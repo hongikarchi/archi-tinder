@@ -1,0 +1,154 @@
+@import "tailwindcss";
+
+/* ── Theme tokens ─────────────────────────────────────────────────────────── */
+:root {
+  /* dark (default) */
+  --color-bg: #0f0f0f;
+  --color-surface: #1a1a1a;
+  --color-surface-2: #1c1c1c;
+  --color-surface-3: #2d3139;
+  --color-border: rgba(255,255,255,0.07);
+  --color-border-soft: rgba(255,255,255,0.1);
+  --color-text: #ffffff;
+  --color-text-2: #e2e8f0;
+  --color-text-muted: #9ca3af;
+  --color-text-dim: #6b7280;
+  --color-text-dimmer: #4b5563;
+  --color-text-dimmest: #374151;
+  --color-nav-bg: rgba(12,12,12,0.97);
+  --color-nav-inactive: #555555;
+  --color-nav-disabled: #2d2d2d;
+  --color-header-bg: rgba(15,17,21,0.9);
+  --color-ai-bubble: rgba(25,28,33,0.8);
+  --color-ai-bubble-border: rgba(255,255,255,0.08);
+  --color-user-bubble: #2d3139;
+  --color-user-bubble-text: #ffffff;
+  --color-input-bg: rgba(25,28,33,0.95);
+  --color-panel-bg: rgba(20,22,28,0.97);
+  --color-progress-track: #1f2937;
+  --color-tag-bg: rgba(255,255,255,0.18);
+  --color-tag-border: rgba(255,255,255,0.28);
+  --color-tag-label: rgba(255,255,255,0.5);
+}
+
+[data-theme="light"] {
+  --color-bg: #f5f5f7;
+  --color-surface: #ffffff;
+  --color-surface-2: #f0f0f0;
+  --color-surface-3: #e4e4e7;
+  --color-border: rgba(0,0,0,0.08);
+  --color-border-soft: rgba(0,0,0,0.13);
+  --color-text: #0f0f0f;
+  --color-text-2: #1f2937;
+  --color-text-muted: #4b5563;
+  --color-text-dim: #6b7280;
+  --color-text-dimmer: #9ca3af;
+  --color-text-dimmest: #d1d5db;
+  --color-nav-bg: rgba(245,245,247,0.97);
+  --color-nav-inactive: #9ca3af;
+  --color-nav-disabled: #d1d5db;
+  --color-header-bg: rgba(245,245,247,0.95);
+  --color-ai-bubble: rgba(255,255,255,0.95);
+  --color-ai-bubble-border: rgba(0,0,0,0.08);
+  --color-user-bubble: #e4e4e7;
+  --color-user-bubble-text: #0f0f0f;
+  --color-input-bg: rgba(255,255,255,0.98);
+  --color-panel-bg: rgba(255,255,255,0.98);
+  --color-progress-track: #e5e7eb;
+  --color-tag-bg: rgba(0,0,0,0.07);
+  --color-tag-border: rgba(0,0,0,0.15);
+  --color-tag-label: rgba(0,0,0,0.4);
+}
+
+/* ── Base ─────────────────────────────────────────────────────────────────── */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  height: 100vh;
+  overflow: hidden;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+/* ── Masonry grid ─────────────────────────────────────────────────────────── */
+.masonry-grid {
+  display: flex;
+  margin-left: -12px;
+  width: auto;
+}
+
+.masonry-grid-col {
+  padding-left: 12px;
+  background-clip: padding-box;
+}
+
+/* ── Tinder card ──────────────────────────────────────────────────────────── */
+.swipe-card {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 20px;
+  background-size: cover;
+  background-position: center;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.swipe-card:active {
+  cursor: grabbing;
+}
+
+/* ── Dual-thumb range slider ─────────────────────────────────────────────── */
+.range-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  pointer-events: none;
+  outline: none;
+  margin: 0;
+}
+.range-thumb::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--color-surface);
+  border: 2.5px solid #ec4899;
+  cursor: pointer;
+  pointer-events: all;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  transition: border-color 0.15s, transform 0.15s;
+}
+.range-thumb::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+  border-color: #f472b6;
+}
+.range-thumb::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--color-surface);
+  border: 2.5px solid #ec4899;
+  cursor: pointer;
+  pointer-events: all;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+.range-thumb::-webkit-slider-runnable-track { background: transparent; }
+.range-thumb::-moz-range-track { background: transparent; }
+
+/* ── LLM bounce animation ────────────────────────────────────────────────── */
+@keyframes bounce {
+  0%, 80%, 100% { transform: scale(0); }
+  40%           { transform: scale(1); }
+}

@@ -1,0 +1,20 @@
+# macOS
+.DS_Store
+
+# Claude Code local settings
+.claude/
+
+# Python / Django (backend — future)
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+*.sqlite3
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
