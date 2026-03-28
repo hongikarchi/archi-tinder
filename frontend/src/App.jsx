@@ -6,6 +6,7 @@ import SwipePage from './pages/SwipePage.jsx'
 import FavoritesPage from './pages/FavoritesPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import * as api from './api/client.js'
+import { clearSessions } from './api/localSession.js'
 
 function normalizeFilters(filters) {
   if (!filters) return {}
@@ -186,17 +187,24 @@ export default function App() {
       swiped_image_ids: swipedIds || [],
       preloaded_images: preloadedImages || null,
     })
-    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, sessionId: result.session_id } : p))
+    setProjects(prev => prev.map(p => {
+      if (p.id !== projectId) return p
+      return {
+        ...p,
+        sessionId: result.session_id,
+        backendId: result.project_id || p.backendId || null,
+      }
+    }))
     setCurrentCard(result.next_image)
     setSessionProgress(result.progress)
     if (!result.next_image) setIsSessionCompleted(true)
     setIsSwipeLoading(false)
   }
 
-  async function handleStart(projectName, preloadedImages) {
+  async function handleStart(projectName, preloadedImages, llmFilters = {}) {
     const projectId = `proj_${Date.now()}`
     const newProject = {
-      id: projectId, projectName, filters: {},
+      id: projectId, projectName, filters: llmFilters || {},
       likedBuildings: [], swipedIds: [],
       predictedLikes: [], analysisReport: null,
       sessionId: null, createdAt: new Date().toISOString(),
@@ -205,7 +213,7 @@ export default function App() {
     setLlmContext(null)
     setProjects(prev => [...prev, newProject])
     setActiveProjectId(projectId)
-    await initSession(projectId, {}, [], true, 'keep', preloadedImages)
+    await initSession(projectId, llmFilters || {}, [], true, 'keep', preloadedImages)
     setTab('swipe')
   }
 
@@ -266,17 +274,21 @@ export default function App() {
     setTab('swipe')
   }
 
-  async function handleUpdateWithImages(id, preloadedImages) {
+  async function handleUpdateWithImages(id, preloadedImages, llmFilters = {}) {
     const project = projects.find(p => p.id === id)
     if (!project) return
     setLlmContext(null)
     setActiveProjectId(id)
     setProjects(prev => prev.map(p => p.id === id ? { ...p, deckImages: preloadedImages } : p))
-    await initSession(id, project.filters, project.swipedIds, false, 'modify', preloadedImages)
+    await initSession(id, llmFilters || project.filters, project.swipedIds, false, 'modify', preloadedImages)
     setTab('swipe')
   }
 
   function handleDeleteProject(id) {
+    const project = projects.find(p => p.id === id)
+    if (project?.backendId) {
+      api.deleteProject(project.backendId).catch(console.error)
+    }
     setProjects(prev => prev.filter(p => p.id !== id))
     if (activeProjectId === id) {
       setActiveProjectId(null)
@@ -287,12 +299,26 @@ export default function App() {
     }
   }
 
-  function handleLogin(user) {
-    const id = typeof user === 'object' ? (user.id || user.userId || String(user)) : String(user)
+  async function handleGenerateReport(projectId) {
+    const project = projects.find(p => p.id === projectId)
+    const backendId = project?.backendId || (project?.id?.includes('-') ? project.id : null)
+    if (!backendId) return
+    try {
+      const { final_report } = await api.generateReport(backendId)
+      setProjects(prev => prev.map(p => p.id === projectId ? { ...p, finalReport: final_report } : p))
+    } catch (err) {
+      console.error('[App] generateReport failed:', err)
+    }
+  }
+
+  async function handleLogin(user) {
+    // user may be a string (mock) or an object from backend {user_id, display_name, access, refresh}
+    const id = typeof user === 'object' ? (user.user_id || user.id || String(user)) : String(user)
+    if (typeof user === 'object' && user.access) {
+      api.setTokens(user.access, user.refresh)
+    }
     sessionStorage.setItem('archithon_user', id)
     setUserId(id)
-    setProjects(JSON.parse(localStorage.getItem(`archithon_projects_${id}`) || '[]'))
-    setActiveProjectId(localStorage.getItem(`archithon_activeId_${id}`) || null)
     setCurrentCard(null)
     setSessionProgress(null)
     setIsSessionCompleted(false)
@@ -301,9 +327,43 @@ export default function App() {
     setTab('home')
     sessionStorage.removeItem('archithon_llmContext')
     sessionStorage.removeItem('archithon_folderOpenId')
+
+    // Sync projects from backend (if JWT available)
+    try {
+      const backendProjects = await api.listProjects()
+      if (backendProjects.length > 0) {
+        const allLikedIds = [...new Set(backendProjects.flatMap(p => p.liked_ids || []))]
+        const allCards = await api.getBuildings(allLikedIds)
+        const cardMap = Object.fromEntries(allCards.map(c => [c.image_id, c]))
+        const mapped = backendProjects.map(p => ({
+          id: String(p.project_id),
+          backendId: String(p.project_id),
+          projectName: p.name,
+          filters: p.filters || {},
+          likedBuildings: (p.liked_ids || []).map(bid => cardMap[bid]).filter(Boolean),
+          swipedIds: [...(p.liked_ids || []), ...(p.disliked_ids || [])],
+          predictedLikes: [],
+          analysisReport: p.analysis_report || null,
+          finalReport: p.final_report || null,
+          sessionId: null,
+          createdAt: p.created_at,
+          deckImages: null,
+        }))
+        setProjects(mapped)
+        setActiveProjectId(null)
+        return
+      }
+    } catch (err) {
+      console.error('[App] project sync failed, falling back to localStorage:', err)
+    }
+    setProjects(JSON.parse(localStorage.getItem(`archithon_projects_${id}`) || '[]'))
+    setActiveProjectId(localStorage.getItem(`archithon_activeId_${id}`) || null)
   }
 
   function handleLogout() {
+    const refresh = localStorage.getItem('archithon_refresh')
+    api.logout(refresh)   // blacklists refresh token, clears JWT from localStorage
+    clearSessions()       // clears in-memory local session state (spec F7)
     sessionStorage.removeItem('archithon_user')
     sessionStorage.removeItem('archithon_tab')
     sessionStorage.removeItem('archithon_llmContext')
@@ -394,6 +454,7 @@ export default function App() {
             projects={projects}
             onDeleteProject={handleDeleteProject}
             onResumeProject={handleResumeProject}
+            onGenerateReport={handleGenerateReport}
             openId={folderOpenId}
             onOpenIdChange={setFolderOpenId}
           />

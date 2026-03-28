@@ -1,91 +1,14 @@
 import { useState, useRef, useEffect } from 'react'
-import buildingsData from '../data/sample_buildings.json'
-import { toImageCard } from '../api/localSession.js'
-
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY
-const GEMINI_MODEL = 'gemini-2.5-flash'
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`
-
-const SYSTEM_INSTRUCTION = `You are an architecture search assistant for ArchiTinder.
-Users describe the kind of buildings they want to find — by country, typology/program, architect, style, mood, material, year, or area.
-Always respond in English. Be helpful and concise.
-
-Respond with ONLY a JSON object (no markdown, no extra text) with exactly these fields:
-{
-  "reply": "Your conversational response to the user",
-  "filters": {
-    "country": "country name or null",
-    "architect": "architect name or null",
-    "program": "building typology or program (e.g. museum, library, housing) or null",
-    "mood": "mood or style descriptor or null",
-    "material": "primary material or null",
-    "area_range": { "min": null_or_number, "max": null_or_number },
-    "year_range": { "min": null_or_number, "max": null_or_number }
-  }
-}
-
-Only fill in fields that the user actually mentioned. Use null for everything else.`
+import * as api from '../api/client.js'
 
 const PRESETS = [
   { label: '🏛️ Japanese modern museum',    query: 'Modern museum in Japan' },
-  { label: '🏟️ Stadium under 5,000 seats', query: 'Stadium with capacity less than 5000 seats' },
-  { label: '📚 Scandinavian library',       query: 'Library in Scandinavia' },
   { label: '🏠 Minimalist housing',         query: 'Minimalist residential housing' },
-  { label: '🌿 Sustainable pavilion',       query: 'Eco-friendly or sustainable pavilion' },
+  { label: '🌿 Landscape architecture',     query: 'Landscape or park architecture' },
   { label: '🏢 Brutalist office',           query: 'Brutalist office or civic building' },
+  { label: '⛪ Religious architecture',     query: 'Religious or spiritual architecture' },
+  { label: '🏨 Boutique hospitality',       query: 'Small hotel or boutique hospitality' },
 ]
-
-const allBuildings = buildingsData.Buildings || []
-
-function searchBuildings(filters) {
-  return allBuildings.filter(b => {
-    if (filters.country) {
-      if (!String(b.country || '').toLowerCase().includes(filters.country.toLowerCase())) return false
-    }
-    if (filters.architect) {
-      if (!String(b.architects || '').toLowerCase().includes(filters.architect.toLowerCase())) return false
-    }
-    if (filters.program) {
-      if (!String(b.typology || '').toLowerCase().includes(filters.program.toLowerCase())) return false
-    }
-    const area = parseFloat(b.area_m2)
-    if (!isNaN(area)) {
-      if (filters.area_range?.min != null && area < filters.area_range.min) return false
-      if (filters.area_range?.max != null && area > filters.area_range.max) return false
-    }
-    return true
-  }).slice(0, 10).map(toImageCard)
-}
-
-async function callGemini(userMessage, history) {
-  const contents = [
-    ...history,
-    { role: 'user', parts: [{ text: userMessage }] },
-  ]
-
-  const res = await fetch(GEMINI_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      system_instruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
-      contents,
-      generationConfig: {
-        responseMimeType: 'application/json',
-        temperature: 0.3,
-      },
-    }),
-  })
-
-  if (!res.ok) {
-    const errBody = await res.json().catch(() => ({}))
-    throw new Error(errBody.error?.message || `Gemini error ${res.status}`)
-  }
-
-  const data = await res.json()
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text
-  if (!text) throw new Error('Empty response from Gemini')
-  return JSON.parse(text)
-}
 
 export default function LLMSearchPage({ mode, projectId, projectName: initialName, minArea, maxArea, onBack, onStart, onUpdate }) {
   const [messages, setMessages] = useState([
@@ -94,10 +17,9 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [latestResults, setLatestResults] = useState([])
+  const [latestFilters, setLatestFilters] = useState({})
   const [showStart, setShowStart] = useState(false)
   const messagesEndRef = useRef(null)
-  // Gemini multi-turn conversation history (not the same as displayed messages)
-  const geminiHistory = useRef([])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -128,33 +50,22 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
     setIsLoading(true)
 
     try {
-      const parsed = await callGemini(text, geminiHistory.current)
-
-      geminiHistory.current = [
-        ...geminiHistory.current,
-        { role: 'user', parts: [{ text }] },
-        { role: 'model', parts: [{ text: JSON.stringify(parsed) }] },
-      ]
-
-      const filters = parsed.filters || {}
-
-      if (minArea > 0) filters.area_range = { ...filters.area_range, min: Math.max(filters.area_range?.min ?? 0, minArea) }
-      if (maxArea < 100000) filters.area_range = { ...filters.area_range, max: Math.min(filters.area_range?.max ?? 100000, maxArea) }
-
-      const results = searchBuildings(filters)
+      const parsed = await api.parseQuery(text)
+      const results = parsed.results || []
 
       const replyText = results.length > 0
         ? `${parsed.reply}\n\nFound ${results.length} building${results.length !== 1 ? 's' : ''} matching your criteria.`
-        : `${parsed.reply}\n\nNo buildings matched those criteria in the local database. Try describing it differently.`
+        : `${parsed.reply}\n\nNo buildings matched those criteria. Try describing it differently.`
 
       setMessages(prev => [...prev, { role: 'ai', text: replyText }])
 
       if (results.length > 0) {
         setLatestResults(results)
+        setLatestFilters(parsed.structured_filters || {})
         setShowStart(true)
       }
     } catch (err) {
-      console.error('[LLMSearchPage] Gemini call failed:', err)
+      console.error('[LLMSearchPage] parseQuery failed:', err)
       setMessages(prev => [...prev, { role: 'ai', text: `Something went wrong: ${err.message}. Please try again.` }])
     }
 
@@ -164,9 +75,9 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
   function handleStartSwiping() {
     const name = initialName || 'Untitled Project'
     if (mode === 'update') {
-      onUpdate(projectId, latestResults)
+      onUpdate(projectId, latestResults, latestFilters)
     } else {
-      onStart(name, latestResults)
+      onStart(name, latestResults, latestFilters)
     }
   }
 

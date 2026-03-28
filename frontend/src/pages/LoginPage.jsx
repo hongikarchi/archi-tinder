@@ -1,7 +1,34 @@
+import { useState } from 'react'
+import { useGoogleLogin } from '@react-oauth/google'
+import * as api from '../api/client.js'
+
 export default function LoginPage({ onLogin, theme, onToggleTheme }) {
-  function handleSocialLogin(provider) {
-    const userId = `user_${provider}_${Date.now()}`
-    onLogin(userId)
+  const [loading, setLoading] = useState(null)  // 'google' | 'kakao' | null
+  const [error, setError]     = useState(null)
+
+  // ── Google ────────────────────────────────────────────────────────────────
+  const googleLogin = useGoogleLogin({
+    onSuccess: async (tokenResponse) => {
+      try {
+        const user = await api.socialLogin('google', tokenResponse.access_token)
+        onLogin(user)
+      } catch (err) {
+        setError('Google login failed. Please try again.')
+        console.error('[LoginPage] Google socialLogin error:', err)
+      } finally {
+        setLoading(null)
+      }
+    },
+    onError: () => {
+      setError('Google login was cancelled or failed.')
+      setLoading(null)
+    },
+  })
+
+  function handleGoogleClick() {
+    setError(null)
+    setLoading('google')
+    googleLogin()
   }
 
   return (
@@ -38,7 +65,9 @@ export default function LoginPage({ onLogin, theme, onToggleTheme }) {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%', maxWidth: 320 }}>
         <SocialButton
-          onClick={() => handleSocialLogin('google')}
+          onClick={handleGoogleClick}
+          loading={loading === 'google'}
+          disabled={loading !== null}
           icon={
             <svg width="18" height="18" viewBox="0 0 24 24">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -50,27 +79,16 @@ export default function LoginPage({ onLogin, theme, onToggleTheme }) {
           label="Continue with Google"
           style={{ background: '#fff', color: '#111', border: '1px solid rgba(0,0,0,0.1)' }}
         />
-        <SocialButton
-          onClick={() => handleSocialLogin('kakao')}
-          icon={
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="#3C1E1E">
-              <path d="M12 3C6.477 3 2 6.477 2 10.8c0 2.713 1.644 5.09 4.125 6.56L5.25 21l4.313-2.813A11.3 11.3 0 0012 18.6c5.523 0 10-3.477 10-7.8S17.523 3 12 3z"/>
-            </svg>
-          }
-          label="Continue with Kakao"
-          style={{ background: '#FEE500', color: '#3C1E1E' }}
-        />
-        <SocialButton
-          onClick={() => handleSocialLogin('naver')}
-          icon={
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff">
-              <path d="M16.273 12.845L7.376 0H0v24h7.727V11.155L16.624 24H24V0h-7.727z"/>
-            </svg>
-          }
-          label="Continue with Naver"
-          style={{ background: '#03C75A', color: '#fff' }}
-        />
       </div>
+
+      {error && (
+        <p style={{
+          color: '#f43f5e', fontSize: 13, marginTop: 16, textAlign: 'center',
+          maxWidth: 320,
+        }}>
+          {error}
+        </p>
+      )}
 
       <p style={{ color: 'var(--color-text-dimmest)', fontSize: 11, marginTop: 32, textAlign: 'center' }}>
         By continuing, you agree to our terms of service
@@ -79,21 +97,29 @@ export default function LoginPage({ onLogin, theme, onToggleTheme }) {
   )
 }
 
-function SocialButton({ onClick, icon, label, style }) {
+function SocialButton({ onClick, icon, label, style, loading, disabled }) {
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
       style={{
         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
         width: '100%', padding: '14px 20px', borderRadius: 14, border: 'none',
-        fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-        transition: 'opacity 0.15s',
+        fontSize: 14, fontWeight: 600, cursor: disabled ? 'default' : 'pointer',
+        fontFamily: 'inherit', transition: 'opacity 0.15s',
+        opacity: disabled ? 0.6 : 1,
         ...style,
       }}
-      onMouseEnter={e => e.currentTarget.style.opacity = '0.88'}
-      onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+      onMouseEnter={e => { if (!disabled) e.currentTarget.style.opacity = '0.88' }}
+      onMouseLeave={e => { if (!disabled) e.currentTarget.style.opacity = '1' }}
     >
-      {icon}
+      {loading ? (
+        <span style={{
+          width: 18, height: 18, border: '2px solid currentColor',
+          borderTopColor: 'transparent', borderRadius: '50%',
+          display: 'inline-block', animation: 'spin 0.7s linear infinite',
+        }} />
+      ) : icon}
       {label}
     </button>
   )

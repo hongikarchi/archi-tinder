@@ -125,6 +125,7 @@ RECOMMENDATION = {
 
 # ── External API keys ─────────────────────────────────────────────────────────
 GEMINI_API_KEY    = os.getenv('GEMINI_API_KEY', '')
+IMAGE_BASE_URL    = os.getenv('IMAGE_BASE_URL', 'https://pub-5d2133d166fc4b65ad05295df352519f.r2.dev')
 GOOGLE_CLIENT_ID  = os.getenv('GOOGLE_CLIENT_ID', '')
 GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET', '')
 KAKAO_CLIENT_ID   = os.getenv('KAKAO_CLIENT_ID', '')
