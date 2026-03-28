@@ -77,10 +77,14 @@ def parse_query(query_text):
             ),
         )
         data = json.loads(response.text)
-        # Sanitize: ensure program is a valid value
+        # Sanitize: ensure program is a valid value (case-insensitive match → canonical form)
         filters = data.get('filters', {})
-        if filters.get('program') and filters['program'] not in PROGRAM_VALUES:
-            filters['program'] = None
+        if filters.get('program'):
+            program = filters['program']
+            if program not in PROGRAM_VALUES:
+                # Try title-casing (e.g. "housing" → "Housing")
+                titled = program.title()
+                filters['program'] = titled if titled in PROGRAM_VALUES else None
         return {
             'reply':   data.get('reply', ''),
             'filters': filters,

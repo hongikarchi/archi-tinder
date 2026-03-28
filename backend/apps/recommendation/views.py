@@ -238,6 +238,8 @@ class SessionResultView(APIView):
 
     def get(self, request, session_id):
         profile = _get_profile(request)
+        if not profile:
+            return Response({'detail': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
         session = AnalysisSession.objects.filter(session_id=session_id).first()
         if not session:
             return Response({'detail': 'Session not found'}, status=status.HTTP_404_NOT_FOUND)

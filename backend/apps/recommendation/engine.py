@@ -83,7 +83,8 @@ def _build_filter_sql(filters):
 
 def _vec_to_pg(vec):
     """Convert Python list of floats to pgvector literal string '[1,2,3]'."""
-    return '[' + ','.join(str(v) for v in vec) + ']'
+    cleaned = [0.0 if (math.isnan(v) or math.isinf(v)) else v for v in vec]
+    return '[' + ','.join(str(v) for v in cleaned) + ']'
 
 
 def _normalize(vec):

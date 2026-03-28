@@ -113,6 +113,8 @@ class KakaoLoginView(APIView):
             return Response({'detail': 'Invalid Kakao token'}, status=status.HTTP_401_UNAUTHORIZED)
 
         info   = resp.json()
+        if not info.get('id'):
+            return Response({'detail': 'Invalid Kakao response'}, status=status.HTTP_401_UNAUTHORIZED)
         kakao_id = str(info['id'])
         kakao_account = info.get('kakao_account', {})
         profile = _get_or_create_user(
