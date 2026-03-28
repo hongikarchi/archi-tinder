@@ -1,7 +1,49 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 
 const TAP_THRESHOLD = 8
 const CARD_WIDTH = 340
+
+function GalleryImage({ url, alt, fullscreen }) {
+  const [imgLoading, setImgLoading] = useState(true)
+  if (fullscreen) {
+    return (
+      <div style={{ position: 'relative', width: '100%', flexShrink: 0 }}>
+        {imgLoading && <div className="skeleton-shimmer" style={{ width: '100%', aspectRatio: '4/3' }} />}
+        <img
+          src={url}
+          alt={alt}
+          loading="lazy"
+          style={{
+            width: '100%', height: 'auto', display: 'block', objectFit: 'cover',
+            opacity: imgLoading ? 0 : 1, transition: 'opacity 0.3s',
+          }}
+          onLoad={() => setImgLoading(false)}
+          onError={() => setImgLoading(false)}
+        />
+      </div>
+    )
+  }
+  return (
+    <div style={{ position: 'relative', height: '100%', flexShrink: 0, scrollSnapAlign: 'start' }}>
+      {imgLoading && (
+        <div className="skeleton-shimmer" style={{ height: '100%', width: 200, borderRadius: 10 }} />
+      )}
+      <img
+        src={url}
+        alt={alt}
+        loading="lazy"
+        style={{
+          height: '100%', width: 'auto',
+          maxWidth: `${CARD_WIDTH - 20}px`,
+          borderRadius: 10, objectFit: 'cover',
+          display: imgLoading ? 'none' : 'block',
+        }}
+        onLoad={() => setImgLoading(false)}
+        onError={() => setImgLoading(false)}
+      />
+    </div>
+  )
+}
 
 export function GalleryOverlay({ card, onClose, fullscreen = false }) {
   const gallery = card.gallery || []
@@ -62,13 +104,7 @@ export function GalleryOverlay({ card, onClose, fullscreen = false }) {
           WebkitOverflowScrolling: 'touch',
         }}>
           {gallery.length > 0 ? gallery.map((url, i) => (
-            <img
-              key={i}
-              src={url}
-              alt={`${card.image_title} ${i + 1}`}
-              loading="lazy"
-              style={{ width: '100%', height: 'auto', display: 'block', objectFit: 'cover', flexShrink: 0 }}
-            />
+            <GalleryImage key={i} url={url} alt={`${card.image_title} ${i + 1}`} fullscreen />
           )) : (
             <div style={{
               flex: 1, display: 'flex',
@@ -123,18 +159,7 @@ export function GalleryOverlay({ card, onClose, fullscreen = false }) {
         scrollSnapType: 'x mandatory',
       }}>
         {gallery.length > 0 ? gallery.map((url, i) => (
-          <img
-            key={i}
-            src={url}
-            alt={`${card.image_title} ${i + 1}`}
-            loading="lazy"
-            style={{
-              height: '100%', width: 'auto',
-              maxWidth: `${CARD_WIDTH - 20}px`,
-              borderRadius: 10, objectFit: 'cover',
-              flexShrink: 0, scrollSnapAlign: 'start',
-            }}
-          />
+          <GalleryImage key={i} url={url} alt={`${card.image_title} ${i + 1}`} />
         )) : (
           <div style={{
             width: '100%', display: 'flex',

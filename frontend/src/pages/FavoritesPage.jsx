@@ -324,17 +324,27 @@ function BuildingCard({ image, onTap }) {
   const title    = image.image_title  || image.title
   const imageUrl = image.image_url    || image.imageUrl
   const country  = image.metadata?.axis_country || image.country
+  const [imgLoading, setImgLoading] = useState(true)
 
   return (
     <div
       onClick={onTap}
       style={{ borderRadius: 12, overflow: 'hidden', background: 'var(--color-surface-2)', position: 'relative', cursor: 'pointer' }}
     >
+      {imgLoading && (
+        <div className="skeleton-shimmer" style={{ width: '100%', aspectRatio: '3/4' }} />
+      )}
       <img
         src={imageUrl}
         alt={title}
-        style={{ width: '100%', aspectRatio: '3/4', objectFit: 'cover', display: 'block' }}
+        style={{
+          width: '100%', aspectRatio: '3/4', objectFit: 'cover', display: 'block',
+          opacity: imgLoading ? 0 : 1, transition: 'opacity 0.3s',
+          position: imgLoading ? 'absolute' : 'static', top: 0, left: 0,
+        }}
         loading="lazy"
+        onLoad={() => setImgLoading(false)}
+        onError={() => setImgLoading(false)}
       />
       <div style={{
         position: 'absolute', inset: 0,

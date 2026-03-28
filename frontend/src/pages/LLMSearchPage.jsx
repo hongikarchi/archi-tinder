@@ -1,24 +1,136 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, memo } from 'react'
 import * as api from '../api/client.js'
 
 const PRESETS = [
-  { label: '🏛️ Japanese modern museum',    query: 'Modern museum in Japan' },
-  { label: '🏠 Minimalist housing',         query: 'Minimalist residential housing' },
-  { label: '🌿 Landscape architecture',     query: 'Landscape or park architecture' },
-  { label: '🏢 Brutalist office',           query: 'Brutalist office or civic building' },
-  { label: '⛪ Religious architecture',     query: 'Religious or spiritual architecture' },
-  { label: '🏨 Boutique hospitality',       query: 'Small hotel or boutique hospitality' },
+  { label: '🏛️ Japanese modern museum',  query: 'Modern museum in Japan' },
+  { label: '🏠 Minimalist housing',       query: 'Minimalist residential housing' },
+  { label: '🌿 Landscape architecture',   query: 'Landscape or park architecture' },
+  { label: '🏢 Brutalist office',         query: 'Brutalist office or civic building' },
+  { label: '⛪ Religious architecture',   query: 'Religious or spiritual architecture' },
+  { label: '🏨 Boutique hospitality',     query: 'Small hotel or boutique hospitality' },
 ]
 
-export default function LLMSearchPage({ mode, projectId, projectName: initialName, minArea, maxArea, onBack, onStart, onUpdate }) {
+const FILTER_LABELS = {
+  program: '🏗',
+  location_country: '🌍',
+  material: '🧱',
+  mood: '✨',
+  year_min: '📅',
+  year_max: '📅',
+  min_area: '📐',
+  max_area: '📐',
+}
+
+function FilterChips({ filters }) {
+  if (!filters) return null
+  const chips = []
+  if (filters.program)          chips.push(`${FILTER_LABELS.program} ${filters.program}`)
+  if (filters.location_country) chips.push(`${FILTER_LABELS.location_country} ${filters.location_country}`)
+  if (filters.material)         chips.push(`${FILTER_LABELS.material} ${filters.material}`)
+  if (filters.mood)             chips.push(`${FILTER_LABELS.mood} ${filters.mood}`)
+  if (filters.year_min || filters.year_max) {
+    const from = filters.year_min || '…'
+    const to   = filters.year_max || '…'
+    chips.push(`📅 ${from}–${to}`)
+  }
+  if (!chips.length) return null
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+      {chips.map(c => (
+        <span key={c} style={{
+          padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 500,
+          background: 'rgba(236,72,153,0.12)',
+          border: '1px solid rgba(236,72,153,0.25)',
+          color: '#f9a8d4',
+        }}>{c}</span>
+      ))}
+    </div>
+  )
+}
+
+const Thumbnail = memo(function Thumbnail({ r }) {
+  const [imgLoading, setImgLoading] = useState(true)
+  return (
+    <div style={{ width: '100%', height: 72, position: 'relative', background: 'rgba(255,255,255,0.04)' }}>
+      {imgLoading && <div className="skeleton-shimmer" style={{ position: 'absolute', inset: 0 }} />}
+      {r.image_url ? (
+        <img
+          src={r.image_url}
+          alt={r.name_en || ''}
+          style={{
+            width: '100%', height: 72, objectFit: 'cover', display: 'block',
+            opacity: imgLoading ? 0 : 1, transition: 'opacity 0.3s',
+          }}
+          onLoad={() => setImgLoading(false)}
+          onError={e => { setImgLoading(false); e.target.style.display = 'none' }}
+        />
+      ) : (
+        <div style={{
+          width: '100%', height: 72,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 20,
+        }}>🏛️</div>
+      )}
+    </div>
+  )
+})
+
+function ResultStrip({ results, isFallback }) {
+  if (!results || !results.length) return null
+  return (
+    <div style={{ marginTop: 12 }}>
+      {isFallback && (
+        <div style={{
+          fontSize: 11, color: '#9ca3af', marginBottom: 6,
+          display: 'flex', alignItems: 'center', gap: 4,
+        }}>
+          <span style={{
+            padding: '1px 7px', borderRadius: 999, fontSize: 10,
+            background: 'rgba(251,191,36,0.12)',
+            border: '1px solid rgba(251,191,36,0.25)',
+            color: '#fbbf24',
+          }}>similar</span>
+          <span>showing related results</span>
+        </div>
+      )}
+      <div style={{
+        display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 6,
+        scrollbarWidth: 'none',
+      }}>
+        {results.slice(0, 12).map(r => (
+          <div key={r.building_id} style={{
+            flexShrink: 0, width: 100, borderRadius: 10, overflow: 'hidden',
+            background: 'rgba(255,255,255,0.05)',
+            border: '1px solid rgba(255,255,255,0.08)',
+          }}>
+            <Thumbnail r={r} />
+            <div style={{ padding: '5px 7px' }}>
+              <div style={{
+                fontSize: 10, fontWeight: 600, color: 'var(--color-text-2)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>{r.name_en || r.building_id}</div>
+              {r.metadata?.axis_country && (
+                <div style={{ fontSize: 9, color: 'var(--color-text-dim)', marginTop: 1 }}>
+                  {r.metadata.axis_country}
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+export default function LLMSearchPage({ mode, projectId, projectName: initialName, onBack, onStart, onUpdate }) {
   const [messages, setMessages] = useState([
     { role: 'ai', text: "Hello! Describe the kind of architecture you're looking for — country, program, architect, style, year, and so on." }
   ])
-  const [input, setInput] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
+  const [input, setInput]               = useState('')
+  const [isLoading, setIsLoading]       = useState(false)
   const [latestResults, setLatestResults] = useState([])
   const [latestFilters, setLatestFilters] = useState({})
-  const [showStart, setShowStart] = useState(false)
+  const [showStart, setShowStart]       = useState(false)
   const messagesEndRef = useRef(null)
 
   useEffect(() => {
@@ -35,13 +147,6 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
 
   function handlePreset(query) {
     if (isLoading) return
-    setInput('')
-    const savedInput = input
-    setInput(query)
-    // Use a ref-based approach: set input then immediately submit
-    setTimeout(() => {
-      setInput(savedInput)
-    }, 0)
     submitQuery(query)
   }
 
@@ -50,18 +155,29 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
     setIsLoading(true)
 
     try {
-      const parsed = await api.parseQuery(text)
-      const results = parsed.results || []
+      const parsed     = await api.parseQuery(text)
+      const results    = parsed.results || []
+      const isFallback = parsed.is_fallback || false
+      const filters    = parsed.structured_filters || {}
 
-      const replyText = results.length > 0
-        ? `${parsed.reply}\n\nFound ${results.length} building${results.length !== 1 ? 's' : ''} matching your criteria.`
-        : `${parsed.reply}\n\nNo buildings matched those criteria. Try describing it differently.`
+      let replyText
+      if (results.length > 0 && !isFallback) {
+        replyText = `${parsed.reply}\n\nFound ${results.length} building${results.length !== 1 ? 's' : ''} matching your criteria.`
+      } else if (results.length > 0 && isFallback) {
+        replyText = `${parsed.reply}\n\n${parsed.fallback_note || 'No exact matches — here are some similar buildings you might like.'}`
+      } else {
+        replyText = `${parsed.reply}\n\nNo buildings found. Try describing it differently.`
+      }
 
-      setMessages(prev => [...prev, { role: 'ai', text: replyText }])
+      setMessages(prev => [...prev, {
+        role: 'ai', text: replyText,
+        results, isFallback,
+        filters: isFallback ? {} : filters,
+      }])
 
       if (results.length > 0) {
         setLatestResults(results)
-        setLatestFilters(parsed.structured_filters || {})
+        setLatestFilters(isFallback ? {} : filters)
         setShowStart(true)
       }
     } catch (err) {
@@ -142,6 +258,8 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
               })
             }}>
               {msg.text}
+              {msg.role === 'ai' && <FilterChips filters={msg.filters} />}
+              {msg.role === 'ai' && <ResultStrip results={msg.results} isFallback={msg.isFallback} />}
             </div>
           </div>
         ))}
