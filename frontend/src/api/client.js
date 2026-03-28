@@ -39,6 +39,8 @@ async function callApi(method, path, body, retry = true) {
     const refreshed = await _tryRefresh()
     if (refreshed) return callApi(method, path, body, false)
     clearTokens()
+    // Notify App to log out — avoids circular imports
+    window.dispatchEvent(new CustomEvent('archithon:session-expired'))
     throw Object.assign(new Error('Session expired'), { status: 401 })
   }
 
@@ -180,12 +182,15 @@ export async function parseQuery(query) {
 
 // ── Projects ──────────────────────────────────────────────────────────────────
 
-export async function listProjects() {
+export async function listProjects(page = 1, pageSize = 50) {
   try {
-    return await callApi('GET', '/projects/')
+    const data = await callApi('GET', `/projects/?page=${page}&page_size=${pageSize}`)
+    // Support both paginated {results, has_more} and legacy plain array
+    if (Array.isArray(data)) return { results: data, has_more: false, total: data.length }
+    return data
   } catch (err) {
     console.error('[api/client] listProjects failed:', err)
-    return []
+    return { results: [], has_more: false, total: 0 }
   }
 }
 

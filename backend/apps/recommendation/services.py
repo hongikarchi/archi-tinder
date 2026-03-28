@@ -42,8 +42,8 @@ Return ONLY valid JSON with this exact structure (use null for fields not mentio
     "mood": null,
     "year_min": null,
     "year_max": null,
-    "area_min": null,
-    "area_max": null
+    "min_area": null,
+    "max_area": null
   }
 }"""
 

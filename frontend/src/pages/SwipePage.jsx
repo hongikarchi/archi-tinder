@@ -2,8 +2,8 @@ import { useRef, useState, useEffect } from 'react'
 import TinderCard from 'react-tinder-card'
 import { GalleryOverlay } from '../components/GalleryOverlay.jsx'
 
-const CARD_WIDTH  = 340
-const CARD_HEIGHT = 480
+const CARD_WIDTH  = Math.min(340, (typeof window !== 'undefined' ? window.innerWidth : 375) - 32)
+const CARD_HEIGHT = Math.round(CARD_WIDTH * (480 / 340))
 const TAP_THRESHOLD = 8
 
 /* ── FlipCard ────────────────────────────────────────────────────────────── */
@@ -99,11 +99,19 @@ function LoadingCard() {
   return (
     <div style={{
       position: 'absolute', top: 0, left: 0, width: CARD_WIDTH, height: CARD_HEIGHT,
-      borderRadius: 20, background: 'var(--color-surface)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      borderRadius: 20, overflow: 'hidden',
+      background: 'var(--color-surface)',
       boxShadow: '0 25px 50px rgba(0,0,0,0.4)',
     }}>
-      <div style={{ color: 'var(--color-text-dimmer)', fontSize: 13 }}>Loading...</div>
+      <div className="skeleton-shimmer" style={{ width: '100%', height: '100%' }} />
+      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '0 18px 22px' }}>
+        <div className="skeleton-shimmer" style={{ height: 17, width: '65%', borderRadius: 6, marginBottom: 12 }} />
+        <div style={{ display: 'flex', gap: 6 }}>
+          {[72, 88, 60].map((w, i) => (
+            <div key={i} className="skeleton-shimmer" style={{ height: 24, width: w, borderRadius: 999 }} />
+          ))}
+        </div>
+      </div>
     </div>
   )
 }

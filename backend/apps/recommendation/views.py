@@ -1,5 +1,6 @@
 import logging
 from django.conf import settings
+from django.db import transaction
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -36,9 +37,22 @@ class ProjectListCreateView(APIView):
     def get(self, request):
         profile = _get_profile(request)
         if not profile:
-            return Response([], status=status.HTTP_200_OK)
-        projects = Project.objects.filter(user=profile).order_by('-created_at')
-        return Response(ProjectSerializer(projects, many=True).data)
+            return Response({'results': [], 'total': 0, 'has_more': False})
+        try:
+            page      = max(1, int(request.query_params.get('page', 1)))
+            page_size = min(max(1, int(request.query_params.get('page_size', 50))), 50)
+        except (ValueError, TypeError):
+            page, page_size = 1, 50
+        qs     = Project.objects.filter(user=profile).order_by('-created_at')
+        total  = qs.count()
+        start  = (page - 1) * page_size
+        chunk  = qs[start:start + page_size]
+        return Response({
+            'results':  ProjectSerializer(chunk, many=True).data,
+            'total':    total,
+            'page':     page,
+            'has_more': (page * page_size) < total,
+        })
 
     def post(self, request):
         profile = _get_profile(request)
@@ -151,63 +165,64 @@ class SwipeView(APIView):
         if action not in ('like', 'dislike'):
             return Response({'detail': 'action must be like or dislike'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Idempotency check — return cached result if already processed
+        # Idempotency check — if already processed, return accepted so frontend treats it as success
         if SwipeEvent.objects.filter(idempotency_key=idempotency_key).exists():
             logger.info('Duplicate swipe ignored: %s', idempotency_key)
-            return Response({'accepted': False, 'detail': 'duplicate'}, status=status.HTTP_200_OK)
+            return Response({'accepted': True, 'detail': 'duplicate'}, status=status.HTTP_200_OK)
 
-        # Get embedding and update preference vector
-        embedding = engine.get_building_embedding(building_id)
-        if embedding:
-            session.preference_vector = engine.update_preference_vector(
-                session.preference_vector, embedding, action
+        with transaction.atomic():
+            # Get embedding and update preference vector
+            embedding = engine.get_building_embedding(building_id)
+            if embedding:
+                session.preference_vector = engine.update_preference_vector(
+                    session.preference_vector, embedding, action
+                )
+
+            # Record swipe
+            SwipeEvent.objects.create(
+                session         = session,
+                building_id     = building_id,
+                action          = action,
+                idempotency_key = idempotency_key,
             )
 
-        # Record swipe
-        SwipeEvent.objects.create(
-            session         = session,
-            building_id     = building_id,
-            action          = action,
-            idempotency_key = idempotency_key,
-        )
+            # Update project liked/disliked lists
+            project = session.project
+            if action == 'like':
+                if building_id not in project.liked_ids:
+                    project.liked_ids = project.liked_ids + [building_id]
+            else:
+                if building_id not in project.disliked_ids:
+                    project.disliked_ids = project.disliked_ids + [building_id]
+            project.save(update_fields=['liked_ids', 'disliked_ids'])
 
-        # Update project liked/disliked lists
-        project = session.project
-        if action == 'like':
-            if building_id not in project.liked_ids:
-                project.liked_ids = project.liked_ids + [building_id]
-        else:
-            if building_id not in project.disliked_ids:
-                project.disliked_ids = project.disliked_ids + [building_id]
-        project.save(update_fields=['liked_ids', 'disliked_ids'])
+            session.current_round += 1
 
-        session.current_round += 1
+            # Check completion
+            if session.current_round >= session.total_rounds:
+                session.status = 'completed'
+                session.save(update_fields=['preference_vector', 'current_round', 'status'])
+                return Response({
+                    'accepted':             True,
+                    'session_status':       'completed',
+                    'progress':             _progress(session),
+                    'next_image':           None,
+                    'is_analysis_completed': True,
+                })
 
-        # Check completion
-        if session.current_round >= session.total_rounds:
-            session.status = 'completed'
-            session.save(update_fields=['preference_vector', 'current_round', 'status'])
-            return Response({
-                'accepted':             True,
-                'session_status':       'completed',
-                'progress':             _progress(session),
-                'next_image':           None,
-                'is_analysis_completed': True,
-            })
+            # Select next image
+            filters   = project.filters or None
+            next_card = engine.select_next_image(
+                session.preference_vector,
+                session.exposed_ids,
+                session.current_round,
+                filters,
+            )
 
-        # Select next image
-        filters   = project.filters or None
-        next_card = engine.select_next_image(
-            session.preference_vector,
-            session.exposed_ids,
-            session.current_round,
-            filters,
-        )
+            if next_card:
+                session.exposed_ids = session.exposed_ids + [next_card['building_id']]
 
-        if next_card:
-            session.exposed_ids = session.exposed_ids + [next_card['building_id']]
-
-        session.save(update_fields=['preference_vector', 'current_round', 'exposed_ids'])
+            session.save(update_fields=['preference_vector', 'current_round', 'exposed_ids'])
 
         return Response({
             'accepted':              True,

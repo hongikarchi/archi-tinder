@@ -1,7 +1,10 @@
 import { useState } from 'react'
 import { GalleryOverlay } from '../components/GalleryOverlay.jsx'
 
+const PAGE_SIZE = 10
+
 export default function FavoritesPage({ projects, onDeleteProject, onResumeProject, onGenerateReport, openId, onOpenIdChange }) {
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
   const openProject = projects.find(p => p.id === openId) || null
 
   if (openProject) {
@@ -15,6 +18,10 @@ export default function FavoritesPage({ projects, onDeleteProject, onResumeProje
       />
     )
   }
+
+  const sorted  = [...projects].reverse()
+  const visible = sorted.slice(0, visibleCount)
+  const hasMore = visibleCount < projects.length
 
   return (
     <div style={{ height: 'calc(100vh - 64px)', overflowY: 'auto', background: 'var(--color-bg)', padding: '40px 20px 100px' }}>
@@ -35,15 +42,30 @@ export default function FavoritesPage({ projects, onDeleteProject, onResumeProje
             </p>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {[...projects].reverse().map(project => (
-              <ProjectCard
-                key={project.id}
-                project={project}
-                onClick={() => onOpenIdChange(project.id)}
-              />
-            ))}
-          </div>
+          <>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {visible.map(project => (
+                <ProjectCard
+                  key={project.id}
+                  project={project}
+                  onClick={() => onOpenIdChange(project.id)}
+                />
+              ))}
+            </div>
+            {hasMore && (
+              <button
+                onClick={() => setVisibleCount(c => c + PAGE_SIZE)}
+                style={{
+                  width: '100%', marginTop: 16, padding: '12px',
+                  background: 'var(--color-surface-2)', border: '1px solid var(--color-border)',
+                  borderRadius: 12, color: 'var(--color-text-dim)',
+                  fontSize: 13, cursor: 'pointer', fontFamily: 'inherit',
+                }}
+              >
+                Load more ({projects.length - visibleCount} remaining)
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>

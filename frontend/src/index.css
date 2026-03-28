@@ -156,3 +156,20 @@ body {
   0%, 80%, 100% { transform: scale(0); }
   40%           { transform: scale(1); }
 }
+
+/* ── Skeleton shimmer ────────────────────────────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--color-surface)   0%,
+    var(--color-surface-2) 50%,
+    var(--color-surface)   100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+}

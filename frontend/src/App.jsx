@@ -10,11 +10,20 @@ import { clearSessions } from './api/localSession.js'
 
 function normalizeFilters(filters) {
   if (!filters) return {}
-  return {
-    typologies: filters.typologies || [],
-    min_area: filters.minArea !== undefined ? filters.minArea : (filters.min_area || 0),
-    max_area: filters.maxArea !== undefined ? filters.maxArea : (filters.max_area || Infinity),
-  }
+  const out = {}
+  // Structured filters from LLM parse-query — pass through
+  if (filters.program)           out.program           = filters.program
+  if (filters.location_country)  out.location_country  = filters.location_country
+  if (filters.material)          out.material          = filters.material
+  if (filters.mood)              out.mood              = filters.mood
+  if (filters.year_min  != null) out.year_min          = filters.year_min
+  if (filters.year_max  != null) out.year_max          = filters.year_max
+  // Area — accept all naming conventions (frontend, LLM area_min, backend min_area)
+  const minArea = filters.min_area ?? filters.minArea ?? filters.area_min ?? null
+  const maxArea = filters.max_area ?? filters.maxArea ?? filters.area_max ?? null
+  if (minArea != null) out.min_area = minArea
+  if (maxArea != null) out.max_area = maxArea
+  return out
 }
 
 /* ── Error Boundary ─────────────────────────────────────────────────────── */
@@ -127,6 +136,20 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', theme)
     localStorage.setItem('archithon_theme', theme)
   }, [theme])
+
+  // If session has a user but no access token, clear immediately
+  useEffect(() => {
+    if (userId && !api.getToken()) {
+      handleLogout()
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Listen for session-expired event dispatched by api/client.js
+  useEffect(() => {
+    const onExpired = () => handleLogout()
+    window.addEventListener('archithon:session-expired', onExpired)
+    return () => window.removeEventListener('archithon:session-expired', onExpired)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!userId) return
@@ -330,7 +353,7 @@ export default function App() {
 
     // Sync projects from backend (if JWT available)
     try {
-      const backendProjects = await api.listProjects()
+      const { results: backendProjects } = await api.listProjects()
       if (backendProjects.length > 0) {
         const allLikedIds = [...new Set(backendProjects.flatMap(p => p.liked_ids || []))]
         const allCards = await api.getBuildings(allLikedIds)

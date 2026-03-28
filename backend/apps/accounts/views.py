@@ -145,6 +145,8 @@ class NaverLoginView(APIView):
             return Response({'detail': 'Invalid Naver token'}, status=status.HTTP_401_UNAUTHORIZED)
 
         info = resp.json().get('response', {})
+        if not info.get('id'):
+            return Response({'detail': 'Invalid Naver response'}, status=status.HTTP_401_UNAUTHORIZED)
         profile = _get_or_create_user(
             provider='naver',
             provider_id=info['id'],
