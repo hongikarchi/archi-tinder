@@ -30,6 +30,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -109,6 +110,8 @@ USE_TZ = True
 
 # ── Static files ──────────────────────────────────────────────────────────────
 STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # ── Recommendation algorithm constants ───────────────────────────────────────
@@ -125,12 +128,29 @@ RECOMMENDATION = {
 
 # ── External API keys ─────────────────────────────────────────────────────────
 GEMINI_API_KEY    = os.getenv('GEMINI_API_KEY', '')
+IMAGE_BASE_URL    = os.getenv('IMAGE_BASE_URL', 'https://pub-5d2133d166fc4b65ad05295df352519f.r2.dev')
 GOOGLE_CLIENT_ID  = os.getenv('GOOGLE_CLIENT_ID', '')
 GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET', '')
 KAKAO_CLIENT_ID   = os.getenv('KAKAO_CLIENT_ID', '')
 KAKAO_CLIENT_SECRET = os.getenv('KAKAO_CLIENT_SECRET', '')
 NAVER_CLIENT_ID   = os.getenv('NAVER_CLIENT_ID', '')
 NAVER_CLIENT_SECRET = os.getenv('NAVER_CLIENT_SECRET', '')
+
+# ── Production security ───────────────────────────────────────────────────────
+if not DEBUG:
+    # HTTP headers
+    SECURE_BROWSER_XSS_FILTER    = True
+    SECURE_CONTENT_TYPE_NOSNIFF  = True
+    X_FRAME_OPTIONS              = 'DENY'
+    SECURE_HSTS_SECONDS          = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD          = True
+    # Cookies (only meaningful if sessions/CSRF are used)
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE    = True
+    # SECRET_KEY sanity check
+    if len(SECRET_KEY) < 50:
+        raise RuntimeError('DJANGO_SECRET_KEY is too short for production (min 50 chars)')
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 LOGGING = {

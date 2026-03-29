@@ -1,7 +1,10 @@
 import { useState } from 'react'
 import { GalleryOverlay } from '../components/GalleryOverlay.jsx'
 
-export default function FavoritesPage({ projects, onDeleteProject, onResumeProject, openId, onOpenIdChange }) {
+const PAGE_SIZE = 10
+
+export default function FavoritesPage({ projects, onDeleteProject, onResumeProject, onGenerateReport, openId, onOpenIdChange }) {
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
   const openProject = projects.find(p => p.id === openId) || null
 
   if (openProject) {
@@ -11,9 +14,14 @@ export default function FavoritesPage({ projects, onDeleteProject, onResumeProje
         onBack={() => onOpenIdChange(null)}
         onDelete={() => { onDeleteProject(openProject.id); onOpenIdChange(null) }}
         onResume={() => onResumeProject(openProject.id)}
+        onGenerateReport={() => onGenerateReport(openProject.id)}
       />
     )
   }
+
+  const sorted  = [...projects].reverse()
+  const visible = sorted.slice(0, visibleCount)
+  const hasMore = visibleCount < projects.length
 
   return (
     <div style={{ height: 'calc(100vh - 64px)', overflowY: 'auto', background: 'var(--color-bg)', padding: '40px 20px 100px' }}>
@@ -34,15 +42,30 @@ export default function FavoritesPage({ projects, onDeleteProject, onResumeProje
             </p>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {[...projects].reverse().map(project => (
-              <ProjectCard
-                key={project.id}
-                project={project}
-                onClick={() => onOpenIdChange(project.id)}
-              />
-            ))}
-          </div>
+          <>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {visible.map(project => (
+                <ProjectCard
+                  key={project.id}
+                  project={project}
+                  onClick={() => onOpenIdChange(project.id)}
+                />
+              ))}
+            </div>
+            {hasMore && (
+              <button
+                onClick={() => setVisibleCount(c => c + PAGE_SIZE)}
+                style={{
+                  width: '100%', marginTop: 16, padding: '12px',
+                  background: 'var(--color-surface-2)', border: '1px solid var(--color-border)',
+                  borderRadius: 12, color: 'var(--color-text-dim)',
+                  fontSize: 13, cursor: 'pointer', fontFamily: 'inherit',
+                }}
+              >
+                Load more ({projects.length - visibleCount} remaining)
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -108,10 +131,16 @@ function ProjectCard({ project, onClick }) {
   )
 }
 
-function FolderDetail({ project, onBack, onDelete, onResume }) {
+function FolderDetail({ project, onBack, onDelete, onResume, onGenerateReport }) {
+  const [reportLoading, setReportLoading] = useState(false)
   const liked      = project.likedBuildings || []
   const predicted  = project.predictedLikes || []
-  const report     = project.analysisReport || null
+  const finalReport = project.finalReport || null
+
+  async function handleGenerateReport() {
+    setReportLoading(true)
+    try { await onGenerateReport() } finally { setReportLoading(false) }
+  }
 
   return (
     <div style={{ height: 'calc(100vh - 64px)', overflowY: 'auto', background: 'var(--color-bg)', paddingBottom: 100 }}>
@@ -143,7 +172,7 @@ function FolderDetail({ project, onBack, onDelete, onResume }) {
         </div>
 
         <button onClick={onResume} style={{
-          width: '100%', padding: '12px', borderRadius: 12, marginBottom: 20,
+          width: '100%', padding: '12px', borderRadius: 12, marginBottom: 12,
           background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
           color: '#fff', fontSize: 14, fontWeight: 600,
           border: 'none', cursor: 'pointer', fontFamily: 'inherit',
@@ -151,29 +180,25 @@ function FolderDetail({ project, onBack, onDelete, onResume }) {
           Resume Swiping →
         </button>
 
-        {report && report.summary_text && (
-          <div style={{
-            background: 'var(--color-surface)', borderRadius: 12, padding: '14px 16px', marginBottom: 20,
-            border: '1px solid var(--color-border)',
-          }}>
-            <p style={{ color: 'var(--color-text-muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 8px' }}>
-              Analysis Report
-            </p>
-            <p style={{ color: 'var(--color-text-2)', fontSize: 13, margin: '0 0 10px', lineHeight: 1.6 }}>
-              {report.summary_text}
-            </p>
-            {report.keywords?.length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {report.keywords.map(kw => (
-                  <span key={kw} style={{
-                    fontSize: 11, padding: '3px 10px', borderRadius: 999,
-                    background: 'rgba(139,92,246,0.2)', color: '#a78bfa',
-                    border: '1px solid rgba(139,92,246,0.3)',
-                  }}>{kw}</span>
-                ))}
-              </div>
-            )}
-          </div>
+        {/* Persona Report */}
+        {finalReport ? (
+          <PersonaReport report={finalReport} />
+        ) : (
+          liked.length > 0 && (
+            <button
+              onClick={handleGenerateReport}
+              disabled={reportLoading}
+              style={{
+                width: '100%', padding: '11px', borderRadius: 12, marginBottom: 20,
+                background: reportLoading ? 'var(--color-surface-2)' : 'rgba(139,92,246,0.15)',
+                color: reportLoading ? 'var(--color-text-dimmer)' : '#a78bfa',
+                fontSize: 13, fontWeight: 600, border: '1px solid rgba(139,92,246,0.3)',
+                cursor: reportLoading ? 'default' : 'pointer', fontFamily: 'inherit',
+              }}
+            >
+              {reportLoading ? 'Generating persona report...' : '✦ Generate Persona Report'}
+            </button>
+          )
         )}
       </div>
 
@@ -193,6 +218,61 @@ function FolderDetail({ project, onBack, onDelete, onResume }) {
           <SectionLabel title="Recommended Buildings" count={predicted.length} accent />
           <ImageGrid images={predicted} />
         </>
+      )}
+    </div>
+  )
+}
+
+function PersonaReport({ report }) {
+  const chips = (items) => (items || []).slice(0, 5).map(item => (
+    <span key={item} style={{
+      fontSize: 11, padding: '3px 10px', borderRadius: 999,
+      background: 'rgba(139,92,246,0.15)', color: '#a78bfa',
+      border: '1px solid rgba(139,92,246,0.25)',
+    }}>{item}</span>
+  ))
+
+  return (
+    <div style={{
+      background: 'linear-gradient(135deg, rgba(139,92,246,0.08), rgba(236,72,153,0.06))',
+      borderRadius: 14, padding: '16px 18px', marginBottom: 20,
+      border: '1px solid rgba(139,92,246,0.25)',
+    }}>
+      <p style={{ color: '#a78bfa', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', margin: '0 0 6px' }}>
+        Your Architectural Persona
+      </p>
+      {report.persona_type && (
+        <p style={{ color: 'var(--color-text)', fontSize: 17, fontWeight: 800, margin: '0 0 4px' }}>
+          {report.persona_type}
+        </p>
+      )}
+      {report.one_liner && (
+        <p style={{ color: '#ec4899', fontSize: 13, fontWeight: 500, fontStyle: 'italic', margin: '0 0 10px' }}>
+          "{report.one_liner}"
+        </p>
+      )}
+      {report.description && (
+        <p style={{ color: 'var(--color-text-dim)', fontSize: 13, lineHeight: 1.6, margin: '0 0 12px' }}>
+          {report.description}
+        </p>
+      )}
+      {report.dominant_programs?.length > 0 && (
+        <div style={{ marginBottom: 8 }}>
+          <p style={{ color: 'var(--color-text-muted)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 5px' }}>Typologies</p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>{chips(report.dominant_programs)}</div>
+        </div>
+      )}
+      {report.dominant_moods?.length > 0 && (
+        <div style={{ marginBottom: 8 }}>
+          <p style={{ color: 'var(--color-text-muted)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 5px' }}>Moods</p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>{chips(report.dominant_moods)}</div>
+        </div>
+      )}
+      {report.dominant_materials?.length > 0 && (
+        <div>
+          <p style={{ color: 'var(--color-text-muted)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 5px' }}>Materials</p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>{chips(report.dominant_materials)}</div>
+        </div>
       )}
     </div>
   )
@@ -244,17 +324,27 @@ function BuildingCard({ image, onTap }) {
   const title    = image.image_title  || image.title
   const imageUrl = image.image_url    || image.imageUrl
   const country  = image.metadata?.axis_country || image.country
+  const [imgLoading, setImgLoading] = useState(true)
 
   return (
     <div
       onClick={onTap}
       style={{ borderRadius: 12, overflow: 'hidden', background: 'var(--color-surface-2)', position: 'relative', cursor: 'pointer' }}
     >
+      {imgLoading && (
+        <div className="skeleton-shimmer" style={{ width: '100%', aspectRatio: '3/4' }} />
+      )}
       <img
         src={imageUrl}
         alt={title}
-        style={{ width: '100%', aspectRatio: '3/4', objectFit: 'cover', display: 'block' }}
+        style={{
+          width: '100%', aspectRatio: '3/4', objectFit: 'cover', display: 'block',
+          opacity: imgLoading ? 0 : 1, transition: 'opacity 0.3s',
+          position: imgLoading ? 'absolute' : 'static', top: 0, left: 0,
+        }}
         loading="lazy"
+        onLoad={() => setImgLoading(false)}
+        onError={() => setImgLoading(false)}
       />
       <div style={{
         position: 'absolute', inset: 0,

@@ -1,103 +1,137 @@
-import { useState, useRef, useEffect } from 'react'
-import buildingsData from '../data/sample_buildings.json'
-import { toImageCard } from '../api/localSession.js'
-
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY
-const GEMINI_MODEL = 'gemini-2.5-flash'
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`
-
-const SYSTEM_INSTRUCTION = `You are an architecture search assistant for ArchiTinder.
-Users describe the kind of buildings they want to find — by country, typology/program, architect, style, mood, material, year, or area.
-Always respond in English. Be helpful and concise.
-
-Respond with ONLY a JSON object (no markdown, no extra text) with exactly these fields:
-{
-  "reply": "Your conversational response to the user",
-  "filters": {
-    "country": "country name or null",
-    "architect": "architect name or null",
-    "program": "building typology or program (e.g. museum, library, housing) or null",
-    "mood": "mood or style descriptor or null",
-    "material": "primary material or null",
-    "area_range": { "min": null_or_number, "max": null_or_number },
-    "year_range": { "min": null_or_number, "max": null_or_number }
-  }
-}
-
-Only fill in fields that the user actually mentioned. Use null for everything else.`
+import { useState, useRef, useEffect, memo } from 'react'
+import * as api from '../api/client.js'
 
 const PRESETS = [
-  { label: '🏛️ Japanese modern museum',    query: 'Modern museum in Japan' },
-  { label: '🏟️ Stadium under 5,000 seats', query: 'Stadium with capacity less than 5000 seats' },
-  { label: '📚 Scandinavian library',       query: 'Library in Scandinavia' },
-  { label: '🏠 Minimalist housing',         query: 'Minimalist residential housing' },
-  { label: '🌿 Sustainable pavilion',       query: 'Eco-friendly or sustainable pavilion' },
-  { label: '🏢 Brutalist office',           query: 'Brutalist office or civic building' },
+  { label: '🏛️ Japanese modern museum',  query: 'Modern museum in Japan' },
+  { label: '🏠 Minimalist housing',       query: 'Minimalist residential housing' },
+  { label: '🌿 Landscape architecture',   query: 'Landscape or park architecture' },
+  { label: '🏢 Brutalist office',         query: 'Brutalist office or civic building' },
+  { label: '⛪ Religious architecture',   query: 'Religious or spiritual architecture' },
+  { label: '🏨 Boutique hospitality',     query: 'Small hotel or boutique hospitality' },
 ]
 
-const allBuildings = buildingsData.Buildings || []
-
-function searchBuildings(filters) {
-  return allBuildings.filter(b => {
-    if (filters.country) {
-      if (!String(b.country || '').toLowerCase().includes(filters.country.toLowerCase())) return false
-    }
-    if (filters.architect) {
-      if (!String(b.architects || '').toLowerCase().includes(filters.architect.toLowerCase())) return false
-    }
-    if (filters.program) {
-      if (!String(b.typology || '').toLowerCase().includes(filters.program.toLowerCase())) return false
-    }
-    const area = parseFloat(b.area_m2)
-    if (!isNaN(area)) {
-      if (filters.area_range?.min != null && area < filters.area_range.min) return false
-      if (filters.area_range?.max != null && area > filters.area_range.max) return false
-    }
-    return true
-  }).slice(0, 10).map(toImageCard)
+const FILTER_LABELS = {
+  program: '🏗',
+  location_country: '🌍',
+  material: '🧱',
+  mood: '✨',
+  year_min: '📅',
+  year_max: '📅',
+  min_area: '📐',
+  max_area: '📐',
 }
 
-async function callGemini(userMessage, history) {
-  const contents = [
-    ...history,
-    { role: 'user', parts: [{ text: userMessage }] },
-  ]
-
-  const res = await fetch(GEMINI_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      system_instruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
-      contents,
-      generationConfig: {
-        responseMimeType: 'application/json',
-        temperature: 0.3,
-      },
-    }),
-  })
-
-  if (!res.ok) {
-    const errBody = await res.json().catch(() => ({}))
-    throw new Error(errBody.error?.message || `Gemini error ${res.status}`)
+function FilterChips({ filters }) {
+  if (!filters) return null
+  const chips = []
+  if (filters.program)          chips.push(`${FILTER_LABELS.program} ${filters.program}`)
+  if (filters.location_country) chips.push(`${FILTER_LABELS.location_country} ${filters.location_country}`)
+  if (filters.material)         chips.push(`${FILTER_LABELS.material} ${filters.material}`)
+  if (filters.mood)             chips.push(`${FILTER_LABELS.mood} ${filters.mood}`)
+  if (filters.year_min || filters.year_max) {
+    const from = filters.year_min || '…'
+    const to   = filters.year_max || '…'
+    chips.push(`📅 ${from}–${to}`)
   }
-
-  const data = await res.json()
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text
-  if (!text) throw new Error('Empty response from Gemini')
-  return JSON.parse(text)
+  if (!chips.length) return null
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+      {chips.map(c => (
+        <span key={c} style={{
+          padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 500,
+          background: 'rgba(236,72,153,0.12)',
+          border: '1px solid rgba(236,72,153,0.25)',
+          color: '#f9a8d4',
+        }}>{c}</span>
+      ))}
+    </div>
+  )
 }
 
-export default function LLMSearchPage({ mode, projectId, projectName: initialName, minArea, maxArea, onBack, onStart, onUpdate }) {
+const Thumbnail = memo(function Thumbnail({ r }) {
+  const [imgLoading, setImgLoading] = useState(true)
+  return (
+    <div style={{ width: '100%', height: 72, position: 'relative', background: 'rgba(255,255,255,0.04)' }}>
+      {imgLoading && <div className="skeleton-shimmer" style={{ position: 'absolute', inset: 0 }} />}
+      {r.image_url ? (
+        <img
+          src={r.image_url}
+          alt={r.name_en || ''}
+          style={{
+            width: '100%', height: 72, objectFit: 'cover', display: 'block',
+            opacity: imgLoading ? 0 : 1, transition: 'opacity 0.3s',
+          }}
+          onLoad={() => setImgLoading(false)}
+          onError={e => { setImgLoading(false); e.target.style.display = 'none' }}
+        />
+      ) : (
+        <div style={{
+          width: '100%', height: 72,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 20,
+        }}>🏛️</div>
+      )}
+    </div>
+  )
+})
+
+function ResultStrip({ results, isFallback }) {
+  if (!results || !results.length) return null
+  return (
+    <div style={{ marginTop: 12 }}>
+      {isFallback && (
+        <div style={{
+          fontSize: 11, color: '#9ca3af', marginBottom: 6,
+          display: 'flex', alignItems: 'center', gap: 4,
+        }}>
+          <span style={{
+            padding: '1px 7px', borderRadius: 999, fontSize: 10,
+            background: 'rgba(251,191,36,0.12)',
+            border: '1px solid rgba(251,191,36,0.25)',
+            color: '#fbbf24',
+          }}>similar</span>
+          <span>showing related results</span>
+        </div>
+      )}
+      <div style={{
+        display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 6,
+        scrollbarWidth: 'none',
+      }}>
+        {results.slice(0, 12).map(r => (
+          <div key={r.building_id} style={{
+            flexShrink: 0, width: 100, borderRadius: 10, overflow: 'hidden',
+            background: 'rgba(255,255,255,0.05)',
+            border: '1px solid rgba(255,255,255,0.08)',
+          }}>
+            <Thumbnail r={r} />
+            <div style={{ padding: '5px 7px' }}>
+              <div style={{
+                fontSize: 10, fontWeight: 600, color: 'var(--color-text-2)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>{r.name_en || r.building_id}</div>
+              {r.metadata?.axis_country && (
+                <div style={{ fontSize: 9, color: 'var(--color-text-dim)', marginTop: 1 }}>
+                  {r.metadata.axis_country}
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+export default function LLMSearchPage({ mode, projectId, projectName: initialName, onBack, onStart, onUpdate }) {
   const [messages, setMessages] = useState([
     { role: 'ai', text: "Hello! Describe the kind of architecture you're looking for — country, program, architect, style, year, and so on." }
   ])
-  const [input, setInput] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
+  const [input, setInput]               = useState('')
+  const [isLoading, setIsLoading]       = useState(false)
   const [latestResults, setLatestResults] = useState([])
-  const [showStart, setShowStart] = useState(false)
+  const [latestFilters, setLatestFilters] = useState({})
+  const [showStart, setShowStart]       = useState(false)
   const messagesEndRef = useRef(null)
-  // Gemini multi-turn conversation history (not the same as displayed messages)
-  const geminiHistory = useRef([])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -113,13 +147,6 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
 
   function handlePreset(query) {
     if (isLoading) return
-    setInput('')
-    const savedInput = input
-    setInput(query)
-    // Use a ref-based approach: set input then immediately submit
-    setTimeout(() => {
-      setInput(savedInput)
-    }, 0)
     submitQuery(query)
   }
 
@@ -128,33 +155,33 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
     setIsLoading(true)
 
     try {
-      const parsed = await callGemini(text, geminiHistory.current)
+      const parsed     = await api.parseQuery(text)
+      const results    = parsed.results || []
+      const isFallback = parsed.is_fallback || false
+      const filters    = parsed.structured_filters || {}
 
-      geminiHistory.current = [
-        ...geminiHistory.current,
-        { role: 'user', parts: [{ text }] },
-        { role: 'model', parts: [{ text: JSON.stringify(parsed) }] },
-      ]
+      let replyText
+      if (results.length > 0 && !isFallback) {
+        replyText = `${parsed.reply}\n\nFound ${results.length} building${results.length !== 1 ? 's' : ''} matching your criteria.`
+      } else if (results.length > 0 && isFallback) {
+        replyText = `${parsed.reply}\n\n${parsed.fallback_note || 'No exact matches — here are some similar buildings you might like.'}`
+      } else {
+        replyText = `${parsed.reply}\n\nNo buildings found. Try describing it differently.`
+      }
 
-      const filters = parsed.filters || {}
-
-      if (minArea > 0) filters.area_range = { ...filters.area_range, min: Math.max(filters.area_range?.min ?? 0, minArea) }
-      if (maxArea < 100000) filters.area_range = { ...filters.area_range, max: Math.min(filters.area_range?.max ?? 100000, maxArea) }
-
-      const results = searchBuildings(filters)
-
-      const replyText = results.length > 0
-        ? `${parsed.reply}\n\nFound ${results.length} building${results.length !== 1 ? 's' : ''} matching your criteria.`
-        : `${parsed.reply}\n\nNo buildings matched those criteria in the local database. Try describing it differently.`
-
-      setMessages(prev => [...prev, { role: 'ai', text: replyText }])
+      setMessages(prev => [...prev, {
+        role: 'ai', text: replyText,
+        results, isFallback,
+        filters: isFallback ? {} : filters,
+      }])
 
       if (results.length > 0) {
         setLatestResults(results)
+        setLatestFilters(isFallback ? {} : filters)
         setShowStart(true)
       }
     } catch (err) {
-      console.error('[LLMSearchPage] Gemini call failed:', err)
+      console.error('[LLMSearchPage] parseQuery failed:', err)
       setMessages(prev => [...prev, { role: 'ai', text: `Something went wrong: ${err.message}. Please try again.` }])
     }
 
@@ -164,9 +191,9 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
   function handleStartSwiping() {
     const name = initialName || 'Untitled Project'
     if (mode === 'update') {
-      onUpdate(projectId, latestResults)
+      onUpdate(projectId, latestResults, latestFilters)
     } else {
-      onStart(name, latestResults)
+      onStart(name, latestResults, latestFilters)
     }
   }
 
@@ -231,6 +258,8 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
               })
             }}>
               {msg.text}
+              {msg.role === 'ai' && <FilterChips filters={msg.filters} />}
+              {msg.role === 'ai' && <ResultStrip results={msg.results} isFallback={msg.isFallback} />}
             </div>
           </div>
         ))}

@@ -32,6 +32,7 @@ class AnalysisSession(models.Model):
     current_round     = models.IntegerField(default=0)
     preference_vector = models.JSONField(default=list)
     exposed_ids       = models.JSONField(default=list)
+    initial_batch     = models.JSONField(default=list)  # building_ids for first 10 rounds
     created_at        = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

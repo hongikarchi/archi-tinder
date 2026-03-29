@@ -3,7 +3,7 @@ from .models import UserProfile
 
 
 class UserSerializer(serializers.ModelSerializer):
-    user_id   = serializers.UUIDField(source='id', read_only=True)
+    user_id   = serializers.IntegerField(source='id', read_only=True)
     providers = serializers.SerializerMethodField()
 
     class Meta:
