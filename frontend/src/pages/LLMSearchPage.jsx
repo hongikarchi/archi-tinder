@@ -56,7 +56,7 @@ const Thumbnail = memo(function Thumbnail({ r }) {
       {r.image_url ? (
         <img
           src={r.image_url}
-          alt={r.name_en || ''}
+          alt={r.image_title || ''}
           style={{
             width: '100%', height: 72, objectFit: 'cover', display: 'block',
             opacity: imgLoading ? 0 : 1, transition: 'opacity 0.3s',
@@ -98,7 +98,7 @@ function ResultStrip({ results, isFallback }) {
         scrollbarWidth: 'none',
       }}>
         {results.slice(0, 12).map(r => (
-          <div key={r.building_id} style={{
+          <div key={r.image_id} style={{
             flexShrink: 0, width: 100, borderRadius: 10, overflow: 'hidden',
             background: 'rgba(255,255,255,0.05)',
             border: '1px solid rgba(255,255,255,0.08)',
@@ -108,7 +108,7 @@ function ResultStrip({ results, isFallback }) {
               <div style={{
                 fontSize: 10, fontWeight: 600, color: 'var(--color-text-2)',
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              }}>{r.name_en || r.building_id}</div>
+              }}>{r.image_title || r.image_id}</div>
               {r.metadata?.axis_country && (
                 <div style={{ fontSize: 9, color: 'var(--color-text-dim)', marginTop: 1 }}>
                   {r.metadata.axis_country}

@@ -194,7 +194,13 @@ class TokenRefreshView(APIView):
             return Response({'detail': 'refresh required'}, status=status.HTTP_400_BAD_REQUEST)
         try:
             refresh = RefreshToken(refresh_token)
-            return Response({'access': str(refresh.access_token)})
+            data = {'access': str(refresh.access_token)}
+            if settings.SIMPLE_JWT.get('ROTATE_REFRESH_TOKENS'):
+                refresh.set_jti()
+                refresh.set_exp()
+                refresh.set_iat()
+                data['refresh'] = str(refresh)
+            return Response(data)
         except Exception:
             return Response({'detail': 'Invalid or expired token'}, status=status.HTTP_401_UNAUTHORIZED)
 

@@ -70,8 +70,11 @@ async function _tryRefresh() {
       body: JSON.stringify({ refresh }),
     })
     if (!res.ok) return false
-    const { access } = await res.json()
-    localStorage.setItem('archithon_access', access)
+    const data = await res.json()
+    localStorage.setItem('archithon_access', data.access)
+    if (data.refresh) {
+      localStorage.setItem('archithon_refresh', data.refresh)
+    }
     return true
   } catch {
     return false

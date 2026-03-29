@@ -210,14 +210,18 @@ class SwipeView(APIView):
                     'is_analysis_completed': True,
                 })
 
-            # Select next image
+            # Select next image — use pre-computed initial batch for early rounds
             filters   = project.filters or None
-            next_card = engine.select_next_image(
-                session.preference_vector,
-                session.exposed_ids,
-                session.current_round,
-                filters,
-            )
+            if session.current_round < len(session.initial_batch):
+                next_bid = session.initial_batch[session.current_round]
+                next_card = engine.get_building_card(next_bid)
+            else:
+                next_card = engine.select_next_image(
+                    session.preference_vector,
+                    session.exposed_ids,
+                    session.current_round,
+                    filters,
+                )
 
             if next_card:
                 session.exposed_ids = session.exposed_ids + [next_card['building_id']]
@@ -240,11 +244,9 @@ class SessionResultView(APIView):
         profile = _get_profile(request)
         if not profile:
             return Response({'detail': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
-        session = AnalysisSession.objects.filter(session_id=session_id).first()
+        session = AnalysisSession.objects.filter(session_id=session_id, user=profile).first()
         if not session:
             return Response({'detail': 'Session not found'}, status=status.HTTP_404_NOT_FOUND)
-        if session.user != profile:
-            return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
 
         # Liked buildings
         liked_ids   = list(session.swipes.filter(action='like').values_list('building_id', flat=True))
@@ -286,6 +288,8 @@ class BuildingBatchView(APIView):
         ids = request.data.get('building_ids', [])
         if not ids:
             return Response([])
+        if not isinstance(ids, list) or len(ids) > 200:
+            return Response({'detail': 'building_ids must be a list of at most 200 items'}, status=status.HTTP_400_BAD_REQUEST)
         cards = engine.get_buildings_by_ids(ids)
         return Response(cards)
 
@@ -350,13 +354,13 @@ class ParseQueryView(APIView):
                 results = engine.search_by_filters(relaxed, limit=20)
                 if results:
                     is_fallback   = True
-                    fallback_note = "No exact matches for those criteria — here are similar buildings you might like."
+                    fallback_note = "No exact matches for those criteria \u2014 here are similar buildings you might like."
 
         if not results:
             # Final fallback: diverse random
             results       = engine.get_diverse_random(n=20)
             is_fallback   = True
-            fallback_note = "Couldn't find an exact match — here are some buildings you might enjoy instead."
+            fallback_note = "Couldn\u2019t find an exact match \u2014 here are some buildings you might enjoy instead."
 
         return Response({
             'reply':              parsed['reply'],
