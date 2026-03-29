@@ -160,8 +160,10 @@ export default function App() {
   })
 
   const [currentCard, setCurrentCard] = useState(null)
+  const [prefetchCard, setPrefetchCard] = useState(null)
   const [sessionProgress, setSessionProgress] = useState(null)
   const [isSwipeLoading, setIsSwipeLoading] = useState(false)
+  const imagePreloadCache = useRef(new Set())
   const [isSessionCompleted, setIsSessionCompleted] = useState(false)
   const [activeProjectId, setActiveProjectId] = useState(() => {
     const id = sessionStorage.getItem('archithon_user')
@@ -190,7 +192,7 @@ export default function App() {
     const onExpired = () => handleLogout()
     window.addEventListener('archithon:session-expired', onExpired)
     return () => window.removeEventListener('archithon:session-expired', onExpired)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     if (!userId) return
@@ -230,6 +232,15 @@ export default function App() {
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  function preloadImage(url) {
+    if (!url || imagePreloadCache.current.has(url)) return Promise.resolve()
+    return new Promise(resolve => {
+      const img = new Image()
+      img.onload = img.onerror = () => { imagePreloadCache.current.add(url); resolve() }
+      img.src = url
+    })
+  }
+
   function toggleTheme() {
     setTheme(t => t === 'dark' ? 'light' : 'dark')
   }
@@ -263,6 +274,11 @@ export default function App() {
     setCurrentCard(result.next_image)
     setSessionProgress(result.progress)
     if (!result.next_image) setIsSessionCompleted(true)
+    if (result.next_image?.image_url) preloadImage(result.next_image.image_url)
+    if (result.prefetch_image) {
+      setPrefetchCard(result.prefetch_image)
+      preloadImage(result.prefetch_image.image_url)
+    }
     setIsSwipeLoading(false)
   }
 
@@ -287,14 +303,24 @@ export default function App() {
     const project = projects.find(p => p.id === activeProjectId)
     if (!project?.sessionId) return
 
-    setIsSwipeLoading(true)
-    const newSwipedIds = [...(project.swipedIds || []), currentCard.image_id]
+    const swipedCard = currentCard
+    const savedPrefetch = prefetchCard
+    const newSwipedIds = [...(project.swipedIds || []), swipedCard.image_id]
+
+    const canInstantSwap = savedPrefetch && imagePreloadCache.current.has(savedPrefetch.image_url)
+    if (canInstantSwap) {
+      setCurrentCard(savedPrefetch)
+      setPrefetchCard(null)
+    } else {
+      setCurrentCard(null)
+      setIsSwipeLoading(true)
+    }
 
     const result = await api.recordSwipe({
       session_id: project.sessionId,
       user_id: userId,
       project_id: activeProjectId,
-      image_id: currentCard.image_id,
+      image_id: swipedCard.image_id,
       action,
       swiped_image_ids: newSwipedIds,
     })
@@ -304,7 +330,7 @@ export default function App() {
       return {
         ...p,
         swipedIds: newSwipedIds,
-        likedBuildings: action === 'like' ? [...p.likedBuildings, currentCard] : p.likedBuildings,
+        likedBuildings: action === 'like' ? [...p.likedBuildings, swipedCard] : p.likedBuildings,
       }
     }))
 
@@ -313,6 +339,7 @@ export default function App() {
     if (result.is_analysis_completed) {
       setIsSessionCompleted(true)
       setCurrentCard(null)
+      setPrefetchCard(null)
       const resultData = await api.getResult({
         session_id: project.sessionId,
         user_id: userId,
@@ -324,7 +351,21 @@ export default function App() {
         analysisReport: resultData.analysis_report || null,
       } : p))
     } else {
-      setCurrentCard(result.next_image)
+      if (canInstantSwap) {
+        // Verify backend agrees with what we're showing; correct if it diverged (rare)
+        if (result.next_image && result.next_image.image_id !== savedPrefetch.image_id) {
+          setCurrentCard(result.next_image)
+          preloadImage(result.next_image.image_url)
+        }
+        // Store look-ahead for the next round
+        setPrefetchCard(result.prefetch_image)
+        preloadImage(result.prefetch_image?.image_url)
+      } else {
+        setCurrentCard(result.next_image)
+        setPrefetchCard(result.prefetch_image)
+        preloadImage(result.next_image?.image_url)
+        preloadImage(result.prefetch_image?.image_url)
+      }
     }
 
     setIsSwipeLoading(false)

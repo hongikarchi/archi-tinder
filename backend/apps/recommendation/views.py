@@ -120,8 +120,9 @@ class SessionCreateView(APIView):
         if not initial_cards:
             return Response({'detail': 'No buildings found for given filters'}, status=status.HTTP_404_NOT_FOUND)
 
-        initial_ids  = [c['building_id'] for c in initial_cards]
-        first_card   = initial_cards[0]
+        initial_ids   = [c['building_id'] for c in initial_cards]
+        first_card    = initial_cards[0]
+        prefetch_card = initial_cards[1] if len(initial_cards) > 1 else None
 
         session = AnalysisSession.objects.create(
             user              = profile,
@@ -140,6 +141,7 @@ class SessionCreateView(APIView):
             'session_status': session.status,
             'total_rounds':   session.total_rounds,
             'next_image':     first_card,
+            'prefetch_image': prefetch_card,
             'progress':       _progress(session),
         }, status=status.HTTP_201_CREATED)
 
@@ -203,10 +205,11 @@ class SwipeView(APIView):
                 session.status = 'completed'
                 session.save(update_fields=['preference_vector', 'current_round', 'status'])
                 return Response({
-                    'accepted':             True,
-                    'session_status':       'completed',
-                    'progress':             _progress(session),
-                    'next_image':           None,
+                    'accepted':              True,
+                    'session_status':        'completed',
+                    'progress':              _progress(session),
+                    'next_image':            None,
+                    'prefetch_image':        None,
                     'is_analysis_completed': True,
                 })
 
@@ -226,6 +229,23 @@ class SwipeView(APIView):
             if next_card:
                 session.exposed_ids = session.exposed_ids + [next_card['building_id']]
 
+            # Compute prefetch_card (best-effort: card after next_card)
+            prefetch_card = None
+            if next_card and session.current_round + 1 < session.total_rounds:
+                try:
+                    if session.current_round + 1 < len(session.initial_batch):
+                        prefetch_bid  = session.initial_batch[session.current_round + 1]
+                        prefetch_card = engine.get_building_card(prefetch_bid)
+                    else:
+                        prefetch_card = engine.select_next_image(
+                            session.preference_vector,
+                            session.exposed_ids,  # already includes next_card
+                            session.current_round + 1,
+                            filters,
+                        )
+                except Exception:
+                    prefetch_card = None
+
             session.save(update_fields=['preference_vector', 'current_round', 'exposed_ids'])
 
         return Response({
@@ -233,6 +253,7 @@ class SwipeView(APIView):
             'session_status':        session.status,
             'progress':              _progress(session),
             'next_image':            next_card,
+            'prefetch_image':        prefetch_card,
             'is_analysis_completed': False,
         })
 

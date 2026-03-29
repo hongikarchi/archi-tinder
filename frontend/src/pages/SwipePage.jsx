@@ -22,6 +22,7 @@ function InfoRow({ label, value }) {
 function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
   const [isExpanded,  setIsExpanded]  = useState(false)
   const [showGallery, setShowGallery] = useState(false)
+  const [imgLoaded,   setImgLoaded]   = useState(false)
   const dragStart = useRef(null)
   const dragStartTime = useRef(null)
 
@@ -82,11 +83,22 @@ function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
           boxShadow: '0 25px 50px rgba(0,0,0,0.6)',
         }}>
           {/* Photo */}
-          <div style={{
-            position: 'absolute', inset: 0,
-            backgroundImage: `url(${card.image_url})`,
-            backgroundSize: 'cover', backgroundPosition: 'center',
-          }} />
+          <div className="skeleton-shimmer" style={{ position: 'absolute', inset: 0 }} />
+          <img
+            src={card.image_url}
+            alt={card.image_title}
+            fetchPriority="high"
+            decoding="sync"
+            draggable={false}
+            onLoad={() => setImgLoaded(true)}
+            style={{
+              position: 'absolute', inset: 0,
+              width: '100%', height: '100%',
+              objectFit: 'cover', objectPosition: 'center',
+              opacity: imgLoaded ? 1 : 0,
+              transition: 'opacity 0.2s ease',
+            }}
+          />
 
           {/* Gradient — expands upward on detail open */}
           <div style={{

@@ -152,7 +152,8 @@ export async function startSession(params) {
   })
   return {
     ...result,
-    next_image: normalizeCard(result.next_image),
+    next_image:     normalizeCard(result.next_image),
+    prefetch_image: normalizeCard(result.prefetch_image),
   }
 }
 
@@ -169,7 +170,8 @@ export async function recordSwipe({ session_id, user_id, project_id, image_id, a
   })
   return {
     ...result,
-    next_image: normalizeCard(result.next_image),
+    next_image:     normalizeCard(result.next_image),
+    prefetch_image: normalizeCard(result.prefetch_image),
   }
 }
 
@@ -233,7 +235,7 @@ export async function getBuildings(buildingIds) {
 /**
  * Fetch final session results.
  */
-export async function getResult({ session_id, user_id, project_id }) {
+export async function getResult({ session_id }) {
   const result = await callApi('GET', `/analysis/sessions/${session_id}/result/`)
   return {
     ...result,
