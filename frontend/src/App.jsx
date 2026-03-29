@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, Component } from 'react'
+import DebugOverlay from './components/DebugOverlay.jsx'
 import SetupPage from './pages/SetupPage.jsx'
 import ProjectSetupPage from './pages/ProjectSetupPage.jsx'
 import LLMSearchPage from './pages/LLMSearchPage.jsx'
@@ -558,6 +559,17 @@ export default function App() {
               Go to Home
             </button>
           </div>
+        )}
+
+        {typeof window !== 'undefined' && window.__debugMode && (
+          <DebugOverlay
+            userId={userId}
+            session={sessionProgress ? {
+              id: activeProject?.sessionId || null,
+              round: sessionProgress.current,
+              total: sessionProgress.total,
+            } : null}
+          />
         )}
 
       </div>

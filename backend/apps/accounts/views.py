@@ -1,4 +1,5 @@
 import logging
+import os
 import requests
 from django.contrib.auth.models import User
 from rest_framework import status
@@ -158,6 +159,28 @@ class NaverLoginView(APIView):
         )
         logger.info('Naver login: user=%s', profile.pk)
         return Response(_make_token_response(profile))
+
+
+# ── Dev Login (automated testing only) ───────────────────────────────────────
+
+class DevLoginView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        secret = os.getenv('DEV_LOGIN_SECRET', '')
+        if not secret:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        if request.data.get('secret') != secret:
+            return Response({'detail': 'Invalid secret'}, status=status.HTTP_403_FORBIDDEN)
+
+        user, _ = User.objects.get_or_create(
+            email='test@architinder.dev',
+            defaults={'username': 'test_architinder', 'first_name': 'Test User'},
+        )
+        profile, _ = UserProfile.objects.get_or_create(
+            user=user, defaults={'display_name': 'Test User'},
+        )
+        return Response(_make_token_response(profile), status=status.HTTP_200_OK)
 
 
 # ── Token refresh ─────────────────────────────────────────────────────────────

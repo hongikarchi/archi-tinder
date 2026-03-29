@@ -9,6 +9,11 @@ const BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001/api/v1'
 
 const isLocalSession = id => id?.startsWith('sess_local_')
 
+// ── API call tracker (for DebugOverlay) ───────────────────────────────────────
+
+let _lastCall = null
+export function getLastCall() { return _lastCall }
+
 // ── JWT token storage ─────────────────────────────────────────────────────────
 
 export function getToken()         { return localStorage.getItem('archithon_access') }
@@ -24,6 +29,7 @@ export function clearTokens() {
 // ── Core fetch helper ─────────────────────────────────────────────────────────
 
 async function callApi(method, path, body, retry = true) {
+  const t0 = Date.now()
   const token = getToken()
   const res = await fetch(`${BASE}${path}`, {
     method,
@@ -33,6 +39,8 @@ async function callApi(method, path, body, retry = true) {
     },
     ...(body ? { body: JSON.stringify(body) } : {}),
   })
+
+  _lastCall = { method, url: path, status: res.status, ms: Date.now() - t0 }
 
   // Auto-refresh on 401 (once)
   if (res.status === 401 && retry) {
@@ -106,6 +114,18 @@ export function normalizeCard(card) {
  */
 export async function socialLogin(provider, accessToken) {
   const data = await callApi('POST', `/auth/social/${provider}/`, { access_token: accessToken }, false)
+  setTokens(data.access, data.refresh)
+  return data.user
+}
+
+export async function devLogin(secret) {
+  const res = await fetch(`${BASE}/auth/dev-login/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ secret }),
+  })
+  if (!res.ok) throw new Error(`Dev login failed: ${res.status}`)
+  const data = await res.json()
   setTokens(data.access, data.refresh)
   return data.user
 }
