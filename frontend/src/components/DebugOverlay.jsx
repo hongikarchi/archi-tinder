@@ -21,7 +21,7 @@ export default function DebugOverlay({ userId, session }) {
     return () => clearInterval(id)
   }, [])
 
-  if (typeof window === 'undefined' || !window.__debugMode) return null
+  if (typeof window === 'undefined' || (!window.__debugMode && localStorage.getItem('__debugMode') !== 'true')) return null
 
   const token = localStorage.getItem('archithon_access')
   const jwtExp = token ? decodeJwtExp(token) : 'none'

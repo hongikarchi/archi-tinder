@@ -132,7 +132,7 @@ export async function devLogin(secret) {
 
 export async function logout(refreshToken) {
   try {
-    await callApi('POST', '/auth/logout/', { refresh: refreshToken })
+    await callApi('POST', '/auth/logout/', { refresh: refreshToken }, false)
   } catch (err) {
     console.error('[api/client] logout error (ignoring):', err)
   }

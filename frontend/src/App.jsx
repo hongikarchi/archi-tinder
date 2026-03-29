@@ -219,6 +219,7 @@ export default function App() {
 
   // On refresh, re-init swipe session if the user was on the swipe tab
   const swipeRestored = useRef(false)
+  const loggingOut = useRef(false)
   useEffect(() => {
     if (swipeRestored.current) return
     if (tab === 'swipe' && activeProjectId && userId) {
@@ -426,6 +427,8 @@ export default function App() {
   }
 
   function handleLogout() {
+    if (loggingOut.current) return
+    loggingOut.current = true
     const refresh = localStorage.getItem('archithon_refresh')
     api.logout(refresh)   // blacklists refresh token, clears JWT from localStorage
     clearSessions()       // clears in-memory local session state (spec F7)
@@ -440,6 +443,7 @@ export default function App() {
     setSessionProgress(null)
     setIsSessionCompleted(false)
     setLlmContext(null)
+    loggingOut.current = false
   }
 
   if (!userId) {
@@ -561,7 +565,7 @@ export default function App() {
           </div>
         )}
 
-        {typeof window !== 'undefined' && window.__debugMode && (
+        {typeof window !== 'undefined' && (window.__debugMode || localStorage.getItem('__debugMode') === 'true') && (
           <DebugOverlay
             userId={userId}
             session={sessionProgress ? {
