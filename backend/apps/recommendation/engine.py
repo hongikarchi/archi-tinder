@@ -30,14 +30,17 @@ def _row_to_card(row):
     base         = _s.IMAGE_BASE_URL.rstrip('/')
     cover        = photos[0] if photos else ''
     image_url    = f'{base}/{building_id}/{cover}' if cover else ''
-    gallery      = [f'{base}/{building_id}/{f}' for f in (photos[1:] + drawings) if f]
+    extra_photos = [f'{base}/{building_id}/{f}' for f in photos[1:] if f]
+    drawing_urls = [f'{base}/{building_id}/{f}' for f in drawings if f]
+    gallery      = extra_photos + drawing_urls
     return {
-        'building_id':   building_id,
-        'name_en':       row.get('name_en') or '',
-        'project_name':  row.get('project_name') or '',
-        'image_url':     image_url,
-        'url':           row.get('url'),
-        'gallery':       gallery,
+        'building_id':          building_id,
+        'name_en':              row.get('name_en') or '',
+        'project_name':         row.get('project_name') or '',
+        'image_url':            image_url,
+        'url':                  row.get('url'),
+        'gallery':              gallery,
+        'gallery_drawing_start': len(extra_photos),
         'metadata': {
             'axis_typology':   row.get('program'),
             'axis_architects': row.get('architect'),

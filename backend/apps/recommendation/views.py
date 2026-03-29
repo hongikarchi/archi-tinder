@@ -339,9 +339,30 @@ class ParseQueryView(APIView):
         filters = {k: v for k, v in parsed['filters'].items() if v is not None}
         results = engine.search_by_filters(filters, limit=20) if filters else []
 
+        is_fallback   = False
+        fallback_note = ''
+
+        if not results:
+            # Relax: drop geographic + numeric constraints, keep program/mood/material
+            relaxed = {k: v for k, v in filters.items()
+                       if k not in ('location_country', 'year_min', 'year_max', 'min_area', 'max_area')}
+            if relaxed and relaxed != filters:
+                results = engine.search_by_filters(relaxed, limit=20)
+                if results:
+                    is_fallback   = True
+                    fallback_note = "No exact matches for those criteria — here are similar buildings you might like."
+
+        if not results:
+            # Final fallback: diverse random
+            results       = engine.get_diverse_random(n=20)
+            is_fallback   = True
+            fallback_note = "Couldn't find an exact match — here are some buildings you might enjoy instead."
+
         return Response({
             'reply':              parsed['reply'],
             'structured_filters': parsed['filters'],
             'suggestions':        [],
             'results':            results,
+            'is_fallback':        is_fallback,
+            'fallback_note':      fallback_note,
         })

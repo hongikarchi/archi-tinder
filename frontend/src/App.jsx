@@ -44,43 +44,68 @@ class ErrorBoundary extends Component {
 }
 
 /* ── Tab Bar ─────────────────────────────────────────────────────────────── */
+const TAB_ICONS = {
+  home: (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" />
+      <line x1="12" y1="8" x2="12" y2="16" />
+      <line x1="8" y1="12" x2="16" y2="12" />
+    </svg>
+  ),
+  swipe: (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4" y="6" width="16" height="13" rx="2" />
+      <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
+    </svg>
+  ),
+  folders: (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
+    </svg>
+  ),
+}
+
 function TabBar({ tab, onSelect, swipeEnabled }) {
   const tabs = [
-    { id: 'home',    icon: '＋',  label: 'New'     },
-    { id: 'swipe',   icon: '🃏',  label: 'Swipe'   },
-    { id: 'folders', icon: '📁',  label: 'Folders' },
+    { id: 'home',    label: 'New'     },
+    { id: 'swipe',   label: 'Swipe'   },
+    { id: 'folders', label: 'Library' },
   ]
   return (
     <nav style={{
       position: 'fixed', bottom: 0, left: 0, right: 0,
-      display: 'flex', zIndex: 100,
+      display: 'flex', zIndex: 100, height: 64,
       background: 'var(--color-nav-bg)',
-      backdropFilter: 'blur(16px)',
+      backdropFilter: 'blur(20px)',
       borderTop: '1px solid var(--color-border)',
     }}>
       {tabs.map(t => {
-        const active = tab === t.id
+        const active   = tab === t.id
         const disabled = t.id === 'swipe' && !swipeEnabled
         return (
           <button
             key={t.id}
             onClick={() => !disabled && onSelect(t.id)}
             style={{
-              flex: 1, padding: '12px 0 16px', border: 'none', background: 'none',
-              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
-              cursor: disabled ? 'default' : 'pointer',
-              color: disabled ? 'var(--color-nav-disabled)' : active ? 'var(--color-text)' : 'var(--color-nav-inactive)',
-              transition: 'color 0.2s', position: 'relative', fontFamily: 'inherit',
+              flex: 1, border: 'none', background: 'none',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4,
+              cursor: disabled ? 'default' : 'pointer', fontFamily: 'inherit',
+              color: disabled ? 'var(--color-nav-disabled)' : active ? '#ec4899' : 'var(--color-nav-inactive)',
+              transition: 'color 0.18s',
+              paddingBottom: 4,
             }}
           >
-            <span style={{ fontSize: 20, lineHeight: 1 }}>{t.icon}</span>
-            <span style={{ fontSize: 10, fontWeight: active ? 700 : 400 }}>{t.label}</span>
-            {active && (
-              <span style={{
-                position: 'absolute', bottom: 0, width: 28, height: 2,
-                background: 'var(--color-text)', borderRadius: 2,
-              }} />
-            )}
+            <div style={{
+              width: 40, height: 28, borderRadius: 14,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: active ? 'rgba(236,72,153,0.12)' : 'transparent',
+              transition: 'background 0.18s',
+            }}>
+              {TAB_ICONS[t.id]}
+            </div>
+            <span style={{ fontSize: 10, fontWeight: active ? 600 : 400, letterSpacing: '0.02em' }}>
+              {t.label}
+            </span>
           </button>
         )
       })}
@@ -90,19 +115,35 @@ function TabBar({ tab, onSelect, swipeEnabled }) {
 
 /* ── Theme Toggle Button ─────────────────────────────────────────────────── */
 function ThemeToggle({ theme, onToggle }) {
+  const isDark = theme === 'dark'
   return (
     <button
       onClick={onToggle}
-      title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+      title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
       style={{
-        background: 'var(--color-surface)', border: '1px solid var(--color-border-soft)',
-        borderRadius: 8, padding: '5px 10px',
-        color: 'var(--color-text-dim)', fontSize: 15, cursor: 'pointer',
-        fontFamily: 'inherit', lineHeight: 1,
-        transition: 'background 0.2s',
+        width: 34, height: 34, borderRadius: '50%',
+        background: 'var(--color-surface)',
+        border: '1px solid var(--color-border-soft)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: 'var(--color-text-dim)', cursor: 'pointer',
+        transition: 'background 0.2s, color 0.2s',
       }}
+      onMouseEnter={e => { e.currentTarget.style.color = 'var(--color-text)' }}
+      onMouseLeave={e => { e.currentTarget.style.color = 'var(--color-text-dim)' }}
     >
-      {theme === 'dark' ? '☀️' : '🌙'}
+      {isDark ? (
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="5" />
+          <line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" />
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+          <line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" />
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+        </svg>
+      ) : (
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+        </svg>
+      )}
     </button>
   )
 }
@@ -409,17 +450,27 @@ export default function App() {
       <div style={{ height: '100vh', overflow: 'hidden' }}>
 
         {/* Header controls */}
-        <div style={{ position: 'fixed', top: 14, right: 16, zIndex: 200, display: 'flex', gap: 8 }}>
+        <div style={{ position: 'fixed', top: 14, right: 16, zIndex: 200, display: 'flex', gap: 6, alignItems: 'center' }}>
           <ThemeToggle theme={theme} onToggle={toggleTheme} />
           <button
             onClick={handleLogout}
+            title="Log out"
             style={{
-              background: 'var(--color-surface)', border: '1px solid var(--color-border-soft)',
-              borderRadius: 8, padding: '5px 12px',
-              color: 'var(--color-text-dim)', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit',
+              width: 34, height: 34, borderRadius: '50%',
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border-soft)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'var(--color-text-dim)', cursor: 'pointer',
+              transition: 'color 0.2s',
             }}
+            onMouseEnter={e => { e.currentTarget.style.color = '#f87171' }}
+            onMouseLeave={e => { e.currentTarget.style.color = 'var(--color-text-dim)' }}
           >
-            Logout
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
           </button>
         </div>
 
