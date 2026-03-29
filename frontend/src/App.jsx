@@ -7,7 +7,6 @@ import SwipePage from './pages/SwipePage.jsx'
 import FavoritesPage from './pages/FavoritesPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import * as api from './api/client.js'
-import { clearSessions } from './api/localSession.js'
 
 function normalizeFilters(filters) {
   if (!filters) return {}
@@ -431,7 +430,6 @@ export default function App() {
     loggingOut.current = true
     const refresh = localStorage.getItem('archithon_refresh')
     api.logout(refresh)   // blacklists refresh token, clears JWT from localStorage
-    clearSessions()       // clears in-memory local session state (spec F7)
     sessionStorage.removeItem('archithon_user')
     sessionStorage.removeItem('archithon_tab')
     sessionStorage.removeItem('archithon_llmContext')
