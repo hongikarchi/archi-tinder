@@ -289,7 +289,7 @@ export default function App() {
     const newProject = {
       id: projectId, projectName, filters: llmFilters || {},
       likedBuildings: [], swipedIds: [],
-      predictedLikes: [], analysisReport: null,
+      predictedLikes: [],
       sessionId: null, createdAt: new Date().toISOString(),
       deckImages: preloadedImages || null,
     }
@@ -352,7 +352,6 @@ export default function App() {
         setProjects(prev => prev.map(p => p.id === activeProjectId ? {
           ...p,
           predictedLikes: resultData.predicted_like_images || [],
-          analysisReport: resultData.analysis_report || null,
         } : p))
       } finally {
         setIsResultLoading(false)
@@ -457,7 +456,6 @@ export default function App() {
           likedBuildings: (p.liked_ids || []).map(bid => cardMap[bid]).filter(Boolean),
           swipedIds: [...(p.liked_ids || []), ...(p.disliked_ids || [])],
           predictedLikes: [],
-          analysisReport: p.analysis_report || null,
           finalReport: p.final_report || null,
           sessionId: null,
           createdAt: p.created_at,
@@ -553,8 +551,6 @@ export default function App() {
             mode={llmContext.mode}
             projectId={llmContext.projectId}
             projectName={llmContext.projectName}
-            minArea={llmContext.minArea}
-            maxArea={llmContext.maxArea}
             onBack={() =>
               llmContext.mode === 'new'
                 ? setLlmContext({ mode: 'new', step: 'setup' })
