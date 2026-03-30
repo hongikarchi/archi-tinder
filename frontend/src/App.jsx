@@ -229,7 +229,7 @@ export default function App() {
       const project = projects.find(p => p.id === activeProjectId)
       if (project) {
         swipeRestored.current = true
-        initSession(activeProjectId, project.filters, project.swipedIds, false, 'keep', project.deckImages || null)
+        initSession(activeProjectId, project.filters)
       }
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -253,17 +253,12 @@ export default function App() {
     setTab(newTab)
   }
 
-  async function initSession(projectId, filters, swipedIds, isNew, filterMode = 'keep', preloadedImages = null) {
+  async function initSession(projectId, filters) {
     setIsSwipeLoading(true)
     setIsSessionCompleted(false)
     const result = await api.startSession({
-      user_id: userId,
       project_id: projectId,
-      is_new_project: isNew,
-      filter_mode: filterMode,
       filters: normalizeFilters(filters),
-      swiped_image_ids: swipedIds || [],
-      preloaded_images: preloadedImages || null,
     })
     setProjects(prev => prev.map(p => {
       if (p.id !== projectId) return p
@@ -297,7 +292,7 @@ export default function App() {
     setProjects(prev => [...prev, newProject])
     setActiveProjectId(projectId)
     setTab('swipe')
-    await initSession(projectId, llmFilters || {}, [], true, 'keep', preloadedImages)
+    await initSession(projectId, llmFilters || {})
   }
 
   async function handleSwipeCard(action) {
@@ -320,11 +315,8 @@ export default function App() {
 
     const result = await api.recordSwipe({
       session_id: project.sessionId,
-      user_id: userId,
-      project_id: activeProjectId,
       image_id: swipedCard.image_id,
       action,
-      swiped_image_ids: newSwipedIds,
     })
 
     setProjects(prev => prev.map(p => {
@@ -346,8 +338,6 @@ export default function App() {
       try {
         const resultData = await api.getResult({
           session_id: project.sessionId,
-          user_id: userId,
-          project_id: activeProjectId,
         })
         setProjects(prev => prev.map(p => p.id === activeProjectId ? {
           ...p,
@@ -383,7 +373,7 @@ export default function App() {
     setLlmContext(null)
     setActiveProjectId(id)
     setTab('swipe')
-    await initSession(id, project.filters, project.swipedIds, false, 'keep', project.deckImages || null)
+    await initSession(id, project.filters)
   }
 
   async function handleUpdateWithImages(id, preloadedImages, llmFilters = {}) {
@@ -393,7 +383,7 @@ export default function App() {
     setActiveProjectId(id)
     setProjects(prev => prev.map(p => p.id === id ? { ...p, deckImages: preloadedImages } : p))
     setTab('swipe')
-    await initSession(id, llmFilters || project.filters, project.swipedIds, false, 'modify', preloadedImages)
+    await initSession(id, llmFilters || project.filters)
   }
 
   function handleDeleteProject(id) {

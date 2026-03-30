@@ -317,17 +317,6 @@ class BuildingBatchView(APIView):
 
 # ── Reports ───────────────────────────────────────────────────────────────────
 
-class ProjectReportView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request, pk):
-        profile = _get_profile(request)
-        project = Project.objects.filter(project_id=pk, user=profile).first() if profile else None
-        if not project:
-            return Response({'detail': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
-        return Response({'analysis_report': project.analysis_report, 'final_report': project.final_report})
-
-
 class ProjectReportGenerateView(APIView):
     permission_classes = [IsAuthenticated]
 

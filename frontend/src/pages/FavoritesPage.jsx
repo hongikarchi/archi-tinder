@@ -75,7 +75,7 @@ export default function FavoritesPage({ projects, onDeleteProject, onResumeProje
 function ProjectCard({ project, onClick }) {
   const liked   = project.likedBuildings?.length || 0
   const swiped  = project.swipedIds?.length || 0
-  const { typologies = [] } = project.filters || {}
+  const program = (project.filters || {}).program || null
 
   return (
     <div
@@ -97,20 +97,13 @@ function ProjectCard({ project, onClick }) {
           <p style={{ color: 'var(--color-text-dim)', fontSize: 12, margin: '0 0 10px' }}>
             {new Date(project.createdAt).toLocaleDateString()} · {swiped} swiped
           </p>
-          {typologies.length > 0 ? (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-              {typologies.slice(0, 4).map(f => (
-                <span key={f} style={{
-                  fontSize: 11, padding: '2px 8px', borderRadius: 999,
-                  background: 'var(--color-surface-3)', color: 'var(--color-text-muted)',
-                }}>
-                  {f}
-                </span>
-              ))}
-              {typologies.length > 4 && (
-                <span style={{ fontSize: 11, color: 'var(--color-text-dimmer)' }}>+{typologies.length - 4}</span>
-              )}
-            </div>
+          {program ? (
+            <span style={{
+              fontSize: 11, padding: '2px 8px', borderRadius: 999,
+              background: 'var(--color-surface-3)', color: 'var(--color-text-muted)',
+            }}>
+              {program}
+            </span>
           ) : (
             <span style={{ fontSize: 11, color: 'var(--color-text-dimmest)' }}>All buildings</span>
           )}

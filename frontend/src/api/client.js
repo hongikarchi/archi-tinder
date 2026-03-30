@@ -146,7 +146,6 @@ export async function logout(refreshToken) {
  */
 export async function startSession(params) {
   const result = await callApi('POST', '/analysis/sessions/', {
-    user_id:    params.user_id,
     project_id: params.project_id,
     filters:    params.filters || {},
   })
@@ -160,10 +159,8 @@ export async function startSession(params) {
 /**
  * Record a swipe action → receive next_image.
  */
-export async function recordSwipe({ session_id, user_id, project_id, image_id, action }) {
+export async function recordSwipe({ session_id, image_id, action }) {
   const result = await callApi('POST', `/analysis/sessions/${session_id}/swipes/`, {
-    user_id,
-    project_id,
     building_id:      image_id,
     action,
     idempotency_key:  `swp_${session_id}_${image_id}`,
@@ -199,10 +196,6 @@ export async function listProjects(page = 1, pageSize = 50) {
     console.error('[api/client] listProjects failed:', err)
     return { results: [], has_more: false, total: 0 }
   }
-}
-
-export async function createProject({ name, filters }) {
-  return callApi('POST', '/projects/', { name, filters: filters || {} })
 }
 
 export async function deleteProject(projectId) {
