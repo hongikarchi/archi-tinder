@@ -11,7 +11,7 @@ FRONTEND_DIR = frontend
 # ── Setup ────────────────────────────────────────────────────────────────────
 setup:
 	@echo "==> Installing backend dependencies..."
-	cd $(BACKEND_DIR) && pip install -r requirements.txt
+	cd $(BACKEND_DIR) && pip3 install -r requirements.txt
 	@echo "==> Running migrations..."
 	cd $(BACKEND_DIR) && python3 manage.py migrate
 	@echo "==> Creating superuser (if not exists)..."
