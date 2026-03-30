@@ -5,6 +5,7 @@ from django.contrib.auth.models import User
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.conf import settings
@@ -13,6 +14,10 @@ from .models import UserProfile, SocialAccount
 from .serializers import UserSerializer
 
 logger = logging.getLogger('apps.accounts')
+
+
+class DevLoginThrottle(AnonRateThrottle):
+    rate = '5/minute'
 
 
 def _get_or_create_user(provider, provider_id, email, display_name, avatar_url):
@@ -65,7 +70,7 @@ def _make_token_response(profile):
     }
 
 
-# ── Google ────────────────────────────────────────────────────────────────────
+# -- Google ----------------------------------------------------------------
 
 class GoogleLoginView(APIView):
     permission_classes = [AllowAny]
@@ -95,7 +100,7 @@ class GoogleLoginView(APIView):
         return Response(_make_token_response(profile))
 
 
-# ── Kakao ─────────────────────────────────────────────────────────────────────
+# -- Kakao -----------------------------------------------------------------
 
 class KakaoLoginView(APIView):
     permission_classes = [AllowAny]
@@ -129,7 +134,7 @@ class KakaoLoginView(APIView):
         return Response(_make_token_response(profile))
 
 
-# ── Naver ─────────────────────────────────────────────────────────────────────
+# -- Naver -----------------------------------------------------------------
 
 class NaverLoginView(APIView):
     permission_classes = [AllowAny]
@@ -161,10 +166,11 @@ class NaverLoginView(APIView):
         return Response(_make_token_response(profile))
 
 
-# ── Dev Login (automated testing only) ───────────────────────────────────────
+# -- Dev Login (automated testing only) ------------------------------------
 
 class DevLoginView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [DevLoginThrottle]
 
     def post(self, request):
         secret = os.getenv('DEV_LOGIN_SECRET', '')
@@ -183,7 +189,7 @@ class DevLoginView(APIView):
         return Response(_make_token_response(profile), status=status.HTTP_200_OK)
 
 
-# ── Token refresh ─────────────────────────────────────────────────────────────
+# -- Token refresh ---------------------------------------------------------
 
 class TokenRefreshView(APIView):
     permission_classes = [AllowAny]
@@ -205,7 +211,7 @@ class TokenRefreshView(APIView):
             return Response({'detail': 'Invalid or expired token'}, status=status.HTTP_401_UNAUTHORIZED)
 
 
-# ── Me ────────────────────────────────────────────────────────────────────────
+# -- Me --------------------------------------------------------------------
 
 class MeView(APIView):
     permission_classes = [IsAuthenticated]
@@ -217,7 +223,7 @@ class MeView(APIView):
         return Response(UserSerializer(profile).data)
 
 
-# ── Logout ────────────────────────────────────────────────────────────────────
+# -- Logout ----------------------------------------------------------------
 
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated]

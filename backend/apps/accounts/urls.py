@@ -1,4 +1,5 @@
 from django.urls import path
+from django.conf import settings
 from .views import (
     GoogleLoginView, KakaoLoginView, NaverLoginView,
     TokenRefreshView, MeView, LogoutView, DevLoginView,
@@ -11,5 +12,9 @@ urlpatterns = [
     path('auth/token/refresh/',      TokenRefreshView.as_view()),
     path('auth/me/',                 MeView.as_view()),
     path('auth/logout/',             LogoutView.as_view()),
-    path('auth/dev-login/',          DevLoginView.as_view()),
 ]
+
+if settings.DEBUG:
+    urlpatterns += [
+        path('auth/dev-login/',      DevLoginView.as_view()),
+    ]

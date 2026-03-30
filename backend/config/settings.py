@@ -59,7 +59,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
-# ── Database ──────────────────────────────────────────────────────────────────
+# -- Database --------------------------------------------------------------
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
@@ -74,7 +74,7 @@ DATABASES = {
     }
 }
 
-# ── Auth ──────────────────────────────────────────────────────────────────────
+# -- Auth ------------------------------------------------------------------
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
@@ -82,7 +82,7 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
-# ── REST Framework ────────────────────────────────────────────────────────────
+# -- REST Framework --------------------------------------------------------
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
@@ -99,22 +99,29 @@ SIMPLE_JWT = {
     'BLACKLIST_AFTER_ROTATION': True,
 }
 
-# ── CORS ──────────────────────────────────────────────────────────────────────
+# -- CORS ------------------------------------------------------------------
 CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:5174').split(',')
 
-# ── Internationalization ──────────────────────────────────────────────────────
+# -- Cache (required for DRF throttling) -----------------------------------
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+    }
+}
+
+# -- Internationalization --------------------------------------------------
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
 
-# ── Static files ──────────────────────────────────────────────────────────────
+# -- Static files ----------------------------------------------------------
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# ── Recommendation algorithm constants ───────────────────────────────────────
+# -- Recommendation algorithm constants ------------------------------------
 RECOMMENDATION = {
     'total_rounds':           20,
     'like_weight':            0.5,
@@ -126,7 +133,7 @@ RECOMMENDATION = {
     'top_k_results':          20,
 }
 
-# ── External API keys ─────────────────────────────────────────────────────────
+# -- External API keys -----------------------------------------------------
 GEMINI_API_KEY    = os.getenv('GEMINI_API_KEY', '')
 IMAGE_BASE_URL    = os.getenv('IMAGE_BASE_URL', 'https://pub-5d2133d166fc4b65ad05295df352519f.r2.dev')
 GOOGLE_CLIENT_ID  = os.getenv('GOOGLE_CLIENT_ID', '')
@@ -136,7 +143,7 @@ KAKAO_CLIENT_SECRET = os.getenv('KAKAO_CLIENT_SECRET', '')
 NAVER_CLIENT_ID   = os.getenv('NAVER_CLIENT_ID', '')
 NAVER_CLIENT_SECRET = os.getenv('NAVER_CLIENT_SECRET', '')
 
-# ── Production security ───────────────────────────────────────────────────────
+# -- Production security ---------------------------------------------------
 if not DEBUG:
     # HTTP headers
     SECURE_BROWSER_XSS_FILTER    = True
@@ -152,7 +159,7 @@ if not DEBUG:
     if len(SECRET_KEY) < 50:
         raise RuntimeError('DJANGO_SECRET_KEY is too short for production (min 50 chars)')
 
-# ── Logging ───────────────────────────────────────────────────────────────────
+# -- Logging ---------------------------------------------------------------
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
