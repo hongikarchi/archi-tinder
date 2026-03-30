@@ -48,6 +48,83 @@
   - JWT: access=1hr, refresh=30days, rotate+blacklist (simplejwt TokenBlacklist app must be in INSTALLED_APPS)
   - Run: `cd backend && python3 manage.py runserver 8001`
 
+  ## Web Testing (web-tester agent)
+
+  ### Dev Login — Authenticating Without OAuth
+  The web-tester agent must use dev-login to get a JWT for testing authenticated flows.
+  Google OAuth is not available in automated/headless contexts, so dev-login is the only path.
+
+  **Endpoint:** `POST http://localhost:8001/api/v1/auth/dev-login/`
+  **Request body:** `{"secret": "<value of DEV_LOGIN_SECRET from backend/.env>"}`
+  **Availability:** DEBUG=True only. The URL itself is unroutable when DEBUG=False.
+  **Rate limit:** 5 requests/minute (DevLoginThrottle).
+
+  **Response (200):**
+  ```json
+  {
+    "access": "<jwt_access_token>",
+    "refresh": "<jwt_refresh_token>",
+    "user": {
+      "user_id": 1,
+      "display_name": "Test User",
+      "avatar_url": null,
+      "providers": []
+    }
+  }
+  ```
+
+  **If DEV_LOGIN_SECRET is not set** in `backend/.env`, the endpoint returns 404.
+  In that case, skip authenticated flows and test page load only.
+
+  ### Injecting Tokens Into the Browser
+  After a successful dev-login curl, inject tokens via `browser_evaluate`:
+  ```js
+  localStorage.setItem('archithon_access', '<access_token>')
+  localStorage.setItem('archithon_refresh', '<refresh_token>')
+  sessionStorage.setItem('archithon_user', '<user.user_id from response>')
+  ```
+  Then reload the page. The app reads these keys on mount to restore auth state.
+
+  **localStorage keys:**
+  - `archithon_access` — JWT access token (1hr expiry)
+  - `archithon_refresh` — JWT refresh token (30d expiry)
+
+  **sessionStorage keys:**
+  - `archithon_user` — user ID (integer, from `response.user.user_id`)
+
+  ### Debug Overlay
+  Enable richer test diagnostics by setting debug mode before reload:
+  ```js
+  localStorage.setItem('__debugMode', 'true')
+  ```
+  This activates `DebugOverlay.jsx`, a fixed panel showing:
+  - JWT expiry time
+  - Last API call (method, URL, status, latency)
+  - Current session ID and swipe progress
+  - User ID or "not logged in"
+
+  The overlay is read-only (`pointerEvents: 'none'`) and survives page reloads.
+  Web-tester should screenshot after enabling it to confirm login state.
+
+  ### Django Admin
+  - **URL:** `http://localhost:8001/admin/`
+  - **Credentials:** username `admin`, password `admin1234` (set by `make setup`)
+  - **Availability:** DEBUG=True only. The admin URL is unroutable when DEBUG=False.
+  - Useful for inspecting user accounts, projects, and social accounts during testing.
+
+  ### Authenticated Flows to Test
+  Once logged in via dev-login, web-tester should test:
+  1. **Home / LLM Search** — AI search input visible, type query, submit
+  2. **Swipe page** — session creation works, cards load, swipe gestures function
+  3. **Favorites page** — project folders render, liked buildings display
+  4. **Persona report** — "Generate Persona Report" button visible when likes exist
+  5. **API connectivity** — no 401 errors on authenticated endpoints
+
+  ### Important: Orchestrator Must NOT Pass skip_login
+  The orchestrator should NOT tell web-tester to skip login. Dev-login exists specifically
+  for automated testing. The orchestrator should let web-tester run its Step 0 (dev-login)
+  before visual tests.
+
   ## Database: architecture_vectors Schema
   Owned by Make DB. Django reads via raw SQL only — never ORM, never migrate.
 
