@@ -254,7 +254,7 @@ function LoadingCard() {
 }
 
 /* ── SwipePage ───────────────────────────────────────────────────────────── */
-export default function SwipePage({ currentCard, progress, isCompleted, isLoading, projectName, onSwipe, onViewResults }) {
+export default function SwipePage({ currentCard, progress, isCompleted, isLoading, isResultLoading = false, projectName, onSwipe, onViewResults }) {
   const cardRef = useRef(null)
   const pendingAction = useRef(null)
   const [galleryOpen, setGalleryOpen] = useState(false)
@@ -298,15 +298,18 @@ export default function SwipePage({ currentCard, progress, isCompleted, isLoadin
         </p>
         <button
           onClick={onViewResults}
+          disabled={isResultLoading}
           style={{
             marginTop: 8, padding: '14px 36px', borderRadius: 14,
             background: 'linear-gradient(135deg, #f43f5e, #fb923c)',
             color: '#fff', fontSize: 15, fontWeight: 700,
-            border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+            border: 'none', cursor: isResultLoading ? 'default' : 'pointer', fontFamily: 'inherit',
             boxShadow: '0 4px 20px rgba(244,63,94,0.35)',
+            opacity: isResultLoading ? 0.6 : 1,
+            transition: 'opacity 0.2s',
           }}
         >
-          View Image Board →
+          {isResultLoading ? 'Preparing results...' : 'View Image Board →'}
         </button>
       </div>
     )

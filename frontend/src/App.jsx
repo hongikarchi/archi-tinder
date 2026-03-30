@@ -165,6 +165,8 @@ export default function App() {
   const [isSwipeLoading, setIsSwipeLoading] = useState(false)
   const imagePreloadCache = useRef(new Set())
   const [isSessionCompleted, setIsSessionCompleted] = useState(false)
+  const [isSyncing, setIsSyncing] = useState(false)
+  const [isResultLoading, setIsResultLoading] = useState(false)
   const [activeProjectId, setActiveProjectId] = useState(() => {
     const id = sessionStorage.getItem('archithon_user')
     return localStorage.getItem(`archithon_activeId_${id}`) || null
@@ -294,8 +296,8 @@ export default function App() {
     setLlmContext(null)
     setProjects(prev => [...prev, newProject])
     setActiveProjectId(projectId)
-    await initSession(projectId, llmFilters || {}, [], true, 'keep', preloadedImages)
     setTab('swipe')
+    await initSession(projectId, llmFilters || {}, [], true, 'keep', preloadedImages)
   }
 
   async function handleSwipeCard(action) {
@@ -340,16 +342,21 @@ export default function App() {
       setIsSessionCompleted(true)
       setCurrentCard(null)
       setPrefetchCard(null)
-      const resultData = await api.getResult({
-        session_id: project.sessionId,
-        user_id: userId,
-        project_id: activeProjectId,
-      })
-      setProjects(prev => prev.map(p => p.id === activeProjectId ? {
-        ...p,
-        predictedLikes: resultData.predicted_like_images || [],
-        analysisReport: resultData.analysis_report || null,
-      } : p))
+      setIsResultLoading(true)
+      try {
+        const resultData = await api.getResult({
+          session_id: project.sessionId,
+          user_id: userId,
+          project_id: activeProjectId,
+        })
+        setProjects(prev => prev.map(p => p.id === activeProjectId ? {
+          ...p,
+          predictedLikes: resultData.predicted_like_images || [],
+          analysisReport: resultData.analysis_report || null,
+        } : p))
+      } finally {
+        setIsResultLoading(false)
+      }
     } else {
       if (canInstantSwap) {
         // Verify backend agrees with what we're showing; correct if it diverged (rare)
@@ -376,8 +383,8 @@ export default function App() {
     if (!project) return
     setLlmContext(null)
     setActiveProjectId(id)
-    await initSession(id, project.filters, project.swipedIds, false, 'keep', project.deckImages || null)
     setTab('swipe')
+    await initSession(id, project.filters, project.swipedIds, false, 'keep', project.deckImages || null)
   }
 
   async function handleUpdateWithImages(id, preloadedImages, llmFilters = {}) {
@@ -386,8 +393,8 @@ export default function App() {
     setLlmContext(null)
     setActiveProjectId(id)
     setProjects(prev => prev.map(p => p.id === id ? { ...p, deckImages: preloadedImages } : p))
-    await initSession(id, llmFilters || project.filters, project.swipedIds, false, 'modify', preloadedImages)
     setTab('swipe')
+    await initSession(id, llmFilters || project.filters, project.swipedIds, false, 'modify', preloadedImages)
   }
 
   function handleDeleteProject(id) {
@@ -435,6 +442,7 @@ export default function App() {
     sessionStorage.removeItem('archithon_folderOpenId')
 
     // Sync projects from backend (if JWT available)
+    setIsSyncing(true)
     try {
       const { results: backendProjects } = await api.listProjects()
       if (backendProjects.length > 0) {
@@ -461,6 +469,8 @@ export default function App() {
       }
     } catch (err) {
       console.error('[App] project sync failed, falling back to localStorage:', err)
+    } finally {
+      setIsSyncing(false)
     }
     setProjects(JSON.parse(localStorage.getItem(`archithon_projects_${id}`) || '[]'))
     setActiveProjectId(localStorage.getItem(`archithon_activeId_${id}`) || null)
@@ -522,6 +532,7 @@ export default function App() {
           <SetupPage
             key={setupKey}
             projects={projects}
+            isSyncing={isSyncing}
             onResume={handleResumeProject}
             onNavigateNew={() => setLlmContext({ mode: 'new', step: 'setup' })}
             onNavigateUpdate={(id, name) => setLlmContext({ mode: 'update', step: 'chat', projectId: id, projectName: name })}
@@ -561,6 +572,7 @@ export default function App() {
             progress={sessionProgress}
             isCompleted={isSessionCompleted}
             isLoading={isSwipeLoading}
+            isResultLoading={isResultLoading}
             projectName={activeProject?.projectName}
             onSwipe={handleSwipeCard}
             onViewResults={() => { setFolderOpenId(activeProjectId); setTab('folders') }}

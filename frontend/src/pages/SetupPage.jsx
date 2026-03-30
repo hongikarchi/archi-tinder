@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-export default function SetupPage({ projects = [], onResume, onNavigateNew, onNavigateUpdate }) {
+export default function SetupPage({ projects = [], isSyncing = false, onResume, onNavigateNew, onNavigateUpdate }) {
   const hasProjects = projects.length > 0
   const [step, setStep] = useState('choose')
   const [selectedProject, setSelectedProject] = useState(null)
@@ -14,21 +14,34 @@ export default function SetupPage({ projects = [], onResume, onNavigateNew, onNa
     return (
       <div style={{ height: 'calc(100vh - 64px)', overflow: 'hidden', background: 'var(--color-bg)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16 }}>
         <Header />
-        <p style={{ color: 'var(--color-text-dim)', fontSize: 13, margin: '0 0 8px' }}>What would you like to do?</p>
-        {hasProjects && (
-          <ChoiceButton
-            icon="📁"
-            title="Update existing folder"
-            desc="Continue swiping on a previous folder"
-            onClick={() => setStep('select-project')}
-          />
+        {isSyncing ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+            <div style={{
+              width: 28, height: 28, border: '3px solid var(--color-border)',
+              borderTopColor: '#ec4899', borderRadius: '50%',
+              animation: 'spin 0.8s linear infinite',
+            }} />
+            <p style={{ color: 'var(--color-text-dim)', fontSize: 13, margin: 0 }}>Loading your projects...</p>
+          </div>
+        ) : (
+          <>
+            <p style={{ color: 'var(--color-text-dim)', fontSize: 13, margin: '0 0 8px' }}>What would you like to do?</p>
+            {hasProjects && (
+              <ChoiceButton
+                icon="📁"
+                title="Update existing folder"
+                desc="Continue swiping on a previous folder"
+                onClick={() => setStep('select-project')}
+              />
+            )}
+            <ChoiceButton
+              icon="＋"
+              title="Create new folder"
+              desc="Describe the architecture you want to AI"
+              onClick={onNavigateNew}
+            />
+          </>
         )}
-        <ChoiceButton
-          icon="＋"
-          title="Create new folder"
-          desc="Describe the architecture you want to AI"
-          onClick={onNavigateNew}
-        />
       </div>
     )
   }
