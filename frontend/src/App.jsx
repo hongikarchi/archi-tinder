@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef, Component } from 'react'
-import DebugOverlay from './components/DebugOverlay.jsx'
+import { Routes, Route, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom'
+import MainLayout from './layouts/MainLayout.jsx'
+import ProtectedRoute from './components/ProtectedRoute.jsx'
 import SetupPage from './pages/SetupPage.jsx'
 import ProjectSetupPage from './pages/ProjectSetupPage.jsx'
 import LLMSearchPage from './pages/LLMSearchPage.jsx'
-import SwipePage from './pages/SwipePage.jsx'
-import FavoritesPage from './pages/FavoritesPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import * as api from './api/client.js'
 
@@ -43,121 +43,30 @@ class ErrorBoundary extends Component {
   }
 }
 
-/* ── Tab Bar ─────────────────────────────────────────────────────────────── */
-const TAB_ICONS = {
-  home: (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="9" />
-      <line x1="12" y1="8" x2="12" y2="16" />
-      <line x1="8" y1="12" x2="16" y2="12" />
-    </svg>
-  ),
-  swipe: (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="4" y="6" width="16" height="13" rx="2" />
-      <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
-    </svg>
-  ),
-  folders: (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
-    </svg>
-  ),
-}
-
-function TabBar({ tab, onSelect, swipeEnabled }) {
-  const tabs = [
-    { id: 'home',    label: 'New'     },
-    { id: 'swipe',   label: 'Swipe'   },
-    { id: 'folders', label: 'Library' },
-  ]
+/* ── LLMSearch update-mode wrapper ──────────────────────────────────────── */
+function LLMSearchUpdateWrapper({ wizardData, onBack, onStart, onUpdate }) {
+  const { projectId } = useParams()
   return (
-    <nav style={{
-      position: 'fixed', bottom: 0, left: 0, right: 0,
-      display: 'flex', zIndex: 100, height: 64,
-      background: 'var(--color-nav-bg)',
-      backdropFilter: 'blur(20px)',
-      borderTop: '1px solid var(--color-border)',
-    }}>
-      {tabs.map(t => {
-        const active   = tab === t.id
-        const disabled = t.id === 'swipe' && !swipeEnabled
-        return (
-          <button
-            key={t.id}
-            onClick={() => !disabled && onSelect(t.id)}
-            style={{
-              flex: 1, border: 'none', background: 'none',
-              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4,
-              cursor: disabled ? 'default' : 'pointer', fontFamily: 'inherit',
-              color: disabled ? 'var(--color-nav-disabled)' : active ? '#ec4899' : 'var(--color-nav-inactive)',
-              transition: 'color 0.18s',
-              paddingBottom: 4,
-            }}
-          >
-            <div style={{
-              width: 40, height: 28, borderRadius: 14,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: active ? 'rgba(236,72,153,0.12)' : 'transparent',
-              transition: 'background 0.18s',
-            }}>
-              {TAB_ICONS[t.id]}
-            </div>
-            <span style={{ fontSize: 10, fontWeight: active ? 600 : 400, letterSpacing: '0.02em' }}>
-              {t.label}
-            </span>
-          </button>
-        )
-      })}
-    </nav>
-  )
-}
-
-/* ── Theme Toggle Button ─────────────────────────────────────────────────── */
-function ThemeToggle({ theme, onToggle }) {
-  const isDark = theme === 'dark'
-  return (
-    <button
-      onClick={onToggle}
-      title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-      style={{
-        width: 34, height: 34, borderRadius: '50%',
-        background: 'var(--color-surface)',
-        border: '1px solid var(--color-border-soft)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: 'var(--color-text-dim)', cursor: 'pointer',
-        transition: 'background 0.2s, color 0.2s',
-      }}
-      onMouseEnter={e => { e.currentTarget.style.color = 'var(--color-text)' }}
-      onMouseLeave={e => { e.currentTarget.style.color = 'var(--color-text-dim)' }}
-    >
-      {isDark ? (
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="5" />
-          <line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" />
-          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-          <line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" />
-          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-        </svg>
-      ) : (
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-        </svg>
-      )}
-    </button>
+    <LLMSearchPage
+      mode="update"
+      projectId={projectId}
+      projectName={wizardData?.projectName}
+      onBack={onBack}
+      onStart={onStart}
+      onUpdate={onUpdate}
+    />
   )
 }
 
 /* ── App ─────────────────────────────────────────────────────────────────── */
 export default function App() {
+  const navigate = useNavigate()
+  const location = useLocation()
+
   const [theme, setTheme] = useState(() => localStorage.getItem('archithon_theme') || 'dark')
   const [userId, setUserId] = useState(() => sessionStorage.getItem('archithon_user') || null)
-  const [tab, setTab] = useState(() => sessionStorage.getItem('archithon_tab') || 'home')
   const [setupKey, setSetupKey] = useState(0)
-  const [folderOpenId, setFolderOpenId] = useState(() => sessionStorage.getItem('archithon_folderOpenId') || null)
-  const [llmContext, setLlmContext] = useState(() => {
-    try { return JSON.parse(sessionStorage.getItem('archithon_llmContext')) } catch { return null }
-  })
+  const [wizardData, setWizardData] = useState(null)
 
   const [currentCard, setCurrentCard] = useState(null)
   const [prefetchCard, setPrefetchCard] = useState(null)
@@ -194,7 +103,7 @@ export default function App() {
     const onExpired = () => handleLogout()
     window.addEventListener('archithon:session-expired', onExpired)
     return () => window.removeEventListener('archithon:session-expired', onExpired)
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!userId) return
@@ -209,23 +118,12 @@ export default function App() {
 
   const activeProject = projects.find(p => p.id === activeProjectId) || null
 
-  // Persist nav state so F5 restores the current page
-  useEffect(() => { sessionStorage.setItem('archithon_tab', tab) }, [tab])
-  useEffect(() => {
-    if (llmContext) sessionStorage.setItem('archithon_llmContext', JSON.stringify(llmContext))
-    else sessionStorage.removeItem('archithon_llmContext')
-  }, [llmContext])
-  useEffect(() => {
-    if (folderOpenId) sessionStorage.setItem('archithon_folderOpenId', folderOpenId)
-    else sessionStorage.removeItem('archithon_folderOpenId')
-  }, [folderOpenId])
-
-  // On refresh, re-init swipe session if the user was on the swipe tab
+  // On refresh, re-init swipe session if the user was on the swipe route
   const swipeRestored = useRef(false)
   const loggingOut = useRef(false)
   useEffect(() => {
     if (swipeRestored.current) return
-    if (tab === 'swipe' && activeProjectId && userId) {
+    if (location.pathname === '/swipe' && activeProjectId && userId) {
       const project = projects.find(p => p.id === activeProjectId)
       if (project) {
         swipeRestored.current = true
@@ -245,12 +143,6 @@ export default function App() {
 
   function toggleTheme() {
     setTheme(t => t === 'dark' ? 'light' : 'dark')
-  }
-
-  function handleSelectTab(newTab) {
-    if (newTab === 'home') { setSetupKey(k => k + 1); setLlmContext(null) }
-    if (newTab === 'folders') setFolderOpenId(null)
-    setTab(newTab)
   }
 
   async function initSession(projectId, filters) {
@@ -288,10 +180,10 @@ export default function App() {
       sessionId: null, createdAt: new Date().toISOString(),
       deckImages: preloadedImages || null,
     }
-    setLlmContext(null)
+    setWizardData(null)
     setProjects(prev => [...prev, newProject])
     setActiveProjectId(projectId)
-    setTab('swipe')
+    navigate('/swipe')
     await initSession(projectId, llmFilters || {})
   }
 
@@ -370,19 +262,19 @@ export default function App() {
   async function handleResumeProject(id) {
     const project = projects.find(p => p.id === id)
     if (!project) return
-    setLlmContext(null)
+    setWizardData(null)
     setActiveProjectId(id)
-    setTab('swipe')
+    navigate('/swipe')
     await initSession(id, project.filters)
   }
 
   async function handleUpdateWithImages(id, preloadedImages, llmFilters = {}) {
     const project = projects.find(p => p.id === id)
     if (!project) return
-    setLlmContext(null)
+    setWizardData(null)
     setActiveProjectId(id)
     setProjects(prev => prev.map(p => p.id === id ? { ...p, deckImages: preloadedImages } : p))
-    setTab('swipe')
+    navigate('/swipe')
     await initSession(id, llmFilters || project.filters)
   }
 
@@ -397,7 +289,7 @@ export default function App() {
       setCurrentCard(null)
       setSessionProgress(null)
       setIsSessionCompleted(false)
-      setTab('home')
+      navigate('/')
     }
   }
 
@@ -424,11 +316,8 @@ export default function App() {
     setCurrentCard(null)
     setSessionProgress(null)
     setIsSessionCompleted(false)
-    setLlmContext(null)
-    setFolderOpenId(null)
-    setTab('home')
-    sessionStorage.removeItem('archithon_llmContext')
-    sessionStorage.removeItem('archithon_folderOpenId')
+    setWizardData(null)
+    navigate('/')
 
     // Sync projects from backend (if JWT available)
     setIsSyncing(true)
@@ -470,152 +359,99 @@ export default function App() {
     const refresh = localStorage.getItem('archithon_refresh')
     api.logout(refresh)   // blacklists refresh token, clears JWT from localStorage
     sessionStorage.removeItem('archithon_user')
-    sessionStorage.removeItem('archithon_tab')
-    sessionStorage.removeItem('archithon_llmContext')
-    sessionStorage.removeItem('archithon_folderOpenId')
     setUserId(null)
     setProjects([])
     setActiveProjectId(null)
     setCurrentCard(null)
     setSessionProgress(null)
     setIsSessionCompleted(false)
-    setLlmContext(null)
+    setWizardData(null)
     loggingOut.current = false
+    navigate('/login')
   }
 
-  if (!userId) {
-    return <LoginPage onLogin={handleLogin} theme={theme} onToggleTheme={toggleTheme} />
+  const sharedLayoutProps = {
+    theme,
+    onToggleTheme: toggleTheme,
+    userId,
+    onLogout: handleLogout,
+    projects,
+    isSyncing,
+    activeProject,
+    activeProjectId,
+    currentCard,
+    sessionProgress,
+    isSessionCompleted,
+    isSwipeLoading,
+    isResultLoading,
+    onSwipe: handleSwipeCard,
+    onViewResults: () => navigate('/library/' + activeProjectId),
+    onResumeProject: handleResumeProject,
+    onDeleteProject: handleDeleteProject,
+    onGenerateReport: handleGenerateReport,
   }
 
   return (
     <ErrorBoundary>
-      <div style={{ height: '100vh', overflow: 'hidden' }}>
+      <Routes>
+        <Route path="/login" element={
+          userId ? <Navigate to="/" replace /> : <LoginPage onLogin={handleLogin} theme={theme} onToggleTheme={toggleTheme} />
+        } />
 
-        {/* Header controls */}
-        <div style={{ position: 'fixed', top: 14, right: 16, zIndex: 200, display: 'flex', gap: 6, alignItems: 'center' }}>
-          <ThemeToggle theme={theme} onToggle={toggleTheme} />
-          <button
-            onClick={handleLogout}
-            title="Log out"
-            style={{
-              width: 34, height: 34, borderRadius: '50%',
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-border-soft)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'var(--color-text-dim)', cursor: 'pointer',
-              transition: 'color 0.2s',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.color = '#f87171' }}
-            onMouseLeave={e => { e.currentTarget.style.color = 'var(--color-text-dim)' }}
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-              <polyline points="16 17 21 12 16 7" />
-              <line x1="21" y1="12" x2="9" y2="12" />
-            </svg>
-          </button>
-        </div>
-
-        {tab === 'home' && !llmContext && (
-          <SetupPage
-            key={setupKey}
-            projects={projects}
-            isSyncing={isSyncing}
-            onResume={handleResumeProject}
-            onNavigateNew={() => setLlmContext({ mode: 'new', step: 'setup' })}
-            onNavigateUpdate={(id, name) => setLlmContext({ mode: 'update', step: 'chat', projectId: id, projectName: name })}
-          />
-        )}
-
-        {tab === 'home' && llmContext?.mode === 'new' && llmContext?.step === 'setup' && (
-          <ProjectSetupPage
-            onBack={() => setLlmContext(null)}
-            onNext={({ projectName, minArea, maxArea }) =>
-              setLlmContext({ mode: 'new', step: 'chat', projectName, minArea, maxArea })
-            }
-          />
-        )}
-
-        {tab === 'home' && llmContext?.step === 'chat' && (
-          <LLMSearchPage
-            mode={llmContext.mode}
-            projectId={llmContext.projectId}
-            projectName={llmContext.projectName}
-            onBack={() =>
-              llmContext.mode === 'new'
-                ? setLlmContext({ mode: 'new', step: 'setup' })
-                : setLlmContext(null)
-            }
-            onStart={handleStart}
-            onUpdate={handleUpdateWithImages}
-          />
-        )}
-
-        <div style={{ display: tab === 'swipe' && activeProject ? 'block' : 'none' }}>
-          <SwipePage
-            key={activeProjectId}
-            currentCard={currentCard}
-            progress={sessionProgress}
-            isCompleted={isSessionCompleted}
-            isLoading={isSwipeLoading}
-            isResultLoading={isResultLoading}
-            projectName={activeProject?.projectName}
-            onSwipe={handleSwipeCard}
-            onViewResults={() => { setFolderOpenId(activeProjectId); setTab('folders') }}
-          />
-        </div>
-
-        <div style={{ display: tab === 'folders' ? 'block' : 'none' }}>
-          <FavoritesPage
-            projects={projects}
-            onDeleteProject={handleDeleteProject}
-            onResumeProject={handleResumeProject}
-            onGenerateReport={handleGenerateReport}
-            openId={folderOpenId}
-            onOpenIdChange={setFolderOpenId}
-          />
-        </div>
-
-        {tab === 'swipe' && !activeProject && (
-          <div style={{
-            height: 'calc(100vh - 64px)', background: 'var(--color-bg)', display: 'flex',
-            flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-            gap: 12, padding: 24,
-          }}>
-            <div style={{ fontSize: 48 }}>🃏</div>
-            <p style={{ fontSize: 16, fontWeight: 900, margin: 0 }}>
-              <span style={{ color: 'var(--color-text)' }}>Archi</span>
-              <span style={{ color: '#ec4899' }}>Tinder</span>
-            </p>
-            <p style={{ color: 'var(--color-text-dimmer)', fontSize: 13 }}>Create a new session from the Home tab</p>
-            <button
-              onClick={() => handleSelectTab('home')}
-              style={{
-                marginTop: 8, padding: '12px 28px', borderRadius: 12,
-                background: 'linear-gradient(135deg,#ec4899,#f43f5e)',
-                color: '#fff', fontSize: 14, fontWeight: 600,
-                border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+        <Route element={
+          <ProtectedRoute userId={userId}>
+            <MainLayout {...sharedLayoutProps} />
+          </ProtectedRoute>
+        }>
+          <Route index element={
+            <SetupPage
+              key={setupKey}
+              projects={projects}
+              isSyncing={isSyncing}
+              onResume={handleResumeProject}
+              onNavigateNew={() => {
+                setSetupKey(k => k + 1)
+                navigate('/new')
               }}
-            >
-              Go to Home
-            </button>
-          </div>
-        )}
+              onNavigateUpdate={(id, name) => {
+                setWizardData({ projectId: id, projectName: name })
+                navigate('/search/' + id)
+              }}
+            />
+          } />
+          <Route path="new" element={
+            <ProjectSetupPage
+              onBack={() => navigate('/')}
+              onNext={({ projectName, minArea, maxArea }) => {
+                setWizardData({ projectName, minArea, maxArea })
+                navigate('/search')
+              }}
+            />
+          } />
+          <Route path="search" element={
+            <LLMSearchPage
+              mode="new"
+              projectName={wizardData?.projectName}
+              onBack={() => navigate('/new')}
+              onStart={handleStart}
+              onUpdate={handleUpdateWithImages}
+            />
+          } />
+          <Route path="search/:projectId" element={
+            <LLMSearchUpdateWrapper
+              wizardData={wizardData}
+              onBack={() => navigate('/')}
+              onStart={handleStart}
+              onUpdate={handleUpdateWithImages}
+            />
+          } />
+          <Route path="swipe" element={null} />
+          <Route path="library" element={null} />
+          <Route path="library/:folderId" element={null} />
+        </Route>
 
-        {typeof window !== 'undefined' && (window.__debugMode || localStorage.getItem('__debugMode') === 'true') && (
-          <DebugOverlay
-            userId={userId}
-            session={sessionProgress ? {
-              id: activeProject?.sessionId || null,
-              round: sessionProgress.current,
-              total: sessionProgress.total,
-            } : null}
-          />
-        )}
-
-      </div>
-
-      <TabBar tab={tab} onSelect={handleSelectTab} swipeEnabled={!!activeProject} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
     </ErrorBoundary>
   )
 }

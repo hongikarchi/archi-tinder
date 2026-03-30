@@ -34,7 +34,7 @@
 
   ## Frontend Architecture
   - `api/client.js` — `normalizeCard()` maps backend→frontend fields: `building_id`→`image_id`, `name_en`→`image_title`; all components use `image_id` not `building_id`
-  - `api/client.js` — `listProjects`, `createProject`, `deleteProject`, `generateReport`, `getBuildings` added
+  - `api/client.js` — `listProjects`, `deleteProject`, `generateReport`, `getBuildings` added
   - `App.jsx` — `handleLogin` async: syncs backend projects on login, batch-fetches liked buildings
   - `App.jsx` — `initSession` stores `backendId` (backend UUID) from session create response
   - `App.jsx` — `handleDeleteProject` calls `api.deleteProject(backendId)` when backend ID is available
