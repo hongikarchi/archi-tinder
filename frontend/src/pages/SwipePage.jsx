@@ -50,7 +50,8 @@ function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
   const country    = card.metadata?.axis_country
   const area_m2    = card.metadata?.axis_area_m2
   const year       = card.metadata?.axis_year
-  const mood       = card.metadata?.axis_mood
+  const style      = card.metadata?.axis_style
+  const atmosphere = card.metadata?.axis_atmosphere
   const material   = card.metadata?.axis_material
   const areaLabel  = area_m2 ? `${Number(area_m2).toLocaleString()} m²` : null
   const gallery         = card.gallery || []
@@ -149,8 +150,10 @@ function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
               <InfoRow label="Country"  value={country} />
               <InfoRow label="Year"     value={year} />
               <InfoRow label="Area"     value={areaLabel} />
-              <InfoRow label="Mood"     value={mood} />
+              <InfoRow label="Style"      value={style} />
+              <InfoRow label="Atmosphere" value={atmosphere} />
               <InfoRow label="Material" value={material} />
+              
             </div>
             {gallery.length > 0 && (
               <button

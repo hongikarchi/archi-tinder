@@ -10,8 +10,8 @@
   - SentenceTransformers is NOT a dependency here — embeddings are pre-computed.
 
   ## Target Structure
-  frontend/   ← React 18 + Vite
-  backend/    ← Django 4.2 LTS + DRF + pgvector + Gemini + social auth
+  frontend/   <- React 18 + Vite
+  backend/    <- Django 4.2 LTS + DRF + pgvector + Gemini + social auth
 
   ## Current State
   - frontend/: BUILT — Phase 0+4 complete; rich inline-style UI, project sync from backend on login
@@ -33,7 +33,7 @@
   - `images/batch/` POST — batch-fetch building cards by `building_ids` list
 
   ## Frontend Architecture
-  - `api/client.js` — `normalizeCard()` maps backend→frontend fields: `building_id`→`image_id`, `name_en`→`image_title`; all components use `image_id` not `building_id`
+  - `api/client.js` — `normalizeCard()` maps backend->frontend fields: `building_id`->`image_id`, `name_en`->`image_title`; all components use `image_id` not `building_id`
   - `api/client.js` — `listProjects`, `deleteProject`, `generateReport`, `getBuildings` added
   - `App.jsx` — `handleLogin` async: syncs backend projects on login, batch-fetches liked buildings
   - `App.jsx` — `initSession` stores `backendId` (backend UUID) from session create response
@@ -140,13 +140,16 @@
       year             INTEGER,
       area_sqm         NUMERIC,
       program          TEXT NOT NULL,      -- see normalized vocabulary below
-      mood             TEXT NOT NULL,
-      material         TEXT NOT NULL,
+      style            TEXT,               -- e.g. Brutalist, Classical, Contemporary
+      atmosphere       TEXT NOT NULL,      -- free-form e.g. "fluid, sweeping, atmospheric"
+      color_tone       TEXT,               -- e.g. Colorful, Cool White, Dark, Earthy
+      material         TEXT,               -- nullable (977 rows NULL)
+      material_visual  TEXT[] NOT NULL,    -- array of visual material descriptors
+      visual_description TEXT NOT NULL,    -- rich text description
       description      TEXT,
       url              TEXT,
       tags             TEXT[],
       source_slugs     TEXT[],
-      image_cover      TEXT,               -- cover filename under images/{building_id}/
       image_photos     TEXT[],             -- all photo filenames
       image_drawings   TEXT[],             -- all drawing filenames
       embedding        VECTOR(384) NOT NULL

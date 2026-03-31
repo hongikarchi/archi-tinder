@@ -14,7 +14,7 @@ const FILTER_LABELS = {
   program: '🏗',
   location_country: '🌍',
   material: '🧱',
-  mood: '✨',
+  style: '✨',
   year_min: '📅',
   year_max: '📅',
   min_area: '📐',
@@ -27,7 +27,7 @@ function FilterChips({ filters }) {
   if (filters.program)          chips.push(`${FILTER_LABELS.program} ${filters.program}`)
   if (filters.location_country) chips.push(`${FILTER_LABELS.location_country} ${filters.location_country}`)
   if (filters.material)         chips.push(`${FILTER_LABELS.material} ${filters.material}`)
-  if (filters.mood)             chips.push(`${FILTER_LABELS.mood} ${filters.mood}`)
+  if (filters.style)            chips.push(`${FILTER_LABELS.style} ${filters.style}`)
   if (filters.year_min || filters.year_max) {
     const from = filters.year_min || '…'
     const to   = filters.year_max || '…'

@@ -47,8 +47,11 @@ def _row_to_card(row):
             'axis_country':    row.get('location_country'),
             'axis_area_m2':    float(row['area_sqm']) if row.get('area_sqm') else None,
             'axis_year':       row.get('year'),
-            'axis_mood':       row.get('mood'),
-            'axis_material':   row.get('material'),
+            'axis_style':          row.get('style'),
+            'axis_atmosphere':     row.get('atmosphere'),
+            'axis_color_tone':     row.get('color_tone'),
+            'axis_material':       row.get('material'),
+            'axis_material_visual': list(row.get('material_visual') or []),
             'axis_tags':       list(row.get('tags') or []),
         },
     }
@@ -74,9 +77,9 @@ def _build_filter_sql(filters):
     if filters.get('material'):
         clauses.append('material ILIKE %s')
         params.append(f"%{filters['material']}%")
-    if filters.get('mood'):
-        clauses.append('mood ILIKE %s')
-        params.append(f"%{filters['mood']}%")
+    if filters.get('style'):
+        clauses.append('style ILIKE %s')
+        params.append(f"%{filters['style']}%")
     if filters.get('year_min') is not None:
         clauses.append('year >= %s')
         params.append(filters['year_min'])
@@ -113,7 +116,7 @@ def get_diverse_random(n=10, filters=None):
     with connection.cursor() as cur:
         cur.execute(
             f'SELECT building_id, name_en, project_name, architect, location_country, '
-            f'city, year, area_sqm, program, mood, material, url, tags, image_photos, image_drawings, '
+            f'city, year, area_sqm, program, style, atmosphere, color_tone, material, material_visual, url, tags, image_photos, image_drawings, '
             f'embedding::text FROM architecture_vectors {where} ORDER BY RANDOM() LIMIT %s',
             params + [min(n * 5, 100)],  # fetch a pool, then diversify
         )
@@ -163,7 +166,7 @@ def get_building_card(building_id):
     with connection.cursor() as cur:
         cur.execute(
             'SELECT building_id, name_en, project_name, architect, location_country, '
-            'city, year, area_sqm, program, mood, material, url, tags, image_photos, image_drawings '
+            'city, year, area_sqm, program, style, atmosphere, color_tone, material, material_visual, url, tags, image_photos, image_drawings '
             'FROM architecture_vectors WHERE building_id = %s',
             [building_id],
         )
@@ -224,7 +227,7 @@ def select_next_image(pref_vector, exposed_ids, current_round, filters=None):
         with connection.cursor() as cur:
             cur.execute(
                 f'SELECT building_id, name_en, project_name, architect, location_country, '
-                f'city, year, area_sqm, program, mood, material, url, tags, image_photos, image_drawings '
+                f'city, year, area_sqm, program, style, atmosphere, color_tone, material, material_visual, url, tags, image_photos, image_drawings '
                 f'FROM architecture_vectors {where} ORDER BY RANDOM() LIMIT 1',
                 params_base + filter_params,
             )
@@ -236,7 +239,7 @@ def select_next_image(pref_vector, exposed_ids, current_round, filters=None):
         with connection.cursor() as cur:
             cur.execute(
                 f'SELECT building_id, name_en, project_name, architect, location_country, '
-                f'city, year, area_sqm, program, mood, material, url, tags, image_photos, image_drawings '
+                f'city, year, area_sqm, program, style, atmosphere, color_tone, material, material_visual, url, tags, image_photos, image_drawings '
                 f'FROM architecture_vectors {where} '
                 f'ORDER BY embedding <=> %s::vector LIMIT 1',
                 params_base + filter_params + [vec_str],
@@ -266,7 +269,7 @@ def get_top_k_results(pref_vector, exposed_ids, k=None):
         with connection.cursor() as cur:
             cur.execute(
                 f'SELECT building_id, name_en, project_name, architect, location_country, '
-                f'city, year, area_sqm, program, mood, material, url, tags, image_photos, image_drawings '
+                f'city, year, area_sqm, program, style, atmosphere, color_tone, material, material_visual, url, tags, image_photos, image_drawings '
                 f'FROM architecture_vectors {exclude_sql} ORDER BY RANDOM() LIMIT %s',
                 params + [k],
             )
@@ -276,7 +279,7 @@ def get_top_k_results(pref_vector, exposed_ids, k=None):
         with connection.cursor() as cur:
             cur.execute(
                 f'SELECT building_id, name_en, project_name, architect, location_country, '
-                f'city, year, area_sqm, program, mood, material, url, tags, image_photos, image_drawings '
+                f'city, year, area_sqm, program, style, atmosphere, color_tone, material, material_visual, url, tags, image_photos, image_drawings '
                 f'FROM architecture_vectors {exclude_sql} '
                 f'ORDER BY embedding <=> %s::vector LIMIT %s',
                 params + [vec_str, k],
@@ -294,7 +297,7 @@ def get_buildings_by_ids(building_ids):
     with connection.cursor() as cur:
         cur.execute(
             f'SELECT building_id, name_en, project_name, architect, location_country, '
-            f'city, year, area_sqm, program, mood, material, url, tags, image_photos, image_drawings '
+            f'city, year, area_sqm, program, style, atmosphere, color_tone, material, material_visual, url, tags, image_photos, image_drawings '
             f'FROM architecture_vectors WHERE building_id IN ({placeholders})',
             list(building_ids),
         )
@@ -313,7 +316,7 @@ def search_by_filters(filters, limit=20):
     with connection.cursor() as cur:
         cur.execute(
             f'SELECT building_id, name_en, project_name, architect, location_country, '
-            f'city, year, area_sqm, program, mood, material, url, tags, image_photos, image_drawings '
+            f'city, year, area_sqm, program, style, atmosphere, color_tone, material, material_visual, url, tags, image_photos, image_drawings '
             f'FROM architecture_vectors {where} ORDER BY RANDOM() LIMIT %s',
             params + [limit],
         )

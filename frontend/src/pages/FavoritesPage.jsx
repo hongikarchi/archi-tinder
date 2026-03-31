@@ -255,10 +255,10 @@ function PersonaReport({ report }) {
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>{chips(report.dominant_programs)}</div>
         </div>
       )}
-      {report.dominant_moods?.length > 0 && (
+      {report.dominant_styles?.length > 0 && (
         <div style={{ marginBottom: 8 }}>
-          <p style={{ color: 'var(--color-text-muted)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 5px' }}>Moods</p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>{chips(report.dominant_moods)}</div>
+          <p style={{ color: 'var(--color-text-muted)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 5px' }}>Styles</p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>{chips(report.dominant_styles)}</div>
         </div>
       )}
       {report.dominant_materials?.length > 0 && (

@@ -39,7 +39,7 @@ Return ONLY valid JSON with this exact structure (use null for fields not mentio
     "location_country": null,
     "program": null,
     "material": null,
-    "mood": null,
+    "style": null,
     "year_min": null,
     "year_max": null,
     "min_area": null,
@@ -55,7 +55,7 @@ Return ONLY valid JSON with this exact structure:
   "one_liner": "A single evocative sentence about their taste",
   "description": "2-3 sentences elaborating on their architectural sensibility",
   "dominant_programs": ["list of program types from: Housing, Office, Museum, Education, Religion, Sports, Transport, Hospitality, Healthcare, Public, Mixed Use, Landscape, Infrastructure, Other"],
-  "dominant_moods": ["2-3 mood words"],
+  "dominant_styles": ["2-3 architectural style words"],
   "dominant_materials": ["2-3 material words"]
 }"""
 
@@ -77,12 +77,12 @@ def parse_query(query_text):
             ),
         )
         data = json.loads(response.text)
-        # Sanitize: ensure program is a valid value (case-insensitive match → canonical form)
+        # Sanitize: ensure program is a valid value (case-insensitive match -> canonical form)
         filters = data.get('filters', {})
         if filters.get('program'):
             program = filters['program']
             if program not in PROGRAM_VALUES:
-                # Try title-casing (e.g. "housing" → "Housing")
+                # Try title-casing (e.g. "housing" -> "Housing")
                 titled = program.title()
                 filters['program'] = titled if titled in PROGRAM_VALUES else None
         return {
@@ -106,7 +106,7 @@ def generate_persona_report(liked_building_ids):
     placeholders = ','.join(['%s'] * len(liked_building_ids))
     with connection.cursor() as cur:
         cur.execute(
-            f'SELECT program, mood, material, architect, location_country '
+            f'SELECT program, style, atmosphere, material, architect, location_country '
             f'FROM architecture_vectors WHERE building_id IN ({placeholders})',
             liked_building_ids,
         )
@@ -116,16 +116,18 @@ def generate_persona_report(liked_building_ids):
         return None
 
     # Aggregate for the prompt
-    programs   = [r['program']          for r in rows if r.get('program')]
-    moods      = [r['mood']             for r in rows if r.get('mood')]
-    materials  = [r['material']         for r in rows if r.get('material')]
-    architects = [r['architect']        for r in rows if r.get('architect')]
-    countries  = [r['location_country'] for r in rows if r.get('location_country')]
+    programs    = [r['program']          for r in rows if r.get('program')]
+    styles      = [r['style']            for r in rows if r.get('style')]
+    atmospheres = [r['atmosphere']       for r in rows if r.get('atmosphere')]
+    materials   = [r['material']         for r in rows if r.get('material')]
+    architects  = [r['architect']        for r in rows if r.get('architect')]
+    countries   = [r['location_country'] for r in rows if r.get('location_country')]
 
     summary = (
         f"The user liked {len(rows)} buildings.\n"
         f"Programs: {', '.join(programs)}\n"
-        f"Moods: {', '.join(moods)}\n"
+        f"Styles: {', '.join(styles)}\n"
+        f"Atmospheres: {', '.join(atmospheres)}\n"
         f"Materials: {', '.join(materials)}\n"
         f"Architects: {', '.join(architects[:10])}\n"
         f"Countries: {', '.join(countries)}"

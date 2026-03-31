@@ -15,7 +15,7 @@ function normalizeFilters(filters) {
   if (filters.program)           out.program           = filters.program
   if (filters.location_country)  out.location_country  = filters.location_country
   if (filters.material)          out.material          = filters.material
-  if (filters.mood)              out.mood              = filters.mood
+  if (filters.style)             out.style             = filters.style
   if (filters.year_min  != null) out.year_min          = filters.year_min
   if (filters.year_max  != null) out.year_max          = filters.year_max
   // Area — accept all naming conventions (frontend, LLM area_min, backend min_area)
