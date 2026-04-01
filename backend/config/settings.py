@@ -136,6 +136,11 @@ RECOMMENDATION = {
     'like_weight': 0.5,              # kept for pref vector update
     'dislike_weight': -1.0,
     'initial_explore_rounds': 10,    # kept for initial batch size
+    # Legacy keys (used by select_next_image, kept for backward compatibility)
+    'total_rounds': 20,              # used by tests
+    'initial_epsilon': 0.18,
+    'epsilon_decay': 0.005,
+    'min_epsilon': 0.05,
 }
 
 # -- External API keys -----------------------------------------------------
