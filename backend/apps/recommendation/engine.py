@@ -501,19 +501,20 @@ def compute_mmr_next(pool_ids, exposed_ids, pool_embeddings, like_vectors, round
     if not like_vectors:
         return random.choice(candidates)
 
-    # Apply recency weights
+    # Apply recency weights: list of (np.array embedding, float weight)
     weighted_likes = _apply_recency_weights(like_vectors, round_num, RC['decay_rate'])
 
-    if len(like_vectors) == 1:
+    if len(weighted_likes) == 1:
         # Single like vector, use it directly as centroid
-        centroids = [np.array(like_vectors[0]['embedding'])]
+        centroids = [weighted_likes[0][0]]
     else:
-        # Run KMeans to get cluster centroids
+        # Run KMeans with recency weights as sample_weight
         from sklearn.cluster import KMeans
-        like_embeddings = [np.array(lv['embedding']) for lv in like_vectors]
-        k_clusters = min(RC['k_clusters'], len(like_vectors))
+        like_embeddings = np.array([w[0] for w in weighted_likes])
+        like_weights = np.array([w[1] for w in weighted_likes])
+        k_clusters = min(RC['k_clusters'], len(weighted_likes))
         kmeans = KMeans(n_clusters=k_clusters, random_state=42, n_init=10)
-        kmeans.fit(like_embeddings)
+        kmeans.fit(like_embeddings, sample_weight=like_weights)
         centroids = kmeans.cluster_centers_
 
     best_candidate = None
