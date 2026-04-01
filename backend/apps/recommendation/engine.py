@@ -440,6 +440,9 @@ def get_pool_embeddings(pool_ids):
     for row in rows:
         embedding_str = row['embedding']
         embedding = np.array([float(x) for x in embedding_str.strip('[]').split(',')])
+        norm = np.linalg.norm(embedding)
+        if norm > 0:
+            embedding = embedding / norm
         result[row['building_id']] = embedding
 
     return result
