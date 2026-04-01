@@ -2,36 +2,36 @@ import { useState, useRef, useEffect, memo } from 'react'
 import * as api from '../api/client.js'
 
 const PRESETS = [
-  { label: '🏛️ Japanese modern museum',  query: 'Modern museum in Japan' },
-  { label: '🏠 Minimalist housing',       query: 'Minimalist residential housing' },
-  { label: '🌿 Landscape architecture',   query: 'Landscape or park architecture' },
-  { label: '🏢 Brutalist office',         query: 'Brutalist office or civic building' },
-  { label: '⛪ Religious architecture',   query: 'Religious or spiritual architecture' },
-  { label: '🏨 Boutique hospitality',     query: 'Small hotel or boutique hospitality' },
+  { label: 'Japanese modern museum',  query: 'Modern museum in Japan' },
+  { label: 'Minimalist housing',       query: 'Minimalist residential housing' },
+  { label: 'Landscape architecture',   query: 'Landscape or park architecture' },
+  { label: 'Brutalist office',         query: 'Brutalist office or civic building' },
+  { label: 'Religious architecture',   query: 'Religious or spiritual architecture' },
+  { label: 'Boutique hospitality',     query: 'Small hotel or boutique hospitality' },
 ]
 
 const FILTER_LABELS = {
-  program: '🏗',
-  location_country: '🌍',
-  material: '🧱',
-  style: '✨',
-  year_min: '📅',
-  year_max: '📅',
-  min_area: '📐',
-  max_area: '📐',
+  program: 'Program',
+  location_country: 'Location',
+  material: 'Material',
+  style: 'Style',
+  year_min: 'Year',
+  year_max: 'Year',
+  min_area: 'Area',
+  max_area: 'Area',
 }
 
 function FilterChips({ filters }) {
   if (!filters) return null
   const chips = []
-  if (filters.program)          chips.push(`${FILTER_LABELS.program} ${filters.program}`)
-  if (filters.location_country) chips.push(`${FILTER_LABELS.location_country} ${filters.location_country}`)
-  if (filters.material)         chips.push(`${FILTER_LABELS.material} ${filters.material}`)
-  if (filters.style)            chips.push(`${FILTER_LABELS.style} ${filters.style}`)
+  if (filters.program)          chips.push(`${FILTER_LABELS.program}: ${filters.program}`)
+  if (filters.location_country) chips.push(`${FILTER_LABELS.location_country}: ${filters.location_country}`)
+  if (filters.material)         chips.push(`${FILTER_LABELS.material}: ${filters.material}`)
+  if (filters.style)            chips.push(`${FILTER_LABELS.style}: ${filters.style}`)
   if (filters.year_min || filters.year_max) {
-    const from = filters.year_min || '…'
-    const to   = filters.year_max || '…'
-    chips.push(`📅 ${from}–${to}`)
+    const from = filters.year_min || '...'
+    const to   = filters.year_max || '...'
+    chips.push(`Year: ${from}-${to}`)
   }
   if (!chips.length) return null
   return (
@@ -69,7 +69,7 @@ const Thumbnail = memo(function Thumbnail({ r }) {
           width: '100%', height: 72,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 20,
-        }}>🏛️</div>
+        }}>Building</div>
       )}
     </div>
   )
@@ -124,12 +124,13 @@ function ResultStrip({ results, isFallback }) {
 
 export default function LLMSearchPage({ mode, projectId, projectName: initialName, onBack, onStart, onUpdate }) {
   const [messages, setMessages] = useState([
-    { role: 'ai', text: "Hello! Describe the kind of architecture you're looking for — country, program, architect, style, year, and so on." }
+    { role: 'ai', text: "Hello! Describe the kind of architecture you're looking for -- country, program, architect, style, year, and so on." }
   ])
   const [input, setInput]               = useState('')
   const [isLoading, setIsLoading]       = useState(false)
   const [latestResults, setLatestResults] = useState([])
   const [latestFilters, setLatestFilters] = useState({})
+  const [latestFilterPriority, setLatestFilterPriority] = useState([])
   const [showStart, setShowStart]       = useState(false)
   const messagesEndRef = useRef(null)
 
@@ -159,12 +160,13 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
       const results    = parsed.results || []
       const isFallback = parsed.is_fallback || false
       const filters    = parsed.structured_filters || {}
+      const filterPriority = parsed.filter_priority || []
 
       let replyText
       if (results.length > 0 && !isFallback) {
         replyText = `${parsed.reply}\n\nFound ${results.length} building${results.length !== 1 ? 's' : ''} matching your criteria.`
       } else if (results.length > 0 && isFallback) {
-        replyText = `${parsed.reply}\n\n${parsed.fallback_note || 'No exact matches — here are some similar buildings you might like.'}`
+        replyText = `${parsed.reply}\n\n${parsed.fallback_note || 'No exact matches -- here are some similar buildings you might like.'}`
       } else {
         replyText = `${parsed.reply}\n\nNo buildings found. Try describing it differently.`
       }
@@ -178,6 +180,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
       if (results.length > 0) {
         setLatestResults(results)
         setLatestFilters(isFallback ? {} : filters)
+        setLatestFilterPriority(isFallback ? [] : filterPriority)
         setShowStart(true)
       }
     } catch (err) {
@@ -191,9 +194,9 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
   function handleStartSwiping() {
     const name = initialName || 'Untitled Project'
     if (mode === 'update') {
-      onUpdate(projectId, latestResults, latestFilters)
+      onUpdate(projectId, latestResults, latestFilters, latestFilterPriority)
     } else {
-      onStart(name, latestResults, latestFilters)
+      onStart(name, latestResults, latestFilters, latestFilterPriority)
     }
   }
 
@@ -218,7 +221,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
         <button onClick={onBack} style={{
           background: 'none', border: 'none', color: 'var(--color-text-dim)',
           fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', padding: '4px 0',
-        }}>← Back</button>
+        }}>Back</button>
         <div style={{ flex: 1, textAlign: 'center' }}>
           <span style={{
             fontSize: 16, fontWeight: 700,
@@ -264,7 +267,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
           </div>
         ))}
 
-        {/* Preset chips — shown only before first user message */}
+        {/* Preset chips -- shown only before first user message */}
         {messages.length === 1 && !isLoading && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, paddingLeft: 2 }}>
             {PRESETS.map(p => (
@@ -334,8 +337,8 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
               cursor: 'pointer', fontFamily: 'inherit',
             }}>
               {mode === 'update'
-                ? `Update with these results · ${latestResults.length}`
-                : `Start swiping · ${latestResults.length}`}
+                ? `Update with these results - ${latestResults.length}`
+                : `Start swiping - ${latestResults.length}`}
             </button>
           </div>
         </div>

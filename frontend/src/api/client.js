@@ -79,7 +79,7 @@ async function _tryRefresh() {
 }
 
 // ── ImageCard normalizer ──────────────────────────────────────────────────────
-// Maps backend field names (spec) → frontend field names used in components.
+// Maps backend field names (spec) -> frontend field names used in components.
 // Components use: image_id, image_title, image_url, gallery, metadata.*
 
 export function normalizeCard(card) {
@@ -163,11 +163,15 @@ export async function logout(refreshToken) {
 
 /**
  * Start an analysis session.
+ * params.filter_priority and params.seed_ids are forwarded to the backend
+ * for weighted scoring pool creation.
  */
 export async function startSession(params) {
   const result = await callApi('POST', '/analysis/sessions/', {
-    project_id: params.project_id,
-    filters:    params.filters || {},
+    project_id:      params.project_id,
+    filters:         params.filters || {},
+    filter_priority: params.filter_priority || [],
+    seed_ids:        params.seed_ids || [],
   })
   return {
     ...result,
@@ -177,7 +181,7 @@ export async function startSession(params) {
 }
 
 /**
- * Record a swipe action → receive next_image.
+ * Record a swipe action -> receive next_image.
  */
 export async function recordSwipe({ session_id, image_id, action }) {
   const result = await callApi('POST', `/analysis/sessions/${session_id}/swipes/`, {
@@ -194,7 +198,7 @@ export async function recordSwipe({ session_id, image_id, action }) {
 
 /**
  * Parse a natural-language query using Gemini on the backend.
- * Returns { reply, structured_filters, suggestions, results: [ImageCard] }
+ * Returns { reply, structured_filters, filter_priority, suggestions, results: [ImageCard] }
  */
 export async function parseQuery(query) {
   const result = await callApi('POST', '/parse-query/', { query })

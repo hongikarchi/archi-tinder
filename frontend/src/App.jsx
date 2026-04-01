@@ -11,14 +11,14 @@ import * as api from './api/client.js'
 function normalizeFilters(filters) {
   if (!filters) return {}
   const out = {}
-  // Structured filters from LLM parse-query — pass through
+  // Structured filters from LLM parse-query -- pass through
   if (filters.program)           out.program           = filters.program
   if (filters.location_country)  out.location_country  = filters.location_country
   if (filters.material)          out.material          = filters.material
   if (filters.style)             out.style             = filters.style
   if (filters.year_min  != null) out.year_min          = filters.year_min
   if (filters.year_max  != null) out.year_max          = filters.year_max
-  // Area — accept all naming conventions (frontend, LLM area_min, backend min_area)
+  // Area -- accept all naming conventions (frontend, LLM area_min, backend min_area)
   const minArea = filters.min_area ?? filters.minArea ?? filters.area_min ?? null
   const maxArea = filters.max_area ?? filters.maxArea ?? filters.area_max ?? null
   if (minArea != null) out.min_area = minArea
@@ -145,12 +145,14 @@ export default function App() {
     setTheme(t => t === 'dark' ? 'light' : 'dark')
   }
 
-  async function initSession(projectId, filters) {
+  async function initSession(projectId, filters, filterPriority = [], seedIds = []) {
     setIsSwipeLoading(true)
     setIsSessionCompleted(false)
     const result = await api.startSession({
       project_id: projectId,
       filters: normalizeFilters(filters),
+      filter_priority: filterPriority,
+      seed_ids: seedIds,
     })
     setProjects(prev => prev.map(p => {
       if (p.id !== projectId) return p
@@ -171,8 +173,9 @@ export default function App() {
     setIsSwipeLoading(false)
   }
 
-  async function handleStart(projectName, preloadedImages, llmFilters = {}) {
+  async function handleStart(projectName, preloadedImages, llmFilters = {}, filterPriority = []) {
     const projectId = `proj_${Date.now()}`
+    const seedIds = (preloadedImages || []).map(c => c.image_id).filter(Boolean)
     const newProject = {
       id: projectId, projectName, filters: llmFilters || {},
       likedBuildings: [], swipedIds: [],
@@ -184,7 +187,7 @@ export default function App() {
     setProjects(prev => [...prev, newProject])
     setActiveProjectId(projectId)
     navigate('/swipe')
-    await initSession(projectId, llmFilters || {})
+    await initSession(projectId, llmFilters || {}, filterPriority, seedIds)
   }
 
   async function handleSwipeCard(action) {
@@ -268,14 +271,15 @@ export default function App() {
     await initSession(id, project.filters)
   }
 
-  async function handleUpdateWithImages(id, preloadedImages, llmFilters = {}) {
+  async function handleUpdateWithImages(id, preloadedImages, llmFilters = {}, filterPriority = []) {
     const project = projects.find(p => p.id === id)
     if (!project) return
+    const seedIds = (preloadedImages || []).map(c => c.image_id).filter(Boolean)
     setWizardData(null)
     setActiveProjectId(id)
     setProjects(prev => prev.map(p => p.id === id ? { ...p, deckImages: preloadedImages } : p))
     navigate('/swipe')
-    await initSession(id, llmFilters || project.filters)
+    await initSession(id, llmFilters || project.filters, filterPriority, seedIds)
   }
 
   function handleDeleteProject(id) {

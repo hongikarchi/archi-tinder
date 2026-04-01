@@ -44,8 +44,11 @@ Return ONLY valid JSON with this exact structure (use null for fields not mentio
     "year_max": null,
     "min_area": null,
     "max_area": null
-  }
-}"""
+  },
+  "filter_priority": ["program", "location_country", "style"]
+}
+
+filter_priority is an array of the filter keys you actually extracted (non-null), ordered from most essential to the user intent to least essential. Only include keys that have non-null values in filters."""
 
 _PERSONA_PROMPT = """You are an architectural taste analyst. Based on the buildings a user has liked, generate a short persona archetype that describes their architectural aesthetic.
 
@@ -86,12 +89,13 @@ def parse_query(query_text):
                 titled = program.title()
                 filters['program'] = titled if titled in PROGRAM_VALUES else None
         return {
-            'reply':   data.get('reply', ''),
-            'filters': filters,
+            'reply':           data.get('reply', ''),
+            'filters':         filters,
+            'filter_priority': data.get('filter_priority', []),
         }
     except Exception as e:
         logger.error('parse_query error: %s', e)
-        return {'reply': 'I had trouble understanding that. Try again?', 'filters': {}}
+        return {'reply': 'I had trouble understanding that. Try again?', 'filters': {}, 'filter_priority': []}
 
 
 def generate_persona_report(liked_building_ids):

@@ -41,8 +41,9 @@ class AnalysisSession(models.Model):
     initial_batch     = models.JSONField(default=list)  # building_ids for first 10 rounds
     phase               = models.CharField(max_length=20, choices=PHASE_CHOICES, default='exploring')
     pool_ids            = models.JSONField(default=list)
+    pool_scores         = models.JSONField(default=dict)   # {building_id: relevance_score}
     like_vectors        = models.JSONField(default=list)   # list of {embedding: [...], round: int}
-    convergence_history = models.JSONField(default=list)   # list of ΔV floats
+    convergence_history = models.JSONField(default=list)   # list of delta-V floats
     previous_pref_vector = models.JSONField(default=list)
     created_at        = models.DateTimeField(auto_now_add=True)
 

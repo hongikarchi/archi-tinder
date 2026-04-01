@@ -1,4 +1,5 @@
 import logging
+from collections import defaultdict
 from django.conf import settings
 from django.db import transaction
 from rest_framework import status
@@ -12,6 +13,12 @@ from . import engine, services
 
 logger = logging.getLogger('apps.recommendation')
 RC = settings.RECOMMENDATION
+
+# Known filter keys for filter_priority validation
+_VALID_FILTER_KEYS = frozenset([
+    'program', 'location_country', 'style', 'material',
+    'min_area', 'max_area', 'year_min', 'year_max',
+])
 
 
 def _get_profile(request):
@@ -105,10 +112,22 @@ class SessionCreateView(APIView):
         if not profile:
             return Response({'detail': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        project_id = request.data.get('project_id')
-        filters    = request.data.get('filters') or {}
+        project_id      = request.data.get('project_id')
+        filters         = request.data.get('filters') or {}
 
-        # Resolve project (project_id may be a local ID like 'proj_xxx' — ignore gracefully)
+        # Validate and sanitize filter_priority: must be a list of known filter key strings, max 10
+        raw_priority = request.data.get('filter_priority') or []
+        if not isinstance(raw_priority, list):
+            raw_priority = []
+        filter_priority = [k for k in raw_priority if isinstance(k, str) and k in _VALID_FILTER_KEYS][:10]
+
+        # Validate and sanitize seed_ids: must be a list of strings, max 50
+        raw_seeds = request.data.get('seed_ids') or []
+        if not isinstance(raw_seeds, list):
+            raw_seeds = []
+        seed_ids = [s for s in raw_seeds if isinstance(s, str) and len(s) <= 20][:50]
+
+        # Resolve project (project_id may be a local ID like 'proj_xxx' -- ignore gracefully)
         project = None
         if project_id:
             try:
@@ -118,30 +137,39 @@ class SessionCreateView(APIView):
         if not project:
             project = Project.objects.create(user=profile, name='Untitled', filters=filters)
 
-        # Create bounded pool
-        pool_ids = engine.create_bounded_pool(filters or project.filters or {})
+        # Create bounded pool with weighted scoring
+        pool_ids, pool_scores = engine.create_bounded_pool(
+            filters or project.filters or {}, filter_priority, seed_ids
+        )
         if not pool_ids:
             return Response({'detail': 'No buildings found for given filters'}, status=status.HTTP_404_NOT_FOUND)
 
         # Get pool embeddings
         pool_embeddings = engine.get_pool_embeddings(pool_ids)
 
-        # Generate initial batch via farthest-point sampling
-        initial_batch = []
-        if pool_ids:
-            # Start with random first building
-            first_bid = pool_ids[0]  # random.choice(pool_ids) equivalent since pool is already random
-            initial_batch.append(first_bid)
+        # Tier-ordered initial_batch: farthest-point within highest score tier first
+        tiers = defaultdict(list)
+        for bid in pool_ids:
+            tiers[pool_scores.get(bid, 0)].append(bid)
 
-            # Greedily pick remaining buildings using farthest-point logic
-            exposed_ids_temp = [first_bid]
-            for _ in range(min(RC['initial_explore_rounds'] - 1, len(pool_ids) - 1)):
-                next_bid = engine.farthest_point_from_pool(pool_ids, exposed_ids_temp, pool_embeddings)
+        initial_batch = []
+        exposed_temp = []
+        for score in sorted(tiers.keys(), reverse=True):
+            tier_ids = list(tiers[score])  # copy so we can mutate
+            while len(initial_batch) < RC['initial_explore_rounds'] and tier_ids:
+                next_bid = engine.farthest_point_from_pool(tier_ids, exposed_temp, pool_embeddings)
                 if next_bid:
                     initial_batch.append(next_bid)
-                    exposed_ids_temp.append(next_bid)
+                    exposed_temp.append(next_bid)
+                    tier_ids.remove(next_bid)
                 else:
                     break
+            if len(initial_batch) >= RC['initial_explore_rounds']:
+                break
+
+        # Guard: if initial_batch is empty (shouldn't happen), fall back
+        if not initial_batch:
+            initial_batch = pool_ids[:1]
 
         first_card = engine.get_building_card(initial_batch[0])
         prefetch_card = engine.get_building_card(initial_batch[1]) if len(initial_batch) > 1 else None
@@ -151,6 +179,7 @@ class SessionCreateView(APIView):
             project              = project,
             phase                = 'exploring',
             pool_ids             = pool_ids,
+            pool_scores          = pool_scores,
             total_rounds         = 999,
             current_round        = 0,
             preference_vector    = [],
@@ -161,7 +190,7 @@ class SessionCreateView(APIView):
             previous_pref_vector = [],
         )
 
-        logger.info('Session created: %s', session.session_id)
+        logger.info('Session created: %s (pool=%d, tiers=%d)', session.session_id, len(pool_ids), len(tiers))
         return Response({
             'session_id':     str(session.session_id),
             'project_id':     str(project.project_id),
@@ -194,7 +223,7 @@ class SwipeView(APIView):
         if action not in ('like', 'dislike'):
             return Response({'detail': 'action must be like or dislike'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Idempotency check — if already processed, return accepted so frontend treats it as success
+        # Idempotency check -- if already processed, return accepted so frontend treats it as success
         if SwipeEvent.objects.filter(idempotency_key=idempotency_key).exists():
             logger.info('Duplicate swipe ignored: %s', idempotency_key)
             return Response({'accepted': True, 'detail': 'duplicate'}, status=status.HTTP_200_OK)
@@ -517,6 +546,7 @@ class ParseQueryView(APIView):
         return Response({
             'reply':              parsed['reply'],
             'structured_filters': parsed['filters'],
+            'filter_priority':    parsed.get('filter_priority', []),
             'suggestions':        [],
             'results':            results,
             'is_fallback':        is_fallback,
