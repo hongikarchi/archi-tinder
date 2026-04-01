@@ -88,7 +88,7 @@ function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
           <img
             src={card.image_url}
             alt={card.image_title}
-            fetchPriority="high"
+            fetchpriority="high"
             decoding="sync"
             draggable={false}
             onLoad={() => setImgLoaded(true)}
