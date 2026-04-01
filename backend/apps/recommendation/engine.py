@@ -491,23 +491,23 @@ def farthest_point_from_pool(pool_ids, exposed_ids, pool_embeddings):
 
 def compute_taste_centroids(like_vectors, round_num):
     """
-    Compute recency-weighted K-Means centroids + global weighted centroid.
-    Returns (centroids_list, global_centroid_ndarray).
-    Used for convergence detection, card selection, and final top-K results.
+    Compute taste cluster centroids with recency weighting.
+    Returns (list_of_centroids, global_centroid) as numpy arrays.
+    Called by views.py (convergence tracking) and algorithm_tester.py.
     """
     weighted_likes = _apply_recency_weights(like_vectors, round_num, RC['decay_rate'])
 
     if len(weighted_likes) == 1:
-        centroids = [weighted_likes[0][0]]
-    else:
-        from sklearn.cluster import KMeans
-        like_embeddings = np.array([w[0] for w in weighted_likes])
-        like_weights = np.array([w[1] for w in weighted_likes])
-        k = min(RC['k_clusters'], len(weighted_likes))
-        kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
-        kmeans.fit(like_embeddings, sample_weight=like_weights)
-        centroids = list(kmeans.cluster_centers_)
+        centroid = weighted_likes[0][0]
+        return [centroid], centroid
 
+    from sklearn.cluster import KMeans
+    like_embeddings = np.array([w[0] for w in weighted_likes])
+    like_weights = np.array([w[1] for w in weighted_likes])
+    k_clusters = min(RC['k_clusters'], len(weighted_likes))
+    kmeans = KMeans(n_clusters=k_clusters, random_state=42, n_init=10)
+    kmeans.fit(like_embeddings, sample_weight=like_weights)
+    centroids = list(kmeans.cluster_centers_)
     global_centroid = _weighted_centroid(weighted_likes)
     return centroids, global_centroid
 
@@ -678,6 +678,7 @@ def build_action_card():
 def get_top_k_mmr(like_vectors, exposed_ids, k=None, round_num=None):
     """
     Get top-k results using MMR for final recommendations.
+    Uses recency-weighted K-Means centroids when round_num is provided.
     Returns list of ImageCard dicts.
     """
     if k is None:
@@ -686,9 +687,17 @@ def get_top_k_mmr(like_vectors, exposed_ids, k=None, round_num=None):
     if not like_vectors:
         return []
 
-    centroids, global_centroid = compute_taste_centroids(
-        like_vectors, round_num if round_num is not None else len(like_vectors)
-    )
+    # Use K-Means centroids with recency weighting when round_num available
+    if round_num is not None:
+        centroids, centroid = compute_taste_centroids(like_vectors, round_num)
+        norm = np.linalg.norm(centroid)
+        if norm > 0:
+            centroid = centroid / norm
+    else:
+        like_embeddings = [np.array(lv['embedding']) for lv in like_vectors]
+        centroid = np.mean(like_embeddings, axis=0)
+        centroid = centroid / np.linalg.norm(centroid)
+        centroids = [centroid]
 
     # Prepare exclusion clause
     exclude_sql = ''
@@ -699,7 +708,7 @@ def get_top_k_mmr(like_vectors, exposed_ids, k=None, round_num=None):
         params = list(exposed_ids)
 
     # Fetch 3*k candidates for re-ranking
-    vec_str = _vec_to_pg(global_centroid.tolist())
+    vec_str = _vec_to_pg(centroid.tolist())
     with connection.cursor() as cur:
         cur.execute(
             f'SELECT building_id, name_en, project_name, architect, location_country, '
@@ -722,7 +731,7 @@ def get_top_k_mmr(like_vectors, exposed_ids, k=None, round_num=None):
     selected = []
     remaining = rows.copy()
 
-    # Select first item with best relevance
+    # Select first item with best relevance (multi-modal: max over all centroids)
     if remaining:
         best_idx = 0
         best_relevance = -1
@@ -741,7 +750,7 @@ def get_top_k_mmr(like_vectors, exposed_ids, k=None, round_num=None):
         for i, row in enumerate(remaining):
             candidate_emb = row['_vec']
 
-            # Relevance
+            # Relevance: max cosine similarity to any centroid (multi-modal)
             relevance = max(np.dot(candidate_emb, c) for c in centroids)
 
             # Redundancy: max similarity to already selected
