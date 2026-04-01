@@ -18,3 +18,4 @@ venv/
 # IDE
 .vscode/
 .idea/
+backend/tools/optimization_results.json
