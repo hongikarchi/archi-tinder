@@ -312,12 +312,26 @@ class SwipeView(APIView):
             # 4. Increment round
             session.current_round += 1
 
-            # 5. Compute convergence
-            if session.preference_vector and session.previous_pref_vector:
-                delta_v = engine.compute_convergence(session.preference_vector, session.previous_pref_vector)
-                if delta_v is not None:
-                    session.convergence_history = session.convergence_history + [delta_v]
-            session.previous_pref_vector = list(session.preference_vector) if session.preference_vector else []
+            # 5. Convergence — use K-Means global centroid during analyzing, pref_vector during exploring
+            if session.phase == 'analyzing' and action == 'like' and session.like_vectors:
+                _, global_centroid = engine.compute_taste_centroids(
+                    session.like_vectors, session.current_round
+                )
+                centroid_list = global_centroid.tolist()
+                if session.previous_pref_vector:
+                    delta_v = engine.compute_convergence(centroid_list, session.previous_pref_vector)
+                    if delta_v is not None:
+                        session.convergence_history = session.convergence_history + [delta_v]
+                session.previous_pref_vector = centroid_list
+            elif session.phase == 'exploring':
+                if session.preference_vector and session.previous_pref_vector:
+                    delta_v = engine.compute_convergence(
+                        session.preference_vector, session.previous_pref_vector
+                    )
+                    if delta_v is not None:
+                        session.convergence_history = session.convergence_history + [delta_v]
+                session.previous_pref_vector = list(session.preference_vector) if session.preference_vector else []
+            # On dislike during analyzing: centroids unchanged, skip convergence check
 
             # 6. Phase transitions
             like_count = len(session.like_vectors)
@@ -444,6 +458,7 @@ class SessionResultView(APIView):
                 session.like_vectors,
                 session.exposed_ids,
                 k=RC['top_k_results'],
+                round_num=session.current_round,
             )
         else:
             predicted_cards = engine.get_top_k_results(

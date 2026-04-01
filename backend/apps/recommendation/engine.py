@@ -489,6 +489,29 @@ def farthest_point_from_pool(pool_ids, exposed_ids, pool_embeddings):
     return best_candidate
 
 
+def compute_taste_centroids(like_vectors, round_num):
+    """
+    Compute recency-weighted K-Means centroids + global weighted centroid.
+    Returns (centroids_list, global_centroid_ndarray).
+    Used for convergence detection, card selection, and final top-K results.
+    """
+    weighted_likes = _apply_recency_weights(like_vectors, round_num, RC['decay_rate'])
+
+    if len(weighted_likes) == 1:
+        centroids = [weighted_likes[0][0]]
+    else:
+        from sklearn.cluster import KMeans
+        like_embeddings = np.array([w[0] for w in weighted_likes])
+        like_weights = np.array([w[1] for w in weighted_likes])
+        k = min(RC['k_clusters'], len(weighted_likes))
+        kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
+        kmeans.fit(like_embeddings, sample_weight=like_weights)
+        centroids = list(kmeans.cluster_centers_)
+
+    global_centroid = _weighted_centroid(weighted_likes)
+    return centroids, global_centroid
+
+
 def compute_mmr_next(pool_ids, exposed_ids, pool_embeddings, like_vectors, round_num):
     """
     Select next building using MMR (Maximal Marginal Relevance).
@@ -501,21 +524,7 @@ def compute_mmr_next(pool_ids, exposed_ids, pool_embeddings, like_vectors, round
     if not like_vectors:
         return random.choice(candidates)
 
-    # Apply recency weights: list of (np.array embedding, float weight)
-    weighted_likes = _apply_recency_weights(like_vectors, round_num, RC['decay_rate'])
-
-    if len(weighted_likes) == 1:
-        # Single like vector, use it directly as centroid
-        centroids = [weighted_likes[0][0]]
-    else:
-        # Run KMeans with recency weights as sample_weight
-        from sklearn.cluster import KMeans
-        like_embeddings = np.array([w[0] for w in weighted_likes])
-        like_weights = np.array([w[1] for w in weighted_likes])
-        k_clusters = min(RC['k_clusters'], len(weighted_likes))
-        kmeans = KMeans(n_clusters=k_clusters, random_state=42, n_init=10)
-        kmeans.fit(like_embeddings, sample_weight=like_weights)
-        centroids = kmeans.cluster_centers_
+    centroids, _ = compute_taste_centroids(like_vectors, round_num)
 
     best_candidate = None
     best_score = -float('inf')
@@ -666,7 +675,7 @@ def build_action_card():
     }
 
 
-def get_top_k_mmr(like_vectors, exposed_ids, k=None):
+def get_top_k_mmr(like_vectors, exposed_ids, k=None, round_num=None):
     """
     Get top-k results using MMR for final recommendations.
     Returns list of ImageCard dicts.
@@ -677,10 +686,9 @@ def get_top_k_mmr(like_vectors, exposed_ids, k=None):
     if not like_vectors:
         return []
 
-    # Extract embeddings and compute weighted centroid
-    like_embeddings = [np.array(lv['embedding']) for lv in like_vectors]
-    centroid = np.mean(like_embeddings, axis=0)
-    centroid = centroid / np.linalg.norm(centroid)  # normalize
+    centroids, global_centroid = compute_taste_centroids(
+        like_vectors, round_num if round_num is not None else len(like_vectors)
+    )
 
     # Prepare exclusion clause
     exclude_sql = ''
@@ -691,7 +699,7 @@ def get_top_k_mmr(like_vectors, exposed_ids, k=None):
         params = list(exposed_ids)
 
     # Fetch 3*k candidates for re-ranking
-    vec_str = _vec_to_pg(centroid.tolist())
+    vec_str = _vec_to_pg(global_centroid.tolist())
     with connection.cursor() as cur:
         cur.execute(
             f'SELECT building_id, name_en, project_name, architect, location_country, '
@@ -719,7 +727,7 @@ def get_top_k_mmr(like_vectors, exposed_ids, k=None):
         best_idx = 0
         best_relevance = -1
         for i, row in enumerate(remaining):
-            relevance = np.dot(row['_vec'], centroid)
+            relevance = max(np.dot(row['_vec'], c) for c in centroids)
             if relevance > best_relevance:
                 best_relevance = relevance
                 best_idx = i
@@ -734,7 +742,7 @@ def get_top_k_mmr(like_vectors, exposed_ids, k=None):
             candidate_emb = row['_vec']
 
             # Relevance
-            relevance = np.dot(candidate_emb, centroid)
+            relevance = max(np.dot(candidate_emb, c) for c in centroids)
 
             # Redundancy: max similarity to already selected
             redundancy = 0
