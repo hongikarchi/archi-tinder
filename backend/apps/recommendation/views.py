@@ -26,6 +26,9 @@ def _progress(session):
         'total_rounds':  session.total_rounds,
         'like_count':    like_count,
         'dislike_count': dislike_count,
+        'phase':         session.phase,
+        'pool_size':     len(session.pool_ids) if session.pool_ids else 0,
+        'pool_remaining': len([pid for pid in (session.pool_ids or []) if pid not in (session.exposed_ids or [])]),
     }
 
 
@@ -115,23 +118,47 @@ class SessionCreateView(APIView):
         if not project:
             project = Project.objects.create(user=profile, name='Untitled', filters=filters)
 
-        # Select initial diverse batch
-        initial_cards = engine.get_diverse_random(n=RC['initial_explore_rounds'], filters=filters or project.filters or None)
-        if not initial_cards:
+        # Create bounded pool
+        pool_ids = engine.create_bounded_pool(filters or project.filters or {})
+        if not pool_ids:
             return Response({'detail': 'No buildings found for given filters'}, status=status.HTTP_404_NOT_FOUND)
 
-        initial_ids   = [c['building_id'] for c in initial_cards]
-        first_card    = initial_cards[0]
-        prefetch_card = initial_cards[1] if len(initial_cards) > 1 else None
+        # Get pool embeddings
+        pool_embeddings = engine.get_pool_embeddings(pool_ids)
+
+        # Generate initial batch via farthest-point sampling
+        initial_batch = []
+        if pool_ids:
+            # Start with random first building
+            first_bid = pool_ids[0]  # random.choice(pool_ids) equivalent since pool is already random
+            initial_batch.append(first_bid)
+
+            # Greedily pick remaining buildings using farthest-point logic
+            exposed_ids_temp = [first_bid]
+            for _ in range(min(RC['initial_explore_rounds'] - 1, len(pool_ids) - 1)):
+                next_bid = engine.farthest_point_from_pool(pool_ids, exposed_ids_temp, pool_embeddings)
+                if next_bid:
+                    initial_batch.append(next_bid)
+                    exposed_ids_temp.append(next_bid)
+                else:
+                    break
+
+        first_card = engine.get_building_card(initial_batch[0])
+        prefetch_card = engine.get_building_card(initial_batch[1]) if len(initial_batch) > 1 else None
 
         session = AnalysisSession.objects.create(
-            user              = profile,
-            project           = project,
-            total_rounds      = RC['total_rounds'],
-            current_round     = 0,
-            preference_vector = [],
-            exposed_ids       = [first_card['building_id']],
-            initial_batch     = initial_ids,
+            user                 = profile,
+            project              = project,
+            phase                = 'exploring',
+            pool_ids             = pool_ids,
+            total_rounds         = 999,
+            current_round        = 0,
+            preference_vector    = [],
+            exposed_ids          = [initial_batch[0]],
+            initial_batch        = initial_batch,
+            like_vectors         = [],
+            convergence_history  = [],
+            previous_pref_vector = [],
         )
 
         logger.info('Session created: %s', session.session_id)
@@ -172,88 +199,196 @@ class SwipeView(APIView):
             logger.info('Duplicate swipe ignored: %s', idempotency_key)
             return Response({'accepted': True, 'detail': 'duplicate'}, status=status.HTTP_200_OK)
 
+        # SPECIAL: action card handling
+        if building_id == '__action_card__':
+            if action == 'like':
+                # Complete the session
+                session.status = 'completed'
+                session.phase = 'completed'
+                session.save()
+                return Response({
+                    'accepted': True,
+                    'session_status': 'completed',
+                    'progress': _progress(session),
+                    'next_image': None,
+                    'prefetch_image': None,
+                    'is_analysis_completed': True,
+                })
+            else:
+                # Reset and keep going
+                session.convergence_history = []
+                session.phase = 'analyzing'
+                session.save()
+                # Fall through to select next card below
+                # (skip normal swipe recording for action card)
+                pool_embeddings = engine.get_pool_embeddings(session.pool_ids)
+                next_card_id = engine.compute_mmr_next(
+                    session.pool_ids, session.exposed_ids, pool_embeddings,
+                    session.like_vectors, session.current_round
+                )
+                next_card = engine.get_building_card(next_card_id) if next_card_id else None
+                if next_card:
+                    session.exposed_ids = session.exposed_ids + [next_card['building_id']]
+                    session.save()
+
+                # Prefetch
+                prefetch_card = None
+                if next_card:
+                    try:
+                        pf_id = engine.compute_mmr_next(
+                            session.pool_ids, session.exposed_ids, pool_embeddings,
+                            session.like_vectors, session.current_round + 1
+                        )
+                        prefetch_card = engine.get_building_card(pf_id) if pf_id else None
+                    except Exception:
+                        pass
+
+                return Response({
+                    'accepted': True,
+                    'session_status': session.status,
+                    'progress': _progress(session),
+                    'next_image': next_card,
+                    'prefetch_image': prefetch_card,
+                    'is_analysis_completed': False,
+                })
+
+        # NORMAL SWIPE PROCESSING
         with transaction.atomic():
-            # Get embedding and update preference vector
+            # 1. Get embedding and update preference vector
             embedding = engine.get_building_embedding(building_id)
             if embedding:
                 session.preference_vector = engine.update_preference_vector(
                     session.preference_vector, embedding, action
                 )
 
-            # Record swipe
+            # 2. Record swipe
             SwipeEvent.objects.create(
-                session         = session,
-                building_id     = building_id,
-                action          = action,
-                idempotency_key = idempotency_key,
+                session=session, building_id=building_id,
+                action=action, idempotency_key=idempotency_key,
             )
 
-            # Update project liked/disliked lists
+            # 3. Update project liked/disliked lists
             project = session.project
             if action == 'like':
                 if building_id not in project.liked_ids:
                     project.liked_ids = project.liked_ids + [building_id]
+                # Append to session.like_vectors
+                if embedding:
+                    session.like_vectors = session.like_vectors + [{'embedding': embedding, 'round': session.current_round}]
             else:
                 if building_id not in project.disliked_ids:
                     project.disliked_ids = project.disliked_ids + [building_id]
             project.save(update_fields=['liked_ids', 'disliked_ids'])
 
+            # 4. Increment round
             session.current_round += 1
 
-            # Check completion
-            if session.current_round >= session.total_rounds:
-                session.status = 'completed'
-                session.save(update_fields=['preference_vector', 'current_round', 'status'])
-                return Response({
-                    'accepted':              True,
-                    'session_status':        'completed',
-                    'progress':              _progress(session),
-                    'next_image':            None,
-                    'prefetch_image':        None,
-                    'is_analysis_completed': True,
-                })
+            # 5. Compute convergence
+            if session.preference_vector and session.previous_pref_vector:
+                delta_v = engine.compute_convergence(session.preference_vector, session.previous_pref_vector)
+                if delta_v is not None:
+                    session.convergence_history = session.convergence_history + [delta_v]
+            session.previous_pref_vector = list(session.preference_vector) if session.preference_vector else []
 
-            # Select next image — use pre-computed initial batch for early rounds
-            filters   = project.filters or None
-            if session.current_round < len(session.initial_batch):
-                next_bid = session.initial_batch[session.current_round]
-                next_card = engine.get_building_card(next_bid)
-            else:
-                next_card = engine.select_next_image(
-                    session.preference_vector,
-                    session.exposed_ids,
-                    session.current_round,
-                    filters,
+            # 6. Phase transitions
+            like_count = len(session.like_vectors)
+
+            if session.phase == 'exploring' and like_count >= RC.get('min_likes_for_clustering', 3):
+                session.phase = 'analyzing'
+                logger.info('Session %s: exploring -> analyzing (likes=%d)', session.session_id, like_count)
+
+            if session.phase == 'analyzing' and engine.check_convergence(
+                session.convergence_history, RC.get('convergence_threshold', 0.08), RC.get('convergence_window', 3)
+            ):
+                session.phase = 'converged'
+                logger.info('Session %s: analyzing -> converged', session.session_id)
+
+            # 7. Check pool exhaustion
+            remaining = [pid for pid in session.pool_ids if pid not in set(session.exposed_ids)]
+            if not remaining and session.phase not in ('converged', 'completed'):
+                session.phase = 'converged'
+                logger.info('Session %s: pool exhausted -> converged', session.session_id)
+
+            # 8. Card selection by phase
+            pool_embeddings = engine.get_pool_embeddings(session.pool_ids)
+
+            if session.phase == 'converged':
+                next_card = engine.build_action_card()
+            elif session.phase == 'exploring':
+                # Use initial_batch for early rounds, then farthest-point
+                if session.current_round < len(session.initial_batch):
+                    next_bid = session.initial_batch[session.current_round]
+                    next_card = engine.get_building_card(next_bid)
+                else:
+                    # Check for consecutive dislikes
+                    recent_swipes = list(session.swipes.order_by('-created_at').values_list('action', flat=True)[:RC.get('max_consecutive_dislikes', 10)])
+                    consecutive_dislikes = 0
+                    for s in recent_swipes:
+                        if s == 'dislike':
+                            consecutive_dislikes += 1
+                        else:
+                            break
+
+                    if consecutive_dislikes >= RC.get('max_consecutive_dislikes', 10):
+                        # Get dislike vectors from project
+                        dislike_embeds = []
+                        for did in project.disliked_ids[-10:]:
+                            emb = engine.get_building_embedding(did)
+                            if emb:
+                                dislike_embeds.append(emb)
+                        fallback_id = engine.get_dislike_fallback(session.pool_ids, session.exposed_ids, pool_embeddings, dislike_embeds)
+                        next_card = engine.get_building_card(fallback_id) if fallback_id else None
+                    else:
+                        next_bid = engine.farthest_point_from_pool(session.pool_ids, session.exposed_ids, pool_embeddings)
+                        next_card = engine.get_building_card(next_bid) if next_bid else None
+            elif session.phase == 'analyzing':
+                next_card_id = engine.compute_mmr_next(
+                    session.pool_ids, session.exposed_ids, pool_embeddings,
+                    session.like_vectors, session.current_round
                 )
+                next_card = engine.get_building_card(next_card_id) if next_card_id else None
+                if not next_card:
+                    # Pool exhausted during analyzing
+                    next_card = engine.build_action_card()
+                    session.phase = 'converged'
+            else:
+                next_card = None
 
-            if next_card:
+            if next_card and next_card.get('building_id') != '__action_card__':
                 session.exposed_ids = session.exposed_ids + [next_card['building_id']]
 
-            # Compute prefetch_card (best-effort: card after next_card)
+            # 9. Prefetch (same phase logic, round+1)
             prefetch_card = None
-            if next_card and session.current_round + 1 < session.total_rounds:
+            if next_card and next_card.get('building_id') != '__action_card__':
                 try:
-                    if session.current_round + 1 < len(session.initial_batch):
-                        prefetch_bid  = session.initial_batch[session.current_round + 1]
-                        prefetch_card = engine.get_building_card(prefetch_bid)
-                    else:
-                        prefetch_card = engine.select_next_image(
-                            session.preference_vector,
-                            session.exposed_ids,  # already includes next_card
-                            session.current_round + 1,
-                            filters,
+                    if session.phase == 'exploring':
+                        if session.current_round + 1 < len(session.initial_batch):
+                            pf_bid = session.initial_batch[session.current_round + 1]
+                            prefetch_card = engine.get_building_card(pf_bid)
+                        else:
+                            pf_bid = engine.farthest_point_from_pool(session.pool_ids, session.exposed_ids, pool_embeddings)
+                            prefetch_card = engine.get_building_card(pf_bid) if pf_bid else None
+                    elif session.phase == 'analyzing':
+                        pf_id = engine.compute_mmr_next(
+                            session.pool_ids, session.exposed_ids, pool_embeddings,
+                            session.like_vectors, session.current_round + 1
                         )
+                        prefetch_card = engine.get_building_card(pf_id) if pf_id else None
                 except Exception:
                     prefetch_card = None
 
-            session.save(update_fields=['preference_vector', 'current_round', 'exposed_ids'])
+            # 10. Save session
+            session.save(update_fields=[
+                'preference_vector', 'current_round', 'exposed_ids',
+                'phase', 'like_vectors', 'convergence_history', 'previous_pref_vector'
+            ])
 
         return Response({
-            'accepted':              True,
-            'session_status':        session.status,
-            'progress':              _progress(session),
-            'next_image':            next_card,
-            'prefetch_image':        prefetch_card,
+            'accepted': True,
+            'session_status': session.status,
+            'progress': _progress(session),
+            'next_image': next_card,
+            'prefetch_image': prefetch_card,
             'is_analysis_completed': False,
         })
 
@@ -274,12 +409,19 @@ class SessionResultView(APIView):
         liked_cards = [engine.get_building_card(bid) for bid in liked_ids]
         liked_cards = [c for c in liked_cards if c]
 
-        # Predicted (top-k by similarity, excluding already exposed)
-        predicted_cards = engine.get_top_k_results(
-            session.preference_vector,
-            session.exposed_ids,
-            k=RC['top_k_results'],
-        )
+        # Use MMR-diversified results when like_vectors available
+        if session.like_vectors:
+            predicted_cards = engine.get_top_k_mmr(
+                session.like_vectors,
+                session.exposed_ids,
+                k=RC['top_k_results'],
+            )
+        else:
+            predicted_cards = engine.get_top_k_results(
+                session.preference_vector,
+                session.exposed_ids,
+                k=RC['top_k_results'],
+            )
 
         return Response({
             'session_id':          str(session.session_id),

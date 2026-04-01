@@ -123,14 +123,19 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # -- Recommendation algorithm constants ------------------------------------
 RECOMMENDATION = {
-    'total_rounds':           20,
-    'like_weight':            0.5,
-    'dislike_weight':        -1.0,
-    'initial_epsilon':        0.18,
-    'epsilon_decay':          0.005,
-    'min_epsilon':            0.05,
-    'initial_explore_rounds': 10,
-    'top_k_results':          20,
+    'bounded_pool_target': 150,
+    'pool_oversample_factor': 5,
+    'min_likes_for_clustering': 3,
+    'decay_rate': 0.05,              # gamma — recency weight decay
+    'mmr_penalty': 0.3,              # lambda — diversity penalty
+    'convergence_threshold': 0.08,   # epsilon — delta-V threshold
+    'convergence_window': 3,
+    'k_clusters': 2,
+    'max_consecutive_dislikes': 10,
+    'top_k_results': 20,
+    'like_weight': 0.5,              # kept for pref vector update
+    'dislike_weight': -1.0,
+    'initial_explore_rounds': 10,    # kept for initial batch size
 }
 
 # -- External API keys -----------------------------------------------------

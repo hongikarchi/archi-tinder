@@ -84,10 +84,27 @@ async function _tryRefresh() {
 
 export function normalizeCard(card) {
   if (!card) return null
+
+  // Handle action cards
+  if (card.building_id === '__action_card__' || card.card_type === 'action') {
+    return {
+      image_id: '__action_card__',
+      card_type: 'action',
+      action_card_message: card.action_card_message || 'Your taste profile is ready!',
+      image_title: card.name_en || 'Analysis Complete',
+      image_url: '',
+      source_url: null,
+      gallery: [],
+      metadata: {},
+    }
+  }
+
   // Already normalized
   if (card.image_id) return card
+
   return {
     image_id:    card.building_id,
+    card_type:   'building',
     image_title: card.name_en || card.project_name,
     image_url:   card.image_url,
     source_url:  card.url || null,

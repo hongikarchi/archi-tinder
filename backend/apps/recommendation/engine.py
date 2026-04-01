@@ -5,6 +5,7 @@ All DB access is raw SQL against architecture_vectors (owned by Make DB).
 import math
 import random
 import logging
+import numpy as np
 from django.conf import settings
 from django.db import connection
 
@@ -322,3 +323,355 @@ def search_by_filters(filters, limit=20):
         )
         rows = _dictfetchall(cur)
     return [_row_to_card(r) for r in rows]
+
+
+# ── Phase-Aware Algorithm (PRD v4.0) ──────────────────────────────────────────────
+
+def create_bounded_pool(filters, target=None):
+    """
+    Create a bounded pool of building IDs for the session.
+    Uses _build_filter_sql to get WHERE clause.
+    Returns list of building_id strings.
+    """
+    if target is None:
+        target = RC['bounded_pool_target']
+
+    where, params = _build_filter_sql(filters)
+    with connection.cursor() as cur:
+        cur.execute(
+            f'SELECT building_id FROM architecture_vectors {where} ORDER BY RANDOM() LIMIT %s',
+            params + [target],
+        )
+        rows = cur.fetchall()
+    return [row[0] for row in rows]
+
+
+def get_pool_embeddings(pool_ids):
+    """
+    Fetch embeddings for pool_ids.
+    Returns dict mapping building_id -> np.ndarray (shape=(384,))
+    """
+    if not pool_ids:
+        return {}
+
+    placeholders = ','.join(['%s'] * len(pool_ids))
+    with connection.cursor() as cur:
+        cur.execute(
+            f'SELECT building_id, embedding::text FROM architecture_vectors WHERE building_id IN ({placeholders})',
+            list(pool_ids),
+        )
+        rows = _dictfetchall(cur)
+
+    result = {}
+    for row in rows:
+        embedding_str = row['embedding']
+        embedding = np.array([float(x) for x in embedding_str.strip('[]').split(',')])
+        result[row['building_id']] = embedding
+
+    return result
+
+
+def farthest_point_from_pool(pool_ids, exposed_ids, pool_embeddings):
+    """
+    Select the building from pool that is farthest from all exposed buildings.
+    Returns building_id string or None if no candidates.
+    """
+    candidates = [bid for bid in pool_ids if bid not in set(exposed_ids)]
+    if not candidates:
+        return None
+
+    if not exposed_ids:
+        return random.choice(candidates)
+
+    best_candidate = None
+    best_distance = -1
+
+    for candidate in candidates:
+        if candidate not in pool_embeddings:
+            continue
+
+        candidate_emb = pool_embeddings[candidate]
+        min_similarity = float('inf')
+
+        for exposed_id in exposed_ids:
+            if exposed_id not in pool_embeddings:
+                continue
+            exposed_emb = pool_embeddings[exposed_id]
+            # Cosine similarity
+            similarity = np.dot(candidate_emb, exposed_emb)
+            min_similarity = min(min_similarity, similarity)
+
+        if min_similarity == float('inf'):  # No valid exposed embeddings
+            min_similarity = 0
+
+        distance = 1 - min_similarity
+        if distance > best_distance:
+            best_distance = distance
+            best_candidate = candidate
+
+    return best_candidate
+
+
+def compute_mmr_next(pool_ids, exposed_ids, pool_embeddings, like_vectors, round_num):
+    """
+    Select next building using MMR (Maximal Marginal Relevance).
+    Returns building_id string or None if no candidates.
+    """
+    candidates = [bid for bid in pool_ids if bid not in set(exposed_ids)]
+    if not candidates:
+        return None
+
+    if not like_vectors:
+        return random.choice(candidates)
+
+    # Apply recency weights
+    weighted_likes = _apply_recency_weights(like_vectors, round_num, RC['decay_rate'])
+
+    if len(like_vectors) == 1:
+        # Single like vector, use it directly as centroid
+        centroids = [np.array(like_vectors[0]['embedding'])]
+    else:
+        # Run KMeans to get cluster centroids
+        from sklearn.cluster import KMeans
+        like_embeddings = [np.array(lv['embedding']) for lv in like_vectors]
+        k_clusters = min(RC['k_clusters'], len(like_vectors))
+        kmeans = KMeans(n_clusters=k_clusters, random_state=42, n_init=10)
+        kmeans.fit(like_embeddings)
+        centroids = kmeans.cluster_centers_
+
+    best_candidate = None
+    best_score = -float('inf')
+
+    for candidate in candidates:
+        if candidate not in pool_embeddings:
+            continue
+
+        candidate_emb = pool_embeddings[candidate]
+
+        # Relevance: max cosine similarity to any cluster centroid
+        relevance = max(np.dot(candidate_emb, centroid) for centroid in centroids)
+
+        # Redundancy: max cosine similarity to any exposed embedding
+        redundancy = 0
+        for exposed_id in exposed_ids:
+            if exposed_id in pool_embeddings:
+                exposed_emb = pool_embeddings[exposed_id]
+                redundancy = max(redundancy, np.dot(candidate_emb, exposed_emb))
+
+        # MMR score
+        mmr_score = relevance - RC['mmr_penalty'] * redundancy
+
+        if mmr_score > best_score:
+            best_score = mmr_score
+            best_candidate = candidate
+
+    return best_candidate
+
+
+def _apply_recency_weights(like_vectors, round_num, gamma):
+    """
+    Apply recency weights to like vectors.
+    Returns list of (np.array(embedding), weight)
+    """
+    weighted_vecs = []
+    for entry in like_vectors:
+        embedding = np.array(entry['embedding'])
+        entry_round = entry['round']
+        weight = math.exp(-gamma * (round_num - entry_round))
+        weighted_vecs.append((embedding, weight))
+    return weighted_vecs
+
+
+def _weighted_centroid(weighted_vecs):
+    """
+    Compute weighted centroid and L2-normalize the result.
+    weighted_vecs is list of (np.array, weight)
+    Returns np.ndarray
+    """
+    if not weighted_vecs:
+        return np.zeros(384)  # Default embedding dimension
+
+    total_weight = sum(weight for _, weight in weighted_vecs)
+    if total_weight == 0:
+        total_weight = 1
+
+    weighted_sum = np.zeros_like(weighted_vecs[0][0])
+    for vec, weight in weighted_vecs:
+        weighted_sum += weight * vec
+
+    centroid = weighted_sum / total_weight
+
+    # L2 normalize
+    norm = np.linalg.norm(centroid)
+    if norm > 0:
+        centroid = centroid / norm
+
+    return centroid
+
+
+def compute_convergence(current_pref, previous_pref):
+    """
+    Compute delta-V between current and previous preference vectors.
+    Returns float or None if either vector is empty.
+    """
+    if not current_pref or not previous_pref:
+        return None
+
+    current = np.array(current_pref)
+    previous = np.array(previous_pref)
+    delta_v = float(np.linalg.norm(current - previous))
+    return delta_v
+
+
+def check_convergence(history, threshold, window=3):
+    """
+    Check if convergence has been reached based on moving average.
+    Returns bool
+    """
+    if len(history) < window:
+        return False
+
+    moving_avg = np.mean(history[-window:])
+    return bool(moving_avg < threshold)
+
+
+def get_dislike_fallback(pool_ids, exposed_ids, pool_embeddings, dislike_vectors):
+    """
+    Select building farthest from dislike centroid.
+    Returns building_id string or None if no candidates.
+    """
+    candidates = [bid for bid in pool_ids if bid not in set(exposed_ids)]
+    if not candidates:
+        return None
+
+    if not dislike_vectors:
+        return random.choice(candidates)
+
+    # Compute dislike centroid
+    dislike_embeddings = [np.array(dv) for dv in dislike_vectors]
+    dislike_centroid = np.mean(dislike_embeddings, axis=0)
+    dislike_centroid = dislike_centroid / np.linalg.norm(dislike_centroid)  # normalize
+
+    best_candidate = None
+    best_distance = -1
+
+    for candidate in candidates:
+        if candidate not in pool_embeddings:
+            continue
+
+        candidate_emb = pool_embeddings[candidate]
+        similarity = np.dot(candidate_emb, dislike_centroid)
+        distance = 1 - similarity  # cosine distance
+
+        if distance > best_distance:
+            best_distance = distance
+            best_candidate = candidate
+
+    return best_candidate
+
+
+def build_action_card():
+    """
+    Return action card dict for analysis completion.
+    """
+    return {
+        'building_id': '__action_card__',
+        'card_type': 'action',
+        'name_en': 'Analysis Complete',
+        'project_name': '',
+        'image_url': '',
+        'url': None,
+        'gallery': [],
+        'gallery_drawing_start': 0,
+        'metadata': {},
+        'action_card_message': 'Your taste profile is ready! Swipe right to see your results, or left to keep exploring.'
+    }
+
+
+def get_top_k_mmr(like_vectors, exposed_ids, k=None):
+    """
+    Get top-k results using MMR for final recommendations.
+    Returns list of ImageCard dicts.
+    """
+    if k is None:
+        k = RC['top_k_results']
+
+    if not like_vectors:
+        return []
+
+    # Extract embeddings and compute weighted centroid
+    like_embeddings = [np.array(lv['embedding']) for lv in like_vectors]
+    centroid = np.mean(like_embeddings, axis=0)
+    centroid = centroid / np.linalg.norm(centroid)  # normalize
+
+    # Prepare exclusion clause
+    exclude_sql = ''
+    params = []
+    if exposed_ids:
+        placeholders = ','.join(['%s'] * len(exposed_ids))
+        exclude_sql = f'WHERE building_id NOT IN ({placeholders})'
+        params = list(exposed_ids)
+
+    # Fetch 3*k candidates for re-ranking
+    vec_str = _vec_to_pg(centroid.tolist())
+    with connection.cursor() as cur:
+        cur.execute(
+            f'SELECT building_id, name_en, project_name, architect, location_country, '
+            f'city, year, area_sqm, program, style, atmosphere, color_tone, material, material_visual, url, tags, image_photos, image_drawings, '
+            f'embedding::text FROM architecture_vectors {exclude_sql} '
+            f'ORDER BY embedding <=> %s::vector LIMIT %s',
+            params + [vec_str, k * 3],
+        )
+        rows = _dictfetchall(cur)
+
+    if not rows:
+        return []
+
+    # Parse embeddings
+    for row in rows:
+        embedding_str = row['embedding']
+        row['_vec'] = np.array([float(x) for x in embedding_str.strip('[]').split(',')])
+
+    # MMR selection
+    selected = []
+    remaining = rows.copy()
+
+    # Select first item with best relevance
+    if remaining:
+        best_idx = 0
+        best_relevance = -1
+        for i, row in enumerate(remaining):
+            relevance = np.dot(row['_vec'], centroid)
+            if relevance > best_relevance:
+                best_relevance = relevance
+                best_idx = i
+        selected.append(remaining.pop(best_idx))
+
+    # Greedy MMR selection for remaining items
+    while len(selected) < k and remaining:
+        best_idx = 0
+        best_score = -float('inf')
+
+        for i, row in enumerate(remaining):
+            candidate_emb = row['_vec']
+
+            # Relevance
+            relevance = np.dot(candidate_emb, centroid)
+
+            # Redundancy: max similarity to already selected
+            redundancy = 0
+            for sel in selected:
+                sel_emb = sel['_vec']
+                redundancy = max(redundancy, np.dot(candidate_emb, sel_emb))
+
+            # MMR score
+            mmr_score = relevance - RC['mmr_penalty'] * redundancy
+
+            if mmr_score > best_score:
+                best_score = mmr_score
+                best_idx = i
+
+        selected.append(remaining.pop(best_idx))
+
+    # Convert to ImageCard format
+    return [_row_to_card(row) for row in selected]

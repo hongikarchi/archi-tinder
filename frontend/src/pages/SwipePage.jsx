@@ -234,6 +234,75 @@ function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
   )
 }
 
+/* ── ActionCard ──────────────────────────────────────────────────────────── */
+function ActionCard({ card }) {
+  return (
+    <div style={{
+      position: 'absolute', top: 0, left: 0,
+      width: CARD_WIDTH, height: CARD_HEIGHT,
+      borderRadius: 20, overflow: 'hidden',
+      boxShadow: '0 25px 50px rgba(0,0,0,0.6)',
+    }}>
+      <div style={{
+        position: 'relative',
+        width: '100%', height: '100%',
+        background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        textAlign: 'center', padding: 24,
+      }}>
+        {/* Sparkle Icon */}
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="white" style={{ marginBottom: 16 }}>
+          <path d="M12 0l3.09 6.26L22 9l-6.91 2.74L12 18l-3.09-6.26L2 9l6.91-2.74L12 0z"/>
+        </svg>
+
+        {/* Title */}
+        <h2 style={{
+          color: '#fff', fontSize: 22, fontWeight: 800,
+          margin: '0 0 12px 0', lineHeight: 1.3
+        }}>
+          Analysis Complete
+        </h2>
+
+        {/* Message */}
+        <p style={{
+          color: 'rgba(255,255,255,0.7)', fontSize: 14,
+          textAlign: 'center', maxWidth: '85%',
+          margin: '0 0 32px 0', lineHeight: 1.4
+        }}>
+          {card.action_card_message}
+        </p>
+
+        {/* Hint row at bottom */}
+        <div style={{
+          position: 'absolute', bottom: 20, left: 20, right: 20,
+          display: 'flex', justifyContent: 'space-between',
+          alignItems: 'center',
+        }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 4,
+            color: 'rgba(255,255,255,0.5)', fontSize: 12
+          }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 18 9 12 15 6"/>
+            </svg>
+            Keep exploring
+          </div>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 4,
+            color: 'rgba(255,255,255,0.5)', fontSize: 12
+          }}>
+            View results
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* ── LoadingCard ─────────────────────────────────────────────────────────── */
 function LoadingCard() {
   return (
@@ -265,8 +334,21 @@ export default function SwipePage({ currentCard, progress, isCompleted, isLoadin
   const current_round = progress?.current_round ?? 0
   const total_rounds  = progress?.total_rounds  ?? 1
   const like_count    = progress?.like_count    ?? 0
-  const pct      = Math.round((current_round / Math.max(total_rounds, 1)) * 100)
-  const showExit = total_rounds > 0 && (current_round / total_rounds) >= 0.3
+  const phase         = progress?.phase
+
+  // Phase-aware progress percentage
+  let pct
+  if (phase === 'exploring') {
+    pct = Math.min(Math.round((like_count / 3) * 100), 100)
+  } else if (phase === 'analyzing') {
+    pct = 66
+  } else if (phase === 'converged') {
+    pct = 100
+  } else {
+    pct = Math.round((current_round / Math.max(total_rounds, 1)) * 100)
+  }
+
+  const showExit = phase && phase !== 'exploring'
 
   function onTinderSwipe(dir) {
     pendingAction.current = dir === 'right' ? 'like' : 'dislike'
@@ -348,11 +430,38 @@ export default function SwipePage({ currentCard, progress, isCompleted, isLoadin
             : <><span style={{ color: 'var(--color-text)' }}>Archi</span><span style={{ color: '#ec4899' }}>Tinder</span></>}
         </h1>
         <div style={{ maxWidth: CARD_WIDTH, margin: '0 auto' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-            <span style={{ color: 'var(--color-text-dim)', fontSize: 11 }}>Progress</span>
-            <span style={{ color: 'var(--color-text-2)', fontSize: 11, fontWeight: 600 }}>
-              {current_round} / {total_rounds}
-            </span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            {phase === 'exploring' && (
+              <>
+                <span style={{ color: 'var(--color-text-dim)', fontSize: 11 }}>Exploring</span>
+                <span style={{ color: 'var(--color-text-2)', fontSize: 11, fontWeight: 600 }}>
+                  {like_count}/3 likes to unlock analysis
+                </span>
+              </>
+            )}
+            {phase === 'analyzing' && (
+              <>
+                <span style={{ color: 'var(--color-text-dim)', fontSize: 11 }}>Analyzing your taste...</span>
+                <div style={{
+                  width: 6, height: 6, borderRadius: '50%',
+                  background: '#f43f5e',
+                }} />
+              </>
+            )}
+            {phase === 'converged' && (
+              <>
+                <span style={{ color: 'var(--color-text-dim)', fontSize: 11 }}>Analysis complete</span>
+                <span style={{ color: 'var(--color-text-2)', fontSize: 11, fontWeight: 600 }}>✓</span>
+              </>
+            )}
+            {(!phase || (phase !== 'exploring' && phase !== 'analyzing' && phase !== 'converged')) && (
+              <>
+                <span style={{ color: 'var(--color-text-dim)', fontSize: 11 }}>Progress</span>
+                <span style={{ color: 'var(--color-text-2)', fontSize: 11, fontWeight: 600 }}>
+                  {current_round} / {total_rounds}
+                </span>
+              </>
+            )}
           </div>
           <div style={{ height: 4, borderRadius: 999, background: 'var(--color-progress-track)', overflow: 'hidden' }}>
             <div style={{
@@ -374,15 +483,19 @@ export default function SwipePage({ currentCard, progress, isCompleted, isLoadin
             key={currentCard.image_id}
             onSwipe={onTinderSwipe}
             onCardLeftScreen={onCardLeftScreen}
-            preventSwipe={galleryOpen ? ['left', 'right', 'up', 'down'] : ['up', 'down']}
+            preventSwipe={currentCard.card_type === 'action' ? [] : (galleryOpen ? ['left', 'right', 'up', 'down'] : ['up', 'down'])}
             swipeRequirementType="position"
             swipeThreshold={120}
           >
-            <SwipeCard
-              card={currentCard}
-              onGalleryOpen={() => setGalleryOpen(true)}
-              onGalleryClose={() => setGalleryOpen(false)}
-            />
+            {currentCard.card_type === 'action' ? (
+              <ActionCard card={currentCard} />
+            ) : (
+              <SwipeCard
+                card={currentCard}
+                onGalleryOpen={() => setGalleryOpen(true)}
+                onGalleryClose={() => setGalleryOpen(false)}
+              />
+            )}
           </TinderCard>
         ) : null}
       </div>

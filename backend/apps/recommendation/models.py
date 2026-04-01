@@ -24,6 +24,12 @@ class AnalysisSession(models.Model):
         ('active',    'Active'),
         ('completed', 'Completed'),
     ]
+    PHASE_CHOICES = [
+        ('exploring', 'Exploring'),
+        ('analyzing', 'Analyzing'),
+        ('converged', 'Converged'),
+        ('completed', 'Completed'),
+    ]
     session_id        = models.UUIDField(primary_key=True, default=uuid.uuid4)
     user              = models.ForeignKey(UserProfile, on_delete=models.CASCADE)
     project           = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='sessions')
@@ -33,6 +39,11 @@ class AnalysisSession(models.Model):
     preference_vector = models.JSONField(default=list)
     exposed_ids       = models.JSONField(default=list)
     initial_batch     = models.JSONField(default=list)  # building_ids for first 10 rounds
+    phase               = models.CharField(max_length=20, choices=PHASE_CHOICES, default='exploring')
+    pool_ids            = models.JSONField(default=list)
+    like_vectors        = models.JSONField(default=list)   # list of {embedding: [...], round: int}
+    convergence_history = models.JSONField(default=list)   # list of ΔV floats
+    previous_pref_vector = models.JSONField(default=list)
     created_at        = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
