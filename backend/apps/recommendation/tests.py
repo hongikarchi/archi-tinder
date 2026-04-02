@@ -121,13 +121,19 @@ class TestSessionFlow(TestCase):
         res = self.client.post('/api/v1/analysis/sessions/', {}, format='json')
         self.assertEqual(res.status_code, 404)
 
+    @patch('apps.recommendation.views.engine.get_building_card')
+    @patch('apps.recommendation.views.engine.farthest_point_from_pool')
+    @patch('apps.recommendation.views.engine.get_pool_embeddings')
+    @patch('apps.recommendation.views.engine.create_bounded_pool')
     @patch('apps.recommendation.views.engine.get_building_embedding')
-    @patch('apps.recommendation.views.engine.select_next_image')
     @patch('apps.recommendation.views.engine.get_diverse_random')
-    def test_swipe_like(self, mock_diverse, mock_next, mock_emb):
-        mock_diverse.return_value = [MOCK_CARD] * 10
-        mock_emb.return_value     = MOCK_EMBEDDING
-        mock_next.return_value    = {**MOCK_CARD, 'building_id': 'b002'}
+    def test_swipe_like(self, mock_diverse, mock_emb, mock_pool, mock_pool_emb, mock_farthest, mock_card):
+        mock_diverse.return_value    = [MOCK_CARD] * 10
+        mock_emb.return_value        = MOCK_EMBEDDING
+        mock_pool.return_value       = (['b001', 'b002'], {})
+        mock_pool_emb.return_value   = {}
+        mock_farthest.return_value   = 'b002'
+        mock_card.return_value       = {**MOCK_CARD, 'building_id': 'b002'}
 
         create = self.client.post('/api/v1/analysis/sessions/', {}, format='json')
         session_id = create.data['session_id']
@@ -145,13 +151,19 @@ class TestSessionFlow(TestCase):
         session = AnalysisSession.objects.get(session_id=session_id)
         self.assertIn('b001', session.project.liked_ids)
 
+    @patch('apps.recommendation.views.engine.get_building_card')
+    @patch('apps.recommendation.views.engine.farthest_point_from_pool')
+    @patch('apps.recommendation.views.engine.get_pool_embeddings')
+    @patch('apps.recommendation.views.engine.create_bounded_pool')
     @patch('apps.recommendation.views.engine.get_building_embedding')
-    @patch('apps.recommendation.views.engine.select_next_image')
     @patch('apps.recommendation.views.engine.get_diverse_random')
-    def test_duplicate_swipe_accepted(self, mock_diverse, mock_next, mock_emb):
-        mock_diverse.return_value = [MOCK_CARD] * 10
-        mock_emb.return_value     = MOCK_EMBEDDING
-        mock_next.return_value    = MOCK_CARD
+    def test_duplicate_swipe_accepted(self, mock_diverse, mock_emb, mock_pool, mock_pool_emb, mock_farthest, mock_card):
+        mock_diverse.return_value    = [MOCK_CARD] * 10
+        mock_emb.return_value        = MOCK_EMBEDDING
+        mock_pool.return_value       = (['b001', 'b002'], {})
+        mock_pool_emb.return_value   = {}
+        mock_farthest.return_value   = 'b001'
+        mock_card.return_value       = MOCK_CARD
 
         create = self.client.post('/api/v1/analysis/sessions/', {}, format='json')
         session_id = create.data['session_id']
@@ -164,35 +176,40 @@ class TestSessionFlow(TestCase):
 
     @patch('apps.recommendation.views.engine.get_top_k_results')
     @patch('apps.recommendation.views.engine.get_building_card')
+    @patch('apps.recommendation.views.engine.farthest_point_from_pool')
+    @patch('apps.recommendation.views.engine.get_pool_embeddings')
+    @patch('apps.recommendation.views.engine.create_bounded_pool')
     @patch('apps.recommendation.views.engine.get_building_embedding')
-    @patch('apps.recommendation.views.engine.select_next_image')
     @patch('apps.recommendation.views.engine.get_diverse_random')
-    def test_full_session_completes(self, mock_diverse, mock_next, mock_emb, mock_card, mock_topk):
-        total = 3  # Use small total for test speed
-        cards = [{**MOCK_CARD, 'building_id': f'b{i:03d}'} for i in range(total + 5)]
-        mock_diverse.return_value = cards
-        mock_emb.return_value     = MOCK_EMBEDDING
-        mock_next.return_value    = MOCK_CARD
-        mock_card.return_value    = MOCK_CARD
-        mock_topk.return_value    = [MOCK_CARD]
+    def test_full_session_completes(self, mock_diverse, mock_emb, mock_pool, mock_pool_emb, mock_farthest, mock_card, mock_topk):
+        cards = [{**MOCK_CARD, 'building_id': f'b{i:03d}'} for i in range(8)]
+        mock_diverse.return_value  = cards
+        mock_emb.return_value      = MOCK_EMBEDDING
+        mock_pool.return_value     = ([c['building_id'] for c in cards], {})
+        mock_pool_emb.return_value = {}
+        mock_farthest.return_value = 'b001'
+        mock_card.return_value     = MOCK_CARD
+        mock_topk.return_value     = [MOCK_CARD]
 
-        # Override total_rounds via settings
-        with patch('apps.recommendation.views.RC', {**__import__('django.conf', fromlist=['settings']).settings.RECOMMENDATION, 'total_rounds': total}):
-            create = self.client.post('/api/v1/analysis/sessions/', {}, format='json')
-            session_id = create.data['session_id']
+        create = self.client.post('/api/v1/analysis/sessions/', {}, format='json')
+        self.assertEqual(create.status_code, 201)
+        session_id = create.data['session_id']
 
-            for i in range(total):
-                res = self.client.post(
-                    f'/api/v1/analysis/sessions/{session_id}/swipes/',
-                    {'building_id': f'b{i:03d}', 'action': 'like', 'idempotency_key': f'swp_{i}'},
-                    format='json',
-                )
-            self.assertTrue(res.data.get('is_analysis_completed'))
+        for i in range(3):
+            res = self.client.post(
+                f'/api/v1/analysis/sessions/{session_id}/swipes/',
+                {'building_id': f'b{i:03d}', 'action': 'like', 'idempotency_key': f'swp_{i}'},
+                format='json',
+            )
+            self.assertEqual(res.status_code, 200)
+            self.assertTrue(res.data['accepted'])
+            self.assertIn('progress', res.data)
+            self.assertIn('next_image', res.data)
 
-            result = self.client.get(f'/api/v1/analysis/sessions/{session_id}/result/')
-            self.assertEqual(result.status_code, 200)
-            self.assertIn('liked_images', result.data)
-            self.assertIn('predicted_images', result.data)
+        result = self.client.get(f'/api/v1/analysis/sessions/{session_id}/result/')
+        self.assertEqual(result.status_code, 200)
+        self.assertIn('liked_images', result.data)
+        self.assertIn('predicted_images', result.data)
 
 
 # ── Buildings batch ───────────────────────────────────────────────────────────

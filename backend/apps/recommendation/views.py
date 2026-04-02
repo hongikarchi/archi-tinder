@@ -232,9 +232,10 @@ class SwipeView(APIView):
         if building_id == '__action_card__':
             if action == 'like':
                 # Complete the session
-                session.status = 'completed'
-                session.phase = 'completed'
-                session.save()
+                with transaction.atomic():
+                    session.status = 'completed'
+                    session.phase = 'completed'
+                    session.save(update_fields=['status', 'phase'])
                 return Response({
                     'accepted': True,
                     'session_status': 'completed',
@@ -245,32 +246,34 @@ class SwipeView(APIView):
                 })
             else:
                 # Reset and keep going
-                session.convergence_history = []
-                session.phase = 'analyzing'
-                session.save()
-                # Fall through to select next card below
-                # (skip normal swipe recording for action card)
-                pool_embeddings = engine.get_pool_embeddings(session.pool_ids)
-                next_card_id = engine.compute_mmr_next(
-                    session.pool_ids, session.exposed_ids, pool_embeddings,
-                    session.like_vectors, session.current_round
-                )
-                next_card = engine.get_building_card(next_card_id) if next_card_id else None
-                if next_card:
-                    session.exposed_ids = session.exposed_ids + [next_card['building_id']]
-                    session.save()
+                with transaction.atomic():
+                    session.convergence_history = []
+                    session.previous_pref_vector = []
+                    session.phase = 'analyzing'
+                    session.save(update_fields=['phase', 'convergence_history', 'previous_pref_vector'])
+                    # Fall through to select next card below
+                    # (skip normal swipe recording for action card)
+                    pool_embeddings = engine.get_pool_embeddings(session.pool_ids)
+                    next_card_id = engine.compute_mmr_next(
+                        session.pool_ids, session.exposed_ids, pool_embeddings,
+                        session.like_vectors, session.current_round
+                    )
+                    next_card = engine.get_building_card(next_card_id) if next_card_id else None
+                    if next_card:
+                        session.exposed_ids = session.exposed_ids + [next_card['building_id']]
+                        session.save(update_fields=['exposed_ids'])
 
-                # Prefetch
-                prefetch_card = None
-                if next_card:
-                    try:
-                        pf_id = engine.compute_mmr_next(
-                            session.pool_ids, session.exposed_ids, pool_embeddings,
-                            session.like_vectors, session.current_round + 1
-                        )
-                        prefetch_card = engine.get_building_card(pf_id) if pf_id else None
-                    except Exception:
-                        pass
+                    # Prefetch
+                    prefetch_card = None
+                    if next_card:
+                        try:
+                            pf_id = engine.compute_mmr_next(
+                                session.pool_ids, session.exposed_ids, pool_embeddings,
+                                session.like_vectors, session.current_round + 1
+                            )
+                            prefetch_card = engine.get_building_card(pf_id) if pf_id else None
+                        except Exception:
+                            pass
 
                 return Response({
                     'accepted': True,

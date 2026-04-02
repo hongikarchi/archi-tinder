@@ -193,62 +193,6 @@ def update_preference_vector(pref_vector, embedding, action):
     return _normalize(updated)
 
 
-def select_next_image(pref_vector, exposed_ids, current_round, filters=None):
-    """
-    Epsilon-greedy next image selection.
-    Returns an ImageCard dict, or None if no candidates remain.
-    """
-    epsilon = max(
-        RC['min_epsilon'],
-        RC['initial_epsilon'] * ((1 - RC['epsilon_decay']) ** current_round),
-    )
-
-    exclude_sql = ''
-    params_base = []
-    if exposed_ids:
-        placeholders = ','.join(['%s'] * len(exposed_ids))
-        exclude_sql = f'building_id NOT IN ({placeholders})'
-        params_base = list(exposed_ids)
-
-    filter_where, filter_params = _build_filter_sql(filters)
-
-    def _combined_where(extra=''):
-        parts = []
-        if exclude_sql:
-            parts.append(exclude_sql)
-        if filter_where:
-            parts.append(filter_where.replace('WHERE ', ''))
-        if extra:
-            parts.append(extra)
-        return ('WHERE ' + ' AND '.join(parts)) if parts else ''
-
-    if random.random() < epsilon or not pref_vector:
-        # Explore: random unexposed building
-        where = _combined_where()
-        with connection.cursor() as cur:
-            cur.execute(
-                f'SELECT building_id, name_en, project_name, architect, location_country, '
-                f'city, year, area_sqm, program, style, atmosphere, color_tone, material, material_visual, url, tags, image_photos, image_drawings '
-                f'FROM architecture_vectors {where} ORDER BY RANDOM() LIMIT 1',
-                params_base + filter_params,
-            )
-            rows = _dictfetchall(cur)
-    else:
-        # Exploit: most similar to preference vector
-        vec_str = _vec_to_pg(pref_vector)
-        where = _combined_where()
-        with connection.cursor() as cur:
-            cur.execute(
-                f'SELECT building_id, name_en, project_name, architect, location_country, '
-                f'city, year, area_sqm, program, style, atmosphere, color_tone, material, material_visual, url, tags, image_photos, image_drawings '
-                f'FROM architecture_vectors {where} '
-                f'ORDER BY embedding <=> %s::vector LIMIT 1',
-                params_base + filter_params + [vec_str],
-            )
-            rows = _dictfetchall(cur)
-
-    return _row_to_card(rows[0]) if rows else None
-
 
 def get_top_k_results(pref_vector, exposed_ids, k=None):
     """

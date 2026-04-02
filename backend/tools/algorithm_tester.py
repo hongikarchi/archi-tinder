@@ -209,7 +209,8 @@ def top_k_mmr_inmemory(like_vectors, exposed_ids, pool_ids, embeddings,
 
     centroids, _ = compute_taste_centroids(like_vectors, round_num)
 
-    candidates = [bid for bid in pool_ids if bid in embeddings]
+    exposed_set = set(exposed_ids)
+    candidates = [bid for bid in pool_ids if bid in embeddings and bid not in exposed_set]
     if not candidates:
         return []
 
