@@ -348,7 +348,7 @@ export default function SwipePage({ currentCard, progress, isCompleted, isLoadin
     pct = Math.round((current_round / Math.max(total_rounds, 1)) * 100)
   }
 
-  const showExit = phase && phase !== 'exploring'
+  const showExit = phase === 'converged' || phase === 'completed'
 
   function onTinderSwipe(dir) {
     pendingAction.current = dir === 'right' ? 'like' : 'dislike'
