@@ -17,7 +17,7 @@
   - frontend/: BUILT -- Phase 0+4 complete; rich inline-style UI, project sync from backend on login
   - backend/: BUILT -- Phase 1+2+3+4 complete; full recommendation engine + Gemini LLM + project persistence
   - Integration fixes applied: JWT auth wired, field name normalizer in client.js, trailing slashes on all URL patterns
-  - Google login: real OAuth wired (VITE_GOOGLE_CLIENT_ID required)
+  - Google login: auth-code flow (VITE_GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET required)
 
   ## Frontend Conventions
   - All component styles are inline JS objects -- Tailwind is NOT used in components
