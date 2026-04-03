@@ -383,6 +383,8 @@ class SwipeView(APIView):
                             if emb:
                                 dislike_embeds.append(emb)
                         fallback_id = engine.get_dislike_fallback(session.pool_ids, session.exposed_ids, pool_embeddings, dislike_embeds)
+                        if fallback_id:
+                            session.exposed_ids = session.exposed_ids + [fallback_id]
                         next_card = engine.get_building_card(fallback_id) if fallback_id else None
                     else:
                         next_bid = engine.farthest_point_from_pool(session.pool_ids, session.exposed_ids, pool_embeddings)
@@ -401,7 +403,9 @@ class SwipeView(APIView):
                 next_card = None
 
             if next_card and next_card.get('building_id') != '__action_card__':
-                session.exposed_ids = session.exposed_ids + [next_card['building_id']]
+                bid = next_card['building_id']
+                if bid not in session.exposed_ids:
+                    session.exposed_ids = session.exposed_ids + [bid]
 
             # 9. Prefetch (same phase logic, round+1)
             prefetch_card = None
