@@ -74,6 +74,7 @@ def _make_token_response(profile):
 
 class GoogleLoginView(APIView):
     permission_classes = [AllowAny]
+    authentication_classes = []  # Don't validate existing tokens on login endpoints
 
     def post(self, request):
         access_token = request.data.get('access_token')
@@ -154,6 +155,7 @@ class GoogleLoginView(APIView):
 
 class KakaoLoginView(APIView):
     permission_classes = [AllowAny]
+    authentication_classes = []  # Don't validate existing tokens on login endpoints
 
     def post(self, request):
         access_token = request.data.get('access_token')
@@ -188,6 +190,7 @@ class KakaoLoginView(APIView):
 
 class NaverLoginView(APIView):
     permission_classes = [AllowAny]
+    authentication_classes = []  # Don't validate existing tokens on login endpoints
 
     def post(self, request):
         access_token = request.data.get('access_token')
@@ -220,6 +223,7 @@ class NaverLoginView(APIView):
 
 class DevLoginView(APIView):
     permission_classes = [AllowAny]
+    authentication_classes = []  # Don't validate existing tokens on login endpoints
     throttle_classes = [DevLoginThrottle]
 
     def post(self, request):
@@ -243,6 +247,7 @@ class DevLoginView(APIView):
 
 class TokenRefreshView(APIView):
     permission_classes = [AllowAny]
+    authentication_classes = []  # Don't validate existing tokens on token refresh
 
     def post(self, request):
         refresh_token = request.data.get('refresh')

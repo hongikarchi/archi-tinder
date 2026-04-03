@@ -136,6 +136,7 @@ export function normalizeCard(card) {
  * Returns: { access, refresh, user }
  */
 export async function socialLogin(provider, accessToken, code) {
+  clearTokens()  // Remove stale tokens so callApi doesn't send an invalid Authorization header
   const body = {}
   if (accessToken) body.access_token = accessToken
   if (code) body.code = code
