@@ -137,12 +137,32 @@ class SessionCreateView(APIView):
         if not project:
             project = Project.objects.create(user=profile, name='Untitled', filters=filters)
 
-        # Create bounded pool with weighted scoring
+        # Create bounded pool with weighted scoring (with filter relaxation fallback)
+        active_filters = filters or project.filters or {}
         pool_ids, pool_scores = engine.create_bounded_pool(
-            filters or project.filters or {}, filter_priority, seed_ids
+            active_filters, filter_priority, seed_ids
         )
+        filter_relaxed = False
+
+        if not pool_ids and active_filters:
+            # Relax: drop geographic + numeric constraints, keep program/style/material
+            relaxed = {k: v for k, v in active_filters.items()
+                       if k not in ('location_country', 'year_min', 'year_max', 'min_area', 'max_area')}
+            if relaxed and relaxed != active_filters:
+                relaxed_priority = [k for k in filter_priority if k in relaxed]
+                pool_ids, pool_scores = engine.create_bounded_pool(
+                    relaxed, relaxed_priority, seed_ids
+                )
+                if pool_ids:
+                    filter_relaxed = True
+                    logger.info('Session pool relaxed (dropped geo/numeric): %d buildings', len(pool_ids))
+
         if not pool_ids:
-            return Response({'detail': 'No buildings found for given filters'}, status=status.HTTP_404_NOT_FOUND)
+            # Final fallback: diverse random pool
+            pool_ids = engine._random_pool(RC['bounded_pool_target'])
+            pool_scores = {}
+            filter_relaxed = True
+            logger.info('Session pool fallback to random: %d buildings', len(pool_ids))
 
         # Get pool embeddings
         pool_embeddings = engine.get_pool_embeddings(pool_ids)
@@ -190,15 +210,16 @@ class SessionCreateView(APIView):
             previous_pref_vector = [],
         )
 
-        logger.info('Session created: %s (pool=%d, tiers=%d)', session.session_id, len(pool_ids), len(tiers))
+        logger.info('Session created: %s (pool=%d, tiers=%d, relaxed=%s)', session.session_id, len(pool_ids), len(tiers), filter_relaxed)
         return Response({
-            'session_id':     str(session.session_id),
-            'project_id':     str(project.project_id),
-            'session_status': session.status,
-            'total_rounds':   session.total_rounds,
-            'next_image':     first_card,
-            'prefetch_image': prefetch_card,
-            'progress':       _progress(session),
+            'session_id':      str(session.session_id),
+            'project_id':      str(project.project_id),
+            'session_status':  session.status,
+            'total_rounds':    session.total_rounds,
+            'next_image':      first_card,
+            'prefetch_image':  prefetch_card,
+            'progress':        _progress(session),
+            'filter_relaxed':  filter_relaxed,
         }, status=status.HTTP_201_CREATED)
 
 

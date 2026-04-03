@@ -163,7 +163,7 @@ export default function App() {
       }
     }))
     setCurrentCard(result.next_image)
-    setSessionProgress(result.progress)
+    setSessionProgress({ ...result.progress, filter_relaxed: result.filter_relaxed || false })
     if (!result.next_image) setIsSessionCompleted(true)
     if (result.next_image?.image_url) preloadImage(result.next_image.image_url)
     if (result.prefetch_image) {

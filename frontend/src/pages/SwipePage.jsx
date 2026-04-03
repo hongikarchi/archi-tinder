@@ -331,10 +331,11 @@ export default function SwipePage({ currentCard, progress, isCompleted, isLoadin
   const pendingAction = useRef(null)
   const [galleryOpen, setGalleryOpen] = useState(false)
 
-  const current_round = progress?.current_round ?? 0
-  const total_rounds  = progress?.total_rounds  ?? 1
-  const like_count    = progress?.like_count    ?? 0
-  const phase         = progress?.phase
+  const current_round    = progress?.current_round ?? 0
+  const total_rounds     = progress?.total_rounds  ?? 1
+  const like_count       = progress?.like_count    ?? 0
+  const phase            = progress?.phase
+  const filter_relaxed   = progress?.filter_relaxed || false
 
   // Phase-aware progress percentage
   let pct
@@ -409,7 +410,7 @@ export default function SwipePage({ currentCard, progress, isCompleted, isLoadin
       }}>
         <div style={{ fontSize: 48 }}>🏛️</div>
         <p style={{ color: 'var(--color-text-dim)', fontSize: 14, textAlign: 'center' }}>
-          No buildings match your criteria.<br />Try adjusting your filters.
+          No more buildings available.<br />Try starting a new session with different filters.
         </p>
       </div>
     )
@@ -470,6 +471,11 @@ export default function SwipePage({ currentCard, progress, isCompleted, isLoadin
               transition: 'width 0.4s ease',
             }} />
           </div>
+          {filter_relaxed && (
+            <p style={{ color: 'var(--color-text-dimmer)', fontSize: 11, marginTop: 6, textAlign: 'center' }}>
+              Filters were relaxed to find more buildings
+            </p>
+          )}
         </div>
       </div>
 
