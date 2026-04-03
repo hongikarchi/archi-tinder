@@ -16,7 +16,7 @@
 3. **B2** -- Card repetition (exposed_ids)
 4. **B3** -- "No buildings match" fallback
 
-### Phase 2: Stability
+### Phase 2: Stability -- COMPLETED 2026-04-03
 5. **F1** -- Swipe error handling + state sync
 6. **A3** -- Recency weight math protection
 7. **BE1** -- API timeout/retry
@@ -58,17 +58,7 @@ Algo-tester built with Optuna but only 3-persona smoke-test done.
 - [ ] Evaluate results vs baseline
 - [ ] Apply optimized params if improvement found
 
-#### A3. Recency weight math protection missing
-`engine.py:502-513`: `round_num < entry_round` causes weight > 1.
-- [ ] `max(0, round_num - entry_round)` guard
-
 ### Frontend
-#### F1. Swipe error handling absent -- Priority 2
-`App.jsx:211-262`: `api.recordSwipe()` has no try-catch.
-- [ ] Add try-catch + error toast to `handleSwipeCard`
-- [ ] Move local state update after backend response
-- [ ] Add retry logic on network failure
-
 #### F2. Image load failure handling missing
 `SwipePage.jsx:88-102`: no retry, no fallback on 404/500.
 - [ ] Image load failure retry (1x)
@@ -81,11 +71,6 @@ Algo-tester built with Optuna but only 3-persona smoke-test done.
 - [ ] TabBar spacing adjustment
 
 ### Backend
-#### BE1. API timeout/retry logic missing
-`client.js:28-58`: infinite fetch timeout, only 401 retry.
-- [ ] 10s fetch timeout
-- [ ] Retry with exponential backoff
-
 #### BE2. Gemini API error feedback missing
 `services.py:66-98`: generic error on Gemini failure.
 - [ ] Gemini API error logging
@@ -145,6 +130,29 @@ Production code has multiple `console.error()` calls.
 ---
 
 ## Resolved
+
+### Phase 2: Stability -- 2026-04-03
+
+#### F1. Swipe error handling + state sync -- 2026-04-03
+`App.jsx:211-262`: `api.recordSwipe()` had no try-catch. Network failure = UI state out of sync with backend.
+- [x] Add try-catch + error toast to `handleSwipeCard`
+- [x] Move local state update (swipedIds, likedBuildings) after backend response
+- [x] Add 1 retry on network error, revert card on failure
+- [x] Auto-dismissing error toast (3s) with inline styles
+- Commit: 1341036
+
+#### A3. Recency weight math protection -- 2026-04-03
+`engine.py:502-513`: `round_num < entry_round` caused weight > 1 (exponential amplification).
+- [x] `max(0, round_num - entry_round)` guard in `_apply_recency_weights`
+- Commit: dc38d41
+
+#### BE1. API timeout/retry logic -- 2026-04-03
+`client.js:28-58`: fetch had no timeout (infinite by default), only retried on 401.
+- [x] 10s AbortController timeout on all fetch calls
+- [x] Network error retry with exponential backoff (2 retries, 300ms/900ms)
+- [x] Timeout on token refresh and dev-login paths
+- [x] Existing 401 refresh logic preserved unchanged
+- Commit: ddad1ae
 
 ### Phase 1: Critical Bug Fix -- 2026-04-03
 
