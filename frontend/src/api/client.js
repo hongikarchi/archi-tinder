@@ -129,12 +129,17 @@ export function normalizeCard(card) {
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 /**
- * Exchange a provider access_token for a backend JWT.
+ * Exchange a provider access_token (or auth code) for a backend JWT.
  * provider: 'google' | 'kakao' | 'naver'
+ * accessToken: OAuth access_token (implicit flow) -- may be null for auth-code flow
+ * code: authorization code (auth-code flow) -- used when accessToken is null
  * Returns: { access, refresh, user }
  */
-export async function socialLogin(provider, accessToken) {
-  const data = await callApi('POST', `/auth/social/${provider}/`, { access_token: accessToken }, false)
+export async function socialLogin(provider, accessToken, code) {
+  const body = {}
+  if (accessToken) body.access_token = accessToken
+  if (code) body.code = code
+  const data = await callApi('POST', `/auth/social/${provider}/`, body, false)
   setTokens(data.access, data.refresh)
   return data.user
 }

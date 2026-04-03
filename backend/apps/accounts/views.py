@@ -77,8 +77,51 @@ class GoogleLoginView(APIView):
 
     def post(self, request):
         access_token = request.data.get('access_token')
+        code = request.data.get('code')
+
+        # Auth-code flow: exchange code for access_token
+        if code and not access_token:
+            try:
+                token_resp = requests.post(
+                    'https://oauth2.googleapis.com/token',
+                    data={
+                        'code': code,
+                        'client_id': settings.GOOGLE_CLIENT_ID,
+                        'client_secret': settings.GOOGLE_CLIENT_SECRET,
+                        'redirect_uri': 'postmessage',
+                        'grant_type': 'authorization_code',
+                    },
+                    timeout=10,
+                )
+                if token_resp.status_code != 200:
+                    logger.warning(
+                        'Google token exchange failed: status=%d body=%s',
+                        token_resp.status_code, token_resp.text[:300],
+                    )
+                    detail = 'Google token exchange failed'
+                    if settings.DEBUG:
+                        detail += f' (status={token_resp.status_code})'
+                    return Response({'detail': detail}, status=status.HTTP_401_UNAUTHORIZED)
+                token_data = token_resp.json()
+                access_token = token_data.get('access_token')
+                if not access_token:
+                    logger.warning('Google token exchange returned no access_token: %s', token_data)
+                    return Response(
+                        {'detail': 'Google token exchange returned no access_token'},
+                        status=status.HTTP_401_UNAUTHORIZED,
+                    )
+            except requests.RequestException as e:
+                logger.error('Google token exchange network error: %s', e)
+                return Response(
+                    {'detail': 'Google token exchange network error'},
+                    status=status.HTTP_502_BAD_GATEWAY,
+                )
+
         if not access_token:
-            return Response({'detail': 'access_token required'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'detail': 'access_token or code required'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         resp = requests.get(
             'https://www.googleapis.com/oauth2/v3/userinfo',
@@ -86,7 +129,14 @@ class GoogleLoginView(APIView):
             timeout=10,
         )
         if resp.status_code != 200:
-            return Response({'detail': 'Invalid Google token'}, status=status.HTTP_401_UNAUTHORIZED)
+            logger.warning(
+                'Google userinfo failed: status=%d body=%s',
+                resp.status_code, resp.text[:300],
+            )
+            detail = 'Failed to validate Google token'
+            if settings.DEBUG:
+                detail += f' (userinfo returned {resp.status_code})'
+            return Response({'detail': detail}, status=status.HTTP_401_UNAUTHORIZED)
 
         info = resp.json()
         profile = _get_or_create_user(

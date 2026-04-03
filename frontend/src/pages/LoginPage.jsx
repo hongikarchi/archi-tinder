@@ -6,21 +6,36 @@ export default function LoginPage({ onLogin, theme, onToggleTheme }) {
   const [loading, setLoading] = useState(null)  // 'google' | 'kakao' | null
   const [error, setError]     = useState(null)
 
-  // ── Google ────────────────────────────────────────────────────────────────
+  // -- Google (auth-code flow for mobile compatibility) ----------------------
   const googleLogin = useGoogleLogin({
-    onSuccess: async (tokenResponse) => {
+    flow: 'auth-code',
+    onSuccess: async (codeResponse) => {
       try {
-        const user = await api.socialLogin('google', tokenResponse.access_token)
+        const user = await api.socialLogin('google', null, codeResponse.code)
         onLogin(user)
       } catch (err) {
-        setError('Google login failed. Please try again.')
+        const detail = err.message || 'Unknown error'
+        setError(`Google login failed: ${detail}`)
         console.error('[LoginPage] Google socialLogin error:', err)
       } finally {
         setLoading(null)
       }
     },
-    onError: () => {
-      setError('Google login was cancelled or failed.')
+    onError: (errorResponse) => {
+      const detail = errorResponse?.error_description || errorResponse?.error || 'cancelled or failed'
+      setError(`Google login error: ${detail}`)
+      console.error('[LoginPage] Google onError:', errorResponse)
+      setLoading(null)
+    },
+    onNonOAuthError: (err) => {
+      if (err?.type === 'popup_closed') {
+        setError(null) // User closed popup intentionally, don't show error
+      } else if (err?.type === 'popup_failed_to_open') {
+        setError('Popup was blocked by the browser. Please allow popups for this site.')
+      } else {
+        setError('Login could not start. Please check your browser settings.')
+      }
+      console.error('[LoginPage] onNonOAuthError:', err)
       setLoading(null)
     },
   })
@@ -50,7 +65,7 @@ export default function LoginPage({ onLogin, theme, onToggleTheme }) {
           fontFamily: 'inherit', lineHeight: 1,
         }}
       >
-        {theme === 'dark' ? '☀️' : '🌙'}
+        {theme === 'dark' ? '\u2600\uFE0F' : '\uD83C\uDF19'}
       </button>
 
       <div style={{ textAlign: 'center', marginBottom: 48 }}>
