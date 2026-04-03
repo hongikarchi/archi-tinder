@@ -26,6 +26,10 @@ function normalizeFilters(filters) {
   return out
 }
 
+function isNetworkError(err) {
+  return err instanceof TypeError || !err.status
+}
+
 /* ── Error Boundary ─────────────────────────────────────────────────────── */
 class ErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { error: null } }
@@ -76,6 +80,7 @@ export default function App() {
   const [isSessionCompleted, setIsSessionCompleted] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
   const [isResultLoading, setIsResultLoading] = useState(false)
+  const [swipeError, setSwipeError] = useState(null)
   const [activeProjectId, setActiveProjectId] = useState(() => {
     const id = sessionStorage.getItem('archithon_user')
     return localStorage.getItem(`archithon_activeId_${id}`) || null
@@ -115,6 +120,13 @@ export default function App() {
     if (activeProjectId) localStorage.setItem(`archithon_activeId_${userId}`, activeProjectId)
     else localStorage.removeItem(`archithon_activeId_${userId}`)
   }, [activeProjectId, userId])
+
+  // Auto-dismiss swipe error toast after 3 seconds
+  useEffect(() => {
+    if (!swipeError) return
+    const timer = setTimeout(() => setSwipeError(null), 3000)
+    return () => clearTimeout(timer)
+  }, [swipeError])
 
   const activeProject = projects.find(p => p.id === activeProjectId) || null
 
@@ -199,6 +211,7 @@ export default function App() {
     const savedPrefetch = prefetchCard
     const newSwipedIds = [...(project.swipedIds || []), swipedCard.image_id]
 
+    // Optimistic UI: show prefetch card immediately for smooth UX
     const canInstantSwap = savedPrefetch && imagePreloadCache.current.has(savedPrefetch.image_url)
     if (canInstantSwap) {
       setCurrentCard(savedPrefetch)
@@ -208,58 +221,76 @@ export default function App() {
       setIsSwipeLoading(true)
     }
 
-    const result = await api.recordSwipe({
-      session_id: project.sessionId,
-      image_id: swipedCard.image_id,
-      action,
-    })
-
-    setProjects(prev => prev.map(p => {
-      if (p.id !== activeProjectId) return p
-      return {
-        ...p,
-        swipedIds: newSwipedIds,
-        likedBuildings: action === 'like' ? [...p.likedBuildings, swipedCard] : p.likedBuildings,
+    try {
+      let result
+      const swipePayload = {
+        session_id: project.sessionId,
+        image_id: swipedCard.image_id,
+        action,
       }
-    }))
 
-    setSessionProgress(result.progress)
-
-    if (result.is_analysis_completed) {
-      setIsSessionCompleted(true)
-      setCurrentCard(null)
-      setPrefetchCard(null)
-      setIsResultLoading(true)
       try {
-        const resultData = await api.getResult({
-          session_id: project.sessionId,
-        })
-        setProjects(prev => prev.map(p => p.id === activeProjectId ? {
-          ...p,
-          predictedLikes: resultData.predicted_like_images || [],
-        } : p))
-      } finally {
-        setIsResultLoading(false)
+        result = await api.recordSwipe(swipePayload)
+      } catch (firstErr) {
+        if (!isNetworkError(firstErr)) throw firstErr
+        // Retry once on network error
+        result = await api.recordSwipe(swipePayload)
       }
-    } else {
-      if (canInstantSwap) {
-        // Verify backend agrees with what we're showing; correct if it diverged (rare)
-        if (result.next_image && result.next_image.image_id !== savedPrefetch.image_id) {
-          setCurrentCard(result.next_image)
-          preloadImage(result.next_image.image_url)
-        }
-        // Store look-ahead for the next round
-        setPrefetchCard(result.prefetch_image)
-        preloadImage(result.prefetch_image?.image_url)
-      } else {
-        setCurrentCard(result.next_image)
-        setPrefetchCard(result.prefetch_image)
-        preloadImage(result.next_image?.image_url)
-        preloadImage(result.prefetch_image?.image_url)
-      }
-    }
 
-    setIsSwipeLoading(false)
+      // Backend confirmed -- now update local state
+      setProjects(prev => prev.map(p => {
+        if (p.id !== activeProjectId) return p
+        return {
+          ...p,
+          swipedIds: newSwipedIds,
+          likedBuildings: action === 'like' ? [...p.likedBuildings, swipedCard] : p.likedBuildings,
+        }
+      }))
+
+      setSessionProgress(result.progress)
+
+      if (result.is_analysis_completed) {
+        setIsSessionCompleted(true)
+        setCurrentCard(null)
+        setPrefetchCard(null)
+        setIsResultLoading(true)
+        try {
+          const resultData = await api.getResult({
+            session_id: project.sessionId,
+          })
+          setProjects(prev => prev.map(p => p.id === activeProjectId ? {
+            ...p,
+            predictedLikes: resultData.predicted_like_images || [],
+          } : p))
+        } finally {
+          setIsResultLoading(false)
+        }
+      } else {
+        if (canInstantSwap) {
+          // Verify backend agrees with what we're showing; correct if it diverged (rare)
+          if (result.next_image && result.next_image.image_id !== savedPrefetch.image_id) {
+            setCurrentCard(result.next_image)
+            preloadImage(result.next_image.image_url)
+          }
+          // Store look-ahead for the next round
+          setPrefetchCard(result.prefetch_image)
+          preloadImage(result.prefetch_image?.image_url)
+        } else {
+          setCurrentCard(result.next_image)
+          setPrefetchCard(result.prefetch_image)
+          preloadImage(result.next_image?.image_url)
+          preloadImage(result.prefetch_image?.image_url)
+        }
+      }
+    } catch (err) {
+      console.error('[App] swipe failed:', err)
+      // Revert UI -- put the swiped card back
+      setCurrentCard(swipedCard)
+      setPrefetchCard(savedPrefetch)
+      setSwipeError('Swipe failed. Please try again.')
+    } finally {
+      setIsSwipeLoading(false)
+    }
   }
 
   async function handleResumeProject(id) {
@@ -456,6 +487,17 @@ export default function App() {
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+
+      {swipeError && (
+        <div style={{
+          position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)',
+          background: 'rgba(220, 38, 38, 0.92)', color: '#fff', padding: '10px 20px',
+          borderRadius: 8, fontSize: 14, fontWeight: 500, zIndex: 9999,
+          pointerEvents: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+        }}>
+          {swipeError}
+        </div>
+      )}
     </ErrorBoundary>
   )
 }
