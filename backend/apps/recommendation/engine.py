@@ -13,6 +13,9 @@ logger = logging.getLogger('apps.recommendation')
 
 RC = settings.RECOMMENDATION  # shorthand for constants
 
+_pool_embedding_cache = {}
+_centroid_cache = {}
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -372,6 +375,10 @@ def get_pool_embeddings(pool_ids):
     if not pool_ids:
         return {}
 
+    cache_key = frozenset(pool_ids)
+    if cache_key in _pool_embedding_cache:
+        return _pool_embedding_cache[cache_key]
+
     placeholders = ','.join(['%s'] * len(pool_ids))
     with connection.cursor() as cur:
         cur.execute(
@@ -389,7 +396,15 @@ def get_pool_embeddings(pool_ids):
             embedding = embedding / norm
         result[row['building_id']] = embedding
 
+    if len(_pool_embedding_cache) > 50:
+        _pool_embedding_cache.clear()
+    _pool_embedding_cache[cache_key] = result
     return result
+
+
+def clear_pool_embedding_cache():
+    """Clear the pool embedding cache (for testing)."""
+    _pool_embedding_cache.clear()
 
 
 def farthest_point_from_pool(pool_ids, exposed_ids, pool_embeddings):
@@ -439,20 +454,35 @@ def compute_taste_centroids(like_vectors, round_num):
     Returns (list_of_centroids, global_centroid) as numpy arrays.
     Called by views.py (convergence tracking) and algorithm_tester.py.
     """
+    cache_key = (
+        tuple((lv['round'], tuple(lv['embedding'][:3])) for lv in like_vectors),
+        round_num,
+    )
+    if cache_key in _centroid_cache:
+        return _centroid_cache[cache_key]
+
     weighted_likes = _apply_recency_weights(like_vectors, round_num, RC['decay_rate'])
 
     if len(weighted_likes) == 1:
         centroid = weighted_likes[0][0]
-        return [centroid], centroid
+        result = ([centroid], centroid)
+        if len(_centroid_cache) > 20:
+            _centroid_cache.clear()
+        _centroid_cache[cache_key] = result
+        return result
 
     from sklearn.cluster import KMeans
     like_embeddings = np.array([w[0] for w in weighted_likes])
     like_weights = np.array([w[1] for w in weighted_likes])
     k_clusters = min(RC['k_clusters'], len(weighted_likes))
-    kmeans = KMeans(n_clusters=k_clusters, random_state=42, n_init=10)
+    kmeans = KMeans(n_clusters=k_clusters, random_state=42, n_init=3)
     kmeans.fit(like_embeddings, sample_weight=like_weights)
     centroids = list(kmeans.cluster_centers_)
     global_centroid = _weighted_centroid(weighted_likes)
+    result = (centroids, global_centroid)
+    if len(_centroid_cache) > 20:
+        _centroid_cache.clear()
+    _centroid_cache[cache_key] = result
     return centroids, global_centroid
 
 

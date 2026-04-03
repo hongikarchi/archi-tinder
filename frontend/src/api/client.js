@@ -231,8 +231,9 @@ export async function startSession(params) {
   })
   return {
     ...result,
-    next_image:     normalizeCard(result.next_image),
-    prefetch_image: normalizeCard(result.prefetch_image),
+    next_image:      normalizeCard(result.next_image),
+    prefetch_image:  normalizeCard(result.prefetch_image),
+    prefetch_image_2: normalizeCard(result.prefetch_image_2),
   }
 }
 
@@ -247,8 +248,9 @@ export async function recordSwipe({ session_id, image_id, action }) {
   })
   return {
     ...result,
-    next_image:     normalizeCard(result.next_image),
-    prefetch_image: normalizeCard(result.prefetch_image),
+    next_image:      normalizeCard(result.next_image),
+    prefetch_image:  normalizeCard(result.prefetch_image),
+    prefetch_image_2: normalizeCard(result.prefetch_image_2),
   }
 }
 

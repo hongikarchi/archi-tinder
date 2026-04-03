@@ -74,6 +74,7 @@ export default function App() {
 
   const [currentCard, setCurrentCard] = useState(null)
   const [prefetchCard, setPrefetchCard] = useState(null)
+  const [prefetchCard2, setPrefetchCard2] = useState(null)
   const [sessionProgress, setSessionProgress] = useState(null)
   const [isSwipeLoading, setIsSwipeLoading] = useState(false)
   const imagePreloadCache = useRef(new Set())
@@ -182,6 +183,10 @@ export default function App() {
       setPrefetchCard(result.prefetch_image)
       preloadImage(result.prefetch_image.image_url)
     }
+    if (result.prefetch_image_2) {
+      setPrefetchCard2(result.prefetch_image_2)
+      preloadImage(result.prefetch_image_2.image_url)
+    }
     setIsSwipeLoading(false)
   }
 
@@ -209,13 +214,15 @@ export default function App() {
 
     const swipedCard = currentCard
     const savedPrefetch = prefetchCard
+    const savedPrefetch2 = prefetchCard2
     const newSwipedIds = [...(project.swipedIds || []), swipedCard.image_id]
 
     // Optimistic UI: show prefetch card immediately for smooth UX
     const canInstantSwap = savedPrefetch && imagePreloadCache.current.has(savedPrefetch.image_url)
     if (canInstantSwap) {
       setCurrentCard(savedPrefetch)
-      setPrefetchCard(null)
+      setPrefetchCard(prefetchCard2)  // shift queue
+      setPrefetchCard2(null)
     } else {
       setCurrentCard(null)
       setIsSwipeLoading(true)
@@ -253,6 +260,7 @@ export default function App() {
         setIsSessionCompleted(true)
         setCurrentCard(null)
         setPrefetchCard(null)
+        setPrefetchCard2(null)
         setIsResultLoading(true)
         try {
           const resultData = await api.getResult({
@@ -272,14 +280,18 @@ export default function App() {
             setCurrentCard(result.next_image)
             preloadImage(result.next_image.image_url)
           }
-          // Store look-ahead for the next round
-          setPrefetchCard(result.prefetch_image)
+          // Update prefetch queue from backend (always set to clear stale values on pool exhaustion)
+          setPrefetchCard(result.prefetch_image || null)
           preloadImage(result.prefetch_image?.image_url)
+          setPrefetchCard2(result.prefetch_image_2 || null)
+          preloadImage(result.prefetch_image_2?.image_url)
         } else {
           setCurrentCard(result.next_image)
           setPrefetchCard(result.prefetch_image)
+          setPrefetchCard2(result.prefetch_image_2 || null)
           preloadImage(result.next_image?.image_url)
           preloadImage(result.prefetch_image?.image_url)
+          preloadImage(result.prefetch_image_2?.image_url)
         }
       }
     } catch (err) {
@@ -287,6 +299,7 @@ export default function App() {
       // Revert UI -- put the swiped card back
       setCurrentCard(swipedCard)
       setPrefetchCard(savedPrefetch)
+      setPrefetchCard2(savedPrefetch2)
       setSwipeError('Swipe failed. Please try again.')
     } finally {
       setIsSwipeLoading(false)

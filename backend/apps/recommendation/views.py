@@ -193,6 +193,7 @@ class SessionCreateView(APIView):
 
         first_card = engine.get_building_card(initial_batch[0])
         prefetch_card = engine.get_building_card(initial_batch[1]) if len(initial_batch) > 1 else None
+        prefetch_card_2 = engine.get_building_card(initial_batch[2]) if len(initial_batch) > 2 else None
 
         session = AnalysisSession.objects.create(
             user                 = profile,
@@ -218,6 +219,7 @@ class SessionCreateView(APIView):
             'total_rounds':    session.total_rounds,
             'next_image':      first_card,
             'prefetch_image':  prefetch_card,
+            'prefetch_image_2': prefetch_card_2,
             'progress':        _progress(session),
             'filter_relaxed':  filter_relaxed,
         }, status=status.HTTP_201_CREATED)
@@ -263,6 +265,7 @@ class SwipeView(APIView):
                     'progress': _progress(session),
                     'next_image': None,
                     'prefetch_image': None,
+                    'prefetch_image_2': None,
                     'is_analysis_completed': True,
                 })
             else:
@@ -296,12 +299,34 @@ class SwipeView(APIView):
                         except Exception:
                             pass
 
+                    # Prefetch 2
+                    prefetch_card_2 = None
+                    if prefetch_card and prefetch_card.get('building_id') != '__action_card__':
+                        try:
+                            temp_exposed = session.exposed_ids + [prefetch_card['building_id']]
+                            if session.phase == 'exploring':
+                                if session.current_round + 2 < len(session.initial_batch):
+                                    pf2_bid = session.initial_batch[session.current_round + 2]
+                                    prefetch_card_2 = engine.get_building_card(pf2_bid)
+                                else:
+                                    pf2_bid = engine.farthest_point_from_pool(session.pool_ids, temp_exposed, pool_embeddings)
+                                    prefetch_card_2 = engine.get_building_card(pf2_bid) if pf2_bid else None
+                            elif session.phase == 'analyzing':
+                                pf2_id = engine.compute_mmr_next(
+                                    session.pool_ids, temp_exposed, pool_embeddings,
+                                    session.like_vectors, session.current_round + 2
+                                )
+                                prefetch_card_2 = engine.get_building_card(pf2_id) if pf2_id else None
+                        except Exception:
+                            prefetch_card_2 = None
+
                 return Response({
                     'accepted': True,
                     'session_status': session.status,
                     'progress': _progress(session),
                     'next_image': next_card,
                     'prefetch_image': prefetch_card,
+                    'prefetch_image_2': prefetch_card_2,
                     'is_analysis_completed': False,
                 })
 
@@ -448,6 +473,27 @@ class SwipeView(APIView):
                 except Exception:
                     prefetch_card = None
 
+            # Prefetch 2 (round+2)
+            prefetch_card_2 = None
+            if prefetch_card and prefetch_card.get('building_id') != '__action_card__':
+                try:
+                    temp_exposed = session.exposed_ids + [prefetch_card['building_id']]
+                    if session.phase == 'exploring':
+                        if session.current_round + 2 < len(session.initial_batch):
+                            pf2_bid = session.initial_batch[session.current_round + 2]
+                            prefetch_card_2 = engine.get_building_card(pf2_bid)
+                        else:
+                            pf2_bid = engine.farthest_point_from_pool(session.pool_ids, temp_exposed, pool_embeddings)
+                            prefetch_card_2 = engine.get_building_card(pf2_bid) if pf2_bid else None
+                    elif session.phase == 'analyzing':
+                        pf2_id = engine.compute_mmr_next(
+                            session.pool_ids, temp_exposed, pool_embeddings,
+                            session.like_vectors, session.current_round + 2
+                        )
+                        prefetch_card_2 = engine.get_building_card(pf2_id) if pf2_id else None
+                except Exception:
+                    prefetch_card_2 = None
+
             # 10. Save session
             session.save(update_fields=[
                 'preference_vector', 'current_round', 'exposed_ids',
@@ -460,6 +506,7 @@ class SwipeView(APIView):
             'progress': _progress(session),
             'next_image': next_card,
             'prefetch_image': prefetch_card,
+            'prefetch_image_2': prefetch_card_2,
             'is_analysis_completed': False,
         })
 
