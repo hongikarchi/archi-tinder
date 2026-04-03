@@ -508,7 +508,7 @@ def _apply_recency_weights(like_vectors, round_num, gamma):
     for entry in like_vectors:
         embedding = np.array(entry['embedding'])
         entry_round = entry['round']
-        weight = math.exp(-gamma * (round_num - entry_round))
+        weight = math.exp(-gamma * max(0, round_num - entry_round))
         weighted_vecs.append((embedding, weight))
     return weighted_vecs
 
