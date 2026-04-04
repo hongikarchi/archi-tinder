@@ -455,7 +455,10 @@ def compute_taste_centroids(like_vectors, round_num):
     Called by views.py (convergence tracking) and algorithm_tester.py.
     """
     cache_key = (
-        tuple((lv['round'], tuple(lv['embedding'][:3])) for lv in like_vectors),
+        tuple(
+            (lv['round'], round(lv['embedding'][0], 6), round(lv['embedding'][191], 6), round(lv['embedding'][-1], 6))
+            for lv in like_vectors
+        ),
         round_num,
     )
     if cache_key in _centroid_cache:

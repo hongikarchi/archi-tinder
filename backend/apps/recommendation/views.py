@@ -240,6 +240,8 @@ class SwipeView(APIView):
         action          = request.data.get('action')
         idempotency_key = request.data.get('idempotency_key', '')
 
+        if not building_id:
+            return Response({'detail': 'building_id is required'}, status=status.HTTP_400_BAD_REQUEST)
         if action not in ('like', 'dislike'):
             return Response({'detail': 'action must be like or dislike'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -461,46 +463,55 @@ class SwipeView(APIView):
                 'phase', 'like_vectors', 'convergence_history', 'previous_pref_vector'
             ])
 
-            # 9. Prefetch (same phase logic, round+1)
-            prefetch_card = None
-            if next_card and next_card.get('building_id') != '__action_card__':
-                try:
-                    if session.phase == 'exploring':
-                        if session.current_round + 1 < len(session.initial_batch):
-                            pf_bid = session.initial_batch[session.current_round + 1]
-                            prefetch_card = engine.get_building_card(pf_bid)
-                        else:
-                            pf_bid = engine.farthest_point_from_pool(session.pool_ids, session.exposed_ids, pool_embeddings)
-                            prefetch_card = engine.get_building_card(pf_bid) if pf_bid else None
-                    elif session.phase == 'analyzing':
-                        pf_id = engine.compute_mmr_next(
-                            session.pool_ids, session.exposed_ids, pool_embeddings,
-                            session.like_vectors, session.current_round + 1
-                        )
-                        prefetch_card = engine.get_building_card(pf_id) if pf_id else None
-                except Exception:
-                    prefetch_card = None
+            # Save copies for prefetch calculation outside transaction
+            saved_pool_ids = list(session.pool_ids)
+            saved_exposed_ids = list(session.exposed_ids)
+            saved_like_vectors = list(session.like_vectors) if session.like_vectors else []
+            saved_initial_batch = list(session.initial_batch) if session.initial_batch else []
+            saved_current_round = session.current_round
+            saved_phase = session.phase
 
-            # Prefetch 2 (round+2)
-            prefetch_card_2 = None
-            if prefetch_card and prefetch_card.get('building_id') != '__action_card__':
-                try:
-                    temp_exposed = session.exposed_ids + [prefetch_card['building_id']]
-                    if session.phase == 'exploring':
-                        if session.current_round + 2 < len(session.initial_batch):
-                            pf2_bid = session.initial_batch[session.current_round + 2]
-                            prefetch_card_2 = engine.get_building_card(pf2_bid)
-                        else:
-                            pf2_bid = engine.farthest_point_from_pool(session.pool_ids, temp_exposed, pool_embeddings)
-                            prefetch_card_2 = engine.get_building_card(pf2_bid) if pf2_bid else None
-                    elif session.phase == 'analyzing':
-                        pf2_id = engine.compute_mmr_next(
-                            session.pool_ids, temp_exposed, pool_embeddings,
-                            session.like_vectors, session.current_round + 2
-                        )
-                        prefetch_card_2 = engine.get_building_card(pf2_id) if pf2_id else None
-                except Exception:
-                    prefetch_card_2 = None
+        # 9. Prefetch (outside transaction -- no lock held)
+        pool_embeddings = engine.get_pool_embeddings(saved_pool_ids)
+        prefetch_card = None
+        if next_card and next_card.get('building_id') != '__action_card__':
+            try:
+                if saved_phase == 'exploring':
+                    if saved_current_round + 1 < len(saved_initial_batch):
+                        pf_bid = saved_initial_batch[saved_current_round + 1]
+                        prefetch_card = engine.get_building_card(pf_bid)
+                    else:
+                        pf_bid = engine.farthest_point_from_pool(saved_pool_ids, saved_exposed_ids, pool_embeddings)
+                        prefetch_card = engine.get_building_card(pf_bid) if pf_bid else None
+                elif saved_phase == 'analyzing':
+                    pf_id = engine.compute_mmr_next(
+                        saved_pool_ids, saved_exposed_ids, pool_embeddings,
+                        saved_like_vectors, saved_current_round + 1
+                    )
+                    prefetch_card = engine.get_building_card(pf_id) if pf_id else None
+            except Exception:
+                prefetch_card = None
+
+        # Prefetch 2 (round+2)
+        prefetch_card_2 = None
+        if prefetch_card and prefetch_card.get('building_id') != '__action_card__':
+            try:
+                temp_exposed = saved_exposed_ids + [prefetch_card['building_id']]
+                if saved_phase == 'exploring':
+                    if saved_current_round + 2 < len(saved_initial_batch):
+                        pf2_bid = saved_initial_batch[saved_current_round + 2]
+                        prefetch_card_2 = engine.get_building_card(pf2_bid)
+                    else:
+                        pf2_bid = engine.farthest_point_from_pool(saved_pool_ids, temp_exposed, pool_embeddings)
+                        prefetch_card_2 = engine.get_building_card(pf2_bid) if pf2_bid else None
+                elif saved_phase == 'analyzing':
+                    pf2_id = engine.compute_mmr_next(
+                        saved_pool_ids, temp_exposed, pool_embeddings,
+                        saved_like_vectors, saved_current_round + 2
+                    )
+                    prefetch_card_2 = engine.get_building_card(pf2_id) if pf2_id else None
+            except Exception:
+                prefetch_card_2 = None
 
         return Response({
             'accepted': True,

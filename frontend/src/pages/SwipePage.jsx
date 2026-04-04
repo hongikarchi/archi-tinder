@@ -533,28 +533,44 @@ export default function SwipePage({ currentCard, progress, isCompleted, isLoadin
 
         {/* Card */}
         <div style={{ width: CARD_WIDTH, height: CARD_HEIGHT, position: 'relative' }}>
-          {isLoading ? (
-            <LoadingCard />
-          ) : currentCard ? (
-            <TinderCard
-              ref={cardRef}
-              key={currentCard.image_id}
-              onSwipe={onTinderSwipe}
-              onCardLeftScreen={onCardLeftScreen}
-              preventSwipe={currentCard.card_type === 'action' ? [] : (galleryOpen ? ['left', 'right', 'up', 'down'] : ['up', 'down'])}
-              swipeRequirementType="position"
-              swipeThreshold={120}
-            >
-              {currentCard.card_type === 'action' ? (
-                <ActionCard card={currentCard} />
-              ) : (
-                <SwipeCard
-                  card={currentCard}
-                  onGalleryOpen={() => setGalleryOpen(true)}
-                  onGalleryClose={() => setGalleryOpen(false)}
-                />
+          {currentCard ? (
+            <>
+              <TinderCard
+                ref={cardRef}
+                key={currentCard.image_id}
+                onSwipe={onTinderSwipe}
+                onCardLeftScreen={onCardLeftScreen}
+                preventSwipe={currentCard.card_type === 'action' ? [] : (galleryOpen ? ['left', 'right', 'up', 'down'] : ['up', 'down'])}
+                swipeRequirementType='position'
+                swipeThreshold={120}
+              >
+                {currentCard.card_type === 'action' ? (
+                  <ActionCard card={currentCard} />
+                ) : (
+                  <SwipeCard
+                    card={currentCard}
+                    onGalleryOpen={() => setGalleryOpen(true)}
+                    onGalleryClose={() => setGalleryOpen(false)}
+                  />
+                )}
+              </TinderCard>
+              {isLoading && (
+                <div style={{
+                  position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  borderRadius: 20, background: 'rgba(0,0,0,0.15)', pointerEvents: 'none',
+                }}>
+                  <div style={{
+                    width: 32, height: 32, borderRadius: '50%',
+                    border: '3px solid rgba(255,255,255,0.2)',
+                    borderTopColor: '#fff',
+                    animation: 'spin 0.8s linear infinite',
+                  }} />
+                </div>
               )}
-            </TinderCard>
+            </>
+          ) : isLoading ? (
+            <LoadingCard />
           ) : null}
         </div>
 

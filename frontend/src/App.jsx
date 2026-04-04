@@ -162,33 +162,45 @@ export default function App() {
   async function initSession(projectId, filters, filterPriority = [], seedIds = []) {
     setIsSwipeLoading(true)
     setIsSessionCompleted(false)
-    const result = await api.startSession({
-      project_id: projectId,
-      filters: normalizeFilters(filters),
-      filter_priority: filterPriority,
-      seed_ids: seedIds,
-    })
-    setProjects(prev => prev.map(p => {
-      if (p.id !== projectId) return p
-      return {
-        ...p,
-        sessionId: result.session_id,
-        backendId: result.project_id || p.backendId || null,
+    try {
+      const result = await api.startSession({
+        project_id: projectId,
+        filters: normalizeFilters(filters),
+        filter_priority: filterPriority,
+        seed_ids: seedIds,
+      })
+      setProjects(prev => prev.map(p => {
+        if (p.id !== projectId) return p
+        return {
+          ...p,
+          sessionId: result.session_id,
+          backendId: result.project_id || p.backendId || null,
+        }
+      }))
+      setCurrentCard(result.next_image)
+      setSessionProgress({ ...result.progress, filter_relaxed: result.filter_relaxed || false })
+      if (!result.next_image) setIsSessionCompleted(true)
+      if (result.next_image?.image_url) preloadImage(result.next_image.image_url)
+      if (result.prefetch_image) {
+        setPrefetchCard(result.prefetch_image)
+        preloadImage(result.prefetch_image.image_url)
+      } else {
+        setPrefetchCard(null)
       }
-    }))
-    setCurrentCard(result.next_image)
-    setSessionProgress({ ...result.progress, filter_relaxed: result.filter_relaxed || false })
-    if (!result.next_image) setIsSessionCompleted(true)
-    if (result.next_image?.image_url) preloadImage(result.next_image.image_url)
-    if (result.prefetch_image) {
-      setPrefetchCard(result.prefetch_image)
-      preloadImage(result.prefetch_image.image_url)
+      if (result.prefetch_image_2) {
+        setPrefetchCard2(result.prefetch_image_2)
+        preloadImage(result.prefetch_image_2.image_url)
+      } else {
+        setPrefetchCard2(null)
+      }
+    } catch (err) {
+      setCurrentCard(null)
+      setPrefetchCard(null)
+      setPrefetchCard2(null)
+      setSwipeError(err.message || 'Failed to start session')
+    } finally {
+      setIsSwipeLoading(false)
     }
-    if (result.prefetch_image_2) {
-      setPrefetchCard2(result.prefetch_image_2)
-      preloadImage(result.prefetch_image_2.image_url)
-    }
-    setIsSwipeLoading(false)
   }
 
   async function handleStart(projectName, preloadedImages, llmFilters = {}, filterPriority = []) {
