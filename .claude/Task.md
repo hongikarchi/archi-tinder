@@ -41,10 +41,10 @@
 18. **AUTH1** -- Kakao / Naver OAuth (deferred -- future)
 19. **F3** -- Mobile optimization -- COMPLETED 2026-04-04
 
-### Phase 6: Cleanup
-20. **INFRA1** -- Backend integration tests
-21. **INFRA2~4** -- Idempotency, total_rounds, console.error
-22. **BE2** -- Gemini error handling improvement
+### Phase 6: Cleanup -- COMPLETED 2026-04-04
+20. **INFRA1** -- Backend integration tests -- COMPLETED 2026-04-04
+21. **INFRA2~4** -- Idempotency, total_rounds, console.error -- COMPLETED 2026-04-04
+22. **BE2** -- Gemini error handling improvement -- COMPLETED 2026-04-04
 
 ---
 
@@ -64,38 +64,11 @@ Smoke test (3 personas x 5 trials) passed. No code changes needed.
 - [ ] Evaluate results vs baseline
 - [ ] Apply optimized params if improvement found
 
-### Backend
-#### BE2. Gemini API error feedback missing
-`services.py:66-98`: generic error on Gemini failure.
-- [ ] Gemini API error logging
-- [ ] Retry logic (1x)
-- [ ] Clear error message for persona report failure
-
 ### Auth
 #### AUTH1. Kakao / Naver OAuth not implemented
 Google OAuth only. Korean users need domestic login.
 - [ ] Kakao social auth backend + frontend button
 - [ ] Naver social auth backend + frontend button
-
-### Infrastructure
-#### INFRA1. Backend integration tests missing
-All testing is manual or web-tester dependent.
-- [ ] pytest + test DB config
-- [ ] Auth flow tests
-- [ ] Swipe session lifecycle tests
-
-#### INFRA2. Idempotency key not session-scoped
-`SwipeEvent.objects.filter(idempotency_key=...)` is global.
-- [ ] Scope idempotency to session + user
-- [ ] Cross-session collision risk verification
-
-#### INFRA3. total_rounds model field cleanup
-`AnalysisSession.total_rounds` is unused (default 20, set to 999).
-- [ ] Remove total_rounds field migration
-
-#### INFRA4. console.error cleanup
-Production code has multiple `console.error()` calls.
-- [ ] Replace with proper error handling or remove
 
 ---
 
@@ -106,6 +79,34 @@ Production code has multiple `console.error()` calls.
 ---
 
 ## Resolved
+
+### Phase 6: Cleanup -- 2026-04-04
+
+#### INFRA1. Backend integration tests -- 2026-04-04
+Set up pytest-django with SQLite in-memory test database.
+- [x] pytest.ini + conftest.py with SQLite override and JWT fixtures
+- [x] test_auth.py: 7 tests (Google login mock, token refresh valid/invalid, logout blacklist, dev-login correct/wrong secret)
+- [x] test_sessions.py: 8 tests (session creation, swipe like/dislike, idempotent swipe, invalid action, exploring->analyzing, analyzing->converged)
+- [x] All engine.py raw SQL calls mocked (architecture_vectors is external)
+- [x] pytest + pytest-django added to requirements.txt
+- Commit: 324ab91
+
+#### INFRA2~4. Idempotency + total_rounds + console.error -- 2026-04-04
+Combined three small cleanups into one commit.
+- [x] INFRA2: Idempotency check scoped to session + idempotency_key (was global). SwipeEvent unique_together constraint added.
+- [x] INFRA3: Removed unused total_rounds field from AnalysisSession model + migration 0006. Removed from _progress, session creation, and response.
+- [x] INFRA4: Removed console.error from 8 locations in production UI code (App.jsx, LoginPage, LLMSearchPage, FavoritesPage). Kept 4 in api/client.js graceful catch blocks.
+- Commit: 55c7249
+
+#### BE2. Gemini error handling improvement -- 2026-04-04
+Improved Gemini API error handling with retry, logging, and structured errors.
+- [x] _retry_gemini_call helper: 1 retry with 1s delay, logs error type and message per attempt
+- [x] parse_query: uses retry wrapper, logs specific error on failure
+- [x] generate_persona_report: raises ValueError/RuntimeError with descriptive messages instead of returning None
+- [x] ProjectReportGenerateView: returns 502 with {detail, error_type} on Gemini failure
+- [x] Frontend: FavoritesPage shows specific error text below Generate button
+- [x] Frontend: handleGenerateReport propagates errors to caller (was silently swallowed)
+- Commit: 5e23479
 
 ### Phase 5: New Features -- 2026-04-04
 
