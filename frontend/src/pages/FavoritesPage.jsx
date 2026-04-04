@@ -128,6 +128,7 @@ function ProjectCard({ project, onClick }) {
 
 function FolderDetail({ project, onBack, onDelete, onResume, onGenerateReport, onImageGenerated }) {
   const [reportLoading, setReportLoading] = useState(false)
+  const [reportError, setReportError] = useState(null)
   const [imageLoading, setImageLoading] = useState(false)
   const [reportImage, setReportImage] = useState(project.reportImage || null)
   const [imageError, setImageError] = useState(null)
@@ -137,7 +138,14 @@ function FolderDetail({ project, onBack, onDelete, onResume, onGenerateReport, o
 
   async function handleGenerateReport() {
     setReportLoading(true)
-    try { await onGenerateReport() } finally { setReportLoading(false) }
+    setReportError(null)
+    try {
+      await onGenerateReport()
+    } catch (err) {
+      setReportError(err.message || 'Report generation failed. Please try again.')
+    } finally {
+      setReportLoading(false)
+    }
   }
 
   async function handleGenerateImage() {
@@ -205,19 +213,24 @@ function FolderDetail({ project, onBack, onDelete, onResume, onGenerateReport, o
           />
         ) : (
           liked.length > 0 && (
-            <button
-              onClick={handleGenerateReport}
-              disabled={reportLoading}
-              style={{
-                width: '100%', padding: '11px', borderRadius: 12, marginBottom: 20,
-                background: reportLoading ? 'var(--color-surface-2)' : 'rgba(139,92,246,0.15)',
-                color: reportLoading ? 'var(--color-text-dimmer)' : '#a78bfa',
-                fontSize: 13, fontWeight: 600, border: '1px solid rgba(139,92,246,0.3)',
-                cursor: reportLoading ? 'default' : 'pointer', fontFamily: 'inherit',
-              }}
-            >
-              {reportLoading ? 'Generating persona report...' : '✦ Generate Persona Report'}
-            </button>
+            <div style={{ marginBottom: 20 }}>
+              <button
+                onClick={handleGenerateReport}
+                disabled={reportLoading}
+                style={{
+                  width: '100%', padding: '11px', borderRadius: 12,
+                  background: reportLoading ? 'var(--color-surface-2)' : 'rgba(139,92,246,0.15)',
+                  color: reportLoading ? 'var(--color-text-dimmer)' : '#a78bfa',
+                  fontSize: 13, fontWeight: 600, border: '1px solid rgba(139,92,246,0.3)',
+                  cursor: reportLoading ? 'default' : 'pointer', fontFamily: 'inherit',
+                }}
+              >
+                {reportLoading ? 'Generating persona report...' : '✦ Generate Persona Report'}
+              </button>
+              {reportError && (
+                <p style={{ color: '#f43f5e', fontSize: 12, marginTop: 8 }}>{reportError}</p>
+              )}
+            </div>
           )
         )}
       </div>

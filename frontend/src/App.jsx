@@ -351,11 +351,8 @@ export default function App() {
     const project = projects.find(p => p.id === projectId)
     const backendId = project?.backendId || (project?.id?.includes('-') ? project.id : null)
     if (!backendId) return
-    try {
-      const { final_report } = await api.generateReport(backendId)
-      setProjects(prev => prev.map(p => p.id === projectId ? { ...p, finalReport: final_report } : p))
-    } catch (err) {
-    }
+    const { final_report } = await api.generateReport(backendId)
+    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, finalReport: final_report } : p))
   }
 
   function handleImageGenerated(projectId, imageData) {

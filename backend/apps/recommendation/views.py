@@ -363,7 +363,7 @@ class SwipeView(APIView):
             # 4. Increment round
             session.current_round += 1
 
-            # 5. Convergence — use K-Means global centroid during analyzing, pref_vector during exploring
+            # 5. Convergence -- use K-Means global centroid during analyzing, pref_vector during exploring
             if session.phase == 'analyzing' and action == 'like' and session.like_vectors:
                 _, global_centroid = engine.compute_taste_centroids(
                     session.like_vectors, session.current_round
@@ -592,9 +592,19 @@ class ProjectReportGenerateView(APIView):
         if not project.liked_ids:
             return Response({'detail': 'No liked buildings yet'}, status=status.HTTP_400_BAD_REQUEST)
 
-        report = services.generate_persona_report(project.liked_ids)
+        try:
+            report = services.generate_persona_report(project.liked_ids)
+        except (ValueError, RuntimeError) as e:
+            return Response(
+                {'detail': str(e), 'error_type': type(e).__name__},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
         if not report:
-            return Response({'detail': 'Report generation failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response(
+                {'detail': 'No building data found for report generation'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
         project.final_report = report
         project.save(update_fields=['final_report'])

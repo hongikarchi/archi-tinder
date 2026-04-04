@@ -1,9 +1,10 @@
 """
-services.py — Gemini LLM integration for query parsing and persona report generation.
+services.py -- Gemini LLM integration for query parsing and persona report generation.
 """
 import base64
 import json
 import logging
+import time
 from django.conf import settings
 from django.db import connection
 from google import genai
@@ -63,24 +64,55 @@ Return ONLY valid JSON with this exact structure:
   "dominant_materials": ["2-3 material words"]
 }"""
 
+_GEMINI_MAX_RETRIES = 1
+_GEMINI_RETRY_DELAY = 1.0  # seconds
+
+
+def _retry_gemini_call(func, *args, **kwargs):
+    """
+    Execute a Gemini API call with one retry on failure.
+    Logs the specific error on each attempt.
+    Returns the result on success, raises on final failure.
+    """
+    last_error = None
+    for attempt in range(_GEMINI_MAX_RETRIES + 1):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            last_error = e
+            logger.warning(
+                'Gemini API call failed (attempt %d/%d): %s: %s',
+                attempt + 1, _GEMINI_MAX_RETRIES + 1,
+                type(e).__name__, str(e),
+            )
+            if attempt < _GEMINI_MAX_RETRIES:
+                time.sleep(_GEMINI_RETRY_DELAY)
+    raise last_error
+
 
 def parse_query(query_text):
     """
     Parse a natural-language query into structured filters using Gemini.
-    Returns {'reply': str, 'filters': dict}.
+    Returns {'reply': str, 'filters': dict, 'filter_priority': list}.
+    On failure (after retry), returns a fallback with empty filters.
     """
     try:
         client = _get_client()
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=query_text,
-            config=types.GenerateContentConfig(
-                system_instruction=_PARSE_QUERY_PROMPT,
-                response_mime_type='application/json',
-                temperature=0.2,
-            ),
-        )
+
+        def _call():
+            return client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=query_text,
+                config=types.GenerateContentConfig(
+                    system_instruction=_PARSE_QUERY_PROMPT,
+                    response_mime_type='application/json',
+                    temperature=0.2,
+                ),
+            )
+
+        response = _retry_gemini_call(_call)
         data = json.loads(response.text)
+
         # Sanitize: ensure program is a valid value (case-insensitive match -> canonical form)
         filters = data.get('filters', {})
         if filters.get('program'):
@@ -94,15 +126,20 @@ def parse_query(query_text):
             'filters':         filters,
             'filter_priority': data.get('filter_priority', []),
         }
+    except json.JSONDecodeError as e:
+        logger.error('parse_query JSON decode error: %s', e)
+        return {'reply': 'I had trouble understanding that. Try again?', 'filters': {}, 'filter_priority': []}
     except Exception as e:
-        logger.error('parse_query error: %s', e)
+        logger.error('parse_query failed after retries: %s: %s', type(e).__name__, e)
         return {'reply': 'I had trouble understanding that. Try again?', 'filters': {}, 'filter_priority': []}
 
 
 def generate_persona_report(liked_building_ids):
     """
     Generate an architect persona report from a list of liked building_ids.
-    Returns a dict with persona fields, or None on failure.
+    Returns a dict with persona fields on success.
+    Raises an exception with a descriptive message on failure (caller handles response).
+    Returns None only if no building data is found.
     """
     if not liked_building_ids:
         return None
@@ -140,19 +177,26 @@ def generate_persona_report(liked_building_ids):
 
     try:
         client = _get_client()
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=summary,
-            config=types.GenerateContentConfig(
-                system_instruction=_PERSONA_PROMPT,
-                response_mime_type='application/json',
-                temperature=0.7,
-            ),
-        )
+
+        def _call():
+            return client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=summary,
+                config=types.GenerateContentConfig(
+                    system_instruction=_PERSONA_PROMPT,
+                    response_mime_type='application/json',
+                    temperature=0.7,
+                ),
+            )
+
+        response = _retry_gemini_call(_call)
         return json.loads(response.text)
+    except json.JSONDecodeError as e:
+        logger.error('generate_persona_report JSON decode error: %s', e)
+        raise ValueError('Gemini returned an invalid response format. Please try again.')
     except Exception as e:
-        logger.error('generate_persona_report error: %s', e)
-        return None
+        logger.error('generate_persona_report failed after retries: %s: %s', type(e).__name__, e)
+        raise RuntimeError(f'Persona report generation failed: {type(e).__name__}. Please try again later.')
 
 
 def generate_persona_image(report):
@@ -177,14 +221,18 @@ def generate_persona_image(report):
         )
 
         client = _get_client()
-        response = client.models.generate_images(
-            model='imagen-3.0-generate-002',
-            prompt=prompt,
-            config=types.GenerateImagesConfig(
-                number_of_images=1,
-                aspect_ratio='16:9',
-            ),
-        )
+
+        def _call():
+            return client.models.generate_images(
+                model='imagen-3.0-generate-002',
+                prompt=prompt,
+                config=types.GenerateImagesConfig(
+                    number_of_images=1,
+                    aspect_ratio='16:9',
+                ),
+            )
+
+        response = _retry_gemini_call(_call)
 
         image_bytes = response.generated_images[0].image.image_bytes
         base64_str = base64.b64encode(image_bytes).decode('utf-8')
@@ -195,5 +243,5 @@ def generate_persona_image(report):
             'prompt': prompt,
         }
     except Exception as e:
-        logger.error('generate_persona_image error: %s', e)
+        logger.error('generate_persona_image error: %s: %s', type(e).__name__, e)
         return None
