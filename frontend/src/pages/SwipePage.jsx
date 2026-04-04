@@ -24,6 +24,8 @@ function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
   const [isExpanded,  setIsExpanded]  = useState(false)
   const [showGallery, setShowGallery] = useState(false)
   const [imgLoaded,   setImgLoaded]   = useState(false)
+  const [imgFailed,   setImgFailed]   = useState(false)
+  const imgRetried = useRef(false)
   const dragStart = useRef(null)
   const dragStartTime = useRef(null)
 
@@ -43,6 +45,18 @@ function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
     if (dx < TAP_THRESHOLD && dy < TAP_THRESHOLD && dt < 300) {
       if (showGallery) closeGallery()
       else setIsExpanded(v => !v)
+    }
+  }
+
+  function handleImgError(e) {
+    if (!imgRetried.current) {
+      // Retry once with cache-busting query param
+      imgRetried.current = true
+      const sep = card.image_url.includes('?') ? '&' : '?'
+      e.target.src = card.image_url + sep + 'retry=1'
+    } else {
+      // Retry also failed -- show fallback
+      setImgFailed(true)
     }
   }
 
@@ -84,23 +98,45 @@ function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
           borderRadius: 20, overflow: 'hidden',
           boxShadow: '0 25px 50px rgba(0,0,0,0.6)',
         }}>
-          {/* Photo */}
-          <div className="skeleton-shimmer" style={{ position: 'absolute', inset: 0 }} />
-          <img
-            src={card.image_url}
-            alt={card.image_title}
-            fetchpriority="high"
-            decoding="sync"
-            draggable={false}
-            onLoad={() => setImgLoaded(true)}
-            style={{
+          {/* Photo / Skeleton / Fallback */}
+          {imgFailed ? (
+            <div style={{
               position: 'absolute', inset: 0,
-              width: '100%', height: '100%',
-              objectFit: 'cover', objectPosition: 'center',
-              opacity: imgLoaded ? 1 : 0,
-              transition: 'opacity 0.2s ease',
-            }}
-          />
+              background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)',
+              display: 'flex', flexDirection: 'column',
+              alignItems: 'center', justifyContent: 'center',
+              gap: 12,
+            }}>
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2"/>
+                <circle cx="8.5" cy="8.5" r="1.5"/>
+                <polyline points="21 15 16 10 5 21"/>
+              </svg>
+              <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, fontWeight: 500 }}>
+                Image unavailable
+              </span>
+            </div>
+          ) : (
+            <>
+              <div className="skeleton-shimmer" style={{ position: 'absolute', inset: 0 }} />
+              <img
+                src={card.image_url}
+                alt={card.image_title}
+                fetchpriority="high"
+                decoding="sync"
+                draggable={false}
+                onLoad={() => setImgLoaded(true)}
+                onError={handleImgError}
+                style={{
+                  position: 'absolute', inset: 0,
+                  width: '100%', height: '100%',
+                  objectFit: 'cover', objectPosition: 'center',
+                  opacity: imgLoaded ? 1 : 0,
+                  transition: 'opacity 0.2s ease',
+                }}
+              />
+            </>
+          )}
 
           {/* Gradient — expands upward on detail open */}
           <div style={{
