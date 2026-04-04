@@ -30,16 +30,16 @@
 11. **UX3** -- Action card message improvement -- COMPLETED 2026-04-03
 12. **F2** -- Image load failure handling -- COMPLETED 2026-04-03
 
-### Phase 4.5: Swipe Bug Fix (URGENT)
+### Phase 4.5: Swipe Bug Fix -- B5, B6, B2v2 COMPLETED 2026-04-04 (B3v2 skipped)
 13. **B5** -- Fast swipe race condition (no swipe lock, concurrent requests)
 14. **B6** -- Card suddenly changes (prefetch response overwrites current card)
 15. **B2v2** -- Same cards still repeating (prefetch uses stale exposed_ids)
-16. **B3v2** -- Pool exhaustion during exploring phase returns null
+16. **B3v2** -- Pool exhaustion during exploring phase returns null (SKIPPED -- low priority)
 
-### Phase 5: New Features
-17. **UX2** -- Persona Report AI image generation
-18. **AUTH1** -- Kakao / Naver OAuth (deferred — future)
-19. **F3** -- Mobile optimization
+### Phase 5: New Features -- UX2, F3 COMPLETED 2026-04-04 (AUTH1 deferred)
+17. **UX2** -- Persona Report AI image generation -- COMPLETED 2026-04-04
+18. **AUTH1** -- Kakao / Naver OAuth (deferred -- future)
+19. **F3** -- Mobile optimization -- COMPLETED 2026-04-04
 
 ### Phase 6: Cleanup
 20. **INFRA1** -- Backend integration tests
@@ -50,33 +50,10 @@
 
 ## Open
 
-### Bug Fix
-#### B5. 빠른 스와이프 시 레이스 컨디션 ⚡ Priority 1
-`handleSwipeCard` 진입 시 `isSwipeLoading` 체크 없음 → 연속 스와이프가 동시에 실행됨.
-`SwipePage.jsx onCardLeftScreen`도 loading 체크 없이 `onSwipe` 호출.
-두 번의 `recordSwipe`가 동시 발생 → prefetch 큐 오염, 상태 불일치.
-- [ ] `handleSwipeCard` 시작 시 `if (isSwipeLoading) return` 가드 추가
-- [ ] `onCardLeftScreen`에 loading 체크 추가
-- [ ] `isSwipeLoading`을 useRef로 변경 (setState 비동기 문제 방지)
-
-#### B6. 카드가 갑자기 바뀜 (prefetch 응답 충돌) ⚡ Priority 1
-optimistic swap 후 backend 응답이 도착하면 `result.next_image.image_id !== savedPrefetch.image_id`
-체크에서 currentCard를 덮어씀 (App.jsx:277-295).
-사용자가 보고 있는 카드가 갑자기 다른 카드로 바뀌는 현상.
-- [ ] backend 응답이 현재 표시 중인 카드와 다를 때 덮어쓰지 않기
-- [ ] prefetch 큐만 업데이트하고 currentCard는 유지
-- [ ] stale response 방지용 swipe sequence number 도입 검토
-
-#### B2v2. 같은 카드 여전히 반복 (prefetch stale exposed_ids) ⚡ Priority 1
-`views.py:465-498`에서 prefetch 계산 시 `session.exposed_ids`가 아직 DB에 저장 안 됨.
-동시 요청 시 두 번째 요청이 DB에서 옛날 exposed_ids를 로드 → 같은 카드 prefetch.
-- [ ] exposed_ids 업데이트를 prefetch 계산 전에 session.save() 호출
-- [ ] 또는 select_for_update()로 세션 동시 접근 방지
-
-#### B3v2. Exploring 단계에서 풀 소진 시 null 반환
-`views.py:436-437`에서 `farthest_point_from_pool`이 None 반환 시 next_card=None으로 전달.
-analyzing 단계는 action card fallback이 있지만 exploring 단계는 없음.
-- [ ] exploring 단계에서도 풀 소진 시 action card 또는 converged 전환 추가
+#### B3v2. Exploring phase pool exhaustion returns null (LOW PRIORITY -- deferred)
+`views.py:436-437` farthest_point_from_pool returns None when pool exhausted.
+analyzing phase has action card fallback but exploring phase does not.
+- [ ] exploring phase pool exhaustion -> action card or converged transition
 
 ### Algorithm
 
@@ -86,13 +63,6 @@ Smoke test (3 personas x 5 trials) passed. No code changes needed.
 - [ ] Run algo-tester: 100 personas x 200 trials
 - [ ] Evaluate results vs baseline
 - [ ] Apply optimized params if improvement found
-
-### Frontend
-#### F3. Mobile layout unoptimized
-375px viewport touch targets, card gestures untested.
-- [ ] SwipePage touch target audit
-- [ ] Mobile Safari card flip test
-- [ ] TabBar spacing adjustment
 
 ### Backend
 #### BE2. Gemini API error feedback missing
@@ -106,13 +76,6 @@ Smoke test (3 personas x 5 trials) passed. No code changes needed.
 Google OAuth only. Korean users need domestic login.
 - [ ] Kakao social auth backend + frontend button
 - [ ] Naver social auth backend + frontend button
-
-### UX/Design
-#### UX2. Persona Report AI image generation (nano banana)
-Generate architecture images based on user taste in final report.
-- [ ] Image generation API selection
-- [ ] Persona report generated image display component
-- [ ] Backend image generation endpoint
 
 ### Infrastructure
 #### INFRA1. Backend integration tests missing
@@ -143,6 +106,55 @@ Production code has multiple `console.error()` calls.
 ---
 
 ## Resolved
+
+### Phase 5: New Features -- 2026-04-04
+
+#### UX2. Persona Report AI image generation -- 2026-04-04
+Generate architecture images based on user taste profile using Google Imagen 3.
+- [x] Research: google-genai SDK v1.47.0 includes `client.models.generate_images()` (Imagen 3)
+- [x] Backend: `generate_persona_image()` in services.py constructs architecture prompt from report attributes
+- [x] Backend: `ProjectReportImageView` endpoint `POST /projects/{id}/report/generate-image/`
+- [x] Backend: `report_image` TextField on Project model (base64 storage)
+- [x] Frontend: `generateReportImage()` API function in client.js
+- [x] Frontend: "Generate AI Architecture Image" button in PersonaReport section
+- [x] Frontend: Image display with base64 data URI, error/loading states
+- [x] Frontend: Image state propagated to App.jsx (persists across navigation)
+- [x] Frontend: Image synced from backend on login via `report_image` field
+- Commit: 797e619
+
+#### F3. Mobile optimization (375px viewport) -- 2026-04-04
+iPhone safe area support and touch target compliance.
+- [x] `viewport-fit=cover` in meta tag for safe area support
+- [x] `env(safe-area-inset-bottom)` on all page heights: calc(100vh - 64px - env(...))
+- [x] TabBar: `content-box` sizing with safe area bottom padding
+- [x] Fixed-bottom elements adjusted (LLM input bar, start swiping panel, ProjectSetup action bar)
+- [x] All back buttons meet 44px minimum touch target (Apple HIG)
+- [x] SwipePage top padding reduced 32px -> 20px for small screens
+- [x] Card title 2-line clamp (`-webkit-line-clamp: 2`) prevents text overflow
+- [x] CSS variable `--safe-area-bottom` added for future use
+- [x] Desktop unaffected (env() fallback = 0px)
+- Commit: 3a0b305
+
+### Phase 4.5: Swipe Bug Fix -- 2026-04-04
+
+#### B5. Fast swipe race condition -- 2026-04-04
+Concurrent swipe requests corrupted prefetch queue state.
+- [x] `swipeLock` useRef guard added to `handleSwipeCard` entry point
+- [x] `onCardLeftScreen` checks swipeLock before calling `onSwipe`
+- [x] useRef (not useState) to avoid async setState race
+- Commit: 7a5a8e1
+
+#### B6. Card suddenly changes (prefetch response overwrites currentCard) -- 2026-04-04
+canInstantSwap path overwrote `currentCard` when backend response diverged from saved prefetch.
+- [x] Removed `currentCard` overwrite in canInstantSwap path
+- [x] Only prefetch queue updated when backend response differs; currentCard preserved
+- Commit: 7a5a8e1
+
+#### B2v2. Same cards still repeating (prefetch stale exposed_ids) -- 2026-04-04
+`session.exposed_ids` not yet saved to DB when prefetch was computed, causing stale reads on concurrent requests.
+- [x] `session.save()` called before prefetch calculation in views.py
+- [x] `select_for_update()` on session query to prevent concurrent stale reads
+- Commit: 7a5a8e1
 
 ### Phase 4: UX Enhancement -- 2026-04-03
 
@@ -178,7 +190,7 @@ Current message was ambiguous about analysis vs completion stage.
 Repeated pool embedding fetch + KMeans re-clustering on every swipe caused latency spikes.
 - [x] Pool embedding session-level caching (frozenset key, max 50 entries)
 - [x] KMeans centroid caching (like-vector fingerprint + round_num key, max 20 entries; recompute only on new like)
-- [x] `n_init=10` → `n_init=3` (3x faster clustering)
+- [x] `n_init=10` -> `n_init=3` (3x faster clustering)
 - [x] Double prefetch: backend returns `prefetch_image_2`, frontend buffers 2 cards with queue shifting
 - Commit: 1eedcda
 
