@@ -21,14 +21,14 @@
 6. **A3** -- Recency weight math protection
 7. **BE1** -- API timeout/retry
 
-### Phase 3: Performance — A1 COMPLETED, A2 VALIDATED
+### Phase 3: Performance -- A1 COMPLETED, A2 VALIDATED
 8. **A1** -- Pool caching + KMeans caching + prefetch -- COMPLETED 2026-04-03
 9. **A2** -- Algo-tester 100 personas -- validated (smoke test passed, full run pending)
 
-### Phase 4: UX Enhancement
-10. **UX1** -- Tutorial popup
-11. **UX3** -- Action card message improvement
-12. **F2** -- Image load failure handling
+### Phase 4: UX Enhancement -- COMPLETED 2026-04-03
+10. **UX1** -- Tutorial popup -- COMPLETED 2026-04-03
+11. **UX3** -- Action card message improvement -- COMPLETED 2026-04-03
+12. **F2** -- Image load failure handling -- COMPLETED 2026-04-03
 
 ### Phase 5: New Features
 13. **UX2** -- Persona Report AI image generation
@@ -55,11 +55,6 @@ Smoke test (3 personas x 5 trials) passed. No code changes needed.
 - [ ] Apply optimized params if improvement found
 
 ### Frontend
-#### F2. Image load failure handling missing
-`SwipePage.jsx:88-102`: no retry, no fallback on 404/500.
-- [ ] Image load failure retry (1x)
-- [ ] Fallback placeholder image
-
 #### F3. Mobile layout unoptimized
 375px viewport touch targets, card gestures untested.
 - [ ] SwipePage touch target audit
@@ -80,22 +75,11 @@ Google OAuth only. Korean users need domestic login.
 - [ ] Naver social auth backend + frontend button
 
 ### UX/Design
-#### UX1. Tutorial popup
-First-time swipe page usage guide with "don't show again" checkbox.
-- [ ] Popup component (checkbox + localStorage)
-- [ ] Conditional display on SwipePage entry
-- [ ] Guide content (swipe directions, card flip, gestures)
-
 #### UX2. Persona Report AI image generation (nano banana)
 Generate architecture images based on user taste in final report.
 - [ ] Image generation API selection
 - [ ] Persona report generated image display component
 - [ ] Backend image generation endpoint
-
-#### UX3. Action card message improvement
-Current message is ambiguous about analysis vs completion stage.
-- [ ] Clearer action card wording
-- [ ] Korean language support review
 
 ### Infrastructure
 #### INFRA1. Backend integration tests missing
@@ -127,7 +111,35 @@ Production code has multiple `console.error()` calls.
 
 ## Resolved
 
-### Phase 3: Performance — 2026-04-03
+### Phase 4: UX Enhancement -- 2026-04-03
+
+#### UX1. Tutorial popup -- 2026-04-03
+First-time swipe page usage guide with "don't show again" checkbox.
+- [x] TutorialPopup component (4 steps: swipe right/left, tap card, AI learns)
+- [x] Semi-transparent overlay, close (X) button, "Don't show again" checkbox
+- [x] localStorage key `archithon_tutorial_dismissed` persists dismissal
+- [x] Only shows on main swipe view (not completed/empty states)
+- [x] Inline styles matching existing dark gradient theme
+- Commit: eb9dc74
+
+#### UX3. Action card message improvement -- 2026-04-03
+Current message was ambiguous about analysis vs completion stage.
+- [x] Backend: `build_action_card()` now returns `action_card_message` + `action_card_subtitle`
+- [x] Title changed from "Analysis Complete" to "Your Taste is Found!"
+- [x] Message: clear explanation of what happened; subtitle: explains swipe directions
+- [x] Frontend: ActionCard renders subtitle, "View results" hint highlighted in accent color
+- [x] `normalizeCard()` passes `action_card_subtitle` through
+- Commit: 1cb814d
+
+#### F2. Image load failure handling -- 2026-04-03
+`SwipePage.jsx`: no retry, no fallback on 404/500 image errors.
+- [x] On first `onError`: retry with `?retry=1` cache-busting param
+- [x] On second failure: show styled fallback (gradient bg + building icon + "Image unavailable")
+- [x] Uses `imgRetried` ref (not state) to avoid re-render loops
+- [x] Inline styles consistent with existing card design
+- Commit: b660453
+
+### Phase 3: Performance -- 2026-04-03
 
 #### A1. Swipe performance optimization -- 2026-04-03
 Repeated pool embedding fetch + KMeans re-clustering on every swipe caused latency spikes.
