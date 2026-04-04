@@ -26,7 +26,7 @@ export default function FavoritesPage({ projects, onDeleteProject, onResumeProje
   const hasMore = visibleCount < projects.length
 
   return (
-    <div style={{ height: 'calc(100vh - 64px)', overflowY: 'auto', background: 'var(--color-bg)', padding: '40px 20px 100px' }}>
+    <div style={{ height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))', overflowY: 'auto', background: 'var(--color-bg)', padding: '40px 20px 100px' }}>
       <div style={{ maxWidth: 480, margin: '0 auto' }}>
         <h2 style={{ color: 'var(--color-text)', fontSize: 22, fontWeight: 800, margin: '0 0 4px' }}>
           Project Folders
@@ -158,12 +158,12 @@ function FolderDetail({ project, onBack, onDelete, onResume, onGenerateReport, o
   }
 
   return (
-    <div style={{ height: 'calc(100vh - 64px)', overflowY: 'auto', background: 'var(--color-bg)', paddingBottom: 100 }}>
+    <div style={{ height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))', overflowY: 'auto', background: 'var(--color-bg)', paddingBottom: 100 }}>
       <div style={{ padding: '20px 20px 0', maxWidth: 480, margin: '0 auto' }}>
         <button onClick={onBack} style={{
           background: 'none', border: 'none', color: 'var(--color-text-dim)',
           fontSize: 13, cursor: 'pointer', padding: '8px 0', fontFamily: 'inherit',
-          display: 'flex', alignItems: 'center', gap: 6,
+          display: 'flex', alignItems: 'center', gap: 6, minHeight: 44,
         }}>
           ← Back
         </button>

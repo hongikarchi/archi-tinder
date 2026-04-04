@@ -173,3 +173,8 @@ body {
   background-size: 200% 100%;
   animation: shimmer 1.6s ease-in-out infinite;
 }
+
+/* -- Mobile safe area (iPhone notch / home indicator) -- */
+:root {
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+}

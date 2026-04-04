@@ -12,7 +12,7 @@ export default function SetupPage({ projects = [], isSyncing = false, onResume, 
 
   if (step === 'choose') {
     return (
-      <div style={{ height: 'calc(100vh - 64px)', overflow: 'hidden', background: 'var(--color-bg)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16 }}>
+      <div style={{ height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))', overflow: 'hidden', background: 'var(--color-bg)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16 }}>
         <Header />
         {isSyncing ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
@@ -48,7 +48,7 @@ export default function SetupPage({ projects = [], isSyncing = false, onResume, 
 
   if (step === 'select-project') {
     return (
-      <div style={{ height: 'calc(100vh - 64px)', overflowY: 'auto', background: 'var(--color-bg)', padding: '40px 20px 120px' }}>
+      <div style={{ height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))', overflowY: 'auto', background: 'var(--color-bg)', padding: '40px 20px 120px' }}>
         <Header />
         <BackButton onClick={() => setStep('choose')} />
         <p style={{ color: 'var(--color-text-dim)', fontSize: 13, textAlign: 'center', margin: '0 0 20px' }}>Select a folder to update</p>
@@ -83,7 +83,7 @@ export default function SetupPage({ projects = [], isSyncing = false, onResume, 
 
   if (step === 'filter-choice') {
     return (
-      <div style={{ height: 'calc(100vh - 64px)', overflow: 'hidden', background: 'var(--color-bg)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16 }}>
+      <div style={{ height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))', overflow: 'hidden', background: 'var(--color-bg)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16 }}>
         <Header />
         <BackButton onClick={() => setStep('select-project')} />
         <p style={{ color: 'var(--color-text)', fontSize: 16, fontWeight: 700, margin: '0 0 4px', textAlign: 'center' }}>
@@ -117,7 +117,8 @@ function BackButton({ onClick }) {
     <button
       onClick={onClick}
       style={{
-        display: 'block', margin: '8px auto 0',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        margin: '8px auto 0', minHeight: 44,
         background: 'none', border: 'none',
         color: 'var(--color-text-dimmer)', fontSize: 13, cursor: 'pointer',
         fontFamily: 'inherit',

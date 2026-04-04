@@ -89,7 +89,7 @@ export default function MainLayout({
       {/* No active project on swipe tab */}
       {isSwipe && !activeProject && (
         <div style={{
-          height: 'calc(100vh - 64px)', background: 'var(--color-bg)', display: 'flex',
+          height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))', background: 'var(--color-bg)', display: 'flex',
           flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
           gap: 12, padding: 24,
         }}>

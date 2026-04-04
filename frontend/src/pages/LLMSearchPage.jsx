@@ -204,7 +204,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
 
   return (
     <div style={{
-      height: 'calc(100vh - 64px)', overflow: 'hidden', background: 'var(--color-bg)',
+      height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))', overflow: 'hidden', background: 'var(--color-bg)',
       display: 'flex', flexDirection: 'column',
       backgroundImage: 'radial-gradient(circle at 15% 50%, rgba(236,72,153,0.07), transparent 30%), radial-gradient(circle at 85% 30%, rgba(244,63,94,0.07), transparent 30%)',
     }}>
@@ -220,7 +220,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
       }}>
         <button onClick={onBack} style={{
           background: 'none', border: 'none', color: 'var(--color-text-dim)',
-          fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', padding: '4px 0',
+          fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', padding: '4px 0', minHeight: 44,
         }}>Back</button>
         <div style={{ flex: 1, textAlign: 'center' }}>
           <span style={{
@@ -320,7 +320,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
       {/* Start swiping panel */}
       {showStart && (
         <div style={{
-          position: 'fixed', bottom: 64 + 70, left: 0, right: 0,
+          position: 'fixed', bottom: 'calc(134px + env(safe-area-inset-bottom, 0px))', left: 0, right: 0,
           padding: '0 16px', zIndex: 20,
         }}>
           <div style={{
@@ -346,7 +346,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
 
       {/* Input */}
       <div style={{
-        position: 'fixed', bottom: 64, left: 0, right: 0,
+        position: 'fixed', bottom: 'calc(64px + env(safe-area-inset-bottom, 0px))', left: 0, right: 0,
         padding: '12px 16px',
         background: 'linear-gradient(to top, var(--color-bg) 80%, transparent)',
         zIndex: 30,

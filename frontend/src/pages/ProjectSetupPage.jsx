@@ -18,7 +18,7 @@ export default function ProjectSetupPage({ onBack, onNext }) {
   }
 
   return (
-    <div style={{ height: 'calc(100vh - 64px)', overflow: 'hidden', background: 'var(--color-bg)', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))', overflow: 'hidden', background: 'var(--color-bg)', display: 'flex', flexDirection: 'column' }}>
 
       <div style={{
         padding: '16px 20px',
@@ -30,7 +30,7 @@ export default function ProjectSetupPage({ onBack, onNext }) {
       }}>
         <button onClick={onBack} style={{
           background: 'none', border: 'none', color: 'var(--color-text-dim)',
-          fontSize: 13, cursor: 'pointer', fontFamily: 'inherit',
+          fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', minHeight: 44,
         }}>← Back</button>
         <div style={{ flex: 1, textAlign: 'center' }}>
           <span style={{ color: 'var(--color-text)', fontSize: 16, fontWeight: 700 }}>New Project</span>
@@ -100,7 +100,7 @@ export default function ProjectSetupPage({ onBack, onNext }) {
       </div>
 
       <div style={{
-        position: 'fixed', bottom: 64, left: 0, right: 0,
+        position: 'fixed', bottom: 'calc(64px + env(safe-area-inset-bottom, 0px))', left: 0, right: 0,
         padding: '16px 20px',
         background: 'linear-gradient(to top, var(--color-bg) 70%, transparent)',
       }}>

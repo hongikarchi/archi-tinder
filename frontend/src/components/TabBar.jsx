@@ -46,6 +46,8 @@ export default function TabBar({ swipeEnabled }) {
     <nav style={{
       position: 'fixed', bottom: 0, left: 0, right: 0,
       display: 'flex', zIndex: 100, height: 64,
+      paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+      boxSizing: 'content-box',
       background: 'var(--color-nav-bg)',
       backdropFilter: 'blur(20px)',
       borderTop: '1px solid var(--color-border)',

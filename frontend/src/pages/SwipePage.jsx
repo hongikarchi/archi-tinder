@@ -173,7 +173,7 @@ function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
             display: 'flex', flexDirection: 'column',
             padding: '16px 18px 20px', gap: 0, overflow: 'hidden',
           }}>
-            <h2 style={{ color: '#fff', fontSize: 18, fontWeight: 700, lineHeight: 1.3, margin: '0 0 3px' }}>
+            <h2 style={{ color: '#fff', fontSize: 18, fontWeight: 700, lineHeight: 1.3, margin: '0 0 3px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
               {card.image_title}
             </h2>
             {architects && (
@@ -420,7 +420,7 @@ export default function SwipePage({ currentCard, progress, isCompleted, isLoadin
   if (isCompleted) {
     return (
       <div style={{
-        height: 'calc(100vh - 64px)', overflow: 'hidden', background: 'var(--color-bg)', display: 'flex',
+        height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))', overflow: 'hidden', background: 'var(--color-bg)', display: 'flex',
         flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
         padding: 24, gap: 12,
       }}>
@@ -454,7 +454,7 @@ export default function SwipePage({ currentCard, progress, isCompleted, isLoadin
   if (!isLoading && !currentCard) {
     return (
       <div style={{
-        height: 'calc(100vh - 64px)', overflow: 'hidden', background: 'var(--color-bg)', display: 'flex',
+        height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))', overflow: 'hidden', background: 'var(--color-bg)', display: 'flex',
         flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
         padding: 24, gap: 12,
       }}>
@@ -471,8 +471,8 @@ export default function SwipePage({ currentCard, progress, isCompleted, isLoadin
       <TutorialPopup visible={showTutorial} onClose={() => setShowTutorial(false)} />
       <div style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center',
-        justifyContent: 'space-between', height: 'calc(100vh - 64px)', overflow: 'hidden',
-        background: 'var(--color-bg)', padding: '32px 16px',
+        justifyContent: 'space-between', height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))', overflow: 'hidden',
+        background: 'var(--color-bg)', padding: '20px 16px',
       }}>
 
         {/* Header */}
