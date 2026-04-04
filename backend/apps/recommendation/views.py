@@ -332,6 +332,11 @@ class SwipeView(APIView):
 
         # NORMAL SWIPE PROCESSING
         with transaction.atomic():
+            # Lock session row to prevent concurrent swipe corruption
+            session = AnalysisSession.objects.select_for_update().get(
+                session_id=session_id, user=profile
+            )
+
             # 1. Get embedding and update preference vector
             embedding = engine.get_building_embedding(building_id)
             if embedding:
@@ -453,6 +458,12 @@ class SwipeView(APIView):
                 if bid not in session.exposed_ids:
                     session.exposed_ids = session.exposed_ids + [bid]
 
+            # Save session BEFORE prefetch so concurrent requests see updated exposed_ids
+            session.save(update_fields=[
+                'preference_vector', 'current_round', 'exposed_ids',
+                'phase', 'like_vectors', 'convergence_history', 'previous_pref_vector'
+            ])
+
             # 9. Prefetch (same phase logic, round+1)
             prefetch_card = None
             if next_card and next_card.get('building_id') != '__action_card__':
@@ -493,12 +504,6 @@ class SwipeView(APIView):
                         prefetch_card_2 = engine.get_building_card(pf2_id) if pf2_id else None
                 except Exception:
                     prefetch_card_2 = None
-
-            # 10. Save session
-            session.save(update_fields=[
-                'preference_vector', 'current_round', 'exposed_ids',
-                'phase', 'like_vectors', 'convergence_history', 'previous_pref_vector'
-            ])
 
         return Response({
             'accepted': True,

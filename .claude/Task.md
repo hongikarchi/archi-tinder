@@ -30,22 +30,55 @@
 11. **UX3** -- Action card message improvement -- COMPLETED 2026-04-03
 12. **F2** -- Image load failure handling -- COMPLETED 2026-04-03
 
+### Phase 4.5: Swipe Bug Fix (URGENT)
+13. **B5** -- Fast swipe race condition (no swipe lock, concurrent requests)
+14. **B6** -- Card suddenly changes (prefetch response overwrites current card)
+15. **B2v2** -- Same cards still repeating (prefetch uses stale exposed_ids)
+16. **B3v2** -- Pool exhaustion during exploring phase returns null
+
 ### Phase 5: New Features
-13. **UX2** -- Persona Report AI image generation
-14. **AUTH1** -- Kakao / Naver OAuth
-15. **F3** -- Mobile optimization
+17. **UX2** -- Persona Report AI image generation
+18. **AUTH1** -- Kakao / Naver OAuth (deferred — future)
+19. **F3** -- Mobile optimization
 
 ### Phase 6: Cleanup
-16. **INFRA1** -- Backend integration tests
-17. **INFRA2~4** -- Idempotency, total_rounds, console.error
-18. **BE2** -- Gemini error handling improvement
+20. **INFRA1** -- Backend integration tests
+21. **INFRA2~4** -- Idempotency, total_rounds, console.error
+22. **BE2** -- Gemini error handling improvement
 
 ---
 
 ## Open
 
-### Algorithm
+### Bug Fix
+#### B5. 빠른 스와이프 시 레이스 컨디션 ⚡ Priority 1
+`handleSwipeCard` 진입 시 `isSwipeLoading` 체크 없음 → 연속 스와이프가 동시에 실행됨.
+`SwipePage.jsx onCardLeftScreen`도 loading 체크 없이 `onSwipe` 호출.
+두 번의 `recordSwipe`가 동시 발생 → prefetch 큐 오염, 상태 불일치.
+- [ ] `handleSwipeCard` 시작 시 `if (isSwipeLoading) return` 가드 추가
+- [ ] `onCardLeftScreen`에 loading 체크 추가
+- [ ] `isSwipeLoading`을 useRef로 변경 (setState 비동기 문제 방지)
 
+#### B6. 카드가 갑자기 바뀜 (prefetch 응답 충돌) ⚡ Priority 1
+optimistic swap 후 backend 응답이 도착하면 `result.next_image.image_id !== savedPrefetch.image_id`
+체크에서 currentCard를 덮어씀 (App.jsx:277-295).
+사용자가 보고 있는 카드가 갑자기 다른 카드로 바뀌는 현상.
+- [ ] backend 응답이 현재 표시 중인 카드와 다를 때 덮어쓰지 않기
+- [ ] prefetch 큐만 업데이트하고 currentCard는 유지
+- [ ] stale response 방지용 swipe sequence number 도입 검토
+
+#### B2v2. 같은 카드 여전히 반복 (prefetch stale exposed_ids) ⚡ Priority 1
+`views.py:465-498`에서 prefetch 계산 시 `session.exposed_ids`가 아직 DB에 저장 안 됨.
+동시 요청 시 두 번째 요청이 DB에서 옛날 exposed_ids를 로드 → 같은 카드 prefetch.
+- [ ] exposed_ids 업데이트를 prefetch 계산 전에 session.save() 호출
+- [ ] 또는 select_for_update()로 세션 동시 접근 방지
+
+#### B3v2. Exploring 단계에서 풀 소진 시 null 반환
+`views.py:436-437`에서 `farthest_point_from_pool`이 None 반환 시 next_card=None으로 전달.
+analyzing 단계는 action card fallback이 있지만 exploring 단계는 없음.
+- [ ] exploring 단계에서도 풀 소진 시 action card 또는 converged 전환 추가
+
+### Algorithm
 
 #### A2. Hyperparameter optimization -- validated, full run pending
 Smoke test (3 personas x 5 trials) passed. No code changes needed.

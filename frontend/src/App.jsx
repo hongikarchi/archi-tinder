@@ -134,6 +134,7 @@ export default function App() {
   // On refresh, re-init swipe session if the user was on the swipe route
   const swipeRestored = useRef(false)
   const loggingOut = useRef(false)
+  const swipeLock = useRef(false)
   useEffect(() => {
     if (swipeRestored.current) return
     if (location.pathname === '/swipe' && activeProjectId && userId) {
@@ -208,9 +209,18 @@ export default function App() {
   }
 
   async function handleSwipeCard(action) {
-    if (!currentCard || !activeProjectId) return
+    if (swipeLock.current) return
+    swipeLock.current = true
+
+    if (!currentCard || !activeProjectId) {
+      swipeLock.current = false
+      return
+    }
     const project = projects.find(p => p.id === activeProjectId)
-    if (!project?.sessionId) return
+    if (!project?.sessionId) {
+      swipeLock.current = false
+      return
+    }
 
     const swipedCard = currentCard
     const savedPrefetch = prefetchCard
@@ -275,16 +285,12 @@ export default function App() {
         }
       } else {
         if (canInstantSwap) {
-          // Verify backend agrees with what we're showing; correct if it diverged (rare)
-          if (result.next_image && result.next_image.image_id !== savedPrefetch.image_id) {
-            setCurrentCard(result.next_image)
-            preloadImage(result.next_image.image_url)
-          }
-          // Update prefetch queue from backend (always set to clear stale values on pool exhaustion)
+          // DON'T overwrite currentCard — user is already looking at savedPrefetch
+          // Only update the prefetch queue from backend response
           setPrefetchCard(result.prefetch_image || null)
-          preloadImage(result.prefetch_image?.image_url)
           setPrefetchCard2(result.prefetch_image_2 || null)
-          preloadImage(result.prefetch_image_2?.image_url)
+          if (result.prefetch_image?.image_url) preloadImage(result.prefetch_image.image_url)
+          if (result.prefetch_image_2?.image_url) preloadImage(result.prefetch_image_2.image_url)
         } else {
           setCurrentCard(result.next_image)
           setPrefetchCard(result.prefetch_image)
@@ -303,6 +309,7 @@ export default function App() {
       setSwipeError('Swipe failed. Please try again.')
     } finally {
       setIsSwipeLoading(false)
+      swipeLock.current = false
     }
   }
 
