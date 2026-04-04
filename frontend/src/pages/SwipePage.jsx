@@ -262,17 +262,29 @@ function ActionCard({ card }) {
           color: '#fff', fontSize: 22, fontWeight: 800,
           margin: '0 0 12px 0', lineHeight: 1.3
         }}>
-          Analysis Complete
+          {card.image_title || 'Your Taste is Found!'}
         </h2>
 
         {/* Message */}
         <p style={{
-          color: 'rgba(255,255,255,0.7)', fontSize: 14,
+          color: 'rgba(255,255,255,0.85)', fontSize: 15,
           textAlign: 'center', maxWidth: '85%',
-          margin: '0 0 32px 0', lineHeight: 1.4
+          margin: '0 0 8px 0', lineHeight: 1.5,
+          fontWeight: 500,
         }}>
           {card.action_card_message}
         </p>
+
+        {/* Subtitle */}
+        {card.action_card_subtitle && (
+          <p style={{
+            color: 'rgba(255,255,255,0.5)', fontSize: 12,
+            textAlign: 'center', maxWidth: '90%',
+            margin: '0 0 24px 0', lineHeight: 1.5,
+          }}>
+            {card.action_card_subtitle}
+          </p>
+        )}
 
         {/* Hint row at bottom */}
         <div style={{
@@ -281,20 +293,20 @@ function ActionCard({ card }) {
           alignItems: 'center',
         }}>
           <div style={{
-            display: 'flex', alignItems: 'center', gap: 4,
-            color: 'rgba(255,255,255,0.5)', fontSize: 12
+            display: 'flex', alignItems: 'center', gap: 6,
+            color: 'rgba(255,255,255,0.45)', fontSize: 12
           }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="15 18 9 12 15 6"/>
             </svg>
             Keep exploring
           </div>
           <div style={{
-            display: 'flex', alignItems: 'center', gap: 4,
-            color: 'rgba(255,255,255,0.5)', fontSize: 12
+            display: 'flex', alignItems: 'center', gap: 6,
+            color: '#fb923c', fontSize: 12, fontWeight: 600,
           }}>
             View results
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="9 18 15 12 9 6"/>
             </svg>
           </div>

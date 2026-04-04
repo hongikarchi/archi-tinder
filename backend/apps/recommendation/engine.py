@@ -638,14 +638,20 @@ def build_action_card():
     return {
         'building_id': '__action_card__',
         'card_type': 'action',
-        'name_en': 'Analysis Complete',
+        'name_en': 'Your Taste is Found!',
         'project_name': '',
         'image_url': '',
         'url': None,
         'gallery': [],
         'gallery_drawing_start': 0,
         'metadata': {},
-        'action_card_message': 'Your taste profile is ready! Swipe right to see your results, or left to keep exploring.'
+        'action_card_message': (
+            'We\'ve analyzed your preferences and found your architectural taste.'
+        ),
+        'action_card_subtitle': (
+            'Swipe right to see your personalized results, '
+            'or swipe left to keep exploring more buildings.'
+        ),
     }
 
 

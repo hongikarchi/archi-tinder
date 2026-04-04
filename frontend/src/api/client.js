@@ -140,6 +140,7 @@ export function normalizeCard(card) {
       image_id: '__action_card__',
       card_type: 'action',
       action_card_message: card.action_card_message || 'Your taste profile is ready!',
+      action_card_subtitle: card.action_card_subtitle || null,
       image_title: card.name_en || 'Analysis Complete',
       image_url: '',
       source_url: null,
