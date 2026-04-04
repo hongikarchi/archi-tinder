@@ -119,16 +119,20 @@ USE_TZ = True
 # -- Static files ----------------------------------------------------------
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+STORAGES = {
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # -- Recommendation algorithm constants ------------------------------------
 RECOMMENDATION = {
     'bounded_pool_target': 150,
     'min_likes_for_clustering': 3,
-    'decay_rate': 0.05,              # gamma — recency weight decay
-    'mmr_penalty': 0.3,              # lambda — diversity penalty
-    'convergence_threshold': 0.08,   # epsilon — delta-V threshold
+    'decay_rate': 0.05,              # gamma -- recency weight decay
+    'mmr_penalty': 0.3,              # lambda -- diversity penalty
+    'convergence_threshold': 0.08,   # epsilon -- delta-V threshold
     'convergence_window': 3,
     'k_clusters': 2,
     'max_consecutive_dislikes': 10,

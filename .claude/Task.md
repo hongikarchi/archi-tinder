@@ -46,6 +46,9 @@
 21. **INFRA2~4** -- Idempotency, total_rounds, console.error -- COMPLETED 2026-04-04
 22. **BE2** -- Gemini error handling improvement -- COMPLETED 2026-04-04
 
+### Phase 7: Codebase Audit Fixes -- COMPLETED 2026-04-04
+23. **AUDIT1** -- Remove unused deps, dead code, consolidate tests, fix deprecations -- COMPLETED 2026-04-04
+
 ---
 
 ## Open
@@ -79,6 +82,21 @@ Google OAuth only. Korean users need domestic login.
 ---
 
 ## Resolved
+
+### Phase 7: Codebase Audit Fixes -- 2026-04-04
+
+#### AUDIT1. Remove unused deps, dead code, consolidate tests, fix deprecations -- 2026-04-04
+Full codebase audit cleanup covering 9 items.
+- [x] Removed unused frontend deps: @react-spring/web, react-masonry-css, @playwright/test
+- [x] Removed dead CSS: .masonry-grid, .masonry-grid-col, .swipe-card, .swipe-card:active
+- [x] Removed VITE_GEMINI_API_KEY from frontend/.env.example
+- [x] Consolidated backend tests: migrated 8 tests (ProjectCRUD + BuildingBatch) from apps/recommendation/tests.py to backend/tests/test_projects.py (pytest style)
+- [x] Deleted backend/tools/__init__.py (empty, unused)
+- [x] Moved optuna to backend/requirements-dev.txt (not needed in production)
+- [x] Added .pytest_cache/ and node_modules/ to .gitignore
+- [x] Replaced deprecated STATICFILES_STORAGE with STORAGES dict (Django 4.2+ format)
+- [x] Removed dead fallback `|| result.predicted_like_images` from client.js getResult()
+- [x] All 23 backend tests pass, frontend build succeeds
 
 ### Phase 6: Cleanup -- 2026-04-04
 

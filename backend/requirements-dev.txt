@@ -1,0 +1,2 @@
+# Dev/tooling dependencies -- not required for production
+optuna>=3.0

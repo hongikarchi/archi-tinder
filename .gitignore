@@ -14,8 +14,19 @@ venv/
 .env
 .env.*
 !.env.example
+.pytest_cache/
+
+# Node
+node_modules/
 
 # IDE
 .vscode/
 .idea/
 backend/tools/optimization_results.json
+
+# Web-tester / Playwright artifacts
+test-artifacts/
+.playwright-mcp/
+test_*.png
+ss*.png
+test_*.mjs

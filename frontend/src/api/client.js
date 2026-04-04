@@ -10,12 +10,12 @@ const FETCH_TIMEOUT_MS = 10000          // 10-second timeout for all fetch calls
 const MAX_NETWORK_RETRIES = 2           // retry count for network failures
 const BACKOFF_BASE_MS = 300             // exponential backoff base (300ms, 900ms)
 
-// ── API call tracker (for DebugOverlay) ───────────────────────────────────────
+// -- API call tracker (for DebugOverlay) -----------------------------------
 
 let _lastCall = null
 export function getLastCall() { return _lastCall }
 
-// ── JWT token storage ─────────────────────────────────────────────────────────
+// -- JWT token storage -----------------------------------------------------
 
 export function getToken()         { return localStorage.getItem('archithon_access') }
 export function setTokens(access, refresh) {
@@ -27,7 +27,7 @@ export function clearTokens() {
   localStorage.removeItem('archithon_refresh')
 }
 
-// ── Network error detection ──────────────────────────────────────────────────
+// -- Network error detection -----------------------------------------------
 
 function _isNetworkError(err) {
   if (err instanceof TypeError) return true                // fetch network failure
@@ -35,7 +35,7 @@ function _isNetworkError(err) {
   return false
 }
 
-// ── Fetch with timeout ───────────────────────────────────────────────────────
+// -- Fetch with timeout ----------------------------------------------------
 
 function _fetchWithTimeout(url, options, timeoutMs = FETCH_TIMEOUT_MS) {
   const controller = new AbortController()
@@ -44,7 +44,7 @@ function _fetchWithTimeout(url, options, timeoutMs = FETCH_TIMEOUT_MS) {
     .finally(() => clearTimeout(timer))
 }
 
-// ── Core fetch helper ─────────────────────────────────────────────────────────
+// -- Core fetch helper -----------------------------------------------------
 
 async function callApi(method, path, body, retry = true) {
   const t0 = Date.now()
@@ -93,7 +93,7 @@ async function callApi(method, path, body, retry = true) {
     const refreshed = await _tryRefresh()
     if (refreshed) return callApi(method, path, body, false)
     clearTokens()
-    // Notify App to log out — avoids circular imports
+    // Notify App to log out -- avoids circular imports
     window.dispatchEvent(new CustomEvent('archithon:session-expired'))
     throw Object.assign(new Error('Session expired'), { status: 401 })
   }
@@ -127,7 +127,7 @@ async function _tryRefresh() {
   }
 }
 
-// ── ImageCard normalizer ──────────────────────────────────────────────────────
+// -- ImageCard normalizer --------------------------------------------------
 // Maps backend field names (spec) -> frontend field names used in components.
 // Components use: image_id, image_title, image_url, gallery, metadata.*
 
@@ -176,7 +176,7 @@ export function normalizeCard(card) {
   }
 }
 
-// ── Auth ──────────────────────────────────────────────────────────────────────
+// -- Auth ------------------------------------------------------------------
 
 /**
  * Exchange a provider access_token (or auth code) for a backend JWT.
@@ -216,7 +216,7 @@ export async function logout(refreshToken) {
   clearTokens()
 }
 
-// ── Analysis Sessions ────────────────────────────────────────────────────────
+// -- Analysis Sessions -----------------------------------------------------
 
 /**
  * Start an analysis session.
@@ -267,7 +267,7 @@ export async function parseQuery(query) {
   }
 }
 
-// ── Projects ──────────────────────────────────────────────────────────────────
+// -- Projects --------------------------------------------------------------
 
 export async function listProjects(page = 1, pageSize = 50) {
   try {
@@ -320,6 +320,6 @@ export async function getResult({ session_id }) {
   return {
     ...result,
     liked_images:           (result.liked_images || []).map(normalizeCard),
-    predicted_like_images:  (result.predicted_images || result.predicted_like_images || []).map(normalizeCard),
+    predicted_like_images:  (result.predicted_images || []).map(normalizeCard),
   }
 }

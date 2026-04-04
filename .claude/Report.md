@@ -44,20 +44,24 @@ flowchart TD
 ## Backend Structure
 | File | Responsibility |
 |------|---------------|
-| `engine.py` | Recommendation algorithm: pool creation, farthest-point, K-Means+MMR, convergence, top-K |
-| `services.py` | Gemini LLM: query parsing (gemini-2.5-flash), persona report generation; Imagen 3: AI architecture image generation |
-| `views.py` | All REST endpoints -- session CRUD, swipes, projects, images, auth, report image generation; `select_for_update()` on session query + `session.save()` before prefetch to prevent concurrent exposed_ids staleness |
-| `config/settings.py` | RECOMMENDATION dict (12 hyperparameters), JWT config, DB config, CORS |
+| `engine.py` | Recommendation algorithm: pool creation, farthest-point, K-Means+MMR, convergence, top-K; centroid cache key uses spread dimensions (0, 191, -1) for collision resistance |
+| `services.py` | Gemini LLM: query parsing (gemini-2.5-flash), persona report generation; Imagen 3: AI architecture image generation; retry wrapper with 1-retry + logging |
+| `views.py` | All REST endpoints -- session CRUD, swipes, projects, images, auth, report image generation; `select_for_update()` on session query + `session.save()` before prefetch to prevent concurrent exposed_ids staleness; persona report returns structured errors (502 with error_type); building_id validation returns 400; prefetch computed outside transaction.atomic() |
+| `config/settings.py` | RECOMMENDATION dict (12 hyperparameters), JWT config, DB config, CORS; uses STORAGES dict (Django 4.2+ format) for WhiteNoise static files |
 | `apps/accounts/views.py` | Google/Kakao/Naver OAuth, dev-login, JWT token management; all login views use `authentication_classes = []` |
+| `tests/conftest.py` | pytest fixtures: SQLite in-memory DB override, user_profile, auth_client, api_client |
+| `tests/test_auth.py` | 7 auth integration tests (Google login mock, token refresh, logout, dev-login) |
+| `tests/test_sessions.py` | 8 session lifecycle tests (creation, swipes, idempotency, phase transitions) with mocked engine.py |
+| `tests/test_projects.py` | 8 project + batch tests (CRUD, pagination, auth, building batch) |
 
 ## Frontend Structure
 | File | Responsibility |
 |------|---------------|
 | `api/client.js` | API client with 10s fetch timeout, network retry (2x backoff), `normalizeCard()` field mapping, `callApi()` with JWT refresh, `socialLogin` clears stale tokens, `generateReportImage()` |
-| `App.jsx` | Router, auth state, session management, project sync on login (incl. `reportImage` mapping), `initSession` stores `backendId` + `filter_relaxed`, swipe error handling, `handleImageGenerated` propagates image state |
-| `SwipePage.jsx` | Card deck, swipe gestures, 3D flip, gallery, phase progress bar, "View Results" (converged/completed only), TutorialPopup, image error retry + fallback; safe-area height; 2-line title clamp |
+| `App.jsx` | Router, auth state, session management, project sync on login (incl. `reportImage` mapping), `initSession` with try-catch-finally (setIsSwipeLoading in finally block prevents infinite spinner), explicit prefetch null reset, swipe error handling, `handleImageGenerated` propagates image state, `handleGenerateReport` propagates errors to caller |
+| `SwipePage.jsx` | Card deck, swipe gestures, 3D flip, gallery, phase progress bar, "View Results" (converged/completed only), TutorialPopup, image error retry + fallback; safe-area height; 2-line title clamp; currentCard renders over loading state (overlay spinner instead of full skeleton) |
 | `TutorialPopup.jsx` | First-time user guide overlay with 4 steps, "Don't show again" checkbox (localStorage) |
-| `FavoritesPage.jsx` | Project folders, persona report display with AI image generation button, "Generate Persona Report" button; safe-area height; 44px back button |
+| `FavoritesPage.jsx` | Project folders, persona report display with AI image generation button, "Generate Persona Report" button with error display; safe-area height; 44px back button |
 | `LLMSearchPage.jsx` | AI search input, Gemini integration; safe-area-adjusted fixed elements |
 | `LoginPage.jsx` | Google auth-code flow login, `onNonOAuthError` popup handling |
 | `TabBar.jsx` | Bottom navigation with safe-area-inset-bottom padding (content-box) |
@@ -72,10 +76,10 @@ flowchart TD
 | GET | `/api/v1/projects/` | List user's projects |
 | POST | `/api/v1/projects/` | Create project |
 | DELETE | `/api/v1/projects/{id}/` | Delete project |
-| POST | `/api/v1/projects/{id}/report/generate/` | Generate persona report |
+| POST | `/api/v1/projects/{id}/report/generate/` | Generate persona report (502 on Gemini failure with error_type) |
 | POST | `/api/v1/projects/{id}/report/generate-image/` | Generate AI architecture image from persona report |
 | POST | `/api/v1/analysis/sessions/` | Start swipe session (filter relaxation fallback, returns `filter_relaxed`) |
-| POST | `/api/v1/analysis/sessions/{id}/swipes/` | Record swipe (dislike fallback tracks exposed_ids) |
+| POST | `/api/v1/analysis/sessions/{id}/swipes/` | Record swipe (idempotency scoped to session, dislike fallback tracks exposed_ids, 400 on missing building_id) |
 | GET | `/api/v1/analysis/sessions/{id}/result/` | Get results |
 | GET | `/api/v1/images/diverse-random/` | Get 10 diverse buildings |
 | POST | `/api/v1/images/batch/` | Batch-fetch buildings by ID |
@@ -101,6 +105,8 @@ flowchart TD
 - MMR-diversified top-k results
 - Preference vector updates (like +0.5, dislike -1.0, L2-normalize)
 - Natural language query parsing + persona report generation (Gemini)
+- **Gemini retry logic** -- 1 retry with 1s delay, specific error logging per attempt
+- **Structured Gemini errors** -- persona report returns error_type + detail on failure, frontend shows error text
 - **AI architecture image generation** (Imagen 3 via google-genai SDK, base64 stored in project model)
 - Project CRUD + sync from backend on login + batch-fetch building cards
 - Images served from Cloudflare R2
@@ -122,54 +128,57 @@ flowchart TD
 - **Card overwrite fix (B6):** canInstantSwap path no longer overwrites `currentCard` when backend response diverges; prefetch queue updated only
 - **Concurrent exposed_ids fix (B2v2):** `session.save()` called before prefetch calculation; `select_for_update()` on session query prevents stale reads
 - **Mobile optimization (F3):** viewport-fit=cover, safe-area-inset-bottom on all pages/TabBar/fixed elements, 44px touch targets, text overflow clamp, reduced SwipePage padding
+- **Backend integration tests (INFRA1):** 23 pytest tests (7 auth + 8 session lifecycle + 8 project/batch) with SQLite in-memory DB and mocked engine.py
+- **Idempotency scoped to session (INFRA2):** SwipeEvent unique_together (session, idempotency_key) instead of global unique
+- **total_rounds removed (INFRA3):** field removed from AnalysisSession model, migration 0006
+- **console.error cleanup (INFRA4):** removed from 8 UI locations, kept in api/client.js graceful catch blocks
+- **initSession infinite spinner fix:** try-catch-finally in App.jsx ensures `setIsSwipeLoading(false)` runs even when `api.startSession()` throws; catch resets card state and shows error toast; prefetch explicitly set to null when absent
+- **Centroid cache key collision fix:** `compute_taste_centroids()` cache key changed from first-3-dimensions to spread dimensions (0, 191, -1) with `round(..., 6)` for float stability across 384-dim vectors
+- **building_id validation in SwipeView:** returns 400 Bad Request if `building_id` is missing or empty, preventing corrupted swipe state
+- **Narrow transaction scope in SwipeView:** prefetch computation moved outside `transaction.atomic()`; session data copied to locals before lock release; improved response times under concurrent load
+- **SwipePage loading priority:** `currentCard` always renders when present (overlay spinner), full skeleton `LoadingCard` only when `currentCard` is null
+- **Codebase audit cleanup (AUDIT1):** removed unused deps (@react-spring/web, react-masonry-css, @playwright/test), dead CSS (.masonry-grid, .swipe-card), dead env var (VITE_GEMINI_API_KEY), dead fallback (predicted_like_images); consolidated tests to backend/tests/; STORAGES dict replaces deprecated STATICFILES_STORAGE; optuna moved to requirements-dev.txt; .gitignore gaps fixed
 
 ### Pending
 - Kakao + Naver OAuth
-- Backend integration tests
 
 ## Last Updated
 - **Date:** 2026-04-04
-- **Commits:** 797e619 (UX2), 3a0b305 (F3)
-- **Phase:** Phase 5 New Features -- UX2 + F3 COMPLETED
+- **Commits:** (pending) codebase audit cleanup
+- **Phase:** Phase 7 -- Codebase Audit Fixes
 - **Changes:**
-  - `backend/apps/recommendation/services.py` -- `generate_persona_image()` using Imagen 3 via google-genai SDK
-  - `backend/apps/recommendation/views.py` -- `ProjectReportImageView` endpoint
-  - `backend/apps/recommendation/models.py` -- `report_image` TextField on Project
-  - `backend/apps/recommendation/urls.py` -- `/projects/{id}/report/generate-image/` route
-  - `backend/apps/recommendation/serializers.py` -- `report_image` in serializer
-  - `frontend/src/pages/FavoritesPage.jsx` -- PersonaReport AI image button + display
-  - `frontend/src/api/client.js` -- `generateReportImage()` function
-  - `frontend/src/App.jsx` -- `handleImageGenerated`, `reportImage` mapping in project sync
-  - `frontend/src/layouts/MainLayout.jsx` -- `onImageGenerated` prop pass-through
-  - `frontend/index.html` -- viewport-fit=cover
-  - `frontend/src/index.css` -- safe-area-bottom CSS variable
-  - `frontend/src/components/TabBar.jsx` -- safe area bottom padding (content-box)
-  - `frontend/src/pages/SwipePage.jsx` -- safe area height, reduced padding, title clamp
-  - `frontend/src/pages/SetupPage.jsx` -- safe area height, 44px back button
-  - `frontend/src/pages/LLMSearchPage.jsx` -- safe area height + fixed elements
-  - `frontend/src/pages/ProjectSetupPage.jsx` -- safe area height, 44px back button
+  - `frontend/package.json` -- removed @react-spring/web, react-masonry-css, @playwright/test
+  - `frontend/src/index.css` -- removed .masonry-grid, .masonry-grid-col, .swipe-card CSS rules
+  - `frontend/.env.example` -- removed VITE_GEMINI_API_KEY
+  - `frontend/src/api/client.js` -- removed dead `|| result.predicted_like_images` fallback in getResult()
+  - `backend/config/settings.py` -- replaced STATICFILES_STORAGE with STORAGES dict (Django 4.2+)
+  - `backend/requirements.txt` -- removed optuna
+  - `backend/requirements-dev.txt` -- new file with optuna
+  - `backend/tests/test_projects.py` -- new file with 8 tests migrated from apps/recommendation/tests.py
+  - `backend/apps/recommendation/tests.py` -- deleted (tests migrated)
+  - `backend/tools/__init__.py` -- deleted (empty, unused)
+  - `.gitignore` -- added .pytest_cache/, node_modules/
+- **Verification:** 23/23 backend tests pass, frontend build succeeds
 
 ```mermaid
 graph TD
-    subgraph Backend
-        services.py:::modified
-        views.py:::modified
-        models.py:::modified
-        urls.py:::modified
-        serializers.py:::modified
+    subgraph "Backend (modified)"
+        settings.py:::modified
+        requirements.txt:::modified
     end
-    subgraph Frontend
-        FavoritesPage.jsx:::modified
-        client.js:::modified
-        App.jsx:::modified
-        MainLayout.jsx:::modified
-        TabBar.jsx:::modified
-        SwipePage.jsx:::modified
-        SetupPage.jsx:::modified
-        LLMSearchPage.jsx:::modified
-        ProjectSetupPage.jsx:::modified
-        index.html:::modified
+    subgraph "Backend (new)"
+        requirements-dev.txt:::new
+        test_projects.py:::new
+    end
+    subgraph "Backend (deleted)"
+        recommendation_tests.py["apps/recommendation/tests.py"]:::deleted
+        tools_init.py["tools/__init__.py"]:::deleted
+    end
+    subgraph "Frontend (modified)"
+        package.json:::modified
         index.css:::modified
+        env.example[".env.example"]:::modified
+        client.js:::modified
     end
 
     classDef new fill:#10b981,color:#fff
