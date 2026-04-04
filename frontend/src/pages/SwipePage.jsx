@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import TinderCard from 'react-tinder-card'
+import TutorialPopup from '../components/TutorialPopup.jsx'
 
 const CARD_WIDTH  = Math.min(340, (typeof window !== 'undefined' ? window.innerWidth : 375) - 32)
 const CARD_HEIGHT = Math.round(CARD_WIDTH * (480 / 340))
@@ -153,7 +154,7 @@ function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
               <InfoRow label="Style"      value={style} />
               <InfoRow label="Atmosphere" value={atmosphere} />
               <InfoRow label="Material" value={material} />
-              
+
             </div>
             {gallery.length > 0 && (
               <button
@@ -330,6 +331,7 @@ export default function SwipePage({ currentCard, progress, isCompleted, isLoadin
   const cardRef = useRef(null)
   const pendingAction = useRef(null)
   const [galleryOpen, setGalleryOpen] = useState(false)
+  const [showTutorial, setShowTutorial] = useState(() => !localStorage.getItem('archithon_tutorial_dismissed'))
 
   const current_round    = progress?.current_round ?? 0
   const total_rounds     = progress?.total_rounds  ?? 1
@@ -417,148 +419,151 @@ export default function SwipePage({ currentCard, progress, isCompleted, isLoadin
   }
 
   return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center',
-      justifyContent: 'space-between', height: 'calc(100vh - 64px)', overflow: 'hidden',
-      background: 'var(--color-bg)', padding: '32px 16px',
-    }}>
+    <>
+      <TutorialPopup visible={showTutorial} onClose={() => setShowTutorial(false)} />
+      <div style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        justifyContent: 'space-between', height: 'calc(100vh - 64px)', overflow: 'hidden',
+        background: 'var(--color-bg)', padding: '32px 16px',
+      }}>
 
-      {/* Header */}
-      <div style={{ textAlign: 'center', width: '100%' }}>
-        <h1 style={{ fontSize: 20, fontWeight: 900, margin: '0 0 14px', letterSpacing: '-0.01em' }}>
-          {projectName
-            ? <span style={{ color: 'var(--color-text)' }}>{projectName}</span>
-            : <><span style={{ color: 'var(--color-text)' }}>Archi</span><span style={{ color: '#ec4899' }}>Tinder</span></>}
-        </h1>
-        <div style={{ maxWidth: CARD_WIDTH, margin: '0 auto' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-            {phase === 'exploring' && (
-              <>
-                <span style={{ color: 'var(--color-text-dim)', fontSize: 11 }}>Exploring</span>
-                <span style={{ color: 'var(--color-text-2)', fontSize: 11, fontWeight: 600 }}>
-                  {like_count}/3 likes to unlock analysis
-                </span>
-              </>
-            )}
-            {phase === 'analyzing' && (
-              <>
-                <span style={{ color: 'var(--color-text-dim)', fontSize: 11 }}>Analyzing your taste...</span>
-                <div style={{
-                  width: 6, height: 6, borderRadius: '50%',
-                  background: '#f43f5e',
-                }} />
-              </>
-            )}
-            {phase === 'converged' && (
-              <>
-                <span style={{ color: 'var(--color-text-dim)', fontSize: 11 }}>Analysis complete</span>
-                <span style={{ color: 'var(--color-text-2)', fontSize: 11, fontWeight: 600 }}>✓</span>
-              </>
-            )}
-            {(!phase || (phase !== 'exploring' && phase !== 'analyzing' && phase !== 'converged')) && (
-              <>
-                <span style={{ color: 'var(--color-text-dim)', fontSize: 11 }}>Progress</span>
-                <span style={{ color: 'var(--color-text-2)', fontSize: 11, fontWeight: 600 }}>
-                  {current_round} / {total_rounds}
-                </span>
-              </>
+        {/* Header */}
+        <div style={{ textAlign: 'center', width: '100%' }}>
+          <h1 style={{ fontSize: 20, fontWeight: 900, margin: '0 0 14px', letterSpacing: '-0.01em' }}>
+            {projectName
+              ? <span style={{ color: 'var(--color-text)' }}>{projectName}</span>
+              : <><span style={{ color: 'var(--color-text)' }}>Archi</span><span style={{ color: '#ec4899' }}>Tinder</span></>}
+          </h1>
+          <div style={{ maxWidth: CARD_WIDTH, margin: '0 auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              {phase === 'exploring' && (
+                <>
+                  <span style={{ color: 'var(--color-text-dim)', fontSize: 11 }}>Exploring</span>
+                  <span style={{ color: 'var(--color-text-2)', fontSize: 11, fontWeight: 600 }}>
+                    {like_count}/3 likes to unlock analysis
+                  </span>
+                </>
+              )}
+              {phase === 'analyzing' && (
+                <>
+                  <span style={{ color: 'var(--color-text-dim)', fontSize: 11 }}>Analyzing your taste...</span>
+                  <div style={{
+                    width: 6, height: 6, borderRadius: '50%',
+                    background: '#f43f5e',
+                  }} />
+                </>
+              )}
+              {phase === 'converged' && (
+                <>
+                  <span style={{ color: 'var(--color-text-dim)', fontSize: 11 }}>Analysis complete</span>
+                  <span style={{ color: 'var(--color-text-2)', fontSize: 11, fontWeight: 600 }}>✓</span>
+                </>
+              )}
+              {(!phase || (phase !== 'exploring' && phase !== 'analyzing' && phase !== 'converged')) && (
+                <>
+                  <span style={{ color: 'var(--color-text-dim)', fontSize: 11 }}>Progress</span>
+                  <span style={{ color: 'var(--color-text-2)', fontSize: 11, fontWeight: 600 }}>
+                    {current_round} / {total_rounds}
+                  </span>
+                </>
+              )}
+            </div>
+            <div style={{ height: 4, borderRadius: 999, background: 'var(--color-progress-track)', overflow: 'hidden' }}>
+              <div style={{
+                height: '100%', borderRadius: 999, width: `${pct}%`,
+                background: 'linear-gradient(to right, #f43f5e, #fb923c)',
+                transition: 'width 0.4s ease',
+              }} />
+            </div>
+            {filter_relaxed && (
+              <p style={{ color: 'var(--color-text-dimmer)', fontSize: 11, marginTop: 6, textAlign: 'center' }}>
+                Filters were relaxed to find more buildings
+              </p>
             )}
           </div>
-          <div style={{ height: 4, borderRadius: 999, background: 'var(--color-progress-track)', overflow: 'hidden' }}>
-            <div style={{
-              height: '100%', borderRadius: 999, width: `${pct}%`,
-              background: 'linear-gradient(to right, #f43f5e, #fb923c)',
-              transition: 'width 0.4s ease',
-            }} />
+        </div>
+
+        {/* Card */}
+        <div style={{ width: CARD_WIDTH, height: CARD_HEIGHT, position: 'relative' }}>
+          {isLoading ? (
+            <LoadingCard />
+          ) : currentCard ? (
+            <TinderCard
+              ref={cardRef}
+              key={currentCard.image_id}
+              onSwipe={onTinderSwipe}
+              onCardLeftScreen={onCardLeftScreen}
+              preventSwipe={currentCard.card_type === 'action' ? [] : (galleryOpen ? ['left', 'right', 'up', 'down'] : ['up', 'down'])}
+              swipeRequirementType="position"
+              swipeThreshold={120}
+            >
+              {currentCard.card_type === 'action' ? (
+                <ActionCard card={currentCard} />
+              ) : (
+                <SwipeCard
+                  card={currentCard}
+                  onGalleryOpen={() => setGalleryOpen(true)}
+                  onGalleryClose={() => setGalleryOpen(false)}
+                />
+              )}
+            </TinderCard>
+          ) : null}
+        </div>
+
+        {/* Action Buttons */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+          <p style={{ color: 'var(--color-text-dimmest)', fontSize: 11, margin: 0 }}>← skip · tap card · save →</p>
+          <div style={{ display: 'flex', gap: 32 }}>
+            <button
+              onClick={() => swipeManual('left')}
+              disabled={isLoading || !currentCard}
+              style={{
+                width: 64, height: 64, borderRadius: '50%',
+                background: 'rgba(239,68,68,0.15)', border: '2px solid rgba(239,68,68,0.4)',
+                color: isLoading ? 'var(--color-text-dimmer)' : '#ef4444',
+                cursor: isLoading ? 'default' : 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+              aria-label="Dislike"
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+            <button
+              onClick={() => swipeManual('right')}
+              disabled={isLoading || !currentCard}
+              style={{
+                width: 64, height: 64, borderRadius: '50%',
+                background: 'rgba(236,72,153,0.15)', border: '2px solid rgba(236,72,153,0.4)',
+                color: isLoading ? 'var(--color-text-dimmer)' : '#ec4899',
+                cursor: isLoading ? 'default' : 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+              aria-label="Like"
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+              </svg>
+            </button>
           </div>
-          {filter_relaxed && (
-            <p style={{ color: 'var(--color-text-dimmer)', fontSize: 11, marginTop: 6, textAlign: 'center' }}>
-              Filters were relaxed to find more buildings
-            </p>
+          {showExit && (
+            <button
+              onClick={onViewResults}
+              style={{
+                padding: '11px 32px', borderRadius: 14,
+                background: 'linear-gradient(135deg, #f43f5e, #fb923c)',
+                color: '#fff', fontSize: 14, fontWeight: 700,
+                border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                boxShadow: '0 4px 20px rgba(244,63,94,0.35)',
+              }}
+            >
+              View Results →
+            </button>
           )}
         </div>
-      </div>
 
-      {/* Card */}
-      <div style={{ width: CARD_WIDTH, height: CARD_HEIGHT, position: 'relative' }}>
-        {isLoading ? (
-          <LoadingCard />
-        ) : currentCard ? (
-          <TinderCard
-            ref={cardRef}
-            key={currentCard.image_id}
-            onSwipe={onTinderSwipe}
-            onCardLeftScreen={onCardLeftScreen}
-            preventSwipe={currentCard.card_type === 'action' ? [] : (galleryOpen ? ['left', 'right', 'up', 'down'] : ['up', 'down'])}
-            swipeRequirementType="position"
-            swipeThreshold={120}
-          >
-            {currentCard.card_type === 'action' ? (
-              <ActionCard card={currentCard} />
-            ) : (
-              <SwipeCard
-                card={currentCard}
-                onGalleryOpen={() => setGalleryOpen(true)}
-                onGalleryClose={() => setGalleryOpen(false)}
-              />
-            )}
-          </TinderCard>
-        ) : null}
       </div>
-
-      {/* Action Buttons */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-        <p style={{ color: 'var(--color-text-dimmest)', fontSize: 11, margin: 0 }}>← skip · tap card · save →</p>
-        <div style={{ display: 'flex', gap: 32 }}>
-          <button
-            onClick={() => swipeManual('left')}
-            disabled={isLoading || !currentCard}
-            style={{
-              width: 64, height: 64, borderRadius: '50%',
-              background: 'rgba(239,68,68,0.15)', border: '2px solid rgba(239,68,68,0.4)',
-              color: isLoading ? 'var(--color-text-dimmer)' : '#ef4444',
-              cursor: isLoading ? 'default' : 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
-            aria-label="Dislike"
-          >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
-          <button
-            onClick={() => swipeManual('right')}
-            disabled={isLoading || !currentCard}
-            style={{
-              width: 64, height: 64, borderRadius: '50%',
-              background: 'rgba(236,72,153,0.15)', border: '2px solid rgba(236,72,153,0.4)',
-              color: isLoading ? 'var(--color-text-dimmer)' : '#ec4899',
-              cursor: isLoading ? 'default' : 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
-            aria-label="Like"
-          >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-            </svg>
-          </button>
-        </div>
-        {showExit && (
-          <button
-            onClick={onViewResults}
-            style={{
-              padding: '11px 32px', borderRadius: 14,
-              background: 'linear-gradient(135deg, #f43f5e, #fb923c)',
-              color: '#fff', fontSize: 14, fontWeight: 700,
-              border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-              boxShadow: '0 4px 20px rgba(244,63,94,0.35)',
-            }}
-          >
-            View Results →
-          </button>
-        )}
-      </div>
-
-    </div>
+    </>
   )
 }
