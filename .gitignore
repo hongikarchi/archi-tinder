@@ -30,3 +30,7 @@ test-artifacts/
 test_*.png
 ss*.png
 test_*.mjs
+
+# Web-testing E2E runner output
+web-testing/reports/
+web-testing/dashboard/data/

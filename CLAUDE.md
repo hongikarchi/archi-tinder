@@ -12,10 +12,12 @@
   ## Target Structure
   frontend/   <- React 18 + Vite
   backend/    <- Django 4.2 LTS + DRF + pgvector + Gemini + social auth
+  web-testing/ <- Playwright E2E visual test runner + dashboard
 
   ## Current State
   - frontend/: BUILT -- Phase 0+4 complete; rich inline-style UI, project sync from backend on login
   - backend/: BUILT -- Phase 1+2+3+4 complete; full recommendation engine + Gemini LLM + project persistence
+  - web-testing/: BUILT -- E2E visual test runner with persona generation, Playwright tests, and dashboard
   - Integration fixes applied: JWT auth wired, field name normalizer in client.js, trailing slashes on all URL patterns
   - Google login: auth-code flow (VITE_GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET required)
 
@@ -110,6 +112,58 @@
   The orchestrator should NOT tell web-tester to skip login. Dev-login exists specifically
   for automated testing. The orchestrator should let web-tester run its Step 0 (dev-login)
   before visual tests.
+
+  ## E2E Visual Test Runner (web-testing/)
+
+  ### Overview
+  Standalone Playwright-based E2E test runner at `web-testing/`. Generates persona-driven test scenarios,
+  runs them against the local dev servers, captures screenshots/timing/errors at every step,
+  and serves a local dashboard for visual review.
+
+  ### Structure
+  ```
+  web-testing/
+  +-- research/persona.py      # PersonaProfile dataclass + template/LLM generation
+  +-- research/scenarios.py    # TestScenario + keyword-overlap swipe decisions
+  +-- runner/runner.py         # Playwright E2E orchestration (sync API)
+  +-- runner/collector.py      # StepRecord, ApiCallRecord, ErrorRecord, Collector class
+  +-- runner/reporter.py       # Generates report.json with summary + bottleneck classification
+  +-- runner/feedback.py       # Generates feedback.json with endpoint->source file mapping
+  +-- dashboard/               # Static HTML/JS/CSS dashboard (no build step)
+  +-- reports/                 # Output dir (gitignored)
+  +-- run.py                   # CLI entry point
+  +-- requirements.txt         # playwright, google-generativeai
+  ```
+
+  ### Running
+  ```bash
+  # Install deps
+  pip install -r web-testing/requirements.txt
+  python -m playwright install chromium
+
+  # Run single persona test (template mode)
+  python web-testing/run.py
+
+  # Run 3 personas with LLM-generated profiles
+  python web-testing/run.py --personas 3 --mode llm
+
+  # Serve dashboard only
+  python web-testing/run.py --dashboard-only
+
+  # Auto-fix mode (structured feedback to stdout)
+  python web-testing/run.py --auto-fix
+  ```
+
+  ### Prerequisites
+  - Frontend dev server running on `http://localhost:5173`
+  - Backend dev server running on `http://localhost:8001`
+  - `DEV_LOGIN_SECRET` set in `backend/.env`
+
+  ### Output
+  - `web-testing/reports/{run_id}/report.json` -- full test report
+  - `web-testing/reports/{run_id}/feedback.json` -- orchestrator-consumable feedback
+  - `web-testing/reports/{run_id}/screenshots/` -- step screenshots
+  - `web-testing/dashboard/data/latest/` -- symlinked latest report for dashboard
 
   ## Database: architecture_vectors Schema
   Owned by Make DB. Django reads via raw SQL only -- never ORM, never migrate.
