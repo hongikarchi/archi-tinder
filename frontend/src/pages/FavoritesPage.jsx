@@ -150,7 +150,6 @@ function FolderDetail({ project, onBack, onDelete, onResume, onGenerateReport, o
       setReportImage(result.image_data)
       if (onImageGenerated) onImageGenerated(result.image_data)
     } catch (err) {
-      console.error('[FavoritesPage] generateReportImage failed:', err)
       setImageError(err.message || 'Image generation failed')
     } finally {
       setImageLoading(false)

@@ -301,7 +301,6 @@ export default function App() {
         }
       }
     } catch (err) {
-      console.error('[App] swipe failed:', err)
       // Revert UI -- put the swiped card back
       setCurrentCard(swipedCard)
       setPrefetchCard(savedPrefetch)
@@ -336,7 +335,7 @@ export default function App() {
   function handleDeleteProject(id) {
     const project = projects.find(p => p.id === id)
     if (project?.backendId) {
-      api.deleteProject(project.backendId).catch(console.error)
+      api.deleteProject(project.backendId).catch(() => {})
     }
     setProjects(prev => prev.filter(p => p.id !== id))
     if (activeProjectId === id) {
@@ -356,7 +355,6 @@ export default function App() {
       const { final_report } = await api.generateReport(backendId)
       setProjects(prev => prev.map(p => p.id === projectId ? { ...p, finalReport: final_report } : p))
     } catch (err) {
-      console.error('[App] generateReport failed:', err)
     }
   }
 
@@ -405,7 +403,7 @@ export default function App() {
         return
       }
     } catch (err) {
-      console.error('[App] project sync failed, falling back to localStorage:', err)
+      // Project sync failed -- falling back to localStorage
     } finally {
       setIsSyncing(false)
     }

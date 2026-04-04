@@ -184,7 +184,6 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
         setShowStart(true)
       }
     } catch (err) {
-      console.error('[LLMSearchPage] parseQuery failed:', err)
       setMessages(prev => [...prev, { role: 'ai', text: `Something went wrong: ${err.message}. Please try again.` }])
     }
 

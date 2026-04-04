@@ -16,7 +16,6 @@ export default function LoginPage({ onLogin, theme, onToggleTheme }) {
       } catch (err) {
         const detail = err.message || 'Unknown error'
         setError(`Google login failed: ${detail}`)
-        console.error('[LoginPage] Google socialLogin error:', err)
       } finally {
         setLoading(null)
       }
@@ -24,7 +23,6 @@ export default function LoginPage({ onLogin, theme, onToggleTheme }) {
     onError: (errorResponse) => {
       const detail = errorResponse?.error_description || errorResponse?.error || 'cancelled or failed'
       setError(`Google login error: ${detail}`)
-      console.error('[LoginPage] Google onError:', errorResponse)
       setLoading(null)
     },
     onNonOAuthError: (err) => {
@@ -35,7 +33,6 @@ export default function LoginPage({ onLogin, theme, onToggleTheme }) {
       } else {
         setError('Login could not start. Please check your browser settings.')
       }
-      console.error('[LoginPage] onNonOAuthError:', err)
       setLoading(null)
     },
   })

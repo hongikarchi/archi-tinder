@@ -30,7 +30,6 @@ def _progress(session):
     dislike_count = session.swipes.filter(action='dislike').count()
     return {
         'current_round': session.current_round,
-        'total_rounds':  session.total_rounds,
         'like_count':    like_count,
         'dislike_count': dislike_count,
         'phase':         session.phase,
@@ -201,7 +200,6 @@ class SessionCreateView(APIView):
             phase                = 'exploring',
             pool_ids             = pool_ids,
             pool_scores          = pool_scores,
-            total_rounds         = 999,
             current_round        = 0,
             preference_vector    = [],
             exposed_ids          = [initial_batch[0]],
@@ -216,7 +214,6 @@ class SessionCreateView(APIView):
             'session_id':      str(session.session_id),
             'project_id':      str(project.project_id),
             'session_status':  session.status,
-            'total_rounds':    session.total_rounds,
             'next_image':      first_card,
             'prefetch_image':  prefetch_card,
             'prefetch_image_2': prefetch_card_2,
@@ -247,7 +244,7 @@ class SwipeView(APIView):
             return Response({'detail': 'action must be like or dislike'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Idempotency check -- if already processed, return accepted so frontend treats it as success
-        if SwipeEvent.objects.filter(idempotency_key=idempotency_key).exists():
+        if idempotency_key and SwipeEvent.objects.filter(idempotency_key=idempotency_key, session=session).exists():
             logger.info('Duplicate swipe ignored: %s', idempotency_key)
             return Response({'accepted': True, 'detail': 'duplicate'}, status=status.HTTP_200_OK)
 

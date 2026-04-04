@@ -35,7 +35,6 @@ class AnalysisSession(models.Model):
     user              = models.ForeignKey(UserProfile, on_delete=models.CASCADE)
     project           = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='sessions')
     status            = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
-    total_rounds      = models.IntegerField(default=20)
     current_round     = models.IntegerField(default=0)
     preference_vector = models.JSONField(default=list)
     exposed_ids       = models.JSONField(default=list)
@@ -60,8 +59,11 @@ class SwipeEvent(models.Model):
     session         = models.ForeignKey(AnalysisSession, on_delete=models.CASCADE, related_name='swipes')
     building_id     = models.CharField(max_length=20)
     action          = models.CharField(max_length=10, choices=ACTION_CHOICES)
-    idempotency_key = models.CharField(max_length=100, unique=True)
+    idempotency_key = models.CharField(max_length=100, db_index=True)
     created_at      = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [('session', 'idempotency_key')]
 
     def __str__(self):
         return f'{self.action} {self.building_id}'
