@@ -3,13 +3,14 @@ from .views import (
     ProjectListCreateView, ProjectDetailView,
     SessionCreateView, SwipeView, SessionResultView,
     DiverseRandomView, BuildingBatchView, ParseQueryView,
-    ProjectReportGenerateView,
+    ProjectReportGenerateView, ProjectReportImageView,
 )
 
 urlpatterns = [
     # Projects
     path('projects/',                                    ProjectListCreateView.as_view()),
     path('projects/<uuid:pk>/',                          ProjectDetailView.as_view()),
+    path('projects/<uuid:pk>/report/generate-image/',     ProjectReportImageView.as_view()),
     path('projects/<uuid:pk>/report/generate/',          ProjectReportGenerateView.as_view()),
     # Analysis sessions
     path('analysis/sessions/',                           SessionCreateView.as_view()),

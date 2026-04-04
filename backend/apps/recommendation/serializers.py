@@ -10,7 +10,7 @@ class ProjectSerializer(serializers.ModelSerializer):
         fields = [
             'project_id', 'name', 'filters',
             'liked_ids', 'disliked_ids',
-            'analysis_report', 'final_report',
+            'analysis_report', 'final_report', 'report_image',
             'created_at', 'updated_at',
         ]
-        read_only_fields = ['project_id', 'liked_ids', 'disliked_ids', 'analysis_report', 'final_report', 'created_at', 'updated_at']
+        read_only_fields = ['project_id', 'liked_ids', 'disliked_ids', 'analysis_report', 'final_report', 'report_image', 'created_at', 'updated_at']

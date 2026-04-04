@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { GalleryOverlay } from '../components/GalleryOverlay.jsx'
+import * as api from '../api/client.js'
 
 const PAGE_SIZE = 10
 
-export default function FavoritesPage({ projects, onDeleteProject, onResumeProject, onGenerateReport, openId, onOpenIdChange }) {
+export default function FavoritesPage({ projects, onDeleteProject, onResumeProject, onGenerateReport, onImageGenerated, openId, onOpenIdChange }) {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
   const openProject = projects.find(p => p.id === openId) || null
 
@@ -15,6 +16,7 @@ export default function FavoritesPage({ projects, onDeleteProject, onResumeProje
         onDelete={() => { onDeleteProject(openProject.id); onOpenIdChange(null) }}
         onResume={() => onResumeProject(openProject.id)}
         onGenerateReport={() => onGenerateReport(openProject.id)}
+        onImageGenerated={(imageData) => onImageGenerated && onImageGenerated(openProject.id, imageData)}
       />
     )
   }
@@ -124,8 +126,11 @@ function ProjectCard({ project, onClick }) {
   )
 }
 
-function FolderDetail({ project, onBack, onDelete, onResume, onGenerateReport }) {
+function FolderDetail({ project, onBack, onDelete, onResume, onGenerateReport, onImageGenerated }) {
   const [reportLoading, setReportLoading] = useState(false)
+  const [imageLoading, setImageLoading] = useState(false)
+  const [reportImage, setReportImage] = useState(project.reportImage || null)
+  const [imageError, setImageError] = useState(null)
   const liked      = project.likedBuildings || []
   const predicted  = project.predictedLikes || []
   const finalReport = project.finalReport || null
@@ -133,6 +138,23 @@ function FolderDetail({ project, onBack, onDelete, onResume, onGenerateReport })
   async function handleGenerateReport() {
     setReportLoading(true)
     try { await onGenerateReport() } finally { setReportLoading(false) }
+  }
+
+  async function handleGenerateImage() {
+    const backendId = project.backendId || project.id
+    if (!backendId || !backendId.includes('-')) return
+    setImageLoading(true)
+    setImageError(null)
+    try {
+      const result = await api.generateReportImage(backendId)
+      setReportImage(result.image_data)
+      if (onImageGenerated) onImageGenerated(result.image_data)
+    } catch (err) {
+      console.error('[FavoritesPage] generateReportImage failed:', err)
+      setImageError(err.message || 'Image generation failed')
+    } finally {
+      setImageLoading(false)
+    }
   }
 
   return (
@@ -175,7 +197,13 @@ function FolderDetail({ project, onBack, onDelete, onResume, onGenerateReport })
 
         {/* Persona Report */}
         {finalReport ? (
-          <PersonaReport report={finalReport} />
+          <PersonaReport
+            report={finalReport}
+            reportImage={reportImage}
+            imageLoading={imageLoading}
+            imageError={imageError}
+            onGenerateImage={handleGenerateImage}
+          />
         ) : (
           liked.length > 0 && (
             <button
@@ -216,7 +244,7 @@ function FolderDetail({ project, onBack, onDelete, onResume, onGenerateReport })
   )
 }
 
-function PersonaReport({ report }) {
+function PersonaReport({ report, reportImage, imageLoading, imageError, onGenerateImage }) {
   const chips = (items) => (items || []).slice(0, 5).map(item => (
     <span key={item} style={{
       fontSize: 11, padding: '3px 10px', borderRadius: 999,
@@ -265,6 +293,43 @@ function PersonaReport({ report }) {
         <div>
           <p style={{ color: 'var(--color-text-muted)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 5px' }}>Materials</p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>{chips(report.dominant_materials)}</div>
+        </div>
+      )}
+
+      {reportImage ? (
+        <div style={{ marginTop: 14 }}>
+          <p style={{ color: 'var(--color-text-muted)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 8px' }}>
+            AI Generated Architecture
+          </p>
+          <img
+            src={`data:image/png;base64,${reportImage}`}
+            alt="AI generated architecture based on your taste"
+            style={{
+              width: '100%', borderRadius: 10, display: 'block',
+              border: '1px solid rgba(139,92,246,0.15)',
+            }}
+          />
+        </div>
+      ) : (
+        <div style={{ marginTop: 14 }}>
+          {imageError && (
+            <p style={{ color: '#f43f5e', fontSize: 11, margin: '0 0 8px' }}>{imageError}</p>
+          )}
+          <button
+            onClick={onGenerateImage}
+            disabled={imageLoading}
+            style={{
+              width: '100%', padding: '10px', borderRadius: 10,
+              background: imageLoading ? 'var(--color-surface-2)' : 'rgba(139,92,246,0.1)',
+              color: imageLoading ? 'var(--color-text-dimmer)' : '#a78bfa',
+              fontSize: 12, fontWeight: 600,
+              border: '1px solid rgba(139,92,246,0.2)',
+              cursor: imageLoading ? 'default' : 'pointer',
+              fontFamily: 'inherit',
+            }}
+          >
+            {imageLoading ? 'Generating image...' : 'Generate AI Architecture Image'}
+          </button>
         </div>
       )}
     </div>

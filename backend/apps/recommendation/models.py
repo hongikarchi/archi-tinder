@@ -12,6 +12,7 @@ class Project(models.Model):
     filters         = models.JSONField(default=dict)
     analysis_report = models.JSONField(null=True, blank=True)
     final_report    = models.JSONField(null=True, blank=True)
+    report_image    = models.TextField(null=True, blank=True)  # base64 image data
     created_at      = models.DateTimeField(auto_now_add=True)
     updated_at      = models.DateTimeField(auto_now=True)
 

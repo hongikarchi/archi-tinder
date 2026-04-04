@@ -605,6 +605,32 @@ class ProjectReportGenerateView(APIView):
         return Response({'final_report': report})
 
 
+class ProjectReportImageView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        profile = _get_profile(request)
+        project = Project.objects.filter(project_id=pk, user=profile).first() if profile else None
+        if not project:
+            return Response({'detail': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if not project.final_report:
+            return Response({'detail': 'Generate persona report first'}, status=status.HTTP_400_BAD_REQUEST)
+
+        result = services.generate_persona_image(project.final_report)
+        if not result:
+            return Response({'detail': 'Image generation failed. The Imagen API may not be enabled for your API key.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        project.report_image = result['image_data']
+        project.save(update_fields=['report_image'])
+        logger.info('Persona image generated for project %s', pk)
+        return Response({
+            'image_data': result['image_data'],
+            'mime_type': result['mime_type'],
+            'prompt': result['prompt'],
+        })
+
+
 # ── LLM Query Parsing ─────────────────────────────────────────────────────────
 
 class ParseQueryView(APIView):

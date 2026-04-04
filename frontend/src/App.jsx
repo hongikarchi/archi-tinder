@@ -360,6 +360,10 @@ export default function App() {
     }
   }
 
+  function handleImageGenerated(projectId, imageData) {
+    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, reportImage: imageData } : p))
+  }
+
   async function handleLogin(user) {
     // user may be a string (mock) or an object from backend {user_id, display_name, access, refresh}
     const id = typeof user === 'object' ? (user.user_id || user.id || String(user)) : String(user)
@@ -391,6 +395,7 @@ export default function App() {
           swipedIds: [...(p.liked_ids || []), ...(p.disliked_ids || [])],
           predictedLikes: [],
           finalReport: p.final_report || null,
+          reportImage: p.report_image || null,
           sessionId: null,
           createdAt: p.created_at,
           deckImages: null,
@@ -444,6 +449,7 @@ export default function App() {
     onResumeProject: handleResumeProject,
     onDeleteProject: handleDeleteProject,
     onGenerateReport: handleGenerateReport,
+    onImageGenerated: handleImageGenerated,
   }
 
   return (

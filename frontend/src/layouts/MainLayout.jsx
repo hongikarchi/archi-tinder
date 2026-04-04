@@ -9,7 +9,7 @@ export default function MainLayout({
   theme, onToggleTheme, userId, onLogout,
   projects, activeProject, activeProjectId,
   currentCard, sessionProgress, isSessionCompleted, isSwipeLoading, isResultLoading,
-  onSwipe, onViewResults, onResumeProject, onDeleteProject, onGenerateReport,
+  onSwipe, onViewResults, onResumeProject, onDeleteProject, onGenerateReport, onImageGenerated,
 }) {
   const location = useLocation()
   const navigate = useNavigate()
@@ -77,6 +77,7 @@ export default function MainLayout({
           onDeleteProject={onDeleteProject}
           onResumeProject={onResumeProject}
           onGenerateReport={onGenerateReport}
+          onImageGenerated={onImageGenerated}
           openId={folderId}
           onOpenIdChange={(id) => {
             if (id) navigate('/library/' + id)

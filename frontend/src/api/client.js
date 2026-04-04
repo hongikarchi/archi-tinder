@@ -293,6 +293,10 @@ export async function generateReport(projectId) {
   return callApi('POST', `/projects/${projectId}/report/generate/`)
 }
 
+export async function generateReportImage(projectId) {
+  return callApi('POST', `/projects/${projectId}/report/generate-image/`)
+}
+
 /**
  * Batch-fetch building cards by IDs.
  * Returns list of normalized ImageCard objects.

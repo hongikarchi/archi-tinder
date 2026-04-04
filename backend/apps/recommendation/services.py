@@ -1,6 +1,7 @@
 """
 services.py — Gemini LLM integration for query parsing and persona report generation.
 """
+import base64
 import json
 import logging
 from django.conf import settings
@@ -151,4 +152,48 @@ def generate_persona_report(liked_building_ids):
         return json.loads(response.text)
     except Exception as e:
         logger.error('generate_persona_report error: %s', e)
+        return None
+
+
+def generate_persona_image(report):
+    """
+    Generate an AI architecture image from a persona report using Imagen 3.
+    Returns {'image_data': base64_str, 'mime_type': str, 'prompt': str} or None on failure.
+    """
+    if not report:
+        return None
+
+    try:
+        style = (report.get('dominant_styles') or ['Contemporary'])[0]
+        program = (report.get('dominant_programs') or ['Housing'])[0]
+        materials = ', '.join(report.get('dominant_materials') or ['concrete'])
+        one_liner = report.get('one_liner', 'serene and monumental')
+
+        prompt = (
+            f"A photorealistic architectural photograph of a building. "
+            f"{style} style, {program} typology, atmosphere: {one_liner}. "
+            f"Materials: {materials}. "
+            f"Professional architectural photography, golden hour lighting, high quality, 8k resolution."
+        )
+
+        client = _get_client()
+        response = client.models.generate_images(
+            model='imagen-3.0-generate-002',
+            prompt=prompt,
+            config=types.GenerateImagesConfig(
+                number_of_images=1,
+                aspect_ratio='16:9',
+            ),
+        )
+
+        image_bytes = response.generated_images[0].image.image_bytes
+        base64_str = base64.b64encode(image_bytes).decode('utf-8')
+
+        return {
+            'image_data': base64_str,
+            'mime_type': 'image/png',
+            'prompt': prompt,
+        }
+    except Exception as e:
+        logger.error('generate_persona_image error: %s', e)
         return None
