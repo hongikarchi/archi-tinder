@@ -49,6 +49,12 @@
 ### Phase 7: Codebase Audit Fixes -- COMPLETED 2026-04-04
 23. **AUDIT1** -- Remove unused deps, dead code, consolidate tests, fix deprecations -- COMPLETED 2026-04-04
 
+### Phase 8: E2E Testing Infrastructure -- COMPLETED 2026-04-05
+24. **TEST1** -- E2E visual test runner module -- COMPLETED 2026-04-05
+
+### Phase 9: E2E Runner Fix
+25. **TEST2** -- Rewrite runner.py to match actual frontend UI flow
+
 ---
 
 ## Open
@@ -77,11 +83,35 @@ Google OAuth only. Korean users need domestic login.
 
 ## In Progress
 
-(none)
+#### TEST2. Rewrite runner.py to match actual frontend UI flow -- 2026-04-05
+Current runner.py doesn't match real frontend. Gets stuck on home page, uses wrong selectors, silent except:pass.
+- [ ] Follow actual flow: Home ("Create new folder") -> /new (project name) -> /search (LLM chat) -> /swipe (buttons) -> /library (results + report)
+- [ ] Use text selectors and aria-labels instead of CSS class guessing
+- [ ] Use like/dislike buttons (aria-label="Like"/"Dislike") not mouse drag
+- [ ] No silent except:pass -- all errors logged and recorded
+- [ ] Proper timeouts for LLM (30s) and Gemini report (20s) calls
+- [ ] Extract card metadata from visible h2/span text
+- [ ] Dismiss tutorial popup on first swipe page visit
 
 ---
 
 ## Resolved
+
+### Phase 8: E2E Testing Infrastructure -- 2026-04-05
+
+#### TEST1. E2E visual test runner module -- 2026-04-05
+New `web-testing/` module for Playwright-based E2E testing with persona-driven scenarios.
+- [x] `research/persona.py` -- PersonaProfile dataclass, template + LLM generation modes
+- [x] `research/scenarios.py` -- TestScenario dataclass, keyword-overlap swipe decisions
+- [x] `runner/runner.py` -- Playwright E2E orchestration (dev-login, search, swipe, results, report)
+- [x] `runner/collector.py` -- StepRecord, ApiCallRecord, ErrorRecord, Collector class
+- [x] `runner/reporter.py` -- report.json generation with bottleneck classification
+- [x] `runner/feedback.py` -- feedback.json with endpoint-to-source-file mapping
+- [x] `run.py` -- CLI entry point (--personas, --mode, --auto-fix, --loop, --dashboard-only)
+- [x] `dashboard/` -- Static HTML/JS/CSS SPA (persona panel, step viewer, error panel, perf table)
+- [x] `.gitignore` updated for web-testing/reports/ and web-testing/dashboard/data/
+- [x] `CLAUDE.md` updated with web-testing documentation
+- Commit: 20337da
 
 ### Phase 7: Codebase Audit Fixes -- 2026-04-04
 
