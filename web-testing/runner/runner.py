@@ -575,17 +575,17 @@ def run_test(scenario, run_id: str, reports_dir: str) -> List[StepRecord]:
             # Wait for swipe animation + next card to load
             page.wait_for_timeout(1500)
 
-            # Capture screenshot every 3rd swipe to avoid too many screenshots
-            if swipe_count % 3 == 1 or swipe_count <= 2:
-                step = collector.collect_step(page, f'07_swipe_{i+1:02d}', t0, {
-                    'swipe_number': swipe_count,
-                    'decision': decision,
-                    'building_id': building_id,
-                    'card_title': card_title,
-                    'card_program': card_metadata.get('axis_typology', ''),
-                    'card_style': card_metadata.get('axis_style', ''),
-                })
-                steps.append(step)
+            # Always create a step record; screenshot every 3rd swipe
+            take_screenshot = (swipe_count % 3 == 1 or swipe_count <= 2)
+            step = collector.collect_step(page, f'07_swipe_{i+1:02d}', t0, {
+                'swipe_number': swipe_count,
+                'decision': decision,
+                'building_id': building_id,
+                'card_title': card_title,
+                'card_program': card_metadata.get('axis_typology', ''),
+                'card_style': card_metadata.get('axis_style', ''),
+            }, screenshot=take_screenshot)
+            steps.append(step)
 
         # ================================================================
         # Step 7: View Results / Navigate to Library
@@ -648,7 +648,24 @@ def run_test(scenario, run_id: str, reports_dir: str) -> List[StepRecord]:
 
             report_generated = False
 
-            # Look for "Generate Persona Report" button on library/favorites page
+            # If we're on /library (folder list), click into the project folder first
+            if '/library' in page.url and '/library/' not in page.url:
+                try:
+                    # The ProjectCard is a div with onClick, containing the project name.
+                    # Click the card by finding the "swiped" text (unique to project cards).
+                    folder_card = page.locator('div[style*="cursor: pointer"]').filter(
+                        has_text='swiped'
+                    ).first
+                    if folder_card.is_visible(timeout=3000):
+                        folder_card.click()
+                        page.wait_for_timeout(2000)
+                        logger.info('Clicked into project folder (url now: %s)', page.url)
+                    else:
+                        logger.warning('Project folder card not visible on /library')
+                except Exception as e:
+                    logger.warning('Could not click project folder: %s', e)
+
+            # Look for "Generate Persona Report" button on folder detail page
             try:
                 report_btn = page.get_by_text('Generate Persona Report', exact=False)
                 if report_btn.is_visible(timeout=5000):

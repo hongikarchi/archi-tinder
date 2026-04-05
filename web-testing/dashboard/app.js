@@ -1,6 +1,7 @@
 /**
  * app.js -- ArchiTinder E2E Test Dashboard SPA
- * Vanilla JS, no build step. Fetches data/latest/report.json + feedback.json.
+ * Vanilla JS, no build step.
+ * Supports multi-persona viewing via data/runs.json manifest.
  */
 
 (function () {
@@ -14,9 +15,30 @@
   let perfSortKey = 'duration_ms';
   let perfSortAsc = false;
 
+  // Multi-persona state
+  let runs = [];           // Array from runs.json
+  let activeRunId = null;  // Currently displayed run
+  let reportsCache = {};   // { run_id: { report, feedback } }
+  let selectorOpen = false;
+
   // -- Data Loading --
 
   async function loadData() {
+    // Try multi-persona manifest first
+    try {
+      const manifestRes = await fetch('data/runs.json');
+      if (manifestRes.ok) {
+        const manifest = await manifestRes.json();
+        runs = manifest.runs || [];
+        if (runs.length > 0) {
+          activeRunId = runs[runs.length - 1].run_id;
+          await loadRun(activeRunId);
+          return;
+        }
+      }
+    } catch (_) { /* no manifest, fall back to single mode */ }
+
+    // Fallback: load from data/latest/ (single persona mode)
     try {
       const [reportRes, feedbackRes] = await Promise.all([
         fetch('data/latest/report.json'),
@@ -24,10 +46,41 @@
       ]);
       if (reportRes.ok) report = await reportRes.json();
       if (feedbackRes.ok) feedback = await feedbackRes.json();
-    } catch (e) {
-      // Data not available
-    }
+    } catch (_) { /* data not available */ }
     render();
+  }
+
+  async function loadRun(runId) {
+    // Return cached data if available
+    if (reportsCache[runId]) {
+      report = reportsCache[runId].report;
+      feedback = reportsCache[runId].feedback;
+      activeRunId = runId;
+      expandedSteps = new Set();
+      render();
+      return;
+    }
+
+    const basePath = runs.length ? `data/${runId}` : 'data/latest';
+    try {
+      const [rRes, fRes] = await Promise.all([
+        fetch(`${basePath}/report.json`),
+        fetch(`${basePath}/feedback.json`),
+      ]);
+      if (rRes.ok) report = await rRes.json();
+      if (fRes.ok) feedback = await fRes.json();
+      reportsCache[runId] = { report, feedback };
+      activeRunId = runId;
+      expandedSteps = new Set();
+    } catch (_) { /* data not available */ }
+    render();
+  }
+
+  // -- Data Path Helper --
+
+  function dataPath() {
+    if (runs.length && activeRunId) return `data/${activeRunId}`;
+    return 'data/latest';
   }
 
   // -- Render --
@@ -41,7 +94,7 @@
           <h3>No test data found</h3>
           <p>Run a test first: python web-testing/run.py</p>
           <p style="margin-top:8px;font-size:12px;color:#555">
-            Looking for: data/latest/report.json
+            Looking for: data/runs.json or data/latest/report.json
           </p>
         </div>
       `;
@@ -68,12 +121,17 @@
     const status = feedback ? feedback.status : 'unknown';
     const runId = report.run_id || 'unknown';
     const duration = report.summary ? report.summary.total_duration_ms : 0;
+    const personaIndex = runs.findIndex(r => r.run_id === activeRunId);
+    const counter = runs.length > 1
+      ? `<span class="persona-counter">${personaIndex + 1} / ${runs.length}</span>`
+      : '';
 
     return `
       <div class="header">
         <div>
           <h1>ArchiTinder E2E Test</h1>
           <span class="run-id">${runId} -- ${formatDuration(duration)}</span>
+          ${counter}
         </div>
         <span class="status-badge ${status}">${status}</span>
       </div>
@@ -87,12 +145,45 @@
     const prefs = p.taste_preferences || {};
     const summary = report.summary || {};
 
+    // Persona selector (multi-persona mode)
+    let selectorHtml = '';
+    if (runs.length > 1) {
+      selectorHtml = `
+        <div class="persona-selector" data-action="toggle-selector">
+          <div>
+            <div class="persona-selector-name">${esc(p.name || 'Unknown')}</div>
+            <div class="persona-selector-meta">${esc(p.occupation || '')} -- Age ${p.age || '?'}</div>
+          </div>
+          <span class="persona-chevron">${selectorOpen ? '\u25B2' : '\u25BC'}</span>
+        </div>
+        ${selectorOpen ? `
+          <div class="persona-dropdown">
+            ${runs.map((r, i) => `
+              <div class="persona-option ${r.run_id === activeRunId ? 'active' : ''}"
+                   data-run-id="${r.run_id}">
+                <span class="persona-option-index">${i + 1}</span>
+                <div class="persona-option-info">
+                  <span class="persona-option-name">${esc(r.persona_name)}</span>
+                  <span class="persona-option-meta">${esc(r.occupation)}</span>
+                </div>
+                <span class="status-dot ${r.status}"></span>
+              </div>
+            `).join('')}
+          </div>
+        ` : ''}
+      `;
+    } else {
+      selectorHtml = `
+        <div class="persona-name">${esc(p.name || 'Unknown')}</div>
+        <div class="persona-detail">${esc(p.occupation || '')} -- Age ${p.age || '?'}</div>
+      `;
+    }
+
     return `
       <div class="sidebar">
         <div class="persona-section">
           <h2>Persona</h2>
-          <div class="persona-name">${esc(p.name || 'Unknown')}</div>
-          <div class="persona-detail">${esc(p.occupation || '')} -- Age ${p.age || '?'}</div>
+          ${selectorHtml}
         </div>
 
         <div class="persona-section">
@@ -202,6 +293,7 @@
     const isExpanded = expandedSteps.has(index);
     const timingClass = step.duration_ms > 3000 ? 'slow' : step.duration_ms > 1000 ? 'medium' : 'fast';
     const meta = step.metadata || {};
+    const base = dataPath();
 
     let swipeInfo = '';
     if (meta.decision) {
@@ -257,7 +349,7 @@
           <span class="step-timing ${timingClass}">${step.duration_ms.toFixed(0)}ms</span>
         </div>
         <div class="step-body">
-          ${step.screenshot ? `<img class="step-screenshot" src="data/latest/${esc(step.screenshot)}" alt="${esc(step.step_name)}" loading="lazy">` : ''}
+          ${step.screenshot ? `<img class="step-screenshot" src="${base}/${esc(step.screenshot)}" alt="${esc(step.step_name)}" loading="lazy">` : ''}
           <div class="step-meta">
             <div class="step-meta-item">
               <span class="label">URL: </span>
@@ -419,7 +511,7 @@
 
   function sortArrow(key) {
     if (perfSortKey !== key) return '';
-    return `<span class="sort-arrow">${perfSortAsc ? 'v' : '^'}</span>`;
+    return `<span class="sort-arrow">${perfSortAsc ? '\u25BC' : '\u25B2'}</span>`;
   }
 
   // -- Events --
@@ -462,6 +554,26 @@
           perfSortAsc = false;
         }
         render();
+      });
+    });
+
+    // Persona selector toggle
+    const selectorEl = document.querySelector('[data-action="toggle-selector"]');
+    if (selectorEl) {
+      selectorEl.addEventListener('click', () => {
+        selectorOpen = !selectorOpen;
+        render();
+      });
+    }
+
+    // Persona option clicks
+    document.querySelectorAll('.persona-option').forEach(opt => {
+      opt.addEventListener('click', () => {
+        const runId = opt.dataset.runId;
+        if (runId && runId !== activeRunId) {
+          selectorOpen = false;
+          loadRun(runId);
+        }
       });
     });
   }

@@ -73,15 +73,43 @@ def _keyword_overlap_score(card_metadata: dict, persona: PersonaProfile) -> floa
     return score / total_weight
 
 
+class _SwipeTracker:
+    """Tracks swipe history to ensure minimum like rate for test progression."""
+    def __init__(self):
+        self.total = 0
+        self.likes = 0
+
+    def decide(self, card_metadata: dict, persona: PersonaProfile) -> str:
+        score = _keyword_overlap_score(card_metadata, persona)
+        self.total += 1
+
+        # Need at least 3 likes for the app to progress past 'exploring' phase.
+        # If we've swiped several times with few likes, force likes to keep test moving.
+        likes_needed = 3
+        remaining = max(15 - self.total, 1)
+        like_deficit = likes_needed - self.likes
+
+        # Force like if we're running out of swipes without enough likes
+        if like_deficit > 0 and remaining <= like_deficit + 2:
+            self.likes += 1
+            return 'like'
+
+        # Lower threshold (0.2) so more cards match, producing a richer test
+        if score >= 0.2:
+            self.likes += 1
+            return 'like'
+
+        return 'dislike'
+
+
 def decide_swipe(card_metadata: dict, persona: PersonaProfile) -> str:
     """
     Decide whether to like or dislike a card based on persona preferences.
-    Uses keyword overlap scoring with a threshold of 0.35.
+    Uses keyword overlap scoring with a low threshold of 0.2.
     Returns 'like' or 'dislike'.
     """
     score = _keyword_overlap_score(card_metadata, persona)
-    # Threshold: like if score >= 0.35 (slightly biased toward liking for richer test data)
-    return 'like' if score >= 0.35 else 'dislike'
+    return 'like' if score >= 0.2 else 'dislike'
 
 
 def build_scenario(persona: PersonaProfile, max_swipes: int = 15) -> TestScenario:
@@ -95,10 +123,11 @@ def build_scenario(persona: PersonaProfile, max_swipes: int = 15) -> TestScenari
     Returns:
         TestScenario instance.
     """
+    tracker = _SwipeTracker()
     return TestScenario(
         persona=persona,
         search_query=persona.search_query,
-        decide_swipe=decide_swipe,
+        decide_swipe=tracker.decide,
         max_swipes=max_swipes,
         generate_report=True,
     )

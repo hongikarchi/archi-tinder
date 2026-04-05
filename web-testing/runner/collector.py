@@ -137,13 +137,14 @@ class Collector:
         return filepath
 
     def collect_step(self, page, step_name: str, start_time: float,
-                     metadata: Optional[dict] = None) -> StepRecord:
+                     metadata: Optional[dict] = None,
+                     screenshot: bool = True) -> StepRecord:
         """
         Finalize data collection for a step.
-        Takes screenshot, gathers pending API calls and errors.
+        Takes screenshot (unless screenshot=False), gathers pending API calls and errors.
         """
         duration_ms = (time.time() - start_time) * 1000
-        screenshot_path = self.capture_screenshot(page, step_name)
+        screenshot_path = self.capture_screenshot(page, step_name) if screenshot else ''
 
         # Drain pending data
         api_calls = list(self._pending_api_calls)

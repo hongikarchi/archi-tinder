@@ -43,26 +43,84 @@ def _generate_run_id() -> str:
     return datetime.now().strftime('run_%Y%m%d_%H%M%S')
 
 
-def _symlink_latest(run_id: str):
-    """Create/update symlink from dashboard/data/latest/ to the latest report."""
-    os.makedirs(DASHBOARD_DATA_DIR, exist_ok=True)
+def _copy_run_to_dashboard(run_id: str):
+    """Copy a single run's data to dashboard/data/{run_id}/ for multi-persona viewing."""
+    data_dir = os.path.join(DASHBOARD_DIR, 'data')
+    dst_dir = os.path.join(data_dir, run_id)
+    os.makedirs(dst_dir, exist_ok=True)
 
     run_dir = os.path.join(REPORTS_DIR, run_id)
 
-    # Copy report.json and feedback.json to dashboard data dir
     for filename in ('report.json', 'feedback.json'):
         src = os.path.join(run_dir, filename)
-        dst = os.path.join(DASHBOARD_DATA_DIR, filename)
+        dst = os.path.join(dst_dir, filename)
         if os.path.exists(src):
             shutil.copy2(src, dst)
 
-    # Copy screenshots directory
     screenshots_src = os.path.join(run_dir, 'screenshots')
-    screenshots_dst = os.path.join(DASHBOARD_DATA_DIR, 'screenshots')
+    screenshots_dst = os.path.join(dst_dir, 'screenshots')
     if os.path.exists(screenshots_src):
         if os.path.exists(screenshots_dst):
             shutil.rmtree(screenshots_dst)
         shutil.copytree(screenshots_src, screenshots_dst)
+
+
+def _publish_dashboard(run_ids: list):
+    """Write runs manifest and update data/latest/ for the dashboard."""
+    data_dir = os.path.join(DASHBOARD_DIR, 'data')
+    os.makedirs(data_dir, exist_ok=True)
+
+    # Clean up stale run dirs from previous batches
+    for entry in os.listdir(data_dir):
+        if entry.startswith('run_') and entry not in run_ids:
+            stale = os.path.join(data_dir, entry)
+            if os.path.isdir(stale):
+                shutil.rmtree(stale)
+
+    # Build runs manifest from each run's report + feedback
+    runs = []
+    for rid in run_ids:
+        report_path = os.path.join(REPORTS_DIR, rid, 'report.json')
+        feedback_path = os.path.join(REPORTS_DIR, rid, 'feedback.json')
+        persona_name = 'Unknown'
+        occupation = ''
+        status = 'unknown'
+        if os.path.exists(report_path):
+            with open(report_path) as f:
+                r = json.load(f)
+                persona_name = r.get('persona', {}).get('name', 'Unknown')
+                occupation = r.get('persona', {}).get('occupation', '')
+        if os.path.exists(feedback_path):
+            with open(feedback_path) as f:
+                fb = json.load(f)
+                status = fb.get('status', 'unknown')
+        runs.append({
+            'run_id': rid,
+            'persona_name': persona_name,
+            'occupation': occupation,
+            'status': status,
+        })
+
+    with open(os.path.join(data_dir, 'runs.json'), 'w') as f:
+        json.dump({'runs': runs}, f, indent=2)
+
+    # Also maintain data/latest/ as copy of last run (backwards compat)
+    if run_ids:
+        last_id = run_ids[-1]
+        latest_dir = os.path.join(data_dir, 'latest')
+        os.makedirs(latest_dir, exist_ok=True)
+        last_run_dir = os.path.join(REPORTS_DIR, last_id)
+        for filename in ('report.json', 'feedback.json'):
+            src = os.path.join(last_run_dir, filename)
+            dst = os.path.join(latest_dir, filename)
+            if os.path.exists(src):
+                shutil.copy2(src, dst)
+        screenshots_src = os.path.join(last_run_dir, 'screenshots')
+        screenshots_dst = os.path.join(latest_dir, 'screenshots')
+        if os.path.exists(screenshots_src):
+            if os.path.exists(screenshots_dst):
+                shutil.rmtree(screenshots_dst)
+            shutil.copytree(screenshots_src, screenshots_dst)
 
 
 def _serve_dashboard(port: int = 8080):
@@ -109,7 +167,7 @@ def _print_summary(report: dict, feedback: dict):
 def run_single(mode: str = 'template', max_swipes: int = 15) -> tuple:
     """
     Run a single persona test.
-    Returns (report, feedback) tuple.
+    Returns (run_id, report, feedback) tuple.
     """
     run_id = _generate_run_id()
     os.makedirs(os.path.join(REPORTS_DIR, run_id), exist_ok=True)
@@ -128,9 +186,9 @@ def run_single(mode: str = 'template', max_swipes: int = 15) -> tuple:
     report = generate_report(run_id, persona.to_dict(), steps, REPORTS_DIR)
     feedback = generate_feedback(report, REPORTS_DIR)
 
-    _symlink_latest(run_id)
+    _copy_run_to_dashboard(run_id)
 
-    return report, feedback
+    return run_id, report, feedback
 
 
 def main():
@@ -174,6 +232,7 @@ def main():
         return
 
     all_feedbacks = []
+    all_run_ids = []
 
     for iteration in range(args.loop):
         if args.loop > 1:
@@ -183,12 +242,16 @@ def main():
             if args.personas > 1:
                 print(f"\n--- Persona {persona_num + 1}/{args.personas} ---")
 
-            report, feedback = run_single(
+            run_id, report, feedback = run_single(
                 mode=args.mode,
                 max_swipes=args.max_swipes,
             )
             _print_summary(report, feedback)
             all_feedbacks.append(feedback)
+            all_run_ids.append(run_id)
+
+    # Publish all runs to dashboard (manifest + data/latest/)
+    _publish_dashboard(all_run_ids)
 
     if args.auto_fix:
         # Output structured feedback for orchestrator consumption

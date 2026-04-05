@@ -66,7 +66,7 @@ def generate_report(
     total_errors = sum(len(s.errors) for s in steps)
 
     # Extract swipe stats from metadata
-    swipe_steps = [s for s in steps if s.step_name.startswith('05_swipe_')]
+    swipe_steps = [s for s in steps if 'swipe_' in s.step_name and 'start' not in s.step_name and s.metadata.get('decision')]
     total_swipes = len(swipe_steps)
     likes = sum(1 for s in swipe_steps if s.metadata.get('decision') == 'like')
     dislikes = sum(1 for s in swipe_steps if s.metadata.get('decision') == 'dislike')
