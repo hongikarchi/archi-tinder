@@ -52,8 +52,9 @@
 ### Phase 8: E2E Testing Infrastructure -- COMPLETED 2026-04-05
 24. **TEST1** -- E2E visual test runner module -- COMPLETED 2026-04-05
 
-### Phase 9: E2E Runner Fix
-25. **TEST2** -- Rewrite runner.py to match actual frontend UI flow
+### Phase 9: E2E Runner Fix -- COMPLETED 2026-04-07
+25. **TEST2** -- Rewrite runner.py to match actual frontend UI flow -- COMPLETED 2026-04-06
+26. **TEST3** -- Fix screenshots, card visibility, timing breakdown -- COMPLETED 2026-04-07
 
 ---
 
@@ -83,19 +84,45 @@ Google OAuth only. Korean users need domestic login.
 
 ## In Progress
 
-#### TEST2. Rewrite runner.py to match actual frontend UI flow -- 2026-04-05
-Current runner.py doesn't match real frontend. Gets stuck on home page, uses wrong selectors, silent except:pass.
-- [ ] Follow actual flow: Home ("Create new folder") -> /new (project name) -> /search (LLM chat) -> /swipe (buttons) -> /library (results + report)
-- [ ] Use text selectors and aria-labels instead of CSS class guessing
-- [ ] Use like/dislike buttons (aria-label="Like"/"Dislike") not mouse drag
-- [ ] No silent except:pass -- all errors logged and recorded
-- [ ] Proper timeouts for LLM (30s) and Gemini report (20s) calls
-- [ ] Extract card metadata from visible h2/span text
-- [ ] Dismiss tutorial popup on first swipe page visit
+(none)
 
 ---
 
 ## Resolved
+
+### Phase 9: E2E Runner Fix -- 2026-04-07
+
+#### TEST3. Fix screenshots, card visibility, timing breakdown -- 2026-04-07
+Three E2E runner fixes validated across 57 personas (20 loops x 3 personas).
+- [x] Issue 1: Screenshots on all swipe steps (was skipping 20/30 via modulo conditional)
+- [x] Issue 2: Card image visibility check after screenshot (detects blank card renders)
+- [x] Issue 3: Timing breakdown (gesture/api/card/image) in step metadata and dashboard
+- [x] Bonus: 3-strategy swipe gesture (locator 3s timeout -> viewport-center drag -> keyboard)
+- [x] Dashboard: timing display in step cards + performance table columns
+- [x] Fixed undefined _wait_for_swipe_response call in action card handler
+- Results: 89.5% completion rate (51/57), 0 gesture failures, 1.43% error rate per swipe
+- Commit: db3f768
+
+#### TEST2. Rewrite runner.py to match actual frontend UI flow -- 2026-04-06
+Runner rewritten to match actual frontend after Gemini UX4 overhaul.
+- [x] Follow actual flow: Home ("Create new folder") -> /new (project name) -> /search (LLM chat) -> /swipe (mouse drag) -> /library (results + report)
+- [x] Use text selectors and aria-labels instead of CSS class guessing
+- [x] Mouse drag swipe gesture (not keyboard -- bypasses swipedCardId guards)
+- [x] No silent except:pass -- all errors logged and recorded
+- [x] Proper timeouts for LLM (30s) and Gemini report (20s) calls
+- [x] Extract card metadata from visible h2/span text
+- [x] Dismiss tutorial popup via localStorage on dev-login
+
+### Gemini UI/UX Polish -- 2026-04-06
+
+#### UX4. Gemini UX Overhaul (Chat, Swipe, Tutorial) -- 2026-04-06
+Executed flawlessly by Gemini Antigravity Agent.
+- [x] LLMSearchPage: Constrained message bubbles to 100vw to prevent ResultStrip horizontal scroll from stretching the whole page.
+- [x] SwipePage: Added `keydown` event listener for PC ArrowLeft/ArrowRight swiping.
+- [x] SwipePage: Removed bulky Like/Dislike action buttons to maximize elegant layout.
+- [x] TutorialPopup: Replaced solid dark background with a semi-transparent blur overlay.
+- [x] TutorialPopup: Responsive hints (`matchMedia`) shown based on touch vs cursor (Swipe gestures vs Arrow keys).
+- [x] TutorialPopup: Removed awkward 'Don't show again' checkbox in UI; taps dismiss immediately.
 
 ### Phase 8: E2E Testing Infrastructure -- 2026-04-05
 

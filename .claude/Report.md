@@ -27,6 +27,8 @@ flowchart TD
     Backend -->|gemini-2.5-flash| Gemini["Google Gemini\nquery parsing\npersona reports"]
     Backend -->|imagen-3.0-generate-002| Imagen["Google Imagen 3\nAI architecture images"]
     Backend -->|image URLs| R2["Cloudflare R2\n3083 images"]
+    WebTesting["web-testing/\nPlaywright E2E"] -->|dev-login + browser| Frontend
+    WebTesting -->|API calls| Backend
 ```
 
 ## Algorithm Pipeline
@@ -59,13 +61,25 @@ flowchart TD
 |------|---------------|
 | `api/client.js` | API client with 10s fetch timeout, network retry (2x backoff), `normalizeCard()` field mapping, `callApi()` with JWT refresh, `socialLogin` clears stale tokens, `generateReportImage()` |
 | `App.jsx` | Router, auth state, session management, project sync on login (incl. `reportImage` mapping), `initSession` with try-catch-finally (setIsSwipeLoading in finally block prevents infinite spinner), explicit prefetch null reset, swipe error handling, `handleImageGenerated` propagates image state, `handleGenerateReport` propagates errors to caller |
-| `SwipePage.jsx` | Card deck, swipe gestures, 3D flip, gallery, phase progress bar, "View Results" (converged/completed only), TutorialPopup, image error retry + fallback; safe-area height; 2-line title clamp; currentCard renders over loading state (overlay spinner instead of full skeleton) |
-| `TutorialPopup.jsx` | First-time user guide overlay with 4 steps, "Don't show again" checkbox (localStorage) |
+| `SwipePage.jsx` | Card deck, swipe gestures, PC keyboard swiping, 3D flip, gallery, phase progress bar, "View Results" (converged/completed only), TutorialPopup, image error retry + fallback; safe-area height; 2-line title clamp; currentCard renders over loading state (overlay spinner) without bulky buttons |
+| `TutorialPopup.jsx` | First-time user guide with responsive semi-transparent overlay (swipe vs arrow key hints), tap-to-dismiss (localStorage) |
 | `FavoritesPage.jsx` | Project folders, persona report display with AI image generation button, "Generate Persona Report" button with error display; safe-area height; 44px back button |
-| `LLMSearchPage.jsx` | AI search input, Gemini integration; safe-area-adjusted fixed elements |
+| `LLMSearchPage.jsx` | AI search input, Gemini integration; safe-area-adjusted fixed elements, constrained horizontal scroll |
 | `LoginPage.jsx` | Google auth-code flow login, `onNonOAuthError` popup handling |
 | `TabBar.jsx` | Bottom navigation with safe-area-inset-bottom padding (content-box) |
 | `ProjectSetupPage.jsx` | New project setup with folder name and area range; safe-area-adjusted layout |
+
+## Web Testing Structure
+| File | Responsibility |
+|------|---------------|
+| `web-testing/research/persona.py` | PersonaProfile dataclass; template mode (random from pools) + LLM mode (Gemini); serializable to dict/JSON |
+| `web-testing/research/scenarios.py` | TestScenario dataclass; keyword-overlap scoring for swipe decisions (program 3x, style 2x, atmosphere 2x, material 1x; threshold 0.35) |
+| `web-testing/runner/runner.py` | Playwright E2E orchestration: dev-login -> home -> LLM search -> swipe loop -> results -> persona report; iPhone 14 Pro viewport; headless Chromium; 3-strategy swipe (locator -> viewport-center -> keyboard); screenshots on all steps; card visibility assertion; gesture/api/card/image timing breakdown |
+| `web-testing/runner/collector.py` | StepRecord, ApiCallRecord, ErrorRecord dataclasses; Collector class with response/console/exception listeners; screenshot capture per step |
+| `web-testing/runner/reporter.py` | Generates report.json with summary stats, bottleneck classification (image_loading, api_call, algorithm_computation, llm_api, database_query, rendering) |
+| `web-testing/runner/feedback.py` | Generates feedback.json mapping API endpoints to source files; performance cause hints; pass/warn/fail status; suggestion string |
+| `web-testing/run.py` | CLI entry point: --personas N, --mode template/llm, --auto-fix, --loop N, --dashboard-only; symlinks latest report to dashboard/data/latest/ |
+| `web-testing/dashboard/` | Static HTML/JS/CSS SPA: persona sidebar, step timeline viewer with timing breakdown, error panel, sortable performance table with gesture/api/card/image columns; timing-aware bottleneck classification; dark theme; CSS Grid layout |
 
 ## API Surface
 | Method | Endpoint | Description |
@@ -122,7 +136,8 @@ flowchart TD
 - **Pool embedding caching:** frozenset key per pool, max 50 entries; eliminates repeated DB queries within a session
 - **KMeans centroid caching:** like-vector fingerprint + round_num key, max 20 entries; skips recomputation on dislikes; n_init reduced 10->3
 - **Double prefetch (2-card buffer):** backend returns `prefetch_image_2`; frontend shifts prefetch queue on each instant swap
-- **Tutorial popup:** first-time SwipePage guide with 4 steps, "Don't show again" checkbox (localStorage `archithon_tutorial_dismissed`)
+- **Gemini UI/UX Polish:** Chat overlay width constrained to fix horizontal scroll bug, responsive semi-transparent overlay for tutorials, PC keyboard left/right swiping functionality, and removal of intrusive UI buttons on SwipePage.
+- **Tutorial popup:** first-time SwipePage visually upgraded guide, tap-to-dismiss (localStorage `archithon_tutorial_dismissed`)
 - **Image error handling:** retry once with `?retry=1` cache bust; fallback placeholder on permanent failure (no more infinite skeleton)
 - **Swipe race condition guard (B5):** `swipeLock` useRef in `handleSwipeCard` + `onCardLeftScreen`; concurrent swipe requests blocked
 - **Card overwrite fix (B6):** canInstantSwap path no longer overwrites `currentCard` when backend response diverges; prefetch queue updated only
@@ -138,50 +153,27 @@ flowchart TD
 - **Narrow transaction scope in SwipeView:** prefetch computation moved outside `transaction.atomic()`; session data copied to locals before lock release; improved response times under concurrent load
 - **SwipePage loading priority:** `currentCard` always renders when present (overlay spinner), full skeleton `LoadingCard` only when `currentCard` is null
 - **Codebase audit cleanup (AUDIT1):** removed unused deps (@react-spring/web, react-masonry-css, @playwright/test), dead CSS (.masonry-grid, .swipe-card), dead env var (VITE_GEMINI_API_KEY), dead fallback (predicted_like_images); consolidated tests to backend/tests/; STORAGES dict replaces deprecated STATICFILES_STORAGE; optuna moved to requirements-dev.txt; .gitignore gaps fixed
+- **E2E visual test runner (TEST1):** Playwright-based `web-testing/` module with persona-driven scenarios, screenshot capture, report/feedback JSON, and static dashboard SPA
+
+- **E2E runner fixes (TEST3):** Screenshots on all swipe steps (was 10/30), card image visibility check after screenshot, gesture/api/card/image timing breakdown in step metadata; 3-strategy swipe gesture (locator -> viewport-center -> keyboard); dashboard timing display in step cards and performance table; validated across 57 personas (20 loops x 3)
 
 ### Pending
 - Kakao + Naver OAuth
 
-## Last Updated
-- **Date:** 2026-04-04
-- **Commits:** (pending) codebase audit cleanup
-- **Phase:** Phase 7 -- Codebase Audit Fixes
+## Last Updated (Claude)
+- **Date:** 2026-04-07
+- **Commits:** db3f768 -- E2E runner: screenshots, card visibility, timing breakdown
+- **Phase:** Phase 9 -- E2E Runner Fix (TEST3)
 - **Changes:**
-  - `frontend/package.json` -- removed @react-spring/web, react-masonry-css, @playwright/test
-  - `frontend/src/index.css` -- removed .masonry-grid, .masonry-grid-col, .swipe-card CSS rules
-  - `frontend/.env.example` -- removed VITE_GEMINI_API_KEY
-  - `frontend/src/api/client.js` -- removed dead `|| result.predicted_like_images` fallback in getResult()
-  - `backend/config/settings.py` -- replaced STATICFILES_STORAGE with STORAGES dict (Django 4.2+)
-  - `backend/requirements.txt` -- removed optuna
-  - `backend/requirements-dev.txt` -- new file with optuna
-  - `backend/tests/test_projects.py` -- new file with 8 tests migrated from apps/recommendation/tests.py
-  - `backend/apps/recommendation/tests.py` -- deleted (tests migrated)
-  - `backend/tools/__init__.py` -- deleted (empty, unused)
-  - `.gitignore` -- added .pytest_cache/, node_modules/
-- **Verification:** 23/23 backend tests pass, frontend build succeeds
+  - `web-testing/runner/runner.py` -- Screenshots on all swipe steps (removed modulo skip), card image visibility assertion, gesture/api/card/image timing breakdown, 3-strategy swipe gesture (locator 3s -> viewport-center -> keyboard), fixed undefined _wait_for_swipe_response
+  - `web-testing/dashboard/app.js` -- Timing breakdown display in step cards, timing columns in performance table, timing-aware bottleneck classification
+- **Verification:** 57 personas tested across 20 loops. 89.5% completion rate (51/57 completed 30 swipes). 0 gesture failures (was 100% for some personas before fix). 1.43% error rate per swipe (all card image visibility warnings, not regressions)
 
-```mermaid
-graph TD
-    subgraph "Backend (modified)"
-        settings.py:::modified
-        requirements.txt:::modified
-    end
-    subgraph "Backend (new)"
-        requirements-dev.txt:::new
-        test_projects.py:::new
-    end
-    subgraph "Backend (deleted)"
-        recommendation_tests.py["apps/recommendation/tests.py"]:::deleted
-        tools_init.py["tools/__init__.py"]:::deleted
-    end
-    subgraph "Frontend (modified)"
-        package.json:::modified
-        index.css:::modified
-        env.example[".env.example"]:::modified
-        client.js:::modified
-    end
-
-    classDef new fill:#10b981,color:#fff
-    classDef modified fill:#f59e0b,color:#000
-    classDef deleted fill:#ef4444,color:#fff
-```
+## Last Updated (Gemini)
+- **Date:** 2026-04-06
+- **Phase:** Gemini UI/UX Polish
+- **Changes:**
+  - `frontend/src/pages/LLMSearchPage.jsx` -- Fixed horizontal overflow scrolling for the AI chat output.
+  - `frontend/src/pages/SwipePage.jsx` -- Configured keyboard shortcut (ArrowLeft/ArrowRight) for PC user swiping and removed action buttons.
+  - `frontend/src/components/TutorialPopup.jsx` -- Created transparent responsive overlay avoiding rigid modals.
+- **Verification:** Visually verified by Antigravity Browser Subagent on localhost.
