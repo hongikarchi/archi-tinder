@@ -2,9 +2,12 @@
 runner.py -- Playwright E2E test orchestration.
 Runs a full user scenario: dev-login -> create project -> search -> swipe -> results -> report.
 
-Matches the actual frontend UI flow as of 2026-04-05:
+Matches the actual frontend UI flow as of 2026-04-06:
   SetupPage (/) -> ProjectSetupPage (/new) -> LLMSearchPage (/search) ->
   SwipePage (/swipe) -> FavoritesPage (/library/{id})
+
+Swipe mechanism: keyboard ArrowRight (like) / ArrowLeft (dislike).
+The UX4 Gemini overhaul removed Like/Dislike buttons; only keyboard and touch gestures remain.
 """
 import json
 import logging
@@ -117,49 +120,54 @@ def _safe_fill(page: Page, selector: str, value: str, description: str, timeout_
         return False
 
 
-def _wait_for_swipe_response(page: Page, timeout_ms: int = 8000) -> Optional[dict]:
+def _setup_swipe_listener(page: Page) -> dict:
     """
-    Wait for the swipe API response (POST .../swipes/) after a button click.
-    The card animation must complete and onCardLeftScreen() must fire before
-    the API call is made. This function waits for that response.
-    Returns the parsed JSON response, or None on timeout.
+    Set up a listener for swipe API response BEFORE pressing the key.
+    Returns a dict that will be populated when the response arrives.
+    Must be called before the keyboard press.
     """
-    swipe_data = {'response': None}
+    swipe_data = {'response': None, '_handler': None}
 
-    def capture_swipe_response(response):
+    def capture(response):
         if '/swipes/' in response.url and response.request.method == 'POST':
             try:
                 swipe_data['response'] = response.json()
             except Exception:
                 swipe_data['response'] = {}
 
-    page.on('response', capture_swipe_response)
+    swipe_data['_handler'] = capture
+    page.on('response', capture)
+    return swipe_data
 
+
+def _collect_swipe_response(page: Page, swipe_data: dict, timeout_ms: int = 5000) -> Optional[dict]:
+    """
+    Wait for the swipe API response that was set up by _setup_swipe_listener.
+    Uses tight polling with short intervals since the listener is already active.
+    """
     try:
-        # Poll for the response with small intervals
         deadline = time.time() + (timeout_ms / 1000)
         while time.time() < deadline:
             if swipe_data['response'] is not None:
                 break
-            page.wait_for_timeout(100)
+            page.wait_for_timeout(50)
     finally:
-        # Remove the listener to avoid accumulating handlers
         try:
-            page.remove_listener('response', capture_swipe_response)
+            page.remove_listener('response', swipe_data['_handler'])
         except Exception:
             pass
 
     return swipe_data['response']
 
 
-def _wait_for_new_card(page: Page, prev_title: str, timeout_ms: int = 3000):
+def _wait_for_new_card(page: Page, prev_title: str, timeout_ms: int = 3000) -> bool:
     """
     Wait until the card title changes from prev_title, indicating a new card loaded.
-    Falls back to a fixed wait if title doesn't change (e.g. action card, pool exhaustion).
+    Returns True if card changed, False on timeout.
     """
     if not prev_title:
-        page.wait_for_timeout(500)
-        return
+        page.wait_for_timeout(300)
+        return True
 
     deadline = time.time() + (timeout_ms / 1000)
     while time.time() < deadline:
@@ -169,12 +177,64 @@ def _wait_for_new_card(page: Page, prev_title: str, timeout_ms: int = 3000):
                 return h2 ? h2.textContent.trim() : '';
             }""")
             if current_title and current_title != prev_title:
-                return
+                return True
         except Exception:
             pass
-        page.wait_for_timeout(150)
+        page.wait_for_timeout(100)
 
-    # Timeout -- card didn't change, which may be normal (action card, etc.)
+    return False
+
+
+def _wait_for_card_image(page: Page, timeout_ms: int = 3000):
+    """
+    Wait for the card image to finish loading so screenshots show the building photo.
+    Checks that an <img> element has naturalWidth > 0 and is tall enough to be a card image.
+    """
+    try:
+        page.wait_for_function("""() => {
+            const imgs = document.querySelectorAll('img');
+            for (const img of imgs) {
+                if (img.naturalWidth > 0 && img.offsetHeight > 100) return true;
+            }
+            return false;
+        }""", timeout=timeout_ms)
+    except Exception:
+        pass  # Image may not load in time -- take screenshot anyway
+
+
+def _wait_for_card_ready(page: Page, timeout_ms: int = 10000) -> bool:
+    """
+    Wait for a swipe card to be visible and ready for interaction.
+    Detects card presence by checking for an h2 element inside the swipe page
+    and verifying no loading overlay is blocking interaction.
+    Returns True if card is ready, False on timeout.
+    """
+    try:
+        page.wait_for_function("""() => {
+            // Card must have a visible h2 (title)
+            const h2 = document.querySelector('h2');
+            if (!h2 || !h2.offsetParent) return false;
+
+            // Check that h2 text is not a static page header like "All done!" or project name only
+            // A card h2 will be inside a div with a background image or gradient
+            const h2Text = h2.textContent.trim();
+            if (!h2Text) return false;
+
+            // Check there's no full-page loading spinner (skeleton card)
+            // The loading skeleton has an animation element but no real card content
+            const spinners = document.querySelectorAll('[style*="animation"]');
+            // If there are spinning elements but no card image, still loading
+            const imgs = document.querySelectorAll('img');
+            let hasCardImage = false;
+            for (const img of imgs) {
+                if (img.offsetHeight > 50) { hasCardImage = true; break; }
+            }
+
+            return hasCardImage || h2Text.length > 3;
+        }""", timeout=timeout_ms)
+        return True
+    except Exception:
+        return False
 
 
 def _extract_card_metadata(page: Page) -> dict:
@@ -235,7 +295,7 @@ def run_test(scenario, run_id: str, reports_dir: str) -> List[StepRecord]:
     2. Home page -- click "Create new folder"
     3. Project setup -- fill name, click "Go to AI Search"
     4. LLM Search -- type query or click preset, wait for results, click "Start swiping"
-    5. Swipe page -- use Like/Dislike buttons (aria-label), detect action card
+    5. Swipe page -- use ArrowRight/ArrowLeft keyboard keys (no buttons since UX4)
     6. View results -- navigate to library
     7. Generate persona report
 
@@ -512,8 +572,17 @@ def run_test(scenario, run_id: str, reports_dir: str) -> List[StepRecord]:
         except PlaywrightTimeout:
             logger.error('Navigation to /swipe failed after clicking "Start swiping"')
 
-        # Wait for card to load
-        page.wait_for_timeout(3000)
+        # Wait for the first card to load on the swipe page.
+        # This involves: session creation API call (POST /sessions/) + first card image load.
+        # Can take 5-15s depending on backend load and network speed.
+        # Since UX4 removed Like/Dislike buttons, we detect card readiness by
+        # checking for a visible card with an h2 title and/or an image.
+        logger.info('Waiting for first card to load (up to 20s)...')
+        first_card_loaded = _wait_for_card_ready(page, timeout_ms=20000)
+        if first_card_loaded:
+            logger.info('First card loaded -- card content visible')
+        else:
+            logger.warning('First card did not load within 20s')
 
         # ================================================================
         # Step 6: Swipe Loop
@@ -526,157 +595,239 @@ def run_test(scenario, run_id: str, reports_dir: str) -> List[StepRecord]:
 
         # Take initial swipe page screenshot
         t0 = time.time()
+        _wait_for_card_image(page, timeout_ms=3000)
         step = collector.collect_step(page, '06_swipe_start', t0, {
             'url': page.url,
+            'first_card_loaded': first_card_loaded,
         })
         steps.append(step)
 
-        # Track the previous card title to detect when a new card loads
-        prev_card_title = ''
+        if not first_card_loaded:
+            logger.error('No card loaded on swipe page -- skipping swipe loop')
+            step.errors.append(ErrorRecord(
+                message='First card never loaded on swipe page (20s timeout)',
+                source='assertion',
+            ))
+        else:
+            # Track the previous card title to detect when a new card loads
+            prev_card_title = ''
 
-        for i in range(scenario.max_swipes):
-            t0 = time.time()
+            for i in range(scenario.max_swipes):
+                t0 = time.time()
 
-            # Check for action card (convergence): "Your Taste is Found!"
-            try:
-                action_card = page.locator('text=Your Taste is Found')
-                if action_card.first.is_visible(timeout=800):
-                    logger.info('Action card detected: "Your Taste is Found!" after %d swipes', swipe_count)
-                    session_completed = True
+                # Check for action card (convergence): "Your Taste is Found!"
+                try:
+                    action_card = page.locator('text=Your Taste is Found')
+                    if action_card.first.is_visible(timeout=800):
+                        logger.info('Action card detected: "Your Taste is Found!" after %d swipes', swipe_count)
+                        session_completed = True
 
-                    step = collector.collect_step(page, f'07_swipe_{i+1:02d}_action_card', t0, {
-                        'action': 'action_card_detected',
-                        'total_swipes': swipe_count,
-                        'total_likes': likes,
-                        'total_dislikes': dislikes,
-                    })
-                    steps.append(step)
+                        step = collector.collect_step(page, f'07_swipe_{i+1:02d}_action_card', t0, {
+                            'action': 'action_card_detected',
+                            'total_swipes': swipe_count,
+                            'total_likes': likes,
+                            'total_dislikes': dislikes,
+                        })
+                        steps.append(step)
 
-                    # Swipe right on the action card to accept results
-                    like_btn = page.locator('button[aria-label="Like"]')
+                        # Swipe right on the action card to accept results
+                        # Use keyboard ArrowRight (same as regular swipe)
+                        try:
+                            page.keyboard.press('ArrowRight')
+                            logger.info('Pressed ArrowRight on action card to accept results')
+                            # Wait for the swipe API call to complete
+                            _wait_for_swipe_response(page, timeout_ms=10000)
+                            page.wait_for_timeout(2000)
+                        except Exception as e:
+                            logger.warning('ArrowRight on action card failed: %s, trying "View Results" button', e)
+                            _safe_click(page, 'text=View Results', '"View Results" button', timeout_ms=3000)
+                            page.wait_for_timeout(2000)
+                        break
+                except Exception:
+                    pass
+
+                # Check for "All done!" completion screen
+                try:
+                    done_text = page.locator('text=All done!')
+                    if done_text.first.is_visible(timeout=300):
+                        logger.info('Completion screen detected: "All done!" after %d swipes', swipe_count)
+                        session_completed = True
+                        # Click "View Image Board" button
+                        _safe_click(page, 'text=View Image Board', '"View Image Board" button', timeout_ms=3000)
+                        page.wait_for_timeout(3000)
+                        step = collector.collect_step(page, f'07_swipe_{i+1:02d}_completed', t0, {
+                            'action': 'session_completed',
+                            'total_swipes': swipe_count,
+                        })
+                        steps.append(step)
+                        break
+                except Exception:
+                    pass
+
+                # Check if there's a card visible by looking for an h2 element
+                # The swipe card always has an h2 with the building title
+                card_visible = False
+                try:
+                    card_visible = page.evaluate("""() => {
+                        const h2 = document.querySelector('h2');
+                        return !!(h2 && h2.offsetParent !== null && h2.textContent.trim().length > 0);
+                    }""")
+                except Exception:
+                    pass
+
+                if not card_visible:
+                    # Wait a bit more -- card might still be loading
+                    page.wait_for_timeout(2000)
                     try:
-                        like_btn.wait_for(state='visible', timeout=2000)
-                        like_btn.click()
-                        # Wait for the swipe API call to complete (action card swipe)
-                        _wait_for_swipe_response(page, timeout_ms=10000)
-                        logger.info('Swiped right on action card to view results')
-                        page.wait_for_timeout(2000)
-                    except PlaywrightTimeout:
-                        logger.warning('Like button not visible on action card, trying "View Results" button')
-                        _safe_click(page, 'text=View Results', '"View Results" button', timeout_ms=3000)
-                        page.wait_for_timeout(2000)
-                    break
-            except Exception:
-                pass
+                        card_visible = page.evaluate("""() => {
+                            const h2 = document.querySelector('h2');
+                            return !!(h2 && h2.offsetParent !== null && h2.textContent.trim().length > 0);
+                        }""")
+                    except Exception:
+                        pass
 
-            # Check for "All done!" completion screen
-            try:
-                done_text = page.locator('text=All done!')
-                if done_text.first.is_visible(timeout=300):
-                    logger.info('Completion screen detected: "All done!" after %d swipes', swipe_count)
-                    session_completed = True
-                    # Click "View Image Board" button
-                    _safe_click(page, 'text=View Image Board', '"View Image Board" button', timeout_ms=3000)
-                    page.wait_for_timeout(3000)
-                    step = collector.collect_step(page, f'07_swipe_{i+1:02d}_completed', t0, {
-                        'action': 'session_completed',
-                        'total_swipes': swipe_count,
+                if not card_visible:
+                    logger.warning('No card visible on swipe page at swipe %d', i + 1)
+                    step = collector.collect_step(page, f'07_swipe_{i+1:02d}_no_card', t0, {
+                        'error': 'No card visible -- h2 element not found',
+                        'swipe_number': swipe_count + 1,
                     })
+                    step.errors.append(ErrorRecord(
+                        message=f'Swipe {i+1}: No card visible, card may not have loaded',
+                        source='assertion',
+                    ))
                     steps.append(step)
                     break
-            except Exception:
-                pass
 
-            # Check if there's a card visible (the like/dislike buttons exist when card is present)
-            like_btn = page.locator('button[aria-label="Like"]')
-            dislike_btn = page.locator('button[aria-label="Dislike"]')
+                # Wait for the loading overlay to disappear (swipeLock released).
+                # When isLoading is true, there's an overlay div with animation.
+                # The keyboard handler in SwipePage ignores keypresses when isLoading=true.
+                try:
+                    page.wait_for_function("""() => {
+                        // Check that the loading overlay spinner is NOT visible
+                        // The overlay has style "pointerEvents: none" and contains a spinning div
+                        const overlays = document.querySelectorAll('div[style*="pointer-events"]');
+                        for (const o of overlays) {
+                            const style = o.getAttribute('style') || '';
+                            if (style.includes('animation') || style.includes('border-radius: 50%')) {
+                                // This looks like the loading spinner overlay
+                                if (o.offsetParent !== null) return false;
+                            }
+                        }
+                        return true;
+                    }""", timeout=5000)
+                except Exception:
+                    logger.warning('Loading overlay may still be present at swipe %d', i + 1)
 
-            try:
-                like_btn.wait_for(state='visible', timeout=5000)
-            except PlaywrightTimeout:
-                logger.warning('Like button not visible -- no card loaded? Swipe %d', i + 1)
-                step = collector.collect_step(page, f'07_swipe_{i+1:02d}_no_card', t0, {
-                    'error': 'Like button not visible -- no card available',
-                    'swipe_number': swipe_count + 1,
-                })
-                step.errors.append(ErrorRecord(
-                    message=f'Swipe {i+1}: Like button not visible, card may not have loaded',
-                    source='assertion',
-                ))
+                # Extract card metadata from the visible card
+                card_metadata = _extract_card_metadata(page)
+                building_id = card_metadata.get('building_id', '')
+                card_title = card_metadata.get('title', '')
+
+                # Decide swipe direction based on persona preferences
+                decision = scenario.decide_swipe(card_metadata, scenario.persona)
+
+                # Set up API response listener BEFORE the swipe gesture.
+                swipe_listener = _setup_swipe_listener(page)
+
+                # Execute swipe via mouse drag on the TinderCard.
+                # This bypasses the keyboard handler's swipedCardId/pendingAction guards
+                # and triggers TinderCard's native drag-based swiping.
+                # swipeThreshold is 120px, so we drag 200px to ensure it triggers.
+                try:
+                    card_el = page.locator('div[style*="position: relative"]').filter(
+                        has=page.locator('img')
+                    ).first
+                    box = card_el.bounding_box()
+                    if box:
+                        cx = box['x'] + box['width'] / 2
+                        cy = box['y'] + box['height'] / 2
+                        dx = 200 if decision == 'like' else -200
+                        page.mouse.move(cx, cy)
+                        page.mouse.down()
+                        # Drag in steps for smooth animation
+                        for s in range(4):
+                            page.mouse.move(cx + dx * (s + 1) / 4, cy, steps=2)
+                        page.mouse.move(cx + dx, cy, steps=2)
+                        page.mouse.up()
+                        logger.info('Swipe %d: %s (drag, title: "%s")', swipe_count + 1, decision.upper(), card_title[:40])
+                    else:
+                        # Fallback to keyboard if card element not found
+                        key = 'ArrowRight' if decision == 'like' else 'ArrowLeft'
+                        page.keyboard.press(key)
+                        logger.info('Swipe %d: %s (key, title: "%s")', swipe_count + 1, decision.upper(), card_title[:40])
+                except Exception as e:
+                    logger.error('Swipe %d: gesture failed: %s', swipe_count + 1, e)
+                    page.remove_listener('response', swipe_listener['_handler'])
+                    step = collector.collect_step(page, f'07_swipe_{i+1:02d}_failed', t0, {
+                        'error': f'Swipe gesture failed: {e}',
+                        'swipe_number': swipe_count + 1,
+                    })
+                    step.errors.append(ErrorRecord(
+                        message=f'Swipe {i+1}: {decision} gesture failed: {e}',
+                        source='assertion',
+                    ))
+                    steps.append(step)
+                    break
+
+                # Collect the swipe API response (listener was set up before the gesture).
+                swipe_response = _collect_swipe_response(page, swipe_listener, timeout_ms=5000)
+
+                if swipe_response:
+                    if swipe_response.get('next_image'):
+                        next_img = swipe_response['next_image']
+                        if next_img.get('building_id') == '__action_card__':
+                            logger.info('Backend returned action card -- convergence reached')
+                        elif next_img.get('building_id'):
+                            logger.info('Next card: %s', next_img.get('name_en', next_img['building_id'])[:40])
+
+                    if swipe_response.get('is_analysis_completed'):
+                        logger.info('Backend reports analysis completed')
+                        session_completed = True
+
+                    if decision == 'like':
+                        likes += 1
+                        if building_id:
+                            buildings_liked.append(building_id)
+                    else:
+                        dislikes += 1
+                else:
+                    logger.warning('Swipe %d: API response not received within timeout', swipe_count + 1)
+                    if decision == 'like':
+                        likes += 1
+                    else:
+                        dislikes += 1
+
+                swipe_count += 1
+                prev_card_title = card_title
+
+                # Wait for the card to change (title differs from previous).
+                # This proves TinderCard animation completed and React re-rendered.
+                card_changed = _wait_for_new_card(page, prev_card_title, timeout_ms=4000)
+
+                if not card_changed and swipe_response is None:
+                    # Card stuck: animation didn't complete, API didn't respond.
+                    # Reload the page to recover from the stuck state.
+                    logger.warning('Swipe %d: card stuck (same title, no API response) -- reloading page', swipe_count)
+                    page.reload()
+                    page.wait_for_timeout(3000)
+                    _wait_for_card_ready(page, timeout_ms=10000)
+                    # After reload, try to continue (the session persists in backend)
+
+                # Only wait for card image on screenshot swipes
+                take_screenshot = (swipe_count % 3 == 1 or swipe_count <= 2)
+                if take_screenshot:
+                    _wait_for_card_image(page, timeout_ms=2000)
+                step = collector.collect_step(page, f'07_swipe_{i+1:02d}', t0, {
+                    'swipe_number': swipe_count,
+                    'decision': decision,
+                    'building_id': building_id,
+                    'card_title': card_title,
+                    'card_program': card_metadata.get('axis_typology', ''),
+                    'card_style': card_metadata.get('axis_style', ''),
+                    'api_confirmed': swipe_response is not None,
+                }, screenshot=take_screenshot)
                 steps.append(step)
-                break
-
-            # Extract card metadata from the visible card
-            card_metadata = _extract_card_metadata(page)
-            building_id = card_metadata.get('building_id', '')
-            card_title = card_metadata.get('title', '')
-
-            # Decide swipe direction based on persona preferences
-            decision = scenario.decide_swipe(card_metadata, scenario.persona)
-
-            # Execute swipe via button click.
-            # The button click triggers cardRef.current.swipe(dir) which starts
-            # TinderCard animation. When the card leaves screen, onCardLeftScreen()
-            # fires and calls recordSwipe() API. We must wait for that API response.
-            if decision == 'like':
-                like_btn.click()
-                logger.info('Swipe %d: LIKE (title: "%s")', swipe_count + 1, card_title[:40])
-            else:
-                dislike_btn.click()
-                logger.info('Swipe %d: DISLIKE (title: "%s")', swipe_count + 1, card_title[:40])
-
-            # Wait for the swipe API response (POST /analysis/sessions/.../swipes/)
-            # This confirms the card animation completed and the backend processed the swipe.
-            swipe_response = _wait_for_swipe_response(page, timeout_ms=8000)
-
-            if swipe_response:
-                # Extract building_id from the API response if available
-                if swipe_response.get('next_image'):
-                    next_img = swipe_response['next_image']
-                    if next_img.get('building_id') == '__action_card__':
-                        logger.info('Backend returned action card -- convergence reached')
-                    elif next_img.get('building_id'):
-                        logger.info('Next card: %s', next_img.get('name_en', next_img['building_id'])[:40])
-
-                if swipe_response.get('is_analysis_completed'):
-                    logger.info('Backend reports analysis completed')
-                    session_completed = True
-
-                if decision == 'like':
-                    likes += 1
-                    if building_id:
-                        buildings_liked.append(building_id)
-                else:
-                    dislikes += 1
-            else:
-                # Swipe API didn't respond in time -- animation may have failed
-                logger.warning('Swipe %d: API response not received within timeout', swipe_count + 1)
-                if decision == 'like':
-                    likes += 1
-                else:
-                    dislikes += 1
-
-            swipe_count += 1
-            prev_card_title = card_title
-
-            # Wait briefly for the next card to render after the API response
-            page.wait_for_timeout(500)
-
-            # Wait for a NEW card to appear (title changes from previous)
-            _wait_for_new_card(page, prev_card_title, timeout_ms=3000)
-
-            # Always create a step record; screenshot every 3rd swipe
-            take_screenshot = (swipe_count % 3 == 1 or swipe_count <= 2)
-            step = collector.collect_step(page, f'07_swipe_{i+1:02d}', t0, {
-                'swipe_number': swipe_count,
-                'decision': decision,
-                'building_id': building_id,
-                'card_title': card_title,
-                'card_program': card_metadata.get('axis_typology', ''),
-                'card_style': card_metadata.get('axis_style', ''),
-                'api_confirmed': swipe_response is not None,
-            }, screenshot=take_screenshot)
-            steps.append(step)
 
         # ================================================================
         # Step 7: View Results / Navigate to Library

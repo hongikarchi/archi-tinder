@@ -12,7 +12,7 @@ class TestScenario:
     persona: PersonaProfile
     search_query: str
     decide_swipe: Callable  # (card_metadata: dict, persona: PersonaProfile) -> 'like' | 'dislike'
-    max_swipes: int = 15
+    max_swipes: int = 30
     generate_report: bool = True
 
 
@@ -75,26 +75,28 @@ def _keyword_overlap_score(card_metadata: dict, persona: PersonaProfile) -> floa
 
 class _SwipeTracker:
     """Tracks swipe history to ensure minimum like rate for test progression."""
-    def __init__(self):
+    def __init__(self, max_swipes: int = 30):
         self.total = 0
         self.likes = 0
+        self._max_swipes = max_swipes
 
     def decide(self, card_metadata: dict, persona: PersonaProfile) -> str:
         score = _keyword_overlap_score(card_metadata, persona)
         self.total += 1
 
-        # Need at least 3 likes for the app to progress past 'exploring' phase.
-        # If we've swiped several times with few likes, force likes to keep test moving.
-        likes_needed = 3
-        remaining = max(15 - self.total, 1)
-        like_deficit = likes_needed - self.likes
+        # Target ~35% like rate (~10 likes in 30 swipes) for convergence.
+        # Backend needs: 3 likes → 'analyzing', then 3+ delta samples below threshold.
+        # Avoid consecutive forced likes — the frontend's swipedCardId guard
+        # blocks rapid same-direction swipes if the animation hasn't completed.
+        target_like_rate = 0.35
+        current_rate = self.likes / max(self.total - 1, 1)
 
-        # Force like if we're running out of swipes without enough likes
-        if like_deficit > 0 and remaining <= like_deficit + 2:
+        # Force like every few swipes if below target (never two forced likes in a row)
+        if current_rate < target_like_rate and self.total > 5 and self.total % 3 == 0:
             self.likes += 1
             return 'like'
 
-        # Lower threshold (0.2) so more cards match, producing a richer test
+        # Like if score matches persona preferences
         if score >= 0.2:
             self.likes += 1
             return 'like'
@@ -112,18 +114,18 @@ def decide_swipe(card_metadata: dict, persona: PersonaProfile) -> str:
     return 'like' if score >= 0.2 else 'dislike'
 
 
-def build_scenario(persona: PersonaProfile, max_swipes: int = 15) -> TestScenario:
+def build_scenario(persona: PersonaProfile, max_swipes: int = 30) -> TestScenario:
     """
     Build a test scenario from a persona profile.
 
     Args:
         persona: The persona to test with.
-        max_swipes: Maximum number of swipes before stopping.
+        max_swipes: Maximum number of swipes before stopping (default: 30).
 
     Returns:
         TestScenario instance.
     """
-    tracker = _SwipeTracker()
+    tracker = _SwipeTracker(max_swipes=max_swipes)
     return TestScenario(
         persona=persona,
         search_query=persona.search_query,

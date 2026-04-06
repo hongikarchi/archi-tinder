@@ -7,6 +7,15 @@ import time
 from dataclasses import dataclass, field
 from typing import List, Optional
 
+# Console messages matching these prefixes are benign dev-mode noise, not real errors.
+_BENIGN_CONSOLE_PREFIXES = (
+    'Warning:',           # React dev-mode warnings (duplicate keys, deprecated lifecycle, etc.)
+    'React does not',     # React dev-mode informational warnings
+    'Download the React', # React DevTools prompt
+    '[vite]',             # Vite HMR messages
+    '[HMR]',             # Hot Module Replacement messages
+)
+
 
 @dataclass
 class ApiCallRecord:
@@ -96,13 +105,23 @@ class Collector:
         page.on('response', on_response)
 
     def start_tracking_console(self, page):
-        """Attach console listener to the page for error tracking."""
+        """
+        Attach console listener to the page for error tracking.
+        Filters out benign dev-mode warnings (React warnings, Vite HMR, etc.)
+        so only genuine errors are captured.
+        """
         def on_console(msg):
-            if msg.type == 'error':
-                self._pending_errors.append(ErrorRecord(
-                    message=msg.text,
-                    source='console',
-                ))
+            if msg.type != 'error':
+                return
+            text = msg.text
+            # Skip benign dev-mode console noise
+            for prefix in _BENIGN_CONSOLE_PREFIXES:
+                if text.startswith(prefix):
+                    return
+            self._pending_errors.append(ErrorRecord(
+                message=text,
+                source='console',
+            ))
 
         page.on('console', on_console)
 

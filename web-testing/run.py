@@ -164,7 +164,7 @@ def _print_summary(report: dict, feedback: dict):
     print("=" * 60 + "\n")
 
 
-def run_single(mode: str = 'template', max_swipes: int = 15) -> tuple:
+def run_single(mode: str = 'template', max_swipes: int = 30) -> tuple:
     """
     Run a single persona test.
     Returns (run_id, report, feedback) tuple.
@@ -205,8 +205,8 @@ def main():
         help='Persona generation mode (default: template)',
     )
     parser.add_argument(
-        '--max-swipes', type=int, default=15,
-        help='Maximum swipes per persona (default: 15)',
+        '--max-swipes', type=int, default=30,
+        help='Maximum swipes per persona (default: 30)',
     )
     parser.add_argument(
         '--auto-fix', action='store_true',
@@ -250,8 +250,8 @@ def main():
             all_feedbacks.append(feedback)
             all_run_ids.append(run_id)
 
-    # Publish all runs to dashboard (manifest + data/latest/)
-    _publish_dashboard(all_run_ids)
+            # Publish to dashboard after EACH persona so results are visible immediately
+            _publish_dashboard(all_run_ids)
 
     if args.auto_fix:
         # Output structured feedback for orchestrator consumption
