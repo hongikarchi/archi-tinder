@@ -326,6 +326,22 @@
       `;
     }
 
+    // Timing breakdown (Issue 3): show gesture/api/card/image sub-step durations
+    let timingHtml = '';
+    if (meta.timing) {
+      const t = meta.timing;
+      timingHtml = `
+        <div style="margin-top:8px;font-size:12px">
+          <div style="display:flex;gap:12px;color:#888">
+            <span>Gesture: ${t.gesture_ms}ms</span>
+            <span>API: ${t.api_wait_ms}ms</span>
+            <span>Card: ${t.card_transition_ms}ms</span>
+            <span>Image: ${t.image_load_ms}ms</span>
+          </div>
+        </div>
+      `;
+    }
+
     let errorsHtml = '';
     if (step.errors && step.errors.length > 0) {
       errorsHtml = `
@@ -373,6 +389,7 @@
             ` : ''}
           </div>
           ${apiTable}
+          ${timingHtml}
           ${errorsHtml}
         </div>
       </div>
@@ -418,12 +435,21 @@
       return '<div class="empty-state"><div class="icon">--</div>No performance data</div>';
     }
 
+    // Check if any step has timing breakdown data
+    const hasTiming = steps.some(s => s.metadata && s.metadata.timing);
+
     return `
       <table class="perf-table">
         <thead>
           <tr>
             <th data-sort="step_name">Step ${sortArrow('step_name')}</th>
             <th data-sort="duration_ms">Duration ${sortArrow('duration_ms')}</th>
+            ${hasTiming ? `
+              <th>Gesture</th>
+              <th>API Wait</th>
+              <th>Card Trans.</th>
+              <th>Image Load</th>
+            ` : ''}
             <th>API Calls</th>
             <th>Errors</th>
             <th>Bottleneck</th>
@@ -433,10 +459,17 @@
           ${steps.map(s => {
             const durClass = s.duration_ms > 3000 ? 'duration-slow' : s.duration_ms > 1000 ? 'duration-medium' : 'duration-fast';
             const bottleneck = classifyBottleneck(s);
+            const t = (s.metadata && s.metadata.timing) ? s.metadata.timing : null;
             return `
               <tr>
                 <td>${esc(s.step_name)}</td>
                 <td class="${durClass}">${s.duration_ms.toFixed(0)}ms</td>
+                ${hasTiming ? `
+                  <td>${t ? t.gesture_ms + 'ms' : '--'}</td>
+                  <td>${t ? t.api_wait_ms + 'ms' : '--'}</td>
+                  <td>${t ? t.card_transition_ms + 'ms' : '--'}</td>
+                  <td>${t ? t.image_load_ms + 'ms' : '--'}</td>
+                ` : ''}
                 <td>${s.api_calls ? s.api_calls.length : 0}</td>
                 <td>${s.errors ? s.errors.length : 0}</td>
                 <td><span class="bottleneck-badge">${bottleneck}</span></td>
@@ -499,6 +532,17 @@
   }
 
   function classifyBottleneck(step) {
+    // Use detailed timing data when available for more accurate classification
+    const meta = step.metadata || {};
+    if (meta.timing) {
+      const t = meta.timing;
+      const max = Math.max(t.gesture_ms, t.api_wait_ms, t.card_transition_ms, t.image_load_ms);
+      if (max === t.api_wait_ms) return 'api_call';
+      if (max === t.image_load_ms) return 'image_loading';
+      if (max === t.card_transition_ms) return 'rendering';
+      if (max === t.gesture_ms) return 'gesture';
+    }
+
     if (!step.api_calls || step.api_calls.length === 0) return 'rendering';
     const hasImageCalls = step.api_calls.some(c => c.url.includes('/images/'));
     const hasReportCalls = step.api_calls.some(c => c.url.includes('/report/'));

@@ -237,6 +237,24 @@ def _wait_for_card_ready(page: Page, timeout_ms: int = 10000) -> bool:
         return False
 
 
+def _check_card_image_visible(page: Page) -> bool:
+    """
+    Check whether a card image is currently visible in the viewport.
+    Returns True if an <img> with naturalWidth > 0 and offsetHeight > 100 is found.
+    Used for post-screenshot assertion to detect blank card renders.
+    """
+    try:
+        return page.evaluate("""() => {
+            const imgs = document.querySelectorAll('img');
+            for (const img of imgs) {
+                if (img.naturalWidth > 0 && img.offsetHeight > 100) return true;
+            }
+            return false;
+        }""")
+    except Exception:
+        return False
+
+
 def _extract_card_metadata(page: Page) -> dict:
     """
     Extract building card metadata from the currently visible swipe card.
@@ -635,9 +653,7 @@ def run_test(scenario, run_id: str, reports_dir: str) -> List[StepRecord]:
                         try:
                             page.keyboard.press('ArrowRight')
                             logger.info('Pressed ArrowRight on action card to accept results')
-                            # Wait for the swipe API call to complete
-                            _wait_for_swipe_response(page, timeout_ms=10000)
-                            page.wait_for_timeout(2000)
+                            page.wait_for_timeout(3000)
                         except Exception as e:
                             logger.warning('ArrowRight on action card failed: %s, trying "View Results" button', e)
                             _safe_click(page, 'text=View Results', '"View Results" button', timeout_ms=3000)
@@ -730,48 +746,82 @@ def run_test(scenario, run_id: str, reports_dir: str) -> List[StepRecord]:
                 # Set up API response listener BEFORE the swipe gesture.
                 swipe_listener = _setup_swipe_listener(page)
 
+
+                # ---- TIMING: before swipe gesture ----
+                t_before_swipe = time.time()
+
                 # Execute swipe via mouse drag on the TinderCard.
                 # This bypasses the keyboard handler's swipedCardId/pendingAction guards
                 # and triggers TinderCard's native drag-based swiping.
                 # swipeThreshold is 120px, so we drag 200px to ensure it triggers.
+                # Viewport: 390x844 (iPhone 14 Pro). Card center approx (195, 350).
+                swipe_succeeded = False
+                dx = 200 if decision == 'like' else -200
+
+                # Strategy 1: Locate card element by CSS and drag from its center
                 try:
                     card_el = page.locator('div[style*="position: relative"]').filter(
                         has=page.locator('img')
                     ).first
-                    box = card_el.bounding_box()
+                    box = card_el.bounding_box(timeout=3000)
                     if box:
                         cx = box['x'] + box['width'] / 2
                         cy = box['y'] + box['height'] / 2
-                        dx = 200 if decision == 'like' else -200
                         page.mouse.move(cx, cy)
                         page.mouse.down()
-                        # Drag in steps for smooth animation
                         for s in range(4):
                             page.mouse.move(cx + dx * (s + 1) / 4, cy, steps=2)
                         page.mouse.move(cx + dx, cy, steps=2)
                         page.mouse.up()
-                        logger.info('Swipe %d: %s (drag, title: "%s")', swipe_count + 1, decision.upper(), card_title[:40])
-                    else:
-                        # Fallback to keyboard if card element not found
+                        swipe_succeeded = True
+                        logger.info('Swipe %d: %s (drag-locator, title: "%s")', swipe_count + 1, decision.upper(), card_title[:40])
+                except Exception as e:
+                    logger.warning('Swipe %d: locator drag failed (%s), trying viewport-center drag', swipe_count + 1, e)
+
+                # Strategy 2: Drag from viewport center (card is always centered)
+                if not swipe_succeeded:
+                    try:
+                        cx, cy = 195, 350  # Viewport center of card area
+                        page.mouse.move(cx, cy)
+                        page.mouse.down()
+                        for s in range(4):
+                            page.mouse.move(cx + dx * (s + 1) / 4, cy, steps=2)
+                        page.mouse.move(cx + dx, cy, steps=2)
+                        page.mouse.up()
+                        swipe_succeeded = True
+                        logger.info('Swipe %d: %s (drag-center, title: "%s")', swipe_count + 1, decision.upper(), card_title[:40])
+                    except Exception as e:
+                        logger.warning('Swipe %d: viewport-center drag failed (%s), trying keyboard', swipe_count + 1, e)
+
+                # Strategy 3: Keyboard fallback (last resort)
+                if not swipe_succeeded:
+                    try:
                         key = 'ArrowRight' if decision == 'like' else 'ArrowLeft'
                         page.keyboard.press(key)
-                        logger.info('Swipe %d: %s (key, title: "%s")', swipe_count + 1, decision.upper(), card_title[:40])
-                except Exception as e:
-                    logger.error('Swipe %d: gesture failed: %s', swipe_count + 1, e)
-                    page.remove_listener('response', swipe_listener['_handler'])
-                    step = collector.collect_step(page, f'07_swipe_{i+1:02d}_failed', t0, {
-                        'error': f'Swipe gesture failed: {e}',
-                        'swipe_number': swipe_count + 1,
-                    })
-                    step.errors.append(ErrorRecord(
-                        message=f'Swipe {i+1}: {decision} gesture failed: {e}',
-                        source='assertion',
-                    ))
-                    steps.append(step)
-                    break
+                        swipe_succeeded = True
+                        logger.info('Swipe %d: %s (keyboard, title: "%s")', swipe_count + 1, decision.upper(), card_title[:40])
+                    except Exception as e:
+                        logger.error('Swipe %d: all gesture methods failed: %s', swipe_count + 1, e)
+                        page.remove_listener('response', swipe_listener['_handler'])
+                        step = collector.collect_step(page, f'07_swipe_{i+1:02d}_failed', t0, {
+                            'error': f'All swipe methods failed: {e}',
+                            'swipe_number': swipe_count + 1,
+                        })
+                        step.errors.append(ErrorRecord(
+                            message=f'Swipe {i+1}: all gesture methods failed: {e}',
+                            source='assertion',
+                        ))
+                        steps.append(step)
+                        break
+
+                # ---- TIMING: after swipe gesture ----
+                t_after_swipe = time.time()
 
                 # Collect the swipe API response (listener was set up before the gesture).
                 swipe_response = _collect_swipe_response(page, swipe_listener, timeout_ms=5000)
+
+                # ---- TIMING: after API response ----
+                t_after_api = time.time()
 
                 if swipe_response:
                     if swipe_response.get('next_image'):
@@ -805,6 +855,9 @@ def run_test(scenario, run_id: str, reports_dir: str) -> List[StepRecord]:
                 # This proves TinderCard animation completed and React re-rendered.
                 card_changed = _wait_for_new_card(page, prev_card_title, timeout_ms=4000)
 
+                # ---- TIMING: after card transition ----
+                t_after_card_change = time.time()
+
                 if not card_changed and swipe_response is None:
                     # Card stuck: animation didn't complete, API didn't respond.
                     # Reload the page to recover from the stuck state.
@@ -814,10 +867,21 @@ def run_test(scenario, run_id: str, reports_dir: str) -> List[StepRecord]:
                     _wait_for_card_ready(page, timeout_ms=10000)
                     # After reload, try to continue (the session persists in backend)
 
-                # Only wait for card image on screenshot swipes
-                take_screenshot = (swipe_count % 3 == 1 or swipe_count <= 2)
-                if take_screenshot:
-                    _wait_for_card_image(page, timeout_ms=2000)
+                # Always wait for card image and take screenshot on every swipe step.
+                # (Issue 1 fix: removed conditional that skipped 20/30 swipe screenshots)
+                _wait_for_card_image(page, timeout_ms=2000)
+
+                # ---- TIMING: after image load ----
+                t_after_image = time.time()
+
+                # Build timing breakdown for performance analysis (Issue 3)
+                timing_breakdown = {
+                    'gesture_ms': round((t_after_swipe - t_before_swipe) * 1000),
+                    'api_wait_ms': round((t_after_api - t_after_swipe) * 1000),
+                    'card_transition_ms': round((t_after_card_change - t_after_api) * 1000),
+                    'image_load_ms': round((t_after_image - t_after_card_change) * 1000),
+                }
+
                 step = collector.collect_step(page, f'07_swipe_{i+1:02d}', t0, {
                     'swipe_number': swipe_count,
                     'decision': decision,
@@ -826,8 +890,18 @@ def run_test(scenario, run_id: str, reports_dir: str) -> List[StepRecord]:
                     'card_program': card_metadata.get('axis_typology', ''),
                     'card_style': card_metadata.get('axis_style', ''),
                     'api_confirmed': swipe_response is not None,
-                }, screenshot=take_screenshot)
+                    'timing': timing_breakdown,
+                }, screenshot=True)
                 steps.append(step)
+
+                # Verify card image was visible in screenshot (Issue 2 fix).
+                # Detects blank card renders that would otherwise go unreported.
+                if not _check_card_image_visible(page):
+                    step.errors.append(ErrorRecord(
+                        message=f'Swipe {swipe_count}: card image not visible in screenshot',
+                        source='assertion',
+                    ))
+                    logger.warning('Swipe %d: card image not visible in screenshot', swipe_count)
 
         # ================================================================
         # Step 7: View Results / Navigate to Library
