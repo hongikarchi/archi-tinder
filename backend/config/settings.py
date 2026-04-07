@@ -68,6 +68,7 @@ DATABASES = {
         'NAME':     os.environ['DB_NAME'],
         'USER':     os.environ['DB_USER'],
         'PASSWORD': os.environ['DB_PASSWORD'],
+        'CONN_MAX_AGE': 600,  # Reuse DB connections for 10 minutes
         'OPTIONS': {
             'sslmode': os.getenv('DB_SSLMODE', 'require'),
         },

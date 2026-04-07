@@ -150,7 +150,15 @@ export default function App() {
     if (!url || imagePreloadCache.current.has(url)) return Promise.resolve()
     return new Promise(resolve => {
       const img = new Image()
-      img.onload = img.onerror = () => { imagePreloadCache.current.add(url); resolve() }
+      const timeout = setTimeout(() => {
+        imagePreloadCache.current.add(url)
+        resolve()
+      }, 1500)
+      img.onload = img.onerror = () => {
+        clearTimeout(timeout)
+        imagePreloadCache.current.add(url)
+        resolve()
+      }
       img.src = url
     })
   }

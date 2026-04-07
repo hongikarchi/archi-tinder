@@ -426,12 +426,12 @@ class SwipeView(APIView):
                             break
 
                     if consecutive_dislikes >= RC.get('max_consecutive_dislikes', 10):
-                        # Get dislike vectors from project
+                        # Batch-fetch dislike embeddings (single query instead of N individual calls)
+                        dislike_ids = project.disliked_ids[-10:]
                         dislike_embeds = []
-                        for did in project.disliked_ids[-10:]:
-                            emb = engine.get_building_embedding(did)
-                            if emb:
-                                dislike_embeds.append(emb)
+                        if dislike_ids:
+                            dislike_emb_map = engine.get_pool_embeddings(dislike_ids)
+                            dislike_embeds = [dislike_emb_map[did] for did in dislike_ids if did in dislike_emb_map]
                         fallback_id = engine.get_dislike_fallback(session.pool_ids, session.exposed_ids, pool_embeddings, dislike_embeds)
                         if fallback_id:
                             session.exposed_ids = session.exposed_ids + [fallback_id]
@@ -470,9 +470,11 @@ class SwipeView(APIView):
             saved_initial_batch = list(session.initial_batch) if session.initial_batch else []
             saved_current_round = session.current_round
             saved_phase = session.phase
+            # Cache pool_embeddings -- same pool_ids, no need to re-fetch outside transaction
+            saved_pool_embeddings = pool_embeddings
 
         # 9. Prefetch (outside transaction -- no lock held)
-        pool_embeddings = engine.get_pool_embeddings(saved_pool_ids)
+        # Reuse cached pool_embeddings from step 8 (pool_ids unchanged)
         prefetch_card = None
         if next_card and next_card.get('building_id') != '__action_card__':
             try:
@@ -481,11 +483,11 @@ class SwipeView(APIView):
                         pf_bid = saved_initial_batch[saved_current_round + 1]
                         prefetch_card = engine.get_building_card(pf_bid)
                     else:
-                        pf_bid = engine.farthest_point_from_pool(saved_pool_ids, saved_exposed_ids, pool_embeddings)
+                        pf_bid = engine.farthest_point_from_pool(saved_pool_ids, saved_exposed_ids, saved_pool_embeddings)
                         prefetch_card = engine.get_building_card(pf_bid) if pf_bid else None
                 elif saved_phase == 'analyzing':
                     pf_id = engine.compute_mmr_next(
-                        saved_pool_ids, saved_exposed_ids, pool_embeddings,
+                        saved_pool_ids, saved_exposed_ids, saved_pool_embeddings,
                         saved_like_vectors, saved_current_round + 1
                     )
                     prefetch_card = engine.get_building_card(pf_id) if pf_id else None
@@ -502,11 +504,11 @@ class SwipeView(APIView):
                         pf2_bid = saved_initial_batch[saved_current_round + 2]
                         prefetch_card_2 = engine.get_building_card(pf2_bid)
                     else:
-                        pf2_bid = engine.farthest_point_from_pool(saved_pool_ids, temp_exposed, pool_embeddings)
+                        pf2_bid = engine.farthest_point_from_pool(saved_pool_ids, temp_exposed, saved_pool_embeddings)
                         prefetch_card_2 = engine.get_building_card(pf2_bid) if pf2_bid else None
                 elif saved_phase == 'analyzing':
                     pf2_id = engine.compute_mmr_next(
-                        saved_pool_ids, temp_exposed, pool_embeddings,
+                        saved_pool_ids, temp_exposed, saved_pool_embeddings,
                         saved_like_vectors, saved_current_round + 2
                     )
                     prefetch_card_2 = engine.get_building_card(pf2_id) if pf2_id else None

@@ -56,6 +56,9 @@
 25. **TEST2** -- Rewrite runner.py to match actual frontend UI flow -- COMPLETED 2026-04-06
 26. **TEST3** -- Fix screenshots, card visibility, timing breakdown -- COMPLETED 2026-04-07
 
+### Phase 10: Swipe API Latency Fix
+27. **PERF1** -- Non-algorithm swipe latency optimizations (pool embedding cache, batch dislike, CONN_MAX_AGE, image preload timeout)
+
 ---
 
 ## Open
@@ -84,7 +87,13 @@ Google OAuth only. Korean users need domestic login.
 
 ## In Progress
 
-(none)
+#### PERF1. Non-algorithm swipe API latency optimizations
+Web testing revealed ~2-5% of swipes take 5-10s (vs normal 2-3s). Root causes are non-algorithm overhead.
+engine.py is OFF-LIMITS.
+- [ ] views.py: Cache pool_embeddings once per request (eliminate redundant call at line 475)
+- [ ] views.py: Batch dislike embedding fetch (replace N individual get_building_embedding calls with single get_pool_embeddings)
+- [ ] settings.py: Add CONN_MAX_AGE=600 for DB connection reuse
+- [ ] App.jsx: Add 1.5s timeout to preloadImage() so UI does not block on slow CDN
 
 ---
 
