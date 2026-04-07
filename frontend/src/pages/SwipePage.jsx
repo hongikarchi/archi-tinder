@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import TinderCard from 'react-tinder-card'
 import TutorialPopup from '../components/TutorialPopup.jsx'
 
@@ -378,6 +378,7 @@ function LoadingCard() {
 export default function SwipePage({ currentCard, progress, isCompleted, isLoading, isResultLoading = false, projectName, onSwipe, onViewResults }) {
   const cardRef = useRef(null)
   const pendingAction = useRef(null)
+  const swipedCardId = useRef(null)
   const [galleryOpen, setGalleryOpen] = useState(false)
   const [showTutorial, setShowTutorial] = useState(() => !localStorage.getItem('archithon_tutorial_dismissed'))
 
@@ -402,6 +403,7 @@ export default function SwipePage({ currentCard, progress, isCompleted, isLoadin
   const showExit = phase === 'converged' || phase === 'completed'
 
   function onTinderSwipe(dir) {
+    swipedCardId.current = currentCard?.image_id
     pendingAction.current = dir === 'right' ? 'like' : 'dislike'
   }
 
@@ -414,8 +416,29 @@ export default function SwipePage({ currentCard, progress, isCompleted, isLoadin
 
   async function swipeManual(dir) {
     if (!cardRef.current || isLoading) return
+    pendingAction.current = dir === 'right' ? 'like' : 'dislike'
     await cardRef.current.swipe(dir)
   }
+
+  useEffect(() => {
+    function handleKeyDown(e) {
+      if (isLoading || !currentCard) return
+      if (showTutorial || pendingAction.current) return
+      if (swipedCardId.current === currentCard.image_id) return
+
+      if (e.key === 'ArrowLeft') {
+        swipedCardId.current = currentCard.image_id
+        if (galleryOpen) setGalleryOpen(false)
+        swipeManual('left')
+      } else if (e.key === 'ArrowRight') {
+        swipedCardId.current = currentCard.image_id
+        if (galleryOpen) setGalleryOpen(false)
+        swipeManual('right')
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isLoading, currentCard, showTutorial, galleryOpen])
 
   if (isCompleted) {
     return (
@@ -577,40 +600,6 @@ export default function SwipePage({ currentCard, progress, isCompleted, isLoadin
         {/* Action Buttons */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
           <p style={{ color: 'var(--color-text-dimmest)', fontSize: 11, margin: 0 }}>← skip · tap card · save →</p>
-          <div style={{ display: 'flex', gap: 32 }}>
-            <button
-              onClick={() => swipeManual('left')}
-              disabled={isLoading || !currentCard}
-              style={{
-                width: 64, height: 64, borderRadius: '50%',
-                background: 'rgba(239,68,68,0.15)', border: '2px solid rgba(239,68,68,0.4)',
-                color: isLoading ? 'var(--color-text-dimmer)' : '#ef4444',
-                cursor: isLoading ? 'default' : 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}
-              aria-label="Dislike"
-            >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-              </svg>
-            </button>
-            <button
-              onClick={() => swipeManual('right')}
-              disabled={isLoading || !currentCard}
-              style={{
-                width: 64, height: 64, borderRadius: '50%',
-                background: 'rgba(236,72,153,0.15)', border: '2px solid rgba(236,72,153,0.4)',
-                color: isLoading ? 'var(--color-text-dimmer)' : '#ec4899',
-                cursor: isLoading ? 'default' : 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}
-              aria-label="Like"
-            >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-              </svg>
-            </button>
-          </div>
           {showExit && (
             <button
               onClick={onViewResults}
@@ -620,6 +609,7 @@ export default function SwipePage({ currentCard, progress, isCompleted, isLoadin
                 color: '#fff', fontSize: 14, fontWeight: 700,
                 border: 'none', cursor: 'pointer', fontFamily: 'inherit',
                 boxShadow: '0 4px 20px rgba(244,63,94,0.35)',
+                marginTop: 12,
               }}
             >
               View Results →

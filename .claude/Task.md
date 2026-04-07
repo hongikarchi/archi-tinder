@@ -56,8 +56,12 @@
 25. **TEST2** -- Rewrite runner.py to match actual frontend UI flow -- COMPLETED 2026-04-06
 26. **TEST3** -- Fix screenshots, card visibility, timing breakdown -- COMPLETED 2026-04-07
 
-### Phase 10: Swipe API Latency Fix
-27. **PERF1** -- Non-algorithm swipe latency optimizations (pool embedding cache, batch dislike, CONN_MAX_AGE, image preload timeout)
+### Phase 10: Swipe API Latency Fix -- COMPLETED 2026-04-05
+27. **PERF1** -- Non-algorithm swipe latency optimizations -- COMPLETED 2026-04-05
+
+### Phase 11: Frontend Bug Fix
+28. **B7** -- Keyboard swiping blocked in gallery mode (SwipePage.jsx)
+29. **B8** -- Card disappears after swipe race condition (App.jsx)
 
 ---
 
@@ -87,17 +91,34 @@ Google OAuth only. Korean users need domestic login.
 
 ## In Progress
 
-#### PERF1. Non-algorithm swipe API latency optimizations
-Web testing revealed ~2-5% of swipes take 5-10s (vs normal 2-3s). Root causes are non-algorithm overhead.
-engine.py is OFF-LIMITS.
-- [ ] views.py: Cache pool_embeddings once per request (eliminate redundant call at line 475)
-- [ ] views.py: Batch dislike embedding fetch (replace N individual get_building_embedding calls with single get_pool_embeddings)
-- [ ] settings.py: Add CONN_MAX_AGE=600 for DB connection reuse
-- [ ] App.jsx: Add 1.5s timeout to preloadImage() so UI does not block on slow CDN
+#### B7. Keyboard swiping blocked in gallery mode -- 2026-04-05
+`SwipePage.jsx` line 426: `galleryOpen` guard blocks all keyboard events during gallery view.
+Users expect ArrowLeft/ArrowRight to still trigger like/dislike even when viewing gallery photos.
+- [ ] Remove `galleryOpen` from keyboard handler guard
+- [ ] Close gallery before triggering swipe on ArrowLeft/ArrowRight
+- [ ] Keep drag swipe prevention in gallery mode (TinderCard preventSwipe stays as-is)
+
+#### B8. Card disappears after swipe, requires F5 reload -- 2026-04-05
+`App.jsx` handleSwipeCard: race condition when non-instant path gets null next_image from API,
+and catch block reverts to wrong card when canInstantSwap was true.
+- [ ] Non-instant path: never set currentCard to null from API response
+- [ ] Catch block: only revert to swipedCard when canInstantSwap was false
+- [ ] Catch block: when canInstantSwap was true, preserve current card (user is already looking at different card)
 
 ---
 
 ## Resolved
+
+### Phase 10: Swipe API Latency Fix -- 2026-04-05
+
+#### PERF1. Non-algorithm swipe API latency optimizations -- 2026-04-05
+Web testing revealed ~2-5% of swipes take 5-10s (vs normal 2-3s). Root causes were non-algorithm overhead.
+engine.py was OFF-LIMITS (no algorithm changes).
+- [x] views.py: Cache pool_embeddings once per request (eliminate redundant get_pool_embeddings call in prefetch section)
+- [x] views.py: Batch dislike embedding fetch (replace N individual get_building_embedding calls with single get_pool_embeddings)
+- [x] settings.py: Add CONN_MAX_AGE=600 for DB connection reuse (10 minutes)
+- [x] App.jsx: Add 1.5s timeout to preloadImage() so UI does not block on slow CDN
+- Commit: 607e143
 
 ### Phase 9: E2E Runner Fix -- 2026-04-07
 

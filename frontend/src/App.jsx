@@ -312,8 +312,12 @@ export default function App() {
           if (result.prefetch_image?.image_url) preloadImage(result.prefetch_image.image_url)
           if (result.prefetch_image_2?.image_url) preloadImage(result.prefetch_image_2.image_url)
         } else {
-          setCurrentCard(result.next_image)
-          setPrefetchCard(result.prefetch_image)
+          // Non-instant path: only set currentCard if API returned a valid next_image
+          // Never set currentCard to null here -- keep loading state instead
+          if (result.next_image) {
+            setCurrentCard(result.next_image)
+          }
+          setPrefetchCard(result.prefetch_image || null)
           setPrefetchCard2(result.prefetch_image_2 || null)
           preloadImage(result.next_image?.image_url)
           preloadImage(result.prefetch_image?.image_url)
@@ -321,10 +325,13 @@ export default function App() {
         }
       }
     } catch (err) {
-      // Revert UI -- put the swiped card back
-      setCurrentCard(swipedCard)
-      setPrefetchCard(savedPrefetch)
-      setPrefetchCard2(savedPrefetch2)
+      // Only revert UI if we hadn't already swapped to a different card
+      // When canInstantSwap was true, user is already looking at savedPrefetch -- don't revert
+      if (!canInstantSwap) {
+        setCurrentCard(swipedCard)
+        setPrefetchCard(savedPrefetch)
+        setPrefetchCard2(savedPrefetch2)
+      }
       setSwipeError('Swipe failed. Please try again.')
     } finally {
       setIsSwipeLoading(false)
