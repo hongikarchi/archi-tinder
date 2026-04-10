@@ -43,6 +43,23 @@ export default function LoginPage({ onLogin, theme, onToggleTheme }) {
     googleLogin()
   }
 
+  async function handleDevClick() {
+    setError(null)
+    setLoading('dev')
+    try {
+      const secret = import.meta.env.VITE_DEV_LOGIN_SECRET
+      if (!secret) {
+        throw new Error('VITE_DEV_LOGIN_SECRET not set in frontend/.env')
+      }
+      const user = await api.devLogin(secret)
+      onLogin(user)
+    } catch (err) {
+      setError(`Dev login failed: ${err.message}`)
+    } finally {
+      setLoading(null)
+    }
+  }
+
   return (
     <div style={{
       height: '100vh', overflow: 'hidden', background: 'var(--color-bg)',
@@ -91,6 +108,16 @@ export default function LoginPage({ onLogin, theme, onToggleTheme }) {
           label="Continue with Google"
           style={{ background: '#fff', color: '#111', border: '1px solid rgba(0,0,0,0.1)' }}
         />
+
+        {import.meta.env.DEV && (
+          <SocialButton
+            onClick={handleDevClick}
+            loading={loading === 'dev'}
+            disabled={loading !== null}
+            label="🚀 Dev Login (Bypass)"
+            style={{ background: '#2d3139', color: '#ec4899', border: '1px solid #ec4899' }}
+          />
+        )}
       </div>
 
       {error && (

@@ -48,8 +48,8 @@ flowchart TD
 |------|---------------|
 | `engine.py` | Recommendation algorithm: pool creation, farthest-point, K-Means+MMR, convergence, top-K; centroid cache key uses spread dimensions (0, 191, -1) for collision resistance |
 | `services.py` | Gemini LLM: query parsing (gemini-2.5-flash), persona report generation; Imagen 3: AI architecture image generation; retry wrapper with 1-retry + logging |
-| `views.py` | All REST endpoints -- session CRUD, swipes, projects, images, auth, report image generation; `select_for_update()` on session query + `session.save()` before prefetch to prevent concurrent exposed_ids staleness; persona report returns structured errors (502 with error_type); building_id validation returns 400; prefetch computed outside transaction.atomic() |
-| `config/settings.py` | RECOMMENDATION dict (12 hyperparameters), JWT config, DB config, CORS; uses STORAGES dict (Django 4.2+ format) for WhiteNoise static files |
+| `views.py` | All REST endpoints -- session CRUD, swipes, projects, images, auth, report image generation; `select_for_update()` on session query + `session.save()` before prefetch to prevent concurrent exposed_ids staleness; persona report returns structured errors (502 with error_type); building_id validation returns 400; prefetch computed outside transaction.atomic(); pool_embeddings cached across transaction boundary (no redundant fetch for prefetch); dislike embeddings batch-fetched via get_pool_embeddings |
+| `config/settings.py` | RECOMMENDATION dict (12 hyperparameters), JWT config, DB config (CONN_MAX_AGE=600), CORS; uses STORAGES dict (Django 4.2+ format) for WhiteNoise static files |
 | `apps/accounts/views.py` | Google/Kakao/Naver OAuth, dev-login, JWT token management; all login views use `authentication_classes = []` |
 | `tests/conftest.py` | pytest fixtures: SQLite in-memory DB override, user_profile, auth_client, api_client |
 | `tests/test_auth.py` | 7 auth integration tests (Google login mock, token refresh, logout, dev-login) |
@@ -60,7 +60,7 @@ flowchart TD
 | File | Responsibility |
 |------|---------------|
 | `api/client.js` | API client with 10s fetch timeout, network retry (2x backoff), `normalizeCard()` field mapping, `callApi()` with JWT refresh, `socialLogin` clears stale tokens, `generateReportImage()` |
-| `App.jsx` | Router, auth state, session management, project sync on login (incl. `reportImage` mapping), `initSession` with try-catch-finally (setIsSwipeLoading in finally block prevents infinite spinner), explicit prefetch null reset, swipe error handling, `handleImageGenerated` propagates image state, `handleGenerateReport` propagates errors to caller |
+| `App.jsx` | Router, auth state, session management, project sync on login (incl. `reportImage` mapping), `initSession` with try-catch-finally (setIsSwipeLoading in finally block prevents infinite spinner), explicit prefetch null reset, swipe error handling, `handleImageGenerated` propagates image state, `handleGenerateReport` propagates errors to caller, `preloadImage` with 1.5s timeout (does not block UI on slow CDN) |
 | `SwipePage.jsx` | Card deck, swipe gestures, PC keyboard swiping, 3D flip, gallery, phase progress bar, "View Results" (converged/completed only), TutorialPopup, image error retry + fallback; safe-area height; 2-line title clamp; currentCard renders over loading state (overlay spinner) without bulky buttons |
 | `TutorialPopup.jsx` | First-time user guide with responsive semi-transparent overlay (swipe vs arrow key hints), tap-to-dismiss (localStorage) |
 | `FavoritesPage.jsx` | Project folders, persona report display with AI image generation button, "Generate Persona Report" button with error display; safe-area height; 44px back button |
@@ -154,20 +154,21 @@ flowchart TD
 - **SwipePage loading priority:** `currentCard` always renders when present (overlay spinner), full skeleton `LoadingCard` only when `currentCard` is null
 - **Codebase audit cleanup (AUDIT1):** removed unused deps (@react-spring/web, react-masonry-css, @playwright/test), dead CSS (.masonry-grid, .swipe-card), dead env var (VITE_GEMINI_API_KEY), dead fallback (predicted_like_images); consolidated tests to backend/tests/; STORAGES dict replaces deprecated STATICFILES_STORAGE; optuna moved to requirements-dev.txt; .gitignore gaps fixed
 - **E2E visual test runner (TEST1):** Playwright-based `web-testing/` module with persona-driven scenarios, screenshot capture, report/feedback JSON, and static dashboard SPA
-
 - **E2E runner fixes (TEST3):** Screenshots on all swipe steps (was 10/30), card image visibility check after screenshot, gesture/api/card/image timing breakdown in step metadata; 3-strategy swipe gesture (locator -> viewport-center -> keyboard); dashboard timing display in step cards and performance table; validated across 57 personas (20 loops x 3)
+- **Swipe API latency optimizations (PERF1):** pool_embeddings cached across transaction boundary (eliminates redundant get_pool_embeddings call in prefetch section); dislike embeddings batch-fetched via single get_pool_embeddings call (was N individual get_building_embedding calls); CONN_MAX_AGE=600 for DB connection reuse; preloadImage 1.5s timeout prevents UI blocking on slow CDN
 
 ### Pending
 - Kakao + Naver OAuth
 
 ## Last Updated (Claude)
-- **Date:** 2026-04-07
-- **Commits:** db3f768 -- E2E runner: screenshots, card visibility, timing breakdown
-- **Phase:** Phase 9 -- E2E Runner Fix (TEST3)
+- **Date:** 2026-04-05
+- **Commits:** 607e143 -- perf: eliminate redundant pool embedding fetch, batch dislike query, add connection pooling and image preload timeout (PERF1)
+- **Phase:** Phase 10 -- Swipe API Latency Fix (PERF1)
 - **Changes:**
-  - `web-testing/runner/runner.py` -- Screenshots on all swipe steps (removed modulo skip), card image visibility assertion, gesture/api/card/image timing breakdown, 3-strategy swipe gesture (locator 3s -> viewport-center -> keyboard), fixed undefined _wait_for_swipe_response
-  - `web-testing/dashboard/app.js` -- Timing breakdown display in step cards, timing columns in performance table, timing-aware bottleneck classification
-- **Verification:** 57 personas tested across 20 loops. 89.5% completion rate (51/57 completed 30 swipes). 0 gesture failures (was 100% for some personas before fix). 1.43% error rate per swipe (all card image visibility warnings, not regressions)
+  - `backend/apps/recommendation/views.py` -- Cache pool_embeddings from step 8 (inside transaction) and reuse in prefetch section (outside transaction), eliminating redundant get_pool_embeddings call; replace N individual get_building_embedding calls for dislike fallback with single batch get_pool_embeddings query
+  - `backend/config/settings.py` -- Add CONN_MAX_AGE=600 to DATABASES config for persistent DB connections (10-minute reuse)
+  - `frontend/src/App.jsx` -- Add 1.5s timeout to preloadImage() function; if image does not load within 1.5s, promise resolves anyway so UI is not blocked by slow CDN
+- **Verification:** 23 backend tests pass, frontend build succeeds, no API contract changes
 
 ## Last Updated (Gemini)
 - **Date:** 2026-04-06

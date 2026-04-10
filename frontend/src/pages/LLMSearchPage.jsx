@@ -235,7 +235,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
 
       {/* Messages */}
       <div style={{
-        flex: 1, overflowY: 'auto', padding: '24px 16px',
+        flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '24px 16px',
         display: 'flex', flexDirection: 'column', gap: 20,
         paddingBottom: bottomOffset,
       }}>
@@ -244,11 +244,11 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
             display: 'flex', flexDirection: 'column',
             alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start',
             alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-            maxWidth: '92%',
+            maxWidth: '100%',
           }}>
             <div style={{
               padding: '12px 16px', borderRadius: 16, fontSize: 14, lineHeight: 1.6,
-              whiteSpace: 'pre-wrap',
+              whiteSpace: 'pre-wrap', maxWidth: '100%', overflowX: 'hidden',
               ...(msg.role === 'user' ? {
                 background: 'var(--color-user-bubble)',
                 color: 'var(--color-user-bubble-text)',

@@ -8,6 +8,7 @@
   - All building references must use `building_id` -- never name, slug, or language-dependent field.
   - Do NOT create or migrate the `architecture_vectors` table -- it is owned by Make DB.
   - SentenceTransformers is NOT a dependency here -- embeddings are pre-computed.
+  - When updating `.claude/Report.md`, update ONLY the `Last Updated (Claude)` section. NEVER overwrite or remove the `Last Updated (Gemini)` section.
 
   ## Target Structure
   frontend/   <- React 18 + Vite
@@ -22,10 +23,11 @@
   - Google login: auth-code flow (VITE_GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET required)
 
   ## Frontend Conventions
+  - **MUST READ `DESIGN.md`**: All front-maker tasks MUST consult `DESIGN.md` for our visual design system, colors, sizes, and UI rules before writing any code.
   - All component styles are inline JS objects -- Tailwind is NOT used in components
   - Viewport-lock layout: body is `height:100vh; overflow:hidden`; pages use `height: calc(100vh - 64px)` (TabBar = 64px fixed bottom)
-  - Accent colors are hardcoded hex in inline styles (not CSS vars) -- grep all page files when changing colors
-  - Do NOT rewrite inline styles; they are the intentional design
+  - Accent colors are hardcoded hex in inline styles (not CSS vars) -- rely on `DESIGN.md` when applying colors
+  - Do NOT rewrite inline styles arbitrarily; they are the intentional design
 
   ## Backend Conventions
   - Django 4.2 LTS required (Python 3.9.6 on this machine; Django 5+ needs Python 3.10+)
@@ -155,7 +157,7 @@
   ```
 
   ### Prerequisites
-  - Frontend dev server running on `http://localhost:5173`
+  - Frontend dev server running on `http://localhost:5174`
   - Backend dev server running on `http://localhost:8001`
   - `DEV_LOGIN_SECRET` set in `backend/.env`
 

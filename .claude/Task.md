@@ -59,9 +59,9 @@
 ### Phase 10: Swipe API Latency Fix -- COMPLETED 2026-04-05
 27. **PERF1** -- Non-algorithm swipe latency optimizations -- COMPLETED 2026-04-05
 
-### Phase 11: Frontend Bug Fix
-28. **B7** -- Keyboard swiping blocked in gallery mode (SwipePage.jsx)
-29. **B8** -- Card disappears after swipe race condition (App.jsx)
+### Phase 11: Frontend Bug Fix -- COMPLETED 2026-04-05
+28. **B7** -- Keyboard swiping blocked in gallery mode (SwipePage.jsx) -- COMPLETED 2026-04-05
+29. **B8** -- Card disappears after swipe race condition (App.jsx) -- COMPLETED 2026-04-05
 
 ---
 
@@ -91,23 +91,29 @@ Google OAuth only. Korean users need domestic login.
 
 ## In Progress
 
-#### B7. Keyboard swiping blocked in gallery mode -- 2026-04-05
-`SwipePage.jsx` line 426: `galleryOpen` guard blocks all keyboard events during gallery view.
-Users expect ArrowLeft/ArrowRight to still trigger like/dislike even when viewing gallery photos.
-- [ ] Remove `galleryOpen` from keyboard handler guard
-- [ ] Close gallery before triggering swipe on ArrowLeft/ArrowRight
-- [ ] Keep drag swipe prevention in gallery mode (TinderCard preventSwipe stays as-is)
-
-#### B8. Card disappears after swipe, requires F5 reload -- 2026-04-05
-`App.jsx` handleSwipeCard: race condition when non-instant path gets null next_image from API,
-and catch block reverts to wrong card when canInstantSwap was true.
-- [ ] Non-instant path: never set currentCard to null from API response
-- [ ] Catch block: only revert to swipedCard when canInstantSwap was false
-- [ ] Catch block: when canInstantSwap was true, preserve current card (user is already looking at different card)
+(none)
 
 ---
 
 ## Resolved
+
+### Phase 11: Frontend Bug Fix -- 2026-04-05
+
+#### B7. Keyboard swiping blocked in gallery mode -- 2026-04-05
+`SwipePage.jsx` line 426: `galleryOpen` guard blocked all keyboard events during gallery view.
+Users expected ArrowLeft/ArrowRight to still trigger like/dislike even when viewing gallery photos.
+- [x] Remove `galleryOpen` from keyboard handler guard
+- [x] Close gallery before triggering swipe on ArrowLeft/ArrowRight
+- [x] Keep drag swipe prevention in gallery mode (TinderCard preventSwipe stays as-is)
+- Commit: f3afb26
+
+#### B8. Card disappears after swipe, requires F5 reload -- 2026-04-05
+`App.jsx` handleSwipeCard: race condition when non-instant path gets null next_image from API,
+and catch block reverts to wrong card when canInstantSwap was true.
+- [x] Non-instant path: never set currentCard to null from API response
+- [x] Catch block: only revert to swipedCard when canInstantSwap was false
+- [x] Catch block: when canInstantSwap was true, preserve current card (user is already looking at different card)
+- Commit: f3afb26
 
 ### Phase 10: Swipe API Latency Fix -- 2026-04-05
 
