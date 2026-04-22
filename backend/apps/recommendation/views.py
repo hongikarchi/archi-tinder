@@ -38,6 +38,22 @@ def _progress(session):
     }
 
 
+def _merge_buffer_into_exposed(exposed_ids, client_buffer_ids):
+    """
+    Merge client_buffer_ids into exposed_ids, preserving order and deduplicating.
+    Returns a new list (does not mutate input).
+    """
+    if not client_buffer_ids:
+        return list(exposed_ids)
+    exposed_set = set(exposed_ids)
+    merged = list(exposed_ids)
+    for bid in client_buffer_ids:
+        if bid and bid != '__action_card__' and bid not in exposed_set:
+            merged.append(bid)
+            exposed_set.add(bid)
+    return merged
+
+
 # ── Projects ──────────────────────────────────────────────────────────────────
 
 class ProjectListCreateView(APIView):
@@ -222,6 +238,144 @@ class SessionCreateView(APIView):
         }, status=status.HTTP_201_CREATED)
 
 
+class SessionStateView(APIView):
+    """
+    Return the current resumable state of an active session without creating
+    a new one. Used by the frontend on page refresh to restore the swipe
+    session where the user left off.
+
+    Response shape matches SwipeView so the frontend can reuse normalization.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, session_id):
+        profile = _get_profile(request)
+        if not profile:
+            return Response({'detail': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        session = AnalysisSession.objects.filter(session_id=session_id, user=profile).first()
+        if not session:
+            return Response({'detail': 'Session not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Completed session: tell the frontend to go to results
+        if session.status == 'completed' or session.phase == 'completed':
+            return Response({
+                'session_id':      str(session.session_id),
+                'project_id':      str(session.project.project_id),
+                'session_status':  session.status,
+                'next_image':      None,
+                'prefetch_image':  None,
+                'prefetch_image_2': None,
+                'progress':        _progress(session),
+                'filter_relaxed':  False,
+                'is_analysis_completed': True,
+            })
+
+        # Current card: the last card added to exposed_ids (or the first if brand-new)
+        # If phase is converged, return an action card instead of a building card.
+        exposed_ids = list(session.exposed_ids or [])
+        pool_ids = list(session.pool_ids or [])
+        initial_batch = list(session.initial_batch or [])
+        like_vectors = list(session.like_vectors or [])
+        current_round = session.current_round
+        phase = session.phase
+
+        if phase == 'converged':
+            current_card = engine.build_action_card()
+            prefetch_card = None
+            prefetch_card_2 = None
+            return Response({
+                'session_id':      str(session.session_id),
+                'project_id':      str(session.project.project_id),
+                'session_status':  session.status,
+                'next_image':      current_card,
+                'prefetch_image':  prefetch_card,
+                'prefetch_image_2': prefetch_card_2,
+                'progress':        _progress(session),
+                'filter_relaxed':  False,
+            })
+
+        # Recover the "current card" shown to the user.
+        # Optional query param `current=<building_id>` lets the frontend hint which card it
+        # was actually displaying (via instant-swap buffering). Without the hint we fall back
+        # to exposed_ids[-1], which is the backend's last-selected next_image -- this may be
+        # 1-2 cards ahead of what the user was looking at, but progress is still preserved.
+        current_hint = request.query_params.get('current', '').strip()
+        current_bid = None
+        pool_set = set(pool_ids)
+        if current_hint and (current_hint in set(exposed_ids) or current_hint in pool_set):
+            current_bid = current_hint
+            # If hint card wasn't in exposed_ids, add it so prefetch excludes it
+            if current_bid not in set(exposed_ids):
+                exposed_ids = exposed_ids + [current_bid]
+        elif exposed_ids:
+            current_bid = exposed_ids[-1]
+        elif initial_batch:
+            current_bid = initial_batch[0]
+        current_card = engine.get_building_card(current_bid) if current_bid else None
+
+        # Compute prefetch + prefetch_2 using current exposed_ids (already includes current_bid)
+        pool_embeddings = engine.get_pool_embeddings(pool_ids) if pool_ids else {}
+
+        prefetch_card = None
+        prefetch_card_2 = None
+        exposed_set = set(exposed_ids)
+        try:
+            if phase == 'exploring':
+                # Use the next entries from initial_batch if still in range and not already exposed
+                pf_bid = None
+                for idx in range(current_round + 1, len(initial_batch)):
+                    cand = initial_batch[idx]
+                    if cand and cand not in exposed_set:
+                        pf_bid = cand
+                        break
+                if pf_bid is None:
+                    pf_bid = engine.farthest_point_from_pool(pool_ids, exposed_ids, pool_embeddings)
+                prefetch_card = engine.get_building_card(pf_bid) if pf_bid else None
+            elif phase == 'analyzing':
+                pf_id = engine.compute_mmr_next(
+                    pool_ids, exposed_ids, pool_embeddings,
+                    like_vectors, current_round + 1
+                )
+                prefetch_card = engine.get_building_card(pf_id) if pf_id else None
+        except Exception:
+            prefetch_card = None
+
+        try:
+            if prefetch_card and prefetch_card.get('building_id') != '__action_card__':
+                temp_exposed = exposed_ids + [prefetch_card['building_id']]
+                temp_set = set(temp_exposed)
+                if phase == 'exploring':
+                    pf2_bid = None
+                    for idx in range(current_round + 1, len(initial_batch)):
+                        cand = initial_batch[idx]
+                        if cand and cand not in temp_set:
+                            pf2_bid = cand
+                            break
+                    if pf2_bid is None:
+                        pf2_bid = engine.farthest_point_from_pool(pool_ids, temp_exposed, pool_embeddings)
+                    prefetch_card_2 = engine.get_building_card(pf2_bid) if pf2_bid else None
+                elif phase == 'analyzing':
+                    pf2_id = engine.compute_mmr_next(
+                        pool_ids, temp_exposed, pool_embeddings,
+                        like_vectors, current_round + 2
+                    )
+                    prefetch_card_2 = engine.get_building_card(pf2_id) if pf2_id else None
+        except Exception:
+            prefetch_card_2 = None
+
+        return Response({
+            'session_id':      str(session.session_id),
+            'project_id':      str(session.project.project_id),
+            'session_status':  session.status,
+            'next_image':      current_card,
+            'prefetch_image':  prefetch_card,
+            'prefetch_image_2': prefetch_card_2,
+            'progress':        _progress(session),
+            'filter_relaxed':  False,
+        })
+
+
 class SwipeView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -239,6 +393,18 @@ class SwipeView(APIView):
         building_id     = request.data.get('building_id')
         action          = request.data.get('action')
         idempotency_key = request.data.get('idempotency_key', '')
+
+        # Validate and sanitize client_buffer_ids: list of building_ids the frontend has
+        # prefetched in its visible queue (not yet swiped). Merging these into exposed_ids
+        # prevents the backend from re-selecting cards the user already has loaded,
+        # which eliminates frontend/backend queue drift ("card stuck" + "same card twice" bugs).
+        raw_buffer = request.data.get('client_buffer_ids') or []
+        if not isinstance(raw_buffer, list):
+            raw_buffer = []
+        client_buffer_ids = [
+            s for s in raw_buffer
+            if isinstance(s, str) and 0 < len(s) <= 20 and s != '__action_card__'
+        ][:10]
 
         if not building_id:
             return Response({'detail': 'building_id is required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -273,7 +439,11 @@ class SwipeView(APIView):
                     session.convergence_history = []
                     session.previous_pref_vector = []
                     session.phase = 'analyzing'
-                    session.save(update_fields=['phase', 'convergence_history', 'previous_pref_vector'])
+                    # Merge client buffer into exposed so we don't re-show cards the
+                    # frontend already has in its queue.
+                    if client_buffer_ids:
+                        session.exposed_ids = _merge_buffer_into_exposed(session.exposed_ids, client_buffer_ids)
+                    session.save(update_fields=['phase', 'convergence_history', 'previous_pref_vector', 'exposed_ids'])
                     # Fall through to select next card below
                     # (skip normal swipe recording for action card)
                     pool_embeddings = engine.get_pool_embeddings(session.pool_ids)
@@ -386,6 +556,12 @@ class SwipeView(APIView):
                 session.previous_pref_vector = list(session.preference_vector) if session.preference_vector else []
             # On dislike during analyzing: centroids unchanged, skip convergence check
 
+            # 5a. Merge client buffer into exposed_ids BEFORE card selection.
+            # This prevents the backend from re-selecting any card the frontend
+            # already has in its visible queue (fixes queue drift bugs).
+            if client_buffer_ids:
+                session.exposed_ids = _merge_buffer_into_exposed(session.exposed_ids, client_buffer_ids)
+
             # 6. Phase transitions
             like_count = len(session.like_vectors)
 
@@ -412,9 +588,18 @@ class SwipeView(APIView):
                 next_card = engine.build_action_card()
             elif session.phase == 'exploring':
                 # Use initial_batch for early rounds, then farthest-point
+                # Note: if the user's current_round lands on an initial_batch slot that was
+                # already merged in from client_buffer_ids, pick the next valid position instead.
+                exposed_set = set(session.exposed_ids)
+                next_card = None
                 if session.current_round < len(session.initial_batch):
                     next_bid = session.initial_batch[session.current_round]
-                    next_card = engine.get_building_card(next_bid)
+                    if next_bid and next_bid not in exposed_set:
+                        next_card = engine.get_building_card(next_bid)
+                    else:
+                        # Fall through to farthest-point selection (initial_batch slot exhausted)
+                        next_bid = engine.farthest_point_from_pool(session.pool_ids, session.exposed_ids, pool_embeddings)
+                        next_card = engine.get_building_card(next_bid) if next_bid else None
                 else:
                     # Check for consecutive dislikes
                     recent_swipes = list(session.swipes.order_by('-created_at').values_list('action', flat=True)[:RC.get('max_consecutive_dislikes', 10)])
@@ -479,9 +664,14 @@ class SwipeView(APIView):
         if next_card and next_card.get('building_id') != '__action_card__':
             try:
                 if saved_phase == 'exploring':
+                    exposed_set = set(saved_exposed_ids)
                     if saved_current_round + 1 < len(saved_initial_batch):
                         pf_bid = saved_initial_batch[saved_current_round + 1]
-                        prefetch_card = engine.get_building_card(pf_bid)
+                        if pf_bid and pf_bid not in exposed_set:
+                            prefetch_card = engine.get_building_card(pf_bid)
+                        else:
+                            pf_bid = engine.farthest_point_from_pool(saved_pool_ids, saved_exposed_ids, saved_pool_embeddings)
+                            prefetch_card = engine.get_building_card(pf_bid) if pf_bid else None
                     else:
                         pf_bid = engine.farthest_point_from_pool(saved_pool_ids, saved_exposed_ids, saved_pool_embeddings)
                         prefetch_card = engine.get_building_card(pf_bid) if pf_bid else None
@@ -500,9 +690,14 @@ class SwipeView(APIView):
             try:
                 temp_exposed = saved_exposed_ids + [prefetch_card['building_id']]
                 if saved_phase == 'exploring':
+                    exposed_set = set(temp_exposed)
                     if saved_current_round + 2 < len(saved_initial_batch):
                         pf2_bid = saved_initial_batch[saved_current_round + 2]
-                        prefetch_card_2 = engine.get_building_card(pf2_bid)
+                        if pf2_bid and pf2_bid not in exposed_set:
+                            prefetch_card_2 = engine.get_building_card(pf2_bid)
+                        else:
+                            pf2_bid = engine.farthest_point_from_pool(saved_pool_ids, temp_exposed, saved_pool_embeddings)
+                            prefetch_card_2 = engine.get_building_card(pf2_bid) if pf2_bid else None
                     else:
                         pf2_bid = engine.farthest_point_from_pool(saved_pool_ids, temp_exposed, saved_pool_embeddings)
                         prefetch_card_2 = engine.get_building_card(pf2_bid) if pf2_bid else None

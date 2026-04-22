@@ -30,6 +30,12 @@ function isNetworkError(err) {
   return err instanceof TypeError || !err.status
 }
 
+// Action cards have image_url = '' and don't need image preload.
+// Treat them as "always instant-swappable" so they advance the queue smoothly.
+function isActionCard(card) {
+  return !!card && (card.card_type === 'action' || card.image_id === '__action_card__')
+}
+
 /* ── Error Boundary ─────────────────────────────────────────────────────── */
 class ErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { error: null } }
@@ -129,6 +135,19 @@ export default function App() {
     return () => clearTimeout(timer)
   }, [swipeError])
 
+  // Persist current card id to localStorage per active project so refresh can
+  // restore the exact card the user was looking at (not just the backend's last
+  // next_image). Cleared when currentCard becomes null or session completes.
+  useEffect(() => {
+    if (!userId || !activeProjectId) return
+    const key = `archithon_currentCard_${userId}_${activeProjectId}`
+    if (currentCard?.image_id && currentCard.image_id !== '__action_card__') {
+      localStorage.setItem(key, currentCard.image_id)
+    } else if (!currentCard) {
+      localStorage.removeItem(key)
+    }
+  }, [currentCard, userId, activeProjectId])
+
   const activeProject = projects.find(p => p.id === activeProjectId) || null
 
   // On refresh, re-init swipe session if the user was on the swipe route
@@ -141,7 +160,13 @@ export default function App() {
       const project = projects.find(p => p.id === activeProjectId)
       if (project) {
         swipeRestored.current = true
-        initSession(activeProjectId, project.filters)
+        // Pass the stored sessionId so initSession tries to resume first,
+        // then falls back to creating a new session if resume fails.
+        // Also pass the persisted currentCard hint so the resume returns the
+        // exact card the user was looking at, not the backend's last selection.
+        const hintKey = `archithon_currentCard_${userId}_${activeProjectId}`
+        const currentHint = localStorage.getItem(hintKey) || null
+        initSession(activeProjectId, project.filters, [], [], project.sessionId || null, currentHint)
       }
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -167,16 +192,29 @@ export default function App() {
     setTheme(t => t === 'dark' ? 'light' : 'dark')
   }
 
-  async function initSession(projectId, filters, filterPriority = [], seedIds = []) {
-    setIsSwipeLoading(true)
-    setIsSessionCompleted(false)
-    try {
-      const result = await api.startSession({
-        project_id: projectId,
-        filters: normalizeFilters(filters),
-        filter_priority: filterPriority,
-        seed_ids: seedIds,
-      })
+  // Populate frontend card state from a session state or start response.
+  function applySessionResponse(projectId, result) {
+    setCurrentCard(result.next_image)
+    setSessionProgress({ ...result.progress, filter_relaxed: result.filter_relaxed || false })
+    if (result.is_analysis_completed || !result.next_image) {
+      setIsSessionCompleted(!!result.is_analysis_completed || !result.next_image)
+    } else {
+      setIsSessionCompleted(false)
+    }
+    if (result.next_image?.image_url) preloadImage(result.next_image.image_url)
+    if (result.prefetch_image) {
+      setPrefetchCard(result.prefetch_image)
+      preloadImage(result.prefetch_image.image_url)
+    } else {
+      setPrefetchCard(null)
+    }
+    if (result.prefetch_image_2) {
+      setPrefetchCard2(result.prefetch_image_2)
+      preloadImage(result.prefetch_image_2.image_url)
+    } else {
+      setPrefetchCard2(null)
+    }
+    if (result.session_id) {
       setProjects(prev => prev.map(p => {
         if (p.id !== projectId) return p
         return {
@@ -185,22 +223,31 @@ export default function App() {
           backendId: result.project_id || p.backendId || null,
         }
       }))
-      setCurrentCard(result.next_image)
-      setSessionProgress({ ...result.progress, filter_relaxed: result.filter_relaxed || false })
-      if (!result.next_image) setIsSessionCompleted(true)
-      if (result.next_image?.image_url) preloadImage(result.next_image.image_url)
-      if (result.prefetch_image) {
-        setPrefetchCard(result.prefetch_image)
-        preloadImage(result.prefetch_image.image_url)
-      } else {
-        setPrefetchCard(null)
+    }
+  }
+
+  async function initSession(projectId, filters, filterPriority = [], seedIds = [], existingSessionId = null, currentHint = null) {
+    setIsSwipeLoading(true)
+    setIsSessionCompleted(false)
+    try {
+      // Try to resume an existing session first (preserves progress across refresh)
+      if (existingSessionId) {
+        try {
+          const resumed = await api.getSessionState(existingSessionId, currentHint)
+          applySessionResponse(projectId, resumed)
+          return
+        } catch (resumeErr) {
+          // Session not found (404), expired, or other failure -- fall through to new session
+        }
       }
-      if (result.prefetch_image_2) {
-        setPrefetchCard2(result.prefetch_image_2)
-        preloadImage(result.prefetch_image_2.image_url)
-      } else {
-        setPrefetchCard2(null)
-      }
+
+      const result = await api.startSession({
+        project_id: projectId,
+        filters: normalizeFilters(filters),
+        filter_priority: filterPriority,
+        seed_ids: seedIds,
+      })
+      applySessionResponse(projectId, result)
     } catch (err) {
       setCurrentCard(null)
       setPrefetchCard(null)
@@ -247,23 +294,39 @@ export default function App() {
     const savedPrefetch2 = prefetchCard2
     const newSwipedIds = [...(project.swipedIds || []), swipedCard.image_id]
 
-    // Optimistic UI: show prefetch card immediately for smooth UX
-    const canInstantSwap = savedPrefetch && imagePreloadCache.current.has(savedPrefetch.image_url)
+    // Optimistic UI: show prefetch card immediately for smooth UX.
+    // Action cards are always instant-swappable (no image to preload).
+    const canInstantSwap = !!savedPrefetch && (
+      isActionCard(savedPrefetch) ||
+      imagePreloadCache.current.has(savedPrefetch.image_url)
+    )
     if (canInstantSwap) {
       setCurrentCard(savedPrefetch)
       setPrefetchCard(prefetchCard2)  // shift queue
       setPrefetchCard2(null)
     } else {
-      setCurrentCard(null)
+      // Keep the current card visible with a loading overlay instead of
+      // replacing it with null. Setting currentCard to null was the root cause
+      // of Bug 1 (cards stop loading) -- if the user tried to interact while
+      // null, the handler returned early and never recovered.
       setIsSwipeLoading(true)
     }
 
     try {
+      // Tell the backend which cards the frontend has prefetched in its visible queue.
+      // The backend merges these into exposed_ids before card selection, so it
+      // never re-selects a card the user already has loaded. This is the core fix
+      // for "cards stop loading" and "same card appears twice" bugs.
+      const clientBufferIds = [savedPrefetch, savedPrefetch2]
+        .filter(c => c && c.image_id && !isActionCard(c))
+        .map(c => c.image_id)
+
       let result
       const swipePayload = {
         session_id: project.sessionId,
         image_id: swipedCard.image_id,
         action,
+        client_buffer_ids: clientBufferIds,
       }
 
       try {
@@ -305,17 +368,33 @@ export default function App() {
         }
       } else {
         if (canInstantSwap) {
-          // DON'T overwrite currentCard — user is already looking at savedPrefetch
-          // Only update the prefetch queue from backend response
-          setPrefetchCard(result.prefetch_image || null)
-          setPrefetchCard2(result.prefetch_image_2 || null)
-          if (result.prefetch_image?.image_url) preloadImage(result.prefetch_image.image_url)
-          if (result.prefetch_image_2?.image_url) preloadImage(result.prefetch_image_2.image_url)
+          // User is looking at savedPrefetch (already swapped to currentCard).
+          // Queue was shifted: prefetch=savedPrefetch2, prefetch_2=null.
+          // Backend's result.next_image is the card that should come AFTER the
+          // entire frontend buffer (backend's exposed_ids now includes [swiped,
+          // savedPrefetch, savedPrefetch2, result.next_image]).
+          // Use result.next_image as the new prefetch_2 (tail-fill the queue).
+          // IGNORE result.prefetch_image and result.prefetch_image_2 on the
+          // instant-swap path -- they describe the backend's view of rounds past
+          // savedPrefetch, but the frontend only advances one step per swipe.
+          // Using them would overwrite the frontend's authoritative queue and
+          // cause drift (the root cause of "cards stop loading" and "same card
+          // twice" bugs before this fix).
+          if (result.next_image) {
+            setPrefetchCard2(result.next_image)
+            if (result.next_image.image_url) preloadImage(result.next_image.image_url)
+          } else {
+            setPrefetchCard2(null)
+          }
         } else {
-          // Non-instant path: only set currentCard if API returned a valid next_image
-          // Never set currentCard to null here -- keep loading state instead
+          // Non-instant path: rebuild queue from backend response entirely.
+          // If next_image is null and session isn't completed, keep the card
+          // in loading state (swiped card was already animated away by TinderCard).
           if (result.next_image) {
             setCurrentCard(result.next_image)
+          } else if (!result.is_analysis_completed) {
+            // Edge case: no next card but session not done (pool temporarily exhausted)
+            // Keep whatever is visible; the loading overlay will clear in finally block
           }
           setPrefetchCard(result.prefetch_image || null)
           setPrefetchCard2(result.prefetch_image_2 || null)
@@ -345,7 +424,8 @@ export default function App() {
     setWizardData(null)
     setActiveProjectId(id)
     navigate('/swipe')
-    await initSession(id, project.filters)
+    // Try to resume the stored session, fall back to new session on failure
+    await initSession(id, project.filters, [], [], project.sessionId || null)
   }
 
   async function handleUpdateWithImages(id, preloadedImages, llmFilters = {}, filterPriority = []) {

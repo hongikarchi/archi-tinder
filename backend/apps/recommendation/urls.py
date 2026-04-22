@@ -1,7 +1,7 @@
 from django.urls import path
 from .views import (
     ProjectListCreateView, ProjectDetailView,
-    SessionCreateView, SwipeView, SessionResultView,
+    SessionCreateView, SessionStateView, SwipeView, SessionResultView,
     DiverseRandomView, BuildingBatchView, ParseQueryView,
     ProjectReportGenerateView, ProjectReportImageView,
 )
@@ -14,6 +14,7 @@ urlpatterns = [
     path('projects/<uuid:pk>/report/generate/',          ProjectReportGenerateView.as_view()),
     # Analysis sessions
     path('analysis/sessions/',                           SessionCreateView.as_view()),
+    path('analysis/sessions/<uuid:session_id>/state/',   SessionStateView.as_view()),
     path('analysis/sessions/<uuid:session_id>/swipes/',  SwipeView.as_view()),
     path('analysis/sessions/<uuid:session_id>/result/',  SessionResultView.as_view()),
     # Images

@@ -396,3 +396,172 @@ class TestPhaseTransitions:
                 p.stop()
 
         assert last_resp.json()['progress']['phase'] == 'converged'
+
+
+@pytest.mark.django_db
+class TestClientBufferMerge:
+    """Verify client_buffer_ids merges into exposed_ids, preventing queue drift."""
+
+    def _create_session(self, auth_client, user_profile):
+        """Helper: create a project + session, return session_id."""
+        project = Project.objects.create(
+            user=user_profile, name='Buffer Test', filters={},
+        )
+        patchers = _apply_patches()
+        try:
+            resp = auth_client.post(
+                '/api/v1/analysis/sessions/',
+                {'project_id': str(project.project_id), 'filters': {}},
+                format='json',
+            )
+        finally:
+            _stop_patches(patchers)
+        return resp.json()['session_id']
+
+    def test_client_buffer_ids_merged_into_exposed(self, auth_client, user_profile):
+        """client_buffer_ids must be added to exposed_ids so subsequent selections skip them."""
+        session_id = self._create_session(auth_client, user_profile)
+
+        patchers = _apply_patches()
+        try:
+            resp = auth_client.post(
+                f'/api/v1/analysis/sessions/{session_id}/swipes/',
+                {
+                    'building_id': 'B00001',
+                    'action': 'like',
+                    'idempotency_key': 'buffer_test_1',
+                    'client_buffer_ids': ['B00002', 'B00003'],
+                },
+                format='json',
+            )
+        finally:
+            _stop_patches(patchers)
+
+        assert resp.status_code == 200
+
+        # Verify exposed_ids includes all buffered cards
+        session = AnalysisSession.objects.get(session_id=session_id)
+        assert 'B00002' in session.exposed_ids
+        assert 'B00003' in session.exposed_ids
+
+    def test_invalid_buffer_ids_ignored(self, auth_client, user_profile):
+        """Non-list or invalid entries in client_buffer_ids must be ignored safely."""
+        session_id = self._create_session(auth_client, user_profile)
+
+        patchers = _apply_patches()
+        try:
+            resp = auth_client.post(
+                f'/api/v1/analysis/sessions/{session_id}/swipes/',
+                {
+                    'building_id': 'B00001',
+                    'action': 'like',
+                    'idempotency_key': 'buffer_invalid_1',
+                    'client_buffer_ids': 'not a list',  # invalid shape
+                },
+                format='json',
+            )
+        finally:
+            _stop_patches(patchers)
+
+        assert resp.status_code == 200
+
+    def test_action_card_marker_filtered_from_buffer(self, auth_client, user_profile):
+        """__action_card__ entries must NOT be added to exposed_ids."""
+        session_id = self._create_session(auth_client, user_profile)
+
+        patchers = _apply_patches()
+        try:
+            auth_client.post(
+                f'/api/v1/analysis/sessions/{session_id}/swipes/',
+                {
+                    'building_id': 'B00001',
+                    'action': 'like',
+                    'idempotency_key': 'buffer_action_1',
+                    'client_buffer_ids': ['B00002', '__action_card__', 'B00003'],
+                },
+                format='json',
+            )
+        finally:
+            _stop_patches(patchers)
+
+        session = AnalysisSession.objects.get(session_id=session_id)
+        assert '__action_card__' not in session.exposed_ids
+        assert 'B00002' in session.exposed_ids
+        assert 'B00003' in session.exposed_ids
+
+
+@pytest.mark.django_db
+class TestSessionStateResume:
+    """Verify SessionStateView returns current session state without creating a new one."""
+
+    def test_resume_returns_current_state(self, auth_client, user_profile):
+        """GET /analysis/sessions/<id>/state/ returns the current card and progress."""
+        project = Project.objects.create(
+            user=user_profile, name='Resume Test', filters={},
+        )
+
+        patchers = _apply_patches()
+        try:
+            # Create a session and swipe a few cards
+            create_resp = auth_client.post(
+                '/api/v1/analysis/sessions/',
+                {'project_id': str(project.project_id), 'filters': {}},
+                format='json',
+            )
+            session_id = create_resp.json()['session_id']
+            original_round = create_resp.json()['progress']['current_round']
+
+            # Swipe 2 cards
+            auth_client.post(
+                f'/api/v1/analysis/sessions/{session_id}/swipes/',
+                {'building_id': 'B00001', 'action': 'like', 'idempotency_key': 'resume_1'},
+                format='json',
+            )
+            auth_client.post(
+                f'/api/v1/analysis/sessions/{session_id}/swipes/',
+                {'building_id': 'B00002', 'action': 'dislike', 'idempotency_key': 'resume_2'},
+                format='json',
+            )
+
+            # Call the resume endpoint
+            resume_resp = auth_client.get(
+                f'/api/v1/analysis/sessions/{session_id}/state/',
+            )
+        finally:
+            _stop_patches(patchers)
+
+        assert resume_resp.status_code == 200
+        data = resume_resp.json()
+        assert data['session_id'] == session_id
+        assert data['next_image'] is not None
+        # Progress should reflect the 2 completed swipes, not reset to 0
+        assert data['progress']['current_round'] == original_round + 2
+        assert data['progress']['like_count'] == 1
+        assert data['progress']['dislike_count'] == 1
+        # No new session created
+        assert AnalysisSession.objects.filter(project=project).count() == 1
+
+    def test_resume_404_for_missing_session(self, auth_client, user_profile):
+        """Resume endpoint returns 404 for a non-existent session."""
+        import uuid
+        fake_id = uuid.uuid4()
+        resp = auth_client.get(f'/api/v1/analysis/sessions/{fake_id}/state/')
+        assert resp.status_code == 404
+
+    def test_resume_completed_session_returns_analysis_completed(self, auth_client, user_profile):
+        """Resuming a completed session returns is_analysis_completed=True."""
+        project = Project.objects.create(
+            user=user_profile, name='Completed Test', filters={},
+        )
+        session = AnalysisSession.objects.create(
+            user=user_profile, project=project,
+            phase='completed', status='completed',
+            pool_ids=['B00001'], pool_scores={}, exposed_ids=['B00001'],
+            initial_batch=['B00001'], like_vectors=[], convergence_history=[],
+        )
+
+        resp = auth_client.get(f'/api/v1/analysis/sessions/{session.session_id}/state/')
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data['is_analysis_completed'] is True
+        assert data['next_image'] is None

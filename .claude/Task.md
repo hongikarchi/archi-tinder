@@ -63,6 +63,11 @@
 28. **B7** -- Keyboard swiping blocked in gallery mode (SwipePage.jsx) -- COMPLETED 2026-04-05
 29. **B8** -- Card disappears after swipe race condition (App.jsx) -- COMPLETED 2026-04-05
 
+### Phase 12: Critical Swipe Bug Fixes -- IN PROGRESS 2026-04-05
+30. **B9** -- Cards stop loading after ~N swipes (frontend/backend queue drift)
+31. **B10** -- Refresh creates new session instead of resuming
+32. **B11** -- Same card appears twice (exposed_ids missing buffered cards)
+
 ---
 
 ## Open
@@ -91,7 +96,29 @@ Google OAuth only. Korean users need domestic login.
 
 ## In Progress
 
-(none)
+### Phase 12: Critical Swipe Bug Fixes
+
+#### B9. Cards stop loading after several swipes -- 2026-04-05
+Root cause: `canInstantSwap` path in `App.jsx:handleSwipeCard` lets the frontend queue drift from backend's exposed_ids.
+Frontend shows `savedPrefetch` as current, but backend's `next_image` in the response is a different card (especially at exploring->analyzing transition where selection switches from initial_batch indexing to MMR). Over many rounds, frontend's queue and backend's selections diverge. Eventually backend's prefetch/prefetch_2 could be null or produce a stuck state.
+- [ ] Backend: `SwipeView.post()` accepts optional `client_buffer_ids` (list of building_ids frontend has prefetched), merge into `session.exposed_ids` before card selection
+- [ ] Frontend: `handleSwipeCard` sends `client_buffer_ids` from `[prefetchCard, prefetchCard2]`
+- [ ] Frontend: On canInstantSwap path, use only `result.next_image` as new `prefetch_2` (tail fill), discard `result.prefetch_image` and `result.prefetch_image_2` (they describe backend's queue, not frontend's)
+- [ ] Frontend: Treat action cards as always instant-swappable (empty image_url, no preload needed)
+
+#### B10. Refresh during swiping returns to beginning -- 2026-04-05
+Root cause: `App.jsx` `swipeRestored` useEffect always calls `initSession` which POSTs to `/analysis/sessions/` creating a brand-new session. The project's stored `sessionId` is never used on refresh.
+- [ ] Backend: New view `SessionStateView` at `GET /analysis/sessions/<uuid:session_id>/state/` -- returns current_card (from `exposed_ids[-1]`), computed prefetch and prefetch_2, and progress
+- [ ] Backend: `urls.py` -- add path for session state endpoint
+- [ ] Frontend: `client.js` -- add `getSessionState(sessionId)` function that normalizes card fields
+- [ ] Frontend: `App.jsx` -- `initSession` accepts optional `existingSessionId` param; if present, call `getSessionState` first, fall back to new session on failure
+- [ ] Frontend: swipeRestored useEffect passes `project.sessionId` to `initSession`
+- [ ] Frontend: `handleResumeProject` passes `project.sessionId` to `initSession`
+
+#### B11. Same card appears twice -- 2026-04-05
+Root cause: Same as B9. The frontend's `savedPrefetch` (shown after instant swap) is NOT in backend's `exposed_ids`. So on later rounds when `farthest_point` or `compute_mmr_next` picks candidates, the savedPrefetch card can be picked again.
+Covered by the B9 fix: `client_buffer_ids` ensures backend tracks everything the frontend has loaded.
+- [ ] Verified by B9 fix (client_buffer_ids merges into exposed_ids)
 
 ---
 
