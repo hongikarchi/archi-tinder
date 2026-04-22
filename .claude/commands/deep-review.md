@@ -256,6 +256,13 @@ context-switch back to the main terminal is needed. If the push surfaces a
 non-fast-forward reject, network error, auth failure, etc., the user resolves it directly
 — no follow-up signal from you, no retry by you.
 
+**Note for the human runner:** if `git push` fails non-ff and you recover with
+`git pull --rebase`, the rebase rewrites local commit SHAs. The `REVIEW-PASSED:
+<sha_short>` entry above now points to a SHA that no longer exists locally, and the
+rewritten commits have never been reviewed at their new SHAs. **Re-run `/deep-review`
+before retrying `git push`.** Only `REVIEW-PASSED` at the current HEAD's SHA is a valid
+push ticket.
+
 The main terminal's orchestrator reads the Handoffs section at the start of its next
 session: `REVIEW-FAIL` and `REVIEW-ABORTED` re-enter the fix loop; `REVIEW-PASSED` closes
 the cycle (either the branch is already on `origin/main` because the user pushed, or the

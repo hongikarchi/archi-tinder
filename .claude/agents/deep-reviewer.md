@@ -59,7 +59,7 @@ Then run these git commands (via Bash) and capture output:
 - `git rev-parse --abbrev-ref HEAD` → branch name
 - `git rev-parse --short HEAD` → sha_short (for display)
 - `git rev-parse HEAD` → **REVIEWED_SHA** (full SHA — stash this for the Step 6 HEAD-drift check)
-- `git rev-parse origin/main` → **REVIEWED_ORIGIN_MAIN** (full SHA — stash this for the Step 6 remote-drift check; non-fatal if `origin/main` is absent offline, in which case record `UNAVAILABLE` and skip remote-drift check in Step 6b)
+- `git rev-parse origin/main` → **REVIEWED_ORIGIN_MAIN** (full SHA — stash this for the Step 6 remote-drift check; non-fatal if `origin/main` is absent offline, in which case record `UNAVAILABLE` and skip remote-drift check in Step 6c)
 - `git log <range> --oneline` → commit list (two-dot is correct here)
 - `git diff <range_three_dot> --stat` → file scope + insertion/deletion counts
   (convert the range's `..` to `...` for divergent-history safety; on linear
@@ -255,6 +255,13 @@ stays in this review terminal, reads the one-line signal, and issues `git push`;
 context-switch back to the main terminal is needed. If the push surfaces a
 non-fast-forward reject, network error, auth failure, etc., the user resolves it directly
 — no follow-up signal from you, no retry by you.
+
+**Note for the human runner:** if `git push` fails non-ff and you recover with
+`git pull --rebase`, the rebase rewrites local commit SHAs. The `REVIEW-PASSED:
+<sha_short>` entry above now points to a SHA that no longer exists locally, and the
+rewritten commits have never been reviewed at their new SHAs. **Re-run `/deep-review`
+before retrying `git push`.** Only `REVIEW-PASSED` at the current HEAD's SHA is a valid
+push ticket.
 
 The main terminal's orchestrator reads the Handoffs section at the start of its next
 session: `REVIEW-FAIL` and `REVIEW-ABORTED` re-enter the fix loop; `REVIEW-PASSED` closes

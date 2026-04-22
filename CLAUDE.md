@@ -206,12 +206,20 @@
   `REVIEW-ABORTED` means the review passed but drift was detected, so the orchestrator
   must either re-review (HEAD drift) or `git pull --rebase` + re-review (remote drift).
   `REVIEW-FAIL` re-enters the orchestrator fix loop (max 2 cycles). `/deep-review` never
-  runs `git push` itself; push is always user-initiated. `/deep-review` **supplements** the
-  fast `reviewer` (API contracts, logic bugs, obvious perf) and `security-manager`
-  (SQLi/XSS/auth keyword scan) agents, filling their explicit exclusions: refactoring,
-  optimization opportunities, test coverage, cross-commit drift, and architecture
-  alignment. See `.claude/WORKFLOW.md` "Multi-Terminal Coordination" for the full
-  pre-push sequence.
+  runs `git push` itself; push is always user-initiated.
+
+  **Push-fail-then-rebase discipline:** if `git push` fails non-ff in the narrow window
+  between the drift check and the user's push, and the user recovers with
+  `git pull --rebase`, the rebase rewrites local commit SHAs. The existing
+  `REVIEW-PASSED: <old_sha>` signal is now stale — it points to a SHA that no longer
+  exists locally. Re-run `/deep-review` before retrying `git push`; only a
+  `REVIEW-PASSED` at the current HEAD's SHA is a valid push ticket.
+
+  `/deep-review` **supplements** the fast `reviewer` (API contracts, logic bugs, obvious
+  perf) and `security-manager` (SQLi/XSS/auth keyword scan) agents, filling their
+  explicit exclusions: refactoring, optimization opportunities, test coverage,
+  cross-commit drift, and architecture alignment. See `.claude/WORKFLOW.md`
+  "Multi-Terminal Coordination" for the full pre-push sequence.
 
   ## Database: architecture_vectors Schema
   Owned by Make DB. Django reads via raw SQL only -- never ORM, never migrate.

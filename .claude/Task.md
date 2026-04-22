@@ -27,6 +27,7 @@
 
 - [2026-04-22] REVIEW-FAIL: d320166 — 0 CRITICAL, 3 MAJOR; see .claude/reviews/latest.md
 - [2026-04-22] REVIEW-PASSED: b5931ab — safe to push; fix-loop resolves all findings from d320166 (one was my misread, correctly dismissed)
+- [2026-04-22] REVIEW-PASSED: d12b2d4 — drift checks passed; run `git push` manually from this terminal
 
 ---
 
