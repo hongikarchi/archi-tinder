@@ -1,8 +1,12 @@
 # macOS
 .DS_Store
 
-# Claude Code local settings
-.claude/
+# Claude Code -- local + derivative only (shared config like agents/, commands/, Goal.md, Task.md, Report.md, WORKFLOW.md is tracked)
+.claude/settings.local.json
+.claude/plans/
+.claude/reviews/
+.claude/projects/
+.claude/cache/
 
 # Python / Django (backend — future)
 __pycache__/

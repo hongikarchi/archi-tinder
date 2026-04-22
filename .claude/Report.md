@@ -156,19 +156,22 @@ flowchart TD
 - **E2E visual test runner (TEST1):** Playwright-based `web-testing/` module with persona-driven scenarios, screenshot capture, report/feedback JSON, and static dashboard SPA
 - **E2E runner fixes (TEST3):** Screenshots on all swipe steps (was 10/30), card image visibility check after screenshot, gesture/api/card/image timing breakdown in step metadata; 3-strategy swipe gesture (locator -> viewport-center -> keyboard); dashboard timing display in step cards and performance table; validated across 57 personas (20 loops x 3)
 - **Swipe API latency optimizations (PERF1):** pool_embeddings cached across transaction boundary (eliminates redundant get_pool_embeddings call in prefetch section); dislike embeddings batch-fetched via single get_pool_embeddings call (was N individual get_building_embedding calls); CONN_MAX_AGE=600 for DB connection reuse; preloadImage 1.5s timeout prevents UI blocking on slow CDN
+- **Deep code review workflow (`/deep-review`):** dedicated review-terminal slash command at `.claude/commands/deep-review.md` + parallel subagent at `.claude/agents/deep-reviewer.md`; **push-gate scope** via `origin/main..HEAD` (unpushed commits only) with optional user-supplied range; `git fetch origin main` refresh before scope computation; produces `.claude/reviews/{sha_short}.md` + `.claude/reviews/latest.md`; 7-axis checklist (architecture, correctness, performance, security, quality, test coverage, cross-commit drift); complementary to the fast `reviewer`/`security-manager` gate, not a replacement; read-only, non-blocking, outside the orchestrator fix loop
 
 ### Pending
 - Kakao + Naver OAuth
 
 ## Last Updated (Claude)
-- **Date:** 2026-04-05
-- **Commits:** 607e143 -- perf: eliminate redundant pool embedding fetch, batch dislike query, add connection pooling and image preload timeout (PERF1)
-- **Phase:** Phase 10 -- Swipe API Latency Fix (PERF1)
+- **Date:** 2026-04-22
+- **Commits:** pending -- feat: add `/deep-review` deep code review workflow + restructure `.gitignore` to track shared `.claude/` config
+- **Phase:** Phase 11 -- Review Infrastructure + Repo Share Model
 - **Changes:**
-  - `backend/apps/recommendation/views.py` -- Cache pool_embeddings from step 8 (inside transaction) and reuse in prefetch section (outside transaction), eliminating redundant get_pool_embeddings call; replace N individual get_building_embedding calls for dislike fallback with single batch get_pool_embeddings query
-  - `backend/config/settings.py` -- Add CONN_MAX_AGE=600 to DATABASES config for persistent DB connections (10-minute reuse)
-  - `frontend/src/App.jsx` -- Add 1.5s timeout to preloadImage() function; if image does not load within 1.5s, promise resolves anyway so UI is not blocked by slow CDN
-- **Verification:** 23 backend tests pass, frontend build succeeds, no API contract changes
+  - `.claude/commands/deep-review.md` -- NEW: project-level slash command; loads deep-review workflow into current session; 7-axis checklist (architecture / correctness / performance / security / code quality / test coverage / cross-commit drift); writes report to `.claude/reviews/{sha_short}.md` + `.claude/reviews/latest.md`; default scope `origin/main..HEAD` (unpushed commits, push-gate semantics) with `git fetch origin main` refresh; accepts optional user-supplied range
+  - `.claude/agents/deep-reviewer.md` -- NEW: programmatic subagent mirroring the slash command for CLI / orchestrator invocation; opus model; read-only (Read, Write, Bash, Glob, Grep); same 7-axis workflow + report format + push-gate scope
+  - `.claude/reviews/` -- NEW directory (created on first `/deep-review` invocation); per-commit review archive + stable `latest.md` for main-terminal read path; gitignored (derivative, per-machine)
+  - `CLAUDE.md` -- new "Code Review" section after "E2E Visual Test Runner"; documents invocation, output path, and that this workflow is read-only / non-blocking and supplements (does not replace) the fast `reviewer` + `security-manager` agents
+  - `.gitignore` -- restructured `.claude/` rule: wholesale exclusion replaced with targeted exclusions for local/derivative paths (`.claude/settings.local.json`, `.claude/plans/`, `.claude/reviews/`, `.claude/projects/`, `.claude/cache/`); shared config (`Goal.md`, `WORKFLOW.md`, `agents/`, `commands/`) is now visible to git and can be committed so the pipeline is reproducible across machines
+- **Verification:** dry-run of `git log origin/main..HEAD --oneline` and `git diff origin/main..HEAD --stat` on main confirms push-gate scope (empty -> abort path engages correctly); `.claude/agents/` (12 agents) and `.claude/commands/` now visible in `git status` as untracked, ready to be staged by a separate commit; the fast `reviewer` + `security-manager` agents remain unchanged inside the orchestrator fix loop; recommended overall flow: orchestrator -> commit on main (no push) -> accumulate N cycles -> `/deep-review` on review terminal -> if issues, fix & re-commit -> `/deep-review` PASS -> manual `git push`
 
 ## Last Updated (Gemini)
 - **Date:** 2026-04-06

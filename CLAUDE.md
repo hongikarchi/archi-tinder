@@ -167,6 +167,35 @@
   - `web-testing/reports/{run_id}/screenshots/` -- step screenshots
   - `web-testing/dashboard/data/latest/` -- symlinked latest report for dashboard
 
+  ## Code Review (`/deep-review`)
+
+  A dedicated deep-review workflow lives at `.claude/commands/deep-review.md` (slash command)
+  and `.claude/agents/deep-reviewer.md` (programmatic subagent). Both share the same
+  7-axis checklist and report format.
+
+  **Invocation:** on a separate "review terminal" Claude Code session, type
+  `/deep-review` (default scope: `main...HEAD`) or `/deep-review <range>` (e.g.
+  `/deep-review HEAD~5..HEAD`).
+
+  **Output:**
+  - `.claude/reviews/{sha_short}.md` -- per-commit archive
+  - `.claude/reviews/latest.md` -- stable read path; main implementation terminal
+    reads this on demand when relevant (never auto-loaded)
+
+  **Scope:** branch since `main` diverged. Reads all changed files (full content, not
+  just hunks) plus `.claude/Goal.md` + `.claude/Report.md` for architecture grounding.
+
+  **7 axes:** architecture alignment, correctness/logic depth, performance/optimization,
+  security in depth, code quality, test coverage, cross-commit drift. Severity:
+  CRITICAL / MAJOR / MINOR.
+
+  **Relationship to existing review agents:** `/deep-review` is **read-only and
+  non-blocking** -- it does not participate in the orchestrator fix loop or gate
+  commits. It **supplements** the fast `reviewer` (API contracts, logic bugs, obvious
+  perf) and `security-manager` (SQLi/XSS/auth keyword scan) agents, filling their
+  explicit exclusions: refactoring, optimization opportunities, test coverage,
+  cross-commit drift, and architecture alignment.
+
   ## Database: architecture_vectors Schema
   Owned by Make DB. Django reads via raw SQL only -- never ORM, never migrate.
 
