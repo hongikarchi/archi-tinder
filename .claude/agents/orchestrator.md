@@ -95,11 +95,30 @@ Spawn `web-tester` with:
 **If WEB TEST FAIL:** -> treat as reviewer FAIL, go to Fix Loop (Step 5b). Web test failures count toward the 2-cycle limit.
 **If local dev server not running:** skip web test, note in report, proceed to Step 6.
 
-### Step 6 -- Commit
+### Step 6 -- Commit (local only; do NOT push)
 Spawn `git-manager` with a one-line commit message describing what was done.
+`git-manager` never pushes by default — this is intentional, because `/deep-review`
+in the review terminal is the pre-push gate.
 
-### Step 7 -- Report
-Spawn `reporter`. It will update `.claude/Report.md` and mark completed tasks in `.claude/Task.md`.
+### Step 7 -- Report and emit REVIEW-REQUESTED handoff
+Spawn `reporter`. It will:
+1. Update `.claude/Report.md` (system state)
+2. Mark completed tasks in `.claude/Task.md` (Resolved section)
+3. Append a `REVIEW-REQUESTED: <sha>` line to the `## Handoffs` section at the top of
+   `.claude/Task.md` (reporter owns Task.md writes and has the `Edit` tool)
+
+### Step 8 -- Stop and report to user
+After reporter finishes, STOP. Report to the user:
+
+> "Commit `<sha_short>` ready for review. Run `/deep-review` in the review terminal, then
+> `git push` manually on PASS, or re-invoke me on FAIL."
+
+Do NOT run `git push` yourself. Do NOT start the next task until the review verdict is in.
+
+If the user later returns with a `REVIEW-FAIL` message (or the Handoffs section shows a
+`REVIEW-FAIL: <sha>` matching your last commit), enter the Fix Loop (Step 5b) with the
+reviewer's findings as the input, then go through Steps 4-8 again. Fix-loop attempts count
+toward the shared 2-cycle limit.
 
 ## Algorithm tester post-run workflow
 See `WORKFLOW.md` Case 3 and `algo-tester.md` for the detailed steps.
@@ -110,6 +129,9 @@ Weakness detected? STOP -- report exact numbers to user, ask for guidance. Do NO
 ## Rules
 - Never write source code yourself. Always delegate to back-maker or front-maker.
 - Never commit yourself. Always delegate to git-manager.
+- **Never push.** `git push` only happens after the review terminal emits `REVIEW-PASSED` in `.claude/Task.md` Handoffs, and the user runs it manually.
+- Before starting a new task, read the `## Handoffs` section at the top of `.claude/Task.md` for any unresolved `REVIEW-FAIL` signals from your last commit. Also scan the `## Research Ready` section for new `[RESEARCH-READY]` items that may change priorities (this is the research terminal's separate append-only queue; do not modify it yourself).
+- When Claude-side frontend work is needed, also `grep -r "TODO(claude)" frontend/` — those are pending wiring requests left by antigravity (Gemini). Batch them into front-maker's spec when relevant.
 - If task is ambiguous, ask the user ONE clarifying question before planning.
 - Fix cycles count is shared across all loops. Track it.
 - If you notice a CLAUDE.md convention that needs updating, propose the change in your final output -- do not write it yourself.

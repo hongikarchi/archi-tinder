@@ -35,6 +35,111 @@ Tasks: PROF1-PROF4 (see Task.md). Build these pages with mock data:
 - Firm profile page (PROF3)
 - User profile page (PROF4)
 
+## Post-Integration Rules
+
+Once a page has been integrated by Claude (i.e., `MOCK_*` replaced with real API calls,
+`useState`/`useEffect` added), Gemini can still return to polish the UI — but inside a
+narrower allowed zone, because the file is now layered.
+
+### Layer Boundary in Integrated Files
+
+| Layer | Owner | Edit freely |
+|-------|-------|-------------|
+| **UI** | Gemini (antigravity) | JSX return, `styles` objects, animations, transitions, colors, spacing, icons, layout, copy |
+| **Data / Logic** | Claude (main) | `useState`, `useEffect`, `callApi()`, custom hooks, error handling, data transformations |
+
+Gemini **reads** state variables in JSX (`{profile?.name}`, `{isLoading && <Spinner />}`) but
+**never creates** them. Only Claude introduces state or data-fetching code.
+
+### Allowed vs Forbidden After Integration
+
+**Allowed (edit freely):**
+- JSX structure, element order, conditional rendering that uses existing state
+- `styles` object: colors, spacing, fonts, shadows, gradients
+- Animation keyframes, `transition` props, Framer Motion props
+- Text content (static labels, helper copy, placeholders)
+- Adding icons, dividers, containers
+
+**Forbidden:**
+- **Do NOT re-insert `MOCK_*` constants** — they have already been replaced by real API calls.
+- **Do NOT modify `useState`, `useEffect`, `callApi()`, or any data-fetching code.**
+- **Do NOT remove `?.` optional chaining** (e.g., `profile?.name`) — it keeps the UI safe
+  while data loads.
+- **Do NOT call new API endpoints directly.** Drop a `TODO(claude): ...` marker instead and
+  let Claude wire the call during the next integration pass.
+
+### TODO Handoff Markers
+
+When Gemini needs behavior that requires API/backend work, drop an inline marker and move on:
+
+```jsx
+// JS/TSX:
+// TODO(claude): <what needs to happen>
+
+// Inside JSX:
+{/* TODO(claude): <what needs to happen> */}
+```
+
+Claude's orchestrator batches these via `grep -r "TODO(claude)" frontend/` during the next
+main-terminal session. Reverse direction (`// TODO(antigravity): ...`) is rare and used by
+Claude to request a specific UI change from Gemini.
+
+### Three Worked Examples
+
+**① Adding a button**
+
+If the `onClick` is pure UI (open a modal, navigate, toggle a tab) — Gemini handles it
+entirely, including local `useState` for toggles:
+
+```jsx
+const [isModalOpen, setIsModalOpen] = useState(false)
+
+<button style={styles.ctaButton} onClick={() => setIsModalOpen(true)}>
+  Add Board
+</button>
+```
+
+If the `onClick` calls an API (delete, follow, save) — Gemini drops a TODO and leaves the
+handler body empty:
+
+```jsx
+<button
+  style={styles.deleteButton}
+  onClick={() => { /* TODO(claude): DELETE /api/v1/boards/${board_id}/ */ }}
+>
+  Delete Board
+</button>
+```
+
+**② Modifying animations**
+
+Entirely Gemini's territory. No TODO needed. Edit the `styles` object, `transition` props,
+or Framer Motion props freely:
+
+```jsx
+const styles = {
+  card: {
+    transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+    transform: isHovered ? 'translateY(-4px)' : 'translateY(0)',
+  },
+}
+```
+
+**③ Deleting / adding informational text**
+
+- **Static text** ("My Boards", "Settings saved", helper copy): Gemini only, no TODO.
+- **Using an existing API field** that the page already fetches (`profile.bio` is already in
+  state): Gemini only — just edit JSX to display it.
+- **Needing a new API field** that doesn't exist yet (e.g., `profile.achievement_count`):
+  display a placeholder and drop a TODO for Claude to extend the backend:
+
+```jsx
+<div style={styles.stat}>
+  {profile?.achievement_count ?? 0} achievements
+  {/* TODO(claude): add achievement_count to /users/me/ response */}
+</div>
+```
+
 ## API Contract Shapes (Phase 13+)
 
 Gemini must use these exact shapes when hardcoding mock data. Claude will build backend endpoints returning these structures.

@@ -23,6 +23,97 @@
 
 ---
 
+## Multi-Terminal Coordination
+
+The project is developed across **four parallel terminals**, each with a focused role and
+isolated context window. All terminals work on the `main` Git branch — coordination is by
+file/layer ownership + handoff signals in `Task.md`, not branches.
+
+### Terminal Roster
+
+| Terminal | Model | Role | Owns / Touches | Typical signals |
+|----------|-------|------|----------------|-----------------|
+| **main** | Claude Code (orchestrator: opus) | Full pipeline — backend, frontend integration, E2E tests, commit | `backend/`, `frontend/` (data layer), `.claude/` | reporter emits `REVIEW-REQUESTED` to Handoffs; consumes `MOCKUP-READY` and `REVIEW-PASSED`/`REVIEW-FAIL` from Handoffs, and `[RESEARCH-READY]` from Research Ready section |
+| **research** | Claude Code (research agent: opus) | Algorithm / search exploration, paper review, design proposals | `research/` only + appends `[RESEARCH-READY]` to Task.md `## Research Ready` section (its own append-only queue) | emits `[RESEARCH-READY]` |
+| **review** | Claude Code (deep-reviewer: opus) | Pre-push deep review across all axes (architecture, perf, security, drift) | read-only; writes `.claude/reviews/*.md` and the handoff line in Task.md `## Handoffs` | emits `REVIEW-PASSED` / `REVIEW-FAIL` to Handoffs |
+| **antigravity** | Gemini (Chrome integration) | Continuous UI iteration — new mockups AND existing-page polish | `frontend/` (UI layer) | emits `MOCKUP-READY` to Handoffs; drops inline `TODO(claude): ...` markers in source |
+
+> **Note on Task.md sections:**
+> - `## Handoffs` (near top) = short-lived review/mockup signals, rolling window.
+> - `## Research Ready` (further down) = research terminal's append-only queue. Do not mix the two.
+
+### Frontend Layer Ownership (antigravity vs main)
+
+Both antigravity and main edit files under `frontend/`, so ownership is split **by layer within the same file**:
+
+| Layer | Owner | Allowed edits |
+|-------|-------|---------------|
+| **UI** | antigravity | JSX return, `styles` objects, animations, transitions, colors, spacing, `MOCK_*` constants (pre-integration only) |
+| **Data / Logic** | main | `useState`, `useEffect`, `callApi()`, error handling, data transformations, custom hooks |
+
+Post-integration rules for antigravity returning to a polished page (full table in `GEMINI.md`):
+- Allowed: JSX structure, styles, animations, colors
+- Forbidden: re-inserting `MOCK_*`, editing `useState/useEffect/callApi`, removing `profile?.xxx` optional chaining
+
+When antigravity needs behavior that requires API/backend work, it drops an inline marker
+instead of wiring it:
+
+```jsx
+<button onClick={() => { /* TODO(claude): DELETE /api/v1/boards/${board_id}/ */ }}>
+  Delete
+</button>
+```
+
+Main's orchestrator batches these via `grep -r "TODO(claude)" frontend/` during the next
+integration session.
+
+### Git Discipline
+
+- **All four terminals work on `main` branch.** No feature branches.
+- **Always `git pull` before starting a session.**
+- **Commit early, commit small** — avoid saving up many changes for one large commit.
+  Git's 3-way merge handles most cases when two terminals touched the same file in
+  different sections (e.g., antigravity edited JSX, main edited `useEffect`).
+- Only `git-manager` commits from the orchestrator pipeline (one commit per task).
+  Antigravity and research commit directly from their own terminal.
+
+### Pre-Push Review Gate
+
+The orchestrator pipeline **commits but does not push**. `/deep-review` is the pre-push gate:
+
+```
+main orchestrator
+  |-> git-manager commits  (stays local)
+  |-> reporter updates Report.md + Task.md
+  |        -> appends `REVIEW-REQUESTED: <sha>` to Task.md Handoffs
+  -> orchestrator STOPS and tells user: "run /deep-review, then manual push"
+     (no push)
+
+(user switches to review terminal)
+
+review terminal
+  |- user runs `/deep-review`
+  |- writes .claude/reviews/<sha>.md and latest.md
+  |- appends `REVIEW-PASSED: <sha>` OR `REVIEW-FAIL: <sha> — <summary>` to Task.md Handoffs
+  -> STOPS
+
+(user switches back to main)
+
+main terminal
+  |- reads Task.md Handoffs
+  |- PASS  -> `git push` manually
+  -> FAIL  -> re-run orchestrator with review feedback (fix loop, max 2 cycles)
+```
+
+This means:
+1. Push only happens after a PASSED review, and always manually by the user.
+2. `git-manager`'s "never pushes unless explicitly told to" default (see Key Rules below)
+   is what makes this safe — no existing agent code needs to change.
+3. The review terminal never edits source; it only writes review reports and Handoffs
+   entries.
+
+---
+
 ## Case 1: Normal feature or bug fix
 
 ```
@@ -163,7 +254,7 @@ Orchestrator detects complex problem (algorithm, UX, performance)
 
 ---
 
-## Case 7: Reporter (updates system docs)
+## Case 7: Reporter (updates system docs + emits REVIEW-REQUESTED)
 
 ```
 reporter runs after every git-manager commit
@@ -179,8 +270,12 @@ reporter runs after every git-manager commit
   |   |- Feature Status (if features completed)
   |   -> Mermaid diagrams (if architecture changed)
   |
-  -> updates Task.md:
-      -> moves completed tasks to Resolved with date
+  |- updates Task.md:
+  |   -> moves completed tasks to Resolved with date
+  |
+  -> appends REVIEW-REQUESTED to Task.md Handoffs:
+       `- [YYYY-MM-DD] REVIEW-REQUESTED: <sha_short> — <one-line summary>`
+       (uses Edit tool; does NOT touch the Research Ready section)
 ```
 
 ---
