@@ -203,10 +203,13 @@
   (local HEAD + `origin/main`) before signalling — `REVIEW-PASSED` means the review
   verdict was clean AND neither ref has moved since Step 1, so the user can safely run
   `git push` manually from the review terminal itself (no context-switch back to main).
-  `REVIEW-ABORTED` means the review passed but drift was detected, so the orchestrator
-  must either re-review (HEAD drift) or `git pull --rebase` + re-review (remote drift).
-  `REVIEW-FAIL` re-enters the orchestrator fix loop (max 2 cycles). `/deep-review` never
-  runs `git push` itself; push is always user-initiated.
+  On `PASS-WITH-MINORS` (clean at CRITICAL/MAJOR level but `K > 0` MINORs), the
+  `REVIEW-PASSED` signal inlines `<K> MINOR noted (see .claude/reviews/latest.md)` so the
+  count is visible without opening the report; MINORs are non-blocking for push by
+  definition. `REVIEW-ABORTED` means the review passed but drift was detected, so the
+  orchestrator must either re-review (HEAD drift) or `git pull --rebase` + re-review
+  (remote drift). `REVIEW-FAIL` re-enters the orchestrator fix loop (max 2 cycles).
+  `/deep-review` never runs `git push` itself; push is always user-initiated.
 
   **Push-fail-then-rebase discipline:** if `git push` fails non-ff in the narrow window
   between the drift check and the user's push, and the user recovers with

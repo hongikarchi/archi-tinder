@@ -108,6 +108,7 @@ review terminal — `/deep-review`
               → append REVIEW-ABORTED: <sha> — origin/main moved ... → STOP
          6d both drifts clear
               → append REVIEW-PASSED: <sha> — drift checks passed; run `git push` manually from this terminal
+                (on PASS-WITH-MINORS the signal inlines "<K> MINOR noted (see .claude/reviews/latest.md)")
 
 (still in the review terminal)
   - REVIEW-PASSED  → user runs `git push` directly (the review terminal never pushes by itself)

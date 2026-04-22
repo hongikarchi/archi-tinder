@@ -18,7 +18,7 @@
 >
 > Signal types for this section:
 > - `REVIEW-REQUESTED: <sha>` — reporter (main pipeline) → review terminal; run `/deep-review` next.
-> - `REVIEW-PASSED: <sha>` — review terminal → user; review passed AND HEAD/origin/main drift checks passed. Run `git push` manually from the review terminal itself (no context-switch to main needed).
+> - `REVIEW-PASSED: <sha>` — review terminal → user; review passed AND HEAD/origin/main drift checks passed. Run `git push` manually from the review terminal itself (no context-switch to main needed). On `PASS-WITH-MINORS` verdict the signal inlines `<K> MINOR noted (see .claude/reviews/latest.md)` so the count is visible at a glance; MINORs are non-blocking for push.
 > - `REVIEW-ABORTED: <sha> — <reason>` — review terminal → main; review verdict was PASS but drift was detected during the review. `HEAD advanced …` → re-run `/deep-review` on the new HEAD. `origin/main moved …` → `git pull --rebase` then re-review.
 > - `REVIEW-FAIL: <sha> — <summary>` — review terminal → main; run fix loop via orchestrator (max 2 cycles).
 > - `MOCKUP-READY: <page>` — antigravity → main; page is ready for API integration pass.

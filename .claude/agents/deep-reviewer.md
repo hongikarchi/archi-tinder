@@ -244,11 +244,23 @@ STOP. Do not proceed to 6d.
 
 ### 6d — PASS / PASS-WITH-MINORS: emit ready-to-push signal
 
-Both drift checks passed. Append:
+Both drift checks passed. Append **one** of the two variants below, depending on whether
+any MINOR findings were recorded in Step 3 (`K` = MINOR count from the Step 5 summary):
 
-```
-- [YYYY-MM-DD] REVIEW-PASSED: <sha_short> — drift checks passed; run `git push` manually from this terminal
-```
+- On **PASS** (clean, `K = 0`):
+  ```
+  - [YYYY-MM-DD] REVIEW-PASSED: <sha_short> — drift checks passed; run `git push` manually from this terminal
+  ```
+
+- On **PASS-WITH-MINORS** (`K > 0`):
+  ```
+  - [YYYY-MM-DD] REVIEW-PASSED: <sha_short> — drift checks passed, <K> MINOR noted (see .claude/reviews/latest.md); run `git push` manually from this terminal
+  ```
+
+The MINOR count travels inline so the human runner sees it without opening the full
+report. MINORs are non-blocking for push by definition (if they were blocking they would
+be MAJOR or CRITICAL and the verdict would be FAIL). Follow-up fix commits for MINORs
+are at the user's discretion and re-enter the normal commit → review → push cycle.
 
 Then STOP. Do **not** run `git push` yourself — push is always user-initiated. The user
 stays in this review terminal, reads the one-line signal, and issues `git push`; no
