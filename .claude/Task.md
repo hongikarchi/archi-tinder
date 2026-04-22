@@ -18,13 +18,15 @@
 >
 > Signal types for this section:
 > - `REVIEW-REQUESTED: <sha>` — reporter (main pipeline) → review terminal; run `/deep-review` next.
-> - `REVIEW-PASSED: <sha>` — review terminal → main; safe to `git push` manually.
-> - `REVIEW-FAIL: <sha> — <summary>` — review terminal → main; run fix loop via orchestrator.
+> - `REVIEW-PASSED: <sha>` — review terminal → user; review passed AND HEAD/origin/main drift checks passed. Run `git push` manually from the review terminal itself (no context-switch to main needed).
+> - `REVIEW-ABORTED: <sha> — <reason>` — review terminal → main; review verdict was PASS but drift was detected during the review. `HEAD advanced …` → re-run `/deep-review` on the new HEAD. `origin/main moved …` → `git pull --rebase` then re-review.
+> - `REVIEW-FAIL: <sha> — <summary>` — review terminal → main; run fix loop via orchestrator (max 2 cycles).
 > - `MOCKUP-READY: <page>` — antigravity → main; page is ready for API integration pass.
 
 <!-- Append new handoff entries here. Format: `- [YYYY-MM-DD] <SIGNAL>` -->
 
 - [2026-04-22] REVIEW-FAIL: d320166 — 0 CRITICAL, 3 MAJOR; see .claude/reviews/latest.md
+- [2026-04-22] REVIEW-PASSED: b5931ab — safe to push; fix-loop resolves all findings from d320166 (one was my misread, correctly dismissed)
 
 ---
 

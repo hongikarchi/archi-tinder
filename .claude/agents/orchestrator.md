@@ -110,15 +110,25 @@ Spawn `reporter`. It will:
 ### Step 8 -- Stop and report to user
 After reporter finishes, STOP. Report to the user:
 
-> "Commit `<sha_short>` ready for review. Run `/deep-review` in the review terminal, then
-> `git push` manually on PASS, or re-invoke me on FAIL."
+> "Commit `<sha_short>` ready for review. Run `/deep-review` in the review terminal;
+> on `REVIEW-PASSED` the user runs `git push` from that same terminal. On `REVIEW-FAIL`
+> or `REVIEW-ABORTED`, re-invoke me."
 
 Do NOT run `git push` yourself. Do NOT start the next task until the review verdict is in.
 
-If the user later returns with a `REVIEW-FAIL` message (or the Handoffs section shows a
-`REVIEW-FAIL: <sha>` matching your last commit), enter the Fix Loop (Step 5b) with the
-reviewer's findings as the input, then go through Steps 4-8 again. Fix-loop attempts count
-toward the shared 2-cycle limit.
+If the Handoffs section shows a `REVIEW-FAIL: <sha>` matching your last commit, enter the
+Fix Loop (Step 5b) with the reviewer's findings as the input, then go through Steps 4-8
+again. Fix-loop attempts count toward the shared 2-cycle limit.
+
+If the Handoffs section shows a `REVIEW-ABORTED: <sha>` matching your last commit, the
+review was clean but drift was detected:
+- `HEAD advanced to <new_sha> during review` → your next commit already superseded the
+  reviewed one; no code fix needed, just ask the user to re-run `/deep-review` for the
+  new SHA.
+- `origin/main moved during review; pull and re-review` → run `git pull --rebase origin main`
+  (after informing the user), resolve any conflicts via the Fix Loop if they arise,
+  then ask the user to re-run `/deep-review`.
+Neither ABORTED case counts toward the 2-cycle limit (no findings to fix).
 
 ## Algorithm tester post-run workflow
 See `WORKFLOW.md` Case 3 and `algo-tester.md` for the detailed steps.
@@ -129,8 +139,8 @@ Weakness detected? STOP -- report exact numbers to user, ask for guidance. Do NO
 ## Rules
 - Never write source code yourself. Always delegate to back-maker or front-maker.
 - Never commit yourself. Always delegate to git-manager.
-- **Never push.** `git push` only happens after the review terminal emits `REVIEW-PASSED` in `.claude/Task.md` Handoffs, and the user runs it manually.
-- Before starting a new task, read the `## Handoffs` section at the top of `.claude/Task.md` for any unresolved `REVIEW-FAIL` signals from your last commit. Also scan the `## Research Ready` section for new `[RESEARCH-READY]` items that may change priorities (this is the research terminal's separate append-only queue; do not modify it yourself).
+- **Never push.** `git push` only happens after the review terminal emits a drift-verified `REVIEW-PASSED` in `.claude/Task.md` Handoffs, and the user runs `git push` manually from the review terminal itself (no context-switch back to main).
+- Before starting a new task, read the `## Handoffs` section at the top of `.claude/Task.md` for any unresolved `REVIEW-FAIL` or `REVIEW-ABORTED` signals from your last commit. Also scan the `## Research Ready` section for new `[RESEARCH-READY]` items that may change priorities (this is the research terminal's separate append-only queue; do not modify it yourself).
 - When Claude-side frontend work is needed, also `grep -r "TODO(claude)" frontend/` — those are pending wiring requests left by antigravity (Gemini). Batch them into front-maker's spec when relevant.
 - If task is ambiguous, ask the user ONE clarifying question before planning.
 - Fix cycles count is shared across all loops. Track it.

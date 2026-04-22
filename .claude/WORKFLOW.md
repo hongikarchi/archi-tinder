@@ -34,9 +34,9 @@ file/layer ownership + handoff signals in `Task.md`, not branches.
 
 | Terminal | Model | Role | Owns / Touches | Typical signals |
 |----------|-------|------|----------------|-----------------|
-| **main** | Claude Code (orchestrator: opus) | Full pipeline — backend, frontend integration, E2E tests, commit | `backend/`, `frontend/` (data layer), `.claude/` | reporter emits `REVIEW-REQUESTED` to Handoffs; consumes `MOCKUP-READY` and `REVIEW-PASSED`/`REVIEW-FAIL` from Handoffs, and `[RESEARCH-READY]` from Research Ready section |
+| **main** | Claude Code (orchestrator: opus) | Full pipeline — backend, frontend integration, E2E tests, commit | `backend/`, `frontend/` (data layer), `.claude/` | reporter emits `REVIEW-REQUESTED` to Handoffs; consumes `MOCKUP-READY`, `REVIEW-FAIL`, `REVIEW-ABORTED` from Handoffs, and `[RESEARCH-READY]` from Research Ready section |
 | **research** | Claude Code (research agent: opus) | Algorithm / search exploration, paper review, design proposals | `research/` only + appends `[RESEARCH-READY]` to Task.md `## Research Ready` section (its own append-only queue) | emits `[RESEARCH-READY]` |
-| **review** | Claude Code (deep-reviewer: opus) | Pre-push deep review across all axes (architecture, perf, security, drift) | read-only; writes `.claude/reviews/*.md` and the handoff line in Task.md `## Handoffs` | emits `REVIEW-PASSED` / `REVIEW-FAIL` to Handoffs |
+| **review** | Claude Code (deep-reviewer: opus) | Pre-push deep review across all axes (architecture, perf, security, drift) + HEAD/`origin/main` drift checks on PASS | read-only on source; writes `.claude/reviews/*.md` and the handoff line in Task.md `## Handoffs`; user manually runs `git push` from this terminal on `REVIEW-PASSED` | emits `REVIEW-PASSED` (drift-verified, ready for manual push), `REVIEW-ABORTED` (PASS but drift detected), or `REVIEW-FAIL` to Handoffs |
 | **antigravity** | Gemini (Chrome integration) | Continuous UI iteration — new mockups AND existing-page polish | `frontend/` (UI layer) | emits `MOCKUP-READY` to Handoffs; drops inline `TODO(claude): ...` markers in source |
 
 > **Note on Task.md sections:**
@@ -80,38 +80,50 @@ integration session.
 
 ### Pre-Push Review Gate
 
-The orchestrator pipeline **commits but does not push**. `/deep-review` is the pre-push gate:
+The orchestrator pipeline **commits but does not push**. `/deep-review` is the pre-push gate,
+and the review terminal performs two drift checks before signalling that push is safe:
 
 ```
 main orchestrator
   |-> git-manager commits  (stays local)
   |-> reporter updates Report.md + Task.md
   |        -> appends `REVIEW-REQUESTED: <sha>` to Task.md Handoffs
-  -> orchestrator STOPS and tells user: "run /deep-review, then manual push"
-     (no push)
+  -> orchestrator STOPS and tells user:
+       "run /deep-review in the review terminal; on REVIEW-PASSED
+        run git push from that same terminal"
+     (no push here)
 
-(user switches to review terminal)
+(user opens / switches to review terminal — stays there through the rest of the cycle)
 
-review terminal
-  |- user runs `/deep-review`
-  |- writes .claude/reviews/<sha>.md and latest.md
-  |- appends `REVIEW-PASSED: <sha>` OR `REVIEW-FAIL: <sha> — <summary>` to Task.md Handoffs
-  -> STOPS
+review terminal — `/deep-review`
+  |- Step 1 captures REVIEWED_SHA = git rev-parse HEAD
+  |                  REVIEWED_ORIGIN_MAIN = git rev-parse origin/main
+  |- Steps 2-5 produce .claude/reviews/<sha>.md + latest.md + stdout summary
+  -> Step 6 branches on verdict:
+       FAIL → append REVIEW-FAIL: <sha> — ... → STOP
+       PASS / PASS-WITH-MINORS:
+         6b HEAD-drift check: re-read HEAD. If ≠ REVIEWED_SHA
+              → append REVIEW-ABORTED: <sha> — HEAD advanced to <new_sha> ... → STOP
+         6c remote-drift check: fetch + re-read origin/main. If ≠ REVIEWED_ORIGIN_MAIN
+              → append REVIEW-ABORTED: <sha> — origin/main moved ... → STOP
+         6d both drifts clear
+              → append REVIEW-PASSED: <sha> — drift checks passed; run `git push` manually from this terminal
 
-(user switches back to main)
-
-main terminal
-  |- reads Task.md Handoffs
-  |- PASS  -> `git push` manually
-  -> FAIL  -> re-run orchestrator with review feedback (fix loop, max 2 cycles)
+(still in the review terminal)
+  - REVIEW-PASSED  → user runs `git push` directly (the review terminal never pushes by itself)
+  - REVIEW-ABORTED → user returns to main terminal; orchestrator handles the follow-up
+                      (re-run /deep-review after HEAD drift; pull --rebase + re-review after remote drift)
+  - REVIEW-FAIL    → user returns to main terminal; orchestrator re-enters fix loop (max 2 cycles)
 ```
 
 This means:
-1. Push only happens after a PASSED review, and always manually by the user.
-2. `git-manager`'s "never pushes unless explicitly told to" default (see Key Rules below)
-   is what makes this safe — no existing agent code needs to change.
-3. The review terminal never edits source; it only writes review reports and Handoffs
-   entries.
+1. `git push` happens from the review terminal, not the main terminal — after the review
+   verified both that the range is clean AND that HEAD and origin/main still match what
+   was reviewed. No context-switch, no "review one range, push another" race.
+2. The review terminal still never edits source code and never runs `git push` itself —
+   the push is always user-initiated by explicit `git push` in the review terminal.
+3. `git-manager`'s "never pushes unless explicitly told to" default (see Key Rules
+   below) is what keeps the orchestrator side clean; no existing agent code changes.
 
 ---
 

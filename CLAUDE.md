@@ -181,9 +181,10 @@
   - `.claude/reviews/{sha_short}.md` -- per-commit archive
   - `.claude/reviews/latest.md` -- stable read path; main implementation terminal
     reads this on demand when relevant (never auto-loaded)
-  - Appends `REVIEW-PASSED: <sha>` or `REVIEW-FAIL: <sha> — <summary>` to the
-    `## Handoffs` section of `.claude/Task.md` so the main terminal can pick up the
-    verdict on its next session
+  - Appends one of `REVIEW-PASSED: <sha>` (drift-verified, ready for manual `git push`
+    from the review terminal), `REVIEW-ABORTED: <sha> — <reason>` (PASS but drift
+    detected), or `REVIEW-FAIL: <sha> — <summary>` to the `## Handoffs` section of
+    `.claude/Task.md` so the main terminal can pick up the verdict on its next session
 
   **Scope:** unpushed commits on the current branch (`origin/main..HEAD` by default,
   or the user-supplied range). Reads all changed files (full content, not just hunks)
@@ -193,18 +194,24 @@
   security in depth, code quality, test coverage, cross-commit drift. Severity:
   CRITICAL / MAJOR / MINOR.
 
-  **Relationship to existing review agents:** `/deep-review` is **read-only** (never edits
-  source) but acts as a **pre-push gate**. The main orchestrator pipeline commits via
-  `git-manager` and stops — it never pushes. The user then runs `/deep-review` in the
-  review terminal; the verdict lands in `.claude/reviews/latest.md` and a one-line
-  `REVIEW-PASSED: <sha>` or `REVIEW-FAIL: <sha> — <summary>` signal is appended to the
-  `## Handoffs` section of `.claude/Task.md`. On PASS the user runs `git push` manually;
-  on FAIL the main orchestrator re-runs the fix loop (max 2 cycles). `/deep-review`
-  **supplements** the fast `reviewer` (API contracts, logic bugs, obvious perf) and
-  `security-manager` (SQLi/XSS/auth keyword scan) agents, filling their explicit
-  exclusions: refactoring, optimization opportunities, test coverage, cross-commit
-  drift, and architecture alignment. See `.claude/WORKFLOW.md` "Multi-Terminal
-  Coordination" for the full pre-push sequence.
+  **Relationship to existing review agents:** `/deep-review` is **read-only on source code**
+  (never edits backend / frontend / research) but acts as a **pre-push gate**. The main
+  orchestrator pipeline commits via `git-manager` and stops — it never pushes. The user
+  runs `/deep-review` in the review terminal; the verdict lands in
+  `.claude/reviews/latest.md` and a one-line signal is appended to the `## Handoffs`
+  section of `.claude/Task.md`. On PASS, `/deep-review` additionally runs two drift checks
+  (local HEAD + `origin/main`) before signalling — `REVIEW-PASSED` means the review
+  verdict was clean AND neither ref has moved since Step 1, so the user can safely run
+  `git push` manually from the review terminal itself (no context-switch back to main).
+  `REVIEW-ABORTED` means the review passed but drift was detected, so the orchestrator
+  must either re-review (HEAD drift) or `git pull --rebase` + re-review (remote drift).
+  `REVIEW-FAIL` re-enters the orchestrator fix loop (max 2 cycles). `/deep-review` never
+  runs `git push` itself; push is always user-initiated. `/deep-review` **supplements** the
+  fast `reviewer` (API contracts, logic bugs, obvious perf) and `security-manager`
+  (SQLi/XSS/auth keyword scan) agents, filling their explicit exclusions: refactoring,
+  optimization opportunities, test coverage, cross-commit drift, and architecture
+  alignment. See `.claude/WORKFLOW.md` "Multi-Terminal Coordination" for the full
+  pre-push sequence.
 
   ## Database: architecture_vectors Schema
   Owned by Make DB. Django reads via raw SQL only -- never ORM, never migrate.
