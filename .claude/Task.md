@@ -63,10 +63,50 @@
 28. **B7** -- Keyboard swiping blocked in gallery mode (SwipePage.jsx) -- COMPLETED 2026-04-05
 29. **B8** -- Card disappears after swipe race condition (App.jsx) -- COMPLETED 2026-04-05
 
-### Phase 12: Critical Swipe Bug Fixes -- IN PROGRESS 2026-04-05
-30. **B9** -- Cards stop loading after ~N swipes (frontend/backend queue drift)
-31. **B10** -- Refresh creates new session instead of resuming
-32. **B11** -- Same card appears twice (exposed_ids missing buffered cards)
+### Phase 12: Critical Swipe Bug Fixes -- COMPLETED 2026-04-05
+30. **B9** -- Cards stop loading after ~N swipes (never set currentCard null) -- COMPLETED 2026-04-05
+31. **B10** -- Refresh creates new session instead of resuming (SessionStateView + currentHint) -- COMPLETED 2026-04-05
+32. **B11** -- Same card appears twice (client_buffer_ids in exposed_ids) -- COMPLETED 2026-04-05
+
+### Phase 13: Profile System -- PENDING
+33. **PROF1** -- OfficeProfile model + Make DB integration (blue-mark, project list, external links, basic info)
+34. **PROF2** -- UserProfile extension (MBTI, avatar, bio, external DM links)
+35. **PROF3** -- Firm profile page UI (project card grid + website/email links)
+36. **PROF4** -- User profile page UI (feed style, board list)
+
+### Phase 14: Board System -- PENDING
+37. **BOARD1** -- Board model (public/private visibility, owner FK)
+38. **BOARD2** -- Project creation: visibility selection UI
+39. **BOARD3** -- Profile page: board browse/manage UI
+
+### Phase 15: Social Foundation -- PENDING
+40. **SOC1** -- Follow model + API (follow/unfollow, follower list)
+41. **SOC2** -- "Love this!" reaction model + API
+42. **SOC3** -- Profile/board: follow button + reaction button UI
+
+### Phase 16: Recommendation Expansion -- PENDING
+43. **REC1** -- Post-swipe "MATCHED!" screen redesign
+44. **REC2** -- Firm recommendation logic (user taste vector ↔ firm project vector matching)
+45. **REC3** -- User recommendation logic (taste vector similarity)
+46. **REC4** -- Landing tab UI (Related Projects / Offices / Users)
+
+### Phase 17: LLM Reverse-Questioning -- PENDING
+47. **LLM1** -- Chat reverse-question prompt design (identify user needs)
+48. **LLM2** -- Persona classification logic (P1-P4 differentiation)
+49. **LLM3** -- Per-persona UI branching (recommendation card type switching)
+
+### Phase 18: External Connections -- PENDING
+50. **EXT1** -- Firm article crawler (Space, ArchDaily, news — keyword-based)
+51. **EXT2** -- Article list UI (inside firm profile)
+52. **EXT3** -- External DM link UI (Instagram, email — on profile)
+
+---
+
+## Research Ready
+
+> Written by research terminal. Main terminal picks items up, implements, then `reporter` removes the line and converts to a resolved task. Append-only; do not edit existing lines here.
+
+- [RESEARCH-READY] 01-hybrid-retrieval — recommend Katz-style RRF hybrid (tsvector + pgvector cosine) gated behind `HYBRID_RETRIEVAL_ENABLED` flag; no extensions required. 8 backend tasks (BACK-HYB-1..6, TEST-HYB-1, ALGO-HYB-1). See `research/search/01-hybrid-retrieval.md`.
 
 ---
 
@@ -96,33 +136,44 @@ Google OAuth only. Korean users need domestic login.
 
 ## In Progress
 
-### Phase 12: Critical Swipe Bug Fixes
-
-#### B9. Cards stop loading after several swipes -- 2026-04-05
-Root cause: `canInstantSwap` path in `App.jsx:handleSwipeCard` lets the frontend queue drift from backend's exposed_ids.
-Frontend shows `savedPrefetch` as current, but backend's `next_image` in the response is a different card (especially at exploring->analyzing transition where selection switches from initial_batch indexing to MMR). Over many rounds, frontend's queue and backend's selections diverge. Eventually backend's prefetch/prefetch_2 could be null or produce a stuck state.
-- [ ] Backend: `SwipeView.post()` accepts optional `client_buffer_ids` (list of building_ids frontend has prefetched), merge into `session.exposed_ids` before card selection
-- [ ] Frontend: `handleSwipeCard` sends `client_buffer_ids` from `[prefetchCard, prefetchCard2]`
-- [ ] Frontend: On canInstantSwap path, use only `result.next_image` as new `prefetch_2` (tail fill), discard `result.prefetch_image` and `result.prefetch_image_2` (they describe backend's queue, not frontend's)
-- [ ] Frontend: Treat action cards as always instant-swappable (empty image_url, no preload needed)
-
-#### B10. Refresh during swiping returns to beginning -- 2026-04-05
-Root cause: `App.jsx` `swipeRestored` useEffect always calls `initSession` which POSTs to `/analysis/sessions/` creating a brand-new session. The project's stored `sessionId` is never used on refresh.
-- [ ] Backend: New view `SessionStateView` at `GET /analysis/sessions/<uuid:session_id>/state/` -- returns current_card (from `exposed_ids[-1]`), computed prefetch and prefetch_2, and progress
-- [ ] Backend: `urls.py` -- add path for session state endpoint
-- [ ] Frontend: `client.js` -- add `getSessionState(sessionId)` function that normalizes card fields
-- [ ] Frontend: `App.jsx` -- `initSession` accepts optional `existingSessionId` param; if present, call `getSessionState` first, fall back to new session on failure
-- [ ] Frontend: swipeRestored useEffect passes `project.sessionId` to `initSession`
-- [ ] Frontend: `handleResumeProject` passes `project.sessionId` to `initSession`
-
-#### B11. Same card appears twice -- 2026-04-05
-Root cause: Same as B9. The frontend's `savedPrefetch` (shown after instant swap) is NOT in backend's `exposed_ids`. So on later rounds when `farthest_point` or `compute_mmr_next` picks candidates, the savedPrefetch card can be picked again.
-Covered by the B9 fix: `client_buffer_ids` ensures backend tracks everything the frontend has loaded.
-- [ ] Verified by B9 fix (client_buffer_ids merges into exposed_ids)
+(none)
 
 ---
 
 ## Resolved
+
+### Phase 12: Critical Swipe Bug Fixes -- 2026-04-05
+
+#### B9. Cards stop loading after several swipes -- 2026-04-05
+Root cause: `canInstantSwap` path in `App.jsx:handleSwipeCard` sets `currentCard=null` when canInstantSwap=false.
+The null guard at line 282 then returns early on subsequent interactions, permanently blocking the swipe flow.
+- [x] Frontend: Never set currentCard to null in non-instant path (keep visible with loading overlay)
+- [x] Frontend: Non-instant path handles null next_image gracefully (edge case: pool temporarily exhausted)
+- [x] Backend: `SwipeView.post()` accepts `client_buffer_ids`, merges into `exposed_ids` via `_merge_buffer_into_exposed`
+- [x] Frontend: `handleSwipeCard` sends `client_buffer_ids` from `[prefetchCard, prefetchCard2]`
+- [x] Frontend: canInstantSwap path uses `result.next_image` as tail-fill only (ignores backend prefetch/prefetch_2)
+- [x] Frontend: Action cards treated as always instant-swappable via `isActionCard()` helper
+- Commit: fbd8486
+
+#### B10. Refresh during swiping returns to beginning -- 2026-04-05
+Root cause: On refresh, `initSession` always created a new session. `SessionStateView` also rejected current_hint
+if it wasn't in exposed_ids (but after instant-swap, the displayed card might only be in the frontend buffer).
+- [x] Backend: `SessionStateView` at `GET /analysis/sessions/<uuid>/state/` with `?current=` hint param
+- [x] Backend: Accept current_hint from pool_ids (not just exposed_ids); append to exposed_ids for prefetch exclusion
+- [x] Backend: Prefetch scans initial_batch forward from current_round+1 (not fixed index)
+- [x] Frontend: `getSessionState(sessionId, currentHint)` in client.js
+- [x] Frontend: `initSession` tries `getSessionState` first, falls back to new session on 404
+- [x] Frontend: swipeRestored useEffect and handleResumeProject pass `project.sessionId`
+- [x] Frontend: currentCard persisted to localStorage per project for seamless refresh hint
+- Commit: fbd8486
+
+#### B11. Same card appears twice -- 2026-04-05
+Root cause: Frontend's prefetch buffer cards not tracked in backend's exposed_ids.
+When canInstantSwap was false and currentCard became null, subsequent swipes couldn't send client_buffer_ids.
+- [x] Fixed by B9 (currentCard never null -> client_buffer_ids always sent)
+- [x] Backend merges client_buffer_ids into exposed_ids before card selection
+- [x] Backend tests verify merge behavior
+- Commit: fbd8486
 
 ### Phase 11: Frontend Bug Fix -- 2026-04-05
 
