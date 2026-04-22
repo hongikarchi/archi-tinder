@@ -1,12 +1,15 @@
 # macOS
 .DS_Store
 
-# Claude Code -- local + derivative only (shared config like agents/, commands/, Goal.md, Task.md, Report.md, WORKFLOW.md is tracked)
-.claude/settings.local.json
-.claude/plans/
-.claude/reviews/
-.claude/projects/
-.claude/cache/
+# Claude Code -- whitelist shared config under .claude/; ignore everything else
+#   (forward-safe against new subpaths like .claude/memory/, .claude/sessions/, etc.)
+.claude/*
+!.claude/agents/
+!.claude/commands/
+!.claude/Goal.md
+!.claude/Report.md
+!.claude/Task.md
+!.claude/WORKFLOW.md
 
 # Python / Django (backend — future)
 __pycache__/

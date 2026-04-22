@@ -24,7 +24,7 @@
 
 <!-- Append new handoff entries here. Format: `- [YYYY-MM-DD] <SIGNAL>` -->
 
-(none yet)
+- [2026-04-22] REVIEW-FAIL: d320166 — 0 CRITICAL, 3 MAJOR; see .claude/reviews/latest.md
 
 ---
 

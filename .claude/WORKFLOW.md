@@ -17,9 +17,10 @@
 | **security-manager** | sonnet | SQL injection, auth bypass, XSS, token leaks | read-only |
 | **web-tester** | sonnet | Live Playwright browser tests | read-only |
 | **git-manager** | haiku | Single commit per task | git only |
-| **reporter** | sonnet | Updates Report.md + Task.md | `.claude/` only |
+| **reporter** | sonnet | Updates Report.md + Task.md, emits REVIEW-REQUESTED handoff | `.claude/` only |
 | **algo-tester** | sonnet | Runs optimizer script, interprets results, triggers orchestrator | runs script + calls orchestrator |
 | **research** | opus | Explores complex problems, writes to research/ | `research/` only |
+| **deep-reviewer** | opus | Pre-push deep review across 7 axes; writes `.claude/reviews/*.md` and REVIEW-PASSED/REVIEW-FAIL handoff | read-only on source; writes `.claude/reviews/` + Task.md Handoffs line |
 
 ---
 

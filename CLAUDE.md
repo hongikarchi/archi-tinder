@@ -174,16 +174,20 @@
   7-axis checklist and report format.
 
   **Invocation:** on a separate "review terminal" Claude Code session, type
-  `/deep-review` (default scope: `main...HEAD`) or `/deep-review <range>` (e.g.
-  `/deep-review HEAD~5..HEAD`).
+  `/deep-review` (default scope: `origin/main..HEAD` — the unpushed commits on the
+  current branch) or `/deep-review <range>` (e.g. `/deep-review HEAD~5..HEAD`).
 
   **Output:**
   - `.claude/reviews/{sha_short}.md` -- per-commit archive
   - `.claude/reviews/latest.md` -- stable read path; main implementation terminal
     reads this on demand when relevant (never auto-loaded)
+  - Appends `REVIEW-PASSED: <sha>` or `REVIEW-FAIL: <sha> — <summary>` to the
+    `## Handoffs` section of `.claude/Task.md` so the main terminal can pick up the
+    verdict on its next session
 
-  **Scope:** branch since `main` diverged. Reads all changed files (full content, not
-  just hunks) plus `.claude/Goal.md` + `.claude/Report.md` for architecture grounding.
+  **Scope:** unpushed commits on the current branch (`origin/main..HEAD` by default,
+  or the user-supplied range). Reads all changed files (full content, not just hunks)
+  plus `.claude/Goal.md` + `.claude/Report.md` for architecture grounding.
 
   **7 axes:** architecture alignment, correctness/logic depth, performance/optimization,
   security in depth, code quality, test coverage, cross-commit drift. Severity:
