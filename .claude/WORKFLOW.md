@@ -34,10 +34,12 @@ file/layer ownership + handoff signals in `Task.md`, not branches.
 
 | Terminal | Model | Role | Owns / Touches | Typical signals |
 |----------|-------|------|----------------|-----------------|
-| **main** | Claude Code (orchestrator: opus) | Full pipeline — backend, frontend integration, E2E tests, commit | `backend/`, `frontend/` (data layer), `.claude/` | reporter emits `REVIEW-REQUESTED` to Handoffs; consumes `MOCKUP-READY`, `REVIEW-FAIL`, `REVIEW-ABORTED`, `SPEC-UPDATED` from Handoffs; `[SPEC-READY]` from Research Ready section |
-| **research** | Claude Code (research agent: opus) | Ongoing algorithm / UX research dialog with user; consolidates findings into `research/spec/requirements.md` (living spec). `research/search/**` deep-dive reports are reasoning archive — accessed directly via filesystem, not via Task.md pointers. | `research/` only + appends `[SPEC-READY]` to Task.md `## Research Ready` + `SPEC-UPDATED` to `## Handoffs` on version bump | emits `[SPEC-READY]`, `SPEC-UPDATED` |
-| **review** | Claude Code (deep-reviewer: opus) | Pre-push deep review across all axes (architecture, perf, security, drift) + HEAD/`origin/main` drift checks on PASS | read-only on source; writes `.claude/reviews/*.md` and the handoff line in Task.md `## Handoffs`; user manually runs `git push` from this terminal on `REVIEW-PASSED` | emits `REVIEW-PASSED` (drift-verified, ready for manual push), `REVIEW-ABORTED` (PASS but drift detected), or `REVIEW-FAIL` to Handoffs |
-| **antigravity** | Gemini (Chrome integration) | Continuous UI iteration — new mockups AND existing-page polish | `frontend/` (UI layer) | emits `MOCKUP-READY` to Handoffs; drops inline `TODO(claude): ...` markers in source |
+| **main** | Claude Code (orchestrator: opus) | Full pipeline — backend, frontend integration, E2E tests, commit | `backend/`, `frontend/` (data layer), `.claude/` (excluding anything inside `research/`) | reporter emits `REVIEW-REQUESTED` to Handoffs; consumes `MOCKUP-READY`, `REVIEW-FAIL`, `REVIEW-ABORTED`, `SPEC-UPDATED` from Handoffs; `[SPEC-READY]` from Research Ready section. **READ-ONLY on `research/`** — never create/modify/delete/stage files there. |
+| **research** | Claude Code (research agent: opus) | Ongoing algorithm / UX research dialog with user; consolidates findings into `research/spec/requirements.md` (living spec). `research/search/**` deep-dive reports are reasoning archive — accessed directly via filesystem, not via Task.md pointers. | **EXCLUSIVE owner of `research/`** (all subdirectories: `spec/`, `search/`, `investigations/`, `algorithm.md`). Also appends `[SPEC-READY]` to Task.md `## Research Ready` + `SPEC-UPDATED` to `## Handoffs` on version bump. Commits its own research/ changes from its own session. | emits `[SPEC-READY]`, `SPEC-UPDATED` |
+| **review** | Claude Code (deep-reviewer: opus) | Pre-push deep review across all axes (architecture, perf, security, drift) + HEAD/`origin/main` drift checks on PASS | read-only on source; writes `.claude/reviews/*.md` and the handoff line in Task.md `## Handoffs`; user manually runs `git push` from this terminal on `REVIEW-PASSED`. **READ-ONLY on `research/`** (same rule as main). | emits `REVIEW-PASSED` (drift-verified, ready for manual push), `REVIEW-ABORTED` (PASS but drift detected), or `REVIEW-FAIL` to Handoffs |
+| **antigravity** | Gemini (Chrome integration) | Continuous UI iteration — new mockups AND existing-page polish | `frontend/` (UI layer). **READ-ONLY on `research/`.** | emits `MOCKUP-READY` to Handoffs; drops inline `TODO(claude): ...` markers in source |
+
+> **⚠️ `research/` ownership is absolute.** The research terminal is the ONLY terminal (and `research` is the ONLY agent) permitted to create, modify, delete, or stage files under `research/` (including `research/spec/`, `research/search/`, `research/investigations/`, `research/algorithm.md`, and any future subdirectory). Main, review, antigravity, and all their spawned subagents (orchestrator, back-maker, front-maker, reviewer, security-manager, git-manager, reporter, deep-reviewer, algo-tester, web-tester) are strictly READ-ONLY on `research/`. This is also the user's active study workspace — do not touch. See CLAUDE.md `## Rules` for the authoritative statement.
 
 > **Note on Task.md sections:**
 > - `## Handoffs` (near top) = short-lived review/mockup signals, rolling window.
@@ -76,9 +78,12 @@ integration session.
   Git's 3-way merge handles most cases when two terminals touched the same file in
   different sections (e.g., antigravity edited JSX, main edited `useEffect`).
 - Only `git-manager` commits from the orchestrator pipeline (one commit per task).
-  Antigravity commits directly from its own terminal. **Research terminal does not commit** —
-  all research writes (spec, reports, `research/**`) are left for main terminal to commit,
-  ensuring a single chronology of code + spec changes.
+  Antigravity commits directly from its own terminal.
+- **Research terminal commits its own `research/` changes** from its own session
+  (the research terminal is the ONLY writer of `research/`; main cannot stage them per
+  the ownership rule above). If `git status` in the main terminal shows uncommitted
+  modifications under `research/`, those belong to the research terminal — leave them
+  untouched and unstaged. `git-manager` actively excludes `research/` from staging.
 
 ### Research ↔ Main: Spec-based Coordination
 

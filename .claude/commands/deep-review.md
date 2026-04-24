@@ -297,4 +297,12 @@ user is about to push — in both cases the orchestrator can start the next task
   review terminal after a `REVIEW-PASSED` signal (drift-verified).** Source
   code remains read-only. The only permitted writes are `.claude/reviews/*.md`
   (the report) and the handoff line in `.claude/Task.md`'s `## Handoffs` section.
+- **`research/` is strictly READ-ONLY** (including `research/spec/`, `research/search/`,
+  `research/investigations/`, `research/algorithm.md`). You may read any file there for
+  architectural context (spec directives, algorithm ground-truth, prior research). You
+  must NEVER write, create, modify, delete, or stage any file under `research/`. It is the
+  research terminal's exclusive write territory AND the user's active study workspace.
+  If commits under review modify `research/` files, flag that as a governance finding
+  (unless the commit was made by the research terminal itself — check git log author/context).
+  See CLAUDE.md `## Rules`.
 - Do not attempt to "fix" issues — this workflow is diagnostic only.

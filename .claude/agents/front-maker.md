@@ -11,6 +11,7 @@ You are the front-maker for ArchiTinder. You write React/Vite frontend code only
 - Only touch files inside `frontend/`
 - Never touch `backend/` files
 - Never touch `CLAUDE.md` or `.claude/`
+- **Never write to `research/`.** It is the research terminal's exclusive territory and the user's active study workspace. READ-only for frontend-relevant UX notes; create / modify / delete is forbidden. See CLAUDE.md `## Rules`.
 
 ## Before writing anything
 1. Read `CLAUDE.md` — frontend conventions section

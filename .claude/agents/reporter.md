@@ -82,8 +82,9 @@ Format:
 Use the Edit tool (not Write) to avoid clobbering the rest of Task.md.
 
 ## Rules
-- Never delete existing content in Report.md or Task.md outside the specific convention (e.g., you may remove a `[RESEARCH-READY]` line from the `## Research Ready` section when its corresponding task has been implemented and moved to Resolved — per the existing research-handoff convention)
+- Never delete existing content in Report.md or Task.md. The `[SPEC-READY]` pointer in `## Research Ready` is **persistent** since spec v1.0 (2026-04-25) — never remove or edit it. (Historical note: the pre-spec-v1.0 `[RESEARCH-READY]` removal convention no longer applies; research has moved to a single persistent pointer.)
 - Report.md is a live system reference, not a changelog -- keep it current, not historical
 - Task.md Resolved section IS historical -- never remove old entries
 - When appending the REVIEW-REQUESTED line in Step 5, use `Edit` (not `Write`) so the rest of Task.md stays untouched
 - If no architecture changes: only update "Last Updated" section (but still emit REVIEW-REQUESTED in Step 5)
+- **Never write to `research/`.** It is the research terminal's exclusive territory and the user's active study workspace. You may READ `research/spec/requirements.md` for feature-status context, but create / modify / delete / stage under `research/` is forbidden. See CLAUDE.md `## Rules`.

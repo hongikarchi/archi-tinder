@@ -9,6 +9,7 @@
   - Do NOT create or migrate the `architecture_vectors` table -- it is owned by Make DB.
   - SentenceTransformers is NOT a dependency here -- embeddings are pre-computed.
   - When updating `.claude/Report.md`, update ONLY the `Last Updated (Claude)` section. NEVER overwrite or remove the `Last Updated (Gemini)` section.
+  - **`research/` folder is off-limits to the main and review terminals.** It is the **research terminal's exclusive write territory** AND the **user's active study workspace**. All main-pipeline and review-terminal agents — `orchestrator`, `back-maker`, `front-maker`, `reviewer`, `security-manager`, `git-manager`, `reporter`, `deep-reviewer`, `algo-tester`, `web-tester` — are **READ-ONLY** on `research/`. Never create, modify, delete, or stage files under `research/` (including `research/spec/`, `research/search/`, `research/investigations/`, `research/algorithm.md`, and any future subdirectory) from the main pipeline. If you read research content, that is fine; writes are forbidden. If a file already exists under `research/` that appears to have been created by the main pipeline (governance violation), leave it for the user or research terminal to handle — do not delete or relocate it yourself. The only legitimate writer of `research/` is the `research` agent invoked from the research terminal.
 
   ## Target Structure
   frontend/   <- React 18 + Vite

@@ -7,10 +7,13 @@ tools: Bash, Read, Write, Glob, Grep, Agent
 
 You are the algorithm tester agent for ArchiTinder.
 
+## Boundary
+**READ-ONLY on `research/`.** You may READ `research/algorithm.md` for hyperparameter ranges and scoring rationale. You must NEVER write, create, modify, delete, or stage any file under `research/`. Your outputs (optimization results, reports, feedback) go to `backend/tools/optimization_results.json`, never to `research/`. `research/` is the research terminal's exclusive territory and the user's active study workspace. See CLAUDE.md `## Rules`.
+
 ## Before starting
 Read:
 - `CLAUDE.md` backend conventions -- specifically `settings.py` location and `RECOMMENDATION` dict structure
-- `research/algorithm.md` -- hyperparameter ranges, scoring rationale, and current production values
+- `research/algorithm.md` -- hyperparameter ranges, scoring rationale, and current production values (READ-ONLY)
 
 ## What you do
 

@@ -7,6 +7,9 @@ tools: Read, Glob, Grep, Bash
 
 You are the code reviewer for ArchiTinder.
 
+## Boundary
+**READ-ONLY on `research/`.** You may READ `research/algorithm.md` and other research files for algorithm ground-truth (see Mode A below). You must NEVER write, create, modify, delete, or stage any file under `research/`. It is the research terminal's exclusive territory and the user's active study workspace. See CLAUDE.md `## Rules`.
+
 ## Two modes
 
 ### Mode A -- Review (called by orchestrator after makers finish)

@@ -33,6 +33,7 @@
 - [2026-04-22] REVIEW-PASSED: d12b2d4 — drift checks passed; run `git push` manually from this terminal
 - [2026-04-25] SPEC-UPDATED: initial → v1.0 — search flow requirements spec v1.0 published at research/spec/requirements.md. Section 11 consolidates actionable directives from all 12 research reports (previous per-topic RESEARCH-READY markers removed — see `research/search/**` files directly for reasoning archive if needed). Main terminal: read the spec and plan implementation independently.
 - [2026-04-25] REVIEW-REQUESTED: 3ee9c77 — convergence detection signal-integrity fixes (Topic 10 Option A); run `/deep-review` next.
+- [2026-04-25] REVIEW-PASSED: ded38be — drift checks passed, 1 MINOR noted (see .claude/reviews/latest.md); run `git push` manually from this terminal
 
 ---
 

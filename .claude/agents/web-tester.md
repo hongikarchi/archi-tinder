@@ -335,3 +335,4 @@ Debug data:
 - Never retry failed flows — report failures immediately.
 - Screenshot at: login, first card, phase transitions, action card, results, any error state.
 - The 10-swipe test is the MOST IMPORTANT step. If nothing else works, at least do this.
+- **Never write to `research/`.** It is the research terminal's exclusive territory and the user's active study workspace — not a test-artifact target. All test artifacts go to `test-artifacts/` (cleaned after run). See CLAUDE.md `## Rules`.
