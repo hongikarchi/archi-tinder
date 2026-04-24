@@ -18,6 +18,7 @@ export default function MainLayout({
   const isHome = pathname === '/' || pathname === '/new' || pathname.startsWith('/search')
   const isSwipe = pathname === '/swipe'
   const isLibrary = pathname.startsWith('/library')
+  const isProfile = pathname.startsWith('/user')
 
   const libraryMatch = pathname.match(/^\/library\/(.+)$/)
   const folderId = libraryMatch ? libraryMatch[1] : null
@@ -26,7 +27,7 @@ export default function MainLayout({
     <div style={{ height: '100vh', overflow: 'hidden' }}>
 
       {/* Header controls */}
-      <div style={{ position: 'fixed', top: 14, right: 16, zIndex: 200, display: 'flex', gap: 6, alignItems: 'center' }}>
+      <div style={{ position: 'fixed', top: 14, right: 16, zIndex: 200, display: (isProfile || pathname.startsWith('/office')) ? 'none' : 'flex', gap: 6, alignItems: 'center' }}>
         <ThemeToggle theme={theme} onToggle={onToggleTheme} />
         <button
           onClick={onLogout}
@@ -51,7 +52,7 @@ export default function MainLayout({
       </div>
 
       {/* Home sub-routes — only visible when on home paths */}
-      <div style={{ display: isHome ? 'block' : 'none' }}>
+      <div style={{ display: (!isSwipe && !isLibrary) ? 'block' : 'none' }}>
         <Outlet />
       </div>
 

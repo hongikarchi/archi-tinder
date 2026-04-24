@@ -19,11 +19,18 @@ const TAB_ICONS = {
       <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
     </svg>
   ),
+  profile: (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </svg>
+  ),
 }
 
 function getActiveTab(pathname) {
   if (pathname === '/swipe') return 'swipe'
   if (pathname.startsWith('/library')) return 'folders'
+  if (pathname.startsWith('/user')) return 'profile'
   return 'home'
 }
 
@@ -33,9 +40,10 @@ export default function TabBar({ swipeEnabled }) {
   const activeTab = getActiveTab(location.pathname)
 
   const tabs = [
-    { id: 'home',    label: 'New',     path: '/' },
-    { id: 'swipe',   label: 'Swipe',   path: '/swipe' },
+    { id: 'home', label: 'New', path: '/' },
+    { id: 'swipe', label: 'Swipe', path: '/swipe' },
     { id: 'folders', label: 'Library', path: '/library' },
+    { id: 'profile', label: 'Profile', path: '/user/me' },
   ]
 
   function handleSelect(tab) {
@@ -53,7 +61,7 @@ export default function TabBar({ swipeEnabled }) {
       borderTop: '1px solid var(--color-border)',
     }}>
       {tabs.map(t => {
-        const active   = activeTab === t.id
+        const active = activeTab === t.id
         const disabled = t.id === 'swipe' && !swipeEnabled
         return (
           <button

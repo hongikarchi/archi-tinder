@@ -6,18 +6,20 @@ import SetupPage from './pages/SetupPage.jsx'
 import ProjectSetupPage from './pages/ProjectSetupPage.jsx'
 import LLMSearchPage from './pages/LLMSearchPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
+import UserProfilePage from './pages/UserProfilePage.jsx'
+import FirmProfilePage from './pages/FirmProfilePage.jsx'
 import * as api from './api/client.js'
 
 function normalizeFilters(filters) {
   if (!filters) return {}
   const out = {}
   // Structured filters from LLM parse-query -- pass through
-  if (filters.program)           out.program           = filters.program
-  if (filters.location_country)  out.location_country  = filters.location_country
-  if (filters.material)          out.material          = filters.material
-  if (filters.style)             out.style             = filters.style
-  if (filters.year_min  != null) out.year_min          = filters.year_min
-  if (filters.year_max  != null) out.year_max          = filters.year_max
+  if (filters.program) out.program = filters.program
+  if (filters.location_country) out.location_country = filters.location_country
+  if (filters.material) out.material = filters.material
+  if (filters.style) out.style = filters.style
+  if (filters.year_min != null) out.year_min = filters.year_min
+  if (filters.year_max != null) out.year_max = filters.year_max
   // Area -- accept all naming conventions (frontend, LLM area_min, backend min_area)
   const minArea = filters.min_area ?? filters.minArea ?? filters.area_min ?? null
   const maxArea = filters.max_area ?? filters.maxArea ?? filters.area_max ?? null
@@ -442,7 +444,7 @@ export default function App() {
   function handleDeleteProject(id) {
     const project = projects.find(p => p.id === id)
     if (project?.backendId) {
-      api.deleteProject(project.backendId).catch(() => {})
+      api.deleteProject(project.backendId).catch(() => { })
     }
     setProjects(prev => prev.filter(p => p.id !== id))
     if (activeProjectId === id) {
@@ -558,7 +560,7 @@ export default function App() {
     <ErrorBoundary>
       <Routes>
         <Route path="/login" element={
-          userId ? <Navigate to="/" replace /> : <LoginPage onLogin={handleLogin} theme={theme} onToggleTheme={toggleTheme} />
+          userId ? <Navigate to="/" replace /> : <LoginPage onLogin={handleLogin} />
         } />
 
         <Route element={
@@ -611,6 +613,8 @@ export default function App() {
           <Route path="swipe" element={null} />
           <Route path="library" element={null} />
           <Route path="library/:folderId" element={null} />
+          <Route path="user/me" element={<UserProfilePage {...sharedLayoutProps} />} />
+          <Route path="office/:officeId" element={<FirmProfilePage {...sharedLayoutProps} />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
