@@ -46,14 +46,14 @@ flowchart TD
 ## Backend Structure
 | File | Responsibility |
 |------|---------------|
-| `engine.py` | Recommendation algorithm: pool creation, farthest-point, K-Means+MMR, convergence, top-K; centroid cache key uses spread dimensions (0, 191, -1) for collision resistance |
+| `engine.py` | Recommendation algorithm: pool creation, farthest-point, K-Means+MMR, convergence, top-K; centroid cache key uses spread dimensions (0, 191, -1) for collision resistance; **pool-score normalization (Topic 12):** _build_score_cases returns 3-tuple with total_weight; create_bounded_pool divides score by total_weight via ::float cast -> [0,1] range; seed boost 1.1 |
 | `services.py` | Gemini LLM: query parsing (gemini-2.5-flash), persona report generation; Imagen 3: AI architecture image generation; retry wrapper with 1-retry + logging |
 | `views.py` | All REST endpoints -- session CRUD, swipes, projects, images, auth, report image generation; `select_for_update()` on session query + `session.save()` before prefetch to prevent concurrent exposed_ids staleness; persona report returns structured errors (502 with error_type); building_id validation returns 400; prefetch computed outside transaction.atomic(); pool_embeddings cached across transaction boundary (no redundant fetch for prefetch); dislike embeddings batch-fetched via get_pool_embeddings; **convergence signal integrity (Topic 10 Option A):** exploring -> analyzing transition clears `convergence_history` + `previous_pref_vector` (prevents cross-metric centroid-vs-pref_vector Delta-V); analyzing-phase Delta-V appended on every swipe (not gated by action == like) so `convergence_window` counts rounds, not likes |
 | `config/settings.py` | RECOMMENDATION dict (12 hyperparameters), JWT config, DB config (CONN_MAX_AGE=600), CORS; uses STORAGES dict (Django 4.2+ format) for WhiteNoise static files |
 | `apps/accounts/views.py` | Google/Kakao/Naver OAuth, dev-login, JWT token management; all login views use `authentication_classes = []` |
 | `tests/conftest.py` | pytest fixtures: SQLite in-memory DB override, user_profile, auth_client, api_client |
 | `tests/test_auth.py` | 7 auth integration tests (Google login mock, token refresh, logout, dev-login) |
-| `tests/test_sessions.py` | 10+ session lifecycle tests (creation, swipes, idempotency, phase transitions, client-buffer merge, state resume, convergence signal integrity) with mocked engine.py; includes `TestConvergenceSignalIntegrity` for Topic 10 Option A fixes |
+| `tests/test_sessions.py` | 12+ session lifecycle tests (creation, swipes, idempotency, phase transitions, client-buffer merge, state resume, convergence signal integrity, pool-score normalization) with mocked engine.py; includes `TestConvergenceSignalIntegrity` for Topic 10 Option A fixes and `TestPoolScoreNormalization` for Topic 12 normalization |
 | `tests/test_projects.py` | 8 project + batch tests (CRUD, pagination, auth, building batch) |
 
 ## Frontend Structure
@@ -158,19 +158,30 @@ flowchart TD
 - **Swipe API latency optimizations (PERF1):** pool_embeddings cached across transaction boundary (eliminates redundant get_pool_embeddings call in prefetch section); dislike embeddings batch-fetched via single get_pool_embeddings call (was N individual get_building_embedding calls); CONN_MAX_AGE=600 for DB connection reuse; preloadImage 1.5s timeout prevents UI blocking on slow CDN
 - **Convergence detection signal integrity (Topic 10 Option A, Sprint 0 Tier A Critical):** two unconditional structural fixes in SwipeView. Bug 1 -- exploring -> analyzing transition now clears `convergence_history` and `previous_pref_vector` so the first analyzing Delta-V is not a cross-metric `||centroid - pref_vector||`. Bug 2 -- analyzing-phase Delta-V append is no longer gated by `action == 'like'`, so `convergence_window=3` correctly counts rounds rather than likes. Known accepted side effect per spec: dislike Delta-V < like Delta-V biases the moving average downward on dislike-heavy sequences.
 - **Deep code review workflow (`/deep-review`):** dedicated review-terminal slash command at `.claude/commands/deep-review.md` + parallel subagent at `.claude/agents/deep-reviewer.md`; **push-gate scope** via `origin/main..HEAD` (unpushed commits only) with optional user-supplied range; `git fetch origin main` refresh before scope computation; produces `.claude/reviews/{sha_short}.md` + `.claude/reviews/latest.md`; 7-axis checklist (architecture, correctness, performance, security, quality, test coverage, cross-commit drift); complementary to the fast `reviewer`/`security-manager` gate, not a replacement; read-only, non-blocking, outside the orchestrator fix loop
+- **Pool score normalization (Topic 12, Sprint 0 A1):** _build_score_cases() returns total_weight alongside cases and params; create_bounded_pool SQL output is normalized via ((sum)::float / total_weight), producing scores in [0,1] regardless of active-filter count. Seed boost is clean 1.1. Fixes weight-scale drift across queries with different filter counts (3-filter max 6 vs 8-filter max 36). Tier-grouping at views.py:188 unchanged behaviorally since defaultdict sorts int or float keys identically.
 
 ### Pending
 - Kakao + Naver OAuth
 
 ## Last Updated (Claude)
 - **Date:** 2026-04-25
-- **Commits:** 3ee9c77 -- fix: convergence detection signal-integrity bugs (Topic 10 Option A)
-- **Phase:** Sprint 0 -- Topic 10 Convergence Detection Tier A Critical (unconditional)
+- **Commits:** 8bf73b8 -- fix: normalize pool scores to [0,1] (Topic 12)
+- **Phase:** Sprint 0 A1 -- Topic 12 pool-score normalization
 - **Changes:**
-  - `backend/apps/recommendation/views.py` -- Bug 1: on `exploring -> analyzing` phase transition, clear `session.convergence_history = []` and `session.previous_pref_vector = []`. Matches the reset pattern already used in the action-card "Reset and keep going" path. Prevents the first analyzing-phase Delta-V from being a cross-metric `||K-Means_centroid - exploring_pref_vector||` distance. The existing `session.save(update_fields=[...])` already covers both fields.
-  - `backend/apps/recommendation/views.py` -- Bug 2: remove `action == 'like'` gate from the analyzing-phase Delta-V append branch. Delta-V is now appended on every analyzing swipe (still guarded by `session.like_vectors` non-empty, since clustering requires >=1 like). `convergence_window=3` now correctly means "3 rounds" rather than "3 likes". Stale comment "# On dislike during analyzing: centroids unchanged, skip convergence check" removed.
-  - `backend/tests/test_sessions.py` -- new `TestConvergenceSignalIntegrity` class with 2 tests: `test_phase_transition_resets_convergence_state` (drives 3 likes to trigger the transition, asserts both fields == []; pre-fix the fields held 2 Delta-V entries + a 384-dim vector) and `test_analyzing_dislike_appends_delta_v` (seeds an analyzing-phase session directly with non-empty `like_vectors` + a valid `previous_pref_vector`, posts one dislike, asserts `convergence_history` grew by exactly 1 entry; pre-fix it grew by 0).
-- **Verification:** `python3 -m pytest backend/tests/` -> 31 passed. `python3 -m flake8` clean on modified regions (pre-existing warnings in unrelated views.py code untouched). Diff limited strictly to the two bug-site blocks + one new test class -- no refactors, no changes to Kalman/dislike-streak/pool-scoring code (all out-of-scope per task brief). Known side effect documented in code comment + commit body + Report.md feature bullet: dislike Delta-V < like Delta-V biases moving average down; acceptable per spec, revisit with data if problematic.
+  - `backend/apps/recommendation/engine.py` -- `_build_score_cases(filters, weights)` now returns `(cases, params, total_weight)` 3-tuple, accumulating total_weight from each branch that fires. `create_bounded_pool` wraps score SQL as `((sum)::float / total_weight)` so scores are in [0, 1] regardless of filter count. `::float` cast prevents integer truncation. Seed boost changed from `n + 1` to clean `1.1` (just above normalized max). Docstring updated to state new score range.
+  - `backend/tests/test_sessions.py` -- new `TestPoolScoreNormalization` class with 2 unit tests: empty-filters path (total_weight=0, early-return fires) and populated-filters path (cases/params/total_weight correct for a known filter set). 33 tests total pass.
+- **Verification:** `python3 -m pytest backend/tests/` -> 33 passed. Reviewer: PASS. Security: PASS. Division by zero impossible (`if not cases:` early-return fires when total_weight would be 0). Tier-grouping at views.py:188 uses defaultdict keyed on score -- works identically for int or float keys. pool_scores is per-session JSONField ephemeral data; no migration needed.
+- **Change diagram:**
+```mermaid
+graph TD
+    subgraph Backend
+        engine.py:::modified
+        test_sessions.py:::modified
+    end
+    engine.py --> test_sessions.py
+
+    classDef modified fill:#f59e0b,color:#000
+```
 
 ## Last Updated (Gemini)
 - **Date:** 2026-04-06

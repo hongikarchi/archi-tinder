@@ -34,6 +34,7 @@
 - [2026-04-25] SPEC-UPDATED: initial → v1.0 — search flow requirements spec v1.0 published at research/spec/requirements.md. Section 11 consolidates actionable directives from all 12 research reports (previous per-topic RESEARCH-READY markers removed — see `research/search/**` files directly for reasoning archive if needed). Main terminal: read the spec and plan implementation independently.
 - [2026-04-25] REVIEW-REQUESTED: 3ee9c77 — convergence detection signal-integrity fixes (Topic 10 Option A); run `/deep-review` next.
 - [2026-04-25] REVIEW-PASSED: ded38be — drift checks passed, 1 MINOR noted (see .claude/reviews/latest.md); run `git push` manually from this terminal
+- [2026-04-25] REVIEW-REQUESTED: 8bf73b8 — pool-score normalization (Topic 12 A1); run `/deep-review` next.
 
 ---
 
@@ -175,6 +176,17 @@ Google OAuth only. Korean users need domestic login.
 ---
 
 ## Resolved
+
+### Sprint 0 A1: Pool-Score Normalization -- 2026-04-25
+
+#### POOL1. Pool-score normalization (Topic 12) -- 2026-04-25
+Per research/spec/requirements.md Section 11 Topic 12. Fixes weight-scale drift (3-filter raw max 6 vs 8-filter raw max 36) by normalizing pool_scores to [0,1].
+- [x] `_build_score_cases` returns (cases, params, total_weight) — accumulates branch weights
+- [x] `create_bounded_pool` wraps SQL score as `((sum)::float / total_weight)` → normalized [0,1]
+- [x] Seed boost changed from `n+1` to clean `1.1`
+- [x] New `TestPoolScoreNormalization` class with 2 unit tests (build_score_cases empty + populated paths). 33 tests total pass.
+- [x] Reviewer: PASS. Security: PASS.
+- Commit: 8bf73b8
 
 ### Sprint 0 Topic 10: Convergence Detection Signal-Integrity -- 2026-04-25
 
