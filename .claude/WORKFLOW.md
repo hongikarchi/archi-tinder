@@ -34,8 +34,8 @@ file/layer ownership + handoff signals in `Task.md`, not branches.
 
 | Terminal | Model | Role | Owns / Touches | Typical signals |
 |----------|-------|------|----------------|-----------------|
-| **main** | Claude Code (orchestrator: opus) | Full pipeline — backend, frontend integration, E2E tests, commit | `backend/`, `frontend/` (data layer), `.claude/` | reporter emits `REVIEW-REQUESTED` to Handoffs; consumes `MOCKUP-READY`, `REVIEW-FAIL`, `REVIEW-ABORTED` from Handoffs, and `[RESEARCH-READY]` from Research Ready section |
-| **research** | Claude Code (research agent: opus) | Algorithm / search exploration, paper review, design proposals | `research/` only + appends `[RESEARCH-READY]` to Task.md `## Research Ready` section (its own append-only queue) | emits `[RESEARCH-READY]` |
+| **main** | Claude Code (orchestrator: opus) | Full pipeline — backend, frontend integration, E2E tests, commit | `backend/`, `frontend/` (data layer), `.claude/` | reporter emits `REVIEW-REQUESTED` to Handoffs; consumes `MOCKUP-READY`, `REVIEW-FAIL`, `REVIEW-ABORTED`, `SPEC-UPDATED` from Handoffs; `[SPEC-READY]` from Research Ready section |
+| **research** | Claude Code (research agent: opus) | Ongoing algorithm / UX research dialog with user; consolidates findings into `research/spec/requirements.md` (living spec). `research/search/**` deep-dive reports are reasoning archive — accessed directly via filesystem, not via Task.md pointers. | `research/` only + appends `[SPEC-READY]` to Task.md `## Research Ready` + `SPEC-UPDATED` to `## Handoffs` on version bump | emits `[SPEC-READY]`, `SPEC-UPDATED` |
 | **review** | Claude Code (deep-reviewer: opus) | Pre-push deep review across all axes (architecture, perf, security, drift) + HEAD/`origin/main` drift checks on PASS | read-only on source; writes `.claude/reviews/*.md` and the handoff line in Task.md `## Handoffs`; user manually runs `git push` from this terminal on `REVIEW-PASSED` | emits `REVIEW-PASSED` (drift-verified, ready for manual push), `REVIEW-ABORTED` (PASS but drift detected), or `REVIEW-FAIL` to Handoffs |
 | **antigravity** | Gemini (Chrome integration) | Continuous UI iteration — new mockups AND existing-page polish | `frontend/` (UI layer) | emits `MOCKUP-READY` to Handoffs; drops inline `TODO(claude): ...` markers in source |
 
@@ -76,7 +76,60 @@ integration session.
   Git's 3-way merge handles most cases when two terminals touched the same file in
   different sections (e.g., antigravity edited JSX, main edited `useEffect`).
 - Only `git-manager` commits from the orchestrator pipeline (one commit per task).
-  Antigravity and research commit directly from their own terminal.
+  Antigravity commits directly from its own terminal. **Research terminal does not commit** —
+  all research writes (spec, reports, `research/**`) are left for main terminal to commit,
+  ensuring a single chronology of code + spec changes.
+
+### Research ↔ Main: Spec-based Coordination
+
+Research terminal does not ship code or implementation plans to main directly. Instead,
+research consolidates findings into a **living spec** at `research/spec/requirements.md`,
+versioned via `**Version**: X.Y` in its header.
+
+**Handoff protocol**:
+- `[SPEC-READY]` in `## Research Ready` — the primary entry point. Main terminal reads
+  `research/spec/requirements.md` when it sees this marker. No per-topic markers are
+  published to Task.md; the 12 topic deep-dives at `research/search/**` are reasoning
+  archive, accessed directly by filesystem only when main needs deep justification
+  behind a Section 11 directive.
+- `SPEC-UPDATED: vX.Y → vX.Z — <sections> — <summary>` in `## Handoffs` on every
+  non-trivial spec revision. Main terminal reads this at session start to discover
+  changes since its last pickup.
+
+**Main's re-read policy** (incremental, not full):
+- On session start: scan Handoffs for new `SPEC-UPDATED` entries since last known version.
+- If new entries: read only the affected sections in the spec (not the whole document).
+- Full re-read is NOT required per task — only when the version bump touches work
+  currently in progress.
+
+**When a SPEC-UPDATED invalidates in-progress work**: orchestrator stops, flags the
+conflict to the user, does NOT silently continue with the old spec. User decides
+whether to finish the current task on the old spec or restart on the new.
+
+**Concurrency (two terminals editing `.claude/Task.md`)**:
+- Research appends to `## Research Ready` (or `## Handoffs` for SPEC-UPDATED).
+- Main's reporter removes resolved markers from `## Research Ready` as each topic lands.
+- Appends to different sections never conflict. Appends to the same section usually
+  merge cleanly via git 3-way.
+- On merge conflict: one terminal pulls + re-appends. No data loss because both
+  terminals work append-only or remove-only.
+
+**What research NEVER does**:
+- Does not prescribe task breakdown, sprint ordering, or implementation pacing — those
+  are entirely main's judgment. Research documents (like
+  `research/spec/research-priority-rebaselined.md`) carry proposed groupings but are
+  explicitly non-binding (see its "Authority Boundary" section).
+- Does not modify `backend/`, `frontend/`, `web-testing/`, or any `.claude/` file
+  outside Task.md's research sections and this WORKFLOW.md's research rows.
+- Does not commit or push.
+
+**What research DOES continuously**:
+- Ongoing user ↔ research dialog: elicitation, clarification, gap hunting, algorithm
+  audit, optimization ideas.
+- Updates `research/spec/requirements.md` in place (version bump + changelog entry).
+- Appends `SPEC-UPDATED` handoff signal so main picks up changes efficiently.
+- Keeps `research/search/**` as reasoning archive — expanded when a new question
+  requires fresh exploration.
 
 ### Pre-Push Review Gate
 
@@ -246,25 +299,51 @@ web-tester starts
 
 ---
 
-## Case 6: Research flow
+## Case 6: Research flow (separate terminal, ongoing)
+
+Research runs in its **own dedicated terminal** (see "Multi-Terminal Coordination" →
+Terminal Roster above). It is **not orchestrator-triggered** — it is a long-running,
+user-driven dialog.
 
 ```
-Orchestrator detects complex problem (algorithm, UX, performance)
-  -> research agent
-       |- reads Goal.md + existing research/ files
-       |- WebSearch for papers, best practices
-       |- reads current code for constraints
-       |
-       -> writes research/<topic>.md
-            |- Question
-            |- Findings (with sources)
-            |- Options (2-3 approaches)
-            |- Recommendation
-            -> Open questions
-       |
-       -> returns to orchestrator:
-            summary + recommended approach + proposed Task.md items
+User starts/resumes research terminal
+  |
+  |- [ongoing dialog: user ↔ research terminal]
+  |    elicitation, clarification, gap-hunting, algorithm audit, optimization ideas
+  |
+  |- research terminal writes / updates:
+  |    research/spec/requirements.md   (living spec, versioned X.Y)
+  |    research/spec/research-priority-rebaselined.md   (research recommendation, non-binding)
+  |    research/search/NN-*.md   (reasoning archive, 12 topic deep-dives)
+  |
+  |- On spec revision:
+  |    1. bumps **Version**: X.Y in requirements.md header
+  |    2. appends Changelog entry at bottom of requirements.md
+  |    3. appends `SPEC-UPDATED: vX.Y → vX.Z — <sections> — <summary>` to
+  |        .claude/Task.md ## Handoffs
+  |    4. if first publication: appends `[SPEC-READY]` to ## Research Ready
+  |
+  -> main terminal (separate, in its own session):
+       |- at session start, reads ## Handoffs for new SPEC-UPDATED
+       |- if new version: reads only affected sections in requirements.md
+       |- plans task breakdown + sequencing INDEPENDENTLY
+       |    (research/spec/research-priority-rebaselined.md is reference, not mandate)
+       |- runs its orchestrator pipeline (Case 1) to implement
 ```
+
+**Research terminal writes only**: `research/**` (full), `.claude/Task.md` (append-only
+research sections), `.claude/WORKFLOW.md` (research rows only, by explicit user grant).
+Never `backend/`, `frontend/`, agent definitions, `Report.md`, or git commits.
+
+**Main terminal reads** (in order): spec → plans → code. Main does NOT read
+`research/search/**` under normal flow — Section 11 of `requirements.md` absorbs
+all actionable directives. Main may consult `research/search/NN-*.md` for deep
+justification only when debugging a spec decision or exploring a variant.
+
+The **old orchestrator-triggered research pattern** (main's orchestrator invoking the
+research agent mid-pipeline for a complex sub-question) is still available in
+principle, but in practice all substantial research now lives in the dedicated
+research terminal.
 
 ---
 

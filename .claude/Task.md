@@ -12,9 +12,11 @@
 > cycles. Each terminal (main / review / antigravity) reads this section at session start.
 > Oldest entries expire naturally — keep ~10 most recent.
 >
-> **Research handoffs are NOT tracked here.** The research terminal writes
-> `[RESEARCH-READY] <topic> — <brief>` entries directly to the `## Research Ready` section
-> below (its existing append-only protocol). Do not duplicate research signals in Handoffs.
+> **Research handoff placement**:
+> - `[SPEC-READY]` marker (persistent "spec exists at this path") goes in `## Research Ready` below.
+> - **Spec version bumps** (`SPEC-UPDATED`) go here in Handoffs — time-sensitive signals that
+>   main terminal picks up at session start. Do not duplicate `[SPEC-READY]` here;
+>   it belongs in `## Research Ready`.
 >
 > Signal types for this section:
 > - `REVIEW-REQUESTED: <sha>` — reporter (main pipeline) → review terminal; run `/deep-review` next.
@@ -22,12 +24,14 @@
 > - `REVIEW-ABORTED: <sha> — <reason>` — review terminal → main; review verdict was PASS but drift was detected during the review. `HEAD advanced …` → re-run `/deep-review` on the new HEAD. `origin/main moved …` → `git pull --rebase` then re-review.
 > - `REVIEW-FAIL: <sha> — <summary>` — review terminal → main; run fix loop via orchestrator (max 2 cycles).
 > - `MOCKUP-READY: <page>` — antigravity → main; page is ready for API integration pass.
+> - `SPEC-UPDATED: vX.Y → vX.Z — <sections> — <summary>` — research terminal → main; spec at `research/spec/requirements.md` bumped to new version. Main reads only the affected sections, not the whole spec. If the change invalidates in-progress work, main's orchestrator stops and asks user.
 
 <!-- Append new handoff entries here. Format: `- [YYYY-MM-DD] <SIGNAL>` -->
 
 - [2026-04-22] REVIEW-FAIL: d320166 — 0 CRITICAL, 3 MAJOR; see .claude/reviews/latest.md
 - [2026-04-22] REVIEW-PASSED: b5931ab — safe to push; fix-loop resolves all findings from d320166 (one was my misread, correctly dismissed)
 - [2026-04-22] REVIEW-PASSED: d12b2d4 — drift checks passed; run `git push` manually from this terminal
+- [2026-04-25] SPEC-UPDATED: initial → v1.0 — search flow requirements spec v1.0 published at research/spec/requirements.md. Section 11 consolidates actionable directives from all 12 research reports (previous per-topic RESEARCH-READY markers removed — see `research/search/**` files directly for reasoning archive if needed). Main terminal: read the spec and plan implementation independently.
 
 ---
 
@@ -129,20 +133,12 @@
 
 ## Research Ready
 
-> Written by research terminal. Main terminal picks items up, implements, then `reporter` removes the line and converts to a resolved task. Append-only; do not edit existing lines here.
+> Written by research terminal. Since spec v1.0 (2026-04-25), this section holds a single persistent `[SPEC-READY]` pointer (updated in place on version bumps). Research handoff is **spec-centric**:
+> - `[SPEC-READY]` marker below points to `research/spec/requirements.md`.
+> - `research/search/**` (12 topic deep-dives) is reasoning archive — accessed directly via filesystem only when deep-justification is needed. No Task.md pointers.
+> - `SPEC-UPDATED` entries in `## Handoffs` (above) carry incremental change signals.
 
-- [RESEARCH-READY] 01-hybrid-retrieval — recommend Katz-style RRF hybrid (tsvector + pgvector cosine) gated behind `HYBRID_RETRIEVAL_ENABLED` flag; no extensions required. 8 backend tasks (BACK-HYB-1..6, TEST-HYB-1, ALGO-HYB-1). See `research/search/01-hybrid-retrieval.md`.
-- [RESEARCH-READY] 02-reranking-layer — MMR already functions as our re-ranker; recommend adding **Gemini 2.5-flash setwise re-rank** of ~60 candidates at session completion, flag-gated `GEMINI_RERANK_ENABLED`, fused with MMR via RRF so diversity is preserved. Off the swipe hot path. ~$0.003/session. See `research/search/02-reranking-layer.md`.
-- [RESEARCH-READY] 03-query-understanding — `research/algorithm.md` already specifies HyDE V_initial which live code silently dropped; recommend restoring it via one extra Gemini call (producing `visual_description`) embedded through HuggingFace Inference API on the exact 384-dim MiniLM model (same geometry as stored embeddings). Flag-gated `HYDE_VINITIAL_ENABLED`. 10 backend tasks (BACK-QU-1..8, TEST-QU-1, ALGO-QU-1). See `research/search/03-query-understanding.md`.
-- [RESEARCH-READY] 04-diversity-methods — Keep MMR per-swipe with session-aware λ ramp (`λ(t)=λ_base·min(1, |exposed|/N_ref)`, one-line change). Replace MMR with **DPP greedy MAP** (Chen 2018) at session-final top-K, flag-gated `DPP_TOPK_ENABLED`. See `research/search/04-diversity-methods.md`.
-- [RESEARCH-READY] 05-preference-weight-learning — Keep Optuna-tuned fixed weights; defer bandits until ≥1K logged sessions. Ship **session logging instrumentation first**. If active experimentation needed now: online EMA on like/dislike asymmetry (Option B), flag-gated. Key finding: pref_vector doesn't drive analyzing-phase card selection → low impact ceiling. See `research/search/05-preference-weight-learning.md`.
-- [RESEARCH-READY] 06-clustering-alternatives — N<<D rules out GMM/DBSCAN/spectral. Ship **adaptive k∈{1,2} via silhouette score** (`ADAPTIVE_K_CLUSTERING_ENABLED`, threshold 0.15) + orthogonal **soft-assignment relevance** (`SOFT_RELEVANCE_ENABLED`, softmax over centroid distances). Both <40-line sklearn-only changes to engine.py:451-489 + 516 + 722/737. See `research/search/06-clustering-alternatives.md`.
-- [RESEARCH-READY] 07-collaborative-signals — **Defer** true CF until `N_projects ≥ 500 AND median likes/project ≥ 20`; at current scale every project is cold-start. Ship Option B: flag-gated **global-popularity prior** (default weight=0.0, min_exposures=5) blended into `_build_score_cases()`. Per-project is correct CF entity. 9 backend tasks (BACK-CF-1..6, TEST-CF-1, ALGO-CF-1, DOCS-CF-1). See `research/search/07-collaborative-signals.md`.
-- [RESEARCH-READY] 08-embedding-model-choice — Recommend **additive multimodal channel**: new `image_embedding` column (jina-clip-v2 1024-dim or SigLIP 2 768-dim) on `architecture_vectors` alongside existing 384-dim MiniLM text embedding. Non-destructive, stays within Make DB ownership. Rejects text-only upgrades + unified multimodal replacement. Coordination items with Make DB team, not Make Web code edits. See `research/search/08-embedding-model-choice.md`.
-- [RESEARCH-READY] 09-ann-indexing — **Do nothing now.** Brute-force cosine on ~3,465-row corpus is sub-ms; vendor benchmarks place seq-scan knee at ~50K rows. Ship lightweight query-timing logs to detect trigger cleanly (p95 > 150 ms or corpus > 50K rows). Pre-negotiate HNSW `CREATE INDEX CONCURRENTLY` playbook for Make DB. Choose HNSW over IVFFlat when triggered. See `research/search/09-ann-indexing.md`.
-- [RESEARCH-READY] 10-convergence-detection — **Two structural bugs found**: (1) Delta-V appended only on likes → window=3 means 3 likes not 3 rounds; (2) convergence_history not reset on phase transition → first analyzing Delta-V is cross-metric. **Ship bug-fix (Option A) unconditionally**, then 1-D Kalman filter with credible-interval gating (`KALMAN_CONVERGENCE_ENABLED`) + Prechelt patience/min-delta fallback. 10 backend tasks. Rejects PELT/BOCD (N≥30 required). See `research/search/10-convergence-detection.md`.
-- [RESEARCH-READY] 11-cold-start-seed — Keep hard-filter + tier-ordered farthest-point as default (Gonzalez 2-approximation bound; 89.5% completion empirical floor). Ship **query-informativeness branch** (`BARE_POOL_WIDEN_ENABLED`, off by default): rich queries use current path; bare queries widen pool to 250 and drop tier-ordering. 8 tasks (BACK-CS-1..5, TEST-CS-1, ALGO-CS-1, DOCS-CS-1). Composes with topics 01/03/07. See `research/search/11-cold-start-seed.md`.
-- [RESEARCH-READY] 12-pool-construction-ranking — **Keep weighted CASE WHEN** (RRF/Borda degenerate on binary filter signals; LTR blocked by missing logs). Only real defect: **weight-scale drift across queries** (3-filter span [0,6] vs 5-filter [0,15]). Ship **normalization fix** (divide by Σ active-filter weights → [0,1], seed boost → 1.1). Partially mooted by Topic 01's RRF when raw_query present. `pool_scores` is load-bearing only for first-10-round tier-grouping. See `research/search/12-pool-construction-ranking.md`.
+- [SPEC-READY 2026-04-25] requirements-spec-v1.0 — consolidated search flow requirements + Section 11 actionable directives per topic. **Entry**: `research/spec/requirements.md` (binding). Reference-only: `research/spec/research-priority-rebaselined.md` (roadmap recommendation, non-binding) and `research/search/**` (reasoning archive). Main terminal: read spec, plan independently, implement via orchestrator pipeline.
 
 ---
 
