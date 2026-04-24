@@ -399,6 +399,142 @@ class TestPhaseTransitions:
 
 
 @pytest.mark.django_db
+class TestConvergenceSignalIntegrity:
+    """Topic 10 Option A: unconditional convergence signal-integrity fixes.
+
+    Covers two structural bugs in the analyzing-phase Delta-V pipeline:
+
+    Bug 1 -- on exploring -> analyzing, `convergence_history` and
+    `previous_pref_vector` must be cleared. Previously the first analyzing
+    Delta-V was a cross-metric `||centroid - pref_vector||` (apples to
+    oranges: K-Means centroid vs exploring preference vector).
+
+    Bug 2 -- Delta-V append during analyzing was gated by `action == 'like'`,
+    so `convergence_window` silently counted likes instead of rounds. After
+    the fix, every analyzing swipe (like or dislike) appends one Delta-V
+    entry (guarded only by `session.like_vectors` non-empty, since clustering
+    needs at least one like).
+
+    See research/spec/requirements.md Section 11 Tier A Topic 10 (binding)
+    and research/search/10-convergence-detection.md Option A (reasoning).
+    """
+
+    def test_phase_transition_resets_convergence_state(self, auth_client, user_profile):
+        """Bug 1: after 3 likes trigger exploring -> analyzing, convergence_history
+        and previous_pref_vector must be cleared to the empty list.
+
+        Pre-fix: after 3 exploring likes, convergence_history accumulates 2 entries
+        (swipes 2 and 3; swipe 1 sets previous_pref_vector for the first time) and
+        previous_pref_vector holds a 384-dim exploring-phase pref_vector. The 4th
+        swipe (first analyzing) would then compute a cross-metric Delta-V.
+
+        Post-fix: on the transition, both fields are reset to [], so the first
+        analyzing swipe has no previous centroid to compare against yet -- Delta-V
+        is deferred to the second analyzing swipe, which is the correct physical
+        semantics (centroid vs centroid).
+        """
+        project = Project.objects.create(
+            user=user_profile, name='Convergence Reset Test', filters={},
+        )
+
+        patchers = _apply_patches()
+        try:
+            resp = auth_client.post(
+                '/api/v1/analysis/sessions/',
+                {'project_id': str(project.project_id), 'filters': {}},
+                format='json',
+            )
+            session_id = resp.json()['session_id']
+
+            # 3 likes = min_likes_for_clustering -> exploring to analyzing
+            for i in range(3):
+                auth_client.post(
+                    f'/api/v1/analysis/sessions/{session_id}/swipes/',
+                    {
+                        'building_id': f'B{str(i+1).zfill(5)}',
+                        'action': 'like',
+                        'idempotency_key': f'conv_reset_like_{i}',
+                    },
+                    format='json',
+                )
+        finally:
+            _stop_patches(patchers)
+
+        session = AnalysisSession.objects.get(session_id=session_id)
+        assert session.phase == 'analyzing'
+        assert session.convergence_history == [], (
+            f'convergence_history should be cleared on phase transition, '
+            f'got {session.convergence_history!r}'
+        )
+        assert session.previous_pref_vector == [], (
+            f'previous_pref_vector should be cleared on phase transition, '
+            f'got len={len(session.previous_pref_vector)}'
+        )
+
+    def test_analyzing_dislike_appends_delta_v(self, auth_client, user_profile):
+        """Bug 2: in analyzing phase, a dislike swipe must append exactly one
+        entry to convergence_history.
+
+        Pre-fix: the `action == 'like'` gate blocked the append entirely on
+        dislikes, so convergence_window=3 counted likes, not rounds.
+
+        Setup: directly seed an analyzing-phase session with
+        like_vectors=[{...}] (clustering needs >=1 like), previous_pref_vector
+        as a valid 384-dim centroid from a prior round, and convergence_history=[].
+        Post one dislike. The mocked compute_convergence returns 0.05, so after
+        the fix we expect convergence_history == [0.05].
+        """
+        project = Project.objects.create(
+            user=user_profile, name='Dislike Delta-V Test', filters={},
+        )
+
+        # Seed an analyzing-phase session directly (avoids driving the full
+        # exploring -> analyzing transition, which adds dependency on swipe order).
+        prev_centroid = (np.random.RandomState(7).randn(384)).tolist()
+        seed_like_embedding = _FAKE_EMBEDDINGS['B00001'].tolist()
+        session = AnalysisSession.objects.create(
+            user=user_profile,
+            project=project,
+            phase='analyzing',
+            status='active',
+            pool_ids=list(_FAKE_POOL),
+            pool_scores=dict(_FAKE_SCORES),
+            exposed_ids=['B00001'],  # already-seen seed-like card
+            initial_batch=list(_FAKE_POOL[:5]),
+            like_vectors=[{'embedding': seed_like_embedding, 'round': 0}],
+            convergence_history=[],
+            previous_pref_vector=prev_centroid,
+            current_round=1,
+        )
+
+        patchers = _apply_patches()
+        try:
+            resp = auth_client.post(
+                f'/api/v1/analysis/sessions/{session.session_id}/swipes/',
+                {
+                    'building_id': 'B00002',
+                    'action': 'dislike',
+                    'idempotency_key': 'analyzing_dislike_delta_v',
+                },
+                format='json',
+            )
+        finally:
+            _stop_patches(patchers)
+
+        assert resp.status_code == 200
+
+        session.refresh_from_db()
+        # Post-fix: dislike during analyzing appends exactly one Delta-V entry
+        # (the mock returns 0.05). Pre-fix: history remained empty due to the
+        # action == 'like' gate.
+        assert len(session.convergence_history) == 1, (
+            f'analyzing-phase dislike should append exactly 1 Delta-V entry, '
+            f'got {session.convergence_history!r}'
+        )
+        assert session.convergence_history[0] == 0.05
+
+
+@pytest.mark.django_db
 class TestClientBufferMerge:
     """Verify client_buffer_ids merges into exposed_ids, preventing queue drift."""
 

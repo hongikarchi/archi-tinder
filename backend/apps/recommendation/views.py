@@ -535,8 +535,14 @@ class SwipeView(APIView):
             # 4. Increment round
             session.current_round += 1
 
-            # 5. Convergence -- use K-Means global centroid during analyzing, pref_vector during exploring
-            if session.phase == 'analyzing' and action == 'like' and session.like_vectors:
+            # 5. Convergence -- use K-Means global centroid during analyzing, pref_vector during exploring.
+            # Note: Delta-V is appended on EVERY analyzing swipe (not gated by action == 'like'),
+            # so `convergence_window` counts rounds, not likes. On a dislike the centroid still
+            # shifts slightly due to recency-weight drift, so Delta-V is smaller but non-zero.
+            # Known bias: dislike Delta-V < like Delta-V may pull the moving average down on
+            # dislike-heavy sequences. Acceptable per research/spec/requirements.md Section 11
+            # Tier A Topic 10 Option A; revisit with data if problematic.
+            if session.phase == 'analyzing' and session.like_vectors:
                 _, global_centroid = engine.compute_taste_centroids(
                     session.like_vectors, session.current_round
                 )
@@ -554,7 +560,6 @@ class SwipeView(APIView):
                     if delta_v is not None:
                         session.convergence_history = session.convergence_history + [delta_v]
                 session.previous_pref_vector = list(session.preference_vector) if session.preference_vector else []
-            # On dislike during analyzing: centroids unchanged, skip convergence check
 
             # 5a. Merge client buffer into exposed_ids BEFORE card selection.
             # This prevents the backend from re-selecting any card the frontend
@@ -567,6 +572,14 @@ class SwipeView(APIView):
 
             if session.phase == 'exploring' and like_count >= RC.get('min_likes_for_clustering', 3):
                 session.phase = 'analyzing'
+                # Reset convergence state: the analyzing phase tracks Delta-V between K-Means
+                # centroids, but `previous_pref_vector` currently holds the exploring-phase
+                # preference_vector (a different physical quantity). Clearing both prevents
+                # the first analyzing Delta-V from being a cross-metric centroid-vs-pref_vector
+                # distance. Matches the reset pattern in the "Reset and keep going" action-card
+                # path above. See research/spec/requirements.md Section 11 Tier A Topic 10.
+                session.convergence_history = []
+                session.previous_pref_vector = []
                 logger.info('Session %s: exploring -> analyzing (likes=%d)', session.session_id, like_count)
 
             if session.phase == 'analyzing' and engine.check_convergence(
