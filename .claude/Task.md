@@ -32,6 +32,7 @@
 - [2026-04-22] REVIEW-PASSED: b5931ab — safe to push; fix-loop resolves all findings from d320166 (one was my misread, correctly dismissed)
 - [2026-04-22] REVIEW-PASSED: d12b2d4 — drift checks passed; run `git push` manually from this terminal
 - [2026-04-25] SPEC-UPDATED: initial → v1.0 — search flow requirements spec v1.0 published at research/spec/requirements.md. Section 11 consolidates actionable directives from all 12 research reports (previous per-topic RESEARCH-READY markers removed — see `research/search/**` files directly for reasoning archive if needed). Main terminal: read the spec and plan implementation independently.
+- [2026-04-25] REVIEW-REQUESTED: 3ee9c77 — convergence detection signal-integrity fixes (Topic 10 Option A); run `/deep-review` next.
 
 ---
 
@@ -173,6 +174,16 @@ Google OAuth only. Korean users need domestic login.
 ---
 
 ## Resolved
+
+### Sprint 0 Topic 10: Convergence Detection Signal-Integrity -- 2026-04-25
+
+#### CONV1. Convergence detection signal-integrity fixes (Topic 10 Option A) -- 2026-04-25
+Per research/spec/requirements.md Section 11 Tier A Critical + research/search/10-convergence-detection.md Option A. Two structural bugs in the analyzing-phase Delta-V pipeline were producing meaningless convergence signals. Both fixes land unconditionally (no flag).
+- [x] Bug 1 fix: on exploring -> analyzing transition in views.py SwipeView, clear session.convergence_history and session.previous_pref_vector. Previously the first analyzing Delta-V computed a cross-metric ||centroid - pref_vector|| (apples to oranges).
+- [x] Bug 2 fix: remove `action == 'like'` gate from the analyzing Delta-V append in views.py. Now every analyzing swipe appends a Delta-V entry (guarded only by `like_vectors` non-empty). convergence_window=3 now counts rounds, not likes.
+- [x] Tests: new TestConvergenceSignalIntegrity class in backend/tests/test_sessions.py with 2 tests (phase transition reset + dislike Delta-V append). All 31 backend tests pass.
+- [x] Known side effect documented in commit + code comment: dislike Delta-V < like Delta-V biases the moving average downward on dislike-heavy sequences. Acceptable per spec; revisit with data.
+- Commit: 3ee9c77
 
 ### Phase 12: Critical Swipe Bug Fixes -- 2026-04-05
 
