@@ -74,7 +74,7 @@ PRODUCTION_PARAMS = {
     'min_likes_for_clustering': 3,
     'convergence_window':       3,
     'k_clusters':               2,
-    'max_consecutive_dislikes': 10,
+    'max_consecutive_dislikes': 5,
     'initial_explore_rounds':   10,
     'top_k_results':            20,
 }

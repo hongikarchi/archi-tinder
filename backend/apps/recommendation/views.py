@@ -615,7 +615,7 @@ class SwipeView(APIView):
                         next_card = engine.get_building_card(next_bid) if next_bid else None
                 else:
                     # Check for consecutive dislikes
-                    recent_swipes = list(session.swipes.order_by('-created_at').values_list('action', flat=True)[:RC.get('max_consecutive_dislikes', 10)])
+                    recent_swipes = list(session.swipes.order_by('-created_at').values_list('action', flat=True)[:RC.get('max_consecutive_dislikes', 5)])
                     consecutive_dislikes = 0
                     for s in recent_swipes:
                         if s == 'dislike':
@@ -623,7 +623,7 @@ class SwipeView(APIView):
                         else:
                             break
 
-                    if consecutive_dislikes >= RC.get('max_consecutive_dislikes', 10):
+                    if consecutive_dislikes >= RC.get('max_consecutive_dislikes', 5):
                         # Batch-fetch dislike embeddings (single query instead of N individual calls)
                         dislike_ids = project.disliked_ids[-10:]
                         dislike_embeds = []

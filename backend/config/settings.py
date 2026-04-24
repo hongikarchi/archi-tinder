@@ -136,7 +136,7 @@ RECOMMENDATION = {
     'convergence_threshold': 0.08,   # epsilon -- delta-V threshold
     'convergence_window': 3,
     'k_clusters': 2,
-    'max_consecutive_dislikes': 10,
+    'max_consecutive_dislikes': 5,
     'top_k_results': 20,
     'like_weight': 0.5,              # kept for pref vector update
     'dislike_weight': -1.0,
