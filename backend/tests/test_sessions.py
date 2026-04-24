@@ -701,3 +701,33 @@ class TestSessionStateResume:
         data = resp.json()
         assert data['is_analysis_completed'] is True
         assert data['next_image'] is None
+
+
+class TestPoolScoreNormalization:
+    """Topic 12: `_build_score_cases` / `create_bounded_pool` normalize to [0,1]."""
+
+    def test_build_score_cases_returns_total_weight(self):
+        """`_build_score_cases` reports the sum of weights for branches that fired."""
+        from apps.recommendation import engine
+
+        # 3 priority entries, but only 2 filters actively set.
+        filters = {'program': 'Museum', 'style': 'Brutalist'}
+        weights = {'program': 3, 'style': 2, 'material': 1}
+
+        cases, params, total_weight = engine._build_score_cases(filters, weights)
+
+        # Two active branches (program + style); material inactive -> not counted.
+        assert len(cases) == 2
+        assert total_weight == 5  # 3 (program) + 2 (style)
+        # Params interleave: [program_value, style_pattern]
+        assert params == ['Museum', '%Brutalist%']
+
+    def test_build_score_cases_returns_zero_when_no_filters_fire(self):
+        """Empty filters -> empty cases and zero total_weight."""
+        from apps.recommendation import engine
+
+        cases, params, total_weight = engine._build_score_cases({}, {'program': 3})
+
+        assert cases == []
+        assert params == []
+        assert total_weight == 0

@@ -289,39 +289,48 @@ def _random_pool(target):
 def _build_score_cases(filters, weights):
     """Build CASE WHEN SQL for each active filter with priority weight."""
     cases, params = [], []
+    total_weight = 0
     if filters.get('program') and 'program' in weights:
         w = weights['program']
         cases.append(f'CASE WHEN program = %s THEN {w} ELSE 0 END')
         params.append(filters['program'])
+        total_weight += w
     if filters.get('location_country') and 'location_country' in weights:
         w = weights['location_country']
         cases.append(f'CASE WHEN location_country ILIKE %s THEN {w} ELSE 0 END')
         params.append(f"%{filters['location_country']}%")
+        total_weight += w
     if filters.get('style') and 'style' in weights:
         w = weights['style']
         cases.append(f'CASE WHEN style ILIKE %s THEN {w} ELSE 0 END')
         params.append(f"%{filters['style']}%")
+        total_weight += w
     if filters.get('material') and 'material' in weights:
         w = weights['material']
         cases.append(f'CASE WHEN material ILIKE %s THEN {w} ELSE 0 END')
         params.append(f"%{filters['material']}%")
+        total_weight += w
     if filters.get('min_area') is not None and 'min_area' in weights:
         w = weights['min_area']
         cases.append(f'CASE WHEN area_sqm >= %s THEN {w} ELSE 0 END')
         params.append(filters['min_area'])
+        total_weight += w
     if filters.get('max_area') is not None and 'max_area' in weights:
         w = weights['max_area']
         cases.append(f'CASE WHEN area_sqm <= %s THEN {w} ELSE 0 END')
         params.append(filters['max_area'])
+        total_weight += w
     if filters.get('year_min') is not None and 'year_min' in weights:
         w = weights['year_min']
         cases.append(f'CASE WHEN year >= %s THEN {w} ELSE 0 END')
         params.append(filters['year_min'])
+        total_weight += w
     if filters.get('year_max') is not None and 'year_max' in weights:
         w = weights['year_max']
         cases.append(f'CASE WHEN year <= %s THEN {w} ELSE 0 END')
         params.append(filters['year_max'])
-    return cases, params
+        total_weight += w
+    return cases, params, total_weight
 
 
 def create_bounded_pool(filters, filter_priority=None, seed_ids=None, target=None):
@@ -329,6 +338,8 @@ def create_bounded_pool(filters, filter_priority=None, seed_ids=None, target=Non
     Create a bounded pool of building IDs with weighted scoring.
     Each building matching at least one filter is included, ranked by score.
     Returns tuple: (pool_ids, pool_scores) where pool_scores is {building_id: score}.
+    Scores are floats in [0, 1], normalized by sum of active-filter weights.
+    Seeded building_ids (if provided) get score 1.1, placing them above max.
     """
     if target is None:
         target = RC['bounded_pool_target']
@@ -339,11 +350,11 @@ def create_bounded_pool(filters, filter_priority=None, seed_ids=None, target=Non
     n = len(priority)
     weights = {key: n - i for i, key in enumerate(priority)}
 
-    cases, params = _build_score_cases(filters, weights)
+    cases, params, total_weight = _build_score_cases(filters, weights)
     if not cases:
         return _random_pool(target), {}
 
-    score_sql = ' + '.join(cases)
+    score_sql = '((' + ' + '.join(cases) + ')::float / ' + str(total_weight) + ')'
     sql = (
         'SELECT building_id, (' + score_sql + ') AS relevance_score'
         ' FROM architecture_vectors'
@@ -362,7 +373,7 @@ def create_bounded_pool(filters, filter_priority=None, seed_ids=None, target=Non
         for sid in seed_ids:
             if sid not in pool_scores:
                 pool_ids.insert(0, sid)
-            pool_scores[sid] = n + 1
+            pool_scores[sid] = 1.1
 
     return pool_ids, pool_scores
 
