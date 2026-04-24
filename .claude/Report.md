@@ -49,7 +49,7 @@ flowchart TD
 | `engine.py` | Recommendation algorithm: pool creation, farthest-point, K-Means+MMR, convergence, top-K; centroid cache key uses spread dimensions (0, 191, -1) for collision resistance; **pool-score normalization (Topic 12):** _build_score_cases returns 3-tuple with total_weight; create_bounded_pool divides score by total_weight via ::float cast -> [0,1] range; seed boost 1.1 |
 | `services.py` | Gemini LLM: query parsing (gemini-2.5-flash), persona report generation; Imagen 3: AI architecture image generation; retry wrapper with 1-retry + logging |
 | `views.py` | All REST endpoints -- session CRUD, swipes, projects, images, auth, report image generation; `select_for_update()` on session query + `session.save()` before prefetch to prevent concurrent exposed_ids staleness; persona report returns structured errors (502 with error_type); building_id validation returns 400; prefetch computed outside transaction.atomic(); pool_embeddings cached across transaction boundary (no redundant fetch for prefetch); dislike embeddings batch-fetched via get_pool_embeddings; **convergence signal integrity (Topic 10 Option A):** exploring -> analyzing transition clears `convergence_history` + `previous_pref_vector` (prevents cross-metric centroid-vs-pref_vector Delta-V); analyzing-phase Delta-V appended on every swipe (not gated by action == like) so `convergence_window` counts rounds, not likes |
-| `config/settings.py` | RECOMMENDATION dict (12 hyperparameters), JWT config, DB config (CONN_MAX_AGE=600), CORS; uses STORAGES dict (Django 4.2+ format) for WhiteNoise static files |
+| `config/settings.py` | RECOMMENDATION dict (12 hyperparameters, `max_consecutive_dislikes=5`), JWT config, DB config (CONN_MAX_AGE=600), CORS; uses STORAGES dict (Django 4.2+ format) for WhiteNoise static files |
 | `apps/accounts/views.py` | Google/Kakao/Naver OAuth, dev-login, JWT token management; all login views use `authentication_classes = []` |
 | `tests/conftest.py` | pytest fixtures: SQLite in-memory DB override, user_profile, auth_client, api_client |
 | `tests/test_auth.py` | 7 auth integration tests (Google login mock, token refresh, logout, dev-login) |
@@ -159,26 +159,29 @@ flowchart TD
 - **Convergence detection signal integrity (Topic 10 Option A, Sprint 0 Tier A Critical):** two unconditional structural fixes in SwipeView. Bug 1 -- exploring -> analyzing transition now clears `convergence_history` and `previous_pref_vector` so the first analyzing Delta-V is not a cross-metric `||centroid - pref_vector||`. Bug 2 -- analyzing-phase Delta-V append is no longer gated by `action == 'like'`, so `convergence_window=3` correctly counts rounds rather than likes. Known accepted side effect per spec: dislike Delta-V < like Delta-V biases the moving average downward on dislike-heavy sequences.
 - **Deep code review workflow (`/deep-review`):** dedicated review-terminal slash command at `.claude/commands/deep-review.md` + parallel subagent at `.claude/agents/deep-reviewer.md`; **push-gate scope** via `origin/main..HEAD` (unpushed commits only) with optional user-supplied range; `git fetch origin main` refresh before scope computation; produces `.claude/reviews/{sha_short}.md` + `.claude/reviews/latest.md`; 7-axis checklist (architecture, correctness, performance, security, quality, test coverage, cross-commit drift); complementary to the fast `reviewer`/`security-manager` gate, not a replacement; read-only, non-blocking, outside the orchestrator fix loop
 - **Pool score normalization (Topic 12, Sprint 0 A1):** _build_score_cases() returns total_weight alongside cases and params; create_bounded_pool SQL output is normalized via ((sum)::float / total_weight), producing scores in [0,1] regardless of active-filter count. Seed boost is clean 1.1. Fixes weight-scale drift across queries with different filter counts (3-filter max 6 vs 8-filter max 36). Tier-grouping at views.py:188 unchanged behaviorally since defaultdict sorts int or float keys identically.
+- **Max consecutive dislikes 10 → 5 (Sprint 0 A2, Section 5.1):** silent dislike fallback (engine.get_dislike_fallback) now fires after 5 consecutive dislikes rather than 10. settings.py canonical value + views.py RC.get() fallbacks + tools/algorithm_tester.py PRODUCTION_PARAMS baseline all aligned. Faster cadence lowers dead-time before the engine pivots away from mismatched neighborhoods. Per spec this is silent normal-flow auto-correction (no user notice).
 
 ### Pending
 - Kakao + Naver OAuth
 
 ## Last Updated (Claude)
 - **Date:** 2026-04-25
-- **Commits:** 8bf73b8 -- fix: normalize pool scores to [0,1] (Topic 12)
-- **Phase:** Sprint 0 A1 -- Topic 12 pool-score normalization
+- **Commits:** f04646f -- fix: reduce max_consecutive_dislikes threshold to 5 (Section 5.1)
+- **Phase:** Sprint 0 A2 -- max_consecutive_dislikes threshold reduction
 - **Changes:**
-  - `backend/apps/recommendation/engine.py` -- `_build_score_cases(filters, weights)` now returns `(cases, params, total_weight)` 3-tuple, accumulating total_weight from each branch that fires. `create_bounded_pool` wraps score SQL as `((sum)::float / total_weight)` so scores are in [0, 1] regardless of filter count. `::float` cast prevents integer truncation. Seed boost changed from `n + 1` to clean `1.1` (just above normalized max). Docstring updated to state new score range.
-  - `backend/tests/test_sessions.py` -- new `TestPoolScoreNormalization` class with 2 unit tests: empty-filters path (total_weight=0, early-return fires) and populated-filters path (cases/params/total_weight correct for a known filter set). 33 tests total pass.
-- **Verification:** `python3 -m pytest backend/tests/` -> 33 passed. Reviewer: PASS. Security: PASS. Division by zero impossible (`if not cases:` early-return fires when total_weight would be 0). Tier-grouping at views.py:188 uses defaultdict keyed on score -- works identically for int or float keys. pool_scores is per-session JSONField ephemeral data; no migration needed.
+  - `backend/config/settings.py` -- RECOMMENDATION['max_consecutive_dislikes'] reduced 10 -> 5 (canonical constant).
+  - `backend/apps/recommendation/views.py` -- RC.get() slice default (line 618) and threshold default (line 626) both changed 10 -> 5 to track canonical settings.
+  - `backend/tools/algorithm_tester.py` -- PRODUCTION_PARAMS baseline updated 10 -> 5. Optuna search range (5, 20) unchanged; 5 remains a valid lower bound.
+- **Verification:** No new tests needed (grep -rn max_consecutive_dislikes backend/tests is empty; pure constant change). All 33 existing tests pass. Reviewer: PASS. Security: PASS.
 - **Change diagram:**
 ```mermaid
 graph TD
     subgraph Backend
-        engine.py:::modified
-        test_sessions.py:::modified
+        settings.py:::modified
+        views.py:::modified
+        algorithm_tester.py:::modified
     end
-    engine.py --> test_sessions.py
+    settings.py --> views.py
 
     classDef modified fill:#f59e0b,color:#000
 ```

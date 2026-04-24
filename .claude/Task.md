@@ -35,6 +35,7 @@
 - [2026-04-25] REVIEW-REQUESTED: 3ee9c77 — convergence detection signal-integrity fixes (Topic 10 Option A); run `/deep-review` next.
 - [2026-04-25] REVIEW-PASSED: ded38be — drift checks passed, 1 MINOR noted (see .claude/reviews/latest.md); run `git push` manually from this terminal
 - [2026-04-25] REVIEW-REQUESTED: 8bf73b8 — pool-score normalization (Topic 12 A1); run `/deep-review` next.
+- [2026-04-25] REVIEW-REQUESTED: f04646f — max_consecutive_dislikes 10 -> 5 (Section 5.1 A2); run `/deep-review` next.
 
 ---
 
@@ -176,6 +177,17 @@ Google OAuth only. Korean users need domestic login.
 ---
 
 ## Resolved
+
+### Sprint 0 A2: Dislike Threshold Reduction -- 2026-04-25
+
+#### DISLIKE1. max_consecutive_dislikes reduced 10 -> 5 (Section 5.1) -- 2026-04-25
+Per research/spec/requirements.md Section 5.1 (binding). Silent dislike fallback now fires after 5 consecutive dislikes. Three locations aligned for coherence:
+- [x] settings.py RECOMMENDATION['max_consecutive_dislikes']: 10 -> 5 (canonical)
+- [x] views.py line 618 + 626 RC.get() fallback defaults: 10 -> 5
+- [x] tools/algorithm_tester.py PRODUCTION_PARAMS baseline: 10 -> 5 (Optuna search range (5,20) unchanged)
+- [x] No new tests needed (grep -rn max_consecutive_dislikes backend/tests -> empty; pure constant change)
+- [x] Reviewer: PASS. Security: PASS.
+- Commit: f04646f
 
 ### Sprint 0 A1: Pool-Score Normalization -- 2026-04-25
 
