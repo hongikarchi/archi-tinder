@@ -222,6 +222,8 @@ export async function logout(refreshToken) {
  * Start an analysis session.
  * params.filter_priority and params.seed_ids are forwarded to the backend
  * for weighted scoring pool creation.
+ * params.visual_description -- Topic 03 HyDE V_initial seed (English text from parse_query);
+ *   ignored by backend when hyde_vinitial_enabled flag is OFF.
  */
 export async function startSession(params) {
   const result = await callApi('POST', '/analysis/sessions/', {
@@ -229,6 +231,7 @@ export async function startSession(params) {
     filters:         params.filters || {},
     filter_priority: params.filter_priority || [],
     seed_ids:        params.seed_ids || [],
+    ...(params.visual_description ? { visual_description: params.visual_description } : {}),
   })
   return {
     ...result,

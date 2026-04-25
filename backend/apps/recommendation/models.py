@@ -51,6 +51,7 @@ class AnalysisSession(models.Model):
     original_filter_priority = models.JSONField(default=list)
     original_seed_ids        = models.JSONField(default=list)
     current_pool_tier        = models.IntegerField(default=1)  # 1=full filter, 2=drop geo/numeric, 3=random pool
+    v_initial         = models.JSONField(null=True, blank=True)  # Topic 03 HyDE: 384-dim float list
     created_at        = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -109,6 +110,7 @@ class SessionEvent(models.Model):
         ('probe_turn',          'Probe Turn'),
         ('cohort_assignment',   'Cohort Assignment'),
         ('parse_query_timing',  'Parse Query Timing'),
+        ('hyde_call_timing',    'HyDE Call Timing'),
     ]
 
     user        = models.ForeignKey(

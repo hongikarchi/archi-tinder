@@ -169,10 +169,24 @@ class SessionCreateView(APIView):
         if not project:
             project = Project.objects.create(user=profile, name='Untitled', filters=filters)
 
+        # Topic 03 HyDE V_initial: embed visual_description when flag enabled
+        visual_description = request.data.get('visual_description') or None
+        if visual_description is not None and (
+            not isinstance(visual_description, str) or len(visual_description) > 5000
+        ):
+            visual_description = None
+        v_initial = None
+        if RC.get('hyde_vinitial_enabled', False) and visual_description:
+            v_initial = services.embed_visual_description(
+                visual_description,
+                session=None,  # session not yet created
+                user=profile,
+            )
+
         # Create bounded pool with weighted scoring (3-tier relaxation fallback via helper)
         active_filters = filters or project.filters or {}
         pool_ids, pool_scores, current_pool_tier = engine.create_pool_with_relaxation(
-            active_filters, filter_priority, seed_ids
+            active_filters, filter_priority, seed_ids, v_initial=v_initial
         )
         filter_relaxed = current_pool_tier > 1
         if filter_relaxed:
@@ -230,6 +244,7 @@ class SessionCreateView(APIView):
             original_filter_priority = list(filter_priority or []),
             original_seed_ids        = list(seed_ids or []),
             current_pool_tier        = current_pool_tier,
+            v_initial                = v_initial,
         )
 
         logger.info('Session created: %s (pool=%d, tiers=%d, relaxed=%s)', session.session_id, len(pool_ids), len(tiers), filter_relaxed)
@@ -244,8 +259,8 @@ class SessionCreateView(APIView):
             filters=active_filters,
             filter_priority=list(filter_priority or []),
             raw_query=raw_query,
-            visual_description=None,  # Topic 03 will populate this
-            v_initial_success=False,  # Topic 03 will set this
+            visual_description=visual_description,
+            v_initial_success=v_initial is not None,
         )
         event_log.emit_event(
             'pool_creation',

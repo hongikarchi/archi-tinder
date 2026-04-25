@@ -9,6 +9,8 @@ import numpy as np
 from django.conf import settings
 from django.db import connection
 
+from . import event_log
+
 logger = logging.getLogger('apps.recommendation')
 
 RC = settings.RECOMMENDATION  # shorthand for constants
@@ -285,7 +287,7 @@ def _random_pool(target):
     return [row[0] for row in rows]
 
 
-def create_pool_with_relaxation(filters, filter_priority, seed_ids, exclude_ids=None, target=None, start_tier=1):
+def create_pool_with_relaxation(filters, filter_priority, seed_ids, exclude_ids=None, target=None, start_tier=1, v_initial=None):
     """
     Run 3-tier pool creation with relaxation fallback.
 
@@ -296,6 +298,7 @@ def create_pool_with_relaxation(filters, filter_priority, seed_ids, exclude_ids=
     exclude_ids: building_ids to remove from the result (e.g., already-exposed). Default None.
     start_tier: starting tier (1, 2, or 3). Used by pool exhaustion guard to escalate from
                 session's current tier.
+    v_initial: Topic 03 HyDE 384-dim float list. Passed to tier 1 and 2 only (not tier 3).
 
     Returns (pool_ids, pool_scores, tier_used).
     Returns ([], {}, 0) if even tier 3 produces no candidates after exclude (unrecoverable).
@@ -306,7 +309,9 @@ def create_pool_with_relaxation(filters, filter_priority, seed_ids, exclude_ids=
 
     # Tier 1
     if start_tier <= 1:
-        pool_ids, pool_scores = create_bounded_pool(filters or {}, filter_priority, seed_ids, target=target)
+        pool_ids, pool_scores = create_bounded_pool(
+            filters or {}, filter_priority, seed_ids, target=target, v_initial=v_initial,
+        )
         filtered_ids = [bid for bid in pool_ids if bid not in exclude_set]
         if filtered_ids:
             filtered_scores = {bid: s for bid, s in pool_scores.items() if bid not in exclude_set}
@@ -318,13 +323,15 @@ def create_pool_with_relaxation(filters, filter_priority, seed_ids, exclude_ids=
                    if k not in ('location_country', 'year_min', 'year_max', 'min_area', 'max_area')}
         if relaxed and relaxed != (filters or {}):
             relaxed_priority = [k for k in (filter_priority or []) if k in relaxed]
-            pool_ids, pool_scores = create_bounded_pool(relaxed, relaxed_priority, seed_ids, target=target)
+            pool_ids, pool_scores = create_bounded_pool(
+                relaxed, relaxed_priority, seed_ids, target=target, v_initial=v_initial,
+            )
             filtered_ids = [bid for bid in pool_ids if bid not in exclude_set]
             if filtered_ids:
                 filtered_scores = {bid: s for bid, s in pool_scores.items() if bid not in exclude_set}
                 return filtered_ids, filtered_scores, 2
 
-    # Tier 3 — random pool
+    # Tier 3 — random pool (v_initial not used)
     pool_ids = [bid for bid in _random_pool(target) if bid not in exclude_set]
     if pool_ids:
         return pool_ids, {}, 3
@@ -360,6 +367,7 @@ def refresh_pool_if_low(session, threshold=5):
         session.original_seed_ids,
         exclude_ids=exclude_ids,
         start_tier=next_tier,
+        v_initial=getattr(session, 'v_initial', None),
     )
     if not new_pool_ids:
         # No new candidates available even at higher tier — degrade gracefully
@@ -430,17 +438,69 @@ def _build_score_cases(filters, weights):
     return cases, params, total_weight
 
 
-def create_bounded_pool(filters, filter_priority=None, seed_ids=None, target=None):
+def create_bounded_pool(filters, filter_priority=None, seed_ids=None, target=None, v_initial=None):
     """
     Create a bounded pool of building IDs with weighted scoring.
     Each building matching at least one filter is included, ranked by score.
     Returns tuple: (pool_ids, pool_scores) where pool_scores is {building_id: score}.
-    Scores are floats in [0, 1], normalized by sum of active-filter weights.
+
+    Scores are floats in [0, 1] for filter-only paths (normalized by sum of active-filter
+    weights). When v_initial is provided (Topic 03 HyDE), a cosine similarity term
+    `hyde_score_weight * cosine_sim` is added to the numerator and the denominator is
+    extended by `hyde_score_weight`. The cosine similarity term `1 - (embedding <=> vector)`
+    ranges in [-1, 1] (pgvector <=> returns distance in [0, 2]), so blended scores and
+    HyDE-only scores may be negative for dissimilar buildings. ORDER BY DESC still ranks
+    them correctly; negative scores are valid output.
+
     Seeded building_ids (if provided) get score 1.1, placing them above max.
+
+    v_initial: Topic 03 HyDE 384-dim float list or None (default). When provided and
+    the feature flag is ON (hyde_vinitial_enabled), the pool query includes a cosine
+    similarity term to rank semantically close buildings higher.
     """
     if target is None:
         target = RC['bounded_pool_target']
+
+    use_hyde = (
+        v_initial is not None
+        and RC.get('hyde_vinitial_enabled', False)
+        and len(v_initial) == 384
+    )
+
     if not filters:
+        if use_hyde:
+            # HyDE-only path: pure cosine similarity ranking, no filter predicates
+            hyde_weight = float(RC.get('hyde_score_weight', 50.0))
+            vec_str = _vec_to_pg(v_initial)
+            sql = (
+                'SELECT building_id,'
+                ' ((1 - (embedding <=> %s::vector)) * %s::float / %s::float) AS relevance_score'
+                ' FROM architecture_vectors'
+                ' ORDER BY embedding <=> %s::vector'
+                ' LIMIT %s'
+            )
+            try:
+                with connection.cursor() as cur:
+                    cur.execute(sql, [vec_str, hyde_weight, hyde_weight, vec_str, target])
+                    rows = cur.fetchall()
+                pool_ids = [row[0] for row in rows]
+                pool_scores = {row[0]: float(row[1]) for row in rows}
+                if seed_ids:
+                    for sid in seed_ids:
+                        if sid not in pool_scores:
+                            pool_ids.insert(0, sid)
+                        pool_scores[sid] = 1.1
+                return pool_ids, pool_scores
+            except Exception as exc:
+                logger.warning('create_bounded_pool: HyDE query failed, falling back (%s)', exc)
+                event_log.emit_event(
+                    'failure',
+                    failure_type='hyde_pool_query',
+                    recovery_path='no_v_initial',
+                    error_class=type(exc).__name__,
+                    error_message=str(exc)[:200],
+                )
+                v_initial = None  # noqa: F841 — signals fall-through intent
         return _random_pool(target), {}
 
     priority = filter_priority or list(filters.keys())
@@ -449,22 +509,93 @@ def create_bounded_pool(filters, filter_priority=None, seed_ids=None, target=Non
 
     cases, params, total_weight = _build_score_cases(filters, weights)
     if not cases:
+        if use_hyde:
+            # HyDE-only path: same as the empty-filters branch above
+            hyde_weight = float(RC.get('hyde_score_weight', 50.0))
+            vec_str = _vec_to_pg(v_initial)
+            sql = (
+                'SELECT building_id,'
+                ' ((1 - (embedding <=> %s::vector)) * %s::float / %s::float) AS relevance_score'
+                ' FROM architecture_vectors'
+                ' ORDER BY embedding <=> %s::vector'
+                ' LIMIT %s'
+            )
+            try:
+                with connection.cursor() as cur:
+                    cur.execute(sql, [vec_str, hyde_weight, hyde_weight, vec_str, target])
+                    rows = cur.fetchall()
+                pool_ids = [row[0] for row in rows]
+                pool_scores = {row[0]: float(row[1]) for row in rows}
+                if seed_ids:
+                    for sid in seed_ids:
+                        if sid not in pool_scores:
+                            pool_ids.insert(0, sid)
+                        pool_scores[sid] = 1.1
+                return pool_ids, pool_scores
+            except Exception as exc:
+                logger.warning('create_bounded_pool: HyDE query failed, falling back (%s)', exc)
+                event_log.emit_event(
+                    'failure',
+                    failure_type='hyde_pool_query',
+                    recovery_path='no_v_initial',
+                    error_class=type(exc).__name__,
+                    error_message=str(exc)[:200],
+                )
+                use_hyde = False  # noqa: F841 — signals fall-through intent
         return _random_pool(target), {}
 
-    score_sql = '((' + ' + '.join(cases) + ')::float / ' + str(total_weight) + ')'
-    sql = (
-        'SELECT building_id, (' + score_sql + ') AS relevance_score'
-        ' FROM architecture_vectors'
-        ' WHERE (' + score_sql + ') > 0'
-        ' ORDER BY relevance_score DESC, RANDOM()'
-        ' LIMIT %s'
-    )
-    with connection.cursor() as cur:
-        cur.execute(sql, params + params + [target])
-        rows = cur.fetchall()
+    _hyde_failed = False
+    if use_hyde:
+        # Filter + HyDE blend: score = (filter_sum + hyde_weight * cosine_sim) / (total_weight + hyde_weight)
+        hyde_weight = float(RC.get('hyde_score_weight', 50.0))
+        vec_str = _vec_to_pg(v_initial)
+        filter_sum_sql = '(' + ' + '.join(cases) + ')::float'
+        denom = total_weight + hyde_weight
+        score_sql = (
+            '((' + filter_sum_sql + ' + %s::float * (1 - (embedding <=> %s::vector)))'
+            ' / ' + str(denom) + ')'
+        )
+        # WHERE: any filter match OR positive cosine similarity
+        where_sql = '((' + filter_sum_sql + ') > 0 OR (1 - (embedding <=> %s::vector)) > 0)'
+        sql = (
+            'SELECT building_id, (' + score_sql + ') AS relevance_score'
+            ' FROM architecture_vectors WHERE '
+            + where_sql
+            + ' ORDER BY relevance_score DESC, RANDOM()'
+            ' LIMIT %s'
+        )
+        # params order: cases (score_sql filter args), hyde_weight, vec_str (cosine),
+        #               cases (where_sql filter args), vec_str (where cosine), target
+        try:
+            with connection.cursor() as cur:
+                cur.execute(sql, params + [hyde_weight, vec_str] + params + [vec_str, target])
+                rows = cur.fetchall()
+        except Exception as exc:
+            logger.warning('create_bounded_pool: HyDE query failed, falling back (%s)', exc)
+            event_log.emit_event(
+                'failure',
+                failure_type='hyde_pool_query',
+                recovery_path='no_v_initial',
+                error_class=type(exc).__name__,
+                error_message=str(exc)[:200],
+            )
+            _hyde_failed = True
+
+    if not use_hyde or _hyde_failed:
+        score_sql = '((' + ' + '.join(cases) + ')::float / ' + str(total_weight) + ')'
+        sql = (
+            'SELECT building_id, (' + score_sql + ') AS relevance_score'
+            ' FROM architecture_vectors'
+            ' WHERE (' + score_sql + ') > 0'
+            ' ORDER BY relevance_score DESC, RANDOM()'
+            ' LIMIT %s'
+        )
+        with connection.cursor() as cur:
+            cur.execute(sql, params + params + [target])
+            rows = cur.fetchall()
 
     pool_ids = [row[0] for row in rows]
-    pool_scores = {row[0]: row[1] for row in rows}
+    pool_scores = {row[0]: float(row[1]) for row in rows}
 
     if seed_ids:
         for sid in seed_ids:

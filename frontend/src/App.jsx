@@ -253,7 +253,7 @@ export default function App() {
     }
   }
 
-  async function initSession(projectId, filters, filterPriority = [], seedIds = [], existingSessionId = null, currentHint = null) {
+  async function initSession(projectId, filters, filterPriority = [], seedIds = [], existingSessionId = null, currentHint = null, visualDescription = null) {
     setIsSwipeLoading(true)
     setIsSessionCompleted(false)
     try {
@@ -273,6 +273,7 @@ export default function App() {
         filters: normalizeFilters(filters),
         filter_priority: filterPriority,
         seed_ids: seedIds,
+        visual_description: visualDescription || undefined,
       })
       applySessionResponse(projectId, result)
     } catch (err) {
@@ -285,7 +286,7 @@ export default function App() {
     }
   }
 
-  async function handleStart(projectName, preloadedImages, llmFilters = {}, filterPriority = []) {
+  async function handleStart(projectName, preloadedImages, llmFilters = {}, filterPriority = [], visualDescription = null) {
     const projectId = `proj_${Date.now()}`
     const seedIds = (preloadedImages || []).map(c => c.image_id).filter(Boolean)
     const newProject = {
@@ -299,7 +300,7 @@ export default function App() {
     setProjects(prev => [...prev, newProject])
     setActiveProjectId(projectId)
     navigate('/swipe')
-    await initSession(projectId, llmFilters || {}, filterPriority, seedIds)
+    await initSession(projectId, llmFilters || {}, filterPriority, seedIds, null, null, visualDescription)
   }
 
   async function handleSwipeCard(action) {
@@ -455,7 +456,7 @@ export default function App() {
     await initSession(id, project.filters, [], [], project.sessionId || null)
   }
 
-  async function handleUpdateWithImages(id, preloadedImages, llmFilters = {}, filterPriority = []) {
+  async function handleUpdateWithImages(id, preloadedImages, llmFilters = {}, filterPriority = [], visualDescription = null) {
     const project = projects.find(p => p.id === id)
     if (!project) return
     const seedIds = (preloadedImages || []).map(c => c.image_id).filter(Boolean)
@@ -463,7 +464,7 @@ export default function App() {
     setActiveProjectId(id)
     setProjects(prev => prev.map(p => p.id === id ? { ...p, deckImages: preloadedImages } : p))
     navigate('/swipe')
-    await initSession(id, llmFilters || project.filters, filterPriority, seedIds)
+    await initSession(id, llmFilters || project.filters, filterPriority, seedIds, null, null, visualDescription)
   }
 
   function handleDeleteProject(id) {

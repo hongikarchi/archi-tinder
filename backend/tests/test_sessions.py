@@ -1003,7 +1003,7 @@ class TestPoolExhaustionGuard:
 
         new_buildings = [f'B{str(i).zfill(5)}' for i in range(1, 11)]
 
-        def mock_create_bounded_pool(filters, priority, seeds, target=None):
+        def mock_create_bounded_pool(filters, priority, seeds, target=None, **kwargs):
             # Tier 2: relaxed filters (no location_country) -> return new buildings
             if 'location_country' not in (filters or {}):
                 return new_buildings[:], {bid: 0.5 for bid in new_buildings}
@@ -1065,7 +1065,7 @@ class TestPoolExhaustionGuard:
         # create_bounded_pool returns IDs that overlap with exposed — helper must filter them out
         overlap_ids = exposed[:3] + [f'C{str(i).zfill(5)}' for i in range(1, 6)]
 
-        def mock_create_bounded_pool(filters, priority, seeds, target=None):
+        def mock_create_bounded_pool(filters, priority, seeds, target=None, **kwargs):
             # Tier-2 call: location_country dropped, returns overlap_ids (some exposed)
             return list(overlap_ids), {bid: 0.5 for bid in overlap_ids}
 
@@ -1095,7 +1095,7 @@ class TestPoolExhaustionGuard:
 
         random_pool = [f'R{str(i).zfill(5)}' for i in range(1, 6)]
 
-        def mock_create_bounded_pool(filters, priority, seeds, target=None):
+        def mock_create_bounded_pool(filters, priority, seeds, target=None, **kwargs):
             return [], {}  # Both full and relaxed filters return empty
 
         def mock_random_pool(target):

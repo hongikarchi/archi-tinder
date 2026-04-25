@@ -131,6 +131,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
   const [latestResults, setLatestResults] = useState([])
   const [latestFilters, setLatestFilters] = useState({})
   const [latestFilterPriority, setLatestFilterPriority] = useState([])
+  const [latestVisualDescription, setLatestVisualDescription] = useState(null)
   const [showStart, setShowStart]       = useState(false)
   const [conversationHistory, setConversationHistory] = useState([])
   const messagesEndRef = useRef(null)
@@ -201,6 +202,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
           setLatestResults(results)
           setLatestFilters(isFallback ? {} : filters)
           setLatestFilterPriority(isFallback ? [] : filterPriority)
+          setLatestVisualDescription(parsed.visual_description ?? null)
           setShowStart(true)
         }
       }
@@ -214,9 +216,9 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
   function handleStartSwiping() {
     const name = initialName || 'Untitled Project'
     if (mode === 'update') {
-      onUpdate(projectId, latestResults, latestFilters, latestFilterPriority)
+      onUpdate(projectId, latestResults, latestFilters, latestFilterPriority, latestVisualDescription)
     } else {
-      onStart(name, latestResults, latestFilters, latestFilterPriority)
+      onStart(name, latestResults, latestFilters, latestFilterPriority, latestVisualDescription)
     }
   }
 

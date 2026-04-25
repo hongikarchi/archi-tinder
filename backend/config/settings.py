@@ -149,10 +149,15 @@ RECOMMENDATION = {
     'dpp_topk_enabled':              False,  # Topic 04 (b): DPP greedy MAP at session-final top-K
     'dpp_alpha':                     1.0,    # Wilhelm-form diversity strength; Optuna search [0.5, 1.0]
     'dpp_singularity_eps':           1e-9,   # Cholesky residual threshold for singularity
+    'hyde_vinitial_enabled':         False,  # Topic 03: HyDE V_initial embedding rerank
+    'hyde_hf_model':                 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2',
+    'hyde_hf_timeout_seconds':       5,
+    'hyde_score_weight':             50.0,   # HyDE similarity score additive weight
 }
 
 # -- External API keys -----------------------------------------------------
 GEMINI_API_KEY    = os.getenv('GEMINI_API_KEY', '')
+HF_TOKEN          = os.getenv('HF_TOKEN', '')
 IMAGE_BASE_URL    = os.getenv('IMAGE_BASE_URL', 'https://pub-5d2133d166fc4b65ad05295df352519f.r2.dev')
 GOOGLE_CLIENT_ID  = os.getenv('GOOGLE_CLIENT_ID', '')
 GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET', '')
