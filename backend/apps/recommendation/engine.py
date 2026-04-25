@@ -703,6 +703,36 @@ def check_convergence(history, threshold, window=3):
     return bool(moving_avg < threshold)
 
 
+def compute_confidence(history, threshold, window=3):
+    """
+    Compute the user-facing confidence value (Spec C-1 통합안 1).
+
+    Formula (Investigation 13): confidence = max(0, 1 - avg(last `window` Δv) / threshold).
+    Returns float in [0, 1] when len(history) >= window. Returns None otherwise
+    (Investigation 13 recommendation: skeleton/hide-bar semantic for the user-facing UI;
+    frontend treats null as "not enough data yet").
+
+    Spec rename note: spec text calls `threshold` ε_init or ε_threshold (Investigation
+    13 §Naming drift recommended ε_threshold). Code uses settings.RECOMMENDATION
+    'convergence_threshold' (the same value, 0.08 in production); pass that to this
+    function. The threshold is shared with check_convergence; informational vs decisional
+    signals at different thresholds is intentional (bar reaches 1.0 at Δv=0; phase
+    transition fires at avg<threshold mid-bar).
+
+    Edge cases per Investigation 13:
+    - n < window: return None (caller hides bar).
+    - All Δv = 0: returns 1.0 (vanishingly rare in practice).
+    - Single Δv spike: bar pins to 0 for `window` rounds until spike slides out
+      (intentional -- centroid jump = real instability).
+    - threshold = 0: defended via max(threshold, 1e-6) to avoid div-by-zero.
+    """
+    if len(history) < window:
+        return None
+    safe_threshold = max(float(threshold), 1e-6)
+    avg = sum(history[-window:]) / window
+    return max(0.0, 1.0 - avg / safe_threshold)
+
+
 def get_dislike_fallback(pool_ids, exposed_ids, pool_embeddings, dislike_vectors):
     """
     Select building farthest from dislike centroid.

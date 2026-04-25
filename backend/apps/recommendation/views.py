@@ -474,6 +474,7 @@ class SwipeView(APIView):
                     'prefetch_image': None,
                     'prefetch_image_2': None,
                     'is_analysis_completed': True,
+                    'confidence': None,
                 })
             else:
                 # Reset and keep going
@@ -546,6 +547,7 @@ class SwipeView(APIView):
                     'prefetch_image': prefetch_card,
                     'prefetch_image_2': prefetch_card_2,
                     'is_analysis_completed': False,
+                    'confidence': None,  # history cleared on reset; hide bar until new window fills
                 })
 
         # NORMAL SWIPE PROCESSING
@@ -840,6 +842,33 @@ class SwipeView(APIView):
             idempotency_key=idempotency_key,
         )
 
+        # Compute user-facing confidence for response (C-1)
+        confidence = engine.compute_confidence(
+            session.convergence_history,
+            RC.get('convergence_threshold', 0.08),
+            window=RC.get('convergence_window', 3),
+        )
+
+        # Emit confidence_update event (Spec v1.2 §6 + dislike-bias telemetry)
+        if confidence is not None:
+            # Best-effort dominant attrs from pref_vector: top-K dims by absolute magnitude.
+            # Returns dimension indices for now; Sprint 4 will wire attribute-name mapping.
+            dominant_attrs = []
+            if session.preference_vector:
+                import numpy as np
+                pref = np.asarray(session.preference_vector, dtype=float)
+                if pref.size > 0:
+                    top_idxs = np.argsort(np.abs(pref))[-3:][::-1]
+                    dominant_attrs = [int(i) for i in top_idxs]
+            event_log.emit_event(
+                'confidence_update',
+                session=session,
+                user=profile,
+                confidence=round(float(confidence), 4),
+                dominant_attrs=dominant_attrs,
+                action=action,  # 'like' or 'dislike' -- Spec v1.2 dislike-bias telemetry
+            )
+
         return Response({
             'accepted': True,
             'session_status': session.status,
@@ -848,6 +877,7 @@ class SwipeView(APIView):
             'prefetch_image': prefetch_card,
             'prefetch_image_2': prefetch_card_2,
             'is_analysis_completed': False,
+            'confidence': confidence,  # float [0,1] or null per spec C-1
         })
 
 

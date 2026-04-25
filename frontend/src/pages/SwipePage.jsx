@@ -374,6 +374,40 @@ function LoadingCard() {
   )
 }
 
+/* ── ConfidenceBar ───────────────────────────────────────────────────────── */
+function ConfidenceBar({ value }) {
+  // value: number in [0, 1] or null
+  // null means n < 3 analyzing-phase swipes, exploring phase, or post-reset
+  if (value === null || value === undefined) return null
+
+  const pct = Math.round(value * 100)
+  return (
+    <div style={{ width: '100%' }}>
+      <div style={{
+        height: 4, borderRadius: 999,
+        background: 'var(--color-progress-track)',
+        overflow: 'hidden',
+      }}>
+        <div style={{
+          height: '100%',
+          width: `${pct}%`,
+          background: '#ec4899',
+          borderRadius: 999,
+          transition: 'width 300ms ease',
+        }} />
+      </div>
+      <div style={{
+        fontSize: 11,
+        color: 'var(--color-text-dim)',
+        textAlign: 'right',
+        marginTop: 4,
+      }}>
+        취향 안정도 {pct}%
+      </div>
+    </div>
+  )
+}
+
 /* ── SwipePage ───────────────────────────────────────────────────────────── */
 export default function SwipePage({ currentCard, progress, isCompleted, isLoading, isResultLoading = false, projectName, onSwipe, onViewResults }) {
   const cardRef = useRef(null)
@@ -387,18 +421,7 @@ export default function SwipePage({ currentCard, progress, isCompleted, isLoadin
   const like_count       = progress?.like_count    ?? 0
   const phase            = progress?.phase
   const filter_relaxed   = progress?.filter_relaxed || false
-
-  // Phase-aware progress percentage
-  let pct
-  if (phase === 'exploring') {
-    pct = Math.min(Math.round((like_count / 3) * 100), 100)
-  } else if (phase === 'analyzing') {
-    pct = 66
-  } else if (phase === 'converged') {
-    pct = 100
-  } else {
-    pct = Math.round((current_round / Math.max(total_rounds, 1)) * 100)
-  }
+  const confidence       = progress?.confidence ?? null
 
   const showExit = phase === 'converged' || phase === 'completed'
 
@@ -438,7 +461,7 @@ export default function SwipePage({ currentCard, progress, isCompleted, isLoadin
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isLoading, currentCard, showTutorial, galleryOpen])
+  }, [isLoading, currentCard, showTutorial, galleryOpen]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (isCompleted) {
     return (
@@ -506,46 +529,24 @@ export default function SwipePage({ currentCard, progress, isCompleted, isLoadin
               : <><span style={{ color: 'var(--color-text)' }}>Archi</span><span style={{ color: '#ec4899' }}>Tinder</span></>}
           </h1>
           <div style={{ maxWidth: CARD_WIDTH, margin: '0 auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-              {phase === 'exploring' && (
-                <>
-                  <span style={{ color: 'var(--color-text-dim)', fontSize: 11 }}>Exploring</span>
-                  <span style={{ color: 'var(--color-text-2)', fontSize: 11, fontWeight: 600 }}>
-                    {like_count}/3 likes to unlock analysis
-                  </span>
-                </>
-              )}
-              {phase === 'analyzing' && (
-                <>
-                  <span style={{ color: 'var(--color-text-dim)', fontSize: 11 }}>Analyzing your taste...</span>
-                  <div style={{
-                    width: 6, height: 6, borderRadius: '50%',
-                    background: '#f43f5e',
-                  }} />
-                </>
-              )}
-              {phase === 'converged' && (
-                <>
-                  <span style={{ color: 'var(--color-text-dim)', fontSize: 11 }}>Analysis complete</span>
-                  <span style={{ color: 'var(--color-text-2)', fontSize: 11, fontWeight: 600 }}>✓</span>
-                </>
-              )}
-              {(!phase || (phase !== 'exploring' && phase !== 'analyzing' && phase !== 'converged')) && (
-                <>
-                  <span style={{ color: 'var(--color-text-dim)', fontSize: 11 }}>Progress</span>
-                  <span style={{ color: 'var(--color-text-2)', fontSize: 11, fontWeight: 600 }}>
+            {confidence !== null ? (
+              <ConfidenceBar value={confidence} />
+            ) : (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                {phase === 'exploring' && (
+                  <>
+                    <span style={{ color: 'var(--color-text-dim)', fontSize: 11 }}>
+                      {like_count}/3 likes to unlock analysis
+                    </span>
+                  </>
+                )}
+                {(!phase || phase === 'analyzing' || phase === 'converged' || phase === 'completed') && (
+                  <span style={{ color: 'var(--color-text-dim)', fontSize: 11 }}>
                     {current_round} / {total_rounds}
                   </span>
-                </>
-              )}
-            </div>
-            <div style={{ height: 4, borderRadius: 999, background: 'var(--color-progress-track)', overflow: 'hidden' }}>
-              <div style={{
-                height: '100%', borderRadius: 999, width: `${pct}%`,
-                background: 'linear-gradient(to right, #f43f5e, #fb923c)',
-                transition: 'width 0.4s ease',
-              }} />
-            </div>
+                )}
+              </div>
+            )}
             {filter_relaxed && (
               <p style={{ color: 'var(--color-text-dimmer)', fontSize: 11, marginTop: 6, textAlign: 'center' }}>
                 Filters were relaxed to find more buildings

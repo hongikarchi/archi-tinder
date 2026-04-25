@@ -207,7 +207,11 @@ export default function App() {
   // Populate frontend card state from a session state or start response.
   function applySessionResponse(projectId, result) {
     setCurrentCard(result.next_image)
-    setSessionProgress({ ...result.progress, filter_relaxed: result.filter_relaxed || false })
+    setSessionProgress({
+      ...result.progress,
+      filter_relaxed: result.filter_relaxed || false,
+      confidence: result.confidence ?? null,
+    })
     if (result.is_analysis_completed || !result.next_image) {
       setIsSessionCompleted(!!result.is_analysis_completed || !result.next_image)
     } else {
@@ -359,7 +363,7 @@ export default function App() {
         }
       }))
 
-      setSessionProgress(result.progress)
+      setSessionProgress({ ...result.progress, confidence: result.confidence ?? null })
 
       if (result.is_analysis_completed) {
         setIsSessionCompleted(true)
