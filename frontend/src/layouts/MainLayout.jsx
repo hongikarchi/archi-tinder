@@ -16,7 +16,6 @@ export default function MainLayout({
   const navigate = useNavigate()
   const pathname = location.pathname
 
-  const isHome = pathname === '/' || pathname === '/new' || pathname.startsWith('/search')
   const isSwipe = pathname === '/swipe'
   const isLibrary = pathname.startsWith('/library')
   const isProfile = pathname.startsWith('/user')
@@ -27,8 +26,8 @@ export default function MainLayout({
   return (
     <div style={{ height: '100vh', overflow: 'hidden' }}>
 
-      {/* Header controls */}
-      <div style={{ position: 'fixed', top: 14, right: 16, zIndex: 200, display: (isProfile || pathname.startsWith('/office')) ? 'none' : 'flex', gap: 6, alignItems: 'center' }}>
+      {/* Header controls — hidden on pages that own their sticky header (profile/office/matched/board) */}
+      <div style={{ position: 'fixed', top: 14, right: 16, zIndex: 200, display: (isProfile || pathname.startsWith('/office') || pathname.startsWith('/matched') || pathname.startsWith('/board')) ? 'none' : 'flex', gap: 6, alignItems: 'center' }}>
         <ThemeToggle theme={theme} onToggle={onToggleTheme} />
         <button
           onClick={onLogout}

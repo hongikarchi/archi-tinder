@@ -8,6 +8,8 @@ import LLMSearchPage from './pages/LLMSearchPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import UserProfilePage from './pages/UserProfilePage.jsx'
 import FirmProfilePage from './pages/FirmProfilePage.jsx'
+import PostSwipeLandingPage from './pages/PostSwipeLandingPage.jsx'
+import BoardDetailPage from './pages/BoardDetailPage.jsx'
 import * as api from './api/client.js'
 
 function normalizeFilters(filters) {
@@ -670,7 +672,10 @@ export default function App() {
           <Route path="library" element={null} />
           <Route path="library/:folderId" element={null} />
           <Route path="user/me" element={<UserProfilePage {...sharedLayoutProps} />} />
+          <Route path="user/:userId" element={<UserProfilePage {...sharedLayoutProps} />} />
           <Route path="office/:officeId" element={<FirmProfilePage {...sharedLayoutProps} />} />
+          <Route path="matched/:sessionId" element={<PostSwipeLandingPage />} />
+          <Route path="board/:boardId" element={<BoardDetailPage />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
