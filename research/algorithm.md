@@ -3,7 +3,7 @@
 > Phase logic, mathematical formulas, and hyperparameter theory.
 > Research agent updates this file. Orchestrator references it for algorithm tasks.
 
-**Last Synced (Reporter):** 2026-04-25 a9305e4
+**Last Synced (Reporter):** 2026-04-25 f17cb5e
 
 ---
 
@@ -82,6 +82,8 @@ _(Updated 2026-04-25 190c830: Like writes now carry an `intensity` field (defaul
 
   _(Updated 2026-04-25 f04646f: `max_consecutive_dislikes` reduced 10 → 5 per spec Section 5.1; silent dislike fallback now fires sooner.)_
 - **Pool Exhaustion:** If all pool buildings shown and delta_V still above epsilon (erratic swiping), force exit to results. UI indicates best-effort results.
+
+  _(Updated 2026-04-25 f17cb5e: §5.6 + §6 implementation requirement A4 — engine.refresh_pool_if_low(threshold=5) called from SwipeView in normal + action-card paths; auto-escalates to next 3-tier filter relaxation level (full → drop geo/numeric → random) and merges new candidates with exclude_ids = pool_ids ∪ exposed_ids. Migration 0008 adds session-level relaxation state (original_filters, original_filter_priority, original_seed_ids, current_pool_tier).)_
 
 ---
 
