@@ -188,41 +188,26 @@ flowchart TD
 
 ## Last Updated (Claude)
 - **Date:** 2026-04-26
-- **Commits:** a35f03f -- docs: set up design pipeline (designer agent + DESIGN.md as design DNA)
-- **Phase:** Governance / agent-config bootstrap — design terminal replaces antigravity (Gemini) terminal
+- **Commits:** 02aa98b -- feat: /review Tier 1.2 multi-run + Tier 1.3 failure pre-check
+- **Phase:** Workflow tooling — /review Part B robustness improvements (Tier 1 URGENT from 57b3244-improvements.md)
 - **Changes:**
-  - `.claude/agents/designer.md` -- NEW: design pipeline supervisor (opus, Agent tool for spawning design-* sub-agents on demand); mirrors orchestrator shape; full UI vs Data layer rules + reciprocal TODO(claude)/TODO(designer) marker conventions + 3 worked examples + API contract shapes lifted from GEMINI.md verbatim
-  - `GEMINI.md` -- DELETED (all load-bearing content migrated to designer.md)
-  - `CLAUDE.md` -- new Design pipeline ownership rule; Last Updated (Gemini) → Last Updated (Designer); Frontend Conventions section notes design-pipeline UI ownership
-  - `DESIGN.md` -- header rewritten: design-pipeline exclusive write ownership; pointer to designer.md + CLAUDE.md Rules
-  - `.claude/agents/front-maker.md` -- narrowed to data layer only; UI layer explicitly designer-owned; reciprocal TODO(designer) marker convention; JSX data-plumbing in integration step still allowed
-  - `.claude/agents/git-manager.md` -- excludes DESIGN.md + .claude/agents/designer.md + .claude/agents/design-*.md from default staging (design terminal commits own work, per research-terminal analog)
-  - `.claude/agents/orchestrator.md` -- TODO(claude) wording updated (antigravity → design terminal); reciprocal TODO(designer) drop instruction added for front-maker scoping
-  - `.claude/commands/review.md` -- removed GEMINI.md from non-UI skip-list
-  - `.claude/WORKFLOW.md` -- Agent Roster + Terminal Roster antigravity → design; Frontend Layer Ownership relabel; Git Discipline design-commits-own-work rule; NEW Case 6.5 Design flow; Reporter Key rules row Last Updated (Gemini) → Last Updated (Designer)
-  - `.claude/Report.md` -- Last Updated (Gemini) section renamed → Last Updated (Designer) with succession note; existing 2026-04-06 content preserved as legacy entry
-  - `.claude/Task.md` -- Handoffs section antigravity → design across cycle description and MOCKUP-READY signal definition
-- **Verification:** Governance-only commit; no backend/frontend source code changed; no tests to run.
-- **Summary:** One-time bootstrap replacing the antigravity (Gemini) terminal with a Claude-based design terminal: designer.md (opus supervisor) + DESIGN.md as design DNA, with per-agent boundary updates across orchestrator, front-maker, git-manager, review, and WORKFLOW.md.
+  - `.claude/commands/review.md` -- REWRITTEN Step B4 (Tier 1.2): NL-submit-to-first-card flow now runs 3 times per persona in independent browser contexts; gate uses p50 (median of 3) instead of single-shot; all 3 raw timings + min/max recorded in report for variance visibility; last run (run_idx=3) continues into B5–B7; high-variance pass-but-max-exceeded case recorded as informational note; adds ~+30s and ~$0.0006 per persona
+  - `.claude/commands/review.md` -- NEW Step B0a (Tier 1.3): SessionEvent failure pre-check before browser launch; Bash query against SessionEvent table for gemini_failure / parse_query_failure / persona_report_failure / failed gemini_rerank events in the 5-minute window ending at REVIEW_START_UTC; fast-fails Part B with underlying API error detail rather than spending 60–120 s rediscovering it as latency mid-run; catches 403 / quota / region failures in ~1 second
+  - `.claude/commands/review.md` -- NEW Step A1 addition: REVIEW_START_UTC captured via `date -u +%Y-%m-%dT%H:%M:%SZ` for the B0a time-window anchor
+  - `.claude/commands/review.md` -- Rules section: "no retries on flaky steps" replaced by two clarified rules — (1) gesture flakes still hard-fail on first occurrence; (2) external-API latency variance uses multi-run aggregation per Tier 1.2 (industry-standard for non-deterministic upstream services like Gemini ~5% variance); old rule was a category error when applied to LLM latency
+  - **Bundled deferred bookkeeping:** Report.md + Task.md state for 210d1dc (Sprint 4 Result page) + a35f03f (Design terminal setup) folded into this commit
+- **Verification:** Workflow-file-only commit; no backend/frontend source code changed; no tests to run. No UI-affecting paths — Part B skipped on next /review.
+- **Summary:** Tier 1 URGENT improvements to /review Part B (escalated after two consecutive same-cause override-push cycles): Tier 1.2 replaces single-shot latency gate with 3-run p50 aggregation to eliminate false FAILs from natural Gemini ~5% variance; Tier 1.3 adds pre-run SessionEvent DB query to surface API failures (403/quota/region) in ~1s instead of 60–120s of browser time. Tier 1.1 (spec §4 budget 4000→5000ms) remains out of scope — research terminal's territory.
 - **Change diagram:**
 ```mermaid
 graph TD
-    subgraph AgentConfig[".claude/agents"]
-        designer_md:::new
-        front_maker_md["front-maker.md"]:::modified
-        git_manager_md["git-manager.md"]:::modified
-        orchestrator_md["orchestrator.md"]:::modified
+    subgraph Commands[".claude/commands"]
+        review_md["review.md"]:::modified
     end
-    subgraph Docs
-        CLAUDE_md["CLAUDE.md"]:::modified
-        DESIGN_md["DESIGN.md"]:::modified
-        WORKFLOW_md[".claude/WORKFLOW.md"]:::modified
-        Report_md[".claude/Report.md"]:::modified
-        Task_md[".claude/Task.md"]:::modified
-        review_md[".claude/commands/review.md"]:::modified
-        GEMINI_md["GEMINI.md"]:::deleted
+    subgraph Docs[".claude"]
+        Report_md["Report.md"]:::modified
+        Task_md["Task.md"]:::modified
     end
-    GEMINI_md -->|migrated to| designer_md
 
     classDef new fill:#10b981,color:#fff
     classDef modified fill:#f59e0b,color:#000
@@ -233,9 +218,31 @@ graph TD
 
 > Owned by the design terminal (`designer` agent). Successor to the prior antigravity
 > (Gemini) terminal. Main pipeline NEVER overwrites this section — see CLAUDE.md
-> `## Rules`. Most recent entry below is historical (carried over from the antigravity
-> era prior to design terminal setup) and pre-dates the `designer` agent's own
-> updates.
+> `## Rules`. Entries newest-first.
+
+- **Date:** 2026-04-26
+- **Phase:** Phase 13–16 mockup batch — antigravity-era page redesigns + new mockup pages
+- **Changes:**
+  - `.claude/agents/design-ui-maker.md` -- NEW: sub-agent for substantial JSX/styles work (full page rewrites, multi-file inline-style refactors per DESIGN.md directive). UI layer only; designer parent commits + emits handoffs.
+  - `.claude/agents/design-mockup-maker.md` -- NEW: sub-agent for brand-new page mockups with `MOCK_*` constants matching designer.md API contract shapes. Drops `TODO(claude):` markers for backend wiring. UI layer only; no `useEffect`/`callApi`/data-fetching; no `api/client.js` edits.
+  - `frontend/src/pages/FirmProfilePage.jsx` -- FULL REWRITE per DESIGN.md (PROF3 polish). Fixed broken `</div>` structure that visually broke the description (line 145 of prior version), unified jarring 480/1000 max-width split into single max-1100 responsive container, added 44px back button to sticky header (`useNavigate(-1)`), replaced off-brand purple `#8b5cf6` glow with brand pink/rose, added meta-chip strip (location · founded year · project count) under name+verified badge, hover-lift + brand-tint borders on project cards, redesigned articles list with left accent border + source pill chip + hover lift, refined logo glow to single brand-pink soft glow. Programs normalized to CLAUDE.md vocabulary (Public/Museum/Office/Mixed Use/Education) replacing prior off-vocab values. MOCK_OFFICE shape preserved field-for-field per designer.md "Firm/Office Profile" contract. 2 TODO(claude) markers dropped (data fetch via officeId, project click navigation).
+  - `frontend/src/pages/UserProfilePage.jsx` -- FULL REWRITE per DESIGN.md (PROF4 polish). Added 44px back button to sticky header, ambient glow + avatar halo switched from off-brand purple to brand pink-rose gradient, added MBTI chip beside display_name, added Instagram/email pill row using `external_links`, restored persona section as polished card (gradient `persona_type` headline via WebkitBackgroundClip + italic `one_liner` + Styles/Programs chip rows), unified 480/1000 split into max-1100 container with 480 hero column, polished BoardCard front-face meta strip (12px tightened) + corner visibility chip (PUBLIC=brand-pink, PRIVATE=destructive #ef4444 replacing lock icon), follow-button transform transition + `TODO(designer):` marker for spinner UI when wired, theme/logout icon row in sticky header right (isMe-only) wired to existing sharedLayoutProps. Existing `TODO(claude):` markers (line 216, 219) preserved verbatim. New `TODO(claude)` for `boards[].thumbnails[6]` backend extension. MOCK_USER shape preserved per designer.md "User Profile" contract.
+  - `frontend/src/pages/PostSwipeLandingPage.jsx` -- NEW MOCKUP PAGE (REC1+REC4). "MATCHED!" celebratory results screen shown after swipe-session completion. Sticky brand-gradient header with 44px back/share buttons; celebratory hero with persona/stat chips ("BASED ON YOUR TASTE" caps label + persona + swipes_analyzed + likes_count); sticky 3-tab bar (Projects / Offices / Users) with index-based animated underline (cubic-bezier 0.3s); responsive grid (auto-fill min 280px, gap 20) of three card variants — image-overlay project cards (4:5 with match_score chip + bottom gradient + 2-line title), split-layout office cards (1:1, white logo top half on transparent-tolerant bg), haloed user cards (96-104px avatar + brand-glow halo + shared_likes meta); per-tab empty state; ambient pink radial glow; safe-area aware. MOCK_LANDING follows designer.md "Post-Swipe Landing (MATCHED! Tabs)" contract field-for-field + 3 documented top-level additions (`persona_label`, `swipes_analyzed`, `likes_count`) with TODO(claude) markers requesting backend inclusion. 5 TODO(claude) markers total. Local `useState` for activeTab UI-only.
+  - `frontend/src/pages/BoardDetailPage.jsx` -- NEW MOCKUP PAGE (BOARD3+SOC2+SOC3). Shared/public board detail view for viewing OTHER users' curated boards — distinct from FavoritesPage's `FolderDetail` (which is own-private project view with delete/generate-report/bookmark). Cinematic hero cover (280-360px responsive, `object-fit: cover` background image with gradient fade to page bg) + sticky transparent header (back, share); hero content overlaps cover bottom (visibility chip PUBLIC=brand-pink/PRIVATE=destructive + 2-line clamp board name + clickable owner row with avatar+name+chevron → `useNavigate(/user/${owner.user_id})` + meta strip "{n} buildings · {n} ❤"); brand-gradient reaction pill (♡ Love this → ♥ Loved · {count}, scale 1.02 hover / 0.98 press) with local optimistic state via `useState`; auto-fill 260px buildings grid with 4:5 image-overlay tiles (program chip top-right, name + architect/year on bottom gradient); empty state for boards with no buildings. MOCK_BOARD follows designer.md "Board Detail" contract field-for-field + 1 documented top-level addition (`cover_image_url`) with TODO(claude) marker. 6 TODO(claude) markers total: data fetch, cover_image_url backend field, building card click, boardId useParams driver, reaction toggle POST/DELETE, share button.
+  - `frontend/src/App.jsx` -- ADDED imports for `PostSwipeLandingPage` and `BoardDetailPage`; ADDED routes `/matched/:sessionId`, `/board/:boardId`, plus `/user/:userId` for non-self profiles (was only `/user/me`). All inside the protected MainLayout block so TabBar remains accessible. Pure JSX-layer additions; no data-layer code touched. New mockup pages don't receive `{...sharedLayoutProps}` spread (they're MOCK_*-driven and don't need it).
+  - `frontend/src/layouts/MainLayout.jsx` -- EXTENDED top-right header chrome hide condition (theme toggle + logout floating buttons) to also suppress on `/matched/*` and `/board/*` paths — both new pages own their sticky header with their own back button, so the floating chrome would be visually redundant. Removed pre-existing dead `const isHome = ...` (lint surfaced it as unused; one-line cleanup; not state, not behavior).
+- **Sub-agent delegation note:** This batch was delegated to four sub-agents per the design pipeline plan (`/Users/kms_laptop/.claude/plans/tidy-crunching-walrus.md` §2): two full-page rewrites to `design-ui-maker` and two new mockup pages to `design-mockup-maker`. The native sub-agent types defined in `.claude/agents/design-{ui-maker,mockup-maker}.md` were created during the same session and not yet loaded by the harness, so each was substituted via `general-purpose` with the EXACT brief intended for the design-* type prefixed by an explicit substitution note. Semantic delegation preserved — each sub-agent operated within a strict file allow-list, ran ESLint, and verified MOCK_* shapes against designer.md contract field-by-field before reporting back. Designer (this session) reviewed each report, ran a second lint pass, added App.jsx routes + MainLayout chrome condition, and committed in three separate commits. See `feedback_designer_delegation.md` memory for the harness limitation + workaround note.
+- **Verification:**
+  - ESLint clean on all 4 designed pages + App.jsx + MainLayout.jsx (`npx eslint --max-warnings=0`)
+  - All 4 sub-agent reports confirmed MOCK_* shapes match designer.md API contract field-by-field
+  - Off-brand color check: zero hits for `#8b5cf6`, `#a78bfa`, `#fb923c`, Tailwind class names across the 4 designed pages
+  - CSS vars used (color-text-dim, color-text-dimmer, color-text-muted, color-header-bg) verified present in `frontend/src/index.css` for both dark and light themes
+  - 16 `TODO(claude):` markers dropped (FirmProfile 2, UserProfile 3, PostSwipeLanding 5, BoardDetail 6) for main pipeline pickup
+  - `MOCKUP-READY:` signals appended to `.claude/Task.md ## Handoffs` for both new pages
+  - **Manual browser visual review NOT performed** — overnight design batch; user will review on next morning per the user's explicit request ("내일 아침에 내가 일어나서 한번 검토해보고 수정사항을 알려줄게")
+- **Summary:** First substantive design-pipeline batch since the bootstrap commit a35f03f. Replaces the two ugly antigravity mockups (FirmProfile + UserProfile) with on-brand, layout-coherent rewrites, and ships two new mockup pages (PostSwipeLanding, BoardDetail) that unblock Phase 16 (REC1/REC4 MATCHED screen + recommendation tabs) and Phase 14-15 (BOARD3 board view + SOC2/3 reaction system) for main pipeline API integration. Six files in `frontend/`, two new sub-agent files in `.claude/agents/`, two routes added to `App.jsx`, one chrome condition extended in `MainLayout.jsx`. Total ~2700 LOC of new/rewritten frontend.
+
+---
 
 - **Date:** 2026-04-06
 - **Phase:** UI/UX Polish (legacy antigravity entry)
