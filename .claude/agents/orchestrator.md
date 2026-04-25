@@ -89,8 +89,10 @@ ANY file under `backend/apps/*/migrations/` was created or modified, verify the
 migration was actually applied to the local dev DB:
 
 ```bash
-cd backend && python3 manage.py showmigrations recommendation 2>&1 | grep -E '\[ \]'
+cd backend && python3 manage.py showmigrations 2>&1 | grep -E '\[ \]'
 ```
+
+(No app filter — Step 2.5's trigger condition fires for migrations in ANY app under `backend/apps/*/migrations/`, so the check must also be app-agnostic. Matches `commands/review.md` Step B1bb's check.)
 
 - **No output** (all migrations applied): proceed to Step 3.
 - **Any `[ ]` entry** (unapplied migration in working tree): back-maker should have run
