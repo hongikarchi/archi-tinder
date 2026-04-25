@@ -731,3 +731,144 @@ class TestPoolScoreNormalization:
         assert cases == []
         assert params == []
         assert total_weight == 0
+
+
+@pytest.mark.django_db
+class TestProjectSchemaA3:
+    """Sprint 0 A3: liked_ids {id, intensity} shape + saved_ids field."""
+
+    def _create_session(self, auth_client, user_profile, project):
+        """Helper: create a session for the given project."""
+        patchers = _apply_patches()
+        try:
+            resp = auth_client.post(
+                '/api/v1/analysis/sessions/',
+                {'project_id': str(project.project_id), 'filters': {}},
+                format='json',
+            )
+        finally:
+            _stop_patches(patchers)
+        return resp.json()['session_id']
+
+    def test_like_writes_intensity_dict(self, auth_client, user_profile):
+        """A like swipe appends `{id, intensity: 1.0}` to project.liked_ids (new shape)."""
+        project = Project.objects.create(user=user_profile, name='A3 Like Shape Test')
+        session_id = self._create_session(auth_client, user_profile, project)
+
+        patchers = _apply_patches()
+        try:
+            resp = auth_client.post(
+                f'/api/v1/analysis/sessions/{session_id}/swipes/',
+                {
+                    'building_id': 'B00001',
+                    'action': 'like',
+                    'idempotency_key': 'a3_like_intensity_1',
+                },
+                format='json',
+            )
+        finally:
+            _stop_patches(patchers)
+
+        assert resp.status_code == 200
+        project.refresh_from_db()
+        assert len(project.liked_ids) == 1
+        assert project.liked_ids[0] == {'id': 'B00001', 'intensity': 1.0}
+
+    def test_like_with_explicit_intensity(self, auth_client, user_profile):
+        """Forward-compat: request can carry `intensity` to override 1.0 (Sprint 3 A-1 prep)."""
+        project = Project.objects.create(user=user_profile, name='A3 Explicit Intensity Test')
+        session_id = self._create_session(auth_client, user_profile, project)
+
+        patchers = _apply_patches()
+        try:
+            resp = auth_client.post(
+                f'/api/v1/analysis/sessions/{session_id}/swipes/',
+                {
+                    'building_id': 'B00001',
+                    'action': 'like',
+                    'idempotency_key': 'a3_explicit_intensity_1',
+                    'intensity': 1.8,
+                },
+                format='json',
+            )
+        finally:
+            _stop_patches(patchers)
+
+        assert resp.status_code == 200
+        project.refresh_from_db()
+        assert len(project.liked_ids) == 1
+        assert project.liked_ids[0]['intensity'] == 1.8
+
+    def test_intensity_clamped(self, auth_client, user_profile):
+        """Out-of-range intensity is clamped to [0, 2], not rejected."""
+        project = Project.objects.create(user=user_profile, name='A3 Clamp Test')
+        session_id = self._create_session(auth_client, user_profile, project)
+
+        # Test upper clamp: intensity=5.0 -> 2.0
+        patchers = _apply_patches()
+        try:
+            resp = auth_client.post(
+                f'/api/v1/analysis/sessions/{session_id}/swipes/',
+                {
+                    'building_id': 'B00001',
+                    'action': 'like',
+                    'idempotency_key': 'a3_clamp_high',
+                    'intensity': 5.0,
+                },
+                format='json',
+            )
+        finally:
+            _stop_patches(patchers)
+
+        assert resp.status_code == 200
+        project.refresh_from_db()
+        assert project.liked_ids[0]['intensity'] == 2.0
+
+        # Test lower clamp: intensity=-1.0 -> 0.0
+        # Use a different building_id to avoid duplicate-like guard
+        patchers = _apply_patches()
+        try:
+            resp2 = auth_client.post(
+                f'/api/v1/analysis/sessions/{session_id}/swipes/',
+                {
+                    'building_id': 'B00002',
+                    'action': 'like',
+                    'idempotency_key': 'a3_clamp_low',
+                    'intensity': -1.0,
+                },
+                format='json',
+            )
+        finally:
+            _stop_patches(patchers)
+
+        assert resp2.status_code == 200
+        project.refresh_from_db()
+        low_entry = next((e for e in project.liked_ids if e['id'] == 'B00002'), None)
+        assert low_entry is not None
+        assert low_entry['intensity'] == 0.0
+
+    def test_liked_id_only_helper_handles_both_shapes(self):
+        """Helper extracts ID strings from both legacy list[str] and new list[dict]."""
+        from apps.recommendation.views import _liked_id_only
+        assert _liked_id_only([]) == []
+        assert _liked_id_only(['B1', 'B2']) == ['B1', 'B2']
+        assert _liked_id_only([{'id': 'B1', 'intensity': 1.0}, {'id': 'B2', 'intensity': 1.8}]) == ['B1', 'B2']
+        assert _liked_id_only([{'id': 'B1', 'intensity': 1.0}, 'B2']) == ['B1', 'B2']  # mixed
+        assert _liked_id_only(None) == []  # defensive
+
+    def test_saved_ids_default_empty(self, user_profile):
+        """New `saved_ids` field defaults to empty list on project creation."""
+        p = Project.objects.create(user=user_profile, name='A3 SavedIds Default Test')
+        assert p.saved_ids == []
+
+    def test_saved_ids_serialized_on_response(self, auth_client, user_profile):
+        """`saved_ids` field appears in project list/detail responses."""
+        Project.objects.create(user=user_profile, name='A3 SavedIds Serialized Test')
+        resp = auth_client.get('/api/v1/projects/')
+        assert resp.status_code == 200
+        data = resp.json()
+        assert 'results' in data
+        assert len(data['results']) >= 1
+        project_data = data['results'][0]
+        assert 'saved_ids' in project_data
+        assert project_data['saved_ids'] == []

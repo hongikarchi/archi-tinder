@@ -7,8 +7,9 @@ class Project(models.Model):
     project_id      = models.UUIDField(primary_key=True, default=uuid.uuid4)
     user            = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name='projects')
     name            = models.CharField(max_length=200)
-    liked_ids       = models.JSONField(default=list)
-    disliked_ids    = models.JSONField(default=list)
+    liked_ids       = models.JSONField(default=list)   # list[{id: str, intensity: float}] — Like 1.0, Love 1.8 (Sprint 3 A-1)
+    disliked_ids    = models.JSONField(default=list)   # list[str] — building_ids only, no intensity
+    saved_ids       = models.JSONField(default=list)   # list[{id: str, saved_at: ISO timestamp}] — bookmark (primary metric)
     filters         = models.JSONField(default=dict)
     analysis_report = models.JSONField(null=True, blank=True)
     final_report    = models.JSONField(null=True, blank=True)

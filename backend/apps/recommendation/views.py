@@ -21,6 +21,20 @@ _VALID_FILTER_KEYS = frozenset([
 ])
 
 
+def _liked_id_only(liked_ids):
+    """Extract building_id strings from liked_ids regardless of legacy/new shape.
+
+    Returns list[str]. Accepts both list[str] (legacy) and list[{id, intensity}] (new).
+    Use this whenever passing liked_ids to a function that expects plain ID strings
+    (e.g., SQL ``WHERE building_id IN (...)``, Gemini persona report).
+    """
+    return [
+        entry if isinstance(entry, str) else entry['id']
+        for entry in (liked_ids or [])
+        if isinstance(entry, str) or (isinstance(entry, dict) and 'id' in entry)
+    ]
+
+
 def _get_profile(request):
     return getattr(request.user, 'profile', None)
 
@@ -522,8 +536,18 @@ class SwipeView(APIView):
             # 3. Update project liked/disliked lists
             project = session.project
             if action == 'like':
-                if building_id not in project.liked_ids:
-                    project.liked_ids = project.liked_ids + [building_id]
+                existing_ids = _liked_id_only(project.liked_ids)
+                if building_id not in existing_ids:
+                    # Default intensity 1.0 for plain Like. Love (intensity 1.8) lands in Sprint 3 A-1
+                    # when the frontend wires up the up-swipe gesture; for now all backend writes
+                    # use 1.0 unless the request explicitly carries an intensity field (future-proofing).
+                    try:
+                        raw_intensity = request.data.get('intensity', 1.0)
+                        intensity = float(raw_intensity) if raw_intensity is not None else 1.0
+                    except (TypeError, ValueError):
+                        intensity = 1.0
+                    intensity = max(0.0, min(2.0, intensity))
+                    project.liked_ids = project.liked_ids + [{'id': building_id, 'intensity': intensity}]
                 # Append to session.like_vectors
                 if embedding:
                     session.like_vectors = session.like_vectors + [{'embedding': embedding, 'round': session.current_round}]
@@ -810,11 +834,12 @@ class ProjectReportGenerateView(APIView):
         if not project:
             return Response({'detail': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        if not project.liked_ids:
+        liked_id_strings = _liked_id_only(project.liked_ids)
+        if not liked_id_strings:
             return Response({'detail': 'No liked buildings yet'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            report = services.generate_persona_report(project.liked_ids)
+            report = services.generate_persona_report(liked_id_strings)
         except (ValueError, RuntimeError) as e:
             return Response(
                 {'detail': str(e), 'error_type': type(e).__name__},

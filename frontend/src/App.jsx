@@ -38,6 +38,16 @@ function isActionCard(card) {
   return !!card && (card.card_type === 'action' || card.image_id === '__action_card__')
 }
 
+// Backend changed Project.liked_ids shape: list[str] -> list[{id, intensity}].
+// This helper accepts either shape and returns plain id strings, so older sessions
+// (pre-migration data still in browser cache) and new responses both work.
+function extractLikedIds(rawLikedIds) {
+  if (!Array.isArray(rawLikedIds)) return []
+  return rawLikedIds
+    .map(entry => (typeof entry === 'string' ? entry : entry?.id))
+    .filter(Boolean)
+}
+
 /* ── Error Boundary ─────────────────────────────────────────────────────── */
 class ErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { error: null } }
@@ -238,7 +248,7 @@ export default function App() {
           const resumed = await api.getSessionState(existingSessionId, currentHint)
           applySessionResponse(projectId, resumed)
           return
-        } catch (resumeErr) {
+        } catch {
           // Session not found (404), expired, or other failure -- fall through to new session
         }
       }
@@ -405,7 +415,7 @@ export default function App() {
           preloadImage(result.prefetch_image_2?.image_url)
         }
       }
-    } catch (err) {
+    } catch {
       // Only revert UI if we hadn't already swapped to a different card
       // When canInstantSwap was true, user is already looking at savedPrefetch -- don't revert
       if (!canInstantSwap) {
@@ -487,7 +497,7 @@ export default function App() {
     try {
       const { results: backendProjects } = await api.listProjects()
       if (backendProjects.length > 0) {
-        const allLikedIds = [...new Set(backendProjects.flatMap(p => p.liked_ids || []))]
+        const allLikedIds = [...new Set(backendProjects.flatMap(p => extractLikedIds(p.liked_ids)))]
         const allCards = await api.getBuildings(allLikedIds)
         const cardMap = Object.fromEntries(allCards.map(c => [c.image_id, c]))
         const mapped = backendProjects.map(p => ({
@@ -495,8 +505,8 @@ export default function App() {
           backendId: String(p.project_id),
           projectName: p.name,
           filters: p.filters || {},
-          likedBuildings: (p.liked_ids || []).map(bid => cardMap[bid]).filter(Boolean),
-          swipedIds: [...(p.liked_ids || []), ...(p.disliked_ids || [])],
+          likedBuildings: extractLikedIds(p.liked_ids).map(bid => cardMap[bid]).filter(Boolean),
+          swipedIds: [...extractLikedIds(p.liked_ids), ...(p.disliked_ids || [])],
           predictedLikes: [],
           finalReport: p.final_report || null,
           reportImage: p.report_image || null,
@@ -508,7 +518,7 @@ export default function App() {
         setActiveProjectId(null)
         return
       }
-    } catch (err) {
+    } catch {
       // Project sync failed -- falling back to localStorage
     } finally {
       setIsSyncing(false)
