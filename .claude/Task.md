@@ -19,9 +19,9 @@
 >   it belongs in `## Research Ready`.
 >
 > Signal types for this section:
-> - `REVIEW-REQUESTED: <sha>` — reporter (main pipeline) → review terminal; run `/deep-review` next.
-> - `REVIEW-PASSED: <sha>` — review terminal → user; review passed AND HEAD/origin/main drift checks passed. Run `git push` manually from the review terminal itself (no context-switch to main needed). On `PASS-WITH-MINORS` verdict the signal inlines `<K> MINOR noted (see .claude/reviews/latest.md)` so the count is visible at a glance; MINORs are non-blocking for push.
-> - `REVIEW-ABORTED: <sha> — <reason>` — review terminal → main; review verdict was PASS but drift was detected during the review. `HEAD advanced …` → re-run `/deep-review` on the new HEAD. `origin/main moved …` → `git pull --rebase` then re-review.
+> - `REVIEW-REQUESTED: <sha>` — reporter (main pipeline) → review terminal; run `/review` next (or just say "리뷰해줘" / "review please" — natural language triggers the unified workflow per CLAUDE.md "Natural language review trigger").
+> - `REVIEW-PASSED: <sha>` — review terminal → user; review passed (Part A static + Part B browser when applicable + Part C drift checks). Run `git push` manually from the review terminal itself (no context-switch to main needed). On `PASS-WITH-MINORS` verdict the signal inlines `<K> MINOR noted (see .claude/reviews/latest.md)` so the count is visible at a glance; MINORs are non-blocking for push.
+> - `REVIEW-ABORTED: <sha> — <reason>` — review terminal → main; review verdict was PASS but drift was detected during the review. `HEAD advanced …` → re-run `/review` on the new HEAD. `origin/main moved …` → `git pull --rebase` then re-review.
 > - `REVIEW-FAIL: <sha> — <summary>` — review terminal → main; run fix loop via orchestrator (max 2 cycles).
 > - `MOCKUP-READY: <page>` — antigravity → main; page is ready for API integration pass.
 > - `SPEC-UPDATED: vX.Y → vX.Z — <sections> — <summary>` — research terminal → main; spec at `research/spec/requirements.md` bumped to new version. Main reads only the affected sections, not the whole spec. If the change invalidates in-progress work, main's orchestrator stops and asks user.
@@ -37,6 +37,7 @@
 - [2026-04-25] REVIEW-REQUESTED: 8bf73b8 — pool-score normalization (Topic 12 A1); run `/deep-review` next.
 - [2026-04-25] REVIEW-REQUESTED: f04646f — max_consecutive_dislikes 10 -> 5 (Section 5.1 A2); run `/deep-review` next.
 - [2026-04-25] REVIEW-REQUESTED: 190c830 — Project schema migration (A3): liked_ids intensity shape + saved_ids field; run `/deep-review` next (UI-affecting paths in scope — recommend `/deep-web-test` after).
+- [2026-04-25] REVIEW-PASSED: 88f0532 — drift checks passed, 1 MINOR noted (see .claude/reviews/latest.md); run `git push` manually from this terminal
 
 ---
 

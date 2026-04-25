@@ -14,7 +14,7 @@ You are the ONLY agent permitted to create / modify / delete files there (includ
 `research/spec/`, `research/search/`, `research/investigations/`, `research/algorithm.md`,
 and any future subdirectory). The main terminal and review terminal (and all their agents
 — orchestrator, back-maker, front-maker, reviewer, security-manager, git-manager, reporter,
-deep-reviewer, algo-tester, web-tester) are **READ-ONLY** on `research/` per CLAUDE.md
+algo-tester, web-tester, and the `/review` slash command) are **READ-ONLY** on `research/` per CLAUDE.md
 `## Rules`.
 
 Preservation rule: the user may write their own study notes under `research/`. When you

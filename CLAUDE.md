@@ -9,7 +9,7 @@
   - Do NOT create or migrate the `architecture_vectors` table -- it is owned by Make DB.
   - SentenceTransformers is NOT a dependency here -- embeddings are pre-computed.
   - When updating `.claude/Report.md`, update ONLY the `Last Updated (Claude)` section. NEVER overwrite or remove the `Last Updated (Gemini)` section.
-  - **`research/` folder is off-limits to the main and review terminals**, with **one narrow exception** noted below. It is the **research terminal's exclusive write territory** AND the **user's active study workspace**. All main-pipeline and review-terminal agents — `orchestrator`, `back-maker`, `front-maker`, `reviewer`, `security-manager`, `git-manager`, `deep-reviewer`, `deep-web-tester`, `algo-tester`, `web-tester` — are **READ-ONLY** on `research/`. Never create, modify, delete, or stage files under `research/` (including `research/spec/`, `research/search/`, `research/investigations/`, and any future subdirectory) from the main pipeline. If you read research content, that is fine; writes are forbidden. If a file already exists under `research/` that appears to have been created by the main pipeline (governance violation), leave it for the user or research terminal to handle — do not delete or relocate it yourself. The only legitimate broad writer of `research/` is the `research` agent invoked from the research terminal.
+  - **`research/` folder is off-limits to the main and review terminals**, with **one narrow exception** noted below. It is the **research terminal's exclusive write territory** AND the **user's active study workspace**. All main-pipeline and review-terminal agents/commands — `orchestrator`, `back-maker`, `front-maker`, `reviewer`, `security-manager`, `git-manager`, `algo-tester`, `web-tester`, and the `/review` slash command — are **READ-ONLY** on `research/`. Never create, modify, delete, or stage files under `research/` (including `research/spec/`, `research/search/`, `research/investigations/`, and any future subdirectory) from the main pipeline. If you read research content, that is fine; writes are forbidden. If a file already exists under `research/` that appears to have been created by the main pipeline (governance violation), leave it for the user or research terminal to handle — do not delete or relocate it yourself. The only legitimate broad writer of `research/` is the `research` agent invoked from the research terminal.
   - **Narrow exception — `research/algorithm.md`:** the `reporter` agent (and only the reporter) is permitted to UPDATE `research/algorithm.md` to keep it in sync with implementation. Permitted writes: (a) sync the **Production Value** column in the Hyperparameter Space table when `backend/config/settings.py` RECOMMENDATION dict changes; (b) append a one-line `_(Updated YYYY-MM-DD <sha_short>: <one-line>)_` annotation under any phase / formula / edge-case section whose corresponding implementation just changed; (c) maintain a `**Last Synced (Reporter):** YYYY-MM-DD <sha_short>` line near the top. Forbidden: rewriting algorithm theory, removing existing content, adding new sections, or touching any other file under `research/`. Reporter must NEVER touch `research/spec/`, `research/search/`, or `research/investigations/`. The `git-manager` agent likewise allows `research/algorithm.md` (and only that file) into staged commits via an explicit override path; broad `research/*` exclusion otherwise stands.
 
   ## Target Structure
@@ -169,21 +169,44 @@
   - `web-testing/reports/{run_id}/screenshots/` -- step screenshots
   - `web-testing/dashboard/data/latest/` -- symlinked latest report for dashboard
 
-  ## Code Review (`/deep-review` + `/deep-web-test`)
+  ## Pre-Push Review (`/review`)
 
-  The pre-push gate is composed of two slash commands that run sequentially in the review
-  terminal: `/deep-review` (static review across 7 axes + drift checks) and the conditional
-  `/deep-web-test` (strict spec-aligned browser verification).
+  The pre-push gate is a single canonical workflow at `.claude/commands/review.md`,
+  invoked in the review terminal via `/review` OR natural language (see "Natural
+  language review trigger" below). It combines:
 
-  ### `/deep-review` — static review + drift gate
+  - **Part A** — Static deep review across 7 axes (architecture, correctness,
+    performance, security, code quality, test coverage, cross-commit drift). Writes
+    report to `.claude/reviews/<sha>.md` + `latest.md`.
+  - **Part B** — Strict browser verification (spec-aligned latency budgets, 3 personas
+    × ≥25 swipes, zero-tolerance error gates, edge cases). **Runs only when
+    UI-affecting paths are in scope** (frontend/, recommendation/views.py, engine.py,
+    accounts/, urls.py, recommendation/migrations/, RECOMMENDATION settings); skipped
+    automatically for pure docs/config commits.
+  - **Part C** — HEAD + origin/main drift checks. Emits one of
+    `REVIEW-PASSED` / `REVIEW-ABORTED` / `REVIEW-FAIL` to `.claude/Task.md ## Handoffs`.
 
-  A dedicated deep-review workflow lives at `.claude/commands/deep-review.md` (slash command)
-  and `.claude/agents/deep-reviewer.md` (programmatic subagent). Both share the same
-  7-axis checklist and report format.
+  ### Natural language review trigger
+
+  In the review terminal, the user typically types natural-language review requests
+  rather than the explicit slash command. Recognize phrases like **"리뷰해줘"**,
+  **"review"**, **"review please"**, **"검토해줘"**, **"리뷰"**, **"리뷰 좀"**,
+  **"branch review"**, etc. as invocations of the `/review` workflow. Read
+  `.claude/commands/review.md` and execute its steps in this session.
+
+  This trigger applies primarily in the review terminal context. In the main terminal,
+  the user typically uses orchestrator-driven flows for development; if they say
+  "리뷰해줘" while working with the orchestrator, prefer the orchestrator's inner-loop
+  `reviewer` subagent unless they explicitly say "pre-push review" or are clearly
+  asking to run the full gate.
+
+  ### Workflow details
 
   **Invocation:** on a separate "review terminal" Claude Code session, type
-  `/deep-review` (default scope: `origin/main..HEAD` — the unpushed commits on the
-  current branch) or `/deep-review <range>` (e.g. `/deep-review HEAD~5..HEAD`).
+  `/review` (default scope: `origin/main..HEAD` — the unpushed commits on the
+  current branch) or `/review <range>` (e.g. `/review HEAD~5..HEAD`). Or just say
+  "리뷰해줘" / "review please" — the natural-language trigger above maps to the
+  same workflow.
 
   **Output:**
   - `.claude/reviews/{sha_short}.md` -- per-commit archive
@@ -202,72 +225,59 @@
   security in depth, code quality, test coverage, cross-commit drift. Severity:
   CRITICAL / MAJOR / MINOR.
 
-  **Relationship to existing review agents:** `/deep-review` is **read-only on source code**
-  (never edits backend / frontend / research) but acts as a **pre-push gate**. The main
-  orchestrator pipeline commits via `git-manager` and stops — it never pushes. The user
-  runs `/deep-review` in the review terminal; the verdict lands in
+  **Pre-push gate semantics:** `/review` is **read-only on source code** (never edits
+  backend / frontend / research) but acts as the **pre-push gate**. The main orchestrator
+  pipeline commits via `git-manager` and stops — it never pushes. The user runs
+  `/review` (or natural language) in the review terminal; the unified verdict lands in
   `.claude/reviews/latest.md` and a one-line signal is appended to the `## Handoffs`
-  section of `.claude/Task.md`. On PASS, `/deep-review` additionally runs two drift checks
-  (local HEAD + `origin/main`) before signalling — `REVIEW-PASSED` means the review
-  verdict was clean AND neither ref has moved since Step 1, so the user can safely run
-  `git push` manually from the review terminal itself (no context-switch back to main).
-  On `PASS-WITH-MINORS` (clean at CRITICAL/MAJOR level but `K > 0` MINORs), the
-  `REVIEW-PASSED` signal inlines `<K> MINOR noted (see .claude/reviews/latest.md)` so the
-  count is visible without opening the report; MINORs are non-blocking for push by
-  definition. `REVIEW-ABORTED` means the review passed but drift was detected, so the
-  orchestrator must either re-review (HEAD drift) or `git pull --rebase` + re-review
-  (remote drift). `REVIEW-FAIL` re-enters the orchestrator fix loop (max 2 cycles).
-  `/deep-review` never runs `git push` itself; push is always user-initiated.
+  section of `.claude/Task.md`. The signal is one of:
+
+  - `REVIEW-PASSED: <sha> — drift checks passed; run \`git push\` manually from this terminal`
+    (clean PASS, no MINORs, browser test passed if applicable). On `PASS-WITH-MINORS` the
+    signal inlines `<K> MINOR noted (see .claude/reviews/latest.md)` — the count is
+    visible without opening the report; MINORs are non-blocking for push.
+  - `REVIEW-ABORTED: <sha> — <reason>` — review verdict was PASS but drift was detected
+    during the review. Either HEAD advanced (re-run `/review`) or origin/main moved
+    (`git pull --rebase` + re-review).
+  - `REVIEW-FAIL: <sha> — <summary>` — either Part A had CRITICAL/MAJOR findings, OR
+    Part B browser test failed. Re-enters the orchestrator fix loop (max 2 cycles).
+
+  **`/review` never runs `git push` itself; push is always user-initiated.**
+
+  **Browser-verification conditional (Part B):** Part B runs ONLY when UI-affecting
+  paths are in scope (frontend/, recommendation/views.py, engine.py, accounts/, urls.py,
+  recommendation/migrations/, RECOMMENDATION settings). For pure docs/config commits,
+  Part B is automatically skipped and the report notes the skip. The local dev server
+  (frontend on :5174, backend on :8001, DEV_LOGIN_SECRET in `backend/.env`) must be
+  running for Part B; otherwise it FAILs with that diagnostic.
+
+  Part B's strict gates per spec Section 4: `time-to-first-card < 4 s` (5 s for bare
+  queries), per-swipe p95 < 700 ms, zero console errors, zero unexpected 4xx/5xx
+  (auth-401-refresh path explicitly allowed), no duplicate cards, expected phase
+  transitions, strict API response shape assertion, edge cases (refresh-resume, action
+  card flow, persona report, network failure injection), multi-session no-contamination,
+  spec primary-metric infrastructure sentinel (Sprint 0 A3 `saved_ids` field).
+
+  **Difference from inner-loop `web-tester`:** the orchestrator pipeline's inner loop
+  uses the fast `web-tester` agent (1 persona, ≥10 swipes, no latency assertion,
+  retries on flake, console errors reported but not failed) to avoid blocking
+  iteration. Part B of `/review` is the strict pre-push variant — slower, no retries,
+  all gates hard. The two are complementary; Part B does NOT replace `web-tester` in
+  the inner loop.
 
   **Push-fail-then-rebase discipline:** if `git push` fails non-ff in the narrow window
   between the drift check and the user's push, and the user recovers with
   `git pull --rebase`, the rebase rewrites local commit SHAs. The existing
   `REVIEW-PASSED: <old_sha>` signal is now stale — it points to a SHA that no longer
-  exists locally. Re-run `/deep-review` before retrying `git push`; only a
-  `REVIEW-PASSED` at the current HEAD's SHA is a valid push ticket.
+  exists locally. Re-run `/review` (or just say "리뷰해줘") before retrying
+  `git push`; only a `REVIEW-PASSED` at the current HEAD's SHA is a valid push ticket.
 
-  `/deep-review` **supplements** the fast `reviewer` (API contracts, logic bugs, obvious
-  perf) and `security-manager` (SQLi/XSS/auth keyword scan) agents, filling their
-  explicit exclusions: refactoring, optimization opportunities, test coverage,
-  cross-commit drift, and architecture alignment. See `.claude/WORKFLOW.md`
-  "Multi-Terminal Coordination" for the full pre-push sequence.
-
-  ### `/deep-web-test` — strict browser verification (conditional)
-
-  A dedicated strict browser verification workflow lives at `.claude/commands/deep-web-test.md`
-  (slash command) and `.claude/agents/deep-web-tester.md` (programmatic subagent). The
-  slash command is the typical invocation path; the subagent path is gated on the `Agent`
-  tool being available in the caller's environment.
-
-  **When to run:** after `/deep-review` PASSes AND it emitted a `RECOMMEND: /deep-web-test`
-  line (Step 5b — triggered when UI-affecting paths are in scope: `frontend/`, `backend/apps/recommendation/views.py`, `engine.py`, `accounts/`, `urls.py`, recommendation migrations, or `RECOMMENDATION` settings). When `/deep-review` says "/deep-web-test optional", you can skip.
-
-  **What it does (strict variant of `web-tester`):** runs 3 personas × ≥25 swipes each
-  with spec-aligned hard gates:
-  - `time-to-first-card < 4 s` (5 s for bare queries) per spec Section 4
-  - per-swipe `p95 < 700 ms` (target 500 ms) per spec Section 4
-  - **zero** console errors / unexpected 4xx/5xx (auth-401-refresh path explicitly allowed)
-  - no duplicate cards, expected phase transitions, strict API response shape assertion
-  - edge cases: refresh-resume mid-session, action card flow, persona report generation, network failure injection
-  - multi-session no-contamination check
-  - spec primary metric infrastructure sentinel (`saved_ids` field on Project, bookmark endpoint — conditional on Sprint 0 A3 having shipped)
-  - per-endpoint p50 / p95 / p99 timing report
-
-  **Output:** inline `DEEP-WEB-TEST: PASS` or `DEEP-WEB-TEST: FAIL` with detailed per-gate
-  breakdown. NOT a Task.md handoff (it is a review-terminal local advisory; the user
-  decides whether to push based on this combined with `REVIEW-PASSED`).
-
-  **Difference from the fast `web-tester` agent:** `web-tester` runs inside the
-  orchestrator inner loop with looser tolerances to avoid blocking iteration (1 persona,
-  ≥10 swipes, no latency assertion, retries on flake, console errors reported but not
-  failed). `deep-web-tester` is the strict pre-push variant — slower, no retries, all
-  gates hard. The two are complementary; `deep-web-tester` does NOT replace `web-tester`
-  in the inner loop.
-
-  **Push gate:** safe to `git push` only when both `REVIEW-PASSED` (from `/deep-review`)
-  AND `DEEP-WEB-TEST: PASS` (from `/deep-web-test`, when applicable per Step 5b
-  recommendation) are in hand. If `/deep-web-test` fails, return to the main terminal
-  with the failure detail; the orchestrator fix-loops on the UX issue.
+  `/review` **supplements** the fast inner-loop `reviewer` (API contracts, logic bugs,
+  obvious perf), `security-manager` (SQLi/XSS/auth keyword scan), and `web-tester`
+  agents, filling their explicit exclusions: refactoring, optimization opportunities,
+  test coverage, cross-commit drift, architecture alignment, spec-strict latency
+  budgets, and edge-case coverage. See `.claude/WORKFLOW.md` "Multi-Terminal
+  Coordination" for the full pre-push sequence.
 
   ## Database: architecture_vectors Schema
   Owned by Make DB. Django reads via raw SQL only -- never ORM, never migrate.

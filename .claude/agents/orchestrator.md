@@ -125,7 +125,7 @@ Spawn `web-tester` with:
 
 ### Step 6 -- Commit (local only; do NOT push)
 Spawn `git-manager` with a one-line commit message describing what was done.
-`git-manager` never pushes by default — this is intentional, because `/deep-review`
+`git-manager` never pushes by default — this is intentional, because `/review`
 in the review terminal is the pre-push gate.
 
 ### Step 7 -- Report and emit REVIEW-REQUESTED handoff
@@ -138,9 +138,12 @@ Spawn `reporter`. It will:
 ### Step 8 -- Stop and report to user
 After reporter finishes, STOP. Report to the user:
 
-> "Commit `<sha_short>` ready for review. Run `/deep-review` in the review terminal;
-> on `REVIEW-PASSED` the user runs `git push` from that same terminal. On `REVIEW-FAIL`
-> or `REVIEW-ABORTED`, re-invoke me."
+> "Commit `<sha_short>` ready for review. Run `/review` in the review terminal (or
+> just say '리뷰해줘' / 'review please' — natural language triggers the same workflow
+> per CLAUDE.md). The unified `/review` runs static deep review + (conditional) strict
+> browser verification + drift checks, then emits one of REVIEW-PASSED / REVIEW-ABORTED
+> / REVIEW-FAIL to Task.md Handoffs. On `REVIEW-PASSED` the user runs `git push` from
+> that same terminal. On `REVIEW-FAIL` or `REVIEW-ABORTED`, re-invoke me."
 
 Do NOT run `git push` yourself. Do NOT start the next task until the review verdict is in.
 
@@ -151,11 +154,11 @@ again. Fix-loop attempts count toward the shared 2-cycle limit.
 If the Handoffs section shows a `REVIEW-ABORTED: <sha>` matching your last commit, the
 review was clean but drift was detected:
 - `HEAD advanced to <new_sha> during review` → your next commit already superseded the
-  reviewed one; no code fix needed, just ask the user to re-run `/deep-review` for the
+  reviewed one; no code fix needed, just ask the user to re-run `/review` for the
   new SHA.
 - `origin/main moved during review; pull and re-review` → run `git pull --rebase origin main`
   (after informing the user), resolve any conflicts via the Fix Loop if they arise,
-  then ask the user to re-run `/deep-review`.
+  then ask the user to re-run `/review`.
 Neither ABORTED case counts toward the 2-cycle limit (no findings to fix).
 
 ## Algorithm tester post-run workflow
