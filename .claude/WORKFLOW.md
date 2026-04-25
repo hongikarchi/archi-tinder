@@ -20,7 +20,8 @@
 | **reporter** | sonnet | Updates Report.md + Task.md, emits REVIEW-REQUESTED handoff | `.claude/` only |
 | **algo-tester** | sonnet | Runs optimizer script, interprets results, triggers orchestrator | runs script + calls orchestrator |
 | **research** | opus | Explores complex problems, writes to research/ | `research/` only |
-| **deep-reviewer** | opus | Pre-push deep review across 7 axes; writes `.claude/reviews/*.md` and REVIEW-PASSED/REVIEW-FAIL handoff | read-only on source; writes `.claude/reviews/` + Task.md Handoffs line |
+| **deep-reviewer** | opus | Pre-push deep review across 7 axes; writes `.claude/reviews/*.md` and REVIEW-PASSED/REVIEW-ABORTED/REVIEW-FAIL handoff. Also emits `RECOMMEND: /deep-web-test` advisory when UI-affecting paths are in scope. | read-only on source; writes `.claude/reviews/` + Task.md Handoffs line |
+| **deep-web-tester** | opus | Pre-push strict browser verification (review terminal). Spec-aligned latency budgets (<500 ms swipe, <3-4s first card), 3 personas × ≥25 swipes, zero-tolerance error gates, edge-case coverage (refresh-resume, action card, persona report, network failure injection). Returns `DEEP-WEB-TEST: PASS` or `FAIL`. | read-only on source; writes only transient `test-artifacts/deep-web-test/` (cleaned after run) |
 
 ---
 
@@ -36,10 +37,12 @@ file/layer ownership + handoff signals in `Task.md`, not branches.
 |----------|-------|------|----------------|-----------------|
 | **main** | Claude Code (orchestrator: opus) | Full pipeline — backend, frontend integration, E2E tests, commit | `backend/`, `frontend/` (data layer), `.claude/` (excluding anything inside `research/`) | reporter emits `REVIEW-REQUESTED` to Handoffs; consumes `MOCKUP-READY`, `REVIEW-FAIL`, `REVIEW-ABORTED`, `SPEC-UPDATED` from Handoffs; `[SPEC-READY]` from Research Ready section. **READ-ONLY on `research/`** — never create/modify/delete/stage files there. |
 | **research** | Claude Code (research agent: opus) | Ongoing algorithm / UX research dialog with user; consolidates findings into `research/spec/requirements.md` (living spec). `research/search/**` deep-dive reports are reasoning archive — accessed directly via filesystem, not via Task.md pointers. | **EXCLUSIVE owner of `research/`** (all subdirectories: `spec/`, `search/`, `investigations/`, `algorithm.md`). Also appends `[SPEC-READY]` to Task.md `## Research Ready` + `SPEC-UPDATED` to `## Handoffs` on version bump. Commits its own research/ changes from its own session. | emits `[SPEC-READY]`, `SPEC-UPDATED` |
-| **review** | Claude Code (deep-reviewer: opus) | Pre-push deep review across all axes (architecture, perf, security, drift) + HEAD/`origin/main` drift checks on PASS | read-only on source; writes `.claude/reviews/*.md` and the handoff line in Task.md `## Handoffs`; user manually runs `git push` from this terminal on `REVIEW-PASSED`. **READ-ONLY on `research/`** (same rule as main). | emits `REVIEW-PASSED` (drift-verified, ready for manual push), `REVIEW-ABORTED` (PASS but drift detected), or `REVIEW-FAIL` to Handoffs |
+| **review** | Claude Code (deep-reviewer + deep-web-tester: opus) | Pre-push gate. Runs `/deep-review` first (7-axis static review + HEAD/`origin/main` drift checks). Then conditionally runs `/deep-web-test` (spec-strict browser verification — latency budgets, multi-persona convergence, edge cases) when UI-affecting paths are in scope per `/deep-review`'s `RECOMMEND` line. Both PASS → user runs `git push` from this terminal. | read-only on source; writes `.claude/reviews/*.md` and the handoff line in Task.md `## Handoffs`; transient `test-artifacts/deep-web-test/` from `/deep-web-test`. **READ-ONLY on `research/`** (same rule as main). | emits `REVIEW-PASSED` (drift-verified), `REVIEW-ABORTED` (PASS but drift detected), or `REVIEW-FAIL` to Handoffs from `/deep-review`. `/deep-web-test` returns its own PASS/FAIL inline (not a Task.md handoff — review terminal local advisory). |
 | **antigravity** | Gemini (Chrome integration) | Continuous UI iteration — new mockups AND existing-page polish | `frontend/` (UI layer). **READ-ONLY on `research/`.** | emits `MOCKUP-READY` to Handoffs; drops inline `TODO(claude): ...` markers in source |
 
-> **⚠️ `research/` ownership is absolute.** The research terminal is the ONLY terminal (and `research` is the ONLY agent) permitted to create, modify, delete, or stage files under `research/` (including `research/spec/`, `research/search/`, `research/investigations/`, `research/algorithm.md`, and any future subdirectory). Main, review, antigravity, and all their spawned subagents (orchestrator, back-maker, front-maker, reviewer, security-manager, git-manager, reporter, deep-reviewer, algo-tester, web-tester) are strictly READ-ONLY on `research/`. This is also the user's active study workspace — do not touch. See CLAUDE.md `## Rules` for the authoritative statement.
+> **⚠️ `research/` ownership is absolute, with one narrow exception.** The research terminal is the broad owner of `research/` (`research/spec/`, `research/search/`, `research/investigations/`, and any future subdirectory). Main, review, antigravity, and all their spawned subagents (orchestrator, back-maker, front-maker, reviewer, security-manager, git-manager, deep-reviewer, deep-web-tester, algo-tester, web-tester) are strictly READ-ONLY on `research/`. This is also the user's active study workspace — do not touch.
+>
+> **Narrow exception**: the `reporter` agent (and only the reporter) may UPDATE `research/algorithm.md` to keep it in sync with implementation — see `reporter.md` Step 6 for the exact scope (Production Value column sync + inline annotations + Last Synced line; no rewriting of theory, no other files). Bookkeeping commits explicitly stage `research/algorithm.md` for this purpose; `git-manager`'s default exclude still applies to all other `research/` paths. See CLAUDE.md `## Rules` for the authoritative statement.
 
 > **Note on Task.md sections:**
 > - `## Handoffs` (near top) = short-lived review/mockup signals, rolling window.
@@ -157,6 +160,10 @@ review terminal — `/deep-review`
   |- Step 1 captures REVIEWED_SHA = git rev-parse HEAD
   |                  REVIEWED_ORIGIN_MAIN = git rev-parse origin/main
   |- Steps 2-5 produce .claude/reviews/<sha>.md + latest.md + stdout summary
+  |- Step 5b emits `RECOMMEND: /deep-web-test` (or "/deep-web-test optional") based on
+  |          whether UI-affecting paths are in scope (frontend/, views.py, engine.py,
+  |          accounts/, urls.py, recommendation/migrations/, settings.py RECOMMENDATION).
+  |          Advisory only; not a Task.md handoff.
   -> Step 6 branches on verdict:
        FAIL → append REVIEW-FAIL: <sha> — ... → STOP
        PASS / PASS-WITH-MINORS:
@@ -168,20 +175,46 @@ review terminal — `/deep-review`
               → append REVIEW-PASSED: <sha> — drift checks passed; run `git push` manually from this terminal
                 (on PASS-WITH-MINORS the signal inlines "<K> MINOR noted (see .claude/reviews/latest.md)")
 
+(still in the review terminal — if Step 5b emitted RECOMMEND, run /deep-web-test next)
+
+review terminal — `/deep-web-test` (conditional)
+  |- Step 0 preflight: dev server up, dev-login, inject tokens
+  |- Step 1 baseline: zero-tolerance pre-existing console-error gate
+  |- Steps 2-5 run 3 personas × ≥25 swipes each:
+  |    time-to-first-card < 4-5 s, per-swipe p95 < 700 ms, zero console errors,
+  |    zero unexpected 4xx/5xx, no duplicate cards, expected phase transitions,
+  |    strict API response shape (every documented field present)
+  |- Step 6 edge cases: refresh-resume, action card, persona report, network failure injection
+  |- Step 7 spec-metric infrastructure (saved_ids field, bookmark endpoint — conditional, post-A3)
+  |- Step 8 cross-persona aggregation, multi-session no-contamination, p50/p95 per endpoint
+  -> Emits inline `DEEP-WEB-TEST: PASS | FAIL` (NOT a Task.md handoff — local advisory)
+
 (still in the review terminal)
-  - REVIEW-PASSED  → user runs `git push` directly (the review terminal never pushes by itself)
+  - both PASSED (REVIEW-PASSED + DEEP-WEB-TEST: PASS)
+                 → user runs `git push` directly
+  - REVIEW-PASSED but DEEP-WEB-TEST: FAIL
+                 → user does NOT push; returns to main with the deep-web-test failure
+                   detail; orchestrator fix-loops on the UX issue
   - REVIEW-ABORTED → user returns to main terminal; orchestrator handles the follow-up
                       (re-run /deep-review after HEAD drift; pull --rebase + re-review after remote drift)
   - REVIEW-FAIL    → user returns to main terminal; orchestrator re-enters fix loop (max 2 cycles)
+                      (skip /deep-web-test in this case — fix code first, re-review, then verify in browser)
 ```
 
 This means:
 1. `git push` happens from the review terminal, not the main terminal — after the review
    verified both that the range is clean AND that HEAD and origin/main still match what
    was reviewed. No context-switch, no "review one range, push another" race.
-2. The review terminal still never edits source code and never runs `git push` itself —
+2. `/deep-web-test` is the strict pre-push browser verification — separate from the fast
+   `web-tester` that runs inside the orchestrator inner loop. It enforces spec-aligned
+   latency budgets, multi-persona convergence cycles, and zero-tolerance error gates.
+   It runs in the same review terminal, on a fresh invocation, and emits its own
+   PASS/FAIL inline (not via Task.md). The user decides whether to push based on BOTH
+   `REVIEW-PASSED` AND `DEEP-WEB-TEST: PASS`. (If `/deep-review`'s Step 5b said the
+   web-test is optional, the user may skip it.)
+3. The review terminal still never edits source code and never runs `git push` itself —
    the push is always user-initiated by explicit `git push` in the review terminal.
-3. `git-manager`'s "never pushes unless explicitly told to" default (see Key Rules
+4. `git-manager`'s "never pushes unless explicitly told to" default (see Key Rules
    below) is what keeps the orchestrator side clean; no existing agent code changes.
 
 ---

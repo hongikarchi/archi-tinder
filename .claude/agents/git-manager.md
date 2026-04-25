@@ -48,4 +48,5 @@ You are the git manager for ArchiTinder.
 - Never `git push` unless the orchestrator explicitly says "push"
 - Never use `--no-verify`
 - If `git add` would stage `.env`, exclude it explicitly
-- **Never stage `research/` files** (including any subdirectory like `research/spec/`, `research/search/`, `research/investigations/`, `research/algorithm.md`). Research terminal owns commits there. See CLAUDE.md `## Rules`.
+- **Never stage `research/` files by default** (including `research/spec/`, `research/search/`, `research/investigations/`). Research terminal owns commits there. See CLAUDE.md `## Rules`.
+- **Narrow exception — `research/algorithm.md`:** if the caller (typically the bookkeeping path after a code commit) explicitly instructs you to include `research/algorithm.md` (e.g., `git add research/algorithm.md` is in your stage command), comply. This is the documented exception in CLAUDE.md `## Rules` — reporter syncs this file with implementation, and the bookkeeping commit batches it with Report.md / Task.md updates. NEVER include any other file under `research/`. If unclear whether a file is the documented exception, ask before staging.

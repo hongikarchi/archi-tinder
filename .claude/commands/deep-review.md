@@ -190,6 +190,56 @@ Emit to stdout on a single line, after writing the report:
 
 `DEEP REVIEW: <OVERALL verdict> — <N> CRITICAL, <M> MAJOR, <K> MINOR. Report: .claude/reviews/latest.md`
 
+## Step 5b — `/deep-web-test` recommendation (conditional)
+
+Inspect the diff to decide whether running the strict pre-push browser verification
+(`/deep-web-test` slash command, or the `deep-web-tester` subagent) is needed before push.
+
+**UI-affecting paths** (any of these in the changed-files list triggers the recommendation):
+- `frontend/**` (any file)
+- `backend/apps/recommendation/views.py` (swipe / session / project endpoints — user-facing API)
+- `backend/apps/recommendation/engine.py` (algorithm semantics that the swipe UI depends on)
+- `backend/apps/accounts/**` (auth / login flow)
+- `backend/config/urls.py` (URL routing exposed to the client)
+- `backend/apps/recommendation/migrations/**` (DB schema affecting reads from the UI)
+- `backend/config/settings.py` if changes touch the `RECOMMENDATION` dict (algorithm
+  hyperparameters that change runtime behavior the UI exercises)
+
+**Non-UI-affecting paths** (do not trigger):
+- `.claude/**` (workflow / agent docs)
+- `*.md` outside source code (CLAUDE.md, GEMINI.md, DESIGN.md, README, etc.)
+- `research/**` (read-only for this terminal anyway)
+- `backend/tests/**` (tests — they verify behavior but don't change runtime)
+- `backend/tools/**` (offline scripts not in the request path)
+- `web-testing/**` (separate test runner module)
+- `.gitignore`, `Makefile`, dev-only configs
+
+Emit ONE additional line to stdout right after the Step 5 summary (NOT to Task.md
+Handoffs — this is a recommendation to the human runner, not a cross-terminal signal):
+
+- If UI-affecting paths present:
+  ```
+  RECOMMEND: /deep-web-test — UI-affecting paths in scope (<list of matched paths>). Run /deep-web-test in this terminal before `git push` to verify spec-aligned latency budgets, edge-case flows, and zero-error gates against the local dev server.
+  ```
+- If only non-UI paths:
+  ```
+  /deep-web-test optional — no UI-affecting paths in this scope. Skip safe; run anyway if you want a sanity baseline.
+  ```
+
+The recommendation is advisory. The user decides whether to run `/deep-web-test`.
+`/deep-web-test` is independent of the drift checks and the `REVIEW-PASSED` signal — it
+runs in the same review terminal, on a fresh invocation, and emits its own
+`DEEP-WEB-TEST: PASS | FAIL` line. If `/deep-web-test` fails, the user is expected to
+NOT run `git push` and instead return to the main terminal with the failure details so
+the orchestrator can fix-loop. If it passes, the user proceeds with `git push` per the
+existing `REVIEW-PASSED` signal from this command.
+
+This step does NOT block the drift-check and signal emission below — it is purely a
+recommendation. Do NOT run the deep-web-test from inside this command (the
+`deep-web-tester` subagent invocation requires the `Agent` tool which is not in this
+agent's tool list — only the slash command `/deep-web-test` invoked from the user's
+review-terminal session can spawn it).
+
 ## Step 6 — Emit handoff signal (drift-checked on PASS)
 
 After writing the report and emitting the stdout summary, the flow branches on the verdict.

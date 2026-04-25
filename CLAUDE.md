@@ -9,7 +9,8 @@
   - Do NOT create or migrate the `architecture_vectors` table -- it is owned by Make DB.
   - SentenceTransformers is NOT a dependency here -- embeddings are pre-computed.
   - When updating `.claude/Report.md`, update ONLY the `Last Updated (Claude)` section. NEVER overwrite or remove the `Last Updated (Gemini)` section.
-  - **`research/` folder is off-limits to the main and review terminals.** It is the **research terminal's exclusive write territory** AND the **user's active study workspace**. All main-pipeline and review-terminal agents — `orchestrator`, `back-maker`, `front-maker`, `reviewer`, `security-manager`, `git-manager`, `reporter`, `deep-reviewer`, `algo-tester`, `web-tester` — are **READ-ONLY** on `research/`. Never create, modify, delete, or stage files under `research/` (including `research/spec/`, `research/search/`, `research/investigations/`, `research/algorithm.md`, and any future subdirectory) from the main pipeline. If you read research content, that is fine; writes are forbidden. If a file already exists under `research/` that appears to have been created by the main pipeline (governance violation), leave it for the user or research terminal to handle — do not delete or relocate it yourself. The only legitimate writer of `research/` is the `research` agent invoked from the research terminal.
+  - **`research/` folder is off-limits to the main and review terminals**, with **one narrow exception** noted below. It is the **research terminal's exclusive write territory** AND the **user's active study workspace**. All main-pipeline and review-terminal agents — `orchestrator`, `back-maker`, `front-maker`, `reviewer`, `security-manager`, `git-manager`, `deep-reviewer`, `deep-web-tester`, `algo-tester`, `web-tester` — are **READ-ONLY** on `research/`. Never create, modify, delete, or stage files under `research/` (including `research/spec/`, `research/search/`, `research/investigations/`, and any future subdirectory) from the main pipeline. If you read research content, that is fine; writes are forbidden. If a file already exists under `research/` that appears to have been created by the main pipeline (governance violation), leave it for the user or research terminal to handle — do not delete or relocate it yourself. The only legitimate broad writer of `research/` is the `research` agent invoked from the research terminal.
+  - **Narrow exception — `research/algorithm.md`:** the `reporter` agent (and only the reporter) is permitted to UPDATE `research/algorithm.md` to keep it in sync with implementation. Permitted writes: (a) sync the **Production Value** column in the Hyperparameter Space table when `backend/config/settings.py` RECOMMENDATION dict changes; (b) append a one-line `_(Updated YYYY-MM-DD <sha_short>: <one-line>)_` annotation under any phase / formula / edge-case section whose corresponding implementation just changed; (c) maintain a `**Last Synced (Reporter):** YYYY-MM-DD <sha_short>` line near the top. Forbidden: rewriting algorithm theory, removing existing content, adding new sections, or touching any other file under `research/`. Reporter must NEVER touch `research/spec/`, `research/search/`, or `research/investigations/`. The `git-manager` agent likewise allows `research/algorithm.md` (and only that file) into staged commits via an explicit override path; broad `research/*` exclusion otherwise stands.
 
   ## Target Structure
   frontend/   <- React 18 + Vite
@@ -168,7 +169,13 @@
   - `web-testing/reports/{run_id}/screenshots/` -- step screenshots
   - `web-testing/dashboard/data/latest/` -- symlinked latest report for dashboard
 
-  ## Code Review (`/deep-review`)
+  ## Code Review (`/deep-review` + `/deep-web-test`)
+
+  The pre-push gate is composed of two slash commands that run sequentially in the review
+  terminal: `/deep-review` (static review across 7 axes + drift checks) and the conditional
+  `/deep-web-test` (strict spec-aligned browser verification).
+
+  ### `/deep-review` — static review + drift gate
 
   A dedicated deep-review workflow lives at `.claude/commands/deep-review.md` (slash command)
   and `.claude/agents/deep-reviewer.md` (programmatic subagent). Both share the same
@@ -224,6 +231,43 @@
   explicit exclusions: refactoring, optimization opportunities, test coverage,
   cross-commit drift, and architecture alignment. See `.claude/WORKFLOW.md`
   "Multi-Terminal Coordination" for the full pre-push sequence.
+
+  ### `/deep-web-test` — strict browser verification (conditional)
+
+  A dedicated strict browser verification workflow lives at `.claude/commands/deep-web-test.md`
+  (slash command) and `.claude/agents/deep-web-tester.md` (programmatic subagent). The
+  slash command is the typical invocation path; the subagent path is gated on the `Agent`
+  tool being available in the caller's environment.
+
+  **When to run:** after `/deep-review` PASSes AND it emitted a `RECOMMEND: /deep-web-test`
+  line (Step 5b — triggered when UI-affecting paths are in scope: `frontend/`, `backend/apps/recommendation/views.py`, `engine.py`, `accounts/`, `urls.py`, recommendation migrations, or `RECOMMENDATION` settings). When `/deep-review` says "/deep-web-test optional", you can skip.
+
+  **What it does (strict variant of `web-tester`):** runs 3 personas × ≥25 swipes each
+  with spec-aligned hard gates:
+  - `time-to-first-card < 4 s` (5 s for bare queries) per spec Section 4
+  - per-swipe `p95 < 700 ms` (target 500 ms) per spec Section 4
+  - **zero** console errors / unexpected 4xx/5xx (auth-401-refresh path explicitly allowed)
+  - no duplicate cards, expected phase transitions, strict API response shape assertion
+  - edge cases: refresh-resume mid-session, action card flow, persona report generation, network failure injection
+  - multi-session no-contamination check
+  - spec primary metric infrastructure sentinel (`saved_ids` field on Project, bookmark endpoint — conditional on Sprint 0 A3 having shipped)
+  - per-endpoint p50 / p95 / p99 timing report
+
+  **Output:** inline `DEEP-WEB-TEST: PASS` or `DEEP-WEB-TEST: FAIL` with detailed per-gate
+  breakdown. NOT a Task.md handoff (it is a review-terminal local advisory; the user
+  decides whether to push based on this combined with `REVIEW-PASSED`).
+
+  **Difference from the fast `web-tester` agent:** `web-tester` runs inside the
+  orchestrator inner loop with looser tolerances to avoid blocking iteration (1 persona,
+  ≥10 swipes, no latency assertion, retries on flake, console errors reported but not
+  failed). `deep-web-tester` is the strict pre-push variant — slower, no retries, all
+  gates hard. The two are complementary; `deep-web-tester` does NOT replace `web-tester`
+  in the inner loop.
+
+  **Push gate:** safe to `git push` only when both `REVIEW-PASSED` (from `/deep-review`)
+  AND `DEEP-WEB-TEST: PASS` (from `/deep-web-test`, when applicable per Step 5b
+  recommendation) are in hand. If `/deep-web-test` fails, return to the main terminal
+  with the failure detail; the orchestrator fix-loops on the UX issue.
 
   ## Database: architecture_vectors Schema
   Owned by Make DB. Django reads via raw SQL only -- never ORM, never migrate.
