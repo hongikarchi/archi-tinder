@@ -3,7 +3,7 @@
 > Phase logic, mathematical formulas, and hyperparameter theory.
 > Research agent updates this file. Orchestrator references it for algorithm tasks.
 
-**Last Synced (Reporter):** 2026-04-25 f17cb5e
+**Last Synced (Reporter):** 2026-04-25 2c7be51
 
 ---
 
@@ -118,6 +118,8 @@ Originally specified as Grid Search, now implemented as **Optuna Bayesian optimi
 - Production baseline seeded as first Optuna trial for fair comparison
 
 Target: convergence in 15-25 swipes with high precision in Top-K results.
+
+_(Updated 2026-04-25 2c7be51: §6 session logging infrastructure (Sprint 0 A5) shipped — SessionEvent model + emit_event helper. Wired session_start, pool_creation, swipe (with timing_breakdown), session_end, failure events. Foundation for V_initial bit hypothesis measurement (Topic 03), per-swipe latency budget validation (Investigation 01 O1), Topic 09 ANN trigger detection, and bandit/CF training data accumulation (Topic 05/07). Other events (tag_answer, confidence_update, bookmark, detail_view, external_url_click, session_extend, probe_turn, cohort_assignment) wired when their feature endpoints ship.)_
 
 ---
 

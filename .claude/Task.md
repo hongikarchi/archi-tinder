@@ -47,6 +47,7 @@
 - [2026-04-25] SPEC-UPDATED: v1.2 → v1.3 — **🚨 URGENT push-gate-blocker fix.** Sections 4, 6, 11.1. Incorporates `research/investigations/15-parse-query-latency.md`. **Root cause of monotonic 3437→5496→6706 ms parse-query latency (FAIL on f607e73 / 5d85b90)**: Gemini 2.5-flash's default **dynamic thinking mode** generates hidden reasoning tokens for our structured-extraction task. `services.py:106-110` `GenerateContentConfig` 에 `thinking_config` 미설정 → 5× generation overhead. 150 output tokens × 200 tok/sec = ~0.75s pure generation; thinking tokens fill the 5× gap. Monotonic increase across runs = server-side throttling drift on top of the thinking-tax floor. **🔧 NEW Section 11.1 IMP-4 (one-line fix)**: add `thinking_config=types.ThinkingConfig(thinking_budget=0)` to `GenerateContentConfig` in both `parse_query` (line 106-110) and `generate_persona_report` (line 188). **Mandatory companion**: Section 6 신규 `parse_query.timing` event with `gemini_total_ms / ttft_ms / gen_ms / input_tokens / output_tokens / thinking_tokens` (`response.usage_metadata.thoughts_token_count`). Without instrumentation, IMP-4 effect unobservable. Section 4 time-to-first-card row 에 sub-budget 추가 (per-Gemini-call p95 ≤ 2.5s). **Expected outcome post-fix**: parse-query 1000-1500 ms (p50), total time-to-first-card ~2.0-2.5s, push gate clears with 1.5s margin. **Sprint 1 chat phase (investigation 06 의 더 큰 prompt) 는 IMP-4 에 latency-blocked** — Sprint 1 ship 전 IMP-4 + instrumentation 필수. Recommend Sprint 0/0.5 immediate.
 - [2026-04-25] REVIEW-FAIL: f607e73 — **Part A: PASS (0 findings, genuinely clean — IMP-1 fix exemplary).** Part B FAIL: Persona Brutalist time-to-first-card **6706 ms > 4000 ms hard ceiling** (parse-query latency alone). **Second consecutive Part B FAIL on same gate; latency monotonically increasing (3437 → 5496 → 6706 ms across 88f0532 / 5d85b90 / f607e73 runs)** — no longer plausibly Gemini jitter, looks structural. IMP-1 (`a9305e4`) targets `select_ms` (swipe hot path), unrelated to parse-query latency. **Workflow-level decision needed before next UI-affecting batch can pass push gate**: (1) ship `services.parse_query` optimization per `research/investigations/01-swipe-latency-feasibility.md` 4-step path, (2) loosen spec §4 budget from <4s to <8s until #1 lands, OR (3) make Part B latency gate tier-aware (fail on swipe-loop p95, warn-only on parse-query). Recommendation: option 3 (lowest-friction, highest-fidelity — tracks the actual hot path that the user's IMP-1 fix targets). See `.claude/reviews/latest.md` Part B "Decision needed" section. B1bb migration backstop PASSED again; no source code regression; no governance violations.
 - [2026-04-25] REVIEW-REQUESTED: f17cb5e — A4 pool exhaustion guard (§5.6 + §6); migration 0008 applied; run `/review` (or "리뷰해줘") next (UI-affecting paths in scope — Part B will trigger).
+- [2026-04-25] REVIEW-REQUESTED: 2c7be51 — A5 §6 session logging infrastructure (SessionEvent model + emit_event + initial wire-up); migration 0009 applied; run `/review` (or "리뷰해줘") next (UI-affecting paths in scope — Part B will trigger).
 
 ---
 
@@ -188,6 +189,19 @@ Google OAuth only. Korean users need domestic login.
 ---
 
 ## Resolved
+
+### Sprint 0 A5: §6 Session Logging Infrastructure -- 2026-04-25
+
+#### LOG1. SessionEvent model + emit helpers + initial endpoint wire-up (§6) -- 2026-04-25
+Per research/spec/requirements.md v1.1 §6 (binding) + v1.1 SPEC-UPDATED additions. Foundation for measurement-dependent v1.0/v1.1 work — V_initial bit hypothesis (Topic 03), latency budget validation (Investigation 01 O1), bandit/CF training (Topic 05/07), Topic 09 ANN trigger detection.
+- [x] SessionEvent model: 13 event types (10 v1.0 + 3 v1.1: pool_creation, cohort_assignment, probe_turn), JSON payload, db_index on (session, created_at) + (event_type, created_at). Migration 0009 pure CreateModel.
+- [x] event_log.py: emit_event(event_type, session=None, user=None, **payload) never raises; emit_swipe_event() convenience wrapper.
+- [x] §6 implementation requirements: #1 Pool exhaustion ✅ (A4 prior); #2 Monotonic timestamps (auto_now_add microsecond + sequence_no tie-break); #3 Anonymized aggregation (user FK SET_NULL preserves history; both FKs nullable for pre-session events); #4 Bookmark rank_zone deferred to Sprint 4 bookmark endpoint.
+- [x] Wired NOW: session_start + pool_creation (SessionCreateView); swipe with timing_breakdown lock_ms/embed_ms/select_ms/prefetch_ms/total_ms via _mark closure (SwipeView normal path); session_end with end_reason='user_confirm' on action-card accept; failure events in services.py parse_query + generate_persona_report exception handlers (4 call sites; error_message truncated 200 chars).
+- [x] Wired LATER: tag_answer (Sprint 3 B-1), confidence_update (Sprint 3 C-1), bookmark/detail_view/external_url_click/session_extend (Sprint 4 result page), probe_turn (Sprint 1 chat phase), cohort_assignment (A/B testing wire-up).
+- [x] TestSessionEventLogging: 5 tests (create + never-raise + sequence_no per session + integration session_create + integration swipe with timing). 54 total tests pass.
+- [x] Reviewer: PASS. Security: PASS (error_message truncation verified at all 4 services.py call sites; no credential leakage; ORM-only SQL).
+- Commit: 2c7be51
 
 ### Sprint 0 A4: Pool Exhaustion Guard -- 2026-04-25
 
