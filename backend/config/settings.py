@@ -143,6 +143,7 @@ RECOMMENDATION = {
     'initial_explore_rounds': 10,    # kept for initial batch size
     'adaptive_k_clustering_enabled': False,  # Topic 06: silhouette-based k selection {1, 2}
     'soft_relevance_enabled':        False,  # Topic 06: softmax over centroid distances vs max
+    'gemini_rerank_enabled':         False,  # Topic 02: Gemini setwise rerank at session end
 }
 
 # -- External API keys -----------------------------------------------------

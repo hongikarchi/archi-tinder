@@ -912,6 +912,25 @@ class SessionResultView(APIView):
                 k=RC['top_k_results'],
             )
 
+        # Topic 02: Gemini setwise rerank (session-end, off swipe hot path)
+        if RC.get('gemini_rerank_enabled', False) and len(predicted_cards) >= 2:
+            candidate_metadata = [
+                {
+                    'building_id': c['building_id'],
+                    'name_en': c.get('name_en', ''),
+                    'atmosphere': c.get('atmosphere', ''),
+                    'material': c.get('material', ''),
+                    'architect': c.get('architect', ''),
+                    'style': c.get('style', ''),
+                    'program': c.get('program', ''),
+                }
+                for c in predicted_cards
+            ]
+            liked_summary = services._liked_summary_for_rerank(session.project.liked_ids)
+            new_order = services.rerank_candidates(candidate_metadata, liked_summary)
+            card_by_id = {c['building_id']: c for c in predicted_cards}
+            predicted_cards = [card_by_id[bid] for bid in new_order if bid in card_by_id]
+
         return Response({
             'session_id':          str(session.session_id),
             'session_status':      session.status,
