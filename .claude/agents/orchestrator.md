@@ -82,6 +82,32 @@ Spawn `back-maker` with a precise spec:
 
 Wait for back-maker to finish.
 
+### Step 2.5 -- Migration sanity check (defensive backstop)
+
+After back-maker returns, inspect its changed-files list (or `git status --short`). If
+ANY file under `backend/apps/*/migrations/` was created or modified, verify the
+migration was actually applied to the local dev DB:
+
+```bash
+cd backend && python3 manage.py showmigrations recommendation 2>&1 | grep -E '\[ \]'
+```
+
+- **No output** (all migrations applied): proceed to Step 3.
+- **Any `[ ]` entry** (unapplied migration in working tree): back-maker should have run
+  `manage.py migrate` per its own Rules (see back-maker.md "After writing > 2. Apply
+  migrations"). If they didn't, run it now yourself:
+  ```bash
+  cd backend && python3 manage.py migrate
+  ```
+  If `migrate` fails, treat it as a back-maker failure: enter Fix Loop (Step 5b) with
+  the migrate stderr as the spec — the migration file itself needs fixing, not the
+  surrounding code.
+
+This is belt-and-suspenders to back-maker's own rule. Postmortem reference: `190c830`
+shipped a migration without applying it; `/review` Part B failed at the next push gate
+with 500 ("column saved_ids does not exist"). See `.claude/reviews/88f0532.md`
+"Post-test Addendum" for the gap analysis.
+
 ### Step 3 -- Front Maker
 Spawn `front-maker` with a precise spec:
 - Which files to touch

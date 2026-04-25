@@ -38,6 +38,7 @@
 - [2026-04-25] REVIEW-REQUESTED: f04646f — max_consecutive_dislikes 10 -> 5 (Section 5.1 A2); run `/deep-review` next.
 - [2026-04-25] REVIEW-REQUESTED: 190c830 — Project schema migration (A3): liked_ids intensity shape + saved_ids field; run `/deep-review` next (UI-affecting paths in scope — recommend `/deep-web-test` after).
 - [2026-04-25] REVIEW-PASSED: 88f0532 — drift checks passed, 1 MINOR noted (see .claude/reviews/latest.md); run `git push` manually from this terminal
+- [2026-04-25] REVIEW-FAIL: 88f0532 — **stale: PASSED above is Part A (static) only.** `/deep-web-test` (Part B) ran AFTER and FAILed: migration 0007 not applied to running dev DB → POST /api/v1/analysis/sessions/ returns 500 ("column saved_ids does not exist"). **Two fixes needed** — see `.claude/reviews/latest.md` "Post-test Addendum" section: (1) immediate: `cd backend && python3 manage.py migrate` + restart runserver; (2) systemic: orchestrator pipeline gap — back-maker writes migration FILES but no agent runs `manage.py migrate` against the dev DB, so subsequent agents work on stale schema. Recommended Tier 1 fix: add migrate-after-migration rule to `.claude/agents/back-maker.md`. Note: HEAD has since advanced to 6984993 (unification commit) — after fixes, re-run unified `/review` on origin/main..HEAD (9 commits), not on the stale 88f0532 range.
 
 ---
 

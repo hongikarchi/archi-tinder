@@ -223,6 +223,28 @@ curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost:8001/api/v1/au
 ```
 Expect `200` (or `304`) from frontend and `400` from dev-login POST without body. If either fails: Part B FAIL with reason `Local dev server not running. Start frontend (npm run dev in frontend/) and backend (python3 manage.py runserver 8001) before re-running.`
 
+### B1bb. Migration sanity check (pre-launch backstop)
+
+Before spending time on dev-login + browser launch, verify the running dev DB has all
+declared migrations applied. This catches the common "migration file shipped but never
+applied locally" gap fast (~1 second) rather than letting it surface as a 500 error
+mid-test.
+
+```bash
+cd backend && python3 manage.py showmigrations 2>&1 | grep -E '\[ \]'
+```
+
+- **No output**: all migrations applied; proceed to B1c.
+- **Any `[ ]` entry**: Part B FAIL with reason `Unapplied migration detected (<list of [ ] entries>). Run \`cd backend && python3 manage.py migrate\` and restart backend (\`python3 manage.py runserver 8001\`) before re-running /review.`
+  - Backend is presumed already running at this point (B1b passed). Even though the
+    code reads the new schema correctly via Django ORM after migrate, restarting
+    runserver is recommended so cached connection state aligns with the new schema.
+
+This is Tier 2 of the systemic fix from `.claude/reviews/88f0532.md` "Post-test
+Addendum" — back-maker.md "After writing > 2. Apply migrations" is Tier 1 (source);
+this is the push-gate backstop that catches the gap if back-maker (or a manual edit)
+slipped through.
+
 ### B1c. Authenticate via dev-login
 ```bash
 DEV_SECRET=$(grep '^DEV_LOGIN_SECRET=' backend/.env | cut -d= -f2)
