@@ -3,7 +3,7 @@
 > Phase logic, mathematical formulas, and hyperparameter theory.
 > Research agent updates this file. Orchestrator references it for algorithm tasks.
 
-**Last Synced (Reporter):** 2026-04-25 190c830
+**Last Synced (Reporter):** 2026-04-25 a9305e4
 
 ---
 
@@ -24,6 +24,8 @@ Gathers initial user feedback within the bounded pool while ensuring visual dive
 
 - Execute **Greedy Farthest-point Sampling** within the pool to serve cards that are as visually distinct from one another as possible.
 - **Transition:** Phase 1 -> Phase 2 when Like count reaches `min_likes_for_clustering` (e.g., 3).
+
+_(Updated 2026-04-25 a9305e4: `farthest_point_from_pool()` (engine.py:421-455) corrected from inverted max-max accumulator to true Gonzalez max-min sampling per Spec v1.1 §11.1 IMP-1. Pre-fix code silently picked near-duplicates of exposed items. Bundled with NumPy batch matmul vectorization (~22ms → ~1ms per call, 20-50× speedup). Topic 11's 2-approximation bound and Section 4 C-3 Better layer 3's "first 3-5 diverse seeds" now actually deliver diverse selection.)_
 
 ### Phase 2: Multi-modal Formulation & Exploitation (MMR)
 The core engine. Tracks recent moods, analyzes multi-faceted tastes, and applies diversity penalties.

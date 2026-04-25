@@ -47,14 +47,14 @@ flowchart TD
 | File | Responsibility |
 |------|---------------|
 | `models.py` | Django ORM models: Project (liked_ids, disliked_ids, saved_ids, report, report_image, session_id), AnalysisSession (phase, pool_ids, exposed_ids, pref_vector, convergence_history, etc.), SwipeEvent (unique_together session+idempotency_key); **schema A3:** Project.liked_ids shape now list[{id, intensity}] (was list[str]); Project.saved_ids NEW (list[{id, saved_at}]) for top-K bookmark / primary-metric source; Project.disliked_ids unchanged |
-| `engine.py` | Recommendation algorithm: pool creation, farthest-point, K-Means+MMR, convergence, top-K; centroid cache key uses spread dimensions (0, 191, -1) for collision resistance; **pool-score normalization (Topic 12):** _build_score_cases returns 3-tuple with total_weight; create_bounded_pool divides score by total_weight via ::float cast -> [0,1] range; seed boost 1.1 |
+| `engine.py` | Recommendation algorithm: pool creation, farthest-point, K-Means+MMR, convergence, top-K; centroid cache key uses spread dimensions (0, 191, -1) for collision resistance; **pool-score normalization (Topic 12):** _build_score_cases returns 3-tuple with total_weight; create_bounded_pool divides score by total_weight via ::float cast -> [0,1] range; seed boost 1.1; **IMP-1 (Spec v1.1 §11.1):** farthest_point_from_pool max-max → max-min correctness fix (Gonzalez sampling) + NumPy batch matmul (C @ E.T) vectorization, ~22ms → ~1ms per call (20-50× speedup); signature preserved across all 12 production callers |
 | `services.py` | Gemini LLM: query parsing (gemini-2.5-flash), persona report generation; Imagen 3: AI architecture image generation; retry wrapper with 1-retry + logging |
 | `views.py` | All REST endpoints -- session CRUD, swipes, projects, images, auth, report image generation; `select_for_update()` on session query + `session.save()` before prefetch to prevent concurrent exposed_ids staleness; persona report returns structured errors (502 with error_type); building_id validation returns 400; prefetch computed outside transaction.atomic(); pool_embeddings cached across transaction boundary (no redundant fetch for prefetch); dislike embeddings batch-fetched via get_pool_embeddings; **convergence signal integrity (Topic 10 Option A):** exploring -> analyzing transition clears `convergence_history` + `previous_pref_vector` (prevents cross-metric centroid-vs-pref_vector Delta-V); analyzing-phase Delta-V appended on every swipe (not gated by action == like) so `convergence_window` counts rounds, not likes; **A3:** _liked_id_only(liked_ids) helper handles legacy and new shape; swipe like-write appends {id, intensity} dict with optional intensity from request body (clamped [0,2], default 1.0); persona report path extracts plain IDs via helper |
 | `config/settings.py` | RECOMMENDATION dict (12 hyperparameters, `max_consecutive_dislikes=5`), JWT config, DB config (CONN_MAX_AGE=600), CORS; uses STORAGES dict (Django 4.2+ format) for WhiteNoise static files |
 | `apps/accounts/views.py` | Google/Kakao/Naver OAuth, dev-login, JWT token management; all login views use `authentication_classes = []` |
 | `tests/conftest.py` | pytest fixtures: SQLite in-memory DB override, user_profile, auth_client, api_client |
 | `tests/test_auth.py` | 7 auth integration tests (Google login mock, token refresh, logout, dev-login) |
-| `tests/test_sessions.py` | 18+ session lifecycle tests (creation, swipes, idempotency, phase transitions, client-buffer merge, state resume, convergence signal integrity, pool-score normalization, project schema A3) with mocked engine.py; includes `TestConvergenceSignalIntegrity` for Topic 10 Option A fixes, `TestPoolScoreNormalization` for Topic 12 normalization, and `TestProjectSchemaA3` (6 tests: like intensity dict, explicit intensity, clamp, legacy/new shape helper, saved_ids default, saved_ids serialized); 39 total tests pass |
+| `tests/test_sessions.py` | 18+ session lifecycle tests (creation, swipes, idempotency, phase transitions, client-buffer merge, state resume, convergence signal integrity, pool-score normalization, project schema A3) with mocked engine.py; includes `TestConvergenceSignalIntegrity` for Topic 10 Option A fixes, `TestPoolScoreNormalization` for Topic 12 normalization, `TestProjectSchemaA3` (6 tests: like intensity dict, explicit intensity, clamp, legacy/new shape helper, saved_ids default, saved_ids serialized), and `TestFarthestPointFromPool` (5 tests: max-min regression counterexample, none on no candidates, random on no exposed, skip missing embeddings, random when all exposed missing); 44 total tests pass |
 | `tests/test_projects.py` | 8 project + batch tests (CRUD, pagination, auth, building batch) |
 
 ## Frontend Structure
@@ -162,41 +162,28 @@ flowchart TD
 - **Pool score normalization (Topic 12, Sprint 0 A1):** _build_score_cases() returns total_weight alongside cases and params; create_bounded_pool SQL output is normalized via ((sum)::float / total_weight), producing scores in [0,1] regardless of active-filter count. Seed boost is clean 1.1. Fixes weight-scale drift across queries with different filter counts (3-filter max 6 vs 8-filter max 36). Tier-grouping at views.py:188 unchanged behaviorally since defaultdict sorts int or float keys identically.
 - **Max consecutive dislikes 10 → 5 (Sprint 0 A2, Section 5.1):** silent dislike fallback (engine.get_dislike_fallback) now fires after 5 consecutive dislikes rather than 10. settings.py canonical value + views.py RC.get() fallbacks + tools/algorithm_tester.py PRODUCTION_PARAMS baseline all aligned. Faster cadence lowers dead-time before the engine pivots away from mismatched neighborhoods. Per spec this is silent normal-flow auto-correction (no user notice).
 - **Project schema migration (Sprint 0 A3, spec Section 7):** Project.liked_ids shape now list[{id, intensity}] with backfill default 1.0 (migration 0007). NEW Project.saved_ids field (list[{id, saved_at}]) plumbed as primary-metric source for top-K bookmark (Section 8). disliked_ids unchanged. Backend _liked_id_only and frontend extractLikedIds helpers handle both legacy and new shapes for backward compat. Sets up Sprint 3 A-1 (Love intensity 1.8) and Sprint 4 result-page bookmark UI. No bookmark endpoint yet -- saved_ids is read-only on serializer.
+- **Farthest-point correctness + vectorization (Spec v1.1 §11.1 IMP-1):** engine.py farthest_point_from_pool was max-max (picked near-duplicates of exposed items) due to inverted accumulator; fixed to max-min per Gonzalez 2-approximation. Bundled with NumPy batch matmul vectorization (replaces ~7500 individual np.dot calls with single BLAS call) for 20-50× speedup. Bug was invisible to integration tests because test_sessions.py:54 mocks the function; new TestFarthestPointFromPool unit tests catch the regression directly. All 12 production callers (views.py × 10, algorithm_tester.py × 2) unaffected — signature + return contract preserved. Topic 11's "Gonzalez bound" and Section 4 C-3 Better layer 3 ("first 3-5 diverse seed cards") now actually deliver diverse selection.
 
 ### Pending
 - Kakao + Naver OAuth
 
 ## Last Updated (Claude)
 - **Date:** 2026-04-25
-- **Commits:** 190c830 -- feat: project schema migration for like intensity + saved_ids (A3)
-- **Phase:** Sprint 0 A3 -- Project schema migration (liked_ids intensity + saved_ids)
+- **Commits:** a9305e4 -- fix: farthest_point max-min correctness + NumPy vectorization (IMP-1)
+- **Phase:** Sprint 0 IMP-1 -- farthest_point max-max → max-min correctness fix (Gonzalez sampling) + NumPy vectorization (Spec v1.1 §11.1)
 - **Changes:**
-  - `backend/apps/recommendation/migrations/0007_project_saved_ids_and_liked_intensity.py` -- Migration 0007: AddField saved_ids + RunPython backfill of liked_ids shape (idempotent). Reverse migration converts dicts back to strings for safe dev rollback.
-  - `backend/apps/recommendation/models.py` -- Project.liked_ids shape now list[{id, intensity}] (was list[str]); Project.saved_ids NEW (list[{id, saved_at}]) for top-K bookmark / primary-metric source; Project.disliked_ids unchanged.
-  - `backend/apps/recommendation/serializers.py` -- saved_ids added as read-only field; liked_ids serializes new dict shape.
-  - `backend/apps/recommendation/views.py` -- _liked_id_only(liked_ids) helper handles legacy and new shape; swipe like-write appends {id, intensity} dict with optional intensity from request body (clamped [0,2], default 1.0); persona report path extracts plain IDs via helper.
-  - `backend/tests/test_sessions.py` -- New TestProjectSchemaA3 class (6 tests); 39 total tests pass.
-  - `frontend/src/App.jsx` -- extractLikedIds(rawLikedIds) helper handles legacy list[str] and new list[{id, intensity}] shapes; applied at 3 sites in handleLogin.
-- **Verification:** 39 backend tests pass (33 prior + 6 new). Reviewer: PASS. Security: PASS (1 pre-existing Warning on Project read-modify-write race; deferred).
+  - `backend/apps/recommendation/engine.py` -- farthest_point_from_pool: inverted max-max accumulator corrected to true Gonzalez max-min sampling (picks candidate maximizing distance to its NEAREST exposed item). NumPy batch matmul (C @ E.T) vectorization replaces ~7500 individual np.dot calls; ~22ms → ~1ms per call (20-50× speedup). Signature + return contract preserved across all 12 production callers (views.py × 10, algorithm_tester.py × 2). All fallbacks preserved (None on no candidates, random.choice on no anchor, defensive skip on missing embeddings).
+  - `backend/tests/test_sessions.py` -- New TestFarthestPointFromPool class (5 tests): test_selects_max_min_diverse_candidate (regression counterexample), test_returns_none_when_no_unexposed_candidates, test_returns_random_candidate_when_no_exposed, test_skips_candidates_missing_from_embeddings, test_returns_random_when_all_exposed_missing_from_embeddings. Counterexample fixture uses 3D orthogonal A⊥B geometry (corrected from spec text geometric error). 44 total tests pass.
+- **Verification:** 44 backend tests pass (39 prior + 5 new). Reviewer: PASS. Security: PASS.
 - **Change diagram:**
 ```mermaid
 graph TD
     subgraph Backend
-        migrations_0007.py:::new
-        models.py:::modified
-        serializers.py:::modified
-        views.py:::modified
+        engine.py:::modified
         test_sessions.py:::modified
     end
-    subgraph Frontend
-        App.jsx:::modified
-    end
-    migrations_0007.py --> models.py
-    models.py --> serializers.py
-    models.py --> views.py
-    views.py --> test_sessions.py
+    engine.py --> test_sessions.py
 
-    classDef new fill:#10b981,color:#fff
     classDef modified fill:#f59e0b,color:#000
 ```
 

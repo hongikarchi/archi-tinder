@@ -39,6 +39,10 @@
 - [2026-04-25] REVIEW-REQUESTED: 190c830 — Project schema migration (A3): liked_ids intensity shape + saved_ids field; run `/deep-review` next (UI-affecting paths in scope — recommend `/deep-web-test` after).
 - [2026-04-25] REVIEW-PASSED: 88f0532 — drift checks passed, 1 MINOR noted (see .claude/reviews/latest.md); run `git push` manually from this terminal
 - [2026-04-25] REVIEW-FAIL: 88f0532 — **stale: PASSED above is Part A (static) only.** `/deep-web-test` (Part B) ran AFTER and FAILed: migration 0007 not applied to running dev DB → POST /api/v1/analysis/sessions/ returns 500 ("column saved_ids does not exist"). **Two fixes needed** — see `.claude/reviews/latest.md` "Post-test Addendum" section: (1) immediate: `cd backend && python3 manage.py migrate` + restart runserver; (2) systemic: orchestrator pipeline gap — back-maker writes migration FILES but no agent runs `manage.py migrate` against the dev DB, so subsequent agents work on stale schema. Recommended Tier 1 fix: add migrate-after-migration rule to `.claude/agents/back-maker.md`. Note: HEAD has since advanced to 6984993 (unification commit) — after fixes, re-run unified `/review` on origin/main..HEAD (9 commits), not on the stale 88f0532 range.
+- [2026-04-25] REVIEW-FAIL: 5d85b90 — static review PASS but browser test FAIL (Persona Brutalist time-to-first-card 5496 ms > 4000 ms hard ceiling; LLM produced "trouble understanding" + diverse_random fallback for query "concrete brutalist museum"); see .claude/reviews/latest.md. **No source bug** — Part A clean (1 MINOR: orchestrator.md Step 2.5 hardcodes `recommendation` app filter, should match review.md Step B1bb's app-agnostic check). Likely cause: upstream Gemini API latency / quality jitter. The migration-gap fix (`5d85b90` 3-tier guard) itself works correctly: B1bb backstop PASSED (no unapplied migrations detected). Decision needed: (a) re-run /review later (transient), (b) investigate parse-query latency, or (c) loosen spec budget if 5s is the new normal.
+- [2026-04-25] SPEC-UPDATED: v1.0 → v1.1 — Sections 3, 4, 6, 10, 11 + new 11.1. Incorporates findings from 10 post-spec investigations (`research/investigations/01-10`; index at `research/investigations/README.md`). Highlights for main: (a) **NEW Section 11.1 IMP-1**: `engine.py:410-448 farthest_point_from_pool()` correctness bug (max-max → max-min, one-line fix; bundle with NumPy vectorization for 20-50× speedup). (b) **Section 11 Topic 01 corrected**: injection point `get_top_k_mmr()` → `create_bounded_pool() q_text` parameter; Topic 01 needs Topic 03 v_initial as RRF vector probe (ship Topic 03 first, Topic 01 second). (c) **Section 6 logging**: new events `pool_creation` / `cohort_assignment` / `probe_turn` + `swipe.timing_breakdown` (lock_ms / embed_ms / select_ms / prefetch_ms / total_ms) + `bookmark.rank_corpus`. (d) **Section 4**: per-swipe latency 측정 정의 명확화 (backend RTT vs user-visible) + V_initial bit hypothesis 가 corpus-wide narrowing 임을 명시 (pool-internal 만으로는 ~2.9 bits 부족) + A-1 row 에 γ retune Optuna search space + B-1 row 에 Option F selection mechanism. (e) **Section 11 Topic 02 ∩ Topic 04**: rerank-then-diversify (Option α) — single `q_i` swap composition. (f) **Section 11 Topic 11**: Gonzalez bound 은 IMP-1 fix 의존. (g) **Section 10**: open #5/#7 resolved (cross-ref investigation 06), 신규 #15 (conversation history persistence). Non-breaking — main 의 진행 중 작업 (Topic 10/12, Section 5.1 trigger, A-1 schema migration) 과 무관. 5d85b90 의 latency FAIL 관련해서는 `research/investigations/01-swipe-latency-feasibility.md` 의 4-step 최적화 경로 참조.
+- [2026-04-25] REVIEW-REQUESTED: 2f8a943 — orchestrator Step 2.5 showmigrations app-agnostic (Part A MINOR fix from /review on 5d85b90); run `/review` next.
+- [2026-04-25] REVIEW-REQUESTED: a9305e4 — IMP-1 farthest_point max-min correctness + NumPy vectorization; run `/review` (or "리뷰해줘") next (UI-affecting paths in scope — Part B will trigger).
 
 ---
 
@@ -145,7 +149,7 @@
 > - `research/search/**` (12 topic deep-dives) is reasoning archive — accessed directly via filesystem only when deep-justification is needed. No Task.md pointers.
 > - `SPEC-UPDATED` entries in `## Handoffs` (above) carry incremental change signals.
 
-- [SPEC-READY 2026-04-25] requirements-spec-v1.0 — consolidated search flow requirements + Section 11 actionable directives per topic. **Entry**: `research/spec/requirements.md` (binding). Reference-only: `research/spec/research-priority-rebaselined.md` (roadmap recommendation, non-binding) and `research/search/**` (reasoning archive). Main terminal: read spec, plan independently, implement via orchestrator pipeline.
+- [SPEC-READY 2026-04-25] requirements-spec-v1.1 — consolidated search flow requirements + Section 11 actionable directives per topic + Section 11.1 pre-existing implementation issues (correctness bug + plumbing gaps + corpus label gate). **Entry**: `research/spec/requirements.md` (binding). Reference: `research/investigations/README.md` (post-spec investigations index — implementation guidance per topic), `research/spec/research-priority-rebaselined.md` (roadmap recommendation, non-binding), `research/search/**` (reasoning archive). Main terminal: read spec, scan latest SPEC-UPDATED in Handoffs for incremental changes, plan independently, implement via orchestrator pipeline.
 
 ---
 
@@ -180,6 +184,18 @@ Google OAuth only. Korean users need domestic login.
 ---
 
 ## Resolved
+
+### Sprint 0 IMP-1: Farthest-point Correctness + Vectorization -- 2026-04-25
+
+#### IMP1. Farthest_point max-min correctness fix + NumPy vectorization (Spec v1.1 §11.1) -- 2026-04-25
+Per research/spec/requirements.md v1.1 §11.1 IMP-1 + research/investigations/02-farthest-point-correctness-and-vectorization.md. Bundles correctness bug fix and 20-50× speedup vectorization in one commit per investigation 02's recommendation.
+- [x] Bug: max-max → max-min accumulator. Function name implies Gonzalez farthest-point sampling (max distance to NEAREST exposed); pre-fix code computed max distance to FARTHEST exposed, silently picking near-duplicates of exposed items.
+- [x] NumPy vectorization: nested Python loop (~7500 individual np.dot calls) → single BLAS matmul (C @ E.T + max(axis=1) + argmin). pgvector rejected (CROSS JOIN anti-pattern, network RTT 50-100× the local NumPy cost).
+- [x] Signature + return contract preserved across all 12 production callers (views.py × 10, algorithm_tester.py × 2).
+- [x] All fallbacks preserved (None on no candidates, random.choice on no anchor, defensive skip on missing-from-embeddings).
+- [x] New TestFarthestPointFromPool class (5 tests). Counterexample fixture corrected from spec text geometric error (3D orthogonal A⊥B, X near A, Y equidistant cos=0.5). Pre-fix picks X (score 0.8590); post-fix picks Y (score 0.5000). 44 total tests pass (39 prior + 5 new).
+- [x] Reviewer: PASS. Security: PASS.
+- Commit: a9305e4
 
 ### Sprint 0 A3: Project Schema Migration -- 2026-04-25
 
