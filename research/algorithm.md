@@ -3,7 +3,7 @@
 > Phase logic, mathematical formulas, and hyperparameter theory.
 > Research agent updates this file. Orchestrator references it for algorithm tasks.
 
-**Last Synced (Reporter):** 2026-04-25 2c7be51
+**Last Synced (Reporter):** 2026-04-25 e290287
 
 ---
 
@@ -18,6 +18,8 @@ Translates the user's initial chat prompt into a semantic vector space.
 4. **Bounded Pool Creation:** Fetch the top N items (e.g., 150) that pass the hard filters and have the highest cosine similarity to V_initial. This becomes the session's exclusive card pool.
 
    _(Updated 2026-04-25 8bf73b8: `_build_score_cases` returns `(cases, params, total_weight)`; `create_bounded_pool` SQL output normalized to [0, 1] via `((sum)::float / total_weight)`; seed boost `1.1`. Fixes weight-scale drift across queries with different filter counts. See spec Section 11 Topic 12.)_
+
+_(Updated 2026-04-25 e290287: Sprint 1 §3 chat phase rewrite (Investigation 06) — `services.parse_query(conversation_history)` now supports 0-2 turn probe per spec §3, output schema gains `visual_description` (English HyDE seed) + `filter_priority` + `raw_query` (first user turn verbatim). LLM-autonomous probe axis selection per Investigation 06 9 few-shot examples. Spec v1.3 §11.1 IMP-4 push-gate-blocker fix shipped: `thinking_config=ThinkingConfig(thinking_budget=0)` on parse_query + generate_persona_report — root cause of monotonic 3437→5496→6706 ms latency drift was Gemini 2.5-flash default dynamic thinking; expected post-fix p50 ~1000-1500ms. Mandatory companion `parse_query_timing` SessionEvent emitted for measurement.)_
 
 ### Phase 1: Bounded Exploration
 Gathers initial user feedback within the bounded pool while ensuring visual diversity.

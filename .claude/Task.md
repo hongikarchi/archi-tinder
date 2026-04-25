@@ -48,6 +48,7 @@
 - [2026-04-25] REVIEW-FAIL: f607e73 — **Part A: PASS (0 findings, genuinely clean — IMP-1 fix exemplary).** Part B FAIL: Persona Brutalist time-to-first-card **6706 ms > 4000 ms hard ceiling** (parse-query latency alone). **Second consecutive Part B FAIL on same gate; latency monotonically increasing (3437 → 5496 → 6706 ms across 88f0532 / 5d85b90 / f607e73 runs)** — no longer plausibly Gemini jitter, looks structural. IMP-1 (`a9305e4`) targets `select_ms` (swipe hot path), unrelated to parse-query latency. **Workflow-level decision needed before next UI-affecting batch can pass push gate**: (1) ship `services.parse_query` optimization per `research/investigations/01-swipe-latency-feasibility.md` 4-step path, (2) loosen spec §4 budget from <4s to <8s until #1 lands, OR (3) make Part B latency gate tier-aware (fail on swipe-loop p95, warn-only on parse-query). Recommendation: option 3 (lowest-friction, highest-fidelity — tracks the actual hot path that the user's IMP-1 fix targets). See `.claude/reviews/latest.md` Part B "Decision needed" section. B1bb migration backstop PASSED again; no source code regression; no governance violations.
 - [2026-04-25] REVIEW-REQUESTED: f17cb5e — A4 pool exhaustion guard (§5.6 + §6); migration 0008 applied; run `/review` (or "리뷰해줘") next (UI-affecting paths in scope — Part B will trigger).
 - [2026-04-25] REVIEW-REQUESTED: 2c7be51 — A5 §6 session logging infrastructure (SessionEvent model + emit_event + initial wire-up); migration 0009 applied; run `/review` (or "리뷰해줘") next (UI-affecting paths in scope — Part B will trigger).
+- [2026-04-25] REVIEW-REQUESTED: e290287 — Sprint 1 chat phase rewrite + Spec v1.3 §11.1 IMP-4 push-gate-blocker fix; migration 0010 applied; run `/review` (or "리뷰해줘") next (UI-affecting paths in scope — Part B will trigger; expect ~1000-1500ms parse-query p50 vs prior 5496ms FAIL).
 
 ---
 
@@ -189,6 +190,26 @@ Google OAuth only. Korean users need domestic login.
 ---
 
 ## Resolved
+
+### Sprint 1: Chat Phase Rewrite + IMP-4 Push-Gate Fix -- 2026-04-25
+
+#### CHAT1. Chat phase 0-2 turn probe + IMP-4 push-gate-blocker (Spec v1.3 §3 + §11.1 IMP-4) -- 2026-04-25
+Per research/spec/requirements.md v1.3 §3 + §11.1 IMP-4 + research/investigations/06-chat-phase-prompt-design-3c.md (full prompt design + 9 few-shot examples). Bundles Sprint 1 chat phase rewrite + IMP-4 URGENT push-gate-blocker (root cause: Gemini 2.5-flash dynamic thinking mode, 5× generation overhead).
+- [x] services._CHAT_PHASE_SYSTEM_PROMPT replaces _PARSE_QUERY_PROMPT (Investigation 06 full system prompt with 9 few-shot examples).
+- [x] services.parse_query(conversation_history) multi-turn signature with backward-compat shim for legacy string.
+- [x] Multi-turn Gemini call: contents=[Content(role,parts)] history + system_instruction.
+- [x] Output schema: terminal {filters, filter_priority, raw_query, visual_description, reply} OR probe {probe_needed=true, probe_question, reply}.
+- [x] raw_query = first user message verbatim (BM25 stability); visual_description always English (HyDE compatibility).
+- [x] §11.1 IMP-4: thinking_config=ThinkingConfig(thinking_budget=0) on BOTH parse_query AND generate_persona_report. Expected p50 1000-1500ms (vs prior 5496ms Part B FAIL).
+- [x] §6 + IMP-4 mandatory companion: parse_query_timing SessionEvent (gemini_total_ms, gen_ms, input_tokens, output_tokens, thinking_tokens). Migration 0010 AlterField for choices change.
+- [x] ParseQueryView input validation: history > 10 / text > 2000 / non-dict / role ∉ {user,model} → 400.
+- [x] Frontend (LLMSearchPage + client.js): parseQuery accepts string OR list; probe path renders probe_question + accumulates conversationHistory; terminal path resets to []. Backward-compat for undefined probe_needed.
+- [x] Resolves §10 #5 (bare query "random" — Investigation 06 Example 7 0-turn skip with diverse_random fallback), §10 #7 (Korean — bilingual prompt design).
+- [x] §10 #15 conversation history persistence: chosen frontend-ephemeral (Investigation 06 default; backend stateless). Future: add backend storage if needed.
+- [x] Pre-deploy gate: _CHAT_PHASE_FEW_SHOT_STYLE_LABELS frozenset asserted against architecture_vectors corpus via pytest test (skips on SQLite).
+- [x] 10 new tests in test_chat_phase.py (5 classes: TestChatPhaseParseQuery, TestPreDeployStyleLabelGate, TestGeneratePersonaReportThinkingBudget, TestParseQueryTimingEvent, TestParseQueryInputValidation). 63 total tests pass + 1 skipped. Zero regressions.
+- [x] Reviewer: PASS (after migration 0010 added in fix-loop cycle 2). Security: PASS.
+- Commit: e290287
 
 ### Sprint 0 A5: §6 Session Logging Infrastructure -- 2026-04-25
 
