@@ -54,6 +54,7 @@
 - [2026-04-25] REVIEW-REQUESTED: f3b8381 — Sprint 3 C-1 confidence bar (Investigation 13 + Spec v1.2 dislike-bias telemetry); UI-affecting paths in scope (SwipePage + App.jsx changes). run `/review` (or "리뷰해줘") next.
 - [2026-04-25] REVIEW-REQUESTED: 96b91a6 — Sprint 4 Topic 06 adaptive k + soft-assignment relevance (both flags default OFF backward-compat); run `/review` (or "리뷰해줘") next (UI-affecting paths NOT in scope — Part B optional).
 - [2026-04-25] REVIEW-REQUESTED: 03c697b — Sprint 4 Topic 02 Gemini setwise rerank (default OFF backward-compat); UI-affecting paths in scope (SessionResultView). run `/review` (or "리뷰해줘") next.
+- [2026-04-25] REVIEW-REQUESTED: de9bfa3 — Sprint 4 Topic 04 DPP + MMR λ ramp (both flags default OFF backward-compat); UI-affecting paths in scope (SessionResultView). run `/review` (or "리뷰해줘") next.
 
 ---
 
@@ -195,6 +196,23 @@ Google OAuth only. Korean users need domestic login.
 ---
 
 ## Resolved
+
+### Sprint 4 Topic 04: DPP Greedy MAP + MMR Lambda Ramp -- 2026-04-25
+
+#### TOPIC04. DPP greedy MAP + MMR lambda ramp (Spec §11 + Investigation 14) -- 2026-04-25
+Per research/spec/requirements.md v1.3 §11 Topic 04 + research/investigations/14-topic04-dpp-kernel-design.md + Spec v1.2 SPEC-UPDATED additions (default α=1.0, q transform, Cholesky singularity threshold).
+- [x] settings.py RECOMMENDATION: 5 new flags/values (mmr_lambda_ramp_enabled F, mmr_lambda_ramp_n_ref 10, dpp_topk_enabled F, dpp_alpha 1.0, dpp_singularity_eps 1e-9). All defaults preserve current behavior.
+- [x] (a) MMR λ ramp: 1-line change in compute_mmr_next; λ(t) = λ_base · min(1, |exposed|/N_ref). λ hoisted outside per-candidate loop (micro-optimization). When flag off, λ_base used as-is.
+- [x] (b) compute_dpp_topk(candidates, embeddings, q_values, k, alpha): Wilhelm kernel L_ii=q², L_ij=α·q_i·q_j·⟨v_i,v_j⟩ via Chen 2018 Cholesky-incremental greedy MAP. O(N·k²) total.
+- [x] α clamped [0, 1] (α>1 breaks PSD per Investigation 14).
+- [x] Singularity (residual<eps=1e-9) → terminate selection + pad q-ordered remaining (no double-selection via valid_mask).
+- [x] 2-phase fallback: phase-1 embedding/q failure → ids[:k]; phase-2 Cholesky exception → q-sorted top-k.
+- [x] Embedding fetch via get_pool_embeddings(ids), NOT from card dicts (which lack embedding field; would crash). Critical correctness flag from back-maker.
+- [x] Standalone Topic 04 q derivation: q = max centroid cosine (range [0.4, 0.95] typical, no rescale needed). RRF fusion + min-max rescale = upcoming Option α composition task.
+- [x] views.py SessionResultView DPP block AFTER Topic 02 rerank block (preserves cosine→rerank→DPP composition order). Gated on dpp_topk_enabled + len>=2 + session.like_vectors.
+- [x] 15 new tests in test_topic04.py (4 ramp + 7 DPP + 3 integration + 1 early-return). 119 total pass + 1 skipped. Existing 104 unchanged.
+- [x] Reviewer: PASS. Security: PASS.
+- Commit: de9bfa3
 
 ### Sprint 4 Topic 02: Gemini Session-End Setwise Rerank -- 2026-04-25
 
