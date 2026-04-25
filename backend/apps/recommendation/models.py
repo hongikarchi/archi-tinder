@@ -106,8 +106,9 @@ class SessionEvent(models.Model):
         ('detail_view',        'Detail View'),
         ('external_url_click', 'External URL Click'),
         ('failure',            'Failure'),
-        ('probe_turn',         'Probe Turn'),
-        ('cohort_assignment',  'Cohort Assignment'),
+        ('probe_turn',          'Probe Turn'),
+        ('cohort_assignment',   'Cohort Assignment'),
+        ('parse_query_timing',  'Parse Query Timing'),
     ]
 
     user        = models.ForeignKey(

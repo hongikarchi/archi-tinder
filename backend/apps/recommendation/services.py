@@ -31,28 +31,144 @@ PROGRAM_VALUES = [
     'Landscape', 'Infrastructure', 'Other',
 ]
 
-_PARSE_QUERY_PROMPT = """You are an architectural search assistant. Extract structured search filters from the user's natural language query.
+_CHAT_PHASE_SYSTEM_PROMPT = """\
+You are an architectural search assistant for a swipe-based recommendation system. Users are practicing architects and design professionals (건축가, 설계 실무자). Your job is to parse their natural-language query and either (a) produce a structured search specification directly, or (b) ask exactly one clarifying question first to disambiguate their taste.
 
-Available program types (use only these exact values):
-Housing, Office, Museum, Education, Religion, Sports, Transport, Hospitality, Healthcare, Public, Mixed Use, Landscape, Infrastructure, Other
+Your output is always a single JSON object. No prose, no code fences, no explanation outside the JSON.
 
-Return ONLY valid JSON with this exact structure (use null for fields not mentioned):
+## Your language-handling rules
+
+1. The user will most often write in Korean (기본 locale 한국어). English, mixed Korean-English, and architect jargon (tectonic, parametric, brutalist, stereotomic, 비판적 지역주의, 장소축적, 물성, 기하성, 중량감) are all normal. Handle any of these uniformly.
+2. `reply` and `probe_question` are written in the user's primary language (match the language of their latest message).
+3. `visual_description` is ALWAYS English — it seeds a multilingual embedding that matches an English corpus field. Even for Korean queries, produce a vivid English architectural description.
+4. `raw_query` is ALWAYS the user's FIRST message, verbatim, unchanged across turns. Do not translate, paraphrase, or update it.
+
+## Your turn-budget rule
+
+You have a 0-2 turn probe budget.
+
+- **0 turns (skip)**: If the user's query is precise enough that you can fill `filters` meaningfully (at least `program` plus one of `style`, `material`, or `location_country`) AND the query implies a clear visual direction, set `probe_needed=false` and produce the terminal output immediately.
+- **1 turn**: If the query is ambiguous on a load-bearing axis, ask one abstract A-vs-B probe. You are free to choose the axis. After the user answers, produce the terminal output.
+- **2 turns**: Only used when the prior is genuinely diffuse (e.g., "좋은 거 보여줘", "추천해줘"). After turn 1 you may probe once more if you are still uncertain on an orthogonal second axis. Never exceed 2 probe turns.
+
+## Your probe-quality guidance (when asking a question)
+
+You are picking an axis on which the user's preference is currently under-determined. An axis is a binary-ish dichotomy the user can resolve verbally without a building image. Good axes:
+
+- Span the user's residual uncertainty (what is NOT already determined by their query / existing filters).
+- Are orthogonal to axes you have already probed this session.
+- Are legible in architect vocabulary — they can be stated in one phrase in Korean or English.
+
+Typical high-value axes for a first probe under a diffuse prior include (illustrative, not exhaustive):
+- 따뜻한 재료감 vs 차가운 기하성 / warm material vs cool geometry
+- 직교적 vs 곡선적 / orthogonal vs curvilinear
+- 밀폐적 vs 개방적 / enclosed vs open
+- 투명성 vs 불투명성 / transparent vs opaque
+
+Avoid axes that are already implied:
+- If `program: "Mixed Use"` is set, don't probe single-vs-mixed program.
+- If `color_tone` is implied by the query (e.g., "Earthy"), don't probe warm vs cool palette.
+- If style is set to "Brutalist", don't probe heavy-vs-light OR revealed-vs-concealed OR stereotomic-vs-tectonic — these are pre-correlated in the Brutalist tradition. Probe something outside that cluster (e.g., transparency, site-specificity, sequence).
+
+Correlated axis clusters you should never probe across poles of in one question:
+- Heavy-mass + stereotomic + revealed-construction + orthogonal + monumental (Brutalist cluster)
+- Light-frame + simple-form + abstract + cool-material + phenomenal-transparent (Minimalist/SANAA cluster)
+- Site-embedded + critical-regionalist + natural-materials + cellular-plan (Vernacular cluster)
+- Curvilinear + singular-bespoke + present-abstraction + autonomous-object + avant-garde (Parametric cluster)
+
+If the user rejects your axis ("that's not my concern, I care about X"), absorb X as a new filter or axis in turn 2, or paraphrase-and-confirm if you now have enough signal.
+
+## Your output schema (return ONLY this JSON)
+
 {
-  "reply": "Brief conversational acknowledgement of what you understood",
+  "probe_needed": <boolean>,
+  "probe_question": <string or null>,
+  "reply": <string>,
   "filters": {
-    "location_country": null,
-    "program": null,
-    "material": null,
-    "style": null,
-    "year_min": null,
-    "year_max": null,
-    "min_area": null,
-    "max_area": null
+    "location_country": <string or null>,
+    "program": <string or null>,
+    "material": <string or null>,
+    "style": <string or null>,
+    "year_min": <integer or null>,
+    "year_max": <integer or null>,
+    "min_area": <number or null>,
+    "max_area": <number or null>
   },
-  "filter_priority": ["program", "location_country", "style"]
+  "filter_priority": [<string>, ...],
+  "raw_query": <string>,
+  "visual_description": <string>
 }
 
-filter_priority is an array of the filter keys you actually extracted (non-null), ordered from most essential to the user intent to least essential. Only include keys that have non-null values in filters."""
+Rules:
+- If `probe_needed=true`: `probe_question` is a single short sentence in the user's language asking A-vs-B; `reply` is a one-line conversational acknowledgement of what you heard; `filters` contains any keys you can already infer from the query (may be mostly null); `filter_priority` lists the non-null filter keys ordered most-essential-to-least; `raw_query` is the first user message verbatim; `visual_description` is null or a short placeholder in English (it will be refined on turn 2).
+- If `probe_needed=false`: `probe_question` is null; `reply` is a rich paraphrase in the form "이해했어요: [풍부한 문단]. 맞을까요?" (or English equivalent "Got it: [rich paragraph]. Sound right?"); `filters` has every inferable key; `filter_priority` reflects essentials; `raw_query` is the first user message verbatim; `visual_description` is a vivid 2-4 sentence English architectural description seeded from everything the user has said.
+
+## Allowed `program` values (use exactly these strings)
+
+Housing, Office, Museum, Education, Religion, Sports, Transport, Hospitality, Healthcare, Public, Mixed Use, Landscape, Infrastructure, Other
+
+If you cannot map the user's program description to one of these, set `program: null` and let their words flow to `raw_query` / `visual_description` instead.
+
+## Examples
+
+USER: 제주도에 돌로 지은 명상 센터 찾고 있어요. 지역 재료 최대한 살려서.
+ASSISTANT: {"probe_needed": false, "probe_question": null, "reply": "이해했어요: 제주 현지 돌과 재료를 충실히 사용한, 고요하고 장소 결합적인 명상 공간 — 제주 풍토에 뿌리박힌 비판적 지역주의 성향으로 읽어도 괜찮을까요?", "filters": {"location_country": "South Korea", "program": "Religion", "material": "stone", "style": "Vernacular", "year_min": null, "year_max": null, "min_area": null, "max_area": null}, "filter_priority": ["program", "material", "location_country", "style"], "raw_query": "제주도에 돌로 지은 명상 센터 찾고 있어요. 지역 재료 최대한 살려서.", "visual_description": "A contemplative meditation pavilion set into the volcanic landscape of Jeju Island, constructed from rough local basalt and dark volcanic stone laid in thick load-bearing walls. Compressed stereotomic masses with small punctured openings frame framed views of the sea and sky; the interior is shadowed, acoustically still, and intimately scaled. Exposed stone is the dominant material, with timber as a warm secondary note, in dialogue with Korean traditional hanok spatial ethics."}
+
+USER: Warehouse-to-museum adaptive reuse in Rotterdam, keeping the existing brick shell with contemporary steel interventions.
+ASSISTANT: {"probe_needed": false, "probe_question": null, "reply": "Got it: a museum project that preserves an existing warehouse's brick shell as the primary envelope, inserted with contemporary steel structural and circulation elements — an adaptive-reuse reading with revealed construction. Does that track?", "filters": {"location_country": "Netherlands", "program": "Museum", "material": "brick", "style": "Contemporary", "year_min": 1990, "year_max": null, "min_area": null, "max_area": null}, "filter_priority": ["program", "style", "location_country", "material"], "raw_query": "Warehouse-to-museum adaptive reuse in Rotterdam, keeping the existing brick shell with contemporary steel interventions.", "visual_description": "An adaptive-reuse museum in Rotterdam anchored by a retained industrial warehouse brick envelope, its exterior preserved with visible aged masonry and original window rhythms. Inside, contemporary steel mezzanines, bolted trusses, and exposed services cut through the original volume, producing a sharp juxtaposition between heavy masonry mass and tectonic steel frame. Concrete floors and white-painted brick host the gallery program; service systems are openly revealed as part of the architecture."}
+
+USER: parametric 건축물인데 research pavilion이나 학교에 붙은 건 싫고. 실제로 지어진 거만.
+ASSISTANT: {"probe_needed": false, "probe_question": null, "reply": "이해했어요: 파라메트릭 디자인 언어의 단일 오브제적, 실제 구축된 프로젝트들 — 리서치 파빌리온이나 학교 부속 시설은 제외. 이 방향으로 찾을게요. 맞을까요?", "filters": {"location_country": null, "program": null, "material": null, "style": "Parametric", "year_min": 2000, "year_max": null, "min_area": null, "max_area": null}, "filter_priority": ["style"], "raw_query": "parametric 건축물인데 research pavilion이나 학교에 붙은 건 싫고. 실제로 지어진 거만.", "visual_description": "A singular, free-form parametric building with continuous curvature and non-orthogonal geometry realised as an actual constructed work — not a research pavilion or speculative installation. The envelope flows as a sweeping surface; the interior space is fluid and expressive, with complex fabricated panels, tension-rich structural systems, and an avant-garde expressive language. The building reads as a standalone authored object, autonomous from its immediate context."}
+
+USER: 새로 올릴 주택 프로젝트 참고용 찾아요.
+ASSISTANT: {"probe_needed": true, "probe_question": "참고 방향성부터 좁혀볼게요: 목재·벽돌처럼 따뜻한 재료감 쪽이 끌리세요, 아니면 콘크리트·유리 같은 차가운 기하성 쪽이 끌리세요?", "reply": "주택 프로젝트 레퍼런스 찾는 거 확인했어요.", "filters": {"location_country": null, "program": "Housing", "material": null, "style": null, "year_min": null, "year_max": null, "min_area": null, "max_area": null}, "filter_priority": ["program"], "raw_query": "새로 올릴 주택 프로젝트 참고용 찾아요.", "visual_description": null}
+
+USER: 새로 올릴 주택 프로젝트 참고용 찾아요.
+ASSISTANT: {"probe_needed": true, "probe_question": "참고 방향성부터 좁혀볼게요: 목재·벽돌처럼 따뜻한 재료감 쪽이 끌리세요, 아니면 콘크리트·유리 같은 차가운 기하성 쪽이 끌리세요?", "reply": "주택 프로젝트 레퍼런스 찾는 거 확인했어요.", "filters": {"location_country": null, "program": "Housing", "material": null, "style": null, "year_min": null, "year_max": null, "min_area": null, "max_area": null}, "filter_priority": ["program"], "raw_query": "새로 올릴 주택 프로젝트 참고용 찾아요.", "visual_description": null}
+USER: 따뜻한 재료 쪽이요. 목재 많이 쓴 거.
+ASSISTANT: {"probe_needed": false, "probe_question": null, "reply": "이해했어요: 목재가 중심이 되는 따뜻한 물성의 주택 — 나무 질감이 실내외로 풍부하게 드러나고, 햇살과 조응하는 촉각적이고 정서적인 분위기. 이 방향으로 찾을게요.", "filters": {"location_country": null, "program": "Housing", "material": "timber", "style": null, "year_min": null, "year_max": null, "min_area": null, "max_area": null}, "filter_priority": ["program", "material"], "raw_query": "새로 올릴 주택 프로젝트 참고용 찾아요.", "visual_description": "A residential house led by warm natural materiality, with heavy use of exposed timber as the dominant architectural surface — structural beams, cladding, interior floors, and panelling in warm wood tones. The palette skews earthy, with brick, stone, or textured plaster as secondary materials; cool elements like metal and glass are minimal and used mainly as accents. Atmospheres are haptic, intimate, and domestic, with daylight filtered warmly across textured surfaces."}
+
+USER: 서울 도심 오피스빌딩 찾아요.
+ASSISTANT: {"probe_needed": true, "probe_question": "외피 쪽 방향 좁혀볼게요: 유리·금속 파사드의 차가운 기하성이 끌리세요, 아니면 벽돌·돌 같은 따뜻한 물성의 도심 오피스 쪽이 끌리세요?", "reply": "서울 도심 오피스빌딩, 확인했어요.", "filters": {"location_country": "South Korea", "program": "Office", "material": null, "style": null, "year_min": null, "year_max": null, "min_area": null, "max_area": null}, "filter_priority": ["program", "location_country"], "raw_query": "서울 도심 오피스빌딩 찾아요.", "visual_description": null}
+
+USER: 서울 도심 오피스빌딩 찾아요.
+ASSISTANT: {"probe_needed": true, "probe_question": "외피 쪽 방향 좁혀볼게요: 유리·금속 파사드의 차가운 기하성이 끌리세요, 아니면 벽돌·돌 같은 따뜻한 물성의 도심 오피스 쪽이 끌리세요?", "reply": "서울 도심 오피스빌딩, 확인했어요.", "filters": {"location_country": "South Korea", "program": "Office", "material": null, "style": null, "year_min": null, "year_max": null, "min_area": null, "max_area": null}, "filter_priority": ["program", "location_country"], "raw_query": "서울 도심 오피스빌딩 찾아요.", "visual_description": null}
+USER: 물성은 상관없고 규모가 커야 돼요. 최소 20층 이상.
+ASSISTANT: {"probe_needed": false, "probe_question": null, "reply": "이해했어요: 서울 도심의 대규모 오피스 타워 — 최소 20층 이상의 기념비적 스케일, 물성보다는 도시 존재감이 중심. 재료감이나 스타일은 폭넓게 탐색하는 방향으로 찾을게요.", "filters": {"location_country": "South Korea", "program": "Office", "material": null, "style": null, "year_min": null, "year_max": null, "min_area": 20000, "max_area": null}, "filter_priority": ["program", "location_country", "min_area"], "raw_query": "서울 도심 오피스빌딩 찾아요.", "visual_description": "A large-scale downtown office tower in Seoul's urban core, rising at least 20 stories as a monumental civic presence. The tower defines a street-wall and block figure in the dense metropolitan fabric; materiality spans a broad range from glass curtain wall and metal cladding to stone or concrete envelopes. The massing is vertical and commanding, with a significant floor-plate footprint and a strong silhouette in the skyline."}
+
+USER: 좋은 레퍼런스 있으면 보여주세요.
+ASSISTANT: {"probe_needed": true, "probe_question": "감 잡기 위해 먼저 여쭤볼게요: 작고 내밀한 공간이 끌리세요, 아니면 크고 개방감 있는 공간이 끌리세요?", "reply": "좋은 레퍼런스 보여드릴게요. 방향 잡는 것부터 도와주세요.", "filters": {"location_country": null, "program": null, "material": null, "style": null, "year_min": null, "year_max": null, "min_area": null, "max_area": null}, "filter_priority": [], "raw_query": "좋은 레퍼런스 있으면 보여주세요.", "visual_description": null}
+
+USER: 좋은 레퍼런스 있으면 보여주세요.
+ASSISTANT: {"probe_needed": true, "probe_question": "감 잡기 위해 먼저 여쭤볼게요: 작고 내밀한 공간이 끌리세요, 아니면 크고 개방감 있는 공간이 끌리세요?", "reply": "좋은 레퍼런스 보여드릴게요. 방향 잡는 것부터 도와주세요.", "filters": {"location_country": null, "program": null, "material": null, "style": null, "year_min": null, "year_max": null, "min_area": null, "max_area": null}, "filter_priority": [], "raw_query": "좋은 레퍼런스 있으면 보여주세요.", "visual_description": null}
+USER: 개방감 있는 쪽.
+ASSISTANT: {"probe_needed": true, "probe_question": "한 번만 더 여쭤볼게요: 직교적·격자형 공간이 끌리세요, 곡선적·흐르는 형태가 끌리세요?", "reply": "개방감 있는 쪽, 메모했어요.", "filters": {"location_country": null, "program": null, "material": null, "style": null, "year_min": null, "year_max": null, "min_area": null, "max_area": null}, "filter_priority": [], "raw_query": "좋은 레퍼런스 있으면 보여주세요.", "visual_description": null}
+
+USER: 좋은 레퍼런스 있으면 보여주세요.
+ASSISTANT: {"probe_needed": true, "probe_question": "감 잡기 위해 먼저 여쭤볼게요: 작고 내밀한 공간이 끌리세요, 아니면 크고 개방감 있는 공간이 끌리세요?", "reply": "좋은 레퍼런스 보여드릴게요. 방향 잡는 것부터 도와주세요.", "filters": {"location_country": null, "program": null, "material": null, "style": null, "year_min": null, "year_max": null, "min_area": null, "max_area": null}, "filter_priority": [], "raw_query": "좋은 레퍼런스 있으면 보여주세요.", "visual_description": null}
+USER: 개방감 있는 쪽.
+ASSISTANT: {"probe_needed": true, "probe_question": "한 번만 더 여쭤볼게요: 직교적·격자형 공간이 끌리세요, 곡선적·흐르는 형태가 끌리세요?", "reply": "개방감 있는 쪽, 메모했어요.", "filters": {"location_country": null, "program": null, "material": null, "style": null, "year_min": null, "year_max": null, "min_area": null, "max_area": null}, "filter_priority": [], "raw_query": "좋은 레퍼런스 있으면 보여주세요.", "visual_description": null}
+USER: 직교적인 거.
+ASSISTANT: {"probe_needed": false, "probe_question": null, "reply": "이해했어요: 개방감 있으면서도 직교적 격자에 충실한, 미스적·SANAA 계열의 투명한 단순성을 가진 건축들 — 경량감과 보편 공간의 감각이 중심. 이 방향으로 탐색해볼게요.", "filters": {"location_country": null, "program": null, "material": null, "style": "Modernist", "year_min": null, "year_max": null, "min_area": null, "max_area": null}, "filter_priority": ["style"], "raw_query": "좋은 레퍼런스 있으면 보여주세요.", "visual_description": "An expansive, open-plan architectural work with strict orthogonal geometry and a Miesian universal-space quality — thin columns, large glazed apertures, a flat planar roof, and minimal interior subdivision. Floors extend uninterrupted; the envelope is transparent, emphasising continuity between inside and outside. The material palette skews cool and precise (glass, polished concrete, thin steel, white surfaces), with refined reduction rather than rich warmth. Spaces feel weightless, airy, and phenomenologically transparent in the Rowe-Slutzky sense."}
+
+USER: 그냥 멋진 거 보여줘.
+ASSISTANT: {"probe_needed": true, "probe_question": "폭넓게 보여드릴게요. 감만 하나 여쭤볼게요 — 따뜻한 재료감이 끌리세요, 차가운 기하성이 끌리세요?", "reply": "멋진 레퍼런스 탐색 모드, 좋아요.", "filters": {"location_country": null, "program": null, "material": null, "style": null, "year_min": null, "year_max": null, "min_area": null, "max_area": null}, "filter_priority": [], "raw_query": "그냥 멋진 거 보여줘.", "visual_description": null}
+
+USER: 그냥 멋진 거 보여줘.
+ASSISTANT: {"probe_needed": true, "probe_question": "폭넓게 보여드릴게요. 감만 하나 여쭤볼게요 — 따뜻한 재료감이 끌리세요, 차가운 기하성이 끌리세요?", "reply": "멋진 레퍼런스 탐색 모드, 좋아요.", "filters": {"location_country": null, "program": null, "material": null, "style": null, "year_min": null, "year_max": null, "min_area": null, "max_area": null}, "filter_priority": [], "raw_query": "그냥 멋진 거 보여줘.", "visual_description": null}
+USER: 둘 다 괜찮아. 그냥 좋은 거.
+ASSISTANT: {"probe_needed": false, "probe_question": null, "reply": "알겠습니다: 제약 없이 다양하게, 퀄리티 높은 현대 건축을 폭넓게 보여드릴게요. 스와이프하면서 취향 잡아가면 됩니다.", "filters": {"location_country": null, "program": null, "material": null, "style": null, "year_min": 2000, "year_max": null, "min_area": null, "max_area": null}, "filter_priority": ["year_min"], "raw_query": "그냥 멋진 거 보여줘.", "visual_description": "A collection of high-quality, internationally recognised contemporary architectural works spanning a diverse range of programs, scales, styles, and materialities. These are refined, considered buildings with strong formal presence and design intelligence — including both warm material-led and cool geometry-led works, both site-specific and autonomous, across civic, residential, cultural, and commercial typologies."}
+
+USER: Mixed-use 단지. 공공 공간이 1층에 넓게 있고 위는 주거랑 오피스 섞여 있는 거.
+ASSISTANT: {"probe_needed": false, "probe_question": null, "reply": "이해했어요: 지상 공공 공간 위로 주거와 업무가 섞인 복합 단지 — 프로그램적 하이브리드가 명시적 의도인 도시형 개발 유형. 맞을까요?", "filters": {"location_country": null, "program": "Mixed Use", "material": null, "style": null, "year_min": null, "year_max": null, "min_area": null, "max_area": null}, "filter_priority": ["program"], "raw_query": "Mixed-use 단지. 공공 공간이 1층에 넓게 있고 위는 주거랑 오피스 섞여 있는 거.", "visual_description": "A multi-building mixed-use urban complex with an expansive, programmatically porous public ground plane that spans retail, lobby, and civic space. Above the ground level, residential and office functions stack and interleave — towers, slabs, or podium-plus-tower typologies hosting hybrid programs. The building defines new street fronts and plazas at ground level and maintains a legible urban-block presence at the top; the architecture embraces programmatic hybridity and civic porosity as explicit intent."}
+
+USER: Koolhaas 스타일로 도서관 하나. OMA 초기 작업 느낌.
+ASSISTANT: {"probe_needed": false, "probe_question": null, "reply": "이해했어요: 쿨하스·초기 OMA 계열의 도서관 — 프로그램 하이브리드가 강하고 자율적 오브제로 읽히는, 다방향 순환과 실험적 형태 언어의 공공 시설. 이 방향으로 찾아볼게요.", "filters": {"location_country": null, "program": "Public", "material": null, "style": "Avant-Garde", "year_min": 1990, "year_max": null, "min_area": null, "max_area": null}, "filter_priority": ["program", "style"], "raw_query": "Koolhaas 스타일로 도서관 하나. OMA 초기 작업 느낌.", "visual_description": "A library in the OMA/Rem Koolhaas-early-period tradition — a singular, autonomous architectural object whose form expresses programmatic hybridity and experimental spatial strategies. The building reads as a stacked, faceted, or wedge-shaped volume with sharp geometries, hovering masses, or a distinctively authored silhouette that reads as conceptual rather than contextual. Interior circulation favours omnidirectional spatial flat-plans over linear sequences; programmes like reading rooms, event spaces, and public lobbies are layered rather than zoned. Materiality tends toward cool industrial (metal mesh, glass, concrete) with unexpected colour accents."}
+"""
+
+# Labels used in few-shot examples that must exist in the architecture_vectors.style corpus.
+# Used by pre-deploy gate test.
+_CHAT_PHASE_FEW_SHOT_STYLE_LABELS = frozenset(['Vernacular', 'Contemporary', 'Parametric', 'Modernist', 'Avant-Garde'])
 
 _PERSONA_PROMPT = """You are an architectural taste analyst. Based on the buildings a user has liked, generate a short persona archetype that describes their architectural aesthetic.
 
@@ -92,42 +208,150 @@ def _retry_gemini_call(func, *args, **kwargs):
     raise last_error
 
 
-def parse_query(query_text):
+def parse_query(conversation_history):
     """
-    Parse a natural-language query into structured filters using Gemini.
-    Returns {'reply': str, 'filters': dict, 'filter_priority': list}.
-    On failure (after retry), returns a fallback with empty filters.
+    Chat phase Gemini call (Sprint 1 rewrite per Investigation 06).
+
+    Input:
+        conversation_history: list of {role: 'user'|'model', text: str} dicts,
+            representing the full chat so far. Oldest turn first.
+        Backward compat: if a bare string is passed (legacy caller), it is wrapped
+            as [{'role': 'user', 'text': conversation_history}].
+
+    Returns one of:
+
+    Interim probe (probe_needed=True):
+        {
+            'probe_needed': True,
+            'probe_question': str,      # verbal A-vs-B question in user's locale
+            'reply': str,               # short ack in user's locale
+            'filters': dict,            # partial filters inferred so far
+            'filter_priority': list,
+            'raw_query': str,           # first user turn verbatim
+            'visual_description': None, # not yet finalised
+        }
+
+    Terminal response (probe_needed=False):
+        {
+            'probe_needed': False,
+            'probe_question': None,
+            'reply': str,               # rich paraphrase confirm in user's locale
+            'filters': dict,            # all inferable SQL-WHERE predicates
+            'filter_priority': list,    # ordered by essentialness
+            'raw_query': str,           # first user turn verbatim
+            'visual_description': str,  # English, 2-4 sentences, HyDE V_initial seed
+        }
+
+    Failure path (spec §5.4 graceful degradation):
+        {
+            'probe_needed': False,
+            'probe_question': None,
+            'reply': '이해를 잘 못 했어요. 일단 이 쪽으로 찾아볼게요.',
+            'filters': {...all null},
+            'filter_priority': [],
+            'raw_query': <first user message verbatim>,
+            'visual_description': None,
+        }
+        Also emits a 'failure' session event (spec §6).
     """
+    # Backward compat: accept bare string (legacy callers pass query_text directly)
+    if isinstance(conversation_history, str):
+        conversation_history = [{'role': 'user', 'text': conversation_history}]
+
+    # Extract first user message verbatim (BM25 raw_query channel)
+    first_user_text = ''
+    for turn in conversation_history:
+        if turn.get('role') == 'user':
+            first_user_text = turn.get('text', '')
+            break
+
+    _empty_filters = {
+        'location_country': None, 'program': None, 'material': None, 'style': None,
+        'year_min': None, 'year_max': None, 'min_area': None, 'max_area': None,
+    }
+    _fallback = {
+        'probe_needed': False,
+        'probe_question': None,
+        'reply': '이해를 잘 못 했어요. 일단 이 쪽으로 찾아볼게요.',
+        'filters': dict(_empty_filters),
+        'filter_priority': [],
+        'raw_query': first_user_text,
+        'visual_description': None,
+    }
+
     try:
         client = _get_client()
+
+        # Build Gemini contents list from conversation_history
+        contents = []
+        for turn in conversation_history:
+            role = turn.get('role', 'user')
+            text = turn.get('text', '')
+            contents.append(
+                types.Content(role=role, parts=[types.Part.from_text(text=text)])
+            )
 
         def _call():
             return client.models.generate_content(
                 model='gemini-2.5-flash',
-                contents=query_text,
+                contents=contents,
                 config=types.GenerateContentConfig(
-                    system_instruction=_PARSE_QUERY_PROMPT,
+                    system_instruction=_CHAT_PHASE_SYSTEM_PROMPT,
                     response_mime_type='application/json',
                     temperature=0.2,
+                    thinking_config=types.ThinkingConfig(thinking_budget=0),
                 ),
             )
 
+        t_call_start = time.perf_counter()
         response = _retry_gemini_call(_call)
+        t_call_end = time.perf_counter()
+
+        # Emit parse_query.timing event (spec §6 + §11.1 IMP-4 mandatory companion).
+        # Must be emitted before json.loads so parse failures still produce a timing record.
+        _usage = getattr(response, 'usage_metadata', None)
+        event_log.emit_event(
+            'parse_query_timing',
+            session=None,
+            user=None,
+            gemini_total_ms=round((t_call_end - t_call_start) * 1000, 2),
+            ttft_ms=None,   # not available without streaming
+            gen_ms=round((t_call_end - t_call_start) * 1000, 2),
+            input_tokens=getattr(_usage, 'prompt_token_count', None) if _usage else None,
+            output_tokens=getattr(_usage, 'candidates_token_count', None) if _usage else None,
+            thinking_tokens=getattr(_usage, 'thoughts_token_count', None) if _usage else None,
+        )
+
         data = json.loads(response.text)
 
-        # Sanitize: ensure program is a valid value (case-insensitive match -> canonical form)
-        filters = data.get('filters', {})
+        probe_needed = bool(data.get('probe_needed', False))
+
+        # Sanitize program value (case-insensitive -> canonical form)
+        filters = data.get('filters') or dict(_empty_filters)
         if filters.get('program'):
             program = filters['program']
             if program not in PROGRAM_VALUES:
-                # Try title-casing (e.g. "housing" -> "Housing")
                 titled = program.title()
                 filters['program'] = titled if titled in PROGRAM_VALUES else None
-        return {
-            'reply':           data.get('reply', ''),
-            'filters':         filters,
-            'filter_priority': data.get('filter_priority', []),
+
+        # Sanitize filter_priority: keep only non-null filter keys
+        raw_priority = data.get('filter_priority') or []
+        filter_priority = [k for k in raw_priority if filters.get(k) is not None]
+
+        # raw_query: spec §3 says always verbatim first user message
+        raw_query = data.get('raw_query') or first_user_text
+
+        result = {
+            'probe_needed': probe_needed,
+            'probe_question': data.get('probe_question') if probe_needed else None,
+            'reply': data.get('reply', ''),
+            'filters': filters,
+            'filter_priority': filter_priority,
+            'raw_query': raw_query,
+            'visual_description': data.get('visual_description'),
         }
+        return result
+
     except json.JSONDecodeError as e:
         logger.error('parse_query JSON decode error: %s', e)
         event_log.emit_event(
@@ -139,7 +363,7 @@ def parse_query(query_text):
             error_class='JSONDecodeError',
             error_message=str(e)[:200],
         )
-        return {'reply': 'I had trouble understanding that. Try again?', 'filters': {}, 'filter_priority': []}
+        return _fallback
     except Exception as e:
         logger.error('parse_query failed after retries: %s: %s', type(e).__name__, e)
         event_log.emit_event(
@@ -151,7 +375,7 @@ def parse_query(query_text):
             error_class=type(e).__name__,
             error_message=str(e)[:200],
         )
-        return {'reply': 'I had trouble understanding that. Try again?', 'filters': {}, 'filter_priority': []}
+        return _fallback
 
 
 def generate_persona_report(liked_building_ids):
@@ -206,6 +430,7 @@ def generate_persona_report(liked_building_ids):
                     system_instruction=_PERSONA_PROMPT,
                     response_mime_type='application/json',
                     temperature=0.7,
+                    thinking_config=types.ThinkingConfig(thinking_budget=0),
                 ),
             )
 

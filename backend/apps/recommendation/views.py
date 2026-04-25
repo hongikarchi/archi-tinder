@@ -983,15 +983,81 @@ class ParseQueryView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        query = request.data.get('query', '').strip()
-        if not query:
-            return Response({'detail': 'query is required'}, status=status.HTTP_400_BAD_REQUEST)
+        # Accept BOTH legacy `query` string AND new `conversation_history` list.
+        # If conversation_history provided: pass directly to parse_query.
+        # If only query: wrap as single-turn history for parse_query.
+        conversation_history = request.data.get('conversation_history')
+        query_str = request.data.get('query', '')
+        if isinstance(query_str, str):
+            query_str = query_str.strip()
 
-        parsed  = services.parse_query(query)
-        filters = {k: v for k, v in parsed['filters'].items() if v is not None}
+        if conversation_history is not None:
+            # New multi-turn path: validate it is a list
+            if not isinstance(conversation_history, list) or len(conversation_history) == 0:
+                return Response(
+                    {'detail': 'conversation_history must be a non-empty list'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            # Security: cap history depth to prevent Gemini cost amplification DoS
+            _MAX_HISTORY_LEN = 10
+            _MAX_TEXT_LEN = 2000
+            _ALLOWED_ROLES = {'user', 'model'}
+            if len(conversation_history) > _MAX_HISTORY_LEN:
+                return Response(
+                    {'detail': f'conversation_history too long (max {_MAX_HISTORY_LEN})'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            for entry in conversation_history:
+                if not isinstance(entry, dict):
+                    return Response(
+                        {'detail': 'conversation_history items must be {role, text} dicts'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                role = entry.get('role', 'user')
+                if role not in _ALLOWED_ROLES:
+                    return Response(
+                        {'detail': f'invalid role; must be one of {sorted(_ALLOWED_ROLES)}'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                text = entry.get('text', '')
+                if not isinstance(text, str) or len(text) > _MAX_TEXT_LEN:
+                    return Response(
+                        {'detail': f'conversation_history.text too long (max {_MAX_TEXT_LEN} chars)'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+        elif query_str:
+            # Legacy single-string path: wrap as single-turn history
+            conversation_history = [{'role': 'user', 'text': query_str}]
+        else:
+            return Response(
+                {'detail': 'query or conversation_history is required'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        parsed = services.parse_query(conversation_history)
+
+        # When probe_needed=True: return probe payload immediately without
+        # touching the search engine. Frontend renders the probe question.
+        if parsed.get('probe_needed'):
+            return Response({
+                'probe_needed': True,
+                'probe_question': parsed.get('probe_question'),
+                'reply': parsed.get('reply', ''),
+                'raw_query': parsed.get('raw_query', ''),
+                'structured_filters': parsed.get('filters', {}),
+                'filter_priority': parsed.get('filter_priority', []),
+                'visual_description': parsed.get('visual_description'),
+                'suggestions': [],
+                'results': [],
+                'is_fallback': False,
+                'fallback_note': '',
+            })
+
+        # Terminal path (probe_needed=False): run search engine.
+        filters = {k: v for k, v in (parsed.get('filters') or {}).items() if v is not None}
         results = engine.search_by_filters(filters, limit=20) if filters else []
 
-        is_fallback   = False
+        is_fallback = False
         fallback_note = ''
 
         if not results:
@@ -1001,21 +1067,25 @@ class ParseQueryView(APIView):
             if relaxed and relaxed != filters:
                 results = engine.search_by_filters(relaxed, limit=20)
                 if results:
-                    is_fallback   = True
+                    is_fallback = True
                     fallback_note = "No exact matches for those criteria \u2014 here are similar buildings you might like."
 
         if not results:
             # Final fallback: diverse random
-            results       = engine.get_diverse_random(n=20)
-            is_fallback   = True
+            results = engine.get_diverse_random(n=20)
+            is_fallback = True
             fallback_note = "Couldn\u2019t find an exact match \u2014 here are some buildings you might enjoy instead."
 
         return Response({
-            'reply':              parsed['reply'],
-            'structured_filters': parsed['filters'],
-            'filter_priority':    parsed.get('filter_priority', []),
-            'suggestions':        [],
-            'results':            results,
-            'is_fallback':        is_fallback,
-            'fallback_note':      fallback_note,
+            'probe_needed': False,
+            'probe_question': None,
+            'reply': parsed.get('reply', ''),
+            'raw_query': parsed.get('raw_query', ''),
+            'visual_description': parsed.get('visual_description'),
+            'structured_filters': parsed.get('filters', {}),
+            'filter_priority': parsed.get('filter_priority', []),
+            'suggestions': [],
+            'results': results,
+            'is_fallback': is_fallback,
+            'fallback_note': fallback_note,
         })

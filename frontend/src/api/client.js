@@ -281,10 +281,18 @@ export async function recordSwipe({ session_id, image_id, action, client_buffer_
 
 /**
  * Parse a natural-language query using Gemini on the backend.
- * Returns { reply, structured_filters, filter_priority, suggestions, results: [ImageCard] }
+ * Backwards-compatible:
+ *   parseQuery('hello')                     -> POST { query: 'hello' }               (legacy single-turn)
+ *   parseQuery([{role:'user', text:'..'}])  -> POST { conversation_history: [...] }  (multi-turn)
+ *
+ * Response (probe_needed=true):  { probe_needed: true, probe_question, reply, results: [] }
+ * Response (probe_needed=false): { reply, structured_filters, filter_priority, suggestions, results: [ImageCard] }
  */
-export async function parseQuery(query) {
-  const result = await callApi('POST', '/parse-query/', { query })
+export async function parseQuery(input) {
+  const body = typeof input === 'string'
+    ? { query: input }
+    : { conversation_history: input }
+  const result = await callApi('POST', '/parse-query/', body)
   return {
     ...result,
     results: (result.results || []).map(normalizeCard),

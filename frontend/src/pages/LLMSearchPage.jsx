@@ -132,6 +132,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
   const [latestFilters, setLatestFilters] = useState({})
   const [latestFilterPriority, setLatestFilterPriority] = useState([])
   const [showStart, setShowStart]       = useState(false)
+  const [conversationHistory, setConversationHistory] = useState([])
   const messagesEndRef = useRef(null)
 
   useEffect(() => {
@@ -152,36 +153,56 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
   }
 
   async function submitQuery(text) {
+    // Build the next conversation_history with the new user turn appended
+    const userTurn = { role: 'user', text }
+    const nextHistory = [...conversationHistory, userTurn]
+
     setMessages(prev => [...prev, { role: 'user', text }])
     setIsLoading(true)
 
     try {
-      const parsed     = await api.parseQuery(text)
-      const results    = parsed.results || []
-      const isFallback = parsed.is_fallback || false
-      const filters    = parsed.structured_filters || {}
-      const filterPriority = parsed.filter_priority || []
+      // Call parse_query with the full history (not just the new turn)
+      const parsed = await api.parseQuery(nextHistory)
 
-      let replyText
-      if (results.length > 0 && !isFallback) {
-        replyText = `${parsed.reply}\n\nFound ${results.length} building${results.length !== 1 ? 's' : ''} matching your criteria.`
-      } else if (results.length > 0 && isFallback) {
-        replyText = `${parsed.reply}\n\n${parsed.fallback_note || 'No exact matches -- here are some similar buildings you might like.'}`
+      if (parsed.probe_needed) {
+        // Probe path: show probe_question as AI message, accumulate history
+        const probeText = parsed.probe_question || parsed.reply || ''
+        const modelTurn = { role: 'model', text: probeText }
+        setConversationHistory([...nextHistory, modelTurn])
+        setMessages(prev => [...prev, { role: 'ai', text: probeText }])
+        // Do not enable swipe yet -- waiting for user reply to the probe
+        setShowStart(false)
       } else {
-        replyText = `${parsed.reply}\n\nNo buildings found. Try describing it differently.`
-      }
+        // Terminal path: existing flow preserved verbatim
+        const results    = parsed.results || []
+        const isFallback = parsed.is_fallback || false
+        const filters    = parsed.structured_filters || {}
+        const filterPriority = parsed.filter_priority || []
 
-      setMessages(prev => [...prev, {
-        role: 'ai', text: replyText,
-        results, isFallback,
-        filters: isFallback ? {} : filters,
-      }])
+        let replyText
+        if (results.length > 0 && !isFallback) {
+          replyText = `${parsed.reply}\n\nFound ${results.length} building${results.length !== 1 ? 's' : ''} matching your criteria.`
+        } else if (results.length > 0 && isFallback) {
+          replyText = `${parsed.reply}\n\n${parsed.fallback_note || 'No exact matches -- here are some similar buildings you might like.'}`
+        } else {
+          replyText = `${parsed.reply}\n\nNo buildings found. Try describing it differently.`
+        }
 
-      if (results.length > 0) {
-        setLatestResults(results)
-        setLatestFilters(isFallback ? {} : filters)
-        setLatestFilterPriority(isFallback ? [] : filterPriority)
-        setShowStart(true)
+        setMessages(prev => [...prev, {
+          role: 'ai', text: replyText,
+          results, isFallback,
+          filters: isFallback ? {} : filters,
+        }])
+
+        // Reset history for the next fresh query
+        setConversationHistory([])
+
+        if (results.length > 0) {
+          setLatestResults(results)
+          setLatestFilters(isFallback ? {} : filters)
+          setLatestFilterPriority(isFallback ? [] : filterPriority)
+          setShowStart(true)
+        }
       }
     } catch (err) {
       setMessages(prev => [...prev, { role: 'ai', text: `Something went wrong: ${err.message}. Please try again.` }])
