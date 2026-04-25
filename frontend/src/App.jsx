@@ -48,6 +48,15 @@ function extractLikedIds(rawLikedIds) {
     .filter(Boolean)
 }
 
+// Backend saved_ids shape: list[{id: str, saved_at: datetime}].
+// Returns plain id strings.
+function extractSavedIds(rawSavedIds) {
+  if (!Array.isArray(rawSavedIds)) return []
+  return rawSavedIds
+    .map(entry => (typeof entry === 'string' ? entry : entry?.id))
+    .filter(Boolean)
+}
+
 /* ── Error Boundary ─────────────────────────────────────────────────────── */
 class ErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { error: null } }
@@ -482,6 +491,37 @@ export default function App() {
     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, reportImage: imageData } : p))
   }
 
+  async function handleToggleBookmark(projectId, cardId, action, rank) {
+    const project = projects.find(p => p.id === projectId)
+    if (!project) return
+    const backendId = project.backendId || (project.id?.includes('-') ? project.id : null)
+    if (!backendId) return
+
+    // Optimistic update
+    setProjects(prev => prev.map(p => {
+      if (p.id !== projectId) return p
+      const current = p.savedIds || []
+      const next = action === 'save'
+        ? [...new Set([...current, cardId])]
+        : current.filter(id => id !== cardId)
+      return { ...p, savedIds: next }
+    }))
+
+    try {
+      await api.bookmarkBuilding(backendId, cardId, action, rank, project.sessionId || null)
+    } catch {
+      // Revert optimistic update on error
+      setProjects(prev => prev.map(p => {
+        if (p.id !== projectId) return p
+        const current = p.savedIds || []
+        const reverted = action === 'save'
+          ? current.filter(id => id !== cardId)
+          : [...new Set([...current, cardId])]
+        return { ...p, savedIds: reverted }
+      }))
+    }
+  }
+
   async function handleLogin(user) {
     // user may be a string (mock) or an object from backend {user_id, display_name, access, refresh}
     const id = typeof user === 'object' ? (user.user_id || user.id || String(user)) : String(user)
@@ -512,6 +552,7 @@ export default function App() {
           likedBuildings: extractLikedIds(p.liked_ids).map(bid => cardMap[bid]).filter(Boolean),
           swipedIds: [...extractLikedIds(p.liked_ids), ...(p.disliked_ids || [])],
           predictedLikes: [],
+          savedIds: extractSavedIds(p.saved_ids),
           finalReport: p.final_report || null,
           reportImage: p.report_image || null,
           sessionId: null,
@@ -568,6 +609,7 @@ export default function App() {
     onDeleteProject: handleDeleteProject,
     onGenerateReport: handleGenerateReport,
     onImageGenerated: handleImageGenerated,
+    onToggleBookmark: handleToggleBookmark,
   }
 
   return (

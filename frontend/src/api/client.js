@@ -355,3 +355,21 @@ export async function getResult({ session_id }) {
     predicted_like_images:  (result.predicted_images || []).map(normalizeCard),
   }
 }
+
+/**
+ * Toggle bookmark (⭐) on a result-page card.
+ * @param {string} projectId - backend project UUID
+ * @param {string} cardId - building_id
+ * @param {'save'|'unsave'} action
+ * @param {number} rank - 1-indexed position in result page (1-50)
+ * @param {string|null} sessionId - optional, for event association
+ * @returns {Promise<{saved_ids: string[], count: number}>}
+ */
+export async function bookmarkBuilding(projectId, cardId, action, rank, sessionId = null) {
+  return callApi('POST', `/projects/${projectId}/bookmark/`, {
+    card_id: cardId,
+    action,
+    rank,
+    ...(sessionId ? { session_id: sessionId } : {}),
+  })
+}

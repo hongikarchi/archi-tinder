@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { GalleryOverlay } from '../components/GalleryOverlay.jsx'
 import * as api from '../api/client.js'
 
 const PAGE_SIZE = 10
+const PRIMARY_COUNT = 10
+const MAX_RESULTS = 50
 
-export default function FavoritesPage({ projects, onDeleteProject, onResumeProject, onGenerateReport, onImageGenerated, openId, onOpenIdChange }) {
+export default function FavoritesPage({ projects, onDeleteProject, onResumeProject, onGenerateReport, onImageGenerated, onToggleBookmark, openId, onOpenIdChange }) {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
   const openProject = projects.find(p => p.id === openId) || null
 
@@ -17,6 +19,7 @@ export default function FavoritesPage({ projects, onDeleteProject, onResumeProje
         onResume={() => onResumeProject(openProject.id)}
         onGenerateReport={() => onGenerateReport(openProject.id)}
         onImageGenerated={(imageData) => onImageGenerated && onImageGenerated(openProject.id, imageData)}
+        onToggleBookmark={(cardId, action, rank) => onToggleBookmark && onToggleBookmark(openProject.id, cardId, action, rank)}
       />
     )
   }
@@ -126,7 +129,7 @@ function ProjectCard({ project, onClick }) {
   )
 }
 
-function FolderDetail({ project, onBack, onDelete, onResume, onGenerateReport, onImageGenerated }) {
+function FolderDetail({ project, onBack, onDelete, onResume, onGenerateReport, onImageGenerated, onToggleBookmark }) {
   const [reportLoading, setReportLoading] = useState(false)
   const [reportError, setReportError] = useState(null)
   const [imageLoading, setImageLoading] = useState(false)
@@ -246,12 +249,232 @@ function FolderDetail({ project, onBack, onDelete, onResume, onGenerateReport, o
         <ImageGrid images={liked} />
       )}
 
-      {predicted.length > 0 && (
+      {/* Recommendations section — spec §8 layout */}
+      <RecommendedSection
+        predicted={predicted}
+        savedIds={project.savedIds || []}
+        onToggleBookmark={onToggleBookmark}
+      />
+    </div>
+  )
+}
+
+/* ── Recommended Section (spec §8) ──────────────────────────────────────── */
+function RecommendedSection({ predicted, savedIds, onToggleBookmark }) {
+  const capped     = predicted.slice(0, MAX_RESULTS)
+  const primary    = capped.slice(0, PRIMARY_COUNT)
+  const secondary  = capped.slice(PRIMARY_COUNT)
+
+  const [secondaryVisible, setSecondaryVisible] = useState(false)
+  const sentinelRef = useRef(null)
+
+  useEffect(() => {
+    if (!sentinelRef.current || secondaryVisible || secondary.length === 0) return
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) setSecondaryVisible(true) },
+      { threshold: 0.1 }
+    )
+    observer.observe(sentinelRef.current)
+    return () => observer.disconnect()
+  }, [secondaryVisible, secondary.length])
+
+  if (capped.length === 0) {
+    return null
+  }
+
+  return (
+    <>
+      <SectionLabel title="Recommended Buildings" count={capped.length} accent />
+
+      {/* Primary zone: rank 1-10 */}
+      <ResultGrid
+        cards={primary}
+        rankOffset={0}
+        savedIds={savedIds}
+        onToggleBookmark={onToggleBookmark}
+      />
+
+      {/* Secondary zone: rank 11-50 with lazy-scroll trigger */}
+      {secondary.length > 0 && (
         <>
-          <SectionLabel title="Recommended Buildings" count={predicted.length} accent />
-          <ImageGrid images={predicted} />
+          {/* Sentinel div — placed just before the divider so observer fires
+              when the user scrolls near the bottom of the primary grid */}
+          <div ref={sentinelRef} style={{ height: 1 }} />
+
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 12,
+            padding: '20px 20px 12px', maxWidth: 480, margin: '0 auto',
+          }}>
+            <div style={{ flex: 1, height: 1, background: 'var(--color-border)' }} />
+            <span style={{
+              color: 'var(--color-text-muted)', fontSize: 11, fontWeight: 700,
+              textTransform: 'uppercase', letterSpacing: '0.1em', whiteSpace: 'nowrap',
+            }}>
+              More Recommendations
+            </span>
+            <div style={{ flex: 1, height: 1, background: 'var(--color-border)' }} />
+          </div>
+
+          {secondaryVisible ? (
+            <>
+              <ResultGrid
+                cards={secondary}
+                rankOffset={PRIMARY_COUNT}
+                savedIds={savedIds}
+                onToggleBookmark={onToggleBookmark}
+              />
+              {capped.length < MAX_RESULTS && (
+                <p style={{
+                  textAlign: 'center', color: 'var(--color-text-dimmest)',
+                  fontSize: 12, padding: '16px 20px',
+                }}>
+                  No more to show
+                </p>
+              )}
+            </>
+          ) : (
+            /* Skeleton while observer hasn't fired yet */
+            <div style={{
+              display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)',
+              gap: 10, padding: '0 20px', maxWidth: 480, margin: '0 auto',
+            }}>
+              {[0, 1, 2, 3].map(i => (
+                <div key={i} className="skeleton-shimmer" style={{ borderRadius: 12, aspectRatio: '3/4' }} />
+              ))}
+            </div>
+          )}
         </>
       )}
+
+      {/* When primary is fewer than MAX_RESULTS and no secondary, also show label */}
+      {secondary.length === 0 && capped.length < MAX_RESULTS && (
+        <p style={{
+          textAlign: 'center', color: 'var(--color-text-dimmest)',
+          fontSize: 12, padding: '16px 20px',
+        }}>
+          No more to show
+        </p>
+      )}
+    </>
+  )
+}
+
+/* ── ResultGrid: grid wrapper for result cards ───────────────────────────── */
+function ResultGrid({ cards, rankOffset, savedIds, onToggleBookmark }) {
+  const [selectedCard, setSelectedCard] = useState(null)
+
+  return (
+    <>
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)',
+        gap: 10, padding: '0 20px', maxWidth: 480, margin: '0 auto',
+      }}>
+        {cards.map((card, i) => {
+          const rank = rankOffset + i + 1
+          const buildingId = card.image_id || card.building_id
+          const isSaved = savedIds.includes(buildingId)
+          return (
+            <ResultCard
+              key={buildingId}
+              card={card}
+              rank={rank}
+              isSaved={isSaved}
+              onTap={() => setSelectedCard(card)}
+              onToggleBookmark={onToggleBookmark}
+            />
+          )
+        })}
+      </div>
+      {selectedCard && (
+        <GalleryOverlay
+          card={selectedCard}
+          onClose={() => setSelectedCard(null)}
+          fullscreen
+        />
+      )}
+    </>
+  )
+}
+
+/* ── ResultCard: building card with ⭐ bookmark button ────────────────────── */
+function ResultCard({ card, rank, isSaved, onTap, onToggleBookmark }) {
+  const title    = card.image_title  || card.title
+  const imageUrl = card.image_url    || card.imageUrl
+  const country  = card.metadata?.axis_country || card.country
+  const buildingId = card.image_id || card.building_id
+  const [imgLoading, setImgLoading] = useState(true)
+
+  function handleBookmarkClick(e) {
+    e.stopPropagation()
+    if (!onToggleBookmark) return
+    onToggleBookmark(buildingId, isSaved ? 'unsave' : 'save', rank)
+  }
+
+  return (
+    <div
+      onClick={onTap}
+      style={{ borderRadius: 12, overflow: 'hidden', background: 'var(--color-surface-2)', position: 'relative', cursor: 'pointer' }}
+    >
+      {imgLoading && (
+        <div className="skeleton-shimmer" style={{ width: '100%', aspectRatio: '3/4' }} />
+      )}
+      <img
+        src={imageUrl}
+        alt={title}
+        style={{
+          width: '100%', aspectRatio: '3/4', objectFit: 'cover', display: 'block',
+          opacity: imgLoading ? 0 : 1, transition: 'opacity 0.3s',
+          position: imgLoading ? 'absolute' : 'static', top: 0, left: 0,
+        }}
+        loading="lazy"
+        onLoad={() => setImgLoading(false)}
+        onError={() => setImgLoading(false)}
+      />
+      <div style={{
+        position: 'absolute', inset: 0,
+        background: 'linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 55%)',
+        display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
+        padding: '10px',
+      }}>
+        <p style={{
+          color: '#fff', fontSize: 11, fontWeight: 600, lineHeight: 1.3, margin: 0,
+          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+          overflow: 'hidden', textOverflow: 'ellipsis',
+        }}>
+          {title}
+        </p>
+        {country && (
+          <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 10, margin: '2px 0 0' }}>
+            {country}
+          </p>
+        )}
+      </div>
+
+      {/* ⭐ Bookmark button — 44px touch target with 32px visual */}
+      <button
+        onClick={handleBookmarkClick}
+        aria-label={isSaved ? 'Remove bookmark' : 'Add bookmark'}
+        style={{
+          position: 'absolute', top: 0, right: 0,
+          width: 44, height: 44,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'transparent', border: 'none', cursor: 'pointer',
+          padding: 0,
+        }}
+      >
+        <span style={{
+          width: 30, height: 30,
+          background: isSaved ? '#ec4899' : 'rgba(0,0,0,0.55)',
+          borderRadius: '50%',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 14, color: '#fff',
+          border: isSaved ? 'none' : '1px solid rgba(255,255,255,0.25)',
+          transition: 'background 0.15s',
+          backdropFilter: 'blur(4px)',
+        }}>
+          {isSaved ? '★' : '☆'}
+        </span>
+      </button>
     </div>
   )
 }

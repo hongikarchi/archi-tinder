@@ -2,7 +2,9 @@ import logging
 import numpy as np
 from collections import defaultdict
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -1073,6 +1075,128 @@ class ProjectReportImageView(APIView):
             'image_data': result['image_data'],
             'mime_type': result['mime_type'],
             'prompt': result['prompt'],
+        })
+
+
+# ── Bookmark ──────────────────────────────────────────────────────────────────
+
+class ProjectBookmarkView(APIView):
+    """
+    POST /api/v1/projects/<project_id>/bookmark/
+
+    Toggle bookmark on a building in the result page top-K. Updates
+    Project.saved_ids (list[{id, saved_at}]) and emits a bookmark event
+    per spec §6 + §8 + Spec v1.2 SPEC-UPDATED.
+
+    Request body:
+        {
+          "card_id":    "<building_id>",          # required; string, max 20 chars
+          "action":     "save" | "unsave",        # required
+          "rank":       <int 1-100>,              # required; 1-indexed result-page position
+          "session_id": "<uuid>"                  # optional; for event association
+        }
+
+    Response 200:
+        {
+          "saved_ids": ["B00042", ...],   # full list of currently bookmarked building IDs
+          "count": <int>                  # length of saved_ids
+        }
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, project_id):
+        profile = _get_profile(request)
+        if profile is None:
+            return Response({'detail': 'unauthenticated'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        try:
+            project = Project.objects.get(project_id=project_id, user=profile)
+        except Project.DoesNotExist:
+            return Response({'detail': 'project not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        card_id = request.data.get('card_id')
+        action = request.data.get('action')
+        rank = request.data.get('rank')
+        session_id = request.data.get('session_id')
+
+        # --- Validate inputs ---
+        if not card_id or not isinstance(card_id, str) or len(card_id) > 20:
+            return Response({'detail': 'invalid card_id'}, status=status.HTTP_400_BAD_REQUEST)
+        if action not in ('save', 'unsave'):
+            return Response(
+                {'detail': "action must be 'save' or 'unsave'"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not isinstance(rank, int) or rank < 1 or rank > 100:
+            return Response(
+                {'detail': 'rank must be integer in [1, 100]'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # --- Toggle saved_ids ---
+        existing = list(project.saved_ids or [])
+        existing_by_id = {
+            e['id']: e
+            for e in existing
+            if isinstance(e, dict) and 'id' in e
+        }
+
+        if action == 'save':
+            if card_id not in existing_by_id:
+                existing.append({'id': card_id, 'saved_at': timezone.now().isoformat()})
+        else:  # unsave
+            existing = [
+                e for e in existing
+                if not (isinstance(e, dict) and e.get('id') == card_id)
+            ]
+
+        project.saved_ids = existing
+        project.save(update_fields=['saved_ids', 'updated_at'])
+
+        # --- Resolve optional session for event association ---
+        session = None
+        if session_id:
+            try:
+                session = AnalysisSession.objects.filter(
+                    session_id=session_id, user=profile,
+                ).first()
+            except (ValueError, ValidationError, Exception):
+                session = None
+
+        # --- Compute rank_zone per Spec v1.2 §6 implementation requirement #4 ---
+        rank_zone = 'primary' if rank <= 10 else 'secondary'
+
+        # --- rank_corpus: deferred placeholder (Investigation 08 / V_initial pipeline) ---
+        # Computed offline from session.preference_vector + bookmark timestamp, or via
+        # future pgvector ORDER BY embedding <=> v_initial LIMIT N query once Topic 03 ships.
+        rank_corpus = None
+
+        # --- Provenance booleans per Spec v1.2 (Topic 02/04 uplift attribution) ---
+        # Default False for Sprint 4; frontend can pass actual values in a follow-up
+        # once it tracks per-card source from the result composition pipeline.
+        provenance = {
+            'in_cosine_top10': False,
+            'in_gemini_top10': False,
+            'in_dpp_top10': False,
+        }
+
+        # --- Emit bookmark SessionEvent ---
+        event_log.emit_event(
+            'bookmark',
+            session=session,
+            user=profile,
+            card_id=card_id,
+            action=action,
+            rank=rank,
+            rank_zone=rank_zone,
+            rank_corpus=rank_corpus,
+            provenance=provenance,
+        )
+
+        saved_id_list = [e['id'] for e in existing if isinstance(e, dict) and 'id' in e]
+        return Response({
+            'saved_ids': saved_id_list,
+            'count': len(saved_id_list),
         })
 
 
