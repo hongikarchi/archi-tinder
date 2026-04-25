@@ -3,7 +3,7 @@
 > Phase logic, mathematical formulas, and hyperparameter theory.
 > Research agent updates this file. Orchestrator references it for algorithm tasks.
 
-**Last Synced (Reporter):** 2026-04-25 96b91a6
+**Last Synced (Reporter):** 2026-04-25 03c697b
 
 ---
 
@@ -37,6 +37,8 @@ Once convergence detected, backend injects an Action Card. User swipes right to 
 
 ### Completed: Top-K Results
 Top-K results fetched based on final multi-modal centroids, with MMR for diverse layout.
+
+_(Updated 2026-04-25 03c697b: Sprint 4 Topic 02 Gemini session-end setwise rerank — when `gemini_rerank_enabled` (default OFF) AND len(predicted_cards) >= 2 at session-result time, services.rerank_candidates calls Gemini 2.5-flash with system prompt + 5 few-shot examples (Investigation 12) and reorders predicted_cards by taste alignment. Output is full ordering (sets up Topic 02 ∩ 04 RRF fusion in upcoming Option α composition). Off swipe hot path. thinking_budget=0 + temp=0 + JSON mime for deterministic structured extraction. Validation: set + length equality with input ids. Silent graceful degradation to cosine ordering on any failure (parse/partial/extra/duplicate/exception) per spec §5.4. Cost ~$0.002-0.0028/session.)_
 
 ---
 
@@ -113,6 +115,7 @@ _(Updated 2026-04-25 190c830: Like writes now carry an `intensity` field (defaul
 | top_k_results | int | 10-30 | 20 |
 | `adaptive_k_clustering_enabled` | bool | True/False | False |
 | `soft_relevance_enabled` | bool | True/False | False |
+| `gemini_rerank_enabled` | bool | True/False | False |
 
 Source: `backend/config/settings.py` RECOMMENDATION dict.
 

@@ -53,6 +53,7 @@
 - [2026-04-25] USER-OVERRIDE-PUSH: 57b3244 — User accepted the 4.15% margin over spec §4 budget per /review's decision option 1 and pushed manually. Branch deployed to `origin/main` (`ded38be..57b3244`, 19 commits). Audit trail: Part B verification produced real diagnostic data (parse_query_timing SessionEvent), IMP-4 fix empirically verified (thinking_tokens=None), 4166 ms latency is the empirical floor for the current chat-phase prompt size. No code regression. **Improvement recommendations for main's next sprint** at `.claude/reviews/57b3244-improvements.md` — Tier 1 fixes (~1.5h total): (1.1) loosen spec §4 budget to <5000ms, (1.2) multi-run aggregation in /review Part B Step B4, (1.3) /review Step B0 SessionEvent.failure pre-check. Tier 2 (Sprint scale): chat prompt optimization, tier-aware Part B gates. Main: read 57b3244-improvements.md, decide which to action this Sprint.
 - [2026-04-25] REVIEW-REQUESTED: f3b8381 — Sprint 3 C-1 confidence bar (Investigation 13 + Spec v1.2 dislike-bias telemetry); UI-affecting paths in scope (SwipePage + App.jsx changes). run `/review` (or "리뷰해줘") next.
 - [2026-04-25] REVIEW-REQUESTED: 96b91a6 — Sprint 4 Topic 06 adaptive k + soft-assignment relevance (both flags default OFF backward-compat); run `/review` (or "리뷰해줘") next (UI-affecting paths NOT in scope — Part B optional).
+- [2026-04-25] REVIEW-REQUESTED: 03c697b — Sprint 4 Topic 02 Gemini setwise rerank (default OFF backward-compat); UI-affecting paths in scope (SessionResultView). run `/review` (or "리뷰해줘") next.
 
 ---
 
@@ -194,6 +195,24 @@ Google OAuth only. Korean users need domestic login.
 ---
 
 ## Resolved
+
+### Sprint 4 Topic 02: Gemini Session-End Setwise Rerank -- 2026-04-25
+
+#### TOPIC02. Gemini setwise rerank at session-end (Spec §11 + Investigation 12 + Spec v1.2 full 60-id ordering) -- 2026-04-25
+Per research/spec/requirements.md v1.3 §11 Topic 02 + research/investigations/12-topic02-rerank-prompt-design.md (full prompt + 5 few-shot examples) + Spec v1.2 SPEC-UPDATED. Flag-gated (default OFF) Gemini rerank at session result time, off swipe hot path.
+- [x] settings.py RECOMMENDATION dict: gemini_rerank_enabled (default False).
+- [x] services.rerank_candidates(candidates, liked_summary) → list of building_ids in rerank order. Full input length (no truncate).
+- [x] services._liked_summary_for_rerank(session): pulls metadata from architecture_vectors via parameterized SQL; intensity tagging [Love]>=1.5 / [Like]<1.5; recency truncation [-MAX_ENTRIES:].
+- [x] _RERANK_SYSTEM_PROMPT + 5 few-shot examples lifted verbatim from Investigation 12 (English-only — no Korean reaches this call).
+- [x] IMP-4 applied: thinking_config=ThinkingConfig(thinking_budget=0).
+- [x] temperature=0.0, response_mime_type='application/json' (deterministic structured extraction).
+- [x] Validation: set(ranking)==set(input_ids) AND len equality (catches missing, extra, duplicate ids).
+- [x] Failure cascade per spec §5.4: parse fail / timeout / partial / extra / duplicate / exception → logger.warning + emit failure event (failure_type='gemini_rerank', recovery_path='cosine_fallback') + return input order.
+- [x] views.py SessionResultView: flag-gated reorder via card_by_id dict reconstruction + foreign-id guard (defense in depth).
+- [x] Cross-session liked_summary scope: like_vectors lacks building_id (only embedding+round) → workaround uses project.liked_ids ({id, intensity}). Tied to §10 #3 multi-session signal transfer (user decision pending).
+- [x] 16 new tests in test_topic02.py (14 unit + 2 DB integration). 104 total pass + 1 skipped. Existing 88 unchanged.
+- [x] Reviewer: PASS-WITH-MINORS (1 fix-loop iteration: slice [:N] → [-N:] for recency). Security: PASS.
+- Commit: 03c697b
 
 ### Sprint 4 Topic 06: Adaptive K + Soft-Assignment Relevance -- 2026-04-25
 
