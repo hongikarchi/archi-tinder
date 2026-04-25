@@ -55,6 +55,7 @@
 - [2026-04-25] REVIEW-REQUESTED: 96b91a6 — Sprint 4 Topic 06 adaptive k + soft-assignment relevance (both flags default OFF backward-compat); run `/review` (or "리뷰해줘") next (UI-affecting paths NOT in scope — Part B optional).
 - [2026-04-25] REVIEW-REQUESTED: 03c697b — Sprint 4 Topic 02 Gemini setwise rerank (default OFF backward-compat); UI-affecting paths in scope (SessionResultView). run `/review` (or "리뷰해줘") next.
 - [2026-04-25] REVIEW-REQUESTED: de9bfa3 — Sprint 4 Topic 04 DPP + MMR λ ramp (both flags default OFF backward-compat); UI-affecting paths in scope (SessionResultView). run `/review` (or "리뷰해줘") next.
+- [2026-04-25] REVIEW-REQUESTED: ebbafd2 — Sprint 4 Topic 02 ∩ 04 Option α composition (RRF fusion + DPP integration); Sprint 4 algorithm batch complete; UI-affecting paths in scope. run `/review` (or "리뷰해줘") next.
 
 ---
 
@@ -196,6 +197,24 @@ Google OAuth only. Korean users need domestic login.
 ---
 
 ## Resolved
+
+### Sprint 4 Topic 02 ∩ 04: Option α Composition -- 2026-04-25
+
+#### COMP1. RRF + DPP composition (Investigation 07 + 14) -- 2026-04-25
+Per research/investigations/07-topk-shaping-composition.md (Option α rerank-then-diversify) + Investigation 14 §"q derivation" (RRF rescale to [0.01, 1.0]).
+- [x] engine.compute_dpp_topk: q_override=None kwarg added (when supplied, uses values directly without [0.4, 0.95] clip — preserves RRF rescale at both tails).
+- [x] views.SessionResultView: candidate_ids_cosine_order captured BEFORE any reorder; rerank_rank_by_id sentinel initialized None.
+- [x] Topic 02 block: sentinel set ONLY when rerank produced real reorder (new_order != candidate_ids_cosine_order). Rerank returning input order = no-op = sentinel stays None.
+- [x] Topic 04 block: branches on sentinel — RRF rescale path when set, existing cosine-q path when None.
+- [x] RRF formula (Investigation 07 line 84): K_RRF=60 hardcoded; fused[bid] = 1/(60+cosine_rank) + 1/(60+rerank_rank).
+- [x] Min-max rescale (Investigation 14): q_i = 0.01 + 0.99 * (fused[bid] - fmin) / (fmax - fmin). Edge case fmax==fmin → all q=0.5.
+- [x] Architectural deviation flagged: composition operates on post-MMR top-K (typically k=20) not raw cosine-60 — established integration point for Topics 02/04 individually; composition follows. Bigger refactor out of scope.
+- [x] Failure cascade per Investigation 07: rerank fail (returns input order) → sentinel stays None → DPP falls back to cosine q.
+- [x] 5 new tests in test_topic_composition.py. 124 total pass + 1 skipped. Existing 119 unchanged.
+- [x] Reviewer: PASS. Security: PASS.
+- Commit: ebbafd2
+
+**Sprint 4 algorithm batch milestone**: Topic 06 (96b91a6) + Topic 02 (03c697b) + Topic 04 (de9bfa3) + Composition (ebbafd2) — all 4 features flag-gated, default OFF, ready for joint Optuna tuning post §6 logging accumulation.
 
 ### Sprint 4 Topic 04: DPP Greedy MAP + MMR Lambda Ramp -- 2026-04-25
 

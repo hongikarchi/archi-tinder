@@ -3,7 +3,7 @@
 > Phase logic, mathematical formulas, and hyperparameter theory.
 > Research agent updates this file. Orchestrator references it for algorithm tasks.
 
-**Last Synced (Reporter):** 2026-04-25 de9bfa3
+**Last Synced (Reporter):** 2026-04-25 ebbafd2
 
 ---
 
@@ -41,6 +41,8 @@ Top-K results fetched based on final multi-modal centroids, with MMR for diverse
 _(Updated 2026-04-25 03c697b: Sprint 4 Topic 02 Gemini session-end setwise rerank — when `gemini_rerank_enabled` (default OFF) AND len(predicted_cards) >= 2 at session-result time, services.rerank_candidates calls Gemini 2.5-flash with system prompt + 5 few-shot examples (Investigation 12) and reorders predicted_cards by taste alignment. Output is full ordering (sets up Topic 02 ∩ 04 RRF fusion in upcoming Option α composition). Off swipe hot path. thinking_budget=0 + temp=0 + JSON mime for deterministic structured extraction. Validation: set + length equality with input ids. Silent graceful degradation to cosine ordering on any failure (parse/partial/extra/duplicate/exception) per spec §5.4. Cost ~$0.002-0.0028/session.)_
 
 _(Updated 2026-04-25 de9bfa3: Sprint 4 Topic 04(b) DPP greedy MAP at session-final top-K — when `dpp_topk_enabled` (default OFF) AND len(predicted_cards) >= 2 AND session.like_vectors, services-side compute_dpp_topk applies Wilhelm 2018 kernel L_ii=q², L_ij=α·q_i·q_j·⟨v_i,v_j⟩ via Chen 2018 Cholesky-incremental greedy MAP O(N·k²). Standalone q = max centroid cosine (RRF rescale ships in Topic 02 ∩ 04 composition). α clamped [0,1] (α>1 breaks PSD). Singularity (residual<eps=1e-9) → pad q-ordered. SessionResultView runs DPP AFTER Topic 02 rerank, preserving cosine→rerank→DPP composition order.)_
+
+_(Updated 2026-04-25 ebbafd2: Sprint 4 Topic 02 ∩ 04 Option α composition (Investigation 07) — when BOTH `gemini_rerank_enabled` AND `dpp_topk_enabled`, SessionResultView composes the two flags via RRF fusion of cosine_rank + rerank_rank, then min-max rescale to [0.01, 1.0] (per Investigation 14 q-scale fix), then DPP with q_override. Single integration point: q_i in L-ensemble reads from RRF-fused score (Topic 02 output) instead of pure cosine. Standalone behaviors of either flag preserved when only one is on. Failure cascade: rerank returning input order = sentinel None = DPP falls back to cosine q. Sprint 4 algorithm batch (Topic 06 + 02 + 04 + composition) milestone reached.)_
 
 ---
 
