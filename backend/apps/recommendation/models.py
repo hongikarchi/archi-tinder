@@ -46,6 +46,11 @@ class AnalysisSession(models.Model):
     like_vectors        = models.JSONField(default=list)   # list of {embedding: [...], round: int}
     convergence_history = models.JSONField(default=list)   # list of delta-V floats
     previous_pref_vector = models.JSONField(default=list)
+    # Sprint 0 A4: pool exhaustion guard state (§5.6 + §6 Implementation Requirements item 1)
+    original_filters         = models.JSONField(default=dict)  # filters used at session creation (for re-relaxation if pool exhausts)
+    original_filter_priority = models.JSONField(default=list)
+    original_seed_ids        = models.JSONField(default=list)
+    current_pool_tier        = models.IntegerField(default=1)  # 1=full filter, 2=drop geo/numeric, 3=random pool
     created_at        = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

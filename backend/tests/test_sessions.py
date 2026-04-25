@@ -7,8 +7,8 @@ the SQLite test database.
 """
 import pytest
 import numpy as np
-from unittest.mock import patch, MagicMock
-from apps.recommendation.models import Project, AnalysisSession, SwipeEvent
+from unittest.mock import patch
+from apps.recommendation.models import Project, AnalysisSession
 
 
 # -- Helpers -----------------------------------------------------------------
@@ -935,3 +935,182 @@ class TestFarthestPointFromPool:
         # exposed has IDs not in pool_embeddings
         result = engine.farthest_point_from_pool(['X', 'Y'], ['Z'], pool_embeddings)
         assert result in {'X', 'Y'}
+
+
+@pytest.mark.django_db
+class TestPoolExhaustionGuard:
+    """Sprint 0 A4: §5.6 + §6 pool exhaustion 3-tier relaxation."""
+
+    def _make_session(self, user_profile, project, pool_ids=None, exposed_ids=None,
+                      current_pool_tier=1, original_filters=None):
+        """Helper: create an AnalysisSession with explicit pool/exposed state."""
+        pool = pool_ids if pool_ids is not None else list(_FAKE_POOL)
+        exposed = exposed_ids if exposed_ids is not None else []
+        return AnalysisSession.objects.create(
+            user=user_profile,
+            project=project,
+            phase='analyzing',
+            status='active',
+            pool_ids=pool,
+            pool_scores=dict(_FAKE_SCORES),
+            exposed_ids=exposed,
+            initial_batch=pool[:5],
+            like_vectors=[],
+            convergence_history=[],
+            previous_pref_vector=[],
+            current_round=len(exposed),
+            original_filters=original_filters or {},
+            original_filter_priority=[],
+            original_seed_ids=[],
+            current_pool_tier=current_pool_tier,
+        )
+
+    def test_no_op_when_pool_above_threshold(self, user_profile):
+        """Remaining pool >= threshold -> no escalation, pool_ids unchanged."""
+        from apps.recommendation import engine
+
+        project = Project.objects.create(user=user_profile, name='A4 no-op test')
+        # pool=15, exposed=5 -> remaining=10 >= threshold=5
+        session = self._make_session(
+            user_profile, project,
+            pool_ids=list(_FAKE_POOL),
+            exposed_ids=list(_FAKE_POOL[:5]),
+            current_pool_tier=1,
+        )
+        original_pool = list(session.pool_ids)
+        original_tier = session.current_pool_tier
+
+        engine.refresh_pool_if_low(session, threshold=5)
+
+        assert session.pool_ids == original_pool, 'pool_ids should not change when remaining >= threshold'
+        assert session.current_pool_tier == original_tier, 'current_pool_tier should not change'
+
+    def test_escalates_tier_1_to_tier_2_when_low(self, user_profile, monkeypatch):
+        """Remaining < 5 AND tier=1 -> fetch tier-2 candidates, merge, bump tier to 2."""
+        from apps.recommendation import engine
+
+        project = Project.objects.create(user=user_profile, name='A4 tier-1-to-2 test')
+        # pool=8 IDs, exposed=6 -> remaining=2 < threshold=5
+        pool = [f'A{str(i).zfill(5)}' for i in range(1, 9)]
+        exposed = pool[:6]
+        session = self._make_session(
+            user_profile, project,
+            pool_ids=pool,
+            exposed_ids=exposed,
+            current_pool_tier=1,
+            original_filters={'program': 'Museum', 'location_country': 'Korea'},
+        )
+
+        new_buildings = [f'B{str(i).zfill(5)}' for i in range(1, 11)]
+
+        def mock_create_bounded_pool(filters, priority, seeds, target=None):
+            # Tier 2: relaxed filters (no location_country) -> return new buildings
+            if 'location_country' not in (filters or {}):
+                return new_buildings[:], {bid: 0.5 for bid in new_buildings}
+            return [], {}
+
+        monkeypatch.setattr('apps.recommendation.engine.create_bounded_pool', mock_create_bounded_pool)
+
+        engine.refresh_pool_if_low(session, threshold=5)
+
+        # All new buildings appended (they are disjoint from pool by construction)
+        for bid in new_buildings:
+            assert bid in session.pool_ids, f'{bid} should be in merged pool'
+        assert session.current_pool_tier == 2, f'Expected tier 2, got {session.current_pool_tier}'
+        # Old pool IDs still present
+        for bid in pool:
+            assert bid in session.pool_ids, f'Original pool ID {bid} should still be present'
+
+    def test_no_escalation_when_already_tier_3(self, user_profile):
+        """Session at tier 3, low pool -> no further escalation, pool_ids unchanged."""
+        from apps.recommendation import engine
+
+        project = Project.objects.create(user=user_profile, name='A4 tier-3 no-op test')
+        pool = list(_FAKE_POOL[:3])   # only 3 total
+        exposed = pool[:2]            # remaining=1 < threshold=5
+        session = self._make_session(
+            user_profile, project,
+            pool_ids=pool,
+            exposed_ids=exposed,
+            current_pool_tier=3,
+        )
+        original_pool = list(session.pool_ids)
+
+        engine.refresh_pool_if_low(session, threshold=5)
+
+        assert session.pool_ids == original_pool, 'pool_ids must not change when already at tier 3'
+        assert session.current_pool_tier == 3
+
+    def test_new_pool_excludes_already_exposed(self, user_profile, monkeypatch):
+        """New pool from higher tier must NOT include already-exposed building_ids.
+
+        Session has original_filters with a geo key (location_country) so that tier-2
+        relaxation is attempted. The mocked create_bounded_pool returns IDs that overlap
+        with exposed — the helper must filter them out via exclude_set before merging.
+        _random_pool is also mocked to prevent hitting architecture_vectors in test DB.
+        """
+        from apps.recommendation import engine
+
+        project = Project.objects.create(user=user_profile, name='A4 exclude-exposed test')
+        pool = [f'A{str(i).zfill(5)}' for i in range(1, 9)]
+        exposed = pool[:6]
+        session = self._make_session(
+            user_profile, project,
+            pool_ids=pool,
+            exposed_ids=exposed,
+            current_pool_tier=1,
+            original_filters={'program': 'Museum', 'location_country': 'Korea'},
+        )
+
+        # create_bounded_pool returns IDs that overlap with exposed — helper must filter them out
+        overlap_ids = exposed[:3] + [f'C{str(i).zfill(5)}' for i in range(1, 6)]
+
+        def mock_create_bounded_pool(filters, priority, seeds, target=None):
+            # Tier-2 call: location_country dropped, returns overlap_ids (some exposed)
+            return list(overlap_ids), {bid: 0.5 for bid in overlap_ids}
+
+        def mock_random_pool(target):
+            return [f'R{str(i).zfill(5)}' for i in range(1, 6)]
+
+        monkeypatch.setattr('apps.recommendation.engine.create_bounded_pool', mock_create_bounded_pool)
+        monkeypatch.setattr('apps.recommendation.engine._random_pool', mock_random_pool)
+
+        engine.refresh_pool_if_low(session, threshold=5)
+
+        pool_set = set(session.pool_ids)
+        # Original pool IDs still present exactly once
+        for bid in pool:
+            assert session.pool_ids.count(bid) == 1, (
+                f'Original pool ID {bid} appears more than once in pool_ids'
+            )
+        # Exposed-only IDs (those in exposed but NOT in pool after escalation new segment)
+        # must not be duplicated; clean new IDs should be present
+        new_clean = [bid for bid in overlap_ids if bid not in set(pool)]
+        for bid in new_clean:
+            assert bid in pool_set, f'Clean new ID {bid} should be in merged pool'
+
+    def test_create_pool_with_relaxation_falls_through_to_random(self, monkeypatch):
+        """Tier 1 + tier 2 both return empty -> tier 3 random pool, tier_used=3."""
+        from apps.recommendation import engine
+
+        random_pool = [f'R{str(i).zfill(5)}' for i in range(1, 6)]
+
+        def mock_create_bounded_pool(filters, priority, seeds, target=None):
+            return [], {}  # Both full and relaxed filters return empty
+
+        def mock_random_pool(target):
+            return list(random_pool)
+
+        monkeypatch.setattr('apps.recommendation.engine.create_bounded_pool', mock_create_bounded_pool)
+        monkeypatch.setattr('apps.recommendation.engine._random_pool', mock_random_pool)
+
+        pool_ids, pool_scores, tier_used = engine.create_pool_with_relaxation(
+            filters={'program': 'Museum', 'location_country': 'Korea'},
+            filter_priority=['program', 'location_country'],
+            seed_ids=[],
+        )
+
+        assert tier_used == 3, f'Expected tier 3, got {tier_used}'
+        assert pool_scores == {}, 'Tier 3 random pool has no scores'
+        for rid in random_pool:
+            assert rid in pool_ids, f'{rid} should be in random pool result'

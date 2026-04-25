@@ -166,32 +166,18 @@ class SessionCreateView(APIView):
         if not project:
             project = Project.objects.create(user=profile, name='Untitled', filters=filters)
 
-        # Create bounded pool with weighted scoring (with filter relaxation fallback)
+        # Create bounded pool with weighted scoring (3-tier relaxation fallback via helper)
         active_filters = filters or project.filters or {}
-        pool_ids, pool_scores = engine.create_bounded_pool(
+        pool_ids, pool_scores, current_pool_tier = engine.create_pool_with_relaxation(
             active_filters, filter_priority, seed_ids
         )
-        filter_relaxed = False
-
-        if not pool_ids and active_filters:
-            # Relax: drop geographic + numeric constraints, keep program/style/material
-            relaxed = {k: v for k, v in active_filters.items()
-                       if k not in ('location_country', 'year_min', 'year_max', 'min_area', 'max_area')}
-            if relaxed and relaxed != active_filters:
-                relaxed_priority = [k for k in filter_priority if k in relaxed]
-                pool_ids, pool_scores = engine.create_bounded_pool(
-                    relaxed, relaxed_priority, seed_ids
-                )
-                if pool_ids:
-                    filter_relaxed = True
-                    logger.info('Session pool relaxed (dropped geo/numeric): %d buildings', len(pool_ids))
+        filter_relaxed = current_pool_tier > 1
+        if filter_relaxed:
+            logger.info('Session pool relaxed to tier %d: %d buildings', current_pool_tier, len(pool_ids))
 
         if not pool_ids:
-            # Final fallback: diverse random pool
-            pool_ids = engine._random_pool(RC['bounded_pool_target'])
-            pool_scores = {}
-            filter_relaxed = True
-            logger.info('Session pool fallback to random: %d buildings', len(pool_ids))
+            # Truly unrecoverable (even random pool empty)
+            return Response({'detail': 'No buildings match your criteria'}, status=404)
 
         # Get pool embeddings
         pool_embeddings = engine.get_pool_embeddings(pool_ids)
@@ -225,18 +211,22 @@ class SessionCreateView(APIView):
         prefetch_card_2 = engine.get_building_card(initial_batch[2]) if len(initial_batch) > 2 else None
 
         session = AnalysisSession.objects.create(
-            user                 = profile,
-            project              = project,
-            phase                = 'exploring',
-            pool_ids             = pool_ids,
-            pool_scores          = pool_scores,
-            current_round        = 0,
-            preference_vector    = [],
-            exposed_ids          = [initial_batch[0]],
-            initial_batch        = initial_batch,
-            like_vectors         = [],
-            convergence_history  = [],
-            previous_pref_vector = [],
+            user                     = profile,
+            project                  = project,
+            phase                    = 'exploring',
+            pool_ids                 = pool_ids,
+            pool_scores              = pool_scores,
+            current_round            = 0,
+            preference_vector        = [],
+            exposed_ids              = [initial_batch[0]],
+            initial_batch            = initial_batch,
+            like_vectors             = [],
+            convergence_history      = [],
+            previous_pref_vector     = [],
+            original_filters         = active_filters,
+            original_filter_priority = list(filter_priority or []),
+            original_seed_ids        = list(seed_ids or []),
+            current_pool_tier        = current_pool_tier,
         )
 
         logger.info('Session created: %s (pool=%d, tiers=%d, relaxed=%s)', session.session_id, len(pool_ids), len(tiers), filter_relaxed)
@@ -457,7 +447,14 @@ class SwipeView(APIView):
                     # frontend already has in its queue.
                     if client_buffer_ids:
                         session.exposed_ids = _merge_buffer_into_exposed(session.exposed_ids, client_buffer_ids)
-                    session.save(update_fields=['phase', 'convergence_history', 'previous_pref_vector', 'exposed_ids'])
+                    # Pool exhaustion guard for "더 swipe" path (§5.6 + §6 A4):
+                    # User is extending past auto-stop — pool is most likely exhausted here.
+                    # Mutates session.pool_ids/pool_scores/current_pool_tier in-place if needed.
+                    engine.refresh_pool_if_low(session, threshold=5)
+                    session.save(update_fields=[
+                        'phase', 'convergence_history', 'previous_pref_vector', 'exposed_ids',
+                        'pool_ids', 'pool_scores', 'current_pool_tier',
+                    ])
                     # Fall through to select next card below
                     # (skip normal swipe recording for action card)
                     pool_embeddings = engine.get_pool_embeddings(session.pool_ids)
@@ -612,7 +609,15 @@ class SwipeView(APIView):
                 session.phase = 'converged'
                 logger.info('Session %s: analyzing -> converged', session.session_id)
 
-            # 7. Check pool exhaustion
+            # 6b. Pool exhaustion guard (§5.6 + §6 implementation requirement A4):
+            # If remaining pool < 5 buildings, escalate to next filter relaxation tier
+            # to extend the pool with new candidates before card selection.
+            # refresh_pool_if_low mutates session.pool_ids/pool_scores/current_pool_tier
+            # in-place when escalation fires.
+            if session.phase not in ('converged', 'completed'):
+                engine.refresh_pool_if_low(session, threshold=5)
+
+            # 7. Check pool exhaustion (hard-empty fallback after refresh attempt)
             remaining = [pid for pid in session.pool_ids if pid not in set(session.exposed_ids)]
             if not remaining and session.phase not in ('converged', 'completed'):
                 session.phase = 'converged'
@@ -679,10 +684,13 @@ class SwipeView(APIView):
                 if bid not in session.exposed_ids:
                     session.exposed_ids = session.exposed_ids + [bid]
 
-            # Save session BEFORE prefetch so concurrent requests see updated exposed_ids
+            # Save session BEFORE prefetch so concurrent requests see updated exposed_ids.
+            # pool_ids/pool_scores/current_pool_tier included unconditionally to persist
+            # any in-place mutations from refresh_pool_if_low (A4 pool exhaustion guard).
             session.save(update_fields=[
                 'preference_vector', 'current_round', 'exposed_ids',
-                'phase', 'like_vectors', 'convergence_history', 'previous_pref_vector'
+                'phase', 'like_vectors', 'convergence_history', 'previous_pref_vector',
+                'pool_ids', 'pool_scores', 'current_pool_tier',
             ])
 
             # Save copies for prefetch calculation outside transaction

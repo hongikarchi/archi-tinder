@@ -196,7 +196,6 @@ def update_preference_vector(pref_vector, embedding, action):
     return _normalize(updated)
 
 
-
 def get_top_k_results(pref_vector, exposed_ids, k=None):
     """
     Query top-k buildings by cosine similarity to preference vector.
@@ -284,6 +283,104 @@ def _random_pool(target):
         )
         rows = cur.fetchall()
     return [row[0] for row in rows]
+
+
+def create_pool_with_relaxation(filters, filter_priority, seed_ids, exclude_ids=None, target=None, start_tier=1):
+    """
+    Run 3-tier pool creation with relaxation fallback.
+
+    Tier 1: full filter (create_bounded_pool with filters as-is).
+    Tier 2: drop geographic + numeric (location_country, year_min, year_max, min_area, max_area).
+    Tier 3: random pool (_random_pool(target)).
+
+    exclude_ids: building_ids to remove from the result (e.g., already-exposed). Default None.
+    start_tier: starting tier (1, 2, or 3). Used by pool exhaustion guard to escalate from
+                session's current tier.
+
+    Returns (pool_ids, pool_scores, tier_used).
+    Returns ([], {}, 0) if even tier 3 produces no candidates after exclude (unrecoverable).
+    """
+    if target is None:
+        target = RC['bounded_pool_target']
+    exclude_set = set(exclude_ids or [])
+
+    # Tier 1
+    if start_tier <= 1:
+        pool_ids, pool_scores = create_bounded_pool(filters or {}, filter_priority, seed_ids, target=target)
+        filtered_ids = [bid for bid in pool_ids if bid not in exclude_set]
+        if filtered_ids:
+            filtered_scores = {bid: s for bid, s in pool_scores.items() if bid not in exclude_set}
+            return filtered_ids, filtered_scores, 1
+
+    # Tier 2
+    if start_tier <= 2:
+        relaxed = {k: v for k, v in (filters or {}).items()
+                   if k not in ('location_country', 'year_min', 'year_max', 'min_area', 'max_area')}
+        if relaxed and relaxed != (filters or {}):
+            relaxed_priority = [k for k in (filter_priority or []) if k in relaxed]
+            pool_ids, pool_scores = create_bounded_pool(relaxed, relaxed_priority, seed_ids, target=target)
+            filtered_ids = [bid for bid in pool_ids if bid not in exclude_set]
+            if filtered_ids:
+                filtered_scores = {bid: s for bid, s in pool_scores.items() if bid not in exclude_set}
+                return filtered_ids, filtered_scores, 2
+
+    # Tier 3 — random pool
+    pool_ids = [bid for bid in _random_pool(target) if bid not in exclude_set]
+    if pool_ids:
+        return pool_ids, {}, 3
+    return [], {}, 0
+
+
+def refresh_pool_if_low(session, threshold=5):
+    """
+    If session's remaining pool (pool_ids - exposed_ids) is below threshold, escalate
+    to the next tier and merge new pool_ids into the session.
+
+    Side effect: when escalation fires, session.pool_ids, session.pool_scores, and
+    session.current_pool_tier are mutated in-place. Caller MUST save the session with
+    these fields in update_fields.
+
+    Returns the session's pool_ids list (updated if escalation fired, unchanged otherwise).
+    Per spec §5.6 + §6: triggered when remaining pool < threshold (default 5).
+    """
+    exposed_set = set(session.exposed_ids or [])
+    remaining = [bid for bid in session.pool_ids if bid not in exposed_set]
+    if len(remaining) >= threshold:
+        return session.pool_ids  # No escalation needed
+    if session.current_pool_tier >= 3:
+        return session.pool_ids  # Already at tier 3 — nothing to escalate to
+
+    next_tier = session.current_pool_tier + 1
+    # exclude_ids: both current pool AND exposed (belt-and-suspenders; exposed already
+    # excluded by pool construction but cheap defensive guard)
+    exclude_ids = list(session.pool_ids or []) + list(session.exposed_ids or [])
+    new_pool_ids, new_pool_scores, tier_used = create_pool_with_relaxation(
+        session.original_filters,
+        session.original_filter_priority,
+        session.original_seed_ids,
+        exclude_ids=exclude_ids,
+        start_tier=next_tier,
+    )
+    if not new_pool_ids:
+        # No new candidates available even at higher tier — degrade gracefully
+        logger.info(
+            'Session %s: pool exhaustion escalation to tier %d found no new candidates',
+            session.session_id, next_tier,
+        )
+        return session.pool_ids
+
+    # Merge: append new IDs (guaranteed disjoint by exclude_ids) and scores
+    session.pool_ids = list(session.pool_ids) + new_pool_ids
+    merged_scores = dict(session.pool_scores or {})
+    merged_scores.update(new_pool_scores)
+    session.pool_scores = merged_scores
+    session.current_pool_tier = tier_used
+
+    logger.info(
+        'Session %s: pool exhaustion guard escalated to tier %d, added %d buildings (total pool=%d)',
+        session.session_id, tier_used, len(new_pool_ids), len(session.pool_ids),
+    )
+    return session.pool_ids
 
 
 def _build_score_cases(filters, weights):
