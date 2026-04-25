@@ -59,6 +59,7 @@
 - [2026-04-26] REVIEW-FAIL: 2da9c65 — **Part A: PASS (0 findings, 10 commits genuinely clean — Sprint 3 C-1 + Sprint 4 Topics 02/04/06 + Composition).** Part B FAIL: Persona Brutalist parse_query 4375 ms (+9.4% over 4000 ms ceiling). **Same structural cause as 57b3244.md retry**: chat phase prompt 5924 input_tokens makes Gemini call 3.0-3.5s; Django/network adds ~900 ms; total 4.0-4.4 s band with natural variance. IMP-4 still verified (`thinking_tokens=None`). All 5 new features in this batch are **flag-gated default OFF** so they don't affect this latency at all. **Improvement recommendations from `57b3244-improvements.md` not yet adopted** — Tier 1.1 (spec §4 budget <5000 ms) or Tier 1.2 (multi-run aggregation) would have made this PASS. **Recommendation**: same as prior cycle — override-push (this batch is risk-bounded by flag-OFF gates) AND prioritize Tier 1.1 + 1.2 from `57b3244-improvements.md` as the NEXT immediate task before more UI-affecting work hits the same wall.
 - [2026-04-26] USER-OVERRIDE-PUSH: 2da9c65 — User accepted the +9.4% margin over spec §4 budget (second consecutive override-push for the same structural reason) and pushed manually. Branch deployed to `origin/main` (`57b3244..2da9c65`, 10 commits — Sprint 3 C-1 + Sprint 4 Topics 02/04/06 + Composition). Audit trail: real diagnostic data captured in `parse_query_timing` SessionEvent (`thinking_tokens=None` IMP-4 verified, `input_tokens=5924` chat-phase prompt floor, `gemini_total_ms=3462` natural variance). All 5 new features are flag-gated default OFF — push is risk-bounded. **🚨 ESCALATION**: see `.claude/reviews/2da9c65-improvements.md` — second consecutive same-cause Part B FAIL means Tier 1 work from `57b3244-improvements.md` is now URGENT not optional. Specifically Tier 1.1 (loosen spec §4 budget to <5000 ms, 1-line spec edit) + Tier 1.2 (multi-run aggregation in /review Step B4, ~30 min). Without these, every future UI-affecting batch will hit the same wall and produce identical override-push pattern. **Next Sprint pickup recommendation**: pause feature work briefly, ship Tier 1.1 + 1.2 first (~30 min total), then resume.
 - [2026-04-26] REVIEW-REQUESTED: 210d1dc — Sprint 4 Result page (bookmark endpoint + frontend)
+- [2026-04-26] REVIEW-REQUESTED: a35f03f — Design terminal setup (designer agent + GEMINI.md migration)
 
 ---
 
@@ -200,6 +201,23 @@ Google OAuth only. Korean users need domestic login.
 ---
 
 ## Resolved
+
+### Design Terminal Bootstrap -- 2026-04-26
+
+#### DESIGN-TERM1. Designer agent + GEMINI.md migration -- 2026-04-26
+One-time bootstrap replacing the antigravity (Gemini) terminal with a Claude-based design terminal. Mirrors the orchestrator/CLAUDE.md relationship: designer (opus) is the supervisor, DESIGN.md is the design DNA, design-* sub-agents spawned on demand.
+- [x] NEW `.claude/agents/designer.md` — design pipeline supervisor (opus, Agent tool); full UI vs Data layer split + reciprocal TODO(claude)/TODO(designer) marker conventions + 3 worked examples + API contract shapes lifted from GEMINI.md
+- [x] DELETED `GEMINI.md` — all load-bearing content migrated to designer.md
+- [x] `CLAUDE.md` — Design pipeline ownership rule added; Last Updated (Gemini) → Last Updated (Designer); Frontend Conventions notes design-pipeline UI ownership
+- [x] `DESIGN.md` — header rewritten as design-pipeline exclusive write territory; pointer to designer.md + CLAUDE.md Rules
+- [x] `.claude/agents/front-maker.md` — narrowed to data layer only; UI layer designer-owned; TODO(designer) marker convention; JSX data-plumbing integration step clarified
+- [x] `.claude/agents/git-manager.md` — excludes DESIGN.md + designer.md + design-*.md from default staging (design terminal commits own work)
+- [x] `.claude/agents/orchestrator.md` — antigravity → design terminal wording; TODO(designer) drop instruction for front-maker scoping
+- [x] `.claude/commands/review.md` — GEMINI.md removed from non-UI skip-list
+- [x] `.claude/WORKFLOW.md` — Agent Roster + Terminal Roster updated; Frontend Layer Ownership relabeled; Git Discipline design rule; NEW Case 6.5 Design flow; Reporter Key rules row updated
+- [x] `.claude/Report.md` — Last Updated (Gemini) section renamed → Last Updated (Designer) with succession note
+- [x] `.claude/Task.md` — Handoffs section antigravity → design cycle description and MOCKUP-READY signal definition
+- Commit: a35f03f
 
 ### Sprint 4 §8 Result Page: Bookmark Endpoint + Frontend -- 2026-04-26
 

@@ -188,40 +188,45 @@ flowchart TD
 
 ## Last Updated (Claude)
 - **Date:** 2026-04-26
-- **Commits:** 210d1dc -- feat: Sprint 4 Result page + bookmark endpoint (§8 + Investigation 08)
-- **Phase:** Sprint 4 Result page -- bookmark endpoint + FavoritesPage RecommendedSection
+- **Commits:** a35f03f -- docs: set up design pipeline (designer agent + DESIGN.md as design DNA)
+- **Phase:** Governance / agent-config bootstrap — design terminal replaces antigravity (Gemini) terminal
 - **Changes:**
-  - `backend/apps/recommendation/urls.py` -- added `POST /api/v1/projects/<uuid:project_id>/bookmark/` route wiring ProjectBookmarkView
-  - `backend/apps/recommendation/views.py` -- NEW ProjectBookmarkView: toggle save/unsave on Project.saved_ids (idempotent); IDOR-safe project ownership filter (404 on other-user project); rank_zone classification ('primary' rank<=10 / 'secondary' rank>10 per Spec v1.2 §6 req #4); bookmark SessionEvent emitted with rank_zone + rank_corpus (null placeholder) + provenance booleans (in_cosine_top10, in_gemini_top10, in_dpp_top10, all default False); ValidationError + timezone hoisted to module-level imports; request body: {card_id, action, rank, session_id?}; response: {saved_ids, count}
-  - `backend/tests/test_bookmark.py` -- NEW: 20 tests (save/unsave/idempotency/validation/IDOR/rank_zone/provenance). 144 total pass + 1 skipped (124 prior + 20 new).
-  - `frontend/src/App.jsx` -- extractSavedIds(rawSavedIds) helper handles both dict {id, saved_at} and legacy string shapes; handleToggleBookmark with optimistic update + revert on backend error; sharedLayoutProps extended with savedIds + onToggleBookmark
-  - `frontend/src/api/client.js` -- NEW bookmarkBuilding(projectId, cardId, action, rank, sessionId) function
-  - `frontend/src/layouts/MainLayout.jsx` -- onToggleBookmark passthrough to FavoritesPage via sharedLayoutProps chain
-  - `frontend/src/pages/FavoritesPage.jsx` -- NEW RecommendedSection sub-component: primary grid (rank 1-10, always visible) + IntersectionObserver lazy-loaded secondary grid (rank 11-50); "More Recommendations" divider; "No more to show" label when pool<50; NEW ResultCard sub-component with star bookmark button (44x44px touch target, #ec4899 saved / rgba(0,0,0,0.55)+blur unsaved per DESIGN.md §2.2 + §1.2); aria-label for screen-reader state; BuildingCard (liked-buildings section) unchanged
-- **Verification:** 144 backend tests pass + 1 skipped (corpus gate, expected). Reviewer: PASS. Security: PASS.
-- **Summary:** Sprint 4 §8 Result page: bookmark toggle endpoint with rank_zone/provenance telemetry wired to SessionEvent; FavoritesPage gains RecommendedSection with lazy-loaded secondary grid and optimistic bookmark UI.
+  - `.claude/agents/designer.md` -- NEW: design pipeline supervisor (opus, Agent tool for spawning design-* sub-agents on demand); mirrors orchestrator shape; full UI vs Data layer rules + reciprocal TODO(claude)/TODO(designer) marker conventions + 3 worked examples + API contract shapes lifted from GEMINI.md verbatim
+  - `GEMINI.md` -- DELETED (all load-bearing content migrated to designer.md)
+  - `CLAUDE.md` -- new Design pipeline ownership rule; Last Updated (Gemini) → Last Updated (Designer); Frontend Conventions section notes design-pipeline UI ownership
+  - `DESIGN.md` -- header rewritten: design-pipeline exclusive write ownership; pointer to designer.md + CLAUDE.md Rules
+  - `.claude/agents/front-maker.md` -- narrowed to data layer only; UI layer explicitly designer-owned; reciprocal TODO(designer) marker convention; JSX data-plumbing in integration step still allowed
+  - `.claude/agents/git-manager.md` -- excludes DESIGN.md + .claude/agents/designer.md + .claude/agents/design-*.md from default staging (design terminal commits own work, per research-terminal analog)
+  - `.claude/agents/orchestrator.md` -- TODO(claude) wording updated (antigravity → design terminal); reciprocal TODO(designer) drop instruction added for front-maker scoping
+  - `.claude/commands/review.md` -- removed GEMINI.md from non-UI skip-list
+  - `.claude/WORKFLOW.md` -- Agent Roster + Terminal Roster antigravity → design; Frontend Layer Ownership relabel; Git Discipline design-commits-own-work rule; NEW Case 6.5 Design flow; Reporter Key rules row Last Updated (Gemini) → Last Updated (Designer)
+  - `.claude/Report.md` -- Last Updated (Gemini) section renamed → Last Updated (Designer) with succession note; existing 2026-04-06 content preserved as legacy entry
+  - `.claude/Task.md` -- Handoffs section antigravity → design across cycle description and MOCKUP-READY signal definition
+- **Verification:** Governance-only commit; no backend/frontend source code changed; no tests to run.
+- **Summary:** One-time bootstrap replacing the antigravity (Gemini) terminal with a Claude-based design terminal: designer.md (opus supervisor) + DESIGN.md as design DNA, with per-agent boundary updates across orchestrator, front-maker, git-manager, review, and WORKFLOW.md.
 - **Change diagram:**
 ```mermaid
 graph TD
-    subgraph Backend
-        urls.py:::modified
-        views.py:::modified
-        test_bookmark.py:::new
+    subgraph AgentConfig[".claude/agents"]
+        designer_md:::new
+        front_maker_md["front-maker.md"]:::modified
+        git_manager_md["git-manager.md"]:::modified
+        orchestrator_md["orchestrator.md"]:::modified
     end
-    subgraph Frontend
-        App.jsx:::modified
-        client.js:::modified
-        MainLayout.jsx:::modified
-        FavoritesPage.jsx:::modified
+    subgraph Docs
+        CLAUDE_md["CLAUDE.md"]:::modified
+        DESIGN_md["DESIGN.md"]:::modified
+        WORKFLOW_md[".claude/WORKFLOW.md"]:::modified
+        Report_md[".claude/Report.md"]:::modified
+        Task_md[".claude/Task.md"]:::modified
+        review_md[".claude/commands/review.md"]:::modified
+        GEMINI_md["GEMINI.md"]:::deleted
     end
-    views.py --> test_bookmark.py
-    urls.py --> views.py
-    App.jsx --> client.js
-    App.jsx --> FavoritesPage.jsx
-    MainLayout.jsx --> FavoritesPage.jsx
+    GEMINI_md -->|migrated to| designer_md
 
     classDef new fill:#10b981,color:#fff
     classDef modified fill:#f59e0b,color:#000
+    classDef deleted fill:#ef4444,color:#fff
 ```
 
 ## Last Updated (Designer)

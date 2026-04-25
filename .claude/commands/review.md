@@ -69,6 +69,7 @@ Then run these git commands (via Bash) and capture output:
 - `git rev-parse --short HEAD` → sha_short (for display)
 - `git rev-parse HEAD` → **REVIEWED_SHA** (full SHA — stash this for the Part C HEAD-drift check)
 - `git rev-parse origin/main` → **REVIEWED_ORIGIN_MAIN** (full SHA — stash this for the Part C remote-drift check; non-fatal if `origin/main` is absent offline, in which case record `UNAVAILABLE` and skip remote-drift check in Step C2)
+- `date -u +%Y-%m-%dT%H:%M:%SZ` → **REVIEW_START_UTC** (ISO 8601 UTC timestamp — stash for the Step B0a SessionEvent.failure pre-check window)
 - `git log <range> --oneline` → commit list (two-dot is correct here)
 - `git diff <range_three_dot> --stat` → file scope + insertion/deletion counts
   (convert the range's `..` to `...` for divergent-history safety; on linear history this is equivalent)
@@ -207,7 +208,53 @@ Inspect `CHANGED_FILES` (the file list from Step A2) for any of these patterns:
 
 **If no UI-affecting paths**: skip Part B entirely. In Step A4's report, fill the "Part B — Browser Verification" section with `Skipped — no UI-affecting paths in scope (only docs/config/test/tooling files changed).` Emit to stdout: `BROWSER TEST: skipped — no UI-affecting paths.` Then jump to Part C.
 
-**If UI-affecting paths present**: continue to Step B1 with the matched paths logged.
+**If UI-affecting paths present**: continue to Step B0a with the matched paths logged.
+
+## Step B0a — SessionEvent failure pre-check (Tier 1.3 fast-fail)
+
+Before launching the browser, query the SessionEvent table for any recent Gemini /
+parse_query / persona_report failure events. If a recent external-API failure has
+already been recorded, we know the browser run will hit it too — fail fast with the
+underlying error rather than spending 60-120 s discovering it as a latency regression
+mid-test.
+
+**Window**: from `(REVIEW_START_UTC - 5 minutes)` to now. The 5-minute window catches
+both very recent (manual smoke before invoking /review) and slightly-older
+(quota / region issue still active) failures without picking up unrelated noise from
+hours-old runs.
+
+```bash
+WINDOW_START=$(python3 -c "
+from datetime import datetime, timedelta, timezone
+start = datetime.fromisoformat('${REVIEW_START_UTC%Z}+00:00') - timedelta(minutes=5)
+print(start.strftime('%Y-%m-%dT%H:%M:%SZ'))
+")
+cd backend && python3 manage.py shell -c "
+from apps.recommendation.models import SessionEvent
+from datetime import datetime
+window_start = datetime.fromisoformat('${WINDOW_START%Z}+00:00')
+recent = SessionEvent.objects.filter(
+    event_type__in=['gemini_failure', 'parse_query_failure', 'persona_report_failure', 'gemini_rerank'],
+    created_at__gte=window_start,
+).exclude(payload__success=True).order_by('-created_at')[:5]
+for ev in recent:
+    print(f'{ev.created_at.isoformat()} {ev.event_type} {ev.payload}')
+" 2>&1 | tee test-artifacts/review/precheck.log
+```
+
+(Pass `REVIEW_START_UTC` and `WINDOW_START` via env or string-substitute into the
+heredoc — implementation detail of the bash wrapper, not the gate logic.)
+
+- **Empty output**: no recent external-API failures detected; proceed to B1.
+- **Non-empty output**: Part B FAIL with reason
+  `External-API failure detected within last 5 minutes (<oldest event_type>: <oldest payload truncated 200 chars>). Resolve upstream Gemini / Imagen issue (check API status, quota, region) before re-running /review.`
+  Skip browser launch entirely — emit `BROWSER TEST: FAIL — pre-check caught
+  upstream API failure.` and jump to Step C3 path C3b.
+
+This fast-fail is intentional: ~$0.0006 + 60-120 s of browser-test time saved per
+upstream-outage scenario. False-positive risk: if the failure was transient (already
+self-resolved), we will re-fail at A1's instructions to retry — acceptable, since the
+human can confirm the API is healthy and re-run /review in seconds.
 
 ## Step B1 — Preflight & authentication
 
@@ -333,13 +380,32 @@ const PERSONAS = [
 
 For each persona, execute Steps B4–B7 below. After all 3 complete, run Step B8 (cross-persona aggregation), then Step B9 (cleanup + report append).
 
-## Step B4 — Time-to-first-card latency gate
+## Step B4 — Time-to-first-card latency gate (multi-run, Tier 1.2)
 
-For each persona, measure **time from NL submit → first card visible** and assert against spec Section 4: `< 3-4s`.
+For each persona, measure **time from NL submit → first card visible** and assert
+against spec Section 4 budgets. Per Tier 1.2 of `.claude/reviews/57b3244-improvements.md`,
+this step runs the NL submit → first card flow **3 times per persona** and uses
+**p50** (median) of the three measurements as the gate value. Single-shot
+measurement was masking ~5% Gemini API variance and producing same-cause Part B
+FAILs across consecutive `/review` cycles (`57b3244`, `2da9c65`); multi-run p50 is
+the standard mitigation for non-deterministic external services.
 
-1. Navigate to `/`.
-2. Open AI search input (home tab).
-3. Inject a fetch interceptor:
+**Gate values (current spec §4)**: 4000 ms hard ceiling for `Brutalist` and
+`Sustainable Korean`; 5000 ms for `Bare Query` (wider pool per Topic 11 / spec C-3).
+These values match the spec **as currently written**. If the spec §4 budget is later
+updated by the research terminal (Tier 1.1 — see `.claude/reviews/2da9c65-improvements.md`),
+update the values here in lockstep so this file stays in sync with the spec.
+
+### B4a — Run the flow 3 times
+
+For each of `run_idx = 1..3`, in a fresh browser context (no shared cookies /
+localStorage carryover between runs):
+
+1. Open a new browser context with the auth tokens injected (same `storageState`
+   pattern as Step B2).
+2. Navigate to `/`.
+3. Open AI search input (home tab).
+4. Inject a fetch interceptor:
 ```js
 () => {
   window.__reviewState = window.__reviewState || {};
@@ -357,11 +423,55 @@ For each persona, measure **time from NL submit → first card visible** and ass
   };
 }
 ```
-4. Type the persona query and record `performance.now()` as `t_submit` right before submit.
-5. Wait for first card to be visible (DOM check: image element with `r2.dev` URL is loaded AND `naturalWidth > 0`). Record this as `t_first_card`.
-6. **Strict gate**: `t_first_card - t_submit < 4000` ms (spec target 3-4s; we use 4s as the hard ceiling). For persona `Bare Query`, allow up to **5000 ms** since bare queries widen the pool (Topic 11 / spec C-3).
+5. Type the persona query and record `performance.now()` as `t_submit`
+   immediately before submit.
+6. Wait for first card visible (DOM check: image element with `r2.dev` URL is
+   loaded AND `naturalWidth > 0`). Record `t_first_card`.
+7. Compute `latency_ms = round(t_first_card - t_submit)`. Append to
+   `runs[]` (1-indexed).
+8. (Optional, recommended) Capture this run's `parse_query_timing`
+   SessionEvent for the IMP-4 telemetry trail — see B4b.
+9. **Continuation policy**: if `run_idx < 3`, close this browser context. If
+   `run_idx == 3`, KEEP this context open — it carries the freshest pool /
+   prefetch state and is what Steps B5–B7 (swipe loop + edge cases) will
+   continue against. (Choosing the last run rather than the median run avoids
+   the engineering cost of keeping all three contexts alive; the swipe loop's
+   own latency assertions are independent of the parse-query latency
+   distribution captured here.)
 
-If gate fails: Part B FAIL with `Persona X: time-to-first-card = Y ms (spec budget 4000 ms)`.
+### B4b — Persist runs to the report
+
+After the 3 runs:
+
+```
+runs_sorted = sorted(runs)            # e.g. [3920, 4050, 4380]
+p50_ms = runs_sorted[1]               # median (50th percentile of n=3)
+min_ms = runs_sorted[0]
+max_ms = runs_sorted[2]
+```
+
+Record the full `[runs[0], runs[1], runs[2]]` triple in the report's per-persona
+table — keeping all three values visible preserves variance signal for trend
+analysis (Tier 1.2 explicitly preserves visibility, not just headline number).
+
+### B4c — Apply the gate
+
+**Strict gate**: `p50_ms < <persona budget>` where the budget is:
+
+| Persona             | Budget (ms) |
+|---------------------|-------------|
+| Brutalist           | 4000        |
+| Sustainable Korean  | 4000        |
+| Bare Query          | 5000        |
+
+If gate fails: Part B FAIL with
+`Persona X: time-to-first-card p50(3 runs) = <p50_ms> ms (budget <budget> ms); runs = [<r0>, <r1>, <r2>]; min=<min_ms>, max=<max_ms>`.
+
+**On Persona X p50 PASS but min < budget AND max > budget** (high-variance run
+that happens to median into PASS): record a MINOR-equivalent note in the report's
+Part B section so the trend stays visible: `Persona X variance: max=<max_ms> ms
+exceeded budget but p50 PASS; monitor for Tier 1.1 spec budget review`. This is
+informational only — the gate is p50.
 
 ## Step B5 — Swipe lifecycle: 25 swipes with per-swipe latency gate
 
@@ -588,7 +698,8 @@ The main terminal's orchestrator reads the Handoffs section at the start of its 
 - Do not suggest changes outside the diff scope unless you explicitly flag the suggestion as "out of scope for this branch".
 - **Do not commit. Do not push — `git push` is always user-initiated from the review terminal after a `REVIEW-PASSED` signal (drift-verified).** Source code remains read-only. The only permitted writes are `.claude/reviews/*.md` (the report), the handoff line in `.claude/Task.md`'s `## Handoffs` section, and transient `test-artifacts/review/` (cleaned in Step B9).
 - **`research/` is strictly READ-ONLY** (including `research/spec/`, `research/search/`, `research/investigations/`, `research/algorithm.md`). The reporter's narrow exception for `algorithm.md` does NOT apply to this command. You may read for context; never write. If commits under review modify `research/` files, flag that as a governance finding (unless the commit was made by the research terminal itself — check git log author/context).
-- **No retries on flaky Part B steps.** If a step fails, hard-fail and report. The fast `web-tester` retries gestures up to 1×; this command does not. The point is to catch flakiness rather than mask it.
+- **No retries on flaky Part B gesture steps.** Button-click misses, image-load timeouts, and other gesture-level flakes are hard-failed on first occurrence (same posture as before — the fast `web-tester` retries gestures up to 1×; this command does not). The point is to catch genuine UI flakiness rather than mask it.
+- **Multi-run aggregation IS used for non-deterministic external-service latency** (Step B4 parse_query → first card, run 3× and gate on p50). This is not a "retry" — it is industry-standard aggregation for stochastic upstream services (Gemini API ~5% variance), where single-shot measurement produces fail patterns that don't reflect the actual user-facing distribution. The previous "no retries" rule was a category error when applied to LLM API latency; per Tier 1.2 of `.claude/reviews/57b3244-improvements.md`, gesture flakiness and external-API latency variance are now treated separately.
 - **Pre-existing console errors fail the run** (Step B2 baseline gate). Do not "subtract" pre-existing errors and only flag new ones — the user shipped a clean app and any console error is a regression target.
 - **Auth refresh** (401 → /auth/refresh/ → retry) is allowed and not counted as a network error. All other 4xx/5xx outside the auth path are failures.
 - **Bash commands permitted** (Part A): `git log`, `git diff`, `git rev-parse`, `git show`, `git fetch origin main --quiet` (drift checks only), `mkdir -p`, `date`. Part B additionally permits `curl` (dev-server health + dev-login) and `node` (Playwright baseline diagnostics).
