@@ -36,6 +36,7 @@
 - [2026-04-25] REVIEW-PASSED: ded38be — drift checks passed, 1 MINOR noted (see .claude/reviews/latest.md); run `git push` manually from this terminal
 - [2026-04-25] REVIEW-REQUESTED: 8bf73b8 — pool-score normalization (Topic 12 A1); run `/deep-review` next.
 - [2026-04-25] REVIEW-REQUESTED: f04646f — max_consecutive_dislikes 10 -> 5 (Section 5.1 A2); run `/deep-review` next.
+- [2026-04-25] REVIEW-REQUESTED: 190c830 — Project schema migration (A3): liked_ids intensity shape + saved_ids field; run `/deep-review` next (UI-affecting paths in scope — recommend `/deep-web-test` after).
 
 ---
 
@@ -177,6 +178,21 @@ Google OAuth only. Korean users need domestic login.
 ---
 
 ## Resolved
+
+### Sprint 0 A3: Project Schema Migration -- 2026-04-25
+
+#### SCHEMA1. Project.liked_ids intensity shape + saved_ids field (Section 7) -- 2026-04-25
+Per research/spec/requirements.md Section 7 + 11. Lays the data layer foundation for Sprint 3 A-1 (Love intensity 1.8) and Sprint 4 top-K bookmark UI (primary success metric).
+- [x] Migration 0007: AddField saved_ids + RunPython backfill of liked_ids shape (idempotent)
+- [x] Project.liked_ids: list[str] -> list[{id, intensity}]; existing entries default intensity=1.0
+- [x] Project.saved_ids NEW: list[{id, saved_at}], read-only on serializer
+- [x] Project.disliked_ids UNCHANGED per spec (no intensity)
+- [x] views.py _liked_id_only helper for legacy/new shape transparency; persona report extracts plain IDs
+- [x] views.py SwipeView like-write: clamp intensity from request body (default 1.0, range [0,2])
+- [x] frontend App.jsx extractLikedIds helper applied at 3 sites in handleLogin
+- [x] 6 new TestProjectSchemaA3 tests; 39 total pass
+- [x] Reviewer: PASS. Security: PASS (1 pre-existing Warning on Project read-modify-write race; deferred).
+- Commit: 190c830
 
 ### Sprint 0 A2: Dislike Threshold Reduction -- 2026-04-25
 

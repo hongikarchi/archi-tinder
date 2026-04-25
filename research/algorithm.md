@@ -3,6 +3,8 @@
 > Phase logic, mathematical formulas, and hyperparameter theory.
 > Research agent updates this file. Orchestrator references it for algorithm tasks.
 
+**Last Synced (Reporter):** 2026-04-25 190c830
+
 ---
 
 ## Recommendation Pipeline Theory
@@ -14,6 +16,8 @@ Translates the user's initial chat prompt into a semantic vector space.
 2. **Visual Description Generation:** The LLM generates a rich, paragraph-length visual description of the ideal architecture based on the prompt.
 3. **Initial Embedding:** This text is embedded using the `paraphrase-multilingual-MiniLM-L12-v2` model to create the initial vector: V_initial.
 4. **Bounded Pool Creation:** Fetch the top N items (e.g., 150) that pass the hard filters and have the highest cosine similarity to V_initial. This becomes the session's exclusive card pool.
+
+   _(Updated 2026-04-25 8bf73b8: `_build_score_cases` returns `(cases, params, total_weight)`; `create_bounded_pool` SQL output normalized to [0, 1] via `((sum)::float / total_weight)`; seed boost `1.1`. Fixes weight-scale drift across queries with different filter counts. See spec Section 11 Topic 12.)_
 
 ### Phase 1: Bounded Exploration
 Gathers initial user feedback within the bounded pool while ensuring visual diversity.
@@ -66,11 +70,15 @@ epsilon (convergence_threshold) range: 0.05-0.15. Current production value: 0.08
 - Like: +like_weight (0.5) added to preference vector, L2-normalized
 - Dislike: +dislike_weight (-1.0) added to preference vector, L2-normalized
 
+_(Updated 2026-04-25 190c830: Like writes now carry an `intensity` field (default 1.0; future Sprint 3 A-1 Love sets 1.8). Backend stores `liked_ids` as list[{id, intensity}]; intensity is clamped [0, 2] at write time. The recency-weighted preference vector update is unchanged in formula; intensity will modulate `like_weight` once Sprint 3 A-1 wires the up-swipe gesture.)_
+
 ---
 
 ## Edge Cases & Fallbacks
 
 - **Extreme Dislike Bias:** If consecutive dislikes >= `max_consecutive_dislikes`, pick building farthest from dislike centroid (escape dead-end). K-Means cannot run without likes.
+
+  _(Updated 2026-04-25 f04646f: `max_consecutive_dislikes` reduced 10 → 5 per spec Section 5.1; silent dislike fallback now fires sooner.)_
 - **Pool Exhaustion:** If all pool buildings shown and delta_V still above epsilon (erratic swiping), force exit to results. UI indicates best-effort results.
 
 ---
@@ -88,7 +96,7 @@ epsilon (convergence_threshold) range: 0.05-0.15. Current production value: 0.08
 | min_likes_for_clustering | int | 2-5 | 3 |
 | convergence_window | int | 2-5 | 3 |
 | k_clusters | int | 1-3 | 2 |
-| max_consecutive_dislikes | int | 5-20 | 10 |
+| max_consecutive_dislikes | int | 5-20 | 5 |
 | initial_explore_rounds | int | 5-20 | 10 |
 | top_k_results | int | 10-30 | 20 |
 
