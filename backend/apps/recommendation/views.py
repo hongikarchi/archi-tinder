@@ -912,6 +912,10 @@ class SessionResultView(APIView):
                 k=RC['top_k_results'],
             )
 
+        # Capture initial cosine order BEFORE any reorder (needed for RRF composition)
+        candidate_ids_cosine_order = [c['building_id'] for c in predicted_cards]
+        rerank_rank_by_id = None  # populated only when Topic 02 ran with a real reorder
+
         # Topic 02: Gemini setwise rerank (session-end, off swipe hot path)
         if RC.get('gemini_rerank_enabled', False) and len(predicted_cards) >= 2:
             candidate_metadata = [
@@ -928,16 +932,53 @@ class SessionResultView(APIView):
             ]
             liked_summary = services._liked_summary_for_rerank(session.project.liked_ids)
             new_order = services.rerank_candidates(candidate_metadata, liked_summary)
-            card_by_id = {c['building_id']: c for c in predicted_cards}
-            predicted_cards = [card_by_id[bid] for bid in new_order if bid in card_by_id]
 
-        # Topic 04 (b): DPP greedy MAP at session-final top-K
+            # Capture both ranks for potential RRF fusion (Topic 02 ∩ 04 Option α).
+            # Sentinel: only set rerank_rank_by_id when rerank produced a real reorder.
+            # If rerank returned input order (failure / no-op), DPP falls back to cosine q.
+            if new_order and set(new_order) == set(candidate_ids_cosine_order):
+                card_by_id = {c['building_id']: c for c in predicted_cards}
+                if new_order != candidate_ids_cosine_order:
+                    rerank_rank_by_id = {bid: i + 1 for i, bid in enumerate(new_order)}
+                predicted_cards = [card_by_id[bid] for bid in new_order if bid in card_by_id]
+
+        # Topic 04 (b): DPP greedy MAP at session-final top-K (with Option α composition)
         if (RC.get('dpp_topk_enabled', False)
                 and len(predicted_cards) >= 2
                 and session.like_vectors):
-            k = RC.get('top_k_results', 20)
+            candidate_ids = [c['building_id'] for c in predicted_cards]
+            k = min(RC.get('top_k_results', 20), len(candidate_ids))
             card_by_id = {c['building_id']: c for c in predicted_cards}
-            dpp_order = engine.compute_dpp_topk(predicted_cards, session.like_vectors, k=k)
+
+            if rerank_rank_by_id is not None:
+                # Option α composition: q = min-max-rescaled RRF fusion
+                # (Investigation 07 + Investigation 14 §q derivation)
+                cosine_rank_by_id = {bid: i + 1 for i, bid in enumerate(candidate_ids_cosine_order)}
+                K_RRF = 60  # Investigation 07 standard k=60
+                fused = {
+                    bid: (1.0 / (K_RRF + cosine_rank_by_id[bid])) + (1.0 / (K_RRF + rerank_rank_by_id[bid]))
+                    for bid in candidate_ids
+                    if bid in cosine_rank_by_id and bid in rerank_rank_by_id
+                }
+                if fused:
+                    fmin = min(fused.values())
+                    fmax = max(fused.values())
+                    if fmax > fmin:
+                        q_values = {
+                            bid: 0.01 + 0.99 * (fused[bid] - fmin) / (fmax - fmin)
+                            for bid in fused
+                        }
+                    else:
+                        q_values = {bid: 0.5 for bid in fused}  # all-equal edge case
+                else:
+                    q_values = {}
+                dpp_order = engine.compute_dpp_topk(
+                    predicted_cards, session.like_vectors, k=k, q_override=q_values or None
+                )
+            else:
+                # Standalone Topic 04: q derived from max centroid cosine inside compute_dpp_topk
+                dpp_order = engine.compute_dpp_topk(predicted_cards, session.like_vectors, k=k)
+
             predicted_cards = [card_by_id[bid] for bid in dpp_order if bid in card_by_id]
 
         return Response({

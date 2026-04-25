@@ -939,7 +939,7 @@ def get_top_k_mmr(like_vectors, exposed_ids, k=None, round_num=None):
     return [_row_to_card(row) for row in selected]
 
 
-def compute_dpp_topk(cards, like_vectors, k):
+def compute_dpp_topk(cards, like_vectors, k, q_override=None):
     """
     Topic 04 (b): DPP greedy MAP at session-final top-K.
 
@@ -954,6 +954,13 @@ def compute_dpp_topk(cards, like_vectors, k):
 
     `cards` is a list of ImageCard dicts (from _row_to_card); embeddings are
     fetched via get_pool_embeddings to avoid KeyError (cards have no 'embedding').
+
+    q_override: optional dict {building_id: float} of pre-computed quality scores.
+    When provided (Option alpha composition with Topic 02 RRF fusion), these scores
+    are used directly as q_i without any centroid computation. The scores must already
+    be min-max rescaled to [0.01, 1.0] by the caller (Investigation 14 §q derivation).
+    The [0.4, 0.95] clip is intentionally bypassed for q_override — clip would destroy
+    the RRF-fused signal that the rescaling was meant to preserve.
 
     Returns list of building_id strings (length <= k).
     Falls back to q-descending order on any exception; q is computed first so
@@ -991,7 +998,11 @@ def compute_dpp_topk(cards, like_vectors, k):
         norms = np.where(norms < 1e-12, 1.0, norms)
         V = V / norms
 
-        if like_vectors:
+        if q_override is not None:
+            # Option alpha composition: use caller-provided RRF-rescaled scores.
+            # Bypass the [0.4, 0.95] clip — scores are already in [0.01, 1.0].
+            q = np.array([q_override.get(bid, 0.5) for bid in valid_ids], dtype=np.float64)
+        elif like_vectors:
             centroids, _ = compute_taste_centroids(like_vectors, round_num=0)
             C = np.array(centroids, dtype=np.float64)
             cn = np.linalg.norm(C, axis=1, keepdims=True)
@@ -999,10 +1010,10 @@ def compute_dpp_topk(cards, like_vectors, k):
             C = C / cn
             cosines = V @ C.T                        # (n_valid, n_centroids)
             q = cosines.max(axis=1)
+            q = np.clip(q, 0.4, 0.95)
         else:
             q = np.ones(len(valid_ids), dtype=np.float64) * 0.7
-
-        q = np.clip(q, 0.4, 0.95)
+            q = np.clip(q, 0.4, 0.95)
     except Exception as exc:
         logger.warning("compute_dpp_topk: embedding/q phase failed (%s) — falling back", exc)
         return ids[:k]
