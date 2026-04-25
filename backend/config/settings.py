@@ -141,6 +141,8 @@ RECOMMENDATION = {
     'like_weight': 0.5,              # kept for pref vector update
     'dislike_weight': -1.0,
     'initial_explore_rounds': 10,    # kept for initial batch size
+    'adaptive_k_clustering_enabled': False,  # Topic 06: silhouette-based k selection {1, 2}
+    'soft_relevance_enabled':        False,  # Topic 06: softmax over centroid distances vs max
 }
 
 # -- External API keys -----------------------------------------------------

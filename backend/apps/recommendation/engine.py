@@ -515,6 +515,11 @@ def clear_pool_embedding_cache():
     _pool_embedding_cache.clear()
 
 
+def clear_centroid_cache():
+    """Clear the centroid cache (for testing)."""
+    _centroid_cache.clear()
+
+
 def farthest_point_from_pool(pool_ids, exposed_ids, pool_embeddings):
     """
     Select the pool building farthest from all exposed buildings (Gonzalez
@@ -579,13 +584,44 @@ def compute_taste_centroids(like_vectors, round_num):
         return result
 
     from sklearn.cluster import KMeans
+    from sklearn.metrics import silhouette_samples
     like_embeddings = np.array([w[0] for w in weighted_likes])
     like_weights = np.array([w[1] for w in weighted_likes])
+    global_centroid = _weighted_centroid(weighted_likes)
+
+    # Topic 06: silhouette-based adaptive k selection (flag-gated, N>=4 required)
+    if RC.get('adaptive_k_clustering_enabled', False) and len(weighted_likes) >= 4:
+        kmeans2 = KMeans(n_clusters=2, random_state=42, n_init=3)
+        kmeans2.fit(like_embeddings, sample_weight=like_weights)
+        if len(set(kmeans2.labels_)) > 1:
+            # Weighted silhouette: per-sample silhouette × recency weights, averaged.
+            # sklearn 1.6.1's silhouette_score doesn't accept sample_weight, so we
+            # compute per-sample scores and weight-average them ourselves. This honors
+            # the recency weights that drove the KMeans clustering decision (which
+            # would otherwise be ignored by the silhouette validation step).
+            try:
+                sample_sils = silhouette_samples(like_embeddings, kmeans2.labels_)
+                sil2 = float(np.average(sample_sils, weights=like_weights))
+            except ValueError:
+                # KMeans degenerated (all points labeled identically) → no separation → k=1
+                sil2 = -1.0
+        else:
+            sil2 = -1.0  # all points in one cluster; degenerate k=2
+        if sil2 >= 0.15:
+            centroids = list(kmeans2.cluster_centers_)
+        else:
+            centroids = [global_centroid]  # degrade to k=1
+        result = (centroids, global_centroid)
+        if len(_centroid_cache) > 20:
+            _centroid_cache.clear()
+        _centroid_cache[cache_key] = result
+        return result
+
+    # Default path: k=min(k_clusters, N) KMeans (flag off or N<4)
     k_clusters = min(RC['k_clusters'], len(weighted_likes))
     kmeans = KMeans(n_clusters=k_clusters, random_state=42, n_init=3)
     kmeans.fit(like_embeddings, sample_weight=like_weights)
     centroids = list(kmeans.cluster_centers_)
-    global_centroid = _weighted_centroid(weighted_likes)
     result = (centroids, global_centroid)
     if len(_centroid_cache) > 20:
         _centroid_cache.clear()
@@ -616,8 +652,14 @@ def compute_mmr_next(pool_ids, exposed_ids, pool_embeddings, like_vectors, round
 
         candidate_emb = pool_embeddings[candidate]
 
-        # Relevance: max cosine similarity to any cluster centroid
-        relevance = max(np.dot(candidate_emb, centroid) for centroid in centroids)
+        # Relevance: max cosine similarity (default) or softmax-weighted avg (Topic 06)
+        if RC.get('soft_relevance_enabled', False) and len(centroids) > 1:
+            sims = np.array([np.dot(candidate_emb, c) for c in centroids])
+            exp_sims = np.exp(sims - sims.max())  # numerically stable softmax
+            weights = exp_sims / exp_sims.sum()
+            relevance = float(np.sum(sims * weights))
+        else:
+            relevance = max(np.dot(candidate_emb, centroid) for centroid in centroids)
 
         # Redundancy: max cosine similarity to any exposed embedding
         redundancy = 0
