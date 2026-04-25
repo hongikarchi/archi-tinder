@@ -3,7 +3,7 @@
 > Phase logic, mathematical formulas, and hyperparameter theory.
 > Research agent updates this file. Orchestrator references it for algorithm tasks.
 
-**Last Synced (Reporter):** 2026-04-25 f3b8381
+**Last Synced (Reporter):** 2026-04-25 96b91a6
 
 ---
 
@@ -54,6 +54,8 @@ gamma (decay_rate) range: 0.01-0.1. Current production value: 0.05.
 Group the weighted Like vectors into K clusters (e.g., 2). The centroids represent the user's multi-modal preference (V_pref).
 Uses `sample_weight` parameter with recency weights.
 
+_(Updated 2026-04-25 96b91a6: Sprint 4 Topic 06 adaptive k — when `adaptive_k_clustering_enabled` (default OFF), N>=4 likes triggers silhouette-weighted k {1,2} selection (threshold 0.15). Weak cluster signal degrades to k=1 (single global weighted centroid). Implementation uses silhouette_samples + np.average(weights=like_weights) for sklearn 1.6.1 API compat.)_
+
 ### MMR Scoring
 ```
 score(b) = similarity(b, centroids) - lambda * max_similarity(b, recent_shown)
@@ -61,6 +63,8 @@ score(b) = similarity(b, centroids) - lambda * max_similarity(b, recent_shown)
 
 Balances relevance (first term) against diversity (second term).
 lambda (mmr_penalty) range: 0.1-0.4. Current production value: 0.3.
+
+_(Updated 2026-04-25 96b91a6: Sprint 4 Topic 06 soft-assignment relevance — when `soft_relevance_enabled` (default OFF) AND len(centroids) > 1, relevance becomes softmax-weighted average of cosine similarities across centroids (vs hard max). Numerically-stable (sims − sims.max()).)_
 
 ### Convergence Detection
 ```
@@ -107,6 +111,8 @@ _(Updated 2026-04-25 190c830: Like writes now carry an `intensity` field (defaul
 | max_consecutive_dislikes | int | 5-20 | 5 |
 | initial_explore_rounds | int | 5-20 | 10 |
 | top_k_results | int | 10-30 | 20 |
+| `adaptive_k_clustering_enabled` | bool | True/False | False |
+| `soft_relevance_enabled` | bool | True/False | False |
 
 Source: `backend/config/settings.py` RECOMMENDATION dict.
 

@@ -52,6 +52,7 @@
 - [2026-04-25] REVIEW-FAIL: 57b3244 — **Part A: PASS (0 findings).** Part B FAIL on retry-after-billing-restoration: parse_query 4166 ms vs 4000 ms ceiling (overshoots by 166 ms / 4.15%). **First real measurement of IMP-4 fix**: A5 `parse_query_timing` SessionEvent payload `{thinking_tokens: None, input_tokens: 5924, output_tokens: 309, gemini_total_ms: 3246}` confirms IMP-4 `thinking_budget=0` works empirically (no thinking-tokens). But IMP-4's predicted 1000-1500 ms p50 underestimated — the new Sprint 1 chat phase prompt (Investigation 06: 9 bilingual few-shot examples) is **5924 input tokens**, ~10× larger than the prior `_PARSE_QUERY_PROMPT`. Gemini 3246 ms + Django/serialization 920 ms = 4166 ms. **Note: prior 4 Part B FAILs (88f0532/5d85b90/f607e73/57b3244-first-run) were ALL Gemini 403 PERMISSION_DENIED — the "monotonic latency drift" in `f607e73.md` was a misdiagnosis; A5 logging surfaced the true cause on its first real run.** **Decision options for user**: (1) accept and push (spec target "3-4s", 4166 ms is at 4.166 — single-run variance), (2) loosen spec §4 budget to <5000 ms, (3) trim chat prompt (Sprint of work, risks bilingual regression), (4) explicit-override single retry. No code change; branch is functionally healthy. See `.claude/reviews/latest.md` Part B "Re-run after Gemini billing restoration" + "Decision options".
 - [2026-04-25] USER-OVERRIDE-PUSH: 57b3244 — User accepted the 4.15% margin over spec §4 budget per /review's decision option 1 and pushed manually. Branch deployed to `origin/main` (`ded38be..57b3244`, 19 commits). Audit trail: Part B verification produced real diagnostic data (parse_query_timing SessionEvent), IMP-4 fix empirically verified (thinking_tokens=None), 4166 ms latency is the empirical floor for the current chat-phase prompt size. No code regression. **Improvement recommendations for main's next sprint** at `.claude/reviews/57b3244-improvements.md` — Tier 1 fixes (~1.5h total): (1.1) loosen spec §4 budget to <5000ms, (1.2) multi-run aggregation in /review Part B Step B4, (1.3) /review Step B0 SessionEvent.failure pre-check. Tier 2 (Sprint scale): chat prompt optimization, tier-aware Part B gates. Main: read 57b3244-improvements.md, decide which to action this Sprint.
 - [2026-04-25] REVIEW-REQUESTED: f3b8381 — Sprint 3 C-1 confidence bar (Investigation 13 + Spec v1.2 dislike-bias telemetry); UI-affecting paths in scope (SwipePage + App.jsx changes). run `/review` (or "리뷰해줘") next.
+- [2026-04-25] REVIEW-REQUESTED: 96b91a6 — Sprint 4 Topic 06 adaptive k + soft-assignment relevance (both flags default OFF backward-compat); run `/review` (or "리뷰해줘") next (UI-affecting paths NOT in scope — Part B optional).
 
 ---
 
@@ -193,6 +194,19 @@ Google OAuth only. Korean users need domestic login.
 ---
 
 ## Resolved
+
+### Sprint 4 Topic 06: Adaptive K + Soft-Assignment Relevance -- 2026-04-25
+
+#### TOPIC06. Adaptive k {1,2} + softmax relevance (Spec §11 Topic 06) -- 2026-04-25
+Per research/spec/requirements.md v1.3 §11 Topic 06. Two orthogonal flag-gated improvements; both default OFF for backward-compat.
+- [x] settings.py RECOMMENDATION dict: adaptive_k_clustering_enabled + soft_relevance_enabled (both default False, opt-in per spec).
+- [x] engine.compute_taste_centroids: adaptive-k branch (silhouette via silhouette_samples + np.average weighted; threshold 0.15; degrades to k=1 on weak signal). N>=4 gate.
+- [x] engine.compute_mmr_next: soft-relevance branch (numerically-stable softmax over centroid similarities). len(centroids)>1 gate.
+- [x] sklearn 1.6.1 API compat: silhouette_score doesn't accept sample_weight kwarg → manual weighted aggregation via silhouette_samples preserves spec intent.
+- [x] Degenerate KMeans (single cluster despite k=2 request): outer guard + try/except ValueError → sil2=-1.0 → k=1 fallback.
+- [x] 9 new tests in TestTopic06AdaptiveK; 88 total pass + 1 skipped. Existing 79 unchanged.
+- [x] Reviewer: PASS (after fix-loop Option b sklearn compat). Security: PASS.
+- Commit: 96b91a6
 
 ### Sprint 3 C-1: Confidence Bar -- 2026-04-25
 
