@@ -872,3 +872,66 @@ class TestProjectSchemaA3:
         project_data = data['results'][0]
         assert 'saved_ids' in project_data
         assert project_data['saved_ids'] == []
+
+
+class TestFarthestPointFromPool:
+    """IMP-1 (spec v1.1 §11.1, investigation 02): max-min correctness + vectorization."""
+
+    def test_selects_max_min_diverse_candidate(self):
+        """Regression against pre-fix max-max bug.
+
+        Pool = {X, Y}, exposed = {A, B}. Embeddings crafted so that:
+        - X is a near-duplicate of A (cos(X,A)=0.99, cos(X,B)=0.141)
+        - Y is equidistant from both (cos(Y,A)=cos(Y,B)=0.5)
+        - A and B are orthogonal
+
+        Pre-fix max-max code picks X (X's farthest exposed = B is very far,
+        max_distance=1-0.141=0.859). Correct max-min code picks Y (Y's
+        nearest exposed has similarity 0.5 < X's nearest 0.99).
+        """
+        from apps.recommendation import engine
+
+        def unit(v):
+            v = np.asarray(v, dtype=float)
+            return v / np.linalg.norm(v)
+
+        pool_embeddings = {
+            'A': unit([1.0, 0.0, 0.0]),
+            'B': unit([0.0, 1.0, 0.0]),                  # orthogonal to A
+            'X': unit([0.99, 0.141, 0.0]),               # cos(X,A)=0.99, cos(X,B)=0.141
+            'Y': unit([0.5, 0.5, np.sqrt(0.5)]),         # cos(Y,A)=cos(Y,B)=0.5
+        }
+        result = engine.farthest_point_from_pool(['X', 'Y'], ['A', 'B'], pool_embeddings)
+        assert result == 'Y', (
+            f"Expected Y (max-min farthest from nearest-exposed); "
+            f"got {result} -- indicates max-max bug from pre-fix code"
+        )
+
+    def test_returns_none_when_no_unexposed_candidates(self):
+        """Pool entirely exposed -> None."""
+        from apps.recommendation import engine
+        pool_embeddings = {'A': np.array([1.0, 0.0]), 'B': np.array([0.0, 1.0])}
+        result = engine.farthest_point_from_pool(['A', 'B'], ['A', 'B'], pool_embeddings)
+        assert result is None
+
+    def test_returns_random_candidate_when_no_exposed(self):
+        """No anchor -> random candidate (deterministically, one of the candidates)."""
+        from apps.recommendation import engine
+        pool_embeddings = {'X': np.array([1.0, 0.0]), 'Y': np.array([0.0, 1.0])}
+        result = engine.farthest_point_from_pool(['X', 'Y'], [], pool_embeddings)
+        assert result in {'X', 'Y'}
+
+    def test_skips_candidates_missing_from_embeddings(self):
+        """Defensive: candidates missing from pool_embeddings are silently skipped."""
+        from apps.recommendation import engine
+        pool_embeddings = {'X': np.array([1.0, 0.0])}  # Y missing
+        result = engine.farthest_point_from_pool(['X', 'Y'], [], pool_embeddings)
+        assert result == 'X'  # Y is skipped, X is the only valid candidate
+
+    def test_returns_random_when_all_exposed_missing_from_embeddings(self):
+        """Exposed list non-empty but every entry missing from pool_embeddings -> random."""
+        from apps.recommendation import engine
+        pool_embeddings = {'X': np.array([1.0, 0.0]), 'Y': np.array([0.0, 1.0])}
+        # exposed has IDs not in pool_embeddings
+        result = engine.farthest_point_from_pool(['X', 'Y'], ['Z'], pool_embeddings)
+        assert result in {'X', 'Y'}
