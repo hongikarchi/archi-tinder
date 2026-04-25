@@ -1114,3 +1114,124 @@ class TestPoolExhaustionGuard:
         assert pool_scores == {}, 'Tier 3 random pool has no scores'
         for rid in random_pool:
             assert rid in pool_ids, f'{rid} should be in random pool result'
+
+
+@pytest.mark.django_db
+class TestSessionEventLogging:
+    """Sprint 0 A5: §6 SessionEvent model + emit_event helper + endpoint wire-up."""
+
+    def test_emit_event_creates_session_event(self, user_profile):
+        """emit_event creates a SessionEvent with the correct fields."""
+        from apps.recommendation import event_log
+        from apps.recommendation.models import SessionEvent
+
+        evt = event_log.emit_event(
+            'failure',
+            user=user_profile,
+            failure_type='test',
+            recovery_path='none',
+        )
+        assert evt is not None
+        assert evt.event_type == 'failure'
+        assert evt.user == user_profile
+        assert evt.session is None
+        assert evt.payload == {'failure_type': 'test', 'recovery_path': 'none'}
+        assert evt.sequence_no == 0
+        assert SessionEvent.objects.count() == 1
+
+    def test_emit_event_never_raises_on_failure(self, user_profile):
+        """If SessionEvent.objects.create raises, emit_event returns None silently."""
+        from apps.recommendation import event_log
+        from apps.recommendation.models import SessionEvent
+
+        with patch.object(SessionEvent.objects, 'create', side_effect=RuntimeError('DB exploded')):
+            # Must NOT raise
+            result = event_log.emit_event('failure', user=user_profile, failure_type='test')
+        assert result is None
+
+    def test_sequence_no_increments_per_session(self, user_profile):
+        """Multiple events for the same session get monotonically increasing sequence_no."""
+        from apps.recommendation import event_log
+        from apps.recommendation.models import SessionEvent
+
+        project = Project.objects.create(user=user_profile, name='Seq Test')
+        session = AnalysisSession.objects.create(
+            user=user_profile,
+            project=project,
+            phase='exploring',
+            status='active',
+            pool_ids=list(_FAKE_POOL),
+            pool_scores=dict(_FAKE_SCORES),
+            exposed_ids=[],
+            initial_batch=list(_FAKE_POOL[:5]),
+            like_vectors=[],
+            convergence_history=[],
+            previous_pref_vector=[],
+        )
+
+        evt0 = event_log.emit_event('session_start', session=session, user=user_profile)
+        evt1 = event_log.emit_event('pool_creation', session=session, user=user_profile)
+        evt2 = event_log.emit_event('swipe', session=session, user=user_profile)
+
+        assert evt0.sequence_no == 0
+        assert evt1.sequence_no == 1
+        assert evt2.sequence_no == 2
+        assert SessionEvent.objects.filter(session=session).count() == 3
+
+    def test_session_create_emits_session_start_and_pool_creation(self, auth_client, user_profile):
+        """SessionCreateView POST should produce session_start + pool_creation events."""
+        from apps.recommendation.models import SessionEvent
+
+        project = Project.objects.create(user=user_profile, name='Event Wire Test')
+
+        patchers = _apply_patches()
+        try:
+            resp = auth_client.post(
+                '/api/v1/analysis/sessions/',
+                {'project_id': str(project.project_id), 'filters': {}},
+                format='json',
+            )
+        finally:
+            _stop_patches(patchers)
+
+        assert resp.status_code == 201
+        event_types = list(SessionEvent.objects.values_list('event_type', flat=True))
+        assert 'session_start' in event_types, f'session_start missing; got {event_types}'
+        assert 'pool_creation' in event_types, f'pool_creation missing; got {event_types}'
+
+    def test_swipe_emits_swipe_event_with_timing(self, auth_client, user_profile):
+        """SwipeView POST should produce a swipe event with timing_breakdown payload."""
+        from apps.recommendation.models import SessionEvent
+
+        project = Project.objects.create(user=user_profile, name='Swipe Event Test')
+
+        patchers = _apply_patches()
+        try:
+            create_resp = auth_client.post(
+                '/api/v1/analysis/sessions/',
+                {'project_id': str(project.project_id), 'filters': {}},
+                format='json',
+            )
+            session_id = create_resp.json()['session_id']
+
+            swipe_resp = auth_client.post(
+                f'/api/v1/analysis/sessions/{session_id}/swipes/',
+                {
+                    'building_id': 'B00001',
+                    'action': 'like',
+                    'idempotency_key': 'a5_swipe_timing_test',
+                },
+                format='json',
+            )
+        finally:
+            _stop_patches(patchers)
+
+        assert swipe_resp.status_code == 200
+
+        swipe_evt = SessionEvent.objects.filter(event_type='swipe').first()
+        assert swipe_evt is not None, 'No swipe SessionEvent found'
+        tb = swipe_evt.payload.get('timing_breakdown')
+        assert tb is not None, f'timing_breakdown missing from payload: {swipe_evt.payload}'
+        assert set(tb.keys()) == {'lock_ms', 'embed_ms', 'select_ms', 'prefetch_ms', 'total_ms'}, (
+            f'Unexpected timing_breakdown keys: {tb.keys()}'
+        )

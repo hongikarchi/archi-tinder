@@ -9,7 +9,7 @@ from rest_framework.views import APIView
 
 from .models import Project, AnalysisSession, SwipeEvent
 from .serializers import ProjectSerializer
-from . import engine, services
+from . import engine, event_log, services
 
 logger = logging.getLogger('apps.recommendation')
 RC = settings.RECOMMENDATION
@@ -230,6 +230,30 @@ class SessionCreateView(APIView):
         )
 
         logger.info('Session created: %s (pool=%d, tiers=%d, relaxed=%s)', session.session_id, len(pool_ids), len(tiers), filter_relaxed)
+
+        # §6 logging: session_start + pool_creation events
+        raw_query = request.data.get('query') or None
+        event_log.emit_event(
+            'session_start',
+            session=session,
+            user=profile,
+            query=raw_query,
+            filters=active_filters,
+            filter_priority=list(filter_priority or []),
+            raw_query=raw_query,
+            visual_description=None,  # Topic 03 will populate this
+            v_initial_success=False,  # Topic 03 will set this
+        )
+        event_log.emit_event(
+            'pool_creation',
+            session=session,
+            user=profile,
+            pool_size=len(pool_ids),
+            tier_used=current_pool_tier,
+            filter_relaxed=filter_relaxed,
+            seed_count=len(seed_ids or []),
+        )
+
         return Response({
             'session_id':      str(session.session_id),
             'project_id':      str(project.project_id),
@@ -428,6 +452,20 @@ class SwipeView(APIView):
                     session.status = 'completed'
                     session.phase = 'completed'
                     session.save(update_fields=['status', 'phase'])
+
+                # §6 logging: session_end (user_confirm = user clicked "View results")
+                all_swipes = list(session.swipes.values_list('action', flat=True))
+                event_log.emit_event(
+                    'session_end',
+                    session=session,
+                    user=profile,
+                    end_reason='user_confirm',
+                    total_swipes=session.current_round,
+                    likes_count=all_swipes.count('like'),
+                    loves_count=0,  # Sprint 3 A-1 will populate this from intensity field
+                    dislikes_count=all_swipes.count('dislike'),
+                )
+
                 return Response({
                     'accepted': True,
                     'session_status': 'completed',
@@ -511,14 +549,23 @@ class SwipeView(APIView):
                 })
 
         # NORMAL SWIPE PROCESSING
+        import time as _time
+        _t_start = _time.perf_counter()
+        _timing_marks = {}  # step_name -> elapsed_ms from _t_start
+
+        def _mark(step):
+            _timing_marks[step] = round((_time.perf_counter() - _t_start) * 1000, 2)
+
         with transaction.atomic():
             # Lock session row to prevent concurrent swipe corruption
             session = AnalysisSession.objects.select_for_update().get(
                 session_id=session_id, user=profile
             )
+            _mark('lock_acquired')
 
             # 1. Get embedding and update preference vector
             embedding = engine.get_building_embedding(building_id)
+            _mark('embed_done')
             if embedding:
                 session.preference_vector = engine.update_preference_vector(
                     session.preference_vector, embedding, action
@@ -684,6 +731,8 @@ class SwipeView(APIView):
                 if bid not in session.exposed_ids:
                     session.exposed_ids = session.exposed_ids + [bid]
 
+            _mark('select_done')
+
             # Save session BEFORE prefetch so concurrent requests see updated exposed_ids.
             # pool_ids/pool_scores/current_pool_tier included unconditionally to persist
             # any in-place mutations from refresh_pool_if_low (A4 pool exhaustion guard).
@@ -754,6 +803,42 @@ class SwipeView(APIView):
                     prefetch_card_2 = engine.get_building_card(pf2_id) if pf2_id else None
             except Exception:
                 prefetch_card_2 = None
+
+        _mark('prefetch_done')
+        _mark('total')
+
+        # §6 logging: derive timing deltas (guarded with max(0,...) against missed marks)
+        _timing_breakdown = {
+            'lock_ms':     max(0, _timing_marks.get('lock_acquired', 0)),
+            'embed_ms':    max(0, _timing_marks.get('embed_done', 0) - _timing_marks.get('lock_acquired', 0)),
+            'select_ms':   max(0, _timing_marks.get('select_done', 0) - _timing_marks.get('embed_done', 0)),
+            'prefetch_ms': max(0, _timing_marks.get('prefetch_done', 0) - _timing_marks.get('select_done', 0)),
+            'total_ms':    max(0, _timing_marks.get('total', 0)),
+        }
+        # intensity was computed inside the action=='like' branch; initialize to None for dislike
+        _intensity = None
+        if action == 'like':
+            try:
+                raw_intensity = request.data.get('intensity', 1.0)
+                _intensity = float(raw_intensity) if raw_intensity is not None else 1.0
+                _intensity = max(0.0, min(2.0, _intensity))
+            except (TypeError, ValueError):
+                _intensity = 1.0
+        _rank_in_pool = None
+        try:
+            _rank_in_pool = session.pool_ids.index(building_id)
+        except (ValueError, AttributeError):
+            pass
+        event_log.emit_swipe_event(
+            session=session,
+            user=profile,
+            direction=action,
+            card_id=building_id,
+            intensity=_intensity,
+            rank_in_pool=_rank_in_pool,
+            timing_breakdown=_timing_breakdown,
+            idempotency_key=idempotency_key,
+        )
 
         return Response({
             'accepted': True,

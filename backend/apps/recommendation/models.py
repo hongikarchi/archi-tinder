@@ -73,3 +73,61 @@ class SwipeEvent(models.Model):
 
     def __str__(self):
         return f'{self.action} {self.building_id}'
+
+
+class SessionEvent(models.Model):
+    """
+    Event log for session lifecycle measurement (spec §6).
+
+    Single model with event_type + JSON payload -- simpler than per-event-type
+    tables and more flexible for spec-evolving events.
+
+    Implementation notes (from spec §6):
+    - Monotonic timestamp: db-level auto_now_add (default microsecond resolution).
+      For tie-breaking within the same session, sequence_no is auto-incremented
+      per session by the emit_event helper.
+    - Anonymized aggregation: user FK + session FK chain, both nullable so failure
+      events during pre-auth or pre-session paths can still be logged.
+    - Bookmark rank_zone separation: payload['rank_zone'] is 'primary' (1-10) or
+      'secondary' (11-50) -- used by primary-metric extractor to distinguish
+      top-10 bookmark rate (objective) from exploration-zone clicks (secondary).
+      Wired when bookmark endpoint ships in Sprint 4.
+    """
+
+    EVENT_TYPE_CHOICES = [
+        ('session_start',      'Session Start'),
+        ('pool_creation',      'Pool Creation'),
+        ('swipe',              'Swipe'),
+        ('tag_answer',         'Tag Answer'),
+        ('confidence_update',  'Confidence Update'),
+        ('session_end',        'Session End'),
+        ('session_extend',     'Session Extend'),
+        ('bookmark',           'Bookmark'),
+        ('detail_view',        'Detail View'),
+        ('external_url_click', 'External URL Click'),
+        ('failure',            'Failure'),
+        ('probe_turn',         'Probe Turn'),
+        ('cohort_assignment',  'Cohort Assignment'),
+    ]
+
+    user        = models.ForeignKey(
+        UserProfile, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='session_events',
+    )
+    session     = models.ForeignKey(
+        AnalysisSession, on_delete=models.CASCADE,
+        null=True, blank=True, related_name='events',
+    )
+    event_type  = models.CharField(max_length=32, choices=EVENT_TYPE_CHOICES, db_index=True)
+    payload     = models.JSONField(default=dict)
+    sequence_no = models.PositiveIntegerField(default=0)  # per-session tie-breaker
+    created_at  = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['session', 'created_at']),
+            models.Index(fields=['event_type', 'created_at']),
+        ]
+
+    def __str__(self):
+        return f'{self.event_type} ({self.session_id}, {self.created_at.isoformat()})'

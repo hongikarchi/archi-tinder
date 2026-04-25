@@ -11,10 +11,12 @@ from google import genai
 from google.genai import types
 
 from .engine import _dictfetchall
+from . import event_log
 
 logger = logging.getLogger('apps.recommendation')
 
 _client = None
+
 
 def _get_client():
     global _client
@@ -128,9 +130,27 @@ def parse_query(query_text):
         }
     except json.JSONDecodeError as e:
         logger.error('parse_query JSON decode error: %s', e)
+        event_log.emit_event(
+            'failure',
+            session=None,
+            user=None,
+            failure_type='gemini_parse',
+            recovery_path='fallback_diverse_random',
+            error_class='JSONDecodeError',
+            error_message=str(e)[:200],
+        )
         return {'reply': 'I had trouble understanding that. Try again?', 'filters': {}, 'filter_priority': []}
     except Exception as e:
         logger.error('parse_query failed after retries: %s: %s', type(e).__name__, e)
+        event_log.emit_event(
+            'failure',
+            session=None,
+            user=None,
+            failure_type='gemini_parse',
+            recovery_path='fallback_diverse_random',
+            error_class=type(e).__name__,
+            error_message=str(e)[:200],
+        )
         return {'reply': 'I had trouble understanding that. Try again?', 'filters': {}, 'filter_priority': []}
 
 
@@ -193,9 +213,27 @@ def generate_persona_report(liked_building_ids):
         return json.loads(response.text)
     except json.JSONDecodeError as e:
         logger.error('generate_persona_report JSON decode error: %s', e)
+        event_log.emit_event(
+            'failure',
+            session=None,
+            user=None,
+            failure_type='gemini_parse',
+            recovery_path='none',
+            error_class='JSONDecodeError',
+            error_message=str(e)[:200],
+        )
         raise ValueError('Gemini returned an invalid response format. Please try again.')
     except Exception as e:
         logger.error('generate_persona_report failed after retries: %s: %s', type(e).__name__, e)
+        event_log.emit_event(
+            'failure',
+            session=None,
+            user=None,
+            failure_type='gemini_parse',
+            recovery_path='none',
+            error_class=type(e).__name__,
+            error_message=str(e)[:200],
+        )
         raise RuntimeError(f'Persona report generation failed: {type(e).__name__}. Please try again later.')
 
 
