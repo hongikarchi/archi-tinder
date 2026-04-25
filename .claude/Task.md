@@ -8,8 +8,8 @@
 
 ## Handoffs
 
-> Short-lived cross-terminal signals for the **review / push** and **antigravity / main**
-> cycles. Each terminal (main / review / antigravity) reads this section at session start.
+> Short-lived cross-terminal signals for the **review / push** and **design / main**
+> cycles. Each terminal (main / review / design) reads this section at session start.
 > Oldest entries expire naturally — keep ~10 most recent.
 >
 > **Research handoff placement**:
@@ -23,7 +23,7 @@
 > - `REVIEW-PASSED: <sha>` — review terminal → user; review passed (Part A static + Part B browser when applicable + Part C drift checks). Run `git push` manually from the review terminal itself (no context-switch to main needed). On `PASS-WITH-MINORS` verdict the signal inlines `<K> MINOR noted (see .claude/reviews/latest.md)` so the count is visible at a glance; MINORs are non-blocking for push.
 > - `REVIEW-ABORTED: <sha> — <reason>` — review terminal → main; review verdict was PASS but drift was detected during the review. `HEAD advanced …` → re-run `/review` on the new HEAD. `origin/main moved …` → `git pull --rebase` then re-review.
 > - `REVIEW-FAIL: <sha> — <summary>` — review terminal → main; run fix loop via orchestrator (max 2 cycles).
-> - `MOCKUP-READY: <page>` — antigravity → main; page is ready for API integration pass.
+> - `MOCKUP-READY: <page>` — design terminal (`designer`) → main; page is ready for API integration pass.
 > - `SPEC-UPDATED: vX.Y → vX.Z — <sections> — <summary>` — research terminal → main; spec at `research/spec/requirements.md` bumped to new version. Main reads only the affected sections, not the whole spec. If the change invalidates in-progress work, main's orchestrator stops and asks user.
 
 <!-- Append new handoff entries here. Format: `- [YYYY-MM-DD] <SIGNAL>` -->
@@ -56,6 +56,9 @@
 - [2026-04-25] REVIEW-REQUESTED: 03c697b — Sprint 4 Topic 02 Gemini setwise rerank (default OFF backward-compat); UI-affecting paths in scope (SessionResultView). run `/review` (or "리뷰해줘") next.
 - [2026-04-25] REVIEW-REQUESTED: de9bfa3 — Sprint 4 Topic 04 DPP + MMR λ ramp (both flags default OFF backward-compat); UI-affecting paths in scope (SessionResultView). run `/review` (or "리뷰해줘") next.
 - [2026-04-25] REVIEW-REQUESTED: ebbafd2 — Sprint 4 Topic 02 ∩ 04 Option α composition (RRF fusion + DPP integration); Sprint 4 algorithm batch complete; UI-affecting paths in scope. run `/review` (or "리뷰해줘") next.
+- [2026-04-26] REVIEW-FAIL: 2da9c65 — **Part A: PASS (0 findings, 10 commits genuinely clean — Sprint 3 C-1 + Sprint 4 Topics 02/04/06 + Composition).** Part B FAIL: Persona Brutalist parse_query 4375 ms (+9.4% over 4000 ms ceiling). **Same structural cause as 57b3244.md retry**: chat phase prompt 5924 input_tokens makes Gemini call 3.0-3.5s; Django/network adds ~900 ms; total 4.0-4.4 s band with natural variance. IMP-4 still verified (`thinking_tokens=None`). All 5 new features in this batch are **flag-gated default OFF** so they don't affect this latency at all. **Improvement recommendations from `57b3244-improvements.md` not yet adopted** — Tier 1.1 (spec §4 budget <5000 ms) or Tier 1.2 (multi-run aggregation) would have made this PASS. **Recommendation**: same as prior cycle — override-push (this batch is risk-bounded by flag-OFF gates) AND prioritize Tier 1.1 + 1.2 from `57b3244-improvements.md` as the NEXT immediate task before more UI-affecting work hits the same wall.
+- [2026-04-26] USER-OVERRIDE-PUSH: 2da9c65 — User accepted the +9.4% margin over spec §4 budget (second consecutive override-push for the same structural reason) and pushed manually. Branch deployed to `origin/main` (`57b3244..2da9c65`, 10 commits — Sprint 3 C-1 + Sprint 4 Topics 02/04/06 + Composition). Audit trail: real diagnostic data captured in `parse_query_timing` SessionEvent (`thinking_tokens=None` IMP-4 verified, `input_tokens=5924` chat-phase prompt floor, `gemini_total_ms=3462` natural variance). All 5 new features are flag-gated default OFF — push is risk-bounded. **🚨 ESCALATION**: see `.claude/reviews/2da9c65-improvements.md` — second consecutive same-cause Part B FAIL means Tier 1 work from `57b3244-improvements.md` is now URGENT not optional. Specifically Tier 1.1 (loosen spec §4 budget to <5000 ms, 1-line spec edit) + Tier 1.2 (multi-run aggregation in /review Step B4, ~30 min). Without these, every future UI-affecting batch will hit the same wall and produce identical override-push pattern. **Next Sprint pickup recommendation**: pause feature work briefly, ship Tier 1.1 + 1.2 first (~30 min total), then resume.
+- [2026-04-26] REVIEW-REQUESTED: 210d1dc — Sprint 4 Result page (bookmark endpoint + frontend)
 
 ---
 
@@ -197,6 +200,30 @@ Google OAuth only. Korean users need domestic login.
 ---
 
 ## Resolved
+
+### Sprint 4 §8 Result Page: Bookmark Endpoint + Frontend -- 2026-04-26
+
+#### BOOKMARK1. ProjectBookmarkView + FavoritesPage RecommendedSection (§8 + Investigation 08) -- 2026-04-26
+Per research/spec/requirements.md §8 Result Page + Spec v1.2 SPEC-UPDATED (rank_zone, rank_corpus, provenance booleans) + research/investigations/08-vinitial-bit-validation-plan.md (rank_corpus for V_initial bit hypothesis validation).
+- [x] Backend: NEW ProjectBookmarkView at POST /api/v1/projects/<uuid:project_id>/bookmark/
+- [x] Request body: {card_id (string <=20), action: 'save'|'unsave', rank: 1-100, session_id?}
+- [x] Response 200: {saved_ids: [...], count: N}
+- [x] Validation: card_id, action enum, rank int range; ValidationError + timezone hoisted to module-level imports
+- [x] Toggle semantics: idempotent (save twice = single entry; unsave on missing = no-op)
+- [x] Project ownership filter: 404 on other-user project (IDOR guard)
+- [x] bookmark SessionEvent emitted with rank_zone ('primary' rank<=10 / 'secondary' rank>10 per Spec v1.2 §6 req #4), rank_corpus null placeholder (Investigation 08 defers to post-Topic 03 V_initial pipeline), provenance {in_cosine_top10, in_gemini_top10, in_dpp_top10} all default False
+- [x] saved_ids storage uses existing list[{id, saved_at}] schema from A3 (migration 0007); no new migration
+- [x] Frontend: FavoritesPage NEW RecommendedSection sub-component
+- [x] Primary grid (rank 1-10, always visible) + IntersectionObserver lazy-loaded secondary grid (rank 11-50)
+- [x] "More Recommendations" divider + "No more to show" label when pool < 50
+- [x] ResultCard sub-component with star bookmark button (44px touch target, #ec4899 saved / rgba blur unsaved per DESIGN.md §1.2 + §2.2, aria-label)
+- [x] BuildingCard (liked-buildings section) unchanged
+- [x] App.jsx: extractSavedIds helper handles {id, saved_at} dict AND legacy string shapes; handleToggleBookmark optimistic update + revert on error; sharedLayoutProps extended with savedIds + onToggleBookmark
+- [x] MainLayout.jsx: onToggleBookmark passthrough to FavoritesPage
+- [x] client.js: bookmarkBuilding(projectId, cardId, action, rank, sessionId)
+- [x] Tests: 20 new tests in test_bookmark.py (save/unsave/idempotency/validation/IDOR/rank_zone/provenance). 144 total pass + 1 skipped.
+- [x] Reviewer: PASS. Security: PASS.
+- Commit: 210d1dc
 
 ### Sprint 4 Topic 02 ∩ 04: Option α Composition -- 2026-04-25
 

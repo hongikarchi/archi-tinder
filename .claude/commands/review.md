@@ -198,7 +198,7 @@ Inspect `CHANGED_FILES` (the file list from Step A2) for any of these patterns:
 
 **Non-UI (these alone do NOT trigger Part B):**
 - `.claude/**`
-- `*.md` outside source code (CLAUDE.md, GEMINI.md, DESIGN.md, README, etc.)
+- `*.md` outside source code (CLAUDE.md, DESIGN.md, README, etc.)
 - `research/**` (read-only for this terminal)
 - `backend/tests/**`
 - `backend/tools/**`

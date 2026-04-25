@@ -10,9 +10,9 @@
 
 | Agent | Model | Role | Touches |
 |-------|-------|------|---------|
-| **orchestrator** | opus | Supervisor -- plans, delegates, manages fix loops | nothing directly |
+| **orchestrator** | opus | Main pipeline supervisor -- plans, delegates, manages fix loops | nothing directly |
 | **back-maker** | sonnet | Django/DRF backend code | `backend/` only |
-| **front-maker** | sonnet | React/Vite frontend code | `frontend/` only |
+| **front-maker** | sonnet | React/Vite frontend **data layer** (useState, useEffect, callApi, hooks, error handling) | `frontend/` data layer only — UI layer is owned by `designer` |
 | **reviewer** | sonnet | API contracts, logic bugs, error handling | read-only |
 | **security-manager** | sonnet | SQL injection, auth bypass, XSS, token leaks | read-only |
 | **web-tester** | sonnet | Live Playwright browser tests | read-only |
@@ -20,6 +20,7 @@
 | **reporter** | sonnet | Updates Report.md + Task.md, emits REVIEW-REQUESTED handoff | `.claude/` only |
 | **algo-tester** | sonnet | Runs optimizer script, interprets results, triggers orchestrator | runs script + calls orchestrator |
 | **research** | opus | Explores complex problems, writes to research/ | `research/` only |
+| **designer** | opus | **Design pipeline supervisor** — owns DESIGN.md + frontend UI layer + design-* sub-agents (parallel of `orchestrator` for the design terminal). Spawns `design-<role>` sub-agents on demand. | `DESIGN.md`, `frontend/` UI layer (JSX styles, animations, colors, layout, MOCK_*), `.claude/agents/design-*.md`, `.claude/Task.md` Handoffs (MOCKUP-READY append-only) |
 | **`/review`** (slash command, no subagent) | opus (review terminal) | **Unified pre-push gate.** Part A: 7-axis static review (writes `.claude/reviews/*.md`). Part B: conditional strict browser verification (3 personas × ≥25 swipes, spec-aligned latency budgets, zero-tolerance error gates, edge cases) when UI-affecting paths in scope. Part C: HEAD + origin/main drift checks. Emits one of REVIEW-PASSED / REVIEW-ABORTED / REVIEW-FAIL to Task.md Handoffs. Invoked via `/review` or natural language ("리뷰해줘", "review", "검토해줘"). | read-only on source; writes `.claude/reviews/` + Task.md Handoffs line + transient `test-artifacts/review/` (Part B, cleaned after run) |
 
 ---
@@ -34,34 +35,38 @@ file/layer ownership + handoff signals in `Task.md`, not branches.
 
 | Terminal | Model | Role | Owns / Touches | Typical signals |
 |----------|-------|------|----------------|-----------------|
-| **main** | Claude Code (orchestrator: opus) | Full pipeline — backend, frontend integration, E2E tests, commit | `backend/`, `frontend/` (data layer), `.claude/` (excluding anything inside `research/`) | reporter emits `REVIEW-REQUESTED` to Handoffs; consumes `MOCKUP-READY`, `REVIEW-FAIL`, `REVIEW-ABORTED`, `SPEC-UPDATED` from Handoffs; `[SPEC-READY]` from Research Ready section. **READ-ONLY on `research/`** — never create/modify/delete/stage files there. |
+| **main** | Claude Code (orchestrator: opus) | Full pipeline — backend, frontend integration, E2E tests, commit | `backend/`, `frontend/` (data layer), `.claude/` (excluding anything inside `research/`, and excluding `.claude/agents/designer.md` + `.claude/agents/design-*.md`) | reporter emits `REVIEW-REQUESTED` to Handoffs; consumes `MOCKUP-READY`, `REVIEW-FAIL`, `REVIEW-ABORTED`, `SPEC-UPDATED` from Handoffs; `[SPEC-READY]` from Research Ready section. **READ-ONLY on `research/` and on design-owned paths.** |
 | **research** | Claude Code (research agent: opus) | Ongoing algorithm / UX research dialog with user; consolidates findings into `research/spec/requirements.md` (living spec). `research/search/**` deep-dive reports are reasoning archive — accessed directly via filesystem, not via Task.md pointers. | **EXCLUSIVE owner of `research/`** (all subdirectories: `spec/`, `search/`, `investigations/`, `algorithm.md`). Also appends `[SPEC-READY]` to Task.md `## Research Ready` + `SPEC-UPDATED` to `## Handoffs` on version bump. Commits its own research/ changes from its own session. | emits `[SPEC-READY]`, `SPEC-UPDATED` |
-| **review** | Claude Code (`/review` slash command: opus) | Unified pre-push gate. Single workflow at `.claude/commands/review.md` invoked via `/review` OR natural language ("리뷰해줘", "review please", "검토해줘"). Runs Part A (static 7-axis review) → Part B (conditional strict browser verification when UI-affecting paths in scope) → Part C (HEAD/`origin/main` drift checks) → emits one unified handoff signal. PASS → user runs `git push` from this terminal. | read-only on source; writes `.claude/reviews/*.md`, the handoff line in Task.md `## Handoffs`, and transient `test-artifacts/review/` during Part B. **READ-ONLY on `research/`** (same rule as main). | emits `REVIEW-PASSED` (clean Part A + Part B + drift-verified), `REVIEW-ABORTED` (clean review but drift detected), or `REVIEW-FAIL` (Part A had CRITICAL/MAJOR OR Part B browser test failed) to Handoffs. |
-| **antigravity** | Gemini (Chrome integration) | Continuous UI iteration — new mockups AND existing-page polish | `frontend/` (UI layer). **READ-ONLY on `research/`.** | emits `MOCKUP-READY` to Handoffs; drops inline `TODO(claude): ...` markers in source |
+| **review** | Claude Code (`/review` slash command: opus) | Unified pre-push gate. Single workflow at `.claude/commands/review.md` invoked via `/review` OR natural language ("리뷰해줘", "review please", "검토해줘"). Runs Part A (static 7-axis review) → Part B (conditional strict browser verification when UI-affecting paths in scope) → Part C (HEAD/`origin/main` drift checks) → emits one unified handoff signal. PASS → user runs `git push` from this terminal. | read-only on source; writes `.claude/reviews/*.md`, the handoff line in Task.md `## Handoffs`, and transient `test-artifacts/review/` during Part B. **READ-ONLY on `research/` and on design-owned paths** (same rule as main). | emits `REVIEW-PASSED` (clean Part A + Part B + drift-verified), `REVIEW-ABORTED` (clean review but drift detected), or `REVIEW-FAIL` (Part A had CRITICAL/MAJOR OR Part B browser test failed) to Handoffs. |
+| **design** | Claude Code (designer: opus; spawns `design-*` sub-agents on demand) | Frontend UI/UX iteration — DESIGN.md DNA updates, new mockups, post-integration polish, design-system propagation. Replaces the prior antigravity (Gemini) terminal. | **EXCLUSIVE owner of `DESIGN.md`** + `.claude/agents/designer.md` + `.claude/agents/design-*.md`. Shared owner of `frontend/` on a **per-line layer split** (UI layer = design; data layer = main's front-maker). **READ-ONLY on `research/` and on `backend/`.** Commits its own work directly from this terminal (research analog). | emits `MOCKUP-READY` to Handoffs; drops inline `TODO(claude): ...` markers in source for main pipeline. Consumes reciprocal `TODO(designer): ...` markers from main pipeline. |
 
-> **⚠️ `research/` ownership is absolute, with one narrow exception.** The research terminal is the broad owner of `research/` (`research/spec/`, `research/search/`, `research/investigations/`, and any future subdirectory). Main, review, antigravity, and all their spawned subagents/commands (orchestrator, back-maker, front-maker, reviewer, security-manager, git-manager, algo-tester, web-tester, and the `/review` slash command) are strictly READ-ONLY on `research/`. This is also the user's active study workspace — do not touch.
+> **⚠️ `research/` ownership is absolute, with one narrow exception.** The research terminal is the broad owner of `research/` (`research/spec/`, `research/search/`, `research/investigations/`, and any future subdirectory). Main, review, design, and all their spawned subagents/commands (orchestrator, back-maker, front-maker, reviewer, security-manager, git-manager, algo-tester, web-tester, designer, design-* sub-agents, and the `/review` slash command) are strictly READ-ONLY on `research/`. This is also the user's active study workspace — do not touch.
 >
 > **Narrow exception**: the `reporter` agent (and only the reporter) may UPDATE `research/algorithm.md` to keep it in sync with implementation — see `reporter.md` Step 6 for the exact scope (Production Value column sync + inline annotations + Last Synced line; no rewriting of theory, no other files). Bookkeeping commits explicitly stage `research/algorithm.md` for this purpose; `git-manager`'s default exclude still applies to all other `research/` paths. See CLAUDE.md `## Rules` for the authoritative statement.
+>
+> **⚠️ `DESIGN.md` + `.claude/agents/design-*.md` ownership is absolute.** The design terminal (`designer` agent + any `design-<role>` sub-agents it creates) is the exclusive writer of `DESIGN.md` and any `.claude/agents/design-*.md` file. Main, review, and research terminals — and ALL their subagents — are strictly READ-ONLY on those paths. The frontend `UI` layer (JSX styles, animations, colors, layout, `MOCK_*` constants) is design-owned per the layer-split rule below; the frontend `data` layer (useState, useEffect, callApi, custom hooks, error handling, data transformations) remains main pipeline's. See `.claude/agents/designer.md` for the full rules and the reciprocal `TODO(claude):` / `TODO(designer):` handoff markers.
 
 > **Note on Task.md sections:**
 > - `## Handoffs` (near top) = short-lived review/mockup signals, rolling window.
 > - `## Research Ready` (further down) = research terminal's append-only queue. Do not mix the two.
 
-### Frontend Layer Ownership (antigravity vs main)
+### Frontend Layer Ownership (designer vs main)
 
-Both antigravity and main edit files under `frontend/`, so ownership is split **by layer within the same file**:
+Both the design terminal (`designer`) and main (`front-maker`) edit files under
+`frontend/`, so ownership is split **by layer within the same file**:
 
 | Layer | Owner | Allowed edits |
 |-------|-------|---------------|
-| **UI** | antigravity | JSX return, `styles` objects, animations, transitions, colors, spacing, `MOCK_*` constants (pre-integration only) |
-| **Data / Logic** | main | `useState`, `useEffect`, `callApi()`, error handling, data transformations, custom hooks |
+| **UI** | designer | JSX return, `styles` objects, animations, transitions, colors, spacing, `MOCK_*` constants (pre-integration only) |
+| **Data / Logic** | main (`front-maker`) | `useState`, `useEffect`, `callApi()`, error handling, data transformations, custom hooks |
 
-Post-integration rules for antigravity returning to a polished page (full table in `GEMINI.md`):
+Post-integration rules for designer returning to a polished page (full table in `.claude/agents/designer.md`):
 - Allowed: JSX structure, styles, animations, colors
 - Forbidden: re-inserting `MOCK_*`, editing `useState/useEffect/callApi`, removing `profile?.xxx` optional chaining
 
-When antigravity needs behavior that requires API/backend work, it drops an inline marker
-instead of wiring it:
+**Reciprocal TODO markers** (drop the marker, move on — no cross-terminal sync overhead):
+
+When designer needs behavior that requires API/backend work, it drops `TODO(claude):`:
 
 ```jsx
 <button onClick={() => { /* TODO(claude): DELETE /api/v1/boards/${board_id}/ */ }}>
@@ -72,20 +77,37 @@ instead of wiring it:
 Main's orchestrator batches these via `grep -r "TODO(claude)" frontend/` during the next
 integration session.
 
+When `front-maker` (main) needs a UI change but is data-layer-bound, it drops
+`TODO(designer):`:
+
+```jsx
+{/* TODO(designer): swap the spinner for a skeleton card here */}
+```
+
+Designer batches these via `grep -r "TODO(designer)" frontend/` at the start of each
+session.
+
 ### Git Discipline
 
 - **All four terminals work on `main` branch.** No feature branches.
 - **Always `git pull` before starting a session.**
 - **Commit early, commit small** — avoid saving up many changes for one large commit.
   Git's 3-way merge handles most cases when two terminals touched the same file in
-  different sections (e.g., antigravity edited JSX, main edited `useEffect`).
+  different sections (e.g., designer edited JSX, main edited `useEffect`).
 - Only `git-manager` commits from the orchestrator pipeline (one commit per task).
-  Antigravity commits directly from its own terminal.
+  The **design terminal** commits directly from its own terminal (research analog).
 - **Research terminal commits its own `research/` changes** from its own session
   (the research terminal is the ONLY writer of `research/`; main cannot stage them per
   the ownership rule above). If `git status` in the main terminal shows uncommitted
   modifications under `research/`, those belong to the research terminal — leave them
   untouched and unstaged. `git-manager` actively excludes `research/` from staging.
+- **Design terminal commits its own `DESIGN.md` and `.claude/agents/design-*.md`
+  changes** from its own session. Main's `git-manager` excludes `DESIGN.md` and
+  `.claude/agents/design-*.md` from default staging — those belong to the design
+  terminal's own commit flow. Frontend `.jsx` files touched on the UI layer by
+  designer typically land in design-terminal commits; main's `front-maker`
+  data-layer edits to the same files land in main commits. Git's 3-way merge handles
+  the per-line split.
 
 ### Research ↔ Main: Spec-based Coordination
 
@@ -382,7 +404,7 @@ User starts/resumes research terminal
 
 **Research terminal writes only**: `research/**` (full), `.claude/Task.md` (append-only
 research sections), `.claude/WORKFLOW.md` (research rows only, by explicit user grant).
-Never `backend/`, `frontend/`, agent definitions, `Report.md`, or git commits.
+Never `backend/`, `frontend/`, agent definitions, `Report.md`, or git commits from main's pipeline.
 
 **Main terminal reads** (in order): spec → plans → code. Main does NOT read
 `research/search/**` under normal flow — Section 11 of `requirements.md` absorbs
@@ -393,6 +415,59 @@ The **old orchestrator-triggered research pattern** (main's orchestrator invokin
 research agent mid-pipeline for a complex sub-question) is still available in
 principle, but in practice all substantial research now lives in the dedicated
 research terminal.
+
+---
+
+## Case 6.5: Design flow (separate terminal, ongoing)
+
+The design pipeline runs in its **own dedicated terminal** (see "Multi-Terminal
+Coordination" → Terminal Roster above). It is the parallel of `orchestrator` for
+UI/UX work, supervised by the `designer` agent. Like research, it is not
+orchestrator-triggered — it is a long-running, user-driven design dialog.
+
+```
+User starts/resumes design terminal
+  |
+  |- [ongoing dialog: user ↔ designer]
+  |    DESIGN.md DNA refinement, mockup planning, post-integration polish, sub-agent
+  |    creation when delegation is needed
+  |
+  |- designer reads at session start:
+  |    DESIGN.md (visual system bible)
+  |    CLAUDE.md (project conventions, design pipeline ownership rule)
+  |    relevant frontend/ files
+  |    grep -r "TODO(designer)" frontend/   (reciprocal markers from main)
+  |
+  |- designer writes / updates:
+  |    DESIGN.md   (design DNA)
+  |    frontend/  (UI layer only — JSX styles, animations, colors, layout, MOCK_*)
+  |    .claude/agents/designer.md    (this file, on convention drift)
+  |    .claude/agents/design-*.md    (creates new sub-agents on demand)
+  |
+  |- designer may spawn `design-<role>` sub-agents via the Agent tool when delegation
+  |   is needed (e.g., multi-file refactor, full mockup page, visual QA pass).
+  |
+  |- On new mockup ready for API integration:
+  |    appends `MOCKUP-READY: <page>` to .claude/Task.md ## Handoffs
+  |
+  |- On UI changes that need backend work:
+  |    drops `// TODO(claude): <what>` markers in source for main pipeline pickup
+  |
+  -> design terminal commits its own work directly (research analog)
+       (main's git-manager excludes DESIGN.md + .claude/agents/design-*.md by default)
+```
+
+**Design terminal writes only**: `DESIGN.md`, `frontend/` UI layer (JSX styles,
+animations, colors, layout, `MOCK_*` constants), `.claude/agents/designer.md`,
+`.claude/agents/design-*.md`, `.claude/Task.md` `## Handoffs` (`MOCKUP-READY`
+append-only). Never `backend/`, `frontend/` data layer, `research/`, agent
+definitions outside `design-*`, `CLAUDE.md`, `WORKFLOW.md`, `Goal.md`, or
+`Report.md`.
+
+**Main terminal reads** (in order): `DESIGN.md` (when front-maker integration
+work touches surrounding JSX) → `MOCKUP-READY` Handoffs (to know which pages are
+ready for API wiring) → `grep -r "TODO(claude)" frontend/` (to batch design's
+backend requests).
 
 ---
 
@@ -431,7 +506,7 @@ reporter runs after every git-manager commit
 | Makers are sandboxed | back-maker: `backend/` only -- front-maker: `frontend/` only |
 | orchestrator never writes code | Always delegates to makers |
 | git-manager never pushes | Unless explicitly told to push |
-| Reporter updates, never appends | Report.md is live state (but preserve Gemini section for Last Updated); Task.md Resolved is historical |
+| Reporter updates, never appends | Report.md is live state (but preserve `Last Updated (Designer)` section — design terminal owns it); Task.md Resolved is historical |
 | Algorithm weakness = manual review | orchestrator stops and flags; does not auto-fix |
 | Fix cycle limit = 2 | After 2 failed cycles, stop and report to user |
 | Research before complex coding | Algorithm/UX tasks without precedent trigger research first |

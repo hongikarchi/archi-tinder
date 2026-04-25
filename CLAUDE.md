@@ -8,9 +8,10 @@
   - All building references must use `building_id` -- never name, slug, or language-dependent field.
   - Do NOT create or migrate the `architecture_vectors` table -- it is owned by Make DB.
   - SentenceTransformers is NOT a dependency here -- embeddings are pre-computed.
-  - When updating `.claude/Report.md`, update ONLY the `Last Updated (Claude)` section. NEVER overwrite or remove the `Last Updated (Gemini)` section.
+  - When updating `.claude/Report.md`, update ONLY the `Last Updated (Claude)` section. NEVER overwrite or remove the `Last Updated (Designer)` section.
   - **`research/` folder is off-limits to the main and review terminals**, with **one narrow exception** noted below. It is the **research terminal's exclusive write territory** AND the **user's active study workspace**. All main-pipeline and review-terminal agents/commands — `orchestrator`, `back-maker`, `front-maker`, `reviewer`, `security-manager`, `git-manager`, `algo-tester`, `web-tester`, and the `/review` slash command — are **READ-ONLY** on `research/`. Never create, modify, delete, or stage files under `research/` (including `research/spec/`, `research/search/`, `research/investigations/`, and any future subdirectory) from the main pipeline. If you read research content, that is fine; writes are forbidden. If a file already exists under `research/` that appears to have been created by the main pipeline (governance violation), leave it for the user or research terminal to handle — do not delete or relocate it yourself. The only legitimate broad writer of `research/` is the `research` agent invoked from the research terminal.
   - **Narrow exception — `research/algorithm.md`:** the `reporter` agent (and only the reporter) is permitted to UPDATE `research/algorithm.md` to keep it in sync with implementation. Permitted writes: (a) sync the **Production Value** column in the Hyperparameter Space table when `backend/config/settings.py` RECOMMENDATION dict changes; (b) append a one-line `_(Updated YYYY-MM-DD <sha_short>: <one-line>)_` annotation under any phase / formula / edge-case section whose corresponding implementation just changed; (c) maintain a `**Last Synced (Reporter):** YYYY-MM-DD <sha_short>` line near the top. Forbidden: rewriting algorithm theory, removing existing content, adding new sections, or touching any other file under `research/`. Reporter must NEVER touch `research/spec/`, `research/search/`, or `research/investigations/`. The `git-manager` agent likewise allows `research/algorithm.md` (and only that file) into staged commits via an explicit override path; broad `research/*` exclusion otherwise stands.
+  - **Design pipeline ownership**: the **`designer`** agent (and any `design-*` sub-agents it creates) exclusively owns the frontend UI layer (JSX styles, animations, colors, layout, `MOCK_*` constants), `DESIGN.md`, and `.claude/agents/design-*.md`. Main pipeline agents (`orchestrator`, `back-maker`, `front-maker`, `reviewer`, `security-manager`, `git-manager`, `reporter`, `algo-tester`, `web-tester`) and the review terminal (`/review`) are **READ-ONLY** on these. The frontend **data layer** (`useState`, `useEffect`, `callApi()`, custom hooks, error handling, data transformations) remains main pipeline's territory (`front-maker`). The UI vs Data split inside the same `.jsx` file is enforced **per-line, not per-file** — both terminals coexist via Git's 3-way merge. See `.claude/agents/designer.md` for the full layer-boundary rules and reciprocal `TODO(claude):` / `TODO(designer):` handoff markers.
 
   ## Target Structure
   frontend/   <- React 18 + Vite
@@ -25,11 +26,11 @@
   - Google login: auth-code flow (VITE_GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET required)
 
   ## Frontend Conventions
-  - **MUST READ `DESIGN.md`**: All front-maker tasks MUST consult `DESIGN.md` for our visual design system, colors, sizes, and UI rules before writing any code.
+  - **MUST READ `DESIGN.md`**: All UI work (designer + design-* sub-agents in the design terminal, and front-maker in the main pipeline whenever data-layer wiring touches surrounding JSX) MUST consult `DESIGN.md` for our visual design system, colors, sizes, and UI rules before writing any code.
   - All component styles are inline JS objects -- Tailwind is NOT used in components
   - Viewport-lock layout: body is `height:100vh; overflow:hidden`; pages use `height: calc(100vh - 64px)` (TabBar = 64px fixed bottom)
   - Accent colors are hardcoded hex in inline styles (not CSS vars) -- rely on `DESIGN.md` when applying colors
-  - Do NOT rewrite inline styles arbitrarily; they are the intentional design
+  - Do NOT rewrite inline styles arbitrarily; they are the intentional design — the **design pipeline** (`designer` agent) owns this layer; main pipeline (`front-maker`) is read-only on JSX styles. See `.claude/agents/designer.md` for the full UI-vs-Data layer split.
 
   ## Backend Conventions
   - Django 4.2 LTS required (Python 3.9.6 on this machine; Django 5+ needs Python 3.10+)
