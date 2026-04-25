@@ -144,6 +144,11 @@ RECOMMENDATION = {
     'adaptive_k_clustering_enabled': False,  # Topic 06: silhouette-based k selection {1, 2}
     'soft_relevance_enabled':        False,  # Topic 06: softmax over centroid distances vs max
     'gemini_rerank_enabled':         False,  # Topic 02: Gemini setwise rerank at session end
+    'mmr_lambda_ramp_enabled':       False,  # Topic 04 (a): per-swipe λ ramp
+    'mmr_lambda_ramp_n_ref':         10,     # N_ref for ramp denominator
+    'dpp_topk_enabled':              False,  # Topic 04 (b): DPP greedy MAP at session-final top-K
+    'dpp_alpha':                     1.0,    # Wilhelm-form diversity strength; Optuna search [0.5, 1.0]
+    'dpp_singularity_eps':           1e-9,   # Cholesky residual threshold for singularity
 }
 
 # -- External API keys -----------------------------------------------------

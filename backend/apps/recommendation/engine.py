@@ -646,6 +646,14 @@ def compute_mmr_next(pool_ids, exposed_ids, pool_embeddings, like_vectors, round
     best_candidate = None
     best_score = -float('inf')
 
+    # Topic 04 (a): compute per-swipe λ once, outside the candidate loop
+    mmr_lambda_base = RC.get('mmr_penalty', 0.3)
+    if RC.get('mmr_lambda_ramp_enabled', False):
+        n_ref = max(1, RC.get('mmr_lambda_ramp_n_ref', 10))
+        mmr_lambda = mmr_lambda_base * min(1.0, len(exposed_ids) / n_ref)
+    else:
+        mmr_lambda = mmr_lambda_base
+
     for candidate in candidates:
         if candidate not in pool_embeddings:
             continue
@@ -669,7 +677,7 @@ def compute_mmr_next(pool_ids, exposed_ids, pool_embeddings, like_vectors, round
                 redundancy = max(redundancy, np.dot(candidate_emb, exposed_emb))
 
         # MMR score
-        mmr_score = relevance - RC['mmr_penalty'] * redundancy
+        mmr_score = relevance - mmr_lambda * redundancy
 
         if mmr_score > best_score:
             best_score = mmr_score
@@ -929,3 +937,117 @@ def get_top_k_mmr(like_vectors, exposed_ids, k=None, round_num=None):
 
     # Convert to ImageCard format
     return [_row_to_card(row) for row in selected]
+
+
+def compute_dpp_topk(cards, like_vectors, k):
+    """
+    Topic 04 (b): DPP greedy MAP at session-final top-K.
+
+    Wilhelm 2018 L-ensemble kernel:
+        L_ii = q_i^2
+        L_ij = alpha * q_i * q_j * <v_i, v_j>   (i != j)
+    where q_i = max centroid cosine in [0.4, 0.95] (standalone Topic 04).
+    alpha = RC['dpp_alpha'], clamped to [0, 1].
+
+    Chen 2018 Cholesky-incremental greedy MAP:
+        O(N * k^2) time; maintains d_i^2 residual variance per candidate.
+
+    `cards` is a list of ImageCard dicts (from _row_to_card); embeddings are
+    fetched via get_pool_embeddings to avoid KeyError (cards have no 'embedding').
+
+    Returns list of building_id strings (length <= k).
+    Falls back to q-descending order on any exception; q is computed first so
+    the fallback is always quality-ordered, not just input order.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    alpha = float(RC.get('dpp_alpha', 1.0))
+    alpha = max(0.0, min(1.0, alpha))   # clamp to [0,1] — Wilhelm PSD requirement
+    eps = float(RC.get('dpp_singularity_eps', 1e-9))
+
+    if not cards:
+        return []
+
+    ids = [c['building_id'] for c in cards]
+    n = len(ids)
+
+    if n <= k:
+        return ids[:]
+
+    # --- Phase 1: fetch embeddings and compute quality scores q ---
+    # Done before the main try-block so the fallback can still be q-sorted.
+    q = None
+    try:
+        pool_embs = get_pool_embeddings(ids)
+        # Preserve original order; skip any id with missing embedding
+        valid_ids = [bid for bid in ids if bid in pool_embs]
+        if len(valid_ids) <= k:
+            # Not enough embeddable candidates for DPP — return what we have
+            return valid_ids[:]
+
+        V = np.array([pool_embs[bid] for bid in valid_ids], dtype=np.float64)
+        norms = np.linalg.norm(V, axis=1, keepdims=True)
+        norms = np.where(norms < 1e-12, 1.0, norms)
+        V = V / norms
+
+        if like_vectors:
+            centroids, _ = compute_taste_centroids(like_vectors, round_num=0)
+            C = np.array(centroids, dtype=np.float64)
+            cn = np.linalg.norm(C, axis=1, keepdims=True)
+            cn = np.where(cn < 1e-12, 1.0, cn)
+            C = C / cn
+            cosines = V @ C.T                        # (n_valid, n_centroids)
+            q = cosines.max(axis=1)
+        else:
+            q = np.ones(len(valid_ids), dtype=np.float64) * 0.7
+
+        q = np.clip(q, 0.4, 0.95)
+    except Exception as exc:
+        logger.warning("compute_dpp_topk: embedding/q phase failed (%s) — falling back", exc)
+        return ids[:k]
+
+    # --- Phase 2: DPP greedy MAP ---
+    nv = len(valid_ids)
+    try:
+        S = V @ V.T                                   # (nv, nv) cosine similarity
+        L = np.outer(q, q) * (alpha * S + (1.0 - alpha) * np.eye(nv))
+
+        d = np.diag(L).copy()
+        c_mat = np.zeros((k, nv), dtype=np.float64)  # Cholesky columns
+
+        selected_idx = []
+        valid_mask = np.ones(nv, dtype=bool)
+
+        for t in range(k):
+            scores = np.where(valid_mask, d, -np.inf)
+            best = int(np.argmax(scores))
+            if d[best] < eps:
+                break                                 # singularity: stop early
+
+            selected_idx.append(best)
+            valid_mask[best] = False
+
+            if t < k - 1:
+                e_t = L[:, best].copy()
+                if t > 0:
+                    e_t -= c_mat[:t, best] @ c_mat[:t, :]
+
+                sqrt_d = np.sqrt(max(d[best], eps))
+                c_mat[t, :] = e_t / sqrt_d
+
+                d -= c_mat[t, :] ** 2
+                d = np.maximum(d, 0.0)
+
+        # Pad remaining slots by q-descending order if early-stopped
+        if len(selected_idx) < k:
+            remaining = [i for i in range(nv) if i not in set(selected_idx)]
+            remaining.sort(key=lambda i: -q[i])
+            selected_idx += remaining[:k - len(selected_idx)]
+
+        return [valid_ids[i] for i in selected_idx[:k]]
+
+    except Exception as exc:
+        logger.warning("compute_dpp_topk: DPP phase failed (%s) — falling back to q-sort", exc)
+        order = sorted(range(nv), key=lambda i: -q[i])
+        return [valid_ids[i] for i in order[:k]]

@@ -1,4 +1,5 @@
 import logging
+import numpy as np
 from collections import defaultdict
 from django.conf import settings
 from django.db import transaction
@@ -855,7 +856,6 @@ class SwipeView(APIView):
             # Returns dimension indices for now; Sprint 4 will wire attribute-name mapping.
             dominant_attrs = []
             if session.preference_vector:
-                import numpy as np
                 pref = np.asarray(session.preference_vector, dtype=float)
                 if pref.size > 0:
                     top_idxs = np.argsort(np.abs(pref))[-3:][::-1]
@@ -930,6 +930,15 @@ class SessionResultView(APIView):
             new_order = services.rerank_candidates(candidate_metadata, liked_summary)
             card_by_id = {c['building_id']: c for c in predicted_cards}
             predicted_cards = [card_by_id[bid] for bid in new_order if bid in card_by_id]
+
+        # Topic 04 (b): DPP greedy MAP at session-final top-K
+        if (RC.get('dpp_topk_enabled', False)
+                and len(predicted_cards) >= 2
+                and session.like_vectors):
+            k = RC.get('top_k_results', 20)
+            card_by_id = {c['building_id']: c for c in predicted_cards}
+            dpp_order = engine.compute_dpp_topk(predicted_cards, session.like_vectors, k=k)
+            predicted_cards = [card_by_id[bid] for bid in dpp_order if bid in card_by_id]
 
         return Response({
             'session_id':          str(session.session_id),
