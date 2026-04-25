@@ -3,7 +3,7 @@
 > Phase logic, mathematical formulas, and hyperparameter theory.
 > Research agent updates this file. Orchestrator references it for algorithm tasks.
 
-**Last Synced (Reporter):** 2026-04-25 e290287
+**Last Synced (Reporter):** 2026-04-25 f3b8381
 
 ---
 
@@ -69,6 +69,8 @@ delta_V = ||centroid_now - centroid_prev|| / ||centroid_prev||
 
 Moving average over `convergence_window` rounds. Converged when delta_V < epsilon.
 epsilon (convergence_threshold) range: 0.05-0.15. Current production value: 0.08.
+
+_(Updated 2026-04-25 f3b8381: Sprint 3 C-1 confidence bar shipped — engine.compute_confidence(history, threshold, window=3) returns user-facing confidence in [0,1] (or None for hide-bar) per spec formula `1 − min(1, avg(last 3 Δv) / ε_threshold)`. SwipeView response includes 'confidence' field in all 3 paths (normal-swipe / action-card reset / complete). confidence_update SessionEvent emitted with `action` field for Spec v1.2 dislike-bias telemetry. Bar visible threshold = phase transition threshold = 0.08 (settings.py); informational vs decisional signals at the same numeric threshold but different semantic targets per Investigation 13.)_
 
 ### Preference Vector Updates
 - Like: +like_weight (0.5) added to preference vector, L2-normalized

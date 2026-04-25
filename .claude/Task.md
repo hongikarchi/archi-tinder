@@ -49,6 +49,9 @@
 - [2026-04-25] REVIEW-REQUESTED: f17cb5e — A4 pool exhaustion guard (§5.6 + §6); migration 0008 applied; run `/review` (or "리뷰해줘") next (UI-affecting paths in scope — Part B will trigger).
 - [2026-04-25] REVIEW-REQUESTED: 2c7be51 — A5 §6 session logging infrastructure (SessionEvent model + emit_event + initial wire-up); migration 0009 applied; run `/review` (or "리뷰해줘") next (UI-affecting paths in scope — Part B will trigger).
 - [2026-04-25] REVIEW-REQUESTED: e290287 — Sprint 1 chat phase rewrite + Spec v1.3 §11.1 IMP-4 push-gate-blocker fix; migration 0010 applied; run `/review` (or "리뷰해줘") next (UI-affecting paths in scope — Part B will trigger; expect ~1000-1500ms parse-query p50 vs prior 5496ms FAIL).
+- [2026-04-25] REVIEW-FAIL: 57b3244 — **Part A: PASS (0 findings).** Part B FAIL on retry-after-billing-restoration: parse_query 4166 ms vs 4000 ms ceiling (overshoots by 166 ms / 4.15%). **First real measurement of IMP-4 fix**: A5 `parse_query_timing` SessionEvent payload `{thinking_tokens: None, input_tokens: 5924, output_tokens: 309, gemini_total_ms: 3246}` confirms IMP-4 `thinking_budget=0` works empirically (no thinking-tokens). But IMP-4's predicted 1000-1500 ms p50 underestimated — the new Sprint 1 chat phase prompt (Investigation 06: 9 bilingual few-shot examples) is **5924 input tokens**, ~10× larger than the prior `_PARSE_QUERY_PROMPT`. Gemini 3246 ms + Django/serialization 920 ms = 4166 ms. **Note: prior 4 Part B FAILs (88f0532/5d85b90/f607e73/57b3244-first-run) were ALL Gemini 403 PERMISSION_DENIED — the "monotonic latency drift" in `f607e73.md` was a misdiagnosis; A5 logging surfaced the true cause on its first real run.** **Decision options for user**: (1) accept and push (spec target "3-4s", 4166 ms is at 4.166 — single-run variance), (2) loosen spec §4 budget to <5000 ms, (3) trim chat prompt (Sprint of work, risks bilingual regression), (4) explicit-override single retry. No code change; branch is functionally healthy. See `.claude/reviews/latest.md` Part B "Re-run after Gemini billing restoration" + "Decision options".
+- [2026-04-25] USER-OVERRIDE-PUSH: 57b3244 — User accepted the 4.15% margin over spec §4 budget per /review's decision option 1 and pushed manually. Branch deployed to `origin/main` (`ded38be..57b3244`, 19 commits). Audit trail: Part B verification produced real diagnostic data (parse_query_timing SessionEvent), IMP-4 fix empirically verified (thinking_tokens=None), 4166 ms latency is the empirical floor for the current chat-phase prompt size. No code regression. **Improvement recommendations for main's next sprint** at `.claude/reviews/57b3244-improvements.md` — Tier 1 fixes (~1.5h total): (1.1) loosen spec §4 budget to <5000ms, (1.2) multi-run aggregation in /review Part B Step B4, (1.3) /review Step B0 SessionEvent.failure pre-check. Tier 2 (Sprint scale): chat prompt optimization, tier-aware Part B gates. Main: read 57b3244-improvements.md, decide which to action this Sprint.
+- [2026-04-25] REVIEW-REQUESTED: f3b8381 — Sprint 3 C-1 confidence bar (Investigation 13 + Spec v1.2 dislike-bias telemetry); UI-affecting paths in scope (SwipePage + App.jsx changes). run `/review` (or "리뷰해줘") next.
 
 ---
 
@@ -190,6 +193,20 @@ Google OAuth only. Korean users need domestic login.
 ---
 
 ## Resolved
+
+### Sprint 3 C-1: Confidence Bar -- 2026-04-25
+
+#### CONF1. Confidence bar (Spec §4 + Investigation 13) -- 2026-04-25
+Per research/spec/requirements.md v1.3 §4 C-1 row (통합안 1) + research/investigations/13-c1-confidence-formula-validation.md + Spec v1.2 SPEC-UPDATED additions (ε_init→ε_threshold rename, 3 underspecified behaviors, dislike-bias semantic gap → confidence_update.action).
+- [x] engine.compute_confidence(history, threshold, window=3) returns float [0,1] or None when n<window. Anchor values verified per Investigation 13 (avg=0→1.0, avg=0.02→0.75, avg=0.04→0.5, avg=threshold→0). threshold=0 div-by-zero guarded via max(threshold, 1e-6).
+- [x] SwipeView response 'confidence' field across all 3 paths (normal-swipe computed, action-card reset null, action-card complete null per fix-loop fix).
+- [x] confidence_update SessionEvent emitted with payload {confidence, dominant_attrs (top-3 dim indices), action} per Spec v1.2 dislike-bias telemetry. Only emitted when non-null.
+- [x] Frontend ConfidenceBar component in SwipePage with inline styles + DESIGN.md accent (#ec4899). Phase label REMOVED per spec. Fallback counter when bar hidden (exploring + non-analyzing).
+- [x] App.jsx propagates confidence in applySessionResponse + handleSwipeCard; backward-compat via result.confidence ?? null.
+- [x] 1-line interpretation text deferred to Sprint 4 (attribute-name mapping layer not yet wired; backend emits dimension indices only).
+- [x] 12 new tests in TestConfidenceBar (3 commit cycles: backend pipeline cycle 1 with 11 unit + 4 integration; fix-loop cycle 2 added 1 test for action-card complete path). 79 tests pass + 1 skipped.
+- [x] Reviewer: PASS (after fix-loop cycle 2 added missing 'confidence' key to action-card complete path). Security: PASS.
+- Commit: f3b8381
 
 ### Sprint 1: Chat Phase Rewrite + IMP-4 Push-Gate Fix -- 2026-04-25
 
