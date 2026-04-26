@@ -50,8 +50,21 @@ def emit_event(event_type, session=None, user=None, **payload):
 
 
 def emit_swipe_event(session, user, direction, card_id, intensity, rank_in_pool,
-                     timing_breakdown, idempotency_key=None):
-    """Convenience wrapper for the most-emitted event type."""
+                     timing_breakdown, idempotency_key=None,
+                     cache_hit=None, cache_source=None, cache_partial_miss_count=None,
+                     prefetch_strategy=None, db_call_count=None,
+                     pool_escalation_fired=None, pool_signature_hash=None):
+    """Convenience wrapper for the most-emitted event type.
+
+    IMP-7 §6 fields (spec v1.6):
+        cache_hit: bool -- True if all pool embeddings were served from cache this swipe.
+        cache_source: str -- 'precompute' (full hit) or 'fresh' (any miss).
+        cache_partial_miss_count: int -- number of building_ids not in cache at call time.
+        prefetch_strategy: str -- 'sync' baseline; 'async-thread' when IMP-8 ships.
+        db_call_count: int | None -- null until IMP-9 connection-level instrumentation.
+        pool_escalation_fired: bool -- True if refresh_pool_if_low escalated tier this swipe.
+        pool_signature_hash: str | None -- first 16 hex chars of SHA-256 of sorted pool_ids.
+    """
     return emit_event(
         'swipe',
         session=session,
@@ -62,4 +75,11 @@ def emit_swipe_event(session, user, direction, card_id, intensity, rank_in_pool,
         rank_in_pool=rank_in_pool,
         timing_breakdown=timing_breakdown,
         idempotency_key=idempotency_key,
+        cache_hit=cache_hit,
+        cache_source=cache_source,
+        cache_partial_miss_count=cache_partial_miss_count,
+        prefetch_strategy=prefetch_strategy,
+        db_call_count=db_call_count,
+        pool_escalation_fired=pool_escalation_fired,
+        pool_signature_hash=pool_signature_hash,
     )

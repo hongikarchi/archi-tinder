@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import numpy as np
 from collections import defaultdict
@@ -692,8 +693,10 @@ class SwipeView(APIView):
             # to extend the pool with new candidates before card selection.
             # refresh_pool_if_low mutates session.pool_ids/pool_scores/current_pool_tier
             # in-place when escalation fires.
+            _tier_before_refresh = session.current_pool_tier
             if session.phase not in ('converged', 'completed'):
                 engine.refresh_pool_if_low(session, threshold=5)
+            _pool_escalation_fired = session.current_pool_tier != _tier_before_refresh
 
             # 7. Check pool exhaustion (hard-empty fallback after refresh attempt)
             remaining = [pid for pid in session.pool_ids if pid not in set(session.exposed_ids)]
@@ -703,6 +706,10 @@ class SwipeView(APIView):
 
             # 8. Card selection by phase
             pool_embeddings = engine.get_pool_embeddings(session.pool_ids)
+            # Capture IMP-7 cache stats immediately after the primary get_pool_embeddings call.
+            # The dislike-fallback branch below may call get_pool_embeddings again (for dislike_ids),
+            # which would overwrite _last_embedding_call_stats. Reading here preserves swipe-selection stats.
+            _embedding_stats = engine.get_last_embedding_call_stats() or {}
 
             if session.phase == 'converged':
                 next_card = engine.build_action_card()
@@ -860,6 +867,15 @@ class SwipeView(APIView):
             _rank_in_pool = session.pool_ids.index(building_id)
         except (ValueError, AttributeError):
             pass
+        # IMP-7 §6 swipe telemetry extensions
+        _cache_misses = _embedding_stats.get('cache_misses', 1)
+        _pool_sig = None
+        try:
+            _pool_sig = hashlib.sha256(
+                ','.join(sorted(session.pool_ids)).encode()
+            ).hexdigest()[:16]
+        except Exception:
+            pass
         event_log.emit_swipe_event(
             session=session,
             user=profile,
@@ -869,6 +885,14 @@ class SwipeView(APIView):
             rank_in_pool=_rank_in_pool,
             timing_breakdown=_timing_breakdown,
             idempotency_key=idempotency_key,
+            # IMP-7 cache telemetry fields (spec v1.6 §6)
+            cache_hit=_cache_misses == 0,
+            cache_source='precompute' if _cache_misses == 0 else 'fresh',
+            cache_partial_miss_count=_cache_misses,
+            prefetch_strategy='sync',        # baseline; IMP-8 will introduce 'async-thread'
+            db_call_count=None,              # IMP-9 verify; null until connection-level instrumentation added
+            pool_escalation_fired=_pool_escalation_fired,
+            pool_signature_hash=_pool_sig,
         )
 
         # Compute user-facing confidence for response (C-1)

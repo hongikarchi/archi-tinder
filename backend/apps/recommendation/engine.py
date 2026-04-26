@@ -15,7 +15,9 @@ logger = logging.getLogger('apps.recommendation')
 
 RC = settings.RECOMMENDATION  # shorthand for constants
 
-_pool_embedding_cache = {}
+_building_embedding_cache = {}             # building_id (str) -> np.ndarray (384-dim, L2-normalized)
+_BUILDING_CACHE_MAX_SIZE = RC.get('pool_embedding_cache_max_size', 5000)  # ~5MB max; configurable via RECOMMENDATION setting
+_last_embedding_call_stats = None          # dict set per get_pool_embeddings call; see get_last_embedding_call_stats()
 _centroid_cache = {}
 
 
@@ -832,42 +834,87 @@ def create_bounded_pool(filters, filter_priority=None, seed_ids=None, target=Non
 
 def get_pool_embeddings(pool_ids):
     """
-    Fetch embeddings for pool_ids.
-    Returns dict mapping building_id -> np.ndarray (shape=(384,))
+    IMP-7: Per-building-id cached embeddings. Partial-miss -> fetch only missing.
+
+    Cache key is building_id (str), NOT frozenset(pool_ids). Prior frozenset key
+    caused full cache invalidation on every pool escalation (A4 guard adds new IDs
+    -> new frozenset -> new key). Per-building-id cache is stable: escalation only
+    ADDs new IDs; previously cached building embeddings are always retained.
+
+    Returns:
+        dict mapping building_id -> np.ndarray (shape=(384,), L2-normalized).
+
+    Side effects:
+        Sets module-level _last_embedding_call_stats for SwipeView §6 telemetry.
+        Caller reads via get_last_embedding_call_stats() after the call.
     """
+    global _last_embedding_call_stats
+
     if not pool_ids:
+        _last_embedding_call_stats = {'requested': 0, 'cache_hits': 0, 'cache_misses': 0}
         return {}
 
-    cache_key = frozenset(pool_ids)
-    if cache_key in _pool_embedding_cache:
-        return _pool_embedding_cache[cache_key]
+    missing_ids = [bid for bid in pool_ids if bid not in _building_embedding_cache]
 
-    placeholders = ','.join(['%s'] * len(pool_ids))
-    with connection.cursor() as cur:
-        cur.execute(
-            f'SELECT building_id, embedding::text FROM architecture_vectors WHERE building_id IN ({placeholders})',
-            list(pool_ids),
-        )
-        rows = _dictfetchall(cur)
+    if missing_ids:
+        placeholders = ','.join(['%s'] * len(missing_ids))
+        with connection.cursor() as cur:
+            cur.execute(
+                f'SELECT building_id, embedding::text FROM architecture_vectors'
+                f' WHERE building_id IN ({placeholders})',
+                missing_ids,
+            )
+            rows = _dictfetchall(cur)
 
-    result = {}
-    for row in rows:
-        embedding_str = row['embedding']
-        embedding = np.array([float(x) for x in embedding_str.strip('[]').split(',')])
-        norm = np.linalg.norm(embedding)
-        if norm > 0:
-            embedding = embedding / norm
-        result[row['building_id']] = embedding
+        for row in rows:
+            embedding_str = row['embedding']
+            embedding = np.array([float(x) for x in embedding_str.strip('[]').split(',')])
+            norm = np.linalg.norm(embedding)
+            if norm > 0:
+                embedding = embedding / norm
+            _building_embedding_cache[row['building_id']] = embedding
 
-    if len(_pool_embedding_cache) > 50:
-        _pool_embedding_cache.clear()
-    _pool_embedding_cache[cache_key] = result
-    return result
+        # FIFO eviction when cache exceeds max size (Python 3.7+ dict preserves insertion order)
+        if len(_building_embedding_cache) > _BUILDING_CACHE_MAX_SIZE:
+            excess = len(_building_embedding_cache) - _BUILDING_CACHE_MAX_SIZE
+            for old_bid in list(_building_embedding_cache.keys())[:excess]:
+                del _building_embedding_cache[old_bid]
+
+    # Record stats for §6 swipe telemetry (most-recent call; overwritten per call)
+    _last_embedding_call_stats = {
+        'requested': len(pool_ids),
+        'cache_hits': len(pool_ids) - len(missing_ids),
+        'cache_misses': len(missing_ids),
+    }
+
+    # Build result dict in pool_ids order (caller accesses by key; order preserved for dict)
+    return {bid: _building_embedding_cache[bid] for bid in pool_ids if bid in _building_embedding_cache}
+
+
+def get_last_embedding_call_stats():
+    """Return stats dict for the most recent get_pool_embeddings call. None if not called yet."""
+    return dict(_last_embedding_call_stats) if _last_embedding_call_stats else None
+
+
+def precompute_pool_embeddings(pool_ids):
+    """
+    IMP-7: Explicit precompute entry point for session-creation warming.
+
+    NOTE: SessionCreateView already calls get_pool_embeddings(pool_ids) at line ~210
+    for the farthest-point tier-grouping step, which warms the cache as a side effect.
+    The pool_precompute_enabled flag in settings gates an explicit call here, but that
+    call is currently a no-op (cache already warm from the natural get_pool_embeddings
+    call). This function is reserved for future explicit-warming paths (e.g., IMP-8
+    async background warming).
+    """
+    if not pool_ids:
+        return
+    get_pool_embeddings(pool_ids)  # populates cache as side effect
 
 
 def clear_pool_embedding_cache():
-    """Clear the pool embedding cache (for testing)."""
-    _pool_embedding_cache.clear()
+    """Clear the per-building-id embedding cache (for testing)."""
+    _building_embedding_cache.clear()
 
 
 def clear_centroid_cache():

@@ -158,6 +158,12 @@ RECOMMENDATION = {
     'hybrid_rrf_k':                  60,     # Cormack 2009 default; uniform fusion 1/(k+rank)
     'hybrid_bm25_dict':              'simple',  # tsvector dictionary; 'simple' = multilingual-safe (no stemming)
     'hybrid_filter_channel_enabled': True,   # True: filter is a 3rd RRF rank channel; False: filter is a predicate gate
+    # IMP-7: per-building-id embedding cache (frozenset -> building_id key refactor)
+    'pool_precompute_enabled': False,        # Currently gates a no-op: cache is warmed naturally via
+                                             # the existing get_pool_embeddings(pool_ids) call in
+                                             # SessionCreateView. Reserved for future explicit-warming
+                                             # paths (e.g., IMP-8 async background warming).
+    'pool_embedding_cache_max_size': 5000,   # IMP-7 FIFO eviction bound; ~5MB max. Bump for larger corpora.
 }
 
 # -- External API keys -----------------------------------------------------

@@ -482,12 +482,16 @@ For each swipe (i = 1 to 25):
 2. If action card appears, swipe right to accept and break (recording action card reached at swipe i).
 3. Otherwise: alternate left/right (i odd → swipe right via ArrowRight key; i even → swipe left via ArrowLeft).
 4. Record gesture timestamp `t_gesture` and response timestamp `t_response` from the fetch interceptor.
-5. **Strict gate per swipe**: `t_response - t_gesture < 700 ms` (spec target <500ms; 700ms hard ceiling allows for drift). If breached on **2 or more swipes within the run**, Part B FAIL.
+5. **Strict gate per swipe (spec v1.6 §4 — ratified post-Investigation 18)**:
+   - Outer (user-felt frontend RTT): `t_response - t_gesture < 1500 ms`. Aspirational <500 ms preserved as goal, not gate. If breached on **2 or more swipes within the run**, Part B FAIL.
+   - Backend sub-budget (per `SessionEvent.swipe.timing_breakdown.total_ms`): `< 1000 ms`. Inspect SessionEvent payloads after the run; if any swipe's backend total_ms ≥ 1000 ms, record as MAJOR finding (informational MINOR if only 1 swipe; FAIL if ≥2).
+
+   _Rationale: Neon PostgreSQL RTT is structurally ~100-250 ms (AWS us-east-1 → Neon Frankfurt pool); per `research/investigations/18-swipe-loop-latency-floor.md` §4, the aspirational <500 ms target cannot be met without INFRA-1 (same-region hosting) or IMP-8 (async prefetch). The 1500 ms outer / 1000 ms backend split preserves the spirit of the spec budget while avoiding false-positive FAIL gates on Neon-RTT-dominated runs. Re-tightening pathway: IMP-7 → IMP-8 → INFRA-1; gate values revert toward 700 ms / 500 ms as each ships._
 
 After 25 swipes (or earlier if action card fired):
 - Collect `__reviewState.api_calls` and compute p50, p95, p99 of swipe latencies.
 - Report breakdown.
-- **Strict gate**: `p95(swipe_latency) < 700 ms`. p99 outliers up to 1500 ms are warned, not failed.
+- **Strict gate**: `p95(swipe_latency_user_felt) < 1500 ms` (frontend RTT) AND `p95(backend total_ms from SessionEvent) < 1000 ms`. p99 outliers up to 2500 ms / 1500 ms respectively are warned, not failed.
 
 ## Step B6 — Strict state + API shape validation
 
