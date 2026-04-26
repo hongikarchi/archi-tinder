@@ -2,6 +2,11 @@
 
 > How the code works right now. Auto-updated by reporter after every commit.
 > For what we're building: see Goal.md. For task status: see Task.md.
+>
+> **Format note**: each structure section has TWO views — a **Mermaid diagram first**
+> (visual map for humans + first-pass agent orientation) and an **expanded prose table
+> below** (full per-file responsibilities + change history annotations for agent reference
+> during code work). Read the diagram for system shape; consult the table for details.
 
 ---
 
@@ -44,14 +49,65 @@ flowchart TD
 ```
 
 ## Backend Structure
+
+```mermaid
+flowchart TD
+    subgraph EXT["External services"]
+        G["Gemini 2.5-flash<br/>parse_query / persona report /<br/>setwise rerank"]
+        IM["Imagen 3<br/>AI architecture image"]
+        HF["HuggingFace MiniLM<br/>v_initial embedding (Topic 03)"]
+        R2["Cloudflare R2<br/>3,083 building images"]
+        DB[("Neon PostgreSQL<br/>3,465 buildings × 384-dim vectors<br/>(pgvector)")]
+    end
+
+    subgraph BE["backend/ — Django 4.2 + DRF"]
+        URL["config/urls.py<br/>routing"]
+        VW["views.py<br/>REST endpoints (sessions, swipes,<br/>projects, bookmark, auth, images)"]
+        EG["engine.py<br/>algorithm core: pool creation,<br/>RRF / HyDE / DPP / MMR / K-Means /<br/>convergence / embedding cache"]
+        SV["services.py<br/>LLM calls: parse_query, persona,<br/>rerank, embed_visual_description"]
+        ML["models.py<br/>Project / AnalysisSession /<br/>SwipeEvent / SessionEvent"]
+        EL["event_log.py<br/>emit_event / emit_swipe_event<br/>(never raises)"]
+        AV["accounts/views.py<br/>OAuth (Google/Kakao/Naver) +<br/>JWT + dev-login"]
+        ST["config/settings.py<br/>RECOMMENDATION dict<br/>(20+ flag-gated hyperparameters)"]
+    end
+
+    URL --> VW
+    URL --> AV
+    VW --> EG
+    VW --> SV
+    VW --> ML
+    VW --> EL
+    SV --> EL
+    EG --> ML
+    AV --> ML
+    EL --> ML
+
+    SV -.HTTPS.-> G
+    SV -.HTTPS.-> IM
+    SV -.HTTPS.-> HF
+    EG -.raw SQL + pgvector.-> DB
+    ML -.ORM.-> DB
+    VW -.image URLs.-> R2
+    EG -.RC dict.-> ST
+    SV -.RC dict.-> ST
+
+    style EXT fill:#1f2937,color:#fff,stroke:#374151
+    style BE fill:#1e3a8a,color:#fff,stroke:#1e40af
+    style EG fill:#10b981,color:#000
+    style VW fill:#3b82f6,color:#fff
+    style SV fill:#8b5cf6,color:#fff
+```
+
+**Read flow**: `views.py` is the orchestration layer — every REST request fans out to `engine.py` (algorithm), `services.py` (LLM/embedding), `models.py` (DB), and `event_log.py` (telemetry). External services are touched ONLY through `services.py` (Gemini / Imagen / HF) or `engine.py` (Postgres via raw SQL on `architecture_vectors`). Settings drive flag-gated behavior across both.
+
 | File | Responsibility |
 |------|---------------|
-| `models.py` | Django ORM models: Project (liked_ids, disliked_ids, saved_ids, report, report_image, session_id), AnalysisSession (phase, pool_ids, exposed_ids, pref_vector, convergence_history, etc.), SwipeEvent (unique_together session+idempotency_key); **schema A3:** Project.liked_ids shape now list[{id, intensity}] (was list[str]); Project.saved_ids NEW (list[{id, saved_at}]) for top-K bookmark / primary-metric source; Project.disliked_ids unchanged; **A4 (§5.6/§6):** AnalysisSession gains 4 new fields (original_filters, original_filter_priority, original_seed_ids, current_pool_tier) for pool relaxation state across re-relaxation events; **A5 (§6):** new SessionEvent model (13 event types in choices, JSON payload, indexes on (session, created_at) + (event_type, created_at), user FK SET_NULL + session FK CASCADE both nullable for pre-session/pre-auth events); **Sprint 1:** SessionEvent.EVENT_TYPE_CHOICES gains 'parse_query_timing' (migration 0010 AlterField); **Topic 03 (Sprint 4):** AnalysisSession.v_initial JSONField (nullable); SessionEvent.EVENT_TYPE_CHOICES gains 'hyde_call_timing'; migration 0011 AddField + AlterField applied to dev DB |
-| `event_log.py` | **A5:** session event log emit helpers; emit_event(event_type, session=None, user=None, **payload) never raises (failure → logger.warning + None); emit_swipe_event() convenience wrapper; per-session sequence_no for tie-break; created_at microsecond is primary order signal |
-| `engine.py` | Recommendation algorithm: pool creation, farthest-point, K-Means+MMR, convergence, top-K; centroid cache key uses spread dimensions (0, 191, -1) for collision resistance; **pool-score normalization (Topic 12):** _build_score_cases returns 3-tuple with total_weight; create_bounded_pool divides score by total_weight via ::float cast -> [0,1] range; seed boost 1.1; **IMP-1 (Spec v1.1 §11.1):** farthest_point_from_pool max-max → max-min correctness fix (Gonzalez sampling) + NumPy batch matmul (C @ E.T) vectorization, ~22ms → ~1ms per call (20-50× speedup); signature preserved across all 12 production callers; **A4:** create_pool_with_relaxation() helper factors out 3-tier logic (full → drop geo/numeric → random) for reuse; refresh_pool_if_low() runs from SwipeView when remaining pool < 5, escalates to next tier and merges new candidates with exclude_ids = pool_ids + exposed_ids; **C-1 (Sprint 3, Investigation 13):** new compute_confidence(history, threshold, window=3) returns float [0,1] or None when n<window per Investigation 13 hide-bar semantic; threshold=0 div-by-zero guarded; **Topic 06 (Sprint 4):** adaptive_k_clustering_enabled flag → silhouette-based k {1,2} selection (threshold 0.15) via silhouette_samples + np.average weighted; soft_relevance_enabled flag → softmax-weighted relevance over centroid distances (numerically-stable). Both flags default OFF; **Topic 04 (Sprint 4):** compute_mmr_next gets λ ramp logic (λ(t) = λ_base · min(1, |exposed|/N_ref)) when mmr_lambda_ramp_enabled; new compute_dpp_topk(candidates, embeddings, q_values, k, alpha) with Wilhelm 2018 kernel (L_ii=q², L_ij=α·q_i·q_j·⟨v_i,v_j⟩) + Chen 2018 Cholesky-incremental greedy MAP O(N·k²). α clamped [0,1]. Singularity (residual<eps=1e-9) → pad q-ordered remaining. 2-phase fallback (embedding/q failure → ids[:k]; Cholesky exception → q-sorted top-k). Embeddings via get_pool_embeddings (NOT card dicts). **Composition (Sprint 4):** compute_dpp_topk gains q_override kwarg — when supplied, uses values directly (bypasses [0.4, 0.95] clip; RRF-rescaled values are already in [0.01, 1.0]); **Topic 03 (Sprint 4):** create_pool_with_relaxation + create_bounded_pool gain optional v_initial parameter; when None: byte-identical to baseline; when provided: pgvector <=> cosine sim blended via (filter_sum + hyde_weight·(1-<=>))/(total_weight+hyde_weight); all 3 HyDE SQL paths wrapped in try/except with non-recursive fallback to non-HyDE or _random_pool; failure event emitted with failure_type='hyde_pool_query'; refresh_pool_if_low passes session.v_initial to escalation calls |
+| `models.py` | Django ORM models: Project (liked_ids, disliked_ids, saved_ids, report, report_image, session_id), AnalysisSession (phase, pool_ids, exposed_ids, pref_vector, convergence_history, etc.), SwipeEvent (unique_together session+idempotency_key); **schema A3:** Project.liked_ids shape now list[{id, intensity}] (was list[str]); Project.saved_ids NEW (list[{id, saved_at}]) for top-K bookmark / primary-metric source; Project.disliked_ids unchanged; **A4 (§5.6/§6):** AnalysisSession gains 4 new fields (original_filters, original_filter_priority, original_seed_ids, current_pool_tier) for pool relaxation state across re-relaxation events; **A5 (§6):** new SessionEvent model (13 event types in choices, JSON payload, indexes on (session, created_at) + (event_type, created_at), user FK SET_NULL + session FK CASCADE both nullable for pre-session/pre-auth events); **Sprint 1:** SessionEvent.EVENT_TYPE_CHOICES gains 'parse_query_timing' (migration 0010 AlterField); **Topic 03 (Sprint 4):** AnalysisSession.v_initial JSONField (nullable); SessionEvent.EVENT_TYPE_CHOICES gains 'hyde_call_timing'; migration 0011 AddField + AlterField applied to dev DB; **Topic 01 (Sprint 4):** AnalysisSession.original_q_text TextField (nullable); SessionEvent.EVENT_TYPE_CHOICES gains 'hybrid_pool_timing'; migration 0012 AddField + AlterField applied to dev DB |
+| `event_log.py` | **A5:** session event log emit helpers; emit_event(event_type, session=None, user=None, **payload) never raises (failure → logger.warning + None); emit_swipe_event() convenience wrapper; per-session sequence_no for tie-break; created_at microsecond is primary order signal; **IMP-7 (Spec v1.6 §6):** emit_swipe_event signature extended with 7 optional kwargs (default None/False): cache_hit, cache_source, cache_partial_miss_count, prefetch_strategy, db_call_count, pool_escalation_fired, pool_signature_hash — backward compat preserved (existing callers pass nothing extra; new fields land on SessionEvent.payload) |
+| `engine.py` | Recommendation algorithm: pool creation, farthest-point, K-Means+MMR, convergence, top-K; centroid cache key uses spread dimensions (0, 191, -1) for collision resistance; **pool-score normalization (Topic 12):** _build_score_cases returns 3-tuple with total_weight; create_bounded_pool divides score by total_weight via ::float cast -> [0,1] range; seed boost 1.1; **IMP-1 (Spec v1.1 §11.1):** farthest_point_from_pool max-max → max-min correctness fix (Gonzalez sampling) + NumPy batch matmul (C @ E.T) vectorization, ~22ms → ~1ms per call (20-50× speedup); signature preserved across all 12 production callers; **A4:** create_pool_with_relaxation() helper factors out 3-tier logic (full → drop geo/numeric → random) for reuse; refresh_pool_if_low() runs from SwipeView when remaining pool < 5, escalates to next tier and merges new candidates with exclude_ids = pool_ids + exposed_ids; **C-1 (Sprint 3, Investigation 13):** new compute_confidence(history, threshold, window=3) returns float [0,1] or None when n<window per Investigation 13 hide-bar semantic; threshold=0 div-by-zero guarded; **Topic 06 (Sprint 4):** adaptive_k_clustering_enabled flag → silhouette-based k {1,2} selection (threshold 0.15) via silhouette_samples + np.average weighted; soft_relevance_enabled flag → softmax-weighted relevance over centroid distances (numerically-stable). Both flags default OFF; **Topic 04 (Sprint 4):** compute_mmr_next gets λ ramp logic (λ(t) = λ_base · min(1, |exposed|/N_ref)) when mmr_lambda_ramp_enabled; new compute_dpp_topk(candidates, embeddings, q_values, k, alpha) with Wilhelm 2018 kernel (L_ii=q², L_ij=α·q_i·q_j·⟨v_i,v_j⟩) + Chen 2018 Cholesky-incremental greedy MAP O(N·k²). α clamped [0,1]. Singularity (residual<eps=1e-9) → pad q-ordered remaining. 2-phase fallback (embedding/q failure → ids[:k]; Cholesky exception → q-sorted top-k). Embeddings via get_pool_embeddings (NOT card dicts). **Composition (Sprint 4):** compute_dpp_topk gains q_override kwarg — when supplied, uses values directly (bypasses [0.4, 0.95] clip; RRF-rescaled values are already in [0.01, 1.0]); **Topic 03 (Sprint 4):** create_pool_with_relaxation + create_bounded_pool gain optional v_initial parameter; when None: byte-identical to baseline; when provided: pgvector <=> cosine sim blended via (filter_sum + hyde_weight·(1-<=>))/(total_weight+hyde_weight); all 3 HyDE SQL paths wrapped in try/except with non-recursive fallback to non-HyDE or _random_pool; failure event emitted with failure_type='hyde_pool_query'; refresh_pool_if_low passes session.v_initial to escalation calls; **Topic 01 (Sprint 4):** create_pool_with_relaxation + create_bounded_pool gain optional q_text parameter; when None and hybrid_retrieval_enabled=False (default): byte-identical to baseline; Mode H (hybrid_retrieval_enabled=True AND q_text non-empty): 4-CTE RRF SQL — candidates CTE (filter scores) → bm25_ranked CTE (ts_rank_cd on visual_description + tags + material_visual via plainto_tsquery(q_text, 'simple' dict)) → vector_ranked CTE (cosine ASC rank via embedding <=> v_initial::vector, Topic 03 v_initial reused — no extra HF call) → filter_ranked CTE → LEFT JOIN + COALESCE rrf_score = Σ 1/(k+rank_i) → ORDER BY DESC + LIMIT; channel skipping rank-level order-independent (vector channel silently omitted when v_initial=None; filter channel controlled by hybrid_filter_channel_enabled); Mode V falls through when Mode H gates fail and v_initial provided; Mode F (baseline) when no v_initial, no q_text; Mode H wrapped in try/except with 'failure' SessionEvent (failure_type='hybrid_pool_query', recovery_path='no_hybrid') + non-recursive inline fallback to Mode V/F; refresh_pool_if_low passes session.original_q_text to escalation calls for RRF persistence across pool exhaustion tier escalation; **IMP-7 (Spec v1.6 §11.1):** _pool_embedding_cache refactored from frozenset(pool_ids)-keyed (invalidated on every A4 escalation) to _building_embedding_cache: dict[building_id → np.ndarray L2-normalized 384-dim] (corpus-immutable, partial-miss path: only newly-added building_ids fetched from DB; hits accumulate over session lifetime across pool exhaustion escalations). FIFO eviction at _BUILDING_CACHE_MAX_SIZE wired via RC.get('pool_embedding_cache_max_size', 5000) — runtime-configurable. get_last_embedding_call_stats() returns per-call {hits, misses} dict; read by SwipeView immediately after get_pool_embeddings call (no race window). precompute_pool_embeddings(pool_ids) no-op gate reserved for IMP-8 async background warming (pool_precompute_enabled=False flag). |
 | `services.py` | Gemini LLM: query parsing (gemini-2.5-flash), persona report generation; Imagen 3: AI architecture image generation; retry wrapper with 1-retry + logging; **A5:** failure events emitted in parse_query + generate_persona_report exception handlers (4 call sites; error_message truncated to 200 chars to prevent traceback leakage); **Sprint 1 §3:** _CHAT_PHASE_SYSTEM_PROMPT replaces _PARSE_QUERY_PROMPT (Investigation 06 full system prompt + 9 few-shot examples); parse_query(conversation_history) multi-turn signature with backward-compat shim for legacy string; thinking_budget=0 on parse_query AND generate_persona_report (Spec v1.3 §11.1 IMP-4 push-gate-blocker fix); parse_query_timing event emitted after each Gemini call; **Topic 02 (Sprint 4):** rerank_candidates(candidates, liked_summary) + _liked_summary_for_rerank(session) helpers. _RERANK_SYSTEM_PROMPT + 5 few-shot examples lifted from Investigation 12 (English-only). thinking_budget=0 (IMP-4) + temperature=0.0 + JSON mime. Validation: set equality + length. Failure cascade: parse fail / partial / extra / duplicate / exception → emit failure event with failure_type='gemini_rerank' recovery_path='cosine_fallback' + return input order. Cross-session liked_summary truncated to most recent MAX_ENTRIES (recency); **Topic 03 (Sprint 4):** NEW embed_visual_description(text, session) — stdlib urllib HF Inference API call to paraphrase-multilingual-MiniLM-L12-v2 (384-dim); handles 1D + 2D HF response shapes; explicit urllib.error.HTTPError class capture (e.code preserved, body truncated 200 chars); failure cascade per spec §5.4: returns None on any failure + emits 'failure' SessionEvent with failure_type='hyde'; empty/None text short-circuits with no event emission |
-| `views.py` | All REST endpoints -- session CRUD, swipes, projects, images, auth, report image generation; `select_for_update()` on session query + `session.save()` before prefetch to prevent concurrent exposed_ids staleness; persona report returns structured errors (502 with error_type); building_id validation returns 400; prefetch computed outside transaction.atomic(); pool_embeddings cached across transaction boundary (no redundant fetch for prefetch); dislike embeddings batch-fetched via get_pool_embeddings; **convergence signal integrity (Topic 10 Option A):** exploring -> analyzing transition clears `convergence_history` + `previous_pref_vector` (prevents cross-metric centroid-vs-pref_vector Delta-V); analyzing-phase Delta-V appended on every swipe (not gated by action == like) so `convergence_window` counts rounds, not likes; **A3:** _liked_id_only(liked_ids) helper handles legacy and new shape; swipe like-write appends {id, intensity} dict with optional intensity from request body (clamped [0,2], default 1.0); persona report path extracts plain IDs via helper; **A4:** SessionCreateView inline 3-tier replaced with engine.create_pool_with_relaxation() call (identical behavior); SwipeView calls refresh_pool_if_low() in normal swipe path AND action-card "Reset and keep going" branch (§5.6 "더 swipe" exhaustion most likely there); update_fields extended with pool_ids, pool_scores, current_pool_tier; **A5:** session_start + pool_creation events emitted in SessionCreateView; swipe event with timing_breakdown (lock_ms / embed_ms / select_ms / prefetch_ms / total_ms via _mark closure) emitted in SwipeView normal path; session_end emitted on action-card accept (end_reason='user_confirm'); **Sprint 1:** ParseQueryView accepts conversation_history list OR legacy query string; defensive input validation (history > 10 → 400, text > 2000 → 400, non-dict items → 400, role ∉ {user,model} → 400); **C-1:** SwipeView includes 'confidence' field in response (all 3 paths: normal-swipe computed, action-card reset null, action-card complete null); confidence_update event emitted when non-null with payload {confidence, dominant_attrs, action} (Spec v1.2 dislike-bias telemetry); **Topic 02:** SessionResultView gates on gemini_rerank_enabled flag + len(predicted_cards)>=2; reorders predicted_cards via card_by_id dict reconstruction with foreign-id guard; **Topic 04:** SessionResultView DPP block runs AFTER Topic 02 rerank (preserves cosine→rerank→DPP composition order). Gated on dpp_topk_enabled + len>=2 + session.like_vectors. import numpy hoisted to module top. **Topic 02 ∩ 04 composition (Investigation 07):** SessionResultView captures candidate_ids_cosine_order BEFORE reorder + rerank_rank_by_id sentinel. When both flags on, RRF fuse → min-max rescale to [0.01, 1.0] → DPP q_override. Failure cascade: rerank returning input order = sentinel stays None = DPP falls back to cosine q. **Sprint 4 §8 bookmark:** NEW ProjectBookmarkView (toggle save/unsave on saved_ids, idempotent, IDOR-safe ownership filter, rank_zone + provenance SessionEvent, ValidationError + timezone hoisted to module-level); **Topic 03 (Sprint 4):** SessionCreateView reads visual_description from request body (str + ≤5000 chars validation; silent coerce to None on invalid — security defense vs HF API cost amplification), calls embed_visual_description when hyde_vinitial_enabled, stores v_initial on session; session_start event populated with visual_description + v_initial_success (pre-existing # Topic 03 placeholder comments now wired) |
-| `config/settings.py` | RECOMMENDATION dict (12 hyperparameters, `max_consecutive_dislikes=5`), JWT config, DB config (CONN_MAX_AGE=600), CORS; uses STORAGES dict (Django 4.2+ format) for WhiteNoise static files; **Topic 06:** RECOMMENDATION dict gains adaptive_k_clustering_enabled + soft_relevance_enabled (both default False); **Topic 02:** RECOMMENDATION dict gains gemini_rerank_enabled (default False); **Topic 04:** RECOMMENDATION dict gains 5 entries (mmr_lambda_ramp_enabled F, mmr_lambda_ramp_n_ref 10, dpp_topk_enabled F, dpp_alpha 1.0, dpp_singularity_eps 1e-9); **Topic 03:** RECOMMENDATION dict gains hyde_vinitial_enabled=False, hyde_hf_model='sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2', hyde_hf_timeout_seconds=5, hyde_score_weight=50.0; HF_TOKEN loaded from os.getenv('HF_TOKEN', '') |
+| `views.py` | All REST endpoints -- session CRUD, swipes, projects, images, auth, report image generation; `select_for_update()` on session query + `session.save()` before prefetch to prevent concurrent exposed_ids staleness; persona report returns structured errors (502 with error_type); building_id validation returns 400; prefetch computed outside transaction.atomic(); pool_embeddings cached across transaction boundary (no redundant fetch for prefetch); dislike embeddings batch-fetched via get_pool_embeddings; **convergence signal integrity (Topic 10 Option A):** exploring -> analyzing transition clears `convergence_history` + `previous_pref_vector` (prevents cross-metric centroid-vs-pref_vector Delta-V); analyzing-phase Delta-V appended on every swipe (not gated by action == like) so `convergence_window` counts rounds, not likes; **A3:** _liked_id_only(liked_ids) helper handles legacy and new shape; swipe like-write appends {id, intensity} dict with optional intensity from request body (clamped [0,2], default 1.0); persona report path extracts plain IDs via helper; **A4:** SessionCreateView inline 3-tier replaced with engine.create_pool_with_relaxation() call (identical behavior); SwipeView calls refresh_pool_if_low() in normal swipe path AND action-card "Reset and keep going" branch (§5.6 "더 swipe" exhaustion most likely there); update_fields extended with pool_ids, pool_scores, current_pool_tier; **A5:** session_start + pool_creation events emitted in SessionCreateView; swipe event with timing_breakdown (lock_ms / embed_ms / select_ms / prefetch_ms / total_ms via _mark closure) emitted in SwipeView normal path; session_end emitted on action-card accept (end_reason='user_confirm'); **Sprint 1:** ParseQueryView accepts conversation_history list OR legacy query string; defensive input validation (history > 10 → 400, text > 2000 → 400, non-dict items → 400, role ∉ {user,model} → 400); **C-1:** SwipeView includes 'confidence' field in response (all 3 paths: normal-swipe computed, action-card reset null, action-card complete null); confidence_update event emitted when non-null with payload {confidence, dominant_attrs, action} (Spec v1.2 dislike-bias telemetry); **Topic 02:** SessionResultView gates on gemini_rerank_enabled flag + len(predicted_cards)>=2; reorders predicted_cards via card_by_id dict reconstruction with foreign-id guard; **Topic 04:** SessionResultView DPP block runs AFTER Topic 02 rerank (preserves cosine→rerank→DPP composition order). Gated on dpp_topk_enabled + len>=2 + session.like_vectors. import numpy hoisted to module top. **Topic 02 ∩ 04 composition (Investigation 07):** SessionResultView captures candidate_ids_cosine_order BEFORE reorder + rerank_rank_by_id sentinel. When both flags on, RRF fuse → min-max rescale to [0.01, 1.0] → DPP q_override. Failure cascade: rerank returning input order = sentinel stays None = DPP falls back to cosine q. **Sprint 4 §8 bookmark:** NEW ProjectBookmarkView (toggle save/unsave on saved_ids, idempotent, IDOR-safe ownership filter, rank_zone + provenance SessionEvent, ValidationError + timezone hoisted to module-level); **Topic 03 (Sprint 4):** SessionCreateView reads visual_description from request body (str + ≤5000 chars validation; silent coerce to None on invalid — security defense vs HF API cost amplification), calls embed_visual_description when hyde_vinitial_enabled, stores v_initial on session; session_start event populated with visual_description + v_initial_success (pre-existing # Topic 03 placeholder comments now wired); **Topic 01 (Sprint 4):** SessionCreateView reads query from request body (already present as raw_query feed); validates ≤1000 chars (security defense vs BM25 DoS amplification); threads as q_text into engine when hybrid_retrieval_enabled=True AND q_text non-empty; stores original_q_text on session for pool exhaustion escalation persistence; **IMP-7 (Spec v1.6 §6):** SwipeView.post captures _tier_before_refresh for pool_escalation_fired detection (compare tier after refresh_pool_if_low); reads get_last_embedding_call_stats() immediately after get_pool_embeddings call; computes pool_signature_hash as 16-char SHA-256 truncation of sorted pool_ids hex digest; passes all 7 §6 telemetry fields (cache_hit, cache_source, cache_partial_miss_count, prefetch_strategy, db_call_count, pool_escalation_fired, pool_signature_hash) to emit_swipe_event |
+| `config/settings.py` | RECOMMENDATION dict (12 hyperparameters, `max_consecutive_dislikes=5`), JWT config, DB config (CONN_MAX_AGE=600), CORS; uses STORAGES dict (Django 4.2+ format) for WhiteNoise static files; **Topic 06:** RECOMMENDATION dict gains adaptive_k_clustering_enabled + soft_relevance_enabled (both default False); **Topic 02:** RECOMMENDATION dict gains gemini_rerank_enabled (default False); **Topic 04:** RECOMMENDATION dict gains 5 entries (mmr_lambda_ramp_enabled F, mmr_lambda_ramp_n_ref 10, dpp_topk_enabled F, dpp_alpha 1.0, dpp_singularity_eps 1e-9); **Topic 03:** RECOMMENDATION dict gains hyde_vinitial_enabled=False, hyde_hf_model='sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2', hyde_hf_timeout_seconds=5, hyde_score_weight=50.0; HF_TOKEN loaded from os.getenv('HF_TOKEN', ''); **Topic 01:** RECOMMENDATION dict gains hybrid_retrieval_enabled=False (CRITICAL: default OFF for backward compat), hybrid_rrf_k=60 (Cormack et al. 2009), hybrid_bm25_dict='simple' (multilingual-safe, no per-locale stemming), hybrid_filter_channel_enabled=True; **IMP-7 (Spec v1.6 §11.1):** RECOMMENDATION dict gains pool_precompute_enabled=False (no-op gate, reserved for IMP-8 async warming), pool_embedding_cache_max_size=5000 (wired to _BUILDING_CACHE_MAX_SIZE via RC.get — runtime-configurable, ~5MB max at 5000 entries) |
 | `apps/accounts/views.py` | Google/Kakao/Naver OAuth, dev-login, JWT token management; all login views use `authentication_classes = []` |
 | `tests/conftest.py` | pytest fixtures: SQLite in-memory DB override, user_profile, auth_client, api_client |
 | `tests/test_auth.py` | 7 auth integration tests (Google login mock, token refresh, logout, dev-login) |
@@ -65,8 +121,78 @@ flowchart TD
 | `tests/test_topic_composition.py` | **Composition NEW (5 tests):** TestTopic02DppComposition — both-on RRF q, rerank-off cosine q, rerank-returns-input fallback, q in [0.01, 1.0], all-equal RRF edge. |
 | `tests/test_bookmark.py` | **Sprint 4 §8 NEW (20 tests):** TestBookmarkEndpoint -- save updates saved_ids; save idempotent; unsave removes; unsave on missing is no-op; invalid action/rank/card_id → 400; rank_zone 'primary' for rank<=10 / 'secondary' for rank>10; 404 on other-user project (IDOR guard); provenance defaults False. 144 total pass + 1 skipped. |
 | `tests/test_hyde.py` | **Topic 03 NEW (22 tests, 5 classes):** TestEmbedVisualDescription — happy path 1D response, happy path 2D response; TestEmbedVisualDescriptionFailures — HTTPError 503, HTTPError 401, URLError, TimeoutError, JSONDecodeError, wrong response shape; TestEmbedVisualDescriptionFlagGating — flag OFF + visual_description in body → no HF call; TestSessionCreateViewHyDE — view-layer integration (flag ON path); TestHyDEInputValidation — oversized input (>5000 chars → no embed call), non-string input → coerce to None. 166 total pass + 1 skipped (+22 from baseline 144). |
+| `tests/test_hybrid_retrieval.py` | **Topic 01 NEW (34 tests):** Mode dispatch (flag-OFF no-op, q_text-None no-op, flag-ON q_text-present → Mode H, flag-ON v_initial-None → BM25-only fallback, empty q_text → no Mode H); BM25 channel isolation; vector channel isolation (v_initial probe reuse from Topic 03); filter channel gating (hybrid_filter_channel_enabled=False → channel omitted); RRF fusion formula (Σ 1/(k+rank_i), k=60 default); try/except fallback to Mode V/F with 'failure' SessionEvent (failure_type='hybrid_pool_query', recovery_path='no_hybrid'); q_text ≤1000 char validation in SessionCreateView; original_q_text stored on session; refresh_pool_if_low forwards original_q_text on escalation; backward-compat sentinel (all Topic 03 (22) + all baseline (144) tests still pass). 200 total pass + 1 skipped (+34 new). |
+| `tests/test_imp7_pool_cache.py` | **IMP-7 NEW (22 tests):** cache basics (hit/miss counts, L2-normalization invariant, FIFO eviction at max_size); critical regression test `TestEscalationCacheRetention` — pool growth [id1,id2,id3]→[id1..id5] produces 3 hits + 2 misses (NOT full invalidation as with old frozenset behavior); precompute helper (no-op gate); session-creation natural warming path; all 7 §6 telemetry fields present in swipe event payload; pool_escalation_fired flag in both directions. 200 → 222 pass + 1 skipped (+22 new). All 200 prior tests pass without modification — backward-compat confirmed. |
 
 ## Frontend Structure
+
+```mermaid
+flowchart TD
+    subgraph ROOT["App.jsx — root"]
+        STATE["state: currentCard / prefetch /<br/>session / projects / savedIds /<br/>latestVisualDescription / confidence"]
+        HND["handlers: handleStart /<br/>handleSwipeCard / handleToggleBookmark /<br/>handleGenerateReport / initSession"]
+        HLP["helpers: extractLikedIds /<br/>extractSavedIds / preloadImage /<br/>applySessionResponse"]
+    end
+
+    subgraph LO["Layout"]
+        ML["MainLayout.jsx<br/>sharedLayoutProps chain"]
+        TB["TabBar.jsx<br/>4 bottom tabs (safe-area)"]
+    end
+
+    subgraph PG["Pages — main pipeline owns data layer"]
+        LP["LoginPage.jsx<br/>Google auth-code OAuth"]
+        LSP["LLMSearchPage.jsx<br/>chat + parse-query<br/>(0-2 turn probe)"]
+        SP["SwipePage.jsx<br/>card deck + 3D flip + gallery +<br/>ConfidenceBar (Sprint 3)"]
+        FP["FavoritesPage.jsx<br/>folders + RecommendedSection<br/>(primary 1-10 + lazy 11-50)"]
+        PSP["ProjectSetupPage.jsx<br/>folder name + area range"]
+    end
+
+    subgraph DESIGN["Pages — design pipeline mockups (MOCKUP-READY)"]
+        FF["FirmProfilePage.jsx<br/>UserProfilePage.jsx<br/>BoardDetailPage.jsx<br/>PostSwipeLandingPage.jsx<br/>(TODO(claude) markers)"]
+    end
+
+    subgraph SH["Shared components"]
+        TP["TutorialPopup.jsx<br/>first-time guide + tap-to-dismiss"]
+        DO["DebugOverlay.jsx<br/>JWT expiry + last API call +<br/>swipe progress (debugMode flag)"]
+    end
+
+    subgraph API_LAYER["API layer"]
+        CL["api/client.js<br/>callApi (10s timeout + 2× retry) /<br/>normalizeCard / JWT refresh /<br/>bookmarkBuilding / startSession /<br/>parseQuery / generateReportImage"]
+    end
+
+    ROOT --> LP
+    ROOT --> ML
+    ROOT --> DO
+    ML --> TB
+    ML --> LSP
+    ML --> SP
+    ML --> FP
+    ML --> PSP
+    ML --> FF
+    SP --> TP
+
+    ROOT --> CL
+    LP --> CL
+    LSP --> CL
+    SP --> CL
+    FP --> CL
+    FF -.TODO(claude).-> CL
+
+    CL -.JWT REST.-> BE((Backend<br/>Django + DRF))
+
+    style ROOT fill:#3b82f6,color:#fff
+    style ML fill:#1e40af,color:#fff
+    style DESIGN fill:#ec4899,color:#fff,stroke:#db2777
+    style CL fill:#10b981,color:#000
+    style BE fill:#1f2937,color:#fff
+```
+
+**Layer ownership** (designer vs main per CLAUDE.md):
+- **UI layer** (JSX styles, animations, colors, layout, `MOCK_*`): `designer` agent in design terminal — owns all `frontend/src/pages/*.jsx` UI sections.
+- **Data layer** (`useState`, `useEffect`, `callApi`, hooks, error handling): `front-maker` in main pipeline — wires up the data flow.
+- Same `.jsx` file may be touched by both terminals; Git's 3-way merge handles per-line splits.
+- Reciprocal `TODO(claude):` (design → main) and `TODO(designer):` (main → design) markers coordinate cross-terminal asks.
+
 | File | Responsibility |
 |------|---------------|
 | `api/client.js` | API client with 10s fetch timeout, network retry (2x backoff), `normalizeCard()` field mapping, `callApi()` with JWT refresh, `socialLogin` clears stale tokens, `generateReportImage()`; **Sprint 1:** parseQuery(input) accepts string OR conversation_history list; dispatches { query } or { conversation_history } body shape; **Sprint 4 §8:** bookmarkBuilding(projectId, cardId, action, rank, sessionId) toggle function; **Topic 03 (Sprint 4):** startSession optionally appends visual_description to POST body (omitted when null/undefined) |
@@ -81,6 +207,46 @@ flowchart TD
 | `ProjectSetupPage.jsx` | New project setup with folder name and area range; safe-area-adjusted layout |
 
 ## Web Testing Structure
+
+```mermaid
+flowchart LR
+    CLI["run.py<br/>--personas N<br/>--mode template/llm<br/>--auto-fix --loop"]
+
+    subgraph GEN["Persona + Scenario generation"]
+        PR["research/persona.py<br/>PersonaProfile<br/>(template / Gemini LLM)"]
+        SC["research/scenarios.py<br/>TestScenario<br/>(keyword overlap scoring)"]
+    end
+
+    subgraph RN["Runner (Playwright)"]
+        R["runner/runner.py<br/>dev-login → home → search →<br/>swipe loop → results → persona report<br/>(iPhone 14 Pro headless Chromium)"]
+        CO["runner/collector.py<br/>StepRecord / ApiCallRecord /<br/>ErrorRecord<br/>(response/console/exception listeners +<br/>per-step screenshots)"]
+    end
+
+    subgraph OUT["Output + dashboard"]
+        RP["runner/reporter.py<br/>report.json<br/>+ bottleneck classification<br/>(image / api / algorithm /<br/>llm / db / rendering)"]
+        FB["runner/feedback.py<br/>feedback.json<br/>(endpoint → source file map +<br/>pass/warn/fail status)"]
+        DA["dashboard/<br/>static SPA<br/>(persona sidebar + step timeline +<br/>error panel + perf table)"]
+    end
+
+    APP[("Frontend localhost:5174 +<br/>Backend localhost:8001")]
+
+    CLI --> GEN
+    GEN --> R
+    R -.controls.-> APP
+    APP -.network/console.-> CO
+    R --> CO
+    CO --> RP
+    CO --> FB
+    RP --> DA
+    FB --> DA
+
+    style CLI fill:#3b82f6,color:#fff
+    style APP fill:#1f2937,color:#fff
+    style DA fill:#10b981,color:#000
+```
+
+**Difference from `/review` Part B**: `web-testing/` is a standalone harness for one-shot persona-driven runs with full timing instrumentation + dashboard. `/review` Part B is the strict pre-push browser gate (multi-run B4 + spec-aligned latency budgets); inner-loop `web-tester` agent in the orchestrator pipeline is a fast single-persona variant. All three are complementary: `web-testing/` for ongoing perf tracking, `web-tester` for inner-loop sanity, `/review` Part B for push gating.
+
 | File | Responsibility |
 |------|---------------|
 | `web-testing/research/persona.py` | PersonaProfile dataclass; template mode (random from pools) + LLM mode (Gemini); serializable to dict/JSON |
@@ -93,6 +259,53 @@ flowchart TD
 | `web-testing/dashboard/` | Static HTML/JS/CSS SPA: persona sidebar, step timeline viewer with timing breakdown, error panel, sortable performance table with gesture/api/card/image columns; timing-aware bottleneck classification; dark theme; CSS Grid layout |
 
 ## API Surface
+
+```mermaid
+flowchart LR
+    subgraph AUTH["Auth lifecycle"]
+        L1["POST /auth/social/google/<br/>POST /auth/dev-login/ (DEBUG only)"]
+        L1 --> JT["JWT { access (1h), refresh (30d) }"]
+        JT --> RF["POST /auth/token/refresh/<br/>(rotate + blacklist on refresh)"]
+        JT --> LO["POST /auth/logout/<br/>(blacklist refresh)"]
+    end
+
+    subgraph SESSION["Swipe-session lifecycle (core flow)"]
+        PQ["POST /parse-query/<br/>chat phase (0-2 turn probe)<br/>→ filters + raw_query + visual_description"]
+        PQ --> CS["POST /analysis/sessions/<br/>create + pool ranking<br/>(Mode F / V / H dispatch)"]
+        CS --> SW["POST /analysis/sessions/{id}/swipes/<br/>×N (idempotent per session)"]
+        SW -->|converged| RES["GET /analysis/sessions/{id}/result/<br/>top-K MMR + DPP + rerank"]
+        SW -.dislike streak / pool exhaustion.-> SW
+    end
+
+    subgraph PROJ["Project + bookmark + report"]
+        PL["GET /projects/<br/>list user's projects"]
+        PC["POST /projects/<br/>create + sync session"]
+        PD["DELETE /projects/{id}/"]
+        BK["POST /projects/{id}/bookmark/<br/>toggle save/unsave (rank_zone +<br/>provenance telemetry)"]
+        RP["POST /projects/{id}/report/generate/<br/>Gemini persona report"]
+        RPI["POST /projects/{id}/report/generate-image/<br/>Imagen 3"]
+    end
+
+    subgraph IMG["Image batch fetching"]
+        DR["GET /images/diverse-random/<br/>10 buildings (cold-start seed)"]
+        BAT["POST /images/batch/<br/>{ building_ids: [...] }"]
+    end
+
+    JT -.Authorization Bearer.-> SESSION
+    JT -.Authorization Bearer.-> PROJ
+    JT -.Authorization Bearer.-> IMG
+    RES -.likes-->| | PROJ
+    RES --> BK
+    PROJ -.batch fetch building cards.-> BAT
+
+    style AUTH fill:#1e3a8a,color:#fff
+    style SESSION fill:#10b981,color:#000
+    style PROJ fill:#ec4899,color:#fff
+    style IMG fill:#8b5cf6,color:#fff
+```
+
+**Read flow**: a typical user session is `auth/social/google → parse-query (chat) → analysis/sessions (create) → swipes ×N → result → projects/{id}/bookmark + report/generate`. All endpoints under `/analysis/`, `/projects/`, and `/images/` require JWT; `auth/*` is the entry. Frontend calls go through `frontend/src/api/client.js` which handles JWT refresh on 401 and field normalization (camelCase → snake_case backend convention bridges in `normalizeCard`).
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/api/v1/auth/social/google/` | Google login (accepts `access_token` or `code`) -> JWT |
@@ -103,7 +316,7 @@ flowchart TD
 | DELETE | `/api/v1/projects/{id}/` | Delete project |
 | POST | `/api/v1/projects/{id}/report/generate/` | Generate persona report (502 on Gemini failure with error_type) |
 | POST | `/api/v1/projects/{id}/report/generate-image/` | Generate AI architecture image from persona report |
-| POST | `/api/v1/analysis/sessions/` | Start swipe session (filter relaxation fallback, returns `filter_relaxed`); optional body field `visual_description` (str, ≤5000 chars; silent coerce on invalid) — when hyde_vinitial_enabled, embedded and stored as v_initial for pool cosine reranking |
+| POST | `/api/v1/analysis/sessions/` | Start swipe session (filter relaxation fallback, returns `filter_relaxed`); optional body field `visual_description` (str, ≤5000 chars; silent coerce on invalid) — when hyde_vinitial_enabled, embedded and stored as v_initial for pool cosine reranking; `query` body field (≤1000 chars) threaded as q_text into pool RRF ranking when hybrid_retrieval_enabled=True AND non-empty — activates Mode H BM25+vector+filter RRF fusion; stored as original_q_text on session for pool exhaustion escalation |
 | POST | `/api/v1/analysis/sessions/{id}/swipes/` | Record swipe (idempotency scoped to session, dislike fallback tracks exposed_ids, 400 on missing building_id); request body accepts optional `intensity` float for like action (defaults 1.0, clamped to [0, 2]) |
 | GET | `/api/v1/analysis/sessions/{id}/result/` | Get results |
 | GET | `/api/v1/images/diverse-random/` | Get 10 diverse buildings |
@@ -145,7 +358,7 @@ flowchart TD
 - **onNonOAuthError** handling for popup-blocked scenarios
 - **Swipe error handling:** try-catch + 1 network retry + card revert + auto-dismissing error toast
 - **API client resilience:** 10s fetch timeout (AbortController), 2x network retry with exponential backoff (300ms, 900ms)
-- **Pool embedding caching:** frozenset key per pool, max 50 entries; eliminates repeated DB queries within a session
+- **Pool embedding caching (IMP-7, Spec v1.6 §11.1):** per-building-id immutable cache (dict[building_id → L2-normalized 384-dim np.ndarray]); corpus is read-only so per-building embeddings never invalidate — cache hits accumulate over session lifetime even across A4 pool exhaustion escalations (old frozenset(pool_ids) key was invalidated on every escalation). Partial-miss path fetches only newly-added building_ids from DB. FIFO eviction at pool_embedding_cache_max_size (default 5000, runtime-configurable). Expected select_ms 300ms → ~50ms. §6 swipe.timing_breakdown extended with 7 new telemetry fields for IMP-7/8/9 verification: cache_hit, cache_source, cache_partial_miss_count, prefetch_strategy, db_call_count, pool_escalation_fired, pool_signature_hash. §4 per-swipe budget ratification: outer gate widened 700ms → 1500ms; backend sub-budget added total_ms < 1000ms. Companion to v1.4 parse-query Tier 1.1 framing — spec catching up to Neon-RTT reality. Re-tightening pathway: IMP-7 → ~600ms, IMP-8 → ~300ms, INFRA-1 → ~50-100ms.
 - **KMeans centroid caching:** like-vector fingerprint + round_num key, max 20 entries; skips recomputation on dislikes; n_init reduced 10->3
 - **Double prefetch (2-card buffer):** backend returns `prefetch_image_2`; frontend shifts prefetch queue on each instant swap
 - **Gemini UI/UX Polish:** Chat overlay width constrained to fix horizontal scroll bug, responsive semi-transparent overlay for tutorials, PC keyboard left/right swiping functionality, and removal of intrusive UI buttons on SwipePage.
@@ -184,51 +397,39 @@ flowchart TD
 - **Topic 02 ∩ 04 Option α composition (Sprint 4, Investigation 07):** rerank-then-diversify pipeline. When both gemini_rerank_enabled AND dpp_topk_enabled, cosine-K → rerank → RRF fuse rank pairs → min-max rescale to [0.01, 1.0] → DPP greedy MAP. Single integration point per Investigation 07 (q_i swap). Standalone behaviors of either Topic preserved when only one flag on. Failure cascade silent per spec §5.4. Sprint 4 algorithm batch (Topic 06 + 02 + 04 + composition) milestone reached — all 4 features flag-gated, default OFF, ready for joint Optuna tuning post §6 logging accumulation.
 - **Sprint 4 §8 Result page bookmark (Investigation 08):** ProjectBookmarkView at POST /api/v1/projects/{id}/bookmark/ -- toggle save/unsave idempotent, IDOR-safe ownership check (404 on other-user project), rank_zone classification (primary rank<=10 / secondary rank>10 per Spec v1.2 §6 req #4), bookmark SessionEvent with provenance booleans (in_cosine_top10, in_gemini_top10, in_dpp_top10 default False) + rank_corpus null placeholder. Frontend: FavoritesPage RecommendedSection with primary (1-10) + IntersectionObserver lazy-loaded secondary (11-50) grids, ResultCard with star bookmark button (optimistic toggle + revert), extractSavedIds backward-compat helper in App.jsx. 20 new tests (144 total pass + 1 skipped).
 - **HyDE V_initial scaffolding (Sprint 4 Topic 03, Spec §11 Topic 03, flag-gated default OFF):** embed_visual_description() via stdlib urllib + HuggingFace Inference API (paraphrase-multilingual-MiniLM-L12-v2, 384-dim). When hyde_vinitial_enabled=False (default): zero runtime behavior change — no HF call, pool SQL identical, session.v_initial=None. When enabled: parse_query visual_description embedded to V_initial, blended into pool-creation cosine reranking via pgvector <=> operator. Graceful failure cascade (failure event failure_type='hyde') at both embed and pool-query stages with non-recursive fallback. Input validation (5000 char ceiling, str type check) prevents HF API cost amplification. Migration 0011 applied. 22 new tests (166 total pass + 1 skipped). Frontend data-layer plumbing only (no UI change): visual_description forwarded through App.jsx 4-layer chain to startSession POST body.
+- **Hybrid Retrieval RRF (Sprint 4 Topic 01, Spec §11 Topic 01, flag-gated default OFF):** Mode H pool creation at session start — Reciprocal Rank Fusion of 3 channels: BM25 (tsvector ts_rank_cd on visual_description + tags + material_visual via plainto_tsquery(raw_query, 'simple' dict) — multilingual-safe; per-locale stemming deferred), vector (pgvector cosine via embedding <=> v_initial::vector — Topic 03 v_initial reused as probe, no extra HF API call), filter (existing CASE-WHEN filter scoring as 3rd channel, gated by hybrid_filter_channel_enabled=True default). RRF formula Σ 1/(k+rank_i), k=60 (Cormack et al. 2009). Channel skipping is rank-level order-independent per spec v1.5 §11 Topic 01: vector channel silently omitted when v_initial=None; filter channel omitted when no filters active. Mode dispatch: Mode H when hybrid_retrieval_enabled=True AND q_text non-empty; Mode V (Topic 03) falls through if Mode H gates fail and v_initial provided; Mode F (baseline) otherwise. Mode H wrapped in try/except — on exception emits 'failure' SessionEvent (failure_type='hybrid_pool_query', recovery_path='no_hybrid') + inline non-recursive fallback to Mode V/F. query ≤1000 char validation (security defense vs DoS amplification). original_q_text stored on session; refresh_pool_if_low forwards it on escalation so RRF persists across pool exhaustion tier escalation. No frontend changes — raw_query already sent as query field since Sprint 1 chat phase rewrite. Migration 0012 applied. 34 new tests (200 total pass + 1 skipped). With flag OFF (default): zero runtime change; q_text param ignored; migration additive only.
 
 ### Pending
 - Kakao + Naver OAuth
 
 ## Last Updated (Claude)
 - **Date:** 2026-04-26
-- **Commits:** 6f4b76f -- feat: Topic 03 HyDE V_initial via HuggingFace Inference API (default OFF)
-- **Phase:** Sprint 4 Topic 03 -- HyDE V_initial scaffolding, flag-gated default OFF, prerequisite for Topic 01 hybrid retrieval
+- **Commits:** 06c6c5a -- feat: IMP-7 per-building-id cache + §6 logging + B5 gate ratify (v1.6)
+- **Phase:** Spec v1.6 IMP-7 -- per-building-id immutable embedding cache (fixes A4 escalation invalidation bug) + §6 swipe.timing_breakdown 7-field observability extensions + §4 per-swipe budget ratification via /review Step B5 gate widening. Workflow-driven optimization companion to v1.4 parse-query Tier 1.1 framing. No migration (cache is in-memory, no schema change).
 - **Changes:**
-  - `backend/apps/recommendation/services.py` -- NEW embed_visual_description(): stdlib urllib HF Inference API (paraphrase-multilingual-MiniLM-L12-v2); 1D/2D response shapes; HTTPError class capture; failure cascade per §5.4; empty/None short-circuit
-  - `backend/apps/recommendation/engine.py` -- create_pool_with_relaxation + create_bounded_pool gain optional v_initial parameter; HyDE SQL blending via pgvector <=>; non-recursive fallback; refresh_pool_if_low forwards session.v_initial
-  - `backend/apps/recommendation/views.py` -- SessionCreateView: visual_description validation (str + ≤5000 chars; silent coerce); embed call when flag ON; v_initial stored on session; session_start event fields wired
-  - `backend/apps/recommendation/models.py` -- AnalysisSession.v_initial JSONField (nullable); SessionEvent EVENT_TYPE_CHOICES gains 'hyde_call_timing'
-  - `backend/apps/recommendation/migrations/0011_add_hyde_topic03.py` -- NEW: AddField (v_initial) + AlterField (event_type choices); applied to dev DB
-  - `backend/config/settings.py` -- RECOMMENDATION dict: hyde_vinitial_enabled=False, hyde_hf_model, hyde_hf_timeout_seconds=5, hyde_score_weight=50.0; HF_TOKEN from os.getenv
-  - `backend/tests/test_hyde.py` -- NEW: 22 tests across 5 classes (happy paths, failure cascades, flag-gating, view integration, input validation); 166 total pass + 1 skipped
-  - `backend/tests/test_sessions.py` -- 3 mock signatures updated to **kwargs for v_initial backward compat
-  - `frontend/src/api/client.js` -- startSession optionally appends visual_description (omitted when null/undefined)
-  - `frontend/src/pages/LLMSearchPage.jsx` -- latestVisualDescription state from parse_query terminal response
-  - `frontend/src/App.jsx` -- 4-layer forwarding: handleStart → handleUpdateWithImages → initSession → startSession; resume paths bypass
-- **Verification:** 166 pass + 1 skipped (+22 new). With flag OFF (default) zero runtime behavior change: no HF call, pool SQL identical, v_initial=None, session_start fields False/None. UI-affecting paths in scope (views.py + frontend) — Part B will trigger on /review.
-- **Summary:** Spec §11 Topic 03 HyDE V_initial scaffolding — embeds Gemini parse_query visual_description via HF Inference API into V_initial, blended into pool-creation cosine reranking via pgvector <=>. Flag-gated default OFF for backward compat; byte-identical to baseline when disabled. Prerequisite for Topic 01 hybrid retrieval (V_initial as RRF vector probe).
+  - `backend/apps/recommendation/engine.py` -- _pool_embedding_cache refactored to _building_embedding_cache (per-building-id keyed, corpus-immutable, partial-miss fetch, FIFO eviction at _BUILDING_CACHE_MAX_SIZE); get_last_embedding_call_stats() per-call hit/miss observer; precompute_pool_embeddings() no-op gate (pool_precompute_enabled=False, reserved for IMP-8)
+  - `backend/apps/recommendation/views.py` -- SwipeView.post: captures _tier_before_refresh for pool_escalation_fired detection; calls get_last_embedding_call_stats() immediately after get_pool_embeddings; computes pool_signature_hash (16-char SHA-256 of sorted pool_ids); passes all 7 §6 telemetry fields to emit_swipe_event
+  - `backend/apps/recommendation/event_log.py` -- emit_swipe_event signature extended with 7 optional kwargs (cache_hit, cache_source, cache_partial_miss_count, prefetch_strategy, db_call_count, pool_escalation_fired, pool_signature_hash); all default None/False; backward compat preserved
+  - `backend/config/settings.py` -- RECOMMENDATION dict: pool_precompute_enabled=False, pool_embedding_cache_max_size=5000 (wired to RC.get — runtime-configurable)
+  - `.claude/commands/review.md` -- Step B5 gate widened: outer 700ms → 1500ms; backend sub-budget total_ms < 1000ms added; aspirational <500ms preserved as goal not gate
+  - `backend/tests/test_imp7_pool_cache.py` -- NEW: 22 tests (cache basics, TestEscalationCacheRetention key regression, L2 normalization invariant, FIFO eviction, precompute helper, session-creation natural warming, all 7 §6 fields in payload, pool_escalation_fired both directions)
+- **Verification:** 200 → 222 pass + 1 skipped (+22 new). All 200 prior tests pass without modification. No migration. Cache restructure transparent to all callers (get_pool_embeddings input/output unchanged).
+- **Summary:** Spec v1.6 IMP-7 fixes the root cause identified in review 6f4b76f Step B5 diagnostic: old `_pool_embedding_cache` keyed by frozenset(pool_ids) was invalidated on every A4 pool escalation — precisely when it was most needed. Per-building-id immutable cache accumulates hits over session lifetime across escalations; partial-miss path fetches only new buildings. Expected select_ms 300ms → ~50ms. Companion §6 telemetry adds 7 swipe.timing_breakdown fields for IMP-7/8/9 verification. §4 budget ratification mirrors v1.4 Tier 1.1 approach (spec catching up to Neon-RTT-dominated structural floor).
 - **Change diagram:**
 ```mermaid
 graph TD
     subgraph Backend
-        services_py["services.py"]:::modified
         engine_py["engine.py"]:::modified
         views_py["views.py"]:::modified
-        models_py["models.py"]:::modified
+        event_log_py["event_log.py"]:::modified
         settings_py["settings.py"]:::modified
-        migration_0011["migrations/0011_add_hyde_topic03.py"]:::new
-        test_hyde["tests/test_hyde.py"]:::new
-        test_sessions["tests/test_sessions.py"]:::modified
+        test_imp7["tests/test_imp7_pool_cache.py"]:::new
     end
-    subgraph Frontend
-        client_js["api/client.js"]:::modified
-        LLMSearchPage["pages/LLMSearchPage.jsx"]:::modified
-        App_jsx["App.jsx"]:::modified
+    subgraph Workflow
+        review_md[".claude/commands/review.md"]:::modified
     end
-    views_py --> services_py
-    services_py --> engine_py
-    models_py --> migration_0011
-    LLMSearchPage --> App_jsx
-    App_jsx --> client_js
+    views_py --> engine_py
+    views_py --> event_log_py
 
     classDef new fill:#10b981,color:#fff
     classDef modified fill:#f59e0b,color:#000
