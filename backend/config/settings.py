@@ -106,6 +106,7 @@ CORS_ALLOW_CREDENTIALS = True
 
 # -- Cache (required for DRF throttling) -----------------------------------
 # IMP-8 (v1.6 §11.1): async prefetch background thread writes to default cache.
+# IMP-5 (v1.5 §11.1): Gemini context-cache resource name stored in default cache.
 # Production multi-worker deploys SHOULD swap LocMemCache for Redis (django-redis)
 # to share cache across workers -- LocMemCache is per-process, so cache writes from
 # bg thread in worker A are not visible to next swipe arriving on worker B.
@@ -172,6 +173,9 @@ RECOMMENDATION = {
     # IMP-8 (Spec v1.6 §11.1): async prefetch background thread
     'async_prefetch_enabled': False,                   # default OFF for safe rollout; flip True after Redis wired in prod
     'async_prefetch_cache_timeout_seconds': 60,        # Django cache TTL for prefetch entries (seconds)
+    # IMP-5 (Spec v1.5 §11.1): Gemini explicit context caching for _CHAT_PHASE_SYSTEM_PROMPT
+    'context_caching_enabled': False,                  # default OFF; flip True only after Redis cache backend is wired
+    'context_caching_ttl_seconds': 3600,               # Gemini cache TTL; also used as Django cache TTL for resource name
 }
 
 # -- External API keys -----------------------------------------------------

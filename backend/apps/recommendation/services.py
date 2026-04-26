@@ -2,11 +2,13 @@
 services.py -- Gemini LLM integration for query parsing and persona report generation.
 """
 import base64
+import hashlib
 import json
 import logging
 import time
 import urllib.error
 import urllib.request
+from django.core.cache import cache as django_cache
 from django.conf import settings
 from django.db import connection
 from google import genai
@@ -25,6 +27,88 @@ def _get_client():
     if _client is None:
         _client = genai.Client(api_key=settings.GEMINI_API_KEY)
     return _client
+
+
+# ---------------------------------------------------------------------------
+# IMP-5 (Spec v1.5 §11.1): Gemini explicit context caching
+# ---------------------------------------------------------------------------
+# Content-hash suffix ensures cache name uniquely identifies this prompt version.
+# Recomputed at import time (constant for a given deployment).
+_CACHE_NAME_PREFIX = 'archi-tinder-chat'
+
+
+def _get_prompt_hash():
+    """Return 8-char hex prefix of SHA-256 of _CHAT_PHASE_SYSTEM_PROMPT.
+
+    Called lazily (after prompt constant is defined) rather than at import time
+    to avoid forward-reference issues during module load.
+    """
+    return hashlib.sha256(_CHAT_PHASE_SYSTEM_PROMPT.encode('utf-8')).hexdigest()[:8]
+
+
+def _get_cache_name():
+    """Full Gemini cache display_name: 'archi-tinder-chat-{hash8}'."""
+    return f'{_CACHE_NAME_PREFIX}-{_get_prompt_hash()}'
+
+
+def _get_django_cache_key():
+    """Django cache key for storing the Gemini cache resource name across requests."""
+    return f'gemini_cache_name:{_get_cache_name()}'
+
+
+def _ensure_chat_cache(client):
+    """
+    IMP-5: Ensure a Gemini context cache for _CHAT_PHASE_SYSTEM_PROMPT exists
+    and return its resource name (e.g. 'cachedContents/abc123').
+
+    Lookup order:
+      1. Django cache (fast path -- avoids Gemini API round-trip per request)
+      2. Gemini caches.create() -- first call per process / after TTL expiry
+
+    Returns str (Gemini cache resource name) on success.
+    Returns None on any failure -- callers fall back to uncached path silently.
+
+    Design notes:
+    - No module-level global for the resource name: Django cache is the
+      single source of truth, allowing multi-worker deploys (with Redis) to
+      share the resource name without per-worker re-creation.
+    - TTL invariant: Django cache TTL = 80% of Gemini cache TTL. This ensures
+      Django cache expires BEFORE Gemini cache so _ensure_chat_cache recreates
+      the Gemini cache entry before generate_content ever receives a stale name.
+      The 20% safety window absorbs SDK clock drift and network jitter.
+    - 404 recovery: retained as defense-in-depth for the residual edge case
+      (SDK clock drift beyond the 20% window). On 404 the Django entry is
+      evicted and a fresh Gemini cache is created.
+    """
+    rc = settings.RECOMMENDATION
+    ttl = rc.get('context_caching_ttl_seconds', 3600)
+    django_key = _get_django_cache_key()
+
+    # --- Fast path: resource name already in Django cache --------------------
+    cached_name = django_cache.get(django_key)
+    if cached_name:
+        return cached_name
+
+    # --- Slow path: create Gemini cache and store name in Django cache -------
+    try:
+        cache_obj = client.caches.create(
+            model='gemini-2.5-flash',
+            config=types.CreateCachedContentConfig(
+                display_name=_get_cache_name(),
+                system_instruction=_CHAT_PHASE_SYSTEM_PROMPT,
+                ttl=f'{ttl}s',
+            ),
+        )
+        resource_name = cache_obj.name
+        # Django cache TTL = 80% of Gemini TTL -- recreate before Gemini expiry to avoid
+        # the stale-name-passed-to-generate_content double-retry pattern. The 20% safety
+        # window absorbs SDK clock drift + network jitter.
+        django_cache.set(django_key, resource_name, timeout=int(ttl * 0.8))
+        logger.info('IMP-5: created Gemini context cache: %s', resource_name)
+        return resource_name
+    except Exception as e:
+        logger.warning('IMP-5: failed to create Gemini context cache: %s: %s', type(e).__name__, e)
+        return None
 
 
 PROGRAM_VALUES = [
@@ -417,6 +501,7 @@ def parse_query(conversation_history):
 
     try:
         client = _get_client()
+        rc = settings.RECOMMENDATION
 
         # Build Gemini contents list from conversation_history
         contents = []
@@ -427,25 +512,79 @@ def parse_query(conversation_history):
                 types.Content(role=role, parts=[types.Part.from_text(text=text)])
             )
 
-        def _call():
-            return client.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=contents,
-                config=types.GenerateContentConfig(
-                    system_instruction=_CHAT_PHASE_SYSTEM_PROMPT,
-                    response_mime_type='application/json',
-                    temperature=0.2,
-                    thinking_config=types.ThinkingConfig(thinking_budget=0),
-                ),
-            )
+        # IMP-5: explicit context caching branch (flag-gated, default OFF)
+        caching_enabled = rc.get('context_caching_enabled', False)
+        cache_resource_name = None
+        if caching_enabled:
+            cache_resource_name = _ensure_chat_cache(client)
+
+        if cache_resource_name:
+            # Cached path: supply cached_content= instead of system_instruction=
+            def _call():
+                return client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=contents,
+                    config=types.GenerateContentConfig(
+                        cached_content=cache_resource_name,
+                        response_mime_type='application/json',
+                        temperature=0.2,
+                        thinking_config=types.ThinkingConfig(thinking_budget=0),
+                    ),
+                )
+        else:
+            # Uncached path: original behaviour, backward-compatible
+            def _call():  # noqa: F811
+                return client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=contents,
+                    config=types.GenerateContentConfig(
+                        system_instruction=_CHAT_PHASE_SYSTEM_PROMPT,
+                        response_mime_type='application/json',
+                        temperature=0.2,
+                        thinking_config=types.ThinkingConfig(thinking_budget=0),
+                    ),
+                )
 
         t_call_start = time.perf_counter()
-        response = _retry_gemini_call(_call)
+        try:
+            response = _retry_gemini_call(_call)
+        except Exception as _cache_exc:
+            # IMP-5: if call failed with 404/NOT_FOUND it means the Gemini cache
+            # has expired but the Django cache entry is still live (TTL skew).
+            # Evict Django entry, clear cache_resource_name, and retry uncached.
+            exc_str = str(_cache_exc)
+            if cache_resource_name and ('404' in exc_str or 'NOT_FOUND' in exc_str):
+                logger.warning(
+                    'IMP-5: Gemini cache 404 for %s -- evicting Django entry and retrying uncached',
+                    cache_resource_name,
+                )
+                django_cache.delete(_get_django_cache_key())
+                cache_resource_name = None
+
+                def _call_uncached():
+                    return client.models.generate_content(
+                        model='gemini-2.5-flash',
+                        contents=contents,
+                        config=types.GenerateContentConfig(
+                            system_instruction=_CHAT_PHASE_SYSTEM_PROMPT,
+                            response_mime_type='application/json',
+                            temperature=0.2,
+                            thinking_config=types.ThinkingConfig(thinking_budget=0),
+                        ),
+                    )
+                response = _retry_gemini_call(_call_uncached)
+            else:
+                raise
         t_call_end = time.perf_counter()
 
         # Emit parse_query.timing event (spec §6 + §11.1 IMP-4 mandatory companion).
         # Must be emitted before json.loads so parse failures still produce a timing record.
+        # IMP-5: extend with 4 new fields (additive -- existing field names unchanged).
         _usage = getattr(response, 'usage_metadata', None)
+        _raw_cached = getattr(_usage, 'cached_content_token_count', None) if _usage else None
+        # Guard: only accept int/float to avoid MagicMock or other non-serialisable types
+        _cached_token_count = int(_raw_cached) if isinstance(_raw_cached, (int, float)) else None
+        _cache_hit = (_cached_token_count > 0) if _cached_token_count is not None else None
         event_log.emit_event(
             'parse_query_timing',
             session=None,
@@ -456,6 +595,11 @@ def parse_query(conversation_history):
             input_tokens=getattr(_usage, 'prompt_token_count', None) if _usage else None,
             output_tokens=getattr(_usage, 'candidates_token_count', None) if _usage else None,
             thinking_tokens=getattr(_usage, 'thoughts_token_count', None) if _usage else None,
+            # IMP-5 fields (additive)
+            cache_hit=_cache_hit,
+            cached_input_tokens=_cached_token_count,
+            cache_name_hash=_get_prompt_hash() if cache_resource_name else None,
+            caching_mode='explicit' if cache_resource_name else 'none',
         )
 
         data = json.loads(response.text)
