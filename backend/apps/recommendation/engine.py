@@ -287,7 +287,11 @@ def _random_pool(target):
     return [row[0] for row in rows]
 
 
-def create_pool_with_relaxation(filters, filter_priority, seed_ids, exclude_ids=None, target=None, start_tier=1, v_initial=None):
+def create_pool_with_relaxation(
+    filters, filter_priority, seed_ids,
+    exclude_ids=None, target=None, start_tier=1,
+    v_initial=None, q_text=None,
+):
     """
     Run 3-tier pool creation with relaxation fallback.
 
@@ -299,6 +303,8 @@ def create_pool_with_relaxation(filters, filter_priority, seed_ids, exclude_ids=
     start_tier: starting tier (1, 2, or 3). Used by pool exhaustion guard to escalate from
                 session's current tier.
     v_initial: Topic 03 HyDE 384-dim float list. Passed to tier 1 and 2 only (not tier 3).
+    q_text: Topic 01 RRF: original natural-language query. Passed to tier 1 and 2 only.
+            Tier 3 random pool is intentionally relevance-blind.
 
     Returns (pool_ids, pool_scores, tier_used).
     Returns ([], {}, 0) if even tier 3 produces no candidates after exclude (unrecoverable).
@@ -310,7 +316,8 @@ def create_pool_with_relaxation(filters, filter_priority, seed_ids, exclude_ids=
     # Tier 1
     if start_tier <= 1:
         pool_ids, pool_scores = create_bounded_pool(
-            filters or {}, filter_priority, seed_ids, target=target, v_initial=v_initial,
+            filters or {}, filter_priority, seed_ids, target=target,
+            v_initial=v_initial, q_text=q_text,
         )
         filtered_ids = [bid for bid in pool_ids if bid not in exclude_set]
         if filtered_ids:
@@ -324,14 +331,15 @@ def create_pool_with_relaxation(filters, filter_priority, seed_ids, exclude_ids=
         if relaxed and relaxed != (filters or {}):
             relaxed_priority = [k for k in (filter_priority or []) if k in relaxed]
             pool_ids, pool_scores = create_bounded_pool(
-                relaxed, relaxed_priority, seed_ids, target=target, v_initial=v_initial,
+                relaxed, relaxed_priority, seed_ids, target=target,
+                v_initial=v_initial, q_text=q_text,
             )
             filtered_ids = [bid for bid in pool_ids if bid not in exclude_set]
             if filtered_ids:
                 filtered_scores = {bid: s for bid, s in pool_scores.items() if bid not in exclude_set}
                 return filtered_ids, filtered_scores, 2
 
-    # Tier 3 — random pool (v_initial not used)
+    # Tier 3 — random pool (v_initial and q_text not used; random fallback is relevance-blind)
     pool_ids = [bid for bid in _random_pool(target) if bid not in exclude_set]
     if pool_ids:
         return pool_ids, {}, 3
@@ -368,6 +376,7 @@ def refresh_pool_if_low(session, threshold=5):
         exclude_ids=exclude_ids,
         start_tier=next_tier,
         v_initial=getattr(session, 'v_initial', None),
+        q_text=getattr(session, 'original_q_text', None),
     )
     if not new_pool_ids:
         # No new candidates available even at higher tier — degrade gracefully
@@ -438,29 +447,244 @@ def _build_score_cases(filters, weights):
     return cases, params, total_weight
 
 
-def create_bounded_pool(filters, filter_priority=None, seed_ids=None, target=None, v_initial=None):
+def _run_hybrid_rrf_pool(filters, filter_priority, seed_ids, target, v_initial, q_text):
+    """
+    Mode H — Hybrid RRF pool creation (Cormack et al. 2009).
+
+    Fuses BM25 (tsvector on visual_description + tags + material_visual),
+    optional cosine vector channel (v_initial), and optional filter-score channel
+    into a Reciprocal Rank Fusion score: sum(1 / (k + rank_i)) over active channels.
+
+    NOTE: tsvector is computed on-the-fly (O(N) full table scan, ~10-50 ms for 3,465
+    rows — acceptable for pool creation). Production should coordinate with Make DB
+    to add a GIN index on the tsvector expression for better performance.
+    e.g. CREATE INDEX ON architecture_vectors USING GIN (to_tsvector('simple',
+         coalesce(visual_description,'') || ' ' || coalesce(array_to_string(tags,' '),'') ...))
+
+    Returns (pool_ids, pool_scores) where pool_scores is {building_id: float rrf_score}.
+    On SQL failure, raises the exception (caller wraps in try/except).
+    """
+    import time as _time
+    _t0 = _time.perf_counter()
+
+    rrf_k = int(RC.get('hybrid_rrf_k', 60))
+    bm25_dict = RC.get('hybrid_bm25_dict', 'simple')
+    filter_channel_on = bool(RC.get('hybrid_filter_channel_enabled', True))
+
+    # Build filter score expressions (same logic as Mode F)
+    priority = filter_priority or list((filters or {}).keys())
+    n = len(priority)
+    weights = {key: n - i for i, key in enumerate(priority)}
+    cases, filter_params, total_weight = _build_score_cases(filters or {}, weights)
+    has_filter_cases = bool(cases) and filter_channel_on
+
+    # Determine active channels
+    has_vector = v_initial is not None and len(v_initial) == 384
+
+    # Build CTEs dynamically for active channels only.
+    # We always have BM25 (caller guarantees q_text is non-empty).
+    # Candidate CTE: ALL rows (filter channel = rank channel, not predicate gate)
+    cte_parts = []
+    params = []
+
+    # --- candidates CTE ---
+    if has_filter_cases:
+        filter_score_expr = '(' + ' + '.join(cases) + ')::float'
+        cte_parts.append(
+            'candidates AS ('
+            'SELECT building_id, embedding, visual_description, tags, material_visual, '
+            + filter_score_expr + ' AS filter_score'
+            ' FROM architecture_vectors'
+            ')'
+        )
+        params.extend(filter_params)
+    else:
+        cte_parts.append(
+            'candidates AS ('
+            'SELECT building_id, embedding, visual_description, tags, material_visual'
+            ' FROM architecture_vectors'
+            ')'
+        )
+
+    # --- bm25_ranked CTE ---
+    cte_parts.append(
+        'bm25_ranked AS ('
+        'SELECT building_id,'
+        ' ts_rank_cd('
+        '   to_tsvector(%s, COALESCE(visual_description, \'\') || \' \' ||'
+        '               COALESCE(array_to_string(tags, \' \'), \'\') || \' \' ||'
+        '               COALESCE(array_to_string(material_visual, \' \'), \'\')'
+        '   ),'
+        '   plainto_tsquery(%s, %s)'
+        ' ) AS bm25_score'
+        ' FROM candidates'
+        ')'
+    )
+    params.extend([bm25_dict, bm25_dict, q_text])
+
+    # --- bm25_with_rank CTE (zero-score rows excluded from BM25 ranking) ---
+    cte_parts.append(
+        'bm25_with_rank AS ('
+        'SELECT building_id,'
+        ' ROW_NUMBER() OVER (ORDER BY bm25_score DESC) AS bm25_rank'
+        ' FROM bm25_ranked'
+        ' WHERE bm25_score > 0'
+        ')'
+    )
+
+    # --- vector_ranked CTE (only built when v_initial provided) ---
+    if has_vector:
+        vec_str = _vec_to_pg(v_initial)
+        cte_parts.append(
+            'vector_ranked AS ('
+            'SELECT building_id,'
+            ' ROW_NUMBER() OVER (ORDER BY embedding <=> %s::vector ASC) AS vec_rank'
+            ' FROM candidates'
+            ')'
+        )
+        params.append(vec_str)
+
+    # --- filter_ranked CTE (only built when filter cases exist and channel enabled) ---
+    if has_filter_cases:
+        cte_parts.append(
+            'filter_ranked AS ('
+            'SELECT building_id,'
+            ' ROW_NUMBER() OVER (ORDER BY filter_score DESC) AS filter_rank'
+            ' FROM candidates'
+            ' WHERE filter_score > 0'
+            ')'
+        )
+
+    # --- Final SELECT: compute RRF score per candidate ---
+    # Build RRF sum expression for active channels
+    rrf_terms = ['COALESCE(1.0 / (%s + bm.bm25_rank), 0)']
+    params.append(rrf_k)
+
+    if has_vector:
+        rrf_terms.append('COALESCE(1.0 / (%s + vr.vec_rank), 0)')
+        params.append(rrf_k)
+
+    if has_filter_cases:
+        rrf_terms.append('COALESCE(1.0 / (%s + fr.filter_rank), 0)')
+        params.append(rrf_k)
+
+    rrf_sum = ' + '.join(rrf_terms)
+
+    join_clauses = ['LEFT JOIN bm25_with_rank bm ON c.building_id = bm.building_id']
+    if has_vector:
+        join_clauses.append('LEFT JOIN vector_ranked vr ON c.building_id = vr.building_id')
+    if has_filter_cases:
+        join_clauses.append('LEFT JOIN filter_ranked fr ON c.building_id = fr.building_id')
+
+    # WHERE: exclude buildings with zero signal across ALL channels
+    # Build inline sum (no alias in WHERE) using same terms without COALESCE
+    where_terms = ['COALESCE(1.0 / (%s + bm.bm25_rank), 0)']
+    params.append(rrf_k)
+    if has_vector:
+        where_terms.append('COALESCE(1.0 / (%s + vr.vec_rank), 0)')
+        params.append(rrf_k)
+    if has_filter_cases:
+        where_terms.append('COALESCE(1.0 / (%s + fr.filter_rank), 0)')
+        params.append(rrf_k)
+
+    where_sum = ' + '.join(where_terms)
+
+    params.append(target)
+
+    sql = (
+        'WITH ' + ',\n'.join(cte_parts) + '\n'
+        'SELECT c.building_id, (' + rrf_sum + ') AS rrf_score'
+        ' FROM candidates c'
+        ' ' + ' '.join(join_clauses)
+        + ' WHERE (' + where_sum + ') > 0'
+        ' ORDER BY rrf_score DESC'
+        ' LIMIT %s'
+    )
+
+    with connection.cursor() as cur:
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+
+    sql_ms = round((_time.perf_counter() - _t0) * 1000, 2)
+
+    pool_ids = [row[0] for row in rows]
+    pool_scores = {row[0]: float(row[1]) for row in rows}
+
+    if seed_ids:
+        for sid in seed_ids:
+            if sid not in pool_scores:
+                pool_ids.insert(0, sid)
+            pool_scores[sid] = 1.1
+
+    # Emit observability event (mirrors hyde_call_timing pattern)
+    event_log.emit_event(
+        'hybrid_pool_timing',
+        has_v_initial=has_vector,
+        has_filter_channel=has_filter_cases,
+        q_text_chars=len(q_text),
+        rrf_top_k_returned=len(pool_ids),
+        sql_total_ms=sql_ms,
+    )
+
+    return pool_ids, pool_scores
+
+
+def create_bounded_pool(filters, filter_priority=None, seed_ids=None, target=None, v_initial=None, q_text=None):
     """
     Create a bounded pool of building IDs with weighted scoring.
     Each building matching at least one filter is included, ranked by score.
     Returns tuple: (pool_ids, pool_scores) where pool_scores is {building_id: score}.
 
-    Scores are floats in [0, 1] for filter-only paths (normalized by sum of active-filter
-    weights). When v_initial is provided (Topic 03 HyDE), a cosine similarity term
-    `hyde_score_weight * cosine_sim` is added to the numerator and the denominator is
-    extended by `hyde_score_weight`. The cosine similarity term `1 - (embedding <=> vector)`
-    ranges in [-1, 1] (pgvector <=> returns distance in [0, 2]), so blended scores and
-    HyDE-only scores may be negative for dissimilar buildings. ORDER BY DESC still ranks
-    them correctly; negative scores are valid output.
+    Dispatch logic:
+    - Mode H (Hybrid RRF): hybrid_retrieval_enabled=True AND q_text non-empty.
+      Fuses BM25 + optional vector + optional filter channels via RRF (Cormack 2009).
+      On SQL failure: falls back to Mode V or Mode F inline (no recursion).
+    - Mode V (Vector only, Topic 03): hybrid_retrieval_enabled=False OR q_text empty,
+      AND v_initial provided and hyde_vinitial_enabled=True. Existing HyDE blend SQL.
+    - Mode F (Filter only, baseline): neither RRF nor vector. CASE-WHEN-only SQL.
+
+    Scores for Mode F/V are floats in [0, 1] (or negative for HyDE anti-relevance).
+    Scores for Mode H are RRF floats (sum of 1/(k+rank) terms). Tier-grouping in
+    views.py sees floats; with RRF scores tier-grouping degenerates to 1-per-tier
+    (all RRF scores are unique). This is acceptable per investigation 03 Zone C —
+    tier structure is preserved, ordering is still semantically correct.
 
     Seeded building_ids (if provided) get score 1.1, placing them above max.
 
     v_initial: Topic 03 HyDE 384-dim float list or None (default). When provided and
     the feature flag is ON (hyde_vinitial_enabled), the pool query includes a cosine
     similarity term to rank semantically close buildings higher.
+
+    q_text: Topic 01 RRF: natural-language query string. When provided and
+    hybrid_retrieval_enabled=True, hybrid RRF SQL is used instead of Mode V/F.
     """
     if target is None:
         target = RC['bounded_pool_target']
 
+    # ── Mode H dispatch ──────────────────────────────────────────────────────
+    # Short-circuit: only enter RRF path when flag ON and q_text non-empty.
+    use_hybrid = (
+        RC.get('hybrid_retrieval_enabled', False)
+        and bool(q_text)
+        and isinstance(q_text, str)
+    )
+    if use_hybrid:
+        try:
+            return _run_hybrid_rrf_pool(
+                filters, filter_priority, seed_ids, target, v_initial, q_text,
+            )
+        except Exception as exc:
+            logger.warning('Hybrid RRF SQL failed (%s); falling back to non-hybrid path', exc)
+            event_log.emit_event(
+                'failure',
+                failure_type='hybrid_pool_query',
+                recovery_path='no_hybrid',
+                error_class=type(exc).__name__,
+                error_message=str(exc)[:200],
+            )
+            # Fall through to Mode V or Mode F below (q_text locally silenced)
+
+    # ── Mode V / Mode F below — unchanged from pre-Topic-01 ─────────────────
     use_hyde = (
         v_initial is not None
         and RC.get('hyde_vinitial_enabled', False)

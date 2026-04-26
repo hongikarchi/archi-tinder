@@ -153,6 +153,11 @@ RECOMMENDATION = {
     'hyde_hf_model':                 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2',
     'hyde_hf_timeout_seconds':       5,
     'hyde_score_weight':             50.0,   # HyDE similarity score additive weight
+    # Topic 01: Hybrid Retrieval (RRF) -- Cormack et al. 2009
+    'hybrid_retrieval_enabled':      False,  # CRITICAL: default OFF for backward compat
+    'hybrid_rrf_k':                  60,     # Cormack 2009 default; uniform fusion 1/(k+rank)
+    'hybrid_bm25_dict':              'simple',  # tsvector dictionary; 'simple' = multilingual-safe (no stemming)
+    'hybrid_filter_channel_enabled': True,   # True: filter is a 3rd RRF rank channel; False: filter is a predicate gate
 }
 
 # -- External API keys -----------------------------------------------------

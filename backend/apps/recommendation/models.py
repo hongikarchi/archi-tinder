@@ -52,6 +52,7 @@ class AnalysisSession(models.Model):
     original_seed_ids        = models.JSONField(default=list)
     current_pool_tier        = models.IntegerField(default=1)  # 1=full filter, 2=drop geo/numeric, 3=random pool
     v_initial         = models.JSONField(null=True, blank=True)  # Topic 03 HyDE: 384-dim float list
+    original_q_text   = models.TextField(null=True, blank=True)  # Topic 01 RRF: original raw_query for re-relaxation
     created_at        = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -111,6 +112,7 @@ class SessionEvent(models.Model):
         ('cohort_assignment',   'Cohort Assignment'),
         ('parse_query_timing',  'Parse Query Timing'),
         ('hyde_call_timing',    'HyDE Call Timing'),
+        ('hybrid_pool_timing',  'Hybrid Pool Timing'),
     ]
 
     user        = models.ForeignKey(

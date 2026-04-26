@@ -183,10 +183,20 @@ class SessionCreateView(APIView):
                 user=profile,
             )
 
+        # Topic 01 RRF: thread q_text only when flag is ON to preserve byte-identical baseline.
+        # raw_query is retrieved later (line ~253) but we need it here for pool creation.
+        _raw_query_early = request.data.get('query') or None
+        if _raw_query_early and not isinstance(_raw_query_early, str):
+            _raw_query_early = None
+        # Security: coerce oversized queries to None (RRF wants a focused query, not an essay)
+        if _raw_query_early and len(_raw_query_early) > 1000:
+            _raw_query_early = None
+        q_text_param = _raw_query_early if RC.get('hybrid_retrieval_enabled', False) else None
+
         # Create bounded pool with weighted scoring (3-tier relaxation fallback via helper)
         active_filters = filters or project.filters or {}
         pool_ids, pool_scores, current_pool_tier = engine.create_pool_with_relaxation(
-            active_filters, filter_priority, seed_ids, v_initial=v_initial
+            active_filters, filter_priority, seed_ids, v_initial=v_initial, q_text=q_text_param,
         )
         filter_relaxed = current_pool_tier > 1
         if filter_relaxed:
@@ -245,6 +255,7 @@ class SessionCreateView(APIView):
             original_seed_ids        = list(seed_ids or []),
             current_pool_tier        = current_pool_tier,
             v_initial                = v_initial,
+            original_q_text          = q_text_param,  # Topic 01 RRF: persisted for re-relaxation
         )
 
         logger.info('Session created: %s (pool=%d, tiers=%d, relaxed=%s)', session.session_id, len(pool_ids), len(tiers), filter_relaxed)
