@@ -155,75 +155,137 @@ const TABS = [
   { key: 'users', label: 'Users' },
 ]
 
+/**
+ * InfoCol — local primitive for §3.5.2 RICH PATTERN 2-col info grid.
+ *   Caps label (10/600 uppercase 0.06em) + single-line ellipsis value (13/600 white).
+ *   Mirrors the InfoCol used in FirmProfilePage + UserProfilePage so all card surfaces
+ *   share the exact same primitive.
+ */
+function InfoCol({ label, value }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <span style={{
+        color: 'rgba(255,255,255,0.5)',
+        fontSize: 10, fontWeight: 600,
+        letterSpacing: '0.06em', textTransform: 'uppercase',
+        marginBottom: 2,
+      }}>
+        {label}
+      </span>
+      <span style={{
+        color: '#fff', fontSize: 13, fontWeight: 600,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>
+        {value}
+      </span>
+    </div>
+  )
+}
+
+/**
+ * MatchChip — subtle dark variant per §3.5.3.
+ *   Replaces the prior branded-pink flood (`rgba(236,72,153,0.85)` + glow) which
+ *   the user explicitly rejected. Brand pink is reserved for primary CTAs and
+ *   accent moments; small chips use subtle dark blur.
+ */
+function MatchChip({ score }) {
+  return (
+    <div style={{
+      position: 'absolute', top: 12, right: 12,
+      padding: '4px 9px', borderRadius: 999,
+      background: 'rgba(0,0,0,0.55)',
+      backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+      color: '#fff', fontSize: 11, fontWeight: 600,
+      zIndex: 2,
+    }}>
+      {Math.round(score * 100)}% match
+    </div>
+  )
+}
+
+/**
+ * ProjectCard — image-overlay card per §3.5.1 + §3.5.2 RICH PATTERN.
+ *   - No default border (transparent), hover lifts -4px and adds pink border (§3.5.1).
+ *   - Title 18/700 + "Project" sub-italic + divider + 2-col CITY/YEAR grid.
+ *   - Match chip subtle dark (§3.5.3); no branded flood.
+ */
 function ProjectCard({ project }) {
-  const [isHovered, setIsHovered] = useState(false)
   return (
     <div
       onClick={() => {
         // TODO(claude): open building detail modal or navigate to /building/${project.building_id}
       }}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
       style={{
         position: 'relative',
         aspectRatio: '4/5',
         borderRadius: 20,
         overflow: 'hidden',
         cursor: 'pointer',
-        border: isHovered ? '1px solid rgba(236,72,153,0.5)' : '1px solid rgba(255,255,255,0.08)',
-        boxShadow: isHovered ? '0 20px 40px rgba(236,72,153,0.18)' : '0 10px 25px rgba(0,0,0,0.35)',
-        transform: isHovered ? 'translateY(-4px)' : 'translateY(0)',
-        transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+        background: 'rgba(255,255,255,0.03)',
+        border: '1px solid transparent',          // §3.5.1: NO default light border
+        boxShadow: '0 10px 25px rgba(0,0,0,0.3)', // §3.5.1 mandatory depth (static)
+        transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
         minHeight: 0,
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = 'translateY(-4px)'
+        e.currentTarget.style.borderColor = 'rgba(236,72,153,0.55)'
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = 'translateY(0)'
+        e.currentTarget.style.borderColor = 'transparent'
       }}
     >
       <img
         src={project.image_url}
         alt={project.name_en}
-        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+        loading="lazy"
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
       />
+      {/* §3.5.1 mandatory bottom gradient overlay */}
       <div style={{
         position: 'absolute', inset: 0,
-        background: 'linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.45) 40%, rgba(0,0,0,0.05) 75%, transparent 100%)',
-      }} />
+        background: 'linear-gradient(to top, rgba(0,0,0,0.93) 0%, rgba(0,0,0,0.4) 50%, transparent 100%)',
+      }} aria-hidden="true" />
 
-      {/* Match score chip */}
-      <div style={{
-        position: 'absolute', top: 12, right: 12,
-        padding: '6px 12px', borderRadius: 999,
-        background: 'rgba(236,72,153,0.85)',
-        backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
-        color: '#fff', fontSize: 12, fontWeight: 800, letterSpacing: '0.02em',
-        boxShadow: '0 4px 12px rgba(236,72,153,0.35)',
-      }}>
-        {Math.round(project.match_score * 100)}% match
-      </div>
+      <MatchChip score={project.match_score} />
 
-      {/* Bottom info */}
-      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '20px' }}>
+      {/* §3.5.2 RICH PATTERN: title + "Project" sub-italic + divider + 2-col CITY/YEAR grid */}
+      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '16px 18px 20px' }}>
         <h4 style={{
-          color: '#fff', fontSize: 18, fontWeight: 800, margin: '0 0 6px', lineHeight: 1.3,
+          color: '#fff', fontSize: 18, fontWeight: 700, margin: '0 0 3px', lineHeight: 1.3,
           display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
           overflow: 'hidden', textOverflow: 'ellipsis',
         }}>
           {project.name_en}
         </h4>
-        <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 13, margin: 0, fontWeight: 600 }}>
-          {project.year} · {project.city}
+        <p style={{
+          color: 'rgba(255,255,255,0.55)', fontSize: 12,
+          margin: '0 0 12px', fontStyle: 'italic',
+        }}>
+          Project
         </p>
+        <div style={{ height: 1, background: 'rgba(255,255,255,0.1)', marginBottom: 12 }} />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px' }}>
+          <InfoCol label="CITY" value={project.city} />
+          <InfoCol label="YEAR" value={project.year} />
+        </div>
       </div>
     </div>
   )
 }
 
+/**
+ * OfficeCard — 1:1 logo+info layout (justified content-shape divergence — logo not photo).
+ *   §3.5.1 hover (lift + pink border, static box-shadow). Title 18/700 + content-type
+ *   sub-italic + meta line (§3.5.2 SINGLE-LINE variant, justified by 1:1 small-card
+ *   geometry where 2-col grid would be cramped).
+ */
 function OfficeCard({ office }) {
   const navigate = useNavigate()
-  const [isHovered, setIsHovered] = useState(false)
   return (
     <div
       onClick={() => navigate(`/office/${office.office_id}`)}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
       style={{
         position: 'relative',
         aspectRatio: '1/1',
@@ -231,25 +293,22 @@ function OfficeCard({ office }) {
         overflow: 'hidden',
         cursor: 'pointer',
         background: 'var(--color-surface)',
-        border: isHovered ? '1px solid rgba(236,72,153,0.5)' : '1px solid rgba(255,255,255,0.08)',
-        boxShadow: isHovered ? '0 20px 40px rgba(236,72,153,0.18)' : '0 10px 25px rgba(0,0,0,0.35)',
-        transform: isHovered ? 'translateY(-4px)' : 'translateY(0)',
-        transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+        border: '1px solid transparent',          // §3.5.1: NO default light border
+        boxShadow: '0 10px 25px rgba(0,0,0,0.3)', // §3.5.1 mandatory depth (static)
+        transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
         display: 'flex', flexDirection: 'column',
         minHeight: 0,
       }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = 'translateY(-4px)'
+        e.currentTarget.style.borderColor = 'rgba(236,72,153,0.55)'
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = 'translateY(0)'
+        e.currentTarget.style.borderColor = 'transparent'
+      }}
     >
-      {/* Match score chip */}
-      <div style={{
-        position: 'absolute', top: 12, right: 12, zIndex: 2,
-        padding: '6px 12px', borderRadius: 999,
-        background: 'rgba(236,72,153,0.85)',
-        backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
-        color: '#fff', fontSize: 12, fontWeight: 800, letterSpacing: '0.02em',
-        boxShadow: '0 4px 12px rgba(236,72,153,0.35)',
-      }}>
-        {Math.round(office.match_score * 100)}% match
-      </div>
+      <MatchChip score={office.match_score} />
 
       {/* Logo half */}
       <div style={{
@@ -265,23 +324,31 @@ function OfficeCard({ office }) {
         />
       </div>
 
-      {/* Info half */}
+      {/* Info half — §3.5.2 SINGLE-LINE variant (title + sub-italic + meta) */}
       <div style={{
         flex: 1,
-        padding: '16px 18px',
+        padding: '14px 18px 16px',
         display: 'flex', flexDirection: 'column', justifyContent: 'center',
         background: 'var(--color-surface)',
         borderTop: '1px solid rgba(255,255,255,0.08)',
       }}>
         <h4 style={{
-          color: 'var(--color-text)', fontSize: 17, fontWeight: 800, margin: '0 0 4px',
+          color: 'var(--color-text)', fontSize: 18, fontWeight: 700, margin: '0 0 3px',
           lineHeight: 1.3,
           display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical',
           overflow: 'hidden', textOverflow: 'ellipsis',
         }}>
           {office.name}
         </h4>
-        <p style={{ color: 'var(--color-text-dim)', fontSize: 13, margin: 0, fontWeight: 600 }}>
+        <p style={{
+          color: 'rgba(255,255,255,0.55)', fontSize: 12,
+          margin: '0 0 4px', fontStyle: 'italic',
+        }}>
+          Architecture Office
+        </p>
+        <p style={{
+          color: 'var(--color-text-dim)', fontSize: 12, margin: 0, fontWeight: 600,
+        }}>
           {office.project_count} projects
         </p>
       </div>
@@ -289,39 +356,39 @@ function OfficeCard({ office }) {
   )
 }
 
+/**
+ * UserCard — vertical text-on-surface card (non-image).
+ *   §3.5.1 hover (lift + pink border, static box-shadow). Display name + sub-italic
+ *   "shared likes" per §3.5.2 SINGLE-LINE variant — text-only on dark surface, no
+ *   image overlay context, so 2-col grid would feel forced.
+ */
 function UserCard({ user }) {
   const navigate = useNavigate()
-  const [isHovered, setIsHovered] = useState(false)
   return (
     <div
       onClick={() => navigate(`/user/${user.user_id}`)}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
       style={{
         position: 'relative',
         padding: '32px 20px 24px',
         borderRadius: 20,
         background: 'var(--color-surface)',
-        border: isHovered ? '1px solid rgba(236,72,153,0.5)' : '1px solid rgba(255,255,255,0.08)',
-        boxShadow: isHovered ? '0 20px 40px rgba(236,72,153,0.18)' : '0 10px 25px rgba(0,0,0,0.35)',
-        transform: isHovered ? 'translateY(-4px)' : 'translateY(0)',
-        transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+        border: '1px solid transparent',          // §3.5.1: NO default light border
+        boxShadow: '0 10px 25px rgba(0,0,0,0.3)', // §3.5.1 mandatory depth (static)
+        transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
         cursor: 'pointer',
         display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center',
         minHeight: 220,
       }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = 'translateY(-4px)'
+        e.currentTarget.style.borderColor = 'rgba(236,72,153,0.55)'
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = 'translateY(0)'
+        e.currentTarget.style.borderColor = 'transparent'
+      }}
     >
-      {/* Match score chip */}
-      <div style={{
-        position: 'absolute', top: 12, right: 12,
-        padding: '6px 12px', borderRadius: 999,
-        background: 'rgba(236,72,153,0.85)',
-        backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
-        color: '#fff', fontSize: 12, fontWeight: 800, letterSpacing: '0.02em',
-        boxShadow: '0 4px 12px rgba(236,72,153,0.35)',
-      }}>
-        {Math.round(user.match_score * 100)}% match
-      </div>
+      <MatchChip score={user.match_score} />
 
       {/* Avatar with brand-glow halo */}
       <div style={{ position: 'relative', marginBottom: 16 }}>
@@ -349,8 +416,8 @@ function UserCard({ user }) {
         {user.display_name}
       </h4>
       <p style={{
-        color: 'var(--color-text-dim)', fontSize: 13, margin: 0,
-        fontStyle: 'italic', fontWeight: 500,
+        color: 'rgba(255,255,255,0.55)', fontSize: 12, margin: 0,
+        fontStyle: 'italic',
       }}>
         {user.shared_likes} shared likes
       </p>
@@ -459,7 +526,7 @@ export default function PostSwipeLandingPage() {
 
         {/* Title with brand gradient */}
         <h1 style={{
-          margin: 0, fontSize: 20, fontWeight: 900, letterSpacing: '0.04em',
+          margin: 0, fontSize: 20, fontWeight: 700, letterSpacing: '0.04em',
           background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
           WebkitBackgroundClip: 'text', backgroundClip: 'text',
           WebkitTextFillColor: 'transparent', color: 'transparent',
@@ -507,7 +574,7 @@ export default function PostSwipeLandingPage() {
         </p>
         <h2 style={{
           color: 'var(--color-text)',
-          fontSize: 'clamp(28px, 5vw, 32px)', fontWeight: 900,
+          fontSize: 'clamp(28px, 5vw, 32px)', fontWeight: 700,
           lineHeight: 1.2, margin: '0 0 14px',
         }}>
           Your taste is unique.
@@ -543,11 +610,11 @@ export default function PostSwipeLandingPage() {
           </span>
           <span style={{
             padding: '8px 14px', borderRadius: 999,
-            background: 'linear-gradient(135deg, rgba(236,72,153,0.18), rgba(244,63,94,0.18))',
-            border: '1px solid rgba(236,72,153,0.35)',
-            color: '#fff', fontSize: 12, fontWeight: 700,
+            background: 'rgba(255,255,255,0.06)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            color: 'var(--color-text-2)', fontSize: 12, fontWeight: 600,
           }}>
-            Persona: {MOCK_LANDING.persona_label}
+            <span style={{ color: '#ec4899', fontWeight: 700 }}>Persona:</span> {MOCK_LANDING.persona_label}
           </span>
         </div>
 

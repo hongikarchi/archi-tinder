@@ -131,13 +131,43 @@ const MOCK_BOARD = {
   is_reacted: false,
 }
 
-function BuildingTile({ building }) {
-  const [isHovered, setIsHovered] = useState(false)
+/**
+ * InfoCol — local primitive for §3.5.2 RICH PATTERN 2-col info grid.
+ *   Caps label (10/600 uppercase 0.06em) + single-line ellipsis value (13/600 white).
+ *   Mirrors the InfoCol used in FirmProfile + UserProfile + PostSwipeLanding.
+ */
+function InfoCol({ label, value }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <span style={{
+        color: 'rgba(255,255,255,0.5)',
+        fontSize: 10, fontWeight: 600,
+        letterSpacing: '0.06em', textTransform: 'uppercase',
+        marginBottom: 2,
+      }}>
+        {label}
+      </span>
+      <span style={{
+        color: '#fff', fontSize: 13, fontWeight: 600,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>
+        {value}
+      </span>
+    </div>
+  )
+}
 
+/**
+ * BuildingTile — image-overlay card per §3.5.1 + §3.5.2 RICH PATTERN.
+ *   - No default border (transparent), hover lifts -4px and adds pink border (§3.5.1).
+ *   - Title 18/700 + "Building" sub-italic + divider + 2-col ARCHITECT/YEAR grid.
+ *   - NO program corner chip per §3.5.3 — program is metadata, not status; chips are
+ *     reserved for binary status state. Matches the rationale used in FirmProfile
+ *     ProjectCard (also drops program chip).
+ */
+function BuildingTile({ building }) {
   return (
     <div
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
       onClick={() => {
         // TODO(claude): navigate to building detail (modal overlay or
         // route `/building/${building.building_id}`) — wire when building
@@ -150,66 +180,56 @@ function BuildingTile({ building }) {
         overflow: 'hidden',
         cursor: 'pointer',
         background: 'rgba(255,255,255,0.03)',
-        border: '1px solid rgba(255,255,255,0.08)',
-        boxShadow: isHovered ? '0 18px 40px rgba(0,0,0,0.5)' : '0 10px 25px rgba(0,0,0,0.3)',
-        transform: isHovered ? 'translateY(-4px)' : 'translateY(0)',
-        transition: 'transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1), box-shadow 0.25s cubic-bezier(0.25, 0.1, 0.25, 1)',
+        border: '1px solid transparent',          // §3.5.1: NO default light border
+        boxShadow: '0 10px 25px rgba(0,0,0,0.3)', // §3.5.1 mandatory depth (static)
+        transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
         userSelect: 'none',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = 'translateY(-4px)'
+        e.currentTarget.style.borderColor = 'rgba(236,72,153,0.55)'
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = 'translateY(0)'
+        e.currentTarget.style.borderColor = 'transparent'
       }}
     >
       <img
         src={building.image_url}
         alt={building.name_en}
+        loading="lazy"
         style={{
           position: 'absolute',
           inset: 0,
           width: '100%',
           height: '100%',
           objectFit: 'cover',
+          display: 'block',
         }}
       />
 
-      {/* Top-right program chip */}
-      <div style={{
-        position: 'absolute',
-        top: 12,
-        right: 12,
-        padding: '5px 10px',
-        borderRadius: 999,
-        background: 'rgba(0,0,0,0.55)',
-        backdropFilter: 'blur(10px)',
-        WebkitBackdropFilter: 'blur(10px)',
-        border: '1px solid rgba(255,255,255,0.18)',
-        color: '#fff',
-        fontSize: 10,
-        fontWeight: 700,
-        letterSpacing: '0.06em',
-        textTransform: 'uppercase',
-      }}>
-        {building.program}
-      </div>
-
-      {/* Bottom gradient + text */}
+      {/* §3.5.1 mandatory bottom gradient overlay */}
       <div style={{
         position: 'absolute',
         inset: 0,
-        background: 'linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.55) 38%, rgba(0,0,0,0.05) 75%, transparent 100%)',
+        background: 'linear-gradient(to top, rgba(0,0,0,0.93) 0%, rgba(0,0,0,0.4) 50%, transparent 100%)',
         pointerEvents: 'none',
-      }} />
+      }} aria-hidden="true" />
 
+      {/* §3.5.2 RICH PATTERN: title + "Building" sub-italic + divider + 2-col ARCHITECT/YEAR grid */}
       <div style={{
         position: 'absolute',
         bottom: 0,
         left: 0,
         right: 0,
-        padding: '16px 16px 18px',
+        padding: '16px 18px 20px',
       }}>
         <h4 style={{
           color: '#fff',
-          fontSize: 16,
-          fontWeight: 800,
-          margin: '0 0 6px',
-          lineHeight: 1.25,
+          fontSize: 18,
+          fontWeight: 700,
+          margin: '0 0 3px',
+          lineHeight: 1.3,
           display: '-webkit-box',
           WebkitLineClamp: 2,
           WebkitBoxOrient: 'vertical',
@@ -219,18 +239,18 @@ function BuildingTile({ building }) {
           {building.name_en}
         </h4>
         <p style={{
-          color: 'rgba(255,255,255,0.65)',
+          color: 'rgba(255,255,255,0.55)',
           fontSize: 12,
-          fontWeight: 600,
-          margin: 0,
-          display: '-webkit-box',
-          WebkitLineClamp: 1,
-          WebkitBoxOrient: 'vertical',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
+          fontStyle: 'italic',
+          margin: '0 0 12px',
         }}>
-          {building.architect} · {building.year}
+          Building
         </p>
+        <div style={{ height: 1, background: 'rgba(255,255,255,0.1)', marginBottom: 12 }} />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px' }}>
+          <InfoCol label="ARCHITECT" value={building.architect} />
+          <InfoCol label="YEAR" value={building.year} />
+        </div>
       </div>
     </div>
   )
@@ -387,6 +407,31 @@ export default function BoardDetailPage() {
           </button>
         </div>
 
+        {/* §3.5.3 PRIVATE-only icon-lock chip — small dark blur circle, white-ish lock SVG.
+            PUBLIC renders nothing (public is the default; only flag the exception).
+            Anchored to hero top-right, sits alongside the back/share row at z-index 5. */}
+        {!isPublic && (
+          <div style={{
+            position: 'absolute',
+            top: 68,
+            right: 20,
+            zIndex: 5,
+            background: 'rgba(0,0,0,0.4)',
+            backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+            padding: 6, borderRadius: '50%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+          aria-label="Private board"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                 stroke="rgba(255,255,255,0.85)" strokeWidth="2"
+                 strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+          </div>
+        )}
+
         {/* Hero content overlapping cover bottom */}
         <div style={{
           position: 'absolute',
@@ -398,34 +443,13 @@ export default function BoardDetailPage() {
           flexDirection: 'column',
           gap: 12,
         }}>
-          {/* Visibility chip */}
-          <div>
-            <span style={{
-              display: 'inline-block',
-              padding: '4px 10px',
-              borderRadius: 999,
-              fontSize: 10,
-              fontWeight: 800,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              background: isPublic ? 'rgba(236,72,153,0.18)' : 'rgba(239,68,68,0.18)',
-              color: isPublic ? '#ec4899' : '#ef4444',
-              border: isPublic ? '1px solid rgba(236,72,153,0.4)' : '1px solid rgba(239,68,68,0.4)',
-              backdropFilter: 'blur(10px)',
-              WebkitBackdropFilter: 'blur(10px)',
-            }}>
-              {MOCK_BOARD.visibility}
-            </span>
-          </div>
-
-          {/* Board name */}
+          {/* Board name — reduced to 28/700 to align with §3.5 card-system tone (was 32/900 — too display-y). */}
           <h1 style={{
             color: '#fff',
-            fontSize: 'clamp(28px, 6vw, 32px)',
-            fontWeight: 900,
+            fontSize: 'clamp(24px, 5vw, 28px)',
+            fontWeight: 700,
             margin: 0,
-            lineHeight: 1.15,
-            letterSpacing: '-0.01em',
+            lineHeight: 1.2,
             display: '-webkit-box',
             WebkitLineClamp: 2,
             WebkitBoxOrient: 'vertical',
@@ -556,10 +580,11 @@ export default function BoardDetailPage() {
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0' }}>
         <h3 style={{
           color: 'var(--color-text)',
-          fontSize: 18,
-          fontWeight: 800,
+          fontSize: 20,
+          fontWeight: 700,
           margin: '32px 0 16px',
           padding: '0 20px',
+          letterSpacing: '-0.01em',
         }}>
           Buildings
         </h3>

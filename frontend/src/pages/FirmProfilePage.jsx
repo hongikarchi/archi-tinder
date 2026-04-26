@@ -144,6 +144,7 @@ function StatsCard({ followingCount, followerCount }) {
  */
 function AboutFlipCard({ description, foundedYear, location }) {
   const [isAboutFlipped, setIsAboutFlipped] = useState(false)
+  const [isHovered, setIsHovered] = useState(false)
 
   return (
     <div
@@ -152,7 +153,12 @@ function AboutFlipCard({ description, foundedYear, location }) {
         flex: '1 1 280px',
         minHeight: 180,
         cursor: 'pointer',
+        // §3.5.4: lift YES, border NO. Lift on outer perspective wrapper.
+        transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+        transform: isHovered ? 'translateY(-4px)' : 'translateY(0)',
       }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       onClick={(e) => {
         if (e.target.closest('button')) return
         setIsAboutFlipped(f => !f)

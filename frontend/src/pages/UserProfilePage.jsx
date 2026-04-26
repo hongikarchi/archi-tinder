@@ -89,11 +89,13 @@ function InfoCol({ label, value }) {
  *               + §3.5.3 PRIVATE-only icon-lock chip (PUBLIC = no chip).
  *   Back face: swipe-style horizontal full-bleed gallery per §3.5.5 + persistent "View Gallery" action bar.
  *
- * NO hover decoration on the outer wrapper per §3.5.4 — flip cards are interaction-driven,
- * not hover-driven. A pink border lingering behind a rotating card looks awkward.
+ * Hover lift YES, hover border NO per §3.5.4. The subtle translateY(-4px) lift matches
+ * every other interactive card in the app; only the pink border is omitted because a
+ * static border lingers awkwardly behind the rotating card.
  */
 function BoardCard({ board }) {
   const [isFlipped, setIsFlipped] = useState(false)
+  const [isHovered, setIsHovered] = useState(false)
   const navigate = useNavigate()
 
   const isPrivate = board.visibility === 'private'
@@ -106,8 +108,13 @@ function BoardCard({ board }) {
         aspectRatio: '3/4',
         cursor: 'pointer',
         userSelect: 'none', WebkitUserSelect: 'none', touchAction: 'manipulation',
-        // §3.5.4: NO hover on flip cards — no border, no transition on outer wrapper.
+        // §3.5.4: lift YES, border NO. Lift on outer perspective wrapper so it doesn't
+        // double-compose with the inner rotateY transform.
+        transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+        transform: isHovered ? 'translateY(-4px)' : 'translateY(0)',
       }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       onClick={(e) => {
         if (e.target.closest('button')) return
         setIsFlipped(!isFlipped)
@@ -287,6 +294,7 @@ function BoardCard({ board }) {
  */
 function PersonaFlipCard({ persona, mbti }) {
   const [isPersonaFlipped, setIsPersonaFlipped] = useState(false)
+  const [isHovered, setIsHovered] = useState(false)
 
   return (
     <div
@@ -295,7 +303,12 @@ function PersonaFlipCard({ persona, mbti }) {
         flex: '1 1 280px',
         minHeight: 180,
         cursor: 'pointer',
+        // §3.5.4: lift YES, border NO. Lift on outer perspective wrapper.
+        transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+        transform: isHovered ? 'translateY(-4px)' : 'translateY(0)',
       }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       onClick={(e) => {
         if (e.target.closest('button')) return
         setIsPersonaFlipped(f => !f)

@@ -146,7 +146,8 @@ onMouseLeave={e => {
 **Mandatory rules:**
 - **NO default light border.** The border lives only in hover state (brand pink at 55% opacity). Resting state is `transparent`.
 - Always include `boxShadow: '0 10px 25px rgba(0,0,0,0.3)'` for depth in dark mode.
-- Hover behavior **applies to non-flip cards only** (§3.5.4 flip cards omit hover decoration — interaction is click-to-flip, not hover): lift `-4px` AND border to brand pink. Duration `0.25s` cubic-bezier(0.4,0,0.2,1). NO scale.
+- **Hover lift applies to ALL cards** (including flip cards): `translateY(-4px)`, duration `0.25s` cubic-bezier(0.4,0,0.2,1). NO scale.
+- **Hover border (pink at 55% opacity) applies to non-flip cards ONLY.** Flip cards (§3.5.4) omit the border because a static border lingers awkwardly behind a rotating card; lift alone is enough feedback.
 - Image fills the card (`width:100%; height:100%; object-fit:cover; position:absolute; inset:0`).
 - Bottom gradient overlay is required for legibility:
   `linear-gradient(to top, rgba(0,0,0,0.93) 0%, rgba(0,0,0,0.4) 50%, transparent 100%)`
@@ -335,7 +336,29 @@ label; back: full detail). Click flips, click again unflips.
 - `transformStyle: 'preserve-3d'` on the rotating layer.
 - Both faces use `backfaceVisibility: 'hidden'` (+ `-webkit-` prefix).
 - Stop propagation for nested buttons via `e.target.closest('button')` early-return.
-- **NO hover decoration on flip cards.** The §3.5.1 hover (lift + pink border) does NOT apply to flip cards. The card itself is the affordance — clicking it flips. A pink border that lingers behind a rotating card looks awkward (visible during and after rotation). Flip cards are interaction-driven, not hover-driven; the visual feedback is the rotation itself.
+- **Hover lift YES, hover border NO.** Per §3.5.1, the subtle `translateY(-4px)` lift applies to all cards including flip cards (it's the standard "interactive element" feedback that the rest of the site uses). The pink border is the only hover decoration that's omitted — a static border lingers awkwardly behind the rotating card during and after the flip. Lift alone is sufficient. Apply the lift on the OUTER perspective wrapper so it doesn't double-compose with the inner rotation.
+
+#### 3.5.6 Reference: SwipePage card is canonical
+
+The full-screen swipe card on `frontend/src/pages/SwipePage.jsx` is the
+**canonical card text reference** for the entire app. Its overlay text uses
+the same primitives codified in §3.5.2:
+
+```jsx
+<h2 style={{ color:'#fff', fontSize:18, fontWeight:700, lineHeight:1.3, margin:'0 0 3px', /* 2-line clamp */ }}>
+  {card.title}
+</h2>
+<p style={{ color:'rgba(255,255,255,0.55)', fontSize:12, margin:'0 0 12px', fontStyle:'italic' }}>
+  {card.architects}
+</p>
+```
+
+When in doubt about typography on any other card surface (project cards in
+FirmProfile, board cards in UserProfile, recommendation cards in
+PostSwipeLanding, building cards in BoardDetail), open SwipePage.jsx and
+mirror its overlay text style. The full-screen size differs but **font size,
+weight, italic, color, and spacing should match exactly** so all card
+surfaces in the app feel like the same design system.
 
 #### 3.5.5 Card-back: swipe-style image gallery
 
