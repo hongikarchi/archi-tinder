@@ -49,6 +49,71 @@ def emit_event(event_type, session=None, user=None, **payload):
         return None
 
 
+def aggregate_session_clustering_stats(session_id):
+    """
+    Topic 06 / IMP-10 sub-task A: aggregate cluster_count_used + silhouette_score
+    across a session's confidence_update events for session_end payload.
+
+    Returns dict:
+        {
+          'cluster_count_distribution': dict[str, int],  # str keys for JSONField stability (e.g., {'1': 3, '2': 2})
+          'silhouette_score_p50': float | None,           # median; None if no scores
+        }
+
+    Returns safely-empty dict (distribution={}, p50=None) on:
+      - session_id is None
+      - no confidence_update events exist yet
+      - all events have silhouette_score=None (adaptive flag was off)
+      - any exception (function never raises)
+
+    Called from SwipeView (session_end path) after action_card like.
+    """
+    from apps.recommendation.models import SessionEvent
+
+    empty = {'cluster_count_distribution': {}, 'silhouette_score_p50': None}
+    if session_id is None:
+        return empty
+    try:
+        events = SessionEvent.objects.filter(
+            session_id=session_id,
+            event_type='confidence_update',
+        ).values_list('payload', flat=True)
+
+        distribution = {}
+        sil_scores = []
+        for payload in events:
+            if not isinstance(payload, dict):
+                continue
+            k = payload.get('cluster_count_used')
+            if k is not None:
+                sk = str(k)
+                distribution[sk] = distribution.get(sk, 0) + 1
+            sil = payload.get('silhouette_score')
+            if sil is not None:
+                sil_scores.append(float(sil))
+
+        p50 = None
+        if sil_scores:
+            sorted_sils = sorted(sil_scores)
+            n = len(sorted_sils)
+            mid = n // 2
+            if n % 2 == 1:
+                p50 = sorted_sils[mid]
+            else:
+                p50 = (sorted_sils[mid - 1] + sorted_sils[mid]) / 2.0
+
+        return {
+            'cluster_count_distribution': distribution,
+            'silhouette_score_p50': p50,
+        }
+    except Exception as exc:
+        logger.warning(
+            'aggregate_session_clustering_stats failed for session %s: %s',
+            session_id, exc,
+        )
+        return empty
+
+
 def emit_swipe_event(session, user, direction, card_id, intensity, rank_in_pool,
                      timing_breakdown, idempotency_key=None,
                      cache_hit=None, cache_source=None, cache_partial_miss_count=None,

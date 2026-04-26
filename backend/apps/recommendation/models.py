@@ -53,6 +53,12 @@ class AnalysisSession(models.Model):
     current_pool_tier        = models.IntegerField(default=1)  # 1=full filter, 2=drop geo/numeric, 3=random pool
     v_initial         = models.JSONField(null=True, blank=True)  # Topic 03 HyDE: 384-dim float list
     original_q_text   = models.TextField(null=True, blank=True)  # Topic 01 RRF: original raw_query for re-relaxation
+    # IMP-10 sub-task A / Spec v1.7 §11.1: top-10 id lists for bookmark provenance
+    # Populated by SessionResultView when each ranking channel runs.
+    # Null when the flag for that channel was off, or for sessions before migration 0013.
+    cosine_top10_ids  = models.JSONField(null=True, blank=True)  # first 10 cosine-ordered ids at result time
+    gemini_top10_ids  = models.JSONField(null=True, blank=True)  # first 10 Gemini-rerank ids (None when flag off)
+    dpp_top10_ids     = models.JSONField(null=True, blank=True)  # first 10 DPP-ordered ids (None when flag off)
     created_at        = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

@@ -19,6 +19,7 @@ _building_embedding_cache = {}             # building_id (str) -> np.ndarray (38
 _BUILDING_CACHE_MAX_SIZE = RC.get('pool_embedding_cache_max_size', 5000)  # ~5MB max; configurable via RECOMMENDATION setting
 _last_embedding_call_stats = None          # dict set per get_pool_embeddings call; see get_last_embedding_call_stats()
 _centroid_cache = {}
+_last_clustering_stats = None              # dict set per compute_taste_centroids call; see get_last_clustering_stats()
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -896,6 +897,63 @@ def get_last_embedding_call_stats():
     return dict(_last_embedding_call_stats) if _last_embedding_call_stats else None
 
 
+def get_last_clustering_stats():
+    """
+    Return stats dict for the most recent compute_taste_centroids call.
+    Returns None if not called yet in this process.
+
+    Keys (always present when not None):
+        cluster_count_used: int     -- actual k used (1 or 2)
+        silhouette_score: float|None -- weighted silhouette when adaptive-k ran; None otherwise
+        soft_relevance_used: bool   -- True when soft_relevance_enabled AND len(centroids)>1
+        n_likes_at_decision: int    -- number of like vectors at clustering time
+
+    IMP-10 sub-task A / Spec v1.8 §6 confidence_update telemetry.
+    """
+    return dict(_last_clustering_stats) if _last_clustering_stats else None
+
+
+def compute_corpus_rank(card_id, v_initial):
+    """
+    Topic 03 / IMP-10 sub-task A: corpus-wide cosine rank of a single card vs V_initial.
+
+    Uses pgvector ORDER BY <=> to rank the entire corpus once and extract the
+    bookmarked card's position.  Rank=1 means closest to v_initial.
+
+    Returns int (1-indexed rank), or None on any of:
+      - v_initial is None or wrong dimension
+      - card not found in corpus
+      - pgvector SQL exception (logs warning; does NOT crash caller)
+
+    Wraps in try/except per IMP-7 failure-cascade pattern: rank_corpus is
+    observability, not correctness -- bookmark must succeed even if this fails.
+    """
+    if v_initial is None or len(v_initial) != 384:
+        return None
+    try:
+        vec_str = _vec_to_pg(v_initial)
+        sql = (
+            'WITH ranked AS ('
+            '  SELECT building_id,'
+            '         ROW_NUMBER() OVER (ORDER BY embedding <=> %s::vector ASC) AS rank'
+            '  FROM architecture_vectors'
+            ')'
+            ' SELECT rank FROM ranked WHERE building_id = %s'
+        )
+        with connection.cursor() as cur:
+            cur.execute(sql, [vec_str, card_id])
+            row = cur.fetchone()
+        if row is None:
+            return None
+        return int(row[0])
+    except Exception as exc:
+        logger.warning(
+            'compute_corpus_rank: pgvector query failed for card %s (%s)',
+            card_id, exc,
+        )
+        return None
+
+
 def precompute_pool_embeddings(pool_ids):
     """
     IMP-7: Explicit precompute entry point for session-creation warming.
@@ -964,7 +1022,14 @@ def compute_taste_centroids(like_vectors, round_num):
     Compute taste cluster centroids with recency weighting.
     Returns (list_of_centroids, global_centroid) as numpy arrays.
     Called by views.py (convergence tracking) and algorithm_tester.py.
+
+    Side effect: sets module-level _last_clustering_stats on every call (including
+    cache hits) per IMP-10 / Spec v1.8 §6 Topic 06 telemetry requirements.
     """
+    global _last_clustering_stats
+
+    n_likes = len(like_vectors)
+
     cache_key = (
         tuple(
             (lv['round'], round(lv['embedding'][0], 6), round(lv['embedding'][191], 6), round(lv['embedding'][-1], 6))
@@ -973,17 +1038,42 @@ def compute_taste_centroids(like_vectors, round_num):
         round_num,
     )
     if cache_key in _centroid_cache:
-        return _centroid_cache[cache_key]
+        result = _centroid_cache[cache_key]
+        # Re-set stats from cached extended entry (3-tuple) or recompute minimally.
+        # Extended cache entries are (centroids, global_centroid, stats_dict).
+        # Legacy entries (from before this change) are 2-tuples; fall through to minimal stats.
+        if isinstance(result, tuple) and len(result) == 3:
+            centroids, global_centroid, cached_stats = result
+            _last_clustering_stats = dict(cached_stats)
+            return centroids, global_centroid
+        # 2-tuple legacy cache hit: recompute stats minimally (len(centroids) is available)
+        centroids, global_centroid = result
+        _last_clustering_stats = {
+            'cluster_count_used': len(centroids),
+            'silhouette_score': None,
+            'soft_relevance_used': RC.get('soft_relevance_enabled', False) and len(centroids) > 1,
+            'n_likes_at_decision': n_likes,
+        }
+        return centroids, global_centroid
 
     weighted_likes = _apply_recency_weights(like_vectors, round_num, RC['decay_rate'])
 
+    # Path 1: N=1 early return
     if len(weighted_likes) == 1:
         centroid = weighted_likes[0][0]
-        result = ([centroid], centroid)
+        centroids = [centroid]
+        stats = {
+            'cluster_count_used': 1,
+            'silhouette_score': None,
+            'soft_relevance_used': False,  # single centroid: soft branch guard (len>1) is False
+            'n_likes_at_decision': n_likes,
+        }
+        _last_clustering_stats = stats
+        result = (centroids, centroid, stats)
         if len(_centroid_cache) > 20:
             _centroid_cache.clear()
         _centroid_cache[cache_key] = result
-        return result
+        return centroids, centroid
 
     from sklearn.cluster import KMeans
     from sklearn.metrics import silhouette_samples
@@ -991,7 +1081,7 @@ def compute_taste_centroids(like_vectors, round_num):
     like_weights = np.array([w[1] for w in weighted_likes])
     global_centroid = _weighted_centroid(weighted_likes)
 
-    # Topic 06: silhouette-based adaptive k selection (flag-gated, N>=4 required)
+    # Path 2 & 3: Topic 06 silhouette-based adaptive k (flag-gated, N>=4 required)
     if RC.get('adaptive_k_clustering_enabled', False) and len(weighted_likes) >= 4:
         kmeans2 = KMeans(n_clusters=2, random_state=42, n_init=3)
         kmeans2.fit(like_embeddings, sample_weight=like_weights)
@@ -1010,21 +1100,37 @@ def compute_taste_centroids(like_vectors, round_num):
         else:
             sil2 = -1.0  # all points in one cluster; degenerate k=2
         if sil2 >= 0.15:
+            # Path 2: adaptive k=2
             centroids = list(kmeans2.cluster_centers_)
         else:
-            centroids = [global_centroid]  # degrade to k=1
-        result = (centroids, global_centroid)
+            # Path 3: adaptive degraded to k=1
+            centroids = [global_centroid]
+        stats = {
+            'cluster_count_used': len(centroids),
+            'silhouette_score': sil2,
+            'soft_relevance_used': RC.get('soft_relevance_enabled', False) and len(centroids) > 1,
+            'n_likes_at_decision': n_likes,
+        }
+        _last_clustering_stats = stats
+        result = (centroids, global_centroid, stats)
         if len(_centroid_cache) > 20:
             _centroid_cache.clear()
         _centroid_cache[cache_key] = result
-        return result
+        return centroids, global_centroid
 
-    # Default path: k=min(k_clusters, N) KMeans (flag off or N<4)
+    # Path 4: Default k=min(k_clusters, N) KMeans (flag off or N<4)
     k_clusters = min(RC['k_clusters'], len(weighted_likes))
     kmeans = KMeans(n_clusters=k_clusters, random_state=42, n_init=3)
     kmeans.fit(like_embeddings, sample_weight=like_weights)
     centroids = list(kmeans.cluster_centers_)
-    result = (centroids, global_centroid)
+    stats = {
+        'cluster_count_used': len(centroids),
+        'silhouette_score': None,  # silhouette only computed on adaptive path
+        'soft_relevance_used': RC.get('soft_relevance_enabled', False) and len(centroids) > 1,
+        'n_likes_at_decision': n_likes,
+    }
+    _last_clustering_stats = stats
+    result = (centroids, global_centroid, stats)
     if len(_centroid_cache) > 20:
         _centroid_cache.clear()
     _centroid_cache[cache_key] = result

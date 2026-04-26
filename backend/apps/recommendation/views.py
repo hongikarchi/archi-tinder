@@ -485,6 +485,8 @@ class SwipeView(APIView):
 
                 # §6 logging: session_end (user_confirm = user clicked "View results")
                 all_swipes = list(session.swipes.values_list('action', flat=True))
+                # IMP-10 / Spec v1.8 §6: aggregate per-session clustering stats
+                _clustering_agg = event_log.aggregate_session_clustering_stats(session.session_id)
                 event_log.emit_event(
                     'session_end',
                     session=session,
@@ -494,6 +496,8 @@ class SwipeView(APIView):
                     likes_count=all_swipes.count('like'),
                     loves_count=0,  # Sprint 3 A-1 will populate this from intensity field
                     dislikes_count=all_swipes.count('dislike'),
+                    cluster_count_distribution=_clustering_agg['cluster_count_distribution'],
+                    silhouette_score_p50=_clustering_agg['silhouette_score_p50'],
                 )
 
                 return Response({
@@ -912,6 +916,12 @@ class SwipeView(APIView):
                 if pref.size > 0:
                     top_idxs = np.argsort(np.abs(pref))[-3:][::-1]
                     dominant_attrs = [int(i) for i in top_idxs]
+            # IMP-10 / Spec v1.8 §6: 4 new Topic 06 clustering telemetry fields.
+            # Read stats set by compute_taste_centroids (called inside convergence path
+            # above at line ~646 via compute_taste_centroids, or via compute_mmr_next).
+            # We read immediately after card-selection to capture the most recent call;
+            # stats are set unconditionally by compute_taste_centroids on every execution.
+            _clustering_stats = engine.get_last_clustering_stats() or {}
             event_log.emit_event(
                 'confidence_update',
                 session=session,
@@ -919,6 +929,11 @@ class SwipeView(APIView):
                 confidence=round(float(confidence), 4),
                 dominant_attrs=dominant_attrs,
                 action=action,  # 'like' or 'dislike' -- Spec v1.2 dislike-bias telemetry
+                # Topic 06 fields (Spec v1.8 §6)
+                cluster_count_used=_clustering_stats.get('cluster_count_used'),
+                silhouette_score=_clustering_stats.get('silhouette_score'),
+                soft_relevance_used=_clustering_stats.get('soft_relevance_used', False),
+                n_likes_at_decision=_clustering_stats.get('n_likes_at_decision'),
             )
 
         return Response({
@@ -968,6 +983,15 @@ class SessionResultView(APIView):
         candidate_ids_cosine_order = [c['building_id'] for c in predicted_cards]
         rerank_rank_by_id = None  # populated only when Topic 02 ran with a real reorder
 
+        # IMP-10 sub-task A / Spec v1.7 §11.1: track top-10 sets for bookmark provenance.
+        # cosine_top10 is always captured here (pre-rerank); other channels only when their flag ran.
+        # Sessions created before migration 0013 have None for all three fields (backward-compat).
+        # Note: SessionResultView is a GET but writes these fields once per result view.
+        # Writes are idempotent (same result on repeated calls) -- no semantic problem.
+        _cosine_top10 = candidate_ids_cosine_order[:10]
+        _gemini_top10 = None   # populated below only when rerank actually reordered
+        _dpp_top10 = None       # populated below only when DPP ran
+
         # Topic 02: Gemini setwise rerank (session-end, off swipe hot path)
         if RC.get('gemini_rerank_enabled', False) and len(predicted_cards) >= 2:
             candidate_metadata = [
@@ -988,8 +1012,11 @@ class SessionResultView(APIView):
             # Capture both ranks for potential RRF fusion (Topic 02 ∩ 04 Option α).
             # Sentinel: only set rerank_rank_by_id when rerank produced a real reorder.
             # If rerank returned input order (failure / no-op), DPP falls back to cosine q.
+            # IMP-10 fix: _gemini_top10 reflects "Gemini ranked it" regardless of whether
+            # order changed -- provenance = "Gemini ran", not "Gemini moved it".
             if new_order and set(new_order) == set(candidate_ids_cosine_order):
                 card_by_id = {c['building_id']: c for c in predicted_cards}
+                _gemini_top10 = new_order[:10]  # IMP-10: store Gemini top-10 for provenance
                 if new_order != candidate_ids_cosine_order:
                     rerank_rank_by_id = {bid: i + 1 for i, bid in enumerate(new_order)}
                 predicted_cards = [card_by_id[bid] for bid in new_order if bid in card_by_id]
@@ -1031,7 +1058,27 @@ class SessionResultView(APIView):
                 # Standalone Topic 04: q derived from max centroid cosine inside compute_dpp_topk
                 dpp_order = engine.compute_dpp_topk(predicted_cards, session.like_vectors, k=k)
 
+            _dpp_top10 = dpp_order[:10]  # IMP-10: store DPP top-10 for provenance
             predicted_cards = [card_by_id[bid] for bid in dpp_order if bid in card_by_id]
+
+        # IMP-10: persist top-10 lists for bookmark provenance lookup.
+        # Only update if values changed (guard against repeated GET calls doing needless writes).
+        _top10_fields_changed = (
+            session.cosine_top10_ids != _cosine_top10
+            or session.gemini_top10_ids != _gemini_top10
+            or session.dpp_top10_ids != _dpp_top10
+        )
+        if _top10_fields_changed:
+            try:
+                session.cosine_top10_ids = _cosine_top10
+                session.gemini_top10_ids = _gemini_top10
+                session.dpp_top10_ids = _dpp_top10
+                session.save(update_fields=['cosine_top10_ids', 'gemini_top10_ids', 'dpp_top10_ids'])
+            except Exception as _exc:
+                logger.warning(
+                    'SessionResultView: failed to persist top10 lists for session %s: %s',
+                    session.session_id, _exc,
+                )
 
         return Response({
             'session_id':          str(session.session_id),
@@ -1216,19 +1263,40 @@ class ProjectBookmarkView(APIView):
         # --- Compute rank_zone per Spec v1.2 §6 implementation requirement #4 ---
         rank_zone = 'primary' if rank <= 10 else 'secondary'
 
-        # --- rank_corpus: deferred placeholder (Investigation 08 / V_initial pipeline) ---
-        # Computed offline from session.preference_vector + bookmark timestamp, or via
-        # future pgvector ORDER BY embedding <=> v_initial LIMIT N query once Topic 03 ships.
+        # --- rank_corpus: IMP-10 sub-task A (Spec v1.7 §11.1 / Investigation 08 H1) ---
+        # When the session has v_initial (HyDE was on), compute the corpus-wide cosine rank
+        # of this card vs the HyDE vector. pgvector <=> ranking in SQL; O(N) corpus scan.
+        # On any exception: rank_corpus stays None (observability, never blocks bookmark).
+        # Sessions without v_initial (HyDE flag off) → rank_corpus stays None as before.
         rank_corpus = None
+        if session is not None and getattr(session, 'v_initial', None) is not None:
+            try:
+                rank_corpus = engine.compute_corpus_rank(card_id, session.v_initial)
+            except Exception as _rank_exc:
+                # Telemetry failure must never block the bookmark
+                logger.warning(
+                    'ProjectBookmarkView: compute_corpus_rank failed for card %s: %s',
+                    card_id, _rank_exc,
+                )
+                rank_corpus = None
 
-        # --- Provenance booleans per Spec v1.2 (Topic 02/04 uplift attribution) ---
-        # Default False for Sprint 4; frontend can pass actual values in a follow-up
-        # once it tracks per-card source from the result composition pipeline.
-        provenance = {
-            'in_cosine_top10': False,
-            'in_gemini_top10': False,
-            'in_dpp_top10': False,
-        }
+        # --- Provenance booleans per Spec v1.2 / IMP-10 sub-task A (Topic 02/04 attribution) ---
+        # Read from session.cosine_top10_ids / gemini_top10_ids / dpp_top10_ids set by
+        # SessionResultView at result-page load time.
+        # Legacy sessions (created before migration 0013) have None → all False (same as before).
+        # New sessions have accurate provenance once SessionResultView has been called.
+        if session is not None:
+            provenance = {
+                'in_cosine_top10': card_id in (session.cosine_top10_ids or []),
+                'in_gemini_top10': card_id in (session.gemini_top10_ids or []),
+                'in_dpp_top10': card_id in (session.dpp_top10_ids or []),
+            }
+        else:
+            provenance = {
+                'in_cosine_top10': False,
+                'in_gemini_top10': False,
+                'in_dpp_top10': False,
+            }
 
         # --- Emit bookmark SessionEvent ---
         event_log.emit_event(
