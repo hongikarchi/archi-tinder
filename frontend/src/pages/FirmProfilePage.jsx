@@ -93,7 +93,7 @@ function StatsCard({ followingCount, followerCount }) {
     }}>
       <span style={{
         display: 'inline-block',
-        color: 'var(--color-text-dimmer)', fontSize: 11, fontWeight: 700,
+        color: 'var(--color-text-dimmer)', fontSize: 11, fontWeight: 600,
         letterSpacing: '0.12em', textTransform: 'uppercase',
       }}>
         Stats
@@ -104,13 +104,13 @@ function StatsCard({ followingCount, followerCount }) {
       }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <span style={{
-            color: 'var(--color-text)', fontSize: 28, fontWeight: 800, lineHeight: 1,
+            color: 'var(--color-text)', fontSize: 28, fontWeight: 700, lineHeight: 1,
             letterSpacing: '-0.01em',
           }}>
             {followingCount}
           </span>
           <span style={{
-            color: 'var(--color-text-dimmer)', fontSize: 11, fontWeight: 700,
+            color: 'var(--color-text-dimmer)', fontSize: 11, fontWeight: 600,
             letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 6,
           }}>
             Following
@@ -119,13 +119,13 @@ function StatsCard({ followingCount, followerCount }) {
         <div style={{ width: 1, height: 40, background: 'var(--color-border-soft)' }} />
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <span style={{
-            color: 'var(--color-text)', fontSize: 28, fontWeight: 800, lineHeight: 1,
+            color: 'var(--color-text)', fontSize: 28, fontWeight: 700, lineHeight: 1,
             letterSpacing: '-0.01em',
           }}>
             {followerCount}
           </span>
           <span style={{
-            color: 'var(--color-text-dimmer)', fontSize: 11, fontWeight: 700,
+            color: 'var(--color-text-dimmer)', fontSize: 11, fontWeight: 600,
             letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 6,
           }}>
             Followers
@@ -187,7 +187,7 @@ function AboutFlipCard({ description, foundedYear, location }) {
           <div style={{ position: 'relative', zIndex: 1 }}>
             <span style={{
               display: 'inline-block',
-              color: '#ec4899', fontSize: 11, fontWeight: 700,
+              color: '#ec4899', fontSize: 11, fontWeight: 600,
               letterSpacing: '0.12em', textTransform: 'uppercase',
               marginBottom: 10,
             }}>
@@ -360,7 +360,7 @@ export default function FirmProfilePage() {
           style={{
             color: 'var(--color-text)',
             fontSize: 17,
-            fontWeight: 800,
+            fontWeight: 700,
             margin: 0,
             letterSpacing: '-0.01em',
             flex: 1,
@@ -456,8 +456,8 @@ export default function FirmProfilePage() {
               <h1
                 style={{
                   color: 'var(--color-text)',
-                  fontSize: 26,
-                  fontWeight: 800,
+                  fontSize: 28,
+                  fontWeight: 700,
                   margin: 0,
                   lineHeight: 1.2,
                   letterSpacing: '-0.01em',
@@ -603,13 +603,13 @@ export default function FirmProfilePage() {
           marginBottom: 20, padding: '0 4px',
         }}>
           <h3 style={{
-            color: 'var(--color-text)', fontSize: 20, fontWeight: 800,
+            color: 'var(--color-text)', fontSize: 20, fontWeight: 700,
             margin: 0, letterSpacing: '-0.01em',
           }}>
             Projects
           </h3>
           <span style={{
-            color: 'var(--color-text-dimmer)', fontSize: 13, fontWeight: 700,
+            color: 'var(--color-text-dimmer)', fontSize: 13, fontWeight: 600,
           }}>
             {MOCK_OFFICE.projects.length}
           </span>
@@ -637,13 +637,13 @@ export default function FirmProfilePage() {
               marginBottom: 20, padding: '0 4px',
             }}>
               <h3 style={{
-                color: 'var(--color-text)', fontSize: 20, fontWeight: 800,
+                color: 'var(--color-text)', fontSize: 20, fontWeight: 700,
                 margin: 0, letterSpacing: '-0.01em',
               }}>
                 Featured Articles
               </h3>
               <span style={{
-                color: 'var(--color-text-dimmer)', fontSize: 13, fontWeight: 700,
+                color: 'var(--color-text-dimmer)', fontSize: 13, fontWeight: 600,
               }}>
                 {MOCK_OFFICE.articles.length}
               </span>
@@ -663,10 +663,37 @@ export default function FirmProfilePage() {
 /* ----------------------------- Sub-components ----------------------------- */
 
 /**
- * ProjectCard — image-overlay card per DESIGN.md §3.5.1 + §3.5.2 + §3.5.3
- *   - No default border (transparent), hover lifts -4px and adds pink border
- *   - Title 18/700 + meta 12 italic rgba(255,255,255,0.55) "{city} · {year}"
- *   - Corner chip top-right: program (default variant — black/45 + blur)
+ * InfoCol — local primitive for §3.5.2 RICH PATTERN 2-col info grid.
+ *   Caps label (10/600 uppercase 0.06em) + single-line ellipsis value (13/600 white).
+ */
+function InfoCol({ label, value }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <span style={{
+        color: 'rgba(255,255,255,0.5)',
+        fontSize: 10, fontWeight: 600,
+        letterSpacing: '0.06em', textTransform: 'uppercase',
+        marginBottom: 2,
+      }}>
+        {label}
+      </span>
+      <span style={{
+        color: '#fff', fontSize: 13, fontWeight: 600,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>
+        {value}
+      </span>
+    </div>
+  )
+}
+
+
+/**
+ * ProjectCard — image-overlay card per DESIGN.md §3.5.1 + §3.5.2 RICH PATTERN.
+ *   - No default border (transparent), hover lifts -4px and adds pink border (§3.5.1).
+ *   - Title 18/700 + "Project" sub-italic + divider + 2-col CITY/YEAR grid (§3.5.2 RICH).
+ *   - NO corner chip per §3.5.3 — program is metadata, not status; chips are reserved for
+ *     binary status state. CITY+YEAR in the info grid carry the relevant metadata.
  */
 function ProjectCard({ project }) {
   return (
@@ -715,28 +742,7 @@ function ProjectCard({ project }) {
         aria-hidden="true"
       />
 
-      {/* §3.5.3 corner chip — default variant (program label) */}
-      <div
-        style={{
-          position: 'absolute',
-          top: 12,
-          right: 12,
-          background: 'rgba(0,0,0,0.45)',
-          backdropFilter: 'blur(10px)',
-          WebkitBackdropFilter: 'blur(10px)',
-          padding: '6px 10px',
-          borderRadius: 999,
-          fontSize: 11,
-          fontWeight: 700,
-          color: '#fff',
-          letterSpacing: '0.04em',
-          textTransform: 'uppercase',
-        }}
-      >
-        {project.program}
-      </div>
-
-      {/* §3.5.2 text hierarchy: title 18/700 + meta 12 italic rgba(255,255,255,0.55) */}
+      {/* §3.5.2 RICH PATTERN: title + "Project" sub-italic + divider + 2-col CITY/YEAR grid */}
       <div
         style={{
           position: 'absolute',
@@ -767,11 +773,16 @@ function ProjectCard({ project }) {
             color: 'rgba(255,255,255,0.55)',
             fontSize: 12,
             fontStyle: 'italic',
-            margin: 0,
+            margin: '0 0 12px',
           }}
         >
-          {project.city} · {project.year}
+          Project
         </p>
+        <div style={{ height: 1, background: 'rgba(255,255,255,0.1)', marginBottom: 12 }} />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px' }}>
+          <InfoCol label="CITY" value={project.city} />
+          <InfoCol label="YEAR" value={project.year} />
+        </div>
       </div>
     </div>
   )
@@ -817,7 +828,7 @@ function ArticleCard({ article }) {
         style={{
           color: 'var(--color-text)',
           fontSize: 15,
-          fontWeight: 700,
+          fontWeight: 600,
           margin: 0,
           lineHeight: 1.4,
           display: '-webkit-box',
@@ -844,7 +855,7 @@ function ArticleCard({ article }) {
             background: 'rgba(236,72,153,0.12)',
             color: '#ec4899',
             fontSize: 11,
-            fontWeight: 700,
+            fontWeight: 600,
             padding: '4px 10px',
             borderRadius: 999,
             letterSpacing: '0.02em',

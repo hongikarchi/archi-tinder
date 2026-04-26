@@ -146,18 +146,21 @@ onMouseLeave={e => {
 **Mandatory rules:**
 - **NO default light border.** The border lives only in hover state (brand pink at 55% opacity). Resting state is `transparent`.
 - Always include `boxShadow: '0 10px 25px rgba(0,0,0,0.3)'` for depth in dark mode.
-- Hover behavior: lift `-4px` AND border to brand pink. Duration `0.25s` cubic-bezier(0.4,0,0.2,1). NO scale.
+- Hover behavior **applies to non-flip cards only** (§3.5.4 flip cards omit hover decoration — interaction is click-to-flip, not hover): lift `-4px` AND border to brand pink. Duration `0.25s` cubic-bezier(0.4,0,0.2,1). NO scale.
 - Image fills the card (`width:100%; height:100%; object-fit:cover; position:absolute; inset:0`).
 - Bottom gradient overlay is required for legibility:
   `linear-gradient(to top, rgba(0,0,0,0.93) 0%, rgba(0,0,0,0.4) 50%, transparent 100%)`
 
-#### 3.5.2 Card text hierarchy (overlay)
+#### 3.5.2 Card text hierarchy (overlay) — RICH PATTERN (default)
 
-Use this exact hierarchy on every image-overlay card overlay. No additional
-chips below the meta line — the overlay stays simple and scannable.
+Use this exact rich hierarchy on every image-overlay card. The pattern is:
+**title + content-type sub-italic + divider + 2-column info grid**. This
+gives cards visual weight and information density without overcrowding the
+overlay. Adapt the 2-col content per card type (Created/Saved for boards,
+City/Year for projects, etc.).
 
 ```jsx
-<div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '16px 18px 20px' }}>
+<div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '16px 18px 20px' }}>
   <h2 style={{
     color: '#fff',
     fontSize: 18,
@@ -170,51 +173,124 @@ chips below the meta line — the overlay stays simple and scannable.
     overflow: 'hidden',
     textOverflow: 'ellipsis',
   }}>
-    {title}
+    {title}      {/* board.name, project.name_en, etc. */}
   </h2>
+
   <p style={{
     color: 'rgba(255,255,255,0.55)',
     fontSize: 12,
+    margin: '0 0 12px',
     fontStyle: 'italic',
-    margin: 0,
   }}>
-    {meta}      {/* "OMA · 2004" or "Seattle · 2004" or "Kim Minseo" */}
+    {subLabel}   {/* "Curated Board" / "Project" / "Building" — content-type sub-italic */}
   </p>
+
+  <div style={{ height: 1, background: 'rgba(255,255,255,0.1)', marginBottom: 12 }} />
+
+  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px' }}>
+    <InfoCol label={leftLabel} value={leftValue} />     {/* "CREATED" / "CITY" */}
+    <InfoCol label={rightLabel} value={rightValue} />   {/* "SAVED" / "YEAR" */}
+  </div>
 </div>
 ```
 
-- Title: 18px, weight 700, white, **2-line clamp**.
-- Meta: 12px, italic, `rgba(255,255,255,0.55)` — secondary info (architect · year, year · city, owner display_name, etc.).
-- Padding `16px 18px 20px` (slightly more bottom).
+Where `InfoCol`:
 
-#### 3.5.3 Corner chips (optional)
+```jsx
+<div style={{ display: 'flex', flexDirection: 'column' }}>
+  <span style={{
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 10,
+    fontWeight: 600,
+    letterSpacing: '0.06em',
+    textTransform: 'uppercase',
+    marginBottom: 2,
+  }}>
+    {label}     {/* "CREATED" / "SAVED" / "CITY" / "YEAR" */}
+  </span>
+  <span style={{
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: 600,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  }}>
+    {value}
+  </span>
+</div>
+```
+
+**Rules:**
+- Title: 18px / **weight 700** / white / 2-line clamp. **Do NOT exceed 700.**
+- Sub-italic: 12px / italic / `rgba(255,255,255,0.55)` / no weight bump. Content-type label only ("Curated Board", "Project", "Building"), NOT metadata.
+- Divider: thin 1px line `rgba(255,255,255,0.1)` between sub-italic and info grid.
+- Info grid: 2 columns. **Caps label 10px / weight 600 (NOT 700)** with letter-spacing 0.06em + uppercase. Value 13px / weight 600 / white / single-line ellipsis.
+- Padding `16px 18px 20px` (slightly more bottom).
+- **Do NOT collapse to a single meta line** — that loses the information density that makes cards feel substantive. The 2-col grid is the standard.
+
+**Single-line variant (use sparingly):** for very small cards (< 200px wide) or contexts where 2-col is overkill, fall back to title + sub-italic only (no divider, no grid). This is a downgrade, not the default.
+
+#### 3.5.3 Corner chips (optional, sparing)
+
+**Use chips only when conveying meaningful state — NOT decoration.** When
+the same information already appears in the §3.5.2 info grid, do not also
+add a chip. Default is no chip; add one only when state is binary and
+status-like (private, matched, etc.).
 
 Top-right placement only. Single chip per card (no chip stacking).
 
+**Status: PRIVATE (icon-only, subtle):**
+
+```jsx
+{visibility === 'private' && (
+  <div style={{
+    position: 'absolute', top: 16, right: 16,
+    background: 'rgba(0,0,0,0.4)',
+    backdropFilter: 'blur(10px)',
+    WebkitBackdropFilter: 'blur(10px)',
+    padding: 6,
+    borderRadius: '50%',
+  }}>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+         stroke="rgba(255,255,255,0.85)" strokeWidth="2"
+         strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+      <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+    </svg>
+  </div>
+)}
+```
+
+- Small circle, subtle dark blur, white-ish lock icon.
+- **Public boards show NO chip** — public is the default; only flag the exception.
+
+**Match score (small, subtle):**
+
 ```jsx
 <div style={{
-  position: 'absolute',
-  top: 12,
-  right: 12,
-  background: 'rgba(0,0,0,0.45)',
+  position: 'absolute', top: 12, right: 12,
+  background: 'rgba(0,0,0,0.55)',
   backdropFilter: 'blur(10px)',
   WebkitBackdropFilter: 'blur(10px)',
-  padding: '6px 10px',
+  padding: '4px 9px',
   borderRadius: 999,
   fontSize: 11,
-  fontWeight: 700,
+  fontWeight: 600,
   color: '#fff',
-  letterSpacing: '0.04em',
-  textTransform: 'uppercase',
 }}>
-  {label}
+  {Math.round(score * 100)}% match
 </div>
 ```
 
-**Variants by purpose:**
-- **Default (program label, year):** background `rgba(0,0,0,0.45)` + blur, white text.
-- **Branded (PUBLIC, match score):** background `rgba(236,72,153,0.85)` + blur, white text.
-- **Destructive (PRIVATE):** background `rgba(239,68,68,0.85)` + blur, white text.
+- Subtle dark backdrop, no branded color flood.
+- Brand pink is reserved for primary CTAs and accent moments (active states, focus, gradient text). Don't burn it on small chips — that creates visual fatigue.
+
+**Forbidden:**
+- Branded color floods on chips (e.g., `rgba(236,72,153,0.85)` filling a corner pill) — too loud, conflicts with the brand-as-accent rule.
+- Public/Public-equivalent chips when public is the default state.
+- Stacking multiple chips (use one max).
+- Decorative chips that repeat info already in §3.5.2 info grid.
 
 #### 3.5.4 Flip card (3D rotateY)
 
@@ -259,6 +335,7 @@ label; back: full detail). Click flips, click again unflips.
 - `transformStyle: 'preserve-3d'` on the rotating layer.
 - Both faces use `backfaceVisibility: 'hidden'` (+ `-webkit-` prefix).
 - Stop propagation for nested buttons via `e.target.closest('button')` early-return.
+- **NO hover decoration on flip cards.** The §3.5.1 hover (lift + pink border) does NOT apply to flip cards. The card itself is the affordance — clicking it flips. A pink border that lingers behind a rotating card looks awkward (visible during and after rotation). Flip cards are interaction-driven, not hover-driven; the visual feedback is the rotation itself.
 
 #### 3.5.5 Card-back: swipe-style image gallery
 

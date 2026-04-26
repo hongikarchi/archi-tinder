@@ -57,20 +57,46 @@ const MOCK_USER = {
 
 
 /**
+ * InfoCol — local primitive for §3.5.2 RICH PATTERN 2-col info grid.
+ *   Caps label (10/600 uppercase 0.06em) + single-line ellipsis value (13/600 white).
+ */
+function InfoCol({ label, value }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <span style={{
+        color: 'rgba(255,255,255,0.5)',
+        fontSize: 10, fontWeight: 600,
+        letterSpacing: '0.06em', textTransform: 'uppercase',
+        marginBottom: 2,
+      }}>
+        {label}
+      </span>
+      <span style={{
+        color: '#fff', fontSize: 13, fontWeight: 600,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>
+        {value}
+      </span>
+    </div>
+  )
+}
+
+
+/**
  * BoardCard — flip card per DESIGN.md §3.5.4
- *   Front face: image-overlay card per §3.5.1 + §3.5.2 + §3.5.3 (PUBLIC=branded / PRIVATE=destructive chip)
- *   Back face: swipe-style horizontal full-bleed gallery per §3.5.5 + persistent "View Gallery" action bar
+ *   Front face: image-overlay card per §3.5.1 + §3.5.2 RICH PATTERN
+ *               (title + "Curated Board" sub-italic + divider + 2-col CREATED/SAVED grid)
+ *               + §3.5.3 PRIVATE-only icon-lock chip (PUBLIC = no chip).
+ *   Back face: swipe-style horizontal full-bleed gallery per §3.5.5 + persistent "View Gallery" action bar.
  *
- * Hover state lives on the OUTER perspective container so it doesn't desync from the flip transform.
+ * NO hover decoration on the outer wrapper per §3.5.4 — flip cards are interaction-driven,
+ * not hover-driven. A pink border lingering behind a rotating card looks awkward.
  */
 function BoardCard({ board }) {
   const [isFlipped, setIsFlipped] = useState(false)
   const navigate = useNavigate()
 
-  const isPublic = board.visibility === 'public'
-  // §3.5.3 variants: PUBLIC = branded (rgba(236,72,153,0.85) + blur + white text)
-  //                  PRIVATE = destructive (rgba(239,68,68,0.85) + blur + white text)
-  const chipBg = isPublic ? 'rgba(236,72,153,0.85)' : 'rgba(239,68,68,0.85)'
+  const isPrivate = board.visibility === 'private'
 
   return (
     <div
@@ -80,22 +106,11 @@ function BoardCard({ board }) {
         aspectRatio: '3/4',
         cursor: 'pointer',
         userSelect: 'none', WebkitUserSelect: 'none', touchAction: 'manipulation',
-        // §3.5.1 hover: outer wrapper carries border + lift so it's flush with rounded faces
-        border: '1px solid transparent',
-        borderRadius: 20,
-        transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+        // §3.5.4: NO hover on flip cards — no border, no transition on outer wrapper.
       }}
       onClick={(e) => {
         if (e.target.closest('button')) return
         setIsFlipped(!isFlipped)
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.transform = 'translateY(-4px)'
-        e.currentTarget.style.borderColor = 'rgba(236,72,153,0.55)'
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.transform = 'translateY(0)'
-        e.currentTarget.style.borderColor = 'transparent'
       }}
     >
       <div style={{
@@ -106,7 +121,7 @@ function BoardCard({ board }) {
         transformStyle: 'preserve-3d',
         transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)'
       }}>
-        {/* FRONT FACE — image-overlay per §3.5.1 + §3.5.2 + §3.5.3 */}
+        {/* FRONT FACE — image-overlay per §3.5.1 + §3.5.2 RICH PATTERN + §3.5.3 (PRIVATE-only icon chip) */}
         <div style={{
           position: 'absolute', inset: 0,
           backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden',
@@ -132,20 +147,28 @@ function BoardCard({ board }) {
             pointerEvents: 'none',
           }} />
 
-          {/* §3.5.3 corner chip — branded (PUBLIC) / destructive (PRIVATE) */}
-          <div style={{
-            position: 'absolute', top: 12, right: 12,
-            background: chipBg,
-            backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
-            padding: '6px 10px', borderRadius: 999,
-            fontSize: 11, fontWeight: 700,
-            color: '#fff',
-            letterSpacing: '0.04em', textTransform: 'uppercase',
-          }}>
-            {isPublic ? 'Public' : 'Private'}
-          </div>
+          {/* §3.5.3 PRIVATE-only icon chip — small dark blur circle, white-ish lock SVG.
+              PUBLIC renders nothing (public is the default; only flag the exception). */}
+          {isPrivate && (
+            <div style={{
+              position: 'absolute', top: 16, right: 16,
+              background: 'rgba(0,0,0,0.4)',
+              backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+              padding: 6, borderRadius: '50%',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+            aria-label="Private board"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                   stroke="rgba(255,255,255,0.85)" strokeWidth="2"
+                   strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+              </svg>
+            </div>
+          )}
 
-          {/* §3.5.2 text hierarchy: title 18/700 + meta 12 italic rgba(255,255,255,0.55) */}
+          {/* §3.5.2 RICH PATTERN: title + "Curated Board" sub-italic + divider + 2-col CREATED/SAVED grid */}
           <div style={{
             position: 'absolute', bottom: 0, left: 0, right: 0,
             padding: '16px 18px 20px',
@@ -159,11 +182,16 @@ function BoardCard({ board }) {
               {board.name}
             </h2>
             <p style={{
-              color: 'rgba(255,255,255,0.55)', fontSize: 12, fontStyle: 'italic',
-              margin: 0,
+              color: 'rgba(255,255,255,0.55)', fontSize: 12,
+              margin: '0 0 12px', fontStyle: 'italic',
             }}>
-              {board.building_count} photos · {board.date}
+              Curated Board
             </p>
+            <div style={{ height: 1, background: 'rgba(255,255,255,0.1)', marginBottom: 12 }} />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px' }}>
+              <InfoCol label="CREATED" value={board.date} />
+              <InfoCol label="SAVED" value={`${board.building_count} photos`} />
+            </div>
           </div>
         </div>
 
@@ -223,7 +251,7 @@ function BoardCard({ board }) {
                 padding: '10px 14px', borderRadius: 12,
                 background: 'rgba(255,255,255,0.10)',
                 border: '1px solid rgba(255,255,255,0.18)',
-                color: '#fff', fontSize: 13, fontWeight: 700,
+                color: '#fff', fontSize: 13, fontWeight: 600,
                 cursor: 'pointer', fontFamily: 'inherit',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                 transition: 'background 0.18s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -302,7 +330,7 @@ function PersonaFlipCard({ persona, mbti }) {
           <div style={{ position: 'relative', zIndex: 1 }}>
             <span style={{
               display: 'inline-block',
-              color: '#ec4899', fontSize: 11, fontWeight: 700,
+              color: '#ec4899', fontSize: 11, fontWeight: 600,
               letterSpacing: '0.12em', textTransform: 'uppercase',
               marginBottom: 10,
             }}>
@@ -310,7 +338,7 @@ function PersonaFlipCard({ persona, mbti }) {
             </span>
             <h3 style={{
               margin: 0,
-              fontSize: 22, fontWeight: 800, lineHeight: 1.2,
+              fontSize: 22, fontWeight: 700, lineHeight: 1.2,
               letterSpacing: '-0.01em',
               background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
               WebkitBackgroundClip: 'text',
@@ -356,7 +384,7 @@ function PersonaFlipCard({ persona, mbti }) {
             <div style={{ marginBottom: 10 }}>
               <span style={{
                 display: 'block',
-                color: 'var(--color-text-dimmer)', fontSize: 10, fontWeight: 700,
+                color: 'var(--color-text-dimmer)', fontSize: 10, fontWeight: 600,
                 letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6,
               }}>
                 Styles
@@ -368,7 +396,7 @@ function PersonaFlipCard({ persona, mbti }) {
                     padding: '4px 10px', borderRadius: 999,
                     background: 'rgba(236,72,153,0.15)',
                     color: '#ec4899',
-                    fontSize: 11, fontWeight: 700,
+                    fontSize: 11, fontWeight: 600,
                   }}>
                     {s}
                   </span>
@@ -381,7 +409,7 @@ function PersonaFlipCard({ persona, mbti }) {
             <div>
               <span style={{
                 display: 'block',
-                color: 'var(--color-text-dimmer)', fontSize: 10, fontWeight: 700,
+                color: 'var(--color-text-dimmer)', fontSize: 10, fontWeight: 600,
                 letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6,
               }}>
                 Programs
@@ -393,7 +421,7 @@ function PersonaFlipCard({ persona, mbti }) {
                     padding: '4px 10px', borderRadius: 999,
                     background: 'rgba(236,72,153,0.15)',
                     color: '#ec4899',
-                    fontSize: 11, fontWeight: 700,
+                    fontSize: 11, fontWeight: 600,
                   }}>
                     {p}
                   </span>
@@ -406,7 +434,7 @@ function PersonaFlipCard({ persona, mbti }) {
           {mbti && (
             <span style={{
               position: 'absolute', bottom: 12, right: 14,
-              color: 'var(--color-text-dimmer)', fontSize: 10, fontWeight: 700,
+              color: 'var(--color-text-dimmer)', fontSize: 10, fontWeight: 600,
               letterSpacing: '0.08em',
             }}>
               {mbti}
@@ -436,7 +464,7 @@ function StatsCard({ followingCount, followerCount }) {
     }}>
       <span style={{
         display: 'inline-block',
-        color: 'var(--color-text-dimmer)', fontSize: 11, fontWeight: 700,
+        color: 'var(--color-text-dimmer)', fontSize: 11, fontWeight: 600,
         letterSpacing: '0.12em', textTransform: 'uppercase',
       }}>
         Stats
@@ -447,13 +475,13 @@ function StatsCard({ followingCount, followerCount }) {
       }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <span style={{
-            color: 'var(--color-text)', fontSize: 28, fontWeight: 800, lineHeight: 1,
+            color: 'var(--color-text)', fontSize: 28, fontWeight: 700, lineHeight: 1,
             letterSpacing: '-0.01em',
           }}>
             {followingCount}
           </span>
           <span style={{
-            color: 'var(--color-text-dimmer)', fontSize: 11, fontWeight: 700,
+            color: 'var(--color-text-dimmer)', fontSize: 11, fontWeight: 600,
             letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 6,
           }}>
             Following
@@ -462,13 +490,13 @@ function StatsCard({ followingCount, followerCount }) {
         <div style={{ width: 1, height: 40, background: 'var(--color-border-soft)' }} />
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <span style={{
-            color: 'var(--color-text)', fontSize: 28, fontWeight: 800, lineHeight: 1,
+            color: 'var(--color-text)', fontSize: 28, fontWeight: 700, lineHeight: 1,
             letterSpacing: '-0.01em',
           }}>
             {followerCount}
           </span>
           <span style={{
-            color: 'var(--color-text-dimmer)', fontSize: 11, fontWeight: 700,
+            color: 'var(--color-text-dimmer)', fontSize: 11, fontWeight: 600,
             letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 6,
           }}>
             Followers
@@ -543,7 +571,7 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
         </button>
 
         <h2 style={{
-          color: 'var(--color-text)', fontSize: 17, fontWeight: 800,
+          color: 'var(--color-text)', fontSize: 17, fontWeight: 700,
           margin: 0, letterSpacing: '-0.01em',
         }}>
           Profile
@@ -640,7 +668,7 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
 
             {/* Name (no MBTI chip — moved into persona flip card back face) */}
             <h1 style={{
-              color: 'var(--color-text)', fontSize: 26, fontWeight: 800,
+              color: 'var(--color-text)', fontSize: 24, fontWeight: 700,
               margin: '0 0 8px', lineHeight: 1.2, letterSpacing: '-0.01em',
             }}>
               {MOCK_USER.display_name}
@@ -757,7 +785,7 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
                 ? 'var(--color-surface-2)'
                 : 'linear-gradient(135deg, #ec4899, #f43f5e)',
               color: isFollowing ? 'var(--color-text-2)' : '#fff',
-              fontSize: 15, fontWeight: 700,
+              fontSize: 15, fontWeight: 600,
               border: isFollowing ? '1px solid var(--color-border)' : 'none',
               cursor: 'pointer',
               marginBottom: 32,
@@ -779,13 +807,13 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
           marginBottom: 20, padding: '0 4px',
         }}>
           <h3 style={{
-            color: 'var(--color-text)', fontSize: 20, fontWeight: 800,
+            color: 'var(--color-text)', fontSize: 20, fontWeight: 700,
             margin: 0, letterSpacing: '-0.01em',
           }}>
             Curated Boards
           </h3>
           <span style={{
-            color: 'var(--color-text-dimmer)', fontSize: 13, fontWeight: 700,
+            color: 'var(--color-text-dimmer)', fontSize: 13, fontWeight: 600,
           }}>
             {MOCK_USER.boards.length}
           </span>
