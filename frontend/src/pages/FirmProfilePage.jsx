@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 
 // TODO: Replace with API call
@@ -41,6 +42,8 @@ const MOCK_OFFICE = {
   logo_url: 'https://images.unsplash.com/photo-1616423640778-28d1b53229bd?w=400&q=80',
   location: 'Rotterdam, Netherlands',
   founded_year: 1975,
+  follower_count: 1247,        // TODO(claude): backend should add follower_count to /api/v1/offices/${officeId}/ Firm/Office Profile contract
+  following_count: 38,         // TODO(claude): backend should add following_count to /api/v1/offices/${officeId}/ Firm/Office Profile contract
   projects: Array.from({ length: 24 }).map((_, i) => ({
     building_id: `B${String(i + 1).padStart(5, '0')}`,
     name_en: PROJECT_NAMES[i % 10] + (i >= 10 ? ` Phase ${Math.floor(i / 10) + 1}` : ''),
@@ -71,6 +74,210 @@ const MOCK_OFFICE = {
   ],
 }
 
+
+/**
+ * StatsCard — Following / Followers; mirrors AboutFlipCard footprint in mid-section row.
+ *   Identical structure to UserProfilePage's StatsCard for cross-page consistency.
+ */
+function StatsCard({ followingCount, followerCount }) {
+  return (
+    <div style={{
+      flex: '1 1 280px',
+      minHeight: 180,
+      padding: '20px 22px',
+      background: 'var(--color-surface)',
+      border: '1px solid var(--color-border-soft)',
+      borderRadius: 20,
+      boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
+      display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+    }}>
+      <span style={{
+        display: 'inline-block',
+        color: 'var(--color-text-dimmer)', fontSize: 11, fontWeight: 700,
+        letterSpacing: '0.12em', textTransform: 'uppercase',
+      }}>
+        Stats
+      </span>
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-around',
+        gap: 24, paddingTop: 12,
+      }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <span style={{
+            color: 'var(--color-text)', fontSize: 28, fontWeight: 800, lineHeight: 1,
+            letterSpacing: '-0.01em',
+          }}>
+            {followingCount}
+          </span>
+          <span style={{
+            color: 'var(--color-text-dimmer)', fontSize: 11, fontWeight: 700,
+            letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 6,
+          }}>
+            Following
+          </span>
+        </div>
+        <div style={{ width: 1, height: 40, background: 'var(--color-border-soft)' }} />
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <span style={{
+            color: 'var(--color-text)', fontSize: 28, fontWeight: 800, lineHeight: 1,
+            letterSpacing: '-0.01em',
+          }}>
+            {followerCount}
+          </span>
+          <span style={{
+            color: 'var(--color-text-dimmer)', fontSize: 11, fontWeight: 700,
+            letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 6,
+          }}>
+            Followers
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
+/**
+ * AboutFlipCard — text-only flip card variant per DESIGN.md §3.5.4
+ *   Front: small "ABOUT" caps label + 2-line description preview + tap hint
+ *   Back: full description + Founded {year} + Located in {location}
+ */
+function AboutFlipCard({ description, foundedYear, location }) {
+  const [isAboutFlipped, setIsAboutFlipped] = useState(false)
+
+  return (
+    <div
+      style={{
+        perspective: '1200px',
+        flex: '1 1 280px',
+        minHeight: 180,
+        cursor: 'pointer',
+      }}
+      onClick={(e) => {
+        if (e.target.closest('button')) return
+        setIsAboutFlipped(f => !f)
+      }}
+    >
+      <div style={{
+        width: '100%', height: '100%',
+        position: 'relative', minHeight: 180,
+        transition: 'transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
+        transformStyle: 'preserve-3d',
+        transform: isAboutFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
+      }}>
+        {/* FRONT */}
+        <div style={{
+          position: 'absolute', inset: 0,
+          backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden',
+          borderRadius: 20, overflow: 'hidden',
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-border-soft)',
+          padding: '20px 22px',
+          display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+          boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
+        }}>
+          {/* Subtle internal glow */}
+          <div style={{
+            position: 'absolute', top: -40, right: -40,
+            width: 160, height: 160, borderRadius: '50%',
+            background: 'radial-gradient(circle, rgba(236,72,153,0.18), transparent 70%)',
+            pointerEvents: 'none',
+          }} />
+
+          <div style={{ position: 'relative', zIndex: 1 }}>
+            <span style={{
+              display: 'inline-block',
+              color: '#ec4899', fontSize: 11, fontWeight: 700,
+              letterSpacing: '0.12em', textTransform: 'uppercase',
+              marginBottom: 10,
+            }}>
+              About
+            </span>
+            <p style={{
+              margin: 0,
+              color: 'var(--color-text-2)', fontSize: 14, lineHeight: 1.5,
+              fontWeight: 500,
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden', textOverflow: 'ellipsis',
+            }}>
+              {description}
+            </p>
+          </div>
+
+          <span style={{
+            position: 'relative', zIndex: 1,
+            color: 'var(--color-text-dimmer)', fontSize: 11, fontWeight: 600,
+            letterSpacing: '0.04em', textTransform: 'uppercase',
+            marginTop: 16,
+          }}>
+            tap to reveal
+          </span>
+        </div>
+
+        {/* BACK */}
+        <div style={{
+          position: 'absolute', inset: 0,
+          backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden',
+          transform: 'rotateY(180deg)',
+          borderRadius: 20, overflow: 'hidden',
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-border-soft)',
+          padding: '20px 22px',
+          display: 'flex', flexDirection: 'column',
+          boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
+        }}>
+          <p style={{
+            margin: '0 0 14px',
+            color: 'var(--color-text-2)', fontSize: 13, lineHeight: 1.55,
+            fontWeight: 500,
+            flex: 1,
+            overflowY: 'auto',
+          }}>
+            {description}
+          </p>
+
+          {/* Footer meta — Founded + Location */}
+          <div style={{
+            display: 'flex', flexWrap: 'wrap', gap: 10,
+            paddingTop: 12,
+            borderTop: '1px solid var(--color-border-soft)',
+          }}>
+            {foundedYear && (
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                color: 'var(--color-text-dim)', fontSize: 12, fontWeight: 600,
+              }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                  <line x1="16" y1="2" x2="16" y2="6"></line>
+                  <line x1="8" y1="2" x2="8" y2="6"></line>
+                  <line x1="3" y1="10" x2="21" y2="10"></line>
+                </svg>
+                Founded {foundedYear}
+              </span>
+            )}
+            {location && (
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                color: 'var(--color-text-dim)', fontSize: 12, fontWeight: 600,
+              }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                  <circle cx="12" cy="10" r="3"></circle>
+                </svg>
+                {location}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
 export default function FirmProfilePage() {
   // eslint-disable-next-line no-unused-vars
   const { officeId } = useParams()
@@ -94,23 +301,23 @@ export default function FirmProfilePage() {
           left: '-10%',
           width: '120%',
           height: '50%',
-          background: 'radial-gradient(circle at 50% 0%, rgba(236,72,153,0.08) 0%, transparent 70%)',
+          background: 'radial-gradient(circle at 50% 0%, rgba(236,72,153,0.10) 0%, transparent 70%)',
           pointerEvents: 'none',
           zIndex: 0,
         }}
       />
 
-      {/* Sticky Header with back button */}
+      {/* Sticky Header — back left, title center, symmetric placeholder right (mirrors UserProfile) */}
       <div
         style={{
           position: 'sticky',
           top: 0,
           zIndex: 10,
-          background: 'rgba(15, 15, 15, 0.72)',
+          background: 'var(--color-header-bg, rgba(15, 15, 15, 0.72))',
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
           borderBottom: '1px solid var(--color-border-soft)',
-          padding: '8px 12px',
+          padding: '12px 16px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -124,27 +331,26 @@ export default function FirmProfilePage() {
           style={{
             width: 44,
             height: 44,
+            minWidth: 44,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             background: 'transparent',
             border: 'none',
-            color: 'var(--color-text-dim)',
+            color: 'var(--color-text)',
             cursor: 'pointer',
-            borderRadius: 10,
-            transition: 'color 0.18s cubic-bezier(0.4, 0, 0.2, 1), background 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
+            borderRadius: 12,
+            transition: 'background 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
             padding: 0,
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.color = '#ec4899'
-            e.currentTarget.style.background = 'rgba(236,72,153,0.08)'
+            e.currentTarget.style.background = 'var(--color-surface-2, rgba(255,255,255,0.05))'
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.color = 'var(--color-text-dim)'
             e.currentTarget.style.background = 'transparent'
           }}
         >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="19" y1="12" x2="5" y2="12"></line>
             <polyline points="12 19 5 12 12 5"></polyline>
           </svg>
@@ -154,9 +360,9 @@ export default function FirmProfilePage() {
           style={{
             color: 'var(--color-text)',
             fontSize: 17,
-            fontWeight: 700,
+            fontWeight: 800,
             margin: 0,
-            letterSpacing: '0.01em',
+            letterSpacing: '-0.01em',
             flex: 1,
             textAlign: 'center',
             whiteSpace: 'nowrap',
@@ -164,250 +370,284 @@ export default function FirmProfilePage() {
             textOverflow: 'ellipsis',
           }}
         >
-          Firm Profile
+          Profile
         </h2>
 
-        {/* Symmetric placeholder so title stays optically centered */}
+        {/* Symmetric placeholder — keeps title optically centered */}
         <div style={{ width: 44, height: 44, flexShrink: 0 }} aria-hidden="true" />
       </div>
 
-      {/* Page content — single responsive container */}
+      {/* Unified responsive container (max-width 1100) — mirrors UserProfile */}
       <div
         style={{
           position: 'relative',
           zIndex: 1,
           maxWidth: 1100,
           margin: '0 auto',
-          padding: '32px 20px 48px',
+          padding: '32px 20px 40px',
         }}
       >
-        {/* Hero — constrained inside the wider container */}
-        <section
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            textAlign: 'center',
-            maxWidth: 560,
-            margin: '0 auto 56px',
-          }}
-        >
-          {/* Logo + brand-pink glow */}
-          {MOCK_OFFICE.logo_url ? (
-            <div style={{ position: 'relative', marginBottom: 24 }}>
+        {/* HERO BLOCK — narrower nested column (max-width 480) — mirrors UserProfile */}
+        <div style={{ maxWidth: 480, margin: '0 auto 36px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+
+            {/* Logo + brand-pink halo glow (matches UserProfile avatar pattern) */}
+            {MOCK_OFFICE.logo_url ? (
+              <div style={{ position: 'relative', marginBottom: 18 }}>
+                <div
+                  style={{
+                    position: 'absolute',
+                    inset: -6,
+                    borderRadius: '50%',
+                    background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
+                    opacity: 0.55,
+                    filter: 'blur(12px)',
+                  }}
+                  aria-hidden="true"
+                />
+                <img
+                  src={MOCK_OFFICE.logo_url}
+                  alt={`${MOCK_OFFICE.name} logo`}
+                  style={{
+                    position: 'relative',
+                    zIndex: 2,
+                    width: 108,
+                    height: 108,
+                    borderRadius: '50%',
+                    objectFit: 'cover',
+                    background: '#fff',
+                    border: '2px solid var(--color-border-soft)',
+                    display: 'block',
+                  }}
+                />
+              </div>
+            ) : (
               <div
                 style={{
-                  position: 'absolute',
-                  inset: -16,
+                  width: 108,
+                  height: 108,
                   borderRadius: '50%',
-                  background: '#ec4899',
-                  opacity: 0.4,
-                  filter: 'blur(20px)',
-                  zIndex: 0,
+                  background: 'var(--color-surface)',
+                  border: '2px solid var(--color-border-soft)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: 18,
                 }}
-                aria-hidden="true"
-              />
-              <img
-                src={MOCK_OFFICE.logo_url}
-                alt={`${MOCK_OFFICE.name} logo`}
-                style={{
-                  position: 'relative',
-                  zIndex: 1,
-                  width: 104,
-                  height: 104,
-                  borderRadius: 24,
-                  objectFit: 'cover',
-                  background: '#fff',
-                  border: '1px solid rgba(255,255,255,0.18)',
-                  display: 'block',
-                }}
-              />
-            </div>
-          ) : (
+              >
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect>
+                  <line x1="9" y1="22" x2="15" y2="22"></line>
+                </svg>
+              </div>
+            )}
+
+            {/* Name + verified mark inline (the Instagram blue-mark equivalent) */}
             <div
               style={{
-                width: 104,
-                height: 104,
-                borderRadius: 24,
-                background: 'var(--color-surface)',
-                border: '1px solid var(--color-border-soft)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                marginBottom: 24,
+                gap: 8,
+                marginBottom: 8,
+                flexWrap: 'wrap',
               }}
             >
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect>
-                <line x1="9" y1="22" x2="15" y2="22"></line>
-                <line x1="12" y1="6" x2="12" y2="6.01"></line>
-                <line x1="12" y1="10" x2="12" y2="10.01"></line>
-                <line x1="12" y1="14" x2="12" y2="14.01"></line>
-              </svg>
-            </div>
-          )}
-
-          {/* Name + verified */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 10,
-              marginBottom: 16,
-              flexWrap: 'wrap',
-            }}
-          >
-            <h1
-              style={{
-                color: 'var(--color-text)',
-                fontSize: 34,
-                fontWeight: 900,
-                margin: 0,
-                lineHeight: 1.15,
-                letterSpacing: '-0.02em',
-              }}
-            >
-              {MOCK_OFFICE.name}
-            </h1>
-            {MOCK_OFFICE.verified && (
-              <span
-                title="Verified office"
+              <h1
                 style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: 26,
-                  height: 26,
-                  borderRadius: '50%',
-                  background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
-                  flexShrink: 0,
+                  color: 'var(--color-text)',
+                  fontSize: 26,
+                  fontWeight: 800,
+                  margin: 0,
+                  lineHeight: 1.2,
+                  letterSpacing: '-0.01em',
                 }}
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12"></polyline>
-                </svg>
-              </span>
-            )}
-          </div>
-
-          {/* Meta chips — wraps gracefully on narrow viewports */}
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              justifyContent: 'center',
-              gap: 8,
-              marginBottom: 24,
-            }}
-          >
-            <Chip>
-              <ChipIcon>
-                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-                  <circle cx="12" cy="10" r="3"></circle>
-                </svg>
-              </ChipIcon>
-              {MOCK_OFFICE.location}
-            </Chip>
-            <Chip>
-              <ChipIcon>
-                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                  <line x1="16" y1="2" x2="16" y2="6"></line>
-                  <line x1="8" y1="2" x2="8" y2="6"></line>
-                  <line x1="3" y1="10" x2="21" y2="10"></line>
-                </svg>
-              </ChipIcon>
-              Est. {MOCK_OFFICE.founded_year}
-            </Chip>
-            <Chip>
-              <ChipIcon>
-                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M3 21h18"></path>
-                  <path d="M5 21V7l7-4 7 4v14"></path>
-                  <path d="M9 9h0M9 13h0M9 17h0M15 9h0M15 13h0M15 17h0"></path>
-                </svg>
-              </ChipIcon>
-              {MOCK_OFFICE.projects.length} projects
-            </Chip>
-          </div>
-
-          {/* Description */}
-          <p
-            style={{
-              color: 'var(--color-text-dim)',
-              fontSize: 15,
-              lineHeight: 1.65,
-              margin: '0 0 28px',
-              fontWeight: 400,
-              maxWidth: 520,
-            }}
-          >
-            {MOCK_OFFICE.description}
-          </p>
-
-          {/* Action buttons */}
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              justifyContent: 'center',
-              gap: 12,
-              width: '100%',
-            }}
-          >
-            {MOCK_OFFICE.website_url && (
-              <ActionButton
-                href={MOCK_OFFICE.website_url}
-                primary
-                icon={
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="2" y1="12" x2="22" y2="12"></line>
-                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                {MOCK_OFFICE.name}
+              </h1>
+              {MOCK_OFFICE.verified && (
+                <span
+                  title="Verified office"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: 22,
+                    height: 22,
+                    borderRadius: '50%',
+                    background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
+                    flexShrink: 0,
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
                   </svg>
-                }
-              >
-                Website
-              </ActionButton>
-            )}
-            {MOCK_OFFICE.contact_email && (
-              <ActionButton
-                href={`mailto:${MOCK_OFFICE.contact_email}`}
-                icon={
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
-                    <polyline points="22,6 12,13 2,6"></polyline>
-                  </svg>
-                }
-              >
-                Email
-              </ActionButton>
-            )}
-          </div>
-        </section>
+                </span>
+              )}
+            </div>
 
-        {/* Projects */}
-        <section style={{ marginBottom: 56 }}>
-          <SectionHeader title="Projects" count={MOCK_OFFICE.projects.length} />
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-              gap: 18,
-            }}
-          >
-            {MOCK_OFFICE.projects.map((project) => (
-              <ProjectCard key={project.building_id} project={project} />
-            ))}
+            {/* Description — italic muted (matches UserProfile bio styling) */}
+            <p
+              style={{
+                color: 'var(--color-text-dim)',
+                fontSize: 15,
+                lineHeight: 1.6,
+                margin: '0 0 18px',
+                fontWeight: 500,
+                fontStyle: 'italic',
+                maxWidth: 360,
+                display: '-webkit-box',
+                WebkitLineClamp: 3,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {MOCK_OFFICE.description}
+            </p>
+
+            {/* Action pills — Website + Email (User-style icon-pills, NOT chunky buttons) */}
+            {(MOCK_OFFICE.website_url || MOCK_OFFICE.contact_email) && (
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+                {MOCK_OFFICE.website_url && (
+                  <a
+                    href={MOCK_OFFICE.website_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 7,
+                      padding: '10px 14px', borderRadius: 999,
+                      background: 'var(--color-surface-2, rgba(255,255,255,0.04))',
+                      border: '1px solid var(--color-border-soft)',
+                      color: 'var(--color-text-2)',
+                      textDecoration: 'none', fontSize: 13, fontWeight: 600,
+                      transition: 'transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.18s, color 0.18s',
+                      minHeight: 44,
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-1px)'
+                      e.currentTarget.style.borderColor = 'rgba(236,72,153,0.45)'
+                      e.currentTarget.style.color = '#ec4899'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)'
+                      e.currentTarget.style.borderColor = 'var(--color-border-soft)'
+                      e.currentTarget.style.color = 'var(--color-text-2)'
+                    }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <line x1="2" y1="12" x2="22" y2="12"></line>
+                      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                    </svg>
+                    Website
+                  </a>
+                )}
+                {MOCK_OFFICE.contact_email && (
+                  <a
+                    href={`mailto:${MOCK_OFFICE.contact_email}`}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 7,
+                      padding: '10px 14px', borderRadius: 999,
+                      background: 'var(--color-surface-2, rgba(255,255,255,0.04))',
+                      border: '1px solid var(--color-border-soft)',
+                      color: 'var(--color-text-2)',
+                      textDecoration: 'none', fontSize: 13, fontWeight: 600,
+                      transition: 'transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.18s, color 0.18s',
+                      minHeight: 44,
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-1px)'
+                      e.currentTarget.style.borderColor = 'rgba(236,72,153,0.45)'
+                      e.currentTarget.style.color = '#ec4899'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)'
+                      e.currentTarget.style.borderColor = 'var(--color-border-soft)'
+                      e.currentTarget.style.color = 'var(--color-text-2)'
+                    }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                      <polyline points="22,6 12,13 2,6"></polyline>
+                    </svg>
+                    Email
+                  </a>
+                )}
+              </div>
+            )}
           </div>
-        </section>
+        </div>
+
+        {/* MID SECTION — Stats + About flip cards side-by-side (desktop), wrap (mobile) */}
+        <div style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 18,
+          marginBottom: 36,
+        }}>
+          <StatsCard
+            followingCount={MOCK_OFFICE.following_count}
+            followerCount={MOCK_OFFICE.follower_count}
+          />
+          <AboutFlipCard
+            description={MOCK_OFFICE.description}
+            foundedYear={MOCK_OFFICE.founded_year}
+            location={MOCK_OFFICE.location}
+          />
+        </div>
+
+        {/* Projects section header — same style as UserProfile "Curated Boards · N" */}
+        <div style={{
+          display: 'flex', alignItems: 'baseline', gap: 12,
+          marginBottom: 20, padding: '0 4px',
+        }}>
+          <h3 style={{
+            color: 'var(--color-text)', fontSize: 20, fontWeight: 800,
+            margin: 0, letterSpacing: '-0.01em',
+          }}>
+            Projects
+          </h3>
+          <span style={{
+            color: 'var(--color-text-dimmer)', fontSize: 13, fontWeight: 700,
+          }}>
+            {MOCK_OFFICE.projects.length}
+          </span>
+        </div>
+
+        {/* Projects grid — same unified container, responsive auto-fill, same column breakpoint as UserProfile boards */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+            gap: 20,
+            marginBottom: 36,
+          }}
+        >
+          {MOCK_OFFICE.projects.map((project) => (
+            <ProjectCard key={project.building_id} project={project} />
+          ))}
+        </div>
 
         {/* Articles */}
         {MOCK_OFFICE.articles?.length > 0 && (
           <section>
-            <SectionHeader title="Featured Articles" count={MOCK_OFFICE.articles.length} />
+            <div style={{
+              display: 'flex', alignItems: 'baseline', gap: 12,
+              marginBottom: 20, padding: '0 4px',
+            }}>
+              <h3 style={{
+                color: 'var(--color-text)', fontSize: 20, fontWeight: 800,
+                margin: 0, letterSpacing: '-0.01em',
+              }}>
+                Featured Articles
+              </h3>
+              <span style={{
+                color: 'var(--color-text-dimmer)', fontSize: 13, fontWeight: 700,
+              }}>
+                {MOCK_OFFICE.articles.length}
+              </span>
+            </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {MOCK_OFFICE.articles.map((article, idx) => (
                 <ArticleCard key={`${article.url}-${idx}`} article={article} />
@@ -422,141 +662,12 @@ export default function FirmProfilePage() {
 
 /* ----------------------------- Sub-components ----------------------------- */
 
-function Chip({ children }) {
-  return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 6,
-        background: 'rgba(255,255,255,0.06)',
-        border: '1px solid rgba(255,255,255,0.08)',
-        padding: '6px 12px',
-        borderRadius: 999,
-        fontSize: 12,
-        fontWeight: 600,
-        color: 'var(--color-text-dim)',
-        whiteSpace: 'nowrap',
-        lineHeight: 1.2,
-      }}
-    >
-      {children}
-    </span>
-  )
-}
-
-function ChipIcon({ children }) {
-  return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: 'var(--color-text-dimmer)',
-      }}
-    >
-      {children}
-    </span>
-  )
-}
-
-function ActionButton({ href, children, icon, primary = false }) {
-  const baseStyle = {
-    flex: '1 1 140px',
-    minWidth: 140,
-    minHeight: 44,
-    padding: '12px 18px',
-    borderRadius: 12,
-    fontSize: 14,
-    fontWeight: 700,
-    textDecoration: 'none',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    cursor: 'pointer',
-    transition: 'transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.18s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
-  }
-  const primaryStyle = {
-    ...baseStyle,
-    background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
-    color: '#fff',
-    border: 'none',
-    boxShadow: '0 8px 24px rgba(236,72,153,0.25)',
-  }
-  const secondaryStyle = {
-    ...baseStyle,
-    background: 'var(--color-surface)',
-    color: 'var(--color-text)',
-    border: '1px solid var(--color-border)',
-  }
-
-  const target = href?.startsWith('mailto:') ? undefined : '_blank'
-  const rel = target === '_blank' ? 'noreferrer' : undefined
-
-  return (
-    <a
-      href={href}
-      target={target}
-      rel={rel}
-      style={primary ? primaryStyle : secondaryStyle}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.transform = 'translateY(-2px)'
-        if (primary) {
-          e.currentTarget.style.boxShadow = '0 12px 32px rgba(236,72,153,0.35)'
-        } else {
-          e.currentTarget.style.borderColor = 'rgba(236,72,153,0.4)'
-        }
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.transform = 'translateY(0)'
-        if (primary) {
-          e.currentTarget.style.boxShadow = '0 8px 24px rgba(236,72,153,0.25)'
-        } else {
-          e.currentTarget.style.borderColor = 'var(--color-border)'
-        }
-      }}
-    >
-      {icon}
-      {children}
-    </a>
-  )
-}
-
-function SectionHeader({ title, count }) {
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'baseline',
-        gap: 12,
-        marginBottom: 20,
-      }}
-    >
-      <h3
-        style={{
-          color: 'var(--color-text)',
-          fontSize: 20,
-          fontWeight: 800,
-          margin: 0,
-          letterSpacing: '-0.01em',
-        }}
-      >
-        {title}
-      </h3>
-      <span
-        style={{
-          color: 'var(--color-text-dimmer)',
-          fontSize: 13,
-          fontWeight: 700,
-        }}
-      >
-        {count}
-      </span>
-    </div>
-  )
-}
-
+/**
+ * ProjectCard — image-overlay card per DESIGN.md §3.5.1 + §3.5.2 + §3.5.3
+ *   - No default border (transparent), hover lifts -4px and adds pink border
+ *   - Title 18/700 + meta 12 italic rgba(255,255,255,0.55) "{city} · {year}"
+ *   - Corner chip top-right: program (default variant — black/45 + blur)
+ */
 function ProjectCard({ project }) {
   return (
     <div
@@ -566,21 +677,19 @@ function ProjectCard({ project }) {
         borderRadius: 20,
         overflow: 'hidden',
         cursor: 'pointer',
-        background: 'var(--color-surface)',
-        border: '1px solid rgba(255,255,255,0.06)',
+        background: 'rgba(255,255,255,0.03)',
+        border: '1px solid transparent',          // §3.5.1: NO default light border
         aspectRatio: '4 / 5',
-        boxShadow: '0 6px 16px rgba(0,0,0,0.25)',
-        transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+        boxShadow: '0 10px 25px rgba(0,0,0,0.3)', // §3.5.1 mandatory depth
+        transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.transform = 'translateY(-4px)'
-        e.currentTarget.style.borderColor = 'rgba(236,72,153,0.35)'
-        e.currentTarget.style.boxShadow = '0 14px 32px rgba(0,0,0,0.4)'
+        e.currentTarget.style.borderColor = 'rgba(236,72,153,0.55)'
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.transform = 'translateY(0)'
-        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'
-        e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.25)'
+        e.currentTarget.style.borderColor = 'transparent'
       }}
     >
       <img
@@ -596,68 +705,69 @@ function ProjectCard({ project }) {
           display: 'block',
         }}
       />
+      {/* §3.5.1 mandatory bottom gradient overlay */}
       <div
         style={{
           position: 'absolute',
           inset: 0,
-          background: 'linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.4) 45%, rgba(0,0,0,0.0) 100%)',
+          background: 'linear-gradient(to top, rgba(0,0,0,0.93) 0%, rgba(0,0,0,0.4) 50%, transparent 100%)',
         }}
         aria-hidden="true"
       />
 
-      {/* Program tag — top-right */}
-      <span
+      {/* §3.5.3 corner chip — default variant (program label) */}
+      <div
         style={{
           position: 'absolute',
           top: 12,
           right: 12,
-          background: 'rgba(0,0,0,0.55)',
-          backdropFilter: 'blur(8px)',
-          WebkitBackdropFilter: 'blur(8px)',
-          color: '#fff',
+          background: 'rgba(0,0,0,0.45)',
+          backdropFilter: 'blur(10px)',
+          WebkitBackdropFilter: 'blur(10px)',
+          padding: '6px 10px',
+          borderRadius: 999,
           fontSize: 11,
           fontWeight: 700,
-          padding: '4px 10px',
-          borderRadius: 999,
-          border: '1px solid rgba(255,255,255,0.12)',
-          letterSpacing: '0.02em',
+          color: '#fff',
+          letterSpacing: '0.04em',
+          textTransform: 'uppercase',
         }}
       >
         {project.program}
-      </span>
+      </div>
 
+      {/* §3.5.2 text hierarchy: title 18/700 + meta 12 italic rgba(255,255,255,0.55) */}
       <div
         style={{
           position: 'absolute',
           bottom: 0,
           left: 0,
           right: 0,
-          padding: '20px',
+          padding: '16px 18px 20px',
         }}
       >
         <h4
           style={{
             color: '#fff',
-            fontSize: 17,
-            fontWeight: 800,
-            margin: '0 0 6px',
+            fontSize: 18,
+            fontWeight: 700,
+            margin: '0 0 3px',
             lineHeight: 1.3,
             display: '-webkit-box',
             WebkitLineClamp: 2,
             WebkitBoxOrient: 'vertical',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
-            letterSpacing: '-0.005em',
           }}
         >
           {project.name_en}
         </h4>
         <p
           style={{
-            color: 'rgba(255,255,255,0.65)',
-            fontSize: 13,
+            color: 'rgba(255,255,255,0.55)',
+            fontSize: 12,
+            fontStyle: 'italic',
             margin: 0,
-            fontWeight: 600,
           }}
         >
           {project.city} · {project.year}
@@ -667,6 +777,11 @@ function ProjectCard({ project }) {
   )
 }
 
+
+/**
+ * ArticleCard — list-style card with §3.5.1 hover behavior (no default border, hover lift)
+ *   Content-specific differentiator: left accent border + source pill (preserved from prior redesign).
+ */
 function ArticleCard({ article }) {
   return (
     <a
@@ -679,21 +794,21 @@ function ArticleCard({ article }) {
         gap: 12,
         padding: '18px 20px 18px 22px',
         background: 'var(--color-surface)',
-        border: '1px solid var(--color-border)',
-        borderLeft: '3px solid #ec4899',
+        border: '1px solid transparent',   // §3.5.1: NO default border
+        borderLeft: '3px solid #ec4899',    // content-specific accent (articles only)
         borderRadius: 14,
         textDecoration: 'none',
         transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.transform = 'translateY(-2px)'
-        e.currentTarget.style.borderColor = 'rgba(236,72,153,0.25)'
+        e.currentTarget.style.transform = 'translateY(-4px)'
+        e.currentTarget.style.borderColor = 'rgba(236,72,153,0.55)'
         e.currentTarget.style.borderLeftColor = '#f43f5e'
-        e.currentTarget.style.boxShadow = '0 10px 24px rgba(0,0,0,0.25)'
+        e.currentTarget.style.boxShadow = '0 10px 25px rgba(0,0,0,0.3)'
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.transform = 'translateY(0)'
-        e.currentTarget.style.borderColor = 'var(--color-border)'
+        e.currentTarget.style.borderColor = 'transparent'
         e.currentTarget.style.borderLeftColor = '#ec4899'
         e.currentTarget.style.boxShadow = 'none'
       }}

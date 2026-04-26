@@ -108,6 +108,218 @@
 </div>
 ```
 
+### 3.5 Card System (Core)
+
+Cards are the primary content carrier across the app — projects, boards,
+buildings, recommendations all share the same structural shape. **Differences
+are content (chips, text), not structure.** Use these primitives consistently
+on every card surface to keep visual unity across pages.
+
+#### 3.5.1 Image-overlay card (default)
+
+Used for: project cards, board cards, building cards, recommendation cards.
+Standard aspect ratios: 4:5 (portrait grid) or 3:4 (slightly wider).
+
+```jsx
+<div style={{
+  background: 'rgba(255,255,255,0.03)',
+  borderRadius: 20,
+  overflow: 'hidden',
+  cursor: 'pointer',
+  border: '1px solid transparent',          // NO default light border
+  position: 'relative',
+  boxShadow: '0 10px 25px rgba(0,0,0,0.3)',
+  transition: 'transform 0.25s cubic-bezier(0.4,0,0.2,1), border-color 0.25s cubic-bezier(0.4,0,0.2,1)',
+}}
+onMouseEnter={e => {
+  e.currentTarget.style.transform = 'translateY(-4px)'
+  e.currentTarget.style.borderColor = 'rgba(236,72,153,0.55)'
+}}
+onMouseLeave={e => {
+  e.currentTarget.style.transform = 'translateY(0)'
+  e.currentTarget.style.borderColor = 'transparent'
+}}>
+  {/* image fill + bottom gradient + text overlay + optional corner chip */}
+</div>
+```
+
+**Mandatory rules:**
+- **NO default light border.** The border lives only in hover state (brand pink at 55% opacity). Resting state is `transparent`.
+- Always include `boxShadow: '0 10px 25px rgba(0,0,0,0.3)'` for depth in dark mode.
+- Hover behavior: lift `-4px` AND border to brand pink. Duration `0.25s` cubic-bezier(0.4,0,0.2,1). NO scale.
+- Image fills the card (`width:100%; height:100%; object-fit:cover; position:absolute; inset:0`).
+- Bottom gradient overlay is required for legibility:
+  `linear-gradient(to top, rgba(0,0,0,0.93) 0%, rgba(0,0,0,0.4) 50%, transparent 100%)`
+
+#### 3.5.2 Card text hierarchy (overlay)
+
+Use this exact hierarchy on every image-overlay card overlay. No additional
+chips below the meta line — the overlay stays simple and scannable.
+
+```jsx
+<div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '16px 18px 20px' }}>
+  <h2 style={{
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 700,
+    lineHeight: 1.3,
+    margin: '0 0 3px',
+    display: '-webkit-box',
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: 'vertical',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  }}>
+    {title}
+  </h2>
+  <p style={{
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 12,
+    fontStyle: 'italic',
+    margin: 0,
+  }}>
+    {meta}      {/* "OMA · 2004" or "Seattle · 2004" or "Kim Minseo" */}
+  </p>
+</div>
+```
+
+- Title: 18px, weight 700, white, **2-line clamp**.
+- Meta: 12px, italic, `rgba(255,255,255,0.55)` — secondary info (architect · year, year · city, owner display_name, etc.).
+- Padding `16px 18px 20px` (slightly more bottom).
+
+#### 3.5.3 Corner chips (optional)
+
+Top-right placement only. Single chip per card (no chip stacking).
+
+```jsx
+<div style={{
+  position: 'absolute',
+  top: 12,
+  right: 12,
+  background: 'rgba(0,0,0,0.45)',
+  backdropFilter: 'blur(10px)',
+  WebkitBackdropFilter: 'blur(10px)',
+  padding: '6px 10px',
+  borderRadius: 999,
+  fontSize: 11,
+  fontWeight: 700,
+  color: '#fff',
+  letterSpacing: '0.04em',
+  textTransform: 'uppercase',
+}}>
+  {label}
+</div>
+```
+
+**Variants by purpose:**
+- **Default (program label, year):** background `rgba(0,0,0,0.45)` + blur, white text.
+- **Branded (PUBLIC, match score):** background `rgba(236,72,153,0.85)` + blur, white text.
+- **Destructive (PRIVATE):** background `rgba(239,68,68,0.85)` + blur, white text.
+
+#### 3.5.4 Flip card (3D rotateY)
+
+Used for: board cards (front: cover; back: gallery), persona card (front: type
+label; back: full detail). Click flips, click again unflips.
+
+```jsx
+<div
+  style={{ perspective: '1200px', cursor: 'pointer', /* outer dimensions */ }}
+  onClick={e => {
+    if (e.target.closest('button')) return       // let nested buttons through
+    setIsFlipped(f => !f)
+  }}
+>
+  <div style={{
+    width: '100%', height: '100%',
+    position: 'relative',
+    transition: 'transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
+    transformStyle: 'preserve-3d',
+    transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
+  }}>
+    <div style={{
+      position: 'absolute', inset: 0,
+      backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden',
+      borderRadius: 20, overflow: 'hidden',
+    }}>
+      {/* FRONT — image-overlay card per §3.5.1 */}
+    </div>
+    <div style={{
+      position: 'absolute', inset: 0,
+      backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden',
+      transform: 'rotateY(180deg)',
+      borderRadius: 20, overflow: 'hidden',
+    }}>
+      {/* BACK — see §3.5.5 for image gallery */}
+    </div>
+  </div>
+</div>
+```
+
+- `perspective: '1200px'` on the outer element.
+- `transformStyle: 'preserve-3d'` on the rotating layer.
+- Both faces use `backfaceVisibility: 'hidden'` (+ `-webkit-` prefix).
+- Stop propagation for nested buttons via `e.target.closest('button')` early-return.
+
+#### 3.5.5 Card-back: swipe-style image gallery
+
+When a flip card's back reveals multiple images (boards), use **full-bleed
+horizontal-scrolling images styled like the SwipePage card — NOT a thumbnail
+grid.** This preserves the cinematic feel of the brand's signature swipe
+interaction.
+
+```jsx
+<div style={{
+  position: 'absolute', inset: 0,
+  background: '#000',
+  display: 'flex',
+  flexDirection: 'column',
+}}>
+  <div
+    style={{
+      flex: 1,
+      overflowX: 'auto',
+      overflowY: 'hidden',
+      display: 'flex',
+      scrollSnapType: 'x mandatory',
+      WebkitOverflowScrolling: 'touch',
+      scrollbarWidth: 'none',          // Firefox
+      msOverflowStyle: 'none',         // IE/Edge legacy
+    }}
+    className="hide-scrollbar"          /* Webkit ::-webkit-scrollbar { display:none } */
+  >
+    {images.map((img, i) => (
+      <div key={i} style={{
+        flex: '0 0 100%',
+        height: '100%',
+        scrollSnapAlign: 'start',
+        position: 'relative',
+      }}>
+        <img src={img} alt="" style={{
+          width: '100%', height: '100%',
+          objectFit: 'cover',
+          display: 'block',
+        }} />
+      </div>
+    ))}
+  </div>
+
+  {/* Persistent action bar at bottom */}
+  <div style={{
+    padding: 16,
+    background: 'linear-gradient(to top, rgba(0,0,0,0.95) 20%, transparent 100%)',
+  }}>
+    <button style={{ /* "View Gallery · N photos" pill, full-width 44px+ touch */ }}>
+      View Gallery · {images.length} photos
+    </button>
+  </div>
+</div>
+```
+
+- `scroll-snap-type: x mandatory` snaps cleanly per image.
+- Each slide is `flex: 0 0 100%` so the card width = one image at a time.
+- Hide scrollbar across browsers (Firefox `scrollbarWidth: 'none'`, Webkit via class with `::-webkit-scrollbar { display: none }`, IE legacy `msOverflowStyle: 'none'`). Add the `.hide-scrollbar` class to `index.css` if it doesn't exist.
+- Action button persists at the bottom — does not scroll with images.
+
 ## 4. Interaction Patterns
 - **Desktop Mode:** Ensure swiping logic binds to `keydown` (`ArrowLeft`, `ArrowRight`).
 - **Hover States:** Apply `cursor: 'pointer'` to interactables. For hover colors, use React inline event handlers (`onMouseEnter`, `onMouseLeave`)

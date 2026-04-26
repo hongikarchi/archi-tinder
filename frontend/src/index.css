@@ -149,3 +149,7 @@ body {
 :root {
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
 }
+
+/* -- Hide scrollbar utility (used by swipe-style card-back galleries per DESIGN.md §3.5.5) -- */
+.hide-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.hide-scrollbar::-webkit-scrollbar { display: none; }
