@@ -1,8 +1,10 @@
 import hashlib
 import logging
+import threading
 import numpy as np
 from collections import defaultdict
 from django.conf import settings
+from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
@@ -70,6 +72,98 @@ def _merge_buffer_into_exposed(exposed_ids, client_buffer_ids):
             merged.append(bid)
             exposed_set.add(bid)
     return merged
+
+
+# ── IMP-8: async prefetch background thread ───────────────────────────────────
+
+def _async_prefetch_thread(
+    session_id, cache_round, phase,
+    pool_ids_snap, exposed_ids_snap, pool_embeddings_snap,
+    like_vectors_snap, initial_batch_snap, current_round_snap,
+):
+    """IMP-8 (Spec v1.6 §11.1): background thread to compute prefetch cards
+    after primary swipe response returns. Result cached for telemetry / future
+    Half-B optimization (currently primary path does NOT consume the cache --
+    see design notes in commit body).
+
+    Snapshots are passed as args (NOT the session object) because the session
+    may have been further mutated by the time the bg thread runs; prefetch
+    should reflect the state at swipe-response-emit time.
+
+    CPython GIL note: engine module globals (_building_embedding_cache,
+    _last_embedding_call_stats) are shared across threads. Dict ops are GIL-
+    protected so the embedding cache is safe to read/write concurrently. The
+    primary thread reads _last_embedding_call_stats before spawning (line ~716
+    in SwipeView.post) so the swipe event payload is already captured.
+
+    Race handling: if the next swipe arrives before this thread finishes, the
+    primary path runs standalone (cache miss) -- same behavior as today.
+    This is purely opportunistic and never blocks correctness.
+    """
+    from django.db import connection as _db_connection
+
+    _db_connection.close()  # release parent thread's connection; bg thread gets its own
+    try:
+        prefetch_card = None
+        prefetch_card_2 = None
+
+        # Compute prefetch_card (round+1 equivalent)
+        if phase == 'exploring':
+            exposed_set = set(exposed_ids_snap)
+            if current_round_snap + 1 < len(initial_batch_snap):
+                pf_bid = initial_batch_snap[current_round_snap + 1]
+                if pf_bid and pf_bid not in exposed_set:
+                    prefetch_card = engine.get_building_card(pf_bid)
+                else:
+                    pf_bid = engine.farthest_point_from_pool(pool_ids_snap, exposed_ids_snap, pool_embeddings_snap)
+                    prefetch_card = engine.get_building_card(pf_bid) if pf_bid else None
+            else:
+                pf_bid = engine.farthest_point_from_pool(pool_ids_snap, exposed_ids_snap, pool_embeddings_snap)
+                prefetch_card = engine.get_building_card(pf_bid) if pf_bid else None
+        elif phase == 'analyzing':
+            pf_id = engine.compute_mmr_next(
+                pool_ids_snap, exposed_ids_snap, pool_embeddings_snap,
+                like_vectors_snap, current_round_snap + 1
+            )
+            prefetch_card = engine.get_building_card(pf_id) if pf_id else None
+
+        # Compute prefetch_card_2 (round+2 equivalent)
+        if prefetch_card and prefetch_card.get('building_id') != '__action_card__':
+            temp_exposed = exposed_ids_snap + [prefetch_card['building_id']]
+            if phase == 'exploring':
+                exposed_set_2 = set(temp_exposed)
+                if current_round_snap + 2 < len(initial_batch_snap):
+                    pf2_bid = initial_batch_snap[current_round_snap + 2]
+                    if pf2_bid and pf2_bid not in exposed_set_2:
+                        prefetch_card_2 = engine.get_building_card(pf2_bid)
+                    else:
+                        pf2_bid = engine.farthest_point_from_pool(pool_ids_snap, temp_exposed, pool_embeddings_snap)
+                        prefetch_card_2 = engine.get_building_card(pf2_bid) if pf2_bid else None
+                else:
+                    pf2_bid = engine.farthest_point_from_pool(pool_ids_snap, temp_exposed, pool_embeddings_snap)
+                    prefetch_card_2 = engine.get_building_card(pf2_bid) if pf2_bid else None
+            elif phase == 'analyzing':
+                pf2_id = engine.compute_mmr_next(
+                    pool_ids_snap, temp_exposed, pool_embeddings_snap,
+                    like_vectors_snap, current_round_snap + 2
+                )
+                prefetch_card_2 = engine.get_building_card(pf2_id) if pf2_id else None
+
+        result = {
+            'prefetch_card_id': prefetch_card.get('building_id') if prefetch_card else None,
+            'prefetch_card_2_id': prefetch_card_2.get('building_id') if prefetch_card_2 else None,
+            'computed_at': timezone.now().isoformat(),
+        }
+        cache_key = f'prefetch:{session_id}:{cache_round}'
+        cache_timeout = settings.RECOMMENDATION.get('async_prefetch_cache_timeout_seconds', 60)
+        cache.set(cache_key, result, timeout=cache_timeout)
+        logger.debug('IMP-8 async prefetch cached: key=%s', cache_key)
+    except Exception as exc:
+        # Cache stays empty; next swipe runs standalone path -- no failure event needed.
+        # This is purely opportunistic optimization; primary path is always the source of truth.
+        logger.warning('IMP-8 async prefetch thread failed: %s', exc)
+    finally:
+        _db_connection.close()  # release bg thread's own connection
 
 
 # ── Projects ──────────────────────────────────────────────────────────────────
@@ -796,8 +890,46 @@ class SwipeView(APIView):
 
         # 9. Prefetch (outside transaction -- no lock held)
         # Reuse cached pool_embeddings from step 8 (pool_ids unchanged)
+        #
+        # IMP-8 (Spec v1.6 §11.1): when async_prefetch_enabled=True, spawn a
+        # background daemon thread to compute prefetch cards and write to Django
+        # cache. Primary response returns immediately with prefetch_image=None
+        # (frontend handles null prefetches gracefully -- existing behavior at
+        # session end / dislike-fallback paths). The cache write is for
+        # telemetry / future Half-B optimization; primary path does NOT consume
+        # the cache in this implementation.
+        #
+        # When async_prefetch_enabled=False (default), the existing sync path
+        # runs unchanged -- no threads, no cache pressure, byte-identical behavior.
+        prefetch_strategy = 'sync'  # updated to 'async-thread' when IMP-8 path runs
         prefetch_card = None
-        if next_card and next_card.get('building_id') != '__action_card__':
+        prefetch_card_2 = None
+        if settings.RECOMMENDATION.get('async_prefetch_enabled', False) and (
+            next_card and next_card.get('building_id') != '__action_card__'
+        ):
+            # IMP-8 async path: spawn bg thread; return None prefetches immediately.
+            # cache_round = saved_current_round + 1 so the key uniquely identifies
+            # "the prefetch for the NEXT swipe after this one".
+            t = threading.Thread(
+                target=_async_prefetch_thread,
+                args=(
+                    str(session.session_id),
+                    saved_current_round + 1,     # cache_round key
+                    saved_phase,
+                    saved_pool_ids,
+                    saved_exposed_ids,
+                    saved_pool_embeddings,
+                    saved_like_vectors,
+                    saved_initial_batch,
+                    saved_current_round,
+                ),
+                daemon=True,
+            )
+            t.start()
+            prefetch_strategy = 'async-thread'
+            # prefetch_card and prefetch_card_2 stay None -- frontend handles gracefully
+        elif next_card and next_card.get('building_id') != '__action_card__':
+            # Existing sync prefetch path (unchanged when flag is OFF)
             try:
                 if saved_phase == 'exploring':
                     exposed_set = set(saved_exposed_ids)
@@ -820,31 +952,30 @@ class SwipeView(APIView):
             except Exception:
                 prefetch_card = None
 
-        # Prefetch 2 (round+2)
-        prefetch_card_2 = None
-        if prefetch_card and prefetch_card.get('building_id') != '__action_card__':
-            try:
-                temp_exposed = saved_exposed_ids + [prefetch_card['building_id']]
-                if saved_phase == 'exploring':
-                    exposed_set = set(temp_exposed)
-                    if saved_current_round + 2 < len(saved_initial_batch):
-                        pf2_bid = saved_initial_batch[saved_current_round + 2]
-                        if pf2_bid and pf2_bid not in exposed_set:
-                            prefetch_card_2 = engine.get_building_card(pf2_bid)
+            # Prefetch 2 (round+2)
+            if prefetch_card and prefetch_card.get('building_id') != '__action_card__':
+                try:
+                    temp_exposed = saved_exposed_ids + [prefetch_card['building_id']]
+                    if saved_phase == 'exploring':
+                        exposed_set = set(temp_exposed)
+                        if saved_current_round + 2 < len(saved_initial_batch):
+                            pf2_bid = saved_initial_batch[saved_current_round + 2]
+                            if pf2_bid and pf2_bid not in exposed_set:
+                                prefetch_card_2 = engine.get_building_card(pf2_bid)
+                            else:
+                                pf2_bid = engine.farthest_point_from_pool(saved_pool_ids, temp_exposed, saved_pool_embeddings)
+                                prefetch_card_2 = engine.get_building_card(pf2_bid) if pf2_bid else None
                         else:
                             pf2_bid = engine.farthest_point_from_pool(saved_pool_ids, temp_exposed, saved_pool_embeddings)
                             prefetch_card_2 = engine.get_building_card(pf2_bid) if pf2_bid else None
-                    else:
-                        pf2_bid = engine.farthest_point_from_pool(saved_pool_ids, temp_exposed, saved_pool_embeddings)
-                        prefetch_card_2 = engine.get_building_card(pf2_bid) if pf2_bid else None
-                elif saved_phase == 'analyzing':
-                    pf2_id = engine.compute_mmr_next(
-                        saved_pool_ids, temp_exposed, saved_pool_embeddings,
-                        saved_like_vectors, saved_current_round + 2
-                    )
-                    prefetch_card_2 = engine.get_building_card(pf2_id) if pf2_id else None
-            except Exception:
-                prefetch_card_2 = None
+                    elif saved_phase == 'analyzing':
+                        pf2_id = engine.compute_mmr_next(
+                            saved_pool_ids, temp_exposed, saved_pool_embeddings,
+                            saved_like_vectors, saved_current_round + 2
+                        )
+                        prefetch_card_2 = engine.get_building_card(pf2_id) if pf2_id else None
+                except Exception:
+                    prefetch_card_2 = None
 
         _mark('prefetch_done')
         _mark('total')
@@ -893,7 +1024,7 @@ class SwipeView(APIView):
             cache_hit=_cache_misses == 0,
             cache_source='precompute' if _cache_misses == 0 else 'fresh',
             cache_partial_miss_count=_cache_misses,
-            prefetch_strategy='sync',        # baseline; IMP-8 will introduce 'async-thread'
+            prefetch_strategy=prefetch_strategy,  # 'sync' (default) or 'async-thread' (IMP-8)
             db_call_count=None,              # IMP-9 verify; null until connection-level instrumentation added
             pool_escalation_fired=_pool_escalation_fired,
             pool_signature_hash=_pool_sig,

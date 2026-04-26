@@ -105,6 +105,11 @@ CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:5173,
 CORS_ALLOW_CREDENTIALS = True
 
 # -- Cache (required for DRF throttling) -----------------------------------
+# IMP-8 (v1.6 §11.1): async prefetch background thread writes to default cache.
+# Production multi-worker deploys SHOULD swap LocMemCache for Redis (django-redis)
+# to share cache across workers -- LocMemCache is per-process, so cache writes from
+# bg thread in worker A are not visible to next swipe arriving on worker B.
+# Single-worker dev / Render free tier with 1 worker: LocMemCache works fine.
 CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
@@ -164,6 +169,9 @@ RECOMMENDATION = {
                                              # SessionCreateView. Reserved for future explicit-warming
                                              # paths (e.g., IMP-8 async background warming).
     'pool_embedding_cache_max_size': 5000,   # IMP-7 FIFO eviction bound; ~5MB max. Bump for larger corpora.
+    # IMP-8 (Spec v1.6 §11.1): async prefetch background thread
+    'async_prefetch_enabled': False,                   # default OFF for safe rollout; flip True after Redis wired in prod
+    'async_prefetch_cache_timeout_seconds': 60,        # Django cache TTL for prefetch entries (seconds)
 }
 
 # -- External API keys -----------------------------------------------------
