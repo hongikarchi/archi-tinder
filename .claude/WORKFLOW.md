@@ -1,8 +1,97 @@
 # ArchiTinder -- Agent Workflow
 
 > **Read this when:** You want to understand how agents work, what triggers what, and when you
-> will be flagged for manual review. All 6 workflow cases are covered here.
+> will be flagged for manual review. All 7 workflow cases are covered here.
 > For feature status: see `Report.md`. For task status: see `Task.md`. For vision: see `Goal.md`.
+
+---
+
+## At-a-Glance — Four-Terminal Architecture
+
+The project runs across **four parallel terminals** on the same `main` Git branch. Coordination is by **file/layer ownership** + **handoff signals in `Task.md`**, not branches. Each terminal has an isolated context window and a focused role.
+
+```mermaid
+flowchart LR
+    subgraph T["Four parallel terminals (all on main branch)"]
+        Main["main<br/>(Claude opus)<br/>orchestrator + makers"]
+        Res["research<br/>(Claude opus)<br/>research agent"]
+        Des["design<br/>(Claude opus)<br/>designer + design-* sub-agents"]
+        Rev["review<br/>(Claude opus)<br/>/review slash command"]
+    end
+
+    Main -->|writes| BE["backend/"]
+    Main -->|writes data layer| FED["frontend/<br/>(useState / useEffect / callApi)"]
+    Main -->|writes most of| CL[".claude/<br/>(except design-*.md)"]
+
+    Res -->|EXCLUSIVE owner| RES["research/<br/>(spec + search + investigations<br/>+ algorithm.md)"]
+
+    Des -->|EXCLUSIVE owner| DM["DESIGN.md"]
+    Des -->|writes UI layer| FEU["frontend/<br/>(JSX styles / animations /<br/>colors / MOCK_*)"]
+    Des -->|writes| DA[".claude/agents/<br/>designer.md + design-*.md"]
+
+    Rev -->|writes| RVR[".claude/reviews/<br/>per-commit reports"]
+    Rev -->|appends| HO["Task.md<br/>## Handoffs (verdict signal)"]
+
+    style Main fill:#3b82f6,color:#fff
+    style Res fill:#10b981,color:#fff
+    style Des fill:#ec4899,color:#fff
+    style Rev fill:#8b5cf6,color:#fff
+```
+
+**Narrow exception** to ownership: `reporter` (main pipeline) may UPDATE only `research/algorithm.md` to keep it in sync with implementation (see CLAUDE.md `## Rules`).
+
+---
+
+## Cross-Terminal Signals
+
+Terminals don't call each other directly — they leave append-only signals in `.claude/Task.md`'s `## Handoffs` and `## Research Ready` sections. Other terminals pick them up at session start.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as user
+    participant R as research terminal
+    participant M as main terminal
+    participant D as design terminal
+    participant V as review terminal
+
+    R->>M: SPEC-UPDATED: vX → vY (handoff signal)
+    Note over M: read changed sections,<br/>plan implementation independently
+
+    D->>M: MOCKUP-READY: <page> (handoff signal)
+    Note over M: integrate API, replace MOCK_*<br/>(front-maker data layer only)
+
+    M->>V: REVIEW-REQUESTED: <sha> (after git-manager + reporter)
+    activate V
+    V->>V: Part A static review<br/>+ Part B browser test<br/>+ Part C drift check
+    deactivate V
+
+    alt Clean PASS
+        V->>U: REVIEW-PASSED: <sha>
+        U->>U: git push (in review terminal)
+    else FAIL (Part A CRITICAL/MAJOR or Part B fail)
+        V->>M: REVIEW-FAIL: <sha>
+        Note over M: orchestrator fix loop<br/>(max 2 cycles)
+    else ABORTED (drift detected during review)
+        V->>M: REVIEW-ABORTED: <sha>
+        Note over M: rebase or re-run /review
+    end
+
+    M->>D: TODO(designer) markers in source
+    D->>M: TODO(claude) markers in source
+```
+
+**Signal types** (full vocabulary in `.claude/Task.md` `## Handoffs` header):
+
+| Signal | Direction | Meaning |
+|--------|-----------|---------|
+| `SPEC-UPDATED: vX → vY` | research → main | Spec bumped; main reads only affected sections |
+| `[SPEC-READY]` | research → main (in `## Research Ready`) | Persistent pointer to current spec |
+| `MOCKUP-READY: <page>` | design → main | New mockup awaiting API integration |
+| `REVIEW-REQUESTED: <sha>` | reporter (main) → review | Run `/review` next (or "리뷰해줘") |
+| `REVIEW-PASSED: <sha>` | review → user | Drift-verified; user runs `git push` from review terminal |
+| `REVIEW-FAIL: <sha>` | review → main | Re-enter orchestrator fix loop |
+| `REVIEW-ABORTED: <sha>` | review → main | PASS verdict but drift detected; re-run after rebase |
 
 ---
 
@@ -15,21 +104,19 @@
 | **front-maker** | sonnet | React/Vite frontend **data layer** (useState, useEffect, callApi, hooks, error handling) | `frontend/` data layer only — UI layer is owned by `designer` |
 | **reviewer** | sonnet | API contracts, logic bugs, error handling | read-only |
 | **security-manager** | sonnet | SQL injection, auth bypass, XSS, token leaks | read-only |
-| **web-tester** | sonnet | Live Playwright browser tests | read-only |
+| **web-tester** | sonnet | Live Playwright browser tests (fast inner-loop variant) | read-only |
 | **git-manager** | haiku | Single commit per task | git only |
-| **reporter** | sonnet | Updates Report.md + Task.md, emits REVIEW-REQUESTED handoff | `.claude/` only |
+| **reporter** | sonnet | Updates Report.md + Task.md, emits REVIEW-REQUESTED handoff | `.claude/` only (+ narrow `research/algorithm.md` sync exception) |
 | **algo-tester** | sonnet | Runs optimizer script, interprets results, triggers orchestrator | runs script + calls orchestrator |
 | **research** | opus | Explores complex problems, writes to research/ | `research/` only |
 | **designer** | opus | **Design pipeline supervisor** — owns DESIGN.md + frontend UI layer + design-* sub-agents (parallel of `orchestrator` for the design terminal). Spawns `design-<role>` sub-agents on demand. | `DESIGN.md`, `frontend/` UI layer (JSX styles, animations, colors, layout, MOCK_*), `.claude/agents/design-*.md`, `.claude/Task.md` Handoffs (MOCKUP-READY append-only) |
-| **`/review`** (slash command, no subagent) | opus (review terminal) | **Unified pre-push gate.** Part A: 7-axis static review (writes `.claude/reviews/*.md`). Part B: conditional strict browser verification (3 personas × ≥25 swipes, spec-aligned latency budgets, zero-tolerance error gates, edge cases) when UI-affecting paths in scope. Part C: HEAD + origin/main drift checks. Emits one of REVIEW-PASSED / REVIEW-ABORTED / REVIEW-FAIL to Task.md Handoffs. Invoked via `/review` or natural language ("리뷰해줘", "review", "검토해줘"). | read-only on source; writes `.claude/reviews/` + Task.md Handoffs line + transient `test-artifacts/review/` (Part B, cleaned after run) |
+| **design-ui-maker** | sonnet | UI-layer JSX/inline-style refactors per a DESIGN.md directive (spawned by designer) | `frontend/` UI layer only |
+| **design-mockup-maker** | sonnet | New mockup pages with `MOCK_*` constants matching designer.md API Contract Shapes (spawned by designer) | `frontend/` UI layer only |
+| **`/review`** (slash command, no subagent) | opus (review terminal) | **Unified pre-push gate.** Part A: 7-axis static review. Part B: conditional strict browser verification. Part C: HEAD + origin/main drift checks. Emits one of REVIEW-PASSED / REVIEW-ABORTED / REVIEW-FAIL to Task.md Handoffs. Invoked via `/review` or natural language ("리뷰해줘", "review", "검토해줘"). | read-only on source; writes `.claude/reviews/` + Task.md Handoffs line + transient `test-artifacts/review/` (Part B, cleaned after run) |
 
 ---
 
 ## Multi-Terminal Coordination
-
-The project is developed across **four parallel terminals**, each with a focused role and
-isolated context window. All terminals work on the `main` Git branch — coordination is by
-file/layer ownership + handoff signals in `Task.md`, not branches.
 
 ### Terminal Roster
 
@@ -118,9 +205,9 @@ versioned via `**Version**: X.Y` in its header.
 **Handoff protocol**:
 - `[SPEC-READY]` in `## Research Ready` — the primary entry point. Main terminal reads
   `research/spec/requirements.md` when it sees this marker. No per-topic markers are
-  published to Task.md; the 12 topic deep-dives at `research/search/**` are reasoning
-  archive, accessed directly by filesystem only when main needs deep justification
-  behind a Section 11 directive.
+  published to Task.md; the topic deep-dives at `research/search/**` and
+  `research/investigations/**` are reasoning archive, accessed directly by filesystem
+  only when main needs deep justification behind a Section 11 directive.
 - `SPEC-UPDATED: vX.Y → vX.Z — <sections> — <summary>` in `## Handoffs` on every
   non-trivial spec revision. Main terminal reads this at session start to discover
   changes since its last pickup.
@@ -157,77 +244,67 @@ whether to finish the current task on the old spec or restart on the new.
   audit, optimization ideas.
 - Updates `research/spec/requirements.md` in place (version bump + changelog entry).
 - Appends `SPEC-UPDATED` handoff signal so main picks up changes efficiently.
-- Keeps `research/search/**` as reasoning archive — expanded when a new question
-  requires fresh exploration.
+- Keeps `research/search/**` + `research/investigations/**` as reasoning archive —
+  expanded when a new question requires fresh exploration.
 
 ### Pre-Push Review Gate
 
 The orchestrator pipeline **commits but does not push**. `/review` is the unified
 pre-push gate that combines static review + (conditional) browser verification + drift
-checks into a single workflow:
+checks into a single workflow. The diagram below shows the up-to-date Part B steps
+including Step B0a SessionEvent failure pre-check (Tier 1.3, spec v1.4-era), Step B4
+multi-run aggregation with p50 gate (Tier 1.2), and Step B5 swipe-loop budget per
+spec v1.6 (outer <1500 ms, backend sub-budget <1000 ms).
 
-```
-main orchestrator
-  |-> git-manager commits  (stays local)
-  |-> reporter updates Report.md + Task.md
-  |        -> appends `REVIEW-REQUESTED: <sha>` to Task.md Handoffs
-  -> orchestrator STOPS and tells user:
-       "run /review (or just say '리뷰해줘') in the review terminal;
-        on REVIEW-PASSED run git push from that same terminal"
-     (no push here)
+```mermaid
+flowchart TD
+    Start([User: /review or '리뷰해줘']) --> A1
+    A1["A1 — Capture scope<br/>REVIEWED_SHA / REVIEWED_ORIGIN_MAIN<br/>REVIEW_START_UTC / CHANGED_FILES<br/>(via git rev-parse + date)"]
+    A1 --> A2["A2-A4 — Read changed files,<br/>Goal.md, Report.md, spec;<br/>apply 7-axis checklist;<br/>write .claude/reviews/&lt;sha&gt;.md + latest.md"]
+    A2 --> A5["A5 — stdout: STATIC REVIEW: verdict — N CRITICAL, M MAJOR, K MINOR"]
+    A5 --> A6{Part A verdict?}
 
-(user opens / switches to review terminal — stays there through the rest of the cycle)
+    A6 -->|FAIL: CRITICAL ≥1<br/>OR MAJOR ≥1| C3F["C3 — emit REVIEW-FAIL<br/>(skip Part B + drift)"]
+    A6 -->|PASS / PASS-WITH-MINORS| B0
 
-review terminal — `/review` (or natural language "리뷰해줘")
-  PART A — Static deep review
-  |- A1 captures REVIEWED_SHA = git rev-parse HEAD
-  |               REVIEWED_ORIGIN_MAIN = git rev-parse origin/main
-  |               CHANGED_FILES = git diff --name-only origin/main..HEAD
-  |- A2-A4 read all changed files + Goal.md + Report.md + spec, apply 7-axis checklist,
-  |        write report to .claude/reviews/<sha>.md + latest.md
-  |- A5 stdout summary: STATIC REVIEW: <verdict> — <N> CRITICAL, <M> MAJOR, <K> MINOR
-  -> A6 branch on verdict:
-       FAIL (CRITICAL≥1 OR MAJOR≥1) → skip Part B + Part C drift, jump to C3 → REVIEW-FAIL
-       PASS / PASS-WITH-MINORS → continue to Part B's path-detection gate
+    B0{B0 — UI-affecting<br/>paths in scope?<br/>frontend/ OR<br/>recommendation/views.py /<br/>engine.py / accounts/ /<br/>urls.py / migrations/ /<br/>RECOMMENDATION settings}
+    B0 -->|no| C1[Part C drift checks]
+    B0 -->|yes| B0a
 
-  PART B — Strict browser verification (CONDITIONAL)
-  |- B0 path gate: scan CHANGED_FILES for UI-affecting paths
-  |     (frontend/, recommendation/views.py, engine.py, accounts/, urls.py,
-  |      recommendation/migrations/, RECOMMENDATION settings)
-  |     - no UI paths → skip Part B, fill report's Part B section as "Skipped",
-  |                     stdout "BROWSER TEST: skipped — no UI-affecting paths"
-  |     - UI paths present → continue to B1
-  |- B1 preflight: dev server health, dev-login, inject tokens, debug overlay
-  |- B2 baseline: zero-tolerance pre-existing console-error gate
-  |- B3-B7 run 3 personas × ≥25 swipes each:
-  |    time-to-first-card < 4 s (5 s for bare query), per-swipe p95 < 700 ms,
-  |    zero console errors, zero unexpected 4xx/5xx (auth-401 refresh allowed),
-  |    no duplicate cards, expected phase transitions, strict API response shape,
-  |    edge cases (refresh-resume, action card, persona report, network failure injection)
-  |- B8 spec-metric infrastructure sentinel (saved_ids field, bookmark endpoint
-  |     — conditional on Sprint 0 A3 having shipped)
-  |- B9 cross-persona aggregation + cleanup + report append
-  -> B10 branch:
-       Part B FAIL → jump to C3 → REVIEW-FAIL combining Part A MINORs + Part B failure
-       Part B PASS (or skipped earlier) → continue to Part C
+    B0a["B0a — SessionEvent failure pre-check<br/>(Tier 1.3, spec v1.4)<br/>query last 5 min from REVIEW_START_UTC<br/>for gemini_failure / parse_query_failure /<br/>persona_report_failure / failed gemini_rerank"]
+    B0a -->|recent failure found| C3F
+    B0a -->|clean| B1
 
-  PART C — Drift checks + final verdict
-  |- C1 HEAD-drift check: re-read HEAD. If ≠ REVIEWED_SHA
-  |     → append REVIEW-ABORTED: <sha> — HEAD advanced to <new_sha> → STOP
-  |- C2 remote-drift check: fetch + re-read origin/main. If ≠ REVIEWED_ORIGIN_MAIN
-  |     → append REVIEW-ABORTED: <sha> — origin/main moved → STOP
-  -> C3 emit final handoff signal:
-       Part A FAIL                           → REVIEW-FAIL: <sha> — N CRITICAL, M MAJOR
-       Part A PASS + Part B FAIL             → REVIEW-FAIL: <sha> — static PASS but browser FAIL (...)
-       Part A PASS + (Part B PASS or skipped) + clean drift:
-         K=0 MINORs → REVIEW-PASSED: <sha> — drift checks passed; run `git push` manually
-         K>0 MINORs → REVIEW-PASSED: <sha> — drift checks passed, K MINOR noted (...)
+    B1["B1-B3 — Preflight: dev server health,<br/>migration sanity check, dev-login,<br/>token injection, baseline diagnostics,<br/>3 personas setup"]
+    B1 --> B4
 
-(still in the review terminal)
-  - REVIEW-PASSED  → user runs `git push` directly
-  - REVIEW-ABORTED → user returns to main terminal; orchestrator handles the follow-up
-                      (re-run /review after HEAD drift; pull --rebase + re-review after remote drift)
-  - REVIEW-FAIL    → user returns to main terminal; orchestrator re-enters fix loop (max 2 cycles)
+    B4["B4 — Time-to-first-card<br/>multi-run 3× per persona (Tier 1.2, spec v1.4)<br/>gate: p50 &lt; 4000 ms (5000 ms bare query)<br/>last run continues to B5+"]
+    B4 -->|p50 over budget on any persona| C3F
+    B4 -->|all personas PASS| B5
+
+    B5["B5 — Swipe lifecycle (~25 swipes)<br/>(spec v1.6 ratification)<br/>outer gate: p95 &lt; 1500 ms<br/>backend sub-budget: total_ms &lt; 1000 ms<br/>(via SessionEvent.swipe.timing_breakdown)"]
+    B5 -->|≥2 swipes breach| C3F
+    B5 -->|PASS| B6
+
+    B6["B6-B8 — State validation,<br/>API shape strict assertion,<br/>edge cases (refresh-resume, action card,<br/>persona report, network failure injection),<br/>spec primary-metric infra sentinel"]
+    B6 --> B9
+    B9["B9 — Cross-persona aggregation,<br/>cleanup, append Part B section to report"]
+    B9 --> C1
+
+    C1{C1 — HEAD drifted?<br/>git rev-parse HEAD<br/>≠ REVIEWED_SHA?}
+    C1 -->|YES| AB1["REVIEW-ABORTED:<br/>HEAD advanced<br/>→ re-run /review"]
+    C1 -->|NO| C2{C2 — origin/main drifted?<br/>git fetch + re-read<br/>≠ REVIEWED_ORIGIN_MAIN?}
+    C2 -->|YES| AB2["REVIEW-ABORTED:<br/>origin/main moved<br/>→ git pull --rebase + re-review"]
+    C2 -->|NO| C3P
+
+    C3P["C3 — emit REVIEW-PASSED<br/>K=0 MINORs: clean<br/>K&gt;0 MINORs: PASS-WITH-MINORS (count inline)"]
+    C3P --> Push([User runs git push<br/>directly from review terminal])
+
+    style C3F fill:#ef4444,color:#fff
+    style AB1 fill:#f59e0b,color:#000
+    style AB2 fill:#f59e0b,color:#000
+    style C3P fill:#10b981,color:#fff
+    style Push fill:#3b82f6,color:#fff
 ```
 
 This means:
@@ -240,50 +317,58 @@ This means:
    verified that the range is clean (Part A), the UX is intact (Part B if applicable),
    AND HEAD/origin/main still match what was reviewed (Part C). No context-switch, no
    "review one range, push another" race.
-3. Part B is the strict pre-push browser verification — separate from the fast
-   `web-tester` that runs inside the orchestrator inner loop. It enforces spec-aligned
-   latency budgets, multi-persona convergence cycles, and zero-tolerance error gates.
-   The user does not invoke it separately; `/review` runs it automatically when the
-   diff includes UI-affecting paths.
-4. The review terminal still never edits source code and never runs `git push` itself —
+3. **Part B uses multi-run aggregation for non-deterministic upstream services.** Step B4
+   (parse-query → first card) runs 3× per persona and gates on the p50 (median) — this
+   absorbs Gemini API ~5% variance that previously caused same-cause Part B FAILs across
+   consecutive cycles. The "no retries on flaky steps" rule still applies to GESTURE
+   flakiness (button-click misses, image-load timeouts) — multi-run is reserved for
+   external-API latency variance.
+4. **Step B0a SessionEvent failure pre-check** fast-fails the run if a recent
+   `gemini_failure` / `parse_query_failure` / `persona_report_failure` event is found
+   within `REVIEW_START_UTC − 5 min`. Saves 60–120 s per upstream-outage scenario.
+5. **Step B5 budget mirrors v1.6 spec ratification** — outer p95 <1500 ms (frontend RTT)
+   and backend sub-budget <1000 ms (per `SessionEvent.swipe.timing_breakdown.total_ms`).
+   Aspirational <500 ms preserved as goal, not gate. Re-tightening pathway:
+   IMP-7 (per-building-id cache) → IMP-8 (background prefetch) → INFRA-1
+   (same-region deploy, multiplicative).
+6. The review terminal still never edits source code and never runs `git push` itself —
    the push is always user-initiated by explicit `git push` in the review terminal.
-4. `git-manager`'s "never pushes unless explicitly told to" default (see Key Rules
+7. `git-manager`'s "never pushes unless explicitly told to" default (see Key Rules
    below) is what keeps the orchestrator side clean; no existing agent code changes.
 
 ---
 
-## Case 1: Normal feature or bug fix
+## Case 1: Normal feature or bug fix (orchestrator pipeline)
 
+```mermaid
+flowchart TD
+    Start([User request]) --> Orch[orchestrator]
+    Orch -->|reads context| Ctx[CLAUDE.md + Goal.md<br/>Task.md + Report.md<br/>spec if relevant]
+    Orch -->|backend spec| BM[back-maker<br/>backend code + flake8]
+    BM -->|API contract| Mig{Migration<br/>created?}
+    Mig -->|yes| Migrate["Step 2.5 — apply migrate<br/>(belt-and-suspenders<br/>backstop)"]
+    Mig -->|no| FM
+    Migrate --> FM[front-maker<br/>frontend data layer + ESLint]
+    FM --> Par{parallel}
+    Par --> RV[reviewer]
+    Par --> SC[security-manager]
+    RV --> Dec{both PASS?}
+    SC --> Dec
+    Dec -->|YES| WT[web-tester<br/>fast inner-loop variant]
+    Dec -->|NO| FL["Fix Loop — reviewer Mode B<br/>translates issues → fix orders<br/>→ back/front-maker<br/>(max 2 cycles total)"]
+    FL --> Par
+    WT --> WD{PASS?}
+    WD -->|PASS| GM[git-manager<br/>commit local — no push]
+    WD -->|FAIL: counts as 1 fix cycle| FL
+    GM --> RP[reporter<br/>Report.md + Task.md<br/>+ algorithm.md narrow sync<br/>+ REVIEW-REQUESTED Handoff]
+    RP --> Stop([STOP — user runs /review<br/>in review terminal])
+
+    style Start fill:#3b82f6,color:#fff
+    style Stop fill:#3b82f6,color:#fff
+    style FL fill:#f59e0b,color:#000
 ```
-User request
-  |-> orchestrator
-       |- reads CLAUDE.md + Goal.md + Task.md + Report.md
-       |- adds/updates task in Task.md (-> In Progress)
-       |- breaks task into back-maker spec + front-maker spec
-       |
-       |-> back-maker          backend code, runs flake8
-       |    -> BACK-MAKER DONE + API contract
-       |
-       |-> front-maker         frontend code, runs ESLint
-       |    -> FRONT-MAKER DONE + API calls made
-       |
-       |-> reviewer --+  (parallel)
-       |-> security --+  (parallel)
-       |
-       |   Both PASS?
-       |   |- YES --> web-tester (10+ swipes, dev-login auth)
-       |   |           |- PASS --> git-manager --> reporter --> done
-       |   |           -> FAIL --> Fix Loop (counts as 1 cycle)
-       |   |
-       |   -> NO  --> Fix Loop (max 2 cycles total)
-       |               |- reviewer (Mode B) translates issues -> fix orders
-       |               |-> back-maker / front-maker fix
-       |               |-> reviewer + security again
-       |               |- PASS --> web-tester --> git-manager --> reporter
-       |               -> still FAIL after cycle 2 --> STOP, report to user
-       |
-       -> git-manager --> reporter (updates Report.md + marks Task.md resolved)
-```
+
+**Fix-cycle accounting**: max 2 cycles total across reviewer/security/web-tester FAIL paths. After 2 failed cycles → STOP, report to user, ask for guidance.
 
 ---
 
@@ -299,53 +384,58 @@ User question
 
 ## Case 3: Algorithm optimizer run
 
-```
-User: "run the algorithm tester"
-  -> algo-tester
-       |- reads CLAUDE.md + research/algorithm.md
-       |- runs: python3 tools/algorithm_tester.py --personas N --trials T
-       |   (~5-10 min, shows progress)
-       |
-       |- reads: backend/tools/optimization_results.json
-       |
-       |- WEAKNESS DETECTED?
-       |   (precision < 0.02, avg_swipes > 40, std > 0.15, archetype near-zero)
-       |   -> YES --> STOP. Report exact numbers to user.
-       |               Wait for manual guidance. No files changed.
-       |
-       |- IMPROVEMENT vs baseline?
-       |   -> NO  --> "Current params are optimal." --> reporter --> done
-       |
-       -> YES: improvement found
-            |- Print summary table (current vs best, % improvement)
-            -> orchestrator: "apply changed params to settings.py"
-                 |-> back-maker (updates RECOMMENDATION dict only)
-                 |-> reviewer + security
-                 |-> git-manager ("chore: apply optimized hyperparameters")
-                 -> reporter
+```mermaid
+flowchart TD
+    Start(["User: 'run the algorithm tester'"]) --> AT[algo-tester]
+    AT --> Read[reads CLAUDE.md +<br/>research/algorithm.md]
+    Read --> Run["python3 tools/algorithm_tester.py<br/>--personas N --trials T<br/>(~5-10 min)"]
+    Run --> Results["read backend/tools/<br/>optimization_results.json"]
+    Results --> Weak{Weakness?<br/>precision &lt; 0.02 OR<br/>avg_swipes &gt; 40 OR<br/>std &gt; 0.15 OR<br/>archetype near-zero}
+    Weak -->|YES| Stop1([STOP — report exact numbers,<br/>wait for guidance,<br/>no files changed])
+    Weak -->|NO| Imp{Improvement<br/>vs baseline?}
+    Imp -->|NO| ReportNoChange[reporter<br/>'current params optimal']
+    Imp -->|YES| Apply[orchestrator:<br/>'apply changed params to settings.py']
+    Apply --> BMo[back-maker<br/>updates RECOMMENDATION dict only]
+    BMo --> RVSC[reviewer + security parallel]
+    RVSC --> GM[git-manager<br/>'chore: apply optimized hyperparameters']
+    GM --> RP[reporter]
+
+    style Stop1 fill:#ef4444,color:#fff
+    style Apply fill:#10b981,color:#fff
 ```
 
 ---
 
 ## Case 4: Fix loop detail
 
-```
-reviewer or security returns FAIL
-  -> orchestrator sends all issues to reviewer (Mode B: Fix Translation)
-       -> reviewer returns precise fix orders per maker
-            |-> back-maker (if backend fix)
-            |-> front-maker (if frontend fix)
-            -> reviewer + security (parallel, second pass)
-                 |- PASS --> web-tester --> git-manager --> reporter
-                 -> FAIL --> cycle 2 (same loop)
-                      -> still FAIL --> STOP, report to user, ask guidance
+```mermaid
+flowchart TD
+    Fail([reviewer or security FAIL]) --> Ord[orchestrator sends ALL issues<br/>to reviewer in Mode B<br/>'Fix Translation']
+    Ord --> Translate[reviewer returns precise<br/>fix orders per maker]
+    Translate --> Maker{which maker?}
+    Maker -->|backend issue| BMfix[back-maker fix]
+    Maker -->|frontend issue| FMfix[front-maker fix]
+    Maker -->|both| Both[back-maker + front-maker]
+    BMfix --> Pass2[reviewer + security<br/>parallel 2nd pass]
+    FMfix --> Pass2
+    Both --> Pass2
+    Pass2 --> P2{PASS?}
+    P2 -->|PASS| Done[web-tester →<br/>git-manager →<br/>reporter]
+    P2 -->|FAIL — cycle 2| Cycle2[same loop one more time]
+    Cycle2 --> Final{PASS?}
+    Final -->|PASS| Done
+    Final -->|FAIL after cycle 2| StopUser([STOP — report to user,<br/>ask for guidance])
+
+    style StopUser fill:#ef4444,color:#fff
 ```
 
 Web test FAIL counts as 1 fix cycle. Max 2 cycles total across all loops.
 
 ---
 
-## Case 5: Web tester flow
+## Case 5: Web tester flow (fast inner-loop variant)
+
+The orchestrator's inner-loop `web-tester` is the fast Playwright runner that catches obvious regressions during the pipeline. The strict pre-push variant lives in `/review` Part B (separate, slower, multi-run).
 
 ```
 web-tester starts
@@ -368,6 +458,8 @@ web-tester starts
       FAIL includes: exact error, failing URL, console log excerpt
 ```
 
+**Difference from `/review` Part B**: inner-loop web-tester is 1 persona × ≥10 swipes, no latency assertion, retries on flake (1×), console errors reported but not failed. Part B is 3 personas × ≥25 swipes, spec-aligned latency budgets, multi-run aggregation, zero-tolerance error gates.
+
 ---
 
 ## Case 6: Research flow (separate terminal, ongoing)
@@ -385,7 +477,8 @@ User starts/resumes research terminal
   |- research terminal writes / updates:
   |    research/spec/requirements.md   (living spec, versioned X.Y)
   |    research/spec/research-priority-rebaselined.md   (research recommendation, non-binding)
-  |    research/search/NN-*.md   (reasoning archive, 12 topic deep-dives)
+  |    research/search/NN-*.md   (reasoning archive, original 12 topic deep-dives)
+  |    research/investigations/NN-*.md   (post-spec deep dives, cross-referenced from spec §11.1)
   |
   |- On spec revision:
   |    1. bumps **Version**: X.Y in requirements.md header
@@ -407,9 +500,9 @@ research sections), `.claude/WORKFLOW.md` (research rows only, by explicit user 
 Never `backend/`, `frontend/`, agent definitions, `Report.md`, or git commits from main's pipeline.
 
 **Main terminal reads** (in order): spec → plans → code. Main does NOT read
-`research/search/**` under normal flow — Section 11 of `requirements.md` absorbs
-all actionable directives. Main may consult `research/search/NN-*.md` for deep
-justification only when debugging a spec decision or exploring a variant.
+`research/search/**` or `research/investigations/**` under normal flow — Section 11
+of `requirements.md` absorbs all actionable directives. Main may consult deep-dive
+files for justification only when debugging a spec decision or exploring a variant.
 
 The **old orchestrator-triggered research pattern** (main's orchestrator invoking the
 research agent mid-pipeline for a complex sub-question) is still available in
@@ -446,6 +539,7 @@ User starts/resumes design terminal
   |
   |- designer may spawn `design-<role>` sub-agents via the Agent tool when delegation
   |   is needed (e.g., multi-file refactor, full mockup page, visual QA pass).
+  |   Currently spawned on demand: design-ui-maker (sonnet), design-mockup-maker (sonnet).
   |
   |- On new mockup ready for API integration:
   |    appends `MOCKUP-READY: <page>` to .claude/Task.md ## Handoffs
@@ -481,7 +575,8 @@ reporter runs after every git-manager commit
   |- reads .claude/Task.md      (task board)
   |
   |- updates Report.md:
-  |   |- Last Updated section for Claude ONLY (Do NOT overwrite Gemini's section)
+  |   |- Last Updated section for Claude ONLY
+  |   |   (Do NOT overwrite Last Updated (Designer) section — design terminal owns it)
   |   |- Structure tables (if new files created)
   |   |- API Surface (if new endpoints)
   |   |- Feature Status (if features completed)
@@ -489,6 +584,12 @@ reporter runs after every git-manager commit
   |
   |- updates Task.md:
   |   -> moves completed tasks to Resolved with date
+  |
+  |- (narrow exception) updates research/algorithm.md ONLY when:
+  |   - RECOMMENDATION dict in settings.py changed → sync Production Value column
+  |   - phase/formula/edge-case section's implementation changed → append 1-line annotation
+  |   - maintains Last Synced (Reporter): YYYY-MM-DD <sha_short> line near top
+  |   See CLAUDE.md ## Rules for the authoritative scope.
   |
   -> appends REVIEW-REQUESTED to Task.md Handoffs:
        `- [YYYY-MM-DD] REVIEW-REQUESTED: <sha_short> — <one-line summary>`
@@ -503,13 +604,14 @@ reporter runs after every git-manager commit
 |------|--------|
 | All changes go through orchestrator | Never implement directly from main conversation |
 | Questions answered directly | No agents needed for explanations |
-| Makers are sandboxed | back-maker: `backend/` only -- front-maker: `frontend/` only |
+| Makers are sandboxed | back-maker: `backend/` only -- front-maker: `frontend/` data layer only -- design-* sub-agents: `frontend/` UI layer only |
 | orchestrator never writes code | Always delegates to makers |
 | git-manager never pushes | Unless explicitly told to push |
 | Reporter updates, never appends | Report.md is live state (but preserve `Last Updated (Designer)` section — design terminal owns it); Task.md Resolved is historical |
 | Algorithm weakness = manual review | orchestrator stops and flags; does not auto-fix |
 | Fix cycle limit = 2 | After 2 failed cycles, stop and report to user |
 | Research before complex coding | Algorithm/UX tasks without precedent trigger research first |
+| WORKFLOW.md stays in sync | When workflow / agent / terminal / pre-push gate / signal vocab changes, update this file (text + Mermaid) in the same commit |
 
 ---
 
@@ -518,11 +620,16 @@ reporter runs after every git-manager commit
 | File | Purpose |
 |------|---------|
 | `.claude/agents/*.md` | Agent definitions (this system) |
+| `.claude/commands/*.md` | Slash command definitions (`/review`, etc.) |
 | `.claude/Goal.md` | Vision + acceptance criteria (north star) |
-| `.claude/Task.md` | Problem board -- open/in-progress/resolved by category |
+| `.claude/Task.md` | Problem board -- open/in-progress/resolved by category, Handoffs + Research Ready signals |
 | `.claude/Report.md` | Live system documentation -- architecture, API, diagrams |
 | `.claude/WORKFLOW.md` | This file -- agent workflow documentation |
-| `research/` | Deep exploration files (algorithm, UX patterns) |
+| `.claude/reviews/*.md` | Per-commit `/review` reports (latest.md is symlink-equivalent) |
+| `research/spec/requirements.md` | Living spec (research terminal exclusive) |
+| `research/algorithm.md` | Algorithm reference (read-only except reporter narrow sync) |
+| `research/search/`, `research/investigations/` | Research reasoning archive |
 | `backend/tools/algorithm_tester.py` | Hyperparameter optimizer script |
 | `backend/tools/optimization_results.json` | Latest tester output |
 | `CLAUDE.md` | Project conventions (read by all agents) |
+| `DESIGN.md` | Design DNA (design terminal exclusive) |
