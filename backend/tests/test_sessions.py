@@ -328,9 +328,9 @@ class TestPhaseTransitions:
             )
             session_id = resp.json()['session_id']
 
-            # Record 3 likes (min_likes_for_clustering = 3)
+            # Record 4 likes (min_likes_for_clustering = 4, Spec v1.8 Topic 06 N>=4 mitigation)
             last_resp = None
-            for i in range(3):
+            for i in range(4):
                 last_resp = auth_client.post(
                     f'/api/v1/analysis/sessions/{session_id}/swipes/',
                     {
@@ -344,7 +344,7 @@ class TestPhaseTransitions:
             _stop_patches(patchers)
 
         assert last_resp.status_code == 200
-        # After 3 likes, phase should be 'analyzing'
+        # After 4 likes, phase should be 'analyzing'
         assert last_resp.json()['progress']['phase'] == 'analyzing'
 
     def test_analyzing_to_converged(self, auth_client, user_profile):
@@ -399,6 +399,102 @@ class TestPhaseTransitions:
 
 
 @pytest.mark.django_db
+class TestSpecV18Topic06N4Mitigation:
+    """Spec v1.8 Topic 06 N>=4 activation-cliff mitigation tests.
+
+    Verifies that raising min_likes_for_clustering from 3 to 4 correctly defers
+    the exploring->analyzing phase transition (and therefore K-Means invocation)
+    until N=4 likes, avoiding the Investigation 09 worst-case window
+    (1 Love + 2 Likes, k=2 forces centroid collapse onto Love).
+    """
+
+    def test_n3_skips_kmeans_per_v18_mitigation(self, auth_client, user_profile):
+        """Spec v1.8 Topic 06 N>=4 mitigation: at N=3 likes K-Means is SKIPPED.
+
+        With min_likes_for_clustering=4, after exactly 3 likes the session phase
+        must remain 'exploring' -- the phase transition to 'analyzing' is deferred,
+        so compute_taste_centroids (K-Means) is never called during swipe processing.
+        This avoids the Investigation 09 worst-case window (1 Love + 2 Likes,
+        k=2 forces centroid collapse onto Love due to love_weight asymmetry).
+        """
+        project = Project.objects.create(
+            user=user_profile, name='V18 N3 Mitigation Test', filters={},
+        )
+
+        patchers = _apply_patches()
+        try:
+            resp = auth_client.post(
+                '/api/v1/analysis/sessions/',
+                {'project_id': str(project.project_id), 'filters': {}},
+                format='json',
+            )
+            session_id = resp.json()['session_id']
+
+            # Record exactly 3 likes -- must NOT trigger phase transition with new threshold
+            last_resp = None
+            for i in range(3):
+                last_resp = auth_client.post(
+                    f'/api/v1/analysis/sessions/{session_id}/swipes/',
+                    {
+                        'building_id': f'B{str(i+1).zfill(5)}',
+                        'action': 'like',
+                        'idempotency_key': f'v18_n3_like_{i}',
+                    },
+                    format='json',
+                )
+        finally:
+            _stop_patches(patchers)
+
+        assert last_resp.status_code == 200
+        # N=3: phase must stay 'exploring' -- K-Means deferred per Spec v1.8 Topic 06
+        assert last_resp.json()['progress']['phase'] == 'exploring', (
+            "Spec v1.8 Topic 06 mitigation: phase must remain 'exploring' at N=3 "
+            "(min_likes_for_clustering=4 defers K-Means activation)"
+        )
+
+    def test_n4_triggers_kmeans_per_v18_threshold(self, auth_client, user_profile):
+        """Spec v1.8 Topic 06: at N=4 K-Means resumes (threshold verified).
+
+        After exactly 4 likes the session transitions to 'analyzing', confirming
+        the 3->4 retune didn't break K-Means activation at the correct boundary.
+        """
+        project = Project.objects.create(
+            user=user_profile, name='V18 N4 Threshold Test', filters={},
+        )
+
+        patchers = _apply_patches()
+        try:
+            resp = auth_client.post(
+                '/api/v1/analysis/sessions/',
+                {'project_id': str(project.project_id), 'filters': {}},
+                format='json',
+            )
+            session_id = resp.json()['session_id']
+
+            # Record exactly 4 likes -- must trigger phase transition at the new threshold
+            last_resp = None
+            for i in range(4):
+                last_resp = auth_client.post(
+                    f'/api/v1/analysis/sessions/{session_id}/swipes/',
+                    {
+                        'building_id': f'B{str(i+1).zfill(5)}',
+                        'action': 'like',
+                        'idempotency_key': f'v18_n4_like_{i}',
+                    },
+                    format='json',
+                )
+        finally:
+            _stop_patches(patchers)
+
+        assert last_resp.status_code == 200
+        # N=4: phase must become 'analyzing' -- K-Means activated per Spec v1.8 Topic 06
+        assert last_resp.json()['progress']['phase'] == 'analyzing', (
+            "Spec v1.8 Topic 06: phase must become 'analyzing' at N=4 "
+            "(min_likes_for_clustering=4 threshold must activate K-Means)"
+        )
+
+
+@pytest.mark.django_db
 class TestConvergenceSignalIntegrity:
     """Topic 10 Option A: unconditional convergence signal-integrity fixes.
 
@@ -420,13 +516,13 @@ class TestConvergenceSignalIntegrity:
     """
 
     def test_phase_transition_resets_convergence_state(self, auth_client, user_profile):
-        """Bug 1: after 3 likes trigger exploring -> analyzing, convergence_history
+        """Bug 1: after 4 likes trigger exploring -> analyzing, convergence_history
         and previous_pref_vector must be cleared to the empty list.
+        (Spec v1.8 Topic 06 N>=4 mitigation: threshold raised 3->4.)
 
-        Pre-fix: after 3 exploring likes, convergence_history accumulates 2 entries
-        (swipes 2 and 3; swipe 1 sets previous_pref_vector for the first time) and
-        previous_pref_vector holds a 384-dim exploring-phase pref_vector. The 4th
-        swipe (first analyzing) would then compute a cross-metric Delta-V.
+        Pre-fix: after exploring likes, convergence_history accumulates entries
+        and previous_pref_vector holds a 384-dim exploring-phase pref_vector.
+        The first analyzing swipe would then compute a cross-metric Delta-V.
 
         Post-fix: on the transition, both fields are reset to [], so the first
         analyzing swipe has no previous centroid to compare against yet -- Delta-V
@@ -446,8 +542,9 @@ class TestConvergenceSignalIntegrity:
             )
             session_id = resp.json()['session_id']
 
-            # 3 likes = min_likes_for_clustering -> exploring to analyzing
-            for i in range(3):
+            # 4 likes = min_likes_for_clustering -> exploring to analyzing
+            # (Spec v1.8 Topic 06 N>=4 mitigation: threshold raised 3->4)
+            for i in range(4):
                 auth_client.post(
                     f'/api/v1/analysis/sessions/{session_id}/swipes/',
                     {

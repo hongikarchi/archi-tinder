@@ -112,11 +112,18 @@ class TestTopic06AdaptiveK:
         assert len(centroids) == 2
 
     def test_adaptive_k_below_min_likes_uses_default_path(self, monkeypatch):
-        """Flag on + N=3 (< 4) => falls through to default k=min(2,3)=2 path."""
+        """Flag on + N=3 (< engine hardcoded >= 4 gate) => falls through to default k=min(2,3)=2 path.
+
+        Note: this tests the ADAPTIVE-K routing gate inside compute_taste_centroids (hardcoded >= 4),
+        which is separate from the phase-transition gate min_likes_for_clustering in settings.py.
+        Spec v1.8 Topic 06 raised min_likes_for_clustering 3->4 so K-Means is never invoked at
+        N=3 from the swipe flow (session stays in exploring phase), but if compute_taste_centroids
+        is called directly with N=3 the engine still uses the default k=2 path -- consistent.
+        """
         monkeypatch.setitem(settings.RECOMMENDATION, 'adaptive_k_clustering_enabled', True)
         clear_centroid_cache()
 
-        likes = [_like_entry(i) for i in range(3)]  # exactly 3 < 4
+        likes = [_like_entry(i) for i in range(3)]  # exactly 3 < engine adaptive gate (4)
         centroids, global_centroid = compute_taste_centroids(likes, round_num=3)
         # Default path: k=min(k_clusters=2, N=3)=2
         assert len(centroids) == 2

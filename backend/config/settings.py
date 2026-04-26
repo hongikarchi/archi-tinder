@@ -130,7 +130,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # -- Recommendation algorithm constants ------------------------------------
 RECOMMENDATION = {
     'bounded_pool_target': 150,
-    'min_likes_for_clustering': 3,
+    'min_likes_for_clustering': 4,  # Spec v1.8 Topic 06 N>=4 activation-cliff mitigation per Investigation 21 §closure -- defer K-Means until N>=4 to avoid the Investigation 09 worst-case window (1 Love + 2 Likes, k=2 forces centroid collapse onto Love)
     'decay_rate': 0.05,              # gamma -- recency weight decay
     'mmr_penalty': 0.3,              # lambda -- diversity penalty
     'convergence_threshold': 0.08,   # epsilon -- delta-V threshold
