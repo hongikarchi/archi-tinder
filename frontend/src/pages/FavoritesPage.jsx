@@ -31,7 +31,7 @@ export default function FavoritesPage({ projects, onDeleteProject, onResumeProje
   return (
     <div style={{ height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))', overflowY: 'auto', background: 'var(--color-bg)', padding: '40px 20px 100px' }}>
       <div style={{ maxWidth: 480, margin: '0 auto' }}>
-        <h2 style={{ color: 'var(--color-text)', fontSize: 22, fontWeight: 800, margin: '0 0 4px' }}>
+        <h2 style={{ color: 'var(--color-text)', fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>
           Project Folders
         </h2>
         <p style={{ color: 'var(--color-text-dimmer)', fontSize: 13, margin: '0 0 24px' }}>
@@ -180,7 +180,7 @@ function FolderDetail({ project, onBack, onDelete, onResume, onGenerateReport, o
 
         <div style={{ margin: '12px 0 6px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
-            <h2 style={{ color: 'var(--color-text)', fontSize: 20, fontWeight: 800, margin: 0 }}>
+            <h2 style={{ color: 'var(--color-text)', fontSize: 20, fontWeight: 700, margin: 0 }}>
               {project.projectName}
             </h2>
             <p style={{ color: 'var(--color-text-dimmer)', fontSize: 12, marginTop: 4 }}>
@@ -222,9 +222,9 @@ function FolderDetail({ project, onBack, onDelete, onResume, onGenerateReport, o
                 disabled={reportLoading}
                 style={{
                   width: '100%', padding: '11px', borderRadius: 12,
-                  background: reportLoading ? 'var(--color-surface-2)' : 'rgba(139,92,246,0.15)',
-                  color: reportLoading ? 'var(--color-text-dimmer)' : '#a78bfa',
-                  fontSize: 13, fontWeight: 600, border: '1px solid rgba(139,92,246,0.3)',
+                  background: reportLoading ? 'var(--color-surface-2)' : 'rgba(236,72,153,0.12)',
+                  color: reportLoading ? 'var(--color-text-dimmer)' : '#ec4899',
+                  fontSize: 13, fontWeight: 600, border: '1px solid rgba(236,72,153,0.30)',
                   cursor: reportLoading ? 'default' : 'pointer', fontFamily: 'inherit',
                 }}
               >
@@ -483,22 +483,22 @@ function PersonaReport({ report, reportImage, imageLoading, imageError, onGenera
   const chips = (items) => (items || []).slice(0, 5).map(item => (
     <span key={item} style={{
       fontSize: 11, padding: '3px 10px', borderRadius: 999,
-      background: 'rgba(139,92,246,0.15)', color: '#a78bfa',
-      border: '1px solid rgba(139,92,246,0.25)',
+      background: 'rgba(236,72,153,0.12)', color: '#ec4899',
+      border: '1px solid rgba(236,72,153,0.25)',
     }}>{item}</span>
   ))
 
   return (
     <div style={{
-      background: 'linear-gradient(135deg, rgba(139,92,246,0.08), rgba(236,72,153,0.06))',
+      background: 'linear-gradient(135deg, rgba(236,72,153,0.10), rgba(244,63,94,0.06))',
       borderRadius: 14, padding: '16px 18px', marginBottom: 20,
-      border: '1px solid rgba(139,92,246,0.25)',
+      border: '1px solid rgba(236,72,153,0.25)',
     }}>
-      <p style={{ color: '#a78bfa', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', margin: '0 0 6px' }}>
+      <p style={{ color: '#ec4899', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', margin: '0 0 6px' }}>
         Your Architectural Persona
       </p>
       {report.persona_type && (
-        <p style={{ color: 'var(--color-text)', fontSize: 17, fontWeight: 800, margin: '0 0 4px' }}>
+        <p style={{ color: 'var(--color-text)', fontSize: 17, fontWeight: 700, margin: '0 0 4px' }}>
           {report.persona_type}
         </p>
       )}
@@ -541,7 +541,7 @@ function PersonaReport({ report, reportImage, imageLoading, imageError, onGenera
             alt="AI generated architecture based on your taste"
             style={{
               width: '100%', borderRadius: 10, display: 'block',
-              border: '1px solid rgba(139,92,246,0.15)',
+              border: '1px solid rgba(236,72,153,0.15)',
             }}
           />
         </div>
@@ -555,10 +555,10 @@ function PersonaReport({ report, reportImage, imageLoading, imageError, onGenera
             disabled={imageLoading}
             style={{
               width: '100%', padding: '10px', borderRadius: 10,
-              background: imageLoading ? 'var(--color-surface-2)' : 'rgba(139,92,246,0.1)',
-              color: imageLoading ? 'var(--color-text-dimmer)' : '#a78bfa',
+              background: imageLoading ? 'var(--color-surface-2)' : 'rgba(236,72,153,0.10)',
+              color: imageLoading ? 'var(--color-text-dimmer)' : '#ec4899',
               fontSize: 12, fontWeight: 600,
-              border: '1px solid rgba(139,92,246,0.2)',
+              border: '1px solid rgba(236,72,153,0.25)',
               cursor: imageLoading ? 'default' : 'pointer',
               fontFamily: 'inherit',
             }}
@@ -575,7 +575,7 @@ function SectionLabel({ title, count, accent }) {
   return (
     <div style={{ padding: '16px 20px 10px', maxWidth: 480, margin: '0 auto' }}>
       <span style={{
-        color: accent ? '#a78bfa' : 'var(--color-text-muted)',
+        color: accent ? '#ec4899' : 'var(--color-text-muted)',
         fontSize: 11, fontWeight: 700,
         textTransform: 'uppercase', letterSpacing: '0.1em',
       }}>

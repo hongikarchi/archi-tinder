@@ -68,7 +68,7 @@ export default function LoginPage({ onLogin }) {
       padding: 24, position: 'relative',
     }}>
       <div style={{ textAlign: 'center', marginBottom: 48 }}>
-        <h1 style={{ fontSize: 36, fontWeight: 900, margin: '0 0 10px', letterSpacing: '-0.02em' }}>
+        <h1 style={{ fontSize: 36, fontWeight: 700, margin: '0 0 10px', letterSpacing: '-0.02em' }}>
           <span style={{ color: 'var(--color-text)' }}>Archi</span>
           <span style={{ color: '#ec4899' }}>Tinder</span>
         </h1>

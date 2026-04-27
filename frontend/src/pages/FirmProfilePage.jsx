@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, Fragment } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 
 // TODO: Replace with API call
@@ -76,165 +76,104 @@ const MOCK_OFFICE = {
 
 
 /**
- * StatsCard — Following / Followers; mirrors AboutFlipCard footprint in mid-section row.
- *   Identical structure to UserProfilePage's StatsCard for cross-page consistency.
+ * DescriptionAboutFlipCard — §3.5.4 Hero Flip variant (text-on-surface, profile pages)
+ *   Front: italic description 3-line clamp + "tap to reveal more" caption
+ *   Back: full description overflow-y auto + footer row with Founded year + Location
+ *   Internal radial-gradient pink glow. Lift YES, border YES (text-on-surface needs containment).
  */
-function StatsCard({ followingCount, followerCount }) {
-  return (
-    <div style={{
-      flex: '1 1 280px',
-      minHeight: 180,
-      padding: '20px 22px',
-      background: 'var(--color-surface)',
-      border: '1px solid var(--color-border-soft)',
-      borderRadius: 20,
-      boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
-      display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
-    }}>
-      <span style={{
-        display: 'inline-block',
-        color: 'var(--color-text-dimmer)', fontSize: 11, fontWeight: 600,
-        letterSpacing: '0.12em', textTransform: 'uppercase',
-      }}>
-        Stats
-      </span>
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-around',
-        gap: 24, paddingTop: 12,
-      }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <span style={{
-            color: 'var(--color-text)', fontSize: 28, fontWeight: 700, lineHeight: 1,
-            letterSpacing: '-0.01em',
-          }}>
-            {followingCount}
-          </span>
-          <span style={{
-            color: 'var(--color-text-dimmer)', fontSize: 11, fontWeight: 600,
-            letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 6,
-          }}>
-            Following
-          </span>
-        </div>
-        <div style={{ width: 1, height: 40, background: 'var(--color-border-soft)' }} />
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <span style={{
-            color: 'var(--color-text)', fontSize: 28, fontWeight: 700, lineHeight: 1,
-            letterSpacing: '-0.01em',
-          }}>
-            {followerCount}
-          </span>
-          <span style={{
-            color: 'var(--color-text-dimmer)', fontSize: 11, fontWeight: 600,
-            letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 6,
-          }}>
-            Followers
-          </span>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-
-/**
- * AboutFlipCard — text-only flip card variant per DESIGN.md §3.5.4
- *   Front: small "ABOUT" caps label + 2-line description preview + tap hint
- *   Back: full description + Founded {year} + Located in {location}
- */
-function AboutFlipCard({ description, foundedYear, location }) {
-  const [isAboutFlipped, setIsAboutFlipped] = useState(false)
+function DescriptionAboutFlipCard({ description, foundedYear, location }) {
+  const [isFlipped, setIsFlipped] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
 
   return (
     <div
       style={{
         perspective: '1200px',
-        flex: '1 1 280px',
+        width: '100%',
         minHeight: 180,
         cursor: 'pointer',
-        // §3.5.4: lift YES, border NO. Lift on outer perspective wrapper.
         transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
         transform: isHovered ? 'translateY(-4px)' : 'translateY(0)',
+        marginTop: 18, marginBottom: 18,
       }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onClick={(e) => {
         if (e.target.closest('button')) return
-        setIsAboutFlipped(f => !f)
+        setIsFlipped(f => !f)
       }}
     >
       <div style={{
-        width: '100%', height: '100%',
-        position: 'relative', minHeight: 180,
+        width: '100%', minHeight: 180,
+        position: 'relative',
         transition: 'transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
         transformStyle: 'preserve-3d',
-        transform: isAboutFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
+        transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
       }}>
-        {/* FRONT */}
+        {/* FRONT — italic description 3-line clamp + "tap to reveal more" */}
         <div style={{
           position: 'absolute', inset: 0,
           backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden',
-          borderRadius: 20, overflow: 'hidden',
+          borderRadius: 20,
           background: 'var(--color-surface)',
           border: '1px solid var(--color-border-soft)',
           padding: '20px 22px',
           display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
           boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
+          minHeight: 180,
         }}>
-          {/* Subtle internal glow */}
+          {/* Internal radial-gradient pink glow */}
           <div style={{
             position: 'absolute', top: -40, right: -40,
             width: 160, height: 160, borderRadius: '50%',
             background: 'radial-gradient(circle, rgba(236,72,153,0.18), transparent 70%)',
             pointerEvents: 'none',
           }} />
-
-          <div style={{ position: 'relative', zIndex: 1 }}>
-            <span style={{
-              display: 'inline-block',
-              color: '#ec4899', fontSize: 11, fontWeight: 600,
-              letterSpacing: '0.12em', textTransform: 'uppercase',
-              marginBottom: 10,
-            }}>
-              About
-            </span>
-            <p style={{
-              margin: 0,
-              color: 'var(--color-text-2)', fontSize: 14, lineHeight: 1.5,
-              fontWeight: 500,
-              display: '-webkit-box',
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: 'vertical',
-              overflow: 'hidden', textOverflow: 'ellipsis',
-            }}>
-              {description}
-            </p>
-          </div>
-
+          <p style={{
+            position: 'relative', zIndex: 1,
+            margin: 0,
+            color: 'var(--color-text-dim)', fontSize: 15, lineHeight: 1.6,
+            fontStyle: 'italic', fontWeight: 500,
+            display: '-webkit-box',
+            WebkitLineClamp: 3,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden', textOverflow: 'ellipsis',
+          }}>
+            {description}
+          </p>
           <span style={{
             position: 'relative', zIndex: 1,
-            color: 'var(--color-text-dimmer)', fontSize: 11, fontWeight: 600,
+            alignSelf: 'flex-end',
+            color: 'var(--color-text-dimmer)', fontSize: 10, fontWeight: 600,
             letterSpacing: '0.04em', textTransform: 'uppercase',
-            marginTop: 16,
+            marginTop: 12,
           }}>
-            tap to reveal
+            tap to reveal more
           </span>
         </div>
 
-        {/* BACK */}
+        {/* BACK — full description + footer (Founded + Location) */}
         <div style={{
           position: 'absolute', inset: 0,
           backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden',
           transform: 'rotateY(180deg)',
-          borderRadius: 20, overflow: 'hidden',
+          borderRadius: 20,
           background: 'var(--color-surface)',
           border: '1px solid var(--color-border-soft)',
           padding: '20px 22px',
           display: 'flex', flexDirection: 'column',
           boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
+          minHeight: 180,
         }}>
+          {/* Internal radial-gradient pink glow */}
+          <div style={{
+            position: 'absolute', top: -40, right: -40,
+            width: 160, height: 160, borderRadius: '50%',
+            background: 'radial-gradient(circle, rgba(236,72,153,0.18), transparent 70%)',
+            pointerEvents: 'none',
+          }} />
           <p style={{
+            position: 'relative', zIndex: 1,
             margin: '0 0 14px',
             color: 'var(--color-text-2)', fontSize: 13, lineHeight: 1.55,
             fontWeight: 500,
@@ -243,9 +182,9 @@ function AboutFlipCard({ description, foundedYear, location }) {
           }}>
             {description}
           </p>
-
           {/* Footer meta — Founded + Location */}
           <div style={{
+            position: 'relative', zIndex: 1,
             display: 'flex', flexWrap: 'wrap', gap: 10,
             paddingTop: 12,
             borderTop: '1px solid var(--color-border-soft)',
@@ -288,6 +227,18 @@ export default function FirmProfilePage() {
   // eslint-disable-next-line no-unused-vars
   const { officeId } = useParams()
   const navigate = useNavigate()
+  const [isFollowing, setIsFollowing] = useState(false)
+  const [followerCount, setFollowerCount] = useState(MOCK_OFFICE.follower_count)
+
+  function handleToggleFollow() {
+    // TODO(claude): POST /api/v1/offices/{id}/follow/ or DELETE
+    setIsFollowing(f => !f)
+    setFollowerCount(prev => isFollowing ? prev - 1 : prev + 1)
+  }
+
+  function handleMessage() {
+    // TODO(claude): wire DM endpoint — POST /api/v1/messages/ or similar
+  }
 
   return (
     <div
@@ -492,25 +443,102 @@ export default function FirmProfilePage() {
               )}
             </div>
 
-            {/* Description — italic muted (matches UserProfile bio styling) */}
-            <p
-              style={{
-                color: 'var(--color-text-dim)',
-                fontSize: 15,
-                lineHeight: 1.6,
-                margin: '0 0 18px',
-                fontWeight: 500,
-                fontStyle: 'italic',
-                maxWidth: 360,
-                display: '-webkit-box',
-                WebkitLineClamp: 3,
-                WebkitBoxOrient: 'vertical',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
-              {MOCK_OFFICE.description}
-            </p>
+            {/* §3.7 Compact stats row */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              gap: 0, marginTop: 14, marginBottom: 4,
+            }}>
+              {[
+                { count: MOCK_OFFICE.projects.length, label: 'Projects' },
+                { count: followerCount, label: 'Followers' },
+                { count: MOCK_OFFICE.following_count, label: 'Following' },
+              ].map((stat, i, arr) => (
+                <Fragment key={stat.label}>
+                  <button
+                    onClick={() => {
+                      if (stat.label === 'Projects') {
+                        // TODO(claude): scroll to projects section or navigate to filtered project list
+                      } else if (stat.label === 'Followers') {
+                        // TODO(claude): navigate to office followers/following list — GET /api/v1/offices/{id}/{followers|following}/
+                      } else {
+                        // TODO(claude): navigate to office followers/following list — GET /api/v1/offices/{id}/{followers|following}/
+                      }
+                    }}
+                    style={{
+                      flex: '0 0 auto',
+                      background: 'transparent', border: 'none', cursor: 'pointer',
+                      padding: '6px 18px', minHeight: 44,
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+                      fontFamily: 'inherit', color: 'inherit',
+                    }}
+                  >
+                    <span style={{ color: 'var(--color-text)', fontSize: 18, fontWeight: 700, lineHeight: 1 }}>
+                      {stat.count}
+                    </span>
+                    <span style={{ color: 'var(--color-text-dim)', fontSize: 12, fontWeight: 500 }}>
+                      {stat.label}
+                    </span>
+                  </button>
+                  {i < arr.length - 1 && (
+                    <div style={{ width: 1, height: 28, background: 'var(--color-border)' }} />
+                  )}
+                </Fragment>
+              ))}
+            </div>
+
+            {/* §3.5.4 Hero Flip — DescriptionAboutFlipCard */}
+            <DescriptionAboutFlipCard
+              description={MOCK_OFFICE.description}
+              foundedYear={MOCK_OFFICE.founded_year}
+              location={MOCK_OFFICE.location}
+            />
+
+            {/* §3.6 Profile Action Row — always shown for office profiles */}
+            <div style={{ display: 'flex', gap: 10, marginTop: 14, width: '100%' }}>
+              <button
+                onClick={handleToggleFollow}
+                onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)' }}
+                onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)' }}
+                onMouseDown={(e) => { e.currentTarget.style.transform = 'scale(0.98)' }}
+                onMouseUp={(e) => { e.currentTarget.style.transform = 'translateY(-1px)' }}
+                style={{
+                  flex: 1,
+                  minHeight: 44, padding: '12px 18px',
+                  borderRadius: 12,
+                  background: isFollowing ? 'var(--color-surface-2)' : 'linear-gradient(135deg, #ec4899, #f43f5e)',
+                  color: isFollowing ? 'var(--color-text-2)' : '#fff',
+                  border: isFollowing ? '1px solid var(--color-border)' : 'none',
+                  fontSize: 14, fontWeight: 700,
+                  cursor: 'pointer', fontFamily: 'inherit',
+                  boxShadow: isFollowing ? 'none' : '0 8px 22px rgba(236,72,153,0.32)',
+                  transition: 'transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), background 0.2s, color 0.2s, box-shadow 0.2s',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                }}
+              >
+                {isFollowing ? (
+                  <>Following<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg></>
+                ) : 'Follow'}
+              </button>
+              <button
+                onClick={handleMessage}
+                aria-label="Message"
+                style={{
+                  width: 44, height: 44, minWidth: 44, flexShrink: 0,
+                  background: 'var(--color-surface)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 12, cursor: 'pointer',
+                  color: 'var(--color-text-2)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transition: 'border-color 0.18s, color 0.18s',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(236,72,153,0.45)'; e.currentTarget.style.color = '#ec4899' }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-2)' }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+              </button>
+            </div>
 
             {/* Action pills — Website + Email (User-style icon-pills, NOT chunky buttons) */}
             {(MOCK_OFFICE.website_url || MOCK_OFFICE.contact_email) && (
@@ -583,24 +611,6 @@ export default function FirmProfilePage() {
               </div>
             )}
           </div>
-        </div>
-
-        {/* MID SECTION — Stats + About flip cards side-by-side (desktop), wrap (mobile) */}
-        <div style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: 18,
-          marginBottom: 36,
-        }}>
-          <StatsCard
-            followingCount={MOCK_OFFICE.following_count}
-            followerCount={MOCK_OFFICE.follower_count}
-          />
-          <AboutFlipCard
-            description={MOCK_OFFICE.description}
-            foundedYear={MOCK_OFFICE.founded_year}
-            location={MOCK_OFFICE.location}
-          />
         </div>
 
         {/* Projects section header — same style as UserProfile "Curated Boards · N" */}

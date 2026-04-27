@@ -295,7 +295,7 @@ function ActionCard({ card }) {
 
         {/* Title */}
         <h2 style={{
-          color: '#fff', fontSize: 22, fontWeight: 800,
+          color: '#fff', fontSize: 22, fontWeight: 700,
           margin: '0 0 12px 0', lineHeight: 1.3
         }}>
           {card.image_title || 'Your Taste is Found!'}
@@ -471,7 +471,7 @@ export default function SwipePage({ currentCard, progress, isCompleted, isLoadin
         padding: 24, gap: 12,
       }}>
         <div style={{ fontSize: 64 }}>🎉</div>
-        <h2 style={{ color: 'var(--color-text)', fontSize: 22, fontWeight: 800, margin: 0 }}>All done!</h2>
+        <h2 style={{ color: 'var(--color-text)', fontSize: 22, fontWeight: 700, margin: 0 }}>All done!</h2>
         <p style={{ color: 'var(--color-text-dim)', fontSize: 14, textAlign: 'center', margin: 0 }}>
           {`"${projectName || 'Project'}" swiping complete`}
         </p>
@@ -523,7 +523,7 @@ export default function SwipePage({ currentCard, progress, isCompleted, isLoadin
 
         {/* Header */}
         <div style={{ textAlign: 'center', width: '100%' }}>
-          <h1 style={{ fontSize: 20, fontWeight: 900, margin: '0 0 14px', letterSpacing: '-0.01em' }}>
+          <h1 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 14px', letterSpacing: '-0.01em' }}>
             {projectName
               ? <span style={{ color: 'var(--color-text)' }}>{projectName}</span>
               : <><span style={{ color: 'var(--color-text)' }}>Archi</span><span style={{ color: '#ec4899' }}>Tinder</span></>}

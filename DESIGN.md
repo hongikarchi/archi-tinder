@@ -338,6 +338,20 @@ label; back: full detail). Click flips, click again unflips.
 - Stop propagation for nested buttons via `e.target.closest('button')` early-return.
 - **Hover lift YES, hover border NO.** Per §3.5.1, the subtle `translateY(-4px)` lift applies to all cards including flip cards (it's the standard "interactive element" feedback that the rest of the site uses). The pink border is the only hover decoration that's omitted — a static border lingers awkwardly behind the rotating card during and after the flip. Lift alone is sufficient. Apply the lift on the OUTER perspective wrapper so it doesn't double-compose with the inner rotation.
 
+**Hero Flip variant (text-on-surface, profile pages):** The same rotateY mechanics
+apply to text-only flip cards used in profile heros. Front face shows a primary
+intro layer (italic bio for users, italic description for offices). Back face
+reveals a secondary identity layer (persona styles+programs+one-liner for users;
+extended description + founded year + location for offices). Same `perspective:
+1200`, `transformStyle: preserve-3d`, `transition: transform 0.5s
+cubic-bezier(0.4, 0, 0.2, 1)`, `backfaceVisibility: hidden`, lift YES on outer
+wrapper, no border. Surface is `var(--color-surface)` with subtle
+`var(--color-border-soft)` outline (NOT the §3.5.1 transparent-default rule —
+text-on-surface cards keep their resting outline because they have no image to
+provide visual containment). Optional internal radial-gradient pink glow as a
+hint of brand. A `tap to reveal` caption in caps label (10/600 letter-spacing
+0.04em) at the bottom-right or top-right signals interactivity.
+
 #### 3.5.6 Reference: SwipePage card is canonical
 
 The full-screen swipe card on `frontend/src/pages/SwipePage.jsx` is the
@@ -419,6 +433,217 @@ interaction.
 - Each slide is `flex: 0 0 100%` so the card width = one image at a time.
 - Hide scrollbar across browsers (Firefox `scrollbarWidth: 'none'`, Webkit via class with `::-webkit-scrollbar { display: none }`, IE legacy `msOverflowStyle: 'none'`). Add the `.hide-scrollbar` class to `index.css` if it doesn't exist.
 - Action button persists at the bottom — does not scroll with images.
+
+**Mandatory scroll indicators (chevron arrows):**
+The horizontal back gallery MUST surface scroll affordance — without an explicit
+hint users do not realize they can swipe across photos (and hidden scrollbars
+remove the only browser-native cue). Place two static chevrons on the left and
+right edges, vertically centered, layered above the scroll container with
+`pointerEvents: 'none'` so they don't block touch.
+
+```jsx
+{/* Left scroll indicator */}
+<div style={{
+  position: 'absolute', left: 10, top: '50%',
+  transform: 'translateY(-50%)',
+  pointerEvents: 'none',
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  width: 32, height: 32, borderRadius: '50%',
+  background: 'rgba(0,0,0,0.32)', backdropFilter: 'blur(6px)',
+  zIndex: 2,
+}}>
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+       stroke="rgba(255,255,255,0.85)" strokeWidth="2.5"
+       strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="15 18 9 12 15 6" />
+  </svg>
+</div>
+{/* Right scroll indicator — mirror */}
+<div style={{ position: 'absolute', right: 10, top: '50%', /* …same */ }}>
+  <svg ...><polyline points="9 18 15 12 9 6" /></svg>
+</div>
+```
+
+- Mirror SwipePage's gallery-face arrow style (which uses top/bottom for
+  vertical scroll); only the orientation flips for horizontal context.
+- Subtle dark-blur disc (32px, `rgba(0,0,0,0.32)`) gives the chevron contrast
+  against any underlying image.
+- 18px chevron, stroke `rgba(255,255,255,0.85)`.
+- Static (do not auto-hide on edge) for v1 — simple is enough.
+
+**Action bar gradient softening:**
+The persistent action bar at the bottom MUST blend smoothly into the gallery
+above it. A hard cut (e.g. opaque action bar starting abruptly) breaks the
+cinematic feel users expect from the front face's bottom-gradient overlay.
+
+```jsx
+<div style={{
+  padding: '20px 16px 16px',
+  background: 'linear-gradient(to top, rgba(0,0,0,0.96) 0%, rgba(0,0,0,0.65) 45%, rgba(0,0,0,0.18) 80%, transparent 100%)',
+}}>
+  {/* "View Gallery · N photos" pill */}
+</div>
+```
+
+- Multi-stop gradient (4 stops) so the fade reaches transparent over a longer
+  range than the single-stop `0.95 20% → transparent 100%` shorthand.
+- Top of the action bar dissolves into the last image; bottom is opaque enough
+  to support the action button's contrast.
+- Match the front face's `linear-gradient(to top, rgba(0,0,0,0.93) 0%,
+  rgba(0,0,0,0.4) 50%, transparent 100%)` aesthetic — same direction, similar
+  curve, slightly higher opacity at the base because the action bar lives there.
+
+### 3.6 Profile Action Row (Instagram pattern)
+
+Profile pages (`UserProfilePage`, `FirmProfilePage`) display a Follow / Following
+toggle as the primary action when viewing OTHER users' / offices' profiles.
+This mirrors Instagram's profile action row to leverage learned behavior.
+
+**Layout:**
+- A horizontal row directly below the hero block (or below the inline stats
+  row, depending on hero composition).
+- Primary button (Follow / Following) takes the major share; optional secondary
+  Message icon-button sits beside it.
+- Full-width on mobile (≤ 640 px); on desktop, max-width 320 + 44px message
+  button to keep the row visually tight.
+- Hidden entirely when `isMe` (own profile) — the row is only meaningful for
+  cross-user / cross-office views.
+
+**State machine:**
+
+| State | Background | Text color | Border | Trailing icon |
+|---|---|---|---|---|
+| `Follow` (default) | `linear-gradient(135deg, #ec4899, #f43f5e)` | `#fff` | none | none |
+| `Following` (after click) | `var(--color-surface)` (or `var(--color-surface-2)`) | `var(--color-text-2)` | `1px solid var(--color-border)` | chevron-down `▼` (12px stroke 2) |
+
+```jsx
+<button
+  onClick={handleToggleFollow}
+  onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)' }}
+  onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)' }}
+  onMouseDown={(e) => { e.currentTarget.style.transform = 'scale(0.98)' }}
+  onMouseUp={(e) => { e.currentTarget.style.transform = 'translateY(-1px)' }}
+  style={{
+    flex: 1,
+    minHeight: 44, padding: '12px 18px',
+    borderRadius: 12,
+    background: isFollowing ? 'var(--color-surface-2)' : 'linear-gradient(135deg, #ec4899, #f43f5e)',
+    color: isFollowing ? 'var(--color-text-2)' : '#fff',
+    border: isFollowing ? '1px solid var(--color-border)' : 'none',
+    fontSize: 14, fontWeight: 700,
+    cursor: 'pointer', fontFamily: 'inherit',
+    boxShadow: isFollowing ? 'none' : '0 8px 22px rgba(236,72,153,0.32)',
+    transition: 'transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), background 0.2s, color 0.2s, box-shadow 0.2s',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+  }}
+>
+  {isFollowing ? (
+    <>Following<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg></>
+  ) : 'Follow'}
+</button>
+
+{/* Optional Message icon button — ghost style */}
+<button
+  onClick={handleMessage}
+  aria-label="Message"
+  style={{
+    width: 44, height: 44, minWidth: 44, flexShrink: 0,
+    background: 'var(--color-surface)',
+    border: '1px solid var(--color-border)',
+    borderRadius: 12, cursor: 'pointer',
+    color: 'var(--color-text-2)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    transition: 'border-color 0.18s, color 0.18s',
+  }}
+  onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(236,72,153,0.45)'; e.currentTarget.style.color = '#ec4899' }}
+  onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-2)' }}
+>
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+  </svg>
+</button>
+```
+
+- Wrap the row in `<div style={{ display: 'flex', gap: 10, marginTop: 14 }}>`.
+- Press `scale(0.98)`; hover `translateY(-1px)`. Both transitions cubic-bezier(0.4, 0, 0.2, 1).
+- The Following state's chevron-down hints at the future "tap to unfollow / mute"
+  sheet (mockup-only; an actual sheet ships when backend is wired).
+- TODO(claude) marker on the toggle handler for the actual `POST /api/v1/users/{id}/follow/`
+  / `DELETE` call.
+
+**When `isMe` is true:** omit the entire row. The hero already shows external-link
+pills (Instagram, email) and the sticky-header right-side controls (theme + logout)
+cover settings — no Follow button is needed.
+
+### 3.7 Compact stats row (Instagram pattern)
+
+When stats live in the hero block (not as a separate StatsCard), use this
+inline horizontal pattern instead of the larger 28px-number card. Three columns
+divided by 1px vertical lines: Posts/Boards/Projects · Followers · Following.
+
+```jsx
+<div style={{
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  gap: 0, marginTop: 14, marginBottom: 18,
+}}>
+  {[
+    { count: boards.length, label: 'Boards' },
+    { count: followerCount, label: 'Followers' },
+    { count: followingCount, label: 'Following' },
+  ].map((stat, i, arr) => (
+    <>
+      <button key={stat.label} style={{
+        flex: '0 0 auto',
+        background: 'transparent', border: 'none', cursor: 'pointer',
+        padding: '6px 18px', minHeight: 44,
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+        fontFamily: 'inherit', color: 'inherit',
+      }}>
+        <span style={{ color: 'var(--color-text)', fontSize: 18, fontWeight: 700, lineHeight: 1 }}>
+          {stat.count}
+        </span>
+        <span style={{ color: 'var(--color-text-dim)', fontSize: 12, fontWeight: 500 }}>
+          {stat.label}
+        </span>
+      </button>
+      {i < arr.length - 1 && (
+        <div style={{ width: 1, height: 28, background: 'var(--color-border)' }} />
+      )}
+    </>
+  ))}
+</div>
+```
+
+- 18px / weight 700 number + 12px / weight 500 label (NOT caps — natural case
+  for visual rhythm with the rest of the hero).
+- 28px-tall vertical 1px dividers.
+- Each stat is a button (44px touch) — tappable for the Followers/Following
+  list when backend exposes those endpoints. Add TODO(claude) markers for
+  click handlers.
+- Uses the same pink accent NOT as a fill but as the page's ambient halo —
+  the row sits inside that halo so it picks up brand presence indirectly.
+
+### 3.8 Font-weight discipline (site-wide)
+
+**700 maximum anywhere in the app.** No 800. No 900.
+
+| Use | Weight |
+|---|---|
+| Hero h1, page titles, section h2 / h3 | 700 |
+| Card titles (overlay or surface) | 700 (per §3.5.2) |
+| Button labels, subtle sub-labels | 600 |
+| Body paragraphs, descriptions | 500 |
+| Caps labels, value lines | 600 |
+| Inactive nav items | 400 |
+
+The brand voice is "premium, sleek, confident" — that's achieved by tight letter-spacing
+and a restrained gradient palette, NOT by display-weight type. 800 / 900 weights
+look heavy and dated; the site reads as more sophisticated when constrained to 700.
+
+This rule applies to every page, including `LoginPage`, `SetupPage`, `MainLayout`'s
+empty-swipe state, `SwipePage`'s sticky header, and `FavoritesPage`'s legacy
+sections. Any 800 / 900 weight you encounter while editing is drift — drop it
+to 700 (or 600 if context calls for restraint).
 
 ## 4. Interaction Patterns
 - **Desktop Mode:** Ensure swiping logic binds to `keydown` (`ArrowLeft`, `ArrowRight`).

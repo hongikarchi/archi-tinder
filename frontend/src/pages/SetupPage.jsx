@@ -104,7 +104,7 @@ export default function SetupPage({ projects = [], isSyncing = false, onResume, 
 function Header() {
   return (
     <div style={{ textAlign: 'center', marginBottom: 8 }}>
-      <h1 style={{ fontSize: 28, fontWeight: 900, margin: 0, letterSpacing: '-0.01em' }}>
+      <h1 style={{ fontSize: 28, fontWeight: 700, margin: 0, letterSpacing: '-0.01em' }}>
         <span style={{ color: 'var(--color-text)' }}>Archi</span>
         <span style={{ color: '#ec4899' }}>Tinder</span>
       </h1>

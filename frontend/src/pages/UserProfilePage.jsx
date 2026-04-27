@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, Fragment } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 // TODO: Replace with API call
@@ -212,6 +212,39 @@ function BoardCard({ board }) {
           background: '#000',
           display: 'flex', flexDirection: 'column',
         }}>
+          {/* §3.5.5 Left scroll indicator — sibling of scroll container, pointerEvents none */}
+          <div style={{
+            position: 'absolute', left: 10, top: '50%',
+            transform: 'translateY(-50%)',
+            pointerEvents: 'none',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: 32, height: 32, borderRadius: '50%',
+            background: 'rgba(0,0,0,0.32)', backdropFilter: 'blur(6px)',
+            zIndex: 2,
+          }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+                 stroke="rgba(255,255,255,0.85)" strokeWidth="2.5"
+                 strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+          </div>
+          {/* §3.5.5 Right scroll indicator */}
+          <div style={{
+            position: 'absolute', right: 10, top: '50%',
+            transform: 'translateY(-50%)',
+            pointerEvents: 'none',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: 32, height: 32, borderRadius: '50%',
+            background: 'rgba(0,0,0,0.32)', backdropFilter: 'blur(6px)',
+            zIndex: 2,
+          }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+                 stroke="rgba(255,255,255,0.85)" strokeWidth="2.5"
+                 strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </div>
+
           {/* Scroll container with scroll-snap — one image per snap point */}
           <div
             className="hide-scrollbar"
@@ -246,10 +279,10 @@ function BoardCard({ board }) {
             ))}
           </div>
 
-          {/* Persistent action bar — gradient blends with last image */}
+          {/* Persistent action bar — §3.5.5 4-stop soft gradient */}
           <div style={{
-            padding: 16,
-            background: 'linear-gradient(to top, rgba(0,0,0,0.95) 20%, transparent 100%)',
+            padding: '20px 16px 16px',
+            background: 'linear-gradient(to top, rgba(0,0,0,0.96) 0%, rgba(0,0,0,0.65) 45%, rgba(0,0,0,0.18) 80%, transparent 100%)',
           }}>
             <button
               onClick={() => navigate('/library/' + board.board_id)}
@@ -288,113 +321,123 @@ function BoardCard({ board }) {
 
 
 /**
- * PersonaFlipCard — text-only flip card variant per DESIGN.md §3.5.4
- *   Front: small "PERSONA" caps label + persona_type as gradient headline + tap hint
- *   Back: one_liner italic + Styles + Programs chip rows + subtle MBTI bottom-right
+ * BioPersonaFlipCard — §3.5.4 Hero Flip variant (text-on-surface, profile pages)
+ *   Front: italic bio + "tap to reveal persona" caption
+ *   Back: persona_type gradient text + one_liner + Styles/Programs chip rows + MBTI bottom-right
+ *   Internal radial-gradient pink glow. Lift YES, border YES (text-on-surface needs containment).
  */
-function PersonaFlipCard({ persona, mbti }) {
-  const [isPersonaFlipped, setIsPersonaFlipped] = useState(false)
+function BioPersonaFlipCard({ bio, persona, mbti }) {
+  const [isFlipped, setIsFlipped] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
 
   return (
     <div
       style={{
         perspective: '1200px',
-        flex: '1 1 280px',
+        width: '100%',
         minHeight: 180,
         cursor: 'pointer',
-        // §3.5.4: lift YES, border NO. Lift on outer perspective wrapper.
         transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
         transform: isHovered ? 'translateY(-4px)' : 'translateY(0)',
+        marginTop: 18, marginBottom: 18,
       }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onClick={(e) => {
         if (e.target.closest('button')) return
-        setIsPersonaFlipped(f => !f)
+        setIsFlipped(f => !f)
       }}
     >
       <div style={{
-        width: '100%', height: '100%',
-        position: 'relative', minHeight: 180,
+        width: '100%', minHeight: 180,
+        position: 'relative',
         transition: 'transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
         transformStyle: 'preserve-3d',
-        transform: isPersonaFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
+        transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
       }}>
-        {/* FRONT */}
+        {/* FRONT — italic bio + "tap to reveal persona" */}
         <div style={{
           position: 'absolute', inset: 0,
           backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden',
-          borderRadius: 20, overflow: 'hidden',
+          borderRadius: 20,
           background: 'var(--color-surface)',
           border: '1px solid var(--color-border-soft)',
           padding: '20px 22px',
           display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
           boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
+          minHeight: 180,
         }}>
-          {/* Subtle internal glow */}
+          {/* Internal radial-gradient pink glow */}
           <div style={{
             position: 'absolute', top: -40, right: -40,
             width: 160, height: 160, borderRadius: '50%',
             background: 'radial-gradient(circle, rgba(236,72,153,0.18), transparent 70%)',
             pointerEvents: 'none',
           }} />
-
-          <div style={{ position: 'relative', zIndex: 1 }}>
-            <span style={{
-              display: 'inline-block',
-              color: '#ec4899', fontSize: 11, fontWeight: 600,
-              letterSpacing: '0.12em', textTransform: 'uppercase',
-              marginBottom: 10,
-            }}>
-              Persona
-            </span>
-            <h3 style={{
-              margin: 0,
-              fontSize: 22, fontWeight: 700, lineHeight: 1.2,
-              letterSpacing: '-0.01em',
-              background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-              color: '#ec4899',
-            }}>
-              {persona.persona_type}
-            </h3>
-          </div>
-
+          <p style={{
+            position: 'relative', zIndex: 1,
+            margin: 0,
+            color: 'var(--color-text-dim)', fontSize: 15, lineHeight: 1.6,
+            fontStyle: 'italic', fontWeight: 500,
+          }}>
+            {bio}
+          </p>
           <span style={{
             position: 'relative', zIndex: 1,
-            color: 'var(--color-text-dimmer)', fontSize: 11, fontWeight: 600,
+            alignSelf: 'flex-end',
+            color: 'var(--color-text-dimmer)', fontSize: 10, fontWeight: 600,
             letterSpacing: '0.04em', textTransform: 'uppercase',
-            marginTop: 16,
+            marginTop: 12,
           }}>
-            tap to reveal
+            tap to reveal persona
           </span>
         </div>
 
-        {/* BACK */}
+        {/* BACK — persona_type gradient + one_liner + chips + MBTI */}
         <div style={{
           position: 'absolute', inset: 0,
           backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden',
           transform: 'rotateY(180deg)',
-          borderRadius: 20, overflow: 'hidden',
+          borderRadius: 20,
           background: 'var(--color-surface)',
           border: '1px solid var(--color-border-soft)',
           padding: '20px 22px',
           display: 'flex', flexDirection: 'column',
           boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
+          minHeight: 180,
         }}>
-          <p style={{
-            margin: '0 0 14px',
-            color: 'var(--color-text-dim)', fontSize: 13, lineHeight: 1.5,
-            fontStyle: 'italic',
+          {/* Internal radial-gradient pink glow */}
+          <div style={{
+            position: 'absolute', top: -40, right: -40,
+            width: 160, height: 160, borderRadius: '50%',
+            background: 'radial-gradient(circle, rgba(236,72,153,0.18), transparent 70%)',
+            pointerEvents: 'none',
+          }} />
+          <h3 style={{
+            position: 'relative', zIndex: 1,
+            margin: '0 0 6px',
+            fontSize: 20, fontWeight: 700, lineHeight: 1.2,
+            letterSpacing: '-0.01em',
+            background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text',
+            color: '#ec4899',
           }}>
-            &ldquo;{persona.one_liner}&rdquo;
-          </p>
-
+            {persona.persona_type}
+          </h3>
+          {persona.one_liner && (
+            <p style={{
+              position: 'relative', zIndex: 1,
+              margin: '0 0 14px',
+              color: 'var(--color-text-dim)', fontSize: 13, lineHeight: 1.5,
+              fontStyle: 'italic', fontWeight: 500,
+            }}>
+              &ldquo;{persona.one_liner}&rdquo;
+            </p>
+          )}
           {persona.styles?.length > 0 && (
-            <div style={{ marginBottom: 10 }}>
+            <div style={{ position: 'relative', zIndex: 1, marginBottom: 10 }}>
               <span style={{
                 display: 'block',
                 color: 'var(--color-text-dimmer)', fontSize: 10, fontWeight: 600,
@@ -417,9 +460,8 @@ function PersonaFlipCard({ persona, mbti }) {
               </div>
             </div>
           )}
-
           {persona.programs?.length > 0 && (
-            <div>
+            <div style={{ position: 'relative', zIndex: 1 }}>
               <span style={{
                 display: 'block',
                 color: 'var(--color-text-dimmer)', fontSize: 10, fontWeight: 600,
@@ -442,78 +484,16 @@ function PersonaFlipCard({ persona, mbti }) {
               </div>
             </div>
           )}
-
           {/* MBTI subtle bottom-right */}
           {mbti && (
             <span style={{
-              position: 'absolute', bottom: 12, right: 14,
+              position: 'absolute', bottom: 12, right: 14, zIndex: 1,
               color: 'var(--color-text-dimmer)', fontSize: 10, fontWeight: 600,
               letterSpacing: '0.08em',
             }}>
               {mbti}
             </span>
           )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-
-/**
- * StatsCard — Following / Followers; mirrors PersonaFlipCard footprint in mid-section row.
- */
-function StatsCard({ followingCount, followerCount }) {
-  return (
-    <div style={{
-      flex: '1 1 280px',
-      minHeight: 180,
-      padding: '20px 22px',
-      background: 'var(--color-surface)',
-      border: '1px solid var(--color-border-soft)',
-      borderRadius: 20,
-      boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
-      display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
-    }}>
-      <span style={{
-        display: 'inline-block',
-        color: 'var(--color-text-dimmer)', fontSize: 11, fontWeight: 600,
-        letterSpacing: '0.12em', textTransform: 'uppercase',
-      }}>
-        Stats
-      </span>
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-around',
-        gap: 24, paddingTop: 12,
-      }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <span style={{
-            color: 'var(--color-text)', fontSize: 28, fontWeight: 700, lineHeight: 1,
-            letterSpacing: '-0.01em',
-          }}>
-            {followingCount}
-          </span>
-          <span style={{
-            color: 'var(--color-text-dimmer)', fontSize: 11, fontWeight: 600,
-            letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 6,
-          }}>
-            Following
-          </span>
-        </div>
-        <div style={{ width: 1, height: 40, background: 'var(--color-border-soft)' }} />
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <span style={{
-            color: 'var(--color-text)', fontSize: 28, fontWeight: 700, lineHeight: 1,
-            letterSpacing: '-0.01em',
-          }}>
-            {followerCount}
-          </span>
-          <span style={{
-            color: 'var(--color-text-dimmer)', fontSize: 11, fontWeight: 600,
-            letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 6,
-          }}>
-            Followers
-          </span>
         </div>
       </div>
     </div>
@@ -679,21 +659,65 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
               />
             </div>
 
-            {/* Name (no MBTI chip — moved into persona flip card back face) */}
+            {/* Name */}
             <h1 style={{
               color: 'var(--color-text)', fontSize: 24, fontWeight: 700,
-              margin: '0 0 8px', lineHeight: 1.2, letterSpacing: '-0.01em',
+              margin: '0 0 4px', lineHeight: 1.2, letterSpacing: '-0.01em',
             }}>
               {MOCK_USER.display_name}
             </h1>
 
-            <p style={{
-              color: 'var(--color-text-dim)', fontSize: 15, lineHeight: 1.6,
-              margin: '0 0 18px', maxWidth: 360, fontWeight: 500,
-              fontStyle: 'italic',
+            {/* §3.7 Compact stats row */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              gap: 0, marginTop: 14, marginBottom: 4,
             }}>
-              {MOCK_USER.bio}
-            </p>
+              {[
+                { count: MOCK_USER.boards.length, label: 'Boards' },
+                { count: followerCount, label: 'Followers' },
+                { count: MOCK_USER.following_count, label: 'Following' },
+              ].map((stat, i, arr) => (
+                <Fragment key={stat.label}>
+                  <button
+                    onClick={() => {
+                      if (stat.label === 'Boards') {
+                        // TODO(claude): navigate to user's boards list when route exists
+                      } else if (stat.label === 'Followers') {
+                        // TODO(claude): navigate to followers list — GET /api/v1/users/{id}/followers/
+                      } else {
+                        // TODO(claude): navigate to following list — GET /api/v1/users/{id}/following/
+                      }
+                    }}
+                    style={{
+                      flex: '0 0 auto',
+                      background: 'transparent', border: 'none', cursor: 'pointer',
+                      padding: '6px 18px', minHeight: 44,
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+                      fontFamily: 'inherit', color: 'inherit',
+                    }}
+                  >
+                    <span style={{ color: 'var(--color-text)', fontSize: 18, fontWeight: 700, lineHeight: 1 }}>
+                      {stat.count}
+                    </span>
+                    <span style={{ color: 'var(--color-text-dim)', fontSize: 12, fontWeight: 500 }}>
+                      {stat.label}
+                    </span>
+                  </button>
+                  {i < arr.length - 1 && (
+                    <div style={{ width: 1, height: 28, background: 'var(--color-border)' }} />
+                  )}
+                </Fragment>
+              ))}
+            </div>
+
+            {/* §3.5.4 Hero Flip — BioPersonaFlipCard */}
+            {MOCK_USER.persona_summary && (
+              <BioPersonaFlipCard
+                bio={MOCK_USER.bio}
+                persona={MOCK_USER.persona_summary}
+                mbti={MOCK_USER.mbti}
+              />
+            )}
 
             {/* External links — Instagram + email pills */}
             {(igUrl || emailUrl) && (
@@ -765,54 +789,60 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
                 )}
               </div>
             )}
+
+            {/* §3.6 Profile Action Row — only for !isMe */}
+            {!isMe && (
+              <div style={{ display: 'flex', gap: 10, marginTop: 14, width: '100%' }}>
+                <button
+                  onClick={handleToggleFollow}
+                  onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)' }}
+                  onMouseDown={(e) => { e.currentTarget.style.transform = 'scale(0.98)' }}
+                  onMouseUp={(e) => { e.currentTarget.style.transform = 'translateY(-1px)' }}
+                  style={{
+                    flex: 1,
+                    minHeight: 44, padding: '12px 18px',
+                    borderRadius: 12,
+                    background: isFollowing ? 'var(--color-surface-2)' : 'linear-gradient(135deg, #ec4899, #f43f5e)',
+                    color: isFollowing ? 'var(--color-text-2)' : '#fff',
+                    border: isFollowing ? '1px solid var(--color-border)' : 'none',
+                    fontSize: 14, fontWeight: 700,
+                    cursor: 'pointer', fontFamily: 'inherit',
+                    boxShadow: isFollowing ? 'none' : '0 8px 22px rgba(236,72,153,0.32)',
+                    transition: 'transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), background 0.2s, color 0.2s, box-shadow 0.2s',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  }}
+                >
+                  {/* TODO(designer): wire spinner UI when main pipeline wires the call */}
+                  {isFollowing ? (
+                    <>Following<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg></>
+                  ) : 'Follow'}
+                </button>
+                <button
+                  onClick={() => {
+                    // TODO(claude): wire DM endpoint — POST /api/v1/messages/ or similar
+                  }}
+                  aria-label="Message"
+                  style={{
+                    width: 44, height: 44, minWidth: 44, flexShrink: 0,
+                    background: 'var(--color-surface)',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 12, cursor: 'pointer',
+                    color: 'var(--color-text-2)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    transition: 'border-color 0.18s, color 0.18s',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(236,72,153,0.45)'; e.currentTarget.style.color = '#ec4899' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-2)' }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                  </svg>
+                </button>
+              </div>
+            )}
           </div>
         </div>
-
-        {/* MID SECTION — Stats + Persona flip cards side-by-side (desktop), wrap (mobile) */}
-        <div style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: 18,
-          marginBottom: 36,
-        }}>
-          <StatsCard
-            followingCount={MOCK_USER.following_count}
-            followerCount={followerCount}
-          />
-          {MOCK_USER.persona_summary && (
-            <PersonaFlipCard
-              persona={MOCK_USER.persona_summary}
-              mbti={MOCK_USER.mbti}
-            />
-          )}
-        </div>
-
-        {/* Follow button — only for non-self profiles */}
-        {!isMe && (
-          <button
-            onClick={handleToggleFollow}
-            style={{
-              width: '100%', minHeight: 48, padding: '14px',
-              borderRadius: 14,
-              background: isFollowing
-                ? 'var(--color-surface-2)'
-                : 'linear-gradient(135deg, #ec4899, #f43f5e)',
-              color: isFollowing ? 'var(--color-text-2)' : '#fff',
-              fontSize: 15, fontWeight: 600,
-              border: isFollowing ? '1px solid var(--color-border)' : 'none',
-              cursor: 'pointer',
-              marginBottom: 32,
-              boxShadow: isFollowing ? 'none' : '0 8px 20px rgba(236,72,153,0.3)',
-              transition: 'transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
-              fontFamily: 'inherit',
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)' }}
-            onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)' }}
-          >
-            {/* TODO(designer): wire spinner UI when main pipeline wires the call */}
-            {isFollowing ? 'Following' : 'Follow'}
-          </button>
-        )}
 
         {/* Boards section header */}
         <div style={{
