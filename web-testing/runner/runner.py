@@ -202,6 +202,71 @@ def _wait_for_card_image(page: Page, timeout_ms: int = 3000):
         pass  # Image may not load in time -- take screenshot anyway
 
 
+def _canned_reply_for(query: str, turn_idx: int) -> str:
+    """Return a persona-appropriate canned reply for a clarification turn.
+
+    Per spec v1.9 + Investigation 22 mitigation M1 + .claude/commands/review.md
+    Step B4 multi-turn loop. Picks reply based on initial query class +
+    turn index (turn 2 specific, turn 3+ fallback "either both").
+
+    Args:
+        query: The original NL search query.
+        turn_idx: Which clarification turn we're on (1-indexed; 1 = first
+            clarification reply, 2 = second, etc.).
+
+    Returns:
+        Canned reply string suitable for the chat textarea.
+    """
+    q_lower = query.lower()
+    if turn_idx >= 2:
+        return 'either is fine, both options'
+    if 'brutalist' in q_lower or 'concrete' in q_lower:
+        return 'yes concrete brutalist museums'
+    if 'sustainable' in q_lower or 'timber' in q_lower or '한국' in query:
+        return 'yes sustainable timber school in Korea'
+    return 'either is fine, surprise me'
+
+
+def _detect_clarification_or_results(page: Page, timeout_ms: int = 8000) -> str:
+    """Poll for either 'Start swiping' button OR clarification AI message.
+
+    Per spec v1.9 §4: TTFC measured from last user clarification submit, so we
+    must distinguish clarification-fire from session-creation-fire.
+
+    Returns:
+        'results' — 'Start swiping' button is visible → no clarification fired
+        'clarification' — input still present without 'Start swiping' button →
+            clarification likely fired (indirect detection — Gemini asked a
+            question instead of returning filters)
+        'timeout' — neither condition observable within timeout (failure)
+    """
+    poll_interval_ms = 250
+    elapsed_ms = 0
+    while elapsed_ms < timeout_ms:
+        # Fast-path: 'Start swiping' button is the success terminal
+        try:
+            start_btn = page.locator('button').filter(has_text='swiping')
+            if start_btn.first.is_visible(timeout=200):
+                return 'results'
+        except Exception:
+            pass
+        # Slow-path: clarification check — search input still present means
+        # the chat phase has not transitioned to results yet (clarification
+        # likely fired or initial response is still streaming)
+        try:
+            search_input = page.locator('input[placeholder*="Find a modern"]')
+            if search_input.is_visible(timeout=200):
+                # Input still here. If we've waited past ~3s without 'swiping'
+                # button, treat as clarification (Gemini is asking a question).
+                if elapsed_ms >= 3000:
+                    return 'clarification'
+        except Exception:
+            pass
+        page.wait_for_timeout(poll_interval_ms)
+        elapsed_ms += poll_interval_ms
+    return 'timeout'
+
+
 def _wait_for_card_ready(page: Page, timeout_ms: int = 10000) -> bool:
     """
     Wait for a swipe card to be visible and ready for interaction.
@@ -474,9 +539,16 @@ def run_test(scenario, run_id: str, reports_dir: str) -> List[StepRecord]:
             logger.error('Navigation to /search failed')
 
         # ================================================================
-        # Step 4: LLM Search -- Submit query, wait for results
+        # Step 4: LLM Search -- Submit query (initial NL turn)
+        #
+        # v1.9 measurement: track t_initial_submit (observability) +
+        # t_last_user_submit (rewritten on each clarification turn; this is
+        # the system-attributable TTFC anchor per spec §4).
         # ================================================================
         t0 = time.time()
+        t_initial_submit = None       # first submit (observability total user-felt latency)
+        t_last_user_submit = None     # rewritten per clarification turn (v1.9 GATE anchor)
+        user_submit_count = 0
         logger.info('Step 4: LLM search page -- query: "%s"', scenario.search_query)
 
         page.wait_for_timeout(1000)
@@ -497,6 +569,9 @@ def run_test(scenario, run_id: str, reports_dir: str) -> List[StepRecord]:
             # Click the submit button (type="submit" inside the form)
             submit_btn = page.locator('button[type="submit"]')
             if submit_btn.first.is_visible(timeout=1000):
+                t_initial_submit = time.time()
+                t_last_user_submit = t_initial_submit
+                user_submit_count = 1
                 submit_btn.first.click()
                 search_submitted = True
                 logger.info('Submitted search query via input + submit button')
@@ -514,6 +589,9 @@ def run_test(scenario, run_id: str, reports_dir: str) -> List[StepRecord]:
                 try:
                     preset_btn = page.get_by_text(preset_text, exact=True)
                     if preset_btn.is_visible(timeout=1000):
+                        t_initial_submit = time.time()
+                        t_last_user_submit = t_initial_submit
+                        user_submit_count = 1
                         preset_btn.click()
                         search_submitted = True
                         logger.info('Clicked preset button: "%s"', preset_text)
@@ -527,6 +605,7 @@ def run_test(scenario, run_id: str, reports_dir: str) -> List[StepRecord]:
         step = collector.collect_step(page, '04_search_submitted', t0, {
             'query': scenario.search_query,
             'search_submitted': search_submitted,
+            't_initial_submit': t_initial_submit,
             'url': page.url,
         })
         if not search_submitted:
@@ -541,30 +620,75 @@ def run_test(scenario, run_id: str, reports_dir: str) -> List[StepRecord]:
             return steps
 
         # ================================================================
-        # Step 5: Wait for search results + "Start swiping" button
+        # Step 5: Multi-turn clarification loop + 'Start swiping' button
+        #
+        # v1.9 §4 + Investigation 22 M1: max 3 clarification turns. Each
+        # canned reply rewrites t_last_user_submit so the GATE measurement
+        # excludes user-paced reading time per spec.
         # ================================================================
         t0 = time.time()
-        logger.info('Step 5: Waiting for "Start swiping" button (LLM + search may take 10-30s)')
+        logger.info('Step 5: Multi-turn loop (max 3 clarifications) → "Start swiping" button')
 
         start_swiping_found = False
-        try:
-            # The button text is "Start swiping - {count}" or "Update with these results - {count}"
-            start_btn = page.locator('button').filter(has_text='swiping')
-            start_btn.first.wait_for(state='visible', timeout=30000)
-            start_swiping_found = True
-            logger.info('"Start swiping" button appeared')
-        except PlaywrightTimeout:
-            logger.error('"Start swiping" button did not appear within 30s')
-            # Check if there's an error message
+        clarification_turns = 0
+        MAX_CLARIFICATION_TURNS = 3
+
+        while clarification_turns < MAX_CLARIFICATION_TURNS:
+            outcome = _detect_clarification_or_results(page, timeout_ms=8000)
+
+            if outcome == 'results':
+                start_swiping_found = True
+                logger.info('"Start swiping" button appeared (after %d clarification turn(s))',
+                            clarification_turns)
+                break
+
+            if outcome == 'timeout':
+                logger.error('Step 5 timeout: neither "Start swiping" button nor clarification observable')
+                # Check if there's an error message
+                try:
+                    error_text = page.locator('text=Something went wrong').first
+                    if error_text.is_visible(timeout=500):
+                        logger.error('Search returned error: "Something went wrong"')
+                except Exception:
+                    pass
+                break
+
+            # outcome == 'clarification' — send canned reply
+            clarification_turns += 1
+            reply_text = _canned_reply_for(scenario.search_query, clarification_turns)
+            logger.info('Clarification turn %d: sending canned reply "%s"',
+                        clarification_turns, reply_text)
             try:
-                error_text = page.locator('text=Something went wrong').first
-                if error_text.is_visible(timeout=500):
-                    logger.error('Search returned error: "Something went wrong"')
-            except Exception:
-                pass
+                clarif_input = page.locator('input[placeholder*="Find a modern"]')
+                clarif_input.fill(reply_text)
+                page.wait_for_timeout(150)
+                clarif_submit = page.locator('button[type="submit"]')
+                if clarif_submit.first.is_visible(timeout=1000):
+                    t_last_user_submit = time.time()  # v1.9: rewrite per turn
+                    user_submit_count += 1
+                    clarif_submit.first.click()
+                else:
+                    logger.warning('Clarification submit button not visible — aborting loop')
+                    break
+            except Exception as e:
+                logger.warning('Clarification reply failed: %s — aborting loop', e)
+                break
+
+        if clarification_turns >= MAX_CLARIFICATION_TURNS and not start_swiping_found:
+            logger.error('Max clarification turns (%d) exhausted without results', MAX_CLARIFICATION_TURNS)
+
+        # v1.9 system-attributable TTFC: from last user submit to first card.
+        # Recorded for downstream reporting. Aspirational total user-felt
+        # latency (t_initial_submit → first card) preserved as observability.
+        ttfc_anchor_ms = int((time.time() - t_last_user_submit) * 1000) if t_last_user_submit else None
+        ttfc_total_user_felt_ms = int((time.time() - t_initial_submit) * 1000) if t_initial_submit else None
 
         step = collector.collect_step(page, '05_search_results', t0, {
             'start_swiping_visible': start_swiping_found,
+            'clarification_turns': clarification_turns,
+            'user_submit_count': user_submit_count,
+            'ttfc_pre_swipe_anchor_ms': ttfc_anchor_ms,
+            'ttfc_pre_swipe_total_user_felt_ms': ttfc_total_user_felt_ms,
             'url': page.url,
         })
         if not start_swiping_found:

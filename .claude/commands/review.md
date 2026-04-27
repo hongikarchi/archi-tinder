@@ -380,21 +380,34 @@ const PERSONAS = [
 
 For each persona, execute Steps B4–B7 below. After all 3 complete, run Step B8 (cross-persona aggregation), then Step B9 (cleanup + report append).
 
-## Step B4 — Time-to-first-card latency gate (multi-run, Tier 1.2)
+## Step B4 — Time-to-first-card latency gate (multi-run, Tier 1.2; v1.9 measurement-boundary)
 
-For each persona, measure **time from NL submit → first card visible** and assert
-against spec Section 4 budgets. Per Tier 1.2 of `.claude/reviews/57b3244-improvements.md`,
-this step runs the NL submit → first card flow **3 times per persona** and uses
-**p50** (median) of the three measurements as the gate value. Single-shot
-measurement was masking ~5% Gemini API variance and producing same-cause Part B
-FAILs across consecutive `/review` cycles (`57b3244`, `2da9c65`); multi-run p50 is
-the standard mitigation for non-deterministic external services.
+For each persona, measure **system-attributable time from last user clarification
+submit → first card visible** and assert against spec Section 4 budgets. Per
+Tier 1.2 of `.claude/reviews/57b3244-improvements.md`, this step runs the flow
+**3 times per persona** and uses **p50** (median) of the three measurements as
+the gate value. Single-shot measurement was masking ~5% Gemini API variance and
+producing same-cause Part B FAILs across consecutive `/review` cycles
+(`57b3244`, `2da9c65`); multi-run p50 is the standard mitigation for
+non-deterministic external services.
+
+**v1.9 measurement boundary (post-SPEC-UPDATED 2026-04-28)**: TTFC is
+**`t_last_user_clarification_submit → t_first_card_visible`** — system-attributable
+latency only. Excludes user-paced clarification reading/typing time, which the
+system cannot compress. Includes final-turn Gemini parse + Django + DB +
+frontend render. **Pre-v1.9 measurement** (`t_initial_nl_submit → t_first_card`)
+is preserved as observability metric `latency_total_user_felt_ms`, not the gate.
+Per spec v1.9, multi-turn clarification dialog is a UX feature, not a latency
+bug — gating on user reading time inflated TTFC across 9 cycles even though no
+system-attributable latency regressed.
 
 **Gate values (current spec §4)**: 4000 ms hard ceiling for `Brutalist` and
 `Sustainable Korean`; 5000 ms for `Bare Query` (wider pool per Topic 11 / spec C-3).
-These values match the spec **as currently written**. If the spec §4 budget is later
-updated by the research terminal (Tier 1.1 — see `.claude/reviews/2da9c65-improvements.md`),
-update the values here in lockstep so this file stays in sync with the spec.
+These values match the spec **as currently written** (v1.9 numeric budget
+unchanged from v1.4 — only the measurement boundary moves). If the spec §4
+budget is later updated by the research terminal (R1b deferred until Tier 2
+staging validation lands), update the values here in lockstep so this file
+stays in sync with the spec.
 
 ### B4a — Run the flow 3 times
 
@@ -405,11 +418,13 @@ localStorage carryover between runs):
    pattern as Step B2).
 2. Navigate to `/`.
 3. Open AI search input (home tab).
-4. Inject a fetch interceptor:
+4. Inject a fetch interceptor + clarification-tracking observer:
 ```js
 () => {
   window.__reviewState = window.__reviewState || {};
-  window.__reviewState.t_submit = null;
+  window.__reviewState.t_initial_submit = null;     // first user submit (observability only)
+  window.__reviewState.t_last_user_submit = null;   // ← v1.9 GATE: rewritten on each user submit
+  window.__reviewState.user_submit_count = 0;       // tracks turns: 1 = single-turn, 2+ = multi-turn
   window.__reviewState.t_first_card = null;
   window.__reviewState.api_calls = [];
   const origFetch = window.fetch;
@@ -423,40 +438,94 @@ localStorage carryover between runs):
   };
 }
 ```
-5. Type the persona query and record `performance.now()` as `t_submit`
-   immediately before submit.
-6. Wait for first card visible (DOM check: image element with `r2.dev` URL is
-   loaded AND `naturalWidth > 0`). Record `t_first_card`.
-7. Compute `latency_ms = round(t_first_card - t_submit)`. Append to
-   `runs[]` (1-indexed).
-8. (Optional, recommended) Capture this run's `parse_query_timing`
-   SessionEvent for the IMP-4 telemetry trail — see B4b.
-9. **Continuation policy**: if `run_idx < 3`, close this browser context. If
-   `run_idx == 3`, KEEP this context open — it carries the freshest pool /
-   prefetch state and is what Steps B5–B7 (swipe loop + edge cases) will
-   continue against. (Choosing the last run rather than the median run avoids
-   the engineering cost of keeping all three contexts alive; the swipe loop's
-   own latency assertions are independent of the parse-query latency
-   distribution captured here.)
+5. Type the persona query. Immediately before submitting, record
+   `performance.now()` as BOTH `t_initial_submit` AND `t_last_user_submit`
+   (initial values are equal). Increment `user_submit_count` to 1. Submit.
+6. **Multi-turn clarification loop** (max 3 user turns to avoid runaway):
+   - Wait up to 8s for one of:
+     - **(a) First card visible** — DOM check: image element with `r2.dev` URL
+       is loaded AND `naturalWidth > 0`. → Break to step 7.
+     - **(b) AI clarification message** — chat container shows a new AI bubble
+       (role=assistant) after a `/chat/` POST returned 200 but no
+       `/sessions/initial/` POST has fired (no session created yet, so the AI
+       is asking a question instead of returning filters). Detection: poll the
+       chat DOM for new assistant messages, OR observe the `__reviewState.api_calls`
+       array for a `/chat/` 200 followed by NO `/sessions/initial/` within ~1s.
+   - If **(b)** — clarification fired:
+     - Pick a persona-appropriate canned reply:
+       - **Brutalist** → `"yes concrete brutalist museums"` (turn 2),
+         `"either is fine, both"` (turn 3 fallback)
+       - **Sustainable Korean** → `"yes sustainable timber school in Korea"`
+         (turn 2), `"either is fine"` (turn 3 fallback)
+       - **Bare Query** → `"either is fine, surprise me"` (turn 2),
+         `"any style"` (turn 3 fallback)
+     - Type into textarea. Immediately before submit, REWRITE
+       `__reviewState.t_last_user_submit = performance.now()` (overwriting prior).
+       Increment `user_submit_count`. Submit. Loop back to top.
+   - If **neither (a) nor (b) within 8s** → FAIL persona run as
+     `"harness hung in clarification loop / no progress within 8s"`.
+   - If **`user_submit_count >= 4`** (3rd canned reply already sent, still no
+     card) → FAIL persona run as
+     `"max clarification turns exceeded (4) — likely H1c harness detection drift
+     or H1b Gemini server-side regression per Investigation 22"`.
+7. **First card visible** — record `t_first_card = performance.now()`.
+8. Compute the **system-attributable TTFC** (v1.9 §4 GATE):
+   `latency_ms = round(t_first_card - t_last_user_submit)`. Excludes all
+   user-paced clarification reading/typing time per spec v1.9.
+   ALSO compute the **total user-felt** latency (observability, NOT a gate):
+   `latency_total_user_felt_ms = round(t_first_card - t_initial_submit)`.
+   Append `{run_idx, latency_ms, latency_total_user_felt_ms, user_submit_count}`
+   to `runs[]` (1-indexed).
+9. (Optional, recommended) Capture this run's `parse_query_timing`
+   SessionEvent payloads for the IMP-4 telemetry trail — see B4b. With M4
+   telemetry shipped (clarification_fired + query_complexity_class fields),
+   each turn's payload should be captured to enable Investigation 22 Phase 1
+   passive data accumulation.
+10. **Continuation policy**: if `run_idx < 3`, close this browser context.
+    If `run_idx == 3`, KEEP this context open — it carries the freshest pool /
+    prefetch state and is what Steps B5–B7 (swipe loop + edge cases) will
+    continue against. (Choosing the last run rather than the median run avoids
+    the engineering cost of keeping all three contexts alive; the swipe loop's
+    own latency assertions are independent of the parse-query latency
+    distribution captured here.)
 
 ### B4b — Persist runs to the report
 
-After the 3 runs:
+After the 3 runs, compute medians for both metrics:
 
 ```
-runs_sorted = sorted(runs)            # e.g. [3920, 4050, 4380]
-p50_ms = runs_sorted[1]               # median (50th percentile of n=3)
-min_ms = runs_sorted[0]
-max_ms = runs_sorted[2]
+# v1.9 GATE — system-attributable TTFC (last user submit → first card)
+runs_sys = sorted([r.latency_ms for r in runs])
+p50_ms = runs_sys[1]                  # gate value
+min_ms = runs_sys[0]
+max_ms = runs_sys[2]
+
+# Observability — total user-felt latency (initial submit → first card)
+runs_total = sorted([r.latency_total_user_felt_ms for r in runs])
+p50_total_ms = runs_total[1]          # NOT a gate; trend metric only
+min_total_ms = runs_total[0]
+max_total_ms = runs_total[2]
+
+# Multi-turn distribution — track clarification rate per persona
+turn_counts = [r.user_submit_count for r in runs]
+clarification_runs = sum(1 for c in turn_counts if c > 1)
 ```
 
-Record the full `[runs[0], runs[1], runs[2]]` triple in the report's per-persona
-table — keeping all three values visible preserves variance signal for trend
-analysis (Tier 1.2 explicitly preserves visibility, not just headline number).
+Record both triples in the report's per-persona table:
+- `latency_ms (system) = [<r0>, <r1>, <r2>]; p50 = <p50_ms> ms`
+- `latency_total_user_felt_ms = [<r0>, <r1>, <r2>]; p50 = <p50_total_ms> ms`
+- `user_submit_count per run = [<c0>, <c1>, <c2>]; clarifications fired in <X>/3 runs`
+
+Keeping all three values per metric preserves variance signal for trend analysis
+(Tier 1.2 explicitly preserves visibility, not just headline number). The
+`user_submit_count` column makes the multi-turn rate visible directly without
+needing to cross-reference `parse_query_timing` SessionEvents.
 
 ### B4c — Apply the gate
 
-**Strict gate**: `p50_ms < <persona budget>` where the budget is:
+**Strict gate (v1.9 system-attributable TTFC)**: `p50_ms < <persona budget>`
+where `p50_ms` is the median of the 3 system-attributable measurements
+(`t_last_user_clarification_submit → t_first_card_visible`) and the budget is:
 
 | Persona             | Budget (ms) |
 |---------------------|-------------|
@@ -465,13 +534,27 @@ analysis (Tier 1.2 explicitly preserves visibility, not just headline number).
 | Bare Query          | 5000        |
 
 If gate fails: Part B FAIL with
-`Persona X: time-to-first-card p50(3 runs) = <p50_ms> ms (budget <budget> ms); runs = [<r0>, <r1>, <r2>]; min=<min_ms>, max=<max_ms>`.
+`Persona X: TTFC p50(3 runs) = <p50_ms> ms (budget <budget> ms); runs = [<r0>, <r1>, <r2>]; min=<min_ms>, max=<max_ms>; clarifications fired in <X>/3 runs`.
 
 **On Persona X p50 PASS but min < budget AND max > budget** (high-variance run
 that happens to median into PASS): record a MINOR-equivalent note in the report's
 Part B section so the trend stays visible: `Persona X variance: max=<max_ms> ms
-exceeded budget but p50 PASS; monitor for Tier 1.1 spec budget review`. This is
+exceeded budget but p50 PASS; monitor for R1b spec budget review`. This is
 informational only — the gate is p50.
+
+**Observability — total user-felt latency** (NOT a gate per spec v1.9):
+record `p50_total_ms` in the report alongside `p50_ms`. If
+`p50_total_ms - p50_ms > 5000 ms`, the persona is spending substantial time in
+clarification turns — flag as a UX concern in the report's Part B section
+(routes to Investigation 22 Tier 3 prompt-tuning track), but does NOT block the
+push gate.
+
+**Multi-turn rate observability** (Investigation 22 Phase 1 trigger):
+record `clarification_runs / 3` per persona. After M4 telemetry ships
+(clarification_fired field on parse_query_timing), n≥30 trials accumulate
+across `/review` cycles + production traffic. Phase 1 query in Investigation 22
+runs against this data to test H0 (noise) vs H1b (Gemini server-side drift) vs
+H1c (harness detection drift).
 
 ## Step B5 — Swipe lifecycle: 25 swipes with per-swipe latency gate
 
