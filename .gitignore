@@ -31,6 +31,9 @@ node_modules/
 .idea/
 backend/tools/optimization_results.json
 
+# Backend transient validation outputs (one-off management commands)
+backend/_validation_*.md
+
 # Web-tester / Playwright artifacts
 test-artifacts/
 .playwright-mcp/
