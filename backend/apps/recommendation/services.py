@@ -272,6 +272,100 @@ _GEMINI_MAX_RETRIES = 1
 _GEMINI_RETRY_DELAY = 1.0  # seconds
 
 
+# ---------------------------------------------------------------------------
+# M4 (Investigation 22 §M4): Query complexity heuristic classifier
+# ---------------------------------------------------------------------------
+# Vocabulary sets for entity counting. Extended with common Korean architectural
+# terms so the heuristic covers the bilingual corpus.
+# Accuracy target: ~80% -- this is a stratification aid, not a hard classifier.
+# ---------------------------------------------------------------------------
+
+_STYLE_TOKENS = frozenset([
+    # English style labels (from few-shot + corpus)
+    'brutalist', 'brutalism', 'contemporary', 'modernist', 'modernism', 'modern',
+    'vernacular', 'parametric', 'avant-garde', 'avantgarde', 'minimalist', 'minimalism',
+    'classical', 'baroque', 'gothic', 'deconstructivist', 'deconstructivism',
+    'high-tech', 'critical regionalist', 'regionalist', 'industrial',
+    # Korean style tokens
+    '브루탈리스트', '브루탈리즘', '미니멀', '파라메트릭', '현대', '근대', '전통',
+])
+
+_PROGRAM_TOKENS = frozenset([
+    # English program labels (PROGRAM_VALUES lowercased + aliases)
+    'housing', 'office', 'museum', 'education', 'school', 'university', 'library',
+    'religion', 'chapel', 'church', 'mosque', 'temple', 'sports', 'stadium',
+    'transport', 'station', 'airport', 'hospitality', 'hotel', 'resort',
+    'healthcare', 'hospital', 'clinic', 'public', 'civic', 'mixed use', 'landscape',
+    'infrastructure', 'pavilion', 'gallery',
+    # Korean program tokens
+    '주택', '오피스', '미술관', '박물관', '학교', '도서관', '교회', '사원',
+    '공공', '호텔', '병원', '역사', '공항', '스타디움', '갤러리',
+])
+
+_MATERIAL_TOKENS = frozenset([
+    # English material tokens
+    'concrete', 'timber', 'brick', 'stone', 'glass', 'steel', 'wood', 'metal',
+    'copper', 'ceramic', 'bamboo', 'rammed earth', 'basalt', 'marble', 'zinc',
+    'aluminum', 'aluminium',
+    # Korean material tokens
+    '콘크리트', '목재', '벽돌', '돌', '유리', '철', '금속', '구리',
+])
+
+# Architectural adjective / atmosphere tokens (adds 1 specificity signal)
+_ADJECTIVE_TOKENS = frozenset([
+    'minimalist', 'monumental', 'transparent', 'tectonic', 'stereotomic',
+    'tactile', 'contemplative', 'fluid', 'orthogonal', 'curvilinear',
+    'austere', 'raw', 'heavy', 'light', 'earthy',
+])
+
+_ALL_SPECIFICITY_TOKENS = _STYLE_TOKENS | _PROGRAM_TOKENS | _MATERIAL_TOKENS | _ADJECTIVE_TOKENS
+
+
+def _classify_query_complexity(text: str) -> str:
+    """
+    M4 heuristic: classify a query string into one of four complexity classes.
+
+    Returns:
+        'brutalist'  -- ≥3 specific architectural entities detected
+        'narrow'     -- 1-2 specific entities (some signal but not fully determined)
+        'barequery'  -- 0 specific entities (vague / generic)
+        'unknown'    -- empty/None input or heuristic cannot decide
+
+    Accuracy target: ~80% -- good enough for stratified analytics (Investigation 22
+    Phase 1 Brutalist-vs-BareQuery cohort split). Not a hard classifier.
+
+    Implementation: splits on whitespace + common delimiters; checks against
+    pre-compiled vocabulary sets (style, program, material, adjective). Korean
+    tokens included for bilingual corpus coverage.
+    """
+    if not text or not isinstance(text, str):
+        return 'unknown'
+
+    lowered = text.lower()
+
+    # Tokenise: split on whitespace and common punctuation
+    import re as _re
+    tokens = set(_re.split(r'[\s,·.!?;:\-/]+', lowered))
+    tokens.discard('')
+
+    # Count hits across all specificity token sets
+    hits = sum(1 for tok in tokens if tok in _ALL_SPECIFICITY_TOKENS)
+
+    # Also check for multi-word tokens (e.g., 'mixed use', 'rammed earth', 'critical regionalist')
+    for multi_tok in ('mixed use', 'rammed earth', 'critical regionalist'):
+        if multi_tok in lowered:
+            hits += 1
+
+    if hits >= 3:
+        return 'brutalist'
+    elif hits >= 1:
+        return 'narrow'
+    elif not tokens or len(tokens) <= 3:
+        return 'barequery'
+    else:
+        return 'barequery'
+
+
 def _retry_gemini_call(func, *args, **kwargs):
     """
     Execute a Gemini API call with one retry on failure.
@@ -580,11 +674,27 @@ def parse_query(conversation_history):
         # Emit parse_query.timing event (spec §6 + §11.1 IMP-4 mandatory companion).
         # Must be emitted before json.loads so parse failures still produce a timing record.
         # IMP-5: extend with 4 new fields (additive -- existing field names unchanged).
+        # M4 (Investigation 22): pre-parse probe_needed to populate clarification_fired
+        #     without changing the "timing always emits when Gemini responds" invariant.
+        #     Pre-parse is best-effort: on decode failure it defaults to None.
         _usage = getattr(response, 'usage_metadata', None)
         _raw_cached = getattr(_usage, 'cached_content_token_count', None) if _usage else None
         # Guard: only accept int/float to avoid MagicMock or other non-serialisable types
         _cached_token_count = int(_raw_cached) if isinstance(_raw_cached, (int, float)) else None
         _cache_hit = (_cached_token_count > 0) if _cached_token_count is not None else None
+
+        # M4: best-effort pre-parse for clarification_fired (does NOT replace the
+        # main json.loads below -- that one raises and is caught by the outer except).
+        _clarification_fired = None  # None = unknown (Gemini error or pre-parse failure)
+        try:
+            _pre_data = json.loads(response.text)
+            _clarification_fired = bool(_pre_data.get('probe_needed', False))
+        except Exception:
+            pass  # main json.loads below will surface the error via the except handler
+
+        # M4: classify the user's query text for stratified analytics
+        _query_complexity_class = _classify_query_complexity(first_user_text)
+
         event_log.emit_event(
             'parse_query_timing',
             session=None,
@@ -600,6 +710,9 @@ def parse_query(conversation_history):
             cached_input_tokens=_cached_token_count,
             cache_name_hash=_get_prompt_hash() if cache_resource_name else None,
             caching_mode='explicit' if cache_resource_name else 'none',
+            # M4 fields (additive, Investigation 22 §M4 + IMP-10 sub-task A continuation)
+            clarification_fired=_clarification_fired,
+            query_complexity_class=_query_complexity_class,
         )
 
         data = json.loads(response.text)
