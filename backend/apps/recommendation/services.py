@@ -137,6 +137,11 @@ You have a 0-2 turn probe budget.
 - **1 turn**: If the query is ambiguous on a load-bearing axis, ask one abstract A-vs-B probe. You are free to choose the axis. After the user answers, produce the terminal output.
 - **2 turns**: Only used when the prior is genuinely diffuse (e.g., "좋은 거 보여줘", "추천해줘"). After turn 1 you may probe once more if you are still uncertain on an orthogonal second axis. Never exceed 2 probe turns.
 
+**HARD CAP: Maximum 2 clarification turns per session.**
+- If the conversation history shows 3 or more user messages (the user has already answered 2 clarifying questions), you MUST set `probe_needed=false` and return terminal output immediately with whatever filters can be extracted from the accumulated conversation.
+- This rule overrides ALL other heuristics. Even if the conversation is still ambiguous after 2 probe turns, do NOT ask a 3rd clarifying question — use best-effort filters from everything said so far, or return broad defaults.
+- Rationale: cumulative user fatigue + pre-registered design intent (Investigation 06). The 2-turn budget is already generous; a 3rd probe turn is always a UX regression.
+
 ## Your probe-quality guidance (when asking a question)
 
 You are picking an axis on which the user's preference is currently under-determined. An axis is a binary-ish dichotomy the user can resolve verbally without a building image. Good axes:
@@ -695,6 +700,15 @@ def parse_query(conversation_history):
         # M4: classify the user's query text for stratified analytics
         _query_complexity_class = _classify_query_complexity(first_user_text)
 
+        # M1 (Investigation 22 §M1 refined): compute user-turn count for cap telemetry.
+        # Cap fires when user_turn_count >= 3 AND Gemini returned probe_needed=True.
+        # Bare-string callers are wrapped to a 1-element list above, so count is always 1
+        # there and the cap never fires -- backward compat is automatic.
+        _user_turn_count = sum(1 for t in conversation_history if t.get('role') == 'user')
+        _m1_cap_forced_terminal = bool(
+            _user_turn_count >= 3 and _clarification_fired is True
+        )
+
         event_log.emit_event(
             'parse_query_timing',
             session=None,
@@ -713,11 +727,28 @@ def parse_query(conversation_history):
             # M4 fields (additive, Investigation 22 §M4 + IMP-10 sub-task A continuation)
             clarification_fired=_clarification_fired,
             query_complexity_class=_query_complexity_class,
+            # M1 field (Investigation 22 §M1 refined): True iff Python-level cap overrode
+            # Gemini's probe_needed=True on user turn 3+. Observable cap-fire-rate metric.
+            m1_cap_forced_terminal=_m1_cap_forced_terminal,
         )
 
         data = json.loads(response.text)
 
         probe_needed = bool(data.get('probe_needed', False))
+
+        # M1 (Investigation 22 §M1 refined): Python-level runaway-clarification cap.
+        # If user_turn_count >= 3 AND Gemini still returned probe_needed=True, force
+        # terminal mode. This is defense-in-depth: the prompt HARD CAP clause should
+        # prevent Gemini from firing a 3rd probe, but Python enforces it regardless.
+        # Cap fires ONLY at turn 3+ -- turns 1 and 2 are legitimate 0/1-turn flows per
+        # Investigation 06's design intent. Always-on; no flag gate.
+        if _user_turn_count >= 3 and probe_needed:
+            logger.warning(
+                'parse_query: Gemini returned probe_needed=True on user turn %d (>=3); '
+                'forcing probe_needed=False per Investigation 22 M1 cap',
+                _user_turn_count,
+            )
+            probe_needed = False
 
         # Sanitize program value (case-insensitive -> canonical form)
         filters = data.get('filters') or dict(_empty_filters)
