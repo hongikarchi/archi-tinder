@@ -1447,6 +1447,44 @@ def get_top_k_mmr(like_vectors, exposed_ids, k=None, round_num=None):
     return [_row_to_card(row) for row in selected]
 
 
+def rerank_pool_with_v_initial(*, pool_ids, exposed_ids, initial_batch_ids, v_initial_vector):
+    """IMP-6 Commit 1: Re-rank unexposed pool tail with late-bound V_initial.
+
+    Re-rank scope invariant: pool_ids \\ (exposed_ids union initial_batch_ids).
+    Cards already shown (exposed) and the initial prefetch batch (initial_batch_ids)
+    are locked at the front of the result — their positions are never changed.
+    This preserves the frontend prefetch invariant:
+        initial_batch[0] = first card
+        initial_batch[1] = prefetch_image
+        initial_batch[2] = prefetch_image_2
+
+    Args:
+        pool_ids:          Ordered list of all pool building IDs.
+        exposed_ids:       Building IDs already shown to the user (any order).
+        initial_batch_ids: Building IDs in the session's initial prefetch batch.
+        v_initial_vector:  384-dim float list (Stage 2 product). Unused by Commit 1
+                           pass-through placeholder; Commit 2 wires actual ranking.
+
+    Returns:
+        New pool_ids list: locked_prefix + reranked_tail (same total length as input).
+        List comprehension preserves insertion order (no set-iteration non-determinism).
+    """
+    locked_set = set(exposed_ids or []) | set(initial_batch_ids or [])
+    locked_prefix = [pid for pid in pool_ids if pid in locked_set]
+    rerank_scope = [pid for pid in pool_ids if pid not in locked_set]
+    reranked_tail = _rank_with_v_initial(rerank_scope, v_initial_vector)
+    return locked_prefix + reranked_tail
+
+
+def _rank_with_v_initial(pool_ids, v_initial_vector):
+    """IMP-6 Commit 1 placeholder: returns pool_ids unchanged.
+
+    Commit 2 replaces this body with cosine-similarity ranking against v_initial_vector.
+    Placeholder returns list copy so callers can safely mutate the result.
+    """
+    return list(pool_ids)
+
+
 def compute_dpp_topk(cards, like_vectors, k, q_override=None):
     """
     Topic 04 (b): DPP greedy MAP at session-final top-K.

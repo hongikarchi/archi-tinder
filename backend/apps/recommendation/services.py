@@ -111,6 +111,53 @@ def _ensure_chat_cache(client):
         return None
 
 
+# ---------------------------------------------------------------------------
+# IMP-6 (Spec v1.10 §11.1) Commit 1: V_initial cache for late-binding
+# ---------------------------------------------------------------------------
+# Stage 2 (Commit 2) writes V_initial here after async visual_description generation.
+# SessionCreateView reads it on pool creation; on miss, filters-only pool is used
+# (BM25-only RRF fallback per spec v1.5 Topic 01 graceful-degrade; order-independent).
+_V_INITIAL_CACHE_KEY_PREFIX = 'v_initial'
+_V_INITIAL_CACHE_TTL_SECONDS = 3600  # 1h — typical user session length
+
+
+def _v_initial_cache_key(user_id, raw_query):
+    """IMP-6: Django cache key for late-bound V_initial vector.
+
+    Format: 'v_initial:{user_id}:{sha256(raw_query)[:16]}'
+    Uses first 16 hex chars of SHA-256 so different queries produce different keys
+    while keeping the key compact (64-bit collision resistance >> session count).
+    """
+    qhash = hashlib.sha256((raw_query or '').encode('utf-8')).hexdigest()[:16]
+    return f'{_V_INITIAL_CACHE_KEY_PREFIX}:{user_id}:{qhash}'
+
+
+def get_cached_v_initial(user_id, raw_query):
+    """IMP-6: Read V_initial from Django cache. Returns None on miss or flag OFF.
+
+    Called by SessionCreateView.post() when stage_decouple_enabled=True.
+    Returns the cached 384-dim float list, or None (triggers filter-only pool).
+    """
+    if not settings.RECOMMENDATION.get('stage_decouple_enabled', False):
+        return None
+    return django_cache.get(_v_initial_cache_key(user_id, raw_query))
+
+
+def set_cached_v_initial(user_id, raw_query, v_initial_vector):
+    """IMP-6: Store V_initial in Django cache for subsequent SessionCreate read.
+
+    Called by Stage 2 async thread (Commit 2) after visual_description embedding.
+    No-op when stage_decouple_enabled=False (default).
+    """
+    if not settings.RECOMMENDATION.get('stage_decouple_enabled', False):
+        return
+    django_cache.set(
+        _v_initial_cache_key(user_id, raw_query),
+        v_initial_vector,
+        timeout=_V_INITIAL_CACHE_TTL_SECONDS,
+    )
+
+
 PROGRAM_VALUES = [
     'Housing', 'Office', 'Museum', 'Education', 'Religion', 'Sports',
     'Transport', 'Hospitality', 'Healthcare', 'Public', 'Mixed Use',

@@ -176,6 +176,15 @@ RECOMMENDATION = {
     # IMP-5 (Spec v1.5 §11.1): Gemini explicit context caching for _CHAT_PHASE_SYSTEM_PROMPT
     'context_caching_enabled': False,                  # default OFF; flip True only after Redis cache backend is wired
     'context_caching_ttl_seconds': 3600,               # Gemini cache TTL; also used as Django cache TTL for resource name
+    # IMP-6 (Spec v1.10 §11.1): 2-stage decouple — late-binding V_initial plumbing.
+    # Commit 1 (2d): scaffolding only. With flag OFF (default) all paths are byte-identical
+    # to pre-IMP-6. With flag ON (Commit 2): parse_query returns Stage 1 output
+    # (filters + reply, ~150-220 tokens) immediately; Stage 2 (visual_description,
+    # ~140-180 tokens) fires async. SessionCreateView reads V_initial from Django cache
+    # (key: v_initial:{user_id}:{sha256(raw_query)[:16]}); on cache miss, creates pool
+    # with filters only (BM25-only RRF per spec v1.5 Topic 01 graceful-degrade).
+    # Expected TTFC improvement (M1-grounded): ~45-55% Gemini wall-time drop.
+    'stage_decouple_enabled': False,                   # default OFF; flip True after Commit 2 lands
 }
 
 # -- External API keys -----------------------------------------------------
