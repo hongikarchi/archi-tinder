@@ -3,7 +3,7 @@
 > Phase logic, mathematical formulas, and hyperparameter theory.
 > Research agent updates this file. Orchestrator references it for algorithm tasks.
 
-**Last Synced (Reporter):** 2026-04-25 ebbafd2
+**Last Synced (Reporter):** 2026-04-28 7348593
 
 ---
 
@@ -21,11 +21,31 @@ Translates the user's initial chat prompt into a semantic vector space.
 
 _(Updated 2026-04-25 e290287: Sprint 1 §3 chat phase rewrite (Investigation 06) — `services.parse_query(conversation_history)` now supports 0-2 turn probe per spec §3, output schema gains `visual_description` (English HyDE seed) + `filter_priority` + `raw_query` (first user turn verbatim). LLM-autonomous probe axis selection per Investigation 06 9 few-shot examples. Spec v1.3 §11.1 IMP-4 push-gate-blocker fix shipped: `thinking_config=ThinkingConfig(thinking_budget=0)` on parse_query + generate_persona_report — root cause of monotonic 3437→5496→6706 ms latency drift was Gemini 2.5-flash default dynamic thinking; expected post-fix p50 ~1000-1500ms. Mandatory companion `parse_query_timing` SessionEvent emitted for measurement.)_
 
+_(Updated 2026-04-26 6f4b76f: HyDE V_initial scaffolding — flag-gated default OFF; activates HF Inference API embed of visual_description and pgvector cosine sim blending in pool creation when enabled)_
+
+_(Updated 2026-04-26 305e213: Topic 01 Hybrid RRF scaffolding — flag-gated default OFF; activates RRF blend of BM25 + v_initial-cosine + filter channels in pool creation when enabled. v_initial reused from Topic 03 — no extra HF call.)_
+
+_(Updated 2026-04-26 06c6c5a: IMP-7 per-building-id immutable cache + companion §6 swipe.timing_breakdown observability — fixes A4 escalation cache invalidation; expected select_ms 300ms → ~50ms.)_
+
+_(Updated 2026-04-26 c133787: IMP-5 Gemini explicit context caching for _CHAT_PHASE_SYSTEM_PROMPT — flag-gated default OFF; lazy-init via _ensure_chat_cache with 80% Django TTL invariant; once flipped on, expected per-Gemini-call ~3246→~1400-1800ms drop. Companion to IMP-8 — both share LocMemCache→Redis swap requirement for multi-worker prod.)_
+
+_(Updated 2026-04-27 6604296: IMP-5 staging validation — 100% cache_hit + 5919 cached tokens verified (mechanism works), but only 5.5% latency drop (161ms) on same-session A/B (Phase A uncached median 2904ms vs Phase B cached median 2743ms); spec §11.1 IMP-5 predicted ≥50% / 1400-1800ms target. Prediction invalidated: Gemini 2.5-flash baseline dropped ~3200→~2900ms since spec written; output-generation dominates floor, cached input tokens do not reduce wall time at 5919-token scale. See research/investigations/16-gemini-context-caching.md for revisit.)_
+
+_(Updated 2026-04-28 834d36e: M4 clarification telemetry shipped — parse_query_timing payload now has additive clarification_fired + query_complexity_class fields. Investigation 22 Phase 1 passive data accumulation can begin (was permanently blocked). Source for clarification_fired = probe_needed Gemini response field, authoritative not heuristic.)_
+
+_(Updated 2026-04-28 1b2bd21: M1 refined clarification cap shipped — prompt + Python 3-layer enforcement caps user clarification turns at max 2 per session. Cap fires at user_turn_count >= 3 (preserves Investigation 06 BareQuery 2-turn flow). m1_cap_forced_terminal telemetry surfaces override events. UX trade-off: cap-forced terminal has short ack reply + None visual_description + partial filters; HyDE V_initial skips cleanly.)_
+
+_(Updated 2026-04-28 7348593: IMP-6 2-stage decouple shipped (flag-gated default OFF) — Phase 0 Gemini call split into Stage 1 sync (parse_query_stage1, ~150-220 output tokens, user-blocking, returns filters+reply via _STAGE1_RESPONSE_SCHEMA that structurally excludes visual_description) + Stage 2 async daemon thread (generate_visual_description, ~140-180 output tokens, fire-and-forget, stores V_initial in Django cache key v_initial:{user_id}:{sha256(raw_query)[:16]}). Stage 1 alone expected ~45-55% Gemini wall drop when stage_decouple_enabled flipped ON; total TTFC ~2400-2700ms restoring spec v1.0 aspirational <3-4s outer budget.)_
+
 ### Phase 1: Bounded Exploration
 Gathers initial user feedback within the bounded pool while ensuring visual diversity.
 
 - Execute **Greedy Farthest-point Sampling** within the pool to serve cards that are as visually distinct from one another as possible.
-- **Transition:** Phase 1 -> Phase 2 when Like count reaches `min_likes_for_clustering` (e.g., 3).
+- **Transition:** Phase 1 -> Phase 2 when Like count reaches `min_likes_for_clustering` (e.g., 4).
+
+_(Updated 2026-04-26 da547cb: min_likes_for_clustering 3→4 per Spec v1.8 Topic 06 N≥4 cliff mitigation — defers K-Means until N≥4 to avoid Investigation 09 worst-case 1 Love + 2 Likes pathology.)_
+
+_(Updated 2026-04-26 1491c5d: IMP-8 async prefetch background thread — flag-gated default OFF; activates daemon thread spawn for prefetch_card+_2 computation when enabled, primary swipe response returns immediately with prefetch=None. Combined with IMP-7 cache fix (06c6c5a): total_ms ~600ms→~300ms per spec v1.6 §4 re-tightening pathway.)_
 
 _(Updated 2026-04-25 a9305e4: `farthest_point_from_pool()` (engine.py:421-455) corrected from inverted max-max accumulator to true Gonzalez max-min sampling per Spec v1.1 §11.1 IMP-1. Pre-fix code silently picked near-duplicates of exposed items. Bundled with NumPy batch matmul vectorization (~22ms → ~1ms per call, 20-50× speedup). Topic 11's 2-approximation bound and Section 4 C-3 Better layer 3's "first 3-5 diverse seeds" now actually deliver diverse selection.)_
 
@@ -113,7 +133,7 @@ _(Updated 2026-04-25 190c830: Like writes now carry an `intensity` field (defaul
 | like_weight | float | 0.1-1.0 | 0.5 |
 | dislike_weight | float | -2.0 to -0.1 | -1.0 |
 | bounded_pool_target | int | 50-300 | 150 |
-| min_likes_for_clustering | int | 2-5 | 3 |
+| min_likes_for_clustering | int | 2-5 | 4 |
 | convergence_window | int | 2-5 | 3 |
 | k_clusters | int | 1-3 | 2 |
 | max_consecutive_dislikes | int | 5-20 | 5 |
@@ -127,6 +147,21 @@ _(Updated 2026-04-25 190c830: Like writes now carry an `intensity` field (defaul
 | `dpp_topk_enabled` | bool | True/False | False |
 | `dpp_alpha` | float | 0.0-1.0 | 1.0 |
 | `dpp_singularity_eps` | float | 1e-12 to 1e-6 | 1e-9 |
+| `hyde_vinitial_enabled` | bool | True/False | False |
+| `hyde_hf_model` | string | — | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` |
+| `hyde_hf_timeout_seconds` | int | 1-30 | 5 |
+| `hyde_score_weight` | float | 0-100 | 50.0 |
+| `hybrid_retrieval_enabled` | bool | True/False | False |
+| `hybrid_rrf_k` | int | 10-100 | 60 |
+| `hybrid_bm25_dict` | string | — | `simple` |
+| `hybrid_filter_channel_enabled` | bool | True/False | True |
+| `pool_precompute_enabled` | bool | True/False | False |
+| `pool_embedding_cache_max_size` | int | 1000-10000 | 5000 |
+| `async_prefetch_enabled` | bool | True/False | False |
+| `async_prefetch_cache_timeout_seconds` | int | 10-300 | 60 |
+| `context_caching_enabled` | bool | True/False | False |
+| `context_caching_ttl_seconds` | int | 60-7200 | 3600 |
+| `stage_decouple_enabled` | bool | True/False | False |
 
 Source: `backend/config/settings.py` RECOMMENDATION dict.
 
