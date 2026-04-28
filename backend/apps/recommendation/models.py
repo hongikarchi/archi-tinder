@@ -119,6 +119,7 @@ class SessionEvent(models.Model):
         ('parse_query_timing',  'Parse Query Timing'),
         ('hyde_call_timing',    'HyDE Call Timing'),
         ('hybrid_pool_timing',  'Hybrid Pool Timing'),
+        ('stage2_timing',       'Stage 2 Timing'),
     ]
 
     user        = models.ForeignKey(

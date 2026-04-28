@@ -578,6 +578,10 @@ def parse_query(conversation_history):
     """
     Chat phase Gemini call (Sprint 1 rewrite per Investigation 06).
 
+    IMP-6 Commit 2: when stage_decouple_enabled=True, routes to parse_query_stage1()
+    which omits visual_description (Stage 2 generates it async). When flag is OFF,
+    runs the original single-call full-output path.
+
     Input:
         conversation_history: list of {role: 'user'|'model', text: str} dicts,
             representing the full chat so far. Oldest turn first.
@@ -606,6 +610,7 @@ def parse_query(conversation_history):
             'filter_priority': list,    # ordered by essentialness
             'raw_query': str,           # first user turn verbatim
             'visual_description': str,  # English, 2-4 sentences, HyDE V_initial seed
+                                        # (None when stage_decouple_enabled=True -- Stage 2)
         }
 
     Failure path (spec §5.4 graceful degradation):
@@ -620,6 +625,11 @@ def parse_query(conversation_history):
         }
         Also emits a 'failure' session event (spec §6).
     """
+    # IMP-6: when stage_decouple_enabled=True, delegate to Stage 1 (visual_description
+    # is generated asynchronously by Stage 2 thread spawned in ParseQueryView).
+    if settings.RECOMMENDATION.get('stage_decouple_enabled', False):
+        return parse_query_stage1(conversation_history)
+    # else: fall through to the original single-call path (default, backward compat)
     # Backward compat: accept bare string (legacy callers pass query_text directly)
     if isinstance(conversation_history, str):
         conversation_history = [{'role': 'user', 'text': conversation_history}]
@@ -847,6 +857,433 @@ def parse_query(conversation_history):
             error_message=str(e)[:200],
         )
         return _fallback
+
+
+# ---------------------------------------------------------------------------
+# IMP-6 Commit 2: Stage 1 schema (excludes visual_description to reduce output tokens)
+# ---------------------------------------------------------------------------
+# Gemini response_schema that covers all Stage 1 fields.
+# visual_description is intentionally absent — Stage 2 generates it asynchronously.
+_STAGE1_RESPONSE_SCHEMA = {
+    'type': 'object',
+    'properties': {
+        'probe_needed': {'type': 'boolean'},
+        'probe_question': {'type': 'string'},
+        'reply': {'type': 'string'},
+        'filters': {
+            'type': 'object',
+            'properties': {
+                'location_country': {'type': 'string'},
+                'program': {'type': 'string'},
+                'material': {'type': 'string'},
+                'style': {'type': 'string'},
+                'year_min': {'type': 'integer'},
+                'year_max': {'type': 'integer'},
+                'min_area': {'type': 'number'},
+                'max_area': {'type': 'number'},
+            },
+        },
+        'filter_priority': {'type': 'array', 'items': {'type': 'string'}},
+        'raw_query': {'type': 'string'},
+    },
+    'required': ['probe_needed', 'reply'],
+}
+
+
+def parse_query_stage1(conversation_history):
+    """IMP-6 Commit 2: Stage 1 Gemini call — USER-BLOCKING portion of the split.
+
+    Same as parse_query() but uses response_schema to exclude visual_description,
+    reducing output tokens from ~290-400 to ~150-220. Returns same dict shape as
+    parse_query() but with visual_description=None always.
+
+    When stage_decouple_enabled=False, this function is not called directly;
+    parse_query() (the legacy wrapper) handles routing.
+
+    Emits parse_query_timing with stage='1' field added (additive — all existing
+    fields preserved per spec v1.7).
+
+    Args:
+        conversation_history: list of {role, text} dicts or bare string (backward compat).
+
+    Returns:
+        Same dict shape as parse_query(), with visual_description always None.
+        On failure: graceful degradation fallback dict (same as parse_query).
+    """
+    # Backward compat: accept bare string (legacy callers pass query_text directly)
+    if isinstance(conversation_history, str):
+        conversation_history = [{'role': 'user', 'text': conversation_history}]
+
+    # Extract first user message verbatim (BM25 raw_query channel)
+    first_user_text = ''
+    for turn in conversation_history:
+        if turn.get('role') == 'user':
+            first_user_text = turn.get('text', '')
+            break
+
+    _empty_filters = {
+        'location_country': None, 'program': None, 'material': None, 'style': None,
+        'year_min': None, 'year_max': None, 'min_area': None, 'max_area': None,
+    }
+    _fallback = {
+        'probe_needed': False,
+        'probe_question': None,
+        'reply': '이해를 잘 못 했어요. 일단 이 쪽으로 찾아볼게요.',
+        'filters': dict(_empty_filters),
+        'filter_priority': [],
+        'raw_query': first_user_text,
+        'visual_description': None,
+    }
+
+    try:
+        client = _get_client()
+        rc = settings.RECOMMENDATION
+
+        # Build Gemini contents list from conversation_history
+        contents = []
+        for turn in conversation_history:
+            role = turn.get('role', 'user')
+            text = turn.get('text', '')
+            contents.append(
+                types.Content(role=role, parts=[types.Part.from_text(text=text)])
+            )
+
+        # IMP-5: explicit context caching branch (flag-gated, default OFF)
+        caching_enabled = rc.get('context_caching_enabled', False)
+        cache_resource_name = None
+        if caching_enabled:
+            cache_resource_name = _ensure_chat_cache(client)
+
+        if cache_resource_name:
+            # Cached path: supply cached_content= instead of system_instruction=
+            # response_schema excludes visual_description -> reduced output tokens
+            def _call():
+                return client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=contents,
+                    config=types.GenerateContentConfig(
+                        cached_content=cache_resource_name,
+                        response_mime_type='application/json',
+                        response_schema=_STAGE1_RESPONSE_SCHEMA,
+                        temperature=0.2,
+                        thinking_config=types.ThinkingConfig(thinking_budget=0),
+                    ),
+                )
+        else:
+            # Uncached path: original system_instruction + Stage 1 schema
+            def _call():  # noqa: F811
+                return client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=contents,
+                    config=types.GenerateContentConfig(
+                        system_instruction=_CHAT_PHASE_SYSTEM_PROMPT,
+                        response_mime_type='application/json',
+                        response_schema=_STAGE1_RESPONSE_SCHEMA,
+                        temperature=0.2,
+                        thinking_config=types.ThinkingConfig(thinking_budget=0),
+                    ),
+                )
+
+        t_call_start = time.perf_counter()
+        try:
+            response = _retry_gemini_call(_call)
+        except Exception as _cache_exc:
+            # IMP-5: if call failed with 404/NOT_FOUND (Gemini cache expired but Django
+            # cache still live), evict Django entry and retry uncached.
+            exc_str = str(_cache_exc)
+            if cache_resource_name and ('404' in exc_str or 'NOT_FOUND' in exc_str):
+                logger.warning(
+                    'IMP-5: Gemini cache 404 for %s -- evicting Django entry and retrying uncached',
+                    cache_resource_name,
+                )
+                django_cache.delete(_get_django_cache_key())
+                cache_resource_name = None
+
+                def _call_uncached():
+                    return client.models.generate_content(
+                        model='gemini-2.5-flash',
+                        contents=contents,
+                        config=types.GenerateContentConfig(
+                            system_instruction=_CHAT_PHASE_SYSTEM_PROMPT,
+                            response_mime_type='application/json',
+                            response_schema=_STAGE1_RESPONSE_SCHEMA,
+                            temperature=0.2,
+                            thinking_config=types.ThinkingConfig(thinking_budget=0),
+                        ),
+                    )
+                response = _retry_gemini_call(_call_uncached)
+            else:
+                raise
+        t_call_end = time.perf_counter()
+
+        # --- Telemetry (same as parse_query, additive stage='1' field per spec v1.7) ---
+        _usage = getattr(response, 'usage_metadata', None)
+        _raw_cached = getattr(_usage, 'cached_content_token_count', None) if _usage else None
+        _cached_token_count = int(_raw_cached) if isinstance(_raw_cached, (int, float)) else None
+        _cache_hit = (_cached_token_count > 0) if _cached_token_count is not None else None
+
+        _clarification_fired = None
+        try:
+            _pre_data = json.loads(response.text)
+            _clarification_fired = bool(_pre_data.get('probe_needed', False))
+        except Exception:
+            pass
+
+        _query_complexity_class = _classify_query_complexity(first_user_text)
+        _user_turn_count = sum(1 for t in conversation_history if t.get('role') == 'user')
+        _m1_cap_forced_terminal = bool(_user_turn_count >= 3 and _clarification_fired is True)
+
+        event_log.emit_event(
+            'parse_query_timing',
+            session=None,
+            user=None,
+            gemini_total_ms=round((t_call_end - t_call_start) * 1000, 2),
+            ttft_ms=None,
+            gen_ms=round((t_call_end - t_call_start) * 1000, 2),
+            input_tokens=getattr(_usage, 'prompt_token_count', None) if _usage else None,
+            output_tokens=getattr(_usage, 'candidates_token_count', None) if _usage else None,
+            thinking_tokens=getattr(_usage, 'thoughts_token_count', None) if _usage else None,
+            # IMP-5 fields
+            cache_hit=_cache_hit,
+            cached_input_tokens=_cached_token_count,
+            cache_name_hash=_get_prompt_hash() if cache_resource_name else None,
+            caching_mode='explicit' if cache_resource_name else 'none',
+            # M4 fields
+            clarification_fired=_clarification_fired,
+            query_complexity_class=_query_complexity_class,
+            # M1 field
+            m1_cap_forced_terminal=_m1_cap_forced_terminal,
+            # IMP-6 Commit 2 additive field: stage identifier
+            stage='1',
+        )
+
+        data = json.loads(response.text)
+        probe_needed = bool(data.get('probe_needed', False))
+
+        # M1 cap: Python-level runaway-clarification guard (same as parse_query)
+        if _user_turn_count >= 3 and probe_needed:
+            logger.warning(
+                'parse_query_stage1: Gemini returned probe_needed=True on user turn %d (>=3); '
+                'forcing probe_needed=False per Investigation 22 M1 cap',
+                _user_turn_count,
+            )
+            probe_needed = False
+
+        # Sanitize program value
+        filters = data.get('filters') or dict(_empty_filters)
+        if filters.get('program'):
+            program = filters['program']
+            if program not in PROGRAM_VALUES:
+                titled = program.title()
+                filters['program'] = titled if titled in PROGRAM_VALUES else None
+
+        # Sanitize filter_priority: keep only non-null filter keys
+        raw_priority = data.get('filter_priority') or []
+        filter_priority = [k for k in raw_priority if filters.get(k) is not None]
+
+        # raw_query: spec §3 says always verbatim first user message
+        raw_query = data.get('raw_query') or first_user_text
+
+        return {
+            'probe_needed': probe_needed,
+            'probe_question': data.get('probe_question') if probe_needed else None,
+            'reply': data.get('reply', ''),
+            'filters': filters,
+            'filter_priority': filter_priority,
+            'raw_query': raw_query,
+            'visual_description': None,  # Stage 2 generates this asynchronously
+        }
+
+    except json.JSONDecodeError as e:
+        logger.error('parse_query_stage1 JSON decode error: %s', e)
+        event_log.emit_event(
+            'failure',
+            session=None,
+            user=None,
+            failure_type='gemini_parse',
+            recovery_path='fallback_diverse_random',
+            error_class='JSONDecodeError',
+            error_message=str(e)[:200],
+        )
+        return _fallback
+    except Exception as e:
+        logger.error('parse_query_stage1 failed after retries: %s: %s', type(e).__name__, e)
+        event_log.emit_event(
+            'failure',
+            session=None,
+            user=None,
+            failure_type='gemini_parse',
+            recovery_path='fallback_diverse_random',
+            error_class=type(e).__name__,
+            error_message=str(e)[:200],
+        )
+        return _fallback
+
+
+def generate_visual_description(filters, raw_query, user_id):
+    """IMP-6 Commit 2: Stage 2 worker — generates visual_description + V_initial.
+
+    Runs in a background thread (daemon=True) spawned by ParseQueryView after
+    Stage 1 returns on a terminal turn (probe_needed=False).
+
+    Operation:
+        1. Single Gemini call producing ONLY visual_description text (~140-180 tokens).
+        2. embed_visual_description(visual_description) -> 384-dim float list.
+        3. set_cached_v_initial(user_id, raw_query, v_initial) for SessionCreate late-bind.
+        4. Emit 'stage2_timing' event with full telemetry.
+
+    Defensive: catches all exceptions; failures never bubble up to the user.
+    SessionCreate falls through to filter-only pool on cache miss (graceful degrade
+    per spec v1.5 Topic 01).
+
+    Args:
+        filters: dict of parsed filters from Stage 1 result.
+        raw_query: str, the verbatim first user message (V_initial cache key component).
+        user_id: int, request.user.id.
+
+    Returns:
+        visual_description string on success, None on failure.
+    """
+    t_stage2_start = time.perf_counter()
+    gemini_visual_description_ms = None
+    hf_inference_ms = None
+    input_tokens = None
+    output_tokens = None
+    v_initial_computed = False
+    v_initial_dim = None
+    success = False
+    error_class = None
+    # State-progression outcome: advances as each stage succeeds.
+    # Starts at 'gemini_failure' so any uncaught exception before HF is correctly classified.
+    outcome = 'gemini_failure'
+
+    try:
+        client = _get_client()
+
+        # Build a concise prompt from filters + raw_query for visual description
+        filter_parts = []
+        if filters.get('program'):
+            filter_parts.append(f"program: {filters['program']}")
+        if filters.get('style'):
+            filter_parts.append(f"style: {filters['style']}")
+        if filters.get('material'):
+            filter_parts.append(f"material: {filters['material']}")
+        if filters.get('location_country'):
+            filter_parts.append(f"country: {filters['location_country']}")
+        filter_summary = ', '.join(filter_parts) if filter_parts else 'unspecified'
+
+        stage2_prompt = (
+            f"Write a vivid 2-4 sentence English architectural description for a building search. "
+            f"The user query was: {raw_query!r}. "
+            f"Inferred filters: {filter_summary}. "
+            f"Output ONLY the description text — no JSON, no labels, no preamble."
+        )
+
+        t_gemini_start = time.perf_counter()
+        response = _retry_gemini_call(
+            client.models.generate_content,
+            model='gemini-2.5-flash',
+            contents=stage2_prompt,
+            config=types.GenerateContentConfig(
+                temperature=0.3,
+                thinking_config=types.ThinkingConfig(thinking_budget=0),
+            ),
+        )
+        t_gemini_end = time.perf_counter()
+        gemini_visual_description_ms = round((t_gemini_end - t_gemini_start) * 1000, 2)
+
+        _usage = getattr(response, 'usage_metadata', None)
+        input_tokens = getattr(_usage, 'prompt_token_count', None) if _usage else None
+        output_tokens = getattr(_usage, 'candidates_token_count', None) if _usage else None
+
+        visual_description = (response.text or '').strip()
+        if not visual_description:
+            logger.warning('IMP-6 Stage 2: Gemini returned empty visual_description')
+            error_class = 'EmptyResponse'
+            return None
+
+        # Gemini succeeded — advance outcome state; HF failure now owns the error label.
+        outcome = 'hf_failure'
+
+        # Compute V_initial via HuggingFace Inference API (existing embed_visual_description).
+        # Time the HF call regardless of its result (hf_inference_ms=None only when HF never fires).
+        t_hf_start = time.perf_counter()
+        v_initial = embed_visual_description(visual_description, session=None, user=None)
+        hf_inference_ms = round((time.perf_counter() - t_hf_start) * 1000, 2)
+
+        if v_initial is not None:
+            # Defensive: verify dimension + non-zero norm before caching
+            import numpy as _np
+            v_arr = _np.asarray(v_initial, dtype=_np.float32)
+            v_norm = _np.linalg.norm(v_arr)
+            if len(v_initial) == 384 and v_norm > 0:
+                # HF succeeded — advance outcome state; cache failure now owns the error label.
+                outcome = 'cache_failure'
+                try:
+                    set_cached_v_initial(user_id, raw_query, v_initial)
+                except Exception as cache_exc:
+                    logger.warning(
+                        'IMP-6 Stage 2: set_cached_v_initial failed: %s: %s',
+                        type(cache_exc).__name__, str(cache_exc),
+                    )
+                    error_class = type(cache_exc).__name__
+                    return None
+                v_initial_computed = True
+                v_initial_dim = len(v_initial)
+                logger.debug(
+                    'IMP-6 Stage 2: V_initial cached for user=%s query_len=%d',
+                    user_id, len(raw_query or ''),
+                )
+                # All stages passed — advance to success.
+                outcome = 'success'
+                success = True
+            else:
+                logger.warning(
+                    'IMP-6 Stage 2: V_initial dim=%d norm=%.4f -- skipping cache',
+                    len(v_initial), v_norm,
+                )
+                error_class = 'BadVInitialVector'
+                # outcome stays 'hf_failure' — bad vector counts as HF-stage failure
+        else:
+            logger.warning('IMP-6 Stage 2: embed_visual_description returned None')
+            error_class = 'EmbedFailed'
+            # outcome stays 'hf_failure'
+
+        return visual_description
+
+    except Exception as e:
+        error_class = type(e).__name__
+        logger.warning(
+            'IMP-6 generate_visual_description failed: %s: %s',
+            type(e).__name__, str(e),
+        )
+        return None
+    finally:
+        # IMP-6 stage2_timing schema (per spec v1.7 §6):
+        #   - stage2_total_ms / gemini_visual_description_ms / hf_inference_ms /
+        #     pool_rerank_ms / outcome (in this commit)
+        #   - v_initial_ready_at_first_card / cards_exposed_when_ready (DEFERRED
+        #     to Commit 3 -- requires cross-request timing coordination between
+        #     this Stage 2 thread and SessionCreateView's first-card-sent timing)
+        # Extra non-spec fields (gemini_input/output_tokens, v_initial_computed/dim,
+        # success, error_class) preserved for richer diagnostic.
+        t_stage2_total = round((time.perf_counter() - t_stage2_start) * 1000, 2)
+        event_log.emit_event(
+            'stage2_timing',
+            session=None,
+            user=None,
+            gemini_visual_description_ms=gemini_visual_description_ms,
+            gemini_input_tokens=input_tokens,
+            gemini_output_tokens=output_tokens,
+            hf_inference_ms=hf_inference_ms,
+            pool_rerank_ms=None,
+            outcome=outcome,
+            v_initial_computed=v_initial_computed,
+            v_initial_dim=v_initial_dim,
+            success=success,
+            error_class=error_class,
+            stage2_total_ms=t_stage2_total,
+        )
 
 
 def generate_persona_report(liked_building_ids):

@@ -1462,12 +1462,22 @@ def rerank_pool_with_v_initial(*, pool_ids, exposed_ids, initial_batch_ids, v_in
         pool_ids:          Ordered list of all pool building IDs.
         exposed_ids:       Building IDs already shown to the user (any order).
         initial_batch_ids: Building IDs in the session's initial prefetch batch.
-        v_initial_vector:  384-dim float list (Stage 2 product). Unused by Commit 1
-                           pass-through placeholder; Commit 2 wires actual ranking.
+        v_initial_vector:  384-dim float list (Stage 2 product). Cosine-similarity
+                           ranking wired in Commit 2 via _rank_with_v_initial.
 
     Returns:
         New pool_ids list: locked_prefix + reranked_tail (same total length as input).
         List comprehension preserves insertion order (no set-iteration non-determinism).
+
+    NOTE: As of IMP-6 Commit 2 (1f55ec6), this function has NO production callers.
+    Regime 1 (V_initial-via-cache -> pool create) is wired via
+    engine.create_pool_with_relaxation(v_initial=...) directly. Regime 2/3
+    (V_initial late-bind during swipe loop with async re-rank) is the future
+    use case for this function.
+
+    TODO(IMP-6 Commit 3): wire rerank_pool_with_v_initial from SwipeNextView
+    after V_initial cache hit during the swipe loop. This activates Regime 2/3
+    re-rank for users whose V_initial wasn't ready at SessionCreate time.
     """
     locked_set = set(exposed_ids or []) | set(initial_batch_ids or [])
     locked_prefix = [pid for pid in pool_ids if pid in locked_set]
@@ -1477,12 +1487,44 @@ def rerank_pool_with_v_initial(*, pool_ids, exposed_ids, initial_batch_ids, v_in
 
 
 def _rank_with_v_initial(pool_ids, v_initial_vector):
-    """IMP-6 Commit 1 placeholder: returns pool_ids unchanged.
+    """IMP-6 Commit 2: Cosine-similarity ranking of pool_ids against V_initial.
 
-    Commit 2 replaces this body with cosine-similarity ranking against v_initial_vector.
-    Placeholder returns list copy so callers can safely mutate the result.
+    Used by rerank_pool_with_v_initial to inject late-bound V_initial into the
+    unexposed-and-not-initial-batch subset.
+
+    Args:
+        pool_ids: list of building IDs to rank.
+        v_initial_vector: 384-dim float list or np.ndarray (Stage 2 product), or None.
+
+    Returns:
+        list of building IDs sorted by descending cosine similarity to v_initial.
+        If v_initial_vector is None or pool empty, returns pool_ids unchanged (list copy).
     """
-    return list(pool_ids)
+    if v_initial_vector is None or not pool_ids:
+        return list(pool_ids)
+
+    v = np.asarray(v_initial_vector, dtype=np.float32)
+    v_norm = np.linalg.norm(v)
+    if v_norm == 0:
+        return list(pool_ids)  # zero vector — defensive pass-through
+    v = v / v_norm
+
+    # Fetch embeddings for pool_ids via the per-building cache (IMP-7 infrastructure).
+    # Already L2-normalized (see get_pool_embeddings docstring / code).
+    embeddings = get_pool_embeddings(pool_ids)  # dict: building_id -> np.ndarray (normalized)
+
+    similarities = []
+    for pid in pool_ids:
+        emb = embeddings.get(pid)
+        if emb is None:
+            similarities.append((pid, -1.0))  # missing embedding -> bottom of list
+            continue
+        # emb is already L2-normalized from get_pool_embeddings; no need to re-normalize
+        sim = float(np.dot(v, emb))
+        similarities.append((pid, sim))
+
+    similarities.sort(key=lambda x: x[1], reverse=True)
+    return [pid for pid, _ in similarities]
 
 
 def compute_dpp_topk(cards, like_vectors, k, q_override=None):

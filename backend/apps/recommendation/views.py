@@ -1456,6 +1456,39 @@ class ProjectBookmarkView(APIView):
         })
 
 
+# ── IMP-6 Commit 2: Stage 2 background thread spawn helper ───────────────────
+
+def _spawn_stage2(filters, raw_query, user_id):
+    """IMP-6 Commit 2: Spawn background thread for Stage 2 visual_description generation.
+
+    Per Investigation 17 §3a + Inv 23 §3: runs OFF the user-blocking critical path.
+    User reads Stage 1 rich-paraphrase confirmation while this generates
+    visual_description -> V_initial -> caches it for SessionCreate's late-bind read.
+
+    Threading design:
+    - daemon=True: prevents process-exit deadlock if thread outlives server process
+    - fire-and-forget (no join): caller returns Stage 1 response immediately
+    - connection.close() in finally: releases Django DB connection at thread exit
+      (each thread gets its own connection; must be explicitly released to avoid leak)
+    - All exceptions caught: Stage 2 failure is silent; SessionCreate falls through
+      to filter-only pool (graceful degrade per spec v1.5 Topic 01)
+    """
+    from django.db import connection as _db_conn
+
+    def _run():
+        try:
+            services.generate_visual_description(filters, raw_query, user_id)
+        except Exception as exc:
+            logger.warning('IMP-6 Stage 2 thread uncaught exception: %s', exc)
+        finally:
+            # Release DB connection at thread exit (Django thread-local conn pool)
+            _db_conn.close()
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+    # Do NOT join -- fire-and-forget; caller returns Stage 1 immediately.
+
+
 # ── LLM Query Parsing ─────────────────────────────────────────────────────────
 
 class ParseQueryView(APIView):
@@ -1531,6 +1564,18 @@ class ParseQueryView(APIView):
                 'is_fallback': False,
                 'fallback_note': '',
             })
+
+        # IMP-6 Commit 2: spawn Stage 2 thread on terminal turn (probe_needed=False)
+        # Stage 2 generates visual_description -> V_initial -> caches for SessionCreate.
+        # Only fires when stage_decouple_enabled=True (default OFF).
+        # Clarification turns (probe_needed=True) are excluded above so we never reach
+        # this point with an unstable filter set.
+        if RC.get('stage_decouple_enabled', False):
+            _spawn_stage2(
+                filters=parsed.get('filters') or {},
+                raw_query=parsed.get('raw_query', ''),
+                user_id=request.user.id,
+            )
 
         # Terminal path (probe_needed=False): run search engine.
         filters = {k: v for k, v in (parsed.get('filters') or {}).items() if v is not None}

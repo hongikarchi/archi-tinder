@@ -18,7 +18,7 @@ Tests:
 """
 import hashlib
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from django.conf import settings
 from django.core.cache import cache
 
@@ -259,89 +259,6 @@ class TestRerankPoolScope:
         assert result == ['A', 'B']
 
 
-# ---------------------------------------------------------------------------
-# TestSessionCreateBranchingLogic
-# ---------------------------------------------------------------------------
-
-class TestSessionCreateBranchingLogic:
-    """Unit-level tests for the if/elif branching logic added to SessionCreateView.post().
-
-    These tests simulate the branching logic directly — they do not call the full view
-    (which requires DB fixtures). Baseline integration coverage for the default-OFF path
-    is provided by the 328 pre-IMP-6 tests that continue to pass with stage_decouple_enabled=False.
-    Full SessionCreateView integration coverage with flag ON will be added in Commit 2
-    when get_cached_v_initial has a non-trivial product to exercise.
-
-    Note: _raw_query_early extraction was moved earlier in SessionCreateView.post() so that
-    it precedes the V_initial block. This is load-bearing for the IMP-6 ON path and is a
-    deliberate ordering change (confirmed safe by the full 328-test suite still passing).
-    """
-
-    def _make_request(self, query='test', visual_description=None):
-        req = MagicMock()
-        req.user.id = 42
-        data = {'query': query}
-        if visual_description is not None:
-            data['visual_description'] = visual_description
-        req.data = data
-        return req
-
-    def test_flag_off_does_not_call_get_cached_v_initial(self):
-        """With flag OFF, get_cached_v_initial must never be called."""
-        from apps.recommendation.services import get_cached_v_initial
-        with patch.dict(settings.RECOMMENDATION, {'stage_decouple_enabled': False}):
-            with patch('apps.recommendation.services.get_cached_v_initial') as mock_get:
-                # Simulate the branch: flag OFF means the if-block is skipped
-                rc = settings.RECOMMENDATION
-                if rc.get('stage_decouple_enabled', False):
-                    get_cached_v_initial(42, 'test')  # should NOT execute
-                assert mock_get.call_count == 0
-
-    def test_flag_on_calls_get_cached_v_initial_with_user_and_query(self):
-        """With flag ON, get_cached_v_initial must be called with user_id + raw_query."""
-        with patch.dict(settings.RECOMMENDATION, {'stage_decouple_enabled': True}):
-            with patch('apps.recommendation.services.get_cached_v_initial',
-                       return_value=None) as mock_get:
-                import apps.recommendation.services as svc
-                rc = settings.RECOMMENDATION
-                raw_query = 'brutalist housing Korea'
-                user_id = 42
-                if rc.get('stage_decouple_enabled', False):
-                    svc.get_cached_v_initial(user_id, raw_query)
-                mock_get.assert_called_once_with(user_id, raw_query)
-
-    def test_flag_off_hyde_path_still_reachable(self):
-        """With both flags OFF, hyde_vinitial_enabled path remains reachable (elif branch)."""
-        with patch.dict(settings.RECOMMENDATION, {
-            'stage_decouple_enabled': False,
-            'hyde_vinitial_enabled': True,
-        }):
-            rc = settings.RECOMMENDATION
-            visual_description = 'concrete walls with natural light'
-            # Simulate the branching logic from SessionCreateView
-            v_initial = None
-            if rc.get('stage_decouple_enabled', False):
-                pass  # IMP-6 path
-            elif rc.get('hyde_vinitial_enabled', False) and visual_description:
-                v_initial = 'HYDE_CALLED'  # marker
-            assert v_initial == 'HYDE_CALLED', (
-                "hyde_vinitial_enabled path must be reachable when stage_decouple_enabled=False"
-            )
-
-    def test_flag_on_suppresses_hyde_path(self):
-        """With stage_decouple_enabled=True, the hyde_vinitial_enabled elif must not fire."""
-        with patch.dict(settings.RECOMMENDATION, {
-            'stage_decouple_enabled': True,
-            'hyde_vinitial_enabled': True,
-        }):
-            rc = settings.RECOMMENDATION
-            visual_description = 'concrete walls with natural light'
-            # Simulate the branching logic from SessionCreateView
-            hyde_called = False
-            if rc.get('stage_decouple_enabled', False):
-                pass  # IMP-6 late-bind path (cache miss -> None is the Commit 1 outcome)
-            elif rc.get('hyde_vinitial_enabled', False) and visual_description:
-                hyde_called = True
-            assert not hyde_called, (
-                "hyde_vinitial_enabled elif must NOT fire when stage_decouple_enabled=True"
-            )
+# TestSessionCreateBranchingLogic (simulation tests) were removed in IMP-6 Commit 2.
+# Replaced by TestSessionCreateLateBindIntegration in test_imp6_stage_decouple.py
+# which exercises the real SessionCreateView with DB fixtures.
