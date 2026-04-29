@@ -37,6 +37,25 @@ Read the existing `.claude/Task.md` first. Then:
 - Add [x] to completed sub-tasks
 - Do NOT remove or edit existing Resolved entries
 
+### 3.5. Archive old Handoffs (token-saving, per `feedback_token_saving_workflow.md` Rule 3)
+
+After Step 3, count the number of `- [YYYY-MM-DD]` entries inside the `## Handoffs` section
+of `.claude/Task.md`. If the count exceeds **30**, archive the oldest ~50 entries:
+
+1. Determine the current month directory: `YYYY-MM = $(date +%Y-%m)`. Ensure
+   `.claude/handoffs-archive/` exists (`mkdir -p`).
+2. Identify the cutoff: keep the most recent 30 handoff entries in `.claude/Task.md`. The
+   remaining (older) entries get moved to `.claude/handoffs-archive/<YYYY-MM>.md`.
+3. **Append (not overwrite)** the moved entries to the archive file. If the archive file
+   already exists for this month, append after a blank line.
+4. The archive file's first line should be `# Handoffs archive — <YYYY-MM>` if newly
+   created. No further header required.
+5. Use `Edit` to atomically replace the moved-out entries in `.claude/Task.md` with the
+   trimmed list.
+
+This trim runs only when count > 30 (no-op otherwise). Bonus on first run: today's
+85-entry Task.md will trim to 30, freeing ~15 K tokens per future reporter cycle.
+
 ### 4. Build a change summary
 
 Create a brief change summary at the bottom of Report.md "Last Updated" section:

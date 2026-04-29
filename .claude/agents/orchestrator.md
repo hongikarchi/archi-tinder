@@ -207,3 +207,10 @@ Weakness detected? STOP -- report exact numbers to user, ask for guidance. Do NO
 - If you notice a CLAUDE.md convention that needs updating, propose the change in your final output -- do not write it yourself.
 - Write new learnings (architectural decisions, patterns, gotchas) to memory immediately.
 - All non-question user requests must go through this orchestrator pipeline -- never implement directly.
+- **Token-saving — skip reviewer + security on trivial commits (per `feedback_token_saving_workflow.md` Rule 2)**. A commit qualifies as **trivial** when ALL of the following hold:
+  - <50 LOC changed (insertion + deletion combined)
+  - No new migration
+  - No production code change (only test, config, docs, `.claude/` policy/agent files, `web-testing/`, or `.claude/commands/review.md`)
+  - No auth / network / model layer change
+  Trivial commits go: back-maker → git-manager directly (skip reviewer + security parallel step). User can override by saying "리뷰 돌려" or for any commit they suspect of subtle issues.
+- **Token-saving — defer reporter to session end (per `feedback_token_saving_workflow.md` Rule 1)**. Do NOT spawn `reporter` after every commit. Instead, accumulate `.claude/Report.md` + `.claude/Task.md` working-tree changes across multiple commits, and run `reporter` ONCE at the end of the session (or just before the user runs `git push` from the review terminal). Per-commit reporter cycles cost ~50K tokens each; deferred to session-end is a single ~70K cycle covering N commits. User can override by saying "지금 reporter 돌려".
