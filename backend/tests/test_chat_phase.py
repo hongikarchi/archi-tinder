@@ -12,6 +12,7 @@ Covers:
 import json
 import pytest
 from unittest.mock import MagicMock
+from django.conf import settings
 
 from apps.recommendation import services
 
@@ -77,7 +78,14 @@ class TestChatPhaseParseQuery:
     """Sprint 1 §3: chat phase 4-field output + 0-2 turn probe per Investigation 06."""
 
     def test_terminal_response_4_fields(self, monkeypatch):
-        """parse_query with clear input returns terminal payload with required 4 spec fields."""
+        """parse_query with clear input returns terminal payload with required 4 spec fields.
+
+        Forces stage_decouple_enabled=False so the legacy single-call path is used,
+        which returns visual_description from Gemini. The stage_decouple_enabled=True
+        path (Stage 1, visual_description=None) is covered by test_imp6_stage_decouple.py
+        TestParseQueryStage1.
+        """
+        monkeypatch.setitem(settings.RECOMMENDATION, 'stage_decouple_enabled', False)
         monkeypatch.setattr(
             services, '_retry_gemini_call',
             lambda func, *a, **kw: _make_gemini_response(_TERMINAL_PAYLOAD),
