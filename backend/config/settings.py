@@ -184,7 +184,14 @@ RECOMMENDATION = {
     # (key: v_initial:{user_id}:{sha256(raw_query)[:16]}); on cache miss, creates pool
     # with filters only (BM25-only RRF per spec v1.5 Topic 01 graceful-degrade).
     # Expected TTFC improvement (M1-grounded): ~45-55% Gemini wall-time drop.
-    'stage_decouple_enabled': False,                   # default OFF; flip True after Commit 2 lands
+    #
+    # Production canary (Sprint D Commit 4): set STAGE_DECOUPLE_ENABLED=true in
+    # Railway dashboard env vars to flip flag ON for production traffic. Default
+    # 'false' preserves byte-identical pre-IMP-6 behavior. Roll back instantly by
+    # unsetting the env var or changing to 'false'. No code redeploy needed for
+    # rollback. Monitor parse_query_timing.stage='1' rate + stage2_timing.outcome
+    # distribution + Brutalist sys_p50 trend post-flip.
+    'stage_decouple_enabled': os.getenv('STAGE_DECOUPLE_ENABLED', 'false').lower() == 'true',  # default OFF; set STAGE_DECOUPLE_ENABLED=true in env to flip
 }
 
 # -- External API keys -----------------------------------------------------

@@ -15,8 +15,12 @@ Tests:
                                flag OFF -> byte-identical (no get_cached_v_initial call,
                                hyde_vinitial_enabled branch reachable);
                                flag ON -> get_cached_v_initial called with user_id + query
+- TestStagedDecoupleEnvVarOverride (Sprint D Commit 4):
+                               STAGE_DECOUPLE_ENABLED env var parsing logic;
+                               'true' / 'false' / 'TRUE' (case-insensitive) / unset
 """
 import hashlib
+import os
 import pytest
 from unittest.mock import patch
 from django.conf import settings
@@ -262,3 +266,36 @@ class TestRerankPoolScope:
 # TestSessionCreateBranchingLogic (simulation tests) were removed in IMP-6 Commit 2.
 # Replaced by TestSessionCreateLateBindIntegration in test_imp6_stage_decouple.py
 # which exercises the real SessionCreateView with DB fixtures.
+
+
+# ---------------------------------------------------------------------------
+# TestStagedDecoupleEnvVarOverride (Sprint D Commit 4: canary env var)
+# ---------------------------------------------------------------------------
+
+class TestStagedDecoupleEnvVarOverride:
+    """Verify STAGE_DECOUPLE_ENABLED env var parsing logic (case-insensitive).
+
+    This tests the os.getenv parsing expression directly, NOT a Django settings
+    reload (which would be brittle). The expression used in settings.py is:
+        os.getenv('STAGE_DECOUPLE_ENABLED', 'false').lower() == 'true'
+    """
+
+    def test_env_var_true_lowercase_evaluates_true(self, monkeypatch):
+        """STAGE_DECOUPLE_ENABLED='true' -> flag reads True (canary flip)."""
+        monkeypatch.setenv('STAGE_DECOUPLE_ENABLED', 'true')
+        assert os.getenv('STAGE_DECOUPLE_ENABLED', 'false').lower() == 'true'
+
+    def test_env_var_false_lowercase_evaluates_false(self, monkeypatch):
+        """STAGE_DECOUPLE_ENABLED='false' -> flag reads False (default behavior)."""
+        monkeypatch.setenv('STAGE_DECOUPLE_ENABLED', 'false')
+        assert os.getenv('STAGE_DECOUPLE_ENABLED', 'false').lower() == 'false'
+
+    def test_env_var_true_uppercase_evaluates_true(self, monkeypatch):
+        """STAGE_DECOUPLE_ENABLED='TRUE' -> case-insensitive -> flag reads True."""
+        monkeypatch.setenv('STAGE_DECOUPLE_ENABLED', 'TRUE')
+        assert os.getenv('STAGE_DECOUPLE_ENABLED', 'false').lower() == 'true'
+
+    def test_env_var_unset_evaluates_false(self, monkeypatch):
+        """Unset env var -> default 'false' -> flag reads False (byte-identical pre-IMP-6)."""
+        monkeypatch.delenv('STAGE_DECOUPLE_ENABLED', raising=False)
+        assert os.getenv('STAGE_DECOUPLE_ENABLED', 'false').lower() == 'false'
