@@ -471,7 +471,7 @@ def embed_visual_description(text, session=None, user=None):
     rc = settings.RECOMMENDATION
     model = rc.get('hyde_hf_model', 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')
     timeout = rc.get('hyde_hf_timeout_seconds', 5)
-    url = f'https://api-inference.huggingface.co/models/{model}'
+    url = f'https://router.huggingface.co/hf-inference/models/{model}/pipeline/feature-extraction'
 
     payload = json.dumps({'inputs': text}).encode('utf-8')
     req = urllib.request.Request(
