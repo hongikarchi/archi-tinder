@@ -25,6 +25,7 @@ INSTALLED_APPS = [
     # Local
     'apps.accounts',
     'apps.recommendation',
+    'apps.profiles',
 ]
 
 MIDDLEWARE = [

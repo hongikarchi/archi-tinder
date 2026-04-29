@@ -282,6 +282,7 @@
 
   ## Database: architecture_vectors Schema
   Owned by Make DB. Django reads via raw SQL only -- never ORM, never migrate.
+  <!-- Last synced 2026-04-29 with Make DB v2 + Divisare migration. Reference: research/infra/03-make-db-snapshot.md §2 -->
 
   ```sql
   CREATE TABLE architecture_vectors (
@@ -307,7 +308,24 @@
       source_slugs     TEXT[],
       image_photos     TEXT[],             -- all photo filenames
       image_drawings   TEXT[],             -- all drawing filenames
-      embedding        VECTOR(384) NOT NULL
+      embedding        VECTOR(384) NOT NULL,
+
+      -- Versioning (Make DB Phase 1)
+      vocab_version            TEXT DEFAULT 'v2',          -- vocab_version snapshot per row
+      prompt_version           TEXT,                       -- "{label}-{sha256(prompt)[:8]}"
+
+      -- Divisare integration (Make DB Phase 8B+ canonical migration)
+      divisare_id              INTEGER,                    -- canonical Divisare project ID
+      divisare_slug            TEXT,                       -- divisare URL slug
+      abstract                 TEXT,                       -- short Divisare abstract
+      architect_canonical_ids  INTEGER[],                  -- canonical architect cluster IDs (PROF1 join key)
+      divisare_tags            TEXT[],                     -- raw Divisare tag taxonomy
+      divisare_credits         JSONB,                      -- {"structures":[...], "lighting":[...], ...}
+      cover_image_url_divisare TEXT,                       -- single full external URL, hotlink target
+      divisare_gallery_urls    TEXT[],                     -- ~10-19 per project, full external URLs
+
+      -- Provenance metadata
+      provenance               JSONB                       -- {"name":"divisare","description":"metalocus", ...}
   );
   ```
 
