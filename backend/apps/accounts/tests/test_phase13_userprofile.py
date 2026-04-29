@@ -114,12 +114,14 @@ class TestUserProfileDetailView:
         assert 'is_following' not in response.json()
 
     @pytest.mark.django_db
-    def test_get_userprofile_excludes_boards(self, user_and_profile):
-        """Response does NOT include boards (BOARD1 territory)."""
+    def test_get_userprofile_includes_boards(self, user_and_profile):
+        """Response includes boards[] (BOARD1 contract)."""
         user, _ = user_and_profile
         client = APIClient()
         response = client.get(f'/api/v1/users/{user.id}/')
-        assert 'boards' not in response.json()
+        body = response.json()
+        assert 'boards' in body
+        assert isinstance(body['boards'], list)
 
     @pytest.mark.django_db
     def test_get_userprofile_no_auth_required(self, user_and_profile):

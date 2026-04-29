@@ -17,6 +17,22 @@ class UserSerializer(serializers.ModelSerializer):
         return list(obj.social_accounts.values_list('provider', flat=True))
 
 
+class UserMiniSerializer(serializers.ModelSerializer):
+    """Minimal public user shape for Project/Board nested `user` field.
+
+    Exposes ONLY: user_id, display_name, avatar_url — deliberately omits
+    `providers` (OAuth provider is private metadata, not a public-facing field).
+
+    Used by ProjectSerializer; keeps provider info off public Project responses.
+    No per-row Python method calls; callers must supply `select_related('user__user')` on the queryset to avoid FK traversal queries.
+    """
+    user_id = serializers.IntegerField(source='user.id', read_only=True)
+
+    class Meta:
+        model  = UserProfile
+        fields = ['user_id', 'display_name', 'avatar_url']
+
+
 class UserProfileSerializer(serializers.ModelSerializer):
     """Public UserProfile — matches designer's MOCK_USER shape (Phase 13 PROF2 scope).
 

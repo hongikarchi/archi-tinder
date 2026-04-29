@@ -294,20 +294,96 @@ class LogoutView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-# -- User Profile (Phase 13 PROF2) -----------------------------------------
+# -- User Profile (Phase 13 PROF2 + BOARD1) --------------------------------
+
+def _build_boards_field(target_profile, is_owner):
+    """Build boards[] list for UserProfileDetailView response.
+
+    Each card contains: project_id, name, date (created_at), visibility,
+    building_count, cover_image_url, thumbnails (up to 6).
+
+    Cover derivation: first liked_ids building → first saved_ids building → ''.
+    Batches all image lookups in a single DB query to avoid N+1.
+    """
+    from apps.recommendation.models import Project
+    from apps.recommendation import engine
+
+    qs = Project.objects.filter(user=target_profile).order_by('-created_at')
+    if not is_owner:
+        qs = qs.filter(visibility='public')
+
+    projects = list(qs)
+    if not projects:
+        return []
+
+    # Collect all building_ids needed for image resolution (cover + thumbnails).
+    # Per project: take first 6 unique ids from liked_ids + saved_ids combined.
+    def _extract_ids(project):
+        liked = [
+            (entry if isinstance(entry, str) else entry.get('id', ''))
+            for entry in (project.liked_ids or [])
+        ]
+        saved = [
+            (entry if isinstance(entry, str) else entry.get('id', ''))
+            for entry in (project.saved_ids or [])
+        ]
+        # De-dup while preserving order; take first 7 to have cover + 6 thumbs
+        seen, result = set(), []
+        for bid in liked + saved:
+            if bid and bid not in seen:
+                seen.add(bid)
+                result.append(bid)
+                if len(result) == 7:
+                    break
+        return result
+
+    project_bid_lists = {p.project_id: _extract_ids(p) for p in projects}
+    all_bids = list({bid for bids in project_bid_lists.values() for bid in bids})
+
+    # Single batch query for all building images
+    image_map = {}  # building_id → image_url
+    if all_bids:
+        cards = engine.get_buildings_by_ids(all_bids)
+        image_map = {c['building_id']: c.get('image_url', '') for c in cards}
+
+    boards = []
+    for p in projects:
+        bids = project_bid_lists[p.project_id]
+        cover_url = next((image_map.get(bid, '') for bid in bids if image_map.get(bid)), '')
+        thumbnails = [image_map[bid] for bid in bids if image_map.get(bid)][:6]
+        building_count = (
+            len(p.liked_ids or []) + len(p.saved_ids or [])
+        )
+        boards.append({
+            'project_id':     str(p.project_id),
+            'name':           p.name,
+            'date':           p.created_at.isoformat(),
+            'visibility':     p.visibility,
+            'building_count': building_count,
+            'cover_image_url': cover_url,
+            'thumbnails':     thumbnails,
+        })
+    return boards
+
 
 class UserProfileDetailView(APIView):
     """GET /api/v1/users/{user_id}/ — public UserProfile detail.
 
     Per spec §1.3: profile data is public-readable. Privacy of individual fields
     (e.g. email visibility) is a UI presentation concern, NOT API gating, in v0.
-    boards[] and is_following are excluded — BOARD1 and SOC1 territory respectively.
+
+    boards[] — BOARD1: non-owner sees public projects only; owner sees all.
+    is_following — SOC1 territory (Phase 15), excluded here.
     """
     permission_classes = [AllowAny]
 
     def get(self, request, user_id):
         profile = get_object_or_404(UserProfile, user__id=user_id)
-        return Response(UserProfileSerializer(profile).data)
+        requester_profile = getattr(request.user, 'profile', None) if request.user.is_authenticated else None
+        is_owner = requester_profile and requester_profile.pk == profile.pk
+        data = UserProfileSerializer(profile).data
+        data['boards'] = _build_boards_field(profile, is_owner)
+        return Response(data)
 
 
 class UserProfileSelfUpdateView(APIView):

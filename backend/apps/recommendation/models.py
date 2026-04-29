@@ -4,6 +4,11 @@ from apps.accounts.models import UserProfile
 
 
 class Project(models.Model):
+    VISIBILITY_CHOICES = [
+        ('public',  'Public'),
+        ('private', 'Private'),
+    ]
+
     project_id      = models.UUIDField(primary_key=True, default=uuid.uuid4)
     user            = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name='projects')
     name            = models.CharField(max_length=200)
@@ -11,11 +16,25 @@ class Project(models.Model):
     disliked_ids    = models.JSONField(default=list)   # list[str] — building_ids only, no intensity
     saved_ids       = models.JSONField(default=list)   # list[{id: str, saved_at: ISO timestamp}] — bookmark (primary metric)
     filters         = models.JSONField(default=dict)
+    raw_query       = models.TextField(null=True, blank=True)  # original user search text, shown on public Board
     analysis_report = models.JSONField(null=True, blank=True)
     final_report    = models.JSONField(null=True, blank=True)
     report_image    = models.TextField(null=True, blank=True)  # base64 image data
     created_at      = models.DateTimeField(auto_now_add=True)
     updated_at      = models.DateTimeField(auto_now=True)
+
+    # -- Phase 13 BOARD1 additions --
+    visibility     = models.CharField(
+        max_length=10,
+        choices=VISIBILITY_CHOICES,
+        default='private',
+        # Conservative default: user must opt-in to publish.
+        # Existing rows backfilled via migration DEFAULT.
+    )
+    reaction_count = models.IntegerField(
+        default=0,
+        # Phase 15 SOC2 placeholder — denormalized counter updated by future Reaction events.
+    )
 
     def __str__(self):
         return f'{self.name} ({self.user})'

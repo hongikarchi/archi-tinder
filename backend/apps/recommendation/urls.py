@@ -1,6 +1,6 @@
 from django.urls import path
 from .views import (
-    ProjectListCreateView, ProjectDetailView,
+    ProjectListCreateView, ProjectDetailView, UserProjectsListView,
     SessionCreateView, SessionStateView, SwipeView, SessionResultView,
     DiverseRandomView, BuildingBatchView, ParseQueryView,
     ProjectReportGenerateView, ProjectReportImageView,
@@ -8,12 +8,15 @@ from .views import (
 )
 
 urlpatterns = [
-    # Projects
+    # Projects (owner list + create)
     path('projects/',                                         ProjectListCreateView.as_view()),
+    # Project detail — GET (public/visibility-gated) + PATCH + DELETE
     path('projects/<uuid:pk>/',                               ProjectDetailView.as_view()),
     path('projects/<uuid:pk>/report/generate-image/',         ProjectReportImageView.as_view()),
     path('projects/<uuid:pk>/report/generate/',               ProjectReportGenerateView.as_view()),
     path('projects/<uuid:project_id>/bookmark/',              ProjectBookmarkView.as_view()),
+    # User-scoped project list — BOARD1 Phase 13
+    path('users/<int:user_id>/projects/',                     UserProjectsListView.as_view()),
     # Analysis sessions
     path('analysis/sessions/',                           SessionCreateView.as_view()),
     path('analysis/sessions/<uuid:session_id>/state/',   SessionStateView.as_view()),
