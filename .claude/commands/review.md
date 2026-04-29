@@ -422,11 +422,12 @@ localStorage carryover between runs):
 ```js
 () => {
   window.__reviewState = window.__reviewState || {};
-  window.__reviewState.t_initial_submit = null;     // first user submit (observability only)
-  window.__reviewState.t_last_user_submit = null;   // ← v1.9 GATE: rewritten on each user submit
-  window.__reviewState.user_submit_count = 0;       // tracks turns: 1 = single-turn, 2+ = multi-turn
+  window.__reviewState.t_initial_submit = null;       // first user submit (observability only)
+  window.__reviewState.t_last_user_submit = null;     // ← v1.9 GATE: rewritten on each user submit
+  window.__reviewState.user_submit_count = 0;         // tracks turns: 1 = single-turn, 2+ = multi-turn
   window.__reviewState.t_first_card = null;
   window.__reviewState.api_calls = [];
+  window.__reviewState.last_probe_needed = null;      // Tier 4: set by each /parse-query/ response
   const origFetch = window.fetch;
   window.fetch = async (...args) => {
     const t0 = performance.now();
@@ -434,40 +435,77 @@ localStorage carryover between runs):
     const res = await origFetch(...args);
     const t1 = performance.now();
     if (url) window.__reviewState.api_calls.push({ url, status: res.status, latency_ms: Math.round(t1 - t0) });
+    // Tier 4: capture probe_needed from /parse-query/ for network-signal detection
+    if (url?.includes('/parse-query/')) {
+      try {
+        const cloned = res.clone();
+        cloned.json().then(j => {
+          // Coerce to bool (mirrors LLMSearchPage.jsx `if (parsed.probe_needed)`)
+          // so undefined / null from a malformed response → false (terminal), not timeout.
+          window.__reviewState.last_probe_needed = !!j.probe_needed;
+        }).catch(() => {
+          window.__reviewState.last_probe_needed = false; // parse failure → treat as terminal
+        });
+      } catch (_) {
+        window.__reviewState.last_probe_needed = false;
+      }
+    }
     return res;
   };
 }
 ```
-5. Type the persona query. Immediately before submitting, record
-   `performance.now()` as BOTH `t_initial_submit` AND `t_last_user_submit`
-   (initial values are equal). Increment `user_submit_count` to 1. Submit.
+
+> **Why network signal, not DOM heuristic**: prior /review cycles observed
+> false-positive "clarification" classifications because Gemini's terminal
+> reply sometimes contains "?" (rhetorical confirms like "맞으시죠?"). The
+> DOM heuristic conflated these with real clarification turns. `probe_needed`
+> in the `/parse-query/` response body is the authoritative backend flag —
+> it is exactly the field `LLMSearchPage.jsx` uses to branch its own UI
+> (`if (parsed.probe_needed)`), so it cannot produce false positives from
+> phrasing. False-positive rate → 0 with this approach. Per /review verdict
+> bonus finding on commit cycle `7ded1a5+cef8e87` (Tier 4 harness audit).
+
+5. Type the persona query. Immediately before submitting, reset
+   `__reviewState.last_probe_needed = null`. Record `performance.now()` as
+   BOTH `t_initial_submit` AND `t_last_user_submit` (initial values are equal).
+   Increment `user_submit_count` to 1. Submit.
 6. **Multi-turn clarification loop** (max 3 user turns to avoid runaway):
-   - Wait up to 8s for one of:
-     - **(a) First card visible** — DOM check: image element with `r2.dev` URL
-       is loaded AND `naturalWidth > 0`. → Break to step 7.
-     - **(b) AI clarification message** — chat container shows a new AI bubble
-       (role=assistant) after a `/chat/` POST returned 200 but no
-       `/sessions/initial/` POST has fired (no session created yet, so the AI
-       is asking a question instead of returning filters). Detection: poll the
-       chat DOM for new assistant messages, OR observe the `__reviewState.api_calls`
-       array for a `/chat/` 200 followed by NO `/sessions/initial/` within ~1s.
-   - If **(b)** — clarification fired:
-     - Pick a persona-appropriate canned reply:
-       - **Brutalist** → `"yes concrete brutalist museums"` (turn 2),
-         `"either is fine, both"` (turn 3 fallback)
-       - **Sustainable Korean** → `"yes sustainable timber school in Korea"`
-         (turn 2), `"either is fine"` (turn 3 fallback)
-       - **Bare Query** → `"either is fine, surprise me"` (turn 2),
-         `"any style"` (turn 3 fallback)
-     - Type into textarea. Immediately before submit, REWRITE
-       `__reviewState.t_last_user_submit = performance.now()` (overwriting prior).
-       Increment `user_submit_count`. Submit. Loop back to top.
-   - If **neither (a) nor (b) within 8s** → FAIL persona run as
-     `"harness hung in clarification loop / no progress within 8s"`.
+
+   **Network-signal detection** (Tier 4 — replaces DOM heuristic): after each
+   submit, poll `__reviewState.last_probe_needed` (populated by the fetch
+   interceptor above when the `/parse-query/` response arrives):
+
+   - **(a) Terminal turn** — `last_probe_needed === false`: backend returned
+     structured filters; frontend will render "Start swiping" button.
+     → Break to step 7 (wait for button/first-card visibility, then record
+     `t_first_card`).
+   - **(b) Clarification turn** — `last_probe_needed === true`: backend
+     returned a probe question; frontend shows an AI bubble and waits for
+     user reply.
+     → Proceed with canned-reply path below.
+   - **(c) Timeout** — `last_probe_needed` still `null` after 8s: no
+     `/parse-query/` response received (network or backend issue).
+     → FAIL persona run as `"harness timeout: no parse-query response within 8s"`.
+
+   Wait up to 8s polling every 200ms. Reset `last_probe_needed = null` before
+   each submit so the next iteration sees a fresh value.
+
+   If **(b)** — clarification fired:
+   - Pick a persona-appropriate canned reply:
+     - **Brutalist** → `"yes concrete brutalist museums"` (turn 2),
+       `"either is fine, both"` (turn 3 fallback)
+     - **Sustainable Korean** → `"yes sustainable timber school in Korea"`
+       (turn 2), `"either is fine"` (turn 3 fallback)
+     - **Bare Query** → `"either is fine, surprise me"` (turn 2),
+       `"any style"` (turn 3 fallback)
+   - Reset `__reviewState.last_probe_needed = null`. Type into textarea.
+     Immediately before submit, REWRITE
+     `__reviewState.t_last_user_submit = performance.now()` (overwriting prior).
+     Increment `user_submit_count`. Submit. Loop back to top.
    - If **`user_submit_count >= 4`** (3rd canned reply already sent, still no
-     card) → FAIL persona run as
-     `"max clarification turns exceeded (4) — likely H1c harness detection drift
-     or H1b Gemini server-side regression per Investigation 22"`.
+     terminal) → FAIL persona run as
+     `"max clarification turns exceeded (4) — likely H1b Gemini server-side
+     regression per Investigation 22"`.
 7. **First card visible** — record `t_first_card = performance.now()`.
 8. Compute the **system-attributable TTFC** (v1.9 §4 GATE):
    `latency_ms = round(t_first_card - t_last_user_submit)`. Excludes all

@@ -9,7 +9,6 @@ Matches the actual frontend UI flow as of 2026-04-06:
 Swipe mechanism: keyboard ArrowRight (like) / ArrowLeft (dislike).
 The UX4 Gemini overhaul removed Like/Dislike buttons; only keyboard and touch gestures remain.
 """
-import json
 import logging
 import os
 import time
@@ -227,44 +226,99 @@ def _canned_reply_for(query: str, turn_idx: int) -> str:
     return 'either is fine, surprise me'
 
 
-def _detect_clarification_or_results(page: Page, timeout_ms: int = 8000) -> str:
-    """Poll for either 'Start swiping' button OR clarification AI message.
+def _setup_parse_query_listener(page: Page) -> dict:
+    """Set up a response listener for POST /parse-query/ BEFORE submitting the query.
 
-    Per spec v1.9 §4: TTFC measured from last user clarification submit, so we
-    must distinguish clarification-fire from session-creation-fire.
+    Per Tier 4 fix (DOM heuristic → network signal): the authoritative
+    clarification signal is `probe_needed` in the parse-query response body.
+    This mirrors how LLMSearchPage.jsx itself decides — `if (parsed.probe_needed)`.
+
+    Must be called BEFORE the submit action so no race can drop a fast response.
+    Returns a dict populated when the response arrives.
+    """
+    parse_data = {'probe_needed': None, '_handler': None}
+
+    def capture(response):
+        if '/parse-query/' in response.url and response.request.method == 'POST':
+            try:
+                body = response.json()
+                parse_data['probe_needed'] = bool(body.get('probe_needed', False))
+            except Exception:
+                # JSON parse failed — treat as terminal to avoid hanging
+                parse_data['probe_needed'] = False
+
+    parse_data['_handler'] = capture
+    page.on('response', capture)
+    return parse_data
+
+
+def _detect_clarification_or_results(
+    page: Page,
+    timeout_ms: int = 8000,
+    pre_listener: Optional[dict] = None,
+) -> str:
+    """Wait for the parse-query network response to determine turn outcome.
+
+    Per Tier 4 fix (DOM heuristic → network signal): clarification vs terminal
+    is determined by `probe_needed` in the POST /api/v1/parse-query/ response
+    body. This is the same flag LLMSearchPage.jsx uses to branch its UI logic
+    (`if (parsed.probe_needed)` at line 168), so it cannot produce false
+    positives from rhetorical "?" phrases in terminal replies.
+
+    Args:
+        page:         Playwright Page object.
+        timeout_ms:   Maximum wait in milliseconds.
+        pre_listener: Dict from _setup_parse_query_listener() registered
+                      BEFORE the submit action (race-free). When provided, the
+                      listener is already capturing; no new listener is attached.
+                      When None (backward-compat), a fresh listener is attached
+                      here — may miss a very-fast response in theory, but Gemini
+                      RTT is typically 800ms+ so the window is negligible.
 
     Returns:
-        'results' — 'Start swiping' button is visible → no clarification fired
-        'clarification' — input still present without 'Start swiping' button →
-            clarification likely fired (indirect detection — Gemini asked a
-            question instead of returning filters)
-        'timeout' — neither condition observable within timeout (failure)
+        'results'       — probe_needed=False → terminal turn; "Start swiping" will appear
+        'clarification' — probe_needed=True  → clarification turn; AI asked a question
+        'timeout'       — no parse-query response observed within timeout
     """
-    poll_interval_ms = 250
-    elapsed_ms = 0
-    while elapsed_ms < timeout_ms:
-        # Fast-path: 'Start swiping' button is the success terminal
-        try:
-            start_btn = page.locator('button').filter(has_text='swiping')
-            if start_btn.first.is_visible(timeout=200):
-                return 'results'
-        except Exception:
-            pass
-        # Slow-path: clarification check — search input still present means
-        # the chat phase has not transitioned to results yet (clarification
-        # likely fired or initial response is still streaming)
-        try:
-            search_input = page.locator('input[placeholder*="Find a modern"]')
-            if search_input.is_visible(timeout=200):
-                # Input still here. If we've waited past ~3s without 'swiping'
-                # button, treat as clarification (Gemini is asking a question).
-                if elapsed_ms >= 3000:
-                    return 'clarification'
-        except Exception:
-            pass
-        page.wait_for_timeout(poll_interval_ms)
-        elapsed_ms += poll_interval_ms
-    return 'timeout'
+    if pre_listener is not None:
+        # Use pre-registered listener (race-free path)
+        parse_data = pre_listener
+        own_listener = False
+    else:
+        # Attach a fresh listener (backward-compat / late-registration path)
+        parse_data = {'probe_needed': None, '_handler': None}
+
+        def capture(response):
+            if '/parse-query/' in response.url and response.request.method == 'POST':
+                try:
+                    body = response.json()
+                    parse_data['probe_needed'] = bool(body.get('probe_needed', False))
+                except Exception:
+                    parse_data['probe_needed'] = False
+
+        parse_data['_handler'] = capture
+        page.on('response', capture)
+        own_listener = True
+
+    try:
+        deadline = time.time() + (timeout_ms / 1000)
+        while time.time() < deadline:
+            if parse_data['probe_needed'] is not None:
+                return 'clarification' if parse_data['probe_needed'] else 'results'
+            page.wait_for_timeout(200)
+        return 'timeout'
+    finally:
+        if own_listener and parse_data.get('_handler'):
+            try:
+                page.remove_listener('response', parse_data['_handler'])
+            except Exception:
+                pass
+        elif not own_listener and parse_data.get('_handler'):
+            # Clean up the pre-registered listener too — it's consumed
+            try:
+                page.remove_listener('response', parse_data['_handler'])
+            except Exception:
+                pass
 
 
 def _wait_for_card_ready(page: Page, timeout_ms: int = 10000) -> bool:
@@ -558,6 +612,7 @@ def run_test(scenario, run_id: str, reports_dir: str) -> List[StepRecord]:
         #   - Input with placeholder "Find a modern museum in Japan..."
         #   - Submit button (pink circle with SVG arrow)
         search_submitted = False
+        _pending_parse_listener = None  # pre-registered before each submit (race-free detection)
 
         # Try using the text input first
         search_input = page.locator('input[placeholder*="Find a modern"]')
@@ -566,9 +621,11 @@ def run_test(scenario, run_id: str, reports_dir: str) -> List[StepRecord]:
             search_input.fill(scenario.search_query)
             page.wait_for_timeout(200)
 
-            # Click the submit button (type="submit" inside the form)
+            # Click the submit button (type="submit" inside the form).
+            # Register parse-query listener BEFORE click to avoid race on fast responses.
             submit_btn = page.locator('button[type="submit"]')
             if submit_btn.first.is_visible(timeout=1000):
+                _pending_parse_listener = _setup_parse_query_listener(page)
                 t_initial_submit = time.time()
                 t_last_user_submit = t_initial_submit
                 user_submit_count = 1
@@ -589,6 +646,7 @@ def run_test(scenario, run_id: str, reports_dir: str) -> List[StepRecord]:
                 try:
                     preset_btn = page.get_by_text(preset_text, exact=True)
                     if preset_btn.is_visible(timeout=1000):
+                        _pending_parse_listener = _setup_parse_query_listener(page)
                         t_initial_submit = time.time()
                         t_last_user_submit = t_initial_submit
                         user_submit_count = 1
@@ -634,7 +692,15 @@ def run_test(scenario, run_id: str, reports_dir: str) -> List[StepRecord]:
         MAX_CLARIFICATION_TURNS = 3
 
         while clarification_turns < MAX_CLARIFICATION_TURNS:
-            outcome = _detect_clarification_or_results(page, timeout_ms=8000)
+            # Use the pre-registered listener from the preceding submit (race-free).
+            # _pending_parse_listener is set before every submit so response capture
+            # is guaranteed regardless of Gemini response speed.
+            outcome = _detect_clarification_or_results(
+                page,
+                timeout_ms=8000,
+                pre_listener=_pending_parse_listener,
+            )
+            _pending_parse_listener = None  # consumed; reset for next turn
 
             if outcome == 'results':
                 start_swiping_found = True
@@ -643,7 +709,7 @@ def run_test(scenario, run_id: str, reports_dir: str) -> List[StepRecord]:
                 break
 
             if outcome == 'timeout':
-                logger.error('Step 5 timeout: neither "Start swiping" button nor clarification observable')
+                logger.error('Step 5 timeout: no parse-query response observed')
                 # Check if there's an error message
                 try:
                     error_text = page.locator('text=Something went wrong').first
@@ -664,6 +730,8 @@ def run_test(scenario, run_id: str, reports_dir: str) -> List[StepRecord]:
                 page.wait_for_timeout(150)
                 clarif_submit = page.locator('button[type="submit"]')
                 if clarif_submit.first.is_visible(timeout=1000):
+                    # Register listener BEFORE click (race-free for next iteration)
+                    _pending_parse_listener = _setup_parse_query_listener(page)
                     t_last_user_submit = time.time()  # v1.9: rewrite per turn
                     user_submit_count += 1
                     clarif_submit.first.click()
@@ -869,7 +937,6 @@ def run_test(scenario, run_id: str, reports_dir: str) -> List[StepRecord]:
 
                 # Set up API response listener BEFORE the swipe gesture.
                 swipe_listener = _setup_swipe_listener(page)
-
 
                 # ---- TIMING: before swipe gesture ----
                 t_before_swipe = time.time()
