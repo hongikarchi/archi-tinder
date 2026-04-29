@@ -2,6 +2,7 @@ import logging
 import os
 import requests
 from django.contrib.auth.models import User
+from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -11,7 +12,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.conf import settings
 
 from .models import UserProfile, SocialAccount
-from .serializers import UserSerializer
+from .serializers import UserSerializer, UserProfileSerializer, UserProfileSelfUpdateSerializer
 
 logger = logging.getLogger('apps.accounts')
 
@@ -291,3 +292,41 @@ class LogoutView(APIView):
             except Exception:
                 pass
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# -- User Profile (Phase 13 PROF2) -----------------------------------------
+
+class UserProfileDetailView(APIView):
+    """GET /api/v1/users/{user_id}/ — public UserProfile detail.
+
+    Per spec §1.3: profile data is public-readable. Privacy of individual fields
+    (e.g. email visibility) is a UI presentation concern, NOT API gating, in v0.
+    boards[] and is_following are excluded — BOARD1 and SOC1 territory respectively.
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request, user_id):
+        profile = get_object_or_404(UserProfile, user__id=user_id)
+        return Response(UserProfileSerializer(profile).data)
+
+
+class UserProfileSelfUpdateView(APIView):
+    """PATCH /api/v1/users/me/ — owner updates own UserProfile editable fields.
+
+    Returns the full UserProfileSerializer shape for consistency with GET.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request):
+        try:
+            profile = request.user.profile
+        except UserProfile.DoesNotExist:
+            return Response(
+                {'detail': 'UserProfile not found for current user.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        serializer = UserProfileSelfUpdateSerializer(profile, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        # Return full UserProfileSerializer shape (consistent with GET)
+        return Response(UserProfileSerializer(profile).data)
