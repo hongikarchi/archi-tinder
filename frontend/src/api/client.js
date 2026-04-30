@@ -376,3 +376,13 @@ export async function bookmarkBuilding(projectId, cardId, action, rank, sessionI
     ...(sessionId ? { session_id: sessionId } : {}),
   })
 }
+
+// -- Profiles --------------------------------------------------------------
+
+export async function getOffice(officeId) {
+  return await callApi('GET', `/offices/${officeId}/`)
+}
+
+export async function getUserProfile(userId) {
+  return await callApi('GET', `/users/${userId}/`)
+}

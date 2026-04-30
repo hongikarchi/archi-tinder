@@ -1,5 +1,21 @@
-import { useState, Fragment } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect, Fragment } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import { getUserProfile } from '../api/client.js'
+
+/**
+ * formatBoardDate — converts ISO 8601 timestamp to "Month YYYY" display string.
+ * Handles null / undefined / invalid strings safely.
+ */
+function formatBoardDate(iso) {
+  if (!iso) return ''
+  try {
+    const d = new Date(iso)
+    if (isNaN(d.getTime())) return ''
+    return d.toLocaleString('en-US', { month: 'long', year: 'numeric' })
+  } catch {
+    return ''
+  }
+}
 
 // TODO: Replace with API call
 const MOCK_USER = {
@@ -502,11 +518,51 @@ function BioPersonaFlipCard({ bio, persona, mbti }) {
 
 
 export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
-  const [isFollowing, setIsFollowing] = useState(MOCK_USER.is_following)
-  const [followerCount, setFollowerCount] = useState(MOCK_USER.follower_count)
+  const { userId: routeUserId } = useParams()
   const navigate = useNavigate()
 
-  const isMe = true // TODO(claude): check if profile user_id === active session user_id
+  const sessionUserId = sessionStorage.getItem('archithon_user')
+  const effectiveUserId = routeUserId || sessionUserId
+  const isMe = !routeUserId || String(routeUserId) === String(sessionUserId)
+
+  const [user, setUser] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  const [isFollowing, setIsFollowing] = useState(false)
+  const [followerCount, setFollowerCount] = useState(0)
+
+  useEffect(() => {
+    if (!effectiveUserId) {
+      setLoading(false)
+      setError('No user ID found.')
+      return
+    }
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    getUserProfile(effectiveUserId)
+      .then(data => {
+        if (cancelled) return
+        // Boards adapter: map project_id -> board_id + format ISO date -> "Month YYYY"
+        const boards = (data.boards || []).map(b => ({
+          ...b,
+          board_id: b.project_id,
+          date: formatBoardDate(b.date),
+        }))
+        setUser({ ...data, boards })
+        setIsFollowing(false)  // is_following: Phase 15 SOC1 territory
+        setFollowerCount(data.follower_count || 0)
+      })
+      .catch(err => {
+        if (cancelled) return
+        setError(err.message || 'Failed to load profile.')
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [effectiveUserId])
 
   function handleToggleFollow() {
      // TODO(claude): POST /api/v1/users/{id}/follow/ or DELETE
@@ -515,9 +571,35 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
   }
 
   // External-link helpers (pure derivations — no hooks)
-  const igHandle = MOCK_USER.external_links?.instagram?.replace(/^@/, '') || ''
+  const igHandle = user?.external_links?.instagram?.replace(/^@/, '') || ''
   const igUrl = igHandle ? `https://instagram.com/${igHandle}` : null
-  const emailUrl = MOCK_USER.external_links?.email ? `mailto:${MOCK_USER.external_links.email}` : null
+  const emailUrl = user?.external_links?.email ? `mailto:${user.external_links.email}` : null
+
+  if (loading) {
+    return (
+      <div style={{
+        height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+        background: 'var(--color-bg)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: 'var(--color-text-dim)', fontSize: 14,
+      }}>
+        Loading profile...
+      </div>
+    )
+  }
+
+  if (error || !user) {
+    return (
+      <div style={{
+        height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+        background: 'var(--color-bg)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: 'var(--color-text-dim)', fontSize: 14,
+      }}>
+        {error || 'Profile not found.'}
+      </div>
+    )
+  }
 
   return (
     <div style={{
@@ -641,30 +723,52 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
 
             {/* Avatar w/ on-brand pink-rose ambient halo */}
-            <div style={{ position: 'relative', marginBottom: 18 }}>
-              <div style={{
-                position: 'absolute', inset: -6, borderRadius: '50%',
-                background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
-                opacity: 0.55, filter: 'blur(12px)',
-              }} />
-              <img
-                src={MOCK_USER.avatar_url}
-                alt="avatar"
+            {user.avatar_url ? (
+              <div style={{ position: 'relative', marginBottom: 18 }}>
+                <div
+                  style={{
+                    position: 'absolute', inset: -6, borderRadius: '50%',
+                    background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
+                    opacity: 0.55, filter: 'blur(12px)',
+                  }}
+                  aria-hidden="true"
+                />
+                <img
+                  src={user.avatar_url}
+                  alt="avatar"
+                  style={{
+                    position: 'relative', zIndex: 2,
+                    width: 108, height: 108, borderRadius: '50%',
+                    border: '2px solid var(--color-border-soft)',
+                    objectFit: 'cover',
+                    background: 'var(--color-surface)',
+                    display: 'block',
+                  }}
+                />
+              </div>
+            ) : (
+              <div
                 style={{
                   width: 108, height: 108, borderRadius: '50%',
-                  border: '2px solid var(--color-border-soft)',
-                  objectFit: 'cover', position: 'relative', zIndex: 2,
                   background: 'var(--color-surface)',
+                  border: '2px solid var(--color-border-soft)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  marginBottom: 18,
                 }}
-              />
-            </div>
+              >
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="8" r="4"></circle>
+                  <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"></path>
+                </svg>
+              </div>
+            )}
 
             {/* Name */}
             <h1 style={{
               color: 'var(--color-text)', fontSize: 24, fontWeight: 700,
               margin: '0 0 4px', lineHeight: 1.2, letterSpacing: '-0.01em',
             }}>
-              {MOCK_USER.display_name}
+              {user.display_name}
             </h1>
 
             {/* §3.7 Compact stats row */}
@@ -673,9 +777,9 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
               gap: 0, marginTop: 14, marginBottom: 4,
             }}>
               {[
-                { count: MOCK_USER.boards.length, label: 'Boards' },
+                { count: user.boards.length, label: 'Boards' },
                 { count: followerCount, label: 'Followers' },
-                { count: MOCK_USER.following_count, label: 'Following' },
+                { count: user.following_count, label: 'Following' },
               ].map((stat, i, arr) => (
                 <Fragment key={stat.label}>
                   <button
@@ -711,11 +815,11 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
             </div>
 
             {/* §3.5.4 Hero Flip — BioPersonaFlipCard */}
-            {MOCK_USER.persona_summary && (
+            {user.persona_summary && (
               <BioPersonaFlipCard
-                bio={MOCK_USER.bio}
-                persona={MOCK_USER.persona_summary}
-                mbti={MOCK_USER.mbti}
+                bio={user.bio}
+                persona={user.persona_summary}
+                mbti={user.mbti}
               />
             )}
 
@@ -753,7 +857,7 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
                       <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
                       <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
                     </svg>
-                    {MOCK_USER.external_links.instagram}
+                    {user.external_links.instagram}
                   </a>
                 )}
                 {emailUrl && (
@@ -784,7 +888,7 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
                       <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
                       <polyline points="22,6 12,13 2,6"></polyline>
                     </svg>
-                    {MOCK_USER.external_links.email}
+                    {user.external_links.email}
                   </a>
                 )}
               </div>
@@ -858,7 +962,7 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
           <span style={{
             color: 'var(--color-text-dimmer)', fontSize: 13, fontWeight: 600,
           }}>
-            {MOCK_USER.boards.length}
+            {user.boards.length}
           </span>
         </div>
 
@@ -868,7 +972,7 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
           gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
           gap: 20,
         }}>
-          {MOCK_USER.boards.map(board => (
+          {user.boards.map(board => (
             <BoardCard key={board.board_id} board={board} />
           ))}
         </div>

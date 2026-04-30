@@ -1,5 +1,6 @@
-import { useState, Fragment } from 'react'
+import { useState, useEffect, Fragment } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { getOffice } from '../api/client.js'
 
 // TODO: Replace with API call
 // TODO(claude): fetch office by officeId — GET /api/v1/offices/${officeId}/
@@ -224,11 +225,42 @@ function DescriptionAboutFlipCard({ description, foundedYear, location }) {
 
 
 export default function FirmProfilePage() {
-  // eslint-disable-next-line no-unused-vars
   const { officeId } = useParams()
   const navigate = useNavigate()
+
+  const [office, setOffice] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
   const [isFollowing, setIsFollowing] = useState(false)
-  const [followerCount, setFollowerCount] = useState(MOCK_OFFICE.follower_count)
+  const [followerCount, setFollowerCount] = useState(0)
+
+  useEffect(() => {
+    if (!officeId) {
+      setLoading(false)
+      setError('No office ID found.')
+      return
+    }
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    getOffice(officeId)
+      .then(data => {
+        if (cancelled) return
+        // articles[] absent (Phase 18 External territory) — default to []
+        setOffice({ ...data, articles: data.articles || [] })
+        setIsFollowing(false)  // is_following: Phase 15 SOC1 territory
+        setFollowerCount(data.follower_count || 0)
+      })
+      .catch(err => {
+        if (cancelled) return
+        setError(err.message || 'Failed to load office profile.')
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [officeId])
 
   function handleToggleFollow() {
     // TODO(claude): POST /api/v1/offices/{id}/follow/ or DELETE
@@ -238,6 +270,32 @@ export default function FirmProfilePage() {
 
   function handleMessage() {
     // TODO(claude): wire DM endpoint — POST /api/v1/messages/ or similar
+  }
+
+  if (loading) {
+    return (
+      <div style={{
+        height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+        background: 'var(--color-bg)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: 'var(--color-text-dim)', fontSize: 14,
+      }}>
+        Loading office profile...
+      </div>
+    )
+  }
+
+  if (error || !office) {
+    return (
+      <div style={{
+        height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+        background: 'var(--color-bg)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: 'var(--color-text-dim)', fontSize: 14,
+      }}>
+        {error || 'Office not found.'}
+      </div>
+    )
   }
 
   return (
@@ -349,7 +407,7 @@ export default function FirmProfilePage() {
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
 
             {/* Logo + brand-pink halo glow (matches UserProfile avatar pattern) */}
-            {MOCK_OFFICE.logo_url ? (
+            {office.logo_url ? (
               <div style={{ position: 'relative', marginBottom: 18 }}>
                 <div
                   style={{
@@ -363,8 +421,8 @@ export default function FirmProfilePage() {
                   aria-hidden="true"
                 />
                 <img
-                  src={MOCK_OFFICE.logo_url}
-                  alt={`${MOCK_OFFICE.name} logo`}
+                  src={office.logo_url}
+                  alt={`${office.name} logo`}
                   style={{
                     position: 'relative',
                     zIndex: 2,
@@ -420,9 +478,9 @@ export default function FirmProfilePage() {
                   letterSpacing: '-0.01em',
                 }}
               >
-                {MOCK_OFFICE.name}
+                {office.name}
               </h1>
-              {MOCK_OFFICE.verified && (
+              {office.verified && (
                 <span
                   title="Verified office"
                   style={{
@@ -449,9 +507,9 @@ export default function FirmProfilePage() {
               gap: 0, marginTop: 14, marginBottom: 4,
             }}>
               {[
-                { count: MOCK_OFFICE.projects.length, label: 'Projects' },
+                { count: (office.projects || []).length, label: 'Projects' },
                 { count: followerCount, label: 'Followers' },
-                { count: MOCK_OFFICE.following_count, label: 'Following' },
+                { count: office.following_count || 0, label: 'Following' },
               ].map((stat, i, arr) => (
                 <Fragment key={stat.label}>
                   <button
@@ -488,9 +546,9 @@ export default function FirmProfilePage() {
 
             {/* §3.5.4 Hero Flip — DescriptionAboutFlipCard */}
             <DescriptionAboutFlipCard
-              description={MOCK_OFFICE.description}
-              foundedYear={MOCK_OFFICE.founded_year}
-              location={MOCK_OFFICE.location}
+              description={office.description}
+              foundedYear={office.founded_year}
+              location={office.location}
             />
 
             {/* §3.6 Profile Action Row — always shown for office profiles */}
@@ -541,11 +599,11 @@ export default function FirmProfilePage() {
             </div>
 
             {/* Action pills — Website + Email (User-style icon-pills, NOT chunky buttons) */}
-            {(MOCK_OFFICE.website_url || MOCK_OFFICE.contact_email) && (
+            {(office.website_url || office.contact_email) && (
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
-                {MOCK_OFFICE.website_url && (
+                {office.website_url && (
                   <a
-                    href={MOCK_OFFICE.website_url}
+                    href={office.website_url}
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{
@@ -577,9 +635,9 @@ export default function FirmProfilePage() {
                     Website
                   </a>
                 )}
-                {MOCK_OFFICE.contact_email && (
+                {office.contact_email && (
                   <a
-                    href={`mailto:${MOCK_OFFICE.contact_email}`}
+                    href={`mailto:${office.contact_email}`}
                     style={{
                       display: 'inline-flex', alignItems: 'center', gap: 7,
                       padding: '10px 14px', borderRadius: 999,
@@ -627,7 +685,7 @@ export default function FirmProfilePage() {
           <span style={{
             color: 'var(--color-text-dimmer)', fontSize: 13, fontWeight: 600,
           }}>
-            {MOCK_OFFICE.projects.length}
+            {(office.projects || []).length}
           </span>
         </div>
 
@@ -640,13 +698,13 @@ export default function FirmProfilePage() {
             marginBottom: 36,
           }}
         >
-          {MOCK_OFFICE.projects.map((project) => (
+          {(office.projects || []).map((project) => (
             <ProjectCard key={project.building_id} project={project} />
           ))}
         </div>
 
         {/* Articles */}
-        {MOCK_OFFICE.articles?.length > 0 && (
+        {office.articles?.length > 0 && (
           <section>
             <div style={{
               display: 'flex', alignItems: 'baseline', gap: 12,
@@ -661,11 +719,11 @@ export default function FirmProfilePage() {
               <span style={{
                 color: 'var(--color-text-dimmer)', fontSize: 13, fontWeight: 600,
               }}>
-                {MOCK_OFFICE.articles.length}
+                {office.articles.length}
               </span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {MOCK_OFFICE.articles.map((article, idx) => (
+              {office.articles.map((article, idx) => (
                 <ArticleCard key={`${article.url}-${idx}`} article={article} />
               ))}
             </div>
