@@ -4,7 +4,7 @@ from .views import (
     SessionCreateView, SessionStateView, SwipeView, SessionResultView,
     DiverseRandomView, BuildingBatchView, ParseQueryView,
     ProjectReportGenerateView, ProjectReportImageView,
-    ProjectBookmarkView,
+    ProjectBookmarkView, ImageLoadTelemetryView,
 )
 
 urlpatterns = [
@@ -27,4 +27,6 @@ urlpatterns = [
     path('images/batch/',                                BuildingBatchView.as_view()),
     # LLM query parsing
     path('parse-query/',                                 ParseQueryView.as_view()),
+    # Telemetry
+    path('telemetry/image-load/',                        ImageLoadTelemetryView.as_view(), name='telemetry_image_load'),
 ]

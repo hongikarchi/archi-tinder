@@ -92,6 +92,14 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
+    'DEFAULT_THROTTLE_RATES': {
+        # Scoped throttle for the anonymous image-load telemetry beacon.
+        # Budget: ~1-2 images/card × 30 swipes/min = 60-90 events/min; 120/min is a safe cap.
+        'image_load_telemetry': '120/min',
+        # Global fallback rates (applied to views that reference these scopes directly).
+        'anon': '60/min',
+        'user': '300/min',
+    },
 }
 
 SIMPLE_JWT = {

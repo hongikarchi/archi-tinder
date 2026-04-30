@@ -31,17 +31,39 @@ def _dictfetchall(cursor):
 
 
 def _row_to_card(row):
-    """Convert a DB row dict to ImageCard format."""
+    """Convert a DB row dict to ImageCard format.
+
+    Image resolution order (defensive fallback for Divisare-only buildings):
+    - cover: image_photos[0] -> R2 composed URL; else cover_image_url_divisare (full URL); else ''.
+    - gallery: R2 extra_photos (image_photos[1:]) + divisare_gallery_urls + R2 drawing_urls.
+               Divisare gallery (external full URLs) is placed in the photo zone before R2 drawings.
+    - gallery_drawing_start: index of first R2 drawing in gallery
+               = len(extra_photos) + len(divisare_gallery_urls).
+      Frontend renders items at index >= gallery_drawing_start with contain-sizing on white bg.
+    """
     from django.conf import settings as _s
-    building_id  = row['building_id']
-    photos       = row.get('image_photos') or []
-    drawings     = row.get('image_drawings') or []
-    base         = _s.IMAGE_BASE_URL.rstrip('/')
-    cover        = photos[0] if photos else ''
-    image_url    = f'{base}/{building_id}/{cover}' if cover else ''
+    building_id      = row['building_id']
+    photos           = row.get('image_photos') or []
+    drawings         = row.get('image_drawings') or []
+    divisare_cover   = row.get('cover_image_url_divisare') or ''
+    divisare_gallery = list(row.get('divisare_gallery_urls') or [])
+    base             = _s.IMAGE_BASE_URL.rstrip('/')
+    cover            = photos[0] if photos else ''
+    if cover:
+        image_url = f'{base}/{building_id}/{cover}'
+    elif divisare_cover:
+        image_url = divisare_cover
+    else:
+        image_url = ''
     extra_photos = [f'{base}/{building_id}/{f}' for f in photos[1:] if f]
     drawing_urls = [f'{base}/{building_id}/{f}' for f in drawings if f]
-    gallery      = extra_photos + drawing_urls
+    # Gallery order: R2 extras (photo zone) → Divisare gallery (photo zone) → R2 drawings (drawing zone).
+    # Divisare gallery URLs are external photos, not drawings; placing them before R2 drawings keeps
+    # the drawing zone strictly at the tail. gallery_drawing_start is the index of the first R2 drawing;
+    # items at index >= gallery_drawing_start are rendered with contain-sizing on white background.
+    # Divisare-only buildings (no R2 photos/drawings) correctly get drawing_start == 0 == len(gallery),
+    # so the drawing zone is empty and all divisare items are treated as photos.
+    gallery      = extra_photos + divisare_gallery + drawing_urls
     return {
         'building_id':          building_id,
         'name_en':              row.get('name_en') or '',
@@ -49,7 +71,7 @@ def _row_to_card(row):
         'image_url':            image_url,
         'url':                  row.get('url'),
         'gallery':              gallery,
-        'gallery_drawing_start': len(extra_photos),
+        'gallery_drawing_start': len(extra_photos) + len(divisare_gallery),
         'metadata': {
             'axis_typology':   row.get('program'),
             'axis_architects': row.get('architect'),
@@ -126,6 +148,7 @@ def get_diverse_random(n=10, filters=None):
         cur.execute(
             f'SELECT building_id, name_en, project_name, architect, location_country, '
             f'city, year, area_sqm, program, style, atmosphere, color_tone, material, material_visual, url, tags, image_photos, image_drawings, '
+            f'cover_image_url_divisare, divisare_gallery_urls, '
             f'embedding::text FROM architecture_vectors {where} ORDER BY RANDOM() LIMIT %s',
             params + [min(n * 5, 100)],  # fetch a pool, then diversify
         )
@@ -175,7 +198,8 @@ def get_building_card(building_id):
     with connection.cursor() as cur:
         cur.execute(
             'SELECT building_id, name_en, project_name, architect, location_country, '
-            'city, year, area_sqm, program, style, atmosphere, color_tone, material, material_visual, url, tags, image_photos, image_drawings '
+            'city, year, area_sqm, program, style, atmosphere, color_tone, material, material_visual, url, tags, image_photos, image_drawings, '
+            'cover_image_url_divisare, divisare_gallery_urls '
             'FROM architecture_vectors WHERE building_id = %s',
             [building_id],
         )
@@ -221,7 +245,8 @@ def get_top_k_results(pref_vector, exposed_ids, k=None):
         with connection.cursor() as cur:
             cur.execute(
                 f'SELECT building_id, name_en, project_name, architect, location_country, '
-                f'city, year, area_sqm, program, style, atmosphere, color_tone, material, material_visual, url, tags, image_photos, image_drawings '
+                f'city, year, area_sqm, program, style, atmosphere, color_tone, material, material_visual, url, tags, image_photos, image_drawings, '
+                f'cover_image_url_divisare, divisare_gallery_urls '
                 f'FROM architecture_vectors {exclude_sql} ORDER BY RANDOM() LIMIT %s',
                 params + [k],
             )
@@ -231,7 +256,8 @@ def get_top_k_results(pref_vector, exposed_ids, k=None):
         with connection.cursor() as cur:
             cur.execute(
                 f'SELECT building_id, name_en, project_name, architect, location_country, '
-                f'city, year, area_sqm, program, style, atmosphere, color_tone, material, material_visual, url, tags, image_photos, image_drawings '
+                f'city, year, area_sqm, program, style, atmosphere, color_tone, material, material_visual, url, tags, image_photos, image_drawings, '
+                f'cover_image_url_divisare, divisare_gallery_urls '
                 f'FROM architecture_vectors {exclude_sql} '
                 f'ORDER BY embedding <=> %s::vector LIMIT %s',
                 params + [vec_str, k],
@@ -249,7 +275,8 @@ def get_buildings_by_ids(building_ids):
     with connection.cursor() as cur:
         cur.execute(
             f'SELECT building_id, name_en, project_name, architect, location_country, '
-            f'city, year, area_sqm, program, style, atmosphere, color_tone, material, material_visual, url, tags, image_photos, image_drawings '
+            f'city, year, area_sqm, program, style, atmosphere, color_tone, material, material_visual, url, tags, image_photos, image_drawings, '
+            f'cover_image_url_divisare, divisare_gallery_urls '
             f'FROM architecture_vectors WHERE building_id IN ({placeholders})',
             list(building_ids),
         )
@@ -268,7 +295,8 @@ def search_by_filters(filters, limit=20):
     with connection.cursor() as cur:
         cur.execute(
             f'SELECT building_id, name_en, project_name, architect, location_country, '
-            f'city, year, area_sqm, program, style, atmosphere, color_tone, material, material_visual, url, tags, image_photos, image_drawings '
+            f'city, year, area_sqm, program, style, atmosphere, color_tone, material, material_visual, url, tags, image_photos, image_drawings, '
+            f'cover_image_url_divisare, divisare_gallery_urls '
             f'FROM architecture_vectors {where} ORDER BY RANDOM() LIMIT %s',
             params + [limit],
         )
@@ -1388,6 +1416,7 @@ def get_top_k_mmr(like_vectors, exposed_ids, k=None, round_num=None):
         cur.execute(
             f'SELECT building_id, name_en, project_name, architect, location_country, '
             f'city, year, area_sqm, program, style, atmosphere, color_tone, material, material_visual, url, tags, image_photos, image_drawings, '
+            f'cover_image_url_divisare, divisare_gallery_urls, '
             f'embedding::text FROM architecture_vectors {exclude_sql} '
             f'ORDER BY embedding <=> %s::vector LIMIT %s',
             params + [vec_str, k * 3],

@@ -139,6 +139,7 @@ class SessionEvent(models.Model):
         ('hyde_call_timing',    'HyDE Call Timing'),
         ('hybrid_pool_timing',  'Hybrid Pool Timing'),
         ('stage2_timing',       'Stage 2 Timing'),
+        ('image_load',          'Image Load'),
     ]
 
     user        = models.ForeignKey(
