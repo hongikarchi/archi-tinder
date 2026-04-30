@@ -1,6 +1,6 @@
 import { useState, useEffect, Fragment } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getUserProfile } from '../api/client.js'
+import { getUserProfile, followUser, unfollowUser } from '../api/client.js'
 import { useImageTelemetry } from '../hooks/useImageTelemetry.js'
 
 /**
@@ -537,7 +537,11 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
   const navigate = useNavigate()
 
   const sessionUserId = sessionStorage.getItem('archithon_user')
-  const effectiveUserId = routeUserId || sessionUserId
+  const rawUserId = routeUserId || sessionUserId
+  // Defense-in-depth: only allow numeric user IDs in API path. Backend route
+  // uses <int:user_id> so non-numeric values 404 anyway, but reject early to
+  // avoid path-traversal-shaped values reaching fetch().
+  const effectiveUserId = /^\d+$/.test(String(rawUserId || '')) ? rawUserId : null
   const isMe = !routeUserId || String(routeUserId) === String(sessionUserId)
 
   const [user, setUser] = useState(null)
@@ -545,6 +549,7 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
   const [error, setError] = useState(null)
 
   const [isFollowing, setIsFollowing] = useState(false)
+  const [isFollowingPending, setIsFollowingPending] = useState(false)
   const [followerCount, setFollowerCount] = useState(0)
 
   useEffect(() => {
@@ -566,8 +571,8 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
           date: formatBoardDate(b.date),
         }))
         setUser({ ...data, boards })
-        setIsFollowing(false)  // is_following: Phase 15 SOC1 territory
-        setFollowerCount(data.follower_count || 0)
+        setIsFollowing(data.is_following ?? false)
+        setFollowerCount(data.follower_count ?? 0)
       })
       .catch(err => {
         if (cancelled) return
@@ -579,10 +584,29 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
     return () => { cancelled = true }
   }, [effectiveUserId])
 
-  function handleToggleFollow() {
-     // TODO(claude): POST /api/v1/users/{id}/follow/ or DELETE
-     setIsFollowing(!isFollowing)
-     setFollowerCount(prev => isFollowing ? prev - 1 : prev + 1)
+  async function handleToggleFollow() {
+    if (isMe || isFollowingPending) return
+    setIsFollowingPending(true)
+    const wasFollowing = isFollowing
+    // Optimistic update
+    setIsFollowing(!wasFollowing)
+    setFollowerCount(c => Math.max(0, c + (wasFollowing ? -1 : 1)))
+    try {
+      if (wasFollowing) {
+        await unfollowUser(effectiveUserId)
+      } else {
+        const res = await followUser(effectiveUserId)
+        // Server-authoritative count if returned
+        if (res?.follower_count != null) setFollowerCount(res.follower_count)
+      }
+    } catch (err) {
+      // Rollback on failure
+      setIsFollowing(wasFollowing)
+      setFollowerCount(c => Math.max(0, c + (wasFollowing ? 1 : -1)))
+      console.error('[follow]', err)
+    } finally {
+      setIsFollowingPending(false)
+    }
   }
 
   // External-link helpers (pure derivations — no hooks)
@@ -914,6 +938,7 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
               <div style={{ display: 'flex', gap: 10, marginTop: 14, width: '100%' }}>
                 <button
                   onClick={handleToggleFollow}
+                  disabled={isFollowingPending}
                   onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)' }}
                   onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)' }}
                   onMouseDown={(e) => { e.currentTarget.style.transform = 'scale(0.98)' }}
@@ -926,7 +951,7 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
                     color: isFollowing ? 'var(--color-text-2)' : '#fff',
                     border: isFollowing ? '1px solid var(--color-border)' : 'none',
                     fontSize: 14, fontWeight: 700,
-                    cursor: 'pointer', fontFamily: 'inherit',
+                    cursor: isFollowingPending ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
                     boxShadow: isFollowing ? 'none' : '0 8px 22px rgba(236,72,153,0.32)',
                     transition: 'transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), background 0.2s, color 0.2s, box-shadow 0.2s',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,

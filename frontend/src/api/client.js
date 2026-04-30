@@ -432,3 +432,11 @@ export async function getOffice(officeId) {
 export async function getUserProfile(userId) {
   return await callApi('GET', `/users/${userId}/`)
 }
+
+export async function followUser(userId) {
+  return await callApi('POST', `/users/${userId}/follow/`)
+}
+
+export async function unfollowUser(userId) {
+  await callApi('DELETE', `/users/${userId}/follow/`)
+}
