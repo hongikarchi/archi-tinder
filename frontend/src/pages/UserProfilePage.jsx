@@ -1,6 +1,7 @@
 import { useState, useEffect, Fragment } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { getUserProfile } from '../api/client.js'
+import { useImageTelemetry } from '../hooks/useImageTelemetry.js'
 
 /**
  * formatBoardDate — converts ISO 8601 timestamp to "Month YYYY" display string.
@@ -116,6 +117,15 @@ function BoardCard({ board }) {
 
   const isPrivate = board.visibility === 'private'
 
+  const { onLoad: coverOnLoad, onError: coverOnError } = useImageTelemetry({
+    buildingId: board.board_id,
+    context: 'user_profile_board_cover',
+  })
+  const { onError: thumbOnError } = useImageTelemetry({
+    buildingId: board.board_id,
+    context: 'user_profile_board_thumb',
+  })
+
   return (
     <div
       style={{
@@ -155,6 +165,9 @@ function BoardCard({ board }) {
           <img
             src={board.cover_image_url}
             alt={board.name}
+            loading="lazy"
+            onLoad={coverOnLoad}
+            onError={coverOnError}
             style={{
               position: 'absolute', inset: 0,
               width: '100%', height: '100%',
@@ -285,6 +298,8 @@ function BoardCard({ board }) {
                 <img
                   src={img}
                   alt=""
+                  loading="lazy"
+                  onError={thumbOnError}
                   style={{
                     width: '100%', height: '100%',
                     objectFit: 'cover',

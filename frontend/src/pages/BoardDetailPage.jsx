@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useImageTelemetry } from '../hooks/useImageTelemetry.js'
 
 // TODO(claude): Replace MOCK_BOARD with API call to GET /api/v1/boards/${boardId}/
 // Returns: { board_id, name, visibility, owner{user_id, display_name, avatar_url},
@@ -166,6 +167,11 @@ function InfoCol({ label, value }) {
  *     ProjectCard (also drops program chip).
  */
 function BuildingTile({ building }) {
+  const { onLoad, onError } = useImageTelemetry({
+    buildingId: building.building_id,
+    context: 'board_detail_gallery',
+  })
+
   return (
     <div
       onClick={() => {
@@ -198,6 +204,8 @@ function BuildingTile({ building }) {
         src={building.image_url}
         alt={building.name_en}
         loading="lazy"
+        onLoad={onLoad}
+        onError={onError}
         style={{
           position: 'absolute',
           inset: 0,

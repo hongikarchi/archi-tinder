@@ -1,6 +1,7 @@
 import { useRef, useState, useEffect } from 'react'
 import TinderCard from 'react-tinder-card'
 import TutorialPopup from '../components/TutorialPopup.jsx'
+import { useImageTelemetry } from '../hooks/useImageTelemetry.js'
 
 const CARD_WIDTH  = Math.min(340, (typeof window !== 'undefined' ? window.innerWidth : 375) - 32)
 const CARD_HEIGHT = Math.round(CARD_WIDTH * (480 / 340))
@@ -29,6 +30,11 @@ function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
   const dragStart = useRef(null)
   const dragStartTime = useRef(null)
 
+  const { onLoad: telemetryOnLoad, onError: telemetryOnError } = useImageTelemetry({
+    buildingId: card.image_id,
+    context: 'swipe_card',
+  })
+
   function openGallery()  { setShowGallery(true);  onGalleryOpen()  }
   function closeGallery() { setShowGallery(false); onGalleryClose() }
 
@@ -49,6 +55,8 @@ function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
   }
 
   function handleImgError(e) {
+    // Emit telemetry FIRST (captures original failed URL before retry mutates e.target.src)
+    telemetryOnError(e)
     if (!imgRetried.current) {
       // Retry once with cache-busting query param
       imgRetried.current = true
@@ -58,6 +66,11 @@ function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
       // Retry also failed -- show fallback
       setImgFailed(true)
     }
+  }
+
+  function handleImgLoad(e) {
+    setImgLoaded(true)
+    telemetryOnLoad(e)
   }
 
   const typology   = card.metadata?.axis_typology
@@ -125,7 +138,7 @@ function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
                 fetchpriority="high"
                 decoding="sync"
                 draggable={false}
-                onLoad={() => setImgLoaded(true)}
+                onLoad={handleImgLoad}
                 onError={handleImgError}
                 style={{
                   position: 'absolute', inset: 0,

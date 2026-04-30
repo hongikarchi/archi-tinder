@@ -127,6 +127,52 @@ async function _tryRefresh() {
   }
 }
 
+// -- Image telemetry helpers -----------------------------------------------
+
+/**
+ * getImageSource — classify image URL by CDN/host origin.
+ * Uses URL(url, origin) to handle both absolute and relative URLs.
+ * Returns: 'divisare' | 'metalocus' | 'r2' | 'external' | 'unknown'
+ */
+export function getImageSource(url) {
+  if (!url || typeof url !== 'string') return 'unknown'
+  try {
+    const u = new URL(url, window.location.origin)
+    const host = u.hostname.toLowerCase()
+    const isHost = (h) => host === h || host.endsWith('.' + h)
+    if (isHost('divisare.com')) return 'divisare'
+    if (isHost('metalocus.es')) return 'metalocus'
+    if (isHost('cloudflarestorage.com') || isHost('r2.dev')) return 'r2'
+    // Same-origin: backend-proxied R2 images
+    if (host === window.location.hostname) return 'r2'
+    return 'external'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/**
+ * emitImageLoadEvent — fire-and-forget telemetry beacon.
+ * Uses sendBeacon when available (reliable on page unload), falls back to fetch.
+ * Errors are swallowed — telemetry must never throw or affect UI.
+ */
+export function emitImageLoadEvent({ url, outcome, building_id, context, load_ms, session_id }) {
+  if (!url || !outcome) return
+  const body = JSON.stringify({ url, outcome, building_id, context, load_ms, session_id })
+  try {
+    if (navigator.sendBeacon) {
+      navigator.sendBeacon(`${BASE}/telemetry/image-load/`, new Blob([body], { type: 'application/json' }))
+    } else {
+      fetch(`${BASE}/telemetry/image-load/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+        keepalive: true,
+      }).catch(() => {})  // swallow errors; telemetry must never throw
+    }
+  } catch { /* swallow; telemetry must never throw */ }
+}
+
 // -- ImageCard normalizer --------------------------------------------------
 // Maps backend field names (spec) -> frontend field names used in components.
 // Components use: image_id, image_title, image_url, gallery, metadata.*

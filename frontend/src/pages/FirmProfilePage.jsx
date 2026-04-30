@@ -1,6 +1,7 @@
 import { useState, useEffect, Fragment } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { getOffice } from '../api/client.js'
+import { useImageTelemetry } from '../hooks/useImageTelemetry.js'
 
 // TODO: Replace with API call
 // TODO(claude): fetch office by officeId — GET /api/v1/offices/${officeId}/
@@ -770,6 +771,11 @@ function InfoCol({ label, value }) {
  *     binary status state. CITY+YEAR in the info grid carry the relevant metadata.
  */
 function ProjectCard({ project }) {
+  const { onLoad, onError } = useImageTelemetry({
+    buildingId: project.building_id,
+    context: 'firm_profile_gallery',
+  })
+
   return (
     <div
       // TODO(claude): navigate to project detail on click — e.g. navigate(`/buildings/${project.building_id}`)
@@ -797,6 +803,8 @@ function ProjectCard({ project }) {
         src={project.image_url}
         alt={project.name_en}
         loading="lazy"
+        onLoad={onLoad}
+        onError={onError}
         style={{
           position: 'absolute',
           inset: 0,
