@@ -1,0 +1,153 @@
+"""
+views.py -- apps/social (Phase 15 SOC1)
+
+4 endpoints for user-to-user asymmetric follow:
+  POST   /api/v1/users/{user_id}/follow/      -- 201/200/400/404
+  DELETE /api/v1/users/{user_id}/follow/      -- 204/404
+  GET    /api/v1/users/{user_id}/followers/   -- paginated list (AllowAny)
+  GET    /api/v1/users/{user_id}/following/   -- paginated list (AllowAny)
+
+Counter caches (UserProfile.follower_count / following_count) are managed
+exclusively by signal receivers in models.py (post_save / post_delete on Follow).
+This covers both explicit view-level deletes and CASCADE deletes triggered by
+user account removal — no counter drift possible.
+"""
+import logging
+
+from django.shortcuts import get_object_or_404
+from rest_framework import status
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.throttling import UserRateThrottle
+from rest_framework.views import APIView
+
+from apps.accounts.models import UserProfile
+from apps.accounts.serializers import UserMiniSerializer
+from apps.social.models import Follow
+
+logger = logging.getLogger('apps.social')
+
+_PAGE_SIZE_DEFAULT = 50
+_PAGE_SIZE_MAX = 50
+
+
+class FollowWriteThrottle(UserRateThrottle):
+    """60 follow/unfollow actions per user per minute — prevents mass-follow bots."""
+    scope = 'follow_write'
+
+
+def _paginate_queryset(qs, request):
+    """Minimal inline pagination: page (1-indexed), page_size (capped at 50).
+
+    Returns (items, meta_dict).
+    """
+    try:
+        page = max(1, int(request.query_params.get('page', 1)))
+    except (ValueError, TypeError):
+        page = 1
+    try:
+        page_size = min(_PAGE_SIZE_MAX, max(1, int(request.query_params.get('page_size', _PAGE_SIZE_DEFAULT))))
+    except (ValueError, TypeError):
+        page_size = _PAGE_SIZE_DEFAULT
+
+    total = qs.count()
+    offset = (page - 1) * page_size
+    items = list(qs[offset: offset + page_size])
+    has_more = (offset + page_size) < total
+    return items, {'page': page, 'page_size': page_size, 'has_more': has_more, 'total': total}
+
+
+class FollowView(APIView):
+    """POST + DELETE /api/v1/users/{user_id}/follow/"""
+
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [FollowWriteThrottle]
+
+    def post(self, request, user_id):
+        """Follow a user.
+
+        Returns:
+          201 {follower_count, following: true} -- new follow created
+          200 {follower_count, following: true} -- already following (idempotent)
+          400 {detail}                           -- self-follow attempt
+          404                                    -- user not found
+        """
+        followee = get_object_or_404(UserProfile, user__id=user_id)
+        requester = getattr(request.user, 'profile', None)
+        if requester is None:
+            return Response({'detail': 'Profile not found.'}, status=status.HTTP_403_FORBIDDEN)
+
+        if requester.pk == followee.pk:
+            return Response({'detail': 'Cannot follow yourself.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        _follow, created = Follow.objects.get_or_create(
+            follower=requester,
+            followee=followee,
+        )
+        # Counter update is handled by _follow_post_save signal when created=True.
+
+        followee.refresh_from_db(fields=['follower_count'])
+        response_status = status.HTTP_201_CREATED if created else status.HTTP_200_OK
+        return Response(
+            {'follower_count': followee.follower_count, 'following': True},
+            status=response_status,
+        )
+
+    def delete(self, request, user_id):
+        """Unfollow a user.
+
+        Returns:
+          204 no body -- unfollowed (counter decremented by signal)
+          404         -- not following, or user not found
+        """
+        followee = get_object_or_404(UserProfile, user__id=user_id)
+        requester = getattr(request.user, 'profile', None)
+        if requester is None:
+            return Response({'detail': 'Profile not found.'}, status=status.HTTP_403_FORBIDDEN)
+
+        deleted_count, _ = Follow.objects.filter(
+            follower=requester, followee=followee
+        ).delete()
+        # _follow_post_delete signal handles counter decrement per deleted instance.
+
+        if deleted_count == 0:
+            return Response({'detail': 'Not following.'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class FollowersListView(APIView):
+    """GET /api/v1/users/{user_id}/followers/ -- users who follow this user."""
+    permission_classes = [AllowAny]
+
+    def get(self, request, user_id):
+        target = get_object_or_404(UserProfile, user__id=user_id)
+        qs = (
+            UserProfile.objects
+            .filter(following_set__followee=target)
+            .select_related('user')
+            .order_by('-following_set__created_at')
+        )
+        items, meta = _paginate_queryset(qs, request)
+        return Response({
+            'results': UserMiniSerializer(items, many=True).data,
+            **meta,
+        })
+
+
+class FollowingListView(APIView):
+    """GET /api/v1/users/{user_id}/following/ -- users this user follows."""
+    permission_classes = [AllowAny]
+
+    def get(self, request, user_id):
+        target = get_object_or_404(UserProfile, user__id=user_id)
+        qs = (
+            UserProfile.objects
+            .filter(follower_set__follower=target)
+            .select_related('user')
+            .order_by('-follower_set__created_at')
+        )
+        items, meta = _paginate_queryset(qs, request)
+        return Response({
+            'results': UserMiniSerializer(items, many=True).data,
+            **meta,
+        })

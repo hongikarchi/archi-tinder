@@ -26,6 +26,7 @@ INSTALLED_APPS = [
     'apps.accounts',
     'apps.recommendation',
     'apps.profiles',
+    'apps.social',
 ]
 
 MIDDLEWARE = [
@@ -96,6 +97,8 @@ REST_FRAMEWORK = {
         # Scoped throttle for the anonymous image-load telemetry beacon.
         # Budget: ~1-2 images/card × 30 swipes/min = 60-90 events/min; 120/min is a safe cap.
         'image_load_telemetry': '120/min',
+        # Follow/unfollow write throttle — prevents mass-follow bots.
+        'follow_write': '60/min',
         # Global fallback rates (applied to views that reference these scopes directly).
         'anon': '60/min',
         'user': '300/min',

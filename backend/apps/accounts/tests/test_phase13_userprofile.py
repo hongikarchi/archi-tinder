@@ -106,12 +106,14 @@ class TestUserProfileDetailView:
         assert response.status_code == 404
 
     @pytest.mark.django_db
-    def test_get_userprofile_excludes_is_following(self, user_and_profile):
-        """Response does NOT include is_following (Phase 15 SOC1 territory)."""
+    def test_get_userprofile_includes_is_following(self, user_and_profile):
+        """Response includes is_following (SOC1 shipped: always present, false for unauthenticated)."""
         user, _ = user_and_profile
         client = APIClient()
         response = client.get(f'/api/v1/users/{user.id}/')
-        assert 'is_following' not in response.json()
+        data = response.json()
+        assert 'is_following' in data
+        assert data['is_following'] is False  # unauthenticated => always false
 
     @pytest.mark.django_db
     def test_get_userprofile_includes_boards(self, user_and_profile):

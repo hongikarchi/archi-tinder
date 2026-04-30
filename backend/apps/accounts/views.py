@@ -373,7 +373,11 @@ class UserProfileDetailView(APIView):
     (e.g. email visibility) is a UI presentation concern, NOT API gating, in v0.
 
     boards[] — BOARD1: non-owner sees public projects only; owner sees all.
-    is_following — SOC1 territory (Phase 15), excluded here.
+    is_following — SOC1 (Phase 15): injected here from Follow table.
+      - Unauthenticated: false
+      - Own profile: false
+      - Authenticated + Follow row exists: true
+      - Authenticated + no Follow row: false
     """
     permission_classes = [AllowAny]
 
@@ -383,6 +387,17 @@ class UserProfileDetailView(APIView):
         is_owner = requester_profile and requester_profile.pk == profile.pk
         data = UserProfileSerializer(profile).data
         data['boards'] = _build_boards_field(profile, is_owner)
+
+        # is_following injection (SOC1)
+        if requester_profile and not is_owner:
+            from apps.social.models import Follow
+            data['is_following'] = Follow.objects.filter(
+                follower=requester_profile,
+                followee=profile,
+            ).exists()
+        else:
+            data['is_following'] = False
+
         return Response(data)
 
 

@@ -6,6 +6,7 @@ urlpatterns = [
     path('api/v1/', include('apps.accounts.urls')),
     path('api/v1/', include('apps.recommendation.urls')),
     path('api/v1/', include('apps.profiles.urls')),
+    path('api/v1/', include('apps.social.urls')),
 ]
 
 if settings.DEBUG:

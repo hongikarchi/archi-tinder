@@ -24,7 +24,7 @@ class UserMiniSerializer(serializers.ModelSerializer):
     `providers` (OAuth provider is private metadata, not a public-facing field).
 
     Used by ProjectSerializer; keeps provider info off public Project responses.
-    No per-row Python method calls; callers must supply `select_related('user__user')` on the queryset to avoid FK traversal queries.
+    No per-row Python method calls; callers must supply `select_related('user')` on the queryset to avoid FK traversal queries.
     """
     user_id = serializers.IntegerField(source='user.id', read_only=True)
 
