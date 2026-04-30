@@ -1,16 +1,21 @@
 """
-views.py -- apps/social (Phase 15 SOC1)
+views.py -- apps/social (Phase 15 SOC1 + SOC2)
 
-4 endpoints for user-to-user asymmetric follow:
+SOC1 — 4 endpoints for user-to-user asymmetric follow:
   POST   /api/v1/users/{user_id}/follow/      -- 201/200/400/404
   DELETE /api/v1/users/{user_id}/follow/      -- 204/404
   GET    /api/v1/users/{user_id}/followers/   -- paginated list (AllowAny)
   GET    /api/v1/users/{user_id}/following/   -- paginated list (AllowAny)
 
-Counter caches (UserProfile.follower_count / following_count) are managed
-exclusively by signal receivers in models.py (post_save / post_delete on Follow).
-This covers both explicit view-level deletes and CASCADE deletes triggered by
-user account removal — no counter drift possible.
+SOC2 — 2 endpoints for project reaction (single-tier ❤️):
+  POST   /api/v1/projects/{project_id}/react/  -- 201/200/403/404
+  DELETE /api/v1/projects/{project_id}/react/  -- 204/403/404
+
+Counter caches (UserProfile.follower_count / following_count,
+Project.reaction_count) are managed exclusively by signal receivers in
+models.py (post_save / post_delete on Follow / Reaction). This covers both
+explicit view-level deletes and CASCADE deletes triggered by user/project
+account removal — no counter drift possible.
 """
 import logging
 
@@ -23,7 +28,7 @@ from rest_framework.views import APIView
 
 from apps.accounts.models import UserProfile
 from apps.accounts.serializers import UserMiniSerializer
-from apps.social.models import Follow
+from apps.social.models import Follow, Reaction
 
 logger = logging.getLogger('apps.social')
 
@@ -151,3 +156,78 @@ class FollowingListView(APIView):
             'results': UserMiniSerializer(items, many=True).data,
             **meta,
         })
+
+
+# ---------------------------------------------------------------------------
+# SOC2 — Project Reaction (Phase 15)
+# ---------------------------------------------------------------------------
+
+class ReactionWriteThrottle(UserRateThrottle):
+    """60 react/unreact actions per user per minute — prevents bulk-reaction abuse."""
+    scope = 'reaction_write'
+
+
+class ReactionView(APIView):
+    """POST + DELETE /api/v1/projects/{project_id}/react/
+
+    POST applies a private-visibility gate (private + non-owner = 403) to
+    block new reactions on private projects. DELETE has no visibility gate:
+    a user always has sovereignty over their own reaction row regardless of
+    the project's current visibility (handles public→private flip cleanly,
+    avoiding orphan reactions).
+
+    POST:
+      201 {reaction_count, reacted: true} -- new reaction created
+      200 {reaction_count, reacted: true} -- already reacted (idempotent)
+      403 {detail}                         -- private project + non-owner
+      404                                  -- project not found
+
+    DELETE:
+      204                                  -- reaction removed; count decremented by signal
+      404 {detail}                         -- not reacted, or project not found
+    """
+
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ReactionWriteThrottle]
+
+    def post(self, request, project_id):
+        from apps.recommendation.models import Project
+        requester = getattr(request.user, 'profile', None)
+        if requester is None:
+            return Response({'detail': 'Profile not found.'}, status=status.HTTP_403_FORBIDDEN)
+
+        project = get_object_or_404(Project, project_id=project_id)
+        if project.visibility != 'public' and project.user_id != requester.pk:
+            return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+
+        _reaction, created = Reaction.objects.get_or_create(
+            user=requester,
+            project=project,
+        )
+        # Counter update handled by _reaction_post_save signal when created=True.
+
+        project.refresh_from_db(fields=['reaction_count'])
+        response_status = status.HTTP_201_CREATED if created else status.HTTP_200_OK
+        return Response(
+            {'reaction_count': project.reaction_count, 'reacted': True},
+            status=response_status,
+        )
+
+    def delete(self, request, project_id):
+        from apps.recommendation.models import Project
+        requester = getattr(request.user, 'profile', None)
+        if requester is None:
+            return Response({'detail': 'Profile not found.'}, status=status.HTTP_403_FORBIDDEN)
+
+        # No visibility gate on DELETE: users may always retract their own
+        # reaction even after the project owner flips visibility to private.
+        project = get_object_or_404(Project, project_id=project_id)
+
+        deleted_count, _ = Reaction.objects.filter(
+            user=requester, project=project
+        ).delete()
+        # _reaction_post_delete signal handles counter decrement per deleted instance.
+
+        if deleted_count == 0:
+            return Response({'detail': 'Not reacted.'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(status=status.HTTP_204_NO_CONTENT)

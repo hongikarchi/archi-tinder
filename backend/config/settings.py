@@ -99,6 +99,8 @@ REST_FRAMEWORK = {
         'image_load_telemetry': '120/min',
         # Follow/unfollow write throttle — prevents mass-follow bots.
         'follow_write': '60/min',
+        # React/unreact write throttle — prevents bulk-reaction abuse (SOC2).
+        'reaction_write': '60/min',
         # Global fallback rates (applied to views that reference these scopes directly).
         'anon': '60/min',
         'user': '300/min',

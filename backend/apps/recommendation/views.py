@@ -220,7 +220,13 @@ class ProjectDetailView(APIView):
         is_owner = profile and project.user_id == profile.pk
         if not is_owner and project.visibility != 'public':
             return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
-        return Response(ProjectSerializer(project).data)
+        data = ProjectSerializer(project).data
+        if request.user.is_authenticated and profile:
+            from apps.social.models import Reaction
+            data['is_reacted'] = Reaction.objects.filter(user=profile, project=project).exists()
+        else:
+            data['is_reacted'] = False
+        return Response(data)
 
     def patch(self, request, pk):
         profile = _get_profile(request)
