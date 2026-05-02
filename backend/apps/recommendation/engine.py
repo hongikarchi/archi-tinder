@@ -20,6 +20,72 @@ _BUILDING_CACHE_MAX_SIZE = RC.get('pool_embedding_cache_max_size', 5000)  # ~5MB
 _last_embedding_call_stats = None          # dict set per get_pool_embeddings call; see get_last_embedding_call_stats()
 _centroid_cache = {}
 _last_clustering_stats = None              # dict set per compute_taste_centroids call; see get_last_clustering_stats()
+_AVAILABLE_COLUMNS = None                  # frozenset of column names in architecture_vectors; None = not yet probed
+
+
+# ── Schema-probe helpers ──────────────────────────────────────────────────────
+
+def _get_available_columns():
+    """Probe architecture_vectors columns once at first successful call. Module-cached
+    for process lifetime after a successful probe. Used to build forward-compatible
+    SELECT clauses that gracefully degrade when optional columns (e.g. divisare_*)
+    are absent from the dev DB schema.
+
+    Thread-safety: two threads racing here is benign — both would issue the same
+    idempotent information_schema query and assign the same frozenset. No lock needed.
+
+    Cache policy: only cached on success. On probe failure (DB unreachable, schema
+    not ready, etc.) _AVAILABLE_COLUMNS remains None so the next call retries.
+    This avoids permanently poisoning the probe state on a transient startup error.
+
+    Returns frozenset of column names, or None if probe failed (caller treats
+    None as "include all optional columns" — legacy fail-loud behavior).
+    """
+    global _AVAILABLE_COLUMNS
+    if _AVAILABLE_COLUMNS is not None:
+        return _AVAILABLE_COLUMNS
+    try:
+        with connection.cursor() as cur:
+            cur.execute(
+                "SELECT column_name FROM information_schema.columns"
+                " WHERE table_name = 'architecture_vectors'"
+            )
+            cols = frozenset(r[0] for r in cur.fetchall())
+            if cols:
+                _AVAILABLE_COLUMNS = cols
+            return _AVAILABLE_COLUMNS
+    except Exception:
+        # Probe failed — return None; caller will include all optional columns
+        # (matches pre-robustness legacy behavior: fail-loud on next real SELECT).
+        return None
+
+
+def _build_select_columns(required, optional=()):
+    """Build a comma-separated column list for SELECT.
+
+    `required` columns are always included. `optional` columns are filtered
+    against the DB schema (only included when the probe found them present).
+    When the probe returns None (failed or schema empty), all candidates are
+    included so the real SQL query fails loudly — same as pre-robustness behavior.
+
+    Security note: column names in `cols` come from information_schema (DB-provided
+    identifiers) filtered against the caller-supplied `optional` whitelist. No user
+    input flows into the SELECT clause; SQL injection is not a concern here.
+    """
+    cols = _get_available_columns()
+    if cols is None:
+        # Probe failed or not yet available — include everything (legacy behavior,
+        # fail-loud on real SELECT if column absent).
+        return ', '.join(list(required) + list(optional))
+    # Include all required; filter optional by availability.
+    actual = list(required) + [c for c in optional if c in cols]
+    return ', '.join(actual)
+
+
+def clear_available_columns_cache():
+    """Reset the schema-probe cache (for testing). Forces re-probe on next call."""
+    global _AVAILABLE_COLUMNS
+    _AVAILABLE_COLUMNS = None
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -144,12 +210,16 @@ def get_diverse_random(n=10, filters=None):
     Returns list of ImageCard dicts.
     """
     where, params = _build_filter_sql(filters)
+    _required_cols = [
+        'building_id', 'name_en', 'project_name', 'architect', 'location_country',
+        'city', 'year', 'area_sqm', 'program', 'style', 'atmosphere', 'color_tone',
+        'material', 'material_visual', 'url', 'tags', 'image_photos', 'image_drawings',
+    ]
+    _optional_cols = ['cover_image_url_divisare', 'divisare_gallery_urls']
+    _cols = _build_select_columns(_required_cols, _optional_cols)
     with connection.cursor() as cur:
         cur.execute(
-            f'SELECT building_id, name_en, project_name, architect, location_country, '
-            f'city, year, area_sqm, program, style, atmosphere, color_tone, material, material_visual, url, tags, image_photos, image_drawings, '
-            f'cover_image_url_divisare, divisare_gallery_urls, '
-            f'embedding::text FROM architecture_vectors {where} ORDER BY RANDOM() LIMIT %s',
+            f'SELECT {_cols}, embedding::text FROM architecture_vectors {where} ORDER BY RANDOM() LIMIT %s',
             params + [min(n * 5, 100)],  # fetch a pool, then diversify
         )
         rows = _dictfetchall(cur)
@@ -195,12 +265,16 @@ def get_building_embedding(building_id):
 
 def get_building_card(building_id):
     """Fetch a single building as an ImageCard dict."""
+    _required_cols = [
+        'building_id', 'name_en', 'project_name', 'architect', 'location_country',
+        'city', 'year', 'area_sqm', 'program', 'style', 'atmosphere', 'color_tone',
+        'material', 'material_visual', 'url', 'tags', 'image_photos', 'image_drawings',
+    ]
+    _optional_cols = ['cover_image_url_divisare', 'divisare_gallery_urls']
+    _cols = _build_select_columns(_required_cols, _optional_cols)
     with connection.cursor() as cur:
         cur.execute(
-            'SELECT building_id, name_en, project_name, architect, location_country, '
-            'city, year, area_sqm, program, style, atmosphere, color_tone, material, material_visual, url, tags, image_photos, image_drawings, '
-            'cover_image_url_divisare, divisare_gallery_urls '
-            'FROM architecture_vectors WHERE building_id = %s',
+            f'SELECT {_cols} FROM architecture_vectors WHERE building_id = %s',
             [building_id],
         )
         rows = _dictfetchall(cur)
@@ -240,14 +314,18 @@ def get_top_k_results(pref_vector, exposed_ids, k=None):
         exclude_sql = f'WHERE building_id NOT IN ({placeholders})'
         params = list(exposed_ids)
 
+    _required_cols = [
+        'building_id', 'name_en', 'project_name', 'architect', 'location_country',
+        'city', 'year', 'area_sqm', 'program', 'style', 'atmosphere', 'color_tone',
+        'material', 'material_visual', 'url', 'tags', 'image_photos', 'image_drawings',
+    ]
+    _optional_cols = ['cover_image_url_divisare', 'divisare_gallery_urls']
+    _cols = _build_select_columns(_required_cols, _optional_cols)
     if not pref_vector:
         # No preference yet — return random
         with connection.cursor() as cur:
             cur.execute(
-                f'SELECT building_id, name_en, project_name, architect, location_country, '
-                f'city, year, area_sqm, program, style, atmosphere, color_tone, material, material_visual, url, tags, image_photos, image_drawings, '
-                f'cover_image_url_divisare, divisare_gallery_urls '
-                f'FROM architecture_vectors {exclude_sql} ORDER BY RANDOM() LIMIT %s',
+                f'SELECT {_cols} FROM architecture_vectors {exclude_sql} ORDER BY RANDOM() LIMIT %s',
                 params + [k],
             )
             rows = _dictfetchall(cur)
@@ -255,10 +333,7 @@ def get_top_k_results(pref_vector, exposed_ids, k=None):
         vec_str = _vec_to_pg(pref_vector)
         with connection.cursor() as cur:
             cur.execute(
-                f'SELECT building_id, name_en, project_name, architect, location_country, '
-                f'city, year, area_sqm, program, style, atmosphere, color_tone, material, material_visual, url, tags, image_photos, image_drawings, '
-                f'cover_image_url_divisare, divisare_gallery_urls '
-                f'FROM architecture_vectors {exclude_sql} '
+                f'SELECT {_cols} FROM architecture_vectors {exclude_sql} '
                 f'ORDER BY embedding <=> %s::vector LIMIT %s',
                 params + [vec_str, k],
             )
@@ -272,12 +347,16 @@ def get_buildings_by_ids(building_ids):
     if not building_ids:
         return []
     placeholders = ','.join(['%s'] * len(building_ids))
+    _required_cols = [
+        'building_id', 'name_en', 'project_name', 'architect', 'location_country',
+        'city', 'year', 'area_sqm', 'program', 'style', 'atmosphere', 'color_tone',
+        'material', 'material_visual', 'url', 'tags', 'image_photos', 'image_drawings',
+    ]
+    _optional_cols = ['cover_image_url_divisare', 'divisare_gallery_urls']
+    _cols = _build_select_columns(_required_cols, _optional_cols)
     with connection.cursor() as cur:
         cur.execute(
-            f'SELECT building_id, name_en, project_name, architect, location_country, '
-            f'city, year, area_sqm, program, style, atmosphere, color_tone, material, material_visual, url, tags, image_photos, image_drawings, '
-            f'cover_image_url_divisare, divisare_gallery_urls '
-            f'FROM architecture_vectors WHERE building_id IN ({placeholders})',
+            f'SELECT {_cols} FROM architecture_vectors WHERE building_id IN ({placeholders})',
             list(building_ids),
         )
         rows = _dictfetchall(cur)
@@ -292,12 +371,16 @@ def search_by_filters(filters, limit=20):
     Used by ParseQueryView (Phase 3).
     """
     where, params = _build_filter_sql(filters)
+    _required_cols = [
+        'building_id', 'name_en', 'project_name', 'architect', 'location_country',
+        'city', 'year', 'area_sqm', 'program', 'style', 'atmosphere', 'color_tone',
+        'material', 'material_visual', 'url', 'tags', 'image_photos', 'image_drawings',
+    ]
+    _optional_cols = ['cover_image_url_divisare', 'divisare_gallery_urls']
+    _cols = _build_select_columns(_required_cols, _optional_cols)
     with connection.cursor() as cur:
         cur.execute(
-            f'SELECT building_id, name_en, project_name, architect, location_country, '
-            f'city, year, area_sqm, program, style, atmosphere, color_tone, material, material_visual, url, tags, image_photos, image_drawings, '
-            f'cover_image_url_divisare, divisare_gallery_urls '
-            f'FROM architecture_vectors {where} ORDER BY RANDOM() LIMIT %s',
+            f'SELECT {_cols} FROM architecture_vectors {where} ORDER BY RANDOM() LIMIT %s',
             params + [limit],
         )
         rows = _dictfetchall(cur)
@@ -1412,12 +1495,16 @@ def get_top_k_mmr(like_vectors, exposed_ids, k=None, round_num=None):
 
     # Fetch 3*k candidates for re-ranking
     vec_str = _vec_to_pg(centroid.tolist())
+    _required_cols = [
+        'building_id', 'name_en', 'project_name', 'architect', 'location_country',
+        'city', 'year', 'area_sqm', 'program', 'style', 'atmosphere', 'color_tone',
+        'material', 'material_visual', 'url', 'tags', 'image_photos', 'image_drawings',
+    ]
+    _optional_cols = ['cover_image_url_divisare', 'divisare_gallery_urls']
+    _cols = _build_select_columns(_required_cols, _optional_cols)
     with connection.cursor() as cur:
         cur.execute(
-            f'SELECT building_id, name_en, project_name, architect, location_country, '
-            f'city, year, area_sqm, program, style, atmosphere, color_tone, material, material_visual, url, tags, image_photos, image_drawings, '
-            f'cover_image_url_divisare, divisare_gallery_urls, '
-            f'embedding::text FROM architecture_vectors {exclude_sql} '
+            f'SELECT {_cols}, embedding::text FROM architecture_vectors {exclude_sql} '
             f'ORDER BY embedding <=> %s::vector LIMIT %s',
             params + [vec_str, k * 3],
         )
