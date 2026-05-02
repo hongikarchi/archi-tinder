@@ -3,7 +3,7 @@
 > Phase logic, mathematical formulas, and hyperparameter theory.
 > Research agent updates this file. Orchestrator references it for algorithm tasks.
 
-**Last Synced (Reporter):** 2026-04-28 7348593
+**Last Synced (Reporter):** 2026-05-02 127f502
 
 ---
 
@@ -36,6 +36,10 @@ _(Updated 2026-04-28 834d36e: M4 clarification telemetry shipped — parse_query
 _(Updated 2026-04-28 1b2bd21: M1 refined clarification cap shipped — prompt + Python 3-layer enforcement caps user clarification turns at max 2 per session. Cap fires at user_turn_count >= 3 (preserves Investigation 06 BareQuery 2-turn flow). m1_cap_forced_terminal telemetry surfaces override events. UX trade-off: cap-forced terminal has short ack reply + None visual_description + partial filters; HyDE V_initial skips cleanly.)_
 
 _(Updated 2026-04-28 7348593: IMP-6 2-stage decouple shipped (flag-gated default OFF) — Phase 0 Gemini call split into Stage 1 sync (parse_query_stage1, ~150-220 output tokens, user-blocking, returns filters+reply via _STAGE1_RESPONSE_SCHEMA that structurally excludes visual_description) + Stage 2 async daemon thread (generate_visual_description, ~140-180 output tokens, fire-and-forget, stores V_initial in Django cache key v_initial:{user_id}:{sha256(raw_query)[:16]}). Stage 1 alone expected ~45-55% Gemini wall drop when stage_decouple_enabled flipped ON; total TTFC ~2400-2700ms restoring spec v1.0 aspirational <3-4s outer budget.)_
+
+_(Updated 2026-04-28 4d98793: Sprint D bundle shipped — validate_imp6 staging validation + HF URL fix + STAGE_DECOUPLE_ENABLED env override for production canary. Empirical Stage 1 ~21% drop + Stage 2 5/5 success + ~800ms TTFC reduction observed in dev. Stage 1 spec v1.10 prediction (45-55%) empirically disproved — same input-dominated pattern as IMP-5; routes to research v1.11 SPEC-UPDATED. Production canary ready: Railway dashboard set STAGE_DECOUPLE_ENABLED=true to flip ON; unset to roll back. HF URL fix replaces deprecated api-inference.huggingface.co with router.huggingface.co/hf-inference/.../pipeline/feature-extraction.)_
+
+_(Updated 2026-04-29 6337f84: Tier 4 harness fix — review/.claude/commands/review.md + web-testing/runner.py now use POST /api/v1/parse-query/ response.probe_needed for clarification detection, replacing DOM heuristic that produced false positives on rhetorical "?" in terminal replies. M4 telemetry was already authoritative ground truth (834d36e); harness now aligns. Investigation 22 Phase 1 data quality improved.)_
 
 ### Phase 1: Bounded Exploration
 Gathers initial user feedback within the bounded pool while ensuring visual diversity.
