@@ -1,169 +1,37 @@
 """
-services.py -- Gemini LLM integration for query parsing and persona report generation.
+parse_query.py -- Query parsing via Gemini chat phase.
+
+Sprint 1 rewrite (Investigation 06): chat-phase + stage-decoupled (IMP-6).
+M4 (Investigation 22): query complexity heuristic classifier + telemetry.
+
+Cross-module symbol access uses the late-bound package reference (_svc) so that
+mock.patch('apps.recommendation.services.X') continues to work in tests.
 """
-import base64
-import hashlib
 import json
 import logging
+import re as _re
 import time
-import urllib.error
-import urllib.request
-from django.core.cache import cache as django_cache
-from django.conf import settings
-from django.db import connection
-from google import genai
-from google.genai import types
 
-from .engine import _dictfetchall
-from . import event_log
+from django.conf import settings
+from django.core.cache import cache as django_cache
+from google.genai import types
 
 logger = logging.getLogger('apps.recommendation')
 
-_client = None
-
-
-def _get_client():
-    global _client
-    if _client is None:
-        _client = genai.Client(api_key=settings.GEMINI_API_KEY)
-    return _client
-
-
 # ---------------------------------------------------------------------------
-# IMP-5 (Spec v1.5 §11.1): Gemini explicit context caching
+# Public constant: PROGRAM_VALUES
+# Used by views and tests directly. Must be accessible at import time.
 # ---------------------------------------------------------------------------
-# Content-hash suffix ensures cache name uniquely identifies this prompt version.
-# Recomputed at import time (constant for a given deployment).
-_CACHE_NAME_PREFIX = 'archi-tinder-chat'
-
-
-def _get_prompt_hash():
-    """Return 8-char hex prefix of SHA-256 of _CHAT_PHASE_SYSTEM_PROMPT.
-
-    Called lazily (after prompt constant is defined) rather than at import time
-    to avoid forward-reference issues during module load.
-    """
-    return hashlib.sha256(_CHAT_PHASE_SYSTEM_PROMPT.encode('utf-8')).hexdigest()[:8]
-
-
-def _get_cache_name():
-    """Full Gemini cache display_name: 'archi-tinder-chat-{hash8}'."""
-    return f'{_CACHE_NAME_PREFIX}-{_get_prompt_hash()}'
-
-
-def _get_django_cache_key():
-    """Django cache key for storing the Gemini cache resource name across requests."""
-    return f'gemini_cache_name:{_get_cache_name()}'
-
-
-def _ensure_chat_cache(client):
-    """
-    IMP-5: Ensure a Gemini context cache for _CHAT_PHASE_SYSTEM_PROMPT exists
-    and return its resource name (e.g. 'cachedContents/abc123').
-
-    Lookup order:
-      1. Django cache (fast path -- avoids Gemini API round-trip per request)
-      2. Gemini caches.create() -- first call per process / after TTL expiry
-
-    Returns str (Gemini cache resource name) on success.
-    Returns None on any failure -- callers fall back to uncached path silently.
-
-    Design notes:
-    - No module-level global for the resource name: Django cache is the
-      single source of truth, allowing multi-worker deploys (with Redis) to
-      share the resource name without per-worker re-creation.
-    - TTL invariant: Django cache TTL = 80% of Gemini cache TTL. This ensures
-      Django cache expires BEFORE Gemini cache so _ensure_chat_cache recreates
-      the Gemini cache entry before generate_content ever receives a stale name.
-      The 20% safety window absorbs SDK clock drift and network jitter.
-    - 404 recovery: retained as defense-in-depth for the residual edge case
-      (SDK clock drift beyond the 20% window). On 404 the Django entry is
-      evicted and a fresh Gemini cache is created.
-    """
-    rc = settings.RECOMMENDATION
-    ttl = rc.get('context_caching_ttl_seconds', 3600)
-    django_key = _get_django_cache_key()
-
-    # --- Fast path: resource name already in Django cache --------------------
-    cached_name = django_cache.get(django_key)
-    if cached_name:
-        return cached_name
-
-    # --- Slow path: create Gemini cache and store name in Django cache -------
-    try:
-        cache_obj = client.caches.create(
-            model='gemini-2.5-flash',
-            config=types.CreateCachedContentConfig(
-                display_name=_get_cache_name(),
-                system_instruction=_CHAT_PHASE_SYSTEM_PROMPT,
-                ttl=f'{ttl}s',
-            ),
-        )
-        resource_name = cache_obj.name
-        # Django cache TTL = 80% of Gemini TTL -- recreate before Gemini expiry to avoid
-        # the stale-name-passed-to-generate_content double-retry pattern. The 20% safety
-        # window absorbs SDK clock drift + network jitter.
-        django_cache.set(django_key, resource_name, timeout=int(ttl * 0.8))
-        logger.info('IMP-5: created Gemini context cache: %s', resource_name)
-        return resource_name
-    except Exception as e:
-        logger.warning('IMP-5: failed to create Gemini context cache: %s: %s', type(e).__name__, e)
-        return None
-
-
-# ---------------------------------------------------------------------------
-# IMP-6 (Spec v1.10 §11.1) Commit 1: V_initial cache for late-binding
-# ---------------------------------------------------------------------------
-# Stage 2 (Commit 2) writes V_initial here after async visual_description generation.
-# SessionCreateView reads it on pool creation; on miss, filters-only pool is used
-# (BM25-only RRF fallback per spec v1.5 Topic 01 graceful-degrade; order-independent).
-_V_INITIAL_CACHE_KEY_PREFIX = 'v_initial'
-_V_INITIAL_CACHE_TTL_SECONDS = 3600  # 1h — typical user session length
-
-
-def _v_initial_cache_key(user_id, raw_query):
-    """IMP-6: Django cache key for late-bound V_initial vector.
-
-    Format: 'v_initial:{user_id}:{sha256(raw_query)[:16]}'
-    Uses first 16 hex chars of SHA-256 so different queries produce different keys
-    while keeping the key compact (64-bit collision resistance >> session count).
-    """
-    qhash = hashlib.sha256((raw_query or '').encode('utf-8')).hexdigest()[:16]
-    return f'{_V_INITIAL_CACHE_KEY_PREFIX}:{user_id}:{qhash}'
-
-
-def get_cached_v_initial(user_id, raw_query):
-    """IMP-6: Read V_initial from Django cache. Returns None on miss or flag OFF.
-
-    Called by SessionCreateView.post() when stage_decouple_enabled=True.
-    Returns the cached 384-dim float list, or None (triggers filter-only pool).
-    """
-    if not settings.RECOMMENDATION.get('stage_decouple_enabled', False):
-        return None
-    return django_cache.get(_v_initial_cache_key(user_id, raw_query))
-
-
-def set_cached_v_initial(user_id, raw_query, v_initial_vector):
-    """IMP-6: Store V_initial in Django cache for subsequent SessionCreate read.
-
-    Called by Stage 2 async thread (Commit 2) after visual_description embedding.
-    No-op when stage_decouple_enabled=False (default).
-    """
-    if not settings.RECOMMENDATION.get('stage_decouple_enabled', False):
-        return
-    django_cache.set(
-        _v_initial_cache_key(user_id, raw_query),
-        v_initial_vector,
-        timeout=_V_INITIAL_CACHE_TTL_SECONDS,
-    )
-
-
 PROGRAM_VALUES = [
     'Housing', 'Office', 'Museum', 'Education', 'Religion', 'Sports',
     'Transport', 'Hospitality', 'Healthcare', 'Public', 'Mixed Use',
     'Landscape', 'Infrastructure', 'Other',
 ]
 
+# ---------------------------------------------------------------------------
+# Large prompt constants (module-level so _CHAT_PHASE_SYSTEM_PROMPT can be
+# imported directly and hashed by _caches._get_prompt_hash at call time).
+# ---------------------------------------------------------------------------
 _CHAT_PHASE_SYSTEM_PROMPT = """\
 You are an architectural search assistant for a swipe-based recommendation system. Users are practicing architects and design professionals (건축가, 설계 실무자). Your job is to parse their natural-language query and either (a) produce a structured search specification directly, or (b) ask exactly one clarifying question first to disambiguate their taste.
 
@@ -308,30 +176,9 @@ ASSISTANT: {"probe_needed": false, "probe_question": null, "reply": "이해했�
 # Used by pre-deploy gate test.
 _CHAT_PHASE_FEW_SHOT_STYLE_LABELS = frozenset(['Vernacular', 'Contemporary', 'Parametric', 'Modernist', 'Avant-Garde'])
 
-_PERSONA_PROMPT = """You are an architectural taste analyst. Based on the buildings a user has liked, generate a short persona archetype that describes their architectural aesthetic.
-
-Return ONLY valid JSON with this exact structure:
-{
-  "persona_type": "A short poetic name like 'The Minimalist' or 'The Pragmatist'",
-  "one_liner": "A single evocative sentence about their taste",
-  "description": "2-3 sentences elaborating on their architectural sensibility",
-  "dominant_programs": ["list of program types from: Housing, Office, Museum, Education, Religion, Sports, Transport, Hospitality, Healthcare, Public, Mixed Use, Landscape, Infrastructure, Other"],
-  "dominant_styles": ["2-3 architectural style words"],
-  "dominant_materials": ["2-3 material words"]
-}"""
-
-_GEMINI_MAX_RETRIES = 1
-_GEMINI_RETRY_DELAY = 1.0  # seconds
-
-
 # ---------------------------------------------------------------------------
 # M4 (Investigation 22 §M4): Query complexity heuristic classifier
 # ---------------------------------------------------------------------------
-# Vocabulary sets for entity counting. Extended with common Korean architectural
-# terms so the heuristic covers the bilingual corpus.
-# Accuracy target: ~80% -- this is a stratification aid, not a hard classifier.
-# ---------------------------------------------------------------------------
-
 _STYLE_TOKENS = frozenset([
     # English style labels (from few-shot + corpus)
     'brutalist', 'brutalism', 'contemporary', 'modernist', 'modernism', 'modern',
@@ -372,13 +219,41 @@ _ADJECTIVE_TOKENS = frozenset([
 
 _ALL_SPECIFICITY_TOKENS = _STYLE_TOKENS | _PROGRAM_TOKENS | _MATERIAL_TOKENS | _ADJECTIVE_TOKENS
 
+# ---------------------------------------------------------------------------
+# IMP-6 Commit 2: Stage 1 response schema (excludes visual_description)
+# ---------------------------------------------------------------------------
+_STAGE1_RESPONSE_SCHEMA = {
+    'type': 'object',
+    'properties': {
+        'probe_needed': {'type': 'boolean'},
+        'probe_question': {'type': 'string'},
+        'reply': {'type': 'string'},
+        'filters': {
+            'type': 'object',
+            'properties': {
+                'location_country': {'type': 'string'},
+                'program': {'type': 'string'},
+                'material': {'type': 'string'},
+                'style': {'type': 'string'},
+                'year_min': {'type': 'integer'},
+                'year_max': {'type': 'integer'},
+                'min_area': {'type': 'number'},
+                'max_area': {'type': 'number'},
+            },
+        },
+        'filter_priority': {'type': 'array', 'items': {'type': 'string'}},
+        'raw_query': {'type': 'string'},
+    },
+    'required': ['probe_needed', 'reply'],
+}
+
 
 def _classify_query_complexity(text: str) -> str:
     """
     M4 heuristic: classify a query string into one of four complexity classes.
 
     Returns:
-        'brutalist'  -- ≥3 specific architectural entities detected
+        'brutalist'  -- >=3 specific architectural entities detected
         'narrow'     -- 1-2 specific entities (some signal but not fully determined)
         'barequery'  -- 0 specific entities (vague / generic)
         'unknown'    -- empty/None input or heuristic cannot decide
@@ -396,7 +271,6 @@ def _classify_query_complexity(text: str) -> str:
     lowered = text.lower()
 
     # Tokenise: split on whitespace and common punctuation
-    import re as _re
     tokens = set(_re.split(r'[\s,·.!?;:\-/]+', lowered))
     tokens.discard('')
 
@@ -416,162 +290,6 @@ def _classify_query_complexity(text: str) -> str:
         return 'barequery'
     else:
         return 'barequery'
-
-
-def _retry_gemini_call(func, *args, **kwargs):
-    """
-    Execute a Gemini API call with one retry on failure.
-    Logs the specific error on each attempt.
-    Returns the result on success, raises on final failure.
-    """
-    last_error = None
-    for attempt in range(_GEMINI_MAX_RETRIES + 1):
-        try:
-            return func(*args, **kwargs)
-        except Exception as e:
-            last_error = e
-            logger.warning(
-                'Gemini API call failed (attempt %d/%d): %s: %s',
-                attempt + 1, _GEMINI_MAX_RETRIES + 1,
-                type(e).__name__, str(e),
-            )
-            if attempt < _GEMINI_MAX_RETRIES:
-                time.sleep(_GEMINI_RETRY_DELAY)
-    raise last_error
-
-
-def embed_visual_description(text, session=None, user=None):
-    """
-    Topic 03 HyDE V_initial: embed `text` via HuggingFace Inference API.
-
-    Model: paraphrase-multilingual-MiniLM-L12-v2 (384-dim).
-    Uses stdlib urllib.request — no new dependencies.
-
-    Returns list[float] of length 384 on success, None on any failure.
-    Failures are always silent (logged + event emitted) and never raise.
-
-    Flag guard is the caller's responsibility (hyde_vinitial_enabled).
-    """
-    hf_token = getattr(settings, 'HF_TOKEN', '')
-    if not hf_token:
-        event_log.emit_event(
-            'failure',
-            session=session,
-            user=user,
-            failure_type='hyde',
-            recovery_path='no_hyde',
-            reason='missing_token',
-        )
-        return None
-
-    if not text or not text.strip():
-        logger.debug('embed_visual_description: empty text, skipping HF call')
-        return None
-
-    rc = settings.RECOMMENDATION
-    model = rc.get('hyde_hf_model', 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')
-    timeout = rc.get('hyde_hf_timeout_seconds', 5)
-    url = f'https://router.huggingface.co/hf-inference/models/{model}/pipeline/feature-extraction'
-
-    payload = json.dumps({'inputs': text}).encode('utf-8')
-    req = urllib.request.Request(
-        url,
-        data=payload,
-        headers={
-            'Authorization': f'Bearer {hf_token}',
-            'Content-Type': 'application/json',
-            'X-Wait-For-Model': 'true',
-        },
-        method='POST',
-    )
-
-    t0 = time.perf_counter()
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            raw = resp.read()
-        elapsed_ms = round((time.perf_counter() - t0) * 1000, 2)
-
-        data = json.loads(raw)
-
-        # Handle both 1-D [float*384] and 2-D (batched) [[float*384]] shapes
-        if isinstance(data, list) and data and isinstance(data[0], list):
-            vec = data[0]
-        elif isinstance(data, list) and data and isinstance(data[0], (int, float)):
-            vec = data
-        else:
-            logger.warning('embed_visual_description: unexpected HF response shape: %s', type(data))
-            event_log.emit_event(
-                'failure',
-                session=session,
-                user=user,
-                failure_type='hyde',
-                recovery_path='no_hyde',
-                reason='unexpected_shape',
-                elapsed_ms=elapsed_ms,
-            )
-            return None
-
-        if len(vec) != 384:
-            logger.warning('embed_visual_description: expected 384-dim, got %d', len(vec))
-            event_log.emit_event(
-                'failure',
-                session=session,
-                user=user,
-                failure_type='hyde',
-                recovery_path='no_hyde',
-                reason=f'wrong_dim_{len(vec)}',
-                elapsed_ms=elapsed_ms,
-            )
-            return None
-
-        # Emit timing event on success
-        event_log.emit_event(
-            'hyde_call_timing',
-            session=session,
-            user=user,
-            elapsed_ms=elapsed_ms,
-            model=model,
-        )
-        return [float(v) for v in vec]
-
-    except urllib.error.HTTPError as e:
-        elapsed_ms = round((time.perf_counter() - t0) * 1000, 2)
-        try:
-            body = e.read().decode('utf-8', errors='replace')[:200]
-        except Exception:
-            body = ''
-        logger.warning(
-            'embed_visual_description: HF API returned HTTP %d',
-            e.code,
-        )
-        event_log.emit_event(
-            'failure',
-            session=session,
-            user=user,
-            failure_type='hyde',
-            recovery_path='no_v_initial',
-            http_status=e.code,
-            error_message=body,
-            elapsed_ms=elapsed_ms,
-        )
-        return None
-    except Exception as e:
-        elapsed_ms = round((time.perf_counter() - t0) * 1000, 2)
-        logger.warning(
-            'embed_visual_description: HF call failed (%s: %s)',
-            type(e).__name__, str(e),
-        )
-        event_log.emit_event(
-            'failure',
-            session=session,
-            user=user,
-            failure_type='hyde',
-            recovery_path='no_hyde',
-            error_class=type(e).__name__,
-            error_message=str(e)[:200],
-            elapsed_ms=elapsed_ms,
-        )
-        return None
 
 
 def parse_query(conversation_history):
@@ -625,10 +343,17 @@ def parse_query(conversation_history):
         }
         Also emits a 'failure' session event (spec §6).
     """
+    # Late-bound package reference for cross-module symbol access.
+    # mock.patch('apps.recommendation.services.X') modifies this module object;
+    # _svc.X reads from it at call time -- patches are visible here.
+    from apps.recommendation import services as _svc  # noqa: PLC0415
+
     # IMP-6: when stage_decouple_enabled=True, delegate to Stage 1 (visual_description
     # is generated asynchronously by Stage 2 thread spawned in ParseQueryView).
+    # Use _svc.parse_query_stage1 so mock.patch/patch.object on services.parse_query_stage1
+    # is visible here at call time (late-bound via the module object).
     if settings.RECOMMENDATION.get('stage_decouple_enabled', False):
-        return parse_query_stage1(conversation_history)
+        return _svc.parse_query_stage1(conversation_history)
     # else: fall through to the original single-call path (default, backward compat)
     # Backward compat: accept bare string (legacy callers pass query_text directly)
     if isinstance(conversation_history, str):
@@ -656,7 +381,7 @@ def parse_query(conversation_history):
     }
 
     try:
-        client = _get_client()
+        client = _svc._get_client()
         rc = settings.RECOMMENDATION
 
         # Build Gemini contents list from conversation_history
@@ -672,7 +397,7 @@ def parse_query(conversation_history):
         caching_enabled = rc.get('context_caching_enabled', False)
         cache_resource_name = None
         if caching_enabled:
-            cache_resource_name = _ensure_chat_cache(client)
+            cache_resource_name = _svc._ensure_chat_cache(client)
 
         if cache_resource_name:
             # Cached path: supply cached_content= instead of system_instruction=
@@ -703,7 +428,7 @@ def parse_query(conversation_history):
 
         t_call_start = time.perf_counter()
         try:
-            response = _retry_gemini_call(_call)
+            response = _svc._retry_gemini_call(_call)
         except Exception as _cache_exc:
             # IMP-5: if call failed with 404/NOT_FOUND it means the Gemini cache
             # has expired but the Django cache entry is still live (TTL skew).
@@ -714,7 +439,7 @@ def parse_query(conversation_history):
                     'IMP-5: Gemini cache 404 for %s -- evicting Django entry and retrying uncached',
                     cache_resource_name,
                 )
-                django_cache.delete(_get_django_cache_key())
+                django_cache.delete(_svc._get_django_cache_key())
                 cache_resource_name = None
 
                 def _call_uncached():
@@ -728,7 +453,7 @@ def parse_query(conversation_history):
                             thinking_config=types.ThinkingConfig(thinking_budget=0),
                         ),
                     )
-                response = _retry_gemini_call(_call_uncached)
+                response = _svc._retry_gemini_call(_call_uncached)
             else:
                 raise
         t_call_end = time.perf_counter()
@@ -766,7 +491,7 @@ def parse_query(conversation_history):
             _user_turn_count >= 3 and _clarification_fired is True
         )
 
-        event_log.emit_event(
+        _svc.event_log.emit_event(
             'parse_query_timing',
             session=None,
             user=None,
@@ -779,7 +504,7 @@ def parse_query(conversation_history):
             # IMP-5 fields (additive)
             cache_hit=_cache_hit,
             cached_input_tokens=_cached_token_count,
-            cache_name_hash=_get_prompt_hash() if cache_resource_name else None,
+            cache_name_hash=_svc._get_prompt_hash() if cache_resource_name else None,
             caching_mode='explicit' if cache_resource_name else 'none',
             # M4 fields (additive, Investigation 22 §M4 + IMP-10 sub-task A continuation)
             clarification_fired=_clarification_fired,
@@ -835,7 +560,7 @@ def parse_query(conversation_history):
 
     except json.JSONDecodeError as e:
         logger.error('parse_query JSON decode error: %s', e)
-        event_log.emit_event(
+        _svc.event_log.emit_event(
             'failure',
             session=None,
             user=None,
@@ -847,7 +572,7 @@ def parse_query(conversation_history):
         return _fallback
     except Exception as e:
         logger.error('parse_query failed after retries: %s: %s', type(e).__name__, e)
-        event_log.emit_event(
+        _svc.event_log.emit_event(
             'failure',
             session=None,
             user=None,
@@ -859,39 +584,8 @@ def parse_query(conversation_history):
         return _fallback
 
 
-# ---------------------------------------------------------------------------
-# IMP-6 Commit 2: Stage 1 schema (excludes visual_description to reduce output tokens)
-# ---------------------------------------------------------------------------
-# Gemini response_schema that covers all Stage 1 fields.
-# visual_description is intentionally absent — Stage 2 generates it asynchronously.
-_STAGE1_RESPONSE_SCHEMA = {
-    'type': 'object',
-    'properties': {
-        'probe_needed': {'type': 'boolean'},
-        'probe_question': {'type': 'string'},
-        'reply': {'type': 'string'},
-        'filters': {
-            'type': 'object',
-            'properties': {
-                'location_country': {'type': 'string'},
-                'program': {'type': 'string'},
-                'material': {'type': 'string'},
-                'style': {'type': 'string'},
-                'year_min': {'type': 'integer'},
-                'year_max': {'type': 'integer'},
-                'min_area': {'type': 'number'},
-                'max_area': {'type': 'number'},
-            },
-        },
-        'filter_priority': {'type': 'array', 'items': {'type': 'string'}},
-        'raw_query': {'type': 'string'},
-    },
-    'required': ['probe_needed', 'reply'],
-}
-
-
 def parse_query_stage1(conversation_history):
-    """IMP-6 Commit 2: Stage 1 Gemini call — USER-BLOCKING portion of the split.
+    """IMP-6 Commit 2: Stage 1 Gemini call -- USER-BLOCKING portion of the split.
 
     Same as parse_query() but uses response_schema to exclude visual_description,
     reducing output tokens from ~290-400 to ~150-220. Returns same dict shape as
@@ -900,7 +594,7 @@ def parse_query_stage1(conversation_history):
     When stage_decouple_enabled=False, this function is not called directly;
     parse_query() (the legacy wrapper) handles routing.
 
-    Emits parse_query_timing with stage='1' field added (additive — all existing
+    Emits parse_query_timing with stage='1' field added (additive -- all existing
     fields preserved per spec v1.7).
 
     Args:
@@ -910,6 +604,9 @@ def parse_query_stage1(conversation_history):
         Same dict shape as parse_query(), with visual_description always None.
         On failure: graceful degradation fallback dict (same as parse_query).
     """
+    # Late-bound package reference (same rationale as parse_query above)
+    from apps.recommendation import services as _svc  # noqa: PLC0415
+
     # Backward compat: accept bare string (legacy callers pass query_text directly)
     if isinstance(conversation_history, str):
         conversation_history = [{'role': 'user', 'text': conversation_history}]
@@ -936,7 +633,7 @@ def parse_query_stage1(conversation_history):
     }
 
     try:
-        client = _get_client()
+        client = _svc._get_client()
         rc = settings.RECOMMENDATION
 
         # Build Gemini contents list from conversation_history
@@ -952,7 +649,7 @@ def parse_query_stage1(conversation_history):
         caching_enabled = rc.get('context_caching_enabled', False)
         cache_resource_name = None
         if caching_enabled:
-            cache_resource_name = _ensure_chat_cache(client)
+            cache_resource_name = _svc._ensure_chat_cache(client)
 
         if cache_resource_name:
             # Cached path: supply cached_content= instead of system_instruction=
@@ -986,7 +683,7 @@ def parse_query_stage1(conversation_history):
 
         t_call_start = time.perf_counter()
         try:
-            response = _retry_gemini_call(_call)
+            response = _svc._retry_gemini_call(_call)
         except Exception as _cache_exc:
             # IMP-5: if call failed with 404/NOT_FOUND (Gemini cache expired but Django
             # cache still live), evict Django entry and retry uncached.
@@ -996,7 +693,7 @@ def parse_query_stage1(conversation_history):
                     'IMP-5: Gemini cache 404 for %s -- evicting Django entry and retrying uncached',
                     cache_resource_name,
                 )
-                django_cache.delete(_get_django_cache_key())
+                django_cache.delete(_svc._get_django_cache_key())
                 cache_resource_name = None
 
                 def _call_uncached():
@@ -1011,7 +708,7 @@ def parse_query_stage1(conversation_history):
                             thinking_config=types.ThinkingConfig(thinking_budget=0),
                         ),
                     )
-                response = _retry_gemini_call(_call_uncached)
+                response = _svc._retry_gemini_call(_call_uncached)
             else:
                 raise
         t_call_end = time.perf_counter()
@@ -1033,7 +730,7 @@ def parse_query_stage1(conversation_history):
         _user_turn_count = sum(1 for t in conversation_history if t.get('role') == 'user')
         _m1_cap_forced_terminal = bool(_user_turn_count >= 3 and _clarification_fired is True)
 
-        event_log.emit_event(
+        _svc.event_log.emit_event(
             'parse_query_timing',
             session=None,
             user=None,
@@ -1046,7 +743,7 @@ def parse_query_stage1(conversation_history):
             # IMP-5 fields
             cache_hit=_cache_hit,
             cached_input_tokens=_cached_token_count,
-            cache_name_hash=_get_prompt_hash() if cache_resource_name else None,
+            cache_name_hash=_svc._get_prompt_hash() if cache_resource_name else None,
             caching_mode='explicit' if cache_resource_name else 'none',
             # M4 fields
             clarification_fired=_clarification_fired,
@@ -1096,7 +793,7 @@ def parse_query_stage1(conversation_history):
 
     except json.JSONDecodeError as e:
         logger.error('parse_query_stage1 JSON decode error: %s', e)
-        event_log.emit_event(
+        _svc.event_log.emit_event(
             'failure',
             session=None,
             user=None,
@@ -1108,7 +805,7 @@ def parse_query_stage1(conversation_history):
         return _fallback
     except Exception as e:
         logger.error('parse_query_stage1 failed after retries: %s: %s', type(e).__name__, e)
-        event_log.emit_event(
+        _svc.event_log.emit_event(
             'failure',
             session=None,
             user=None,
@@ -1118,636 +815,3 @@ def parse_query_stage1(conversation_history):
             error_message=str(e)[:200],
         )
         return _fallback
-
-
-def generate_visual_description(filters, raw_query, user_id):
-    """IMP-6 Commit 2: Stage 2 worker — generates visual_description + V_initial.
-
-    Runs in a background thread (daemon=True) spawned by ParseQueryView after
-    Stage 1 returns on a terminal turn (probe_needed=False).
-
-    Operation:
-        1. Single Gemini call producing ONLY visual_description text (~140-180 tokens).
-        2. embed_visual_description(visual_description) -> 384-dim float list.
-        3. set_cached_v_initial(user_id, raw_query, v_initial) for SessionCreate late-bind.
-        4. Emit 'stage2_timing' event with full telemetry.
-
-    Defensive: catches all exceptions; failures never bubble up to the user.
-    SessionCreate falls through to filter-only pool on cache miss (graceful degrade
-    per spec v1.5 Topic 01).
-
-    Args:
-        filters: dict of parsed filters from Stage 1 result.
-        raw_query: str, the verbatim first user message (V_initial cache key component).
-        user_id: int, request.user.id.
-
-    Returns:
-        visual_description string on success, None on failure.
-    """
-    t_stage2_start = time.perf_counter()
-    gemini_visual_description_ms = None
-    hf_inference_ms = None
-    input_tokens = None
-    output_tokens = None
-    v_initial_computed = False
-    v_initial_dim = None
-    success = False
-    error_class = None
-    # State-progression outcome: advances as each stage succeeds.
-    # Starts at 'gemini_failure' so any uncaught exception before HF is correctly classified.
-    outcome = 'gemini_failure'
-
-    try:
-        client = _get_client()
-
-        # Build a concise prompt from filters + raw_query for visual description
-        filter_parts = []
-        if filters.get('program'):
-            filter_parts.append(f"program: {filters['program']}")
-        if filters.get('style'):
-            filter_parts.append(f"style: {filters['style']}")
-        if filters.get('material'):
-            filter_parts.append(f"material: {filters['material']}")
-        if filters.get('location_country'):
-            filter_parts.append(f"country: {filters['location_country']}")
-        filter_summary = ', '.join(filter_parts) if filter_parts else 'unspecified'
-
-        stage2_prompt = (
-            f"Write a vivid 2-4 sentence English architectural description for a building search. "
-            f"The user query was: {raw_query!r}. "
-            f"Inferred filters: {filter_summary}. "
-            f"Output ONLY the description text — no JSON, no labels, no preamble."
-        )
-
-        t_gemini_start = time.perf_counter()
-        response = _retry_gemini_call(
-            client.models.generate_content,
-            model='gemini-2.5-flash',
-            contents=stage2_prompt,
-            config=types.GenerateContentConfig(
-                temperature=0.3,
-                thinking_config=types.ThinkingConfig(thinking_budget=0),
-            ),
-        )
-        t_gemini_end = time.perf_counter()
-        gemini_visual_description_ms = round((t_gemini_end - t_gemini_start) * 1000, 2)
-
-        _usage = getattr(response, 'usage_metadata', None)
-        input_tokens = getattr(_usage, 'prompt_token_count', None) if _usage else None
-        output_tokens = getattr(_usage, 'candidates_token_count', None) if _usage else None
-
-        visual_description = (response.text or '').strip()
-        if not visual_description:
-            logger.warning('IMP-6 Stage 2: Gemini returned empty visual_description')
-            error_class = 'EmptyResponse'
-            return None
-
-        # Gemini succeeded — advance outcome state; HF failure now owns the error label.
-        outcome = 'hf_failure'
-
-        # Compute V_initial via HuggingFace Inference API (existing embed_visual_description).
-        # Time the HF call regardless of its result (hf_inference_ms=None only when HF never fires).
-        t_hf_start = time.perf_counter()
-        v_initial = embed_visual_description(visual_description, session=None, user=None)
-        hf_inference_ms = round((time.perf_counter() - t_hf_start) * 1000, 2)
-
-        if v_initial is not None:
-            # Defensive: verify dimension + non-zero norm before caching
-            import numpy as _np
-            v_arr = _np.asarray(v_initial, dtype=_np.float32)
-            v_norm = _np.linalg.norm(v_arr)
-            if len(v_initial) == 384 and v_norm > 0:
-                # HF succeeded — advance outcome state; cache failure now owns the error label.
-                outcome = 'cache_failure'
-                try:
-                    set_cached_v_initial(user_id, raw_query, v_initial)
-                except Exception as cache_exc:
-                    logger.warning(
-                        'IMP-6 Stage 2: set_cached_v_initial failed: %s: %s',
-                        type(cache_exc).__name__, str(cache_exc),
-                    )
-                    error_class = type(cache_exc).__name__
-                    return None
-                v_initial_computed = True
-                v_initial_dim = len(v_initial)
-                logger.debug(
-                    'IMP-6 Stage 2: V_initial cached for user=%s query_len=%d',
-                    user_id, len(raw_query or ''),
-                )
-                # All stages passed — advance to success.
-                outcome = 'success'
-                success = True
-            else:
-                logger.warning(
-                    'IMP-6 Stage 2: V_initial dim=%d norm=%.4f -- skipping cache',
-                    len(v_initial), v_norm,
-                )
-                error_class = 'BadVInitialVector'
-                # outcome stays 'hf_failure' — bad vector counts as HF-stage failure
-        else:
-            logger.warning('IMP-6 Stage 2: embed_visual_description returned None')
-            error_class = 'EmbedFailed'
-            # outcome stays 'hf_failure'
-
-        return visual_description
-
-    except Exception as e:
-        error_class = type(e).__name__
-        logger.warning(
-            'IMP-6 generate_visual_description failed: %s: %s',
-            type(e).__name__, str(e),
-        )
-        return None
-    finally:
-        # IMP-6 stage2_timing schema (per spec v1.7 §6):
-        #   - stage2_total_ms / gemini_visual_description_ms / hf_inference_ms /
-        #     pool_rerank_ms / outcome (in this commit)
-        #   - v_initial_ready_at_first_card / cards_exposed_when_ready (DEFERRED
-        #     to Commit 3 -- requires cross-request timing coordination between
-        #     this Stage 2 thread and SessionCreateView's first-card-sent timing)
-        # Extra non-spec fields (gemini_input/output_tokens, v_initial_computed/dim,
-        # success, error_class) preserved for richer diagnostic.
-        t_stage2_total = round((time.perf_counter() - t_stage2_start) * 1000, 2)
-        event_log.emit_event(
-            'stage2_timing',
-            session=None,
-            user=None,
-            gemini_visual_description_ms=gemini_visual_description_ms,
-            gemini_input_tokens=input_tokens,
-            gemini_output_tokens=output_tokens,
-            hf_inference_ms=hf_inference_ms,
-            pool_rerank_ms=None,
-            outcome=outcome,
-            v_initial_computed=v_initial_computed,
-            v_initial_dim=v_initial_dim,
-            success=success,
-            error_class=error_class,
-            stage2_total_ms=t_stage2_total,
-        )
-
-
-def generate_persona_report(liked_building_ids):
-    """
-    Generate an architect persona report from a list of liked building_ids.
-    Returns a dict with persona fields on success.
-    Raises an exception with a descriptive message on failure (caller handles response).
-    Returns None only if no building data is found.
-    """
-    if not liked_building_ids:
-        return None
-
-    # Fetch attributes of liked buildings
-    placeholders = ','.join(['%s'] * len(liked_building_ids))
-    with connection.cursor() as cur:
-        cur.execute(
-            f'SELECT program, style, atmosphere, material, architect, location_country '
-            f'FROM architecture_vectors WHERE building_id IN ({placeholders})',
-            liked_building_ids,
-        )
-        rows = _dictfetchall(cur)
-
-    if not rows:
-        return None
-
-    # Aggregate for the prompt
-    programs    = [r['program']          for r in rows if r.get('program')]
-    styles      = [r['style']            for r in rows if r.get('style')]
-    atmospheres = [r['atmosphere']       for r in rows if r.get('atmosphere')]
-    materials   = [r['material']         for r in rows if r.get('material')]
-    architects  = [r['architect']        for r in rows if r.get('architect')]
-    countries   = [r['location_country'] for r in rows if r.get('location_country')]
-
-    summary = (
-        f"The user liked {len(rows)} buildings.\n"
-        f"Programs: {', '.join(programs)}\n"
-        f"Styles: {', '.join(styles)}\n"
-        f"Atmospheres: {', '.join(atmospheres)}\n"
-        f"Materials: {', '.join(materials)}\n"
-        f"Architects: {', '.join(architects[:10])}\n"
-        f"Countries: {', '.join(countries)}"
-    )
-
-    try:
-        client = _get_client()
-
-        def _call():
-            return client.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=summary,
-                config=types.GenerateContentConfig(
-                    system_instruction=_PERSONA_PROMPT,
-                    response_mime_type='application/json',
-                    temperature=0.7,
-                    thinking_config=types.ThinkingConfig(thinking_budget=0),
-                ),
-            )
-
-        response = _retry_gemini_call(_call)
-        return json.loads(response.text)
-    except json.JSONDecodeError as e:
-        logger.error('generate_persona_report JSON decode error: %s', e)
-        event_log.emit_event(
-            'failure',
-            session=None,
-            user=None,
-            failure_type='gemini_parse',
-            recovery_path='none',
-            error_class='JSONDecodeError',
-            error_message=str(e)[:200],
-        )
-        raise ValueError('Gemini returned an invalid response format. Please try again.')
-    except Exception as e:
-        logger.error('generate_persona_report failed after retries: %s: %s', type(e).__name__, e)
-        event_log.emit_event(
-            'failure',
-            session=None,
-            user=None,
-            failure_type='gemini_parse',
-            recovery_path='none',
-            error_class=type(e).__name__,
-            error_message=str(e)[:200],
-        )
-        raise RuntimeError(f'Persona report generation failed: {type(e).__name__}. Please try again later.')
-
-
-# ---------------------------------------------------------------------------
-# Topic 02: Gemini setwise rerank (session-end, off swipe hot path)
-# System prompt text + 5 few-shot examples per Investigation 12 verbatim.
-# ---------------------------------------------------------------------------
-
-_RERANK_SYSTEM_PROMPT = """\
-You are an architectural taste re-ranker for a swipe-based recommendation system. Given a summary of buildings a user has liked during their swipe session, and a shortlist of candidate buildings, return the candidates ordered from most to least aligned with the user's expressed taste.
-
-Weight signal that semantic embedding similarity does NOT capture well: the alignment between each candidate's atmosphere wording, tags enumeration, style nuance, material treatment, and architect lineage versus the user's liked summary. Embedding similarity is already encoded upstream — your contribution is the text-field judgment a 384-dimensional vector compresses lossily.
-
-When the liked summary expresses a coherent taste (e.g., "contemplative tactile masonry"), prefer candidates whose atmosphere / tags / style language echoes that taste, even if visual_description diverges on the surface. When the liked summary is mixed (e.g., warm domestic AND cold civic), preserve both modes in the upper half of the ranking — do not collapse to one.
-
-Return ONLY a JSON object with a single field "ranking", a list of all input building_id strings ordered from most aligned (index 0) to least aligned (index N-1). Every input building_id must appear exactly once. Do not invent building_ids. Do not omit any. No commentary, prose, or code fences outside the JSON.
-
-Output schema:
-{ "ranking": [<building_id>, <building_id>, ...] }
-
-## Examples
-
-USER: LIKED SUMMARY:
-- Therme Vals (Critical Regionalist, contemplative tactile dim, stone) [Love]
-- Bruder Klaus Field Chapel (Vernacular, ascetic luminous, concrete) [Love]
-- Vajrasana Buddhist Retreat (Contemporary, austere quiet, brick) [Like]
-
-CANDIDATES:
-[1] B01001 Sea Ranch Chapel — Hubbell, Vernacular, Religion, timber, organic intimate hand-built
-[2] B01002 Apple Park Visitor Center — Foster, Contemporary, Hospitality, glass, corporate polished transparent
-[3] B01003 Saint-Pierre de Firminy — Le Corbusier, Brutalist, Religion, concrete, monumental austere cavernous
-[4] B01004 Ronchamp Chapel — Le Corbusier, Modernist, Religion, concrete, sculptural contemplative spiritual
-[5] B01005 Burj Khalifa — SOM, Contemporary, Mixed Use, steel, monumental technical vertical
-
-Return your JSON ranking now.
-ASSISTANT: {"ranking": ["B01003", "B01004", "B01001", "B01002", "B01005"]}
-
-USER: LIKED SUMMARY:
-- Maison Bordeaux (Contemporary, fluid domestic, concrete-glass) [Like]
-- Casa de Blas (Modernist, light pavilion, steel-glass) [Like]
-- Centre Pompidou (High-tech, monumental urban, steel) [Love]
-- Seattle Central Library (Contemporary, civic monumental, glass-steel) [Love]
-
-CANDIDATES:
-[1] B02001 Villa Müller — Loos, Modernist, Housing, stone, domestic intimate ornate
-[2] B02002 Sendai Mediatheque — Ito, Contemporary, Public, steel, civic transparent fluid
-[3] B02003 Glass House — Johnson, Modernist, Housing, glass, pavilion transparent intimate
-[4] B02004 NCPA Beijing — Andreu, Contemporary, Public, steel, monumental dramatic civic
-[5] B02005 Schindler House — Schindler, Modernist, Housing, timber, domestic indoor-outdoor warm
-[6] B02006 Ningbo Tea House — Wang Shu, Critical Regionalist, Hospitality, brick-recycled, vernacular contemplative tactile
-
-Return your JSON ranking now.
-ASSISTANT: {"ranking": ["B02002", "B02003", "B02004", "B02005", "B02001", "B02006"]}
-
-USER: LIKED SUMMARY:
-- Sharp Centre for Design (High-tech, playful, steel-color) [Like]
-- Lou Ruvo Center (Deconstructivist, sculptural, steel) [Like]
-- Walt Disney Concert Hall (Deconstructivist, sculptural, steel) [Love]
-
-CANDIDATES:
-[1] B03001 Guangzhou Opera House — Hadid, Parametric, Public, steel-glass, fluid sculptural dramatic
-[2] B03002 Strip Mall (1985) — Unknown, Vernacular, Mixed Use, stucco, bland anonymous commercial
-[3] B03003 Jewish Museum Berlin — Libeskind, Deconstructivist, Museum, zinc-titanium, fragmented somber sculptural
-[4] B03004 Heydar Aliyev Center — Hadid, Parametric, Public, concrete-fiberglass, fluid monumental sweeping
-[5] B03005 Vitra Fire Station — Hadid, Deconstructivist, Other, concrete, angular dynamic sharp
-
-Return your JSON ranking now.
-ASSISTANT: {"ranking": ["B03005", "B03003", "B03004", "B03001", "B03002"]}
-
-USER: LIKED SUMMARY:
-- Therme Vals (Critical Regionalist, contemplative tactile dim, stone) [Love]
-- Salk Institute (Modernist, monumental contemplative, concrete) [Love]
-- Kimbell Art Museum (Modernist, contemplative luminous, concrete) [Like]
-
-CANDIDATES:
-[1] B04001 Generic Office Tower — anon, Contemporary, Office, glass-steel, sleek polished neutral
-[2] B04002 Hill House (Mackintosh) — Mackintosh, Arts and Crafts, Housing, stone, austere refined contemplative
-[3] B04003 Modern Suburban Home — anon, Contemporary, Housing, mixed, comfortable airy bright
-[4] B04004 Yokohama Port Terminal — FOA, Parametric, Transport, steel-glass, fluid public dynamic
-[5] B04005 Maison de Verre — Chareau, Modernist, Housing, glass-steel, transparent industrial layered
-[6] B04006 Wabi Tea House — anon, Vernacular, Religion, timber-paper, austere quiet contemplative
-
-Return your JSON ranking now.
-ASSISTANT: {"ranking": ["B04002", "B04006", "B04005", "B04004", "B04003", "B04001"]}
-
-USER: LIKED SUMMARY:
-- Glass Pavilion at Toledo Museum (Contemporary, transparent floating, glass) [Like]
-
-CANDIDATES:
-[1] B05001 Farnsworth House — Mies, Modernist, Housing, steel-glass, transparent floating austere
-[2] B05002 De Young Museum — Herzog & de Meuron, Contemporary, Museum, copper, weathered tactile civic
-[3] B05003 Ningbo History Museum — Wang Shu, Critical Regionalist, Museum, <none>, vernacular textured layered
-[4] B05004 Mosque of Cordoba — historical, Islamic, Religion, stone-brick, majestic dim mystical
-[5] B05005 New National Gallery — Mies, Modernist, Public, steel-glass, transparent monumental austere
-
-Return your JSON ranking now.
-ASSISTANT: {"ranking": ["B05001", "B05005", "B05002", "B05004", "B05003"]}
-"""
-
-
-def _liked_summary_for_rerank(liked_ids):
-    """
-    Build a liked-summary string for rerank_candidates from project.liked_ids.
-
-    Input liked_ids: list of str or {id, intensity} dicts (supports both legacy
-    and new shapes). Intensity >= 1.5 is tagged [Love], < 1.5 is tagged [Like].
-
-    Fetches building metadata (name_en, style, atmosphere, material) from
-    architecture_vectors via batch SQL. Falls back to building_id only when
-    metadata fetch fails or a row is missing.
-
-    Truncated to approximately 1 K tokens (70 lines max) per Investigation 12
-    BACK-RNK-3.
-
-    Returns a string with one bullet per building.
-    """
-    if not liked_ids:
-        return ''
-
-    # Normalise to list of (building_id, intensity) tuples
-    entries = []
-    for item in liked_ids:
-        if isinstance(item, str):
-            entries.append((item, 1.0))
-        elif isinstance(item, dict) and 'id' in item:
-            intensity = float(item.get('intensity', 1.0))
-            entries.append((item['id'], intensity))
-
-    if not entries:
-        return ''
-
-    # Truncate to ~70 entries (~1 K token budget at ~14 tokens/line)
-    MAX_ENTRIES = 70
-    entries = entries[-MAX_ENTRIES:]  # keep most recent (current taste)
-
-    building_ids = [bid for bid, _ in entries]
-    intensity_map = {bid: intensity for bid, intensity in entries}
-
-    # Fetch metadata from architecture_vectors
-    metadata_map = {}
-    try:
-        placeholders = ','.join(['%s'] * len(building_ids))
-        with connection.cursor() as cur:
-            cur.execute(
-                f'SELECT building_id, name_en, style, atmosphere, material '
-                f'FROM architecture_vectors WHERE building_id IN ({placeholders})',
-                building_ids,
-            )
-            rows = _dictfetchall(cur)
-        for row in rows:
-            metadata_map[row['building_id']] = row
-    except Exception as e:
-        logger.warning('_liked_summary_for_rerank metadata fetch failed: %s', e)
-
-    lines = []
-    for bid in building_ids:
-        intensity = intensity_map.get(bid, 1.0)
-        tag = '[Love]' if intensity >= 1.5 else '[Like]'
-        meta = metadata_map.get(bid)
-        if meta:
-            name_en = meta.get('name_en') or bid
-            style = meta.get('style') or ''
-            atmosphere = meta.get('atmosphere') or ''
-            material = meta.get('material') or '<none>'
-            parts = ', '.join(p for p in [style, atmosphere, material] if p)
-            lines.append(f'- {name_en} ({parts}) {tag}')
-        else:
-            lines.append(f'- {bid} {tag}')
-
-    return '\n'.join(lines)
-
-
-def rerank_candidates(candidates, liked_summary):
-    """
-    Gemini 2.5-flash setwise rerank of candidate buildings against the user's
-    liked_summary. Returns full ordering (length matches input) -- list of
-    building_ids from most to least aligned with taste.
-
-    Input candidates: list of dicts with keys building_id, name_en, atmosphere,
-    material, architect, style, program (Investigation 12 I/O design Inputs).
-    Truncated to 60 candidates max per spec.
-
-    On failure (parse error, timeout, partial coverage, validation): logs
-    WARNING and returns input order (cosine_rank as-is). Per spec 5.4:
-    silent graceful degradation.
-    """
-    if not candidates:
-        return []
-
-    # Truncate to 60 per spec
-    candidates = candidates[:60]
-    input_ids = [c['building_id'] for c in candidates]
-
-    # Build user prompt (compact one-line-per-candidate per Investigation 12)
-    candidate_lines = []
-    for i, c in enumerate(candidates, start=1):
-        bid = c.get('building_id', '')
-        name_en = c.get('name_en', '')
-        architect = c.get('architect', '') or 'anon'
-        style = c.get('style', '') or ''
-        program = c.get('program', '') or ''
-        material = c.get('material', '') or '<none>'
-        atmosphere = c.get('atmosphere', '') or ''
-        candidate_lines.append(
-            f'[{i}] {bid} {name_en} — {architect}, {style}, {program}, {material}, {atmosphere}'
-        )
-
-    user_prompt = (
-        f'LIKED SUMMARY:\n{liked_summary}\n\n'
-        f'CANDIDATES:\n' + '\n'.join(candidate_lines) + '\n\nReturn your JSON ranking now.'
-    )
-
-    try:
-        client = _get_client()
-
-        def _call():
-            return client.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=user_prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction=_RERANK_SYSTEM_PROMPT,
-                    response_mime_type='application/json',
-                    temperature=0.0,
-                    thinking_config=types.ThinkingConfig(thinking_budget=0),
-                ),
-            )
-
-        response = _retry_gemini_call(_call)
-        raw_text = response.text
-
-    except Exception as e:
-        logger.warning(
-            'rerank_candidates Gemini call failed (exception): %s: %s',
-            type(e).__name__, str(e),
-        )
-        event_log.emit_event(
-            'failure',
-            session=None,
-            user=None,
-            failure_type='gemini_rerank',
-            recovery_path='cosine_fallback',
-            rerank_status='exception',
-            error_class=type(e).__name__,
-            error_message=str(e)[:200],
-        )
-        return list(input_ids)
-
-    # Validate per Investigation 12 BACK-RNK-6
-    return _validate_rerank_response(raw_text, input_ids)
-
-
-def _validate_rerank_response(raw_text, input_ids):
-    """
-    Validate Gemini rerank response. Returns ordered list of building_ids on
-    success or input_ids (cosine order) on any validation failure.
-
-    Validation steps per Investigation 12:
-    1. JSON parses
-    2. 'ranking' key exists, is a list, all elements are strings
-    3. set(ranking) == set(input_ids) AND len(ranking) == len(input_ids)
-    """
-    input_id_set = set(input_ids)
-
-    # Step 1: JSON parse
-    try:
-        obj = json.loads(raw_text)
-    except (json.JSONDecodeError, ValueError) as e:
-        logger.warning(
-            'rerank_candidates validation failed [parse_fail]: %s', e,
-        )
-        event_log.emit_event(
-            'failure',
-            session=None,
-            user=None,
-            failure_type='gemini_rerank',
-            recovery_path='cosine_fallback',
-            rerank_status='parse_fail',
-        )
-        return list(input_ids)
-
-    # Step 2: ranking key exists, is a list, all strings
-    ranking = obj.get('ranking')
-    if not isinstance(ranking, list):
-        logger.warning(
-            'rerank_candidates validation failed [wrong_type]: ranking is %s',
-            type(ranking).__name__,
-        )
-        event_log.emit_event(
-            'failure',
-            session=None,
-            user=None,
-            failure_type='gemini_rerank',
-            recovery_path='cosine_fallback',
-            rerank_status='wrong_type',
-        )
-        return list(input_ids)
-
-    if not all(isinstance(item, str) for item in ranking):
-        logger.warning(
-            'rerank_candidates validation failed [wrong_type]: ranking contains non-strings',
-        )
-        event_log.emit_event(
-            'failure',
-            session=None,
-            user=None,
-            failure_type='gemini_rerank',
-            recovery_path='cosine_fallback',
-            rerank_status='wrong_type',
-        )
-        return list(input_ids)
-
-    # Step 3: set equality + length check (catches duplicates and missing/extra ids)
-    if len(ranking) != len(input_ids) or set(ranking) != input_id_set:
-        # Distinguish missing ids from extra ids from duplicates for logging
-        ranking_set = set(ranking)
-        if len(set(ranking)) != len(ranking):
-            tag = 'duplicates'
-        elif not ranking_set.issubset(input_id_set) or not input_id_set.issubset(ranking_set):
-            tag = 'id_mismatch'
-        else:
-            tag = 'id_mismatch'
-        logger.warning(
-            'rerank_candidates validation failed [%s]: got %d ids, expected %d',
-            tag, len(ranking), len(input_ids),
-        )
-        event_log.emit_event(
-            'failure',
-            session=None,
-            user=None,
-            failure_type='gemini_rerank',
-            recovery_path='cosine_fallback',
-            rerank_status=tag,
-        )
-        return list(input_ids)
-
-    return ranking
-
-
-def generate_persona_image(report):
-    """
-    Generate an AI architecture image from a persona report using Imagen 3.
-    Returns {'image_data': base64_str, 'mime_type': str, 'prompt': str} or None on failure.
-    """
-    if not report:
-        return None
-
-    try:
-        style = (report.get('dominant_styles') or ['Contemporary'])[0]
-        program = (report.get('dominant_programs') or ['Housing'])[0]
-        materials = ', '.join(report.get('dominant_materials') or ['concrete'])
-        one_liner = report.get('one_liner', 'serene and monumental')
-
-        prompt = (
-            f"A photorealistic architectural photograph of a building. "
-            f"{style} style, {program} typology, atmosphere: {one_liner}. "
-            f"Materials: {materials}. "
-            f"Professional architectural photography, golden hour lighting, high quality, 8k resolution."
-        )
-
-        client = _get_client()
-
-        def _call():
-            return client.models.generate_images(
-                model='imagen-3.0-generate-002',
-                prompt=prompt,
-                config=types.GenerateImagesConfig(
-                    number_of_images=1,
-                    aspect_ratio='16:9',
-                ),
-            )
-
-        response = _retry_gemini_call(_call)
-
-        image_bytes = response.generated_images[0].image.image_bytes
-        base64_str = base64.b64encode(image_bytes).decode('utf-8')
-
-        return {
-            'image_data': base64_str,
-            'mime_type': 'image/png',
-            'prompt': prompt,
-        }
-    except Exception as e:
-        logger.error('generate_persona_image error: %s: %s', type(e).__name__, e)
-        return None
