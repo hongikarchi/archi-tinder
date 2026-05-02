@@ -7,7 +7,9 @@
 !.claude/agents/
 !.claude/commands/
 !.claude/plans/
+!.claude/postmortems/
 !.claude/reviews/
+!.claude/validations/
 !.claude/Goal.md
 !.claude/Report.md
 !.claude/Task.md
@@ -33,7 +35,6 @@ node_modules/
 .idea/
 
 # Web-tester / Playwright artifacts
-test-artifacts/
 .playwright-mcp/
 test_*.png
 ss*.png

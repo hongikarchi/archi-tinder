@@ -5,6 +5,34 @@
   For system architecture and API surface, see `.claude/Report.md`.
   For 3-developer collaboration / branching / file ownership, see `BRANCHING.md`.
 
+  ## Audit Trail Locations
+  Different categories of historical / decision documents live in distinct directories
+  so that agents and collaborators always know where to look. Do NOT scatter audit
+  documents into ad-hoc paths (e.g. `backend/_validation_*.md` was the old anti-pattern;
+  consolidated into `.claude/validations/`).
+
+  | Category | Location | Writer | Lifecycle |
+  |---|---|---|---|
+  | **Spec** (binding requirements) | `research/spec/*.md` | research terminal | Long-lived; versioned |
+  | **Investigation** (pre-spec exploration) | `research/investigations/*.md` | research terminal | Numbered chronologically; archived |
+  | **Decision record** (architectural) | `research/spec/phase*-decision-record.md` | research terminal | Per phase |
+  | **Plan** (`/plan` artifacts) | `.claude/plans/*.md` | Claude main session | Random-named per `/plan` invocation |
+  | **Review verdict** (pre-push gate) | `.claude/reviews/*.md` | review terminal | Per-commit; `latest.md` symlink |
+  | **Validation** (staging A/B results) | `.claude/validations/*.md` | main pipeline | Per-feature (e.g. `imp5.md`, `imp6.md`) |
+  | **Postmortem** (bug-fix retrospective) | `.claude/postmortems/*.md` | main pipeline | Per-incident, named descriptively |
+  | **System report** (live state) | `.claude/Report.md` | reporter agent | Single file; updated each commit |
+  | **Task board** (handoffs + done log) | `.claude/Task.md` | reporter agent | Single file; Handoffs trim at >30 |
+  | **Handoffs archive** (auto-trim) | `.claude/handoffs-archive/<YYYY-MM>.md` | reporter agent | Created when Handoffs >30 |
+
+  Cross-references:
+  - Staging validation outputs (e.g. `validate_imp5.py` Django management command)
+    must write to `.claude/validations/<imp>.md`, NOT to `backend/` root.
+  - Bug-fix retrospectives (post-incident analysis) go in `.claude/postmortems/` with
+    descriptive filenames (e.g. `swipe-infinite-loading-fix.md`), not in `.claude/plans/`
+    (plans is for `/plan`-mode artifacts only).
+  - Research terminal owns `research/` exclusively (one narrow exception: `reporter`
+    may sync `research/algorithm.md` per Step 6 in `.claude/agents/reporter.md`).
+
   ## Rules
   - All building references must use `building_id` -- never name, slug, or language-dependent field.
   - Do NOT create or migrate the `architecture_vectors` table -- it is owned by Make DB.
