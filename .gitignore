@@ -6,6 +6,8 @@
 .claude/*
 !.claude/agents/
 !.claude/commands/
+!.claude/plans/
+!.claude/reviews/
 !.claude/Goal.md
 !.claude/Report.md
 !.claude/Task.md
@@ -29,10 +31,6 @@ node_modules/
 # IDE
 .vscode/
 .idea/
-backend/tools/optimization_results.json
-
-# Backend transient validation outputs (one-off management commands)
-backend/_validation_*.md
 
 # Web-tester / Playwright artifacts
 test-artifacts/
