@@ -3,6 +3,7 @@
   ## What This Repo Does
   React frontend + Django backend that reads from a PostgreSQL DB built by Make DB (reference-crawling repo).
   For system architecture and API surface, see `.claude/Report.md`.
+  For 3-developer collaboration / branching / file ownership, see `BRANCHING.md`.
 
   ## Rules
   - All building references must use `building_id` -- never name, slug, or language-dependent field.
