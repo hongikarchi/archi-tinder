@@ -6,8 +6,8 @@
 
 | Role | Owner | Primary territory |
 |---|---|---|
-| **A** | Algorithm | `backend/apps/recommendation/engine.py`, `backend/apps/recommendation/services/recommend.py`, `backend/config/settings.py` (RECOMMENDATION dict), algorithm tests |
-| **B** | Post-swipe SNS | `backend/apps/social/`, `backend/apps/profiles/`, `frontend/src/pages/PostSwipeLandingPage.jsx`, `FirmProfilePage.jsx`, `UserProfilePage.jsx`, `BoardDetailPage.jsx`, `frontend/src/api/social.js`, `frontend/src/api/profiles.js` |
+| **A** | Algorithm | `backend/apps/recommendation/engine.py`, `backend/apps/recommendation/services/{embeddings,rerank,generation,parse_query,_caches,_gemini}.py`, `backend/config/settings.py` (RECOMMENDATION dict only), `backend/tests/` (algorithm tests: `test_topic*`, `test_hyde`, `test_hybrid_retrieval`, `test_imp*`, `test_chat_phase`, `test_confidence`, etc.) |
+| **B** | Post-swipe SNS | `backend/apps/social/`, `backend/apps/profiles/`, `frontend/src/pages/PostSwipeLandingPage.jsx`, `FirmProfilePage.jsx`, `UserProfilePage.jsx`, `BoardDetailPage.jsx`, `frontend/src/api/social.js`, `frontend/src/api/profiles.js`, `frontend/src/components/profile/` (BoardCard, BioPersonaFlipCard, DescriptionAboutFlipCard, ProjectCard, ArticleCard, InfoCol) |
 | **C** (admin) | Everything else | `backend/apps/accounts/`, `backend/apps/recommendation/views/sessions.py`, `views/projects.py`, `views/swipe.py`, `views/search.py`, `views/reports.py`, `views/telemetry.py`, `frontend/src/pages/SwipePage.jsx`, `LLMSearchPage.jsx`, `FavoritesPage.jsx`, `LoginPage.jsx`, `ProjectSetupPage.jsx`, Django admin, deployment config |
 
 ## Shared / coordinated edit files
@@ -21,19 +21,20 @@ These files are touched by 2+ roles. Default merge strategy is **append-only** w
 | `backend/apps/recommendation/views/__init__.py` | Re-export barrel | New imports go at the bottom |
 | `backend/apps/recommendation/services/__init__.py` | Re-export barrel | New imports go at the bottom |
 | `frontend/src/api/client.js` | Re-export barrel | New `export * from './<feature>.js'` at the bottom |
+| `backend/config/urls.py` | Root URL include — every new Django app gets a line here | Append at the bottom of the `urlpatterns` list |
+| `frontend/src/App.jsx` `<Routes>` block | Every new page registers a `<Route>` here | Append new routes at the bottom of `<Routes>` (the surrounding component logic is order-sensitive — see below) |
+| `backend/.env.example` / `frontend/.env.example` | New env vars | Append to the bottom; comment what the var does |
+| `backend/requirements.txt` | New Python deps | Append; pin versions |
 
 ### Order-sensitive (announce before parallel edits)
 
 | File | Why shared | Conflict risk |
 |---|---|---|
 | `backend/apps/recommendation/serializers.py` | Touchpoint between A's algorithm output and C's API contract | A and C may both add fields — coordinate field names |
-| `backend/config/settings.py` | A owns RECOMMENDATION dict + tunable params; B/C add `INSTALLED_APPS`, middleware, throttles | Single file, multiple sections — communicate before editing the same section |
-| `backend/config/urls.py` | Root URL include — every new Django app gets a line here | Append at the bottom of the `urlpatterns` list to minimize conflict |
-| `frontend/src/App.jsx` | Single React Router setup — every new page registers a `<Route>` here | Add new routes at the bottom of the `<Routes>` block; if two devs add routes simultaneously, second-to-merge rebases |
+| `backend/config/settings.py` | A owns RECOMMENDATION dict + tunable params; B/C add `INSTALLED_APPS`, middleware, throttles | Single file, multiple sections — announce which section you'll edit |
+| `frontend/src/App.jsx` (non-`<Routes>` body) | Shared `useEffect`/handlers/imports section | Touch only if a new feature genuinely needs cross-page state plumbing; otherwise stay inside your page |
 | `frontend/src/components/profile/InfoCol.jsx` | Tiny shared component (B-extracted, may be reused) | If a non-B role needs to extend it, propose a generalization in PR |
-| `frontend/package.json` / `frontend/package-lock.json` | New JS deps | Run `npm install` AFTER pulling main; never hand-edit lock |
-| `backend/requirements.txt` | New Python deps | Pin versions; second-to-merge rebases the dep order |
-| `backend/.env.example` / `frontend/.env.example` | New env vars | Append to bottom; document what the var does in a comment |
+| `frontend/package.json` / `frontend/package-lock.json` | New JS deps | Run `npm install` AFTER pulling main; never hand-edit the lock file; commit both files together |
 
 ### Migrations (always coordinate)
 
@@ -126,7 +127,7 @@ If two roles need to edit the same file, coordinate via:
 1. `python manage.py startapp <name>` under `backend/apps/`
 2. Add `'apps.<name>'` to **`backend/config/settings.py`** `INSTALLED_APPS` (announce in chat)
 3. Add `path('api/v1/<name>/', include('apps.<name>.urls'))` to **`backend/config/urls.py`** (announce in chat)
-4. Generate first migration: `python manage.py makemigrations <name>` — see Migration coordination
+4. Generate first migration: `python manage.py makemigrations <name>` — follow the **Migrations (always coordinate)** subsection above
 5. If app exposes models referenced by other roles' code: discuss the public surface with admin (C) before merging
 
 ### Adding a new frontend page
