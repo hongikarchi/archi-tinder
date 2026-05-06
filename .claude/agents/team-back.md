@@ -181,8 +181,17 @@ on the diff yourself:
   revert the off-scope edit.
 - **DRF CharField gotcha** — covered earlier in this doc; re-verify if
   you added any new `CharField` with custom validators.
+- **Fix-loop regression check** (cycle ≥1 only) — if you are fixing
+  a prior cycle's reviewer/security FAIL, EXPLICITLY ask yourself:
+  "Could my fix introduce a NEW MINOR or regression in code I just
+  touched?" Empirical from BOARD3 cycle 1 (2026-05-06): the cycle 1
+  fix for the original MINOR introduced a new dual-display MINOR that
+  the cycle 1 reviewer caught — a wasted cycle. Walk the diff once
+  more for new logic added during the fix; for each, re-check axes 1
+  (lint/tests), 2 (diff re-read), 3 (pattern parity). The cost of
+  one extra check beats the cost of cycle 2.
 
-When all 7 above PASS, append `BACK-DONE: <slug>` to Handoffs. WEB-MAIN
+When all 8 above PASS, append `BACK-DONE: <slug>` to Handoffs. WEB-MAIN
 proceeds to commit + /review without an in-session Claude review pass.
 
 **Risky commit exception**: if your work touches one of these zones,

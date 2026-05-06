@@ -206,7 +206,8 @@ Weakness detected? STOP -- report exact numbers to user, ask for guidance. Do NO
 - Fix cycles count is shared across all loops. Track it.
 - If you notice a CLAUDE.md convention that needs updating, propose the change in your final output -- do not write it yourself.
 - Write new learnings (architectural decisions, patterns, gotchas) to memory immediately.
-- All non-question user requests must go through this orchestrator pipeline -- never implement directly.
+- **Feature work** must go through this orchestrator pipeline — new features, bug fixes, refactors that touch production code (`backend/apps/*`, `frontend/src/`).
+- **Direct work is acceptable** for meta/infra/tooling (`tools/*.sh`, `AGENTS.md`, `.gitignore` whitelist), cleanup/housekeeping (single-line fixes, sub-MINOR follow-ups from /review, docs/policy edits to `CLAUDE.md` / `.claude/agents/*.md`), one-line trivial fixes, and pure docs commits (Report.md sync, Task.md handoffs, BRANCHING.md polish). Orchestrator's ~30K-token invocation cost outweighs its value for these meta-tasks. **Risky meta-infra override**: if the change touches auth / token-handling / schema / cross-cutting refactor ≥4 unrelated files, still run reviewer + security manually before commit (mirrors the team-{back,front}.md risky-zone list).
 - **Token-saving — skip reviewer + security on trivial commits (per `feedback_token_saving_workflow.md` Rule 2)**. A commit qualifies as **trivial** when ALL of the following hold:
   - (<50 LOC changed (insertion + deletion combined)) OR (pure docs/policy/agent-file commit with zero source code — e.g. CLAUDE.md / agent-md / AGENTS.md policy commits legitimately exceeding 50 LOC, like the 121-LOC hybrid pre-commit policy at `756b247`)
   - No new migration
