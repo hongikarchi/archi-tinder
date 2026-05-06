@@ -13,6 +13,14 @@ export async function unfollowUser(userId) {
   await callApi('DELETE', `/users/${userId}/follow/`)
 }
 
+export async function followOffice(officeId) {
+  return await callApi('POST', `/offices/${officeId}/follow/`)
+}
+
+export async function unfollowOffice(officeId) {
+  await callApi('DELETE', `/offices/${officeId}/follow/`)
+}
+
 export async function getProjectReactors(projectId, { page = 1, pageSize = 50 } = {}) {
   return await callApi('GET', `/projects/${projectId}/reactors/?page=${page}&page_size=${pageSize}`)
 }
