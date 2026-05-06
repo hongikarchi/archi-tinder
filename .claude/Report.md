@@ -113,12 +113,14 @@ flowchart TD
 | `apps/recommendation/migrations/0014_add_stage2_timing_event_type.py` | **Sprint C / IMP-6 NEW (7348593):** `AlterField` on `SessionEvent.EVENT_TYPE_CHOICES` — adds `'stage2_timing'` choice; application-level enum only, no PostgreSQL column change, no data migration, fully reverse-safe. Prerequisite for `stage2_timing` events emitted by `generate_visual_description()` Stage 2 thread. |
 | `apps/profiles/models.py` | **Phase 13 PROF1 NEW (f5dc690):** Office (UUID PK, name, aliases JSONField, verified, claim_status enum: unclaimed/pending/verified/rejected, contact_email/website/logo_url/description/location/founded_year, canonical_id Integer indexed nullable — Make DB join key via architect_canonical_ids[]; follower_count/following_count Phase 15 placeholders) + OfficeProjectLink (UUID PK, FK to Office, building_id TEXT indexed, confidence FloatField MinValueValidator(0.0)+MaxValueValidator(1.0), source enum: canonical_fk/manual/string_match/unmatched, unique_together [office, building_id]). |
 | `apps/profiles/serializers.py` | **Phase 13 PROF1 NEW (f5dc690):** OfficeSerializer (public read), OfficeClaimSerializer (proof_text ONLY — cycle 1 hardening, mutate-on-claim abuse vector eliminated), OfficeAdminSerializer (fields='__all__'), OfficeProjectLinkInlineSerializer. |
-| `apps/profiles/views.py` | **Phase 13 PROF1 NEW (f5dc690):** OfficeDetailView (AllowAny; raw SQL join on architecture_vectors for B1 hybrid building resolution), OfficeClaimView (IsAuthenticated + OfficeClaimThrottle, marks pending only), OfficeAdminQueueView (IsAdminUser, list pending claims), OfficeAdminVerifyView (IsAdminUser, PATCH verify/reject). |
+| `apps/profiles/views.py` | **Phase 13 PROF1 NEW (f5dc690):** OfficeDetailView (AllowAny; raw SQL join on architecture_vectors for B1 hybrid building resolution), OfficeClaimView (IsAuthenticated + OfficeClaimThrottle, marks pending only), OfficeAdminQueueView (IsAdminUser, list pending claims), OfficeAdminVerifyView (IsAdminUser, PATCH verify/reject). **Phase 15 SOC3 (e397317):** OfficeFollowView (POST/DELETE, IsAuthenticated, FollowWriteThrottle 60/min shared-scope, get_or_create idempotent, filter().delete() race-safe); OfficeDetailView extended with `is_following` injection mirroring UserProfileDetailView pattern. |
 | `apps/profiles/throttles.py` | **Phase 13 PROF1 NEW (f5dc690):** OfficeClaimThrottle (UserRateThrottle, scope='office_claim', rate='5/hour'). |
 | `apps/profiles/urls.py` | **Phase 13 PROF1 NEW (f5dc690):** 4 URL patterns: `offices/<uuid>/`, `offices/<uuid>/claim/`, `admin/office_claims/`, `admin/office_claims/<uuid>/`. |
 | `apps/profiles/migrations/0001_initial.py` | **Phase 13 PROF1 NEW (f5dc690):** CreateModel Office + CreateModel OfficeProjectLink + unique_together constraint. |
 | `apps/profiles/migrations/0002_alter_officeprojectlink_confidence.py` | **Phase 13 PROF1 NEW (f5dc690):** AlterField confidence — adds MinValueValidator(0.0)+MaxValueValidator(1.0). Cycle 1 hardening. |
 | `apps/profiles/tests/test_phase13_office.py` | **Phase 13 PROF1 NEW (f5dc690):** 23 tests across 6 classes — TestOfficeModelCreation, TestOfficeProjectLinkCreation, TestOfficeDetailView, TestOfficeClaimView (throttle, rejected→reclaim path), TestOfficeAdminQueueView, TestOfficeAdminVerifyView. 385 → 408 pass + 1 skipped. |
+| `apps/profiles/migrations/0004_officefollow.py` | **Phase 15 SOC3 NEW (e397317):** AddModel-only `OfficeFollow` (FK to UserProfile + Office, unique_together, no data migration, reverse-safe). |
+| `apps/profiles/tests/test_office_follow.py` | **Phase 15 SOC3 NEW (e397317):** 10 tests — POST creates + increments follower_count / idempotent 200 / 404 missing office / DELETE removes + decrements / unauth 401 / is_following toggle / throttle 61st req 429. 567 → 577 pass + 1 skipped. |
 | `apps/accounts/models.py` | **Phase 13 PROF2 NEW fields (cef8e87):** UserProfile extended with 6 additive nullable fields — `bio` (TextField, blank, max_length=500), `mbti` (CharField, max_length=4, blank), `external_links` (JSONField, default=dict), `persona_summary` (JSONField, default=dict — Phase 17 LLM placeholder, read_only), `follower_count` (IntegerField, default=0 — Phase 15 SOC1 counter cache), `following_count` (IntegerField, default=0 — counter cache mirror). All safe defaults, non-destructive on existing rows. |
 | `apps/accounts/serializers.py` | **Phase 13 PROF2 NEW (cef8e87):** `UserProfileSerializer` (public, matches MOCK_USER — 9 fields: user_id, display_name, avatar_url, bio, mbti, external_links, persona_summary, follower_count, following_count; read_only_fields: user_id, follower_count, following_count, persona_summary) + `UserProfileSelfUpdateSerializer` (PATCH /users/me/, IsAuthenticated; editable: display_name, bio, mbti, external_links; validate_mbti: alpha-only 4-char enforcement + uppercase; validate_external_links: dict + string keys/values + ≤500 chars per value). `UserSerializer` (auth/login contract) UNCHANGED. |
 | `apps/accounts/views.py` | Google/Kakao/Naver OAuth, dev-login, JWT token management; all login views use `authentication_classes = []`; **Phase 13 PROF2 NEW (cef8e87):** `UserProfileDetailView` (GET /api/v1/users/{user_id}/, AllowAny, 404 on missing profile) + `UserProfileSelfUpdateView` (PATCH /api/v1/users/me/, IsAuthenticated, 404 if user has no UserProfile) |
@@ -126,6 +128,12 @@ flowchart TD
 | `apps/accounts/migrations/0002_userprofile_phase13_extension.py` | **Phase 13 PROF2 NEW (cef8e87):** AddField ×6 — bio, mbti, external_links, persona_summary, follower_count, following_count. Non-destructive, reverse-safe (DROP COLUMN). |
 | `apps/accounts/tests/test_phase13_userprofile.py` | **Phase 13 PROF2 NEW (cef8e87):** 22 tests across 3 classes — TestUserProfileExtensionModel (3: defaults, str repr, existing fields preserved), TestUserProfileDetailView (5: MOCK_USER shape parity, 404, AllowAny, is_following exclusion, boards[] exclusion), TestUserProfileSelfUpdateView (14: auth required, bio update, MBTI uppercase, MBTI invalid — length + numeric cycle 1 alpha enforcement, MBTI whitespace clears field, external_links update, 4 validator failure paths, follower_count read-only, persona_summary not user-writable, no_profile 404 cycle 1). 408 → 428 pass + 1 skipped + 2 pre-existing failures. |
 | `backend/railway.toml` | **Sprint D ops hardening (7ded1a5):** buildCommand extended — `python manage.py migrate --noinput` inserted before `collectstatic`. Ensures every Railway redeploy auto-applies pending schema migrations (idempotent; safe at every deploy). Future-proofs PROF2/BOARD1/Phase 14+ migrations. Companion: DEV_LOGIN_SECRET removed from Railway dashboard + rotated locally — manual operator actions, no commit. |
+| `tools/cmux_setup.sh` | **Cmux infra NEW (a379bc6):** Idempotent 4-workspace tmux creator — WEB-MAIN / WEB-BACK / WEB-FRONT / WEB-REVIEW; each workspace names its window and initializes the correct Codex CLI session on startup. |
+| `tools/dispatch.sh` | **Cmux infra NEW (a379bc6, 5fbf1fa):** Sends a task to a named Codex team workspace via tmux send-keys. >1500-char messages auto-written to `/tmp/dispatch-<team>-<ts>.md`; sends file-pointer instead of inline text (empirical fix for cmux silent-truncation during BOARD3 rollout). |
+| `tools/poll.sh` | **Cmux infra NEW (a379bc6):** Reads a team's screen output from WEB-MAIN. |
+| `AGENTS.md` | **Cmux infra NEW (a379bc6):** Codex CLI baseline instructions + hard guardrails (auto-loaded from cwd on Codex startup). |
+| `.claude/agents/team-back.md` | **Cmux infra NEW (a379bc6):** WEB-BACK team file — owned files list, DRF gotchas (trim_whitespace), 7-axis self-review checklist, risky-zone thresholds, fix loop cap (2 cycles). |
+| `.claude/agents/team-front.md` | **Cmux infra NEW (a379bc6):** WEB-FRONT team file — owned files list, frontend conventions, 6-axis self-review checklist. |
 | `tests/conftest.py` | pytest fixtures: SQLite in-memory DB override, user_profile, auth_client, api_client |
 | `tests/test_auth.py` | 7 auth integration tests (Google login mock, token refresh, logout, dev-login) |
 | `tests/test_sessions.py` | 18+ session lifecycle tests (creation, swipes, idempotency, phase transitions, client-buffer merge, state resume, convergence signal integrity, pool-score normalization, project schema A3) with mocked engine.py; includes `TestConvergenceSignalIntegrity` for Topic 10 Option A fixes, `TestPoolScoreNormalization` for Topic 12 normalization, `TestProjectSchemaA3` (6 tests: like intensity dict, explicit intensity, clamp, legacy/new shape helper, saved_ids default, saved_ids serialized), `TestFarthestPointFromPool` (5 tests: max-min regression counterexample, none on no candidates, random on no exposed, skip missing embeddings, random when all exposed missing), `TestPoolExhaustionGuard` (5 tests: no-op above threshold, tier 1→2 escalate, tier 3 no-op, exclude exposed, fall-through to tier 3), and `TestSessionEventLogging` (5 tests: create + never-raise + sequence_no per session + integration session_create + integration swipe with timing); 54 total tests pass; **Topic 03:** 3 mock signatures updated to **kwargs for backward compat with new v_initial kwarg; **Spec v1.8 Topic 06 N≥4 cliff mitigation (da547cb):** NEW TestSpecV18Topic06N4Mitigation class (2 tests: test_n3_skips_kmeans_per_v18_mitigation — phase stays 'exploring' at N=3; test_n4_triggers_kmeans_per_v18_threshold — phase flips to 'analyzing' at N=4); existing K-Means activation tests updated (2 minor changes: range(3) → range(4) to match new threshold, semantics preserved) |
@@ -228,7 +236,16 @@ flowchart TD
 | `LoginPage.jsx` | Google auth-code flow login, `onNonOAuthError` popup handling |
 | `MainLayout.jsx` | Layout wrapper; sharedLayoutProps chain extended with onToggleBookmark passthrough to FavoritesPage (Sprint 4 §8) |
 | `TabBar.jsx` | Bottom navigation with safe-area-inset-bottom padding (content-box) |
-| `ProjectSetupPage.jsx` | New project setup with folder name and area range; safe-area-adjusted layout |
+| `ProjectSetupPage.jsx` | New project setup with folder name and area range; safe-area-adjusted layout; **Phase 14 BOARD2 (bdc8d7b):** public/private visibility toggle (default 'private') wired through wizardData → handleStart → PATCH /projects/{id}/ after session create |
+| `UserProfilePage.jsx` | **Phase 13 PROF3 (d735666 + b272f37):** wired to GET /api/v1/users/{user_id}/ + follow/unfollow; 1023 → 565 LOC via 6 extracted shared components in `components/profile/` |
+| `FirmProfilePage.jsx` | **Phase 13 PROF3 (d735666 + b272f37):** wired to GET /api/v1/offices/{id}/ + office follow/unfollow (SOC3 39de1d4); 962 → 595 LOC via shared components |
+| `BoardDetailPage.jsx` | **Phase 14 BOARD3 (aedc817):** wired to GET /projects/{uuid}/ + reaction toggle (POST/DELETE /projects/{uuid}/react/); `useBoard` hook; optimistic reaction + rollback + `isReactionPending` race guard; server-authoritative `{reaction_count, reacted}` override; `reactionError` dedicated banner |
+| `PostSwipeLandingPage.jsx` | MOCKUP-READY (design terminal BOARD3 context); Phase 16 REC1 target |
+| `components/profile/` | **Phase 13 PROF3 NEW (b272f37):** 6 shared components extracted from UserProfilePage + FirmProfilePage — `InfoCol`, `BoardCard`, `BioPersonaFlipCard`, `DescriptionAboutFlipCard`, `ProjectCard`, `ArticleCard` |
+| `hooks/useBoard.js` | **Phase 14 BOARD3 NEW (aedc817):** Fetches project + buildings; cancellation guard via AbortController; pagination support |
+| `hooks/useProjectReactors.js` | **Phase 15 SOC2 NEW (59d2af4):** Paginated reactors list fetcher; cancellation guard |
+| `api/social.js` | **Phase 15 SOC1/SOC3:** `followUser`, `unfollowUser`, `followOffice`, `unfollowOffice` API wrappers |
+| `api/projects.js` | **Phase 14/15:** `getProject`, `getBoardBuildings`, `reactToProject`, `unreactToProject`, `getProjectReactors`, `updateProject` |
 
 ## Web Testing Structure
 
@@ -355,6 +372,19 @@ flowchart LR
 | PATCH | `/api/v1/admin/office_claims/{office_id}/` | Verify or reject office claim (IsAdminUser); request: {action: 'verify'|'reject'} |
 | GET | `/api/v1/users/{user_id}/` | User profile detail (AllowAny); returns MOCK_USER shape — 9 fields: user_id, display_name, avatar_url, bio, mbti, external_links, persona_summary, follower_count, following_count; 404 if UserProfile does not exist |
 | PATCH | `/api/v1/users/me/` | Self-update user profile (IsAuthenticated); editable fields: display_name, bio, mbti, external_links; validate_mbti: 4-char alpha-only + auto-uppercase; validate_external_links: dict + string keys/values + ≤500 chars per value; 404 if caller has no UserProfile; returns full UserProfileSerializer shape on 200 |
+| GET | `/api/v1/projects/{id}/` | Board/project detail (AllowAny for public, IsAuthenticated for private owner); returns board shape: id, name, visibility, owner{...}, reaction_count, reacted, buildings[], created_at |
+| PATCH | `/api/v1/projects/{id}/` | Update project (IsAuthenticated, owner only); editable: name, visibility; ProjectSelfUpdateSerializer |
+| DELETE | `/api/v1/projects/{id}/` | Delete project (IsAuthenticated, owner only); 204 |
+| GET | `/api/v1/users/{user_id}/projects/` | List user's public boards (AllowAny); paginated (page_size cap 50) |
+| POST | `/api/v1/projects/{id}/react/` | Add reaction "Love this!" (IsAuthenticated); creates Reaction or returns 200 on idempotent; increments project.reaction_count; injects `reacted` flag |
+| DELETE | `/api/v1/projects/{id}/react/` | Remove reaction (IsAuthenticated); no visibility gate (allows retraction on public→private flip); decrements project.reaction_count |
+| GET | `/api/v1/projects/{id}/reactors/` | List users who reacted (public: open; private+owner: open; private+non-owner: 403); paginated |
+| POST | `/api/v1/users/{user_id}/follow/` | Follow a user (IsAuthenticated, CheckConstraint prevents self-follow); FollowWriteThrottle 60/min; increments follower_count/following_count |
+| DELETE | `/api/v1/users/{user_id}/follow/` | Unfollow a user (IsAuthenticated); race-safe filter().delete(); decrements counters (Greatest floor) |
+| GET | `/api/v1/users/{user_id}/followers/` | List followers (AllowAny) |
+| GET | `/api/v1/users/{user_id}/following/` | List following (AllowAny) |
+| POST | `/api/v1/offices/{office_id}/follow/` | Follow an office (IsAuthenticated, FollowWriteThrottle 60/min shared-scope); get_or_create idempotent |
+| DELETE | `/api/v1/offices/{office_id}/follow/` | Unfollow an office (IsAuthenticated); race-safe filter().delete() |
 
 ## Feature Status (from checklist)
 
@@ -443,95 +473,57 @@ flowchart LR
 - **Phase 13 PROF2 UserProfile extension backend (cef8e87):** `apps/accounts/` extended — UserProfile gains 6 additive nullable fields (bio, mbti, external_links, persona_summary, follower_count, following_count); migration 0002 (non-destructive AddField ×6); UserProfileSerializer (public, 9-field MOCK_USER parity) + UserProfileSelfUpdateSerializer (PATCH /users/me/, validate_mbti alpha-only+uppercase, validate_external_links dict+string+≤500chars); UserProfileDetailView (GET /users/{user_id}/, AllowAny, 404 on missing profile) + UserProfileSelfUpdateView (PATCH /users/me/, IsAuthenticated, 404 if no profile). Fix-loop cycle 1: MBTI alpha enforcement (rejects '1234'), 4 external_links validator failure paths, 404 path test, persona_summary in read_only_fields. MOCK_USER 9/11 field parity (is_following deferred Phase 15 SOC1; boards[] deferred BOARD1). 22 tests across 3 classes (408 → 428 pass + 1 skipped + 2 pre-existing failures out-of-scope).
 - **Railway migrate hardening (7ded1a5):** `backend/railway.toml` buildCommand extended — `python manage.py migrate --noinput` inserted before `collectstatic`. Every Railway redeploy now auto-applies pending schema migrations (idempotent; safe). Future-proofs PROF2/BOARD1/Phase 14+ migrations. Companion: DEV_LOGIN_SECRET removed from Railway dashboard + rotated locally (manual operator actions, no commit).
 - **Test cleanup + Tier 4 harness fix (2026-04-29 / a36b247 + 6337f84):** Two companion commits. (1) **Test env-mock isolation (a36b247):** Fixed 2 pre-existing test failures — `TestSettingsDefaults::test_stage_decouple_enabled_defaults_false` hardened via `monkeypatch.delenv('STAGE_DECOUPLE_ENABLED')` (was failing because `backend/.env` had `STAGE_DECOUPLE_ENABLED=true` from Sprint D local sync); `TestChatPhaseParseQuery::test_terminal_response_4_fields` isolated via `monkeypatch.setitem(settings.RECOMMENDATION, 'stage_decouple_enabled', False)` (was failing due to Sprint C IMP-6 stage 1 split returning `visual_description=None`). 428 baseline → 430 passed + 1 skipped. (2) **Tier 4 harness clarification detection (6337f84):** `_detect_clarification_or_results` in `web-testing/runner/runner.py` + Step B4a in `.claude/commands/review.md` rewritten to use `POST /api/v1/parse-query/` response `probe_needed` boolean (network signal) instead of DOM "?" heuristic that produced false positives on Gemini rhetorical confirms (e.g. "맞으시죠?"). Investigation 22 Phase 1 data quality improved: harness now aligns with M4 telemetry (`834d36e`) authoritative ground truth.
+- **Phase 13–15 social-graph + board rollout complete (2026-05-06 / b272f37→fa15aab):** Phases 13, 14, and 15 fully shipped to origin/main. (1) **Phase 13 PROF3/PROF4 frontend integration (d735666 context, components refactor b272f37):** UserProfilePage 1023→565 LOC, FirmProfilePage 962→595 LOC via 6 extracted shared components (`components/profile/`: InfoCol, BoardCard, BioPersonaFlipCard, DescriptionAboutFlipCard, ProjectCard, ArticleCard). Real API wiring for both profile pages. (2) **Phase 14 BOARD1 backend (a501c8d):** Project=Board merge with public/private visibility — 4 new endpoints (GET/PATCH/DELETE /projects/{id}/, GET /users/{id}/projects/), migration 0015 AddField-only reverse-safe, 39 tests, `disliked_ids` permanently absent from ProjectSerializer (parameterized test enforces). (3) **Phase 14 BOARD2 frontend (bdc8d7b):** Public/private toggle in ProjectSetupPage, fire-and-forget PATCH after session-create, handleLogin visibility mapping fix. (4) **Phase 14 BOARD3 frontend (aedc817):** BoardDetailPage wired to real GET /projects/{uuid}/ + reaction toggle, `useBoard` hook with cancellation guard, optimistic reaction + rollback + race guard, server-authoritative response override. (5) **Phase 15 SOC1 user-follow (15d44a9 + a1f5371):** Follow model with CheckConstraint (no self-follow), signal-driven counter cache (Greatest underflow floor), POST/DELETE /users/{id}/follow/, GET followers/following, `is_following` injection in UserProfileDetailView, 24 tests, optimistic frontend follow/unfollow. (6) **Phase 15 SOC2 project reaction (ba757eb + 042bed4 + 59d2af4):** Reaction model + POST/DELETE /projects/{id}/react/, `reacted` injection in ProjectDetailView, GET /projects/{id}/reactors/ visibility-gated list, `useProjectReactors` hook. (7) **Phase 15 SOC3 office-follow (e397317 + 39de1d4):** OfficeFollow model + OfficeFollowView POST/DELETE + `is_following` injection in OfficeDetailView, migration 0004, 10 tests, FirmProfilePage follow wired. (8) **collaboration infra:** views.py 1700 LOC → 8 modules (`views/` package), client.js → 8 `api/` modules, BRANCHING.md collaboration guide. (9) **Cmux stateful 4-workspace infra:** `tools/cmux_setup.sh`, `dispatch.sh` (>1500-char file-fallback), `poll.sh`, `AGENTS.md`, `team-back.md` (7-axis), `team-front.md` (6-axis). (10) **Hybrid pre-commit policy:** Codex team self-review replaces in-session reviewer+security on dispatched work; /review cross-model gate preserved. Test count: 546 → 577 passed + 1 skipped.
 
 ### Pending
 - Kakao + Naver OAuth
+- Phase 16: Recommendation Expansion (R-PHASE16 RESEARCH-REQUESTED queued — research terminal to elicit spec §4 decisions)
 
 ## Last Updated (Claude)
-- **Date:** 2026-05-02
-- **Commits batch (10 unpushed since `a501c8d`, the last on origin/main):** `d735666` PROF3 frontend integration | `3894bbe` Path C backend defensive image-source + telemetry endpoint (1/2) | `c605f0c` Path C frontend mitigations + beacon (2/2) | `15d44a9` SOC1 user-follow backend (Phase 15) | `a1f5371` SOC1 frontend follow/unfollow wiring | `ba757eb` SOC2 Project reaction backend (Phase 15) | `36ecbf3` gitignore relaxation + .env.example completeness for collaboration | `1ae4684` refactor: split views.py into views/ package | `9c04887` refactor: split client.js into api/*.js modules | `127f502` BRANCHING.md collaboration guide
-- **Files changed (high-level):** Phase 13 PROF3 (UserProfilePage + FirmProfilePage backend wiring with adapter) | Path C backend (`engine.py` defensive divisare fallback, `apps/recommendation/views/telemetry.py` ImageLoadTelemetryView, `SessionEvent.image_load` choice, migration 0016, +25 tests) | Path C frontend (NEW `hooks/useImageTelemetry.js`, preconnect tags, `getImageSource` host-anchored matching, sendBeacon fallback) | SOC1 (NEW `apps/social/` Django app — Follow model + signal-based counter + DB-level CheckConstraint + 60/min throttle + `/users/{id}/follow|followers|following/` endpoints + `is_following` injection in UserProfileDetailView, +24 tests) | SOC2 (Reaction model + `/projects/{id}/react/` endpoints + `is_reacted` injection — DELETE intentionally not visibility-gated for public→private flip retraction, +23 tests) | gitignore (whitelist `.claude/plans/` + `.claude/reviews/`, remove `_validation_*.md` + `optimization_results.json` ignore lines, env.example +HF_TOKEN +STAGE_DECOUPLE_ENABLED +VITE_GEMINI_API_KEY, NEW `apps/social/migrations/__init__.py` (was missing in SOC1 commit, would have broken fresh clones)) | views.py refactor (1700 LOC → 8 modules in `views/` package: __init__, _shared, projects, sessions, swipe, search, reports, telemetry) | client.js refactor (442 LOC → 8 modules under `api/`: client barrel, core, auth, images, sessions, projects, profiles, social) | NEW `BRANCHING.md` root-level 3-developer collaboration guide.
-- **Summary:** Major Phase 13 + Phase 15 + collaboration-prep batch. **Phase 13** completes profile/board user-facing integration (PROF3) and Path C image hosting (defensive divisare fallback at engine layer + frontend mitigations + telemetry beacon). **Phase 15** ships SOC1 (User-User asymmetric follow) and SOC2 (Project Reaction "Love this!") backends + SOC1 frontend wiring — both with signal-based counter caching + DB-level invariants (CheckConstraint for self-follow, Greatest floor for underflow) + per-user write throttle (60/min). Office follow + Reaction on other targets remain Phase 15 dialogue-gate deferred. **Collaboration prep**: gitignore audit makes the repo cleanly clonable for teammates (.env.example completeness fix solves the "code doesn't run after pull" issue); views.py + client.js split into per-feature modules dramatically reduces merge-conflict surface for the upcoming 3-person workflow (algorithm / SNS pages / admin); BRANCHING.md codifies role-based file ownership + GitHub Flow + /review-in-PR process. Test count: 430 baseline → **546 passed, 1 skipped** (+116 net new across PROF3 / Path C / SOC1 / SOC2 / refactor verification).
+- **Date:** 2026-05-06
+- **Commits batch (16 commits `b272f37`→`fa15aab` since last reporter pass `a501c8d` on origin/main):** `b272f37` profile-component refactor | `db78b37` BRANCHING.md hotzone table + scenario guides | `38a6ac6` BRANCHING.md fix-pass | `27fee9b` display_name+bio DRF validation fix | `042bed4` SOC2 GET /projects/{id}/reactors/ list | `59d2af4` useProjectReactors hook | `51dd387` Codex stateless dispatch protocol (deprecated) | `a379bc6` cmux 4-workspace stateful infra | `3ef52b2` cmux comment cleanup | `aedc817` BOARD3 BoardDetailPage frontend integration | `5fbf1fa` dispatch.sh long-message file-fallback | `bdc8d7b` BOARD2 visibility toggle in ProjectSetupPage | `e397317` SOC3-back OfficeFollow backend | `39de1d4` SOC3-front FirmProfilePage follow wiring | `756b247` hybrid pre-commit policy | `fa15aab` Task.md bookkeeping + R-PHASE16 signal
+- **Files changed (high-level):** PROF3 (component refactor: UserProfilePage 1023→565, FirmProfilePage 962→595; +6 shared components in `components/profile/`) | display_name+bio validation fix (DRF `trim_whitespace=False` on `/users/me/` PATCH) | SOC2 list (GET `/projects/{id}/reactors/` visibility-gated; `useProjectReactors` hook) | BOARD3 (`BoardDetailPage` wired to real API + reaction toggle; `useBoard` hook; `reactToProject`/`unreactToProject` wrappers) | BOARD2 (public/private toggle in `ProjectSetupPage`; `updateProject` wrapper; handleLogin visibility fix) | SOC3-back (`OfficeFollow` model + `OfficeFollowView` POST/DELETE + `is_following` injection; migration 0004; +10 tests; 567→577) | SOC3-front (`FirmProfilePage` follow wired; `followOffice`/`unfollowOffice` wrappers) | Cmux infra (`tools/cmux_setup.sh` + `dispatch.sh` long-msg file-fallback + `poll.sh` + `AGENTS.md` + `team-back.md` + `team-front.md`) | Hybrid pre-commit policy (CLAUDE.md + team files: Codex self-review replaces in-session reviewer+security on dispatched work, /review gate preserved) | BRANCHING.md augmented (hotzone table + scenario guides + fix-pass)
+- **Summary:** Phase 13–15 frontend rollout complete. All three social-graph features (SOC1 User-follow / SOC2 Project-reaction / SOC3 Office-follow) and both board-system features (BOARD2 visibility selection / BOARD3 board detail view) are wired to real APIs on origin/main. The cmux 4-workspace stateful infrastructure (WEB-MAIN / WEB-BACK / WEB-FRONT / WEB-REVIEW) replaces the prior stateless codex exec pattern, enabling persistent Codex CLI team sessions with self-review checklists. The hybrid pre-commit policy (Codex team self-review + /review cross-model gate, skip in-session reviewer+security on dispatched work) saves ~150-200K tokens per BOARD-class deliverable. dispatch.sh long-message file-fallback fixes cmux silent-truncation for plans >1500 chars. R-PHASE16 RESEARCH-REQUESTED signal queued in Task.md for research terminal to begin Phase 16 Recommendation Expansion dialogue. Test count: 567 passed + 1 skipped (vs 546 prior, +21 from SOC3-back).
 
 ```mermaid
 graph TD
     subgraph Backend
-        social[apps/social/ NEW Phase 15]:::new
-        engine[apps/recommendation/engine.py defensive divisare]:::modified
-        views_pkg[apps/recommendation/views/ NEW package — 8 modules]:::new
-        accounts_views[apps/accounts/views.py +is_following inject]:::modified
-        settings[config/settings.py throttle rates 60+120+300/min]:::modified
-        env_example[backend/.env.example +HF_TOKEN +STAGE_DECOUPLE +0001 init fix]:::modified
+        office_follow[apps/profiles/models.py OfficeFollow NEW]:::new
+        profiles_views[apps/profiles/views.py OfficeFollowView + is_following]:::modified
+        profiles_migration_0004[apps/profiles/migrations/0004_officefollow.py]:::new
+        test_office_follow[apps/profiles/tests/test_office_follow.py]:::new
+        accounts_serializers[apps/accounts/serializers.py trim_whitespace=False]:::modified
     end
     subgraph Frontend
-        api_pkg[src/api/ NEW package — 8 modules]:::new
-        useImageTelem[src/hooks/useImageTelemetry.js NEW]:::new
-        UserProfile[src/pages/UserProfilePage.jsx wired follow + boards]:::modified
-        FirmProfile[src/pages/FirmProfilePage.jsx wired office]:::modified
-        env_front[frontend/.env.example +VITE_GEMINI_API_KEY]:::modified
-        index_html[frontend/index.html preconnect tags]:::modified
+        BoardDetailPage[src/pages/BoardDetailPage.jsx wired API + reaction]:::modified
+        ProjectSetupPage[src/pages/ProjectSetupPage.jsx visibility toggle]:::modified
+        FirmProfilePage[src/pages/FirmProfilePage.jsx follow wired]:::modified
+        UserProfilePage[src/pages/UserProfilePage.jsx refactored 1023→565]:::modified
+        components_profile[src/components/profile/ 6 shared components]:::new
+        useBoard[src/hooks/useBoard.js NEW]:::new
+        useProjectReactors[src/hooks/useProjectReactors.js NEW]:::new
+        api_projects[src/api/projects.js reactors + react/unreact]:::modified
+        api_social[src/api/social.js followOffice/unfollowOffice]:::modified
     end
-    subgraph Docs
-        branching[BRANCHING.md NEW collaboration guide]:::new
-        gitignore[.gitignore relaxed for team share]:::modified
-        claudemd[CLAUDE.md +pointer to BRANCHING]:::modified
+    subgraph Infra
+        cmux_setup[tools/cmux_setup.sh NEW 4-workspace creator]:::new
+        dispatch_sh[tools/dispatch.sh NEW + file-fallback]:::new
+        poll_sh[tools/poll.sh NEW]:::new
+        agents_md[AGENTS.md NEW Codex baseline]:::new
+        team_back[.claude/agents/team-back.md NEW 7-axis checklist]:::new
+        team_front[.claude/agents/team-front.md NEW 6-axis checklist]:::new
+        branching[BRANCHING.md hotzones + scenario guides]:::modified
+        claude_md[CLAUDE.md hybrid pre-commit policy]:::modified
     end
-    engine --> views_pkg
-    UserProfile --> api_pkg
-    FirmProfile --> api_pkg
-    useImageTelem --> api_pkg
+    office_follow --> profiles_views
+    BoardDetailPage --> useBoard
+    BoardDetailPage --> api_projects
+    FirmProfilePage --> api_social
+    UserProfilePage --> components_profile
 
     classDef new fill:#10b981,color:#fff
     classDef modified fill:#f59e0b,color:#000
     classDef deleted fill:#ef4444,color:#fff
-```
-
-```mermaid
-graph TD
-    subgraph Backend
-        test_imp6["tests/test_imp6_late_binding_plumbing.py"]:::modified
-        test_chat["tests/test_chat_phase.py"]:::modified
-    end
-    subgraph Harness
-        runner["web-testing/runner/runner.py"]:::modified
-        review_cmd[".claude/commands/review.md"]:::modified
-    end
-    test_imp6 -->|"monkeypatch.delenv STAGE_DECOUPLE_ENABLED"| test_imp6
-    test_chat -->|"monkeypatch.setitem stage_decouple_enabled=False"| test_chat
-    runner -->|"_setup_parse_query_listener → probe_needed"| review_cmd
-
-    classDef new fill:#10b981,color:#fff
-    classDef modified fill:#f59e0b,color:#000
-    classDef deleted fill:#ef4444,color:#fff
-```
-- **Changes:**
-  - `backend/apps/accounts/models.py` -- MODIFIED: UserProfile extended with 6 additive nullable fields — `bio` (TextField, blank, max_length=500), `mbti` (CharField, max_length=4, blank), `external_links` (JSONField, default=dict), `persona_summary` (JSONField, default=dict — Phase 17 LLM placeholder, read_only), `follower_count` (IntegerField, default=0 — Phase 15 SOC1 counter cache), `following_count` (IntegerField, default=0 — counter cache mirror). All safe defaults, non-destructive on existing rows.
-  - `backend/apps/accounts/serializers.py` -- MODIFIED: Added `UserProfileSerializer` (public, 9 fields matching MOCK_USER: user_id/display_name/avatar_url/bio/mbti/external_links/persona_summary/follower_count/following_count; read_only_fields: user_id/follower_count/following_count/persona_summary) + `UserProfileSelfUpdateSerializer` (PATCH /users/me/; editable: display_name/bio/mbti/external_links; validate_mbti: alpha-only 4-char + uppercase; validate_external_links: dict + string keys+values + ≤500 chars per value). Existing `UserSerializer` UNCHANGED.
-  - `backend/apps/accounts/views.py` -- MODIFIED: Added `UserProfileDetailView` (GET /api/v1/users/{user_id}/, AllowAny, 404 on missing UserProfile) + `UserProfileSelfUpdateView` (PATCH /api/v1/users/me/, IsAuthenticated, 404 if caller has no UserProfile). All prior login/auth views UNCHANGED.
-  - `backend/apps/accounts/urls.py` -- MODIFIED: Added 2 URL patterns — `users/<int:user_id>/` → UserProfileDetailView; `users/me/` → UserProfileSelfUpdateView (type-disambiguated: `me` string vs integer `user_id`).
-  - `backend/apps/accounts/migrations/0002_userprofile_phase13_extension.py` -- NEW: AddField ×6 — bio, mbti, external_links, persona_summary, follower_count, following_count. Non-destructive, reverse-safe (DROP COLUMN).
-  - `backend/apps/accounts/tests/test_phase13_userprofile.py` -- NEW: 22 tests across 3 classes — TestUserProfileExtensionModel (3: defaults/str-repr/existing-fields-preserved), TestUserProfileDetailView (5: MOCK_USER shape parity/404/AllowAny/is_following-exclusion/boards[]-exclusion), TestUserProfileSelfUpdateView (14: auth-required/bio-update/MBTI-uppercase/MBTI-invalid-length+numeric-cycle1-alpha/MBTI-whitespace/external_links-update/4-validator-failure-paths/follower_count-read-only/persona_summary-not-user-writable/no_profile-404-cycle1).
-  - `backend/railway.toml` -- MODIFIED: buildCommand extended — `python manage.py migrate --noinput` inserted before `python manage.py collectstatic --noinput`. Idempotent; ensures every Railway redeploy auto-applies pending schema migrations. Future-proofs PROF2/BOARD1/Phase 14+ migrations.
-- **Verification:** 22 new tests pass. 408 → 428 pass + 1 skipped + 2 pre-existing failures out-of-scope (test_chat_phase, test_stage_decouple). Pipeline: back-maker → reviewer → security → fix-loop cycle 1 (MBTI alpha + external_links validators + 404 path + persona_summary read-only) → reviewer PASS → git-manager.
-- **Summary:** Phase 13 PROF2 ships UserProfile extension backend with MOCK_USER 9-field parity, full PATCH validation, and 22 tests. Railway buildCommand hardening ensures zero-touch schema migration on every deploy. Step 6 (algorithm.md) skipped — neither commit touches RECOMMENDATION dict, engine.py, or algorithm-relevant recommendation/views.py.
-
-```mermaid
-graph TD
-    subgraph Backend
-        accounts_models.py:::modified
-        accounts_serializers.py:::modified
-        accounts_views.py:::modified
-        accounts_urls.py:::modified
-        accounts_migration_0002:::new
-        accounts_tests_phase13:::new
-        railway_toml:::modified
-    end
-    accounts_views.py --> accounts_models.py
-    accounts_views.py --> accounts_serializers.py
-    accounts_urls.py --> accounts_views.py
-
-    classDef new fill:#10b981,color:#fff
-    classDef modified fill:#f59e0b,color:#000
 ```
 
 ## Last Updated (Designer)
