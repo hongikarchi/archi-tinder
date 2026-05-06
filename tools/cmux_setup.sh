@@ -1,8 +1,11 @@
 #!/bin/bash
-# cmux 4-workspace setup for make_web (Phase 15 stateful multi-team).
+# cmux 4-workspace setup for make_web (stateful multi-team).
 #
-# Each team gets its OWN workspace (sidebar entry), mirroring make_db's
-# DB-MAIN/CRAWLER/MATCHER/ENRICHER/REVIEWER layout.
+# Each team gets its OWN workspace (sidebar entry). Inspired by make_db's
+# DB-MAIN/CRAWLER/MATCHER/ENRICHER/REVIEWER layout, but make_web is
+# horizontal (frontend / backend) rather than a sequential pipeline.
+# Note: in make_web, "Phase 15" refers to Social Foundation per the
+# product roadmap, NOT to this multi-agent architecture.
 #
 #   WEB-MAIN     — Claude Code (Opus orchestrator, this session)
 #   WEB-BACK     — Codex CLI (writes/fixes backend/*)
