@@ -101,6 +101,62 @@ Same 2-cycle cap as WEB-BACK:
 - All API URLs end with trailing slash (matches backend's
   APPEND_SLASH expectation).
 
+## Self-review checklist before signaling FRONT-DONE
+
+Per the hybrid pre-commit policy (CLAUDE.md § Token-saving rules), the
+default path skips Claude `reviewer` / `security-manager` agents in WEB-
+MAIN. WEB-MAIN trusts your FRONT-DONE report. So your `npm run lint /
+build` green is the floor, not the ceiling — before signaling DONE, walk
+this checklist on the diff yourself:
+
+- **Lint + build** — `npm run lint --quiet` + `npm run build` GREEN.
+- **Diff re-read** — read your final diff once more. Hunt specifically
+  for: contract mismatches with the backend response (e.g. frontend
+  reads `resp.is_reacted` but backend returns `{reacted}` — real bug
+  caught at /review on BOARD3 cycle 0; cross-check the actual handler
+  response shape, not the GET response shape), missing UUID / regex
+  guards on `useParams()` IDs (path-traversal defense per
+  FirmProfilePage `/^[A-Za-z0-9_-]{1,64}$/` precedent), missing
+  `cancelled` flag on async useEffect, missing `isPending` race guard
+  on optimistic-update handlers, missing rollback in catch blocks.
+- **Pattern parity** — for any new hook / page wiring, find one existing
+  similar one in the codebase (e.g. UserProfilePage SOC1 follow handler
+  when shipping FirmProfilePage SOC3 follow handler) and side-by-side
+  compare: same state shape? same useEffect cancellation guard? same
+  optimistic+rollback structure? same imports from `api/client.js`
+  barrel?
+- **JSX scope** — `git diff <file>.jsx` and confirm zero changes to
+  inline-style objects, color literals (`#xxxxxx`), JSX layout markup,
+  `MOCK_*` constants. Per-line not per-file: only `useState` /
+  `useEffect` / `callApi` / data-property reads should change. If you
+  touched a `style={{...}}` object literal, you have crossed into
+  designer territory — revert and dispatch CLARIFICATION instead.
+- **Security axes** — `useParams()` ID validation before reaching
+  `fetch()`, no raw `fetch()` (always `callApi`), no `console.log` on
+  tokens or PII, no `dangerouslySetInnerHTML`, no token in URL params.
+- **Scope check** — did you edit any file outside the dispatch's stated
+  files-to-edit list? If yes, justify in your DONE message; otherwise
+  revert. Allowed scope creep: lint fix on a clearly pre-existing issue
+  that your lint run surfaced (e.g. `tick → _` in DebugOverlay during
+  BOARD3 cycle 0). NOT allowed: refactor of unrelated styling, "while
+  I'm here" cleanups.
+- **Trailing slashes** — every new URL ends with `/`.
+
+When all 6 above PASS, append `FRONT-DONE: <slug>` to Handoffs. WEB-MAIN
+proceeds to commit + /review without an in-session Claude review pass.
+
+**Risky commit exception**: if your work touches one of these zones,
+explicitly add `(claude-review-requested)` to your DONE message — this
+signals WEB-MAIN to run the Claude in-session reviewer/security pass on
+top of your self-review:
+
+- New auth flow / token refresh logic / OAuth handling
+- New external API call (non-`callApi` integration — should be rare;
+  verify with WEB-MAIN before adding any)
+- Storage layer change (LocalStorage / sessionStorage key rename or
+  schema change)
+- Cross-cutting hook used by ≥3 pages
+
 ## When you're idle
 
 Wait at the Codex prompt. WEB-MAIN will `cmux send` your next task.

@@ -112,6 +112,56 @@ Same as the standard 2-cycle cap from AGENTS.md:
 - All URL patterns end with trailing slash (Django APPEND_SLASH only
   redirects GET, not POST).
 
+## Self-review checklist before signaling BACK-DONE
+
+Per the hybrid pre-commit policy (CLAUDE.md § Token-saving rules), the
+default path skips Claude `reviewer` / `security-manager` agents in WEB-
+MAIN. WEB-MAIN trusts your BACK-DONE report. So your `pytest` green is
+the floor, not the ceiling — before signaling DONE, walk this checklist
+on the diff yourself:
+
+- **Lint + tests** — `pytest <changed-app>` and `flake8 <changed-files>`
+  GREEN. No skipped tests. No `pytest.mark.xfail` to mask failures.
+- **Diff re-read** — read your final diff once more. Hunt specifically
+  for: contract mismatches between caller & callee (frontend reads
+  field X but backend returns Y), race conditions in counter caches /
+  signal handlers, missing `IsAuthenticated` / 403 / 404 guards on new
+  endpoints, off-by-one in pagination bounds, transaction boundaries on
+  multi-row mutations.
+- **Pattern parity** — for any new model / view / endpoint, find one
+  existing similar one in the codebase (e.g. SOC1 Follow when shipping
+  SOC3 OfficeFollow) and side-by-side compare: same `permission_classes`?
+  same throttle? same `unique_together` / `db_index`? same response
+  shape (status codes + body fields)?
+- **Migration sanity** — `makemigrations` only added what you intended.
+  No accidental `RemoveField` from a sibling app. Migration is reverse-
+  safe (no data migrations without explicit reason).
+- **Security axes** — IDOR (authorization beyond authentication?), input
+  validation on user-controlled fields (DRF Serializer.choices /
+  MaxLength / regex), no raw SQL on user input (use ORM or
+  `parameterized %s`), no token leakage in error responses.
+- **Scope check** — did you edit any file outside the dispatch's stated
+  files-to-edit list? If yes, justify in your DONE message; otherwise
+  revert the off-scope edit.
+- **DRF CharField gotcha** — covered earlier in this doc; re-verify if
+  you added any new `CharField` with custom validators.
+
+When all 7 above PASS, append `BACK-DONE: <slug>` to Handoffs. WEB-MAIN
+proceeds to commit + /review without an in-session Claude review pass.
+
+**Risky commit exception**: if your work touches one of these zones,
+explicitly add `(claude-review-requested)` to your DONE message — this
+signals WEB-MAIN to run the Claude in-session reviewer/security pass on
+top of your self-review:
+
+- New `permission_classes` / new auth check / token-handling code
+- Network layer (new external API call, retry/backoff change)
+- Model.objects on `architecture_vectors` (must be raw SQL — but if
+  you ever refactor any code path nearby, flag it)
+- Migration with data backfill / `RunPython` / non-additive schema
+  change
+- Cross-cutting refactor touching ≥4 unrelated apps
+
 ## When you're idle
 
 Wait at the Codex prompt. WEB-MAIN will `cmux send` your next task.

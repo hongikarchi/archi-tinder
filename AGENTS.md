@@ -43,13 +43,23 @@ you're done.
 Append-only. One line per signal. Format: `<SIGNAL>: <payload>`.
 
 - `BACK-DONE: <slug>` — WEB-BACK finished a backend task; payload is
-  the task slug or the produced artifact path.
-- `FRONT-DONE: <slug>` — WEB-FRONT finished a frontend task.
+  the task slug or the produced artifact path. Append
+  `(claude-review-requested)` if the work touches auth flow, token-
+  handling, migrations with data backfill, or cross-cutting refactor
+  (per CLAUDE.md § Hybrid pre-commit policy + your team file's risky-
+  commit zones).
+- `FRONT-DONE: <slug>` — WEB-FRONT finished a frontend task. Same
+  `(claude-review-requested)` suffix when risky.
 - `BACK-BLOCKED: <one-line reason>` — WEB-BACK cannot proceed; root
   cause + which file/decision is required.
 - `FRONT-BLOCKED: <one-line reason>` — WEB-FRONT cannot proceed.
 - `<TEAM>-NEEDS-CLARIFICATION: <one-sentence question>` — scope or
   intent is ambiguous; stop and wait.
+
+**Self-review is mandatory before DONE** — your team file
+(`.claude/agents/team-back.md` / `team-front.md`) defines a checklist
+WEB-MAIN trusts in lieu of running the in-session Claude reviewer +
+security agents on every commit. Walk it before signaling DONE.
 
 `REVIEW-PASSED` / `REVIEW-FAIL` / `REVIEW-ABORTED` are emitted by
 WEB-REVIEW (Claude `/review`), not by you.
