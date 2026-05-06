@@ -122,7 +122,7 @@ function ResultStrip({ results, isFallback }) {
   )
 }
 
-export default function LLMSearchPage({ mode, projectId, projectName: initialName, onBack, onStart, onUpdate }) {
+export default function LLMSearchPage({ mode, projectId, projectName: initialName, visibility = 'private', onBack, onStart, onUpdate }) {
   const [messages, setMessages] = useState([
     { role: 'ai', text: "Hello! Describe the kind of architecture you're looking for -- country, program, architect, style, year, and so on." }
   ])
@@ -218,7 +218,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
     if (mode === 'update') {
       onUpdate(projectId, latestResults, latestFilters, latestFilterPriority, latestVisualDescription)
     } else {
-      onStart(name, latestResults, latestFilters, latestFilterPriority, latestVisualDescription)
+      onStart(name, latestResults, latestFilters, latestFilterPriority, latestVisualDescription, visibility)
     }
   }
 

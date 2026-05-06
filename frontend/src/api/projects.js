@@ -28,6 +28,15 @@ export async function getProject(projectId, { throwOnError = false } = {}) {
   }
 }
 
+export async function updateProject(projectId, fields) {
+  try {
+    return await callApi('PATCH', `/projects/${projectId}/`, fields)
+  } catch (err) {
+    console.error('[api/client] updateProject failed:', err)
+    return null
+  }
+}
+
 export async function deleteProject(projectId) {
   try {
     await callApi('DELETE', `/projects/${projectId}/`)

@@ -8,13 +8,14 @@ export default function ProjectSetupPage({ onBack, onNext }) {
   const [projectName, setProjectName] = useState('')
   const [minArea, setMinArea] = useState(SCALE_MIN)
   const [maxArea, setMaxArea] = useState(SCALE_MAX)
+  const [visibility, setVisibility] = useState('private')
 
   const canProceed = projectName.trim().length > 0
   const areaActive = minArea > SCALE_MIN || maxArea < SCALE_MAX
 
   function handleNext() {
     if (!canProceed) return
-    onNext({ projectName: projectName.trim(), minArea, maxArea })
+    onNext({ projectName: projectName.trim(), minArea, maxArea, visibility })
   }
 
   return (
@@ -94,6 +95,38 @@ export default function ProjectSetupPage({ onBack, onNext }) {
             {['Small', '', 'Medium', '', 'Large'].map((label, i) => (
               <span key={i} style={{ color: 'var(--color-text-dimmest)', fontSize: 10 }}>{label}</span>
             ))}
+          </div>
+        </div>
+
+        <div style={{ marginTop: 32 }}>
+          <p style={{ color: 'var(--color-text-muted)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', margin: '0 0 10px' }}>
+            Visibility
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            {['private', 'public'].map(option => {
+              const active = visibility === option
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => setVisibility(option)}
+                  style={{
+                    minHeight: 44,
+                    borderRadius: 12,
+                    border: active ? '1px solid #ec4899' : '1px solid var(--color-border-soft)',
+                    background: active ? 'rgba(236,72,153,0.12)' : 'var(--color-surface-2)',
+                    color: active ? '#f9a8d4' : 'var(--color-text-dim)',
+                    fontSize: 13,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                    textTransform: 'capitalize',
+                  }}
+                >
+                  {option}
+                </button>
+              )
+            })}
           </div>
         </div>
 

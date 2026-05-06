@@ -276,6 +276,7 @@ export default function App() {
         visual_description: visualDescription || undefined,
       })
       applySessionResponse(projectId, result)
+      return result
     } catch (err) {
       setCurrentCard(null)
       setPrefetchCard(null)
@@ -286,7 +287,7 @@ export default function App() {
     }
   }
 
-  async function handleStart(projectName, preloadedImages, llmFilters = {}, filterPriority = [], visualDescription = null) {
+  async function handleStart(projectName, preloadedImages, llmFilters = {}, filterPriority = [], visualDescription = null, visibility = 'private') {
     const projectId = `proj_${Date.now()}`
     const seedIds = (preloadedImages || []).map(c => c.image_id).filter(Boolean)
     const newProject = {
@@ -295,12 +296,16 @@ export default function App() {
       predictedLikes: [],
       sessionId: null, createdAt: new Date().toISOString(),
       deckImages: preloadedImages || null,
+      visibility,
     }
     setWizardData(null)
     setProjects(prev => [...prev, newProject])
     setActiveProjectId(projectId)
     navigate('/swipe')
-    await initSession(projectId, llmFilters || {}, filterPriority, seedIds, null, null, visualDescription)
+    const result = await initSession(projectId, llmFilters || {}, filterPriority, seedIds, null, null, visualDescription)
+    if (visibility !== 'private' && result?.project_id) {
+      api.updateProject(result.project_id, { visibility })
+    }
   }
 
   async function handleSwipeCard(action) {
@@ -551,6 +556,7 @@ export default function App() {
           id: String(p.project_id),
           backendId: String(p.project_id),
           projectName: p.name,
+          visibility: p.visibility || 'private',
           filters: p.filters || {},
           likedBuildings: extractLikedIds(p.liked_ids).map(bid => cardMap[bid]).filter(Boolean),
           swipedIds: [...extractLikedIds(p.liked_ids), ...(p.disliked_ids || [])],
@@ -646,8 +652,8 @@ export default function App() {
           <Route path="new" element={
             <ProjectSetupPage
               onBack={() => navigate('/')}
-              onNext={({ projectName, minArea, maxArea }) => {
-                setWizardData({ projectName, minArea, maxArea })
+              onNext={({ projectName, minArea, maxArea, visibility }) => {
+                setWizardData({ projectName, minArea, maxArea, visibility })
                 navigate('/search')
               }}
             />
@@ -656,6 +662,7 @@ export default function App() {
             <LLMSearchPage
               mode="new"
               projectName={wizardData?.projectName}
+              visibility={wizardData?.visibility}
               onBack={() => navigate('/new')}
               onStart={handleStart}
               onUpdate={handleUpdateWithImages}
