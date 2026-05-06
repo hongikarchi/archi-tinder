@@ -66,6 +66,19 @@ fi
 # would submit the prompt prematurely on the first \n.
 flat_msg=$(printf '%s' "$MESSAGE" | tr '\n' ' ')
 
+# Long-message fallback: cmux send silently truncates messages past
+# ~1-2 KB. Empirical: a 2.3 KB BOARD3 plan was dropped entirely on
+# first try (codex never saw it; WEB-FRONT scrollback showed no
+# dispatched line at all). For anything past 1500 chars, write the
+# full plan to a temp file and dispatch a short pointer instead.
+LIMIT=1500
+if [ ${#flat_msg} -gt "$LIMIT" ]; then
+    plan_file="/tmp/dispatch-${TEAM}-$(date +%Y%m%d-%H%M%S).md"
+    printf '%s\n' "$MESSAGE" > "$plan_file"
+    flat_msg="Long plan: read ${plan_file} and execute. Acceptance + handoff signal format are inside. Append handoff line per the file's instructions when done, then stop."
+    printf '[dispatch] %s plan → %s (%d chars; sending pointer)\n' "$WS_NAME" "$plan_file" "${#MESSAGE}"
+fi
+
 $CMUX send --workspace "$ws_ref" --surface "$surf_ref" "$flat_msg" >/dev/null
 $CMUX send-key --workspace "$ws_ref" --surface "$surf_ref" "Enter" >/dev/null
 
