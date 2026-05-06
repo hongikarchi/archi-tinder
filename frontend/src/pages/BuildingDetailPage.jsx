@@ -1,0 +1,343 @@
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { getBuildings } from '../api/client.js'
+
+const BUILDING_ID_RE = /^[A-Za-z0-9_-]{1,32}$/
+
+function formatArea(value) {
+  if (value === null || value === undefined || value === '') return null
+  const num = Number(value)
+  return Number.isFinite(num) ? `${num.toLocaleString()} m²` : String(value)
+}
+
+function metadataItems(card) {
+  const metadata = card?.metadata || {}
+  const materialVisual = Array.isArray(metadata.axis_material_visual)
+    ? metadata.axis_material_visual.join(', ')
+    : metadata.axis_material_visual
+
+  return [
+    ['Architect', metadata.axis_architects],
+    ['Year', metadata.axis_year],
+    ['Program', metadata.axis_typology],
+    ['Style', metadata.axis_style],
+    ['Material', metadata.axis_material || materialVisual],
+    ['Location', metadata.axis_country],
+    ['Area', formatArea(metadata.axis_area_m2)],
+  ].filter(([, value]) => value)
+}
+
+function LoadingState({ onBack }) {
+  return (
+    <div style={{
+      minHeight: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+      background: 'var(--color-bg)',
+      color: 'var(--color-text)',
+    }}>
+      <Header onBack={onBack} />
+      <div className="skeleton-shimmer" style={{ height: '50vh', width: '100%' }} />
+      <div style={{ padding: '22px 20px' }}>
+        <div className="skeleton-shimmer" style={{ width: '72%', height: 28, borderRadius: 8, marginBottom: 14 }} />
+        <div className="skeleton-shimmer" style={{ width: '46%', height: 16, borderRadius: 8, marginBottom: 24 }} />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          {[0, 1, 2, 3].map(i => (
+            <div key={i} className="skeleton-shimmer" style={{ height: 58, borderRadius: 12 }} />
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ErrorState({ message, onBack, onRetry }) {
+  return (
+    <div style={{
+      minHeight: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+      background: 'var(--color-bg)',
+      color: 'var(--color-text)',
+      display: 'flex',
+      flexDirection: 'column',
+    }}>
+      <Header onBack={onBack} />
+      <div style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 14,
+        padding: 24,
+        textAlign: 'center',
+      }}>
+        <p style={{ color: 'var(--color-text)', fontSize: 17, fontWeight: 700, margin: 0 }}>
+          건물 정보를 찾을 수 없어요
+        </p>
+        <p style={{ color: 'var(--color-text-dim)', fontSize: 13, lineHeight: 1.5, margin: 0 }}>
+          {message}
+        </p>
+        <button
+          type="button"
+          onClick={onRetry}
+          style={{
+            minHeight: 44,
+            padding: '0 18px',
+            borderRadius: 12,
+            border: '1px solid var(--color-border-soft)',
+            background: 'var(--color-surface)',
+            color: 'var(--color-text)',
+            fontSize: 13,
+            fontWeight: 700,
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+          }}
+        >
+          Retry
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function Header({ onBack }) {
+  return (
+    <div style={{
+      position: 'sticky',
+      top: 0,
+      zIndex: 20,
+      height: 56,
+      display: 'flex',
+      alignItems: 'center',
+      padding: '6px 14px',
+      background: 'var(--color-header-bg, rgba(10,10,12,0.72))',
+      backdropFilter: 'blur(16px)',
+      WebkitBackdropFilter: 'blur(16px)',
+      borderBottom: '1px solid var(--color-border-soft)',
+    }}>
+      <button
+        type="button"
+        onClick={onBack}
+        aria-label="Back"
+        style={{
+          width: 44,
+          height: 44,
+          borderRadius: 12,
+          border: 'none',
+          background: 'transparent',
+          color: 'var(--color-text)',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="19" y1="12" x2="5" y2="12" />
+          <polyline points="12 19 5 12 12 5" />
+        </svg>
+      </button>
+    </div>
+  )
+}
+
+export default function BuildingDetailPage() {
+  const navigate = useNavigate()
+  const rawBuildingId = useParams().buildingId
+  const buildingId = BUILDING_ID_RE.test(String(rawBuildingId || '')) ? rawBuildingId : null
+  const [building, setBuilding] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [reloadKey, setReloadKey] = useState(0)
+
+  useEffect(() => {
+    if (!buildingId) {
+      setBuilding(null)
+      setLoading(false)
+      setError('Invalid building ID.')
+      return
+    }
+
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+
+    getBuildings([buildingId])
+      .then(results => {
+        if (cancelled) return
+        const next = results?.[0] || null
+        setBuilding(next)
+        setError(next ? null : 'No building matched this ID.')
+      })
+      .catch(err => {
+        if (cancelled) return
+        setBuilding(null)
+        setError(err.message || 'Failed to load building detail.')
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => { cancelled = true }
+  }, [buildingId, reloadKey])
+
+  const gallery = useMemo(() => {
+    if (!building) return []
+    const merged = building.gallery?.length ? building.gallery : []
+    return merged.length ? merged : [building.image_url].filter(Boolean)
+  }, [building])
+
+  const title = building?.image_title || building?.name_en || buildingId || 'Building'
+  const architect = building?.metadata?.axis_architects
+  const description = building?.metadata?.axis_atmosphere || building?.atmosphere || 'No atmosphere description is available yet.'
+  const items = metadataItems(building)
+
+  function handleBack() {
+    navigate(-1)
+  }
+
+  if (loading) return <LoadingState onBack={handleBack} />
+  if (error || !building) {
+    return (
+      <ErrorState
+        message={error || 'No building matched this ID.'}
+        onBack={handleBack}
+        onRetry={() => setReloadKey(k => k + 1)}
+      />
+    )
+  }
+
+  return (
+    <div style={{
+      minHeight: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+      background: 'var(--color-bg)',
+      color: 'var(--color-text)',
+      overflowY: 'auto',
+      paddingBottom: 'calc(84px + env(safe-area-inset-bottom, 0px))',
+    }}>
+      <Header onBack={handleBack} />
+
+      <section className="hide-scrollbar" style={{
+        height: '50vh',
+        minHeight: 320,
+        display: 'flex',
+        overflowX: 'auto',
+        scrollSnapType: 'x mandatory',
+        background: 'var(--color-surface)',
+      }}>
+        {gallery.map((url, index) => (
+          <div key={`${url}-${index}`} style={{
+            position: 'relative',
+            minWidth: '100%',
+            height: '100%',
+            scrollSnapAlign: 'start',
+            background: '#050505',
+          }}>
+            <div className="skeleton-shimmer" style={{ position: 'absolute', inset: 0 }} />
+            <img
+              src={url}
+              alt={`${title} ${index + 1}`}
+              loading={index === 0 ? 'eager' : 'lazy'}
+              style={{
+                position: 'absolute',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+              }}
+            />
+          </div>
+        ))}
+      </section>
+
+      <main style={{ maxWidth: 820, margin: '0 auto', padding: '24px 20px 0' }}>
+        <p style={{
+          color: 'var(--color-text-muted)',
+          fontSize: 11,
+          fontWeight: 800,
+          letterSpacing: '0.1em',
+          textTransform: 'uppercase',
+          margin: '0 0 8px',
+        }}>
+          Building detail
+        </p>
+        <h1 style={{
+          color: 'var(--color-text)',
+          fontSize: 'clamp(28px, 7vw, 42px)',
+          fontWeight: 800,
+          lineHeight: 1.08,
+          margin: '0 0 8px',
+        }}>
+          {title}
+        </h1>
+        {architect && (
+          <p style={{
+            color: 'var(--color-text-dim)',
+            fontSize: 15,
+            fontStyle: 'italic',
+            lineHeight: 1.45,
+            margin: '0 0 20px',
+          }}>
+            {architect}
+          </p>
+        )}
+
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(138px, 1fr))',
+          gap: 10,
+          marginBottom: 24,
+        }}>
+          {items.map(([label, value]) => (
+            <div key={label} style={{
+              minHeight: 58,
+              borderRadius: 12,
+              border: '1px solid var(--color-border-soft)',
+              background: 'var(--color-surface)',
+              padding: '10px 12px',
+            }}>
+              <div style={{
+                color: 'var(--color-text-muted)',
+                fontSize: 10,
+                fontWeight: 800,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                marginBottom: 4,
+              }}>
+                {label}
+              </div>
+              <div style={{
+                color: 'var(--color-text)',
+                fontSize: 13,
+                fontWeight: 700,
+                lineHeight: 1.3,
+              }}>
+                {value}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <section style={{
+          borderTop: '1px solid var(--color-border-soft)',
+          paddingTop: 20,
+        }}>
+          <h2 style={{
+            color: 'var(--color-text)',
+            fontSize: 16,
+            fontWeight: 800,
+            margin: '0 0 10px',
+          }}>
+            Atmosphere
+          </h2>
+          <p style={{
+            color: 'var(--color-text-dim)',
+            fontSize: 15,
+            lineHeight: 1.65,
+            margin: 0,
+          }}>
+            {description}
+          </p>
+        </section>
+      </main>
+    </div>
+  )
+}

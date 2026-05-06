@@ -11,6 +11,7 @@ import FirmProfilePage from './pages/FirmProfilePage.jsx'
 import PostSwipeLandingPage from './pages/PostSwipeLandingPage.jsx'
 import BoardDetailPage from './pages/BoardDetailPage.jsx'
 import ResultsPage from './pages/ResultsPage.jsx'
+import BuildingDetailPage from './pages/BuildingDetailPage.jsx'
 import * as api from './api/client.js'
 
 function normalizeFilters(filters) {
@@ -691,6 +692,7 @@ export default function App() {
           <Route path="office/:officeId" element={<FirmProfilePage {...sharedLayoutProps} />} />
           <Route path="matched/:sessionId" element={<PostSwipeLandingPage />} />
           <Route path="result/:sessionId" element={<ResultsPage projects={projects} setProjects={setProjects} />} />
+          <Route path="buildings/:buildingId" element={<BuildingDetailPage />} />
           <Route path="board/:boardId" element={<BoardDetailPage />} />
         </Route>
 
