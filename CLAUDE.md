@@ -56,6 +56,26 @@
     - **Auto-archive Task.md handoffs** — when `## Handoffs` section exceeds 30 entries, reporter trims oldest to `.claude/handoffs-archive/<YYYY-MM>.md`, keeping recent 30 in Task.md.
     - **Slim back-maker prompts** — target 1.5-2 K tokens per delegation (vs 3-5 K previously). Use spec section pointers + minimal scope; back-maker reads spec directly when needed.
     - **Don't read full /review reports in main** — when user reports verdict, summarize verdict + key findings in chat; do NOT pull the 25-30 K report body into main context.
+    - **Bundle trivial commits — push only on milestone / push-worthy commits** — Don't `/review + push` after every trivial commit. Accumulate locally and sweep them in with the next push-worthy commit's `/review` (which scans the whole `origin/main..HEAD` range, so no extra cost). Empirical from 2026-05-06 session: 8 push events for 16 commits ≈ ~2 commits/push. Bundling could have reduced to 4-5 push events (~30-40% `/review` token savings = ~450-600 K Claude per session).
+      - **Push-worthy** (immediately `/review` + push when committed):
+        1. **Milestone commit** — closes a Task.md `## Development Roadmap` task ID (PROF1, BOARD3, SOC3-back, REC1, etc).
+        2. **Production code commit** — `backend/apps/*/{models,views,serializers,urls,migrations}.py` or `frontend/src/{pages,hooks,api,contexts}/*.{js,jsx}` with logic change.
+        3. **Migration commit** — schema change in any app.
+        4. **Risky-zone touch** — auth / token-handling / new external API integration / cross-cutting refactor ≥ 4 unrelated apps (matches CLAUDE.md hybrid-policy risky-commit list).
+        5. **User explicit request** — "지금 push" / "리뷰 돌려".
+      - **Bundle-worthy** (commit locally; push deferred to next push-worthy or session-end):
+        1. **Pure docs / policy** — `CLAUDE.md`, `.claude/agents/*.md`, `AGENTS.md`, `BRANCHING.md`, `Goal.md`, `Report.md`, `Task.md` (handoff entries, status updates).
+        2. **Tooling** — `tools/*.sh`, `.gitignore` whitelist additions, cmux config (per 2026-05-07 user decision: tooling-self-use is local-effective from commit time; remote sync waits for next code push).
+        3. **Sub-MINOR follow-ups** — cosmetic fixes from `/review` reports (typo in docstring, dead-code branch, etc).
+        4. **Handoff entries** — single-line `RESEARCH-REQUESTED:` / similar additions to `Task.md ## Handoffs`.
+        5. **Session-end housekeeping** — reporter pass output (Report.md sync, Task.md trim, handoffs archive).
+      - **Forced push triggers** (sweep accumulated bundle even without a push-worthy commit):
+        1. **Push-worthy commit lands** (automatic — sweeps everything in `origin/main..HEAD`).
+        2. **Session end** (cleanup batch — explicit user "끝내자" or context wind-down).
+        3. **Bundle accumulator > 5 commits** (heuristic — review scope and history clarity start to suffer).
+        4. **24 hours since first bundle commit** (anti-stale; rarely triggers).
+        5. **User explicit "지금 push"**.
+      - **Drift safety**: each push still triggers `/review` Part C drift check on the entire `origin/main..HEAD` range, so bundling does NOT lose drift protection. Larger range simply means slightly larger Part A scope (Part B browser test cost is fixed-per-session regardless of range size).
 
   ## Target Structure
   frontend/   <- React 18 + Vite
