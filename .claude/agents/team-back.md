@@ -112,6 +112,42 @@ Same as the standard 2-cycle cap from AGENTS.md:
 - All URL patterns end with trailing slash (Django APPEND_SLASH only
   redirects GET, not POST).
 
+## DB-touch handoff — when migrate or live-DB query is needed
+
+Your codex sandbox is `workspace-write`, which **blocks DNS to external
+services** including the Neon Postgres dev DB. Empirical: SOC3-back
+hit `manage.py migrate` failure on 2026-05-06 — codex correctly stopped
+and signalled BLOCKED; WEB-MAIN ran the migrate manually with full
+network access.
+
+**The pattern**: when your task involves any of —
+
+- `python3 manage.py migrate` (apply migration to dev/prod DB)
+- `python3 manage.py shell` querying live data
+- `python3 manage.py loaddata` / `dumpdata`
+- Any script hitting `DATABASE_URL` directly
+
+You **do not run those commands**. Instead:
+
+1. Write the code (model + migration file generated via
+   `makemigrations` IS allowed — it's a file write, no DB connection
+   needed) + tests.
+2. Run `pytest <changed-app>` — pytest creates its OWN test DB via
+   Django's test runner; no Neon connection needed for unit/integration
+   tests of the model+view logic.
+3. If pytest passes, signal `BACK-DONE: <slug> (db-handoff-needed)`
+   in your handoff message. The `(db-handoff-needed)` suffix tells
+   WEB-MAIN to apply the migration + run a smoke test against Neon
+   before committing.
+4. If pytest needs the new schema applied to a non-test DB to run
+   (rare; only if a fixture script needs it), signal
+   `BACK-BLOCKED: <slug> needs migrate before tests` and stop.
+
+`(db-handoff-needed)` is NOT the same as `(claude-review-requested)`
+— the latter is for risky code that needs Claude reviewer; the former
+is for routine DB-mutation steps WEB-MAIN must run on your behalf.
+Both can coexist on a single DONE message if needed.
+
 ## Self-review checklist before signaling BACK-DONE
 
 Per the hybrid pre-commit policy (CLAUDE.md § Token-saving rules), the

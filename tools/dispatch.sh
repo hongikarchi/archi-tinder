@@ -62,6 +62,20 @@ if [ -z "$surf_ref" ]; then
     exit 3
 fi
 
+# WEB-REVIEW context-bloat mitigation: empirical bug — a /review
+# session that has accumulated ~400 KB+ tokens stops processing new
+# input cleanly (dispatch message stuck in prompt for ~14 minutes
+# before manual Enter nudge resolved it). /review is stateless by
+# design (re-reads files each invocation) so dropping prior context
+# is free. Auto-/clear before EVERY review dispatch. Opt-out:
+# DISPATCH_NO_CLEAR=1 ./tools/dispatch.sh review "..."
+if [ "$TEAM" = "review" ] && [ "${DISPATCH_NO_CLEAR:-0}" != "1" ]; then
+    $CMUX send --workspace "$ws_ref" --surface "$surf_ref" "/clear" >/dev/null
+    $CMUX send-key --workspace "$ws_ref" --surface "$surf_ref" "Enter" >/dev/null
+    sleep 3
+    printf "[dispatch] %s pre-clear sent\n" "$WS_NAME"
+fi
+
 # Strip newlines: cmux send types literally and a multi-line message
 # would submit the prompt prematurely on the first \n.
 flat_msg=$(printf '%s' "$MESSAGE" | tr '\n' ' ')
