@@ -10,6 +10,7 @@ import UserProfilePage from './pages/UserProfilePage.jsx'
 import FirmProfilePage from './pages/FirmProfilePage.jsx'
 import PostSwipeLandingPage from './pages/PostSwipeLandingPage.jsx'
 import BoardDetailPage from './pages/BoardDetailPage.jsx'
+import ResultsPage from './pages/ResultsPage.jsx'
 import * as api from './api/client.js'
 
 function normalizeFilters(filters) {
@@ -396,8 +397,11 @@ export default function App() {
             ...p,
             predictedLikes: resultData.predicted_like_images || [],
           } : p))
+        } catch {
+          // ResultsPage will attempt a fresh GET /result/ on entry.
         } finally {
           setIsResultLoading(false)
+          navigate(`/result/${project.sessionId}`)
         }
       } else {
         if (canInstantSwap) {
@@ -613,7 +617,10 @@ export default function App() {
     isSwipeLoading,
     isResultLoading,
     onSwipe: handleSwipeCard,
-    onViewResults: () => navigate('/library/' + activeProjectId),
+    onViewResults: () => {
+      if (activeProject?.sessionId) navigate('/result/' + activeProject.sessionId)
+      else navigate('/library/' + activeProjectId)
+    },
     onResumeProject: handleResumeProject,
     onDeleteProject: handleDeleteProject,
     onGenerateReport: handleGenerateReport,
@@ -683,6 +690,7 @@ export default function App() {
           <Route path="user/:userId" element={<UserProfilePage {...sharedLayoutProps} />} />
           <Route path="office/:officeId" element={<FirmProfilePage {...sharedLayoutProps} />} />
           <Route path="matched/:sessionId" element={<PostSwipeLandingPage />} />
+          <Route path="result/:sessionId" element={<ResultsPage projects={projects} setProjects={setProjects} />} />
           <Route path="board/:boardId" element={<BoardDetailPage />} />
         </Route>
 
