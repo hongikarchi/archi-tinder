@@ -137,6 +137,59 @@ sequenceDiagram
 > - `## Handoffs` (near top) = short-lived review/mockup signals, rolling window.
 > - `## Research Ready` (further down) = research terminal's append-only queue. Do not mix the two.
 
+### Codex Integration (BACK / FRONT panes — stateless dispatch)
+
+The cmux setup includes `workspace:2 BACK` and `workspace:3 FRONT` panes for **stateless Codex CLI dispatch** of mechanical code work. Pattern: Claude main writes a precise plan, dispatches via `cmux send`, Codex `exec` runs fresh per task, sentinel signals completion, Claude validates output via reviewer + security agents.
+
+**Empirically validated 2026-05-06** across 3 PASS commits (`27fee9b` validators, `042bed4` reactors endpoint, `59d2af4` frontend hook). Quality 4/5 ("slightly better than back-maker" on bounded tasks); Plan-handoff fidelity tax low when plan is fully specified.
+
+**When to dispatch to Codex** (vs back-maker):
+
+| Use Codex when... | Use back-maker when... |
+|---|---|
+| Mechanical, well-bounded task (single feature, clear spec) | Open-ended exploration, refactoring across 5+ files |
+| Plan can include verbatim code blocks for new functions | Bug fix where root cause needs diagnosis |
+| Acceptance is `pytest -v` exit 0 + lint clean | Output evaluation is subjective (algorithm tuning) |
+| Designer territory clearly excluded | Design pipeline already involved |
+
+**Dispatch flow** (stateless, single task):
+
+```
+[Plan written by Claude main]                    .claude/codex-tasks/<NNN>-<slug>.md
+            │
+            ▼
+[cmux send to BACK or FRONT pane]
+  codex exec --sandbox workspace-write
+    -C <repo> < plan.md
+    && echo "WRAP<NNN>FINISHED"
+    || echo "WRAP<NNN>NONZERO"
+            │
+            ▼
+[Codex executes — autonomous test loop until green]
+            │
+            ▼
+[Wrapper sentinel WRAP<NNN>FINISHED on its own line]
+            │
+            ▼
+[Claude main: git diff verify deliverable exists]
+            │
+            ▼
+[Reviewer + security agents in parallel — same bar as back-maker]
+            │
+            ▼
+[git-manager commit (Co-Authored-By Codex CLI)]
+```
+
+**Key invariants** (full protocol at `.claude/codex-tasks/PROTOCOL.md`):
+
+- Verify pane state with `cmux read-screen` BEFORE dispatch — must be a clean shell prompt, not an interactive process.
+- Sentinel is shell-emitted (`echo WRAP<NNN>...`), never relies on Codex output.
+- Sentinel match must be anchored at start-of-line (`grep -q "^WRAP..."`) to avoid matching the dispatch command echoed in the prompt.
+- After sentinel fires, ALWAYS verify with `git diff --stat` that files actually changed. Zero diff = false-positive sentinel; investigate.
+- 2 failed iterations on the same task → fall back to Claude back-maker.
+
+**Relationship to other terminals**: Codex panes are *invocation surfaces*, not full terminals. They share Claude main's signal flow — REVIEW-REQUESTED is still emitted by main's reporter, /review still runs in workspace:4, design pipeline is unchanged. The Codex pattern is an **alternative to back-maker for the inner loop only**.
+
 ### Frontend Layer Ownership (designer vs main)
 
 Both the design terminal (`designer`) and main (`front-maker`) edit files under

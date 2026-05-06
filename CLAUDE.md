@@ -84,6 +84,55 @@
   - `images/batch/` POST -- batch-fetch building cards by `building_ids` list
   - Run: `cd backend && python3 manage.py runserver 8001`
 
+  ## Codex Usage Policy (stateless dispatch)
+
+  Empirically validated 2026-05-06: Claude main can dispatch mechanical code work
+  to Codex CLI (running in cmux `workspace:2 BACK` / `workspace:3 FRONT` panes)
+  via `cmux send` + stateless `codex exec`. 3/3 PASS empirical commits
+  (`27fee9b`, `042bed4`, `59d2af4`) at 4/5 quality vs back-maker. Full protocol
+  at `.claude/codex-tasks/PROTOCOL.md`; integration overview at WORKFLOW.md.
+
+  **When to dispatch to Codex**:
+  - Mechanical, well-bounded task (single feature, clear file scope)
+  - Plan can include verbatim code blocks for new functions / classes / tests
+  - Acceptance is `pytest -v` exit 0 + lint clean (no subjective evaluation)
+  - Can be specified in <100 lines of plan markdown
+
+  **When to stay with Claude back-maker** (do NOT dispatch to Codex):
+  - Open-ended exploration, refactor across 5+ files, or cross-layer changes
+  - Bug fix where root cause is unclear (Codex starts cold each task)
+  - Algorithm tuning with subjective output evaluation
+  - Design-territory work (frontend UI / inline styles — designer agent territory)
+
+  **Plan-handoff requirements** (Codex is cold-context — explicit plans required):
+  - Include verbatim code blocks for new functions, not just natural-language spec
+  - Specify framework defaults that affect behavior (e.g. DRF `CharField`
+    `trim_whitespace=True, allow_blank=False`, ORM `related_name` exact strings,
+    lazy-import patterns to avoid circular dependencies)
+  - Mandatory autonomous-test-loop section: "MUST run pytest/lint until green
+    before signaling DONE; max 3 iterations or signal BLOCKED"
+  - Explicit Permission scope: Read/Edit allow-list AND explicit Do NOT list
+    (no `git commit`, no `npm install`, no `.env` modification)
+
+  **Sentinel discipline**:
+  - Wrapper sentinels are shell-emitted (`echo WRAP<NNN>FINISHED`), never rely
+    on Codex output (would false-positive when sentinel echoed in prompt text;
+    003 first attempt sacrificed 30 min to this exact failure mode)
+  - Always anchor `grep -q "^WRAP<NNN>..."` at start-of-line
+  - Always verify with `git diff --stat` AFTER sentinel — zero diff means
+    false-positive, do NOT proceed to reviewer
+
+  **Pane state verification** (before every dispatch):
+  - `cmux read-screen --workspace workspace:N --surface surface:N --lines 5`
+  - Must show clean shell prompt; never dispatch into an interactive process
+
+  **Failure handling**:
+  - Reviewer or Security FAIL on Codex output → write Plan v2 (specify the
+    missing context that caused the failure) and re-dispatch
+  - 2 failed iterations on the same task → fall back to Claude back-maker
+  - The bar for reviewer/security verdict is identical to back-maker output;
+    no separate "Codex reviewer" exists
+
   ## Web Testing (web-tester agent)
 
   ### Dev Login -- Authenticating Without OAuth
