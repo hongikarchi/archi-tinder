@@ -137,58 +137,82 @@ sequenceDiagram
 > - `## Handoffs` (near top) = short-lived review/mockup signals, rolling window.
 > - `## Research Ready` (further down) = research terminal's append-only queue. Do not mix the two.
 
-### Codex Integration (BACK / FRONT panes — stateless dispatch)
+### Codex Multi-Workspace (WEB-BACK / WEB-FRONT — stateful)
 
-The cmux setup includes `workspace:2 BACK` and `workspace:3 FRONT` panes for **stateless Codex CLI dispatch** of mechanical code work. Pattern: Claude main writes a precise plan, dispatches via `cmux send`, Codex `exec` runs fresh per task, sentinel signals completion, Claude validates output via reviewer + security agents.
+Make Web runs as 4 cmux workspaces in one window — `WEB-MAIN` (this Claude
+session, orchestrator), `WEB-BACK` (Codex CLI), `WEB-FRONT` (Codex CLI),
+`WEB-REVIEW` (Claude Code, `/review` only). Each Codex team's session is
+**stateful** — it stays running, auto-loads `AGENTS.md` from cwd at startup,
+and is dispatched tasks via `cmux send` (wrapped by `tools/dispatch.sh`).
 
-**Empirically validated 2026-05-06** across 3 PASS commits (`27fee9b` validators, `042bed4` reactors endpoint, `59d2af4` frontend hook). Quality 4/5 ("slightly better than back-maker" on bounded tasks); Plan-handoff fidelity tax low when plan is fully specified.
+**Setup** (idempotent — re-runs only create missing workspaces):
 
-**When to dispatch to Codex** (vs back-maker):
+```bash
+./tools/cmux_setup.sh    # creates WEB-BACK / WEB-FRONT / WEB-REVIEW with init prompts
+```
 
-| Use Codex when... | Use back-maker when... |
+**Architecture ground truth** (edit these files, not policy in this doc):
+- `AGENTS.md` — Codex baseline (auto-loaded by codex CLI from cwd-walk)
+- `.claude/agents/team-back.md`, `team-front.md` — per-team owned files,
+  typical task shapes, DRF gotcha, fix loop
+- `tools/dispatch.sh <team> "<msg>"` — WEB-MAIN → team
+- `tools/poll.sh <team> [lines]` — read team's screen
+
+**When to dispatch to a Codex team** (vs in-session Claude sub-agent):
+
+| Use Codex team when... | Use Claude back-maker / front-maker when... |
 |---|---|
 | Mechanical, well-bounded task (single feature, clear spec) | Open-ended exploration, refactoring across 5+ files |
-| Plan can include verbatim code blocks for new functions | Bug fix where root cause needs diagnosis |
+| Plan can include explicit acceptance criteria | Bug fix where root cause needs diagnosis |
 | Acceptance is `pytest -v` exit 0 + lint clean | Output evaluation is subjective (algorithm tuning) |
 | Designer territory clearly excluded | Design pipeline already involved |
 
-**Dispatch flow** (stateless, single task):
+**Dispatch flow** (stateful, single task):
 
 ```
-[Plan written by Claude main]                    .claude/codex-tasks/<NNN>-<slug>.md
+[WEB-MAIN: orchestrator chooses team based on task shape]
             │
             ▼
-[cmux send to BACK or FRONT pane]
-  codex exec --sandbox workspace-write
-    -C <repo> < plan.md
-    && echo "WRAP<NNN>FINISHED"
-    || echo "WRAP<NNN>NONZERO"
+[./tools/dispatch.sh back "Add /api/v1/foo/ per spec §X"]
+  cmux send → types into team's prompt + Enter
             │
             ▼
-[Codex executes — autonomous test loop until green]
+[Codex team executes — reads files, edits, runs tests until green]
             │
             ▼
-[Wrapper sentinel WRAP<NNN>FINISHED on its own line]
+[Codex appends BACK-DONE: <slug> to .claude/Task.md § Handoffs]
             │
             ▼
-[Claude main: git diff verify deliverable exists]
+[WEB-MAIN polls via tools/poll.sh + greps Task.md Handoffs]
             │
             ▼
 [Reviewer + security agents in parallel — same bar as back-maker]
             │
             ▼
-[git-manager commit (Co-Authored-By Codex CLI)]
+[git-manager commit (Co-Authored-By Codex CLI <noreply@openai.com>)]
 ```
 
-**Key invariants** (full protocol at `.claude/codex-tasks/PROTOCOL.md`):
+**Handoff signals** (`.claude/Task.md` § Handoffs):
+- `BACK-DONE: <slug>` / `FRONT-DONE: <slug>` — team finished
+- `BACK-BLOCKED: <reason>` / `FRONT-BLOCKED: <reason>` — exhausted self-heal
+- `<TEAM>-NEEDS-CLARIFICATION: <question>` — scope ambiguous, team waits
 
-- Verify pane state with `cmux read-screen` BEFORE dispatch — must be a clean shell prompt, not an interactive process.
-- Sentinel is shell-emitted (`echo WRAP<NNN>...`), never relies on Codex output.
-- Sentinel match must be anchored at start-of-line (`grep -q "^WRAP..."`) to avoid matching the dispatch command echoed in the prompt.
-- After sentinel fires, ALWAYS verify with `git diff --stat` that files actually changed. Zero diff = false-positive sentinel; investigate.
-- 2 failed iterations on the same task → fall back to Claude back-maker.
+**Key invariants**:
+- Codex auto-loads `AGENTS.md` from cwd at startup (verified 2026-05-06).
+- Stateful: a team's session persists across tasks — WEB-MAIN doesn't
+  re-init context every dispatch. Restart codex (`/quit` then `codex`) only
+  if `AGENTS.md` or the team file changed and you want the new baseline.
+- Reviewer/security verdict bar is identical to back-maker output; no
+  separate "Codex reviewer."
+- Cap: 2 fix cycles per task → escalate (`<TEAM>-BLOCKED`) → WEB-MAIN may
+  fall back to Claude `back-maker`/`front-maker`.
 
-**Relationship to other terminals**: Codex panes are *invocation surfaces*, not full terminals. They share Claude main's signal flow — REVIEW-REQUESTED is still emitted by main's reporter, /review still runs in workspace:4, design pipeline is unchanged. The Codex pattern is an **alternative to back-maker for the inner loop only**.
+**Relationship to other terminals**: WEB-REVIEW is unchanged — it's the
+`/review` pre-push gate (read-only, writes only to `.claude/reviews/*.md`
++ a one-line REVIEW-PASSED/FAIL/ABORTED signal). The design pipeline is
+also unchanged: designer terminal owns the UI layer; WEB-FRONT codex owns
+only the data layer (the per-line, not per-file, split documented in
+`.claude/agents/designer.md` still holds).
 
 ### Frontend Layer Ownership (designer vs main)
 

@@ -84,54 +84,52 @@
   - `images/batch/` POST -- batch-fetch building cards by `building_ids` list
   - Run: `cd backend && python3 manage.py runserver 8001`
 
-  ## Codex Usage Policy (stateless dispatch)
+  ## Codex Multi-Workspace (stateful 4-tab cmux setup)
 
-  Empirically validated 2026-05-06: Claude main can dispatch mechanical code work
-  to Codex CLI (running in cmux `workspace:2 BACK` / `workspace:3 FRONT` panes)
-  via `cmux send` + stateless `codex exec`. 3/3 PASS empirical commits
-  (`27fee9b`, `042bed4`, `59d2af4`) at 4/5 quality vs back-maker. Full protocol
-  at `.claude/codex-tasks/PROTOCOL.md`; integration overview at WORKFLOW.md.
+  Make Web runs as 4 cmux workspaces in one window, mirroring Make DB's stateful
+  multi-team architecture. WEB-MAIN is this Claude Code session (orchestrator).
+  WEB-BACK and WEB-FRONT each host a persistent Codex CLI session that auto-loads
+  `AGENTS.md` from cwd + its team file when WEB-MAIN dispatches a task.
 
-  **When to dispatch to Codex**:
+  | Workspace | Runs | Owns |
+  |---|---|---|
+  | WEB-MAIN | Claude Code (this session) | Pipeline, dispatch, in-session reviewer/security |
+  | WEB-BACK | Codex CLI | `backend/*` (apps, serializers, views, migrations, tests) |
+  | WEB-FRONT | Codex CLI | `frontend/*` data layer (`useState`/`useEffect`/`callApi`/hooks) — UI styles still designer-only |
+  | WEB-REVIEW | Claude Code | `/review` pre-push gate only |
+
+  **Files that define this architecture** (ground truth — edit these, not policy here):
+  - `AGENTS.md` — Codex baseline + hard guardrails (auto-loaded from cwd by codex CLI on startup)
+  - `.claude/agents/team-back.md`, `team-front.md` — per-team owned files + DRF gotchas + fix loop
+  - `tools/cmux_setup.sh` — idempotent 4-workspace creator + init prompts
+  - `tools/dispatch.sh <team> "<msg>"` — WEB-MAIN sends a task to a team
+  - `tools/poll.sh <team> [lines]` — WEB-MAIN reads a team's screen output
+
+  **When to dispatch to a Codex team** (vs an in-session Claude sub-agent):
   - Mechanical, well-bounded task (single feature, clear file scope)
-  - Plan can include verbatim code blocks for new functions / classes / tests
-  - Acceptance is `pytest -v` exit 0 + lint clean (no subjective evaluation)
-  - Can be specified in <100 lines of plan markdown
+  - Plan can include verbatim code blocks; acceptance is `pytest`/lint green
+  - Stay with Claude `back-maker`/`front-maker` for: open-ended refactors,
+    bug fixes with unclear root cause, algorithm tuning, design-territory work
 
-  **When to stay with Claude back-maker** (do NOT dispatch to Codex):
-  - Open-ended exploration, refactor across 5+ files, or cross-layer changes
-  - Bug fix where root cause is unclear (Codex starts cold each task)
-  - Algorithm tuning with subjective output evaluation
-  - Design-territory work (frontend UI / inline styles — designer agent territory)
+  **DRF gotcha** (lesson from empirical test 001 v1, codified in `team-back.md`):
+  `serializers.CharField` defaults to `trim_whitespace=True, allow_blank=False` —
+  validators receive already-stripped input. To validate whitespace-only, declare
+  the field with `trim_whitespace=False, allow_blank=True`. Tests must cover
+  whitespace-only explicitly.
 
-  **Plan-handoff requirements** (Codex is cold-context — explicit plans required):
-  - Include verbatim code blocks for new functions, not just natural-language spec
-  - Specify framework defaults that affect behavior (e.g. DRF `CharField`
-    `trim_whitespace=True, allow_blank=False`, ORM `related_name` exact strings,
-    lazy-import patterns to avoid circular dependencies)
-  - Mandatory autonomous-test-loop section: "MUST run pytest/lint until green
-    before signaling DONE; max 3 iterations or signal BLOCKED"
-  - Explicit Permission scope: Read/Edit allow-list AND explicit Do NOT list
-    (no `git commit`, no `npm install`, no `.env` modification)
+  **Handoff signals** (`.claude/Task.md` § Handoffs):
+  - `BACK-DONE: <slug>` / `FRONT-DONE: <slug>` — team finished
+  - `BACK-BLOCKED: <reason>` / `FRONT-BLOCKED: <reason>` — team escalates
+  - `<TEAM>-NEEDS-CLARIFICATION: <question>` — team waits
 
-  **Sentinel discipline**:
-  - Wrapper sentinels are shell-emitted (`echo WRAP<NNN>FINISHED`), never rely
-    on Codex output (would false-positive when sentinel echoed in prompt text;
-    003 first attempt sacrificed 30 min to this exact failure mode)
-  - Always anchor `grep -q "^WRAP<NNN>..."` at start-of-line
-  - Always verify with `git diff --stat` AFTER sentinel — zero diff means
-    false-positive, do NOT proceed to reviewer
+  **Fix loop**: WEB-MAIN's in-session `reviewer` or `security-manager` agent
+  evaluates Codex output (same bar as Claude `back-maker`/`front-maker` output —
+  no separate Codex-reviewer). On FAIL, dispatch to team with the diagnosis;
+  cap at 2 cycles, then escalate to Claude sub-agent.
 
-  **Pane state verification** (before every dispatch):
-  - `cmux read-screen --workspace workspace:N --surface surface:N --lines 5`
-  - Must show clean shell prompt; never dispatch into an interactive process
-
-  **Failure handling**:
-  - Reviewer or Security FAIL on Codex output → write Plan v2 (specify the
-    missing context that caused the failure) and re-dispatch
-  - 2 failed iterations on the same task → fall back to Claude back-maker
-  - The bar for reviewer/security verdict is identical to back-maker output;
-    no separate "Codex reviewer" exists
+  Historical note: pre-2026-05-06 used a stateless `codex exec` pattern
+  (commits `27fee9b`, `042bed4`, `59d2af4`, `51dd387`); deprecated in favor
+  of the stateful pattern after empirical comparison with Make DB's setup.
 
   ## Web Testing (web-tester agent)
 
