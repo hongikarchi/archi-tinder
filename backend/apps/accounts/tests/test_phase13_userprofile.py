@@ -287,3 +287,56 @@ class TestUserProfileSelfUpdateView:
         response = client.patch('/api/v1/users/me/', {'bio': 'test'}, format='json')
         assert response.status_code == 404
         assert 'detail' in response.json()
+
+    @pytest.mark.django_db
+    def test_display_name_whitespace_only_rejected(
+        self, user_and_profile, auth_client_for,
+    ):
+        """PATCH with whitespace-only display_name returns 400."""
+        response = auth_client_for.patch(
+            '/api/v1/users/me/', {'display_name': '   '}, format='json',
+        )
+        assert response.status_code == 400
+        errors = response.json()['display_name']
+        assert 'whitespace' in str(errors)
+
+    @pytest.mark.django_db
+    def test_display_name_too_long_rejected(
+        self, user_and_profile, auth_client_for,
+    ):
+        """PATCH with display_name over 30 chars returns 400."""
+        response = auth_client_for.patch(
+            '/api/v1/users/me/', {'display_name': 'a' * 31}, format='json',
+        )
+        assert response.status_code == 400
+        errors = response.json()['display_name']
+        assert (
+            '30 characters' in str(errors)
+            or 'no more than 30 characters' in str(errors)
+        )
+
+    @pytest.mark.django_db
+    def test_display_name_trimmed_on_save(
+        self, user_and_profile, auth_client_for,
+    ):
+        """PATCH trims leading/trailing spaces before saving display_name."""
+        user, _ = user_and_profile
+        response = auth_client_for.patch(
+            '/api/v1/users/me/', {'display_name': '  Alice  '}, format='json',
+        )
+        assert response.status_code == 200
+        profile = UserProfile.objects.get(user=user)
+        assert profile.display_name == 'Alice'
+
+    @pytest.mark.django_db
+    def test_bio_too_long_rejected(self, user_and_profile, auth_client_for):
+        """PATCH with bio over 500 chars returns 400 validation error."""
+        response = auth_client_for.patch(
+            '/api/v1/users/me/', {'bio': 'x' * 501}, format='json',
+        )
+        assert response.status_code == 400
+        errors = response.json()['bio']
+        assert (
+            '500 characters' in str(errors)
+            or 'no more than 500 characters' in str(errors)
+        )

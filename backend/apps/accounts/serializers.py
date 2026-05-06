@@ -64,9 +64,51 @@ class UserProfileSelfUpdateSerializer(serializers.ModelSerializer):
     Excludes counter caches (auto-managed) and avatar_url (separate upload flow,
     future commit). persona_summary is Phase 17 LLM-derived — not user-editable.
     """
+    # Override DRF CharField defaults so our validate_<field> methods see the
+    # raw user-supplied string (DRF would otherwise strip whitespace + reject
+    # empty strings before our validator runs, making the whitespace-only
+    # branch dead code).
+    display_name = serializers.CharField(
+        trim_whitespace=False, allow_blank=True, required=False, max_length=30,
+    )
+    bio = serializers.CharField(
+        trim_whitespace=False,
+        allow_blank=True,
+        required=False,
+        max_length=500,
+    )
+
     class Meta:
         model = UserProfile
         fields = ['display_name', 'bio', 'mbti', 'external_links']
+
+    def validate_display_name(self, value):
+        """display_name: 1-30 chars after .strip(); reject whitespace-only."""
+        if value is None:
+            return value
+        stripped = value.strip()
+        if len(stripped) == 0:
+            raise serializers.ValidationError(
+                'display_name cannot be whitespace-only.'
+            )
+        if len(stripped) > 30:
+            raise serializers.ValidationError(
+                'display_name must be 30 characters or fewer.'
+            )
+        return stripped
+
+    def validate_bio(self, value):
+        """bio: max 500 chars; whitespace-only -> empty string (cleared)."""
+        if value is None:
+            return value
+        stripped = value.strip()
+        if len(stripped) > 500:
+            raise serializers.ValidationError(
+                'bio must be 500 characters or fewer.'
+            )
+        # Whitespace-only is treated as "clear the bio" rather than rejected,
+        # so users can wipe their bio by submitting a space (or just empty).
+        return stripped
 
     def validate_mbti(self, value):
         """MBTI must be exactly 4 letters or empty."""
