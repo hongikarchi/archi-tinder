@@ -47,6 +47,33 @@ class Follow(models.Model):
         return f'{self.follower_id} -> {self.followee_id}'
 
 
+class OfficeFollow(models.Model):
+    """Asymmetric user-to-office follow relationship (Phase 15 SOC3).
+
+    Counter cache (Office.follower_count) updated via post_save/post_delete signals.
+    """
+    follower = models.ForeignKey(
+        'accounts.UserProfile',
+        on_delete=models.CASCADE,
+        related_name='office_following_set',
+    )
+    followee = models.ForeignKey(
+        'profiles.Office',
+        on_delete=models.CASCADE,
+        related_name='follower_set',
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        unique_together = [('follower', 'followee')]
+        indexes = [
+            models.Index(fields=['followee', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f'{self.follower_id} -> office:{self.followee_id}'
+
+
 # ---------------------------------------------------------------------------
 # Counter signals — single source of truth for follower_count / following_count
 # ---------------------------------------------------------------------------
@@ -81,6 +108,26 @@ def _follow_post_delete(sender, instance, **kwargs):
     )
 
 
+@receiver(post_save, sender=OfficeFollow)
+def _office_follow_post_save(sender, instance, created, **kwargs):
+    """Increment Office.follower_count when a new OfficeFollow row is created."""
+    if not created:
+        return
+    from apps.profiles.models import Office
+    Office.objects.filter(pk=instance.followee_id).update(
+        follower_count=F('follower_count') + 1,
+    )
+
+
+@receiver(post_delete, sender=OfficeFollow)
+def _office_follow_post_delete(sender, instance, **kwargs):
+    """Decrement Office.follower_count when an OfficeFollow row is deleted."""
+    from apps.profiles.models import Office
+    Office.objects.filter(pk=instance.followee_id).update(
+        follower_count=Greatest(F('follower_count') - 1, 0),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Reaction model -- Phase 15 SOC2
 # ---------------------------------------------------------------------------
@@ -107,7 +154,7 @@ class Reaction(models.Model):
     class Meta:
         unique_together = [('user', 'project')]
         indexes = [
-            models.Index(fields=['project', '-created_at']),
+            models.Index(fields=['project', '-created_at'], name='social_reac_project_idx'),
         ]
 
     def __str__(self):

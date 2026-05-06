@@ -7,14 +7,19 @@ SOC1 — 4 endpoints for user-to-user asymmetric follow:
   GET    /api/v1/users/{user_id}/followers/   -- paginated list (AllowAny)
   GET    /api/v1/users/{user_id}/following/   -- paginated list (AllowAny)
 
-SOC2 — 2 endpoints for project reaction (single-tier ❤️):
+SOC2 — 2 endpoints for project reaction (single-tier):
   POST   /api/v1/projects/{project_id}/react/  -- 201/200/403/404
   DELETE /api/v1/projects/{project_id}/react/  -- 204/403/404
 
+SOC3 — 2 endpoints for Office follow:
+  POST   /api/v1/offices/{office_id}/follow/   -- 201/200/404
+  DELETE /api/v1/offices/{office_id}/follow/   -- 204/404
+
 Counter caches (UserProfile.follower_count / following_count,
-Project.reaction_count) are managed exclusively by signal receivers in
-models.py (post_save / post_delete on Follow / Reaction). This covers both
-explicit view-level deletes and CASCADE deletes triggered by user/project
+Project.reaction_count, Office.follower_count) are managed exclusively by
+signal receivers in models.py (post_save / post_delete on Follow /
+Reaction / OfficeFollow). This covers both explicit view-level deletes and
+CASCADE deletes triggered by user/project/office
 account removal — no counter drift possible.
 """
 import logging
@@ -28,7 +33,7 @@ from rest_framework.views import APIView
 
 from apps.accounts.models import UserProfile
 from apps.accounts.serializers import UserMiniSerializer
-from apps.social.models import Follow, Reaction
+from apps.social.models import Follow, OfficeFollow, Reaction
 
 logger = logging.getLogger('apps.social')
 
@@ -117,6 +122,50 @@ class FollowView(APIView):
 
         if deleted_count == 0:
             return Response({'detail': 'Not following.'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class OfficeFollowView(APIView):
+    """POST + DELETE /api/v1/offices/{office_id}/follow/"""
+
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [FollowWriteThrottle]
+
+    def post(self, request, office_id):
+        from apps.profiles.models import Office
+        office = get_object_or_404(Office, office_id=office_id)
+        requester = getattr(request.user, 'profile', None)
+        if requester is None:
+            return Response({'detail': 'Profile not found.'}, status=status.HTTP_403_FORBIDDEN)
+
+        _follow, created = OfficeFollow.objects.get_or_create(
+            follower=requester,
+            followee=office,
+        )
+        # Counter update is handled by _office_follow_post_save signal when created=True.
+
+        office.refresh_from_db(fields=['follower_count'])
+        response_status = status.HTTP_201_CREATED if created else status.HTTP_200_OK
+        return Response(
+            {'follower_count': office.follower_count, 'following': True},
+            status=response_status,
+        )
+
+    def delete(self, request, office_id):
+        from apps.profiles.models import Office
+        office = get_object_or_404(Office, office_id=office_id)
+        requester = getattr(request.user, 'profile', None)
+        if requester is None:
+            return Response({'detail': 'Profile not found.'}, status=status.HTTP_403_FORBIDDEN)
+
+        deleted_count, _ = OfficeFollow.objects.filter(
+            follower=requester, followee=office
+        ).delete()
+        # _office_follow_post_delete signal handles counter decrement per deleted instance.
+
+        if deleted_count == 0:
+            return Response({'detail': 'Not following.'}, status=status.HTTP_404_NOT_FOUND)
+        office.refresh_from_db(fields=['follower_count'])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

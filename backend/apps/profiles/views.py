@@ -58,6 +58,18 @@ class OfficeDetailView(APIView):
         serializer = OfficeSerializer(office)
         data = serializer.data
         data['projects'] = projects
+        if request.user.is_authenticated:
+            requester = getattr(request.user, 'profile', None)
+            if requester:
+                from apps.social.models import OfficeFollow
+                data['is_following'] = OfficeFollow.objects.filter(
+                    follower=requester,
+                    followee=office,
+                ).exists()
+            else:
+                data['is_following'] = False
+        else:
+            data['is_following'] = False
         return Response(data)
 
 
