@@ -14,7 +14,7 @@ function decodeJwtExp(token) {
 }
 
 export default function DebugOverlay({ userId, session }) {
-  const [tick, setTick] = useState(0)
+  const [, setTick] = useState(0)
 
   useEffect(() => {
     const id = setInterval(() => setTick(t => t + 1), 2000)

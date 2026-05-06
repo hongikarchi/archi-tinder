@@ -18,6 +18,16 @@ export async function listProjects(page = 1, pageSize = 50) {
   }
 }
 
+export async function getProject(projectId, { throwOnError = false } = {}) {
+  try {
+    return await callApi('GET', `/projects/${projectId}/`)
+  } catch (err) {
+    console.error('[api/client] getProject failed:', err)
+    if (throwOnError) throw err
+    return null
+  }
+}
+
 export async function deleteProject(projectId) {
   try {
     await callApi('DELETE', `/projects/${projectId}/`)
@@ -45,6 +55,22 @@ export async function getBuildings(buildingIds) {
     return (result || []).map(normalizeCard)
   } catch (err) {
     console.error('[api/client] getBuildings failed:', err)
+    return []
+  }
+}
+
+/**
+ * Batch-fetch raw building rows for board detail.
+ * BoardDetailPage expects the backend's raw card fields directly.
+ */
+export async function getBoardBuildings(buildingIds) {
+  if (!buildingIds?.length) return []
+  try {
+    const result = await callApi('POST', '/images/batch/', { building_ids: buildingIds })
+    const byId = new Map((result || []).map(card => [String(card.building_id ?? card.id), card]))
+    return buildingIds.map(id => byId.get(String(id))).filter(Boolean)
+  } catch (err) {
+    console.error('[api/client] getBoardBuildings failed:', err)
     return []
   }
 }

@@ -1,6 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useImageTelemetry } from '../hooks/useImageTelemetry.js'
+import { useBoard } from '../hooks/useBoard.js'
+import { reactToProject, unreactToProject } from '../api/social.js'
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 // TODO(claude): Replace MOCK_BOARD with API call to GET /api/v1/boards/${boardId}/
 // Returns: { board_id, name, visibility, owner{user_id, display_name, avatar_url},
@@ -266,38 +270,62 @@ function BuildingTile({ building }) {
 
 export default function BoardDetailPage() {
   const navigate = useNavigate()
-  // TODO(claude): use `boardId` from URL params to fetch board data
-  // GET /api/v1/boards/${boardId}/
-  const { boardId: _boardId } = useParams()
+  const rawBoardId = useParams().boardId
+  const boardId = UUID_RE.test(String(rawBoardId || '')) ? rawBoardId : null
+  const { board, loading, error } = useBoard(boardId)
 
-  const [isReacted, setIsReacted] = useState(MOCK_BOARD.is_reacted)
-  const [reactionCount, setReactionCount] = useState(MOCK_BOARD.reaction_count)
+  const [isReacted, setIsReacted] = useState(false)
+  const [reactionCount, setReactionCount] = useState(0)
+  const [isReactionPending, setIsReactionPending] = useState(false)
+  const [reactionError, setReactionError] = useState(null)
   const [isReactHovered, setIsReactHovered] = useState(false)
   const [isReactPressed, setIsReactPressed] = useState(false)
   const [isOwnerRowHovered, setIsOwnerRowHovered] = useState(false)
   const [isBackHovered, setIsBackHovered] = useState(false)
   const [isShareHovered, setIsShareHovered] = useState(false)
 
-  function handleToggleReaction() {
-    // TODO(claude): if !isReacted -> POST /api/v1/boards/${MOCK_BOARD.board_id}/react/
-    //               else         -> DELETE /api/v1/boards/${MOCK_BOARD.board_id}/react/
-    // Response shape: { reaction_count, is_reacted } — sync with server response.
-    if (isReacted) {
-      setIsReacted(false)
-      setReactionCount(prev => Math.max(0, prev - 1))
-    } else {
-      setIsReacted(true)
-      setReactionCount(prev => prev + 1)
+  useEffect(() => {
+    if (!board) return
+    setIsReacted(!!board.is_reacted)
+    setReactionCount(board.reaction_count ?? 0)
+    setReactionError(null)
+  }, [board])
+
+  async function handleToggleReaction() {
+    if (!board || isReactionPending) return
+
+    const wasReacted = isReacted
+    const previousCount = reactionCount
+    const nextReacted = !wasReacted
+    setIsReactionPending(true)
+    setReactionError(null)
+    setIsReacted(nextReacted)
+    setReactionCount(prev => Math.max(0, prev + (nextReacted ? 1 : -1)))
+
+    try {
+      const resp = nextReacted
+        ? await reactToProject(board.project_id)
+        : await unreactToProject(board.project_id)
+      if (resp?.reaction_count !== undefined) setReactionCount(resp.reaction_count)
+      if (resp?.reacted !== undefined) setIsReacted(!!resp.reacted)
+    } catch (err) {
+      setIsReacted(wasReacted)
+      setReactionCount(previousCount)
+      setReactionError(err.message || 'Failed to update reaction.')
+    } finally {
+      setIsReactionPending(false)
     }
   }
 
   function handleNavigateToOwner() {
-    navigate(`/user/${MOCK_BOARD.owner.user_id}`)
+    if (!board?.user?.user_id) return
+    navigate(`/user/${board.user.user_id}`)
   }
 
-  const isPublic = MOCK_BOARD.visibility === 'public'
-  const buildings = MOCK_BOARD.buildings || []
-  const coverImage = MOCK_BOARD.cover_image_url || (buildings[0] && buildings[0].image_url)
+  const isPublic = !board || board.visibility === 'public'
+  const buildings = board?.buildings || []
+  const coverImage = board?.cover_image_url || (buildings[0] && buildings[0].image_url)
+  const statusMessage = error?.message || (loading ? 'Loading board...' : 'This board is empty')
 
   return (
     <div style={{
@@ -317,7 +345,7 @@ export default function BoardDetailPage() {
         {coverImage && (
           <img
             src={coverImage}
-            alt={MOCK_BOARD.name}
+            alt={board?.name || 'Board cover'}
             style={{
               position: 'absolute',
               inset: 0,
@@ -465,7 +493,7 @@ export default function BoardDetailPage() {
             textOverflow: 'ellipsis',
             textShadow: '0 2px 12px rgba(0,0,0,0.4)',
           }}>
-            {MOCK_BOARD.name}
+            {board?.name || ''}
           </h1>
 
           {/* Owner row */}
@@ -493,8 +521,8 @@ export default function BoardDetailPage() {
             }}
           >
             <img
-              src={MOCK_BOARD.owner.avatar_url}
-              alt={MOCK_BOARD.owner.display_name}
+              src={board?.user?.avatar_url || ''}
+              alt={board?.user?.display_name || 'Board owner'}
               style={{
                 width: 28,
                 height: 28,
@@ -511,7 +539,7 @@ export default function BoardDetailPage() {
               textDecoration: isOwnerRowHovered ? 'underline' : 'none',
               textUnderlineOffset: 3,
             }}>
-              {MOCK_BOARD.owner.display_name}
+              {board?.user?.display_name || ''}
             </span>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.65)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
               <polyline points="9 18 15 12 9 6"></polyline>
@@ -539,6 +567,7 @@ export default function BoardDetailPage() {
       }}>
         <button
           onClick={handleToggleReaction}
+          disabled={!board || isReactionPending}
           onMouseEnter={() => setIsReactHovered(true)}
           onMouseLeave={() => { setIsReactHovered(false); setIsReactPressed(false) }}
           onMouseDown={() => setIsReactPressed(true)}
@@ -583,6 +612,17 @@ export default function BoardDetailPage() {
           <span>{isReacted ? `Loved · ${reactionCount}` : 'Love this'}</span>
         </button>
       </div>
+      {reactionError && (
+        <div style={{
+          color: 'var(--color-text-muted, #999)',
+          fontSize: 12,
+          fontWeight: 600,
+          padding: '0 20px 4px',
+          textAlign: 'center',
+        }}>
+          {reactionError}
+        </div>
+      )}
 
       {/* Buildings section */}
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0' }}>
@@ -619,7 +659,7 @@ export default function BoardDetailPage() {
               fontWeight: 600,
               margin: 0,
             }}>
-              This board is empty
+              {statusMessage}
             </p>
           </div>
         ) : (
