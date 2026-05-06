@@ -1,6 +1,6 @@
 /**
  * api/social.js
- * Social graph: follow / unfollow.
+ * Social graph: follow / unfollow + project reactors.
  */
 
 import { callApi } from './core.js'
@@ -11,4 +11,8 @@ export async function followUser(userId) {
 
 export async function unfollowUser(userId) {
   await callApi('DELETE', `/users/${userId}/follow/`)
+}
+
+export async function getProjectReactors(projectId, { page = 1, pageSize = 50 } = {}) {
+  return await callApi('GET', `/projects/${projectId}/reactors/?page=${page}&page_size=${pageSize}`)
 }
