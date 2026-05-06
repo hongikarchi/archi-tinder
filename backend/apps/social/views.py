@@ -231,3 +231,51 @@ class ReactionView(APIView):
         if deleted_count == 0:
             return Response({'detail': 'Not reacted.'}, status=status.HTTP_404_NOT_FOUND)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ProjectReactorsListView(APIView):
+    """GET /api/v1/projects/{project_id}/reactors/
+
+    Users who reacted to a project.
+
+    Visibility gate (mirrors POST):
+      - public project: anyone can list (200)
+      - private project + owner viewing: 200 with full list
+      - private project + non-owner / anonymous: 403
+
+    Query params:
+      page (default 1), page_size (default 50, max 50)
+      same as _paginate_queryset.
+
+    Response 200:
+      {results: [UserMiniSerializer...], page, page_size, has_more, total}
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request, project_id):
+        from apps.recommendation.models import Project
+        project = get_object_or_404(Project, project_id=project_id)
+
+        # Visibility gate mirrors POST in ReactionView.
+        if project.visibility != 'public':
+            if request.user.is_authenticated:
+                requester = getattr(request.user, 'profile', None)
+            else:
+                requester = None
+            if requester is None or project.user_id != requester.pk:
+                return Response(
+                    {'detail': 'Forbidden'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+        qs = (
+            UserProfile.objects
+            .filter(reactions__project=project)
+            .select_related('user')
+            .order_by('-reactions__created_at')
+        )
+        items, meta = _paginate_queryset(qs, request)
+        return Response({
+            'results': UserMiniSerializer(items, many=True).data,
+            **meta,
+        })

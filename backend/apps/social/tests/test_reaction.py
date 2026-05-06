@@ -40,6 +40,10 @@ def _react_url(project_id):
     return f'/api/v1/projects/{project_id}/react/'
 
 
+def _reactors_url(project_id):
+    return f'/api/v1/projects/{project_id}/reactors/'
+
+
 def _project_url(project_id):
     return f'/api/v1/projects/{project_id}/'
 
@@ -377,6 +381,65 @@ class TestReactionEdgeCases:
         reaction.save()
         project.refresh_from_db()
         assert project.reaction_count == 1, 'Counter must not double-increment on re-save'
+
+
+# ---------------------------------------------------------------------------
+# TestReactorsList
+# ---------------------------------------------------------------------------
+
+class TestReactorsList:
+
+    @pytest.mark.django_db
+    def test_reactors_list_public_project_returns_200_with_reactor(
+        self, user_a, user_b, auth_client_a, anon_client,
+    ):
+        """GET reactors for a public project returns the reacting user."""
+        a_user, _ = user_a
+        _, b_profile = user_b
+        project = _make_public_project(b_profile)
+
+        response = auth_client_a.post(_react_url(project.project_id))
+        assert response.status_code == 201
+
+        response = anon_client.get(_reactors_url(project.project_id))
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data['results']) == 1
+        assert data['results'][0]['user_id'] == a_user.id
+
+    @pytest.mark.django_db
+    def test_reactors_list_private_project_owner_returns_200(
+        self, user_b, auth_client_b,
+    ):
+        """Owner can list reactors for their private project."""
+        _, b_profile = user_b
+        project = _make_private_project(b_profile)
+
+        response = auth_client_b.post(_react_url(project.project_id))
+        assert response.status_code == 201
+
+        response = auth_client_b.get(_reactors_url(project.project_id))
+        assert response.status_code == 200
+        assert len(response.json()['results']) == 1
+
+    @pytest.mark.django_db
+    def test_reactors_list_private_project_non_owner_returns_403(
+        self, user_a, user_b, auth_client_a,
+    ):
+        """Non-owner cannot list reactors for a private project."""
+        _, b_profile = user_b
+        project = _make_private_project(b_profile)
+
+        response = auth_client_a.get(_reactors_url(project.project_id))
+        assert response.status_code == 403
+        assert response.json()['detail'] == 'Forbidden'
+
+    @pytest.mark.django_db
+    def test_reactors_list_nonexistent_project_returns_404(self, anon_client):
+        """GET reactors for a non-existent project UUID returns 404."""
+        fake_id = '00000000-0000-0000-0000-000000000000'
+        response = anon_client.get(_reactors_url(fake_id))
+        assert response.status_code == 404
 
 
 # ---------------------------------------------------------------------------

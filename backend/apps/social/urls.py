@@ -1,5 +1,11 @@
 from django.urls import path
-from .views import FollowView, FollowersListView, FollowingListView, ReactionView
+from .views import (
+    FollowView,
+    FollowersListView,
+    FollowingListView,
+    ProjectReactorsListView,
+    ReactionView,
+)
 
 urlpatterns = [
     path('users/<int:user_id>/follow/', FollowView.as_view(), name='user-follow'),
@@ -7,4 +13,9 @@ urlpatterns = [
     path('users/<int:user_id>/following/', FollowingListView.as_view(), name='user-following'),
     # SOC2 — Project reaction
     path('projects/<uuid:project_id>/react/', ReactionView.as_view(), name='project-react'),
+    path(
+        'projects/<uuid:project_id>/reactors/',
+        ProjectReactorsListView.as_view(),
+        name='project-reactors',
+    ),
 ]
