@@ -96,6 +96,8 @@ export function normalizeCard(card) {
       axis_material_visual: card.metadata?.axis_material_visual ?? card.material_visual ?? [],
       axis_material:   card.metadata?.axis_material   ?? card.material  ?? null,
       axis_tags:       card.metadata?.axis_tags       ?? card.tags      ?? [],
+      visual_description: card.metadata?.visual_description ?? card.visual_description ?? null,
+      description:        card.metadata?.description        ?? card.description        ?? null,
     },
   }
 }

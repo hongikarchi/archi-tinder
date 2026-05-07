@@ -1,3 +1,4 @@
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useResults } from '../hooks/useResults.js'
 
@@ -15,14 +16,16 @@ function personaFields(result, project) {
   }
 }
 
-function ResultCard({ card, rank, saved, pending, onToggle }) {
+function ResultCard({ card, rank, saved, pending, onOpen, onToggle }) {
   const title = card.image_title || card.name_en || `Recommendation ${rank}`
   const architects = card.metadata?.axis_architects || card.architect
   const country = card.metadata?.axis_country || card.location_country
   const year = card.metadata?.axis_year || card.year
 
   return (
-    <article style={{
+    <article
+      onClick={() => onOpen(card)}
+      style={{
       position: 'relative',
       flex: '0 0 min(82vw, 320px)',
       height: 'min(58vh, 520px)',
@@ -33,6 +36,7 @@ function ResultCard({ card, rank, saved, pending, onToggle }) {
       border: '1px solid var(--color-border-soft)',
       boxShadow: '0 18px 42px rgba(0,0,0,0.35)',
       scrollSnapAlign: 'start',
+      cursor: 'pointer',
     }}>
       <div className="skeleton-shimmer" style={{ position: 'absolute', inset: 0 }} />
       {card.image_url && (
@@ -70,7 +74,10 @@ function ResultCard({ card, rank, saved, pending, onToggle }) {
       </div>
       <button
         type="button"
-        onClick={() => onToggle(card, rank)}
+        onClick={(event) => {
+          event.stopPropagation()
+          onToggle(card, rank)
+        }}
         disabled={pending}
         aria-label={saved ? 'Remove bookmark' : 'Save bookmark'}
         style={{
@@ -141,9 +148,40 @@ export default function ResultsPage({ projects, setProjects }) {
   const navigate = useNavigate()
   const { sessionId } = useParams()
   const { cards, error, loading, pendingIds, project, result, toggleBookmark } = useResults(sessionId, projects, setProjects)
+  const [loadedRank, setLoadedRank] = useState(10)
+  const observerRef = useRef(null)
   const persona = personaFields(result, project)
-  const topCards = cards.slice(0, 10)
+  const cappedTotal = Math.min(cards.length, 50)
+  const visibleCount = Math.min(loadedRank, cappedTotal)
+  const topCards = cards.slice(0, visibleCount)
   const savedIds = project?.savedIds || []
+
+  useEffect(() => {
+    setLoadedRank(10)
+  }, [sessionId])
+
+  useEffect(() => {
+    const node = observerRef.current
+    if (!node || loadedRank >= cappedTotal) return
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) {
+        setLoadedRank(prev => Math.min(prev + 10, cappedTotal))
+      }
+    }, { root: null, rootMargin: '160px' })
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [loadedRank, cappedTotal])
+
+  function handleOpenBuilding(card) {
+    const id = cardId(card)
+    if (!id) return
+    navigate(`/buildings/${id}`, {
+      state: {
+        fromProjectId: project?.backendId || project?.id,
+        fromSessionId: sessionId,
+      },
+    })
+  }
 
   return (
     <div style={{
@@ -227,11 +265,11 @@ export default function ResultsPage({ projects, setProjects }) {
               Top-K recommendations
             </p>
             <h2 style={{ color: 'var(--color-text)', fontSize: 20, fontWeight: 800, margin: 0 }}>
-              Rank 1-10
+              Rank 1-{Math.max(visibleCount, 10)}
             </h2>
           </div>
           <span style={{ color: 'var(--color-text-dimmer)', fontSize: 12, fontWeight: 700 }}>
-            {topCards.length}/10
+            {topCards.length}/{Math.max(cappedTotal, 10)}
           </span>
         </div>
 
@@ -262,28 +300,53 @@ export default function ResultsPage({ projects, setProjects }) {
               {topCards.map((card, index) => {
                 const id = cardId(card)
                 return (
-                  <ResultCard
-                    key={id || index}
-                    card={card}
-                    rank={index + 1}
-                    saved={savedIds.includes(id)}
-                    pending={pendingIds.has(id)}
-                    onToggle={toggleBookmark}
-                  />
+                  <Fragment key={id || index}>
+                    {index === 10 && (
+                      <div style={{
+                        flex: '0 0 120px',
+                        minHeight: 420,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'var(--color-text-dim)',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        textAlign: 'center',
+                        borderLeft: '1px solid var(--color-border-soft)',
+                        borderRight: '1px solid var(--color-border-soft)',
+                        margin: '24px 10px',
+                      }}>
+                        더 많은 추천
+                      </div>
+                    )}
+                    <ResultCard
+                      card={card}
+                      rank={index + 1}
+                      saved={savedIds.includes(id)}
+                      pending={pendingIds.has(id)}
+                      onOpen={handleOpenBuilding}
+                      onToggle={toggleBookmark}
+                    />
+                  </Fragment>
                 )
               })}
+              {loadedRank < cappedTotal && (
+                <div ref={observerRef} style={{ flex: '0 0 1px', minHeight: 420 }} />
+              )}
             </div>
-            <div style={{
-              margin: '10px 18px 0',
-              padding: '16px 0 0',
-              borderTop: '1px solid var(--color-border-soft)',
-              color: 'var(--color-text-dimmer)',
-              fontSize: 13,
-              fontWeight: 700,
-              textAlign: 'center',
-            }}>
-              더 많은 추천
-            </div>
+            {loadedRank >= cards.length && cards.length > 0 && cards.length < 50 && (
+              <div style={{
+                margin: '10px 18px 0',
+                padding: '16px 0 0',
+                borderTop: '1px solid var(--color-border-soft)',
+                color: 'var(--color-text-dimmer)',
+                fontSize: 13,
+                fontWeight: 700,
+                textAlign: 'center',
+              }}>
+                더 볼 게 없어요
+              </div>
+            )}
           </>
         )}
       </section>

@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom'
 import { useImageTelemetry } from '../../hooks/useImageTelemetry.js'
 import InfoCol from './InfoCol'
 
@@ -9,6 +10,7 @@ import InfoCol from './InfoCol'
  *     binary status state. CITY+YEAR in the info grid carry the relevant metadata.
  */
 export default function ProjectCard({ project }) {
+  const navigate = useNavigate()
   const { onLoad, onError } = useImageTelemetry({
     buildingId: project.building_id,
     context: 'firm_profile_gallery',
@@ -16,7 +18,11 @@ export default function ProjectCard({ project }) {
 
   return (
     <div
-      // TODO(claude): navigate to project detail on click — e.g. navigate(`/buildings/${project.building_id}`)
+      onClick={() => {
+        if (!project.building_id) return
+        const state = project.project_id ? { fromProjectId: project.project_id } : undefined
+        navigate(`/buildings/${project.building_id}`, { state })
+      }}
       style={{
         position: 'relative',
         borderRadius: 20,

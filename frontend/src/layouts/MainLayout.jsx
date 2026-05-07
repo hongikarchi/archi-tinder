@@ -27,7 +27,7 @@ export default function MainLayout({
     <div style={{ height: '100vh', overflow: 'hidden' }}>
 
       {/* Header controls — hidden on pages that own their sticky header (profile/office/matched/board) */}
-      <div style={{ position: 'fixed', top: 14, right: 16, zIndex: 200, display: (isProfile || pathname.startsWith('/office') || pathname.startsWith('/matched') || pathname.startsWith('/board')) ? 'none' : 'flex', gap: 6, alignItems: 'center' }}>
+      <div style={{ position: 'fixed', top: 14, right: 16, zIndex: 200, display: (isProfile || pathname.startsWith('/office') || pathname.startsWith('/matched') || pathname.startsWith('/board') || pathname.startsWith('/buildings')) ? 'none' : 'flex', gap: 6, alignItems: 'center' }}>
         <ThemeToggle theme={theme} onToggle={onToggleTheme} />
         <button
           onClick={onLogout}

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
-import { getBuildings } from '../api/client.js'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { bookmarkBuilding, getBuildings } from '../api/client.js'
 
 const BUILDING_ID_RE = /^[A-Za-z0-9_-]{1,32}$/
 
@@ -98,7 +98,7 @@ function ErrorState({ message, onBack, onRetry }) {
   )
 }
 
-function Header({ onBack }) {
+function Header({ onBack, bookmarkEnabled, bookmarkPending, isBookmarked, onToggleBookmark }) {
   return (
     <div style={{
       position: 'sticky',
@@ -135,18 +135,45 @@ function Header({ onBack }) {
           <polyline points="12 19 5 12 12 5" />
         </svg>
       </button>
+      {bookmarkEnabled && (
+        <button
+          type="button"
+          onClick={onToggleBookmark}
+          disabled={bookmarkPending}
+          aria-label={isBookmarked ? 'Remove bookmark' : 'Save bookmark'}
+          style={{
+            marginLeft: 'auto',
+            width: 44,
+            height: 44,
+            borderRadius: 12,
+            border: isBookmarked ? '1px solid rgba(251,191,36,0.65)' : '1px solid var(--color-border-soft)',
+            background: isBookmarked ? 'rgba(251,191,36,0.18)' : 'transparent',
+            color: isBookmarked ? '#fbbf24' : 'var(--color-text)',
+            cursor: bookmarkPending ? 'default' : 'pointer',
+            opacity: bookmarkPending ? 0.65 : 1,
+            fontSize: 20,
+          }}
+        >
+          {isBookmarked ? '★' : '☆'}
+        </button>
+      )}
     </div>
   )
 }
 
 export default function BuildingDetailPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const rawBuildingId = useParams().buildingId
   const buildingId = BUILDING_ID_RE.test(String(rawBuildingId || '')) ? rawBuildingId : null
+  const fromProjectId = location.state?.fromProjectId || null
+  const fromSessionId = location.state?.fromSessionId || null
   const [building, setBuilding] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [reloadKey, setReloadKey] = useState(0)
+  const [isBookmarked, setIsBookmarked] = useState(false)
+  const [bookmarkPending, setBookmarkPending] = useState(false)
 
   useEffect(() => {
     if (!buildingId) {
@@ -185,13 +212,28 @@ export default function BuildingDetailPage() {
     return merged.length ? merged : [building.image_url].filter(Boolean)
   }, [building])
 
-  const title = building?.image_title || building?.name_en || buildingId || 'Building'
+  const title = building?.image_title || buildingId || 'Building'
   const architect = building?.metadata?.axis_architects
-  const description = building?.metadata?.axis_atmosphere || building?.atmosphere || 'No atmosphere description is available yet.'
+  const detailDescription = building?.metadata?.visual_description || building?.metadata?.description || null
+  const description = building?.metadata?.axis_atmosphere || 'No atmosphere description is available yet.'
   const items = metadataItems(building)
 
   function handleBack() {
     navigate(-1)
+  }
+
+  async function handleToggleBookmark() {
+    if (!fromProjectId || !buildingId || bookmarkPending) return
+    const wasBookmarked = isBookmarked
+    setBookmarkPending(true)
+    setIsBookmarked(!wasBookmarked)
+    try {
+      await bookmarkBuilding(fromProjectId, buildingId, wasBookmarked ? 'unsave' : 'save', null, fromSessionId)
+    } catch {
+      setIsBookmarked(wasBookmarked)
+    } finally {
+      setBookmarkPending(false)
+    }
   }
 
   if (loading) return <LoadingState onBack={handleBack} />
@@ -213,7 +255,13 @@ export default function BuildingDetailPage() {
       overflowY: 'auto',
       paddingBottom: 'calc(84px + env(safe-area-inset-bottom, 0px))',
     }}>
-      <Header onBack={handleBack} />
+      <Header
+        onBack={handleBack}
+        bookmarkEnabled={!!fromProjectId}
+        bookmarkPending={bookmarkPending}
+        isBookmarked={isBookmarked}
+        onToggleBookmark={handleToggleBookmark}
+      />
 
       <section className="hide-scrollbar" style={{
         height: '50vh',
@@ -315,6 +363,53 @@ export default function BuildingDetailPage() {
             </div>
           ))}
         </div>
+
+        {building.source_url && (
+          <a
+            href={building.source_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              color: 'var(--color-text-dim)',
+              fontSize: 13,
+              fontWeight: 700,
+              textDecoration: 'none',
+              marginBottom: 24,
+            }}
+          >
+            View on source
+            <span aria-hidden="true">↗</span>
+          </a>
+        )}
+
+        {detailDescription && (
+          <section style={{
+            borderTop: '1px solid var(--color-border-soft)',
+            paddingTop: 20,
+            marginBottom: 20,
+          }}>
+            <h2 style={{
+              color: 'var(--color-text)',
+              fontSize: 16,
+              fontWeight: 800,
+              margin: '0 0 10px',
+            }}>
+              Description
+            </h2>
+            <p style={{
+              color: 'var(--color-text-dim)',
+              fontSize: 15,
+              lineHeight: 1.65,
+              margin: 0,
+              whiteSpace: 'pre-wrap',
+            }}>
+              {detailDescription}
+            </p>
+          </section>
+        )}
 
         <section style={{
           borderTop: '1px solid var(--color-border-soft)',

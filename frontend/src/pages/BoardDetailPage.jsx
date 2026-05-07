@@ -170,7 +170,8 @@ function InfoCol({ label, value }) {
  *     reserved for binary status state. Matches the rationale used in FirmProfile
  *     ProjectCard (also drops program chip).
  */
-function BuildingTile({ building }) {
+function BuildingTile({ building, fromProjectId }) {
+  const navigate = useNavigate()
   const { onLoad, onError } = useImageTelemetry({
     buildingId: building.building_id,
     context: 'board_detail_gallery',
@@ -179,9 +180,8 @@ function BuildingTile({ building }) {
   return (
     <div
       onClick={() => {
-        // TODO(claude): navigate to building detail (modal overlay or
-        // route `/building/${building.building_id}`) — wire when building
-        // detail endpoint / route is decided.
+        if (!building.building_id) return
+        navigate(`/buildings/${building.building_id}`, { state: { fromProjectId } })
       }}
       style={{
         position: 'relative',
@@ -670,7 +670,7 @@ export default function BoardDetailPage() {
             padding: '0 20px',
           }}>
             {buildings.map(building => (
-              <BuildingTile key={building.building_id} building={building} />
+              <BuildingTile key={building.building_id} building={building} fromProjectId={boardId} />
             ))}
           </div>
         )}
