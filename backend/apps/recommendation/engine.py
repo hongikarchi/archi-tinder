@@ -150,6 +150,8 @@ def _row_to_card(row):
             'axis_material':       row.get('material'),
             'axis_material_visual': list(row.get('material_visual') or []),
             'axis_tags':       list(row.get('tags') or []),
+            'visual_description': row.get('visual_description') or '',
+            'description':        row.get('description') or '',
         },
     }
 
@@ -214,6 +216,7 @@ def get_diverse_random(n=10, filters=None):
         'building_id', 'name_en', 'project_name', 'architect', 'location_country',
         'city', 'year', 'area_sqm', 'program', 'style', 'atmosphere', 'color_tone',
         'material', 'material_visual', 'url', 'tags', 'image_photos', 'image_drawings',
+        'visual_description', 'description',
     ]
     _optional_cols = ['cover_image_url_divisare', 'divisare_gallery_urls']
     _cols = _build_select_columns(_required_cols, _optional_cols)
@@ -269,6 +272,7 @@ def get_building_card(building_id):
         'building_id', 'name_en', 'project_name', 'architect', 'location_country',
         'city', 'year', 'area_sqm', 'program', 'style', 'atmosphere', 'color_tone',
         'material', 'material_visual', 'url', 'tags', 'image_photos', 'image_drawings',
+        'visual_description', 'description',
     ]
     _optional_cols = ['cover_image_url_divisare', 'divisare_gallery_urls']
     _cols = _build_select_columns(_required_cols, _optional_cols)
@@ -318,6 +322,7 @@ def get_top_k_results(pref_vector, exposed_ids, k=None):
         'building_id', 'name_en', 'project_name', 'architect', 'location_country',
         'city', 'year', 'area_sqm', 'program', 'style', 'atmosphere', 'color_tone',
         'material', 'material_visual', 'url', 'tags', 'image_photos', 'image_drawings',
+        'visual_description', 'description',
     ]
     _optional_cols = ['cover_image_url_divisare', 'divisare_gallery_urls']
     _cols = _build_select_columns(_required_cols, _optional_cols)
@@ -351,6 +356,7 @@ def get_buildings_by_ids(building_ids):
         'building_id', 'name_en', 'project_name', 'architect', 'location_country',
         'city', 'year', 'area_sqm', 'program', 'style', 'atmosphere', 'color_tone',
         'material', 'material_visual', 'url', 'tags', 'image_photos', 'image_drawings',
+        'visual_description', 'description',
     ]
     _optional_cols = ['cover_image_url_divisare', 'divisare_gallery_urls']
     _cols = _build_select_columns(_required_cols, _optional_cols)
@@ -375,6 +381,7 @@ def search_by_filters(filters, limit=20):
         'building_id', 'name_en', 'project_name', 'architect', 'location_country',
         'city', 'year', 'area_sqm', 'program', 'style', 'atmosphere', 'color_tone',
         'material', 'material_visual', 'url', 'tags', 'image_photos', 'image_drawings',
+        'visual_description', 'description',
     ]
     _optional_cols = ['cover_image_url_divisare', 'divisare_gallery_urls']
     _cols = _build_select_columns(_required_cols, _optional_cols)
@@ -1499,6 +1506,7 @@ def get_top_k_mmr(like_vectors, exposed_ids, k=None, round_num=None):
         'building_id', 'name_en', 'project_name', 'architect', 'location_country',
         'city', 'year', 'area_sqm', 'program', 'style', 'atmosphere', 'color_tone',
         'material', 'material_visual', 'url', 'tags', 'image_photos', 'image_drawings',
+        'visual_description', 'description',
     ]
     _optional_cols = ['cover_image_url_divisare', 'divisare_gallery_urls']
     _cols = _build_select_columns(_required_cols, _optional_cols)
