@@ -20,8 +20,7 @@ export default function ProjectCard({ project }) {
     <div
       onClick={() => {
         if (!project.building_id) return
-        const state = project.project_id ? { fromProjectId: project.project_id } : undefined
-        navigate(`/buildings/${project.building_id}`, { state })
+        navigate(`/buildings/${project.building_id}`)
       }}
       style={{
         position: 'relative',

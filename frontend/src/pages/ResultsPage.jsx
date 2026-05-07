@@ -24,7 +24,7 @@ function ResultCard({ card, rank, saved, pending, onOpen, onToggle }) {
 
   return (
     <article
-      onClick={() => onOpen(card)}
+      onClick={() => onOpen(card, rank)}
       style={{
       position: 'relative',
       flex: '0 0 min(82vw, 320px)',
@@ -172,13 +172,16 @@ export default function ResultsPage({ projects, setProjects }) {
     return () => observer.disconnect()
   }, [loadedRank, cappedTotal])
 
-  function handleOpenBuilding(card) {
+  function handleOpenBuilding(card, rank) {
     const id = cardId(card)
+    const fromProjectId = project?.backendId || (project?.id?.includes('-') ? project.id : null)
     if (!id) return
     navigate(`/buildings/${id}`, {
       state: {
-        fromProjectId: project?.backendId || project?.id,
+        fromProjectId,
         fromSessionId: sessionId,
+        rank,
+        savedIds,
       },
     })
   }

@@ -170,7 +170,7 @@ function InfoCol({ label, value }) {
  *     reserved for binary status state. Matches the rationale used in FirmProfile
  *     ProjectCard (also drops program chip).
  */
-function BuildingTile({ building, fromProjectId }) {
+function BuildingTile({ building, fromProjectId, rank, savedIds }) {
   const navigate = useNavigate()
   const { onLoad, onError } = useImageTelemetry({
     buildingId: building.building_id,
@@ -181,7 +181,8 @@ function BuildingTile({ building, fromProjectId }) {
     <div
       onClick={() => {
         if (!building.building_id) return
-        navigate(`/buildings/${building.building_id}`, { state: { fromProjectId } })
+        const state = fromProjectId ? { fromProjectId, rank, savedIds } : undefined
+        navigate(`/buildings/${building.building_id}`, { state })
       }}
       style={{
         position: 'relative',
@@ -324,6 +325,9 @@ export default function BoardDetailPage() {
 
   const isPublic = !board || board.visibility === 'public'
   const buildings = board?.buildings || []
+  const viewerId = sessionStorage.getItem('archithon_user')
+  const isOwner = !!viewerId && String(board?.user?.user_id) === String(viewerId)
+  const savedIds = (board?.saved_ids || []).map(item => item?.id || item).filter(Boolean)
   const coverImage = board?.cover_image_url || (buildings[0] && buildings[0].image_url)
   const statusMessage = error?.message || (loading ? 'Loading board...' : 'This board is empty')
 
@@ -669,8 +673,14 @@ export default function BoardDetailPage() {
             gap: 20,
             padding: '0 20px',
           }}>
-            {buildings.map(building => (
-              <BuildingTile key={building.building_id} building={building} fromProjectId={boardId} />
+            {buildings.map((building, index) => (
+              <BuildingTile
+                key={building.building_id}
+                building={building}
+                fromProjectId={isOwner ? boardId : null}
+                rank={index + 1}
+                savedIds={savedIds}
+              />
             ))}
           </div>
         )}

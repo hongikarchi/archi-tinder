@@ -4,6 +4,10 @@ import { bookmarkBuilding, getBuildings } from '../api/client.js'
 
 const BUILDING_ID_RE = /^[A-Za-z0-9_-]{1,32}$/
 
+function isValidRank(value) {
+  return Number.isInteger(value) && value >= 1 && value <= 100
+}
+
 function formatArea(value) {
   if (value === null || value === undefined || value === '') return null
   const num = Number(value)
@@ -168,12 +172,21 @@ export default function BuildingDetailPage() {
   const buildingId = BUILDING_ID_RE.test(String(rawBuildingId || '')) ? rawBuildingId : null
   const fromProjectId = location.state?.fromProjectId || null
   const fromSessionId = location.state?.fromSessionId || null
+  const rank = isValidRank(location.state?.rank) ? location.state.rank : null
+  const savedIds = useMemo(
+    () => (Array.isArray(location.state?.savedIds) ? location.state.savedIds : []),
+    [location.state?.savedIds]
+  )
   const [building, setBuilding] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [reloadKey, setReloadKey] = useState(0)
-  const [isBookmarked, setIsBookmarked] = useState(false)
+  const [isBookmarked, setIsBookmarked] = useState(() => !!buildingId && savedIds.includes(buildingId))
   const [bookmarkPending, setBookmarkPending] = useState(false)
+
+  useEffect(() => {
+    setIsBookmarked(!!buildingId && savedIds.includes(buildingId))
+  }, [buildingId, savedIds])
 
   useEffect(() => {
     if (!buildingId) {
@@ -223,12 +236,12 @@ export default function BuildingDetailPage() {
   }
 
   async function handleToggleBookmark() {
-    if (!fromProjectId || !buildingId || bookmarkPending) return
+    if (!fromProjectId || !buildingId || !rank || bookmarkPending) return
     const wasBookmarked = isBookmarked
     setBookmarkPending(true)
     setIsBookmarked(!wasBookmarked)
     try {
-      await bookmarkBuilding(fromProjectId, buildingId, wasBookmarked ? 'unsave' : 'save', null, fromSessionId)
+      await bookmarkBuilding(fromProjectId, buildingId, wasBookmarked ? 'unsave' : 'save', rank, fromSessionId)
     } catch {
       setIsBookmarked(wasBookmarked)
     } finally {
@@ -257,7 +270,7 @@ export default function BuildingDetailPage() {
     }}>
       <Header
         onBack={handleBack}
-        bookmarkEnabled={!!fromProjectId}
+        bookmarkEnabled={!!fromProjectId && !!rank}
         bookmarkPending={bookmarkPending}
         isBookmarked={isBookmarked}
         onToggleBookmark={handleToggleBookmark}
