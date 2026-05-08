@@ -26,7 +26,12 @@ CMUX=/Applications/cmux.app/Contents/Resources/bin/cmux
 CWD="/Users/kms_laptop/Documents/archi-tinder/make_web"
 
 # team : start_command  (WEB-MAIN excluded — it's the current session)
-TEAMS=("WEB-BACK:codex" "WEB-FRONT:codex" "WEB-REVIEW:claude")
+# Codex is started with `-c model_reasoning_effort=high` to override the
+# session-level default (medium). Empirical 2026-05-08: config.toml's
+# `model_reasoning_effort = "xhigh"` is NOT applied automatically on
+# codex restart — only `-c` flag at launch time sticks. /model menu
+# also resets effort to medium. So we explicitly set it here.
+TEAMS=("WEB-BACK:codex -c model_reasoning_effort=high" "WEB-FRONT:codex -c model_reasoning_effort=high" "WEB-REVIEW:claude")
 
 # Self-discovery prompt sent on first start. Same template for codex
 # teams (WEB-BACK / WEB-FRONT). WEB-REVIEW uses a different prompt
