@@ -15,14 +15,19 @@ For the full picture see:
 
 ## ⚠️ First-time setup (do this once after cloning)
 
-> If you skip this step you will not have the migration-conflict pre-push hook
-> and you may push a duplicate-numbered Django migration that breaks the team.
+> If you skip this step you will not have the migration-conflict pre-push hook,
+> and CODEOWNERS will not auto-assign you for review on PRs you open.
 
 ```bash
 git clone https://github.com/<org>/<repo>.git
 cd make_web
-./tools/install-hooks.sh        # installs hooks/pre-push into .git/hooks/
+./tools/onboarding.sh           # interactive: hooks + CODEOWNERS handle registration
 ```
+
+The script asks for your role (A=Algorithm / B=SNS / C=Admin) and your GitHub
+handle, then replaces the matching `@TODO-role-*` placeholder in `.github/CODEOWNERS`.
+Commit the CODEOWNERS edit on your first feature branch — see "Common pitfalls"
+below.
 
 Then set up your environment:
 
