@@ -118,6 +118,25 @@ git checkout develop && git pull origin develop
 git branch -d feature/algo-mmr-lambda-tuning
 ```
 
+## First PR sanity check (recommended after onboarding)
+
+After cloning + running `./tools/install-hooks.sh`, do one tiny verification PR
+to confirm your local + GitHub setup works end-to-end:
+
+1. `git checkout develop && git pull origin develop`
+2. `git checkout -b feature/<role>-onboarding-check`
+3. Make a trivial edit (e.g., a typo fix or a comment in a file your role owns)
+4. `git add . && git commit -m "chore: <role> onboarding check"`
+5. `git push -u origin feature/<role>-onboarding-check`
+6. `gh pr create --base develop`
+7. Confirm visually on GitHub: CI runs (status checks `backend` + `frontend`),
+   CODEOWNERS auto-assigns admin as reviewer.
+8. After admin approves + CI green: Squash and merge.
+
+If any step fails, surface the error to the admin — usually a setup detail to
+fix (e.g., status check name mismatch, missing CODEOWNERS handle, hook not
+installed).
+
 ## Deploy flow (develop → main)
 
 When `develop` has accumulated enough vetted features (admin's call):
