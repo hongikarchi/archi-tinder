@@ -10,6 +10,20 @@ jobs:
   backend:
     name: Backend (pytest + migrations check)
     runs-on: ubuntu-latest
+    # Job-level env applied to all steps. settings.py reads these at import
+    # time, before pytest-django can call into conftest.py's setdefault, so
+    # they must be set in the CI environment rather than only in conftest.
+    env:
+      DJANGO_SETTINGS_MODULE: config.settings
+      DJANGO_SECRET_KEY: ci-secret-key-not-for-production
+      DB_HOST: localhost
+      DB_PORT: '5432'
+      DB_NAME: ci_db
+      DB_USER: ci_user
+      DB_PASSWORD: ci_pass
+      DJANGO_DEBUG: 'True'
+      DEV_LOGIN_SECRET: ci-test-secret
+      GEMINI_API_KEY: ci-test-gemini-key
     defaults:
       run:
         working-directory: backend
@@ -36,15 +50,6 @@ jobs:
       - name: makemigrations --check (no pending migrations)
         # Catches the case where a model change wasn't accompanied by a migration.
         # Also catches duplicate migration numbers when paired with the local pre-push hook.
-        env:
-          DJANGO_SETTINGS_MODULE: config.settings
-          DJANGO_SECRET_KEY: ci-secret-key-not-for-production
-          DB_HOST: localhost
-          DB_PORT: '5432'
-          DB_NAME: ci_db
-          DB_USER: ci_user
-          DB_PASSWORD: ci_pass
-          DJANGO_DEBUG: 'True'
         run: python manage.py makemigrations --check --dry-run
 
   frontend:
