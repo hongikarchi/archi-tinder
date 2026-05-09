@@ -18,7 +18,7 @@ CMUX=/Applications/cmux.app/Contents/Resources/bin/cmux
 
 if [ "$#" -lt 1 ]; then
     echo "Usage: $0 <team> [lines] [--scrollback]" >&2
-    echo "  team ∈ {main, back, front, review}" >&2
+    echo "  team ∈ {main, back, front, review, git}" >&2
     exit 1
 fi
 

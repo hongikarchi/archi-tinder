@@ -13,13 +13,38 @@
 > Oldest entries expire naturally — reporter trims to ~30 most recent on session-end pass.
 >
 > Signal types for this section:
+>
+> **Review cycle:**
 > - `REVIEW-REQUESTED: <sha>` — reporter (main pipeline) → review terminal; run `/review` next (or just say "리뷰해줘" / "review please").
-> - `REVIEW-PASSED: <sha>` — review terminal → user; PASS verdict. Open or merge PR per CONTRIBUTING.md. On `PASS-WITH-MINORS` verdict the signal inlines `<K> MINOR noted (see .claude/reviews/latest.md)`; MINORs are non-blocking.
+> - `REVIEW-PASSED: <sha>` — review terminal → WEB-GIT; PASS verdict, drift-verified. WEB-GIT runs `git-push-pr.sh`. On `PASS-WITH-MINORS` verdict the signal inlines `<K> MINOR noted (see .claude/reviews/latest.md)`; MINORs are non-blocking.
 > - `REVIEW-ABORTED: <sha> — <reason>` — review terminal → main; PASS verdict but drift detected. Re-run after rebase.
 > - `REVIEW-FAIL: <sha> — <summary>` — review terminal → main; run fix loop via orchestrator (max 2 cycles).
-> - `BACK-DONE: <slug>` / `FRONT-DONE: <slug>` — codex team (WEB-BACK / WEB-FRONT) → WEB-MAIN. Append `(claude-review-requested)` for risky-zone work.
+>
+> **Codex team handoffs (WEB-BACK / WEB-FRONT → WEB-MAIN):**
+> - `BACK-DONE: <slug>` / `FRONT-DONE: <slug>` — task complete. Append `(claude-review-requested)` for risky-zone work.
 > - `BACK-BLOCKED: <reason>` / `FRONT-BLOCKED: <reason>` — codex team escalates after exhausting self-heal (2 cycles).
 > - `<TEAM>-NEEDS-CLARIFICATION: <q>` — scope ambiguous; team waits.
+>
+> **WEB-GIT publish cycle (Internal PR — Mode 1):**
+> - `READY-FOR-PUSH: <branch>` — WEB-MAIN → WEB-GIT (alt path for trivial commits skipping `/review`).
+> - `BRANCH-CREATED: <branch>` — WEB-GIT created new feature branch from develop (`tools/git-new-feature.sh`).
+> - `PR-OPENED: #<N>` — WEB-GIT pushed branch + `gh pr create --base develop`. CI is running.
+> - `PR-CI-GREEN: #<N>` / `PR-CI-FAIL: #<N>` — `git-poll-merge.sh` result.
+> - `PR-MERGED: #<N>` — squash-merged into develop, branch deleted, local develop synced.
+>
+> **WEB-GIT external triage (Mode 2 — collaborator PRs):**
+> - `PR-READY-FOR-REVIEW: #<N>` — WEB-GIT checked out external PR. Admin manually triggers `/review` per hybrid policy.
+> - `PR-CHANGES-REQUESTED: #<N>` — WEB-GIT posted FAIL verdict to PR via `gh pr review --request-changes` (summary + collapsible details body).
+> - `PR-CONFLICT: #<N>` — external PR conflicts with develop; WEB-GIT commented asking author to rebase.
+>
+> **WEB-GIT deploy (Mode 3 — develop → main):**
+> - `DEPLOY-PR-OPENED: #<N>` — develop → main PR opened with batch summary.
+> - `DEPLOY-MERGED: #<N>` — admin merged; Railway auto-deploy started.
+>
+> **WEB-GIT refusals / specials:**
+> - `GIT-PUBLISH-BLOCKED: <reason>` — refusal (e.g. wrong branch, ruleset violation).
+> - `GIT-PUBLISH-RETRY: <branch>` — rebase performed, new sha; re-run `/review` against new sha.
+> - `GIT-PUBLISH-NOOP: <reason>` — nothing to do (e.g. develop = main on deploy).
 
 <!-- Append new handoff entries here. Format: `- [YYYY-MM-DD] <SIGNAL>` -->
 
@@ -79,6 +104,8 @@
 - [2026-05-07] FRONT-DONE: BUNDLE-NEXT cycle1 — CRITICAL rank:null + MAJOR #2 sync + MAJOR #3 ownership fixed. 4 files. lint/build clean.
 - [2026-05-08] REVIEW-ABORTED: 1a7e1ed — HEAD advanced to d1d9a72 during review; re-run /review
 - [2026-05-08] REVIEW-PASSED: d1d9a72 — drift checks passed, 3 MINOR noted (see .claude/reviews/latest.md); run `git push` manually from this terminal
+- [2026-05-09] PR2-IN-FLIGHT: WEB-GIT 5-tab architecture + git-manager/git-publisher split. Branch=feature/admin-web-git-architecture. **New files**: `.claude/agents/git-publisher.md` (Modes 1/2/3 — internal push/PR, external PR triage with hybrid `/review` trigger, deploy PR), `tools/git-{new-feature,stage-and-commit,push-pr,poll-merge}.sh`, `tools/{migrate,test-backend,check-frontend,back-validate,front-validate}.sh`. **Slimmed**: `git-manager.md` (commit-only, branch rule check, secret skip, never push), `back-maker.md` / `front-maker.md` (inline bash → `back-validate.sh` / `front-validate.sh` reference), `team-back.md` / `team-front.md` (validate.sh references). **Updated**: `tools/cmux_setup.sh` (5-workspace incl. WEB-GIT + `init_prompt_git`), `tools/cleanup-after-push.sh` (also clears + re-inits WEB-GIT), `tools/dispatch.sh` / `poll.sh` (team ∈ {back, front, review, **git**}), `AGENTS.md` (5-workspace table + WEB-GIT signals), `CLAUDE.md` (5-tab cmux + git-publisher + script catalog), `.claude/WORKFLOW.md` (5-tab diagram + external PR triage sequence + signal vocab + Agent/Terminal Roster). **Decisions reflected** (per `/Users/kms_laptop/.claude/plans/synthetic-sparking-finch.md` PR 2 deferred section): (1) external PR `/review` trigger = hybrid (WEB-GIT emits `PR-READY-FOR-REVIEW`; admin manually triggers); (2) FAIL comment = summary + collapsible details. **New signal vocab added to Task.md header**: BRANCH-CREATED / READY-FOR-PUSH / PR-OPENED / PR-CI-GREEN / PR-CI-FAIL / PR-MERGED / PR-READY-FOR-REVIEW / PR-CHANGES-REQUESTED / PR-CONFLICT / DEPLOY-PR-OPENED / DEPLOY-MERGED / GIT-PUBLISH-{BLOCKED,RETRY,NOOP}. Next steps: (a) admin runs `./tools/cmux_setup.sh` to materialize WEB-GIT tab after this PR merges, (b) WEB-GIT first init prompt walks git-publisher.md + verifies `gh auth status`, (c) future PRs go MAIN-commit → REVIEW → GIT-push/PR/merge.
+- [2026-05-09] REVIEW-FAIL: a90c6d9 — 0 CRITICAL, 2 MAJOR; see .claude/reviews/latest.md
 
 ---
 

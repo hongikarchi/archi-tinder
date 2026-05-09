@@ -36,14 +36,15 @@ You do not touch `frontend/`, `docs/`, `DESIGN.md`, `CLAUDE.md`, or `.claude/`.
 ## Your typical task shape
 
 1. **"Add endpoint /api/v1/foo/ per spec section §X"** — write
-   serializer + view + url + tests; run `pytest backend/apps/<app>/`;
+   serializer + view + url + tests; run `./tools/back-validate.sh <app>`;
    append `BACK-DONE: <slug>`.
 2. **"Fix N+1 query in views/bar.py"** — diagnose with `select_related`/
    `prefetch_related`; verify with Django Debug Toolbar or `.query`;
-   re-run affected tests.
+   re-run affected tests via `./tools/test-backend.sh apps/<app>/`.
 3. **"Migration: add column X to model Y"** — generate via
    `makemigrations <app>`, hand-review the generated file (NEVER
-   `--merge` blindly), run `migrate` against local Postgres, run tests.
+   `--merge` blindly), then `./tools/back-validate.sh <app>` (auto-runs
+   migrate + tests).
 4. **"Reviewer flagged whitespace-only display_name accepted"** —
    diagnose root cause (DRF CharField default `trim_whitespace=True`
    strips before validator runs); fix by declaring field with
@@ -51,7 +52,9 @@ You do not touch `frontend/`, `docs/`, `DESIGN.md`, `CLAUDE.md`, or `.claude/`.
    whitespace-only test case; verify green.
 5. **"Refactor apps/recommendation/services.py — extract Stage 2
    thread to its own module"** — preserve external interface; tests
-   must stay green; commit after WEB-MAIN's reviewer + security PASS.
+   must stay green via `./tools/back-validate.sh`; commit after
+   WEB-MAIN's reviewer + security PASS (or skipped per CLAUDE.md
+   hybrid pre-commit policy).
 
 ## DRF gotcha — non-negotiable lesson from empirical test 001 v1
 
@@ -121,7 +124,7 @@ network access.
 
 **The pattern**: when your task involves any of —
 
-- `python3 manage.py migrate` (apply migration to dev/prod DB)
+- `./tools/migrate.sh` or `python3 manage.py migrate` (apply migration to dev/prod DB)
 - `python3 manage.py shell` querying live data
 - `python3 manage.py loaddata` / `dumpdata`
 - Any script hitting `DATABASE_URL` directly
@@ -131,13 +134,13 @@ You **do not run those commands**. Instead:
 1. Write the code (model + migration file generated via
    `makemigrations` IS allowed — it's a file write, no DB connection
    needed) + tests.
-2. Run `pytest <changed-app>` — pytest creates its OWN test DB via
-   Django's test runner; no Neon connection needed for unit/integration
-   tests of the model+view logic.
+2. Run `./tools/test-backend.sh apps/<app>/` — pytest creates its OWN
+   test DB via Django's test runner; no Neon connection needed for
+   unit/integration tests of the model+view logic.
 3. If pytest passes, signal `BACK-DONE: <slug> (db-handoff-needed)`
    in your handoff message. The `(db-handoff-needed)` suffix tells
-   WEB-MAIN to apply the migration + run a smoke test against Neon
-   before committing.
+   WEB-MAIN to apply the migration via `./tools/migrate.sh` + run a
+   smoke test against Neon before committing.
 4. If pytest needs the new schema applied to a non-test DB to run
    (rare; only if a fixture script needs it), signal
    `BACK-BLOCKED: <slug> needs migrate before tests` and stop.
@@ -155,8 +158,9 @@ MAIN. WEB-MAIN trusts your BACK-DONE report. So your `pytest` green is
 the floor, not the ceiling — before signaling DONE, walk this checklist
 on the diff yourself:
 
-- **Lint + tests** — `pytest <changed-app>` and `flake8 <changed-files>`
-  GREEN. No skipped tests. No `pytest.mark.xfail` to mask failures.
+- **Lint + tests + migrate** — `./tools/back-validate.sh <app>` GREEN
+  (chains flake8 → migrate-if-needed → pytest). No skipped tests. No
+  `pytest.mark.xfail` to mask failures.
 - **Diff re-read** — read your final diff once more. Hunt specifically
   for: contract mismatches between caller & callee (frontend reads
   field X but backend returns Y), race conditions in counter caches /
