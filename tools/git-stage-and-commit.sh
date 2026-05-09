@@ -17,8 +17,24 @@
 
 set -euo pipefail
 
+# --check mode: validate branch state + show what would be staged. No commit.
+if [ "${1:-}" = "--check" ]; then
+    echo "git-stage-and-commit.sh --check"
+    cur=$(git branch --show-current)
+    case "$cur" in
+        main|develop) echo "  ✗ on protected branch '$cur' — would refuse"; exit 2 ;;
+        feature/*)    echo "  ✓ on feature branch: $cur" ;;
+        *)            echo "  ⚠ unusual branch '$cur' — would warn but allow" ;;
+    esac
+    n_changed=$(git status --porcelain | wc -l | tr -d ' ')
+    echo "  → $n_changed files would be staged (excluding secrets)"
+    git status --short | head -10
+    exit 0
+fi
+
 if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
     echo "Usage: $0 \"<message-first-line>\" [\"<message-body>\"]" >&2
+    echo "       $0 --check                   # branch + would-stage check only" >&2
     echo "Example: $0 \"feat: add /api/v1/foo/\" \"Per spec §2.3.\"" >&2
     exit 1
 fi

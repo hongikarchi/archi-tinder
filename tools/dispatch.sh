@@ -52,14 +52,49 @@ if [ -z "$ws_ref" ]; then
     exit 2
 fi
 
-surf_ref=$(
+# Surface selection — prefer terminal-type panes over Claude Code special views.
+#
+# Empirical (2026-05-09 dogfood): cmux list-pane-surfaces may return a surface
+# like "* surface:4  ✳ DEEP REVIEW  [selected]" when Claude Code is showing a
+# special view (agent dropdown, thinking display, /agents picker, etc.) instead
+# of the normal terminal prompt. Sending text to that surface returns
+# "Surface is not a terminal" and exits non-zero.
+#
+# Strategy: gather all surfaces; first prefer ones WITHOUT the ✳ marker
+# (terminal panes); if all surfaces have ✳, fall back to the first raw
+# surface and let the cmux send error message guide the operator.
+all_surfs=$(
     $CMUX list-pane-surfaces --workspace "$ws_ref" 2>/dev/null \
-        | awk '{for (i=1;i<=NF;i++) if ($i ~ /^surface:/) { print $i; exit }}'
+        | awk '{
+            ref=""
+            for (i=1;i<=NF;i++) if ($i ~ /^surface:/) { ref=$i; break }
+            if (ref == "") next
+            # Skip surfaces marked with ✳ — those are non-terminal special views.
+            if (index($0, "✳") > 0) next
+            print ref
+        }'
 )
+if [ -z "$all_surfs" ]; then
+    # No clean terminal surface found; fall back to first raw surface.
+    all_surfs=$(
+        $CMUX list-pane-surfaces --workspace "$ws_ref" 2>/dev/null \
+            | awk '{for (i=1;i<=NF;i++) if ($i ~ /^surface:/) { print $i; exit }}'
+    )
+fi
+surf_ref=$(echo "$all_surfs" | head -1)
 
 if [ -z "$surf_ref" ]; then
     echo "ERROR: no surface in workspace $ws_ref ($WS_NAME)" >&2
     exit 3
+fi
+
+# Pre-flight probe: try a no-op send. If the chosen surface is non-terminal,
+# fail FAST with a clear message instead of letting the long-message dispatch
+# bomb halfway through.
+if ! $CMUX send --workspace "$ws_ref" --surface "$surf_ref" "" >/dev/null 2>&1; then
+    echo "ERROR: surface $surf_ref in $WS_NAME is not a terminal pane (probably a Claude Code special view: ✳ marker, /agents picker, thinking display, etc.)" >&2
+    echo "Fix: in cmux UI, click the $WS_NAME tab and press Esc to return to the terminal prompt, then re-run dispatch." >&2
+    exit 4
 fi
 
 # WEB-REVIEW context-bloat mitigation: empirical bug — a /review

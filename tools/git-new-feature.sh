@@ -17,8 +17,27 @@
 
 set -euo pipefail
 
+# --check mode: validate environment without taking action. Used by tools/.smoke.sh
+# and by operators who want to verify branch state before committing.
+if [ "${1:-}" = "--check" ]; then
+    echo "git-new-feature.sh --check"
+    if [ -n "$(git status --porcelain)" ]; then
+        echo "  ✗ working tree has uncommitted changes (would refuse to create branch)"
+        exit 2
+    fi
+    cur=$(git branch --show-current)
+    echo "  ✓ working tree clean; current branch: $cur"
+    if ! git fetch origin develop --quiet 2>/dev/null; then
+        echo "  ✗ git fetch origin develop failed (network or remote issue)"
+        exit 3
+    fi
+    echo "  ✓ origin/develop reachable"
+    exit 0
+fi
+
 if [ "$#" -ne 2 ]; then
-    echo "Usage: $0 <role> <topic>" >&2
+    echo "Usage: $0 <role> <topic>          # create new feature branch" >&2
+    echo "       $0 --check                 # environment sanity check only" >&2
     echo "  role  ∈ {algo, sns, admin}" >&2
     echo "  topic = short slug (e.g. 'mmr-lambda-tuning')" >&2
     exit 1

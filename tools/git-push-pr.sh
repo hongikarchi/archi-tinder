@@ -16,6 +16,30 @@
 
 set -euo pipefail
 
+# --check mode: branch + AHEAD + gh auth check. No push, no PR open.
+if [ "${1:-}" = "--check" ]; then
+    echo "git-push-pr.sh --check"
+    cur=$(git branch --show-current)
+    case "$cur" in
+        main|develop) echo "  ✗ on protected branch '$cur' — would refuse"; exit 2 ;;
+        feature/*)    echo "  ✓ on feature branch: $cur" ;;
+        *)            echo "  ⚠ unusual branch '$cur' — would proceed with warning" ;;
+    esac
+    if ! git fetch origin develop --quiet 2>/dev/null; then
+        echo "  ✗ git fetch origin develop failed"; exit 3
+    fi
+    ahead=$(git rev-list --count "origin/develop..HEAD" 2>/dev/null || echo 0)
+    if [ "$ahead" = "0" ]; then
+        echo "  ✗ branch not ahead of origin/develop — nothing to PR"; exit 4
+    fi
+    echo "  ✓ $ahead commits ahead of origin/develop"
+    if ! gh auth status >/dev/null 2>&1; then
+        echo "  ✗ gh CLI not authenticated (run 'gh auth login')"; exit 5
+    fi
+    echo "  ✓ gh CLI authenticated"
+    exit 0
+fi
+
 TITLE_OVERRIDE="${1:-}"
 
 BRANCH=$(git branch --show-current)
