@@ -133,26 +133,49 @@
   - `images/batch/` POST -- batch-fetch building cards by `building_ids` list
   - Run: `cd backend && python3 manage.py runserver 8001`
 
-  ## Codex Multi-Workspace (stateful 4-tab cmux setup)
+  ## Codex Multi-Workspace (stateful 5-tab cmux setup)
 
-  Make Web runs as 4 cmux workspaces in one window, mirroring Make DB's stateful
-  multi-team architecture. WEB-MAIN is this Claude Code session (orchestrator).
-  WEB-BACK and WEB-FRONT each host a persistent Codex CLI session that auto-loads
-  `AGENTS.md` from cwd + its team file when WEB-MAIN dispatches a task.
+  Make Web runs as 5 cmux workspaces in one window. WEB-MAIN is this Claude Code
+  session (orchestrator + commits via `git-manager`). WEB-BACK and WEB-FRONT each
+  host a persistent Codex CLI session that auto-loads `AGENTS.md` from cwd + its
+  team file when WEB-MAIN dispatches a task. WEB-REVIEW runs Claude Code for
+  `/review` pre-push gate. WEB-GIT runs Claude Code for the `git-publisher` agent
+  (push / PR / merge / external PR triage / develop→main deploy).
 
   | Workspace | Runs | Owns |
   |---|---|---|
-  | WEB-MAIN | Claude Code (this session) | Pipeline, dispatch, in-session reviewer/security |
+  | WEB-MAIN | Claude Code (this session) | Pipeline, dispatch, in-session reviewer/security, **commit via git-manager** (never push) |
   | WEB-BACK | Codex CLI | `backend/*` (apps, serializers, views, migrations, tests) |
   | WEB-FRONT | Codex CLI | `frontend/*` (data layer + UI — but consult `DESIGN.md` before changing inline styles) |
-  | WEB-REVIEW | Claude Code | `/review` pre-push gate only |
+  | WEB-REVIEW | Claude Code | `/review` pre-push gate only (read-only on source) |
+  | WEB-GIT | Claude Code (git-publisher) | **push / PR open / PR poll / squash merge / branch cleanup / external PR triage / develop→main deploy** (only `git` + `gh` commands; never commits source) |
+
+  **Two-agent split for git operations** (per 2026-05-09 architecture decision):
+  - `git-manager.md` (WEB-MAIN, ~0.8K tokens) — single commit only, secret skip,
+    branch rule check, never push.
+  - `git-publisher.md` (WEB-GIT, ~3K tokens) — 3 modes: (1) Internal push+PR,
+    (2) External PR triage with hybrid `/review` trigger (admin manual after
+    `PR-READY-FOR-REVIEW` signal), (3) Deploy PR (develop→main).
+  - Cross-terminal handshake via `Task.md § Handoffs` signals: `READY-FOR-PUSH`,
+    `PR-OPENED`, `PR-CI-GREEN`, `PR-MERGED`, `PR-READY-FOR-REVIEW`,
+    `PR-CHANGES-REQUESTED`, `DEPLOY-PR-OPENED`, `DEPLOY-MERGED`,
+    `GIT-PUBLISH-{BLOCKED,RETRY,NOOP}`.
 
   **Files that define this architecture** (ground truth — edit these, not policy here):
   - `AGENTS.md` — Codex baseline + hard guardrails (auto-loaded from cwd by codex CLI on startup)
   - `.claude/agents/team-back.md`, `team-front.md` — per-team owned files + DRF gotchas + fix loop
-  - `tools/cmux_setup.sh` — idempotent 4-workspace creator + init prompts
-  - `tools/dispatch.sh <team> "<msg>"` — WEB-MAIN sends a task to a team
+  - `.claude/agents/git-manager.md` — slim commit-only agent (WEB-MAIN)
+  - `.claude/agents/git-publisher.md` — push/PR/merge/external/deploy agent (WEB-GIT)
+  - `tools/cmux_setup.sh` — idempotent 5-workspace creator + init prompts
+  - `tools/dispatch.sh <team> "<msg>"` — WEB-MAIN sends a task to a team (`team ∈ {back, front, review, git}`)
   - `tools/poll.sh <team> [lines]` — WEB-MAIN reads a team's screen output
+  - `tools/git-new-feature.sh <role> <topic>` — sync develop + create feature branch
+  - `tools/git-stage-and-commit.sh "<msg>"` — single safe commit (called by git-manager)
+  - `tools/git-push-pr.sh` — push + `gh pr create --base develop` (called by git-publisher Mode 1)
+  - `tools/git-poll-merge.sh <PR#>` — poll CI status (called by git-publisher)
+  - `tools/back-validate.sh [app]` — flake8 + migrate-if-needed + pytest (called by back-maker / team-back)
+  - `tools/front-validate.sh` — npm lint + build (called by front-maker / team-front)
+  - `tools/migrate.sh [app]`, `tools/test-backend.sh`, `tools/check-frontend.sh` — finer-grained wrappers
 
   **When to dispatch to a Codex team** (vs an in-session Claude sub-agent):
   - Mechanical, well-bounded task (single feature, clear file scope)
@@ -170,6 +193,12 @@
   - `BACK-DONE: <slug>` / `FRONT-DONE: <slug>` — team finished
   - `BACK-BLOCKED: <reason>` / `FRONT-BLOCKED: <reason>` — team escalates
   - `<TEAM>-NEEDS-CLARIFICATION: <question>` — team waits
+  - `READY-FOR-PUSH: <branch>` — WEB-MAIN → WEB-GIT (after REVIEW-PASSED)
+  - `BRANCH-CREATED: <branch>` / `PR-OPENED: #<N>` / `PR-CI-GREEN: #<N>` / `PR-CI-FAIL: #<N>` / `PR-MERGED: #<N>` — WEB-GIT internal PR lifecycle
+  - `PR-READY-FOR-REVIEW: #<N>` — WEB-GIT → admin (external PR triage; admin manually triggers `/review` per hybrid policy)
+  - `PR-CHANGES-REQUESTED: #<N>` — WEB-GIT after external PR FAIL verdict
+  - `DEPLOY-PR-OPENED: #<N>` / `DEPLOY-MERGED: #<N>` — WEB-GIT develop→main deploy
+  - `GIT-PUBLISH-{BLOCKED,RETRY,NOOP}: <reason>` — WEB-GIT refuses or special case
 
   **Fix loop**: WEB-MAIN's in-session `reviewer` or `security-manager` agent
   evaluates Codex output (same bar as Claude `back-maker`/`front-maker` output —

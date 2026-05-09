@@ -12,9 +12,9 @@ perspectives.
 
 ---
 
-## You are part of a 4-workspace cmux team
+## You are part of a 5-workspace cmux team
 
-`make_web` runs as 4 cmux workspaces in one window. You are inside one
+`make_web` runs as 5 cmux workspaces in one window. You are inside one
 of the two "team" workspaces; the orchestrator lives in WEB-MAIN. To
 know which team you are, look at the cmux workspace title (`WEB-BACK`
 or `WEB-FRONT`) — `tools/cmux_setup.sh` sets this automatically. Each
@@ -24,10 +24,11 @@ file before any action.**
 
 | Workspace | Runs | Owns |
 |---|---|---|
-| WEB-MAIN | Claude Code (orchestrator) | Pipeline, dispatch, in-session reviewer/security |
+| WEB-MAIN | Claude Code (orchestrator) | Pipeline, dispatch, in-session reviewer/security, **commits via git-manager** |
 | WEB-BACK | Codex CLI | `backend/` (Django apps, serializers, views, migrations, tests) |
 | WEB-FRONT | Codex CLI | `frontend/` (React data + UI; consult `DESIGN.md` for visual system) |
 | WEB-REVIEW | Claude Code | `/review` pre-push gate only (read-only on source) |
+| WEB-GIT | Claude Code (git-publisher) | **push / PR / merge / external PR triage / develop→main deploy** (read-only on source; only runs `git`/`gh`) |
 
 ## How WEB-MAIN sends you work
 
@@ -63,6 +64,11 @@ security agents on every commit. Walk it before signaling DONE.
 
 `REVIEW-PASSED` / `REVIEW-FAIL` / `REVIEW-ABORTED` are emitted by
 WEB-REVIEW (Claude `/review`), not by you.
+
+`PR-OPENED` / `PR-MERGED` / `PR-READY-FOR-REVIEW` /
+`PR-CHANGES-REQUESTED` / `BRANCH-CREATED` / `READY-FOR-PUSH` /
+`DEPLOY-PR-OPENED` / `DEPLOY-MERGED` / `GIT-PUBLISH-*` are emitted by
+WEB-GIT (Claude `git-publisher`), not by you.
 
 Full vocabulary in `.claude/WORKFLOW.md` § "Handoff Signals".
 

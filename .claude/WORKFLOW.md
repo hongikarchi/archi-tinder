@@ -5,34 +5,40 @@
 
 ---
 
-## At-a-Glance — Two Active Terminals
+## At-a-Glance — Five-Tab Multi-Terminal Architecture
 
-The project runs across **two parallel Claude Code terminals** + two Codex CLI workspaces (cmux 4-tab layout). Coordination is by **handoff signals in `Task.md`** + ownership conventions documented in `CONTRIBUTING.md`.
+The project runs across **three Claude Code terminals** + two Codex CLI workspaces (cmux 5-tab layout). Coordination is by **handoff signals in `Task.md`** + ownership conventions documented in `CONTRIBUTING.md`.
 
 ```mermaid
 flowchart LR
-    subgraph T["Terminals (cmux 4-tab; current branch is whatever feature/develop/main is checked out)"]
-        Main["WEB-MAIN<br/>(Claude opus)<br/>orchestrator + makers"]
+    subgraph T["Terminals (cmux 5-tab; current branch is whatever feature/develop/main is checked out)"]
+        Main["WEB-MAIN<br/>(Claude opus)<br/>orchestrator + makers<br/>+ git-manager (commit only)"]
         Back["WEB-BACK<br/>(Codex CLI)<br/>team-back lead"]
         Front["WEB-FRONT<br/>(Codex CLI)<br/>team-front lead"]
         Rev["WEB-REVIEW<br/>(Claude opus)<br/>/review pre-push gate"]
+        Git["WEB-GIT<br/>(Claude sonnet)<br/>git-publisher: push/PR/merge"]
     end
 
     Main -->|writes / dispatches| BE["backend/"]
     Main -->|writes / dispatches| FE["frontend/"]
     Main -->|writes most of| CL[".claude/"]
     Main -->|writes / updates| DOCS["docs/<br/>(specs + algorithm.md)"]
+    Main -->|local commit| GIT_LOCAL[".git/HEAD<br/>(no push)"]
 
     Back -.dispatched via cmux send.-> BE
     Front -.dispatched via cmux send.-> FE
 
     Rev -->|writes| RVR[".claude/reviews/<br/>per-commit reports"]
-    Rev -->|appends| HO["Task.md<br/>## Handoffs (verdict signal)"]
+    Rev -->|appends verdict| HO["Task.md<br/>## Handoffs"]
+
+    Git -->|git push + gh pr create| REMOTE["origin/develop<br/>(via squash-merge PR)"]
+    Git -->|appends PR signals| HO
 
     style Main fill:#3b82f6,color:#fff
     style Back fill:#fbbf24,color:#000
     style Front fill:#fbbf24,color:#000
     style Rev fill:#8b5cf6,color:#fff
+    style Git fill:#10b981,color:#fff
 ```
 
 ---
@@ -48,24 +54,61 @@ sequenceDiagram
     participant M as WEB-MAIN
     participant T as WEB-BACK / WEB-FRONT (Codex)
     participant V as WEB-REVIEW
+    participant G as WEB-GIT
 
     M->>T: dispatch.sh back/front "<task>"
     T->>M: BACK-DONE / FRONT-DONE: <slug>
-    M->>V: REVIEW-REQUESTED: <sha> (after git-manager + reporter)
+    M->>M: git-manager commits (local, no push)
+    M->>V: REVIEW-REQUESTED: <sha> (via reporter)
     activate V
-    V->>V: Part A static review<br/>+ Part B browser test<br/>+ Part C drift check
+    V->>V: Part A static + Part B browser + Part C drift
     deactivate V
 
     alt Clean PASS
-        V->>U: REVIEW-PASSED: <sha>
-        U->>U: open PR (feature → develop), CI runs
-        U->>U: admin approves + squash merge
+        V->>G: REVIEW-PASSED: <sha>
+        G->>G: git-push-pr.sh → push + gh pr create
+        G->>U: PR-OPENED: #<N> + CI poll
+        U->>G: admin approves on GitHub UI
+        G->>G: gh pr merge --squash --delete-branch
+        G->>M: PR-MERGED: #<N>
     else FAIL
         V->>M: REVIEW-FAIL: <sha>
-        Note over M: orchestrator fix loop<br/>(max 2 cycles)
+        Note over M: orchestrator fix loop (max 2 cycles)
     else ABORTED (drift detected during review)
         V->>M: REVIEW-ABORTED: <sha>
         Note over M: rebase or re-run /review
+    end
+```
+
+**External PR triage** (Role A / Role B collaborator submissions):
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as collaborator
+    participant GH as GitHub PR
+    participant G as WEB-GIT
+    participant V as WEB-REVIEW
+    participant U as admin
+
+    C->>GH: gh pr create --base develop
+    GH->>GH: GHA CI runs (.github/workflows/ci.yml)
+    G->>GH: gh pr list --state open (poll OR admin pings)
+    G->>G: gh pr checkout #<N>
+    G->>U: PR-READY-FOR-REVIEW: #<N>
+    U->>V: trigger /review manually (hybrid policy)
+    activate V
+    V->>V: /review against PR branch
+    deactivate V
+    alt PASS
+        V->>G: REVIEW-PASSED: <sha>
+        G->>GH: gh pr review --approve + gh pr merge --squash
+        G->>U: PR-MERGED: #<N>
+    else FAIL
+        V->>G: REVIEW-FAIL: <sha>
+        G->>GH: gh pr review --request-changes (summary + collapsible details)
+        G->>U: PR-CHANGES-REQUESTED: #<N>
+        Note over C,GH: collaborator pushes fix; admin re-triggers /review
     end
 ```
 
@@ -77,9 +120,21 @@ sequenceDiagram
 | `BACK-BLOCKED: <reason>` / `FRONT-BLOCKED: <reason>` | codex team → WEB-MAIN | Self-heal exhausted; escalate |
 | `<TEAM>-NEEDS-CLARIFICATION: <q>` | codex team → WEB-MAIN | Scope ambiguous; team waits |
 | `REVIEW-REQUESTED: <sha>` | reporter (WEB-MAIN) → WEB-REVIEW | Run `/review` next |
-| `REVIEW-PASSED: <sha>` | WEB-REVIEW → user | Drift-verified; open / merge PR |
+| `REVIEW-PASSED: <sha>` | WEB-REVIEW → WEB-GIT | Drift-verified; push + open PR |
 | `REVIEW-FAIL: <sha>` | WEB-REVIEW → WEB-MAIN | Re-enter orchestrator fix loop |
 | `REVIEW-ABORTED: <sha>` | WEB-REVIEW → WEB-MAIN | PASS verdict but drift detected; re-run after rebase |
+| `READY-FOR-PUSH: <branch>` | WEB-MAIN → WEB-GIT | (alt to REVIEW-PASSED) trivial commit skipping `/review` |
+| `BRANCH-CREATED: <branch>` | WEB-GIT → WEB-MAIN | New feature branch created from develop |
+| `PR-OPENED: #<N>` | WEB-GIT → admin | `gh pr create` succeeded; CI running |
+| `PR-CI-GREEN: #<N>` / `PR-CI-FAIL: #<N>` | WEB-GIT → admin | CI poll result |
+| `PR-MERGED: #<N>` | WEB-GIT → WEB-MAIN | Squash-merged into develop, branch deleted, local synced |
+| `PR-READY-FOR-REVIEW: #<N>` | WEB-GIT → admin | External PR checked out; admin triggers `/review` (hybrid policy) |
+| `PR-CHANGES-REQUESTED: #<N>` | WEB-GIT → collaborator (PR comment) | External PR FAIL; verdict body posted |
+| `PR-CONFLICT: #<N>` | WEB-GIT → admin | External PR conflicts with develop; author must rebase |
+| `DEPLOY-PR-OPENED: #<N>` / `DEPLOY-MERGED: #<N>` | WEB-GIT → admin | develop→main deploy PR lifecycle |
+| `GIT-PUBLISH-BLOCKED: <reason>` | WEB-GIT → admin | Refusal (wrong branch, ruleset violation) |
+| `GIT-PUBLISH-RETRY: <branch>` | WEB-GIT → admin | Rebase performed, new sha; re-run `/review` |
+| `GIT-PUBLISH-NOOP: <reason>` | WEB-GIT → admin | Nothing to do (e.g. develop = main) |
 
 ---
 
@@ -93,7 +148,8 @@ sequenceDiagram
 | **reviewer** | sonnet | API contracts, logic bugs, error handling | read-only |
 | **security-manager** | sonnet | SQL injection, auth bypass, XSS, token leaks | read-only |
 | **web-tester** | sonnet | Live Playwright browser tests (fast inner-loop variant) | read-only |
-| **git-manager** | haiku | Single commit per task | git only |
+| **git-manager** | haiku | **Single commit only — never pushes.** Lives in WEB-MAIN. | `git commit` |
+| **git-publisher** | sonnet | **Push / PR open / PR poll / squash merge / external PR triage / develop→main deploy.** Lives in WEB-GIT (separate tab). | `git push`, `gh pr *` |
 | **reporter** | sonnet | Updates Report.md + Task.md, emits REVIEW-REQUESTED handoff | `.claude/` only (+ narrow `docs/algorithm.md` sync exception) |
 | **algo-tester** | sonnet | Runs optimizer script, interprets results, triggers orchestrator | runs script + calls orchestrator |
 | **team-back / team-front** | opus | Codex CLI team leads (running in WEB-BACK / WEB-FRONT cmux tabs) | `backend/` / `frontend/` per role |
@@ -107,10 +163,11 @@ sequenceDiagram
 
 | Terminal | Runs | Owns / Touches |
 |----------|------|----------------|
-| **WEB-MAIN** | Claude Code (orchestrator: opus) | Full pipeline — backend, frontend, commits. Reads `.claude/`, `docs/`, `CLAUDE.md`, `DESIGN.md`, `CONTRIBUTING.md`. Dispatches to codex teams via `tools/dispatch.sh`. |
+| **WEB-MAIN** | Claude Code (orchestrator: opus) | Full pipeline — backend, frontend, **local commits via git-manager** (never pushes). Reads `.claude/`, `docs/`, `CLAUDE.md`, `DESIGN.md`, `CONTRIBUTING.md`. Dispatches to codex teams via `tools/dispatch.sh`. |
 | **WEB-BACK** | Codex CLI (gpt-5.5 + `-c model_reasoning_effort=high`) | `backend/` (per `.claude/agents/team-back.md`). Self-reviews before BACK-DONE per hybrid policy. |
 | **WEB-FRONT** | Codex CLI (same model config) | `frontend/` (per `.claude/agents/team-front.md`). Consults `DESIGN.md` for visual system. |
 | **WEB-REVIEW** | Claude Code (`/review` slash command: opus) | Pre-push gate. Read-only on source/docs; writes `.claude/reviews/*.md`, Task.md Handoffs line, transient `test-artifacts/review/`. |
+| **WEB-GIT** | Claude Code (git-publisher: sonnet) | **Push / PR / merge / external PR triage / develop→main deploy.** Reads source for context; writes only `git`/`gh` actions + Task.md Handoffs line. Per `.claude/agents/git-publisher.md`. |
 
 ### Codex Multi-Workspace (WEB-BACK / WEB-FRONT — stateful)
 
@@ -119,7 +176,7 @@ Each Codex team's session is **stateful** — it stays running, auto-loads `AGEN
 **Setup** (idempotent — re-runs only create missing workspaces):
 
 ```bash
-./tools/cmux_setup.sh    # creates WEB-BACK / WEB-FRONT / WEB-REVIEW with init prompts
+./tools/cmux_setup.sh    # creates WEB-BACK / WEB-FRONT / WEB-REVIEW / WEB-GIT with init prompts
 ```
 
 **Architecture ground truth** (edit these files, not policy in this doc):
@@ -247,7 +304,7 @@ flowchart TD
     WD -->|PASS| GM[git-manager<br/>commit local — no push]
     WD -->|FAIL: counts as 1 fix cycle| FL
     GM --> RP[reporter<br/>Report.md + Task.md<br/>+ docs/algorithm.md narrow sync<br/>+ REVIEW-REQUESTED Handoff]
-    RP --> Stop([STOP — user runs /review<br/>in review terminal,<br/>then opens PR])
+    RP --> Stop([STOP — user runs /review<br/>in WEB-REVIEW. On REVIEW-PASSED,<br/>WEB-GIT runs git-push-pr.sh.])
 
     style Start fill:#3b82f6,color:#fff
     style Stop fill:#3b82f6,color:#fff
@@ -392,7 +449,8 @@ reporter runs at session end (or when user requests)
 | Questions answered directly | No agents needed for explanations |
 | Makers are sandboxed | back-maker: `backend/` only · front-maker: `frontend/` only |
 | orchestrator never writes code | Always delegates to makers |
-| git-manager never pushes | Push happens via PR after `/review` PASS |
+| **git-manager only commits** | WEB-MAIN; never pushes. Push is git-publisher's job in WEB-GIT. |
+| **git-publisher only pushes / opens PRs / merges** | WEB-GIT; never commits source code. |
 | Reporter updates, never appends | Report.md is live state; Task.md Resolved is historical |
 | Algorithm weakness = manual review | orchestrator stops and flags; does not auto-fix |
 | Fix cycle limit = 2 | After 2 failed cycles, stop and report to user |
@@ -419,11 +477,18 @@ reporter runs at session end (or when user requests)
 | `DESIGN.md` | Visual design system (consult for any UI work) |
 | `CONTRIBUTING.md` | Branch model + PR workflow + role/file ownership |
 | `AGENTS.md` | Codex baseline (auto-loaded by codex CLI) |
-| `tools/cmux_setup.sh` | Idempotent 4-workspace creator |
-| `tools/dispatch.sh` | WEB-MAIN → codex team |
-| `tools/poll.sh` | Read codex team's screen |
+| `tools/cmux_setup.sh` | Idempotent 5-workspace creator (incl. WEB-GIT) |
+| `tools/dispatch.sh` | WEB-MAIN → codex team / WEB-REVIEW / WEB-GIT |
+| `tools/poll.sh` | Read another tab's screen |
 | `tools/install-hooks.sh` | Install local pre-push hook (one-time per clone) |
-| `tools/cleanup-after-push.sh` | Rule 7 post-push cleanup |
+| `tools/cleanup-after-push.sh` | Rule 7 post-push cleanup (clears WEB-BACK/FRONT/REVIEW/GIT) |
+| `tools/git-new-feature.sh` | Sync develop + create `feature/<role>-<topic>` branch |
+| `tools/git-stage-and-commit.sh` | Single-commit wrapper called by git-manager (WEB-MAIN) |
+| `tools/git-push-pr.sh` | Push + `gh pr create --base develop` — git-publisher Mode 1 |
+| `tools/git-poll-merge.sh` | Poll PR CI status until green/red/timeout |
+| `tools/back-validate.sh` | flake8 + migrate-if-needed + pytest chain |
+| `tools/front-validate.sh` | npm lint + build chain |
+| `tools/migrate.sh` / `tools/test-backend.sh` / `tools/check-frontend.sh` | Finer-grained validation wrappers |
 | `hooks/pre-push` | Migration-numbering conflict check |
 | `.github/CODEOWNERS` | Auto-assign reviewers per file ownership |
 | `.github/PULL_REQUEST_TEMPLATE.md` | PR description scaffold |
