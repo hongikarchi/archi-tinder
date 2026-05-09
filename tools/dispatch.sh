@@ -73,12 +73,23 @@ if [ -z "$surf_ref" ]; then
 fi
 
 # Force-Esc the surface to drop any active special view. Safe on a normal
-# prompt (no-op). Some Claude Code views need 2 Esc presses (one to close
-# the picker, one to discard partial input) — send twice to be safe.
+# prompt (no-op). Some Claude Code views need multiple Esc presses (one to
+# close the picker, one to discard partial input, etc.). Send 3 times.
+#
+# Empirical (2026-05-10 PR #8 cycle): 2 Esc was insufficient when WEB-GIT
+# was sitting on a `/effort high` confirmation menu — dispatch reached
+# surface but message disappeared, never landed in the prompt buffer.
+# Bumping to 3 Esc + 0.4s gaps fixed the case in retry. Operator
+# preventive: avoid `/effort`, `/agents`, `/model` slash commands inside
+# stateful sub-terminals (back/front/review/git); restart the session
+# via cmux UI if you need to change effort or model — see
+# cmux_setup.sh init_prompt_git for the codified rule.
 $CMUX send-key --workspace "$ws_ref" --surface "$surf_ref" "Escape" >/dev/null 2>&1 || true
-sleep 0.3
+sleep 0.4
 $CMUX send-key --workspace "$ws_ref" --surface "$surf_ref" "Escape" >/dev/null 2>&1 || true
-sleep 0.3
+sleep 0.4
+$CMUX send-key --workspace "$ws_ref" --surface "$surf_ref" "Escape" >/dev/null 2>&1 || true
+sleep 0.4
 
 # WEB-REVIEW context-bloat mitigation: empirical bug — a /review
 # session that has accumulated ~400 KB+ tokens stops processing new
