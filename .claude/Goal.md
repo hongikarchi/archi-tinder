@@ -1,12 +1,12 @@
 # Goal — ArchiTinder PRD (project constitution)
 
-> **Read this when:** orchestrator / research / designer / reviewer needs a tiebreaker
+> **Read this when:** orchestrator / reviewer / admin needs a tiebreaker
 > for a trade-off — "should we build this?" / "which persona wins?" / "is this in or
 > out of scope?". This is the highest-level decision reference, intentionally short
 > and stable.
 >
 > **NOT** a feature list (see `Task.md`), **NOT** system docs (see `Report.md`),
-> **NOT** the algorithm spec (see `research/spec/requirements.md`), **NOT** visual
+> **NOT** algorithm reference (see `docs/algorithm.md`), **NOT** visual
 > rules (see `DESIGN.md`). Those layers are detailed and fluid; this layer is
 > principled and rarely amended.
 >
@@ -184,20 +184,20 @@ agent's discretion.
 ## 7. Roadmap (phase milestones)
 
 A coarse map of where we've been and where we're going. Detailed sprint planning
-lives in `Task.md`; algorithm sequencing in `research/spec/research-priority-rebaselined.md`.
+lives in `Task.md`; algorithm theory in `docs/algorithm.md`; pending specs in `docs/specs/`.
 
 | Phase | Focus | Status |
 |-------|-------|--------|
 | 1-12 | Single-user reference exploration base (auth, 4-phase recommendation, Gemini search, persona report, project CRUD, E2E test infra, mobile polish, swipe bug fixes) | ✅ Complete |
-| 13 | **Profile system** — Firm profile, User profile, public/private boards | 🟡 In progress (mockups ready; backend pending) |
-| 14 | **Board system** — board detail view, follow, "Love this!" reaction | Pending |
-| 15 | **Social foundation** — DM links (Instagram/email), MATCHED! results screen | Pending |
-| 16 | **Recommendation expansion** — 3-tab landing (Projects / Offices / Users), persona-classified results | Pending |
+| 13 | **Profile system** — Firm profile, User profile, public/private boards | ✅ Complete |
+| 14 | **Board system** — board detail view, follow, "Love this!" reaction | ✅ Complete |
+| 15 | **Social foundation** — DM links (Instagram/email), MATCHED! results screen | ✅ Complete |
+| 16 | **Recommendation expansion** — 3-tab landing (Projects / Offices / Users), persona-classified results | Pending (see `docs/specs/phase16-recommendation-expansion.md`) |
 | 17 | **LLM reverse-questioning** — chat-phase persona classifier (deeper than current 0-2 turn probe) | Pending |
 | 18 | **External connections** — firm article crawl (Space, ArchDaily, news keyword matching), external DM wiring | Pending |
 | post-18 | Long-term: scale (multi-region), monetization activation, possibly adjacent verticals (interior, landscape) — TBD | Future |
 
-The **algorithm side** (search-flow refinements per `research/spec/requirements.md`)
+The **algorithm side** (search-flow refinements documented in `docs/algorithm.md`)
 runs orthogonally to the phase roadmap. Topics 01-12, IMP-1..IMP-9, INFRA-1 are
 their own track; both must converge for v1 launch.
 
@@ -238,32 +238,32 @@ When two valid choices conflict, apply these in order:
 5. **External-dependency restraint**: prefer extending Gemini / HuggingFace /
    Imagen / Cloudflare R2 / Neon Postgres before adding a new external service.
    New dependencies need user approval.
-6. **Spec is single source of truth** for algorithm decisions. If `research/spec/
-   requirements.md` says X, code does X. If main believes spec is wrong, raise
-   it to research terminal — do not fork behavior.
+6. **Algorithm reference is the source of truth** for hyperparameters and phase
+   semantics. If `docs/algorithm.md` says X, code does X. Changes to algorithm
+   theory go through admin PR review with the rationale documented.
 7. **Korea-first** (§6). When localization decisions conflict, Korean UX wins;
    English is supported, not co-equal.
 
 ---
 
-## 10. Open research areas (delegated to research terminal)
+## 10. Open research areas (admin spec dialogue)
 
-These question domains are owned by `research/` (see `research/spec/requirements.md`
-and `research/investigations/`). Main pipeline does NOT decide these unilaterally
-— it implements per spec.
+These question domains are admin-owned and tracked in `docs/specs/`. New questions
+that arise should be captured as a Task.md roadmap entry pointing at a `docs/specs/`
+file (admin authors the spec via PR before implementation begins).
 
-| Area | Currently in spec |
-|------|-------------------|
-| Search algorithm | spec v1.6 — RRF hybrid retrieval, HyDE V_initial, DPP diversity, K-Means + MMR, convergence detection, latency optimization stack (IMP-7/8/9 + INFRA-1) |
-| User-feedback loop | spec §3 chat phase 0-2 turn probe; §4 swipe latency; §6 session event logging |
-| Frontend UX exploration | gesture beyond swipe (tap / rotate / zoom / long-press); arrow-key support; should ❤️/❌ buttons remain or fade out? |
+| Area | Source of truth |
+|------|----------------|
+| Search algorithm | `docs/algorithm.md` — RRF hybrid retrieval, HyDE V_initial, DPP diversity, K-Means + MMR, convergence detection, latency optimization stack |
+| User-feedback loop | chat phase 0-2 turn probe; swipe latency budgets; session event logging — see `docs/algorithm.md` |
+| Frontend UX exploration | gesture beyond swipe (tap / rotate / zoom / long-press); arrow-key support — admin decides per Task.md |
 | DB quality | crawling pipeline (Make DB owned), data QC, legal posture (copyright, bot crawling) — out of `make_web` repo scope |
-| User DB & consent | what user data to collect, consent flow at signup (Korean PIPA + GDPR), marketing-opt-in, retention policy — research pending |
-| Performance bottlenecks | image (R2 latency), backend compute (algorithm), network RTT (Neon) — covered by spec v1.6 IMP-7/8/9 + INFRA-1 |
+| User DB & consent | what user data to collect, consent flow at signup (Korean PIPA + GDPR), marketing-opt-in, retention policy — pending spec |
+| Performance bottlenecks | image (R2 latency), backend compute (algorithm), network RTT (Neon) — IMP-7/8/9 + INFRA-1 tracked in `docs/algorithm.md` |
 | Algorithm evaluation methodology | how to measure "matching quality" at scale; A/B cohort design; primary vs secondary metric weighting |
 
-When a question arises that isn't on this list and isn't covered by spec → it
-belongs in research terminal first, not in orchestrator-implement-then-debug.
+When a question arises that isn't on this list and isn't covered by `docs/`, capture
+it as a Task.md entry first; resolve via spec PR before orchestrator-implements.
 
 ---
 

@@ -1,12 +1,13 @@
 # ArchiTinder Design System
 
-> This is the source of truth for all frontend styling. The **design pipeline**
-> (`designer` agent + any `design-*` sub-agents in the design terminal) is the
-> exclusive writer of this file. All other agents (main pipeline's `front-maker`,
-> `orchestrator`, etc., and the review terminal's `/review`) MUST consult and follow
-> these rules when reading or modifying frontend components, but are READ-ONLY on this
-> file itself. See `.claude/agents/designer.md` and `CLAUDE.md ## Rules` for the full
-> ownership boundary.
+> This is the source of truth for all frontend styling. Anyone touching JSX
+> inline styles, colors, layout, animations, or typography in `frontend/`
+> MUST consult this file first. The design system is load-bearing — deviations
+> require explicit justification in the PR description.
+>
+> Editorial rights: admin-owned via PR (sibling of `CLAUDE.md`). Reporter
+> updates are not applicable here. Other agents (`front-maker`, codex teams,
+> `/review`) read but never write.
 
 ## Core Philosophy
 - **Aesthetics First:** Premium, cinematic dark mode with vibrant neon accents.

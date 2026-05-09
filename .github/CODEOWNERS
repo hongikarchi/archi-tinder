@@ -1,0 +1,38 @@
+# CODEOWNERS — automatic reviewer assignment for PRs.
+#
+# Format: <path-pattern>  @<github-handle>
+# When a PR modifies a path matching a pattern, GitHub auto-assigns the
+# listed handle as a reviewer. Combined with branch protection rule
+# "Require review from Code Owners", this enforces ownership.
+#
+# Roles map to CONTRIBUTING.md "Roles" table.
+# When new collaborators join, replace the @TODO-* placeholders with
+# their actual GitHub handles. Invalid handles cause silent skip
+# (no auto-assignment), not a hard error.
+
+# ===== Role A — Algorithm =====
+/backend/apps/recommendation/engine.py                       @TODO-role-A
+/backend/apps/recommendation/services/                       @TODO-role-A
+/backend/tests/test_topic*                                   @TODO-role-A
+/backend/tests/test_hyde*                                    @TODO-role-A
+/backend/tests/test_hybrid_retrieval*                        @TODO-role-A
+/backend/tests/test_imp*                                     @TODO-role-A
+/backend/tests/test_chat_phase*                              @TODO-role-A
+/backend/tests/test_confidence*                              @TODO-role-A
+/docs/algorithm.md                                           @TODO-role-A
+
+# ===== Role B — SNS / post-swipe =====
+/backend/apps/social/                                        @TODO-role-B
+/backend/apps/profiles/                                      @TODO-role-B
+/frontend/src/pages/PostSwipeLandingPage.jsx                 @TODO-role-B
+/frontend/src/pages/UserProfilePage.jsx                      @TODO-role-B
+/frontend/src/pages/FirmProfilePage.jsx                      @TODO-role-B
+/frontend/src/pages/BoardDetailPage.jsx                      @TODO-role-B
+/frontend/src/api/social.js                                  @TODO-role-B
+/frontend/src/api/profiles.js                                @TODO-role-B
+/frontend/src/components/profile/                            @TODO-role-B
+
+# ===== Role C — Admin (catch-all) =====
+# Catches everything not claimed above. Admin reviews all PRs by virtue
+# of being the catch-all + having admin merge permission.
+*                                                            @TODO-role-C-admin

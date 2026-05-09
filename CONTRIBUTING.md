@@ -1,6 +1,18 @@
-# Branching & Collaboration
+# Contributing to Make Web
 
-3-person team workflow for Make Web. GitHub Flow with admin review.
+3-person team workflow. main + develop + feature/* branches with PR-only landing
+and admin review. Read this once before your first commit.
+
+## Setup (one-time per clone)
+
+```bash
+git clone <repo>
+cd make_web
+./tools/install-hooks.sh    # installs hooks/pre-push (migration order check)
+```
+
+The pre-push hook catches the case where you and another developer independently
+created migrations with the same number. It runs locally before any push.
 
 ## Roles
 
@@ -41,56 +53,83 @@ These files are touched by 2+ roles. Default merge strategy is **append-only** w
 Django migrations are numbered per app. Two devs creating `<app>/migrations/0042_*.py` simultaneously will produce duplicate numbers and a broken migration graph.
 
 **Per-feature workflow:**
-1. `git checkout main && git pull origin main` immediately before `python manage.py makemigrations <app>`.
+1. `git checkout develop && git pull origin develop` immediately before `python manage.py makemigrations <app>`.
 2. Don't sit on locally-generated migrations for days — merge within ~24h or rebase.
-3. If conflict happens at merge time: second-to-merge regenerates the migration on their branch.
+3. The local `hooks/pre-push` (installed via `./tools/install-hooks.sh`) catches duplicate-number conflicts before push. GHA CI also runs `makemigrations --check` as backup.
+4. If conflict happens at merge time anyway: second-to-merge regenerates the migration on their branch.
 
-## Branch model — GitHub Flow
+## Branch model — main + develop + feature/*
 
 ```
-main (protected; admin merges only)
-├── feature/algo-<topic>      ← A's branch
-├── feature/sns-<topic>       ← B's branch
-└── feature/admin-<topic>     ← C's branch
+main (production — Railway auto-deploy on push)
+ ↑ squash merge from develop (admin manual, after batched verification)
+develop (integration — PR target for all feature work)
+ ↑ squash merge from feature/<role>-<topic>
+feature/algo-<topic>      ← Role A's work branch
+feature/sns-<topic>       ← Role B's work branch
+feature/admin-<topic>     ← Role C's (admin) work branch
 ```
 
 **Rules:**
 
-1. `main` is **protected**. Direct pushes blocked. Only merges from approved PRs.
-2. Each developer creates `feature/<role>-<short-topic>` per task. Examples:
+1. `main` is **protected** — PR + status check + Code Owner approval required.
+2. `develop` is **protected** — PR + status check required (admin bypass disabled;
+   admin's PRs go through the same gate).
+3. Each developer creates `feature/<role>-<short-topic>` per task. Examples:
    - `feature/algo-mmr-lambda-tuning`
    - `feature/sns-board-detail-integration`
    - `feature/admin-search-relevance-tweak`
-3. PRs target `main`. **Admin (C) approves all PRs** (or at least one teammate + admin for non-admin PRs).
-4. Merge method: **squash merge** (clean history; one commit per PR).
+4. PRs target **`develop`**, not `main`.
+5. Periodically (when develop has accumulated enough vetted features), admin opens
+   a `develop → main` PR and squash-merges to deploy.
+6. Merge method: **squash merge** (clean history; one commit per PR).
 
 ## Workflow per feature
 
 ```bash
-# 1. Sync from main
-git checkout main && git pull origin main
+# 1. Sync from develop
+git checkout develop && git pull origin develop
 
 # 2. New branch
 git checkout -b feature/algo-mmr-lambda-tuning
 
 # 3. Work + commit (multiple commits OK; squashed at merge time)
 git add .
-git commit -m "feat: tune mmr_lambda from 0.7 to 0.6 (Investigation 14 §3)"
+git commit -m "feat: tune mmr_lambda from 0.7 to 0.6"
 
-# 4. Push
+# 4. Push (the local pre-push hook checks migration numbering)
 git push -u origin feature/algo-mmr-lambda-tuning
 
-# 5. Open PR on GitHub UI (or `gh pr create`)
-gh pr create --title "Algo: MMR lambda 0.7 → 0.6" --body "..."
+# 5. Open PR targeting develop
+gh pr create --base develop --title "Algo: MMR lambda 0.7 → 0.6" \
+             --body "$(cat <<'EOF'
+See PR template (auto-rendered).
+EOF
+)"
 
-# 6. Admin runs /review in review terminal — verdict in .claude/reviews/
-#    or PR comments
+# 6. CI runs (.github/workflows/ci.yml — pytest + lint + makemigrations check).
+#    Admin runs /review in WEB-REVIEW terminal for deeper analysis.
 
-# 7. After approval + REVIEW-PASSED → admin clicks "Squash and merge"
+# 7. After REVIEW-PASSED + Code Owner approval + CI green → admin clicks
+#    "Squash and merge" on GitHub.
 
 # 8. Local cleanup
-git checkout main && git pull origin main
+git checkout develop && git pull origin develop
 git branch -d feature/algo-mmr-lambda-tuning
+```
+
+## Deploy flow (develop → main)
+
+When `develop` has accumulated enough vetted features (admin's call):
+
+```bash
+# 1. Open PR develop → main
+gh pr create --base main --head develop --title "Release: <date> — <summary>"
+
+# 2. CI runs again on the merged range. /review can be run if there's any concern
+#    (typically not needed since each feature was already reviewed).
+
+# 3. Admin self-approves + squash-merge. Railway auto-deploys on main push.
 ```
 
 ## Commit message convention
@@ -108,9 +147,15 @@ Body: include context (spec ref, investigation #, decision rationale).
 
 ## /review usage
 
-The admin uses `/review` (or natural language "리뷰해줘") in a separate review terminal session for PRs. The verdict (PASS / PASS-WITH-MINORS / FAIL) lands in `.claude/reviews/<sha>.md`.
+The admin uses `/review` (or natural language "리뷰해줘") in the WEB-REVIEW
+terminal session for PRs. The verdict (PASS / PASS-WITH-MINORS / FAIL) lands in
+`.claude/reviews/<sha>.md`.
 
-For non-admin PRs: admin runs `/review` after the author requests review.
+Default scope when invoked without arguments: `origin/develop..HEAD` for feature
+branches (the unmerged commits that would land in develop on PR merge).
+
+`develop → main` PRs typically don't need `/review` since each underlying feature
+was already reviewed; admin self-merges based on CI green.
 
 ## File ownership conflict resolution
 

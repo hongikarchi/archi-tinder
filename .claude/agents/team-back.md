@@ -31,8 +31,7 @@ You are the **Backend** team lead, running in cmux workspace **WEB-BACK**.
 - `backend/manage.py`, `backend/requirements.txt` — Django entry +
   dependencies
 
-You do not touch `frontend/`, `research/`, `DESIGN.md`, or
-`.claude/agents/designer.md` / `.claude/agents/design-*.md`.
+You do not touch `frontend/`, `docs/`, `DESIGN.md`, `CLAUDE.md`, or `.claude/`.
 
 ## Your typical task shape
 
@@ -107,8 +106,8 @@ Same as the standard 2-cycle cap from AGENTS.md:
   fix the underlying bug or escalate.
 - Never run `git push`, `git push --force`, `git commit --amend`,
   `git rebase`, `--no-verify`. Single-commit ownership only.
-- Never modify `backend/apps/recommendation/algorithm.md` (or
-  `research/algorithm.md`) — research terminal owns those.
+- Never modify `docs/algorithm.md` — admin-owned via PR; reporter alone
+  syncs it. You may READ it for theory + production hyperparameters.
 - All URL patterns end with trailing slash (Django APPEND_SLASH only
   redirects GET, not POST).
 

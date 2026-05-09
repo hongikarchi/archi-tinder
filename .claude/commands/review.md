@@ -23,12 +23,7 @@ verification they don't do at all.
 
 ## Boundary
 
-- **Read-only on source code.** Backend / frontend / docs / `research/` are READ-ONLY.
-- **`research/` is strictly READ-ONLY** (all subdirectories: `research/spec/`,
-  `research/search/`, `research/investigations/`, `research/algorithm.md`). The reporter's
-  narrow exception for `algorithm.md` does NOT apply to this command. You may read any
-  file under `research/` for context (spec, ground truth, prior research) but never
-  write, create, modify, delete, or stage. See CLAUDE.md `## Rules`.
+- **Read-only on source code and docs.** Backend / frontend / `docs/` are READ-ONLY.
 - The only permitted writes are:
   - `.claude/reviews/<sha_short>.md` and `.claude/reviews/latest.md` (the unified report)
   - One handoff line in `.claude/Task.md ## Handoffs` (Part C exit signal)
@@ -38,9 +33,10 @@ verification they don't do at all.
 
 If the user provided an argument after `/review` (or after their natural-language
 phrase), use it as the git revision range (e.g. `HEAD~5..HEAD`, `<sha>..<sha>`).
-Otherwise default to `origin/main..HEAD` — the unpushed commits on the current branch.
-This makes the workflow a true **push gate**: it reviews exactly what would go public on
-`git push`.
+Otherwise default to `origin/develop..HEAD` for feature branches (the unmerged commits
+that would land in develop on PR merge), or `origin/main..HEAD` if you're already on
+develop / main. This makes the workflow a true **push gate**: it reviews exactly what
+would go public on `git push`.
 
 ---
 
@@ -89,8 +85,8 @@ and exit without writing any file.
 - Also read for grounding:
   - `.claude/Goal.md` → acceptance criteria
   - `.claude/Report.md` → System Architecture + Algorithm Pipeline sections
-  - `research/spec/requirements.md` → spec sections relevant to changed code
-  - Any file referenced from changed files (e.g. `research/algorithm.md` if `engine.py` changed)
+  - `docs/specs/*.md` → spec sections relevant to changed code (if any)
+  - Any file referenced from changed files (e.g. `docs/algorithm.md` if `engine.py` changed)
 
 ## Step A3 — Apply the 7-axis checklist
 
@@ -199,8 +195,10 @@ Inspect `CHANGED_FILES` (the file list from Step A2) for any of these patterns:
 
 **Non-UI (these alone do NOT trigger Part B):**
 - `.claude/**`
-- `*.md` outside source code (CLAUDE.md, DESIGN.md, README, etc.)
-- `research/**` (read-only for this terminal)
+- `docs/**`
+- `*.md` outside source code (CLAUDE.md, DESIGN.md, CONTRIBUTING.md, README, etc.)
+- `.github/**`
+- `hooks/**`
 - `backend/tests/**`
 - `backend/tools/**`
 - `web-testing/**`
@@ -607,7 +605,7 @@ For each swipe (i = 1 to 25):
    - Outer (user-felt frontend RTT): `t_response - t_gesture < 1500 ms`. Aspirational <500 ms preserved as goal, not gate. If breached on **2 or more swipes within the run**, Part B FAIL.
    - Backend sub-budget (per `SessionEvent.swipe.timing_breakdown.total_ms`): `< 1000 ms`. Inspect SessionEvent payloads after the run; if any swipe's backend total_ms ≥ 1000 ms, record as MAJOR finding (informational MINOR if only 1 swipe; FAIL if ≥2).
 
-   _Rationale: Neon PostgreSQL RTT is structurally ~100-250 ms (AWS us-east-1 → Neon Frankfurt pool); per `research/investigations/18-swipe-loop-latency-floor.md` §4, the aspirational <500 ms target cannot be met without INFRA-1 (same-region hosting) or IMP-8 (async prefetch). The 1500 ms outer / 1000 ms backend split preserves the spirit of the spec budget while avoiding false-positive FAIL gates on Neon-RTT-dominated runs. Re-tightening pathway: IMP-7 → IMP-8 → INFRA-1; gate values revert toward 700 ms / 500 ms as each ships._
+   _Rationale: Neon PostgreSQL RTT is structurally ~100-250 ms (AWS us-east-1 → Neon Frankfurt pool); the aspirational <500 ms target cannot be met without same-region hosting (INFRA-1) or async prefetch (IMP-8). The 1500 ms outer / 1000 ms backend split preserves the spirit of the spec budget while avoiding false-positive FAIL gates on Neon-RTT-dominated runs. Re-tightening pathway: IMP-7 → IMP-8 → INFRA-1; gate values revert toward 700 ms / 500 ms as each ships._
 
 After 25 swipes (or earlier if action card fired):
 - Collect `__reviewState.api_calls` and compute p50, p95, p99 of swipe latencies.
@@ -821,8 +819,7 @@ The main terminal's orchestrator reads the Handoffs section at the start of its 
 - **Be honest.** If the branch is genuinely clean, say so — do not invent problems to pad the report. An honest PASS with a short body is more valuable than a padded report.
 - Every Part A finding must cite a file path (+ line number where applicable).
 - Do not suggest changes outside the diff scope unless you explicitly flag the suggestion as "out of scope for this branch".
-- **Do not commit. Do not push — `git push` is always user-initiated from the review terminal after a `REVIEW-PASSED` signal (drift-verified).** Source code remains read-only. The only permitted writes are `.claude/reviews/*.md` (the report), the handoff line in `.claude/Task.md`'s `## Handoffs` section, and transient `test-artifacts/review/` (cleaned in Step B9).
-- **`research/` is strictly READ-ONLY** (including `research/spec/`, `research/search/`, `research/investigations/`, `research/algorithm.md`). The reporter's narrow exception for `algorithm.md` does NOT apply to this command. You may read for context; never write. If commits under review modify `research/` files, flag that as a governance finding (unless the commit was made by the research terminal itself — check git log author/context).
+- **Do not commit. Do not push — `git push` is always user-initiated from the review terminal after a `REVIEW-PASSED` signal (drift-verified).** Source code and `docs/` remain read-only. The only permitted writes are `.claude/reviews/*.md` (the report), the handoff line in `.claude/Task.md`'s `## Handoffs` section, and transient `test-artifacts/review/` (cleaned in Step B9).
 - **No retries on flaky Part B gesture steps.** Button-click misses, image-load timeouts, and other gesture-level flakes are hard-failed on first occurrence (same posture as before — the fast `web-tester` retries gestures up to 1×; this command does not). The point is to catch genuine UI flakiness rather than mask it.
 - **Multi-run aggregation IS used for non-deterministic external-service latency** (Step B4 parse_query → first card, run 3× and gate on p50). This is not a "retry" — it is industry-standard aggregation for stochastic upstream services (Gemini API ~5% variance), where single-shot measurement produces fail patterns that don't reflect the actual user-facing distribution. The previous "no retries" rule was a category error when applied to LLM API latency; per Tier 1.2 of `.claude/reviews/57b3244-improvements.md`, gesture flakiness and external-API latency variance are now treated separately.
 - **Pre-existing console errors fail the run** (Step B2 baseline gate). Do not "subtract" pre-existing errors and only flag new ones — the user shipped a clean app and any console error is a regression target.

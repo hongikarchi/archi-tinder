@@ -23,7 +23,7 @@ Minimal valid spawn shape:
 ```
 Agent({
   description: "<one-line summary>",
-  subagent_type: "back-maker",  // or front-maker, reviewer, security-manager, web-tester, git-manager, reporter, research, algo-tester
+  subagent_type: "back-maker",  // or front-maker, reviewer, security-manager, web-tester, git-manager, reporter, algo-tester
   prompt: "<full self-contained brief for the subagent>"
 })
 ```
@@ -40,7 +40,8 @@ rule in §Rules below is absolute.
 2. Read `.claude/Goal.md` -- vision and acceptance criteria
 3. Read `.claude/Task.md` -- current problem board
 4. Read `.claude/Report.md` -- how code works now (architecture, API surface)
-5. If algorithm/UX task: check `research/` for prior exploration
+5. If algorithm task: read `docs/algorithm.md` for theory + production hyperparameters
+6. If task references a spec: read the file under `docs/specs/`
 
 ## When user requests work
 1. Read `.claude/Goal.md` + scan relevant code
@@ -58,13 +59,6 @@ Follow the **📋 Development Roadmap** at the top of `.claude/Task.md`:
 4. After completing a task, immediately proceed to the next one in the roadmap
 5. Commit after EACH task (not batched) — one commit per task ID
 6. Stop at the end of the current Phase and report progress to user before starting the next Phase
-
-## When to spawn research agent
-If the task involves:
-- Algorithm changes without clear prior art in research/
-- New UX patterns (gestures, animations, interactions)
-- Performance optimization requiring benchmarks
-Then: spawn research agent FIRST, wait for findings, add tasks based on results.
 
 ## Workflow
 
@@ -198,16 +192,14 @@ Weakness detected? STOP -- report exact numbers to user, ask for guidance. Do NO
 ## Rules
 - Never write source code yourself. Always delegate to back-maker or front-maker via the `Agent` tool (see "Spawning subagents" at the top). If `Agent` appears unavailable, STOP and report the blockage to the user — do not work around it by editing files directly.
 - Never commit yourself. Always delegate to git-manager.
-- **`research/` is off-limits.** Never spawn any subagent with instructions to create, modify, or delete files under `research/` (including `research/spec/`, `research/search/`, `research/investigations/`, `research/algorithm.md`). You may READ research artifacts for context, but writes are the research terminal's exclusive domain and user's active study space. If a task scope appears to require writing to `research/`, STOP and ask the user whether the work should be routed to the research terminal. See CLAUDE.md `## Rules` for the authoritative statement.
-- **Never push.** `git push` only happens after the review terminal emits a drift-verified `REVIEW-PASSED` in `.claude/Task.md` Handoffs, and the user runs `git push` manually from the review terminal itself (no context-switch back to main).
-- Before starting a new task, read the `## Handoffs` section at the top of `.claude/Task.md` for any unresolved `REVIEW-FAIL` or `REVIEW-ABORTED` signals from your last commit. Also scan the `## Research Ready` section for new `[RESEARCH-READY]` items that may change priorities (this is the research terminal's separate append-only queue; do not modify it yourself).
-- When Claude-side frontend work is needed, also `grep -r "TODO(claude)" frontend/` — those are pending wiring requests left by the design terminal (`designer` agent). Batch them into front-maker's spec when relevant. Reciprocal: if your front-maker's data-layer work surfaces a UI tweak the designer should make, instruct front-maker to drop a `// TODO(designer): <what>` marker in the source rather than touching the JSX styles itself.
+- **Never push.** `git push` only happens after the review terminal emits a drift-verified `REVIEW-PASSED` in `.claude/Task.md` Handoffs, and the user runs `git push` manually from the review terminal itself (no context-switch back to main). With main + develop branch protection, even admin pushes go via PR — see `CONTRIBUTING.md`.
+- Before starting a new task, read the `## Handoffs` section at the top of `.claude/Task.md` for any unresolved `REVIEW-FAIL` or `REVIEW-ABORTED` signals from your last commit.
 - If task is ambiguous, ask the user ONE clarifying question before planning.
 - Fix cycles count is shared across all loops. Track it.
 - If you notice a CLAUDE.md convention that needs updating, propose the change in your final output -- do not write it yourself.
 - Write new learnings (architectural decisions, patterns, gotchas) to memory immediately.
 - **Feature work** must go through this orchestrator pipeline — new features, bug fixes, refactors that touch production code (`backend/apps/*`, `frontend/src/`).
-- **Direct work is acceptable** for meta/infra/tooling (`tools/*.sh`, `AGENTS.md`, `.gitignore` whitelist), cleanup/housekeeping (single-line fixes, sub-MINOR follow-ups from /review, docs/policy edits to `CLAUDE.md` / `.claude/agents/*.md`), one-line trivial fixes, and pure docs commits (Report.md sync, Task.md handoffs, BRANCHING.md polish). Orchestrator's ~30K-token invocation cost outweighs its value for these meta-tasks. **Risky meta-infra override**: if the change touches auth / token-handling / schema / cross-cutting refactor ≥4 unrelated files, still run reviewer + security manually before commit (mirrors the team-{back,front}.md risky-zone list).
+- **Direct work is acceptable** for meta/infra/tooling (`tools/*.sh`, `hooks/*`, `.github/*`, `AGENTS.md`, `.gitignore` whitelist), cleanup/housekeeping (single-line fixes, sub-MINOR follow-ups from /review, docs/policy edits to `CLAUDE.md` / `CONTRIBUTING.md` / `.claude/agents/*.md` / `docs/*`), one-line trivial fixes, and pure docs commits (Report.md sync, Task.md handoffs). Orchestrator's ~30K-token invocation cost outweighs its value for these meta-tasks. **Risky meta-infra override**: if the change touches auth / token-handling / schema / cross-cutting refactor ≥4 unrelated files, still run reviewer + security manually before commit (mirrors the team-{back,front}.md risky-zone list).
 - **Token-saving — skip reviewer + security on trivial commits (per `feedback_token_saving_workflow.md` Rule 2)**. A commit qualifies as **trivial** when ALL of the following hold:
   - (<50 LOC changed (insertion + deletion combined)) OR (pure docs/policy/agent-file commit with zero source code — e.g. CLAUDE.md / agent-md / AGENTS.md policy commits legitimately exceeding 50 LOC, like the 121-LOC hybrid pre-commit policy at `756b247`)
   - No new migration

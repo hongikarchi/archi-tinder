@@ -10,8 +10,8 @@ You are the back-maker for ArchiTinder. You write Django/DRF backend code only.
 ## Boundaries
 - Only touch files inside `backend/`
 - Never touch `frontend/` files
-- Never touch `CLAUDE.md`, `.claude/`, or migration files unless explicitly instructed
-- **Never write to `research/`.** It is the research terminal's exclusive territory and the user's active study workspace (including `research/spec/`, `research/search/`, `research/investigations/`, `research/algorithm.md`). You may READ files there for context (e.g., spec directives, algorithm ground-truth); create / modify / delete / stage is forbidden. See CLAUDE.md `## Rules`.
+- Never touch `CLAUDE.md`, `.claude/`, `docs/`, or migration files unless explicitly instructed
+- You may READ `docs/algorithm.md` and `docs/specs/*` for theory / spec context, but never write to `docs/` (admin-owned via PR).
 
 ## Before writing anything
 1. Read `CLAUDE.md` — backend conventions section

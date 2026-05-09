@@ -1,66 +1,56 @@
 # ArchiTinder -- Agent Workflow
 
-> **Read this when:** You want to understand how agents work, what triggers what, and when you
-> will be flagged for manual review. All 7 workflow cases are covered here.
+> **Read this when:** You want to understand how the orchestrator pipeline works, what triggers what, and how the pre-push review gate fits in. Branch model + PR workflow live in `CONTRIBUTING.md` (root).
 > For feature status: see `Report.md`. For task status: see `Task.md`. For vision: see `Goal.md`.
 
 ---
 
-## At-a-Glance — Four-Terminal Architecture
+## At-a-Glance — Two Active Terminals
 
-The project runs across **four parallel terminals** on the same `main` Git branch. Coordination is by **file/layer ownership** + **handoff signals in `Task.md`**, not branches. Each terminal has an isolated context window and a focused role.
+The project runs across **two parallel Claude Code terminals** + two Codex CLI workspaces (cmux 4-tab layout). Coordination is by **handoff signals in `Task.md`** + ownership conventions documented in `CONTRIBUTING.md`.
 
 ```mermaid
 flowchart LR
-    subgraph T["Four parallel terminals (all on main branch)"]
-        Main["main<br/>(Claude opus)<br/>orchestrator + makers"]
-        Res["research<br/>(Claude opus)<br/>research agent"]
-        Des["design<br/>(Claude opus)<br/>designer + design-* sub-agents"]
-        Rev["review<br/>(Claude opus)<br/>/review slash command"]
+    subgraph T["Terminals (cmux 4-tab; current branch is whatever feature/develop/main is checked out)"]
+        Main["WEB-MAIN<br/>(Claude opus)<br/>orchestrator + makers"]
+        Back["WEB-BACK<br/>(Codex CLI)<br/>team-back lead"]
+        Front["WEB-FRONT<br/>(Codex CLI)<br/>team-front lead"]
+        Rev["WEB-REVIEW<br/>(Claude opus)<br/>/review pre-push gate"]
     end
 
-    Main -->|writes| BE["backend/"]
-    Main -->|writes data layer| FED["frontend/<br/>(useState / useEffect / callApi)"]
-    Main -->|writes most of| CL[".claude/<br/>(except design-*.md)"]
+    Main -->|writes / dispatches| BE["backend/"]
+    Main -->|writes / dispatches| FE["frontend/"]
+    Main -->|writes most of| CL[".claude/"]
+    Main -->|writes / updates| DOCS["docs/<br/>(specs + algorithm.md)"]
 
-    Res -->|EXCLUSIVE owner| RES["research/<br/>(spec + search + investigations<br/>+ algorithm.md)"]
-
-    Des -->|EXCLUSIVE owner| DM["DESIGN.md"]
-    Des -->|writes UI layer| FEU["frontend/<br/>(JSX styles / animations /<br/>colors / MOCK_*)"]
-    Des -->|writes| DA[".claude/agents/<br/>designer.md + design-*.md"]
+    Back -.dispatched via cmux send.-> BE
+    Front -.dispatched via cmux send.-> FE
 
     Rev -->|writes| RVR[".claude/reviews/<br/>per-commit reports"]
     Rev -->|appends| HO["Task.md<br/>## Handoffs (verdict signal)"]
 
     style Main fill:#3b82f6,color:#fff
-    style Res fill:#10b981,color:#fff
-    style Des fill:#ec4899,color:#fff
+    style Back fill:#fbbf24,color:#000
+    style Front fill:#fbbf24,color:#000
     style Rev fill:#8b5cf6,color:#fff
 ```
-
-**Narrow exception** to ownership: `reporter` (main pipeline) may UPDATE only `research/algorithm.md` to keep it in sync with implementation (see CLAUDE.md `## Rules`).
 
 ---
 
 ## Cross-Terminal Signals
 
-Terminals don't call each other directly — they leave append-only signals in `.claude/Task.md`'s `## Handoffs` and `## Research Ready` sections. Other terminals pick them up at session start.
+Terminals don't call each other directly — they leave append-only signals in `.claude/Task.md`'s `## Handoffs` section. Other terminals (and the human admin) pick them up at session start.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant U as user
-    participant R as research terminal
-    participant M as main terminal
-    participant D as design terminal
-    participant V as review terminal
+    participant U as user (admin)
+    participant M as WEB-MAIN
+    participant T as WEB-BACK / WEB-FRONT (Codex)
+    participant V as WEB-REVIEW
 
-    R->>M: SPEC-UPDATED: vX → vY (handoff signal)
-    Note over M: read changed sections,<br/>plan implementation independently
-
-    D->>M: MOCKUP-READY: <page> (handoff signal)
-    Note over M: integrate API, replace MOCK_*<br/>(front-maker data layer only)
-
+    M->>T: dispatch.sh back/front "<task>"
+    T->>M: BACK-DONE / FRONT-DONE: <slug>
     M->>V: REVIEW-REQUESTED: <sha> (after git-manager + reporter)
     activate V
     V->>V: Part A static review<br/>+ Part B browser test<br/>+ Part C drift check
@@ -68,30 +58,28 @@ sequenceDiagram
 
     alt Clean PASS
         V->>U: REVIEW-PASSED: <sha>
-        U->>U: git push (in review terminal)
-    else FAIL (Part A CRITICAL/MAJOR or Part B fail)
+        U->>U: open PR (feature → develop), CI runs
+        U->>U: admin approves + squash merge
+    else FAIL
         V->>M: REVIEW-FAIL: <sha>
         Note over M: orchestrator fix loop<br/>(max 2 cycles)
     else ABORTED (drift detected during review)
         V->>M: REVIEW-ABORTED: <sha>
         Note over M: rebase or re-run /review
     end
-
-    M->>D: TODO(designer) markers in source
-    D->>M: TODO(claude) markers in source
 ```
 
-**Signal types** (full vocabulary in `.claude/Task.md` `## Handoffs` header):
+**Signal vocabulary** (full list in `.claude/Task.md` `## Handoffs` header):
 
 | Signal | Direction | Meaning |
 |--------|-----------|---------|
-| `SPEC-UPDATED: vX → vY` | research → main | Spec bumped; main reads only affected sections |
-| `[SPEC-READY]` | research → main (in `## Research Ready`) | Persistent pointer to current spec |
-| `MOCKUP-READY: <page>` | design → main | New mockup awaiting API integration |
-| `REVIEW-REQUESTED: <sha>` | reporter (main) → review | Run `/review` next (or "리뷰해줘") |
-| `REVIEW-PASSED: <sha>` | review → user | Drift-verified; user runs `git push` from review terminal |
-| `REVIEW-FAIL: <sha>` | review → main | Re-enter orchestrator fix loop |
-| `REVIEW-ABORTED: <sha>` | review → main | PASS verdict but drift detected; re-run after rebase |
+| `BACK-DONE: <slug>` / `FRONT-DONE: <slug>` | codex team → WEB-MAIN | Team finished dispatched task |
+| `BACK-BLOCKED: <reason>` / `FRONT-BLOCKED: <reason>` | codex team → WEB-MAIN | Self-heal exhausted; escalate |
+| `<TEAM>-NEEDS-CLARIFICATION: <q>` | codex team → WEB-MAIN | Scope ambiguous; team waits |
+| `REVIEW-REQUESTED: <sha>` | reporter (WEB-MAIN) → WEB-REVIEW | Run `/review` next |
+| `REVIEW-PASSED: <sha>` | WEB-REVIEW → user | Drift-verified; open / merge PR |
+| `REVIEW-FAIL: <sha>` | WEB-REVIEW → WEB-MAIN | Re-enter orchestrator fix loop |
+| `REVIEW-ABORTED: <sha>` | WEB-REVIEW → WEB-MAIN | PASS verdict but drift detected; re-run after rebase |
 
 ---
 
@@ -99,20 +87,17 @@ sequenceDiagram
 
 | Agent | Model | Role | Touches |
 |-------|-------|------|---------|
-| **orchestrator** | opus | Main pipeline supervisor -- plans, delegates, manages fix loops | nothing directly |
+| **orchestrator** | opus | Main pipeline supervisor — plans, delegates, manages fix loops | nothing directly (delegates) |
 | **back-maker** | sonnet | Django/DRF backend code | `backend/` only |
-| **front-maker** | sonnet | React/Vite frontend **data layer** (useState, useEffect, callApi, hooks, error handling) | `frontend/` data layer only — UI layer is owned by `designer` |
+| **front-maker** | sonnet | React/Vite frontend code (data + UI; consults DESIGN.md) | `frontend/` only |
 | **reviewer** | sonnet | API contracts, logic bugs, error handling | read-only |
 | **security-manager** | sonnet | SQL injection, auth bypass, XSS, token leaks | read-only |
 | **web-tester** | sonnet | Live Playwright browser tests (fast inner-loop variant) | read-only |
 | **git-manager** | haiku | Single commit per task | git only |
-| **reporter** | sonnet | Updates Report.md + Task.md, emits REVIEW-REQUESTED handoff | `.claude/` only (+ narrow `research/algorithm.md` sync exception) |
+| **reporter** | sonnet | Updates Report.md + Task.md, emits REVIEW-REQUESTED handoff | `.claude/` only (+ narrow `docs/algorithm.md` sync exception) |
 | **algo-tester** | sonnet | Runs optimizer script, interprets results, triggers orchestrator | runs script + calls orchestrator |
-| **research** | opus | Explores complex problems, writes to research/ | `research/` only |
-| **designer** | opus | **Design pipeline supervisor** — owns DESIGN.md + frontend UI layer + design-* sub-agents (parallel of `orchestrator` for the design terminal). Spawns `design-<role>` sub-agents on demand. | `DESIGN.md`, `frontend/` UI layer (JSX styles, animations, colors, layout, MOCK_*), `.claude/agents/design-*.md`, `.claude/Task.md` Handoffs (MOCKUP-READY append-only) |
-| **design-ui-maker** | sonnet | UI-layer JSX/inline-style refactors per a DESIGN.md directive (spawned by designer) | `frontend/` UI layer only |
-| **design-mockup-maker** | sonnet | New mockup pages with `MOCK_*` constants matching designer.md API Contract Shapes (spawned by designer) | `frontend/` UI layer only |
-| **`/review`** (slash command, no subagent) | opus (review terminal) | **Unified pre-push gate.** Part A: 7-axis static review. Part B: conditional strict browser verification. Part C: HEAD + origin/main drift checks. Emits one of REVIEW-PASSED / REVIEW-ABORTED / REVIEW-FAIL to Task.md Handoffs. Invoked via `/review` or natural language ("리뷰해줘", "review", "검토해줘"). | read-only on source; writes `.claude/reviews/` + Task.md Handoffs line + transient `test-artifacts/review/` (Part B, cleaned after run) |
+| **team-back / team-front** | opus | Codex CLI team leads (running in WEB-BACK / WEB-FRONT cmux tabs) | `backend/` / `frontend/` per role |
+| **`/review`** (slash command) | opus (review terminal) | **Unified pre-push gate.** Part A 7-axis static + Part B (conditional) browser + Part C drift checks. Emits one of REVIEW-PASSED / REVIEW-ABORTED / REVIEW-FAIL. | read-only on source + docs; writes `.claude/reviews/*.md` + Task.md Handoffs line + transient `test-artifacts/review/` |
 
 ---
 
@@ -120,30 +105,16 @@ sequenceDiagram
 
 ### Terminal Roster
 
-| Terminal | Model | Role | Owns / Touches | Typical signals |
-|----------|-------|------|----------------|-----------------|
-| **main** | Claude Code (orchestrator: opus) | Full pipeline — backend, frontend integration, E2E tests, commit | `backend/`, `frontend/` (data layer), `.claude/` (excluding anything inside `research/`, and excluding `.claude/agents/designer.md` + `.claude/agents/design-*.md`) | reporter emits `REVIEW-REQUESTED` to Handoffs; consumes `MOCKUP-READY`, `REVIEW-FAIL`, `REVIEW-ABORTED`, `SPEC-UPDATED` from Handoffs; `[SPEC-READY]` from Research Ready section. **READ-ONLY on `research/` and on design-owned paths.** |
-| **research** | Claude Code (research agent: opus) | Ongoing algorithm / UX research dialog with user; consolidates findings into `research/spec/requirements.md` (living spec). `research/search/**` deep-dive reports are reasoning archive — accessed directly via filesystem, not via Task.md pointers. | **EXCLUSIVE owner of `research/`** (all subdirectories: `spec/`, `search/`, `investigations/`, `algorithm.md`). Also appends `[SPEC-READY]` to Task.md `## Research Ready` + `SPEC-UPDATED` to `## Handoffs` on version bump. Commits its own research/ changes from its own session. | emits `[SPEC-READY]`, `SPEC-UPDATED` |
-| **review** | Claude Code (`/review` slash command: opus) | Unified pre-push gate. Single workflow at `.claude/commands/review.md` invoked via `/review` OR natural language ("리뷰해줘", "review please", "검토해줘"). Runs Part A (static 7-axis review) → Part B (conditional strict browser verification when UI-affecting paths in scope) → Part C (HEAD/`origin/main` drift checks) → emits one unified handoff signal. PASS → user runs `git push` from this terminal. | read-only on source; writes `.claude/reviews/*.md`, the handoff line in Task.md `## Handoffs`, and transient `test-artifacts/review/` during Part B. **READ-ONLY on `research/` and on design-owned paths** (same rule as main). | emits `REVIEW-PASSED` (clean Part A + Part B + drift-verified), `REVIEW-ABORTED` (clean review but drift detected), or `REVIEW-FAIL` (Part A had CRITICAL/MAJOR OR Part B browser test failed) to Handoffs. |
-| **design** | Claude Code (designer: opus; spawns `design-*` sub-agents on demand) | Frontend UI/UX iteration — DESIGN.md DNA updates, new mockups, post-integration polish, design-system propagation. Replaces the prior antigravity (Gemini) terminal. | **EXCLUSIVE owner of `DESIGN.md`** + `.claude/agents/designer.md` + `.claude/agents/design-*.md`. Shared owner of `frontend/` on a **per-line layer split** (UI layer = design; data layer = main's front-maker). **READ-ONLY on `research/` and on `backend/`.** Commits its own work directly from this terminal (research analog). | emits `MOCKUP-READY` to Handoffs; drops inline `TODO(claude): ...` markers in source for main pipeline. Consumes reciprocal `TODO(designer): ...` markers from main pipeline. |
-
-> **⚠️ `research/` ownership is absolute, with one narrow exception.** The research terminal is the broad owner of `research/` (`research/spec/`, `research/search/`, `research/investigations/`, and any future subdirectory). Main, review, design, and all their spawned subagents/commands (orchestrator, back-maker, front-maker, reviewer, security-manager, git-manager, algo-tester, web-tester, designer, design-* sub-agents, and the `/review` slash command) are strictly READ-ONLY on `research/`. This is also the user's active study workspace — do not touch.
->
-> **Narrow exception**: the `reporter` agent (and only the reporter) may UPDATE `research/algorithm.md` to keep it in sync with implementation — see `reporter.md` Step 6 for the exact scope (Production Value column sync + inline annotations + Last Synced line; no rewriting of theory, no other files). Bookkeeping commits explicitly stage `research/algorithm.md` for this purpose; `git-manager`'s default exclude still applies to all other `research/` paths. See CLAUDE.md `## Rules` for the authoritative statement.
->
-> **⚠️ `DESIGN.md` + `.claude/agents/design-*.md` ownership is absolute.** The design terminal (`designer` agent + any `design-<role>` sub-agents it creates) is the exclusive writer of `DESIGN.md` and any `.claude/agents/design-*.md` file. Main, review, and research terminals — and ALL their subagents — are strictly READ-ONLY on those paths. The frontend `UI` layer (JSX styles, animations, colors, layout, `MOCK_*` constants) is design-owned per the layer-split rule below; the frontend `data` layer (useState, useEffect, callApi, custom hooks, error handling, data transformations) remains main pipeline's. See `.claude/agents/designer.md` for the full rules and the reciprocal `TODO(claude):` / `TODO(designer):` handoff markers.
-
-> **Note on Task.md sections:**
-> - `## Handoffs` (near top) = short-lived review/mockup signals, rolling window.
-> - `## Research Ready` (further down) = research terminal's append-only queue. Do not mix the two.
+| Terminal | Runs | Owns / Touches |
+|----------|------|----------------|
+| **WEB-MAIN** | Claude Code (orchestrator: opus) | Full pipeline — backend, frontend, commits. Reads `.claude/`, `docs/`, `CLAUDE.md`, `DESIGN.md`, `CONTRIBUTING.md`. Dispatches to codex teams via `tools/dispatch.sh`. |
+| **WEB-BACK** | Codex CLI (gpt-5.5 + `-c model_reasoning_effort=high`) | `backend/` (per `.claude/agents/team-back.md`). Self-reviews before BACK-DONE per hybrid policy. |
+| **WEB-FRONT** | Codex CLI (same model config) | `frontend/` (per `.claude/agents/team-front.md`). Consults `DESIGN.md` for visual system. |
+| **WEB-REVIEW** | Claude Code (`/review` slash command: opus) | Pre-push gate. Read-only on source/docs; writes `.claude/reviews/*.md`, Task.md Handoffs line, transient `test-artifacts/review/`. |
 
 ### Codex Multi-Workspace (WEB-BACK / WEB-FRONT — stateful)
 
-Make Web runs as 4 cmux workspaces in one window — `WEB-MAIN` (this Claude
-session, orchestrator), `WEB-BACK` (Codex CLI), `WEB-FRONT` (Codex CLI),
-`WEB-REVIEW` (Claude Code, `/review` only). Each Codex team's session is
-**stateful** — it stays running, auto-loads `AGENTS.md` from cwd at startup,
-and is dispatched tasks via `cmux send` (wrapped by `tools/dispatch.sh`).
+Each Codex team's session is **stateful** — it stays running, auto-loads `AGENTS.md` from cwd at startup, and is dispatched tasks via `cmux send` (wrapped by `tools/dispatch.sh`).
 
 **Setup** (idempotent — re-runs only create missing workspaces):
 
@@ -154,7 +125,7 @@ and is dispatched tasks via `cmux send` (wrapped by `tools/dispatch.sh`).
 **Architecture ground truth** (edit these files, not policy in this doc):
 - `AGENTS.md` — Codex baseline (auto-loaded by codex CLI from cwd-walk)
 - `.claude/agents/team-back.md`, `team-front.md` — per-team owned files,
-  typical task shapes, DRF gotcha, fix loop
+  typical task shapes, DRF gotcha, fix loop, self-review checklists
 - `tools/dispatch.sh <team> "<msg>"` — WEB-MAIN → team
 - `tools/poll.sh <team> [lines]` — read team's screen
 
@@ -165,32 +136,6 @@ and is dispatched tasks via `cmux send` (wrapped by `tools/dispatch.sh`).
 | Mechanical, well-bounded task (single feature, clear spec) | Open-ended exploration, refactoring across 5+ files |
 | Plan can include explicit acceptance criteria | Bug fix where root cause needs diagnosis |
 | Acceptance is `pytest -v` exit 0 + lint clean | Output evaluation is subjective (algorithm tuning) |
-| Designer territory clearly excluded | Design pipeline already involved |
-
-**Dispatch flow** (stateful, single task):
-
-```
-[WEB-MAIN: orchestrator chooses team based on task shape]
-            │
-            ▼
-[./tools/dispatch.sh back "Add /api/v1/foo/ per spec §X"]
-  cmux send → types into team's prompt + Enter
-            │
-            ▼
-[Codex team executes — reads files, edits, runs tests until green]
-            │
-            ▼
-[Codex appends BACK-DONE: <slug> to .claude/Task.md § Handoffs]
-            │
-            ▼
-[WEB-MAIN polls via tools/poll.sh + greps Task.md Handoffs]
-            │
-            ▼
-[Reviewer + security agents in parallel — same bar as back-maker]
-            │
-            ▼
-[git-manager commit (Co-Authored-By Codex CLI <noreply@openai.com>)]
-```
 
 **Handoff signals** (`.claude/Task.md` § Handoffs):
 - `BACK-DONE: <slug>` / `FRONT-DONE: <slug>` — team finished
@@ -198,146 +143,31 @@ and is dispatched tasks via `cmux send` (wrapped by `tools/dispatch.sh`).
 - `<TEAM>-NEEDS-CLARIFICATION: <question>` — scope ambiguous, team waits
 
 **Key invariants**:
-- Codex auto-loads `AGENTS.md` from cwd at startup (verified 2026-05-06).
-- Stateful: a team's session persists across tasks — WEB-MAIN doesn't
-  re-init context every dispatch. Restart codex (`/quit` then `codex`) only
-  if `AGENTS.md` or the team file changed and you want the new baseline.
-- Reviewer/security verdict bar is identical to back-maker output; no
-  separate "Codex reviewer."
-- Cap: 2 fix cycles per task → escalate (`<TEAM>-BLOCKED`) → WEB-MAIN may
-  fall back to Claude `back-maker`/`front-maker`.
+- Codex auto-loads `AGENTS.md` from cwd at startup.
+- Stateful: a team's session persists across tasks — WEB-MAIN doesn't re-init context every dispatch. Restart codex (`/quit` then `codex -c model_reasoning_effort=high`) only if `AGENTS.md` or the team file changed.
+- Reviewer/security verdict bar is identical to back-maker output; no separate "Codex reviewer."
+- Cap: 2 fix cycles per task → escalate (`<TEAM>-BLOCKED`) → WEB-MAIN may fall back to Claude `back-maker` / `front-maker`.
 
-**Relationship to other terminals**: WEB-REVIEW is unchanged — it's the
-`/review` pre-push gate (read-only, writes only to `.claude/reviews/*.md`
-+ a one-line REVIEW-PASSED/FAIL/ABORTED signal). The design pipeline is
-also unchanged: designer terminal owns the UI layer; WEB-FRONT codex owns
-only the data layer (the per-line, not per-file, split documented in
-`.claude/agents/designer.md` still holds).
+### Branch Model & PR Workflow
 
-### Frontend Layer Ownership (designer vs main)
+**See `CONTRIBUTING.md`** (root) for the canonical rules. Summary:
 
-Both the design terminal (`designer`) and main (`front-maker`) edit files under
-`frontend/`, so ownership is split **by layer within the same file**:
-
-| Layer | Owner | Allowed edits |
-|-------|-------|---------------|
-| **UI** | designer | JSX return, `styles` objects, animations, transitions, colors, spacing, `MOCK_*` constants (pre-integration only) |
-| **Data / Logic** | main (`front-maker`) | `useState`, `useEffect`, `callApi()`, error handling, data transformations, custom hooks |
-
-Post-integration rules for designer returning to a polished page (full table in `.claude/agents/designer.md`):
-- Allowed: JSX structure, styles, animations, colors
-- Forbidden: re-inserting `MOCK_*`, editing `useState/useEffect/callApi`, removing `profile?.xxx` optional chaining
-
-**Reciprocal TODO markers** (drop the marker, move on — no cross-terminal sync overhead):
-
-When designer needs behavior that requires API/backend work, it drops `TODO(claude):`:
-
-```jsx
-<button onClick={() => { /* TODO(claude): DELETE /api/v1/boards/${board_id}/ */ }}>
-  Delete
-</button>
-```
-
-Main's orchestrator batches these via `grep -r "TODO(claude)" frontend/` during the next
-integration session.
-
-When `front-maker` (main) needs a UI change but is data-layer-bound, it drops
-`TODO(designer):`:
-
-```jsx
-{/* TODO(designer): swap the spinner for a skeleton card here */}
-```
-
-Designer batches these via `grep -r "TODO(designer)" frontend/` at the start of each
-session.
-
-### Git Discipline
-
-- **All four terminals work on `main` branch.** No feature branches.
-- **Always `git pull` before starting a session.**
-- **Commit early, commit small** — avoid saving up many changes for one large commit.
-  Git's 3-way merge handles most cases when two terminals touched the same file in
-  different sections (e.g., designer edited JSX, main edited `useEffect`).
-- Only `git-manager` commits from the orchestrator pipeline (one commit per task).
-  The **design terminal** commits directly from its own terminal (research analog).
-- **Research terminal commits its own `research/` changes** from its own session
-  (the research terminal is the ONLY writer of `research/`; main cannot stage them per
-  the ownership rule above). If `git status` in the main terminal shows uncommitted
-  modifications under `research/`, those belong to the research terminal — leave them
-  untouched and unstaged. `git-manager` actively excludes `research/` from staging.
-- **Design terminal commits its own `DESIGN.md` and `.claude/agents/design-*.md`
-  changes** from its own session. Main's `git-manager` excludes `DESIGN.md` and
-  `.claude/agents/design-*.md` from default staging — those belong to the design
-  terminal's own commit flow. Frontend `.jsx` files touched on the UI layer by
-  designer typically land in design-terminal commits; main's `front-maker`
-  data-layer edits to the same files land in main commits. Git's 3-way merge handles
-  the per-line split.
-
-### Research ↔ Main: Spec-based Coordination
-
-Research terminal does not ship code or implementation plans to main directly. Instead,
-research consolidates findings into a **living spec** at `research/spec/requirements.md`,
-versioned via `**Version**: X.Y` in its header.
-
-**Handoff protocol**:
-- `[SPEC-READY]` in `## Research Ready` — the primary entry point. Main terminal reads
-  `research/spec/requirements.md` when it sees this marker. No per-topic markers are
-  published to Task.md; the topic deep-dives at `research/search/**` and
-  `research/investigations/**` are reasoning archive, accessed directly by filesystem
-  only when main needs deep justification behind a Section 11 directive.
-- `SPEC-UPDATED: vX.Y → vX.Z — <sections> — <summary>` in `## Handoffs` on every
-  non-trivial spec revision. Main terminal reads this at session start to discover
-  changes since its last pickup.
-
-**Main's re-read policy** (incremental, not full):
-- On session start: scan Handoffs for new `SPEC-UPDATED` entries since last known version.
-- If new entries: read only the affected sections in the spec (not the whole document).
-- Full re-read is NOT required per task — only when the version bump touches work
-  currently in progress.
-
-**When a SPEC-UPDATED invalidates in-progress work**: orchestrator stops, flags the
-conflict to the user, does NOT silently continue with the old spec. User decides
-whether to finish the current task on the old spec or restart on the new.
-
-**Concurrency (two terminals editing `.claude/Task.md`)**:
-- Research appends to `## Research Ready` (or `## Handoffs` for SPEC-UPDATED).
-- Main's reporter removes resolved markers from `## Research Ready` as each topic lands.
-- Appends to different sections never conflict. Appends to the same section usually
-  merge cleanly via git 3-way.
-- On merge conflict: one terminal pulls + re-appends. No data loss because both
-  terminals work append-only or remove-only.
-
-**What research NEVER does**:
-- Does not prescribe task breakdown, sprint ordering, or implementation pacing — those
-  are entirely main's judgment. Research documents (like
-  `research/spec/research-priority-rebaselined.md`) carry proposed groupings but are
-  explicitly non-binding (see its "Authority Boundary" section).
-- Does not modify `backend/`, `frontend/`, `web-testing/`, or any `.claude/` file
-  outside Task.md's research sections and this WORKFLOW.md's research rows.
-- Does not commit or push.
-
-**What research DOES continuously**:
-- Ongoing user ↔ research dialog: elicitation, clarification, gap hunting, algorithm
-  audit, optimization ideas.
-- Updates `research/spec/requirements.md` in place (version bump + changelog entry).
-- Appends `SPEC-UPDATED` handoff signal so main picks up changes efficiently.
-- Keeps `research/search/**` + `research/investigations/**` as reasoning archive —
-  expanded when a new question requires fresh exploration.
+- `main` (production, Railway auto-deploy) ← squash merge from `develop`
+- `develop` (integration, PR target) ← squash merge from `feature/<role>-<topic>`
+- All commits land via PR — admin's PRs included.
+- CI runs on every PR (`.github/workflows/ci.yml` — pytest + lint + makemigrations check).
+- `/review` is the deeper local gate; runs on the unpushed range (default `origin/develop..HEAD`).
+- One-time per clone: `./tools/install-hooks.sh` (migration-numbering pre-push hook).
 
 ### Pre-Push Review Gate
 
-The orchestrator pipeline **commits but does not push**. `/review` is the unified
-pre-push gate that combines static review + (conditional) browser verification + drift
-checks into a single workflow. The diagram below shows the up-to-date Part B steps
-including Step B0a SessionEvent failure pre-check (Tier 1.3, spec v1.4-era), Step B4
-multi-run aggregation with p50 gate (Tier 1.2), and Step B5 swipe-loop budget per
-spec v1.6 (outer <1500 ms, backend sub-budget <1000 ms).
+The orchestrator pipeline **commits but does not push**. `/review` is the unified pre-push gate that combines static review + (conditional) browser verification + drift checks into a single workflow.
 
 ```mermaid
 flowchart TD
     Start([User: /review or '리뷰해줘']) --> A1
-    A1["A1 — Capture scope<br/>REVIEWED_SHA / REVIEWED_ORIGIN_MAIN<br/>REVIEW_START_UTC / CHANGED_FILES<br/>(via git rev-parse + date)"]
-    A1 --> A2["A2-A4 — Read changed files,<br/>Goal.md, Report.md, spec;<br/>apply 7-axis checklist;<br/>write .claude/reviews/&lt;sha&gt;.md + latest.md"]
+    A1["A1 — Capture scope<br/>REVIEWED_SHA / REVIEWED_REMOTE_BASE<br/>REVIEW_START_UTC / CHANGED_FILES"]
+    A1 --> A2["A2-A4 — Read changed files,<br/>Goal.md, Report.md, docs/specs/;<br/>apply 7-axis checklist;<br/>write .claude/reviews/&lt;sha&gt;.md + latest.md"]
     A2 --> A5["A5 — stdout: STATIC REVIEW: verdict — N CRITICAL, M MAJOR, K MINOR"]
     A5 --> A6{Part A verdict?}
 
@@ -348,34 +178,34 @@ flowchart TD
     B0 -->|no| C1[Part C drift checks]
     B0 -->|yes| B0a
 
-    B0a["B0a — SessionEvent failure pre-check<br/>(Tier 1.3, spec v1.4)<br/>query last 5 min from REVIEW_START_UTC<br/>for gemini_failure / parse_query_failure /<br/>persona_report_failure / failed gemini_rerank"]
+    B0a["B0a — SessionEvent failure pre-check<br/>(Tier 1.3)<br/>query last 5 min from REVIEW_START_UTC"]
     B0a -->|recent failure found| C3F
     B0a -->|clean| B1
 
     B1["B1-B3 — Preflight: dev server health,<br/>migration sanity check, dev-login,<br/>token injection, baseline diagnostics,<br/>3 personas setup"]
     B1 --> B4
 
-    B4["B4 — Time-to-first-card<br/>multi-run 3× per persona (Tier 1.2, spec v1.4)<br/>gate: p50 &lt; 4000 ms (5000 ms bare query)<br/>last run continues to B5+"]
+    B4["B4 — Time-to-first-card<br/>multi-run 3× per persona (Tier 1.2)<br/>gate: p50 &lt; 4000 ms (5000 ms bare query)"]
     B4 -->|p50 over budget on any persona| C3F
     B4 -->|all personas PASS| B5
 
-    B5["B5 — Swipe lifecycle (~25 swipes)<br/>(spec v1.6 ratification)<br/>outer gate: p95 &lt; 1500 ms<br/>backend sub-budget: total_ms &lt; 1000 ms<br/>(via SessionEvent.swipe.timing_breakdown)"]
+    B5["B5 — Swipe lifecycle (~25 swipes)<br/>outer gate: p95 &lt; 1500 ms<br/>backend sub-budget: total_ms &lt; 1000 ms"]
     B5 -->|≥2 swipes breach| C3F
     B5 -->|PASS| B6
 
-    B6["B6-B8 — State validation,<br/>API shape strict assertion,<br/>edge cases (refresh-resume, action card,<br/>persona report, network failure injection),<br/>spec primary-metric infra sentinel"]
+    B6["B6-B8 — State validation,<br/>API shape strict assertion,<br/>edge cases, infra sentinel"]
     B6 --> B9
     B9["B9 — Cross-persona aggregation,<br/>cleanup, append Part B section to report"]
     B9 --> C1
 
-    C1{C1 — HEAD drifted?<br/>git rev-parse HEAD<br/>≠ REVIEWED_SHA?}
+    C1{C1 — HEAD drifted?}
     C1 -->|YES| AB1["REVIEW-ABORTED:<br/>HEAD advanced<br/>→ re-run /review"]
-    C1 -->|NO| C2{C2 — origin/main drifted?<br/>git fetch + re-read<br/>≠ REVIEWED_ORIGIN_MAIN?}
-    C2 -->|YES| AB2["REVIEW-ABORTED:<br/>origin/main moved<br/>→ git pull --rebase + re-review"]
+    C1 -->|NO| C2{C2 — remote base drifted?<br/>git fetch + re-read}
+    C2 -->|YES| AB2["REVIEW-ABORTED:<br/>remote moved<br/>→ git pull --rebase + re-review"]
     C2 -->|NO| C3P
 
     C3P["C3 — emit REVIEW-PASSED<br/>K=0 MINORs: clean<br/>K&gt;0 MINORs: PASS-WITH-MINORS (count inline)"]
-    C3P --> Push([User runs git push<br/>directly from review terminal])
+    C3P --> Push([User opens PR / merges from review terminal])
 
     style C3F fill:#ef4444,color:#fff
     style AB1 fill:#f59e0b,color:#000
@@ -384,34 +214,13 @@ flowchart TD
     style Push fill:#3b82f6,color:#fff
 ```
 
-This means:
-1. **One unified command, one verdict.** `/review` runs Part A (static review),
-   conditionally Part B (browser verification when UI-affecting paths in scope), and
-   Part C (drift checks), then emits one combined signal. Natural language
-   ("리뷰해줘", "review please", "검토해줘") triggers the same workflow per CLAUDE.md
-   "Natural language review trigger".
-2. `git push` happens from the review terminal, not the main terminal — after the review
-   verified that the range is clean (Part A), the UX is intact (Part B if applicable),
-   AND HEAD/origin/main still match what was reviewed (Part C). No context-switch, no
-   "review one range, push another" race.
-3. **Part B uses multi-run aggregation for non-deterministic upstream services.** Step B4
-   (parse-query → first card) runs 3× per persona and gates on the p50 (median) — this
-   absorbs Gemini API ~5% variance that previously caused same-cause Part B FAILs across
-   consecutive cycles. The "no retries on flaky steps" rule still applies to GESTURE
-   flakiness (button-click misses, image-load timeouts) — multi-run is reserved for
-   external-API latency variance.
-4. **Step B0a SessionEvent failure pre-check** fast-fails the run if a recent
-   `gemini_failure` / `parse_query_failure` / `persona_report_failure` event is found
-   within `REVIEW_START_UTC − 5 min`. Saves 60–120 s per upstream-outage scenario.
-5. **Step B5 budget mirrors v1.6 spec ratification** — outer p95 <1500 ms (frontend RTT)
-   and backend sub-budget <1000 ms (per `SessionEvent.swipe.timing_breakdown.total_ms`).
-   Aspirational <500 ms preserved as goal, not gate. Re-tightening pathway:
-   IMP-7 (per-building-id cache) → IMP-8 (background prefetch) → INFRA-1
-   (same-region deploy, multiplicative).
-6. The review terminal still never edits source code and never runs `git push` itself —
-   the push is always user-initiated by explicit `git push` in the review terminal.
-7. `git-manager`'s "never pushes unless explicitly told to" default (see Key Rules
-   below) is what keeps the orchestrator side clean; no existing agent code changes.
+**Notes**:
+1. **One unified command, one verdict.** `/review` runs Part A (static review), conditionally Part B (browser verification when UI-affecting paths in scope), and Part C (drift checks), then emits one combined signal. Natural language ("리뷰해줘", "review please", "검토해줘") triggers the same workflow.
+2. **PR-based push**: after REVIEW-PASSED, the user opens a PR (or merges if already open) — see `CONTRIBUTING.md` for the branch flow.
+3. **Part B uses multi-run aggregation** for non-deterministic upstream services. Step B4 (parse-query → first card) runs 3× per persona and gates on the p50.
+4. **Step B0a** fast-fails on recent backend failure events (saves 60–120 s).
+5. **Step B5 budget**: outer p95 < 1500 ms, backend sub-budget < 1000 ms.
+6. The review terminal never edits source code or runs `git push`.
 
 ---
 
@@ -420,12 +229,12 @@ This means:
 ```mermaid
 flowchart TD
     Start([User request]) --> Orch[orchestrator]
-    Orch -->|reads context| Ctx[CLAUDE.md + Goal.md<br/>Task.md + Report.md<br/>spec if relevant]
-    Orch -->|backend spec| BM[back-maker<br/>backend code + flake8]
+    Orch -->|reads context| Ctx[CLAUDE.md + Goal.md<br/>Task.md + Report.md<br/>docs/specs if relevant]
+    Orch -->|backend spec| BM[back-maker / dispatch to WEB-BACK<br/>backend code + flake8]
     BM -->|API contract| Mig{Migration<br/>created?}
     Mig -->|yes| Migrate["Step 2.5 — apply migrate<br/>(belt-and-suspenders<br/>backstop)"]
     Mig -->|no| FM
-    Migrate --> FM[front-maker<br/>frontend data layer + ESLint]
+    Migrate --> FM[front-maker / dispatch to WEB-FRONT<br/>frontend + ESLint]
     FM --> Par{parallel}
     Par --> RV[reviewer]
     Par --> SC[security-manager]
@@ -437,8 +246,8 @@ flowchart TD
     WT --> WD{PASS?}
     WD -->|PASS| GM[git-manager<br/>commit local — no push]
     WD -->|FAIL: counts as 1 fix cycle| FL
-    GM --> RP[reporter<br/>Report.md + Task.md<br/>+ algorithm.md narrow sync<br/>+ REVIEW-REQUESTED Handoff]
-    RP --> Stop([STOP — user runs /review<br/>in review terminal])
+    GM --> RP[reporter<br/>Report.md + Task.md<br/>+ docs/algorithm.md narrow sync<br/>+ REVIEW-REQUESTED Handoff]
+    RP --> Stop([STOP — user runs /review<br/>in review terminal,<br/>then opens PR])
 
     style Start fill:#3b82f6,color:#fff
     style Stop fill:#3b82f6,color:#fff
@@ -446,6 +255,8 @@ flowchart TD
 ```
 
 **Fix-cycle accounting**: max 2 cycles total across reviewer/security/web-tester FAIL paths. After 2 failed cycles → STOP, report to user, ask for guidance.
+
+**Hybrid pre-commit policy**: when work was dispatched to a Codex team (BACK-DONE / FRONT-DONE), the team's own self-review per `team-back.md` / `team-front.md` is the default pre-commit gate; WEB-MAIN skips the in-session reviewer + security agents and proceeds to git-manager. The cross-model verification still happens at `/review`. See CLAUDE.md § Token-saving rules for the risky-zone override (`(claude-review-requested)`).
 
 ---
 
@@ -464,7 +275,7 @@ User question
 ```mermaid
 flowchart TD
     Start(["User: 'run the algorithm tester'"]) --> AT[algo-tester]
-    AT --> Read[reads CLAUDE.md +<br/>research/algorithm.md]
+    AT --> Read[reads CLAUDE.md +<br/>docs/algorithm.md]
     Read --> Run["python3 tools/algorithm_tester.py<br/>--personas N --trials T<br/>(~5-10 min)"]
     Run --> Results["read backend/tools/<br/>optimization_results.json"]
     Results --> Weak{Weakness?<br/>precision &lt; 0.02 OR<br/>avg_swipes &gt; 40 OR<br/>std &gt; 0.15 OR<br/>archetype near-zero}
@@ -539,121 +350,17 @@ web-tester starts
 
 ---
 
-## Case 6: Research flow (separate terminal, ongoing)
-
-Research runs in its **own dedicated terminal** (see "Multi-Terminal Coordination" →
-Terminal Roster above). It is **not orchestrator-triggered** — it is a long-running,
-user-driven dialog.
+## Case 6: Reporter (updates system docs + emits REVIEW-REQUESTED)
 
 ```
-User starts/resumes research terminal
-  |
-  |- [ongoing dialog: user ↔ research terminal]
-  |    elicitation, clarification, gap-hunting, algorithm audit, optimization ideas
-  |
-  |- research terminal writes / updates:
-  |    research/spec/requirements.md   (living spec, versioned X.Y)
-  |    research/spec/research-priority-rebaselined.md   (research recommendation, non-binding)
-  |    research/search/NN-*.md   (reasoning archive, original 12 topic deep-dives)
-  |    research/investigations/NN-*.md   (post-spec deep dives, cross-referenced from spec §11.1)
-  |
-  |- On spec revision:
-  |    1. bumps **Version**: X.Y in requirements.md header
-  |    2. appends Changelog entry at bottom of requirements.md
-  |    3. appends `SPEC-UPDATED: vX.Y → vX.Z — <sections> — <summary>` to
-  |        .claude/Task.md ## Handoffs
-  |    4. if first publication: appends `[SPEC-READY]` to ## Research Ready
-  |
-  -> main terminal (separate, in its own session):
-       |- at session start, reads ## Handoffs for new SPEC-UPDATED
-       |- if new version: reads only affected sections in requirements.md
-       |- plans task breakdown + sequencing INDEPENDENTLY
-       |    (research/spec/research-priority-rebaselined.md is reference, not mandate)
-       |- runs its orchestrator pipeline (Case 1) to implement
-```
-
-**Research terminal writes only**: `research/**` (full), `.claude/Task.md` (append-only
-research sections), `.claude/WORKFLOW.md` (research rows only, by explicit user grant).
-Never `backend/`, `frontend/`, agent definitions, `Report.md`, or git commits from main's pipeline.
-
-**Main terminal reads** (in order): spec → plans → code. Main does NOT read
-`research/search/**` or `research/investigations/**` under normal flow — Section 11
-of `requirements.md` absorbs all actionable directives. Main may consult deep-dive
-files for justification only when debugging a spec decision or exploring a variant.
-
-The **old orchestrator-triggered research pattern** (main's orchestrator invoking the
-research agent mid-pipeline for a complex sub-question) is still available in
-principle, but in practice all substantial research now lives in the dedicated
-research terminal.
-
----
-
-## Case 6.5: Design flow (separate terminal, ongoing)
-
-The design pipeline runs in its **own dedicated terminal** (see "Multi-Terminal
-Coordination" → Terminal Roster above). It is the parallel of `orchestrator` for
-UI/UX work, supervised by the `designer` agent. Like research, it is not
-orchestrator-triggered — it is a long-running, user-driven design dialog.
-
-```
-User starts/resumes design terminal
-  |
-  |- [ongoing dialog: user ↔ designer]
-  |    DESIGN.md DNA refinement, mockup planning, post-integration polish, sub-agent
-  |    creation when delegation is needed
-  |
-  |- designer reads at session start:
-  |    DESIGN.md (visual system bible)
-  |    CLAUDE.md (project conventions, design pipeline ownership rule)
-  |    relevant frontend/ files
-  |    grep -r "TODO(designer)" frontend/   (reciprocal markers from main)
-  |
-  |- designer writes / updates:
-  |    DESIGN.md   (design DNA)
-  |    frontend/  (UI layer only — JSX styles, animations, colors, layout, MOCK_*)
-  |    .claude/agents/designer.md    (this file, on convention drift)
-  |    .claude/agents/design-*.md    (creates new sub-agents on demand)
-  |
-  |- designer may spawn `design-<role>` sub-agents via the Agent tool when delegation
-  |   is needed (e.g., multi-file refactor, full mockup page, visual QA pass).
-  |   Currently spawned on demand: design-ui-maker (sonnet), design-mockup-maker (sonnet).
-  |
-  |- On new mockup ready for API integration:
-  |    appends `MOCKUP-READY: <page>` to .claude/Task.md ## Handoffs
-  |
-  |- On UI changes that need backend work:
-  |    drops `// TODO(claude): <what>` markers in source for main pipeline pickup
-  |
-  -> design terminal commits its own work directly (research analog)
-       (main's git-manager excludes DESIGN.md + .claude/agents/design-*.md by default)
-```
-
-**Design terminal writes only**: `DESIGN.md`, `frontend/` UI layer (JSX styles,
-animations, colors, layout, `MOCK_*` constants), `.claude/agents/designer.md`,
-`.claude/agents/design-*.md`, `.claude/Task.md` `## Handoffs` (`MOCKUP-READY`
-append-only). Never `backend/`, `frontend/` data layer, `research/`, agent
-definitions outside `design-*`, `CLAUDE.md`, `WORKFLOW.md`, `Goal.md`, or
-`Report.md`.
-
-**Main terminal reads** (in order): `DESIGN.md` (when front-maker integration
-work touches surrounding JSX) → `MOCKUP-READY` Handoffs (to know which pages are
-ready for API wiring) → `grep -r "TODO(claude)" frontend/` (to batch design's
-backend requests).
-
----
-
-## Case 7: Reporter (updates system docs + emits REVIEW-REQUESTED)
-
-```
-reporter runs after every git-manager commit
+reporter runs at session end (or when user requests)
   |
   |- git log -1 --stat           (what changed)
   |- reads .claude/Report.md    (system documentation)
   |- reads .claude/Task.md      (task board)
   |
   |- updates Report.md:
-  |   |- Last Updated section for Claude ONLY
-  |   |   (Do NOT overwrite Last Updated (Designer) section — design terminal owns it)
+  |   |- Last Updated section for Claude
   |   |- Structure tables (if new files created)
   |   |- API Surface (if new endpoints)
   |   |- Feature Status (if features completed)
@@ -661,8 +368,9 @@ reporter runs after every git-manager commit
   |
   |- updates Task.md:
   |   -> moves completed tasks to Resolved with date
+  |   -> archives Handoffs to .claude/handoffs-archive/<YYYY-MM>.md when count > 30
   |
-  |- (narrow exception) updates research/algorithm.md ONLY when:
+  |- (narrow exception) updates docs/algorithm.md ONLY when:
   |   - RECOMMENDATION dict in settings.py changed → sync Production Value column
   |   - phase/formula/edge-case section's implementation changed → append 1-line annotation
   |   - maintains Last Synced (Reporter): YYYY-MM-DD <sha_short> line near top
@@ -670,7 +378,7 @@ reporter runs after every git-manager commit
   |
   -> appends REVIEW-REQUESTED to Task.md Handoffs:
        `- [YYYY-MM-DD] REVIEW-REQUESTED: <sha_short> — <one-line summary>`
-       (uses Edit tool; does NOT touch the Research Ready section)
+       (uses Edit tool to leave the rest of Task.md untouched)
 ```
 
 ---
@@ -679,16 +387,16 @@ reporter runs after every git-manager commit
 
 | Rule | Detail |
 |------|--------|
-| All changes go through orchestrator | Never implement directly from main conversation |
+| All feature work goes through orchestrator | Never implement directly from main conversation |
+| Direct work allowed for | meta/infra (`tools/`, `hooks/`, `.github/`), single-line fixes, sub-MINOR follow-ups, pure docs (CLAUDE.md / CONTRIBUTING.md / DESIGN.md / docs/* / Report.md / Task.md) |
 | Questions answered directly | No agents needed for explanations |
-| Makers are sandboxed | back-maker: `backend/` only -- front-maker: `frontend/` data layer only -- design-* sub-agents: `frontend/` UI layer only |
+| Makers are sandboxed | back-maker: `backend/` only · front-maker: `frontend/` only |
 | orchestrator never writes code | Always delegates to makers |
-| git-manager never pushes | Unless explicitly told to push |
-| Reporter updates, never appends | Report.md is live state (but preserve `Last Updated (Designer)` section — design terminal owns it); Task.md Resolved is historical |
+| git-manager never pushes | Push happens via PR after `/review` PASS |
+| Reporter updates, never appends | Report.md is live state; Task.md Resolved is historical |
 | Algorithm weakness = manual review | orchestrator stops and flags; does not auto-fix |
 | Fix cycle limit = 2 | After 2 failed cycles, stop and report to user |
-| Research before complex coding | Algorithm/UX tasks without precedent trigger research first |
-| WORKFLOW.md stays in sync | When workflow / agent / terminal / pre-push gate / signal vocab changes, update this file (text + Mermaid) in the same commit |
+| WORKFLOW.md stays in sync | When workflow / agent / pre-push gate / signal vocab changes, update this file (text + Mermaid) in the same commit |
 
 ---
 
@@ -696,17 +404,27 @@ reporter runs after every git-manager commit
 
 | File | Purpose |
 |------|---------|
-| `.claude/agents/*.md` | Agent definitions (this system) |
+| `.claude/agents/*.md` | Agent definitions |
 | `.claude/commands/*.md` | Slash command definitions (`/review`, etc.) |
 | `.claude/Goal.md` | Vision + acceptance criteria (north star) |
-| `.claude/Task.md` | Problem board -- open/in-progress/resolved by category, Handoffs + Research Ready signals |
-| `.claude/Report.md` | Live system documentation -- architecture, API, diagrams |
-| `.claude/WORKFLOW.md` | This file -- agent workflow documentation |
+| `.claude/Task.md` | Problem board + Handoffs signals |
+| `.claude/Report.md` | Live system documentation — architecture, API, diagrams |
+| `.claude/WORKFLOW.md` | This file — agent workflow documentation |
 | `.claude/reviews/*.md` | Per-commit `/review` reports (latest.md is symlink-equivalent) |
-| `research/spec/requirements.md` | Living spec (research terminal exclusive) |
-| `research/algorithm.md` | Algorithm reference (read-only except reporter narrow sync) |
-| `research/search/`, `research/investigations/` | Research reasoning archive |
+| `docs/algorithm.md` | Algorithm reference (read-only except reporter narrow sync) |
+| `docs/specs/*.md` | Pending-feature specs + decision records (admin-owned via PR) |
 | `backend/tools/algorithm_tester.py` | Hyperparameter optimizer script |
 | `backend/tools/optimization_results.json` | Latest tester output |
 | `CLAUDE.md` | Project conventions (read by all agents) |
-| `DESIGN.md` | Design DNA (design terminal exclusive) |
+| `DESIGN.md` | Visual design system (consult for any UI work) |
+| `CONTRIBUTING.md` | Branch model + PR workflow + role/file ownership |
+| `AGENTS.md` | Codex baseline (auto-loaded by codex CLI) |
+| `tools/cmux_setup.sh` | Idempotent 4-workspace creator |
+| `tools/dispatch.sh` | WEB-MAIN → codex team |
+| `tools/poll.sh` | Read codex team's screen |
+| `tools/install-hooks.sh` | Install local pre-push hook (one-time per clone) |
+| `tools/cleanup-after-push.sh` | Rule 7 post-push cleanup |
+| `hooks/pre-push` | Migration-numbering conflict check |
+| `.github/CODEOWNERS` | Auto-assign reviewers per file ownership |
+| `.github/PULL_REQUEST_TEMPLATE.md` | PR description scaffold |
+| `.github/workflows/ci.yml` | CI (pytest + lint + makemigrations check) |

@@ -26,7 +26,7 @@ file before any action.**
 |---|---|---|
 | WEB-MAIN | Claude Code (orchestrator) | Pipeline, dispatch, in-session reviewer/security |
 | WEB-BACK | Codex CLI | `backend/` (Django apps, serializers, views, migrations, tests) |
-| WEB-FRONT | Codex CLI | `frontend/` (React data layer — `useState`, `useEffect`, `callApi`, hooks, error handling) |
+| WEB-FRONT | Codex CLI | `frontend/` (React data + UI; consult `DESIGN.md` for visual system) |
 | WEB-REVIEW | Claude Code | `/review` pre-push gate only (read-only on source) |
 
 ## How WEB-MAIN sends you work
@@ -89,15 +89,18 @@ sub-agent (back-maker / front-maker) for harder cases.
 
 You **never**:
 
-1. Modify anything under `research/` — research terminal's exclusive
-   territory (per CLAUDE.md `## Rules`). Reads OK; writes forbidden.
-2. Modify `DESIGN.md` or `.claude/agents/designer.md` or
-   `.claude/agents/design-*.md` — designer terminal owns those.
-3. Modify frontend JSX visual style (inline-style objects, colors,
-   layout, animations, `MOCK_*` constants) — that is the designer
-   terminal's UI layer. Frontend **data layer** (`useState`,
-   `useEffect`, `callApi()`, hooks, error handling, data transforms)
-   IS yours if you are WEB-FRONT.
+1. **Commit directly to `main` or `develop`.** Before any code edit,
+   run `git status` to confirm current branch. If on `main` or
+   `develop`, refuse to commit — request the operator switch to a
+   `feature/<role>-<topic>` branch first. Server-side branch
+   protection will reject the push anyway, but do not waste a cycle
+   trying.
+2. Modify `CLAUDE.md`, `CONTRIBUTING.md`, `DESIGN.md`, `README.md`, or
+   anything under `docs/` or `.claude/` — admin-owned via PR. Reads OK.
+3. When editing frontend visual styles (inline-style objects, colors,
+   layout, animations), you must consult `DESIGN.md` first. Deviations
+   from the design system require explicit justification in your DONE
+   message.
 4. Cross teams: WEB-BACK does NOT touch `frontend/`; WEB-FRONT does
    NOT touch `backend/`.
 5. Touch `.env`, `.env.*` (except `.env.example`), `*.key`, `*.pem`,
@@ -107,14 +110,12 @@ You **never**:
 7. Add `sentence-transformers`, `transformers`, or any embedding
    library as a runtime dependency — embeddings are pre-computed in
    Make DB.
-8. Run `git push`, `git push --force`, `git push -f`, or any push
-   variant. Push is the user's manual action from WEB-REVIEW after
-   `/review` PASS.
+8. Run any push variant: `git push`, `git push --force`, `git push -f`.
+   Push happens via PR after WEB-REVIEW emits REVIEW-PASSED (see
+   `CONTRIBUTING.md`).
 9. Run `git commit --amend`, `git rebase`, `git reset --hard`,
    `git checkout -- <path>`, `--no-verify`, `--no-gpg-sign`, or any
-   hook-skipping / history-rewriting flag.
-10. Stage `.claude/agents/designer.md`, `.claude/agents/design-*.md`,
-    or `DESIGN.md` even if your diff happens to include them.
+   hook-skipping / history-rewriting flag on shared branches.
 
 ## Behavioral norms
 
@@ -147,10 +148,13 @@ You **never**:
 ## Project anchors
 
 - `CLAUDE.md` — project conventions + Backend / Frontend / DB rules
-- `BRANCHING.md` — 3-developer collaboration + shared-file hotzones
+- `CONTRIBUTING.md` — branch model + PR workflow + role/file ownership
+- `DESIGN.md` — visual design system (consult for any frontend UI work)
 - `.claude/Report.md` — live system state + API surface
 - `.claude/Task.md` — § Handoffs has the latest 10 signals
 - `.claude/WORKFLOW.md` — full operational pipeline
+- `docs/algorithm.md` — recommendation algorithm theory + production hyperparameters
+- `docs/specs/*.md` — pending-feature specs + decision records
 - `tools/dispatch.sh` — how WEB-MAIN reaches you
 - `tools/poll.sh` — how WEB-MAIN reads your screen
 

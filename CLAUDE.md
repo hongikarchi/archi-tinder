@@ -3,25 +3,55 @@
   ## What This Repo Does
   React frontend + Django backend that reads from a PostgreSQL DB built by Make DB (reference-crawling repo).
   For system architecture and API surface, see `.claude/Report.md`.
-  For 3-developer collaboration / branching / file ownership, see `BRANCHING.md`.
+  For 3-developer collaboration / branch model / PR workflow / file ownership, see `CONTRIBUTING.md`.
+
+  ## Branch Model — HARD RULES (must follow before any commit)
+
+  **The team uses GitHub Flow with a develop integration branch:**
+
+  - `main` — production (Railway auto-deploy). Protected: PR-only, force-push blocked, requires Code Owner approval.
+  - `develop` — integration branch. Protected: PR + status check required (admin bypass disabled).
+  - `feature/<role>-<topic>` — per-task work branches:
+    - Role A (algorithm) → `feature/algo-<topic>`
+    - Role B (SNS / profiles / boards) → `feature/sns-<topic>`
+    - Role C (admin / everything else) → `feature/admin-<topic>`
+
+  **Hard rules — NEVER violate:**
+
+  1. **Never commit directly to `main` or `develop`.** Server-side branch protection will reject the push, but you should not even try. Always work on a `feature/*` branch.
+  2. **Before any code edit, run `git status`** to confirm the current branch. If on `main` or `develop`, do not proceed with edits — first sync develop and create a feature branch:
+     ```bash
+     git checkout develop && git pull origin develop
+     git checkout -b feature/<role>-<topic>
+     ```
+  3. **Never run `git push origin main` or `git push origin develop`** — pushes go from `feature/*` branches only, then to `develop` via PR, then to `main` via PR.
+  4. **Never use `--no-verify`, `--force`, `--force-with-lease`, `git rebase -i`, `git reset --hard` on shared branches**, or any history-rewriting flag.
+  5. **PRs target `develop`, not `main`.** The admin batches features and opens a separate `develop → main` PR when ready to deploy.
+  6. **One-time setup per clone (each collaborator must run once):**
+     ```bash
+     ./tools/install-hooks.sh
+     ```
+     Without this, your local does not have the migration-numbering pre-push hook, and you may push a duplicate-numbered Django migration that breaks the team.
+
+  **If `git status` at session start shows you are on `main` or `develop` with uncommitted changes**: the previous session likely did not switch to a feature branch. Stash or save the work, then create a proper feature branch before continuing. Do not stage or commit while on a protected branch.
+
+  Full details (workflow scripts, common pitfalls, file ownership table): see `CONTRIBUTING.md` at the repo root.
 
   ## Audit Trail Locations
   Different categories of historical / decision documents live in distinct directories
   so that agents and collaborators always know where to look. Do NOT scatter audit
-  documents into ad-hoc paths (e.g. `backend/_validation_*.md` was the old anti-pattern;
-  consolidated into `.claude/validations/`).
+  documents into ad-hoc paths.
 
   | Category | Location | Writer | Lifecycle |
   |---|---|---|---|
-  | **Spec** (binding requirements) | `research/spec/*.md` | research terminal | Long-lived; versioned |
-  | **Investigation** (pre-spec exploration) | `research/investigations/*.md` | research terminal | Numbered chronologically; archived |
-  | **Decision record** (architectural) | `research/spec/phase*-decision-record.md` | research terminal | Per phase |
+  | **Spec** (binding requirements / pending work) | `docs/specs/*.md` | admin | Long-lived; versioned |
+  | **Algorithm reference** (theory + hyperparams) | `docs/algorithm.md` | admin (reporter syncs prod values) | Live; reporter updates Production Value column when settings.py changes |
   | **Plan** (`/plan` artifacts) | `.claude/plans/*.md` | Claude main session | Random-named per `/plan` invocation |
   | **Review verdict** (pre-push gate) | `.claude/reviews/*.md` | review terminal | Per-commit; `latest.md` symlink |
   | **Validation** (staging A/B results) | `.claude/validations/*.md` | main pipeline | Per-feature (e.g. `imp5.md`, `imp6.md`) |
   | **Postmortem** (bug-fix retrospective) | `.claude/postmortems/*.md` | main pipeline | Per-incident, named descriptively |
   | **System report** (live state) | `.claude/Report.md` | reporter agent | Single file; updated each commit |
-  | **Task board** (handoffs + done log) | `.claude/Task.md` | reporter agent | Single file; Handoffs trim at >30 |
+  | **Task board** (roadmap + handoffs) | `.claude/Task.md` | reporter agent | Single file; Handoffs trim at >30 |
   | **Handoffs archive** (auto-trim) | `.claude/handoffs-archive/<YYYY-MM>.md` | reporter agent | Created when Handoffs >30 |
 
   Cross-references:
@@ -30,17 +60,13 @@
   - Bug-fix retrospectives (post-incident analysis) go in `.claude/postmortems/` with
     descriptive filenames (e.g. `swipe-infinite-loading-fix.md`), not in `.claude/plans/`
     (plans is for `/plan`-mode artifacts only).
-  - Research terminal owns `research/` exclusively (one narrow exception: `reporter`
-    may sync `research/algorithm.md` per Step 6 in `.claude/agents/reporter.md`).
 
   ## Rules
   - All building references must use `building_id` -- never name, slug, or language-dependent field.
   - Do NOT create or migrate the `architecture_vectors` table -- it is owned by Make DB.
   - SentenceTransformers is NOT a dependency here -- embeddings are pre-computed.
-  - When updating `.claude/Report.md`, update ONLY the `Last Updated (Claude)` section. NEVER overwrite or remove the `Last Updated (Designer)` section.
-  - **`research/` folder is off-limits to the main and review terminals**, with **one narrow exception** noted below. It is the **research terminal's exclusive write territory** AND the **user's active study workspace**. All main-pipeline and review-terminal agents/commands — `orchestrator`, `back-maker`, `front-maker`, `reviewer`, `security-manager`, `git-manager`, `algo-tester`, `web-tester`, and the `/review` slash command — are **READ-ONLY** on `research/`. Never create, modify, delete, or stage files under `research/` (including `research/spec/`, `research/search/`, `research/investigations/`, and any future subdirectory) from the main pipeline. If you read research content, that is fine; writes are forbidden. If a file already exists under `research/` that appears to have been created by the main pipeline (governance violation), leave it for the user or research terminal to handle — do not delete or relocate it yourself. The only legitimate broad writer of `research/` is the `research` agent invoked from the research terminal.
-  - **Narrow exception — `research/algorithm.md`:** the `reporter` agent (and only the reporter) is permitted to UPDATE `research/algorithm.md` to keep it in sync with implementation. Permitted writes: (a) sync the **Production Value** column in the Hyperparameter Space table when `backend/config/settings.py` RECOMMENDATION dict changes; (b) append a one-line `_(Updated YYYY-MM-DD <sha_short>: <one-line>)_` annotation under any phase / formula / edge-case section whose corresponding implementation just changed; (c) maintain a `**Last Synced (Reporter):** YYYY-MM-DD <sha_short>` line near the top. Forbidden: rewriting algorithm theory, removing existing content, adding new sections, or touching any other file under `research/`. Reporter must NEVER touch `research/spec/`, `research/search/`, or `research/investigations/`. The `git-manager` agent likewise allows `research/algorithm.md` (and only that file) into staged commits via an explicit override path; broad `research/*` exclusion otherwise stands.
-  - **Design pipeline ownership**: the **`designer`** agent (and any `design-*` sub-agents it creates) exclusively owns the frontend UI layer (JSX styles, animations, colors, layout, `MOCK_*` constants), `DESIGN.md`, and `.claude/agents/design-*.md`. Main pipeline agents (`orchestrator`, `back-maker`, `front-maker`, `reviewer`, `security-manager`, `git-manager`, `reporter`, `algo-tester`, `web-tester`) and the review terminal (`/review`) are **READ-ONLY** on these. The frontend **data layer** (`useState`, `useEffect`, `callApi()`, custom hooks, error handling, data transformations) remains main pipeline's territory (`front-maker`). The UI vs Data split inside the same `.jsx` file is enforced **per-line, not per-file** — both terminals coexist via Git's 3-way merge. See `.claude/agents/designer.md` for the full layer-boundary rules and reciprocal `TODO(claude):` / `TODO(designer):` handoff markers.
+  - When updating `.claude/Report.md`, update ONLY the `Last Updated (Claude)` section.
+  - **`docs/algorithm.md` reporter sync (narrow write permission)**: only the `reporter` agent updates `docs/algorithm.md`, and only to keep it in sync with implementation. Permitted writes: (a) sync the **Production Value** column in the Hyperparameter Space table when `backend/config/settings.py` RECOMMENDATION dict changes; (b) append a one-line `_(Updated YYYY-MM-DD <sha_short>: <one-line>)_` annotation under any phase / formula / edge-case section whose corresponding implementation just changed; (c) maintain a `**Last Synced (Reporter):** YYYY-MM-DD <sha_short>` line near the top. Forbidden: rewriting algorithm theory, removing existing content, adding new sections. Other `docs/` files (specs, etc.) are admin-owned plain documents — anyone can edit via PR per CONTRIBUTING.md.
   - **Plan mode protocol — Korean summary + multiple choice + one question at a time** (durable across sessions). When entering plan mode, follow this exact procedure:
     1. **Data gathering** (Phase 1) — read-only exploration. Use Explore agent or direct read tools. Collect facts before analysis.
     2. **Korean summary in chat** — present a *short* (5-15 lines) Korean summary of the diagnosis / proposal / data. Do NOT dump 500-line English plan files into chat. The plan file (the only writable file in plan mode) can be more detailed but the chat presentation is summarized + Korean.
@@ -64,10 +90,10 @@
         4. **Risky-zone touch** — auth / token-handling / new external API integration / cross-cutting refactor ≥ 4 unrelated apps (matches CLAUDE.md hybrid-policy risky-commit list).
         5. **User explicit request** — "지금 push" / "리뷰 돌려".
       - **Bundle-worthy** (commit locally; push deferred to next push-worthy or session-end):
-        1. **Pure docs / policy** — `CLAUDE.md`, `.claude/agents/*.md`, `AGENTS.md`, `BRANCHING.md`, `Goal.md`, `Report.md`, `Task.md` (handoff entries, status updates).
-        2. **Tooling** — `tools/*.sh`, `.gitignore` whitelist additions, cmux config (per 2026-05-07 user decision: tooling-self-use is local-effective from commit time; remote sync waits for next code push).
+        1. **Pure docs / policy** — `CLAUDE.md`, `.claude/agents/*.md`, `AGENTS.md`, `CONTRIBUTING.md`, `DESIGN.md`, `docs/*.md`, `Goal.md`, `Report.md`, `Task.md` (handoff entries, status updates).
+        2. **Tooling** — `tools/*.sh`, `hooks/*`, `.github/*`, `.gitignore` whitelist additions, cmux config (per 2026-05-07 user decision: tooling-self-use is local-effective from commit time; remote sync waits for next code push).
         3. **Sub-MINOR follow-ups** — cosmetic fixes from `/review` reports (typo in docstring, dead-code branch, etc).
-        4. **Handoff entries** — single-line `RESEARCH-REQUESTED:` / similar additions to `Task.md ## Handoffs`.
+        4. **Handoff entries** — single-line additions to `Task.md ## Handoffs`.
         5. **Session-end housekeeping** — reporter pass output (Report.md sync, Task.md trim, handoffs archive).
       - **Forced push triggers** (sweep accumulated bundle even without a push-worthy commit):
         1. **Push-worthy commit lands** (automatic — sweeps everything in `origin/main..HEAD`).
@@ -92,11 +118,11 @@
   - Google login: auth-code flow (VITE_GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET required)
 
   ## Frontend Conventions
-  - **MUST READ `DESIGN.md`**: All UI work (designer + design-* sub-agents in the design terminal, and front-maker in the main pipeline whenever data-layer wiring touches surrounding JSX) MUST consult `DESIGN.md` for our visual design system, colors, sizes, and UI rules before writing any code.
+  - **MUST READ `DESIGN.md`**: All UI work (any role's frontend changes — JSX styles, layout, colors, animations) MUST consult `DESIGN.md` (root) for our visual design system, colors, sizes, and UI rules before writing any code.
   - All component styles are inline JS objects -- Tailwind is NOT used in components
   - Viewport-lock layout: body is `height:100vh; overflow:hidden`; pages use `height: calc(100vh - 64px)` (TabBar = 64px fixed bottom)
   - Accent colors are hardcoded hex in inline styles (not CSS vars) -- rely on `DESIGN.md` when applying colors
-  - Do NOT rewrite inline styles arbitrarily; they are the intentional design — the **design pipeline** (`designer` agent) owns this layer; main pipeline (`front-maker`) is read-only on JSX styles. See `.claude/agents/designer.md` for the full UI-vs-Data layer split.
+  - Do NOT rewrite inline styles arbitrarily; they are the intentional design. Treat existing inline styles as load-bearing unless `DESIGN.md` rules say otherwise — when in doubt, consult `DESIGN.md` and surface the change in the PR description.
 
   ## Backend Conventions
   - Django 4.2 LTS required (Python 3.9.6 on this machine; Django 5+ needs Python 3.10+)
@@ -118,7 +144,7 @@
   |---|---|---|
   | WEB-MAIN | Claude Code (this session) | Pipeline, dispatch, in-session reviewer/security |
   | WEB-BACK | Codex CLI | `backend/*` (apps, serializers, views, migrations, tests) |
-  | WEB-FRONT | Codex CLI | `frontend/*` data layer (`useState`/`useEffect`/`callApi`/hooks) — UI styles still designer-only |
+  | WEB-FRONT | Codex CLI | `frontend/*` (data layer + UI — but consult `DESIGN.md` before changing inline styles) |
   | WEB-REVIEW | Claude Code | `/review` pre-push gate only |
 
   **Files that define this architecture** (ground truth — edit these, not policy here):
@@ -132,7 +158,7 @@
   - Mechanical, well-bounded task (single feature, clear file scope)
   - Plan can include verbatim code blocks; acceptance is `pytest`/lint green
   - Stay with Claude `back-maker`/`front-maker` for: open-ended refactors,
-    bug fixes with unclear root cause, algorithm tuning, design-territory work
+    bug fixes with unclear root cause, algorithm tuning, UI work that needs `DESIGN.md` judgment
 
   **DRF gotcha** (lesson from empirical test 001 v1, codified in `team-back.md`):
   `serializers.CharField` defaults to `trim_whitespace=True, allow_blank=False` —
@@ -340,7 +366,7 @@
   CRITICAL / MAJOR / MINOR.
 
   **Pre-push gate semantics:** `/review` is **read-only on source code** (never edits
-  backend / frontend / research) but acts as the **pre-push gate**. The main orchestrator
+  backend / frontend / docs) but acts as the **pre-push gate**. The main orchestrator
   pipeline commits via `git-manager` and stops — it never pushes. The user runs
   `/review` (or natural language) in the review terminal; the unified verdict lands in
   `.claude/reviews/latest.md` and a one-line signal is appended to the `## Handoffs`
@@ -395,7 +421,7 @@
 
   ## Database: architecture_vectors Schema
   Owned by Make DB. Django reads via raw SQL only -- never ORM, never migrate.
-  <!-- Last synced 2026-04-29 with Make DB v2 + Divisare migration. Reference: research/infra/03-make-db-snapshot.md §2 -->
+  <!-- Last synced 2026-04-29 with Make DB v2 + Divisare migration. -->
 
   ```sql
   CREATE TABLE architecture_vectors (

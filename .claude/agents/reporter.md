@@ -100,10 +100,9 @@ Format:
 
 Use the Edit tool (not Write) to avoid clobbering the rest of Task.md.
 
-### 6. Sync `research/algorithm.md` (conditional, narrow exception)
+### 6. Sync `docs/algorithm.md` (conditional)
 
-This is the ONLY permitted write under `research/` for any main-pipeline agent. Run this
-step only when the commit you are reporting on touched any of:
+Run this step only when the commit you are reporting on touched any of:
 - `backend/config/settings.py` (specifically the `RECOMMENDATION` dict)
 - `backend/apps/recommendation/engine.py`
 - `backend/apps/recommendation/views.py` (algorithm-relevant sections — phase transitions,
@@ -116,7 +115,7 @@ When triggered, do exactly the following — no more, no less:
 #### 6a. Hyperparameter Production Value sync (mechanical)
 
 If `backend/config/settings.py` `RECOMMENDATION` dict values changed, update the
-**Production Value** column in `research/algorithm.md`'s Hyperparameter Space table to
+**Production Value** column in `docs/algorithm.md`'s Hyperparameter Space table to
 match. Read both `settings.py` and the existing `algorithm.md` table; replace each row's
 value cell where it diverges. Leave Type and Range columns alone.
 
@@ -129,7 +128,7 @@ If a key was removed, leave the existing row in place (history) but add the anno
 
 #### 6b. Inline annotations (semantic)
 
-For each section in `algorithm.md` whose described behavior just changed in the commit,
+For each section in `docs/algorithm.md` whose described behavior just changed in the commit,
 append exactly one italic annotation line at the END of that section (do not rewrite the
 description):
 
@@ -146,7 +145,7 @@ If no semantic section maps to the change (e.g., pure refactor), skip 6b.
 
 #### 6c. Top-of-file Last Synced line
 
-Add or replace a single line near the top of `algorithm.md`, right under the existing
+Add or replace a single line near the top of `docs/algorithm.md`, right under the existing
 intro blockquote:
 
 ```
@@ -154,32 +153,23 @@ intro blockquote:
 ```
 
 If the line already exists, replace its value. If not, insert it as a new line right
-after the existing `> Phase logic, mathematical formulas, and hyperparameter theory.`
-blockquote.
+after the existing intro blockquote.
 
 #### 6d. Hard limits (forbidden actions)
 
 You MUST NOT:
 - Rewrite or paraphrase algorithm theory (Mathematical Formulas section, Phase descriptions)
-- Add new sections to `algorithm.md`
+- Add new sections to `docs/algorithm.md`
 - Remove any existing line (only ANNOTATE or REPLACE the Production Value cell / Last Synced line)
-- Touch ANY other file under `research/` — not `research/spec/`, not `research/search/`,
-  not `research/investigations/`, nothing else
-- Stage `research/algorithm.md` into the SAME commit as the code change. Reporter runs
-  AFTER `git-manager` per the orchestrator pipeline. The `algorithm.md` update rolls
-  into the bookkeeping (docs) commit that follows the code commit, alongside
-  `Report.md` + `Task.md` updates. The bookkeeping committer (typically the parent
-  session driving the pipeline) explicitly stages `research/algorithm.md` for that
-  commit; `git-manager`'s default exclude pattern (`':(exclude)research/*'`) does not
-  fire on the bookkeeping path.
+- Touch any other file under `docs/specs/` — those are admin-owned and edited via PR
 
 If your edit would cross any of these limits, STOP and report the constraint to the user
 instead of proceeding.
 
 ## Rules
-- Never delete existing content in Report.md or Task.md. The `[SPEC-READY]` pointer in `## Research Ready` is **persistent** since spec v1.0 (2026-04-25) — never remove or edit it. (Historical note: the pre-spec-v1.0 `[RESEARCH-READY]` removal convention no longer applies; research has moved to a single persistent pointer.)
+- Never delete existing content in Report.md or Task.md.
 - Report.md is a live system reference, not a changelog -- keep it current, not historical
 - Task.md Resolved section IS historical -- never remove old entries
 - When appending the REVIEW-REQUESTED line in Step 5, use `Edit` (not `Write`) so the rest of Task.md stays untouched
 - If no architecture changes: only update "Last Updated" section (but still emit REVIEW-REQUESTED in Step 5)
-- **`research/` is off-limits with ONE narrow exception: `research/algorithm.md`.** You (the reporter) MAY update `research/algorithm.md` per the rules in Step 6 below to keep the algorithm reference in sync with implementation. You MUST NEVER touch any other file under `research/` — `research/spec/`, `research/search/`, `research/investigations/`, etc. You may READ `research/spec/requirements.md` for feature-status context but never write to it. See CLAUDE.md `## Rules` for the authoritative statement.
+- **`docs/algorithm.md` is the only file outside `.claude/` that the reporter writes.** Step 6 above defines the narrow surface. All other `docs/` files (specs in `docs/specs/`) are admin-owned and updated only via PR. See CLAUDE.md `## Rules`.

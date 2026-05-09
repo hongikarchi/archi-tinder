@@ -1,0 +1,83 @@
+#!/bin/bash
+# pre-push hook — Django migration numbering conflict check.
+#
+# Installed by tools/install-hooks.sh into .git/hooks/pre-push.
+# Each collaborator runs `./tools/install-hooks.sh` once after cloning.
+#
+# Purpose: catch the case where two developers independently created
+# migrations with the same number (e.g. both created 0005_*.py) before
+# the second one tries to push. Without this check, the duplicate
+# migration would only surface at PR merge time as a hard merge conflict
+# — much later in the cycle.
+#
+# Algorithm: for each migration file added on HEAD vs origin/develop,
+# check whether origin/develop already has a migration with the same
+# leading number in the same app directory. If yes → conflict.
+#
+# Resolution path printed on conflict:
+#   git checkout develop && git pull origin develop
+#   git checkout <feature-branch> && git rebase develop
+#   python backend/manage.py makemigrations <app>   # re-number locally
+#
+# Bypass (emergency only): git push --no-verify
+
+set -u
+
+# If origin/develop doesn't exist (fresh fork, no remote develop yet), skip.
+if ! git rev-parse --verify --quiet origin/develop >/dev/null 2>&1; then
+    exit 0
+fi
+
+# Refresh origin/develop ref. Best-effort — if network fails, fall through
+# with possibly-stale knowledge (better than blocking the push).
+git fetch origin develop --quiet 2>/dev/null || true
+
+# Find new migration files on HEAD relative to origin/develop.
+new_migs=$(git diff --name-only origin/develop...HEAD -- 'backend/apps/*/migrations/[0-9]*.py' 2>/dev/null || true)
+
+if [ -z "$new_migs" ]; then
+    exit 0
+fi
+
+conflict=0
+while IFS= read -r path; do
+    [ -z "$path" ] && continue
+    [ -f "$path" ] || continue   # skip deletions
+
+    base=$(basename "$path")
+    app_mig_dir=$(dirname "$path")
+    num=$(echo "$base" | grep -oE '^[0-9]+' | head -1 || true)
+    [ -z "$num" ] && continue
+
+    # Does origin/develop already have a migration with the same leading
+    # number in this app/migrations/ directory, but a DIFFERENT filename?
+    existing=$(git ls-tree --name-only origin/develop "$app_mig_dir/" 2>/dev/null \
+                | grep -E "^${num}_" \
+                | grep -v "^${base}$" \
+                || true)
+
+    if [ -n "$existing" ]; then
+        if [ "$conflict" -eq 0 ]; then
+            echo "" >&2
+            echo "ERROR: Django migration numbering conflict detected" >&2
+            echo "" >&2
+        fi
+        echo "  Local:        $path" >&2
+        echo "  origin/develop already has: $app_mig_dir/$existing" >&2
+        echo "" >&2
+        conflict=1
+    fi
+done <<< "$new_migs"
+
+if [ "$conflict" -eq 1 ]; then
+    echo "Resolution:" >&2
+    echo "  1. git checkout develop && git pull origin develop" >&2
+    echo "  2. git checkout - && git rebase develop" >&2
+    echo "  3. cd backend && python manage.py makemigrations <app>  # re-number" >&2
+    echo "  4. git add -u && git commit --amend --no-edit && git push" >&2
+    echo "" >&2
+    echo "Bypass (emergency only): git push --no-verify" >&2
+    exit 1
+fi
+
+exit 0
