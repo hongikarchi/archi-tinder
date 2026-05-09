@@ -8,11 +8,18 @@ and admin review. Read this once before your first commit.
 ```bash
 git clone <repo>
 cd make_web
-./tools/install-hooks.sh    # installs hooks/pre-push (migration order check)
+./tools/onboarding.sh    # interactive: installs hooks + registers your CODEOWNERS handle
 ```
 
-The pre-push hook catches the case where you and another developer independently
-created migrations with the same number. It runs locally before any push.
+`onboarding.sh` walks you through 3 steps:
+1. Installs the migration-conflict pre-push hook (calls `install-hooks.sh`)
+2. Asks your role (A=Algorithm / B=SNS / C=Admin)
+3. Asks your GitHub handle and replaces the matching `@TODO-role-*` placeholder
+   in `.github/CODEOWNERS` with `@yourhandle`. You commit the CODEOWNERS edit
+   yourself on your first feature branch — see "First PR sanity check" below.
+
+If you only want to install hooks (e.g. CODEOWNERS already has your handle),
+run `./tools/install-hooks.sh` directly instead.
 
 ## Roles
 
