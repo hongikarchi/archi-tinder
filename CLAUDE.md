@@ -76,35 +76,15 @@
     6. **ExitPlanMode** — only call this AFTER all decisions are settled in the plan file. Do not ask "should I proceed?" via text or `AskUserQuestion`; that is exactly what `ExitPlanMode` does.
     Why: the user requested this on 2026-04-29 ("내가 요청한 사항에 대해서 지금처럼 한번에 무지막지한 영어로 한번에 제시하지 말고, 좀 요약해서 한글로 나한테 한번 검토 받은 다음에... 객관식으로 고르는 방식으로 진행하도록"). Long English plan dumps overwhelm; sequential multiple-choice walks support careful per-topic decision-making. This rule applies to ALL plan-mode entries from any terminal session, not just one-off.
   - **Session protocol** — see **`.claude/SESSION_PROTOCOL.md`** for the push-단위 session model, session-start/end checklists, the standard plan-table template (terminals + agents + token estimates + risk + decisions), Korean-summary rule, and bundle-vs-push thresholds. WEB-MAIN session start MUST run the § 2 checklist (git status / git pull / Task.md Handoffs scan + `SESSION-START-TODO` surfacing) BEFORE substantive work. Plan reporting (§ 3) MUST happen before any `Edit` / `Write` / multi-step `Bash` action — not after. The protocol applies to all collaborators (admin + Role A + Role B), not Claude self only. Why: codified 2026-05-09 after the user requested "작업 시작 전에 표 형식으로 분담 + 추정 + 객관식 보고" — bundles plan-mode protocol (above) + token-saving rules (below) into one operational doc.
-  - **Token-saving workflow rules** (per `.claude/agents/orchestrator.md` Rules + `.claude/agents/reporter.md` Step 3.5; see also memory `feedback_token_saving_workflow.md` for full rationale):
-    - **Defer reporter to session end** — do NOT spawn `reporter` after every commit; accumulate `.claude/Report.md` + `.claude/Task.md` working-tree changes and run reporter ONCE at session end (or before `git push`). User override: "지금 reporter 돌려".
-    - **Skip reviewer + security on trivial commits** — *trivial* = (<50 LOC OR pure docs/policy/agent-file commit with zero source code) + no migration + no production code (only test, config, docs, `.claude/` policy/agent files, `web-testing/`, or `.claude/commands/review.md`) + no auth/network/model layer change. The "pure docs/policy" branch handles cases like CLAUDE.md / agent-md / AGENTS.md cross-cutting policy commits that legitimately exceed 50 LOC (e.g. the 121-LOC hybrid pre-commit policy commit in `756b247`) but introduce zero runtime risk. Trivial commits go back-maker → git-manager directly. User override: "리뷰 돌려" or any explicit request.
-    - **Hybrid pre-commit policy for Codex team output** — when `back-maker` or `front-maker` work was dispatched to WEB-BACK / WEB-FRONT (Codex teams), the team's **own self-review** (per `.claude/agents/team-back.md` § "Self-review checklist before BACK-DONE" / `team-front.md` § "Self-review checklist before FRONT-DONE") is the **default pre-commit gate**. WEB-MAIN trusts the BACK-DONE / FRONT-DONE report and skips the in-session Claude `reviewer` + `security-manager` agents. Cross-model verification still happens at `/review` (Claude Opus on WEB-REVIEW vs Codex gpt-5.5 on the teams). **Risky-commit override**: Codex teams append `(claude-review-requested)` to their DONE message when work touches auth flow, token-handling, new external API integration, migrations with data backfill, or cross-cutting refactors ≥4 unrelated apps; WEB-MAIN then runs the in-session reviewer/security pass on top of the self-review. Same applies to Claude `back-maker` / `front-maker` direct work — the in-session reviewer/security run when the orchestrator believes the change is risky, otherwise relies on /review's Part A as the canonical static analysis. Rationale: pre-commit Claude reviewer + security on Codex output ate ~150-200 K Claude tokens per BOARD-class deliverable (3-cycle fix loop) while /review's Part A already covers the 7-axis static analysis. The hybrid keeps the cross-model verification (which catches genuine bugs — see BOARD3 cycle 0 `resp.is_reacted` vs `resp.reacted` contract mismatch) at `/review` time, where Part B browser test ALSO runs and provides empirical end-to-end verification of the same code.
-    - **Auto-archive Task.md handoffs** — when `## Handoffs` section exceeds 30 entries, reporter trims oldest to `.claude/handoffs-archive/<YYYY-MM>.md`, keeping recent 30 in Task.md.
-    - **Slim back-maker prompts** — target 1.5-2 K tokens per delegation (vs 3-5 K previously). Use spec section pointers + minimal scope; back-maker reads spec directly when needed.
-    - **Don't read full /review reports in main** — when user reports verdict, summarize verdict + key findings in chat; do NOT pull the 25-30 K report body into main context.
-    - **Bundle trivial commits — push only on milestone / push-worthy commits** — Don't `/review + push` after every trivial commit. Accumulate locally and sweep them in with the next push-worthy commit's `/review` (which scans the whole `origin/main..HEAD` range, so no extra cost). Empirical from 2026-05-06 session: 8 push events for 16 commits ≈ ~2 commits/push. Bundling could have reduced to 4-5 push events (~30-40% `/review` token savings = ~450-600 K Claude per session).
-      - **Push-worthy** (immediately `/review` + push when committed):
-        1. **Milestone commit** — closes a Task.md `## Development Roadmap` task ID (PROF1, BOARD3, SOC3-back, REC1, etc).
-        2. **Production code commit** — `backend/apps/*/{models,views,serializers,urls,migrations}.py` or `frontend/src/{pages,hooks,api,contexts}/*.{js,jsx}` with logic change.
-        3. **Migration commit** — schema change in any app.
-        4. **Risky-zone touch** — auth / token-handling / new external API integration / cross-cutting refactor ≥ 4 unrelated apps (matches CLAUDE.md hybrid-policy risky-commit list).
-        5. **User explicit request** — "지금 push" / "리뷰 돌려".
-      - **Bundle-worthy** (commit locally; push deferred to next push-worthy or session-end):
-        1. **Pure docs / policy** — `CLAUDE.md`, `.claude/agents/*.md`, `AGENTS.md`, `CONTRIBUTING.md`, `DESIGN.md`, `docs/*.md`, `Goal.md`, `Report.md`, `Task.md` (handoff entries, status updates).
-        2. **Tooling** — `tools/*.sh`, `hooks/*`, `.github/*`, `.gitignore` whitelist additions, cmux config (per 2026-05-07 user decision: tooling-self-use is local-effective from commit time; remote sync waits for next code push).
-        3. **Sub-MINOR follow-ups** — cosmetic fixes from `/review` reports (typo in docstring, dead-code branch, etc).
-        4. **Handoff entries** — single-line additions to `Task.md ## Handoffs`.
-        5. **Session-end housekeeping** — reporter pass output (Report.md sync, Task.md trim, handoffs archive).
-      - **Forced push triggers** (sweep accumulated bundle even without a push-worthy commit):
-        1. **Push-worthy commit lands** (automatic — sweeps everything in `origin/main..HEAD`).
-        2. **Session end** (cleanup batch — explicit user "끝내자" or context wind-down).
-        3. **Bundle accumulator > 5 commits** (heuristic — review scope and history clarity start to suffer).
-        4. **24 hours since first bundle commit** (anti-stale; rarely triggers).
-        5. **User explicit "지금 push"**.
-      - **Drift safety**: each push still triggers `/review` Part C drift check on the entire `origin/main..HEAD` range, so bundling does NOT lose drift protection. Larger range simply means slightly larger Part A scope (Part B browser test cost is fixed-per-session regardless of range size).
-    - **Rule 7 — Post-push session-memory cleanup** — After a push completes (origin/main caught up to local HEAD), the WEB-MAIN operator runs `tools/cleanup-after-push.sh` to send `/clear` to WEB-BACK / WEB-FRONT / WEB-REVIEW. Then WEB-MAIN itself runs `/compact` manually (Claude cannot self-`/clear` from inside the same session). This bounds each push cycle's accumulated context so the next cycle starts fresh and avoids the 2026-05-07-class context-bloat bugs (WEB-REVIEW stuck-prompt at 464K tokens; WEB-REVIEW server-side rate-limit mid-review). The codex teams' `/clear` is followed by an automatic init prompt re-send (self-discovery against AGENTS.md + team-{back,front}.md + CLAUDE.md + Task.md Handoffs) so they're ready for the next dispatch. Estimated savings: ~30-50% Claude tokens per cycle when applied consistently. Rule applies to push-completion events only — mid-session `/clear` on a busy tab is destructive and can interrupt running work.
-    - **Rule 8 — Codex model standardization** — Both WEB-BACK and WEB-FRONT use `gpt-5.5` with `model_reasoning_effort=high` (NOT medium/xhigh/etc). The `/fast` mode toggle is left to operator discretion (currently on for both — empirically 1.5-3 min for 200-400 LOC mechanical work). **Critical empirical (2026-05-08)**: codex's `~/.codex/config.toml` setting `model_reasoning_effort = "xhigh"` is NOT auto-applied on codex restart, AND the `/model` slash menu resets effort to medium when re-selecting. The only way to make `high` stick is the `-c model_reasoning_effort=high` command-line flag at codex launch. `tools/cmux_setup.sh` codifies this: TEAMS array uses `codex -c model_reasoning_effort=high`. When a codex tab is restarted manually, also use `-c model_reasoning_effort=high` (not just `codex`). Operator: do NOT use `/model` slash inside codex — it triggers the medium-default reset bug.
+  - **Token-saving workflow rules** — see **`docs/token-saving.md`** for
+    the 8-rule operational policy: (1) defer reporter to session end,
+    (2) skip reviewer + security on trivial commits, (3) hybrid Codex
+    self-review pre-commit gate, (4) auto-archive Task.md handoffs,
+    (5) slim back-maker prompts, (6) bundle trivial commits / push only
+    push-worthy, (7) post-push cleanup, (8) Codex `-c model_reasoning_effort=high`.
+    User overrides apply: "지금 reporter 돌려" / "리뷰 돌려" / "지금 push".
+    Don't read full /review reports in main — summarize verdict in chat
+    instead of pulling the 25-30 K body.
 
   ## Target Structure
   frontend/   <- React 18 + Vite
@@ -210,297 +190,51 @@
   (commits `27fee9b`, `042bed4`, `59d2af4`, `51dd387`); deprecated in favor
   of the stateful pattern after empirical comparison with Make DB's setup.
 
-  ## Web Testing (web-tester agent)
-
-  ### Dev Login -- Authenticating Without OAuth
-  The web-tester agent must use dev-login to get a JWT for testing authenticated flows.
-  Google OAuth is not available in automated/headless contexts, so dev-login is the only path.
-
-  **Endpoint:** `POST http://localhost:8001/api/v1/auth/dev-login/`
-  **Request body:** `{"secret": "<value of DEV_LOGIN_SECRET from backend/.env>"}`
-  **Availability:** DEBUG=True only. The URL itself is unroutable when DEBUG=False.
-  **Rate limit:** 5 requests/minute (DevLoginThrottle).
-
-  **Response (200):**
-  ```json
-  {
-    "access": "<jwt_access_token>",
-    "refresh": "<jwt_refresh_token>",
-    "user": {
-      "user_id": 1,
-      "display_name": "Test User",
-      "avatar_url": null,
-      "providers": []
-    }
-  }
-  ```
-
-  **If DEV_LOGIN_SECRET is not set** in `backend/.env`, the endpoint returns 404.
-  In that case, skip authenticated flows and test page load only.
-
-  ### Injecting Tokens Into the Browser
-  After a successful dev-login curl, inject tokens via `browser_evaluate`:
-  ```js
-  localStorage.setItem('archithon_access', '<access_token>')
-  localStorage.setItem('archithon_refresh', '<refresh_token>')
-  sessionStorage.setItem('archithon_user', '<user.user_id from response>')
-  ```
-  Then reload the page. The app reads these keys on mount to restore auth state.
-
-  **localStorage keys:**
-  - `archithon_access` -- JWT access token (1hr expiry)
-  - `archithon_refresh` -- JWT refresh token (30d expiry)
-
-  **sessionStorage keys:**
-  - `archithon_user` -- user ID (integer, from `response.user.user_id`)
-
-  ### Debug Overlay
-  Enable richer test diagnostics by setting debug mode before reload:
-  ```js
-  localStorage.setItem('__debugMode', 'true')
-  ```
-  This activates `DebugOverlay.jsx`, a fixed panel showing:
-  - JWT expiry time
-  - Last API call (method, URL, status, latency)
-  - Current session ID and swipe progress
-  - User ID or "not logged in"
-
-  The overlay is read-only (`pointerEvents: 'none'`) and survives page reloads.
-  Web-tester should screenshot after enabling it to confirm login state.
-
-  ### Django Admin
-  - **URL:** `http://localhost:8001/admin/`
-  - **Credentials:** username `admin`, password `admin1234` (set by `make setup`)
-  - **Availability:** DEBUG=True only. The admin URL is unroutable when DEBUG=False.
-  - Useful for inspecting user accounts, projects, and social accounts during testing.
-
-  ### Authenticated Flows to Test
-  Once logged in via dev-login, web-tester should test:
-  1. **Home / LLM Search** -- AI search input visible, type query, submit
-  2. **Swipe page** -- session creation works, cards load, swipe gestures function
-  3. **Favorites page** -- project folders render, liked buildings display
-  4. **Persona report** -- "Generate Persona Report" button visible when likes exist
-  5. **API connectivity** -- no 401 errors on authenticated endpoints
-
-  ### Important: Orchestrator Must NOT Pass skip_login
-  The orchestrator should NOT tell web-tester to skip login. Dev-login exists specifically
-  for automated testing. The orchestrator should let web-tester run its Step 0 (dev-login)
-  before visual tests.
-
-  ## E2E Visual Test Runner (web-testing/)
-
-  ### Overview
-  Standalone Playwright-based E2E test runner at `web-testing/`. Generates persona-driven test scenarios,
-  runs them against the local dev servers, captures screenshots/timing/errors at every step,
-  and serves a local dashboard for visual review.
-
-  ### Structure
-  ```
-  web-testing/
-  +-- research/persona.py      # PersonaProfile dataclass + template/LLM generation
-  +-- research/scenarios.py    # TestScenario + keyword-overlap swipe decisions
-  +-- runner/runner.py         # Playwright E2E orchestration (sync API)
-  +-- runner/collector.py      # StepRecord, ApiCallRecord, ErrorRecord, Collector class
-  +-- runner/reporter.py       # Generates report.json with summary + bottleneck classification
-  +-- runner/feedback.py       # Generates feedback.json with endpoint->source file mapping
-  +-- dashboard/               # Static HTML/JS/CSS dashboard (no build step)
-  +-- reports/                 # Output dir (gitignored)
-  +-- run.py                   # CLI entry point
-  +-- requirements.txt         # playwright, google-generativeai
-  ```
-
-  ### Running
-  ```bash
-  # Install deps
-  pip install -r web-testing/requirements.txt
-  python -m playwright install chromium
-
-  # Run single persona test (template mode)
-  python web-testing/run.py
-
-  # Run 3 personas with LLM-generated profiles
-  python web-testing/run.py --personas 3 --mode llm
-
-  # Serve dashboard only
-  python web-testing/run.py --dashboard-only
-
-  # Auto-fix mode (structured feedback to stdout)
-  python web-testing/run.py --auto-fix
-  ```
-
-  ### Prerequisites
-  - Frontend dev server running on `http://localhost:5174`
-  - Backend dev server running on `http://localhost:8001`
-  - `DEV_LOGIN_SECRET` set in `backend/.env`
-
-  ### Output
-  - `web-testing/reports/{run_id}/report.json` -- full test report
-  - `web-testing/reports/{run_id}/feedback.json` -- orchestrator-consumable feedback
-  - `web-testing/reports/{run_id}/screenshots/` -- step screenshots
-  - `web-testing/dashboard/data/latest/` -- symlinked latest report for dashboard
+  ## Web Testing
+  See **`web-testing/AGENTS.md`** for: dev-login flow + token injection +
+  debug overlay + Django admin + authenticated flows the agent should test
+  + the standalone E2E visual test runner CLI + strict (Part B) vs fast
+  (inner loop) modes. The orchestrator must NOT pass `skip_login` to
+  `web-tester`; dev-login is the only path in headless contexts.
 
   ## Pre-Push Review (`/review`)
 
-  The pre-push gate is a single canonical workflow at `.claude/commands/review.md`,
-  invoked in the review terminal via `/review` OR natural language (see "Natural
-  language review trigger" below). It combines:
+  Pre-push gate runs in WEB-REVIEW. **Canonical spec: `.claude/commands/review.md`.**
+  Three parts:
+  - **Part A** — static 7-axis review (architecture / correctness / perf /
+    security / quality / test coverage / drift); writes `.claude/reviews/<sha>.md`
+    + `latest.md`.
+  - **Part B** — strict browser verification (spec-aligned latency, 3 personas
+    × ≥25 swipes, zero-error gates, edge cases). Runs only when UI-affecting
+    paths are in scope; auto-skipped for pure docs/config.
+  - **Part C** — HEAD + origin/main drift check.
 
-  - **Part A** — Static deep review across 7 axes (architecture, correctness,
-    performance, security, code quality, test coverage, cross-commit drift). Writes
-    report to `.claude/reviews/<sha>.md` + `latest.md`.
-  - **Part B** — Strict browser verification (spec-aligned latency budgets, 3 personas
-    × ≥25 swipes, zero-tolerance error gates, edge cases). **Runs only when
-    UI-affecting paths are in scope** (frontend/, recommendation/views.py, engine.py,
-    accounts/, urls.py, recommendation/migrations/, RECOMMENDATION settings); skipped
-    automatically for pure docs/config commits.
-  - **Part C** — HEAD + origin/main drift checks. Emits one of
-    `REVIEW-PASSED` / `REVIEW-ABORTED` / `REVIEW-FAIL` to `.claude/Task.md ## Handoffs`.
+  Verdict signals appended to `.claude/Task.md ## Handoffs`:
+  `REVIEW-PASSED` / `REVIEW-ABORTED` / `REVIEW-FAIL`. `/review` is **read-only on
+  source code** + **never runs `git push` itself** — push is always user-initiated
+  from WEB-GIT (`git-publisher`).
 
-  ### Natural language review trigger
+  ### Natural language trigger
+  In WEB-REVIEW, recognize **"리뷰해줘"** / **"review"** / **"검토해줘"** / similar
+  Korean/English variants as `/review` invocation. In WEB-MAIN, prefer the orchestrator
+  inner-loop `reviewer` subagent for those phrases, unless the user explicitly says
+  "pre-push review".
 
-  In the review terminal, the user typically types natural-language review requests
-  rather than the explicit slash command. Recognize phrases like **"리뷰해줘"**,
-  **"review"**, **"review please"**, **"검토해줘"**, **"리뷰"**, **"리뷰 좀"**,
-  **"branch review"**, etc. as invocations of the `/review` workflow. Read
-  `.claude/commands/review.md` and execute its steps in this session.
+  ### Push-fail-then-rebase discipline
+  If `git push` fails non-ff and you recover with `git pull --rebase`, the rebase
+  rewrites local commit SHAs. The existing `REVIEW-PASSED: <old_sha>` signal is now
+  stale. Re-run `/review` (or "리뷰해줘") before retrying push — only a
+  `REVIEW-PASSED` at the current HEAD SHA is a valid push ticket.
 
-  This trigger applies primarily in the review terminal context. In the main terminal,
-  the user typically uses orchestrator-driven flows for development; if they say
-  "리뷰해줘" while working with the orchestrator, prefer the orchestrator's inner-loop
-  `reviewer` subagent unless they explicitly say "pre-push review" or are clearly
-  asking to run the full gate.
+  See `.claude/commands/review.md` for: full Part B gates, scope rules,
+  push-fail-then-rebase discipline, complementarity with inner-loop agents.
+  See `.claude/WORKFLOW.md` "Multi-Terminal Coordination" for the full pre-push
+  sequence diagram.
 
-  ### Workflow details
-
-  **Invocation:** on a separate "review terminal" Claude Code session, type
-  `/review` (default scope: `origin/main..HEAD` — the unpushed commits on the
-  current branch) or `/review <range>` (e.g. `/review HEAD~5..HEAD`). Or just say
-  "리뷰해줘" / "review please" — the natural-language trigger above maps to the
-  same workflow.
-
-  **Output:**
-  - `.claude/reviews/{sha_short}.md` -- per-commit archive
-  - `.claude/reviews/latest.md` -- stable read path; main implementation terminal
-    reads this on demand when relevant (never auto-loaded)
-  - Appends one of `REVIEW-PASSED: <sha>` (drift-verified, ready for manual `git push`
-    from the review terminal), `REVIEW-ABORTED: <sha> — <reason>` (PASS but drift
-    detected), or `REVIEW-FAIL: <sha> — <summary>` to the `## Handoffs` section of
-    `.claude/Task.md` so the main terminal can pick up the verdict on its next session
-
-  **Scope:** unpushed commits on the current branch (`origin/main..HEAD` by default,
-  or the user-supplied range). Reads all changed files (full content, not just hunks)
-  plus `.claude/Goal.md` + `.claude/Report.md` for architecture grounding.
-
-  **7 axes:** architecture alignment, correctness/logic depth, performance/optimization,
-  security in depth, code quality, test coverage, cross-commit drift. Severity:
-  CRITICAL / MAJOR / MINOR.
-
-  **Pre-push gate semantics:** `/review` is **read-only on source code** (never edits
-  backend / frontend / docs) but acts as the **pre-push gate**. The main orchestrator
-  pipeline commits via `git-manager` and stops — it never pushes. The user runs
-  `/review` (or natural language) in the review terminal; the unified verdict lands in
-  `.claude/reviews/latest.md` and a one-line signal is appended to the `## Handoffs`
-  section of `.claude/Task.md`. The signal is one of:
-
-  - `REVIEW-PASSED: <sha> — drift checks passed; run \`git push\` manually from this terminal`
-    (clean PASS, no MINORs, browser test passed if applicable). On `PASS-WITH-MINORS` the
-    signal inlines `<K> MINOR noted (see .claude/reviews/latest.md)` — the count is
-    visible without opening the report; MINORs are non-blocking for push.
-  - `REVIEW-ABORTED: <sha> — <reason>` — review verdict was PASS but drift was detected
-    during the review. Either HEAD advanced (re-run `/review`) or origin/main moved
-    (`git pull --rebase` + re-review).
-  - `REVIEW-FAIL: <sha> — <summary>` — either Part A had CRITICAL/MAJOR findings, OR
-    Part B browser test failed. Re-enters the orchestrator fix loop (max 2 cycles).
-
-  **`/review` never runs `git push` itself; push is always user-initiated.**
-
-  **Browser-verification conditional (Part B):** Part B runs ONLY when UI-affecting
-  paths are in scope (frontend/, recommendation/views.py, engine.py, accounts/, urls.py,
-  recommendation/migrations/, RECOMMENDATION settings). For pure docs/config commits,
-  Part B is automatically skipped and the report notes the skip. The local dev server
-  (frontend on :5174, backend on :8001, DEV_LOGIN_SECRET in `backend/.env`) must be
-  running for Part B; otherwise it FAILs with that diagnostic.
-
-  Part B's strict gates per spec Section 4: `time-to-first-card < 4 s` (5 s for bare
-  queries), per-swipe p95 < 700 ms, zero console errors, zero unexpected 4xx/5xx
-  (auth-401-refresh path explicitly allowed), no duplicate cards, expected phase
-  transitions, strict API response shape assertion, edge cases (refresh-resume, action
-  card flow, persona report, network failure injection), multi-session no-contamination,
-  spec primary-metric infrastructure sentinel (Sprint 0 A3 `saved_ids` field).
-
-  **Difference from inner-loop `web-tester`:** the orchestrator pipeline's inner loop
-  uses the fast `web-tester` agent (1 persona, ≥10 swipes, no latency assertion,
-  retries on flake, console errors reported but not failed) to avoid blocking
-  iteration. Part B of `/review` is the strict pre-push variant — slower, no retries,
-  all gates hard. The two are complementary; Part B does NOT replace `web-tester` in
-  the inner loop.
-
-  **Push-fail-then-rebase discipline:** if `git push` fails non-ff in the narrow window
-  between the drift check and the user's push, and the user recovers with
-  `git pull --rebase`, the rebase rewrites local commit SHAs. The existing
-  `REVIEW-PASSED: <old_sha>` signal is now stale — it points to a SHA that no longer
-  exists locally. Re-run `/review` (or just say "리뷰해줘") before retrying
-  `git push`; only a `REVIEW-PASSED` at the current HEAD's SHA is a valid push ticket.
-
-  `/review` **supplements** the fast inner-loop `reviewer` (API contracts, logic bugs,
-  obvious perf), `security-manager` (SQLi/XSS/auth keyword scan), and `web-tester`
-  agents, filling their explicit exclusions: refactoring, optimization opportunities,
-  test coverage, cross-commit drift, architecture alignment, spec-strict latency
-  budgets, and edge-case coverage. See `.claude/WORKFLOW.md` "Multi-Terminal
-  Coordination" for the full pre-push sequence.
-
-  ## Database: architecture_vectors Schema
-  Owned by Make DB. Django reads via raw SQL only -- never ORM, never migrate.
-  <!-- Last synced 2026-04-29 with Make DB v2 + Divisare migration. -->
-
-  ```sql
-  CREATE TABLE architecture_vectors (
-      building_id      TEXT PRIMARY KEY,   -- e.g. 'B00042', stable canonical key
-      slug             TEXT UNIQUE NOT NULL,
-      name_en          TEXT NOT NULL,
-      project_name     TEXT NOT NULL,
-      architect        TEXT,
-      location_country TEXT,
-      city             TEXT,
-      year             INTEGER,
-      area_sqm         NUMERIC,
-      program          TEXT NOT NULL,      -- see normalized vocabulary below
-      style            TEXT,               -- e.g. Brutalist, Classical, Contemporary
-      atmosphere       TEXT NOT NULL,      -- free-form e.g. "fluid, sweeping, atmospheric"
-      color_tone       TEXT,               -- e.g. Colorful, Cool White, Dark, Earthy
-      material         TEXT,               -- nullable (977 rows NULL)
-      material_visual  TEXT[] NOT NULL,    -- array of visual material descriptors
-      visual_description TEXT NOT NULL,    -- rich text description
-      description      TEXT,
-      url              TEXT,
-      tags             TEXT[],
-      source_slugs     TEXT[],
-      image_photos     TEXT[],             -- all photo filenames
-      image_drawings   TEXT[],             -- all drawing filenames
-      embedding        VECTOR(384) NOT NULL,
-
-      -- Versioning (Make DB Phase 1)
-      vocab_version            TEXT DEFAULT 'v2',          -- vocab_version snapshot per row
-      prompt_version           TEXT,                       -- "{label}-{sha256(prompt)[:8]}"
-
-      -- Divisare integration (Make DB Phase 8B+ canonical migration)
-      divisare_id              INTEGER,                    -- canonical Divisare project ID
-      divisare_slug            TEXT,                       -- divisare URL slug
-      abstract                 TEXT,                       -- short Divisare abstract
-      architect_canonical_ids  INTEGER[],                  -- canonical architect cluster IDs (PROF1 join key)
-      divisare_tags            TEXT[],                     -- raw Divisare tag taxonomy
-      divisare_credits         JSONB,                      -- {"structures":[...], "lighting":[...], ...}
-      cover_image_url_divisare TEXT,                       -- single full external URL, hotlink target
-      divisare_gallery_urls    TEXT[],                     -- ~10-19 per project, full external URLs
-
-      -- Provenance metadata
-      provenance               JSONB                       -- {"name":"divisare","description":"metalocus", ...}
-  );
-  ```
-
-  ## Normalized `program` Values
-  Used in filters and Gemini persona reports. Must use exactly these values -- no raw strings.
-
-  `Housing` | `Office` | `Museum` | `Education` | `Religion` | `Sports` |
-  `Transport` | `Hospitality` | `Healthcare` | `Public` | `Mixed Use` |
-  `Landscape` | `Infrastructure` | `Other`
+  ## Database
+  See **`docs/database-schema.md`** for the `architecture_vectors` CREATE TABLE
+  + normalized `program` vocabulary + Make-DB-ownership hard rules. Backend
+  work touching the building data layer must consult this file. Hard rules
+  (already enforced in `## Rules` above): use `building_id` only; never ORM
+  or migrate `architecture_vectors`; embeddings are pre-computed (no
+  SentenceTransformers runtime dep).

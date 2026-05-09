@@ -152,7 +152,7 @@ Both can coexist on a single DONE message if needed.
 
 ## Self-review checklist before signaling BACK-DONE
 
-Per the hybrid pre-commit policy (CLAUDE.md § Token-saving rules), the
+Per the hybrid pre-commit policy (`docs/token-saving.md` Rule 3), the
 default path skips Claude `reviewer` / `security-manager` agents in WEB-
 MAIN. WEB-MAIN trusts your BACK-DONE report. So your `pytest` green is
 the floor, not the ceiling — before signaling DONE, walk this checklist

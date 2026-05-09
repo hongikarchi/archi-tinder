@@ -137,7 +137,7 @@ Wait for both to complete.
 Spawn `web-tester` with:
 - `url`: `http://localhost:5174` (local dev server must be running)
 - Let web-tester run its Step 0 (dev-login authentication) -- do NOT skip login
-- Web-tester will use `POST /api/v1/auth/dev-login/` to get a JWT and inject it into the browser (see CLAUDE.md "Web Testing" section for details)
+- Web-tester will use `POST /api/v1/auth/dev-login/` to get a JWT and inject it into the browser (see `web-testing/AGENTS.md` for details)
 - If dev-login fails (404 = DEV_LOGIN_SECRET not set), web-tester will fall back to unauthenticated page-load testing
 - Only test flows relevant to what was changed
 
@@ -200,12 +200,12 @@ Weakness detected? STOP -- report exact numbers to user, ask for guidance. Do NO
 - Write new learnings (architectural decisions, patterns, gotchas) to memory immediately.
 - **Feature work** must go through this orchestrator pipeline — new features, bug fixes, refactors that touch production code (`backend/apps/*`, `frontend/src/`).
 - **Direct work is acceptable** for meta/infra/tooling (`tools/*.sh`, `hooks/*`, `.github/*`, `AGENTS.md`, `.gitignore` whitelist), cleanup/housekeeping (single-line fixes, sub-MINOR follow-ups from /review, docs/policy edits to `CLAUDE.md` / `CONTRIBUTING.md` / `.claude/agents/*.md` / `docs/*`), one-line trivial fixes, and pure docs commits (Report.md sync, Task.md handoffs). Orchestrator's ~30K-token invocation cost outweighs its value for these meta-tasks. **Risky meta-infra override**: if the change touches auth / token-handling / schema / cross-cutting refactor ≥4 unrelated files, still run reviewer + security manually before commit (mirrors the team-{back,front}.md risky-zone list).
-- **Token-saving — skip reviewer + security on trivial commits (per `feedback_token_saving_workflow.md` Rule 2)**. A commit qualifies as **trivial** when ALL of the following hold:
-  - (<50 LOC changed (insertion + deletion combined)) OR (pure docs/policy/agent-file commit with zero source code — e.g. CLAUDE.md / agent-md / AGENTS.md policy commits legitimately exceeding 50 LOC, like the 121-LOC hybrid pre-commit policy at `756b247`)
-  - No new migration
-  - No production code change (only test, config, docs, `.claude/` policy/agent files, `web-testing/`, or `.claude/commands/review.md`)
-  - No auth / network / model layer change
-  Trivial commits go: back-maker → git-manager directly (skip reviewer + security parallel step). User can override by saying "리뷰 돌려" or for any commit they suspect of subtle issues.
-- **Token-saving — hybrid pre-commit policy for Codex team output (per CLAUDE.md § Token-saving Rules + `756b247`)**. When work was dispatched to WEB-BACK / WEB-FRONT (Codex teams), the team's own self-review (codified in `.claude/agents/team-back.md` § "Self-review checklist before BACK-DONE" / `team-front.md` § "Self-review checklist before FRONT-DONE") is the default pre-commit gate. Skip the in-session Claude reviewer + security-manager on a BACK-DONE / FRONT-DONE handoff and proceed to git-manager. Cross-model verification still happens at `/review` (Claude Opus on WEB-REVIEW vs Codex gpt-5.5 on the teams). **Risky-commit override**: if the team's DONE message contains `(claude-review-requested)` (auth flow / token-handling / new external API integration / migration with data backfill / cross-cutting refactor — see CLAUDE.md for the full risky-zone list), DO run reviewer + security on top of the self-review.
-- **Token-saving — bundle trivial commits, push only on milestone / push-worthy (per CLAUDE.md § Token-saving Rules)**. After committing, decide: `/review + push` immediately, OR commit locally and accumulate. **Push-worthy** = (a) closes a Task.md Development Roadmap task ID, (b) production code logic change, (c) migration, (d) risky-zone touch, (e) user explicit request. **Bundle-worthy** = pure docs/policy (CLAUDE.md / agent-md / AGENTS.md / Task.md / Report.md), tooling (`tools/*.sh`), sub-MINOR follow-ups, handoff entries, session-end housekeeping. Sweep accumulated bundle when (a) push-worthy commit lands (`origin/main..HEAD` covers all in single `/review`), (b) session end, (c) bundle > 5 commits, (d) 24 h since first bundle commit, (e) user "지금 push". Drift safety preserved — each push still triggers `/review` Part C on full range.
-- **Token-saving — defer reporter to session end (per `feedback_token_saving_workflow.md` Rule 1)**. Do NOT spawn `reporter` after every commit. Instead, accumulate `.claude/Report.md` + `.claude/Task.md` working-tree changes across multiple commits, and run `reporter` ONCE at the end of the session (or just before the user runs `git push` from the review terminal). Per-commit reporter cycles cost ~50K tokens each; deferred to session-end is a single ~70K cycle covering N commits. User can override by saying "지금 reporter 돌려".
+- **Token-saving rules** — see `docs/token-saving.md` for the 8-rule policy:
+  Rule 1 (defer reporter to session end), Rule 2 (skip reviewer + security on
+  trivial commits — `<50 LOC` OR pure docs/policy + no migration + no
+  production code + no auth/network/model change), Rule 3 (hybrid Codex
+  self-review default; risky-zone `(claude-review-requested)` override),
+  Rule 4 (auto-archive Task.md handoffs), Rule 5 (slim back-maker prompts),
+  Rule 6 (bundle trivial commits, push only push-worthy), Rule 7 (post-push
+  cleanup), Rule 8 (Codex `-c model_reasoning_effort=high`).
+  User overrides: "지금 reporter 돌려" / "리뷰 돌려" / "지금 push".
