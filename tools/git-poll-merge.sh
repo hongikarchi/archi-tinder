@@ -30,8 +30,28 @@
 
 set -euo pipefail
 
+# --check mode: gh auth + PR existence check. No polling.
+if [ "${1:-}" = "--check" ]; then
+    echo "git-poll-merge.sh --check"
+    if ! gh auth status >/dev/null 2>&1; then
+        echo "  ✗ gh CLI not authenticated"; exit 5
+    fi
+    echo "  ✓ gh CLI authenticated"
+    if [ -n "${2:-}" ]; then
+        if gh pr view "$2" --json number >/dev/null 2>&1; then
+            echo "  ✓ PR #$2 exists"
+        else
+            echo "  ✗ PR #$2 not found"; exit 6
+        fi
+    else
+        echo "  (skip PR existence check — no PR# given)"
+    fi
+    exit 0
+fi
+
 if [ "$#" -lt 1 ]; then
-    echo "Usage: $0 <PR-number> [timeout_seconds]" >&2
+    echo "Usage: $0 <PR-number> [timeout_seconds]    # poll CI until green/red/timeout" >&2
+    echo "       $0 --check [PR-number]              # gh auth + optional PR existence" >&2
     exit 3
 fi
 

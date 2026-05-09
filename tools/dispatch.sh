@@ -52,6 +52,16 @@ if [ -z "$ws_ref" ]; then
     exit 2
 fi
 
+# Surface selection — first surface in the workspace.
+#
+# Empirical (2026-05-09 dogfood, two cycles): the surface name (e.g.
+# "✳ DEEP REVIEW") does NOT predict send success — the same ✳ surface
+# accepted a send in one cycle and refused in the next. The actual
+# determinant is whether Claude Code is currently showing a normal terminal
+# prompt vs a special view (agent dropdown, thinking display, /agents
+# picker, etc.). The fix is to force-Esc the surface BEFORE sending text:
+# Esc on a normal prompt is a no-op; Esc on a special view returns to the
+# prompt. This is safer than name-based filtering.
 surf_ref=$(
     $CMUX list-pane-surfaces --workspace "$ws_ref" 2>/dev/null \
         | awk '{for (i=1;i<=NF;i++) if ($i ~ /^surface:/) { print $i; exit }}'
@@ -61,6 +71,14 @@ if [ -z "$surf_ref" ]; then
     echo "ERROR: no surface in workspace $ws_ref ($WS_NAME)" >&2
     exit 3
 fi
+
+# Force-Esc the surface to drop any active special view. Safe on a normal
+# prompt (no-op). Some Claude Code views need 2 Esc presses (one to close
+# the picker, one to discard partial input) — send twice to be safe.
+$CMUX send-key --workspace "$ws_ref" --surface "$surf_ref" "Escape" >/dev/null 2>&1 || true
+sleep 0.3
+$CMUX send-key --workspace "$ws_ref" --surface "$surf_ref" "Escape" >/dev/null 2>&1 || true
+sleep 0.3
 
 # WEB-REVIEW context-bloat mitigation: empirical bug — a /review
 # session that has accumulated ~400 KB+ tokens stops processing new
