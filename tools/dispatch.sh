@@ -52,50 +52,33 @@ if [ -z "$ws_ref" ]; then
     exit 2
 fi
 
-# Surface selection — prefer terminal-type panes over Claude Code special views.
+# Surface selection — first surface in the workspace.
 #
-# Empirical (2026-05-09 dogfood): cmux list-pane-surfaces may return a surface
-# like "* surface:4  ✳ DEEP REVIEW  [selected]" when Claude Code is showing a
-# special view (agent dropdown, thinking display, /agents picker, etc.) instead
-# of the normal terminal prompt. Sending text to that surface returns
-# "Surface is not a terminal" and exits non-zero.
-#
-# Strategy: gather all surfaces; first prefer ones WITHOUT the ✳ marker
-# (terminal panes); if all surfaces have ✳, fall back to the first raw
-# surface and let the cmux send error message guide the operator.
-all_surfs=$(
+# Empirical (2026-05-09 dogfood, two cycles): the surface name (e.g.
+# "✳ DEEP REVIEW") does NOT predict send success — the same ✳ surface
+# accepted a send in one cycle and refused in the next. The actual
+# determinant is whether Claude Code is currently showing a normal terminal
+# prompt vs a special view (agent dropdown, thinking display, /agents
+# picker, etc.). The fix is to force-Esc the surface BEFORE sending text:
+# Esc on a normal prompt is a no-op; Esc on a special view returns to the
+# prompt. This is safer than name-based filtering.
+surf_ref=$(
     $CMUX list-pane-surfaces --workspace "$ws_ref" 2>/dev/null \
-        | awk '{
-            ref=""
-            for (i=1;i<=NF;i++) if ($i ~ /^surface:/) { ref=$i; break }
-            if (ref == "") next
-            # Skip surfaces marked with ✳ — those are non-terminal special views.
-            if (index($0, "✳") > 0) next
-            print ref
-        }'
+        | awk '{for (i=1;i<=NF;i++) if ($i ~ /^surface:/) { print $i; exit }}'
 )
-if [ -z "$all_surfs" ]; then
-    # No clean terminal surface found; fall back to first raw surface.
-    all_surfs=$(
-        $CMUX list-pane-surfaces --workspace "$ws_ref" 2>/dev/null \
-            | awk '{for (i=1;i<=NF;i++) if ($i ~ /^surface:/) { print $i; exit }}'
-    )
-fi
-surf_ref=$(echo "$all_surfs" | head -1)
 
 if [ -z "$surf_ref" ]; then
     echo "ERROR: no surface in workspace $ws_ref ($WS_NAME)" >&2
     exit 3
 fi
 
-# Pre-flight probe: try a no-op send. If the chosen surface is non-terminal,
-# fail FAST with a clear message instead of letting the long-message dispatch
-# bomb halfway through.
-if ! $CMUX send --workspace "$ws_ref" --surface "$surf_ref" "" >/dev/null 2>&1; then
-    echo "ERROR: surface $surf_ref in $WS_NAME is not a terminal pane (probably a Claude Code special view: ✳ marker, /agents picker, thinking display, etc.)" >&2
-    echo "Fix: in cmux UI, click the $WS_NAME tab and press Esc to return to the terminal prompt, then re-run dispatch." >&2
-    exit 4
-fi
+# Force-Esc the surface to drop any active special view. Safe on a normal
+# prompt (no-op). Some Claude Code views need 2 Esc presses (one to close
+# the picker, one to discard partial input) — send twice to be safe.
+$CMUX send-key --workspace "$ws_ref" --surface "$surf_ref" "Escape" >/dev/null 2>&1 || true
+sleep 0.3
+$CMUX send-key --workspace "$ws_ref" --surface "$surf_ref" "Escape" >/dev/null 2>&1 || true
+sleep 0.3
 
 # WEB-REVIEW context-bloat mitigation: empirical bug — a /review
 # session that has accumulated ~400 KB+ tokens stops processing new
