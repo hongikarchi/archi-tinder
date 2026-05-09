@@ -17,6 +17,16 @@
 #
 # Does NOT merge — that's the caller's choice (operator manual or
 # git-publisher.md Mode 1 step 6).
+#
+# `gh pr checks` exit-code reference (verified empirically against gh CLI 2.x
+# on PR #6 dogfood, 2026-05-09):
+#   0 = all checks pass
+#   1 = at least one check FAILED (SilentError)
+#   8 = at least one check still PENDING (PendingError)
+#   * = unexpected (gh installation issue, auth, etc.)
+# Older gh versions (<2.0) overload exit 1 for both fail and pending; if
+# that becomes a problem, fall back to keyword-scanning OUTPUT for
+# "fail"/"error" on any non-zero exit.
 
 set -euo pipefail
 
@@ -39,7 +49,7 @@ fi
 echo "─── Polling PR #$PR (timeout=${TIMEOUT}s, interval=${INTERVAL}s) ───"
 
 while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
-    # gh pr checks exits 0=pass, 8=fail, 1=running
+    # gh pr checks exit codes: 0=pass, 1=fail, 8=pending (see top-of-file ref)
     set +e
     OUTPUT=$(gh pr checks "$PR" 2>&1)
     CODE=$?
@@ -54,18 +64,27 @@ while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
             echo "  PR-CI-GREEN: #${PR} — passed in ${ELAPSED}s"
             exit 0
             ;;
-        8)
-            echo "[$NOW] +${ELAPSED}s  → CHECKS FAILED"
-            echo "$OUTPUT" | grep -E '(fail|FAIL)' | head -5
-            echo ""
-            FAILED_RUN=$(gh pr checks "$PR" --json name,state,link 2>/dev/null \
-                | grep -o '"link":"[^"]*"' | head -1 | sed 's/"link":"//;s/"$//' || echo "?")
-            echo "Append to .claude/Task.md § Handoffs:"
-            echo "  PR-CI-FAIL: #${PR} — checks red after ${ELAPSED}s; logs at ${FAILED_RUN}"
-            exit 1
-            ;;
         1)
-            PENDING=$(echo "$OUTPUT" | grep -cE '(pending|in.progress)' || echo 0)
+            # Defense-in-depth: very old gh (<2.0) returned 1 for both fail
+            # and pending. If OUTPUT contains only "pending"/"in_progress"
+            # markers and no "fail", treat as pending. Otherwise treat as fail.
+            FAIL_LINES=$(echo "$OUTPUT" | grep -cE '\bfail\b|\berror\b' || true)
+            if [ "$FAIL_LINES" = "0" ] && echo "$OUTPUT" | grep -qE 'pending|in.progress'; then
+                PENDING=$(echo "$OUTPUT" | grep -cE 'pending|in.progress' || echo 0)
+                echo "[$NOW] +${ELAPSED}s  → still pending (${PENDING} checks; old gh overload)"
+            else
+                echo "[$NOW] +${ELAPSED}s  → CHECKS FAILED"
+                echo "$OUTPUT" | grep -E '(fail|FAIL)' | head -5
+                echo ""
+                FAILED_RUN=$(gh pr checks "$PR" --json name,state,link 2>/dev/null \
+                    | grep -o '"link":"[^"]*"' | head -1 | sed 's/"link":"//;s/"$//' || echo "?")
+                echo "Append to .claude/Task.md § Handoffs:"
+                echo "  PR-CI-FAIL: #${PR} — checks red after ${ELAPSED}s; logs at ${FAILED_RUN}"
+                exit 1
+            fi
+            ;;
+        8)
+            PENDING=$(echo "$OUTPUT" | grep -cE 'pending|in.progress' || echo 0)
             echo "[$NOW] +${ELAPSED}s  → still pending (${PENDING} checks running)"
             ;;
         *)

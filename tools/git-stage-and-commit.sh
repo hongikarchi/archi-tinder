@@ -74,7 +74,11 @@ if echo "$staged" | grep -qE '\.(env|key|pem|p12|pfx)$|credentials\.|^secrets/';
     echo "ERROR: secret-like file slipped past exclude list:" >&2
     echo "$staged" | grep -E '\.(env|key|pem|p12|pfx)$|credentials\.|^secrets/' >&2
     echo "Aborting. Fix .gitignore or unstage manually." >&2
-    git reset HEAD -- $(echo "$staged" | grep -E '\.(env|key|pem|p12|pfx)$|credentials\.|^secrets/' || true) >/dev/null 2>&1 || true
+    # Best-effort cleanup: unstage each secret-like path, preserving
+    # whitespace-safe filenames (avoid word-split via while-read).
+    while IFS= read -r leaked; do
+        [ -n "$leaked" ] && git reset HEAD -- "$leaked" >/dev/null 2>&1 || true
+    done < <(echo "$staged" | grep -E '\.(env|key|pem|p12|pfx)$|credentials\.|^secrets/' || true)
     exit 5
 fi
 
@@ -100,9 +104,11 @@ fi
 # Commit
 git commit -m "$MSG"
 
-# Report
+# Report — use diff-tree against the just-created commit; falls back to "?"
+# on first-commit-ever (no parent) where diff-tree returns zero rows.
 SHA=$(git rev-parse --short HEAD)
-COUNT=$(git diff --cached HEAD~1 --name-only 2>/dev/null | wc -l | tr -d ' ' || echo "?")
+COUNT=$(git diff-tree --no-commit-id --name-only -r HEAD 2>/dev/null | wc -l | tr -d ' ')
+COUNT=${COUNT:-?}
 
 echo ""
 echo "✓ Committed: $SHA on $BRANCH"

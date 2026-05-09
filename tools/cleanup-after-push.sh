@@ -35,7 +35,7 @@ init_prompt_codex() {
     local team_upper
     team_upper=$(echo "$team_lower" | tr '[:lower:]' '[:upper:]')
     cat <<EOF
-You are WEB-${team_upper}, one of the 5 cmux workspaces in the make_web stateful multi-team architecture. Before doing any work, read these files in order: 1) AGENTS.md (your baseline + hard guardrails — codex should already have auto-loaded this from cwd) 2) .claude/agents/team-${team_lower}.md (your specific role + owned files) 3) CLAUDE.md (project conventions, especially Backend/Frontend Conventions + Rules) 4) the most recent 10 lines of .claude/Task.md § Handoffs (recent state). After reading, reply with one short sentence confirming you understand your role and your hard guardrails. Then wait for WEB-MAIN to dispatch your first real task via tools/dispatch.sh.
+You are WEB-${team_upper}, one of the 5 cmux workspaces in the make_web stateful multi-team architecture (WEB-MAIN + WEB-BACK + WEB-FRONT + WEB-REVIEW + WEB-GIT). Before doing any work, read these files in order: 1) AGENTS.md (your baseline + hard guardrails — codex should already have auto-loaded this from cwd) 2) .claude/agents/team-${team_lower}.md (your specific role + owned files) 3) CLAUDE.md (project conventions, especially Backend/Frontend Conventions + Rules) 4) the most recent 10 lines of .claude/Task.md § Handoffs (recent state). After reading, reply with one short sentence confirming you understand your role and your hard guardrails. Then wait for WEB-MAIN to dispatch your first real task via tools/dispatch.sh.
 EOF
 }
 

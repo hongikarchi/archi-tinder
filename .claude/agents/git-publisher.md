@@ -82,7 +82,15 @@ Trigger: Task.md handoff has `REVIEW-PASSED: <sha> — drift checks passed; run 
 7. **Local cleanup:**
    ```bash
    git checkout develop && git pull origin develop
-   git branch -d feature/<branch>     # already merged, safe to delete locally
+   # squash creates a NEW commit on develop; the original feature-branch
+   # commits are NOT ancestors of develop's HEAD. `git branch -d` checks
+   # ancestry and refuses ("not fully merged") — use -D after confirming
+   # the PR is actually merged on the GitHub side.
+   if [ "$(gh pr view <N> --json state --jq .state)" = "MERGED" ]; then
+       git branch -D feature/<branch>
+   else
+       echo "PR #<N> not yet MERGED on GitHub — skip local delete"
+   fi
    ```
 
 8. **Emit final signal:**
@@ -174,10 +182,23 @@ Trigger: a teammate opens a PR against `develop`. You poll periodically OR opera
 6. **Cleanup local branch (regardless of merge outcome):**
    ```bash
    git checkout develop
-   git branch -D pr-<N>     # safe — never pushed locally
-   ```
 
-   **Important — `gh pr checkout <N>` quirk:** the local branch name follows the PR's *head ref name* (e.g. `feature/algo-mmr-tuning`), NOT `pr-<N>`. Inspect via `git branch -v` before deleting; substitute the actual ref. Use `git branch -D` (capital D) only if the branch is unmerged into develop AND you've confirmed the PR will not be re-checked-out (e.g. after PR-MERGED or after operator confirms abandonment). Otherwise `git branch -d` (lowercase) is safer.
+   # `gh pr checkout <N>` names the local branch after the PR's *head ref name*
+   # (e.g. `feature/algo-mmr-tuning`), NOT `pr-<N>`. Discover the actual ref
+   # before deleting:
+   PR_REF=$(gh pr view <N> --json headRefName --jq .headRefName)
+   echo "PR #<N> local branch: $PR_REF"
+
+   # Use -D (capital) only if PR was MERGED (squash creates a new commit on
+   # develop — the local branch is not ancestor-merged). Use -d (lowercase)
+   # if the PR was closed without merge AND you might re-checkout later.
+   if [ "$(gh pr view <N> --json state --jq .state)" = "MERGED" ]; then
+       git branch -D "$PR_REF"
+   else
+       git branch -d "$PR_REF" 2>/dev/null || \
+           echo "Local branch $PR_REF not deleted; remove with -D if abandoned"
+   fi
+   ```
 
 ---
 
