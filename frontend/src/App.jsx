@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, Component } from 'react'
 import { Routes, Route, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom'
+import { resolveProjectBackendId } from './utils/resolveProjectBackendId.js'
 import MainLayout from './layouts/MainLayout.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import SetupPage from './pages/SetupPage.jsx'
@@ -494,7 +495,7 @@ export default function App() {
 
   async function handleGenerateReport(projectId) {
     const project = projects.find(p => p.id === projectId)
-    const backendId = project?.backendId || (project?.id?.includes('-') ? project.id : null)
+    const backendId = resolveProjectBackendId(project)
     if (!backendId) return
     const { final_report } = await api.generateReport(backendId)
     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, finalReport: final_report } : p))
@@ -507,7 +508,7 @@ export default function App() {
   async function handleToggleBookmark(projectId, cardId, action, rank) {
     const project = projects.find(p => p.id === projectId)
     if (!project) return
-    const backendId = project.backendId || (project.id?.includes('-') ? project.id : null)
+    const backendId = resolveProjectBackendId(project)
     if (!backendId) return
 
     // Optimistic update

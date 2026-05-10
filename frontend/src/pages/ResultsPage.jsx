@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useResults } from '../hooks/useResults.js'
+import { resolveProjectBackendId } from '../utils/resolveProjectBackendId.js'
 
 function cardId(card) {
   return card?.image_id || card?.building_id || ''
@@ -146,6 +147,7 @@ function ResultCard({ card, rank, saved, pending, onOpen, onToggle }) {
 
 export default function ResultsPage({ projects, setProjects }) {
   const navigate = useNavigate()
+  const location = useLocation()
   const { sessionId } = useParams()
   const { cards, error, loading, pendingIds, project, result, toggleBookmark } = useResults(sessionId, projects, setProjects)
   const [loadedRank, setLoadedRank] = useState(10)
@@ -155,6 +157,25 @@ export default function ResultsPage({ projects, setProjects }) {
   const visibleCount = Math.min(loadedRank, cappedTotal)
   const topCards = cards.slice(0, visibleCount)
   const savedIds = project?.savedIds || []
+
+  // Reconcile bookmark state when navigating back from BuildingDetailPage
+  useEffect(() => {
+    const changed = location.state?.bookmarkChanged
+    if (!changed || !project) return
+    const { buildingId, action } = changed
+    if (!buildingId || !action) return
+    setProjects(prev => prev.map(p => {
+      if (p.sessionId !== sessionId) return p
+      const current = p.savedIds || []
+      const next = action === 'save'
+        ? [...new Set([...current, buildingId])]
+        : current.filter(id => id !== buildingId)
+      return { ...p, savedIds: next }
+    }))
+    // Clear signal so a further navigate(-1)/forward doesn't re-apply it
+    navigate(location.pathname, { replace: true, state: null })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     setLoadedRank(10)
@@ -174,7 +195,7 @@ export default function ResultsPage({ projects, setProjects }) {
 
   function handleOpenBuilding(card, rank) {
     const id = cardId(card)
-    const fromProjectId = project?.backendId || (project?.id?.includes('-') ? project.id : null)
+    const fromProjectId = resolveProjectBackendId(project)
     if (!id) return
     navigate(`/buildings/${id}`, {
       state: {
@@ -182,6 +203,7 @@ export default function ResultsPage({ projects, setProjects }) {
         fromSessionId: sessionId,
         rank,
         savedIds,
+        referrer: location.pathname,
       },
     })
   }

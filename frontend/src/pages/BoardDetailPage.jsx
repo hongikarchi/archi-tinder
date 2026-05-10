@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useImageTelemetry } from '../hooks/useImageTelemetry.js'
 import { useBoard } from '../hooks/useBoard.js'
 import { reactToProject, unreactToProject } from '../api/social.js'
@@ -170,7 +170,7 @@ function InfoCol({ label, value }) {
  *     reserved for binary status state. Matches the rationale used in FirmProfile
  *     ProjectCard (also drops program chip).
  */
-function BuildingTile({ building, fromProjectId, rank, savedIds }) {
+function BuildingTile({ building, fromProjectId, rank, savedIds, referrer }) {
   const navigate = useNavigate()
   const { onLoad, onError } = useImageTelemetry({
     buildingId: building.building_id,
@@ -181,7 +181,9 @@ function BuildingTile({ building, fromProjectId, rank, savedIds }) {
     <div
       onClick={() => {
         if (!building.building_id) return
-        const state = fromProjectId ? { fromProjectId, rank, savedIds } : undefined
+        const state = fromProjectId
+          ? { fromProjectId, rank, savedIds, referrer }
+          : undefined
         navigate(`/buildings/${building.building_id}`, { state })
       }}
       style={{
@@ -271,6 +273,7 @@ function BuildingTile({ building, fromProjectId, rank, savedIds }) {
 
 export default function BoardDetailPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const rawBoardId = useParams().boardId
   const boardId = UUID_RE.test(String(rawBoardId || '')) ? rawBoardId : null
   const { board, loading, error } = useBoard(boardId)
@@ -284,13 +287,37 @@ export default function BoardDetailPage() {
   const [isOwnerRowHovered, setIsOwnerRowHovered] = useState(false)
   const [isBackHovered, setIsBackHovered] = useState(false)
   const [isShareHovered, setIsShareHovered] = useState(false)
+  const [localSavedIds, setLocalSavedIds] = useState([])
+  // Capture bookmark signal once at mount so board-load effect can apply it
+  const bookmarkSignalRef = useRef(location.state?.bookmarkChanged || null)
 
   useEffect(() => {
     if (!board) return
     setIsReacted(!!board.is_reacted)
     setReactionCount(board.reaction_count ?? 0)
     setReactionError(null)
+    // Seed from board data, then apply any pending bookmark signal
+    const base = (board.saved_ids || []).map(item => item?.id || item).filter(Boolean)
+    const signal = bookmarkSignalRef.current
+    if (signal?.buildingId && signal?.action) {
+      bookmarkSignalRef.current = null
+      const { buildingId: changedId, action } = signal
+      if (action === 'save') {
+        setLocalSavedIds([...new Set([...base, changedId])])
+      } else {
+        setLocalSavedIds(base.filter(id => id !== changedId))
+      }
+    } else {
+      setLocalSavedIds(base)
+    }
   }, [board])
+
+  // Clear bookmark signal from history on mount so forward/back doesn't re-apply it
+  useEffect(() => {
+    if (!location.state?.bookmarkChanged) return
+    navigate(location.pathname, { replace: true, state: null })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function handleToggleReaction() {
     if (!board || isReactionPending) return
@@ -327,7 +354,6 @@ export default function BoardDetailPage() {
   const buildings = board?.buildings || []
   const viewerId = sessionStorage.getItem('archithon_user')
   const isOwner = !!viewerId && String(board?.user?.user_id) === String(viewerId)
-  const savedIds = (board?.saved_ids || []).map(item => item?.id || item).filter(Boolean)
   const coverImage = board?.cover_image_url || (buildings[0] && buildings[0].image_url)
   const statusMessage = error?.message || (loading ? 'Loading board...' : 'This board is empty')
 
@@ -679,7 +705,8 @@ export default function BoardDetailPage() {
                 building={building}
                 fromProjectId={isOwner ? boardId : null}
                 rank={index + 1}
-                savedIds={savedIds}
+                savedIds={localSavedIds}
+                referrer={location.pathname}
               />
             ))}
           </div>

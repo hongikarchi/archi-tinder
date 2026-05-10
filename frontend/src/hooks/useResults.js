@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { bookmarkBuilding, getResult } from '../api/client.js'
+import { resolveProjectBackendId } from '../utils/resolveProjectBackendId.js'
 
 function isUuid(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ''))
@@ -62,7 +63,7 @@ export function useResults(sessionId, projects, setProjects) {
 
   async function toggleBookmark(card, rank) {
     const cardId = getCardId(card)
-    const backendId = project?.backendId || (project?.id?.includes('-') ? project.id : null)
+    const backendId = resolveProjectBackendId(project)
     if (!cardId || !backendId || pendingIds.has(cardId)) return
 
     const wasSaved = (project?.savedIds || []).includes(cardId)
