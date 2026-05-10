@@ -10,6 +10,45 @@ jobs:
   backend:
     name: Backend (pytest + migrations check)
     runs-on: ubuntu-latest
+    # Job-level env applied to all steps. settings.py reads these at import
+    # time, before pytest-django can call into conftest.py's setdefault, so
+    # they must be set in the CI environment rather than only in conftest.
+    env:
+      DJANGO_SETTINGS_MODULE: config.settings
+      DJANGO_SECRET_KEY: ci-secret-key-not-for-production
+      DB_HOST: localhost
+      DB_PORT: '5432'
+      DB_NAME: ci_db
+      DB_USER: ci_user
+      DB_PASSWORD: ci_pass
+      # Local CI Postgres (pgvector/pgvector:pg16) doesn't speak SSL; the
+      # default 'require' sslmode (suited to Neon prod DSN) would fail.
+      DB_SSLMODE: disable
+      DJANGO_DEBUG: 'True'
+      DEV_LOGIN_SECRET: ci-test-secret
+      GEMINI_API_KEY: ci-test-gemini-key
+    services:
+      # Postgres with pgvector pre-installed. Some tests (notably under
+      # backend/tests/test_sessions.py and test_topic*) bypass the SQLite
+      # in-memory override declared in conftest.py and connect directly to
+      # the configured DB; PR #10 cycle 1 empirically proved the SQLite
+      # fixture isn't load-bearing for those test paths (237 passed / 346
+      # errors all "Connection refused on 5432" until PG service was added).
+      # Local dev runs against a live PG so those tests "passed" without the
+      # override ever firing — false signal.
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: ci_user
+          POSTGRES_PASSWORD: ci_pass
+          POSTGRES_DB: ci_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     defaults:
       run:
         working-directory: backend
@@ -28,24 +67,31 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run pytest
-        # conftest.py overrides DB to SQLite in-memory, so no Postgres service needed.
-        # Stops on first failure for faster feedback.
-        run: pytest -x
+      - name: Enable pgvector extension on test DB
+        # The pgvector/pgvector image ships the extension binary but Postgres
+        # still requires `CREATE EXTENSION vector` per database. Required by
+        # the architecture_vectors raw-SQL paths (Make DB owns the table; we
+        # just need vector type registered for the test connection).
+        run: |
+          PGPASSWORD=ci_pass psql -h localhost -U ci_user -d ci_db -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
       - name: makemigrations --check (no pending migrations)
         # Catches the case where a model change wasn't accompanied by a migration.
         # Also catches duplicate migration numbers when paired with the local pre-push hook.
-        env:
-          DJANGO_SETTINGS_MODULE: config.settings
-          DJANGO_SECRET_KEY: ci-secret-key-not-for-production
-          DB_HOST: localhost
-          DB_PORT: '5432'
-          DB_NAME: ci_db
-          DB_USER: ci_user
-          DB_PASSWORD: ci_pass
-          DJANGO_DEBUG: 'True'
+        # --dry-run does not require an active DB connection.
         run: python manage.py makemigrations --check --dry-run
+
+      - name: migrate (set up test schema)
+        # Tests using @pytest.mark.django_db get fresh test DBs from pytest-django,
+        # but tests bypassing that fixture connect directly to ci_db with whatever
+        # schema is current. Run migrations to populate that schema.
+        run: python manage.py migrate
+
+      - name: pytest
+        # Tests connect to localhost:5432 (the postgres service container).
+        # Pytest-django manages its own test DB lifecycle for tests using the
+        # `db` fixture; tests that bypass it use ci_db directly.
+        run: python -m pytest -q --tb=short
 
   frontend:
     name: Frontend (lint + build)

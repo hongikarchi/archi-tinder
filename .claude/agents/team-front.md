@@ -64,9 +64,9 @@ Same 2-cycle cap as WEB-BACK:
 - WEB-MAIN's `reviewer` finds a contract mismatch or a missing error
   handler
 - WEB-MAIN dispatches `"Fix per <one-line>; cycle <c+1>/2"`
-- Codex fixes root cause; re-runs `eslint` on the changed files +
-  starts dev server briefly to verify; appends `FRONT-DONE: <slug>
-  v<n+1>`
+- Codex fixes root cause; re-runs `./tools/front-validate.sh` on the
+  changed files + starts dev server briefly to verify; appends
+  `FRONT-DONE: <slug> v<n+1>`
 - Cap: cycle 2 → escalate (`FRONT-BLOCKED: <slug> exhausted self-heal
   — <root-cause>`); WEB-MAIN may then run Claude `front-maker`
 
@@ -92,13 +92,14 @@ Same 2-cycle cap as WEB-BACK:
 
 ## Self-review checklist before signaling FRONT-DONE
 
-Per the hybrid pre-commit policy (CLAUDE.md § Token-saving rules), the
+Per the hybrid pre-commit policy (`docs/token-saving.md` Rule 3), the
 default path skips Claude `reviewer` / `security-manager` agents in WEB-
 MAIN. WEB-MAIN trusts your FRONT-DONE report. So your `npm run lint /
 build` green is the floor, not the ceiling — before signaling DONE, walk
 this checklist on the diff yourself:
 
-- **Lint + build** — `npm run lint --quiet` + `npm run build` GREEN.
+- **Lint + build** — `./tools/front-validate.sh` GREEN (chains
+  `npm run lint` → `npm run build`).
 - **Diff re-read** — read your final diff once more. Hunt specifically
   for: contract mismatches with the backend response (e.g. frontend
   reads `resp.is_reacted` but backend returns `{reacted}` — real bug

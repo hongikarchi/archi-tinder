@@ -33,7 +33,7 @@ The caller has already consumed results via Playwright MCP — local files are n
 
 ## Step 0 — Authenticate (dev-login)
 
-Read CLAUDE.md "Web Testing" section for the full procedure. Short summary:
+Read `web-testing/AGENTS.md` for the full procedure. Short summary:
 
 1. Read DEV_LOGIN_SECRET from `backend/.env`
 2. `curl -s -X POST http://localhost:8001/api/v1/auth/dev-login/ -H "Content-Type: application/json" -d '{"secret":"<DEV_LOGIN_SECRET>"}'`

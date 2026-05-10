@@ -1,21 +1,19 @@
 #!/bin/bash
-# cmux 4-workspace setup for make_web (stateful multi-team).
+# cmux 5-workspace setup for make_web (stateful multi-team).
 #
-# Each team gets its OWN workspace (sidebar entry). Inspired by make_db's
-# DB-MAIN/CRAWLER/MATCHER/ENRICHER/REVIEWER layout, but make_web is
-# horizontal (frontend / backend) rather than a sequential pipeline.
-# Note: in make_web, "Phase 15" refers to Social Foundation per the
-# product roadmap, NOT to this multi-agent architecture.
+# Each team gets its OWN workspace (sidebar entry).
 #
 #   WEB-MAIN     — Claude Code (Opus orchestrator, this session)
 #   WEB-BACK     — Codex CLI (writes/fixes backend/*)
 #   WEB-FRONT    — Codex CLI (writes/fixes frontend/* data layer)
 #   WEB-REVIEW   — Claude Code (Opus, /review pre-push gate)
+#   WEB-GIT      — Claude Code (Sonnet git-publisher: push/PR/merge/external)
 #
 # Each new workspace's first agent message is a self-discovery prompt
 # that anchors it to AGENTS.md (codex auto-loads from cwd) + its team
-# file (.claude/agents/team-<team>.md). Without this, codex sessions
-# would start blank and act inconsistently across reboots / first-runs.
+# file (.claude/agents/team-<team>.md or git-publisher.md). Without
+# this, sessions would start blank and act inconsistently across
+# reboots / first-runs.
 #
 # Idempotent: re-running adds missing workspaces only; existing ones
 # are left alone (won't kill running agents or re-send init prompts).
@@ -31,7 +29,7 @@ CWD="/Users/kms_laptop/Documents/archi-tinder/make_web"
 # `model_reasoning_effort = "xhigh"` is NOT applied automatically on
 # codex restart — only `-c` flag at launch time sticks. /model menu
 # also resets effort to medium. So we explicitly set it here.
-TEAMS=("WEB-BACK:codex -c model_reasoning_effort=high" "WEB-FRONT:codex -c model_reasoning_effort=high" "WEB-REVIEW:claude")
+TEAMS=("WEB-BACK:codex -c model_reasoning_effort=high" "WEB-FRONT:codex -c model_reasoning_effort=high" "WEB-REVIEW:claude" "WEB-GIT:claude")
 
 # Self-discovery prompt sent on first start. Same template for codex
 # teams (WEB-BACK / WEB-FRONT). WEB-REVIEW uses a different prompt
@@ -41,13 +39,19 @@ init_prompt_codex() {
     local team_upper
     team_upper=$(echo "$team_lower" | tr '[:lower:]' '[:upper:]')
     cat <<EOF
-You are WEB-${team_upper}, one of the 4 cmux workspaces in the make_web stateful multi-team architecture. Before doing any work, read these files in order: 1) AGENTS.md (your baseline + hard guardrails — codex should already have auto-loaded this from cwd) 2) .claude/agents/team-${team_lower}.md (your specific role + owned files) 3) CLAUDE.md (project conventions, especially Backend/Frontend Conventions + Rules) 4) the most recent 10 lines of .claude/Task.md § Handoffs (recent state). After reading, reply with one short sentence confirming you understand your role and your hard guardrails. Then wait for WEB-MAIN to dispatch your first real task via tools/dispatch.sh.
+You are WEB-${team_upper}, one of the 5 cmux workspaces in the make_web stateful multi-team architecture (WEB-MAIN + WEB-BACK + WEB-FRONT + WEB-REVIEW + WEB-GIT). Before doing any work, read these files in order: 1) AGENTS.md (your baseline + hard guardrails — codex should already have auto-loaded this from cwd) 2) .claude/agents/team-${team_lower}.md (your specific role + owned files) 3) CLAUDE.md (project conventions, especially Backend/Frontend Conventions + Rules) 4) the most recent 10 lines of .claude/Task.md § Handoffs (recent state). After reading, reply with one short sentence confirming you understand your role and your hard guardrails. Then wait for WEB-MAIN to dispatch your first real task via tools/dispatch.sh.
 EOF
 }
 
 init_prompt_review() {
     cat <<EOF
-You are WEB-REVIEW, the pre-push review terminal for make_web. Your only job is the /review slash command (per .claude/commands/review.md and CLAUDE.md § Pre-Push Review). When the user types "리뷰해줘" or "review" or invokes /review, run the gate. Otherwise stay idle. You are READ-ONLY on backend/, frontend/, research/. You write only to .claude/reviews/<sha>.md, .claude/reviews/latest.md, and a one-line REVIEW-PASSED/REVIEW-FAIL/REVIEW-ABORTED signal in .claude/Task.md § Handoffs. Reply with "ready" once you've read CLAUDE.md § Pre-Push Review and .claude/commands/review.md.
+You are WEB-REVIEW, the pre-push review terminal for make_web. Your only job is the /review slash command (per .claude/commands/review.md and CLAUDE.md § Pre-Push Review). When the user types "리뷰해줘" or "review" or invokes /review, run the gate. Otherwise stay idle. You are READ-ONLY on backend/, frontend/. You write only to .claude/reviews/<sha>.md, .claude/reviews/latest.md, and a one-line REVIEW-PASSED/REVIEW-FAIL/REVIEW-ABORTED signal in .claude/Task.md § Handoffs. Reply with "ready" once you've read CLAUDE.md § Pre-Push Review and .claude/commands/review.md.
+EOF
+}
+
+init_prompt_git() {
+    cat <<EOF
+You are WEB-GIT, the git operations terminal for make_web (5-tab cmux architecture). Your role is the git-publisher agent (.claude/agents/git-publisher.md): push feature branches, open PRs against develop, poll CI, squash-merge after approval, triage external PRs (Role A/B collaborator submissions), and open develop→main deploy PRs. You NEVER commit source code — commits happen in WEB-MAIN via git-manager. You also NEVER push --force, --rebase shared branches, or auto-approve your own PRs. **Surface hygiene — hard rule**: do NOT enter Claude Code slash commands that switch the surface state (e.g. /effort, /agents, /model picker, /config menu). These can leave the surface in a special view that WEB-MAIN's tools/dispatch.sh cannot anchor onto via Esc-force, and dispatched messages may silently fail to land in the prompt buffer. If you need to change effort or model, restart this session via cmux UI instead. Read in order: 1) .claude/agents/git-publisher.md (your full role + 3 modes), 2) CONTRIBUTING.md (branch model + PR workflow), 3) the most recent 10 lines of .claude/Task.md § Handoffs (recent state), 4) verify gh auth status. Reply "ready" once you've read git-publisher.md and confirmed gh auth.
 EOF
 }
 
@@ -89,7 +93,12 @@ for spec in "${TEAMS[@]}"; do
     # cmux send (it types literally), so the heredoc collapses to one
     # long line — perfect for an agent prompt.
     if [ "$cmd" = "claude" ]; then
-        msg=$(init_prompt_review | tr '\n' ' ')
+        # WEB-REVIEW vs WEB-GIT distinguished by workspace name
+        case "$name" in
+            WEB-REVIEW) msg=$(init_prompt_review | tr '\n' ' ') ;;
+            WEB-GIT)    msg=$(init_prompt_git    | tr '\n' ' ') ;;
+            *)          msg=$(init_prompt_review | tr '\n' ' ') ;;  # fallback
+        esac
     else
         msg=$(init_prompt_codex "$team_lower" | tr '\n' ' ')
     fi
@@ -111,7 +120,7 @@ fi
 
 echo ""
 echo "✓ WEB workspaces ready"
-$CMUX list-workspaces | grep -E "WEB-(MAIN|BACK|FRONT|REVIEW)" || true
+$CMUX list-workspaces | grep -E "WEB-(MAIN|BACK|FRONT|REVIEW|GIT)" || true
 echo ""
 echo "  dispatch:  ./tools/dispatch.sh <team> \"<message>\""
-echo "  team ∈ {back, front, review}"
+echo "  team ∈ {back, front, review, git}"

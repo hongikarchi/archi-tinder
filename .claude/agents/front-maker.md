@@ -26,11 +26,21 @@ You are the front-maker for ArchiTinder. You write React/Vite frontend code only
 Conventions are in CLAUDE.md + DESIGN.md — re-read the relevant sections before writing any code.
 
 ## After writing
-Run ESLint on changed files:
+
+Run the validation chain (lint → build) in one shot:
+
 ```bash
-cd frontend && npx eslint <changed_files> --max-warnings=0 2>&1 | head -30
+./tools/front-validate.sh
 ```
-Fix any errors. Warnings are acceptable if they cannot be avoided.
+
+For targeted lint on specific files during edit cycles (faster):
+
+```bash
+./tools/check-frontend.sh src/pages/X.jsx src/api/y.js
+```
+
+Both exit non-zero on failure. Fix and re-run before reporting done. Warnings are
+acceptable only if the lint config can't be avoided; build must always be green.
 
 ## Report format (return this to orchestrator)
 ```

@@ -16,7 +16,10 @@ git diff HEAD~1 --name-only  # which files changed
 git diff HEAD~1 --stat       # size of changes
 ```
 Read `.claude/Report.md` -- current system documentation.
-Read `.claude/Task.md` -- current task board.
+Read `.claude/Task.md` -- current task board. The `## Resolved` section is a
+stub pointing to `.claude/resolved-archive.md`; only read the archive when you
+need to append a new completed entry (Step 3 below). Most reporter runs do
+NOT need to read the archive.
 
 ### 2. Update Report.md
 
@@ -30,12 +33,18 @@ Read the existing `.claude/Report.md` first. Then update:
 
 Preserve all existing content. Only modify sections that need updating.
 
-### 3. Update Task.md
+### 3. Update Task.md + resolved-archive.md
 
 Read the existing `.claude/Task.md` first. Then:
-- Move completed tasks from Open/In Progress to Resolved with today's date
-- Add [x] to completed sub-tasks
-- Do NOT remove or edit existing Resolved entries
+- Move completed tasks from `## Open` / `## In Progress` (in `.claude/Task.md`)
+  to `.claude/resolved-archive.md` with today's date — append at the end of
+  the archive file, not at the top
+- Task.md `## Resolved` is a stub; do NOT add entries there
+- Add [x] to completed sub-tasks before moving them to the archive
+- Do NOT remove or edit existing entries in `.claude/resolved-archive.md`
+  (it is append-only history)
+- If no Open/In Progress task corresponds to this commit (e.g. a small
+  follow-up), skip this step entirely — git log is sufficient history
 
 ### 3.5. Archive old Handoffs (token-saving, per `feedback_token_saving_workflow.md` Rule 3)
 
@@ -58,26 +67,19 @@ This trim runs only when count > 30 (no-op otherwise). Bonus on first run: today
 
 ### 4. Build a change summary
 
-Create a brief change summary at the bottom of Report.md "Last Updated" section:
+Update Report.md "Last Updated" section with a brief change summary:
 - What was done (1-2 sentences)
-- Change diagram (Mermaid graph of modified files)
+- Files touched (bullet list — concise, e.g. `backend/apps/foo/views.py +12/-3`)
 
-Example change diagram:
-```mermaid
-graph TD
-    subgraph Backend
-        views.py:::modified
-        engine.py:::new
-    end
-    subgraph Frontend
-        App.jsx:::modified
-    end
-    views.py --> engine.py
+**Mermaid change diagram is OPTIONAL — only produce it when the architecture
+itself changed**: new service, new data flow, new API surface boundary, new
+module added, or major component removed. For feature commits / bug fixes /
+refactors within an existing module, skip the diagram — the architecture-level
+Mermaid graphs at the top of Report.md (User Flow / System Architecture /
+Algorithm Pipeline / Backend Structure) are the canonical view.
 
-    classDef new fill:#10b981,color:#fff
-    classDef modified fill:#f59e0b,color:#000
-    classDef deleted fill:#ef4444,color:#fff
-```
+This rule cuts ~3-5K output tokens + ~10s latency per reporter run on the
+common case (~80% of commits don't change architecture).
 
 ### 5. Append REVIEW-REQUESTED handoff
 
@@ -169,7 +171,7 @@ instead of proceeding.
 ## Rules
 - Never delete existing content in Report.md or Task.md.
 - Report.md is a live system reference, not a changelog -- keep it current, not historical
-- Task.md Resolved section IS historical -- never remove old entries
+- `.claude/resolved-archive.md` is append-only historical record -- never remove existing entries (Task.md `## Resolved` is now a stub pointing to the archive)
 - When appending the REVIEW-REQUESTED line in Step 5, use `Edit` (not `Write`) so the rest of Task.md stays untouched
 - If no architecture changes: only update "Last Updated" section (but still emit REVIEW-REQUESTED in Step 5)
 - **`docs/algorithm.md` is the only file outside `.claude/` that the reporter writes.** Step 6 above defines the narrow surface. All other `docs/` files (specs in `docs/specs/`) are admin-owned and updated only via PR. See CLAUDE.md `## Rules`.

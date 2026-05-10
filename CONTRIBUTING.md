@@ -8,11 +8,18 @@ and admin review. Read this once before your first commit.
 ```bash
 git clone <repo>
 cd make_web
-./tools/install-hooks.sh    # installs hooks/pre-push (migration order check)
+./tools/onboarding.sh    # interactive: installs hooks + registers your CODEOWNERS handle
 ```
 
-The pre-push hook catches the case where you and another developer independently
-created migrations with the same number. It runs locally before any push.
+`onboarding.sh` walks you through 3 steps:
+1. Installs the migration-conflict pre-push hook (calls `install-hooks.sh`)
+2. Asks your role (A=Algorithm / B=SNS / C=Admin)
+3. Asks your GitHub handle and replaces the matching `@TODO-role-*` placeholder
+   in `.github/CODEOWNERS` with `@yourhandle`. You commit the CODEOWNERS edit
+   yourself on your first feature branch — see "First PR sanity check" below.
+
+If you only want to install hooks (e.g. CODEOWNERS already has your handle),
+run `./tools/install-hooks.sh` directly instead.
 
 ## Roles
 
@@ -117,6 +124,25 @@ EOF
 git checkout develop && git pull origin develop
 git branch -d feature/algo-mmr-lambda-tuning
 ```
+
+## First PR sanity check (recommended after onboarding)
+
+After cloning + running `./tools/install-hooks.sh`, do one tiny verification PR
+to confirm your local + GitHub setup works end-to-end:
+
+1. `git checkout develop && git pull origin develop`
+2. `git checkout -b feature/<role>-onboarding-check`
+3. Make a trivial edit (e.g., a typo fix or a comment in a file your role owns)
+4. `git add . && git commit -m "chore: <role> onboarding check"`
+5. `git push -u origin feature/<role>-onboarding-check`
+6. `gh pr create --base develop`
+7. Confirm visually on GitHub: CI runs (status checks `backend` + `frontend`),
+   CODEOWNERS auto-assigns admin as reviewer.
+8. After admin approves + CI green: Squash and merge.
+
+If any step fails, surface the error to the admin — usually a setup detail to
+fix (e.g., status check name mismatch, missing CODEOWNERS handle, hook not
+installed).
 
 ## Deploy flow (develop → main)
 

@@ -15,6 +15,8 @@
 !.claude/Report.md
 !.claude/Task.md
 !.claude/WORKFLOW.md
+!.claude/SESSION_PROTOCOL.md
+!.claude/resolved-archive.md
 
 # Python / Django (backend — future)
 __pycache__/
@@ -44,3 +46,42 @@ test_*.mjs
 # Web-testing E2E runner output
 web-testing/reports/
 web-testing/dashboard/data/
+
+# Python coverage
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Frontend build output (Vite)
+frontend/dist/
+frontend/build/
+
+# Process / lock / runtime artefacts
+*.pid
+*.swp
+*.swo
+
+# Certificates / private keys (defense-in-depth — no .key / .pem
+# files should ever be committed; .gitignore is a backstop, not the
+# primary control)
+*.pem
+*.crt
+*.cer
+*.key
+*.p12
+*.pfx
+secrets/
+credentials/
+
+# Windows (협업자 OS 다양화 대비)
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Editor temp / backup
+*~
+*.bak
+*.orig
+.#*
+\#*\#

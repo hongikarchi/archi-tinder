@@ -480,46 +480,39 @@ flowchart LR
 - Phase 16: Recommendation Expansion (R-PHASE16 RESEARCH-REQUESTED queued — research terminal to elicit spec §4 decisions)
 
 ## Last Updated (Claude)
-- **Date:** 2026-05-06
-- **Commits batch (16 commits `b272f37`→`fa15aab` since last reporter pass `a501c8d` on origin/main):** `b272f37` profile-component refactor | `db78b37` BRANCHING.md hotzone table + scenario guides | `38a6ac6` BRANCHING.md fix-pass | `27fee9b` display_name+bio DRF validation fix | `042bed4` SOC2 GET /projects/{id}/reactors/ list | `59d2af4` useProjectReactors hook | `51dd387` Codex stateless dispatch protocol (deprecated) | `a379bc6` cmux 4-workspace stateful infra | `3ef52b2` cmux comment cleanup | `aedc817` BOARD3 BoardDetailPage frontend integration | `5fbf1fa` dispatch.sh long-message file-fallback | `bdc8d7b` BOARD2 visibility toggle in ProjectSetupPage | `e397317` SOC3-back OfficeFollow backend | `39de1d4` SOC3-front FirmProfilePage follow wiring | `756b247` hybrid pre-commit policy | `fa15aab` Task.md bookkeeping + R-PHASE16 signal
-- **Files changed (high-level):** PROF3 (component refactor: UserProfilePage 1023→565, FirmProfilePage 962→595; +6 shared components in `components/profile/`) | display_name+bio validation fix (DRF `trim_whitespace=False` on `/users/me/` PATCH) | SOC2 list (GET `/projects/{id}/reactors/` visibility-gated; `useProjectReactors` hook) | BOARD3 (`BoardDetailPage` wired to real API + reaction toggle; `useBoard` hook; `reactToProject`/`unreactToProject` wrappers) | BOARD2 (public/private toggle in `ProjectSetupPage`; `updateProject` wrapper; handleLogin visibility fix) | SOC3-back (`OfficeFollow` model + `OfficeFollowView` POST/DELETE + `is_following` injection; migration 0004; +10 tests; 567→577) | SOC3-front (`FirmProfilePage` follow wired; `followOffice`/`unfollowOffice` wrappers) | Cmux infra (`tools/cmux_setup.sh` + `dispatch.sh` long-msg file-fallback + `poll.sh` + `AGENTS.md` + `team-back.md` + `team-front.md`) | Hybrid pre-commit policy (CLAUDE.md + team files: Codex self-review replaces in-session reviewer+security on dispatched work, /review gate preserved) | BRANCHING.md augmented (hotzone table + scenario guides + fix-pass)
-- **Summary:** Phase 13–15 frontend rollout complete. All three social-graph features (SOC1 User-follow / SOC2 Project-reaction / SOC3 Office-follow) and both board-system features (BOARD2 visibility selection / BOARD3 board detail view) are wired to real APIs on origin/main. The cmux 4-workspace stateful infrastructure (WEB-MAIN / WEB-BACK / WEB-FRONT / WEB-REVIEW) replaces the prior stateless codex exec pattern, enabling persistent Codex CLI team sessions with self-review checklists. The hybrid pre-commit policy (Codex team self-review + /review cross-model gate, skip in-session reviewer+security on dispatched work) saves ~150-200K tokens per BOARD-class deliverable. dispatch.sh long-message file-fallback fixes cmux silent-truncation for plans >1500 chars. R-PHASE16 RESEARCH-REQUESTED signal queued in Task.md for research terminal to begin Phase 16 Recommendation Expansion dialogue. Test count: 567 passed + 1 skipped (vs 546 prior, +21 from SOC3-back).
+- **Date:** 2026-05-09
+- **Commit:** `dad4eb4` (merged into develop as PR #7; develop also contains PR #6 `36940f0`)
+- **Files changed:** `.claude/SESSION_PROTOCOL.md` (NEW — push-unit session model + start/end checklists + standard plan-table template + bundle-vs-push thresholds + token-budget orientation) | `CLAUDE.md` (1-line SESSION_PROTOCOL reference under Plan mode protocol) | `tools/dispatch.sh` (ESC-force pattern replaces wrong ✳-filter — 2 Esc keys before send; pre-flight no-op probe removed; empirically validated) | `tools/git-new-feature.sh` + `tools/git-stage-and-commit.sh` + `tools/git-push-pr.sh` + `tools/git-poll-merge.sh` (per-script `--check` mode: branch state + working-tree clean + ahead-of-develop count + gh auth verification, no side effects) | `tools/.smoke.sh` (NEW — chains 4 `--check` calls for one-command environment sanity; closes PR #6 deferred MINOR-5) | `.gitignore` (`!.claude/SESSION_PROTOCOL.md` whitelist entry) | `.claude/agents/git-publisher.md` (NEW — PR #6: Modes 1/2/3 for internal push/PR, external PR triage, and deploy PR) | `tools/git-{new-feature,stage-and-commit,push-pr,poll-merge}.sh` (NEW — PR #6: WEB-GIT tool wrappers) | `tools/cmux_setup.sh` + `tools/cleanup-after-push.sh` + `tools/dispatch.sh` + `tools/poll.sh` + `AGENTS.md` + `CLAUDE.md` + `.claude/WORKFLOW.md` (PR #6: updated for 5-workspace architecture including WEB-GIT tab)
+- **Summary:** This session closed the git/workflow optimization category via two PRs merged to develop. PR #6 (`36940f0`, 2 commits `a90c6d9`+`8cbb419`) introduces the WEB-GIT 5th workspace with the git-publisher agent (Modes 1/2/3), 4 git tool wrappers, and slimmed git-manager/back-maker/front-maker agent files. PR #7 (`dad4eb4`, 3 commits `24e0b0f`+`0060ce7`+`b93b419`) adds SESSION_PROTOCOL.md (the push-unit session model the team now operates under), fixes dispatch.sh with the empirically-validated ESC-force pattern, adds per-script `--check` mode + `tools/.smoke.sh` for environment sanity, and sweeps the PR #6 review verdict. No algorithm changes — algorithm.md sync NOT applicable. Infra structure: WEB-MAIN / WEB-BACK / WEB-FRONT / WEB-REVIEW / WEB-GIT (5 workspaces). FOLLOWUP-CI-PYTEST remains as a separate small PR.
 
 ```mermaid
 graph TD
-    subgraph Backend
-        office_follow[apps/profiles/models.py OfficeFollow NEW]:::new
-        profiles_views[apps/profiles/views.py OfficeFollowView + is_following]:::modified
-        profiles_migration_0004[apps/profiles/migrations/0004_officefollow.py]:::new
-        test_office_follow[apps/profiles/tests/test_office_follow.py]:::new
-        accounts_serializers[apps/accounts/serializers.py trim_whitespace=False]:::modified
+    subgraph NewFiles
+        session_protocol[.claude/SESSION_PROTOCOL.md]:::new
+        git_publisher[.claude/agents/git-publisher.md]:::new
+        smoke_sh[tools/.smoke.sh]:::new
+        git_new_feature[tools/git-new-feature.sh]:::new
+        git_stage_commit[tools/git-stage-and-commit.sh]:::new
+        git_push_pr[tools/git-push-pr.sh]:::new
+        git_poll_merge[tools/git-poll-merge.sh]:::new
     end
-    subgraph Frontend
-        BoardDetailPage[src/pages/BoardDetailPage.jsx wired API + reaction]:::modified
-        ProjectSetupPage[src/pages/ProjectSetupPage.jsx visibility toggle]:::modified
-        FirmProfilePage[src/pages/FirmProfilePage.jsx follow wired]:::modified
-        UserProfilePage[src/pages/UserProfilePage.jsx refactored 1023→565]:::modified
-        components_profile[src/components/profile/ 6 shared components]:::new
-        useBoard[src/hooks/useBoard.js NEW]:::new
-        useProjectReactors[src/hooks/useProjectReactors.js NEW]:::new
-        api_projects[src/api/projects.js reactors + react/unreact]:::modified
-        api_social[src/api/social.js followOffice/unfollowOffice]:::modified
+    subgraph Modified
+        dispatch_sh[tools/dispatch.sh ESC-force fix]:::modified
+        cmux_setup[tools/cmux_setup.sh 5-workspace]:::modified
+        claude_md[CLAUDE.md SESSION_PROTOCOL ref]:::modified
+        gitignore[.gitignore SESSION_PROTOCOL whitelist]:::modified
+        agents_md[AGENTS.md 5-workspace table]:::modified
+        workflow_md[.claude/WORKFLOW.md 5-tab diagram]:::modified
     end
-    subgraph Infra
-        cmux_setup[tools/cmux_setup.sh NEW 4-workspace creator]:::new
-        dispatch_sh[tools/dispatch.sh NEW + file-fallback]:::new
-        poll_sh[tools/poll.sh NEW]:::new
-        agents_md[AGENTS.md NEW Codex baseline]:::new
-        team_back[.claude/agents/team-back.md NEW 7-axis checklist]:::new
-        team_front[.claude/agents/team-front.md NEW 6-axis checklist]:::new
-        branching[BRANCHING.md hotzones + scenario guides]:::modified
-        claude_md[CLAUDE.md hybrid pre-commit policy]:::modified
-    end
-    office_follow --> profiles_views
-    BoardDetailPage --> useBoard
-    BoardDetailPage --> api_projects
-    FirmProfilePage --> api_social
-    UserProfilePage --> components_profile
+    git_publisher --> git_new_feature
+    git_publisher --> git_stage_commit
+    git_publisher --> git_push_pr
+    git_publisher --> git_poll_merge
+    smoke_sh --> git_new_feature
+    smoke_sh --> git_stage_commit
+    smoke_sh --> git_push_pr
+    smoke_sh --> git_poll_merge
+    dispatch_sh --> cmux_setup
 
     classDef new fill:#10b981,color:#fff
     classDef modified fill:#f59e0b,color:#000
