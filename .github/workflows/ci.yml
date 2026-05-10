@@ -42,19 +42,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # NOTE: pytest step intentionally omitted for now. The repo's tests
-      # currently rely on a real PostgreSQL with the pgvector extension
-      # (architecture_vectors raw-SQL paths), and conftest.py's in-memory
-      # SQLite override does not fire reliably for tests under
-      # backend/apps/*/tests/. Re-enabling pytest in CI requires adding a
-      # Postgres + pgvector service container with extension setup. Tracked
-      # as a follow-up TODO in .claude/Task.md.
-
       - name: makemigrations --check (no pending migrations)
         # Catches the case where a model change wasn't accompanied by a migration.
         # Also catches duplicate migration numbers when paired with the local pre-push hook.
         # --dry-run does not require an active DB connection.
         run: python manage.py makemigrations --check --dry-run
+
+      - name: pytest
+        # Tests use SQLite in-memory via conftest.py's `django_db_modify_db_settings`
+        # session-scoped fixture (replicated in every sub-conftest under apps/*/tests/).
+        # Tests that touch architecture_vectors (PG-only, owned by Make DB) mock the
+        # cursor — no real Postgres / pgvector required. Local empirical: 582 passed
+        # + 1 skipped, 0 failed (developing on Apple Silicon SQLite).
+        run: python -m pytest -q --tb=short
 
   frontend:
     name: Frontend (lint + build)
