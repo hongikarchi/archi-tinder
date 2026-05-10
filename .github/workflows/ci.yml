@@ -21,6 +21,9 @@ jobs:
       DB_NAME: ci_db
       DB_USER: ci_user
       DB_PASSWORD: ci_pass
+      # Local CI Postgres (pgvector/pgvector:pg16) doesn't speak SSL; the
+      # default 'require' sslmode (suited to Neon prod DSN) would fail.
+      DB_SSLMODE: disable
       DJANGO_DEBUG: 'True'
       DEV_LOGIN_SECRET: ci-test-secret
       GEMINI_API_KEY: ci-test-gemini-key
