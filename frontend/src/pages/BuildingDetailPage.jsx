@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { bookmarkBuilding, getBuildings } from '../api/client.js'
 
@@ -172,20 +172,25 @@ export default function BuildingDetailPage() {
   const buildingId = BUILDING_ID_RE.test(String(rawBuildingId || '')) ? rawBuildingId : null
   const fromProjectId = location.state?.fromProjectId || null
   const fromSessionId = location.state?.fromSessionId || null
+  const referrer = location.state?.referrer || null
   const rank = isValidRank(location.state?.rank) ? location.state.rank : null
   const savedIds = useMemo(
     () => (Array.isArray(location.state?.savedIds) ? location.state.savedIds : []),
     [location.state?.savedIds]
   )
+  const initialBookmarked = !!buildingId && savedIds.includes(buildingId)
+  const initialBookmarkedRef = useRef(initialBookmarked)
   const [building, setBuilding] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [reloadKey, setReloadKey] = useState(0)
-  const [isBookmarked, setIsBookmarked] = useState(() => !!buildingId && savedIds.includes(buildingId))
+  const [isBookmarked, setIsBookmarked] = useState(initialBookmarked)
   const [bookmarkPending, setBookmarkPending] = useState(false)
 
   useEffect(() => {
-    setIsBookmarked(!!buildingId && savedIds.includes(buildingId))
+    const next = !!buildingId && savedIds.includes(buildingId)
+    initialBookmarkedRef.current = next
+    setIsBookmarked(next)
   }, [buildingId, savedIds])
 
   useEffect(() => {
@@ -232,7 +237,20 @@ export default function BuildingDetailPage() {
   const items = metadataItems(building)
 
   function handleBack() {
-    navigate(-1)
+    const netChanged = isBookmarked !== initialBookmarkedRef.current
+    if (netChanged && referrer && buildingId) {
+      navigate(referrer, {
+        replace: true,
+        state: {
+          bookmarkChanged: {
+            buildingId,
+            action: isBookmarked ? 'save' : 'unsave',
+          },
+        },
+      })
+    } else {
+      navigate(-1)
+    }
   }
 
   async function handleToggleBookmark() {
