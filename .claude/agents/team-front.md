@@ -92,7 +92,7 @@ Same 2-cycle cap as WEB-BACK:
 
 ## Self-review checklist before signaling FRONT-DONE
 
-Per the hybrid pre-commit policy (CLAUDE.md § Token-saving rules), the
+Per the hybrid pre-commit policy (`docs/token-saving.md` Rule 3), the
 default path skips Claude `reviewer` / `security-manager` agents in WEB-
 MAIN. WEB-MAIN trusts your FRONT-DONE report. So your `npm run lint /
 build` green is the floor, not the ceiling — before signaling DONE, walk

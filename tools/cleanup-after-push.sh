@@ -3,13 +3,22 @@
 #
 # Usage:    ./tools/cleanup-after-push.sh
 #
-# Sends `/clear` to WEB-BACK / WEB-FRONT / WEB-REVIEW / WEB-GIT so each starts the
-# next task with a fresh agent context. The codex teams pick up AGENTS.md again
+# Sends `/clear` to WEB-BACK / WEB-FRONT / WEB-REVIEW so each starts the next
+# task with a fresh agent context. The codex teams pick up AGENTS.md again
 # from cwd-walk; the review terminal already re-reads files per /review
 # invocation, so the /clear is mainly to drop accumulated transcript bytes
 # (empirical: 2026-05-07 WEB-REVIEW hit 464K stuck-prompt bug; 2026-05-07
 # WEB-REVIEW second time hit Anthropic server-side rate limit mid-review).
-# WEB-GIT cumulates push / PR / poll output and benefits similarly.
+#
+# **WEB-GIT is intentionally NOT auto-cleared.** Empirical (2026-05-09):
+# git push/PR/merge cycles produce small transcripts (~10 lines per cycle —
+# command output + handoff line), so WEB-GIT doesn't accumulate context the
+# way /review reports do. Auto-/clear + re-init was costing ~6.5K Claude
+# tokens/cycle (file reads of git-publisher.md + CONTRIBUTING.md + Task.md
+# handoffs) for negligible benefit. If WEB-GIT *does* feel bloated (long
+# external-PR triage chain, etc.), operator can /clear it manually in cmux UI.
+# `gh auth status` is OS-level and survives /clear, so no auth re-verify is
+# needed even after a manual /clear.
 #
 # WEB-MAIN (this Claude session) is NOT touched — Claude self-/clear is not
 # possible from inside the same session, and the main session's accumulated
@@ -39,12 +48,10 @@ You are WEB-${team_upper}, one of the 5 cmux workspaces in the make_web stateful
 EOF
 }
 
-# Self-discovery prompt for WEB-GIT (mirrors cmux_setup.sh init_prompt_git).
-init_prompt_git() {
-    cat <<EOF
-You are WEB-GIT, the git operations terminal for make_web (5-tab cmux architecture). Your role is the git-publisher agent (.claude/agents/git-publisher.md): push feature branches, open PRs against develop, poll CI, squash-merge after approval, triage external PRs, and open develop→main deploy PRs. You NEVER commit source code — commits happen in WEB-MAIN via git-manager. Read in order: 1) .claude/agents/git-publisher.md, 2) CONTRIBUTING.md, 3) recent 10 lines of .claude/Task.md § Handoffs, 4) verify gh auth status. Reply "ready" once done.
-EOF
-}
+# NOTE: init_prompt_git removed (was here, defined alongside init_prompt_codex).
+# WEB-GIT is no longer auto-cleared by this script (see file-header comment),
+# so the helper is unused. cmux_setup.sh keeps its own init_prompt_git for the
+# one-time tab-creation case.
 
 clear_tab() {
     local team="$1"          # back / front / review
@@ -92,8 +99,6 @@ clear_tab() {
 
     # Send init prompt:
     #  - codex teams (back/front): always need re-orientation after /clear
-    #  - WEB-GIT (claude git-publisher): also benefits from re-anchoring to
-    #    git-publisher.md role definition after /clear
     #  - WEB-REVIEW (claude /review): re-reads files per invocation; no
     #    init needed beyond the next /review call
     if [ "$agent" = "codex" ]; then
@@ -102,19 +107,13 @@ clear_tab() {
         $CMUX send --workspace "$ws_ref" --surface "$sref" "$init_msg" >/dev/null
         $CMUX send-key --workspace "$ws_ref" --surface "$sref" "Enter" >/dev/null
         printf "       ↳ codex init prompt sent\n"
-    elif [ "$team" = "git" ]; then
-        local init_msg
-        init_msg=$(init_prompt_git | tr '\n' ' ')
-        $CMUX send --workspace "$ws_ref" --surface "$sref" "$init_msg" >/dev/null
-        $CMUX send-key --workspace "$ws_ref" --surface "$sref" "Enter" >/dev/null
-        printf "       ↳ git-publisher init prompt sent\n"
     fi
 }
 
 clear_tab back   codex
 clear_tab front  codex
 clear_tab review claude
-clear_tab git    claude
+# WEB-GIT intentionally skipped — see file-header comment.
 
 echo ""
 echo "✓ Cleanup complete. WEB-MAIN should run /compact manually if context"
