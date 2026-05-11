@@ -480,43 +480,31 @@ flowchart LR
 - Phase 16: Recommendation Expansion (R-PHASE16 RESEARCH-REQUESTED queued — research terminal to elicit spec §4 decisions)
 
 ## Last Updated (Claude)
-- **Date:** 2026-05-09
-- **Commit:** `dad4eb4` (merged into develop as PR #7; develop also contains PR #6 `36940f0`)
-- **Files changed:** `.claude/SESSION_PROTOCOL.md` (NEW — push-unit session model + start/end checklists + standard plan-table template + bundle-vs-push thresholds + token-budget orientation) | `CLAUDE.md` (1-line SESSION_PROTOCOL reference under Plan mode protocol) | `tools/dispatch.sh` (ESC-force pattern replaces wrong ✳-filter — 2 Esc keys before send; pre-flight no-op probe removed; empirically validated) | `tools/git-new-feature.sh` + `tools/git-stage-and-commit.sh` + `tools/git-push-pr.sh` + `tools/git-poll-merge.sh` (per-script `--check` mode: branch state + working-tree clean + ahead-of-develop count + gh auth verification, no side effects) | `tools/.smoke.sh` (NEW — chains 4 `--check` calls for one-command environment sanity; closes PR #6 deferred MINOR-5) | `.gitignore` (`!.claude/SESSION_PROTOCOL.md` whitelist entry) | `.claude/agents/git-publisher.md` (NEW — PR #6: Modes 1/2/3 for internal push/PR, external PR triage, and deploy PR) | `tools/git-{new-feature,stage-and-commit,push-pr,poll-merge}.sh` (NEW — PR #6: WEB-GIT tool wrappers) | `tools/cmux_setup.sh` + `tools/cleanup-after-push.sh` + `tools/dispatch.sh` + `tools/poll.sh` + `AGENTS.md` + `CLAUDE.md` + `.claude/WORKFLOW.md` (PR #6: updated for 5-workspace architecture including WEB-GIT tab)
-- **Summary:** This session closed the git/workflow optimization category via two PRs merged to develop. PR #6 (`36940f0`, 2 commits `a90c6d9`+`8cbb419`) introduces the WEB-GIT 5th workspace with the git-publisher agent (Modes 1/2/3), 4 git tool wrappers, and slimmed git-manager/back-maker/front-maker agent files. PR #7 (`dad4eb4`, 3 commits `24e0b0f`+`0060ce7`+`b93b419`) adds SESSION_PROTOCOL.md (the push-unit session model the team now operates under), fixes dispatch.sh with the empirically-validated ESC-force pattern, adds per-script `--check` mode + `tools/.smoke.sh` for environment sanity, and sweeps the PR #6 review verdict. No algorithm changes — algorithm.md sync NOT applicable. Infra structure: WEB-MAIN / WEB-BACK / WEB-FRONT / WEB-REVIEW / WEB-GIT (5 workspaces). FOLLOWUP-CI-PYTEST remains as a separate small PR.
+- **Date:** 2026-05-11
+- **Commit:** `c231c59` (PR #18 — Recovery: redeploy Bug #1-#5 fixes; main = develop = c231c59, no divergence)
+- **Files changed:** `tools/dispatch.sh` (Bug #1 fix — per-terminal anchor strategy: Codex uses Ctrl+C, Claude uses Esc×3) | `tools/git-new-feature.sh` (Bug #2 fix — SAFE_PATHS_REGEX whitelist for auto-stash: only stashes `.claude/Task.md` and `research/` paths, not all unstaged changes) | `backend/conftest.py` (Bug #3 fix — moved from `backend/tests/conftest.py` to `backend/conftest.py`; docstring added explaining SQLite-override partial-coverage gap for pgvector SQL paths) | `tools/test-backend.sh` (Bug #3 fix — `--ci-shape` flag runs pytest in CI-matching configuration with Neon DB credentials) | `.claude/agents/git-publisher.md` (Bug #4 fix — Mode 3 step 5: `gh pr merge --delete-branch` regression documented + Option A `gh api PUT pulls/<N>/merge` canonical path; Bug #5 fix — Mode 3 step 5: mandatory post-deploy `origin/develop` force-reset to `origin/main` via `gh api PATCH repos/{owner}/{repo}/git/refs/heads/develop` to prevent develop drift after squash-merge to main) | `.claude/postmortems/2026-05-11-workflow-dogfood.md` (NEW — 193-line postmortem documenting all 5 bugs + root causes + fixes + regression lessons from the workflow dogfood session) | `.github/workflows/ci.yml` (Bug #3 fix — pytest step revived in backend GHA job; pgvector service container added; `DB_SSLMODE=disable` env var for CI DB connection)
+- **Summary:** Five bugs discovered during a workflow dogfood session (2026-05-11) are now fixed and live on main. The bugs were: #1 wrong escape sequence for Codex terminals in dispatch.sh; #2 over-aggressive auto-stash in git-new-feature.sh; #3 conftest.py misplaced (SQLite override not loading) + missing pytest revival in GHA; #4 gh pr merge --delete-branch regression in git-publisher Mode 3; #5 origin/develop diverging from main after squash-deploy. All 5 fixes were bundled via PR #18 (cherry-pick onto fresh feature branch from main) after develop diverged (Bug #5 recovery path: Option B). develop=main reset is now codified as mandatory post-deploy step in git-publisher.md Mode 3 step 5. algorithm.md sync NOT applicable (no RECOMMENDATION dict changes).
 
 ```mermaid
 graph TD
-    subgraph NewFiles
-        session_protocol[.claude/SESSION_PROTOCOL.md]:::new
-        git_publisher[.claude/agents/git-publisher.md]:::new
-        smoke_sh[tools/.smoke.sh]:::new
-        git_new_feature[tools/git-new-feature.sh]:::new
-        git_stage_commit[tools/git-stage-and-commit.sh]:::new
-        git_push_pr[tools/git-push-pr.sh]:::new
-        git_poll_merge[tools/git-poll-merge.sh]:::new
+    subgraph Tooling["tools/ + infra"]
+        dispatch_sh[tools/dispatch.sh]:::modified
+        git_new_feature[tools/git-new-feature.sh]:::modified
+        test_backend[tools/test-backend.sh]:::modified
+        ci_yml[.github/workflows/ci.yml]:::modified
     end
-    subgraph Modified
-        dispatch_sh[tools/dispatch.sh ESC-force fix]:::modified
-        cmux_setup[tools/cmux_setup.sh 5-workspace]:::modified
-        claude_md[CLAUDE.md SESSION_PROTOCOL ref]:::modified
-        gitignore[.gitignore SESSION_PROTOCOL whitelist]:::modified
-        agents_md[AGENTS.md 5-workspace table]:::modified
-        workflow_md[.claude/WORKFLOW.md 5-tab diagram]:::modified
+    subgraph Backend
+        conftest_py[backend/conftest.py]:::modified
     end
-    git_publisher --> git_new_feature
-    git_publisher --> git_stage_commit
-    git_publisher --> git_push_pr
-    git_publisher --> git_poll_merge
-    smoke_sh --> git_new_feature
-    smoke_sh --> git_stage_commit
-    smoke_sh --> git_push_pr
-    smoke_sh --> git_poll_merge
-    dispatch_sh --> cmux_setup
+    subgraph Agents[".claude/agents/"]
+        git_publisher[git-publisher.md]:::modified
+    end
+    subgraph Docs[".claude/"]
+        postmortem[postmortems/2026-05-11-workflow-dogfood.md]:::new
+    end
 
     classDef new fill:#10b981,color:#fff
     classDef modified fill:#f59e0b,color:#000
-    classDef deleted fill:#ef4444,color:#fff
 ```
 
 ## Last Updated (Designer)
