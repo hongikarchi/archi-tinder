@@ -72,24 +72,40 @@ if [ -z "$surf_ref" ]; then
     exit 3
 fi
 
-# Force-Esc the surface to drop any active special view. Safe on a normal
-# prompt (no-op). Some Claude Code views need multiple Esc presses (one to
-# close the picker, one to discard partial input, etc.). Send 3 times.
+# Anchor to clean prompt state. Different terminals need different keys:
 #
-# Empirical (2026-05-10 PR #8 cycle): 2 Esc was insufficient when WEB-GIT
-# was sitting on a `/effort high` confirmation menu — dispatch reached
-# surface but message disappeared, never landed in the prompt buffer.
-# Bumping to 3 Esc + 0.4s gaps fixed the case in retry. Operator
-# preventive: avoid `/effort`, `/agents`, `/model` slash commands inside
-# stateful sub-terminals (back/front/review/git); restart the session
-# via cmux UI if you need to change effort or model — see
+# - Claude Code (review/git): Esc closes special views (slash command menus,
+#   /agents picker, /effort confirmation). 3 Esc presses + 0.4s gaps cover
+#   multi-stage menus. NEVER send Ctrl+C — it would interrupt any running
+#   task (e.g. a /review pass mid-flight).
+#
+# - Codex CLI (back/front): Esc TOGGLES Codex into edit-prev / scroll-prev
+#   mode (empirical: 2026-05-11 dogfood, PR #9-#10 cycle). Subsequent text
+#   sent via `cmux send` lands in that navigation context instead of the
+#   prompt buffer, and Enter triggers a no-op edit action — message
+#   silently lost. Codex CLI auto-clears stale buffer between Enter
+#   submissions, so the anchor only needs to ABORT any pending input mode.
+#   Ctrl+C cancels a mid-edit or scroll mode + returns to a clean prompt
+#   without affecting idle state.
+#
+# Operator preventive (still applies to both): avoid `/effort`, `/agents`,
+# `/model` slash commands inside stateful sub-terminals; restart the
+# session via cmux UI if you need to change effort or model — see
 # cmux_setup.sh init_prompt_git for the codified rule.
-$CMUX send-key --workspace "$ws_ref" --surface "$surf_ref" "Escape" >/dev/null 2>&1 || true
-sleep 0.4
-$CMUX send-key --workspace "$ws_ref" --surface "$surf_ref" "Escape" >/dev/null 2>&1 || true
-sleep 0.4
-$CMUX send-key --workspace "$ws_ref" --surface "$surf_ref" "Escape" >/dev/null 2>&1 || true
-sleep 0.4
+case "$TEAM" in
+    back|front)
+        $CMUX send-key --workspace "$ws_ref" --surface "$surf_ref" "c" "ctrl" >/dev/null 2>&1 || true
+        sleep 0.4
+        ;;
+    *)
+        $CMUX send-key --workspace "$ws_ref" --surface "$surf_ref" "Escape" >/dev/null 2>&1 || true
+        sleep 0.4
+        $CMUX send-key --workspace "$ws_ref" --surface "$surf_ref" "Escape" >/dev/null 2>&1 || true
+        sleep 0.4
+        $CMUX send-key --workspace "$ws_ref" --surface "$surf_ref" "Escape" >/dev/null 2>&1 || true
+        sleep 0.4
+        ;;
+esac
 
 # WEB-REVIEW context-bloat mitigation: empirical bug — a /review
 # session that has accumulated ~400 KB+ tokens stops processing new
