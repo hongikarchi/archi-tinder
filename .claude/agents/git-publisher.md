@@ -244,11 +244,42 @@ Trigger: operator says "배포 PR 열어줘" or "deploy PR ready" — typically 
 
 4. **Wait for admin's manual approval + green CI** (you do NOT auto-merge a deploy PR — admin always inspects).
 
-5. **After admin merges via UI:**
+5. **After admin merges via UI** (or when operator authorizes `gh pr merge` via admin bypass):
+
+   **⚠ Bug #4 — `gh pr merge --delete-branch=false --admin` flag is ignored**: empirical (2026-05-10 PR #11 dogfood), despite explicitly passing `--delete-branch=false`, the deploy-PR merge auto-deleted `origin/develop`. Local develop remained intact, but the integration branch went missing on origin until recovery. Two options:
+
+   - **Option A (preferred)** — merge via `gh api -X PUT pulls/<N>/merge` which does NOT touch source branches:
+     ```bash
+     gh api -X PUT "repos/<owner>/<repo>/pulls/<N>/merge" \
+       --field merge_method=squash \
+       --field commit_title="Deploy: <summary>" \
+       --field commit_message="<body>"
+     ```
+   - **Option B (with safety net)** — use `gh pr merge --admin` (no `--delete-branch=false`), then **immediately verify** `origin/develop` still exists:
+     ```bash
+     gh pr merge <N> --squash --admin
+     git ls-remote origin refs/heads/develop  # should print non-empty
+     ```
+     If empty, restore from local develop:
+     ```bash
+     LOCAL_DEVELOP_SHA=$(git rev-parse develop)
+     gh api -X POST "repos/<owner>/<repo>/git/refs" \
+       --field "ref=refs/heads/develop" \
+       --field "sha=$LOCAL_DEVELOP_SHA"
+     # Verify:
+     git ls-remote origin refs/heads/develop
+     ```
+     (CLAUDE.md "never push to develop" rule is honored — this is a recovery via the GitHub REST API for a vanished branch, not a normal push.)
+
+   **⚠ Pre-emptive stash before local-sync** (empirical, PR #12-#14 dogfood): WEB-GIT writes its `DEPLOY-MERGED` / `PR-MERGED` handoff to `.claude/Task.md` BEFORE running local-sync; the `git checkout` step then aborts on the dirty Task.md. Apply this pattern:
    ```bash
+   git stash push -- .claude/Task.md      # pre-emptive stash
    git checkout main && git pull origin main
-   git checkout develop && git pull origin develop      # in case of post-merge sync
+   git checkout develop && git pull origin develop
+   git fetch --prune                       # reap deleted feature/* refs
+   git stash pop                            # restore handoff edit
    ```
+
    Confirm Railway auto-deploy started:
    ```bash
    echo "Check Railway logs at: https://railway.app/project/<project-id>"
@@ -259,6 +290,8 @@ Trigger: operator says "배포 PR 열어줘" or "deploy PR ready" — typically 
    ```
    DEPLOY-MERGED: #<N> — main = <sha-short>; Railway deploy in progress
    ```
+   If you needed to recover origin/develop in step 5, append a note like
+   `(origin/develop restored via gh api git/refs after --delete-branch flag regression)` so the next session knows the recovery happened.
 
 ---
 
