@@ -76,26 +76,34 @@ Trigger: Task.md handoff has `REVIEW-PASSED: <sha> — drift checks passed; run 
 
 6. **Merge after green + approval:**
    ```bash
-   gh pr merge <N> --squash --delete-branch
+   gh pr merge <N> --squash
    ```
+   (Repo setting `delete_branch_on_merge: false` as of 2026-05-11 — see Bug #4 below for root-cause history. `--delete-branch` flag and `gh api PUT pulls/<N>/merge` path are now equivalent on head-branch preservation; both leave the head branch alive on origin.)
 
-7. **Local cleanup:**
+7. **Remote + local cleanup:**
    ```bash
+   # Remote: delete feature branch on origin (explicit since repo setting is off)
+   FEATURE_BRANCH=$(git branch --show-current)
+   gh api -X DELETE "repos/<owner>/<repo>/git/refs/heads/$FEATURE_BRANCH" 2>/dev/null || \
+       echo "remote ref already gone — skip"
+
+   # Local: sync develop + delete feature branch
    git checkout develop && git pull origin develop
    # squash creates a NEW commit on develop; the original feature-branch
    # commits are NOT ancestors of develop's HEAD. `git branch -d` checks
    # ancestry and refuses ("not fully merged") — use -D after confirming
    # the PR is actually merged on the GitHub side.
    if [ "$(gh pr view <N> --json state --jq .state)" = "MERGED" ]; then
-       git branch -D feature/<branch>
+       git branch -D "$FEATURE_BRANCH"
    else
        echo "PR #<N> not yet MERGED on GitHub — skip local delete"
    fi
+   git fetch --prune
    ```
 
 8. **Emit final signal:**
    ```
-   PR-MERGED: #<N> — squashed into develop (<sha-short>); local cleanup done
+   PR-MERGED: #<N> — squashed into develop (<sha-short>); remote + local cleanup done
    ```
 
 ---
@@ -246,30 +254,29 @@ Trigger: operator says "배포 PR 열어줘" or "deploy PR ready" — typically 
 
 5. **After admin merges via UI** (or when operator authorizes `gh pr merge` via admin bypass):
 
-   **⚠ Bug #4 — `gh pr merge --delete-branch=false --admin` flag is ignored**: empirical (2026-05-10 PR #11 dogfood), despite explicitly passing `--delete-branch=false`, the deploy-PR merge auto-deleted `origin/develop`. Local develop remained intact, but the integration branch went missing on origin until recovery. Two options:
+   **✓ Bug #4 — RESOLVED 2026-05-11 by disabling `delete_branch_on_merge` repo setting.** Earlier diagnosis was incomplete:
+   - **Original (PR #11 dogfood 2026-05-10)**: `gh pr merge --delete-branch=false --admin` ignored the flag and auto-deleted `origin/develop` after deploy merge.
+   - **Refined (PR #19 dogfood 2026-05-11)**: `gh api -X PUT pulls/<N>/merge` ALSO deleted the head branch — Option A was not a true fix. Root cause is the GitHub repo-level setting `delete_branch_on_merge: true`, which fires on every merge regardless of API path (`gh pr merge` with any flag, `gh api PUT`, web UI).
+   - **Permanent fix**: `gh api -X PATCH repos/<owner>/<repo> --field delete_branch_on_merge=false` (applied 2026-05-11). Now every merge preserves the head branch on origin. Explicit cleanup via `gh api -X DELETE refs/heads/<branch>` is the canonical pattern (Mode 1 step 7 above).
 
-   - **Option A (preferred)** — merge via `gh api -X PUT pulls/<N>/merge` which does NOT touch source branches:
-     ```bash
-     gh api -X PUT "repos/<owner>/<repo>/pulls/<N>/merge" \
-       --field merge_method=squash \
-       --field commit_title="Deploy: <summary>" \
-       --field commit_message="<body>"
-     ```
-   - **Option B (with safety net)** — use `gh pr merge --admin` (no `--delete-branch=false`), then **immediately verify** `origin/develop` still exists:
-     ```bash
-     gh pr merge <N> --squash --admin
-     git ls-remote origin refs/heads/develop  # should print non-empty
-     ```
-     If empty, restore from local develop:
-     ```bash
-     LOCAL_DEVELOP_SHA=$(git rev-parse develop)
-     gh api -X POST "repos/<owner>/<repo>/git/refs" \
-       --field "ref=refs/heads/develop" \
-       --field "sha=$LOCAL_DEVELOP_SHA"
-     # Verify:
-     git ls-remote origin refs/heads/develop
-     ```
-     (CLAUDE.md "never push to develop" rule is honored — this is a recovery via the GitHub REST API for a vanished branch, not a normal push.)
+   **Deploy-PR (develop → main) merge is now safe with any path:**
+   ```bash
+   gh pr merge <N> --squash --admin
+   # OR equivalently:
+   gh api -X PUT "repos/<owner>/<repo>/pulls/<N>/merge" --field merge_method=squash
+   ```
+   `origin/develop` is preserved by repo-setting guarantee. No verify-and-recover dance needed.
+
+   **Historical safety-net code** (kept for reference in case `delete_branch_on_merge` is ever re-enabled):
+   ```bash
+   git ls-remote origin refs/heads/develop  # verify non-empty
+   # If empty, restore from local develop:
+   LOCAL_DEVELOP_SHA=$(git rev-parse develop)
+   gh api -X POST "repos/<owner>/<repo>/git/refs" \
+     --field "ref=refs/heads/develop" \
+     --field "sha=$LOCAL_DEVELOP_SHA"
+   ```
+   (CLAUDE.md "never push to develop" rule honored — this is REST API recovery for a vanished ref, not a normal push.)
 
    **⚠ Pre-emptive stash before local-sync** (empirical, PR #12-#14 dogfood): WEB-GIT writes its `DEPLOY-MERGED` / `PR-MERGED` handoff to `.claude/Task.md` BEFORE running local-sync; the `git checkout` step then aborts on the dirty Task.md. Apply this pattern:
    ```bash

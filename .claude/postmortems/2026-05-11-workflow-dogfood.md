@@ -119,12 +119,28 @@ This force-resets `origin/develop` to match `origin/main` after each deploy, res
 
 **Sandbox**: direct `git push origin develop:develop` was BLOCKED by `Bash` permission classifier (CLAUDE.md hard rule). API path was allowed.
 
-**Permanent fix proposal**:
-- Document in `git-publisher.md` Mode 3: "after deploy merge, ALWAYS verify origin/develop still exists; if deleted, recover via `gh api -X POST ... git/refs`".
-- Or use a different merge command for deploy PRs that doesn't engage the auto-delete path: `gh api -X PUT pulls/<N>/merge --field merge_method=squash`.
-- File issue against `gh` CLI for the `--delete-branch=false` regression.
+**Initial fix (2026-05-11 morning, PR #15)**: Documented in `git-publisher.md` Mode 3 step 5 with two options — Option A `gh api -X PUT pulls/<N>/merge` (claimed to not touch source branches) and Option B `gh pr merge --admin` + verify-and-recover via `gh api git/refs`. **This diagnosis turned out to be incomplete.**
 
-**Severity**: HIGH for collaboration workflow integrity (a future session that doesn't notice the deletion would create feature branches off a non-existent base). Low for this session because we caught it within minutes.
+**Refined diagnosis (2026-05-11 afternoon, PR #19 dogfood)**: Using Option A (`gh api -X PUT pulls/19/merge`) on a feature→develop PR, the head branch (feature/admin-reporter-sync) was ALSO auto-deleted by GitHub. The `gh api -X DELETE` follow-up returned 422 "Reference does not exist." This proved the auto-delete is NOT triggered by `gh pr merge` specifically — it fires on EVERY merge regardless of API path (`gh pr merge`, `gh api PUT`, web UI). Root cause: GitHub repo-level setting `delete_branch_on_merge: true`.
+
+**Permanent fix (2026-05-11 afternoon, this commit)**:
+```
+gh api -X PATCH repos/hongikarchi/archi-tinder --field delete_branch_on_merge=false
+```
+After flipping the setting: every merge preserves the head branch on origin. Explicit cleanup via `gh api -X DELETE refs/heads/<branch>` becomes the canonical pattern (Mode 1 step 7). Deploy PRs (develop→main) are now safe with any merge API — `origin/develop` is preserved by repo-setting guarantee, no verify-and-recover dance needed. Bug #4 is fully resolved at the root cause.
+
+**Trade-off**: feature branches no longer auto-delete on origin after PR merge → explicit `gh api -X DELETE` step added to Mode 1 step 7. Small operational cost; large correctness gain. The historical `git/refs` POST recovery snippet stays in git-publisher.md for the case where the repo setting is ever re-enabled.
+
+**Empirical sequence** (which-PR-found-what timeline):
+
+| PR | What dogfood revealed | Confidence after |
+|---|---|---|
+| #11 (deploy 1) | `gh pr merge --delete-branch=false` ignored, develop deleted | Symptom only |
+| #15 (Bug #4 doc) | Codified Option A + Option B with verify-and-recover | Wrong root cause |
+| #19 (reporter sync) | `gh api PUT` ALSO deletes head branch → repo setting must be the cause | Correct root cause |
+| THIS COMMIT | `gh api PATCH delete_branch_on_merge=false` | Root cause neutralized |
+
+**Severity**: HIGH for collaboration workflow integrity. Resolved at root. No further occurrence expected.
 
 ---
 
