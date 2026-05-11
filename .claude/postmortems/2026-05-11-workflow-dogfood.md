@@ -76,6 +76,41 @@
 
 **Severity**: MEDIUM — wasted 1 fix-loop cycle (cycle 1 → cycle 2 transition) before the real solution was clear.
 
+### Bug #5 — Squash deploy creates commit-graph divergence; second deploy hits merge conflict
+
+**Symptom**: PR #16 (second deploy attempt, develop → main with PR #12-#15 bug fixes) returned `mergeable: CONFLICTING` despite all CI green. `gh api PUT pulls/16/merge` rejected with `HTTP 405: Pull Request has merge conflicts`.
+
+**Reproduce**: Make any successful squash deploy (e.g. PR #11 develop → main with 8 commits). Then add more commits to develop. Open a second deploy PR. It will fail.
+
+**Root cause** (the bug-#1-of-postmortem-bugs): squash merge collapses develop's N commits into 1 NEW commit on main, BUT leaves develop's original N commits intact. After PR #11:
+```
+main:    a1c235c → 78e4548 (NEW single commit, "squash of 8")
+develop: a1c235c → ... → 87acb4f (8 original commits, unchanged)
+         ↑ same tree as 78e4548 but unreachable from main's HEAD
+```
+Tree-identical, graph-divergent. The next deploy PR sees main has commits develop doesn't (`78e4548`) AND develop has commits main doesn't (the 8 originals), so it produces phantom conflicts even though no actual code conflicts.
+
+**Hidden assumption that broke**: the team workflow `feature → develop → main` implicitly assumed `develop` and `main` would be "in sync" after deploy. They're tree-synced but graph-divergent. squash merge model breaks the graph-sync side of that assumption.
+
+**Permanent fix (this PR)**: codify a mandatory post-deploy step in `.claude/agents/git-publisher.md` Mode 3 step 5:
+```bash
+MAIN_SHA=$(git rev-parse origin/main)
+gh api -X PATCH "repos/.../git/refs/heads/develop" \
+  --field "sha=$MAIN_SHA" --field "force=true"
+git checkout develop && git fetch && git reset --hard origin/develop
+```
+This force-resets `origin/develop` to match `origin/main` after each deploy, restoring graph-sync. The unsquashed develop history (now redundant with main's squash commit) is discarded.
+
+**Recovery for PR #16's blocked deploy** (deferred to next session):
+1. Force-reset `origin/develop` = `origin/main` via the API call above.
+2. Locally cherry-pick the 4 squashed commit hashes (`e57111b`, `d471bcd`, `c200e23`, `9d52efb`) onto a new feature branch from the freshly-reset develop.
+3. Open feature → develop PR + merge.
+4. Open new deploy PR develop → main + merge (now clean since develop = main + 4 cherry-picks).
+
+**Severity**: HIGH — silently broke the deploy workflow after the very first squash deploy. Every team using squash-only main protection hits this on their second deploy if they don't reset develop.
+
+**Why this wasn't caught earlier**: PR #11 was the first deploy in this repo's history (per `gh pr list --base main` log), so there was no second-deploy data point until this session's dogfood. The architectural decision "squash-only on main" (made in repo settings for clean main history) implicitly required the matching "reset develop after deploy" pattern, which we never codified.
+
 ### Bug #4 — `gh pr merge --admin` ignores `--delete-branch=false` flag, deletes integration branch
 
 **Symptom**: `gh pr merge 11 --squash --delete-branch=false --admin` (deploy PR develop→main) succeeded the merge but ALSO auto-deleted `origin/develop`. `--delete-branch=false` was silently ignored.

@@ -286,6 +286,24 @@ Trigger: operator says "배포 PR 열어줘" or "deploy PR ready" — typically 
    # (operator opens the link — you don't have browser access)
    ```
 
+   **⚠ Bug #5 — squash deploy creates commit-graph divergence** (empirical, PR #16 dogfood 2026-05-11): squash merge collapses develop's N commits into 1 new commit on main, but develop still keeps the original N commits. After deploy, develop and main have IDENTICAL trees but DIVERGENT commit graphs. The next deploy PR (develop → main) fails with `mergeable: CONFLICTING` because git can't reconcile the two graphs (main's squash commit doesn't exist on develop; develop's old N commits don't exist on main).
+
+   **Mandatory post-deploy step**: force-reset `origin/develop` to match `origin/main` so the next cycle starts from a synced baseline.
+
+   ```bash
+   # After local-sync settles, force-reset origin/develop to origin/main
+   MAIN_SHA=$(git rev-parse origin/main)
+   gh api -X PATCH "repos/<owner>/<repo>/git/refs/heads/develop" \
+     --field "sha=$MAIN_SHA" \
+     --field "force=true"
+   # Local develop also needs reset to match
+   git checkout develop && git fetch origin develop && git reset --hard origin/develop
+   ```
+
+   This is destructive on origin/develop (overwrites the unsquashed history that's now redundant with main's squash commit). It is the inverse of the CLAUDE.md "never push to develop" rule — that rule is for normal feature flow; THIS is post-deploy housekeeping that keeps the squash-merge model viable. Without this step, the next deploy PR hits Bug #5 conflict.
+
+   Safety check before reset: verify `origin/develop` only has commits whose tree content is already on `origin/main` (i.e. no unmerged feature work). If any in-flight feature PR targets `develop`, defer the reset and notify operator.
+
 6. **Emit:**
    ```
    DEPLOY-MERGED: #<N> — main = <sha-short>; Railway deploy in progress
