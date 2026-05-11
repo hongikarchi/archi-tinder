@@ -2,8 +2,40 @@
 conftest.py -- pytest fixtures for backend integration tests.
 
 Sets environment variables before Django settings import, overrides
-DATABASES to SQLite in-memory, and handles URL reloading for DEBUG-only
-routes (dev-login).
+DATABASES to SQLite in-memory (for tests using `@pytest.mark.django_db`),
+and handles URL reloading for DEBUG-only routes (dev-login).
+
+CAVEAT: SQLite override is NOT load-bearing for all test paths.
+================================================================
+
+`django_db_modify_db_settings` fixture mutates `settings.DATABASES` at
+session-scope before pytest-django's `django_db_setup`. This routes
+**`@pytest.mark.django_db`-decorated tests** to an in-memory SQLite DB.
+
+BUT some tests bypass that fixture path entirely:
+  - tests that instantiate a connection directly via
+    `django.db.connection.cursor()` outside `@pytest.mark.django_db`
+  - tests under `backend/tests/test_sessions.py`, `test_topic*.py`,
+    `test_topic_composition.py` and similar that hit real schema
+    via session-scoped fixtures or module-level setup
+
+Those tests connect to whatever PG is configured by `DB_HOST` / `DB_PORT`
+/ `DB_NAME` env vars (`localhost:5432` by default).
+
+Local consequence (false-pass signal):
+  - If you have a dev Postgres running on 5432, bypassing tests succeed
+    against your live data → green local run.
+  - In CI without a PG service container, those same tests fail with
+    "Connection refused on 5432". Empirical: PR #10 cycle 1 surfaced
+    346 errors locally hidden because dev PG was running.
+
+CI is the canonical validation gate.
+================================================================
+For a CI-shape local run that surfaces these bypassing tests:
+  DB_HOST=nonexistent.invalid python -m pytest -q
+
+Or rely on `.github/workflows/ci.yml` Backend job (real PG with pgvector
+service container — see PR #10 fix-loop for the load-bearing config).
 """
 import os
 
