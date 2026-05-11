@@ -8,25 +8,54 @@
 # Result: local branch `feature/<role>-<topic>` checked out from latest origin/develop.
 #
 # Refuses if:
-#   - working tree has uncommitted changes (would lose work)
+#   - working tree has uncommitted SOURCE-CODE changes (would lose work)
 #   - branch already exists (re-use existing branch)
 #   - role is not in {algo, sns, admin}
+#
+# Auto-stashes (and restores after branch creation):
+#   - `.claude/Task.md` — handoff entries written by WEB-REVIEW / WEB-GIT
+#   - `.claude/reviews/*` — review reports (per-SHA + latest.md)
+#   - `.claude/postmortems/*` — postmortem files
+#   - `.claude/resolved-archive.md` — historical resolved entries
+#   These are bookkeeping that the next feature commit needs to sweep in.
 #
 # Idempotent in spirit: safe to run multiple times if you abort and retry,
 # as long as you cleaned up the prior failed attempt.
 
 set -euo pipefail
 
+# Path pattern for review-terminal artifacts that are safe to auto-stash.
+# Matches against `git status --porcelain` second-field paths.
+SAFE_PATHS_REGEX='^\.claude/(Task\.md|reviews/|postmortems/|resolved-archive\.md)'
+
+# Helper: list dirty paths (modified + staged + untracked); return only those
+# NOT matching SAFE_PATHS_REGEX.
+unsafe_dirty_paths() {
+    git status --porcelain | sed 's/^...//' | grep -vE "$SAFE_PATHS_REGEX" || true
+}
+
+# Helper: list dirty paths matching SAFE_PATHS_REGEX (review artifacts).
+safe_dirty_paths() {
+    git status --porcelain | sed 's/^...//' | grep -E "$SAFE_PATHS_REGEX" || true
+}
+
 # --check mode: validate environment without taking action. Used by tools/.smoke.sh
 # and by operators who want to verify branch state before committing.
 if [ "${1:-}" = "--check" ]; then
     echo "git-new-feature.sh --check"
-    if [ -n "$(git status --porcelain)" ]; then
-        echo "  ✗ working tree has uncommitted changes (would refuse to create branch)"
+    UNSAFE=$(unsafe_dirty_paths)
+    SAFE=$(safe_dirty_paths)
+    if [ -n "$UNSAFE" ]; then
+        echo "  ✗ working tree has uncommitted SOURCE changes (would refuse):"
+        echo "$UNSAFE" | sed 's/^/      /'
         exit 2
     fi
+    if [ -n "$SAFE" ]; then
+        echo "  ⚠ review-terminal artifacts dirty (would auto-stash):"
+        echo "$SAFE" | sed 's/^/      /'
+    fi
     cur=$(git branch --show-current)
-    echo "  ✓ working tree clean; current branch: $cur"
+    echo "  ✓ no blocking dirty paths; current branch: $cur"
     if ! git fetch origin develop --quiet 2>/dev/null; then
         echo "  ✗ git fetch origin develop failed (network or remote issue)"
         exit 3
@@ -61,10 +90,11 @@ fi
 
 BRANCH="feature/${ROLE}-${TOPIC}"
 
-# Working tree must be clean
-if [ -n "$(git status --porcelain)" ]; then
-    echo "ERROR: working tree has uncommitted changes. Stash or commit first:" >&2
-    git status --short >&2
+# Refuse only on SOURCE-CODE dirty. Review artifacts auto-stash below.
+UNSAFE=$(unsafe_dirty_paths)
+if [ -n "$UNSAFE" ]; then
+    echo "ERROR: working tree has uncommitted source-code changes. Stash or commit first:" >&2
+    echo "$UNSAFE" | sed 's/^/    /' >&2
     exit 2
 fi
 
@@ -76,12 +106,32 @@ if git show-ref --verify --quiet "refs/heads/${BRANCH}"; then
     exit 3
 fi
 
+# Auto-stash review-terminal artifacts (handoffs / reviews / postmortems).
+# These need to be carried into the new feature branch and bundled with the
+# next commit (per the long-standing "review terminal is read-only on source
+# code but writes Task.md handoffs" pattern from .claude/commands/review.md).
+SAFE=$(safe_dirty_paths)
+STASHED=0
+if [ -n "$SAFE" ]; then
+    echo "Auto-stashing review-terminal artifacts:"
+    echo "$SAFE" | sed 's/^/    /'
+    # shellcheck disable=SC2086
+    git stash push -u -m "auto-stash-for-${BRANCH}" -- $(echo "$SAFE" | tr '\n' ' ')
+    STASHED=1
+fi
+
 # Sync develop
 git checkout develop
 git pull origin develop
 
 # Create feature branch
 git checkout -b "${BRANCH}"
+
+# Restore stash on the new branch
+if [ "$STASHED" = "1" ]; then
+    git stash pop
+    echo "✓ Review-terminal artifacts restored to ${BRANCH}"
+fi
 
 echo ""
 echo "✓ Branch created: ${BRANCH}"
