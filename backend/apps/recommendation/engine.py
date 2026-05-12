@@ -7,6 +7,7 @@ import random
 import logging
 import numpy as np
 from django.conf import settings
+from django.core.cache import cache
 from django.db import connection
 
 from . import event_log
@@ -254,7 +255,16 @@ def get_diverse_random(n=10, filters=None):
 
 
 def get_building_embedding(building_id):
-    """Fetch the embedding vector for a single building. Returns list of floats."""
+    """Fetch the embedding vector for a single building. Returns list of floats.
+
+    Checks _building_embedding_cache first (populated by get_pool_embeddings).
+    Swiped cards are always from the pool, so this is almost always a cache hit.
+    Falls back to DB only for edge cases (e.g. cards outside the current pool).
+    """
+    cached = _building_embedding_cache.get(building_id)
+    if cached is not None:
+        return cached.tolist()
+
     with connection.cursor() as cur:
         cur.execute(
             'SELECT embedding::text FROM architecture_vectors WHERE building_id = %s',
@@ -266,8 +276,27 @@ def get_building_embedding(building_id):
     return [float(x) for x in row[0].strip('[]').split(',')]
 
 
+_CARD_CACHE_TTL = None   # resolved lazily from RC to avoid import-time RC access
+
+
+def _card_cache_ttl():
+    global _CARD_CACHE_TTL
+    if _CARD_CACHE_TTL is None:
+        _CARD_CACHE_TTL = RC.get('card_cache_ttl', 3600)
+    return _CARD_CACHE_TTL
+
+
+def _card_cache_key(building_id):
+    return f'bcard:{building_id}'
+
+
 def get_building_card(building_id):
-    """Fetch a single building as an ImageCard dict."""
+    """Fetch a single building as an ImageCard dict. Results cached per building_id."""
+    key = _card_cache_key(building_id)
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+
     _required_cols = [
         'building_id', 'name_en', 'project_name', 'architect', 'location_country',
         'city', 'year', 'area_sqm', 'program', 'style', 'atmosphere', 'color_tone',
@@ -282,7 +311,10 @@ def get_building_card(building_id):
             [building_id],
         )
         rows = _dictfetchall(cur)
-    return _row_to_card(rows[0]) if rows else None
+    card = _row_to_card(rows[0]) if rows else None
+    if card is not None:
+        cache.set(key, card, _card_cache_ttl())
+    return card
 
 
 def update_preference_vector(pref_vector, embedding, action):
@@ -348,27 +380,50 @@ def get_top_k_results(pref_vector, exposed_ids, k=None):
 
 
 def get_buildings_by_ids(building_ids):
-    """Fetch multiple buildings by ID list. Returns list of ImageCard dicts."""
+    """Fetch multiple buildings by ID list. Returns list of ImageCard dicts.
+
+    Cache-aware: checks per-building cache first, DB-fetches only uncached IDs,
+    stores newly fetched cards, then merges preserving input order.
+    """
     if not building_ids:
         return []
-    placeholders = ','.join(['%s'] * len(building_ids))
-    _required_cols = [
-        'building_id', 'name_en', 'project_name', 'architect', 'location_country',
-        'city', 'year', 'area_sqm', 'program', 'style', 'atmosphere', 'color_tone',
-        'material', 'material_visual', 'url', 'tags', 'image_photos', 'image_drawings',
-        'visual_description', 'description',
-    ]
-    _optional_cols = ['cover_image_url_divisare', 'divisare_gallery_urls']
-    _cols = _build_select_columns(_required_cols, _optional_cols)
-    with connection.cursor() as cur:
-        cur.execute(
-            f'SELECT {_cols} FROM architecture_vectors WHERE building_id IN ({placeholders})',
-            list(building_ids),
-        )
-        rows = _dictfetchall(cur)
-    # Preserve input order
-    row_map = {r['building_id']: r for r in rows}
-    return [_row_to_card(row_map[bid]) for bid in building_ids if bid in row_map]
+
+    # Phase 1: cache lookup
+    card_map = {}
+    miss_ids = []
+    for bid in building_ids:
+        cached = cache.get(_card_cache_key(bid))
+        if cached is not None:
+            card_map[bid] = cached
+        else:
+            miss_ids.append(bid)
+
+    # Phase 2: batch DB fetch for cache misses only
+    if miss_ids:
+        placeholders = ','.join(['%s'] * len(miss_ids))
+        _required_cols = [
+            'building_id', 'name_en', 'project_name', 'architect', 'location_country',
+            'city', 'year', 'area_sqm', 'program', 'style', 'atmosphere', 'color_tone',
+            'material', 'material_visual', 'url', 'tags', 'image_photos', 'image_drawings',
+            'visual_description', 'description',
+        ]
+        _optional_cols = ['cover_image_url_divisare', 'divisare_gallery_urls']
+        _cols = _build_select_columns(_required_cols, _optional_cols)
+        with connection.cursor() as cur:
+            cur.execute(
+                f'SELECT {_cols} FROM architecture_vectors WHERE building_id IN ({placeholders})',
+                miss_ids,
+            )
+            rows = _dictfetchall(cur)
+
+        ttl = _card_cache_ttl()
+        for row in rows:
+            card = _row_to_card(row)
+            card_map[row['building_id']] = card
+            cache.set(_card_cache_key(row['building_id']), card, ttl)
+
+    # Phase 3: restore input order
+    return [card_map[bid] for bid in building_ids if bid in card_map]
 
 
 def search_by_filters(filters, limit=20):
@@ -1269,9 +1324,6 @@ def compute_mmr_next(pool_ids, exposed_ids, pool_embeddings, like_vectors, round
 
     centroids, _ = compute_taste_centroids(like_vectors, round_num)
 
-    best_candidate = None
-    best_score = -float('inf')
-
     # Topic 04 (a): compute per-swipe λ once, outside the candidate loop
     mmr_lambda_base = RC.get('mmr_penalty', 0.3)
     if RC.get('mmr_lambda_ramp_enabled', False):
@@ -1280,36 +1332,36 @@ def compute_mmr_next(pool_ids, exposed_ids, pool_embeddings, like_vectors, round
     else:
         mmr_lambda = mmr_lambda_base
 
-    for candidate in candidates:
-        if candidate not in pool_embeddings:
-            continue
+    valid_candidates = [bid for bid in candidates if bid in pool_embeddings]
+    if not valid_candidates:
+        return None
 
-        candidate_emb = pool_embeddings[candidate]
+    C = np.stack([pool_embeddings[bid] for bid in valid_candidates])  # (N, 384)
 
-        # Relevance: max cosine similarity (default) or softmax-weighted avg (Topic 06)
-        if RC.get('soft_relevance_enabled', False) and len(centroids) > 1:
-            sims = np.array([np.dot(candidate_emb, c) for c in centroids])
-            exp_sims = np.exp(sims - sims.max())  # numerically stable softmax
-            weights = exp_sims / exp_sims.sum()
-            relevance = float(np.sum(sims * weights))
-        else:
-            relevance = max(np.dot(candidate_emb, centroid) for centroid in centroids)
+    # ── Relevance (vectorized) ────────────────────────────────────────────
+    K_mat = np.stack(centroids)   # (K, 384)
+    sim_mat = C @ K_mat.T         # (N, K)
 
-        # Redundancy: max cosine similarity to any exposed embedding
-        redundancy = 0
-        for exposed_id in exposed_ids:
-            if exposed_id in pool_embeddings:
-                exposed_emb = pool_embeddings[exposed_id]
-                redundancy = max(redundancy, np.dot(candidate_emb, exposed_emb))
+    if RC.get('soft_relevance_enabled', False) and len(centroids) > 1:
+        # Numerically stable softmax-weighted average per candidate (Topic 06)
+        sim_shifted = sim_mat - sim_mat.max(axis=1, keepdims=True)
+        exp_sims = np.exp(sim_shifted)
+        weights = exp_sims / exp_sims.sum(axis=1, keepdims=True)  # (N, K)
+        relevance = (sim_mat * weights).sum(axis=1)               # (N,)
+    else:
+        relevance = sim_mat.max(axis=1)  # (N,)
 
-        # MMR score
-        mmr_score = relevance - mmr_lambda * redundancy
+    # ── Redundancy (vectorized) ───────────────────────────────────────────
+    exposed_valid = [e for e in exposed_ids if e in pool_embeddings]
+    if exposed_valid:
+        E = np.stack([pool_embeddings[e] for e in exposed_valid])  # (M, 384)
+        redundancy = (C @ E.T).max(axis=1)                         # (N,)
+    else:
+        redundancy = np.zeros(len(valid_candidates))
 
-        if mmr_score > best_score:
-            best_score = mmr_score
-            best_candidate = candidate
-
-    return best_candidate
+    # ── MMR scores → best candidate ──────────────────────────────────────
+    mmr_scores = relevance - mmr_lambda * redundancy  # (N,)
+    return valid_candidates[int(np.argmax(mmr_scores))]
 
 
 def _apply_recency_weights(like_vectors, round_num, gamma):
