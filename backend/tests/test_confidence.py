@@ -104,6 +104,7 @@ _SESSION_PATCHES = {
     },
     f'{_ENGINE}.farthest_point_from_pool': _mock_farthest_point,
     f'{_ENGINE}.get_building_card': _make_card,
+    f'{_ENGINE}.get_buildings_by_ids': lambda ids: [_make_card(bid) for bid in ids if bid],
     f'{_ENGINE}.get_building_embedding': lambda bid: list(
         _FAKE_EMBEDDINGS.get(bid, np.random.randn(384))
     ),
