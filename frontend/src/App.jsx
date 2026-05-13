@@ -471,15 +471,9 @@ export default function App() {
     swipeLock.current = true
     setIsSwipeLoading(true)
     try {
-      const lastSwipedId = (project.swipedIds || []).slice(-1)[0]
-      if (!lastSwipedId) {
-        setSwipeError('Cannot extend — no swipe history available.')
-        return
-      }
-
       const result = await api.recordSwipe({
         session_id: project.sessionId,
-        image_id: lastSwipedId,
+        image_id: (project.swipedIds || []).slice(-1)[0] || '',
         action: 'like',
         client_buffer_ids: [],
         extend: true,

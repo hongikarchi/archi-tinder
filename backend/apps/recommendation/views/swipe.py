@@ -327,11 +327,12 @@ class SwipeView(APIView):
             if isinstance(s, str) and 0 < len(s) <= 20
         ][:10]
 
-        if not building_id:
-            return Response({'detail': 'building_id is required'}, status=status.HTTP_400_BAD_REQUEST)
-        if action not in ('like', 'dislike'):
-            return Response({'detail': 'action must be like or dislike'}, status=status.HTTP_400_BAD_REQUEST)
         extend_requested = bool(request.data.get('extend', False))
+
+        if not extend_requested and not building_id:
+            return Response({'detail': 'building_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        if not extend_requested and action not in ('like', 'dislike'):
+            return Response({'detail': 'action must be like or dislike'}, status=status.HTTP_400_BAD_REQUEST)
 
         # S3 extend-session short-circuit. Extend is NOT a real swipe and must not
         # mutate like/ranking state (no SwipeEvent, no like_vectors, no round bump).
