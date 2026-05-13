@@ -56,12 +56,20 @@ export async function generateReportImage(projectId) {
 /**
  * Batch-fetch building cards by IDs.
  * Returns list of normalized ImageCard objects.
+ * Splits into chunks of 200 to respect the backend limit.
  */
 export async function getBuildings(buildingIds) {
   if (!buildingIds?.length) return []
+  const CHUNK = 200
+  const chunks = []
+  for (let i = 0; i < buildingIds.length; i += CHUNK) {
+    chunks.push(buildingIds.slice(i, i + CHUNK))
+  }
   try {
-    const result = await callApi('POST', '/images/batch/', { building_ids: buildingIds })
-    return (result || []).map(normalizeCard)
+    const results = await Promise.all(
+      chunks.map(chunk => callApi('POST', '/images/batch/', { building_ids: chunk }))
+    )
+    return results.flat().map(normalizeCard)
   } catch (err) {
     console.error('[api/client] getBuildings failed:', err)
     return []

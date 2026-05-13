@@ -356,8 +356,8 @@ function ConfidenceBar({ value, phase, likeCount }) {
 
 /* ── SwipePage ───────────────────────────────────────────────────────────── */
 export default function SwipePage({
-  currentCard, progress, isCompleted, isLoading, isResultLoading = false,
-  projectName, onSwipe, onViewResults, onExtendSession
+  currentCard, cardResetToken = 0, progress, isCompleted, isLoading, isResultLoading = false,
+  projectName, onSwipe, onViewResults, onExtendSession,
 }) {
   const cardRef = useRef(null)
   const pendingAction = useRef(null)
@@ -387,6 +387,13 @@ export default function SwipePage({
     pendingAction.current = dir === 'right' ? 'like' : 'dislike'
     await cardRef.current.swipe(dir)
   }
+
+  // When cardResetToken changes the TinderCard was force-remounted after a
+  // locked swipe. Clear the guard refs so the same card can be swiped again.
+  useEffect(() => {
+    swipedCardId.current = null
+    pendingAction.current = null
+  }, [cardResetToken])
 
   useEffect(() => {
     function handleKeyDown(e) {
@@ -562,7 +569,7 @@ export default function SwipePage({
             <>
               <TinderCard
                 ref={cardRef}
-                key={currentCard.image_id}
+                key={`${currentCard.image_id}_${cardResetToken}`}
                 onSwipe={onTinderSwipe}
                 onCardLeftScreen={onCardLeftScreen}
                 preventSwipe={galleryOpen ? ['left', 'right', 'up', 'down'] : ['up', 'down']}

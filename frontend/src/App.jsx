@@ -103,6 +103,7 @@ export default function App() {
   const [wizardData, setWizardData] = useState(null)
 
   const [currentCard, setCurrentCard] = useState(null)
+  const [cardResetToken, setCardResetToken] = useState(0)
   const [prefetchCard, setPrefetchCard] = useState(null)
   const [prefetchCard2, setPrefetchCard2] = useState(null)
   const [sessionProgress, setSessionProgress] = useState(null)
@@ -177,6 +178,8 @@ export default function App() {
   const swipeRestored = useRef(false)
   const loggingOut = useRef(false)
   const swipeLock = useRef(false)
+  const swipeLog = useRef([])
+  const swipeCount = useRef(0)
   useEffect(() => {
     if (swipeRestored.current) return
     if (location.pathname === '/swipe' && activeProjectId && userId) {
@@ -198,12 +201,7 @@ export default function App() {
     if (!url || imagePreloadCache.current.has(url)) return Promise.resolve()
     return new Promise(resolve => {
       const img = new Image()
-      const timeout = setTimeout(() => {
-        imagePreloadCache.current.add(url)
-        resolve()
-      }, 1500)
       img.onload = img.onerror = () => {
-        clearTimeout(timeout)
         imagePreloadCache.current.add(url)
         resolve()
       }
@@ -310,7 +308,12 @@ export default function App() {
   }
 
   async function handleSwipeCard(action) {
-    if (swipeLock.current) return
+    if (swipeLock.current) {
+      // Card may have flown off-screen during the lock window.
+      // Force TinderCard remount so it reappears centered instead of going blank.
+      setCardResetToken(t => t + 1)
+      return
+    }
     swipeLock.current = true
 
     if (!currentCard || !activeProjectId) {
@@ -334,6 +337,27 @@ export default function App() {
       isActionCard(savedPrefetch) ||
       imagePreloadCache.current.has(savedPrefetch.image_url)
     )
+
+    // -- Diagnostic log entry (populated as swipe progresses) --
+    const _dbg = {
+      n: ++swipeCount.current,
+      action,
+      cardId: swipedCard.image_id?.slice(-8) ?? '?',
+      instant: canInstantSwap,
+      instantReason: !savedPrefetch ? 'no_pf'
+        : (canInstantSwap ? (isActionCard(savedPrefetch) ? 'action' : 'cached') : 'miss'),
+      apiMs: 0,
+      preloadMs: null,
+      nextId: null,
+      nextBlocked: false,
+      fallback: false,
+      pf: null,
+      pf2: null,
+      totalMs: 0,
+      err: null,
+      ts: Date.now(),
+    }
+
     if (canInstantSwap) {
       setCurrentCard(savedPrefetch)
       setPrefetchCard(prefetchCard2)  // shift queue
@@ -368,6 +392,7 @@ export default function App() {
         client_buffer_ids: clientBufferIds,
       }
 
+      const _apiT0 = Date.now()
       try {
         result = await api.recordSwipe(swipePayload)
       } catch (firstErr) {
@@ -375,6 +400,7 @@ export default function App() {
         // Retry once on network error
         result = await api.recordSwipe(swipePayload)
       }
+      _dbg.apiMs = Date.now() - _apiT0
 
       // Backend confirmed -- now update local state
       setProjects(prev => prev.map(p => {
@@ -427,7 +453,12 @@ export default function App() {
           // Using them would overwrite the frontend's authoritative queue and
           // cause drift (the root cause of "cards stop loading" and "same card
           // twice" bugs before this fix).
-          if (result.next_image) {
+          const _nextBlocked = !!(result.next_image && isActionCard(result.next_image))
+          _dbg.nextId = result.next_image?.image_id?.slice(-8) ?? null
+          _dbg.nextBlocked = _nextBlocked
+          _dbg.pf = result.prefetch_image?.image_id?.slice(-8) ?? null
+          _dbg.pf2 = result.prefetch_image_2?.image_id?.slice(-8) ?? null
+          if (result.next_image && !_nextBlocked) {
             setPrefetchCard2(result.next_image)
             if (result.next_image.image_url) preloadImage(result.next_image.image_url)
           } else {
@@ -435,22 +466,38 @@ export default function App() {
           }
         } else {
           // Non-instant path: rebuild queue from backend response entirely.
-          // If next_image is null and session isn't completed, keep the card
-          // in loading state (swiped card was already animated away by TinderCard).
+          _dbg.nextId = result.next_image?.image_id?.slice(-8) ?? null
+          _dbg.pf = result.prefetch_image?.image_id?.slice(-8) ?? null
+          _dbg.pf2 = result.prefetch_image_2?.image_id?.slice(-8) ?? null
           if (result.next_image) {
+            // Wait for the image to download before showing the card so the
+            // transition from LoadingCard lands with the image already visible.
+            const _plT0 = Date.now()
+            await preloadImage(result.next_image.image_url)
+            _dbg.preloadMs = Date.now() - _plT0
             setCurrentCard(result.next_image)
           } else if (!result.is_analysis_completed) {
-            // Edge case: no next card but session not done (pool temporarily exhausted)
-            // Keep whatever is visible; the loading overlay will clear in finally block
+            // Pool temporarily exhausted — fall back to getSessionState (same as page refresh).
+            // This re-runs the recommendation engine and returns the correct next card,
+            // preventing the frozen/blank state caused by null next_image.
+            _dbg.fallback = true
+            try {
+              const fresh = await api.getSessionState(project.sessionId)
+              applySessionResponse(activeProjectId, fresh)
+              return
+            } catch {
+              // If getSessionState also fails, leave currentCard=null (LoadingCard stays,
+              // user sees "No more buildings" after loading clears in finally).
+            }
           }
           setPrefetchCard(result.prefetch_image || null)
           setPrefetchCard2(result.prefetch_image_2 || null)
-          preloadImage(result.next_image?.image_url)
           preloadImage(result.prefetch_image?.image_url)
           preloadImage(result.prefetch_image_2?.image_url)
         }
       }
-    } catch {
+    } catch (e) {
+      _dbg.err = e?.message ?? 'unknown'
       // Only revert UI if we hadn't already swapped to a different card
       // When canInstantSwap was true, user is already looking at savedPrefetch -- don't revert
       if (!canInstantSwap) {
@@ -460,6 +507,10 @@ export default function App() {
       }
       setSwipeError('Swipe failed. Please try again.')
     } finally {
+      _dbg.totalMs = Date.now() - _dbg.ts
+      const log = swipeLog.current
+      if (log.length >= 10) log.shift()
+      log.push(_dbg)
       setIsSwipeLoading(false)
       swipeLock.current = false
     }
@@ -595,6 +646,7 @@ export default function App() {
       if (activeProject?.sessionId) navigate('/result/' + activeProject.sessionId)
       else navigate('/user/me')
     },
+    cardResetToken,
   }
 
   return (

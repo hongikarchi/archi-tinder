@@ -7,7 +7,7 @@ import SwipePage from '../pages/SwipePage.jsx'
 export default function MainLayout({
   theme, onToggleTheme, userId, onLogout,
   activeProject, activeProjectId,
-  currentCard, sessionProgress, isSessionCompleted, isSwipeLoading, isResultLoading,
+  currentCard, cardResetToken, sessionProgress, isSessionCompleted, isSwipeLoading, isResultLoading,
   onSwipe, onViewResults,
 }) {
   const location = useLocation()
@@ -55,6 +55,7 @@ export default function MainLayout({
         <SwipePage
           key={activeProjectId}
           currentCard={currentCard}
+          cardResetToken={cardResetToken}
           progress={sessionProgress}
           isCompleted={isSessionCompleted}
           isLoading={isSwipeLoading}
@@ -104,6 +105,7 @@ export default function MainLayout({
             confidence: sessionProgress.confidence,
             can_continue: sessionProgress.can_continue,
           } : null}
+          swipeDebug={swipeDebug}
         />
       )}
 
