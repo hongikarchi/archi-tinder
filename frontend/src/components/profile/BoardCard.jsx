@@ -220,7 +220,7 @@ export default function BoardCard({ board }) {
             background: 'linear-gradient(to top, rgba(0,0,0,0.96) 0%, rgba(0,0,0,0.65) 45%, rgba(0,0,0,0.18) 80%, transparent 100%)',
           }}>
             <button
-              onClick={() => navigate('/library/' + board.board_id)}
+              onClick={() => navigate('/board/' + board.board_id)}
               style={{
                 width: '100%', minHeight: 44,
                 padding: '10px 14px', borderRadius: 12,

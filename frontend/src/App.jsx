@@ -669,7 +669,7 @@ export default function App() {
     onExtendSession: handleExtendSession,
     onViewResults: () => {
       if (activeProject?.sessionId) navigate('/result/' + activeProject.sessionId)
-      else navigate('/library/' + activeProjectId)
+      else navigate('/user/me')
     },
     onResumeProject: handleResumeProject,
     onDeleteProject: handleDeleteProject,
@@ -734,8 +734,8 @@ export default function App() {
             />
           } />
           <Route path="swipe" element={null} />
-          <Route path="library" element={null} />
-          <Route path="library/:folderId" element={null} />
+          <Route path="library" element={<Navigate to="/user/me" replace />} />
+          <Route path="library/:folderId" element={<Navigate to="/user/me" replace />} />
           <Route path="user/me" element={<UserProfilePage {...sharedLayoutProps} />} />
           <Route path="user/:userId" element={<UserProfilePage {...sharedLayoutProps} />} />
           <Route path="office/:officeId" element={<FirmProfilePage {...sharedLayoutProps} />} />
