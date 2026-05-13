@@ -65,6 +65,7 @@ class AnalysisSession(models.Model):
     like_vectors        = models.JSONField(default=list)   # list of {embedding: [...], round: int}
     convergence_history = models.JSONField(default=list)   # list of delta-V floats
     previous_pref_vector = models.JSONField(default=list)
+    extended_rounds     = models.IntegerField(default=0)
     # Sprint 0 A4: pool exhaustion guard state (§5.6 + §6 Implementation Requirements item 1)
     original_filters         = models.JSONField(default=dict)  # filters used at session creation (for re-relaxation if pool exhausts)
     original_filter_priority = models.JSONField(default=list)

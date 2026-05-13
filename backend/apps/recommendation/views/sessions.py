@@ -220,6 +220,7 @@ class SessionStateView(APIView):
                 'progress':        _progress(session),
                 'filter_relaxed':  False,
                 'is_analysis_completed': True,
+                'can_continue':    False,
             })
 
         # Current card: the last card added to exposed_ids (or the first if brand-new)
@@ -232,18 +233,21 @@ class SessionStateView(APIView):
         phase = session.phase
 
         if phase == 'converged':
-            current_card = engine.build_action_card()
+            residual = len([pid for pid in pool_ids if pid not in set(exposed_ids)]) if pool_ids else 0
+            can_continue = (residual >= 1) and (session.extended_rounds < 5)
             prefetch_card = None
             prefetch_card_2 = None
             return Response({
                 'session_id':      str(session.session_id),
                 'project_id':      str(session.project.project_id),
                 'session_status':  session.status,
-                'next_image':      current_card,
+                'next_image':      None,
                 'prefetch_image':  prefetch_card,
                 'prefetch_image_2': prefetch_card_2,
                 'progress':        _progress(session),
                 'filter_relaxed':  False,
+                'is_analysis_completed': True,
+                'can_continue':    can_continue,
             })
 
         # Recover the "current card" shown to the user.
@@ -324,6 +328,7 @@ class SessionStateView(APIView):
             'prefetch_image_2': prefetch_card_2,
             'progress':        _progress(session),
             'filter_relaxed':  False,
+            'can_continue':    False,
         })
 
 

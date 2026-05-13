@@ -34,15 +34,6 @@ from django.core.cache import cache
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_action_card():
-    return {
-        'building_id': '__action_card__', 'card_type': 'action',
-        'name_en': '', 'project_name': '', 'image_url': '',
-        'url': None, 'gallery': [], 'gallery_drawing_start': 0,
-        'metadata': {}, 'action_card_message': '', 'action_card_subtitle': '',
-    }
-
-
 def _mock_card(bid):
     if bid is None:
         return None
@@ -126,7 +117,6 @@ def _base_engine_patches(pool_ids):
         f'{_ENGINE}.compute_mmr_next': lambda *a: pool_ids[1],
         f'{_ENGINE}.compute_convergence': lambda *a: 0.05,
         f'{_ENGINE}.check_convergence': lambda *a: False,
-        f'{_ENGINE}.build_action_card': _make_action_card,
         f'{_ENGINE}.get_dislike_fallback': lambda *a, **kw: pool_ids[2],
         f'{_ENGINE}.refresh_pool_if_low': lambda *a, **kw: None,
         f'{_ENGINE}.farthest_point_from_pool': lambda pool_ids, exposed, embs: next(

@@ -8,7 +8,7 @@ the SQLite test database.
 import pytest
 import numpy as np
 from unittest.mock import patch
-from apps.recommendation.models import Project, AnalysisSession
+from apps.recommendation.models import Project, AnalysisSession, SwipeEvent
 
 
 # -- Helpers -----------------------------------------------------------------
@@ -95,23 +95,6 @@ def _mock_mmr_next(pool_ids, exposed_ids, pool_embeddings, like_vectors, round_n
     return None
 
 
-def _mock_build_action_card():
-    """Return action card dict."""
-    return {
-        'building_id': '__action_card__',
-        'card_type': 'action',
-        'name_en': 'Your Taste is Found!',
-        'project_name': '',
-        'image_url': '',
-        'url': None,
-        'gallery': [],
-        'gallery_drawing_start': 0,
-        'metadata': {},
-        'action_card_message': 'We\'ve analyzed your preferences.',
-        'action_card_subtitle': 'Swipe right to see results.',
-    }
-
-
 # Shared patch decorator for engine functions used in session creation
 _ENGINE = 'apps.recommendation.views.engine'
 
@@ -126,7 +109,6 @@ _SESSION_PATCHES = {
     f'{_ENGINE}.compute_mmr_next': _mock_mmr_next,
     f'{_ENGINE}.compute_convergence': lambda *a: 0.05,
     f'{_ENGINE}.check_convergence': lambda *a: False,
-    f'{_ENGINE}.build_action_card': _mock_build_action_card,
     f'{_ENGINE}.get_dislike_fallback': lambda *a, **kw: 'B00010',
     f'{_ENGINE}._random_pool': lambda target: _FAKE_POOL[:target],
 }
@@ -969,6 +951,166 @@ class TestProjectSchemaA3:
         project_data = data['results'][0]
         assert 'saved_ids' in project_data
         assert project_data['saved_ids'] == []
+
+
+@pytest.mark.django_db
+class TestExtendSessionFlow:
+    """S3: extend-session ('Keep exploring') flow.
+
+    Replaces the deprecated __action_card__ POST handler with an explicit
+    `extend: true` swipe-body flag. Cap = 5 extension rounds per session.
+    """
+
+    def _create_converged_session(self, user_profile):
+        """Helper: seed a session directly into 'converged' phase with a refillable pool."""
+        project = Project.objects.create(user=user_profile, name='Extend Test', filters={})
+        return AnalysisSession.objects.create(
+            user=user_profile,
+            project=project,
+            phase='converged',
+            status='active',
+            pool_ids=list(_FAKE_POOL),
+            pool_scores=dict(_FAKE_SCORES),
+            exposed_ids=['B00001'],
+            initial_batch=list(_FAKE_POOL[:5]),
+            like_vectors=[{'embedding': _FAKE_EMBEDDINGS['B00001'].tolist(), 'round': 0}],
+            convergence_history=[0.05, 0.05, 0.05],
+            previous_pref_vector=_FAKE_EMBEDDINGS['B00001'].tolist(),
+            current_round=10,
+            extended_rounds=0,
+        )
+
+    def test_converged_returns_can_continue_with_null_card(self, auth_client, user_profile):
+        """A swipe on a converged session (no extend flag) returns next_image=null + is_analysis_completed=true + can_continue=true."""
+        session = self._create_converged_session(user_profile)
+
+        patchers = _apply_patches()
+        try:
+            resp = auth_client.post(
+                f'/api/v1/analysis/sessions/{session.session_id}/swipes/',
+                {'building_id': 'B00002', 'action': 'like', 'idempotency_key': 'conv_no_extend'},
+                format='json',
+            )
+        finally:
+            _stop_patches(patchers)
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data['next_image'] is None
+        assert data['is_analysis_completed'] is True
+        assert data['can_continue'] is True
+
+    def test_extend_flag_serves_next_card(self, auth_client, user_profile):
+        """extend=true on converged session returns next_image (non-null), increments extended_rounds, resets phase to analyzing."""
+        session = self._create_converged_session(user_profile)
+
+        patchers = _apply_patches()
+        try:
+            resp = auth_client.post(
+                f'/api/v1/analysis/sessions/{session.session_id}/swipes/',
+                {
+                    'building_id': 'B00002',
+                    'action': 'like',
+                    'idempotency_key': 'conv_extend_1',
+                    'extend': True,
+                },
+                format='json',
+            )
+        finally:
+            _stop_patches(patchers)
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data['next_image'] is not None
+        assert data['is_analysis_completed'] is False
+
+        session.refresh_from_db()
+        assert session.extended_rounds == 1
+        assert session.phase == 'analyzing'
+        assert session.convergence_history == []
+        assert session.previous_pref_vector == []
+
+    def test_extend_works_when_carrier_idempotency_key_collides(self, auth_client, user_profile):
+        """Frontend reuse of the last swipe key must not block real extend."""
+        session = self._create_converged_session(user_profile)
+        colliding_key = f'swp_{session.session_id}_B00001'
+        SwipeEvent.objects.create(
+            session=session,
+            building_id='B00001',
+            action='like',
+            idempotency_key=colliding_key,
+        )
+
+        patchers = _apply_patches()
+        try:
+            resp = auth_client.post(
+                f'/api/v1/analysis/sessions/{session.session_id}/swipes/',
+                {
+                    'building_id': 'B00001',
+                    'action': 'like',
+                    'idempotency_key': colliding_key,
+                    'extend': True,
+                },
+                format='json',
+            )
+        finally:
+            _stop_patches(patchers)
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert 'detail' not in data or data.get('detail') != 'duplicate'
+        assert data['next_image'] is not None
+        assert data['is_analysis_completed'] is False
+        session.refresh_from_db()
+        assert session.extended_rounds == 1
+        assert session.phase == 'analyzing'
+        assert SwipeEvent.objects.filter(session=session).count() == 1
+
+    def test_extend_cap_5_returns_completion(self, auth_client, user_profile):
+        """After 5 extensions, extend=true is ignored — returns next_image=null + can_continue=false."""
+        session = self._create_converged_session(user_profile)
+        session.extended_rounds = 5
+        session.save(update_fields=['extended_rounds'])
+
+        patchers = _apply_patches()
+        try:
+            resp = auth_client.post(
+                f'/api/v1/analysis/sessions/{session.session_id}/swipes/',
+                {
+                    'building_id': 'B00002',
+                    'action': 'like',
+                    'idempotency_key': 'conv_extend_capped',
+                    'extend': True,
+                },
+                format='json',
+            )
+        finally:
+            _stop_patches(patchers)
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data['next_image'] is None
+        assert data['is_analysis_completed'] is True
+        assert data['can_continue'] is False
+
+        session.refresh_from_db()
+        assert session.extended_rounds == 5
+
+    def test_state_endpoint_converged_returns_can_continue(self, auth_client, user_profile):
+        """GET /sessions/<id>/state/ on converged session returns can_continue + null next_image (no action card)."""
+        session = self._create_converged_session(user_profile)
+
+        patchers = _apply_patches()
+        try:
+            resp = auth_client.get(f'/api/v1/analysis/sessions/{session.session_id}/state/')
+        finally:
+            _stop_patches(patchers)
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data['next_image'] is None
+        assert data['is_analysis_completed'] is True
+        assert data['can_continue'] is True
 
 
 class TestFarthestPointFromPool:
