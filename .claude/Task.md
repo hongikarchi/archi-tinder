@@ -100,6 +100,7 @@
 - [2026-05-14] FRONT-DONE: s3-swipe-end-flow-front
 - [2026-05-14] BACK-BLOCKED: s3-swipe-end-flow-back-fix2 — required verification failed twice (`cd backend && python3 -m pytest tests/test_confidence.py tests/test_imp7_pool_cache.py tests/test_imp8_async_prefetch.py tests/test_sessions.py 2>&1 | tail -3` reports 62 errors and failing tests in `tests/test_sessions.py`), and backend-wide `__action_card__` grep still returns residual matches outside edited test files (`backend/tests/test_sessions.py`, `backend/apps/recommendation/views/swipe.py`).
 - [2026-05-14] REVIEW-PASSED: fd871d3 — drift checks passed, 6 MINOR noted (see .claude/reviews/latest.md); run `git push` manually from this terminal
+- [2026-05-14] REVIEW-PASSED: 2936fc2 — drift checks passed, 6 MINOR noted (see .claude/reviews/latest.md); run `git push` manually from this terminal
 ---
 
 ## Development Roadmap
