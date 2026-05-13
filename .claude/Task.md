@@ -91,6 +91,10 @@
 - [2026-05-14] PR-READY-FOR-REVIEW: #22 — ksangjo/feat/sj-0512-dbspeed → develop, "refactor: optimize full-stack data flow and caching architecture". +641/-190, 9 files. CI=all green (Backend pytest+migrations SUCCESS, Frontend lint+build SUCCESS, Vercel + comments SUCCESS). Mergeable=UNKNOWN (GitHub still computing). 2 commits (5fd4bb7 main refactor + 4db3e4a backend pytest fix). Local checkout via `gh pr checkout 22` done; HEAD will return to `feat/sj-0512-dbspeed` after this handoff stashed so WEB-REVIEW's `/review` defaults to `origin/develop..HEAD` = PR diff. Admin: trigger `/review` in WEB-REVIEW per hybrid policy; on PASS → Mode 2 step 4 (approve + squash merge + `gh api -X DELETE refs/heads/feat/sj-0512-dbspeed` + local sync); on FAIL → Mode 2 step 5 (request-changes with collapsible report body). Working-tree handoff edits will be stashed on develop pending /review verdict.
 - [2026-05-14] PR-CHANGES-REQUESTED: #22 — 0 CRIT / 1 MAJ / 4 MIN per .claude/reviews/4db3e4a.md. `gh pr review 22 --request-changes --body-file /tmp/pr22-fail-comment.md` posted using canonical git-publisher.md:158-178 format (header verdict + counts + top-3 + collapsible <details> with full review body). Verified `reviewDecision=CHANGES_REQUESTED`. Top 3 surfaced: (MAJOR) `.env.example` deletion vs README/CONTRIBUTING references — onboarding break; (MINOR) `card_cache_ttl` not declared in RECOMMENDATION dict; (MINOR) `views/swipe.py:619-628` narrows action-card fallback for MMR-returns-ID-but-DB-missing. 2 additional MINOR folded into body: LocMemCache MAX_ENTRIES=300 vs ~150-per-session footprint thrash; `bcard:<id>` cache key missing schema version for future Redis swap. Part B browser verification SKIPPED per review.md Step A6 (MAJOR ≥ 1 short-circuits to FAIL). Mode 2 step 6 cleanup executed: checkout develop + delete LOCAL `feat/sj-0512-dbspeed` (NOT remote — author still owns it). Remote `origin/feat/sj-0512-dbspeed` preserved for author's next push after addressing findings.
 - [2026-05-14] REPORTER-DONE: c8a5bc7 — Report.md Last Updated synced (PR #24: lean workflow rename — `.claude/agents/team-{back,front}.md` → `.claude/codex/{backend,frontend}-worker.md`, 4 new lean tools cmux_lean_setup/dispatch-codex-task/codex-task-template/print-claude-codex-handoff); fixed stale `.claude/agents/team-back.md`/`team-front.md` paths in Report.md structure table (rows 135-136) + Phase 13-15 bullet (line 476); 2 external PRs triaged (PR #23 base-ref violation → request-changes; PR #22 REVIEW-FAIL 0/1/4 → request-changes); Task.md handoffs trimmed 51→30 (oldest 21 archived to `.claude/handoffs-archive/2026-05.md`); algorithm.md skipped (no RECOMMENDATION dict changes this session).
+- [2026-05-14] PR-OPENED: #25 — feature/admin-reporter-sync → develop, 1 commits (4998ccf "docs(reporter): post-PR#24 sync — lean workflow rename live + 2 external PRs triaged"), CI running. URL: https://github.com/hongikarchi/archi-tinder/pull/25. Diff: 6 files +334/-140 (Report.md sync + Task.md handoff archive + 2 review artifacts). /review skipped per CLAUDE.md Rule 2 (pure docs sweep). Canonical Mode 1 step 7 on green.
+- [2026-05-14] PR-CI-GREEN: #25 — Backend 2m7s, Frontend 13s, Vercel + comments all SUCCESS (initial poll exited early due to checks-registered-later race; re-polled with `length(map(select(.bucket=="pending")))==0` predicate which waited correctly).
+- [2026-05-14] PR-MERGED: #25 — squashed into develop (25c14bb) via `gh pr merge 25 --squash --admin` (no --delete-branch). Mode 1 step 7 sequence clean: no stash needed (working tree clean) → merge → `gh api -X DELETE refs/heads/feature/admin-reporter-sync` HTTP 204 → checkout develop → pull (fast-forward c8a5bc7..25c14bb, 6 files +334/-140) → branch -D → fetch --prune → no stash to pop. Reporter sync of PR #24 + 2 external PR triages now live on develop.
+- [2026-05-14] REPLAN-LANDED: S1 of 2026-05-14 tab 3-structure replan committed on feature/admin-replan-tab3. Files: `.claude/plans/replan-2026-05-14-tab3-restructure.md` (new, full push roadmap S1-S8 + /compact boundaries + decisions Q1-Q6), `docs/COLLAB_HANDOFF.md` (new, collaborator on-ramp pointing to CLAUDE.md/CONTRIBUTING.md/database-schema.md), `.claude/Task.md` Roadmap Phase 19-26 entries added + Phase 16-18 marked as superseded/scope-revised + B3v2 entry routed to S3. /review skipped per CLAUDE.md Rule 2 (pure docs). Ready for git-publisher Mode 1 push+PR.
 ---
 
 ## Development Roadmap
@@ -171,15 +175,20 @@
 41. **SOC2** -- "Love this!" reaction model + API -- COMPLETED 2026-05-02
 42. **SOC3** -- Profile/board: follow button + reaction button UI -- COMPLETED 2026-05-06
 
-### Phase 16: Recommendation Expansion -- PENDING
-> Spec: `docs/specs/phase16-recommendation-expansion.md`. Resolve §2 dimensions in admin dialogue before implementation.
-43. **REC1** -- Post-swipe "MATCHED!" screen redesign + persona report integration
-44. **REC2** -- Firm recommendation logic (user taste vector ↔ firm project vector matching)
-45. **REC3** -- User recommendation logic (taste vector similarity)
-46. **REC4** -- Landing tab UI / `GET /api/v1/landing/{sessionId}/` backend (Related Projects / Offices / Users)
+### Phase 16: Recommendation Expansion -- PENDING (revised under 2026-05-14 replan)
+> Spec: `docs/specs/phase16-recommendation-expansion.md`. REC1 supersedes the
+> swipe end-flow rework now scoped under **Push S3** (see plan
+> `.claude/plans/replan-2026-05-14-tab3-restructure.md`).
+> REC2/REC3/REC4 retargeted to the Profile tab "사무소 추천" button (Q3 decision)
+> rather than a dedicated Landing tab. Spec body needs S8 sweep.
+43. **REC1** -- Post-swipe end screen consolidation (now executed in **S3**)
+44. **REC2** -- Firm recommendation logic (Profile-button-triggered)
+45. **REC3** -- User recommendation logic (Profile-button-triggered)
+46. **REC4** -- ~~Landing tab~~ → folded into S6 (Profile tab integration)
 
 ### Phase 17: LLM Reverse-Questioning -- PENDING
-> Spec: `docs/specs/phase17-llm-reverse-q.md`. §4 cross-spec interaction with chat phase TTFC budget — load-bearing decision.
+> Spec: `docs/specs/phase17-llm-reverse-q.md`. Replan Q6 confirms Option A —
+> reverse-question in first 0-2 turns of Taste-tab LLM chat. Spec needs S8 sweep.
 47. **LLM1** -- Chat reverse-question prompt design (identify user needs)
 48. **LLM2** -- Persona classification logic (P1-P4 differentiation; populates `UserProfile.persona_summary`)
 49. **LLM3** -- Per-persona UI branching (recommendation card type switching)
@@ -190,8 +199,20 @@
 51. **EXT2** -- Article list UI (inside firm profile)
 52. **EXT3** -- External DM link UI (Instagram, email — on profile)
 
+### Phase 19-26: 2026-05-14 Replan (Tab 3-Structure Transition) -- PENDING
+> Full plan: `.claude/plans/replan-2026-05-14-tab3-restructure.md`.
+> Pre-empts Phase 16-18 ordering — execute S1-S8 sequentially before reopening Phase 16-18 dimensions.
+53. **S1** -- Plan + collaborator on-ramp doc (this push)
+54. **S2** -- DB new-schema integration *(triggers Make DB owner fetch)*
+55. **S3** -- Swipe end-flow consolidation (Issue 2: ActionCard removal + end-screen rewrite)
+56. **S4** -- Progress UI single source (Issue 1: ConfidenceBar/round-counter merge)
+57. **S5** -- Library → Profile absorb (Issue 3: real data + redirect)
+58. **S6** -- 4-tab → 3-tab cutover (Discovery / Taste / Profile)
+59. **S7** -- Discovery Swipe tab (new infinite-scroll page + save flow + surprise board)
+60. **S8** -- Roadmap / spec sweep (Phase 16-18 reconciliation, stale docs cleanup)
+
 ### Carryover (deferred non-blocking from prior reviews)
-53. **SOC3-back-blocked** -- Original blocker was Neon DB DNS in codex sandbox. Revisit when next Office model migration is needed; resolution path documented in `.claude/codex/backend-worker.md` § "DB-touch handoff".
+61. **SOC3-back-blocked** -- Original blocker was Neon DB DNS in codex sandbox. Revisit when next Office model migration is needed; resolution path documented in `.claude/codex/backend-worker.md` § "DB-touch handoff".
 
 ---
 
@@ -211,10 +232,13 @@
 
 ## Open
 
-#### B3v2. Exploring phase pool exhaustion returns null (LOW PRIORITY -- deferred)
+#### B3v2. Exploring phase pool exhaustion returns null (superseded by S3)
 `views.py:436-437` farthest_point_from_pool returns None when pool exhausted.
-analyzing phase has action card fallback but exploring phase does not.
-- [ ] exploring phase pool exhaustion -> action card or converged transition
+The 2026-05-14 replan **S3** push rewrites end-of-session handling and
+deprecates `build_action_card`; pool-exhaustion now routes to the new
+end-screen via `can_continue: false` + `is_analysis_completed: true`.
+Close this entry when S3 lands.
+- [ ] exploring phase pool exhaustion -> handled by S3 end-screen rewrite
 
 ### Algorithm
 
