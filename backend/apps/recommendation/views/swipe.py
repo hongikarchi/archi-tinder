@@ -37,6 +37,24 @@ def _merge_buffer_into_exposed(exposed_ids, client_buffer_ids):
     return merged
 
 
+# ── Async telemetry thread ────────────────────────────────────────────────────
+
+def _emit_telemetry_thread(swipe_kwargs, confidence_kwargs):
+    """Fire-and-forget: emit swipe + confidence_update events off the hot path.
+    Saves ~4 DB round-trips (~1200ms on Neon) from the swipe response time.
+    """
+    from django.db import connection as _db_connection
+    _db_connection.close()
+    try:
+        event_log.emit_swipe_event(**swipe_kwargs)
+        if confidence_kwargs is not None:
+            event_log.emit_event('confidence_update', **confidence_kwargs)
+    except Exception as exc:
+        logger.warning('Telemetry thread failed: %s', exc)
+    finally:
+        _db_connection.close()
+
+
 # ── IMP-8: async prefetch background thread ───────────────────────────────────
 
 def _async_prefetch_thread(
@@ -786,61 +804,62 @@ class SwipeView(APIView):
             ).hexdigest()[:16]
         except Exception:
             pass
-        event_log.emit_swipe_event(
-            session=session,
-            user=profile,
-            direction=action,
-            card_id=building_id,
-            intensity=_intensity,
-            rank_in_pool=_rank_in_pool,
-            timing_breakdown=_timing_breakdown,
-            idempotency_key=idempotency_key,
-            # IMP-7 cache telemetry fields (spec v1.6 §6)
-            cache_hit=_cache_misses == 0,
-            cache_source='precompute' if _cache_misses == 0 else 'fresh',
-            cache_partial_miss_count=_cache_misses,
-            prefetch_strategy=prefetch_strategy,  # 'sync' (default) or 'async-thread' (IMP-8)
-            db_call_count=None,              # IMP-9 verify; null until connection-level instrumentation added
-            pool_escalation_fired=_pool_escalation_fired,
-            pool_signature_hash=_pool_sig,
+        logger.info(
+            '[SWIPE TIMING] lock=%dms embed=%dms select=%dms prefetch=%dms total=%dms | phase=%s cache_hit=%s',
+            _timing_breakdown['lock_ms'],
+            _timing_breakdown['embed_ms'],
+            _timing_breakdown['select_ms'],
+            _timing_breakdown['prefetch_ms'],
+            _timing_breakdown['total_ms'],
+            saved_phase,
+            _cache_misses == 0,
         )
 
-        # Compute user-facing confidence for response (C-1)
+        # Compute user-facing confidence (Python-only, fast — must stay on hot path)
         confidence = engine.compute_confidence(
             session.convergence_history,
             RC.get('convergence_threshold', 0.08),
             window=RC.get('convergence_window', 3),
         )
 
-        # Emit confidence_update event (Spec v1.2 §6 + dislike-bias telemetry)
+        # Build telemetry kwargs and fire off background thread.
+        # Keeps ~4 Neon DB round-trips (~1200ms) off the response path.
+        _swipe_telem = dict(
+            session=session, user=profile, direction=action, card_id=building_id,
+            intensity=_intensity, rank_in_pool=_rank_in_pool,
+            timing_breakdown=_timing_breakdown, idempotency_key=idempotency_key,
+            cache_hit=_cache_misses == 0,
+            cache_source='precompute' if _cache_misses == 0 else 'fresh',
+            cache_partial_miss_count=_cache_misses,
+            prefetch_strategy=prefetch_strategy,
+            db_call_count=None,
+            pool_escalation_fired=_pool_escalation_fired,
+            pool_signature_hash=_pool_sig,
+        )
+        _confidence_telem = None
         if confidence is not None:
-            # Best-effort dominant attrs from pref_vector: top-K dims by absolute magnitude.
-            # Returns dimension indices for now; Sprint 4 will wire attribute-name mapping.
             dominant_attrs = []
             if session.preference_vector:
                 pref = np.asarray(session.preference_vector, dtype=float)
                 if pref.size > 0:
                     top_idxs = np.argsort(np.abs(pref))[-3:][::-1]
                     dominant_attrs = [int(i) for i in top_idxs]
-            # IMP-10 / Spec v1.8 §6: 4 new Topic 06 clustering telemetry fields.
-            # Read stats set by compute_taste_centroids (called inside convergence path
-            # above at line ~646 via compute_taste_centroids, or via compute_mmr_next).
-            # We read immediately after card-selection to capture the most recent call;
-            # stats are set unconditionally by compute_taste_centroids on every execution.
             _clustering_stats = engine.get_last_clustering_stats() or {}
-            event_log.emit_event(
-                'confidence_update',
-                session=session,
-                user=profile,
+            _confidence_telem = dict(
+                session=session, user=profile,
                 confidence=round(float(confidence), 4),
                 dominant_attrs=dominant_attrs,
-                action=action,  # 'like' or 'dislike' -- Spec v1.2 dislike-bias telemetry
-                # Topic 06 fields (Spec v1.8 §6)
+                action=action,
                 cluster_count_used=_clustering_stats.get('cluster_count_used'),
                 silhouette_score=_clustering_stats.get('silhouette_score'),
                 soft_relevance_used=_clustering_stats.get('soft_relevance_used', False),
                 n_likes_at_decision=_clustering_stats.get('n_likes_at_decision'),
             )
+        threading.Thread(
+            target=_emit_telemetry_thread,
+            args=(_swipe_telem, _confidence_telem),
+            daemon=True,
+        ).start()
 
         return Response({
             'accepted': True,
@@ -850,5 +869,5 @@ class SwipeView(APIView):
             'prefetch_image': prefetch_card,
             'prefetch_image_2': prefetch_card_2,
             'is_analysis_completed': False,
-            'confidence': confidence,  # float [0,1] or null per spec C-1
+            'confidence': confidence,
         })

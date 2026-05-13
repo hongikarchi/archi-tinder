@@ -8,9 +8,9 @@ import FavoritesPage from '../pages/FavoritesPage.jsx'
 export default function MainLayout({
   theme, onToggleTheme, userId, onLogout,
   projects, activeProject, activeProjectId,
-  currentCard, sessionProgress, isSessionCompleted, isSwipeLoading, isResultLoading,
+  currentCard, cardResetToken, sessionProgress, isSessionCompleted, isSwipeLoading, isResultLoading,
   onSwipe, onViewResults, onResumeProject, onDeleteProject, onGenerateReport, onImageGenerated,
-  onToggleBookmark,
+  onToggleBookmark, swipeDebug,
 }) {
   const location = useLocation()
   const navigate = useNavigate()
@@ -61,6 +61,7 @@ export default function MainLayout({
         <SwipePage
           key={activeProjectId}
           currentCard={currentCard}
+          cardResetToken={cardResetToken}
           progress={sessionProgress}
           isCompleted={isSessionCompleted}
           isLoading={isSwipeLoading}
@@ -123,6 +124,7 @@ export default function MainLayout({
             round: sessionProgress.current,
             total: sessionProgress.total,
           } : null}
+          swipeDebug={swipeDebug}
         />
       )}
 

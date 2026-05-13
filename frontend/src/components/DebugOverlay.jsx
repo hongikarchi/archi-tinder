@@ -13,11 +13,22 @@ function decodeJwtExp(token) {
   }
 }
 
-export default function DebugOverlay({ userId, session }) {
+function shortId(id) {
+  if (!id) return '—'
+  return id.slice(-8)
+}
+
+function ms(n, warn = 800) {
+  if (n == null) return '—'
+  const s = n + 'ms'
+  return n > warn ? `⚠${s}` : s
+}
+
+export default function DebugOverlay({ userId, session, swipeDebug }) {
   const [, setTick] = useState(0)
 
   useEffect(() => {
-    const id = setInterval(() => setTick(t => t + 1), 2000)
+    const id = setInterval(() => setTick(t => t + 1), 1000)
     return () => clearInterval(id)
   }, [])
 
@@ -27,47 +38,122 @@ export default function DebugOverlay({ userId, session }) {
   const jwtExp = token ? decodeJwtExp(token) : 'none'
   const lastCall = getLastCall()
 
+  const c = { color: '#6ee7b7', fontWeight: 'bold' }
+  const dim = { color: '#9ca3af' }
+  const warn = { color: '#fbbf24' }
+  const err = { color: '#f87171' }
+
   const containerStyle = {
     position: 'fixed',
     bottom: 80,
     left: 12,
     zIndex: 9999,
-    background: 'rgba(0,0,0,0.85)',
+    background: 'rgba(0,0,0,0.9)',
     fontFamily: 'monospace',
     fontSize: 10,
     borderRadius: 8,
     padding: '10px 12px',
-    maxWidth: 320,
+    maxWidth: 380,
     border: '1px solid rgba(255,255,255,0.15)',
     color: '#d1fae5',
-    lineHeight: 1.6,
+    lineHeight: 1.7,
     pointerEvents: 'none',
   }
 
-  const labelStyle = { color: '#6ee7b7', fontWeight: 'bold' }
-  const dimStyle = { color: '#9ca3af' }
+  // -- Queue section --
+  let queueSection = null
+  if (swipeDebug) {
+    const { log, swipeLock, imagePreloadCache, currentCard, prefetchCard, prefetchCard2, isSwipeLoading } = swipeDebug
+    const cacheSize = imagePreloadCache?.current?.size ?? '?'
+    const locked = swipeLock?.current ? <span style={warn}>LOCKED</span> : <span style={dim}>free</span>
+    const loading = isSwipeLoading ? <span style={warn}>LOADING</span> : <span style={dim}>idle</span>
+
+    function cardLine(label, card) {
+      if (!card) return <div><span style={dim}>{label}:</span> <span style={dim}>null</span></div>
+      const cached = imagePreloadCache?.current?.has(card.image_url)
+      const isAct = card.building_id === '__action_card__' || card.card_type === 'action'
+      return (
+        <div>
+          <span style={dim}>{label}:</span>{' '}
+          <span style={{ color: isAct ? '#a78bfa' : '#d1fae5' }}>{shortId(card.image_id)}</span>
+          {isAct ? <span style={{ color: '#a78bfa' }}> [action]</span> : (
+            cached
+              ? <span style={{ color: '#6ee7b7' }}> ✓</span>
+              : <span style={warn}> ✗miss</span>
+          )}
+        </div>
+      )
+    }
+
+    // Swipe log
+    const entries = (log?.current ?? []).slice().reverse()
+    const logRows = entries.map((e, i) => {
+      const color = e.err ? err : (e.totalMs > 1500 ? warn : dim)
+      const instant = e.instant
+        ? <span style={{ color: '#6ee7b7' }}>⚡{e.instantReason}</span>
+        : <span style={warn}>⏳{e.instantReason}</span>
+      const fallbackTag = e.fallback ? <span style={warn}> ↺fb</span> : null
+      const blockedTag = e.nextBlocked ? <span style={{ color: '#a78bfa' }}> 🚫act</span> : null
+      const errTag = e.err ? <span style={err}> ERR:{e.err.slice(0, 20)}</span> : null
+      const preTag = e.preloadMs != null
+        ? <span style={e.preloadMs > 1500 ? warn : dim}> pl:{ms(e.preloadMs, 1500)}</span>
+        : null
+      return (
+        <div key={i} style={color}>
+          #{e.n} {e.action === 'like' ? '❤' : '✕'}{' '}
+          {instant}{' '}
+          <span style={dim}>api:{ms(e.apiMs, 1000)}</span>
+          {preTag}
+          {' '}<span style={dim}>→{e.nextId ?? 'null'}</span>
+          {blockedTag}{fallbackTag}{errTag}
+          {' '}<span style={{ color: '#6b7280' }}>[{e.totalMs}ms]</span>
+        </div>
+      )
+    })
+
+    queueSection = (
+      <>
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 4, paddingTop: 4 }}>
+          <span style={c}>[QUEUE]</span>{' '}
+          lock:{locked} load:{loading} cache:{cacheSize}
+        </div>
+        {cardLine('cur ', currentCard)}
+        {cardLine('pf  ', prefetchCard)}
+        {cardLine('pf2 ', prefetchCard2)}
+        {entries.length > 0 && (
+          <>
+            <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 4, paddingTop: 4 }}>
+              <span style={c}>[SWIPE LOG]</span>
+            </div>
+            {logRows}
+          </>
+        )}
+      </>
+    )
+  }
 
   return (
     <div style={containerStyle}>
-      <div><span style={labelStyle}>[DEBUG]</span> {userId || 'not logged in'}</div>
-      <div><span style={dimStyle}>JWT exp:</span> {jwtExp}</div>
+      <div><span style={c}>[DEBUG]</span> {userId || 'not logged in'}</div>
+      <div><span style={dim}>JWT exp:</span> {jwtExp}</div>
       {session ? (
         <div>
-          <span style={dimStyle}>Session:</span>{' '}
+          <span style={dim}>Session:</span>{' '}
           {session.id ? session.id.slice(0, 8) : '—'}{' '}
           · round {session.round ?? '?'}/{session.total ?? '?'}
         </div>
       ) : (
-        <div><span style={dimStyle}>Session:</span> none</div>
+        <div><span style={dim}>Session:</span> none</div>
       )}
       {lastCall ? (
         <div>
-          <span style={dimStyle}>Last call:</span>{' '}
+          <span style={dim}>Last call:</span>{' '}
           {lastCall.method} {lastCall.url} {lastCall.status} {lastCall.ms}ms
         </div>
       ) : (
-        <div><span style={dimStyle}>Last call:</span> none yet</div>
+        <div><span style={dim}>Last call:</span> none yet</div>
       )}
+      {queueSection}
     </div>
   )
 }
