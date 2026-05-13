@@ -120,8 +120,12 @@ export default function MainLayout({
           userId={userId}
           session={sessionProgress ? {
             id: activeProject?.sessionId || null,
-            round: sessionProgress.current,
-            total: sessionProgress.total,
+            round: sessionProgress.current_round,
+            total: sessionProgress.total_rounds,
+            phase: sessionProgress.phase,
+            like_count: sessionProgress.like_count,
+            confidence: sessionProgress.confidence,
+            can_continue: sessionProgress.can_continue,
           } : null}
         />
       )}
