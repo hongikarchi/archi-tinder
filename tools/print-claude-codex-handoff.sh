@@ -82,7 +82,7 @@ Please do the following:
 3. If adopting, update canonical Claude-owned docs/settings:
    - CLAUDE.md
    - .claude/SESSION_PROTOCOL.md
-   - .claude/agents/team-back.md and team-front.md if needed
+   - .claude/codex/backend-worker.md and frontend-worker.md if needed
    - any Claude memory or agent setting that conflicts with the new protocol
 4. Reconcile the new tools with existing cmux workflow:
    - tools/cmux_setup.sh remains the full 5-tab option.

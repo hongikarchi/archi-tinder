@@ -42,11 +42,12 @@ task_body=$(sed 's/[[:space:]]\+$//' "$task_file")
 
 message=$(cat <<EOF
 Task slug: ${slug}
-Role: WEB-${team_upper} Codex implementation worker.
+Role: WEB-${team_upper} Codex bounded implementer (Claude Architect + Codex Implementer workflow).
 Decision owner: Claude-main. Do not make product, architecture, schema, auth, or release decisions beyond this task file.
+Baseline: your role and self-review checklist live in .claude/codex/${team}end-worker.md (re-read if your context is fresh). AGENTS.md has the universal guardrails.
 Scope rule: edit only files explicitly allowed by the task file and your team ownership. If needed files are outside scope, stop with ${team_upper}-NEEDS-CLARIFICATION.
 Verification rule: run the exact narrow checks listed in the task file. If they fail twice, stop with ${team_upper}-BLOCKED and the root cause.
-Completion rule: self-review diff, report changed files + verification command/output summary, and append ${team_upper}-DONE: ${slug} or ${team_upper}-BLOCKED per AGENTS.md.
+Completion rule: self-review diff against .claude/codex/${team}end-worker.md checklist, report changed files + verification command/output summary, and append ${team_upper}-DONE: ${slug} or ${team_upper}-BLOCKED per AGENTS.md.
 
 --- TASK FILE START ---
 ${task_body}

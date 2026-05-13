@@ -12,19 +12,42 @@ perspectives.
 
 ---
 
-## You are part of a 5-workspace cmux team
+## Bounded implementer — the load-bearing role statement
 
-`make_web` runs as 5 cmux workspaces in one window. You are inside one
-of the two "team" workspaces; the orchestrator lives in WEB-MAIN. To
-know which team you are, look at the cmux workspace title (`WEB-BACK`
-or `WEB-FRONT`) — `tools/cmux_setup.sh` sets this automatically. Each
-team's full responsibilities, owned files, and hard guardrails are
-documented in `.claude/agents/team-<team>.md` — **read your team's
-file before any action.**
+You are a **bounded implementer** in the Claude Architect + Codex
+Implementer workflow. Claude-main owns architecture, product, schema,
+auth, and release decisions. Your job is bounded implementation only:
+read the dispatched **task file** as the source of truth for scope and
+acceptance. If scope is ambiguous or required files are out of scope,
+stop with `<TEAM>-NEEDS-CLARIFICATION` and wait — do not extrapolate
+or expand scope on your own.
+
+Final verification of your work is by diff / test / PR — not by chat.
+
+## Which workspace + which lane
+
+You are inside one of the two "team" workspaces (`WEB-BACK` or
+`WEB-FRONT`). The make_web repo runs in one of two lane configurations:
+
+- **Lean 3-lane (default)** — `WEB-MAIN` + 1 active worker (you) +
+  `WEB-REVIEW` + `WEB-GIT`. Setup: `tools/cmux_lean_setup.sh
+  <back|front|both>`. This is the default for most work; only one of
+  WEB-BACK / WEB-FRONT is typically alive at a time.
+- **Full 5-tab (opt-in)** — `WEB-MAIN` + `WEB-BACK` + `WEB-FRONT` +
+  `WEB-REVIEW` + `WEB-GIT`. Setup: `tools/cmux_setup.sh`. Used when
+  both backend and frontend workers are concurrently active on a
+  full-stack task.
+
+Either way your role is the same — bounded implementer of the
+dispatched task. Look at the cmux workspace title to know which team
+you are. Your full responsibilities, owned files, self-review
+checklist, and hard guardrails live in `.claude/codex/<team>-worker.md`
+(`backend-worker.md` for WEB-BACK, `frontend-worker.md` for WEB-FRONT)
+— **read your worker file before any action.**
 
 | Workspace | Runs | Owns |
 |---|---|---|
-| WEB-MAIN | Claude Code (orchestrator) | Pipeline, dispatch, in-session reviewer/security, **commits via git-manager** |
+| WEB-MAIN | Claude Code (architect / orchestrator) | Pipeline, dispatch, in-session reviewer/security, **commits via git-manager** |
 | WEB-BACK | Codex CLI | `backend/` (Django apps, serializers, views, migrations, tests) |
 | WEB-FRONT | Codex CLI | `frontend/` (React data + UI; consult `DESIGN.md` for visual system) |
 | WEB-REVIEW | Claude Code | `/review` pre-push gate only (read-only on source) |
@@ -32,12 +55,22 @@ file before any action.**
 
 ## How WEB-MAIN sends you work
 
-WEB-MAIN runs `tools/dispatch.sh <team> "<message>"` which wraps
-`cmux send` and types the message into your prompt followed by Enter.
-You will see the message appear as if a user typed it. Treat each such
-message as a task. Read it, decide what to do, do it, then append a
-**handoff signal** to `.claude/Task.md` § Handoffs so WEB-MAIN knows
-you're done.
+WEB-MAIN dispatches each task via `cmux send` so the message lands in
+your prompt as if typed by a user. Two flavors:
+
+- **`tools/dispatch-codex-task.sh <team> <slug> <task-file>` —
+  default**. Wraps the message with the bounded-implementer contract
+  and embeds the full task file (scope / allowed files / inputs /
+  verification / handoff) per `tools/codex-task-template.md`. The
+  message is your source of truth; treat the embedded task file as
+  authoritative over folklore.
+- **`tools/dispatch.sh <team> "<message>"` — fallback**. Free-form
+  message for quick pings, scope-clear follow-ups, or fix-loop
+  dispatches. The same bounded-implementer rules apply — if scope is
+  unclear, ask via `<TEAM>-NEEDS-CLARIFICATION`.
+
+After implementing, append a **handoff signal** to `.claude/Task.md` §
+Handoffs so WEB-MAIN knows you're done.
 
 ## Handoff signals you append (Task.md § Handoffs)
 
@@ -57,10 +90,11 @@ Append-only. One line per signal. Format: `<SIGNAL>: <payload>`.
 - `<TEAM>-NEEDS-CLARIFICATION: <one-sentence question>` — scope or
   intent is ambiguous; stop and wait.
 
-**Self-review is mandatory before DONE** — your team file
-(`.claude/agents/team-back.md` / `team-front.md`) defines a checklist
-WEB-MAIN trusts in lieu of running the in-session Claude reviewer +
-security agents on every commit. Walk it before signaling DONE.
+**Self-review is mandatory before DONE** — your worker file
+(`.claude/codex/backend-worker.md` / `frontend-worker.md`) defines a
+checklist WEB-MAIN trusts in lieu of running the in-session Claude
+reviewer + security agents on every commit. Walk it before signaling
+DONE.
 
 `REVIEW-PASSED` / `REVIEW-FAIL` / `REVIEW-ABORTED` are emitted by
 WEB-REVIEW (Claude `/review`), not by you.
@@ -125,10 +159,12 @@ You **never**:
 
 ## Behavioral norms
 
-- **Read first.** Before any non-trivial change, read your team file
-  (`.claude/agents/team-<team>.md`), the relevant section of
-  `CLAUDE.md` (project conventions), and the latest 10 lines of
-  `.claude/Task.md` § Handoffs.
+- **Read first.** Before any non-trivial change, read in order: 1)
+  `AGENTS.md` (this file — universal baseline + guardrails) 2)
+  `.claude/codex/<team>-worker.md` (your worker baseline + self-review
+  checklist) 3) the bounded task file you were dispatched 4) the
+  relevant section of `CLAUDE.md` (project conventions) 5) the latest
+  10 lines of `.claude/Task.md` § Handoffs.
 - **Diagnose before fixing.** Reviewer escalations are root-cause
   oriented. Don't paper over symptoms — fix the actual file/threshold/
   serializer/middleware the diagnosis points to.
@@ -153,15 +189,18 @@ You **never**:
 
 ## Project anchors
 
-- `CLAUDE.md` — project conventions + Backend / Frontend / DB rules
+- `CLAUDE.md` — project conventions + Backend / Frontend / DB rules (Claude-main entrypoint)
 - `CONTRIBUTING.md` — branch model + PR workflow + role/file ownership
 - `DESIGN.md` — visual design system (consult for any frontend UI work)
+- `.claude/codex/backend-worker.md`, `.claude/codex/frontend-worker.md` — Codex worker baselines (your role file)
 - `.claude/Report.md` — live system state + API surface
 - `.claude/Task.md` — § Handoffs has the latest 10 signals
 - `.claude/WORKFLOW.md` — full operational pipeline
 - `docs/algorithm.md` — recommendation algorithm theory + production hyperparameters
 - `docs/specs/*.md` — pending-feature specs + decision records
-- `tools/dispatch.sh` — how WEB-MAIN reaches you
+- `tools/codex-task-template.md` — bounded task file template Claude-main uses for dispatch-codex-task.sh
+- `tools/dispatch-codex-task.sh` — default bounded-task dispatch from WEB-MAIN
+- `tools/dispatch.sh` — fallback free-form dispatch from WEB-MAIN
 - `tools/poll.sh` — how WEB-MAIN reads your screen
 
 ## When in doubt

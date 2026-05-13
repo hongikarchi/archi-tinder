@@ -9,8 +9,10 @@
 ## Handoffs
 
 > Short-lived cross-terminal signals for the **review / push** cycle.
-> Each terminal (main / review) reads this section at session start.
+> Each terminal (main / review / git / codex workers) reads this section at session start.
 > Oldest entries expire naturally — reporter trims to ~30 most recent on session-end pass.
+>
+> Lane note (2026-05-13): **lean 3-lane is the default** (WEB-MAIN + 1 Codex worker + WEB-REVIEW + WEB-GIT, set up via `tools/cmux_lean_setup.sh <back|front|both>`). Full 5-tab is opt-in via `tools/cmux_setup.sh` for full-stack concurrent work. Signal vocabulary is identical across both lanes — only the worker baseline path changed (`.claude/codex/<team>-worker.md`, formerly `.claude/agents/team-<team>.md`).
 >
 > Signal types for this section:
 >
@@ -97,6 +99,9 @@
 - [2026-05-11] BUG-4-ROOT-CAUSE-FIXED: PR #19 empirical finding (`gh api PUT` also auto-deletes head branch) revealed that Bug #4's original diagnosis ("`gh pr merge --delete-branch=false` flag ignored") was the symptom, not the cause. Real root cause: GitHub repo-level setting `delete_branch_on_merge: true` which fires on EVERY merge regardless of API path (`gh pr merge`, `gh api PUT`, web UI). Permanent fix applied: `gh api -X PATCH repos/hongikarchi/archi-tinder --field delete_branch_on_merge=false`. Verified `delete_branch_on_merge: False`. Trade-off: feature branches no longer auto-delete on origin → explicit `gh api -X DELETE refs/heads/<branch>` added to git-publisher.md Mode 1 step 7 as canonical cleanup. Deploy PRs (develop→main) now safe with any merge API — `origin/develop` preserved by repo-setting guarantee, no verify-and-recover dance. Bug #4 fully resolved at root cause. git-publisher.md Bug #4 section rewritten + postmortem updated. Working on feature/admin-bug-4-root-cause-fix; will push + PR + merge in this session for end-to-end empirical validation (head branch should survive after merge — this is the dogfood that closes Bug #4).
 - [2026-05-11] PR-CI-GREEN: #20 — Backend pytest + migrations 2m9s, Frontend 15s, Vercel + comments all SUCCESS.
 - [2026-05-11] PR-MERGED: #20 — squashed into develop (249a8d5) via `gh pr merge 20 --squash --admin` (NO `--delete-branch` flag per new Mode 1 doc — repo setting now handles branch retention). 🎯 **EMPIRICAL PROOF Bug #4 ROOT CAUSE FIX**: immediately after squash merge, `gh api repos/hongikarchi/archi-tinder/branches/feature/admin-bug-4-root-cause-fix --jq .name` returned `"feature/admin-bug-4-root-cause-fix"` (NOT 404) — head branch SURVIVED on origin. This is dispositive proof that the root cause was the repo-level `delete_branch_on_merge: true` setting (now `false`), NOT the gh CLI `--delete-branch=false` flag behavior. Prior Bug #4 diagnosis ("flag ignored under --admin") and Bug #4 codified Option A (gh api PUT) were both addressing the SYMPTOM not the cause; the surviving head branch via standard `gh pr merge --admin` (no flag) confirms this. Explicit Mode 1 step 7 cleanup executed end-to-end: (a) `gh api -X DELETE repos/.../git/refs/heads/feature/admin-bug-4-root-cause-fix` → HTTP 204 OK; (b) local sync: stash → checkout develop → pull → branch -D → fetch --prune → stash pop, all clean; (c) post-cleanup verify: same `gh api branches/...` now returns `404 Branch not found` ✓. Local develop fast-forwarded `cc18fb9..249a8d5` (3 files, +60/-33: .claude/agents/git-publisher.md Mode 1 steps 6-8 rewrite + Bug #4 section, postmortem Bug #4 root-cause entry, Task.md handoff sweep). **Bug #4 ROOT cause now closed empirically and dispositively** — the Mode 1 step 7 cleanup pattern (no `--delete-branch` flag + explicit `gh api DELETE` + local sync) is the new canonical post-merge sequence; Option A (`gh api PUT`) remains documented as the safer-for-Mode-3 path but is no longer needed in Mode 1 just to preserve the source branch.
+- [2026-05-11] PR-OPENED: #21 — feature/admin-task-md-cleanup → develop, 1 commits (5b669f5 "chore(task.md): sweep PR#20 handoffs + drop 2 stale entries"), CI running. URL: https://github.com/hongikarchi/archi-tinder/pull/21. Diff: +4/-4, 1 file (.claude/Task.md only — removes MINOR-3-PACK from Carryover, drops stale Bug #5 SESSION-START-TODO from Resolved, sweeps WIP PR#20 lifecycle handoffs). /review skipped per CLAUDE.md Rule 2 (docs only, zero source code). Polling CI in background (task `bz5tvpy79`); on green, will merge via Mode 1 step 7 canonical sequence: `gh pr merge 21 --squash --admin` (NO --delete-branch flag) + `gh api -X DELETE refs/heads/feature/admin-task-md-cleanup` + local sync (stash → checkout develop → pull → branch -D → fetch --prune → stash pop). PR targets develop → Bug #5 reset N/A.
+- [2026-05-11] PR-CI-GREEN: #21 — Backend pytest + migrations 2m14s, Frontend 12s, Vercel + comments all SUCCESS.
+- [2026-05-11] PR-MERGED: #21 — squashed into develop (f08dc7a) via `gh pr merge 21 --squash --admin` (no --delete-branch). Canonical Mode 1 step 7 sequence executed cleanly: stash → merge → `gh api -X DELETE refs/heads/feature/admin-task-md-cleanup` (HTTP 204) → checkout develop → pull (fast-forward `249a8d5..f08dc7a`, 1 file +4/-4) → branch -D → fetch --prune (origin/feature/admin-task-md-cleanup deleted) → stash pop. Zero issues. PR #20's Mode 1 step 7 pattern continues to work as documented; this is the second consecutive empirical validation of the post-root-cause-fix workflow.
 ---
 
 ## Development Roadmap
@@ -197,7 +202,7 @@
 52. **EXT3** -- External DM link UI (Instagram, email — on profile)
 
 ### Carryover (deferred non-blocking from prior reviews)
-53. **SOC3-back-blocked** -- Original blocker was Neon DB DNS in codex sandbox. Revisit when next Office model migration is needed; resolution path documented in `.claude/agents/team-back.md` § "DB-touch handoff".
+53. **SOC3-back-blocked** -- Original blocker was Neon DB DNS in codex sandbox. Revisit when next Office model migration is needed; resolution path documented in `.claude/codex/backend-worker.md` § "DB-touch handoff".
 
 ---
 

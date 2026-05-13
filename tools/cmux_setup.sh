@@ -10,10 +10,10 @@
 #   WEB-GIT      — Claude Code (Sonnet git-publisher: push/PR/merge/external)
 #
 # Each new workspace's first agent message is a self-discovery prompt
-# that anchors it to AGENTS.md (codex auto-loads from cwd) + its team
-# file (.claude/agents/team-<team>.md or git-publisher.md). Without
-# this, sessions would start blank and act inconsistently across
-# reboots / first-runs.
+# that anchors it to AGENTS.md (codex auto-loads from cwd) + its worker
+# file (.claude/codex/<team>-worker.md for codex teams; git-publisher.md
+# for WEB-GIT). Without this, sessions would start blank and act
+# inconsistently across reboots / first-runs.
 #
 # Idempotent: re-running adds missing workspaces only; existing ones
 # are left alone (won't kill running agents or re-send init prompts).
@@ -39,7 +39,7 @@ init_prompt_codex() {
     local team_upper
     team_upper=$(echo "$team_lower" | tr '[:lower:]' '[:upper:]')
     cat <<EOF
-You are WEB-${team_upper}, one of the 5 cmux workspaces in the make_web stateful multi-team architecture (WEB-MAIN + WEB-BACK + WEB-FRONT + WEB-REVIEW + WEB-GIT). Before doing any work, read these files in order: 1) AGENTS.md (your baseline + hard guardrails — codex should already have auto-loaded this from cwd) 2) .claude/agents/team-${team_lower}.md (your specific role + owned files) 3) CLAUDE.md (project conventions, especially Backend/Frontend Conventions + Rules) 4) the most recent 10 lines of .claude/Task.md § Handoffs (recent state). After reading, reply with one short sentence confirming you understand your role and your hard guardrails. Then wait for WEB-MAIN to dispatch your first real task via tools/dispatch.sh.
+You are WEB-${team_upper}, one of the 5 cmux workspaces in the make_web stateful multi-team architecture (WEB-MAIN + WEB-BACK + WEB-FRONT + WEB-REVIEW + WEB-GIT) in the Claude Architect + Codex Implementer workflow. You are a bounded implementer; Claude-main owns architecture, product, schema, auth, release. Before doing any work, read these files in order: 1) AGENTS.md (your baseline + hard guardrails — codex should already have auto-loaded this from cwd) 2) .claude/codex/${team_lower}end-worker.md (your specific role + owned files + self-review checklist) 3) CLAUDE.md (project conventions, especially Backend/Frontend Conventions + Rules) 4) the most recent 10 lines of .claude/Task.md § Handoffs (recent state). After reading, reply with one short sentence confirming you understand your role and your hard guardrails. Then wait for WEB-MAIN to dispatch your first task via tools/dispatch-codex-task.sh (default, bounded task file) or tools/dispatch.sh (fallback, free-form).
 EOF
 }
 
