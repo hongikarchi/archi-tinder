@@ -61,6 +61,10 @@ expected token cost, time, risk, and decision points up front.
 
 ### 3a. Standard plan template
 
+Default plan-table 터미널 컬럼은 lean 3-lane 위주로 기록한다 (WEB-MAIN + WEB-BACK *or* WEB-FRONT 보통). 풀 5-tab은 backend·frontend 동시 작업일 때만.
+
+Codex worker 호출 step은 **bounded task file 작성 → `tools/dispatch-codex-task.sh <team> <slug> <task-file>`** 패턴이 default. 가벼운 follow-up이나 ping은 `tools/dispatch.sh <team> "<msg>"` fallback.
+
 ```markdown
 ## 작업: <한 줄 한글 요약>
 
@@ -68,14 +72,17 @@ expected token cost, time, risk, and decision points up front.
 
 | Step | 터미널 | 에이전트 / 도구 | 동작 | 토큰 추정 |
 |------|--------|----------------|------|----------|
-| 1 | WEB-MAIN | direct OR agent name | … | ~XK |
-| 2 | WEB-BACK | team-back (Codex) | … | ~YK codex-side |
-| 3 | WEB-MAIN | reviewer + security 병렬 | … | ~ZK |
+| 1 | WEB-MAIN | direct OR agent name | task file 작성 (`tools/codex-task-template.md` 복사) | ~XK |
+| 2 | WEB-MAIN | dispatch-codex-task.sh | bounded task 발송 → WEB-BACK (or WEB-FRONT) | ~1K |
+| 3 | WEB-BACK | backend-worker (Codex) | implement + self-review + BACK-DONE | ~YK codex-side, ~3-5K claude poll |
+| 4 | WEB-MAIN | reviewer + security 병렬 (risky-zone만) | … | ~ZK |
+| 5 | WEB-MAIN | git-manager | commit | ~2K |
 | ... | ... | ... | ... | ... |
 
 **합계 추정**: ~AK Claude main + ~BK codex + ~CK review = **~totalK total / push**
 **시간**: ~M-N분 (codex E + review F + CI G + 사람 결정 가변)
 **Risk**: low / medium / high — 이유 (auth touch / migration / cross-cutting / etc.)
+**Lane**: lean 3-lane (default) | full 5-tab (back+front 동시 시)
 
 ### 결정 필요 객관식 (있으면 한 번에 하나씩)
 1. <질문 1>

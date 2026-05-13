@@ -5,28 +5,29 @@
 
 ---
 
-## At-a-Glance — Five-Tab Multi-Terminal Architecture
+## At-a-Glance — Multi-Terminal Architecture (Lean default, Full opt-in)
 
-The project runs across **three Claude Code terminals** + two Codex CLI workspaces (cmux 5-tab layout). Coordination is by **handoff signals in `Task.md`** + ownership conventions documented in `CONTRIBUTING.md`.
+The project runs across **Claude Code terminals + Codex CLI workspaces** in a cmux layout. Coordination is by **handoff signals in `Task.md`** + ownership conventions documented in `CONTRIBUTING.md`. Two lane configurations exist:
+
+### Lean 3-lane (default — most work)
+
+WEB-MAIN + one Codex worker (back OR front) + WEB-REVIEW + WEB-GIT. Setup via `tools/cmux_lean_setup.sh <back|front|both>`.
 
 ```mermaid
 flowchart LR
-    subgraph T["Terminals (cmux 5-tab; current branch is whatever feature/develop/main is checked out)"]
-        Main["WEB-MAIN<br/>(Claude opus)<br/>orchestrator + makers<br/>+ git-manager (commit only)"]
-        Back["WEB-BACK<br/>(Codex CLI)<br/>team-back lead"]
-        Front["WEB-FRONT<br/>(Codex CLI)<br/>team-front lead"]
+    subgraph T["cmux Lean 3-lane (default)"]
+        Main["WEB-MAIN<br/>(Claude opus)<br/>architect / orchestrator<br/>+ git-manager (commit only)"]
+        Worker["WEB-BACK or WEB-FRONT<br/>(Codex CLI)<br/>bounded implementer"]
         Rev["WEB-REVIEW<br/>(Claude opus)<br/>/review pre-push gate"]
         Git["WEB-GIT<br/>(Claude sonnet)<br/>git-publisher: push/PR/merge"]
     end
 
-    Main -->|writes / dispatches| BE["backend/"]
-    Main -->|writes / dispatches| FE["frontend/"]
+    Main -->|writes / dispatches| BE_FE["backend/ or frontend/"]
     Main -->|writes most of| CL[".claude/"]
     Main -->|writes / updates| DOCS["docs/<br/>(specs + algorithm.md)"]
     Main -->|local commit| GIT_LOCAL[".git/HEAD<br/>(no push)"]
 
-    Back -.dispatched via cmux send.-> BE
-    Front -.dispatched via cmux send.-> FE
+    Worker -.bounded task file via dispatch-codex-task.sh.-> BE_FE
 
     Rev -->|writes| RVR[".claude/reviews/<br/>per-commit reports"]
     Rev -->|appends verdict| HO["Task.md<br/>## Handoffs"]
@@ -35,10 +36,45 @@ flowchart LR
     Git -->|appends PR signals| HO
 
     style Main fill:#3b82f6,color:#fff
-    style Back fill:#fbbf24,color:#000
-    style Front fill:#fbbf24,color:#000
+    style Worker fill:#fbbf24,color:#000
     style Rev fill:#8b5cf6,color:#fff
     style Git fill:#10b981,color:#fff
+```
+
+### Full 5-tab (opt-in — both workers concurrently active)
+
+WEB-MAIN + WEB-BACK + WEB-FRONT + WEB-REVIEW + WEB-GIT. Setup via `tools/cmux_setup.sh`. Used when a full-stack task wants backend and frontend workers running in parallel.
+
+```mermaid
+flowchart LR
+    subgraph T5["cmux Full 5-tab (opt-in)"]
+        Main5["WEB-MAIN<br/>(Claude opus)<br/>architect / orchestrator<br/>+ git-manager (commit only)"]
+        Back5["WEB-BACK<br/>(Codex CLI)<br/>backend-worker baseline"]
+        Front5["WEB-FRONT<br/>(Codex CLI)<br/>frontend-worker baseline"]
+        Rev5["WEB-REVIEW<br/>(Claude opus)<br/>/review pre-push gate"]
+        Git5["WEB-GIT<br/>(Claude sonnet)<br/>git-publisher: push/PR/merge"]
+    end
+
+    Main5 -->|writes / dispatches| BE5["backend/"]
+    Main5 -->|writes / dispatches| FE5["frontend/"]
+    Main5 -->|writes most of| CL5[".claude/"]
+    Main5 -->|writes / updates| DOCS5["docs/<br/>(specs + algorithm.md)"]
+    Main5 -->|local commit| GIT_LOCAL5[".git/HEAD<br/>(no push)"]
+
+    Back5 -.dispatched via cmux send.-> BE5
+    Front5 -.dispatched via cmux send.-> FE5
+
+    Rev5 -->|writes| RVR5[".claude/reviews/<br/>per-commit reports"]
+    Rev5 -->|appends verdict| HO5["Task.md<br/>## Handoffs"]
+
+    Git5 -->|git push + gh pr create| REMOTE5["origin/develop<br/>(via squash-merge PR)"]
+    Git5 -->|appends PR signals| HO5
+
+    style Main5 fill:#3b82f6,color:#fff
+    style Back5 fill:#fbbf24,color:#000
+    style Front5 fill:#fbbf24,color:#000
+    style Rev5 fill:#8b5cf6,color:#fff
+    style Git5 fill:#10b981,color:#fff
 ```
 
 ---
@@ -152,7 +188,7 @@ sequenceDiagram
 | **git-publisher** | sonnet | **Push / PR open / PR poll / squash merge / external PR triage / develop→main deploy.** Lives in WEB-GIT (separate tab). | `git push`, `gh pr *` |
 | **reporter** | sonnet | Updates Report.md + Task.md, emits REVIEW-REQUESTED handoff | `.claude/` only (+ narrow `docs/algorithm.md` sync exception) |
 | **algo-tester** | sonnet | Runs optimizer script, interprets results, triggers orchestrator | runs script + calls orchestrator |
-| **team-back / team-front** | opus | Codex CLI team leads (running in WEB-BACK / WEB-FRONT cmux tabs) | `backend/` / `frontend/` per role |
+| **backend-worker / frontend-worker** | Codex CLI | Codex bounded implementers (running in WEB-BACK / WEB-FRONT cmux tabs). Baselines at `.claude/codex/<team>-worker.md`. | `backend/` / `frontend/` per role |
 | **`/review`** (slash command) | opus (review terminal) | **Unified pre-push gate.** Part A 7-axis static + Part B (conditional) browser + Part C drift checks. Emits one of REVIEW-PASSED / REVIEW-ABORTED / REVIEW-FAIL. | read-only on source + docs; writes `.claude/reviews/*.md` + Task.md Handoffs line + transient `test-artifacts/review/` |
 
 ---
@@ -163,45 +199,53 @@ sequenceDiagram
 
 | Terminal | Runs | Owns / Touches |
 |----------|------|----------------|
-| **WEB-MAIN** | Claude Code (orchestrator: opus) | Full pipeline — backend, frontend, **local commits via git-manager** (never pushes). Reads `.claude/`, `docs/`, `CLAUDE.md`, `DESIGN.md`, `CONTRIBUTING.md`. Dispatches to codex teams via `tools/dispatch.sh`. |
-| **WEB-BACK** | Codex CLI (gpt-5.5 + `-c model_reasoning_effort=high`) | `backend/` (per `.claude/agents/team-back.md`). Self-reviews before BACK-DONE per hybrid policy. |
-| **WEB-FRONT** | Codex CLI (same model config) | `frontend/` (per `.claude/agents/team-front.md`). Consults `DESIGN.md` for visual system. |
+| **WEB-MAIN** | Claude Code (architect / orchestrator: opus) | Full pipeline — backend, frontend, **local commits via git-manager** (never pushes). Reads `.claude/`, `docs/`, `CLAUDE.md`, `DESIGN.md`, `CONTRIBUTING.md`. Dispatches bounded tasks to codex workers via `tools/dispatch-codex-task.sh` (default) / `tools/dispatch.sh` (fallback). |
+| **WEB-BACK** | Codex CLI (gpt-5.5 + `-c model_reasoning_effort=high`) | `backend/` (per `.claude/codex/backend-worker.md`). Self-reviews before BACK-DONE per hybrid policy. |
+| **WEB-FRONT** | Codex CLI (same model config) | `frontend/` (per `.claude/codex/frontend-worker.md`). Consults `DESIGN.md` for visual system. |
 | **WEB-REVIEW** | Claude Code (`/review` slash command: opus) | Pre-push gate. Read-only on source/docs; writes `.claude/reviews/*.md`, Task.md Handoffs line, transient `test-artifacts/review/`. |
 | **WEB-GIT** | Claude Code (git-publisher: sonnet) | **Push / PR / merge / external PR triage / develop→main deploy.** Reads source for context; writes only `git`/`gh` actions + Task.md Handoffs line. Per `.claude/agents/git-publisher.md`. |
 
 ### Codex Multi-Workspace (WEB-BACK / WEB-FRONT — stateful)
 
-Each Codex team's session is **stateful** — it stays running, auto-loads `AGENTS.md` from cwd at startup, and is dispatched tasks via `cmux send` (wrapped by `tools/dispatch.sh`).
+Each Codex worker's session is **stateful** — it stays running, auto-loads `AGENTS.md` from cwd at startup, and is dispatched tasks via `cmux send`. Two dispatch wrappers exist; the default carries a bounded task file:
+
+- `tools/dispatch-codex-task.sh <team> <slug> <task-file>` — **default**. Embeds the task file (per `tools/codex-task-template.md`) inside a bounded-implementer contract message. Use for any non-trivial task.
+- `tools/dispatch.sh <team> "<msg>"` — **fallback**. Free-form message for quick pings, scope-clear follow-ups, or fix-loop dispatches.
 
 **Setup** (idempotent — re-runs only create missing workspaces):
 
 ```bash
-./tools/cmux_setup.sh    # creates WEB-BACK / WEB-FRONT / WEB-REVIEW / WEB-GIT with init prompts
+./tools/cmux_lean_setup.sh <back|front|both>   # default: 1 worker + WEB-REVIEW + WEB-GIT
+./tools/cmux_setup.sh                          # opt-in: full 5-tab (both workers concurrently active)
 ```
 
 **Architecture ground truth** (edit these files, not policy in this doc):
 - `AGENTS.md` — Codex baseline (auto-loaded by codex CLI from cwd-walk)
-- `.claude/agents/team-back.md`, `team-front.md` — per-team owned files,
+- `.claude/codex/backend-worker.md`, `frontend-worker.md` — per-worker owned files,
   typical task shapes, DRF gotcha, fix loop, self-review checklists
-- `tools/dispatch.sh <team> "<msg>"` — WEB-MAIN → team
-- `tools/poll.sh <team> [lines]` — read team's screen
+- `tools/codex-task-template.md` — bounded task file template
+- `tools/dispatch-codex-task.sh <team> <slug> <task-file>` — WEB-MAIN → worker (default, bounded task file)
+- `tools/dispatch.sh <team> "<msg>"` — WEB-MAIN → worker / review / git (fallback, free-form)
+- `tools/poll.sh <team> [lines]` — read worker's screen
 
-**When to dispatch to a Codex team** (vs in-session Claude sub-agent):
+**When to dispatch to a Codex worker (with bounded task file)** (vs in-session Claude sub-agent):
 
-| Use Codex team when... | Use Claude back-maker / front-maker when... |
+| Use Codex worker (bounded task file) when... | Use Claude back-maker / front-maker when... |
 |---|---|
 | Mechanical, well-bounded task (single feature, clear spec) | Open-ended exploration, refactoring across 5+ files |
 | Plan can include explicit acceptance criteria | Bug fix where root cause needs diagnosis |
 | Acceptance is `pytest -v` exit 0 + lint clean | Output evaluation is subjective (algorithm tuning) |
 
+The free-form `dispatch.sh` is reserved for quick pings (e.g. "are you alive?", "re-read your worker file"), scope-clear fix-loop dispatches where the task file was already established, or non-implementation messages.
+
 **Handoff signals** (`.claude/Task.md` § Handoffs):
-- `BACK-DONE: <slug>` / `FRONT-DONE: <slug>` — team finished
+- `BACK-DONE: <slug>` / `FRONT-DONE: <slug>` — worker finished
 - `BACK-BLOCKED: <reason>` / `FRONT-BLOCKED: <reason>` — exhausted self-heal
-- `<TEAM>-NEEDS-CLARIFICATION: <question>` — scope ambiguous, team waits
+- `<TEAM>-NEEDS-CLARIFICATION: <question>` — scope ambiguous, worker waits
 
 **Key invariants**:
 - Codex auto-loads `AGENTS.md` from cwd at startup.
-- Stateful: a team's session persists across tasks — WEB-MAIN doesn't re-init context every dispatch. Restart codex (`/quit` then `codex -c model_reasoning_effort=high`) only if `AGENTS.md` or the team file changed.
+- Stateful: a worker's session persists across tasks — WEB-MAIN doesn't re-init context every dispatch. Restart codex (`/quit` then `codex -c model_reasoning_effort=high`) only if `AGENTS.md` or the worker file changed.
 - Reviewer/security verdict bar is identical to back-maker output; no separate "Codex reviewer."
 - Cap: 2 fix cycles per task → escalate (`<TEAM>-BLOCKED`) → WEB-MAIN may fall back to Claude `back-maker` / `front-maker`.
 
@@ -313,7 +357,7 @@ flowchart TD
 
 **Fix-cycle accounting**: max 2 cycles total across reviewer/security/web-tester FAIL paths. After 2 failed cycles → STOP, report to user, ask for guidance.
 
-**Hybrid pre-commit policy**: when work was dispatched to a Codex team (BACK-DONE / FRONT-DONE), the team's own self-review per `team-back.md` / `team-front.md` is the default pre-commit gate; WEB-MAIN skips the in-session reviewer + security agents and proceeds to git-manager. The cross-model verification still happens at `/review`. See CLAUDE.md § Token-saving rules for the risky-zone override (`(claude-review-requested)`).
+**Hybrid pre-commit policy**: when work was dispatched to a Codex worker (BACK-DONE / FRONT-DONE), the worker's own self-review per `.claude/codex/backend-worker.md` / `.claude/codex/frontend-worker.md` is the default pre-commit gate; WEB-MAIN skips the in-session reviewer + security agents and proceeds to git-manager. The cross-model verification still happens at `/review`. See CLAUDE.md § Token-saving rules for the risky-zone override (`(claude-review-requested)`).
 
 ---
 
@@ -462,7 +506,8 @@ reporter runs at session end (or when user requests)
 
 | File | Purpose |
 |------|---------|
-| `.claude/agents/*.md` | Agent definitions |
+| `.claude/agents/*.md` | Claude subagent definitions (orchestrator / makers / reviewer / reporter / git-manager / git-publisher / web-tester / algo-tester) |
+| `.claude/codex/backend-worker.md`, `frontend-worker.md` | Codex worker baselines (WEB-BACK / WEB-FRONT) — owned files, self-review checklist, fix loop |
 | `.claude/commands/*.md` | Slash command definitions (`/review`, etc.) |
 | `.claude/Goal.md` | Vision + acceptance criteria (north star) |
 | `.claude/Task.md` | Problem board + Handoffs signals |
@@ -473,12 +518,16 @@ reporter runs at session end (or when user requests)
 | `docs/specs/*.md` | Pending-feature specs + decision records (admin-owned via PR) |
 | `backend/tools/algorithm_tester.py` | Hyperparameter optimizer script |
 | `backend/tools/optimization_results.json` | Latest tester output |
-| `CLAUDE.md` | Project conventions (read by all agents) |
+| `CLAUDE.md` | Project conventions (read by Claude main + sub-agents) |
 | `DESIGN.md` | Visual design system (consult for any UI work) |
 | `CONTRIBUTING.md` | Branch model + PR workflow + role/file ownership |
 | `AGENTS.md` | Codex baseline (auto-loaded by codex CLI) |
-| `tools/cmux_setup.sh` | Idempotent 5-workspace creator (incl. WEB-GIT) |
-| `tools/dispatch.sh` | WEB-MAIN → codex team / WEB-REVIEW / WEB-GIT |
+| `tools/codex-task-template.md` | Bounded task file template Claude-main fills + dispatches |
+| `tools/cmux_lean_setup.sh` | **Default**: lean 3-lane workspace creator (1 Codex worker + WEB-REVIEW + WEB-GIT) |
+| `tools/cmux_setup.sh` | **Opt-in**: full 5-tab workspace creator (incl. WEB-GIT) |
+| `tools/dispatch-codex-task.sh` | **Default**: WEB-MAIN → codex worker with bounded task file embedded |
+| `tools/dispatch.sh` | **Fallback**: free-form WEB-MAIN → codex worker / WEB-REVIEW / WEB-GIT |
+| `tools/print-claude-codex-handoff.sh` | Prints the Codex→Claude-main handoff prompt for lean-workflow adoption |
 | `tools/poll.sh` | Read another tab's screen |
 | `tools/install-hooks.sh` | Install local pre-push hook (one-time per clone) |
 | `tools/cleanup-after-push.sh` | Rule 7 post-push cleanup (clears WEB-BACK/FRONT/REVIEW/GIT) |

@@ -5,6 +5,7 @@
 #   (forward-safe against new subpaths like .claude/memory/, .claude/sessions/, etc.)
 .claude/*
 !.claude/agents/
+!.claude/codex/
 !.claude/commands/
 !.claude/plans/
 !.claude/postmortems/

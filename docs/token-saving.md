@@ -31,19 +31,19 @@ in-session `reviewer` + `security-manager` agents.
 
 User override: "리뷰 돌려" or any explicit request → run them anyway.
 
-## Rule 3 — Hybrid pre-commit policy for Codex team output
+## Rule 3 — Hybrid pre-commit policy for Codex worker output
 
-When work was dispatched to WEB-BACK / WEB-FRONT (Codex teams), the team's
-own self-review (per `.claude/agents/team-back.md` § "Self-review checklist
-before BACK-DONE" / `team-front.md` § "Self-review checklist before
-FRONT-DONE") is the **default pre-commit gate**. WEB-MAIN trusts the
-BACK-DONE / FRONT-DONE report and skips the in-session Claude `reviewer` +
-`security-manager` agents.
+When work was dispatched to WEB-BACK / WEB-FRONT (Codex workers), the worker's
+own self-review (per `.claude/codex/backend-worker.md` § "Self-review checklist
+before signaling BACK-DONE" / `frontend-worker.md` § "Self-review checklist
+before signaling FRONT-DONE") is the **default pre-commit gate**. WEB-MAIN
+trusts the BACK-DONE / FRONT-DONE report and skips the in-session Claude
+`reviewer` + `security-manager` agents.
 
 Cross-model verification still happens at `/review` (Claude Opus on
-WEB-REVIEW vs Codex gpt-5.5 on the teams).
+WEB-REVIEW vs Codex gpt-5.5 on the workers).
 
-**Risky-commit override**: Codex teams append `(claude-review-requested)` to
+**Risky-commit override**: Codex workers append `(claude-review-requested)` to
 their DONE message when work touches:
 - auth flow
 - token-handling
