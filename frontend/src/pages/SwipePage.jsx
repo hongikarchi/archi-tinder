@@ -284,87 +284,6 @@ function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
   )
 }
 
-/* ── ActionCard ──────────────────────────────────────────────────────────── */
-function ActionCard({ card }) {
-  return (
-    <div style={{
-      position: 'absolute', top: 0, left: 0,
-      width: CARD_WIDTH, height: CARD_HEIGHT,
-      borderRadius: 20, overflow: 'hidden',
-      boxShadow: '0 25px 50px rgba(0,0,0,0.6)',
-    }}>
-      <div style={{
-        position: 'relative',
-        width: '100%', height: '100%',
-        background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
-        display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center',
-        textAlign: 'center', padding: 24,
-      }}>
-        {/* Sparkle Icon */}
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="white" style={{ marginBottom: 16 }}>
-          <path d="M12 0l3.09 6.26L22 9l-6.91 2.74L12 18l-3.09-6.26L2 9l6.91-2.74L12 0z"/>
-        </svg>
-
-        {/* Title */}
-        <h2 style={{
-          color: '#fff', fontSize: 22, fontWeight: 700,
-          margin: '0 0 12px 0', lineHeight: 1.3
-        }}>
-          {card.image_title || 'Your Taste is Found!'}
-        </h2>
-
-        {/* Message */}
-        <p style={{
-          color: 'rgba(255,255,255,0.85)', fontSize: 15,
-          textAlign: 'center', maxWidth: '85%',
-          margin: '0 0 8px 0', lineHeight: 1.5,
-          fontWeight: 500,
-        }}>
-          {card.action_card_message}
-        </p>
-
-        {/* Subtitle */}
-        {card.action_card_subtitle && (
-          <p style={{
-            color: 'rgba(255,255,255,0.5)', fontSize: 12,
-            textAlign: 'center', maxWidth: '90%',
-            margin: '0 0 24px 0', lineHeight: 1.5,
-          }}>
-            {card.action_card_subtitle}
-          </p>
-        )}
-
-        {/* Hint row at bottom */}
-        <div style={{
-          position: 'absolute', bottom: 20, left: 20, right: 20,
-          display: 'flex', justifyContent: 'space-between',
-          alignItems: 'center',
-        }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            color: 'rgba(255,255,255,0.45)', fontSize: 12
-          }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="15 18 9 12 15 6"/>
-            </svg>
-            Keep exploring
-          </div>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            color: '#fb923c', fontSize: 12, fontWeight: 600,
-          }}>
-            View results
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="9 18 15 12 9 6"/>
-            </svg>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 /* ── LoadingCard ─────────────────────────────────────────────────────────── */
 function LoadingCard() {
   return (
@@ -422,7 +341,10 @@ function ConfidenceBar({ value }) {
 }
 
 /* ── SwipePage ───────────────────────────────────────────────────────────── */
-export default function SwipePage({ currentCard, progress, isCompleted, isLoading, isResultLoading = false, projectName, onSwipe, onViewResults }) {
+export default function SwipePage({
+  currentCard, progress, isCompleted, isLoading, isResultLoading = false,
+  projectName, onSwipe, onViewResults, onExtendSession
+}) {
   const cardRef = useRef(null)
   const pendingAction = useRef(null)
   const swipedCardId = useRef(null)
@@ -435,8 +357,6 @@ export default function SwipePage({ currentCard, progress, isCompleted, isLoadin
   const phase            = progress?.phase
   const filter_relaxed   = progress?.filter_relaxed || false
   const confidence       = progress?.confidence ?? null
-
-  const showExit = phase === 'converged' || phase === 'completed'
 
   function onTinderSwipe(dir) {
     swipedCardId.current = currentCard?.image_id
@@ -477,35 +397,108 @@ export default function SwipePage({ currentCard, progress, isCompleted, isLoadin
   }, [isLoading, currentCard, showTutorial, galleryOpen]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (isCompleted) {
+    const canContinue = !!progress?.can_continue
     return (
       <div style={{
-        height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))', overflow: 'hidden', background: 'var(--color-bg)', display: 'flex',
-        flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        padding: 24, gap: 12,
+        height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+        overflow: 'hidden',
+        background: 'var(--color-bg)',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 24,
+        gap: 16,
       }}>
-        <div style={{ fontSize: 64 }}>🎉</div>
-        <h2 style={{ color: 'var(--color-text)', fontSize: 22, fontWeight: 700, margin: 0 }}>All done!</h2>
-        <p style={{ color: 'var(--color-text-dim)', fontSize: 14, textAlign: 'center', margin: 0 }}>
-          {`"${projectName || 'Project'}" swiping complete`}
-        </p>
-        <p style={{ color: 'var(--color-text-dimmer)', fontSize: 13, textAlign: 'center' }}>
-          ♥ {like_count} saved
-        </p>
-        <button
-          onClick={onViewResults}
-          disabled={isResultLoading}
-          style={{
-            marginTop: 8, padding: '14px 36px', borderRadius: 14,
-            background: 'linear-gradient(135deg, #f43f5e, #fb923c)',
-            color: '#fff', fontSize: 15, fontWeight: 700,
-            border: 'none', cursor: isResultLoading ? 'default' : 'pointer', fontFamily: 'inherit',
-            boxShadow: '0 4px 20px rgba(244,63,94,0.35)',
-            opacity: isResultLoading ? 0.6 : 1,
-            transition: 'opacity 0.2s',
-          }}
-        >
-          {isResultLoading ? 'Preparing results...' : 'View Image Board →'}
-        </button>
+        <div style={{
+          width: CARD_WIDTH,
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-border)',
+          borderRadius: 20,
+          padding: '32px 24px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 12,
+          boxShadow: '0 25px 50px rgba(0,0,0,0.4)',
+        }}>
+          <div style={{ fontSize: 56 }}>✨</div>
+          <h2 style={{
+            color: 'var(--color-text)',
+            fontSize: 22,
+            fontWeight: 700,
+            margin: 0,
+            textAlign: 'center',
+          }}>
+            Your taste is found
+          </h2>
+          <p style={{
+            color: 'var(--color-text-2)',
+            fontSize: 14,
+            textAlign: 'center',
+            margin: 0,
+            lineHeight: 1.5,
+          }}>
+            {projectName ? `"${projectName}"` : 'Project'} swiping complete · ♥ {like_count} saved
+          </p>
+          <p style={{
+            color: 'var(--color-text-muted)',
+            fontSize: 12,
+            textAlign: 'center',
+            margin: '4px 0 0',
+            lineHeight: 1.5,
+          }}>
+            {canContinue
+              ? 'View your persona report, or keep exploring more buildings.'
+              : 'Your persona report is ready.'}
+          </p>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: CARD_WIDTH }}>
+          <button
+            onClick={onViewResults}
+            disabled={isResultLoading}
+            style={{
+              padding: '14px 24px',
+              borderRadius: 14,
+              background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
+              color: '#fff',
+              fontSize: 15,
+              fontWeight: 700,
+              border: 'none',
+              cursor: isResultLoading ? 'default' : 'pointer',
+              fontFamily: 'inherit',
+              boxShadow: '0 4px 20px rgba(236,72,153,0.35)',
+              opacity: isResultLoading ? 0.6 : 1,
+              transition: 'opacity 0.2s',
+              minHeight: 44,
+            }}
+          >
+            {isResultLoading ? 'Preparing report...' : 'View persona report →'}
+          </button>
+          {canContinue && (
+            <button
+              onClick={onExtendSession}
+              disabled={isLoading || isResultLoading}
+              style={{
+                padding: '12px 24px',
+                borderRadius: 14,
+                background: 'var(--color-surface-2)',
+                color: 'var(--color-text)',
+                fontSize: 14,
+                fontWeight: 600,
+                border: '1px solid var(--color-border)',
+                cursor: (isLoading || isResultLoading) ? 'default' : 'pointer',
+                fontFamily: 'inherit',
+                opacity: (isLoading || isResultLoading) ? 0.6 : 1,
+                transition: 'opacity 0.2s, background 0.15s',
+                minHeight: 44,
+              }}
+            >
+              Keep exploring
+            </button>
+          )}
+        </div>
       </div>
     )
   }
@@ -577,19 +570,15 @@ export default function SwipePage({ currentCard, progress, isCompleted, isLoadin
                 key={currentCard.image_id}
                 onSwipe={onTinderSwipe}
                 onCardLeftScreen={onCardLeftScreen}
-                preventSwipe={currentCard.card_type === 'action' ? [] : (galleryOpen ? ['left', 'right', 'up', 'down'] : ['up', 'down'])}
+                preventSwipe={galleryOpen ? ['left', 'right', 'up', 'down'] : ['up', 'down']}
                 swipeRequirementType='position'
                 swipeThreshold={120}
               >
-                {currentCard.card_type === 'action' ? (
-                  <ActionCard card={currentCard} />
-                ) : (
-                  <SwipeCard
-                    card={currentCard}
-                    onGalleryOpen={() => setGalleryOpen(true)}
-                    onGalleryClose={() => setGalleryOpen(false)}
-                  />
-                )}
+                <SwipeCard
+                  card={currentCard}
+                  onGalleryOpen={() => setGalleryOpen(true)}
+                  onGalleryClose={() => setGalleryOpen(false)}
+                />
               </TinderCard>
               {isLoading && (
                 <div style={{
@@ -614,21 +603,6 @@ export default function SwipePage({ currentCard, progress, isCompleted, isLoadin
         {/* Action Buttons */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
           <p style={{ color: 'var(--color-text-dimmest)', fontSize: 11, margin: 0 }}>← skip · tap card · save →</p>
-          {showExit && (
-            <button
-              onClick={onViewResults}
-              style={{
-                padding: '11px 32px', borderRadius: 14,
-                background: 'linear-gradient(135deg, #f43f5e, #fb923c)',
-                color: '#fff', fontSize: 14, fontWeight: 700,
-                border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-                boxShadow: '0 4px 20px rgba(244,63,94,0.35)',
-                marginTop: 12,
-              }}
-            >
-              View Results →
-            </button>
-          )}
         </div>
 
       </div>

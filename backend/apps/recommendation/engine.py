@@ -1444,30 +1444,6 @@ def get_dislike_fallback(pool_ids, exposed_ids, pool_embeddings, dislike_vectors
     return best_candidate
 
 
-def build_action_card():
-    """
-    Return action card dict for analysis completion.
-    """
-    return {
-        'building_id': '__action_card__',
-        'card_type': 'action',
-        'name_en': 'Your Taste is Found!',
-        'project_name': '',
-        'image_url': '',
-        'url': None,
-        'gallery': [],
-        'gallery_drawing_start': 0,
-        'metadata': {},
-        'action_card_message': (
-            'We\'ve analyzed your preferences and found your architectural taste.'
-        ),
-        'action_card_subtitle': (
-            'Swipe right to see your personalized results, '
-            'or swipe left to keep exploring more buildings.'
-        ),
-    }
-
-
 def get_top_k_mmr(like_vectors, exposed_ids, k=None, round_num=None):
     """
     Get top-k results using MMR for final recommendations.

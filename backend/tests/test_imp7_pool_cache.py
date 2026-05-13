@@ -34,16 +34,6 @@ from apps.recommendation.engine import (
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_action_card():
-    """Return a minimal fake action card dict (avoids multi-line lambda E127 issues)."""
-    return {
-        'building_id': '__action_card__', 'card_type': 'action',
-        'name_en': '', 'project_name': '', 'image_url': '',
-        'url': None, 'gallery': [], 'gallery_drawing_start': 0,
-        'metadata': {}, 'action_card_message': '', 'action_card_subtitle': '',
-    }
-
-
 def _make_embedding_str(seed=42, dim=384):
     """Return a pgvector-style embedding string for a random unit vector."""
     rng = np.random.RandomState(seed)
@@ -451,7 +441,6 @@ class TestSessionCreateViewWarmsCacheNaturally:
             f'{_ENGINE}.compute_mmr_next': lambda *a: 'B00001',
             f'{_ENGINE}.compute_convergence': lambda *a: 0.05,
             f'{_ENGINE}.check_convergence': lambda *a: False,
-            f'{_ENGINE}.build_action_card': _make_action_card,
             f'{_ENGINE}.get_dislike_fallback': lambda *a, **kw: 'B00010',
             f'{_ENGINE}.refresh_pool_if_low': lambda *a, **kw: None,
         }
@@ -560,7 +549,6 @@ class TestSwipeEventPayload:
             f'{_ENGINE}.compute_mmr_next': lambda *a: pool_ids[1],
             f'{_ENGINE}.compute_convergence': lambda *a: 0.05,
             f'{_ENGINE}.check_convergence': lambda *a: False,
-            f'{_ENGINE}.build_action_card': _make_action_card,
             f'{_ENGINE}.get_dislike_fallback': lambda *a, **kw: pool_ids[2],
             f'{_ENGINE}.refresh_pool_if_low': lambda *a, **kw: None,
             f'{_ENGINE}.farthest_point_from_pool': lambda pool_ids, exposed, embs: next(
@@ -663,7 +651,6 @@ class TestSwipeEventPayload:
             f'{_ENGINE}.compute_mmr_next': lambda *a: pool_ids[1],
             f'{_ENGINE}.compute_convergence': lambda *a: 0.05,
             f'{_ENGINE}.check_convergence': lambda *a: False,
-            f'{_ENGINE}.build_action_card': _make_action_card,
             f'{_ENGINE}.get_dislike_fallback': lambda *a, **kw: pool_ids[2],
             f'{_ENGINE}.refresh_pool_if_low': lambda *a, **kw: None,
             f'{_ENGINE}.farthest_point_from_pool': lambda pool_ids, exposed, embs: next(
@@ -751,7 +738,6 @@ class TestPoolEscalationFiredFlag:
             f'{_ENGINE}.compute_mmr_next': lambda *a: pool_ids[1],
             f'{_ENGINE}.compute_convergence': lambda *a: 0.05,
             f'{_ENGINE}.check_convergence': lambda *a: False,
-            f'{_ENGINE}.build_action_card': _make_action_card,
             f'{_ENGINE}.get_dislike_fallback': lambda *a, **kw: pool_ids[2],
             f'{_ENGINE}.refresh_pool_if_low': lambda *a, **kw: None,  # no-op: no escalation
             f'{_ENGINE}.farthest_point_from_pool': lambda pool_ids, exposed, embs: next(
@@ -831,7 +817,6 @@ class TestPoolEscalationFiredFlag:
             f'{_ENGINE}.compute_mmr_next': lambda *a: pool_ids[1],
             f'{_ENGINE}.compute_convergence': lambda *a: 0.05,
             f'{_ENGINE}.check_convergence': lambda *a: False,
-            f'{_ENGINE}.build_action_card': _make_action_card,
             f'{_ENGINE}.get_dislike_fallback': lambda *a, **kw: pool_ids[2],
             f'{_ENGINE}.refresh_pool_if_low': _escalating_refresh,  # fires escalation
             f'{_ENGINE}.farthest_point_from_pool': lambda pool_ids, exposed, embs: next(

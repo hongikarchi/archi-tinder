@@ -324,128 +324,84 @@ class SwipeView(APIView):
             raw_buffer = []
         client_buffer_ids = [
             s for s in raw_buffer
-            if isinstance(s, str) and 0 < len(s) <= 20 and s != '__action_card__'
+            if isinstance(s, str) and 0 < len(s) <= 20
         ][:10]
 
-        if not building_id:
+        extend_requested = bool(request.data.get('extend', False))
+
+        if not extend_requested and not building_id:
             return Response({'detail': 'building_id is required'}, status=status.HTTP_400_BAD_REQUEST)
-        if action not in ('like', 'dislike'):
+        if not extend_requested and action not in ('like', 'dislike'):
             return Response({'detail': 'action must be like or dislike'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # S3 extend-session short-circuit. Extend is NOT a real swipe and must not
+        # mutate like/ranking state (no SwipeEvent, no like_vectors, no round bump).
+        if extend_requested:
+            with transaction.atomic():
+                session = AnalysisSession.objects.select_for_update().get(
+                    session_id=session_id, user=profile
+                )
+                if session.phase not in ('converged', 'completed') or session.extended_rounds >= 5:
+                    residual_noop = len([
+                        pid for pid in session.pool_ids
+                        if pid not in set(session.exposed_ids)
+                    ]) if session.pool_ids else 0
+                    can_continue_noop = (residual_noop >= 1) and (session.extended_rounds < 5)
+                    return Response({
+                        'accepted': True,
+                        'session_status': session.status,
+                        'progress': _progress(session),
+                        'next_image': None,
+                        'prefetch_image': None,
+                        'prefetch_image_2': None,
+                        'is_analysis_completed': session.phase in ('converged', 'completed'),
+                        'can_continue': can_continue_noop and session.phase in ('converged', 'completed'),
+                        'confidence': None,
+                    })
+
+                session.extended_rounds += 1
+                session.phase = 'analyzing'
+                session.convergence_history = []
+                session.previous_pref_vector = []
+
+                if client_buffer_ids:
+                    session.exposed_ids = _merge_buffer_into_exposed(session.exposed_ids, client_buffer_ids)
+
+                engine.refresh_pool_if_low(session, threshold=5)
+
+                pool_embeddings = engine.get_pool_embeddings(session.pool_ids)
+                next_card_id = engine.compute_mmr_next(
+                    session.pool_ids, session.exposed_ids, pool_embeddings,
+                    session.like_vectors, session.current_round,
+                )
+                next_card = engine.get_building_card(next_card_id) if next_card_id else None
+                if next_card:
+                    session.exposed_ids = session.exposed_ids + [next_card['building_id']]
+
+                session.save(update_fields=[
+                    'extended_rounds', 'phase', 'convergence_history', 'previous_pref_vector',
+                    'exposed_ids', 'pool_ids', 'pool_scores', 'current_pool_tier',
+                ])
+
+            residual_after = len([
+                pid for pid in session.pool_ids if pid not in set(session.exposed_ids)
+            ]) if session.pool_ids else 0
+            return Response({
+                'accepted': True,
+                'session_status': session.status,
+                'progress': _progress(session),
+                'next_image': next_card,
+                'prefetch_image': None,
+                'prefetch_image_2': None,
+                'is_analysis_completed': next_card is None,
+                'can_continue': (residual_after >= 1) and (session.extended_rounds < 5),
+                'confidence': None,
+            })
 
         # Idempotency check -- if already processed, return accepted so frontend treats it as success
         if idempotency_key and SwipeEvent.objects.filter(idempotency_key=idempotency_key, session=session).exists():
             logger.info('Duplicate swipe ignored: %s', idempotency_key)
             return Response({'accepted': True, 'detail': 'duplicate'}, status=status.HTTP_200_OK)
-
-        # SPECIAL: action card handling
-        if building_id == '__action_card__':
-            if action == 'like':
-                # Complete the session
-                with transaction.atomic():
-                    session.status = 'completed'
-                    session.phase = 'completed'
-                    session.save(update_fields=['status', 'phase'])
-
-                # §6 logging: session_end (user_confirm = user clicked "View results")
-                all_swipes = list(session.swipes.values_list('action', flat=True))
-                # IMP-10 / Spec v1.8 §6: aggregate per-session clustering stats
-                _clustering_agg = event_log.aggregate_session_clustering_stats(session.session_id)
-                event_log.emit_event(
-                    'session_end',
-                    session=session,
-                    user=profile,
-                    end_reason='user_confirm',
-                    total_swipes=session.current_round,
-                    likes_count=all_swipes.count('like'),
-                    loves_count=0,  # Sprint 3 A-1 will populate this from intensity field
-                    dislikes_count=all_swipes.count('dislike'),
-                    cluster_count_distribution=_clustering_agg['cluster_count_distribution'],
-                    silhouette_score_p50=_clustering_agg['silhouette_score_p50'],
-                )
-
-                return Response({
-                    'accepted': True,
-                    'session_status': 'completed',
-                    'progress': _progress(session),
-                    'next_image': None,
-                    'prefetch_image': None,
-                    'prefetch_image_2': None,
-                    'is_analysis_completed': True,
-                    'confidence': None,
-                })
-            else:
-                # Reset and keep going
-                with transaction.atomic():
-                    session.convergence_history = []
-                    session.previous_pref_vector = []
-                    session.phase = 'analyzing'
-                    # Merge client buffer into exposed so we don't re-show cards the
-                    # frontend already has in its queue.
-                    if client_buffer_ids:
-                        session.exposed_ids = _merge_buffer_into_exposed(session.exposed_ids, client_buffer_ids)
-                    # Pool exhaustion guard for "더 swipe" path (§5.6 + §6 A4):
-                    # User is extending past auto-stop — pool is most likely exhausted here.
-                    # Mutates session.pool_ids/pool_scores/current_pool_tier in-place if needed.
-                    engine.refresh_pool_if_low(session, threshold=5)
-                    session.save(update_fields=[
-                        'phase', 'convergence_history', 'previous_pref_vector', 'exposed_ids',
-                        'pool_ids', 'pool_scores', 'current_pool_tier',
-                    ])
-                    # Fall through to select next card below
-                    # (skip normal swipe recording for action card)
-                    pool_embeddings = engine.get_pool_embeddings(session.pool_ids)
-                    next_card_id = engine.compute_mmr_next(
-                        session.pool_ids, session.exposed_ids, pool_embeddings,
-                        session.like_vectors, session.current_round
-                    )
-                    next_card = engine.get_building_card(next_card_id) if next_card_id else None
-                    if next_card:
-                        session.exposed_ids = session.exposed_ids + [next_card['building_id']]
-                        session.save(update_fields=['exposed_ids'])
-
-                    # Prefetch
-                    prefetch_card = None
-                    if next_card:
-                        try:
-                            pf_id = engine.compute_mmr_next(
-                                session.pool_ids, session.exposed_ids, pool_embeddings,
-                                session.like_vectors, session.current_round + 1
-                            )
-                            prefetch_card = engine.get_building_card(pf_id) if pf_id else None
-                        except Exception:
-                            pass
-
-                    # Prefetch 2
-                    prefetch_card_2 = None
-                    if prefetch_card and prefetch_card.get('building_id') != '__action_card__':
-                        try:
-                            temp_exposed = session.exposed_ids + [prefetch_card['building_id']]
-                            if session.phase == 'exploring':
-                                if session.current_round + 2 < len(session.initial_batch):
-                                    pf2_bid = session.initial_batch[session.current_round + 2]
-                                    prefetch_card_2 = engine.get_building_card(pf2_bid)
-                                else:
-                                    pf2_bid = engine.farthest_point_from_pool(session.pool_ids, temp_exposed, pool_embeddings)
-                                    prefetch_card_2 = engine.get_building_card(pf2_bid) if pf2_bid else None
-                            elif session.phase == 'analyzing':
-                                pf2_id = engine.compute_mmr_next(
-                                    session.pool_ids, temp_exposed, pool_embeddings,
-                                    session.like_vectors, session.current_round + 2
-                                )
-                                prefetch_card_2 = engine.get_building_card(pf2_id) if pf2_id else None
-                        except Exception:
-                            prefetch_card_2 = None
-
-                return Response({
-                    'accepted': True,
-                    'session_status': session.status,
-                    'progress': _progress(session),
-                    'next_image': next_card,
-                    'prefetch_image': prefetch_card,
-                    'prefetch_image_2': prefetch_card_2,
-                    'is_analysis_completed': False,
-                    'confidence': None,  # history cleared on reset; hide bar until new window fills
-                })
 
         # NORMAL SWIPE PROCESSING
         import time as _time
@@ -579,7 +535,7 @@ class SwipeView(APIView):
             _embedding_stats = engine.get_last_embedding_call_stats() or {}
 
             if session.phase == 'converged':
-                next_card = engine.build_action_card()
+                next_card = None
             elif session.phase == 'exploring':
                 # Use initial_batch for early rounds, then farthest-point
                 # Note: if the user's current_round lands on an initial_batch slot that was
@@ -626,7 +582,7 @@ class SwipeView(APIView):
                 next_card = engine.get_building_card(next_card_id) if next_card_id else None
                 if not next_card:
                     # Pool exhausted during analyzing
-                    next_card = engine.build_action_card()
+                    next_card = None
                     session.phase = 'converged'
             else:
                 next_card = None
@@ -665,7 +621,7 @@ class SwipeView(APIView):
         # cache. Primary response returns immediately with prefetch_image=None
         # (frontend handles null prefetches gracefully -- existing behavior at
         # session end / dislike-fallback paths). The cache write is for
-        # telemetry / future Half-B optimization; primary path does NOT consume
+        # telemetry / future Half-B optimization; primary path does not consume
         # the cache in this implementation.
         #
         # When async_prefetch_enabled=False (default), the existing sync path
@@ -673,9 +629,9 @@ class SwipeView(APIView):
         prefetch_strategy = 'sync'  # updated to 'async-thread' when IMP-8 path runs
         prefetch_card = None
         prefetch_card_2 = None
-        if settings.RECOMMENDATION.get('async_prefetch_enabled', False) and (
+        if (settings.RECOMMENDATION.get('async_prefetch_enabled', False) and (
             next_card and next_card.get('building_id') != '__action_card__'
-        ):
+        )):
             # IMP-8 async path: spawn bg thread; return None prefetches immediately.
             # cache_round = saved_current_round + 1 so the key uniquely identifies
             # "the prefetch for the NEXT swipe after this one".
@@ -843,6 +799,10 @@ class SwipeView(APIView):
             'next_image': next_card,
             'prefetch_image': prefetch_card,
             'prefetch_image_2': prefetch_card_2,
-            'is_analysis_completed': False,
+            'is_analysis_completed': next_card is None and session.phase in ('converged', 'completed'),
+            'can_continue': (
+                len([pid for pid in session.pool_ids if pid not in set(session.exposed_ids)]) >= 1
+                and session.extended_rounds < 5
+            ),
             'confidence': confidence,  # float [0,1] or null per spec C-1
         })

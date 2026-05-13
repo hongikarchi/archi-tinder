@@ -225,6 +225,7 @@ export default function App() {
       ...result.progress,
       filter_relaxed: result.filter_relaxed || false,
       confidence: result.confidence ?? null,
+      can_continue: result.can_continue ?? false, // S3: pass through from backend
     })
     if (result.is_analysis_completed || !result.next_image) {
       setIsSessionCompleted(!!result.is_analysis_completed || !result.next_image)
@@ -390,6 +391,12 @@ export default function App() {
         setCurrentCard(null)
         setPrefetchCard(null)
         setPrefetchCard2(null)
+        setSessionProgress(prev => ({
+          ...(prev || {}),
+          ...result.progress,
+          confidence: result.confidence ?? null,
+          can_continue: result.can_continue ?? false,
+        }))
         setIsResultLoading(true)
         try {
           const resultData = await api.getResult({
@@ -403,7 +410,6 @@ export default function App() {
           // ResultsPage will attempt a fresh GET /result/ on entry.
         } finally {
           setIsResultLoading(false)
-          navigate(`/result/${project.sessionId}`)
         }
       } else {
         if (canInstantSwap) {
@@ -451,6 +457,42 @@ export default function App() {
         setPrefetchCard2(savedPrefetch2)
       }
       setSwipeError('Swipe failed. Please try again.')
+    } finally {
+      setIsSwipeLoading(false)
+      swipeLock.current = false
+    }
+  }
+
+  async function handleExtendSession() {
+    if (swipeLock.current) return
+    const project = projects.find(p => p.id === activeProjectId)
+    if (!project?.sessionId) return
+
+    swipeLock.current = true
+    setIsSwipeLoading(true)
+    try {
+      const result = await api.recordSwipe({
+        session_id: project.sessionId,
+        image_id: (project.swipedIds || []).slice(-1)[0] || '',
+        action: 'like',
+        client_buffer_ids: [],
+        extend: true,
+      })
+
+      setIsSessionCompleted(false)
+      setCurrentCard(result.next_image)
+      setPrefetchCard(result.prefetch_image || null)
+      setPrefetchCard2(result.prefetch_image_2 || null)
+      setSessionProgress({
+        ...result.progress,
+        confidence: result.confidence ?? null,
+        can_continue: result.can_continue ?? false,
+      })
+      if (result.next_image?.image_url) preloadImage(result.next_image.image_url)
+      if (result.prefetch_image?.image_url) preloadImage(result.prefetch_image.image_url)
+      if (result.prefetch_image_2?.image_url) preloadImage(result.prefetch_image_2.image_url)
+    } catch {
+      setSwipeError('Could not continue exploring. Please try again.')
     } finally {
       setIsSwipeLoading(false)
       swipeLock.current = false
@@ -619,6 +661,7 @@ export default function App() {
     isSwipeLoading,
     isResultLoading,
     onSwipe: handleSwipeCard,
+    onExtendSession: handleExtendSession,
     onViewResults: () => {
       if (activeProject?.sessionId) navigate('/result/' + activeProject.sessionId)
       else navigate('/library/' + activeProjectId)

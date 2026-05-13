@@ -55,12 +55,13 @@ export async function getSessionState(sessionId, currentHint = null) {
  * in its visible queue (not yet swiped). The backend merges these into
  * session.exposed_ids before card selection so the same card is never shown twice.
  */
-export async function recordSwipe({ session_id, image_id, action, client_buffer_ids = [] }) {
+export async function recordSwipe({ session_id, image_id, action, client_buffer_ids = [], extend = false }) {
   const result = await callApi('POST', `/analysis/sessions/${session_id}/swipes/`, {
     building_id:       image_id,
     action,
     idempotency_key:   `swp_${session_id}_${image_id}`,
     client_buffer_ids: client_buffer_ids,
+    ...(extend ? { extend: true } : {}),
   })
   return {
     ...result,
