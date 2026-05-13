@@ -74,6 +74,36 @@ def _fake_embeddings_dict(ids):
             for i, bid in enumerate(ids)}
 
 
+_SWIPE_VIEW = 'apps.recommendation.views.swipe'
+
+
+class _SyncThread:
+    """threading.Thread replacement: runs target synchronously so test transaction sees DB writes."""
+    def __init__(self, target=None, args=(), kwargs=None, daemon=None, **kw):
+        self._target = target
+        self._args = args
+        self._kwargs = kwargs or {}
+
+    def start(self):
+        if self._target:
+            self._target(*self._args, **self._kwargs)
+
+
+def _sync_emit_telemetry(swipe_kwargs, confidence_kwargs):
+    """_emit_telemetry_thread replacement: emit synchronously, no DB close."""
+    from apps.recommendation import event_log
+    event_log.emit_swipe_event(**swipe_kwargs)
+    if confidence_kwargs is not None:
+        event_log.emit_event('confidence_update', **confidence_kwargs)
+
+
+# Add these to any local `patches` dict that checks for SessionEvent after a swipe.
+_THREAD_PATCHES = {
+    f'{_SWIPE_VIEW}.threading.Thread': _SyncThread,
+    f'{_SWIPE_VIEW}._emit_telemetry_thread': _sync_emit_telemetry,
+}
+
+
 # ---------------------------------------------------------------------------
 # TestBuildingCacheBasics
 # ---------------------------------------------------------------------------
@@ -554,6 +584,7 @@ class TestSwipeEventPayload:
             f'{_ENGINE}.farthest_point_from_pool': lambda pool_ids, exposed, embs: next(
                 (b for b in pool_ids if b not in set(exposed)), None),
             f'{_ENGINE}.compute_confidence': lambda *a, **kw: 0.5,
+            **_THREAD_PATCHES,
         }
         # Also mock get_last_embedding_call_stats to return known values
         patchers = []
@@ -656,6 +687,7 @@ class TestSwipeEventPayload:
             f'{_ENGINE}.farthest_point_from_pool': lambda pool_ids, exposed, embs: next(
                 (b for b in pool_ids if b not in set(exposed)), None),
             f'{_ENGINE}.compute_confidence': lambda *a, **kw: None,
+            **_THREAD_PATCHES,
         }
         patchers = []
         for target, side_effect in patches.items():
@@ -744,6 +776,7 @@ class TestPoolEscalationFiredFlag:
                 (b for b in pool_ids if b not in set(exposed)), None),
             f'{_ENGINE}.compute_confidence': lambda *a, **kw: None,
             f'{_ENGINE}.get_last_embedding_call_stats': lambda: {'requested': 15, 'cache_hits': 15, 'cache_misses': 0},
+            **_THREAD_PATCHES,
         }
         patchers = []
         for target, side_effect in patches.items():
@@ -823,6 +856,7 @@ class TestPoolEscalationFiredFlag:
                 (b for b in pool_ids if b not in set(exposed)), None),
             f'{_ENGINE}.compute_confidence': lambda *a, **kw: None,
             f'{_ENGINE}.get_last_embedding_call_stats': lambda: {'requested': 6, 'cache_hits': 4, 'cache_misses': 2},
+            **_THREAD_PATCHES,
         }
         patchers = []
         for target, side_effect in patches.items():
