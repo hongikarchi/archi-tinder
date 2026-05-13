@@ -3,31 +3,26 @@ import TabBar from '../components/TabBar.jsx'
 import ThemeToggle from '../components/ThemeToggle.jsx'
 import DebugOverlay from '../components/DebugOverlay.jsx'
 import SwipePage from '../pages/SwipePage.jsx'
-import FavoritesPage from '../pages/FavoritesPage.jsx'
 
 export default function MainLayout({
   theme, onToggleTheme, userId, onLogout,
-  projects, activeProject, activeProjectId,
+  activeProject, activeProjectId,
   currentCard, sessionProgress, isSessionCompleted, isSwipeLoading, isResultLoading,
-  onSwipe, onViewResults, onResumeProject, onDeleteProject, onGenerateReport, onImageGenerated,
-  onToggleBookmark,
+  onSwipe, onViewResults,
 }) {
   const location = useLocation()
   const navigate = useNavigate()
   const pathname = location.pathname
 
   const isSwipe = pathname === '/swipe'
-  const isLibrary = pathname.startsWith('/library')
   const isProfile = pathname.startsWith('/user')
-
-  const libraryMatch = pathname.match(/^\/library\/(.+)$/)
-  const folderId = libraryMatch ? libraryMatch[1] : null
+  const isBoard = pathname.startsWith('/board/')
 
   return (
     <div style={{ height: '100vh', overflow: 'hidden' }}>
 
-      {/* Header controls — hidden on pages that own their sticky header (profile/office/matched/board) */}
-      <div style={{ position: 'fixed', top: 14, right: 16, zIndex: 200, display: (isProfile || pathname.startsWith('/office') || pathname.startsWith('/matched') || pathname.startsWith('/board')) ? 'none' : 'flex', gap: 6, alignItems: 'center' }}>
+      {/* Header controls — hidden on pages that own their sticky header */}
+      <div style={{ position: 'fixed', top: 14, right: 16, zIndex: 200, display: (isProfile || pathname.startsWith('/office') || pathname.startsWith('/matched') || isBoard) ? 'none' : 'flex', gap: 6, alignItems: 'center' }}>
         <ThemeToggle theme={theme} onToggle={onToggleTheme} />
         <button
           onClick={onLogout}
@@ -51,8 +46,8 @@ export default function MainLayout({
         </button>
       </div>
 
-      {/* Home sub-routes — only visible when on home paths */}
-      <div style={{ display: (!isSwipe && !isLibrary) ? 'block' : 'none' }}>
+      {/* All non-swipe routes rendered via Outlet */}
+      <div style={{ display: !isSwipe ? 'block' : 'none' }}>
         <Outlet />
       </div>
 
@@ -68,23 +63,6 @@ export default function MainLayout({
           projectName={activeProject?.projectName}
           onSwipe={onSwipe}
           onViewResults={onViewResults}
-        />
-      </div>
-
-      {/* FavoritesPage — always mounted, shown/hidden via display */}
-      <div style={{ display: isLibrary ? 'block' : 'none' }}>
-        <FavoritesPage
-          projects={projects}
-          onDeleteProject={onDeleteProject}
-          onResumeProject={onResumeProject}
-          onGenerateReport={onGenerateReport}
-          onImageGenerated={onImageGenerated}
-          onToggleBookmark={onToggleBookmark}
-          openId={folderId}
-          onOpenIdChange={(id) => {
-            if (id) navigate('/library/' + id)
-            else navigate('/library')
-          }}
         />
       </div>
 
@@ -126,7 +104,7 @@ export default function MainLayout({
         />
       )}
 
-      <TabBar swipeEnabled={!!activeProject} />
+      {!isBoard && <TabBar swipeEnabled={!!activeProject} />}
     </div>
   )
 }

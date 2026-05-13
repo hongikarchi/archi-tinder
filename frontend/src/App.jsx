@@ -613,7 +613,7 @@ export default function App() {
     isSwipeLoading,
     isResultLoading,
     onSwipe: handleSwipeCard,
-    onViewResults: () => navigate('/library/' + activeProjectId),
+    onViewResults: () => navigate('/board/' + activeProjectId),
     onResumeProject: handleResumeProject,
     onDeleteProject: handleDeleteProject,
     onGenerateReport: handleGenerateReport,
@@ -677,8 +677,8 @@ export default function App() {
             />
           } />
           <Route path="swipe" element={null} />
-          <Route path="library" element={null} />
-          <Route path="library/:folderId" element={null} />
+          <Route path="library" element={<Navigate to="/user/me" replace />} />
+          <Route path="library/:folderId" element={<Navigate to="/user/me" replace />} />
           <Route path="user/me" element={<UserProfilePage {...sharedLayoutProps} />} />
           <Route path="user/:userId" element={<UserProfilePage {...sharedLayoutProps} />} />
           <Route path="office/:officeId" element={<FirmProfilePage {...sharedLayoutProps} />} />

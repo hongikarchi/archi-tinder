@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useImageTelemetry } from '../hooks/useImageTelemetry.js'
 import { useBoard } from '../hooks/useBoard.js'
 import { reactToProject, unreactToProject } from '../api/social.js'
+import { GalleryOverlay } from '../components/GalleryOverlay.jsx'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -170,7 +171,7 @@ function InfoCol({ label, value }) {
  *     reserved for binary status state. Matches the rationale used in FirmProfile
  *     ProjectCard (also drops program chip).
  */
-function BuildingTile({ building }) {
+function BuildingTile({ building, onClick }) {
   const { onLoad, onError } = useImageTelemetry({
     buildingId: building.building_id,
     context: 'board_detail_gallery',
@@ -178,11 +179,7 @@ function BuildingTile({ building }) {
 
   return (
     <div
-      onClick={() => {
-        // TODO(claude): navigate to building detail (modal overlay or
-        // route `/building/${building.building_id}`) — wire when building
-        // detail endpoint / route is decided.
-      }}
+      onClick={onClick}
       style={{
         position: 'relative',
         aspectRatio: '4 / 5',
@@ -273,7 +270,7 @@ export default function BoardDetailPage() {
   const rawBoardId = useParams().boardId
   const boardId = UUID_RE.test(String(rawBoardId || '')) ? rawBoardId : null
   const { board, loading, error } = useBoard(boardId)
-
+  const [selectedBuilding, setSelectedBuilding] = useState(null)
   const [isReacted, setIsReacted] = useState(false)
   const [reactionCount, setReactionCount] = useState(0)
   const [isReactionPending, setIsReactionPending] = useState(false)
@@ -324,15 +321,16 @@ export default function BoardDetailPage() {
 
   const isPublic = !board || board.visibility === 'public'
   const buildings = board?.buildings || []
+  const recommended = board?.recommended || []
   const coverImage = board?.cover_image_url || (buildings[0] && buildings[0].image_url)
   const statusMessage = error?.message || (loading ? 'Loading board...' : 'This board is empty')
 
   return (
     <div style={{
-      height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+      height: '100vh',
       overflowY: 'auto',
       background: 'var(--color-bg)',
-      paddingBottom: 'calc(80px + env(safe-area-inset-bottom))',
+      paddingBottom: 'calc(40px + env(safe-area-inset-bottom))',
     }}>
       {/* Hero cover */}
       <div style={{
@@ -670,10 +668,150 @@ export default function BoardDetailPage() {
             padding: '0 20px',
           }}>
             {buildings.map(building => (
-              <BuildingTile key={building.building_id} building={building} />
+              <BuildingTile
+                key={building.building_id}
+                building={building}
+                onClick={() => setSelectedBuilding({
+                  image_id: building.building_id,
+                  image_title: building.name_en,
+                  image_url: building.image_url,
+                  gallery: building.gallery || [],
+                  gallery_drawing_start: building.gallery_drawing_start ?? null,
+                })}
+              />
             ))}
           </div>
         )}
+      </div>
+
+      {/* Recommended section — only shown when session has predictions */}
+      {recommended.length > 0 && (
+        <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0' }}>
+          <div style={{
+            margin: '40px 20px 0',
+            height: 1,
+            background: 'var(--color-border)',
+          }} />
+          <h3 style={{
+            color: 'var(--color-text)',
+            fontSize: 20,
+            fontWeight: 700,
+            margin: '32px 0 4px',
+            padding: '0 20px',
+            letterSpacing: '-0.01em',
+          }}>
+            Recommended
+          </h3>
+          <p style={{
+            color: 'var(--color-text-dimmer)',
+            fontSize: 13,
+            margin: '0 0 16px',
+            padding: '0 20px',
+          }}>
+            Based on your preferences
+          </p>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+            gap: 12,
+            padding: '0 20px',
+          }}>
+            {recommended.slice(0, 10).map(card => (
+              <RecommendedTile
+                key={card.image_id || card.building_id}
+                card={card}
+                onClick={() => setSelectedBuilding(card)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {selectedBuilding && (
+        <GalleryOverlay
+          card={selectedBuilding}
+          onClose={() => setSelectedBuilding(null)}
+          fullscreen
+        />
+      )}
+    </div>
+  )
+}
+
+function RecommendedTile({ card, onClick }) {
+  const [imgLoading, setImgLoading] = useState(true)
+  const title = card.image_title || card.name_en
+  const imageUrl = card.image_url
+
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        position: 'relative',
+        aspectRatio: '3 / 4',
+        borderRadius: 16,
+        overflow: 'hidden',
+        cursor: 'pointer',
+        background: 'rgba(255,255,255,0.03)',
+        border: '1px solid transparent',
+        boxShadow: '0 8px 20px rgba(0,0,0,0.25)',
+        transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+        userSelect: 'none',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = 'translateY(-4px)'
+        e.currentTarget.style.borderColor = 'rgba(236,72,153,0.55)'
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = 'translateY(0)'
+        e.currentTarget.style.borderColor = 'transparent'
+      }}
+    >
+      {imgLoading && <div className="skeleton-shimmer" style={{ position: 'absolute', inset: 0 }} />}
+      <img
+        src={imageUrl}
+        alt={title}
+        loading="lazy"
+        onLoad={() => setImgLoading(false)}
+        onError={() => setImgLoading(false)}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+          display: 'block',
+          opacity: imgLoading ? 0 : 1,
+          transition: 'opacity 0.3s',
+        }}
+      />
+      <div style={{
+        position: 'absolute',
+        inset: 0,
+        background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.2) 50%, transparent 100%)',
+        pointerEvents: 'none',
+      }} />
+      <div style={{
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        padding: '12px 14px 16px',
+      }}>
+        <p style={{
+          color: '#fff',
+          fontSize: 13,
+          fontWeight: 600,
+          margin: 0,
+          lineHeight: 1.3,
+          display: '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}>
+          {title}
+        </p>
       </div>
     </div>
   )

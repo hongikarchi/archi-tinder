@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { GalleryOverlay } from '../components/GalleryOverlay.jsx'
 import * as api from '../api/client.js'
 
@@ -6,23 +7,9 @@ const PAGE_SIZE = 10
 const PRIMARY_COUNT = 10
 const MAX_RESULTS = 50
 
-export default function FavoritesPage({ projects, onDeleteProject, onResumeProject, onGenerateReport, onImageGenerated, onToggleBookmark, openId, onOpenIdChange }) {
+export default function FavoritesPage({ projects }) {
+  const navigate = useNavigate()
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
-  const openProject = projects.find(p => p.id === openId) || null
-
-  if (openProject) {
-    return (
-      <FolderDetail
-        project={openProject}
-        onBack={() => onOpenIdChange(null)}
-        onDelete={() => { onDeleteProject(openProject.id); onOpenIdChange(null) }}
-        onResume={() => onResumeProject(openProject.id)}
-        onGenerateReport={() => onGenerateReport(openProject.id)}
-        onImageGenerated={(imageData) => onImageGenerated && onImageGenerated(openProject.id, imageData)}
-        onToggleBookmark={(cardId, action, rank) => onToggleBookmark && onToggleBookmark(openProject.id, cardId, action, rank)}
-      />
-    )
-  }
 
   const sorted  = [...projects].reverse()
   const visible = sorted.slice(0, visibleCount)
@@ -53,7 +40,7 @@ export default function FavoritesPage({ projects, onDeleteProject, onResumeProje
                 <ProjectCard
                   key={project.id}
                   project={project}
-                  onClick={() => onOpenIdChange(project.id)}
+                  onClick={() => project.backendId && navigate(`/board/${project.backendId}`)}
                 />
               ))}
             </div>

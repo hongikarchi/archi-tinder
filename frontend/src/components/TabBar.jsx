@@ -14,11 +14,6 @@ const TAB_ICONS = {
       <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
     </svg>
   ),
-  folders: (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
-    </svg>
-  ),
   profile: (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
@@ -29,7 +24,6 @@ const TAB_ICONS = {
 
 function getActiveTab(pathname) {
   if (pathname === '/swipe') return 'swipe'
-  if (pathname.startsWith('/library')) return 'folders'
   if (pathname.startsWith('/user')) return 'profile'
   return 'home'
 }
@@ -42,7 +36,6 @@ export default function TabBar({ swipeEnabled }) {
   const tabs = [
     { id: 'home', label: 'New', path: '/' },
     { id: 'swipe', label: 'Swipe', path: '/swipe' },
-    { id: 'folders', label: 'Library', path: '/library' },
     { id: 'profile', label: 'Profile', path: '/user/me' },
   ]
 

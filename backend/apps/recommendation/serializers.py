@@ -11,12 +11,18 @@ class ProjectSerializer(serializers.ModelSerializer):
     Applies to owner, public, admin — all contexts.
 
     `user` is a nested minimal shape: user_id + display_name + avatar_url.
+    `latest_session_id` is the most recent completed session UUID, or null.
     """
     project_id = serializers.UUIDField(read_only=True)
     user = UserMiniSerializer(read_only=True)
+    latest_session_id = serializers.SerializerMethodField()
+
+    def get_latest_session_id(self, obj):
+        session = obj.sessions.order_by('-created_at').first()
+        return str(session.session_id) if session else None
 
     class Meta:
-        model  = Project
+        model = Project
         fields = [
             'project_id',
             'user',
@@ -30,6 +36,7 @@ class ProjectSerializer(serializers.ModelSerializer):
             'analysis_report',
             'final_report',
             'report_image',
+            'latest_session_id',
             'created_at',
             'updated_at',
         ]
@@ -43,18 +50,18 @@ class ProjectSerializer(serializers.ModelSerializer):
             'final_report',
             'report_image',
             'raw_query',
+            'latest_session_id',
             'created_at',
             'updated_at',
         ]
-        # `disliked_ids` intentionally excluded — never serialized to any caller
+        # `disliked_ids` intentionally excluded — never exposed
 
 
 class ProjectSelfUpdateSerializer(serializers.ModelSerializer):
-    """PATCH /api/v1/projects/{project_id}/ — owner updates name + visibility only.
+    """PATCH /api/v1/projects/{project_id}/ — owner-only name + visibility.
 
-    All other fields (liked_ids, saved_ids, filters, reaction_count, etc.)
-    are managed by swipe flow or system — silently ignored on PATCH.
+    All other fields managed by swipe flow or system; silently ignored.
     """
     class Meta:
-        model  = Project
+        model = Project
         fields = ['name', 'visibility']

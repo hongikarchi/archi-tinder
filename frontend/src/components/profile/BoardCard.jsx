@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useImageTelemetry } from '../../hooks/useImageTelemetry.js'
-import InfoCol from './InfoCol'
+import InfoCol from './InfoCol.jsx'
 
 /**
  * BoardCard — flip card per DESIGN.md §3.5.4
@@ -15,7 +15,6 @@ import InfoCol from './InfoCol'
  * static border lingers awkwardly behind the rotating card.
  */
 export default function BoardCard({ board }) {
-  const [isFlipped, setIsFlipped] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
   const navigate = useNavigate()
 
@@ -25,43 +24,24 @@ export default function BoardCard({ board }) {
     buildingId: board.board_id,
     context: 'user_profile_board_cover',
   })
-  const { onError: thumbOnError } = useImageTelemetry({
-    buildingId: board.board_id,
-    context: 'user_profile_board_thumb',
-  })
-
   return (
     <div
       style={{
-        perspective: '1200px',
         width: '100%',
         aspectRatio: '3/4',
         cursor: 'pointer',
         userSelect: 'none', WebkitUserSelect: 'none', touchAction: 'manipulation',
-        // §3.5.4: lift YES, border NO. Lift on outer perspective wrapper so it doesn't
-        // double-compose with the inner rotateY transform.
         transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
         transform: isHovered ? 'translateY(-4px)' : 'translateY(0)',
+        position: 'relative',
       }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      onClick={(e) => {
-        if (e.target.closest('button')) return
-        setIsFlipped(!isFlipped)
-      }}
+      onClick={() => navigate('/board/' + board.board_id)}
     >
-      <div style={{
-        width: '100%',
-        height: '100%',
-        position: 'relative',
-        transition: 'transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
-        transformStyle: 'preserve-3d',
-        transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)'
-      }}>
-        {/* FRONT FACE — image-overlay per §3.5.1 + §3.5.2 RICH PATTERN + §3.5.3 (PRIVATE-only icon chip) */}
+        {/* Image-overlay card per §3.5.1 + §3.5.2 RICH PATTERN + §3.5.3 */}
         <div style={{
           position: 'absolute', inset: 0,
-          backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden',
           borderRadius: 20, overflow: 'hidden',
           boxShadow: '0 10px 25px rgba(0,0,0,0.3)',
           background: 'rgba(255,255,255,0.03)',
@@ -135,121 +115,6 @@ export default function BoardCard({ board }) {
           </div>
         </div>
 
-        {/* BACK FACE — §3.5.5 swipe-style horizontal full-bleed gallery */}
-        <div style={{
-          position: 'absolute', inset: 0,
-          backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden',
-          transform: 'rotateY(180deg)',
-          borderRadius: 20, overflow: 'hidden',
-          boxShadow: '0 10px 25px rgba(0,0,0,0.3)',
-          background: '#000',
-          display: 'flex', flexDirection: 'column',
-        }}>
-          {/* §3.5.5 Left scroll indicator — sibling of scroll container, pointerEvents none */}
-          <div style={{
-            position: 'absolute', left: 10, top: '50%',
-            transform: 'translateY(-50%)',
-            pointerEvents: 'none',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            width: 32, height: 32, borderRadius: '50%',
-            background: 'rgba(0,0,0,0.32)', backdropFilter: 'blur(6px)',
-            zIndex: 2,
-          }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
-                 stroke="rgba(255,255,255,0.85)" strokeWidth="2.5"
-                 strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="15 18 9 12 15 6" />
-            </svg>
-          </div>
-          {/* §3.5.5 Right scroll indicator */}
-          <div style={{
-            position: 'absolute', right: 10, top: '50%',
-            transform: 'translateY(-50%)',
-            pointerEvents: 'none',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            width: 32, height: 32, borderRadius: '50%',
-            background: 'rgba(0,0,0,0.32)', backdropFilter: 'blur(6px)',
-            zIndex: 2,
-          }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
-                 stroke="rgba(255,255,255,0.85)" strokeWidth="2.5"
-                 strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="9 18 15 12 9 6" />
-            </svg>
-          </div>
-
-          {/* Scroll container with scroll-snap — one image per snap point */}
-          <div
-            className="hide-scrollbar"
-            style={{
-              flex: 1,
-              overflowX: 'auto',
-              overflowY: 'hidden',
-              display: 'flex',
-              scrollSnapType: 'x mandatory',
-              WebkitOverflowScrolling: 'touch',
-              scrollbarWidth: 'none',
-              msOverflowStyle: 'none',
-            }}
-          >
-            {board.thumbnails?.map((img, i) => (
-              <div key={i} style={{
-                flex: '0 0 100%',
-                height: '100%',
-                scrollSnapAlign: 'start',
-                position: 'relative',
-              }}>
-                <img
-                  src={img}
-                  alt=""
-                  loading="lazy"
-                  onError={thumbOnError}
-                  style={{
-                    width: '100%', height: '100%',
-                    objectFit: 'cover',
-                    display: 'block',
-                  }}
-                />
-              </div>
-            ))}
-          </div>
-
-          {/* Persistent action bar — §3.5.5 4-stop soft gradient */}
-          <div style={{
-            padding: '20px 16px 16px',
-            background: 'linear-gradient(to top, rgba(0,0,0,0.96) 0%, rgba(0,0,0,0.65) 45%, rgba(0,0,0,0.18) 80%, transparent 100%)',
-          }}>
-            <button
-              onClick={() => navigate('/library/' + board.board_id)}
-              style={{
-                width: '100%', minHeight: 44,
-                padding: '10px 14px', borderRadius: 12,
-                background: 'rgba(255,255,255,0.10)',
-                border: '1px solid rgba(255,255,255,0.18)',
-                color: '#fff', fontSize: 13, fontWeight: 600,
-                cursor: 'pointer', fontFamily: 'inherit',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                transition: 'background 0.18s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(236,72,153,0.18)'
-                e.currentTarget.style.borderColor = 'rgba(236,72,153,0.45)'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.10)'
-                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.18)'
-              }}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2"></rect>
-                <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                <polyline points="21 15 16 10 5 21"></polyline>
-              </svg>
-              View Gallery · {board.building_count} photos
-            </button>
-          </div>
-        </div>
-      </div>
     </div>
   )
 }
