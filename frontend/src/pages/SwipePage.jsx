@@ -306,13 +306,27 @@ function LoadingCard() {
   )
 }
 
-/* ── ConfidenceBar ───────────────────────────────────────────────────────── */
-function ConfidenceBar({ value }) {
-  // value: number in [0, 1] or null
-  // null means n < 3 analyzing-phase swipes, exploring phase, or post-reset
-  if (value === null || value === undefined) return null
-
-  const pct = Math.round(value * 100)
+/* ── ConfidenceBar (unified progress for all phases) ─────────────────────── */
+function ConfidenceBar({ value, phase, likeCount }) {
+  // value: confidence in [0, 1] (analyzing+ phases) or null (exploring / pre-reset)
+  // When confidence is null and we're in exploring phase, fall back to like-count
+  // progress (0-3 likes to unlock analysis). Always renders one bar + one label
+  // so the header never branches between two visualizations.
+  let pct = 0
+  let label = ''
+  if (value !== null && value !== undefined) {
+    pct = Math.round(value * 100)
+    label = phase === 'converged' || phase === 'completed'
+      ? '분석 완료'
+      : `취향 안정도 ${pct}%`
+  } else if (phase === 'exploring') {
+    const likes = Math.min(likeCount ?? 0, 3)
+    pct = Math.round((likes / 3) * 100)
+    label = `탐색 중 · ♥ ${likes}/3`
+  } else {
+    pct = 0
+    label = '준비 중'
+  }
   return (
     <div style={{ width: '100%' }}>
       <div style={{
@@ -334,7 +348,7 @@ function ConfidenceBar({ value }) {
         textAlign: 'right',
         marginTop: 4,
       }}>
-        취향 안정도 {pct}%
+        {label}
       </div>
     </div>
   )
@@ -351,8 +365,6 @@ export default function SwipePage({
   const [galleryOpen, setGalleryOpen] = useState(false)
   const [showTutorial, setShowTutorial] = useState(() => !localStorage.getItem('archithon_tutorial_dismissed'))
 
-  const current_round    = progress?.current_round ?? 0
-  const total_rounds     = progress?.total_rounds  ?? 1
   const like_count       = progress?.like_count    ?? 0
   const phase            = progress?.phase
   const filter_relaxed   = progress?.filter_relaxed || false
@@ -535,24 +547,7 @@ export default function SwipePage({
               : <><span style={{ color: 'var(--color-text)' }}>Archi</span><span style={{ color: '#ec4899' }}>Tinder</span></>}
           </h1>
           <div style={{ maxWidth: CARD_WIDTH, margin: '0 auto' }}>
-            {confidence !== null ? (
-              <ConfidenceBar value={confidence} />
-            ) : (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                {phase === 'exploring' && (
-                  <>
-                    <span style={{ color: 'var(--color-text-dim)', fontSize: 11 }}>
-                      {like_count}/3 likes to unlock analysis
-                    </span>
-                  </>
-                )}
-                {(!phase || phase === 'analyzing' || phase === 'converged' || phase === 'completed') && (
-                  <span style={{ color: 'var(--color-text-dim)', fontSize: 11 }}>
-                    {current_round} / {total_rounds}
-                  </span>
-                )}
-              </div>
-            )}
+            <ConfidenceBar value={confidence} phase={phase} likeCount={like_count} />
             {filter_relaxed && (
               <p style={{ color: 'var(--color-text-dimmer)', fontSize: 11, marginTop: 6, textAlign: 'center' }}>
                 Filters were relaxed to find more buildings

@@ -52,11 +52,21 @@ export default function DebugOverlay({ userId, session }) {
       <div><span style={labelStyle}>[DEBUG]</span> {userId || 'not logged in'}</div>
       <div><span style={dimStyle}>JWT exp:</span> {jwtExp}</div>
       {session ? (
-        <div>
-          <span style={dimStyle}>Session:</span>{' '}
-          {session.id ? session.id.slice(0, 8) : '—'}{' '}
-          · round {session.round ?? '?'}/{session.total ?? '?'}
-        </div>
+        <>
+          <div>
+            <span style={dimStyle}>Session:</span>{' '}
+            {session.id ? session.id.slice(0, 8) : '—'}{' '}
+            · round {session.round ?? '?'}/{session.total ?? '?'}
+          </div>
+          <div>
+            <span style={dimStyle}>Phase:</span> {session.phase ?? '—'}
+            {' · '}<span style={dimStyle}>♥</span> {session.like_count ?? 0}
+            {' · '}<span style={dimStyle}>conf</span>{' '}
+            {session.confidence != null ? session.confidence.toFixed(3) : 'null'}
+            {' · '}<span style={dimStyle}>ext?</span>{' '}
+            {session.can_continue == null ? '—' : session.can_continue ? 'yes' : 'no'}
+          </div>
+        </>
       ) : (
         <div><span style={dimStyle}>Session:</span> none</div>
       )}
