@@ -114,6 +114,28 @@ def _mock_build_action_card():
 
 # Shared patch decorator for engine functions used in session creation
 _ENGINE = 'apps.recommendation.views.engine'
+_SWIPE_VIEW = 'apps.recommendation.views.swipe'
+
+
+class _SyncThread:
+    """threading.Thread replacement: runs target synchronously so test transaction sees DB writes."""
+    def __init__(self, target=None, args=(), kwargs=None, daemon=None, **kw):
+        self._target = target
+        self._args = args
+        self._kwargs = kwargs or {}
+
+    def start(self):
+        if self._target:
+            self._target(*self._args, **self._kwargs)
+
+
+def _sync_emit_telemetry(swipe_kwargs, confidence_kwargs):
+    """_emit_telemetry_thread replacement: emit synchronously, no DB close."""
+    from apps.recommendation import event_log
+    event_log.emit_swipe_event(**swipe_kwargs)
+    if confidence_kwargs is not None:
+        event_log.emit_event('confidence_update', **confidence_kwargs)
+
 
 _SESSION_PATCHES = {
     f'{_ENGINE}.create_bounded_pool': lambda *a, **kw: (_FAKE_POOL[:], dict(_FAKE_SCORES)),
@@ -129,6 +151,8 @@ _SESSION_PATCHES = {
     f'{_ENGINE}.build_action_card': _mock_build_action_card,
     f'{_ENGINE}.get_dislike_fallback': lambda *a, **kw: 'B00010',
     f'{_ENGINE}._random_pool': lambda target: _FAKE_POOL[:target],
+    f'{_SWIPE_VIEW}.threading.Thread': _SyncThread,
+    f'{_SWIPE_VIEW}._emit_telemetry_thread': _sync_emit_telemetry,
 }
 
 
