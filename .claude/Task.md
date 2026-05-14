@@ -111,6 +111,7 @@
 - [2026-05-14] PR-MERGED: #30 — squashed into develop (976bfdc) via `gh pr merge 30 --squash --admin` (no --delete-branch). Mode 1 step 7 clean: stash → merge → `gh api -X DELETE refs/heads/feature/admin-s6-tab-cutover` HTTP 204 → checkout develop → pull (fast-forward 7f225c2..976bfdc, 6 files +59/-930 — FavoritesPage + SetupPage deleted) → branch -D → fetch --prune → stash pop. **Note**: squash commit title is the last commit's "docs(handoffs): swap S6 signal to REVIEW-REQUESTED per replan" rather than the substantive S6 feat title (gh default behavior; commit body still contains the 4-tab → 3-tab cutover diff). S6 (4-tab → 3-tab TabBar cutover per replan) live on develop.
 - [2026-05-14] FRONT-DONE: s7-discovery-frontend-page — DiscoveryPage + SaveToBoardModal + api/discovery.js verified. One deviation from task file: used `metadata.axis_architects` (matching normalizeCard output + all other card consumers) instead of `metadata.architect` as written in the spec bullet. front-validate.sh ALL GREEN (lint + vite build).
 - [2026-05-14] BACK-DONE: s7-discovery-backend-feed
+- [2026-05-14] REVIEW-FAIL: 666e36f — static review PASS-WITH-MINORS (0 CRITICAL, 0 MAJOR, 4 MINOR) but browser test FAIL: DiscoveryPage stuck loading=true under React StrictMode dev (isActiveRef never reset on remount at frontend/src/pages/DiscoveryPage.jsx:149+173); cards stay empty even though /api/v1/discovery/ returns warm 12-card payload in ~615ms; fix is `useEffect(() => { isActiveRef.current = true; return () => { isActiveRef.current = false } }, [])`; see .claude/reviews/latest.md
 
 ## Development Roadmap
 
@@ -286,3 +287,4 @@ Append new resolved entries to the archive, not here.
 FRONT-DONE: s7-discovery-frontend-page
 BACK-BLOCKED: s7-discovery-backend-feed — tools/back-validate.sh recommendation still fails on repo-wide flake8 (e.g., apps/accounts/apps.py:3:1 E302, apps/recommendation/engine.py:111:16 E221) before pytest execution.
 REVIEW-REQUESTED: 11c786b
+- [2026-05-14] REVIEW-REQUESTED: 0ee6b42 — fix(s7): isActiveRef StrictMode reset. 1-line fix per reviewer's exact diagnosis at REVIEW-FAIL: 666e36f. front-validate ALL GREEN. Re-run /review Part B on /discovery (cards render → infinite scroll → ⭐ → SaveToBoardModal → 5 saves → SurpriseBoardModal → bulk-bookmark gates).
