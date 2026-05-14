@@ -62,8 +62,9 @@
     (plans is for `/plan`-mode artifacts only).
 
   ## Rules
-  - All building references must use `building_id` -- never name, slug, or language-dependent field.
-  - Do NOT create or migrate the `architecture_vectors` table -- it is owned by Make DB.
+  - All building references must use `canonical_bld_id` (TEXT PK like `'bld_000344'`) -- never `name`, `slug`, or any language-dependent field.
+  - Do NOT create or migrate the `canonical_v2_buildings` table -- it is owned by Make DB.
+  - Every building query MUST gate on `is_publishable = true` (39 of 39,776 rows are non-publishable). `engine._build_filter_sql` already emits this clause; raw SQL elsewhere must add it.
   - SentenceTransformers is NOT a dependency here -- embeddings are pre-computed.
   - When updating `.claude/Report.md`, update ONLY the `Last Updated (Claude)` section.
   - **`docs/algorithm.md` reporter sync (narrow write permission)**: only the `reporter` agent updates `docs/algorithm.md`, and only to keep it in sync with implementation. Permitted writes: (a) sync the **Production Value** column in the Hyperparameter Space table when `backend/config/settings.py` RECOMMENDATION dict changes; (b) append a one-line `_(Updated YYYY-MM-DD <sha_short>: <one-line>)_` annotation under any phase / formula / edge-case section whose corresponding implementation just changed; (c) maintain a `**Last Synced (Reporter):** YYYY-MM-DD <sha_short>` line near the top. Forbidden: rewriting algorithm theory, removing existing content, adding new sections. Other `docs/` files (specs, etc.) are admin-owned plain documents — anyone can edit via PR per CONTRIBUTING.md.
@@ -110,22 +111,52 @@
   - All URL patterns must have trailing slashes -- Django APPEND_SLASH only redirects GET, not POST
   - Neon PostgreSQL: use `sslmode=require` in DATABASE_URL; psycopg2-binary (not asyncpg)
   - JWT: access=1hr, refresh=30days, rotate+blacklist (simplejwt TokenBlacklist app must be in INSTALLED_APPS)
-  - `architecture_vectors` -- read-only via raw SQL; never use Django ORM or migrate this table
-  - `images/batch/` POST -- batch-fetch building cards by `building_ids` list
+  - `canonical_v2_buildings` -- read-only via raw SQL; never use Django ORM or migrate this table. Old `architecture_vectors` table is deprecated and untouched by Make Web code.
+  - `images/batch/` POST -- batch-fetch building cards by `canonical_bld_ids` list (request body field `canonical_bld_ids`; legacy `building_ids` accepted for one rollout cycle)
   - Run: `cd backend && python3 manage.py runserver 8001`
 
-  ## Codex Multi-Workspace (stateful 5-tab cmux setup)
+  ## Claude Architect + Codex Implementer Workflow
 
-  Make Web runs as 5 cmux workspaces in one window. WEB-MAIN is this Claude Code
-  session (orchestrator + commits via `git-manager`). WEB-BACK and WEB-FRONT each
-  host a persistent Codex CLI session that auto-loads `AGENTS.md` from cwd + its
-  team file when WEB-MAIN dispatches a task. WEB-REVIEW runs Claude Code for
-  `/review` pre-push gate. WEB-GIT runs Claude Code for the `git-publisher` agent
-  (push / PR / merge / external PR triage / develop→main deploy).
+  **Operating principle**: *Claude-main owns architecture, product, schema, auth,
+  release. Codex implements bounded tasks. Final verification = diff / test / PR.*
+
+  Codex workers run as stateful Codex CLI sessions in cmux workspaces and
+  auto-load `AGENTS.md` from cwd. Each worker reads its own baseline file
+  (`.claude/codex/backend-worker.md` or `frontend-worker.md`) plus the
+  dispatched bounded task file. WEB-MAIN dispatches via `cmux send`. WEB-REVIEW
+  runs Claude Code for the `/review` pre-push gate. WEB-GIT runs Claude Code
+  for the `git-publisher` agent.
+
+  ### Lean 3-lane (default — most work)
+
+  One Codex worker (back OR front) + WEB-MAIN + WEB-REVIEW + WEB-GIT.
+
+  - **Setup**: `tools/cmux_lean_setup.sh <back|front|both>` (idempotent).
+  - **Dispatch (default)**: `tools/dispatch-codex-task.sh <team> <slug> <task-file>`
+    — Claude-main writes a task file from `tools/codex-task-template.md` (scope /
+    allowed files / contracts / verification / handoff), the wrapper embeds it in
+    a bounded-implementer contract message and sends it to the worker. **This is
+    the default dispatch path; bounded task files are required for any non-trivial
+    task.**
+  - **Dispatch (fallback)**: `tools/dispatch.sh <team> "<free-form msg>"` for
+    quick pings, scope-clear follow-ups, or fix-loop dispatches where re-writing
+    a task file is overhead. Same bounded-implementer rules apply on the worker
+    side.
+
+  ### Full 5-tab (opt-in — both workers concurrently active)
+
+  WEB-MAIN + WEB-BACK + WEB-FRONT + WEB-REVIEW + WEB-GIT — used when a full-stack
+  task wants backend and frontend workers running in parallel.
+
+  - **Setup**: `tools/cmux_setup.sh` (idempotent).
+  - **Dispatch**: same `tools/dispatch-codex-task.sh` (default) /
+    `tools/dispatch.sh` (fallback) — the wrapper detects the team.
+
+  ### Workspaces (both lanes)
 
   | Workspace | Runs | Owns |
   |---|---|---|
-  | WEB-MAIN | Claude Code (this session) | Pipeline, dispatch, in-session reviewer/security, **commit via git-manager** (never push) |
+  | WEB-MAIN | Claude Code (this session, architect) | Pipeline, dispatch, in-session reviewer/security, **commit via git-manager** (never push) |
   | WEB-BACK | Codex CLI | `backend/*` (apps, serializers, views, migrations, tests) |
   | WEB-FRONT | Codex CLI | `frontend/*` (data layer + UI — but consult `DESIGN.md` before changing inline styles) |
   | WEB-REVIEW | Claude Code | `/review` pre-push gate only (read-only on source) |
@@ -144,36 +175,40 @@
 
   **Files that define this architecture** (ground truth — edit these, not policy here):
   - `AGENTS.md` — Codex baseline + hard guardrails (auto-loaded from cwd by codex CLI on startup)
-  - `.claude/agents/team-back.md`, `team-front.md` — per-team owned files + DRF gotchas + fix loop
+  - `.claude/codex/backend-worker.md`, `.claude/codex/frontend-worker.md` — per-worker owned files + DRF gotchas + self-review checklist + fix loop
   - `.claude/agents/git-manager.md` — slim commit-only agent (WEB-MAIN)
   - `.claude/agents/git-publisher.md` — push/PR/merge/external/deploy agent (WEB-GIT)
-  - `tools/cmux_setup.sh` — idempotent 5-workspace creator + init prompts
-  - `tools/dispatch.sh <team> "<msg>"` — WEB-MAIN sends a task to a team (`team ∈ {back, front, review, git}`)
+  - `tools/cmux_lean_setup.sh <back|front|both>` — lean 3-lane workspace creator + init prompts (default)
+  - `tools/cmux_setup.sh` — full 5-tab workspace creator + init prompts (opt-in)
+  - `tools/codex-task-template.md` — bounded task file template Claude-main copies + fills per dispatch
+  - `tools/dispatch-codex-task.sh <team> <slug> <task-file>` — default dispatch (bounded task file required)
+  - `tools/dispatch.sh <team> "<msg>"` — fallback free-form dispatch (`team ∈ {back, front, review, git}`)
+  - `tools/print-claude-codex-handoff.sh` — prints the Codex→Claude-main handoff prompt for lean-workflow adoption
   - `tools/poll.sh <team> [lines]` — WEB-MAIN reads a team's screen output
   - `tools/git-new-feature.sh <role> <topic>` — sync develop + create feature branch
   - `tools/git-stage-and-commit.sh "<msg>"` — single safe commit (called by git-manager)
   - `tools/git-push-pr.sh` — push + `gh pr create --base develop` (called by git-publisher Mode 1)
   - `tools/git-poll-merge.sh <PR#>` — poll CI status (called by git-publisher)
-  - `tools/back-validate.sh [app]` — flake8 + migrate-if-needed + pytest (called by back-maker / team-back)
-  - `tools/front-validate.sh` — npm lint + build (called by front-maker / team-front)
+  - `tools/back-validate.sh [app]` — flake8 + migrate-if-needed + pytest (called by back-maker / backend-worker)
+  - `tools/front-validate.sh` — npm lint + build (called by front-maker / frontend-worker)
   - `tools/migrate.sh [app]`, `tools/test-backend.sh`, `tools/check-frontend.sh` — finer-grained wrappers
 
-  **When to dispatch to a Codex team** (vs an in-session Claude sub-agent):
+  **When to dispatch to a Codex worker (with bounded task file)** vs an in-session Claude sub-agent:
   - Mechanical, well-bounded task (single feature, clear file scope)
-  - Plan can include verbatim code blocks; acceptance is `pytest`/lint green
+  - Plan can include verbatim code blocks; acceptance is `pytest` / lint green
   - Stay with Claude `back-maker`/`front-maker` for: open-ended refactors,
     bug fixes with unclear root cause, algorithm tuning, UI work that needs `DESIGN.md` judgment
 
-  **DRF gotcha** (lesson from empirical test 001 v1, codified in `team-back.md`):
+  **DRF gotcha** (lesson from empirical test 001 v1, codified in `backend-worker.md`):
   `serializers.CharField` defaults to `trim_whitespace=True, allow_blank=False` —
   validators receive already-stripped input. To validate whitespace-only, declare
   the field with `trim_whitespace=False, allow_blank=True`. Tests must cover
   whitespace-only explicitly.
 
   **Handoff signals** (`.claude/Task.md` § Handoffs):
-  - `BACK-DONE: <slug>` / `FRONT-DONE: <slug>` — team finished
-  - `BACK-BLOCKED: <reason>` / `FRONT-BLOCKED: <reason>` — team escalates
-  - `<TEAM>-NEEDS-CLARIFICATION: <question>` — team waits
+  - `BACK-DONE: <slug>` / `FRONT-DONE: <slug>` — worker finished
+  - `BACK-BLOCKED: <reason>` / `FRONT-BLOCKED: <reason>` — worker escalates
+  - `<TEAM>-NEEDS-CLARIFICATION: <question>` — worker waits
   - `READY-FOR-PUSH: <branch>` — WEB-MAIN → WEB-GIT (after REVIEW-PASSED)
   - `BRANCH-CREATED: <branch>` / `PR-OPENED: #<N>` / `PR-CI-GREEN: #<N>` / `PR-CI-FAIL: #<N>` / `PR-MERGED: #<N>` — WEB-GIT internal PR lifecycle
   - `PR-READY-FOR-REVIEW: #<N>` — WEB-GIT → admin (external PR triage; admin manually triggers `/review` per hybrid policy)
@@ -183,12 +218,14 @@
 
   **Fix loop**: WEB-MAIN's in-session `reviewer` or `security-manager` agent
   evaluates Codex output (same bar as Claude `back-maker`/`front-maker` output —
-  no separate Codex-reviewer). On FAIL, dispatch to team with the diagnosis;
+  no separate Codex-reviewer). On FAIL, dispatch to worker with the diagnosis;
   cap at 2 cycles, then escalate to Claude sub-agent.
 
   Historical note: pre-2026-05-06 used a stateless `codex exec` pattern
   (commits `27fee9b`, `042bed4`, `59d2af4`, `51dd387`); deprecated in favor
   of the stateful pattern after empirical comparison with Make DB's setup.
+  The bounded-task-file dispatch protocol (2026-05-13) hardens the stateful
+  pattern by making per-task scope explicit instead of folkloric.
 
   ## Web Testing
   See **`web-testing/AGENTS.md`** for: dev-login flow + token injection +
@@ -232,9 +269,10 @@
   sequence diagram.
 
   ## Database
-  See **`docs/database-schema.md`** for the `architecture_vectors` CREATE TABLE
-  + normalized `program` vocabulary + Make-DB-ownership hard rules. Backend
-  work touching the building data layer must consult this file. Hard rules
-  (already enforced in `## Rules` above): use `building_id` only; never ORM
-  or migrate `architecture_vectors`; embeddings are pre-computed (no
+  See **`docs/database-schema.md`** for the `canonical_v2_buildings` CREATE TABLE
+  + normalized `program` vocabulary + image-resolution semantics + Make-DB-
+  ownership hard rules. Backend work touching the building data layer must
+  consult this file. Hard rules (already enforced in `## Rules` above): use
+  `canonical_bld_id` only; never ORM or migrate `canonical_v2_buildings`; gate
+  every query on `is_publishable = true`; embeddings are pre-computed (no
   SentenceTransformers runtime dep).

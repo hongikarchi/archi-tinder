@@ -41,6 +41,10 @@ from .search import (
     # Private helper accessed by tests
     _spawn_stage2,
 )
+from .discovery import (
+    DiscoveryFeedView,
+    BoardSurpriseView,
+)
 from .reports import (
     ProjectReportGenerateView,
     ProjectReportImageView,
@@ -69,6 +73,8 @@ __all__ = [
     'BuildingBatchView',
     'DiverseRandomView',
     'ParseQueryView',
+    'DiscoveryFeedView',
+    'BoardSurpriseView',
     'ProjectReportGenerateView',
     'ProjectReportImageView',
     'ImageLoadTelemetryView',

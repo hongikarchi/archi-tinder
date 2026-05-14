@@ -467,9 +467,11 @@ class TestBackwardCompat:
             with _RecommendationOverride(context_caching_enabled=False):
                 result = parse_query([{'role': 'user', 'text': 'hello'}])
 
+        # S2 canonical_v2 schema migration added top-level image_focus to the
+        # parse_query response (rider on filters for per-cover-variant selection).
         expected_keys = {
             'probe_needed', 'probe_question', 'reply', 'filters',
-            'filter_priority', 'raw_query', 'visual_description',
+            'filter_priority', 'image_focus', 'raw_query', 'visual_description',
         }
         assert set(result.keys()) == expected_keys
 

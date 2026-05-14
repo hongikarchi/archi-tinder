@@ -29,7 +29,7 @@ def _make_fake_cards(ids):
     """Minimal card dicts for SessionResultView consumption."""
     return [
         {
-            'building_id': bid,
+            'canonical_bld_id': bid,
             'name_en': f'Building {bid}',
             'atmosphere': 'calm',
             'material': 'concrete',
@@ -140,7 +140,7 @@ class TestTopic02DppComposition:
 
         def _fake_dpp(cards, like_vectors, k, q_override=None):
             captured['q_override'] = q_override
-            return [c['building_id'] for c in cards[:k]]
+            return [c['canonical_bld_id'] for c in cards[:k]]
 
         monkeypatch.setattr(engine, 'get_top_k_mmr', _fake_top_k_mmr)
         monkeypatch.setattr(services, 'rerank_candidates', _fake_rerank)
@@ -185,7 +185,7 @@ class TestTopic02DppComposition:
 
         def _fake_dpp(cards, like_vectors, k, q_override=None):
             captured['q_override'] = q_override
-            return [c['building_id'] for c in cards[:k]]
+            return [c['canonical_bld_id'] for c in cards[:k]]
 
         monkeypatch.setattr(engine, 'get_top_k_mmr', _fake_top_k_mmr)
         monkeypatch.setattr(engine, 'compute_dpp_topk', _fake_dpp)
@@ -234,7 +234,7 @@ class TestTopic02DppComposition:
 
         def _fake_dpp(cards, like_vectors, k, q_override=None):
             captured['q_override'] = q_override
-            return [c['building_id'] for c in cards[:k]]
+            return [c['canonical_bld_id'] for c in cards[:k]]
 
         monkeypatch.setattr(engine, 'get_top_k_mmr', _fake_top_k_mmr)
         monkeypatch.setattr(services, 'rerank_candidates', _fake_rerank)
@@ -279,7 +279,7 @@ class TestTopic02DppComposition:
 
         def _fake_dpp(cards, like_vectors, k, q_override=None):
             captured['q_override'] = q_override
-            return [c['building_id'] for c in cards[:k]]
+            return [c['canonical_bld_id'] for c in cards[:k]]
 
         monkeypatch.setattr(engine, 'get_top_k_mmr', _fake_top_k_mmr)
         monkeypatch.setattr(services, 'rerank_candidates', _fake_rerank)
@@ -338,7 +338,7 @@ class TestTopic02DppComposition:
 
         def _fake_dpp(cards, like_vectors, k, q_override=None):
             captured['q_override'] = q_override
-            return [c['building_id'] for c in cards[:k]]
+            return [c['canonical_bld_id'] for c in cards[:k]]
 
         monkeypatch.setattr(engine, 'get_top_k_mmr', _fake_top_k_mmr)
         monkeypatch.setattr(services, 'rerank_candidates', _fake_rerank)

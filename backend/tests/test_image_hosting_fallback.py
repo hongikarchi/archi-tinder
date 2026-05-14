@@ -9,7 +9,7 @@ import math
 import pytest
 from django.conf import settings
 
-from apps.recommendation.engine import _row_to_card
+from apps.recommendation.engine import _row_to_card  # noqa: F401 — used by skipped legacy class
 from apps.recommendation.models import SessionEvent
 
 
@@ -17,10 +17,10 @@ from apps.recommendation.models import SessionEvent
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _base_row(building_id='B00001', **overrides):
+def _base_row(canonical_bld_id='B00001', **overrides):
     """Build a minimal DB row dict for _row_to_card tests."""
     row = {
-        'building_id': building_id,
+        'canonical_bld_id': canonical_bld_id,
         'name_en': 'Test Building',
         'project_name': 'Test Project',
         'architect': 'Test Architect',
@@ -48,6 +48,7 @@ def _base_row(building_id='B00001', **overrides):
 # TestRowToCardDivisareFallback
 # ---------------------------------------------------------------------------
 
+@pytest.mark.skip(reason="legacy v1 schema (image_photos/image_drawings); replaced by apps/recommendation/tests/test_row_to_card.py for canonical_v2_buildings")
 class TestRowToCardDivisareFallback:
     """Unit tests for _row_to_card image resolution order."""
 
@@ -170,7 +171,7 @@ class TestRowToCardDivisareFallback:
         """Row lacking divisare columns (older code path) — .get() returns None safely."""
         # Simulate a row that has no Divisare columns at all (KeyError should not occur)
         row = {
-            'building_id': 'B00002',
+            'canonical_bld_id': 'B00002',
             'name_en': 'Old Building',
             'project_name': 'Old Project',
             'architect': None,
@@ -220,7 +221,7 @@ class TestImageLoadTelemetryView:
         event = SessionEvent.objects.filter(event_type='image_load').last()
         assert event is not None
         assert event.payload['outcome'] == 'success'
-        assert event.payload['building_id'] == 'B00001'
+        assert event.payload['canonical_bld_id'] == 'B00001'
         assert event.payload['context'] == 'card'
         assert event.payload['load_ms'] == 123
         assert event.payload['domain'] == 'images.example.com'

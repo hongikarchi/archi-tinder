@@ -1,12 +1,24 @@
 """
-engine.py — Recommendation algorithm using pgvector.
-All DB access is raw SQL against architecture_vectors (owned by Make DB).
+engine.py -- Recommendation algorithm using pgvector.
+
+All DB access is raw SQL against `canonical_v2_buildings` (owned by Make DB).
+Hard rules:
+  - Use `canonical_bld_id` everywhere (TEXT PK like 'bld_000344'); never use
+    a language-dependent field for identity.
+  - Every building query is gated by `is_publishable = true` (39/39,776 rows are
+    non-publishable per make-db's `publishability_reasons[]`). _build_filter_sql
+    always emits at least this clause.
+  - Embeddings are pre-computed VECTOR(384); SentenceTransformers is NOT a
+    runtime dep of Make Web.
+  - Image URLs are full source-CDN URLs (Divisare/etc.). R2 composition is no
+    longer used. `covers_by_type` JSONB allows per-focus cover selection.
 """
 import math
 import random
 import logging
 import numpy as np
 from django.conf import settings
+from django.core.cache import cache
 from django.db import connection
 
 from . import event_log
@@ -15,18 +27,18 @@ logger = logging.getLogger('apps.recommendation')
 
 RC = settings.RECOMMENDATION  # shorthand for constants
 
-_building_embedding_cache = {}             # building_id (str) -> np.ndarray (384-dim, L2-normalized)
+_building_embedding_cache = {}             # canonical_bld_id (str) -> np.ndarray (384-dim, L2-normalized)
 _BUILDING_CACHE_MAX_SIZE = RC.get('pool_embedding_cache_max_size', 5000)  # ~5MB max; configurable via RECOMMENDATION setting
 _last_embedding_call_stats = None          # dict set per get_pool_embeddings call; see get_last_embedding_call_stats()
 _centroid_cache = {}
 _last_clustering_stats = None              # dict set per compute_taste_centroids call; see get_last_clustering_stats()
-_AVAILABLE_COLUMNS = None                  # frozenset of column names in architecture_vectors; None = not yet probed
+_AVAILABLE_COLUMNS = None                  # frozenset of column names in canonical_v2_buildings; None = not yet probed
 
 
 # ── Schema-probe helpers ──────────────────────────────────────────────────────
 
 def _get_available_columns():
-    """Probe architecture_vectors columns once at first successful call. Module-cached
+    """Probe canonical_v2_buildings columns once at first successful call. Module-cached
     for process lifetime after a successful probe. Used to build forward-compatible
     SELECT clauses that gracefully degrade when optional columns (e.g. divisare_*)
     are absent from the dev DB schema.
@@ -48,7 +60,7 @@ def _get_available_columns():
         with connection.cursor() as cur:
             cur.execute(
                 "SELECT column_name FROM information_schema.columns"
-                " WHERE table_name = 'architecture_vectors'"
+                " WHERE table_name = 'canonical_v2_buildings'"
             )
             cols = frozenset(r[0] for r in cur.fetchall())
             if cols:
@@ -96,96 +108,158 @@ def _dictfetchall(cursor):
     return [dict(zip(cols, row)) for row in cursor.fetchall()]
 
 
-def _row_to_card(row):
-    """Convert a DB row dict to ImageCard format.
+_VALID_IMAGE_FOCUS = frozenset({'exterior', 'interior', 'drawing', 'aerial', 'detail'})
 
-    Image resolution order (defensive fallback for Divisare-only buildings):
-    - cover: image_photos[0] -> R2 composed URL; else cover_image_url_divisare (full URL); else ''.
-    - gallery: R2 extra_photos (image_photos[1:]) + divisare_gallery_urls + R2 drawing_urls.
-               Divisare gallery (external full URLs) is placed in the photo zone before R2 drawings.
-    - gallery_drawing_start: index of first R2 drawing in gallery
-               = len(extra_photos) + len(divisare_gallery_urls).
-      Frontend renders items at index >= gallery_drawing_start with contain-sizing on white bg.
+
+def _row_to_card(row, image_focus=None):
+    """Convert a DB row dict (canonical_v2_buildings) to ImageCard format.
+
+    Image resolution (canonical_v2 schema):
+    - cover: covers_by_type[image_focus] when caller requested a focus and it
+      resolves to a URL; otherwise fallback chain:
+        display_cover_url -> cover_image_url_default -> covers_by_type.exterior
+        -> all_images[0].url -> ''.
+    - gallery: all_images sorted by (kind: cover→gallery→drawing, then
+      image_order, then rank). The URL chosen as cover is removed from gallery.
+    - gallery_drawing_start: index of first item with kind=='drawing' in gallery
+      (== len(gallery) when no drawings). Frontend renders items at index >=
+      gallery_drawing_start with contain-sizing on white background.
     """
-    from django.conf import settings as _s
-    building_id      = row['building_id']
-    photos           = row.get('image_photos') or []
-    drawings         = row.get('image_drawings') or []
-    divisare_cover   = row.get('cover_image_url_divisare') or ''
-    divisare_gallery = list(row.get('divisare_gallery_urls') or [])
-    base             = _s.IMAGE_BASE_URL.rstrip('/')
-    cover            = photos[0] if photos else ''
-    if cover:
-        image_url = f'{base}/{building_id}/{cover}'
-    elif divisare_cover:
-        image_url = divisare_cover
-    else:
-        image_url = ''
-    extra_photos = [f'{base}/{building_id}/{f}' for f in photos[1:] if f]
-    drawing_urls = [f'{base}/{building_id}/{f}' for f in drawings if f]
-    # Gallery order: R2 extras (photo zone) → Divisare gallery (photo zone) → R2 drawings (drawing zone).
-    # Divisare gallery URLs are external photos, not drawings; placing them before R2 drawings keeps
-    # the drawing zone strictly at the tail. gallery_drawing_start is the index of the first R2 drawing;
-    # items at index >= gallery_drawing_start are rendered with contain-sizing on white background.
-    # Divisare-only buildings (no R2 photos/drawings) correctly get drawing_start == 0 == len(gallery),
-    # so the drawing zone is empty and all divisare items are treated as photos.
-    gallery      = extra_photos + divisare_gallery + drawing_urls
+    canonical_bld_id = row['canonical_bld_id']
+    covers_by_type = row.get('covers_by_type') or {}
+    if isinstance(covers_by_type, str):
+        import json as _json
+        try:
+            covers_by_type = _json.loads(covers_by_type)
+        except (ValueError, TypeError):
+            covers_by_type = {}
+    all_images_raw = row.get('all_images') or []
+    if isinstance(all_images_raw, str):
+        import json as _json
+        try:
+            all_images_raw = _json.loads(all_images_raw)
+        except (ValueError, TypeError):
+            all_images_raw = []
+    source_urls = row.get('source_urls') or {}
+    if isinstance(source_urls, str):
+        import json as _json
+        try:
+            source_urls = _json.loads(source_urls)
+        except (ValueError, TypeError):
+            source_urls = {}
+
+    # Cover resolution
+    image_url = ''
+    if image_focus and image_focus in _VALID_IMAGE_FOCUS:
+        image_url = covers_by_type.get(image_focus) or ''
+    if not image_url:
+        image_url = (
+            row.get('display_cover_url')
+            or row.get('cover_image_url_default')
+            or covers_by_type.get('exterior')
+            or ''
+        )
+    if not image_url and all_images_raw:
+        first = all_images_raw[0] if isinstance(all_images_raw[0], dict) else {}
+        image_url = first.get('url') or ''
+
+    # Gallery from all_images: sort by (kind rank, image_order, rank)
+    kind_order = {'cover': 0, 'gallery': 1, 'drawing': 2}
+    images = [img for img in all_images_raw if isinstance(img, dict) and img.get('url')]
+    images.sort(key=lambda img: (
+        kind_order.get(img.get('kind') or '', 1),
+        img.get('image_order') if img.get('image_order') is not None else 9999,
+        img.get('rank') if img.get('rank') is not None else 9999,
+    ))
+    gallery_urls = []
+    seen = {image_url} if image_url else set()
+    drawing_start = None
+    for img in images:
+        url = img.get('url')
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        if drawing_start is None and img.get('kind') == 'drawing':
+            drawing_start = len(gallery_urls)
+        gallery_urls.append(url)
+    if drawing_start is None:
+        drawing_start = len(gallery_urls)
+
+    # source_urls is jsonb like {"divisare": ["https://..."]}; pick first URL.
+    src_url = None
+    if isinstance(source_urls, dict):
+        for vals in source_urls.values():
+            if isinstance(vals, list) and vals:
+                src_url = vals[0]
+                break
+
+    architect_names = row.get('architect_names') or []
+    if isinstance(architect_names, str):
+        # If DB driver returned text[] as raw text (rare); fall back to architects_text.
+        architect_names = []
+    architects_display = (
+        row.get('architects_text')
+        or (', '.join(architect_names) if architect_names else None)
+    )
+
     return {
-        'building_id':          building_id,
-        'name_en':              row.get('name_en') or '',
-        'project_name':         row.get('project_name') or '',
-        'image_url':            image_url,
-        'url':                  row.get('url'),
-        'gallery':              gallery,
-        'gallery_drawing_start': len(extra_photos) + len(divisare_gallery),
+        'canonical_bld_id':       canonical_bld_id,
+        'name':                   row.get('name') or '',
+        'image_url':              image_url,
+        'covers_by_type':         covers_by_type,
+        'url':                    src_url,
+        'gallery':                gallery_urls,
+        'gallery_drawing_start':  drawing_start,
         'metadata': {
-            'axis_typology':   row.get('program'),
-            'axis_architects': row.get('architect'),
-            'axis_country':    row.get('location_country'),
-            'axis_area_m2':    float(row['area_sqm']) if row.get('area_sqm') else None,
-            'axis_year':       row.get('year'),
+            'axis_typology':       row.get('program'),
+            'axis_architects':     architects_display,
+            'axis_country':        row.get('location_country'),
+            'axis_city':           row.get('location_city'),
+            'axis_year':           row.get('project_year'),
             'axis_style':          row.get('style'),
             'axis_atmosphere':     row.get('atmosphere'),
             'axis_color_tone':     row.get('color_tone'),
-            'axis_material':       row.get('material'),
             'axis_material_visual': list(row.get('material_visual') or []),
-            'axis_tags':       list(row.get('tags') or []),
-            'visual_description': row.get('visual_description') or '',
-            'description':        row.get('description') or '',
+            'visual_description':  row.get('visual_description') or '',
         },
     }
 
 
 def _build_filter_sql(filters):
-    """Build WHERE clauses from a filters dict. Returns (clauses_str, params_list)."""
-    clauses, params = [], []
+    """Build WHERE clauses from a filters dict. Returns (clauses_str, params_list).
+
+    Always prepends `is_publishable = true` so that every building query in the
+    engine is publishable-gated. Callers do NOT need to add this themselves.
+    """
+    clauses = ['is_publishable = true']
+    params = []
     if not filters:
-        return '', []
+        filters = {}
     if filters.get('program'):
         clauses.append('program = %s')
         params.append(filters['program'])
     if filters.get('location_country'):
         clauses.append('location_country ILIKE %s')
         params.append(f"%{filters['location_country']}%")
-    if filters.get('min_area') is not None:
-        clauses.append('area_sqm >= %s')
-        params.append(filters['min_area'])
-    if filters.get('max_area') is not None:
-        clauses.append('area_sqm <= %s')
-        params.append(filters['max_area'])
+    if filters.get('location_city'):
+        clauses.append('location_city ILIKE %s')
+        params.append(f"%{filters['location_city']}%")
     if filters.get('material'):
-        clauses.append('material ILIKE %s')
+        # material_visual is TEXT[] — match against any element.
+        clauses.append(
+            'EXISTS (SELECT 1 FROM unnest(material_visual) m WHERE m ILIKE %s)'
+        )
         params.append(f"%{filters['material']}%")
     if filters.get('style'):
         clauses.append('style ILIKE %s')
         params.append(f"%{filters['style']}%")
     if filters.get('year_min') is not None:
-        clauses.append('year >= %s')
+        clauses.append('project_year >= %s')
         params.append(filters['year_min'])
     if filters.get('year_max') is not None:
-        clauses.append('year <= %s')
+        clauses.append('project_year <= %s')
         params.append(filters['year_max'])
-    where = 'WHERE ' + ' AND '.join(clauses) if clauses else ''
+    where = 'WHERE ' + ' AND '.join(clauses)
     return where, params
 
 
@@ -205,24 +279,32 @@ def _normalize(vec):
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-def get_diverse_random(n=10, filters=None):
+def get_diverse_random(n=10, filters=None, image_focus=None):
     """
     Select n maximally diverse buildings from candidates.
     Uses greedy farthest-point sampling on cosine distance.
     Returns list of ImageCard dicts.
+
+    image_focus: optional value in {'exterior','interior','drawing','aerial',
+    'detail'} forwarded to _row_to_card so the cover is picked from
+    covers_by_type[image_focus] when available.
     """
+    if image_focus is None and filters:
+        image_focus = filters.get('image_focus')
     where, params = _build_filter_sql(filters)
     _required_cols = [
-        'building_id', 'name_en', 'project_name', 'architect', 'location_country',
-        'city', 'year', 'area_sqm', 'program', 'style', 'atmosphere', 'color_tone',
-        'material', 'material_visual', 'url', 'tags', 'image_photos', 'image_drawings',
-        'visual_description', 'description',
+        'canonical_bld_id', 'name', 'architect_names', 'architects_text',
+        'location_country', 'location_city', 'project_year',
+        'program', 'style', 'atmosphere', 'color_tone', 'material_visual',
+        'visual_description',
+        'covers_by_type', 'all_images', 'display_cover_url',
+        'cover_image_url_default', 'source_urls',
     ]
-    _optional_cols = ['cover_image_url_divisare', 'divisare_gallery_urls']
+    _optional_cols = ()
     _cols = _build_select_columns(_required_cols, _optional_cols)
     with connection.cursor() as cur:
         cur.execute(
-            f'SELECT {_cols}, embedding::text FROM architecture_vectors {where} ORDER BY RANDOM() LIMIT %s',
+            f'SELECT {_cols}, embedding::text FROM canonical_v2_buildings {where} ORDER BY RANDOM() LIMIT %s',
             params + [min(n * 5, 100)],  # fetch a pool, then diversify
         )
         rows = _dictfetchall(cur)
@@ -250,15 +332,24 @@ def get_diverse_random(n=10, filters=None):
                 best_idx, best_dist = i, dist
         selected.append(remaining.pop(best_idx))
 
-    return [_row_to_card(r) for r in selected]
+    return [_row_to_card(r, image_focus=image_focus) for r in selected]
 
 
-def get_building_embedding(building_id):
-    """Fetch the embedding vector for a single building. Returns list of floats."""
+def get_building_embedding(canonical_bld_id):
+    """Fetch the embedding vector for a single building. Returns list of floats.
+
+    Checks _building_embedding_cache first (populated by get_pool_embeddings).
+    Swiped cards are always from the pool, so this is almost always a cache hit.
+    Falls back to DB only for edge cases (e.g. cards outside the current pool).
+    """
+    cached = _building_embedding_cache.get(canonical_bld_id)
+    if cached is not None:
+        return cached.tolist()
+
     with connection.cursor() as cur:
         cur.execute(
-            'SELECT embedding::text FROM architecture_vectors WHERE building_id = %s',
-            [building_id],
+            'SELECT embedding::text FROM canonical_v2_buildings WHERE canonical_bld_id = %s AND is_publishable = true',
+            [canonical_bld_id],
         )
         row = cur.fetchone()
     if not row:
@@ -266,23 +357,64 @@ def get_building_embedding(building_id):
     return [float(x) for x in row[0].strip('[]').split(',')]
 
 
-def get_building_card(building_id):
-    """Fetch a single building as an ImageCard dict."""
+_CARD_CACHE_TTL = None   # resolved lazily from RC to avoid import-time RC access
+
+
+def _card_cache_ttl():
+    global _CARD_CACHE_TTL
+    if _CARD_CACHE_TTL is None:
+        _CARD_CACHE_TTL = RC.get('card_cache_ttl', 3600)
+    return _CARD_CACHE_TTL
+
+
+# Bump _CARD_CACHE_SCHEMA when _row_to_card output shape changes so older Redis
+# entries are not silently served as stale shape after a deploy.
+_CARD_CACHE_SCHEMA = 'v2'
+
+
+def _card_cache_key(canonical_bld_id):
+    return f'bcard:{_CARD_CACHE_SCHEMA}:{canonical_bld_id}'
+
+
+def get_building_card(canonical_bld_id, image_focus=None):
+    """Fetch a single building as an ImageCard dict. Results cached per canonical_bld_id.
+
+    image_focus, when set, picks the cover from covers_by_type[image_focus].
+    Cache key is per-canonical_bld_id (not per-focus) — focus only re-routes the
+    cover field at row-to-card time; the cached card holds full covers_by_type +
+    all_images so a different focus can be selected without re-fetching.
+    """
+    if image_focus:
+        # When focus is requested, recompute card from cached source row data
+        # only if cache holds full payload (it does, since v2 cards include
+        # covers_by_type + all_images). Simplest path: bypass cache + re-build.
+        key = None
+    else:
+        key = _card_cache_key(canonical_bld_id)
+        cached = cache.get(key)
+        if cached is not None:
+            return cached
+
     _required_cols = [
-        'building_id', 'name_en', 'project_name', 'architect', 'location_country',
-        'city', 'year', 'area_sqm', 'program', 'style', 'atmosphere', 'color_tone',
-        'material', 'material_visual', 'url', 'tags', 'image_photos', 'image_drawings',
-        'visual_description', 'description',
+        'canonical_bld_id', 'name', 'architect_names', 'architects_text',
+        'location_country', 'location_city', 'project_year',
+        'program', 'style', 'atmosphere', 'color_tone', 'material_visual',
+        'visual_description',
+        'covers_by_type', 'all_images', 'display_cover_url',
+        'cover_image_url_default', 'source_urls',
     ]
-    _optional_cols = ['cover_image_url_divisare', 'divisare_gallery_urls']
+    _optional_cols = ()
     _cols = _build_select_columns(_required_cols, _optional_cols)
     with connection.cursor() as cur:
         cur.execute(
-            f'SELECT {_cols} FROM architecture_vectors WHERE building_id = %s',
-            [building_id],
+            f'SELECT {_cols} FROM canonical_v2_buildings WHERE canonical_bld_id = %s AND is_publishable = true',
+            [canonical_bld_id],
         )
         rows = _dictfetchall(cur)
-    return _row_to_card(rows[0]) if rows else None
+    card = _row_to_card(rows[0], image_focus=image_focus) if rows else None
+    if card is not None and key is not None:
+        cache.set(key, card, _card_cache_ttl())
+    return card
 
 
 def update_preference_vector(pref_vector, embedding, action):
@@ -303,34 +435,38 @@ def update_preference_vector(pref_vector, embedding, action):
     return _normalize(updated)
 
 
-def get_top_k_results(pref_vector, exposed_ids, k=None):
+def get_top_k_results(pref_vector, exposed_ids, k=None, image_focus=None):
     """
     Query top-k buildings by cosine similarity to preference vector.
     Excludes exposed_ids. Returns list of ImageCard dicts.
+    image_focus: forwarded to _row_to_card for per-focus cover selection.
     """
     if k is None:
         k = RC['top_k_results']
 
-    exclude_sql = ''
     params = []
     if exposed_ids:
         placeholders = ','.join(['%s'] * len(exposed_ids))
-        exclude_sql = f'WHERE building_id NOT IN ({placeholders})'
+        exclude_sql = f'WHERE is_publishable = true AND canonical_bld_id NOT IN ({placeholders})'
         params = list(exposed_ids)
+    else:
+        exclude_sql = 'WHERE is_publishable = true'
 
     _required_cols = [
-        'building_id', 'name_en', 'project_name', 'architect', 'location_country',
-        'city', 'year', 'area_sqm', 'program', 'style', 'atmosphere', 'color_tone',
-        'material', 'material_visual', 'url', 'tags', 'image_photos', 'image_drawings',
-        'visual_description', 'description',
+        'canonical_bld_id', 'name', 'architect_names', 'architects_text',
+        'location_country', 'location_city', 'project_year',
+        'program', 'style', 'atmosphere', 'color_tone', 'material_visual',
+        'visual_description',
+        'covers_by_type', 'all_images', 'display_cover_url',
+        'cover_image_url_default', 'source_urls',
     ]
-    _optional_cols = ['cover_image_url_divisare', 'divisare_gallery_urls']
+    _optional_cols = ()
     _cols = _build_select_columns(_required_cols, _optional_cols)
     if not pref_vector:
         # No preference yet — return random
         with connection.cursor() as cur:
             cur.execute(
-                f'SELECT {_cols} FROM architecture_vectors {exclude_sql} ORDER BY RANDOM() LIMIT %s',
+                f'SELECT {_cols} FROM canonical_v2_buildings {exclude_sql} ORDER BY RANDOM() LIMIT %s',
                 params + [k],
             )
             rows = _dictfetchall(cur)
@@ -338,60 +474,97 @@ def get_top_k_results(pref_vector, exposed_ids, k=None):
         vec_str = _vec_to_pg(pref_vector)
         with connection.cursor() as cur:
             cur.execute(
-                f'SELECT {_cols} FROM architecture_vectors {exclude_sql} '
+                f'SELECT {_cols} FROM canonical_v2_buildings {exclude_sql} '
                 f'ORDER BY embedding <=> %s::vector LIMIT %s',
                 params + [vec_str, k],
             )
             rows = _dictfetchall(cur)
 
-    return [_row_to_card(r) for r in rows]
+    return [_row_to_card(r, image_focus=image_focus) for r in rows]
 
 
-def get_buildings_by_ids(building_ids):
-    """Fetch multiple buildings by ID list. Returns list of ImageCard dicts."""
-    if not building_ids:
+def get_buildings_by_ids(canonical_bld_ids, image_focus=None):
+    """Fetch multiple buildings by ID list. Returns list of ImageCard dicts.
+
+    Cache-aware: checks per-building cache first, DB-fetches only uncached IDs,
+    stores newly fetched cards, then merges preserving input order.
+    """
+    if not canonical_bld_ids:
         return []
-    placeholders = ','.join(['%s'] * len(building_ids))
-    _required_cols = [
-        'building_id', 'name_en', 'project_name', 'architect', 'location_country',
-        'city', 'year', 'area_sqm', 'program', 'style', 'atmosphere', 'color_tone',
-        'material', 'material_visual', 'url', 'tags', 'image_photos', 'image_drawings',
-        'visual_description', 'description',
-    ]
-    _optional_cols = ['cover_image_url_divisare', 'divisare_gallery_urls']
-    _cols = _build_select_columns(_required_cols, _optional_cols)
-    with connection.cursor() as cur:
-        cur.execute(
-            f'SELECT {_cols} FROM architecture_vectors WHERE building_id IN ({placeholders})',
-            list(building_ids),
-        )
-        rows = _dictfetchall(cur)
-    # Preserve input order
-    row_map = {r['building_id']: r for r in rows}
-    return [_row_to_card(row_map[bid]) for bid in building_ids if bid in row_map]
+
+    # Phase 1: cache lookup (skipped when image_focus is set; per-focus covers
+    # require fresh _row_to_card pass, but DB row data is still cacheable —
+    # caller can refetch with image_focus=None to use cache. For now, bypass.)
+    card_map = {}
+    miss_ids = []
+    if image_focus:
+        miss_ids = list(canonical_bld_ids)
+    else:
+        for bid in canonical_bld_ids:
+            cached = cache.get(_card_cache_key(bid))
+            if cached is not None:
+                card_map[bid] = cached
+            else:
+                miss_ids.append(bid)
+
+    # Phase 2: batch DB fetch for cache misses only
+    if miss_ids:
+        placeholders = ','.join(['%s'] * len(miss_ids))
+        _required_cols = [
+            'canonical_bld_id', 'name', 'architect_names', 'architects_text',
+            'location_country', 'location_city', 'project_year',
+            'program', 'style', 'atmosphere', 'color_tone', 'material_visual',
+            'visual_description',
+            'covers_by_type', 'all_images', 'display_cover_url',
+            'cover_image_url_default', 'source_urls',
+        ]
+        _optional_cols = ()
+        _cols = _build_select_columns(_required_cols, _optional_cols)
+        with connection.cursor() as cur:
+            cur.execute(
+                f'SELECT {_cols} FROM canonical_v2_buildings WHERE canonical_bld_id IN ({placeholders}) AND is_publishable = true',
+                miss_ids,
+            )
+            rows = _dictfetchall(cur)
+
+        ttl = _card_cache_ttl()
+        for row in rows:
+            card = _row_to_card(row, image_focus=image_focus)
+            card_map[row['canonical_bld_id']] = card
+            # Only cache the focus-less card so the cache key remains shared.
+            if not image_focus:
+                cache.set(_card_cache_key(row['canonical_bld_id']), card, ttl)
+
+    # Phase 3: restore input order
+    return [card_map[bid] for bid in canonical_bld_ids if bid in card_map]
 
 
-def search_by_filters(filters, limit=20):
+def search_by_filters(filters, limit=20, image_focus=None):
     """
     Return buildings matching the given filters dict.
     Used by ParseQueryView (Phase 3).
+    image_focus: forwarded to _row_to_card; falls back to filters.get('image_focus').
     """
+    if image_focus is None and filters:
+        image_focus = filters.get('image_focus')
     where, params = _build_filter_sql(filters)
     _required_cols = [
-        'building_id', 'name_en', 'project_name', 'architect', 'location_country',
-        'city', 'year', 'area_sqm', 'program', 'style', 'atmosphere', 'color_tone',
-        'material', 'material_visual', 'url', 'tags', 'image_photos', 'image_drawings',
-        'visual_description', 'description',
+        'canonical_bld_id', 'name', 'architect_names', 'architects_text',
+        'location_country', 'location_city', 'project_year',
+        'program', 'style', 'atmosphere', 'color_tone', 'material_visual',
+        'visual_description',
+        'covers_by_type', 'all_images', 'display_cover_url',
+        'cover_image_url_default', 'source_urls',
     ]
-    _optional_cols = ['cover_image_url_divisare', 'divisare_gallery_urls']
+    _optional_cols = ()
     _cols = _build_select_columns(_required_cols, _optional_cols)
     with connection.cursor() as cur:
         cur.execute(
-            f'SELECT {_cols} FROM architecture_vectors {where} ORDER BY RANDOM() LIMIT %s',
+            f'SELECT {_cols} FROM canonical_v2_buildings {where} ORDER BY RANDOM() LIMIT %s',
             params + [limit],
         )
         rows = _dictfetchall(cur)
-    return [_row_to_card(r) for r in rows]
+    return [_row_to_card(r, image_focus=image_focus) for r in rows]
 
 
 # ── Phase-Aware Algorithm (PRD v4.0) ──────────────────────────────────────────────
@@ -401,7 +574,7 @@ def _random_pool(target):
     """Fallback: random pool when no filters are provided."""
     with connection.cursor() as cur:
         cur.execute(
-            'SELECT building_id FROM architecture_vectors ORDER BY RANDOM() LIMIT %s',
+            'SELECT canonical_bld_id FROM canonical_v2_buildings WHERE is_publishable = true ORDER BY RANDOM() LIMIT %s',
             [target],
         )
         rows = cur.fetchall()
@@ -420,7 +593,7 @@ def create_pool_with_relaxation(
     Tier 2: drop geographic + numeric (location_country, year_min, year_max, min_area, max_area).
     Tier 3: random pool (_random_pool(target)).
 
-    exclude_ids: building_ids to remove from the result (e.g., already-exposed). Default None.
+    exclude_ids: canonical_bld_ids to remove from the result (e.g., already-exposed). Default None.
     start_tier: starting tier (1, 2, or 3). Used by pool exhaustion guard to escalate from
                 session's current tier.
     v_initial: Topic 03 HyDE 384-dim float list. Passed to tier 1 and 2 only (not tier 3).
@@ -522,7 +695,11 @@ def refresh_pool_if_low(session, threshold=5):
 
 
 def _build_score_cases(filters, weights):
-    """Build CASE WHEN SQL for each active filter with priority weight."""
+    """Build CASE WHEN SQL for each active filter with priority weight.
+
+    Schema-aligned to canonical_v2_buildings: drops area_sqm; year -> project_year;
+    material ILIKE -> material_visual[] EXISTS match; adds location_city.
+    """
     cases, params = [], []
     total_weight = 0
     if filters.get('program') and 'program' in weights:
@@ -535,6 +712,11 @@ def _build_score_cases(filters, weights):
         cases.append(f'CASE WHEN location_country ILIKE %s THEN {w} ELSE 0 END')
         params.append(f"%{filters['location_country']}%")
         total_weight += w
+    if filters.get('location_city') and 'location_city' in weights:
+        w = weights['location_city']
+        cases.append(f'CASE WHEN location_city ILIKE %s THEN {w} ELSE 0 END')
+        params.append(f"%{filters['location_city']}%")
+        total_weight += w
     if filters.get('style') and 'style' in weights:
         w = weights['style']
         cases.append(f'CASE WHEN style ILIKE %s THEN {w} ELSE 0 END')
@@ -542,27 +724,21 @@ def _build_score_cases(filters, weights):
         total_weight += w
     if filters.get('material') and 'material' in weights:
         w = weights['material']
-        cases.append(f'CASE WHEN material ILIKE %s THEN {w} ELSE 0 END')
+        cases.append(
+            'CASE WHEN EXISTS '
+            '(SELECT 1 FROM unnest(material_visual) m WHERE m ILIKE %s) '
+            f'THEN {w} ELSE 0 END'
+        )
         params.append(f"%{filters['material']}%")
-        total_weight += w
-    if filters.get('min_area') is not None and 'min_area' in weights:
-        w = weights['min_area']
-        cases.append(f'CASE WHEN area_sqm >= %s THEN {w} ELSE 0 END')
-        params.append(filters['min_area'])
-        total_weight += w
-    if filters.get('max_area') is not None and 'max_area' in weights:
-        w = weights['max_area']
-        cases.append(f'CASE WHEN area_sqm <= %s THEN {w} ELSE 0 END')
-        params.append(filters['max_area'])
         total_weight += w
     if filters.get('year_min') is not None and 'year_min' in weights:
         w = weights['year_min']
-        cases.append(f'CASE WHEN year >= %s THEN {w} ELSE 0 END')
+        cases.append(f'CASE WHEN project_year >= %s THEN {w} ELSE 0 END')
         params.append(filters['year_min'])
         total_weight += w
     if filters.get('year_max') is not None and 'year_max' in weights:
         w = weights['year_max']
-        cases.append(f'CASE WHEN year <= %s THEN {w} ELSE 0 END')
+        cases.append(f'CASE WHEN project_year <= %s THEN {w} ELSE 0 END')
         params.append(filters['year_max'])
         total_weight += w
     return cases, params, total_weight
@@ -579,10 +755,10 @@ def _run_hybrid_rrf_pool(filters, filter_priority, seed_ids, target, v_initial, 
     NOTE: tsvector is computed on-the-fly (O(N) full table scan, ~10-50 ms for 3,465
     rows — acceptable for pool creation). Production should coordinate with Make DB
     to add a GIN index on the tsvector expression for better performance.
-    e.g. CREATE INDEX ON architecture_vectors USING GIN (to_tsvector('simple',
+    e.g. CREATE INDEX ON canonical_v2_buildings USING GIN (to_tsvector('simple',
          coalesce(visual_description,'') || ' ' || coalesce(array_to_string(tags,' '),'') ...))
 
-    Returns (pool_ids, pool_scores) where pool_scores is {building_id: float rrf_score}.
+    Returns (pool_ids, pool_scores) where pool_scores is {canonical_bld_id: float rrf_score}.
     On SQL failure, raises the exception (caller wraps in try/except).
     """
     import time as _time
@@ -609,31 +785,35 @@ def _run_hybrid_rrf_pool(filters, filter_priority, seed_ids, target, v_initial, 
     params = []
 
     # --- candidates CTE ---
+    # Always gate by is_publishable (39/39776 rows are non-publishable per make-db rules).
     if has_filter_cases:
         filter_score_expr = '(' + ' + '.join(cases) + ')::float'
         cte_parts.append(
             'candidates AS ('
-            'SELECT building_id, embedding, visual_description, tags, material_visual, '
+            'SELECT canonical_bld_id, embedding, visual_description, material_visual, '
             + filter_score_expr + ' AS filter_score'
-            ' FROM architecture_vectors'
+            ' FROM canonical_v2_buildings'
+            ' WHERE is_publishable = true'
             ')'
         )
         params.extend(filter_params)
     else:
         cte_parts.append(
             'candidates AS ('
-            'SELECT building_id, embedding, visual_description, tags, material_visual'
-            ' FROM architecture_vectors'
+            'SELECT canonical_bld_id, embedding, visual_description, material_visual'
+            ' FROM canonical_v2_buildings'
+            ' WHERE is_publishable = true'
             ')'
         )
 
     # --- bm25_ranked CTE ---
+    # tsvector built on visual_description + material_visual only (tags column dropped
+    # in canonical_v2_buildings schema).
     cte_parts.append(
         'bm25_ranked AS ('
-        'SELECT building_id,'
+        'SELECT canonical_bld_id,'
         ' ts_rank_cd('
         '   to_tsvector(%s, COALESCE(visual_description, \'\') || \' \' ||'
-        '               COALESCE(array_to_string(tags, \' \'), \'\') || \' \' ||'
         '               COALESCE(array_to_string(material_visual, \' \'), \'\')'
         '   ),'
         '   plainto_tsquery(%s, %s)'
@@ -646,7 +826,7 @@ def _run_hybrid_rrf_pool(filters, filter_priority, seed_ids, target, v_initial, 
     # --- bm25_with_rank CTE (zero-score rows excluded from BM25 ranking) ---
     cte_parts.append(
         'bm25_with_rank AS ('
-        'SELECT building_id,'
+        'SELECT canonical_bld_id,'
         ' ROW_NUMBER() OVER (ORDER BY bm25_score DESC) AS bm25_rank'
         ' FROM bm25_ranked'
         ' WHERE bm25_score > 0'
@@ -658,7 +838,7 @@ def _run_hybrid_rrf_pool(filters, filter_priority, seed_ids, target, v_initial, 
         vec_str = _vec_to_pg(v_initial)
         cte_parts.append(
             'vector_ranked AS ('
-            'SELECT building_id,'
+            'SELECT canonical_bld_id,'
             ' ROW_NUMBER() OVER (ORDER BY embedding <=> %s::vector ASC) AS vec_rank'
             ' FROM candidates'
             ')'
@@ -669,7 +849,7 @@ def _run_hybrid_rrf_pool(filters, filter_priority, seed_ids, target, v_initial, 
     if has_filter_cases:
         cte_parts.append(
             'filter_ranked AS ('
-            'SELECT building_id,'
+            'SELECT canonical_bld_id,'
             ' ROW_NUMBER() OVER (ORDER BY filter_score DESC) AS filter_rank'
             ' FROM candidates'
             ' WHERE filter_score > 0'
@@ -691,11 +871,11 @@ def _run_hybrid_rrf_pool(filters, filter_priority, seed_ids, target, v_initial, 
 
     rrf_sum = ' + '.join(rrf_terms)
 
-    join_clauses = ['LEFT JOIN bm25_with_rank bm ON c.building_id = bm.building_id']
+    join_clauses = ['LEFT JOIN bm25_with_rank bm ON c.canonical_bld_id = bm.canonical_bld_id']
     if has_vector:
-        join_clauses.append('LEFT JOIN vector_ranked vr ON c.building_id = vr.building_id')
+        join_clauses.append('LEFT JOIN vector_ranked vr ON c.canonical_bld_id = vr.canonical_bld_id')
     if has_filter_cases:
-        join_clauses.append('LEFT JOIN filter_ranked fr ON c.building_id = fr.building_id')
+        join_clauses.append('LEFT JOIN filter_ranked fr ON c.canonical_bld_id = fr.canonical_bld_id')
 
     # WHERE: exclude buildings with zero signal across ALL channels
     # Build inline sum (no alias in WHERE) using same terms without COALESCE
@@ -714,7 +894,7 @@ def _run_hybrid_rrf_pool(filters, filter_priority, seed_ids, target, v_initial, 
 
     sql = (
         'WITH ' + ',\n'.join(cte_parts) + '\n'
-        'SELECT c.building_id, (' + rrf_sum + ') AS rrf_score'
+        'SELECT c.canonical_bld_id, (' + rrf_sum + ') AS rrf_score'
         ' FROM candidates c'
         ' ' + ' '.join(join_clauses)
         + ' WHERE (' + where_sum + ') > 0'
@@ -754,7 +934,7 @@ def create_bounded_pool(filters, filter_priority=None, seed_ids=None, target=Non
     """
     Create a bounded pool of building IDs with weighted scoring.
     Each building matching at least one filter is included, ranked by score.
-    Returns tuple: (pool_ids, pool_scores) where pool_scores is {building_id: score}.
+    Returns tuple: (pool_ids, pool_scores) where pool_scores is {canonical_bld_id: score}.
 
     Dispatch logic:
     - Mode H (Hybrid RRF): hybrid_retrieval_enabled=True AND q_text non-empty.
@@ -770,7 +950,7 @@ def create_bounded_pool(filters, filter_priority=None, seed_ids=None, target=Non
     (all RRF scores are unique). This is acceptable per investigation 03 Zone C —
     tier structure is preserved, ordering is still semantically correct.
 
-    Seeded building_ids (if provided) get score 1.1, placing them above max.
+    Seeded canonical_bld_ids (if provided) get score 1.1, placing them above max.
 
     v_initial: Topic 03 HyDE 384-dim float list or None (default). When provided and
     the feature flag is ON (hyde_vinitial_enabled), the pool query includes a cosine
@@ -818,9 +998,10 @@ def create_bounded_pool(filters, filter_priority=None, seed_ids=None, target=Non
             hyde_weight = float(RC.get('hyde_score_weight', 50.0))
             vec_str = _vec_to_pg(v_initial)
             sql = (
-                'SELECT building_id,'
+                'SELECT canonical_bld_id,'
                 ' ((1 - (embedding <=> %s::vector)) * %s::float / %s::float) AS relevance_score'
-                ' FROM architecture_vectors'
+                ' FROM canonical_v2_buildings'
+                ' WHERE is_publishable = true'
                 ' ORDER BY embedding <=> %s::vector'
                 ' LIMIT %s'
             )
@@ -859,9 +1040,10 @@ def create_bounded_pool(filters, filter_priority=None, seed_ids=None, target=Non
             hyde_weight = float(RC.get('hyde_score_weight', 50.0))
             vec_str = _vec_to_pg(v_initial)
             sql = (
-                'SELECT building_id,'
+                'SELECT canonical_bld_id,'
                 ' ((1 - (embedding <=> %s::vector)) * %s::float / %s::float) AS relevance_score'
-                ' FROM architecture_vectors'
+                ' FROM canonical_v2_buildings'
+                ' WHERE is_publishable = true'
                 ' ORDER BY embedding <=> %s::vector'
                 ' LIMIT %s'
             )
@@ -903,10 +1085,11 @@ def create_bounded_pool(filters, filter_priority=None, seed_ids=None, target=Non
         # WHERE: any filter match OR positive cosine similarity
         where_sql = '((' + filter_sum_sql + ') > 0 OR (1 - (embedding <=> %s::vector)) > 0)'
         sql = (
-            'SELECT building_id, (' + score_sql + ') AS relevance_score'
-            ' FROM architecture_vectors WHERE '
+            'SELECT canonical_bld_id, (' + score_sql + ') AS relevance_score'
+            ' FROM canonical_v2_buildings WHERE is_publishable = true AND ('
             + where_sql
-            + ' ORDER BY relevance_score DESC, RANDOM()'
+            + ')'
+            ' ORDER BY relevance_score DESC, RANDOM()'
             ' LIMIT %s'
         )
         # params order: cases (score_sql filter args), hyde_weight, vec_str (cosine),
@@ -929,9 +1112,9 @@ def create_bounded_pool(filters, filter_priority=None, seed_ids=None, target=Non
     if not use_hyde or _hyde_failed:
         score_sql = '((' + ' + '.join(cases) + ')::float / ' + str(total_weight) + ')'
         sql = (
-            'SELECT building_id, (' + score_sql + ') AS relevance_score'
-            ' FROM architecture_vectors'
-            ' WHERE (' + score_sql + ') > 0'
+            'SELECT canonical_bld_id, (' + score_sql + ') AS relevance_score'
+            ' FROM canonical_v2_buildings'
+            ' WHERE is_publishable = true AND (' + score_sql + ') > 0'
             ' ORDER BY relevance_score DESC, RANDOM()'
             ' LIMIT %s'
         )
@@ -955,13 +1138,13 @@ def get_pool_embeddings(pool_ids):
     """
     IMP-7: Per-building-id cached embeddings. Partial-miss -> fetch only missing.
 
-    Cache key is building_id (str), NOT frozenset(pool_ids). Prior frozenset key
+    Cache key is canonical_bld_id (str), NOT frozenset(pool_ids). Prior frozenset key
     caused full cache invalidation on every pool escalation (A4 guard adds new IDs
     -> new frozenset -> new key). Per-building-id cache is stable: escalation only
     ADDs new IDs; previously cached building embeddings are always retained.
 
     Returns:
-        dict mapping building_id -> np.ndarray (shape=(384,), L2-normalized).
+        dict mapping canonical_bld_id -> np.ndarray (shape=(384,), L2-normalized).
 
     Side effects:
         Sets module-level _last_embedding_call_stats for SwipeView §6 telemetry.
@@ -979,8 +1162,8 @@ def get_pool_embeddings(pool_ids):
         placeholders = ','.join(['%s'] * len(missing_ids))
         with connection.cursor() as cur:
             cur.execute(
-                f'SELECT building_id, embedding::text FROM architecture_vectors'
-                f' WHERE building_id IN ({placeholders})',
+                f'SELECT canonical_bld_id, embedding::text FROM canonical_v2_buildings'
+                f' WHERE canonical_bld_id IN ({placeholders}) AND is_publishable = true',
                 missing_ids,
             )
             rows = _dictfetchall(cur)
@@ -991,7 +1174,7 @@ def get_pool_embeddings(pool_ids):
             norm = np.linalg.norm(embedding)
             if norm > 0:
                 embedding = embedding / norm
-            _building_embedding_cache[row['building_id']] = embedding
+            _building_embedding_cache[row['canonical_bld_id']] = embedding
 
         # FIFO eviction when cache exceeds max size (Python 3.7+ dict preserves insertion order)
         if len(_building_embedding_cache) > _BUILDING_CACHE_MAX_SIZE:
@@ -1052,11 +1235,12 @@ def compute_corpus_rank(card_id, v_initial):
         vec_str = _vec_to_pg(v_initial)
         sql = (
             'WITH ranked AS ('
-            '  SELECT building_id,'
+            '  SELECT canonical_bld_id,'
             '         ROW_NUMBER() OVER (ORDER BY embedding <=> %s::vector ASC) AS rank'
-            '  FROM architecture_vectors'
+            '  FROM canonical_v2_buildings'
+            '  WHERE is_publishable = true'
             ')'
-            ' SELECT rank FROM ranked WHERE building_id = %s'
+            ' SELECT rank FROM ranked WHERE canonical_bld_id = %s'
         )
         with connection.cursor() as cur:
             cur.execute(sql, [vec_str, card_id])
@@ -1258,7 +1442,7 @@ def compute_taste_centroids(like_vectors, round_num):
 def compute_mmr_next(pool_ids, exposed_ids, pool_embeddings, like_vectors, round_num):
     """
     Select next building using MMR (Maximal Marginal Relevance).
-    Returns building_id string or None if no candidates.
+    Returns canonical_bld_id string or None if no candidates.
     """
     candidates = [bid for bid in pool_ids if bid not in set(exposed_ids)]
     if not candidates:
@@ -1269,9 +1453,6 @@ def compute_mmr_next(pool_ids, exposed_ids, pool_embeddings, like_vectors, round
 
     centroids, _ = compute_taste_centroids(like_vectors, round_num)
 
-    best_candidate = None
-    best_score = -float('inf')
-
     # Topic 04 (a): compute per-swipe λ once, outside the candidate loop
     mmr_lambda_base = RC.get('mmr_penalty', 0.3)
     if RC.get('mmr_lambda_ramp_enabled', False):
@@ -1280,36 +1461,36 @@ def compute_mmr_next(pool_ids, exposed_ids, pool_embeddings, like_vectors, round
     else:
         mmr_lambda = mmr_lambda_base
 
-    for candidate in candidates:
-        if candidate not in pool_embeddings:
-            continue
+    valid_candidates = [bid for bid in candidates if bid in pool_embeddings]
+    if not valid_candidates:
+        return None
 
-        candidate_emb = pool_embeddings[candidate]
+    C = np.stack([pool_embeddings[bid] for bid in valid_candidates])  # (N, 384)
 
-        # Relevance: max cosine similarity (default) or softmax-weighted avg (Topic 06)
-        if RC.get('soft_relevance_enabled', False) and len(centroids) > 1:
-            sims = np.array([np.dot(candidate_emb, c) for c in centroids])
-            exp_sims = np.exp(sims - sims.max())  # numerically stable softmax
-            weights = exp_sims / exp_sims.sum()
-            relevance = float(np.sum(sims * weights))
-        else:
-            relevance = max(np.dot(candidate_emb, centroid) for centroid in centroids)
+    # ── Relevance (vectorized) ────────────────────────────────────────────
+    K_mat = np.stack(centroids)   # (K, 384)
+    sim_mat = C @ K_mat.T         # (N, K)
 
-        # Redundancy: max cosine similarity to any exposed embedding
-        redundancy = 0
-        for exposed_id in exposed_ids:
-            if exposed_id in pool_embeddings:
-                exposed_emb = pool_embeddings[exposed_id]
-                redundancy = max(redundancy, np.dot(candidate_emb, exposed_emb))
+    if RC.get('soft_relevance_enabled', False) and len(centroids) > 1:
+        # Numerically stable softmax-weighted average per candidate (Topic 06)
+        sim_shifted = sim_mat - sim_mat.max(axis=1, keepdims=True)
+        exp_sims = np.exp(sim_shifted)
+        weights = exp_sims / exp_sims.sum(axis=1, keepdims=True)  # (N, K)
+        relevance = (sim_mat * weights).sum(axis=1)               # (N,)
+    else:
+        relevance = sim_mat.max(axis=1)  # (N,)
 
-        # MMR score
-        mmr_score = relevance - mmr_lambda * redundancy
+    # ── Redundancy (vectorized) ───────────────────────────────────────────
+    exposed_valid = [e for e in exposed_ids if e in pool_embeddings]
+    if exposed_valid:
+        E = np.stack([pool_embeddings[e] for e in exposed_valid])  # (M, 384)
+        redundancy = (C @ E.T).max(axis=1)                         # (N,)
+    else:
+        redundancy = np.zeros(len(valid_candidates))
 
-        if mmr_score > best_score:
-            best_score = mmr_score
-            best_candidate = candidate
-
-    return best_candidate
+    # ── MMR scores → best candidate ──────────────────────────────────────
+    mmr_scores = relevance - mmr_lambda * redundancy  # (N,)
+    return valid_candidates[int(np.argmax(mmr_scores))]
 
 
 def _apply_recency_weights(like_vectors, round_num, gamma):
@@ -1412,7 +1593,7 @@ def compute_confidence(history, threshold, window=3):
 def get_dislike_fallback(pool_ids, exposed_ids, pool_embeddings, dislike_vectors):
     """
     Select building farthest from dislike centroid.
-    Returns building_id string or None if no candidates.
+    Returns canonical_bld_id string or None if no candidates.
     """
     candidates = [bid for bid in pool_ids if bid not in set(exposed_ids)]
     if not candidates:
@@ -1444,31 +1625,7 @@ def get_dislike_fallback(pool_ids, exposed_ids, pool_embeddings, dislike_vectors
     return best_candidate
 
 
-def build_action_card():
-    """
-    Return action card dict for analysis completion.
-    """
-    return {
-        'building_id': '__action_card__',
-        'card_type': 'action',
-        'name_en': 'Your Taste is Found!',
-        'project_name': '',
-        'image_url': '',
-        'url': None,
-        'gallery': [],
-        'gallery_drawing_start': 0,
-        'metadata': {},
-        'action_card_message': (
-            'We\'ve analyzed your preferences and found your architectural taste.'
-        ),
-        'action_card_subtitle': (
-            'Swipe right to see your personalized results, '
-            'or swipe left to keep exploring more buildings.'
-        ),
-    }
-
-
-def get_top_k_mmr(like_vectors, exposed_ids, k=None, round_num=None):
+def get_top_k_mmr(like_vectors, exposed_ids, k=None, round_num=None, image_focus=None):
     """
     Get top-k results using MMR for final recommendations.
     Uses recency-weighted K-Means centroids when round_num is provided.
@@ -1493,26 +1650,29 @@ def get_top_k_mmr(like_vectors, exposed_ids, k=None, round_num=None):
         centroids = [centroid]
 
     # Prepare exclusion clause
-    exclude_sql = ''
     params = []
     if exposed_ids:
         placeholders = ','.join(['%s'] * len(exposed_ids))
-        exclude_sql = f'WHERE building_id NOT IN ({placeholders})'
+        exclude_sql = f'WHERE is_publishable = true AND canonical_bld_id NOT IN ({placeholders})'
         params = list(exposed_ids)
+    else:
+        exclude_sql = 'WHERE is_publishable = true'
 
     # Fetch 3*k candidates for re-ranking
     vec_str = _vec_to_pg(centroid.tolist())
     _required_cols = [
-        'building_id', 'name_en', 'project_name', 'architect', 'location_country',
-        'city', 'year', 'area_sqm', 'program', 'style', 'atmosphere', 'color_tone',
-        'material', 'material_visual', 'url', 'tags', 'image_photos', 'image_drawings',
-        'visual_description', 'description',
+        'canonical_bld_id', 'name', 'architect_names', 'architects_text',
+        'location_country', 'location_city', 'project_year',
+        'program', 'style', 'atmosphere', 'color_tone', 'material_visual',
+        'visual_description',
+        'covers_by_type', 'all_images', 'display_cover_url',
+        'cover_image_url_default', 'source_urls',
     ]
-    _optional_cols = ['cover_image_url_divisare', 'divisare_gallery_urls']
+    _optional_cols = ()
     _cols = _build_select_columns(_required_cols, _optional_cols)
     with connection.cursor() as cur:
         cur.execute(
-            f'SELECT {_cols}, embedding::text FROM architecture_vectors {exclude_sql} '
+            f'SELECT {_cols}, embedding::text FROM canonical_v2_buildings {exclude_sql} '
             f'ORDER BY embedding <=> %s::vector LIMIT %s',
             params + [vec_str, k * 3],
         )
@@ -1568,7 +1728,7 @@ def get_top_k_mmr(like_vectors, exposed_ids, k=None, round_num=None):
         selected.append(remaining.pop(best_idx))
 
     # Convert to ImageCard format
-    return [_row_to_card(row) for row in selected]
+    return [_row_to_card(row, image_focus=image_focus) for row in selected]
 
 
 def rerank_pool_with_v_initial(*, pool_ids, exposed_ids, initial_batch_ids, v_initial_vector):
@@ -1635,7 +1795,7 @@ def _rank_with_v_initial(pool_ids, v_initial_vector):
 
     # Fetch embeddings for pool_ids via the per-building cache (IMP-7 infrastructure).
     # Already L2-normalized (see get_pool_embeddings docstring / code).
-    embeddings = get_pool_embeddings(pool_ids)  # dict: building_id -> np.ndarray (normalized)
+    embeddings = get_pool_embeddings(pool_ids)  # dict: canonical_bld_id -> np.ndarray (normalized)
 
     similarities = []
     for pid in pool_ids:
@@ -1667,14 +1827,14 @@ def compute_dpp_topk(cards, like_vectors, k, q_override=None):
     `cards` is a list of ImageCard dicts (from _row_to_card); embeddings are
     fetched via get_pool_embeddings to avoid KeyError (cards have no 'embedding').
 
-    q_override: optional dict {building_id: float} of pre-computed quality scores.
+    q_override: optional dict {canonical_bld_id: float} of pre-computed quality scores.
     When provided (Option alpha composition with Topic 02 RRF fusion), these scores
     are used directly as q_i without any centroid computation. The scores must already
     be min-max rescaled to [0.01, 1.0] by the caller (Investigation 14 §q derivation).
     The [0.4, 0.95] clip is intentionally bypassed for q_override — clip would destroy
     the RRF-fused signal that the rescaling was meant to preserve.
 
-    Returns list of building_id strings (length <= k).
+    Returns list of canonical_bld_id strings (length <= k).
     Falls back to q-descending order on any exception; q is computed first so
     the fallback is always quality-ordered, not just input order.
     """
@@ -1688,7 +1848,7 @@ def compute_dpp_topk(cards, like_vectors, k, q_override=None):
     if not cards:
         return []
 
-    ids = [c['building_id'] for c in cards]
+    ids = [c['canonical_bld_id'] for c in cards]
     n = len(ids)
 
     if n <= k:
@@ -1774,3 +1934,109 @@ def compute_dpp_topk(cards, like_vectors, k, q_override=None):
         logger.warning("compute_dpp_topk: DPP phase failed (%s) — falling back to q-sort", exc)
         order = sorted(range(nv), key=lambda i: -q[i])
         return [valid_ids[i] for i in order[:k]]
+
+
+def compute_user_taste_vector(profile):
+    """
+    Aggregate the user's taste vector as the weighted mean embedding of liked
+    building IDs across all their Projects.
+
+    Returns:
+        np.ndarray (384,) normalized, or None if no liked embedding is found.
+    """
+    from .models import Project
+
+    liked_records = Project.objects.filter(user=profile).values_list('liked_ids', flat=True)
+    weighted = []
+    for liked_ids in liked_records:
+        for entry in (liked_ids or []):
+            if isinstance(entry, dict):
+                bid = entry.get('id')
+                if not isinstance(bid, str):
+                    continue
+                try:
+                    intensity = float(entry.get('intensity', 1.0))
+                except (TypeError, ValueError):
+                    intensity = 1.0
+            elif isinstance(entry, str):
+                bid = entry
+                intensity = 1.0
+            else:
+                continue
+            weighted.append((bid, intensity))
+
+    if not weighted:
+        return None
+
+    seen = set()
+    ordered_ids = []
+    intensities = {}
+    for bid, intensity in weighted:
+        if bid not in seen:
+            ordered_ids.append(bid)
+            intensities[bid] = intensity
+            seen.add(bid)
+        else:
+            # Keep first-seen occurrence to avoid duplicate amplification.
+            intensities[bid] = max(intensities[bid], intensity)
+
+    embeddings = get_pool_embeddings(ordered_ids)
+    if not embeddings:
+        return None
+
+    agg = np.zeros(384, dtype=np.float64)
+    total_weight = 0.0
+    for bid in ordered_ids:
+        emb = embeddings.get(bid)
+        if emb is None:
+            continue
+        weight = intensities.get(bid, 1.0)
+        if not isinstance(weight, (int, float)) or weight <= 0:
+            weight = 1.0
+        agg += np.asarray(emb) * float(weight)
+        total_weight += float(weight)
+
+    if total_weight <= 0:
+        return None
+
+    normalized = _normalize((agg / total_weight).tolist())
+    return np.array(normalized, dtype=np.float64)
+
+
+def taste_ranked_page(v_taste, exclude_ids, limit, offset, image_focus=None):
+    """
+    Cosine-rank all buildings against v_taste, skipping exclude_ids,
+    and return one page.
+    image_focus: forwarded to _row_to_card for per-focus cover selection.
+    """
+    _required_cols = [
+        'canonical_bld_id', 'name', 'architect_names', 'architects_text',
+        'location_country', 'location_city', 'project_year',
+        'program', 'style', 'atmosphere', 'color_tone', 'material_visual',
+        'visual_description',
+        'covers_by_type', 'all_images', 'display_cover_url',
+        'cover_image_url_default', 'source_urls',
+    ]
+    _optional_cols = ()
+    _cols = _build_select_columns(_required_cols, _optional_cols)
+
+    exclude = [bid for bid in (exclude_ids or []) if isinstance(bid, str)]
+    try:
+        with connection.cursor() as cur:
+            cur.execute(
+                f'WITH ranked AS ('
+                f' SELECT {_cols}, embedding <=> %s::vector AS score'
+                f' FROM canonical_v2_buildings'
+                f' WHERE is_publishable = true AND canonical_bld_id <> ALL(%s::text[])'
+                f' ORDER BY embedding <=> %s::vector ASC'
+                f')'
+                f' SELECT * FROM ranked'
+                f' OFFSET %s LIMIT %s',
+                [_vec_to_pg(v_taste), exclude, _vec_to_pg(v_taste), int(offset), int(limit)],
+            )
+            rows = _dictfetchall(cur)
+    except Exception as exc:
+        logger.warning('taste_ranked_page: pgvector query failed (%s)', exc)
+        return []
+
+    return [_row_to_card(r, image_focus=image_focus) for r in rows]

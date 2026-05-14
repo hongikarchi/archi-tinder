@@ -3,25 +3,19 @@ import TabBar from '../components/TabBar.jsx'
 import ThemeToggle from '../components/ThemeToggle.jsx'
 import DebugOverlay from '../components/DebugOverlay.jsx'
 import SwipePage from '../pages/SwipePage.jsx'
-import FavoritesPage from '../pages/FavoritesPage.jsx'
 
 export default function MainLayout({
   theme, onToggleTheme, userId, onLogout,
-  projects, activeProject, activeProjectId,
-  currentCard, sessionProgress, isSessionCompleted, isSwipeLoading, isResultLoading,
-  onSwipe, onViewResults, onResumeProject, onDeleteProject, onGenerateReport, onImageGenerated,
-  onToggleBookmark,
+  activeProject, activeProjectId,
+  currentCard, cardResetToken, sessionProgress, isSessionCompleted, isSwipeLoading, isResultLoading,
+  onSwipe, onViewResults,
 }) {
   const location = useLocation()
   const navigate = useNavigate()
   const pathname = location.pathname
 
   const isSwipe = pathname === '/swipe'
-  const isLibrary = pathname.startsWith('/library')
   const isProfile = pathname.startsWith('/user')
-
-  const libraryMatch = pathname.match(/^\/library\/(.+)$/)
-  const folderId = libraryMatch ? libraryMatch[1] : null
 
   return (
     <div style={{ height: '100vh', overflow: 'hidden' }}>
@@ -51,8 +45,8 @@ export default function MainLayout({
         </button>
       </div>
 
-      {/* Home sub-routes — only visible when on home paths */}
-      <div style={{ display: (!isSwipe && !isLibrary) ? 'block' : 'none' }}>
+      {/* Home sub-routes — only visible when not on swipe */}
+      <div style={{ display: !isSwipe ? 'block' : 'none' }}>
         <Outlet />
       </div>
 
@@ -61,6 +55,7 @@ export default function MainLayout({
         <SwipePage
           key={activeProjectId}
           currentCard={currentCard}
+          cardResetToken={cardResetToken}
           progress={sessionProgress}
           isCompleted={isSessionCompleted}
           isLoading={isSwipeLoading}
@@ -68,23 +63,6 @@ export default function MainLayout({
           projectName={activeProject?.projectName}
           onSwipe={onSwipe}
           onViewResults={onViewResults}
-        />
-      </div>
-
-      {/* FavoritesPage — always mounted, shown/hidden via display */}
-      <div style={{ display: isLibrary ? 'block' : 'none' }}>
-        <FavoritesPage
-          projects={projects}
-          onDeleteProject={onDeleteProject}
-          onResumeProject={onResumeProject}
-          onGenerateReport={onGenerateReport}
-          onImageGenerated={onImageGenerated}
-          onToggleBookmark={onToggleBookmark}
-          openId={folderId}
-          onOpenIdChange={(id) => {
-            if (id) navigate('/library/' + id)
-            else navigate('/library')
-          }}
         />
       </div>
 
@@ -100,9 +78,9 @@ export default function MainLayout({
             <span style={{ color: 'var(--color-text)' }}>Archi</span>
             <span style={{ color: '#ec4899' }}>Tinder</span>
           </p>
-          <p style={{ color: 'var(--color-text-dimmer)', fontSize: 13 }}>Create a new session from the Home tab</p>
+          <p style={{ color: 'var(--color-text-dimmer)', fontSize: 13 }}>Start a taste analysis to begin swiping</p>
           <button
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/new')}
             style={{
               marginTop: 8, padding: '12px 28px', borderRadius: 12,
               background: 'linear-gradient(135deg,#ec4899,#f43f5e)',
@@ -110,7 +88,7 @@ export default function MainLayout({
               border: 'none', cursor: 'pointer', fontFamily: 'inherit',
             }}
           >
-            Go to Home
+            Start Taste Analysis
           </button>
         </div>
       )}
@@ -120,8 +98,12 @@ export default function MainLayout({
           userId={userId}
           session={sessionProgress ? {
             id: activeProject?.sessionId || null,
-            round: sessionProgress.current,
-            total: sessionProgress.total,
+            round: sessionProgress.current_round,
+            total: sessionProgress.total_rounds,
+            phase: sessionProgress.phase,
+            like_count: sessionProgress.like_count,
+            confidence: sessionProgress.confidence,
+            can_continue: sessionProgress.can_continue,
           } : null}
         />
       )}

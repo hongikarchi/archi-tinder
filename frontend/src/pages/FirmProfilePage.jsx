@@ -575,7 +575,7 @@ export default function FirmProfilePage() {
           }}
         >
           {(office.projects || []).map((project) => (
-            <ProjectCard key={project.building_id} project={project} />
+            <ProjectCard key={project.canonical_bld_id || project.building_id} project={project} />
           ))}
         </div>
 

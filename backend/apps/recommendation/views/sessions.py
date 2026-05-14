@@ -14,11 +14,12 @@ from ._shared import _get_profile, _progress
 logger = logging.getLogger('apps.recommendation')
 RC = settings.RECOMMENDATION
 
-# Known filter keys for filter_priority validation
+# Known filter keys for filter_priority validation (canonical_v2 schema)
 _VALID_FILTER_KEYS = frozenset([
-    'program', 'location_country', 'style', 'material',
-    'min_area', 'max_area', 'year_min', 'year_max',
+    'program', 'location_country', 'location_city', 'style', 'material',
+    'year_min', 'year_max',
 ])
+_VALID_IMAGE_FOCUS = frozenset(['exterior', 'interior', 'drawing', 'aerial', 'detail'])
 
 
 # ── Analysis Sessions ─────────────────────────────────────────────────────────
@@ -88,7 +89,16 @@ class SessionCreateView(APIView):
             )
 
         # Create bounded pool with weighted scoring (3-tier relaxation fallback via helper)
-        active_filters = filters or project.filters or {}
+        active_filters = dict(filters or project.filters or {})
+
+        # image_focus: rider on filters dict (NOT a WHERE-clause filter, but
+        # threads through to _row_to_card so cards get the user-picked cover).
+        # Accept either from explicit `image_focus` param OR from filters['image_focus'].
+        req_focus = request.data.get('image_focus')
+        if req_focus in _VALID_IMAGE_FOCUS:
+            active_filters['image_focus'] = req_focus
+        elif active_filters.get('image_focus') not in _VALID_IMAGE_FOCUS:
+            active_filters.pop('image_focus', None)
         pool_ids, pool_scores, current_pool_tier = engine.create_pool_with_relaxation(
             active_filters, filter_priority, seed_ids, v_initial=v_initial, q_text=q_text_param,
         )
@@ -127,9 +137,12 @@ class SessionCreateView(APIView):
         if not initial_batch:
             initial_batch = pool_ids[:1]
 
-        first_card = engine.get_building_card(initial_batch[0])
-        prefetch_card = engine.get_building_card(initial_batch[1]) if len(initial_batch) > 1 else None
-        prefetch_card_2 = engine.get_building_card(initial_batch[2]) if len(initial_batch) > 2 else None
+        _initial_cards = engine.get_buildings_by_ids(
+            initial_batch[:3], image_focus=active_filters.get('image_focus')
+        )
+        first_card      = _initial_cards[0] if len(_initial_cards) > 0 else None
+        prefetch_card   = _initial_cards[1] if len(_initial_cards) > 1 else None
+        prefetch_card_2 = _initial_cards[2] if len(_initial_cards) > 2 else None
 
         session = AnalysisSession.objects.create(
             user                     = profile,
@@ -220,6 +233,7 @@ class SessionStateView(APIView):
                 'progress':        _progress(session),
                 'filter_relaxed':  False,
                 'is_analysis_completed': True,
+                'can_continue':    False,
             })
 
         # Current card: the last card added to exposed_ids (or the first if brand-new)
@@ -230,20 +244,24 @@ class SessionStateView(APIView):
         like_vectors = list(session.like_vectors or [])
         current_round = session.current_round
         phase = session.phase
+        image_focus = (session.original_filters or {}).get('image_focus')
 
         if phase == 'converged':
-            current_card = engine.build_action_card()
+            residual = len([pid for pid in pool_ids if pid not in set(exposed_ids)]) if pool_ids else 0
+            can_continue = (residual >= 1) and (session.extended_rounds < 5)
             prefetch_card = None
             prefetch_card_2 = None
             return Response({
                 'session_id':      str(session.session_id),
                 'project_id':      str(session.project.project_id),
                 'session_status':  session.status,
-                'next_image':      current_card,
+                'next_image':      None,
                 'prefetch_image':  prefetch_card,
                 'prefetch_image_2': prefetch_card_2,
                 'progress':        _progress(session),
                 'filter_relaxed':  False,
+                'is_analysis_completed': True,
+                'can_continue':    can_continue,
             })
 
         # Recover the "current card" shown to the user.
@@ -263,7 +281,7 @@ class SessionStateView(APIView):
             current_bid = exposed_ids[-1]
         elif initial_batch:
             current_bid = initial_batch[0]
-        current_card = engine.get_building_card(current_bid) if current_bid else None
+        current_card = engine.get_building_card(current_bid, image_focus=image_focus) if current_bid else None
 
         # Compute prefetch + prefetch_2 using current exposed_ids (already includes current_bid)
         pool_embeddings = engine.get_pool_embeddings(pool_ids) if pool_ids else {}
@@ -282,19 +300,19 @@ class SessionStateView(APIView):
                         break
                 if pf_bid is None:
                     pf_bid = engine.farthest_point_from_pool(pool_ids, exposed_ids, pool_embeddings)
-                prefetch_card = engine.get_building_card(pf_bid) if pf_bid else None
+                prefetch_card = engine.get_building_card(pf_bid, image_focus=image_focus) if pf_bid else None
             elif phase == 'analyzing':
                 pf_id = engine.compute_mmr_next(
                     pool_ids, exposed_ids, pool_embeddings,
                     like_vectors, current_round + 1
                 )
-                prefetch_card = engine.get_building_card(pf_id) if pf_id else None
+                prefetch_card = engine.get_building_card(pf_id, image_focus=image_focus) if pf_id else None
         except Exception:
             prefetch_card = None
 
         try:
-            if prefetch_card and prefetch_card.get('building_id') != '__action_card__':
-                temp_exposed = exposed_ids + [prefetch_card['building_id']]
+            if prefetch_card and prefetch_card.get('canonical_bld_id') != '__action_card__':
+                temp_exposed = exposed_ids + [prefetch_card['canonical_bld_id']]
                 temp_set = set(temp_exposed)
                 if phase == 'exploring':
                     pf2_bid = None
@@ -305,13 +323,13 @@ class SessionStateView(APIView):
                             break
                     if pf2_bid is None:
                         pf2_bid = engine.farthest_point_from_pool(pool_ids, temp_exposed, pool_embeddings)
-                    prefetch_card_2 = engine.get_building_card(pf2_bid) if pf2_bid else None
+                    prefetch_card_2 = engine.get_building_card(pf2_bid, image_focus=image_focus) if pf2_bid else None
                 elif phase == 'analyzing':
                     pf2_id = engine.compute_mmr_next(
                         pool_ids, temp_exposed, pool_embeddings,
                         like_vectors, current_round + 2
                     )
-                    prefetch_card_2 = engine.get_building_card(pf2_id) if pf2_id else None
+                    prefetch_card_2 = engine.get_building_card(pf2_id, image_focus=image_focus) if pf2_id else None
         except Exception:
             prefetch_card_2 = None
 
@@ -324,6 +342,7 @@ class SessionStateView(APIView):
             'prefetch_image_2': prefetch_card_2,
             'progress':        _progress(session),
             'filter_relaxed':  False,
+            'can_continue':    False,
         })
 
 
@@ -339,7 +358,7 @@ class SessionResultView(APIView):
             return Response({'detail': 'Session not found'}, status=status.HTTP_404_NOT_FOUND)
 
         # Liked buildings
-        liked_ids   = list(session.swipes.filter(action='like').values_list('building_id', flat=True))
+        liked_ids   = list(session.swipes.filter(action='like').values_list('canonical_bld_id', flat=True))
         liked_cards = [engine.get_building_card(bid) for bid in liked_ids]
         liked_cards = [c for c in liked_cards if c]
 
@@ -359,7 +378,7 @@ class SessionResultView(APIView):
             )
 
         # Capture initial cosine order BEFORE any reorder (needed for RRF composition)
-        candidate_ids_cosine_order = [c['building_id'] for c in predicted_cards]
+        candidate_ids_cosine_order = [c['canonical_bld_id'] for c in predicted_cards]
         rerank_rank_by_id = None  # populated only when Topic 02 ran with a real reorder
 
         # IMP-10 sub-task A / Spec v1.7 §11.1: track top-10 sets for bookmark provenance.
@@ -375,7 +394,7 @@ class SessionResultView(APIView):
         if RC.get('gemini_rerank_enabled', False) and len(predicted_cards) >= 2:
             candidate_metadata = [
                 {
-                    'building_id': c['building_id'],
+                    'canonical_bld_id': c['canonical_bld_id'],
                     'name_en': c.get('name_en', ''),
                     'atmosphere': c.get('atmosphere', ''),
                     'material': c.get('material', ''),
@@ -394,7 +413,7 @@ class SessionResultView(APIView):
             # IMP-10 fix: _gemini_top10 reflects "Gemini ranked it" regardless of whether
             # order changed -- provenance = "Gemini ran", not "Gemini moved it".
             if new_order and set(new_order) == set(candidate_ids_cosine_order):
-                card_by_id = {c['building_id']: c for c in predicted_cards}
+                card_by_id = {c['canonical_bld_id']: c for c in predicted_cards}
                 _gemini_top10 = new_order[:10]  # IMP-10: store Gemini top-10 for provenance
                 if new_order != candidate_ids_cosine_order:
                     rerank_rank_by_id = {bid: i + 1 for i, bid in enumerate(new_order)}
@@ -404,9 +423,9 @@ class SessionResultView(APIView):
         if (RC.get('dpp_topk_enabled', False)
                 and len(predicted_cards) >= 2
                 and session.like_vectors):
-            candidate_ids = [c['building_id'] for c in predicted_cards]
+            candidate_ids = [c['canonical_bld_id'] for c in predicted_cards]
             k = min(RC.get('top_k_results', 20), len(candidate_ids))
-            card_by_id = {c['building_id']: c for c in predicted_cards}
+            card_by_id = {c['canonical_bld_id']: c for c in predicted_cards}
 
             if rerank_rank_by_id is not None:
                 # Option α composition: q = min-max-rescaled RRF fusion

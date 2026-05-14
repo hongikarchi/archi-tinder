@@ -1,9 +1,7 @@
 import { useState, useEffect, useRef, Component } from 'react'
 import { Routes, Route, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom'
-import { resolveProjectBackendId } from './utils/resolveProjectBackendId.js'
 import MainLayout from './layouts/MainLayout.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
-import SetupPage from './pages/SetupPage.jsx'
 import ProjectSetupPage from './pages/ProjectSetupPage.jsx'
 import LLMSearchPage from './pages/LLMSearchPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
@@ -13,6 +11,7 @@ import PostSwipeLandingPage from './pages/PostSwipeLandingPage.jsx'
 import BoardDetailPage from './pages/BoardDetailPage.jsx'
 import ResultsPage from './pages/ResultsPage.jsx'
 import BuildingDetailPage from './pages/BuildingDetailPage.jsx'
+import DiscoveryPage from './pages/DiscoveryPage.jsx'
 import * as api from './api/client.js'
 
 function normalizeFilters(filters) {
@@ -101,17 +100,16 @@ export default function App() {
 
   const [theme, setTheme] = useState(() => localStorage.getItem('archithon_theme') || 'dark')
   const [userId, setUserId] = useState(() => sessionStorage.getItem('archithon_user') || null)
-  const [setupKey, setSetupKey] = useState(0)
   const [wizardData, setWizardData] = useState(null)
 
   const [currentCard, setCurrentCard] = useState(null)
+  const [cardResetToken, setCardResetToken] = useState(0)
   const [prefetchCard, setPrefetchCard] = useState(null)
   const [prefetchCard2, setPrefetchCard2] = useState(null)
   const [sessionProgress, setSessionProgress] = useState(null)
   const [isSwipeLoading, setIsSwipeLoading] = useState(false)
   const imagePreloadCache = useRef(new Set())
   const [isSessionCompleted, setIsSessionCompleted] = useState(false)
-  const [isSyncing, setIsSyncing] = useState(false)
   const [isResultLoading, setIsResultLoading] = useState(false)
   const [swipeError, setSwipeError] = useState(null)
   const [activeProjectId, setActiveProjectId] = useState(() => {
@@ -180,6 +178,8 @@ export default function App() {
   const swipeRestored = useRef(false)
   const loggingOut = useRef(false)
   const swipeLock = useRef(false)
+  const swipeLog = useRef([])
+  const swipeCount = useRef(0)
   useEffect(() => {
     if (swipeRestored.current) return
     if (location.pathname === '/swipe' && activeProjectId && userId) {
@@ -201,12 +201,7 @@ export default function App() {
     if (!url || imagePreloadCache.current.has(url)) return Promise.resolve()
     return new Promise(resolve => {
       const img = new Image()
-      const timeout = setTimeout(() => {
-        imagePreloadCache.current.add(url)
-        resolve()
-      }, 1500)
       img.onload = img.onerror = () => {
-        clearTimeout(timeout)
         imagePreloadCache.current.add(url)
         resolve()
       }
@@ -225,6 +220,7 @@ export default function App() {
       ...result.progress,
       filter_relaxed: result.filter_relaxed || false,
       confidence: result.confidence ?? null,
+      can_continue: result.can_continue ?? false, // S3: pass through from backend
     })
     if (result.is_analysis_completed || !result.next_image) {
       setIsSessionCompleted(!!result.is_analysis_completed || !result.next_image)
@@ -312,7 +308,12 @@ export default function App() {
   }
 
   async function handleSwipeCard(action) {
-    if (swipeLock.current) return
+    if (swipeLock.current) {
+      // Card may have flown off-screen during the lock window.
+      // Force TinderCard remount so it reappears centered instead of going blank.
+      setCardResetToken(t => t + 1)
+      return
+    }
     swipeLock.current = true
 
     if (!currentCard || !activeProjectId) {
@@ -336,10 +337,36 @@ export default function App() {
       isActionCard(savedPrefetch) ||
       imagePreloadCache.current.has(savedPrefetch.image_url)
     )
+
+    // -- Diagnostic log entry (populated as swipe progresses) --
+    const _dbg = {
+      n: ++swipeCount.current,
+      action,
+      cardId: swipedCard.image_id?.slice(-8) ?? '?',
+      instant: canInstantSwap,
+      instantReason: !savedPrefetch ? 'no_pf'
+        : (canInstantSwap ? (isActionCard(savedPrefetch) ? 'action' : 'cached') : 'miss'),
+      apiMs: 0,
+      preloadMs: null,
+      nextId: null,
+      nextBlocked: false,
+      fallback: false,
+      pf: null,
+      pf2: null,
+      totalMs: 0,
+      err: null,
+      ts: Date.now(),
+    }
+
     if (canInstantSwap) {
       setCurrentCard(savedPrefetch)
       setPrefetchCard(prefetchCard2)  // shift queue
       setPrefetchCard2(null)
+      // Optimistic like_count bump so the unified progress bar advances in lockstep
+      // with the visible card. Server response at line ~387 replaces with authoritative state.
+      if (action === 'like') {
+        setSessionProgress(p => p ? { ...p, like_count: (p.like_count ?? 0) + 1 } : p)
+      }
     } else {
       // Keep the current card visible with a loading overlay instead of
       // replacing it with null. Setting currentCard to null was the root cause
@@ -365,6 +392,7 @@ export default function App() {
         client_buffer_ids: clientBufferIds,
       }
 
+      const _apiT0 = Date.now()
       try {
         result = await api.recordSwipe(swipePayload)
       } catch (firstErr) {
@@ -372,6 +400,7 @@ export default function App() {
         // Retry once on network error
         result = await api.recordSwipe(swipePayload)
       }
+      _dbg.apiMs = Date.now() - _apiT0
 
       // Backend confirmed -- now update local state
       setProjects(prev => prev.map(p => {
@@ -390,6 +419,12 @@ export default function App() {
         setCurrentCard(null)
         setPrefetchCard(null)
         setPrefetchCard2(null)
+        setSessionProgress(prev => ({
+          ...(prev || {}),
+          ...result.progress,
+          confidence: result.confidence ?? null,
+          can_continue: result.can_continue ?? false,
+        }))
         setIsResultLoading(true)
         try {
           const resultData = await api.getResult({
@@ -403,7 +438,6 @@ export default function App() {
           // ResultsPage will attempt a fresh GET /result/ on entry.
         } finally {
           setIsResultLoading(false)
-          navigate(`/result/${project.sessionId}`)
         }
       } else {
         if (canInstantSwap) {
@@ -419,7 +453,12 @@ export default function App() {
           // Using them would overwrite the frontend's authoritative queue and
           // cause drift (the root cause of "cards stop loading" and "same card
           // twice" bugs before this fix).
-          if (result.next_image) {
+          const _nextBlocked = !!(result.next_image && isActionCard(result.next_image))
+          _dbg.nextId = result.next_image?.image_id?.slice(-8) ?? null
+          _dbg.nextBlocked = _nextBlocked
+          _dbg.pf = result.prefetch_image?.image_id?.slice(-8) ?? null
+          _dbg.pf2 = result.prefetch_image_2?.image_id?.slice(-8) ?? null
+          if (result.next_image && !_nextBlocked) {
             setPrefetchCard2(result.next_image)
             if (result.next_image.image_url) preloadImage(result.next_image.image_url)
           } else {
@@ -427,22 +466,38 @@ export default function App() {
           }
         } else {
           // Non-instant path: rebuild queue from backend response entirely.
-          // If next_image is null and session isn't completed, keep the card
-          // in loading state (swiped card was already animated away by TinderCard).
+          _dbg.nextId = result.next_image?.image_id?.slice(-8) ?? null
+          _dbg.pf = result.prefetch_image?.image_id?.slice(-8) ?? null
+          _dbg.pf2 = result.prefetch_image_2?.image_id?.slice(-8) ?? null
           if (result.next_image) {
+            // Wait for the image to download before showing the card so the
+            // transition from LoadingCard lands with the image already visible.
+            const _plT0 = Date.now()
+            await preloadImage(result.next_image.image_url)
+            _dbg.preloadMs = Date.now() - _plT0
             setCurrentCard(result.next_image)
           } else if (!result.is_analysis_completed) {
-            // Edge case: no next card but session not done (pool temporarily exhausted)
-            // Keep whatever is visible; the loading overlay will clear in finally block
+            // Pool temporarily exhausted — fall back to getSessionState (same as page refresh).
+            // This re-runs the recommendation engine and returns the correct next card,
+            // preventing the frozen/blank state caused by null next_image.
+            _dbg.fallback = true
+            try {
+              const fresh = await api.getSessionState(project.sessionId)
+              applySessionResponse(activeProjectId, fresh)
+              return
+            } catch {
+              // If getSessionState also fails, leave currentCard=null (LoadingCard stays,
+              // user sees "No more buildings" after loading clears in finally).
+            }
           }
           setPrefetchCard(result.prefetch_image || null)
           setPrefetchCard2(result.prefetch_image_2 || null)
-          preloadImage(result.next_image?.image_url)
           preloadImage(result.prefetch_image?.image_url)
           preloadImage(result.prefetch_image_2?.image_url)
         }
       }
-    } catch {
+    } catch (e) {
+      _dbg.err = e?.message ?? 'unknown'
       // Only revert UI if we hadn't already swapped to a different card
       // When canInstantSwap was true, user is already looking at savedPrefetch -- don't revert
       if (!canInstantSwap) {
@@ -452,19 +507,49 @@ export default function App() {
       }
       setSwipeError('Swipe failed. Please try again.')
     } finally {
+      _dbg.totalMs = Date.now() - _dbg.ts
+      const log = swipeLog.current
+      if (log.length >= 10) log.shift()
+      log.push(_dbg)
       setIsSwipeLoading(false)
       swipeLock.current = false
     }
   }
 
-  async function handleResumeProject(id) {
-    const project = projects.find(p => p.id === id)
-    if (!project) return
-    setWizardData(null)
-    setActiveProjectId(id)
-    navigate('/swipe')
-    // Try to resume the stored session, fall back to new session on failure
-    await initSession(id, project.filters, [], [], project.sessionId || null)
+  async function handleExtendSession() {
+    if (swipeLock.current) return
+    const project = projects.find(p => p.id === activeProjectId)
+    if (!project?.sessionId) return
+
+    swipeLock.current = true
+    setIsSwipeLoading(true)
+    try {
+      const result = await api.recordSwipe({
+        session_id: project.sessionId,
+        image_id: (project.swipedIds || []).slice(-1)[0] || '',
+        action: 'like',
+        client_buffer_ids: [],
+        extend: true,
+      })
+
+      setIsSessionCompleted(false)
+      setCurrentCard(result.next_image)
+      setPrefetchCard(result.prefetch_image || null)
+      setPrefetchCard2(result.prefetch_image_2 || null)
+      setSessionProgress({
+        ...result.progress,
+        confidence: result.confidence ?? null,
+        can_continue: result.can_continue ?? false,
+      })
+      if (result.next_image?.image_url) preloadImage(result.next_image.image_url)
+      if (result.prefetch_image?.image_url) preloadImage(result.prefetch_image.image_url)
+      if (result.prefetch_image_2?.image_url) preloadImage(result.prefetch_image_2.image_url)
+    } catch {
+      setSwipeError('Could not continue exploring. Please try again.')
+    } finally {
+      setIsSwipeLoading(false)
+      swipeLock.current = false
+    }
   }
 
   async function handleUpdateWithImages(id, preloadedImages, llmFilters = {}, filterPriority = [], visualDescription = null) {
@@ -476,64 +561,6 @@ export default function App() {
     setProjects(prev => prev.map(p => p.id === id ? { ...p, deckImages: preloadedImages } : p))
     navigate('/swipe')
     await initSession(id, llmFilters || project.filters, filterPriority, seedIds, null, null, visualDescription)
-  }
-
-  function handleDeleteProject(id) {
-    const project = projects.find(p => p.id === id)
-    if (project?.backendId) {
-      api.deleteProject(project.backendId).catch(() => { })
-    }
-    setProjects(prev => prev.filter(p => p.id !== id))
-    if (activeProjectId === id) {
-      setActiveProjectId(null)
-      setCurrentCard(null)
-      setSessionProgress(null)
-      setIsSessionCompleted(false)
-      navigate('/')
-    }
-  }
-
-  async function handleGenerateReport(projectId) {
-    const project = projects.find(p => p.id === projectId)
-    const backendId = resolveProjectBackendId(project)
-    if (!backendId) return
-    const { final_report } = await api.generateReport(backendId)
-    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, finalReport: final_report } : p))
-  }
-
-  function handleImageGenerated(projectId, imageData) {
-    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, reportImage: imageData } : p))
-  }
-
-  async function handleToggleBookmark(projectId, cardId, action, rank) {
-    const project = projects.find(p => p.id === projectId)
-    if (!project) return
-    const backendId = resolveProjectBackendId(project)
-    if (!backendId) return
-
-    // Optimistic update
-    setProjects(prev => prev.map(p => {
-      if (p.id !== projectId) return p
-      const current = p.savedIds || []
-      const next = action === 'save'
-        ? [...new Set([...current, cardId])]
-        : current.filter(id => id !== cardId)
-      return { ...p, savedIds: next }
-    }))
-
-    try {
-      await api.bookmarkBuilding(backendId, cardId, action, rank, project.sessionId || null)
-    } catch {
-      // Revert optimistic update on error
-      setProjects(prev => prev.map(p => {
-        if (p.id !== projectId) return p
-        const current = p.savedIds || []
-        const reverted = action === 'save'
-          ? current.filter(id => id !== cardId)
-          : [...new Set([...current, cardId])]
-        return { ...p, savedIds: reverted }
-      }))
-    }
   }
 
   async function handleLogin(user) {
@@ -551,7 +578,6 @@ export default function App() {
     navigate('/')
 
     // Sync projects from backend (if JWT available)
-    setIsSyncing(true)
     try {
       const { results: backendProjects } = await api.listProjects()
       if (backendProjects.length > 0) {
@@ -580,8 +606,6 @@ export default function App() {
       }
     } catch {
       // Project sync failed -- falling back to localStorage
-    } finally {
-      setIsSyncing(false)
     }
     setProjects(JSON.parse(localStorage.getItem(`archithon_projects_${id}`) || '[]'))
     setActiveProjectId(localStorage.getItem(`archithon_activeId_${id}`) || null)
@@ -609,8 +633,6 @@ export default function App() {
     onToggleTheme: toggleTheme,
     userId,
     onLogout: handleLogout,
-    projects,
-    isSyncing,
     activeProject,
     activeProjectId,
     currentCard,
@@ -619,15 +641,12 @@ export default function App() {
     isSwipeLoading,
     isResultLoading,
     onSwipe: handleSwipeCard,
+    onExtendSession: handleExtendSession,
     onViewResults: () => {
       if (activeProject?.sessionId) navigate('/result/' + activeProject.sessionId)
-      else navigate('/library/' + activeProjectId)
+      else navigate('/user/me')
     },
-    onResumeProject: handleResumeProject,
-    onDeleteProject: handleDeleteProject,
-    onGenerateReport: handleGenerateReport,
-    onImageGenerated: handleImageGenerated,
-    onToggleBookmark: handleToggleBookmark,
+    cardResetToken,
   }
 
   return (
@@ -642,25 +661,11 @@ export default function App() {
             <MainLayout {...sharedLayoutProps} />
           </ProtectedRoute>
         }>
-          <Route index element={
-            <SetupPage
-              key={setupKey}
-              projects={projects}
-              isSyncing={isSyncing}
-              onResume={handleResumeProject}
-              onNavigateNew={() => {
-                setSetupKey(k => k + 1)
-                navigate('/new')
-              }}
-              onNavigateUpdate={(id, name) => {
-                setWizardData({ projectId: id, projectName: name })
-                navigate('/search/' + id)
-              }}
-            />
-          } />
+          <Route index element={<Navigate to="/discovery" replace />} />
+          <Route path="discovery" element={<DiscoveryPage />} />
           <Route path="new" element={
             <ProjectSetupPage
-              onBack={() => navigate('/')}
+              onBack={() => navigate('/discovery')}
               onNext={({ projectName, minArea, maxArea, visibility }) => {
                 setWizardData({ projectName, minArea, maxArea, visibility })
                 navigate('/search')
@@ -686,8 +691,8 @@ export default function App() {
             />
           } />
           <Route path="swipe" element={null} />
-          <Route path="library" element={null} />
-          <Route path="library/:folderId" element={null} />
+          <Route path="library" element={<Navigate to="/user/me" replace />} />
+          <Route path="library/:folderId" element={<Navigate to="/user/me" replace />} />
           <Route path="user/me" element={<UserProfilePage {...sharedLayoutProps} />} />
           <Route path="user/:userId" element={<UserProfilePage {...sharedLayoutProps} />} />
           <Route path="office/:officeId" element={<FirmProfilePage {...sharedLayoutProps} />} />

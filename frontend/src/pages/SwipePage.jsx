@@ -26,7 +26,9 @@ function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
   const [showGallery, setShowGallery] = useState(false)
   const [imgLoaded,   setImgLoaded]   = useState(false)
   const [imgFailed,   setImgFailed]   = useState(false)
-  const imgRetried = useRef(false)
+  // Set of URLs already attempted as src (cache-bust retry + covers_by_type
+  // fallback chain). Initialized lazily inside handleImgError on first failure.
+  const imgRetried = useRef(null)
   const dragStart = useRef(null)
   const dragStartTime = useRef(null)
 
@@ -57,15 +59,31 @@ function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
   function handleImgError(e) {
     // Emit telemetry FIRST (captures original failed URL before retry mutates e.target.src)
     telemetryOnError(e)
-    if (!imgRetried.current) {
-      // Retry once with cache-busting query param
-      imgRetried.current = true
-      const sep = card.image_url.includes('?') ? '&' : '?'
-      e.target.src = card.image_url + sep + 'retry=1'
-    } else {
-      // Retry also failed -- show fallback
-      setImgFailed(true)
+    // Multi-step fallback chain for cold/warm + external-CDN flakiness (S2).
+    // Order: cache-bust retry -> covers_by_type.exterior (canonical default) ->
+    //        any other covers_by_type variant -> first gallery URL -> give up.
+    const cbt = card.covers_by_type || {}
+    const fallbackChain = [
+      cbt.exterior, cbt.interior, cbt.aerial, cbt.detail, cbt.drawing,
+      ...(card.gallery || []),
+    ].filter(u => u && typeof u === 'string')
+    if (!(imgRetried.current instanceof Set)) {
+      imgRetried.current = new Set([card.image_url])
     }
+    if (!imgRetried.current.has(card.image_url + '?retry=1')) {
+      imgRetried.current.add(card.image_url + '?retry=1')
+      const sep = (card.image_url || '').includes('?') ? '&' : '?'
+      e.target.src = (card.image_url || '') + sep + 'retry=1'
+      return
+    }
+    for (const url of fallbackChain) {
+      if (!imgRetried.current.has(url)) {
+        imgRetried.current.add(url)
+        e.target.src = url
+        return
+      }
+    }
+    setImgFailed(true)
   }
 
   function handleImgLoad(e) {
@@ -76,12 +94,16 @@ function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
   const typology   = card.metadata?.axis_typology
   const architects = card.metadata?.axis_architects
   const country    = card.metadata?.axis_country
-  const area_m2    = card.metadata?.axis_area_m2
+  const city       = card.metadata?.axis_city
   const year       = card.metadata?.axis_year
   const style      = card.metadata?.axis_style
   const atmosphere = card.metadata?.axis_atmosphere
-  const material   = card.metadata?.axis_material
-  const areaLabel  = area_m2 ? `${Number(area_m2).toLocaleString()} m²` : null
+  // canonical_v2 drops single-string `material`; expose first 2-3 of
+  // material_visual[] as a comma-joined chip instead.
+  const materialList = Array.isArray(card.metadata?.axis_material_visual)
+    ? card.metadata.axis_material_visual.slice(0, 3)
+    : []
+  const material     = materialList.length ? materialList.join(', ') : null
   const gallery         = card.gallery || []
   const drawingStart    = card.gallery_drawing_start ?? gallery.length
 
@@ -198,8 +220,8 @@ function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px', flex: 1 }}>
               <InfoRow label="Type"     value={typology} />
               <InfoRow label="Country"  value={country} />
+              <InfoRow label="City"     value={city} />
               <InfoRow label="Year"     value={year} />
-              <InfoRow label="Area"     value={areaLabel} />
               <InfoRow label="Style"      value={style} />
               <InfoRow label="Atmosphere" value={atmosphere} />
               <InfoRow label="Material" value={material} />
@@ -284,87 +306,6 @@ function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
   )
 }
 
-/* ── ActionCard ──────────────────────────────────────────────────────────── */
-function ActionCard({ card }) {
-  return (
-    <div style={{
-      position: 'absolute', top: 0, left: 0,
-      width: CARD_WIDTH, height: CARD_HEIGHT,
-      borderRadius: 20, overflow: 'hidden',
-      boxShadow: '0 25px 50px rgba(0,0,0,0.6)',
-    }}>
-      <div style={{
-        position: 'relative',
-        width: '100%', height: '100%',
-        background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
-        display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center',
-        textAlign: 'center', padding: 24,
-      }}>
-        {/* Sparkle Icon */}
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="white" style={{ marginBottom: 16 }}>
-          <path d="M12 0l3.09 6.26L22 9l-6.91 2.74L12 18l-3.09-6.26L2 9l6.91-2.74L12 0z"/>
-        </svg>
-
-        {/* Title */}
-        <h2 style={{
-          color: '#fff', fontSize: 22, fontWeight: 700,
-          margin: '0 0 12px 0', lineHeight: 1.3
-        }}>
-          {card.image_title || 'Your Taste is Found!'}
-        </h2>
-
-        {/* Message */}
-        <p style={{
-          color: 'rgba(255,255,255,0.85)', fontSize: 15,
-          textAlign: 'center', maxWidth: '85%',
-          margin: '0 0 8px 0', lineHeight: 1.5,
-          fontWeight: 500,
-        }}>
-          {card.action_card_message}
-        </p>
-
-        {/* Subtitle */}
-        {card.action_card_subtitle && (
-          <p style={{
-            color: 'rgba(255,255,255,0.5)', fontSize: 12,
-            textAlign: 'center', maxWidth: '90%',
-            margin: '0 0 24px 0', lineHeight: 1.5,
-          }}>
-            {card.action_card_subtitle}
-          </p>
-        )}
-
-        {/* Hint row at bottom */}
-        <div style={{
-          position: 'absolute', bottom: 20, left: 20, right: 20,
-          display: 'flex', justifyContent: 'space-between',
-          alignItems: 'center',
-        }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            color: 'rgba(255,255,255,0.45)', fontSize: 12
-          }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="15 18 9 12 15 6"/>
-            </svg>
-            Keep exploring
-          </div>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            color: '#fb923c', fontSize: 12, fontWeight: 600,
-          }}>
-            View results
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="9 18 15 12 9 6"/>
-            </svg>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 /* ── LoadingCard ─────────────────────────────────────────────────────────── */
 function LoadingCard() {
   return (
@@ -387,13 +328,27 @@ function LoadingCard() {
   )
 }
 
-/* ── ConfidenceBar ───────────────────────────────────────────────────────── */
-function ConfidenceBar({ value }) {
-  // value: number in [0, 1] or null
-  // null means n < 3 analyzing-phase swipes, exploring phase, or post-reset
-  if (value === null || value === undefined) return null
-
-  const pct = Math.round(value * 100)
+/* ── ConfidenceBar (unified progress for all phases) ─────────────────────── */
+function ConfidenceBar({ value, phase, likeCount }) {
+  // value: confidence in [0, 1] (analyzing+ phases) or null (exploring / pre-reset)
+  // When confidence is null and we're in exploring phase, fall back to like-count
+  // progress (0-3 likes to unlock analysis). Always renders one bar + one label
+  // so the header never branches between two visualizations.
+  let pct = 0
+  let label = ''
+  if (value !== null && value !== undefined) {
+    pct = Math.round(value * 100)
+    label = phase === 'converged' || phase === 'completed'
+      ? '분석 완료'
+      : `취향 안정도 ${pct}%`
+  } else if (phase === 'exploring') {
+    const likes = Math.min(likeCount ?? 0, 3)
+    pct = Math.round((likes / 3) * 100)
+    label = `탐색 중 · ♥ ${likes}/3`
+  } else {
+    pct = 0
+    label = '준비 중'
+  }
   return (
     <div style={{ width: '100%' }}>
       <div style={{
@@ -415,28 +370,27 @@ function ConfidenceBar({ value }) {
         textAlign: 'right',
         marginTop: 4,
       }}>
-        취향 안정도 {pct}%
+        {label}
       </div>
     </div>
   )
 }
 
 /* ── SwipePage ───────────────────────────────────────────────────────────── */
-export default function SwipePage({ currentCard, progress, isCompleted, isLoading, isResultLoading = false, projectName, onSwipe, onViewResults }) {
+export default function SwipePage({
+  currentCard, cardResetToken = 0, progress, isCompleted, isLoading, isResultLoading = false,
+  projectName, onSwipe, onViewResults, onExtendSession,
+}) {
   const cardRef = useRef(null)
   const pendingAction = useRef(null)
   const swipedCardId = useRef(null)
   const [galleryOpen, setGalleryOpen] = useState(false)
   const [showTutorial, setShowTutorial] = useState(() => !localStorage.getItem('archithon_tutorial_dismissed'))
 
-  const current_round    = progress?.current_round ?? 0
-  const total_rounds     = progress?.total_rounds  ?? 1
   const like_count       = progress?.like_count    ?? 0
   const phase            = progress?.phase
   const filter_relaxed   = progress?.filter_relaxed || false
   const confidence       = progress?.confidence ?? null
-
-  const showExit = phase === 'converged' || phase === 'completed'
 
   function onTinderSwipe(dir) {
     swipedCardId.current = currentCard?.image_id
@@ -455,6 +409,13 @@ export default function SwipePage({ currentCard, progress, isCompleted, isLoadin
     pendingAction.current = dir === 'right' ? 'like' : 'dislike'
     await cardRef.current.swipe(dir)
   }
+
+  // When cardResetToken changes the TinderCard was force-remounted after a
+  // locked swipe. Clear the guard refs so the same card can be swiped again.
+  useEffect(() => {
+    swipedCardId.current = null
+    pendingAction.current = null
+  }, [cardResetToken])
 
   useEffect(() => {
     function handleKeyDown(e) {
@@ -477,35 +438,108 @@ export default function SwipePage({ currentCard, progress, isCompleted, isLoadin
   }, [isLoading, currentCard, showTutorial, galleryOpen]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (isCompleted) {
+    const canContinue = !!progress?.can_continue
     return (
       <div style={{
-        height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))', overflow: 'hidden', background: 'var(--color-bg)', display: 'flex',
-        flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        padding: 24, gap: 12,
+        height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+        overflow: 'hidden',
+        background: 'var(--color-bg)',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 24,
+        gap: 16,
       }}>
-        <div style={{ fontSize: 64 }}>🎉</div>
-        <h2 style={{ color: 'var(--color-text)', fontSize: 22, fontWeight: 700, margin: 0 }}>All done!</h2>
-        <p style={{ color: 'var(--color-text-dim)', fontSize: 14, textAlign: 'center', margin: 0 }}>
-          {`"${projectName || 'Project'}" swiping complete`}
-        </p>
-        <p style={{ color: 'var(--color-text-dimmer)', fontSize: 13, textAlign: 'center' }}>
-          ♥ {like_count} saved
-        </p>
-        <button
-          onClick={onViewResults}
-          disabled={isResultLoading}
-          style={{
-            marginTop: 8, padding: '14px 36px', borderRadius: 14,
-            background: 'linear-gradient(135deg, #f43f5e, #fb923c)',
-            color: '#fff', fontSize: 15, fontWeight: 700,
-            border: 'none', cursor: isResultLoading ? 'default' : 'pointer', fontFamily: 'inherit',
-            boxShadow: '0 4px 20px rgba(244,63,94,0.35)',
-            opacity: isResultLoading ? 0.6 : 1,
-            transition: 'opacity 0.2s',
-          }}
-        >
-          {isResultLoading ? 'Preparing results...' : 'View Image Board →'}
-        </button>
+        <div style={{
+          width: CARD_WIDTH,
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-border)',
+          borderRadius: 20,
+          padding: '32px 24px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 12,
+          boxShadow: '0 25px 50px rgba(0,0,0,0.4)',
+        }}>
+          <div style={{ fontSize: 56 }}>✨</div>
+          <h2 style={{
+            color: 'var(--color-text)',
+            fontSize: 22,
+            fontWeight: 700,
+            margin: 0,
+            textAlign: 'center',
+          }}>
+            Your taste is found
+          </h2>
+          <p style={{
+            color: 'var(--color-text-2)',
+            fontSize: 14,
+            textAlign: 'center',
+            margin: 0,
+            lineHeight: 1.5,
+          }}>
+            {projectName ? `"${projectName}"` : 'Project'} swiping complete · ♥ {like_count} saved
+          </p>
+          <p style={{
+            color: 'var(--color-text-muted)',
+            fontSize: 12,
+            textAlign: 'center',
+            margin: '4px 0 0',
+            lineHeight: 1.5,
+          }}>
+            {canContinue
+              ? 'View your persona report, or keep exploring more buildings.'
+              : 'Your persona report is ready.'}
+          </p>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: CARD_WIDTH }}>
+          <button
+            onClick={onViewResults}
+            disabled={isResultLoading}
+            style={{
+              padding: '14px 24px',
+              borderRadius: 14,
+              background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
+              color: '#fff',
+              fontSize: 15,
+              fontWeight: 700,
+              border: 'none',
+              cursor: isResultLoading ? 'default' : 'pointer',
+              fontFamily: 'inherit',
+              boxShadow: '0 4px 20px rgba(236,72,153,0.35)',
+              opacity: isResultLoading ? 0.6 : 1,
+              transition: 'opacity 0.2s',
+              minHeight: 44,
+            }}
+          >
+            {isResultLoading ? 'Preparing report...' : 'View persona report →'}
+          </button>
+          {canContinue && (
+            <button
+              onClick={onExtendSession}
+              disabled={isLoading || isResultLoading}
+              style={{
+                padding: '12px 24px',
+                borderRadius: 14,
+                background: 'var(--color-surface-2)',
+                color: 'var(--color-text)',
+                fontSize: 14,
+                fontWeight: 600,
+                border: '1px solid var(--color-border)',
+                cursor: (isLoading || isResultLoading) ? 'default' : 'pointer',
+                fontFamily: 'inherit',
+                opacity: (isLoading || isResultLoading) ? 0.6 : 1,
+                transition: 'opacity 0.2s, background 0.15s',
+                minHeight: 44,
+              }}
+            >
+              Keep exploring
+            </button>
+          )}
+        </div>
       </div>
     )
   }
@@ -542,24 +576,7 @@ export default function SwipePage({ currentCard, progress, isCompleted, isLoadin
               : <><span style={{ color: 'var(--color-text)' }}>Archi</span><span style={{ color: '#ec4899' }}>Tinder</span></>}
           </h1>
           <div style={{ maxWidth: CARD_WIDTH, margin: '0 auto' }}>
-            {confidence !== null ? (
-              <ConfidenceBar value={confidence} />
-            ) : (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                {phase === 'exploring' && (
-                  <>
-                    <span style={{ color: 'var(--color-text-dim)', fontSize: 11 }}>
-                      {like_count}/3 likes to unlock analysis
-                    </span>
-                  </>
-                )}
-                {(!phase || phase === 'analyzing' || phase === 'converged' || phase === 'completed') && (
-                  <span style={{ color: 'var(--color-text-dim)', fontSize: 11 }}>
-                    {current_round} / {total_rounds}
-                  </span>
-                )}
-              </div>
-            )}
+            <ConfidenceBar value={confidence} phase={phase} likeCount={like_count} />
             {filter_relaxed && (
               <p style={{ color: 'var(--color-text-dimmer)', fontSize: 11, marginTop: 6, textAlign: 'center' }}>
                 Filters were relaxed to find more buildings
@@ -574,22 +591,18 @@ export default function SwipePage({ currentCard, progress, isCompleted, isLoadin
             <>
               <TinderCard
                 ref={cardRef}
-                key={currentCard.image_id}
+                key={`${currentCard.image_id}_${cardResetToken}`}
                 onSwipe={onTinderSwipe}
                 onCardLeftScreen={onCardLeftScreen}
-                preventSwipe={currentCard.card_type === 'action' ? [] : (galleryOpen ? ['left', 'right', 'up', 'down'] : ['up', 'down'])}
+                preventSwipe={galleryOpen ? ['left', 'right', 'up', 'down'] : ['up', 'down']}
                 swipeRequirementType='position'
                 swipeThreshold={120}
               >
-                {currentCard.card_type === 'action' ? (
-                  <ActionCard card={currentCard} />
-                ) : (
-                  <SwipeCard
-                    card={currentCard}
-                    onGalleryOpen={() => setGalleryOpen(true)}
-                    onGalleryClose={() => setGalleryOpen(false)}
-                  />
-                )}
+                <SwipeCard
+                  card={currentCard}
+                  onGalleryOpen={() => setGalleryOpen(true)}
+                  onGalleryClose={() => setGalleryOpen(false)}
+                />
               </TinderCard>
               {isLoading && (
                 <div style={{
@@ -614,21 +627,6 @@ export default function SwipePage({ currentCard, progress, isCompleted, isLoadin
         {/* Action Buttons */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
           <p style={{ color: 'var(--color-text-dimmest)', fontSize: 11, margin: 0 }}>← skip · tap card · save →</p>
-          {showExit && (
-            <button
-              onClick={onViewResults}
-              style={{
-                padding: '11px 32px', borderRadius: 14,
-                background: 'linear-gradient(135deg, #f43f5e, #fb923c)',
-                color: '#fff', fontSize: 14, fontWeight: 700,
-                border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-                boxShadow: '0 4px 20px rgba(244,63,94,0.35)',
-                marginTop: 12,
-              }}
-            >
-              View Results →
-            </button>
-          )}
         </div>
 
       </div>

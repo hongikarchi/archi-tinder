@@ -34,16 +34,6 @@ from apps.recommendation.engine import (
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_action_card():
-    """Return a minimal fake action card dict (avoids multi-line lambda E127 issues)."""
-    return {
-        'building_id': '__action_card__', 'card_type': 'action',
-        'name_en': '', 'project_name': '', 'image_url': '',
-        'url': None, 'gallery': [], 'gallery_drawing_start': 0,
-        'metadata': {}, 'action_card_message': '', 'action_card_subtitle': '',
-    }
-
-
 def _make_embedding_str(seed=42, dim=384):
     """Return a pgvector-style embedding string for a random unit vector."""
     rng = np.random.RandomState(seed)
@@ -62,16 +52,16 @@ def _make_raw_embedding(seed=42, dim=384):
 def _make_cursor_for_ids(id_to_seed):
     """Build a mock cursor that returns embedding rows for the given {bid: seed} dict."""
     rows_data = [
-        {'building_id': bid, 'embedding': _make_embedding_str(seed)}
+        {'canonical_bld_id': bid, 'embedding': _make_embedding_str(seed)}
         for bid, seed in id_to_seed.items()
     ]
     cursor = MagicMock()
     cursor.__enter__ = lambda s: s
     cursor.__exit__ = MagicMock(return_value=False)
     # description + fetchall for _dictfetchall
-    cursor.description = [('building_id',), ('embedding',)]
+    cursor.description = [('canonical_bld_id',), ('embedding',)]
     cursor.fetchall.return_value = [
-        (row['building_id'], row['embedding']) for row in rows_data
+        (row['canonical_bld_id'], row['embedding']) for row in rows_data
     ]
     return cursor, rows_data
 
@@ -82,6 +72,36 @@ _FAKE_POOL_ALL = [f'B{str(i).zfill(5)}' for i in range(1, 16)]
 def _fake_embeddings_dict(ids):
     return {bid: np.random.RandomState(i).randn(384).astype(np.float32)
             for i, bid in enumerate(ids)}
+
+
+_SWIPE_VIEW = 'apps.recommendation.views.swipe'
+
+
+class _SyncThread:
+    """threading.Thread replacement: runs target synchronously so test transaction sees DB writes."""
+    def __init__(self, target=None, args=(), kwargs=None, daemon=None, **kw):
+        self._target = target
+        self._args = args
+        self._kwargs = kwargs or {}
+
+    def start(self):
+        if self._target:
+            self._target(*self._args, **self._kwargs)
+
+
+def _sync_emit_telemetry(swipe_kwargs, confidence_kwargs):
+    """_emit_telemetry_thread replacement: emit synchronously, no DB close."""
+    from apps.recommendation import event_log
+    event_log.emit_swipe_event(**swipe_kwargs)
+    if confidence_kwargs is not None:
+        event_log.emit_event('confidence_update', **confidence_kwargs)
+
+
+# Add these to any local `patches` dict that checks for SessionEvent after a swipe.
+_THREAD_PATCHES = {
+    f'{_SWIPE_VIEW}.threading.Thread': _SyncThread,
+    f'{_SWIPE_VIEW}._emit_telemetry_thread': _sync_emit_telemetry,
+}
 
 
 # ---------------------------------------------------------------------------
@@ -285,7 +305,7 @@ class TestL2Normalization:
         cursor = MagicMock()
         cursor.__enter__ = lambda s: s
         cursor.__exit__ = MagicMock(return_value=False)
-        cursor.description = [('building_id',), ('embedding',)]
+        cursor.description = [('canonical_bld_id',), ('embedding',)]
         cursor.fetchall.return_value = [('B00099', raw_str)]
 
         with patch('apps.recommendation.engine.connection') as mock_conn:
@@ -302,7 +322,7 @@ class TestL2Normalization:
         cursor = MagicMock()
         cursor.__enter__ = lambda s: s
         cursor.__exit__ = MagicMock(return_value=False)
-        cursor.description = [('building_id',), ('embedding',)]
+        cursor.description = [('canonical_bld_id',), ('embedding',)]
         cursor.fetchall.return_value = [('B00000', zero_str)]
 
         with patch('apps.recommendation.engine.connection') as mock_conn:
@@ -333,7 +353,7 @@ class TestCacheBoundFIFO:
             cursor = MagicMock()
             cursor.__enter__ = lambda s: s
             cursor.__exit__ = MagicMock(return_value=False)
-            cursor.description = [('building_id',), ('embedding',)]
+            cursor.description = [('canonical_bld_id',), ('embedding',)]
             cursor.fetchall.return_value = [(bid, _make_embedding_str(seed=i))]
             with patch('apps.recommendation.engine.connection') as mock_conn:
                 mock_conn.cursor.return_value = cursor
@@ -359,7 +379,7 @@ class TestCacheBoundFIFO:
             cursor = MagicMock()
             cursor.__enter__ = lambda s: s
             cursor.__exit__ = MagicMock(return_value=False)
-            cursor.description = [('building_id',), ('embedding',)]
+            cursor.description = [('canonical_bld_id',), ('embedding',)]
             cursor.fetchall.return_value = [(bid, _make_embedding_str(seed=i))]
             with patch('apps.recommendation.engine.connection') as mock_conn:
                 mock_conn.cursor.return_value = cursor
@@ -451,7 +471,6 @@ class TestSessionCreateViewWarmsCacheNaturally:
             f'{_ENGINE}.compute_mmr_next': lambda *a: 'B00001',
             f'{_ENGINE}.compute_convergence': lambda *a: 0.05,
             f'{_ENGINE}.check_convergence': lambda *a: False,
-            f'{_ENGINE}.build_action_card': _make_action_card,
             f'{_ENGINE}.get_dislike_fallback': lambda *a, **kw: 'B00010',
             f'{_ENGINE}.refresh_pool_if_low': lambda *a, **kw: None,
         }
@@ -560,12 +579,12 @@ class TestSwipeEventPayload:
             f'{_ENGINE}.compute_mmr_next': lambda *a: pool_ids[1],
             f'{_ENGINE}.compute_convergence': lambda *a: 0.05,
             f'{_ENGINE}.check_convergence': lambda *a: False,
-            f'{_ENGINE}.build_action_card': _make_action_card,
             f'{_ENGINE}.get_dislike_fallback': lambda *a, **kw: pool_ids[2],
             f'{_ENGINE}.refresh_pool_if_low': lambda *a, **kw: None,
             f'{_ENGINE}.farthest_point_from_pool': lambda pool_ids, exposed, embs: next(
                 (b for b in pool_ids if b not in set(exposed)), None),
             f'{_ENGINE}.compute_confidence': lambda *a, **kw: 0.5,
+            **_THREAD_PATCHES,
         }
         # Also mock get_last_embedding_call_stats to return known values
         patchers = []
@@ -663,12 +682,12 @@ class TestSwipeEventPayload:
             f'{_ENGINE}.compute_mmr_next': lambda *a: pool_ids[1],
             f'{_ENGINE}.compute_convergence': lambda *a: 0.05,
             f'{_ENGINE}.check_convergence': lambda *a: False,
-            f'{_ENGINE}.build_action_card': _make_action_card,
             f'{_ENGINE}.get_dislike_fallback': lambda *a, **kw: pool_ids[2],
             f'{_ENGINE}.refresh_pool_if_low': lambda *a, **kw: None,
             f'{_ENGINE}.farthest_point_from_pool': lambda pool_ids, exposed, embs: next(
                 (b for b in pool_ids if b not in set(exposed)), None),
             f'{_ENGINE}.compute_confidence': lambda *a, **kw: None,
+            **_THREAD_PATCHES,
         }
         patchers = []
         for target, side_effect in patches.items():
@@ -751,13 +770,13 @@ class TestPoolEscalationFiredFlag:
             f'{_ENGINE}.compute_mmr_next': lambda *a: pool_ids[1],
             f'{_ENGINE}.compute_convergence': lambda *a: 0.05,
             f'{_ENGINE}.check_convergence': lambda *a: False,
-            f'{_ENGINE}.build_action_card': _make_action_card,
             f'{_ENGINE}.get_dislike_fallback': lambda *a, **kw: pool_ids[2],
             f'{_ENGINE}.refresh_pool_if_low': lambda *a, **kw: None,  # no-op: no escalation
             f'{_ENGINE}.farthest_point_from_pool': lambda pool_ids, exposed, embs: next(
                 (b for b in pool_ids if b not in set(exposed)), None),
             f'{_ENGINE}.compute_confidence': lambda *a, **kw: None,
             f'{_ENGINE}.get_last_embedding_call_stats': lambda: {'requested': 15, 'cache_hits': 15, 'cache_misses': 0},
+            **_THREAD_PATCHES,
         }
         patchers = []
         for target, side_effect in patches.items():
@@ -831,13 +850,13 @@ class TestPoolEscalationFiredFlag:
             f'{_ENGINE}.compute_mmr_next': lambda *a: pool_ids[1],
             f'{_ENGINE}.compute_convergence': lambda *a: 0.05,
             f'{_ENGINE}.check_convergence': lambda *a: False,
-            f'{_ENGINE}.build_action_card': _make_action_card,
             f'{_ENGINE}.get_dislike_fallback': lambda *a, **kw: pool_ids[2],
             f'{_ENGINE}.refresh_pool_if_low': _escalating_refresh,  # fires escalation
             f'{_ENGINE}.farthest_point_from_pool': lambda pool_ids, exposed, embs: next(
                 (b for b in pool_ids if b not in set(exposed)), None),
             f'{_ENGINE}.compute_confidence': lambda *a, **kw: None,
             f'{_ENGINE}.get_last_embedding_call_stats': lambda: {'requested': 6, 'cache_hits': 4, 'cache_misses': 2},
+            **_THREAD_PATCHES,
         }
         patchers = []
         for target, side_effect in patches.items():

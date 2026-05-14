@@ -31,13 +31,12 @@ def _get_profile(request):
 
 
 def _progress(session):
-    like_count    = session.swipes.filter(action='like').count()
-    dislike_count = session.swipes.filter(action='dislike').count()
+    like_count = len(session.like_vectors) if session.like_vectors else 0
     return {
         'current_round': session.current_round,
         'like_count':    like_count,
-        'dislike_count': dislike_count,
+        'dislike_count': session.current_round - like_count,
         'phase':         session.phase,
-        'pool_size':     len(session.pool_ids) if session.pool_ids else 0,
-        'pool_remaining': len([pid for pid in (session.pool_ids or []) if pid not in (session.exposed_ids or [])]),
+        'pool_size': len(session.pool_ids) if session.pool_ids else 0,
+        'pool_remaining': len(set(session.pool_ids or []) - set(session.exposed_ids or [])),
     }

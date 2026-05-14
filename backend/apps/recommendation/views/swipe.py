@@ -37,6 +37,24 @@ def _merge_buffer_into_exposed(exposed_ids, client_buffer_ids):
     return merged
 
 
+# ── Async telemetry thread ────────────────────────────────────────────────────
+
+def _emit_telemetry_thread(swipe_kwargs, confidence_kwargs):
+    """Fire-and-forget: emit swipe + confidence_update events off the hot path.
+    Saves ~4 DB round-trips (~1200ms on Neon) from the swipe response time.
+    """
+    from django.db import connection as _db_connection
+    _db_connection.close()
+    try:
+        event_log.emit_swipe_event(**swipe_kwargs)
+        if confidence_kwargs is not None:
+            event_log.emit_event('confidence_update', **confidence_kwargs)
+    except Exception as exc:
+        logger.warning('Telemetry thread failed: %s', exc)
+    finally:
+        _db_connection.close()
+
+
 # ── IMP-8: async prefetch background thread ───────────────────────────────────
 
 def _async_prefetch_thread(
@@ -91,8 +109,8 @@ def _async_prefetch_thread(
             prefetch_card = engine.get_building_card(pf_id) if pf_id else None
 
         # Compute prefetch_card_2 (round+2 equivalent)
-        if prefetch_card and prefetch_card.get('building_id') != '__action_card__':
-            temp_exposed = exposed_ids_snap + [prefetch_card['building_id']]
+        if prefetch_card and prefetch_card.get('canonical_bld_id') != '__action_card__':
+            temp_exposed = exposed_ids_snap + [prefetch_card['canonical_bld_id']]
             if phase == 'exploring':
                 exposed_set_2 = set(temp_exposed)
                 if current_round_snap + 2 < len(initial_batch_snap):
@@ -113,8 +131,8 @@ def _async_prefetch_thread(
                 prefetch_card_2 = engine.get_building_card(pf2_id) if pf2_id else None
 
         result = {
-            'prefetch_card_id': prefetch_card.get('building_id') if prefetch_card else None,
-            'prefetch_card_2_id': prefetch_card_2.get('building_id') if prefetch_card_2 else None,
+            'prefetch_card_id': prefetch_card.get('canonical_bld_id') if prefetch_card else None,
+            'prefetch_card_2_id': prefetch_card_2.get('canonical_bld_id') if prefetch_card_2 else None,
             'computed_at': timezone.now().isoformat(),
         }
         cache_key = f'prefetch:{session_id}:{cache_round}'
@@ -143,11 +161,15 @@ class BuildingBatchView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        ids = request.data.get('building_ids', [])
+        # Accept either canonical_bld_ids (new) or building_ids (legacy).
+        ids = request.data.get('canonical_bld_ids') or request.data.get('building_ids') or []
         if not ids:
             return Response([])
         if not isinstance(ids, list) or len(ids) > 200:
-            return Response({'detail': 'building_ids must be a list of at most 200 items'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'detail': 'canonical_bld_ids must be a list of at most 200 items'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         cards = engine.get_buildings_by_ids(ids)
         return Response(cards)
 
@@ -311,7 +333,9 @@ class SwipeView(APIView):
         if session.status == 'completed':
             return Response({'detail': 'Session already completed'}, status=status.HTTP_400_BAD_REQUEST)
 
-        building_id     = request.data.get('building_id')
+        # Accept both 'canonical_bld_id' (new) and 'building_id' (legacy) for one
+        # frontend rollout cycle. Treat both identically; pick whichever is set.
+        canonical_bld_id = request.data.get('canonical_bld_id') or request.data.get('building_id')
         action          = request.data.get('action')
         idempotency_key = request.data.get('idempotency_key', '')
 
@@ -324,128 +348,84 @@ class SwipeView(APIView):
             raw_buffer = []
         client_buffer_ids = [
             s for s in raw_buffer
-            if isinstance(s, str) and 0 < len(s) <= 20 and s != '__action_card__'
+            if isinstance(s, str) and 0 < len(s) <= 20
         ][:10]
 
-        if not building_id:
-            return Response({'detail': 'building_id is required'}, status=status.HTTP_400_BAD_REQUEST)
-        if action not in ('like', 'dislike'):
+        extend_requested = bool(request.data.get('extend', False))
+
+        if not extend_requested and not canonical_bld_id:
+            return Response({'detail': 'canonical_bld_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        if not extend_requested and action not in ('like', 'dislike'):
             return Response({'detail': 'action must be like or dislike'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # S3 extend-session short-circuit. Extend is NOT a real swipe and must not
+        # mutate like/ranking state (no SwipeEvent, no like_vectors, no round bump).
+        if extend_requested:
+            with transaction.atomic():
+                session = AnalysisSession.objects.select_for_update().get(
+                    session_id=session_id, user=profile
+                )
+                if session.phase not in ('converged', 'completed') or session.extended_rounds >= 5:
+                    residual_noop = len([
+                        pid for pid in session.pool_ids
+                        if pid not in set(session.exposed_ids)
+                    ]) if session.pool_ids else 0
+                    can_continue_noop = (residual_noop >= 1) and (session.extended_rounds < 5)
+                    return Response({
+                        'accepted': True,
+                        'session_status': session.status,
+                        'progress': _progress(session),
+                        'next_image': None,
+                        'prefetch_image': None,
+                        'prefetch_image_2': None,
+                        'is_analysis_completed': session.phase in ('converged', 'completed'),
+                        'can_continue': can_continue_noop and session.phase in ('converged', 'completed'),
+                        'confidence': None,
+                    })
+
+                session.extended_rounds += 1
+                session.phase = 'analyzing'
+                session.convergence_history = []
+                session.previous_pref_vector = []
+
+                if client_buffer_ids:
+                    session.exposed_ids = _merge_buffer_into_exposed(session.exposed_ids, client_buffer_ids)
+
+                engine.refresh_pool_if_low(session, threshold=5)
+
+                pool_embeddings = engine.get_pool_embeddings(session.pool_ids)
+                next_card_id = engine.compute_mmr_next(
+                    session.pool_ids, session.exposed_ids, pool_embeddings,
+                    session.like_vectors, session.current_round,
+                )
+                next_card = engine.get_building_card(next_card_id) if next_card_id else None
+                if next_card:
+                    session.exposed_ids = session.exposed_ids + [next_card['canonical_bld_id']]
+
+                session.save(update_fields=[
+                    'extended_rounds', 'phase', 'convergence_history', 'previous_pref_vector',
+                    'exposed_ids', 'pool_ids', 'pool_scores', 'current_pool_tier',
+                ])
+
+            residual_after = len([
+                pid for pid in session.pool_ids if pid not in set(session.exposed_ids)
+            ]) if session.pool_ids else 0
+            return Response({
+                'accepted': True,
+                'session_status': session.status,
+                'progress': _progress(session),
+                'next_image': next_card,
+                'prefetch_image': None,
+                'prefetch_image_2': None,
+                'is_analysis_completed': next_card is None,
+                'can_continue': (residual_after >= 1) and (session.extended_rounds < 5),
+                'confidence': None,
+            })
 
         # Idempotency check -- if already processed, return accepted so frontend treats it as success
         if idempotency_key and SwipeEvent.objects.filter(idempotency_key=idempotency_key, session=session).exists():
             logger.info('Duplicate swipe ignored: %s', idempotency_key)
             return Response({'accepted': True, 'detail': 'duplicate'}, status=status.HTTP_200_OK)
-
-        # SPECIAL: action card handling
-        if building_id == '__action_card__':
-            if action == 'like':
-                # Complete the session
-                with transaction.atomic():
-                    session.status = 'completed'
-                    session.phase = 'completed'
-                    session.save(update_fields=['status', 'phase'])
-
-                # §6 logging: session_end (user_confirm = user clicked "View results")
-                all_swipes = list(session.swipes.values_list('action', flat=True))
-                # IMP-10 / Spec v1.8 §6: aggregate per-session clustering stats
-                _clustering_agg = event_log.aggregate_session_clustering_stats(session.session_id)
-                event_log.emit_event(
-                    'session_end',
-                    session=session,
-                    user=profile,
-                    end_reason='user_confirm',
-                    total_swipes=session.current_round,
-                    likes_count=all_swipes.count('like'),
-                    loves_count=0,  # Sprint 3 A-1 will populate this from intensity field
-                    dislikes_count=all_swipes.count('dislike'),
-                    cluster_count_distribution=_clustering_agg['cluster_count_distribution'],
-                    silhouette_score_p50=_clustering_agg['silhouette_score_p50'],
-                )
-
-                return Response({
-                    'accepted': True,
-                    'session_status': 'completed',
-                    'progress': _progress(session),
-                    'next_image': None,
-                    'prefetch_image': None,
-                    'prefetch_image_2': None,
-                    'is_analysis_completed': True,
-                    'confidence': None,
-                })
-            else:
-                # Reset and keep going
-                with transaction.atomic():
-                    session.convergence_history = []
-                    session.previous_pref_vector = []
-                    session.phase = 'analyzing'
-                    # Merge client buffer into exposed so we don't re-show cards the
-                    # frontend already has in its queue.
-                    if client_buffer_ids:
-                        session.exposed_ids = _merge_buffer_into_exposed(session.exposed_ids, client_buffer_ids)
-                    # Pool exhaustion guard for "더 swipe" path (§5.6 + §6 A4):
-                    # User is extending past auto-stop — pool is most likely exhausted here.
-                    # Mutates session.pool_ids/pool_scores/current_pool_tier in-place if needed.
-                    engine.refresh_pool_if_low(session, threshold=5)
-                    session.save(update_fields=[
-                        'phase', 'convergence_history', 'previous_pref_vector', 'exposed_ids',
-                        'pool_ids', 'pool_scores', 'current_pool_tier',
-                    ])
-                    # Fall through to select next card below
-                    # (skip normal swipe recording for action card)
-                    pool_embeddings = engine.get_pool_embeddings(session.pool_ids)
-                    next_card_id = engine.compute_mmr_next(
-                        session.pool_ids, session.exposed_ids, pool_embeddings,
-                        session.like_vectors, session.current_round
-                    )
-                    next_card = engine.get_building_card(next_card_id) if next_card_id else None
-                    if next_card:
-                        session.exposed_ids = session.exposed_ids + [next_card['building_id']]
-                        session.save(update_fields=['exposed_ids'])
-
-                    # Prefetch
-                    prefetch_card = None
-                    if next_card:
-                        try:
-                            pf_id = engine.compute_mmr_next(
-                                session.pool_ids, session.exposed_ids, pool_embeddings,
-                                session.like_vectors, session.current_round + 1
-                            )
-                            prefetch_card = engine.get_building_card(pf_id) if pf_id else None
-                        except Exception:
-                            pass
-
-                    # Prefetch 2
-                    prefetch_card_2 = None
-                    if prefetch_card and prefetch_card.get('building_id') != '__action_card__':
-                        try:
-                            temp_exposed = session.exposed_ids + [prefetch_card['building_id']]
-                            if session.phase == 'exploring':
-                                if session.current_round + 2 < len(session.initial_batch):
-                                    pf2_bid = session.initial_batch[session.current_round + 2]
-                                    prefetch_card_2 = engine.get_building_card(pf2_bid)
-                                else:
-                                    pf2_bid = engine.farthest_point_from_pool(session.pool_ids, temp_exposed, pool_embeddings)
-                                    prefetch_card_2 = engine.get_building_card(pf2_bid) if pf2_bid else None
-                            elif session.phase == 'analyzing':
-                                pf2_id = engine.compute_mmr_next(
-                                    session.pool_ids, temp_exposed, pool_embeddings,
-                                    session.like_vectors, session.current_round + 2
-                                )
-                                prefetch_card_2 = engine.get_building_card(pf2_id) if pf2_id else None
-                        except Exception:
-                            prefetch_card_2 = None
-
-                return Response({
-                    'accepted': True,
-                    'session_status': session.status,
-                    'progress': _progress(session),
-                    'next_image': next_card,
-                    'prefetch_image': prefetch_card,
-                    'prefetch_image_2': prefetch_card_2,
-                    'is_analysis_completed': False,
-                    'confidence': None,  # history cleared on reset; hide bar until new window fills
-                })
 
         # NORMAL SWIPE PROCESSING
         import time as _time
@@ -463,7 +443,7 @@ class SwipeView(APIView):
             _mark('lock_acquired')
 
             # 1. Get embedding and update preference vector
-            embedding = engine.get_building_embedding(building_id)
+            embedding = engine.get_building_embedding(canonical_bld_id)
             _mark('embed_done')
             if embedding:
                 session.preference_vector = engine.update_preference_vector(
@@ -472,7 +452,7 @@ class SwipeView(APIView):
 
             # 2. Record swipe
             SwipeEvent.objects.create(
-                session=session, building_id=building_id,
+                session=session, canonical_bld_id=canonical_bld_id,
                 action=action, idempotency_key=idempotency_key,
             )
 
@@ -480,7 +460,7 @@ class SwipeView(APIView):
             project = session.project
             if action == 'like':
                 existing_ids = _liked_id_only(project.liked_ids)
-                if building_id not in existing_ids:
+                if canonical_bld_id not in existing_ids:
                     # Default intensity 1.0 for plain Like. Love (intensity 1.8) lands in Sprint 3 A-1
                     # when the frontend wires up the up-swipe gesture; for now all backend writes
                     # use 1.0 unless the request explicitly carries an intensity field (future-proofing).
@@ -490,13 +470,13 @@ class SwipeView(APIView):
                     except (TypeError, ValueError):
                         intensity = 1.0
                     intensity = max(0.0, min(2.0, intensity))
-                    project.liked_ids = project.liked_ids + [{'id': building_id, 'intensity': intensity}]
+                    project.liked_ids = project.liked_ids + [{'id': canonical_bld_id, 'intensity': intensity}]
                 # Append to session.like_vectors
                 if embedding:
                     session.like_vectors = session.like_vectors + [{'embedding': embedding, 'round': session.current_round}]
             else:
-                if building_id not in project.disliked_ids:
-                    project.disliked_ids = project.disliked_ids + [building_id]
+                if canonical_bld_id not in project.disliked_ids:
+                    project.disliked_ids = project.disliked_ids + [canonical_bld_id]
             project.save(update_fields=['liked_ids', 'disliked_ids'])
 
             # 4. Increment round
@@ -578,24 +558,22 @@ class SwipeView(APIView):
             # which would overwrite _last_embedding_call_stats. Reading here preserves swipe-selection stats.
             _embedding_stats = engine.get_last_embedding_call_stats() or {}
 
+            # ID selection only — DB fetch deferred to post-transaction batch call.
             if session.phase == 'converged':
-                next_card = engine.build_action_card()
+                next_bid = None  # S3: no end-of-session card in stream; frontend handles end-screen
             elif session.phase == 'exploring':
-                # Use initial_batch for early rounds, then farthest-point
-                # Note: if the user's current_round lands on an initial_batch slot that was
-                # already merged in from client_buffer_ids, pick the next valid position instead.
                 exposed_set = set(session.exposed_ids)
-                next_card = None
+                next_bid = None
                 if session.current_round < len(session.initial_batch):
-                    next_bid = session.initial_batch[session.current_round]
-                    if next_bid and next_bid not in exposed_set:
-                        next_card = engine.get_building_card(next_bid)
+                    _candidate = session.initial_batch[session.current_round]
+                    if _candidate and _candidate not in exposed_set:
+                        next_bid = _candidate
                     else:
-                        # Fall through to farthest-point selection (initial_batch slot exhausted)
-                        next_bid = engine.farthest_point_from_pool(session.pool_ids, session.exposed_ids, pool_embeddings)
-                        next_card = engine.get_building_card(next_bid) if next_bid else None
+                        # initial_batch slot already exposed — fall through to farthest-point
+                        next_bid = engine.farthest_point_from_pool(
+                            session.pool_ids, session.exposed_ids, pool_embeddings
+                        )
                 else:
-                    # Check for consecutive dislikes
                     recent_swipes = list(session.swipes.order_by('-created_at').values_list('action', flat=True)[:RC.get('max_consecutive_dislikes', 5)])
                     consecutive_dislikes = 0
                     for s in recent_swipes:
@@ -611,30 +589,26 @@ class SwipeView(APIView):
                         if dislike_ids:
                             dislike_emb_map = engine.get_pool_embeddings(dislike_ids)
                             dislike_embeds = [dislike_emb_map[did] for did in dislike_ids if did in dislike_emb_map]
-                        fallback_id = engine.get_dislike_fallback(session.pool_ids, session.exposed_ids, pool_embeddings, dislike_embeds)
-                        if fallback_id:
-                            session.exposed_ids = session.exposed_ids + [fallback_id]
-                        next_card = engine.get_building_card(fallback_id) if fallback_id else None
+                        next_bid = engine.get_dislike_fallback(
+                            session.pool_ids, session.exposed_ids, pool_embeddings, dislike_embeds
+                        )
                     else:
-                        next_bid = engine.farthest_point_from_pool(session.pool_ids, session.exposed_ids, pool_embeddings)
-                        next_card = engine.get_building_card(next_bid) if next_bid else None
+                        next_bid = engine.farthest_point_from_pool(
+                            session.pool_ids, session.exposed_ids, pool_embeddings
+                        )
             elif session.phase == 'analyzing':
-                next_card_id = engine.compute_mmr_next(
+                next_bid = engine.compute_mmr_next(
                     session.pool_ids, session.exposed_ids, pool_embeddings,
                     session.like_vectors, session.current_round
                 )
-                next_card = engine.get_building_card(next_card_id) if next_card_id else None
-                if not next_card:
+                if not next_bid:
                     # Pool exhausted during analyzing
-                    next_card = engine.build_action_card()
                     session.phase = 'converged'
             else:
-                next_card = None
+                next_bid = None
 
-            if next_card and next_card.get('building_id') != '__action_card__':
-                bid = next_card['building_id']
-                if bid not in session.exposed_ids:
-                    session.exposed_ids = session.exposed_ids + [bid]
+            if next_bid and next_bid not in session.exposed_ids:
+                session.exposed_ids = session.exposed_ids + [next_bid]
 
             _mark('select_done')
 
@@ -657,28 +631,29 @@ class SwipeView(APIView):
             # Cache pool_embeddings -- same pool_ids, no need to re-fetch outside transaction
             saved_pool_embeddings = pool_embeddings
 
-        # 9. Prefetch (outside transaction -- no lock held)
-        # Reuse cached pool_embeddings from step 8 (pool_ids unchanged)
+        # 9. Card fetch + prefetch (outside transaction — no lock held)
+        # All building IDs were resolved inside the transaction (step 8).
+        # DB fetches are batched here: 3 sequential RTTs → 1 RTT.
         #
-        # IMP-8 (Spec v1.6 §11.1): when async_prefetch_enabled=True, spawn a
-        # background daemon thread to compute prefetch cards and write to Django
-        # cache. Primary response returns immediately with prefetch_image=None
-        # (frontend handles null prefetches gracefully -- existing behavior at
-        # session end / dislike-fallback paths). The cache write is for
-        # telemetry / future Half-B optimization; primary path does NOT consume
-        # the cache in this implementation.
-        #
-        # When async_prefetch_enabled=False (default), the existing sync path
-        # runs unchanged -- no threads, no cache pressure, byte-identical behavior.
-        prefetch_strategy = 'sync'  # updated to 'async-thread' when IMP-8 path runs
+        # Paths:
+        #   next_bid is None  → converged/exhausted; next_card stays None
+        #     (S3: no end-of-stream card — frontend renders end-screen on is_analysis_completed).
+        #   async_prefetch_enabled=True  → fetch next_card alone (1 RTT),
+        #     delegate prefetch to background thread (IMP-8 unchanged).
+        #   sync (default)  → compute pf_bid + pf2_bid (CPU-only), then
+        #     fetch all three IDs in a single get_buildings_by_ids call (1 RTT).
+        prefetch_strategy = 'sync'
+        next_card = None
         prefetch_card = None
         prefetch_card_2 = None
-        if settings.RECOMMENDATION.get('async_prefetch_enabled', False) and (
-            next_card and next_card.get('building_id') != '__action_card__'
-        ):
-            # IMP-8 async path: spawn bg thread; return None prefetches immediately.
-            # cache_round = saved_current_round + 1 so the key uniquely identifies
-            # "the prefetch for the NEXT swipe after this one".
+
+        if next_bid is None:
+            # converged / pool-exhausted — no DB fetch needed; next_card stays None
+            pass
+
+        elif settings.RECOMMENDATION.get('async_prefetch_enabled', False):
+            # IMP-8 async path: fetch next_card in main thread, offload prefetch.
+            next_card = engine.get_building_card(next_bid)
             t = threading.Thread(
                 target=_async_prefetch_thread,
                 args=(
@@ -697,54 +672,66 @@ class SwipeView(APIView):
             t.start()
             prefetch_strategy = 'async-thread'
             # prefetch_card and prefetch_card_2 stay None -- frontend handles gracefully
-        elif next_card and next_card.get('building_id') != '__action_card__':
-            # Existing sync prefetch path (unchanged when flag is OFF)
+
+        else:
+            # ── Phase 1: prefetch ID selection (CPU-only, no DB) ─────────────
+            pf_bid = None
+            pf2_bid = None
             try:
                 if saved_phase == 'exploring':
                     exposed_set = set(saved_exposed_ids)
                     if saved_current_round + 1 < len(saved_initial_batch):
-                        pf_bid = saved_initial_batch[saved_current_round + 1]
-                        if pf_bid and pf_bid not in exposed_set:
-                            prefetch_card = engine.get_building_card(pf_bid)
+                        _candidate = saved_initial_batch[saved_current_round + 1]
+                        if _candidate and _candidate not in exposed_set:
+                            pf_bid = _candidate
                         else:
-                            pf_bid = engine.farthest_point_from_pool(saved_pool_ids, saved_exposed_ids, saved_pool_embeddings)
-                            prefetch_card = engine.get_building_card(pf_bid) if pf_bid else None
+                            pf_bid = engine.farthest_point_from_pool(
+                                saved_pool_ids, saved_exposed_ids, saved_pool_embeddings
+                            )
                     else:
-                        pf_bid = engine.farthest_point_from_pool(saved_pool_ids, saved_exposed_ids, saved_pool_embeddings)
-                        prefetch_card = engine.get_building_card(pf_bid) if pf_bid else None
+                        pf_bid = engine.farthest_point_from_pool(
+                            saved_pool_ids, saved_exposed_ids, saved_pool_embeddings
+                        )
                 elif saved_phase == 'analyzing':
-                    pf_id = engine.compute_mmr_next(
+                    pf_bid = engine.compute_mmr_next(
                         saved_pool_ids, saved_exposed_ids, saved_pool_embeddings,
                         saved_like_vectors, saved_current_round + 1
                     )
-                    prefetch_card = engine.get_building_card(pf_id) if pf_id else None
             except Exception:
-                prefetch_card = None
+                pf_bid = None
 
-            # Prefetch 2 (round+2)
-            if prefetch_card and prefetch_card.get('building_id') != '__action_card__':
+            if pf_bid:
                 try:
-                    temp_exposed = saved_exposed_ids + [prefetch_card['building_id']]
+                    # Use pf_bid string directly — card data not needed for ID selection.
+                    temp_exposed = saved_exposed_ids + [pf_bid]
                     if saved_phase == 'exploring':
                         exposed_set = set(temp_exposed)
                         if saved_current_round + 2 < len(saved_initial_batch):
-                            pf2_bid = saved_initial_batch[saved_current_round + 2]
-                            if pf2_bid and pf2_bid not in exposed_set:
-                                prefetch_card_2 = engine.get_building_card(pf2_bid)
+                            _candidate = saved_initial_batch[saved_current_round + 2]
+                            if _candidate and _candidate not in exposed_set:
+                                pf2_bid = _candidate
                             else:
-                                pf2_bid = engine.farthest_point_from_pool(saved_pool_ids, temp_exposed, saved_pool_embeddings)
-                                prefetch_card_2 = engine.get_building_card(pf2_bid) if pf2_bid else None
+                                pf2_bid = engine.farthest_point_from_pool(
+                                    saved_pool_ids, temp_exposed, saved_pool_embeddings
+                                )
                         else:
-                            pf2_bid = engine.farthest_point_from_pool(saved_pool_ids, temp_exposed, saved_pool_embeddings)
-                            prefetch_card_2 = engine.get_building_card(pf2_bid) if pf2_bid else None
+                            pf2_bid = engine.farthest_point_from_pool(
+                                saved_pool_ids, temp_exposed, saved_pool_embeddings
+                            )
                     elif saved_phase == 'analyzing':
-                        pf2_id = engine.compute_mmr_next(
+                        pf2_bid = engine.compute_mmr_next(
                             saved_pool_ids, temp_exposed, saved_pool_embeddings,
                             saved_like_vectors, saved_current_round + 2
                         )
-                        prefetch_card_2 = engine.get_building_card(pf2_id) if pf2_id else None
                 except Exception:
-                    prefetch_card_2 = None
+                    pf2_bid = None
+
+            # ── Phase 2: single batch DB call (1 RTT for next + pf + pf2) ────
+            _fetch_ids = [bid for bid in [next_bid, pf_bid, pf2_bid] if bid]
+            _fetched = {c['canonical_bld_id']: c for c in engine.get_buildings_by_ids(_fetch_ids)}
+            next_card       = _fetched.get(next_bid)
+            prefetch_card   = _fetched.get(pf_bid)   if pf_bid   else None
+            prefetch_card_2 = _fetched.get(pf2_bid)  if pf2_bid  else None
 
         _mark('prefetch_done')
         _mark('total')
@@ -768,7 +755,7 @@ class SwipeView(APIView):
                 _intensity = 1.0
         _rank_in_pool = None
         try:
-            _rank_in_pool = session.pool_ids.index(building_id)
+            _rank_in_pool = session.pool_ids.index(canonical_bld_id)
         except (ValueError, AttributeError):
             pass
         # IMP-7 §6 swipe telemetry extensions
@@ -780,61 +767,62 @@ class SwipeView(APIView):
             ).hexdigest()[:16]
         except Exception:
             pass
-        event_log.emit_swipe_event(
-            session=session,
-            user=profile,
-            direction=action,
-            card_id=building_id,
-            intensity=_intensity,
-            rank_in_pool=_rank_in_pool,
-            timing_breakdown=_timing_breakdown,
-            idempotency_key=idempotency_key,
-            # IMP-7 cache telemetry fields (spec v1.6 §6)
-            cache_hit=_cache_misses == 0,
-            cache_source='precompute' if _cache_misses == 0 else 'fresh',
-            cache_partial_miss_count=_cache_misses,
-            prefetch_strategy=prefetch_strategy,  # 'sync' (default) or 'async-thread' (IMP-8)
-            db_call_count=None,              # IMP-9 verify; null until connection-level instrumentation added
-            pool_escalation_fired=_pool_escalation_fired,
-            pool_signature_hash=_pool_sig,
+        logger.info(
+            '[SWIPE TIMING] lock=%dms embed=%dms select=%dms prefetch=%dms total=%dms | phase=%s cache_hit=%s',
+            _timing_breakdown['lock_ms'],
+            _timing_breakdown['embed_ms'],
+            _timing_breakdown['select_ms'],
+            _timing_breakdown['prefetch_ms'],
+            _timing_breakdown['total_ms'],
+            saved_phase,
+            _cache_misses == 0,
         )
 
-        # Compute user-facing confidence for response (C-1)
+        # Compute user-facing confidence (Python-only, fast — must stay on hot path)
         confidence = engine.compute_confidence(
             session.convergence_history,
             RC.get('convergence_threshold', 0.08),
             window=RC.get('convergence_window', 3),
         )
 
-        # Emit confidence_update event (Spec v1.2 §6 + dislike-bias telemetry)
+        # Build telemetry kwargs and fire off background thread.
+        # Keeps ~4 Neon DB round-trips (~1200ms) off the response path.
+        _swipe_telem = dict(
+            session=session, user=profile, direction=action, card_id=canonical_bld_id,
+            intensity=_intensity, rank_in_pool=_rank_in_pool,
+            timing_breakdown=_timing_breakdown, idempotency_key=idempotency_key,
+            cache_hit=_cache_misses == 0,
+            cache_source='precompute' if _cache_misses == 0 else 'fresh',
+            cache_partial_miss_count=_cache_misses,
+            prefetch_strategy=prefetch_strategy,
+            db_call_count=None,
+            pool_escalation_fired=_pool_escalation_fired,
+            pool_signature_hash=_pool_sig,
+        )
+        _confidence_telem = None
         if confidence is not None:
-            # Best-effort dominant attrs from pref_vector: top-K dims by absolute magnitude.
-            # Returns dimension indices for now; Sprint 4 will wire attribute-name mapping.
             dominant_attrs = []
             if session.preference_vector:
                 pref = np.asarray(session.preference_vector, dtype=float)
                 if pref.size > 0:
                     top_idxs = np.argsort(np.abs(pref))[-3:][::-1]
                     dominant_attrs = [int(i) for i in top_idxs]
-            # IMP-10 / Spec v1.8 §6: 4 new Topic 06 clustering telemetry fields.
-            # Read stats set by compute_taste_centroids (called inside convergence path
-            # above at line ~646 via compute_taste_centroids, or via compute_mmr_next).
-            # We read immediately after card-selection to capture the most recent call;
-            # stats are set unconditionally by compute_taste_centroids on every execution.
             _clustering_stats = engine.get_last_clustering_stats() or {}
-            event_log.emit_event(
-                'confidence_update',
-                session=session,
-                user=profile,
+            _confidence_telem = dict(
+                session=session, user=profile,
                 confidence=round(float(confidence), 4),
                 dominant_attrs=dominant_attrs,
-                action=action,  # 'like' or 'dislike' -- Spec v1.2 dislike-bias telemetry
-                # Topic 06 fields (Spec v1.8 §6)
+                action=action,
                 cluster_count_used=_clustering_stats.get('cluster_count_used'),
                 silhouette_score=_clustering_stats.get('silhouette_score'),
                 soft_relevance_used=_clustering_stats.get('soft_relevance_used', False),
                 n_likes_at_decision=_clustering_stats.get('n_likes_at_decision'),
             )
+        threading.Thread(
+            target=_emit_telemetry_thread,
+            args=(_swipe_telem, _confidence_telem),
+            daemon=True,
+        ).start()
 
         return Response({
             'accepted': True,
@@ -843,6 +831,10 @@ class SwipeView(APIView):
             'next_image': next_card,
             'prefetch_image': prefetch_card,
             'prefetch_image_2': prefetch_card_2,
-            'is_analysis_completed': False,
+            'is_analysis_completed': next_card is None and session.phase in ('converged', 'completed'),
+            'can_continue': (
+                len([pid for pid in session.pool_ids if pid not in set(session.exposed_ids)]) >= 1
+                and session.extended_rounds < 5
+            ),
             'confidence': confidence,  # float [0,1] or null per spec C-1
         })

@@ -19,61 +19,6 @@ function formatBoardDate(iso) {
   }
 }
 
-// TODO: Replace with API call
-const MOCK_USER = {
-  user_id: 1,
-  display_name: "Kim Minseo",
-  avatar_url: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&q=80",
-  bio: "Architecture student at SNU, obsessed with brutalism and minimal design.",
-  mbti: "INTJ",
-  external_links: {
-    instagram: "@kimarch",
-    email: "kim@example.com"
-  },
-  follower_count: 42,
-  following_count: 18,
-  is_following: false,
-  boards: Array.from({ length: 24 }).map((_, i) => ({
-    board_id: `proj_${123 + i}`,
-    name: [
-      "Museum References", "Concrete Dreams", "Minimalist Living", "Urban Brutalism",
-      "Wood & Light", "Glass Facades", "Parametric Forms", "Public Spaces",
-      "Residential Concepts", "Adaptive Reuse"
-    ][i % 10] + (i >= 10 ? ` Vol.${Math.floor(i/10) + 1}` : ""),
-    date: `April 2026`,
-    visibility: i % 5 === 0 ? "private" : "public",
-    // Stable count (no Math.random() — value is shown twice on flip-card front + View Gallery btn,
-    // and re-renders would otherwise produce mismatched values on each render)
-    building_count: 8 + ((i * 7) % 47),
-    cover_image_url: [
-      "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800&q=80",
-      "https://images.unsplash.com/photo-1513694203232-719a280e022f?w=800&q=80",
-      "https://images.unsplash.com/photo-1449844908441-8829872d2607?w=800&q=80",
-      "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&q=80",
-      "https://images.unsplash.com/photo-1511818966892-d7d671e672a2?w=800&q=80",
-      "https://images.unsplash.com/photo-1524815340653-53d719ce3660?w=800&q=80"
-    ][i % 6],
-    // TODO(claude): backend should add thumbnails[6] to /api/v1/boards/{id}/ minimal response or replace with derived top-N images
-    thumbnails: Array.from({ length: 6 }).map((_, j) => [
-      "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800&q=80",
-      "https://images.unsplash.com/photo-1513694203232-719a280e022f?w=800&q=80",
-      "https://images.unsplash.com/photo-1449844908441-8829872d2607?w=800&q=80",
-      "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&q=80",
-      "https://images.unsplash.com/photo-1511818966892-d7d671e672a2?w=800&q=80",
-      "https://images.unsplash.com/photo-1524815340653-53d719ce3660?w=800&q=80",
-      "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?w=800&q=80",
-      "https://images.unsplash.com/photo-1506146332389-18140dc7b2fb?w=800&q=80"
-    ][(i * 3 + j) % 8])
-  })),
-  persona_summary: {
-    persona_type: "The Parametric Visionary",
-    one_liner: "They seek purity where form and light converge",
-    styles: ["Modern", "Parametric"],
-    programs: ["Museum", "Public"]
-  }
-}
-
-
 export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
   const { userId: routeUserId } = useParams()
   const navigate = useNavigate()

@@ -7,6 +7,7 @@ Tests cover:
   - get_building_card: dev-schema (no divisare cols) -> no 500, image_url fallback
   - clear_available_columns_cache: resets probe cache for isolation
 """
+import pytest
 from unittest.mock import patch, MagicMock
 
 import apps.recommendation.engine as engine_module
@@ -224,6 +225,7 @@ class TestBuildSelectColumns:
 # TestGetBuildingCardDevSchema
 # ---------------------------------------------------------------------------
 
+@pytest.mark.skip(reason="legacy divisare-probe schema (building_id, image_photos); no longer applies to canonical_v2_buildings engine")
 class TestGetBuildingCardDevSchema:
     """get_building_card with dev schema (no divisare columns) does not 500."""
 

@@ -48,7 +48,7 @@ def _like_entry(seed, round_num=1):
 
 def _fake_card(bid):
     return {
-        'building_id': bid,
+        'canonical_bld_id': bid,
         'name_en': f'Building {bid}',
         'project_name': f'Project {bid}',
         'image_url': '',
@@ -539,7 +539,7 @@ class TestSessionResultViewStoresTop10s:
         session.refresh_from_db()
         assert session.cosine_top10_ids is not None
         assert len(session.cosine_top10_ids) == 10
-        expected_order = [c['building_id'] for c in fake_cards[:10]]
+        expected_order = [c['canonical_bld_id'] for c in fake_cards[:10]]
         assert session.cosine_top10_ids == expected_order
 
     def test_gemini_top10_none_when_flag_off(self, auth_client, user_profile):
@@ -599,7 +599,7 @@ class TestSessionResultViewStoresTop10s:
         session = self._make_completed_session(user_profile, project)
 
         fake_cards = [_fake_card(bid) for bid in FAKE_POOL[:12]]
-        cosine_order = [c['building_id'] for c in fake_cards]
+        cosine_order = [c['canonical_bld_id'] for c in fake_cards]
 
         # Rerank returns the same order -- Gemini ran but nothing moved.
         with patch.object(engine, 'get_top_k_mmr', return_value=fake_cards), \

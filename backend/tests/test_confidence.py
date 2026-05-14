@@ -34,10 +34,10 @@ def _make_card(bid):
     if bid is None:
         return None
     return {
-        'building_id': bid,
-        'name_en': f'Building {bid}',
-        'project_name': f'Project {bid}',
+        'canonical_bld_id': bid,
+        'name': f'Building {bid}',
         'image_url': '',
+        'covers_by_type': {},
         'url': None,
         'gallery': [],
         'gallery_drawing_start': 0,
@@ -45,14 +45,13 @@ def _make_card(bid):
             'axis_typology': 'Museum',
             'axis_architects': 'Test Arch',
             'axis_country': 'Korea',
-            'axis_area_m2': 200.0,
+            'axis_city': None,
             'axis_year': 2022,
             'axis_style': 'Brutalist',
             'axis_atmosphere': 'bold',
             'axis_color_tone': 'Dark',
-            'axis_material': 'concrete',
             'axis_material_visual': [],
-            'axis_tags': [],
+            'visual_description': '',
         },
     }
 
@@ -79,23 +78,29 @@ def _mock_mmr_next(pool_ids, exposed_ids, pool_embeddings, like_vectors, round_n
     return None
 
 
-def _mock_build_action_card():
-    return {
-        'building_id': '__action_card__',
-        'card_type': 'action',
-        'name_en': 'Your Taste is Found!',
-        'project_name': '',
-        'image_url': '',
-        'url': None,
-        'gallery': [],
-        'gallery_drawing_start': 0,
-        'metadata': {},
-        'action_card_message': "We've analyzed your preferences.",
-        'action_card_subtitle': 'Swipe right to see results.',
-    }
-
-
 _ENGINE = 'apps.recommendation.views.engine'
+_SWIPE_VIEW = 'apps.recommendation.views.swipe'
+
+
+class _SyncThread:
+    """threading.Thread replacement: runs target synchronously so test sees DB writes."""
+    def __init__(self, target=None, args=(), kwargs=None, daemon=None, **kw):
+        self._target = target
+        self._args = args
+        self._kwargs = kwargs or {}
+
+    def start(self):
+        if self._target:
+            self._target(*self._args, **self._kwargs)
+
+
+def _sync_emit_telemetry(swipe_kwargs, confidence_kwargs):
+    """_emit_telemetry_thread replacement: emit synchronously, no DB close."""
+    from apps.recommendation import event_log
+    event_log.emit_swipe_event(**swipe_kwargs)
+    if confidence_kwargs is not None:
+        event_log.emit_event('confidence_update', **confidence_kwargs)
+
 
 _SESSION_PATCHES = {
     f'{_ENGINE}.create_bounded_pool': lambda *a, **kw: (_FAKE_POOL[:], dict(_FAKE_SCORES)),
@@ -104,6 +109,7 @@ _SESSION_PATCHES = {
     },
     f'{_ENGINE}.farthest_point_from_pool': _mock_farthest_point,
     f'{_ENGINE}.get_building_card': _make_card,
+    f'{_ENGINE}.get_buildings_by_ids': lambda ids, image_focus=None: [_make_card(bid) for bid in ids if bid],
     f'{_ENGINE}.get_building_embedding': lambda bid: list(
         _FAKE_EMBEDDINGS.get(bid, np.random.randn(384))
     ),
@@ -114,9 +120,11 @@ _SESSION_PATCHES = {
     f'{_ENGINE}.compute_mmr_next': _mock_mmr_next,
     f'{_ENGINE}.compute_convergence': lambda *a: 0.05,
     f'{_ENGINE}.check_convergence': lambda *a: False,
-    f'{_ENGINE}.build_action_card': _mock_build_action_card,
     f'{_ENGINE}.get_dislike_fallback': lambda *a, **kw: 'B00010',
     f'{_ENGINE}._random_pool': lambda target: _FAKE_POOL[:target],
+    # Make telemetry thread synchronous so the test transaction sees DB writes.
+    f'{_SWIPE_VIEW}.threading.Thread': _SyncThread,
+    f'{_SWIPE_VIEW}._emit_telemetry_thread': _sync_emit_telemetry,
 }
 
 
@@ -350,70 +358,3 @@ class TestConfidenceBarIntegration:
         )
         assert 'confidence' in evt.payload, f"'confidence' missing from payload: {evt.payload}"
         assert 0.0 <= evt.payload['confidence'] <= 1.0
-
-    def test_action_card_reset_response_has_null_confidence(self, auth_client, user_profile):
-        """Action-card 'Reset and keep going' (dislike) response confidence is null."""
-        session_id, session = self._create_session_in_analyzing(
-            auth_client, user_profile, history=[0.04, 0.04, 0.04]
-        )
-        # Manually set phase to 'converged' so the action card fires
-        session.phase = 'converged'
-        session.save(update_fields=['phase'])
-
-        patchers = _apply_patches()
-        try:
-            resp = auth_client.post(
-                f'/api/v1/analysis/sessions/{session_id}/swipes/',
-                {
-                    'building_id': '__action_card__',
-                    'action': 'dislike',  # "Reset and keep going"
-                    'idempotency_key': 'conf_action_reset_test_1',
-                },
-                format='json',
-            )
-        finally:
-            _stop_patches(patchers)
-
-        assert resp.status_code == 200
-        data = resp.json()
-        assert 'confidence' in data, f"'confidence' key missing from reset response: {data.keys()}"
-        assert data['confidence'] is None, (
-            f"Expected null confidence after reset (history cleared), got {data['confidence']!r}"
-        )
-
-    def test_action_card_complete_response_has_confidence_key(self, auth_client, user_profile):
-        """Action-card 'like' (complete / view results) path response must include 'confidence' key (null).
-
-        AC #3: both action-card paths (reset+dislike and complete+like) must expose 'confidence'.
-        Session terminates on this path; no convergence history to compute over, so null is correct.
-        """
-        session_id, session = self._create_session_in_analyzing(
-            auth_client, user_profile, history=[0.04, 0.04, 0.04]
-        )
-        # Manually set phase to 'converged' so the action card fires
-        session.phase = 'converged'
-        session.save(update_fields=['phase'])
-
-        patchers = _apply_patches()
-        try:
-            resp = auth_client.post(
-                f'/api/v1/analysis/sessions/{session_id}/swipes/',
-                {
-                    'building_id': '__action_card__',
-                    'action': 'like',  # "View results" -- complete branch
-                    'idempotency_key': 'conf_action_complete_test_1',
-                },
-                format='json',
-            )
-        finally:
-            _stop_patches(patchers)
-
-        assert resp.status_code == 200
-        data = resp.json()
-        assert 'confidence' in data, f"'confidence' key missing from complete response: {data.keys()}"
-        assert data['confidence'] is None, (
-            f"Expected null confidence on session complete (no live history), got {data['confidence']!r}"
-        )
-        assert data.get('is_analysis_completed') is True, (
-            f"Expected is_analysis_completed=True on complete path, got {data.get('is_analysis_completed')!r}"
-        )

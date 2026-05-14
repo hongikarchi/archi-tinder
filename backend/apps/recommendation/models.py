@@ -65,6 +65,7 @@ class AnalysisSession(models.Model):
     like_vectors        = models.JSONField(default=list)   # list of {embedding: [...], round: int}
     convergence_history = models.JSONField(default=list)   # list of delta-V floats
     previous_pref_vector = models.JSONField(default=list)
+    extended_rounds     = models.IntegerField(default=0)
     # Sprint 0 A4: pool exhaustion guard state (§5.6 + §6 Implementation Requirements item 1)
     original_filters         = models.JSONField(default=dict)  # filters used at session creation (for re-relaxation if pool exhausts)
     original_filter_priority = models.JSONField(default=list)
@@ -89,17 +90,17 @@ class SwipeEvent(models.Model):
         ('like',    'Like'),
         ('dislike', 'Dislike'),
     ]
-    session         = models.ForeignKey(AnalysisSession, on_delete=models.CASCADE, related_name='swipes')
-    building_id     = models.CharField(max_length=20)
-    action          = models.CharField(max_length=10, choices=ACTION_CHOICES)
-    idempotency_key = models.CharField(max_length=100, db_index=True)
-    created_at      = models.DateTimeField(auto_now_add=True)
+    session          = models.ForeignKey(AnalysisSession, on_delete=models.CASCADE, related_name='swipes')
+    canonical_bld_id = models.CharField(max_length=20)
+    action           = models.CharField(max_length=10, choices=ACTION_CHOICES)
+    idempotency_key  = models.CharField(max_length=100, db_index=True)
+    created_at       = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         unique_together = [('session', 'idempotency_key')]
 
     def __str__(self):
-        return f'{self.action} {self.building_id}'
+        return f'{self.action} {self.canonical_bld_id}'
 
 
 class SessionEvent(models.Model):

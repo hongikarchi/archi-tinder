@@ -1,64 +1,104 @@
-# Database Schema: `architecture_vectors`
+# Database Schema: `canonical_v2_buildings`
 
 Owned by **Make DB** (reference-crawling repo). Django reads via raw SQL only —
 **never ORM, never migrate**.
 
-<!-- Last synced 2026-04-29 with Make DB v2 + Divisare migration. -->
+**Status as of 2026-05-14:** Live Neon DB is at the **v2 canonical schema**
+(31 columns, 39,776 rows, ~99.9% publishable). The old `architecture_vectors`
+table (v1 / 23 columns / 3,465 rows) still exists in the same database but is
+**deprecated** — no Make Web SQL touches it anymore.
 
 ## Hard rules
-- All building references must use `building_id` — never `name`, `slug`, or
-  any language-dependent field.
-- Do NOT create or migrate the `architecture_vectors` table — it is owned by
-  Make DB and managed there.
+
+- All building references must use `canonical_bld_id` (TEXT PK like
+  `'bld_000344'`) — never `name`, `slug`, or any language-dependent field.
+- Do NOT create or migrate the `canonical_v2_buildings` table — it is owned
+  by Make DB and managed there.
+- Every Make Web building query MUST gate on `is_publishable = true`
+  (39 of 39,776 rows are flagged non-publishable for image/metadata gaps).
+  `engine._build_filter_sql` always emits at least this clause; custom
+  raw SQL must add it explicitly.
 - SentenceTransformers is NOT a runtime dependency in Make Web — embeddings
-  are pre-computed by Make DB and read via raw SQL.
+  are pre-computed by Make DB and read via raw SQL (`embedding VECTOR(384)`).
+- Image URLs are **full source-CDN URLs** stored in the row (Divisare,
+  Metalocus, Archello, etc.). R2 composition (`IMAGE_BASE_URL + key`) is
+  retired; do not reintroduce it.
 
 ## Table definition
 
 ```sql
-CREATE TABLE architecture_vectors (
-    building_id      TEXT PRIMARY KEY,   -- e.g. 'B00042', stable canonical key
-    slug             TEXT UNIQUE NOT NULL,
-    name_en          TEXT NOT NULL,
-    project_name     TEXT NOT NULL,
-    architect        TEXT,
-    location_country TEXT,
-    city             TEXT,
-    year             INTEGER,
-    area_sqm         NUMERIC,
-    program          TEXT NOT NULL,      -- see normalized vocabulary below
-    style            TEXT,               -- e.g. Brutalist, Classical, Contemporary
-    atmosphere       TEXT NOT NULL,      -- free-form e.g. "fluid, sweeping, atmospheric"
-    color_tone       TEXT,               -- e.g. Colorful, Cool White, Dark, Earthy
-    material         TEXT,               -- nullable (977 rows NULL)
-    material_visual  TEXT[] NOT NULL,    -- array of visual material descriptors
-    visual_description TEXT NOT NULL,    -- rich text description
-    description      TEXT,
-    url              TEXT,
-    tags             TEXT[],
-    source_slugs     TEXT[],
-    image_photos     TEXT[],             -- all photo filenames
-    image_drawings   TEXT[],             -- all drawing filenames
-    embedding        VECTOR(384) NOT NULL,
+CREATE TABLE canonical_v2_buildings (
+    -- Identity
+    canonical_bld_id          TEXT PRIMARY KEY,    -- e.g. 'bld_000344'
+    name                      TEXT NOT NULL,
+    names_alts                TEXT[] NOT NULL,     -- alt project names
 
-    -- Versioning (Make DB Phase 1)
-    vocab_version            TEXT DEFAULT 'v2',          -- vocab_version snapshot per row
-    prompt_version           TEXT,                       -- "{label}-{sha256(prompt)[:8]}"
+    -- Location / time
+    location_city             TEXT,
+    location_country          TEXT,
+    project_year              INTEGER,
 
-    -- Divisare integration (Make DB Phase 8B+ canonical migration)
-    divisare_id              INTEGER,                    -- canonical Divisare project ID
-    divisare_slug            TEXT,                       -- divisare URL slug
-    abstract                 TEXT,                       -- short Divisare abstract
-    architect_canonical_ids  INTEGER[],                  -- canonical architect cluster IDs (PROF1 join key)
-    divisare_tags            TEXT[],                     -- raw Divisare tag taxonomy
-    divisare_credits         JSONB,                      -- {"structures":[...], "lighting":[...], ...}
-    cover_image_url_divisare TEXT,                       -- single full external URL, hotlink target
-    divisare_gallery_urls    TEXT[],                     -- ~10-19 per project, full external URLs
+    -- Architect linkage (PROF1 join key)
+    architect_canonical_ids   TEXT[] NOT NULL,     -- canonical architect cluster IDs
+    architect_names           TEXT[] NOT NULL,
+    architects_text           TEXT,                -- pre-joined display string
 
-    -- Provenance metadata
-    provenance               JSONB                       -- {"name":"divisare","description":"metalocus", ...}
+    -- Typology axes (gated by Make DB vocab)
+    program                   TEXT NOT NULL,       -- 14-enum (see below)
+    style                     TEXT NOT NULL,
+    color_tone                TEXT NOT NULL,
+    atmosphere                TEXT NOT NULL,
+    material_visual           TEXT[] NOT NULL,
+    visual_description        TEXT NOT NULL,
+
+    -- Images (canonical v2 model)
+    image_derived             JSONB NOT NULL,      -- {style, color_tone, material_visual, visual_description} -- derived snapshot slot
+    covers_by_type            JSONB NOT NULL,      -- {exterior, interior, drawing, aerial, detail} -> URL|null
+    all_images                JSONB NOT NULL,      -- list of {url, kind(cover|gallery|drawing), type, image_order, rank, phash, phash_cluster_id, source, source_id, ...}
+    best_image_per_cluster    JSONB NOT NULL,      -- {phash_cluster_id: image_obj} -- best-of-cluster after phash dedupe
+    cover_image_url_default   TEXT,                -- canonical default cover (Make DB pick)
+    display_cover_url         TEXT,                -- frontend-displayed cover (Make DB pick, may equal default)
+
+    -- Source provenance
+    source_refs               JSONB NOT NULL,      -- {"divisare": ["17580", ...], ...}
+    source_urls               JSONB NOT NULL,      -- {"divisare": ["https://...", ...], ...}
+    identity_source           TEXT,                -- which source produced canonical identity
+
+    -- Quality + publishability
+    confidence_tier           TEXT NOT NULL,       -- 'T1' | 'T2' | 'T3'
+    n_sources                 INTEGER NOT NULL,
+    is_publishable            BOOLEAN NOT NULL,    -- Make Web MUST filter on this
+    publishability_reasons    TEXT[] NOT NULL,     -- e.g. ['missing_all_images']
+    needs_image_derived_backfill BOOLEAN NOT NULL,
+
+    -- Embeddings
+    embedding                 VECTOR(384) NOT NULL,  -- paraphrase-multilingual-MiniLM-L12-v2
+
+    updated_at                TIMESTAMPTZ NOT NULL
 );
 ```
+
+## Image resolution semantics
+
+The frontend renders one cover image per card. `_row_to_card()` resolves the
+cover with this fallback chain (highest preference first):
+
+1. `covers_by_type[image_focus]` — when `image_focus` is set on the request
+   and the variant is non-null. `image_focus ∈ {exterior, interior, drawing,
+   aerial, detail}`. Set by the LLM intake (`parse_query`) when the user
+   signals a preferred view ("외관/실내/도면/조감/디테일").
+2. `display_cover_url` — Make DB's preferred display cover.
+3. `cover_image_url_default` — Make DB's canonical default.
+4. `covers_by_type.exterior` — last covers_by_type try.
+5. `all_images[0].url` — first item in the deduped/sorted gallery.
+6. `''` (empty string) — when the building has no images at all; the
+   frontend then renders a placeholder.
+
+Gallery is built from `all_images` sorted by `(kind: cover→gallery→drawing,
+image_order, rank)` with the chosen cover URL removed.
+`gallery_drawing_start` is the index of the first `kind=='drawing'` item;
+items at index ≥ `gallery_drawing_start` are rendered with `object-fit: contain`
+on white background (drawings, not photos).
 
 ## Normalized `program` Values
 
@@ -68,3 +108,18 @@ no raw strings.
 `Housing` | `Office` | `Museum` | `Education` | `Religion` | `Sports` |
 `Transport` | `Hospitality` | `Healthcare` | `Public` | `Mixed Use` |
 `Landscape` | `Infrastructure` | `Other`
+
+## Legacy v1 schema (deprecated)
+
+The previous `architecture_vectors` table (23 columns) is preserved in the
+DB for the migration window but **no Make Web code path references it**. Its
+PK was `building_id` (e.g. `'B00042'`); the new PK `canonical_bld_id` uses
+the `'bld_xxxxxx'` prefix and is the only ID the application stores from
+the cutover point onward.
+
+Historical SwipeEvent / Project / Bookmark rows that contain v1 IDs are left
+in place as orphans (no clean v1→v2 ID map exists). New rows after the S2
+migration carry v2 IDs.
+
+<!-- Last reality-synced 2026-05-14 against live Neon (v2, 31 cols, 39,776 rows). -->
+<!-- Engine code cutover: feature/admin-s2-new-schema. -->
