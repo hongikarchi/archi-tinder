@@ -170,7 +170,10 @@ export default function DiscoveryPage() {
     return () => media.removeEventListener('change', apply)
   }, [])
 
-  useEffect(() => () => { isActiveRef.current = false }, [])
+  useEffect(() => {
+    isActiveRef.current = true
+    return () => { isActiveRef.current = false }
+  }, [])
 
   // Surprise trigger: fires once per visit after SURPRISE_THRESHOLD saves
   useEffect(() => {
