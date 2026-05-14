@@ -8,7 +8,7 @@ export default function MainLayout({
   theme, onToggleTheme, userId, onLogout,
   activeProject, activeProjectId,
   currentCard, cardResetToken, sessionProgress, isSessionCompleted, isSwipeLoading, isResultLoading,
-  onSwipe, onViewResults,
+  onSwipe, onViewResults, onExtendSession,
 }) {
   const location = useLocation()
   const navigate = useNavigate()
@@ -63,6 +63,7 @@ export default function MainLayout({
           projectName={activeProject?.projectName}
           onSwipe={onSwipe}
           onViewResults={onViewResults}
+          onExtendSession={onExtendSession}
         />
       </div>
 
@@ -108,7 +109,7 @@ export default function MainLayout({
         />
       )}
 
-      <TabBar swipeEnabled={!!activeProject} />
+      <TabBar />
     </div>
   )
 }

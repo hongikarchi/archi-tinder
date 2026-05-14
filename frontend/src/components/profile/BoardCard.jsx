@@ -13,6 +13,10 @@ import InfoCol from './InfoCol'
  * Hover lift YES, hover border NO per §3.5.4. The subtle translateY(-4px) lift matches
  * every other interactive card in the app; only the pink border is omitted because a
  * static border lingers awkwardly behind the rotating card.
+ *
+ * When `board.cover_image_url` is empty/falsy (pre-cutover legacy boards whose
+ * cover refers to an old building id no longer present in canonical_v2),
+ * render a brand-gradient placeholder div in place of a broken <img>.
  */
 export default function BoardCard({ board }) {
   const [isFlipped, setIsFlipped] = useState(false)
@@ -20,6 +24,7 @@ export default function BoardCard({ board }) {
   const navigate = useNavigate()
 
   const isPrivate = board.visibility === 'private'
+  const hasCover = !!board.cover_image_url
 
   const { onLoad: coverOnLoad, onError: coverOnError } = useImageTelemetry({
     buildingId: board.board_id,
@@ -66,19 +71,33 @@ export default function BoardCard({ board }) {
           boxShadow: '0 10px 25px rgba(0,0,0,0.3)',
           background: 'rgba(255,255,255,0.03)',
         }}>
-          <img
-            src={board.cover_image_url}
-            alt={board.name}
-            loading="lazy"
-            onLoad={coverOnLoad}
-            onError={coverOnError}
-            style={{
-              position: 'absolute', inset: 0,
-              width: '100%', height: '100%',
-              objectFit: 'cover', objectPosition: 'center',
-              display: 'block',
-            }}
-          />
+          {hasCover ? (
+            <img
+              src={board.cover_image_url}
+              alt={board.name}
+              loading="lazy"
+              onLoad={coverOnLoad}
+              onError={coverOnError}
+              style={{
+                position: 'absolute', inset: 0,
+                width: '100%', height: '100%',
+                objectFit: 'cover', objectPosition: 'center',
+                display: 'block',
+              }}
+            />
+          ) : (
+            // Gradient placeholder for boards with no cover (e.g. pre-cutover
+            // legacy boards whose cover FK points to a removed building).
+            // Uses DESIGN.md brand gradient as a soft tint over surface,
+            // not the pure CTA gradient — this is a placeholder, not a button.
+            <div
+              aria-hidden
+              style={{
+                position: 'absolute', inset: 0,
+                background: 'linear-gradient(135deg, rgba(236,72,153,0.22) 0%, rgba(244,63,94,0.18) 50%, rgba(15,15,15,0.85) 100%)',
+              }}
+            />
+          )}
 
           {/* §3.5.1 mandatory bottom gradient overlay for legibility */}
           <div style={{
