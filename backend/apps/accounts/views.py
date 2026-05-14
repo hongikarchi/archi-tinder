@@ -296,28 +296,59 @@ class LogoutView(APIView):
 
 # -- User Profile (Phase 13 PROF2 + BOARD1) --------------------------------
 
-def _build_boards_field(target_profile, is_owner):
-    """Build boards[] list for UserProfileDetailView response.
+def _build_boards_field(target_profile, is_owner, page=1, page_size=12):
+    """Build boards pagination dict for UserProfileDetailView response.
 
-    Each card contains: project_id, name, date (created_at), visibility,
+    Returns a dict with items + pagination metadata:
+      {
+        "items": [...],       # list of board dicts (same shape as before)
+        "page": <int>,
+        "page_size": <int>,
+        "total_count": <int>,
+        "has_more": <bool>,
+        "next_page": <int|null>,
+      }
+
+    Each board card contains: project_id, name, date (created_at), visibility,
     building_count, cover_image_url, thumbnails (up to 6).
 
     Cover derivation: first liked_ids building → first saved_ids building → ''.
-    Batches all image lookups in a single DB query to avoid N+1.
+    Image batch lookup is performed only for the paged slice to avoid N+1 at
+    scale. The image_focus echo in card payloads enables frontend objectFit
+    decisions.
     """
     from apps.recommendation.models import Project
     from apps.recommendation import engine
+
+    # Clamp pagination params
+    page_size = min(max(1, page_size), 50)
+    page = max(1, page)
 
     qs = Project.objects.filter(user=target_profile).order_by('-created_at')
     if not is_owner:
         qs = qs.filter(visibility='public')
 
-    projects = list(qs)
+    total_count = qs.count()
+    offset = (page - 1) * page_size
+    paged_qs = qs[offset: offset + page_size]
+    projects = list(paged_qs)
+
+    has_more = offset + page_size < total_count
+    next_page = page + 1 if has_more else None
+
     if not projects:
-        return []
+        return {
+            'items': [],
+            'page': page,
+            'page_size': page_size,
+            'total_count': total_count,
+            'has_more': has_more,
+            'next_page': next_page,
+        }
 
     # Collect all building_ids needed for image resolution (cover + thumbnails).
-    # Per project: take first 6 unique ids from liked_ids + saved_ids combined.
+    # Per project: take first 7 unique ids from liked_ids + saved_ids combined
+    # (cover uses first; thumbnails use up to 6 from the rest).
     def _extract_ids(project):
         liked = [
             (entry if isinstance(entry, str) else entry.get('id', ''))
@@ -340,13 +371,13 @@ def _build_boards_field(target_profile, is_owner):
     project_bid_lists = {p.project_id: _extract_ids(p) for p in projects}
     all_bids = list({bid for bids in project_bid_lists.values() for bid in bids})
 
-    # Single batch query for all building images
+    # Single batch query for the paged slice's buildings only
     image_map = {}  # building_id → image_url
     if all_bids:
         cards = engine.get_buildings_by_ids(all_bids)
         image_map = {c['building_id']: c.get('image_url', '') for c in cards}
 
-    boards = []
+    items = []
     for p in projects:
         bids = project_bid_lists[p.project_id]
         cover_url = next((image_map.get(bid, '') for bid in bids if image_map.get(bid)), '')
@@ -354,7 +385,7 @@ def _build_boards_field(target_profile, is_owner):
         building_count = (
             len(p.liked_ids or []) + len(p.saved_ids or [])
         )
-        boards.append({
+        items.append({
             'project_id':     str(p.project_id),
             'name':           p.name,
             'date':           p.created_at.isoformat(),
@@ -363,7 +394,15 @@ def _build_boards_field(target_profile, is_owner):
             'cover_image_url': cover_url,
             'thumbnails':     thumbnails,
         })
-    return boards
+
+    return {
+        'items': items,
+        'page': page,
+        'page_size': page_size,
+        'total_count': total_count,
+        'has_more': has_more,
+        'next_page': next_page,
+    }
 
 
 class UserProfileDetailView(APIView):
@@ -385,8 +424,16 @@ class UserProfileDetailView(APIView):
         profile = get_object_or_404(UserProfile, user__id=user_id)
         requester_profile = getattr(request.user, 'profile', None) if request.user.is_authenticated else None
         is_owner = requester_profile and requester_profile.pk == profile.pk
+        try:
+            page = int(request.query_params.get("boards_page", 1))
+        except (TypeError, ValueError):
+            page = 1
+        try:
+            page_size = int(request.query_params.get("boards_page_size", 12))
+        except (TypeError, ValueError):
+            page_size = 12
         data = UserProfileSerializer(profile).data
-        data['boards'] = _build_boards_field(profile, is_owner)
+        data['boards'] = _build_boards_field(profile, is_owner, page=page, page_size=page_size)
 
         # is_following injection (SOC1)
         if requester_profile and not is_owner:

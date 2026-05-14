@@ -9,6 +9,10 @@ export async function getOffice(officeId) {
   return await callApi('GET', `/offices/${officeId}/`)
 }
 
-export async function getUserProfile(userId) {
-  return await callApi('GET', `/users/${userId}/`)
+export async function getUserProfile(userId, { boardsPage, boardsPageSize } = {}) {
+  const params = new URLSearchParams()
+  if (boardsPage != null) params.set('boards_page', boardsPage)
+  if (boardsPageSize != null) params.set('boards_page_size', boardsPageSize)
+  const qs = params.toString()
+  return await callApi('GET', `/users/${userId}/${qs ? `?${qs}` : ''}`)
 }

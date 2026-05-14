@@ -117,13 +117,16 @@ class TestUserProfileDetailView:
 
     @pytest.mark.django_db
     def test_get_userprofile_includes_boards(self, user_and_profile):
-        """Response includes boards[] (BOARD1 contract)."""
+        """Response includes boards (BOARD1 contract) as a pagination dict with items list."""
         user, _ = user_and_profile
         client = APIClient()
         response = client.get(f'/api/v1/users/{user.id}/')
         body = response.json()
         assert 'boards' in body
-        assert isinstance(body['boards'], list)
+        # boards is now a pagination dict (FIX 7); items is the list of board cards
+        assert isinstance(body['boards'], dict)
+        assert 'items' in body['boards']
+        assert isinstance(body['boards']['items'], list)
 
     @pytest.mark.django_db
     def test_get_userprofile_no_auth_required(self, user_and_profile):

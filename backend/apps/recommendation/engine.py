@@ -124,6 +124,9 @@ def _row_to_card(row, image_focus=None):
     - gallery_drawing_start: index of first item with kind=='drawing' in gallery
       (== len(gallery) when no drawings). Frontend renders items at index >=
       gallery_drawing_start with contain-sizing on white background.
+    - image_focus: echoed verbatim in the returned dict so the frontend can
+      make objectFit decisions (e.g. 'contain' for drawings, 'cover' for
+      exterior/interior). None when caller did not specify a focus.
     """
     canonical_bld_id = row['canonical_bld_id']
     covers_by_type = row.get('covers_by_type') or {}
@@ -206,6 +209,7 @@ def _row_to_card(row, image_focus=None):
         'canonical_bld_id':       canonical_bld_id,
         'name':                   row.get('name') or '',
         'image_url':              image_url,
+        'image_focus':            image_focus,
         'covers_by_type':         covers_by_type,
         'url':                    src_url,
         'gallery':                gallery_urls,

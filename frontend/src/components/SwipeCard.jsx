@@ -39,10 +39,11 @@ function InfoRow({ label, value }) {
 
 /* ── SwipeCard ───────────────────────────────────────────────────────────── */
 export default function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
-  const [isExpanded,  setIsExpanded]  = useState(false)
-  const [showGallery, setShowGallery] = useState(false)
-  const [imgLoaded,   setImgLoaded]   = useState(false)
-  const [imgFailed,   setImgFailed]   = useState(false)
+  const [isExpanded,     setIsExpanded]     = useState(false)
+  const [showGallery,    setShowGallery]    = useState(false)
+  const [hasBeenOpened,  setHasBeenOpened]  = useState(false)
+  const [imgLoaded,      setImgLoaded]      = useState(false)
+  const [imgFailed,      setImgFailed]      = useState(false)
   // Set of URLs already attempted as src (cache-bust retry + covers_by_type
   // fallback chain). Initialized lazily inside handleImgError on first failure.
   const imgRetried = useRef(null)
@@ -56,7 +57,7 @@ export default function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
     context: 'swipe_card',
   })
 
-  function openGallery()  { setShowGallery(true);  onGalleryOpen && onGalleryOpen()  }
+  function openGallery()  { setHasBeenOpened(true); setShowGallery(true);  onGalleryOpen && onGalleryOpen()  }
   function closeGallery() { setShowGallery(false); onGalleryClose && onGalleryClose() }
 
   function handlePointerDown(e) {
@@ -130,6 +131,8 @@ export default function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
   useEffect(() => {
     setImgLoaded(false)
     setImgFailed(false)
+    setHasBeenOpened(false)
+    setShowGallery(false)
     imgRetried.current = null
     if (timeoutRef.current) clearTimeout(timeoutRef.current)
     timeoutRef.current = setTimeout(() => {
@@ -164,6 +167,7 @@ export default function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
   const material     = materialList.length ? materialList.join(', ') : null
   const gallery         = card.gallery || []
   const drawingStart    = card.gallery_drawing_start ?? gallery.length
+  const isWideAspect    = card.image_focus === 'drawing' || card.image_focus === 'aerial'
 
   return (
     <div
@@ -211,7 +215,7 @@ export default function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
             </div>
           ) : (
             <>
-              <div className="skeleton-shimmer" style={{ position: 'absolute', inset: 0 }} />
+              <div className="skeleton-shimmer" style={{ position: 'absolute', inset: 0, background: isWideAspect ? '#fff' : undefined }} />
               <img
                 ref={imgRef}
                 src={card.image_url}
@@ -226,7 +230,8 @@ export default function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
                 style={{
                   position: 'absolute', inset: 0,
                   width: '100%', height: '100%',
-                  objectFit: 'cover', objectPosition: 'center',
+                  objectFit: isWideAspect ? 'contain' : 'cover', objectPosition: 'center',
+                  background: isWideAspect ? '#fff' : undefined,
                   opacity: imgLoaded ? 1 : 0,
                   transition: 'opacity 0.2s ease',
                 }}
@@ -278,7 +283,7 @@ export default function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
               </p>
             )}
             <div style={{ height: 1, background: 'rgba(255,255,255,0.1)', marginBottom: 12 }} />
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px', flex: 1 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px', flex: '0 1 auto' }}>
               <InfoRow label="Type"     value={typology} />
               <InfoRow label="Country"  value={country} />
               <InfoRow label="City"     value={city} />
@@ -312,8 +317,8 @@ export default function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
           </div>
         </div>
 
-        {/* ── GALLERY FACE ── */}
-        <div style={{
+        {/* ── GALLERY FACE ── lazy-mounted on first gallery open, stays mounted after */}
+        {hasBeenOpened && <div style={{
           position: 'absolute', inset: 0,
           backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden',
           transform: 'rotateY(180deg)',
@@ -360,7 +365,7 @@ export default function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
               <polyline points="6 9 12 15 18 9"/>
             </svg>
           </div>
-        </div>
+        </div>}
 
       </div>
     </div>

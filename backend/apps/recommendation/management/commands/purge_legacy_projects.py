@@ -12,11 +12,15 @@ Safety:
   - Default mode is dry-run: prints counts per user + grand total, deletes nothing.
   - `--confirm` switches to destructive mode. Required to actually delete.
   - `--before YYYY-MM-DD` overrides the cutoff (UTC date, treated as <YYYY-MM-DDT00:00:00Z).
+  - `--all` targets ALL projects across every user (ignores --before). Still requires
+    --confirm to actually delete.
 
 Usage:
     python manage.py purge_legacy_projects
     python manage.py purge_legacy_projects --before 2026-05-01
     python manage.py purge_legacy_projects --confirm
+    python manage.py purge_legacy_projects --all
+    python manage.py purge_legacy_projects --all --confirm
 """
 from collections import Counter
 from datetime import datetime, timezone
@@ -32,6 +36,7 @@ DEFAULT_CUTOFF = "2026-05-14"
 class Command(BaseCommand):
     help = (
         "Bulk-delete legacy Project rows created before --before (default %s). "
+        "Use --all to target every project regardless of date. "
         "Dry-run by default; pass --confirm to actually delete." % DEFAULT_CUTOFF
     )
 
@@ -41,7 +46,8 @@ class Command(BaseCommand):
             type=str,
             default=DEFAULT_CUTOFF,
             help="Cutoff date in YYYY-MM-DD format (UTC). Projects with "
-                 "created_at < this date are targeted. Default: %s" % DEFAULT_CUTOFF,
+                 "created_at < this date are targeted. Default: %s. "
+                 "Ignored when --all is set." % DEFAULT_CUTOFF,
         )
         parser.add_argument(
             "--confirm",
@@ -49,20 +55,31 @@ class Command(BaseCommand):
             default=False,
             help="Actually delete. Without this flag, the command is dry-run only.",
         )
+        parser.add_argument(
+            "--all",
+            dest="purge_all",
+            action="store_true",
+            default=False,
+            help="Target ALL projects (every user). When set, --before is ignored. "
+                 "Still requires --confirm to actually delete.",
+        )
 
     def handle(self, *args, **options):
-        before_str = options["before"]
         confirm = bool(options["confirm"])
         dry_run = not confirm
+        purge_all = bool(options["purge_all"])
 
-        try:
-            cutoff = datetime.strptime(before_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-        except ValueError as exc:
-            raise CommandError(
-                "Invalid --before value %r; expected YYYY-MM-DD. (%s)" % (before_str, exc)
-            )
-
-        qs = Project.objects.filter(created_at__lt=cutoff).select_related("user__user")
+        if purge_all:
+            qs = Project.objects.all().select_related("user__user")
+        else:
+            before_str = options["before"]
+            try:
+                cutoff = datetime.strptime(before_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            except ValueError as exc:
+                raise CommandError(
+                    "Invalid --before value %r; expected YYYY-MM-DD. (%s)" % (before_str, exc)
+                )
+            qs = Project.objects.filter(created_at__lt=cutoff).select_related("user__user")
 
         # Tally per-user count. Project.user is a FK to UserProfile (not auth.User).
         # Surface auth.User.username when available, else fall back to display_name,
@@ -79,9 +96,14 @@ class Command(BaseCommand):
         total = sum(per_user.values())
 
         mode_label = "DRY-RUN" if dry_run else "DELETE"
-        self.stdout.write(
-            "purge_legacy_projects [%s] cutoff=%s (UTC)" % (mode_label, cutoff.isoformat())
-        )
+        if purge_all:
+            self.stdout.write(
+                "purge_legacy_projects [%s] ALL projects" % mode_label
+            )
+        else:
+            self.stdout.write(
+                "purge_legacy_projects [%s] cutoff=%s (UTC)" % (mode_label, cutoff.isoformat())
+            )
         if not per_user:
             self.stdout.write("No matching projects found.")
             self.stdout.write("TOTAL: 0 projects")
