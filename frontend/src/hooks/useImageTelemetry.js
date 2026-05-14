@@ -34,7 +34,7 @@ export function useImageTelemetry({ buildingId, context, sessionId } = {}) {
     emitImageLoadEvent({
       url,
       outcome: 'success',
-      building_id: buildingId,
+      canonical_bld_id: buildingId,
       context,
       load_ms,
       session_id: sessionId,
@@ -49,7 +49,7 @@ export function useImageTelemetry({ buildingId, context, sessionId } = {}) {
     emitImageLoadEvent({
       url,
       outcome: 'failure',
-      building_id: buildingId,
+      canonical_bld_id: buildingId,
       context,
       load_ms,
       session_id: sessionId,

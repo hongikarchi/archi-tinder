@@ -34,10 +34,10 @@ def _make_card(bid):
     if bid is None:
         return None
     return {
-        'building_id': bid,
-        'name_en': f'Building {bid}',
-        'project_name': f'Project {bid}',
+        'canonical_bld_id': bid,
+        'name': f'Building {bid}',
         'image_url': '',
+        'covers_by_type': {},
         'url': None,
         'gallery': [],
         'gallery_drawing_start': 0,
@@ -45,14 +45,13 @@ def _make_card(bid):
             'axis_typology': 'Museum',
             'axis_architects': 'Test Arch',
             'axis_country': 'Korea',
-            'axis_area_m2': 200.0,
+            'axis_city': None,
             'axis_year': 2022,
             'axis_style': 'Brutalist',
             'axis_atmosphere': 'bold',
             'axis_color_tone': 'Dark',
-            'axis_material': 'concrete',
             'axis_material_visual': [],
-            'axis_tags': [],
+            'visual_description': '',
         },
     }
 
@@ -110,7 +109,7 @@ _SESSION_PATCHES = {
     },
     f'{_ENGINE}.farthest_point_from_pool': _mock_farthest_point,
     f'{_ENGINE}.get_building_card': _make_card,
-    f'{_ENGINE}.get_buildings_by_ids': lambda ids: [_make_card(bid) for bid in ids if bid],
+    f'{_ENGINE}.get_buildings_by_ids': lambda ids, image_focus=None: [_make_card(bid) for bid in ids if bid],
     f'{_ENGINE}.get_building_embedding': lambda bid: list(
         _FAKE_EMBEDDINGS.get(bid, np.random.randn(384))
     ),

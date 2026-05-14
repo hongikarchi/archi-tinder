@@ -38,7 +38,7 @@ def _mock_card(bid):
     if bid is None:
         return None
     return {
-        'building_id': bid, 'name_en': f'Building {bid}', 'project_name': '',
+        'canonical_bld_id': bid, 'name_en': f'Building {bid}', 'project_name': '',
         'image_url': '', 'url': None, 'gallery': [], 'gallery_drawing_start': 0,
         'metadata': {
             'axis_typology': 'Museum', 'axis_architects': None,

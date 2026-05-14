@@ -8,7 +8,7 @@ const PAGE_LIMIT = 12
 const SURPRISE_THRESHOLD = 5
 
 function getCardId(card) {
-  return card?.building_id || card?.image_id || null
+  return card?.canonical_bld_id || card?.image_id || card?.building_id || null
 }
 
 function DiscoveryCard({ card, onOpen, onSave }) {

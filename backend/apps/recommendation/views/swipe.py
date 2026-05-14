@@ -161,11 +161,15 @@ class BuildingBatchView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        ids = request.data.get('building_ids', [])
+        # Accept either canonical_bld_ids (new) or building_ids (legacy).
+        ids = request.data.get('canonical_bld_ids') or request.data.get('building_ids') or []
         if not ids:
             return Response([])
         if not isinstance(ids, list) or len(ids) > 200:
-            return Response({'detail': 'building_ids must be a list of at most 200 items'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'detail': 'canonical_bld_ids must be a list of at most 200 items'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         cards = engine.get_buildings_by_ids(ids)
         return Response(cards)
 
@@ -751,7 +755,7 @@ class SwipeView(APIView):
                 _intensity = 1.0
         _rank_in_pool = None
         try:
-            _rank_in_pool = session.pool_ids.index(building_id)
+            _rank_in_pool = session.pool_ids.index(canonical_bld_id)
         except (ValueError, AttributeError):
             pass
         # IMP-7 §6 swipe telemetry extensions
@@ -784,7 +788,7 @@ class SwipeView(APIView):
         # Build telemetry kwargs and fire off background thread.
         # Keeps ~4 Neon DB round-trips (~1200ms) off the response path.
         _swipe_telem = dict(
-            session=session, user=profile, direction=action, card_id=building_id,
+            session=session, user=profile, direction=action, card_id=canonical_bld_id,
             intensity=_intensity, rank_in_pool=_rank_in_pool,
             timing_breakdown=_timing_breakdown, idempotency_key=idempotency_key,
             cache_hit=_cache_misses == 0,

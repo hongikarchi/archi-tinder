@@ -7,7 +7,7 @@ function isUuid(value) {
 }
 
 function getCardId(card) {
-  return card?.image_id || card?.building_id || null
+  return card?.image_id || card?.canonical_bld_id || card?.building_id || null
 }
 
 export function useResults(sessionId, projects, setProjects) {

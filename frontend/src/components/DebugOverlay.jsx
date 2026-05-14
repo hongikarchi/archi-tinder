@@ -71,7 +71,7 @@ export default function DebugOverlay({ userId, session, swipeDebug }) {
     function cardLine(label, card) {
       if (!card) return <div><span style={dim}>{label}:</span> <span style={dim}>null</span></div>
       const cached = imagePreloadCache?.current?.has(card.image_url)
-      const isAct = card.building_id === '__action_card__' || card.card_type === 'action'
+      const isAct = card.image_id === '__action_card__' || card.card_type === 'action'
       return (
         <div>
           <span style={dim}>{label}:</span>{' '}

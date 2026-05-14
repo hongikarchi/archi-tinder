@@ -58,7 +58,7 @@ export default function SurpriseBoardModal({ onClose, onSaved }) {
       // Bulk-bookmark all cards into the new board (sequential for v1)
       for (let i = 0; i < cards.length; i++) {
         const card = cards[i]
-        const buildingId = card?.building_id || card?.image_id
+        const buildingId = card?.canonical_bld_id || card?.image_id || card?.building_id
         if (!buildingId) continue
         await bookmarkBuilding(projectId, buildingId, 'save', i + 1, null)
       }
@@ -219,7 +219,7 @@ export default function SurpriseBoardModal({ onClose, onSaved }) {
                 const imgUrl = card?.image_url
                 return (
                   <div
-                    key={card?.image_id || card?.building_id || i}
+                    key={card?.image_id || card?.canonical_bld_id || card?.building_id || i}
                     style={{
                       aspectRatio: '4/5',
                       borderRadius: 8,

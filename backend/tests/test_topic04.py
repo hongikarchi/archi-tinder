@@ -59,15 +59,15 @@ def _make_cards(n):
             vec[(i + 1) % DIM] = 0.1
             vec = _unit(vec)
         cards.append({
-            'building_id': f'B{i:05d}',
+            'canonical_bld_id': f'B{i:05d}',
             '_test_embedding': vec,  # kept for test use only, not in real card format
         })
     return cards
 
 
 def _cards_to_pool_embs(cards):
-    """Return dict {building_id: np.ndarray} from test card list."""
-    return {c['building_id']: c['_test_embedding'] for c in cards}
+    """Return dict {canonical_bld_id: np.ndarray} from test card list."""
+    return {c['canonical_bld_id']: c['_test_embedding'] for c in cards}
 
 
 def _like_vectors_fixture(n=2):
@@ -213,7 +213,7 @@ class TestDppTopK:
         result = engine.compute_dpp_topk(cards, like_vectors, k=3)
 
         assert len(result) == 3
-        input_ids = {c['building_id'] for c in cards}
+        input_ids = {c['canonical_bld_id'] for c in cards}
         assert all(bid in input_ids for bid in result)
         assert len(set(result)) == len(result)
 
@@ -226,7 +226,7 @@ class TestDppTopK:
         # No pool embs patch needed — early return happens before embedding fetch
         result = engine.compute_dpp_topk(cards, like_vectors, k=5)
 
-        assert result == [c['building_id'] for c in cards]
+        assert result == [c['canonical_bld_id'] for c in cards]
 
     def test_empty_input_returns_empty(self):
         """Empty cards list returns empty list."""
@@ -254,7 +254,7 @@ class TestDppTopK:
             bid = f'B{i:05d}'
             vec = np.zeros(DIM)
             vec[i] = 1.0
-            cards.append({'building_id': bid})
+            cards.append({'canonical_bld_id': bid})
             embs[bid] = vec
 
         monkeypatch.setattr(engine, 'get_pool_embeddings', lambda ids: {bid: embs[bid] for bid in ids if bid in embs})
@@ -309,7 +309,7 @@ class TestDppTopK:
 
         # Falls back to first k ids (input order)
         assert len(result) == 3
-        input_ids = {c['building_id'] for c in cards}
+        input_ids = {c['canonical_bld_id'] for c in cards}
         assert all(bid in input_ids for bid in result)
 
     def test_singularity_pads_remaining_slots(self, monkeypatch):
@@ -331,7 +331,7 @@ class TestDppTopK:
         result = engine.compute_dpp_topk(cards, like_vectors, k=3)
 
         assert len(result) == 3
-        input_ids = {c['building_id'] for c in cards}
+        input_ids = {c['canonical_bld_id'] for c in cards}
         assert all(bid in input_ids for bid in result)
         assert len(set(result)) == 3
 
@@ -351,7 +351,7 @@ class TestDppTopK:
         result = engine.compute_dpp_topk(cards, like_vectors=[], k=3)
 
         assert len(result) == 3
-        input_ids = {c['building_id'] for c in cards}
+        input_ids = {c['canonical_bld_id'] for c in cards}
         assert all(bid in input_ids for bid in result)
 
 
@@ -369,7 +369,7 @@ class TestSessionResultDppIntegration:
             vec = np.zeros(DIM)
             vec[i % DIM] = 1.0
             cards.append({
-                'building_id': bid,
+                'canonical_bld_id': bid,
                 'name_en': f'Building {bid}',
                 'embedding': vec.tolist(),
                 'atmosphere': 'calm',
@@ -469,7 +469,7 @@ class TestSessionResultDppIntegration:
         resp = auth_client.get(f'/api/v1/analysis/sessions/{session.session_id}/result/')
         assert resp.status_code == 200
         data = resp.json()
-        predicted_ids = [c['building_id'] for c in data['predicted_images']]
+        predicted_ids = [c['canonical_bld_id'] for c in data['predicted_images']]
         assert predicted_ids == reversed_ids[:5]
 
     @pytest.mark.django_db

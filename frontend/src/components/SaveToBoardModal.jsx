@@ -3,7 +3,7 @@ import { bookmarkBuilding, listProjects } from '../api/client.js'
 import { callApi } from '../api/core.js'
 
 function getCardId(card) {
-  return card?.building_id || card?.image_id || null
+  return card?.canonical_bld_id || card?.image_id || card?.building_id || null
 }
 
 function ProjectRow({ project, disabled, onClick }) {

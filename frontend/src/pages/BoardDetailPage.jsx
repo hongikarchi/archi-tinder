@@ -172,19 +172,20 @@ function InfoCol({ label, value }) {
  */
 function BuildingTile({ building, fromProjectId, rank, savedIds, referrer }) {
   const navigate = useNavigate()
+  const buildingId = building.canonical_bld_id || building.building_id
   const { onLoad, onError } = useImageTelemetry({
-    buildingId: building.building_id,
+    buildingId,
     context: 'board_detail_gallery',
   })
 
   return (
     <div
       onClick={() => {
-        if (!building.building_id) return
+        if (!buildingId) return
         const state = fromProjectId
           ? { fromProjectId, rank, savedIds, referrer }
           : undefined
-        navigate(`/buildings/${building.building_id}`, { state })
+        navigate(`/buildings/${buildingId}`, { state })
       }}
       style={{
         position: 'relative',
@@ -701,7 +702,7 @@ export default function BoardDetailPage() {
           }}>
             {buildings.map((building, index) => (
               <BuildingTile
-                key={building.building_id}
+                key={building.canonical_bld_id || building.building_id}
                 building={building}
                 fromProjectId={isOwner ? boardId : null}
                 rank={index + 1}

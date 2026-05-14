@@ -26,7 +26,7 @@ def _make_candidates(ids):
     """Build minimal candidate dicts for rerank_candidates."""
     return [
         {
-            'building_id': bid,
+            'canonical_bld_id': bid,
             'name_en': f'Building {bid}',
             'atmosphere': 'calm serene',
             'material': 'concrete',
@@ -238,12 +238,12 @@ class TestRerankCandidates:
 
         # Mock the SQL fetch to return canned metadata
         fake_rows = [
-            {'building_id': 'B00001', 'name_en': 'House A', 'style': 'Modernist',
-             'atmosphere': 'calm', 'material': 'concrete'},
-            {'building_id': 'B00002', 'name_en': 'Museum B', 'style': 'Brutalist',
-             'atmosphere': 'dramatic', 'material': 'stone'},
-            {'building_id': 'B00003', 'name_en': 'Chapel C', 'style': 'Vernacular',
-             'atmosphere': 'quiet', 'material': 'timber'},
+            {'canonical_bld_id': 'B00001', 'name': 'House A', 'style': 'Modernist',
+             'atmosphere': 'calm', 'material_visual': ['concrete']},
+            {'canonical_bld_id': 'B00002', 'name': 'Museum B', 'style': 'Brutalist',
+             'atmosphere': 'dramatic', 'material_visual': ['stone']},
+            {'canonical_bld_id': 'B00003', 'name': 'Chapel C', 'style': 'Vernacular',
+             'atmosphere': 'quiet', 'material_visual': ['timber']},
         ]
 
         with patch('apps.recommendation.services.connection') as mock_conn:
@@ -251,11 +251,11 @@ class TestRerankCandidates:
             mock_cursor.__enter__ = MagicMock(return_value=mock_cursor)
             mock_cursor.__exit__ = MagicMock(return_value=False)
             mock_cursor.fetchall.return_value = [
-                (r['building_id'], r['name_en'], r['style'], r['atmosphere'], r['material'])
+                (r['canonical_bld_id'], r['name'], r['style'], r['atmosphere'], r['material_visual'])
                 for r in fake_rows
             ]
             mock_cursor.description = [
-                ('building_id',), ('name_en',), ('style',), ('atmosphere',), ('material',)
+                ('canonical_bld_id',), ('name',), ('style',), ('atmosphere',), ('material_visual',)
             ]
             mock_conn.cursor.return_value = mock_cursor
 
@@ -325,7 +325,7 @@ class TestSessionResultViewRerank:
         from apps.recommendation import services, engine
 
         fake_cards = [
-            {'building_id': 'B00001', 'name_en': 'Building A', 'atmosphere': 'calm',
+            {'canonical_bld_id': 'B00001', 'name_en': 'Building A', 'atmosphere': 'calm',
              'material': 'concrete', 'architect': 'Anon', 'style': 'Contemporary',
              'program': 'Museum'},
         ]
@@ -373,12 +373,12 @@ class TestSessionResultViewRerank:
 
         from apps.recommendation import services, engine
 
-        # Fake get_top_k_mmr to return 2 cards with known building_ids
+        # Fake get_top_k_mmr to return 2 cards with known canonical_bld_ids
         fake_cards = [
-            {'building_id': 'B00001', 'name_en': 'Building A', 'atmosphere': 'calm',
+            {'canonical_bld_id': 'B00001', 'name_en': 'Building A', 'atmosphere': 'calm',
              'material': 'concrete', 'architect': 'Anon', 'style': 'Contemporary',
              'program': 'Museum'},
-            {'building_id': 'B00002', 'name_en': 'Building B', 'atmosphere': 'dramatic',
+            {'canonical_bld_id': 'B00002', 'name_en': 'Building B', 'atmosphere': 'dramatic',
              'material': 'stone', 'architect': 'Anon', 'style': 'Brutalist',
              'program': 'Museum'},
         ]
@@ -423,5 +423,5 @@ class TestSessionResultViewRerank:
         predicted = data.get('predicted_images', [])
         assert len(predicted) == 2
         # Verify reordering: B00002 should come first (reversed by mock_rerank)
-        assert predicted[0]['building_id'] == 'B00002'
-        assert predicted[1]['building_id'] == 'B00001'
+        assert predicted[0]['canonical_bld_id'] == 'B00002'
+        assert predicted[1]['canonical_bld_id'] == 'B00001'

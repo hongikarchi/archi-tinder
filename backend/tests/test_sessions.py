@@ -26,12 +26,12 @@ for bid in _FAKE_EMBEDDINGS:
 
 
 def _make_card(bid):
-    """Create a fake building card dict."""
+    """Create a fake building card dict (v2 schema)."""
     return {
-        'building_id': bid,
-        'name_en': f'Building {bid}',
-        'project_name': f'Project {bid}',
+        'canonical_bld_id': bid,
+        'name': f'Building {bid}',
         'image_url': f'https://example.com/{bid}/photo.jpg',
+        'covers_by_type': {},
         'url': None,
         'gallery': [],
         'gallery_drawing_start': 0,
@@ -39,14 +39,13 @@ def _make_card(bid):
             'axis_typology': 'Housing',
             'axis_architects': 'Test Architect',
             'axis_country': 'Korea',
-            'axis_area_m2': 100.0,
+            'axis_city': None,
             'axis_year': 2020,
             'axis_style': 'Contemporary',
             'axis_atmosphere': 'calm',
             'axis_color_tone': 'Cool White',
-            'axis_material': 'concrete',
             'axis_material_visual': [],
-            'axis_tags': [],
+            'visual_description': '',
         },
     }
 
@@ -60,7 +59,7 @@ def _mock_farthest_point(pool_ids, exposed_ids, pool_embeddings):
     return None
 
 
-def _mock_get_card(bid):
+def _mock_get_card(bid, image_focus=None):
     """Return fake card or None."""
     if bid is None:
         return None
@@ -179,7 +178,7 @@ class TestSessionCreation:
         data = resp.json()
         assert 'session_id' in data
         assert data['next_image'] is not None
-        assert data['next_image']['building_id'] in _FAKE_POOL
+        assert data['next_image']['canonical_bld_id'] in _FAKE_POOL
         assert 'progress' in data
         assert data['progress']['phase'] == 'exploring'
 
@@ -1060,7 +1059,7 @@ class TestExtendSessionFlow:
         colliding_key = f'swp_{session.session_id}_B00001'
         SwipeEvent.objects.create(
             session=session,
-            building_id='B00001',
+            canonical_bld_id='B00001',
             action='like',
             idempotency_key=colliding_key,
         )
