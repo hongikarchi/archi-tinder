@@ -1,22 +1,18 @@
 import { useLocation, useNavigate } from 'react-router-dom'
 
 const TAB_ICONS = {
-  home: (
+  discovery: (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="9" />
-      <line x1="12" y1="8" x2="12" y2="16" />
-      <line x1="8" y1="12" x2="16" y2="12" />
+      <rect x="3" y="3" width="7" height="7" />
+      <rect x="14" y="3" width="7" height="7" />
+      <rect x="3" y="14" width="7" height="7" />
+      <rect x="14" y="14" width="7" height="7" />
     </svg>
   ),
   swipe: (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <rect x="4" y="6" width="16" height="13" rx="2" />
       <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
-    </svg>
-  ),
-  folders: (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
     </svg>
   ),
   profile: (
@@ -29,9 +25,8 @@ const TAB_ICONS = {
 
 function getActiveTab(pathname) {
   if (pathname === '/swipe') return 'swipe'
-  if (pathname.startsWith('/library')) return 'folders'
   if (pathname.startsWith('/user')) return 'profile'
-  return 'home'
+  return 'discovery'
 }
 
 export default function TabBar({ swipeEnabled }) {
@@ -40,9 +35,8 @@ export default function TabBar({ swipeEnabled }) {
   const activeTab = getActiveTab(location.pathname)
 
   const tabs = [
-    { id: 'home', label: 'New', path: '/' },
-    { id: 'swipe', label: 'Swipe', path: '/swipe' },
-    { id: 'folders', label: 'Library', path: '/library' },
+    { id: 'discovery', label: 'Discovery', path: '/discovery' },
+    { id: 'swipe', label: 'Taste', path: '/swipe' },
     { id: 'profile', label: 'Profile', path: '/user/me' },
   ]
 
