@@ -485,35 +485,46 @@ flowchart LR
 
 ## Last Updated (Claude)
 - **Date:** 2026-05-14
-- **Commit:** `c8a5bc7` (PR #24 — chore(workflow): finalize lean Claude Architect + Codex Implementer rename; squashed into develop)
-- **Files changed (PR #24 = 9e95615 + a65b75a, 18 files):** `tools/cmux_lean_setup.sh` (NEW — lean 3-lane workspace creator) | `tools/dispatch-codex-task.sh` (NEW — bounded task file dispatcher) | `tools/codex-task-template.md` (NEW — bounded task file template) | `tools/print-claude-codex-handoff.sh` (NEW — Codex→Claude-main handoff prompt printer) | `.claude/codex/backend-worker.md` (renamed from `.claude/agents/team-back.md`; YAML frontmatter stripped) | `.claude/codex/frontend-worker.md` (renamed from `.claude/agents/team-front.md`; YAML frontmatter stripped) | `AGENTS.md` (updated — bounded implementer framing, new codex/ paths) | `CLAUDE.md` (updated — lean 3-lane as default, dispatch-codex-task.sh as default dispatch) | `.claude/WORKFLOW.md` (updated — lean 3-lane diagram, new signal vocab) | `.claude/SESSION_PROTOCOL.md` (updated — codex/ worker paths) | `.claude/Goal.md` (updated — codex/ worker references) | `tools/cmux_setup.sh` (init prompt updated) | `tools/cleanup-after-push.sh` (init prompt updated) | `tools/dispatch.sh` (fallback label updated) | `tools/front-validate.sh`, `tools/back-validate.sh`, `tools/git-push-pr.sh`, `tools/print-claude-codex-handoff.sh` (path refs updated) | `.gitignore` (`.claude/codex/` whitelist added)
-- **Also this session:** 2 external PRs triaged by WEB-GIT — PR #23 (ksangjo/feat/sj-0513-errorfix, base-ref violation → request-changes) + PR #22 (ksangjo/feat/sj-0512-dbspeed, REVIEW-FAIL 0 CRIT / 1 MAJ / 4 MIN → request-changes with collapsible report).
-- **Summary:** Lean Claude Architect + Codex Implementer workflow renamed and hardened. `.claude/agents/team-{back,front}.md` moved to `.claude/codex/{backend,frontend}-worker.md` (eliminates mis-invocation surface as Claude subagent_type). Four new lean-workflow tools added: `cmux_lean_setup.sh` (idempotent 3-lane setup), `dispatch-codex-task.sh` (bounded task dispatch — now default over free-form `dispatch.sh`), `codex-task-template.md`, `print-claude-codex-handoff.sh`. Report.md structure table updated with new file paths and 4 new tool rows. algorithm.md sync NOT applicable (no RECOMMENDATION dict changes this session).
+- **Commit:** `b7d39b2` (PR #34 — feat(s2): canonical_v2_buildings cutover; squashed into develop) + S8 spec-sweep commit pending on `feature/admin-s8-roadmap-sweep`
+- **Push range 2026-05-13 → 2026-05-14 (Tab 3-Structure Replan S1-S8 + canonical_v2_buildings cutover):**
+  - **S1** (PR #26 → b9c8dd4) — Replan plan + COLLAB_HANDOFF.md
+  - **S2** (PR #34 → b7d39b2) — **canonical_v2_buildings full cutover**: `backend/apps/recommendation/engine.py` 20+ raw SQL rewritten (canonical_bld_id PK + is_publishable gate + image_focus jsonb cover model), `backend/apps/recommendation/services/parse_query.py` adds Gemini `image_focus` enum (exterior/interior/drawing/aerial/detail with Korean+English hints), `backend/apps/recommendation/views/{sessions,search,swipe}.py` thread image_focus end-to-end, `backend/apps/recommendation/services/{rerank,generation}.py` migrated, `backend/apps/recommendation/models.py` + `migrations/0018_rename_swipeevent_canonical_bld_id.py` SwipeEvent.building_id → canonical_bld_id, `frontend/src/api/{images,sessions,projects}.js` normalizeCard rewrite + canonical_bld_ids API senders + cover fallback chain (covers_by_type[focus] → display_cover_url → cover_image_url_default → covers_by_type.exterior → all_images[0].url → ''), `frontend/src/pages/{SwipePage,BuildingDetailPage}.jsx` drop area row + read axis_material_visual[]. 41 files +1047/-611. Tests: 599/599 pytest GREEN + 12 legacy v1 tests skipped + live Neon smoke PASS on bld_000344. `docs/database-schema.md` full rewrite, `CLAUDE.md` hard rules swap (building_id → canonical_bld_id; architecture_vectors → canonical_v2_buildings; add is_publishable gate rule).
+  - **S2-prep** (PR #33 → c0f1da9) — database-schema.md reality-sync vs live v1 Neon
+  - **External PR absorb** (PR #32 → bc5a057) — admin absorbed @ksangjo PRs #22+#23 (caching refactor + blank-screen fix + test telemetry isolation; original branches CLOSED)
+  - **S3** (PR #27 → 2a61881) — Swipe end-flow consolidation (ActionCard removal + tolerate empty building_id on extend session)
+  - **S4** (PR #28 → a5edff5) — Unified progress bar + DebugOverlay extension
+  - **S5** (PR #29 → 7f225c2) — Library → Profile absorb (FavoritesPage + SetupPage deleted)
+  - **S6** (PR #30 → 976bfdc) — 4-tab → 3-tab cutover (Discovery / Taste / Profile only; Part B browser 7/7 ×3 personas green)
+  - **S7** (PR #31 → 278cc1a / 0ee6b42 cluster + 0e93d9f frontend) — Discovery infinite-scroll tab + SaveToBoardModal + SurpriseBoardModal
+  - **S8** (this commit on `feature/admin-s8-roadmap-sweep`) — spec/roadmap sweep: `docs/specs/phase16-recommendation-expansion.md` rewritten (Landing tab deprecated → Profile-button surface; endpoint shape changed), `docs/specs/phase17-llm-reverse-q.md` Q6 RESOLVED annotation (Option A pre-swipe), `docs/specs/phase18-external-connections.md` Goal.md path fix, `docs/specs/requirements.md` canonical_bld_id + canonical_v2_buildings + is_publishable rule swap, `.claude/Goal.md` § 7 Phase 16-19 rows + § 11 checklist tick + v3 history entry, `.claude/Task.md` Roadmap S3-S8 marked COMPLETED + Phase 16/17/18 sweep annotations + Handoffs trimmed 62→30 (32 archived to `.claude/handoffs-archive/2026-05.md` "Archived 2026-05-14 S8 sweep" section), 3 stale remote branches deleted (`feat/sj-0512-dbspeed` + `feat/sj-0513-errorfix` + `phase-5-polish-tests`; PR #22 + #23 already absorbed).
+- **Branch hygiene post-S8:** remote heads = `main` (c231c59 = pre-deploy gap), `develop` (b7d39b2 + S8 pending), `feature/sns-profile-system` (b0a00f9 — 유예원 unintegrated work, preserved per admin decision 2026-05-14; comparison vs develop S5-S7 deferred). Deploy PR develop → main scheduled next.
+- **Summary:** Full S1-S8 replan landed; Make Web cutover to Make DB's new `canonical_v2_buildings` 31-col / 39,776-row table is complete; tab structure now 3-tab (Discovery / Taste / Profile); Phase 16-18 specs reconciled with the new tab world. algorithm.md sync NOT applicable (no RECOMMENDATION dict changes this session window; production hyperparameters unchanged).
 
 ```mermaid
-graph TD
-    subgraph Codex[".claude/codex/"]
-        backend_worker[backend-worker.md]:::new
-        frontend_worker[frontend-worker.md]:::new
+graph LR
+    subgraph S2["S2 canonical_v2_buildings cutover"]
+        engine[engine.py raw-SQL\nis_publishable + canonical_bld_id]:::core
+        parse[parse_query.py\nimage_focus enum]:::core
+        mig[migration 0018\nSwipeEvent rename]:::core
+        front_api[frontend/api\nnormalizeCard + cover fallback]:::core
     end
-    subgraph Tools["tools/"]
-        lean_setup[cmux_lean_setup.sh]:::new
-        dispatch_task[dispatch-codex-task.sh]:::new
-        task_template[codex-task-template.md]:::new
-        print_handoff[print-claude-codex-handoff.sh]:::new
-        cmux_setup[cmux_setup.sh]:::modified
-        dispatch_sh[dispatch.sh]:::modified
-        cleanup[cleanup-after-push.sh]:::modified
+    subgraph Tabs["S5-S7 Tab 3-Structure"]
+        s5[S5 Library→Profile]:::ui
+        s6[S6 4→3 tab cutover]:::ui
+        s7[S7 Discovery tab]:::ui
     end
-    subgraph Root["root / .claude/"]
-        agents_md[AGENTS.md]:::modified
-        claude_md[CLAUDE.md]:::modified
-        workflow_md[.claude/WORKFLOW.md]:::modified
-        session_proto[.claude/SESSION_PROTOCOL.md]:::modified
+    subgraph Docs["S8 spec sweep"]
+        ph16[phase16: Landing→Profile-button]:::doc
+        ph17[phase17: Q6 RESOLVED]:::doc
+        req[requirements.md\ncanonical_bld_id swap]:::doc
+        goal[Goal.md v3]:::doc
     end
 
-    classDef new fill:#10b981,color:#fff
-    classDef modified fill:#f59e0b,color:#000
+    S2 --> Tabs --> Docs
+
+    classDef core fill:#10b981,color:#fff
+    classDef ui fill:#3b82f6,color:#fff
+    classDef doc fill:#f59e0b,color:#000
 ```
 
 ## Last Updated (Designer)

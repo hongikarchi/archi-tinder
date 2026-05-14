@@ -197,9 +197,10 @@ lives in `Task.md`; algorithm theory in `docs/algorithm.md`; pending specs in `d
 | 13 | **Profile system** — Firm profile, User profile, public/private boards | ✅ Complete |
 | 14 | **Board system** — board detail view, follow, "Love this!" reaction | ✅ Complete |
 | 15 | **Social foundation** — DM links (Instagram/email), MATCHED! results screen | ✅ Complete |
-| 16 | **Recommendation expansion** — 3-tab landing (Projects / Offices / Users), persona-classified results | Pending (see `docs/specs/phase16-recommendation-expansion.md`) |
-| 17 | **LLM reverse-questioning** — chat-phase persona classifier (deeper than current 0-2 turn probe) | Pending |
-| 18 | **External connections** — firm article crawl (Space, ArchDaily, news keyword matching), external DM wiring | Pending |
+| 16 | **Recommendation expansion** — Profile-tab "사무소 추천" button surfacing office + user recs (REC1 already shipped as Push S3 swipe end-screen; Landing tab removed by 2026-05-14 replan) | Pending (see `docs/specs/phase16-recommendation-expansion.md`) |
+| 17 | **LLM reverse-questioning** — Taste-tab chat-phase persona classifier (Replan Q6: Option A pre-swipe, first 0-2 turns) | Pending (see `docs/specs/phase17-llm-reverse-q.md`) |
+| 18 | **External connections** — firm article crawl (Space, ArchDaily, news keyword matching), external DM wiring | Pending (see `docs/specs/phase18-external-connections.md`) |
+| 19-26 | **2026-05-14 Tab 3-Structure Replan** — S1 planning + S2 canonical_v2_buildings cutover + S3 swipe end-flow + S4 progress UI + S5 library absorb + S6 4→3 tab cutover + S7 Discovery tab + S8 spec sweep | ✅ Complete (2026-05-14) |
 | post-18 | Long-term: scale (multi-region), monetization activation, possibly adjacent verticals (interior, landscape) — TBD | Future |
 
 The **algorithm side** (search-flow refinements documented in `docs/algorithm.md`)
@@ -276,21 +277,22 @@ it as a Task.md entry first; resolve via spec PR before orchestrator-implements.
 
 Detailed sub-tasks live in `Task.md`. This is the headline checklist:
 
-- [ ] Phase 13 — Firm profile page (blue verified mark, project cards, external links)
-- [ ] Phase 13 — User profile page (MBTI, avatar, bio, boards)
-- [ ] Phase 13 — Public/private boards (set at project creation + profile settings)
-- [ ] Phase 14 — Board detail view (other users' boards)
-- [ ] Phase 14 — Follow system + "Love this!" reaction
-- [ ] Phase 15 — External DM links (Instagram, email)
-- [ ] Phase 15 — "MATCHED!" results screen + recommendation card landing (3 tabs)
-- [ ] Phase 16 — Recommendation expansion (firm/user/project tabs with match scores)
-- [ ] Phase 17 — LLM reverse-questioning → persona classification
+- [x] Phase 13 — Firm profile page (blue verified mark, project cards, external links) — shipped 2026-05-02 (PROF3)
+- [x] Phase 13 — User profile page (MBTI, avatar, bio, boards) — shipped 2026-05-02 (PROF4)
+- [x] Phase 13 — Public/private boards (set at project creation + profile settings) — shipped 2026-05-06 (BOARD2)
+- [x] Phase 14 — Board detail view (other users' boards) — shipped 2026-05-06 (BOARD3)
+- [x] Phase 14 — Follow system + "Love this!" reaction — shipped 2026-05-06 (SOC1 + SOC2 + SOC3)
+- [x] Phase 15 — External DM links (Instagram, email) — shipped via Phase 13 PROF2 / Phase 15 SOC3
+- [~] Phase 15 — "MATCHED!" results screen + recommendation card landing — superseded 2026-05-14: Landing tab removed; consolidated swipe end-screen shipped as Push S3; office/user recs retargeted to Profile-tab button under Phase 16
+- [ ] Phase 16 — Recommendation expansion (Profile-tab button: office + user recs with match scores)
+- [ ] Phase 17 — LLM reverse-questioning → persona classification (Taste-tab pre-swipe per Replan Q6)
 - [ ] Phase 18 — Firm article crawl / keyword matching (Space, ArchDaily, news)
 
 ---
 
 ## Document history
 
+- **v3 — 2026-05-14 (S8 spec sweep)**: post-Replan reconciliation. Phase 16 description rewritten (Landing tab → Profile-button surface). Phase 17 notes Replan Q6 = Option A (pre-swipe). Phase 13-15 checklist items ticked. Phase 19-26 (2026-05-14 replan S1-S8) added as ✅ Complete row.
 - **v2 — 2026-04-26**: rewritten as a constitution-style PRD per user request.
   Adds working principles, decision tiebreakers, out-of-scope clauses, business
   model surface, open research areas catalog. Original v1 (Phase 1-12 summary +
