@@ -285,3 +285,4 @@ Historical resolved tasks moved to `.claude/resolved-archive.md` (frees
 Append new resolved entries to the archive, not here.
 FRONT-DONE: s7-discovery-frontend-page
 BACK-BLOCKED: s7-discovery-backend-feed — tools/back-validate.sh recommendation still fails on repo-wide flake8 (e.g., apps/accounts/apps.py:3:1 E302, apps/recommendation/engine.py:111:16 E221) before pytest execution.
+REVIEW-REQUESTED: 11c786b
