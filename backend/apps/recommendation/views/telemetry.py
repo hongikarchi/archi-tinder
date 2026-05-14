@@ -87,7 +87,10 @@ class ImageLoadTelemetryView(APIView):
                 'url': url[:2048],
                 'outcome': outcome,
                 'domain': domain[:128],
-                'building_id': str(data.get('building_id', ''))[:32] or None,
+                'canonical_bld_id': (
+                    str(data.get('canonical_bld_id') or data.get('building_id') or '')[:32]
+                    or None
+                ),
                 'context': str(data.get('context', ''))[:32] or None,
                 'load_ms': load_ms,
             },

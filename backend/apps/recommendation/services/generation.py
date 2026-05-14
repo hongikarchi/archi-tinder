@@ -201,7 +201,7 @@ def generate_visual_description(filters, raw_query, user_id):
 
 def generate_persona_report(liked_building_ids):
     """
-    Generate an architect persona report from a list of liked building_ids.
+    Generate an architect persona report from a list of liked canonical_bld_ids.
     Returns a dict with persona fields on success.
     Raises an exception with a descriptive message on failure (caller handles response).
     Returns None only if no building data is found.
@@ -211,12 +211,14 @@ def generate_persona_report(liked_building_ids):
     if not liked_building_ids:
         return None
 
-    # Fetch attributes of liked buildings
+    # Fetch attributes of liked buildings (publishable-gated).
     placeholders = ','.join(['%s'] * len(liked_building_ids))
     with _svc.connection.cursor() as cur:
         cur.execute(
-            f'SELECT program, style, atmosphere, material, architect, location_country '
-            f'FROM architecture_vectors WHERE building_id IN ({placeholders})',
+            f'SELECT program, style, atmosphere, material_visual, architects_text,'
+            f' location_country '
+            f'FROM canonical_v2_buildings'
+            f' WHERE canonical_bld_id IN ({placeholders}) AND is_publishable = true',
             liked_building_ids,
         )
         rows = _svc._dictfetchall(cur)
@@ -225,12 +227,16 @@ def generate_persona_report(liked_building_ids):
         return None
 
     # Aggregate for the prompt
-    programs    = [r['program']          for r in rows if r.get('program')]
-    styles      = [r['style']            for r in rows if r.get('style')]
-    atmospheres = [r['atmosphere']       for r in rows if r.get('atmosphere')]
-    materials   = [r['material']         for r in rows if r.get('material')]
-    architects  = [r['architect']        for r in rows if r.get('architect')]
-    countries   = [r['location_country'] for r in rows if r.get('location_country')]
+    programs    = [r['program']           for r in rows if r.get('program')]
+    styles      = [r['style']             for r in rows if r.get('style')]
+    atmospheres = [r['atmosphere']        for r in rows if r.get('atmosphere')]
+    materials = []
+    for r in rows:
+        mv = r.get('material_visual') or []
+        if mv:
+            materials.extend(mv[:2])
+    architects  = [r['architects_text']   for r in rows if r.get('architects_text')]
+    countries   = [r['location_country']  for r in rows if r.get('location_country')]
 
     summary = (
         f"The user liked {len(rows)} buildings.\n"

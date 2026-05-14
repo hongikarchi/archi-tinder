@@ -136,7 +136,15 @@ class ParseQueryView(APIView):
 
         # Terminal path (probe_needed=False): run search engine.
         filters = {k: v for k, v in (parsed.get('filters') or {}).items() if v is not None}
-        results = engine.search_by_filters(filters, limit=20) if filters else []
+        # image_focus lives outside the WHERE-clause filter dict but riders along
+        # so cards get the user-requested cover variant.
+        image_focus = parsed.get('image_focus')
+        if image_focus:
+            filters['image_focus'] = image_focus
+        results = (
+            engine.search_by_filters(filters, limit=20, image_focus=image_focus)
+            if filters else []
+        )
 
         is_fallback = False
         fallback_note = ''
@@ -144,16 +152,17 @@ class ParseQueryView(APIView):
         if not results:
             # Relax: drop geographic + numeric constraints, keep program/mood/material
             relaxed = {k: v for k, v in filters.items()
-                       if k not in ('location_country', 'year_min', 'year_max', 'min_area', 'max_area')}
+                       if k not in ('location_country', 'location_city',
+                                    'year_min', 'year_max')}
             if relaxed and relaxed != filters:
-                results = engine.search_by_filters(relaxed, limit=20)
+                results = engine.search_by_filters(relaxed, limit=20, image_focus=image_focus)
                 if results:
                     is_fallback = True
                     fallback_note = "No exact matches for those criteria — here are similar buildings you might like."
 
         if not results:
             # Final fallback: diverse random
-            results = engine.get_diverse_random(n=20)
+            results = engine.get_diverse_random(n=20, image_focus=image_focus)
             is_fallback = True
             fallback_note = "Couldn’t find an exact match — here are some buildings you might enjoy instead."
 
@@ -165,6 +174,7 @@ class ParseQueryView(APIView):
             'visual_description': parsed.get('visual_description'),
             'structured_filters': parsed.get('filters', {}),
             'filter_priority': parsed.get('filter_priority', []),
+            'image_focus': image_focus,
             'suggestions': [],
             'results': results,
             'is_fallback': is_fallback,
