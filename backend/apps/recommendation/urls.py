@@ -2,9 +2,9 @@ from django.urls import path
 from .views import (
     ProjectListCreateView, ProjectDetailView, UserProjectsListView,
     SessionCreateView, SessionStateView, SwipeView, SessionResultView,
-    DiverseRandomView, BuildingBatchView, ParseQueryView,
+    DiscoveryFeedView, DiverseRandomView, BuildingBatchView, ParseQueryView,
     ProjectReportGenerateView, ProjectReportImageView,
-    ProjectBookmarkView, ImageLoadTelemetryView,
+    ProjectBookmarkView, ImageLoadTelemetryView, BoardSurpriseView,
 )
 
 urlpatterns = [
@@ -23,8 +23,11 @@ urlpatterns = [
     path('analysis/sessions/<uuid:session_id>/swipes/',  SwipeView.as_view()),
     path('analysis/sessions/<uuid:session_id>/result/',  SessionResultView.as_view()),
     # Images
+    path('discovery/',                                   DiscoveryFeedView.as_view()),
     path('images/diverse-random/',                       DiverseRandomView.as_view()),
     path('images/batch/',                                BuildingBatchView.as_view()),
+    # Surprise board
+    path('recommendations/board-surprise/',              BoardSurpriseView.as_view()),
     # LLM query parsing
     path('parse-query/',                                 ParseQueryView.as_view()),
     # Telemetry

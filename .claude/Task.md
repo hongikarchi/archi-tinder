@@ -105,6 +105,12 @@
 - [2026-05-14] PR-CI-GREEN: #29 — Backend 2m8s, Frontend 11s, Vercel + comments all SUCCESS.
 - [2026-05-14] PR-MERGED: #29 — squashed into develop (7f225c2) via `gh pr merge 29 --squash --admin` (no --delete-branch). Mode 1 step 7 clean: stash → merge → `gh api -X DELETE refs/heads/feature/admin-s5-library-to-profile` HTTP 204 → checkout develop → pull (fast-forward a5edff5..7f225c2, 7 files +220/-191) → branch -D → fetch --prune → stash pop. S5 (absorb /library into Profile per replan Issue 3) live on develop.
 - [2026-05-14] REVIEW-REQUESTED: 14510ae — feat(s6): 4-tab → 3-tab TabBar cutover. Replan S6 explicitly requires Part B browser strict mode (large routing change: TabBar 4→3, index → /discovery redirect, ProjectSetupPage onBack repath, MainLayout empty-state retarget). Rule 2 override per plan. WEB-REVIEW please run `/review` Part A 7-axis + Part B browser strict + Part C drift.
+- [2026-05-14] REVIEW-PASSED: 00feeb1 — drift checks passed, 3 MINOR noted (see .claude/reviews/latest.md); run `git push` manually from this terminal
+- [2026-05-14] PR-OPENED: #30 — feature/admin-s6-tab-cutover → develop, 3 commits (14510ae S6 code 4→3-tab cutover + e5d469e READY-FOR-PUSH signal + 00feeb1 REVIEW-REQUESTED signal swap), CI running. URL: https://github.com/hongikarchi/archi-tinder/pull/30. REVIEW-PASSED at 00feeb1 (3 MINOR non-blocking out-of-scope for S7; Part A 0/0/3, Part B 7/7 S6 smoke gates green ×3 personas, Part C drift clean). On CI green: canonical Mode 1 step 7.
+- [2026-05-14] PR-CI-GREEN: #30 — Backend 2m6s, Frontend 11s, Vercel + comments all SUCCESS.
+- [2026-05-14] PR-MERGED: #30 — squashed into develop (976bfdc) via `gh pr merge 30 --squash --admin` (no --delete-branch). Mode 1 step 7 clean: stash → merge → `gh api -X DELETE refs/heads/feature/admin-s6-tab-cutover` HTTP 204 → checkout develop → pull (fast-forward 7f225c2..976bfdc, 6 files +59/-930 — FavoritesPage + SetupPage deleted) → branch -D → fetch --prune → stash pop. **Note**: squash commit title is the last commit's "docs(handoffs): swap S6 signal to REVIEW-REQUESTED per replan" rather than the substantive S6 feat title (gh default behavior; commit body still contains the 4-tab → 3-tab cutover diff). S6 (4-tab → 3-tab TabBar cutover per replan) live on develop.
+- [2026-05-14] FRONT-DONE: s7-discovery-frontend-page — DiscoveryPage + SaveToBoardModal + api/discovery.js verified. One deviation from task file: used `metadata.axis_architects` (matching normalizeCard output + all other card consumers) instead of `metadata.architect` as written in the spec bullet. front-validate.sh ALL GREEN (lint + vite build).
+- [2026-05-14] BACK-DONE: s7-discovery-backend-feed
 
 ## Development Roadmap
 
@@ -277,3 +283,5 @@ Google OAuth only. Korean users need domestic login.
 Historical resolved tasks moved to `.claude/resolved-archive.md` (frees
 ~30-50K tokens per reporter call; git log is the authoritative history).
 Append new resolved entries to the archive, not here.
+FRONT-DONE: s7-discovery-frontend-page
+BACK-BLOCKED: s7-discovery-backend-feed — tools/back-validate.sh recommendation still fails on repo-wide flake8 (e.g., apps/accounts/apps.py:3:1 E302, apps/recommendation/engine.py:111:16 E221) before pytest execution.
