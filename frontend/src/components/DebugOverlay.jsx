@@ -139,16 +139,16 @@ export default function DebugOverlay({ userId, session, swipeDebug }) {
       {session ? (
         <>
           <div>
-            <span style={dimStyle}>Session:</span>{' '}
+            <span style={dim}>Session:</span>{' '}
             {session.id ? session.id.slice(0, 8) : '—'}{' '}
             · round {session.round ?? '?'}/{session.total ?? '?'}
           </div>
           <div>
-            <span style={dimStyle}>Phase:</span> {session.phase ?? '—'}
-            {' · '}<span style={dimStyle}>♥</span> {session.like_count ?? 0}
-            {' · '}<span style={dimStyle}>conf</span>{' '}
+            <span style={dim}>Phase:</span> {session.phase ?? '—'}
+            {' · '}<span style={dim}>♥</span> {session.like_count ?? 0}
+            {' · '}<span style={dim}>conf</span>{' '}
             {session.confidence != null ? session.confidence.toFixed(3) : 'null'}
-            {' · '}<span style={dimStyle}>ext?</span>{' '}
+            {' · '}<span style={dim}>ext?</span>{' '}
             {session.can_continue == null ? '—' : session.can_continue ? 'yes' : 'no'}
           </div>
         </>

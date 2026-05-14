@@ -105,7 +105,6 @@ export default function MainLayout({
             confidence: sessionProgress.confidence,
             can_continue: sessionProgress.can_continue,
           } : null}
-          swipeDebug={swipeDebug}
         />
       )}
 

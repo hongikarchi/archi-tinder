@@ -15,7 +15,6 @@ Usage:
     python manage.py profile_image_latency --iterations 50
     python manage.py profile_image_latency --batch-sizes 1,5,20,50
 """
-import statistics
 import time
 from typing import List, Dict, Any
 
@@ -45,6 +44,7 @@ def stats(samples: list) -> dict:
         return {}
     s = sorted(samples)
     n = len(s)
+
     def pct(p):
         idx = max(0, min(n - 1, int(p / 100 * n)))
         return s[idx]
@@ -371,7 +371,7 @@ class Command(BaseCommand):
         card_url_p50 = results['card']['url_compose'].get('p50', 0)
         swipe_total_p50 = results['swipe']['total_3_cards']['p50']
 
-        self.stdout.write(f'\n  스와이프 응답 비용 (p50 기준):')
+        self.stdout.write('\n  스와이프 응답 비용 (p50 기준):')
         self.stdout.write(f'    • 3× get_building_card 합산: {swipe_total_p50:.1f}ms')
         self.stdout.write(f'    • 단건 카드 평균:            {card_total_p50:.1f}ms')
         self.stdout.write(f'      └─ DB 쿼리:               {card_db_p50:.1f}ms ({card_db_p50/card_total_p50*100:.0f}% of total)' if card_total_p50 else '')
