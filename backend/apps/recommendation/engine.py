@@ -1750,3 +1750,106 @@ def compute_dpp_topk(cards, like_vectors, k, q_override=None):
         logger.warning("compute_dpp_topk: DPP phase failed (%s) — falling back to q-sort", exc)
         order = sorted(range(nv), key=lambda i: -q[i])
         return [valid_ids[i] for i in order[:k]]
+
+
+def compute_user_taste_vector(profile):
+    """
+    Aggregate the user's taste vector as the weighted mean embedding of liked
+    building IDs across all their Projects.
+
+    Returns:
+        np.ndarray (384,) normalized, or None if no liked embedding is found.
+    """
+    from .models import Project
+
+    liked_records = Project.objects.filter(user=profile).values_list('liked_ids', flat=True)
+    weighted = []
+    for liked_ids in liked_records:
+        for entry in (liked_ids or []):
+            if isinstance(entry, dict):
+                bid = entry.get('id')
+                if not isinstance(bid, str):
+                    continue
+                try:
+                    intensity = float(entry.get('intensity', 1.0))
+                except (TypeError, ValueError):
+                    intensity = 1.0
+            elif isinstance(entry, str):
+                bid = entry
+                intensity = 1.0
+            else:
+                continue
+            weighted.append((bid, intensity))
+
+    if not weighted:
+        return None
+
+    seen = set()
+    ordered_ids = []
+    intensities = {}
+    for bid, intensity in weighted:
+        if bid not in seen:
+            ordered_ids.append(bid)
+            intensities[bid] = intensity
+            seen.add(bid)
+        else:
+            # Keep first-seen occurrence to avoid duplicate amplification.
+            intensities[bid] = max(intensities[bid], intensity)
+
+    embeddings = get_pool_embeddings(ordered_ids)
+    if not embeddings:
+        return None
+
+    agg = np.zeros(384, dtype=np.float64)
+    total_weight = 0.0
+    for bid in ordered_ids:
+        emb = embeddings.get(bid)
+        if emb is None:
+            continue
+        weight = intensities.get(bid, 1.0)
+        if not isinstance(weight, (int, float)) or weight <= 0:
+            weight = 1.0
+        agg += np.asarray(emb) * float(weight)
+        total_weight += float(weight)
+
+    if total_weight <= 0:
+        return None
+
+    normalized = _normalize((agg / total_weight).tolist())
+    return np.array(normalized, dtype=np.float64)
+
+
+def taste_ranked_page(v_taste, exclude_ids, limit, offset):
+    """
+    Cosine-rank all buildings against v_taste, skipping exclude_ids,
+    and return one page.
+    """
+    _required_cols = [
+        'building_id', 'name_en', 'project_name', 'architect', 'location_country',
+        'city', 'year', 'area_sqm', 'program', 'style', 'atmosphere', 'color_tone',
+        'material', 'material_visual', 'url', 'tags', 'image_photos', 'image_drawings',
+        'visual_description', 'description',
+    ]
+    _optional_cols = ['cover_image_url_divisare', 'divisare_gallery_urls']
+    _cols = _build_select_columns(_required_cols, _optional_cols)
+
+    exclude = [bid for bid in (exclude_ids or []) if isinstance(bid, str)]
+    try:
+        with connection.cursor() as cur:
+            cur.execute(
+                f'WITH ranked AS ('
+                f' SELECT {_cols}, embedding <=> %s::vector AS score'
+                f' FROM architecture_vectors'
+                f' WHERE building_id <> ALL(%s::text[])'
+                f' ORDER BY embedding <=> %s::vector ASC'
+                f')'
+                f' SELECT * FROM ranked'
+                f' OFFSET %s LIMIT %s',
+                [_vec_to_pg(v_taste), exclude, _vec_to_pg(v_taste), int(offset), int(limit)],
+            )
+            rows = _dictfetchall(cur)
+    except Exception as exc:
+        logger.warning('taste_ranked_page: pgvector query failed (%s)', exc)
+        return []
+
+    return [_row_to_card(r) for r in rows]

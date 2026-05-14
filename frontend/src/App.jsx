@@ -11,6 +11,7 @@ import PostSwipeLandingPage from './pages/PostSwipeLandingPage.jsx'
 import BoardDetailPage from './pages/BoardDetailPage.jsx'
 import ResultsPage from './pages/ResultsPage.jsx'
 import BuildingDetailPage from './pages/BuildingDetailPage.jsx'
+import DiscoveryPage from './pages/DiscoveryPage.jsx'
 import * as api from './api/client.js'
 
 function normalizeFilters(filters) {
@@ -89,47 +90,6 @@ function LLMSearchUpdateWrapper({ wizardData, onBack, onStart, onUpdate }) {
       onStart={onStart}
       onUpdate={onUpdate}
     />
-  )
-}
-
-/* ── Discovery placeholder (S7 will ship the real infinite-scroll feed) ───── */
-function DiscoveryPlaceholder({ onStart }) {
-  return (
-    <div style={{
-      height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
-      background: 'var(--color-bg)',
-      display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center',
-      gap: 14, padding: 24,
-    }}>
-      <h1 style={{
-        fontSize: 28, fontWeight: 700, margin: 0, letterSpacing: '-0.01em',
-        textAlign: 'center',
-      }}>
-        <span style={{ color: 'var(--color-text)' }}>Archi</span>
-        <span style={{ color: '#ec4899' }}>Tinder</span>
-      </h1>
-      <p style={{ color: 'var(--color-text-dim)', fontSize: 14, margin: 0, textAlign: 'center' }}>
-        Discovery feed coming soon
-      </p>
-      <p style={{
-        color: 'var(--color-text-dimmer)', fontSize: 12, margin: 0,
-        textAlign: 'center', maxWidth: 320, lineHeight: 1.5,
-      }}>
-        Browse curated architecture by taste. For now, start a new taste analysis to build your persona.
-      </p>
-      <button
-        onClick={onStart}
-        style={{
-          marginTop: 6, padding: '12px 28px', borderRadius: 12,
-          background: 'linear-gradient(135deg,#ec4899,#f43f5e)',
-          color: '#fff', fontSize: 14, fontWeight: 600,
-          border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-        }}
-      >
-        Start Taste Analysis →
-      </button>
-    </div>
   )
 }
 
@@ -650,7 +610,7 @@ export default function App() {
           </ProtectedRoute>
         }>
           <Route index element={<Navigate to="/discovery" replace />} />
-          <Route path="discovery" element={<DiscoveryPlaceholder onStart={() => navigate('/new')} />} />
+          <Route path="discovery" element={<DiscoveryPage />} />
           <Route path="new" element={
             <ProjectSetupPage
               onBack={() => navigate('/discovery')}
