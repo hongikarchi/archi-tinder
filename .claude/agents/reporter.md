@@ -100,6 +100,11 @@ Format:
 - [YYYY-MM-DD] REVIEW-REQUESTED: <sha_short> — <one-line summary of what was done>
 ```
 
+The `<one-line summary>` is written **caveman-terse** (this repo, since 2026-05-15):
+drop articles / filler / hedging, fragments OK. The signal keyword
+`REVIEW-REQUESTED` and the `[YYYY-MM-DD] ` / `<sha_short>` structure stay exact —
+compress only the summary prose.
+
 Use the Edit tool (not Write) to avoid clobbering the rest of Task.md.
 
 ### 6. Sync `docs/algorithm.md` (conditional)

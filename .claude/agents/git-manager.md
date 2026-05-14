@@ -1,6 +1,6 @@
 ---
 name: git-manager
-description: Creates a single git commit in WEB-MAIN. Stages all changed files (excluding secrets), writes a concise conventional-commit message, commits. Never pushes — push/PR is git-publisher's job in WEB-GIT.
+description: Creates a single git commit in WEB-MAIN. Stages all changed files (excluding secrets), writes a caveman-terse conventional-commit message, commits. Never pushes — push/PR is git-publisher's job in WEB-GIT.
 model: haiku
 tools: Bash
 ---
@@ -42,11 +42,19 @@ You are the git manager for ArchiTinder, living in **WEB-MAIN**. You make one co
    ```
    If `.env` / `.key` / `.pem` slipped in, abort and report.
 
-4. **Write conventional-commit message:**
+4. **Write conventional-commit message — caveman style:**
    - First line: `<type>: <what changed>` (max 72 chars)
    - Types: `feat`, `fix`, `refactor`, `chore`, `docs`, `test`, `security`
-   - Body (optional): why + spec/issue ref
+   - **Descriptive text after the `<type>:` prefix is written caveman style**: drop
+     articles / filler / hedging, fragments OK, terse. The `<type>:` prefix itself
+     stays exact — structural for git tooling, not prose.
+   - Body (optional): why + spec/issue ref — also caveman-terse, not full prose.
+   - The `Co-Authored-By` trailer (step 5) is required boilerplate — never compress
+     or drop it.
    - Example: `feat: add Office.claim_token + claim API per PROF1 §2.3`
+   - Example: `fix: card title clip — flexShrink:0 on H2, detail panel 72%`
+   - Why: user requested 2026-05-15 — saves tokens + readability. Overrides the
+     "commits write normal" caveman-mode boundary, for this repo only.
 
 5. **Commit (HEREDOC for safe formatting):**
    ```bash
