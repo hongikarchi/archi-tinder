@@ -286,8 +286,13 @@ def _card_cache_ttl():
     return _CARD_CACHE_TTL
 
 
+# Bump _CARD_CACHE_SCHEMA when _row_to_card output shape changes so older Redis
+# entries are not silently served as stale shape after a deploy.
+_CARD_CACHE_SCHEMA = 'v1'
+
+
 def _card_cache_key(building_id):
-    return f'bcard:{building_id}'
+    return f'bcard:{_CARD_CACHE_SCHEMA}:{building_id}'
 
 
 def get_building_card(building_id):
