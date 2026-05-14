@@ -49,11 +49,13 @@ Probe-turn chat history during a session is currently transient. Should it persi
 
 ## Hard System Constraints (cross-cutting, do not violate)
 
-- All building references use `building_id` (text PK), never name / slug / language-dependent field.
-- `architecture_vectors` table is owned by Make DB — read-only via raw SQL only. No Django ORM, no migrations.
+- All building references use `canonical_bld_id` (TEXT PK like `'bld_000344'`), never name / slug / language-dependent field.
+- `canonical_v2_buildings` table is owned by Make DB — read-only via raw SQL only. No Django ORM, no migrations.
+- Every building query MUST gate on `is_publishable = true` (39 of 39,776 rows are non-publishable; `engine._build_filter_sql` emits this clause automatically).
+- Cover image resolution honors LLM-derived `image_focus` ∈ {`exterior`, `interior`, `drawing`, `aerial`, `detail`} → `covers_by_type[focus]` with fallback chain to `display_cover_url` → `cover_image_url_default` → `covers_by_type.exterior` → `all_images[0].url` → `''`.
 - SentenceTransformers is NOT a runtime dependency — embeddings are pre-computed by Make DB.
 - All URL patterns end with trailing slash (Django `APPEND_SLASH` only redirects GET).
 - JWT: access 1hr, refresh 30 days, rotate + blacklist via `simplejwt`.
 - Neon PostgreSQL: `sslmode=require`, `psycopg2-binary` (not asyncpg).
 
-(See `CLAUDE.md` for the full list of project conventions.)
+(See `CLAUDE.md` for the full list of project conventions; see `docs/database-schema.md` for the full `canonical_v2_buildings` CREATE TABLE + image-resolution semantics.)
