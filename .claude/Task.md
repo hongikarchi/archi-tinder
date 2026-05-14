@@ -104,7 +104,7 @@
 - [2026-05-14] PR-OPENED: #29 — feature/admin-s5-library-to-profile → develop, 1 commits (7143588 "feat(s5): absorb /library into Profile (replan Issue 3)"), CI running. URL: https://github.com/hongikarchi/archi-tinder/pull/29. /review skipped per Rule 2 (frontend dead-code removal + route redirects; front-validate.sh PASS in WEB-MAIN; no algorithm/contract change).
 - [2026-05-14] PR-CI-GREEN: #29 — Backend 2m8s, Frontend 11s, Vercel + comments all SUCCESS.
 - [2026-05-14] PR-MERGED: #29 — squashed into develop (7f225c2) via `gh pr merge 29 --squash --admin` (no --delete-branch). Mode 1 step 7 clean: stash → merge → `gh api -X DELETE refs/heads/feature/admin-s5-library-to-profile` HTTP 204 → checkout develop → pull (fast-forward a5edff5..7f225c2, 7 files +220/-191) → branch -D → fetch --prune → stash pop. S5 (absorb /library into Profile per replan Issue 3) live on develop.
-- [2026-05-14] READY-FOR-PUSH: feature/admin-s6-tab-cutover — REVIEW-SKIPPED (trivial cutover, token-saving Rule 2). 1-commit S6 (14510ae "feat(s6): 4-tab → 3-tab TabBar cutover"). WEB-GIT Mode 1 internal push+PR: `gh pr create --base develop` with title "feat(s6): 4-tab → 3-tab TabBar cutover", poll CI, on green canonical Mode 1 step 7 sequence. Frontend-only, 6 files -930 LOC (dead-code removal).
+- [2026-05-14] REVIEW-REQUESTED: 14510ae — feat(s6): 4-tab → 3-tab TabBar cutover. Replan S6 explicitly requires Part B browser strict mode (large routing change: TabBar 4→3, index → /discovery redirect, ProjectSetupPage onBack repath, MainLayout empty-state retarget). Rule 2 override per plan. WEB-REVIEW please run `/review` Part A 7-axis + Part B browser strict + Part C drift.
 
 ## Development Roadmap
 
