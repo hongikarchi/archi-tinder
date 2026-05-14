@@ -166,6 +166,20 @@ def _row_to_card(row, image_focus=None):
         first = all_images_raw[0] if isinstance(all_images_raw[0], dict) else {}
         image_url = first.get('url') or ''
 
+    # Detect actual kind of resolved image_url (for frontend aspect handling).
+    # Sources, in order: covers_by_type reverse-lookup, all_images entry match.
+    image_kind = None
+    if image_url and isinstance(covers_by_type, dict):
+        for k, u in covers_by_type.items():
+            if u == image_url:
+                image_kind = k
+                break
+    if image_kind is None and image_url:
+        for img in all_images_raw:
+            if isinstance(img, dict) and img.get('url') == image_url:
+                image_kind = img.get('kind')
+                break
+
     # Gallery from all_images: sort by (kind rank, image_order, rank)
     kind_order = {'cover': 0, 'gallery': 1, 'drawing': 2}
     images = [img for img in all_images_raw if isinstance(img, dict) and img.get('url')]
@@ -210,6 +224,7 @@ def _row_to_card(row, image_focus=None):
         'name':                   row.get('name') or '',
         'image_url':              image_url,
         'image_focus':            image_focus,
+        'image_kind':             image_kind,
         'covers_by_type':         covers_by_type,
         'url':                    src_url,
         'gallery':                gallery_urls,

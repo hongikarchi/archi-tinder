@@ -327,7 +327,7 @@ class TestUserProfileBoardsField:
             liked_ids=[{'id': 'B001', 'intensity': 1.0}],
         )
         uid = user_profile.user.id
-        mock_card = {'building_id': 'B001', 'image_url': 'https://cdn.example.com/B001/photo.jpg'}
+        mock_card = {'canonical_bld_id': 'B001', 'image_url': 'https://cdn.example.com/B001/photo.jpg'}
         with patch('apps.recommendation.engine.get_buildings_by_ids', return_value=[mock_card]):
             resp = api_client.get(f'/api/v1/users/{uid}/')
         boards = resp.json()['boards']['items']

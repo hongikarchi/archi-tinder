@@ -372,10 +372,10 @@ def _build_boards_field(target_profile, is_owner, page=1, page_size=12):
     all_bids = list({bid for bids in project_bid_lists.values() for bid in bids})
 
     # Single batch query for the paged slice's buildings only
-    image_map = {}  # building_id → image_url
+    image_map = {}  # canonical_bld_id → image_url
     if all_bids:
         cards = engine.get_buildings_by_ids(all_bids)
-        image_map = {c['building_id']: c.get('image_url', '') for c in cards}
+        image_map = {c['canonical_bld_id']: c.get('image_url', '') for c in cards}
 
     items = []
     for p in projects:

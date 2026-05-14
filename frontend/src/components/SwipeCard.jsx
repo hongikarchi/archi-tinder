@@ -167,7 +167,11 @@ export default function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
   const material     = materialList.length ? materialList.join(', ') : null
   const gallery         = card.gallery || []
   const drawingStart    = card.gallery_drawing_start ?? gallery.length
-  const isWideAspect    = card.image_focus === 'drawing' || card.image_focus === 'aerial'
+  // Wide-aspect cards need contain-fit to avoid side-crop. Two signals:
+  // - image_focus: what the caller requested (sessions.py forwards LLM choice)
+  // - image_kind: actual kind of resolved image_url (Discovery / fallback path)
+  const wideKinds = ['drawing', 'aerial']
+  const isWideAspect = wideKinds.includes(card.image_focus) || wideKinds.includes(card.image_kind)
 
   return (
     <div
@@ -264,26 +268,36 @@ export default function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
             </div>
           </div>
 
-          {/* Detail content — transparent, slides over expanded gradient */}
+          {/* Detail content — transparent, slides over expanded gradient.
+              Height 72% gives breathing room for 2-line H2 + architects +
+              7-row InfoRow grid + gallery button. flexShrink:0 on critical
+              elements means only the grid compresses when content overflows;
+              H2 / architects / divider / button always keep their natural
+              height. */}
           <div style={{
             position: 'absolute', left: 0, right: 0, bottom: 0,
-            height: '66%',
+            height: '72%',
             background: 'transparent',
             transform: isExpanded ? 'translateY(0)' : 'translateY(100%)',
             transition: 'transform 0.42s cubic-bezier(0.32, 0, 0.18, 1)',
             display: 'flex', flexDirection: 'column',
             padding: '16px 18px 20px', gap: 0, overflow: 'hidden',
           }}>
-            <h2 style={{ color: '#fff', fontSize: 18, fontWeight: 700, lineHeight: 1.3, margin: '0 0 3px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+            <h2 style={{
+              color: '#fff', fontSize: 18, fontWeight: 700, lineHeight: 1.3,
+              margin: '0 0 3px', flexShrink: 0,
+              overflow: 'hidden', textOverflow: 'ellipsis',
+              display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+            }}>
               {card.image_title}
             </h2>
             {architects && (
-              <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 12, margin: '0 0 12px', fontStyle: 'italic' }}>
+              <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 12, margin: '0 0 12px', fontStyle: 'italic', flexShrink: 0 }}>
                 {architects}
               </p>
             )}
-            <div style={{ height: 1, background: 'rgba(255,255,255,0.1)', marginBottom: 12 }} />
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px', flex: '0 1 auto' }}>
+            <div style={{ height: 1, background: 'rgba(255,255,255,0.1)', marginBottom: 12, flexShrink: 0 }} />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px', flex: '0 1 auto', minHeight: 0 }}>
               <InfoRow label="Type"     value={typology} />
               <InfoRow label="Country"  value={country} />
               <InfoRow label="City"     value={city} />
@@ -303,6 +317,7 @@ export default function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
                   background: 'rgba(255,255,255,0.09)', border: '1px solid rgba(255,255,255,0.18)',
                   color: '#fff', fontSize: 12, fontWeight: 600,
                   cursor: 'pointer', fontFamily: 'inherit',
+                  flexShrink: 0,
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                 }}
               >
