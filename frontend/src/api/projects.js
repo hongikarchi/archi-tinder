@@ -67,7 +67,7 @@ export async function getBuildings(buildingIds) {
   }
   try {
     const results = await Promise.all(
-      chunks.map(chunk => callApi('POST', '/images/batch/', { building_ids: chunk }))
+      chunks.map(chunk => callApi('POST', '/images/batch/', { canonical_bld_ids: chunk }))
     )
     return results.flat().map(normalizeCard)
   } catch (err) {
@@ -83,8 +83,10 @@ export async function getBuildings(buildingIds) {
 export async function getBoardBuildings(buildingIds) {
   if (!buildingIds?.length) return []
   try {
-    const result = await callApi('POST', '/images/batch/', { building_ids: buildingIds })
-    const byId = new Map((result || []).map(card => [String(card.building_id ?? card.id), card]))
+    const result = await callApi('POST', '/images/batch/', { canonical_bld_ids: buildingIds })
+    const byId = new Map(
+      (result || []).map(card => [String(card.canonical_bld_id ?? card.building_id ?? card.id), card])
+    )
     return buildingIds.map(id => byId.get(String(id))).filter(Boolean)
   } catch (err) {
     console.error('[api/client] getBoardBuildings failed:', err)

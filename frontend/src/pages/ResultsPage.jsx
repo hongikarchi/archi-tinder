@@ -4,7 +4,7 @@ import { useResults } from '../hooks/useResults.js'
 import { resolveProjectBackendId } from '../utils/resolveProjectBackendId.js'
 
 function cardId(card) {
-  return card?.image_id || card?.building_id || ''
+  return card?.image_id || card?.canonical_bld_id || card?.building_id || ''
 }
 
 function personaFields(result, project) {

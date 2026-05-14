@@ -11,16 +11,17 @@ import InfoCol from './InfoCol'
  */
 export default function ProjectCard({ project }) {
   const navigate = useNavigate()
+  const buildingId = project.canonical_bld_id || project.building_id
   const { onLoad, onError } = useImageTelemetry({
-    buildingId: project.building_id,
+    buildingId,
     context: 'firm_profile_gallery',
   })
 
   return (
     <div
       onClick={() => {
-        if (!project.building_id) return
-        navigate(`/buildings/${project.building_id}`)
+        if (!buildingId) return
+        navigate(`/buildings/${buildingId}`)
       }}
       style={{
         position: 'relative',

@@ -118,9 +118,9 @@ def _liked_summary_for_rerank(liked_ids):
     Input liked_ids: list of str or {id, intensity} dicts (supports both legacy
     and new shapes). Intensity >= 1.5 is tagged [Love], < 1.5 is tagged [Like].
 
-    Fetches building metadata (name_en, style, atmosphere, material) from
-    architecture_vectors via batch SQL. Falls back to building_id only when
-    metadata fetch fails or a row is missing.
+    Fetches building metadata (name, style, atmosphere, material_visual) from
+    canonical_v2_buildings via batch SQL. Falls back to canonical_bld_id only
+    when metadata fetch fails or a row is missing.
 
     Truncated to approximately 1 K tokens (70 lines max) per Investigation 12
     BACK-RNK-3.
@@ -148,37 +148,39 @@ def _liked_summary_for_rerank(liked_ids):
     MAX_ENTRIES = 70
     entries = entries[-MAX_ENTRIES:]  # keep most recent (current taste)
 
-    building_ids = [bid for bid, _ in entries]
+    bld_ids = [bid for bid, _ in entries]
     intensity_map = {bid: intensity for bid, intensity in entries}
 
-    # Fetch metadata from architecture_vectors
+    # Fetch metadata from canonical_v2_buildings (publishable-gated)
     metadata_map = {}
     try:
-        placeholders = ','.join(['%s'] * len(building_ids))
+        placeholders = ','.join(['%s'] * len(bld_ids))
         with _svc.connection.cursor() as cur:
             cur.execute(
-                f'SELECT building_id, name_en, style, atmosphere, material '
-                f'FROM architecture_vectors WHERE building_id IN ({placeholders})',
-                building_ids,
+                f'SELECT canonical_bld_id, name, style, atmosphere, material_visual '
+                f'FROM canonical_v2_buildings'
+                f' WHERE canonical_bld_id IN ({placeholders}) AND is_publishable = true',
+                bld_ids,
             )
             rows = _svc._dictfetchall(cur)
         for row in rows:
-            metadata_map[row['building_id']] = row
+            metadata_map[row['canonical_bld_id']] = row
     except Exception as e:
         logger.warning('_liked_summary_for_rerank metadata fetch failed: %s', e)
 
     lines = []
-    for bid in building_ids:
+    for bid in bld_ids:
         intensity = intensity_map.get(bid, 1.0)
         tag = '[Love]' if intensity >= 1.5 else '[Like]'
         meta = metadata_map.get(bid)
         if meta:
-            name_en = meta.get('name_en') or bid
+            name = meta.get('name') or bid
             style = meta.get('style') or ''
             atmosphere = meta.get('atmosphere') or ''
-            material = meta.get('material') or '<none>'
+            mat_list = meta.get('material_visual') or []
+            material = ', '.join(mat_list[:3]) if mat_list else '<none>'
             parts = ', '.join(p for p in [style, atmosphere, material] if p)
-            lines.append(f'- {name_en} ({parts}) {tag}')
+            lines.append(f'- {name} ({parts}) {tag}')
         else:
             lines.append(f'- {bid} {tag}')
 
@@ -191,9 +193,10 @@ def rerank_candidates(candidates, liked_summary):
     liked_summary. Returns full ordering (length matches input) -- list of
     building_ids from most to least aligned with taste.
 
-    Input candidates: list of dicts with keys building_id, name_en, atmosphere,
-    material, architect, style, program (Investigation 12 I/O design Inputs).
-    Truncated to 60 candidates max per spec.
+    Input candidates: list of ImageCard dicts (engine._row_to_card output) with
+    keys canonical_bld_id, name, metadata.{axis_architects, axis_style,
+    axis_typology, axis_material_visual, axis_atmosphere}. Truncated to 60
+    candidates max per spec.
 
     On failure (parse error, timeout, partial coverage, validation): logs
     WARNING and returns input order (cosine_rank as-is). Per spec 5.4:
@@ -206,20 +209,24 @@ def rerank_candidates(candidates, liked_summary):
 
     # Truncate to 60 per spec
     candidates = candidates[:60]
-    input_ids = [c['building_id'] for c in candidates]
+    input_ids = [c['canonical_bld_id'] for c in candidates]
 
-    # Build user prompt (compact one-line-per-candidate per Investigation 12)
+    # Build user prompt (compact one-line-per-candidate per Investigation 12).
+    # Reads from ImageCard shape (engine._row_to_card output): top-level
+    # canonical_bld_id / name and metadata.axis_* axes.
     candidate_lines = []
     for i, c in enumerate(candidates, start=1):
-        bid = c.get('building_id', '')
-        name_en = c.get('name_en', '')
-        architect = c.get('architect', '') or 'anon'
-        style = c.get('style', '') or ''
-        program = c.get('program', '') or ''
-        material = c.get('material', '') or '<none>'
-        atmosphere = c.get('atmosphere', '') or ''
+        bid = c.get('canonical_bld_id', '')
+        name = c.get('name', '')
+        md = c.get('metadata') or {}
+        architect = md.get('axis_architects') or 'anon'
+        style = md.get('axis_style') or ''
+        program = md.get('axis_typology') or ''
+        mat_visual = md.get('axis_material_visual') or []
+        material = ', '.join(mat_visual[:3]) if mat_visual else '<none>'
+        atmosphere = md.get('axis_atmosphere') or ''
         candidate_lines.append(
-            f'[{i}] {bid} {name_en} — {architect}, {style}, {program}, {material}, {atmosphere}'
+            f'[{i}] {bid} {name} — {architect}, {style}, {program}, {material}, {atmosphere}'
         )
 
     user_prompt = (

@@ -33,9 +33,9 @@ export async function startSession(params) {
  * Fetch the current resumable state of an active session.
  * Used on page refresh to continue a swipe session where the user left off,
  * instead of creating a brand-new session (which would reset progress).
- * The optional `currentHint` is the building_id of the card the frontend was
- * actively displaying (via instant-swap buffering). The backend uses it as a
- * hint to return the same card the user was looking at, so refresh is seamless.
+ * The optional `currentHint` is the canonical_bld_id of the card the frontend
+ * was actively displaying (via instant-swap buffering). The backend uses it as
+ * a hint to return the same card the user was looking at, so refresh is seamless.
  * Throws on 404 (session not found) or other API errors.
  */
 export async function getSessionState(sessionId, currentHint = null) {
@@ -51,13 +51,14 @@ export async function getSessionState(sessionId, currentHint = null) {
 
 /**
  * Record a swipe action -> receive next_image.
- * client_buffer_ids is an array of building_ids the frontend has prefetched
- * in its visible queue (not yet swiped). The backend merges these into
- * session.exposed_ids before card selection so the same card is never shown twice.
+ * client_buffer_ids is an array of canonical_bld_ids the frontend has
+ * prefetched in its visible queue (not yet swiped). The backend merges these
+ * into session.exposed_ids before card selection so the same card is never
+ * shown twice.
  */
 export async function recordSwipe({ session_id, image_id, action, client_buffer_ids = [], extend = false }) {
   const result = await callApi('POST', `/analysis/sessions/${session_id}/swipes/`, {
-    building_id:       image_id,
+    canonical_bld_id:  image_id,
     action,
     idempotency_key:   `swp_${session_id}_${image_id}`,
     client_buffer_ids: client_buffer_ids,

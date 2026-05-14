@@ -26,7 +26,9 @@ function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
   const [showGallery, setShowGallery] = useState(false)
   const [imgLoaded,   setImgLoaded]   = useState(false)
   const [imgFailed,   setImgFailed]   = useState(false)
-  const imgRetried = useRef(false)
+  // Set of URLs already attempted as src (cache-bust retry + covers_by_type
+  // fallback chain). Initialized lazily inside handleImgError on first failure.
+  const imgRetried = useRef(null)
   const dragStart = useRef(null)
   const dragStartTime = useRef(null)
 
@@ -57,15 +59,31 @@ function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
   function handleImgError(e) {
     // Emit telemetry FIRST (captures original failed URL before retry mutates e.target.src)
     telemetryOnError(e)
-    if (!imgRetried.current) {
-      // Retry once with cache-busting query param
-      imgRetried.current = true
-      const sep = card.image_url.includes('?') ? '&' : '?'
-      e.target.src = card.image_url + sep + 'retry=1'
-    } else {
-      // Retry also failed -- show fallback
-      setImgFailed(true)
+    // Multi-step fallback chain for cold/warm + external-CDN flakiness (S2).
+    // Order: cache-bust retry -> covers_by_type.exterior (canonical default) ->
+    //        any other covers_by_type variant -> first gallery URL -> give up.
+    const cbt = card.covers_by_type || {}
+    const fallbackChain = [
+      cbt.exterior, cbt.interior, cbt.aerial, cbt.detail, cbt.drawing,
+      ...(card.gallery || []),
+    ].filter(u => u && typeof u === 'string')
+    if (!(imgRetried.current instanceof Set)) {
+      imgRetried.current = new Set([card.image_url])
     }
+    if (!imgRetried.current.has(card.image_url + '?retry=1')) {
+      imgRetried.current.add(card.image_url + '?retry=1')
+      const sep = (card.image_url || '').includes('?') ? '&' : '?'
+      e.target.src = (card.image_url || '') + sep + 'retry=1'
+      return
+    }
+    for (const url of fallbackChain) {
+      if (!imgRetried.current.has(url)) {
+        imgRetried.current.add(url)
+        e.target.src = url
+        return
+      }
+    }
+    setImgFailed(true)
   }
 
   function handleImgLoad(e) {
@@ -76,12 +94,16 @@ function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
   const typology   = card.metadata?.axis_typology
   const architects = card.metadata?.axis_architects
   const country    = card.metadata?.axis_country
-  const area_m2    = card.metadata?.axis_area_m2
+  const city       = card.metadata?.axis_city
   const year       = card.metadata?.axis_year
   const style      = card.metadata?.axis_style
   const atmosphere = card.metadata?.axis_atmosphere
-  const material   = card.metadata?.axis_material
-  const areaLabel  = area_m2 ? `${Number(area_m2).toLocaleString()} m²` : null
+  // canonical_v2 drops single-string `material`; expose first 2-3 of
+  // material_visual[] as a comma-joined chip instead.
+  const materialList = Array.isArray(card.metadata?.axis_material_visual)
+    ? card.metadata.axis_material_visual.slice(0, 3)
+    : []
+  const material     = materialList.length ? materialList.join(', ') : null
   const gallery         = card.gallery || []
   const drawingStart    = card.gallery_drawing_start ?? gallery.length
 
@@ -198,8 +220,8 @@ function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px', flex: 1 }}>
               <InfoRow label="Type"     value={typology} />
               <InfoRow label="Country"  value={country} />
+              <InfoRow label="City"     value={city} />
               <InfoRow label="Year"     value={year} />
-              <InfoRow label="Area"     value={areaLabel} />
               <InfoRow label="Style"      value={style} />
               <InfoRow label="Atmosphere" value={atmosphere} />
               <InfoRow label="Material" value={material} />

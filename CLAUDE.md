@@ -62,8 +62,9 @@
     (plans is for `/plan`-mode artifacts only).
 
   ## Rules
-  - All building references must use `building_id` -- never name, slug, or language-dependent field.
-  - Do NOT create or migrate the `architecture_vectors` table -- it is owned by Make DB.
+  - All building references must use `canonical_bld_id` (TEXT PK like `'bld_000344'`) -- never `name`, `slug`, or any language-dependent field.
+  - Do NOT create or migrate the `canonical_v2_buildings` table -- it is owned by Make DB.
+  - Every building query MUST gate on `is_publishable = true` (39 of 39,776 rows are non-publishable). `engine._build_filter_sql` already emits this clause; raw SQL elsewhere must add it.
   - SentenceTransformers is NOT a dependency here -- embeddings are pre-computed.
   - When updating `.claude/Report.md`, update ONLY the `Last Updated (Claude)` section.
   - **`docs/algorithm.md` reporter sync (narrow write permission)**: only the `reporter` agent updates `docs/algorithm.md`, and only to keep it in sync with implementation. Permitted writes: (a) sync the **Production Value** column in the Hyperparameter Space table when `backend/config/settings.py` RECOMMENDATION dict changes; (b) append a one-line `_(Updated YYYY-MM-DD <sha_short>: <one-line>)_` annotation under any phase / formula / edge-case section whose corresponding implementation just changed; (c) maintain a `**Last Synced (Reporter):** YYYY-MM-DD <sha_short>` line near the top. Forbidden: rewriting algorithm theory, removing existing content, adding new sections. Other `docs/` files (specs, etc.) are admin-owned plain documents — anyone can edit via PR per CONTRIBUTING.md.
@@ -110,8 +111,8 @@
   - All URL patterns must have trailing slashes -- Django APPEND_SLASH only redirects GET, not POST
   - Neon PostgreSQL: use `sslmode=require` in DATABASE_URL; psycopg2-binary (not asyncpg)
   - JWT: access=1hr, refresh=30days, rotate+blacklist (simplejwt TokenBlacklist app must be in INSTALLED_APPS)
-  - `architecture_vectors` -- read-only via raw SQL; never use Django ORM or migrate this table
-  - `images/batch/` POST -- batch-fetch building cards by `building_ids` list
+  - `canonical_v2_buildings` -- read-only via raw SQL; never use Django ORM or migrate this table. Old `architecture_vectors` table is deprecated and untouched by Make Web code.
+  - `images/batch/` POST -- batch-fetch building cards by `canonical_bld_ids` list (request body field `canonical_bld_ids`; legacy `building_ids` accepted for one rollout cycle)
   - Run: `cd backend && python3 manage.py runserver 8001`
 
   ## Claude Architect + Codex Implementer Workflow
@@ -268,9 +269,10 @@
   sequence diagram.
 
   ## Database
-  See **`docs/database-schema.md`** for the `architecture_vectors` CREATE TABLE
-  + normalized `program` vocabulary + Make-DB-ownership hard rules. Backend
-  work touching the building data layer must consult this file. Hard rules
-  (already enforced in `## Rules` above): use `building_id` only; never ORM
-  or migrate `architecture_vectors`; embeddings are pre-computed (no
+  See **`docs/database-schema.md`** for the `canonical_v2_buildings` CREATE TABLE
+  + normalized `program` vocabulary + image-resolution semantics + Make-DB-
+  ownership hard rules. Backend work touching the building data layer must
+  consult this file. Hard rules (already enforced in `## Rules` above): use
+  `canonical_bld_id` only; never ORM or migrate `canonical_v2_buildings`; gate
+  every query on `is_publishable = true`; embeddings are pre-computed (no
   SentenceTransformers runtime dep).

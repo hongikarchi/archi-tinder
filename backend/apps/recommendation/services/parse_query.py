@@ -92,15 +92,15 @@ If the user rejects your axis ("that's not my concern, I care about X"), absorb 
   "reply": <string>,
   "filters": {
     "location_country": <string or null>,
+    "location_city": <string or null>,
     "program": <string or null>,
     "material": <string or null>,
     "style": <string or null>,
     "year_min": <integer or null>,
-    "year_max": <integer or null>,
-    "min_area": <number or null>,
-    "max_area": <number or null>
+    "year_max": <integer or null>
   },
   "filter_priority": [<string>, ...],
+  "image_focus": <"exterior" | "interior" | "drawing" | "aerial" | "detail" | null>,
   "raw_query": <string>,
   "visual_description": <string>
 }
@@ -114,6 +114,19 @@ Rules:
 Housing, Office, Museum, Education, Religion, Sports, Transport, Hospitality, Healthcare, Public, Mixed Use, Landscape, Infrastructure, Other
 
 If you cannot map the user's program description to one of these, set `program: null` and let their words flow to `raw_query` / `visual_description` instead.
+
+## `image_focus` — pick the cover image the user implicitly wants
+
+Buildings have multiple cover variants (exterior, interior, drawing, aerial, detail). When the user signals which view matters, set `image_focus` to that variant; otherwise leave it `null`.
+
+Hints (Korean + English, non-exhaustive):
+- "외관", "외피", "입면", "정면", "facade", "exterior" → `"exterior"`
+- "내부", "실내", "interior", "내장", "lobby", "공간 내부" → `"interior"`
+- "도면", "평면", "단면", "plan", "section", "drawing" → `"drawing"`
+- "조감", "공중", "항공", "aerial", "drone", "bird's-eye" → `"aerial"`
+- "디테일", "근경", "detail shot", "close-up", "node" → `"detail"`
+
+When the user's intent is ambiguous, prefer `null` (the system will use the building's default cover). Do not invent a focus that the user did not request.
 
 ## Examples
 
@@ -232,16 +245,25 @@ _STAGE1_RESPONSE_SCHEMA = {
             'type': 'object',
             'properties': {
                 'location_country': {'type': 'string'},
+                'location_city': {'type': 'string'},
                 'program': {'type': 'string'},
                 'material': {'type': 'string'},
                 'style': {'type': 'string'},
                 'year_min': {'type': 'integer'},
                 'year_max': {'type': 'integer'},
-                'min_area': {'type': 'number'},
-                'max_area': {'type': 'number'},
             },
         },
         'filter_priority': {'type': 'array', 'items': {'type': 'string'}},
+        'image_focus': {
+            'type': 'string',
+            'enum': ['exterior', 'interior', 'drawing', 'aerial', 'detail'],
+            'description': (
+                'Which cover image variant best matches the user intent: '
+                'exterior (외관/입면), interior (실내/내부), drawing '
+                '(도면/평면/단면), aerial (조감/항공샷), detail (디테일/근경). '
+                'Omit when the user did not specify or it is unclear.'
+            ),
+        },
         'raw_query': {'type': 'string'},
     },
     'required': ['probe_needed', 'reply'],
@@ -367,8 +389,9 @@ def parse_query(conversation_history):
             break
 
     _empty_filters = {
-        'location_country': None, 'program': None, 'material': None, 'style': None,
-        'year_min': None, 'year_max': None, 'min_area': None, 'max_area': None,
+        'location_country': None, 'location_city': None,
+        'program': None, 'material': None, 'style': None,
+        'year_min': None, 'year_max': None,
     }
     _fallback = {
         'probe_needed': False,
@@ -376,6 +399,7 @@ def parse_query(conversation_history):
         'reply': '이해를 잘 못 했어요. 일단 이 쪽으로 찾아볼게요.',
         'filters': dict(_empty_filters),
         'filter_priority': [],
+        'image_focus': None,
         'raw_query': first_user_text,
         'visual_description': None,
     }
@@ -547,12 +571,17 @@ def parse_query(conversation_history):
         # raw_query: spec §3 says always verbatim first user message
         raw_query = data.get('raw_query') or first_user_text
 
+        image_focus = data.get('image_focus')
+        if image_focus not in ('exterior', 'interior', 'drawing', 'aerial', 'detail'):
+            image_focus = None
+
         result = {
             'probe_needed': probe_needed,
             'probe_question': data.get('probe_question') if probe_needed else None,
             'reply': data.get('reply', ''),
             'filters': filters,
             'filter_priority': filter_priority,
+            'image_focus': image_focus,
             'raw_query': raw_query,
             'visual_description': data.get('visual_description'),
         }
@@ -619,8 +648,9 @@ def parse_query_stage1(conversation_history):
             break
 
     _empty_filters = {
-        'location_country': None, 'program': None, 'material': None, 'style': None,
-        'year_min': None, 'year_max': None, 'min_area': None, 'max_area': None,
+        'location_country': None, 'location_city': None,
+        'program': None, 'material': None, 'style': None,
+        'year_min': None, 'year_max': None,
     }
     _fallback = {
         'probe_needed': False,
@@ -628,6 +658,7 @@ def parse_query_stage1(conversation_history):
         'reply': '이해를 잘 못 했어요. 일단 이 쪽으로 찾아볼게요.',
         'filters': dict(_empty_filters),
         'filter_priority': [],
+        'image_focus': None,
         'raw_query': first_user_text,
         'visual_description': None,
     }
@@ -781,12 +812,17 @@ def parse_query_stage1(conversation_history):
         # raw_query: spec §3 says always verbatim first user message
         raw_query = data.get('raw_query') or first_user_text
 
+        image_focus = data.get('image_focus')
+        if image_focus not in ('exterior', 'interior', 'drawing', 'aerial', 'detail'):
+            image_focus = None
+
         return {
             'probe_needed': probe_needed,
             'probe_question': data.get('probe_question') if probe_needed else None,
             'reply': data.get('reply', ''),
             'filters': filters,
             'filter_priority': filter_priority,
+            'image_focus': image_focus,
             'raw_query': raw_query,
             'visual_description': None,  # Stage 2 generates this asynchronously
         }

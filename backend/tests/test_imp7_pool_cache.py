@@ -52,16 +52,16 @@ def _make_raw_embedding(seed=42, dim=384):
 def _make_cursor_for_ids(id_to_seed):
     """Build a mock cursor that returns embedding rows for the given {bid: seed} dict."""
     rows_data = [
-        {'building_id': bid, 'embedding': _make_embedding_str(seed)}
+        {'canonical_bld_id': bid, 'embedding': _make_embedding_str(seed)}
         for bid, seed in id_to_seed.items()
     ]
     cursor = MagicMock()
     cursor.__enter__ = lambda s: s
     cursor.__exit__ = MagicMock(return_value=False)
     # description + fetchall for _dictfetchall
-    cursor.description = [('building_id',), ('embedding',)]
+    cursor.description = [('canonical_bld_id',), ('embedding',)]
     cursor.fetchall.return_value = [
-        (row['building_id'], row['embedding']) for row in rows_data
+        (row['canonical_bld_id'], row['embedding']) for row in rows_data
     ]
     return cursor, rows_data
 
@@ -305,7 +305,7 @@ class TestL2Normalization:
         cursor = MagicMock()
         cursor.__enter__ = lambda s: s
         cursor.__exit__ = MagicMock(return_value=False)
-        cursor.description = [('building_id',), ('embedding',)]
+        cursor.description = [('canonical_bld_id',), ('embedding',)]
         cursor.fetchall.return_value = [('B00099', raw_str)]
 
         with patch('apps.recommendation.engine.connection') as mock_conn:
@@ -322,7 +322,7 @@ class TestL2Normalization:
         cursor = MagicMock()
         cursor.__enter__ = lambda s: s
         cursor.__exit__ = MagicMock(return_value=False)
-        cursor.description = [('building_id',), ('embedding',)]
+        cursor.description = [('canonical_bld_id',), ('embedding',)]
         cursor.fetchall.return_value = [('B00000', zero_str)]
 
         with patch('apps.recommendation.engine.connection') as mock_conn:
@@ -353,7 +353,7 @@ class TestCacheBoundFIFO:
             cursor = MagicMock()
             cursor.__enter__ = lambda s: s
             cursor.__exit__ = MagicMock(return_value=False)
-            cursor.description = [('building_id',), ('embedding',)]
+            cursor.description = [('canonical_bld_id',), ('embedding',)]
             cursor.fetchall.return_value = [(bid, _make_embedding_str(seed=i))]
             with patch('apps.recommendation.engine.connection') as mock_conn:
                 mock_conn.cursor.return_value = cursor
@@ -379,7 +379,7 @@ class TestCacheBoundFIFO:
             cursor = MagicMock()
             cursor.__enter__ = lambda s: s
             cursor.__exit__ = MagicMock(return_value=False)
-            cursor.description = [('building_id',), ('embedding',)]
+            cursor.description = [('canonical_bld_id',), ('embedding',)]
             cursor.fetchall.return_value = [(bid, _make_embedding_str(seed=i))]
             with patch('apps.recommendation.engine.connection') as mock_conn:
                 mock_conn.cursor.return_value = cursor

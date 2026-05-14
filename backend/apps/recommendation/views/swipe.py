@@ -109,8 +109,8 @@ def _async_prefetch_thread(
             prefetch_card = engine.get_building_card(pf_id) if pf_id else None
 
         # Compute prefetch_card_2 (round+2 equivalent)
-        if prefetch_card and prefetch_card.get('building_id') != '__action_card__':
-            temp_exposed = exposed_ids_snap + [prefetch_card['building_id']]
+        if prefetch_card and prefetch_card.get('canonical_bld_id') != '__action_card__':
+            temp_exposed = exposed_ids_snap + [prefetch_card['canonical_bld_id']]
             if phase == 'exploring':
                 exposed_set_2 = set(temp_exposed)
                 if current_round_snap + 2 < len(initial_batch_snap):
@@ -131,8 +131,8 @@ def _async_prefetch_thread(
                 prefetch_card_2 = engine.get_building_card(pf2_id) if pf2_id else None
 
         result = {
-            'prefetch_card_id': prefetch_card.get('building_id') if prefetch_card else None,
-            'prefetch_card_2_id': prefetch_card_2.get('building_id') if prefetch_card_2 else None,
+            'prefetch_card_id': prefetch_card.get('canonical_bld_id') if prefetch_card else None,
+            'prefetch_card_2_id': prefetch_card_2.get('canonical_bld_id') if prefetch_card_2 else None,
             'computed_at': timezone.now().isoformat(),
         }
         cache_key = f'prefetch:{session_id}:{cache_round}'
@@ -161,11 +161,15 @@ class BuildingBatchView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        ids = request.data.get('building_ids', [])
+        # Accept either canonical_bld_ids (new) or building_ids (legacy).
+        ids = request.data.get('canonical_bld_ids') or request.data.get('building_ids') or []
         if not ids:
             return Response([])
         if not isinstance(ids, list) or len(ids) > 200:
-            return Response({'detail': 'building_ids must be a list of at most 200 items'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'detail': 'canonical_bld_ids must be a list of at most 200 items'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         cards = engine.get_buildings_by_ids(ids)
         return Response(cards)
 
@@ -329,7 +333,9 @@ class SwipeView(APIView):
         if session.status == 'completed':
             return Response({'detail': 'Session already completed'}, status=status.HTTP_400_BAD_REQUEST)
 
-        building_id     = request.data.get('building_id')
+        # Accept both 'canonical_bld_id' (new) and 'building_id' (legacy) for one
+        # frontend rollout cycle. Treat both identically; pick whichever is set.
+        canonical_bld_id = request.data.get('canonical_bld_id') or request.data.get('building_id')
         action          = request.data.get('action')
         idempotency_key = request.data.get('idempotency_key', '')
 
@@ -347,8 +353,8 @@ class SwipeView(APIView):
 
         extend_requested = bool(request.data.get('extend', False))
 
-        if not extend_requested and not building_id:
-            return Response({'detail': 'building_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        if not extend_requested and not canonical_bld_id:
+            return Response({'detail': 'canonical_bld_id is required'}, status=status.HTTP_400_BAD_REQUEST)
         if not extend_requested and action not in ('like', 'dislike'):
             return Response({'detail': 'action must be like or dislike'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -394,7 +400,7 @@ class SwipeView(APIView):
                 )
                 next_card = engine.get_building_card(next_card_id) if next_card_id else None
                 if next_card:
-                    session.exposed_ids = session.exposed_ids + [next_card['building_id']]
+                    session.exposed_ids = session.exposed_ids + [next_card['canonical_bld_id']]
 
                 session.save(update_fields=[
                     'extended_rounds', 'phase', 'convergence_history', 'previous_pref_vector',
@@ -437,7 +443,7 @@ class SwipeView(APIView):
             _mark('lock_acquired')
 
             # 1. Get embedding and update preference vector
-            embedding = engine.get_building_embedding(building_id)
+            embedding = engine.get_building_embedding(canonical_bld_id)
             _mark('embed_done')
             if embedding:
                 session.preference_vector = engine.update_preference_vector(
@@ -446,7 +452,7 @@ class SwipeView(APIView):
 
             # 2. Record swipe
             SwipeEvent.objects.create(
-                session=session, building_id=building_id,
+                session=session, canonical_bld_id=canonical_bld_id,
                 action=action, idempotency_key=idempotency_key,
             )
 
@@ -454,7 +460,7 @@ class SwipeView(APIView):
             project = session.project
             if action == 'like':
                 existing_ids = _liked_id_only(project.liked_ids)
-                if building_id not in existing_ids:
+                if canonical_bld_id not in existing_ids:
                     # Default intensity 1.0 for plain Like. Love (intensity 1.8) lands in Sprint 3 A-1
                     # when the frontend wires up the up-swipe gesture; for now all backend writes
                     # use 1.0 unless the request explicitly carries an intensity field (future-proofing).
@@ -464,13 +470,13 @@ class SwipeView(APIView):
                     except (TypeError, ValueError):
                         intensity = 1.0
                     intensity = max(0.0, min(2.0, intensity))
-                    project.liked_ids = project.liked_ids + [{'id': building_id, 'intensity': intensity}]
+                    project.liked_ids = project.liked_ids + [{'id': canonical_bld_id, 'intensity': intensity}]
                 # Append to session.like_vectors
                 if embedding:
                     session.like_vectors = session.like_vectors + [{'embedding': embedding, 'round': session.current_round}]
             else:
-                if building_id not in project.disliked_ids:
-                    project.disliked_ids = project.disliked_ids + [building_id]
+                if canonical_bld_id not in project.disliked_ids:
+                    project.disliked_ids = project.disliked_ids + [canonical_bld_id]
             project.save(update_fields=['liked_ids', 'disliked_ids'])
 
             # 4. Increment round
@@ -722,7 +728,7 @@ class SwipeView(APIView):
 
             # ── Phase 2: single batch DB call (1 RTT for next + pf + pf2) ────
             _fetch_ids = [bid for bid in [next_bid, pf_bid, pf2_bid] if bid]
-            _fetched = {c['building_id']: c for c in engine.get_buildings_by_ids(_fetch_ids)}
+            _fetched = {c['canonical_bld_id']: c for c in engine.get_buildings_by_ids(_fetch_ids)}
             next_card       = _fetched.get(next_bid)
             prefetch_card   = _fetched.get(pf_bid)   if pf_bid   else None
             prefetch_card_2 = _fetched.get(pf2_bid)  if pf2_bid  else None
@@ -749,7 +755,7 @@ class SwipeView(APIView):
                 _intensity = 1.0
         _rank_in_pool = None
         try:
-            _rank_in_pool = session.pool_ids.index(building_id)
+            _rank_in_pool = session.pool_ids.index(canonical_bld_id)
         except (ValueError, AttributeError):
             pass
         # IMP-7 §6 swipe telemetry extensions
@@ -782,7 +788,7 @@ class SwipeView(APIView):
         # Build telemetry kwargs and fire off background thread.
         # Keeps ~4 Neon DB round-trips (~1200ms) off the response path.
         _swipe_telem = dict(
-            session=session, user=profile, direction=action, card_id=building_id,
+            session=session, user=profile, direction=action, card_id=canonical_bld_id,
             intensity=_intensity, rank_in_pool=_rank_in_pool,
             timing_breakdown=_timing_breakdown, idempotency_key=idempotency_key,
             cache_hit=_cache_misses == 0,

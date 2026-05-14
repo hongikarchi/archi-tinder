@@ -90,17 +90,17 @@ class SwipeEvent(models.Model):
         ('like',    'Like'),
         ('dislike', 'Dislike'),
     ]
-    session         = models.ForeignKey(AnalysisSession, on_delete=models.CASCADE, related_name='swipes')
-    building_id     = models.CharField(max_length=20)
-    action          = models.CharField(max_length=10, choices=ACTION_CHOICES)
-    idempotency_key = models.CharField(max_length=100, db_index=True)
-    created_at      = models.DateTimeField(auto_now_add=True)
+    session          = models.ForeignKey(AnalysisSession, on_delete=models.CASCADE, related_name='swipes')
+    canonical_bld_id = models.CharField(max_length=20)
+    action           = models.CharField(max_length=10, choices=ACTION_CHOICES)
+    idempotency_key  = models.CharField(max_length=100, db_index=True)
+    created_at       = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         unique_together = [('session', 'idempotency_key')]
 
     def __str__(self):
-        return f'{self.action} {self.building_id}'
+        return f'{self.action} {self.canonical_bld_id}'
 
 
 class SessionEvent(models.Model):
