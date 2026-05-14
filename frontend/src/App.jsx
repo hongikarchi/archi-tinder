@@ -1,9 +1,7 @@
 import { useState, useEffect, useRef, Component } from 'react'
 import { Routes, Route, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom'
-import { resolveProjectBackendId } from './utils/resolveProjectBackendId.js'
 import MainLayout from './layouts/MainLayout.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
-import SetupPage from './pages/SetupPage.jsx'
 import ProjectSetupPage from './pages/ProjectSetupPage.jsx'
 import LLMSearchPage from './pages/LLMSearchPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
@@ -94,6 +92,47 @@ function LLMSearchUpdateWrapper({ wizardData, onBack, onStart, onUpdate }) {
   )
 }
 
+/* ── Discovery placeholder (S7 will ship the real infinite-scroll feed) ───── */
+function DiscoveryPlaceholder({ onStart }) {
+  return (
+    <div style={{
+      height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+      background: 'var(--color-bg)',
+      display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      gap: 14, padding: 24,
+    }}>
+      <h1 style={{
+        fontSize: 28, fontWeight: 700, margin: 0, letterSpacing: '-0.01em',
+        textAlign: 'center',
+      }}>
+        <span style={{ color: 'var(--color-text)' }}>Archi</span>
+        <span style={{ color: '#ec4899' }}>Tinder</span>
+      </h1>
+      <p style={{ color: 'var(--color-text-dim)', fontSize: 14, margin: 0, textAlign: 'center' }}>
+        Discovery feed coming soon
+      </p>
+      <p style={{
+        color: 'var(--color-text-dimmer)', fontSize: 12, margin: 0,
+        textAlign: 'center', maxWidth: 320, lineHeight: 1.5,
+      }}>
+        Browse curated architecture by taste. For now, start a new taste analysis to build your persona.
+      </p>
+      <button
+        onClick={onStart}
+        style={{
+          marginTop: 6, padding: '12px 28px', borderRadius: 12,
+          background: 'linear-gradient(135deg,#ec4899,#f43f5e)',
+          color: '#fff', fontSize: 14, fontWeight: 600,
+          border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+        }}
+      >
+        Start Taste Analysis →
+      </button>
+    </div>
+  )
+}
+
 /* ── App ─────────────────────────────────────────────────────────────────── */
 export default function App() {
   const navigate = useNavigate()
@@ -101,7 +140,6 @@ export default function App() {
 
   const [theme, setTheme] = useState(() => localStorage.getItem('archithon_theme') || 'dark')
   const [userId, setUserId] = useState(() => sessionStorage.getItem('archithon_user') || null)
-  const [setupKey, setSetupKey] = useState(0)
   const [wizardData, setWizardData] = useState(null)
 
   const [currentCard, setCurrentCard] = useState(null)
@@ -111,7 +149,6 @@ export default function App() {
   const [isSwipeLoading, setIsSwipeLoading] = useState(false)
   const imagePreloadCache = useRef(new Set())
   const [isSessionCompleted, setIsSessionCompleted] = useState(false)
-  const [isSyncing, setIsSyncing] = useState(false)
   const [isResultLoading, setIsResultLoading] = useState(false)
   const [swipeError, setSwipeError] = useState(null)
   const [activeProjectId, setActiveProjectId] = useState(() => {
@@ -504,16 +541,6 @@ export default function App() {
     }
   }
 
-  async function handleResumeProject(id) {
-    const project = projects.find(p => p.id === id)
-    if (!project) return
-    setWizardData(null)
-    setActiveProjectId(id)
-    navigate('/swipe')
-    // Try to resume the stored session, fall back to new session on failure
-    await initSession(id, project.filters, [], [], project.sessionId || null)
-  }
-
   async function handleUpdateWithImages(id, preloadedImages, llmFilters = {}, filterPriority = [], visualDescription = null) {
     const project = projects.find(p => p.id === id)
     if (!project) return
@@ -523,64 +550,6 @@ export default function App() {
     setProjects(prev => prev.map(p => p.id === id ? { ...p, deckImages: preloadedImages } : p))
     navigate('/swipe')
     await initSession(id, llmFilters || project.filters, filterPriority, seedIds, null, null, visualDescription)
-  }
-
-  function handleDeleteProject(id) {
-    const project = projects.find(p => p.id === id)
-    if (project?.backendId) {
-      api.deleteProject(project.backendId).catch(() => { })
-    }
-    setProjects(prev => prev.filter(p => p.id !== id))
-    if (activeProjectId === id) {
-      setActiveProjectId(null)
-      setCurrentCard(null)
-      setSessionProgress(null)
-      setIsSessionCompleted(false)
-      navigate('/')
-    }
-  }
-
-  async function handleGenerateReport(projectId) {
-    const project = projects.find(p => p.id === projectId)
-    const backendId = resolveProjectBackendId(project)
-    if (!backendId) return
-    const { final_report } = await api.generateReport(backendId)
-    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, finalReport: final_report } : p))
-  }
-
-  function handleImageGenerated(projectId, imageData) {
-    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, reportImage: imageData } : p))
-  }
-
-  async function handleToggleBookmark(projectId, cardId, action, rank) {
-    const project = projects.find(p => p.id === projectId)
-    if (!project) return
-    const backendId = resolveProjectBackendId(project)
-    if (!backendId) return
-
-    // Optimistic update
-    setProjects(prev => prev.map(p => {
-      if (p.id !== projectId) return p
-      const current = p.savedIds || []
-      const next = action === 'save'
-        ? [...new Set([...current, cardId])]
-        : current.filter(id => id !== cardId)
-      return { ...p, savedIds: next }
-    }))
-
-    try {
-      await api.bookmarkBuilding(backendId, cardId, action, rank, project.sessionId || null)
-    } catch {
-      // Revert optimistic update on error
-      setProjects(prev => prev.map(p => {
-        if (p.id !== projectId) return p
-        const current = p.savedIds || []
-        const reverted = action === 'save'
-          ? current.filter(id => id !== cardId)
-          : [...new Set([...current, cardId])]
-        return { ...p, savedIds: reverted }
-      }))
-    }
   }
 
   async function handleLogin(user) {
@@ -598,7 +567,6 @@ export default function App() {
     navigate('/')
 
     // Sync projects from backend (if JWT available)
-    setIsSyncing(true)
     try {
       const { results: backendProjects } = await api.listProjects()
       if (backendProjects.length > 0) {
@@ -627,8 +595,6 @@ export default function App() {
       }
     } catch {
       // Project sync failed -- falling back to localStorage
-    } finally {
-      setIsSyncing(false)
     }
     setProjects(JSON.parse(localStorage.getItem(`archithon_projects_${id}`) || '[]'))
     setActiveProjectId(localStorage.getItem(`archithon_activeId_${id}`) || null)
@@ -656,8 +622,6 @@ export default function App() {
     onToggleTheme: toggleTheme,
     userId,
     onLogout: handleLogout,
-    projects,
-    isSyncing,
     activeProject,
     activeProjectId,
     currentCard,
@@ -671,11 +635,6 @@ export default function App() {
       if (activeProject?.sessionId) navigate('/result/' + activeProject.sessionId)
       else navigate('/user/me')
     },
-    onResumeProject: handleResumeProject,
-    onDeleteProject: handleDeleteProject,
-    onGenerateReport: handleGenerateReport,
-    onImageGenerated: handleImageGenerated,
-    onToggleBookmark: handleToggleBookmark,
   }
 
   return (
@@ -690,25 +649,11 @@ export default function App() {
             <MainLayout {...sharedLayoutProps} />
           </ProtectedRoute>
         }>
-          <Route index element={
-            <SetupPage
-              key={setupKey}
-              projects={projects}
-              isSyncing={isSyncing}
-              onResume={handleResumeProject}
-              onNavigateNew={() => {
-                setSetupKey(k => k + 1)
-                navigate('/new')
-              }}
-              onNavigateUpdate={(id, name) => {
-                setWizardData({ projectId: id, projectName: name })
-                navigate('/search/' + id)
-              }}
-            />
-          } />
+          <Route index element={<Navigate to="/discovery" replace />} />
+          <Route path="discovery" element={<DiscoveryPlaceholder onStart={() => navigate('/new')} />} />
           <Route path="new" element={
             <ProjectSetupPage
-              onBack={() => navigate('/')}
+              onBack={() => navigate('/discovery')}
               onNext={({ projectName, minArea, maxArea, visibility }) => {
                 setWizardData({ projectName, minArea, maxArea, visibility })
                 navigate('/search')

@@ -101,7 +101,9 @@
 - [2026-05-14] BACK-BLOCKED: s3-swipe-end-flow-back-fix2 — required verification failed twice (`cd backend && python3 -m pytest tests/test_confidence.py tests/test_imp7_pool_cache.py tests/test_imp8_async_prefetch.py tests/test_sessions.py 2>&1 | tail -3` reports 62 errors and failing tests in `tests/test_sessions.py`), and backend-wide `__action_card__` grep still returns residual matches outside edited test files (`backend/tests/test_sessions.py`, `backend/apps/recommendation/views/swipe.py`).
 - [2026-05-14] REVIEW-PASSED: fd871d3 — drift checks passed, 6 MINOR noted (see .claude/reviews/latest.md); run `git push` manually from this terminal
 - [2026-05-14] REVIEW-PASSED: 2936fc2 — drift checks passed, 6 MINOR noted (see .claude/reviews/latest.md); run `git push` manually from this terminal
----
+- [2026-05-14] PR-OPENED: #29 — feature/admin-s5-library-to-profile → develop, 1 commits (7143588 "feat(s5): absorb /library into Profile (replan Issue 3)"), CI running. URL: https://github.com/hongikarchi/archi-tinder/pull/29. /review skipped per Rule 2 (frontend dead-code removal + route redirects; front-validate.sh PASS in WEB-MAIN; no algorithm/contract change).
+- [2026-05-14] PR-CI-GREEN: #29 — Backend 2m8s, Frontend 11s, Vercel + comments all SUCCESS.
+- [2026-05-14] PR-MERGED: #29 — squashed into develop (7f225c2) via `gh pr merge 29 --squash --admin` (no --delete-branch). Mode 1 step 7 clean: stash → merge → `gh api -X DELETE refs/heads/feature/admin-s5-library-to-profile` HTTP 204 → checkout develop → pull (fast-forward a5edff5..7f225c2, 7 files +220/-191) → branch -D → fetch --prune → stash pop. S5 (absorb /library into Profile per replan Issue 3) live on develop.
 
 ## Development Roadmap
 

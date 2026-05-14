@@ -77,9 +77,9 @@ export default function MainLayout({
             <span style={{ color: 'var(--color-text)' }}>Archi</span>
             <span style={{ color: '#ec4899' }}>Tinder</span>
           </p>
-          <p style={{ color: 'var(--color-text-dimmer)', fontSize: 13 }}>Create a new session from the Home tab</p>
+          <p style={{ color: 'var(--color-text-dimmer)', fontSize: 13 }}>Start a taste analysis to begin swiping</p>
           <button
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/new')}
             style={{
               marginTop: 8, padding: '12px 28px', borderRadius: 12,
               background: 'linear-gradient(135deg,#ec4899,#f43f5e)',
@@ -87,7 +87,7 @@ export default function MainLayout({
               border: 'none', cursor: 'pointer', fontFamily: 'inherit',
             }}
           >
-            Go to Home
+            Start Taste Analysis
           </button>
         </div>
       )}
