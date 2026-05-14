@@ -127,9 +127,10 @@ class SessionCreateView(APIView):
         if not initial_batch:
             initial_batch = pool_ids[:1]
 
-        first_card = engine.get_building_card(initial_batch[0])
-        prefetch_card = engine.get_building_card(initial_batch[1]) if len(initial_batch) > 1 else None
-        prefetch_card_2 = engine.get_building_card(initial_batch[2]) if len(initial_batch) > 2 else None
+        _initial_cards = engine.get_buildings_by_ids(initial_batch[:3])
+        first_card      = _initial_cards[0] if len(_initial_cards) > 0 else None
+        prefetch_card   = _initial_cards[1] if len(_initial_cards) > 1 else None
+        prefetch_card_2 = _initial_cards[2] if len(_initial_cards) > 2 else None
 
         session = AnalysisSession.objects.create(
             user                     = profile,

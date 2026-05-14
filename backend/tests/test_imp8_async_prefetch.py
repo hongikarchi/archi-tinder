@@ -75,6 +75,39 @@ class _NoopThread:
         pass
 
 
+# Import after class definitions to avoid circular-import issues at parse time.
+def _get_async_prefetch_fn():
+    from apps.recommendation.views import _async_prefetch_thread
+    return _async_prefetch_thread
+
+
+class _DiscThread:
+    """Discriminating thread: suppresses _async_prefetch_thread (unsafe in tests),
+    runs all other targets (e.g. telemetry) synchronously so test transaction
+    sees the DB writes immediately.
+    """
+    def __init__(self, target=None, args=(), daemon=None, **kw):
+        self._target = target
+        self._args = args
+
+    def start(self):
+        if self._target is _get_async_prefetch_fn():
+            return  # suppress — would close test DB connection
+        if self._target:
+            self._target(*self._args)
+
+    def join(self, timeout=None):
+        pass
+
+
+def _sync_emit_telemetry(swipe_kwargs, confidence_kwargs):
+    """_emit_telemetry_thread replacement: run emits synchronously, no DB close."""
+    from apps.recommendation import event_log
+    event_log.emit_swipe_event(**swipe_kwargs)
+    if confidence_kwargs is not None:
+        event_log.emit_event('confidence_update', **confidence_kwargs)
+
+
 def _create_session_and_project(user_profile, pool_size=10):
     """Create a Project + AnalysisSession for swipe tests."""
     from apps.recommendation.models import Project, AnalysisSession
@@ -127,6 +160,9 @@ def _base_engine_patches(pool_ids):
             'requested': 10, 'cache_hits': 10, 'cache_misses': 0,
         },
         f'{_ENGINE}.get_last_clustering_stats': lambda: None,
+        # Telemetry thread patches: run synchronously so test transaction sees DB writes.
+        'apps.recommendation.views.swipe._emit_telemetry_thread': _sync_emit_telemetry,
+        'apps.recommendation.views.threading.Thread': _DiscThread,
     }
 
 
@@ -181,8 +217,8 @@ class TestFlagGating:
         assert data['accepted'] is True
         # Sync path: prefetch_image should be a card dict (not None)
         assert data['prefetch_image'] is not None
-        # No bg thread spawned
-        assert len(spawned) == 0, 'Thread should NOT be spawned when flag is OFF'
+        # Only the telemetry thread is spawned; no async prefetch thread when flag is OFF
+        assert len(spawned) == 1, 'Only telemetry thread spawned when async prefetch flag is OFF'
 
     def test_flag_on_async_path_prefetch_null(self, auth_client, user_profile, settings):
         """With async_prefetch_enabled=True, primary response has null prefetches."""
@@ -219,8 +255,8 @@ class TestFlagGating:
         assert data['prefetch_image_2'] is None, (
             f'Expected None for prefetch_image_2 in async path, got {data["prefetch_image_2"]}'
         )
-        # A bg thread was spawned
-        assert len(spawned_threads) == 1, 'Exactly one Thread should be spawned when flag is ON'
+        # Async prefetch thread + telemetry thread both spawned when flag is ON
+        assert len(spawned_threads) == 2, 'Async prefetch + telemetry threads spawned when flag is ON'
 
     def test_flag_on_prefetch_strategy_async_thread_in_event(self, auth_client, user_profile, settings):
         """With flag ON, swipe event has prefetch_strategy='async-thread'."""
@@ -230,9 +266,10 @@ class TestFlagGating:
         patchers = _apply_patches(_base_engine_patches(pool_ids))
 
         try:
+            # _DiscThread: suppresses async prefetch (unsafe), runs telemetry synchronously.
             thread_patcher = patch(
                 'apps.recommendation.views.threading.Thread',
-                side_effect=lambda *a, **kw: _NoopThread(*a, **kw),
+                side_effect=lambda *a, **kw: _DiscThread(*a, **kw),
             )
             thread_patcher.start()
             patchers.append(thread_patcher)
@@ -707,7 +744,7 @@ class TestBackwardCompat:
         finally:
             _stop_patches(patchers)
 
-        assert len(spawned) == 0, 'threading.Thread must NOT be called when flag is OFF'
+        assert len(spawned) == 1, 'Only telemetry thread spawned; no async prefetch thread when flag is OFF'
 
     def test_flag_off_no_cache_write(self, auth_client, user_profile):
         """No cache entries are written when flag is OFF."""

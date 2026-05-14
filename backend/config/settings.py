@@ -128,6 +128,10 @@ CORS_ALLOW_CREDENTIALS = True
 CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        # Default MAX_ENTRIES=300 thrashes with ~150-card pools per session;
+        # bump to 2000 (~13 concurrent sessions × 150 building-card payloads).
+        # Re-tune when swapping in Redis for prod.
+        'OPTIONS': {'MAX_ENTRIES': 2000},
     }
 }
 
@@ -187,6 +191,10 @@ RECOMMENDATION = {
     # IMP-8 (Spec v1.6 §11.1): async prefetch background thread
     'async_prefetch_enabled': False,                   # default OFF for safe rollout; flip True after Redis wired in prod
     'async_prefetch_cache_timeout_seconds': 60,        # Django cache TTL for prefetch entries (seconds)
+    # Per-card LRU TTL (PR #22 absorb): cache.get/set under 'bcard:<id>' keys.
+    # 3600s default keeps building-card payloads warm across requests without
+    # going stale relative to Make DB updates.
+    'card_cache_ttl': 3600,
     # IMP-5 (Spec v1.5 §11.1): Gemini explicit context caching for _CHAT_PHASE_SYSTEM_PROMPT
     'context_caching_enabled': False,                  # default OFF; flip True only after Redis cache backend is wired
     'context_caching_ttl_seconds': 3600,               # Gemini cache TTL; also used as Django cache TTL for resource name
