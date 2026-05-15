@@ -49,10 +49,16 @@ def _get_or_create_user(provider, provider_id, email, display_name, avatar_url):
             avatar_url=avatar_url,
         )
     else:
-        # Update display name / avatar if blank
-        if not profile.display_name and display_name:
+        # Always sync display_name + avatar_url from the provider on every login
+        update_fields = []
+        if display_name:
             profile.display_name = display_name
-            profile.save(update_fields=['display_name'])
+            update_fields.append('display_name')
+        if avatar_url:
+            profile.avatar_url = avatar_url
+            update_fields.append('avatar_url')
+        if update_fields:
+            profile.save(update_fields=update_fields)
 
     SocialAccount.objects.get_or_create(
         provider=provider,
