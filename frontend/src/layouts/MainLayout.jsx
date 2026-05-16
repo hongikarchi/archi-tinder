@@ -9,6 +9,7 @@ export default function MainLayout({
   activeProject, activeProjectId,
   currentCard, cardResetToken, sessionProgress, isSessionCompleted, isSwipeLoading, isResultLoading,
   onSwipe, onViewResults, onExtendSession,
+  onExitToNewProject, onExitToHome,
 }) {
   const location = useLocation()
   const navigate = useNavigate()
@@ -64,6 +65,8 @@ export default function MainLayout({
           onSwipe={onSwipe}
           onViewResults={onViewResults}
           onExtendSession={onExtendSession}
+          onExitToNewProject={onExitToNewProject}
+          onExitToHome={onExitToHome}
         />
       </div>
 

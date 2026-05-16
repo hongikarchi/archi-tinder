@@ -485,48 +485,23 @@ flowchart LR
 
 ## Last Updated (Claude)
 - **Date:** 2026-05-16
-- **Commit:** `97127f1` (PR #39 — docs: P1 perf-ux-overhaul delegation HARD RULE + caveman git text; squashed into develop). Also absorbed: `5fcfd3d` (PR #37 — fix(deploy-hotfix): /user/me 500, drawing crop on Discovery, title clip).
+- **Commit:** `9c7d513` (PR #40 — perf: P2 latency — N+1 batch fetch + ring buffer instrumentation; squashed into develop). Bundled: `7d9f306` (reporter P1 session-end housekeeping), `e1fda98` (SESSION-START-TODO for P2).
 - **Changes:**
-  - P1 perf-ux-overhaul: `CLAUDE.md` gains "Implementation delegation — HARD RULE" bullet (WEB-MAIN never writes backend/frontend feature code directly; delegates to orchestrator/back-maker/front-maker/codex; carve-out for meta/infra/docs). `.claude/WORKFLOW.md` `## Key rules` gains matching row. `.claude/agents/git-manager.md`, `.claude/agents/git-publisher.md`, `.claude/agents/reporter.md` updated to emit caveman-terse git text (commit msgs, PR bodies, handoff signals). git-publisher registration confirmed present — non-bug.
-  - Hotfix bundle (PR #37 / 5fcfd3d): `/api/v1/users/me/` 500 fix, Discovery page drawing crop fix, card title clip fix.
-  - Remaining perf-ux-overhaul phases (P2 Latency, P3 Swipe UX, P4 Building detail, P5/P6 Boards edit) untouched — next-session work.
-- **Files changed (PR #39):**
-  - `CLAUDE.md` +17 (delegation HARD RULE bullet)
-  - `.claude/WORKFLOW.md` +1 (matching Key rules row)
-  - `.claude/agents/git-manager.md` +11/-3 (caveman step 4)
-  - `.claude/agents/git-publisher.md` +8 (caveman global rule)
-  - `.claude/agents/reporter.md` +5 (caveman step 5)
-- **Files changed (PR #37, hotfix bundle):** 16 files +1150/-680 (SwipeCard.jsx new, purge_legacy_projects.py new, /user/me 500 fix, Discovery crop fix, title clip, profile pagination)
-  - **S8** (this commit on `feature/admin-s8-roadmap-sweep`) — spec/roadmap sweep: `docs/specs/phase16-recommendation-expansion.md` rewritten (Landing tab deprecated → Profile-button surface; endpoint shape changed), `docs/specs/phase17-llm-reverse-q.md` Q6 RESOLVED annotation (Option A pre-swipe), `docs/specs/phase18-external-connections.md` Goal.md path fix, `docs/specs/requirements.md` canonical_bld_id + canonical_v2_buildings + is_publishable rule swap, `.claude/Goal.md` § 7 Phase 16-19 rows + § 11 checklist tick + v3 history entry, `.claude/Task.md` Roadmap S3-S8 marked COMPLETED + Phase 16/17/18 sweep annotations + Handoffs trimmed 62→30 (32 archived to `.claude/handoffs-archive/2026-05.md` "Archived 2026-05-14 S8 sweep" section), 3 stale remote branches deleted (`feat/sj-0512-dbspeed` + `feat/sj-0513-errorfix` + `phase-5-polish-tests`; PR #22 + #23 already absorbed).
-- **Branch hygiene post-S8:** remote heads = `main` (c231c59 = pre-deploy gap), `develop` (b7d39b2 + S8 pending), `feature/sns-profile-system` (b0a00f9 — 유예원 unintegrated work, preserved per admin decision 2026-05-14; comparison vs develop S5-S7 deferred). Deploy PR develop → main scheduled next.
-- **Summary:** Full S1-S8 replan landed; Make Web cutover to Make DB's new `canonical_v2_buildings` 31-col / 39,776-row table is complete; tab structure now 3-tab (Discovery / Taste / Profile); Phase 16-18 specs reconciled with the new tab world. algorithm.md sync NOT applicable (no RECOMMENDATION dict changes this session window; production hyperparameters unchanged).
-
-```mermaid
-graph LR
-    subgraph S2["S2 canonical_v2_buildings cutover"]
-        engine[engine.py raw-SQL\nis_publishable + canonical_bld_id]:::core
-        parse[parse_query.py\nimage_focus enum]:::core
-        mig[migration 0018\nSwipeEvent rename]:::core
-        front_api[frontend/api\nnormalizeCard + cover fallback]:::core
-    end
-    subgraph Tabs["S5-S7 Tab 3-Structure"]
-        s5[S5 Library→Profile]:::ui
-        s6[S6 4→3 tab cutover]:::ui
-        s7[S7 Discovery tab]:::ui
-    end
-    subgraph Docs["S8 spec sweep"]
-        ph16[phase16: Landing→Profile-button]:::doc
-        ph17[phase17: Q6 RESOLVED]:::doc
-        req[requirements.md\ncanonical_bld_id swap]:::doc
-        goal[Goal.md v3]:::doc
-    end
-
-    S2 --> Tabs --> Docs
-
-    classDef core fill:#10b981,color:#fff
-    classDef ui fill:#3b82f6,color:#fff
-    classDef doc fill:#f59e0b,color:#000
-```
+  - P2 latency: `backend/apps/recommendation/views/sessions.py` `SessionResultView.liked_cards` — N+1 `[engine.get_building_card(bid) for bid in liked_ids]` replaced with batch `engine.get_buildings_by_ids(liked_ids)` (cache-aware, IN-query for misses, preserves order, `is_publishable=true` gate).
+  - Discovery exclude_set bug fix: `backend/apps/recommendation/views/discovery.py` — `card.get('building_id')` → `card.get('canonical_bld_id')` at DiscoveryFeedView + BoardSurpriseView (old key never existed on engine cards; exclude_set filter was silently no-op).
+  - Test fix: `backend/apps/recommendation/tests/test_discovery.py` — fixture + assertions symmetric with view fix.
+  - Frontend ring buffer: `frontend/src/api/core.js` — `_lastCall` single slot → 8-slot ring buffer `_callHistory[]`. `getLastCall()` signature unchanged; `getCallHistory()` new export for concurrent-request latency diagnosis.
+  - 4 MINOR noted in /review (non-blocking, deferred): dead DebugOverlay instrumentation, getBoardBuildings missing 200-chunk, preloadImage timeout removed, duplicate intensity coercion in swipe.py.
+  - Rule 6 bundle pattern: reporter pass (`7d9f306`) + SESSION-START-TODO (`e1fda98`) + P2 work (`50e4073`) all swept into PR #40. Working tree carryover (Task.md handoff edits + `.claude/reviews/50e4073.md` + `latest.md` symlink) stashed pre-push, reland post-merge.
+- **Files changed (PR #40):**
+  - `backend/apps/recommendation/views/sessions.py` +4/-2 (batch fetch)
+  - `backend/apps/recommendation/views/discovery.py` +2/-2 (canonical_bld_id fix)
+  - `backend/apps/recommendation/tests/test_discovery.py` +8/-7 (fixture + assertions fix)
+  - `frontend/src/api/core.js` +9/-3 (8-slot ring buffer)
+  - `.claude/Report.md` +12/-13 (P1 last-updated section)
+  - `.claude/Task.md` +7/-9 (handoffs trimmed 39→30 + signals)
+  - `.claude/handoffs-archive/2026-05.md` +10 (9 oldest archived)
+- **Summary:** P2 latency closed — SessionResultView N+1 batch fetch + discovery.py exclude_set canonical_bld_id fix + frontend 8-slot ring buffer live on develop. No RECOMMENDATION dict changes; algorithm.md sync not applicable. Handoffs trimmed 36→30 (6 archived) this reporter pass.
 
 ## Last Updated (Designer)
 
