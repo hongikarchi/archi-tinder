@@ -84,6 +84,7 @@
 - [2026-05-16] PR-CI-GREEN: #39 — backend 2m15s, frontend 18s, Vercel + comments all pass.
 - [2026-05-16] PR-MERGED: #39 — squashed develop @ 97127f1. Mode 1 step 7 clean: `gh api -X DELETE refs/heads/feature/admin-caveman-git-text` → checkout develop → pull (.claude/agents/reporter.md + CLAUDE.md + others, 5 files +42/-3) → branch -D → fetch --prune. develop HEAD = 97127f1.
 - [2026-05-16] REPORTER-DONE: 97127f1 — P1 perf-ux-overhaul session closed; CLAUDE.md delegation HARD RULE live on develop; remaining phases P2-P6 next sessions
+- [2026-05-16] SESSION-START-TODO: next P2 session — branch P2 from `feature/admin-reporter-p1-close` (NOT develop) to absorb pending reporter pass commit `7d9f306` (Rule 6 bundle). Command: `git checkout feature/admin-reporter-p1-close && git checkout -b feature/admin-p2-latency`. P2 PR then sweeps both 7d9f306 + P2 work in one push.
 
 ## Development Roadmap
 
