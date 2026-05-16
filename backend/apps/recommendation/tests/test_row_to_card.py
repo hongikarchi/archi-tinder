@@ -75,6 +75,30 @@ class TestRowToCardVisualDescription:
 class TestRowToCardCoverResolution:
     """Cover-image resolution: image_focus then fallback chain."""
 
+    def test_image_focus_echoed_in_card(self):
+        """image_focus passed to _row_to_card must appear verbatim in the returned dict."""
+        row = _minimal_row(
+            covers_by_type={'interior': 'https://int/cover.jpg', 'exterior': None,
+                            'drawing': None, 'aerial': None, 'detail': None},
+        )
+        card = _row_to_card(row, image_focus='interior')
+        assert card['image_focus'] == 'interior'
+
+    def test_image_focus_none_when_not_specified(self):
+        """When no focus is passed, image_focus in the card must be None."""
+        row = _minimal_row(display_cover_url='https://default/cover.jpg')
+        card = _row_to_card(row)
+        assert card['image_focus'] is None
+
+    def test_image_focus_none_for_invalid_focus(self):
+        """An invalid focus value is not applied to cover but IS echoed as-is."""
+        row = _minimal_row(display_cover_url='https://default/cover.jpg')
+        card = _row_to_card(row, image_focus='bogus')
+        # Invalid focus: cover falls back to display_cover_url
+        assert card['image_url'] == 'https://default/cover.jpg'
+        # But the literal value is still echoed (caller knows what it sent)
+        assert card['image_focus'] == 'bogus'
+
     def test_image_focus_uses_covers_by_type(self):
         row = _minimal_row(
             display_cover_url='https://default/cover.jpg',

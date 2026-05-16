@@ -24,12 +24,12 @@ const TAB_ICONS = {
 }
 
 function getActiveTab(pathname) {
-  if (pathname === '/swipe') return 'swipe'
+  if (pathname === '/swipe' || pathname === '/new' || pathname.startsWith('/search')) return 'swipe'
   if (pathname.startsWith('/user')) return 'profile'
   return 'discovery'
 }
 
-export default function TabBar({ swipeEnabled }) {
+export default function TabBar() {
   const location = useLocation()
   const navigate = useNavigate()
   const activeTab = getActiveTab(location.pathname)
@@ -56,16 +56,15 @@ export default function TabBar({ swipeEnabled }) {
     }}>
       {tabs.map(t => {
         const active = activeTab === t.id
-        const disabled = t.id === 'swipe' && !swipeEnabled
         return (
           <button
             key={t.id}
-            onClick={() => !disabled && handleSelect(t)}
+            onClick={() => handleSelect(t)}
             style={{
               flex: 1, border: 'none', background: 'none',
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4,
-              cursor: disabled ? 'default' : 'pointer', fontFamily: 'inherit',
-              color: disabled ? 'var(--color-nav-disabled)' : active ? '#ec4899' : 'var(--color-nav-inactive)',
+              cursor: 'pointer', fontFamily: 'inherit',
+              color: active ? '#ec4899' : 'var(--color-nav-inactive)',
               transition: 'color 0.18s',
               paddingBottom: 4,
             }}

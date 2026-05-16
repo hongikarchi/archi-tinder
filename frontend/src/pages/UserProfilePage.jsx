@@ -1,4 +1,4 @@
-import { useState, useEffect, Fragment } from 'react'
+import { useState, useEffect, useRef, useCallback, Fragment } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { getUserProfile, followUser, unfollowUser } from '../api/client.js'
 import BoardCard from '../components/profile/BoardCard'
@@ -39,6 +39,19 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
   const [isFollowingPending, setIsFollowingPending] = useState(false)
   const [followerCount, setFollowerCount] = useState(0)
 
+  // Boards pagination state — separate from user profile so we can append incrementally
+  const [boards, setBoards] = useState([])
+  const [boardsTotalCount, setBoardsTotalCount] = useState(0)
+  const [boardsPage, setBoardsPage] = useState(1)
+  const [boardsHasMore, setBoardsHasMore] = useState(false)
+  const [boardsLoading, setBoardsLoading] = useState(false)
+  const sentinelRef = useRef(null)
+
+  // Adapter: map project_id -> board_id + format ISO date -> "Month YYYY"
+  function adaptBoard(b) {
+    return { ...b, board_id: b.project_id, date: formatBoardDate(b.date) }
+  }
+
   useEffect(() => {
     if (!effectiveUserId) {
       setLoading(false)
@@ -48,16 +61,21 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
     let cancelled = false
     setLoading(true)
     setError(null)
-    getUserProfile(effectiveUserId)
+    // Reset boards state on user change
+    setBoards([])
+    setBoardsPage(1)
+    setBoardsHasMore(false)
+    getUserProfile(effectiveUserId, { boardsPage: 1, boardsPageSize: 12 })
       .then(data => {
         if (cancelled) return
-        // Boards adapter: map project_id -> board_id + format ISO date -> "Month YYYY"
-        const boards = (data.boards || []).map(b => ({
-          ...b,
-          board_id: b.project_id,
-          date: formatBoardDate(b.date),
-        }))
-        setUser({ ...data, boards })
+        const boardsPayload = data.boards || {}
+        const items = (boardsPayload.items || []).map(adaptBoard)
+        setBoards(items)
+        setBoardsTotalCount(boardsPayload.total_count ?? items.length)
+        setBoardsHasMore(boardsPayload.has_more ?? false)
+        setBoardsPage(boardsPayload.page ?? 1)
+        // Store profile without boards — boards are in separate state
+        setUser({ ...data, boards: undefined })
         setIsFollowing(data.is_following ?? false)
         setFollowerCount(data.follower_count ?? 0)
       })
@@ -70,6 +88,36 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
       })
     return () => { cancelled = true }
   }, [effectiveUserId])
+
+  const loadMoreBoards = useCallback(async () => {
+    if (boardsLoading || !boardsHasMore || !effectiveUserId) return
+    setBoardsLoading(true)
+    try {
+      const nextPage = boardsPage + 1
+      const data = await getUserProfile(effectiveUserId, { boardsPage: nextPage, boardsPageSize: 12 })
+      const boardsPayload = data.boards || {}
+      const items = (boardsPayload.items || []).map(adaptBoard)
+      setBoards(prev => [...prev, ...items])
+      setBoardsPage(boardsPayload.page ?? nextPage)
+      setBoardsHasMore(boardsPayload.has_more ?? false)
+    } catch (err) {
+      console.error('[boards pagination]', err)
+    } finally {
+      setBoardsLoading(false)
+    }
+  }, [boardsLoading, boardsHasMore, boardsPage, effectiveUserId])
+
+  // IntersectionObserver — trigger loadMoreBoards when sentinel is visible
+  useEffect(() => {
+    const sentinel = sentinelRef.current
+    if (!sentinel) return
+    const observer = new IntersectionObserver(
+      entries => { if (entries[0].isIntersecting) loadMoreBoards() },
+      { rootMargin: '200px' },
+    )
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [loadMoreBoards])
 
   async function handleToggleFollow() {
     if (isMe || isFollowingPending) return
@@ -303,7 +351,7 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
               gap: 0, marginTop: 14, marginBottom: 4,
             }}>
               {[
-                { count: user.boards.length, label: 'Boards' },
+                { count: boardsTotalCount, label: 'Boards' },
                 { count: followerCount, label: 'Followers' },
                 { count: user.following_count, label: 'Following' },
               ].map((stat, i, arr) => (
@@ -489,20 +537,45 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
           <span style={{
             color: 'var(--color-text-dimmer)', fontSize: 13, fontWeight: 600,
           }}>
-            {user.boards.length}
+            {boardsTotalCount}
           </span>
         </div>
 
         {/* Boards grid — same unified container, responsive auto-fill */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-          gap: 20,
-        }}>
-          {user.boards.map(board => (
-            <BoardCard key={board.board_id} board={board} />
-          ))}
-        </div>
+        {boards.length > 0 ? (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+            gap: 20,
+          }}>
+            {boards.map(board => (
+              <BoardCard key={board.board_id} board={board} />
+            ))}
+          </div>
+        ) : (!boardsHasMore && !boardsLoading && (
+          <div style={{
+            color: 'var(--color-text-dim)', fontSize: 14, textAlign: 'center', padding: '40px 0',
+          }}>
+            No boards yet.
+          </div>
+        ))}
+
+        {/* Infinite scroll sentinel */}
+        <div ref={sentinelRef} style={{ height: 1 }} />
+
+        {/* Boards pagination loading spinner */}
+        {boardsLoading && (
+          <div style={{
+            display: 'flex', justifyContent: 'center', padding: '24px 0',
+          }}>
+            <div style={{
+              width: 24, height: 24, borderRadius: '50%',
+              border: '2px solid var(--color-border)',
+              borderTopColor: '#ec4899',
+              animation: 'spin 0.8s linear infinite',
+            }} />
+          </div>
+        )}
 
       </div>
     </div>

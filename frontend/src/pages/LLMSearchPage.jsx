@@ -123,22 +123,97 @@ function ResultStrip({ results, isFallback }) {
 }
 
 export default function LLMSearchPage({ mode, projectId, projectName: initialName, visibility = 'private', onBack, onStart, onUpdate }) {
-  const [messages, setMessages] = useState([
-    { role: 'ai', text: "Hello! Describe the kind of architecture you're looking for -- country, program, architect, style, year, and so on." }
-  ])
+  // Derive storage key once per render cycle (props/sessionStorage are stable for the lifecycle of this route mount)
+  const userId = sessionStorage.getItem('archithon_user') || 'anon'
+  const storageKey = `archithon_chat_${userId}_${mode}_${projectId || 'new'}`
+
+  const [messages, setMessages] = useState(() => {
+    try {
+      const stored = localStorage.getItem(`${storageKey}__messages`)
+      if (stored) return JSON.parse(stored)
+    } catch { /* ignore */ }
+    return [{ role: 'ai', text: "Hello! Describe the kind of architecture you're looking for -- country, program, architect, style, year, and so on." }]
+  })
   const [input, setInput]               = useState('')
   const [isLoading, setIsLoading]       = useState(false)
-  const [latestResults, setLatestResults] = useState([])
-  const [latestFilters, setLatestFilters] = useState({})
-  const [latestFilterPriority, setLatestFilterPriority] = useState([])
-  const [latestVisualDescription, setLatestVisualDescription] = useState(null)
-  const [showStart, setShowStart]       = useState(false)
-  const [conversationHistory, setConversationHistory] = useState([])
+  const [latestResults, setLatestResults] = useState(() => {
+    try {
+      const stored = localStorage.getItem(`${storageKey}__latestResults`)
+      if (stored) return JSON.parse(stored)
+    } catch { /* ignore */ }
+    return []
+  })
+  const [latestFilters, setLatestFilters] = useState(() => {
+    try {
+      const stored = localStorage.getItem(`${storageKey}__latestFilters`)
+      if (stored) return JSON.parse(stored)
+    } catch { /* ignore */ }
+    return {}
+  })
+  const [latestFilterPriority, setLatestFilterPriority] = useState(() => {
+    try {
+      const stored = localStorage.getItem(`${storageKey}__latestFilterPriority`)
+      if (stored) return JSON.parse(stored)
+    } catch { /* ignore */ }
+    return []
+  })
+  const [latestVisualDescription, setLatestVisualDescription] = useState(() => {
+    try {
+      const stored = localStorage.getItem(`${storageKey}__latestVisualDescription`)
+      if (stored) return JSON.parse(stored)
+    } catch { /* ignore */ }
+    return null
+  })
+  const [showStart, setShowStart] = useState(() => {
+    try {
+      const stored = localStorage.getItem(`${storageKey}__showStart`)
+      if (stored) return JSON.parse(stored)
+    } catch { /* ignore */ }
+    return false
+  })
+  const [conversationHistory, setConversationHistory] = useState(() => {
+    try {
+      const stored = localStorage.getItem(`${storageKey}__conversationHistory`)
+      if (stored) return JSON.parse(stored)
+    } catch { /* ignore */ }
+    return []
+  })
   const messagesEndRef = useRef(null)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, isLoading])
+
+  // Persist chat state to localStorage so the conversation survives navigation
+  useEffect(() => {
+    localStorage.setItem(`${storageKey}__messages`, JSON.stringify(messages))
+  }, [storageKey, messages])
+  useEffect(() => {
+    localStorage.setItem(`${storageKey}__conversationHistory`, JSON.stringify(conversationHistory))
+  }, [storageKey, conversationHistory])
+  useEffect(() => {
+    localStorage.setItem(`${storageKey}__latestResults`, JSON.stringify(latestResults))
+  }, [storageKey, latestResults])
+  useEffect(() => {
+    localStorage.setItem(`${storageKey}__latestFilters`, JSON.stringify(latestFilters))
+  }, [storageKey, latestFilters])
+  useEffect(() => {
+    localStorage.setItem(`${storageKey}__latestFilterPriority`, JSON.stringify(latestFilterPriority))
+  }, [storageKey, latestFilterPriority])
+  useEffect(() => {
+    localStorage.setItem(`${storageKey}__latestVisualDescription`, JSON.stringify(latestVisualDescription))
+  }, [storageKey, latestVisualDescription])
+  useEffect(() => {
+    localStorage.setItem(`${storageKey}__showStart`, JSON.stringify(showStart))
+  }, [storageKey, showStart])
+
+  function clearChatStorage() {
+    [
+      '__messages', '__conversationHistory', '__latestResults',
+      '__latestFilters', '__latestFilterPriority', '__latestVisualDescription',
+      '__showStart',
+    ].forEach(suffix => localStorage.removeItem(`${storageKey}${suffix}`))
+  }
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -215,6 +290,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
 
   function handleStartSwiping() {
     const name = initialName || 'Untitled Project'
+    clearChatStorage()
     if (mode === 'update') {
       onUpdate(projectId, latestResults, latestFilters, latestFilterPriority, latestVisualDescription)
     } else {
