@@ -26,28 +26,61 @@ function LoadingCard() {
 }
 
 /* ── ConfidenceBar (unified progress for all phases) ─────────────────────── */
-function ConfidenceBar({ value, phase, likeCount }) {
+function ConfidenceBar({ value, phase, progress }) {
   // value: confidence in [0, 1] (analyzing+ phases) or null (exploring / pre-reset)
-  // When confidence is null and we're in exploring phase, fall back to like-count
-  // progress (0-3 likes to unlock analysis). Always renders one bar + one label
-  // so the header never branches between two visualizations.
+  // progress: full progress object for swipe count
+  const likeCount = progress?.like_count ?? 0
   let pct = 0
-  let label = ''
-  if (value !== null && value !== undefined) {
-    pct = Math.round(value * 100)
-    label = phase === 'converged' || phase === 'completed'
-      ? '분석 완료'
-      : `취향 안정도 ${pct}%`
+  let stageLabel = 'Loading…'
+
+  if (phase === 'converged' || phase === 'completed') {
+    pct = value != null ? Math.round(value * 100) : 100
+    stageLabel = 'Converged'
+  } else if (phase === 'analyzing') {
+    pct = value != null ? Math.round(value * 100) : 0
+    stageLabel = 'Analyzing'
   } else if (phase === 'exploring') {
-    const likes = Math.min(likeCount ?? 0, 3)
+    const likes = Math.min(likeCount, 3)
     pct = Math.round((likes / 3) * 100)
-    label = `탐색 중 · ♥ ${likes}/3`
-  } else {
-    pct = 0
-    label = '준비 중'
+    stageLabel = 'Exploring'
+  } else if (value != null) {
+    pct = Math.round(value * 100)
+    stageLabel = 'Analyzing'
   }
+
+  // Swipe count: prefer swipe_count, fallback to like+dislike sum, fallback to likes only
+  let swipeCountLabel = ''
+  if (progress?.swipe_count != null) {
+    swipeCountLabel = `${progress.swipe_count} swipes`
+  } else if (progress?.like_count != null && progress?.dislike_count != null) {
+    swipeCountLabel = `${progress.like_count + progress.dislike_count} swipes`
+  } else if (progress?.like_count != null) {
+    swipeCountLabel = `${progress.like_count} ♥`
+  }
+
   return (
     <div style={{ width: '100%' }}>
+      {/* Two-column info row above the bar */}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+        marginBottom: 5,
+      }}>
+        <span style={{
+          fontSize: 13, fontWeight: 600, color: 'var(--color-text)',
+          lineHeight: 1.2,
+        }}>
+          {stageLabel}
+        </span>
+        {swipeCountLabel ? (
+          <span style={{
+            fontSize: 12, fontWeight: 500, color: 'var(--color-text-dim)',
+          }}>
+            {swipeCountLabel}
+          </span>
+        ) : null}
+      </div>
+
+      {/* Bar */}
       <div style={{
         height: 4, borderRadius: 999,
         background: 'var(--color-progress-track)',
@@ -61,13 +94,164 @@ function ConfidenceBar({ value, phase, likeCount }) {
           transition: 'width 300ms ease',
         }} />
       </div>
+
+      {/* Percent below bar, right-aligned */}
       <div style={{
         fontSize: 11,
         color: 'var(--color-text-dim)',
         textAlign: 'right',
         marginTop: 4,
       }}>
-        {label}
+        {pct}%
+      </div>
+    </div>
+  )
+}
+
+/* ── ExitConfirmPopup ────────────────────────────────────────────────────── */
+function ExitConfirmPopup({ onNewProject, onHome, onCancel }) {
+  return (
+    <div
+      onClick={onCancel}
+      style={{
+        position: 'fixed', inset: 0,
+        background: 'rgba(10,10,12,0.65)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        zIndex: 10001,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '0 24px',
+        paddingBottom: 'env(safe-area-inset-bottom)',
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-border-soft)',
+          borderRadius: 20,
+          padding: '28px 24px 24px',
+          width: '100%',
+          maxWidth: 360,
+          display: 'flex', flexDirection: 'column', gap: 8,
+          boxShadow: '0 25px 50px rgba(0,0,0,0.5)',
+        }}
+      >
+        <h2 style={{
+          color: 'var(--color-text)', fontSize: 17, fontWeight: 700,
+          margin: '0 0 4px', textAlign: 'center',
+        }}>
+          현재 세션을 종료할까요?
+        </h2>
+        <p style={{
+          color: 'var(--color-text-dim)', fontSize: 13, fontWeight: 500,
+          textAlign: 'center', margin: '0 0 12px', lineHeight: 1.5,
+        }}>
+          지금까지의 좋아요는 저장돼요. 새 프로젝트를 시작하거나 홈으로 돌아갈 수 있어요.
+        </p>
+        <button
+          onClick={onNewProject}
+          style={{
+            padding: '13px 24px', borderRadius: 12,
+            background: '#ec4899', color: '#fff',
+            fontSize: 14, fontWeight: 600, border: 'none',
+            cursor: 'pointer', fontFamily: 'inherit', minHeight: 44,
+          }}
+        >
+          새 프로젝트 시작
+        </button>
+        <button
+          onClick={onHome}
+          style={{
+            padding: '13px 24px', borderRadius: 12,
+            background: 'var(--color-surface-2)', color: 'var(--color-text)',
+            fontSize: 14, fontWeight: 600,
+            border: '1px solid var(--color-border)',
+            cursor: 'pointer', fontFamily: 'inherit', minHeight: 44,
+          }}
+        >
+          홈으로
+        </button>
+        <button
+          onClick={onCancel}
+          style={{
+            padding: '10px 24px', borderRadius: 12,
+            background: 'transparent', color: 'var(--color-text-dim)',
+            fontSize: 13, fontWeight: 500, border: 'none',
+            cursor: 'pointer', fontFamily: 'inherit', minHeight: 40,
+          }}
+        >
+          취소
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/* ── DismissConfirmPopup ─────────────────────────────────────────────────── */
+function DismissConfirmPopup({ onConfirm, onCancel }) {
+  return (
+    <div
+      onClick={onCancel}
+      style={{
+        position: 'fixed', inset: 0,
+        background: 'rgba(10,10,12,0.65)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        zIndex: 10001,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '0 24px',
+        paddingBottom: 'env(safe-area-inset-bottom)',
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-border-soft)',
+          borderRadius: 20,
+          padding: '28px 24px 24px',
+          width: '100%',
+          maxWidth: 360,
+          display: 'flex', flexDirection: 'column', gap: 8,
+          boxShadow: '0 25px 50px rgba(0,0,0,0.5)',
+        }}
+      >
+        <h2 style={{
+          color: 'var(--color-text)', fontSize: 17, fontWeight: 700,
+          margin: '0 0 4px', textAlign: 'center',
+        }}>
+          이 건물을 보지 않을까요?
+        </h2>
+        <p style={{
+          color: 'var(--color-text-dim)', fontSize: 13, fontWeight: 500,
+          textAlign: 'center', margin: '0 0 12px', lineHeight: 1.5,
+        }}>
+          왼쪽 스와이프 = 다시 추천 안 됨. 한 번 더 확인할게요.
+        </p>
+        <button
+          onClick={onConfirm}
+          style={{
+            padding: '13px 24px', borderRadius: 12,
+            background: 'var(--color-surface-2)', color: 'var(--color-text)',
+            fontSize: 14, fontWeight: 600,
+            border: '1px solid var(--color-border)',
+            cursor: 'pointer', fontFamily: 'inherit', minHeight: 44,
+          }}
+        >
+          건너뛰기
+        </button>
+        <button
+          onClick={onCancel}
+          style={{
+            padding: '10px 24px', borderRadius: 12,
+            background: 'transparent', color: 'var(--color-text-dim)',
+            fontSize: 13, fontWeight: 500, border: 'none',
+            cursor: 'pointer', fontFamily: 'inherit', minHeight: 40,
+          }}
+        >
+          취소
+        </button>
       </div>
     </div>
   )
@@ -77,12 +261,18 @@ function ConfidenceBar({ value, phase, likeCount }) {
 export default function SwipePage({
   currentCard, cardResetToken = 0, progress, isCompleted, isLoading, isResultLoading = false,
   projectName, onSwipe, onViewResults, onExtendSession,
+  onExitToNewProject, onExitToHome,
 }) {
   const cardRef = useRef(null)
   const pendingAction = useRef(null)
   const swipedCardId = useRef(null)
+  const hasShownDismissTutorial = useRef(!!localStorage.getItem('archithon_dismiss_tutorial_seen'))
+  const pendingDismissDir = useRef(null)
+  const [localResetTick, setLocalResetTick] = useState(0)
   const [galleryOpen, setGalleryOpen] = useState(false)
   const [showTutorial, setShowTutorial] = useState(() => !localStorage.getItem('archithon_tutorial_dismissed'))
+  const [showExitConfirm, setShowExitConfirm] = useState(false)
+  const [showDismissConfirm, setShowDismissConfirm] = useState(false)
 
   const like_count       = progress?.like_count    ?? 0
   const phase            = progress?.phase
@@ -90,6 +280,15 @@ export default function SwipePage({
   const confidence       = progress?.confidence ?? null
 
   function onTinderSwipe(dir) {
+    // F4: intercept first-ever left swipe to show dismiss tutorial
+    if (dir === 'left' && !hasShownDismissTutorial.current) {
+      // Stash direction; card has already animated — we'll reset it on cancel
+      pendingDismissDir.current = dir
+      pendingAction.current = null
+      swipedCardId.current = null
+      setShowDismissConfirm(true)
+      return
+    }
     swipedCardId.current = currentCard?.image_id
     pendingAction.current = dir === 'right' ? 'like' : 'dislike'
   }
@@ -103,8 +302,36 @@ export default function SwipePage({
 
   async function swipeManual(dir) {
     if (!cardRef.current || isLoading) return
+    // F4: intercept first-ever left swipe from keyboard
+    if (dir === 'left' && !hasShownDismissTutorial.current) {
+      pendingDismissDir.current = dir
+      setShowDismissConfirm(true)
+      return
+    }
     pendingAction.current = dir === 'right' ? 'like' : 'dislike'
     await cardRef.current.swipe(dir)
+  }
+
+  function handleDismissConfirm() {
+    hasShownDismissTutorial.current = true
+    localStorage.setItem('archithon_dismiss_tutorial_seen', '1')
+    setShowDismissConfirm(false)
+    const dir = pendingDismissDir.current
+    pendingDismissDir.current = null
+    if (dir && cardRef.current) {
+      pendingAction.current = 'dislike'
+      swipedCardId.current = currentCard?.image_id
+      cardRef.current.swipe('left')
+    }
+  }
+
+  function handleDismissCancel() {
+    pendingDismissDir.current = null
+    pendingAction.current = null
+    swipedCardId.current = null
+    setShowDismissConfirm(false)
+    // Force TinderCard remount to restore card to center
+    setLocalResetTick(t => t + 1)
   }
 
   // When cardResetToken changes the TinderCard was force-remounted after a
@@ -117,12 +344,13 @@ export default function SwipePage({
   useEffect(() => {
     function handleKeyDown(e) {
       if (isLoading || !currentCard) return
-      if (showTutorial || pendingAction.current) return
+      if (showTutorial || showExitConfirm || showDismissConfirm || pendingAction.current) return
       if (swipedCardId.current === currentCard.image_id) return
 
       if (e.key === 'ArrowLeft') {
-        swipedCardId.current = currentCard.image_id
         if (galleryOpen) setGalleryOpen(false)
+        // Only pre-set swipedCardId guard if not going to intercept for dismiss tutorial
+        if (hasShownDismissTutorial.current) swipedCardId.current = currentCard.image_id
         swipeManual('left')
       } else if (e.key === 'ArrowRight') {
         swipedCardId.current = currentCard.image_id
@@ -132,7 +360,7 @@ export default function SwipePage({
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isLoading, currentCard, showTutorial, galleryOpen]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isLoading, currentCard, showTutorial, showExitConfirm, showDismissConfirm, galleryOpen]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (isCompleted) {
     const canContinue = !!progress?.can_continue
@@ -259,11 +487,51 @@ export default function SwipePage({
   return (
     <>
       <TutorialPopup visible={showTutorial} onClose={() => setShowTutorial(false)} />
+
+      {showExitConfirm && (
+        <ExitConfirmPopup
+          onNewProject={() => { setShowExitConfirm(false); onExitToNewProject?.() }}
+          onHome={() => { setShowExitConfirm(false); onExitToHome?.() }}
+          onCancel={() => setShowExitConfirm(false)}
+        />
+      )}
+
+      {showDismissConfirm && (
+        <DismissConfirmPopup
+          onConfirm={handleDismissConfirm}
+          onCancel={handleDismissCancel}
+        />
+      )}
+
       <div style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center',
         justifyContent: 'space-between', height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))', overflow: 'hidden',
         background: 'var(--color-bg)', padding: '20px 16px',
+        position: 'relative',
       }}>
+
+        {/* F3 — Exit button, top-right floating */}
+        <button
+          onClick={() => setShowExitConfirm(true)}
+          aria-label="Exit session"
+          style={{
+            position: 'absolute', top: 12, right: 16,
+            width: 32, height: 32, borderRadius: '50%',
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: 'var(--color-text-dim)', cursor: 'pointer',
+            zIndex: 10,
+          }}
+        >
+          {/* Left-arrow / exit icon */}
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+        </button>
 
         {/* Header */}
         <div style={{ textAlign: 'center', width: '100%' }}>
@@ -273,7 +541,7 @@ export default function SwipePage({
               : <><span style={{ color: 'var(--color-text)' }}>Archi</span><span style={{ color: '#ec4899' }}>Tinder</span></>}
           </h1>
           <div style={{ maxWidth: CARD_WIDTH, margin: '0 auto' }}>
-            <ConfidenceBar value={confidence} phase={phase} likeCount={like_count} />
+            <ConfidenceBar value={confidence} phase={phase} progress={progress} />
             {filter_relaxed && (
               <p style={{ color: 'var(--color-text-dimmer)', fontSize: 11, marginTop: 6, textAlign: 'center' }}>
                 Filters were relaxed to find more buildings
@@ -288,7 +556,7 @@ export default function SwipePage({
             <>
               <TinderCard
                 ref={cardRef}
-                key={`${currentCard.image_id}_${cardResetToken}`}
+                key={`${currentCard.image_id}_${cardResetToken}_${localResetTick}`}
                 onSwipe={onTinderSwipe}
                 onCardLeftScreen={onCardLeftScreen}
                 preventSwipe={galleryOpen ? ['left', 'right', 'up', 'down'] : ['up', 'down']}
