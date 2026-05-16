@@ -357,9 +357,9 @@ class SessionResultView(APIView):
         if not session:
             return Response({'detail': 'Session not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Liked buildings
+        # Liked buildings (batch fetch — cache-aware, preserves order, applies is_publishable gate)
         liked_ids   = list(session.swipes.filter(action='like').values_list('canonical_bld_id', flat=True))
-        liked_cards = [engine.get_building_card(bid) for bid in liked_ids]
+        liked_cards = engine.get_buildings_by_ids(liked_ids)
         liked_cards = [c for c in liked_cards if c]
 
         # Use MMR-diversified results when like_vectors available

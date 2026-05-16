@@ -12,8 +12,14 @@ const BACKOFF_BASE_MS = 300             // exponential backoff base (300ms, 900m
 
 // -- API call tracker (for DebugOverlay) -----------------------------------
 
-let _lastCall = null
-export function getLastCall() { return _lastCall }
+const _CALL_HISTORY_SIZE = 8
+const _callHistory = []
+function _recordCall(entry) {
+  _callHistory.push(entry)
+  if (_callHistory.length > _CALL_HISTORY_SIZE) _callHistory.shift()
+}
+export function getLastCall() { return _callHistory[_callHistory.length - 1] || null }
+export function getCallHistory() { return _callHistory.slice() }
 
 // -- JWT token storage -----------------------------------------------------
 
@@ -98,18 +104,18 @@ export async function callApi(method, path, body, retry = true) {
         continue
       }
       // Non-network error or exhausted retries
-      _lastCall = { method, url: path, status: 0, ms: Date.now() - t0 }
+      _recordCall({ method, url: path, status: 0, ms: Date.now() - t0 })
       throw err
     }
   }
 
   // If all retries failed with network errors, throw the last one
   if (!res) {
-    _lastCall = { method, url: path, status: 0, ms: Date.now() - t0 }
+    _recordCall({ method, url: path, status: 0, ms: Date.now() - t0 })
     throw lastNetworkErr
   }
 
-  _lastCall = { method, url: path, status: res.status, ms: Date.now() - t0 }
+  _recordCall({ method, url: path, status: res.status, ms: Date.now() - t0 })
 
   // Auto-refresh on 401 (once)
   if (res.status === 401 && retry) {
