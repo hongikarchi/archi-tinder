@@ -32,10 +32,6 @@ function normalizeFilters(filters) {
   return out
 }
 
-function isNetworkError(err) {
-  return err instanceof TypeError || !err.status
-}
-
 /**
  * Classify a swipe/extend error into { message, kind }.
  * kind: 'network' | 'auth' | 'client' | 'server'
@@ -191,9 +187,6 @@ export default function App() {
     }
   }, [currentCard, userId, activeProjectId])
 
-  // Keep currentCardRef in sync so setTimeout closures can read live card identity
-  useEffect(() => { currentCardRef.current = currentCard }, [currentCard])
-
   const activeProject = projects.find(p => p.id === activeProjectId) || null
 
   // On refresh, re-init swipe session if the user was on the swipe route
@@ -204,6 +197,9 @@ export default function App() {
   const swipeCount = useRef(0)
   const swipeRetryCount = useRef(0)
   const currentCardRef = useRef(null)
+
+  // Keep currentCardRef in sync so setTimeout closures can read live card identity
+  useEffect(() => { currentCardRef.current = currentCard }, [currentCard])
   useEffect(() => {
     if (swipeRestored.current) return
     if (location.pathname === '/swipe' && activeProjectId && userId) {
@@ -420,7 +416,7 @@ export default function App() {
       try {
         result = await api.recordSwipe(swipePayload)
       } catch (firstErr) {
-        if (!isNetworkError(firstErr)) throw firstErr
+        if (classifySwipeError(firstErr).kind !== 'network') throw firstErr
         // Retry once on network error
         result = await api.recordSwipe(swipePayload)
       }

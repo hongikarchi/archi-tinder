@@ -110,6 +110,18 @@ function ConfidenceBar({ value, phase, progress }) {
 
 /* ── ExitConfirmPopup ────────────────────────────────────────────────────── */
 function ExitConfirmPopup({ onNewProject, onHome, onCancel }) {
+  const primaryBtnRef = useRef(null)
+
+  // Auto-focus primary button on mount
+  useEffect(() => { primaryBtnRef.current?.focus() }, [])
+
+  // Dismiss on Escape
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onCancel() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onCancel])
+
   return (
     <div
       onClick={onCancel}
@@ -125,6 +137,9 @@ function ExitConfirmPopup({ onNewProject, onHome, onCancel }) {
       }}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="exit-confirm-title"
         onClick={e => e.stopPropagation()}
         style={{
           background: 'var(--color-surface)',
@@ -137,7 +152,7 @@ function ExitConfirmPopup({ onNewProject, onHome, onCancel }) {
           boxShadow: '0 25px 50px rgba(0,0,0,0.5)',
         }}
       >
-        <h2 style={{
+        <h2 id="exit-confirm-title" style={{
           color: 'var(--color-text)', fontSize: 17, fontWeight: 700,
           margin: '0 0 4px', textAlign: 'center',
         }}>
@@ -150,6 +165,7 @@ function ExitConfirmPopup({ onNewProject, onHome, onCancel }) {
           지금까지의 좋아요는 저장돼요. 새 프로젝트를 시작하거나 홈으로 돌아갈 수 있어요.
         </p>
         <button
+          ref={primaryBtnRef}
           onClick={onNewProject}
           style={{
             padding: '13px 24px', borderRadius: 12,
@@ -190,6 +206,18 @@ function ExitConfirmPopup({ onNewProject, onHome, onCancel }) {
 
 /* ── DismissConfirmPopup ─────────────────────────────────────────────────── */
 function DismissConfirmPopup({ onConfirm, onCancel }) {
+  const primaryBtnRef = useRef(null)
+
+  // Auto-focus primary button on mount
+  useEffect(() => { primaryBtnRef.current?.focus() }, [])
+
+  // Dismiss on Escape
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onCancel() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onCancel])
+
   return (
     <div
       onClick={onCancel}
@@ -205,6 +233,9 @@ function DismissConfirmPopup({ onConfirm, onCancel }) {
       }}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="dismiss-confirm-title"
         onClick={e => e.stopPropagation()}
         style={{
           background: 'var(--color-surface)',
@@ -217,7 +248,7 @@ function DismissConfirmPopup({ onConfirm, onCancel }) {
           boxShadow: '0 25px 50px rgba(0,0,0,0.5)',
         }}
       >
-        <h2 style={{
+        <h2 id="dismiss-confirm-title" style={{
           color: 'var(--color-text)', fontSize: 17, fontWeight: 700,
           margin: '0 0 4px', textAlign: 'center',
         }}>
@@ -230,6 +261,7 @@ function DismissConfirmPopup({ onConfirm, onCancel }) {
           왼쪽 스와이프 = 다시 추천 안 됨. 한 번 더 확인할게요.
         </p>
         <button
+          ref={primaryBtnRef}
           onClick={onConfirm}
           style={{
             padding: '13px 24px', borderRadius: 12,
@@ -510,12 +542,12 @@ export default function SwipePage({
         position: 'relative',
       }}>
 
-        {/* F3 — Exit button, top-right floating */}
+        {/* F3 — Exit button, top-left floating (moved from right to avoid Logout button occlusion) */}
         <button
           onClick={() => setShowExitConfirm(true)}
           aria-label="Exit session"
           style={{
-            position: 'absolute', top: 12, right: 16,
+            position: 'absolute', top: 12, left: 16,
             width: 32, height: 32, borderRadius: '50%',
             background: 'var(--color-surface)',
             border: '1px solid var(--color-border)',
