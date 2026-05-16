@@ -484,18 +484,19 @@ flowchart LR
 - Phase 16: Recommendation Expansion (R-PHASE16 RESEARCH-REQUESTED queued — research terminal to elicit spec §4 decisions)
 
 ## Last Updated (Claude)
-- **Date:** 2026-05-14
-- **Commit:** `b7d39b2` (PR #34 — feat(s2): canonical_v2_buildings cutover; squashed into develop) + S8 spec-sweep commit pending on `feature/admin-s8-roadmap-sweep`
-- **Push range 2026-05-13 → 2026-05-14 (Tab 3-Structure Replan S1-S8 + canonical_v2_buildings cutover):**
-  - **S1** (PR #26 → b9c8dd4) — Replan plan + COLLAB_HANDOFF.md
-  - **S2** (PR #34 → b7d39b2) — **canonical_v2_buildings full cutover**: `backend/apps/recommendation/engine.py` 20+ raw SQL rewritten (canonical_bld_id PK + is_publishable gate + image_focus jsonb cover model), `backend/apps/recommendation/services/parse_query.py` adds Gemini `image_focus` enum (exterior/interior/drawing/aerial/detail with Korean+English hints), `backend/apps/recommendation/views/{sessions,search,swipe}.py` thread image_focus end-to-end, `backend/apps/recommendation/services/{rerank,generation}.py` migrated, `backend/apps/recommendation/models.py` + `migrations/0018_rename_swipeevent_canonical_bld_id.py` SwipeEvent.building_id → canonical_bld_id, `frontend/src/api/{images,sessions,projects}.js` normalizeCard rewrite + canonical_bld_ids API senders + cover fallback chain (covers_by_type[focus] → display_cover_url → cover_image_url_default → covers_by_type.exterior → all_images[0].url → ''), `frontend/src/pages/{SwipePage,BuildingDetailPage}.jsx` drop area row + read axis_material_visual[]. 41 files +1047/-611. Tests: 599/599 pytest GREEN + 12 legacy v1 tests skipped + live Neon smoke PASS on bld_000344. `docs/database-schema.md` full rewrite, `CLAUDE.md` hard rules swap (building_id → canonical_bld_id; architecture_vectors → canonical_v2_buildings; add is_publishable gate rule).
-  - **S2-prep** (PR #33 → c0f1da9) — database-schema.md reality-sync vs live v1 Neon
-  - **External PR absorb** (PR #32 → bc5a057) — admin absorbed @ksangjo PRs #22+#23 (caching refactor + blank-screen fix + test telemetry isolation; original branches CLOSED)
-  - **S3** (PR #27 → 2a61881) — Swipe end-flow consolidation (ActionCard removal + tolerate empty building_id on extend session)
-  - **S4** (PR #28 → a5edff5) — Unified progress bar + DebugOverlay extension
-  - **S5** (PR #29 → 7f225c2) — Library → Profile absorb (FavoritesPage + SetupPage deleted)
-  - **S6** (PR #30 → 976bfdc) — 4-tab → 3-tab cutover (Discovery / Taste / Profile only; Part B browser 7/7 ×3 personas green)
-  - **S7** (PR #31 → 278cc1a / 0ee6b42 cluster + 0e93d9f frontend) — Discovery infinite-scroll tab + SaveToBoardModal + SurpriseBoardModal
+- **Date:** 2026-05-16
+- **Commit:** `97127f1` (PR #39 — docs: P1 perf-ux-overhaul delegation HARD RULE + caveman git text; squashed into develop). Also absorbed: `5fcfd3d` (PR #37 — fix(deploy-hotfix): /user/me 500, drawing crop on Discovery, title clip).
+- **Changes:**
+  - P1 perf-ux-overhaul: `CLAUDE.md` gains "Implementation delegation — HARD RULE" bullet (WEB-MAIN never writes backend/frontend feature code directly; delegates to orchestrator/back-maker/front-maker/codex; carve-out for meta/infra/docs). `.claude/WORKFLOW.md` `## Key rules` gains matching row. `.claude/agents/git-manager.md`, `.claude/agents/git-publisher.md`, `.claude/agents/reporter.md` updated to emit caveman-terse git text (commit msgs, PR bodies, handoff signals). git-publisher registration confirmed present — non-bug.
+  - Hotfix bundle (PR #37 / 5fcfd3d): `/api/v1/users/me/` 500 fix, Discovery page drawing crop fix, card title clip fix.
+  - Remaining perf-ux-overhaul phases (P2 Latency, P3 Swipe UX, P4 Building detail, P5/P6 Boards edit) untouched — next-session work.
+- **Files changed (PR #39):**
+  - `CLAUDE.md` +17 (delegation HARD RULE bullet)
+  - `.claude/WORKFLOW.md` +1 (matching Key rules row)
+  - `.claude/agents/git-manager.md` +11/-3 (caveman step 4)
+  - `.claude/agents/git-publisher.md` +8 (caveman global rule)
+  - `.claude/agents/reporter.md` +5 (caveman step 5)
+- **Files changed (PR #37, hotfix bundle):** 16 files +1150/-680 (SwipeCard.jsx new, purge_legacy_projects.py new, /user/me 500 fix, Discovery crop fix, title clip, profile pagination)
   - **S8** (this commit on `feature/admin-s8-roadmap-sweep`) — spec/roadmap sweep: `docs/specs/phase16-recommendation-expansion.md` rewritten (Landing tab deprecated → Profile-button surface; endpoint shape changed), `docs/specs/phase17-llm-reverse-q.md` Q6 RESOLVED annotation (Option A pre-swipe), `docs/specs/phase18-external-connections.md` Goal.md path fix, `docs/specs/requirements.md` canonical_bld_id + canonical_v2_buildings + is_publishable rule swap, `.claude/Goal.md` § 7 Phase 16-19 rows + § 11 checklist tick + v3 history entry, `.claude/Task.md` Roadmap S3-S8 marked COMPLETED + Phase 16/17/18 sweep annotations + Handoffs trimmed 62→30 (32 archived to `.claude/handoffs-archive/2026-05.md` "Archived 2026-05-14 S8 sweep" section), 3 stale remote branches deleted (`feat/sj-0512-dbspeed` + `feat/sj-0513-errorfix` + `phase-5-polish-tests`; PR #22 + #23 already absorbed).
 - **Branch hygiene post-S8:** remote heads = `main` (c231c59 = pre-deploy gap), `develop` (b7d39b2 + S8 pending), `feature/sns-profile-system` (b0a00f9 — 유예원 unintegrated work, preserved per admin decision 2026-05-14; comparison vs develop S5-S7 deferred). Deploy PR develop → main scheduled next.
 - **Summary:** Full S1-S8 replan landed; Make Web cutover to Make DB's new `canonical_v2_buildings` 31-col / 39,776-row table is complete; tab structure now 3-tab (Discovery / Taste / Profile); Phase 16-18 specs reconciled with the new tab world. algorithm.md sync NOT applicable (no RECOMMENDATION dict changes this session window; production hyperparameters unchanged).
