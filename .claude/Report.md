@@ -485,23 +485,26 @@ flowchart LR
 
 ## Last Updated (Claude)
 - **Date:** 2026-05-16
-- **Commit:** `9c7d513` (PR #40 — perf: P2 latency — N+1 batch fetch + ring buffer instrumentation; squashed into develop). Bundled: `7d9f306` (reporter P1 session-end housekeeping), `e1fda98` (SESSION-START-TODO for P2).
+- **Commit:** `824dc86` (PR #41 — feat: P3 swipe UX — ConfidenceBar redesign + error classify + exit/dismiss popups; squashed into develop). Bundled: `b6825f3` (reporter P2 session-end housekeeping), `2c387df` (P3 swipe UX feat), `acefff8` (P3 review fixes F3 collision + ARIA dialog + classifier dedup).
 - **Changes:**
-  - P2 latency: `backend/apps/recommendation/views/sessions.py` `SessionResultView.liked_cards` — N+1 `[engine.get_building_card(bid) for bid in liked_ids]` replaced with batch `engine.get_buildings_by_ids(liked_ids)` (cache-aware, IN-query for misses, preserves order, `is_publishable=true` gate).
-  - Discovery exclude_set bug fix: `backend/apps/recommendation/views/discovery.py` — `card.get('building_id')` → `card.get('canonical_bld_id')` at DiscoveryFeedView + BoardSurpriseView (old key never existed on engine cards; exclude_set filter was silently no-op).
-  - Test fix: `backend/apps/recommendation/tests/test_discovery.py` — fixture + assertions symmetric with view fix.
-  - Frontend ring buffer: `frontend/src/api/core.js` — `_lastCall` single slot → 8-slot ring buffer `_callHistory[]`. `getLastCall()` signature unchanged; `getCallHistory()` new export for concurrent-request latency diagnosis.
-  - 4 MINOR noted in /review (non-blocking, deferred): dead DebugOverlay instrumentation, getBoardBuildings missing 200-chunk, preloadImage timeout removed, duplicate intensity coercion in swipe.py.
-  - Rule 6 bundle pattern: reporter pass (`7d9f306`) + SESSION-START-TODO (`e1fda98`) + P2 work (`50e4073`) all swept into PR #40. Working tree carryover (Task.md handoff edits + `.claude/reviews/50e4073.md` + `latest.md` symlink) stashed pre-push, reland post-merge.
-- **Files changed (PR #40):**
-  - `backend/apps/recommendation/views/sessions.py` +4/-2 (batch fetch)
-  - `backend/apps/recommendation/views/discovery.py` +2/-2 (canonical_bld_id fix)
-  - `backend/apps/recommendation/tests/test_discovery.py` +8/-7 (fixture + assertions fix)
-  - `frontend/src/api/core.js` +9/-3 (8-slot ring buffer)
-  - `.claude/Report.md` +12/-13 (P1 last-updated section)
-  - `.claude/Task.md` +7/-9 (handoffs trimmed 39→30 + signals)
-  - `.claude/handoffs-archive/2026-05.md` +10 (9 oldest archived)
-- **Summary:** P2 latency closed — SessionResultView N+1 batch fetch + discovery.py exclude_set canonical_bld_id fix + frontend 8-slot ring buffer live on develop. No RECOMMENDATION dict changes; algorithm.md sync not applicable. Handoffs trimmed 36→30 (6 archived) this reporter pass.
+  - F1 ConfidenceBar redesign: `frontend/src/pages/SwipePage.jsx` — stage label + swipe count + percent row added to ConfidenceBar inline component.
+  - F2 swipe error classification: `frontend/src/pages/SwipePage.jsx` — NEW `classifySwipeError(err)` returns `{kind, message}` with kinds: network/auth/client/server; inner-retry on network only with card-id guard.
+  - F3 exit/new-project button: `frontend/src/pages/SwipePage.jsx` + `frontend/src/App.jsx` — Exit button top-left (right:16 → left:16, no Logout collision); NEW ExitConfirmPopup with `새 프로젝트 시작` + `홈으로` routes; ARIA role=dialog + aria-modal + aria-labelledby + Escape close + auto-focus primary.
+  - F4 first-dismiss tutorial popup: `frontend/src/pages/SwipePage.jsx` — DismissConfirmPopup with `archithon_dismiss_tutorial_seen` localStorage flag; ARIA role=dialog; first-time only.
+  - MainLayout.jsx: pathname `/swipe` added to Logout exclusion list (prevents Logout render on swipe route).
+  - 2 MINORs deferred non-blocking: MINOR #3 mouse-drag flicker (cosmetic), MINOR #4 setTimeout stale-closure (low probability).
+  - Rule 6 bundle pattern: reporter pass (`b6825f3`) + P3 feat (`2c387df`) + P3 review fixes (`acefff8`) swept into PR #41.
+- **Files changed (PR #41 @ 824dc86):**
+  - `frontend/src/pages/SwipePage.jsx` +342/-57 (F1+F2+F3+F4)
+  - `frontend/src/App.jsx` +67/-6 (ExitConfirmPopup routes + new-project flow)
+  - `frontend/src/layouts/MainLayout.jsx` +3/-0 (pathname exclusion)
+  - `.claude/Report.md` +57/-60 (P2 last-updated section)
+  - `.claude/Task.md` +15/-1 (handoffs signals)
+  - `.claude/handoffs-archive/2026-05.md` +8 (8 entries archived)
+  - `.claude/reviews/2c387df.md` +204/-0 (REVIEW-FAIL verdict)
+  - `.claude/reviews/50e4073.md` +125/-0 (carryover review artifact)
+  - `.claude/reviews/latest.md` (updated symlink content)
+- **Summary:** P3 swipe-UX closed — F1 ConfidenceBar stage label, F2 error classification + inner-retry, F3 Exit top-left button with ExitConfirmPopup (ARIA), F4 first-dismiss tutorial popup (ARIA) live on develop. Frontend-only; no backend/algorithm/schema changes. algorithm.md sync not applicable. Handoffs trimmed 37→30 (7 archived) this reporter pass.
 
 ## Last Updated (Designer)
 
