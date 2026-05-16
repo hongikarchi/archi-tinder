@@ -493,6 +493,7 @@ reporter runs at session end (or when user requests)
 | Questions answered directly | No agents needed for explanations |
 | Makers are sandboxed | back-maker: `backend/` only · front-maker: `frontend/` only |
 | orchestrator never writes code | Always delegates to makers |
+| **WEB-MAIN picks model + effort per delegated task** | opus owns architecture / schema / auth / release decisions + review — never writes `backend/` or `frontend/` feature code in opus "because delegating feels like overhead." Feature / bug / refactor → orchestrator or back-maker / front-maker (`model: sonnet`) or codex worker. Carve-out (direct OK): meta / infra / docs. Codified in `CLAUDE.md` `## Rules` (2026-05-15). |
 | **git-manager only commits** | WEB-MAIN; never pushes. Push is git-publisher's job in WEB-GIT. |
 | **git-publisher only pushes / opens PRs / merges** | WEB-GIT; never commits source code. |
 | Reporter updates, never appends | Report.md is live state; Task.md Resolved is historical |
