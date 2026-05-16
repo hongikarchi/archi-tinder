@@ -11,7 +11,7 @@ _FAKE_TASTE_VEC = np.array([0.1] * 384, dtype=np.float64)
 
 
 def _card(building_id):
-    return {'building_id': building_id}
+    return {'canonical_bld_id': building_id}
 
 
 def _make_cards(building_ids):
@@ -56,12 +56,12 @@ def test_warm_returns_taste_ordered(auth_client, user_profile):
     assert resp.status_code == 200
     assert payload['taste_state'] == 'warm'
     assert len(payload['cards']) == 12
-    assert payload['cards'][0]['building_id'] == 'R001'
+    assert payload['cards'][0]['canonical_bld_id'] == 'R001'
     assert payload['next_cursor'] == 12
     assert payload['has_more'] is True
     assert list(mocked.call_args.args[1]) == ['L001', 'L002', 'D001', 'S001']
     blocked_ids = {'L001', 'L002', 'D001', 'S001'}
-    assert blocked_ids.isdisjoint(card['building_id'] for card in payload['cards'])
+    assert blocked_ids.isdisjoint(card['canonical_bld_id'] for card in payload['cards'])
 
 
 @pytest.mark.django_db
@@ -86,10 +86,10 @@ def test_pagination_cursor_advances(auth_client, user_profile):
     assert payload_1['taste_state'] == 'warm'
     assert payload_2['taste_state'] == 'warm'
     assert payload_1['next_cursor'] == 12
-    assert payload_1['cards'][0]['building_id'] == 'B000'
-    assert payload_2['cards'][0]['building_id'] == 'B012'
-    first_ids = {card['building_id'] for card in payload_1['cards']}
-    second_ids = {card['building_id'] for card in payload_2['cards']}
+    assert payload_1['cards'][0]['canonical_bld_id'] == 'B000'
+    assert payload_2['cards'][0]['canonical_bld_id'] == 'B012'
+    first_ids = {card['canonical_bld_id'] for card in payload_1['cards']}
+    second_ids = {card['canonical_bld_id'] for card in payload_2['cards']}
     assert first_ids.isdisjoint(second_ids)
     assert mocked.call_count == 2
 
@@ -151,7 +151,7 @@ def test_surprise_warm_returns_taste_ranked(auth_client, user_profile):
     assert 'Curated' in payload['title']
     assert len(payload['cards']) == 10
     blocked_ids = {'L001', 'L002', 'D001', 'S001'}
-    assert blocked_ids.isdisjoint(card['building_id'] for card in payload['cards'])
+    assert blocked_ids.isdisjoint(card['canonical_bld_id'] for card in payload['cards'])
     # Verify exclude_ids ordering: liked → disliked → saved
     assert list(mocked.call_args.args[1]) == ['L001', 'L002', 'D001', 'S001']
 

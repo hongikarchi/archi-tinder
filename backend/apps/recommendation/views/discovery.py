@@ -69,7 +69,7 @@ class DiscoveryFeedView(APIView):
         v_taste = engine.compute_user_taste_vector(profile)
         if v_taste is None:
             cards = engine.get_diverse_random(n=limit, filters=None)
-            cards = [card for card in cards if card.get('building_id') not in exclude_set]
+            cards = [card for card in cards if card.get('canonical_bld_id') not in exclude_set]
             return Response({
                 'cards': cards,
                 'next_cursor': None,
@@ -138,7 +138,7 @@ class BoardSurpriseView(APIView):
         v_taste = engine.compute_user_taste_vector(profile)
         if v_taste is None:
             cards = engine.get_diverse_random(n=10, filters=None)
-            cards = [card for card in cards if card.get('building_id') not in exclude_set]
+            cards = [card for card in cards if card.get('canonical_bld_id') not in exclude_set]
             return Response({
                 'cards': cards,
                 'title': 'Discover something new',
