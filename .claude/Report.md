@@ -485,15 +485,23 @@ flowchart LR
 
 ## Last Updated (Claude)
 - **Date:** 2026-05-18
-- **Commit:** `450d3c1` — fix: P6 minors — bulk delete snapshot revert + style factor + cancel race (#47)
+- **Commit:** `de2e979` — chore: doc-system cleanup + algorithm ownership boundary (#51)
 - **Changes:**
-  - `frontend/src/pages/UserProfilePage.jsx` +64/-55: 3 P6 deferred MINORs resolved — (1) handleBulkDelete snapshots prevBoards/prevTotal and reverts via filter(successfulIds) fixing ≥2-failure splice ordering bug; (2) bulkActionButtonStyle(disabled) + bulkBtnHover helpers dedupe Public/Private inline styles; (3) exitSelectMode no longer clears bulkPending — handlers own lifecycle, Cancel mid-op no longer enables re-entry.
-  - `.claude/Task.md` +5: P6-minors handoff signals added.
-  - Frontend-only; no backend change; no algorithm/schema change; algorithm.md sync not applicable.
-- **Files changed (450d3c1):**
-  - `frontend/src/pages/UserProfilePage.jsx` +64/-55
-  - `.claude/Task.md` +5
-- **Summary:** P6 deferred MINORs patched on develop @ 450d3c1. Bulk delete now snapshot-reverts correctly on partial failure; style helpers dedupe button inline styles; Cancel mid-op is race-safe. Frontend-only; no backend/algo changes.
+  - `.claude/Goal.md` +27: Algorithm ownership section codified — separate collaborator owns engine.py/embeddings/rerank/Topics/IMP-1/7/8/A2; admin scope = reporter Production Value sync + theory PR review + LLM chat module (parse_query, generation, _gemini, IMP-4/5/6, Phase 17).
+  - `.claude/Task.md` +65/-71: Phase 19-26 + P1-P6 blocks noted as archived; Algorithm category removed; 3 orphan READY-FOR-PUSH lines in Resolved pruned; 24 P5/P6 handoffs moved to `handoffs-archive/2026-05.md`.
+  - `.claude/WORKFLOW.md` +31: Bugs #1-#5 codified in § Known Workflow Issues; 30-day retention rule added to § Operational hygiene.
+  - `.claude/agents/algo-tester.md` deleted (132 lines — hyperparameter sweep agent removed; algorithm tuning no longer in admin scope).
+  - `.claude/agents/orchestrator.md` +19/-7: "Algorithm tester post-run workflow" replaced with externally-owned scope note.
+  - `.claude/codex-tasks-archive/` created: s7-discovery-backend-feed.md, s7-discovery-frontend-page.md, s7-discovery-surprise.md moved from codex-tasks/.
+  - `.claude/plans-archive/replan-2026-05-14-tab3-restructure.md` moved from plans/.
+  - `.claude/postmortems/2026-05-11-workflow-dogfood-RESOLVED.md` renamed from -workflow-dogfood.md.
+  - `.claude/resolved-archive.md` +28: Phase 19-26 (S1-S8 replan) + P1-P6 latency+UX overhaul archived.
+  - `.claude/validations/imp5.md` +2, `imp6.md` +2: status notes added.
+  - `.gitignore` +3: whitelist for new archive dirs.
+  - `docs/COLLAB_HANDOFF.md` +9/-7, `docs/specs/phase16-*.md` +2/-1, `docs/specs/phase18-*.md` +26/-7: stale path refs + headers refreshed.
+  - Pure docs/policy commit; no source, no schema, no algorithm.md changes.
+- **Files changed (de2e979):** 20 files, +709/-214 (all docs/policy)
+- **Summary:** Doc-system cleanup landed — Phase 19-26 + P1-P6 archived to resolved-archive, codex-tasks-archive + plans-archive dirs created, dogfood postmortem marked RESOLVED, WORKFLOW.md gained Known Workflow Issues + retention policy, Goal.md algorithm ownership section codified, algo-tester agent deleted. Admin no longer owns algorithm tuning; separate collaborator scope per Goal.md § Algorithm ownership.
 
 ## Last Updated (Designer)
 

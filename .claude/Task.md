@@ -65,6 +65,7 @@
 - [2026-05-18] DEPLOY-MERGED: #49 — main = d785c360 ("Deploy: PR #37-#48 (P1-P6 latency + UX overhaul series + deploy hotfix) (#49)"). Squash via `gh api PUT pulls/49/merge` (Bug #4 sidestep). Railway auto-deploy triggered.
 - [2026-05-18] DEPLOY-DEVELOP-RESET: develop force-reset to main d785c360 per Bug #5 (codified carve-out). Initial WEB-GIT attempt blocked by auto-mode classifier; admin manually ran `gh api PATCH refs/heads/develop --force=true` from WEB-MAIN per user authorization. Both heads now d785c360.
 - [2026-05-18] DOCS-FIX: CLAUDE.md HARD RULE 4 + CONTRIBUTING.md Deploy flow updated to codify Bug #5 carve-out so future deploys don't hit classifier block. Direct edit (meta/infra carve-out per delegation rule).
+- [2026-05-18] REPORTER-DONE: de2e979 — doc-system cleanup: Phase 19-26+P1-P6 archived, codex/plans-archive dirs, WORKFLOW Known Issues + retention, Goal.md algo ownership, algo-tester deleted
 
 ## Development Roadmap
 
