@@ -241,11 +241,11 @@ flowchart TD
 | `MainLayout.jsx` | Layout wrapper; sharedLayoutProps chain extended with onToggleBookmark passthrough to FavoritesPage (Sprint 4 §8) |
 | `TabBar.jsx` | Bottom navigation with safe-area-inset-bottom padding (content-box) |
 | `ProjectSetupPage.jsx` | New project setup with folder name and area range; safe-area-adjusted layout; **Phase 14 BOARD2 (bdc8d7b):** public/private visibility toggle (default 'private') wired through wizardData → handleStart → PATCH /projects/{id}/ after session create |
-| `UserProfilePage.jsx` | **Phase 13 PROF3 (d735666 + b272f37):** wired to GET /api/v1/users/{user_id}/ + follow/unfollow; 1023 → 565 LOC via 6 extracted shared components in `components/profile/`; **P5 (35b297f):** optimistic PATCH/DELETE board handlers + revert on failure |
+| `UserProfilePage.jsx` | **Phase 13 PROF3 (d735666 + b272f37):** wired to GET /api/v1/users/{user_id}/ + follow/unfollow; 1023 → 565 LOC via 6 extracted shared components in `components/profile/`; **P5 (35b297f):** optimistic PATCH/DELETE board handlers + revert on failure; **P6 (06763a9):** bulk edit mode — Edit toggle (owner-only), select-mode cancel/count/select-all bar, sticky bulk action bar (Public/Private/Delete N), Promise.allSettled partial revert, 2-step bulk delete confirm (3s timeout + outside-click cancel) |
 | `FirmProfilePage.jsx` | **Phase 13 PROF3 (d735666 + b272f37):** wired to GET /api/v1/offices/{id}/ + office follow/unfollow (SOC3 39de1d4); 962 → 595 LOC via shared components |
 | `BoardDetailPage.jsx` | **Phase 14 BOARD3 (aedc817):** wired to GET /projects/{uuid}/ + reaction toggle (POST/DELETE /projects/{uuid}/react/); `useBoard` hook; optimistic reaction + rollback + `isReactionPending` race guard; server-authoritative `{reaction_count, reacted}` override; `reactionError` dedicated banner |
 | `PostSwipeLandingPage.jsx` | MOCKUP-READY (design terminal BOARD3 context); Phase 16 REC1 target |
-| `components/profile/` | **Phase 13 PROF3 NEW (b272f37):** 6 shared components extracted from UserProfilePage + FirmProfilePage — `InfoCol`, `BoardCard`, `BioPersonaFlipCard`, `DescriptionAboutFlipCard`, `ProjectCard`, `ArticleCard`; **P5 (35b297f):** `BoardCard` extended with owner-aware lock chip (hover toggle public↔private, mobile always-show) + X delete with 2-step inline confirm (red "Confirm?" pill, 3s timeout, outside-click cancel) |
+| `components/profile/` | **Phase 13 PROF3 NEW (b272f37):** 6 shared components extracted from UserProfilePage + FirmProfilePage — `InfoCol`, `BoardCard`, `BioPersonaFlipCard`, `DescriptionAboutFlipCard`, `ProjectCard`, `ArticleCard`; **P5 (35b297f):** `BoardCard` extended with owner-aware lock chip (hover toggle public↔private, mobile always-show) + X delete with 2-step inline confirm (red "Confirm?" pill, 3s timeout, outside-click cancel); **P6 (06763a9):** `BoardCard` gains select-mode props (selectMode, selected, onToggleSelect) — 28px circle checkbox overlay + 3px ring highlight + auto-unflip when selectMode becomes true |
 | `hooks/useBoard.js` | **Phase 14 BOARD3 NEW (aedc817):** Fetches project + buildings; cancellation guard via AbortController; pagination support |
 | `hooks/useProjectReactors.js` | **Phase 15 SOC2 NEW (59d2af4):** Paginated reactors list fetcher; cancellation guard |
 | `api/social.js` | **Phase 15 SOC1/SOC3:** `followUser`, `unfollowUser`, `followOffice`, `unfollowOffice` API wrappers |
@@ -485,21 +485,18 @@ flowchart LR
 
 ## Last Updated (Claude)
 - **Date:** 2026-05-17
-- **Commit:** `35b297f` — feat: P5 Curated Boards inline edit — lock toggle + delete confirm
+- **Commit:** `06763a9` — feat: P6 boards bulk edit — multi-select + bulk lock + bulk delete (#45)
 - **Changes:**
-  - `frontend/src/components/profile/BoardCard.jsx` +141/-23: owner-aware lock chip (hover toggle public↔private, mobile always-show); X delete button top-left; 2-step inline confirm (red "Confirm?" pill, 3s timeout, outside-click cancel).
-  - `frontend/src/pages/UserProfilePage.jsx` +28/-8: optimistic PATCH/DELETE + revert on failure; uses `updateProject` / `deleteProject` from api/projects.js.
-  - `frontend/src/api/projects.js` +2/-1: rethrow errors on failure so callers can revert optimistic state.
-  - `frontend/src/App.jsx` +3/-1: fire-and-forget `.catch` on project mutations to silence unhandled rejection warnings.
-  - `.claude/plans/building-detail-page.md` +50/-0: plan doc updates (P5 scope tracked).
-  - Inner-loop reviewer PASS cycle 2 (MAJOR×2 + MINOR×2 fixed). Security PASS.
-- **Files changed (35b297f):**
-  - `frontend/src/components/profile/BoardCard.jsx` +141/-23
-  - `frontend/src/pages/UserProfilePage.jsx` +28/-8
-  - `frontend/src/api/projects.js` +2/-1
-  - `frontend/src/App.jsx` +3/-1
-  - `.claude/plans/building-detail-page.md` +50/-0
-- **Summary:** P5 BoardCard inline edit live on `feature/admin-p5-board-inline-edit`. Owner sees lock chip (hover or mobile always-show) + X delete with 2-step confirm popup. UserProfilePage optimistic PATCH/DELETE + revert. No backend changes; no algorithm/schema changes; algorithm.md sync not applicable.
+  - `frontend/src/components/profile/BoardCard.jsx` +158/-?`: select-mode props + 28px circle checkbox overlay + 3px ring + auto-unflip when selectMode active.
+  - `frontend/src/pages/UserProfilePage.jsx` +352/-?`: Edit toggle in boards header (owner-only); select-mode state + cancel/count/select-all bar; sticky bulk action bar (Public / Private / Delete N); Promise.allSettled partial revert on PATCH/DELETE fail; 2-step bulk delete confirm (3s timeout + outside-click cancel).
+  - `.claude/Task.md` +5: P6 handoff signals added.
+  - Frontend-only; no backend change; no algorithm/schema change; algorithm.md sync not applicable.
+  - /review: Part A PASS-WITH-MINORS (2 deferrable: handleBulkDelete double-failure ordering + Public/Private button style duplication); Part B 14/14 gates PASS; Part C drift PASS.
+- **Files changed (06763a9):**
+  - `frontend/src/components/profile/BoardCard.jsx` +158
+  - `frontend/src/pages/UserProfilePage.jsx` +352
+  - `.claude/Task.md` +5
+- **Summary:** P6 Curated Boards bulk edit live on develop @ 06763a9. Owner can enter select mode, multi-select boards, and bulk set Public/Private or bulk delete with Promise.allSettled + partial revert. Full P0-P6 latency+UX overhaul series complete. 2 MINOR deferred (non-blocking); 1 non-blocking race (Cancel-during-in-flight). No backend/algo changes.
 
 ## Last Updated (Designer)
 
