@@ -314,7 +314,8 @@ export default function SwipePage({
   function onTinderSwipe(dir) {
     // F4: intercept first-ever left swipe to show dismiss tutorial
     if (dir === 'left' && !hasShownDismissTutorial.current) {
-      // Stash direction; card has already animated — we'll reset it on cancel
+      // Restore card to center BEFORE showing popup so cancel path has no flicker
+      cardRef.current?.restoreCard()
       pendingDismissDir.current = dir
       pendingAction.current = null
       swipedCardId.current = null
