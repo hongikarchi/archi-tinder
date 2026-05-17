@@ -326,7 +326,9 @@ export default function App() {
     navigate('/swipe')
     const result = await initSession(projectId, llmFilters || {}, filterPriority, seedIds, null, null, visualDescription)
     if (visibility !== 'private' && result?.project_id) {
-      api.updateProject(result.project_id, { visibility })
+      api.updateProject(result.project_id, { visibility }).catch(err =>
+        console.error('[App] updateProject visibility sync failed:', err)
+      )
     }
   }
 

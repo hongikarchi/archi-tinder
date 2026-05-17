@@ -241,15 +241,15 @@ flowchart TD
 | `MainLayout.jsx` | Layout wrapper; sharedLayoutProps chain extended with onToggleBookmark passthrough to FavoritesPage (Sprint 4 §8) |
 | `TabBar.jsx` | Bottom navigation with safe-area-inset-bottom padding (content-box) |
 | `ProjectSetupPage.jsx` | New project setup with folder name and area range; safe-area-adjusted layout; **Phase 14 BOARD2 (bdc8d7b):** public/private visibility toggle (default 'private') wired through wizardData → handleStart → PATCH /projects/{id}/ after session create |
-| `UserProfilePage.jsx` | **Phase 13 PROF3 (d735666 + b272f37):** wired to GET /api/v1/users/{user_id}/ + follow/unfollow; 1023 → 565 LOC via 6 extracted shared components in `components/profile/` |
+| `UserProfilePage.jsx` | **Phase 13 PROF3 (d735666 + b272f37):** wired to GET /api/v1/users/{user_id}/ + follow/unfollow; 1023 → 565 LOC via 6 extracted shared components in `components/profile/`; **P5 (35b297f):** optimistic PATCH/DELETE board handlers + revert on failure |
 | `FirmProfilePage.jsx` | **Phase 13 PROF3 (d735666 + b272f37):** wired to GET /api/v1/offices/{id}/ + office follow/unfollow (SOC3 39de1d4); 962 → 595 LOC via shared components |
 | `BoardDetailPage.jsx` | **Phase 14 BOARD3 (aedc817):** wired to GET /projects/{uuid}/ + reaction toggle (POST/DELETE /projects/{uuid}/react/); `useBoard` hook; optimistic reaction + rollback + `isReactionPending` race guard; server-authoritative `{reaction_count, reacted}` override; `reactionError` dedicated banner |
 | `PostSwipeLandingPage.jsx` | MOCKUP-READY (design terminal BOARD3 context); Phase 16 REC1 target |
-| `components/profile/` | **Phase 13 PROF3 NEW (b272f37):** 6 shared components extracted from UserProfilePage + FirmProfilePage — `InfoCol`, `BoardCard`, `BioPersonaFlipCard`, `DescriptionAboutFlipCard`, `ProjectCard`, `ArticleCard` |
+| `components/profile/` | **Phase 13 PROF3 NEW (b272f37):** 6 shared components extracted from UserProfilePage + FirmProfilePage — `InfoCol`, `BoardCard`, `BioPersonaFlipCard`, `DescriptionAboutFlipCard`, `ProjectCard`, `ArticleCard`; **P5 (35b297f):** `BoardCard` extended with owner-aware lock chip (hover toggle public↔private, mobile always-show) + X delete with 2-step inline confirm (red "Confirm?" pill, 3s timeout, outside-click cancel) |
 | `hooks/useBoard.js` | **Phase 14 BOARD3 NEW (aedc817):** Fetches project + buildings; cancellation guard via AbortController; pagination support |
 | `hooks/useProjectReactors.js` | **Phase 15 SOC2 NEW (59d2af4):** Paginated reactors list fetcher; cancellation guard |
 | `api/social.js` | **Phase 15 SOC1/SOC3:** `followUser`, `unfollowUser`, `followOffice`, `unfollowOffice` API wrappers |
-| `api/projects.js` | **Phase 14/15:** `getProject`, `getBoardBuildings`, `reactToProject`, `unreactToProject`, `getProjectReactors`, `updateProject` |
+| `api/projects.js` | **Phase 14/15:** `getProject`, `getBoardBuildings`, `reactToProject`, `unreactToProject`, `getProjectReactors`, `updateProject`; **P5 (35b297f):** errors rethrown on failure so callers can revert optimistic state |
 
 ## Web Testing Structure
 
@@ -484,27 +484,22 @@ flowchart LR
 - Phase 16: Recommendation Expansion (R-PHASE16 RESEARCH-REQUESTED queued — research terminal to elicit spec §4 decisions)
 
 ## Last Updated (Claude)
-- **Date:** 2026-05-16
-- **Commit:** `824dc86` (PR #41 — feat: P3 swipe UX — ConfidenceBar redesign + error classify + exit/dismiss popups; squashed into develop). Bundled: `b6825f3` (reporter P2 session-end housekeeping), `2c387df` (P3 swipe UX feat), `acefff8` (P3 review fixes F3 collision + ARIA dialog + classifier dedup).
+- **Date:** 2026-05-17
+- **Commit:** `35b297f` — feat: P5 Curated Boards inline edit — lock toggle + delete confirm
 - **Changes:**
-  - F1 ConfidenceBar redesign: `frontend/src/pages/SwipePage.jsx` — stage label + swipe count + percent row added to ConfidenceBar inline component.
-  - F2 swipe error classification: `frontend/src/pages/SwipePage.jsx` — NEW `classifySwipeError(err)` returns `{kind, message}` with kinds: network/auth/client/server; inner-retry on network only with card-id guard.
-  - F3 exit/new-project button: `frontend/src/pages/SwipePage.jsx` + `frontend/src/App.jsx` — Exit button top-left (right:16 → left:16, no Logout collision); NEW ExitConfirmPopup with `새 프로젝트 시작` + `홈으로` routes; ARIA role=dialog + aria-modal + aria-labelledby + Escape close + auto-focus primary.
-  - F4 first-dismiss tutorial popup: `frontend/src/pages/SwipePage.jsx` — DismissConfirmPopup with `archithon_dismiss_tutorial_seen` localStorage flag; ARIA role=dialog; first-time only.
-  - MainLayout.jsx: pathname `/swipe` added to Logout exclusion list (prevents Logout render on swipe route).
-  - 2 MINORs deferred non-blocking: MINOR #3 mouse-drag flicker (cosmetic), MINOR #4 setTimeout stale-closure (low probability).
-  - Rule 6 bundle pattern: reporter pass (`b6825f3`) + P3 feat (`2c387df`) + P3 review fixes (`acefff8`) swept into PR #41.
-- **Files changed (PR #41 @ 824dc86):**
-  - `frontend/src/pages/SwipePage.jsx` +342/-57 (F1+F2+F3+F4)
-  - `frontend/src/App.jsx` +67/-6 (ExitConfirmPopup routes + new-project flow)
-  - `frontend/src/layouts/MainLayout.jsx` +3/-0 (pathname exclusion)
-  - `.claude/Report.md` +57/-60 (P2 last-updated section)
-  - `.claude/Task.md` +15/-1 (handoffs signals)
-  - `.claude/handoffs-archive/2026-05.md` +8 (8 entries archived)
-  - `.claude/reviews/2c387df.md` +204/-0 (REVIEW-FAIL verdict)
-  - `.claude/reviews/50e4073.md` +125/-0 (carryover review artifact)
-  - `.claude/reviews/latest.md` (updated symlink content)
-- **Summary:** P3 swipe-UX closed — F1 ConfidenceBar stage label, F2 error classification + inner-retry, F3 Exit top-left button with ExitConfirmPopup (ARIA), F4 first-dismiss tutorial popup (ARIA) live on develop. Frontend-only; no backend/algorithm/schema changes. algorithm.md sync not applicable. Handoffs trimmed 37→30 (7 archived) this reporter pass.
+  - `frontend/src/components/profile/BoardCard.jsx` +141/-23: owner-aware lock chip (hover toggle public↔private, mobile always-show); X delete button top-left; 2-step inline confirm (red "Confirm?" pill, 3s timeout, outside-click cancel).
+  - `frontend/src/pages/UserProfilePage.jsx` +28/-8: optimistic PATCH/DELETE + revert on failure; uses `updateProject` / `deleteProject` from api/projects.js.
+  - `frontend/src/api/projects.js` +2/-1: rethrow errors on failure so callers can revert optimistic state.
+  - `frontend/src/App.jsx` +3/-1: fire-and-forget `.catch` on project mutations to silence unhandled rejection warnings.
+  - `.claude/plans/building-detail-page.md` +50/-0: plan doc updates (P5 scope tracked).
+  - Inner-loop reviewer PASS cycle 2 (MAJOR×2 + MINOR×2 fixed). Security PASS.
+- **Files changed (35b297f):**
+  - `frontend/src/components/profile/BoardCard.jsx` +141/-23
+  - `frontend/src/pages/UserProfilePage.jsx` +28/-8
+  - `frontend/src/api/projects.js` +2/-1
+  - `frontend/src/App.jsx` +3/-1
+  - `.claude/plans/building-detail-page.md` +50/-0
+- **Summary:** P5 BoardCard inline edit live on `feature/admin-p5-board-inline-edit`. Owner sees lock chip (hover or mobile always-show) + X delete with 2-step confirm popup. UserProfilePage optimistic PATCH/DELETE + revert. No backend changes; no algorithm/schema changes; algorithm.md sync not applicable.
 
 ## Last Updated (Designer)
 
