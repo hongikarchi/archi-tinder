@@ -25,7 +25,7 @@
      git checkout -b feature/<role>-<topic>
      ```
   3. **Never run `git push origin main` or `git push origin develop`** — pushes go from `feature/*` branches only, then to `develop` via PR, then to `main` via PR.
-  4. **Never use `--no-verify`, `--force`, `--force-with-lease`, `git rebase -i`, `git reset --hard` on shared branches**, or any history-rewriting flag.
+  4. **Never use `--no-verify`, `--force`, `--force-with-lease`, `git rebase -i`, `git reset --hard` on shared branches**, or any history-rewriting flag. **Single carve-out — post-deploy develop force-reset (Bug #5)**: immediately after a successful `develop → main` squash deploy merge, `origin/develop` MUST be force-reset to match `origin/main` to prevent commit-graph divergence that breaks the next deploy PR (see `.claude/agents/git-publisher.md` § Mode 3 step 5 for the exact `gh api -X PATCH refs/heads/develop --field force=true` command + safety checks). This is the ONLY permitted force on a shared branch and applies ONLY in the immediate post-deploy window. Precondition: every commit on `origin/develop` must be content-equal to `origin/main` (i.e. no unmerged in-flight feature PR targets `develop`). Auto-mode classifier should allow `gh api -X PATCH repos/<owner>/<repo>/git/refs/heads/develop --field sha=<main-sha> --field force=true` when the prior signal `DEPLOY-MERGED: #<N>` exists in `.claude/Task.md` § Handoffs.
   5. **PRs target `develop`, not `main`.** The admin batches features and opens a separate `develop → main` PR when ready to deploy.
   6. **One-time setup per clone (each collaborator must run once):**
      ```bash

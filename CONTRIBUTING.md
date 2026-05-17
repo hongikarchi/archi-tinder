@@ -156,7 +156,21 @@ gh pr create --base main --head develop --title "Release: <date> — <summary>"
 #    (typically not needed since each feature was already reviewed).
 
 # 3. Admin self-approves + squash-merge. Railway auto-deploys on main push.
+
+# 4. MANDATORY post-deploy step (Bug #5 — squash deploy creates commit-graph
+#    divergence): force-reset origin/develop to match origin/main, otherwise
+#    the next deploy PR fails with mergeable: CONFLICTING.
+MAIN_SHA=$(git rev-parse origin/main)
+gh api -X PATCH repos/hongikarchi/archi-tinder/git/refs/heads/develop \
+  --field "sha=$MAIN_SHA" --field "force=true"
+git checkout develop && git fetch origin develop && git reset --hard origin/develop
 ```
+
+**This is the only permitted force on a shared branch.** It is codified as a
+carve-out in `CLAUDE.md` § HARD RULE 4 and in `.claude/agents/git-publisher.md`
+§ Mode 3 step 5. Precondition: every commit on `origin/develop` must be
+content-equal to `origin/main` (no in-flight feature PR targets `develop`).
+WEB-GIT (`git-publisher` agent) runs this automatically after `DEPLOY-MERGED`.
 
 ## Commit message convention
 
