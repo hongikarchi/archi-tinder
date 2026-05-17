@@ -253,3 +253,4 @@ Historical resolved tasks moved to `.claude/resolved-archive.md` (frees
 ~30-50K tokens per reporter call; git log is the authoritative history).
 Append new resolved entries to the archive, not here.
 - 2026-05-18 READY-FOR-PUSH: feature/admin-p6-minors @ ab4c0a2 — P6 deferred MINORs (snapshot revert + style factor + cancel race); trivial polish, /review skip per Rule 2
+- 2026-05-18 READY-FOR-PUSH: feature/admin-reporter-p6m-close @ 922d327 — reporter session-end (Report.md sync + Task.md trim 41→30); /review skipped per Rule 2 (docs only)
