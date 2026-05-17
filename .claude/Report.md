@@ -484,19 +484,16 @@ flowchart LR
 - Phase 16: Recommendation Expansion (R-PHASE16 RESEARCH-REQUESTED queued — research terminal to elicit spec §4 decisions)
 
 ## Last Updated (Claude)
-- **Date:** 2026-05-17
-- **Commit:** `06763a9` — feat: P6 boards bulk edit — multi-select + bulk lock + bulk delete (#45)
+- **Date:** 2026-05-18
+- **Commit:** `450d3c1` — fix: P6 minors — bulk delete snapshot revert + style factor + cancel race (#47)
 - **Changes:**
-  - `frontend/src/components/profile/BoardCard.jsx` +158/-?`: select-mode props + 28px circle checkbox overlay + 3px ring + auto-unflip when selectMode active.
-  - `frontend/src/pages/UserProfilePage.jsx` +352/-?`: Edit toggle in boards header (owner-only); select-mode state + cancel/count/select-all bar; sticky bulk action bar (Public / Private / Delete N); Promise.allSettled partial revert on PATCH/DELETE fail; 2-step bulk delete confirm (3s timeout + outside-click cancel).
-  - `.claude/Task.md` +5: P6 handoff signals added.
+  - `frontend/src/pages/UserProfilePage.jsx` +64/-55: 3 P6 deferred MINORs resolved — (1) handleBulkDelete snapshots prevBoards/prevTotal and reverts via filter(successfulIds) fixing ≥2-failure splice ordering bug; (2) bulkActionButtonStyle(disabled) + bulkBtnHover helpers dedupe Public/Private inline styles; (3) exitSelectMode no longer clears bulkPending — handlers own lifecycle, Cancel mid-op no longer enables re-entry.
+  - `.claude/Task.md` +5: P6-minors handoff signals added.
   - Frontend-only; no backend change; no algorithm/schema change; algorithm.md sync not applicable.
-  - /review: Part A PASS-WITH-MINORS (2 deferrable: handleBulkDelete double-failure ordering + Public/Private button style duplication); Part B 14/14 gates PASS; Part C drift PASS.
-- **Files changed (06763a9):**
-  - `frontend/src/components/profile/BoardCard.jsx` +158
-  - `frontend/src/pages/UserProfilePage.jsx` +352
+- **Files changed (450d3c1):**
+  - `frontend/src/pages/UserProfilePage.jsx` +64/-55
   - `.claude/Task.md` +5
-- **Summary:** P6 Curated Boards bulk edit live on develop @ 06763a9. Owner can enter select mode, multi-select boards, and bulk set Public/Private or bulk delete with Promise.allSettled + partial revert. Full P0-P6 latency+UX overhaul series complete. 2 MINOR deferred (non-blocking); 1 non-blocking race (Cancel-during-in-flight). No backend/algo changes.
+- **Summary:** P6 deferred MINORs patched on develop @ 450d3c1. Bulk delete now snapshot-reverts correctly on partial failure; style helpers dedupe button inline styles; Cancel mid-op is race-safe. Frontend-only; no backend/algo changes.
 
 ## Last Updated (Designer)
 
