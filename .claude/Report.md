@@ -241,15 +241,15 @@ flowchart TD
 | `MainLayout.jsx` | Layout wrapper; sharedLayoutProps chain extended with onToggleBookmark passthrough to FavoritesPage (Sprint 4 §8) |
 | `TabBar.jsx` | Bottom navigation with safe-area-inset-bottom padding (content-box) |
 | `ProjectSetupPage.jsx` | New project setup with folder name and area range; safe-area-adjusted layout; **Phase 14 BOARD2 (bdc8d7b):** public/private visibility toggle (default 'private') wired through wizardData → handleStart → PATCH /projects/{id}/ after session create |
-| `UserProfilePage.jsx` | **Phase 13 PROF3 (d735666 + b272f37):** wired to GET /api/v1/users/{user_id}/ + follow/unfollow; 1023 → 565 LOC via 6 extracted shared components in `components/profile/` |
+| `UserProfilePage.jsx` | **Phase 13 PROF3 (d735666 + b272f37):** wired to GET /api/v1/users/{user_id}/ + follow/unfollow; 1023 → 565 LOC via 6 extracted shared components in `components/profile/`; **P5 (35b297f):** optimistic PATCH/DELETE board handlers + revert on failure |
 | `FirmProfilePage.jsx` | **Phase 13 PROF3 (d735666 + b272f37):** wired to GET /api/v1/offices/{id}/ + office follow/unfollow (SOC3 39de1d4); 962 → 595 LOC via shared components |
 | `BoardDetailPage.jsx` | **Phase 14 BOARD3 (aedc817):** wired to GET /projects/{uuid}/ + reaction toggle (POST/DELETE /projects/{uuid}/react/); `useBoard` hook; optimistic reaction + rollback + `isReactionPending` race guard; server-authoritative `{reaction_count, reacted}` override; `reactionError` dedicated banner |
 | `PostSwipeLandingPage.jsx` | MOCKUP-READY (design terminal BOARD3 context); Phase 16 REC1 target |
-| `components/profile/` | **Phase 13 PROF3 NEW (b272f37):** 6 shared components extracted from UserProfilePage + FirmProfilePage — `InfoCol`, `BoardCard`, `BioPersonaFlipCard`, `DescriptionAboutFlipCard`, `ProjectCard`, `ArticleCard` |
+| `components/profile/` | **Phase 13 PROF3 NEW (b272f37):** 6 shared components extracted from UserProfilePage + FirmProfilePage — `InfoCol`, `BoardCard`, `BioPersonaFlipCard`, `DescriptionAboutFlipCard`, `ProjectCard`, `ArticleCard`; **P5 (35b297f):** `BoardCard` extended with owner-aware lock chip (hover toggle public↔private, mobile always-show) + X delete with 2-step inline confirm (red "Confirm?" pill, 3s timeout, outside-click cancel) |
 | `hooks/useBoard.js` | **Phase 14 BOARD3 NEW (aedc817):** Fetches project + buildings; cancellation guard via AbortController; pagination support |
 | `hooks/useProjectReactors.js` | **Phase 15 SOC2 NEW (59d2af4):** Paginated reactors list fetcher; cancellation guard |
 | `api/social.js` | **Phase 15 SOC1/SOC3:** `followUser`, `unfollowUser`, `followOffice`, `unfollowOffice` API wrappers |
-| `api/projects.js` | **Phase 14/15:** `getProject`, `getBoardBuildings`, `reactToProject`, `unreactToProject`, `getProjectReactors`, `updateProject` |
+| `api/projects.js` | **Phase 14/15:** `getProject`, `getBoardBuildings`, `reactToProject`, `unreactToProject`, `getProjectReactors`, `updateProject`; **P5 (35b297f):** errors rethrown on failure so callers can revert optimistic state |
 
 ## Web Testing Structure
 
@@ -485,31 +485,21 @@ flowchart LR
 
 ## Last Updated (Claude)
 - **Date:** 2026-05-17
-- **Commit:** `52c3cbf` (PR #42 — feat: P4 BuildingDetailPage — Pinterest masonry + per-image kind badge + filter toggle; squashed into develop). Bundled: `823bff1` (reporter P3 session-end housekeeping), `18fc67f` (P3 deferred MINORs — F4 mouse-drag flicker + setTimeout project guard), `ff80a81` (P4 BuildingDetailPage Pinterest masonry redesign).
+- **Commit:** `35b297f` — feat: P5 Curated Boards inline edit — lock toggle + delete confirm
 - **Changes:**
-  - P4 BuildingDetailPage gallery rewrite: `frontend/src/pages/BuildingDetailPage.jsx` — 2-section masonry (photos + drawings), per-image kind badge (Exterior/Interior/Drawing/Aerial/Detail/Cover/Photo), 3-chip filter toggle (All / Photos / Drawings), backward-compat fallback to old horizontal carousel when `gallery_meta` empty.
-  - Backend additive: `backend/apps/recommendation/engine.py` `_row_to_card` now emits `gallery_meta: [{url, kind}]` parallel to existing `gallery: [str]`. Zero breaking change — `SwipeCard.jsx` + `GalleryOverlay.jsx` untouched.
-  - `frontend/src/api/images.js`: `normalizeCard` passthrough for new `gallery_meta` field.
-  - `frontend/src/index.css`: CSS `@media` desktop 3-column masonry (columnCount 3 at ≥768px).
-  - `frontend/src/App.jsx`: BuildingDetailPage route wiring + modal state.
-  - `frontend/src/pages/SwipePage.jsx`: BuildingDetailPage open handler.
-  - `backend/apps/recommendation/tests/test_row_to_card.py`: new test coverage for `gallery_meta` field shape.
-  - 3 reviewer MINORs all non-blocking: galleryFilter state reset (theoretical — no in-app building-to-building nav), badge style duplication (maintainability), drawings eager-load inconsistency (minor UX). All deferred.
-  - Rule 6 bundle: reporter P3 pass + P3 deferred MINORs + P4 feat swept into PR #42.
-- **Files changed (PR #42 @ 52c3cbf):**
-  - `frontend/src/pages/BuildingDetailPage.jsx` +243/-57 (P4 masonry gallery rewrite)
-  - `frontend/src/App.jsx` +10/-1 (BuildingDetailPage route)
-  - `frontend/src/api/images.js` +1/-0 (gallery_meta passthrough)
-  - `frontend/src/index.css` +7/-0 (desktop 3-col masonry media query)
-  - `frontend/src/pages/SwipePage.jsx` +3/-1 (open handler)
-  - `backend/apps/recommendation/engine.py` +3/-0 (gallery_meta in _row_to_card)
-  - `backend/apps/recommendation/tests/test_row_to_card.py` +36/-0 (new tests)
-  - `.claude/Report.md` (this section)
-  - `.claude/Task.md` (handoffs signals + archive trim)
-  - `.claude/handoffs-archive/2026-05.md` (7 entries archived)
-  - `.claude/reviews/acefff8.md` +227/-0 (carryover review artifact)
-  - `.claude/reviews/latest.md` (updated content)
-- **Summary:** P4 BuildingDetailPage Pinterest masonry redesign live on develop. Backend additive `gallery_meta:[{url,kind}]` field from `_row_to_card`; frontend gallery section fully rewritten with 2-section masonry, per-image kind badges, filter toggle, carousel fallback. No algorithm/schema changes; algorithm.md sync not applicable. Handoffs trimmed 35→30 (5 entries archived, +2 new = net 37→30 after add) this reporter pass.
+  - `frontend/src/components/profile/BoardCard.jsx` +141/-23: owner-aware lock chip (hover toggle public↔private, mobile always-show); X delete button top-left; 2-step inline confirm (red "Confirm?" pill, 3s timeout, outside-click cancel).
+  - `frontend/src/pages/UserProfilePage.jsx` +28/-8: optimistic PATCH/DELETE + revert on failure; uses `updateProject` / `deleteProject` from api/projects.js.
+  - `frontend/src/api/projects.js` +2/-1: rethrow errors on failure so callers can revert optimistic state.
+  - `frontend/src/App.jsx` +3/-1: fire-and-forget `.catch` on project mutations to silence unhandled rejection warnings.
+  - `.claude/plans/building-detail-page.md` +50/-0: plan doc updates (P5 scope tracked).
+  - Inner-loop reviewer PASS cycle 2 (MAJOR×2 + MINOR×2 fixed). Security PASS.
+- **Files changed (35b297f):**
+  - `frontend/src/components/profile/BoardCard.jsx` +141/-23
+  - `frontend/src/pages/UserProfilePage.jsx` +28/-8
+  - `frontend/src/api/projects.js` +2/-1
+  - `frontend/src/App.jsx` +3/-1
+  - `.claude/plans/building-detail-page.md` +50/-0
+- **Summary:** P5 BoardCard inline edit live on `feature/admin-p5-board-inline-edit`. Owner sees lock chip (hover or mobile always-show) + X delete with 2-step confirm popup. UserProfilePage optimistic PATCH/DELETE + revert. No backend changes; no algorithm/schema changes; algorithm.md sync not applicable.
 
 ## Last Updated (Designer)
 
