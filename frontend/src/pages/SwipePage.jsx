@@ -1,310 +1,7 @@
 import { useRef, useState, useEffect } from 'react'
 import TinderCard from 'react-tinder-card'
 import TutorialPopup from '../components/TutorialPopup.jsx'
-import { useImageTelemetry } from '../hooks/useImageTelemetry.js'
-
-const CARD_WIDTH  = Math.min(340, (typeof window !== 'undefined' ? window.innerWidth : 375) - 32)
-const CARD_HEIGHT = Math.round(CARD_WIDTH * (480 / 340))
-const TAP_THRESHOLD = 8
-
-/* ── InfoRow ─────────────────────────────────────────────────────────────── */
-function InfoRow({ label, value }) {
-  if (!value) return null
-  return (
-    <div>
-      <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>
-        {label}
-      </div>
-      <div style={{ color: '#e2e8f0', fontSize: 12, fontWeight: 500, lineHeight: 1.3 }}>{value}</div>
-    </div>
-  )
-}
-
-/* ── Card ────────────────────────────────────────────────────────────────── */
-function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
-  const [isExpanded,  setIsExpanded]  = useState(false)
-  const [showGallery, setShowGallery] = useState(false)
-  const [imgLoaded,   setImgLoaded]   = useState(false)
-  const [imgFailed,   setImgFailed]   = useState(false)
-  // Set of URLs already attempted as src (cache-bust retry + covers_by_type
-  // fallback chain). Initialized lazily inside handleImgError on first failure.
-  const imgRetried = useRef(null)
-  const dragStart = useRef(null)
-  const dragStartTime = useRef(null)
-
-  const { onLoad: telemetryOnLoad, onError: telemetryOnError } = useImageTelemetry({
-    buildingId: card.image_id,
-    context: 'swipe_card',
-  })
-
-  function openGallery()  { setShowGallery(true);  onGalleryOpen()  }
-  function closeGallery() { setShowGallery(false); onGalleryClose() }
-
-  function handlePointerDown(e) {
-    dragStart.current = { x: e.clientX, y: e.clientY }
-    dragStartTime.current = Date.now()
-  }
-  function handlePointerUp(e) {
-    if (!dragStart.current) return
-    const dx = Math.abs(e.clientX - dragStart.current.x)
-    const dy = Math.abs(e.clientY - dragStart.current.y)
-    const dt = Date.now() - dragStartTime.current
-    dragStart.current = null
-    if (dx < TAP_THRESHOLD && dy < TAP_THRESHOLD && dt < 300) {
-      if (showGallery) closeGallery()
-      else setIsExpanded(v => !v)
-    }
-  }
-
-  function handleImgError(e) {
-    // Emit telemetry FIRST (captures original failed URL before retry mutates e.target.src)
-    telemetryOnError(e)
-    // Multi-step fallback chain for cold/warm + external-CDN flakiness (S2).
-    // Order: cache-bust retry -> covers_by_type.exterior (canonical default) ->
-    //        any other covers_by_type variant -> first gallery URL -> give up.
-    const cbt = card.covers_by_type || {}
-    const fallbackChain = [
-      cbt.exterior, cbt.interior, cbt.aerial, cbt.detail, cbt.drawing,
-      ...(card.gallery || []),
-    ].filter(u => u && typeof u === 'string')
-    if (!(imgRetried.current instanceof Set)) {
-      imgRetried.current = new Set([card.image_url])
-    }
-    if (!imgRetried.current.has(card.image_url + '?retry=1')) {
-      imgRetried.current.add(card.image_url + '?retry=1')
-      const sep = (card.image_url || '').includes('?') ? '&' : '?'
-      e.target.src = (card.image_url || '') + sep + 'retry=1'
-      return
-    }
-    for (const url of fallbackChain) {
-      if (!imgRetried.current.has(url)) {
-        imgRetried.current.add(url)
-        e.target.src = url
-        return
-      }
-    }
-    setImgFailed(true)
-  }
-
-  function handleImgLoad(e) {
-    setImgLoaded(true)
-    telemetryOnLoad(e)
-  }
-
-  const typology   = card.metadata?.axis_typology
-  const architects = card.metadata?.axis_architects
-  const country    = card.metadata?.axis_country
-  const city       = card.metadata?.axis_city
-  const year       = card.metadata?.axis_year
-  const style      = card.metadata?.axis_style
-  const atmosphere = card.metadata?.axis_atmosphere
-  // canonical_v2 drops single-string `material`; expose first 2-3 of
-  // material_visual[] as a comma-joined chip instead.
-  const materialList = Array.isArray(card.metadata?.axis_material_visual)
-    ? card.metadata.axis_material_visual.slice(0, 3)
-    : []
-  const material     = materialList.length ? materialList.join(', ') : null
-  const gallery         = card.gallery || []
-  const drawingStart    = card.gallery_drawing_start ?? gallery.length
-
-  return (
-    <div
-      style={{
-        position: 'absolute', top: 0, left: 0,
-        width: CARD_WIDTH, height: CARD_HEIGHT,
-        cursor: 'grab',
-        userSelect: 'none', WebkitUserSelect: 'none', touchAction: 'none',
-        perspective: 1200,
-      }}
-      onPointerDown={handlePointerDown}
-      onPointerUp={handlePointerUp}
-    >
-      <div style={{
-        width: '100%', height: '100%', position: 'relative',
-        transformStyle: 'preserve-3d',
-        transform: showGallery ? 'rotateY(180deg)' : 'rotateY(0deg)',
-        transition: 'transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
-      }}>
-
-        {/* ── FRONT FACE ── */}
-        <div style={{
-          position: 'absolute', inset: 0,
-          backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden',
-          borderRadius: 20, overflow: 'hidden',
-          boxShadow: '0 25px 50px rgba(0,0,0,0.6)',
-        }}>
-          {/* Photo / Skeleton / Fallback */}
-          {imgFailed ? (
-            <div style={{
-              position: 'absolute', inset: 0,
-              background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)',
-              display: 'flex', flexDirection: 'column',
-              alignItems: 'center', justifyContent: 'center',
-              gap: 12,
-            }}>
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2"/>
-                <circle cx="8.5" cy="8.5" r="1.5"/>
-                <polyline points="21 15 16 10 5 21"/>
-              </svg>
-              <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, fontWeight: 500 }}>
-                Image unavailable
-              </span>
-            </div>
-          ) : (
-            <>
-              <div className="skeleton-shimmer" style={{ position: 'absolute', inset: 0 }} />
-              <img
-                src={card.image_url}
-                alt={card.image_title}
-                fetchpriority="high"
-                decoding="sync"
-                draggable={false}
-                onLoad={handleImgLoad}
-                onError={handleImgError}
-                style={{
-                  position: 'absolute', inset: 0,
-                  width: '100%', height: '100%',
-                  objectFit: 'cover', objectPosition: 'center',
-                  opacity: imgLoaded ? 1 : 0,
-                  transition: 'opacity 0.2s ease',
-                }}
-              />
-            </>
-          )}
-
-          {/* Gradient — expands upward on detail open */}
-          <div style={{
-            position: 'absolute', bottom: 0, left: 0, right: 0,
-            height: isExpanded ? '100%' : '52%',
-            background: 'linear-gradient(to top, rgba(0,0,0,0.93) 0%, rgba(0,0,0,0.6) 38%, rgba(0,0,0,0.12) 72%, transparent 100%)',
-            transition: 'height 0.42s cubic-bezier(0.32, 0, 0.18, 1)',
-            pointerEvents: 'none',
-          }} />
-
-          {/* Front: hint only (no title) */}
-          <div style={{
-            position: 'absolute', bottom: 0, left: 0, right: 0, padding: '0 18px 20px',
-            opacity: isExpanded ? 0 : 1,
-            transform: isExpanded ? 'translateY(-6px)' : 'translateY(0)',
-            transition: 'opacity 0.22s ease, transform 0.38s ease',
-            pointerEvents: isExpanded ? 'none' : 'auto',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, color: 'rgba(255,255,255,0.5)', fontSize: 11, letterSpacing: '0.04em' }}>
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="18 15 12 9 6 15" />
-              </svg>
-              tap for details
-            </div>
-          </div>
-
-          {/* Detail content — transparent, slides over expanded gradient */}
-          <div style={{
-            position: 'absolute', left: 0, right: 0, bottom: 0,
-            height: '66%',
-            background: 'transparent',
-            transform: isExpanded ? 'translateY(0)' : 'translateY(100%)',
-            transition: 'transform 0.42s cubic-bezier(0.32, 0, 0.18, 1)',
-            display: 'flex', flexDirection: 'column',
-            padding: '16px 18px 20px', gap: 0, overflow: 'hidden',
-          }}>
-            <h2 style={{ color: '#fff', fontSize: 18, fontWeight: 700, lineHeight: 1.3, margin: '0 0 3px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-              {card.image_title}
-            </h2>
-            {architects && (
-              <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 12, margin: '0 0 12px', fontStyle: 'italic' }}>
-                {architects}
-              </p>
-            )}
-            <div style={{ height: 1, background: 'rgba(255,255,255,0.1)', marginBottom: 12 }} />
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px', flex: 1 }}>
-              <InfoRow label="Type"     value={typology} />
-              <InfoRow label="Country"  value={country} />
-              <InfoRow label="City"     value={city} />
-              <InfoRow label="Year"     value={year} />
-              <InfoRow label="Style"      value={style} />
-              <InfoRow label="Atmosphere" value={atmosphere} />
-              <InfoRow label="Material" value={material} />
-
-            </div>
-            {gallery.length > 0 && (
-              <button
-                onPointerDown={e => e.stopPropagation()}
-                onPointerUp={e => e.stopPropagation()}
-                onClick={e => { e.stopPropagation(); openGallery() }}
-                style={{
-                  marginTop: 12, width: '100%', padding: '10px 14px', borderRadius: 10,
-                  background: 'rgba(255,255,255,0.09)', border: '1px solid rgba(255,255,255,0.18)',
-                  color: '#fff', fontSize: 12, fontWeight: 600,
-                  cursor: 'pointer', fontFamily: 'inherit',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                }}
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="3" width="28" height="28" rx="2"/>
-                  <circle cx="8.5" cy="8.5" r="1.5"/>
-                  <polyline points="21 15 16 10 5 21"/>
-                </svg>
-                View Gallery · {gallery.length} photos
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* ── GALLERY FACE ── */}
-        <div style={{
-          position: 'absolute', inset: 0,
-          backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden',
-          transform: 'rotateY(180deg)',
-          borderRadius: 20, overflow: 'hidden',
-          boxShadow: '0 25px 50px rgba(0,0,0,0.6)',
-          background: '#000',
-        }}>
-          {/* Vertical scroll of full-width images */}
-          <div
-            onTouchStart={e => e.stopPropagation()}
-            onTouchMove={e => e.stopPropagation()}
-            style={{
-              position: 'absolute', inset: 0,
-              overflowY: 'auto', overflowX: 'hidden',
-              scrollSnapType: 'y mandatory',
-              overscrollBehaviorY: 'contain',
-              scrollbarWidth: 'none',
-            }}
-          >
-            {gallery.map((url, i) => (
-              <div key={i} style={{
-                width: '100%', height: CARD_HEIGHT,
-                flexShrink: 0,
-                scrollSnapAlign: 'start',
-                scrollSnapStop: 'always',
-                backgroundImage: `url(${url})`,
-                backgroundSize: i >= drawingStart ? 'contain' : 'cover',
-                backgroundPosition: 'center',
-                backgroundRepeat: 'no-repeat',
-                backgroundColor: i >= drawingStart ? '#fff' : 'transparent',
-              }} />
-            ))}
-          </div>
-
-          {/* Top arrow */}
-          <div style={{ position: 'absolute', top: 14, left: 0, right: 0, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="18 15 12 9 6 15"/>
-            </svg>
-          </div>
-          {/* Bottom arrow */}
-          <div style={{ position: 'absolute', bottom: 14, left: 0, right: 0, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="6 9 12 15 18 9"/>
-            </svg>
-          </div>
-        </div>
-
-      </div>
-    </div>
-  )
-}
+import SwipeCard, { CARD_WIDTH, CARD_HEIGHT } from '../components/SwipeCard.jsx'
 
 /* ── LoadingCard ─────────────────────────────────────────────────────────── */
 function LoadingCard() {
@@ -329,28 +26,61 @@ function LoadingCard() {
 }
 
 /* ── ConfidenceBar (unified progress for all phases) ─────────────────────── */
-function ConfidenceBar({ value, phase, likeCount }) {
+function ConfidenceBar({ value, phase, progress }) {
   // value: confidence in [0, 1] (analyzing+ phases) or null (exploring / pre-reset)
-  // When confidence is null and we're in exploring phase, fall back to like-count
-  // progress (0-3 likes to unlock analysis). Always renders one bar + one label
-  // so the header never branches between two visualizations.
+  // progress: full progress object for swipe count
+  const likeCount = progress?.like_count ?? 0
   let pct = 0
-  let label = ''
-  if (value !== null && value !== undefined) {
-    pct = Math.round(value * 100)
-    label = phase === 'converged' || phase === 'completed'
-      ? '분석 완료'
-      : `취향 안정도 ${pct}%`
+  let stageLabel = 'Loading…'
+
+  if (phase === 'converged' || phase === 'completed') {
+    pct = value != null ? Math.round(value * 100) : 100
+    stageLabel = 'Converged'
+  } else if (phase === 'analyzing') {
+    pct = value != null ? Math.round(value * 100) : 0
+    stageLabel = 'Analyzing'
   } else if (phase === 'exploring') {
-    const likes = Math.min(likeCount ?? 0, 3)
+    const likes = Math.min(likeCount, 3)
     pct = Math.round((likes / 3) * 100)
-    label = `탐색 중 · ♥ ${likes}/3`
-  } else {
-    pct = 0
-    label = '준비 중'
+    stageLabel = 'Exploring'
+  } else if (value != null) {
+    pct = Math.round(value * 100)
+    stageLabel = 'Analyzing'
   }
+
+  // Swipe count: prefer swipe_count, fallback to like+dislike sum, fallback to likes only
+  let swipeCountLabel = ''
+  if (progress?.swipe_count != null) {
+    swipeCountLabel = `${progress.swipe_count} swipes`
+  } else if (progress?.like_count != null && progress?.dislike_count != null) {
+    swipeCountLabel = `${progress.like_count + progress.dislike_count} swipes`
+  } else if (progress?.like_count != null) {
+    swipeCountLabel = `${progress.like_count} ♥`
+  }
+
   return (
     <div style={{ width: '100%' }}>
+      {/* Two-column info row above the bar */}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+        marginBottom: 5,
+      }}>
+        <span style={{
+          fontSize: 13, fontWeight: 600, color: 'var(--color-text)',
+          lineHeight: 1.2,
+        }}>
+          {stageLabel}
+        </span>
+        {swipeCountLabel ? (
+          <span style={{
+            fontSize: 12, fontWeight: 500, color: 'var(--color-text-dim)',
+          }}>
+            {swipeCountLabel}
+          </span>
+        ) : null}
+      </div>
+
+      {/* Bar */}
       <div style={{
         height: 4, borderRadius: 999,
         background: 'var(--color-progress-track)',
@@ -364,13 +94,196 @@ function ConfidenceBar({ value, phase, likeCount }) {
           transition: 'width 300ms ease',
         }} />
       </div>
+
+      {/* Percent below bar, right-aligned */}
       <div style={{
         fontSize: 11,
         color: 'var(--color-text-dim)',
         textAlign: 'right',
         marginTop: 4,
       }}>
-        {label}
+        {pct}%
+      </div>
+    </div>
+  )
+}
+
+/* ── ExitConfirmPopup ────────────────────────────────────────────────────── */
+function ExitConfirmPopup({ onNewProject, onHome, onCancel }) {
+  const primaryBtnRef = useRef(null)
+
+  // Auto-focus primary button on mount
+  useEffect(() => { primaryBtnRef.current?.focus() }, [])
+
+  // Dismiss on Escape
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onCancel() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onCancel])
+
+  return (
+    <div
+      onClick={onCancel}
+      style={{
+        position: 'fixed', inset: 0,
+        background: 'rgba(10,10,12,0.65)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        zIndex: 10001,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '0 24px',
+        paddingBottom: 'env(safe-area-inset-bottom)',
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="exit-confirm-title"
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-border-soft)',
+          borderRadius: 20,
+          padding: '28px 24px 24px',
+          width: '100%',
+          maxWidth: 360,
+          display: 'flex', flexDirection: 'column', gap: 8,
+          boxShadow: '0 25px 50px rgba(0,0,0,0.5)',
+        }}
+      >
+        <h2 id="exit-confirm-title" style={{
+          color: 'var(--color-text)', fontSize: 17, fontWeight: 700,
+          margin: '0 0 4px', textAlign: 'center',
+        }}>
+          현재 세션을 종료할까요?
+        </h2>
+        <p style={{
+          color: 'var(--color-text-dim)', fontSize: 13, fontWeight: 500,
+          textAlign: 'center', margin: '0 0 12px', lineHeight: 1.5,
+        }}>
+          지금까지의 좋아요는 저장돼요. 새 프로젝트를 시작하거나 홈으로 돌아갈 수 있어요.
+        </p>
+        <button
+          ref={primaryBtnRef}
+          onClick={onNewProject}
+          style={{
+            padding: '13px 24px', borderRadius: 12,
+            background: '#ec4899', color: '#fff',
+            fontSize: 14, fontWeight: 600, border: 'none',
+            cursor: 'pointer', fontFamily: 'inherit', minHeight: 44,
+          }}
+        >
+          새 프로젝트 시작
+        </button>
+        <button
+          onClick={onHome}
+          style={{
+            padding: '13px 24px', borderRadius: 12,
+            background: 'var(--color-surface-2)', color: 'var(--color-text)',
+            fontSize: 14, fontWeight: 600,
+            border: '1px solid var(--color-border)',
+            cursor: 'pointer', fontFamily: 'inherit', minHeight: 44,
+          }}
+        >
+          홈으로
+        </button>
+        <button
+          onClick={onCancel}
+          style={{
+            padding: '10px 24px', borderRadius: 12,
+            background: 'transparent', color: 'var(--color-text-dim)',
+            fontSize: 13, fontWeight: 500, border: 'none',
+            cursor: 'pointer', fontFamily: 'inherit', minHeight: 40,
+          }}
+        >
+          취소
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/* ── DismissConfirmPopup ─────────────────────────────────────────────────── */
+function DismissConfirmPopup({ onConfirm, onCancel }) {
+  const primaryBtnRef = useRef(null)
+
+  // Auto-focus primary button on mount
+  useEffect(() => { primaryBtnRef.current?.focus() }, [])
+
+  // Dismiss on Escape
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onCancel() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onCancel])
+
+  return (
+    <div
+      onClick={onCancel}
+      style={{
+        position: 'fixed', inset: 0,
+        background: 'rgba(10,10,12,0.65)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        zIndex: 10001,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '0 24px',
+        paddingBottom: 'env(safe-area-inset-bottom)',
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="dismiss-confirm-title"
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-border-soft)',
+          borderRadius: 20,
+          padding: '28px 24px 24px',
+          width: '100%',
+          maxWidth: 360,
+          display: 'flex', flexDirection: 'column', gap: 8,
+          boxShadow: '0 25px 50px rgba(0,0,0,0.5)',
+        }}
+      >
+        <h2 id="dismiss-confirm-title" style={{
+          color: 'var(--color-text)', fontSize: 17, fontWeight: 700,
+          margin: '0 0 4px', textAlign: 'center',
+        }}>
+          이 건물을 보지 않을까요?
+        </h2>
+        <p style={{
+          color: 'var(--color-text-dim)', fontSize: 13, fontWeight: 500,
+          textAlign: 'center', margin: '0 0 12px', lineHeight: 1.5,
+        }}>
+          왼쪽 스와이프 = 다시 추천 안 됨. 한 번 더 확인할게요.
+        </p>
+        <button
+          ref={primaryBtnRef}
+          onClick={onConfirm}
+          style={{
+            padding: '13px 24px', borderRadius: 12,
+            background: 'var(--color-surface-2)', color: 'var(--color-text)',
+            fontSize: 14, fontWeight: 600,
+            border: '1px solid var(--color-border)',
+            cursor: 'pointer', fontFamily: 'inherit', minHeight: 44,
+          }}
+        >
+          건너뛰기
+        </button>
+        <button
+          onClick={onCancel}
+          style={{
+            padding: '10px 24px', borderRadius: 12,
+            background: 'transparent', color: 'var(--color-text-dim)',
+            fontSize: 13, fontWeight: 500, border: 'none',
+            cursor: 'pointer', fontFamily: 'inherit', minHeight: 40,
+          }}
+        >
+          취소
+        </button>
       </div>
     </div>
   )
@@ -380,12 +293,18 @@ function ConfidenceBar({ value, phase, likeCount }) {
 export default function SwipePage({
   currentCard, cardResetToken = 0, progress, isCompleted, isLoading, isResultLoading = false,
   projectName, onSwipe, onViewResults, onExtendSession,
+  onExitToNewProject, onExitToHome,
 }) {
   const cardRef = useRef(null)
   const pendingAction = useRef(null)
   const swipedCardId = useRef(null)
+  const hasShownDismissTutorial = useRef(!!localStorage.getItem('archithon_dismiss_tutorial_seen'))
+  const pendingDismissDir = useRef(null)
+  const [localResetTick, setLocalResetTick] = useState(0)
   const [galleryOpen, setGalleryOpen] = useState(false)
   const [showTutorial, setShowTutorial] = useState(() => !localStorage.getItem('archithon_tutorial_dismissed'))
+  const [showExitConfirm, setShowExitConfirm] = useState(false)
+  const [showDismissConfirm, setShowDismissConfirm] = useState(false)
 
   const like_count       = progress?.like_count    ?? 0
   const phase            = progress?.phase
@@ -393,6 +312,16 @@ export default function SwipePage({
   const confidence       = progress?.confidence ?? null
 
   function onTinderSwipe(dir) {
+    // F4: intercept first-ever left swipe to show dismiss tutorial
+    if (dir === 'left' && !hasShownDismissTutorial.current) {
+      // Restore card to center BEFORE showing popup so cancel path has no flicker
+      cardRef.current?.restoreCard()
+      pendingDismissDir.current = dir
+      pendingAction.current = null
+      swipedCardId.current = null
+      setShowDismissConfirm(true)
+      return
+    }
     swipedCardId.current = currentCard?.image_id
     pendingAction.current = dir === 'right' ? 'like' : 'dislike'
   }
@@ -406,8 +335,36 @@ export default function SwipePage({
 
   async function swipeManual(dir) {
     if (!cardRef.current || isLoading) return
+    // F4: intercept first-ever left swipe from keyboard
+    if (dir === 'left' && !hasShownDismissTutorial.current) {
+      pendingDismissDir.current = dir
+      setShowDismissConfirm(true)
+      return
+    }
     pendingAction.current = dir === 'right' ? 'like' : 'dislike'
     await cardRef.current.swipe(dir)
+  }
+
+  function handleDismissConfirm() {
+    hasShownDismissTutorial.current = true
+    localStorage.setItem('archithon_dismiss_tutorial_seen', '1')
+    setShowDismissConfirm(false)
+    const dir = pendingDismissDir.current
+    pendingDismissDir.current = null
+    if (dir && cardRef.current) {
+      pendingAction.current = 'dislike'
+      swipedCardId.current = currentCard?.image_id
+      cardRef.current.swipe('left')
+    }
+  }
+
+  function handleDismissCancel() {
+    pendingDismissDir.current = null
+    pendingAction.current = null
+    swipedCardId.current = null
+    setShowDismissConfirm(false)
+    // Force TinderCard remount to restore card to center
+    setLocalResetTick(t => t + 1)
   }
 
   // When cardResetToken changes the TinderCard was force-remounted after a
@@ -420,12 +377,13 @@ export default function SwipePage({
   useEffect(() => {
     function handleKeyDown(e) {
       if (isLoading || !currentCard) return
-      if (showTutorial || pendingAction.current) return
+      if (showTutorial || showExitConfirm || showDismissConfirm || pendingAction.current) return
       if (swipedCardId.current === currentCard.image_id) return
 
       if (e.key === 'ArrowLeft') {
-        swipedCardId.current = currentCard.image_id
         if (galleryOpen) setGalleryOpen(false)
+        // Only pre-set swipedCardId guard if not going to intercept for dismiss tutorial
+        if (hasShownDismissTutorial.current) swipedCardId.current = currentCard.image_id
         swipeManual('left')
       } else if (e.key === 'ArrowRight') {
         swipedCardId.current = currentCard.image_id
@@ -435,7 +393,7 @@ export default function SwipePage({
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isLoading, currentCard, showTutorial, galleryOpen]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isLoading, currentCard, showTutorial, showExitConfirm, showDismissConfirm, galleryOpen]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (isCompleted) {
     const canContinue = !!progress?.can_continue
@@ -562,11 +520,51 @@ export default function SwipePage({
   return (
     <>
       <TutorialPopup visible={showTutorial} onClose={() => setShowTutorial(false)} />
+
+      {showExitConfirm && (
+        <ExitConfirmPopup
+          onNewProject={() => { setShowExitConfirm(false); onExitToNewProject?.() }}
+          onHome={() => { setShowExitConfirm(false); onExitToHome?.() }}
+          onCancel={() => setShowExitConfirm(false)}
+        />
+      )}
+
+      {showDismissConfirm && (
+        <DismissConfirmPopup
+          onConfirm={handleDismissConfirm}
+          onCancel={handleDismissCancel}
+        />
+      )}
+
       <div style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center',
         justifyContent: 'space-between', height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))', overflow: 'hidden',
         background: 'var(--color-bg)', padding: '20px 16px',
+        position: 'relative',
       }}>
+
+        {/* F3 — Exit button, top-left floating (moved from right to avoid Logout button occlusion) */}
+        <button
+          onClick={() => setShowExitConfirm(true)}
+          aria-label="Exit session"
+          style={{
+            position: 'absolute', top: 12, left: 16,
+            width: 32, height: 32, borderRadius: '50%',
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: 'var(--color-text-dim)', cursor: 'pointer',
+            zIndex: 10,
+          }}
+        >
+          {/* Left-arrow / exit icon */}
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+        </button>
 
         {/* Header */}
         <div style={{ textAlign: 'center', width: '100%' }}>
@@ -576,7 +574,7 @@ export default function SwipePage({
               : <><span style={{ color: 'var(--color-text)' }}>Archi</span><span style={{ color: '#ec4899' }}>Tinder</span></>}
           </h1>
           <div style={{ maxWidth: CARD_WIDTH, margin: '0 auto' }}>
-            <ConfidenceBar value={confidence} phase={phase} likeCount={like_count} />
+            <ConfidenceBar value={confidence} phase={phase} progress={progress} />
             {filter_relaxed && (
               <p style={{ color: 'var(--color-text-dimmer)', fontSize: 11, marginTop: 6, textAlign: 'center' }}>
                 Filters were relaxed to find more buildings
@@ -591,7 +589,7 @@ export default function SwipePage({
             <>
               <TinderCard
                 ref={cardRef}
-                key={`${currentCard.image_id}_${cardResetToken}`}
+                key={`${currentCard.image_id}_${cardResetToken}_${localResetTick}`}
                 onSwipe={onTinderSwipe}
                 onCardLeftScreen={onCardLeftScreen}
                 preventSwipe={galleryOpen ? ['left', 'right', 'up', 'down'] : ['up', 'down']}

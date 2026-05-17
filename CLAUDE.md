@@ -86,6 +86,23 @@
     User overrides apply: "지금 reporter 돌려" / "리뷰 돌려" / "지금 push".
     Don't read full /review reports in main — summarize verdict in chat
     instead of pulling the 25-30 K body.
+  - **Implementation delegation — HARD RULE** (durable across sessions).
+    WEB-MAIN (Claude opus) owns *architecture, schema, auth, product + release
+    decisions, and review* — it does **NOT** write production feature code
+    directly. Every `backend/` or `frontend/` feature / bug-fix / refactor edit
+    is delegated: full features, unclear-root-cause bugs, or cross-cutting
+    refactors → **orchestrator**; bounded mechanical changes → **back-maker /
+    front-maker** (`model: sonnet`) sub-agents or a **codex worker** (bounded
+    task file). WEB-MAIN picks the model / effort per task and dispatches — it
+    does not fall back to implementing in opus because delegation feels like
+    overhead. **Carve-out (WEB-MAIN direct edit OK)**: meta / infra (`tools/`,
+    `hooks/`, `.github/`), single-line policy fixes, sub-MINOR follow-ups, and
+    pure docs (`CLAUDE.md`, `.claude/*`, `docs/*`, `AGENTS.md`,
+    `CONTRIBUTING.md`, `DESIGN.md`, `Report.md`, `Task.md`) — direct edit +
+    `git-manager`. Why: codified 2026-05-15 — `back-maker` / `front-maker` carry
+    `model: sonnet` but WEB-MAIN was implementing feature code directly in opus
+    (sonnet usage ≈ 0), inflating cost. Mirrors `.claude/WORKFLOW.md` "Key
+    rules" + "Agent Roster".
 
   ## Target Structure
   frontend/   <- React 18 + Vite

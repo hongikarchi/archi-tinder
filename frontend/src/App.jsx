@@ -32,8 +32,23 @@ function normalizeFilters(filters) {
   return out
 }
 
-function isNetworkError(err) {
-  return err instanceof TypeError || !err.status
+/**
+ * Classify a swipe/extend error into { message, kind }.
+ * kind: 'network' | 'auth' | 'client' | 'server'
+ * message: Korean user-facing string, or null for auth (navigate handles it).
+ */
+function classifySwipeError(e) {
+  const status = e?.status
+  if (!status || e instanceof TypeError || e?.message?.includes('Network')) {
+    return { kind: 'network', message: '네트워크 연결을 확인해주세요. 다시 시도합니다…' }
+  }
+  if (status === 401 || status === 403) {
+    return { kind: 'auth', message: null }
+  }
+  if (status >= 500) {
+    return { kind: 'server', message: `서버 오류 — 잠시 후 다시 시도해주세요. (${status})` }
+  }
+  return { kind: 'client', message: `잘못된 요청입니다. (${status})` }
 }
 
 // Action cards have image_url = '' and don't need image preload.
@@ -180,6 +195,14 @@ export default function App() {
   const swipeLock = useRef(false)
   const swipeLog = useRef([])
   const swipeCount = useRef(0)
+  const swipeRetryCount = useRef(0)
+  const currentCardRef = useRef(null)
+  const activeProjectIdRef = useRef(null)
+
+  // Keep currentCardRef in sync so setTimeout closures can read live card identity
+  useEffect(() => { currentCardRef.current = currentCard }, [currentCard])
+  // Keep activeProjectIdRef in sync so setTimeout closures detect project-switch / session-end
+  useEffect(() => { activeProjectIdRef.current = activeProjectId }, [activeProjectId])
   useEffect(() => {
     if (swipeRestored.current) return
     if (location.pathname === '/swipe' && activeProjectId && userId) {
@@ -303,7 +326,9 @@ export default function App() {
     navigate('/swipe')
     const result = await initSession(projectId, llmFilters || {}, filterPriority, seedIds, null, null, visualDescription)
     if (visibility !== 'private' && result?.project_id) {
-      api.updateProject(result.project_id, { visibility })
+      api.updateProject(result.project_id, { visibility }).catch(err =>
+        console.error('[App] updateProject visibility sync failed:', err)
+      )
     }
   }
 
@@ -396,7 +421,7 @@ export default function App() {
       try {
         result = await api.recordSwipe(swipePayload)
       } catch (firstErr) {
-        if (!isNetworkError(firstErr)) throw firstErr
+        if (classifySwipeError(firstErr).kind !== 'network') throw firstErr
         // Retry once on network error
         result = await api.recordSwipe(swipePayload)
       }
@@ -412,6 +437,8 @@ export default function App() {
         }
       }))
 
+      swipeRetryCount.current = 0
+      setSwipeError(null)
       setSessionProgress({ ...result.progress, confidence: result.confidence ?? null })
 
       if (result.is_analysis_completed) {
@@ -505,7 +532,33 @@ export default function App() {
         setPrefetchCard(savedPrefetch)
         setPrefetchCard2(savedPrefetch2)
       }
-      setSwipeError('Swipe failed. Please try again.')
+      const { kind, message } = classifySwipeError(e)
+      if (kind === 'auth') {
+        // core.js already dispatches on 401 — only dispatch here for 403
+        if (e?.status !== 401) {
+          window.dispatchEvent(new Event('archithon:session-expired'))
+        }
+      } else if (kind === 'network' && !canInstantSwap && swipeRetryCount.current < 1) {
+        // Auto-retry once on network error, only when card was reverted (non-instant path)
+        const retryCardId = swipedCard?.image_id
+        const retryProjectId = activeProjectId
+        swipeRetryCount.current += 1
+        if (message) setSwipeError(message)
+        setTimeout(() => {
+          // Only retry if user hasn't switched cards OR changed/ended the project
+          const cardMatches = currentCardRef.current?.image_id === retryCardId
+          const projectMatches = activeProjectIdRef.current === retryProjectId
+          if (cardMatches && projectMatches) {
+            handleSwipeCard(action)
+          } else {
+            swipeRetryCount.current = 0
+            setSwipeError(null)
+          }
+        }, 1500)
+      } else {
+        swipeRetryCount.current = 0
+        if (message) setSwipeError(message)
+      }
     } finally {
       _dbg.totalMs = Date.now() - _dbg.ts
       const log = swipeLog.current
@@ -544,8 +597,16 @@ export default function App() {
       if (result.next_image?.image_url) preloadImage(result.next_image.image_url)
       if (result.prefetch_image?.image_url) preloadImage(result.prefetch_image.image_url)
       if (result.prefetch_image_2?.image_url) preloadImage(result.prefetch_image_2.image_url)
-    } catch {
-      setSwipeError('Could not continue exploring. Please try again.')
+    } catch (e) {
+      const { kind, message } = classifySwipeError(e)
+      if (kind === 'auth') {
+        // core.js already dispatches on 401 — only dispatch here for 403
+        if (e?.status !== 401) {
+          window.dispatchEvent(new Event('archithon:session-expired'))
+        }
+      } else if (message) {
+        setSwipeError(message)
+      }
     } finally {
       setIsSwipeLoading(false)
       swipeLock.current = false
@@ -647,6 +708,8 @@ export default function App() {
       else navigate('/user/me')
     },
     cardResetToken,
+    onExitToNewProject: () => { setActiveProjectId(null); navigate('/new') },
+    onExitToHome:       () => { setActiveProjectId(null); navigate('/discovery') },
   }
 
   return (

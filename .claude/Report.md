@@ -241,15 +241,15 @@ flowchart TD
 | `MainLayout.jsx` | Layout wrapper; sharedLayoutProps chain extended with onToggleBookmark passthrough to FavoritesPage (Sprint 4 §8) |
 | `TabBar.jsx` | Bottom navigation with safe-area-inset-bottom padding (content-box) |
 | `ProjectSetupPage.jsx` | New project setup with folder name and area range; safe-area-adjusted layout; **Phase 14 BOARD2 (bdc8d7b):** public/private visibility toggle (default 'private') wired through wizardData → handleStart → PATCH /projects/{id}/ after session create |
-| `UserProfilePage.jsx` | **Phase 13 PROF3 (d735666 + b272f37):** wired to GET /api/v1/users/{user_id}/ + follow/unfollow; 1023 → 565 LOC via 6 extracted shared components in `components/profile/` |
+| `UserProfilePage.jsx` | **Phase 13 PROF3 (d735666 + b272f37):** wired to GET /api/v1/users/{user_id}/ + follow/unfollow; 1023 → 565 LOC via 6 extracted shared components in `components/profile/`; **P5 (35b297f):** optimistic PATCH/DELETE board handlers + revert on failure; **P6 (06763a9):** bulk edit mode — Edit toggle (owner-only), select-mode cancel/count/select-all bar, sticky bulk action bar (Public/Private/Delete N), Promise.allSettled partial revert, 2-step bulk delete confirm (3s timeout + outside-click cancel) |
 | `FirmProfilePage.jsx` | **Phase 13 PROF3 (d735666 + b272f37):** wired to GET /api/v1/offices/{id}/ + office follow/unfollow (SOC3 39de1d4); 962 → 595 LOC via shared components |
 | `BoardDetailPage.jsx` | **Phase 14 BOARD3 (aedc817):** wired to GET /projects/{uuid}/ + reaction toggle (POST/DELETE /projects/{uuid}/react/); `useBoard` hook; optimistic reaction + rollback + `isReactionPending` race guard; server-authoritative `{reaction_count, reacted}` override; `reactionError` dedicated banner |
 | `PostSwipeLandingPage.jsx` | MOCKUP-READY (design terminal BOARD3 context); Phase 16 REC1 target |
-| `components/profile/` | **Phase 13 PROF3 NEW (b272f37):** 6 shared components extracted from UserProfilePage + FirmProfilePage — `InfoCol`, `BoardCard`, `BioPersonaFlipCard`, `DescriptionAboutFlipCard`, `ProjectCard`, `ArticleCard` |
+| `components/profile/` | **Phase 13 PROF3 NEW (b272f37):** 6 shared components extracted from UserProfilePage + FirmProfilePage — `InfoCol`, `BoardCard`, `BioPersonaFlipCard`, `DescriptionAboutFlipCard`, `ProjectCard`, `ArticleCard`; **P5 (35b297f):** `BoardCard` extended with owner-aware lock chip (hover toggle public↔private, mobile always-show) + X delete with 2-step inline confirm (red "Confirm?" pill, 3s timeout, outside-click cancel); **P6 (06763a9):** `BoardCard` gains select-mode props (selectMode, selected, onToggleSelect) — 28px circle checkbox overlay + 3px ring highlight + auto-unflip when selectMode becomes true |
 | `hooks/useBoard.js` | **Phase 14 BOARD3 NEW (aedc817):** Fetches project + buildings; cancellation guard via AbortController; pagination support |
 | `hooks/useProjectReactors.js` | **Phase 15 SOC2 NEW (59d2af4):** Paginated reactors list fetcher; cancellation guard |
 | `api/social.js` | **Phase 15 SOC1/SOC3:** `followUser`, `unfollowUser`, `followOffice`, `unfollowOffice` API wrappers |
-| `api/projects.js` | **Phase 14/15:** `getProject`, `getBoardBuildings`, `reactToProject`, `unreactToProject`, `getProjectReactors`, `updateProject` |
+| `api/projects.js` | **Phase 14/15:** `getProject`, `getBoardBuildings`, `reactToProject`, `unreactToProject`, `getProjectReactors`, `updateProject`; **P5 (35b297f):** errors rethrown on failure so callers can revert optimistic state |
 
 ## Web Testing Structure
 
@@ -484,48 +484,16 @@ flowchart LR
 - Phase 16: Recommendation Expansion (R-PHASE16 RESEARCH-REQUESTED queued — research terminal to elicit spec §4 decisions)
 
 ## Last Updated (Claude)
-- **Date:** 2026-05-14
-- **Commit:** `b7d39b2` (PR #34 — feat(s2): canonical_v2_buildings cutover; squashed into develop) + S8 spec-sweep commit pending on `feature/admin-s8-roadmap-sweep`
-- **Push range 2026-05-13 → 2026-05-14 (Tab 3-Structure Replan S1-S8 + canonical_v2_buildings cutover):**
-  - **S1** (PR #26 → b9c8dd4) — Replan plan + COLLAB_HANDOFF.md
-  - **S2** (PR #34 → b7d39b2) — **canonical_v2_buildings full cutover**: `backend/apps/recommendation/engine.py` 20+ raw SQL rewritten (canonical_bld_id PK + is_publishable gate + image_focus jsonb cover model), `backend/apps/recommendation/services/parse_query.py` adds Gemini `image_focus` enum (exterior/interior/drawing/aerial/detail with Korean+English hints), `backend/apps/recommendation/views/{sessions,search,swipe}.py` thread image_focus end-to-end, `backend/apps/recommendation/services/{rerank,generation}.py` migrated, `backend/apps/recommendation/models.py` + `migrations/0018_rename_swipeevent_canonical_bld_id.py` SwipeEvent.building_id → canonical_bld_id, `frontend/src/api/{images,sessions,projects}.js` normalizeCard rewrite + canonical_bld_ids API senders + cover fallback chain (covers_by_type[focus] → display_cover_url → cover_image_url_default → covers_by_type.exterior → all_images[0].url → ''), `frontend/src/pages/{SwipePage,BuildingDetailPage}.jsx` drop area row + read axis_material_visual[]. 41 files +1047/-611. Tests: 599/599 pytest GREEN + 12 legacy v1 tests skipped + live Neon smoke PASS on bld_000344. `docs/database-schema.md` full rewrite, `CLAUDE.md` hard rules swap (building_id → canonical_bld_id; architecture_vectors → canonical_v2_buildings; add is_publishable gate rule).
-  - **S2-prep** (PR #33 → c0f1da9) — database-schema.md reality-sync vs live v1 Neon
-  - **External PR absorb** (PR #32 → bc5a057) — admin absorbed @ksangjo PRs #22+#23 (caching refactor + blank-screen fix + test telemetry isolation; original branches CLOSED)
-  - **S3** (PR #27 → 2a61881) — Swipe end-flow consolidation (ActionCard removal + tolerate empty building_id on extend session)
-  - **S4** (PR #28 → a5edff5) — Unified progress bar + DebugOverlay extension
-  - **S5** (PR #29 → 7f225c2) — Library → Profile absorb (FavoritesPage + SetupPage deleted)
-  - **S6** (PR #30 → 976bfdc) — 4-tab → 3-tab cutover (Discovery / Taste / Profile only; Part B browser 7/7 ×3 personas green)
-  - **S7** (PR #31 → 278cc1a / 0ee6b42 cluster + 0e93d9f frontend) — Discovery infinite-scroll tab + SaveToBoardModal + SurpriseBoardModal
-  - **S8** (this commit on `feature/admin-s8-roadmap-sweep`) — spec/roadmap sweep: `docs/specs/phase16-recommendation-expansion.md` rewritten (Landing tab deprecated → Profile-button surface; endpoint shape changed), `docs/specs/phase17-llm-reverse-q.md` Q6 RESOLVED annotation (Option A pre-swipe), `docs/specs/phase18-external-connections.md` Goal.md path fix, `docs/specs/requirements.md` canonical_bld_id + canonical_v2_buildings + is_publishable rule swap, `.claude/Goal.md` § 7 Phase 16-19 rows + § 11 checklist tick + v3 history entry, `.claude/Task.md` Roadmap S3-S8 marked COMPLETED + Phase 16/17/18 sweep annotations + Handoffs trimmed 62→30 (32 archived to `.claude/handoffs-archive/2026-05.md` "Archived 2026-05-14 S8 sweep" section), 3 stale remote branches deleted (`feat/sj-0512-dbspeed` + `feat/sj-0513-errorfix` + `phase-5-polish-tests`; PR #22 + #23 already absorbed).
-- **Branch hygiene post-S8:** remote heads = `main` (c231c59 = pre-deploy gap), `develop` (b7d39b2 + S8 pending), `feature/sns-profile-system` (b0a00f9 — 유예원 unintegrated work, preserved per admin decision 2026-05-14; comparison vs develop S5-S7 deferred). Deploy PR develop → main scheduled next.
-- **Summary:** Full S1-S8 replan landed; Make Web cutover to Make DB's new `canonical_v2_buildings` 31-col / 39,776-row table is complete; tab structure now 3-tab (Discovery / Taste / Profile); Phase 16-18 specs reconciled with the new tab world. algorithm.md sync NOT applicable (no RECOMMENDATION dict changes this session window; production hyperparameters unchanged).
-
-```mermaid
-graph LR
-    subgraph S2["S2 canonical_v2_buildings cutover"]
-        engine[engine.py raw-SQL\nis_publishable + canonical_bld_id]:::core
-        parse[parse_query.py\nimage_focus enum]:::core
-        mig[migration 0018\nSwipeEvent rename]:::core
-        front_api[frontend/api\nnormalizeCard + cover fallback]:::core
-    end
-    subgraph Tabs["S5-S7 Tab 3-Structure"]
-        s5[S5 Library→Profile]:::ui
-        s6[S6 4→3 tab cutover]:::ui
-        s7[S7 Discovery tab]:::ui
-    end
-    subgraph Docs["S8 spec sweep"]
-        ph16[phase16: Landing→Profile-button]:::doc
-        ph17[phase17: Q6 RESOLVED]:::doc
-        req[requirements.md\ncanonical_bld_id swap]:::doc
-        goal[Goal.md v3]:::doc
-    end
-
-    S2 --> Tabs --> Docs
-
-    classDef core fill:#10b981,color:#fff
-    classDef ui fill:#3b82f6,color:#fff
-    classDef doc fill:#f59e0b,color:#000
-```
+- **Date:** 2026-05-18
+- **Commit:** `450d3c1` — fix: P6 minors — bulk delete snapshot revert + style factor + cancel race (#47)
+- **Changes:**
+  - `frontend/src/pages/UserProfilePage.jsx` +64/-55: 3 P6 deferred MINORs resolved — (1) handleBulkDelete snapshots prevBoards/prevTotal and reverts via filter(successfulIds) fixing ≥2-failure splice ordering bug; (2) bulkActionButtonStyle(disabled) + bulkBtnHover helpers dedupe Public/Private inline styles; (3) exitSelectMode no longer clears bulkPending — handlers own lifecycle, Cancel mid-op no longer enables re-entry.
+  - `.claude/Task.md` +5: P6-minors handoff signals added.
+  - Frontend-only; no backend change; no algorithm/schema change; algorithm.md sync not applicable.
+- **Files changed (450d3c1):**
+  - `frontend/src/pages/UserProfilePage.jsx` +64/-55
+  - `.claude/Task.md` +5
+- **Summary:** P6 deferred MINORs patched on develop @ 450d3c1. Bulk delete now snapshot-reverts correctly on partial failure; style helpers dedupe button inline styles; Cancel mid-op is race-safe. Frontend-only; no backend/algo changes.
 
 ## Last Updated (Designer)
 

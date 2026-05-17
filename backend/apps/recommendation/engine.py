@@ -124,6 +124,9 @@ def _row_to_card(row, image_focus=None):
     - gallery_drawing_start: index of first item with kind=='drawing' in gallery
       (== len(gallery) when no drawings). Frontend renders items at index >=
       gallery_drawing_start with contain-sizing on white background.
+    - image_focus: echoed verbatim in the returned dict so the frontend can
+      make objectFit decisions (e.g. 'contain' for drawings, 'cover' for
+      exterior/interior). None when caller did not specify a focus.
     """
     canonical_bld_id = row['canonical_bld_id']
     covers_by_type = row.get('covers_by_type') or {}
@@ -163,6 +166,20 @@ def _row_to_card(row, image_focus=None):
         first = all_images_raw[0] if isinstance(all_images_raw[0], dict) else {}
         image_url = first.get('url') or ''
 
+    # Detect actual kind of resolved image_url (for frontend aspect handling).
+    # Sources, in order: covers_by_type reverse-lookup, all_images entry match.
+    image_kind = None
+    if image_url and isinstance(covers_by_type, dict):
+        for k, u in covers_by_type.items():
+            if u == image_url:
+                image_kind = k
+                break
+    if image_kind is None and image_url:
+        for img in all_images_raw:
+            if isinstance(img, dict) and img.get('url') == image_url:
+                image_kind = img.get('kind')
+                break
+
     # Gallery from all_images: sort by (kind rank, image_order, rank)
     kind_order = {'cover': 0, 'gallery': 1, 'drawing': 2}
     images = [img for img in all_images_raw if isinstance(img, dict) and img.get('url')]
@@ -172,6 +189,7 @@ def _row_to_card(row, image_focus=None):
         img.get('rank') if img.get('rank') is not None else 9999,
     ))
     gallery_urls = []
+    gallery_meta = []
     seen = {image_url} if image_url else set()
     drawing_start = None
     for img in images:
@@ -182,6 +200,7 @@ def _row_to_card(row, image_focus=None):
         if drawing_start is None and img.get('kind') == 'drawing':
             drawing_start = len(gallery_urls)
         gallery_urls.append(url)
+        gallery_meta.append({'url': url, 'kind': img.get('kind') or 'gallery'})
     if drawing_start is None:
         drawing_start = len(gallery_urls)
 
@@ -206,9 +225,12 @@ def _row_to_card(row, image_focus=None):
         'canonical_bld_id':       canonical_bld_id,
         'name':                   row.get('name') or '',
         'image_url':              image_url,
+        'image_focus':            image_focus,
+        'image_kind':             image_kind,
         'covers_by_type':         covers_by_type,
         'url':                    src_url,
         'gallery':                gallery_urls,
+        'gallery_meta':           gallery_meta,
         'gallery_drawing_start':  drawing_start,
         'metadata': {
             'axis_typology':       row.get('program'),

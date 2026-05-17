@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useImageTelemetry } from '../../hooks/useImageTelemetry.js'
 import InfoCol from './InfoCol'
@@ -12,14 +12,68 @@ import InfoCol from './InfoCol'
  *
  * Hover lift YES, hover border NO per §3.5.4. The subtle translateY(-4px) lift matches
  * every other interactive card in the app; only the pink border is omitted because a
- * static border lingers awkwardly behind the rotating card.
+ * static border lingers awkwardly behind the rotating card. When selected, a 3px pink
+ * ring is applied via box-shadow on the outer wrapper instead.
+ *
+ * When `board.cover_image_url` is empty/falsy (pre-cutover legacy boards whose
+ * cover refers to an old building id no longer present in canonical_v2),
+ * render a brand-gradient placeholder div in place of a broken <img>.
+ *
+ * Owner props:
+ *   isOwner (bool, default false) — shows lock-toggle chip + X delete button.
+ *   onVisibilityChange (fn) — called with 'public' | 'private' when owner clicks lock chip.
+ *   onDelete (fn) — called after 2-step confirm when owner deletes.
+ *
+ * Select-mode props (P6 bulk edit):
+ *   selectMode (bool, default false) — when true, card click toggles selection; no flip.
+ *   isSelected (bool, default false) — whether this card is in the current selection.
+ *   onSelectToggle (fn) — called with board_id when card is clicked in select mode.
  */
-export default function BoardCard({ board }) {
+export default function BoardCard({
+  board,
+  isOwner = false,
+  onVisibilityChange = () => {},
+  onDelete = () => {},
+  selectMode = false,
+  isSelected = false,
+  onSelectToggle = () => {},
+}) {
   const [isFlipped, setIsFlipped] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const confirmTimerRef = useRef(null)
+  const deleteBtnRef = useRef(null)
   const navigate = useNavigate()
 
+  // Detect mobile once at mount — touch devices always show owner chips
+  const isMobile = useMemo(
+    () => typeof window !== 'undefined' && window.matchMedia('(hover: none)').matches,
+    []
+  )
+
+  // Clear timeout on unmount
+  useEffect(() => () => clearTimeout(confirmTimerRef.current), [])
+
+  // P6: when select mode activates, un-flip so the selection circle on the front face is visible
+  useEffect(() => {
+    if (selectMode) setIsFlipped(false)
+  }, [selectMode])
+
+  // Click-outside cancels pending delete confirm
+  useEffect(() => {
+    if (!confirmingDelete) return
+    function handleOutsideClick(e) {
+      if (deleteBtnRef.current && !deleteBtnRef.current.contains(e.target)) {
+        clearTimeout(confirmTimerRef.current)
+        setConfirmingDelete(false)
+      }
+    }
+    document.addEventListener('mousedown', handleOutsideClick)
+    return () => document.removeEventListener('mousedown', handleOutsideClick)
+  }, [confirmingDelete])
+
   const isPrivate = board.visibility === 'private'
+  const hasCover = !!board.cover_image_url
 
   const { onLoad: coverOnLoad, onError: coverOnError } = useImageTelemetry({
     buildingId: board.board_id,
@@ -40,12 +94,20 @@ export default function BoardCard({ board }) {
         userSelect: 'none', WebkitUserSelect: 'none', touchAction: 'manipulation',
         // §3.5.4: lift YES, border NO. Lift on outer perspective wrapper so it doesn't
         // double-compose with the inner rotateY transform.
-        transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+        // In select mode, replace the lift with a pink ring when selected (box-shadow
+        // lives outside the element so it doesn't affect layout or fight the border).
+        transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
         transform: isHovered ? 'translateY(-4px)' : 'translateY(0)',
+        boxShadow: isSelected ? '0 0 0 3px #ec4899' : 'none',
       }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onClick={(e) => {
+        // Select mode: whole card body toggles selection — before button guard.
+        if (selectMode) {
+          onSelectToggle(board.board_id)
+          return
+        }
         if (e.target.closest('button')) return
         setIsFlipped(!isFlipped)
       }}
@@ -66,19 +128,33 @@ export default function BoardCard({ board }) {
           boxShadow: '0 10px 25px rgba(0,0,0,0.3)',
           background: 'rgba(255,255,255,0.03)',
         }}>
-          <img
-            src={board.cover_image_url}
-            alt={board.name}
-            loading="lazy"
-            onLoad={coverOnLoad}
-            onError={coverOnError}
-            style={{
-              position: 'absolute', inset: 0,
-              width: '100%', height: '100%',
-              objectFit: 'cover', objectPosition: 'center',
-              display: 'block',
-            }}
-          />
+          {hasCover ? (
+            <img
+              src={board.cover_image_url}
+              alt={board.name}
+              loading="lazy"
+              onLoad={coverOnLoad}
+              onError={coverOnError}
+              style={{
+                position: 'absolute', inset: 0,
+                width: '100%', height: '100%',
+                objectFit: 'cover', objectPosition: 'center',
+                display: 'block',
+              }}
+            />
+          ) : (
+            // Gradient placeholder for boards with no cover (e.g. pre-cutover
+            // legacy boards whose cover FK points to a removed building).
+            // Uses DESIGN.md brand gradient as a soft tint over surface,
+            // not the pure CTA gradient — this is a placeholder, not a button.
+            <div
+              aria-hidden
+              style={{
+                position: 'absolute', inset: 0,
+                background: 'linear-gradient(135deg, rgba(236,72,153,0.22) 0%, rgba(244,63,94,0.18) 50%, rgba(15,15,15,0.85) 100%)',
+              }}
+            />
+          )}
 
           {/* §3.5.1 mandatory bottom gradient overlay for legibility */}
           <div style={{
@@ -87,25 +163,146 @@ export default function BoardCard({ board }) {
             pointerEvents: 'none',
           }} />
 
-          {/* §3.5.3 PRIVATE-only icon chip — small dark blur circle, white-ish lock SVG.
-              PUBLIC renders nothing (public is the default; only flag the exception). */}
-          {isPrivate && (
-            <div style={{
-              position: 'absolute', top: 16, right: 16,
-              background: 'rgba(0,0,0,0.4)',
-              backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
-              padding: 6, borderRadius: '50%',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
-            aria-label="Private board"
+          {/* P6 select-mode: selection circle indicator replaces lock chip for owners.
+              28px circle, top-right. Unchecked = outlined on dark bg; Checked = pink fill + checkmark. */}
+          {selectMode && isOwner ? (
+            <div
+              aria-label={isSelected ? 'Selected' : 'Not selected'}
+              style={{
+                position: 'absolute', top: 16, right: 16,
+                width: 28, height: 28, borderRadius: '50%',
+                border: isSelected ? 'none' : '2px solid rgba(255,255,255,0.9)',
+                background: isSelected ? '#ec4899' : 'rgba(0,0,0,0.4)',
+                backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                transition: 'background 0.15s cubic-bezier(0.4,0,0.2,1), border 0.15s cubic-bezier(0.4,0,0.2,1)',
+                pointerEvents: 'none', // card body handles the click
+              }}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                   stroke="rgba(255,255,255,0.85)" strokeWidth="2"
-                   strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-              </svg>
+              {isSelected && (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                     stroke="#fff" strokeWidth="2.5"
+                     strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              )}
             </div>
+          ) : (
+            /* §3.5.3 Lock chip — owner: toggle visibility; non-owner: indicator only when private.
+               Owner chip visible when isHovered || isMobile || isPrivate.
+               Non-owner chip visible only when isPrivate (current behavior, no change).
+               Hidden entirely for owner when selectMode is true (selection circle takes this slot). */
+            isOwner ? (
+              (isHovered || isMobile || isPrivate) && (
+                <button
+                  type="button"
+                  aria-label={isPrivate ? 'Make public' : 'Make private'}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onVisibilityChange(isPrivate ? 'public' : 'private')
+                  }}
+                  style={{
+                    position: 'absolute', top: 16, right: 16,
+                    background: 'rgba(0,0,0,0.4)',
+                    backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+                    padding: 6, borderRadius: '50%',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    border: 'none', cursor: 'pointer',
+                    transition: 'background 0.18s cubic-bezier(0.4,0,0.2,1)',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.6)' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.4)' }}
+                >
+                  {isPrivate ? (
+                    // Lock-closed SVG (private)
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                         stroke="rgba(255,255,255,0.85)" strokeWidth="2"
+                         strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                    </svg>
+                  ) : (
+                    // Lock-open SVG (public) — shackle stops short on right side
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                         stroke="rgba(255,255,255,0.85)" strokeWidth="2"
+                         strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                      <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
+                    </svg>
+                  )}
+                </button>
+              )
+            ) : (
+              // Non-owner: show indicator-only chip when private
+              isPrivate && (
+                <div style={{
+                  position: 'absolute', top: 16, right: 16,
+                  background: 'rgba(0,0,0,0.4)',
+                  backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+                  padding: 6, borderRadius: '50%',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+                aria-label="Private board"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                       stroke="rgba(255,255,255,0.85)" strokeWidth="2"
+                       strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                  </svg>
+                </div>
+              )
+            )
+          )}
+
+          {/* X delete button — owner-only, top-left, mirrors lock chip styling.
+              Grows from circle (idle) to pill (confirming) with "Confirm?" inside.
+              Hidden in select mode — bulk delete is handled by the bulk action bar. */}
+          {isOwner && !selectMode && (isHovered || isMobile || confirmingDelete) && (
+            <button
+              ref={deleteBtnRef}
+              type="button"
+              aria-label={confirmingDelete ? 'Click again to confirm delete' : 'Delete board'}
+              onClick={(e) => {
+                e.stopPropagation()
+                if (!confirmingDelete) {
+                  clearTimeout(confirmTimerRef.current)
+                  setConfirmingDelete(true)
+                  confirmTimerRef.current = setTimeout(() => setConfirmingDelete(false), 3000)
+                } else {
+                  clearTimeout(confirmTimerRef.current)
+                  setConfirmingDelete(false)
+                  onDelete()
+                }
+              }}
+              style={{
+                position: 'absolute', top: 16, left: 16,
+                display: confirmingDelete ? 'flex' : 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                background: 'rgba(0,0,0,0.4)',
+                backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+                padding: confirmingDelete ? '6px 10px 6px 6px' : 6,
+                borderRadius: confirmingDelete ? 16 : '50%',
+                border: 'none', cursor: 'pointer',
+                transition: 'all 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.6)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.4)' }}
+            >
+              {/* X icon — red when confirming, white-ish when idle */}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                   stroke={confirmingDelete ? '#ef4444' : 'rgba(255,255,255,0.85)'}
+                   strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+              {confirmingDelete && (
+                <span style={{ fontSize: 11, color: '#ef4444', fontWeight: 600 }}>
+                  Confirm?
+                </span>
+              )}
+            </button>
           )}
 
           {/* §3.5.2 RICH PATTERN: title + "Curated Board" sub-italic + divider + 2-col CREATED/SAVED grid */}

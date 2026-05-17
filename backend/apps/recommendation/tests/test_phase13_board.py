@@ -292,7 +292,11 @@ class TestUserProfileBoardsField:
         uid = user_profile.user.id
         with patch('apps.recommendation.engine.get_buildings_by_ids', return_value=[]):
             resp = api_client.get(f'/api/v1/users/{uid}/')
-        assert resp.json()['boards'] == []
+        boards = resp.json()['boards']
+        # boards is now a pagination dict; items is the empty list
+        assert boards['items'] == []
+        assert boards['total_count'] == 0
+        assert boards['has_more'] is False
 
     def test_boards_non_owner_sees_public_only(self, api_client, user_profile):
         Project.objects.create(user=user_profile, name='PubBoard', visibility='public')
@@ -300,7 +304,7 @@ class TestUserProfileBoardsField:
         uid = user_profile.user.id
         with patch('apps.recommendation.engine.get_buildings_by_ids', return_value=[]):
             resp = api_client.get(f'/api/v1/users/{uid}/')
-        boards = resp.json()['boards']
+        boards = resp.json()['boards']['items']
         names = [b['name'] for b in boards]
         assert 'PubBoard' in names
         assert 'PrivBoard' not in names
@@ -311,7 +315,7 @@ class TestUserProfileBoardsField:
         uid = user_profile.user.id
         with patch('apps.recommendation.engine.get_buildings_by_ids', return_value=[]):
             resp = auth_client.get(f'/api/v1/users/{uid}/')
-        boards = resp.json()['boards']
+        boards = resp.json()['boards']['items']
         names = [b['name'] for b in boards]
         assert 'PubO' in names
         assert 'PrivO' in names
@@ -323,10 +327,10 @@ class TestUserProfileBoardsField:
             liked_ids=[{'id': 'B001', 'intensity': 1.0}],
         )
         uid = user_profile.user.id
-        mock_card = {'building_id': 'B001', 'image_url': 'https://cdn.example.com/B001/photo.jpg'}
+        mock_card = {'canonical_bld_id': 'B001', 'image_url': 'https://cdn.example.com/B001/photo.jpg'}
         with patch('apps.recommendation.engine.get_buildings_by_ids', return_value=[mock_card]):
             resp = api_client.get(f'/api/v1/users/{uid}/')
-        boards = resp.json()['boards']
+        boards = resp.json()['boards']['items']
         assert len(boards) == 1
         card = boards[0]
         required_fields = {
@@ -346,8 +350,57 @@ class TestUserProfileBoardsField:
         uid = user_profile.user.id
         with patch('apps.recommendation.engine.get_buildings_by_ids', return_value=[]):
             resp = api_client.get(f'/api/v1/users/{uid}/')
-        card = resp.json()['boards'][0]
+        card = resp.json()['boards']['items'][0]
         assert card['building_count'] == 3  # 2 liked + 1 saved
+
+
+# ── TestBoardsPagination ──────────────────────────────────────────────────────
+
+@pytest.mark.django_db
+class TestBoardsPagination:
+
+    def test_boards_response_shape_has_pagination_fields(self, api_client, user_profile):
+        """boards dict must include items, page, page_size, total_count, has_more, next_page."""
+        uid = user_profile.user.id
+        with patch('apps.recommendation.engine.get_buildings_by_ids', return_value=[]):
+            resp = api_client.get(f'/api/v1/users/{uid}/')
+        boards = resp.json()['boards']
+        for field in ('items', 'page', 'page_size', 'total_count', 'has_more', 'next_page'):
+            assert field in boards, f"Missing field: {field}"
+
+    def test_boards_pagination_page_size(self, api_client, user_profile):
+        """boards_page_size query param limits the items returned."""
+        for i in range(5):
+            Project.objects.create(user=user_profile, name=f'Pub{i}', visibility='public')
+        uid = user_profile.user.id
+        with patch('apps.recommendation.engine.get_buildings_by_ids', return_value=[]):
+            resp = api_client.get(f'/api/v1/users/{uid}/?boards_page_size=2')
+        boards = resp.json()['boards']
+        assert len(boards['items']) == 2
+        assert boards['total_count'] == 5
+        assert boards['has_more'] is True
+        assert boards['next_page'] == 2
+
+    def test_boards_pagination_page2(self, api_client, user_profile):
+        """boards_page=2 returns the second slice."""
+        for i in range(3):
+            Project.objects.create(user=user_profile, name=f'Pub{i}', visibility='public')
+        uid = user_profile.user.id
+        with patch('apps.recommendation.engine.get_buildings_by_ids', return_value=[]):
+            resp = api_client.get(f'/api/v1/users/{uid}/?boards_page=2&boards_page_size=2')
+        boards = resp.json()['boards']
+        assert len(boards['items']) == 1
+        assert boards['has_more'] is False
+        assert boards['next_page'] is None
+
+    def test_boards_page_size_capped_at_50(self, api_client, user_profile):
+        """boards_page_size=999 is clamped to 50."""
+        Project.objects.create(user=user_profile, name='Pub1', visibility='public')
+        uid = user_profile.user.id
+        with patch('apps.recommendation.engine.get_buildings_by_ids', return_value=[]):
+            resp = api_client.get(f'/api/v1/users/{uid}/?boards_page_size=999')
+        boards = resp.json()['boards']
+        assert boards['page_size'] == 50
 
 
 # ── Backward Compat Smoke Tests ───────────────────────────────────────────────
