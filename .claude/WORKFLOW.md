@@ -484,6 +484,37 @@ reporter runs at session end (or when user requests)
 
 ---
 
+## Known Workflow Issues
+
+Surfaced empirically during the 2026-05-11 dogfood session (see
+`.claude/postmortems/2026-05-11-workflow-dogfood-RESOLVED.md` for full
+diagnoses). Items below are the ones still requiring operator awareness
+or workaround.
+
+| # | Issue | Severity | Workaround / Status |
+|---|---|---|---|
+| 1 | `tools/dispatch.sh` Esc-anchor doesn't clear Codex CLI input buffer — sequential dispatch to WEB-FRONT / WEB-BACK appends to leftover init-prompt buffer; Codex processes wrong combined input | HIGH | Fall back to in-session Claude `front-maker` / `back-maker` subagents, OR run `/clear` manually in the Codex tab before dispatch, OR use `tools/dispatch-codex-task.sh` with a bounded task file (which avoids the buffer issue). Permanent fix proposal: add `Ctrl+U` (kill-line) to dispatch anchor for codex-running terminals. |
+| 2 | `tools/git-new-feature.sh` refuses dirty working tree without auto-stash | LOW | Manual `git stash push <paths>` → `git-new-feature.sh` → `git stash pop`. Permanent fix proposal: `--auto-stash` flag scoped to bookkeeping paths (`.claude/reviews/*`, `.claude/Task.md`). |
+| 3 | Local `pytest` gives false-pass signal — `backend/conftest.py` SQLite override is not load-bearing for all test paths; tests open direct DB connections that succeed locally (dev Postgres on :5432) but fail in CI (no PG) | MEDIUM | "Real CI is the validation gate" — green CI status, not local pytest, is the proof. Permanent fix proposal: document this in `backend/conftest.py`, or have `tools/test-backend.sh` simulate CI environment locally. |
+
+**Resolved at root cause (kept for history; no current workaround needed):**
+
+| # | Issue | Resolution |
+|---|---|---|
+| 4 | `gh pr merge --admin` ignores `--delete-branch=false`; head branch auto-deletes regardless of API path | Repo setting flipped: `gh api -X PATCH repos/<owner>/<repo> --field delete_branch_on_merge=false`. Mode 1 step 7 now uses explicit `gh api -X DELETE refs/heads/<branch>` for cleanup. |
+| 5 | Squash deploy creates commit-graph divergence; second deploy PR fails with `mergeable: CONFLICTING` despite tree-identical content | Mandatory post-deploy step codified in `CLAUDE.md` HARD RULE 4 carve-out + `CONTRIBUTING.md` Deploy flow step 4 + `.claude/agents/git-publisher.md` Mode 3 step 5: force-reset `origin/develop` to match `origin/main` via `gh api PATCH refs/heads/develop --field force=true`. Single permitted force on a shared branch. |
+
+---
+
+## Operational hygiene
+
+- **`.claude/reviews/*.md` retention**: prune review files older than 30
+  days post-merge. The directory is informational only — git log is the
+  authoritative history. `latest.md` symlink should always point to the
+  most recent review's source SHA.
+
+---
+
 ## Key rules
 
 | Rule | Detail |

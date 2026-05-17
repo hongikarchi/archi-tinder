@@ -108,11 +108,12 @@ are the two files your work intersects.
 
 ---
 
-## 6. Active replan (as of 2026-05-14)
+## 6. Past replan (delivered 2026-05-14, deployed 2026-05-14 via PR #36)
 
-See `.claude/plans/replan-2026-05-14-tab3-restructure.md`. The frontend is
-mid-restructure from 4 tabs to 3 (Discovery / Taste / Profile). DB schema
-work lands in Push S2 of that plan.
+The 2026-05-14 Tab 3-Structure Replan (S1-S8) shipped: frontend moved
+from 4 tabs to 3 (Discovery / Taste / Profile), DB cutover to
+`canonical_v2_buildings` happened in Push S2. Plan file archived at
+`.claude/plans-archive/replan-2026-05-14-tab3-restructure.md`.
 
 ---
 

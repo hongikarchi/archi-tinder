@@ -183,11 +183,20 @@ review was clean but drift was detected:
   then ask the user to re-run `/review`.
 Neither ABORTED case counts toward the 2-cycle limit (no findings to fix).
 
-## Algorithm tester post-run workflow
-See `WORKFLOW.md` Case 3 and `algo-tester.md` for the detailed steps.
+## Algorithm work — externally owned
 
-Your role: when algo-tester hands off, run back-maker -> reviewer -> security -> git-manager -> reporter.
-Weakness detected? STOP -- report exact numbers to user, ask for guidance. Do NOT auto-fix.
+Per `.claude/Goal.md` § Algorithm ownership (2026-05-18), algorithm-side
+work (`engine.py`, `services/embeddings.py`, `services/rerank.py`,
+`services/_caches.py`, Topic 01-12 in `docs/algorithm.md`, IMP-1/7/8,
+A2 hyperparameter optimization) is owned by a separate collaborator —
+orchestrator does NOT dispatch algorithm tuning work, and there is no
+`algo-tester` sub-agent in this repo's `.claude/agents/`. If the user
+asks for algorithm tuning, surface the ownership boundary and decline.
+
+LLM-chat-module work (`services/parse_query.py`, `services/generation.py`,
+`services/_gemini.py`, chat-phase Gemini latency IMP-4/5/6, Phase 17
+reverse-Q + persona) remains in scope — dispatch as a normal feature
+through back-maker.
 
 ## Rules
 - Never write source code yourself. Always delegate to back-maker or front-maker via the `Agent` tool (see "Spawning subagents" at the top). If `Agent` appears unavailable, STOP and report the blockage to the user — do not work around it by editing files directly.

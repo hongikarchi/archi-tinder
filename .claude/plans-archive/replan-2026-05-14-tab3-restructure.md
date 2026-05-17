@@ -1,5 +1,7 @@
 # Replan 2026-05-14 — Tab 3-Structure Transition + Accumulated Issue Sweep
 
+> **[DELIVERED 2026-05-14]** All 8 pushes (S1-S8) shipped to develop and deployed to main via PR #36 (S1-S6) + PR #31 (S7) + S8 sweep + later P1-P6 series. Archived 2026-05-18.
+
 **Approved**: 2026-05-14 via remote `/ultraplan` session.
 **Author session**: WEB-MAIN admin (after Notion / Figma / KakaoTalk alignment).
 **Scope**: Reorganize navigation from current 4 tabs to agreed 3 tabs, fix three

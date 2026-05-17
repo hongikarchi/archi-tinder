@@ -13,32 +13,30 @@ DM wiring".
 
 ## 1. Scope
 
-Two distinct sub-problems:
-
-**1.1 Firm article surfacing** — when viewing a FirmProfilePage, surface
-external articles about that firm:
+**1.1 Firm article surfacing** — the actual Phase 18 deliverable. When
+viewing a FirmProfilePage, surface external articles about that firm:
 - Source candidates: Space (Korean architecture magazine), ArchDaily,
   general news (keyword match on firm name).
 - Storage: cached per-firm, refreshed on a TBD schedule.
 
-**1.2 External DM wiring** — DM/contact links on Office and User
-profiles:
-- Office: email link, website link (already in `Office.contact_email`
-  + `Office.website`).
-- User: optional Instagram / email links (`UserProfile.external_links`
-  JSON shape).
-- Phase 18 expands beyond simple link-out to potentially track
-  click-through (analytics) or pre-fill DM templates.
+**1.2 External DM wiring** — ✅ **shipped in Phase 15** (`Office.contact_email`
++ `Office.website` + `UserProfile.external_links` JSON shape already wired
+and rendered on Office / User profile pages). What remains for Phase 18
+under this sub-scope is optional, deferred:
+- Click-through analytics (PIPA / GDPR consent posture required first).
+- Pre-fill DM templates / launch-with-context links.
+- These belong to a Phase 18.1 follow-up; not in the v1 Phase 18 scope.
 
 ## 2. Open dimensions (admin decision)
+
+Phase 18 v1 = firm article surfacing only. Dimensions to resolve:
 
 | Dimension | Question | Notes |
 |---|---|---|
 | Article source priority | Space first (Korean), or ArchDaily first (global), or both at parity? | Korea-first principle (Goal.md § 6) suggests Space first. |
 | Crawl freshness | Real-time API call on profile view / scheduled batch (daily/weekly) / event-driven (on firm publish)? | Cost vs freshness trade-off. |
 | Storage | Cache in `Office` row (denormalised) / separate `OfficeArticle` table / external CDN? | Schema decision. |
-| Click-through tracking | Track external clicks (privacy implication) / pure link-out (no tracking)? | PIPA / GDPR posture. |
-| Instagram/email surface | UserProfilePage already has `external_links` JSON; expose all sources or admin-curated subset? | UX decision. |
+| Article fallback | When 0 articles match: empty section / hide section / show "no recent articles" placeholder? | UX. |
 
 ## 3. Acceptance criteria (illustrative)
 

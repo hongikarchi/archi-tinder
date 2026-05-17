@@ -235,7 +235,7 @@ Estimate: ~30-50 LOC delta. Bundle-worthy.
 
 ---
 
-## Hard rules (per AGENTS.md + team-front.md)
+## Hard rules (per AGENTS.md + `.claude/codex/frontend-worker.md`)
 
 - BuildingDetailPage is a NEW page — no MOCK_* contract from designer (no constraint to match)
 - Inline-style JSX is allowed for new elements (no existing designer mockup to preserve)

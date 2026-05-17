@@ -1,5 +1,7 @@
 # IMP-5 Staging Validation Results — Control vs Cached A/B
 
+> **Status (2026-05-18):** Spec v1.10 prediction (≥50% drop / 1400-1800ms target) invalidated by 5.5% empirical drop. Prod flag `gemini_context_caching_enabled` shipped OFF. LLM chat latency stream remains under user ownership; revisit when spec v1.11 re-grounding lands or traffic ≥250 sessions/day. Cross-ref: `feedback_token_saving_workflow.md` decision context.
+
 ## Run summary
 - Date: 2026-04-27T17:12:53.964325+00:00
 - Mode: both
