@@ -258,3 +258,4 @@ Google OAuth only. Korean users need domestic login.
 Historical resolved tasks moved to `.claude/resolved-archive.md` (frees
 ~30-50K tokens per reporter call; git log is the authoritative history).
 Append new resolved entries to the archive, not here.
+- 2026-05-18 READY-FOR-PUSH: feature/admin-p6-minors @ ab4c0a2 — P6 deferred MINORs (snapshot revert + style factor + cancel race); trivial polish, /review skip per Rule 2
