@@ -227,6 +227,42 @@ class TestRowToCardGallery:
         card = _row_to_card(row)
         assert 'https://a/2.jpg' in card['gallery']
 
+    def test_gallery_meta_emit(self):
+        """gallery_meta emitted with correct url/kind; cover URL excluded; order matches gallery."""
+        row = _minimal_row(
+            display_cover_url='https://a/cover.jpg',
+            all_images=[
+                {'url': 'https://a/cover.jpg', 'kind': 'cover',   'image_order': 0},
+                {'url': 'https://a/1.jpg',     'kind': 'cover',   'image_order': 1},
+                {'url': 'https://a/2.jpg',     'kind': 'drawing', 'image_order': 2},
+            ],
+        )
+        card = _row_to_card(row)
+        # gallery_meta present and parallel to gallery
+        assert 'gallery_meta' in card
+        assert len(card['gallery_meta']) == len(card['gallery'])
+        # cover URL excluded from gallery_meta
+        meta_urls = [m['url'] for m in card['gallery_meta']]
+        assert 'https://a/cover.jpg' not in meta_urls
+        # kinds are correct
+        kinds = {m['url']: m['kind'] for m in card['gallery_meta']}
+        assert kinds['https://a/1.jpg'] == 'cover'
+        assert kinds['https://a/2.jpg'] == 'drawing'
+
+    def test_gallery_meta_kind_defaults_to_gallery_when_missing(self):
+        """When img kind is None or missing, gallery_meta entry uses 'gallery' as kind."""
+        row = _minimal_row(
+            display_cover_url='https://a/cover.jpg',
+            all_images=[
+                {'url': 'https://a/1.jpg', 'kind': None,    'image_order': 0},
+                {'url': 'https://a/2.jpg',                   'image_order': 1},
+            ],
+        )
+        card = _row_to_card(row)
+        kinds = {m['url']: m['kind'] for m in card['gallery_meta']}
+        assert kinds.get('https://a/1.jpg') == 'gallery'
+        assert kinds.get('https://a/2.jpg') == 'gallery'
+
 
 class TestRowToCardMetadataAxes:
     """canonical_v2 axis_* metadata mapping."""

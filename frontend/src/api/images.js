@@ -94,6 +94,7 @@ export function normalizeCard(card) {
     image_url:   card.image_url,
     source_url:  card.url || null,
     gallery:     card.gallery || [],
+    gallery_meta: card.gallery_meta || [],
     gallery_drawing_start: card.gallery_drawing_start ?? card.metadata?.gallery_drawing_start ?? null,
     // covers_by_type: jsonb dict {exterior, interior, drawing, aerial, detail}
     // passthrough so UI can render a focus selector (S2 image_focus feature).

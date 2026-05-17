@@ -29,6 +29,19 @@ function metadataItems(card) {
   ].filter(([, value]) => value)
 }
 
+function kindLabel(kind) {
+  const map = {
+    exterior: 'Exterior',
+    interior: 'Interior',
+    drawing: 'Drawing',
+    aerial: 'Aerial',
+    detail: 'Detail',
+    cover: 'Cover',
+    gallery: 'Photo',
+  }
+  return map[kind] || 'Photo'
+}
+
 function LoadingState({ onBack }) {
   return (
     <div style={{
@@ -228,6 +241,16 @@ export default function BuildingDetailPage() {
     return merged.length ? merged : [building.image_url].filter(Boolean)
   }, [building])
 
+  const galleryMeta = useMemo(() => {
+    if (!building) return []
+    const meta = building.gallery_meta?.length ? building.gallery_meta : []
+    return meta
+  }, [building])
+
+  const photos = useMemo(() => galleryMeta.filter(g => g.kind !== 'drawing'), [galleryMeta])
+  const drawings = useMemo(() => galleryMeta.filter(g => g.kind === 'drawing'), [galleryMeta])
+  const [galleryFilter, setGalleryFilter] = useState('all')  // 'all' | 'photos' | 'drawings'
+
   const title = building?.image_title || buildingId || 'Building'
   const architect = building?.metadata?.axis_architects
   const detailDescription = building?.metadata?.visual_description || building?.metadata?.description || null
@@ -292,38 +315,198 @@ export default function BuildingDetailPage() {
         onToggleBookmark={handleToggleBookmark}
       />
 
-      <section className="hide-scrollbar" style={{
-        height: '50vh',
-        minHeight: 320,
-        display: 'flex',
-        overflowX: 'auto',
-        scrollSnapType: 'x mandatory',
-        background: 'var(--color-surface)',
-      }}>
-        {gallery.map((url, index) => (
-          <div key={`${url}-${index}`} style={{
-            position: 'relative',
-            minWidth: '100%',
-            height: '100%',
-            scrollSnapAlign: 'start',
-            background: '#050505',
+      {galleryMeta.length > 0 ? (
+        <>
+          {/* Filter toggle chips */}
+          <div style={{
+            display: 'flex',
+            gap: 8,
+            padding: '14px 20px 0',
+            maxWidth: 820,
+            margin: '0 auto',
+            width: '100%',
+            boxSizing: 'border-box',
           }}>
-            <div className="skeleton-shimmer" style={{ position: 'absolute', inset: 0 }} />
-            <img
-              src={url}
-              alt={`${title} ${index + 1}`}
-              loading={index === 0 ? 'eager' : 'lazy'}
-              style={{
-                position: 'absolute',
-                inset: 0,
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-              }}
-            />
+            {[
+              { id: 'all', label: 'All' },
+              { id: 'photos', label: 'Photos' },
+              { id: 'drawings', label: 'Drawings' },
+            ].map(chip => {
+              const active = galleryFilter === chip.id
+              const disabled = (chip.id === 'photos' && photos.length === 0)
+                || (chip.id === 'drawings' && drawings.length === 0)
+              return (
+                <button
+                  key={chip.id}
+                  type="button"
+                  onClick={() => setGalleryFilter(chip.id)}
+                  disabled={disabled}
+                  style={{
+                    padding: '7px 14px',
+                    borderRadius: 999,
+                    border: active ? '1px solid #ec4899' : '1px solid var(--color-border-soft)',
+                    background: active ? 'rgba(236,72,153,0.14)' : 'var(--color-surface)',
+                    color: disabled ? 'var(--color-text-dimmer)' : (active ? '#ec4899' : 'var(--color-text)'),
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: disabled ? 'default' : 'pointer',
+                    fontFamily: 'inherit',
+                    opacity: disabled ? 0.45 : 1,
+                  }}
+                >
+                  {chip.label}
+                </button>
+              )
+            })}
           </div>
-        ))}
-      </section>
+
+          {/* 2-section masonry */}
+          <div style={{
+            maxWidth: 820,
+            margin: '0 auto',
+            padding: '14px 20px 0',
+            width: '100%',
+            boxSizing: 'border-box',
+          }}>
+            {photos.length > 0 && galleryFilter !== 'drawings' && (
+              <section style={{ marginBottom: 24 }}>
+                <h2 style={{
+                  color: 'var(--color-text)',
+                  fontSize: 14,
+                  fontWeight: 700,
+                  letterSpacing: '0.05em',
+                  textTransform: 'uppercase',
+                  margin: '0 0 10px',
+                }}>
+                  Photos
+                </h2>
+                <div style={{ columnCount: 2, columnGap: 8 }} className="building-masonry">
+                  {photos.map((item, idx) => (
+                    <div key={`${item.url}-${idx}`} style={{
+                      breakInside: 'avoid',
+                      marginBottom: 8,
+                      position: 'relative',
+                      borderRadius: 8,
+                      overflow: 'hidden',
+                      background: 'var(--color-surface)',
+                    }}>
+                      <img
+                        src={item.url}
+                        alt={`${title} ${kindLabel(item.kind)} ${idx + 1}`}
+                        loading={idx < 2 ? 'eager' : 'lazy'}
+                        style={{
+                          width: '100%',
+                          height: 'auto',
+                          display: 'block',
+                        }}
+                      />
+                      <span style={{
+                        position: 'absolute',
+                        bottom: 6,
+                        left: 6,
+                        background: 'rgba(0,0,0,0.6)',
+                        color: '#fff',
+                        fontSize: 10,
+                        fontWeight: 700,
+                        padding: '2px 6px',
+                        borderRadius: 4,
+                        letterSpacing: '0.04em',
+                      }}>
+                        {kindLabel(item.kind)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+            {drawings.length > 0 && galleryFilter !== 'photos' && (
+              <section style={{ marginBottom: 24 }}>
+                <h2 style={{
+                  color: 'var(--color-text)',
+                  fontSize: 14,
+                  fontWeight: 700,
+                  letterSpacing: '0.05em',
+                  textTransform: 'uppercase',
+                  margin: '0 0 10px',
+                }}>
+                  Drawings
+                </h2>
+                <div style={{ columnCount: 2, columnGap: 8 }} className="building-masonry">
+                  {drawings.map((item, idx) => (
+                    <div key={`${item.url}-${idx}`} style={{
+                      breakInside: 'avoid',
+                      marginBottom: 8,
+                      position: 'relative',
+                      borderRadius: 8,
+                      overflow: 'hidden',
+                      background: '#fff',
+                    }}>
+                      <img
+                        src={item.url}
+                        alt={`${title} Drawing ${idx + 1}`}
+                        loading="lazy"
+                        style={{
+                          width: '100%',
+                          height: 'auto',
+                          display: 'block',
+                          objectFit: 'contain',
+                        }}
+                      />
+                      <span style={{
+                        position: 'absolute',
+                        bottom: 6,
+                        left: 6,
+                        background: 'rgba(0,0,0,0.6)',
+                        color: '#fff',
+                        fontSize: 10,
+                        fontWeight: 700,
+                        padding: '2px 6px',
+                        borderRadius: 4,
+                        letterSpacing: '0.04em',
+                      }}>
+                        Drawing
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+          </div>
+        </>
+      ) : gallery.length > 0 ? (
+        <section className="hide-scrollbar" style={{
+          height: '50vh',
+          minHeight: 320,
+          display: 'flex',
+          overflowX: 'auto',
+          scrollSnapType: 'x mandatory',
+          background: 'var(--color-surface)',
+        }}>
+          {gallery.map((url, index) => (
+            <div key={`${url}-${index}`} style={{
+              position: 'relative',
+              minWidth: '100%',
+              height: '100%',
+              scrollSnapAlign: 'start',
+              background: '#050505',
+            }}>
+              <div className="skeleton-shimmer" style={{ position: 'absolute', inset: 0 }} />
+              <img
+                src={url}
+                alt={`${title} ${index + 1}`}
+                loading={index === 0 ? 'eager' : 'lazy'}
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                }}
+              />
+            </div>
+          ))}
+        </section>
+      ) : null}
 
       <main style={{ maxWidth: 820, margin: '0 auto', padding: '24px 20px 0' }}>
         <p style={{

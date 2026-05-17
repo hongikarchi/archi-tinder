@@ -197,9 +197,12 @@ export default function App() {
   const swipeCount = useRef(0)
   const swipeRetryCount = useRef(0)
   const currentCardRef = useRef(null)
+  const activeProjectIdRef = useRef(null)
 
   // Keep currentCardRef in sync so setTimeout closures can read live card identity
   useEffect(() => { currentCardRef.current = currentCard }, [currentCard])
+  // Keep activeProjectIdRef in sync so setTimeout closures detect project-switch / session-end
+  useEffect(() => { activeProjectIdRef.current = activeProjectId }, [activeProjectId])
   useEffect(() => {
     if (swipeRestored.current) return
     if (location.pathname === '/swipe' && activeProjectId && userId) {
@@ -536,11 +539,14 @@ export default function App() {
       } else if (kind === 'network' && !canInstantSwap && swipeRetryCount.current < 1) {
         // Auto-retry once on network error, only when card was reverted (non-instant path)
         const retryCardId = swipedCard?.image_id
+        const retryProjectId = activeProjectId
         swipeRetryCount.current += 1
         if (message) setSwipeError(message)
         setTimeout(() => {
-          // Only retry if the user hasn't advanced to a different card
-          if (currentCardRef.current?.image_id === retryCardId) {
+          // Only retry if user hasn't switched cards OR changed/ended the project
+          const cardMatches = currentCardRef.current?.image_id === retryCardId
+          const projectMatches = activeProjectIdRef.current === retryProjectId
+          if (cardMatches && projectMatches) {
             handleSwipeCard(action)
           } else {
             swipeRetryCount.current = 0

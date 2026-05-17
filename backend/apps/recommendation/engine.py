@@ -189,6 +189,7 @@ def _row_to_card(row, image_focus=None):
         img.get('rank') if img.get('rank') is not None else 9999,
     ))
     gallery_urls = []
+    gallery_meta = []
     seen = {image_url} if image_url else set()
     drawing_start = None
     for img in images:
@@ -199,6 +200,7 @@ def _row_to_card(row, image_focus=None):
         if drawing_start is None and img.get('kind') == 'drawing':
             drawing_start = len(gallery_urls)
         gallery_urls.append(url)
+        gallery_meta.append({'url': url, 'kind': img.get('kind') or 'gallery'})
     if drawing_start is None:
         drawing_start = len(gallery_urls)
 
@@ -228,6 +230,7 @@ def _row_to_card(row, image_focus=None):
         'covers_by_type':         covers_by_type,
         'url':                    src_url,
         'gallery':                gallery_urls,
+        'gallery_meta':           gallery_meta,
         'gallery_drawing_start':  drawing_start,
         'metadata': {
             'axis_typology':       row.get('program'),
