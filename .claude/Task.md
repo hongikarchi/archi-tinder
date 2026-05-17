@@ -88,6 +88,11 @@
 - [2026-05-17] PR-OPENED: #43 — feature/admin-p5-board-inline-edit → develop, 3 commits (fbfe536 reporter P4 housekeeping + 35b297f P5 BoardCard inline edit lock toggle + delete confirm + bd49537 reporter P5 housekeeping). URL: https://github.com/hongikarchi/archi-tinder/pull/43. REVIEW-PASSED at bd49537 (3 MINOR deferrable). Backend untouched. Carryover (Task.md handoff + reviews/latest.md + reviews/bd49537.md) stashed pre-push; relands on develop post-merge.
 - [2026-05-17] PR-CI-GREEN: #43 — backend 2m11s, frontend 17s, Vercel + comments all pass.
 - [2026-05-17] PR-MERGED: #43 — squashed develop @ a86e3d7. Mode 1 step 7: `gh api -X DELETE refs/heads/feature/admin-p5-board-inline-edit` → checkout develop (after re-stash; mid-flow Task.md edits blocked first attempt) → pull --ff-only (10 files +672/-252, includes carryover `.claude/reviews/ff80a81.md`) → branch -D → fetch --prune → stash pop newer (PR-OPENED sigs + reviews/bd49537.md restored) → checkout latest.md from older stash + drop (older Task.md slice abandoned — superseded by newer stash content). develop HEAD = a86e3d7.
+- [2026-05-17] READY-FOR-PUSH: feature/admin-p5.1-board-edit-polish — HEAD 3ab42f2, inner-loop reviewer PASS-WITH-MINORS (1 ARIA conflict fixed direct) + security PASS, /review skipped per Rule 2 (trivial). 1 commit addressing 3 P5 MINORs (#1 inline toast, #2 id+index revert, #3 per-board lock). Frontend-only `UserProfilePage.jsx` +70/-7.
+- [2026-05-17] BRANCH-CREATED: feature/admin-p5.1-board-edit-polish (single-commit polish branch).
+- [2026-05-17] PR-OPENED: #44 — feature/admin-p5.1-board-edit-polish → develop, 1 commit (3ab42f2 P5.1 toast + race-safe revert + per-board lock). URL: https://github.com/hongikarchi/archi-tinder/pull/44. /review skipped per Token-Saving Rule 2 (trivial frontend polish, P5 MINOR follow-up).
+- [2026-05-17] PR-CI-GREEN: #44 — backend 2m6s, frontend 14s, Vercel + comments all pass.
+- [2026-05-17] PR-MERGED: #44 — squashed develop @ 01a8edb. Mode 1 step 7: pre-checkout stash (mid-flow Task.md sigs) → `gh api -X DELETE refs/heads/feature/admin-p5.1-board-edit-polish` → checkout develop → pull --ff-only (4 files +635/-184, sweeps carryover `bd49537.md` + `latest.md` from P5 cycle into develop) → branch -D → fetch --prune → stash pop (Task.md handoff restored). develop HEAD = 01a8edb.
 
 ## Development Roadmap
 
