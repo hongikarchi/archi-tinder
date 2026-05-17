@@ -48,6 +48,11 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
   const [boardsLoading, setBoardsLoading] = useState(false)
   const sentinelRef = useRef(null)
 
+  // MINOR #1: inline error banner for failed board actions (optimistic revert feedback)
+  const [boardActionError, setBoardActionError] = useState(null)
+  // MINOR #3: per-board pending set — blocks rapid double-toggle
+  const [pendingVisibility, setPendingVisibility] = useState(() => new Set())
+
   // Adapter: map project_id -> board_id + format ISO date -> "Month YYYY"
   function adaptBoard(b) {
     return { ...b, board_id: b.project_id, date: formatBoardDate(b.date) }
@@ -120,6 +125,13 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
     return () => observer.disconnect()
   }, [loadMoreBoards])
 
+  // Auto-dismiss board action error after 4s
+  useEffect(() => {
+    if (!boardActionError) return
+    const t = setTimeout(() => setBoardActionError(null), 4000)
+    return () => clearTimeout(t)
+  }, [boardActionError])
+
   async function handleToggleFollow() {
     if (isMe || isFollowingPending) return
     setIsFollowingPending(true)
@@ -146,31 +158,48 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
   }
 
   // Optimistic visibility toggle — reverts on API failure.
+  // MINOR #3: per-board pending guard blocks rapid double-toggle stale-prev race.
   const handleVisibilityChange = useCallback(async (boardId, next) => {
+    if (pendingVisibility.has(boardId)) return
     const prev = boards.find(b => b.board_id === boardId)?.visibility
+    if (!prev) return
+    setPendingVisibility(s => { const n = new Set(s); n.add(boardId); return n })
     setBoards(bs => bs.map(b => b.board_id === boardId ? { ...b, visibility: next } : b))
     try {
       await updateProject(boardId, { visibility: next })
     } catch (err) {
       setBoards(bs => bs.map(b => b.board_id === boardId ? { ...b, visibility: prev } : b))
+      setBoardActionError({ type: 'patch', msg: 'Failed to update board visibility. Reverted.' })
       console.error('[UserProfilePage] visibility toggle failed, reverted', err)
+    } finally {
+      setPendingVisibility(s => { const n = new Set(s); n.delete(boardId); return n })
     }
-  }, [boards])
+  }, [boards, pendingVisibility])
 
   // Optimistic delete — reverts on API failure.
+  // MINOR #2: id-based revert preserves concurrently-paginated boards that
+  //           arrived after the snapshot was captured.
   const handleDelete = useCallback(async (boardId) => {
-    const snapshot = boards
-    const prevTotal = boardsTotalCount
+    const deletedBoard = boards.find(b => b.board_id === boardId)
+    const deletedIndex = boards.findIndex(b => b.board_id === boardId)
+    if (!deletedBoard) return
     setBoards(bs => bs.filter(b => b.board_id !== boardId))
     setBoardsTotalCount(t => Math.max(0, t - 1))
     try {
       await deleteProject(boardId)
     } catch (err) {
-      setBoards(snapshot)
-      setBoardsTotalCount(prevTotal)
-      console.error('[UserProfilePage] delete failed, reverted', err)
+      // Re-insert at original index; any boards paginated in during the flight are preserved.
+      setBoards(bs => {
+        const next = [...bs]
+        const insertAt = Math.min(deletedIndex, next.length)
+        next.splice(insertAt, 0, deletedBoard)
+        return next
+      })
+      setBoardsTotalCount(t => t + 1)
+      setBoardActionError({ type: 'delete', msg: 'Failed to delete board. Restored.' })
+      console.error('[UserProfilePage] delete failed, restored', err)
     }
-  }, [boards, boardsTotalCount])
+  }, [boards])
 
   // External-link helpers (pure derivations — no hooks)
   const igHandle = user?.external_links?.instagram?.replace(/^@/, '') || ''
@@ -550,6 +579,33 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
             )}
           </div>
         </div>
+
+        {/* MINOR #1: inline error banner for failed board actions */}
+        {boardActionError && (
+          <div aria-live="polite" style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+            padding: '12px 16px', marginBottom: 12, borderRadius: 12,
+            background: 'rgba(239,68,68,0.12)',
+            borderLeft: '3px solid #ef4444',
+            color: 'var(--color-text)', fontSize: 13, fontWeight: 500,
+          }}>
+            <span>{boardActionError.msg}</span>
+            <button
+              type="button"
+              onClick={() => setBoardActionError(null)}
+              aria-label="Dismiss"
+              style={{
+                background: 'transparent', border: 'none', cursor: 'pointer',
+                color: 'var(--color-text-2)', padding: 4, lineHeight: 0,
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+        )}
 
         {/* Boards section header */}
         <div style={{
