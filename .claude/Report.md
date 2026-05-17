@@ -484,27 +484,32 @@ flowchart LR
 - Phase 16: Recommendation Expansion (R-PHASE16 RESEARCH-REQUESTED queued — research terminal to elicit spec §4 decisions)
 
 ## Last Updated (Claude)
-- **Date:** 2026-05-16
-- **Commit:** `824dc86` (PR #41 — feat: P3 swipe UX — ConfidenceBar redesign + error classify + exit/dismiss popups; squashed into develop). Bundled: `b6825f3` (reporter P2 session-end housekeeping), `2c387df` (P3 swipe UX feat), `acefff8` (P3 review fixes F3 collision + ARIA dialog + classifier dedup).
+- **Date:** 2026-05-17
+- **Commit:** `52c3cbf` (PR #42 — feat: P4 BuildingDetailPage — Pinterest masonry + per-image kind badge + filter toggle; squashed into develop). Bundled: `823bff1` (reporter P3 session-end housekeeping), `18fc67f` (P3 deferred MINORs — F4 mouse-drag flicker + setTimeout project guard), `ff80a81` (P4 BuildingDetailPage Pinterest masonry redesign).
 - **Changes:**
-  - F1 ConfidenceBar redesign: `frontend/src/pages/SwipePage.jsx` — stage label + swipe count + percent row added to ConfidenceBar inline component.
-  - F2 swipe error classification: `frontend/src/pages/SwipePage.jsx` — NEW `classifySwipeError(err)` returns `{kind, message}` with kinds: network/auth/client/server; inner-retry on network only with card-id guard.
-  - F3 exit/new-project button: `frontend/src/pages/SwipePage.jsx` + `frontend/src/App.jsx` — Exit button top-left (right:16 → left:16, no Logout collision); NEW ExitConfirmPopup with `새 프로젝트 시작` + `홈으로` routes; ARIA role=dialog + aria-modal + aria-labelledby + Escape close + auto-focus primary.
-  - F4 first-dismiss tutorial popup: `frontend/src/pages/SwipePage.jsx` — DismissConfirmPopup with `archithon_dismiss_tutorial_seen` localStorage flag; ARIA role=dialog; first-time only.
-  - MainLayout.jsx: pathname `/swipe` added to Logout exclusion list (prevents Logout render on swipe route).
-  - 2 MINORs deferred non-blocking: MINOR #3 mouse-drag flicker (cosmetic), MINOR #4 setTimeout stale-closure (low probability).
-  - Rule 6 bundle pattern: reporter pass (`b6825f3`) + P3 feat (`2c387df`) + P3 review fixes (`acefff8`) swept into PR #41.
-- **Files changed (PR #41 @ 824dc86):**
-  - `frontend/src/pages/SwipePage.jsx` +342/-57 (F1+F2+F3+F4)
-  - `frontend/src/App.jsx` +67/-6 (ExitConfirmPopup routes + new-project flow)
-  - `frontend/src/layouts/MainLayout.jsx` +3/-0 (pathname exclusion)
-  - `.claude/Report.md` +57/-60 (P2 last-updated section)
-  - `.claude/Task.md` +15/-1 (handoffs signals)
-  - `.claude/handoffs-archive/2026-05.md` +8 (8 entries archived)
-  - `.claude/reviews/2c387df.md` +204/-0 (REVIEW-FAIL verdict)
-  - `.claude/reviews/50e4073.md` +125/-0 (carryover review artifact)
-  - `.claude/reviews/latest.md` (updated symlink content)
-- **Summary:** P3 swipe-UX closed — F1 ConfidenceBar stage label, F2 error classification + inner-retry, F3 Exit top-left button with ExitConfirmPopup (ARIA), F4 first-dismiss tutorial popup (ARIA) live on develop. Frontend-only; no backend/algorithm/schema changes. algorithm.md sync not applicable. Handoffs trimmed 37→30 (7 archived) this reporter pass.
+  - P4 BuildingDetailPage gallery rewrite: `frontend/src/pages/BuildingDetailPage.jsx` — 2-section masonry (photos + drawings), per-image kind badge (Exterior/Interior/Drawing/Aerial/Detail/Cover/Photo), 3-chip filter toggle (All / Photos / Drawings), backward-compat fallback to old horizontal carousel when `gallery_meta` empty.
+  - Backend additive: `backend/apps/recommendation/engine.py` `_row_to_card` now emits `gallery_meta: [{url, kind}]` parallel to existing `gallery: [str]`. Zero breaking change — `SwipeCard.jsx` + `GalleryOverlay.jsx` untouched.
+  - `frontend/src/api/images.js`: `normalizeCard` passthrough for new `gallery_meta` field.
+  - `frontend/src/index.css`: CSS `@media` desktop 3-column masonry (columnCount 3 at ≥768px).
+  - `frontend/src/App.jsx`: BuildingDetailPage route wiring + modal state.
+  - `frontend/src/pages/SwipePage.jsx`: BuildingDetailPage open handler.
+  - `backend/apps/recommendation/tests/test_row_to_card.py`: new test coverage for `gallery_meta` field shape.
+  - 3 reviewer MINORs all non-blocking: galleryFilter state reset (theoretical — no in-app building-to-building nav), badge style duplication (maintainability), drawings eager-load inconsistency (minor UX). All deferred.
+  - Rule 6 bundle: reporter P3 pass + P3 deferred MINORs + P4 feat swept into PR #42.
+- **Files changed (PR #42 @ 52c3cbf):**
+  - `frontend/src/pages/BuildingDetailPage.jsx` +243/-57 (P4 masonry gallery rewrite)
+  - `frontend/src/App.jsx` +10/-1 (BuildingDetailPage route)
+  - `frontend/src/api/images.js` +1/-0 (gallery_meta passthrough)
+  - `frontend/src/index.css` +7/-0 (desktop 3-col masonry media query)
+  - `frontend/src/pages/SwipePage.jsx` +3/-1 (open handler)
+  - `backend/apps/recommendation/engine.py` +3/-0 (gallery_meta in _row_to_card)
+  - `backend/apps/recommendation/tests/test_row_to_card.py` +36/-0 (new tests)
+  - `.claude/Report.md` (this section)
+  - `.claude/Task.md` (handoffs signals + archive trim)
+  - `.claude/handoffs-archive/2026-05.md` (7 entries archived)
+  - `.claude/reviews/acefff8.md` +227/-0 (carryover review artifact)
+  - `.claude/reviews/latest.md` (updated content)
+- **Summary:** P4 BuildingDetailPage Pinterest masonry redesign live on develop. Backend additive `gallery_meta:[{url,kind}]` field from `_row_to_card`; frontend gallery section fully rewritten with 2-section masonry, per-image kind badges, filter toggle, carousel fallback. No algorithm/schema changes; algorithm.md sync not applicable. Handoffs trimmed 35→30 (5 entries archived, +2 new = net 37→30 after add) this reporter pass.
 
 ## Last Updated (Designer)
 
