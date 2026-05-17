@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, Fragment } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { getUserProfile, followUser, unfollowUser } from '../api/client.js'
+import { updateProject, deleteProject } from '../api/projects.js'
 import BoardCard from '../components/profile/BoardCard'
 import BioPersonaFlipCard from '../components/profile/BioPersonaFlipCard'
 
@@ -143,6 +144,33 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
       setIsFollowingPending(false)
     }
   }
+
+  // Optimistic visibility toggle — reverts on API failure.
+  const handleVisibilityChange = useCallback(async (boardId, next) => {
+    const prev = boards.find(b => b.board_id === boardId)?.visibility
+    setBoards(bs => bs.map(b => b.board_id === boardId ? { ...b, visibility: next } : b))
+    try {
+      await updateProject(boardId, { visibility: next })
+    } catch (err) {
+      setBoards(bs => bs.map(b => b.board_id === boardId ? { ...b, visibility: prev } : b))
+      console.error('[UserProfilePage] visibility toggle failed, reverted', err)
+    }
+  }, [boards])
+
+  // Optimistic delete — reverts on API failure.
+  const handleDelete = useCallback(async (boardId) => {
+    const snapshot = boards
+    const prevTotal = boardsTotalCount
+    setBoards(bs => bs.filter(b => b.board_id !== boardId))
+    setBoardsTotalCount(t => Math.max(0, t - 1))
+    try {
+      await deleteProject(boardId)
+    } catch (err) {
+      setBoards(snapshot)
+      setBoardsTotalCount(prevTotal)
+      console.error('[UserProfilePage] delete failed, reverted', err)
+    }
+  }, [boards, boardsTotalCount])
 
   // External-link helpers (pure derivations — no hooks)
   const igHandle = user?.external_links?.instagram?.replace(/^@/, '') || ''
@@ -549,7 +577,13 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
             gap: 20,
           }}>
             {boards.map(board => (
-              <BoardCard key={board.board_id} board={board} />
+              <BoardCard
+                key={board.board_id}
+                board={board}
+                isOwner={isMe}
+                onVisibilityChange={(next) => handleVisibilityChange(board.board_id, next)}
+                onDelete={() => handleDelete(board.board_id)}
+              />
             ))}
           </div>
         ) : (!boardsHasMore && !boardsLoading && (

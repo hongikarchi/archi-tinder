@@ -33,7 +33,7 @@ export async function updateProject(projectId, fields) {
     return await callApi('PATCH', `/projects/${projectId}/`, fields)
   } catch (err) {
     console.error('[api/client] updateProject failed:', err)
-    return null
+    throw err
   }
 }
 
@@ -42,6 +42,7 @@ export async function deleteProject(projectId) {
     await callApi('DELETE', `/projects/${projectId}/`)
   } catch (err) {
     console.error('[api/client] deleteProject failed:', err)
+    throw err
   }
 }
 

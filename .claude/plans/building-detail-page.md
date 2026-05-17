@@ -1,6 +1,54 @@
 # Plan — Building Detail Page (option A)
 
-**Status**: Phase 1 SHIPPED (BuildingDetailPage.jsx live on develop). **P4 redesign in progress 2026-05-17** — see "P4 Update" section below. Older sections (Phase 2/3 click-handler + bookmark) shipped separately.
+**Status**: P4 SHIPPED 2026-05-17 (PR #42 @ `52c3cbf`). **P5 in progress 2026-05-17** — Curated Boards inline editing. See "P5 Update" section below.
+
+---
+
+## P5 Update (2026-05-17) — Curated Boards inline editing
+
+**Scope**: `BoardCard.jsx` + `UserProfilePage.jsx` only. Adds owner-gated inline edit affordances on the front face of each curated board card on the profile page.
+
+**Decisions** (user-confirmed):
+1. Lock chip toggle: **show on hover** for owner (desktop). Mobile fallback: always show. Non-owner: keep current behavior (chip only when private).
+2. Delete confirm: **inline 2-step** — first X click turns the X red + label "Confirm?"; 2nd click within 3s deletes; click elsewhere or 3s timeout cancels.
+
+### Backend
+No change. `PATCH /api/v1/projects/{project_id}/` (visibility) and `DELETE /api/v1/projects/{project_id}/` already live (`backend/apps/recommendation/views/projects.py`).
+
+### Frontend
+`frontend/src/components/profile/BoardCard.jsx`:
+- New props: `isOwner: bool`, `onVisibilityChange: (newVisibility) => void`, `onDelete: () => void`.
+- Replace existing private-only chip block (lines ~109-128) with owner-aware chip:
+  - Owner: render chip when `isHovered || isMobile` OR `isPrivate`. Lock-closed icon for private, lock-open icon for public. Clickable → optimistically flips visibility + calls `onVisibilityChange(next)`. Stop click propagation (don't flip card).
+  - Non-owner: render chip only when `isPrivate` (current behavior).
+- Add X delete button top-left when `isOwner`: 32px round dark-blur chip mirroring lock chip styling. State machine: `confirmingDelete` boolean + `confirmTimerRef`. 1st click sets `confirmingDelete=true` + 3s timeout to reset. 2nd click within window calls `onDelete()`. Tooltip / aria swaps from "Delete board" → "Click again to confirm". Visual: idle white-ish X, confirming red X + small "Confirm?" label below or beside.
+- `isMobile` detection: simple `window.matchMedia('(hover: none)').matches` once at mount.
+
+`frontend/src/pages/UserProfilePage.jsx`:
+- Pass `isOwner={isMe}` to each `<BoardCard>`.
+- `onVisibilityChange`: optimistic update local `boards` state (find by `board_id`, set `visibility`), then `await updateProject(board_id, { visibility: next })`. On failure: revert + console.error (no toast — out of scope).
+- `onDelete`: optimistic remove from local `boards` + decrement `boardsTotalCount`, then `await deleteProject(board_id)`. On failure: re-insert + console.error.
+- Imports: `updateProject`, `deleteProject` from `../api/projects.js`.
+
+### Files touched
+- `frontend/src/components/profile/BoardCard.jsx` (rewrite chip block + add X button + handlers)
+- `frontend/src/pages/UserProfilePage.jsx` (pass isOwner + 2 handlers)
+
+### Out of scope
+- BoardDetailPage edit affordances.
+- Bulk edit / multi-select (P6).
+- Toast notifications.
+- Cover image change.
+- Rename board (P6 candidate).
+
+### Acceptance
+- Owner hover → lock-open chip appears on a public board; click toggles to lock-closed; PATCH fires; optimistic update visible immediately.
+- Owner clicks X → X turns red + "Confirm?" appears. 2nd click within 3s removes card; DELETE fires. Timeout / clicking elsewhere cancels (X reverts).
+- Non-owner: no X button, lock chip only when private (current behavior).
+- Card flip click NOT triggered by chip / X button clicks (event propagation stopped).
+- DESIGN.md compliance: chip styling matches existing private chip (32px round dark-blur), fontWeight ≤ 700, brand accent `#ec4899` only for hover.
+
+---
 **Spec anchor**: `research/spec/requirements.md` § 8 "Detail Page" (last subsection).
 
 ---
