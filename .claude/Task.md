@@ -218,3 +218,4 @@ Historical resolved tasks moved to `.claude/resolved-archive.md` (frees
 ~30-50K tokens per reporter call; git log is the authoritative history).
 Append new resolved entries to the archive, not here.
 - 2026-05-18 READY-FOR-PUSH: feature/admin-doc-cleanup-2026-05-18 @ 8269260 — doc-system audit + cleanup + algorithm ownership boundary. 20 files (pure docs/policy, zero source). /review skip per Rule 2.
+- 2026-05-18 READY-FOR-PUSH: feature/admin-reporter-doc-cleanup-close @ 254a325 — reporter session-end housekeeping (Report.md sync). Docs-only, /review skip per Rule 2.
