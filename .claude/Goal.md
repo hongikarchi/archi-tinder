@@ -207,6 +207,33 @@ The **algorithm side** (search-flow refinements documented in `docs/algorithm.md
 runs orthogonally to the phase roadmap. Topics 01-12, IMP-1..IMP-9, INFRA-1 are
 their own track; both must converge for v1 launch.
 
+### Algorithm ownership (2026-05-18)
+
+The algorithm side — `backend/apps/recommendation/engine.py`,
+`services/embeddings.py` (HF V_initial), `services/rerank.py` (Gemini
+session-end Topic 02), `services/_caches.py`, all `docs/algorithm.md`
+Topic 01-12 + IMP-1/7/8 + A2 hyperparameter optimization + the
+mathematical formulas (recency, convergence, MMR) — is **owned by a
+separate collaborator post-2026-05-18**. Admin role here is limited to:
+
+1. **Reporter auto-sync** of the Production Value column in
+   `docs/algorithm.md` § Hyperparameter Space table when
+   `backend/config/settings.py` RECOMMENDATION dict changes.
+2. **Theory-edit review** on PR (when external collaborator opens a PR
+   touching `docs/algorithm.md`, admin reviews on PR).
+3. **LLM chat module work** — `services/parse_query.py`,
+   `services/generation.py` (Gemini persona report + visual_description),
+   `services/_gemini.py`, IMP-4 / IMP-5 / IMP-6 (chat-phase Gemini call
+   latency), and Phase 17 (LLM1-3 reverse-Q + persona classification)
+   remain admin-owned. The `parse_query() → engine.create_bounded_pool()`
+   JSON contract (`{filters, filter_priority, visual_description,
+   raw_query, reply, probe_needed}` + 384-dim `v_initial` from HF) is
+   the boundary; either side may evolve independently as long as the
+   contract holds.
+
+`tools/algorithm_tester.py` is hand-off material — kept in tree as a
+collaborator-facing artifact; admin does not run it.
+
 ---
 
 ## 8. Business model (informational, not blocking decisions)

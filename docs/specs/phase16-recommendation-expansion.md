@@ -1,7 +1,7 @@
 # Phase 16 — Recommendation Expansion
 
 **Status**: Re-scoped 2026-05-14 by the tab-3-structure replan
-(`.claude/plans/replan-2026-05-14-tab3-restructure.md`). REC1 already
+(`.claude/plans-archive/replan-2026-05-14-tab3-restructure.md`). REC1 already
 executed as **Push S3** (swipe end-flow consolidation). REC2 / REC3 now
 serve a **Profile-tab "사무소 추천" button** rather than a dedicated
 Landing tab — the Landing tab itself was removed in Push S6 (4-tab →

@@ -972,3 +972,31 @@ Consolidated 3 overlapping docs (PRD.md, PROJECT.md, REPORT.md) into purpose-spe
 - [x] Updated all agent file references
 - [x] Trimmed CLAUDE.md architecture sections (now in Report.md)
 - [x] Deleted PRD.md, PROJECT.md, REPORT.md
+
+### Phase 19-26: 2026-05-14 Replan (Tab 3-Structure Transition) -- COMPLETED 2026-05-14, deployed 2026-05-14 via PR #36
+
+> Originally in `.claude/Task.md § Development Roadmap`; moved to this archive on
+> 2026-05-18 after deployment to main (PR #36 squash @ f955ab5, all 8 pushes live).
+> Replan plan file archived at `.claude/plans-archive/replan-2026-05-14-tab3-restructure.md`.
+
+53. **S1** -- Plan + collaborator on-ramp doc -- COMPLETED 2026-05-13 (PR #26 → develop b9c8dd4)
+54. **S2** -- DB new-schema integration -- COMPLETED 2026-05-14 (PR #34 `feature/admin-s2-new-schema`: engine.py 20+ raw SQL rewritten for `canonical_v2_buildings` 31-col / 39,776-row table; canonical_bld_id PK + is_publishable gate + image_focus jsonb cover model; SwipeEvent migration 0018; frontend normalizeCard / fallback chain; full pytest 599/599 GREEN; live Neon smoke PASS on bld_000344)
+55. **S3** -- Swipe end-flow consolidation -- COMPLETED 2026-05-13 (PR #27 → develop 2a61881; ActionCard removal + end-screen rewrite; tolerate empty building_id on extend session)
+56. **S4** -- Progress UI single source -- COMPLETED 2026-05-13 (PR #28 → develop a5edff5; unified progress bar + DebugOverlay extension)
+57. **S5** -- Library → Profile absorb -- COMPLETED 2026-05-13 (PR #29 → develop 7f225c2; FavoritesPage + SetupPage deleted; real data + redirect)
+58. **S6** -- 4-tab → 3-tab cutover -- COMPLETED 2026-05-14 (PR #30 → develop 976bfdc; Discovery / Taste / Profile only; Library/Landing removed; Part B browser 7/7 ×3 personas green)
+59. **S7** -- Discovery Swipe tab -- COMPLETED 2026-05-14 (PR #31 / 0ee6b42 cluster + 0e93d9f frontend; infinite-scroll Discovery page + save flow + surprise board)
+60. **S8** -- Roadmap / spec sweep -- COMPLETED 2026-05-14 (Phase 16/17/18 specs refreshed post-replan + post-S2; Goal.md § 7 Phase 16 description rewritten; docs/specs/requirements.md canonical_v2_buildings refs fixed; Task.md handoffs trimmed 62 → 30; remote stale branches deleted)
+
+### Phase P1-P6 ArchiTinder Latency + UX Overhaul -- COMPLETED 2026-05-18, deployed via PR #49
+
+> Series shipped between 2026-05-15 and 2026-05-18. Final deploy: PR #49 squash @ d785c360.
+
+- **P1** docs/delegation rule -- PR #39 → 97127f1
+- **P2** N+1 batch fetch + ring buffer instrumentation -- PR #40 → 9c7d513
+- **P3** swipe UX (ConfidenceBar redesign + error classify + exit/dismiss popups) -- PR #41 → 824dc86
+- **P4** BuildingDetailPage Pinterest masonry + per-image kind badge + filter toggle -- PR #42 → 52c3cbf
+- **P5** Curated Boards inline edit (lock toggle + delete confirm) -- PR #43 → a86e3d7
+- **P5.1** P5 polish (toast + race-safe revert + per-board lock) -- PR #44 → 01a8edb
+- **P6** Boards bulk edit (multi-select + bulk lock + bulk delete) -- PR #45 → 06763a9
+- **P6 minors** (snapshot revert + style factor + cancel race) -- PR #47 → 450d3c1

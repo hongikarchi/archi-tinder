@@ -1,5 +1,7 @@
 # IMP-6 Staging Validation Results — Control vs Decoupled A/B
 
+> **Status (2026-05-18):** Stage 1 flag `STAGE_DECOUPLE_ENABLED` ON in develop (Stage 1 alone delivered 10.7% drop vs spec v1.10 ≥45% prediction → FAIL). Stage 2 async daemon thread wired but largely unfired (BareQuery 2-turn limit gate). Spec v1.11 re-grounding queued under user-owned LLM chat latency stream.
+
 ## Run summary
 - Date: 2026-04-29T02:37:13.892024+00:00
 - Mode: both

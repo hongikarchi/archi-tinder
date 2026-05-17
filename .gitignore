@@ -12,6 +12,9 @@
 !.claude/reviews/
 !.claude/validations/
 !.claude/handoffs-archive/
+!.claude/codex-tasks/
+!.claude/codex-tasks-archive/
+!.claude/plans-archive/
 !.claude/Goal.md
 !.claude/Report.md
 !.claude/Task.md
