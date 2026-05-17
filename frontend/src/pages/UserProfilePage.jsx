@@ -61,11 +61,13 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
   const bulkDeleteBtnRef = useRef(null)
   const bulkConfirmTimerRef = useRef(null)
 
-  // Helper: exit select mode and reset all selection state
+  // Helper: exit select mode and reset all selection state.
+  // NOTE: does NOT clear bulkPending — bulk handlers clear it themselves after
+  // Promise.allSettled resolves, so Cancel during a pending op cannot fire a
+  // second op (MINOR #3).
   const exitSelectMode = useCallback(() => {
     setSelectMode(false)
     setSelectedBoards(new Set())
-    setBulkPending(false)
     setConfirmingBulkDelete(false)
     clearTimeout(bulkConfirmTimerRef.current)
   }, [])
@@ -277,46 +279,75 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
         msg: `Failed to update ${failedIds.length} board(s). Reverted.`,
       })
     }
+    // Clear pending BEFORE exitSelectMode so Cancel during in-flight op cannot
+    // trigger a second bulk op (MINOR #3).
+    setBulkPending(false)
     exitSelectMode()
   }, [bulkPending, selectedBoards, boards, exitSelectMode])
 
-  // P6: bulk delete (optimistic, partial revert on failure)
+  // P6: bulk delete (optimistic, snapshot-based revert on failure)
+  // MINOR #1: snapshot prevBoards BEFORE optimistic removal so re-insertion after
+  // partial failure does not use stale indexes into the already-shrunk array.
+  // MINOR #3: setBulkPending(false) runs AFTER allSettled, BEFORE exitSelectMode.
   const handleBulkDelete = useCallback(async () => {
     if (bulkPending) return
     const ids = [...selectedBoards]
     if (ids.length === 0) return
-    // Snapshot full objects + original indexes for revert
-    const snapshots = ids.map(id => ({
-      id,
-      board: boards.find(b => b.board_id === id),
-      index: boards.findIndex(b => b.board_id === id),
-    })).filter(s => s.board)
+    const prevBoards = boards
+    const prevTotal = boardsTotalCount
     setBulkPending(true)
     // Optimistic removal
     setBoards(bs => bs.filter(b => !selectedBoards.has(b.board_id)))
-    setBoardsTotalCount(t => Math.max(0, t - snapshots.length))
-    const results = await Promise.allSettled(snapshots.map(s => deleteProject(s.id)))
-    const failedSnapshots = snapshots.filter((_, i) => results[i].status === 'rejected')
-    if (failedSnapshots.length > 0) {
-      // Re-insert failed boards at their original indexes (sort asc so earlier splices don't shift)
-      failedSnapshots.sort((a, b) => a.index - b.index)
-      setBoards(bs => {
-        const next = [...bs]
-        for (const { board, index } of failedSnapshots) {
-          const insertAt = Math.min(index, next.length)
-          next.splice(insertAt, 0, board)
-        }
-        return next
-      })
-      setBoardsTotalCount(t => t + failedSnapshots.length)
+    setBoardsTotalCount(t => Math.max(0, t - ids.length))
+    const results = await Promise.allSettled(ids.map(id => deleteProject(id)))
+    const failedIds = results
+      .map((r, i) => (r.status === 'rejected' ? ids[i] : null))
+      .filter(Boolean)
+    if (failedIds.length > 0) {
+      const successfulIds = new Set(
+        results.map((r, i) => (r.status === 'fulfilled' ? ids[i] : null)).filter(Boolean)
+      )
+      // Restore from snapshot, dropping only the actually-deleted IDs
+      setBoards(prevBoards.filter(b => !successfulIds.has(b.board_id)))
+      setBoardsTotalCount(prevTotal - successfulIds.size)
       setBoardActionError({
         type: 'bulk-delete',
-        msg: `Failed to delete ${failedSnapshots.length} board(s). Restored.`,
+        msg: `Failed to delete ${failedIds.length} board(s). Restored.`,
       })
     }
-    // Net: optimistic removed all, then we add back failed — net successCount removed.
+    // Clear pending BEFORE exitSelectMode so Cancel during in-flight op cannot
+    // trigger a second bulk op (MINOR #3).
+    setBulkPending(false)
     exitSelectMode()
-  }, [bulkPending, selectedBoards, boards, exitSelectMode])
+  }, [bulkPending, selectedBoards, boards, boardsTotalCount, exitSelectMode])
+
+  // MINOR #2: shared style helpers for Public / Private bulk action buttons.
+  // Defined here (component-scoped consts) so they close over nothing and stay
+  // stable across renders without needing useCallback/useMemo.
+  function bulkActionButtonStyle(disabled) {
+    return {
+      flex: 1,
+      minHeight: 44, padding: '0 12px',
+      borderRadius: 10, border: '1px solid var(--color-border)',
+      background: 'var(--color-surface)',
+      color: 'var(--color-text-2)', fontSize: 13, fontWeight: 600,
+      cursor: disabled ? 'not-allowed' : 'pointer',
+      fontFamily: 'inherit',
+      opacity: disabled ? 0.5 : 1,
+      transition: 'border-color 0.18s, color 0.18s, opacity 0.18s',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+    }
+  }
+  const bulkBtnHoverEnter = (disabled) => (e) => {
+    if (!disabled) {
+      e.currentTarget.style.borderColor = 'rgba(236,72,153,0.45)'
+      e.currentTarget.style.color = '#ec4899'
+    }
+  }
+  const bulkBtnHoverLeave = (e) => {
+    e.currentTarget.style.borderColor = 'var(--color-border)'
+    e.currentTarget.style.color = 'var(--color-text-2)'
+  }
 
   // External-link helpers (pure derivations — no hooks)
   const igHandle = user?.external_links?.instagram?.replace(/^@/, '') || ''
@@ -875,20 +906,9 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
               type="button"
               disabled={bulkPending}
               onClick={() => handleBulkVisibility('public')}
-              style={{
-                flex: 1,
-                minHeight: 44, padding: '0 12px',
-                borderRadius: 10, border: '1px solid var(--color-border)',
-                background: 'var(--color-surface)',
-                color: 'var(--color-text-2)', fontSize: 13, fontWeight: 600,
-                cursor: bulkPending ? 'not-allowed' : 'pointer',
-                fontFamily: 'inherit',
-                opacity: bulkPending ? 0.5 : 1,
-                transition: 'border-color 0.18s, color 0.18s, opacity 0.18s',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-              }}
-              onMouseEnter={(e) => { if (!bulkPending) { e.currentTarget.style.borderColor = 'rgba(236,72,153,0.45)'; e.currentTarget.style.color = '#ec4899' } }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-2)' }}
+              style={bulkActionButtonStyle(bulkPending)}
+              onMouseEnter={bulkBtnHoverEnter(bulkPending)}
+              onMouseLeave={bulkBtnHoverLeave}
             >
               {/* Lock-open icon */}
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -902,20 +922,9 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
               type="button"
               disabled={bulkPending}
               onClick={() => handleBulkVisibility('private')}
-              style={{
-                flex: 1,
-                minHeight: 44, padding: '0 12px',
-                borderRadius: 10, border: '1px solid var(--color-border)',
-                background: 'var(--color-surface)',
-                color: 'var(--color-text-2)', fontSize: 13, fontWeight: 600,
-                cursor: bulkPending ? 'not-allowed' : 'pointer',
-                fontFamily: 'inherit',
-                opacity: bulkPending ? 0.5 : 1,
-                transition: 'border-color 0.18s, color 0.18s, opacity 0.18s',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-              }}
-              onMouseEnter={(e) => { if (!bulkPending) { e.currentTarget.style.borderColor = 'rgba(236,72,153,0.45)'; e.currentTarget.style.color = '#ec4899' } }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-2)' }}
+              style={bulkActionButtonStyle(bulkPending)}
+              onMouseEnter={bulkBtnHoverEnter(bulkPending)}
+              onMouseLeave={bulkBtnHoverLeave}
             >
               {/* Lock-closed icon */}
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
