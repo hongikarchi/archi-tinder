@@ -85,6 +85,10 @@
 - [2026-05-17] PR-MERGED: #45 — squashed develop @ 06763a9. Mode 1 step 7: pre-checkout stash → `gh api -X DELETE refs/heads/feature/admin-p6-board-bulk-edit` → checkout develop → pull --ff-only (3 files +445/-70: Task.md +5, BoardCard.jsx +158, UserProfilePage.jsx +352 incl. bulk action bar + Promise.allSettled) → branch -D → fetch --prune → pop newer stash (Task.md sigs) → extract latest.md from older stash + drop. NOTE: `.claude/reviews/391cd26.md` (untracked in older stash) lost on drop; review terminal can regen from `latest.md`. develop HEAD = 06763a9.
 - [2026-05-17] REPORTER-DONE: 06763a9 — P6 boards bulk edit + full P0-P6 latency+UX overhaul series closed; multi-select + bulk lock + bulk delete + Promise.allSettled partial revert live on develop; 2 MINOR deferred non-blocking; series complete
 - [2026-05-17] REVIEW-REQUESTED: 06763a9 — P6 bulk board edit + reporter P6 housekeeping; full P0-P6 series done
+- [2026-05-17] BRANCH-CREATED: feature/admin-reporter-p6-close (single docs commit; Task.md handoffs archive + Report.md sync).
+- [2026-05-17] PR-OPENED: #46 — feature/admin-reporter-p6-close → develop, 1 commit (2794014 reporter P6 session-end housekeeping). URL: https://github.com/hongikarchi/archi-tinder/pull/46. /review skipped per Token-Saving Rule 2 (docs-only). Closes full P0-P6 ArchiTinder latency+UX overhaul series.
+- [2026-05-17] PR-CI-GREEN: #46 — backend 2m6s, frontend 12s, Vercel + comments all pass.
+- [2026-05-17] PR-MERGED: #46 — squashed develop @ f8fffcd. Mode 1 step 7: pre-checkout stash → `gh api -X DELETE refs/heads/feature/admin-reporter-p6-close` → checkout develop → pull --ff-only (3 files +36/-31: Report.md sync, Task.md handoff archive trim, handoffs-archive/2026-05.md +16) → branch -D → fetch --prune → stash pop (Task.md handoff sigs restored). develop HEAD = f8fffcd.
 
 ## Development Roadmap
 
