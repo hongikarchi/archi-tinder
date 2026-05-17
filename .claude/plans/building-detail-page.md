@@ -1,9 +1,70 @@
 # Plan — Building Detail Page (option A)
 
-**Status**: Plan-only (drafted 2026-05-07 session-end). Implementation deferred until #51 ResultsPage sweep completes + user wakes.
+**Status**: Phase 1 SHIPPED (BuildingDetailPage.jsx live on develop). **P4 redesign in progress 2026-05-17** — see "P4 Update" section below. Older sections (Phase 2/3 click-handler + bookmark) shipped separately.
 **Spec anchor**: `research/spec/requirements.md` § 8 "Detail Page" (last subsection).
-**Closes 3 TODO(claude) markers**: `ProjectCard.jsx:19`, `BoardDetailPage.jsx:182`, future click target from `ResultsPage.jsx`.
-**Related task**: would be a new Task.md entry, e.g. `#X — Building Detail Page (Phase 13/Spec §8 Detail)`.
+
+---
+
+## P4 Update (2026-05-17) — Pinterest gallery redesign + multisource
+
+**Scope**: Gallery section ONLY. Replaces current horizontal scroll-snap carousel (~50vh, full-width per slide) with 2-section masonry grid + per-image kind badge + top filter toggle. Rest of page (header, metadata grid, description, atmosphere, bookmark) unchanged.
+
+**Multisource definition**: photos + drawings split with per-image `kind` label (exterior / interior / drawing / aerial / detail) sourced from extended backend gallery shape.
+
+### Backend change (additive — keeps `gallery` URL array intact)
+
+`backend/apps/recommendation/engine.py` `_row_to_card`:
+
+Emit NEW field `gallery_meta: [{url, kind}]` parallel to existing `gallery: [url]` URL array. `gallery` field stays unchanged (consumers: SwipeCard.jsx, GalleryOverlay.jsx, current BuildingDetailPage carousel — none break). `gallery_drawing_start` stays as-is.
+
+Implementation: at the same loop in `_row_to_card` that builds `gallery_urls` (lines ~191-203), also build `gallery_meta` from `all_images_raw`. Each entry: `{url: img['url'], kind: img.get('kind') or 'gallery'}`. Filter empty urls + dedupe by url (same logic as `gallery_urls`).
+
+Test fixtures (`backend/tests/conftest.py:28`, `test_imp7_pool_cache.py:448/537/655/743/814`, `test_imp10_topic06_telemetry.py:56`, `test_imp8_async_prefetch.py:42`, `test_hyde.py:234/358/526/568`, `test_hybrid_retrieval.py:485/530/580/621/774`, `test_confidence.py:42`, `test_sessions.py:36`, `test_projects.py:18`) using `'gallery': []` — add `'gallery_meta': []` parallel where the fixture must match the row-to-card output. Pytest must stay green.
+
+### Frontend change
+
+`frontend/src/api/images.js` `normalizeCard` — add `gallery_meta: card.gallery_meta || []` passthrough next to existing `gallery` line (line 96-97).
+
+`frontend/src/pages/BuildingDetailPage.jsx` — gallery section rewrite (current lines 295-326):
+- Top: filter toggle 3 chip — `[All] [Photos] [Drawings]` (default All)
+- Compute `photos = gallery_meta.filter(g => g.kind !== 'drawing')`, `drawings = gallery_meta.filter(g => g.kind === 'drawing')`
+- Render 2-section masonry: Photos masonry (CSS columns or grid-template-rows masonry) → "Drawings" h2 → Drawings masonry. Each section hidden if 0 items.
+- Each image: `<div>` with image + small absolute-positioned badge bottom-left showing kind capitalized ("Exterior" / "Interior" / "Drawing" / "Aerial" / "Detail" / "Gallery"). Badge: small inline-style chip on rgba(0,0,0,0.6) background, white text, fontSize 10, padding 2px 6px, borderRadius 4.
+- Filter toggle: when "Photos" selected, hide Drawings section; when "Drawings" selected, hide Photos section; default All shows both.
+- Masonry CSS: `columnCount: 2` (mobile), `columnCount: 3` at `@media (min-width: 768px)` via inline media query OR CSS class. Each item: `breakInside: avoid; marginBottom: 8`. Image: `width: 100%; height: auto; display: block; borderRadius: 8`.
+- Fallback: if `gallery_meta` empty (older backend response not yet deployed), fallback to current carousel using existing `gallery` URL array.
+
+### Acceptance
+
+- `/buildings/bld_007848` loads → top toggle visible → 2 masonry sections render with per-image kind badges
+- Toggle "Photos" hides Drawings section; "Drawings" hides Photos; "All" shows both
+- Backward compat: if backend not yet redeployed (`gallery_meta` absent), page falls back to current carousel
+- `cd backend && pytest -x` green
+- `cd frontend && npm run lint` green
+- `cd frontend && npm run build` green
+- No console errors / warnings in browser
+
+### Out of scope (deferred)
+
+- Pinch-zoom / image lightbox / fullscreen viewer
+- Per-image rank ordering UI (image_order is just display order, not interactive)
+- New backend endpoint dedicated to building (single-element batch fetch still used)
+- Filter chips beyond All / Photos / Drawings
+
+### Files touched
+
+| File | Change | LOC |
+|---|---|---|
+| `backend/apps/recommendation/engine.py` | `_row_to_card` emit `gallery_meta` parallel field | ~15 |
+| `backend/tests/*` (many fixtures) | Add `'gallery_meta': []` parallel to `'gallery': []` where needed | ~25 |
+| `frontend/src/api/images.js` | `normalizeCard` passthrough | ~2 |
+| `frontend/src/pages/BuildingDetailPage.jsx` | Gallery section rewrite (top toggle + 2-section masonry + per-image badge + fallback) | ~120 |
+
+**Total**: ~160 LOC. Push-worthy: closes spec § 8 Detail Page "multisource gallery" requirement.
+
+---
+
+## Below: original Phase 1/2/3 plan (2026-05-07) — Phase 1 SHIPPED, Phase 2/3 also shipped via separate PRs.
 
 ---
 

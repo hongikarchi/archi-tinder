@@ -153,3 +153,10 @@ body {
 /* -- Hide scrollbar utility (used by swipe-style card-back galleries per DESIGN.md §3.5.5) -- */
 .hide-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
 .hide-scrollbar::-webkit-scrollbar { display: none; }
+
+/* -- Building detail masonry: 3-col on desktop ----------------------------- */
+@media (min-width: 768px) {
+  .building-masonry {
+    column-count: 3 !important;
+  }
+}
