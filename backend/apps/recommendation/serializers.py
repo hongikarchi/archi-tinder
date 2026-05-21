@@ -14,6 +14,11 @@ class ProjectSerializer(serializers.ModelSerializer):
     """
     project_id = serializers.UUIDField(read_only=True)
     user = UserMiniSerializer(read_only=True)
+    latest_session_id = serializers.SerializerMethodField()
+
+    def get_latest_session_id(self, obj):
+        session = obj.sessions.order_by('-created_at').first()
+        return str(session.session_id) if session else None
 
     class Meta:
         model  = Project
@@ -30,6 +35,7 @@ class ProjectSerializer(serializers.ModelSerializer):
             'analysis_report',
             'final_report',
             'report_image',
+            'latest_session_id',
             'created_at',
             'updated_at',
         ]
@@ -43,6 +49,7 @@ class ProjectSerializer(serializers.ModelSerializer):
             'final_report',
             'report_image',
             'raw_query',
+            'latest_session_id',
             'created_at',
             'updated_at',
         ]

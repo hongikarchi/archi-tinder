@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getBoardBuildings, getProject } from '../api/projects.js'
+import { getResult } from '../api/sessions.js'
 
 function collectBoardBuildingIds(project) {
   const ids = []
@@ -15,13 +16,14 @@ function collectBoardBuildingIds(project) {
   return ids
 }
 
-function adaptProjectToBoard(project, buildings) {
+function adaptProjectToBoard(project, buildings, recommended = []) {
   return {
     ...project,
     board_id: project.project_id,
     owner: project.user,
     cover_image_url: buildings[0]?.image_url || '',
     buildings,
+    recommended,
   }
 }
 
@@ -47,9 +49,15 @@ export function useBoard(projectId) {
         if (cancelled) return
         if (!project) throw new Error('Board not found.')
         const buildingIds = collectBoardBuildingIds(project)
-        const buildings = await getBoardBuildings(buildingIds)
+        const [buildings, resultData] = await Promise.all([
+          getBoardBuildings(buildingIds),
+          project.latest_session_id
+            ? getResult({ session_id: project.latest_session_id }).catch(() => null)
+            : Promise.resolve(null),
+        ])
         if (cancelled) return
-        setBoard(adaptProjectToBoard(project, buildings))
+        const recommended = resultData?.predicted_like_images || []
+        setBoard(adaptProjectToBoard(project, buildings, recommended))
       })
       .catch(err => {
         if (cancelled) return
