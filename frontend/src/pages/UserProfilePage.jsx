@@ -4,6 +4,7 @@ import { getUserProfile, followUser, unfollowUser } from '../api/client.js'
 import { updateProject, deleteProject } from '../api/projects.js'
 import BoardCard from '../components/profile/BoardCard'
 import BioPersonaFlipCard from '../components/profile/BioPersonaFlipCard'
+import AppearanceSettings from '../components/AppearanceSettings.jsx'
 
 /**
  * formatBoardDate — converts ISO 8601 timestamp to "Month YYYY" display string.
@@ -20,7 +21,7 @@ function formatBoardDate(iso) {
   }
 }
 
-export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
+export default function UserProfilePage({ onLogout }) {
   const { userId: routeUserId } = useParams()
   const navigate = useNavigate()
 
@@ -434,39 +435,6 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
         {/* Right-side controls — only shown for own profile */}
         {isMe ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <button
-              onClick={onToggleTheme}
-              aria-label="Toggle theme"
-              title={theme === 'light' ? 'Switch to dark' : 'Switch to light'}
-              style={{
-                width: 44, height: 44, minWidth: 44,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: 'transparent', border: 'none',
-                color: 'var(--color-text-dim)', cursor: 'pointer',
-                borderRadius: 12,
-                transition: 'color 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = '#ec4899' }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--color-text-dim)' }}
-            >
-              {theme === 'light' ? (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-                </svg>
-              ) : (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="4"></circle>
-                  <line x1="12" y1="2" x2="12" y2="5"></line>
-                  <line x1="12" y1="19" x2="12" y2="22"></line>
-                  <line x1="4.93" y1="4.93" x2="7.05" y2="7.05"></line>
-                  <line x1="16.95" y1="16.95" x2="19.07" y2="19.07"></line>
-                  <line x1="2" y1="12" x2="5" y2="12"></line>
-                  <line x1="19" y1="12" x2="22" y2="12"></line>
-                  <line x1="4.93" y1="19.07" x2="7.05" y2="16.95"></line>
-                  <line x1="16.95" y1="7.05" x2="19.07" y2="4.93"></line>
-                </svg>
-              )}
-            </button>
             <button
               onClick={onLogout}
               aria-label="Log out"
@@ -993,6 +961,25 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
               borderTopColor: '#ec4899',
               animation: 'spin 0.8s linear infinite',
             }} />
+          </div>
+        )}
+
+        {/* Settings section — own profile only */}
+        {isMe && (
+          <div style={{
+            marginTop: 40,
+            paddingTop: 24,
+            borderTop: '1px solid var(--color-border)',
+          }}>
+            <h2 style={{
+              fontSize: 18,
+              fontWeight: 700,
+              color: 'var(--color-text)',
+              margin: '0 0 20px',
+            }}>
+              Settings
+            </h2>
+            <AppearanceSettings />
           </div>
         )}
 

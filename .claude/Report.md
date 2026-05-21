@@ -484,24 +484,17 @@ flowchart LR
 - Phase 16: Recommendation Expansion (R-PHASE16 RESEARCH-REQUESTED queued — research terminal to elicit spec §4 decisions)
 
 ## Last Updated (Claude)
-- **Date:** 2026-05-18
-- **Commit:** `de2e979` — chore: doc-system cleanup + algorithm ownership boundary (#51)
+- **Date:** 2026-05-21
+- **Commit:** `e0f69d9` — feat: salvage PR #38 — google login sync + board recommended section (#53)
 - **Changes:**
-  - `.claude/Goal.md` +27: Algorithm ownership section codified — separate collaborator owns engine.py/embeddings/rerank/Topics/IMP-1/7/8/A2; admin scope = reporter Production Value sync + theory PR review + LLM chat module (parse_query, generation, _gemini, IMP-4/5/6, Phase 17).
-  - `.claude/Task.md` +65/-71: Phase 19-26 + P1-P6 blocks noted as archived; Algorithm category removed; 3 orphan READY-FOR-PUSH lines in Resolved pruned; 24 P5/P6 handoffs moved to `handoffs-archive/2026-05.md`.
-  - `.claude/WORKFLOW.md` +31: Bugs #1-#5 codified in § Known Workflow Issues; 30-day retention rule added to § Operational hygiene.
-  - `.claude/agents/algo-tester.md` deleted (132 lines — hyperparameter sweep agent removed; algorithm tuning no longer in admin scope).
-  - `.claude/agents/orchestrator.md` +19/-7: "Algorithm tester post-run workflow" replaced with externally-owned scope note.
-  - `.claude/codex-tasks-archive/` created: s7-discovery-backend-feed.md, s7-discovery-frontend-page.md, s7-discovery-surprise.md moved from codex-tasks/.
-  - `.claude/plans-archive/replan-2026-05-14-tab3-restructure.md` moved from plans/.
-  - `.claude/postmortems/2026-05-11-workflow-dogfood-RESOLVED.md` renamed from -workflow-dogfood.md.
-  - `.claude/resolved-archive.md` +28: Phase 19-26 (S1-S8 replan) + P1-P6 latency+UX overhaul archived.
-  - `.claude/validations/imp5.md` +2, `imp6.md` +2: status notes added.
-  - `.gitignore` +3: whitelist for new archive dirs.
-  - `docs/COLLAB_HANDOFF.md` +9/-7, `docs/specs/phase16-*.md` +2/-1, `docs/specs/phase18-*.md` +26/-7: stale path refs + headers refreshed.
-  - Pure docs/policy commit; no source, no schema, no algorithm.md changes.
-- **Files changed (de2e979):** 20 files, +709/-214 (all docs/policy)
-- **Summary:** Doc-system cleanup landed — Phase 19-26 + P1-P6 archived to resolved-archive, codex-tasks-archive + plans-archive dirs created, dogfood postmortem marked RESOLVED, WORKFLOW.md gained Known Workflow Issues + retention policy, Goal.md algorithm ownership section codified, algo-tester agent deleted. Admin no longer owns algorithm tuning; separate collaborator scope per Goal.md § Algorithm ownership.
+  - `backend/apps/accounts/views.py` +24/-2: Google login always syncs `display_name` + `avatar_url` from provider on every login (was: display_name only-if-blank, avatar never).
+  - `backend/apps/recommendation/serializers.py` +9: `ProjectSerializer` gains `latest_session_id` read-only field.
+  - `backend/apps/recommendation/views/projects.py` +29/-2: `UserProjectsListView` + `ProjectListCreateView` annotate queryset with correlated `Subquery` for `_latest_session_id` — eliminates N+1 (one session query per project row); `get_latest_session_id()` reads annotation when present, falls back to per-row query on detail view.
+  - `frontend/src/hooks/useBoard.js` +14/-2: parallel-fetches latest session result; exposes `board.recommended` (top-10 predicted-like buildings) from session result.
+  - `frontend/src/pages/BoardDetailPage.jsx` +66: adds "Recommended" section with `RecommendedTile` component (top-10 predicted-like buildings for this board).
+  - `.claude/Task.md` +7: PR #53 lifecycle signals appended during session.
+- **Files changed (e0f69d9):** 6 files, +139/-10
+- **Summary:** PR #38 salvage merged — Google login now always syncs provider profile fields; `ProjectSerializer` exposes `latest_session_id`; `BoardDetailPage` gains a "Recommended" section (top-10 predicted-like buildings fetched from the board's latest session result); N+1 regression on project-list views caught by CI and fixed via correlated `Subquery` annotation.
 
 ## Last Updated (Designer)
 

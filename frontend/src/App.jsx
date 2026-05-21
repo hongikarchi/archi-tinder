@@ -113,7 +113,6 @@ export default function App() {
   const navigate = useNavigate()
   const location = useLocation()
 
-  const [theme, setTheme] = useState(() => localStorage.getItem('archithon_theme') || 'dark')
   const [userId, setUserId] = useState(() => sessionStorage.getItem('archithon_user') || null)
   const [wizardData, setWizardData] = useState(null)
 
@@ -135,12 +134,6 @@ export default function App() {
     const id = sessionStorage.getItem('archithon_user')
     return JSON.parse(localStorage.getItem(`archithon_projects_${id}`) || '[]')
   })
-
-  // Apply theme to <html> element
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme)
-    localStorage.setItem('archithon_theme', theme)
-  }, [theme])
 
   // If session has a user but no access token, clear immediately
   useEffect(() => {
@@ -230,10 +223,6 @@ export default function App() {
       }
       img.src = url
     })
-  }
-
-  function toggleTheme() {
-    setTheme(t => t === 'dark' ? 'light' : 'dark')
   }
 
   // Populate frontend card state from a session state or start response.
@@ -690,8 +679,6 @@ export default function App() {
   }
 
   const sharedLayoutProps = {
-    theme,
-    onToggleTheme: toggleTheme,
     userId,
     onLogout: handleLogout,
     activeProject,

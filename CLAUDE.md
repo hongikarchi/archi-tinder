@@ -10,7 +10,7 @@
   **The team uses GitHub Flow with a develop integration branch:**
 
   - `main` — production (Railway auto-deploy). Protected: PR-only, force-push blocked, requires Code Owner approval.
-  - `develop` — integration branch. Protected: PR + status check required (admin bypass disabled).
+  - `develop` — integration branch. Protected: PR + status check + Code Owner review. Sole-admin CODEOWNERS = PR author, so Code Owner review is structurally unsatisfiable → admin-bypass squash-merge (`gh pr merge --admin`) is the current workflow until collaborators join.
   - `feature/<role>-<topic>` — per-task work branches:
     - Role A (algorithm) → `feature/algo-<topic>`
     - Role B (SNS / profiles / boards) → `feature/sns-<topic>`
@@ -118,9 +118,9 @@
 
   ## Frontend Conventions
   - **MUST READ `DESIGN.md`**: All UI work (any role's frontend changes — JSX styles, layout, colors, animations) MUST consult `DESIGN.md` (root) for our visual design system, colors, sizes, and UI rules before writing any code.
-  - All component styles are inline JS objects -- Tailwind is NOT used in components
+  - Component styling = hybrid per `DESIGN.md` §4: `tokens.css` CSS variables (themeable values) + co-located CSS Modules (`*.module.css`) for interactive components owning `:hover`/`:focus`/`:active` + inline `style={{}}` for layout / one-off / dynamic values. No Tailwind / Bootstrap / MUI / styled-components / emotion. (Tailwind was installed-but-unused pre-redesign; removed in the design-foundation PR.)
   - Viewport-lock layout: body is `height:100vh; overflow:hidden`; pages use `height: calc(100vh - 64px)` (TabBar = 64px fixed bottom)
-  - Accent colors are hardcoded hex in inline styles (not CSS vars) -- rely on `DESIGN.md` when applying colors
+  - Accent colors are themed CSS variables (`var(--accent-1/2/3)`, `var(--color-destructive)`) defined per-theme in `tokens.css` — see `DESIGN.md` §1.2/§1.3. Legacy hardcoded `#ec4899`/`#f43f5e` in not-yet-migrated components is replaced per component-rework PR.
   - Do NOT rewrite inline styles arbitrarily; they are the intentional design. Treat existing inline styles as load-bearing unless `DESIGN.md` rules say otherwise — when in doubt, consult `DESIGN.md` and surface the change in the PR description.
 
   ## Backend Conventions
