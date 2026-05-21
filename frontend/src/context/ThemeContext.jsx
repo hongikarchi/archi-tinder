@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { ThemeContext } from './_themeContext.js'
+import { getToken } from '../api/core.js'
+import { updateMyProfile } from '../api/profiles.js'
 
 const VALID_THEMES = ['github-light', 'github-dark', 'ayu-light', 'synthwave-84']
 const VALID_FONTS  = ['plex', 'noto-serif']
@@ -37,7 +39,6 @@ export function ThemeProvider({ children }) {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
     localStorage.setItem('archithon_theme', theme)
-    // TODO(PR#2): if logged in, PATCH /users/me/ { theme } for cross-device sync
   }, [theme])
 
   // Apply font attribute + persist
@@ -48,19 +49,29 @@ export function ThemeProvider({ children }) {
       document.documentElement.removeAttribute('data-font')
     }
     localStorage.setItem('archithon_font', font)
-    // TODO(PR#2): if logged in, PATCH /users/me/ { font } for cross-device sync
   }, [font])
 
   function setTheme(next) {
-    if (VALID_THEMES.includes(next)) setThemeState(next)
+    if (!VALID_THEMES.includes(next)) return
+    setThemeState(next)
+    if (getToken()) updateMyProfile({ theme: next }).catch(() => {})
   }
 
   function setFont(next) {
-    if (VALID_FONTS.includes(next)) setFontState(next)
+    if (!VALID_FONTS.includes(next)) return
+    setFontState(next)
+    if (getToken()) updateMyProfile({ font: next }).catch(() => {})
+  }
+
+  // Apply server-side theme/font on login (cross-device sync).
+  // Does NOT PATCH back — server is the source of truth here.
+  function hydrate(serverTheme, serverFont) {
+    setThemeState(migrateTheme(serverTheme))
+    setFontState(migrateFont(serverFont))
   }
 
   return (
-    <ThemeContext.Provider value={{ theme, font, setTheme, setFont }}>
+    <ThemeContext.Provider value={{ theme, font, setTheme, setFont, hydrate }}>
       {children}
     </ThemeContext.Provider>
   )

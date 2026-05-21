@@ -16,3 +16,7 @@ export async function getUserProfile(userId, { boardsPage, boardsPageSize } = {}
   const qs = params.toString()
   return await callApi('GET', `/users/${userId}/${qs ? `?${qs}` : ''}`)
 }
+
+export async function updateMyProfile(patch) {
+  return await callApi('PATCH', '/users/me/', patch)
+}

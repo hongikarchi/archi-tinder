@@ -3,6 +3,17 @@ from django.contrib.auth.models import User
 
 
 class UserProfile(models.Model):
+    THEME_CHOICES = [
+        ('github-light', 'GitHub Light'),
+        ('github-dark', 'GitHub Dark'),
+        ('ayu-light', 'Ayu Light'),
+        ('synthwave-84', "SynthWave '84"),
+    ]
+    FONT_CHOICES = [
+        ('plex', 'IBM Plex Sans KR'),
+        ('noto-serif', 'Noto Serif KR'),
+    ]
+
     # -- Existing fields (PROF1 baseline) --
     user         = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     display_name = models.CharField(max_length=100)
@@ -43,6 +54,10 @@ class UserProfile(models.Model):
         default=0,
         # Counter cache; mirror of follower_count (opposite direction).
     )
+
+    # -- App-preference fields (design-system PR2) --
+    theme = models.CharField(max_length=20, choices=THEME_CHOICES, default='github-light')
+    font = models.CharField(max_length=20, choices=FONT_CHOICES, default='plex')
 
     def __str__(self):
         return self.display_name
