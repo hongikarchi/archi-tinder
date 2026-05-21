@@ -1,11 +1,10 @@
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import TabBar from '../components/TabBar.jsx'
-import ThemeToggle from '../components/ThemeToggle.jsx'
 import DebugOverlay from '../components/DebugOverlay.jsx'
 import SwipePage from '../pages/SwipePage.jsx'
 
 export default function MainLayout({
-  theme, onToggleTheme, userId, onLogout,
+  userId, onLogout,
   activeProject, activeProjectId,
   currentCard, cardResetToken, sessionProgress, isSessionCompleted, isSwipeLoading, isResultLoading,
   onSwipe, onViewResults, onExtendSession,
@@ -23,7 +22,6 @@ export default function MainLayout({
 
       {/* Header controls — hidden on pages that own their sticky header (profile/office/matched/board) */}
       <div style={{ position: 'fixed', top: 14, right: 16, zIndex: 200, display: (isProfile || pathname.startsWith('/office') || pathname.startsWith('/matched') || pathname.startsWith('/board') || pathname.startsWith('/buildings')) ? 'none' : 'flex', gap: 6, alignItems: 'center' }}>
-        <ThemeToggle theme={theme} onToggle={onToggleTheme} />
         <button
           onClick={onLogout}
           title="Log out"

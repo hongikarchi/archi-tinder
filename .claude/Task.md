@@ -73,6 +73,10 @@
 - [2026-05-21] PR-OPENED: #53 — feature/admin-pr38-salvage → develop, 1 commit (cef76e0 salvage PR #38 google login sync + board recommended section). URL: https://github.com/hongikarchi/archi-tinder/pull/53. CI running.
 - [2026-05-21] PR-CLOSED: #38 — superseded by #53; comment left for @yywon1.
 - [2026-05-21] PR-CI-FAIL: #53 — Backend (pytest + migrations check) failed; TestUserProjectsListView.test_no_n_plus_one_select_related: expected 5 queries but 10 done. Logs: https://github.com/hongikarchi/archi-tinder/actions/runs/26217895654/job/77144916946
+- [2026-05-21] PR-CI-GREEN: #53 — pushed 848e791 (N+1 fix); backend 2m7s, frontend 15s, all checks pass (run 26219060991).
+- [2026-05-21] PR-MERGE-BLOCKED: #53 — REVIEW_REQUIRED, no approvals yet; CI green, awaiting admin approval on GitHub UI before merge.
+- [2026-05-21] PR-MERGED: #53 — squashed develop @ e0f69d9; feature/admin-pr38-salvage remote deleted; admin bypass (author=CODEOWNERS, CI green); google login sync + board recommended section live on develop
+- [2026-05-21] SESSION-START-TODO: next initiative — design-system redesign. Rewrite repo DESIGN.md from the downloaded ~/Downloads/design.md (light-mode / blue-accent / theme + font switcher redesign) + rework frontend/ to match. Multi-phase — scope with /plan first. See memory project_design_redesign.md.
 
 ## Development Roadmap
 
