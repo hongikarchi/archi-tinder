@@ -70,6 +70,9 @@
 - [2026-05-18] PR-OPENED: #52 — feature/admin-reporter-doc-cleanup-close → develop, 2 commits (254a325 reporter doc-cleanup session-end housekeeping + 6c20737 handoff sig). URL: https://github.com/hongikarchi/archi-tinder/pull/52. /review skipped per Token-Saving Rule 2 (docs-only).
 - [2026-05-18] PR-CI-GREEN: #52 — backend 2m14s, frontend 14s, Vercel + comments all pass.
 - [2026-05-18] PR-MERGED: #52 — squashed develop @ aff9cab. Mode 1 step 7: pre-checkout stash → `gh api -X DELETE refs/heads/feature/admin-reporter-doc-cleanup-close` → checkout develop → pull --ff-only (2 files +18/-8: Report.md sync to de2e979, Task.md REPORTER-DONE sig) → branch -D → fetch --prune → stash pop (Task.md handoff sigs restored). develop HEAD = aff9cab.
+- [2026-05-21] PR-OPENED: #53 — feature/admin-pr38-salvage → develop, 1 commit (cef76e0 salvage PR #38 google login sync + board recommended section). URL: https://github.com/hongikarchi/archi-tinder/pull/53. CI running.
+- [2026-05-21] PR-CLOSED: #38 — superseded by #53; comment left for @yywon1.
+- [2026-05-21] PR-CI-FAIL: #53 — Backend (pytest + migrations check) failed; TestUserProjectsListView.test_no_n_plus_one_select_related: expected 5 queries but 10 done. Logs: https://github.com/hongikarchi/archi-tinder/actions/runs/26217895654/job/77144916946
 
 ## Development Roadmap
 
