@@ -6,4 +6,9 @@
 buildCommand = "pip install -r requirements.txt && python manage.py migrate --noinput && python manage.py collectstatic --noinput"
 
 [deploy]
-startCommand = "gunicorn config.wsgi:application --bind 0.0.0.0:$PORT"
+# --workers 3: a single sync worker serializes every request, so one slow
+# request (cold recommendation `discovery`, LLM `parse-query`) blocks the
+# whole backend and queues everything behind it.
+# --timeout 120: gunicorn's 30s default SIGKILLs a slow cold-cache request
+# before it can finish and warm the in-process pool/KMeans cache.
+startCommand = "gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 3 --timeout 120"
