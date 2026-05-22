@@ -32,12 +32,11 @@ re-run. App label narrows pytest to one app's tests when the change is scoped.
 
 **Migration-applied is mandatory if you touched `backend/apps/*/migrations/`.**
 `back-validate.sh` auto-detects pending migration files in working tree and runs
-`./tools/migrate.sh` before pytest. **Why:** the orchestrator pipeline has no other
-agent that runs `migrate`. If skipped, the migration FILE ships in commits (prod
-deploy auto-runs migrate) but the **local dev DB stays on the previous schema**, so
-web-tester / `/review` Part B hits 500s at runtime ("column X does not exist") that
-look like code bugs. Postmortem: `190c830` shipped without migrate and broke
-`/review` Part B (see `.claude/reviews/88f0532.md`).
+`./tools/migrate.sh` before pytest. **Why:** no other agent in the pipeline runs
+`migrate`. If skipped, the migration FILE ships in commits (prod deploy auto-runs
+migrate) but the **local dev DB stays on the previous schema**, so browser
+verification hits 500s at runtime ("column X does not exist") that look like code
+bugs.
 
 If migrate fails (RunPython error, integrity constraint), do NOT report success —
 return the stderr to orchestrator as a back-maker failure for the fix loop.

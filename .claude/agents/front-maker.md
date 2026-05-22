@@ -49,5 +49,5 @@ Files changed: [list]
 API calls made:
   - METHOD /api/v1/path/ → used in [component]
 Lint: PASS / WARNINGS (list if any)
-Notes: [anything the reviewer should know]
+Notes: [anything code-review should know]
 ```

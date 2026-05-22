@@ -12,11 +12,9 @@
 #
 # DB connection: relies on backend/.env (DATABASE_URL or DB_* vars).
 #
-# Empirical 2026-05-06 (SOC3-back postmortem): codex sandbox-write blocks
-# DNS to Neon — codex calls this script and fails immediately on DNS;
-# WEB-MAIN must run it manually with full network. The script itself is
-# environment-agnostic (it just runs manage.py); the failure is a
-# sandbox-level signal, not a script bug.
+# Run this with full network access — it connects to Neon. A sandboxed
+# context that blocks DNS to Neon fails immediately; that is an environment
+# signal, not a script bug (the script just runs manage.py).
 
 set -euo pipefail
 
