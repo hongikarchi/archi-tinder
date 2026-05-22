@@ -126,7 +126,7 @@ export default function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
     telemetryOnLoad(e)
   }
 
-  // 4-second load timeout — if the main URL hasn't fired onLoad, advance to
+  // 2-second load timeout — if the main URL hasn't fired onLoad, advance to
   // the covers_by_type fallback chain. Cleared on onLoad / onError / unmount.
   useEffect(() => {
     setImgLoaded(false)
@@ -142,7 +142,7 @@ export default function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
         setImgFailed(true)
       }
       timeoutRef.current = null
-    }, 4000)
+    }, 2000)
     return () => {
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current)
@@ -353,19 +353,35 @@ export default function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
               scrollbarWidth: 'none',
             }}
           >
-            {gallery.map((url, i) => (
-              <div key={i} style={{
-                width: '100%', height: CARD_HEIGHT,
-                flexShrink: 0,
-                scrollSnapAlign: 'start',
-                scrollSnapStop: 'always',
-                backgroundImage: `url(${url})`,
-                backgroundSize: i >= drawingStart ? 'contain' : 'cover',
-                backgroundPosition: 'center',
-                backgroundRepeat: 'no-repeat',
-                backgroundColor: i >= drawingStart ? '#fff' : 'transparent',
-              }} />
-            ))}
+            {gallery.map((url, i) => {
+              const isDrawing = i >= drawingStart
+              return (
+                <div key={i} style={{
+                  width: '100%', height: CARD_HEIGHT,
+                  flexShrink: 0,
+                  scrollSnapAlign: 'start',
+                  scrollSnapStop: 'always',
+                  background: isDrawing ? '#fff' : '#111',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <img
+                    src={url}
+                    alt=""
+                    loading={i === 0 ? 'eager' : 'lazy'}
+                    decoding="async"
+                    draggable={false}
+                    onError={e => { e.currentTarget.style.visibility = 'hidden' }}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: isDrawing ? 'contain' : 'cover',
+                      objectPosition: 'center',
+                      display: 'block',
+                    }}
+                  />
+                </div>
+              )
+            })}
           </div>
 
           {/* Top arrow */}
