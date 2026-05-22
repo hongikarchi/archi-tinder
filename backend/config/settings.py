@@ -75,18 +75,20 @@ DATABASES = {
             'sslmode': os.getenv('DB_SSLMODE', 'require'),
         },
     },
-    # Phase A (behavior-neutral): both aliases point at the same Neon DB.
-    # Phase B will provision the real read-replica and flip BUILDINGS_DB_* vars.
+    # Building reference data — Make-DB-owned, read-only. Separate Neon DB.
+    # BUILDINGS_DB_* are required: a missing var fails loud at import rather
+    # than silently routing building queries to the app DB (which has no
+    # canonical_v2_buildings table). MakeWebRouter blocks migrate on this alias.
     'buildings': {
         'ENGINE': 'django.db.backends.postgresql',
-        'HOST': os.getenv('BUILDINGS_DB_HOST') or os.environ['DB_HOST'],
-        'PORT': os.getenv('BUILDINGS_DB_PORT') or os.getenv('DB_PORT', '5432'),
-        'NAME': os.getenv('BUILDINGS_DB_NAME') or os.environ['DB_NAME'],
-        'USER': os.getenv('BUILDINGS_DB_USER') or os.environ['DB_USER'],
-        'PASSWORD': os.getenv('BUILDINGS_DB_PASSWORD') or os.environ['DB_PASSWORD'],
+        'HOST':     os.environ['BUILDINGS_DB_HOST'],
+        'PORT':     os.getenv('BUILDINGS_DB_PORT', '5432'),
+        'NAME':     os.environ['BUILDINGS_DB_NAME'],
+        'USER':     os.environ['BUILDINGS_DB_USER'],
+        'PASSWORD': os.environ['BUILDINGS_DB_PASSWORD'],
         'CONN_MAX_AGE': 600,
         'OPTIONS': {
-            'sslmode': os.getenv('BUILDINGS_DB_SSLMODE') or os.getenv('DB_SSLMODE', 'require'),
+            'sslmode': os.getenv('BUILDINGS_DB_SSLMODE', 'require'),
         },
     },
 }
