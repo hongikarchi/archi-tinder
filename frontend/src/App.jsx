@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, Component } from 'react'
 import { Routes, Route, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom'
+import { useTheme } from './hooks/useTheme.js'
 import MainLayout from './layouts/MainLayout.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import ProjectSetupPage from './pages/ProjectSetupPage.jsx'
@@ -112,8 +113,8 @@ function LLMSearchUpdateWrapper({ wizardData, onBack, onStart, onUpdate }) {
 export default function App() {
   const navigate = useNavigate()
   const location = useLocation()
+  const { hydrate } = useTheme()
 
-  const [theme, setTheme] = useState(() => localStorage.getItem('archithon_theme') || 'dark')
   const [userId, setUserId] = useState(() => sessionStorage.getItem('archithon_user') || null)
   const [wizardData, setWizardData] = useState(null)
 
@@ -135,12 +136,6 @@ export default function App() {
     const id = sessionStorage.getItem('archithon_user')
     return JSON.parse(localStorage.getItem(`archithon_projects_${id}`) || '[]')
   })
-
-  // Apply theme to <html> element
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme)
-    localStorage.setItem('archithon_theme', theme)
-  }, [theme])
 
   // If session has a user but no access token, clear immediately
   useEffect(() => {
@@ -230,10 +225,6 @@ export default function App() {
       }
       img.src = url
     })
-  }
-
-  function toggleTheme() {
-    setTheme(t => t === 'dark' ? 'light' : 'dark')
   }
 
   // Populate frontend card state from a session state or start response.
@@ -632,6 +623,7 @@ export default function App() {
     }
     sessionStorage.setItem('archithon_user', id)
     setUserId(id)
+    if (typeof user === 'object') hydrate(user.theme, user.font)
     setCurrentCard(null)
     setSessionProgress(null)
     setIsSessionCompleted(false)
@@ -690,8 +682,6 @@ export default function App() {
   }
 
   const sharedLayoutProps = {
-    theme,
-    onToggleTheme: toggleTheme,
     userId,
     onLogout: handleLogout,
     activeProject,

@@ -24,7 +24,7 @@ lazily accesses _CHAT_PHASE_SYSTEM_PROMPT via _svc so ordering is safe.
 import urllib.request  # noqa: F401  -- test_hyde patches services.urllib.request.urlopen
 import urllib  # noqa: F401  -- needed so services.urllib attribute exists for patch resolution
 
-from django.db import connection  # noqa: F401  -- patched in test_topic02, test_chat_phase
+from django.db import connections as _connections
 
 # event_log is accessed as a module (tests patch services.event_log and
 # services.event_log.emit_event), so import the module object directly.
@@ -94,6 +94,29 @@ from .rerank import (  # noqa: F401
     rerank_candidates,
     _validate_rerank_response,
 )
+
+# ---------------------------------------------------------------------------
+# connection: thread-local-safe proxy for connections['buildings'].
+# Must be defined AFTER all imports so no E402 is triggered for imports above.
+# Tests patch via mock.patch('apps.recommendation.services.connection', X).
+# ---------------------------------------------------------------------------
+
+
+class _BuildingsConnectionProxy:
+    """Route attribute access to connections['buildings'] at call time.
+
+    Mirrors django.db.DefaultConnectionProxy: re-resolves the thread-local
+    wrapper on every __getattr__ call so background threads (search.py Stage 2,
+    swipe.py prefetch) get their own connection, not the main thread's.
+    """
+
+    def __getattr__(self, name):
+        return getattr(_connections['buildings'], name)
+
+
+# patched in test_topic02, test_chat_phase
+connection = _BuildingsConnectionProxy()
+
 
 # ---------------------------------------------------------------------------
 # __all__: public API surface (private names excluded)

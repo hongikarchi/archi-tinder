@@ -115,9 +115,9 @@ EOF
 )"
 
 # 6. CI runs (.github/workflows/ci.yml — pytest + lint + makemigrations check).
-#    Admin runs /review in WEB-REVIEW terminal for deeper analysis.
+#    Admin reviews the PR for deeper analysis.
 
-# 7. After REVIEW-PASSED + Code Owner approval + CI green → admin clicks
+# 7. After review pass + Code Owner approval + CI green → admin clicks
 #    "Squash and merge" on GitHub.
 
 # 8. Local cleanup
@@ -152,11 +152,25 @@ When `develop` has accumulated enough vetted features (admin's call):
 # 1. Open PR develop → main
 gh pr create --base main --head develop --title "Release: <date> — <summary>"
 
-# 2. CI runs again on the merged range. /review can be run if there's any concern
-#    (typically not needed since each feature was already reviewed).
+# 2. CI runs again on the merged range. A fresh review can be run if there's any
+#    concern (typically not needed since each feature was already reviewed).
 
 # 3. Admin self-approves + squash-merge. Railway auto-deploys on main push.
+
+# 4. MANDATORY post-deploy step (Bug #5 — squash deploy creates commit-graph
+#    divergence): force-reset origin/develop to match origin/main, otherwise
+#    the next deploy PR fails with mergeable: CONFLICTING.
+MAIN_SHA=$(git rev-parse origin/main)
+gh api -X PATCH repos/hongikarchi/archi-tinder/git/refs/heads/develop \
+  --field "sha=$MAIN_SHA" --field "force=true"
+git checkout develop && git fetch origin develop && git reset --hard origin/develop
 ```
+
+**This is the only permitted force on a shared branch.** It is codified as a
+carve-out in `CLAUDE.md` § HARD RULE 4 and in `.claude/agents/git-publisher.md`
+§ Mode 3 step 5. Precondition: every commit on `origin/develop` must be
+content-equal to `origin/main` (no in-flight feature PR targets `develop`).
+The `git-publisher` agent runs this automatically after a deploy merge.
 
 ## Commit message convention
 
@@ -171,17 +185,16 @@ Follow Conventional Commits style:
 
 Body: include context (spec ref, investigation #, decision rationale).
 
-## /review usage
+## Review
 
-The admin uses `/review` (or natural language "리뷰해줘") in the WEB-REVIEW
-terminal session for PRs. The verdict (PASS / PASS-WITH-MINORS / FAIL) lands in
-`.claude/reviews/<sha>.md`.
+The `orchestrate` skill runs the `code-review` and `security-manager` sub-agents
+on a feature branch before push (the `app-test` sub-agent runs the pre-push
+browser + drift gate). Each returns a PASS / FAIL verdict; FAIL feeds the fix
+loop. Review scope is the unmerged commits that would land in develop on PR
+merge (`origin/develop..HEAD`).
 
-Default scope when invoked without arguments: `origin/develop..HEAD` for feature
-branches (the unmerged commits that would land in develop on PR merge).
-
-`develop → main` PRs typically don't need `/review` since each underlying feature
-was already reviewed; admin self-merges based on CI green.
+`develop → main` PRs typically don't need a fresh review since each underlying
+feature was already reviewed; admin self-merges based on CI green.
 
 ## File ownership conflict resolution
 
@@ -224,7 +237,7 @@ If two roles need to edit the same file, coordinate via:
 
 - Use scoped `git -C <subdir>` operations to avoid reading whole repo.
 - Pass file:line pointers in agent prompts (e.g., "edit `views/swipe.py:120-150`").
-- Reporter is deferred to session end (Rule 1 in CLAUDE.md). Don't spawn after every commit.
-- Trivial commits (<50 LOC, no migration, no production logic) skip reviewer/security per Rule 2.
+- Reporter is deferred to session end. Don't spawn after every commit.
+- Trivial commits (<50 LOC, no migration, no production logic) skip code-review/security.
 
-See `.claude/agents/orchestrator.md` and `.claude/agents/reporter.md` for full token-saving policy.
+See `.claude/WORKFLOW.md` for the full token-saving policy.

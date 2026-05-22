@@ -5,19 +5,10 @@
 #   (forward-safe against new subpaths like .claude/memory/, .claude/sessions/, etc.)
 .claude/*
 !.claude/agents/
-!.claude/codex/
-!.claude/commands/
+!.claude/skills/
 !.claude/plans/
-!.claude/postmortems/
-!.claude/reviews/
-!.claude/validations/
-!.claude/handoffs-archive/
-!.claude/Goal.md
-!.claude/Report.md
 !.claude/Task.md
 !.claude/WORKFLOW.md
-!.claude/SESSION_PROTOCOL.md
-!.claude/resolved-archive.md
 
 # Python / Django (backend — future)
 __pycache__/
@@ -48,7 +39,7 @@ test_*.mjs
 web-testing/reports/
 web-testing/dashboard/data/
 
-# /review Part B browser-verification artifacts (per-SHA snapshot + traces)
+# app-test browser-verification artifacts (per-SHA snapshot + traces)
 test-artifacts/
 
 # Python coverage

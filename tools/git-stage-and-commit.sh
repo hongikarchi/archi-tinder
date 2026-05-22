@@ -10,9 +10,9 @@
 #   2. Stages all changes EXCLUDING secret/cache files.
 #   3. Verifies no .env/.key/.pem snuck in.
 #   4. Creates one commit with the supplied message + Claude co-author tag.
-#   5. Never pushes. Push is WEB-GIT's job (git-push-pr.sh).
+#   5. Never pushes. Push is git-publisher's job (git-push-pr.sh).
 #
-# This is the script git-manager.md (WEB-MAIN) calls. Operator can call it
+# This is the script the git-manager agent calls. Operator can call it
 # directly for trivial commits.
 
 set -euo pipefail
@@ -131,5 +131,5 @@ echo "✓ Committed: $SHA on $BRANCH"
 echo "  Subject: $SUBJECT"
 echo ""
 echo "Next steps:"
-echo "  • Review (recommended): trigger /review in WEB-REVIEW"
-echo "  • Push + PR: WEB-GIT runs ./tools/git-push-pr.sh"
+echo "  • Pre-push gate (recommended): app-test"
+echo "  • Push + PR: git-publisher runs ./tools/git-push-pr.sh"

@@ -13,9 +13,7 @@
 #   - role is not in {algo, sns, admin}
 #
 # Auto-stashes (and restores after branch creation):
-#   - `.claude/Task.md` — handoff entries written by WEB-REVIEW / WEB-GIT
-#   - `.claude/reviews/*` — review reports (per-SHA + latest.md)
-#   - `.claude/postmortems/*` — postmortem files
+#   - `.claude/Task.md` — task-ledger edits
 #   - `.claude/resolved-archive.md` — historical resolved entries
 #   These are bookkeeping that the next feature commit needs to sweep in.
 #
@@ -26,7 +24,7 @@ set -euo pipefail
 
 # Path pattern for review-terminal artifacts that are safe to auto-stash.
 # Matches against `git status --porcelain` second-field paths.
-SAFE_PATHS_REGEX='^\.claude/(Task\.md|reviews/|postmortems/|resolved-archive\.md)'
+SAFE_PATHS_REGEX='^\.claude/Task\.md'
 
 # Helper: list dirty paths (modified + staged + untracked); return only those
 # NOT matching SAFE_PATHS_REGEX.
@@ -140,5 +138,5 @@ echo ""
 echo "Next steps:"
 echo "  1. Make your code changes"
 echo "  2. Commit: ./tools/git-stage-and-commit.sh \"<message>\""
-echo "  3. Run /review in WEB-REVIEW (or skip for trivial commits)"
-echo "  4. Push + PR: WEB-GIT runs ./tools/git-push-pr.sh"
+echo "  3. Pre-push gate: app-test (or skip for trivial commits)"
+echo "  4. Push + PR: git-publisher runs ./tools/git-push-pr.sh"

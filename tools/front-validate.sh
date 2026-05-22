@@ -1,5 +1,5 @@
 #!/bin/bash
-# front-validate.sh — front-maker / frontend-worker's pre-DONE self-check chain.
+# front-validate.sh — front-maker's pre-DONE self-check chain.
 #
 # Usage:    ./tools/front-validate.sh
 #

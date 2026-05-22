@@ -28,7 +28,7 @@ from datetime import datetime
 import numpy as np
 import warnings
 warnings.filterwarnings('ignore', category=RuntimeWarning, module='sklearn')
-from django.db import connection
+from django.db import connections
 
 from apps.recommendation.engine import (
     RC,
@@ -103,7 +103,7 @@ ARCHETYPE_CONFIG = {
 def load_embeddings():
     """Load all building embeddings from DB, normalize to unit length."""
     print("Loading embeddings from DB...", flush=True)
-    with connection.cursor() as cur:
+    with connections['buildings'].cursor() as cur:
         cur.execute("SELECT building_id, embedding::text FROM architecture_vectors")
         rows = cur.fetchall()
     embeddings = {}

@@ -1,652 +1,831 @@
 # ArchiTinder Design System
 
-> This is the source of truth for all frontend styling. Anyone touching JSX
-> inline styles, colors, layout, animations, or typography in `frontend/`
-> MUST consult this file first. The design system is load-bearing — deviations
-> require explicit justification in the PR description.
+> This is the **single source of truth** for the ArchiTinder frontend design
+> system. Anyone touching `frontend/` UI — JSX, layout, colors, animations,
+> typography — MUST consult this file before writing code. The design system
+> is load-bearing; deviations require explicit justification in the PR
+> description.
 >
 > Editorial rights: admin-owned via PR (sibling of `CLAUDE.md`). Reporter
-> updates are not applicable here. Other agents (`front-maker`, codex teams,
-> `/review`) read but never write.
-
-## Core Philosophy
-- **Aesthetics First:** Premium, cinematic dark mode with vibrant neon accents.
-- **Vibe:** Modern, sleek, glassmorphic, fluid, gesture-friendly.
-- **Implementation:** React inline styles. NO Tailwind CSS. NO external UI libraries (like Material-UI or Chakra). Use raw HTML elements with inline `style={{...}}` objects.
-
-## 1. Color Palette
-
-### 1.1 Base Theme (Dark Mode Default)
-*The app relies on CSS variables defined in `index.css` for structural colors.*
-- **Background:** `var(--color-bg)` (`#0f0f0f`)
-- **Surface/Cards:** `var(--color-surface)` (`#1a1a1a`), `var(--color-surface-2)` (`#1c1c1c`)
-- **Borders:** `var(--color-border)` (`rgba(255,255,255,0.07)`), `var(--color-border-soft)` (`rgba(255,255,255,0.1)`)
-
-### 1.2 Accent Colors (Hardcoded Inline)
-*These MUST be hardcoded directly into inline styles, NOT read from CSS vars.*
-- **Primary Brand (Hot Pink):** `#ec4899` (Used for active tabs, selected states, Save actions)
-- **Secondary Accent (Rose):** `#f43f5e` (Used exclusively alongside Primary for gradients)
-- **Primary Gradient:** `linear-gradient(135deg, #ec4899, #f43f5e)` (Used for main call-to-action buttons like 'Generate Report')
-- **Destructive/Skip (Red):** `#ef4444` (Used for Skip/Dislike actions)
-
-### 1.3 Text Colors
-- **Primary Text:** `var(--color-text)` (`#ffffff`)
-- **Secondary Text:** `var(--color-text-2)` (`#e2e8f0`)
-- **Muted/Placeholder:** `var(--color-text-muted)` (`#9ca3af`)
-
-## 2. Layout & Spacing
-
-### 2.1 Viewport constraints
-- The app is designed to prevent window scrolling. 
-- `body` has `overflow: hidden`.
-- Pages must take full height minus TabBar: `height: calc(100vh - 64px - env(safe-area-inset-bottom))`
-- **TabBar Height:** `64px` fixed at the bottom.
-
-### 2.2 Mobile Optimization (Crucial)
-- Always include iOS Safe Area constraints:
-  - `paddingBottom: 'env(safe-area-inset-bottom)'` on scrollable containers or TabBars.
-- Minimum touch target for clickable elements (buttons, back arrows) must be **44px** (Apple HIG requirement).
-- Border Radiuses:
-  - Cards: `20px` to `24px`
-  - Buttons/Tags: `8px` to `12px`
-
-## 3. Component Stylings
-
-### 3.1 Buttons
-**Primary CTA Button:**
-```jsx
-<button style={{
-  background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
-  color: '#fff',
-  fontWeight: 600,
-  padding: '16px 24px',
-  borderRadius: '12px',
-  border: 'none',
-  minHeight: '44px',
-  cursor: 'pointer'
-}}>
-  Complete Setup
-</button>
-```
-
-### 3.2 Glassmorphic Inputs / Search Bars
-```jsx
-<input style={{
-  backgroundColor: 'rgba(25, 28, 33, 0.95)', 
-  border: '1px solid rgba(255, 255, 255, 0.1)',
-  backdropFilter: 'blur(10px)',
-  color: '#ffffff',
-  borderRadius: '16px',
-  padding: '16px',
-}} />
-```
-**Focus State:** Inject logic to change `borderColor` to `#ec4899` `onFocus`.
-
-### 3.3 Text & Typography constraints
-- Component titles are extremely prone to overflow on mobile devices.
-- Always apply absolute CSS clamping for Card titles:
-```jsx
-<h2 style={{
-  display: '-webkit-box',
-  WebkitLineClamp: 2,
-  WebkitBoxOrient: 'vertical',
-  overflow: 'hidden',
-  textOverflow: 'ellipsis'
-}}>Building Title</h2>
-```
-
-### 3.4 Overlays (Modals, Tutorials)
-- Do NOT use solid blocks.
-- Use Semi-Transparent Blur Overlays to maintain immersion.
-- Example Backdrop:
-```jsx
-<div style={{
-  background: 'rgba(10, 10, 12, 0.65)',
-  backdropFilter: 'blur(12px)',
-  paddingBottom: 'env(safe-area-inset-bottom)'
-}}>
-  {children}
-</div>
-```
-
-### 3.5 Card System (Core)
-
-Cards are the primary content carrier across the app — projects, boards,
-buildings, recommendations all share the same structural shape. **Differences
-are content (chips, text), not structure.** Use these primitives consistently
-on every card surface to keep visual unity across pages.
-
-#### 3.5.1 Image-overlay card (default)
-
-Used for: project cards, board cards, building cards, recommendation cards.
-Standard aspect ratios: 4:5 (portrait grid) or 3:4 (slightly wider).
-
-```jsx
-<div style={{
-  background: 'rgba(255,255,255,0.03)',
-  borderRadius: 20,
-  overflow: 'hidden',
-  cursor: 'pointer',
-  border: '1px solid transparent',          // NO default light border
-  position: 'relative',
-  boxShadow: '0 10px 25px rgba(0,0,0,0.3)',
-  transition: 'transform 0.25s cubic-bezier(0.4,0,0.2,1), border-color 0.25s cubic-bezier(0.4,0,0.2,1)',
-}}
-onMouseEnter={e => {
-  e.currentTarget.style.transform = 'translateY(-4px)'
-  e.currentTarget.style.borderColor = 'rgba(236,72,153,0.55)'
-}}
-onMouseLeave={e => {
-  e.currentTarget.style.transform = 'translateY(0)'
-  e.currentTarget.style.borderColor = 'transparent'
-}}>
-  {/* image fill + bottom gradient + text overlay + optional corner chip */}
-</div>
-```
-
-**Mandatory rules:**
-- **NO default light border.** The border lives only in hover state (brand pink at 55% opacity). Resting state is `transparent`.
-- Always include `boxShadow: '0 10px 25px rgba(0,0,0,0.3)'` for depth in dark mode.
-- **Hover lift applies to ALL cards** (including flip cards): `translateY(-4px)`, duration `0.25s` cubic-bezier(0.4,0,0.2,1). NO scale.
-- **Hover border (pink at 55% opacity) applies to non-flip cards ONLY.** Flip cards (§3.5.4) omit the border because a static border lingers awkwardly behind a rotating card; lift alone is enough feedback.
-- Image fills the card (`width:100%; height:100%; object-fit:cover; position:absolute; inset:0`).
-- Bottom gradient overlay is required for legibility:
-  `linear-gradient(to top, rgba(0,0,0,0.93) 0%, rgba(0,0,0,0.4) 50%, transparent 100%)`
-
-#### 3.5.2 Card text hierarchy (overlay) — RICH PATTERN (default)
-
-Use this exact rich hierarchy on every image-overlay card. The pattern is:
-**title + content-type sub-italic + divider + 2-column info grid**. This
-gives cards visual weight and information density without overcrowding the
-overlay. Adapt the 2-col content per card type (Created/Saved for boards,
-City/Year for projects, etc.).
-
-```jsx
-<div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '16px 18px 20px' }}>
-  <h2 style={{
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 700,
-    lineHeight: 1.3,
-    margin: '0 0 3px',
-    display: '-webkit-box',
-    WebkitLineClamp: 2,
-    WebkitBoxOrient: 'vertical',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-  }}>
-    {title}      {/* board.name, project.name_en, etc. */}
-  </h2>
-
-  <p style={{
-    color: 'rgba(255,255,255,0.55)',
-    fontSize: 12,
-    margin: '0 0 12px',
-    fontStyle: 'italic',
-  }}>
-    {subLabel}   {/* "Curated Board" / "Project" / "Building" — content-type sub-italic */}
-  </p>
-
-  <div style={{ height: 1, background: 'rgba(255,255,255,0.1)', marginBottom: 12 }} />
-
-  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px' }}>
-    <InfoCol label={leftLabel} value={leftValue} />     {/* "CREATED" / "CITY" */}
-    <InfoCol label={rightLabel} value={rightValue} />   {/* "SAVED" / "YEAR" */}
-  </div>
-</div>
-```
-
-Where `InfoCol`:
-
-```jsx
-<div style={{ display: 'flex', flexDirection: 'column' }}>
-  <span style={{
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: 10,
-    fontWeight: 600,
-    letterSpacing: '0.06em',
-    textTransform: 'uppercase',
-    marginBottom: 2,
-  }}>
-    {label}     {/* "CREATED" / "SAVED" / "CITY" / "YEAR" */}
-  </span>
-  <span style={{
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: 600,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  }}>
-    {value}
-  </span>
-</div>
-```
-
-**Rules:**
-- Title: 18px / **weight 700** / white / 2-line clamp. **Do NOT exceed 700.**
-- Sub-italic: 12px / italic / `rgba(255,255,255,0.55)` / no weight bump. Content-type label only ("Curated Board", "Project", "Building"), NOT metadata.
-- Divider: thin 1px line `rgba(255,255,255,0.1)` between sub-italic and info grid.
-- Info grid: 2 columns. **Caps label 10px / weight 600 (NOT 700)** with letter-spacing 0.06em + uppercase. Value 13px / weight 600 / white / single-line ellipsis.
-- Padding `16px 18px 20px` (slightly more bottom).
-- **Do NOT collapse to a single meta line** — that loses the information density that makes cards feel substantive. The 2-col grid is the standard.
-
-**Single-line variant (use sparingly):** for very small cards (< 200px wide) or contexts where 2-col is overkill, fall back to title + sub-italic only (no divider, no grid). This is a downgrade, not the default.
-
-#### 3.5.3 Corner chips (optional, sparing)
-
-**Use chips only when conveying meaningful state — NOT decoration.** When
-the same information already appears in the §3.5.2 info grid, do not also
-add a chip. Default is no chip; add one only when state is binary and
-status-like (private, matched, etc.).
-
-Top-right placement only. Single chip per card (no chip stacking).
-
-**Status: PRIVATE (icon-only, subtle):**
-
-```jsx
-{visibility === 'private' && (
-  <div style={{
-    position: 'absolute', top: 16, right: 16,
-    background: 'rgba(0,0,0,0.4)',
-    backdropFilter: 'blur(10px)',
-    WebkitBackdropFilter: 'blur(10px)',
-    padding: 6,
-    borderRadius: '50%',
-  }}>
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-         stroke="rgba(255,255,255,0.85)" strokeWidth="2"
-         strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-      <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-    </svg>
-  </div>
-)}
-```
-
-- Small circle, subtle dark blur, white-ish lock icon.
-- **Public boards show NO chip** — public is the default; only flag the exception.
-
-**Match score (small, subtle):**
-
-```jsx
-<div style={{
-  position: 'absolute', top: 12, right: 12,
-  background: 'rgba(0,0,0,0.55)',
-  backdropFilter: 'blur(10px)',
-  WebkitBackdropFilter: 'blur(10px)',
-  padding: '4px 9px',
-  borderRadius: 999,
-  fontSize: 11,
-  fontWeight: 600,
-  color: '#fff',
-}}>
-  {Math.round(score * 100)}% match
-</div>
-```
-
-- Subtle dark backdrop, no branded color flood.
-- Brand pink is reserved for primary CTAs and accent moments (active states, focus, gradient text). Don't burn it on small chips — that creates visual fatigue.
-
-**Forbidden:**
-- Branded color floods on chips (e.g., `rgba(236,72,153,0.85)` filling a corner pill) — too loud, conflicts with the brand-as-accent rule.
-- Public/Public-equivalent chips when public is the default state.
-- Stacking multiple chips (use one max).
-- Decorative chips that repeat info already in §3.5.2 info grid.
-
-#### 3.5.4 Flip card (3D rotateY)
-
-Used for: board cards (front: cover; back: gallery), persona card (front: type
-label; back: full detail). Click flips, click again unflips.
-
-```jsx
-<div
-  style={{ perspective: '1200px', cursor: 'pointer', /* outer dimensions */ }}
-  onClick={e => {
-    if (e.target.closest('button')) return       // let nested buttons through
-    setIsFlipped(f => !f)
-  }}
+> updates are not applicable here. Other agents (`front-maker`, `code-review`,
+> `app-test`) read but never write.
 >
-  <div style={{
-    width: '100%', height: '100%',
-    position: 'relative',
-    transition: 'transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
-    transformStyle: 'preserve-3d',
-    transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
-  }}>
-    <div style={{
-      position: 'absolute', inset: 0,
-      backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden',
-      borderRadius: 20, overflow: 'hidden',
-    }}>
-      {/* FRONT — image-overlay card per §3.5.1 */}
-    </div>
-    <div style={{
-      position: 'absolute', inset: 0,
-      backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden',
-      transform: 'rotateY(180deg)',
-      borderRadius: 20, overflow: 'hidden',
-    }}>
-      {/* BACK — see §3.5.5 for image gallery */}
-    </div>
-  </div>
-</div>
+> **Adopted 2026-05-21 — full redesign.** Light-mode default, 4 user-selectable
+> themes + theme switcher, font switcher, CSS-variable design tokens
+> (`frontend/src/tokens.css`), CSS Modules + CSS `:hover` for interactive
+> components. Rolled out across a multi-PR initiative — early PRs introduce the
+> token/theme system; component visuals migrate per-PR afterward.
+
+---
+
+## Glossary
+
+Mapping between **design-system terms** (code/docs) and **user-facing labels**
+(what the user sees on screen). Consult this table first when a term is
+ambiguous or you do not know what to search for in code.
+
+| User term (UI label) | Design-system term (code/docs) | Defined in |
+|---|---|---|
+| **Board** | Folder Card | §8.7 |
+| **Project** | Project Card | §8.6 |
+
+> When a new term mapping appears, add a row here. The spec itself is managed in
+> the relevant § section.
+
+---
+
+## 1. Color Tokens
+
+**Default theme: GitHub Light.** Users can freely change the theme with the
+theme switcher (see §5).
+
+### 1.1 Surface & Text
+```yaml
+bg:         "#FFFFFF"
+surface:    "#F6F8FA"
+surface-2:  "#EFF2F5"
+surface-3:  "#E1E4E8"
+text:       "#1F2328"
+text-2:     "#24292F"
+text-muted: "#656D76"
+text-dim:   "#8C959F"
+border:     "rgba(0,0,0,0.08)"
+border-soft: "rgba(0,0,0,0.12)"
 ```
 
-- `perspective: '1200px'` on the outer element.
-- `transformStyle: 'preserve-3d'` on the rotating layer.
-- Both faces use `backfaceVisibility: 'hidden'` (+ `-webkit-` prefix).
-- Stop propagation for nested buttons via `e.target.closest('button')` early-return.
-- **Hover lift YES, hover border NO.** Per §3.5.1, the subtle `translateY(-4px)` lift applies to all cards including flip cards (it's the standard "interactive element" feedback that the rest of the site uses). The pink border is the only hover decoration that's omitted — a static border lingers awkwardly behind the rotating card during and after the flip. Lift alone is sufficient. Apply the lift on the OUTER perspective wrapper so it doesn't double-compose with the inner rotation.
-
-**Hero Flip variant (text-on-surface, profile pages):** The same rotateY mechanics
-apply to text-only flip cards used in profile heros. Front face shows a primary
-intro layer (italic bio for users, italic description for offices). Back face
-reveals a secondary identity layer (persona styles+programs+one-liner for users;
-extended description + founded year + location for offices). Same `perspective:
-1200`, `transformStyle: preserve-3d`, `transition: transform 0.5s
-cubic-bezier(0.4, 0, 0.2, 1)`, `backfaceVisibility: hidden`, lift YES on outer
-wrapper, no border. Surface is `var(--color-surface)` with subtle
-`var(--color-border-soft)` outline (NOT the §3.5.1 transparent-default rule —
-text-on-surface cards keep their resting outline because they have no image to
-provide visual containment). Optional internal radial-gradient pink glow as a
-hint of brand. A `tap to reveal` caption in caps label (10/600 letter-spacing
-0.04em) at the bottom-right or top-right signals interactivity.
-
-#### 3.5.6 Reference: SwipePage card is canonical
-
-The full-screen swipe card on `frontend/src/pages/SwipePage.jsx` is the
-**canonical card text reference** for the entire app. Its overlay text uses
-the same primitives codified in §3.5.2:
-
-```jsx
-<h2 style={{ color:'#fff', fontSize:18, fontWeight:700, lineHeight:1.3, margin:'0 0 3px', /* 2-line clamp */ }}>
-  {card.title}
-</h2>
-<p style={{ color:'rgba(255,255,255,0.55)', fontSize:12, margin:'0 0 12px', fontStyle:'italic' }}>
-  {card.architects}
-</p>
+### 1.2 Accent (themed)
+```yaml
+accent-1:   "#0969DA"
+accent-2:   "#8250DF"
+accent-3:   "#953800"
 ```
 
-When in doubt about typography on any other card surface (project cards in
-FirmProfile, board cards in UserProfile, recommendation cards in
-PostSwipeLanding, building cards in BoardDetail), open SwipePage.jsx and
-mirror its overlay text style. The full-screen size differs but **font size,
-weight, italic, color, and spacing should match exactly** so all card
-surfaces in the app feel like the same design system.
+### 1.3 Destructive / Skip (themed)
+**Each theme defines a red tone that fits its light/dark character.**
+Current default (GitHub Light):
+```yaml
+destructive: "#D73A49"
+```
+Other themes (the theme switcher changes this in lockstep):
+- Ayu Light → `#E5524B`
+- GitHub Dark → `#F85149`
+- SynthWave '84 → `#FF6188`
 
-#### 3.5.5 Card-back: swipe-style image gallery
+---
 
-When a flip card's back reveals multiple images (boards), use **full-bleed
-horizontal-scrolling images styled like the SwipePage card — NOT a thumbnail
-grid.** This preserves the cinematic feel of the brand's signature swipe
-interaction.
+## 2. Typography
 
-```jsx
-<div style={{
-  position: 'absolute', inset: 0,
-  background: '#000',
-  display: 'flex',
-  flexDirection: 'column',
-}}>
-  <div
-    style={{
-      flex: 1,
-      overflowX: 'auto',
-      overflowY: 'hidden',
-      display: 'flex',
-      scrollSnapType: 'x mandatory',
-      WebkitOverflowScrolling: 'touch',
-      scrollbarWidth: 'none',          // Firefox
-      msOverflowStyle: 'none',         // IE/Edge legacy
-    }}
-    className="hide-scrollbar"          /* Webkit ::-webkit-scrollbar { display:none } */
-  >
-    {images.map((img, i) => (
-      <div key={i} style={{
-        flex: '0 0 100%',
-        height: '100%',
-        scrollSnapAlign: 'start',
-        position: 'relative',
-      }}>
-        <img src={img} alt="" style={{
-          width: '100%', height: '100%',
-          objectFit: 'cover',
-          display: 'block',
-        }} />
-      </div>
-    ))}
-  </div>
+**Default body font: IBM Plex Sans KR.** Users can switch to Noto Serif KR with
+the Font toggle (see §6).
 
-  {/* Persistent action bar at bottom */}
-  <div style={{
-    padding: 16,
-    background: 'linear-gradient(to top, rgba(0,0,0,0.95) 20%, transparent 100%)',
-  }}>
-    <button style={{ /* "View Gallery · N photos" pill, full-width 44px+ touch */ }}>
-      View Gallery · {images.length} photos
-    </button>
-  </div>
-</div>
+### 2.1 Font Family
+```yaml
+font-family:        "IBM Plex Sans KR"
+font-stack:         '"IBM Plex Sans KR", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "맑은 고딕", system-ui, -apple-system, BlinkMacSystemFont, sans-serif'
+font-stack-serif:   '"Noto Serif KR", "본명조", "Nanum Myeongjo", "나눔명조", "AppleMyungjo", "Batang", "바탕", Georgia, serif'
 ```
 
-- `scroll-snap-type: x mandatory` snaps cleanly per image.
-- Each slide is `flex: 0 0 100%` so the card width = one image at a time.
-- Hide scrollbar across browsers (Firefox `scrollbarWidth: 'none'`, Webkit via class with `::-webkit-scrollbar { display: none }`, IE legacy `msOverflowStyle: 'none'`). Add the `.hide-scrollbar` class to `index.css` if it doesn't exist.
-- Action button persists at the bottom — does not scroll with images.
+**Fallback policy** — guarantees Korean glyph availability per environment:
+1. **Primary**: web font (loaded from Google Fonts)
+2. **Web fallback**: Noto Sans KR (Sans) / Nanum Myeongjo (Serif) — more likely
+   to be cached already
+3. **macOS / iOS**: Apple SD Gothic Neo (Sans) / AppleMyungjo (Serif)
+4. **Windows**: Malgun Gothic (Sans) / Batang (Serif)
+5. **Last resort**: `system-ui` / `Georgia` / `sans-serif` / `serif`
 
-**Mandatory scroll indicators (chevron arrows):**
-The horizontal back gallery MUST surface scroll affordance — without an explicit
-hint users do not realize they can swipe across photos (and hidden scrollbars
-remove the only browser-native cue). Place two static chevrons on the left and
-right edges, vertically centered, layered above the scroll container with
-`pointerEvents: 'none'` so they don't block touch.
+Korean names (`맑은 고딕`, `본명조`, etc.) are listed alongside the English
+names in case the OS locale fails to match the English name.
 
-```jsx
-{/* Left scroll indicator */}
-<div style={{
-  position: 'absolute', left: 10, top: '50%',
-  transform: 'translateY(-50%)',
-  pointerEvents: 'none',
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-  width: 32, height: 32, borderRadius: '50%',
-  background: 'rgba(0,0,0,0.32)', backdropFilter: 'blur(6px)',
-  zIndex: 2,
-}}>
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
-       stroke="rgba(255,255,255,0.85)" strokeWidth="2.5"
-       strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="15 18 9 12 15 6" />
-  </svg>
-</div>
-{/* Right scroll indicator — mirror */}
-<div style={{ position: 'absolute', right: 10, top: '50%', /* …same */ }}>
-  <svg ...><polyline points="9 18 15 12 9 6" /></svg>
-</div>
+### 2.2 Type Scale — Desktop (≥ 769px)
+```yaml
+h1-size-desktop:      48
+h2-size-desktop:      30
+body-size-desktop:    18
+caption-size-desktop: 14
 ```
 
-- Mirror SwipePage's gallery-face arrow style (which uses top/bottom for
-  vertical scroll); only the orientation flips for horizontal context.
-- Subtle dark-blur disc (32px, `rgba(0,0,0,0.32)`) gives the chevron contrast
-  against any underlying image.
-- 18px chevron, stroke `rgba(255,255,255,0.85)`.
-- Static (do not auto-hide on edge) for v1 — simple is enough.
-
-**Action bar gradient softening:**
-The persistent action bar at the bottom MUST blend smoothly into the gallery
-above it. A hard cut (e.g. opaque action bar starting abruptly) breaks the
-cinematic feel users expect from the front face's bottom-gradient overlay.
-
-```jsx
-<div style={{
-  padding: '20px 16px 16px',
-  background: 'linear-gradient(to top, rgba(0,0,0,0.96) 0%, rgba(0,0,0,0.65) 45%, rgba(0,0,0,0.18) 80%, transparent 100%)',
-}}>
-  {/* "View Gallery · N photos" pill */}
-</div>
+### 2.3 Type Scale — Mobile (≤ 768px)
+```yaml
+h1-size-mobile:      32
+h2-size-mobile:      24
+body-size-mobile:    16
+caption-size-mobile: 13
 ```
 
-- Multi-stop gradient (4 stops) so the fade reaches transparent over a longer
-  range than the single-stop `0.95 20% → transparent 100%` shorthand.
-- Top of the action bar dissolves into the last image; bottom is opaque enough
-  to support the action button's contrast.
-- Match the front face's `linear-gradient(to top, rgba(0,0,0,0.93) 0%,
-  rgba(0,0,0,0.4) 50%, transparent 100%)` aesthetic — same direction, similar
-  curve, slightly higher opacity at the base because the action bar lives there.
-
-### 3.6 Profile Action Row (Instagram pattern)
-
-Profile pages (`UserProfilePage`, `FirmProfilePage`) display a Follow / Following
-toggle as the primary action when viewing OTHER users' / offices' profiles.
-This mirrors Instagram's profile action row to leverage learned behavior.
-
-**Layout:**
-- A horizontal row directly below the hero block (or below the inline stats
-  row, depending on hero composition).
-- Primary button (Follow / Following) takes the major share; optional secondary
-  Message icon-button sits beside it.
-- Full-width on mobile (≤ 640 px); on desktop, max-width 320 + 44px message
-  button to keep the row visually tight.
-- Hidden entirely when `isMe` (own profile) — the row is only meaningful for
-  cross-user / cross-office views.
-
-**State machine:**
-
-| State | Background | Text color | Border | Trailing icon |
-|---|---|---|---|---|
-| `Follow` (default) | `linear-gradient(135deg, #ec4899, #f43f5e)` | `#fff` | none | none |
-| `Following` (after click) | `var(--color-surface)` (or `var(--color-surface-2)`) | `var(--color-text-2)` | `1px solid var(--color-border)` | chevron-down `▼` (12px stroke 2) |
-
-```jsx
-<button
-  onClick={handleToggleFollow}
-  onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)' }}
-  onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)' }}
-  onMouseDown={(e) => { e.currentTarget.style.transform = 'scale(0.98)' }}
-  onMouseUp={(e) => { e.currentTarget.style.transform = 'translateY(-1px)' }}
-  style={{
-    flex: 1,
-    minHeight: 44, padding: '12px 18px',
-    borderRadius: 12,
-    background: isFollowing ? 'var(--color-surface-2)' : 'linear-gradient(135deg, #ec4899, #f43f5e)',
-    color: isFollowing ? 'var(--color-text-2)' : '#fff',
-    border: isFollowing ? '1px solid var(--color-border)' : 'none',
-    fontSize: 14, fontWeight: 700,
-    cursor: 'pointer', fontFamily: 'inherit',
-    boxShadow: isFollowing ? 'none' : '0 8px 22px rgba(236,72,153,0.32)',
-    transition: 'transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), background 0.2s, color 0.2s, box-shadow 0.2s',
-    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-  }}
->
-  {isFollowing ? (
-    <>Following<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg></>
-  ) : 'Follow'}
-</button>
-
-{/* Optional Message icon button — ghost style */}
-<button
-  onClick={handleMessage}
-  aria-label="Message"
-  style={{
-    width: 44, height: 44, minWidth: 44, flexShrink: 0,
-    background: 'var(--color-surface)',
-    border: '1px solid var(--color-border)',
-    borderRadius: 12, cursor: 'pointer',
-    color: 'var(--color-text-2)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    transition: 'border-color 0.18s, color 0.18s',
-  }}
-  onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(236,72,153,0.45)'; e.currentTarget.style.color = '#ec4899' }}
-  onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-2)' }}
->
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-  </svg>
-</button>
+### 2.4 Weights (shared across environments)
+```yaml
+h1-weight:      700
+h2-weight:      600
+body-weight:    400
+caption-weight: 500
 ```
 
-- Wrap the row in `<div style={{ display: 'flex', gap: 10, marginTop: 14 }}>`.
-- Press `scale(0.98)`; hover `translateY(-1px)`. Both transitions cubic-bezier(0.4, 0, 0.2, 1).
-- The Following state's chevron-down hints at the future "tap to unfollow / mute"
-  sheet (mockup-only; an actual sheet ships when backend is wired).
-- TODO(claude) marker on the toggle handler for the actual `POST /api/v1/users/{id}/follow/`
-  / `DELETE` call.
+### 2.5 Font-weight discipline
+**Maximum 700. 800/900 forbidden.** The "premium, sleek, confident" tone is
+expressed through letter-spacing, whitespace, and palette — not weight.
 
-**When `isMe` is true:** omit the entire row. The hero already shows external-link
-pills (Instagram, email) and the sticky-header right-side controls (theme + logout)
-cover settings — no Follow button is needed.
+### 2.5a Single-font policy
+- **Headings, body, and captions all use the same font family** (no dual-font
+  operation).
+- Hierarchy is expressed only via size + weight + letter-spacing + whitespace.
+- The Font toggle (§6) switches the whole system at once — no partial switching.
+- Pairings like editorial serif headings + sans body are deliberately excluded
+  → simpler mental model, consistent user toggle behavior.
 
-### 3.7 Compact stats row (Instagram pattern)
-
-When stats live in the hero block (not as a separate StatsCard), use this
-inline horizontal pattern instead of the larger 28px-number card. Three columns
-divided by 1px vertical lines: Posts/Boards/Projects · Followers · Following.
-
-```jsx
-<div style={{
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-  gap: 0, marginTop: 14, marginBottom: 18,
-}}>
-  {[
-    { count: boards.length, label: 'Boards' },
-    { count: followerCount, label: 'Followers' },
-    { count: followingCount, label: 'Following' },
-  ].map((stat, i, arr) => (
-    <>
-      <button key={stat.label} style={{
-        flex: '0 0 auto',
-        background: 'transparent', border: 'none', cursor: 'pointer',
-        padding: '6px 18px', minHeight: 44,
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
-        fontFamily: 'inherit', color: 'inherit',
-      }}>
-        <span style={{ color: 'var(--color-text)', fontSize: 18, fontWeight: 700, lineHeight: 1 }}>
-          {stat.count}
-        </span>
-        <span style={{ color: 'var(--color-text-dim)', fontSize: 12, fontWeight: 500 }}>
-          {stat.label}
-        </span>
-      </button>
-      {i < arr.length - 1 && (
-        <div style={{ width: 1, height: 28, background: 'var(--color-border)' }} />
-      )}
-    </>
-  ))}
-</div>
+### 2.6 Legacy aliases (gradual migration)
+```yaml
+h1-size:      48   # → h1-size-desktop
+h2-size:      30   # → h2-size-desktop
+body-size:    18   # → body-size-desktop
+caption-size: 14   # → caption-size-desktop
 ```
 
-- 18px / weight 700 number + 12px / weight 500 label (NOT caps — natural case
-  for visual rhythm with the rest of the hero).
-- 28px-tall vertical 1px dividers.
-- Each stat is a button (44px touch) — tappable for the Followers/Following
-  list when backend exposes those endpoints. Add TODO(claude) markers for
-  click handlers.
-- Uses the same pink accent NOT as a fill but as the page's ambient halo —
-  the row sits inside that halo so it picks up brand presence indirectly.
+---
 
-### 3.8 Font-weight discipline (site-wide)
+## 3. Layout & Shape
 
-**700 maximum anywhere in the app.** No 800. No 900.
+### 3.1 Border Radius Scale (tokenized)
+```yaml
+radius-sm:   8     # small chips, inputs
+radius-md:   12    # buttons, small cards
+radius-lg:   20    # default card
+radius-xl:   24    # large cards, modals
+radius-pill: 999   # pill shape
+```
 
-| Use | Weight |
-|---|---|
-| Hero h1, page titles, section h2 / h3 | 700 |
-| Card titles (overlay or surface) | 700 (per §3.5.2) |
-| Button labels, subtle sub-labels | 600 |
-| Body paragraphs, descriptions | 500 |
-| Caps labels, value lines | 600 |
-| Inactive nav items | 400 |
+### 3.2 Touch Target (per device)
+```yaml
+touch-target-mobile:  44    # Apple HIG recommendation
+touch-target-desktop: 32    # exploits mouse precision
+```
 
-The brand voice is "premium, sleek, confident" — that's achieved by tight letter-spacing
-and a restrained gradient palette, NOT by display-weight type. 800 / 900 weights
-look heavy and dated; the site reads as more sophisticated when constrained to 700.
+### 3.3 TabBar Height (conditional)
+```yaml
+tabbar-height-with-label: 64    # icon + keyword (current default)
+tabbar-height-icon-only:  56    # icon only
+tabbar-height:            64    # value currently in use
+```
+> ⚠️ If nav labels are removed during development, change `tabbar-height` to 56.
 
-This rule applies to every page, including `LoginPage`, `SetupPage`, `MainLayout`'s
-empty-swipe state, `SwipePage`'s sticky header, and `FavoritesPage`'s legacy
-sections. Any 800 / 900 weight you encounter while editing is drift — drop it
-to 700 (or 600 if context calls for restraint).
+### 3.4 Legacy aliases (gradual migration)
+```yaml
+radius-card:    20   # → radius-lg
+radius-button:  12   # → radius-md
+```
 
-## 4. Interaction Patterns
-- **Desktop Mode:** Ensure swiping logic binds to `keydown` (`ArrowLeft`, `ArrowRight`).
-- **Hover States:** Apply `cursor: 'pointer'` to interactables. For hover colors, use React inline event handlers (`onMouseEnter`, `onMouseLeave`)
-- **Skeleton Loaders:** Do not block existing cards. Use overlay spinners on top of stale data instead of tearing down the UI to show a skeleton.
+### 3.5 Motion Tokens
+All transitions use only the tokens below. Inline ms / cubic-bezier hardcoding
+is forbidden.
+
+**Duration (4 tiers)**
+```yaml
+motion-fast:    180ms   # micro: hover, focus border, chip toggle, filter
+motion-normal:  220ms   # standard: transforms, lifts (most frequently used)
+motion-slow:    400ms   # fade-outs: glow dispersion, color shift
+motion-flip:    500ms   # heavy: Discovery card 3D rotateY flip
+```
+
+**Easing (2)**
+```yaml
+motion-ease:     cubic-bezier(0.4, 0, 0.2, 1)   # most transforms/lifts (Material standard)
+motion-ease-out: cubic-bezier(0, 0, 0.2, 1)     # decelerate fade (glow disappearing, etc.)
+```
+
+**Click-moment exception**
+Instant display at the click moment (0s) — e.g. glow — keeps a literal `0s`
+without a token. "Instant" is an intent, not a timing.
+
+**Usage example**
+```css
+.button       { transition: transform var(--motion-normal) var(--motion-ease); }
+.input        { transition: border-color var(--motion-fast),
+                            box-shadow   var(--motion-slow) var(--motion-ease-out); }
+.input:active { transition: box-shadow 0s; }   /* click moment — instant */
+.card-flip    { transition: transform var(--motion-flip) var(--motion-ease); }
+```
+
+---
+
+## 4. Design Philosophy
+
+- **Aesthetics — tone split by mode**
+  - **Light themes** (GitHub Light · Ayu Light): **Clear · Editorial ·
+    Content-first.** Restrained backgrounds that do not obscure architecture
+    imagery, clear text hierarchy, sharp typography. Restrained shadows +
+    consistent surfaces = the tone of a magazine / archive.
+  - **Dark themes** (GitHub Dark · SynthWave '84): **Cinematic · Atmospheric ·
+    Dramatic.** Deep backgrounds that make imagery glow, rich contrast,
+    glow/neon accents. Deeper shadows + atmospheric gradients = the tone of a
+    film / a gallery at night.
+  - Both tones keep the common denominator "premium, refined, confident." The
+    mode difference is expressed in contrast and atmosphere.
+- **Vibe**: `glassmorphic` · `fluid` · `gesture-friendly (swipe hint only)` —
+  all adopted.
+  - Glassmorphic: `backdrop-filter: blur(12px)` on headers, input bars, gallery
+    hints, etc.
+  - Fluid: `translateY(-3px)` + 0.22s transition on card/button hover.
+  - Gesture-friendly: a "← swipe ✕ · swipe ♥ →" hint at the top of Discovery
+    cards (the action buttons themselves are not emphasized).
+- **Implementation — CSS variables + Inline hybrid**
+  - **CSS variables own**: themeable values — color, font, spacing tokens,
+    motion tokens, radius, etc. (see §3.5 motion, §1 color).
+  - **Inline styles own**: fixed / one-dimensional values — one-off layout,
+    dynamically computed values, emphasis gradients.
+  - **Forbidden**: Tailwind, Bootstrap, MUI, Chakra, styled-components, emotion,
+    and other external UI / CSS-in-JS libraries.
+  - **Allowed**: plain CSS files (`tokens.css`, see §10.2), CSS Modules.
+  - Rationale: editing a token applies a consistent change everywhere + zero
+    runtime overhead + minimal bundle size.
+- **Hover implementation**: visual transitions (color, shadow, transform) use
+  **only the CSS `:hover` pseudo-class.** The inline `onMouseEnter/Leave` +
+  React-state pattern is retired — performance and simplicity first.
+- **Theme switching**: only explicit user choice is honored. No automatic
+  `prefers-color-scheme` switching.
+- **Line-clamp**: 2-line clamp applies only to card titles. Other text wraps
+  naturally.
+
+---
+
+## 5. Theme Switcher (end-user facing)
+
+ArchiTinder provides a feature that lets **the user freely choose a color
+theme.**
+
+### 5.1 Exposure
+- The theme selection button is a chip composed of a **background color +
+  accent color**.
+- Each chip visually previews its theme's background + accent.
+- Clicking switches instantly (no page reload).
+
+### 5.2 Chip Spec (example)
+```yaml
+chip-bg-preview-size:     20    # diameter of the background-color preview circle (px)
+chip-accent-preview-size: 12    # diameter of the accent-color preview circle (px, overlapped on the bg)
+chip-padding:             "6px 14px"
+chip-radius:              999
+```
+
+### 5.3 Candidate Themes
+- **GitHub Light** ← default
+- Ayu Light
+- GitHub Dark
+- SynthWave '84
+
+### 5.4 Exposure Location
+- Exposed inside **Profile tab → Settings section → Appearance**.
+- Does not clutter the main UI (header / sidebar) — the theme is not a
+  frequently changed setting.
+- Same location on mobile and desktop (inside Profile → Settings).
+
+### 5.5 Persistence
+- **Stored on the user account (cross-device).**
+- Logged-in users: stored as a server-side user preference → the same theme
+  applies automatically on other devices.
+- Guests: applied only for the session (next visit reverts to the default
+  GitHub Light).
+- No automatic `prefers-color-scheme` switching (settled in §7).
+
+### 5.6 Labels / Copy
+- Section title: **"Appearance"**
+- Sub-items: **"Theme"** (theme chip list), **"Font"** (same location as the §6
+  font toggle).
+
+---
+
+## 6. Font Switcher (end-user facing)
+
+ArchiTinder also lets the user switch the body font.
+
+### 6.1 Toggle Button — "the button label is itself a preview of the font it will switch to"
+- Button label: always the single word **`Font`**.
+- The label's **font-family is rendered in the font *other* than the current
+  one** → clicking shows directly which font it will switch to.
+- Clicking toggles between the two fonts.
+
+### 6.2 State Machine
+
+| Current body font | Button label | Button label's font-family |
+|---|---|---|
+| IBM Plex Sans KR (default) | `Font` | Noto Serif KR (the font it switches to) |
+| Noto Serif KR | `Font` | IBM Plex Sans KR (the font it switches to) |
+
+### 6.3 Candidate Fonts
+- **IBM Plex Sans KR** ← default (geometric sans-serif, technical)
+- Noto Serif KR (classic serif, editorial)
+
+### 6.4 Exposure Location
+**Same as §5.4** — inside Profile → Settings → Appearance, in the same place as
+the Theme chips. Per the §5.6 label definitions, placed as the "Font" item
+directly below Theme.
+
+---
+
+## 7. Responsive Layout
+
+ArchiTinder is mobile-first but must also behave naturally on desktop.
+
+### 7.1 Mobile (≤ 768px)
+- Bottom-fixed nav bar (Search · Discover · Boards · Profile, 4-column grid).
+- Page left/right padding 16px.
+- Card grid: 2 columns.
+- iOS Safe Area support (`padding-bottom: env(safe-area-inset-bottom)`).
+
+### 7.2 Desktop (≥ 769px)
+- Left 220px fixed sidebar nav (vertical, icon + label).
+- Main content area: no horizontal scroll, max-width 1200px.
+- Card grid: 3 columns.
+- Page left/right padding 32px.
+
+### 7.3 Breakpoints
+```yaml
+breakpoint-mobile-max:  768   # ≤ 768px → mobile layout
+breakpoint-desktop-min: 769   # ≥ 769px → desktop layout
+```
+
+---
+
+## 8. Components
+
+### 8.1 Primary CTA Button
+Main action buttons (core CTAs like sign-up / share / purchase).
+
+```css
+background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+color: #fff;
+border: 0;
+border-radius: calc(var(--radius-md) * 1px);
+padding: 14-16px;
+font-weight: 600;
+min-height: 44px;
+transition: transform 0.22s, background-color 0.22s, box-shadow 0.4s ease-out;
+```
+
+**Click moment (`:active`) — glow shadow**
+Like the input focus pattern (§8.5), the glow appears instantly on click and
+fades out over 0.4s.
+
+```css
+.primary-cta:active {
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent-1) 28%, transparent);
+  transition: transform 0.22s, box-shadow 0s;  /* glow appears instantly */
+}
+```
+
+- When the theme changes, the gradient colors change with it.
+- Applied to: Persona "View persona report", Discovery ♥ (Save), AI Search chat
+  send ↑.
+- Buttons that already have a depth shadow (e.g. Discovery ♥) stack both
+  shadows (`0 6px 16px rgba(0,0,0,0.25), 0 0 0 6px ...`).
+
+### 8.2 Secondary Button
+Secondary actions (close an option that doesn't resonate, Skip, etc.).
+
+```css
+background: var(--surface);
+color: var(--text);
+border: 1px solid var(--border);
+border-radius: calc(var(--radius-md) * 1px);
+padding: 14px 16px;
+font-weight: 500-600;
+min-height: 44px;
+```
+
+### 8.3 Ghost Button
+Weakest emphasis (Share, View more, etc.).
+
+```css
+background: transparent;
+color: var(--text);
+border: 1px solid var(--border);
+border-radius: calc(var(--radius-md) * 1px);
+padding: 14px 16px;
+font-weight: 500;
+min-height: 44px;
+```
+
+### 8.4 Destructive Button
+Dangerous actions — delete / block / cancel.
+
+```css
+background: transparent;
+color: var(--destructive);
+border: 1px solid var(--destructive);
+border-radius: calc(var(--radius-md) * 1px);
+padding: 14px 16px;
+font-weight: 600;
+min-height: 44px;
+```
+
+> Whether hover switches to a filled style (`bg: var(--destructive); color:
+> #fff`) is decided at the interaction-design stage.
+
+### 8.5 Input (Glassmorphic, 3-state focus)
+
+```css
+.input {
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: calc(var(--radius-pill) * 1px);  /* or radius-md for square inputs */
+  padding: 12px 18px;
+  color: var(--text);
+  transition: border-color 0.18s, box-shadow 0.4s ease-out;
+}
+
+.input:focus-within {
+  border-color: var(--accent-1);
+}
+
+.input:has(input:active) {  /* the brief click moment */
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-1) 28%, transparent);
+  transition: border-color 0.18s, box-shadow 0s;  /* glow appears instantly */
+}
+```
+
+**3-tier focus states:**
+- Default: gray border
+- Focused (focus held): accent-1 border (no glow, restrained)
+- Click moment (mouse just pressed): accent-1 border + glow shadow → fades out
+  smoothly over 0.4s
+
+### 8.6 Project Card (Discovery canonical)
+ArchiTinder's core card — combines the image-overlay card, the 3D flip, and the
+back-face gallery.
+
+**Front face**
+```
++-------------------------------+
+|  [project main image]      ↻  |  ← flip hint top-right
+|                               |
+|                               |
+|         (gradient fade)       |
+|                               |
+| Title (h2, 22px, 700)         |
+| Architects (13px italic, 60%) |
+| ─────── divider ───────       |
+| YEAR  | LOCATION | PROGRAM    |  ← 3-col info grid
+| 2004  | Kanazawa | Museum     |
++-------------------------------+
+```
+
+```yaml
+card-radius: 20         # var(--radius-lg)
+card-shadow: "0 12px 32px rgba(0,0,0,0.3)"
+card-bottom-gradient: "linear-gradient(180deg, transparent 30%, rgba(0,0,0,0.82))"
+card-text-color: "#fff"
+card-title: 22px / 700 / line-clamp 2
+card-architects: 13px / regular / rgba(255,255,255,0.6)
+card-divider: "1px rgba(255,255,255,0.15)"
+card-info-label: 10px / 600 / uppercase 0.06em / rgba(255,255,255,0.5)
+card-info-value: 13px / 600 / #fff / single-line ellipsis
+card-info-columns: 3  # YEAR + LOCATION + PROGRAM
+card-info-layout: "flex / justify-content: space-between"
+```
+
+**Back face (3D rotateY)**
+- Click anywhere on the card → `transform: rotateY(180deg)` on the inner
+  wrapper.
+- Back face: full-bleed horizontal-scrolling gallery of sub-images.
+- `scroll-snap-type: x mandatory` for clean image-per-frame snapping.
+- Left/Right chevron arrows (32px, dark blur) as a visual affordance.
+- Bottom action: "View Gallery · N photos" pill with a 4-stop gradient backdrop.
+
+```yaml
+flip-perspective: 1200px
+flip-duration: 0.5s
+flip-easing: "cubic-bezier(0.4, 0, 0.2, 1)"
+back-action-gradient: "linear-gradient(to top, rgba(0,0,0,0.96) 0%, rgba(0,0,0,0.65) 45%, rgba(0,0,0,0.18) 80%, transparent 100%)"
+```
+
+**Geometry**
+```yaml
+card-aspect-ratio: "4 / 5"   # portrait, Tinder-like ratio
+                              # mobile: fills screen (flex:1) / desktop: explicit 4/5
+```
+
+**Border / Hover policy**
+- **No border** — the card edge is expressed only with `radius-lg` +
+  `box-shadow: 0 12px 32px rgba(0,0,0,0.3)` (avoids conflict with the
+  background image / gradient).
+- **No hover effect** — Discovery is a swipe-centric UX; hover is not a natural
+  interaction. Card actions happen only through click (flip) / swipe /
+  Like·Skip buttons.
+
+**Interaction** — every per-environment input method is supported equally.
+
+| Action | Mobile | Desktop |
+|---|---|---|
+| **Skip** (← swipe) | left swipe gesture | `ArrowLeft` key OR mouse left-drag OR ✕ button click |
+| **Like** (→ swipe) | right swipe gesture | `ArrowRight` key OR mouse right-drag OR ♥ button click |
+| **Flip (front ↔ back)** | tap the card photo | `Enter` key OR photo click |
+
+Principles:
+- **Drag threshold**: a swipe is confirmed at ≥ 25% of card width of movement;
+  below that, spring back to position.
+- **Keyboard visibility**: shortcut listeners are bound only while the active
+  screen is Discovery (disabled on other screens).
+- **Focus state**: explicit focus ring (`:focus-visible`) on cards/buttons for
+  keyboard users.
+
+**Text legibility** — the same black gradient fade is applied to both
+Front/Back faces. Because white text sits on real project photos (varied
+tones), a black fade at the bottom secures contrast. After comparing 8
+alternatives (glassmorphic panel / solid scrim / text-shadow / per-element
+chips / mix-blend, etc.), the black gradient fade was the most natural, does
+not obscure the photo, and gives reliable legibility.
+
+Front:
+```css
+.discovery-face.front::before {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(180deg, transparent 30%, rgba(0,0,0,0.82));
+}
+```
+
+Back (the "View Gallery · N photos" action on the gallery face follows the same
+principle):
+```css
+.back-action {
+  background: linear-gradient(to top,
+    rgba(0,0,0,0.96) 0%,
+    rgba(0,0,0,0.65) 45%,
+    rgba(0,0,0,0.18) 80%,
+    transparent 100%);
+}
+/* no pill background — "View Gallery · 6 photos" is text, placed directly on the gradient */
+.back-action button {
+  background: transparent;
+  border: 0;
+  color: #fff;
+  font-weight: 600;
+}
+```
+
+Core principles:
+- All white text on the card sits **on top of the bottom black gradient** (front
+  title/architects/info, back action label alike).
+- No separate panel/scrim/chip background — the gradient is the only legibility
+  aid.
+- Even a button, if it is text, is placed directly on the gradient with no pill
+  bg.
+
+### 8.7 Folder Card (Boards canonical)
+A "folder" metaphor card. The top tab (label) narrows diagonally toward the
+right.
+
+**Structure / content order**
+```
++----------------+
+| Tab title (⋯)   \              ← 1. folder title (inside the tab, ⋯ if long)
++------------------+----+
+|                       |
+|  Overview (long desc) |        ← 2. overview
+|  Summary (one line)   |        ← 3. summary
+|  ─── divider ───      |        ← 4. divider (1px solid --border)
+|  [img] [img] [img]    |        ← 5. 3 project main images
+|                       |
+|  N projects   2026.x  |        ← 6. project count + creation date (justified)
++-----------------------+
+```
+
+```yaml
+folder-tab-color:        "var(--accent-1)"
+folder-tab-text-color:   "#fff"
+folder-tab-height-visible: 32      # visible height (total 48 — 16px covered by the body corner)
+folder-tab-offset-x:     4         # starts 4px inside the body's left edge
+folder-tab-radius-tl:    10        # body radius / 1.6
+folder-tab-radius-tr:    7         # roundness of the slant start point
+folder-tab-min-width:    "calc((50% - 4px) / 0.7)"   # slant start point aligns to body center
+folder-tab-max-width:    "calc(100% - 20px)"
+folder-tab-label-padding: "0 28% 0 18px"             # right 28% is the slant-avoidance area
+
+folder-body-bg:          "var(--surface-2)"
+folder-body-radius:      16
+folder-body-padding:     18
+
+folder-title-font-size:    13
+folder-title-font-weight:  600
+folder-title-ellipsis:     "⋯"     # U+22EF midline (NOT … U+2026, NOT ...)
+```
+
+**Title truncation**
+- Short title: shown in full (no truncation).
+- Long title: a JS binary search finds the longest prefix that fits the tab's
+  inner width, rendered as `prefix + ⋯`.
+- Use `text-overflow: clip` (blocks the browser default `…`).
+
+**Hover** — **lift + 1px accent outline, no shadow/glow**
+```css
+.folder-card {
+  transition: transform 0.2s ease, filter 0.18s;
+  /* base: no filter — flat, no drop-shadow */
+}
+.folder-card:hover {
+  transform: translateY(-3px);
+  filter:
+    drop-shadow( 1px  0   0 var(--accent-1))
+    drop-shadow(-1px  0   0 var(--accent-1))
+    drop-shadow( 0    1px 0 var(--accent-1))
+    drop-shadow( 0   -1px 0 var(--accent-1));
+}
+```
+
+- 4-directional stacked `drop-shadow` traces an outline that follows the tab's
+  slanted corners (CSS `outline` is rectangular and cannot follow the slant
+  curve).
+- No underneath drop-shadow in either default or hover state (flat design).
+- `box-shadow` not used.
+
+### 8.8 Loading State (Skeleton + Spinner combination)
+- **Card / list skeletons** → **Skeleton** (mimics the real layout with radius +
+  gray blocks).
+- **Buttons / short actions** → **inline spinner** (replace the button label
+  with a spinner, disabled).
+- No shimmer animation (performance cost + unrelated to the Vibe keywords).
+
+```yaml
+skeleton-bg:           "var(--surface-2)"
+skeleton-radius:       "var(--radius-sm)"   # 8px
+skeleton-block-height: 16                   # one text line; cards use aspect-ratio
+spinner-size:          20
+spinner-stroke-width:  2
+spinner-duration:      "1.2s"   # one rotation
+```
+
+### 8.9 Error / Empty State (3-tier)
+| Scenario | Pattern | Location |
+|---|---|---|
+| No data at all (e.g. first board, end of recommendations) | **Empty component** — friendly illustration + one-line description + Primary CTA | page / list area |
+| Component load failure (network/server) | **Inline Error** — specific message + "Try again" button | the component's own slot |
+| Action failure (save/send, transient) | **Toast** (§8.11) | bottom-center |
+
+Principle: **never build a catastrophic full-screen error** — always isolate at
+the component level so the user can keep using the rest.
+
+### 8.10 Modal / Bottom Sheet
+**Auto-selected per environment**
+- Mobile (≤768px): **Bottom Sheet** — swipe-up from the bottom. Matches the
+  gesture-friendly Vibe.
+- Desktop (≥769px): **Centered Modal** — center-aligned, dimmed backdrop.
+
+```yaml
+sheet-radius-top:    "calc(var(--radius-xl) * 1px)"  # 24px, top corners only
+sheet-handle:        "4px × 36px"                    # top swipe handle bar
+sheet-max-height:    "85vh"                          # up to 85% of the screen
+sheet-backdrop:      "rgba(0,0,0,0.4)"
+modal-max-width:     "480px"
+modal-radius:        "calc(var(--radius-lg) * 1px)"  # 20px
+modal-padding:       "24px"
+sheet-anim-duration: "var(--motion-flip)"            # 500ms slide-up
+sheet-anim-easing:   "var(--motion-ease)"
+```
+
+Closing: mobile = swipe-down + backdrop tap; desktop = ESC + backdrop click +
+top-right ✕ button.
+
+### 8.11 Toast
+- **Position**: **bottom-center** (does not cover the mobile nav bar, natural on
+  desktop too).
+- **Duration**: **3s** default (the longer-toast option is 5s).
+- **Style**: **Glassmorphic** (matches the Vibe) — the same frosted-glass
+  pattern as headers/input bars.
+
+```yaml
+toast-position:       "bottom-center"
+toast-bottom-offset:  "calc(var(--tabbar-height) + 16px)"  # mobile: above the nav
+toast-duration:       3000   # ms
+toast-duration-long:  5000   # ms (long / important messages)
+toast-bg:             "color-mix(in srgb, var(--surface) 72%, transparent)"
+toast-backdrop:       "blur(12px)"
+toast-border:         "1px solid var(--border)"
+toast-radius:         "var(--radius-pill)"
+toast-padding:        "10px 16px"
+toast-enter:          "var(--motion-normal) var(--motion-ease)"    # slide-up + fade-in
+toast-exit:           "var(--motion-fast) var(--motion-ease-out)"  # fade-out
+```
+
+Type color tints:
+- info: default
+- success: `border-color: var(--accent-2)`
+- warning: `border-color: var(--accent-3)`
+- error: `border-color: var(--destructive)`
+
+---
+
+## 9. Decisions
+
+| Item | Decision | Note |
+|---|---|---|
+| Default Theme | **GitHub Light** | §1.1 ✅ |
+| Theme Switching | exposed to end users (background + accent chips) | §5 ✅ |
+| Body Font | **IBM Plex Sans KR** | §2.1 ✅ |
+| Font Switching | exposed to end users (Font label rendered in the font it switches to) | §6 ✅ |
+| Font-weight cap | **700** (800/900 forbidden) | §2.5 ✅ |
+| Type Scale | **split per environment (Desktop / Mobile)** | §2.2 / §2.3 ✅ |
+| Destructive color | **themed** (an appropriate red per theme) | §1.3 ✅ |
+| Text hierarchy | **4 tiers retained** | §1.1 ✅ |
+| iOS Safe Area | **bottom TabBar / CTA only** | §7.1 ✅ |
+| Implementation | hybrid (inline + CSS variables) | §4 ✅ |
+| Accent policy | **themed (CSS variables)** | §1.2 ✅ |
+| Responsive | **mobile-first + desktop left-sidebar re-layout** | §7 ✅ |
+| TabBar Height | **64px (with label) / 56px (icon only)** | §3.3 ✅ |
+| Border Radius | **4-tier tokenized (sm/md/lg/xl)** | §3.1 ✅ |
+| Touch Target | **mobile 44px / desktop 32px+** | §3.2 ✅ |
+| Vibe Keywords | **Glassmorphic · Fluid · Gesture-friendly (hint only)** | §4 ✅ |
+| Folder Card Hover | **lift + 1px accent outline, no shadow/glow** | §8.7 ✅ |
+| Theme Switcher location | **Profile → Settings → Appearance** | §5.4 ✅ |
+| Theme persistence | **user account (cross-device), guests session-only** | §5.5 ✅ |
+| Project Card Aspect | **4 / 5 portrait** | §8.6 ✅ |
+| Project Card Border | **none — radius + shadow only** | §8.6 ✅ |
+| Project Card Hover | **no effect (swipe UX)** | §8.6 ✅ |
+| Project Card Text legibility | **bottom black gradient fade (front/back identical)** | §8.6 ✅ |
+| Motion Tokens | **Duration 4 tiers (fast/normal/slow/flip) + Easing 2 (standard/ease-out)** | §3.5 ✅ |
+| Dual-font operation | **single font only — headings/body same family, toggle = full switch** | §2.5a ✅ |
+| Loading State | **Skeleton + Spinner combination (no shimmer)** | §8.8 ✅ |
+| Error / Empty | **3-tier: Empty component / Inline Error / Toast** | §8.9 ✅ |
+| Modal / Sheet | **auto per environment: mobile Bottom Sheet, desktop Centered Modal** | §8.10 ✅ |
+| Toast | **bottom-center · 3s · glassmorphic** | §8.11 ✅ |
+| Discovery Interaction | **keyboard ←/→ + drag → swipe, Enter + photo click → flip** | §8.6 ✅ |
+| Hover implementation | **CSS `:hover` pseudo-class only (inline JS forbidden)** | §4 ✅ |
+| Korean font fallback | **Web → OS Korean → system-ui (Sans/Serif each)** | §2.1 ✅ |
+| Design doc structure | **`DESIGN.md` is the single source of truth** | §10.1 ✅ |
+| Design token location | **dedicated `tokens.css` file** | §10.2 ✅ |
+| Theme/font addition process | **`tokens.css` + switcher edit + DESIGN.md update + PR design review** | §10.3 ✅ |
+| Component isolation policy | **extract when used on 2+ pages (design-system granularity always)** | §10.4 ✅ |
+| Aesthetics tone | **tone split by mode: Light=clear/editorial, Dark=cinematic/atmospheric** | §4 ✅ |
+| Implementation rule | **CSS variables + Inline hybrid (external UI / CSS-in-JS libraries forbidden)** | §4 ✅ |
+
+---
+
+## 10. Code Structure
+
+### 10.1 Markdown File Policy
+- **`DESIGN.md` is the single source of truth.** All tokens / decisions / specs
+  are recorded here.
+- New decisions and changes are added only to `DESIGN.md`, via PR.
+- There is no separate `design.md` or `DECISIONS.md` in the repo — this file is
+  canonical. (The redesign was originally drafted in an external `design.md`;
+  its content was absorbed here on adoption, 2026-05-21.)
+
+### 10.2 Design Token Location
+- **A dedicated `tokens.css` file** — `frontend/src/tokens.css` holds
+  `:root { --bg, --accent-*, --motion-*, ... }` plus the per-theme
+  `[data-theme="..."]` override blocks and the `[data-font="..."]` font block.
+- Separated from component styles so it owns only the token concern.
+- Imported in `frontend/src/main.jsx` before `index.css`.
+- A single file so cache invalidation works cleanly on change.
+
+### 10.3 Theme / Font Addition Process
+New themes / fonts are added or removed **only via PR**. Steps:
+1. **Edit `tokens.css`**: add a new `[data-theme="..."]` block (theme) or extend
+   the `[data-font="..."]` block (font).
+2. **Wire the switcher**: add the new option to `ThemeContext` + the Appearance
+   switcher component.
+3. **Update `DESIGN.md`**: sync the §1.2 (theme) or §2 (font) tables, yaml
+   blocks, and descriptions.
+4. **Submit a PR**: include a preview screenshot of the new option + the
+   rationale.
+5. **Design review**: merge only after approval from at least one design
+   reviewer.
+- Free-form additions are forbidden — a review step is mandatory for
+  consistency and quality.
+
+### 10.4 Component Isolation Policy
+**Extraction criteria (extract into a component if ANY one applies)**
+- A pattern used on 2+ pages / screens.
+- A JSX block over 50 lines even if used on a single page.
+- Design-system granularity (Button / Input / Card / Toast / Modal, etc.) —
+  always a component.
+
+**When keeping it inline (within a component) is appropriate**
+- Short layout code used only on a single page.
+- A one-off static composition.
+- Page composition that sits above the design-system layer.
+
+> Intent: balance reusability and readability. Extracting too early yields the
+> wrong abstraction; too late accumulates duplication.
+
+**Styling form per the §4 hybrid rule**: interactive components that own
+`:hover` / `:focus` / `:active` get a co-located `*.module.css` (CSS Module).
+Themeable values come from `tokens.css` variables. Inline styles remain only for
+pure layout/positioning and runtime-dynamic values.
+
+---
+
+## 11. In Progress / Undecided
+
+- [ ] **Persona screen components** (Profile Action Row + Stats Row)
+  - Proceed when persona-screen design work begins.
+- All other categories are resolved in the §9 decision table.
+
+---
+
+## Usage
+
+1. The running app (`cd frontend && npm run dev`) is the live preview of this
+   design system — there is no separate preview server.
+2. To change a token value, edit `frontend/src/tokens.css` and update the
+   corresponding yaml block + description in this file in the same PR.
+3. To add a token, add a `--key: value` line to `tokens.css` and document it
+   here.

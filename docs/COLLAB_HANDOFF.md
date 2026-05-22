@@ -62,27 +62,21 @@ The repo is whitelist-style: `.gitignore` excludes everything under `.claude/`
 newcomer:
 
 **Shared (in git, you get them on fetch):**
-- `tools/*` (CLI scripts including `dispatch-codex-task.sh`, `cmux_*setup.sh`)
+- `tools/*` (CLI scripts)
 - `docs/` (specs, algorithm, database schema)
-- `.claude/agents/`, `.claude/codex/`, `.claude/commands/` (agent baselines)
-- `.claude/Task.md`, `.claude/Report.md`, `.claude/WORKFLOW.md`,
-  `.claude/SESSION_PROTOCOL.md`
-- `.claude/plans/`, `.claude/postmortems/`, `.claude/reviews/`,
-  `.claude/validations/`, `.claude/handoffs-archive/`
-- Root: `CLAUDE.md`, `AGENTS.md`, `Goal.md`, `CONTRIBUTING.md`, `DESIGN.md`,
-  `README.md`
+- `.claude/agents/`, `.claude/skills/` (sub-agent definitions + the orchestrate skill)
+- `.claude/Task.md`, `.claude/WORKFLOW.md`, `.claude/plans/`
+- Root: `CLAUDE.md`, `CONTRIBUTING.md`, `DESIGN.md`, `README.md`
 
 **Not shared (each clone has its own copy or none):**
 - `.claude/settings*.json` (personal harness settings)
 - `.claude/memory/` (per-machine auto-memory)
 - `.env`, `.env.*` (secrets — use `.env.example` as the template)
 - `node_modules/`, `.venv/`, `__pycache__/`, build artifacts
-- cmux / codex local state (each terminal has its own session)
 
 If you fetch the repo and run `claude` from the project root, `CLAUDE.md` and
-the agent baselines auto-load. Same for `codex` workers (they auto-load
-`AGENTS.md` from cwd). Other contributors' Claude instances therefore share
-the same workflow guidance once they pull develop.
+the agent definitions auto-load. Other contributors' Claude instances therefore
+share the same workflow guidance once they pull develop.
 
 ---
 
@@ -108,29 +102,18 @@ are the two files your work intersects.
 
 ---
 
-## 6. Active replan (as of 2026-05-14)
+## 6. Past replan (delivered 2026-05-14, deployed 2026-05-14 via PR #36)
 
-See `.claude/plans/replan-2026-05-14-tab3-restructure.md`. The frontend is
-mid-restructure from 4 tabs to 3 (Discovery / Taste / Profile). DB schema
-work lands in Push S2 of that plan.
-
----
-
-## 7. Account sharing schedule
-
-Claude Code + Codex CLI accounts will be shared on the team channel later
-this week (2026-05-14 week). Until then, each contributor uses their own.
-The `CLAUDE.md` and `AGENTS.md` files are repo-tracked, so once you have
-Claude / Codex running in this directory you have the same workflow as
-everyone else.
+The 2026-05-14 Tab 3-Structure Replan (S1-S8) shipped: frontend moved
+from 4 tabs to 3 (Discovery / Taste / Profile), DB cutover to
+`canonical_v2_buildings` happened in Push S2. The replan shipped via PR #36.
 
 ---
 
-## 8. When stuck
+## 7. When stuck
 
 - Workflow questions → `.claude/WORKFLOW.md`
 - Branch / push errors → `CLAUDE.md` § Branch Model + `CONTRIBUTING.md`
-- Session protocol → `.claude/SESSION_PROTOCOL.md`
 - Algorithm theory → `docs/algorithm.md`
 - DB schema → `docs/database-schema.md`
 - Anything else → ask the admin (Role C) in chat.

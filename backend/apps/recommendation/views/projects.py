@@ -1,13 +1,14 @@
 import logging
 
 from django.conf import settings
+from django.db.models import OuterRef, Subquery
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from ..models import Project
+from ..models import AnalysisSession, Project
 from ..serializers import ProjectSerializer, ProjectSelfUpdateSerializer
 from ._shared import _get_profile
 
@@ -29,7 +30,18 @@ class ProjectListCreateView(APIView):
             page_size = min(max(1, int(request.query_params.get('page_size', 50))), 50)
         except (ValueError, TypeError):
             page, page_size = 1, 50
-        qs     = Project.objects.filter(user=profile).order_by('-created_at')
+        _latest_sid_sq = Subquery(
+            AnalysisSession.objects.filter(project=OuterRef('pk'))
+            .order_by('-created_at')
+            .values('session_id')[:1]
+        )
+        qs = (
+            Project.objects
+            .filter(user=profile)
+            .select_related('user__user')
+            .annotate(_latest_session_id=_latest_sid_sq)
+            .order_by('-created_at')
+        )
         total  = qs.count()
         start  = (page - 1) * page_size
         chunk  = qs[start:start + page_size]
@@ -117,7 +129,18 @@ class UserProjectsListView(APIView):
             page_size = min(max(1, int(request.query_params.get('page_size', 50))), 50)
         except (ValueError, TypeError):
             page, page_size = 1, 50
-        qs = Project.objects.filter(user=target_profile).select_related('user__user').order_by('-created_at')
+        _latest_sid_sq = Subquery(
+            AnalysisSession.objects.filter(project=OuterRef('pk'))
+            .order_by('-created_at')
+            .values('session_id')[:1]
+        )
+        qs = (
+            Project.objects
+            .filter(user=target_profile)
+            .select_related('user__user')
+            .annotate(_latest_session_id=_latest_sid_sq)
+            .order_by('-created_at')
+        )
         if not is_owner:
             qs = qs.filter(visibility='public')
         total = qs.count()

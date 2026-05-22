@@ -74,8 +74,26 @@ DATABASES = {
         'OPTIONS': {
             'sslmode': os.getenv('DB_SSLMODE', 'require'),
         },
-    }
+    },
+    # Building reference data — Make-DB-owned, read-only. Separate Neon DB.
+    # BUILDINGS_DB_* are required: a missing var fails loud at import rather
+    # than silently routing building queries to the app DB (which has no
+    # canonical_v2_buildings table). MakeWebRouter blocks migrate on this alias.
+    'buildings': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'HOST':     os.environ['BUILDINGS_DB_HOST'],
+        'PORT':     os.getenv('BUILDINGS_DB_PORT', '5432'),
+        'NAME':     os.environ['BUILDINGS_DB_NAME'],
+        'USER':     os.environ['BUILDINGS_DB_USER'],
+        'PASSWORD': os.environ['BUILDINGS_DB_PASSWORD'],
+        'CONN_MAX_AGE': 600,
+        'OPTIONS': {
+            'sslmode': os.getenv('BUILDINGS_DB_SSLMODE', 'require'),
+        },
+    },
 }
+
+DATABASE_ROUTERS = ['config.db_router.MakeWebRouter']
 
 # -- Auth ------------------------------------------------------------------
 AUTH_PASSWORD_VALIDATORS = [

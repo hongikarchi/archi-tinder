@@ -244,8 +244,8 @@ class TestOfficeDetailView:
             assert admin_field not in data, f'Admin field "{admin_field}" leaked into public response'
 
     @pytest.mark.django_db
-    @patch('apps.profiles.views.connection')
-    def test_get_office_hydrates_projects_from_links(self, mock_conn, api_client, office):
+    @patch('apps.profiles.views.connections')
+    def test_get_office_hydrates_projects_from_links(self, mock_connections, api_client, office):
         # Create a project link
         OfficeProjectLink.objects.create(
             office=office,
@@ -253,12 +253,14 @@ class TestOfficeDetailView:
             confidence=1.0,
             source='manual',
         )
-        # Mock raw SQL cursor returning architecture_vectors row
+        # Mock raw SQL cursor returning architecture_vectors row.
+        # views.py uses connections['buildings'].cursor() post DB-split Phase A,
+        # so the mock is wired through the connections __getitem__ accessor.
         mock_cur = MagicMock()
         mock_cur.fetchall.return_value = [
             ('B00042', 'Seattle Central Library', 2004, 'Public', 'Seattle', ['0_cover.jpg']),
         ]
-        mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+        mock_connections.__getitem__.return_value.cursor.return_value.__enter__.return_value = mock_cur
 
         url = f'/api/v1/offices/{office.office_id}/'
         response = api_client.get(url)

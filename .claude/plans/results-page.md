@@ -1,8 +1,8 @@
 # Plan — #51 Sprint 4 Result Page (Top-K + Bookmark UI)
 
-**Status**: Plan-only (drafted 2026-05-07 session-end). Implementation deferred to next session.
-**Spec anchor**: `research/spec/requirements.md` § 8 "Result Page & Bookmark Design"
-**Investigation**: `research/investigations/08-vinitial-bit-validation-plan.md` (V_initial bit-gain measurement; informs `rank_corpus` logging hooks but NOT a frontend dependency).
+**Status (updated 2026-05-18)**: Phase 1 (Top-K result rendering) shipped @ 9053537 (2026-05-09); Phase 2 (lazy-load) shipped @ 9cc650a (2026-05-17); Phase 3-4 deferred. This plan file retained as historical reference for the Phase 1-2 design.
+**Spec anchor**: `docs/specs/requirements.md` § 8 "Result Page & Bookmark Design"
+**Investigation**: (V_initial bit-gain measurement was the Topic 03 algorithm side; tracked in `docs/algorithm.md` not in a plan-file dependency).
 **Task ID**: Task.md `#51 Sprint 4 Result page + bookmark endpoint` — currently `[in_progress]`.
 
 ---

@@ -30,7 +30,7 @@ def _spawn_stage2(filters, raw_query, user_id):
     - All exceptions caught: Stage 2 failure is silent; SessionCreate falls through
       to filter-only pool (graceful degrade per spec v1.5 Topic 01)
     """
-    from django.db import connection as _db_conn
+    from django.db import connections as _connections
 
     def _run():
         try:
@@ -38,8 +38,8 @@ def _spawn_stage2(filters, raw_query, user_id):
         except Exception as exc:
             logger.warning('IMP-6 Stage 2 thread uncaught exception: %s', exc)
         finally:
-            # Release DB connection at thread exit (Django thread-local conn pool)
-            _db_conn.close()
+            # Release all DB connections at thread exit (Django thread-local conn pool)
+            _connections.close_all()
 
     t = threading.Thread(target=_run, daemon=True)
     t.start()
