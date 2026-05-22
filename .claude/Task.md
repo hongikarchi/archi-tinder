@@ -156,6 +156,21 @@ frontend, leaf→hub order. Scope with `/plan` per slice.
 
 ## Resolved
 
+### Neon DB-split (data step) + Production Deploy — RESOLVED 2026-05-22 (PR #63)
+[x] DB-split complete and live in production: app DB = `user_data` (57 migrations,
+    23 tables), buildings DB = `neondb` (`canonical_v2_buildings`, 39,776 rows).
+[x] Prior DEPLOY-BLOCKER — "DB-split data step incomplete (`user_data` empty)" —
+    fully resolved: `DB_NAME` env flipped `neondb` → `user_data` on Railway; cutover
+    deploy `69c9473a` = SUCCESS; production verified healthy (schema 57/23, DB
+    connections, gunicorn clean, Vercel frontend 200 — all green).
+[x] Deploy PR #63 squash-merged develop → main (carried PRs #50–#61, 12 commits).
+    origin/develop force-reset to match main (Bug #5 carve-out).
+[x] Read-only infra CLIs (neonctl, railway, vercel) installed + authed this session.
+Deferred follow-ups (not scheduled — noted for later):
+- Drop `neondb`'s orphaned app tables in a later session (kept as rollback backup
+  until prod is confirmed stable for ≥1 week).
+- Neon `Staging` branch TTL auto-expires 2026-05-23 07:14 UTC (no action needed).
+
 ### PR #2 — theme/font server persistence — SHIPPED 2026-05-22
 [x] Merged as PR #59 (develop `49b347d`).
 Backend `UserProfile.theme`/`font` fields + migration `0003`; `UserSerializer`

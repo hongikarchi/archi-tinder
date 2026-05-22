@@ -13,7 +13,7 @@ window.PROJECT_STATE = {
     project: 'ArchiTinder — Make Web',
     updated: '2026-05-22',
     branch: 'develop',
-    head: '49b347d',
+    head: 'd3cf4e27',
   },
 
   tasks: {
@@ -46,27 +46,28 @@ window.PROJECT_STATE = {
   ],
 
   prs: [
+    { n: 63, title: 'deploy: develop → main 2026-05-22 (PRs #50–#61)', date: '2026-05-22' },
+    { n: 61, title: 'feat: app-test FEATURE-SCOPED mode — lighter gate for non-swipe PRs', date: '2026-05-22' },
+    { n: 60, title: 'chore: reporter PR2 session-end housekeeping', date: '2026-05-22' },
     { n: 59, title: 'feat: theme/font server persistence + cross-device hydration', date: '2026-05-22' },
     { n: 58, title: 'feat: project dashboard — web view of tasks / roadmap / PRs / architecture', date: '2026-05-22' },
     { n: 57, title: 'refactor: drop Codex, collapse multi-terminal workflow to single session + sub-agents', date: '2026-05-22' },
     { n: 56, title: 'chore: DB-split Phase B cutover — BUILDINGS_DB_* hard-required', date: '2026-05-22' },
     { n: 55, title: 'feat: DB-split Phase A — multi-DB code abstraction (app DB + buildings alias)', date: '2026-05-22' },
-    { n: 54, title: 'feat: design-system foundation — tokens.css 4 themes + ThemeContext + AppearanceSettings (PR #1)', date: '2026-05-21' },
-    { n: 53, title: 'feat: salvage PR #38 — google login sync + board recommended section', date: '2026-05-21' },
-    { n: 52, title: 'chore: reporter doc-cleanup session-end housekeeping', date: '2026-05-17' },
   ],
 
   architecture: {
     stack: 'React 18 + Vite (frontend) · Django 4.2 LTS + DRF + pgvector + Gemini (backend) · Neon PostgreSQL',
     databases: [
-      { alias: 'default', role: 'Make Web app data — accounts / profiles / recommendation / social. Django ORM + migrations target this only.' },
-      { alias: 'buildings', role: 'Make-DB-owned canonical_v2_buildings (~39,776 rows) — read-only raw SQL, never ORM or migrate.' },
+      { alias: 'default', role: 'Make Web app data — accounts / profiles / recommendation / social. Django ORM + migrations target this only. DB name: user_data (57 migrations, 23 tables).' },
+      { alias: 'buildings', role: 'Make-DB-owned canonical_v2_buildings (~39,776 rows) — read-only raw SQL, never ORM or migrate. DB name: neondb.' },
     ],
     deploy: 'Railway (backend) · Vercel (frontend) · Cloudflare R2 (images) · Neon Postgres — all Singapore region',
     notes: [
       'All building references use canonical_bld_id (TEXT PK); queries gate on is_publishable = true.',
       'JWT auth: access 1hr / refresh 30d, rotate + blacklist.',
       'Google login via auth-code flow.',
+      'DB-split live in production as of 2026-05-22 (deploy PR #63, cutover deploy 69c9473a).',
     ],
   },
 
