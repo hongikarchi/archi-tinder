@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ArchiTinder — Make Web · Project Dashboard</title>
+<style>
+  :root {
+    --bg: #f6f8fa;
+    --panel: #ffffff;
+    --border: #d0d7de;
+    --border-soft: #e5e8eb;
+    --text: #1f2328;
+    --text-soft: #57606a;
+    --text-faint: #8c959f;
+    --accent: #0969da;
+    --accent-soft: #ddf4ff;
+    --green: #1a7f37;
+    --green-bg: #dafbe1;
+    --grey: #6e7781;
+    --grey-bg: #eaeef2;
+    --amber: #bf8700;
+    --amber-bg: #fff8c5;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  code, .mono { font-family: var(--mono); }
+
+  /* ---- Header ---- */
+  header {
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    padding: 18px 28px 14px;
+  }
+  header .title {
+    font-size: 19px;
+    font-weight: 600;
+    margin: 0 0 6px;
+  }
+  header .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    font-size: 12.5px;
+    color: var(--text-soft);
+  }
+  header .meta .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: var(--bg);
+    border: 1px solid var(--border-soft);
+    border-radius: 999px;
+    padding: 2px 9px;
+  }
+  header .meta .chip b { color: var(--text); font-weight: 600; }
+  header .meta .chip .mono { font-family: var(--mono); }
+
+  /* ---- Layout ---- */
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 28px 60px; }
+
+  /* ---- Tabs ---- */
+  .tabbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    border-bottom: 1px solid var(--border);
+    margin-top: 0;
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 5;
+    padding-top: 14px;
+  }
+  .tab-btn {
+    appearance: none;
+    border: none;
+    background: transparent;
+    font-family: var(--sans);
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--text-soft);
+    padding: 9px 14px 8px;
+    cursor: pointer;
+    border-bottom: 2.5px solid transparent;
+    margin-bottom: -1px;
+    border-radius: 6px 6px 0 0;
+  }
+  .tab-btn:hover { background: var(--panel); color: var(--text); }
+  .tab-btn.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+    background: var(--panel);
+  }
+  .panel { display: none; padding-top: 22px; }
+  .panel.active { display: block; }
+
+  /* ---- Generic blocks ---- */
+  .section-title {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    margin: 26px 0 10px;
+  }
+  .section-title:first-child { margin-top: 0; }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+  }
+  .card .row-id {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-radius: 4px;
+    padding: 1px 6px;
+    margin-right: 8px;
+  }
+  .card .row-title { font-weight: 600; }
+  .card .row-note { color: var(--text-soft); font-size: 13px; margin-top: 5px; }
+
+  .empty {
+    color: var(--text-faint);
+    font-style: italic;
+    padding: 8px 2px;
+    font-size: 13px;
+  }
+  .note-line {
+    font-size: 12.5px;
+    color: var(--text-soft);
+    background: var(--grey-bg);
+    border-radius: 6px;
+    padding: 9px 12px;
+    margin-top: 14px;
+  }
+
+  /* ---- Badges ---- */
+  .badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .badge-tag {
+    font-size: 10px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    margin-left: 7px;
+    vertical-align: middle;
+  }
+
+  /* ---- Roadmap ---- */
+  table.grid {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  table.grid th, table.grid td {
+    text-align: left;
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--border-soft);
+    vertical-align: top;
+  }
+  table.grid th {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-faint);
+    background: var(--bg);
+  }
+  table.grid tr:last-child td { border-bottom: none; }
+  table.grid td.c-phase { font-family: var(--mono); font-weight: 600; white-space: nowrap; width: 70px; }
+  table.grid td.c-status { white-space: nowrap; width: 1%; }
+
+  /* ---- Persona cards ---- */
+  .persona-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 10px;
+  }
+  .persona-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .persona-card .pc-head { display: flex; align-items: center; flex-wrap: wrap; }
+  .persona-card .pc-id { font-family: var(--mono); font-size: 11.5px; color: var(--text-faint); margin-right: 7px; }
+  .persona-card .pc-name { font-weight: 600; }
+  .persona-card .pc-desc { color: var(--text-soft); font-size: 12.5px; margin-top: 5px; }
+
+  /* ---- PR list ---- */
+  .pr-item {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: 8px;
+  }
+  .pr-item .pr-n {
+    font-family: var(--mono);
+    font-weight: 700;
+    color: var(--accent);
+    flex: 0 0 auto;
+  }
+  .pr-item .pr-title { flex: 1 1 auto; }
+  .pr-item .pr-date {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-faint);
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  /* ---- Architecture ---- */
+  .kv { margin-bottom: 10px; }
+  .kv .kv-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    margin-bottom: 4px;
+  }
+  .kv .kv-value { font-size: 13.5px; }
+  ul.bullets { margin: 6px 0 0; padding-left: 20px; }
+  ul.bullets li { margin-bottom: 4px; color: var(--text-soft); font-size: 13px; }
+  .db-item .db-alias {
+    font-family: var(--mono);
+    font-weight: 600;
+    color: var(--accent);
+  }
+  .db-item .db-role { color: var(--text-soft); font-size: 13px; margin-top: 4px; }
+
+  /* ---- File map tree ---- */
+  .tree-node { margin-bottom: 12px; }
+  .tree-root {
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: 13.5px;
+    color: var(--text);
+    background: var(--accent-soft);
+    border-radius: 5px;
+    padding: 4px 9px;
+    display: inline-block;
+  }
+  .tree-children {
+    list-style: none;
+    margin: 6px 0 0;
+    padding-left: 18px;
+    border-left: 2px solid var(--border-soft);
+  }
+  .tree-children li {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text-soft);
+    padding: 2px 0 2px 14px;
+    position: relative;
+  }
+  .tree-children li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 13px;
+    width: 10px;
+    height: 0;
+    border-top: 2px solid var(--border-soft);
+  }
+
+  /* ---- Flow ---- */
+  .flow-box {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 6px;
+  }
+  .flow-box .fb-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 5px;
+  }
+  .flow-box .fb-text { font-size: 13px; color: var(--text-soft); }
+  .flow-arrow {
+    text-align: center;
+    font-size: 18px;
+    color: var(--text-faint);
+    margin: 2px 0;
+    line-height: 1;
+  }
+  .agent-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 10px;
+    margin-top: 6px;
+  }
+  .agent-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 11px 13px;
+  }
+  .agent-card .ac-name {
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--accent);
+  }
+  .agent-card .ac-role { color: var(--text-soft); font-size: 12.5px; margin-top: 4px; }
+
+  footer {
+    color: var(--text-faint);
+    font-size: 11.5px;
+    text-align: center;
+    padding-top: 30px;
+  }
+
+  @media (max-width: 640px) {
+    .wrap, header { padding-left: 16px; padding-right: 16px; }
+    .pr-item { flex-wrap: wrap; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1 class="title" id="hdr-project">Project Dashboard</h1>
+  <div class="meta" id="hdr-meta"></div>
+</header>
+
+<div class="wrap">
+  <nav class="tabbar" id="tabbar"></nav>
+
+  <section class="panel" id="panel-tasks"></section>
+  <section class="panel" id="panel-roadmap"></section>
+  <section class="panel" id="panel-git"></section>
+  <section class="panel" id="panel-arch"></section>
+  <section class="panel" id="panel-files"></section>
+  <section class="panel" id="panel-flow"></section>
+
+  <footer>Static project dashboard · renders <code>project/state.js</code> · no server required</footer>
+</div>
+
+<!-- Data first, render second — both plain scripts so file:// double-click works -->
+<script src="state.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  var S = (typeof window !== "undefined" && window.PROJECT_STATE) || {};
+
+  /* ---------- helpers ---------- */
+  function esc(v) {
+    if (v === null || v === undefined) return "";
+    return String(v)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+  function arr(v) { return Array.isArray(v) ? v : []; }
+  function has(v) { return Array.isArray(v) && v.length > 0; }
+  function emptyMsg(label) {
+    return '<div class="empty">' + esc(label || "none") + "</div>";
+  }
+  function set(id, html) {
+    var el = document.getElementById(id);
+    if (el) el.innerHTML = html;
+  }
+
+  var STATUS_COLOR = {
+    "shipped":     { fg: "var(--green)", bg: "var(--green-bg)" },
+    "pending":     { fg: "var(--grey)",  bg: "var(--grey-bg)" },
+    "in progress": { fg: "var(--amber)", bg: "var(--amber-bg)" }
+  };
+  function statusBadge(status) {
+    var key = String(status || "").toLowerCase();
+    var c = STATUS_COLOR[key] || { fg: "var(--grey)", bg: "var(--grey-bg)" };
+    return '<span class="badge" style="color:' + c.fg + ';background:' + c.bg + '">'
+         + esc(status || "—") + "</span>";
+  }
+
+  /* ---------- header ---------- */
+  function renderHeader() {
+    var m = S.meta || {};
+    document.getElementById("hdr-project").textContent = m.project || "Project Dashboard";
+    var chips = [];
+    if (m.updated) chips.push('<span class="chip">updated <b>' + esc(m.updated) + "</b></span>");
+    if (m.branch)  chips.push('<span class="chip">branch <b class="mono">' + esc(m.branch) + "</b></span>");
+    if (m.head)    chips.push('<span class="chip">head <b class="mono">' + esc(m.head) + "</b></span>");
+    set("hdr-meta", chips.length ? chips.join("") : emptyMsg("no metadata"));
+  }
+
+  /* ---------- 1. Tasks ---------- */
+  function taskCard(t) {
+    t = t || {};
+    var h = '<div class="card">';
+    h += "<div>";
+    if (t.id) h += '<span class="row-id">' + esc(t.id) + "</span>";
+    h += '<span class="row-title">' + esc(t.title || "(untitled)") + "</span>";
+    h += "</div>";
+    if (t.note) h += '<div class="row-note">' + esc(t.note) + "</div>";
+    h += "</div>";
+    return h;
+  }
+  function renderTasks() {
+    var T = S.tasks || {};
+    var h = "";
+    h += '<div class="section-title">Open</div>';
+    h += has(T.open) ? arr(T.open).map(taskCard).join("") : emptyMsg("no open tasks");
+    h += '<div class="section-title">In Progress</div>';
+    h += has(T.inProgress) ? arr(T.inProgress).map(taskCard).join("") : emptyMsg("nothing in progress");
+    if (T.note) h += '<div class="note-line">' + esc(T.note) + "</div>";
+    set("panel-tasks", h);
+  }
+
+  /* ---------- 2. Roadmap + personas ---------- */
+  function renderRoadmap() {
+    var h = '<div class="section-title">Phase Roadmap</div>';
+    var rm = arr(S.roadmap);
+    if (rm.length) {
+      h += '<table class="grid"><thead><tr>'
+         + "<th>Phase</th><th>Focus</th><th>Status</th>"
+         + "</tr></thead><tbody>";
+      rm.forEach(function (r) {
+        r = r || {};
+        h += "<tr>"
+           + '<td class="c-phase">' + esc(r.phase || "—") + "</td>"
+           + "<td>" + esc(r.focus || "—") + "</td>"
+           + '<td class="c-status">' + statusBadge(r.status) + "</td>"
+           + "</tr>";
+      });
+      h += "</tbody></table>";
+    } else {
+      h += emptyMsg("no roadmap entries");
+    }
+
+    h += '<div class="section-title">Personas</div>';
+    var ps = arr(S.personas);
+    if (ps.length) {
+      h += '<div class="persona-row">';
+      ps.forEach(function (p) {
+        p = p || {};
+        h += '<div class="persona-card">';
+        h += '<div class="pc-head">';
+        if (p.id) h += '<span class="pc-id">' + esc(p.id) + "</span>";
+        h += '<span class="pc-name">' + esc(p.name || "(unnamed)") + "</span>";
+        if (p.tag) h += '<span class="badge badge-tag">' + esc(p.tag) + "</span>";
+        h += "</div>";
+        if (p.desc) h += '<div class="pc-desc">' + esc(p.desc) + "</div>";
+        h += "</div>";
+      });
+      h += "</div>";
+    } else {
+      h += emptyMsg("no personas");
+    }
+    set("panel-roadmap", h);
+  }
+
+  /* ---------- 3. Git & PR ---------- */
+  function renderGit() {
+    var h = '<div class="section-title">Recent Pull Requests</div>';
+    var prs = arr(S.prs);
+    if (prs.length) {
+      prs.forEach(function (p) {
+        p = p || {};
+        h += '<div class="pr-item">';
+        h += '<span class="pr-n">#' + esc(p.n != null ? p.n : "?") + "</span>";
+        h += '<span class="pr-title">' + esc(p.title || "(no title)") + "</span>";
+        h += '<span class="pr-date">' + esc(p.date || "—") + "</span>";
+        h += "</div>";
+      });
+    } else {
+      h += emptyMsg("no pull requests");
+    }
+    set("panel-git", h);
+  }
+
+  /* ---------- 4. Architecture ---------- */
+  function renderArch() {
+    var A = S.architecture || {};
+    var h = "";
+
+    h += '<div class="section-title">Stack</div>';
+    h += '<div class="kv"><div class="kv-value">' + (A.stack ? esc(A.stack) : '<span class="empty">—</span>') + "</div></div>";
+
+    h += '<div class="section-title">Databases</div>';
+    var dbs = arr(A.databases);
+    if (dbs.length) {
+      dbs.forEach(function (d) {
+        d = d || {};
+        h += '<div class="card db-item">';
+        h += '<div class="db-alias">' + esc(d.alias || "(alias)") + "</div>";
+        if (d.role) h += '<div class="db-role">' + esc(d.role) + "</div>";
+        h += "</div>";
+      });
+    } else {
+      h += emptyMsg("no databases listed");
+    }
+
+    h += '<div class="section-title">Deploy</div>';
+    h += '<div class="kv"><div class="kv-value">' + (A.deploy ? esc(A.deploy) : '<span class="empty">—</span>') + "</div></div>";
+
+    h += '<div class="section-title">Notes</div>';
+    var notes = arr(A.notes);
+    if (notes.length) {
+      h += '<ul class="bullets">';
+      notes.forEach(function (n) { h += "<li>" + esc(n) + "</li>"; });
+      h += "</ul>";
+    } else {
+      h += emptyMsg("no notes");
+    }
+    set("panel-arch", h);
+  }
+
+  /* ---------- 5. File Map ---------- */
+  function renderFiles() {
+    var fm = S.fileMap || {};
+    var keys = Object.keys(fm);
+    var h = '<div class="section-title">File Map</div>';
+    if (keys.length) {
+      keys.forEach(function (root) {
+        h += '<div class="tree-node">';
+        h += '<span class="tree-root">' + esc(root) + "</span>";
+        var children = arr(fm[root]);
+        if (children.length) {
+          h += '<ul class="tree-children">';
+          children.forEach(function (c) { h += "<li>" + esc(c) + "</li>"; });
+          h += "</ul>";
+        } else {
+          h += emptyMsg("(empty)");
+        }
+        h += "</div>";
+      });
+    } else {
+      h += emptyMsg("no file map");
+    }
+    set("panel-files", h);
+  }
+
+  /* ---------- 6. Flow ---------- */
+  function renderFlow() {
+    var F = S.flow || {};
+    var h = "";
+
+    h += '<div class="section-title">Session</div>';
+    h += '<div class="flow-box">';
+    h += '<div class="fb-label">Session — Orchestrator</div>';
+    h += '<div class="fb-text">' + (F.session ? esc(F.session) : "—") + "</div>";
+    h += "</div>";
+
+    h += '<div class="flow-arrow">&darr;</div>';
+
+    h += '<div class="flow-box">';
+    h += '<div class="fb-label">Skill</div>';
+    h += '<div class="fb-text">' + (F.skill ? esc(F.skill) : "—") + "</div>";
+    h += "</div>";
+
+    h += '<div class="flow-arrow" title="session dispatches agents">&darr; dispatches &darr;</div>';
+
+    h += '<div class="section-title">Agent Roster</div>';
+    var agents = arr(F.agents);
+    if (agents.length) {
+      h += '<div class="agent-grid">';
+      agents.forEach(function (a) {
+        a = a || {};
+        h += '<div class="agent-card">';
+        h += '<div class="ac-name">' + esc(a.name || "(agent)") + "</div>";
+        if (a.role) h += '<div class="ac-role">' + esc(a.role) + "</div>";
+        h += "</div>";
+      });
+      h += "</div>";
+    } else {
+      h += emptyMsg("no agents");
+    }
+    set("panel-flow", h);
+  }
+
+  /* ---------- tabs ---------- */
+  var TABS = [
+    { id: "tasks",   label: "Tasks" },
+    { id: "roadmap", label: "Roadmap" },
+    { id: "git",     label: "Git & PR" },
+    { id: "arch",    label: "Architecture" },
+    { id: "files",   label: "File Map" },
+    { id: "flow",    label: "Flow" }
+  ];
+
+  function activateTab(id) {
+    TABS.forEach(function (t) {
+      var btn = document.getElementById("tabbtn-" + t.id);
+      var panel = document.getElementById("panel-" + t.id);
+      var on = (t.id === id);
+      if (btn) btn.classList.toggle("active", on);
+      if (panel) panel.classList.toggle("active", on);
+    });
+  }
+
+  function buildTabbar() {
+    var bar = document.getElementById("tabbar");
+    if (!bar) return;
+    bar.innerHTML = "";
+    TABS.forEach(function (t) {
+      var b = document.createElement("button");
+      b.className = "tab-btn";
+      b.id = "tabbtn-" + t.id;
+      b.type = "button";
+      b.textContent = t.label;
+      b.addEventListener("click", function () { activateTab(t.id); });
+      bar.appendChild(b);
+    });
+  }
+
+  /* ---------- init ---------- */
+  function init() {
+    renderHeader();
+    renderTasks();
+    renderRoadmap();
+    renderGit();
+    renderArch();
+    renderFiles();
+    renderFlow();
+    buildTabbar();
+    activateTab("tasks"); // default to first tab
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();
+</script>
+</body>
+</html>

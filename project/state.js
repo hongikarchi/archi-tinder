@@ -1,0 +1,93 @@
+/*
+ * project/state.js — ArchiTinder Make Web project state.
+ *
+ * Data source for project/dashboard.html. Loaded via <script> (no fetch,
+ * so dashboard.html opens by double-click — no local server needed).
+ *
+ * Maintained by the `reporter` agent at session end. Code-derived sections
+ * (tasks, prs, fileMap) are regenerated; semi-static sections (roadmap,
+ * personas, architecture, flow) are updated when they change.
+ */
+window.PROJECT_STATE = {
+  meta: {
+    project: 'ArchiTinder — Make Web',
+    updated: '2026-05-22',
+    branch: 'develop',
+    head: '724f8d1',
+  },
+
+  tasks: {
+    open: [
+      { id: 'AUTH1', title: 'Kakao / Naver OAuth', note: 'Google-only today; Korean users need domestic login' },
+    ],
+    inProgress: [
+      { id: 'theme-persistence', title: 'PR #2 — theme/font server persistence', note: 'committed (feature/admin-theme-persistence @ b5d0519), paused; resumes independently' },
+    ],
+    note: 'Full phase roadmap → Roadmap tab. Detailed ledger: .claude/Task.md',
+  },
+
+  roadmap: [
+    { phase: '1–12', focus: 'Single-user reference exploration base (auth, 4-phase recommendation, Gemini search, persona report, project CRUD, E2E infra)', status: 'shipped' },
+    { phase: '13', focus: 'Profile system — firm + user profiles, public/private boards', status: 'shipped' },
+    { phase: '14', focus: 'Board system — board detail view, follow, "Love this!" reaction', status: 'shipped' },
+    { phase: '15', focus: 'Social foundation — external DM links, MATCHED! results screen', status: 'shipped' },
+    { phase: '16', focus: 'Recommendation expansion — Profile-tab office + user recs', status: 'pending' },
+    { phase: '17', focus: 'LLM reverse-questioning — pre-swipe persona classification', status: 'pending' },
+    { phase: '18', focus: 'External connections — firm article crawl (Space, ArchDaily, news)', status: 'pending' },
+    { phase: '19–26', focus: 'Tab 3-structure replan + P1–P6 latency/UX overhaul', status: 'shipped' },
+    { phase: 'design', focus: 'Design-system redesign — light-mode tokens, 4-theme switcher, frontend rework', status: 'in progress' },
+  ],
+
+  personas: [
+    { id: 'P1', name: 'Firm → Jobseeker', tag: 'PRIMARY', desc: 'an architect looking for the right firm to apply to' },
+    { id: 'P2', name: 'Person → Person', desc: 'follow people whose aesthetic taste you trust' },
+    { id: 'P3', name: 'Firm → Client', desc: 'a client seeking a firm to commission' },
+    { id: 'P4', name: 'Individual Solo', tag: 'GATEWAY', desc: 'inspiration / personal taste board — most users start here' },
+  ],
+
+  prs: [
+    { n: 57, title: 'refactor: drop Codex, collapse multi-terminal workflow to single session + sub-agents', date: '2026-05-22' },
+    { n: 56, title: 'chore: DB-split Phase B cutover — BUILDINGS_DB_* hard-required', date: '2026-05-22' },
+    { n: 55, title: 'feat: DB-split Phase A — multi-DB code abstraction', date: '2026-05-22' },
+    { n: 54, title: 'feat: design-system foundation — tokens.css 4 themes + ThemeContext', date: '2026-05-21' },
+    { n: 53, title: 'feat: salvage PR #38 — google login sync + board recommended section', date: '2026-05-21' },
+    { n: 52, title: 'chore: reporter doc-cleanup session-end housekeeping', date: '2026-05-17' },
+    { n: 51, title: 'chore: doc-system cleanup + algorithm ownership boundary', date: '2026-05-17' },
+    { n: 50, title: 'docs: codify Bug #5 deploy-cycle force-reset carve-out', date: '2026-05-17' },
+  ],
+
+  architecture: {
+    stack: 'React 18 + Vite (frontend) · Django 4.2 LTS + DRF + pgvector + Gemini (backend) · Neon PostgreSQL',
+    databases: [
+      { alias: 'default', role: 'Make Web app data — accounts / profiles / recommendation / social. Django ORM + migrations target this only.' },
+      { alias: 'buildings', role: 'Make-DB-owned canonical_v2_buildings (~39,776 rows) — read-only raw SQL, never ORM or migrate.' },
+    ],
+    deploy: 'Railway (backend) · Vercel (frontend) · Cloudflare R2 (images) · Neon Postgres — all Singapore region',
+    notes: [
+      'All building references use canonical_bld_id (TEXT PK); queries gate on is_publishable = true.',
+      'JWT auth: access 1hr / refresh 30d, rotate + blacklist.',
+      'Google login via auth-code flow.',
+    ],
+  },
+
+  fileMap: {
+    'frontend/src': ['api/', 'components/', 'context/', 'hooks/', 'layouts/', 'pages/', 'utils/'],
+    'backend/apps': ['accounts/', 'profiles/', 'recommendation/', 'social/'],
+    'docs': ['algorithm.md', 'database-schema.md', 'COLLAB_HANDOFF.md', 'specs/'],
+  },
+
+  flow: {
+    session: 'One Claude Code session — the orchestrator. Owns architecture, schema, auth, product + release decisions, and review. Dispatches sub-agents; does not write feature code itself.',
+    skill: 'orchestrate — the feature-implementation playbook the session runs itself.',
+    agents: [
+      { name: 'back-maker', role: 'Django/DRF backend code' },
+      { name: 'front-maker', role: 'React/Vite frontend code' },
+      { name: 'code-review', role: 'static code review — inner loop, per change, pre-commit' },
+      { name: 'security-manager', role: 'security scan — inner loop, per change, pre-commit' },
+      { name: 'app-test', role: 'pre-push gate — live browser user-journey + drift check' },
+      { name: 'git-manager', role: 'single commit — never pushes' },
+      { name: 'git-publisher', role: 'push / PR / merge / develop→main deploy' },
+      { name: 'reporter', role: 'session-end — updates Task.md + this dashboard state' },
+    ],
+  },
+};
