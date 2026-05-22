@@ -845,6 +845,7 @@ export default function UserProfilePage({ onLogout }) {
                 selectMode={selectMode}
                 isSelected={selectedBoards.has(board.board_id)}
                 onSelectToggle={handleSelectToggle}
+                directNavigate={true}
               />
             ))}
           </div>

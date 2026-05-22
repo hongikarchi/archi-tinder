@@ -93,10 +93,22 @@ class ProjectDetailView(APIView):
         project = get_object_or_404(Project, project_id=pk)
         if project.user_id != profile.pk:
             return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
-        serializer = ProjectSelfUpdateSerializer(project, data=request.data, partial=True)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        project.refresh_from_db()  # updated_at is auto_now=True (DB-set); refresh to avoid stale in-memory value
+
+        # remove_building_ids: remove specified buildings from liked_ids and saved_ids
+        remove_ids = request.data.get('remove_building_ids')
+        if remove_ids is not None:
+            remove_set = set(remove_ids)
+            project.liked_ids = [item for item in project.liked_ids if item.get('id') not in remove_set]
+            project.saved_ids = [item for item in project.saved_ids if item.get('id') not in remove_set]
+            project.save(update_fields=['liked_ids', 'saved_ids'])
+
+        schema_data = {k: v for k, v in request.data.items() if k != 'remove_building_ids'}
+        if schema_data:
+            serializer = ProjectSelfUpdateSerializer(project, data=schema_data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+
+        project.refresh_from_db()
         return Response(ProjectSerializer(project).data)
 
     def delete(self, request, pk):
