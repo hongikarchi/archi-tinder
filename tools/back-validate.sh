@@ -1,5 +1,5 @@
 #!/bin/bash
-# back-validate.sh — back-maker / backend-worker's pre-DONE self-check chain.
+# back-validate.sh — back-maker's pre-DONE self-check chain.
 #
 # Usage:    ./tools/back-validate.sh [app_label_for_pytest]
 #

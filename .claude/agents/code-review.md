@@ -1,5 +1,5 @@
 ---
-name: reviewer
+name: code-review
 description: Reviews code changes for integration correctness. Checks API contracts between front and back, logic bugs, error handling at boundaries, and obvious performance issues. Returns PASS or FAIL with specific fix orders. When given fix orders from the orchestrator, translates them into precise instructions for back-maker and/or front-maker.
 model: sonnet
 tools: Read, Glob, Grep, Bash
@@ -23,9 +23,8 @@ Given: list of issues from orchestrator/security -> translate into precise fix o
 ## Mode A -- What to check
 
 **When reviewing recommendation engine changes** (`engine.py`, `views.py` swipe logic):
-- Read `.claude/Goal.md` for acceptance criteria and algorithm goals
 - Read `docs/algorithm.md` for phase transition rules, edge case definitions, and mathematical specifications
-- These are the ground truth for what "correct" means in the algorithm (phase transitions, convergence, MMR, recency)
+- This is the ground truth for what "correct" means in the algorithm (phase transitions, convergence, MMR, recency)
 
 ### CHECK THESE
 **API contract**

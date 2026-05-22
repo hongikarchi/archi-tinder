@@ -11,7 +11,7 @@
 #   5. Echoes PR number for downstream tools (git-poll-merge.sh).
 #
 # Called by:
-#   - git-publisher.md Mode 1 (WEB-GIT)
+#   - git-publisher.md Mode 1
 #   - operator directly when trivial PR
 
 set -euo pipefail

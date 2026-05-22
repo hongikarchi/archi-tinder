@@ -1,87 +1,11 @@
 # Task Board
 
-> Auto-updated by orchestrator. When you request work, orchestrator reads Goal.md
-> + current code, then adds/updates tasks here before executing.
+> Auto-updated by the orchestrator. When you request work, the orchestrator reads
+> the current code, then adds/updates tasks here before executing.
 > Categories: Frontend, Backend, Auth, UX/Design, Infrastructure
-> (Algorithm work is owned by a separate collaborator post-2026-05-18; see `.claude/Goal.md` § Algorithm ownership.)
+> (Algorithm work is owned by a separate collaborator post-2026-05-18.)
 
 ---
-
-## Handoffs
-
-> Short-lived cross-terminal signals for the **review / push** cycle.
-> Each terminal (main / review / git / codex workers) reads this section at session start.
-> Oldest entries expire naturally — reporter trims to ~30 most recent on session-end pass.
->
-> Lane note (2026-05-13): **lean 3-lane is the default** (WEB-MAIN + 1 Codex worker + WEB-REVIEW + WEB-GIT, set up via `tools/cmux_lean_setup.sh <back|front|both>`). Full 5-tab is opt-in via `tools/cmux_setup.sh` for full-stack concurrent work. Signal vocabulary is identical across both lanes — only the worker baseline path changed (`.claude/codex/<team>-worker.md`, formerly `.claude/agents/team-<team>.md`).
->
-> Signal types for this section:
->
-> **Review cycle:**
-> - `REVIEW-REQUESTED: <sha>` — reporter (main pipeline) → review terminal; run `/review` next (or just say "리뷰해줘" / "review please").
-> - `REVIEW-PASSED: <sha>` — review terminal → WEB-GIT; PASS verdict, drift-verified. WEB-GIT runs `git-push-pr.sh`. On `PASS-WITH-MINORS` verdict the signal inlines `<K> MINOR noted (see .claude/reviews/latest.md)`; MINORs are non-blocking.
-> - `REVIEW-ABORTED: <sha> — <reason>` — review terminal → main; PASS verdict but drift detected. Re-run after rebase.
-> - `REVIEW-FAIL: <sha> — <summary>` — review terminal → main; run fix loop via orchestrator (max 2 cycles).
->
-> **Codex team handoffs (WEB-BACK / WEB-FRONT → WEB-MAIN):**
-> - `BACK-DONE: <slug>` / `FRONT-DONE: <slug>` — task complete. Append `(claude-review-requested)` for risky-zone work.
-> - `BACK-BLOCKED: <reason>` / `FRONT-BLOCKED: <reason>` — codex team escalates after exhausting self-heal (2 cycles).
-> - `<TEAM>-NEEDS-CLARIFICATION: <q>` — scope ambiguous; team waits.
->
-> **WEB-GIT publish cycle (Internal PR — Mode 1):**
-> - `READY-FOR-PUSH: <branch>` — WEB-MAIN → WEB-GIT (alt path for trivial commits skipping `/review`).
-> - `BRANCH-CREATED: <branch>` — WEB-GIT created new feature branch from develop (`tools/git-new-feature.sh`).
-> - `PR-OPENED: #<N>` — WEB-GIT pushed branch + `gh pr create --base develop`. CI is running.
-> - `PR-CI-GREEN: #<N>` / `PR-CI-FAIL: #<N>` — `git-poll-merge.sh` result.
-> - `PR-MERGED: #<N>` — squash-merged into develop, branch deleted, local develop synced.
->
-> **WEB-GIT external triage (Mode 2 — collaborator PRs):**
-> - `PR-READY-FOR-REVIEW: #<N>` — WEB-GIT checked out external PR. Admin manually triggers `/review` per hybrid policy.
-> - `PR-CHANGES-REQUESTED: #<N>` — WEB-GIT posted FAIL verdict to PR via `gh pr review --request-changes` (summary + collapsible details body).
-> - `PR-CONFLICT: #<N>` — external PR conflicts with develop; WEB-GIT commented asking author to rebase.
->
-> **WEB-GIT deploy (Mode 3 — develop → main):**
-> - `DEPLOY-PR-OPENED: #<N>` — develop → main PR opened with batch summary.
-> - `DEPLOY-MERGED: #<N>` — admin merged; Railway auto-deploy started.
->
-> **WEB-GIT refusals / specials:**
-> - `GIT-PUBLISH-BLOCKED: <reason>` — refusal (e.g. wrong branch, ruleset violation).
-> - `GIT-PUBLISH-RETRY: <branch>` — rebase performed, new sha; re-run `/review` against new sha.
-> - `GIT-PUBLISH-NOOP: <reason>` — nothing to do (e.g. develop = main on deploy).
->
-> **Session-spanning TODOs:**
-> - `SESSION-START-TODO: <action>` — explicit pending action for the *next* session's first move (e.g. "run `./tools/cmux_setup.sh`"). Surfaced automatically by the SESSION_PROTOCOL.md § 2 checklist on next session start.
-
-<!-- Append new handoff entries here. Format: `- [YYYY-MM-DD] <SIGNAL>` -->
-
-- [2026-05-18] READY-FOR-PUSH: feature/admin-p6-minors — HEAD 61a7ea7 (handoff sig), ab4c0a2 fix. 2 commits. /review skipped per Rule 2 (trivial polish, P6 MINOR follow-up). Frontend-only `UserProfilePage.jsx` +64/-55.
-- [2026-05-18] BRANCH-CREATED: feature/admin-p6-minors (P6 deferred MINOR follow-up branch).
-- [2026-05-18] PR-OPENED: #47 — feature/admin-p6-minors → develop, 2 commits (ab4c0a2 P6 minors bulk delete snapshot revert + style factor + cancel race + 61a7ea7 handoff sig). URL: https://github.com/hongikarchi/archi-tinder/pull/47. /review skipped per Token-Saving Rule 2.
-- [2026-05-18] PR-CI-GREEN: #47 — backend 2m9s, frontend 16s, Vercel + comments all pass.
-- [2026-05-18] PR-MERGED: #47 — squashed develop @ 450d3c1. Mode 1 step 7: pre-checkout stash → `gh api -X DELETE refs/heads/feature/admin-p6-minors` → checkout develop → pull --ff-only (2 files +69/-55: Task.md +5, UserProfilePage.jsx +64 incl. snapshot revert + style helpers + cancel race fix) → branch -D → fetch --prune → stash pop (Task.md handoff sigs restored). develop HEAD = 450d3c1.
-- [2026-05-18] REPORTER-DONE: 450d3c1 — P6 minors patched; bulk delete snapshot revert + bulkActionButtonStyle factor + exitSelectMode cancel race fix live on develop
-- [2026-05-18] DEPLOY-PR-OPENED: #49 — develop @ 4340d09 → main @ f955ab5, 11 PRs (P1-P6 latency+UX overhaul series + deploy hotfix #37). URL: https://github.com/hongikarchi/archi-tinder/pull/49.
-- [2026-05-18] PR-CI-GREEN: #49 — backend 2m7s/2m10s ×2, frontend 10s/14s ×2, Vercel + comments all pass.
-- [2026-05-18] DEPLOY-MERGED: #49 — main = d785c360 ("Deploy: PR #37-#48 (P1-P6 latency + UX overhaul series + deploy hotfix) (#49)"). Squash via `gh api PUT pulls/49/merge` (Bug #4 sidestep). Railway auto-deploy triggered.
-- [2026-05-18] DEPLOY-DEVELOP-RESET: develop force-reset to main d785c360 per Bug #5 (codified carve-out). Initial WEB-GIT attempt blocked by auto-mode classifier; admin manually ran `gh api PATCH refs/heads/develop --force=true` from WEB-MAIN per user authorization. Both heads now d785c360.
-- [2026-05-18] DOCS-FIX: CLAUDE.md HARD RULE 4 + CONTRIBUTING.md Deploy flow updated to codify Bug #5 carve-out so future deploys don't hit classifier block. Direct edit (meta/infra carve-out per delegation rule).
-- [2026-05-18] REPORTER-DONE: de2e979 — doc-system cleanup: Phase 19-26+P1-P6 archived, codex/plans-archive dirs, WORKFLOW Known Issues + retention, Goal.md algo ownership, algo-tester deleted
-- [2026-05-18] BRANCH-CREATED: feature/admin-reporter-doc-cleanup-close (reporter session-end housekeeping; docs-only).
-- [2026-05-18] PR-OPENED: #52 — feature/admin-reporter-doc-cleanup-close → develop, 2 commits (254a325 reporter doc-cleanup session-end housekeeping + 6c20737 handoff sig). URL: https://github.com/hongikarchi/archi-tinder/pull/52. /review skipped per Token-Saving Rule 2 (docs-only).
-- [2026-05-18] PR-CI-GREEN: #52 — backend 2m14s, frontend 14s, Vercel + comments all pass.
-- [2026-05-18] PR-MERGED: #52 — squashed develop @ aff9cab. Mode 1 step 7: pre-checkout stash → `gh api -X DELETE refs/heads/feature/admin-reporter-doc-cleanup-close` → checkout develop → pull --ff-only (2 files +18/-8: Report.md sync to de2e979, Task.md REPORTER-DONE sig) → branch -D → fetch --prune → stash pop (Task.md handoff sigs restored). develop HEAD = aff9cab.
-- [2026-05-21] PR-OPENED: #53 — feature/admin-pr38-salvage → develop, 1 commit (cef76e0 salvage PR #38 google login sync + board recommended section). URL: https://github.com/hongikarchi/archi-tinder/pull/53. CI running.
-- [2026-05-21] PR-CLOSED: #38 — superseded by #53; comment left for @yywon1.
-- [2026-05-21] PR-CI-FAIL: #53 — Backend (pytest + migrations check) failed; TestUserProjectsListView.test_no_n_plus_one_select_related: expected 5 queries but 10 done. Logs: https://github.com/hongikarchi/archi-tinder/actions/runs/26217895654/job/77144916946
-- [2026-05-21] PR-CI-GREEN: #53 — pushed 848e791 (N+1 fix); backend 2m7s, frontend 15s, all checks pass (run 26219060991).
-- [2026-05-21] PR-MERGE-BLOCKED: #53 — REVIEW_REQUIRED, no approvals yet; CI green, awaiting admin approval on GitHub UI before merge.
-- [2026-05-21] PR-MERGED: #53 — squashed develop @ e0f69d9; feature/admin-pr38-salvage remote deleted; admin bypass (author=CODEOWNERS, CI green); google login sync + board recommended section live on develop
-- [2026-05-21] SESSION-START-TODO: next initiative — design-system redesign. Rewrite repo DESIGN.md from the downloaded ~/Downloads/design.md (light-mode / blue-accent / theme + font switcher redesign) + rework frontend/ to match. Multi-phase — scope with /plan first. See memory project_design_redesign.md.
-- [2026-05-22] BRANCH-CREATED: feature/admin-db-multidb (DB-split Phase A — multi-DB code abstraction; single commit).
-- [2026-05-22] PR-OPENED: #55 — feature/admin-db-multidb → develop, 1 commit (c045e0d Phase A multi-DB abstraction: app DB + buildings alias routed via db_router). URL: https://github.com/hongikarchi/archi-tinder/pull/55. Pre-push gate cleared: reviewer PASS + /review REVIEW-PASSED at c045e0d (drift PASS, 2 MINOR non-blocking). Behavior-neutral: settings.py 2-alias DATABASES (buildings falls back to DB_* env → runtime byte-identical), config/db_router.py MakeWebRouter blocks migrate on buildings, building raw SQL → connections['buildings'], swipe/search connections.close_all(), ci.yml BUILDINGS_DB_* env. NO model/migration/endpoint change. Phase B (later PR) provisions real second DB.
-- [2026-05-22] PR-CI-FAIL: #55 — backend pytest FAIL (1 failed / 607 passed / 12 skipped), frontend + Vercel pass. Failure: `apps/profiles/tests/test_phase13_office.py::TestOfficeDetailView::test_get_office_hydrates_projects_from_links` — `AttributeError: module 'apps.profiles.views' does not have the attribute 'connection'`. Root cause: Phase A diff repointed `apps/profiles/views.py` building raw SQL off `from django.db import connection` (likely → `connections['buildings']`), removing the module-level `connection` symbol; the test still does `@patch('apps.profiles.views.connection')` → patch target gone. Fix (WEB-MAIN orchestrator → back-maker/codex): update `test_phase13_office.py` to patch the new symbol (`apps.profiles.views.connections` or the specific `connections['buildings']` accessor used), OR keep `connection` importable in views.py if still referenced. NOT a WEB-GIT fix — git-publisher never commits source. PR #55 stays OPEN; re-run CI after fix push. Logs: https://github.com/hongikarchi/archi-tinder/actions/runs/26272620365/job/77329383247
-- [2026-05-22] PR-CI-GREEN: #55 — fix commit 7fcdaec pushed (test_phase13_office.py patch target updated for DB-split Phase A, 23/23 local pass). Re-triggered CI: backend 2m10s, frontend 11s, Vercel + comments all pass (run 26272932152).
-- [2026-05-22] PR-MERGED: #55 — squashed develop @ 164f37a. Mode 1 step 7: `gh api -X DELETE refs/heads/feature/admin-db-multidb` → checkout develop → pull --ff-only (14 files +153/-50: new config/db_router.py, settings.py 2-alias DATABASES, building raw SQL → connections['buildings'], conftest.py + test fixes, ci.yml BUILDINGS_DB_* env) → branch -D → fetch --prune. develop HEAD = 164f37a. DB-split Phase A (multi-DB code abstraction, behavior-neutral) live on develop. Phase B (provisions real second DB) deferred to later PR.
 
 ## Development Roadmap
 
@@ -183,16 +107,14 @@
 
 ### Phase 18: External Connections -- PENDING (S8 sweep COMPLETED)
 > Spec: `docs/specs/phase18-external-connections.md` (refreshed S8
-> 2026-05-14: Goal.md path corrected to `.claude/Goal.md`; scope
-> unchanged). Lower priority than Phase 16-17.
+> 2026-05-14; scope unchanged). Lower priority than Phase 16-17.
 50. **EXT1** -- Firm article crawler (Space, ArchDaily, news — keyword-based)
 51. **EXT2** -- Article list UI (inside firm profile)
 52. **EXT3** -- External DM link UI (Instagram, email — on profile)
 
 > **Phase 19-26 (2026-05-14 Replan, Tab 3-Structure Transition) + Phase P1-P6
 > latency+UX overhaul (2026-05-15..2026-05-18)** — all shipped to production
-> via deploy PR #36 (S1-S8) and PR #49 (P1-P6). Archived to
-> `.claude/resolved-archive.md` on 2026-05-18.
+> via deploy PR #36 (S1-S8) and PR #49 (P1-P6). See git history for detail.
 
 ---
 
@@ -202,7 +124,7 @@
 > Algorithm theory + production hyperparameters live in `docs/algorithm.md`. Owned by a
 > separate collaborator post-2026-05-18; admin role here is limited to (a) reporter
 > auto-sync of the Production Value column when `settings.py` RECOMMENDATION dict
-> changes, and (b) theory-edit review on PR (see `.claude/Goal.md` § Algorithm ownership).
+> changes, and (b) theory-edit review on PR.
 >
 > Current pending specs:
 > - `docs/specs/phase16-recommendation-expansion.md` — Phase 16 dimensions
@@ -230,8 +152,4 @@ Google OAuth only. Korean users need domestic login.
 
 ## Resolved
 
-Historical resolved tasks moved to `.claude/resolved-archive.md` (frees
-~30-50K tokens per reporter call; git log is the authoritative history).
-Append new resolved entries to the archive, not here.
-- 2026-05-18 READY-FOR-PUSH: feature/admin-doc-cleanup-2026-05-18 @ 8269260 — doc-system audit + cleanup + algorithm ownership boundary. 20 files (pure docs/policy, zero source). /review skip per Rule 2.
-- 2026-05-18 READY-FOR-PUSH: feature/admin-reporter-doc-cleanup-close @ 254a325 — reporter session-end housekeeping (Report.md sync). Docs-only, /review skip per Rule 2.
+(none)

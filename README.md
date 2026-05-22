@@ -5,7 +5,6 @@ built by a sibling repo (Make DB).
 
 For the full picture see:
 - `CLAUDE.md` — project conventions, agent rules, DB schema (auto-loaded by Claude Code)
-- `AGENTS.md` — codex CLI baseline (auto-loaded by codex CLI)
 - `CONTRIBUTING.md` — branch model, PR workflow, role / file ownership
 - `DESIGN.md` — visual design system (consult for any UI work)
 - `docs/algorithm.md` — recommendation algorithm theory
@@ -51,7 +50,7 @@ npm run dev                       # http://localhost:5174
 
 ## ⚠️ Branch rules — read this before your first commit
 
-Even if your AI assistant (Claude Code, Codex CLI, Cursor, etc.) is doing the
+Even if your AI assistant (Claude Code, Cursor, etc.) is doing the
 typing, **YOU are responsible for these rules**. Server-side branch protection
 will reject violations, but the AI may still try and waste time.
 
@@ -74,7 +73,7 @@ and tell it to switch to a feature branch first**.
 
 ---
 
-## ⚠️ When working with an AI assistant (Claude Code / Codex CLI)
+## ⚠️ When working with an AI assistant (Claude Code)
 
 If you are a git novice, paste this verbatim into your AI assistant's first
 message of a new session:
@@ -82,8 +81,8 @@ message of a new session:
 > Before any work, please:
 > 1. Run `git status` and tell me what branch I'm on. If I'm on `main` or
 >    `develop`, refuse to commit anything until I'm on a `feature/*` branch.
-> 2. Read `CLAUDE.md` (or `AGENTS.md` if you are codex), then read the
->    relevant section of `CONTRIBUTING.md` (root) for branch rules.
+> 2. Read `CLAUDE.md`, then read the relevant section of `CONTRIBUTING.md`
+>    (root) for branch rules.
 > 3. Confirm in one sentence what you're about to do and which files you'll
 >    touch before you start writing code.
 
@@ -108,7 +107,7 @@ git push -u origin feature/algo-mmr-tuning
 # 6. Open a PR on GitHub targeting develop (the PR template will guide you)
 gh pr create --base develop
 
-# 7. Admin reviews via the WEB-REVIEW terminal /review command
+# 7. Admin reviews the PR
 # 8. After CI green + admin approval → admin clicks "Squash and merge"
 
 # 9. Local cleanup
@@ -132,6 +131,6 @@ git branch -d feature/algo-mmr-tuning
 ## Architecture (one-liner)
 
 `frontend/` (React 18 + Vite) ↔ `backend/` (Django 4.2 + DRF + pgvector + Gemini)
-↔ Neon PostgreSQL (architecture_vectors table owned by Make DB, read-only here).
+↔ Neon PostgreSQL (`canonical_v2_buildings` table owned by Make DB, read-only here).
 
-Full system docs: `.claude/Report.md`.
+DB schema: `docs/database-schema.md`. Workflow + agents: `.claude/WORKFLOW.md`.
