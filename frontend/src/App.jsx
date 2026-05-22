@@ -623,7 +623,7 @@ export default function App() {
     }
     sessionStorage.setItem('archithon_user', id)
     setUserId(id)
-    hydrate(user.theme, user.font)
+    if (typeof user === 'object') hydrate(user.theme, user.font)
     setCurrentCard(null)
     setSessionProgress(null)
     setIsSessionCompleted(false)
