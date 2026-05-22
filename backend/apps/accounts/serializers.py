@@ -6,7 +6,7 @@ class UserSerializer(serializers.ModelSerializer):
     """Login / auth-token response serializer. Used by _make_token_response() and MeView.
     Shape is a stable contract with the frontend login flow — do NOT add PROF2 fields here.
     """
-    user_id   = serializers.IntegerField(source='id', read_only=True)
+    user_id   = serializers.IntegerField(source='user.id', read_only=True)
     providers = serializers.SerializerMethodField()
 
     class Meta:

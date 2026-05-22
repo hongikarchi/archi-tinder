@@ -25,12 +25,13 @@ export default function UserProfilePage({ theme, onToggleTheme, onLogout }) {
   const navigate = useNavigate()
 
   const sessionUserId = sessionStorage.getItem('archithon_user')
-  const rawUserId = routeUserId || sessionUserId
+  // 'me' is a named alias for the logged-in user's numeric ID
+  const rawUserId = (routeUserId === 'me' ? sessionUserId : routeUserId) || sessionUserId
   // Defense-in-depth: only allow numeric user IDs in API path. Backend route
   // uses <int:user_id> so non-numeric values 404 anyway, but reject early to
   // avoid path-traversal-shaped values reaching fetch().
   const effectiveUserId = /^\d+$/.test(String(rawUserId || '')) ? rawUserId : null
-  const isMe = !routeUserId || String(routeUserId) === String(sessionUserId)
+  const isMe = !routeUserId || routeUserId === 'me' || String(routeUserId) === String(sessionUserId)
 
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
