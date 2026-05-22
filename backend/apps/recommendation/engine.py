@@ -19,9 +19,24 @@ import logging
 import numpy as np
 from django.conf import settings
 from django.core.cache import cache
-from django.db import connection
+from django.db import connections as _connections
 
 from . import event_log
+
+
+class _EngineConnectionProxy:
+    """Thread-local-safe proxy for connections['buildings'].
+
+    All raw SQL in engine.py queries canonical_v2_buildings (Make DB owned).
+    Re-resolves connections['buildings'] on every attribute access so
+    background threads get their own thread-local wrapper.
+    """
+
+    def __getattr__(self, name):
+        return getattr(_connections['buildings'], name)
+
+
+connection = _EngineConnectionProxy()
 
 logger = logging.getLogger('apps.recommendation')
 

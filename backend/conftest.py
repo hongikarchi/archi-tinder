@@ -70,6 +70,16 @@ def django_db_modify_db_settings():
         'NAME': ':memory:',
         'ATOMIC_REQUESTS': False,
     }
+    # Mirror 'buildings' to 'default' so pytest-django reuses the same
+    # in-memory SQLite DB rather than creating a second connection.
+    # In production both aliases point to the same Neon DB (Phase A); the
+    # MIRROR key makes tests consistent with that behavior-neutral stance.
+    settings.DATABASES['buildings'] = {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': ':memory:',
+        'ATOMIC_REQUESTS': False,
+        'TEST': {'MIRROR': 'default'},
+    }
 
 
 @pytest.fixture

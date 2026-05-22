@@ -1,5 +1,5 @@
 from django.conf import settings
-from django.db import connection
+from django.db import connections
 from django.shortcuts import get_object_or_404
 from rest_framework import permissions, status
 from rest_framework.response import Response
@@ -28,7 +28,7 @@ class OfficeDetailView(APIView):
         projects = []
         if building_ids:
             base = settings.IMAGE_BASE_URL.rstrip('/')
-            with connection.cursor() as cur:
+            with connections['buildings'].cursor() as cur:
                 cur.execute(
                     """
                     SELECT building_id, name_en, year, program, city, image_photos
