@@ -88,7 +88,7 @@ export default function DiscoveryPage() {
 
       // Preload images so subsequent cards render with image already cached.
       const preload = preloadRef.current
-      for (const c of result.cards) {
+      for (const c of result.cards.slice(0, 3)) {
         if (c?.image_url) preload(c.image_url)
       }
 
