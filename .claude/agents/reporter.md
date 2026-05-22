@@ -1,6 +1,6 @@
 ---
 name: reporter
-description: Runs after every completed task. Reads the last git commit and updates the task board in .claude/Task.md, marking completed tasks as resolved.
+description: Runs at session end. Reads the last git commit, updates the task board in .claude/Task.md, regenerates the project/ dashboard state, and (conditionally) syncs docs/algorithm.md.
 model: sonnet
 tools: Read, Write, Edit, Bash, Glob, Grep
 ---
@@ -95,7 +95,26 @@ You MUST NOT:
 If your edit would cross any of these limits, STOP and report the constraint to the user
 instead of proceeding.
 
+### 4. Refresh the project dashboard state
+
+Update `project/state.js` so `project/dashboard.html` reflects current state.
+Read `project/state.js` first, then:
+
+- **`meta`** — set `updated` to today's date, `branch` to the current branch,
+  `head` to `git rev-parse --short HEAD`.
+- **`tasks`** — rebuild `open` + `inProgress` from `.claude/Task.md`'s `## Open`
+  and `## In Progress` sections.
+- **`prs`** — rebuild from `gh pr list --base develop --state merged --limit 8
+  --json number,title,mergedAt` (newest first).
+- **`roadmap`, `personas`, `architecture`, `fileMap`, `flow`** — semi-static.
+  Leave them unchanged unless the session's commit actually changed that area
+  (a phase shipped, an agent added, a new top-level dir, a deploy-stack change).
+
+Write the file back with `Write` — it is a small structured JS file, so a full
+rewrite that preserves the unchanged sections is fine. Keep the
+`window.PROJECT_STATE = { ... };` shape and the header comment intact.
+
 ## Rules
 - Never delete existing content in Task.md.
 - When updating Task.md, use `Edit` (not `Write`) so the rest of the file stays untouched.
-- **`docs/algorithm.md` is the only file outside `.claude/` that the reporter writes.** Step 3 above defines the narrow surface. All other `docs/` files (specs in `docs/specs/`) are admin-owned and updated only via PR. See CLAUDE.md `## Rules`.
+- The reporter writes `.claude/Task.md`, `project/state.js`, and — within the narrow Step 3 surface — `docs/algorithm.md`. All other `docs/` files (specs in `docs/specs/`) are admin-owned and updated only via PR. See CLAUDE.md `## Rules`.
