@@ -253,15 +253,38 @@ export default function ResultsPage({ projects, setProjects }) {
           }}>
             Persona report
           </p>
-          <h1 style={{
-            color: 'var(--color-text)',
-            fontSize: 'clamp(26px, 8vw, 38px)',
-            fontWeight: 800,
-            lineHeight: 1.05,
-            margin: '0 0 10px',
-          }}>
-            {persona.type}
-          </h1>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, margin: '0 0 10px' }}>
+            <h1 style={{
+              color: 'var(--color-text)',
+              fontSize: 'clamp(26px, 8vw, 38px)',
+              fontWeight: 800,
+              lineHeight: 1.05,
+              margin: 0,
+              flex: 1,
+            }}>
+              {persona.type}
+            </h1>
+            <button
+              type="button"
+              onClick={() => navigate('/user/me')}
+              style={{
+                flexShrink: 0,
+                marginTop: 4,
+                padding: '8px 16px',
+                borderRadius: 12,
+                background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
+                color: '#fff',
+                fontSize: 13,
+                fontWeight: 700,
+                border: 'none',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                boxShadow: '0 3px 12px rgba(236,72,153,0.35)',
+              }}
+            >
+              Save →
+            </button>
+          </div>
           <p style={{
             color: 'var(--color-text-dim)',
             fontSize: 14,

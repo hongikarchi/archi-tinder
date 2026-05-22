@@ -266,7 +266,7 @@ export default function App() {
     }
   }
 
-  async function initSession(projectId, filters, filterPriority = [], seedIds = [], existingSessionId = null, currentHint = null, visualDescription = null) {
+  async function initSession(projectId, filters, filterPriority = [], seedIds = [], existingSessionId = null, currentHint = null, visualDescription = null, projectName = 'Untitled') {
     setIsSwipeLoading(true)
     setIsSessionCompleted(false)
     try {
@@ -283,6 +283,7 @@ export default function App() {
 
       const result = await api.startSession({
         project_id: projectId,
+        name: projectName,
         filters: normalizeFilters(filters),
         filter_priority: filterPriority,
         seed_ids: seedIds,
@@ -315,7 +316,7 @@ export default function App() {
     setProjects(prev => [...prev, newProject])
     setActiveProjectId(projectId)
     navigate('/swipe')
-    const result = await initSession(projectId, llmFilters || {}, filterPriority, seedIds, null, null, visualDescription)
+    const result = await initSession(projectId, llmFilters || {}, filterPriority, seedIds, null, null, visualDescription, projectName)
     if (visibility !== 'private' && result?.project_id) {
       api.updateProject(result.project_id, { visibility }).catch(err =>
         console.error('[App] updateProject visibility sync failed:', err)
@@ -698,8 +699,18 @@ export default function App() {
       else navigate('/user/me')
     },
     cardResetToken,
-    onExitToNewProject: () => { setActiveProjectId(null); navigate('/new') },
-    onExitToHome:       () => { setActiveProjectId(null); navigate('/discovery') },
+    onExitToNewProject: () => {
+      const hasLikes = (activeProject?.likedBuildings?.length ?? 0) > 0
+      if (!hasLikes && activeProjectId) api.deleteProject(activeProjectId).catch(() => {})
+      setActiveProjectId(null)
+      navigate('/new')
+    },
+    onExitToHome: () => {
+      const hasLikes = (activeProject?.likedBuildings?.length ?? 0) > 0
+      if (!hasLikes && activeProjectId) api.deleteProject(activeProjectId).catch(() => {})
+      setActiveProjectId(null)
+      navigate('/discovery')
+    },
   }
 
   return (
