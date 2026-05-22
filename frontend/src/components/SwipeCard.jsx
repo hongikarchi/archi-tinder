@@ -9,7 +9,7 @@ import { useImageTelemetry } from '../hooks/useImageTelemetry.js'
  * version EXCEPT:
  *   - <img decoding="async"> (was "sync" — sync blocks render)
  *   - explicit width/height on the <img> (prevent layout thrash)
- *   - 4-second image-load timeout that triggers the covers_by_type fallback
+ *   - 2-second image-load timeout that triggers the covers_by_type fallback
  *     chain if the main URL hasn't fired onLoad yet
  *
  * The fallback chain itself is unchanged: cache-bust → covers_by_type.exterior
