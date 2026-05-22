@@ -13,7 +13,7 @@ window.PROJECT_STATE = {
     project: 'ArchiTinder — Make Web',
     updated: '2026-05-22',
     branch: 'develop',
-    head: '724f8d1',
+    head: '49b347d',
   },
 
   tasks: {
@@ -21,7 +21,7 @@ window.PROJECT_STATE = {
       { id: 'AUTH1', title: 'Kakao / Naver OAuth', note: 'Google-only today; Korean users need domestic login' },
     ],
     inProgress: [
-      { id: 'theme-persistence', title: 'PR #2 — theme/font server persistence', note: 'committed (feature/admin-theme-persistence @ b5d0519), paused; resumes independently' },
+      { id: 'DESIGN-REWORK', title: 'Design-system redesign — per-component rework', note: 'Foundation shipped (PR #54). Remaining: ~7,700 LOC inline styles → CSS Modules, light-theme visuals, leaf→hub order.' },
     ],
     note: 'Full phase roadmap → Roadmap tab. Detailed ledger: .claude/Task.md',
   },
@@ -46,14 +46,14 @@ window.PROJECT_STATE = {
   ],
 
   prs: [
+    { n: 59, title: 'feat: theme/font server persistence + cross-device hydration', date: '2026-05-22' },
+    { n: 58, title: 'feat: project dashboard — web view of tasks / roadmap / PRs / architecture', date: '2026-05-22' },
     { n: 57, title: 'refactor: drop Codex, collapse multi-terminal workflow to single session + sub-agents', date: '2026-05-22' },
     { n: 56, title: 'chore: DB-split Phase B cutover — BUILDINGS_DB_* hard-required', date: '2026-05-22' },
-    { n: 55, title: 'feat: DB-split Phase A — multi-DB code abstraction', date: '2026-05-22' },
-    { n: 54, title: 'feat: design-system foundation — tokens.css 4 themes + ThemeContext', date: '2026-05-21' },
+    { n: 55, title: 'feat: DB-split Phase A — multi-DB code abstraction (app DB + buildings alias)', date: '2026-05-22' },
+    { n: 54, title: 'feat: design-system foundation — tokens.css 4 themes + ThemeContext + AppearanceSettings (PR #1)', date: '2026-05-21' },
     { n: 53, title: 'feat: salvage PR #38 — google login sync + board recommended section', date: '2026-05-21' },
     { n: 52, title: 'chore: reporter doc-cleanup session-end housekeeping', date: '2026-05-17' },
-    { n: 51, title: 'chore: doc-system cleanup + algorithm ownership boundary', date: '2026-05-17' },
-    { n: 50, title: 'docs: codify Bug #5 deploy-cycle force-reset carve-out', date: '2026-05-17' },
   ],
 
   architecture: {

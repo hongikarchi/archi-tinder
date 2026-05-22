@@ -146,10 +146,18 @@ Google OAuth only. Korean users need domestic login.
 
 ## In Progress
 
-(none)
+### Design-system redesign — per-component rework (pending)
+Foundation shipped (PR #54: `tokens.css` 4 themes + `ThemeContext` +
+`AppearanceSettings`). Remaining: per-component visual rework (~7,700 LOC,
+inline styles → CSS Modules + `:hover`, light-theme visuals) across the
+frontend, leaf→hub order. Scope with `/plan` per slice.
 
 ---
 
 ## Resolved
 
-(none)
+### PR #2 — theme/font server persistence — SHIPPED 2026-05-22
+[x] Merged as PR #59 (develop `49b347d`).
+Backend `UserProfile.theme`/`font` fields + migration `0003`; `UserSerializer`
+login-response wiring; frontend `ThemeContext` hydrate-on-login + `updateMyProfile()`
+PATCH on change. Cross-device server-sync fully operational.
