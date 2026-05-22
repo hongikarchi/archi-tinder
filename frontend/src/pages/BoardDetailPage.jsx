@@ -445,7 +445,7 @@ export default function BoardDetailPage() {
   }
 
   async function handleDeleteSelected() {
-    if (selectedIds.size === 0 || deleteInProgress) return
+    if (!isOwner || selectedIds.size === 0 || deleteInProgress) return
     setDeleteInProgress(true)
     const ids = [...selectedIds]
     try {
@@ -472,7 +472,8 @@ export default function BoardDetailPage() {
   const buildings = localBuildings ?? board?.buildings ?? []
   const recommended = board?.recommended || []
   const viewerId = sessionStorage.getItem('archithon_user')
-  const isOwner = !!viewerId && String(board?.user?.user_id) === String(viewerId)
+  const boardOwnerId = board?.user?.user_id ?? board?.owner?.user_id
+  const isOwner = !!viewerId && String(boardOwnerId) === String(viewerId)
   const coverImage = board?.cover_image_url || (buildings[0] && buildings[0].image_url)
   const statusMessage = error?.message || (loading ? 'Loading board...' : 'This board is empty')
 

@@ -613,7 +613,7 @@ export default function App() {
     setActiveProjectId(id)
     setProjects(prev => prev.map(p => p.id === id ? { ...p, deckImages: preloadedImages } : p))
     navigate('/swipe')
-    await initSession(id, llmFilters || project.filters, filterPriority, seedIds, null, null, visualDescription)
+    await initSession(id, llmFilters || project.filters, filterPriority, seedIds, null, null, visualDescription, project.projectName)
   }
 
   async function handleLogin(user) {
@@ -701,13 +701,15 @@ export default function App() {
     cardResetToken,
     onExitToNewProject: () => {
       const hasLikes = (activeProject?.likedBuildings?.length ?? 0) > 0
-      if (!hasLikes && activeProjectId) api.deleteProject(activeProjectId).catch(() => {})
+      const backendId = activeProject?.backendId
+      if (!hasLikes && backendId) api.deleteProject(backendId).catch(() => {})
       setActiveProjectId(null)
       navigate('/new')
     },
     onExitToHome: () => {
       const hasLikes = (activeProject?.likedBuildings?.length ?? 0) > 0
-      if (!hasLikes && activeProjectId) api.deleteProject(activeProjectId).catch(() => {})
+      const backendId = activeProject?.backendId
+      if (!hasLikes && backendId) api.deleteProject(backendId).catch(() => {})
       setActiveProjectId(null)
       navigate('/discovery')
     },
