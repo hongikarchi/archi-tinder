@@ -124,7 +124,7 @@
 
   ## Pre-Push Gate — `app-test`
 
-  The pipeline commits but the `app-test` agent gates the push. It runs the live browser user-journey verification (dev-login → search → swipe lifecycle → results → error recovery, with card-data validation, phase-transition checks, spec-aligned latency budgets) plus the HEAD / `origin/develop` drift check. It returns one verdict — PASS / PASS-WITH-MINORS / FAIL / ABORTED (drift) — and persists nothing. `app-test` is auto-skipped for pure docs/config changes (no UI/runtime surface). Static code review is the separate `code-review` agent's job (inner loop, per change) — `app-test` does not re-do it. Spec: `.claude/agents/app-test.md`.
+  The pipeline commits but the `app-test` agent gates the push. It runs the live browser user-journey verification (dev-login → search → swipe lifecycle → results → error recovery, with card-data validation, phase-transition checks, spec-aligned latency budgets) plus the HEAD / `origin/develop` drift check. It returns one verdict — PASS / PASS-WITH-MINORS / FAIL / ABORTED (drift) — and persists nothing. It runs in one of two modes — FULL (the 3-persona swipe journey, for changes touching the recommendation/swipe path) or FEATURE-SCOPED (preflight + a caller-supplied feature checklist + a light regression smoke, for changes that don't); the caller picks, default FULL. `app-test` is auto-skipped for pure docs/config changes (no UI/runtime surface). Static code review is the separate `code-review` agent's job (inner loop, per change) — `app-test` does not re-do it. Spec: `.claude/agents/app-test.md`.
 
   ## Database
   See **`docs/database-schema.md`** for the `canonical_v2_buildings` CREATE TABLE
