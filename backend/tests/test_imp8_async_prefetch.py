@@ -5,7 +5,7 @@ Tests for:
 - TestFlagGating: flag OFF -> sync path unchanged; flag ON -> async path, bg thread spawned
 - TestAsyncThreadComputesPrefetch: bg thread writes correct cache entry
 - TestAsyncThreadFailureGraceful: engine failure inside bg thread is swallowed; swipe still 200
-- TestConnectionClosureOnExit: connection.close() called at start and in finally block
+- TestConnectionClosureOnExit: connections.close_all() called at start and in finally block
 - TestBackwardCompat: existing IMP-7 swipe-event assertions pass with flag OFF
 - TestSettingsFlagsImp8: new settings keys exist with correct defaults
 
@@ -14,7 +14,7 @@ Threading strategy:
   constructed but does NOT call the target. This prevents `_async_prefetch_thread`
   from closing the test's DB connection mid-request.
 - Unit tests on _async_prefetch_thread directly: call the function directly with
-  `patch('django.db.connection.close', lambda: None)` so the test DB connection
+  `patch('django.db.connections.close_all', lambda: None)` so the test DB connection
   survives but the behavior of the function body is exercised.
 
 Cache key contract: prefetch:{session_id}:{cache_round}
@@ -25,7 +25,7 @@ Cache key contract: prefetch:{session_id}:{cache_round}
 """
 import numpy as np
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from django.conf import settings
 from django.core.cache import cache
 
@@ -344,7 +344,7 @@ class TestAsyncThreadComputesPrefetch:
         session_id = 'test-session-cache-entry-001'
         cache_round = 2  # matches integration: saved_current_round(1) + 1
 
-        with patch('django.db.connection.close', lambda: None), \
+        with patch('django.db.connections.close_all', lambda: None), \
              patch('apps.recommendation.views.engine.farthest_point_from_pool',
                    side_effect=lambda pid, exp, embs: next(
                        (b for b in pid if b not in set(exp)), None
@@ -380,7 +380,7 @@ class TestAsyncThreadComputesPrefetch:
         session_id = 'test-session-cache-key-002'
         cache_round = 5  # arbitrary; we check the key includes this exact value
 
-        with patch('django.db.connection.close', lambda: None), \
+        with patch('django.db.connections.close_all', lambda: None), \
              patch('apps.recommendation.views.engine.farthest_point_from_pool',
                    side_effect=lambda pid, exp, embs: next(
                        (b for b in pid if b not in set(exp)), None
@@ -417,7 +417,7 @@ class TestAsyncThreadComputesPrefetch:
         session_id = 'test-session-fields-003'
         cache_round = 2
 
-        with patch('django.db.connection.close', lambda: None), \
+        with patch('django.db.connections.close_all', lambda: None), \
              patch('apps.recommendation.views.engine.farthest_point_from_pool',
                    side_effect=lambda pid, exp, embs: next(
                        (b for b in pid if b not in set(exp)), None
@@ -458,7 +458,7 @@ class TestAsyncThreadComputesPrefetch:
             mmr_calls.append(args)
             return pool_ids[2]
 
-        with patch('django.db.connection.close', lambda: None), \
+        with patch('django.db.connections.close_all', lambda: None), \
              patch('apps.recommendation.views.engine.compute_mmr_next',
                    side_effect=_counting_mmr), \
              patch('apps.recommendation.views.engine.get_building_card',
@@ -547,7 +547,7 @@ class TestAsyncThreadFailureGraceful:
         session_id = 'test-session-failure-cache-005'
         cache_round = 2
 
-        with patch('django.db.connection.close', lambda: None), \
+        with patch('django.db.connections.close_all', lambda: None), \
              patch('apps.recommendation.views.engine.farthest_point_from_pool',
                    side_effect=RuntimeError('forced failure')), \
              patch('apps.recommendation.views.engine.compute_mmr_next',
@@ -580,7 +580,7 @@ class TestAsyncThreadFailureGraceful:
 
         pool_ids = [f'B{str(i).zfill(5)}' for i in range(1, 4)]
 
-        with patch('django.db.connection.close', lambda: None), \
+        with patch('django.db.connections.close_all', lambda: None), \
              patch('apps.recommendation.views.engine.farthest_point_from_pool',
                    side_effect=ValueError('boom')), \
              patch('apps.recommendation.views.engine.compute_mmr_next',
@@ -608,18 +608,15 @@ class TestAsyncThreadFailureGraceful:
 # ---------------------------------------------------------------------------
 
 class TestConnectionClosureOnExit:
-    """connection.close() is called at thread start and in the finally block."""
+    """connections.close_all() is called at thread start and in the finally block."""
 
     def test_connection_close_called_at_start_and_finally(self):
-        """_async_prefetch_thread calls connection.close() twice: once at start, once in finally."""
+        """_async_prefetch_thread calls connections.close_all() twice: once at start, once in finally."""
         from apps.recommendation.views import _async_prefetch_thread
 
         pool_ids = [f'B{str(i).zfill(5)}' for i in range(1, 6)]
         fake_embs = {bid: np.ones(384) / np.linalg.norm(np.ones(384)) for bid in pool_ids}
         close_calls = []
-
-        mock_conn = MagicMock()
-        mock_conn.close.side_effect = lambda: close_calls.append('close')
 
         with patch('apps.recommendation.views.engine.farthest_point_from_pool', return_value=pool_ids[1]), \
              patch('apps.recommendation.views.engine.get_building_card', side_effect=_mock_card), \
@@ -629,9 +626,8 @@ class TestConnectionClosureOnExit:
 
             mock_tz.now.return_value.isoformat.return_value = '2026-04-26T00:00:00+00:00'
 
-            # Patch the local import inside _async_prefetch_thread
-            # The function does `from django.db import connection as _db_connection`
-            with patch('django.db.connection', mock_conn):
+            # Patch connections.close_all (used by the refactored multi-DB path)
+            with patch('django.db.connections.close_all', side_effect=lambda: close_calls.append('close_all')):
                 _async_prefetch_thread(
                     session_id='test-session-123',
                     cache_round=1,
@@ -644,21 +640,18 @@ class TestConnectionClosureOnExit:
                     current_round_snap=0,
                 )
 
-        # connection.close() must be called at least twice:
+        # connections.close_all() must be called at least twice:
         # once at start (release parent's conn) and once in finally (release bg thread's conn)
         assert len(close_calls) >= 2, (
-            f'Expected at least 2 connection.close() calls, got {len(close_calls)}: {close_calls}'
+            f'Expected at least 2 connections.close_all() calls, got {len(close_calls)}: {close_calls}'
         )
 
     def test_connection_close_called_in_finally_on_exception(self):
-        """connection.close() in finally block runs even when the function body raises."""
+        """connections.close_all() in finally block runs even when the function body raises."""
         from apps.recommendation.views import _async_prefetch_thread
 
         pool_ids = [f'B{str(i).zfill(5)}' for i in range(1, 6)]
         close_calls = []
-
-        mock_conn = MagicMock()
-        mock_conn.close.side_effect = lambda: close_calls.append('close')
 
         # Force an exception inside the try block
         with patch(
@@ -667,7 +660,7 @@ class TestConnectionClosureOnExit:
         ), patch(
             'apps.recommendation.views.engine.compute_mmr_next',
             side_effect=RuntimeError('boom'),
-        ), patch('django.db.connection', mock_conn):
+        ), patch('django.db.connections.close_all', side_effect=lambda: close_calls.append('close_all')):
             # Should NOT raise (exception caught inside the function)
             _async_prefetch_thread(
                 session_id='test-session-456',
@@ -683,7 +676,7 @@ class TestConnectionClosureOnExit:
 
         # Even on exception, finally block must have fired
         assert len(close_calls) >= 2, (
-            f'Expected at least 2 close() calls even on exception, got {len(close_calls)}'
+            f'Expected at least 2 close_all() calls even on exception, got {len(close_calls)}'
         )
 
 

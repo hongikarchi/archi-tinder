@@ -74,8 +74,24 @@ DATABASES = {
         'OPTIONS': {
             'sslmode': os.getenv('DB_SSLMODE', 'require'),
         },
-    }
+    },
+    # Phase A (behavior-neutral): both aliases point at the same Neon DB.
+    # Phase B will provision the real read-replica and flip BUILDINGS_DB_* vars.
+    'buildings': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'HOST': os.getenv('BUILDINGS_DB_HOST') or os.environ['DB_HOST'],
+        'PORT': os.getenv('BUILDINGS_DB_PORT') or os.getenv('DB_PORT', '5432'),
+        'NAME': os.getenv('BUILDINGS_DB_NAME') or os.environ['DB_NAME'],
+        'USER': os.getenv('BUILDINGS_DB_USER') or os.environ['DB_USER'],
+        'PASSWORD': os.getenv('BUILDINGS_DB_PASSWORD') or os.environ['DB_PASSWORD'],
+        'CONN_MAX_AGE': 600,
+        'OPTIONS': {
+            'sslmode': os.getenv('BUILDINGS_DB_SSLMODE') or os.getenv('DB_SSLMODE', 'require'),
+        },
+    },
 }
+
+DATABASE_ROUTERS = ['config.db_router.MakeWebRouter']
 
 # -- Auth ------------------------------------------------------------------
 AUTH_PASSWORD_VALIDATORS = [

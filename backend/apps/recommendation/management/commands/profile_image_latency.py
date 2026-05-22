@@ -19,7 +19,7 @@ import time
 from typing import List, Dict, Any
 
 from django.core.management.base import BaseCommand
-from django.db import connection
+from django.db import connections
 
 import apps.recommendation.engine as engine
 
@@ -83,7 +83,7 @@ def _fetch_raw_row(building_id: str) -> Dict[str, Any]:
     ]
     optional = ['cover_image_url_divisare', 'divisare_gallery_urls']
     cols = engine._build_select_columns(required, optional)
-    with connection.cursor() as cur:
+    with connections['buildings'].cursor() as cur:
         cur.execute(
             f'SELECT {cols} FROM architecture_vectors WHERE building_id = %s',
             [building_id],
@@ -105,7 +105,7 @@ def _fetch_raw_rows_batch(building_ids: List[str]) -> List[Dict[str, Any]]:
     optional = ['cover_image_url_divisare', 'divisare_gallery_urls']
     cols = engine._build_select_columns(required, optional)
     ph = ','.join(['%s'] * len(building_ids))
-    with connection.cursor() as cur:
+    with connections['buildings'].cursor() as cur:
         cur.execute(
             f'SELECT {cols} FROM architecture_vectors WHERE building_id IN ({ph})',
             list(building_ids),
@@ -115,7 +115,7 @@ def _fetch_raw_rows_batch(building_ids: List[str]) -> List[Dict[str, Any]]:
 
 def _pick_sample_ids(n: int) -> List[str]:
     """architecture_vectors에서 랜덤으로 n개의 building_id를 고른다."""
-    with connection.cursor() as cur:
+    with connections['buildings'].cursor() as cur:
         cur.execute(
             'SELECT building_id FROM architecture_vectors ORDER BY RANDOM() LIMIT %s',
             [n],
@@ -191,7 +191,7 @@ def bench_get_diverse_random(iterations: int) -> dict:
             ]
             optional = ['cover_image_url_divisare', 'divisare_gallery_urls']
             cols = engine._build_select_columns(required, optional)
-            with connection.cursor() as cur:
+            with connections['buildings'].cursor() as cur:
                 cur.execute(
                     f'SELECT {cols}, embedding::text FROM architecture_vectors ORDER BY RANDOM() LIMIT %s',
                     [POOL],

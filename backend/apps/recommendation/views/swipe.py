@@ -43,8 +43,8 @@ def _emit_telemetry_thread(swipe_kwargs, confidence_kwargs):
     """Fire-and-forget: emit swipe + confidence_update events off the hot path.
     Saves ~4 DB round-trips (~1200ms on Neon) from the swipe response time.
     """
-    from django.db import connection as _db_connection
-    _db_connection.close()
+    from django.db import connections as _connections
+    _connections.close_all()
     try:
         event_log.emit_swipe_event(**swipe_kwargs)
         if confidence_kwargs is not None:
@@ -52,7 +52,7 @@ def _emit_telemetry_thread(swipe_kwargs, confidence_kwargs):
     except Exception as exc:
         logger.warning('Telemetry thread failed: %s', exc)
     finally:
-        _db_connection.close()
+        _connections.close_all()
 
 
 # ── IMP-8: async prefetch background thread ───────────────────────────────────
@@ -81,9 +81,9 @@ def _async_prefetch_thread(
     primary path runs standalone (cache miss) -- same behavior as today.
     This is purely opportunistic and never blocks correctness.
     """
-    from django.db import connection as _db_connection
+    from django.db import connections as _connections
 
-    _db_connection.close()  # release parent thread's connection; bg thread gets its own
+    _connections.close_all()  # release parent thread's connections; bg thread gets its own
     try:
         prefetch_card = None
         prefetch_card_2 = None
@@ -144,7 +144,7 @@ def _async_prefetch_thread(
         # This is purely opportunistic optimization; primary path is always the source of truth.
         logger.warning('IMP-8 async prefetch thread failed: %s', exc)
     finally:
-        _db_connection.close()  # release bg thread's own connection
+        _connections.close_all()  # release bg thread's own connections
 
 
 # ── Images ────────────────────────────────────────────────────────────────────

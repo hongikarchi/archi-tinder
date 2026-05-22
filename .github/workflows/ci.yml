@@ -24,6 +24,14 @@ jobs:
       # Local CI Postgres (pgvector/pgvector:pg16) doesn't speak SSL; the
       # default 'require' sslmode (suited to Neon prod DSN) would fail.
       DB_SSLMODE: disable
+      # Phase A (behavior-neutral): 'buildings' alias points at the same DB.
+      # Phase B will provision the real read-replica; only these vars change.
+      BUILDINGS_DB_HOST: localhost
+      BUILDINGS_DB_PORT: '5432'
+      BUILDINGS_DB_NAME: ci_db
+      BUILDINGS_DB_USER: ci_user
+      BUILDINGS_DB_PASSWORD: ci_pass
+      BUILDINGS_DB_SSLMODE: disable
       DJANGO_DEBUG: 'True'
       DEV_LOGIN_SECRET: ci-test-secret
       GEMINI_API_KEY: ci-test-gemini-key
