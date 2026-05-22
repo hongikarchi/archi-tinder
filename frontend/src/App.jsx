@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, Component } from 'react'
 import { Routes, Route, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom'
+import { useTheme } from './hooks/useTheme.js'
 import MainLayout from './layouts/MainLayout.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import ProjectSetupPage from './pages/ProjectSetupPage.jsx'
@@ -112,6 +113,7 @@ function LLMSearchUpdateWrapper({ wizardData, onBack, onStart, onUpdate }) {
 export default function App() {
   const navigate = useNavigate()
   const location = useLocation()
+  const { hydrate } = useTheme()
 
   const [userId, setUserId] = useState(() => sessionStorage.getItem('archithon_user') || null)
   const [wizardData, setWizardData] = useState(null)
@@ -621,6 +623,7 @@ export default function App() {
     }
     sessionStorage.setItem('archithon_user', id)
     setUserId(id)
+    if (typeof user === 'object') hydrate(user.theme, user.font)
     setCurrentCard(null)
     setSessionProgress(null)
     setIsSessionCompleted(false)

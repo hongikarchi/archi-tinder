@@ -4,14 +4,18 @@ from .models import UserProfile
 
 class UserSerializer(serializers.ModelSerializer):
     """Login / auth-token response serializer. Used by _make_token_response() and MeView.
-    Shape is a stable contract with the frontend login flow — do NOT add PROF2 fields here.
+
+    theme and font are intentionally included as bootstrap-critical app preferences —
+    the frontend must know the correct theme/font immediately on login to avoid a flash
+    of the wrong design system. PROF2 *profile-content* fields (bio, mbti,
+    external_links, persona_summary) must stay out of this serializer.
     """
     user_id   = serializers.IntegerField(source='id', read_only=True)
     providers = serializers.SerializerMethodField()
 
     class Meta:
         model  = UserProfile
-        fields = ['user_id', 'display_name', 'avatar_url', 'providers']
+        fields = ['user_id', 'display_name', 'avatar_url', 'providers', 'theme', 'font']
 
     def get_providers(self, obj):
         return list(obj.social_accounts.values_list('provider', flat=True))
@@ -80,7 +84,7 @@ class UserProfileSelfUpdateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = UserProfile
-        fields = ['display_name', 'bio', 'mbti', 'external_links']
+        fields = ['display_name', 'bio', 'mbti', 'external_links', 'theme', 'font']
 
     def validate_display_name(self, value):
         """display_name: 1-30 chars after .strip(); reject whitespace-only."""
