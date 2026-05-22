@@ -6,6 +6,8 @@
 import { callApi } from './core.js'
 import { normalizeCard } from './images.js'
 
+const PARSE_QUERY_TIMEOUT_MS = 60000    // Gemini LLM generation can take 10-30s
+
 /**
  * Start an analysis session.
  * params.filter_priority and params.seed_ids are forwarded to the backend
@@ -85,7 +87,7 @@ export async function parseQuery(input) {
   const body = typeof input === 'string'
     ? { query: input }
     : { conversation_history: input }
-  const result = await callApi('POST', '/parse-query/', body)
+  const result = await callApi('POST', '/parse-query/', body, true, PARSE_QUERY_TIMEOUT_MS)
   return {
     ...result,
     results: (result.results || []).map(normalizeCard),
