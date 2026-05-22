@@ -10,7 +10,7 @@ class UserSerializer(serializers.ModelSerializer):
     of the wrong design system. PROF2 *profile-content* fields (bio, mbti,
     external_links, persona_summary) must stay out of this serializer.
     """
-    user_id   = serializers.IntegerField(source='id', read_only=True)
+    user_id   = serializers.IntegerField(source='user.id', read_only=True)
     providers = serializers.SerializerMethodField()
 
     class Meta:
