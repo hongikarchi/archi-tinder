@@ -142,6 +142,16 @@ Google OAuth only. Korean users need domestic login.
 - [ ] Kakao social auth backend + frontend button
 - [ ] Naver social auth backend + frontend button
 
+### Dev Environment
+#### DEV-ENV1. Local backend/.env points at production DB — repoint off prod
+`DB_HOST=ep-broad-hat-a1jaomn7`, `DB_NAME=user_data` in `backend/.env` targets
+the live production database. app-test ran write-constrained for PRs #68 and #69
+(live-browser journey / dev-login / swipe skipped to avoid prod writes). Recommended
+fix: provision a dedicated Neon test branch and update `backend/.env` so future
+app-test runs execute the full live journey.
+- [ ] Provision Neon test branch (or local Postgres) for dev
+- [ ] Update backend/.env DB_* vars to point at test DB, not production
+
 ---
 
 ## In Progress
@@ -155,6 +165,20 @@ frontend, leaf→hub order. Scope with `/plan` per slice.
 ---
 
 ## Resolved
+
+### External PR triage — UserSerializer fix + image loading perf — RESOLVED 2026-05-23 (PRs #68, #69)
+[x] PR #68 (squash `779725e` on develop): `fix: UserSerializer.user_id source — user.id not profile id`.
+    `UserSerializer.user_id` field source `'id'` → `'user.id'` so `auth/me` + login response
+    returns Django `User.id` (not `UserProfile.id`), fixing wrong-profile-after-Google-login when
+    PKs diverge. Adds `backend/apps/accounts/tests/test_userserializer.py` (deterministic, forces
+    id divergence). External PR #62 closed superseded. Two parts of PR #62 intentionally NOT
+    carried: `UserProfilePage.jsx` `/user/me` change (already fixed on develop via static route
+    in `App.jsx`) and `views.py` display_name/avatar login-sync (separate concern, out of scope).
+[x] PR #69 (squash `403bd02` on develop): `perf(frontend): image loading — 4s→2s timeout, lazy gallery, preload cap 3`.
+    Cherry-pick of external PR #64's intended commit `3f9c385`: `SwipeCard.jsx` image-load
+    timeout 4s→2s + gallery CSS→`<img>` lazy, `DiscoveryPage.jsx` preload cap 12→3. JSDoc
+    comment synced. External PR #64 closed superseded (wrong base + polluted 154-file diff).
+    app-test ran FEATURE-SCOPED (write-constrained — local .env targets prod DB; see DEV-ENV1).
 
 ### Neon DB-split (data step) + Production Deploy — RESOLVED 2026-05-22 (PR #63)
 [x] DB-split complete and live in production: app DB = `user_data` (57 migrations,

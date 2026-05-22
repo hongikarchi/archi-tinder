@@ -11,14 +11,15 @@
 window.PROJECT_STATE = {
   meta: {
     project: 'ArchiTinder — Make Web',
-    updated: '2026-05-22',
+    updated: '2026-05-23',
     branch: 'develop',
-    head: 'd3cf4e27',
+    head: '403bd02',
   },
 
   tasks: {
     open: [
       { id: 'AUTH1', title: 'Kakao / Naver OAuth', note: 'Google-only today; Korean users need domestic login' },
+      { id: 'DEV-ENV1', title: 'Repoint local backend/.env off production DB', note: 'Current .env targets prod user_data; app-test ran write-constrained for PRs #68/#69. Provision Neon test branch or local Postgres.' },
     ],
     inProgress: [
       { id: 'DESIGN-REWORK', title: 'Design-system redesign — per-component rework', note: 'Foundation shipped (PR #54). Remaining: ~7,700 LOC inline styles → CSS Modules, light-theme visuals, leaf→hub order.' },
@@ -46,14 +47,14 @@ window.PROJECT_STATE = {
   ],
 
   prs: [
-    { n: 63, title: 'deploy: develop → main 2026-05-22 (PRs #50–#61)', date: '2026-05-22' },
+    { n: 69, title: 'perf(frontend): image loading — 4s→2s timeout, lazy gallery, preload cap 3', date: '2026-05-22' },
+    { n: 68, title: 'fix: UserSerializer.user_id source — user.id not profile id', date: '2026-05-22' },
+    { n: 66, title: 'fix: discovery 499s timeout + LLM chat abort — gunicorn workers + per-endpoint client timeouts', date: '2026-05-22' },
+    { n: 65, title: 'chore: reporter DB-split deploy session-end sync', date: '2026-05-22' },
     { n: 61, title: 'feat: app-test FEATURE-SCOPED mode — lighter gate for non-swipe PRs', date: '2026-05-22' },
     { n: 60, title: 'chore: reporter PR2 session-end housekeeping', date: '2026-05-22' },
     { n: 59, title: 'feat: theme/font server persistence + cross-device hydration', date: '2026-05-22' },
     { n: 58, title: 'feat: project dashboard — web view of tasks / roadmap / PRs / architecture', date: '2026-05-22' },
-    { n: 57, title: 'refactor: drop Codex, collapse multi-terminal workflow to single session + sub-agents', date: '2026-05-22' },
-    { n: 56, title: 'chore: DB-split Phase B cutover — BUILDINGS_DB_* hard-required', date: '2026-05-22' },
-    { n: 55, title: 'feat: DB-split Phase A — multi-DB code abstraction (app DB + buildings alias)', date: '2026-05-22' },
   ],
 
   architecture: {
