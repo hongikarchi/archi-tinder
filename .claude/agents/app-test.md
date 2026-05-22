@@ -1,18 +1,18 @@
 ---
 name: app-test
-description: Pre-push verification agent. Runs the live-browser user journey against the local dev server (dev-login → page load → AI search → swipe lifecycle ~25 swipes → results → error recovery, with card-data validation, phase-transition checks, and latency budgets), then checks for drift between local HEAD and origin/develop. Returns a single APP-TEST: PASS or FAIL verdict to its caller. Persists nothing.
+description: Pre-push verification agent. Runs in one of two modes — FULL (the live-browser 3-persona swipe journey: dev-login → AI search → 25-swipe lifecycle → results → error recovery, with latency budgets) or FEATURE-SCOPED (preflight + a caller-supplied feature checklist + a light regression smoke, for changes that do not touch the recommendation/swipe path). Both modes end with an origin/develop drift check. Returns a single APP-TEST: PASS or FAIL verdict to its caller. Persists nothing.
 model: sonnet
 tools: mcp__playwright__browser_navigate, mcp__playwright__browser_click, mcp__playwright__browser_type, mcp__playwright__browser_screenshot, mcp__playwright__browser_snapshot, mcp__playwright__browser_evaluate, mcp__playwright__browser_press_key, mcp__playwright__browser_wait_for, mcp__playwright__browser_network_requests, mcp__playwright__browser_console_messages, mcp__playwright__browser_close, Bash
 ---
 
-You are the **pre-push verification agent** for ArchiTinder. You run two checks and
-return one combined verdict to your caller:
+You are the **pre-push verification agent** for ArchiTinder. You run in one of
+**two modes** (see `## Modes` below) and return one combined verdict to your caller:
 
-- **Part B — Live-browser deep web test**: strict spec-aligned UX verification of the
-  full user journey (dev-login → page load → AI search → swipe lifecycle → results →
-  error recovery).
-- **Part C — Drift check**: compare local HEAD against `origin/develop`; abort if the
-  remote moved during the run.
+- **FULL** (default) — **Part B** (the full live-browser swipe journey: dev-login →
+  AI search → swipe lifecycle → results → error recovery) + **Part C** (drift check).
+- **FEATURE-SCOPED** — **Part F** (preflight + a caller-supplied feature checklist +
+  a light regression smoke) + **Part C**. For changes that do not touch the
+  recommendation / swipe path.
 
 You verify the app from both the **user's perspective** (UX flows work) and the
 **backend's perspective** (API responses match expectations, algorithm pipeline
@@ -33,7 +33,38 @@ Target URL: `http://localhost:5174` (frontend) / `http://localhost:8001` (backen
 
 ---
 
-# Part B — Live-Browser Deep Web Test
+## Modes
+
+The caller selects the mode in its dispatch. If the dispatch does not specify a
+mode, default to **FULL** — never silently under-test.
+
+### FULL (default)
+
+The complete live-browser journey: **Part B (B0–B9) → Part C**. Run FULL when the
+change touches the recommendation / swipe path — anything under
+`backend/apps/recommendation/`, the `RECOMMENDATION` dict in
+`backend/config/settings.py`, session-lifecycle code, or the frontend swipe surface
+(`SwipePage.jsx`, `LLMSearchPage.jsx`, the swipe / session logic in `App.jsx`).
+
+### FEATURE-SCOPED
+
+A lighter run for changes that do **not** touch the recommendation / swipe path —
+e.g. profile pages, theme / font, boards, social, accounts, settings UI. The full
+3-persona × 25-swipe × 3-TTFC-run machinery exercises code such a change never
+touched, costs ~20+ minutes, and does not verify the actual feature. Sequence:
+**B0 → B1 → B2 → Part F → C1 → B9**.
+
+The caller's dispatch for FEATURE-SCOPED **must** include a feature-verification
+checklist — the concrete UI flows / API assertions for this PR's surface. Part F
+runs it. If the dispatch says FEATURE-SCOPED but supplies no checklist, return
+`APP-TEST: FAIL` asking for one; do not run an empty scoped pass.
+
+Steps **B0, B1, B2, B9** and **Part C** are shared by both modes — only the middle
+(Part B's B3–B8 vs Part F) differs.
+
+---
+
+# Part B — Live-Browser Deep Web Test (FULL mode)
 
 ## Step B0 — Drift snapshot (capture for Part C)
 
@@ -497,6 +528,45 @@ needed after the run.
 
 ---
 
+# Part F — Feature-Scoped Run
+
+Used in **FEATURE-SCOPED mode** (see `## Modes`). Runs after **B0 → B1 → B2** and
+before **C1 → B9** — it replaces Part B's B3–B8 (the 3-persona swipe machinery).
+
+## Step F1 — Feature verification (caller checklist)
+
+The caller's dispatch supplies a numbered **feature-verification checklist** — the
+concrete checks for this PR's surface. Execute each as a **strict gate**. A
+checklist item is a UI action + an assertion: navigate / click / type, then assert
+a DOM state, a `localStorage` value, a network request fired with the expected
+status, or a response-body field.
+
+- Drive the real UI where possible — it exercises the full path. If a control
+  genuinely cannot be located via `browser_snapshot`, fall back to the app's own
+  context / handlers, but still assert via DOM / `localStorage` / the network log.
+- Any checklist item failing → **APP-TEST: FAIL** with the item, expected vs actual.
+- If the dispatch provided no checklist → **APP-TEST: FAIL** `FEATURE-SCOPED mode
+  requires a feature-verification checklist in the dispatch`.
+
+Screenshot each verified state to `test-artifacts/`.
+
+## Step F2 — Light regression smoke
+
+Confirm the change did not break the core journey. This is a smoke check — **not** a
+latency or convergence gate.
+
+1. From the home / discovery surface, run one AI search (e.g. `concrete museum`).
+   Answer any clarification turn with one canned reply; reach the first card.
+2. Perform ~5 swipes, alternating `ArrowRight` / `ArrowLeft`.
+3. **Strict gates**: cards load; every `/swipes/` POST returns 200; no app crash or
+   blank screen; zero console errors during the smoke.
+
+Do **not** assert TTFC budgets, the 25-swipe count, 3-persona coverage, or per-swipe
+latency — those are FULL-mode gates over code a feature-scoped change did not touch.
+FAIL only on crash / console error / swipe-API non-200.
+
+---
+
 # Part C — Drift check
 
 ## Step C1 — origin/develop drift
@@ -523,11 +593,14 @@ HEAD-drift check is unnecessary — only the `origin/develop` comparison applies
 
 # Verdict
 
-Return exactly one of the two verdicts below as your final message to the caller. You
-write **no file** and **no handoff line** — the verdict is your return value.
+Return exactly one verdict as your final message to the caller — the PASS shape for
+the mode you ran, or the shared FAIL shape. You write **no file** and **no handoff
+line** — the verdict is your return value.
+
+**FULL mode — PASS:**
 
 ```
-APP-TEST: PASS
+APP-TEST: PASS (FULL)
 Browser test: dev-login ✓ · 3 personas · 25-swipe lifecycle ✓
 - TTFC p50: Brutalist <Nms>, Sustainable Korean <Nms>, Bare Query <Nms> (all under budget)
 - Swipe latency p95: <Nms> user-felt / <Nms> backend (under budget)
@@ -536,7 +609,17 @@ Browser test: dev-login ✓ · 3 personas · 25-swipe lifecycle ✓
 Drift: origin/develop unchanged ✓
 ```
 
-or:
+**FEATURE-SCOPED mode — PASS:**
+
+```
+APP-TEST: PASS (FEATURE-SCOPED)
+Preflight: dev-login ✓ · migrations ✓ · console baseline clean ✓
+Feature checklist: <N>/<N> items passed — <one line per item>
+Regression smoke: AI search → 5 swipes ✓ · swipe API 200 ✓ · zero console errors
+Drift: origin/develop unchanged ✓
+```
+
+**Either mode — FAIL:**
 
 ```
 APP-TEST: FAIL
@@ -554,8 +637,11 @@ Debug data:
 ---
 
 ## Rules
-- Always run Steps B0–B6 in order. Steps B7–B8 are conditional on prior steps
-  succeeding.
+- **Mode first** — confirm FULL vs FEATURE-SCOPED from the dispatch before starting
+  (default FULL). FULL runs B0–B9 + Part C; FEATURE-SCOPED runs B0 → B1 → B2 →
+  Part F → C1 → B9.
+- In FULL mode, always run Steps B0–B6 in order. Steps B7–B8 are conditional on
+  prior steps succeeding.
 - If Step B5/B6 reveals no card loads, STOP and FAIL immediately — do not continue.
 - Report exact building_ids, phase values, latency numbers, and error messages — the
   caller needs specifics to drive a fix.

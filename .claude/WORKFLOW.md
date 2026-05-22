@@ -42,7 +42,7 @@ a sub-agent that returns its result directly to the session that dispatched it.
 | **front-maker** | React/Vite frontend code (consults `DESIGN.md`) | `frontend/` only |
 | **code-review** | Static code review — API contracts, logic bugs, error handling, integration correctness | read-only |
 | **security-manager** | Security scan — SQL injection, auth bypass, XSS, secret/token leakage | read-only |
-| **app-test** | Pre-push gate — live browser user-journey test + HEAD/origin drift check | read-only |
+| **app-test** | Pre-push gate — live browser user-journey test + HEAD/origin drift check; FULL / FEATURE-SCOPED modes | read-only |
 | **git-manager** | Single commit only — never pushes | `git commit` |
 | **git-publisher** | Push / PR open / PR poll / squash merge / external PR triage / develop→main deploy | `git push`, `gh pr *` |
 | **reporter** | Session-end — updates `.claude/Task.md` + the `project/` dashboard state | `.claude/`, `project/` |
@@ -144,7 +144,11 @@ The pipeline commits but the `app-test` agent gates the push. It runs the live
 browser user-journey (dev-login → search → swipe lifecycle → results → error
 recovery, with card-data validation, phase-transition checks, latency budgets)
 and the HEAD/`origin/develop` drift check. It returns one verdict — PASS /
-PASS-WITH-MINORS / FAIL / ABORTED (drift) — and persists nothing. On FAIL the
+PASS-WITH-MINORS / FAIL / ABORTED (drift) — and persists nothing. It runs in one
+of two modes — **FULL** (the 3-persona swipe journey, for changes touching the
+recommendation/swipe path) or **FEATURE-SCOPED** (preflight + a caller-supplied
+feature checklist + a light regression smoke, for changes that don't); the caller
+picks, default FULL — see `.claude/agents/app-test.md` § Modes. On FAIL the
 orchestrate fix loop re-enters (counts as 1 cycle). On ABORTED, rebase and
 re-run. `app-test` is auto-skipped for pure docs/config changes (no UI/runtime
 surface).
