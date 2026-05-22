@@ -6,7 +6,7 @@
 
 export const BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001/api/v1'
 
-const FETCH_TIMEOUT_MS = 10000          // 10-second timeout for all fetch calls
+const FETCH_TIMEOUT_MS = 15000          // 15-second default timeout (per-call override available via callApi 5th param)
 const MAX_NETWORK_RETRIES = 2           // retry count for network failures
 const BACKOFF_BASE_MS = 300             // exponential backoff base (300ms, 900ms)
 
@@ -75,7 +75,7 @@ async function _tryRefresh() {
 
 // -- Core fetch helper -----------------------------------------------------
 
-export async function callApi(method, path, body, retry = true) {
+export async function callApi(method, path, body, retry = true, timeoutMs = FETCH_TIMEOUT_MS) {
   const t0 = Date.now()
   const token = getToken()
   const fetchOptions = {
@@ -93,7 +93,7 @@ export async function callApi(method, path, body, retry = true) {
   // Attempt fetch with network-level retries (not for HTTP error responses)
   for (let attempt = 0; attempt <= MAX_NETWORK_RETRIES; attempt++) {
     try {
-      res = await _fetchWithTimeout(`${BASE}${path}`, fetchOptions)
+      res = await _fetchWithTimeout(`${BASE}${path}`, fetchOptions, timeoutMs)
       lastNetworkErr = null
       break
     } catch (err) {
@@ -120,7 +120,7 @@ export async function callApi(method, path, body, retry = true) {
   // Auto-refresh on 401 (once)
   if (res.status === 401 && retry) {
     const refreshed = await _tryRefresh()
-    if (refreshed) return callApi(method, path, body, false)
+    if (refreshed) return callApi(method, path, body, false, timeoutMs)
     clearTokens()
     // Notify App to log out -- avoids circular imports
     window.dispatchEvent(new CustomEvent('archithon:session-expired'))
