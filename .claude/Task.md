@@ -142,6 +142,11 @@ Google OAuth only. Korean users need domestic login.
 - [ ] Kakao social auth backend + frontend button
 - [ ] Naver social auth backend + frontend button
 
+### Audit Tier 2/3/4 — pending next sessions
+Remaining items from the full codebase audit report.
+- [ ] Tier 2 — UX-contract bugs: #3/#4/#5/#7/#9/#10
+- [ ] Tier 3 — ops risk: #14/#16/#17
+- [ ] Tier 4 — file decomp: App.jsx, engine.py, BoardDetailPage, UserProfilePage
 
 ---
 
@@ -156,6 +161,12 @@ frontend, leaf→hub order. Scope with `/plan` per slice.
 ---
 
 ## Resolved
+
+### Audit Tier 1 hotfix bundle — RESOLVED 2026-05-23 (PR #74)
+[x] #1 legacy `liked_ids`/`saved_ids` string entries: migration `0019` normalizes to dict.
+[x] #2 bookmark + project PATCH: `transaction.atomic` + `select_for_update` on Project.
+[x] #6 finish gate FE 3→4 to match BE `min_likes_for_clustering=4`.
+[x] #8 `ProjectSerializer` `latest_session_meta` + Resume vs New UI on BoardCard; ownership gate on `latest_session_*` (IDOR fix); projects.py PATCH/DELETE locked-query ownership filter (TOCTOU fix).
 
 ### External PR triage — Board UX + Codex defect fixes — RESOLVED 2026-05-23 (PR #72)
 [x] PR #71 (external, `yywon1`) opened against wrong base `main`. Triage: branched
