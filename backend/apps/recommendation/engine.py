@@ -344,17 +344,42 @@ def get_diverse_random(n=10, filters=None, image_focus=None):
     ]
     _optional_cols = ()
     _cols = _build_select_columns(_required_cols, _optional_cols)
-    # ORDER BY RANDOM() here is intentional: get_diverse_random is called with a
-    # WHERE clause from _build_filter_sql that typically narrows to hundreds–low-thousands
-    # of rows, so the sort cost is small. The over-fetch (n*5, ≤100) then applies
-    # greedy farthest-point diversification — preserving randomness is required. (Finding
-    # #14a: unfiltered sites replaced; this filtered site left as-is by design.)
+    # Two-query pattern: ID-only fetch first (no embedding column, no sort over
+    # full corpus), then Python random.sample, then full-row fetch for the sample
+    # only.  This avoids an ORDER BY RANDOM() sort over the entire publishable
+    # corpus (~39k rows) on unfiltered or lightly-filtered calls.
+    # (Audit finding #2.7: stale comment claimed this was already fixed — it wasn't.)
     with connection.cursor() as cur:
         cur.execute(
-            f'SELECT {_cols}, embedding::text FROM canonical_v2_buildings {where} ORDER BY RANDOM() LIMIT %s',
-            params + [min(n * 5, 100)],  # fetch a pool, then diversify
+            f'SELECT canonical_bld_id FROM canonical_v2_buildings {where}',
+            params,
+        )
+        all_ids = [row[0] for row in cur.fetchall()]
+
+    if not all_ids:
+        return []
+
+    # Python random.sample — no PG sort over full corpus
+    sample_size = min(n * 5, 100, len(all_ids))
+    sampled_ids = random.sample(all_ids, sample_size)
+
+    # Second query: fetch full rows for sampled IDs only.
+    # Must gate on is_publishable = true: between query 1 and query 2 a row
+    # could theoretically be unpublished (per CLAUDE.md every building query gates
+    # on is_publishable = true, regardless of how the ID set was obtained).
+    with connection.cursor() as cur:
+        cur.execute(
+            f'SELECT {_cols}, embedding::text FROM canonical_v2_buildings'
+            f' WHERE canonical_bld_id = ANY(%s) AND is_publishable = true',
+            [sampled_ids],
         )
         rows = _dictfetchall(cur)
+
+    # Postgres ANY(...) returns rows in PK/index order — reorder to match
+    # sampled_ids so random.sample order is preserved through to the greedy
+    # farthest-point diversification step below.
+    rows_by_id = {r['canonical_bld_id']: r for r in rows}
+    rows = [rows_by_id[bid] for bid in sampled_ids if bid in rows_by_id]
 
     if not rows:
         return []

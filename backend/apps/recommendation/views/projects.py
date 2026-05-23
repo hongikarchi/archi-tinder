@@ -33,14 +33,25 @@ class ProjectListCreateView(APIView):
             page, page_size = 1, 50
         _latest_sid_sq = Subquery(
             AnalysisSession.objects.filter(project=OuterRef('pk'))
-            .order_by('-created_at')
-            .values('session_id')[:1]
+            .order_by('-created_at').values('session_id')[:1]
+        )
+        _latest_lv_sq = Subquery(
+            AnalysisSession.objects.filter(project=OuterRef('pk'))
+            .order_by('-created_at').values('like_vectors')[:1]
+        )
+        _latest_ca_sq = Subquery(
+            AnalysisSession.objects.filter(project=OuterRef('pk'))
+            .order_by('-created_at').values('created_at')[:1]
         )
         qs = (
             Project.objects
             .filter(user=profile)
             .select_related('user__user')
-            .annotate(_latest_session_id=_latest_sid_sq)
+            .annotate(
+                _latest_session_id=_latest_sid_sq,
+                _latest_like_vectors=_latest_lv_sq,
+                _latest_session_created_at=_latest_ca_sq,
+            )
             .order_by('-created_at')
         )
         total  = qs.count()
@@ -166,14 +177,25 @@ class UserProjectsListView(APIView):
             page, page_size = 1, 50
         _latest_sid_sq = Subquery(
             AnalysisSession.objects.filter(project=OuterRef('pk'))
-            .order_by('-created_at')
-            .values('session_id')[:1]
+            .order_by('-created_at').values('session_id')[:1]
+        )
+        _latest_lv_sq = Subquery(
+            AnalysisSession.objects.filter(project=OuterRef('pk'))
+            .order_by('-created_at').values('like_vectors')[:1]
+        )
+        _latest_ca_sq = Subquery(
+            AnalysisSession.objects.filter(project=OuterRef('pk'))
+            .order_by('-created_at').values('created_at')[:1]
         )
         qs = (
             Project.objects
             .filter(user=target_profile)
             .select_related('user__user')
-            .annotate(_latest_session_id=_latest_sid_sq)
+            .annotate(
+                _latest_session_id=_latest_sid_sq,
+                _latest_like_vectors=_latest_lv_sq,
+                _latest_session_created_at=_latest_ca_sq,
+            )
             .order_by('-created_at')
         )
         if not is_owner:

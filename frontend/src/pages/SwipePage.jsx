@@ -40,8 +40,8 @@ function ConfidenceBar({ value, phase, progress }) {
     pct = value != null ? Math.round(value * 100) : 0
     stageLabel = 'Analyzing'
   } else if (phase === 'exploring') {
-    const likes = Math.min(likeCount, 3)
-    pct = Math.round((likes / 3) * 100)
+    const likes = Math.min(likeCount, 4)
+    pct = Math.round((likes / 4) * 100)
     stageLabel = 'Exploring'
   } else if (value != null) {
     pct = Math.round(value * 100)

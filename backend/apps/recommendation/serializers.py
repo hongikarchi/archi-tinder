@@ -1,6 +1,8 @@
+from types import SimpleNamespace
+
 from rest_framework import serializers
 from apps.accounts.serializers import UserMiniSerializer
-from .models import AnalysisSession, Project
+from .models import Project
 
 
 class ProjectSerializer(serializers.ModelSerializer):
@@ -84,15 +86,21 @@ class ProjectSerializer(serializers.ModelSerializer):
             return None if cached is False else cached
 
         session = None
-        # Annotated path: attribute present (even when None/falsy)
+        # Annotated path: attribute present (even when None/falsy).
+        # ProjectListCreateView and UserProjectsListView annotate three attrs:
+        #   _latest_session_id, _latest_like_vectors, _latest_session_created_at
+        # Using a SimpleNamespace avoids the N+1 AnalysisSession.objects.get()
+        # that the old code issued once per project in the list response.
         if hasattr(obj, '_latest_session_id'):
             if obj._latest_session_id:
-                try:
-                    session = AnalysisSession.objects.get(session_id=obj._latest_session_id)
-                except AnalysisSession.DoesNotExist:
-                    session = None
+                session = SimpleNamespace(
+                    session_id=obj._latest_session_id,
+                    like_vectors=getattr(obj, '_latest_like_vectors', None) or [],
+                    created_at=getattr(obj, '_latest_session_created_at', None),
+                )
         else:
             # Fallback for non-annotated single-object contexts
+            # (e.g. ProjectDetailView, serializer unit tests).
             session = obj.sessions.order_by('-created_at').first()
 
         obj.__dict__[cache_key] = session if session is not None else False
