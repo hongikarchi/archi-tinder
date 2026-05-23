@@ -142,15 +142,6 @@ Google OAuth only. Korean users need domestic login.
 - [ ] Kakao social auth backend + frontend button
 - [ ] Naver social auth backend + frontend button
 
-### Dev Environment
-#### DEV-ENV1. Local backend/.env points at production DB — repoint off prod
-`DB_HOST=ep-broad-hat-a1jaomn7`, `DB_NAME=user_data` in `backend/.env` targets
-the live production database. app-test ran write-constrained for PRs #68 and #69
-(live-browser journey / dev-login / swipe skipped to avoid prod writes). Recommended
-fix: provision a dedicated Neon test branch and update `backend/.env` so future
-app-test runs execute the full live journey.
-- [ ] Provision Neon test branch (or local Postgres) for dev
-- [ ] Update backend/.env DB_* vars to point at test DB, not production
 
 ---
 
@@ -165,6 +156,32 @@ frontend, leaf→hub order. Scope with `/plan` per slice.
 ---
 
 ## Resolved
+
+### External PR triage — Board UX + Codex defect fixes — RESOLVED 2026-05-23 (PR #72)
+[x] PR #71 (external, `yywon1`) opened against wrong base `main`. Triage: branched
+    `feature/admin-board-ux-clean` off develop, cherry-picked both PR #71 commits
+    (authorship preserved), added third commit `82bd36e` fixing 3 Codex defects.
+    PR #72 squash-merged to develop as `877e82c`. PR #71 closed superseded.
+[x] Defect 1 (Major) — "Finish & View Report" race: `swipePending` counter gates button
+    `disabled={isResultLoading || swipePending > 0}`; threaded via `sharedLayoutProps`
+    → `MainLayout.jsx` → `SwipePage.jsx`.
+[x] Defect 2 (Major) — stale board hero cover after delete: `BoardDetailPage.jsx` cover
+    now prefers `buildings[0].image_url`, falls back to `board.cover_image_url`.
+[x] Defect 3 (Medium) — `PATCH remove_building_ids` type validation + atomicity:
+    `isinstance(remove_ids, list)` guard → 400; `is_valid(raise_exception=True)` before
+    `transaction.atomic()`; both saves inside atomic block. + 3 new unit tests in
+    `backend/tests/test_projects.py` (valid removal, invalid type, atomicity proof).
+[x] app-test FULL PASS-WITH-MINORS (3-persona live journey, local-dev branch).
+
+### DEV-ENV1. Local backend/.env repointed off production DB — RESOLVED 2026-05-23
+[x] Provisioned persistent Neon child branch `local-dev` (`br-rough-wildflower-a115ukd4`,
+    endpoint `ep-summer-king-a1xldgwi`, no TTL) off `production`. Contains CoW copies of
+    both `user_data` (57 migrations, 2 users at branch time) and `neondb`
+    (39,736 publishable buildings).
+[x] Updated 6 `.env` keys (`DB_HOST`/`DB_USER`/`DB_PASSWORD` + `BUILDINGS_*` equivalents).
+    Backup saved at `backend/.env.bak.1779499369`. Production credentials no longer in `.env`.
+[x] Backend runserver + vite restarted, both confirmed pointed at `local-dev`.
+    Production isolation now mechanically guaranteed.
 
 ### External PR triage — UserSerializer fix + image loading perf — RESOLVED 2026-05-23 (PRs #68, #69)
 [x] PR #68 (squash `779725e` on develop): `fix: UserSerializer.user_id source — user.id not profile id`.
