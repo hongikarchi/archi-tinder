@@ -160,6 +160,15 @@ frontend, leaf→hub order. Scope with `/plan` per slice.
 
 ## Resolved
 
+### Codex Round 2 audit — 7 findings resolved — RESOLVED 2026-05-24 (PRs #85 / #86 / #87)
+[x] B1 — `/images/batch/` 500 on nested list input: serializer validation fixed (PR #85)
+[x] B2 — BoardDetail field mismatch causing placeholder rendering: normalize fixed (PR #85)
+[x] B3 — useBoard.Promise.all coupling: board no longer waits on result API (PR #85)
+[x] P1 — SwipePage analyzing 0% progress drop: fixed analyzing percentage flow (PR #86)
+[x] P2 — Gemini auth-error retry waste: fail-fast on auth errors, no retry (PR #86)
+[x] P3 — Discovery taste vector TTL cache: caches.py get_or_build_taste/evict_taste, 1hr TTL, evict on liked_ids change (PR #87)
+[x] P4 — IMP-8 redis-prep doc sync: algorithm.md annotated (this housekeeping commit)
+
 ### External codex audit — 9 findings resolved — RESOLVED 2026-05-23 (PRs #81 / #82 / #83)
 [x] #1.1 (P1 latent) — raw_query stored under both `'raw_query'` and `'query'` keys so old + new clients both read correctly (PR #82).
 [x] #1.2 (P1) — swipe idempotency: full SwipeRecord payload re-returned on duplicate swipe_id (was empty 200); race-condition guard catches concurrent identical swipe (PR #81).
