@@ -6,7 +6,7 @@ Coverage:
   - ProjectSerializer: disliked_ids NEVER in response (owner, public, admin)
   - GET /api/v1/projects/{id}/ — own→200, public→200 anon, private non-owner→403
   - PATCH /api/v1/projects/{id}/ — owner updates name+visibility; follower_count/
-    disliked_ids silently ignored; non-owner 403
+    disliked_ids silently ignored; non-owner 404 (TOCTOU fix: lock folded into owner filter)
   - GET /api/v1/users/{id}/projects/ — non-owner: public only; owner: all
   - GET /api/v1/users/{id}/ — boards[] field present and correctly hydrated
   - Backward compat smoke tests for existing swipe workflow
@@ -206,14 +206,14 @@ class TestProjectSelfUpdateView:
         p.refresh_from_db()
         assert p.reaction_count == 0
 
-    def test_non_owner_patch_returns_403(self, other_auth_client, user_profile):
+    def test_non_owner_patch_returns_404(self, other_auth_client, user_profile):
         p = Project.objects.create(user=user_profile, name='NotMine')
         resp = other_auth_client.patch(
             f'/api/v1/projects/{p.project_id}/',
             {'name': 'Hacked'},
             format='json',
         )
-        assert resp.status_code == 403
+        assert resp.status_code == 404
 
     def test_unauthenticated_patch_returns_401(self, api_client, user_profile):
         p = Project.objects.create(user=user_profile, name='P1')
