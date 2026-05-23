@@ -16,60 +16,91 @@ function collectBoardBuildingIds(project) {
   return ids
 }
 
-function adaptProjectToBoard(project, buildings, recommended = []) {
+function adaptProjectToBoard(project, buildings) {
   return {
     ...project,
     board_id: project.project_id,
     owner: project.user,
     cover_image_url: buildings[0]?.image_url || '',
     buildings,
-    recommended,
   }
 }
 
 export function useBoard(projectId) {
   const [board, setBoard] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [recommended, setRecommended] = useState([])
+  const [buildingsLoading, setBuildingsLoading] = useState(true)
+  const [resultLoading, setResultLoading] = useState(false)
   const [error, setError] = useState(null)
 
   useEffect(() => {
     if (!projectId) {
       setBoard(null)
-      setLoading(false)
+      setRecommended([])
+      setBuildingsLoading(false)
+      setResultLoading(false)
       setError(new Error('No board ID found.'))
       return
     }
 
     let cancelled = false
-    setLoading(true)
+    setBuildingsLoading(true)
+    setResultLoading(false)
+    setRecommended([])
     setError(null)
+    setBoard(null)
 
     getProject(projectId, { throwOnError: true })
-      .then(async project => {
+      .then(project => {
         if (cancelled) return
         if (!project) throw new Error('Board not found.')
+
         const buildingIds = collectBoardBuildingIds(project)
-        const [buildings, resultData] = await Promise.all([
-          getBoardBuildings(buildingIds),
-          project.latest_session_id
-            ? getResult({ session_id: project.latest_session_id }).catch(() => null)
-            : Promise.resolve(null),
-        ])
-        if (cancelled) return
-        const recommended = resultData?.predicted_like_images || []
-        setBoard(adaptProjectToBoard(project, buildings, recommended))
+
+        // Fetch buildings independently — show cards as soon as they arrive.
+        // setBoard fires exactly once per board load so the BoardDetailPage
+        // useEffect([board]) initializes local state only once.
+        getBoardBuildings(buildingIds)
+          .then(buildings => {
+            if (cancelled) return
+            setBoard(adaptProjectToBoard(project, buildings))
+            setBuildingsLoading(false)
+          })
+          .catch(() => {
+            if (cancelled) return
+            setBoard(adaptProjectToBoard(project, []))
+            setBuildingsLoading(false)
+          })
+
+        // Fetch result independently — recommended section populates when it arrives.
+        // Uses separate `recommended` state so setBoard is never called again.
+        if (project.latest_session_id) {
+          setResultLoading(true)
+          getResult({ session_id: project.latest_session_id })
+            .then(resultData => {
+              if (cancelled) return
+              setRecommended(resultData?.predicted_like_images || [])
+            })
+            .catch(() => { /* leave recommended empty on error */ })
+            .finally(() => {
+              if (!cancelled) setResultLoading(false)
+            })
+        }
       })
       .catch(err => {
         if (cancelled) return
         setBoard(null)
+        setRecommended([])
+        setBuildingsLoading(false)
+        setResultLoading(false)
         setError(err)
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
       })
 
     return () => { cancelled = true }
   }, [projectId])
 
-  return { board, loading, error }
+  // Expose a combined `loading` alias so existing consumers continue to work.
+  const loading = buildingsLoading
+
+  return { board, recommended, loading, buildingsLoading, resultLoading, error }
 }

@@ -78,8 +78,9 @@ export async function getBuildings(buildingIds) {
 }
 
 /**
- * Batch-fetch raw building rows for board detail.
- * BoardDetailPage expects the backend's raw card fields directly.
+ * Batch-fetch building cards for board detail.
+ * Returns normalized ImageCard objects (same shape as swipe cards).
+ * Preserves input order via Map lookup before normalizing.
  */
 export async function getBoardBuildings(buildingIds) {
   if (!buildingIds?.length) return []
@@ -88,7 +89,10 @@ export async function getBoardBuildings(buildingIds) {
     const byId = new Map(
       (result || []).map(card => [String(card.canonical_bld_id ?? card.building_id ?? card.id), card])
     )
-    return buildingIds.map(id => byId.get(String(id))).filter(Boolean)
+    return buildingIds
+      .map(id => byId.get(String(id)))
+      .filter(Boolean)
+      .map(normalizeCard)
   } catch (err) {
     console.error('[api/client] getBoardBuildings failed:', err)
     return []

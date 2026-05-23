@@ -271,6 +271,50 @@ class TestBuildingBatch:
         assert resp.status_code == 200
         assert resp.json() == []
 
+    def test_batch_nested_list_returns_400(self, auth_client):
+        """Nested list element slips past list check without element validation → PG 500.
+        Fix: element-type guard must reject non-string elements."""
+        resp = auth_client.post(
+            '/api/v1/images/batch/',
+            {'canonical_bld_ids': [['bld_000001']]},
+            format='json',
+        )
+        assert resp.status_code == 400
+        assert 'non-empty strings' in resp.json().get('detail', '')
+
+    @patch('apps.recommendation.views.engine.get_buildings_by_ids')
+    def test_batch_valid_string_ids_returns_200(self, mock_batch, auth_client):
+        """Valid list of non-empty strings must reach engine and return 200."""
+        mock_batch.return_value = [MOCK_CARD]
+        resp = auth_client.post(
+            '/api/v1/images/batch/',
+            {'canonical_bld_ids': ['bld_000001']},
+            format='json',
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+
+    def test_batch_none_and_empty_string_returns_400(self, auth_client):
+        """None and empty-string elements must be rejected by element-type guard."""
+        resp = auth_client.post(
+            '/api/v1/images/batch/',
+            {'canonical_bld_ids': [None, '']},
+            format='json',
+        )
+        assert resp.status_code == 400
+        assert 'non-empty strings' in resp.json().get('detail', '')
+
+    def test_batch_integer_element_returns_400(self, auth_client):
+        """Integer element must be rejected by element-type guard."""
+        resp = auth_client.post(
+            '/api/v1/images/batch/',
+            {'canonical_bld_ids': [123]},
+            format='json',
+        )
+        assert resp.status_code == 400
+        assert 'non-empty strings' in resp.json().get('detail', '')
+
 
 # -- ProjectSerializer.latest_session_meta ------------------------------------
 
