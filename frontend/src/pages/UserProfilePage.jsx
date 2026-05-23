@@ -21,7 +21,7 @@ function formatBoardDate(iso) {
   }
 }
 
-export default function UserProfilePage({ onLogout }) {
+export default function UserProfilePage({ onLogout, onResumeProject, onNewProjectSession }) {
   const { userId: routeUserId } = useParams()
   const navigate = useNavigate()
 
@@ -845,7 +845,9 @@ export default function UserProfilePage({ onLogout }) {
                 selectMode={selectMode}
                 isSelected={selectedBoards.has(board.board_id)}
                 onSelectToggle={handleSelectToggle}
-                directNavigate={true}
+                directNavigate={!board.latest_session_meta}
+                onResume={onResumeProject ? () => onResumeProject(board.board_id) : undefined}
+                onStartNew={onNewProjectSession ? () => onNewProjectSession(board.board_id) : undefined}
               />
             ))}
           </div>

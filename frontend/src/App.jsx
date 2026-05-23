@@ -658,7 +658,8 @@ export default function App() {
           savedIds: extractSavedIds(p.saved_ids),
           finalReport: p.final_report || null,
           reportImage: p.report_image || null,
-          sessionId: null,
+          sessionId: p.latest_session_id || null,
+          latestSessionMeta: p.latest_session_meta || null,
           createdAt: p.created_at,
           deckImages: null,
         }))
@@ -688,6 +689,30 @@ export default function App() {
     setWizardData(null)
     loggingOut.current = false
     navigate('/login')
+  }
+
+  // Resume an interrupted swipe session from a board card.
+  // boardId == project_id (String). Looks up the local project entry to get
+  // its filters + stored sessionId, then navigates to /swipe.
+  async function handleResumeProject(boardId) {
+    const id = String(boardId)
+    const project = projects.find(p => p.id === id)
+    if (!project) return
+    setActiveProjectId(id)
+    navigate('/swipe')
+    await initSession(id, project.filters, [], [], project.sessionId || null, null, null, project.projectName)
+  }
+
+  // Start a fresh swipe session for an existing project, discarding the old session.
+  async function handleNewProjectSession(boardId) {
+    const id = String(boardId)
+    const project = projects.find(p => p.id === id)
+    if (!project) return
+    // Clear stored sessionId so initSession creates a brand-new session
+    setProjects(prev => prev.map(p => p.id === id ? { ...p, sessionId: null, latestSessionMeta: null } : p))
+    setActiveProjectId(id)
+    navigate('/swipe')
+    await initSession(id, project.filters, [], [], null, null, null, project.projectName)
   }
 
   const sharedLayoutProps = {
@@ -722,6 +747,8 @@ export default function App() {
       setActiveProjectId(null)
       navigate('/discovery')
     },
+    onResumeProject: handleResumeProject,
+    onNewProjectSession: handleNewProjectSession,
   }
 
   return (

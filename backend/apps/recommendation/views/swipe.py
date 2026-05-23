@@ -205,9 +205,8 @@ class ProjectBookmarkView(APIView):
         if profile is None:
             return Response({'detail': 'unauthenticated'}, status=status.HTTP_401_UNAUTHORIZED)
 
-        try:
-            project = Project.objects.get(project_id=project_id, user=profile)
-        except Project.DoesNotExist:
+        # Existence check outside the lock — cheap 404 guard before acquiring row lock.
+        if not Project.objects.filter(project_id=project_id, user=profile).exists():
             return Response({'detail': 'project not found'}, status=status.HTTP_404_NOT_FOUND)
 
         card_id = request.data.get('card_id')
@@ -229,25 +228,33 @@ class ProjectBookmarkView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # --- Toggle saved_ids ---
-        existing = list(project.saved_ids or [])
-        existing_by_id = {
-            e['id']: e
-            for e in existing
-            if isinstance(e, dict) and 'id' in e
-        }
+        # --- Toggle saved_ids (atomic read-modify-write to prevent lost updates) ---
+        with transaction.atomic():
+            try:
+                project = Project.objects.select_for_update().get(
+                    project_id=project_id, user=profile,
+                )
+            except Project.DoesNotExist:
+                return Response({'detail': 'project not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        if action == 'save':
-            if card_id not in existing_by_id:
-                existing.append({'id': card_id, 'saved_at': timezone.now().isoformat()})
-        else:  # unsave
-            existing = [
-                e for e in existing
-                if not (isinstance(e, dict) and e.get('id') == card_id)
-            ]
+            existing = list(project.saved_ids or [])
+            existing_by_id = {
+                e['id']: e
+                for e in existing
+                if isinstance(e, dict) and 'id' in e
+            }
 
-        project.saved_ids = existing
-        project.save(update_fields=['saved_ids', 'updated_at'])
+            if action == 'save':
+                if card_id not in existing_by_id:
+                    existing.append({'id': card_id, 'saved_at': timezone.now().isoformat()})
+            else:  # unsave
+                existing = [
+                    e for e in existing
+                    if not (isinstance(e, dict) and e.get('id') == card_id)
+                ]
+
+            project.saved_ids = existing
+            project.save(update_fields=['saved_ids', 'updated_at'])
 
         # --- Resolve optional session for event association ---
         session = None

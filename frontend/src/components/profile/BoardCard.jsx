@@ -38,6 +38,8 @@ export default function BoardCard({
   isSelected = false,
   onSelectToggle = () => {},
   directNavigate = false,
+  onResume,
+  onStartNew,
 }) {
   const [isFlipped, setIsFlipped] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
@@ -420,8 +422,53 @@ export default function BoardCard({
           <div style={{
             padding: '20px 16px 16px',
             background: 'linear-gradient(to top, rgba(0,0,0,0.96) 0%, rgba(0,0,0,0.65) 45%, rgba(0,0,0,0.18) 80%, transparent 100%)',
+            display: 'flex', flexDirection: 'column', gap: 8,
           }}>
+            {/* Resume vs New — only when a prior interrupted session exists */}
+            {isOwner && board.latest_session_meta && onResume && onStartNew && (
+              <div style={{ display: 'flex', gap: 8 }}>
+                {/* Primary CTA — resume per DESIGN.md §8.1 */}
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onResume() }}
+                  style={{
+                    flex: 1, minHeight: 44,
+                    padding: '10px 8px', borderRadius: 12,
+                    background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
+                    border: 0,
+                    color: '#fff', fontSize: 12, fontWeight: 600,
+                    cursor: 'pointer', fontFamily: 'inherit',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    transition: 'transform var(--motion-normal) var(--motion-ease)',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)' }}
+                >
+                  이어보기 (♥ {board.latest_session_meta.like_count})
+                </button>
+                {/* Secondary — new session per DESIGN.md §8.2 */}
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onStartNew() }}
+                  style={{
+                    flex: 1, minHeight: 44,
+                    padding: '10px 8px', borderRadius: 12,
+                    background: 'rgba(255,255,255,0.10)',
+                    border: '1px solid rgba(255,255,255,0.18)',
+                    color: '#fff', fontSize: 12, fontWeight: 600,
+                    cursor: 'pointer', fontFamily: 'inherit',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    transition: 'background var(--motion-fast) var(--motion-ease)',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.18)' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.10)' }}
+                >
+                  새로 시작
+                </button>
+              </div>
+            )}
             <button
+              type="button"
               onClick={() => navigate('/board/' + board.board_id)}
               style={{
                 width: '100%', minHeight: 44,
