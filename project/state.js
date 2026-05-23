@@ -12,14 +12,15 @@ window.PROJECT_STATE = {
   meta: {
     project: 'ArchiTinder — Make Web',
     updated: '2026-05-23',
+    lastSyncedAt: '2026-05-23',
     branch: 'develop',
-    head: 'f0c0e23',
+    head: '08fac3d',
   },
 
   tasks: {
     open: [
       { id: 'AUTH1', title: 'Kakao / Naver OAuth', note: 'Google-only today; Korean users need domestic login' },
-      { id: 'AUDIT-T2/3/4', title: 'Audit Tier 2/3/4 — pending next sessions', note: 'Tier 2 = UX-contract bugs (#3/#4/#5/#7/#9/#10). Tier 3 = ops risk (#14/#16/#17). Tier 4 = file decomp (App.jsx, engine.py, BoardDetailPage, UserProfilePage).' },
+      { id: 'AUDIT-T4', title: 'Audit Tier 4 — structural refactor (deferred)', note: 'File decomp: engine.py (2079 LOC), App.jsx (795 LOC), BoardDetailPage (1032 LOC), UserProfilePage (990 LOC), PostSwipeLandingPage (696 LOC), SwipePage (666 LOC), FirmProfilePage (611 LOC).' },
     ],
     inProgress: [
       { id: 'DESIGN-REWORK', title: 'Design-system redesign — per-component rework', note: 'Foundation shipped (PR #54). Remaining: ~7,700 LOC inline styles → CSS Modules, light-theme visuals, leaf→hub order.' },
@@ -47,14 +48,14 @@ window.PROJECT_STATE = {
   ],
 
   prs: [
+    { n: 79, title: 'fix: audit tier-3 ops risk (#14 ORDER BY RANDOM + sync corpus-rank + #16 GET-write atomic + #17 thread-local telemetry)', date: '2026-05-23' },
+    { n: 78, title: 'fix: audit tier-2 profiles legacy table (#10 architecture_vectors → canonical_v2_buildings)', date: '2026-05-23' },
+    { n: 77, title: 'fix: audit tier-2 raw_query plumbing (#4 FE→BE + #5 persist)', date: '2026-05-23' },
+    { n: 76, title: 'fix: audit tier-2 cuts (#3 area filter + #7 dead /matched route + #9 rerank shape)', date: '2026-05-23' },
     { n: 74, title: 'fix: audit tier-1 hotfix bundle (#1/#2/#6/#8)', date: '2026-05-23' },
     { n: 73, title: 'chore: session-end reporter housekeeping — DEV-ENV1 resolved + PR #72 recorded', date: '2026-05-23' },
     { n: 72, title: 'feat: board UX — edit mode, name edit, swipe finish button, result save (PR #71 recreation + Codex defect fixes)', date: '2026-05-23' },
     { n: 70, title: 'chore: session-end reporter housekeeping — record external PR triage + add DEV-ENV1', date: '2026-05-22' },
-    { n: 69, title: 'perf(frontend): image loading — 4s→2s timeout, lazy gallery, preload cap 3', date: '2026-05-22' },
-    { n: 68, title: 'fix: UserSerializer.user_id source — user.id not profile id', date: '2026-05-22' },
-    { n: 66, title: 'fix: discovery 499s timeout + LLM chat abort — gunicorn workers + per-endpoint client timeouts', date: '2026-05-22' },
-    { n: 65, title: 'chore: reporter DB-split deploy session-end sync', date: '2026-05-22' },
   ],
 
   architecture: {
