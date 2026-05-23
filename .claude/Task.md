@@ -134,7 +134,7 @@
 
 ---
 
-## Open
+## Next
 
 ### Auth
 #### AUTH1. Kakao / Naver OAuth not implemented
@@ -148,7 +148,7 @@ Remaining file decomposition items from full codebase audit.
 
 ---
 
-## In Progress
+## Now
 
 ### Design-system redesign — per-component rework (pending)
 Foundation shipped (PR #54: `tokens.css` 4 themes + `ThemeContext` +
@@ -158,7 +158,7 @@ frontend, leaf→hub order. Scope with `/plan` per slice.
 
 ---
 
-## Resolved
+## Done
 
 ### Codex Round 2 audit — 7 findings resolved — RESOLVED 2026-05-24 (PRs #85 / #86 / #87)
 [x] B1 — `/images/batch/` 500 on nested list input: serializer validation fixed (PR #85)

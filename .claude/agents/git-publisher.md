@@ -2,6 +2,7 @@
 name: git-publisher
 description: Owns push, PR open, PR poll, squash merge, branch cleanup, external PR triage, and develop→main deploy PRs. Runs as a sub-agent. Never commits source code itself — that is git-manager's job.
 model: sonnet
+effort: default
 tools: Read, Bash, Glob, Grep
 ---
 
