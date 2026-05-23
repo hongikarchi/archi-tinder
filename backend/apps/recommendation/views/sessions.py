@@ -393,15 +393,13 @@ class SessionResultView(APIView):
 
         # Topic 02: Gemini setwise rerank (session-end, off swipe hot path)
         if RC.get('gemini_rerank_enabled', False) and len(predicted_cards) >= 2:
+            # Pass cards in the shape rerank_candidates expects: canonical_bld_id +
+            # name (top-level) and metadata.axis_* (as produced by engine._row_to_card).
             candidate_metadata = [
                 {
                     'canonical_bld_id': c['canonical_bld_id'],
-                    'name_en': c.get('name_en', ''),
-                    'atmosphere': c.get('atmosphere', ''),
-                    'material': c.get('material', ''),
-                    'architect': c.get('architect', ''),
-                    'style': c.get('style', ''),
-                    'program': c.get('program', ''),
+                    'name': c.get('name', ''),
+                    'metadata': c.get('metadata') or {},
                 }
                 for c in predicted_cards
             ]

@@ -17,8 +17,6 @@ const FILTER_LABELS = {
   style: 'Style',
   year_min: 'Year',
   year_max: 'Year',
-  min_area: 'Area',
-  max_area: 'Area',
 }
 
 function FilterChips({ filters }) {
