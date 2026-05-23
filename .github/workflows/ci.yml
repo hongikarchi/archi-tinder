@@ -99,9 +99,8 @@ jobs:
         # Tests connect to localhost:5432 (the postgres service container).
         # Pytest-django manages its own test DB lifecycle for tests using the
         # `db` fixture; tests that bypass it use ci_db directly.
-        # -v + --durations=20 + -x: diagnostic for PR-D hang. Restore -q after merge.
-        timeout-minutes: 20
-        run: python -m pytest -v --tb=short --durations=20 -x
+        timeout-minutes: 15
+        run: python -m pytest -q --tb=short
 
   frontend:
     name: Frontend (lint + build)
