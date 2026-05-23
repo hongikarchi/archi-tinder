@@ -48,6 +48,10 @@ class SessionCreateView(APIView):
             raw_seeds = []
         seed_ids = [s for s in raw_seeds if isinstance(s, str) and len(s) <= 20][:50]
 
+        # raw_query: accept 'raw_query' (new FE key) with 'query' fallback for old clients.
+        # Separate from _raw_query_early below (which is coerced to None > 1000 chars for RRF).
+        raw_query = (request.data.get('raw_query') or request.data.get('query') or '').strip()[:2000]
+
         # Resolve project (project_id may be a local ID like 'proj_xxx' -- ignore gracefully)
         project = None
         if project_id:
@@ -56,7 +60,7 @@ class SessionCreateView(APIView):
             except Exception:
                 project = None
         if not project:
-            project = Project.objects.create(user=profile, name=project_name, filters=filters)
+            project = Project.objects.create(user=profile, name=project_name, filters=filters, raw_query=raw_query)
 
         # Topic 01 RRF: extract raw_query early — needed for both RRF q_text and
         # IMP-6 cache key. Coerce to None for non-string or oversized values.
@@ -169,15 +173,15 @@ class SessionCreateView(APIView):
         logger.info('Session created: %s (pool=%d, tiers=%d, relaxed=%s)', session.session_id, len(pool_ids), len(tiers), filter_relaxed)
 
         # §6 logging: session_start + pool_creation events
-        raw_query = request.data.get('query') or None
+        # Use the line-53 dual-key value (trimmed/truncated); coerce empty str to None.
         event_log.emit_event(
             'session_start',
             session=session,
             user=profile,
-            query=raw_query,
+            query=raw_query or None,
             filters=active_filters,
             filter_priority=list(filter_priority or []),
-            raw_query=raw_query,
+            raw_query=raw_query or None,
             visual_description=visual_description,
             v_initial_success=v_initial is not None,
         )

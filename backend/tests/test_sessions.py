@@ -202,6 +202,80 @@ class TestSessionCreation:
 
 
 @pytest.mark.django_db
+class TestSessionRawQueryPersistence:
+    """Audit #5: raw_query must be persisted on Project at session creation."""
+
+    def test_raw_query_persisted_on_new_project(self, auth_client, user_profile):
+        """POST with raw_query creates a Project row with that exact string."""
+        patchers = _apply_patches()
+        try:
+            resp = auth_client.post(
+                '/api/v1/analysis/sessions/',
+                {'filters': {}, 'raw_query': 'modern minimalist firms in Seoul'},
+                format='json',
+            )
+        finally:
+            _stop_patches(patchers)
+
+        assert resp.status_code == 201
+        project = Project.objects.get(project_id=resp.json()['project_id'])
+        assert project.raw_query == 'modern minimalist firms in Seoul'
+
+    def test_raw_query_defaults_to_empty_string_when_missing(self, auth_client, user_profile):
+        """POST without raw_query key stores empty string on Project (not NULL)."""
+        patchers = _apply_patches()
+        try:
+            resp = auth_client.post(
+                '/api/v1/analysis/sessions/',
+                {'filters': {}},
+                format='json',
+            )
+        finally:
+            _stop_patches(patchers)
+
+        assert resp.status_code == 201
+        project = Project.objects.get(project_id=resp.json()['project_id'])
+        assert project.raw_query == ''
+
+    def test_raw_query_truncated_at_2000_chars(self, auth_client, user_profile):
+        """POST with 2500-char raw_query truncates to 2000 chars (no DB error)."""
+        long_query = 'a' * 2500
+        patchers = _apply_patches()
+        try:
+            resp = auth_client.post(
+                '/api/v1/analysis/sessions/',
+                {'filters': {}, 'raw_query': long_query},
+                format='json',
+            )
+        finally:
+            _stop_patches(patchers)
+
+        assert resp.status_code == 201
+        project = Project.objects.get(project_id=resp.json()['project_id'])
+        assert len(project.raw_query) <= 2000
+
+    def test_raw_query_not_overwritten_on_session_resume(self, auth_client, user_profile):
+        """When session is created against an existing project_id, the project's
+        raw_query stays as originally stored, even if the new request sends a different value."""
+        project = Project.objects.create(
+            user=user_profile, name='Resume Test', filters={}, raw_query='original',
+        )
+        patchers = _apply_patches()
+        try:
+            resp = auth_client.post(
+                '/api/v1/analysis/sessions/',
+                {'project_id': str(project.project_id), 'filters': {}, 'raw_query': 'new'},
+                format='json',
+            )
+        finally:
+            _stop_patches(patchers)
+
+        assert resp.status_code == 201
+        project.refresh_from_db()
+        assert project.raw_query == 'original'
+
+
+@pytest.mark.django_db
 class TestSwipeRecording:
 
     def _create_session(self, auth_client, user_profile):
