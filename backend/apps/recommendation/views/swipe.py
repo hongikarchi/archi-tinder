@@ -6,7 +6,7 @@ import numpy as np
 from django.conf import settings
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -421,10 +421,24 @@ class SwipeView(APIView):
                 'confidence': None,
             })
 
-        # Idempotency check -- if already processed, return accepted so frontend treats it as success
-        if idempotency_key and SwipeEvent.objects.filter(idempotency_key=idempotency_key, session=session).exists():
+        # Idempotency check -- if already processed, return full payload so FE state machine
+        # can read progress/next_image/is_analysis_completed without hitting undefined fields.
+        if idempotency_key and SwipeEvent.objects.filter(
+            idempotency_key=idempotency_key, session=session
+        ).exists():
             logger.info('Duplicate swipe ignored: %s', idempotency_key)
-            return Response({'accepted': True, 'detail': 'duplicate'}, status=status.HTTP_200_OK)
+            return Response({
+                'accepted': True,
+                'session_status': session.status,
+                'progress': _progress(session),
+                'next_image': None,
+                'prefetch_image': None,
+                'prefetch_image_2': None,
+                'is_analysis_completed': session.status == 'completed',
+                'can_continue': False,
+                'confidence': None,
+                'detail': 'duplicate',
+            }, status=status.HTTP_200_OK)
 
         # NORMAL SWIPE PROCESSING
         import time as _time
@@ -440,6 +454,10 @@ class SwipeView(APIView):
                 session_id=session_id, user=profile
             )
             _mark('lock_acquired')
+            # Lock Project row before mutating its JSON lists (liked_ids / disliked_ids).
+            # Lock order: Session -> Project (no deadlock vs. bookmark POST which takes
+            # only Project and never acquires Session first).
+            project = Project.objects.select_for_update().get(pk=session.project_id)
 
             # 1. Get embedding and update preference vector
             embedding = engine.get_building_embedding(canonical_bld_id)
@@ -449,14 +467,35 @@ class SwipeView(APIView):
                     session.preference_vector, embedding, action
                 )
 
-            # 2. Record swipe
-            SwipeEvent.objects.create(
-                session=session, canonical_bld_id=canonical_bld_id,
-                action=action, idempotency_key=idempotency_key,
-            )
+            # 2. Record swipe — nested savepoint to handle concurrent duplicate races.
+            # Two concurrent requests with the same idempotency_key can both pass the
+            # pre-check at line ~424 before either has committed. The savepoint ensures
+            # the outer atomic block stays healthy when the constraint fires on the second.
+            try:
+                with transaction.atomic():  # savepoint
+                    SwipeEvent.objects.create(
+                        session=session, canonical_bld_id=canonical_bld_id,
+                        action=action, idempotency_key=idempotency_key,
+                    )
+            except IntegrityError:
+                # Concurrent duplicate raced past the pre-check. Bail out — the other
+                # request already committed the row. Re-read session for latest state.
+                logger.info('Concurrent duplicate swipe caught at create: %s', idempotency_key)
+                session.refresh_from_db()
+                return Response({
+                    'accepted': True,
+                    'session_status': session.status,
+                    'progress': _progress(session),
+                    'next_image': None,
+                    'prefetch_image': None,
+                    'prefetch_image_2': None,
+                    'is_analysis_completed': session.status == 'completed',
+                    'can_continue': False,
+                    'confidence': None,
+                    'detail': 'duplicate',
+                })
 
-            # 3. Update project liked/disliked lists
-            project = session.project
+            # 3. Update project liked/disliked lists (use the locked `project` from above)
             if action == 'like':
                 existing_ids = _liked_id_only(project.liked_ids)
                 if canonical_bld_id not in existing_ids:
