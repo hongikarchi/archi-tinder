@@ -263,7 +263,7 @@ export default function App() {
     }
   }
 
-  async function initSession(projectId, filters, filterPriority = [], seedIds = [], existingSessionId = null, currentHint = null, visualDescription = null, projectName = 'Untitled') {
+  async function initSession(projectId, filters, filterPriority = [], seedIds = [], existingSessionId = null, currentHint = null, visualDescription = null, projectName = 'Untitled', rawQuery = '') {
     setIsSwipeLoading(true)
     setIsSessionCompleted(false)
     try {
@@ -285,6 +285,7 @@ export default function App() {
         filter_priority: filterPriority,
         seed_ids: seedIds,
         visual_description: visualDescription || undefined,
+        raw_query: rawQuery || '',
       })
       applySessionResponse(projectId, result)
       return result
@@ -298,7 +299,7 @@ export default function App() {
     }
   }
 
-  async function handleStart(projectName, preloadedImages, llmFilters = {}, filterPriority = [], visualDescription = null, visibility = 'private') {
+  async function handleStart(projectName, preloadedImages, llmFilters = {}, filterPriority = [], visualDescription = null, visibility = 'private', rawQuery = '') {
     const projectId = `proj_${Date.now()}`
     const seedIds = (preloadedImages || []).map(c => c.image_id).filter(Boolean)
     const newProject = {
@@ -313,7 +314,7 @@ export default function App() {
     setProjects(prev => [...prev, newProject])
     setActiveProjectId(projectId)
     navigate('/swipe')
-    const result = await initSession(projectId, llmFilters || {}, filterPriority, seedIds, null, null, visualDescription, projectName)
+    const result = await initSession(projectId, llmFilters || {}, filterPriority, seedIds, null, null, visualDescription, projectName, rawQuery || '')
     if (visibility !== 'private' && result?.project_id) {
       api.updateProject(result.project_id, { visibility }).catch(err =>
         console.error('[App] updateProject visibility sync failed:', err)

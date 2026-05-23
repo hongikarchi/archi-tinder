@@ -162,6 +162,13 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
     } catch { /* ignore */ }
     return null
   })
+  const [latestRawQuery, setLatestRawQuery] = useState(() => {
+    try {
+      const stored = localStorage.getItem(`${storageKey}__latestRawQuery`)
+      if (stored) return JSON.parse(stored)
+    } catch { /* ignore */ }
+    return ''
+  })
   const [showStart, setShowStart] = useState(() => {
     try {
       const stored = localStorage.getItem(`${storageKey}__showStart`)
@@ -202,6 +209,9 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
     localStorage.setItem(`${storageKey}__latestVisualDescription`, JSON.stringify(latestVisualDescription))
   }, [storageKey, latestVisualDescription])
   useEffect(() => {
+    localStorage.setItem(`${storageKey}__latestRawQuery`, JSON.stringify(latestRawQuery))
+  }, [storageKey, latestRawQuery])
+  useEffect(() => {
     localStorage.setItem(`${storageKey}__showStart`, JSON.stringify(showStart))
   }, [storageKey, showStart])
 
@@ -209,7 +219,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
     [
       '__messages', '__conversationHistory', '__latestResults',
       '__latestFilters', '__latestFilterPriority', '__latestVisualDescription',
-      '__showStart',
+      '__latestRawQuery', '__showStart',
     ].forEach(suffix => localStorage.removeItem(`${storageKey}${suffix}`))
   }
 
@@ -276,6 +286,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
           setLatestFilters(isFallback ? {} : filters)
           setLatestFilterPriority(isFallback ? [] : filterPriority)
           setLatestVisualDescription(parsed.visual_description ?? null)
+          setLatestRawQuery(text || '')
           setShowStart(true)
         }
       }
@@ -292,7 +303,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
     if (mode === 'update') {
       onUpdate(projectId, latestResults, latestFilters, latestFilterPriority, latestVisualDescription)
     } else {
-      onStart(name, latestResults, latestFilters, latestFilterPriority, latestVisualDescription, visibility)
+      onStart(name, latestResults, latestFilters, latestFilterPriority, latestVisualDescription, visibility, latestRawQuery || '')
     }
   }
 

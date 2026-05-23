@@ -22,6 +22,7 @@ export async function startSession(params) {
     filters:         params.filters || {},
     filter_priority: params.filter_priority || [],
     seed_ids:        params.seed_ids || [],
+    raw_query:       params.raw_query || '',
     ...(params.visual_description ? { visual_description: params.visual_description } : {}),
   })
   return {
