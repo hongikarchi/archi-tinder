@@ -15,6 +15,7 @@ from rest_framework.views import APIView
 
 from ..models import Project, AnalysisSession, SwipeEvent
 from .. import engine, event_log
+from ..caches import evict_taste
 from ._shared import _get_profile, _progress, _liked_id_only
 
 logger = logging.getLogger('apps.recommendation')
@@ -521,6 +522,7 @@ class SwipeView(APIView):
                 if canonical_bld_id not in project.disliked_ids:
                     project.disliked_ids = project.disliked_ids + [canonical_bld_id]
             project.save(update_fields=['liked_ids', 'disliked_ids'])
+            evict_taste(profile.id)
 
             # 4. Increment round
             session.current_round += 1
