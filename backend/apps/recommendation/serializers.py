@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 from rest_framework import serializers
 from apps.accounts.serializers import UserMiniSerializer
 from .models import Project
@@ -11,16 +13,116 @@ class ProjectSerializer(serializers.ModelSerializer):
     Applies to owner, public, admin — all contexts.
 
     `user` is a nested minimal shape: user_id + display_name + avatar_url.
+
+    `latest_session_meta` / `latest_session_id` are OWNER-ONLY fields.
+    Non-owners (including anonymous callers) always receive null for both.
+    This prevents IDOR: a viewer querying another user's public board must not
+    learn whether that user has an in-progress session or its like activity.
+
+    Ownership check: request.user must equal the Project owner's Django User.
+    When request is absent from context (e.g. direct serializer instantiation
+    without a request) the fields return null conservatively.
+
+    Session lookup is memoised per Project instance via obj.__dict__ to avoid
+    two separate DB hits for the two SerializerMethodFields.
+
+    `latest_session_meta` shape (when visible):
+      - id: str(session_id)
+      - like_count: len(like_vectors) — canonical source, same as swipe.py:518
+      - created_at: ISO timestamp of session creation (AnalysisSession has no
+        updated_at column; created_at is the next-best proxy for recency)
+    Returns null when no session exists or caller is not the owner.
     """
     project_id = serializers.UUIDField(read_only=True)
     user = UserMiniSerializer(read_only=True)
     latest_session_id = serializers.SerializerMethodField()
+    latest_session_meta = serializers.SerializerMethodField()
+
+    # ------------------------------------------------------------------
+    # Ownership gate: returns True iff the requesting user owns this project
+    # ------------------------------------------------------------------
+    def _is_owner(self, obj):
+        """Return True only when the authenticated request user is the project owner."""
+        request = self.context.get('request')
+        if request is None or not request.user or not request.user.is_authenticated:
+            return False
+        # Project.user is a UserProfile; UserProfile.user is the Django User.
+        return request.user == obj.user.user
+
+    # ------------------------------------------------------------------
+    # Session lookup with per-instance memoisation (Defect 2 fix)
+    # ------------------------------------------------------------------
+    def _get_latest_session(self, obj):
+        """Return the most-recent AnalysisSession for this Project, or None.
+
+        Ownership is gated by the caller (_is_owner check) BEFORE this method
+        is invoked, so by the time we reach the DB lookup we are sure the
+        requesting user is entitled to the data.
+
+        Memoisation: the result is cached in obj.__dict__ under a private key
+        so both get_latest_session_id and get_latest_session_meta share a
+        single DB round-trip per serialised object.  A sentinel value of
+        False is used to distinguish "cached None" from "not yet cached".
+
+        Two lookup paths:
+
+        1. Annotated queryset (ProjectListCreateView / UserProjectsListView) —
+           the view annotates each Project with ``_latest_session_id`` via a
+           Subquery.  When present we inspect the annotation directly:
+           - annotation is None → no session exists → return None (no extra query)
+           - annotation is a UUID → fetch the full Session row (1 query, not N)
+
+        2. Single-object context (ProjectDetailView, serializer unit tests) —
+           the ``_latest_session_id`` attribute is absent, so we fall back to a
+           queryset call.  One extra query per single-object GET is acceptable.
+
+        This design keeps the list-view query count at O(1) regardless of
+        project count.
+        """
+        cache_key = '_latest_session_cache'
+        if cache_key in obj.__dict__:
+            cached = obj.__dict__[cache_key]
+            # False is the sentinel meaning "cached result is None"
+            return None if cached is False else cached
+
+        session = None
+        # Annotated path: attribute present (even when None/falsy).
+        # ProjectListCreateView and UserProjectsListView annotate three attrs:
+        #   _latest_session_id, _latest_like_vectors, _latest_session_created_at
+        # Using a SimpleNamespace avoids the N+1 AnalysisSession.objects.get()
+        # that the old code issued once per project in the list response.
+        if hasattr(obj, '_latest_session_id'):
+            if obj._latest_session_id:
+                session = SimpleNamespace(
+                    session_id=obj._latest_session_id,
+                    like_vectors=getattr(obj, '_latest_like_vectors', None) or [],
+                    created_at=getattr(obj, '_latest_session_created_at', None),
+                )
+        else:
+            # Fallback for non-annotated single-object contexts
+            # (e.g. ProjectDetailView, serializer unit tests).
+            session = obj.sessions.order_by('-created_at').first()
+
+        obj.__dict__[cache_key] = session if session is not None else False
+        return session
 
     def get_latest_session_id(self, obj):
-        if hasattr(obj, '_latest_session_id'):
-            return str(obj._latest_session_id) if obj._latest_session_id else None
-        session = obj.sessions.order_by('-created_at').first()
+        if not self._is_owner(obj):
+            return None
+        session = self._get_latest_session(obj)
         return str(session.session_id) if session else None
+
+    def get_latest_session_meta(self, obj):
+        if not self._is_owner(obj):
+            return None
+        session = self._get_latest_session(obj)
+        if not session:
+            return None
+        return {
+            'id': str(session.session_id),
+            'like_count': len(session.like_vectors or []),
+            'created_at': session.created_at.isoformat(),
+        }
 
     class Meta:
         model  = Project
@@ -38,6 +140,7 @@ class ProjectSerializer(serializers.ModelSerializer):
             'final_report',
             'report_image',
             'latest_session_id',
+            'latest_session_meta',
             'created_at',
             'updated_at',
         ]
@@ -52,6 +155,7 @@ class ProjectSerializer(serializers.ModelSerializer):
             'report_image',
             'raw_query',
             'latest_session_id',
+            'latest_session_meta',
             'created_at',
             'updated_at',
         ]

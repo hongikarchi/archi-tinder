@@ -134,7 +134,7 @@
 
 ---
 
-## Open
+## Next
 
 ### Auth
 #### AUTH1. Kakao / Naver OAuth not implemented
@@ -142,9 +142,13 @@ Google OAuth only. Korean users need domestic login.
 - [ ] Kakao social auth backend + frontend button
 - [ ] Naver social auth backend + frontend button
 
+### Audit Tier 4 — structural refactor (deferred)
+Remaining file decomposition items from full codebase audit.
+- [ ] Tier 4 — file decomp: engine.py (2079 LOC), App.jsx (795 LOC), BoardDetailPage (1032 LOC), UserProfilePage (990 LOC), PostSwipeLandingPage (696 LOC), SwipePage (666 LOC), FirmProfilePage (611 LOC)
+
 ---
 
-## In Progress
+## Now
 
 ### Design-system redesign — per-component rework (pending)
 Foundation shipped (PR #54: `tokens.css` 4 themes + `ThemeContext` +
@@ -154,7 +158,88 @@ frontend, leaf→hub order. Scope with `/plan` per slice.
 
 ---
 
-## Resolved
+## Done
+
+### Codex Round 2 audit — 7 findings resolved — RESOLVED 2026-05-24 (PRs #85 / #86 / #87)
+[x] B1 — `/images/batch/` 500 on nested list input: serializer validation fixed (PR #85)
+[x] B2 — BoardDetail field mismatch causing placeholder rendering: normalize fixed (PR #85)
+[x] B3 — useBoard.Promise.all coupling: board no longer waits on result API (PR #85)
+[x] P1 — SwipePage analyzing 0% progress drop: fixed analyzing percentage flow (PR #86)
+[x] P2 — Gemini auth-error retry waste: fail-fast on auth errors, no retry (PR #86)
+[x] P3 — Discovery taste vector TTL cache: caches.py get_or_build_taste/evict_taste, 1hr TTL, evict on liked_ids change (PR #87)
+[x] P4 — IMP-8 redis-prep doc sync: algorithm.md annotated (this housekeeping commit)
+
+### External codex audit — 9 findings resolved — RESOLVED 2026-05-23 (PRs #81 / #82 / #83)
+[x] #1.1 (P1 latent) — raw_query stored under both `'raw_query'` and `'query'` keys so old + new clients both read correctly (PR #82).
+[x] #1.2 (P1) — swipe idempotency: full SwipeRecord payload re-returned on duplicate swipe_id (was empty 200); race-condition guard catches concurrent identical swipe (PR #81).
+[x] #1.3 (P1) — Project row lock: `select_for_update()` on Project in swipe handler prevents concurrent-write corruption (PR #81).
+[x] #1.4 (P1 latent) — DPP 3× overfetch: `dpp_overfetch_multiplier=3` added to RECOMMENDATION; SessionResultView passes `n = k * multiplier` candidate window so DPP MAP-narrow runs over a broader set (PR #82).
+[x] #2.5 (P2) — `get_diverse_random` replaced ORDER BY RANDOM() full scan with two-query pattern (ID fetch + Python `random.sample` + WHERE IN) to avoid O(corpus) sort (PR #83).
+[x] #2.6 (P2) — ProjectListView + OfficeProjectListView N+1: `Subquery` composition eliminates per-project ORM queries (PR #83).
+[x] #2.7 (P2) — JWT refresh now blacklists old token on rotate + wraps `TokenError` for clean 401 response (PR #83).
+[x] #2.8 (P2) — `image_focus` `isinstance` guard in sessions.py rejects non-string values with 400 early; plumbed from LLMSearchPage → App → POST body (PR #83).
+[x] #2.9 (P2) — exploring progress bar max raised 3→4 in SwipePage to match `min_likes_for_clustering=4` backend threshold (PR #83).
+
+### Audit Tier 3 ops risk — RESOLVED 2026-05-23 (PR #79)
+[x] #14a ORDER BY RANDOM replaced with two-query pattern (ID fetch + Python random.sample + WHERE IN) in get_top_k_results no-pref + _random_pool. Remaining 2 sites (get_diverse_random, search_by_filters) left — already-filtered subsets, cost acceptable.
+[x] #14b bookmark POST corpus-rank sync removed; rank_corpus = None + TODO (telemetry-only field, not in API response; eliminates O(corpus_size) scan on bookmark).
+[x] #16 SessionResultView GET write wrapped in transaction.atomic() for multi-field save atomicity. select_for_update() dropped — caused CI hang (PG savepoint+FOR UPDATE interaction with pytest-django outer atomic).
+[x] #17 engine.py module-global _last_embedding_call_stats/_last_clustering_stats replaced with threading.local(). 6 write sites + 2 getters updated. Per-thread isolation prevents concurrent-request stats overwrite.
+Note: TestTelemetryThreadLocal (2 tests) removed — ThreadPoolExecutor + threading.local() + pytest-django PG context caused CI hang (19min). Diagnostic CI run (-v -x --durations=20, 20min timeout) confirmed test as hang root cause. Structural guarantee of #17 fix preserved by code; test coverage dropped but CI green.
+
+### Audit Tier 2 UX-contract bugs — RESOLVED 2026-05-23 (PR #76 / #77 / #78)
+[x] #3 area filter normalization: normalizeFilters() in frontend; backend filter_args guard on empty list (PR #76).
+[x] #4 FE→BE raw_query plumbing: raw_query field threaded from DiscoveryPage through API call to backend (PR #77).
+[x] #5 raw_query persist: backend persists raw_query to SwipeSession on first swipe (PR #77).
+[x] #7 dead /matched route removed from MainLayout.jsx guard + routing table (PR #76).
+[x] #9 rerank response shape fixed: engine returns list-of-dicts matching frontend expectation (PR #76).
+[x] #10 profiles legacy table: architecture_vectors references replaced with canonical_v2_buildings reads (PR #78).
+
+### Audit Tier 1 hotfix bundle — RESOLVED 2026-05-23 (PR #74)
+[x] #1 legacy `liked_ids`/`saved_ids` string entries: migration `0019` normalizes to dict.
+[x] #2 bookmark + project PATCH: `transaction.atomic` + `select_for_update` on Project.
+[x] #6 finish gate FE 3→4 to match BE `min_likes_for_clustering=4`.
+[x] #8 `ProjectSerializer` `latest_session_meta` + Resume vs New UI on BoardCard; ownership gate on `latest_session_*` (IDOR fix); projects.py PATCH/DELETE locked-query ownership filter (TOCTOU fix).
+
+### External PR triage — Board UX + Codex defect fixes — RESOLVED 2026-05-23 (PR #72)
+[x] PR #71 (external, `yywon1`) opened against wrong base `main`. Triage: branched
+    `feature/admin-board-ux-clean` off develop, cherry-picked both PR #71 commits
+    (authorship preserved), added third commit `82bd36e` fixing 3 Codex defects.
+    PR #72 squash-merged to develop as `877e82c`. PR #71 closed superseded.
+[x] Defect 1 (Major) — "Finish & View Report" race: `swipePending` counter gates button
+    `disabled={isResultLoading || swipePending > 0}`; threaded via `sharedLayoutProps`
+    → `MainLayout.jsx` → `SwipePage.jsx`.
+[x] Defect 2 (Major) — stale board hero cover after delete: `BoardDetailPage.jsx` cover
+    now prefers `buildings[0].image_url`, falls back to `board.cover_image_url`.
+[x] Defect 3 (Medium) — `PATCH remove_building_ids` type validation + atomicity:
+    `isinstance(remove_ids, list)` guard → 400; `is_valid(raise_exception=True)` before
+    `transaction.atomic()`; both saves inside atomic block. + 3 new unit tests in
+    `backend/tests/test_projects.py` (valid removal, invalid type, atomicity proof).
+[x] app-test FULL PASS-WITH-MINORS (3-persona live journey, local-dev branch).
+
+### DEV-ENV1. Local backend/.env repointed off production DB — RESOLVED 2026-05-23
+[x] Provisioned persistent Neon child branch `local-dev` (`br-rough-wildflower-a115ukd4`,
+    endpoint `ep-summer-king-a1xldgwi`, no TTL) off `production`. Contains CoW copies of
+    both `user_data` (57 migrations, 2 users at branch time) and `neondb`
+    (39,736 publishable buildings).
+[x] Updated 6 `.env` keys (`DB_HOST`/`DB_USER`/`DB_PASSWORD` + `BUILDINGS_*` equivalents).
+    Backup saved at `backend/.env.bak.1779499369`. Production credentials no longer in `.env`.
+[x] Backend runserver + vite restarted, both confirmed pointed at `local-dev`.
+    Production isolation now mechanically guaranteed.
+
+### External PR triage — UserSerializer fix + image loading perf — RESOLVED 2026-05-23 (PRs #68, #69)
+[x] PR #68 (squash `779725e` on develop): `fix: UserSerializer.user_id source — user.id not profile id`.
+    `UserSerializer.user_id` field source `'id'` → `'user.id'` so `auth/me` + login response
+    returns Django `User.id` (not `UserProfile.id`), fixing wrong-profile-after-Google-login when
+    PKs diverge. Adds `backend/apps/accounts/tests/test_userserializer.py` (deterministic, forces
+    id divergence). External PR #62 closed superseded. Two parts of PR #62 intentionally NOT
+    carried: `UserProfilePage.jsx` `/user/me` change (already fixed on develop via static route
+    in `App.jsx`) and `views.py` display_name/avatar login-sync (separate concern, out of scope).
+[x] PR #69 (squash `403bd02` on develop): `perf(frontend): image loading — 4s→2s timeout, lazy gallery, preload cap 3`.
+    Cherry-pick of external PR #64's intended commit `3f9c385`: `SwipeCard.jsx` image-load
+    timeout 4s→2s + gallery CSS→`<img>` lazy, `DiscoveryPage.jsx` preload cap 12→3. JSDoc
+    comment synced. External PR #64 closed superseded (wrong base + polluted 154-file diff).
+    app-test ran FEATURE-SCOPED (write-constrained — local .env targets prod DB; see DEV-ENV1).
 
 ### Neon DB-split (data step) + Production Deploy — RESOLVED 2026-05-22 (PR #63)
 [x] DB-split complete and live in production: app DB = `user_data` (57 migrations,

@@ -8,7 +8,6 @@ import LLMSearchPage from './pages/LLMSearchPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import UserProfilePage from './pages/UserProfilePage.jsx'
 import FirmProfilePage from './pages/FirmProfilePage.jsx'
-import PostSwipeLandingPage from './pages/PostSwipeLandingPage.jsx'
 import BoardDetailPage from './pages/BoardDetailPage.jsx'
 import ResultsPage from './pages/ResultsPage.jsx'
 import BuildingDetailPage from './pages/BuildingDetailPage.jsx'
@@ -25,11 +24,6 @@ function normalizeFilters(filters) {
   if (filters.style) out.style = filters.style
   if (filters.year_min != null) out.year_min = filters.year_min
   if (filters.year_max != null) out.year_max = filters.year_max
-  // Area -- accept all naming conventions (frontend, LLM area_min, backend min_area)
-  const minArea = filters.min_area ?? filters.minArea ?? filters.area_min ?? null
-  const maxArea = filters.max_area ?? filters.maxArea ?? filters.area_max ?? null
-  if (minArea != null) out.min_area = minArea
-  if (maxArea != null) out.max_area = maxArea
   return out
 }
 
@@ -128,6 +122,9 @@ export default function App() {
   const [isSessionCompleted, setIsSessionCompleted] = useState(false)
   const [isResultLoading, setIsResultLoading] = useState(false)
   const [swipeError, setSwipeError] = useState(null)
+  // Tracks in-flight recordSwipe() calls. Button gates on this so the
+  // "Finish & View Report" button can't fire before the backend save settles.
+  const [swipePending, setSwipePending] = useState(0)
   const [activeProjectId, setActiveProjectId] = useState(() => {
     const id = sessionStorage.getItem('archithon_user')
     return localStorage.getItem(`archithon_activeId_${id}`) || null
@@ -266,7 +263,7 @@ export default function App() {
     }
   }
 
-  async function initSession(projectId, filters, filterPriority = [], seedIds = [], existingSessionId = null, currentHint = null, visualDescription = null) {
+  async function initSession(projectId, filters, filterPriority = [], seedIds = [], existingSessionId = null, currentHint = null, visualDescription = null, projectName = 'Untitled', rawQuery = '', imageFocus = null) {
     setIsSwipeLoading(true)
     setIsSessionCompleted(false)
     try {
@@ -283,10 +280,13 @@ export default function App() {
 
       const result = await api.startSession({
         project_id: projectId,
+        name: projectName,
         filters: normalizeFilters(filters),
         filter_priority: filterPriority,
         seed_ids: seedIds,
         visual_description: visualDescription || undefined,
+        raw_query: rawQuery || '',
+        image_focus: imageFocus,
       })
       applySessionResponse(projectId, result)
       return result
@@ -300,7 +300,7 @@ export default function App() {
     }
   }
 
-  async function handleStart(projectName, preloadedImages, llmFilters = {}, filterPriority = [], visualDescription = null, visibility = 'private') {
+  async function handleStart(projectName, preloadedImages, llmFilters = {}, filterPriority = [], visualDescription = null, visibility = 'private', rawQuery = '', imageFocus = null) {
     const projectId = `proj_${Date.now()}`
     const seedIds = (preloadedImages || []).map(c => c.image_id).filter(Boolean)
     const newProject = {
@@ -315,7 +315,7 @@ export default function App() {
     setProjects(prev => [...prev, newProject])
     setActiveProjectId(projectId)
     navigate('/swipe')
-    const result = await initSession(projectId, llmFilters || {}, filterPriority, seedIds, null, null, visualDescription)
+    const result = await initSession(projectId, llmFilters || {}, filterPriority, seedIds, null, null, visualDescription, projectName, rawQuery || '', imageFocus)
     if (visibility !== 'private' && result?.project_id) {
       api.updateProject(result.project_id, { visibility }).catch(err =>
         console.error('[App] updateProject visibility sync failed:', err)
@@ -373,6 +373,10 @@ export default function App() {
       err: null,
       ts: Date.now(),
     }
+
+    // Mark swipe in-flight — prevents "Finish & View Report" button from firing
+    // while recordSwipe() is pending (optimistic bump can reach isAt100 instantly).
+    setSwipePending(n => n + 1)
 
     if (canInstantSwap) {
       setCurrentCard(savedPrefetch)
@@ -555,6 +559,7 @@ export default function App() {
       const log = swipeLog.current
       if (log.length >= 10) log.shift()
       log.push(_dbg)
+      setSwipePending(n => Math.max(0, n - 1))
       setIsSwipeLoading(false)
       swipeLock.current = false
     }
@@ -604,7 +609,7 @@ export default function App() {
     }
   }
 
-  async function handleUpdateWithImages(id, preloadedImages, llmFilters = {}, filterPriority = [], visualDescription = null) {
+  async function handleUpdateWithImages(id, preloadedImages, llmFilters = {}, filterPriority = [], visualDescription = null, imageFocus = null) {
     const project = projects.find(p => p.id === id)
     if (!project) return
     const seedIds = (preloadedImages || []).map(c => c.image_id).filter(Boolean)
@@ -612,7 +617,7 @@ export default function App() {
     setActiveProjectId(id)
     setProjects(prev => prev.map(p => p.id === id ? { ...p, deckImages: preloadedImages } : p))
     navigate('/swipe')
-    await initSession(id, llmFilters || project.filters, filterPriority, seedIds, null, null, visualDescription)
+    await initSession(id, llmFilters || project.filters, filterPriority, seedIds, null, null, visualDescription, project.projectName, '', imageFocus)
   }
 
   async function handleLogin(user) {
@@ -649,7 +654,8 @@ export default function App() {
           savedIds: extractSavedIds(p.saved_ids),
           finalReport: p.final_report || null,
           reportImage: p.report_image || null,
-          sessionId: null,
+          sessionId: p.latest_session_id || null,
+          latestSessionMeta: p.latest_session_meta || null,
           createdAt: p.created_at,
           deckImages: null,
         }))
@@ -681,6 +687,30 @@ export default function App() {
     navigate('/login')
   }
 
+  // Resume an interrupted swipe session from a board card.
+  // boardId == project_id (String). Looks up the local project entry to get
+  // its filters + stored sessionId, then navigates to /swipe.
+  async function handleResumeProject(boardId) {
+    const id = String(boardId)
+    const project = projects.find(p => p.id === id)
+    if (!project) return
+    setActiveProjectId(id)
+    navigate('/swipe')
+    await initSession(id, project.filters, [], [], project.sessionId || null, null, null, project.projectName)
+  }
+
+  // Start a fresh swipe session for an existing project, discarding the old session.
+  async function handleNewProjectSession(boardId) {
+    const id = String(boardId)
+    const project = projects.find(p => p.id === id)
+    if (!project) return
+    // Clear stored sessionId so initSession creates a brand-new session
+    setProjects(prev => prev.map(p => p.id === id ? { ...p, sessionId: null, latestSessionMeta: null } : p))
+    setActiveProjectId(id)
+    navigate('/swipe')
+    await initSession(id, project.filters, [], [], null, null, null, project.projectName)
+  }
+
   const sharedLayoutProps = {
     userId,
     onLogout: handleLogout,
@@ -691,6 +721,7 @@ export default function App() {
     isSessionCompleted,
     isSwipeLoading,
     isResultLoading,
+    swipePending,
     onSwipe: handleSwipeCard,
     onExtendSession: handleExtendSession,
     onViewResults: () => {
@@ -698,8 +729,22 @@ export default function App() {
       else navigate('/user/me')
     },
     cardResetToken,
-    onExitToNewProject: () => { setActiveProjectId(null); navigate('/new') },
-    onExitToHome:       () => { setActiveProjectId(null); navigate('/discovery') },
+    onExitToNewProject: () => {
+      const hasLikes = (activeProject?.likedBuildings?.length ?? 0) > 0
+      const backendId = activeProject?.backendId
+      if (!hasLikes && backendId) api.deleteProject(backendId).catch(() => {})
+      setActiveProjectId(null)
+      navigate('/new')
+    },
+    onExitToHome: () => {
+      const hasLikes = (activeProject?.likedBuildings?.length ?? 0) > 0
+      const backendId = activeProject?.backendId
+      if (!hasLikes && backendId) api.deleteProject(backendId).catch(() => {})
+      setActiveProjectId(null)
+      navigate('/discovery')
+    },
+    onResumeProject: handleResumeProject,
+    onNewProjectSession: handleNewProjectSession,
   }
 
   return (
@@ -749,7 +794,6 @@ export default function App() {
           <Route path="user/me" element={<UserProfilePage {...sharedLayoutProps} />} />
           <Route path="user/:userId" element={<UserProfilePage {...sharedLayoutProps} />} />
           <Route path="office/:officeId" element={<FirmProfilePage {...sharedLayoutProps} />} />
-          <Route path="matched/:sessionId" element={<PostSwipeLandingPage />} />
           <Route path="result/:sessionId" element={<ResultsPage projects={projects} setProjects={setProjects} />} />
           <Route path="buildings/:buildingId" element={<BuildingDetailPage />} />
           <Route path="board/:boardId" element={<BoardDetailPage />} />

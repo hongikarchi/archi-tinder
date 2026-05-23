@@ -2,6 +2,7 @@
 name: security-manager
 description: Scans changed code for security vulnerabilities across backend (SQL injection, auth bypass, secret leakage), frontend (XSS, token storage, endpoint injection), and database (raw SQL params, exposed IDs). Returns PASS or FAIL with specific issues.
 model: sonnet
+effort: default
 tools: Read, Glob, Grep, Bash
 ---
 

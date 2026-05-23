@@ -16,6 +16,7 @@ Hard rules:
 import math
 import random
 import logging
+import threading
 import numpy as np
 from django.conf import settings
 from django.core.cache import cache
@@ -44,10 +45,14 @@ RC = settings.RECOMMENDATION  # shorthand for constants
 
 _building_embedding_cache = {}             # canonical_bld_id (str) -> np.ndarray (384-dim, L2-normalized)
 _BUILDING_CACHE_MAX_SIZE = RC.get('pool_embedding_cache_max_size', 5000)  # ~5MB max; configurable via RECOMMENDATION setting
-_last_embedding_call_stats = None          # dict set per get_pool_embeddings call; see get_last_embedding_call_stats()
 _centroid_cache = {}
-_last_clustering_stats = None              # dict set per compute_taste_centroids call; see get_last_clustering_stats()
 _AVAILABLE_COLUMNS = None                  # frozenset of column names in canonical_v2_buildings; None = not yet probed
+
+# Per-thread telemetry storage (Finding #17).
+# Previously module-level globals; concurrent gunicorn threads would corrupt each
+# other's stats. threading.local() gives each request-thread its own copy so reads
+# always reflect the call made on THIS thread, not a concurrent request's call.
+_telemetry = threading.local()             # attrs: embedding_call_stats, clustering_stats
 
 
 # ── Schema-probe helpers ──────────────────────────────────────────────────────
@@ -339,12 +344,42 @@ def get_diverse_random(n=10, filters=None, image_focus=None):
     ]
     _optional_cols = ()
     _cols = _build_select_columns(_required_cols, _optional_cols)
+    # Two-query pattern: ID-only fetch first (no embedding column, no sort over
+    # full corpus), then Python random.sample, then full-row fetch for the sample
+    # only.  This avoids an ORDER BY RANDOM() sort over the entire publishable
+    # corpus (~39k rows) on unfiltered or lightly-filtered calls.
+    # (Audit finding #2.7: stale comment claimed this was already fixed — it wasn't.)
     with connection.cursor() as cur:
         cur.execute(
-            f'SELECT {_cols}, embedding::text FROM canonical_v2_buildings {where} ORDER BY RANDOM() LIMIT %s',
-            params + [min(n * 5, 100)],  # fetch a pool, then diversify
+            f'SELECT canonical_bld_id FROM canonical_v2_buildings {where}',
+            params,
+        )
+        all_ids = [row[0] for row in cur.fetchall()]
+
+    if not all_ids:
+        return []
+
+    # Python random.sample — no PG sort over full corpus
+    sample_size = min(n * 5, 100, len(all_ids))
+    sampled_ids = random.sample(all_ids, sample_size)
+
+    # Second query: fetch full rows for sampled IDs only.
+    # Must gate on is_publishable = true: between query 1 and query 2 a row
+    # could theoretically be unpublished (per CLAUDE.md every building query gates
+    # on is_publishable = true, regardless of how the ID set was obtained).
+    with connection.cursor() as cur:
+        cur.execute(
+            f'SELECT {_cols}, embedding::text FROM canonical_v2_buildings'
+            f' WHERE canonical_bld_id = ANY(%s) AND is_publishable = true',
+            [sampled_ids],
         )
         rows = _dictfetchall(cur)
+
+    # Postgres ANY(...) returns rows in PK/index order — reorder to match
+    # sampled_ids so random.sample order is preserved through to the greedy
+    # farthest-point diversification step below.
+    rows_by_id = {r['canonical_bld_id']: r for r in rows}
+    rows = [rows_by_id[bid] for bid in sampled_ids if bid in rows_by_id]
 
     if not rows:
         return []
@@ -500,13 +535,32 @@ def get_top_k_results(pref_vector, exposed_ids, k=None, image_focus=None):
     _optional_cols = ()
     _cols = _build_select_columns(_required_cols, _optional_cols)
     if not pref_vector:
-        # No preference yet — return random
+        # No preference yet — return random sample.
+        # Two-query pattern (Finding #14a): fetch IDs only (no SELECT *), sample in Python,
+        # then fetch full rows by sampled IDs. Avoids ORDER BY RANDOM() full-corpus sort
+        # on ~39k rows which forces a sequential scan + sort pass.
         with connection.cursor() as cur:
             cur.execute(
-                f'SELECT {_cols} FROM canonical_v2_buildings {exclude_sql} ORDER BY RANDOM() LIMIT %s',
-                params + [k],
+                f'SELECT canonical_bld_id FROM canonical_v2_buildings {exclude_sql}',
+                params,
             )
-            rows = _dictfetchall(cur)
+            all_ids = [row[0] for row in cur.fetchall()]
+        sampled_ids = random.sample(all_ids, min(k, len(all_ids))) if all_ids else []
+        if sampled_ids:
+            placeholders2 = ','.join(['%s'] * len(sampled_ids))
+            with connection.cursor() as cur:
+                cur.execute(
+                    f'SELECT {_cols} FROM canonical_v2_buildings'
+                    f' WHERE canonical_bld_id IN ({placeholders2}) AND is_publishable = true',
+                    sampled_ids,
+                )
+                rows = _dictfetchall(cur)
+            # Postgres IN (...) returns rows in PK/index order, not sampled_ids order.
+            # Re-sort by sampled_ids so each refresh presents rows in a different sequence.
+            rows_by_id = {r['canonical_bld_id']: r for r in rows}
+            rows = [rows_by_id[bid] for bid in sampled_ids if bid in rows_by_id]
+        else:
+            rows = []
     else:
         vec_str = _vec_to_pg(pref_vector)
         with connection.cursor() as cur:
@@ -595,6 +649,10 @@ def search_by_filters(filters, limit=20, image_focus=None):
     ]
     _optional_cols = ()
     _cols = _build_select_columns(_required_cols, _optional_cols)
+    # ORDER BY RANDOM() here is intentional: search_by_filters applies a WHERE clause
+    # from _build_filter_sql that narrows to a manageable subset before sorting. The
+    # user-supplied limit is typically ≤20. (Finding #14a: unfiltered sites replaced;
+    # this filtered site left as-is by design.)
     with connection.cursor() as cur:
         cur.execute(
             f'SELECT {_cols} FROM canonical_v2_buildings {where} ORDER BY RANDOM() LIMIT %s',
@@ -608,14 +666,17 @@ def search_by_filters(filters, limit=20, image_focus=None):
 
 
 def _random_pool(target):
-    """Fallback: random pool when no filters are provided."""
+    """Fallback: random pool when no filters are provided.
+
+    Two-query pattern (Finding #14a): fetch all publishable IDs, sample in Python,
+    return sampled list. Avoids ORDER BY RANDOM() full-table sort on ~39k rows.
+    """
     with connection.cursor() as cur:
         cur.execute(
-            'SELECT canonical_bld_id FROM canonical_v2_buildings WHERE is_publishable = true ORDER BY RANDOM() LIMIT %s',
-            [target],
+            'SELECT canonical_bld_id FROM canonical_v2_buildings WHERE is_publishable = true',
         )
-        rows = cur.fetchall()
-    return [row[0] for row in rows]
+        all_ids = [row[0] for row in cur.fetchall()]
+    return random.sample(all_ids, min(target, len(all_ids))) if all_ids else []
 
 
 def create_pool_with_relaxation(
@@ -1184,13 +1245,11 @@ def get_pool_embeddings(pool_ids):
         dict mapping canonical_bld_id -> np.ndarray (shape=(384,), L2-normalized).
 
     Side effects:
-        Sets module-level _last_embedding_call_stats for SwipeView §6 telemetry.
+        Sets thread-local _telemetry.embedding_call_stats for SwipeView §6 telemetry.
         Caller reads via get_last_embedding_call_stats() after the call.
     """
-    global _last_embedding_call_stats
-
     if not pool_ids:
-        _last_embedding_call_stats = {'requested': 0, 'cache_hits': 0, 'cache_misses': 0}
+        _telemetry.embedding_call_stats = {'requested': 0, 'cache_hits': 0, 'cache_misses': 0}
         return {}
 
     missing_ids = [bid for bid in pool_ids if bid not in _building_embedding_cache]
@@ -1219,8 +1278,8 @@ def get_pool_embeddings(pool_ids):
             for old_bid in list(_building_embedding_cache.keys())[:excess]:
                 del _building_embedding_cache[old_bid]
 
-    # Record stats for §6 swipe telemetry (most-recent call; overwritten per call)
-    _last_embedding_call_stats = {
+    # Record stats for §6 swipe telemetry (most-recent call on this thread; overwritten per call)
+    _telemetry.embedding_call_stats = {
         'requested': len(pool_ids),
         'cache_hits': len(pool_ids) - len(missing_ids),
         'cache_misses': len(missing_ids),
@@ -1231,14 +1290,16 @@ def get_pool_embeddings(pool_ids):
 
 
 def get_last_embedding_call_stats():
-    """Return stats dict for the most recent get_pool_embeddings call. None if not called yet."""
-    return dict(_last_embedding_call_stats) if _last_embedding_call_stats else None
+    """Return stats dict for the most recent get_pool_embeddings call on THIS thread.
+    Returns None if not called yet in this thread (threading.local default)."""
+    stats = getattr(_telemetry, 'embedding_call_stats', None)
+    return dict(stats) if stats else None
 
 
 def get_last_clustering_stats():
     """
-    Return stats dict for the most recent compute_taste_centroids call.
-    Returns None if not called yet in this process.
+    Return stats dict for the most recent compute_taste_centroids call on THIS thread.
+    Returns None if not called yet in this thread (threading.local default).
 
     Keys (always present when not None):
         cluster_count_used: int     -- actual k used (1 or 2)
@@ -1248,7 +1309,8 @@ def get_last_clustering_stats():
 
     IMP-10 sub-task A / Spec v1.8 §6 confidence_update telemetry.
     """
-    return dict(_last_clustering_stats) if _last_clustering_stats else None
+    stats = getattr(_telemetry, 'clustering_stats', None)
+    return dict(stats) if stats else None
 
 
 def compute_corpus_rank(card_id, v_initial):
@@ -1362,11 +1424,9 @@ def compute_taste_centroids(like_vectors, round_num):
     Returns (list_of_centroids, global_centroid) as numpy arrays.
     Called by views.py (convergence tracking) and algorithm_tester.py.
 
-    Side effect: sets module-level _last_clustering_stats on every call (including
+    Side effect: sets thread-local _telemetry.clustering_stats on every call (including
     cache hits) per IMP-10 / Spec v1.8 §6 Topic 06 telemetry requirements.
     """
-    global _last_clustering_stats
-
     n_likes = len(like_vectors)
 
     cache_key = (
@@ -1383,11 +1443,11 @@ def compute_taste_centroids(like_vectors, round_num):
         # Legacy entries (from before this change) are 2-tuples; fall through to minimal stats.
         if isinstance(result, tuple) and len(result) == 3:
             centroids, global_centroid, cached_stats = result
-            _last_clustering_stats = dict(cached_stats)
+            _telemetry.clustering_stats = dict(cached_stats)
             return centroids, global_centroid
         # 2-tuple legacy cache hit: recompute stats minimally (len(centroids) is available)
         centroids, global_centroid = result
-        _last_clustering_stats = {
+        _telemetry.clustering_stats = {
             'cluster_count_used': len(centroids),
             'silhouette_score': None,
             'soft_relevance_used': RC.get('soft_relevance_enabled', False) and len(centroids) > 1,
@@ -1407,7 +1467,7 @@ def compute_taste_centroids(like_vectors, round_num):
             'soft_relevance_used': False,  # single centroid: soft branch guard (len>1) is False
             'n_likes_at_decision': n_likes,
         }
-        _last_clustering_stats = stats
+        _telemetry.clustering_stats = stats
         result = (centroids, centroid, stats)
         if len(_centroid_cache) > 20:
             _centroid_cache.clear()
@@ -1450,7 +1510,7 @@ def compute_taste_centroids(like_vectors, round_num):
             'soft_relevance_used': RC.get('soft_relevance_enabled', False) and len(centroids) > 1,
             'n_likes_at_decision': n_likes,
         }
-        _last_clustering_stats = stats
+        _telemetry.clustering_stats = stats
         result = (centroids, global_centroid, stats)
         if len(_centroid_cache) > 20:
             _centroid_cache.clear()
@@ -1468,7 +1528,7 @@ def compute_taste_centroids(like_vectors, round_num):
         'soft_relevance_used': RC.get('soft_relevance_enabled', False) and len(centroids) > 1,
         'n_likes_at_decision': n_likes,
     }
-    _last_clustering_stats = stats
+    _telemetry.clustering_stats = stats
     result = (centroids, global_centroid, stats)
     if len(_centroid_cache) > 20:
         _centroid_cache.clear()

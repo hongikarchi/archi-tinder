@@ -3,7 +3,7 @@
 > Phase logic, mathematical formulas, and hyperparameter theory.
 > Research agent updates this file. Orchestrator references it for algorithm tasks.
 
-**Last Synced (Reporter):** 2026-05-02 127f502
+**Last Synced (Reporter):** 2026-05-24 0e9217b
 
 ---
 
@@ -51,6 +51,8 @@ _(Updated 2026-04-26 da547cb: min_likes_for_clustering 3→4 per Spec v1.8 Topic
 
 _(Updated 2026-04-26 1491c5d: IMP-8 async prefetch background thread — flag-gated default OFF; activates daemon thread spawn for prefetch_card+_2 computation when enabled, primary swipe response returns immediately with prefetch=None. Combined with IMP-7 cache fix (06c6c5a): total_ms ~600ms→~300ms per spec v1.6 §4 re-tightening pathway.)_
 
+_(Updated 2026-05-24 0e9217b: Half A async prefetch implemented; flag gated on Redis swap. Discovery taste vector TTL cache shipped via caches.py — bridges single-worker dev now; multi-worker prod still gated on Redis swap.)_
+
 _(Updated 2026-04-25 a9305e4: `farthest_point_from_pool()` (engine.py:421-455) corrected from inverted max-max accumulator to true Gonzalez max-min sampling per Spec v1.1 §11.1 IMP-1. Pre-fix code silently picked near-duplicates of exposed items. Bundled with NumPy batch matmul vectorization (~22ms → ~1ms per call, 20-50× speedup). Topic 11's 2-approximation bound and Section 4 C-3 Better layer 3's "first 3-5 diverse seeds" now actually deliver diverse selection.)_
 
 ### Phase 2: Multi-modal Formulation & Exploitation (MMR)
@@ -67,6 +69,8 @@ _(Updated 2026-04-25 03c697b: Sprint 4 Topic 02 Gemini session-end setwise reran
 _(Updated 2026-04-25 de9bfa3: Sprint 4 Topic 04(b) DPP greedy MAP at session-final top-K — when `dpp_topk_enabled` (default OFF) AND len(predicted_cards) >= 2 AND session.like_vectors, services-side compute_dpp_topk applies Wilhelm 2018 kernel L_ii=q², L_ij=α·q_i·q_j·⟨v_i,v_j⟩ via Chen 2018 Cholesky-incremental greedy MAP O(N·k²). Standalone q = max centroid cosine (RRF rescale ships in Topic 02 ∩ 04 composition). α clamped [0,1] (α>1 breaks PSD). Singularity (residual<eps=1e-9) → pad q-ordered. SessionResultView runs DPP AFTER Topic 02 rerank, preserving cosine→rerank→DPP composition order.)_
 
 _(Updated 2026-04-25 ebbafd2: Sprint 4 Topic 02 ∩ 04 Option α composition (Investigation 07) — when BOTH `gemini_rerank_enabled` AND `dpp_topk_enabled`, SessionResultView composes the two flags via RRF fusion of cosine_rank + rerank_rank, then min-max rescale to [0.01, 1.0] (per Investigation 14 q-scale fix), then DPP with q_override. Single integration point: q_i in L-ensemble reads from RRF-fused score (Topic 02 output) instead of pure cosine. Standalone behaviors of either flag preserved when only one is on. Failure cascade: rerank returning input order = sentinel None = DPP falls back to cosine q. Sprint 4 algorithm batch (Topic 06 + 02 + 04 + composition) milestone reached.)_
+
+_(Updated 2026-05-23 1004912: caller over-fetches 3× when dpp_topk_enabled=True so MAP narrow runs — `dpp_overfetch_multiplier=3` added to RECOMMENDATION; SessionResultView passes candidate window `n = top_k_results * multiplier` before DPP greedy MAP to widen diversity selection.)_
 
 ---
 
@@ -151,6 +155,7 @@ _(Updated 2026-04-25 190c830: Like writes now carry an `intensity` field (defaul
 | `dpp_topk_enabled` | bool | True/False | False |
 | `dpp_alpha` | float | 0.0-1.0 | 1.0 |
 | `dpp_singularity_eps` | float | 1e-12 to 1e-6 | 1e-9 |
+| `dpp_overfetch_multiplier` | int | — | 3 |
 | `hyde_vinitial_enabled` | bool | True/False | False |
 | `hyde_hf_model` | string | — | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` |
 | `hyde_hf_timeout_seconds` | int | 1-30 | 5 |

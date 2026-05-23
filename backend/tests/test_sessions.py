@@ -202,6 +202,178 @@ class TestSessionCreation:
 
 
 @pytest.mark.django_db
+class TestSessionRawQueryPersistence:
+    """Audit #5: raw_query must be persisted on Project at session creation."""
+
+    def test_raw_query_persisted_on_new_project(self, auth_client, user_profile):
+        """POST with raw_query creates a Project row with that exact string."""
+        patchers = _apply_patches()
+        try:
+            resp = auth_client.post(
+                '/api/v1/analysis/sessions/',
+                {'filters': {}, 'raw_query': 'modern minimalist firms in Seoul'},
+                format='json',
+            )
+        finally:
+            _stop_patches(patchers)
+
+        assert resp.status_code == 201
+        project = Project.objects.get(project_id=resp.json()['project_id'])
+        assert project.raw_query == 'modern minimalist firms in Seoul'
+
+    def test_raw_query_defaults_to_empty_string_when_missing(self, auth_client, user_profile):
+        """POST without raw_query key stores empty string on Project (not NULL)."""
+        patchers = _apply_patches()
+        try:
+            resp = auth_client.post(
+                '/api/v1/analysis/sessions/',
+                {'filters': {}},
+                format='json',
+            )
+        finally:
+            _stop_patches(patchers)
+
+        assert resp.status_code == 201
+        project = Project.objects.get(project_id=resp.json()['project_id'])
+        assert project.raw_query == ''
+
+    def test_raw_query_truncated_at_2000_chars(self, auth_client, user_profile):
+        """POST with 2500-char raw_query truncates to 2000 chars (no DB error)."""
+        long_query = 'a' * 2500
+        patchers = _apply_patches()
+        try:
+            resp = auth_client.post(
+                '/api/v1/analysis/sessions/',
+                {'filters': {}, 'raw_query': long_query},
+                format='json',
+            )
+        finally:
+            _stop_patches(patchers)
+
+        assert resp.status_code == 201
+        project = Project.objects.get(project_id=resp.json()['project_id'])
+        assert len(project.raw_query) <= 2000
+
+    def test_raw_query_not_overwritten_on_session_resume(self, auth_client, user_profile):
+        """When session is created against an existing project_id, the project's
+        raw_query stays as originally stored, even if the new request sends a different value."""
+        project = Project.objects.create(
+            user=user_profile, name='Resume Test', filters={}, raw_query='original',
+        )
+        patchers = _apply_patches()
+        try:
+            resp = auth_client.post(
+                '/api/v1/analysis/sessions/',
+                {'project_id': str(project.project_id), 'filters': {}, 'raw_query': 'new'},
+                format='json',
+            )
+        finally:
+            _stop_patches(patchers)
+
+        assert resp.status_code == 201
+        project.refresh_from_db()
+        assert project.raw_query == 'original'
+
+    def test_raw_query_threaded_to_rrf_q_text(self, auth_client, user_profile, monkeypatch):
+        """Codex audit #1.1: raw_query is threaded to RRF q_text when hybrid_retrieval_enabled.
+
+        Sends raw_query='test query' (the FE key), enables hybrid_retrieval_enabled,
+        and asserts that create_pool_with_relaxation receives q_text='test query' (not None).
+        """
+        from django.conf import settings
+
+        monkeypatch.setitem(settings.RECOMMENDATION, 'hybrid_retrieval_enabled', True)
+
+        captured_q_text = []
+
+        def _mock_create_pool(filters, filter_priority, seed_ids, v_initial=None, q_text=None):
+            captured_q_text.append(q_text)
+            return _FAKE_POOL[:], dict(_FAKE_SCORES), 1
+
+        # Build custom patches: start from base set, then add create_pool_with_relaxation
+        # so the view-level call is intercepted directly (capturing q_text kwarg).
+        custom_patches = {
+            k: v for k, v in _SESSION_PATCHES.items()
+            if k != f'{_ENGINE}.create_bounded_pool'
+        }
+        custom_patches[f'{_ENGINE}.create_pool_with_relaxation'] = _mock_create_pool
+
+        patchers = []
+        for target, side_effect in custom_patches.items():
+            p = patch(target, side_effect=side_effect)
+            p.start()
+            patchers.append(p)
+
+        try:
+            resp = auth_client.post(
+                '/api/v1/analysis/sessions/',
+                {'filters': {}, 'raw_query': 'test query'},
+                format='json',
+            )
+        finally:
+            for p in patchers:
+                p.stop()
+
+        assert resp.status_code == 201
+        assert len(captured_q_text) == 1
+        assert captured_q_text[0] == 'test query', (
+            f"q_text was {captured_q_text[0]!r}, expected 'test query' -- "
+            f"Fix #1.1 regression: _raw_query_early must read 'raw_query' key"
+        )
+
+    def test_raw_query_threaded_to_vinitial_cache(self, auth_client, user_profile, monkeypatch):
+        """Codex audit #1.1: raw_query is passed to services.get_cached_v_initial when stage_decouple_enabled.
+
+        Sends raw_query='test query' (the FE key), enables stage_decouple_enabled,
+        and asserts that services.get_cached_v_initial receives 'test query' as
+        the second positional argument (raw_query / cache key parameter).
+        """
+        from django.conf import settings
+
+        monkeypatch.setitem(settings.RECOMMENDATION, 'stage_decouple_enabled', True)
+
+        cache_call_args = []
+
+        def _mock_get_cached_v_initial(user_id, raw_query):
+            cache_call_args.append((user_id, raw_query))
+            return None  # simulate cache miss
+
+        custom_patches = dict(_SESSION_PATCHES)
+
+        patchers = []
+        for target, side_effect in custom_patches.items():
+            p = patch(target, side_effect=side_effect)
+            p.start()
+            patchers.append(p)
+
+        services_patch = patch(
+            'apps.recommendation.views.services.get_cached_v_initial',
+            side_effect=_mock_get_cached_v_initial,
+        )
+        services_patch.start()
+        patchers.append(services_patch)
+
+        try:
+            resp = auth_client.post(
+                '/api/v1/analysis/sessions/',
+                {'filters': {}, 'raw_query': 'test query'},
+                format='json',
+            )
+        finally:
+            for p in patchers:
+                p.stop()
+
+        assert resp.status_code == 201
+        assert len(cache_call_args) == 1, (
+            f"Expected 1 call to get_cached_v_initial, got {len(cache_call_args)}"
+        )
+        assert cache_call_args[0][1] == 'test query', (
+            f"get_cached_v_initial received raw_query={cache_call_args[0][1]!r}, "
+            f"expected 'test query' -- Fix #1.1 regression"
+        )
+
+
+@pytest.mark.django_db
 class TestSwipeRecording:
 
     def _create_session(self, auth_client, user_profile):
@@ -1497,3 +1669,58 @@ class TestSessionEventLogging:
         assert set(tb.keys()) == {'lock_ms', 'embed_ms', 'select_ms', 'prefetch_ms', 'total_ms'}, (
             f'Unexpected timing_breakdown keys: {tb.keys()}'
         )
+
+
+# ---------------------------------------------------------------------------
+# Finding #16 regression: SessionResultView GET write idempotency
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestSessionResultWriteIdempotency:
+    """Finding #16: SessionResultView GET-with-write wraps the multi-field save
+    in transaction.atomic() — verifies a second GET produces the same top-10 lists
+    (idempotent: same input → same write, so duplicate write is benign)."""
+
+    def test_result_view_get_twice_idempotent(self, auth_client, user_profile):
+        """Calling SessionResultView GET twice writes top10 once; second call is a no-op."""
+        from apps.recommendation.models import AnalysisSession
+        import numpy as np
+
+        project = Project.objects.create(user=user_profile, name='Idempotency Test')
+        fake_vec = list(np.random.RandomState(7).randn(384))
+        session = AnalysisSession.objects.create(
+            user=user_profile,
+            project=project,
+            status='completed',
+            phase='converged',
+            preference_vector=fake_vec,
+            like_vectors=[],
+            pool_ids=_FAKE_POOL,
+            exposed_ids=_FAKE_POOL,
+            pool_scores=_FAKE_SCORES,
+            current_round=10,
+            current_pool_tier=1,
+        )
+
+        fake_cards = [_make_card(bid) for bid in _FAKE_POOL[:5]]
+
+        with patch(f'{_ENGINE}.get_buildings_by_ids', return_value=[]):
+            with patch(f'{_ENGINE}.get_top_k_results', return_value=fake_cards):
+                resp1 = auth_client.get(
+                    f'/api/v1/analysis/sessions/{session.session_id}/result/'
+                )
+                resp2 = auth_client.get(
+                    f'/api/v1/analysis/sessions/{session.session_id}/result/'
+                )
+
+        assert resp1.status_code == 200
+        assert resp2.status_code == 200
+
+        session.refresh_from_db()
+        expected_top10 = [c['canonical_bld_id'] for c in fake_cards[:10]]
+        assert session.cosine_top10_ids == expected_top10, (
+            f"cosine_top10_ids not persisted: {session.cosine_top10_ids}"
+        )
+        # gemini and dpp flags are off in test settings; expect None
+        assert session.gemini_top10_ids is None
+        assert session.dpp_top10_ids is None

@@ -135,6 +135,15 @@
   }
   .card .row-title { font-weight: 600; }
   .card .row-note { color: var(--text-soft); font-size: 13px; margin-top: 5px; }
+  .card .row-meta {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--text-faint);
+    margin-top: 6px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+  }
 
   .empty {
     color: var(--text-faint);
@@ -162,15 +171,34 @@
     border-radius: 999px;
     white-space: nowrap;
   }
-  .badge-tag {
-    font-size: 10px;
-    background: var(--accent-soft);
-    color: var(--accent);
-    margin-left: 7px;
-    vertical-align: middle;
-  }
 
-  /* ---- Roadmap ---- */
+  /* ---- Phase milestones table (collapsed in Done) ---- */
+  details.milestones {
+    margin-top: 26px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 4px 0;
+  }
+  details.milestones > summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 10px 16px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
+  details.milestones > summary::-webkit-details-marker { display: none; }
+  details.milestones > summary::before {
+    content: "▸ ";
+    color: var(--text-faint);
+    font-weight: 400;
+  }
+  details.milestones[open] > summary::before { content: "▾ "; }
+  details.milestones table.grid { border: none; border-radius: 0; }
+
   table.grid {
     width: 100%;
     border-collapse: collapse;
@@ -195,23 +223,7 @@
   table.grid tr:last-child td { border-bottom: none; }
   table.grid td.c-phase { font-family: var(--mono); font-weight: 600; white-space: nowrap; width: 70px; }
   table.grid td.c-status { white-space: nowrap; width: 1%; }
-
-  /* ---- Persona cards ---- */
-  .persona-row {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: 10px;
-  }
-  .persona-card {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 12px 14px;
-  }
-  .persona-card .pc-head { display: flex; align-items: center; flex-wrap: wrap; }
-  .persona-card .pc-id { font-family: var(--mono); font-size: 11.5px; color: var(--text-faint); margin-right: 7px; }
-  .persona-card .pc-name { font-weight: 600; }
-  .persona-card .pc-desc { color: var(--text-soft); font-size: 12.5px; margin-top: 5px; }
+  table.grid td.c-mono { font-family: var(--mono); font-size: 12.5px; }
 
   /* ---- PR list ---- */
   .pr-item {
@@ -231,7 +243,7 @@
     flex: 0 0 auto;
   }
   .pr-item .pr-title { flex: 1 1 auto; }
-  .pr-item .pr-date {
+  .pr-item .pr-when {
     font-family: var(--mono);
     font-size: 12px;
     color: var(--text-faint);
@@ -239,104 +251,26 @@
     white-space: nowrap;
   }
 
-  /* ---- Architecture ---- */
-  .kv { margin-bottom: 10px; }
-  .kv .kv-label {
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    color: var(--text-faint);
-    margin-bottom: 4px;
-  }
-  .kv .kv-value { font-size: 13.5px; }
-  ul.bullets { margin: 6px 0 0; padding-left: 20px; }
-  ul.bullets li { margin-bottom: 4px; color: var(--text-soft); font-size: 13px; }
-  .db-item .db-alias {
-    font-family: var(--mono);
-    font-weight: 600;
-    color: var(--accent);
-  }
-  .db-item .db-role { color: var(--text-soft); font-size: 13px; margin-top: 4px; }
-
-  /* ---- File map tree ---- */
-  .tree-node { margin-bottom: 12px; }
-  .tree-root {
-    font-family: var(--mono);
-    font-weight: 600;
-    font-size: 13.5px;
-    color: var(--text);
-    background: var(--accent-soft);
-    border-radius: 5px;
-    padding: 4px 9px;
-    display: inline-block;
-  }
-  .tree-children {
-    list-style: none;
-    margin: 6px 0 0;
-    padding-left: 18px;
-    border-left: 2px solid var(--border-soft);
-  }
-  .tree-children li {
-    font-family: var(--mono);
-    font-size: 13px;
-    color: var(--text-soft);
-    padding: 2px 0 2px 14px;
-    position: relative;
-  }
-  .tree-children li::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    top: 13px;
-    width: 10px;
-    height: 0;
-    border-top: 2px solid var(--border-soft);
-  }
-
-  /* ---- Flow ---- */
-  .flow-box {
+  /* ---- Mermaid block ---- */
+  .mermaid-block {
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 14px 16px;
+    margin-bottom: 16px;
+    overflow-x: auto;
+  }
+  .mermaid-block .mb-caption {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--text-soft);
     margin-bottom: 6px;
   }
-  .flow-box .fb-label {
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    color: var(--accent);
-    margin-bottom: 5px;
-  }
-  .flow-box .fb-text { font-size: 13px; color: var(--text-soft); }
-  .flow-arrow {
+  .mermaid {
+    font-family: var(--sans);
     text-align: center;
-    font-size: 18px;
-    color: var(--text-faint);
-    margin: 2px 0;
-    line-height: 1;
   }
-  .agent-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    gap: 10px;
-    margin-top: 6px;
-  }
-  .agent-card {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 11px 13px;
-  }
-  .agent-card .ac-name {
-    font-family: var(--mono);
-    font-weight: 600;
-    font-size: 13px;
-    color: var(--accent);
-  }
-  .agent-card .ac-role { color: var(--text-soft); font-size: 12.5px; margin-top: 4px; }
+  .mermaid svg { max-width: 100%; height: auto; }
 
   footer {
     color: var(--text-faint);
@@ -360,16 +294,17 @@
 <div class="wrap">
   <nav class="tabbar" id="tabbar"></nav>
 
-  <section class="panel" id="panel-tasks"></section>
-  <section class="panel" id="panel-roadmap"></section>
-  <section class="panel" id="panel-git"></section>
-  <section class="panel" id="panel-arch"></section>
-  <section class="panel" id="panel-files"></section>
-  <section class="panel" id="panel-flow"></section>
+  <section class="panel" id="panel-done"></section>
+  <section class="panel" id="panel-now"></section>
+  <section class="panel" id="panel-next"></section>
+  <section class="panel" id="panel-systemflow"></section>
+  <section class="panel" id="panel-agentflow"></section>
 
   <footer>Static project dashboard · renders <code>project/state.js</code> · no server required</footer>
 </div>
 
+<!-- Vendored Mermaid v10 (offline-safe; file:// double-click compatible) -->
+<script src="./mermaid.min.js"></script>
 <!-- Data first, render second — both plain scripts so file:// double-click works -->
 <script src="state.js"></script>
 <script>
@@ -413,46 +348,73 @@
   /* ---------- header ---------- */
   function renderHeader() {
     var m = S.meta || {};
-    document.getElementById("hdr-project").textContent = m.project || "Project Dashboard";
+    document.getElementById("hdr-project").textContent = m.name || "Project Dashboard";
     var chips = [];
-    if (m.updated) chips.push('<span class="chip">updated <b>' + esc(m.updated) + "</b></span>");
-    if (m.branch)  chips.push('<span class="chip">branch <b class="mono">' + esc(m.branch) + "</b></span>");
-    if (m.head)    chips.push('<span class="chip">head <b class="mono">' + esc(m.head) + "</b></span>");
+    if (m.updatedAt) chips.push('<span class="chip">updated <b>' + esc(m.updatedAt) + "</b></span>");
+    if (m.branch)    chips.push('<span class="chip">branch <b class="mono">' + esc(m.branch) + "</b></span>");
+    if (m.head)      chips.push('<span class="chip">head <b class="mono">' + esc(m.head) + "</b></span>");
     set("hdr-meta", chips.length ? chips.join("") : emptyMsg("no metadata"));
   }
 
-  /* ---------- 1. Tasks ---------- */
-  function taskCard(t) {
+  /* ---------- card renderer (shared by done/now/next) ---------- */
+  function taskCard(t, opts) {
     t = t || {};
+    opts = opts || {};
     var h = '<div class="card">';
     h += "<div>";
     if (t.id) h += '<span class="row-id">' + esc(t.id) + "</span>";
     h += '<span class="row-title">' + esc(t.title || "(untitled)") + "</span>";
     h += "</div>";
     if (t.note) h += '<div class="row-note">' + esc(t.note) + "</div>";
+
+    var meta = [];
+    if (opts.completedAt && t.completedAt) meta.push("completed " + esc(t.completedAt));
+    if (opts.startedAt && t.startedAt)     meta.push("started " + esc(t.startedAt));
+    if (has(t.prs)) {
+      meta.push("PRs: " + t.prs.map(function (n) { return "#" + esc(n); }).join(" · "));
+    }
+    if (meta.length) h += '<div class="row-meta">' + meta.join('<span style="color:var(--border)">|</span>') + "</div>";
     h += "</div>";
     return h;
   }
-  function renderTasks() {
-    var T = S.tasks || {};
-    var h = "";
-    h += '<div class="section-title">Open</div>';
-    h += has(T.open) ? arr(T.open).map(taskCard).join("") : emptyMsg("no open tasks");
-    h += '<div class="section-title">In Progress</div>';
-    h += has(T.inProgress) ? arr(T.inProgress).map(taskCard).join("") : emptyMsg("nothing in progress");
-    if (T.note) h += '<div class="note-line">' + esc(T.note) + "</div>";
-    set("panel-tasks", h);
-  }
 
-  /* ---------- 2. Roadmap + personas ---------- */
-  function renderRoadmap() {
-    var h = '<div class="section-title">Phase Roadmap</div>';
-    var rm = arr(S.roadmap);
-    if (rm.length) {
+  /* ---------- 1. Done ---------- */
+  function renderDone() {
+    var h = "";
+
+    h += '<div class="section-title">Recent Merged PRs (latest 8)</div>';
+    var prs = arr(S.prs);
+    if (prs.length) {
+      prs.forEach(function (p) {
+        p = p || {};
+        h += '<div class="pr-item">';
+        h += '<span class="pr-n">#' + esc(p.number != null ? p.number : "?") + "</span>";
+        h += '<span class="pr-title">' + esc(p.title || "(no title)") + "</span>";
+        h += '<span class="pr-when" title="' + esc(p.mergedAt || "") + '">' + esc(p.mergedAtKST || p.mergedAt || "—") + "</span>";
+        h += "</div>";
+      });
+    } else {
+      h += emptyMsg("no pull requests");
+    }
+
+    h += '<div class="section-title">Resolved Work</div>';
+    var done = arr(S.done);
+    if (done.length) {
+      done.forEach(function (d) {
+        h += taskCard(d, { completedAt: true });
+      });
+    } else {
+      h += emptyMsg("no resolved work");
+    }
+
+    h += '<details class="milestones">';
+    h += '<summary>Phase Milestones (archive)</summary>';
+    var ms = arr(S.milestones);
+    if (ms.length) {
       h += '<table class="grid"><thead><tr>'
          + "<th>Phase</th><th>Focus</th><th>Status</th>"
          + "</tr></thead><tbody>";
-      rm.forEach(function (r) {
+      ms.forEach(function (r) {
         r = r || {};
         h += "<tr>"
            + '<td class="c-phase">' + esc(r.phase || "—") + "</td>"
@@ -462,158 +424,125 @@
       });
       h += "</tbody></table>";
     } else {
-      h += emptyMsg("no roadmap entries");
+      h += emptyMsg("no milestones");
     }
+    h += "</details>";
 
-    h += '<div class="section-title">Personas</div>';
-    var ps = arr(S.personas);
-    if (ps.length) {
-      h += '<div class="persona-row">';
-      ps.forEach(function (p) {
-        p = p || {};
-        h += '<div class="persona-card">';
-        h += '<div class="pc-head">';
-        if (p.id) h += '<span class="pc-id">' + esc(p.id) + "</span>";
-        h += '<span class="pc-name">' + esc(p.name || "(unnamed)") + "</span>";
-        if (p.tag) h += '<span class="badge badge-tag">' + esc(p.tag) + "</span>";
-        h += "</div>";
-        if (p.desc) h += '<div class="pc-desc">' + esc(p.desc) + "</div>";
-        h += "</div>";
-      });
-      h += "</div>";
-    } else {
-      h += emptyMsg("no personas");
-    }
-    set("panel-roadmap", h);
+    set("panel-done", h);
   }
 
-  /* ---------- 3. Git & PR ---------- */
-  function renderGit() {
-    var h = '<div class="section-title">Recent Pull Requests</div>';
-    var prs = arr(S.prs);
-    if (prs.length) {
-      prs.forEach(function (p) {
-        p = p || {};
-        h += '<div class="pr-item">';
-        h += '<span class="pr-n">#' + esc(p.n != null ? p.n : "?") + "</span>";
-        h += '<span class="pr-title">' + esc(p.title || "(no title)") + "</span>";
-        h += '<span class="pr-date">' + esc(p.date || "—") + "</span>";
-        h += "</div>";
+  /* ---------- 2. Now ---------- */
+  function renderNow() {
+    var h = '<div class="section-title">Current Initiative Slice</div>';
+    var now = arr(S.now);
+    if (now.length) {
+      now.forEach(function (n) {
+        h += taskCard(n, { startedAt: true });
       });
     } else {
-      h += emptyMsg("no pull requests");
+      h += emptyMsg("nothing in flight");
     }
-    set("panel-git", h);
+    h += '<div class="note-line">Each entry is a single in-flight initiative — may span one PR (single fix) or many PRs (design-system rework, dashboard rework). Update <code>.claude/Task.md</code> <code>## Now</code> section to add or remove.</div>';
+    set("panel-now", h);
   }
 
-  /* ---------- 4. Architecture ---------- */
-  function renderArch() {
-    var A = S.architecture || {};
+  /* ---------- 3. Next ---------- */
+  function renderNext() {
+    var h = '<div class="section-title">Backlog / Planned / Deferred</div>';
+    var next = arr(S.next);
+    if (next.length) {
+      next.forEach(function (n) {
+        h += taskCard(n, {});
+      });
+    } else {
+      h += emptyMsg("backlog empty");
+    }
+    h += '<div class="note-line">Source: <code>.claude/Task.md</code> <code>## Next</code> section. Items here have not been started; the orchestrator pulls from here when picking the next initiative.</div>';
+    set("panel-next", h);
+  }
+
+  /* ---------- 4. System Flow (2 Mermaid diagrams) ---------- */
+  function renderSystemFlow() {
     var h = "";
+    var sf = S.systemFlow || {};
+    var rf = S.recommendationFlow || {};
 
-    h += '<div class="section-title">Stack</div>';
-    h += '<div class="kv"><div class="kv-value">' + (A.stack ? esc(A.stack) : '<span class="empty">—</span>') + "</div></div>";
-
-    h += '<div class="section-title">Databases</div>';
-    var dbs = arr(A.databases);
-    if (dbs.length) {
-      dbs.forEach(function (d) {
-        d = d || {};
-        h += '<div class="card db-item">';
-        h += '<div class="db-alias">' + esc(d.alias || "(alias)") + "</div>";
-        if (d.role) h += '<div class="db-role">' + esc(d.role) + "</div>";
-        h += "</div>";
-      });
-    } else {
-      h += emptyMsg("no databases listed");
-    }
-
-    h += '<div class="section-title">Deploy</div>';
-    h += '<div class="kv"><div class="kv-value">' + (A.deploy ? esc(A.deploy) : '<span class="empty">—</span>') + "</div></div>";
-
-    h += '<div class="section-title">Notes</div>';
-    var notes = arr(A.notes);
-    if (notes.length) {
-      h += '<ul class="bullets">';
-      notes.forEach(function (n) { h += "<li>" + esc(n) + "</li>"; });
-      h += "</ul>";
-    } else {
-      h += emptyMsg("no notes");
-    }
-    set("panel-arch", h);
-  }
-
-  /* ---------- 5. File Map ---------- */
-  function renderFiles() {
-    var fm = S.fileMap || {};
-    var keys = Object.keys(fm);
-    var h = '<div class="section-title">File Map</div>';
-    if (keys.length) {
-      keys.forEach(function (root) {
-        h += '<div class="tree-node">';
-        h += '<span class="tree-root">' + esc(root) + "</span>";
-        var children = arr(fm[root]);
-        if (children.length) {
-          h += '<ul class="tree-children">';
-          children.forEach(function (c) { h += "<li>" + esc(c) + "</li>"; });
-          h += "</ul>";
-        } else {
-          h += emptyMsg("(empty)");
-        }
-        h += "</div>";
-      });
-    } else {
-      h += emptyMsg("no file map");
-    }
-    set("panel-files", h);
-  }
-
-  /* ---------- 6. Flow ---------- */
-  function renderFlow() {
-    var F = S.flow || {};
-    var h = "";
-
-    h += '<div class="section-title">Session</div>';
-    h += '<div class="flow-box">';
-    h += '<div class="fb-label">Session — Orchestrator</div>';
-    h += '<div class="fb-text">' + (F.session ? esc(F.session) : "—") + "</div>";
+    h += '<div class="mermaid-block">';
+    h += '<div class="mb-caption">' + esc(sf.title || "System Flow") + "</div>";
+    h += '<div class="mermaid" id="mm-systemflow"></div>';
     h += "</div>";
 
-    h += '<div class="flow-arrow">&darr;</div>';
-
-    h += '<div class="flow-box">';
-    h += '<div class="fb-label">Skill</div>';
-    h += '<div class="fb-text">' + (F.skill ? esc(F.skill) : "—") + "</div>";
+    h += '<div class="mermaid-block">';
+    h += '<div class="mb-caption">' + esc(rf.title || "Recommendation / Swipe Flow") + "</div>";
+    h += '<div class="mermaid" id="mm-recflow"></div>';
     h += "</div>";
 
-    h += '<div class="flow-arrow" title="session dispatches agents">&darr; dispatches &darr;</div>';
+    set("panel-systemflow", h);
+
+    // textContent (not innerHTML) — Mermaid expects raw syntax incl. literal <br/>
+    var smm = document.getElementById("mm-systemflow");
+    if (smm) smm.textContent = sf.mermaid || "flowchart LR\n  Empty[no diagram]";
+    var rmm = document.getElementById("mm-recflow");
+    if (rmm) rmm.textContent = rf.mermaid || "flowchart TD\n  Empty[no diagram]";
+  }
+
+  /* ---------- 5. Agent Flow (1 Mermaid + roster table) ---------- */
+  function renderAgentFlow() {
+    var h = "";
+    var af = S.agentFlow || {};
+
+    h += '<div class="mermaid-block">';
+    h += '<div class="mb-caption">' + esc(af.title || "Agent Flow") + "</div>";
+    h += '<div class="mermaid" id="mm-agentflow"></div>';
+    h += "</div>";
 
     h += '<div class="section-title">Agent Roster</div>';
-    var agents = arr(F.agents);
+    var agents = arr(S.agents);
     if (agents.length) {
-      h += '<div class="agent-grid">';
+      h += '<table class="grid"><thead><tr>'
+         + "<th>Agent</th><th>Role</th><th>Model</th><th>Effort</th>"
+         + "</tr></thead><tbody>";
       agents.forEach(function (a) {
         a = a || {};
-        h += '<div class="agent-card">';
-        h += '<div class="ac-name">' + esc(a.name || "(agent)") + "</div>";
-        if (a.role) h += '<div class="ac-role">' + esc(a.role) + "</div>";
-        h += "</div>";
+        h += "<tr>"
+           + '<td class="c-mono"><b style="color:var(--accent)">' + esc(a.name || "(agent)") + "</b></td>"
+           + "<td>" + esc(a.role || "—") + "</td>"
+           + '<td class="c-mono">' + esc(a.model || "—") + "</td>"
+           + '<td class="c-mono">' + esc(a.effort || "default") + "</td>"
+           + "</tr>";
       });
-      h += "</div>";
+      h += "</tbody></table>";
     } else {
       h += emptyMsg("no agents");
     }
-    set("panel-flow", h);
+    set("panel-agentflow", h);
+
+    var amm = document.getElementById("mm-agentflow");
+    if (amm) amm.textContent = af.mermaid || "flowchart LR\n  Empty[no diagram]";
+  }
+
+  /* ---------- Mermaid render hook ----------
+   * v10 with startOnLoad:false. After every panel innerHTML inject that may
+   * contain `.mermaid` blocks, call mermaid.run() against that panel's
+   * selector. Mermaid is idempotent — calling twice on the same node is a
+   * no-op once data-processed is set.
+   */
+  function runMermaid(panelId) {
+    if (typeof window.mermaid === "undefined" || typeof window.mermaid.run !== "function") return;
+    try {
+      window.mermaid.run({ querySelector: "#" + panelId + " .mermaid" });
+    } catch (e) {
+      console.error("mermaid.run failed for " + panelId, e);
+    }
   }
 
   /* ---------- tabs ---------- */
   var TABS = [
-    { id: "tasks",   label: "Tasks" },
-    { id: "roadmap", label: "Roadmap" },
-    { id: "git",     label: "Git & PR" },
-    { id: "arch",    label: "Architecture" },
-    { id: "files",   label: "File Map" },
-    { id: "flow",    label: "Flow" }
+    { id: "done",        label: "Done" },
+    { id: "now",         label: "Now" },
+    { id: "next",        label: "Next" },
+    { id: "systemflow",  label: "System Flow" },
+    { id: "agentflow",   label: "Agent Flow" }
   ];
 
   function activateTab(id) {
@@ -624,6 +553,12 @@
       if (btn) btn.classList.toggle("active", on);
       if (panel) panel.classList.toggle("active", on);
     });
+    // Mermaid: render lazily once the target panel is display:block.
+    // Mermaid v10 derives SVG size from the live DOM box, so rendering inside
+    // display:none containers produces 0×0 outputs that look "blank" later.
+    if (id === "systemflow" || id === "agentflow") {
+      runMermaid("panel-" + id);
+    }
   }
 
   function buildTabbar() {
@@ -643,15 +578,27 @@
 
   /* ---------- init ---------- */
   function init() {
+    if (typeof window.mermaid !== "undefined") {
+      try {
+        window.mermaid.initialize({
+          startOnLoad: false,
+          theme: "default",
+          flowchart: { htmlLabels: true, curve: "basis" },
+          securityLevel: "loose"
+        });
+      } catch (e) {
+        console.error("mermaid.initialize failed", e);
+      }
+    }
+
     renderHeader();
-    renderTasks();
-    renderRoadmap();
-    renderGit();
-    renderArch();
-    renderFiles();
-    renderFlow();
+    renderDone();
+    renderNow();
+    renderNext();
+    renderSystemFlow();
+    renderAgentFlow();
     buildTabbar();
-    activateTab("tasks"); // default to first tab
+    activateTab("done"); // default landing tab; activateTab() lazy-loads Mermaid for flow tabs
   }
 
   if (document.readyState === "loading") {

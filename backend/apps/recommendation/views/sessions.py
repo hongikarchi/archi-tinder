@@ -2,6 +2,7 @@ import logging
 from collections import defaultdict
 
 from django.conf import settings
+from django.db import transaction
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -33,6 +34,7 @@ class SessionCreateView(APIView):
             return Response({'detail': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
 
         project_id      = request.data.get('project_id')
+        project_name    = (request.data.get('name') or '').strip()[:100] or 'Untitled'
         filters         = request.data.get('filters') or {}
 
         # Validate and sanitize filter_priority: must be a list of known filter key strings, max 10
@@ -47,6 +49,10 @@ class SessionCreateView(APIView):
             raw_seeds = []
         seed_ids = [s for s in raw_seeds if isinstance(s, str) and len(s) <= 20][:50]
 
+        # raw_query: accept 'raw_query' (new FE key) with 'query' fallback for old clients.
+        # Separate from _raw_query_early below (which is coerced to None > 1000 chars for RRF).
+        raw_query = (request.data.get('raw_query') or request.data.get('query') or '').strip()[:2000]
+
         # Resolve project (project_id may be a local ID like 'proj_xxx' -- ignore gracefully)
         project = None
         if project_id:
@@ -55,11 +61,13 @@ class SessionCreateView(APIView):
             except Exception:
                 project = None
         if not project:
-            project = Project.objects.create(user=profile, name='Untitled', filters=filters)
+            project = Project.objects.create(user=profile, name=project_name, filters=filters, raw_query=raw_query)
 
         # Topic 01 RRF: extract raw_query early — needed for both RRF q_text and
-        # IMP-6 cache key. Coerce to None for non-string or oversized values.
-        _raw_query_early = request.data.get('query') or None
+        # IMP-6 cache key. Accept 'raw_query' (FE key, sessions.js:25) with
+        # 'query' fallback for old clients — mirrors the line-54 dual-key dispatch.
+        # Coerce to None for non-string or oversized values.
+        _raw_query_early = request.data.get('raw_query') or request.data.get('query') or None
         if _raw_query_early and not isinstance(_raw_query_early, str):
             _raw_query_early = None
         # Security: coerce oversized queries to None (RRF wants a focused query, not an essay)
@@ -95,7 +103,7 @@ class SessionCreateView(APIView):
         # threads through to _row_to_card so cards get the user-picked cover).
         # Accept either from explicit `image_focus` param OR from filters['image_focus'].
         req_focus = request.data.get('image_focus')
-        if req_focus in _VALID_IMAGE_FOCUS:
+        if isinstance(req_focus, str) and req_focus in _VALID_IMAGE_FOCUS:
             active_filters['image_focus'] = req_focus
         elif active_filters.get('image_focus') not in _VALID_IMAGE_FOCUS:
             active_filters.pop('image_focus', None)
@@ -168,15 +176,15 @@ class SessionCreateView(APIView):
         logger.info('Session created: %s (pool=%d, tiers=%d, relaxed=%s)', session.session_id, len(pool_ids), len(tiers), filter_relaxed)
 
         # §6 logging: session_start + pool_creation events
-        raw_query = request.data.get('query') or None
+        # Use the line-53 dual-key value (trimmed/truncated); coerce empty str to None.
         event_log.emit_event(
             'session_start',
             session=session,
             user=profile,
-            query=raw_query,
+            query=raw_query or None,
             filters=active_filters,
             filter_priority=list(filter_priority or []),
-            raw_query=raw_query,
+            raw_query=raw_query or None,
             visual_description=visual_description,
             v_initial_success=v_initial is not None,
         )
@@ -377,6 +385,20 @@ class SessionResultView(APIView):
                 k=RC['top_k_results'],
             )
 
+        # Topic 04(b) DPP: when flag ON, over-fetch candidates so DPP MAP can actually narrow.
+        # Without over-fetch, n == k and DPP's early-return branch fires (no-op).
+        # Cosine/Gemini top-10 provenance fields slice the first top_k_results entries
+        # of the over-fetched set so their semantics match pre-fix.
+        _overfetch_mult = RC.get('dpp_overfetch_multiplier', 3) if RC.get('dpp_topk_enabled', False) else 1
+        if _overfetch_mult > 1 and session.like_vectors:
+            # Re-fetch with larger k via the MMR branch (already used when like_vectors exist)
+            predicted_cards = engine.get_top_k_mmr(
+                session.like_vectors,
+                session.exposed_ids,
+                k=RC['top_k_results'] * _overfetch_mult,
+                round_num=session.current_round,
+            )
+
         # Capture initial cosine order BEFORE any reorder (needed for RRF composition)
         candidate_ids_cosine_order = [c['canonical_bld_id'] for c in predicted_cards]
         rerank_rank_by_id = None  # populated only when Topic 02 ran with a real reorder
@@ -392,15 +414,13 @@ class SessionResultView(APIView):
 
         # Topic 02: Gemini setwise rerank (session-end, off swipe hot path)
         if RC.get('gemini_rerank_enabled', False) and len(predicted_cards) >= 2:
+            # Pass cards in the shape rerank_candidates expects: canonical_bld_id +
+            # name (top-level) and metadata.axis_* (as produced by engine._row_to_card).
             candidate_metadata = [
                 {
                     'canonical_bld_id': c['canonical_bld_id'],
-                    'name_en': c.get('name_en', ''),
-                    'atmosphere': c.get('atmosphere', ''),
-                    'material': c.get('material', ''),
-                    'architect': c.get('architect', ''),
-                    'style': c.get('style', ''),
-                    'program': c.get('program', ''),
+                    'name': c.get('name', ''),
+                    'metadata': c.get('metadata') or {},
                 }
                 for c in predicted_cards
             ]
@@ -459,24 +479,33 @@ class SessionResultView(APIView):
             _dpp_top10 = dpp_order[:10]  # IMP-10: store DPP top-10 for provenance
             predicted_cards = [card_by_id[bid] for bid in dpp_order if bid in card_by_id]
 
+        # Guard: ensure predicted_cards is exactly top_k_results items at response time.
+        # DPP path already narrows to k; non-DPP over-fetch=1 never grows.
+        # Defensive slice handles any edge case where over-fetch candidate leaks through.
+        predicted_cards = predicted_cards[:RC.get('top_k_results', 20)]
+
         # IMP-10: persist top-10 lists for bookmark provenance lookup.
-        # Only update if values changed (guard against repeated GET calls doing needless writes).
-        _top10_fields_changed = (
-            session.cosine_top10_ids != _cosine_top10
-            or session.gemini_top10_ids != _gemini_top10
-            or session.dpp_top10_ids != _dpp_top10
-        )
-        if _top10_fields_changed:
-            try:
-                session.cosine_top10_ids = _cosine_top10
-                session.gemini_top10_ids = _gemini_top10
-                session.dpp_top10_ids = _dpp_top10
-                session.save(update_fields=['cosine_top10_ids', 'gemini_top10_ids', 'dpp_top10_ids'])
-            except Exception as _exc:
-                logger.warning(
-                    'SessionResultView: failed to persist top10 lists for session %s: %s',
-                    session.session_id, _exc,
+        # Atomic check-then-write inside transaction.atomic() (Finding #16). Two
+        # concurrent GET callers cannot race a partial update — the multi-field
+        # save is atomic. Lock-free: writes are IDEMPOTENT (same input → same
+        # top-10 values), so a duplicate write is a no-op, not corruption.
+        try:
+            with transaction.atomic():
+                _top10_fields_changed = (
+                    session.cosine_top10_ids != _cosine_top10
+                    or session.gemini_top10_ids != _gemini_top10
+                    or session.dpp_top10_ids != _dpp_top10
                 )
+                if _top10_fields_changed:
+                    session.cosine_top10_ids = _cosine_top10
+                    session.gemini_top10_ids = _gemini_top10
+                    session.dpp_top10_ids = _dpp_top10
+                    session.save(update_fields=['cosine_top10_ids', 'gemini_top10_ids', 'dpp_top10_ids'])
+        except Exception as _exc:
+            logger.warning(
+                'SessionResultView: failed to persist top10 lists for session %s: %s',
+                session.session_id, _exc,
+            )
 
         return Response({
             'session_id':          str(session.session_id),

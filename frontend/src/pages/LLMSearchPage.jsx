@@ -17,8 +17,6 @@ const FILTER_LABELS = {
   style: 'Style',
   year_min: 'Year',
   year_max: 'Year',
-  min_area: 'Area',
-  max_area: 'Area',
 }
 
 function FilterChips({ filters }) {
@@ -164,6 +162,20 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
     } catch { /* ignore */ }
     return null
   })
+  const [latestImageFocus, setLatestImageFocus] = useState(() => {
+    try {
+      const stored = localStorage.getItem(`${storageKey}__latestImageFocus`)
+      if (stored) return JSON.parse(stored)
+    } catch { /* ignore */ }
+    return null
+  })
+  const [latestRawQuery, setLatestRawQuery] = useState(() => {
+    try {
+      const stored = localStorage.getItem(`${storageKey}__latestRawQuery`)
+      if (stored) return JSON.parse(stored)
+    } catch { /* ignore */ }
+    return ''
+  })
   const [showStart, setShowStart] = useState(() => {
     try {
       const stored = localStorage.getItem(`${storageKey}__showStart`)
@@ -204,6 +216,12 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
     localStorage.setItem(`${storageKey}__latestVisualDescription`, JSON.stringify(latestVisualDescription))
   }, [storageKey, latestVisualDescription])
   useEffect(() => {
+    localStorage.setItem(`${storageKey}__latestImageFocus`, JSON.stringify(latestImageFocus))
+  }, [storageKey, latestImageFocus])
+  useEffect(() => {
+    localStorage.setItem(`${storageKey}__latestRawQuery`, JSON.stringify(latestRawQuery))
+  }, [storageKey, latestRawQuery])
+  useEffect(() => {
     localStorage.setItem(`${storageKey}__showStart`, JSON.stringify(showStart))
   }, [storageKey, showStart])
 
@@ -211,7 +229,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
     [
       '__messages', '__conversationHistory', '__latestResults',
       '__latestFilters', '__latestFilterPriority', '__latestVisualDescription',
-      '__showStart',
+      '__latestImageFocus', '__latestRawQuery', '__showStart',
     ].forEach(suffix => localStorage.removeItem(`${storageKey}${suffix}`))
   }
 
@@ -278,6 +296,8 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
           setLatestFilters(isFallback ? {} : filters)
           setLatestFilterPriority(isFallback ? [] : filterPriority)
           setLatestVisualDescription(parsed.visual_description ?? null)
+          setLatestImageFocus(parsed.image_focus || null)
+          setLatestRawQuery(parsed.raw_query || text || '')
           setShowStart(true)
         }
       }
@@ -292,9 +312,9 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
     const name = initialName || 'Untitled Project'
     clearChatStorage()
     if (mode === 'update') {
-      onUpdate(projectId, latestResults, latestFilters, latestFilterPriority, latestVisualDescription)
+      onUpdate(projectId, latestResults, latestFilters, latestFilterPriority, latestVisualDescription, latestImageFocus)
     } else {
-      onStart(name, latestResults, latestFilters, latestFilterPriority, latestVisualDescription, visibility)
+      onStart(name, latestResults, latestFilters, latestFilterPriority, latestVisualDescription, visibility, latestRawQuery || '', latestImageFocus)
     }
   }
 

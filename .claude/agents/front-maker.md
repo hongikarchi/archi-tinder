@@ -2,6 +2,7 @@
 name: front-maker
 description: Implements frontend changes in React/Vite. Only touches files inside frontend/. Follows all conventions in CLAUDE.md. Runs ESLint after changes and reports what it built.
 model: sonnet
+effort: default
 tools: Read, Write, Edit, Bash, Glob, Grep
 ---
 

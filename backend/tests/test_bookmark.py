@@ -303,3 +303,68 @@ class TestBookmarkAuthIsolation:
             format='json',
         )
         assert resp.status_code == 200
+
+
+# ── Atomicity / idempotency ────────────────────────────────────────────────────
+
+@pytest.mark.django_db
+class TestBookmarkIdempotency:
+    """Verify that duplicate bookmark POSTs produce exactly one entry.
+
+    True concurrency testing relies on PG row-lock semantics and cannot be
+    reproduced in a single-threaded SQLite unit test.  These tests verify the
+    sequential idempotency contract: the second identical request must not
+    create a duplicate entry.
+    """
+
+    def test_save_twice_yields_single_entry(self, auth_client, user_profile):
+        """POST bookmark save for the same card twice → exactly 1 entry in saved_ids."""
+        project = _make_project(user_profile)
+
+        for _ in range(2):
+            resp = auth_client.post(
+                _bookmark_url(project.project_id),
+                _payload(card_id='bld_000042', action='save', rank=1),
+                format='json',
+            )
+            assert resp.status_code == 200
+
+        project.refresh_from_db()
+        ids = [e['id'] for e in project.saved_ids if isinstance(e, dict) and 'id' in e]
+        assert ids.count('bld_000042') == 1, (
+            f"Expected exactly 1 entry for bld_000042, got {ids.count('bld_000042')}: {ids}"
+        )
+
+    def test_save_multiple_different_cards_does_not_deduplicate(self, auth_client, user_profile):
+        """Two different card IDs each saved once → 2 entries (sanity check)."""
+        project = _make_project(user_profile)
+
+        for card in ('bld_000001', 'bld_000002'):
+            resp = auth_client.post(
+                _bookmark_url(project.project_id),
+                _payload(card_id=card, action='save', rank=3),
+                format='json',
+            )
+            assert resp.status_code == 200
+
+        project.refresh_from_db()
+        ids = [e['id'] for e in project.saved_ids if isinstance(e, dict) and 'id' in e]
+        assert len(ids) == 2
+        assert 'bld_000001' in ids
+        assert 'bld_000002' in ids
+
+    def test_save_then_unsave_then_save_yields_single_entry(self, auth_client, user_profile):
+        """save → unsave → save cycle ends with exactly 1 entry."""
+        project = _make_project(user_profile)
+
+        for action in ('save', 'unsave', 'save'):
+            resp = auth_client.post(
+                _bookmark_url(project.project_id),
+                _payload(card_id='bld_000099', action=action, rank=5),
+                format='json',
+            )
+            assert resp.status_code == 200
+
+        project.refresh_from_db()
+        ids = [e['id'] for e in project.saved_ids if isinstance(e, dict) and 'id' in e]
+        assert ids.count('bld_000099') == 1

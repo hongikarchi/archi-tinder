@@ -18,10 +18,13 @@ const PARSE_QUERY_TIMEOUT_MS = 60000    // Gemini LLM generation can take 10-30s
 export async function startSession(params) {
   const result = await callApi('POST', '/analysis/sessions/', {
     project_id:      params.project_id,
+    name:            params.name || 'Untitled',
     filters:         params.filters || {},
     filter_priority: params.filter_priority || [],
     seed_ids:        params.seed_ids || [],
+    raw_query:       params.raw_query || '',
     ...(params.visual_description ? { visual_description: params.visual_description } : {}),
+    ...(params.image_focus ? { image_focus: params.image_focus } : {}),
   })
   return {
     ...result,

@@ -37,11 +37,11 @@ function ConfidenceBar({ value, phase, progress }) {
     pct = value != null ? Math.round(value * 100) : 100
     stageLabel = 'Converged'
   } else if (phase === 'analyzing') {
-    pct = value != null ? Math.round(value * 100) : 0
+    pct = value != null ? Math.round(value * 100) : 100
     stageLabel = 'Analyzing'
   } else if (phase === 'exploring') {
-    const likes = Math.min(likeCount, 3)
-    pct = Math.round((likes / 3) * 100)
+    const likes = Math.min(likeCount, 4)
+    pct = Math.round((likes / 4) * 100)
     stageLabel = 'Exploring'
   } else if (value != null) {
     pct = Math.round(value * 100)
@@ -291,7 +291,7 @@ function DismissConfirmPopup({ onConfirm, onCancel }) {
 
 /* ── SwipePage ───────────────────────────────────────────────────────────── */
 export default function SwipePage({
-  currentCard, cardResetToken = 0, progress, isCompleted, isLoading, isResultLoading = false,
+  currentCard, cardResetToken = 0, progress, isCompleted, isLoading, isResultLoading = false, swipePending = 0,
   projectName, onSwipe, onViewResults, onExtendSession,
   onExitToNewProject, onExitToHome,
 }) {
@@ -310,6 +310,12 @@ export default function SwipePage({
   const phase            = progress?.phase
   const filter_relaxed   = progress?.filter_relaxed || false
   const confidence       = progress?.confidence ?? null
+
+  // Show "Finish & View Report" button when progress hits 100% (still swiping, not yet completed)
+  const isAt100 = !isCompleted && (
+    (phase === 'exploring' && like_count >= 4) ||
+    ((phase === 'analyzing' || phase === 'converged') && confidence != null && confidence >= 1.0)
+  )
 
   function onTinderSwipe(dir) {
     // F4: intercept first-ever left swipe to show dismiss tutorial
@@ -582,6 +588,33 @@ export default function SwipePage({
             )}
           </div>
         </div>
+
+        {/* Finish button — appears between progress bar and card when progress hits 100% */}
+        {isAt100 && (
+          <div style={{ width: CARD_WIDTH }}>
+            <button
+              onClick={onViewResults}
+              disabled={isResultLoading || swipePending > 0}
+              style={{
+                width: '100%',
+                padding: '12px 20px',
+                borderRadius: 14,
+                background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
+                color: '#fff',
+                fontSize: 14,
+                fontWeight: 700,
+                border: 'none',
+                cursor: (isResultLoading || swipePending > 0) ? 'default' : 'pointer',
+                fontFamily: 'inherit',
+                boxShadow: '0 4px 16px rgba(236,72,153,0.35)',
+                opacity: (isResultLoading || swipePending > 0) ? 0.6 : 1,
+                transition: 'opacity 0.2s',
+              }}
+            >
+              {isResultLoading ? 'Preparing report...' : 'Finish & View Report →'}
+            </button>
+          </div>
+        )}
 
         {/* Card */}
         <div style={{ width: CARD_WIDTH, height: CARD_HEIGHT, position: 'relative' }}>

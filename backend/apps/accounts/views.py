@@ -8,6 +8,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.conf import settings
 
@@ -274,12 +275,18 @@ class TokenRefreshView(APIView):
             refresh = RefreshToken(refresh_token)
             data = {'access': str(refresh.access_token)}
             if settings.SIMPLE_JWT.get('ROTATE_REFRESH_TOKENS'):
+                if settings.SIMPLE_JWT.get('BLACKLIST_AFTER_ROTATION'):
+                    try:
+                        refresh.blacklist()
+                    except AttributeError:
+                        # token_blacklist app not installed (dev mode without migrations)
+                        pass
                 refresh.set_jti()
                 refresh.set_exp()
                 refresh.set_iat()
                 data['refresh'] = str(refresh)
             return Response(data)
-        except Exception:
+        except TokenError:
             return Response({'detail': 'Invalid or expired token'}, status=status.HTTP_401_UNAUTHORIZED)
 
 

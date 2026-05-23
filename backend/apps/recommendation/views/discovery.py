@@ -7,6 +7,7 @@ from rest_framework.views import APIView
 
 from ..models import Project
 from .. import engine
+from ..caches import get_or_build_taste
 from ._shared import _get_profile, _liked_id_only
 
 logger = logging.getLogger('apps.recommendation')
@@ -66,7 +67,7 @@ class DiscoveryFeedView(APIView):
         exclude_set = set(exclude_ids)
 
         # --- Compute taste vector and serve cold or warm path ---
-        v_taste = engine.compute_user_taste_vector(profile)
+        v_taste = get_or_build_taste(profile)
         if v_taste is None:
             cards = engine.get_diverse_random(n=limit, filters=None)
             cards = [card for card in cards if card.get('canonical_bld_id') not in exclude_set]
@@ -135,7 +136,7 @@ class BoardSurpriseView(APIView):
         exclude_set = set(exclude_ids)
 
         # --- Compute taste vector and serve cold or warm path ---
-        v_taste = engine.compute_user_taste_vector(profile)
+        v_taste = get_or_build_taste(profile)
         if v_taste is None:
             cards = engine.get_diverse_random(n=10, filters=None)
             cards = [card for card in cards if card.get('canonical_bld_id') not in exclude_set]

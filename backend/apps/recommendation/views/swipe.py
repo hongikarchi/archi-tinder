@@ -6,7 +6,7 @@ import numpy as np
 from django.conf import settings
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -15,6 +15,7 @@ from rest_framework.views import APIView
 
 from ..models import Project, AnalysisSession, SwipeEvent
 from .. import engine, event_log
+from ..caches import evict_taste
 from ._shared import _get_profile, _progress, _liked_id_only
 
 logger = logging.getLogger('apps.recommendation')
@@ -170,6 +171,11 @@ class BuildingBatchView(APIView):
                 {'detail': 'canonical_bld_ids must be a list of at most 200 items'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        if not all(isinstance(i, str) and i for i in ids):
+            return Response(
+                {'detail': 'canonical_bld_ids elements must be non-empty strings'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         cards = engine.get_buildings_by_ids(ids)
         return Response(cards)
 
@@ -205,9 +211,8 @@ class ProjectBookmarkView(APIView):
         if profile is None:
             return Response({'detail': 'unauthenticated'}, status=status.HTTP_401_UNAUTHORIZED)
 
-        try:
-            project = Project.objects.get(project_id=project_id, user=profile)
-        except Project.DoesNotExist:
+        # Existence check outside the lock — cheap 404 guard before acquiring row lock.
+        if not Project.objects.filter(project_id=project_id, user=profile).exists():
             return Response({'detail': 'project not found'}, status=status.HTTP_404_NOT_FOUND)
 
         card_id = request.data.get('card_id')
@@ -229,25 +234,33 @@ class ProjectBookmarkView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # --- Toggle saved_ids ---
-        existing = list(project.saved_ids or [])
-        existing_by_id = {
-            e['id']: e
-            for e in existing
-            if isinstance(e, dict) and 'id' in e
-        }
+        # --- Toggle saved_ids (atomic read-modify-write to prevent lost updates) ---
+        with transaction.atomic():
+            try:
+                project = Project.objects.select_for_update().get(
+                    project_id=project_id, user=profile,
+                )
+            except Project.DoesNotExist:
+                return Response({'detail': 'project not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        if action == 'save':
-            if card_id not in existing_by_id:
-                existing.append({'id': card_id, 'saved_at': timezone.now().isoformat()})
-        else:  # unsave
-            existing = [
-                e for e in existing
-                if not (isinstance(e, dict) and e.get('id') == card_id)
-            ]
+            existing = list(project.saved_ids or [])
+            existing_by_id = {
+                e['id']: e
+                for e in existing
+                if isinstance(e, dict) and 'id' in e
+            }
 
-        project.saved_ids = existing
-        project.save(update_fields=['saved_ids', 'updated_at'])
+            if action == 'save':
+                if card_id not in existing_by_id:
+                    existing.append({'id': card_id, 'saved_at': timezone.now().isoformat()})
+            else:  # unsave
+                existing = [
+                    e for e in existing
+                    if not (isinstance(e, dict) and e.get('id') == card_id)
+                ]
+
+            project.saved_ids = existing
+            project.save(update_fields=['saved_ids', 'updated_at'])
 
         # --- Resolve optional session for event association ---
         session = None
@@ -262,22 +275,14 @@ class ProjectBookmarkView(APIView):
         # --- Compute rank_zone per Spec v1.2 §6 implementation requirement #4 ---
         rank_zone = 'primary' if rank <= 10 else 'secondary'
 
-        # --- rank_corpus: IMP-10 sub-task A (Spec v1.7 §11.1 / Investigation 08 H1) ---
-        # When the session has v_initial (HyDE was on), compute the corpus-wide cosine rank
-        # of this card vs the HyDE vector. pgvector <=> ranking in SQL; O(N) corpus scan.
-        # On any exception: rank_corpus stays None (observability, never blocks bookmark).
-        # Sessions without v_initial (HyDE flag off) → rank_corpus stays None as before.
+        # --- rank_corpus: deferred (Finding #14b) ---
+        # compute_corpus_rank() does a full O(N) pgvector scan (~39k rows) synchronously,
+        # blocking the bookmark response. rank_corpus is telemetry-only (stored in
+        # SessionEvent.payload); it is not returned to the client and has no correctness
+        # impact on bookmarking. Setting to None here; move to a background task when
+        # Celery/task-queue is available.
+        # TODO(Finding #14b): compute_corpus_rank deferred — add background task here.
         rank_corpus = None
-        if session is not None and getattr(session, 'v_initial', None) is not None:
-            try:
-                rank_corpus = engine.compute_corpus_rank(card_id, session.v_initial)
-            except Exception as _rank_exc:
-                # Telemetry failure must never block the bookmark
-                logger.warning(
-                    'ProjectBookmarkView: compute_corpus_rank failed for card %s: %s',
-                    card_id, _rank_exc,
-                )
-                rank_corpus = None
 
         # --- Provenance booleans per Spec v1.2 / IMP-10 sub-task A (Topic 02/04 attribution) ---
         # Read from session.cosine_top10_ids / gemini_top10_ids / dpp_top10_ids set by
@@ -422,10 +427,24 @@ class SwipeView(APIView):
                 'confidence': None,
             })
 
-        # Idempotency check -- if already processed, return accepted so frontend treats it as success
-        if idempotency_key and SwipeEvent.objects.filter(idempotency_key=idempotency_key, session=session).exists():
+        # Idempotency check -- if already processed, return full payload so FE state machine
+        # can read progress/next_image/is_analysis_completed without hitting undefined fields.
+        if idempotency_key and SwipeEvent.objects.filter(
+            idempotency_key=idempotency_key, session=session
+        ).exists():
             logger.info('Duplicate swipe ignored: %s', idempotency_key)
-            return Response({'accepted': True, 'detail': 'duplicate'}, status=status.HTTP_200_OK)
+            return Response({
+                'accepted': True,
+                'session_status': session.status,
+                'progress': _progress(session),
+                'next_image': None,
+                'prefetch_image': None,
+                'prefetch_image_2': None,
+                'is_analysis_completed': session.status == 'completed',
+                'can_continue': False,
+                'confidence': None,
+                'detail': 'duplicate',
+            }, status=status.HTTP_200_OK)
 
         # NORMAL SWIPE PROCESSING
         import time as _time
@@ -441,6 +460,10 @@ class SwipeView(APIView):
                 session_id=session_id, user=profile
             )
             _mark('lock_acquired')
+            # Lock Project row before mutating its JSON lists (liked_ids / disliked_ids).
+            # Lock order: Session -> Project (no deadlock vs. bookmark POST which takes
+            # only Project and never acquires Session first).
+            project = Project.objects.select_for_update().get(pk=session.project_id)
 
             # 1. Get embedding and update preference vector
             embedding = engine.get_building_embedding(canonical_bld_id)
@@ -450,14 +473,35 @@ class SwipeView(APIView):
                     session.preference_vector, embedding, action
                 )
 
-            # 2. Record swipe
-            SwipeEvent.objects.create(
-                session=session, canonical_bld_id=canonical_bld_id,
-                action=action, idempotency_key=idempotency_key,
-            )
+            # 2. Record swipe — nested savepoint to handle concurrent duplicate races.
+            # Two concurrent requests with the same idempotency_key can both pass the
+            # pre-check at line ~424 before either has committed. The savepoint ensures
+            # the outer atomic block stays healthy when the constraint fires on the second.
+            try:
+                with transaction.atomic():  # savepoint
+                    SwipeEvent.objects.create(
+                        session=session, canonical_bld_id=canonical_bld_id,
+                        action=action, idempotency_key=idempotency_key,
+                    )
+            except IntegrityError:
+                # Concurrent duplicate raced past the pre-check. Bail out — the other
+                # request already committed the row. Re-read session for latest state.
+                logger.info('Concurrent duplicate swipe caught at create: %s', idempotency_key)
+                session.refresh_from_db()
+                return Response({
+                    'accepted': True,
+                    'session_status': session.status,
+                    'progress': _progress(session),
+                    'next_image': None,
+                    'prefetch_image': None,
+                    'prefetch_image_2': None,
+                    'is_analysis_completed': session.status == 'completed',
+                    'can_continue': False,
+                    'confidence': None,
+                    'detail': 'duplicate',
+                })
 
-            # 3. Update project liked/disliked lists
-            project = session.project
+            # 3. Update project liked/disliked lists (use the locked `project` from above)
             if action == 'like':
                 existing_ids = _liked_id_only(project.liked_ids)
                 if canonical_bld_id not in existing_ids:
@@ -478,6 +522,7 @@ class SwipeView(APIView):
                 if canonical_bld_id not in project.disliked_ids:
                     project.disliked_ids = project.disliked_ids + [canonical_bld_id]
             project.save(update_fields=['liked_ids', 'disliked_ids'])
+            evict_taste(profile.id)
 
             # 4. Increment round
             session.current_round += 1

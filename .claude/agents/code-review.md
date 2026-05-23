@@ -2,6 +2,7 @@
 name: code-review
 description: Reviews code changes for integration correctness. Checks API contracts between front and back, logic bugs, error handling at boundaries, and obvious performance issues. Returns PASS or FAIL with specific fix orders. When given fix orders from the orchestrator, translates them into precise instructions for back-maker and/or front-maker.
 model: sonnet
+effort: default
 tools: Read, Glob, Grep, Bash
 ---
 
