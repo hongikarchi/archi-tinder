@@ -13,12 +13,13 @@ window.PROJECT_STATE = {
     project: 'ArchiTinder — Make Web',
     updated: '2026-05-23',
     branch: 'develop',
-    head: '877e82c',
+    head: 'f0c0e23',
   },
 
   tasks: {
     open: [
       { id: 'AUTH1', title: 'Kakao / Naver OAuth', note: 'Google-only today; Korean users need domestic login' },
+      { id: 'AUDIT-T2/3/4', title: 'Audit Tier 2/3/4 — pending next sessions', note: 'Tier 2 = UX-contract bugs (#3/#4/#5/#7/#9/#10). Tier 3 = ops risk (#14/#16/#17). Tier 4 = file decomp (App.jsx, engine.py, BoardDetailPage, UserProfilePage).' },
     ],
     inProgress: [
       { id: 'DESIGN-REWORK', title: 'Design-system redesign — per-component rework', note: 'Foundation shipped (PR #54). Remaining: ~7,700 LOC inline styles → CSS Modules, light-theme visuals, leaf→hub order.' },
@@ -46,14 +47,14 @@ window.PROJECT_STATE = {
   ],
 
   prs: [
+    { n: 74, title: 'fix: audit tier-1 hotfix bundle (#1/#2/#6/#8)', date: '2026-05-23' },
+    { n: 73, title: 'chore: session-end reporter housekeeping — DEV-ENV1 resolved + PR #72 recorded', date: '2026-05-23' },
     { n: 72, title: 'feat: board UX — edit mode, name edit, swipe finish button, result save (PR #71 recreation + Codex defect fixes)', date: '2026-05-23' },
     { n: 70, title: 'chore: session-end reporter housekeeping — record external PR triage + add DEV-ENV1', date: '2026-05-22' },
     { n: 69, title: 'perf(frontend): image loading — 4s→2s timeout, lazy gallery, preload cap 3', date: '2026-05-22' },
     { n: 68, title: 'fix: UserSerializer.user_id source — user.id not profile id', date: '2026-05-22' },
     { n: 66, title: 'fix: discovery 499s timeout + LLM chat abort — gunicorn workers + per-endpoint client timeouts', date: '2026-05-22' },
     { n: 65, title: 'chore: reporter DB-split deploy session-end sync', date: '2026-05-22' },
-    { n: 61, title: 'feat: app-test FEATURE-SCOPED mode — lighter gate for non-swipe PRs', date: '2026-05-22' },
-    { n: 60, title: 'chore: reporter PR2 session-end housekeeping', date: '2026-05-22' },
   ],
 
   architecture: {
