@@ -173,7 +173,7 @@ function InfoCol({ label, value }) {
  */
 function BuildingTile({ building, fromProjectId, rank, savedIds, referrer, isEditMode, isSelected, onToggleSelect }) {
   const navigate = useNavigate()
-  const buildingId = building.canonical_bld_id || building.building_id
+  const buildingId = building.image_id || building.canonical_bld_id || building.building_id
   const { onLoad, onError } = useImageTelemetry({
     buildingId,
     context: 'board_detail_gallery',
@@ -212,7 +212,7 @@ function BuildingTile({ building, fromProjectId, rank, savedIds, referrer, isEdi
     >
       <img
         src={building.image_url}
-        alt={building.name_en}
+        alt={building.image_title || building.name_en}
         loading="lazy"
         onLoad={onLoad}
         onError={onError}
@@ -276,7 +276,7 @@ function BuildingTile({ building, fromProjectId, rank, savedIds, referrer, isEdi
           overflow: 'hidden',
           textOverflow: 'ellipsis',
         }}>
-          {building.name_en}
+          {building.image_title || building.name_en}
         </h4>
         <p style={{
           color: 'rgba(255,255,255,0.55)',
@@ -288,8 +288,8 @@ function BuildingTile({ building, fromProjectId, rank, savedIds, referrer, isEdi
         </p>
         <div style={{ height: 1, background: 'rgba(255,255,255,0.1)', marginBottom: 12 }} />
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px' }}>
-          <InfoCol label="ARCHITECT" value={building.architect} />
-          <InfoCol label="YEAR" value={building.year} />
+          <InfoCol label="ARCHITECT" value={building.metadata?.axis_architects} />
+          <InfoCol label="YEAR" value={building.metadata?.axis_year} />
         </div>
       </div>
     </div>
@@ -327,7 +327,7 @@ export default function BoardDetailPage() {
   const location = useLocation()
   const rawBoardId = useParams().boardId
   const boardId = UUID_RE.test(String(rawBoardId || '')) ? rawBoardId : null
-  const { board, loading, error } = useBoard(boardId)
+  const { board, recommended: hookRecommended, loading, resultLoading, error } = useBoard(boardId)
 
   const [isReacted, setIsReacted] = useState(false)
   const [reactionCount, setReactionCount] = useState(0)
@@ -451,7 +451,7 @@ export default function BoardDetailPage() {
     try {
       await updateProject(boardId, { remove_building_ids: ids })
       setLocalBuildings(prev => (prev || []).filter(b => {
-        const bid = b.canonical_bld_id || b.building_id
+        const bid = b.image_id || b.canonical_bld_id || b.building_id
         return !ids.includes(bid)
       }))
       setSelectedIds(new Set())
@@ -470,7 +470,7 @@ export default function BoardDetailPage() {
 
   const isPublic = !board || board.visibility === 'public'
   const buildings = localBuildings ?? board?.buildings ?? []
-  const recommended = board?.recommended || []
+  const recommended = hookRecommended
   const viewerId = sessionStorage.getItem('archithon_user')
   const boardOwnerId = board?.user?.user_id ?? board?.owner?.user_id
   const isOwner = !!viewerId && String(boardOwnerId) === String(viewerId)
@@ -919,7 +919,7 @@ export default function BoardDetailPage() {
             padding: '0 20px',
           }}>
             {buildings.map((building, index) => {
-              const bid = building.canonical_bld_id || building.building_id
+              const bid = building.image_id || building.canonical_bld_id || building.building_id
               return (
               <BuildingTile
                 key={bid}
@@ -938,7 +938,7 @@ export default function BoardDetailPage() {
         )}
       </div>
 
-      {recommended.length > 0 && (
+      {(recommended.length > 0 || resultLoading) && (
         <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0' }}>
           <div style={{ height: 1, background: 'var(--color-border)', margin: '0 20px' }} />
           <h3 style={{
@@ -951,29 +951,42 @@ export default function BoardDetailPage() {
           }}>
             Recommended
           </h3>
-          <p style={{
-            color: 'var(--color-text-dimmer)',
-            fontSize: 13,
-            fontWeight: 500,
-            margin: '0 0 16px',
-            padding: '0 20px',
-          }}>
-            Based on your preferences
-          </p>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
-            gap: 12,
-            padding: '0 20px',
-          }}>
-            {recommended.slice(0, 10).map(card => (
-              <RecommendedTile
-                key={card.image_id}
-                card={card}
-                onClick={() => navigate('/buildings/' + card.image_id)}
-              />
-            ))}
-          </div>
+          {resultLoading && recommended.length === 0 ? (
+            <div style={{
+              padding: '8px 20px 24px',
+              color: 'var(--color-text-muted)',
+              fontSize: 13,
+              fontWeight: 500,
+            }}>
+              Loading recommendations...
+            </div>
+          ) : (
+            <>
+              <p style={{
+                color: 'var(--color-text-dimmer)',
+                fontSize: 13,
+                fontWeight: 500,
+                margin: '0 0 16px',
+                padding: '0 20px',
+              }}>
+                Based on your preferences
+              </p>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+                gap: 12,
+                padding: '0 20px',
+              }}>
+                {recommended.slice(0, 10).map(card => (
+                  <RecommendedTile
+                    key={card.image_id}
+                    card={card}
+                    onClick={() => navigate('/buildings/' + card.image_id)}
+                  />
+                ))}
+              </div>
+            </>
+          )}
         </div>
       )}
 

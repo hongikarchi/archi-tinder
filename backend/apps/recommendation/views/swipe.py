@@ -170,6 +170,11 @@ class BuildingBatchView(APIView):
                 {'detail': 'canonical_bld_ids must be a list of at most 200 items'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        if not all(isinstance(i, str) and i for i in ids):
+            return Response(
+                {'detail': 'canonical_bld_ids elements must be non-empty strings'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         cards = engine.get_buildings_by_ids(ids)
         return Response(cards)
 
