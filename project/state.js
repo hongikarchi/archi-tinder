@@ -13,13 +13,12 @@ window.PROJECT_STATE = {
     project: 'ArchiTinder — Make Web',
     updated: '2026-05-23',
     branch: 'develop',
-    head: '403bd02',
+    head: '877e82c',
   },
 
   tasks: {
     open: [
       { id: 'AUTH1', title: 'Kakao / Naver OAuth', note: 'Google-only today; Korean users need domestic login' },
-      { id: 'DEV-ENV1', title: 'Repoint local backend/.env off production DB', note: 'Current .env targets prod user_data; app-test ran write-constrained for PRs #68/#69. Provision Neon test branch or local Postgres.' },
     ],
     inProgress: [
       { id: 'DESIGN-REWORK', title: 'Design-system redesign — per-component rework', note: 'Foundation shipped (PR #54). Remaining: ~7,700 LOC inline styles → CSS Modules, light-theme visuals, leaf→hub order.' },
@@ -47,14 +46,14 @@ window.PROJECT_STATE = {
   ],
 
   prs: [
+    { n: 72, title: 'feat: board UX — edit mode, name edit, swipe finish button, result save (PR #71 recreation + Codex defect fixes)', date: '2026-05-23' },
+    { n: 70, title: 'chore: session-end reporter housekeeping — record external PR triage + add DEV-ENV1', date: '2026-05-22' },
     { n: 69, title: 'perf(frontend): image loading — 4s→2s timeout, lazy gallery, preload cap 3', date: '2026-05-22' },
     { n: 68, title: 'fix: UserSerializer.user_id source — user.id not profile id', date: '2026-05-22' },
     { n: 66, title: 'fix: discovery 499s timeout + LLM chat abort — gunicorn workers + per-endpoint client timeouts', date: '2026-05-22' },
     { n: 65, title: 'chore: reporter DB-split deploy session-end sync', date: '2026-05-22' },
     { n: 61, title: 'feat: app-test FEATURE-SCOPED mode — lighter gate for non-swipe PRs', date: '2026-05-22' },
     { n: 60, title: 'chore: reporter PR2 session-end housekeeping', date: '2026-05-22' },
-    { n: 59, title: 'feat: theme/font server persistence + cross-device hydration', date: '2026-05-22' },
-    { n: 58, title: 'feat: project dashboard — web view of tasks / roadmap / PRs / architecture', date: '2026-05-22' },
   ],
 
   architecture: {
@@ -69,6 +68,7 @@ window.PROJECT_STATE = {
       'JWT auth: access 1hr / refresh 30d, rotate + blacklist.',
       'Google login via auth-code flow.',
       'DB-split live in production as of 2026-05-22 (deploy PR #63, cutover deploy 69c9473a).',
+      'local-dev Neon branch (br-rough-wildflower-a115ukd4) provisioned 2026-05-23 — backend/.env now points here, not prod.',
     ],
   },
 
