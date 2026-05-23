@@ -2,6 +2,7 @@
 name: back-maker
 description: Implements backend changes in Django/DRF. Only touches files inside backend/. Follows all conventions in CLAUDE.md. Runs flake8 after changes and reports what it built.
 model: sonnet
+effort: default
 tools: Read, Write, Edit, Bash, Glob, Grep
 ---
 

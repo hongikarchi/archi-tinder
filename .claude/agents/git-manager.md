@@ -2,6 +2,7 @@
 name: git-manager
 description: Creates a single git commit. Stages all changed files (excluding secrets), writes a caveman-terse conventional-commit message, commits. Never pushes — push/PR is git-publisher's job.
 model: haiku
+effort: default
 tools: Bash
 ---
 

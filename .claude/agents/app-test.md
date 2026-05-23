@@ -2,6 +2,7 @@
 name: app-test
 description: Pre-push verification agent. Runs in one of two modes — FULL (the live-browser 3-persona swipe journey: dev-login → AI search → 25-swipe lifecycle → results → error recovery, with latency budgets) or FEATURE-SCOPED (preflight + a caller-supplied feature checklist + a light regression smoke, for changes that do not touch the recommendation/swipe path). Both modes end with an origin/develop drift check. Returns a single APP-TEST: PASS or FAIL verdict to its caller. Persists nothing.
 model: sonnet
+effort: default
 tools: mcp__playwright__browser_navigate, mcp__playwright__browser_click, mcp__playwright__browser_type, mcp__playwright__browser_screenshot, mcp__playwright__browser_snapshot, mcp__playwright__browser_evaluate, mcp__playwright__browser_press_key, mcp__playwright__browser_wait_for, mcp__playwright__browser_network_requests, mcp__playwright__browser_console_messages, mcp__playwright__browser_close, Bash
 ---
 
