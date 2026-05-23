@@ -162,6 +162,13 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
     } catch { /* ignore */ }
     return null
   })
+  const [latestImageFocus, setLatestImageFocus] = useState(() => {
+    try {
+      const stored = localStorage.getItem(`${storageKey}__latestImageFocus`)
+      if (stored) return JSON.parse(stored)
+    } catch { /* ignore */ }
+    return null
+  })
   const [latestRawQuery, setLatestRawQuery] = useState(() => {
     try {
       const stored = localStorage.getItem(`${storageKey}__latestRawQuery`)
@@ -209,6 +216,9 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
     localStorage.setItem(`${storageKey}__latestVisualDescription`, JSON.stringify(latestVisualDescription))
   }, [storageKey, latestVisualDescription])
   useEffect(() => {
+    localStorage.setItem(`${storageKey}__latestImageFocus`, JSON.stringify(latestImageFocus))
+  }, [storageKey, latestImageFocus])
+  useEffect(() => {
     localStorage.setItem(`${storageKey}__latestRawQuery`, JSON.stringify(latestRawQuery))
   }, [storageKey, latestRawQuery])
   useEffect(() => {
@@ -219,7 +229,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
     [
       '__messages', '__conversationHistory', '__latestResults',
       '__latestFilters', '__latestFilterPriority', '__latestVisualDescription',
-      '__latestRawQuery', '__showStart',
+      '__latestImageFocus', '__latestRawQuery', '__showStart',
     ].forEach(suffix => localStorage.removeItem(`${storageKey}${suffix}`))
   }
 
@@ -286,6 +296,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
           setLatestFilters(isFallback ? {} : filters)
           setLatestFilterPriority(isFallback ? [] : filterPriority)
           setLatestVisualDescription(parsed.visual_description ?? null)
+          setLatestImageFocus(parsed.image_focus || null)
           setLatestRawQuery(parsed.raw_query || text || '')
           setShowStart(true)
         }
@@ -301,9 +312,9 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
     const name = initialName || 'Untitled Project'
     clearChatStorage()
     if (mode === 'update') {
-      onUpdate(projectId, latestResults, latestFilters, latestFilterPriority, latestVisualDescription)
+      onUpdate(projectId, latestResults, latestFilters, latestFilterPriority, latestVisualDescription, latestImageFocus)
     } else {
-      onStart(name, latestResults, latestFilters, latestFilterPriority, latestVisualDescription, visibility, latestRawQuery || '')
+      onStart(name, latestResults, latestFilters, latestFilterPriority, latestVisualDescription, visibility, latestRawQuery || '', latestImageFocus)
     }
   }
 

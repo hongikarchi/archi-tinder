@@ -103,7 +103,7 @@ class SessionCreateView(APIView):
         # threads through to _row_to_card so cards get the user-picked cover).
         # Accept either from explicit `image_focus` param OR from filters['image_focus'].
         req_focus = request.data.get('image_focus')
-        if req_focus in _VALID_IMAGE_FOCUS:
+        if isinstance(req_focus, str) and req_focus in _VALID_IMAGE_FOCUS:
             active_filters['image_focus'] = req_focus
         elif active_filters.get('image_focus') not in _VALID_IMAGE_FOCUS:
             active_filters.pop('image_focus', None)

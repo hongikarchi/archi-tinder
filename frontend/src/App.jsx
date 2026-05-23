@@ -263,7 +263,7 @@ export default function App() {
     }
   }
 
-  async function initSession(projectId, filters, filterPriority = [], seedIds = [], existingSessionId = null, currentHint = null, visualDescription = null, projectName = 'Untitled', rawQuery = '') {
+  async function initSession(projectId, filters, filterPriority = [], seedIds = [], existingSessionId = null, currentHint = null, visualDescription = null, projectName = 'Untitled', rawQuery = '', imageFocus = null) {
     setIsSwipeLoading(true)
     setIsSessionCompleted(false)
     try {
@@ -286,6 +286,7 @@ export default function App() {
         seed_ids: seedIds,
         visual_description: visualDescription || undefined,
         raw_query: rawQuery || '',
+        image_focus: imageFocus,
       })
       applySessionResponse(projectId, result)
       return result
@@ -299,7 +300,7 @@ export default function App() {
     }
   }
 
-  async function handleStart(projectName, preloadedImages, llmFilters = {}, filterPriority = [], visualDescription = null, visibility = 'private', rawQuery = '') {
+  async function handleStart(projectName, preloadedImages, llmFilters = {}, filterPriority = [], visualDescription = null, visibility = 'private', rawQuery = '', imageFocus = null) {
     const projectId = `proj_${Date.now()}`
     const seedIds = (preloadedImages || []).map(c => c.image_id).filter(Boolean)
     const newProject = {
@@ -314,7 +315,7 @@ export default function App() {
     setProjects(prev => [...prev, newProject])
     setActiveProjectId(projectId)
     navigate('/swipe')
-    const result = await initSession(projectId, llmFilters || {}, filterPriority, seedIds, null, null, visualDescription, projectName, rawQuery || '')
+    const result = await initSession(projectId, llmFilters || {}, filterPriority, seedIds, null, null, visualDescription, projectName, rawQuery || '', imageFocus)
     if (visibility !== 'private' && result?.project_id) {
       api.updateProject(result.project_id, { visibility }).catch(err =>
         console.error('[App] updateProject visibility sync failed:', err)
@@ -608,7 +609,7 @@ export default function App() {
     }
   }
 
-  async function handleUpdateWithImages(id, preloadedImages, llmFilters = {}, filterPriority = [], visualDescription = null) {
+  async function handleUpdateWithImages(id, preloadedImages, llmFilters = {}, filterPriority = [], visualDescription = null, imageFocus = null) {
     const project = projects.find(p => p.id === id)
     if (!project) return
     const seedIds = (preloadedImages || []).map(c => c.image_id).filter(Boolean)
@@ -616,7 +617,7 @@ export default function App() {
     setActiveProjectId(id)
     setProjects(prev => prev.map(p => p.id === id ? { ...p, deckImages: preloadedImages } : p))
     navigate('/swipe')
-    await initSession(id, llmFilters || project.filters, filterPriority, seedIds, null, null, visualDescription, project.projectName)
+    await initSession(id, llmFilters || project.filters, filterPriority, seedIds, null, null, visualDescription, project.projectName, '', imageFocus)
   }
 
   async function handleLogin(user) {
