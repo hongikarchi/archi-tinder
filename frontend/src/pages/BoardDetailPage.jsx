@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useImageTelemetry } from '../hooks/useImageTelemetry.js'
 import { useBoard } from '../hooks/useBoard.js'
+import { updateProject } from '../api/projects.js'
 import { reactToProject, unreactToProject } from '../api/social.js'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -170,7 +171,7 @@ function InfoCol({ label, value }) {
  *     reserved for binary status state. Matches the rationale used in FirmProfile
  *     ProjectCard (also drops program chip).
  */
-function BuildingTile({ building, fromProjectId, rank, savedIds, referrer }) {
+function BuildingTile({ building, fromProjectId, rank, savedIds, referrer, isEditMode, isSelected, onToggleSelect }) {
   const navigate = useNavigate()
   const buildingId = building.canonical_bld_id || building.building_id
   const { onLoad, onError } = useImageTelemetry({
@@ -181,6 +182,7 @@ function BuildingTile({ building, fromProjectId, rank, savedIds, referrer }) {
   return (
     <div
       onClick={() => {
+        if (isEditMode) { onToggleSelect?.(buildingId); return }
         if (!buildingId) return
         const state = fromProjectId
           ? { fromProjectId, rank, savedIds, referrer }
@@ -231,6 +233,28 @@ function BuildingTile({ building, fromProjectId, rank, savedIds, referrer }) {
         background: 'linear-gradient(to top, rgba(0,0,0,0.93) 0%, rgba(0,0,0,0.4) 50%, transparent 100%)',
         pointerEvents: 'none',
       }} aria-hidden="true" />
+
+      {/* Edit mode selection overlay */}
+      {isEditMode && (
+        <div style={{
+          position: 'absolute', inset: 0, pointerEvents: 'none',
+          background: isSelected ? 'rgba(236,72,153,0.28)' : 'rgba(0,0,0,0.18)',
+          transition: 'background 0.15s',
+          display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end',
+          padding: 12,
+        }}>
+          <div style={{
+            width: 26, height: 26, borderRadius: '50%',
+            border: `2px solid ${isSelected ? '#ec4899' : 'rgba(255,255,255,0.7)'}`,
+            background: isSelected ? '#ec4899' : 'rgba(0,0,0,0.35)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 14, color: '#fff', fontWeight: 700,
+            transition: 'all 0.15s',
+          }}>
+            {isSelected ? '✓' : ''}
+          </div>
+        </div>
+      )}
 
       {/* §3.5.2 RICH PATTERN: title + "Building" sub-italic + divider + 2-col ARCHITECT/YEAR grid */}
       <div style={{
@@ -315,6 +339,15 @@ export default function BoardDetailPage() {
   const [isBackHovered, setIsBackHovered] = useState(false)
   const [isShareHovered, setIsShareHovered] = useState(false)
   const [localSavedIds, setLocalSavedIds] = useState([])
+  const [localName, setLocalName] = useState('')
+  const [isEditingName, setIsEditingName] = useState(false)
+  const [editName, setEditName] = useState('')
+  const [nameSaving, setNameSaving] = useState(false)
+  const nameInputRef = useRef(null)
+  const [isEditMode, setIsEditMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState(new Set())
+  const [localBuildings, setLocalBuildings] = useState(null)
+  const [deleteInProgress, setDeleteInProgress] = useState(false)
   // Capture bookmark signal once at mount so board-load effect can apply it
   const bookmarkSignalRef = useRef(location.state?.bookmarkChanged || null)
 
@@ -323,6 +356,8 @@ export default function BoardDetailPage() {
     setIsReacted(!!board.is_reacted)
     setReactionCount(board.reaction_count ?? 0)
     setReactionError(null)
+    setLocalName(board.name || '')
+    setLocalBuildings(board.buildings || [])
     // Seed from board data, then apply any pending bookmark signal
     const base = (board.saved_ids || []).map(item => item?.id || item).filter(Boolean)
     const signal = bookmarkSignalRef.current
@@ -372,17 +407,79 @@ export default function BoardDetailPage() {
     }
   }
 
+  function startEditingName() {
+    setEditName(localName)
+    setIsEditingName(true)
+    setTimeout(() => nameInputRef.current?.select(), 0)
+  }
+
+  async function commitNameEdit() {
+    const trimmed = editName.trim()
+    if (!trimmed || trimmed === localName) {
+      setIsEditingName(false)
+      return
+    }
+    setNameSaving(true)
+    try {
+      await updateProject(boardId, { name: trimmed })
+      setLocalName(trimmed)
+    } catch {
+      // revert on error — keep original name
+    } finally {
+      setNameSaving(false)
+      setIsEditingName(false)
+    }
+  }
+
+  function handleNameKeyDown(e) {
+    if (e.key === 'Enter') { e.preventDefault(); commitNameEdit() }
+    if (e.key === 'Escape') { setIsEditingName(false) }
+  }
+
+  function handleToggleBuildingSelect(id) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  async function handleDeleteSelected() {
+    if (!isOwner || selectedIds.size === 0 || deleteInProgress) return
+    setDeleteInProgress(true)
+    const ids = [...selectedIds]
+    try {
+      await updateProject(boardId, { remove_building_ids: ids })
+      setLocalBuildings(prev => (prev || []).filter(b => {
+        const bid = b.canonical_bld_id || b.building_id
+        return !ids.includes(bid)
+      }))
+      setSelectedIds(new Set())
+      setIsEditMode(false)
+    } catch {
+      // keep state on error
+    } finally {
+      setDeleteInProgress(false)
+    }
+  }
+
   function handleNavigateToOwner() {
     if (!board?.user?.user_id) return
     navigate(`/user/${board.user.user_id}`)
   }
 
   const isPublic = !board || board.visibility === 'public'
-  const buildings = board?.buildings || []
+  const buildings = localBuildings ?? board?.buildings ?? []
   const recommended = board?.recommended || []
   const viewerId = sessionStorage.getItem('archithon_user')
-  const isOwner = !!viewerId && String(board?.user?.user_id) === String(viewerId)
-  const coverImage = board?.cover_image_url || (buildings[0] && buildings[0].image_url)
+  const boardOwnerId = board?.user?.user_id ?? board?.owner?.user_id
+  const isOwner = !!viewerId && String(boardOwnerId) === String(viewerId)
+  // Recompute cover from local state first so deleting the first card doesn't
+  // leave a stale cover. Fall back to board.cover_image_url only when buildings
+  // are present but buildings[0] lacks an image_url; null when board is empty.
+  const coverImage = buildings.length > 0
+    ? (buildings[0]?.image_url || board?.cover_image_url || null)
+    : null
   const statusMessage = error?.message || (loading ? 'Loading board...' : 'This board is empty')
 
   return (
@@ -537,22 +634,88 @@ export default function BoardDetailPage() {
           flexDirection: 'column',
           gap: 12,
         }}>
-          {/* Board name — reduced to 28/700 to align with §3.5 card-system tone (was 32/900 — too display-y). */}
-          <h1 style={{
-            color: '#fff',
-            fontSize: 'clamp(24px, 5vw, 28px)',
-            fontWeight: 700,
-            margin: 0,
-            lineHeight: 1.2,
-            display: '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            textShadow: '0 2px 12px rgba(0,0,0,0.4)',
-          }}>
-            {board?.name || ''}
-          </h1>
+          {/* Board name — editable by owner */}
+          {isEditingName ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                ref={nameInputRef}
+                value={editName}
+                onChange={e => setEditName(e.target.value)}
+                onKeyDown={handleNameKeyDown}
+                onBlur={commitNameEdit}
+                disabled={nameSaving}
+                maxLength={100}
+                style={{
+                  flex: 1,
+                  fontSize: 'clamp(20px, 5vw, 26px)',
+                  fontWeight: 700,
+                  lineHeight: 1.2,
+                  color: '#fff',
+                  background: 'rgba(255,255,255,0.12)',
+                  border: '1px solid rgba(255,255,255,0.35)',
+                  borderRadius: 10,
+                  padding: '6px 12px',
+                  fontFamily: 'inherit',
+                  outline: 'none',
+                  backdropFilter: 'blur(8px)',
+                }}
+              />
+              <button
+                onMouseDown={e => { e.preventDefault(); commitNameEdit() }}
+                disabled={nameSaving}
+                style={{
+                  width: 36, height: 36, borderRadius: '50%',
+                  background: '#ec4899', border: 'none',
+                  color: '#fff', fontSize: 16, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                {nameSaving ? '…' : '✓'}
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+              <h1 style={{
+                color: '#fff',
+                fontSize: 'clamp(24px, 5vw, 28px)',
+                fontWeight: 700,
+                margin: 0,
+                lineHeight: 1.2,
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                textShadow: '0 2px 12px rgba(0,0,0,0.4)',
+              }}>
+                {localName || board?.name || ''}
+              </h1>
+              {isOwner && (
+                <button
+                  onClick={startEditingName}
+                  aria-label="Edit board name"
+                  style={{
+                    flexShrink: 0,
+                    marginTop: 4,
+                    width: 32, height: 32, borderRadius: '50%',
+                    background: 'rgba(0,0,0,0.35)',
+                    backdropFilter: 'blur(8px)',
+                    border: '1px solid rgba(255,255,255,0.18)',
+                    color: 'rgba(255,255,255,0.8)',
+                    cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    padding: 0,
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Owner row */}
           <div
@@ -617,60 +780,88 @@ export default function BoardDetailPage() {
         </div>
       </div>
 
-      {/* Action row - reaction button */}
+      {/* Action row — owner sees edit controls, others see Love This */}
       <div style={{
         padding: '24px 20px 8px',
         display: 'flex',
         justifyContent: 'center',
       }}>
-        <button
-          onClick={handleToggleReaction}
-          disabled={!board || isReactionPending}
-          onMouseEnter={() => setIsReactHovered(true)}
-          onMouseLeave={() => { setIsReactHovered(false); setIsReactPressed(false) }}
-          onMouseDown={() => setIsReactPressed(true)}
-          onMouseUp={() => setIsReactPressed(false)}
-          style={{
-            width: '100%',
-            maxWidth: 320,
-            minHeight: 44,
-            padding: '14px 24px',
-            borderRadius: 999,
-            background: isReacted
-              ? 'var(--color-surface)'
-              : 'linear-gradient(135deg, #ec4899, #f43f5e)',
-            color: isReacted ? '#ec4899' : '#fff',
-            border: isReacted ? '1px solid #ec4899' : 'none',
-            fontSize: 15,
-            fontWeight: 700,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 10,
-            transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), filter 0.2s cubic-bezier(0.4, 0, 0.2, 1), background 0.2s cubic-bezier(0.4, 0, 0.2, 1), color 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-            transform: isReactPressed ? 'scale(0.98)' : (isReactHovered ? 'scale(1.02)' : 'scale(1)'),
-            filter: isReactHovered && !isReacted ? 'brightness(1.08)' : 'none',
-            boxShadow: isReacted ? 'none' : '0 8px 22px rgba(236,72,153,0.32)',
-            fontFamily: 'inherit',
-          }}
-        >
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill={isReacted ? '#ec4899' : 'none'}
-            stroke={isReacted ? '#ec4899' : 'currentColor'}
-            strokeWidth="2.2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+        {isOwner ? (
+          <button
+            onClick={() => { setIsEditMode(true); setSelectedIds(new Set()) }}
+            disabled={!board || buildings.length === 0}
+            style={{
+              width: '100%',
+              maxWidth: 320,
+              minHeight: 44,
+              padding: '14px 24px',
+              borderRadius: 999,
+              background: 'var(--color-surface)',
+              color: 'var(--color-text)',
+              border: '1px solid var(--color-border)',
+              fontSize: 15,
+              fontWeight: 700,
+              cursor: buildings.length === 0 ? 'default' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 10,
+              fontFamily: 'inherit',
+              opacity: buildings.length === 0 ? 0.4 : 1,
+            }}
           >
-            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
-          </svg>
-          <span>{isReacted ? `Loved · ${reactionCount}` : 'Love this'}</span>
-        </button>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+            <span>Edit Board</span>
+          </button>
+        ) : (
+          <button
+            onClick={handleToggleReaction}
+            disabled={!board || isReactionPending}
+            onMouseEnter={() => setIsReactHovered(true)}
+            onMouseLeave={() => { setIsReactHovered(false); setIsReactPressed(false) }}
+            onMouseDown={() => setIsReactPressed(true)}
+            onMouseUp={() => setIsReactPressed(false)}
+            style={{
+              width: '100%',
+              maxWidth: 320,
+              minHeight: 44,
+              padding: '14px 24px',
+              borderRadius: 999,
+              background: isReacted
+                ? 'var(--color-surface)'
+                : 'linear-gradient(135deg, #ec4899, #f43f5e)',
+              color: isReacted ? '#ec4899' : '#fff',
+              border: isReacted ? '1px solid #ec4899' : 'none',
+              fontSize: 15,
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 10,
+              transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), filter 0.2s cubic-bezier(0.4, 0, 0.2, 1), background 0.2s cubic-bezier(0.4, 0, 0.2, 1), color 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+              transform: isReactPressed ? 'scale(0.98)' : (isReactHovered ? 'scale(1.02)' : 'scale(1)'),
+              filter: isReactHovered && !isReacted ? 'brightness(1.08)' : 'none',
+              boxShadow: isReacted ? 'none' : '0 8px 22px rgba(236,72,153,0.32)',
+              fontFamily: 'inherit',
+            }}
+          >
+            <svg
+              width="18" height="18" viewBox="0 0 24 24"
+              fill={isReacted ? '#ec4899' : 'none'}
+              stroke={isReacted ? '#ec4899' : 'currentColor'}
+              strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
+            >
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+            </svg>
+            <span>{isReacted ? `Loved · ${reactionCount}` : 'Love this'}</span>
+          </button>
+        )}
       </div>
-      {reactionError && (
+      {!isOwner && reactionError && (
         <div style={{
           color: 'var(--color-text-muted, #999)',
           fontSize: 12,
@@ -727,16 +918,22 @@ export default function BoardDetailPage() {
             gap: 20,
             padding: '0 20px',
           }}>
-            {buildings.map((building, index) => (
+            {buildings.map((building, index) => {
+              const bid = building.canonical_bld_id || building.building_id
+              return (
               <BuildingTile
-                key={building.canonical_bld_id || building.building_id}
+                key={bid}
                 building={building}
                 fromProjectId={isOwner ? boardId : null}
                 rank={index + 1}
                 savedIds={localSavedIds}
                 referrer={location.pathname}
+                isEditMode={isEditMode}
+                isSelected={selectedIds.has(bid)}
+                onToggleSelect={handleToggleBuildingSelect}
               />
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
@@ -777,6 +974,57 @@ export default function BoardDetailPage() {
               />
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Edit mode sticky bottom bar */}
+      {isEditMode && (
+        <div style={{
+          position: 'fixed',
+          bottom: 'calc(64px + env(safe-area-inset-bottom, 0px))',
+          left: 0, right: 0,
+          padding: '12px 20px',
+          background: 'var(--color-surface)',
+          borderTop: '1px solid var(--color-border)',
+          backdropFilter: 'blur(20px)',
+          display: 'flex',
+          gap: 10,
+          zIndex: 50,
+        }}>
+          <button
+            onClick={() => { setIsEditMode(false); setSelectedIds(new Set()) }}
+            style={{
+              flex: 1, minHeight: 44, borderRadius: 14,
+              background: 'var(--color-surface-2)',
+              color: 'var(--color-text)',
+              border: '1px solid var(--color-border)',
+              fontSize: 14, fontWeight: 700,
+              cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleDeleteSelected}
+            disabled={selectedIds.size === 0 || deleteInProgress}
+            style={{
+              flex: 2, minHeight: 44, borderRadius: 14,
+              background: selectedIds.size > 0 ? 'var(--color-destructive, #ef4444)' : 'var(--color-surface-2)',
+              color: selectedIds.size > 0 ? '#fff' : 'var(--color-text-dim)',
+              border: 'none',
+              fontSize: 14, fontWeight: 700,
+              cursor: selectedIds.size === 0 ? 'default' : 'pointer',
+              fontFamily: 'inherit',
+              opacity: deleteInProgress ? 0.6 : 1,
+              transition: 'background 0.2s, color 0.2s',
+            }}
+          >
+            {deleteInProgress
+              ? 'Deleting...'
+              : selectedIds.size > 0
+                ? `Delete ${selectedIds.size} card${selectedIds.size > 1 ? 's' : ''}`
+                : 'Select cards to delete'}
+          </button>
         </div>
       )}
     </div>

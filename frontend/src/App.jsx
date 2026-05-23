@@ -128,6 +128,9 @@ export default function App() {
   const [isSessionCompleted, setIsSessionCompleted] = useState(false)
   const [isResultLoading, setIsResultLoading] = useState(false)
   const [swipeError, setSwipeError] = useState(null)
+  // Tracks in-flight recordSwipe() calls. Button gates on this so the
+  // "Finish & View Report" button can't fire before the backend save settles.
+  const [swipePending, setSwipePending] = useState(0)
   const [activeProjectId, setActiveProjectId] = useState(() => {
     const id = sessionStorage.getItem('archithon_user')
     return localStorage.getItem(`archithon_activeId_${id}`) || null
@@ -266,7 +269,7 @@ export default function App() {
     }
   }
 
-  async function initSession(projectId, filters, filterPriority = [], seedIds = [], existingSessionId = null, currentHint = null, visualDescription = null) {
+  async function initSession(projectId, filters, filterPriority = [], seedIds = [], existingSessionId = null, currentHint = null, visualDescription = null, projectName = 'Untitled') {
     setIsSwipeLoading(true)
     setIsSessionCompleted(false)
     try {
@@ -283,6 +286,7 @@ export default function App() {
 
       const result = await api.startSession({
         project_id: projectId,
+        name: projectName,
         filters: normalizeFilters(filters),
         filter_priority: filterPriority,
         seed_ids: seedIds,
@@ -315,7 +319,7 @@ export default function App() {
     setProjects(prev => [...prev, newProject])
     setActiveProjectId(projectId)
     navigate('/swipe')
-    const result = await initSession(projectId, llmFilters || {}, filterPriority, seedIds, null, null, visualDescription)
+    const result = await initSession(projectId, llmFilters || {}, filterPriority, seedIds, null, null, visualDescription, projectName)
     if (visibility !== 'private' && result?.project_id) {
       api.updateProject(result.project_id, { visibility }).catch(err =>
         console.error('[App] updateProject visibility sync failed:', err)
@@ -373,6 +377,10 @@ export default function App() {
       err: null,
       ts: Date.now(),
     }
+
+    // Mark swipe in-flight — prevents "Finish & View Report" button from firing
+    // while recordSwipe() is pending (optimistic bump can reach isAt100 instantly).
+    setSwipePending(n => n + 1)
 
     if (canInstantSwap) {
       setCurrentCard(savedPrefetch)
@@ -555,6 +563,7 @@ export default function App() {
       const log = swipeLog.current
       if (log.length >= 10) log.shift()
       log.push(_dbg)
+      setSwipePending(n => Math.max(0, n - 1))
       setIsSwipeLoading(false)
       swipeLock.current = false
     }
@@ -612,7 +621,7 @@ export default function App() {
     setActiveProjectId(id)
     setProjects(prev => prev.map(p => p.id === id ? { ...p, deckImages: preloadedImages } : p))
     navigate('/swipe')
-    await initSession(id, llmFilters || project.filters, filterPriority, seedIds, null, null, visualDescription)
+    await initSession(id, llmFilters || project.filters, filterPriority, seedIds, null, null, visualDescription, project.projectName)
   }
 
   async function handleLogin(user) {
@@ -691,6 +700,7 @@ export default function App() {
     isSessionCompleted,
     isSwipeLoading,
     isResultLoading,
+    swipePending,
     onSwipe: handleSwipeCard,
     onExtendSession: handleExtendSession,
     onViewResults: () => {
@@ -698,8 +708,20 @@ export default function App() {
       else navigate('/user/me')
     },
     cardResetToken,
-    onExitToNewProject: () => { setActiveProjectId(null); navigate('/new') },
-    onExitToHome:       () => { setActiveProjectId(null); navigate('/discovery') },
+    onExitToNewProject: () => {
+      const hasLikes = (activeProject?.likedBuildings?.length ?? 0) > 0
+      const backendId = activeProject?.backendId
+      if (!hasLikes && backendId) api.deleteProject(backendId).catch(() => {})
+      setActiveProjectId(null)
+      navigate('/new')
+    },
+    onExitToHome: () => {
+      const hasLikes = (activeProject?.likedBuildings?.length ?? 0) > 0
+      const backendId = activeProject?.backendId
+      if (!hasLikes && backendId) api.deleteProject(backendId).catch(() => {})
+      setActiveProjectId(null)
+      navigate('/discovery')
+    },
   }
 
   return (

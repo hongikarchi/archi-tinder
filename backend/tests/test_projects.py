@@ -117,6 +117,82 @@ class TestProjectDetailView:
         assert data.get('updated_at') is not None
 
 
+# -- remove_building_ids PATCH tests ------------------------------------------
+
+@pytest.mark.django_db
+class TestProjectRemoveBuildingIds:
+
+    def test_patch_remove_building_ids_valid(self, auth_client, user_profile):
+        """Valid remove_building_ids removes matched items from liked_ids and saved_ids."""
+        project = Project.objects.create(
+            user=user_profile,
+            name='RemoveTest',
+            liked_ids=[{'id': 'bld_001'}, {'id': 'bld_002'}, {'id': 'bld_003'}],
+            saved_ids=[{'id': 'bld_001', 'saved_at': '2024-01-01T00:00:00Z'}, {'id': 'bld_002', 'saved_at': '2024-01-02T00:00:00Z'}],
+        )
+        resp = auth_client.patch(
+            f'/api/v1/projects/{project.project_id}/',
+            {'remove_building_ids': ['bld_001', 'bld_003']},
+            format='json',
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        liked_ids = [item['id'] for item in data['liked_ids']]
+        saved_ids = [item['id'] for item in data['saved_ids']]
+        assert liked_ids == ['bld_002']
+        assert saved_ids == ['bld_002']
+
+    def test_patch_remove_building_ids_invalid_type(self, auth_client, user_profile):
+        """Non-list remove_building_ids returns 400 and does not mutate liked_ids."""
+        project = Project.objects.create(
+            user=user_profile,
+            name='InvalidTypeTest',
+            liked_ids=[{'id': 'bld_001'}],
+            saved_ids=[],
+        )
+
+        # string instead of list
+        resp = auth_client.patch(
+            f'/api/v1/projects/{project.project_id}/',
+            {'remove_building_ids': 'bld_001'},
+            format='json',
+        )
+        assert resp.status_code == 400
+        assert 'remove_building_ids' in resp.json()['detail']
+        project.refresh_from_db()
+        assert len(project.liked_ids) == 1
+
+        # int instead of list
+        resp2 = auth_client.patch(
+            f'/api/v1/projects/{project.project_id}/',
+            {'remove_building_ids': 123},
+            format='json',
+        )
+        assert resp2.status_code == 400
+        project.refresh_from_db()
+        assert len(project.liked_ids) == 1
+
+    def test_patch_remove_building_ids_with_invalid_schema_field_atomic(self, auth_client, user_profile):
+        """Atomicity: if schema_data is invalid, the remove_building_ids delete is NOT persisted."""
+        project = Project.objects.create(
+            user=user_profile,
+            name='AtomicTest',
+            liked_ids=[{'id': 'bld_001'}, {'id': 'bld_002'}],
+            saved_ids=[],
+        )
+        resp = auth_client.patch(
+            f'/api/v1/projects/{project.project_id}/',
+            {'remove_building_ids': ['bld_001'], 'visibility': 'invalid_value'},
+            format='json',
+        )
+        assert resp.status_code == 400
+        project.refresh_from_db()
+        # delete must NOT have been persisted — liked_ids still has both entries
+        assert len(project.liked_ids) == 2
+        liked_id_values = [item['id'] for item in project.liked_ids]
+        assert 'bld_001' in liked_id_values
+
+
 # -- UserProjectsListView --------------------------------------------------------
 
 @pytest.mark.django_db

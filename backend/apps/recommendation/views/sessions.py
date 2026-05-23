@@ -33,6 +33,7 @@ class SessionCreateView(APIView):
             return Response({'detail': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
 
         project_id      = request.data.get('project_id')
+        project_name    = (request.data.get('name') or '').strip()[:100] or 'Untitled'
         filters         = request.data.get('filters') or {}
 
         # Validate and sanitize filter_priority: must be a list of known filter key strings, max 10
@@ -55,7 +56,7 @@ class SessionCreateView(APIView):
             except Exception:
                 project = None
         if not project:
-            project = Project.objects.create(user=profile, name='Untitled', filters=filters)
+            project = Project.objects.create(user=profile, name=project_name, filters=filters)
 
         # Topic 01 RRF: extract raw_query early — needed for both RRF q_text and
         # IMP-6 cache key. Coerce to None for non-string or oversized values.

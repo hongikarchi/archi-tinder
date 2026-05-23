@@ -6,7 +6,7 @@ import SwipePage from '../pages/SwipePage.jsx'
 export default function MainLayout({
   userId, onLogout,
   activeProject, activeProjectId,
-  currentCard, cardResetToken, sessionProgress, isSessionCompleted, isSwipeLoading, isResultLoading,
+  currentCard, cardResetToken, sessionProgress, isSessionCompleted, isSwipeLoading, isResultLoading, swipePending,
   onSwipe, onViewResults, onExtendSession,
   onExitToNewProject, onExitToHome,
 }) {
@@ -59,6 +59,7 @@ export default function MainLayout({
           isCompleted={isSessionCompleted}
           isLoading={isSwipeLoading}
           isResultLoading={isResultLoading}
+          swipePending={swipePending}
           projectName={activeProject?.projectName}
           onSwipe={onSwipe}
           onViewResults={onViewResults}

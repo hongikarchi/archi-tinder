@@ -37,6 +37,7 @@ export default function BoardCard({
   selectMode = false,
   isSelected = false,
   onSelectToggle = () => {},
+  directNavigate = false,
 }) {
   const [isFlipped, setIsFlipped] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
@@ -109,6 +110,10 @@ export default function BoardCard({
           return
         }
         if (e.target.closest('button')) return
+        if (directNavigate) {
+          navigate('/board/' + board.board_id)
+          return
+        }
         setIsFlipped(!isFlipped)
       }}
     >
