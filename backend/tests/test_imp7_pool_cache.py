@@ -210,8 +210,8 @@ class TestBuildingCacheBasics:
 
     def test_none_before_any_call(self):
         """get_last_embedding_call_stats returns None when no call has been made yet."""
-        # Reset module-level state
-        engine_module._last_embedding_call_stats = None
+        if hasattr(engine_module._telemetry, 'embedding_call_stats'):
+            del engine_module._telemetry.embedding_call_stats
         assert get_last_embedding_call_stats() is None
 
 
