@@ -464,24 +464,22 @@ class SessionResultView(APIView):
             predicted_cards = [card_by_id[bid] for bid in dpp_order if bid in card_by_id]
 
         # IMP-10: persist top-10 lists for bookmark provenance lookup.
-        # Lock-then-check-then-write inside atomic to prevent concurrent GET requests
-        # from racing and double-writing (Finding #16). All slow work (rerank, DPP)
-        # runs above, outside the lock — only the idempotent guard + save are locked.
+        # Atomic check-then-write inside transaction.atomic() (Finding #16). Two
+        # concurrent GET callers cannot race a partial update — the multi-field
+        # save is atomic. Lock-free: writes are IDEMPOTENT (same input → same
+        # top-10 values), so a duplicate write is a no-op, not corruption.
         try:
             with transaction.atomic():
-                locked = AnalysisSession.objects.select_for_update().get(
-                    session_id=session.session_id
-                )
                 _top10_fields_changed = (
-                    locked.cosine_top10_ids != _cosine_top10
-                    or locked.gemini_top10_ids != _gemini_top10
-                    or locked.dpp_top10_ids != _dpp_top10
+                    session.cosine_top10_ids != _cosine_top10
+                    or session.gemini_top10_ids != _gemini_top10
+                    or session.dpp_top10_ids != _dpp_top10
                 )
                 if _top10_fields_changed:
-                    locked.cosine_top10_ids = _cosine_top10
-                    locked.gemini_top10_ids = _gemini_top10
-                    locked.dpp_top10_ids = _dpp_top10
-                    locked.save(update_fields=['cosine_top10_ids', 'gemini_top10_ids', 'dpp_top10_ids'])
+                    session.cosine_top10_ids = _cosine_top10
+                    session.gemini_top10_ids = _gemini_top10
+                    session.dpp_top10_ids = _dpp_top10
+                    session.save(update_fields=['cosine_top10_ids', 'gemini_top10_ids', 'dpp_top10_ids'])
         except Exception as _exc:
             logger.warning(
                 'SessionResultView: failed to persist top10 lists for session %s: %s',

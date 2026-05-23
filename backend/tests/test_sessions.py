@@ -1579,9 +1579,9 @@ class TestSessionEventLogging:
 
 @pytest.mark.django_db
 class TestSessionResultWriteIdempotency:
-    """Finding #16: SessionResultView GET-with-write uses select_for_update inside
-    transaction.atomic() — verifies the provenance fields are written once and are
-    stable on a second call (idempotent guard inside the lock)."""
+    """Finding #16: SessionResultView GET-with-write wraps the multi-field save
+    in transaction.atomic() — verifies a second GET produces the same top-10 lists
+    (idempotent: same input → same write, so duplicate write is benign)."""
 
     def test_result_view_get_twice_idempotent(self, auth_client, user_profile):
         """Calling SessionResultView GET twice writes top10 once; second call is a no-op."""
