@@ -11,10 +11,10 @@
 window.PROJECT_STATE = {
   meta: {
     project: 'ArchiTinder — Make Web',
-    updated: '2026-05-23',
-    lastSyncedAt: '2026-05-23',
+    updated: '2026-05-24',
+    lastSyncedAt: '2026-05-24',
     branch: 'develop',
-    head: '01a278c',
+    head: '0e9217b',
   },
 
   tasks: {
@@ -48,14 +48,14 @@ window.PROJECT_STATE = {
   ],
 
   prs: [
+    { n: 87, title: 'perf: codex round 2 — discovery taste vector TTL cache + evict on liked_ids change (P3)', date: '2026-05-23' },
+    { n: 86, title: 'fix: codex round 2 UX + Gemini fail-fast — analyzing 100% + auth-error retry waste (P1/P2)', date: '2026-05-23' },
+    { n: 85, title: 'fix: codex round 2 bugs — images/batch validation + BoardDetail normalize + useBoard decouple (B1/B2/B3)', date: '2026-05-23' },
     { n: 83, title: 'fix: audit codex P2 bundle — diverse RANDOM 2-query + ProjectList N+1 + JWT blacklist + image_focus plumb + exploring bar 3→4 (#2.5–#2.9)', date: '2026-05-23' },
     { n: 82, title: 'fix: audit codex P1 latent — raw_query dual-key + DPP 3x overfetch (#1.1 + #1.4)', date: '2026-05-23' },
     { n: 81, title: 'fix: audit codex P1 — swipe idempotency full payload + race catch + Project row lock (#1.2 + #1.3)', date: '2026-05-23' },
     { n: 80, title: 'chore: session-end reporter housekeeping — Tier 2/3 audit resolved (4 PRs)', date: '2026-05-23' },
     { n: 79, title: 'fix: audit tier-3 ops risk (#14 ORDER BY RANDOM + sync corpus-rank + #16 GET-write atomic + #17 thread-local telemetry)', date: '2026-05-23' },
-    { n: 78, title: 'fix: audit tier-2 profiles legacy table (#10 architecture_vectors → canonical_v2_buildings)', date: '2026-05-23' },
-    { n: 77, title: 'fix: audit tier-2 raw_query plumbing (#4 FE → BE + #5 persist)', date: '2026-05-23' },
-    { n: 76, title: 'fix: audit tier-2 cuts (#3 area filter + #7 dead /matched route + #9 rerank shape)', date: '2026-05-23' },
   ],
 
   architecture: {

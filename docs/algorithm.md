@@ -3,7 +3,7 @@
 > Phase logic, mathematical formulas, and hyperparameter theory.
 > Research agent updates this file. Orchestrator references it for algorithm tasks.
 
-**Last Synced (Reporter):** 2026-05-23 01a278c
+**Last Synced (Reporter):** 2026-05-24 0e9217b
 
 ---
 
@@ -50,6 +50,8 @@ Gathers initial user feedback within the bounded pool while ensuring visual dive
 _(Updated 2026-04-26 da547cb: min_likes_for_clustering 3→4 per Spec v1.8 Topic 06 N≥4 cliff mitigation — defers K-Means until N≥4 to avoid Investigation 09 worst-case 1 Love + 2 Likes pathology.)_
 
 _(Updated 2026-04-26 1491c5d: IMP-8 async prefetch background thread — flag-gated default OFF; activates daemon thread spawn for prefetch_card+_2 computation when enabled, primary swipe response returns immediately with prefetch=None. Combined with IMP-7 cache fix (06c6c5a): total_ms ~600ms→~300ms per spec v1.6 §4 re-tightening pathway.)_
+
+_(Updated 2026-05-24 0e9217b: Half A async prefetch implemented; flag gated on Redis swap. Discovery taste vector TTL cache shipped via caches.py — bridges single-worker dev now; multi-worker prod still gated on Redis swap.)_
 
 _(Updated 2026-04-25 a9305e4: `farthest_point_from_pool()` (engine.py:421-455) corrected from inverted max-max accumulator to true Gonzalez max-min sampling per Spec v1.1 §11.1 IMP-1. Pre-fix code silently picked near-duplicates of exposed items. Bundled with NumPy batch matmul vectorization (~22ms → ~1ms per call, 20-50× speedup). Topic 11's 2-approximation bound and Section 4 C-3 Better layer 3's "first 3-5 diverse seeds" now actually deliver diverse selection.)_
 
