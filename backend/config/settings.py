@@ -189,6 +189,7 @@ RECOMMENDATION = {
     'mmr_lambda_ramp_enabled':       False,  # Topic 04 (a): per-swipe λ ramp
     'mmr_lambda_ramp_n_ref':         10,     # N_ref for ramp denominator
     'dpp_topk_enabled':              False,  # Topic 04 (b): DPP greedy MAP at session-final top-K
+    'dpp_overfetch_multiplier':      3,      # Topic 04 (b): candidate window multiplier when DPP ON (n=k*mult so DPP can MAP-narrow)
     'dpp_alpha':                     1.0,    # Wilhelm-form diversity strength; Optuna search [0.5, 1.0]
     'dpp_singularity_eps':           1e-9,   # Cholesky residual threshold for singularity
     'hyde_vinitial_enabled':         False,  # Topic 03: HyDE V_initial embedding rerank

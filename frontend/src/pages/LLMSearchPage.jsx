@@ -286,7 +286,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
           setLatestFilters(isFallback ? {} : filters)
           setLatestFilterPriority(isFallback ? [] : filterPriority)
           setLatestVisualDescription(parsed.visual_description ?? null)
-          setLatestRawQuery(text || '')
+          setLatestRawQuery(parsed.raw_query || text || '')
           setShowStart(true)
         }
       }

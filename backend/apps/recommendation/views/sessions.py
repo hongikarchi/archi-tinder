@@ -64,8 +64,10 @@ class SessionCreateView(APIView):
             project = Project.objects.create(user=profile, name=project_name, filters=filters, raw_query=raw_query)
 
         # Topic 01 RRF: extract raw_query early — needed for both RRF q_text and
-        # IMP-6 cache key. Coerce to None for non-string or oversized values.
-        _raw_query_early = request.data.get('query') or None
+        # IMP-6 cache key. Accept 'raw_query' (FE key, sessions.js:25) with
+        # 'query' fallback for old clients — mirrors the line-54 dual-key dispatch.
+        # Coerce to None for non-string or oversized values.
+        _raw_query_early = request.data.get('raw_query') or request.data.get('query') or None
         if _raw_query_early and not isinstance(_raw_query_early, str):
             _raw_query_early = None
         # Security: coerce oversized queries to None (RRF wants a focused query, not an essay)
@@ -383,6 +385,20 @@ class SessionResultView(APIView):
                 k=RC['top_k_results'],
             )
 
+        # Topic 04(b) DPP: when flag ON, over-fetch candidates so DPP MAP can actually narrow.
+        # Without over-fetch, n == k and DPP's early-return branch fires (no-op).
+        # Cosine/Gemini top-10 provenance fields slice the first top_k_results entries
+        # of the over-fetched set so their semantics match pre-fix.
+        _overfetch_mult = RC.get('dpp_overfetch_multiplier', 3) if RC.get('dpp_topk_enabled', False) else 1
+        if _overfetch_mult > 1 and session.like_vectors:
+            # Re-fetch with larger k via the MMR branch (already used when like_vectors exist)
+            predicted_cards = engine.get_top_k_mmr(
+                session.like_vectors,
+                session.exposed_ids,
+                k=RC['top_k_results'] * _overfetch_mult,
+                round_num=session.current_round,
+            )
+
         # Capture initial cosine order BEFORE any reorder (needed for RRF composition)
         candidate_ids_cosine_order = [c['canonical_bld_id'] for c in predicted_cards]
         rerank_rank_by_id = None  # populated only when Topic 02 ran with a real reorder
@@ -462,6 +478,11 @@ class SessionResultView(APIView):
 
             _dpp_top10 = dpp_order[:10]  # IMP-10: store DPP top-10 for provenance
             predicted_cards = [card_by_id[bid] for bid in dpp_order if bid in card_by_id]
+
+        # Guard: ensure predicted_cards is exactly top_k_results items at response time.
+        # DPP path already narrows to k; non-DPP over-fetch=1 never grows.
+        # Defensive slice handles any edge case where over-fetch candidate leaks through.
+        predicted_cards = predicted_cards[:RC.get('top_k_results', 20)]
 
         # IMP-10: persist top-10 lists for bookmark provenance lookup.
         # Atomic check-then-write inside transaction.atomic() (Finding #16). Two
