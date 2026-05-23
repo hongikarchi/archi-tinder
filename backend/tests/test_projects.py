@@ -69,8 +69,8 @@ class TestProjectCRUD:
         assert resp.status_code == 204
         assert not Project.objects.filter(project_id=project.project_id).exists()
 
-    def test_delete_other_users_project_returns_403(self, auth_client, user_profile):
-        """Cannot delete a project belonging to another user — 403 (project exists, forbidden)."""
+    def test_delete_other_users_project_returns_404(self, auth_client, user_profile):
+        """Cannot delete a project belonging to another user — 404 (no row lock granted to non-owner)."""
         from django.contrib.auth.models import User
         from apps.accounts.models import UserProfile
         other_user = User.objects.create_user(
@@ -81,7 +81,7 @@ class TestProjectCRUD:
         )
         project = Project.objects.create(user=other_profile, name='NotMine')
         resp = auth_client.delete(f'/api/v1/projects/{project.project_id}/')
-        assert resp.status_code == 403
+        assert resp.status_code == 404
 
     def test_unauthenticated_returns_401(self, api_client):
         resp = api_client.get('/api/v1/projects/')
@@ -270,3 +270,223 @@ class TestBuildingBatch:
         )
         assert resp.status_code == 200
         assert resp.json() == []
+
+
+# -- ProjectSerializer.latest_session_meta ------------------------------------
+
+def _make_owner_request(user):
+    """Build a minimal DRF-compatible request stub with the given authenticated user.
+
+    Creates a DRF Request from an APIRequestFactory GET, then assigns the user
+    directly to Request.user (the DRF setter propagates to both internal _user
+    and the underlying HttpRequest).  This bypasses the authentication backend
+    pipeline while still satisfying the serializer's `request.user.is_authenticated`
+    and `request.user == obj.user.user` checks.
+    """
+    from rest_framework.test import APIRequestFactory
+    from rest_framework.request import Request
+    factory = APIRequestFactory()
+    raw = factory.get('/')
+    req = Request(raw)
+    req.user = user  # DRF Request.user setter sets both req._user and raw.user
+    return req
+
+
+@pytest.mark.django_db
+class TestProjectSerializerLatestSessionMeta:
+    """Verify ProjectSerializer exposes latest_session_meta with correct shape.
+
+    Tests run against the serializer directly (not via HTTP) to stay isolated
+    from view-layer annotation logic.  The serializer's fallback path
+    (obj.sessions.order_by('-created_at').first()) is exercised here.
+
+    All owner-path tests pass context={'request': <owner_request>} so the
+    ownership gate is satisfied.  Non-owner / no-context paths are tested
+    separately (IDOR guard tests).
+    """
+
+    def test_latest_session_meta_is_none_when_no_session(self, user_profile):
+        """Project with no sessions → latest_session_meta is null (owner caller)."""
+        from apps.recommendation.serializers import ProjectSerializer
+        project = Project.objects.create(user=user_profile, name='No Session')
+        req = _make_owner_request(user_profile.user)
+        data = ProjectSerializer(project, context={'request': req}).data
+        assert data['latest_session_meta'] is None
+
+    def test_latest_session_meta_returns_correct_shape(self, user_profile):
+        """Project with a session returns id, like_count, created_at (owner caller)."""
+        from apps.recommendation.models import AnalysisSession
+        from apps.recommendation.serializers import ProjectSerializer
+
+        project = Project.objects.create(user=user_profile, name='Has Session')
+        n_likes = 3
+        session = AnalysisSession.objects.create(
+            user=user_profile,
+            project=project,
+            like_vectors=[{'embedding': [0.1] * 5, 'round': i} for i in range(n_likes)],
+        )
+
+        req = _make_owner_request(user_profile.user)
+        data = ProjectSerializer(project, context={'request': req}).data
+        meta = data['latest_session_meta']
+
+        assert meta is not None
+        assert meta['id'] == str(session.session_id)
+        assert meta['like_count'] == n_likes
+        assert 'created_at' in meta
+        # created_at must be a non-empty ISO string
+        assert isinstance(meta['created_at'], str) and meta['created_at']
+
+    def test_latest_session_meta_like_count_matches_like_vectors_length(self, user_profile):
+        """like_count is len(like_vectors), not a separate column (owner caller)."""
+        from apps.recommendation.models import AnalysisSession
+        from apps.recommendation.serializers import ProjectSerializer
+
+        project = Project.objects.create(user=user_profile, name='Like Count Test')
+        AnalysisSession.objects.create(
+            user=user_profile,
+            project=project,
+            like_vectors=[{'embedding': [0.0] * 5, 'round': i} for i in range(7)],
+        )
+
+        req = _make_owner_request(user_profile.user)
+        data = ProjectSerializer(project, context={'request': req}).data
+        assert data['latest_session_meta']['like_count'] == 7
+
+    def test_latest_session_meta_uses_most_recent_session(self, user_profile):
+        """When multiple sessions exist, meta reflects the most recently created (owner caller)."""
+        import time
+        from apps.recommendation.models import AnalysisSession
+        from apps.recommendation.serializers import ProjectSerializer
+
+        project = Project.objects.create(user=user_profile, name='Multi Session')
+        AnalysisSession.objects.create(
+            user=user_profile, project=project,
+            like_vectors=[{'embedding': [0.0] * 5, 'round': 0}],
+        )
+        # Small sleep to ensure created_at ordering is deterministic on SQLite
+        time.sleep(0.01)
+        newer_session = AnalysisSession.objects.create(
+            user=user_profile, project=project,
+            like_vectors=[{'embedding': [0.0] * 5, 'round': i} for i in range(5)],
+        )
+
+        req = _make_owner_request(user_profile.user)
+        data = ProjectSerializer(project, context={'request': req}).data
+        meta = data['latest_session_meta']
+        assert meta['id'] == str(newer_session.session_id)
+        assert meta['like_count'] == 5
+
+    def test_latest_session_id_and_meta_consistent(self, user_profile):
+        """latest_session_id and latest_session_meta['id'] must refer to the same session (owner caller)."""
+        from apps.recommendation.models import AnalysisSession
+        from apps.recommendation.serializers import ProjectSerializer
+
+        project = Project.objects.create(user=user_profile, name='Consistency Test')
+        session = AnalysisSession.objects.create(
+            user=user_profile,
+            project=project,
+            like_vectors=[],
+        )
+
+        req = _make_owner_request(user_profile.user)
+        data = ProjectSerializer(project, context={'request': req}).data
+        assert data['latest_session_id'] == str(session.session_id)
+        assert data['latest_session_meta']['id'] == str(session.session_id)
+
+    # -- IDOR guard: Defect 1 regression tests --------------------------------
+
+    def test_latest_session_meta_hidden_from_non_owner(self, user_profile):
+        """Non-owner viewing another user's public project gets latest_session_meta=None.
+
+        Regression guard for IDOR: viewer A queries owner B's public project.
+        Even when B has an in-progress session, A must receive null for both
+        latest_session_meta and latest_session_id.
+        """
+        from django.contrib.auth.models import User
+        from apps.accounts.models import UserProfile
+        from apps.recommendation.models import AnalysisSession
+        from apps.recommendation.serializers import ProjectSerializer
+
+        # Owner B has a public project with an active session
+        owner_user = User.objects.create_user(
+            username='owner_b', email='owner_b@test.com',
+        )
+        owner_profile = UserProfile.objects.create(
+            user=owner_user, display_name='Owner B',
+        )
+        project = Project.objects.create(
+            user=owner_profile, name='Public Board', visibility='public',
+        )
+        AnalysisSession.objects.create(
+            user=owner_profile,
+            project=project,
+            like_vectors=[{'embedding': [0.1] * 5, 'round': 0}],
+        )
+
+        # Viewer A is a different authenticated user
+        viewer_req = _make_owner_request(user_profile.user)
+        data = ProjectSerializer(project, context={'request': viewer_req}).data
+
+        assert data['latest_session_meta'] is None, (
+            'Non-owner must not receive session meta — IDOR leak'
+        )
+        assert data['latest_session_id'] is None, (
+            'Non-owner must not receive session_id — IDOR leak'
+        )
+
+    def test_latest_session_meta_hidden_when_no_context(self, user_profile):
+        """Serializer called without request context returns null conservatively."""
+        from apps.recommendation.models import AnalysisSession
+        from apps.recommendation.serializers import ProjectSerializer
+
+        project = Project.objects.create(user=user_profile, name='No Context')
+        AnalysisSession.objects.create(
+            user=user_profile, project=project, like_vectors=[],
+        )
+        # No context passed — conservative fallback must be null
+        data = ProjectSerializer(project).data
+        assert data['latest_session_meta'] is None
+        assert data['latest_session_id'] is None
+
+
+# -- TOCTOU / ownership tests (Defect 3) -------------------------------------
+
+@pytest.mark.django_db
+class TestProjectPatchOwnership:
+    """Verify PATCH /projects/{pk}/ returns 404 for non-owner cross-user requests.
+
+    Regression guard for Defect 3: ownership is now folded into the
+    select_for_update().filter(user=profile) queryset so a non-owner request
+    never acquires a row lock and receives 404 (not 403).
+    """
+
+    def _make_other_client(self):
+        """Create a second user + JWT client."""
+        from django.contrib.auth.models import User
+        from apps.accounts.models import UserProfile
+        from rest_framework.test import APIClient
+        from rest_framework_simplejwt.tokens import RefreshToken
+
+        other_user = User.objects.create_user(
+            username='attacker', email='attacker@test.com',
+        )
+        UserProfile.objects.create(user=other_user, display_name='Attacker')
+        client = APIClient()
+        refresh = RefreshToken.for_user(other_user)
+        client.credentials(HTTP_AUTHORIZATION=f'Bearer {refresh.access_token}')
+        return client
+
+    def test_project_patch_returns_404_for_non_owner_cross_user(self, user_profile):
+        """User A tries to PATCH user B's project → 404 (no lock granted to non-owner)."""
+        project = Project.objects.create(user=user_profile, name='Victim Project')
+        attacker_client = self._make_other_client()
+        resp = attacker_client.patch(
+            f'/api/v1/projects/{project.project_id}/',
+            {'name': 'Hijacked'},
+            format='json',
+        )
+        assert resp.status_code == 404
+        # Project must be unchanged
+        project.refresh_from_db()
+        assert project.name == 'Victim Project'

@@ -313,7 +313,7 @@ export default function SwipePage({
 
   // Show "Finish & View Report" button when progress hits 100% (still swiping, not yet completed)
   const isAt100 = !isCompleted && (
-    (phase === 'exploring' && like_count >= 3) ||
+    (phase === 'exploring' && like_count >= 4) ||
     ((phase === 'analyzing' || phase === 'converged') && confidence != null && confidence >= 1.0)
   )
 

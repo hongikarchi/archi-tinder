@@ -47,7 +47,7 @@ class ProjectListCreateView(APIView):
         start  = (page - 1) * page_size
         chunk  = qs[start:start + page_size]
         return Response({
-            'results':  ProjectSerializer(chunk, many=True).data,
+            'results':  ProjectSerializer(chunk, many=True, context={'request': request}).data,
             'total':    total,
             'page':     page,
             'has_more': (page * page_size) < total,
@@ -57,11 +57,14 @@ class ProjectListCreateView(APIView):
         profile = _get_profile(request)
         if not profile:
             return Response({'detail': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
-        serializer = ProjectSerializer(data=request.data)
+        serializer = ProjectSerializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         project = serializer.save(user=profile)
         logger.info('Project created: %s by user %s', project.project_id, profile.pk)
-        return Response(ProjectSerializer(project).data, status=status.HTTP_201_CREATED)
+        return Response(
+            ProjectSerializer(project, context={'request': request}).data,
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class ProjectDetailView(APIView):
@@ -69,7 +72,8 @@ class ProjectDetailView(APIView):
 
     GET:   AllowAny — returns 200 for own or public; 403 for private non-owner.
     PATCH: owner-only — name + visibility only (ProjectSelfUpdateSerializer).
-    DELETE: owner-only — cascade rules TBD (Phase 15); plain delete for now.
+    DELETE: owner-only — returns 404 for cross-user (not 403) to avoid leaking
+            project existence to non-owners.
     """
     permission_classes = [AllowAny]
 
@@ -79,7 +83,7 @@ class ProjectDetailView(APIView):
         is_owner = profile and project.user_id == profile.pk
         if not is_owner and project.visibility != 'public':
             return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
-        data = ProjectSerializer(project).data
+        data = ProjectSerializer(project, context={'request': request}).data
         if request.user.is_authenticated and profile:
             from apps.social.models import Reaction
             data['is_reacted'] = Reaction.objects.filter(user=profile, project=project).exists()
@@ -91,9 +95,6 @@ class ProjectDetailView(APIView):
         profile = _get_profile(request)
         if not profile:
             return Response({'detail': 'Authentication required'}, status=status.HTTP_401_UNAUTHORIZED)
-        project = get_object_or_404(Project, project_id=pk)
-        if project.user_id != profile.pk:
-            return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
 
         # remove_building_ids: remove specified buildings from liked_ids and saved_ids
         remove_ids = request.data.get('remove_building_ids')
@@ -104,13 +105,24 @@ class ProjectDetailView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+        # Strip non-schema keys before entering the atomic block.
         schema_data = {k: v for k, v in request.data.items() if k != 'remove_building_ids'}
-        serializer = None
-        if schema_data:
-            serializer = ProjectSelfUpdateSerializer(project, data=schema_data, partial=True)
-            serializer.is_valid(raise_exception=True)  # validate BEFORE any write
 
         with transaction.atomic():
+            # Fold ownership into the locked queryset (Defect 3 fix).
+            # select_for_update().filter(user=profile) means the lock is only
+            # granted when the row belongs to the requesting user — a non-owner
+            # request sees 404 without ever acquiring a row lock.
+            project = get_object_or_404(
+                Project.objects.select_for_update().filter(user=profile),
+                project_id=pk,
+            )
+
+            serializer = None
+            if schema_data:
+                serializer = ProjectSelfUpdateSerializer(project, data=schema_data, partial=True)
+                serializer.is_valid(raise_exception=True)
+
             if remove_ids is not None:
                 remove_set = set(remove_ids)
                 project.liked_ids = [item for item in project.liked_ids if item.get('id') not in remove_set]
@@ -120,15 +132,15 @@ class ProjectDetailView(APIView):
                 serializer.save()
 
         project.refresh_from_db()
-        return Response(ProjectSerializer(project).data)
+        return Response(ProjectSerializer(project, context={'request': request}).data)
 
     def delete(self, request, pk):
         profile = _get_profile(request)
         if not profile:
             return Response({'detail': 'Authentication required'}, status=status.HTTP_401_UNAUTHORIZED)
-        project = get_object_or_404(Project, project_id=pk)
-        if project.user_id != profile.pk:
-            return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+        # Filter by user=profile so non-owner requests get 404, not 403,
+        # matching the security-manager recommendation and ProjectBookmarkView pattern.
+        project = get_object_or_404(Project.objects.filter(user=profile), project_id=pk)
         project.delete()
         logger.info('Project deleted: %s', pk)
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -170,7 +182,7 @@ class UserProjectsListView(APIView):
         start = (page - 1) * page_size
         chunk = list(qs[start:start + page_size])
         return Response({
-            'results':  ProjectSerializer(chunk, many=True).data,
+            'results':  ProjectSerializer(chunk, many=True, context={'request': request}).data,
             'total':    total,
             'page':     page,
             'has_more': (page * page_size) < total,
