@@ -128,6 +128,9 @@ export default function App() {
   const [isSessionCompleted, setIsSessionCompleted] = useState(false)
   const [isResultLoading, setIsResultLoading] = useState(false)
   const [swipeError, setSwipeError] = useState(null)
+  // Tracks in-flight recordSwipe() calls. Button gates on this so the
+  // "Finish & View Report" button can't fire before the backend save settles.
+  const [swipePending, setSwipePending] = useState(0)
   const [activeProjectId, setActiveProjectId] = useState(() => {
     const id = sessionStorage.getItem('archithon_user')
     return localStorage.getItem(`archithon_activeId_${id}`) || null
@@ -375,6 +378,10 @@ export default function App() {
       ts: Date.now(),
     }
 
+    // Mark swipe in-flight — prevents "Finish & View Report" button from firing
+    // while recordSwipe() is pending (optimistic bump can reach isAt100 instantly).
+    setSwipePending(n => n + 1)
+
     if (canInstantSwap) {
       setCurrentCard(savedPrefetch)
       setPrefetchCard(prefetchCard2)  // shift queue
@@ -556,6 +563,7 @@ export default function App() {
       const log = swipeLog.current
       if (log.length >= 10) log.shift()
       log.push(_dbg)
+      setSwipePending(n => Math.max(0, n - 1))
       setIsSwipeLoading(false)
       swipeLock.current = false
     }
@@ -692,6 +700,7 @@ export default function App() {
     isSessionCompleted,
     isSwipeLoading,
     isResultLoading,
+    swipePending,
     onSwipe: handleSwipeCard,
     onExtendSession: handleExtendSession,
     onViewResults: () => {

@@ -291,7 +291,7 @@ function DismissConfirmPopup({ onConfirm, onCancel }) {
 
 /* ── SwipePage ───────────────────────────────────────────────────────────── */
 export default function SwipePage({
-  currentCard, cardResetToken = 0, progress, isCompleted, isLoading, isResultLoading = false,
+  currentCard, cardResetToken = 0, progress, isCompleted, isLoading, isResultLoading = false, swipePending = 0,
   projectName, onSwipe, onViewResults, onExtendSession,
   onExitToNewProject, onExitToHome,
 }) {
@@ -594,7 +594,7 @@ export default function SwipePage({
           <div style={{ width: CARD_WIDTH }}>
             <button
               onClick={onViewResults}
-              disabled={isResultLoading}
+              disabled={isResultLoading || swipePending > 0}
               style={{
                 width: '100%',
                 padding: '12px 20px',
@@ -604,10 +604,10 @@ export default function SwipePage({
                 fontSize: 14,
                 fontWeight: 700,
                 border: 'none',
-                cursor: isResultLoading ? 'default' : 'pointer',
+                cursor: (isResultLoading || swipePending > 0) ? 'default' : 'pointer',
                 fontFamily: 'inherit',
                 boxShadow: '0 4px 16px rgba(236,72,153,0.35)',
-                opacity: isResultLoading ? 0.6 : 1,
+                opacity: (isResultLoading || swipePending > 0) ? 0.6 : 1,
                 transition: 'opacity 0.2s',
               }}
             >

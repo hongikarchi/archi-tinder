@@ -1,6 +1,7 @@
 import logging
 
 from django.conf import settings
+from django.db import transaction
 from django.db.models import OuterRef, Subquery
 from django.shortcuts import get_object_or_404
 from rest_framework import status
@@ -97,16 +98,26 @@ class ProjectDetailView(APIView):
         # remove_building_ids: remove specified buildings from liked_ids and saved_ids
         remove_ids = request.data.get('remove_building_ids')
         if remove_ids is not None:
-            remove_set = set(remove_ids)
-            project.liked_ids = [item for item in project.liked_ids if item.get('id') not in remove_set]
-            project.saved_ids = [item for item in project.saved_ids if item.get('id') not in remove_set]
-            project.save(update_fields=['liked_ids', 'saved_ids'])
+            if not isinstance(remove_ids, list) or not all(isinstance(x, str) for x in remove_ids):
+                return Response(
+                    {'detail': 'remove_building_ids must be a list of strings'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
         schema_data = {k: v for k, v in request.data.items() if k != 'remove_building_ids'}
+        serializer = None
         if schema_data:
             serializer = ProjectSelfUpdateSerializer(project, data=schema_data, partial=True)
-            serializer.is_valid(raise_exception=True)
-            serializer.save()
+            serializer.is_valid(raise_exception=True)  # validate BEFORE any write
+
+        with transaction.atomic():
+            if remove_ids is not None:
+                remove_set = set(remove_ids)
+                project.liked_ids = [item for item in project.liked_ids if item.get('id') not in remove_set]
+                project.saved_ids = [item for item in project.saved_ids if item.get('id') not in remove_set]
+                project.save(update_fields=['liked_ids', 'saved_ids'])
+            if serializer is not None:
+                serializer.save()
 
         project.refresh_from_db()
         return Response(ProjectSerializer(project).data)

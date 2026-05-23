@@ -474,7 +474,12 @@ export default function BoardDetailPage() {
   const viewerId = sessionStorage.getItem('archithon_user')
   const boardOwnerId = board?.user?.user_id ?? board?.owner?.user_id
   const isOwner = !!viewerId && String(boardOwnerId) === String(viewerId)
-  const coverImage = board?.cover_image_url || (buildings[0] && buildings[0].image_url)
+  // Recompute cover from local state first so deleting the first card doesn't
+  // leave a stale cover. Fall back to board.cover_image_url only when buildings
+  // are present but buildings[0] lacks an image_url; null when board is empty.
+  const coverImage = buildings.length > 0
+    ? (buildings[0]?.image_url || board?.cover_image_url || null)
+    : null
   const statusMessage = error?.message || (loading ? 'Loading board...' : 'This board is empty')
 
   return (
