@@ -2,6 +2,7 @@ import logging
 from collections import defaultdict
 
 from django.conf import settings
+from django.db import transaction
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -463,23 +464,27 @@ class SessionResultView(APIView):
             predicted_cards = [card_by_id[bid] for bid in dpp_order if bid in card_by_id]
 
         # IMP-10: persist top-10 lists for bookmark provenance lookup.
-        # Only update if values changed (guard against repeated GET calls doing needless writes).
-        _top10_fields_changed = (
-            session.cosine_top10_ids != _cosine_top10
-            or session.gemini_top10_ids != _gemini_top10
-            or session.dpp_top10_ids != _dpp_top10
-        )
-        if _top10_fields_changed:
-            try:
-                session.cosine_top10_ids = _cosine_top10
-                session.gemini_top10_ids = _gemini_top10
-                session.dpp_top10_ids = _dpp_top10
-                session.save(update_fields=['cosine_top10_ids', 'gemini_top10_ids', 'dpp_top10_ids'])
-            except Exception as _exc:
-                logger.warning(
-                    'SessionResultView: failed to persist top10 lists for session %s: %s',
-                    session.session_id, _exc,
+        # Atomic check-then-write inside transaction.atomic() (Finding #16). Two
+        # concurrent GET callers cannot race a partial update — the multi-field
+        # save is atomic. Lock-free: writes are IDEMPOTENT (same input → same
+        # top-10 values), so a duplicate write is a no-op, not corruption.
+        try:
+            with transaction.atomic():
+                _top10_fields_changed = (
+                    session.cosine_top10_ids != _cosine_top10
+                    or session.gemini_top10_ids != _gemini_top10
+                    or session.dpp_top10_ids != _dpp_top10
                 )
+                if _top10_fields_changed:
+                    session.cosine_top10_ids = _cosine_top10
+                    session.gemini_top10_ids = _gemini_top10
+                    session.dpp_top10_ids = _dpp_top10
+                    session.save(update_fields=['cosine_top10_ids', 'gemini_top10_ids', 'dpp_top10_ids'])
+        except Exception as _exc:
+            logger.warning(
+                'SessionResultView: failed to persist top10 lists for session %s: %s',
+                session.session_id, _exc,
+            )
 
         return Response({
             'session_id':          str(session.session_id),

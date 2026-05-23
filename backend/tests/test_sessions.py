@@ -1571,3 +1571,58 @@ class TestSessionEventLogging:
         assert set(tb.keys()) == {'lock_ms', 'embed_ms', 'select_ms', 'prefetch_ms', 'total_ms'}, (
             f'Unexpected timing_breakdown keys: {tb.keys()}'
         )
+
+
+# ---------------------------------------------------------------------------
+# Finding #16 regression: SessionResultView GET write idempotency
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestSessionResultWriteIdempotency:
+    """Finding #16: SessionResultView GET-with-write wraps the multi-field save
+    in transaction.atomic() — verifies a second GET produces the same top-10 lists
+    (idempotent: same input → same write, so duplicate write is benign)."""
+
+    def test_result_view_get_twice_idempotent(self, auth_client, user_profile):
+        """Calling SessionResultView GET twice writes top10 once; second call is a no-op."""
+        from apps.recommendation.models import AnalysisSession
+        import numpy as np
+
+        project = Project.objects.create(user=user_profile, name='Idempotency Test')
+        fake_vec = list(np.random.RandomState(7).randn(384))
+        session = AnalysisSession.objects.create(
+            user=user_profile,
+            project=project,
+            status='completed',
+            phase='converged',
+            preference_vector=fake_vec,
+            like_vectors=[],
+            pool_ids=_FAKE_POOL,
+            exposed_ids=_FAKE_POOL,
+            pool_scores=_FAKE_SCORES,
+            current_round=10,
+            current_pool_tier=1,
+        )
+
+        fake_cards = [_make_card(bid) for bid in _FAKE_POOL[:5]]
+
+        with patch(f'{_ENGINE}.get_buildings_by_ids', return_value=[]):
+            with patch(f'{_ENGINE}.get_top_k_results', return_value=fake_cards):
+                resp1 = auth_client.get(
+                    f'/api/v1/analysis/sessions/{session.session_id}/result/'
+                )
+                resp2 = auth_client.get(
+                    f'/api/v1/analysis/sessions/{session.session_id}/result/'
+                )
+
+        assert resp1.status_code == 200
+        assert resp2.status_code == 200
+
+        session.refresh_from_db()
+        expected_top10 = [c['canonical_bld_id'] for c in fake_cards[:10]]
+        assert session.cosine_top10_ids == expected_top10, (
+            f"cosine_top10_ids not persisted: {session.cosine_top10_ids}"
+        )
+        # gemini and dpp flags are off in test settings; expect None
+        assert session.gemini_top10_ids is None
+        assert session.dpp_top10_ids is None

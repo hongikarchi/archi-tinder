@@ -292,7 +292,9 @@ class TestBookmarkRankCorpusFilling:
         )
 
     def test_session_with_v_initial_gets_rank_corpus(self, auth_client, user_profile):
-        """Session with v_initial + bookmark -> event payload has rank_corpus = computed int."""
+        """Finding #14b: compute_corpus_rank deferred — rank_corpus is always None now.
+        The call was a blocking O(N) pgvector scan on bookmark POST hot path; removed
+        per audit recommendation. rank_corpus stays None until a background task is wired."""
         project = Project.objects.create(user=user_profile, name='Test')
         session = self._make_session_with_v_initial(user_profile, project, v_initial=_v_initial())
 
@@ -309,15 +311,17 @@ class TestBookmarkRankCorpusFilling:
             )
 
         assert resp.status_code == 200
-        mock_rank.assert_called_once()
+        # compute_corpus_rank must NOT be called (deferred, Finding #14b)
+        mock_rank.assert_not_called()
         event = SessionEvent.objects.filter(
             event_type='bookmark', user=user_profile,
         ).order_by('-created_at').first()
         assert event is not None
-        assert event.payload['rank_corpus'] == 42
+        # rank_corpus is None — sync call removed; background task TODO in swipe.py
+        assert event.payload['rank_corpus'] is None
 
     def test_session_without_v_initial_rank_corpus_none(self, auth_client, user_profile):
-        """Session with v_initial=None -> rank_corpus stays None."""
+        """Session with v_initial=None -> rank_corpus stays None (unchanged by Finding #14b)."""
         project = Project.objects.create(user=user_profile, name='Test')
         session = self._make_session_with_v_initial(user_profile, project, v_initial=None)
 
@@ -334,7 +338,7 @@ class TestBookmarkRankCorpusFilling:
             )
 
         assert resp.status_code == 200
-        # compute_corpus_rank should not be called when v_initial is None
+        # compute_corpus_rank must NOT be called (deferred, Finding #14b)
         mock_rank.assert_not_called()
         event = SessionEvent.objects.filter(
             event_type='bookmark', user=user_profile,
