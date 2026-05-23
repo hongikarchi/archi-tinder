@@ -14,7 +14,7 @@ window.PROJECT_STATE = {
     updated: '2026-05-23',
     lastSyncedAt: '2026-05-23',
     branch: 'develop',
-    head: '08fac3d',
+    head: '01a278c',
   },
 
   tasks: {
@@ -48,14 +48,14 @@ window.PROJECT_STATE = {
   ],
 
   prs: [
+    { n: 83, title: 'fix: audit codex P2 bundle — diverse RANDOM 2-query + ProjectList N+1 + JWT blacklist + image_focus plumb + exploring bar 3→4 (#2.5–#2.9)', date: '2026-05-23' },
+    { n: 82, title: 'fix: audit codex P1 latent — raw_query dual-key + DPP 3x overfetch (#1.1 + #1.4)', date: '2026-05-23' },
+    { n: 81, title: 'fix: audit codex P1 — swipe idempotency full payload + race catch + Project row lock (#1.2 + #1.3)', date: '2026-05-23' },
+    { n: 80, title: 'chore: session-end reporter housekeeping — Tier 2/3 audit resolved (4 PRs)', date: '2026-05-23' },
     { n: 79, title: 'fix: audit tier-3 ops risk (#14 ORDER BY RANDOM + sync corpus-rank + #16 GET-write atomic + #17 thread-local telemetry)', date: '2026-05-23' },
     { n: 78, title: 'fix: audit tier-2 profiles legacy table (#10 architecture_vectors → canonical_v2_buildings)', date: '2026-05-23' },
-    { n: 77, title: 'fix: audit tier-2 raw_query plumbing (#4 FE→BE + #5 persist)', date: '2026-05-23' },
+    { n: 77, title: 'fix: audit tier-2 raw_query plumbing (#4 FE → BE + #5 persist)', date: '2026-05-23' },
     { n: 76, title: 'fix: audit tier-2 cuts (#3 area filter + #7 dead /matched route + #9 rerank shape)', date: '2026-05-23' },
-    { n: 74, title: 'fix: audit tier-1 hotfix bundle (#1/#2/#6/#8)', date: '2026-05-23' },
-    { n: 73, title: 'chore: session-end reporter housekeeping — DEV-ENV1 resolved + PR #72 recorded', date: '2026-05-23' },
-    { n: 72, title: 'feat: board UX — edit mode, name edit, swipe finish button, result save (PR #71 recreation + Codex defect fixes)', date: '2026-05-23' },
-    { n: 70, title: 'chore: session-end reporter housekeeping — record external PR triage + add DEV-ENV1', date: '2026-05-22' },
   ],
 
   architecture: {
