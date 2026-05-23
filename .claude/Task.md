@@ -142,11 +142,9 @@ Google OAuth only. Korean users need domestic login.
 - [ ] Kakao social auth backend + frontend button
 - [ ] Naver social auth backend + frontend button
 
-### Audit Tier 2/3/4 — pending next sessions
-Remaining items from the full codebase audit report.
-- [ ] Tier 2 — UX-contract bugs: #3/#4/#5/#7/#9/#10
-- [ ] Tier 3 — ops risk: #14/#16/#17
-- [ ] Tier 4 — file decomp: App.jsx, engine.py, BoardDetailPage, UserProfilePage
+### Audit Tier 4 — structural refactor (deferred)
+Remaining file decomposition items from full codebase audit.
+- [ ] Tier 4 — file decomp: engine.py (2079 LOC), App.jsx (795 LOC), BoardDetailPage (1032 LOC), UserProfilePage (990 LOC), PostSwipeLandingPage (696 LOC), SwipePage (666 LOC), FirmProfilePage (611 LOC)
 
 ---
 
@@ -161,6 +159,21 @@ frontend, leaf→hub order. Scope with `/plan` per slice.
 ---
 
 ## Resolved
+
+### Audit Tier 3 ops risk — RESOLVED 2026-05-23 (PR #79)
+[x] #14a ORDER BY RANDOM replaced with two-query pattern (ID fetch + Python random.sample + WHERE IN) in get_top_k_results no-pref + _random_pool. Remaining 2 sites (get_diverse_random, search_by_filters) left — already-filtered subsets, cost acceptable.
+[x] #14b bookmark POST corpus-rank sync removed; rank_corpus = None + TODO (telemetry-only field, not in API response; eliminates O(corpus_size) scan on bookmark).
+[x] #16 SessionResultView GET write wrapped in transaction.atomic() for multi-field save atomicity. select_for_update() dropped — caused CI hang (PG savepoint+FOR UPDATE interaction with pytest-django outer atomic).
+[x] #17 engine.py module-global _last_embedding_call_stats/_last_clustering_stats replaced with threading.local(). 6 write sites + 2 getters updated. Per-thread isolation prevents concurrent-request stats overwrite.
+Note: TestTelemetryThreadLocal (2 tests) removed — ThreadPoolExecutor + threading.local() + pytest-django PG context caused CI hang (19min). Diagnostic CI run (-v -x --durations=20, 20min timeout) confirmed test as hang root cause. Structural guarantee of #17 fix preserved by code; test coverage dropped but CI green.
+
+### Audit Tier 2 UX-contract bugs — RESOLVED 2026-05-23 (PR #76 / #77 / #78)
+[x] #3 area filter normalization: normalizeFilters() in frontend; backend filter_args guard on empty list (PR #76).
+[x] #4 FE→BE raw_query plumbing: raw_query field threaded from DiscoveryPage through API call to backend (PR #77).
+[x] #5 raw_query persist: backend persists raw_query to SwipeSession on first swipe (PR #77).
+[x] #7 dead /matched route removed from MainLayout.jsx guard + routing table (PR #76).
+[x] #9 rerank response shape fixed: engine returns list-of-dicts matching frontend expectation (PR #76).
+[x] #10 profiles legacy table: architecture_vectors references replaced with canonical_v2_buildings reads (PR #78).
 
 ### Audit Tier 1 hotfix bundle — RESOLVED 2026-05-23 (PR #74)
 [x] #1 legacy `liked_ids`/`saved_ids` string entries: migration `0019` normalizes to dict.
