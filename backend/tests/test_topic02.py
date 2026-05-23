@@ -23,16 +23,18 @@ from unittest.mock import MagicMock, patch
 # ---------------------------------------------------------------------------
 
 def _make_candidates(ids):
-    """Build minimal candidate dicts for rerank_candidates."""
+    """Build minimal candidate dicts for rerank_candidates (engine._row_to_card shape)."""
     return [
         {
             'canonical_bld_id': bid,
-            'name_en': f'Building {bid}',
-            'atmosphere': 'calm serene',
-            'material': 'concrete',
-            'architect': 'Anon',
-            'style': 'Contemporary',
-            'program': 'Museum',
+            'name': f'Building {bid}',
+            'metadata': {
+                'axis_atmosphere': 'calm serene',
+                'axis_material_visual': ['concrete'],
+                'axis_architects': 'Anon',
+                'axis_style': 'Contemporary',
+                'axis_typology': 'Museum',
+            },
         }
         for bid in ids
     ]
@@ -325,9 +327,17 @@ class TestSessionResultViewRerank:
         from apps.recommendation import services, engine
 
         fake_cards = [
-            {'canonical_bld_id': 'B00001', 'name_en': 'Building A', 'atmosphere': 'calm',
-             'material': 'concrete', 'architect': 'Anon', 'style': 'Contemporary',
-             'program': 'Museum'},
+            {
+                'canonical_bld_id': 'B00001',
+                'name': 'Building A',
+                'metadata': {
+                    'axis_atmosphere': 'calm',
+                    'axis_material_visual': ['concrete'],
+                    'axis_architects': 'Anon',
+                    'axis_style': 'Contemporary',
+                    'axis_typology': 'Museum',
+                },
+            },
         ]
         # Mock engine calls to avoid raw SQL on architecture_vectors
         monkeypatch.setattr(engine, 'get_top_k_mmr', lambda *a, **kw: list(fake_cards))
@@ -375,12 +385,28 @@ class TestSessionResultViewRerank:
 
         # Fake get_top_k_mmr to return 2 cards with known canonical_bld_ids
         fake_cards = [
-            {'canonical_bld_id': 'B00001', 'name_en': 'Building A', 'atmosphere': 'calm',
-             'material': 'concrete', 'architect': 'Anon', 'style': 'Contemporary',
-             'program': 'Museum'},
-            {'canonical_bld_id': 'B00002', 'name_en': 'Building B', 'atmosphere': 'dramatic',
-             'material': 'stone', 'architect': 'Anon', 'style': 'Brutalist',
-             'program': 'Museum'},
+            {
+                'canonical_bld_id': 'B00001',
+                'name': 'Building A',
+                'metadata': {
+                    'axis_atmosphere': 'calm',
+                    'axis_material_visual': ['concrete'],
+                    'axis_architects': 'Anon',
+                    'axis_style': 'Contemporary',
+                    'axis_typology': 'Museum',
+                },
+            },
+            {
+                'canonical_bld_id': 'B00002',
+                'name': 'Building B',
+                'metadata': {
+                    'axis_atmosphere': 'dramatic',
+                    'axis_material_visual': ['stone'],
+                    'axis_architects': 'Anon',
+                    'axis_style': 'Brutalist',
+                    'axis_typology': 'Museum',
+                },
+            },
         ]
         monkeypatch.setattr(engine, 'get_top_k_mmr', lambda *a, **kw: list(fake_cards))
         monkeypatch.setattr(engine, 'get_top_k_results', lambda *a, **kw: list(fake_cards))

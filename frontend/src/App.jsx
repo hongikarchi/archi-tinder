@@ -8,7 +8,6 @@ import LLMSearchPage from './pages/LLMSearchPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import UserProfilePage from './pages/UserProfilePage.jsx'
 import FirmProfilePage from './pages/FirmProfilePage.jsx'
-import PostSwipeLandingPage from './pages/PostSwipeLandingPage.jsx'
 import BoardDetailPage from './pages/BoardDetailPage.jsx'
 import ResultsPage from './pages/ResultsPage.jsx'
 import BuildingDetailPage from './pages/BuildingDetailPage.jsx'
@@ -25,11 +24,6 @@ function normalizeFilters(filters) {
   if (filters.style) out.style = filters.style
   if (filters.year_min != null) out.year_min = filters.year_min
   if (filters.year_max != null) out.year_max = filters.year_max
-  // Area -- accept all naming conventions (frontend, LLM area_min, backend min_area)
-  const minArea = filters.min_area ?? filters.minArea ?? filters.area_min ?? null
-  const maxArea = filters.max_area ?? filters.maxArea ?? filters.area_max ?? null
-  if (minArea != null) out.min_area = minArea
-  if (maxArea != null) out.max_area = maxArea
   return out
 }
 
@@ -798,7 +792,6 @@ export default function App() {
           <Route path="user/me" element={<UserProfilePage {...sharedLayoutProps} />} />
           <Route path="user/:userId" element={<UserProfilePage {...sharedLayoutProps} />} />
           <Route path="office/:officeId" element={<FirmProfilePage {...sharedLayoutProps} />} />
-          <Route path="matched/:sessionId" element={<PostSwipeLandingPage />} />
           <Route path="result/:sessionId" element={<ResultsPage projects={projects} setProjects={setProjects} />} />
           <Route path="buildings/:buildingId" element={<BuildingDetailPage />} />
           <Route path="board/:boardId" element={<BoardDetailPage />} />
