@@ -1,4 +1,5 @@
-from django.conf import settings
+import json
+
 from django.db import connections
 from django.shortcuts import get_object_or_404
 from rest_framework import permissions, status
@@ -17,8 +18,9 @@ class OfficeDetailView(APIView):
     def get(self, request, office_id):
         office = get_object_or_404(Office, office_id=office_id)
 
-        # Hydrate projects[] via OfficeProjectLink + raw SQL on architecture_vectors
-        building_ids = list(
+        # Hydrate projects[] via OfficeProjectLink + raw SQL on canonical_v2_buildings.
+        # OfficeProjectLink.building_id stores canonical_bld_id ('bld_000344' format).
+        canonical_bld_ids = list(
             OfficeProjectLink.objects
             .filter(office=office)
             .order_by('-confidence', '-created_at')
@@ -26,33 +28,72 @@ class OfficeDetailView(APIView):
         )
 
         projects = []
-        if building_ids:
-            base = settings.IMAGE_BASE_URL.rstrip('/')
+        if canonical_bld_ids:
             with connections['buildings'].cursor() as cur:
                 cur.execute(
                     """
-                    SELECT building_id, name_en, year, program, city, image_photos
-                    FROM architecture_vectors
-                    WHERE building_id = ANY(%s)
+                    SELECT canonical_bld_id,
+                           name,
+                           project_year,
+                           program,
+                           location_city,
+                           display_cover_url,
+                           cover_image_url_default,
+                           covers_by_type,
+                           all_images
+                    FROM canonical_v2_buildings
+                    WHERE canonical_bld_id = ANY(%s)
+                      AND is_publishable = true
                     """,
-                    [building_ids],
+                    [canonical_bld_ids],
                 )
                 rows = cur.fetchall()
-                # Preserve ordering from building_ids (confidence-sorted)
+                # Preserve ordering from canonical_bld_ids (confidence-sorted)
                 row_map = {row[0]: row for row in rows}
-                for bid in building_ids:
-                    if bid not in row_map:
+                for cid in canonical_bld_ids:
+                    if cid not in row_map:
                         continue
-                    bid, name_en, year, program, city, image_photos = row_map[bid]
-                    cover = image_photos[0] if image_photos else None
-                    image_url = f'{base}/{bid}/{cover}' if cover else None
+                    (
+                        canonical_bld_id, name, project_year, program,
+                        location_city, display_cover_url, cover_image_url_default,
+                        covers_by_type_raw, all_images_raw,
+                    ) = row_map[cid]
+
+                    # Image resolution: source-CDN URLs stored in the row (no R2 composition).
+                    # Fallback chain mirrors engine._row_to_card:
+                    #   display_cover_url -> cover_image_url_default
+                    #   -> covers_by_type.exterior -> all_images[0].url -> ''
+                    covers_by_type = covers_by_type_raw or {}
+                    if isinstance(covers_by_type, str):
+                        try:
+                            covers_by_type = json.loads(covers_by_type)
+                        except (ValueError, TypeError):
+                            covers_by_type = {}
+                    all_images = all_images_raw or []
+                    if isinstance(all_images, str):
+                        try:
+                            all_images = json.loads(all_images)
+                        except (ValueError, TypeError):
+                            all_images = []
+
+                    image_url = (
+                        display_cover_url
+                        or cover_image_url_default
+                        or (covers_by_type.get('exterior') if isinstance(covers_by_type, dict) else None)
+                        or ''
+                    )
+                    if not image_url and all_images:
+                        first = all_images[0] if isinstance(all_images[0], dict) else {}
+                        image_url = first.get('url') or ''
+
                     projects.append({
-                        'building_id': bid,
-                        'name_en': name_en,
-                        'image_url': image_url,
-                        'year': year,
+                        'canonical_bld_id': canonical_bld_id,
+                        'building_id': canonical_bld_id,  # backward-compat alias
+                        'name_en': name,                  # FE reads name_en; source is canonical `name`
+                        'image_url': image_url or None,
+                        'year': project_year,
                         'program': program,
-                        'city': city,
+                        'city': location_city,
                     })
 
         serializer = OfficeSerializer(office)

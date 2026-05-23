@@ -246,19 +246,29 @@ class TestOfficeDetailView:
     @pytest.mark.django_db
     @patch('apps.profiles.views.connections')
     def test_get_office_hydrates_projects_from_links(self, mock_connections, api_client, office):
-        # Create a project link
+        """Projects[] hydrated from canonical_v2_buildings via raw SQL (audit #10 fix)."""
         OfficeProjectLink.objects.create(
             office=office,
-            building_id='B00042',
+            building_id='bld_000344',  # canonical_bld_id format
             confidence=1.0,
             source='manual',
         )
-        # Mock raw SQL cursor returning architecture_vectors row.
-        # views.py uses connections['buildings'].cursor() post DB-split Phase A,
-        # so the mock is wired through the connections __getitem__ accessor.
+        # Mock cursor returning canonical_v2_buildings row shape:
+        # (canonical_bld_id, name, project_year, program, location_city,
+        #  display_cover_url, cover_image_url_default, covers_by_type, all_images)
         mock_cur = MagicMock()
         mock_cur.fetchall.return_value = [
-            ('B00042', 'Seattle Central Library', 2004, 'Public', 'Seattle', ['0_cover.jpg']),
+            (
+                'bld_000344',
+                'Seattle Central Library',
+                2004,
+                'Public',
+                'Seattle',
+                'https://cdn.divisare.com/images/bld_000344/cover.jpg',  # display_cover_url
+                None,   # cover_image_url_default
+                None,   # covers_by_type
+                None,   # all_images
+            ),
         ]
         mock_connections.__getitem__.return_value.cursor.return_value.__enter__.return_value = mock_cur
 
@@ -268,14 +278,27 @@ class TestOfficeDetailView:
         data = response.json()
         assert len(data['projects']) == 1
         proj = data['projects'][0]
-        assert proj['building_id'] == 'B00042'
+        assert proj['canonical_bld_id'] == 'bld_000344'
+        assert proj['building_id'] == 'bld_000344'   # backward-compat alias
         assert proj['name_en'] == 'Seattle Central Library'
         assert proj['year'] == 2004
         assert proj['program'] == 'Public'
         assert proj['city'] == 'Seattle'
-        assert proj['image_url'] is not None
-        assert 'B00042' in proj['image_url']
-        assert '0_cover.jpg' in proj['image_url']
+        assert proj['image_url'] == 'https://cdn.divisare.com/images/bld_000344/cover.jpg'
+        # Must NOT use R2 composition (IMAGE_BASE_URL + key) — image is a full CDN URL
+        assert proj['image_url'].startswith('https://')
+
+    @pytest.mark.django_db
+    @patch('apps.profiles.views.connections')
+    def test_get_office_empty_links_returns_empty_projects(self, mock_connections, api_client, office):
+        """No OfficeProjectLink rows -> projects=[] and no SQL cursor call."""
+        url = f'/api/v1/offices/{office.office_id}/'
+        response = api_client.get(url)
+        assert response.status_code == 200
+        data = response.json()
+        assert data['projects'] == []
+        # connections cursor must NOT be called when there are no links
+        mock_connections.__getitem__.return_value.cursor.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

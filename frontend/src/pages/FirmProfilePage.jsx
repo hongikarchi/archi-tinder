@@ -5,79 +5,6 @@ import DescriptionAboutFlipCard from '../components/profile/DescriptionAboutFlip
 import ProjectCard from '../components/profile/ProjectCard'
 import ArticleCard from '../components/profile/ArticleCard'
 
-// TODO: Replace with API call
-// TODO(claude): fetch office by officeId — GET /api/v1/offices/${officeId}/
-const PROJECT_NAMES = [
-  'Seattle Central Library', 'Taipei Performing Arts Center', 'Casa da Musica', 'CCTV Headquarters',
-  'Qatar National Library', 'Fondazione Prada', 'De Rotterdam', 'Milstein Hall',
-  'Seoul National University Museum of Art', 'IIT McCormick Tribune Campus Center',
-]
-const PROJECT_IMAGES = [
-  'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800&q=80',
-  'https://images.unsplash.com/photo-1513694203232-719a280e022f?w=800&q=80',
-  'https://images.unsplash.com/photo-1449844908441-8829872d2607?w=800&q=80',
-  'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&q=80',
-  'https://images.unsplash.com/photo-1511818966892-d7d671e672a2?w=800&q=80',
-  'https://images.unsplash.com/photo-1524815340653-53d719ce3660?w=800&q=80',
-]
-const PROJECT_CITIES = [
-  'Seattle', 'Taipei', 'Porto', 'Beijing', 'Doha', 'Milan',
-  'Rotterdam', 'Ithaca', 'Seoul', 'Chicago',
-]
-// Stable, hardcoded years (no Math.random() to avoid re-render jitter)
-const PROJECT_YEARS = [
-  2004, 2022, 2005, 2012, 2018, 2018, 2013, 2011, 2015, 2003,
-  2020, 2007, 2009, 2014, 2016, 2019, 2008, 2017, 2021, 2006,
-  2023, 2010, 2002, 2024,
-]
-// Programs use the normalized vocabulary from CLAUDE.md (Housing, Office, Museum, etc.)
-const PROJECT_PROGRAMS = [
-  'Public', 'Public', 'Museum', 'Office', 'Public', 'Museum',
-  'Mixed Use', 'Education', 'Museum', 'Education',
-]
-
-const MOCK_OFFICE = {
-  office_id: 'OFF001',
-  name: 'OMA',
-  verified: true,
-  website_url: 'https://oma.com',
-  contact_email: 'info@oma.com',
-  description: 'Office for Metropolitan Architecture is a leading international partnership practicing architecture, urbanism, and cultural analysis. Founded in 1975, OMA combines visionary design with rigorous research to shape the contemporary built environment.',
-  logo_url: 'https://images.unsplash.com/photo-1616423640778-28d1b53229bd?w=400&q=80',
-  location: 'Rotterdam, Netherlands',
-  founded_year: 1975,
-  follower_count: 1247,        // TODO(claude): backend should add follower_count to /api/v1/offices/${officeId}/ Firm/Office Profile contract
-  following_count: 38,         // TODO(claude): backend should add following_count to /api/v1/offices/${officeId}/ Firm/Office Profile contract
-  projects: Array.from({ length: 24 }).map((_, i) => ({
-    building_id: `B${String(i + 1).padStart(5, '0')}`,
-    name_en: PROJECT_NAMES[i % 10] + (i >= 10 ? ` Phase ${Math.floor(i / 10) + 1}` : ''),
-    image_url: PROJECT_IMAGES[i % 6],
-    year: PROJECT_YEARS[i],
-    program: PROJECT_PROGRAMS[i % 10],
-    city: PROJECT_CITIES[i % 10],
-  })),
-  articles: [
-    {
-      title: 'OMA Unveils New Campus Design for Singapore Riverside',
-      source: 'ArchDaily',
-      url: 'https://archdaily.com/',
-      date: '2025-01-15',
-    },
-    {
-      title: 'Rem Koolhaas on the future of urbanism and the post-pandemic city',
-      source: 'Dezeen',
-      url: 'https://dezeen.com/',
-      date: '2024-11-20',
-    },
-    {
-      title: 'Inside OMA’s latest cultural intervention in Doha',
-      source: 'Wallpaper*',
-      url: 'https://wallpaper.com/',
-      date: '2024-09-08',
-    },
-  ],
-}
-
 
 export default function FirmProfilePage() {
   const rawOfficeId = useParams().officeId
@@ -110,6 +37,8 @@ export default function FirmProfilePage() {
         // articles[] absent (Phase 18 External territory) — default to []
         setOffice({ ...data, articles: data.articles || [] })
         setIsFollowing(data.is_following ?? false)
+        // TODO(claude): backend should add follower_count to /api/v1/offices/${officeId}/ Firm/Office Profile contract
+        // TODO(claude): backend should add following_count to /api/v1/offices/${officeId}/ Firm/Office Profile contract
         setFollowerCount(data.follower_count ?? 0)
       })
       .catch(err => {

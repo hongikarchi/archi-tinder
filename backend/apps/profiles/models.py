@@ -27,7 +27,7 @@ class Office(models.Model):
 
     # Make DB integration — primary join key per B1 refinement (Inv 19 §3 + infra/03 §6)
     canonical_id = models.IntegerField(null=True, blank=True, db_index=True)
-    # mirrors architecture_vectors.architect_canonical_ids[] when matched.
+    # mirrors canonical_v2_buildings.architect_canonical_ids[] when matched.
     # Sparse today (Divisare-only); populated by Make DB cleanup.
 
     # Phase 15 SOC1 placeholders (counter caches; Follow events will update)
@@ -48,10 +48,10 @@ class Office(models.Model):
 
 
 class OfficeProjectLink(models.Model):
-    """Links Office to a building in architecture_vectors (Make DB owned).
+    """Links Office to a building in canonical_v2_buildings (Make DB owned).
 
     Per B1 refinement: 4-tier resolution priority:
-      1. canonical_fk: Office.canonical_id matches architecture_vectors.architect_canonical_ids[]
+      1. canonical_fk: Office.canonical_id matches canonical_v2_buildings.architect_canonical_ids[]
       2. manual: user claimed; admin verified
       3. string_match: Levenshtein + token-set similarity vs Office.name + aliases
       4. (unmatched buildings have no row in this table)
@@ -65,7 +65,7 @@ class OfficeProjectLink(models.Model):
 
     link_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     office = models.ForeignKey(Office, on_delete=models.CASCADE, related_name='project_links')
-    building_id = models.TextField(db_index=True)   # -> architecture_vectors.building_id (TEXT, 'B00042' format)
+    building_id = models.TextField(db_index=True)   # -> canonical_v2_buildings.canonical_bld_id (TEXT, 'bld_000344' format)
     confidence = models.FloatField(
         validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
     )                                               # 1.0 for manual/canonical_fk/admin; 0-0.99 for string_match
