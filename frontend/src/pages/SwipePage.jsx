@@ -37,7 +37,7 @@ function ConfidenceBar({ value, phase, progress }) {
     pct = value != null ? Math.round(value * 100) : 100
     stageLabel = 'Converged'
   } else if (phase === 'analyzing') {
-    pct = value != null ? Math.round(value * 100) : 0
+    pct = value != null ? Math.round(value * 100) : 100
     stageLabel = 'Analyzing'
   } else if (phase === 'exploring') {
     const likes = Math.min(likeCount, 4)
