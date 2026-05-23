@@ -11,6 +11,7 @@ from rest_framework.views import APIView
 
 from ..models import AnalysisSession, Project
 from ..serializers import ProjectSerializer, ProjectSelfUpdateSerializer
+from ..caches import evict_taste
 from ._shared import _get_profile
 
 logger = logging.getLogger('apps.recommendation')
@@ -139,6 +140,7 @@ class ProjectDetailView(APIView):
                 project.liked_ids = [item for item in project.liked_ids if item.get('id') not in remove_set]
                 project.saved_ids = [item for item in project.saved_ids if item.get('id') not in remove_set]
                 project.save(update_fields=['liked_ids', 'saved_ids'])
+                evict_taste(profile.id)
             if serializer is not None:
                 serializer.save()
 
