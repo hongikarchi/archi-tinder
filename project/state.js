@@ -74,7 +74,7 @@ window.PROJECT_STATE = {
       title: 'Neon DB-split + production deploy',
       completedAt: '2026-05-22',
       prs: [63],
-      note: 'app DB = user_data (57 migrations, 23 tables), buildings DB = neondb (39,776 rows); deploy 69c9473a verified healthy',
+      note: 'app DB = user_data (57 migrations, 23 tables), buildings DB = neondb (39,776 rows); deploy 69c9473a verified healthy. (Buildings DB later renamed neondb → archi_data on 2026-05-24 by Make DB.)',
     },
   ],
 
