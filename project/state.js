@@ -22,12 +22,26 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-05-24 23:59 KST',
-    head: '18949a8',
+    updatedAt: '2026-05-25 00:45 KST',
+    head: '0690b85',
     branch: 'develop',
   },
 
   done: [
+    {
+      id: 'TASK-MD-RESTRUCTURE-V2',
+      title: '#20 TASK-MD-RESTRUCTURE-V2 — Workflow Rules + Now/Next discipline + audit-verified AUDIT-T4 LOC + AUTH1 frontend scope',
+      completedAt: '2026-05-25',
+      prs: [104],
+      note: 'Task.md 394→305 lines: dropped Phase 1-18 Development Roadmap section (duplicates of Done), replaced with compact Roadmap (Historical) at bottom + new Workflow Rules block at top. Reordered: header → Workflow Rules → Now → Next → Done → Roadmap (Historical). AUTH1 scope narrowed to frontend only (backend Kakao+Naver already shipped). AUDIT-T4 LOC re-verified 2026-05-25 (engine.py 2139, FirmProfilePage 540 refactored down). Codified Now/Next discipline in orchestrate/SKILL.md.',
+    },
+    {
+      id: 'DESIGN-REWORK-MOVE',
+      title: '#19 DESIGN-REWORK-MOVE — move DESIGN-REWORK out of Now (paused, no PR in flight) → Next',
+      completedAt: '2026-05-25',
+      prs: [103],
+      note: 'DESIGN-REWORK moved from Task.md ## Now to ## Next with paused tag — Now definition is "PR in flight" and no design PR in 50+ commits + memory marked paused. state.js now[] → [], DESIGN-REWORK appended to next[]. CLAUDE.md Current State refreshed. dashboard.html emptyMsg already handles empty array.',
+    },
     {
       id: 'TASK-NEXT-RESTRUCTURE',
       title: '#18 TASK-NEXT-RESTRUCTURE — absorb docs/specs into Task.md Next, fix orchestrate stale refs',
@@ -70,20 +84,6 @@ window.PROJECT_STATE = {
       prs: [93],
       note: 'Make DB renamed buildings DB neondb → archi_data; new SELECT-only role make_web (was neondb_owner); canonical_v2_architects table added (14,216 firms). Make Web swapped .env + Railway prod env vars; refreshed .env.example + CLAUDE.md is_publishable stat (39/39,776 → 2,614/39,478 ~6.6%) + docs/database-schema.md. Prod redeploy 04e7633e Online verified.',
     },
-    {
-      id: 'V1-LEGACY-CLEANUP',
-      title: '#11 V1-LEGACY-CLEANUP — drop architecture_vectors refs + orphan tables',
-      completedAt: '2026-05-24',
-      prs: [92],
-      note: 'Neondb local-dev branch drop + 23 orphan user/app tables + legacy architecture_vectors dropped. 3 backend v1 files deleted (algorithm_tester.py, profile_image_latency.py, test_chat_phase_style_labels). 5 stale doc refs refreshed. Plan merry-toasting-dove.md archived.',
-    },
-    {
-      id: 'DEPLOY-2026-05-24',
-      title: 'develop → main deploy — 21 PRs (#68–#89)',
-      completedAt: '2026-05-24',
-      prs: [90],
-      note: 'Release PR #90 squash-merged 21 PRs to main (179d6f6). Railway prod confirmed Online. origin/develop force-reset to match main (Bug #5 carve-out).',
-    },
   ],
 
   now: [],
@@ -91,13 +91,13 @@ window.PROJECT_STATE = {
   next: [
     {
       id: 'AUTH1',
-      title: 'Kakao / Naver OAuth',
-      note: 'Google OAuth only today. Korean users need domestic login. Backend + frontend buttons for both.',
+      title: 'Kakao / Naver OAuth (frontend only — backend done)',
+      note: 'Backend Kakao + Naver implementation shipped: apps/accounts/views.py KakaoLoginView + NaverLoginView, urls.py auth/social/kakao/ + auth/social/naver/. Frontend LoginPage.jsx has Google button only — Kakao + Naver buttons remaining.',
     },
     {
       id: 'AUDIT-T4',
       title: 'Audit Tier 4 — structural refactor (deferred)',
-      note: 'File decomp: engine.py (2079 LOC), App.jsx (795 LOC), BoardDetailPage (1032 LOC), UserProfilePage (990 LOC), PostSwipeLandingPage (696 LOC), SwipePage (666 LOC), FirmProfilePage (611 LOC).',
+      note: 'File decomp (LOC verified 2026-05-25): engine.py 2139 (+60 since first flagged), App.jsx 817, BoardDetailPage 1045, UserProfilePage 992, PostSwipeLandingPage 696, SwipePage 666, FirmProfilePage 540 (recently refactored down from 611).',
     },
     {
       id: 'PHASE16',
@@ -203,6 +203,24 @@ window.PROJECT_STATE = {
 
   prs: [
     {
+      number: 104,
+      title: 'docs: restructure Task.md (Workflow Rules + Now/Next discipline) + update AUTH1/AUDIT-T4',
+      mergedAt: '2026-05-24T15:29:32Z',
+      mergedAtKST: '2026-05-25 00:29 KST',
+    },
+    {
+      number: 103,
+      title: 'docs: move DESIGN-REWORK out of Now (paused, no PR in flight) → Next',
+      mergedAt: '2026-05-24T15:15:51Z',
+      mergedAtKST: '2026-05-25 00:15 KST',
+    },
+    {
+      number: 102,
+      title: 'chore: session-end reporter housekeeping — docs PRs #100/#101',
+      mergedAt: '2026-05-24T15:03:05Z',
+      mergedAtKST: '2026-05-25 00:03 KST',
+    },
+    {
       number: 101,
       title: 'docs: absorb docs/specs into Task.md Next, fix orchestrate stale refs',
       mergedAt: '2026-05-24T14:56:47Z',
@@ -231,24 +249,6 @@ window.PROJECT_STATE = {
       title: 'chore: session-end reporter housekeeping — PRs #92/#93/#94 + plan archive',
       mergedAt: '2026-05-24T04:30:44Z',
       mergedAtKST: '2026-05-24 13:30 KST',
-    },
-    {
-      number: 94,
-      title: 'fix(gemini): hard 15s timeout cap on retry wrapper (228s hang → ≤31s)',
-      mergedAt: '2026-05-24T04:26:12Z',
-      mergedAtKST: '2026-05-24 13:26 KST',
-    },
-    {
-      number: 93,
-      title: 'chore: buildings DB swap to archi_data + make_web role (config + docs)',
-      mergedAt: '2026-05-24T03:19:05Z',
-      mergedAtKST: '2026-05-24 12:19 KST',
-    },
-    {
-      number: 92,
-      title: 'chore: drop v1 architecture_vectors refs — 2 files + 4 doc fixes',
-      mergedAt: '2026-05-24T01:42:39Z',
-      mergedAtKST: '2026-05-24 10:42 KST',
     },
   ],
 
