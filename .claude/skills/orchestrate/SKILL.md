@@ -43,17 +43,17 @@ is absolute.
 2. Read `.claude/Task.md` — current problem board (`## Now` / `## Next` / `## Done`); Phase 16-18 dimensions live in `## Next` directly (the prior `docs/specs/*.md` folder was absorbed 2026-05-24)
 3. Read code directly — the running code is the source of truth for architecture and API surface (per CLAUDE.md `## What This Repo Does`). No standalone Report.md.
 4. If algorithm task: read `docs/algorithm.md` for theory + production hyperparameters
-5. If task references a Phase or open question: read the matching `### <SLUG>` entry in `.claude/Task.md` `## Next`
+5. If task references a Phase or open question: read the matching `#### <SLUG>` entry under one of the `### HIGH` / `### MEDIUM` / `### LOW` buckets in `.claude/Task.md` `## Next`
 
 ## When user requests work
 1. **Session start (Now/Next discipline)** — open `.claude/Task.md`. Read `## Now` first.
    - If `## Now` is non-empty and matches the user's request: continue that entry.
-   - If empty: look in `## Next` for a matching `### <SLUG>` entry. Move it into `## Now` (cut from Next, paste into Now). One initiative slice at a time.
+   - If empty: look in `## Next` for a matching `#### <SLUG>` entry under one of the `### HIGH` / `### MEDIUM` / `### LOW` buckets. Promote it into `## Now` as `### <SLUG> — <one-line title>` (cut from the bucket in Next, paste into Now, raise heading level one). One initiative slice at a time. Prefer `### HIGH` first when picking.
    - If the user's request is brand-new: write a fresh `### <SLUG> — <one-line title>` directly into `## Now`. Slug = ALL-CAPS (e.g. `AUTH1`, `PHASE16`, `IMP5-BYPASS`).
 2. Read `CLAUDE.md` `## Product Identity` + `## Product Constitution` + scan relevant code.
 3. Execute (back-maker / front-maker / etc.).
-4. **Mid-session deferral** — if the user says "미루자" / "later" / "defer", move the Now entry **back to `## Next`** with a one-line rationale note. Do not silently leave it in Now.
-5. **Session end (success)** — `reporter` agent moves the Now entry to `## Done` under `### <title> — RESOLVED YYYY-MM-DD (PR #N)` with PR ref + SHA. Any `Deferred: ...` text in the Done note auto-surfaces as a new `### <SLUG>` in `## Next` (reporter sub-step 2a).
+4. **Mid-session deferral** — if the user says "미루자" / "later" / "defer", move the Now entry **back to `## Next`** with a one-line rationale note (demote one heading level to `#### <SLUG>` and place under the bucket that matches its new status — usually `### MEDIUM` for normal deferrals, `### LOW` for explicit skip). Do not silently leave it in Now.
+5. **Session end (success)** — `reporter` agent moves the Now entry to `## Done` under `### <title> — RESOLVED YYYY-MM-DD (PR #N)` with PR ref + SHA. Any `Deferred: ...` text in the Done note auto-surfaces as a new `#### <SLUG>` under `### MEDIUM` in `## Next` (reporter sub-step 2a; HIGH / LOW only when the Done note explicitly tags it).
 6. **Failure after 2 cycles** — leave the entry in `## Now`, add failure notes inline, report to user. Do not move to Done.
 
 ## When user says "오늘 개발 진행해" or "continue development"

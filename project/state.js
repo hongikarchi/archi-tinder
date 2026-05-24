@@ -12,7 +12,10 @@
  * Three-bucket model:
  *   - `done`      = resolved work (merged, shipped, archived)
  *   - `now`       = current initiative slice (one or more PRs in flight)
- *   - `next`      = backlog / planned / deferred work
+ *   - `next`      = backlog grouped by priority: { high: [], medium: [], low: [] }
+ *                   HIGH   = next initiative slice candidate (specced, ready to pull)
+ *                   MEDIUM = uncategorised pending (review needed before promotion)
+ *                   LOW    = explicitly deferred / skipped (revisit when context shifts)
  *
  * Time convention: all human-facing timestamps are `YYYY-MM-DD HH:mm KST`.
  * PRs additionally carry the raw `mergedAt` (ISO 8601 UTC from `gh pr list`)
@@ -95,118 +98,124 @@ window.PROJECT_STATE = {
 
   now: [],
 
-  next: [
-    {
-      id: 'AUTH1',
-      title: 'Kakao / Naver OAuth (frontend only — backend done)',
-      note: 'Backend Kakao + Naver implementation shipped: apps/accounts/views.py KakaoLoginView + NaverLoginView, urls.py auth/social/kakao/ + auth/social/naver/. Frontend LoginPage.jsx has Google button only — Kakao + Naver buttons remaining.',
-    },
-    {
-      id: 'AUDIT-T4',
-      title: 'Audit Tier 4 — structural refactor (deferred)',
-      note: 'File decomp (LOC verified 2026-05-25): engine.py 2139 (+60 since first flagged), App.jsx 817, BoardDetailPage 1045, UserProfilePage 992, PostSwipeLandingPage 696, SwipePage 666, FirmProfilePage 540 (recently refactored down from 611).',
-    },
-    {
-      id: 'PHASE16',
-      title: 'Phase 16 — Recommendation expansion (Profile-tab 사무소/유저 추천)',
-      note: 'REC1 shipped as Push S3. REC2 (firm) + REC3 (user) target GET /api/v1/recommendations/profile/ returning {offices, users} for a Profile-tab button. Open: firm vector composition, user taste vector, cold-start strategy, match score visibility, diversity/follow-exclusion, tie-breakers, trigger surface UX. Acceptance: p95 ≤800ms Singapore, cold-start graceful, is_publishable=true gating preserved.',
-    },
-    {
-      id: 'PHASE17',
-      title: 'Phase 17 — LLM reverse-questioning (pre-swipe persona classification P1-P4)',
-      note: 'Reverse-question in first 0-2 turns of Taste-tab LLM chat (Q6 Option A confirmed 2026-05-14). Populates UserProfile.persona_summary. Open: reverse-Q examples, per-persona UI branching, persona drift, representation shape, persistence, confidence+override. Acceptance: TTFC Taste-tab chat ≤4000ms; persona override path tested.',
-    },
-    {
-      id: 'PHASE18',
-      title: 'Phase 18 — External connections (firm article crawl)',
-      note: 'Lowest pending priority. Surfaces external articles about a firm on FirmProfilePage (Space / ArchDaily / news keyword match). Phase 15 already shipped External DM wiring. Open: article source priority, crawl freshness, storage, article fallback. Acceptance: ≤10 most recent articles per firm, open in new tab, no FirmProfilePage TTFC regression.',
-    },
-    {
-      id: 'XSESS',
-      title: 'Cross-session signal transfer (deferred)',
-      note: 'liked_ids / pref_vector carry-over between sessions. Current spec: implicit independence (each session starts fresh). Six options A–F. Defer until traffic justifies experiment cost.',
-    },
-    {
-      id: 'EMPTY-STATE',
-      title: 'Empty-state UX (Project = 0)',
-      note: 'First-time user with 0 projects sees Home → project picker. Need explicit empty-state path: guided flow / empty-state + create button / demo query. Low priority — current users are existing accounts.',
-    },
-    {
-      id: 'MULTILANG',
-      title: 'Multi-language behavior (partial)',
-      note: 'Chat phase has bilingual rendering rule. Mobile UI / detail page / persona report multi-language posture unresolved. Korea-first per Constitution Decision Principle 7; English supported, not co-equal.',
-    },
-    {
-      id: 'MOBILE-DESKTOP',
-      title: 'Mobile vs desktop UX divergence',
-      note: 'Current viewport-lock layout is mobile-first. Detail pages on desktop work but unoptimised. Low priority — desktop is secondary.',
-    },
-    {
-      id: 'PRIVACY-PIPA',
-      title: 'Privacy / sharing posture (PIPA + GDPR)',
-      note: 'Phase 13+ Profile/Board public/private visibility shipped. PIPA + GDPR posture for signup data collection / consent flow / retention policy still open. Required before public launch.',
-    },
-    {
-      id: 'CONVO-PERSIST',
-      title: 'Conversation history persistence',
-      note: 'Probe-turn chat history during a session is currently transient. Persist for session resume? Low priority.',
-    },
-    {
-      id: 'IMP5-BYPASS',
-      title: 'IMP-5 cache create timeout wrapper bypass',
-      note: 'backend/apps/recommendation/services/_caches.py:92 IMP-5 Gemini context-cache create call bypasses the _retry_gemini_call timeout wrapper. Gated by context_caching_enabled flag (default OFF) — zero prod impact until toggled on. Wrap on toggle-on.',
-    },
-    {
-      id: 'CODEX-STAGE3-RERUN',
-      title: 'Codex Stage 3 re-audit on prod (post-PR #97)',
-      note: 'CI hang fix (PR #97) deployed via PR #98. Re-run codex Stage 3 (AI Search Flow 5) against prod to verify the 228s /parse-query/ hang no longer fires under load. Cumulative validation of PR #94 timeout cap + PR #97 daemon-thread swap.',
-    },
-    {
-      id: 'PERF-PROJECTS',
-      title: '/projects/ p50 600ms (budget 300ms)',
-      note: 'Codex Round 2: /projects/ p50 latency 600ms vs spec budget 300ms. Probable N+1 or warm cache miss. Investigate query plan.',
-    },
-    {
-      id: 'PERF-DISCOVERY',
-      title: 'Discovery cache-hit 450ms (budget <200ms)',
-      note: 'Codex Round 2: Discovery endpoint cache-hit path measures 450ms; spec budget <200ms. Cache may be doing extra work or response serialization is the floor. Trace.',
-    },
-    {
-      id: 'PERF-SESSION-CREATE',
-      title: 'Session create 5.2s baseline',
-      note: 'POST /analysis/sessions/ measured 5.2s baseline. Pre-existing; flag for investigation.',
-    },
-    {
-      id: 'MATMUL-WARN',
-      title: 'matmul runtime warning (sklearn BLAS dtype)',
-      note: 'sklearn emits matmul dtype warning during clustering. Cosmetic noise but indicates float32/float64 mismatch — quick fix is dtype-align embedding ndarrays before kmeans.',
-    },
-    {
-      id: 'ARCHITECTS-WIRING',
-      title: 'canonical_v2_architects feature wiring',
-      note: 'Make DB shipped canonical_v2_architects (14,216 firms, 4,357 recommendable) in 2026-05-24 DB swap. Make Web profiles_office 4-tier resolution + REC2 (Phase 16) should consume this. Not yet wired.',
-    },
-    {
-      id: 'USER-DATA-ROLE-SEP',
-      title: 'user_data DB role separation (security)',
-      note: 'user_data DB currently uses default neondb_owner role with full privileges. Split to a restricted Make-Web-only role mirroring the SELECT-only make_web role on archi_data. Security backlog.',
-    },
-    {
-      id: 'SNAPSHOT-BRANCH-DROP',
-      title: '1-week post-deploy snapshot branch drop',
-      note: 'After production deploys, Neon snapshot branches retained for 1 week as rollback safety. Drop the lingering ones after retention window (verify Neon dashboard).',
-    },
-    {
-      id: 'CELERY-CORPUS-RANK',
-      title: 'Celery compute_corpus_rank background task',
-      note: 'recommendation_swipeevent row inserts currently compute corpus rank synchronously (or skip when on bookmark POST per PR #79). Async via Celery for proper telemetry without blocking.',
-    },
-    {
-      id: 'DESIGN-REWORK',
-      title: 'Design-system redesign per-component rework (paused)',
-      note: 'Foundation shipped: PR #54 (tokens.css 4 themes + ThemeContext + AppearanceSettings) + PR #59 (theme/font server persistence). Remaining: per-component visual rework (~7,700 LOC, inline styles → CSS Modules + :hover, light-theme visuals) across the frontend, leaf→hub order. Paused — no active PR. Resume via /plan per slice.',
-    },
-  ],
+  next: {
+    high: [
+      {
+        id: 'PHASE17',
+        title: 'Phase 17 — LLM chat refinement: reverse-Q to fill required info slate',
+        note: 'parse_query.py already implements a 0-2 turn probe budget with free-choice abstract A-vs-B axes. This task drops persona classification (P1-P4) and re-scopes the work to (1) define an explicit "required info slate" the chat must collect (filter fields like program / style / material / location_country), and (2) refine LLM probe behaviour so it deterministically targets missing slate fields instead of free-choice axes. Open: which fields are required vs optional, probe priority order, optional-slate inclusion, fallback when 2-turn budget exhausts with slate gap, conversational shape (abstract A-vs-B vs direct field-asking), cross-language posture (Korea-first preserved). Acceptance: TTFC budget 4000ms not regressed; 2-turn probe always lands required-slate ≥1 field; A/B slate-completion-rate vs current prompt.',
+      },
+    ],
+    medium: [
+      {
+        id: 'PHASE18',
+        title: 'Phase 18 — External connections (firm article crawl)',
+        note: 'Lowest pending priority. Surfaces external articles about a firm on FirmProfilePage (Space / ArchDaily / news keyword match). Phase 15 already shipped External DM wiring. Open: article source priority, crawl freshness, storage, article fallback. Acceptance: ≤10 most recent articles per firm, open in new tab, no FirmProfilePage TTFC regression.',
+      },
+      {
+        id: 'XSESS',
+        title: 'Cross-session signal transfer (deferred)',
+        note: 'liked_ids / pref_vector carry-over between sessions. Current spec: implicit independence (each session starts fresh). Six options A–F. Defer until traffic justifies experiment cost.',
+      },
+      {
+        id: 'EMPTY-STATE',
+        title: 'Empty-state UX (Project = 0)',
+        note: 'First-time user with 0 projects sees Home → project picker. Need explicit empty-state path: guided flow / empty-state + create button / demo query. Low priority — current users are existing accounts.',
+      },
+      {
+        id: 'MULTILANG',
+        title: 'Multi-language behavior (partial)',
+        note: 'Chat phase has bilingual rendering rule. Mobile UI / detail page / persona report multi-language posture unresolved. Korea-first per Constitution Decision Principle 7; English supported, not co-equal.',
+      },
+      {
+        id: 'MOBILE-DESKTOP',
+        title: 'Mobile vs desktop UX divergence',
+        note: 'Current viewport-lock layout is mobile-first. Detail pages on desktop work but unoptimised. Low priority — desktop is secondary.',
+      },
+      {
+        id: 'PRIVACY-PIPA',
+        title: 'Privacy / sharing posture (PIPA + GDPR)',
+        note: 'Phase 13+ Profile/Board public/private visibility shipped. PIPA + GDPR posture for signup data collection / consent flow / retention policy still open. Required before public launch.',
+      },
+      {
+        id: 'CONVO-PERSIST',
+        title: 'Conversation history persistence',
+        note: 'Probe-turn chat history during a session is currently transient. Persist for session resume? Low priority.',
+      },
+      {
+        id: 'IMP5-BYPASS',
+        title: 'IMP-5 cache create timeout wrapper bypass',
+        note: 'backend/apps/recommendation/services/_caches.py:92 IMP-5 Gemini context-cache create call bypasses the _retry_gemini_call timeout wrapper. Gated by context_caching_enabled flag (default OFF) — zero prod impact until toggled on. Wrap on toggle-on.',
+      },
+      {
+        id: 'CODEX-STAGE3-RERUN',
+        title: 'Codex Stage 3 re-audit on prod (post-PR #97)',
+        note: 'CI hang fix (PR #97) deployed via PR #98. Re-run codex Stage 3 (AI Search Flow 5) against prod to verify the 228s /parse-query/ hang no longer fires under load. Cumulative validation of PR #94 timeout cap + PR #97 daemon-thread swap.',
+      },
+      {
+        id: 'PERF-PROJECTS',
+        title: '/projects/ p50 600ms (budget 300ms)',
+        note: 'Codex Round 2: /projects/ p50 latency 600ms vs spec budget 300ms. Probable N+1 or warm cache miss. Investigate query plan.',
+      },
+      {
+        id: 'PERF-DISCOVERY',
+        title: 'Discovery cache-hit 450ms (budget <200ms)',
+        note: 'Codex Round 2: Discovery endpoint cache-hit path measures 450ms; spec budget <200ms. Cache may be doing extra work or response serialization is the floor. Trace.',
+      },
+      {
+        id: 'PERF-SESSION-CREATE',
+        title: 'Session create 5.2s baseline',
+        note: 'POST /analysis/sessions/ measured 5.2s baseline. Pre-existing; flag for investigation.',
+      },
+      {
+        id: 'MATMUL-WARN',
+        title: 'matmul runtime warning (sklearn BLAS dtype)',
+        note: 'sklearn emits matmul dtype warning during clustering. Cosmetic noise but indicates float32/float64 mismatch — quick fix is dtype-align embedding ndarrays before kmeans.',
+      },
+      {
+        id: 'ARCHITECTS-WIRING',
+        title: 'canonical_v2_architects feature wiring',
+        note: 'Make DB shipped canonical_v2_architects (14,216 firms, 4,357 recommendable) in 2026-05-24 DB swap. Make Web profiles_office 4-tier resolution + REC2 (Phase 16) should consume this. Not yet wired.',
+      },
+      {
+        id: 'USER-DATA-ROLE-SEP',
+        title: 'user_data DB role separation (security)',
+        note: 'user_data DB currently uses default neondb_owner role with full privileges. Split to a restricted Make-Web-only role mirroring the SELECT-only make_web role on archi_data. Security backlog.',
+      },
+      {
+        id: 'SNAPSHOT-BRANCH-DROP',
+        title: '1-week post-deploy snapshot branch drop',
+        note: 'After production deploys, Neon snapshot branches retained for 1 week as rollback safety. Drop the lingering ones after retention window (verify Neon dashboard).',
+      },
+      {
+        id: 'CELERY-CORPUS-RANK',
+        title: 'Celery compute_corpus_rank background task',
+        note: 'recommendation_swipeevent row inserts currently compute corpus rank synchronously (or skip when on bookmark POST per PR #79). Async via Celery for proper telemetry without blocking.',
+      },
+      {
+        id: 'DESIGN-REWORK',
+        title: 'Design-system redesign per-component rework (paused)',
+        note: 'Foundation shipped: PR #54 (tokens.css 4 themes + ThemeContext + AppearanceSettings) + PR #59 (theme/font server persistence). Remaining: per-component visual rework (~7,700 LOC, inline styles → CSS Modules + :hover, light-theme visuals) across the frontend, leaf→hub order. Paused — no active PR. Resume via /plan per slice.',
+      },
+    ],
+    low: [
+      {
+        id: 'AUTH1',
+        title: 'Kakao / Naver OAuth (frontend only — backend done)',
+        note: 'Backend Kakao + Naver implementation shipped: apps/accounts/views.py KakaoLoginView + NaverLoginView, urls.py auth/social/kakao/ + auth/social/naver/. Frontend LoginPage.jsx has Google button only — Kakao + Naver buttons remaining.',
+      },
+      {
+        id: 'AUDIT-T4',
+        title: 'Audit Tier 4 — structural refactor (deferred)',
+        note: 'File decomp (LOC verified 2026-05-25): engine.py 2139 (+60 since first flagged), App.jsx 817, BoardDetailPage 1045, UserProfilePage 992, PostSwipeLandingPage 696, SwipePage 666, FirmProfilePage 540 (recently refactored down from 611).',
+      },
+      {
+        id: 'PHASE16',
+        title: 'Phase 16 — Recommendation expansion (Profile-tab 사무소/유저 추천)',
+        note: 'REC1 shipped as Push S3. REC2 (firm) + REC3 (user) target GET /api/v1/recommendations/profile/ returning {offices, users} for a Profile-tab button. Open: firm vector composition, user taste vector, cold-start strategy, match score visibility, diversity/follow-exclusion, tie-breakers, trigger surface UX. Acceptance: p95 ≤800ms Singapore, cold-start graceful, is_publishable=true gating preserved.',
+      },
+    ],
+  },
 
   prs: [
     {
@@ -391,7 +400,7 @@ window.PROJECT_STATE = {
     { phase: '14', focus: 'Board system — board detail view, follow, "Love this!" reaction', status: 'shipped' },
     { phase: '15', focus: 'Social foundation — external DM links, MATCHED! results screen', status: 'shipped' },
     { phase: '16', focus: 'Recommendation expansion — Profile-tab office + user recs', status: 'pending' },
-    { phase: '17', focus: 'LLM reverse-questioning — pre-swipe persona classification', status: 'pending' },
+    { phase: '17', focus: 'LLM chat refinement — reverse-Q to fill required info slate (persona classification dropped)', status: 'pending' },
     { phase: '18', focus: 'External connections — firm article crawl (Space, ArchDaily, news)', status: 'pending' },
     { phase: '19–26', focus: 'Tab 3-structure replan + P1–P6 latency/UX overhaul', status: 'shipped' },
     { phase: 'design', focus: 'Design-system redesign — light-mode tokens, 4-theme switcher, frontend rework', status: 'in progress' },

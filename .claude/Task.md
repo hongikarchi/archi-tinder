@@ -11,7 +11,12 @@
 - **Mid-session** — if work in `## Now` gets deferred ("미루자"), move it back to `## Next` with a one-line rationale note. If a new sub-task appears, add it under the active Now entry's body or create a new Now entry.
 - **Session end (success)** — reporter moves `## Now` → `## Done` with PR ref + SHA. If the Now entry's note mentions a deferred follow-up (`Deferred: ...`), reporter also auto-surfaces a matching `## Next ### <SLUG>` per its sub-step 2a (see `.claude/agents/reporter.md`).
 
-**Naming convention**: ALL-CAPS-SLUG header (`AUTH1`, `PHASE16`, `IMP5-BYPASS`, `PERF-DISCOVERY`, `DESIGN-REWORK`). One `### <SLUG> — <one-line title>` header per item, multi-line body for context. Sub-tasks use `- [ ]` / `- [x]` checkboxes.
+**Naming convention**: ALL-CAPS-SLUG header (`AUTH1`, `PHASE16`, `IMP5-BYPASS`, `PERF-DISCOVERY`, `DESIGN-REWORK`). In `## Now` and `## Done`, items are `### <SLUG> — <one-line title>`. In `## Next`, items live under priority buckets `### HIGH` / `### MEDIUM` / `### LOW` and use `#### <SLUG> — <one-line title>` (one level deeper). Multi-line body for context. Sub-tasks use `- [ ]` / `- [x]` checkboxes.
+
+**Priority bucket semantics** (`## Next`):
+- **HIGH** — specced, ready to pull into `## Now`. Open dimensions resolved or acceptable to resolve during implementation.
+- **MEDIUM** — uncategorised pending. Needs review before promotion (scope, urgency, prerequisites).
+- **LOW** — explicitly deferred / skipped. Not blocking; revisit when context shifts (traffic, prereq shipped, priority change).
 
 Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separate collaborator post-2026-05-18 — see CLAUDE.md `## Rules`. Tracked in `docs/algorithm.md`, not this board.
 
@@ -25,21 +30,108 @@ _(none — no active initiative slice with a PR in flight.)_
 
 ## Next
 
-> Flat backlog. Priority is admin tiebreaker (see CLAUDE.md `## Product Constitution`
-> Decision Principles). Phase 16-18 dimensions inlined here (formerly `docs/specs/*`,
-> absorbed 2026-05-24). Pending strategic + operational items live side-by-side.
-> Algorithm theory + production hyperparameters still live in `docs/algorithm.md`
-> (admin-owned, reporter syncs Production Value column only).
+> Backlog grouped by priority bucket (`### HIGH` / `### MEDIUM` / `### LOW`). Each
+> item is a `#### <SLUG>` entry one level deeper. Bucket semantics described in
+> `## Workflow Rules` above. Phase 16-18 dimensions inlined here (formerly
+> `docs/specs/*`, absorbed 2026-05-24). Algorithm theory + production
+> hyperparameters still live in `docs/algorithm.md` (admin-owned, reporter syncs
+> Production Value column only).
 
-### AUTH1 — Kakao / Naver OAuth (frontend only — backend done)
+### HIGH
+
+#### PHASE17 — LLM Chat refinement: reverse-Q to fill required info slate
+`backend/apps/recommendation/services/parse_query.py` already implements a 0-2 turn probe budget where the LLM free-choices an abstract A-vs-B axis. This task **drops persona classification (P1-P4)** and re-scopes the work: (1) define an explicit *required information slate* the chat must collect — filter fields the downstream search needs — and (2) refine LLM probe behaviour so probes deterministically target missing slate fields when the user's first turn is too diffuse, instead of choosing axes freely.
+
+Goal: a diffuse natural-language query ("좋은 거 보여줘", "추천해줘") still ends with a usable filter set, by virtue of the probe loop asking specifically for the gaps.
+
+Open dimensions:
+- **Required info slate** — which filter fields are mandatory? Today's 0-turn skip rule = "`program` + at least one of (`style` | `material` | `location_country`)". Keep / expand / contract?
+- **Probe priority** — among missing required fields, which is asked first? (e.g., program > material > style > location)
+- **Optional slate** — `color_tone` / `year_min-max` / `transparency` etc. — never probed (auto-inferred only) vs allowed to consume probe budget when essentials are already covered?
+- **Fallback when 2-turn budget exhausts with slate gap** — best-effort filter / generic default / broad-pool fallback?
+- **Conversational shape** — keep current abstract A-vs-B style ("따뜻한 재료감 vs 차가운 기하성") vs allow direct field-asking ("어떤 program이 필요하세요?")? Mix?
+- **Cross-language posture** — Korean query → Korean probe (current). No change (Constitution Decision Principle 7).
+
+Acceptance:
+- TTFC for Taste-tab chat does not regress beyond the 4000 ms budget (per `docs/algorithm.md`).
+- After ≤2 probe turns, `filter_priority` always contains at least one required-slate field.
+- A/B run on a fixed 50-query sample comparing slate-completion-rate (current prompt vs refined prompt) — refined prompt must not regress and should improve on diffuse-prior cases.
+
+### MEDIUM
+
+#### PHASE18 — External Connections (firm article crawl)
+Lowest pending strategic priority. Surfaces external articles about a firm on FirmProfilePage (Space / ArchDaily / news keyword match). Phase 15 already shipped External DM wiring (`Office.contact_email`, `Office.website`, `UserProfile.external_links`).
+
+Open dimensions:
+- **Article source priority** — Space-first (Korean) vs ArchDaily-first (global) vs parity? (Korea-first principle suggests Space)
+- **Crawl freshness** — real-time on view / scheduled daily-weekly / event-driven?
+- **Storage** — denormalised in `Office` row / separate `OfficeArticle` table / external CDN?
+- **Article fallback** — empty section / hide section / "no recent articles" placeholder?
+
+Acceptance: ≤10 most recent articles per firm; open in new tab (legal posture); no FirmProfilePage TTFC regression (article fetch async, doesn't block initial paint).
+
+#### XSESS — Cross-session signal transfer (deferred)
+Same project's multiple sessions — should `liked_ids` / `pref_vector` carry over between sessions? Current spec is implicit independence (each session starts fresh). Six options: A independent (status quo) / B exposure-only carry / C asymmetric negative-only / D fade-decay carry / E full warm-start / F user-controlled toggle. Defer until traffic justifies experiment cost.
+
+#### EMPTY-STATE — Empty-state UX (Project = 0)
+First-time user with 0 projects sees Home → project picker. Need explicit empty-state path: guided flow / empty-state + create button / demo query? Low priority — current users are existing accounts.
+
+#### MULTILANG — Multi-language behavior (partial)
+Chat phase has bilingual rendering rule. Mobile UI / detail page / persona report's multi-language posture unresolved. Korea-first per Constitution Decision Principle 7; English supported, not co-equal.
+
+#### MOBILE-DESKTOP — Mobile vs desktop UX divergence
+Current viewport-lock layout is mobile-first. Detail pages on desktop work but unoptimised. Low priority — desktop is secondary.
+
+#### PRIVACY-PIPA — Privacy / sharing posture
+Phase 13+ Profile/Board public/private visibility shipped. PIPA + GDPR posture for signup data collection / consent flow / retention policy still open. **Required before public launch.**
+
+#### CONVO-PERSIST — Conversation history persistence
+Probe-turn chat history during a session is currently transient. Persist for session resume? Low priority.
+
+#### IMP5-BYPASS — IMP-5 cache create timeout wrapper bypass
+`backend/apps/recommendation/services/_caches.py:92` IMP-5 Gemini context-cache create call bypasses the `_retry_gemini_call` timeout wrapper. Gated by `context_caching_enabled` flag (default OFF) — zero prod impact until toggled on. Wrap on toggle-on.
+
+#### CODEX-STAGE3-RERUN — Codex Stage 3 re-audit on prod (post-PR #97)
+CI hang fix (PR #97) deployed via PR #98. Re-run codex Stage 3 (AI Search Flow 5) against prod to verify the 228 s `/parse-query/` hang no longer fires under load. Cumulative validation of PR #94 timeout cap + PR #97 daemon-thread swap.
+
+#### PERF-PROJECTS — `/projects/` p50 600ms (budget 300ms)
+Codex Round 2 observation: `/projects/` endpoint p50 latency 600 ms vs spec budget 300 ms. Probable N+1 elsewhere or warm cache miss. Investigate query plan.
+
+#### PERF-DISCOVERY — Discovery cache-hit 450ms (budget <200ms)
+Codex Round 2: Discovery endpoint cache-hit path measures 450 ms; spec budget <200 ms. Cache may be doing extra work or response serialization is the floor. Trace.
+
+#### PERF-SESSION-CREATE — Session create 5.2s baseline
+POST `/analysis/sessions/` measured 5.2 s baseline. Pre-existing; flag for investigation.
+
+#### MATMUL-WARN — matmul runtime warning (sklearn BLAS dtype)
+sklearn emits matmul dtype warning during clustering. Cosmetic noise but indicates float32 / float64 mismatch — quick fix is dtype-align embedding ndarrays before kmeans.
+
+#### ARCHITECTS-WIRING — `canonical_v2_architects` feature wiring
+Make DB shipped new table `canonical_v2_architects` (14,216 firms, 4,357 recommendable) in 2026-05-24 DB swap. Make Web `profiles_office` 4-tier resolution + REC2 (Phase 16) should consume this. Not yet wired.
+
+#### USER-DATA-ROLE-SEP — `user_data` DB role separation (security)
+`user_data` DB currently uses default `neondb_owner` role with full privileges. Split to a restricted Make-Web-only role mirroring the SELECT-only `make_web` role on `archi_data`. Security backlog.
+
+#### SNAPSHOT-BRANCH-DROP — 1-week post-deploy snapshot branch drop
+After production deploys, Neon snapshot branches retained for 1 week as rollback safety. Drop the lingering ones after retention window (verify Neon dashboard).
+
+#### CELERY-CORPUS-RANK — Celery `compute_corpus_rank` background task
+`recommendation_swipeevent` row inserts currently compute corpus rank synchronously (or skip when on bookmark POST per PR #79). Async via Celery for proper telemetry without blocking.
+
+#### DESIGN-REWORK — Design-system redesign per-component rework (paused)
+Foundation shipped: PR #54 (`tokens.css` 4 themes + `ThemeContext` + `AppearanceSettings`) + PR #59 (theme/font server persistence). Remaining: per-component visual rework (~7,700 LOC, inline styles → CSS Modules + `:hover`, light-theme visuals) across the frontend, leaf→hub order. Paused — no active PR. Resume via `/plan` per slice.
+
+### LOW
+
+#### AUTH1 — Kakao / Naver OAuth (frontend only — backend done)
 Backend Kakao + Naver implementation shipped: `apps/accounts/views.py` KakaoLoginView + NaverLoginView, `apps/accounts/urls.py` `auth/social/kakao/` + `auth/social/naver/`, `apps/accounts/models.py` provider choices. Frontend `LoginPage.jsx` currently has Google button only.
 - [ ] Kakao button on `LoginPage.jsx` (loading state already typed `'kakao'`)
 - [ ] Naver button on `LoginPage.jsx` (loading state not yet typed `'naver'`)
 
-### AUDIT-T4 — Structural refactor (deferred)
+#### AUDIT-T4 — Structural refactor (deferred)
 File decomp (LOC verified 2026-05-25): engine.py 2139 (+60 since first flagged), App.jsx 817, BoardDetailPage 1045, UserProfilePage 992, PostSwipeLandingPage 696, SwipePage 666, FirmProfilePage 540 (recently refactored down from 611).
 
-### PHASE16 — Recommendation Expansion (Profile-tab 사무소/유저 추천)
+#### PHASE16 — Recommendation Expansion (Profile-tab 사무소/유저 추천)
 Re-scoped 2026-05-14 (REC1 already shipped as Push S3). REC2 (firm) + REC3 (user) target a single composite endpoint `GET /api/v1/recommendations/profile/` returning `{offices: [...], users: [...]}` for a Profile-tab button. Landing tab removed (Push S6).
 
 Open dimensions (admin decision before implementation):
@@ -52,81 +144,6 @@ Open dimensions (admin decision before implementation):
 - **Trigger surface UX** — Single button → modal / full-page / toggle between Office/User?
 
 Acceptance: `/recommendations/profile/` p95 ≤ 800 ms on Singapore deploy; cold-start UX graceful; `canonical_bld_id` + `is_publishable=true` gating preserved per CLAUDE.md hard rules.
-
-### PHASE17 — LLM Reverse-Q + Persona Classification (P1-P4)
-Reverse-question lives in first 0-2 turns of Taste-tab LLM chat (pre-swipe; Q6 Option A confirmed 2026-05-14). Populates `UserProfile.persona_summary` (PROF2 field reserved).
-
-Open dimensions:
-- **Reverse-Q examples** — adversarial / implicit / non-verbal (deduce from filter shape)?
-- **Per-persona UI branching** — silent classification + tailored cards vs explicit "I am: ☐ jobseeker ☐ hiring ..." prompt?
-- **Persona drift** — user can be P1 one session, P2 another — explicit support?
-- **Persona representation shape** — structured `{persona_type, one_liner, styles[], programs[]}` vs flat `persona_label`?
-- **Persona persistence** — per-session / per-user / per-user-with-current-session-override?
-- **Confidence + override** — low-confidence: ask user vs silent commit?
-
-Acceptance: TTFC for Taste-tab chat does not regress beyond the 4000 ms budget (per `docs/algorithm.md`); persona override path tested.
-
-### PHASE18 — External Connections (firm article crawl)
-Lowest pending priority. Surfaces external articles about a firm on FirmProfilePage (Space / ArchDaily / news keyword match). Phase 15 already shipped External DM wiring (`Office.contact_email`, `Office.website`, `UserProfile.external_links`).
-
-Open dimensions:
-- **Article source priority** — Space-first (Korean) vs ArchDaily-first (global) vs parity? (Korea-first principle suggests Space)
-- **Crawl freshness** — real-time on view / scheduled daily-weekly / event-driven?
-- **Storage** — denormalised in `Office` row / separate `OfficeArticle` table / external CDN?
-- **Article fallback** — empty section / hide section / "no recent articles" placeholder?
-
-Acceptance: ≤10 most recent articles per firm; open in new tab (legal posture); no FirmProfilePage TTFC regression (article fetch async, doesn't block initial paint).
-
-### XSESS — Cross-session signal transfer (deferred)
-Same project's multiple sessions — should `liked_ids` / `pref_vector` carry over between sessions? Current spec is implicit independence (each session starts fresh). Six options: A independent (status quo) / B exposure-only carry / C asymmetric negative-only / D fade-decay carry / E full warm-start / F user-controlled toggle. Defer until traffic justifies experiment cost.
-
-### EMPTY-STATE — Empty-state UX (Project = 0)
-First-time user with 0 projects sees Home → project picker. Need explicit empty-state path: guided flow / empty-state + create button / demo query? Low priority — current users are existing accounts.
-
-### MULTILANG — Multi-language behavior (partial)
-Chat phase has bilingual rendering rule. Mobile UI / detail page / persona report's multi-language posture unresolved. Korea-first per Constitution Decision Principle 7; English supported, not co-equal.
-
-### MOBILE-DESKTOP — Mobile vs desktop UX divergence
-Current viewport-lock layout is mobile-first. Detail pages on desktop work but unoptimised. Low priority — desktop is secondary.
-
-### PRIVACY-PIPA — Privacy / sharing posture
-Phase 13+ Profile/Board public/private visibility shipped. PIPA + GDPR posture for signup data collection / consent flow / retention policy still open. **Required before public launch.**
-
-### CONVO-PERSIST — Conversation history persistence
-Probe-turn chat history during a session is currently transient. Persist for session resume? Low priority.
-
-### IMP5-BYPASS — IMP-5 cache create timeout wrapper bypass
-`backend/apps/recommendation/services/_caches.py:92` IMP-5 Gemini context-cache create call bypasses the `_retry_gemini_call` timeout wrapper. Gated by `context_caching_enabled` flag (default OFF) — zero prod impact until toggled on. Wrap on toggle-on.
-
-### CODEX-STAGE3-RERUN — Codex Stage 3 re-audit on prod (post-PR #97)
-CI hang fix (PR #97) deployed via PR #98. Re-run codex Stage 3 (AI Search Flow 5) against prod to verify the 228 s `/parse-query/` hang no longer fires under load. Cumulative validation of PR #94 timeout cap + PR #97 daemon-thread swap.
-
-### PERF-PROJECTS — `/projects/` p50 600ms (budget 300ms)
-Codex Round 2 observation: `/projects/` endpoint p50 latency 600 ms vs spec budget 300 ms. Probable N+1 elsewhere or warm cache miss. Investigate query plan.
-
-### PERF-DISCOVERY — Discovery cache-hit 450ms (budget <200ms)
-Codex Round 2: Discovery endpoint cache-hit path measures 450 ms; spec budget <200 ms. Cache may be doing extra work or response serialization is the floor. Trace.
-
-### PERF-SESSION-CREATE — Session create 5.2s baseline
-POST `/analysis/sessions/` measured 5.2 s baseline. Pre-existing; flag for investigation.
-
-### MATMUL-WARN — matmul runtime warning (sklearn BLAS dtype)
-sklearn emits matmul dtype warning during clustering. Cosmetic noise but indicates float32 / float64 mismatch — quick fix is dtype-align embedding ndarrays before kmeans.
-
-### ARCHITECTS-WIRING — `canonical_v2_architects` feature wiring
-Make DB shipped new table `canonical_v2_architects` (14,216 firms, 4,357 recommendable) in 2026-05-24 DB swap. Make Web `profiles_office` 4-tier resolution + REC2 (Phase 16) should consume this. Not yet wired.
-
-### USER-DATA-ROLE-SEP — `user_data` DB role separation (security)
-`user_data` DB currently uses default `neondb_owner` role with full privileges. Split to a restricted Make-Web-only role mirroring the SELECT-only `make_web` role on `archi_data`. Security backlog.
-
-### SNAPSHOT-BRANCH-DROP — 1-week post-deploy snapshot branch drop
-After production deploys, Neon snapshot branches retained for 1 week as rollback safety. Drop the lingering ones after retention window (verify Neon dashboard).
-
-### CELERY-CORPUS-RANK — Celery `compute_corpus_rank` background task
-`recommendation_swipeevent` row inserts currently compute corpus rank synchronously (or skip when on bookmark POST per PR #79). Async via Celery for proper telemetry without blocking.
-
-### DESIGN-REWORK — Design-system redesign per-component rework (paused)
-Foundation shipped: PR #54 (`tokens.css` 4 themes + `ThemeContext` + `AppearanceSettings`) + PR #59 (theme/font server persistence). Remaining: per-component visual rework (~7,700 LOC, inline styles → CSS Modules + `:hover`, light-theme visuals) across the frontend, leaf→hub order. Paused — no active PR. Resume via `/plan` per slice.
 
 ---
 
