@@ -1,120 +1,25 @@
 # Task Board
 
-> Auto-updated by the orchestrator. When you request work, the orchestrator reads
-> the current code, then adds/updates tasks here before executing.
-> Categories: Frontend, Backend, Auth, UX/Design, Infrastructure
-> (Algorithm work is owned by a separate collaborator post-2026-05-18.)
+> Authored by the session; updated by the `reporter` agent at session end. The dashboard
+> (`project/dashboard.html` ← `project/state.js`) renders this file's three active
+> sections (`## Now` / `## Next` / `## Done`). The compact `## Roadmap (Historical)`
+> section at the bottom is a phase-level summary, not a task list.
+
+## Workflow Rules
+
+- **Session start** — read `## Now` first. If empty and the user is starting new work, move the matched `## Next ### <SLUG>` entry into `## Now` (or write a fresh `### <SLUG>` if brand-new). One initiative slice at a time.
+- **Mid-session** — if work in `## Now` gets deferred ("미루자"), move it back to `## Next` with a one-line rationale note. If a new sub-task appears, add it under the active Now entry's body or create a new Now entry.
+- **Session end (success)** — reporter moves `## Now` → `## Done` with PR ref + SHA. If the Now entry's note mentions a deferred follow-up (`Deferred: ...`), reporter also auto-surfaces a matching `## Next ### <SLUG>` per its sub-step 2a (see `.claude/agents/reporter.md`).
+
+**Naming convention**: ALL-CAPS-SLUG header (`AUTH1`, `PHASE16`, `IMP5-BYPASS`, `PERF-DISCOVERY`, `DESIGN-REWORK`). One `### <SLUG> — <one-line title>` header per item, multi-line body for context. Sub-tasks use `- [ ]` / `- [x]` checkboxes.
+
+Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separate collaborator post-2026-05-18 — see CLAUDE.md `## Rules`. Tracked in `docs/algorithm.md`, not this board.
 
 ---
 
-## Development Roadmap
+## Now
 
-> Orchestrator: follow this order. Each Phase's tasks are referenced by ID.
-
-### Phase 1: Critical Bug Fix -- COMPLETED 2026-04-03
-1. **B4** -- Mobile Google login (auth-code flow)
-2. **B1** -- "View Result" button timing
-3. **B2** -- Card repetition (exposed_ids)
-4. **B3** -- "No buildings match" fallback
-
-### Phase 2: Stability -- COMPLETED 2026-04-03
-5. **F1** -- Swipe error handling + state sync
-6. **A3** -- Recency weight math protection
-7. **BE1** -- API timeout/retry
-
-### Phase 3: Performance -- A1 COMPLETED, A2 VALIDATED
-8. **A1** -- Pool caching + KMeans caching + prefetch -- COMPLETED 2026-04-03
-9. **A2** -- Algo-tester 100 personas -- validated (smoke test passed, full run pending)
-
-### Phase 4: UX Enhancement -- COMPLETED 2026-04-03
-10. **UX1** -- Tutorial popup -- COMPLETED 2026-04-03
-11. **UX3** -- Action card message improvement -- COMPLETED 2026-04-03
-12. **F2** -- Image load failure handling -- COMPLETED 2026-04-03
-
-### Phase 4.5: Swipe Bug Fix -- B5, B6, B2v2 COMPLETED 2026-04-04 (B3v2 skipped)
-13. **B5** -- Fast swipe race condition (no swipe lock, concurrent requests)
-14. **B6** -- Card suddenly changes (prefetch response overwrites current card)
-15. **B2v2** -- Same cards still repeating (prefetch uses stale exposed_ids)
-16. **B3v2** -- Pool exhaustion during exploring phase returns null (SKIPPED -- low priority)
-
-### Phase 5: New Features -- UX2, F3 COMPLETED 2026-04-04 (AUTH1 deferred)
-17. **UX2** -- Persona Report AI image generation -- COMPLETED 2026-04-04
-18. **AUTH1** -- Kakao / Naver OAuth (deferred -- future)
-19. **F3** -- Mobile optimization -- COMPLETED 2026-04-04
-
-### Phase 6: Cleanup -- COMPLETED 2026-04-04
-20. **INFRA1** -- Backend integration tests -- COMPLETED 2026-04-04
-21. **INFRA2~4** -- Idempotency, total_rounds, console.error -- COMPLETED 2026-04-04
-22. **BE2** -- Gemini error handling improvement -- COMPLETED 2026-04-04
-
-### Phase 7: Codebase Audit Fixes -- COMPLETED 2026-04-04
-23. **AUDIT1** -- Remove unused deps, dead code, consolidate tests, fix deprecations -- COMPLETED 2026-04-04
-
-### Phase 8: E2E Testing Infrastructure -- COMPLETED 2026-04-05
-24. **TEST1** -- E2E visual test runner module -- COMPLETED 2026-04-05
-
-### Phase 9: E2E Runner Fix -- COMPLETED 2026-04-07
-25. **TEST2** -- Rewrite runner.py to match actual frontend UI flow -- COMPLETED 2026-04-06
-26. **TEST3** -- Fix screenshots, card visibility, timing breakdown -- COMPLETED 2026-04-07
-
-### Phase 10: Swipe API Latency Fix -- COMPLETED 2026-04-05
-27. **PERF1** -- Non-algorithm swipe latency optimizations -- COMPLETED 2026-04-05
-
-### Phase 11: Frontend Bug Fix -- COMPLETED 2026-04-05
-28. **B7** -- Keyboard swiping blocked in gallery mode (SwipePage.jsx) -- COMPLETED 2026-04-05
-29. **B8** -- Card disappears after swipe race condition (App.jsx) -- COMPLETED 2026-04-05
-
-### Phase 12: Critical Swipe Bug Fixes -- COMPLETED 2026-04-05
-30. **B9** -- Cards stop loading after ~N swipes (never set currentCard null) -- COMPLETED 2026-04-05
-31. **B10** -- Refresh creates new session instead of resuming (SessionStateView + currentHint) -- COMPLETED 2026-04-05
-32. **B11** -- Same card appears twice (client_buffer_ids in exposed_ids) -- COMPLETED 2026-04-05
-
-### Phase 13: Profile System -- COMPLETED 2026-05-06
-33. **PROF1** -- OfficeProfile model + Make DB integration (blue-mark, project list, external links, basic info) -- COMPLETED 2026-04-29
-34. **PROF2** -- UserProfile extension (MBTI, avatar, bio, external DM links) -- COMPLETED 2026-04-29
-35. **PROF3** -- Firm profile page UI (project card grid + website/email links) -- COMPLETED 2026-05-02
-36. **PROF4** -- User profile page UI (feed style, board list) -- COMPLETED 2026-05-02
-
-### Phase 14: Board System -- COMPLETED 2026-05-06
-37. **BOARD1** -- Board model (public/private visibility, owner FK) -- COMPLETED 2026-04-30
-38. **BOARD2** -- Project creation: visibility selection UI -- COMPLETED 2026-05-06
-39. **BOARD3** -- Profile page: board browse/manage UI -- COMPLETED 2026-05-06
-
-### Phase 15: Social Foundation -- COMPLETED 2026-05-06
-40. **SOC1** -- Follow model + API (follow/unfollow, follower list) -- COMPLETED 2026-05-02
-41. **SOC2** -- "Love this!" reaction model + API -- COMPLETED 2026-05-02
-42. **SOC3** -- Profile/board: follow button + reaction button UI -- COMPLETED 2026-05-06
-
-### Phase 16: Recommendation Expansion -- PENDING (revised under 2026-05-14 replan; S8 sweep COMPLETED)
-> Re-scoped 2026-05-14: REC1 already executed as **Push S3**. REC2 / REC3 now
-> serve a Profile-tab "사무소 추천" button (Q3 decision); Landing tab
-> deleted by Push S6. Endpoint shape changed from
-> `/api/v1/landing/{sessionId}/` (deprecated) to a Profile-targeted
-> composite (e.g. `/api/v1/recommendations/profile/`).
-> Open dimensions + acceptance now live in `## Next` § PHASE16.
-43. **REC1** -- Post-swipe end screen consolidation (executed in **S3** 2026-05-14)
-44. **REC2** -- Firm recommendation logic (Profile-button-triggered)
-45. **REC3** -- User recommendation logic (Profile-button-triggered)
-46. **REC4** -- ~~Landing tab~~ → removed by Push S6 (Profile-tab button surface instead)
-
-### Phase 17: LLM Reverse-Questioning -- PENDING (S8 sweep COMPLETED)
-> Replan Q6 RESOLVED → Option A: reverse-question lives in the first
-> 0-2 turns of the Taste-tab LLM chat (pre-swipe). TTFC budget unchanged.
-> Open dimensions + acceptance now live in `## Next` § PHASE17.
-47. **LLM1** -- Chat reverse-question prompt design (identify user needs)
-48. **LLM2** -- Persona classification logic (P1-P4 differentiation; populates `UserProfile.persona_summary`)
-49. **LLM3** -- Per-persona UI branching (recommendation card type switching)
-
-### Phase 18: External Connections -- PENDING (S8 sweep COMPLETED)
-> Lower priority than Phase 16-17. Open dimensions + acceptance now
-> live in `## Next` § PHASE18.
-50. **EXT1** -- Firm article crawler (Space, ArchDaily, news — keyword-based)
-51. **EXT2** -- Article list UI (inside firm profile)
-52. **EXT3** -- External DM link UI (Instagram, email — on profile)
-
-> **Phase 19-26 (2026-05-14 Replan, Tab 3-Structure Transition) + Phase P1-P6
-> latency+UX overhaul (2026-05-15..2026-05-18)** — all shipped to production
-> via deploy PR #36 (S1-S8) and PR #49 (P1-P6). See git history for detail.
+_(none — no active initiative slice with a PR in flight.)_
 
 ---
 
@@ -126,13 +31,13 @@
 > Algorithm theory + production hyperparameters still live in `docs/algorithm.md`
 > (admin-owned, reporter syncs Production Value column only).
 
-### AUTH1 — Kakao / Naver OAuth
-Google OAuth only. Korean users need domestic login.
-- [ ] Kakao social auth backend + frontend button
-- [ ] Naver social auth backend + frontend button
+### AUTH1 — Kakao / Naver OAuth (frontend only — backend done)
+Backend Kakao + Naver implementation shipped: `apps/accounts/views.py` KakaoLoginView + NaverLoginView, `apps/accounts/urls.py` `auth/social/kakao/` + `auth/social/naver/`, `apps/accounts/models.py` provider choices. Frontend `LoginPage.jsx` currently has Google button only.
+- [ ] Kakao button on `LoginPage.jsx` (loading state already typed `'kakao'`)
+- [ ] Naver button on `LoginPage.jsx` (loading state not yet typed `'naver'`)
 
 ### AUDIT-T4 — Structural refactor (deferred)
-File decomp: engine.py (2079 LOC), App.jsx (795 LOC), BoardDetailPage (1032 LOC), UserProfilePage (990 LOC), PostSwipeLandingPage (696 LOC), SwipePage (666 LOC), FirmProfilePage (611 LOC).
+File decomp (LOC verified 2026-05-25): engine.py 2139 (+60 since first flagged), App.jsx 817, BoardDetailPage 1045, UserProfilePage 992, PostSwipeLandingPage 696, SwipePage 666, FirmProfilePage 540 (recently refactored down from 611).
 
 ### PHASE16 — Recommendation Expansion (Profile-tab 사무소/유저 추천)
 Re-scoped 2026-05-14 (REC1 already shipped as Push S3). REC2 (firm) + REC3 (user) target a single composite endpoint `GET /api/v1/recommendations/profile/` returning `{offices: [...], users: [...]}` for a Profile-tab button. Landing tab removed (Push S6).
@@ -222,12 +127,6 @@ After production deploys, Neon snapshot branches retained for 1 week as rollback
 
 ### DESIGN-REWORK — Design-system redesign per-component rework (paused)
 Foundation shipped: PR #54 (`tokens.css` 4 themes + `ThemeContext` + `AppearanceSettings`) + PR #59 (theme/font server persistence). Remaining: per-component visual rework (~7,700 LOC, inline styles → CSS Modules + `:hover`, light-theme visuals) across the frontend, leaf→hub order. Paused — no active PR. Resume via `/plan` per slice.
-
----
-
-## Now
-
-_(none — no active initiative slice with a PR in flight.)_
 
 ---
 
@@ -392,3 +291,15 @@ Deferred follow-ups (not scheduled — noted for later):
 Backend `UserProfile.theme`/`font` fields + migration `0003`; `UserSerializer`
 login-response wiring; frontend `ThemeContext` hydrate-on-login + `updateMyProfile()`
 PATCH on change. Cross-device server-sync fully operational.
+
+---
+
+## Roadmap (Historical)
+
+> Compact phase summary. For full work audit see `## Done` above + `git log`.
+
+- **Phase 1-12 (2026-03 → 2026-04)** — Single-user reference-exploration base: auth, 4-phase recommendation, Gemini search, persona report, project CRUD, E2E infra. **Shipped.**
+- **Phase 13-15 (2026-04-29 → 2026-05-06)** — Social-graph triplet: User-follow, Project-reaction, Office-follow + Profile / Board system. **Shipped.**
+- **Phase 16-18** — Recommendation expansion / LLM reverse-Q / external connections. **Pending** — open dimensions tracked in `## Next` § PHASE16 / PHASE17 / PHASE18.
+- **Phase 19-26 (2026-05-14 Replan)** — Tab 3-Structure Transition (Library tab → Profile, Landing tab removed, Discovery infinite-scroll). **Shipped** via deploy PR #36 (S1-S8).
+- **Phase P1-P6 (2026-05-15 → 2026-05-18)** — Latency + UX overhaul series. **Shipped** via deploy PR #49.
