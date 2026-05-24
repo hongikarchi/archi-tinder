@@ -59,9 +59,9 @@ If `backend/config/settings.py` `RECOMMENDATION` dict values changed, update the
 match. Read both `settings.py` and the existing `algorithm.md` table; replace each row's
 value cell where it diverges. Leave Type and Range columns alone.
 
-If a new key was added to `RECOMMENDATION`, append a new row to the table with Type and
-Range filled in based on `backend/tools/algorithm_tester.py:INTEGER_PARAMS` /
-`FLOAT_PARAMS` if available, otherwise leave Range blank.
+If a new key was added to `RECOMMENDATION`, append a new row to the table with Type
+filled in from `settings.py` and leave Range blank (no Optuna search-space source exists
+in-repo anymore; admin fills Range manually if/when a search session is run).
 
 If a key was removed, leave the existing row in place (history) but add the annotation
 `_(removed in <sha_short>)_` to the value cell.

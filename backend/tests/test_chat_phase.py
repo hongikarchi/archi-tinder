@@ -7,7 +7,6 @@ Covers:
   - Multi-turn conversation_history passthrough to Gemini
   - Backward compat: legacy string input wraps as single-turn
   - Gemini failure degrades to fallback + emits failure event (A5 integration)
-  - Pre-deploy style label corpus verification (skipped on SQLite)
 """
 import json
 import pytest
@@ -194,40 +193,6 @@ class TestChatPhaseParseQuery:
         assert failure_events.count() >= 1
         last = failure_events.order_by('-created_at').first()
         assert last.payload.get('failure_type') == 'gemini_parse'
-
-    @pytest.mark.django_db
-    def test_chat_phase_style_labels_in_corpus(self):
-        """
-        Pre-deploy gate: every style label in few-shot examples must exist in
-        the architecture_vectors corpus.
-
-        Skips automatically when architecture_vectors is not in the test DB
-        (i.e., SQLite in-memory — the normal CI environment).
-        """
-        from django.db import connection, OperationalError, ProgrammingError
-        from apps.recommendation.services import _CHAT_PHASE_FEW_SHOT_STYLE_LABELS
-
-        # Check whether architecture_vectors exists in this DB.
-        # OperationalError: SQLite missing table. ProgrammingError: Postgres missing table.
-        try:
-            with connection.cursor() as cur:
-                cur.execute(
-                    "SELECT DISTINCT style FROM architecture_vectors "
-                    "WHERE style IS NOT NULL ORDER BY style"
-                )
-                corpus_styles = {row[0] for row in cur.fetchall()}
-        except (OperationalError, ProgrammingError):
-            pytest.skip('architecture_vectors table not available in test DB')
-
-        if not corpus_styles:
-            pytest.skip('architecture_vectors table is empty — cannot verify style labels')
-
-        missing = _CHAT_PHASE_FEW_SHOT_STYLE_LABELS - corpus_styles
-        assert not missing, (
-            f'Few-shot style labels not found in corpus: {missing}. '
-            f'Corpus has: {sorted(corpus_styles)}. '
-            f'Update the few-shot examples or accept null-filter degradation for these labels.'
-        )
 
 
 # ---------------------------------------------------------------------------

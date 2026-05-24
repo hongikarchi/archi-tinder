@@ -3,10 +3,12 @@
 Owned by **Make DB** (reference-crawling repo). Django reads via raw SQL only —
 **never ORM, never migrate**.
 
-**Status as of 2026-05-14:** Live Neon DB is at the **v2 canonical schema**
-(31 columns, 39,776 rows, ~99.9% publishable). The old `architecture_vectors`
-table (v1 / 23 columns / 3,465 rows) still exists in the same database but is
-**deprecated** — no Make Web SQL touches it anymore.
+**Status as of 2026-05-24:** Live Neon DB is at the **v2 canonical schema**
+(31 columns, 39,776 rows, ~99.9% publishable). On 2026-05-24 the orphan
+Make Web user/app tables that lingered on this DB (auth_*, accounts_*,
+recommendation_*, profiles_*, social_*, token_blacklist_*, django_*) were
+dropped along with the legacy v1 `architecture_vectors` table; only
+`canonical_v2_buildings` remains on the `buildings` alias.
 
 ## Hard rules
 
@@ -109,17 +111,18 @@ no raw strings.
 `Transport` | `Hospitality` | `Healthcare` | `Public` | `Mixed Use` |
 `Landscape` | `Infrastructure` | `Other`
 
-## Legacy v1 schema (deprecated)
+## Legacy v1 schema (removed 2026-05-24)
 
-The previous `architecture_vectors` table (23 columns) is preserved in the
-DB for the migration window but **no Make Web code path references it**. Its
-PK was `building_id` (e.g. `'B00042'`); the new PK `canonical_bld_id` uses
-the `'bld_xxxxxx'` prefix and is the only ID the application stores from
-the cutover point onward.
+The previous `architecture_vectors` table (23 columns, PK `building_id` like
+`'B00042'`) was dropped on 2026-05-24. The v2 cutover had already moved every
+runtime code path to `canonical_v2_buildings` (PK `canonical_bld_id` like
+`'bld_xxxxxx'`); only ops tools and one test gate still referenced v1, and
+they were deleted in the same cleanup.
 
-Historical SwipeEvent / Project / Bookmark rows that contain v1 IDs are left
-in place as orphans (no clean v1→v2 ID map exists). New rows after the S2
-migration carry v2 IDs.
+Historical SwipeEvent / Project rows that contained v1 IDs were left in place
+as orphans during the S2 cutover; the buildings-side row drop on 2026-05-24
+does not affect them (they live on `user_data`).
 
-<!-- Last reality-synced 2026-05-14 against live Neon (v2, 31 cols, 39,776 rows). -->
+<!-- Last reality-synced 2026-05-24 against live Neon (v2, 31 cols, 39,776 rows). -->
 <!-- Engine code cutover: feature/admin-s2-new-schema. -->
+<!-- v1 + orphan-user-table drop: feature/admin-drop-v1-legacy. -->

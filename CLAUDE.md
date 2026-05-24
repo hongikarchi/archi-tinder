@@ -118,7 +118,7 @@
   - Neon PostgreSQL: use `sslmode=require`; psycopg2-binary (not asyncpg).
   - **Two `DATABASES` aliases**: `'default'` = the Make Web app DB (`DB_*` env vars) — Django ORM + migrations target this only; `'buildings'` = the Make-DB-owned building DB (`BUILDINGS_DB_*` env vars) — read-only raw SQL via `connections['buildings']`, NEVER ORM or migrate. `config/db_router.py` blocks `migrate` on `'buildings'`.
   - JWT: access=1hr, refresh=30days, rotate+blacklist (simplejwt TokenBlacklist app must be in INSTALLED_APPS).
-  - `canonical_v2_buildings` -- read-only via raw SQL on the `'buildings'` connection; never ORM or migrate. Old `architecture_vectors` table is deprecated.
+  - `canonical_v2_buildings` -- read-only via raw SQL on the `'buildings'` connection; never ORM or migrate. (Legacy `architecture_vectors` table was dropped 2026-05-24.)
   - `images/batch/` POST -- batch-fetch building cards by `canonical_bld_ids` list.
   - Run: `cd backend && python3 manage.py runserver 8001`.
 

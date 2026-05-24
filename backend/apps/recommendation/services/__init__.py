@@ -58,7 +58,6 @@ from ._caches import (  # noqa: F401
 from .parse_query import (  # noqa: F401
     PROGRAM_VALUES,
     _CHAT_PHASE_SYSTEM_PROMPT,
-    _CHAT_PHASE_FEW_SHOT_STYLE_LABELS,
     _STAGE1_RESPONSE_SCHEMA,
     _STYLE_TOKENS,
     _PROGRAM_TOKENS,
