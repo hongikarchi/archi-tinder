@@ -3,12 +3,16 @@
 Owned by **Make DB** (reference-crawling repo). Django reads via raw SQL only —
 **never ORM, never migrate**.
 
-**Status as of 2026-05-24:** Live Neon DB is at the **v2 canonical schema**
-(31 columns, 39,776 rows, ~99.9% publishable). On 2026-05-24 the orphan
-Make Web user/app tables that lingered on this DB (auth_*, accounts_*,
-recommendation_*, profiles_*, social_*, token_blacklist_*, django_*) were
-dropped along with the legacy v1 `architecture_vectors` table; only
-`canonical_v2_buildings` remains on the `buildings` alias.
+**Status as of 2026-05-24:** Live Neon DB renamed `neondb` → `archi_data`
+on the production branch (`ep-broad-hat-a1jaomn7`). Two tables remain on the
+`buildings` alias: `canonical_v2_buildings` (39,478 rows, ~93.4% publishable
+after the C23 update tightened non-publishable flagging) and the new
+`canonical_v2_architects` (14,216 firms, 4,357 recommendable — see §2b
+below for the architect schema). The legacy `local-dev` Neon branch (24
+orphan user/app tables + legacy v1 `architecture_vectors` + stale C8
+buildings) was dropped and archived to snapshot branch
+`pre-cleanup-2026-05-24` (1-week retention). Make Web reads via a dedicated
+SELECT-only role `make_web` (the writer role `neondb_owner` is Make-DB-only).
 
 ## Hard rules
 
@@ -17,7 +21,8 @@ dropped along with the legacy v1 `architecture_vectors` table; only
 - Do NOT create or migrate the `canonical_v2_buildings` table — it is owned
   by Make DB and managed there.
 - Every Make Web building query MUST gate on `is_publishable = true`
-  (39 of 39,776 rows are flagged non-publishable for image/metadata gaps).
+  (2,614 of 39,478 rows — ~6.6% — are flagged non-publishable for image
+  or metadata gaps as of the C23 update on 2026-05-24).
   `engine._build_filter_sql` always emits at least this clause; custom
   raw SQL must add it explicitly.
 - SentenceTransformers is NOT a runtime dependency in Make Web — embeddings
