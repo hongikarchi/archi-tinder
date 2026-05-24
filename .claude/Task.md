@@ -160,6 +160,40 @@ frontend, leaf→hub order. Scope with `/plan` per slice.
 
 ## Done
 
+### #13 GEMINI-TIMEOUT-CAP — RESOLVED 2026-05-24 (PR #94 `8b4df92`)
+[x] `_retry_gemini_call` hard-caps every Gemini SDK call at 15s (45s for Imagen 3) via `concurrent.futures.ThreadPoolExecutor` + `future.result(timeout=N)`.
+[x] 228s `/parse-query/` hang observed in codex audit → worst case now ≤31s.
+[x] 4 new tests + 5 regression tests added.
+Deferred: `_caches.py:92` IMP-5 cache create call still bypasses wrapper (gated by `context_caching_enabled` default `False`, zero prod impact until toggled on).
+
+### #12 BUILDINGS-DB-SWAP — RESOLVED 2026-05-24 (PR #93 `b1b1212`)
+[x] Make DB renamed buildings DB `neondb` → `archi_data`; new SELECT-only role `make_web` (was `neondb_owner`).
+[x] Added `canonical_v2_architects` table (14,216 firms).
+[x] Make Web swapped local `backend/.env` + Railway prod env vars.
+[x] Refreshed `backend/.env.example` + `CLAUDE.md` is_publishable stat (39/39,776 → 2,614/39,478 ~6.6%) + `docs/database-schema.md` status block.
+[x] New `docs/MAKEWEB_DB_SWAP_RESPONSE.md` added.
+[x] Verified end-to-end (psql + Django check + ORM smoke + prod redeploy 04e7633e Online).
+
+### #11 V1-LEGACY-CLEANUP — RESOLVED 2026-05-24 (PR #92 `5957df9`)
+[x] Neondb `local-dev` branch drop + 23 orphan user/app tables + legacy `architecture_vectors` dropped.
+[x] 3 backend files referencing v1 deleted: `tools/algorithm_tester.py`, `apps/recommendation/management/commands/profile_image_latency.py`, `tests/test_chat_phase.py::test_chat_phase_style_labels_in_corpus`.
+[x] 5 stale doc refs refreshed: CLAUDE.md / docs/database-schema.md / docs/COLLAB_HANDOFF.md / .claude/agents/reporter.md / .claude/agents/code-review.md.
+Plan `.claude/plans/merry-toasting-dove.md` archived to `.claude/plans/archive/2026-05-24-merry-toasting-dove.md`.
+
+### develop → main deploy — 21 PRs (#68–#89) — RESOLVED 2026-05-24 (PR #90 merge `179d6f6`)
+[x] Release PR #90 squash-merged develop → main (`179d6f6`). Carried PRs #68–#89 (21 PRs).
+[x] Railway prod auto-deploy confirmed Online at `179d6f6`.
+[x] origin/develop force-reset to match main (Bug #5 carve-out).
+
+### Dashboard rework — 5-tab Done/Now/Next + Mermaid flows + KST timestamps — RESOLVED 2026-05-24 (PR #89 merge `f5967f2`)
+[x] 6-tab Tasks/Roadmap/Git/Architecture/FileMap/Flow → 5-tab Done/Now/Next/System Flow/Agent Flow.
+[x] Task.md sections renamed: Open→Next, In Progress→Now, Resolved→Done. Dashboard vocab 1:1.
+[x] Vendored mermaid.min.js (3.3 MB) for offline file:// + airplane safety. Lazy-render on tab.
+[x] 3 Mermaid diagrams: System Flow + Recommendation Flow + Agent Flow.
+[x] state.js schema rewritten: meta.updatedAt, done/now/next arrays, prs.mergedAt+mergedAtKST.
+[x] reporter.md spec updated: new Task.md vocab, KST formatter, no Mermaid regen.
+[x] 8 agent frontmatters gain effort: default.
+
 ### Codex Round 2 audit — 7 findings resolved — RESOLVED 2026-05-24 (PRs #85 / #86 / #87)
 [x] B1 — `/images/batch/` 500 on nested list input: serializer validation fixed (PR #85)
 [x] B2 — BoardDetail field mismatch causing placeholder rendering: normalize fixed (PR #85)

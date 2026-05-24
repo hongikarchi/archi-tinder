@@ -3,10 +3,16 @@
 Owned by **Make DB** (reference-crawling repo). Django reads via raw SQL only —
 **never ORM, never migrate**.
 
-**Status as of 2026-05-14:** Live Neon DB is at the **v2 canonical schema**
-(31 columns, 39,776 rows, ~99.9% publishable). The old `architecture_vectors`
-table (v1 / 23 columns / 3,465 rows) still exists in the same database but is
-**deprecated** — no Make Web SQL touches it anymore.
+**Status as of 2026-05-24:** Live Neon DB renamed `neondb` → `archi_data`
+on the production branch (`ep-broad-hat-a1jaomn7`). Two tables remain on the
+`buildings` alias: `canonical_v2_buildings` (39,478 rows, ~93.4% publishable
+after the C23 update tightened non-publishable flagging) and the new
+`canonical_v2_architects` (14,216 firms, 4,357 recommendable — see §2b
+below for the architect schema). The legacy `local-dev` Neon branch (24
+orphan user/app tables + legacy v1 `architecture_vectors` + stale C8
+buildings) was dropped and archived to snapshot branch
+`pre-cleanup-2026-05-24` (1-week retention). Make Web reads via a dedicated
+SELECT-only role `make_web` (the writer role `neondb_owner` is Make-DB-only).
 
 ## Hard rules
 
@@ -15,7 +21,8 @@ table (v1 / 23 columns / 3,465 rows) still exists in the same database but is
 - Do NOT create or migrate the `canonical_v2_buildings` table — it is owned
   by Make DB and managed there.
 - Every Make Web building query MUST gate on `is_publishable = true`
-  (39 of 39,776 rows are flagged non-publishable for image/metadata gaps).
+  (2,614 of 39,478 rows — ~6.6% — are flagged non-publishable for image
+  or metadata gaps as of the C23 update on 2026-05-24).
   `engine._build_filter_sql` always emits at least this clause; custom
   raw SQL must add it explicitly.
 - SentenceTransformers is NOT a runtime dependency in Make Web — embeddings
@@ -109,17 +116,18 @@ no raw strings.
 `Transport` | `Hospitality` | `Healthcare` | `Public` | `Mixed Use` |
 `Landscape` | `Infrastructure` | `Other`
 
-## Legacy v1 schema (deprecated)
+## Legacy v1 schema (removed 2026-05-24)
 
-The previous `architecture_vectors` table (23 columns) is preserved in the
-DB for the migration window but **no Make Web code path references it**. Its
-PK was `building_id` (e.g. `'B00042'`); the new PK `canonical_bld_id` uses
-the `'bld_xxxxxx'` prefix and is the only ID the application stores from
-the cutover point onward.
+The previous `architecture_vectors` table (23 columns, PK `building_id` like
+`'B00042'`) was dropped on 2026-05-24. The v2 cutover had already moved every
+runtime code path to `canonical_v2_buildings` (PK `canonical_bld_id` like
+`'bld_xxxxxx'`); only ops tools and one test gate still referenced v1, and
+they were deleted in the same cleanup.
 
-Historical SwipeEvent / Project / Bookmark rows that contain v1 IDs are left
-in place as orphans (no clean v1→v2 ID map exists). New rows after the S2
-migration carry v2 IDs.
+Historical SwipeEvent / Project rows that contained v1 IDs were left in place
+as orphans during the S2 cutover; the buildings-side row drop on 2026-05-24
+does not affect them (they live on `user_data`).
 
-<!-- Last reality-synced 2026-05-14 against live Neon (v2, 31 cols, 39,776 rows). -->
+<!-- Last reality-synced 2026-05-24 against live Neon (v2, 31 cols, 39,776 rows). -->
 <!-- Engine code cutover: feature/admin-s2-new-schema. -->
+<!-- v1 + orphan-user-table drop: feature/admin-drop-v1-legacy. -->

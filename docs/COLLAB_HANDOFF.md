@@ -82,7 +82,7 @@ share the same workflow guidance once they pull develop.
 
 ## 5. The Make Web ↔ Make DB seam
 
-`backend/apps/recommendation/engine.py` reads `architecture_vectors` via raw
+`backend/apps/recommendation/engine.py` reads `canonical_v2_buildings` via raw
 SQL (read-only). The table is **owned by Make DB** — never run a Django
 migration that touches it.
 

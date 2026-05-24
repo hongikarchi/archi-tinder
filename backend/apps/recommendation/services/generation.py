@@ -326,7 +326,7 @@ def generate_persona_image(report):
                 ),
             )
 
-        response = _svc._retry_gemini_call(_call)
+        response = _svc._retry_gemini_call(_call, timeout=45.0)
 
         image_bytes = response.generated_images[0].image.image_bytes
         base64_str = base64.b64encode(image_bytes).decode('utf-8')

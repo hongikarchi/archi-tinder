@@ -1422,7 +1422,7 @@ def compute_taste_centroids(like_vectors, round_num):
     """
     Compute taste cluster centroids with recency weighting.
     Returns (list_of_centroids, global_centroid) as numpy arrays.
-    Called by views.py (convergence tracking) and algorithm_tester.py.
+    Called by views.py (convergence tracking).
 
     Side effect: sets thread-local _telemetry.clustering_stats on every call (including
     cache hits) per IMP-10 / Spec v1.8 §6 Topic 06 telemetry requirements.

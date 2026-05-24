@@ -185,10 +185,6 @@ USER: Koolhaas 스타일로 도서관 하나. OMA 초기 작업 느낌.
 ASSISTANT: {"probe_needed": false, "probe_question": null, "reply": "이해했어요: 쿨하스·초기 OMA 계열의 도서관 — 프로그램 하이브리드가 강하고 자율적 오브제로 읽히는, 다방향 순환과 실험적 형태 언어의 공공 시설. 이 방향으로 찾아볼게요.", "filters": {"location_country": null, "program": "Public", "material": null, "style": "Avant-Garde", "year_min": 1990, "year_max": null}, "filter_priority": ["program", "style"], "raw_query": "Koolhaas 스타일로 도서관 하나. OMA 초기 작업 느낌.", "visual_description": "A library in the OMA/Rem Koolhaas-early-period tradition — a singular, autonomous architectural object whose form expresses programmatic hybridity and experimental spatial strategies. The building reads as a stacked, faceted, or wedge-shaped volume with sharp geometries, hovering masses, or a distinctively authored silhouette that reads as conceptual rather than contextual. Interior circulation favours omnidirectional spatial flat-plans over linear sequences; programmes like reading rooms, event spaces, and public lobbies are layered rather than zoned. Materiality tends toward cool industrial (metal mesh, glass, concrete) with unexpected colour accents."}
 """
 
-# Labels used in few-shot examples that must exist in the architecture_vectors.style corpus.
-# Used by pre-deploy gate test.
-_CHAT_PHASE_FEW_SHOT_STYLE_LABELS = frozenset(['Vernacular', 'Contemporary', 'Parametric', 'Modernist', 'Avant-Garde'])
-
 # ---------------------------------------------------------------------------
 # M4 (Investigation 22 §M4): Query complexity heuristic classifier
 # ---------------------------------------------------------------------------

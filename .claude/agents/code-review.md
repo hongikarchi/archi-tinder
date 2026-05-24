@@ -78,8 +78,8 @@ Issues:
 FIX ORDERS
 
 back-maker:
-- views.py line ~152: add existence check for building_id before SwipeEvent.objects.create()
-- Use architecture_vectors query: SELECT 1 FROM architecture_vectors WHERE building_id = %s
+- views.py line ~152: add existence check for canonical_bld_id before SwipeEvent.objects.create()
+- Use canonical_v2_buildings query: SELECT 1 FROM canonical_v2_buildings WHERE canonical_bld_id = %s AND is_publishable = true
 
 front-maker:
 - client.js line ~134: add await before api.getBuildings() call
