@@ -51,7 +51,7 @@
   ## Rules
   - All building references must use `canonical_bld_id` (TEXT PK like `'bld_000344'`) -- never `name`, `slug`, or any language-dependent field.
   - Do NOT create or migrate the `canonical_v2_buildings` table -- it is owned by Make DB.
-  - Every building query MUST gate on `is_publishable = true` (39 of 39,776 rows are non-publishable). `engine._build_filter_sql` already emits this clause; raw SQL elsewhere must add it.
+  - Every building query MUST gate on `is_publishable = true` (2,614 of 39,478 rows ~6.6% are non-publishable as of C23 on 2026-05-24). `engine._build_filter_sql` already emits this clause; raw SQL elsewhere must add it.
   - SentenceTransformers is NOT a dependency here -- embeddings are pre-computed.
   - **`docs/algorithm.md` reporter sync (narrow write permission)**: only the `reporter` agent updates `docs/algorithm.md`, and only to keep it in sync with implementation. Permitted writes: (a) sync the **Production Value** column in the Hyperparameter Space table when `backend/config/settings.py` RECOMMENDATION dict changes; (b) append a one-line `_(Updated YYYY-MM-DD <sha_short>: <one-line>)_` annotation under any phase / formula / edge-case section whose corresponding implementation just changed; (c) maintain a `**Last Synced (Reporter):** YYYY-MM-DD <sha_short>` line near the top. Forbidden: rewriting algorithm theory, removing existing content, adding new sections. Other `docs/` files (specs, etc.) are admin-owned plain documents — anyone can edit via PR per CONTRIBUTING.md.
   - **Plan mode protocol — Korean summary + multiple choice + one question at a time** (durable across sessions). When entering plan mode:
