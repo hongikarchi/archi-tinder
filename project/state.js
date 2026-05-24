@@ -21,12 +21,26 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-05-24 01:34 KST',
-    head: '9c037a0',
-    branch: 'feature/admin-dashboard-rework',
+    updatedAt: '2026-05-24',
+    head: '179d6f6',
+    branch: 'feature/admin-session-end-reporter-post-deploy',
   },
 
   done: [
+    {
+      id: 'DEPLOY-2026-05-24',
+      title: 'develop → main deploy — 21 PRs (#68–#89)',
+      completedAt: '2026-05-24',
+      prs: [90],
+      note: 'Release PR #90 squash-merged 21 PRs to main (179d6f6). Railway prod confirmed Online. origin/develop force-reset to match main (Bug #5 carve-out).',
+    },
+    {
+      id: 'DASHBOARD-REWORK',
+      title: 'Dashboard rework — 5-tab Done/Now/Next + Mermaid flows + KST timestamps',
+      completedAt: '2026-05-24',
+      prs: [89],
+      note: '6-tab → 5-tab Done/Now/Next/System Flow/Agent Flow; mermaid.min.js vendored; Task.md sections renamed Open→Next / In Progress→Now / Resolved→Done; state.js schema rewritten; reporter.md spec updated.',
+    },
     {
       id: 'CODEX-R2',
       title: 'Codex Round 2 audit — 7 findings resolved',
@@ -66,12 +80,6 @@ window.PROJECT_STATE = {
 
   now: [
     {
-      id: 'DASHBOARD-REWORK',
-      title: 'Dashboard rework — 5-tab Done/Now/Next + Mermaid flows + KST HH:mm timestamps',
-      startedAt: '2026-05-24',
-      note: 'In flight on feature/admin-dashboard-rework. Replaces 6-tab Tasks/Roadmap/Git/Arch/FileMap/Flow with Done/Now/Next/System Flow/Agent Flow; vendors mermaid.min.js; renames Task.md section headers; adds effort field to 8 agent frontmatters.',
-    },
-    {
       id: 'DESIGN-REWORK',
       title: 'Design-system redesign — per-component rework',
       startedAt: '2026-05-08',
@@ -108,6 +116,18 @@ window.PROJECT_STATE = {
   ],
 
   prs: [
+    {
+      number: 90,
+      title: 'Release: 2026-05-24 — codex round 2 + dashboard rework',
+      mergedAt: '2026-05-23T17:01:43Z',
+      mergedAtKST: '2026-05-24 02:01 KST',
+    },
+    {
+      number: 89,
+      title: 'feat: dashboard rework — 5-tab Done/Now/Next + Mermaid flows + KST timestamps',
+      mergedAt: '2026-05-23T16:55:00Z',
+      mergedAtKST: '2026-05-24 01:55 KST',
+    },
     {
       number: 88,
       title: 'chore: session-end reporter housekeeping — codex round 2 (7 findings resolved)',
