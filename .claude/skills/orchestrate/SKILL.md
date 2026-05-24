@@ -39,20 +39,22 @@ delegation by writing source code yourself. The no-direct-code rule in §Rules b
 is absolute.
 
 ## Before every task
-1. Read `CLAUDE.md` — conventions, rules, DB schema, coding standards
-2. Read `.claude/Goal.md` — vision and acceptance criteria
-3. Read `.claude/Task.md` — current problem board
-4. Read `.claude/Report.md` — how code works now (architecture, API surface)
-5. If algorithm task: read `docs/algorithm.md` for theory + production hyperparameters
-6. If task references a spec: read the file under `docs/specs/`
+1. Read `CLAUDE.md` — conventions, rules, DB schema, coding standards, and `## Product Identity` + `## Product Constitution` (the vision + acceptance + decision principles anchor)
+2. Read `.claude/Task.md` — current problem board (`## Now` / `## Next` / `## Done`); Phase 16-18 dimensions live in `## Next` directly (the prior `docs/specs/*.md` folder was absorbed 2026-05-24)
+3. Read code directly — the running code is the source of truth for architecture and API surface (per CLAUDE.md `## What This Repo Does`). No standalone Report.md.
+4. If algorithm task: read `docs/algorithm.md` for theory + production hyperparameters
+5. If task references a Phase or open question: read the matching `### <SLUG>` entry in `.claude/Task.md` `## Next`
 
 ## When user requests work
-1. Read `.claude/Goal.md` + scan relevant code
-2. Add or update the problem in `.claude/Task.md` (correct category, with context + sub-tasks)
-3. Move to 🟡 In Progress
-4. Execute (back-maker / front-maker / etc.)
-5. On success: move to 🟢 Resolved with date
-6. On failure after 2 cycles: leave in 🟡 In Progress, add failure notes, report to user
+1. **Session start (Now/Next discipline)** — open `.claude/Task.md`. Read `## Now` first.
+   - If `## Now` is non-empty and matches the user's request: continue that entry.
+   - If empty: look in `## Next` for a matching `### <SLUG>` entry. Move it into `## Now` (cut from Next, paste into Now). One initiative slice at a time.
+   - If the user's request is brand-new: write a fresh `### <SLUG> — <one-line title>` directly into `## Now`. Slug = ALL-CAPS (e.g. `AUTH1`, `PHASE16`, `IMP5-BYPASS`).
+2. Read `CLAUDE.md` `## Product Identity` + `## Product Constitution` + scan relevant code.
+3. Execute (back-maker / front-maker / etc.).
+4. **Mid-session deferral** — if the user says "미루자" / "later" / "defer", move the Now entry **back to `## Next`** with a one-line rationale note. Do not silently leave it in Now.
+5. **Session end (success)** — `reporter` agent moves the Now entry to `## Done` under `### <title> — RESOLVED YYYY-MM-DD (PR #N)` with PR ref + SHA. Any `Deferred: ...` text in the Done note auto-surfaces as a new `### <SLUG>` in `## Next` (reporter sub-step 2a).
+6. **Failure after 2 cycles** — leave the entry in `## Now`, add failure notes inline, report to user. Do not move to Done.
 
 ## When user says "오늘 개발 진행해" or "continue development"
 Follow the **📋 Development Roadmap** at the top of `.claude/Task.md`:
@@ -124,8 +126,9 @@ Wait for both to complete.
 
 ### Step 5 — Decision
 **If both PASS:**
-→ Check architectural fit yourself: does this match `.claude/Goal.md` acceptance
-  criteria and `CLAUDE.md` conventions?
+→ Check architectural fit yourself: does this match `CLAUDE.md` `## Product Identity`
+  (Core Promise + Two Pillars) and `## Product Constitution` (out-of-scope +
+  decision principles)?
 → If YES: go to Step 6 (commit)
 → If NO: go to the Fix Loop (Step 5b)
 
@@ -175,8 +178,9 @@ orchestrate skill itself never pushes.
 
 ### Step 9 — Report (session-end)
 Dispatch `reporter`. It will:
-1. Update `.claude/Report.md` (system state)
-2. Mark completed tasks in `.claude/Task.md` (Resolved section)
+1. Move completed tasks from `.claude/Task.md` `## Now` / `## Next` into `## Done` under a dated `### <title> — RESOLVED YYYY-MM-DD (PR #N)` header.
+2. Regenerate `project/state.js` (meta + done[] + now[] + next[] + prs[] + agents[]) so `project/dashboard.html` reflects current state.
+3. Conditionally sync `docs/algorithm.md` (Production Value column + section annotations + Last Synced line) when the commit touched algorithm-relevant code.
 
 ### Step 10 — Stop and report to user
 After reporter finishes, STOP. Summarize for the user what was implemented, the
@@ -184,12 +188,12 @@ commit/PR, the app-test verdict, and any open follow-ups.
 
 ## Algorithm work — externally owned
 
-Per `.claude/Goal.md` § Algorithm ownership (2026-05-18), algorithm-side work
-(`engine.py`, `services/embeddings.py`, `services/rerank.py`,
-`services/_caches.py`, Topic 01-12 in `docs/algorithm.md`, IMP-1/7/8, A2
-hyperparameter optimization) is owned by a separate collaborator — this skill does
-NOT dispatch algorithm tuning work. If the user asks for algorithm tuning, surface
-the ownership boundary and decline.
+Per `CLAUDE.md` `## Rules` (`docs/algorithm.md` narrow write permission, codified
+post-2026-05-18), algorithm-side work (`engine.py`, `services/embeddings.py`,
+`services/rerank.py`, `services/_caches.py`, Topic 01-12 in `docs/algorithm.md`,
+IMP-1/7/8, A2 hyperparameter optimization) is owned by a separate collaborator —
+this skill does NOT dispatch algorithm tuning work. If the user asks for
+algorithm tuning, surface the ownership boundary and decline.
 
 LLM-chat-module work (`services/parse_query.py`, `services/generation.py`,
 `services/_gemini.py`, chat-phase Gemini latency IMP-4/5/6, Phase 17 reverse-Q +
@@ -217,7 +221,7 @@ persona) remains in scope — dispatch as a normal feature through back-maker.
   outweighs its value for these meta-tasks. **Risky meta-infra override**: if the
   change touches auth / token-handling / schema / a cross-cutting refactor of ≥4
   unrelated files, still run code-review + security-manager before commit.
-- **Token-saving rules** — see `docs/token-saving.md`:
+- **Token-saving rules** — see `.claude/WORKFLOW.md` § Token-saving rules:
   Rule 1 (defer reporter to session end), Rule 2 (skip code-review +
   security-manager on trivial commits — `<50 LOC` OR pure docs/policy + no
   migration + no production code + no auth/network/model change), Rule 4

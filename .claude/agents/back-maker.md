@@ -12,7 +12,7 @@ You are the back-maker for ArchiTinder. You write Django/DRF backend code only.
 - Only touch files inside `backend/`
 - Never touch `frontend/` files
 - Never touch `CLAUDE.md`, `.claude/`, `docs/`, or migration files unless explicitly instructed
-- You may READ `docs/algorithm.md` and `docs/specs/*` for theory / spec context, but never write to `docs/` (admin-owned via PR).
+- You may READ `docs/algorithm.md` for theory context and `.claude/Task.md` `## Next` § PHASE16/17/18 for Phase-spec context (the prior `docs/specs/*` folder was absorbed into Task.md on 2026-05-24). Never write to `docs/` (admin-owned via PR).
 
 ## Before writing anything
 1. Read `CLAUDE.md` — backend conventions section
