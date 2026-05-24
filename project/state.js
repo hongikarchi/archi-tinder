@@ -86,14 +86,7 @@ window.PROJECT_STATE = {
     },
   ],
 
-  now: [
-    {
-      id: 'DESIGN-REWORK',
-      title: 'Design-system redesign — per-component rework',
-      startedAt: '2026-05-08',
-      note: 'Foundation shipped (PR #54: tokens.css 4 themes + ThemeContext + AppearanceSettings). Remaining: per-component visual rework (~7,700 LOC, inline styles → CSS Modules + :hover, light-theme visuals) across the frontend, leaf→hub order. Scope with /plan per slice.',
-    },
-  ],
+  now: [],
 
   next: [
     {
@@ -200,6 +193,11 @@ window.PROJECT_STATE = {
       id: 'CELERY-CORPUS-RANK',
       title: 'Celery compute_corpus_rank background task',
       note: 'recommendation_swipeevent row inserts currently compute corpus rank synchronously (or skip when on bookmark POST per PR #79). Async via Celery for proper telemetry without blocking.',
+    },
+    {
+      id: 'DESIGN-REWORK',
+      title: 'Design-system redesign per-component rework (paused)',
+      note: 'Foundation shipped: PR #54 (tokens.css 4 themes + ThemeContext + AppearanceSettings) + PR #59 (theme/font server persistence). Remaining: per-component visual rework (~7,700 LOC, inline styles → CSS Modules + :hover, light-theme visuals) across the frontend, leaf→hub order. Paused — no active PR. Resume via /plan per slice.',
     },
   ],
 
