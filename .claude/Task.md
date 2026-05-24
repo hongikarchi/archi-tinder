@@ -160,6 +160,18 @@ frontend, leaf→hub order. Scope with `/plan` per slice.
 
 ## Done
 
+### #16 DEPLOY-2026-05-24-v2 — RESOLVED 2026-05-24 (PR #98 `fd063e0`)
+[x] develop → main deploy. 1 PR (#97). main = `fd063e0`. Railway deployment `a98725bf` Online.
+[x] Bug #5 carve-out applied: origin/develop force-reset to fd063e0.
+[x] Prod functional pre-deploy (PR #94 cap working). This deploy = CI baseline alignment + main/develop sync. PR #98.
+
+### #15 CI-HANG-FIX — RESOLVED 2026-05-24 (PR #97 `9647c40`)
+[x] `_retry_gemini_call` runtime primitive swapped: `concurrent.futures.ThreadPoolExecutor` → `threading.Thread(daemon=True)` + `queue.Queue.get(timeout)`.
+[x] `from threading import Thread as _Thread` captured at module-load — bypasses test_imp8 `_DiscThread` global mock leak.
+[x] Same 15s/45s deadline + FATAL classification + retry semantics. Prod behavior unchanged.
+[x] Triggered by: PR #94 ThreadPoolExecutor wrapper hung pytest CI at 15min timeout, cascading 5 CI failures (PR #94, #95, #96 develop/main/PR).
+[x] Full suite: 683 passed / 11 skipped / 0 failed.
+
 ### #13 GEMINI-TIMEOUT-CAP — RESOLVED 2026-05-24 (PR #94 `8b4df92`)
 [x] `_retry_gemini_call` hard-caps every Gemini SDK call at 15s (45s for Imagen 3) via `concurrent.futures.ThreadPoolExecutor` + `future.result(timeout=N)`.
 [x] 228s `/parse-query/` hang observed in codex audit → worst case now ≤31s.
