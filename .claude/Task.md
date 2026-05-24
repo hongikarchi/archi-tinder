@@ -57,27 +57,178 @@ Acceptance:
 - After ≤2 probe turns, `filter_priority` always contains at least one required-slate field.
 - A/B run on a fixed 50-query sample comparing slate-completion-rate (current prompt vs refined prompt) — refined prompt must not regress and should improve on diffuse-prior cases.
 
-### MEDIUM
-
-#### PHASE18 — External Connections (firm article crawl)
-Lowest pending strategic priority. Surfaces external articles about a firm on FirmProfilePage (Space / ArchDaily / news keyword match). Phase 15 already shipped External DM wiring (`Office.contact_email`, `Office.website`, `UserProfile.external_links`).
+#### XSESS — Cross-session signal transfer
+Same Project can host multiple `AnalysisSession` rows (user comes back, "Resume" or new swipe round on the same Project — second session is created fresh while `Project.liked_ids` / `disliked_ids` / `saved_ids` carry forward as the persistent accumulator). Today the new session's algorithm-side state (`like_vectors`, `convergence_history`, `phase`) starts from scratch — exploring phase, empty pool of taste signal — even though the user just liked 12 buildings in Session #1.
 
 Open dimensions:
-- **Article source priority** — Space-first (Korean) vs ArchDaily-first (global) vs parity? (Korea-first principle suggests Space)
-- **Crawl freshness** — real-time on view / scheduled daily-weekly / event-driven?
-- **Storage** — denormalised in `Office` row / separate `OfficeArticle` table / external CDN?
-- **Article fallback** — empty section / hide section / "no recent articles" placeholder?
+- **Carry policy** — A independent (status quo) / B exposure-only carry (don't re-show prior cards, taste fresh) / C asymmetric negative-only (carry dislikes, drop likes) / D fade-decay carry (recency-weight prior `liked_ids` into `like_vectors`) / E full warm-start (replay prior `liked_ids` → `like_vectors`, skip exploring phase) / F user-controlled toggle ("Resume taste?" prompt at session 2 start).
+- **Phase entry on warm-start** — if D or E chosen: enter `analyzing` immediately (3+ likes already), or still play 1-2 exploring rounds for diversity?
+- **Backend wiring** — `SessionCreateView` (`views/sessions.py:28`) currently treats project lookup as cosmetic (just resolves project_id). Carry would require reading `Project.liked_ids` → embedding fetch → seeding `AnalysisSession.like_vectors` at create time.
 
-Acceptance: ≤10 most recent articles per firm; open in new tab (legal posture); no FirmProfilePage TTFC regression (article fetch async, doesn't block initial paint).
-
-#### XSESS — Cross-session signal transfer (deferred)
-Same project's multiple sessions — should `liked_ids` / `pref_vector` carry over between sessions? Current spec is implicit independence (each session starts fresh). Six options: A independent (status quo) / B exposure-only carry / C asymmetric negative-only / D fade-decay carry / E full warm-start / F user-controlled toggle. Defer until traffic justifies experiment cost.
+Acceptance: behavior matches chosen option deterministically; session 2 TTFC not regressed beyond session 1 (warm-start should be ≤ or equal); A/B telemetry on session 2 satisfaction (saved_ids growth rate, completion rate) vs status quo.
 
 #### EMPTY-STATE — Empty-state UX (Project = 0)
-First-time user with 0 projects sees Home → project picker. Need explicit empty-state path: guided flow / empty-state + create button / demo query? Low priority — current users are existing accounts.
+First-time user with 0 projects sees Home → project picker. Need explicit empty-state path so new sign-ups don't bounce off a blank Home. Frontend-only (HomePage / ProjectListPage).
 
-#### MULTILANG — Multi-language behavior (partial)
-Chat phase has bilingual rendering rule. Mobile UI / detail page / persona report's multi-language posture unresolved. Korea-first per Constitution Decision Principle 7; English supported, not co-equal.
+Open dimensions:
+- **Onboarding shape** — guided flow (single CTA "Start your first taste analysis" → jump straight to AI Search) / empty-state placeholder + create button / demo query (pre-baked example, zero-friction swipe immediately) / hybrid (placeholder + demo CTA together).
+- **Copy + voice** — direct ("아직 프로젝트가 없어요") vs product-voice ("취향 첫 발견을 시작해볼까요?").
+- **Visual** — illustration / icon-only / none?
+
+Acceptance: 0-project user sees a deliberate empty state on Home (no broken-looking blank); CTA path to first swipe ≤2 clicks; no regression on existing-projects rendering.
+
+#### MULTILANG — User-set language preference (mirrors theme/font pattern)
+**Decision (user 2026-05-25)**: language is a user-controlled setting, NOT browser-locale auto-detected. Pattern mirrors the existing theme/font persistence shipped in PR #54 + PR #59. User toggles language in Settings (Korean / English); the choice drives both LLM chat answer language and UI label rendering across the app.
+
+Current state:
+- Chat phase (`parse_query.py`) already adapts to the user's latest message language inline ("`reply` and `probe_question` are written in the user's primary language"). With this setting wired through, the chat will instead use the user's profile language deterministically — no language inference from message text.
+- Theme + font already follow this exact pattern: `UserProfile.theme` + `UserProfile.font` server-persisted, `ThemeContext` hydrates on login, `AppearanceSettings.jsx` exposes the toggle, `updateMyProfile({ theme })` PATCH on change.
+
+Implementation outline:
+- Backend — add `UserProfile.language` CharField with choices `[('ko', 'Korean'), ('en', 'English')]`, default `'ko'` (Korea-first). Migration + serializer wiring + login-response inclusion (parity with theme/font).
+- Frontend — `LanguageContext` mirroring `ThemeContext`; hydrate from login response; `setLanguage()` PATCHes `updateMyProfile({ language })`. Add language toggle to `AppearanceSettings.jsx` (or a sibling settings panel — admin call).
+- Wire-through — `parse_query.py` accepts `language` parameter from `SessionCreateView`/`SwipeView`/etc., overrides the "match user's message language" rule. UI labels via a small dictionary-lookup helper (`t('home.title')`-style) — no full i18n lib (`react-i18next` adds bundle weight; Korea-first + bilingual-only justifies a hand-rolled lookup).
+
+Open dimensions:
+- **Scope priority** — TabBar / button copy / page titles first (high-traffic surfaces) → page bodies → error messages → modal alerts? Or sweep alphabetically?
+- **Translation source** — admin hand-writes both KO + EN strings / Gemini-translate KO → EN with admin spot-check / accept any English UI gaps temporarily (Korea-first, English a follower)?
+- **Settings UI placement** — extend `AppearanceSettings.jsx` with a language section, or new `LanguageSettings.jsx` sibling page? (Theme + Font already coexist there, language is a natural third.)
+- **Untranslated string fallback** — if `t('foo.bar')` lookup misses in current language, fall back to KO (default) or render the key literal `foo.bar` as a debug surface?
+
+Acceptance:
+- New `UserProfile.language` field, default `'ko'`, settable via Settings UI; PATCH round-trips correctly.
+- LLM chat answer language follows the setting, not message-language inference.
+- ≥1 high-traffic UI surface (e.g., TabBar) rendered in both languages off the same string source.
+- No regression in theme/font persistence (same wiring shape).
+
+#### CONVO-PERSIST — Conversation history server persistence (replace localStorage)
+**Decision (user 2026-05-25)**: chat conversation history must persist to the backend DB, not just to browser `localStorage` as it does today. Cross-device + cross-browser + survives storage clears.
+
+Current state:
+- `LLMSearchPage.jsx:186–205` stores `conversationHistory` in `localStorage` keyed by `storageKey` (Project-scoped). Survives page navigation + browser refresh on the **same browser**, but lost on logout / second device / incognito / cache clear.
+- Resume + Exit UX already shipped: `SwipePage.jsx:122–123` `ExitConfirmPopup` (Exit to New Project / Home / Cancel); chat re-enters with the prior history populated from `localStorage`.
+- Backend has no conversation field today: `Project.raw_query` stores only the first user message; `AnalysisSession` has algorithm state only.
+
+Implementation outline:
+- Backend — add `Project.conversation_history` JSONField (default `list`) OR a new `ConversationTurn` row table — see open dimension. Migration. Serializer wiring. Endpoint: probably extend `ProjectSerializer` round-trip + a dedicated `POST /api/v1/projects/<id>/conversation/` for append (idempotent on turn-id).
+- Frontend — `LLMSearchPage.jsx` swaps `localStorage` reads for an API fetch on mount; appends to backend on each turn; keep `localStorage` as a write-through cache for offline resume + read-fallback when API is slow.
+
+Open dimensions:
+- **Storage shape** — `Project.conversation_history` JSONField (denormalised, simple, hydrates with project payload) vs `ConversationTurn` table (normalised, paginated, ordered by created_at)?
+- **Per-session vs per-project** — store on `Project` (history accumulates across sessions) or on `AnalysisSession` (each swipe round has its own chat)? PHASE17 reverse-Q lives in `parse_query.py` which is called at session-create time, suggesting per-session — but the user-facing chat UI is project-level.
+- **`localStorage` retention** — keep as a write-through cache (offline-tolerant) / delete on first successful backend write (single source of truth) / remove entirely (cleaner)?
+- **Retention policy** — keep forever (audit trail for PHASE17 chat refinement) / 30-day TTL / cascade delete with Project?
+- **Migration of existing `localStorage` data** — one-shot backfill on next login (frontend reads localStorage, POSTs to backend, deletes local) vs no backfill (existing in-flight chats stay local until next exit, then lose history)?
+
+Acceptance:
+- Logout + log back in (same or different browser) → conversation history fully re-rendered from backend, including order + structured turn payloads.
+- Probe-turn writes succeed under network slow / retry / partial failure (idempotent append).
+- No regression in current Resume / Exit UX.
+- localStorage cache (if kept) is purged on logout or Project delete to prevent stale cross-user contamination.
+
+#### IMP5-BYPASS — IMP-5 cache create timeout wrapper bypass
+`backend/apps/recommendation/services/_caches.py:92` IMP-5 Gemini context-cache create call bypasses the `_retry_gemini_call` timeout wrapper that every other Gemini SDK call goes through (PR #94 hard-cap 15s, 45s for Imagen). Gated by `context_caching_enabled` flag (default OFF) — zero prod impact until the flag is toggled on, at which point an SDK hang would have no cap.
+
+Fix: wrap the create call in `_retry_gemini_call(...)` so it inherits the same 15s deadline. ~5 LOC backend edit. Pre-emptive safety — easier to do now than to discover the gap when toggling the flag under load.
+
+Acceptance: `_caches.py:92` flows through the wrapper; existing IMP-5 unit tests still pass; flag toggle behaviour unchanged.
+
+#### PERF-PROJECTS — `/projects/` p50 600 ms (budget 300 ms)
+Codex Round 2 (2026-05-24) measured `GET /api/v1/projects/` at p50 = 600 ms, spec budget = 300 ms. Codex retest (2026-05-25) also observed double-fetch in dev (React StrictMode artefact + real prefetch — both contribute). User-visible: Projects list is the post-login first paint surface; >300 ms reads as sluggish.
+
+Investigation outline:
+1. Measure SQL count via `connection.queries` or Django Debug Toolbar against `ProjectListView`.
+2. If N+1 → port the `Subquery` / `prefetch_related` pattern shipped in PR #83 (`ProjectListView` + `OfficeProjectListView` already use this; new offenders likely live in serializer relations).
+3. If serializer-heavy → trim fields, introduce a `ProjectListSerializer` (lightweight) distinct from `ProjectDetailSerializer`.
+4. If neither → add a Django cache-framework layer (taste cache at `caches.py` is the existing template).
+
+Acceptance: p50 ≤ 300 ms on Singapore-deploy `/projects/`; no regression on serializer field shape consumed by HomePage / BoardCard.
+
+#### PERF-DISCOVERY — Discovery cache-hit 450 ms (budget <200 ms)
+Codex Round 2: `GET /api/v1/discovery/` cache-hit p50 = 450 ms vs spec budget < 200 ms. Codex retest 2026-05-25 observed cache-cold path 4.11 s with external image retries — cache-hit re-measure pending. Taste cache shipped in PR #87 (`get_or_build_taste` / `evict_taste`, 1 h TTL, evict on `liked_ids` change).
+
+Suspect work on the hit path:
+- response serialization on 12 cards (image URL resolution + program normalisation per row)
+- buildings-DB raw SQL lookup still executing on cache hit (cache may only hold the candidate id list, not the card payloads)
+- cache-key fragmentation lowering true hit rate
+
+Investigation outline:
+1. Discovery view (`views/discovery.py`) — log per-stage timing on a single request (cache lookup / SQL fan-out / serialization).
+2. If serialization is the floor → trim card payload, batch-resolve image URLs.
+3. If raw SQL still fires on hit → extend the cache to hold full card payloads, not just ids.
+4. If hit rate is low → audit cache key shape (taste fingerprint vs raw filter signature).
+
+Acceptance: cache-hit p50 < 200 ms on Singapore deploy; cache-cold path improvement opportunistic; no SwipePage UX regression (card payload shape preserved).
+
+#### PERF-SESSION-CREATE — `POST /analysis/sessions/` 5.2 s baseline (Codex retest 2026-05-25: 7.71 s)
+Codex Round 2 baseline = 5.2 s; Codex retest (2026-05-25) measured browser-side 7.71 s — slipping further. No explicit spec budget yet for session create itself (the 4000 ms TTFC budget covers chat parse, not the swipe-session bootstrap that follows). UX impact: 5–8 s wait between "Search" click and first swipe card is the heaviest single delay in the funnel.
+
+Pipeline steps (`views/sessions.py:28–160`):
+1. Project resolve / create
+2. `v_initial` embedding (HyDE sync or IMP-6 late-bind cache lookup)
+3. `engine.create_pool_with_relaxation` — 3-tier `canonical_v2_buildings` raw-SQL fan-out
+4. `engine.get_pool_embeddings` — pool 150 × 384-dim
+5. Tier-ordered `initial_batch` build — repeated `farthest_point_from_pool` matmul (≈10 iterations, also where Codex flagged the divide/overflow/invalid warnings)
+6. `AnalysisSession.objects.create` + response serialization
+
+Suspect bottlenecks: (a) pool SQL fan-out + 3-tier relaxation worst-case; (b) embedding batch fetch (≈ 150 vectors); (c) matmul repetition in initial batch.
+
+Investigation outline:
+1. Per-step timing log on one create request (Singapore deploy) to identify the dominant step.
+2. If pool creation dominates → cache by `(filter_signature, tier)` key; the same filter shape recurs across users.
+3. If embedding fetch dominates → batch-prefetch via single SQL, drop per-id round-trips.
+4. If initial-batch matmul dominates → vectorise the 10-call farthest-point loop into one batched matmul (cousin of MMR vectorisation already done in `compute_mmr_next`).
+
+Acceptance: session-create p50 ≤ 2 s Singapore deploy (≈ 3 × improvement); pool shape + initial_batch ordering unchanged (swipe loop deterministic with prior tests); no regression on filter relaxation behaviour.
+
+#### USER-DATA-ROLE-SEP — `user_data` DB role separation (least-privilege)
+**Decision (user 2026-05-25)**: split into two roles. Today the Django runtime logs into the `user_data` DB as `neondb_owner` — full DDL + DML + role + extension privileges. The app only needs DML on app tables.
+
+Plan:
+- Create a new Neon role `make_web_app` with `LOGIN` + `SELECT, INSERT, UPDATE, DELETE` on `ALL TABLES IN SCHEMA public` + `USAGE, SELECT ON ALL SEQUENCES`. No DDL, no role mgmt, no extension privileges.
+- Switch `DB_USER` in `backend/.env`, `backend/.env.example`, and Railway prod env from `neondb_owner` → `make_web_app`.
+- Keep `neondb_owner` alive as the **admin-only** login the operator uses when running `python manage.py migrate` (DDL needs the strong role; migrations run from the operator's machine, not from the prod app).
+- Mirrors the buildings-DB pattern shipped in PR #93 (`make_web` SELECT-only on `archi_data`), but with write privileges added since `user_data` is the app's read+write DB.
+
+Open dimensions:
+- **Default-privilege carry-over** — after the GRANT, future tables created by migration default to `neondb_owner`-only. Add `ALTER DEFAULT PRIVILEGES FOR ROLE neondb_owner IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO make_web_app;` so future migrations don't require manual GRANT each time?
+- **Cutover order** — create role + GRANT → verify with a manual `psql -U make_web_app` smoke (CRUD + reject DDL) → flip Railway env vars → restart prod gunicorn → confirm app green. Rollback = flip env back to `neondb_owner`.
+
+Acceptance:
+- Django runtime (Railway prod + local) connects as `make_web_app`; full app suite passes (login → swipe → save).
+- `make_web_app` cannot `DROP TABLE` or `CREATE ROLE` (verified via psql).
+- `manage.py migrate` still works under `neondb_owner` from operator machine.
+
+#### DEV-ENV2 — Local-dev branch verify + Neon/Railway/.env separation documented
+**Discovered during 2026-05-25 SNAPSHOT-BRANCH-DROP review.** The `local-dev` Neon branch provisioned by DEV-ENV1 (2026-05-23) is no longer listed in `neonctl branches list` for project `holy-pond-45504245`. Current branches: `production` + `pre-cleanup-2026-05-24` snapshot — that is all. The local `backend/.env` `DB_HOST` is `ep-broad-hat-a1jaomn7.ap-southeast-1.aws.neon.tech`, which is unverified (Claude session was blocked from inspecting Neon endpoint→branch mapping for credential-leak reasons).
+
+Risk: if `ep-broad-hat-a1jaomn7` belongs to the `production` branch, then **local `manage.py runserver` writes directly to prod user_data** — the exact failure mode DEV-ENV1 fixed. No mechanical guarantee of isolation right now.
+
+Architecture context (the answer to the user's recurring question):
+- `.env` is `.gitignored`; values exist only on the local machine. Loaded into `os.environ` by `python-dotenv` when Django boots.
+- Railway prod injects its own env vars into the gunicorn container; `.env` file is never deployed.
+- → Local and prod can point at different Neon branches via the same `settings.py` code reading `os.environ.get('DB_HOST')`.
+- This separation is the mechanism that makes DEV-ENV1 work — but only if local `.env` actually points at a dev branch and Railway env points at production.
+
+Tasks:
+1. **Verify current state** — user opens Neon dashboard, looks up endpoint `ep-broad-hat-a1jaomn7` and confirms which branch it belongs to. (Two possibilities: dev branch survived under a different name → no fix needed; or it points at `production` → DEV-ENV1 broken.)
+2. **Restore isolation if broken** — re-provision a persistent child Neon branch off `production` (no TTL), point `backend/.env` `DB_HOST` + `BUILDINGS_DB_HOST` at the new branch endpoint, leave Railway env vars untouched.
+3. **Document the separation** in `CLAUDE.md` `## Backend Conventions` (currently this convention exists only in DEV-ENV1 Done note + this entry). Make explicit:
+   - Local `.env` → dev branch
+   - Railway env → production branch
+   - Migrations run from operator machine using the admin role on production branch only when the deploy demands it
+4. **(Stretch)** add a startup-time sanity check (Django `apps.py` `ready()` or a runserver wrapper) that logs which branch the runtime resolved — so future drift is visible.
+
+Acceptance: known mapping between every env (local + Railway + any future preview) and its Neon branch; CLAUDE.md documents the separation; mechanical isolation between local writes and prod data restored if broken.
+
+#### DESIGN-REWORK — Design-system per-component rework (resume from paused foundation)
+Foundation shipped: PR #54 (`tokens.css` 4 themes + `ThemeContext` + `AppearanceSettings`) + PR #59 (theme/font server persistence). Remaining: per-component visual rework (≈ 7,700 LOC) — inline `style={{}}` → CSS Modules + `:hover/:focus`/`:active`, light-theme polish where dark-only assumptions still leak through, leaf→hub component order (small leaf components first, then containers).
+
+Resume via `/plan per slice` — each slice = one logical component cluster (e.g. SwipeCard + LoadingCard, then BoardCard, then HomePage, etc.). Each slice ships its own PR via the orchestrate skill; the full sweep takes many sessions.
+
+Acceptance per slice: `npm run lint` + `npm run build` clean; light + all dark variants render the touched components without visual regressions (compare against pre-slice screenshot); no new global token added without DESIGN.md update.
+
+### MEDIUM
 
 #### MOBILE-DESKTOP — Mobile vs desktop UX divergence
 Current viewport-lock layout is mobile-first. Detail pages on desktop work but unoptimised. Low priority — desktop is secondary.
@@ -85,41 +236,8 @@ Current viewport-lock layout is mobile-first. Detail pages on desktop work but u
 #### PRIVACY-PIPA — Privacy / sharing posture
 Phase 13+ Profile/Board public/private visibility shipped. PIPA + GDPR posture for signup data collection / consent flow / retention policy still open. **Required before public launch.**
 
-#### CONVO-PERSIST — Conversation history persistence
-Probe-turn chat history during a session is currently transient. Persist for session resume? Low priority.
-
-#### IMP5-BYPASS — IMP-5 cache create timeout wrapper bypass
-`backend/apps/recommendation/services/_caches.py:92` IMP-5 Gemini context-cache create call bypasses the `_retry_gemini_call` timeout wrapper. Gated by `context_caching_enabled` flag (default OFF) — zero prod impact until toggled on. Wrap on toggle-on.
-
-#### CODEX-STAGE3-RERUN — Codex Stage 3 re-audit on prod (post-PR #97)
-CI hang fix (PR #97) deployed via PR #98. Re-run codex Stage 3 (AI Search Flow 5) against prod to verify the 228 s `/parse-query/` hang no longer fires under load. Cumulative validation of PR #94 timeout cap + PR #97 daemon-thread swap.
-
-#### PERF-PROJECTS — `/projects/` p50 600ms (budget 300ms)
-Codex Round 2 observation: `/projects/` endpoint p50 latency 600 ms vs spec budget 300 ms. Probable N+1 elsewhere or warm cache miss. Investigate query plan.
-
-#### PERF-DISCOVERY — Discovery cache-hit 450ms (budget <200ms)
-Codex Round 2: Discovery endpoint cache-hit path measures 450 ms; spec budget <200 ms. Cache may be doing extra work or response serialization is the floor. Trace.
-
-#### PERF-SESSION-CREATE — Session create 5.2s baseline
-POST `/analysis/sessions/` measured 5.2 s baseline. Pre-existing; flag for investigation.
-
 #### MATMUL-WARN — matmul runtime warning (sklearn BLAS dtype)
 sklearn emits matmul dtype warning during clustering. Cosmetic noise but indicates float32 / float64 mismatch — quick fix is dtype-align embedding ndarrays before kmeans.
-
-#### ARCHITECTS-WIRING — `canonical_v2_architects` feature wiring
-Make DB shipped new table `canonical_v2_architects` (14,216 firms, 4,357 recommendable) in 2026-05-24 DB swap. Make Web `profiles_office` 4-tier resolution + REC2 (Phase 16) should consume this. Not yet wired.
-
-#### USER-DATA-ROLE-SEP — `user_data` DB role separation (security)
-`user_data` DB currently uses default `neondb_owner` role with full privileges. Split to a restricted Make-Web-only role mirroring the SELECT-only `make_web` role on `archi_data`. Security backlog.
-
-#### SNAPSHOT-BRANCH-DROP — 1-week post-deploy snapshot branch drop
-After production deploys, Neon snapshot branches retained for 1 week as rollback safety. Drop the lingering ones after retention window (verify Neon dashboard).
-
-#### CELERY-CORPUS-RANK — Celery `compute_corpus_rank` background task
-`recommendation_swipeevent` row inserts currently compute corpus rank synchronously (or skip when on bookmark POST per PR #79). Async via Celery for proper telemetry without blocking.
-
-#### DESIGN-REWORK — Design-system redesign per-component rework (paused)
-Foundation shipped: PR #54 (`tokens.css` 4 themes + `ThemeContext` + `AppearanceSettings`) + PR #59 (theme/font server persistence). Remaining: per-component visual rework (~7,700 LOC, inline styles → CSS Modules + `:hover`, light-theme visuals) across the frontend, leaf→hub order. Paused — no active PR. Resume via `/plan` per slice.
 
 ### LOW
 
@@ -144,6 +262,22 @@ Open dimensions (admin decision before implementation):
 - **Trigger surface UX** — Single button → modal / full-page / toggle between Office/User?
 
 Acceptance: `/recommendations/profile/` p95 ≤ 800 ms on Singapore deploy; cold-start UX graceful; `canonical_bld_id` + `is_publishable=true` gating preserved per CLAUDE.md hard rules.
+
+#### PHASE18 — External Connections (firm article crawl)
+Surfaces external articles about a firm on FirmProfilePage (Space / ArchDaily / news keyword match). Phase 15 already shipped External DM wiring (`Office.contact_email`, `Office.website`, `UserProfile.external_links`).
+
+Open dimensions:
+- **Article source priority** — Space-first (Korean) vs ArchDaily-first (global) vs parity? (Korea-first principle suggests Space)
+- **Crawl freshness** — real-time on view / scheduled daily-weekly / event-driven?
+- **Storage** — denormalised in `Office` row / separate `OfficeArticle` table / external CDN?
+- **Article fallback** — empty section / hide section / "no recent articles" placeholder?
+
+Acceptance: ≤10 most recent articles per firm; open in new tab (legal posture); no FirmProfilePage TTFC regression (article fetch async, doesn't block initial paint).
+
+#### CELERY-CORPUS-RANK — Celery `compute_corpus_rank` background task
+`recommendation_swipeevent` row inserts used to compute `corpus_rank` synchronously (O(corpus_size) scan on every swipe). PR #79 turned this off on the bookmark path (`rank_corpus = None` + TODO). Today the field is None on every write — telemetry slightly degraded but swipe response is fast. Celery + Redis would let us re-enable the calculation off the hot path.
+
+Why LOW: introducing Celery just for this one field is over-investment. Adds Redis (Railway add-on cost), a worker process, monitoring surface, and a deploy step — all for one telemetry column the product doesn't currently consume. Revisit when other background jobs accumulate (image batch processing, periodic embedding refresh, scheduled snapshot drops) so Celery earns its keep across multiple tasks.
 
 ---
 
