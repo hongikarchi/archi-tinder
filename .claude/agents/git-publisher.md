@@ -31,6 +31,11 @@ The dispatch may also paste an exact `gh` command — run it as-is.
 4. **Never approve your own PR.** If the admin is the only Code Owner and the PR needs admin approval, surface that — do not work around it.
 5. **Never merge a PR with red CI.** Even if asked to "merge anyway," ask once for confirmation; if confirmed, flag the CI-red merge in your report.
 6. **Never modify `.github/CODEOWNERS`, `.github/workflows/*`, branch protection rulesets**. Those are admin-owned via PR (route through git-manager).
+7. **Publish gate — refuse-without-trigger.** Before opening a PR or merging, verify the dispatch prompt explicitly cites at least one of:
+   - **(a) User trigger in current turn** — the prompt quotes the user typing one of: `"PR 올려"` / `"push"` / `"publish"` / `"merge"` / `"PR 열어"` / `"deploy"` / `"배포"` / `"release"`.
+   - **(b) Active plan reference** — the prompt cites `.claude/plans/<name>.md` and its `## PR Plan` section authorizing this slice.
+   If neither (a) nor (b) is explicitly cited, REFUSE. Return: `git-publisher REFUSED — no publish trigger cited in dispatch prompt. Caller must re-dispatch with user trigger quote or active plan PR Plan reference.` Do NOT push, do NOT open a PR. Codified post-incident 2026-05-25 (PR #105 main-merge accident).
+8. **Base=main precondition.** Any PR creation or merge targeting `main` requires the dispatch trigger to be specifically `"deploy"` / `"release"` / `"배포"`. Plain `"PR 올려"` / `"push"` / `"publish"` / `"merge"` does NOT authorize base=main. If base=main is requested without the deploy keyword in the trigger, REFUSE. Codified post-incident 2026-05-25.
 
 ---
 

@@ -12,21 +12,74 @@
  * Three-bucket model:
  *   - `done`      = resolved work (merged, shipped, archived)
  *   - `now`       = current initiative slice (one or more PRs in flight)
- *   - `next`      = backlog / planned / deferred work
+ *   - `next`      = backlog grouped by priority: { high: [], medium: [], low: [] }
+ *                   HIGH   = next initiative slice candidate (specced, ready to pull)
+ *                   MEDIUM = uncategorised pending (review needed before promotion)
+ *                   LOW    = explicitly deferred / skipped (revisit when context shifts)
  *
  * Time convention: all human-facing timestamps are `YYYY-MM-DD HH:mm KST`.
  * PRs additionally carry the raw `mergedAt` (ISO 8601 UTC from `gh pr list`)
  * so the value can be re-parsed by any consumer.
  */
+// Reporter: Mermaid sources may be stale — commit 18949a8 touched .claude/agents/reporter.md. Next session should refresh the affected diagram by hand.
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-05-24',
-    head: '8b4df92',
-    branch: 'feature/admin-session-end-reporter-post-swap',
+    updatedAt: '2026-05-25 01:50 KST',
+    head: '890236c',
+    branch: 'develop',
   },
 
   done: [
+    {
+      id: 'SWIPE-CALIBRATING',
+      title: '#21 SWIPE-CALIBRATING — ConfidenceBar null-confidence guard (Calibrating… label)',
+      completedAt: '2026-05-25',
+      prs: [108],
+      note: '4th swipe trips exploring→analyzing transition; backend resets convergence_history per spec C-1; compute_confidence returns null for ~5 swipes. Old code showed Analyzing 100% on null fallback — user stuck. Fix: null confidence in analyzing branch → Calibrating… label + likeCount/4 progress. isAt100 Finish gate untouched. Backend convergence reset unchanged (correct per spec). Deferred: MATMUL-WARN, PERF-DISCOVERY, PERF-SESSION-CREATE, PERF-PROJECTS all remain in next[].',
+    },
+    {
+      id: 'TASK-MD-RESTRUCTURE-V2',
+      title: '#20 TASK-MD-RESTRUCTURE-V2 — Workflow Rules + Now/Next discipline + audit-verified AUDIT-T4 LOC + AUTH1 frontend scope',
+      completedAt: '2026-05-25',
+      prs: [104],
+      note: 'Task.md 394→305 lines: dropped Phase 1-18 Development Roadmap section (duplicates of Done), replaced with compact Roadmap (Historical) at bottom + new Workflow Rules block at top. Reordered: header → Workflow Rules → Now → Next → Done → Roadmap (Historical). AUTH1 scope narrowed to frontend only (backend Kakao+Naver already shipped). AUDIT-T4 LOC re-verified 2026-05-25 (engine.py 2139, FirmProfilePage 540 refactored down). Codified Now/Next discipline in orchestrate/SKILL.md.',
+    },
+    {
+      id: 'DESIGN-REWORK-MOVE',
+      title: '#19 DESIGN-REWORK-MOVE — move DESIGN-REWORK out of Now (paused, no PR in flight) → Next',
+      completedAt: '2026-05-25',
+      prs: [103],
+      note: 'DESIGN-REWORK moved from Task.md ## Now to ## Next with paused tag — Now definition is "PR in flight" and no design PR in 50+ commits + memory marked paused. state.js now[] → [], DESIGN-REWORK appended to next[]. CLAUDE.md Current State refreshed. dashboard.html emptyMsg already handles empty array.',
+    },
+    {
+      id: 'TASK-NEXT-RESTRUCTURE',
+      title: '#18 TASK-NEXT-RESTRUCTURE — absorb docs/specs into Task.md Next, fix orchestrate stale refs',
+      completedAt: '2026-05-24',
+      prs: [101],
+      note: 'docs/specs/*.md (4 files) absorbed into Task.md ## Next flat backlog, folder deleted. orchestrate/SKILL.md stale refs fixed (Goal.md → CLAUDE.md constitution, Report.md → code+state.js, token-saving.md → WORKFLOW.md). 10 operational deferrals surfaced as ## Next entries. reporter.md sub-step 2a added (Deferred→Next surfacing). back-maker/front-maker/code-review agent refs updated.',
+    },
+    {
+      id: 'PRODUCT-IDENTITY',
+      title: '#17 PRODUCT-IDENTITY — add Product Identity section to CLAUDE.md (Core Promise anchor)',
+      completedAt: '2026-05-24',
+      prs: [100],
+      note: 'New ## Product Identity section added to CLAUDE.md between What This Repo Does and Branch Model. ### Core Promise sub-section: 10-15 swipes → Aha! moment, Korean user-quote anchor, two-pillars one-liner (algorithm + corpus), pointer to docs/algorithm.md. Surfaces positive product identity previously implicit. +8 lines.',
+    },
+    {
+      id: 'DEPLOY-2026-05-24-v2',
+      title: '#16 DEPLOY-2026-05-24-v2 — develop → main deploy, 1 PR (#97)',
+      completedAt: '2026-05-24',
+      prs: [98],
+      note: 'Release PR #98 squash-merged CI hang fix to main (fd063e0). Railway deployment a98725bf Online. Bug #5 carve-out applied (develop force-reset to fd063e0). Prod functional pre-deploy (PR #94 cap working); this deploy = CI baseline alignment + main/develop sync.',
+    },
+    {
+      id: 'CI-HANG-FIX',
+      title: '#15 CI-HANG-FIX — _retry_gemini_call executor → daemon Thread + Queue',
+      completedAt: '2026-05-24',
+      prs: [97],
+      note: 'ThreadPoolExecutor + future.result(timeout) → threading.Thread(daemon=True) + queue.Queue.get(timeout). _Thread captured at module-load to bypass test_imp8 _DiscThread global mock leak. Same 15s/45s deadline + FATAL + retry semantics. PR #94 ThreadPoolExecutor hung pytest CI 15min, cascading 5 CI failures. Full suite: 683 passed / 11 skipped / 0 failed.',
+    },
     {
       id: 'GEMINI-TIMEOUT-CAP',
       title: '#13 GEMINI-TIMEOUT-CAP — hard 15s timeout cap on Gemini retry wrapper',
@@ -41,149 +94,167 @@ window.PROJECT_STATE = {
       prs: [93],
       note: 'Make DB renamed buildings DB neondb → archi_data; new SELECT-only role make_web (was neondb_owner); canonical_v2_architects table added (14,216 firms). Make Web swapped .env + Railway prod env vars; refreshed .env.example + CLAUDE.md is_publishable stat (39/39,776 → 2,614/39,478 ~6.6%) + docs/database-schema.md. Prod redeploy 04e7633e Online verified.',
     },
-    {
-      id: 'V1-LEGACY-CLEANUP',
-      title: '#11 V1-LEGACY-CLEANUP — drop architecture_vectors refs + orphan tables',
-      completedAt: '2026-05-24',
-      prs: [92],
-      note: 'Neondb local-dev branch drop + 23 orphan user/app tables + legacy architecture_vectors dropped. 3 backend v1 files deleted (algorithm_tester.py, profile_image_latency.py, test_chat_phase_style_labels). 5 stale doc refs refreshed. Plan merry-toasting-dove.md archived.',
-    },
-    {
-      id: 'DEPLOY-2026-05-24',
-      title: 'develop → main deploy — 21 PRs (#68–#89)',
-      completedAt: '2026-05-24',
-      prs: [90],
-      note: 'Release PR #90 squash-merged 21 PRs to main (179d6f6). Railway prod confirmed Online. origin/develop force-reset to match main (Bug #5 carve-out).',
-    },
-    {
-      id: 'DASHBOARD-REWORK',
-      title: 'Dashboard rework — 5-tab Done/Now/Next + Mermaid flows + KST timestamps',
-      completedAt: '2026-05-24',
-      prs: [89],
-      note: '6-tab → 5-tab Done/Now/Next/System Flow/Agent Flow; mermaid.min.js vendored; Task.md sections renamed Open→Next / In Progress→Now / Resolved→Done; state.js schema rewritten; reporter.md spec updated.',
-    },
-    {
-      id: 'CODEX-R2',
-      title: 'Codex Round 2 audit — 7 findings resolved',
-      completedAt: '2026-05-24',
-      prs: [85, 86, 87],
-      note: 'images/batch validation, BoardDetail normalize, useBoard decouple, SwipePage analyzing %, Gemini auth-error fail-fast, discovery taste-vector TTL cache',
-    },
-    {
-      id: 'CODEX-EXT-9',
-      title: 'External codex audit — 9 findings resolved',
-      completedAt: '2026-05-23',
-      prs: [81, 82, 83],
-      note: 'raw_query dual-key, swipe idempotency full payload, Project row lock, DPP 3× overfetch, diverse RANDOM 2-query, ProjectList N+1, JWT blacklist, image_focus plumb, exploring bar 3→4',
-    },
-    {
-      id: 'AUDIT-T3',
-      title: 'Audit Tier 3 ops risk',
-      completedAt: '2026-05-23',
-      prs: [79],
-      note: 'ORDER BY RANDOM 2-query, sync corpus-rank, GET-write atomic, thread-local telemetry',
-    },
-    {
-      id: 'AUDIT-T2',
-      title: 'Audit Tier 2 UX-contract bugs',
-      completedAt: '2026-05-23',
-      prs: [76, 77, 78],
-      note: 'area filter normalize, FE→BE raw_query plumb, dead /matched route, rerank response shape, profiles legacy table',
-    },
-    {
-      id: 'DEPLOY-PROD',
-      title: 'Neon DB-split + production deploy',
-      completedAt: '2026-05-22',
-      prs: [63],
-      note: 'app DB = user_data (57 migrations, 23 tables), buildings DB = neondb (39,776 rows); deploy 69c9473a verified healthy. (Buildings DB later renamed neondb → archi_data on 2026-05-24 by Make DB.)',
-    },
   ],
 
-  now: [
-    {
-      id: 'DESIGN-REWORK',
-      title: 'Design-system redesign — per-component rework',
-      startedAt: '2026-05-08',
-      note: 'Foundation shipped (PR #54: tokens.css 4 themes + ThemeContext + AppearanceSettings). Remaining: per-component visual rework (~7,700 LOC, inline styles → CSS Modules + :hover, light-theme visuals) across the frontend, leaf→hub order. Scope with /plan per slice.',
-    },
-  ],
+  now: [],
 
-  next: [
-    {
-      id: 'AUTH1',
-      title: 'Kakao / Naver OAuth',
-      note: 'Google OAuth only today. Korean users need domestic login. Backend + frontend buttons for both.',
-    },
-    {
-      id: 'AUDIT-T4',
-      title: 'Audit Tier 4 — structural refactor (deferred)',
-      note: 'File decomp: engine.py (2079 LOC), App.jsx (795 LOC), BoardDetailPage (1032 LOC), UserProfilePage (990 LOC), PostSwipeLandingPage (696 LOC), SwipePage (666 LOC), FirmProfilePage (611 LOC).',
-    },
-    {
-      id: 'PHASE16',
-      title: 'Phase 16 — Recommendation expansion (Profile-tab office + user recs)',
-      note: 'Spec: docs/specs/phase16-recommendation-expansion.md. REC1 already executed as Push S3; REC2 / REC3 serve a Profile-tab "사무소 추천" button (Q3 decision); Landing tab deleted by Push S6.',
-    },
-    {
-      id: 'PHASE17',
-      title: 'Phase 17 — LLM reverse-questioning (pre-swipe persona classification)',
-      note: 'Spec: docs/specs/phase17-llm-reverse-q.md. Reverse-question lives in the first 0-2 turns of the Taste-tab LLM chat. Per-persona UI branching for P1-P4.',
-    },
-    {
-      id: 'PHASE18',
-      title: 'Phase 18 — External connections (firm article crawl)',
-      note: 'Spec: docs/specs/phase18-external-connections.md. Lower priority than Phase 16-17. Space, ArchDaily, news crawler + article list UI + external DM links.',
-    },
-  ],
+  next: {
+    high: [
+      {
+        id: 'BACK-LLM-1',
+        title: 'LLM 채팅이 검색에 필요한 정보를 다 안 모음',
+        note: 'parse_query.py already implements a 0-2 turn probe budget with free-choice abstract A-vs-B axes. This task drops persona classification (P1-P4) and re-scopes the work to (1) define an explicit "required info slate" the chat must collect (filter fields like program / style / material / location_country), and (2) refine LLM probe behaviour so it deterministically targets missing slate fields instead of free-choice axes. Open: which fields are required vs optional, probe priority order, optional-slate inclusion, fallback when 2-turn budget exhausts with slate gap, conversational shape (abstract A-vs-B vs direct field-asking), cross-language posture (Korea-first preserved). Acceptance: TTFC budget 4000ms not regressed; 2-turn probe always lands required-slate ≥1 field; A/B slate-completion-rate vs current prompt.',
+      },
+      {
+        id: 'BACK-RECOMMEND-1',
+        title: 'Project 두번째 세션이 이전 taste를 모름',
+        note: 'Same Project can host multiple AnalysisSession rows; user "Resume" creates a fresh session while Project.liked_ids accumulates. Today session #2 algorithm state (like_vectors, convergence_history, phase) starts from scratch despite the user having liked 12 buildings in session #1. Open: carry policy (A independent / B exposure-only / C dislike-only / D fade-decay / E full warm-start / F user toggle); warm-start phase entry; SessionCreateView wiring at views/sessions.py:28 (currently just resolves project_id, carry would seed like_vectors from Project.liked_ids embeddings at create time). Acceptance: deterministic behaviour, session #2 TTFC not regressed, A/B on saved_ids growth + completion rate.',
+      },
+      {
+        id: 'FRONT-UX-1',
+        title: '신규 사용자에게 홈이 빈 화면',
+        note: 'First-time user with 0 projects lands on Home → project picker — currently shows nothing deliberate. Frontend-only (HomePage / ProjectListPage). Open: onboarding shape (guided CTA / placeholder + create button / demo query / hybrid), copy + voice, visual illustration. Acceptance: 0-project user sees deliberate empty state; CTA path to first swipe ≤2 clicks; no regression on existing-projects rendering.',
+      },
+      {
+        id: 'FULL-LANGUAGE-1',
+        title: '한/영 언어 설정 토글 없음',
+        note: 'Decision 2026-05-25: language is a user setting (Korean / English), not browser-locale auto-detected. Pattern mirrors PR #54 + PR #59 theme/font persistence. Backend: UserProfile.language CharField, default ko. Frontend: LanguageContext mirroring ThemeContext, toggle in AppearanceSettings (or sibling page). Drives LLM chat answer language (parse_query.py reads from profile, overrides message-language inference) + UI label rendering (hand-rolled t() helper, no react-i18next dependency). Open: scope priority (TabBar first?), translation source (admin / Gemini + review), settings UI placement, untranslated fallback. Acceptance: language PATCH round-trip, LLM chat follows setting, ≥1 high-traffic UI surface bilingual, no theme/font regression.',
+      },
+      {
+        id: 'BACK-LLM-2',
+        title: '채팅 기록이 다른 기기에서 사라짐',
+        note: 'Decision 2026-05-25: persist chat conversation to backend DB, not just browser localStorage. Today LLMSearchPage.jsx:186–205 stores conversationHistory in localStorage — single-browser, lost on logout / device switch / cache clear. Resume + Exit UX already shipped (SwipePage.jsx ExitConfirmPopup). Backend currently has no conversation field. Plan: add Project.conversation_history JSONField (or ConversationTurn table — open) + migration + serializer + idempotent append endpoint; swap LLMSearchPage localStorage reads for API; optionally keep localStorage as write-through cache. Open: storage shape (JSONField vs table), per-session vs per-project, localStorage retention, retention policy, migration of existing local data. Acceptance: logout + re-login on any browser re-hydrates conversation; idempotent append survives network retry; Resume/Exit UX unchanged.',
+      },
+      {
+        id: 'BACK-LLM-3',
+        title: 'Gemini cache 호출에 timeout 없음',
+        note: '_caches.py:92 IMP-5 Gemini context-cache create call bypasses the _retry_gemini_call timeout wrapper (PR #94 15s cap). Gated by context_caching_enabled flag (default OFF) — zero prod impact until toggled on. Fix: wrap call in _retry_gemini_call; ~5 LOC backend edit. Pre-emptive safety before flag toggle. Acceptance: _caches.py:92 flows through wrapper; existing IMP-5 tests pass; flag behaviour unchanged.',
+      },
+      {
+        id: 'BACK-PERFORMANCE-1',
+        title: '/projects/ 응답 600ms (목표 300ms)',
+        note: 'Codex Round 2 measured p50 = 600 ms vs spec 300 ms. Codex retest 2026-05-25 also saw dev double-fetch (StrictMode + real prefetch). User-visible: post-login first paint surface. Investigation: SQL-count probe → port PR #83 Subquery/prefetch_related pattern if N+1 → trim serializer or add light ProjectListSerializer → cache layer last resort. Acceptance: p50 ≤300 ms Singapore deploy, no serializer-shape regression on HomePage/BoardCard.',
+      },
+      {
+        id: 'BACK-PERFORMANCE-2',
+        title: 'Discovery 캐시 hit 450ms (목표 <200ms)',
+        note: 'Codex Round 2: discovery cache-hit p50 = 450 ms vs spec <200 ms. Retest 2026-05-25: cache-cold 4.11 s with external image retries. Taste cache shipped PR #87 (1h TTL, evict on liked_ids change). Suspect: serialization floor on 12 cards / raw SQL still on hit path / low true hit-rate from key fragmentation. Investigation: per-stage timing in views/discovery.py → trim payload, batch URLs, extend cache to hold card payloads, audit key shape. Acceptance: hit-path p50 <200 ms Singapore deploy; no SwipePage card-shape regression.',
+      },
+      {
+        id: 'BACK-PERFORMANCE-3',
+        title: 'Search 후 첫 카드까지 5-8초',
+        note: 'Single heaviest delay in the funnel — 5–8 s between Search click and first swipe card. Pipeline (views/sessions.py:28-160): project resolve → v_initial embedding → create_pool_with_relaxation (3-tier SQL fan-out) → get_pool_embeddings (150 × 384) → tier-ordered initial_batch via repeated farthest_point_from_pool matmul (same code path emitting Codex divide/overflow/invalid warnings) → AnalysisSession INSERT. Investigation: per-step timing log on prod → cache by (filter_signature, tier) if pool dominates / batch-prefetch embeddings / vectorise initial-batch farthest-point loop. Acceptance: p50 ≤ 2 s Singapore deploy (≈ 3× improvement); pool + initial_batch determinism preserved.',
+      },
+      {
+        id: 'INFRA-DB-1',
+        title: 'Django app이 owner 권한으로 DB 접근',
+        note: 'Decision 2026-05-25: split Django runtime off neondb_owner. Today DB_USER=neondb_owner (full DDL/DML/role/extension). Create new Neon role make_web_app (SELECT+INSERT+UPDATE+DELETE on app tables + USAGE/SELECT on sequences; no DDL); switch .env + .env.example + Railway DB_USER → make_web_app; keep neondb_owner alive for operator-run manage.py migrate. Mirrors buildings-DB make_web role (PR #93) but write-enabled since user_data is read+write. Open: ALTER DEFAULT PRIVILEGES so future migrations auto-grant to app role; cutover order. Acceptance: app runtime green under make_web_app; psql confirms DDL is blocked; manage.py migrate still works under neondb_owner.',
+      },
+      {
+        id: 'INFRA-ENV-1',
+        title: 'local-dev Neon branch 사라짐 — prod 직격 위험',
+        note: 'Confirmed 2026-05-25 via docs/MAKEWEB_DB_SWAP_RESPONSE.md line 10-12: local-dev branch was dropped during PR #93 buildings-DB swap; .env DB_HOST was deliberately repointed to ep-broad-hat-a1jaomn7 (production endpoint) "for local development to function." Net: local runserver writes directly to prod user_data right now — DEV-ENV1 isolation broken. Tasks: (1) provision new persistent dev child branch off production; (2) repoint local .env DB_HOST + BUILDINGS_DB_HOST; (3) document local-vs-Railway env separation in CLAUDE.md ## Backend Conventions; (4) stretch: Django apps.py ready() log line printing resolved DB host on boot; (5) stretch: identify + patch any tainted prod rows created since 2026-05-24. Acceptance: local writes land on dev branch; CLAUDE.md documents the mapping; startup log confirms branch.',
+      },
+      {
+        id: 'FRONT-DESIGN-1',
+        title: '디자인 시스템 컴포넌트 리워크 (paused)',
+        note: 'Foundation shipped: PR #54 (tokens.css 4 themes + ThemeContext + AppearanceSettings) + PR #59 (theme/font server persistence). Remaining: per-component visual rework (~7,700 LOC) — inline styles → CSS Modules + :hover/:focus/:active, light-theme polish, leaf→hub order. Resume via /plan per slice; each slice ships its own PR via orchestrate skill. Acceptance per slice: lint+build clean, light+dark variants regression-free, no token added without DESIGN.md update.',
+      },
+    ],
+    medium: [
+      {
+        id: 'FRONT-LAYOUT-1',
+        title: 'Desktop wide-screen 레이아웃 어색함',
+        note: 'Current viewport-lock layout is mobile-first. Detail pages on desktop work but unoptimised. Low priority — desktop is secondary.',
+      },
+      {
+        id: 'FULL-LEGAL-1',
+        title: 'PIPA/GDPR consent 없음 (public launch 차단)',
+        note: 'Phase 13+ Profile/Board public/private visibility shipped. PIPA + GDPR posture for signup data collection / consent flow / retention policy still open. Required before public launch.',
+      },
+      {
+        id: 'BACK-RECOMMEND-2',
+        title: 'engine.py matmul warning 정리',
+        note: 'sklearn emits matmul dtype warning during clustering. Cosmetic noise but indicates float32/float64 mismatch — quick fix is dtype-align embedding ndarrays before kmeans.',
+      },
+    ],
+    low: [
+      {
+        id: 'FRONT-AUTH-1',
+        title: 'LoginPage에 Kakao/Naver 버튼 없음',
+        note: 'Backend Kakao + Naver implementation shipped: apps/accounts/views.py KakaoLoginView + NaverLoginView, urls.py auth/social/kakao/ + auth/social/naver/. Frontend LoginPage.jsx has Google button only — Kakao + Naver buttons remaining.',
+      },
+      {
+        id: 'FULL-REFACTOR-1',
+        title: '큰 파일 분해 필요 (engine.py 2139 LOC 등)',
+        note: 'File decomp (LOC verified 2026-05-25): engine.py 2139 (+60 since first flagged), App.jsx 817, BoardDetailPage 1045, UserProfilePage 992, PostSwipeLandingPage 696, SwipePage 666, FirmProfilePage 540 (recently refactored down from 611).',
+      },
+      {
+        id: 'BACK-RECOMMEND-3',
+        title: 'Profile-tab 사무소/유저 추천 endpoint 없음',
+        note: 'REC1 shipped as Push S3. REC2 (firm) + REC3 (user) target GET /api/v1/recommendations/profile/ returning {offices, users} for a Profile-tab button. Open: firm vector composition, user taste vector, cold-start strategy, match score visibility, diversity/follow-exclusion, tie-breakers, trigger surface UX. Acceptance: p95 ≤800ms Singapore, cold-start graceful, is_publishable=true gating preserved.',
+      },
+      {
+        id: 'BACK-EXTERNAL-1',
+        title: 'FirmProfilePage에 외부 기사 surface 없음',
+        note: 'Surfaces external articles about a firm on FirmProfilePage (Space / ArchDaily / news keyword match). Phase 15 already shipped External DM wiring. Open: article source priority, crawl freshness, storage, article fallback. Acceptance: ≤10 most recent articles per firm, open in new tab, no FirmProfilePage TTFC regression.',
+      },
+      {
+        id: 'INFRA-QUEUE-1',
+        title: 'corpus_rank telemetry 꺼져있음',
+        note: 'corpus_rank telemetry field currently None on every swipe (PR #79 turned off the synchronous O(corpus_size) scan; product does not consume the field). Re-enabling requires Celery + Redis + worker process + monitoring — over-investment for one telemetry column. Revisit when multiple background jobs accumulate (image batch, embedding refresh, scheduled snapshot drops) so the infra cost amortises.',
+      },
+    ],
+  },
 
   prs: [
     {
-      number: 94,
-      title: 'fix(gemini): hard 15s timeout cap on retry wrapper (228s hang → ≤31s)',
-      mergedAt: '2026-05-24T04:26:12Z',
-      mergedAtKST: '2026-05-24 13:26 KST',
+      number: 108,
+      title: 'fix(frontend): ConfidenceBar Calibrating label when analyzing+null',
+      mergedAt: '2026-05-24T16:33:11Z',
+      mergedAtKST: '2026-05-25 01:33 KST',
     },
     {
-      number: 93,
-      title: 'chore: buildings DB swap to archi_data + make_web role (config + docs)',
-      mergedAt: '2026-05-24T03:19:05Z',
-      mergedAtKST: '2026-05-24 12:19 KST',
+      number: 107,
+      title: 'chore: session-end reporter housekeeping — docs PRs #103/#104 (redo, correct base=develop)',
+      mergedAt: '2026-05-24T15:51:54Z',
+      mergedAtKST: '2026-05-25 00:51 KST',
     },
     {
-      number: 92,
-      title: 'chore: drop v1 architecture_vectors refs — 2 files + 4 doc fixes',
-      mergedAt: '2026-05-24T01:42:39Z',
-      mergedAtKST: '2026-05-24 10:42 KST',
+      number: 104,
+      title: 'docs: restructure Task.md (Workflow Rules + Now/Next discipline) + update AUTH1/AUDIT-T4',
+      mergedAt: '2026-05-24T15:29:32Z',
+      mergedAtKST: '2026-05-25 00:29 KST',
     },
     {
-      number: 91,
-      title: 'chore: session-end reporter housekeeping — 2026-05-24 post-deploy',
-      mergedAt: '2026-05-24T00:48:21Z',
-      mergedAtKST: '2026-05-24 09:48 KST',
+      number: 103,
+      title: 'docs: move DESIGN-REWORK out of Now (paused, no PR in flight) → Next',
+      mergedAt: '2026-05-24T15:15:51Z',
+      mergedAtKST: '2026-05-25 00:15 KST',
     },
     {
-      number: 90,
-      title: 'Release: 2026-05-24 — codex round 2 + dashboard rework',
-      mergedAt: '2026-05-23T17:01:43Z',
-      mergedAtKST: '2026-05-24 02:01 KST',
+      number: 102,
+      title: 'chore: session-end reporter housekeeping — docs PRs #100/#101',
+      mergedAt: '2026-05-24T15:03:05Z',
+      mergedAtKST: '2026-05-25 00:03 KST',
     },
     {
-      number: 89,
-      title: 'feat: dashboard rework — 5-tab Done/Now/Next + Mermaid flows + KST timestamps',
-      mergedAt: '2026-05-23T16:58:28Z',
-      mergedAtKST: '2026-05-24 01:58 KST',
+      number: 101,
+      title: 'docs: absorb docs/specs into Task.md Next, fix orchestrate stale refs',
+      mergedAt: '2026-05-24T14:56:47Z',
+      mergedAtKST: '2026-05-24 23:56 KST',
     },
     {
-      number: 88,
-      title: 'chore: session-end reporter housekeeping — codex round 2 (7 findings resolved)',
-      mergedAt: '2026-05-23T16:32:04Z',
-      mergedAtKST: '2026-05-24 01:32 KST',
+      number: 100,
+      title: 'docs: add Product Identity section to CLAUDE.md (Core Promise anchor)',
+      mergedAt: '2026-05-24T14:34:59Z',
+      mergedAtKST: '2026-05-24 23:34 KST',
     },
     {
-      number: 87,
-      title: 'perf: codex round 2 — discovery taste vector TTL cache',
-      mergedAt: '2026-05-23T16:28:04Z',
-      mergedAtKST: '2026-05-24 01:28 KST',
+      number: 99,
+      title: 'chore: session-end reporter housekeeping — CI hang fix + deploy #98',
+      mergedAt: '2026-05-24T11:03:09Z',
+      mergedAtKST: '2026-05-24 20:03 KST',
     },
   ],
 
@@ -319,7 +390,7 @@ window.PROJECT_STATE = {
     { phase: '14', focus: 'Board system — board detail view, follow, "Love this!" reaction', status: 'shipped' },
     { phase: '15', focus: 'Social foundation — external DM links, MATCHED! results screen', status: 'shipped' },
     { phase: '16', focus: 'Recommendation expansion — Profile-tab office + user recs', status: 'pending' },
-    { phase: '17', focus: 'LLM reverse-questioning — pre-swipe persona classification', status: 'pending' },
+    { phase: '17', focus: 'LLM chat refinement — reverse-Q to fill required info slate (persona classification dropped)', status: 'pending' },
     { phase: '18', focus: 'External connections — firm article crawl (Space, ArchDaily, news)', status: 'pending' },
     { phase: '19–26', focus: 'Tab 3-structure replan + P1–P6 latency/UX overhaul', status: 'shipped' },
     { phase: 'design', focus: 'Design-system redesign — light-mode tokens, 4-theme switcher, frontend rework', status: 'in progress' },

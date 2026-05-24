@@ -6,6 +6,14 @@
   For collaboration / branch model / PR workflow / file ownership, see `CONTRIBUTING.md`.
   For the build workflow (the single session, its sub-agents, the `orchestrate` skill), see `.claude/WORKFLOW.md`.
 
+  ## Product Identity
+
+  ### Core Promise
+  10-15 swipes → Aha! moment (taste captured).
+  > "이 앱이 내 미묘한 취향을 벌써 눈치챘네?"
+
+  Two pillars (물리적 직관성 + 마법 같은 반응성). Detail → `docs/algorithm.md`.
+
   ## Branch Model — HARD RULES (must follow before any commit)
 
   **The team uses GitHub Flow with a develop integration branch:**
@@ -88,10 +96,9 @@
   ## Audit Trail Locations
   | Category | Location | Writer |
   |---|---|---|
-  | **Spec** (binding requirements / pending work) | `docs/specs/*.md` | admin |
+  | **Task board** (roadmap + Next backlog + Done log) | `.claude/Task.md` | reporter agent (Phase 16-18 dimensions inlined here as of 2026-05-24; the prior `docs/specs/*.md` folder was absorbed) |
   | **Algorithm reference** (theory + hyperparams) | `docs/algorithm.md` | admin (reporter syncs prod values) |
   | **Plan** (`/plan` artifacts) | `.claude/plans/*.md` | the session |
-  | **Task board** (roadmap + tasks) | `.claude/Task.md` | reporter agent |
   | **Project dashboard** (live state, human-facing) | `project/dashboard.html` + `project/state.js` | reporter agent |
 
   ## Target Structure
@@ -100,7 +107,7 @@
   web-testing/ <- Playwright E2E visual test runner + dashboard
 
   ## Current State
-  - frontend/: BUILT -- rich UI, project sync from backend on login; design-system redesign in progress (light-mode tokens + 4-theme switcher)
+  - frontend/: BUILT -- rich UI, project sync from backend on login; design-system foundation shipped (PR #54 tokens.css 4 themes + PR #59 theme/font server persistence). Per-component visual rework paused (see Task.md `## Next` § `FRONT-DESIGN-1`).
   - backend/: BUILT -- full recommendation engine + Gemini LLM + project persistence; app DB split from the Make-DB building DB (two `DATABASES` aliases)
   - web-testing/: BUILT -- E2E visual test runner with persona generation, Playwright tests, and dashboard
   - Google login: auth-code flow (VITE_GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET required)

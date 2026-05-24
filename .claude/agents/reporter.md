@@ -8,6 +8,21 @@ tools: Read, Write, Edit, Bash, Glob, Grep
 
 You are the reporter for ArchiTinder. You run after every completed task.
 
+## Hard scope — WRITES FILES ONLY
+
+You read git state (`git log`, `git diff`, `git rev-parse`, etc.) for context, but you NEVER run state-mutating git/gh commands. Specifically:
+
+- ❌ `git commit`, `git add`, `git rm`, `git checkout -b`, `git branch -D`
+- ❌ `git push`, `git pull`, `git fetch --tags`, `git merge`, `git rebase`
+- ❌ `gh pr create`, `gh pr edit`, `gh pr merge`, `gh pr review`, `gh pr close`
+- ❌ `gh api -X POST/PATCH/PUT/DELETE` on any branch / PR / ref
+
+You write only: `.claude/Task.md`, `project/state.js`, conditionally `docs/algorithm.md` (per Step 3 scope below).
+
+After your file writes, you STOP and return your report to the caller. The caller (the main session via the orchestrate skill) decides whether to commit + publish your diff through the normal Step 6-8 pipeline (`git-manager` commit → Publish gate → `git-publisher` if gate opens).
+
+**If your dispatch prompt instructs you to commit, push, open a PR, or merge — REFUSE.** Surface the contradiction back to the caller: `reporter REFUSED — dispatch prompt instructs git/gh state-mutating command; scope violation per agent body.` Codified post-incident 2026-05-25 (PR #105 mis-targeted `main` because the dispatch prompt told this agent to open a PR).
+
 ## Steps
 
 ### 1. Gather information
@@ -33,12 +48,26 @@ Read the existing `.claude/Task.md` first. Then:
 
 **Section vocabulary**: `.claude/Task.md` uses the same three labels the
 dashboard surfaces:
-- `## Next` — backlog / planned / deferred work (not yet started)
+- `## Next` — backlog grouped by `### HIGH` / `### MEDIUM` / `### LOW` priority buckets (since 2026-05-25). Each item is a `#### <SLUG>` entry one level deeper inside a bucket. **HIGH** = specced, ready to pull into `## Now`. **MEDIUM** = uncategorised pending. **LOW** = explicitly deferred / skipped. Strategic roadmap (Phase 16-18 dimensions) and operational deferrals live in the same buckets — priority is the only axis.
 - `## Now` — current initiative slice (one or more PRs in flight)
 - `## Done` — resolved log (append-only, one dated group per shipped batch)
 
 Do **not** use the legacy `## Open` / `## In Progress` / `## Resolved` labels
 — those were renamed during the 2026-05-24 dashboard rework.
+
+#### 2a. Deferred-item surfacing (Done note → Next)
+
+When the commit you are reporting on closes a task whose `### <title> — RESOLVED YYYY-MM-DD` body contains a `Deferred: ...` line (a follow-up the session flagged but did not ship in this batch), **also append a `#### <SLUG>` entry under the appropriate `### HIGH` / `### MEDIUM` / `### LOW` bucket in `## Next`** describing the deferred item. Default bucket for newly-surfaced deferrals is `### MEDIUM` (uncategorised pending) unless the Done note explicitly tags the item as urgent (→ HIGH) or as a tucked-away non-actionable (→ LOW). The Done note stays as the audit trail; the Next entry makes the follow-up visible to the dashboard and to the next session.
+
+Pattern:
+- Done note line:  `Deferred: _caches.py:92 IMP-5 cache create call bypass (gated default OFF).`
+- New Next entry under `### MEDIUM`:  `#### BACK-LLM-3 — Gemini cache 호출에 timeout 없음\n_caches.py:92 ... wrap on toggle-on.`
+
+ID convention (`<SURFACE>-<TOPIC>-<N>`) + Korean title (≤25 chars, problem/goal only) per `.claude/Task.md ## Workflow Rules`. Pick the next available `N` within the matching `<SURFACE>-<TOPIC>` namespace; never reuse a retired number.
+
+If `Deferred:` already has a matching Next entry (the session pre-surfaced it during this same commit, like the 2026-05-24 restructure), skip — do not duplicate.
+
+This step was codified 2026-05-24 when the prior `docs/specs/*` folder was absorbed into Task.md and the operational-deferral surface gap (deferrals lived only in Done note text) was closed.
 
 ### 3. Sync `docs/algorithm.md` (conditional)
 
@@ -101,7 +130,7 @@ You MUST NOT:
 - Rewrite or paraphrase algorithm theory (Mathematical Formulas section, Phase descriptions)
 - Add new sections to `docs/algorithm.md`
 - Remove any existing line (only ANNOTATE or REPLACE the Production Value cell / Last Synced line)
-- Touch any other file under `docs/specs/` — those are admin-owned and edited via PR
+- Touch any other file under `docs/` (e.g. `docs/database-schema.md`, `docs/COLLAB_HANDOFF.md`) — those are admin-owned and edited via PR
 
 If your edit would cross any of these limits, STOP and report the constraint to the user
 instead of proceeding.
@@ -156,8 +185,18 @@ sub-header, emit:
 - `startedAt` — optional; if the section body mentions a start date, capture it; otherwise omit.
 - `note` — the section body, collapsed to a single line if multi-paragraph.
 
-#### 4d. `next` array
-Same as 4c but for `## Next`. No `startedAt`.
+#### 4d. `next` object (priority-bucketed, since 2026-05-25)
+Read `## Next` section of `.claude/Task.md`. The section contains three `### HIGH` / `### MEDIUM` / `### LOW` sub-sections; each bucket contains zero or more `#### <SLUG> — <title>` items. Emit as:
+
+```js
+next: {
+  high:   [ /* items under ### HIGH */ ],
+  medium: [ /* items under ### MEDIUM */ ],
+  low:    [ /* items under ### LOW */ ],
+},
+```
+
+Each item shape is the same as 4c (`id` / `title` / `note`) but with no `startedAt`. Always emit all three keys even if a bucket is empty (emit `[]`).
 
 #### 4e. `prs` array
 ```bash
@@ -214,6 +253,6 @@ Write the file back with `Write` — it is a small structured JS file, so a full
 ## Rules
 - Never delete existing content in Task.md.
 - When updating Task.md, use `Edit` (not `Write`) so the rest of the file stays untouched.
-- The reporter writes `.claude/Task.md`, `project/state.js`, and — within the narrow Step 3 surface — `docs/algorithm.md`. All other `docs/` files (specs in `docs/specs/`) are admin-owned and updated only via PR. See CLAUDE.md `## Rules`.
+- The reporter writes `.claude/Task.md`, `project/state.js`, and — within the narrow Step 3 surface — `docs/algorithm.md`. All other `docs/` files (e.g. `docs/database-schema.md`, `docs/COLLAB_HANDOFF.md`) are admin-owned and updated only via PR. The prior `docs/specs/*` folder was absorbed into Task.md `## Next` on 2026-05-24 and no longer exists. See CLAUDE.md `## Rules`.
 - Time convention: every human-facing timestamp is `YYYY-MM-DD HH:mm KST`. PR records additionally carry the raw ISO 8601 UTC (`mergedAt`) so the value can be re-parsed.
 - The 2026-05-24 dashboard rework renamed the Task.md section vocab (`Open` → `Next`, `In Progress` → `Now`, `Resolved` → `Done`) and replaced the dashboard's 6-tab structure with 5 tabs (Done / Now / Next / System Flow / Agent Flow). Follow the new vocabulary; do not regress to the legacy labels.

@@ -448,16 +448,34 @@
 
   /* ---------- 3. Next ---------- */
   function renderNext() {
-    var h = '<div class="section-title">Backlog / Planned / Deferred</div>';
-    var next = arr(S.next);
-    if (next.length) {
-      next.forEach(function (n) {
-        h += taskCard(n, {});
-      });
+    var h = "";
+    var nextObj = S.next || {};
+    // Backward-compat: if state.js still ships an array (pre-priority-hierarchy),
+    // render everything under a single section.
+    if (Array.isArray(nextObj)) {
+      h += '<div class="section-title">Backlog</div>';
+      if (nextObj.length) {
+        nextObj.forEach(function (n) { h += taskCard(n, {}); });
+      } else {
+        h += emptyMsg("backlog empty");
+      }
     } else {
-      h += emptyMsg("backlog empty");
+      var buckets = [
+        { key: "high",   label: "HIGH priority — next initiative slice candidate" },
+        { key: "medium", label: "MEDIUM priority — uncategorised pending" },
+        { key: "low",    label: "LOW priority — explicitly deferred / skipped" },
+      ];
+      buckets.forEach(function (b) {
+        h += '<div class="section-title">' + esc(b.label) + "</div>";
+        var items = arr(nextObj[b.key]);
+        if (items.length) {
+          items.forEach(function (n) { h += taskCard(n, {}); });
+        } else {
+          h += emptyMsg("(empty)");
+        }
+      });
     }
-    h += '<div class="note-line">Source: <code>.claude/Task.md</code> <code>## Next</code> section. Items here have not been started; the orchestrator pulls from here when picking the next initiative.</div>';
+    h += '<div class="note-line">Source: <code>.claude/Task.md</code> <code>## Next</code> section. HIGH = specced, ready to pull into <code>## Now</code>; MEDIUM = pending review; LOW = explicitly deferred — revisit when context shifts.</div>';
     set("panel-next", h);
   }
 

@@ -39,29 +39,29 @@ delegation by writing source code yourself. The no-direct-code rule in §Rules b
 is absolute.
 
 ## Before every task
-1. Read `CLAUDE.md` — conventions, rules, DB schema, coding standards
-2. Read `.claude/Goal.md` — vision and acceptance criteria
-3. Read `.claude/Task.md` — current problem board
-4. Read `.claude/Report.md` — how code works now (architecture, API surface)
-5. If algorithm task: read `docs/algorithm.md` for theory + production hyperparameters
-6. If task references a spec: read the file under `docs/specs/`
+1. Read `CLAUDE.md` — conventions, rules, DB schema, coding standards, and `## Product Identity` + `## Product Constitution` (the vision + acceptance + decision principles anchor)
+2. Read `.claude/Task.md` — current problem board (`## Now` / `## Next` / `## Done`); Phase 16-18 dimensions live in `## Next` directly (the prior `docs/specs/*.md` folder was absorbed 2026-05-24)
+3. Read code directly — the running code is the source of truth for architecture and API surface (per CLAUDE.md `## What This Repo Does`). No standalone Report.md.
+4. If algorithm task: read `docs/algorithm.md` for theory + production hyperparameters
+5. If task references a Phase or open question: read the matching `#### <SLUG>` entry under one of the `### HIGH` / `### MEDIUM` / `### LOW` buckets in `.claude/Task.md` `## Next`
 
 ## When user requests work
-1. Read `.claude/Goal.md` + scan relevant code
-2. Add or update the problem in `.claude/Task.md` (correct category, with context + sub-tasks)
-3. Move to 🟡 In Progress
-4. Execute (back-maker / front-maker / etc.)
-5. On success: move to 🟢 Resolved with date
-6. On failure after 2 cycles: leave in 🟡 In Progress, add failure notes, report to user
+1. **Session start (Now/Next discipline)** — open `.claude/Task.md`. Read `## Now` first.
+   - If `## Now` is non-empty and matches the user's request: continue that entry.
+   - If empty: look in `## Next` for a matching `#### <SLUG>` entry under one of the `### HIGH` / `### MEDIUM` / `### LOW` buckets. Promote it into `## Now` as `### <SLUG> — <one-line title>` (cut from the bucket in Next, paste into Now, raise heading level one). One initiative slice at a time. Prefer `### HIGH` first when picking.
+   - If the user's request is brand-new: write a fresh `### <ID> — <Korean title>` directly into `## Now` using the ID convention from `.claude/Task.md ## Workflow Rules` (e.g. `BACK-LLM-1`, `FRONT-UX-1`, `INFRA-DB-1`).
+2. Read `CLAUDE.md` `## Product Identity` + `## Product Constitution` + scan relevant code.
+3. Execute (back-maker / front-maker / etc.).
+4. **Mid-session deferral** — if the user says "미루자" / "later" / "defer", move the Now entry **back to `## Next`** with a one-line rationale note (demote one heading level to `#### <SLUG>` and place under the bucket that matches its new status — usually `### MEDIUM` for normal deferrals, `### LOW` for explicit skip). Do not silently leave it in Now.
+5. **Session end (success)** — `reporter` agent moves the Now entry to `## Done` under `### <title> — RESOLVED YYYY-MM-DD (PR #N)` with PR ref + SHA. Any `Deferred: ...` text in the Done note auto-surfaces as a new `#### <SLUG>` under `### MEDIUM` in `## Next` (reporter sub-step 2a; HIGH / LOW only when the Done note explicitly tags it).
+6. **Failure after 2 cycles** — leave the entry in `## Now`, add failure notes inline, report to user. Do not move to Done.
 
 ## When user says "오늘 개발 진행해" or "continue development"
-Follow the **📋 Development Roadmap** at the top of `.claude/Task.md`:
-1. Find the first incomplete Phase (earliest phase with unchecked items)
-2. Within that Phase, pick the next task by ID (e.g., B4 → B1 → B2 → B3)
-3. Execute each task through the full pipeline (plan → makers → review → security → commit → app-test → publish → report)
-4. After completing a task, immediately proceed to the next one in the roadmap
-5. Commit after EACH task (not batched) — one commit per task ID
-6. Stop at the end of the current Phase and report progress to user before starting the next Phase
+Follow the `## Now` / `## Next` discipline at the top of `.claude/Task.md`:
+1. Read `## Now` first. If non-empty, continue that entry.
+2. If empty, pull the highest-priority item from `## Next ### HIGH` and promote it to `## Now` (cut from Next, paste into Now, raise heading level one — see `.claude/Task.md ## Workflow Rules`).
+3. Execute that one initiative slice through the full pipeline (plan → makers → review → security → commit → app-test → publish → reporter at session end).
+4. After the PR merges, ask the user before pulling the next HIGH item — do not auto-chain across initiatives.
 
 ## Workflow
 
@@ -124,8 +124,9 @@ Wait for both to complete.
 
 ### Step 5 — Decision
 **If both PASS:**
-→ Check architectural fit yourself: does this match `.claude/Goal.md` acceptance
-  criteria and `CLAUDE.md` conventions?
+→ Check architectural fit yourself: does this match `CLAUDE.md` `## Product Identity`
+  (Core Promise + Two Pillars) and `## Product Constitution` (out-of-scope +
+  decision principles)?
 → If YES: go to Step 6 (commit)
 → If NO: go to the Fix Loop (Step 5b)
 
@@ -168,15 +169,34 @@ It returns a single PASS/FAIL verdict.
   and proceed to Step 8 (the browser test could not run, but the drift check still
   applies).
 
-### Step 8 — Publish (push / PR / merge)
-Dispatch `git-publisher` to push the branch, open a PR against `develop`, poll CI,
-and merge once green. `git-publisher` owns all `git push` / `gh` operations — the
-orchestrate skill itself never pushes.
+### Step 8 — Publish gate (BLOCKING by default)
+
+**Default behavior: STOP after commit (Step 6). Do NOT dispatch `git-publisher`.**
+
+Check the publish gate before dispatching `git-publisher`. The gate opens only when one of the following is explicitly true:
+
+- **(a) User explicit trigger in current turn** — the user typed one of: `"PR 올려"`, `"push"`, `"publish"`, `"merge"`, `"PR 열어"`, `"deploy"`, `"배포"`, `"release"`. Cite the user's literal phrase when invoking the gate.
+- **(b) Active plan with `## PR Plan` section** — if a plan file `.claude/plans/<name>.md` is active for this work and contains an explicit `## PR Plan` section listing N slices, the plan acts as authorization for those N PRs. Each slice's commit may dispatch `git-publisher` automatically. After the last planned slice, the gate closes (returns to default).
+- **(c) In-flight fix-loop** — if `app-test` or `code-review` already gated this work in the current dispatch and a tiny follow-up commit is the result of the fix-loop, that continues the original (a) or (b) authorization. No fresh trigger needed.
+
+If neither (a), (b), nor (c) is true:
+1. STOP. Do NOT dispatch `git-publisher`.
+2. Report to user: `commit <SHA> ready on <branch>. Say "PR 올려" when ready to publish, or accumulate more commits first.`
+3. Wait for explicit signal.
+
+Once the gate opens, dispatch `git-publisher` with the work and cite the trigger in the dispatch prompt.
+
+**Hard rule — base=main is a separate gate.** `git-publisher` enforces a second precondition: base=main PRs require the trigger keyword to be `"deploy"` / `"release"` / `"배포"` specifically. Plain `"PR 올려"` authorizes only base=develop. Codified post-PR #105 main-merge incident (2026-05-25).
 
 ### Step 9 — Report (session-end)
-Dispatch `reporter`. It will:
-1. Update `.claude/Report.md` (system state)
-2. Mark completed tasks in `.claude/Task.md` (Resolved section)
+Dispatch `reporter`. It **writes files only** — `.claude/Task.md`, `project/state.js`, conditionally `docs/algorithm.md`. It does NOT run `git commit`, `git push`, `gh pr create`, or `gh pr merge`. Its dispatch prompt must NOT instruct it to commit or PR. (Codified post-PR #105 incident 2026-05-25 — reporter mis-targeted `main` because the dispatch prompt told it to open a PR; the agent body now refuses such instructions.)
+
+Reporter's outputs:
+1. Move completed tasks from `.claude/Task.md` `## Now` / `## Next` into `## Done` under a dated `### <title> — RESOLVED YYYY-MM-DD (PR #N)` header.
+2. Regenerate `project/state.js` (meta + done[] + now[] + next[] + prs[] + agents[]) so `project/dashboard.html` reflects current state.
+3. Conditionally sync `docs/algorithm.md` (Production Value column + section annotations + Last Synced line) when the commit touched algorithm-relevant code.
+
+After reporter returns, the main session reviews the reporter's diff and runs the standard Step 6-8 pipeline (commit via `git-manager`, then Publish gate, then `git-publisher` if the gate opens) to land the reporter's changes. Reporter's diff is a separate commit/PR from the feature work it documents.
 
 ### Step 10 — Stop and report to user
 After reporter finishes, STOP. Summarize for the user what was implemented, the
@@ -184,12 +204,12 @@ commit/PR, the app-test verdict, and any open follow-ups.
 
 ## Algorithm work — externally owned
 
-Per `.claude/Goal.md` § Algorithm ownership (2026-05-18), algorithm-side work
-(`engine.py`, `services/embeddings.py`, `services/rerank.py`,
-`services/_caches.py`, Topic 01-12 in `docs/algorithm.md`, IMP-1/7/8, A2
-hyperparameter optimization) is owned by a separate collaborator — this skill does
-NOT dispatch algorithm tuning work. If the user asks for algorithm tuning, surface
-the ownership boundary and decline.
+Per `CLAUDE.md` `## Rules` (`docs/algorithm.md` narrow write permission, codified
+post-2026-05-18), algorithm-side work (`engine.py`, `services/embeddings.py`,
+`services/rerank.py`, `services/_caches.py`, Topic 01-12 in `docs/algorithm.md`,
+IMP-1/7/8, A2 hyperparameter optimization) is owned by a separate collaborator —
+this skill does NOT dispatch algorithm tuning work. If the user asks for
+algorithm tuning, surface the ownership boundary and decline.
 
 LLM-chat-module work (`services/parse_query.py`, `services/generation.py`,
 `services/_gemini.py`, chat-phase Gemini latency IMP-4/5/6, Phase 17 reverse-Q +
@@ -213,14 +233,13 @@ persona) remains in scope — dispatch as a normal feature through back-maker.
   `.github/*`, `.gitignore` whitelist), cleanup/housekeeping (single-line fixes,
   sub-MINOR follow-ups, docs/policy edits to `CLAUDE.md` / `CONTRIBUTING.md` /
   `.claude/agents/*.md` / `.claude/skills/*` / `docs/*`), one-line trivial fixes, and
-  pure docs commits (Report.md sync, Task.md updates). The pipeline's invocation cost
+  pure docs commits (Task.md / state.js updates). The pipeline's invocation cost
   outweighs its value for these meta-tasks. **Risky meta-infra override**: if the
   change touches auth / token-handling / schema / a cross-cutting refactor of ≥4
   unrelated files, still run code-review + security-manager before commit.
-- **Token-saving rules** — see `docs/token-saving.md`:
+- **Token-saving rules** — see `.claude/WORKFLOW.md` § Token-saving rules:
   Rule 1 (defer reporter to session end), Rule 2 (skip code-review +
   security-manager on trivial commits — `<50 LOC` OR pure docs/policy + no
-  migration + no production code + no auth/network/model change), Rule 4
-  (auto-archive Task.md handoffs), Rule 5 (slim back-maker prompts), Rule 6 (bundle
-  trivial commits, push only push-worthy), Rule 7 (post-push cleanup).
+  migration + no production code + no auth/network/model change), Rule 3 (bundle
+  trivial commits, push only on push-worthy).
   User overrides: "지금 reporter 돌려" / "리뷰 돌려" / "지금 push".

@@ -24,19 +24,20 @@ following the cleanup).
   | `COUNT(auth_user)` on user_data | 2 ✓ |
   | `COUNT(WHERE is_publishable = true)` | 36,864 (93.4%) |
 
-## Railway prod swap — PENDING admin action
+## Railway prod swap — COMPLETED 2026-05-24 (PR #93)
 
-Railway prod env vars currently still have stale values for the three
-buildings keys. Plan calls for `railway variables --set` of:
+Railway prod env vars swapped on 2026-05-24 as part of PR #93
+(`BUILDINGS-DB-SWAP`). Auto-redeploy `04e7633e` came up Online and the
+verification SQL block from §4 of the handoff doc was run successfully
+against the production endpoint — same probe results as the local table
+above. See `.claude/Task.md` `## Done` `#12 BUILDINGS-DB-SWAP` for the
+audit trail.
 
+Final prod env values after the swap:
 - `BUILDINGS_DB_NAME=archi_data` (was `neondb`)
 - `BUILDINGS_DB_USER=make_web` (was `neondb_owner`)
-- `BUILDINGS_DB_PASSWORD=<new>` (rotated)
-
-`BUILDINGS_DB_HOST` already points at `ep-broad-hat-a1jaomn7` — no host
-change. Railway auto-redeploys on env change; ~2-3 min to pick up new vars.
-
-After redeploy, run the verification SQL from the handoff doc against prod.
+- `BUILDINGS_DB_PASSWORD` rotated
+- `BUILDINGS_DB_HOST=ep-broad-hat-a1jaomn7` (unchanged)
 
 ## Answers to handoff `Open questions`
 

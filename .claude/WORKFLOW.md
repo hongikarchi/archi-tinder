@@ -61,7 +61,7 @@ For any feature or bug fix, the session runs the `orchestrate` skill:
 
 ```mermaid
 flowchart TD
-    Start([User request]) --> Ctx[Read context — CLAUDE.md,<br/>Task.md, docs/specs if relevant]
+    Start([User request]) --> Ctx[Read context — CLAUDE.md,<br/>Task.md]
     Ctx --> BM[back-maker — backend code + flake8]
     BM --> Mig{Migration created?}
     Mig -->|yes| Migrate[apply migrate]
@@ -167,6 +167,13 @@ surface).
    "지금 push" / session end. Bundle-worthy = pure docs/policy, tooling,
    sub-MINOR follow-ups. Each push still runs `app-test`'s drift check over the
    whole range, so bundling loses no protection.
+   **Enforcement (codified post-PR #105 incident 2026-05-25)**:
+   `.claude/skills/orchestrate/SKILL.md` Step 8 Publish gate (default-STOP after
+   commit; opens only on explicit user trigger or active-plan `## PR Plan`
+   reference). `.claude/agents/git-publisher.md` hard guardrails 7 + 8
+   (refuse-without-trigger + base=main precondition requiring deploy keyword).
+   `.claude/agents/reporter.md` Hard scope (writes files only; refuses any
+   dispatch prompt that instructs git/gh state-mutating commands).
 
 ## 8. Known issues
 
