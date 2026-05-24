@@ -57,13 +57,11 @@ is absolute.
 6. **Failure after 2 cycles** — leave the entry in `## Now`, add failure notes inline, report to user. Do not move to Done.
 
 ## When user says "오늘 개발 진행해" or "continue development"
-Follow the **📋 Development Roadmap** at the top of `.claude/Task.md`:
-1. Find the first incomplete Phase (earliest phase with unchecked items)
-2. Within that Phase, pick the next task by ID (e.g., B4 → B1 → B2 → B3)
-3. Execute each task through the full pipeline (plan → makers → review → security → commit → app-test → publish → report)
-4. After completing a task, immediately proceed to the next one in the roadmap
-5. Commit after EACH task (not batched) — one commit per task ID
-6. Stop at the end of the current Phase and report progress to user before starting the next Phase
+Follow the `## Now` / `## Next` discipline at the top of `.claude/Task.md`:
+1. Read `## Now` first. If non-empty, continue that entry.
+2. If empty, pull the highest-priority item from `## Next ### HIGH` and promote it to `## Now` (cut from Next, paste into Now, raise heading level one — see `.claude/Task.md ## Workflow Rules`).
+3. Execute that one initiative slice through the full pipeline (plan → makers → review → security → commit → app-test → publish → reporter at session end).
+4. After the PR merges, ask the user before pulling the next HIGH item — do not auto-chain across initiatives.
 
 ## Workflow
 
@@ -235,14 +233,13 @@ persona) remains in scope — dispatch as a normal feature through back-maker.
   `.github/*`, `.gitignore` whitelist), cleanup/housekeeping (single-line fixes,
   sub-MINOR follow-ups, docs/policy edits to `CLAUDE.md` / `CONTRIBUTING.md` /
   `.claude/agents/*.md` / `.claude/skills/*` / `docs/*`), one-line trivial fixes, and
-  pure docs commits (Report.md sync, Task.md updates). The pipeline's invocation cost
+  pure docs commits (Task.md / state.js updates). The pipeline's invocation cost
   outweighs its value for these meta-tasks. **Risky meta-infra override**: if the
   change touches auth / token-handling / schema / a cross-cutting refactor of ≥4
   unrelated files, still run code-review + security-manager before commit.
 - **Token-saving rules** — see `.claude/WORKFLOW.md` § Token-saving rules:
   Rule 1 (defer reporter to session end), Rule 2 (skip code-review +
   security-manager on trivial commits — `<50 LOC` OR pure docs/policy + no
-  migration + no production code + no auth/network/model change), Rule 4
-  (auto-archive Task.md handoffs), Rule 5 (slim back-maker prompts), Rule 6 (bundle
-  trivial commits, push only push-worthy), Rule 7 (post-push cleanup).
+  migration + no production code + no auth/network/model change), Rule 3 (bundle
+  trivial commits, push only on push-worthy).
   User overrides: "지금 reporter 돌려" / "리뷰 돌려" / "지금 push".

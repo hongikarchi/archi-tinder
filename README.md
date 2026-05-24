@@ -8,7 +8,7 @@ For the full picture see:
 - `CONTRIBUTING.md` — branch model, PR workflow, role / file ownership
 - `DESIGN.md` — visual design system (consult for any UI work)
 - `docs/algorithm.md` — recommendation algorithm theory
-- `docs/specs/` — pending-feature specs (Phase 16 / 17 / 18)
+- `.claude/Task.md` `## Next` — pending-feature backlog (absorbed the prior `docs/specs/` folder on 2026-05-24; items use the `<SURFACE>-<TOPIC>-<N>` ID convention described in `## Workflow Rules`)
 
 ---
 

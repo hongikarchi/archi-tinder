@@ -229,26 +229,26 @@ Acceptance:
 - `manage.py migrate` still works under `neondb_owner` from operator machine.
 
 #### INFRA-ENV-1 — local-dev Neon branch 사라짐 — prod 직격 위험
-**Discovered during 2026-05-25 SNAPSHOT-BRANCH-DROP review.** The `local-dev` Neon branch provisioned by DEV-ENV1 (2026-05-23) is no longer listed in `neonctl branches list` for project `holy-pond-45504245`. Current branches: `production` + `pre-cleanup-2026-05-24` snapshot — that is all. The local `backend/.env` `DB_HOST` is `ep-broad-hat-a1jaomn7.ap-southeast-1.aws.neon.tech`, which is unverified (Claude session was blocked from inspecting Neon endpoint→branch mapping for credential-leak reasons).
+**Confirmed 2026-05-25 via `docs/MAKEWEB_DB_SWAP_RESPONSE.md` line 10-12.** The DEV-ENV1 `local-dev` Neon branch was dropped during the 2026-05-24 buildings-DB swap (PR #93 / `BUILDINGS-DB-SWAP`). At that point `backend/.env` `DB_HOST` was deliberately repointed to `ep-broad-hat-a1jaomn7` — **the production endpoint** — "for local development to function" (admin note in the swap response doc).
 
-Risk: if `ep-broad-hat-a1jaomn7` belongs to the `production` branch, then **local `manage.py runserver` writes directly to prod user_data** — the exact failure mode DEV-ENV1 fixed. No mechanical guarantee of isolation right now.
+Net effect right now: **local `python3 manage.py runserver` writes directly to the production `user_data` Neon branch.** DEV-ENV1's mechanical isolation is broken. Any local swipe / project create / save lands in real prod rows.
 
-Architecture context (the answer to the user's recurring question):
-- `.env` is `.gitignored`; values exist only on the local machine. Loaded into `os.environ` by `python-dotenv` when Django boots.
+Architecture context:
+- `backend/.env` is `.gitignored`; values exist only on the local machine. `python-dotenv` loads it into `os.environ` at Django boot.
 - Railway prod injects its own env vars into the gunicorn container; `.env` file is never deployed.
-- → Local and prod can point at different Neon branches via the same `settings.py` code reading `os.environ.get('DB_HOST')`.
-- This separation is the mechanism that makes DEV-ENV1 work — but only if local `.env` actually points at a dev branch and Railway env points at production.
+- → Local and prod *can* point at different Neon branches via the same `settings.py` code reading `os.environ.get('DB_HOST')` — but only if local `.env` actually points at a dev branch.
 
 Tasks:
-1. **Verify current state** — user opens Neon dashboard, looks up endpoint `ep-broad-hat-a1jaomn7` and confirms which branch it belongs to. (Two possibilities: dev branch survived under a different name → no fix needed; or it points at `production` → DEV-ENV1 broken.)
-2. **Restore isolation if broken** — re-provision a persistent child Neon branch off `production` (no TTL), point `backend/.env` `DB_HOST` + `BUILDINGS_DB_HOST` at the new branch endpoint, leave Railway env vars untouched.
-3. **Document the separation** in `CLAUDE.md` `## Backend Conventions` (currently this convention exists only in DEV-ENV1 Done note + this entry). Make explicit:
-   - Local `.env` → dev branch
-   - Railway env → production branch
-   - Migrations run from operator machine using the admin role on production branch only when the deploy demands it
-4. **(Stretch)** add a startup-time sanity check (Django `apps.py` `ready()` or a runserver wrapper) that logs which branch the runtime resolved — so future drift is visible.
+1. **Re-provision a persistent dev child branch** off `production` (no TTL) via `neonctl branches create --name local-dev-2 --parent production`. Capture the new endpoint hostname.
+2. **Repoint local `.env`** — `DB_HOST` and `BUILDINGS_DB_HOST` (currently both `ep-broad-hat-a1jaomn7`) → new dev-branch endpoint. Leave Railway prod env vars untouched.
+3. **Document the separation** in `CLAUDE.md` `## Backend Conventions`. Make explicit:
+   - Local `.env` → dev Neon branch
+   - Railway prod env → `production` Neon branch
+   - Migrations run from operator machine against `production` only when a deploy demands it
+4. **(Stretch)** add a Django `apps.py` `ready()` log line that prints the resolved DB host on startup — so future drift is visible at runserver-boot time.
+5. **(Stretch)** patch the prod rows that local development accidentally created since 2026-05-24 if any tainted rows are identified (e.g., any `auth_user` row with a local-style email).
 
-Acceptance: known mapping between every env (local + Railway + any future preview) and its Neon branch; CLAUDE.md documents the separation; mechanical isolation between local writes and prod data restored if broken.
+Acceptance: local writes land on a dev branch, not on prod; Neon dashboard shows a persistent dev branch; CLAUDE.md documents the env-source mapping; startup log confirms which branch the runtime is pointing at.
 
 #### FRONT-DESIGN-1 — 디자인 시스템 컴포넌트 리워크 (paused)
 Foundation shipped: PR #54 (`tokens.css` 4 themes + `ThemeContext` + `AppearanceSettings`) + PR #59 (theme/font server persistence). Remaining: per-component visual rework (≈ 7,700 LOC) — inline `style={{}}` → CSS Modules + `:hover/:focus`/`:active`, light-theme polish where dark-only assumptions still leak through, leaf→hub component order (small leaf components first, then containers).
