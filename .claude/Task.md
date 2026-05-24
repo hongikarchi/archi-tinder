@@ -160,6 +160,20 @@ frontend, leaf→hub order. Scope with `/plan` per slice.
 
 ## Done
 
+### develop → main deploy — 21 PRs (#68–#89) — RESOLVED 2026-05-24 (PR #90 merge `179d6f6`)
+[x] Release PR #90 squash-merged develop → main (`179d6f6`). Carried PRs #68–#89 (21 PRs).
+[x] Railway prod auto-deploy confirmed Online at `179d6f6`.
+[x] origin/develop force-reset to match main (Bug #5 carve-out).
+
+### Dashboard rework — 5-tab Done/Now/Next + Mermaid flows + KST timestamps — RESOLVED 2026-05-24 (PR #89 merge `f5967f2`)
+[x] 6-tab Tasks/Roadmap/Git/Architecture/FileMap/Flow → 5-tab Done/Now/Next/System Flow/Agent Flow.
+[x] Task.md sections renamed: Open→Next, In Progress→Now, Resolved→Done. Dashboard vocab 1:1.
+[x] Vendored mermaid.min.js (3.3 MB) for offline file:// + airplane safety. Lazy-render on tab.
+[x] 3 Mermaid diagrams: System Flow + Recommendation Flow + Agent Flow.
+[x] state.js schema rewritten: meta.updatedAt, done/now/next arrays, prs.mergedAt+mergedAtKST.
+[x] reporter.md spec updated: new Task.md vocab, KST formatter, no Mermaid regen.
+[x] 8 agent frontmatters gain effort: default.
+
 ### Codex Round 2 audit — 7 findings resolved — RESOLVED 2026-05-24 (PRs #85 / #86 / #87)
 [x] B1 — `/images/batch/` 500 on nested list input: serializer validation fixed (PR #85)
 [x] B2 — BoardDetail field mismatch causing placeholder rendering: normalize fixed (PR #85)
