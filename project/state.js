@@ -22,11 +22,32 @@ window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
     updatedAt: '2026-05-24',
-    head: '179d6f6',
-    branch: 'feature/admin-session-end-reporter-post-deploy',
+    head: '8b4df92',
+    branch: 'feature/admin-session-end-reporter-post-swap',
   },
 
   done: [
+    {
+      id: 'GEMINI-TIMEOUT-CAP',
+      title: '#13 GEMINI-TIMEOUT-CAP — hard 15s timeout cap on Gemini retry wrapper',
+      completedAt: '2026-05-24',
+      prs: [94],
+      note: '_retry_gemini_call caps every Gemini SDK call at 15s (45s Imagen3) via ThreadPoolExecutor + future.result(timeout). 228s /parse-query/ hang → ≤31s. 4 new tests + 5 regression. Deferred: _caches.py:92 IMP-5 create call bypasses wrapper (context_caching_enabled default False, zero prod impact).',
+    },
+    {
+      id: 'BUILDINGS-DB-SWAP',
+      title: '#12 BUILDINGS-DB-SWAP — buildings DB neondb → archi_data + make_web role',
+      completedAt: '2026-05-24',
+      prs: [93],
+      note: 'Make DB renamed buildings DB neondb → archi_data; new SELECT-only role make_web (was neondb_owner); canonical_v2_architects table added (14,216 firms). Make Web swapped .env + Railway prod env vars; refreshed .env.example + CLAUDE.md is_publishable stat (39/39,776 → 2,614/39,478 ~6.6%) + docs/database-schema.md. Prod redeploy 04e7633e Online verified.',
+    },
+    {
+      id: 'V1-LEGACY-CLEANUP',
+      title: '#11 V1-LEGACY-CLEANUP — drop architecture_vectors refs + orphan tables',
+      completedAt: '2026-05-24',
+      prs: [92],
+      note: 'Neondb local-dev branch drop + 23 orphan user/app tables + legacy architecture_vectors dropped. 3 backend v1 files deleted (algorithm_tester.py, profile_image_latency.py, test_chat_phase_style_labels). 5 stale doc refs refreshed. Plan merry-toasting-dove.md archived.',
+    },
     {
       id: 'DEPLOY-2026-05-24',
       title: 'develop → main deploy — 21 PRs (#68–#89)',
@@ -117,6 +138,30 @@ window.PROJECT_STATE = {
 
   prs: [
     {
+      number: 94,
+      title: 'fix(gemini): hard 15s timeout cap on retry wrapper (228s hang → ≤31s)',
+      mergedAt: '2026-05-24T04:26:12Z',
+      mergedAtKST: '2026-05-24 13:26 KST',
+    },
+    {
+      number: 93,
+      title: 'chore: buildings DB swap to archi_data + make_web role (config + docs)',
+      mergedAt: '2026-05-24T03:19:05Z',
+      mergedAtKST: '2026-05-24 12:19 KST',
+    },
+    {
+      number: 92,
+      title: 'chore: drop v1 architecture_vectors refs — 2 files + 4 doc fixes',
+      mergedAt: '2026-05-24T01:42:39Z',
+      mergedAtKST: '2026-05-24 10:42 KST',
+    },
+    {
+      number: 91,
+      title: 'chore: session-end reporter housekeeping — 2026-05-24 post-deploy',
+      mergedAt: '2026-05-24T00:48:21Z',
+      mergedAtKST: '2026-05-24 09:48 KST',
+    },
+    {
       number: 90,
       title: 'Release: 2026-05-24 — codex round 2 + dashboard rework',
       mergedAt: '2026-05-23T17:01:43Z',
@@ -125,8 +170,8 @@ window.PROJECT_STATE = {
     {
       number: 89,
       title: 'feat: dashboard rework — 5-tab Done/Now/Next + Mermaid flows + KST timestamps',
-      mergedAt: '2026-05-23T16:55:00Z',
-      mergedAtKST: '2026-05-24 01:55 KST',
+      mergedAt: '2026-05-23T16:58:28Z',
+      mergedAtKST: '2026-05-24 01:58 KST',
     },
     {
       number: 88,
@@ -139,42 +184,6 @@ window.PROJECT_STATE = {
       title: 'perf: codex round 2 — discovery taste vector TTL cache',
       mergedAt: '2026-05-23T16:28:04Z',
       mergedAtKST: '2026-05-24 01:28 KST',
-    },
-    {
-      number: 86,
-      title: 'fix: codex round 2 UX + Gemini fail-fast',
-      mergedAt: '2026-05-23T16:06:41Z',
-      mergedAtKST: '2026-05-24 01:06 KST',
-    },
-    {
-      number: 85,
-      title: 'fix: codex round 2 bugs — images/batch validation + board normalize + useBoard decouple',
-      mergedAt: '2026-05-23T15:55:52Z',
-      mergedAtKST: '2026-05-24 00:55 KST',
-    },
-    {
-      number: 84,
-      title: 'chore: session-end reporter housekeeping — codex audit 9 findings resolved (PRs #81/#82/#83)',
-      mergedAt: '2026-05-23T15:02:22Z',
-      mergedAtKST: '2026-05-24 00:02 KST',
-    },
-    {
-      number: 83,
-      title: 'fix: audit codex P2 bundle — diverse RANDOM 2-query + ProjectList N+1 + JWT blacklist + image_focus plumb + exploring bar 3→4 (#2.5–#2.9)',
-      mergedAt: '2026-05-23T14:54:59Z',
-      mergedAtKST: '2026-05-23 23:54 KST',
-    },
-    {
-      number: 82,
-      title: 'fix: audit codex P1 latent — raw_query dual-key + DPP 3x overfetch (#1.1 + #1.4)',
-      mergedAt: '2026-05-23T14:20:03Z',
-      mergedAtKST: '2026-05-23 23:20 KST',
-    },
-    {
-      number: 81,
-      title: 'fix: audit codex P1 — swipe idempotency full payload + race catch + Project row lock (#1.2 + #1.3)',
-      mergedAt: '2026-05-23T13:57:56Z',
-      mergedAtKST: '2026-05-23 22:57 KST',
     },
   ],
 
