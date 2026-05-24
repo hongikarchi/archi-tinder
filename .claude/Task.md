@@ -86,28 +86,28 @@
 42. **SOC3** -- Profile/board: follow button + reaction button UI -- COMPLETED 2026-05-06
 
 ### Phase 16: Recommendation Expansion -- PENDING (revised under 2026-05-14 replan; S8 sweep COMPLETED)
-> Spec: `docs/specs/phase16-recommendation-expansion.md` (refreshed S8
-> 2026-05-14). REC1 already executed as **Push S3**. REC2 / REC3 now
+> Re-scoped 2026-05-14: REC1 already executed as **Push S3**. REC2 / REC3 now
 > serve a Profile-tab "사무소 추천" button (Q3 decision); Landing tab
 > deleted by Push S6. Endpoint shape changed from
 > `/api/v1/landing/{sessionId}/` (deprecated) to a Profile-targeted
 > composite (e.g. `/api/v1/recommendations/profile/`).
+> Open dimensions + acceptance now live in `## Next` § PHASE16.
 43. **REC1** -- Post-swipe end screen consolidation (executed in **S3** 2026-05-14)
 44. **REC2** -- Firm recommendation logic (Profile-button-triggered)
 45. **REC3** -- User recommendation logic (Profile-button-triggered)
 46. **REC4** -- ~~Landing tab~~ → removed by Push S6 (Profile-tab button surface instead)
 
 ### Phase 17: LLM Reverse-Questioning -- PENDING (S8 sweep COMPLETED)
-> Spec: `docs/specs/phase17-llm-reverse-q.md` (refreshed S8 2026-05-14).
 > Replan Q6 RESOLVED → Option A: reverse-question lives in the first
 > 0-2 turns of the Taste-tab LLM chat (pre-swipe). TTFC budget unchanged.
+> Open dimensions + acceptance now live in `## Next` § PHASE17.
 47. **LLM1** -- Chat reverse-question prompt design (identify user needs)
 48. **LLM2** -- Persona classification logic (P1-P4 differentiation; populates `UserProfile.persona_summary`)
 49. **LLM3** -- Per-persona UI branching (recommendation card type switching)
 
 ### Phase 18: External Connections -- PENDING (S8 sweep COMPLETED)
-> Spec: `docs/specs/phase18-external-connections.md` (refreshed S8
-> 2026-05-14; scope unchanged). Lower priority than Phase 16-17.
+> Lower priority than Phase 16-17. Open dimensions + acceptance now
+> live in `## Next` § PHASE18.
 50. **EXT1** -- Firm article crawler (Space, ArchDaily, news — keyword-based)
 51. **EXT2** -- Article list UI (inside firm profile)
 52. **EXT3** -- External DM link UI (Instagram, email — on profile)
@@ -118,33 +118,107 @@
 
 ---
 
-## Specs
-
-> Pending-feature specs and decision records live in `docs/specs/` (admin-owned via PR).
-> Algorithm theory + production hyperparameters live in `docs/algorithm.md`. Owned by a
-> separate collaborator post-2026-05-18; admin role here is limited to (a) reporter
-> auto-sync of the Production Value column when `settings.py` RECOMMENDATION dict
-> changes, and (b) theory-edit review on PR.
->
-> Current pending specs:
-> - `docs/specs/phase16-recommendation-expansion.md` — Phase 16 dimensions
-> - `docs/specs/phase17-llm-reverse-q.md` — Phase 17 dimensions
-> - `docs/specs/phase18-external-connections.md` — Phase 18 dimensions
-> - `docs/specs/requirements.md` — still-open cross-cutting questions
-
----
-
 ## Next
 
-### Auth
-#### AUTH1. Kakao / Naver OAuth not implemented
+> Flat backlog. Priority is admin tiebreaker (see CLAUDE.md `## Product Constitution`
+> Decision Principles). Phase 16-18 dimensions inlined here (formerly `docs/specs/*`,
+> absorbed 2026-05-24). Pending strategic + operational items live side-by-side.
+> Algorithm theory + production hyperparameters still live in `docs/algorithm.md`
+> (admin-owned, reporter syncs Production Value column only).
+
+### AUTH1 — Kakao / Naver OAuth
 Google OAuth only. Korean users need domestic login.
 - [ ] Kakao social auth backend + frontend button
 - [ ] Naver social auth backend + frontend button
 
-### Audit Tier 4 — structural refactor (deferred)
-Remaining file decomposition items from full codebase audit.
-- [ ] Tier 4 — file decomp: engine.py (2079 LOC), App.jsx (795 LOC), BoardDetailPage (1032 LOC), UserProfilePage (990 LOC), PostSwipeLandingPage (696 LOC), SwipePage (666 LOC), FirmProfilePage (611 LOC)
+### AUDIT-T4 — Structural refactor (deferred)
+File decomp: engine.py (2079 LOC), App.jsx (795 LOC), BoardDetailPage (1032 LOC), UserProfilePage (990 LOC), PostSwipeLandingPage (696 LOC), SwipePage (666 LOC), FirmProfilePage (611 LOC).
+
+### PHASE16 — Recommendation Expansion (Profile-tab 사무소/유저 추천)
+Re-scoped 2026-05-14 (REC1 already shipped as Push S3). REC2 (firm) + REC3 (user) target a single composite endpoint `GET /api/v1/recommendations/profile/` returning `{offices: [...], users: [...]}` for a Profile-tab button. Landing tab removed (Push S6).
+
+Open dimensions (admin decision before implementation):
+- **Firm vector composition** — Mean / weighted-mean / curated-subset / max-sim of firm's project embeddings?
+- **User taste vector** — Aggregated from user's `liked_ids` across Projects; recency-weighted? curated subset?
+- **Cold-start strategy** — New user 0 swipes → "popular users" / generic taste cluster / disable User tab until N swipes?
+- **Match score visibility** — Show "92% match" on cards or hide?
+- **Diversity vs follow-exclusion** — Recommend already-followed firms? (probably exclude)
+- **Tie-breakers** — Followers count / recency / random / hybrid?
+- **Trigger surface UX** — Single button → modal / full-page / toggle between Office/User?
+
+Acceptance: `/recommendations/profile/` p95 ≤ 800 ms on Singapore deploy; cold-start UX graceful; `canonical_bld_id` + `is_publishable=true` gating preserved per CLAUDE.md hard rules.
+
+### PHASE17 — LLM Reverse-Q + Persona Classification (P1-P4)
+Reverse-question lives in first 0-2 turns of Taste-tab LLM chat (pre-swipe; Q6 Option A confirmed 2026-05-14). Populates `UserProfile.persona_summary` (PROF2 field reserved).
+
+Open dimensions:
+- **Reverse-Q examples** — adversarial / implicit / non-verbal (deduce from filter shape)?
+- **Per-persona UI branching** — silent classification + tailored cards vs explicit "I am: ☐ jobseeker ☐ hiring ..." prompt?
+- **Persona drift** — user can be P1 one session, P2 another — explicit support?
+- **Persona representation shape** — structured `{persona_type, one_liner, styles[], programs[]}` vs flat `persona_label`?
+- **Persona persistence** — per-session / per-user / per-user-with-current-session-override?
+- **Confidence + override** — low-confidence: ask user vs silent commit?
+
+Acceptance: TTFC for Taste-tab chat does not regress beyond the 4000 ms budget (per `docs/algorithm.md`); persona override path tested.
+
+### PHASE18 — External Connections (firm article crawl)
+Lowest pending priority. Surfaces external articles about a firm on FirmProfilePage (Space / ArchDaily / news keyword match). Phase 15 already shipped External DM wiring (`Office.contact_email`, `Office.website`, `UserProfile.external_links`).
+
+Open dimensions:
+- **Article source priority** — Space-first (Korean) vs ArchDaily-first (global) vs parity? (Korea-first principle suggests Space)
+- **Crawl freshness** — real-time on view / scheduled daily-weekly / event-driven?
+- **Storage** — denormalised in `Office` row / separate `OfficeArticle` table / external CDN?
+- **Article fallback** — empty section / hide section / "no recent articles" placeholder?
+
+Acceptance: ≤10 most recent articles per firm; open in new tab (legal posture); no FirmProfilePage TTFC regression (article fetch async, doesn't block initial paint).
+
+### XSESS — Cross-session signal transfer (deferred)
+Same project's multiple sessions — should `liked_ids` / `pref_vector` carry over between sessions? Current spec is implicit independence (each session starts fresh). Six options: A independent (status quo) / B exposure-only carry / C asymmetric negative-only / D fade-decay carry / E full warm-start / F user-controlled toggle. Defer until traffic justifies experiment cost.
+
+### EMPTY-STATE — Empty-state UX (Project = 0)
+First-time user with 0 projects sees Home → project picker. Need explicit empty-state path: guided flow / empty-state + create button / demo query? Low priority — current users are existing accounts.
+
+### MULTILANG — Multi-language behavior (partial)
+Chat phase has bilingual rendering rule. Mobile UI / detail page / persona report's multi-language posture unresolved. Korea-first per Constitution Decision Principle 7; English supported, not co-equal.
+
+### MOBILE-DESKTOP — Mobile vs desktop UX divergence
+Current viewport-lock layout is mobile-first. Detail pages on desktop work but unoptimised. Low priority — desktop is secondary.
+
+### PRIVACY-PIPA — Privacy / sharing posture
+Phase 13+ Profile/Board public/private visibility shipped. PIPA + GDPR posture for signup data collection / consent flow / retention policy still open. **Required before public launch.**
+
+### CONVO-PERSIST — Conversation history persistence
+Probe-turn chat history during a session is currently transient. Persist for session resume? Low priority.
+
+### IMP5-BYPASS — IMP-5 cache create timeout wrapper bypass
+`backend/apps/recommendation/services/_caches.py:92` IMP-5 Gemini context-cache create call bypasses the `_retry_gemini_call` timeout wrapper. Gated by `context_caching_enabled` flag (default OFF) — zero prod impact until toggled on. Wrap on toggle-on.
+
+### CODEX-STAGE3-RERUN — Codex Stage 3 re-audit on prod (post-PR #97)
+CI hang fix (PR #97) deployed via PR #98. Re-run codex Stage 3 (AI Search Flow 5) against prod to verify the 228 s `/parse-query/` hang no longer fires under load. Cumulative validation of PR #94 timeout cap + PR #97 daemon-thread swap.
+
+### PERF-PROJECTS — `/projects/` p50 600ms (budget 300ms)
+Codex Round 2 observation: `/projects/` endpoint p50 latency 600 ms vs spec budget 300 ms. Probable N+1 elsewhere or warm cache miss. Investigate query plan.
+
+### PERF-DISCOVERY — Discovery cache-hit 450ms (budget <200ms)
+Codex Round 2: Discovery endpoint cache-hit path measures 450 ms; spec budget <200 ms. Cache may be doing extra work or response serialization is the floor. Trace.
+
+### PERF-SESSION-CREATE — Session create 5.2s baseline
+POST `/analysis/sessions/` measured 5.2 s baseline. Pre-existing; flag for investigation.
+
+### MATMUL-WARN — matmul runtime warning (sklearn BLAS dtype)
+sklearn emits matmul dtype warning during clustering. Cosmetic noise but indicates float32 / float64 mismatch — quick fix is dtype-align embedding ndarrays before kmeans.
+
+### ARCHITECTS-WIRING — `canonical_v2_architects` feature wiring
+Make DB shipped new table `canonical_v2_architects` (14,216 firms, 4,357 recommendable) in 2026-05-24 DB swap. Make Web `profiles_office` 4-tier resolution + REC2 (Phase 16) should consume this. Not yet wired.
+
+### USER-DATA-ROLE-SEP — `user_data` DB role separation (security)
+`user_data` DB currently uses default `neondb_owner` role with full privileges. Split to a restricted Make-Web-only role mirroring the SELECT-only `make_web` role on `archi_data`. Security backlog.
+
+### SNAPSHOT-BRANCH-DROP — 1-week post-deploy snapshot branch drop
+After production deploys, Neon snapshot branches retained for 1 week as rollback safety. Drop the lingering ones after retention window (verify Neon dashboard).
+
+### CELERY-CORPUS-RANK — Celery `compute_corpus_rank` background task
+`recommendation_swipeevent` row inserts currently compute corpus rank synchronously (or skip when on bookmark POST per PR #79). Async via Celery for proper telemetry without blocking.
 
 ---
 
