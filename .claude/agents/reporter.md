@@ -33,12 +33,24 @@ Read the existing `.claude/Task.md` first. Then:
 
 **Section vocabulary**: `.claude/Task.md` uses the same three labels the
 dashboard surfaces:
-- `## Next` — backlog / planned / deferred work (not yet started)
+- `## Next` — backlog / planned / deferred work (not yet started). **Flat list** — strategic roadmap (Phase 16-18 dimensions, AUTH1, AUDIT-T4) and operational deferrals (perf observations, audit follow-ups, security backlog, IMP toggles) live side-by-side. Priority is admin tiebreaker per CLAUDE.md `## Product Constitution` Decision Principles. No sub-grouping.
 - `## Now` — current initiative slice (one or more PRs in flight)
 - `## Done` — resolved log (append-only, one dated group per shipped batch)
 
 Do **not** use the legacy `## Open` / `## In Progress` / `## Resolved` labels
 — those were renamed during the 2026-05-24 dashboard rework.
+
+#### 2a. Deferred-item surfacing (Done note → Next)
+
+When the commit you are reporting on closes a task whose `### <title> — RESOLVED YYYY-MM-DD` body contains a `Deferred: ...` line (a follow-up the session flagged but did not ship in this batch), **also append a `### <SLUG>` entry to `## Next`** describing the deferred item. The Done note stays as the audit trail; the Next entry makes the follow-up visible to the dashboard and to the next session.
+
+Pattern:
+- Done note line:  `Deferred: _caches.py:92 IMP-5 cache create call bypass (gated default OFF).`
+- New Next entry:  `### IMP5-BYPASS — IMP-5 cache create timeout wrapper bypass\n_caches.py:92 ... wrap on toggle-on.`
+
+If `Deferred:` already has a matching Next entry (the session pre-surfaced it during this same commit, like the 2026-05-24 restructure), skip — do not duplicate.
+
+This step was codified 2026-05-24 when the prior `docs/specs/*` folder was absorbed into Task.md and the operational-deferral surface gap (deferrals lived only in Done note text) was closed.
 
 ### 3. Sync `docs/algorithm.md` (conditional)
 
@@ -101,7 +113,7 @@ You MUST NOT:
 - Rewrite or paraphrase algorithm theory (Mathematical Formulas section, Phase descriptions)
 - Add new sections to `docs/algorithm.md`
 - Remove any existing line (only ANNOTATE or REPLACE the Production Value cell / Last Synced line)
-- Touch any other file under `docs/specs/` — those are admin-owned and edited via PR
+- Touch any other file under `docs/` (e.g. `docs/database-schema.md`, `docs/COLLAB_HANDOFF.md`) — those are admin-owned and edited via PR
 
 If your edit would cross any of these limits, STOP and report the constraint to the user
 instead of proceeding.
@@ -214,6 +226,6 @@ Write the file back with `Write` — it is a small structured JS file, so a full
 ## Rules
 - Never delete existing content in Task.md.
 - When updating Task.md, use `Edit` (not `Write`) so the rest of the file stays untouched.
-- The reporter writes `.claude/Task.md`, `project/state.js`, and — within the narrow Step 3 surface — `docs/algorithm.md`. All other `docs/` files (specs in `docs/specs/`) are admin-owned and updated only via PR. See CLAUDE.md `## Rules`.
+- The reporter writes `.claude/Task.md`, `project/state.js`, and — within the narrow Step 3 surface — `docs/algorithm.md`. All other `docs/` files (e.g. `docs/database-schema.md`, `docs/COLLAB_HANDOFF.md`) are admin-owned and updated only via PR. The prior `docs/specs/*` folder was absorbed into Task.md `## Next` on 2026-05-24 and no longer exists. See CLAUDE.md `## Rules`.
 - Time convention: every human-facing timestamp is `YYYY-MM-DD HH:mm KST`. PR records additionally carry the raw ISO 8601 UTC (`mergedAt`) so the value can be re-parsed.
 - The 2026-05-24 dashboard rework renamed the Task.md section vocab (`Open` → `Next`, `In Progress` → `Now`, `Resolved` → `Done`) and replaced the dashboard's 6-tab structure with 5 tabs (Done / Now / Next / System Flow / Agent Flow). Follow the new vocabulary; do not regress to the legacy labels.

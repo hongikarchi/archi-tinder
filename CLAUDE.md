@@ -96,10 +96,9 @@
   ## Audit Trail Locations
   | Category | Location | Writer |
   |---|---|---|
-  | **Spec** (binding requirements / pending work) | `docs/specs/*.md` | admin |
+  | **Task board** (roadmap + Next backlog + Done log) | `.claude/Task.md` | reporter agent (Phase 16-18 dimensions inlined here as of 2026-05-24; the prior `docs/specs/*.md` folder was absorbed) |
   | **Algorithm reference** (theory + hyperparams) | `docs/algorithm.md` | admin (reporter syncs prod values) |
   | **Plan** (`/plan` artifacts) | `.claude/plans/*.md` | the session |
-  | **Task board** (roadmap + tasks) | `.claude/Task.md` | reporter agent |
   | **Project dashboard** (live state, human-facing) | `project/dashboard.html` + `project/state.js` | reporter agent |
 
   ## Target Structure
