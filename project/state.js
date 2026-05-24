@@ -22,11 +22,25 @@ window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
     updatedAt: '2026-05-24',
-    head: '8b4df92',
-    branch: 'feature/admin-session-end-reporter-post-swap',
+    head: 'fd063e0',
+    branch: 'feature/admin-session-end-reporter-post-ci-fix',
   },
 
   done: [
+    {
+      id: 'DEPLOY-2026-05-24-v2',
+      title: '#16 DEPLOY-2026-05-24-v2 — develop → main deploy, 1 PR (#97)',
+      completedAt: '2026-05-24',
+      prs: [98],
+      note: 'Release PR #98 squash-merged CI hang fix to main (fd063e0). Railway deployment a98725bf Online. Bug #5 carve-out applied (develop force-reset to fd063e0). Prod functional pre-deploy (PR #94 cap working); this deploy = CI baseline alignment + main/develop sync.',
+    },
+    {
+      id: 'CI-HANG-FIX',
+      title: '#15 CI-HANG-FIX — _retry_gemini_call executor → daemon Thread + Queue',
+      completedAt: '2026-05-24',
+      prs: [97],
+      note: 'ThreadPoolExecutor + future.result(timeout) → threading.Thread(daemon=True) + queue.Queue.get(timeout). _Thread captured at module-load to bypass test_imp8 _DiscThread global mock leak. Same 15s/45s deadline + FATAL + retry semantics. PR #94 ThreadPoolExecutor hung pytest CI 15min, cascading 5 CI failures. Full suite: 683 passed / 11 skipped / 0 failed.',
+    },
     {
       id: 'GEMINI-TIMEOUT-CAP',
       title: '#13 GEMINI-TIMEOUT-CAP — hard 15s timeout cap on Gemini retry wrapper',
@@ -138,6 +152,24 @@ window.PROJECT_STATE = {
 
   prs: [
     {
+      number: 98,
+      title: 'Release: 2026-05-24 — CI hang fix (PR #97)',
+      mergedAt: '2026-05-24T10:58:47Z',
+      mergedAtKST: '2026-05-24 19:58 KST',
+    },
+    {
+      number: 97,
+      title: 'fix(gemini): swap executor for daemon Thread + Queue (CI hang)',
+      mergedAt: '2026-05-24T08:01:27Z',
+      mergedAtKST: '2026-05-24 17:01 KST',
+    },
+    {
+      number: 95,
+      title: 'chore: session-end reporter housekeeping — PRs #92/#93/#94 + plan archive',
+      mergedAt: '2026-05-24T04:30:44Z',
+      mergedAtKST: '2026-05-24 13:30 KST',
+    },
+    {
       number: 94,
       title: 'fix(gemini): hard 15s timeout cap on retry wrapper (228s hang → ≤31s)',
       mergedAt: '2026-05-24T04:26:12Z',
@@ -162,28 +194,10 @@ window.PROJECT_STATE = {
       mergedAtKST: '2026-05-24 09:48 KST',
     },
     {
-      number: 90,
-      title: 'Release: 2026-05-24 — codex round 2 + dashboard rework',
-      mergedAt: '2026-05-23T17:01:43Z',
-      mergedAtKST: '2026-05-24 02:01 KST',
-    },
-    {
       number: 89,
       title: 'feat: dashboard rework — 5-tab Done/Now/Next + Mermaid flows + KST timestamps',
       mergedAt: '2026-05-23T16:58:28Z',
       mergedAtKST: '2026-05-24 01:58 KST',
-    },
-    {
-      number: 88,
-      title: 'chore: session-end reporter housekeeping — codex round 2 (7 findings resolved)',
-      mergedAt: '2026-05-23T16:32:04Z',
-      mergedAtKST: '2026-05-24 01:32 KST',
-    },
-    {
-      number: 87,
-      title: 'perf: codex round 2 — discovery taste vector TTL cache',
-      mergedAt: '2026-05-23T16:28:04Z',
-      mergedAtKST: '2026-05-24 01:28 KST',
     },
   ],
 
