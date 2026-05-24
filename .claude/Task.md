@@ -132,6 +132,19 @@ Foundation shipped: PR #54 (`tokens.css` 4 themes + `ThemeContext` + `Appearance
 
 ## Done
 
+### #20 TASK-MD-RESTRUCTURE-V2 — RESOLVED 2026-05-25 (PR #104 `0690b85`)
+[x] Replaced 100+ line `## Development Roadmap` with compact `## Workflow Rules` section (session start/mid/end protocol + naming convention + algorithm work ownership note).
+[x] Reordered file: header → Workflow Rules → `## Now` → `## Next` → `## Done` → `## Roadmap (Historical)`.
+[x] Updated AUTH1 scope: Kakao/Naver backend already shipped in `apps/accounts/views.py` KakaoLoginView + NaverLoginView; scope narrowed to `LoginPage.jsx` frontend buttons only.
+[x] Updated AUDIT-T4 LOC (re-verified 2026-05-25): engine.py 2139, App.jsx 817, BoardDetailPage 1045, UserProfilePage 992, PostSwipeLandingPage 696, SwipePage 666, FirmProfilePage 540 (recently refactored down from 611).
+[x] `orchestrate/SKILL.md`: codified Now/Next discipline — read `## Now` first at session start; defer mid-session work back to `## Next`; reporter moves `## Now` → `## Done` on success.
+[x] Added `## Roadmap (Historical)` compact phase summary at bottom (replaces deleted Development Roadmap).
+
+### #19 DESIGN-REWORK-MOVE — RESOLVED 2026-05-25 (PR #103 `a6d173a`)
+[x] Moved DESIGN-REWORK from `## Now` → `## Next` with `(paused)` tag. No design PR in flight for 50+ commits; reporter `## Now = "PRs in flight"` definition was violated.
+[x] `project/state.js`: `now[]` → `[]`; `next[]` gained DESIGN-REWORK entry at end.
+[x] `CLAUDE.md ## Current State`: frontend status updated from "design-system redesign in progress" → "foundation shipped + per-component rework paused".
+
 ### #18 TASK-NEXT-RESTRUCTURE — RESOLVED 2026-05-24 (PR #101 `19694aa`)
 [x] Absorbed `docs/specs/*.md` (4 files: phase16-recommendation-expansion.md, phase17-llm-reverse-q.md, phase18-external-connections.md, requirements.md) into `.claude/Task.md ## Next` as a flat backlog. Deleted the folder.
 [x] Fixed `orchestrate/SKILL.md` stale refs: `.claude/Goal.md` → `CLAUDE.md ## Product Identity + ## Product Constitution`; `.claude/Report.md` → "read code directly + state.js"; `docs/token-saving.md` → `.claude/WORKFLOW.md § Token-saving rules`.
