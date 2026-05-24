@@ -18,15 +18,30 @@
  * PRs additionally carry the raw `mergedAt` (ISO 8601 UTC from `gh pr list`)
  * so the value can be re-parsed by any consumer.
  */
+// Reporter: Mermaid sources may be stale — commit 18949a8 touched .claude/agents/reporter.md. Next session should refresh the affected diagram by hand.
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-05-24',
-    head: 'fd063e0',
-    branch: 'feature/admin-session-end-reporter-post-ci-fix',
+    updatedAt: '2026-05-24 23:59 KST',
+    head: '18949a8',
+    branch: 'develop',
   },
 
   done: [
+    {
+      id: 'TASK-NEXT-RESTRUCTURE',
+      title: '#18 TASK-NEXT-RESTRUCTURE — absorb docs/specs into Task.md Next, fix orchestrate stale refs',
+      completedAt: '2026-05-24',
+      prs: [101],
+      note: 'docs/specs/*.md (4 files) absorbed into Task.md ## Next flat backlog, folder deleted. orchestrate/SKILL.md stale refs fixed (Goal.md → CLAUDE.md constitution, Report.md → code+state.js, token-saving.md → WORKFLOW.md). 10 operational deferrals surfaced as ## Next entries. reporter.md sub-step 2a added (Deferred→Next surfacing). back-maker/front-maker/code-review agent refs updated.',
+    },
+    {
+      id: 'PRODUCT-IDENTITY',
+      title: '#17 PRODUCT-IDENTITY — add Product Identity section to CLAUDE.md (Core Promise anchor)',
+      completedAt: '2026-05-24',
+      prs: [100],
+      note: 'New ## Product Identity section added to CLAUDE.md between What This Repo Does and Branch Model. ### Core Promise sub-section: 10-15 swipes → Aha! moment, Korean user-quote anchor, two-pillars one-liner (algorithm + corpus), pointer to docs/algorithm.md. Surfaces positive product identity previously implicit. +8 lines.',
+    },
     {
       id: 'DEPLOY-2026-05-24-v2',
       title: '#16 DEPLOY-2026-05-24-v2 — develop → main deploy, 1 PR (#97)',
@@ -69,48 +84,6 @@ window.PROJECT_STATE = {
       prs: [90],
       note: 'Release PR #90 squash-merged 21 PRs to main (179d6f6). Railway prod confirmed Online. origin/develop force-reset to match main (Bug #5 carve-out).',
     },
-    {
-      id: 'DASHBOARD-REWORK',
-      title: 'Dashboard rework — 5-tab Done/Now/Next + Mermaid flows + KST timestamps',
-      completedAt: '2026-05-24',
-      prs: [89],
-      note: '6-tab → 5-tab Done/Now/Next/System Flow/Agent Flow; mermaid.min.js vendored; Task.md sections renamed Open→Next / In Progress→Now / Resolved→Done; state.js schema rewritten; reporter.md spec updated.',
-    },
-    {
-      id: 'CODEX-R2',
-      title: 'Codex Round 2 audit — 7 findings resolved',
-      completedAt: '2026-05-24',
-      prs: [85, 86, 87],
-      note: 'images/batch validation, BoardDetail normalize, useBoard decouple, SwipePage analyzing %, Gemini auth-error fail-fast, discovery taste-vector TTL cache',
-    },
-    {
-      id: 'CODEX-EXT-9',
-      title: 'External codex audit — 9 findings resolved',
-      completedAt: '2026-05-23',
-      prs: [81, 82, 83],
-      note: 'raw_query dual-key, swipe idempotency full payload, Project row lock, DPP 3× overfetch, diverse RANDOM 2-query, ProjectList N+1, JWT blacklist, image_focus plumb, exploring bar 3→4',
-    },
-    {
-      id: 'AUDIT-T3',
-      title: 'Audit Tier 3 ops risk',
-      completedAt: '2026-05-23',
-      prs: [79],
-      note: 'ORDER BY RANDOM 2-query, sync corpus-rank, GET-write atomic, thread-local telemetry',
-    },
-    {
-      id: 'AUDIT-T2',
-      title: 'Audit Tier 2 UX-contract bugs',
-      completedAt: '2026-05-23',
-      prs: [76, 77, 78],
-      note: 'area filter normalize, FE→BE raw_query plumb, dead /matched route, rerank response shape, profiles legacy table',
-    },
-    {
-      id: 'DEPLOY-PROD',
-      title: 'Neon DB-split + production deploy',
-      completedAt: '2026-05-22',
-      prs: [63],
-      note: 'app DB = user_data (57 migrations, 23 tables), buildings DB = neondb (39,776 rows); deploy 69c9473a verified healthy. (Buildings DB later renamed neondb → archi_data on 2026-05-24 by Make DB.)',
-    },
   ],
 
   now: [
@@ -135,27 +108,119 @@ window.PROJECT_STATE = {
     },
     {
       id: 'PHASE16',
-      title: 'Phase 16 — Recommendation expansion (Profile-tab office + user recs)',
-      note: 'Spec: docs/specs/phase16-recommendation-expansion.md. REC1 already executed as Push S3; REC2 / REC3 serve a Profile-tab "사무소 추천" button (Q3 decision); Landing tab deleted by Push S6.',
+      title: 'Phase 16 — Recommendation expansion (Profile-tab 사무소/유저 추천)',
+      note: 'REC1 shipped as Push S3. REC2 (firm) + REC3 (user) target GET /api/v1/recommendations/profile/ returning {offices, users} for a Profile-tab button. Open: firm vector composition, user taste vector, cold-start strategy, match score visibility, diversity/follow-exclusion, tie-breakers, trigger surface UX. Acceptance: p95 ≤800ms Singapore, cold-start graceful, is_publishable=true gating preserved.',
     },
     {
       id: 'PHASE17',
-      title: 'Phase 17 — LLM reverse-questioning (pre-swipe persona classification)',
-      note: 'Spec: docs/specs/phase17-llm-reverse-q.md. Reverse-question lives in the first 0-2 turns of the Taste-tab LLM chat. Per-persona UI branching for P1-P4.',
+      title: 'Phase 17 — LLM reverse-questioning (pre-swipe persona classification P1-P4)',
+      note: 'Reverse-question in first 0-2 turns of Taste-tab LLM chat (Q6 Option A confirmed 2026-05-14). Populates UserProfile.persona_summary. Open: reverse-Q examples, per-persona UI branching, persona drift, representation shape, persistence, confidence+override. Acceptance: TTFC Taste-tab chat ≤4000ms; persona override path tested.',
     },
     {
       id: 'PHASE18',
       title: 'Phase 18 — External connections (firm article crawl)',
-      note: 'Spec: docs/specs/phase18-external-connections.md. Lower priority than Phase 16-17. Space, ArchDaily, news crawler + article list UI + external DM links.',
+      note: 'Lowest pending priority. Surfaces external articles about a firm on FirmProfilePage (Space / ArchDaily / news keyword match). Phase 15 already shipped External DM wiring. Open: article source priority, crawl freshness, storage, article fallback. Acceptance: ≤10 most recent articles per firm, open in new tab, no FirmProfilePage TTFC regression.',
+    },
+    {
+      id: 'XSESS',
+      title: 'Cross-session signal transfer (deferred)',
+      note: 'liked_ids / pref_vector carry-over between sessions. Current spec: implicit independence (each session starts fresh). Six options A–F. Defer until traffic justifies experiment cost.',
+    },
+    {
+      id: 'EMPTY-STATE',
+      title: 'Empty-state UX (Project = 0)',
+      note: 'First-time user with 0 projects sees Home → project picker. Need explicit empty-state path: guided flow / empty-state + create button / demo query. Low priority — current users are existing accounts.',
+    },
+    {
+      id: 'MULTILANG',
+      title: 'Multi-language behavior (partial)',
+      note: 'Chat phase has bilingual rendering rule. Mobile UI / detail page / persona report multi-language posture unresolved. Korea-first per Constitution Decision Principle 7; English supported, not co-equal.',
+    },
+    {
+      id: 'MOBILE-DESKTOP',
+      title: 'Mobile vs desktop UX divergence',
+      note: 'Current viewport-lock layout is mobile-first. Detail pages on desktop work but unoptimised. Low priority — desktop is secondary.',
+    },
+    {
+      id: 'PRIVACY-PIPA',
+      title: 'Privacy / sharing posture (PIPA + GDPR)',
+      note: 'Phase 13+ Profile/Board public/private visibility shipped. PIPA + GDPR posture for signup data collection / consent flow / retention policy still open. Required before public launch.',
+    },
+    {
+      id: 'CONVO-PERSIST',
+      title: 'Conversation history persistence',
+      note: 'Probe-turn chat history during a session is currently transient. Persist for session resume? Low priority.',
+    },
+    {
+      id: 'IMP5-BYPASS',
+      title: 'IMP-5 cache create timeout wrapper bypass',
+      note: 'backend/apps/recommendation/services/_caches.py:92 IMP-5 Gemini context-cache create call bypasses the _retry_gemini_call timeout wrapper. Gated by context_caching_enabled flag (default OFF) — zero prod impact until toggled on. Wrap on toggle-on.',
+    },
+    {
+      id: 'CODEX-STAGE3-RERUN',
+      title: 'Codex Stage 3 re-audit on prod (post-PR #97)',
+      note: 'CI hang fix (PR #97) deployed via PR #98. Re-run codex Stage 3 (AI Search Flow 5) against prod to verify the 228s /parse-query/ hang no longer fires under load. Cumulative validation of PR #94 timeout cap + PR #97 daemon-thread swap.',
+    },
+    {
+      id: 'PERF-PROJECTS',
+      title: '/projects/ p50 600ms (budget 300ms)',
+      note: 'Codex Round 2: /projects/ p50 latency 600ms vs spec budget 300ms. Probable N+1 or warm cache miss. Investigate query plan.',
+    },
+    {
+      id: 'PERF-DISCOVERY',
+      title: 'Discovery cache-hit 450ms (budget <200ms)',
+      note: 'Codex Round 2: Discovery endpoint cache-hit path measures 450ms; spec budget <200ms. Cache may be doing extra work or response serialization is the floor. Trace.',
+    },
+    {
+      id: 'PERF-SESSION-CREATE',
+      title: 'Session create 5.2s baseline',
+      note: 'POST /analysis/sessions/ measured 5.2s baseline. Pre-existing; flag for investigation.',
+    },
+    {
+      id: 'MATMUL-WARN',
+      title: 'matmul runtime warning (sklearn BLAS dtype)',
+      note: 'sklearn emits matmul dtype warning during clustering. Cosmetic noise but indicates float32/float64 mismatch — quick fix is dtype-align embedding ndarrays before kmeans.',
+    },
+    {
+      id: 'ARCHITECTS-WIRING',
+      title: 'canonical_v2_architects feature wiring',
+      note: 'Make DB shipped canonical_v2_architects (14,216 firms, 4,357 recommendable) in 2026-05-24 DB swap. Make Web profiles_office 4-tier resolution + REC2 (Phase 16) should consume this. Not yet wired.',
+    },
+    {
+      id: 'USER-DATA-ROLE-SEP',
+      title: 'user_data DB role separation (security)',
+      note: 'user_data DB currently uses default neondb_owner role with full privileges. Split to a restricted Make-Web-only role mirroring the SELECT-only make_web role on archi_data. Security backlog.',
+    },
+    {
+      id: 'SNAPSHOT-BRANCH-DROP',
+      title: '1-week post-deploy snapshot branch drop',
+      note: 'After production deploys, Neon snapshot branches retained for 1 week as rollback safety. Drop the lingering ones after retention window (verify Neon dashboard).',
+    },
+    {
+      id: 'CELERY-CORPUS-RANK',
+      title: 'Celery compute_corpus_rank background task',
+      note: 'recommendation_swipeevent row inserts currently compute corpus rank synchronously (or skip when on bookmark POST per PR #79). Async via Celery for proper telemetry without blocking.',
     },
   ],
 
   prs: [
     {
-      number: 98,
-      title: 'Release: 2026-05-24 — CI hang fix (PR #97)',
-      mergedAt: '2026-05-24T10:58:47Z',
-      mergedAtKST: '2026-05-24 19:58 KST',
+      number: 101,
+      title: 'docs: absorb docs/specs into Task.md Next, fix orchestrate stale refs',
+      mergedAt: '2026-05-24T14:56:47Z',
+      mergedAtKST: '2026-05-24 23:56 KST',
+    },
+    {
+      number: 100,
+      title: 'docs: add Product Identity section to CLAUDE.md (Core Promise anchor)',
+      mergedAt: '2026-05-24T14:34:59Z',
+      mergedAtKST: '2026-05-24 23:34 KST',
+    },
+    {
+      number: 99,
+      title: 'chore: session-end reporter housekeeping — CI hang fix + deploy #98',
+      mergedAt: '2026-05-24T11:03:09Z',
+      mergedAtKST: '2026-05-24 20:03 KST',
     },
     {
       number: 97,
@@ -186,18 +251,6 @@ window.PROJECT_STATE = {
       title: 'chore: drop v1 architecture_vectors refs — 2 files + 4 doc fixes',
       mergedAt: '2026-05-24T01:42:39Z',
       mergedAtKST: '2026-05-24 10:42 KST',
-    },
-    {
-      number: 91,
-      title: 'chore: session-end reporter housekeeping — 2026-05-24 post-deploy',
-      mergedAt: '2026-05-24T00:48:21Z',
-      mergedAtKST: '2026-05-24 09:48 KST',
-    },
-    {
-      number: 89,
-      title: 'feat: dashboard rework — 5-tab Done/Now/Next + Mermaid flows + KST timestamps',
-      mergedAt: '2026-05-23T16:58:28Z',
-      mergedAtKST: '2026-05-24 01:58 KST',
     },
   ],
 
