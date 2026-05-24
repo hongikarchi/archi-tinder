@@ -37,8 +37,19 @@ function ConfidenceBar({ value, phase, progress }) {
     pct = value != null ? Math.round(value * 100) : 100
     stageLabel = 'Converged'
   } else if (phase === 'analyzing') {
-    pct = value != null ? Math.round(value * 100) : 100
-    stageLabel = 'Analyzing'
+    if (value != null) {
+      pct = Math.round(value * 100)
+      stageLabel = 'Analyzing'
+    } else {
+      // Post-transition calibration window: backend has reset convergence_history
+      // and needs `convergence_window` (=3) more delta_v entries before
+      // compute_confidence returns a non-null float. Until then we keep the
+      // exploring-phase visual semantic (progress driven by like_count) so the
+      // bar never falsely reads 100%. See plans/merry-toasting-dove.md.
+      const likes = Math.min(likeCount, 4)
+      pct = Math.round((likes / 4) * 100)
+      stageLabel = 'Calibrating…'
+    }
   } else if (phase === 'exploring') {
     const likes = Math.min(likeCount, 4)
     pct = Math.round((likes / 4) * 100)
