@@ -3,6 +3,7 @@ _gemini.py -- Low-level Gemini API client wrapper and retry logic.
 
 Self-contained: no imports from sibling sub-modules.
 """
+import concurrent.futures
 import logging
 import time
 
@@ -34,7 +35,7 @@ def _get_client():
     return _client
 
 
-def _retry_gemini_call(func, *args, **kwargs):
+def _retry_gemini_call(func, *args, timeout=15.0, **kwargs):
     """
     Execute a Gemini API call with one retry on transient failure.
 
@@ -43,11 +44,30 @@ def _retry_gemini_call(func, *args, **kwargs):
     Transient errors (5xx, ResourceExhausted, unknown) get one retry after
     _GEMINI_RETRY_DELAY seconds.
 
+    timeout: hard wall-clock deadline in seconds for each attempt. Default 15s.
+    On deadline expiry, raises TimeoutError (treated as transient — retried
+    once, then re-raised on second failure). Callers that need longer
+    deadlines (e.g. persona report generation) should pass timeout=N
+    explicitly.
+
     Returns the result on success, raises on final failure.
     """
     for attempt in range(_GEMINI_MAX_RETRIES + 1):
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
         try:
-            return func(*args, **kwargs)
+            future = executor.submit(func, *args, **kwargs)
+            return future.result(timeout=timeout)
+        except concurrent.futures.TimeoutError:
+            logger.warning(
+                'Gemini API call timeout (attempt %d/%d) after %.1fs',
+                attempt + 1, _GEMINI_MAX_RETRIES + 1, timeout,
+            )
+            if attempt == _GEMINI_MAX_RETRIES:
+                raise TimeoutError(
+                    f'Gemini call exceeded {timeout}s after '
+                    f'{_GEMINI_MAX_RETRIES + 1} attempts'
+                )
+            time.sleep(_GEMINI_RETRY_DELAY)
         except _FATAL_GEMINI_EXC as e:
             logger.warning(
                 'Gemini API permanent error (no retry): %s: %s',
@@ -63,3 +83,5 @@ def _retry_gemini_call(func, *args, **kwargs):
             if attempt == _GEMINI_MAX_RETRIES:
                 raise
             time.sleep(_GEMINI_RETRY_DELAY)
+        finally:
+            executor.shutdown(wait=False)

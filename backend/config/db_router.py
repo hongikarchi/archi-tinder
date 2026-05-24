@@ -1,15 +1,18 @@
 """
 db_router.py -- Django multi-database router for Make Web.
 
-Phase A (behavior-neutral): 'buildings' alias points at the same Neon DB as
-'default'.  Phase B will provision a real read-replica and flip BUILDINGS_DB_*
-env vars.
+Two-database topology on a single Neon endpoint:
+  - 'default' alias -> user_data DB (Make Web ORM target; auth, profiles,
+    recommendation, etc.).
+  - 'buildings' alias -> archi_data DB (Make-DB-owned, read-only). Make Web
+    queries `canonical_v2_buildings` + `canonical_v2_architects` via raw SQL
+    using a dedicated SELECT-only role (`make_web`).
 
 Routing logic:
   - db_for_read / db_for_write / allow_relation: return None (defer to default
     Django behavior -- every ORM model lives on 'default').
-  - allow_migrate: block migration attempts on 'buildings' (canonical_v2_buildings
-    is owned by Make DB; Make Web must never migrate it).
+  - allow_migrate: block migration attempts on 'buildings' (archi_data is
+    owned by Make DB; Make Web must never migrate it).
 """
 
 
