@@ -6,6 +6,14 @@
   For collaboration / branch model / PR workflow / file ownership, see `CONTRIBUTING.md`.
   For the build workflow (the single session, its sub-agents, the `orchestrate` skill), see `.claude/WORKFLOW.md`.
 
+  ## Product Identity
+
+  ### Core Promise
+  10-15 swipes → Aha! moment (taste captured).
+  > "이 앱이 내 미묘한 취향을 벌써 눈치챘네?"
+
+  Two pillars (물리적 직관성 + 마법 같은 반응성). Detail → `docs/algorithm.md`.
+
   ## Branch Model — HARD RULES (must follow before any commit)
 
   **The team uses GitHub Flow with a develop integration branch:**
