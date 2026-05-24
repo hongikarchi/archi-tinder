@@ -220,15 +220,14 @@ After production deploys, Neon snapshot branches retained for 1 week as rollback
 ### CELERY-CORPUS-RANK — Celery `compute_corpus_rank` background task
 `recommendation_swipeevent` row inserts currently compute corpus rank synchronously (or skip when on bookmark POST per PR #79). Async via Celery for proper telemetry without blocking.
 
+### DESIGN-REWORK — Design-system redesign per-component rework (paused)
+Foundation shipped: PR #54 (`tokens.css` 4 themes + `ThemeContext` + `AppearanceSettings`) + PR #59 (theme/font server persistence). Remaining: per-component visual rework (~7,700 LOC, inline styles → CSS Modules + `:hover`, light-theme visuals) across the frontend, leaf→hub order. Paused — no active PR. Resume via `/plan` per slice.
+
 ---
 
 ## Now
 
-### Design-system redesign — per-component rework (pending)
-Foundation shipped (PR #54: `tokens.css` 4 themes + `ThemeContext` +
-`AppearanceSettings`). Remaining: per-component visual rework (~7,700 LOC,
-inline styles → CSS Modules + `:hover`, light-theme visuals) across the
-frontend, leaf→hub order. Scope with `/plan` per slice.
+_(none — no active initiative slice with a PR in flight.)_
 
 ---
 
