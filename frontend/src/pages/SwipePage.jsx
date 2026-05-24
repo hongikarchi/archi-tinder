@@ -322,11 +322,18 @@ export default function SwipePage({
   const filter_relaxed   = progress?.filter_relaxed || false
   const confidence       = progress?.confidence ?? null
 
-  // Show "Finish & View Report" button when progress hits 100% (still swiping, not yet completed)
-  const isAt100 = !isCompleted && (
-    (phase === 'exploring' && like_count >= 4) ||
-    ((phase === 'analyzing' || phase === 'converged') && confidence != null && confidence >= 1.0)
-  )
+  // Latch: once the threshold is reached, keep the button visible even if
+  // subsequent swipes change phase/confidence. Resets only when session ends.
+  const [finishUnlocked, setFinishUnlocked] = useState(false)
+  useEffect(() => {
+    if (isCompleted) { setFinishUnlocked(false); return }
+    const reached = (
+      (phase === 'exploring' && like_count >= 4) ||
+      ((phase === 'analyzing' || phase === 'converged') && confidence != null && confidence >= 1.0)
+    )
+    if (reached) setFinishUnlocked(true)
+  }, [phase, like_count, confidence, isCompleted])
+  const isAt100 = !isCompleted && finishUnlocked
 
   function onTinderSwipe(dir) {
     // F4: intercept first-ever left swipe to show dismiss tutorial

@@ -166,6 +166,16 @@ export default function App() {
     return () => clearTimeout(timer)
   }, [swipeError])
 
+  // Auto-navigate to results when session completes (pool exhausted or analysis done).
+  // Skips the intermediate "Your taste is found" screen — navigates directly.
+  useEffect(() => {
+    if (!isSessionCompleted) return
+    const sessionId = projects.find(p => p.id === activeProjectId)?.sessionId
+    if (!sessionId) return
+    if (location.pathname !== '/swipe') return
+    navigate('/result/' + sessionId)
+  }, [isSessionCompleted]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Persist current card id to localStorage per active project so refresh can
   // restore the exact card the user was looking at (not just the backend's last
   // next_image). Cleared when currentCard becomes null or session completes.
