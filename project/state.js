@@ -22,12 +22,19 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-05-25 00:45 KST',
-    head: '0690b85',
+    updatedAt: '2026-05-25 01:50 KST',
+    head: '890236c',
     branch: 'develop',
   },
 
   done: [
+    {
+      id: 'SWIPE-CALIBRATING',
+      title: '#21 SWIPE-CALIBRATING — ConfidenceBar null-confidence guard (Calibrating… label)',
+      completedAt: '2026-05-25',
+      prs: [108],
+      note: '4th swipe trips exploring→analyzing transition; backend resets convergence_history per spec C-1; compute_confidence returns null for ~5 swipes. Old code showed Analyzing 100% on null fallback — user stuck. Fix: null confidence in analyzing branch → Calibrating… label + likeCount/4 progress. isAt100 Finish gate untouched. Backend convergence reset unchanged (correct per spec). Deferred: MATMUL-WARN, PERF-DISCOVERY, PERF-SESSION-CREATE, PERF-PROJECTS all remain in next[].',
+    },
     {
       id: 'TASK-MD-RESTRUCTURE-V2',
       title: '#20 TASK-MD-RESTRUCTURE-V2 — Workflow Rules + Now/Next discipline + audit-verified AUDIT-T4 LOC + AUTH1 frontend scope',
@@ -203,6 +210,18 @@ window.PROJECT_STATE = {
 
   prs: [
     {
+      number: 108,
+      title: 'fix(frontend): ConfidenceBar Calibrating label when analyzing+null',
+      mergedAt: '2026-05-24T16:33:11Z',
+      mergedAtKST: '2026-05-25 01:33 KST',
+    },
+    {
+      number: 107,
+      title: 'chore: session-end reporter housekeeping — docs PRs #103/#104 (redo, correct base=develop)',
+      mergedAt: '2026-05-24T15:51:54Z',
+      mergedAtKST: '2026-05-25 00:51 KST',
+    },
+    {
       number: 104,
       title: 'docs: restructure Task.md (Workflow Rules + Now/Next discipline) + update AUTH1/AUDIT-T4',
       mergedAt: '2026-05-24T15:29:32Z',
@@ -237,18 +256,6 @@ window.PROJECT_STATE = {
       title: 'chore: session-end reporter housekeeping — CI hang fix + deploy #98',
       mergedAt: '2026-05-24T11:03:09Z',
       mergedAtKST: '2026-05-24 20:03 KST',
-    },
-    {
-      number: 97,
-      title: 'fix(gemini): swap executor for daemon Thread + Queue (CI hang)',
-      mergedAt: '2026-05-24T08:01:27Z',
-      mergedAtKST: '2026-05-24 17:01 KST',
-    },
-    {
-      number: 95,
-      title: 'chore: session-end reporter housekeeping — PRs #92/#93/#94 + plan archive',
-      mergedAt: '2026-05-24T04:30:44Z',
-      mergedAtKST: '2026-05-24 13:30 KST',
     },
   ],
 
