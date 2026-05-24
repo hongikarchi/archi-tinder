@@ -25,12 +25,40 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-05-25 01:50 KST',
-    head: '890236c',
+    updatedAt: '2026-05-25 03:54 KST',
+    head: '1888b5f',
     branch: 'develop',
   },
 
   done: [
+    {
+      id: 'INFRA-DEPLOY-1',
+      title: '2026-05-25 develop → main 배포 (PR #99–#111)',
+      completedAt: '2026-05-25',
+      prs: [112],
+      note: 'develop → main squash-merged carrying 11 PRs (#99–#111). main = 1888b5f. Railway prod auto-deploy triggered. Bug #5 carve-out applied: origin/develop force-reset to origin/main (1888b5f).',
+    },
+    {
+      id: 'INFRA-DOC-1',
+      title: 'Task.md ID 규칙 + bucket + stale doc 정리',
+      completedAt: '2026-05-25',
+      prs: [111],
+      note: '## Next flat list → HIGH/MEDIUM/LOW buckets; 20 entries renamed to <SURFACE>-<TOPIC>-<N> + Korean ≤25-char title. ID convention codified in Workflow Rules; cross-refs updated in reporter.md, orchestrate/SKILL.md, maker agents. 5 stale doc spots cleaned (WORKFLOW.md Mermaid, orchestrate old phase block, README.md, SWAP_RESPONSE doc status, .env.example unused vars). INFRA-ENV-1 status upgraded confirmed (prod endpoint direct write risk).',
+    },
+    {
+      id: 'INFRA-DOC-2',
+      title: 'Reporter housekeeping (PR #108 기록)',
+      completedAt: '2026-05-25',
+      prs: [110],
+      note: 'Task.md ## Done prepended with #21 SWIPE-CALIBRATING entry (PR #108 890236c). state.js meta.head → 890236c, done[] + prs[] rebuilt.',
+    },
+    {
+      id: 'INFRA-DOC-3',
+      title: 'Publish gate + reporter no-git-ops mechanism',
+      completedAt: '2026-05-25',
+      prs: [109],
+      note: 'orchestrate/SKILL.md Step 8: publish blocked by default, gate opens only on explicit user trigger or active deploy plan. git-publisher guardrails 7+8: trigger citation required; main-base PRs need explicit deploy keyword. reporter.md Hard scope: all state-mutating git/gh commands forbidden. WORKFLOW.md Rule 3: enforcement note re post-PR #105 accidental main-base merge incident.',
+    },
     {
       id: 'SWIPE-CALIBRATING',
       title: '#21 SWIPE-CALIBRATING — ConfidenceBar null-confidence guard (Calibrating… label)',
@@ -86,13 +114,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-05-24',
       prs: [94],
       note: '_retry_gemini_call caps every Gemini SDK call at 15s (45s Imagen3) via ThreadPoolExecutor + future.result(timeout). 228s /parse-query/ hang → ≤31s. 4 new tests + 5 regression. Deferred: _caches.py:92 IMP-5 create call bypasses wrapper (context_caching_enabled default False, zero prod impact).',
-    },
-    {
-      id: 'BUILDINGS-DB-SWAP',
-      title: '#12 BUILDINGS-DB-SWAP — buildings DB neondb → archi_data + make_web role',
-      completedAt: '2026-05-24',
-      prs: [93],
-      note: 'Make DB renamed buildings DB neondb → archi_data; new SELECT-only role make_web (was neondb_owner); canonical_v2_architects table added (14,216 firms). Make Web swapped .env + Railway prod env vars; refreshed .env.example + CLAUDE.md is_publishable stat (39/39,776 → 2,614/39,478 ~6.6%) + docs/database-schema.md. Prod redeploy 04e7633e Online verified.',
     },
   ],
 
@@ -209,6 +230,30 @@ window.PROJECT_STATE = {
 
   prs: [
     {
+      number: 112,
+      title: 'Release: 2026-05-25 — Task.md ID convention + stale doc cleanup + bucket review',
+      mergedAt: '2026-05-24T18:50:49Z',
+      mergedAtKST: '2026-05-25 03:50 KST',
+    },
+    {
+      number: 111,
+      title: 'docs: Task.md ID convention + Next bucket reorg + stale doc cleanup',
+      mergedAt: '2026-05-24T18:28:00Z',
+      mergedAtKST: '2026-05-25 03:28 KST',
+    },
+    {
+      number: 110,
+      title: 'chore: session-end reporter housekeeping — PR #108 (SWIPE-CALIBRATING)',
+      mergedAt: '2026-05-24T17:20:00Z',
+      mergedAtKST: '2026-05-25 02:20 KST',
+    },
+    {
+      number: 109,
+      title: 'chore: codify publish-gate + reporter-no-git-ops mechanisms (post-PR #105 incident)',
+      mergedAt: '2026-05-24T17:00:00Z',
+      mergedAtKST: '2026-05-25 02:00 KST',
+    },
+    {
       number: 108,
       title: 'fix(frontend): ConfidenceBar Calibrating label when analyzing+null',
       mergedAt: '2026-05-24T16:33:11Z',
@@ -231,30 +276,6 @@ window.PROJECT_STATE = {
       title: 'docs: move DESIGN-REWORK out of Now (paused, no PR in flight) → Next',
       mergedAt: '2026-05-24T15:15:51Z',
       mergedAtKST: '2026-05-25 00:15 KST',
-    },
-    {
-      number: 102,
-      title: 'chore: session-end reporter housekeeping — docs PRs #100/#101',
-      mergedAt: '2026-05-24T15:03:05Z',
-      mergedAtKST: '2026-05-25 00:03 KST',
-    },
-    {
-      number: 101,
-      title: 'docs: absorb docs/specs into Task.md Next, fix orchestrate stale refs',
-      mergedAt: '2026-05-24T14:56:47Z',
-      mergedAtKST: '2026-05-24 23:56 KST',
-    },
-    {
-      number: 100,
-      title: 'docs: add Product Identity section to CLAUDE.md (Core Promise anchor)',
-      mergedAt: '2026-05-24T14:34:59Z',
-      mergedAtKST: '2026-05-24 23:34 KST',
-    },
-    {
-      number: 99,
-      title: 'chore: session-end reporter housekeeping — CI hang fix + deploy #98',
-      mergedAt: '2026-05-24T11:03:09Z',
-      mergedAtKST: '2026-05-24 20:03 KST',
     },
   ],
 
