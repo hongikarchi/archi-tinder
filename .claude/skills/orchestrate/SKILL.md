@@ -171,16 +171,34 @@ It returns a single PASS/FAIL verdict.
   and proceed to Step 8 (the browser test could not run, but the drift check still
   applies).
 
-### Step 8 — Publish (push / PR / merge)
-Dispatch `git-publisher` to push the branch, open a PR against `develop`, poll CI,
-and merge once green. `git-publisher` owns all `git push` / `gh` operations — the
-orchestrate skill itself never pushes.
+### Step 8 — Publish gate (BLOCKING by default)
+
+**Default behavior: STOP after commit (Step 6). Do NOT dispatch `git-publisher`.**
+
+Check the publish gate before dispatching `git-publisher`. The gate opens only when one of the following is explicitly true:
+
+- **(a) User explicit trigger in current turn** — the user typed one of: `"PR 올려"`, `"push"`, `"publish"`, `"merge"`, `"PR 열어"`, `"deploy"`, `"배포"`, `"release"`. Cite the user's literal phrase when invoking the gate.
+- **(b) Active plan with `## PR Plan` section** — if a plan file `.claude/plans/<name>.md` is active for this work and contains an explicit `## PR Plan` section listing N slices, the plan acts as authorization for those N PRs. Each slice's commit may dispatch `git-publisher` automatically. After the last planned slice, the gate closes (returns to default).
+- **(c) In-flight fix-loop** — if `app-test` or `code-review` already gated this work in the current dispatch and a tiny follow-up commit is the result of the fix-loop, that continues the original (a) or (b) authorization. No fresh trigger needed.
+
+If neither (a), (b), nor (c) is true:
+1. STOP. Do NOT dispatch `git-publisher`.
+2. Report to user: `commit <SHA> ready on <branch>. Say "PR 올려" when ready to publish, or accumulate more commits first.`
+3. Wait for explicit signal.
+
+Once the gate opens, dispatch `git-publisher` with the work and cite the trigger in the dispatch prompt.
+
+**Hard rule — base=main is a separate gate.** `git-publisher` enforces a second precondition: base=main PRs require the trigger keyword to be `"deploy"` / `"release"` / `"배포"` specifically. Plain `"PR 올려"` authorizes only base=develop. Codified post-PR #105 main-merge incident (2026-05-25).
 
 ### Step 9 — Report (session-end)
-Dispatch `reporter`. It will:
+Dispatch `reporter`. It **writes files only** — `.claude/Task.md`, `project/state.js`, conditionally `docs/algorithm.md`. It does NOT run `git commit`, `git push`, `gh pr create`, or `gh pr merge`. Its dispatch prompt must NOT instruct it to commit or PR. (Codified post-PR #105 incident 2026-05-25 — reporter mis-targeted `main` because the dispatch prompt told it to open a PR; the agent body now refuses such instructions.)
+
+Reporter's outputs:
 1. Move completed tasks from `.claude/Task.md` `## Now` / `## Next` into `## Done` under a dated `### <title> — RESOLVED YYYY-MM-DD (PR #N)` header.
 2. Regenerate `project/state.js` (meta + done[] + now[] + next[] + prs[] + agents[]) so `project/dashboard.html` reflects current state.
 3. Conditionally sync `docs/algorithm.md` (Production Value column + section annotations + Last Synced line) when the commit touched algorithm-relevant code.
+
+After reporter returns, the main session reviews the reporter's diff and runs the standard Step 6-8 pipeline (commit via `git-manager`, then Publish gate, then `git-publisher` if the gate opens) to land the reporter's changes. Reporter's diff is a separate commit/PR from the feature work it documents.
 
 ### Step 10 — Stop and report to user
 After reporter finishes, STOP. Summarize for the user what was implemented, the
