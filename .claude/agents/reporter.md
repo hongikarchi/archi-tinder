@@ -48,7 +48,7 @@ Read the existing `.claude/Task.md` first. Then:
 
 **Section vocabulary**: `.claude/Task.md` uses the same three labels the
 dashboard surfaces:
-- `## Next` — backlog / planned / deferred work (not yet started). **Flat list** — strategic roadmap (Phase 16-18 dimensions, AUTH1, AUDIT-T4) and operational deferrals (perf observations, audit follow-ups, security backlog, IMP toggles) live side-by-side. Priority is admin tiebreaker per CLAUDE.md `## Product Constitution` Decision Principles. No sub-grouping.
+- `## Next` — backlog grouped by `### HIGH` / `### MEDIUM` / `### LOW` priority buckets (since 2026-05-25). Each item is a `#### <SLUG>` entry one level deeper inside a bucket. **HIGH** = specced, ready to pull into `## Now`. **MEDIUM** = uncategorised pending. **LOW** = explicitly deferred / skipped. Strategic roadmap (Phase 16-18 dimensions) and operational deferrals live in the same buckets — priority is the only axis.
 - `## Now` — current initiative slice (one or more PRs in flight)
 - `## Done` — resolved log (append-only, one dated group per shipped batch)
 
@@ -57,11 +57,13 @@ Do **not** use the legacy `## Open` / `## In Progress` / `## Resolved` labels
 
 #### 2a. Deferred-item surfacing (Done note → Next)
 
-When the commit you are reporting on closes a task whose `### <title> — RESOLVED YYYY-MM-DD` body contains a `Deferred: ...` line (a follow-up the session flagged but did not ship in this batch), **also append a `### <SLUG>` entry to `## Next`** describing the deferred item. The Done note stays as the audit trail; the Next entry makes the follow-up visible to the dashboard and to the next session.
+When the commit you are reporting on closes a task whose `### <title> — RESOLVED YYYY-MM-DD` body contains a `Deferred: ...` line (a follow-up the session flagged but did not ship in this batch), **also append a `#### <SLUG>` entry under the appropriate `### HIGH` / `### MEDIUM` / `### LOW` bucket in `## Next`** describing the deferred item. Default bucket for newly-surfaced deferrals is `### MEDIUM` (uncategorised pending) unless the Done note explicitly tags the item as urgent (→ HIGH) or as a tucked-away non-actionable (→ LOW). The Done note stays as the audit trail; the Next entry makes the follow-up visible to the dashboard and to the next session.
 
 Pattern:
 - Done note line:  `Deferred: _caches.py:92 IMP-5 cache create call bypass (gated default OFF).`
-- New Next entry:  `### IMP5-BYPASS — IMP-5 cache create timeout wrapper bypass\n_caches.py:92 ... wrap on toggle-on.`
+- New Next entry under `### MEDIUM`:  `#### BACK-LLM-3 — Gemini cache 호출에 timeout 없음\n_caches.py:92 ... wrap on toggle-on.`
+
+ID convention (`<SURFACE>-<TOPIC>-<N>`) + Korean title (≤25 chars, problem/goal only) per `.claude/Task.md ## Workflow Rules`. Pick the next available `N` within the matching `<SURFACE>-<TOPIC>` namespace; never reuse a retired number.
 
 If `Deferred:` already has a matching Next entry (the session pre-surfaced it during this same commit, like the 2026-05-24 restructure), skip — do not duplicate.
 
@@ -183,8 +185,18 @@ sub-header, emit:
 - `startedAt` — optional; if the section body mentions a start date, capture it; otherwise omit.
 - `note` — the section body, collapsed to a single line if multi-paragraph.
 
-#### 4d. `next` array
-Same as 4c but for `## Next`. No `startedAt`.
+#### 4d. `next` object (priority-bucketed, since 2026-05-25)
+Read `## Next` section of `.claude/Task.md`. The section contains three `### HIGH` / `### MEDIUM` / `### LOW` sub-sections; each bucket contains zero or more `#### <SLUG> — <title>` items. Emit as:
+
+```js
+next: {
+  high:   [ /* items under ### HIGH */ ],
+  medium: [ /* items under ### MEDIUM */ ],
+  low:    [ /* items under ### LOW */ ],
+},
+```
+
+Each item shape is the same as 4c (`id` / `title` / `note`) but with no `startedAt`. Always emit all three keys even if a bucket is empty (emit `[]`).
 
 #### 4e. `prs` array
 ```bash

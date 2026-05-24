@@ -61,7 +61,7 @@ For any feature or bug fix, the session runs the `orchestrate` skill:
 
 ```mermaid
 flowchart TD
-    Start([User request]) --> Ctx[Read context — CLAUDE.md,<br/>Task.md, docs/specs if relevant]
+    Start([User request]) --> Ctx[Read context — CLAUDE.md,<br/>Task.md]
     Ctx --> BM[back-maker — backend code + flake8]
     BM --> Mig{Migration created?}
     Mig -->|yes| Migrate[apply migrate]
