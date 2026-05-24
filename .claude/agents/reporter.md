@@ -61,7 +61,9 @@ When the commit you are reporting on closes a task whose `### <title> — RESOLV
 
 Pattern:
 - Done note line:  `Deferred: _caches.py:92 IMP-5 cache create call bypass (gated default OFF).`
-- New Next entry under `### MEDIUM`:  `#### IMP5-BYPASS — IMP-5 cache create timeout wrapper bypass\n_caches.py:92 ... wrap on toggle-on.`
+- New Next entry under `### MEDIUM`:  `#### BACK-LLM-3 — Gemini cache 호출에 timeout 없음\n_caches.py:92 ... wrap on toggle-on.`
+
+ID convention (`<SURFACE>-<TOPIC>-<N>`) + Korean title (≤25 chars, problem/goal only) per `.claude/Task.md ## Workflow Rules`. Pick the next available `N` within the matching `<SURFACE>-<TOPIC>` namespace; never reuse a retired number.
 
 If `Deferred:` already has a matching Next entry (the session pre-surfaced it during this same commit, like the 2026-05-24 restructure), skip — do not duplicate.
 

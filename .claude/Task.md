@@ -7,11 +7,40 @@
 
 ## Workflow Rules
 
-- **Session start** — read `## Now` first. If empty and the user is starting new work, move the matched `## Next ### <SLUG>` entry into `## Now` (or write a fresh `### <SLUG>` if brand-new). One initiative slice at a time.
+- **Session start** — read `## Now` first. If empty and the user is starting new work, move the matched `## Next` entry (under `### HIGH` / `### MEDIUM` / `### LOW`) into `## Now`. Or write a fresh entry if brand-new. One initiative slice at a time.
 - **Mid-session** — if work in `## Now` gets deferred ("미루자"), move it back to `## Next` with a one-line rationale note. If a new sub-task appears, add it under the active Now entry's body or create a new Now entry.
-- **Session end (success)** — reporter moves `## Now` → `## Done` with PR ref + SHA. If the Now entry's note mentions a deferred follow-up (`Deferred: ...`), reporter also auto-surfaces a matching `## Next ### <SLUG>` per its sub-step 2a (see `.claude/agents/reporter.md`).
+- **Session end (success)** — reporter moves `## Now` → `## Done` with PR ref + SHA. If the Now entry's note mentions a deferred follow-up (`Deferred: ...`), reporter also auto-surfaces a matching `## Next` entry per its sub-step 2a (see `.claude/agents/reporter.md`).
 
-**Naming convention**: ALL-CAPS-SLUG header (`AUTH1`, `PHASE16`, `IMP5-BYPASS`, `PERF-DISCOVERY`, `DESIGN-REWORK`). In `## Now` and `## Done`, items are `### <SLUG> — <one-line title>`. In `## Next`, items live under priority buckets `### HIGH` / `### MEDIUM` / `### LOW` and use `#### <SLUG> — <one-line title>` (one level deeper). Multi-line body for context. Sub-tasks use `- [ ]` / `- [x]` checkboxes.
+**ID convention** (since 2026-05-25): `<SURFACE>-<TOPIC>-<N>`.
+- **SURFACE** = `FRONT` / `BACK` / `FULL` / `INFRA`. Tells where the work lives.
+  - `FRONT` = frontend only (React/Vite)
+  - `BACK` = backend only (Django/DRF)
+  - `FULL` = cross-cutting FE + BE (one feature, two PRs coordinated)
+  - `INFRA` = ops surface — Neon / Railway / Vercel / `.env` / DB roles / deploy
+- **TOPIC** = readable English word. **No obscure abbreviations.** Only universal acronyms allowed: `LLM`, `UX`, `DB`, `ENV`, `AUTH`. Conventional topics:
+  - BACK: `LLM` / `RECOMMEND` / `PERFORMANCE` / `AUTH` / `EXTERNAL`
+  - FRONT: `UX` / `DESIGN` / `LAYOUT` / `AUTH`
+  - FULL: `LANGUAGE` / `LEGAL` / `REFACTOR` / `LLM`
+  - INFRA: `DB` / `ENV` / `DEPLOY` / `QUEUE` / `MONITOR`
+- **N** = integer counter per `<SURFACE>-<TOPIC>`, persistent across bucket moves. `BACK-LLM-1`, `BACK-LLM-2`, etc. Never re-used.
+
+**Title convention**: short Korean problem / goal statement, ≤ 25 chars. Says **what is wrong or what we want**, not **how**. The body carries the how. Examples:
+- ✅ `LLM 채팅이 검색에 필요한 정보를 다 안 모음`
+- ✅ `/projects/ 응답 600ms (목표 300ms)`
+- ❌ `LLM chat refinement: refine probe behaviour to deterministically target missing required slate fields` (too long, English jargon, embeds the how)
+
+**Header format**:
+- `## Now` and `## Done` items → `### <ID> — <Korean title>`
+- `## Next` items → `#### <ID> — <Korean title>` under one of `### HIGH` / `### MEDIUM` / `### LOW`
+- `## Done` resolved suffix → append ` — RESOLVED YYYY-MM-DD (PR #N `<sha>`)`
+- Multi-line body for context. Sub-tasks use `- [ ]` / `- [x]` checkboxes.
+
+**Consistency across artefacts** — every surface that names a task uses the same `<ID> — <Korean title>` pair so cross-referencing is mechanical:
+- **Commit subject**: `<type>(<ID>): <Korean title>`. Body keeps caveman-terse description.
+- **PR title**: same shape as the commit subject.
+- **Reporter Done entry** in `## Done`: `### <ID> — <Korean title> — RESOLVED YYYY-MM-DD (PR #N `<sha>`)`.
+- **state.js**: `id` = `<ID>`, `title` = Korean title (no English duplicate).
+- Long historical Done entries from before 2026-05-25 keep their legacy headers (`### #21 SWIPE-CALIBRATING — ...`) as archive — do not rewrite history.
 
 **Priority bucket semantics** (`## Next`):
 - **HIGH** — specced, ready to pull into `## Now`. Open dimensions resolved or acceptable to resolve during implementation.
@@ -39,7 +68,7 @@ _(none — no active initiative slice with a PR in flight.)_
 
 ### HIGH
 
-#### PHASE17 — LLM Chat refinement: reverse-Q to fill required info slate
+#### BACK-LLM-1 — LLM 채팅이 검색에 필요한 정보를 다 안 모음
 `backend/apps/recommendation/services/parse_query.py` already implements a 0-2 turn probe budget where the LLM free-choices an abstract A-vs-B axis. This task **drops persona classification (P1-P4)** and re-scopes the work: (1) define an explicit *required information slate* the chat must collect — filter fields the downstream search needs — and (2) refine LLM probe behaviour so probes deterministically target missing slate fields when the user's first turn is too diffuse, instead of choosing axes freely.
 
 Goal: a diffuse natural-language query ("좋은 거 보여줘", "추천해줘") still ends with a usable filter set, by virtue of the probe loop asking specifically for the gaps.
@@ -57,7 +86,7 @@ Acceptance:
 - After ≤2 probe turns, `filter_priority` always contains at least one required-slate field.
 - A/B run on a fixed 50-query sample comparing slate-completion-rate (current prompt vs refined prompt) — refined prompt must not regress and should improve on diffuse-prior cases.
 
-#### XSESS — Cross-session signal transfer
+#### BACK-RECOMMEND-1 — Project 두번째 세션이 이전 taste를 모름
 Same Project can host multiple `AnalysisSession` rows (user comes back, "Resume" or new swipe round on the same Project — second session is created fresh while `Project.liked_ids` / `disliked_ids` / `saved_ids` carry forward as the persistent accumulator). Today the new session's algorithm-side state (`like_vectors`, `convergence_history`, `phase`) starts from scratch — exploring phase, empty pool of taste signal — even though the user just liked 12 buildings in Session #1.
 
 Open dimensions:
@@ -67,7 +96,7 @@ Open dimensions:
 
 Acceptance: behavior matches chosen option deterministically; session 2 TTFC not regressed beyond session 1 (warm-start should be ≤ or equal); A/B telemetry on session 2 satisfaction (saved_ids growth rate, completion rate) vs status quo.
 
-#### EMPTY-STATE — Empty-state UX (Project = 0)
+#### FRONT-UX-1 — 신규 사용자에게 홈이 빈 화면
 First-time user with 0 projects sees Home → project picker. Need explicit empty-state path so new sign-ups don't bounce off a blank Home. Frontend-only (HomePage / ProjectListPage).
 
 Open dimensions:
@@ -77,7 +106,7 @@ Open dimensions:
 
 Acceptance: 0-project user sees a deliberate empty state on Home (no broken-looking blank); CTA path to first swipe ≤2 clicks; no regression on existing-projects rendering.
 
-#### MULTILANG — User-set language preference (mirrors theme/font pattern)
+#### FULL-LANGUAGE-1 — 한/영 언어 설정 토글 없음
 **Decision (user 2026-05-25)**: language is a user-controlled setting, NOT browser-locale auto-detected. Pattern mirrors the existing theme/font persistence shipped in PR #54 + PR #59. User toggles language in Settings (Korean / English); the choice drives both LLM chat answer language and UI label rendering across the app.
 
 Current state:
@@ -101,7 +130,7 @@ Acceptance:
 - ≥1 high-traffic UI surface (e.g., TabBar) rendered in both languages off the same string source.
 - No regression in theme/font persistence (same wiring shape).
 
-#### CONVO-PERSIST — Conversation history server persistence (replace localStorage)
+#### BACK-LLM-2 — 채팅 기록이 다른 기기에서 사라짐
 **Decision (user 2026-05-25)**: chat conversation history must persist to the backend DB, not just to browser `localStorage` as it does today. Cross-device + cross-browser + survives storage clears.
 
 Current state:
@@ -115,9 +144,9 @@ Implementation outline:
 
 Open dimensions:
 - **Storage shape** — `Project.conversation_history` JSONField (denormalised, simple, hydrates with project payload) vs `ConversationTurn` table (normalised, paginated, ordered by created_at)?
-- **Per-session vs per-project** — store on `Project` (history accumulates across sessions) or on `AnalysisSession` (each swipe round has its own chat)? PHASE17 reverse-Q lives in `parse_query.py` which is called at session-create time, suggesting per-session — but the user-facing chat UI is project-level.
+- **Per-session vs per-project** — store on `Project` (history accumulates across sessions) or on `AnalysisSession` (each swipe round has its own chat)? `BACK-LLM-1` reverse-Q lives in `parse_query.py` which is called at session-create time, suggesting per-session — but the user-facing chat UI is project-level.
 - **`localStorage` retention** — keep as a write-through cache (offline-tolerant) / delete on first successful backend write (single source of truth) / remove entirely (cleaner)?
-- **Retention policy** — keep forever (audit trail for PHASE17 chat refinement) / 30-day TTL / cascade delete with Project?
+- **Retention policy** — keep forever (audit trail for `BACK-LLM-1` chat refinement) / 30-day TTL / cascade delete with Project?
 - **Migration of existing `localStorage` data** — one-shot backfill on next login (frontend reads localStorage, POSTs to backend, deletes local) vs no backfill (existing in-flight chats stay local until next exit, then lose history)?
 
 Acceptance:
@@ -126,14 +155,14 @@ Acceptance:
 - No regression in current Resume / Exit UX.
 - localStorage cache (if kept) is purged on logout or Project delete to prevent stale cross-user contamination.
 
-#### IMP5-BYPASS — IMP-5 cache create timeout wrapper bypass
+#### BACK-LLM-3 — Gemini cache 호출에 timeout 없음
 `backend/apps/recommendation/services/_caches.py:92` IMP-5 Gemini context-cache create call bypasses the `_retry_gemini_call` timeout wrapper that every other Gemini SDK call goes through (PR #94 hard-cap 15s, 45s for Imagen). Gated by `context_caching_enabled` flag (default OFF) — zero prod impact until the flag is toggled on, at which point an SDK hang would have no cap.
 
 Fix: wrap the create call in `_retry_gemini_call(...)` so it inherits the same 15s deadline. ~5 LOC backend edit. Pre-emptive safety — easier to do now than to discover the gap when toggling the flag under load.
 
 Acceptance: `_caches.py:92` flows through the wrapper; existing IMP-5 unit tests still pass; flag toggle behaviour unchanged.
 
-#### PERF-PROJECTS — `/projects/` p50 600 ms (budget 300 ms)
+#### BACK-PERFORMANCE-1 — `/projects/` 응답 600ms (목표 300ms)
 Codex Round 2 (2026-05-24) measured `GET /api/v1/projects/` at p50 = 600 ms, spec budget = 300 ms. Codex retest (2026-05-25) also observed double-fetch in dev (React StrictMode artefact + real prefetch — both contribute). User-visible: Projects list is the post-login first paint surface; >300 ms reads as sluggish.
 
 Investigation outline:
@@ -144,7 +173,7 @@ Investigation outline:
 
 Acceptance: p50 ≤ 300 ms on Singapore-deploy `/projects/`; no regression on serializer field shape consumed by HomePage / BoardCard.
 
-#### PERF-DISCOVERY — Discovery cache-hit 450 ms (budget <200 ms)
+#### BACK-PERFORMANCE-2 — Discovery 캐시 hit 450ms (목표 <200ms)
 Codex Round 2: `GET /api/v1/discovery/` cache-hit p50 = 450 ms vs spec budget < 200 ms. Codex retest 2026-05-25 observed cache-cold path 4.11 s with external image retries — cache-hit re-measure pending. Taste cache shipped in PR #87 (`get_or_build_taste` / `evict_taste`, 1 h TTL, evict on `liked_ids` change).
 
 Suspect work on the hit path:
@@ -160,7 +189,7 @@ Investigation outline:
 
 Acceptance: cache-hit p50 < 200 ms on Singapore deploy; cache-cold path improvement opportunistic; no SwipePage UX regression (card payload shape preserved).
 
-#### PERF-SESSION-CREATE — `POST /analysis/sessions/` 5.2 s baseline (Codex retest 2026-05-25: 7.71 s)
+#### BACK-PERFORMANCE-3 — Search 후 첫 카드까지 5-8초
 Codex Round 2 baseline = 5.2 s; Codex retest (2026-05-25) measured browser-side 7.71 s — slipping further. No explicit spec budget yet for session create itself (the 4000 ms TTFC budget covers chat parse, not the swipe-session bootstrap that follows). UX impact: 5–8 s wait between "Search" click and first swipe card is the heaviest single delay in the funnel.
 
 Pipeline steps (`views/sessions.py:28–160`):
@@ -181,7 +210,7 @@ Investigation outline:
 
 Acceptance: session-create p50 ≤ 2 s Singapore deploy (≈ 3 × improvement); pool shape + initial_batch ordering unchanged (swipe loop deterministic with prior tests); no regression on filter relaxation behaviour.
 
-#### USER-DATA-ROLE-SEP — `user_data` DB role separation (least-privilege)
+#### INFRA-DB-1 — Django app이 owner 권한으로 DB 접근
 **Decision (user 2026-05-25)**: split into two roles. Today the Django runtime logs into the `user_data` DB as `neondb_owner` — full DDL + DML + role + extension privileges. The app only needs DML on app tables.
 
 Plan:
@@ -199,7 +228,7 @@ Acceptance:
 - `make_web_app` cannot `DROP TABLE` or `CREATE ROLE` (verified via psql).
 - `manage.py migrate` still works under `neondb_owner` from operator machine.
 
-#### DEV-ENV2 — Local-dev branch verify + Neon/Railway/.env separation documented
+#### INFRA-ENV-1 — local-dev Neon branch 사라짐 — prod 직격 위험
 **Discovered during 2026-05-25 SNAPSHOT-BRANCH-DROP review.** The `local-dev` Neon branch provisioned by DEV-ENV1 (2026-05-23) is no longer listed in `neonctl branches list` for project `holy-pond-45504245`. Current branches: `production` + `pre-cleanup-2026-05-24` snapshot — that is all. The local `backend/.env` `DB_HOST` is `ep-broad-hat-a1jaomn7.ap-southeast-1.aws.neon.tech`, which is unverified (Claude session was blocked from inspecting Neon endpoint→branch mapping for credential-leak reasons).
 
 Risk: if `ep-broad-hat-a1jaomn7` belongs to the `production` branch, then **local `manage.py runserver` writes directly to prod user_data** — the exact failure mode DEV-ENV1 fixed. No mechanical guarantee of isolation right now.
@@ -221,7 +250,7 @@ Tasks:
 
 Acceptance: known mapping between every env (local + Railway + any future preview) and its Neon branch; CLAUDE.md documents the separation; mechanical isolation between local writes and prod data restored if broken.
 
-#### DESIGN-REWORK — Design-system per-component rework (resume from paused foundation)
+#### FRONT-DESIGN-1 — 디자인 시스템 컴포넌트 리워크 (paused)
 Foundation shipped: PR #54 (`tokens.css` 4 themes + `ThemeContext` + `AppearanceSettings`) + PR #59 (theme/font server persistence). Remaining: per-component visual rework (≈ 7,700 LOC) — inline `style={{}}` → CSS Modules + `:hover/:focus`/`:active`, light-theme polish where dark-only assumptions still leak through, leaf→hub component order (small leaf components first, then containers).
 
 Resume via `/plan per slice` — each slice = one logical component cluster (e.g. SwipeCard + LoadingCard, then BoardCard, then HomePage, etc.). Each slice ships its own PR via the orchestrate skill; the full sweep takes many sessions.
@@ -230,26 +259,26 @@ Acceptance per slice: `npm run lint` + `npm run build` clean; light + all dark v
 
 ### MEDIUM
 
-#### MOBILE-DESKTOP — Mobile vs desktop UX divergence
+#### FRONT-LAYOUT-1 — Desktop wide-screen 레이아웃 어색함
 Current viewport-lock layout is mobile-first. Detail pages on desktop work but unoptimised. Low priority — desktop is secondary.
 
-#### PRIVACY-PIPA — Privacy / sharing posture
+#### FULL-LEGAL-1 — PIPA/GDPR consent 없음 (public launch 차단)
 Phase 13+ Profile/Board public/private visibility shipped. PIPA + GDPR posture for signup data collection / consent flow / retention policy still open. **Required before public launch.**
 
-#### MATMUL-WARN — matmul runtime warning (sklearn BLAS dtype)
+#### BACK-RECOMMEND-2 — engine.py matmul warning 정리
 sklearn emits matmul dtype warning during clustering. Cosmetic noise but indicates float32 / float64 mismatch — quick fix is dtype-align embedding ndarrays before kmeans.
 
 ### LOW
 
-#### AUTH1 — Kakao / Naver OAuth (frontend only — backend done)
+#### FRONT-AUTH-1 — LoginPage에 Kakao/Naver 버튼 없음
 Backend Kakao + Naver implementation shipped: `apps/accounts/views.py` KakaoLoginView + NaverLoginView, `apps/accounts/urls.py` `auth/social/kakao/` + `auth/social/naver/`, `apps/accounts/models.py` provider choices. Frontend `LoginPage.jsx` currently has Google button only.
 - [ ] Kakao button on `LoginPage.jsx` (loading state already typed `'kakao'`)
 - [ ] Naver button on `LoginPage.jsx` (loading state not yet typed `'naver'`)
 
-#### AUDIT-T4 — Structural refactor (deferred)
+#### FULL-REFACTOR-1 — 큰 파일 분해 필요 (engine.py 2139 LOC 등)
 File decomp (LOC verified 2026-05-25): engine.py 2139 (+60 since first flagged), App.jsx 817, BoardDetailPage 1045, UserProfilePage 992, PostSwipeLandingPage 696, SwipePage 666, FirmProfilePage 540 (recently refactored down from 611).
 
-#### PHASE16 — Recommendation Expansion (Profile-tab 사무소/유저 추천)
+#### BACK-RECOMMEND-3 — Profile-tab 사무소/유저 추천 endpoint 없음
 Re-scoped 2026-05-14 (REC1 already shipped as Push S3). REC2 (firm) + REC3 (user) target a single composite endpoint `GET /api/v1/recommendations/profile/` returning `{offices: [...], users: [...]}` for a Profile-tab button. Landing tab removed (Push S6).
 
 Open dimensions (admin decision before implementation):
@@ -263,7 +292,7 @@ Open dimensions (admin decision before implementation):
 
 Acceptance: `/recommendations/profile/` p95 ≤ 800 ms on Singapore deploy; cold-start UX graceful; `canonical_bld_id` + `is_publishable=true` gating preserved per CLAUDE.md hard rules.
 
-#### PHASE18 — External Connections (firm article crawl)
+#### BACK-EXTERNAL-1 — FirmProfilePage에 외부 기사 surface 없음
 Surfaces external articles about a firm on FirmProfilePage (Space / ArchDaily / news keyword match). Phase 15 already shipped External DM wiring (`Office.contact_email`, `Office.website`, `UserProfile.external_links`).
 
 Open dimensions:
@@ -274,7 +303,7 @@ Open dimensions:
 
 Acceptance: ≤10 most recent articles per firm; open in new tab (legal posture); no FirmProfilePage TTFC regression (article fetch async, doesn't block initial paint).
 
-#### CELERY-CORPUS-RANK — Celery `compute_corpus_rank` background task
+#### INFRA-QUEUE-1 — corpus_rank telemetry 꺼져있음
 `recommendation_swipeevent` row inserts used to compute `corpus_rank` synchronously (O(corpus_size) scan on every swipe). PR #79 turned this off on the bookmark path (`rank_corpus = None` + TODO). Today the field is None on every write — telemetry slightly degraded but swipe response is fast. Celery + Redis would let us re-enable the calculation off the hot path.
 
 Why LOW: introducing Celery just for this one field is over-investment. Adds Redis (Railway add-on cost), a worker process, monitoring surface, and a deploy step — all for one telemetry column the product doesn't currently consume. Revisit when other background jobs accumulate (image batch processing, periodic embedding refresh, scheduled snapshot drops) so Celery earns its keep across multiple tasks.
