@@ -3,15 +3,23 @@ _gemini.py -- Low-level Gemini API client wrapper and retry logic.
 
 Self-contained: no imports from sibling sub-modules.
 """
-import concurrent.futures
 import logging
+import queue
 import time
+from threading import Thread as _Thread
 
 from django.conf import settings
 from google import genai
 from google.api_core import exceptions as gax_exceptions
 
 logger = logging.getLogger('apps.recommendation')
+
+# `_Thread` captures the real `threading.Thread` class at module-load time
+# so the timeout wrapper is immune to tests that mock `threading.Thread`
+# globally (e.g. `_DiscThread` in test_imp8_async_prefetch.py). Without this
+# capture, a leaked synchronous Thread mock would make hung Gemini calls
+# return their value before the deadline can fire, breaking the timeout
+# guarantee that production depends on.
 
 _client = None
 
@@ -50,14 +58,30 @@ def _retry_gemini_call(func, *args, timeout=15.0, **kwargs):
     deadlines (e.g. persona report generation) should pass timeout=N
     explicitly.
 
+    Implementation: each attempt runs `func` in a daemon thread that pushes
+    its result (or error) onto a Queue. The caller blocks on Queue.get with
+    a timeout. Using Queue.get instead of Thread.is_alive avoids dependence
+    on threading.Thread instance attributes — robust against test mocks that
+    substitute Thread with a partial-API stand-in. Daemon threads also die
+    with the process so a hung SDK call cannot block pytest or interpreter
+    exit; the orphan worker exits naturally when the SDK call returns.
+
     Returns the result on success, raises on final failure.
     """
     for attempt in range(_GEMINI_MAX_RETRIES + 1):
-        executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        result_queue = queue.Queue(maxsize=1)
+
+        def _runner():
+            try:
+                result_queue.put(('ok', func(*args, **kwargs)))
+            except BaseException as e:
+                result_queue.put(('err', e))
+
+        _Thread(target=_runner, daemon=True).start()
+
         try:
-            future = executor.submit(func, *args, **kwargs)
-            return future.result(timeout=timeout)
-        except concurrent.futures.TimeoutError:
+            kind, value = result_queue.get(timeout=timeout)
+        except queue.Empty:
             logger.warning(
                 'Gemini API call timeout (attempt %d/%d) after %.1fs',
                 attempt + 1, _GEMINI_MAX_RETRIES + 1, timeout,
@@ -68,20 +92,24 @@ def _retry_gemini_call(func, *args, timeout=15.0, **kwargs):
                     f'{_GEMINI_MAX_RETRIES + 1} attempts'
                 )
             time.sleep(_GEMINI_RETRY_DELAY)
-        except _FATAL_GEMINI_EXC as e:
-            logger.warning(
-                'Gemini API permanent error (no retry): %s: %s',
-                type(e).__name__, str(e),
-            )
-            raise
-        except Exception as e:
+            continue
+
+        if kind == 'err':
+            e = value
+            if isinstance(e, _FATAL_GEMINI_EXC):
+                logger.warning(
+                    'Gemini API permanent error (no retry): %s: %s',
+                    type(e).__name__, str(e),
+                )
+                raise e
             logger.warning(
                 'Gemini API call failed (attempt %d/%d): %s: %s',
                 attempt + 1, _GEMINI_MAX_RETRIES + 1,
                 type(e).__name__, str(e),
             )
             if attempt == _GEMINI_MAX_RETRIES:
-                raise
+                raise e
             time.sleep(_GEMINI_RETRY_DELAY)
-        finally:
-            executor.shutdown(wait=False)
+            continue
+
+        return value

@@ -26,25 +26,32 @@ from apps.recommendation.services._gemini import _retry_gemini_call
 
 def test_timeout_raises_after_deadline(monkeypatch):
     """
-    A func that blocks on a threading.Event (never set) must be cut off by
-    a 0.5s deadline. threading.Event.wait() is immune to time.sleep patching.
-    With _GEMINI_MAX_RETRIES=1 (two attempts), we expect TimeoutError.
-    Patch _gemini.time.sleep so the inter-attempt retry delay is instant.
+    A func that blocks must be cut off by a 0.5s deadline. With
+    _GEMINI_MAX_RETRIES=1 (two attempts), we expect TimeoutError.
+
+    `_gemini.py` captures `threading.Thread` at module-load time as
+    `_Thread`, so this test is immune to any global threading.Thread mock
+    a previous test (e.g. `_DiscThread` in test_imp8) may have left in
+    place — the wrapper always spawns a real OS thread.
     """
     monkeypatch.setattr(
         'apps.recommendation.services._gemini.time.sleep',
         lambda _: None,
     )
 
-    _never_set = threading.Event()
+    event = threading.Event()
 
     def hung_func():
-        # blocks until event is set (never) — simulates a hung Gemini SDK call
-        _never_set.wait(timeout=30.0)
+        # blocks until event is set; released in the finally to free the
+        # daemon worker after the wrapper has already raised.
+        event.wait(timeout=30.0)
         return 'never reached'
 
-    with pytest.raises(TimeoutError, match='Gemini call exceeded'):
-        _retry_gemini_call(hung_func, timeout=0.5)
+    try:
+        with pytest.raises(TimeoutError, match='Gemini call exceeded'):
+            _retry_gemini_call(hung_func, timeout=0.5)
+    finally:
+        event.set()
 
 
 # ---------------------------------------------------------------------------
