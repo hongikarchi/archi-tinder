@@ -46,22 +46,52 @@
 
   Full details (workflow scripts, common pitfalls, file ownership table): see `CONTRIBUTING.md` at the repo root.
 
-  ## Workflow — one session + sub-agents
+  ## Workflow — one session + sub-agents + skills
 
-  ArchiTinder Make Web is built from **one Claude Code session** (the orchestrator). It owns architecture, schema, auth, product + release decisions, and review — it does not write feature code itself; it dispatches sub-agents and runs the `orchestrate` skill.
+  ArchiTinder Make Web is built from **one Claude Code session** (the orchestrator). It owns architecture, schema, auth, product + release decisions, and review — it does not write feature code itself; it dispatches sub-agents and runs skills.
 
-  - **`orchestrate` skill** (`.claude/skills/orchestrate/`) — the feature-implementation playbook the session runs itself (a skill, not an agent, because only the main session can dispatch sub-agents).
-  - **8 sub-agents** (`.claude/agents/`) — `back-maker` · `front-maker` (implementation) · `code-review` · `security-manager` (inner-loop review, pre-commit) · `app-test` (pre-push browser + drift gate) · `git-manager` (commit) · `git-publisher` (push / PR / merge / deploy) · `reporter` (session-end state).
-  - **agent vs skill**: isolated work that returns a result → an agent. A procedure the main session runs itself, including anything that dispatches agents → a skill. There are no slash commands.
+  - **Skills** (`.claude/skills/`) — procedures the main session runs itself:
+    - `orchestrate` — feature-implementation playbook (back-maker/front-maker → review → security → git → publish → reporter).
+    - `reporter-inline` — session-end audit (Task.md + state.js + algorithm.md). Runs inline before squash merge so audit ships in the SAME PR as the work. **Replaces the `reporter` agent for routine housekeeping** (2026-05-26).
+    - `git-commit` — single-commit creator with branch + secret guards. **Replaces the `git-manager` agent for routine commits** (2026-05-26).
+    - `git-publish` — feature → develop push + PR open + admin squash + cleanup (Mode 2). **Replaces the `git-publisher` agent's Mode 2** (2026-05-26); the agent stays for Mode 3 deploy / external PR triage / complex rebase.
+  - **6 sub-agents** (`.claude/agents/`) — still dispatched for isolated work that returns a result:
+    - `back-maker` · `front-maker` — implementation (isolated context, sonnet).
+    - `code-review` · `security-manager` — inner-loop review (parallel pre-commit gate).
+    - `app-test` — pre-push browser + drift gate.
+    - `git-publisher` — push/PR/merge/deploy (Mode 2 default goes through `git-publish` skill; agent only fires for Mode 3 + edge cases).
+  - **2 deprecated agents** (`.claude/agents/` with `deprecated: true`) — kept for fallback during 2026-05-26 migration; slated for removal after 1 week of skill-only usage: `git-manager` · `reporter`.
+  - **agent vs skill**: isolated work that returns a result → agent. A procedure the main session runs itself (including ones that dispatch agents) → skill. There are no slash commands.
 
   Full pipeline, session model, planning protocol, token-saving rules: **`.claude/WORKFLOW.md`**.
+
+  ## Git Operations — HARD RULE (2026-05-26)
+
+  - **Default git ops** (commit / push / PR open / squash merge) → use the appropriate **skill** (`git-commit`, `git-publish`), executed by the main session. Do NOT dispatch `git-manager` agent for routine commits. The `git-publisher` agent still fires for Mode 3 / edge cases (see escalation matrix below).
+  - **Audit recording** (`.claude/Task.md ## Done` + `project/state.js` + conditional `docs/algorithm.md`) → use the **`reporter-inline` skill** BEFORE the publish step, in the same feature PR. **Reporter no longer ships a separate PR** — the audit commit lands on the same feature branch as the code commit and gets squashed together. Do NOT dispatch `reporter` agent for routine housekeeping.
+  - **Escalation matrix → `git-publisher` agent** (Mode 3 territory or edge cases the skill cannot safely handle):
+    - `develop → main` deploy mode (multi-PR batch + post-deploy `develop` force-reset to match `main`; requires explicit deploy keyword AND HARD RULE 4 carve-out citation).
+    - External collaborator PR triage (PR from someone other than admin needs review + decision).
+    - Rebase conflicts requiring multi-step recovery (`--force-with-lease` lease retries).
+    - Push rejection with unclear cause.
+    - Mid-merge failure with non-trivial error.
+  - **Escalation matrix → `reporter` agent** (fallback during migration window):
+    - `reporter-inline` skill produced a `state.js` that fails parse (Mermaid escaping, JSON-like structure error, etc.) and quick fix is unclear.
+    - Multi-PR batch audit (deploy mode) where broader agent scope helps consistency.
+    - Unfamiliar `state.js` field structure surfaces.
+  - **Forbidden** (mirror HARD RULE 1, 3, 4):
+    - Ad-hoc `git push origin develop` / `git push origin main`. Pushes go from `feature/*` only.
+    - `gh pr create --base main` outside Mode 3 deploy. Default base is `develop`.
+    - `--force` / `--force-with-lease` on a shared branch (single carve-out = post-deploy develop force-reset, agent Mode 3 only).
+    - `--no-verify`, `--amend` on a pushed commit, `git rebase -i`, `git reset --hard` on shared branches.
+  - **Publish gate** (mirror `[[feedback_publish_gate]]`): the `git-publish` skill Step 0 enforces. After commit, default action is STOP. Push / PR / merge requires explicit publish keyword (Korean: `올려`, `푸시`, `배포`, `merge`, `PR 만들어`, `배포해`, `deploy`, `ship`; English: `push`, `open PR`, `merge`, `deploy`, `ship`) OR an active `.claude/plans/<slug>.md` authorizing the action.
 
   ## Rules
   - All building references must use `canonical_bld_id` (TEXT PK like `'bld_000344'`) -- never `name`, `slug`, or any language-dependent field.
   - Do NOT create or migrate the `canonical_v2_buildings` table -- it is owned by Make DB.
   - Every building query MUST gate on `is_publishable = true` (2,614 of 39,478 rows ~6.6% are non-publishable as of C23 on 2026-05-24). `engine._build_filter_sql` already emits this clause; raw SQL elsewhere must add it.
   - SentenceTransformers is NOT a dependency here -- embeddings are pre-computed.
-  - **`docs/algorithm.md` reporter sync (narrow write permission)**: only the `reporter` agent updates `docs/algorithm.md`, and only to keep it in sync with implementation. Permitted writes: (a) sync the **Production Value** column in the Hyperparameter Space table when `backend/config/settings.py` RECOMMENDATION dict changes; (b) append a one-line `_(Updated YYYY-MM-DD <sha_short>: <one-line>)_` annotation under any phase / formula / edge-case section whose corresponding implementation just changed; (c) maintain a `**Last Synced (Reporter):** YYYY-MM-DD <sha_short>` line near the top. Forbidden: rewriting algorithm theory, removing existing content, adding new sections. Other `docs/` files (specs, etc.) are admin-owned plain documents — anyone can edit via PR per CONTRIBUTING.md.
+  - **`docs/algorithm.md` reporter sync (narrow write permission)**: only the `reporter-inline` skill (and the deprecated `reporter` agent on fallback) updates `docs/algorithm.md`, and only to keep it in sync with implementation. Permitted writes: (a) sync the **Production Value** column in the Hyperparameter Space table when `backend/config/settings.py` RECOMMENDATION dict changes; (b) append a one-line `_(Updated YYYY-MM-DD <sha_short>: <one-line>)_` annotation under any phase / formula / edge-case section whose corresponding implementation just changed; (c) maintain a `**Last Synced (Reporter):** YYYY-MM-DD <sha_short>` line near the top. Forbidden: rewriting algorithm theory, removing existing content, adding new sections. Other `docs/` files (specs, etc.) are admin-owned plain documents — anyone can edit via PR per CONTRIBUTING.md.
   - **Plan mode protocol — Korean summary + multiple choice + one question at a time** (durable across sessions). When entering plan mode:
     1. **Data gathering** — read-only exploration (Explore agent or direct reads). Collect facts before analysis.
     2. **Korean summary in chat** — a *short* (5-15 line) Korean summary of the diagnosis / proposal. Do NOT dump long English plan files into chat; the plan file can be detailed, the chat presentation is summarized + Korean.
@@ -70,7 +100,7 @@
     5. **Plan file finalize** — once decisions are answered, update the plan file. Korean summary block; English for code identifiers.
     6. **ExitPlanMode** — only AFTER all decisions are settled. Do not ask "should I proceed?" — that is what `ExitPlanMode` does.
     Why: user request 2026-04-29 — long English plan dumps overwhelm; sequential multiple-choice supports careful per-topic decisions. Applies to all plan-mode entries.
-  - **Implementation delegation — HARD RULE** (durable across sessions). The session owns *architecture, schema, auth, product + release decisions, and review* — it does **NOT** write production feature code directly. Every `backend/` or `frontend/` feature / bug-fix / refactor edit is delegated: full features, unclear-root-cause bugs, or cross-cutting refactors → the `orchestrate` skill; bounded mechanical changes → `back-maker` / `front-maker` (`model: sonnet`) sub-agents. The session picks the model / effort per task and dispatches — it does not fall back to implementing in opus because delegation feels like overhead. **Carve-out (direct edit OK)**: meta / infra (`tools/`, `hooks/`, `.github/`), single-line policy fixes, sub-MINOR follow-ups, and pure docs (`CLAUDE.md`, `.claude/*`, `docs/*`, `CONTRIBUTING.md`, `DESIGN.md`, `README.md`) — direct edit + `git-manager`. Why: codified 2026-05-15 — `back-maker` / `front-maker` carry `model: sonnet`; the session must not implement feature code in opus "because delegating feels like overhead."
+  - **Implementation delegation — HARD RULE** (durable across sessions). The session owns *architecture, schema, auth, product + release decisions, and review* — it does **NOT** write production feature code directly. Every `backend/` or `frontend/` feature / bug-fix / refactor edit is delegated: full features, unclear-root-cause bugs, or cross-cutting refactors → the `orchestrate` skill; bounded mechanical changes → `back-maker` / `front-maker` (`model: sonnet`) sub-agents. The session picks the model / effort per task and dispatches — it does not fall back to implementing in opus because delegation feels like overhead. **Carve-out (direct edit OK)**: meta / infra (`tools/`, `hooks/`, `.github/`), single-line policy fixes, sub-MINOR follow-ups, and pure docs (`CLAUDE.md`, `.claude/*`, `docs/*`, `CONTRIBUTING.md`, `DESIGN.md`, `README.md`) — direct edit + `git-commit` skill (the `git-manager` agent is deprecated as of 2026-05-26). Why: codified 2026-05-15 — `back-maker` / `front-maker` carry `model: sonnet`; the session must not implement feature code in opus "because delegating feels like overhead."
 
   ## Product Constitution
 

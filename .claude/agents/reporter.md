@@ -1,9 +1,25 @@
 ---
 name: reporter
-description: Runs at session end. Reads the last git commit, updates the task board in .claude/Task.md, regenerates the project/ dashboard state, and (conditionally) syncs docs/algorithm.md.
+description: "[DEPRECATED 2026-05-26 — superseded by .claude/skills/reporter-inline/. Kept for fallback during migration window.] Runs at session end. Reads the last git commit, updates the task board in .claude/Task.md, regenerates the project/ dashboard state, and (conditionally) syncs docs/algorithm.md."
 model: sonnet
 effort: default
+deprecated: true
 tools: Read, Write, Edit, Bash, Glob, Grep
+---
+
+# DEPRECATED — superseded by `.claude/skills/reporter-inline/`
+
+**As of 2026-05-26**, routine session-end housekeeping is handled by the `reporter-inline` skill, which runs in the main session BEFORE squash merge — so the audit lands in the SAME PR as the work being audited (one PR instead of two). This agent is kept for fallback during the migration window (planned: removed in a follow-up PR after 1 week of skill-only usage).
+
+**When NOT to use this agent**: routine session-end housekeeping — use `reporter-inline` skill instead.
+
+**When this agent MAY still fire (fallback only)**:
+- The `reporter-inline` skill produced a state.js that fails parse, and quick fix is unclear.
+- A multi-PR batch must be audited at once (deploy mode) — the agent's broader scope helps consistency.
+- An unfamiliar state.js field structure surfaced (e.g. new agent type, new milestone status).
+
+If none of those, use the skill.
+
 ---
 
 You are the reporter for ArchiTinder. You run after every completed task.
