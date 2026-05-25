@@ -1,8 +1,9 @@
 import logging
+import threading
 from collections import defaultdict
 
 from django.conf import settings
-from django.db import transaction
+from django.db import close_old_connections, transaction
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -10,6 +11,7 @@ from rest_framework.views import APIView
 
 from ..models import Project, AnalysisSession
 from .. import engine, event_log, services
+from ..perf_timing import endpoint, stage
 from ._shared import _get_profile, _progress
 
 logger = logging.getLogger('apps.recommendation')
@@ -29,185 +31,220 @@ class SessionCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        profile = _get_profile(request)
-        if not profile:
-            return Response({'detail': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        with endpoint('session_create'):
+            with stage('get_profile'):
+                profile = _get_profile(request)
+            if not profile:
+                return Response({'detail': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        project_id      = request.data.get('project_id')
-        project_name    = (request.data.get('name') or '').strip()[:100] or 'Untitled'
-        filters         = request.data.get('filters') or {}
+            project_id      = request.data.get('project_id')
+            project_name    = (request.data.get('name') or '').strip()[:100] or 'Untitled'
+            filters         = request.data.get('filters') or {}
 
-        # Validate and sanitize filter_priority: must be a list of known filter key strings, max 10
-        raw_priority = request.data.get('filter_priority') or []
-        if not isinstance(raw_priority, list):
-            raw_priority = []
-        filter_priority = [k for k in raw_priority if isinstance(k, str) and k in _VALID_FILTER_KEYS][:10]
+            # Validate and sanitize filter_priority: must be a list of known filter key strings, max 10
+            raw_priority = request.data.get('filter_priority') or []
+            if not isinstance(raw_priority, list):
+                raw_priority = []
+            filter_priority = [k for k in raw_priority if isinstance(k, str) and k in _VALID_FILTER_KEYS][:10]
 
-        # Validate and sanitize seed_ids: must be a list of strings, max 50
-        raw_seeds = request.data.get('seed_ids') or []
-        if not isinstance(raw_seeds, list):
-            raw_seeds = []
-        seed_ids = [s for s in raw_seeds if isinstance(s, str) and len(s) <= 20][:50]
+            # Validate and sanitize seed_ids: must be a list of strings, max 50
+            raw_seeds = request.data.get('seed_ids') or []
+            if not isinstance(raw_seeds, list):
+                raw_seeds = []
+            seed_ids = [s for s in raw_seeds if isinstance(s, str) and len(s) <= 20][:50]
 
-        # raw_query: accept 'raw_query' (new FE key) with 'query' fallback for old clients.
-        # Separate from _raw_query_early below (which is coerced to None > 1000 chars for RRF).
-        raw_query = (request.data.get('raw_query') or request.data.get('query') or '').strip()[:2000]
+            # raw_query: accept 'raw_query' (new FE key) with 'query' fallback for old clients.
+            # Separate from _raw_query_early below (which is coerced to None > 1000 chars for RRF).
+            raw_query = (request.data.get('raw_query') or request.data.get('query') or '').strip()[:2000]
 
-        # Resolve project (project_id may be a local ID like 'proj_xxx' -- ignore gracefully)
-        project = None
-        if project_id:
-            try:
-                project = Project.objects.filter(project_id=project_id, user=profile).first()
-            except Exception:
+            with stage('resolve_or_create_project'):
+                # Resolve project (project_id may be a local ID like 'proj_xxx' -- ignore gracefully)
                 project = None
-        if not project:
-            project = Project.objects.create(user=profile, name=project_name, filters=filters, raw_query=raw_query)
+                if project_id:
+                    try:
+                        project = Project.objects.filter(project_id=project_id, user=profile).first()
+                    except Exception:
+                        project = None
+                if not project:
+                    project = Project.objects.create(
+                        user=profile, name=project_name, filters=filters, raw_query=raw_query,
+                    )
 
-        # Topic 01 RRF: extract raw_query early — needed for both RRF q_text and
-        # IMP-6 cache key. Accept 'raw_query' (FE key, sessions.js:25) with
-        # 'query' fallback for old clients — mirrors the line-54 dual-key dispatch.
-        # Coerce to None for non-string or oversized values.
-        _raw_query_early = request.data.get('raw_query') or request.data.get('query') or None
-        if _raw_query_early and not isinstance(_raw_query_early, str):
-            _raw_query_early = None
-        # Security: coerce oversized queries to None (RRF wants a focused query, not an essay)
-        if _raw_query_early and len(_raw_query_early) > 1000:
-            _raw_query_early = None
-        q_text_param = _raw_query_early if RC.get('hybrid_retrieval_enabled', False) else None
+            # Topic 01 RRF: extract raw_query early — needed for both RRF q_text and
+            # IMP-6 cache key. Accept 'raw_query' (FE key, sessions.js:25) with
+            # 'query' fallback for old clients — mirrors the line-54 dual-key dispatch.
+            # Coerce to None for non-string or oversized values.
+            _raw_query_early = request.data.get('raw_query') or request.data.get('query') or None
+            if _raw_query_early and not isinstance(_raw_query_early, str):
+                _raw_query_early = None
+            # Security: coerce oversized queries to None (RRF wants a focused query, not an essay)
+            if _raw_query_early and len(_raw_query_early) > 1000:
+                _raw_query_early = None
+            q_text_param = _raw_query_early if RC.get('hybrid_retrieval_enabled', False) else None
 
-        # V_initial: IMP-6 late-bind path (flag ON) or HyDE sync path (flag OFF)
-        visual_description = request.data.get('visual_description') or None
-        if visual_description is not None and (
-            not isinstance(visual_description, str) or len(visual_description) > 5000
-        ):
-            visual_description = None
-        v_initial = None
-        if RC.get('stage_decouple_enabled', False):
-            # IMP-6 Commit 1: late-bind path — try Django cache for Stage 2 product.
-            # Cache miss (Commit 1: Stage 2 not yet implemented) returns None.
-            # Filter-only pool creation follows per spec v1.5 Topic 01 graceful-degrade
-            # (BM25-only RRF; rank-level fusion is order-independent, no structural issue).
-            v_initial = services.get_cached_v_initial(request.user.id, _raw_query_early)
-        elif RC.get('hyde_vinitial_enabled', False) and visual_description:
-            # IMP-6 OFF: existing sync HyDE V_initial path — byte-identical to pre-IMP-6
-            v_initial = services.embed_visual_description(
-                visual_description,
-                session=None,  # session not yet created
-                user=profile,
-            )
+            # V_initial: IMP-6 late-bind path (flag ON) or HyDE sync path (flag OFF)
+            visual_description = request.data.get('visual_description') or None
+            if visual_description is not None and (
+                not isinstance(visual_description, str) or len(visual_description) > 5000
+            ):
+                visual_description = None
+            v_initial = None
+            with stage('v_initial'):
+                if RC.get('stage_decouple_enabled', False):
+                    # IMP-6 Commit 1: late-bind path — try Django cache for Stage 2 product.
+                    # Cache miss (Commit 1: Stage 2 not yet implemented) returns None.
+                    # Filter-only pool creation follows per spec v1.5 Topic 01 graceful-degrade
+                    # (BM25-only RRF; rank-level fusion is order-independent, no structural issue).
+                    v_initial = services.get_cached_v_initial(request.user.id, _raw_query_early)
+                elif RC.get('hyde_vinitial_enabled', False) and visual_description:
+                    # IMP-6 OFF: existing sync HyDE V_initial path — byte-identical to pre-IMP-6
+                    v_initial = services.embed_visual_description(
+                        visual_description,
+                        session=None,  # session not yet created
+                        user=profile,
+                    )
 
-        # Create bounded pool with weighted scoring (3-tier relaxation fallback via helper)
-        active_filters = dict(filters or project.filters or {})
+            # Create bounded pool with weighted scoring (3-tier relaxation fallback via helper)
+            active_filters = dict(filters or project.filters or {})
 
-        # image_focus: rider on filters dict (NOT a WHERE-clause filter, but
-        # threads through to _row_to_card so cards get the user-picked cover).
-        # Accept either from explicit `image_focus` param OR from filters['image_focus'].
-        req_focus = request.data.get('image_focus')
-        if isinstance(req_focus, str) and req_focus in _VALID_IMAGE_FOCUS:
-            active_filters['image_focus'] = req_focus
-        elif active_filters.get('image_focus') not in _VALID_IMAGE_FOCUS:
-            active_filters.pop('image_focus', None)
-        pool_ids, pool_scores, current_pool_tier = engine.create_pool_with_relaxation(
-            active_filters, filter_priority, seed_ids, v_initial=v_initial, q_text=q_text_param,
-        )
-        filter_relaxed = current_pool_tier > 1
-        if filter_relaxed:
-            logger.info('Session pool relaxed to tier %d: %d buildings', current_pool_tier, len(pool_ids))
+            # image_focus: rider on filters dict (NOT a WHERE-clause filter, but
+            # threads through to _row_to_card so cards get the user-picked cover).
+            # Accept either from explicit `image_focus` param OR from filters['image_focus'].
+            req_focus = request.data.get('image_focus')
+            if isinstance(req_focus, str) and req_focus in _VALID_IMAGE_FOCUS:
+                active_filters['image_focus'] = req_focus
+            elif active_filters.get('image_focus') not in _VALID_IMAGE_FOCUS:
+                active_filters.pop('image_focus', None)
 
-        if not pool_ids:
-            # Truly unrecoverable (even random pool empty)
-            return Response({'detail': 'No buildings match your criteria'}, status=404)
+            with stage('create_pool', filter_keys=','.join(sorted(active_filters.keys()))):
+                pool_ids, pool_scores, current_pool_tier = engine.create_pool_with_relaxation(
+                    active_filters, filter_priority, seed_ids,
+                    v_initial=v_initial, q_text=q_text_param,
+                )
+            filter_relaxed = current_pool_tier > 1
+            if filter_relaxed:
+                logger.info('Session pool relaxed to tier %d: %d buildings', current_pool_tier, len(pool_ids))
 
-        # Get pool embeddings
-        pool_embeddings = engine.get_pool_embeddings(pool_ids)
+            if not pool_ids:
+                # Truly unrecoverable (even random pool empty)
+                return Response({'detail': 'No buildings match your criteria'}, status=404)
 
-        # Tier-ordered initial_batch: farthest-point within highest score tier first
-        tiers = defaultdict(list)
-        for bid in pool_ids:
-            tiers[pool_scores.get(bid, 0)].append(bid)
+            with stage('get_pool_embeddings', pool_size=len(pool_ids)):
+                pool_embeddings = engine.get_pool_embeddings(pool_ids)
 
-        initial_batch = []
-        exposed_temp = []
-        for score in sorted(tiers.keys(), reverse=True):
-            tier_ids = list(tiers[score])  # copy so we can mutate
-            while len(initial_batch) < RC['initial_explore_rounds'] and tier_ids:
-                next_bid = engine.farthest_point_from_pool(tier_ids, exposed_temp, pool_embeddings)
-                if next_bid:
-                    initial_batch.append(next_bid)
-                    exposed_temp.append(next_bid)
-                    tier_ids.remove(next_bid)
-                else:
-                    break
-            if len(initial_batch) >= RC['initial_explore_rounds']:
-                break
+            with stage('build_initial_batch'):
+                # Tier-ordered initial_batch: farthest-point within highest score tier first
+                tiers = defaultdict(list)
+                for bid in pool_ids:
+                    tiers[pool_scores.get(bid, 0)].append(bid)
 
-        # Guard: if initial_batch is empty (shouldn't happen), fall back
-        if not initial_batch:
-            initial_batch = pool_ids[:1]
+                initial_batch = []
+                exposed_temp = []
+                for score in sorted(tiers.keys(), reverse=True):
+                    tier_ids = list(tiers[score])  # copy so we can mutate
+                    while len(initial_batch) < RC['initial_explore_rounds'] and tier_ids:
+                        next_bid = engine.farthest_point_from_pool(tier_ids, exposed_temp, pool_embeddings)
+                        if next_bid:
+                            initial_batch.append(next_bid)
+                            exposed_temp.append(next_bid)
+                            tier_ids.remove(next_bid)
+                        else:
+                            break
+                    if len(initial_batch) >= RC['initial_explore_rounds']:
+                        break
 
-        _initial_cards = engine.get_buildings_by_ids(
-            initial_batch[:3], image_focus=active_filters.get('image_focus')
-        )
-        first_card      = _initial_cards[0] if len(_initial_cards) > 0 else None
-        prefetch_card   = _initial_cards[1] if len(_initial_cards) > 1 else None
-        prefetch_card_2 = _initial_cards[2] if len(_initial_cards) > 2 else None
+                # Guard: if initial_batch is empty (shouldn't happen), fall back
+                if not initial_batch:
+                    initial_batch = pool_ids[:1]
 
-        session = AnalysisSession.objects.create(
-            user                     = profile,
-            project                  = project,
-            phase                    = 'exploring',
-            pool_ids                 = pool_ids,
-            pool_scores              = pool_scores,
-            current_round            = 0,
-            preference_vector        = [],
-            exposed_ids              = [initial_batch[0]],
-            initial_batch            = initial_batch,
-            like_vectors             = [],
-            convergence_history      = [],
-            previous_pref_vector     = [],
-            original_filters         = active_filters,
-            original_filter_priority = list(filter_priority or []),
-            original_seed_ids        = list(seed_ids or []),
-            current_pool_tier        = current_pool_tier,
-            v_initial                = v_initial,
-            original_q_text          = q_text_param,  # Topic 01 RRF: persisted for re-relaxation
-        )
+            with stage('fetch_initial_cards', n=min(3, len(initial_batch))):
+                _initial_cards = engine.get_buildings_by_ids(
+                    initial_batch[:3], image_focus=active_filters.get('image_focus')
+                )
+            first_card      = _initial_cards[0] if len(_initial_cards) > 0 else None
+            prefetch_card   = _initial_cards[1] if len(_initial_cards) > 1 else None
+            prefetch_card_2 = _initial_cards[2] if len(_initial_cards) > 2 else None
 
-        logger.info('Session created: %s (pool=%d, tiers=%d, relaxed=%s)', session.session_id, len(pool_ids), len(tiers), filter_relaxed)
+            with stage('session_insert'):
+                session = AnalysisSession.objects.create(
+                    user                     = profile,
+                    project                  = project,
+                    phase                    = 'exploring',
+                    pool_ids                 = pool_ids,
+                    pool_scores              = pool_scores,
+                    current_round            = 0,
+                    preference_vector        = [],
+                    exposed_ids              = [initial_batch[0]],
+                    initial_batch            = initial_batch,
+                    like_vectors             = [],
+                    convergence_history      = [],
+                    previous_pref_vector     = [],
+                    original_filters         = active_filters,
+                    original_filter_priority = list(filter_priority or []),
+                    original_seed_ids        = list(seed_ids or []),
+                    current_pool_tier        = current_pool_tier,
+                    v_initial                = v_initial,
+                    original_q_text          = q_text_param,  # Topic 01 RRF: persisted for re-relaxation
+                )
 
-        # §6 logging: session_start + pool_creation events
-        # Use the line-53 dual-key value (trimmed/truncated); coerce empty str to None.
-        event_log.emit_event(
-            'session_start',
-            session=session,
-            user=profile,
-            query=raw_query or None,
-            filters=active_filters,
-            filter_priority=list(filter_priority or []),
-            raw_query=raw_query or None,
-            visual_description=visual_description,
-            v_initial_success=v_initial is not None,
-        )
-        event_log.emit_event(
-            'pool_creation',
-            session=session,
-            user=profile,
-            pool_size=len(pool_ids),
-            tier_used=current_pool_tier,
-            filter_relaxed=filter_relaxed,
-            seed_count=len(seed_ids or []),
-        )
+            logger.info('Session created: %s (pool=%d, tiers=%d, relaxed=%s)', session.session_id, len(pool_ids), len(tiers), filter_relaxed)
 
-        return Response({
-            'session_id':      str(session.session_id),
-            'project_id':      str(project.project_id),
-            'session_status':  session.status,
-            'next_image':      first_card,
-            'prefetch_image':  prefetch_card,
-            'prefetch_image_2': prefetch_card_2,
-            'progress':        _progress(session),
-            'filter_relaxed':  filter_relaxed,
-        }, status=status.HTTP_201_CREATED)
+            # §6 logging: session_start + pool_creation — fire-and-forget.
+            # Analytics events are not response-critical; dispatching off the
+            # request thread saves ~292 ms synchronous DB round-trip.
+            # Values captured by closure are immutable at this point (post-return
+            # path does not mutate session, active_filters, etc.).
+            _emit_payload = [
+                {
+                    'event_type': 'session_start',
+                    'session': session,
+                    'user': profile,
+                    'query': raw_query or None,
+                    'filters': active_filters,
+                    'filter_priority': list(filter_priority or []),
+                    'raw_query': raw_query or None,
+                    'visual_description': visual_description,
+                    'v_initial_success': v_initial is not None,
+                },
+                {
+                    'event_type': 'pool_creation',
+                    'session': session,
+                    'user': profile,
+                    'pool_size': len(pool_ids),
+                    'tier_used': current_pool_tier,
+                    'filter_relaxed': filter_relaxed,
+                    'seed_count': len(seed_ids or []),
+                },
+            ]
+            _session_id_for_log = session.session_id  # safe copy for thread log
+
+            def _async_emit():
+                # New thread gets its own DB connection; close stale ones at
+                # entry and exit to prevent connection leaks under gunicorn.
+                close_old_connections()
+                try:
+                    event_log.emit_event_batch(_emit_payload)
+                except Exception as _exc:
+                    logger.warning(
+                        'Async emit_events failed for session %s: %s',
+                        _session_id_for_log, _exc,
+                    )
+                finally:
+                    close_old_connections()
+
+            with stage('emit_events_dispatch'):
+                threading.Thread(target=_async_emit, daemon=True).start()
+
+            return Response({
+                'session_id':      str(session.session_id),
+                'project_id':      str(project.project_id),
+                'session_status':  session.status,
+                'next_image':      first_card,
+                'prefetch_image':  prefetch_card,
+                'prefetch_image_2': prefetch_card_2,
+                'progress':        _progress(session),
+                'filter_relaxed':  filter_relaxed,
+            }, status=status.HTTP_201_CREATED)
 
 
 class SessionStateView(APIView):

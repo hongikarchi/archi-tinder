@@ -80,10 +80,14 @@ def measure_projects(token: str, runs: int) -> list[float]:
     return times
 
 
-def measure_sessions(token: str, runs: int, query: str) -> list[float]:
+def measure_sessions(token: str, runs: int, query: str,
+                     filters: dict | None = None) -> list[float]:
     times = []
     for i in range(runs):
         body = {'raw_query': f'{query} run-{i}'}
+        if filters is not None:
+            body['filters'] = filters
+            body['filter_priority'] = list(filters.keys())
         _, _, ms = _http(
             'POST', '/api/v1/analysis/sessions/', body=body, token=token
         )
@@ -116,14 +120,22 @@ def main() -> int:
         '--token', default=None,
         help='override JWT (otherwise dev-login via DEV_LOGIN_SECRET)',
     )
+    p.add_argument(
+        '--filters', default=None,
+        help=(
+            'JSON dict of filters for --endpoint sessions '
+            '(e.g. \'{"program":"museum","style":"modern"}\')'
+        ),
+    )
     args = p.parse_args()
 
     token = args.token or _get_token()
+    filters = json.loads(args.filters) if args.filters else None
 
     if args.endpoint == 'projects':
         times = measure_projects(token, args.runs)
     elif args.endpoint == 'sessions':
-        times = measure_sessions(token, args.runs, args.query)
+        times = measure_sessions(token, args.runs, args.query, filters=filters)
     else:
         times = measure_discovery(token, args.runs)
 

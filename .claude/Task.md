@@ -178,27 +178,6 @@ Investigation outline:
 
 Acceptance: cache-hit p50 < 200 ms on Singapore deploy; cache-cold path improvement opportunistic; no SwipePage UX regression (card payload shape preserved).
 
-#### BACK-PERFORMANCE-3 — Search 후 첫 카드까지 5-8초
-Codex Round 2 baseline = 5.2 s; Codex retest (2026-05-25) measured browser-side 7.71 s — slipping further. No explicit spec budget yet for session create itself (the 4000 ms TTFC budget covers chat parse, not the swipe-session bootstrap that follows). UX impact: 5–8 s wait between "Search" click and first swipe card is the heaviest single delay in the funnel.
-
-Pipeline steps (`views/sessions.py:28–160`):
-1. Project resolve / create
-2. `v_initial` embedding (HyDE sync or IMP-6 late-bind cache lookup)
-3. `engine.create_pool_with_relaxation` — 3-tier `canonical_v2_buildings` raw-SQL fan-out
-4. `engine.get_pool_embeddings` — pool 150 × 384-dim
-5. Tier-ordered `initial_batch` build — repeated `farthest_point_from_pool` matmul (≈10 iterations, also where Codex flagged the divide/overflow/invalid warnings)
-6. `AnalysisSession.objects.create` + response serialization
-
-Suspect bottlenecks: (a) pool SQL fan-out + 3-tier relaxation worst-case; (b) embedding batch fetch (≈ 150 vectors); (c) matmul repetition in initial batch.
-
-Investigation outline:
-1. Per-step timing log on one create request (Singapore deploy) to identify the dominant step.
-2. If pool creation dominates → cache by `(filter_signature, tier)` key; the same filter shape recurs across users.
-3. If embedding fetch dominates → batch-prefetch via single SQL, drop per-id round-trips.
-4. If initial-batch matmul dominates → vectorise the 10-call farthest-point loop into one batched matmul (cousin of MMR vectorisation already done in `compute_mmr_next`).
-
-Acceptance: session-create p50 ≤ 2 s Singapore deploy (≈ 3 × improvement); pool shape + initial_batch ordering unchanged (swipe loop deterministic with prior tests); no regression on filter relaxation behaviour.
-
 #### FRONT-DESIGN-1 — 디자인 시스템 컴포넌트 리워크 (paused)
 Foundation shipped: PR #54 (`tokens.css` 4 themes + `ThemeContext` + `AppearanceSettings`) + PR #59 (theme/font server persistence). Remaining: per-component visual rework (≈ 7,700 LOC) — inline `style={{}}` → CSS Modules + `:hover/:focus`/`:active`, light-theme polish where dark-only assumptions still leak through, leaf→hub component order (small leaf components first, then containers).
 
@@ -270,6 +249,17 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 ---
 
 ## Done
+
+### BACK-PERFORMANCE-3 — Search 후 첫 카드까지 5-8초 — RESOLVED 2026-05-26 (PR #125 `fb669b6-pre-squash`)
+- [x] Local sessions create p50 2567 → 1508 ms realistic / 1484 ms worst-case (-42%). Both PASS ≤ 2000 ms.
+- [x] Tier 1 pool cache (filter signature SHA1 key, 30 min TTL). `_tier1_cache_key(filters, filter_priority, seed_ids, v_initial, q_text)`. Pool ordering preserved (full tuple cached pre-exclude). `exclude_ids` applied post-fetch (per-session state, not in key).
+- [x] `_random_pool` 30 min in-memory cache (module-level dict). Tier 3 random fallback ~1040 → ~5 ms warm.
+- [x] `emit_events` → `threading.Thread` daemon fire-and-forget. `close_old_connections()` entry+finally. Analytics events lost on process crash mid-thread (acceptable per spec).
+- [x] `emit_event_batch` in `event_log.py` — `bulk_create` wrapper. Backward-compat `emit_event` preserved.
+- [x] `perf_timing` sub-stages on `engine.create_pool_with_relaxation` / `create_bounded_pool` / `get_pool_embeddings` (data-driven hypothesis formation).
+- [x] `perf_measure` CLI `--filters` JSON option (realistic Tier 1 measurement).
+- Measurement scope: local Neon `local-dev-2` only (development proxy). Prod Singapore p50 = post-deploy Codex retest. Multi-worker prod: per-worker cache, warm-up cost per worker. Cold path / first request unchanged ~2400-2600 ms — cache hit dominates `perf_measure` 3-run p50.
+- Algorithm-territory edits (`engine.py`) per user authorization. Pool ordering + initial_batch shape + swipe-loop determinism preserved (code-review AC1 verified).
 
 ### BACK-PERFORMANCE-1 — `/projects/` 응답 600ms (목표 300ms) — RESOLVED 2026-05-26 (PR #124 `505717a-pre-squash`)
 - [x] Local p50 1136 → 661 ms (-42%). Goal ≤ 300 ms 미달 — auth floor ~590 ms 잔존.
