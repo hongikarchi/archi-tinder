@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { bookmarkBuilding, getBuildings } from '../api/client.js'
+import SaveToBoardModal from '../components/SaveToBoardModal.jsx'
 
 const BUILDING_ID_RE = /^[A-Za-z0-9_-]{1,32}$/
 
@@ -115,7 +116,7 @@ function ErrorState({ message, onBack, onRetry }) {
   )
 }
 
-function Header({ onBack, bookmarkEnabled, bookmarkPending, isBookmarked, onToggleBookmark }) {
+function Header({ onBack, onSaveToBoard, bookmarkEnabled, bookmarkPending, isBookmarked, onToggleBookmark }) {
   return (
     <div style={{
       position: 'sticky',
@@ -152,28 +153,58 @@ function Header({ onBack, bookmarkEnabled, bookmarkPending, isBookmarked, onTogg
           <polyline points="12 19 5 12 12 5" />
         </svg>
       </button>
-      {bookmarkEnabled && (
+
+      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+        {/* Save to Board */}
         <button
           type="button"
-          onClick={onToggleBookmark}
-          disabled={bookmarkPending}
-          aria-label={isBookmarked ? 'Remove bookmark' : 'Save bookmark'}
+          onClick={onSaveToBoard}
+          aria-label="Save to board"
           style={{
-            marginLeft: 'auto',
-            width: 44,
-            height: 44,
-            borderRadius: 12,
-            border: isBookmarked ? '1px solid rgba(251,191,36,0.65)' : '1px solid var(--color-border-soft)',
-            background: isBookmarked ? 'rgba(251,191,36,0.18)' : 'transparent',
-            color: isBookmarked ? '#fbbf24' : 'var(--color-text)',
-            cursor: bookmarkPending ? 'default' : 'pointer',
-            opacity: bookmarkPending ? 0.65 : 1,
-            fontSize: 20,
+            height: 36,
+            padding: '0 14px',
+            borderRadius: 10,
+            border: 'none',
+            background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
+            color: '#fff',
+            fontSize: 13,
+            fontWeight: 700,
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
           }}
         >
-          {isBookmarked ? '★' : '☆'}
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+          보드에 추가
         </button>
-      )}
+
+        {bookmarkEnabled && (
+          <button
+            type="button"
+            onClick={onToggleBookmark}
+            disabled={bookmarkPending}
+            aria-label={isBookmarked ? 'Remove bookmark' : 'Save bookmark'}
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: 12,
+              border: isBookmarked ? '1px solid rgba(251,191,36,0.65)' : '1px solid var(--color-border-soft)',
+              background: isBookmarked ? 'rgba(251,191,36,0.18)' : 'transparent',
+              color: isBookmarked ? '#fbbf24' : 'var(--color-text)',
+              cursor: bookmarkPending ? 'default' : 'pointer',
+              opacity: bookmarkPending ? 0.65 : 1,
+              fontSize: 20,
+            }}
+          >
+            {isBookmarked ? '★' : '☆'}
+          </button>
+        )}
+      </div>
     </div>
   )
 }
@@ -199,6 +230,7 @@ export default function BuildingDetailPage() {
   const [reloadKey, setReloadKey] = useState(0)
   const [isBookmarked, setIsBookmarked] = useState(initialBookmarked)
   const [bookmarkPending, setBookmarkPending] = useState(false)
+  const [saveModalOpen, setSaveModalOpen] = useState(false)
 
   useEffect(() => {
     const next = !!buildingId && savedIds.includes(buildingId)
@@ -311,11 +343,20 @@ export default function BuildingDetailPage() {
     }}>
       <Header
         onBack={handleBack}
+        onSaveToBoard={() => setSaveModalOpen(true)}
         bookmarkEnabled={!!fromProjectId && !!rank}
         bookmarkPending={bookmarkPending}
         isBookmarked={isBookmarked}
         onToggleBookmark={handleToggleBookmark}
       />
+
+      {saveModalOpen && building && (
+        <SaveToBoardModal
+          card={{ ...building, canonical_bld_id: buildingId }}
+          onClose={() => setSaveModalOpen(false)}
+          onSaved={() => setSaveModalOpen(false)}
+        />
+      )}
 
       <main style={{ maxWidth: 820, margin: '0 auto', padding: '24px 20px 16px' }}>
         <p style={{
