@@ -166,26 +166,17 @@ export default function App() {
     return () => clearTimeout(timer)
   }, [swipeError])
 
-  // Auto-navigate to /result/:sessionId when:
-  //   (a) session is completed (pool exhausted) — backend says no more cards, OR
-  //   (b) frontend latch threshold reached — exploring with like_count >= 4,
-  //       OR analyzing/converged with confidence >= 1.0. Skips the Finish-button
-  //       click since the user has clearly produced enough signal.
+  // Auto-navigate only when the backend declares a real terminal state. Four likes
+  // means clustering can start, not that taste has converged.
   useEffect(() => {
     if (location.pathname !== '/swipe') return
     const phase = sessionProgress?.phase
-    const likeCount = sessionProgress?.like_count ?? 0
-    const confidence = sessionProgress?.confidence ?? null
-    const at100 = (
-      (phase === 'exploring' && likeCount >= 4) ||
-      (phase === 'converged') ||
-      (phase === 'analyzing' && confidence != null && confidence >= 1.0)
-    )
-    if (!isSessionCompleted && !at100) return
+    const backendDone = isSessionCompleted || phase === 'converged'
+    if (!backendDone) return
     const sessionId = projects.find(p => p.id === activeProjectId)?.sessionId
     if (!sessionId) return
     navigate('/result/' + sessionId)
-  }, [isSessionCompleted, sessionProgress?.phase, sessionProgress?.like_count, sessionProgress?.confidence]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isSessionCompleted, sessionProgress?.phase]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Persist current card id to localStorage per active project so refresh can
   // restore the exact card the user was looking at (not just the backend's last
@@ -455,7 +446,11 @@ export default function App() {
 
       swipeRetryCount.current = 0
       setSwipeError(null)
-      setSessionProgress({ ...result.progress, confidence: result.confidence ?? null })
+      setSessionProgress({
+        ...result.progress,
+        confidence: result.confidence ?? null,
+        can_continue: result.can_continue ?? false,
+      })
 
       if (result.is_analysis_completed) {
         setIsSessionCompleted(true)

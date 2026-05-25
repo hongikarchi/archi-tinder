@@ -272,6 +272,11 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
         const isFallback = parsed.is_fallback || false
         const filters    = parsed.structured_filters || {}
         const filterPriority = parsed.filter_priority || []
+        const rawQueryForSession = nextHistory
+          .filter(turn => turn.role === 'user')
+          .map(turn => turn.text)
+          .join(' ')
+          .trim()
 
         let replyText
         if (results.length > 0 && !isFallback) {
@@ -285,7 +290,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
         setMessages(prev => [...prev, {
           role: 'ai', text: replyText,
           results, isFallback,
-          filters: isFallback ? {} : filters,
+          filters,
         }])
 
         // Reset history for the next fresh query
@@ -293,11 +298,11 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
 
         if (results.length > 0) {
           setLatestResults(results)
-          setLatestFilters(isFallback ? {} : filters)
-          setLatestFilterPriority(isFallback ? [] : filterPriority)
+          setLatestFilters(filters)
+          setLatestFilterPriority(filterPriority)
           setLatestVisualDescription(parsed.visual_description ?? null)
           setLatestImageFocus(parsed.image_focus || null)
-          setLatestRawQuery(parsed.raw_query || text || '')
+          setLatestRawQuery(rawQueryForSession || parsed.raw_query || text || '')
           setShowStart(true)
         }
       }

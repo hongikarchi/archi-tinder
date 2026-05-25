@@ -80,13 +80,15 @@ class TestTopic06AdaptiveK:
 
     # -- adaptive_k_clustering_enabled flag tests ----------------------------
 
-    def test_adaptive_k_disabled_by_default(self):
-        """Default flag=False: k=2 KMeans always used when N>=4."""
+    def test_adaptive_k_disabled_by_default(self, monkeypatch):
+        """Default flag=False: once multimodal routing is allowed, k=2 KMeans is used."""
         assert settings.RECOMMENDATION.get('adaptive_k_clustering_enabled', False) is False
+        monkeypatch.setitem(settings.RECOMMENDATION, 'min_likes_for_multimodal', 4)
+        clear_centroid_cache()
 
         likes = [_like_entry(i) for i in range(4)]
         centroids, global_centroid = compute_taste_centroids(likes, round_num=4)
-        # Default k_clusters=2 and N=4 >= 2 => two centroids
+        # Default k_clusters=2 and N=4 >= min_likes_for_multimodal => two centroids.
         assert len(centroids) == 2
 
     def test_adaptive_k_picks_k1_on_low_silhouette(self, monkeypatch):
@@ -104,6 +106,7 @@ class TestTopic06AdaptiveK:
     def test_adaptive_k_picks_k2_on_high_silhouette(self, monkeypatch):
         """Flag on + two well-separated clusters (sil(k=2) >= 0.15) => k=2."""
         monkeypatch.setitem(settings.RECOMMENDATION, 'adaptive_k_clustering_enabled', True)
+        monkeypatch.setitem(settings.RECOMMENDATION, 'min_likes_for_multimodal', 8)
         clear_centroid_cache()
 
         likes = _two_cluster_likes()  # 8 entries, 2 tight far-apart clusters
@@ -112,15 +115,14 @@ class TestTopic06AdaptiveK:
         assert len(centroids) == 2
 
     def test_adaptive_k_below_min_likes_uses_default_path(self, monkeypatch):
-        """Flag on + N=3 (< engine hardcoded >= 4 gate) => falls through to default k=min(2,3)=2 path.
+        """Flag on + N=3 (< adaptive KMeans gate) falls through to the default k=2 path.
 
         Note: this tests the ADAPTIVE-K routing gate inside compute_taste_centroids (hardcoded >= 4),
-        which is separate from the phase-transition gate min_likes_for_clustering in settings.py.
-        Spec v1.8 Topic 06 raised min_likes_for_clustering 3->4 so K-Means is never invoked at
-        N=3 from the swipe flow (session stays in exploring phase), but if compute_taste_centroids
-        is called directly with N=3 the engine still uses the default k=2 path -- consistent.
+        which is separate from the target-window multimodal gate. The test lowers the multimodal
+        gate so it can exercise the old adaptive-k boundary directly.
         """
         monkeypatch.setitem(settings.RECOMMENDATION, 'adaptive_k_clustering_enabled', True)
+        monkeypatch.setitem(settings.RECOMMENDATION, 'min_likes_for_multimodal', 3)
         clear_centroid_cache()
 
         likes = [_like_entry(i) for i in range(3)]  # exactly 3 < engine adaptive gate (4)

@@ -184,6 +184,7 @@ class TestComputeTasteCentroidsStats:
     def test_path2_adaptive_k2_stats(self, monkeypatch):
         """Adaptive ON, two-cluster data: k=2, silhouette is real float >= 0.15."""
         monkeypatch.setitem(settings.RECOMMENDATION, 'adaptive_k_clustering_enabled', True)
+        monkeypatch.setitem(settings.RECOMMENDATION, 'min_likes_for_multimodal', 4)
         clear_centroid_cache()
         # Two well-separated poles
         pole_a = _unit_vec(0)
@@ -209,6 +210,7 @@ class TestComputeTasteCentroidsStats:
     def test_path3_adaptive_k1_tight_cluster_stats(self, monkeypatch):
         """Adaptive ON, tight cluster (sil<0.15): degrades to k=1, silhouette < 0.15."""
         monkeypatch.setitem(settings.RECOMMENDATION, 'adaptive_k_clustering_enabled', True)
+        monkeypatch.setitem(settings.RECOMMENDATION, 'min_likes_for_multimodal', 4)
         clear_centroid_cache()
         pole = _unit_vec(42)
         likes = []
@@ -227,6 +229,7 @@ class TestComputeTasteCentroidsStats:
         """soft_relevance_used=True when flag ON AND k=2."""
         monkeypatch.setitem(settings.RECOMMENDATION, 'adaptive_k_clustering_enabled', True)
         monkeypatch.setitem(settings.RECOMMENDATION, 'soft_relevance_enabled', True)
+        monkeypatch.setitem(settings.RECOMMENDATION, 'min_likes_for_multimodal', 4)
         clear_centroid_cache()
         pole_a = _unit_vec(0)
         pole_b = -pole_a

@@ -479,7 +479,7 @@ class TestStage2ThreadSpawn:
 
     def test_thread_not_spawned_on_clarification_turn(self):
         """ParseQueryView should NOT spawn Stage 2 when probe_needed=True."""
-        from rest_framework.test import APIRequestFactory
+        from rest_framework.test import APIRequestFactory, force_authenticate
         from apps.recommendation.views import ParseQueryView
 
         factory = APIRequestFactory()
@@ -502,7 +502,7 @@ class TestStage2ThreadSpawn:
 
     def test_thread_not_spawned_when_flag_off(self):
         """stage_decouple_enabled=False -> _spawn_stage2 never called even on terminal turn."""
-        from rest_framework.test import APIRequestFactory
+        from rest_framework.test import APIRequestFactory, force_authenticate
         from apps.recommendation.views import ParseQueryView
 
         factory = APIRequestFactory()
@@ -524,6 +524,62 @@ class TestStage2ThreadSpawn:
                             view(request)
 
         mock_spawn.assert_not_called()
+
+    def test_view_keeps_first_user_raw_query_and_sanitizes_nullish_filters(self):
+        """Terminal parse payload should not leak Gemini's string "null" or last-turn raw_query."""
+        from rest_framework.test import APIRequestFactory, force_authenticate
+        from apps.recommendation.views import ParseQueryView
+
+        factory = APIRequestFactory()
+        history = [
+            {'role': 'user', 'text': 'Modern museum in Japan'},
+            {'role': 'model', 'text': 'minimal or sculptural?'},
+            {'role': 'user', 'text': 'simple minimalist concrete and metal spaces'},
+        ]
+        request = factory.post(
+            '/api/v1/recommendation/parse-query/',
+            {'conversation_history': history},
+            format='json',
+        )
+        request.user = MagicMock()
+        request.user.id = 1
+        request.user.is_authenticated = True
+        force_authenticate(request, user=request.user)
+
+        terminal_result = {
+            'probe_needed': False,
+            'probe_question': None,
+            'reply': 'Got it.',
+            'filters': {
+                'location_country': 'null',
+                'location_city': ',',
+                'program': None,
+                'material': 'concrete',
+                'style': 'Minimalist',
+                'year_max': 9999,
+            },
+            'filter_priority': ['location_country', 'material', 'style'],
+            'raw_query': 'simple minimalist concrete and metal spaces',
+            'visual_description': None,
+            'image_focus': 'interior',
+        }
+        with patch('apps.recommendation.views.services.parse_query', return_value=terminal_result):
+            with patch('apps.recommendation.views.engine.search_by_filters', return_value=[{'canonical_bld_id': 'b1'}]):
+                with patch('apps.recommendation.views.search._spawn_stage2') as mock_spawn:
+                    with patch.dict(settings.RECOMMENDATION, {'stage_decouple_enabled': True}):
+                        response = ParseQueryView.as_view()(request)
+
+        assert response.data['raw_query'] == 'Modern museum in Japan'
+        assert response.data['structured_filters'] == {
+            'material': 'concrete',
+            'style': 'Minimalist',
+        }
+        assert response.data['filter_priority'] == ['material', 'style']
+        mock_spawn.assert_called_once_with(
+            filters={'material': 'concrete', 'style': 'Minimalist'},
+            raw_query='Modern museum in Japan',
+            user_id=1,
+        )
 
     def test_thread_failure_silent(self):
         """Stage 2 thread exception does NOT bubble up to the caller of _spawn_stage2."""
