@@ -116,7 +116,7 @@ function ErrorState({ message, onBack, onRetry }) {
   )
 }
 
-function Header({ onBack, onSaveToBoard, isSaved, bookmarkEnabled, bookmarkPending, isBookmarked, onToggleBookmark }) {
+function Header({ onBack, onSaveToBoard, isSaved, saveEnabled, bookmarkEnabled, bookmarkPending, isBookmarked, onToggleBookmark }) {
   return (
     <div style={{
       position: 'sticky',
@@ -155,8 +155,8 @@ function Header({ onBack, onSaveToBoard, isSaved, bookmarkEnabled, bookmarkPendi
       </button>
 
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-        {/* Save to Board */}
-        <button
+        {/* Save to Board — only on recommended buildings, not on board-saved ones */}
+        {saveEnabled && <button
           type="button"
           onClick={onSaveToBoard}
           aria-label={isSaved ? 'Saved to board' : 'Save to board'}
@@ -193,7 +193,7 @@ function Header({ onBack, onSaveToBoard, isSaved, bookmarkEnabled, bookmarkPendi
               보드에 추가
             </>
           )}
-        </button>
+        </button>}
 
         {bookmarkEnabled && (
           <button
@@ -229,6 +229,7 @@ export default function BuildingDetailPage() {
   const fromProjectId = location.state?.fromProjectId || null
   const fromSessionId = location.state?.fromSessionId || null
   const referrer = location.state?.referrer || null
+  const fromBoard = !!location.state?.fromBoard
   const rank = isValidRank(location.state?.rank) ? location.state.rank : null
   const savedIds = useMemo(
     () => (Array.isArray(location.state?.savedIds) ? location.state.savedIds : []),
@@ -358,6 +359,7 @@ export default function BuildingDetailPage() {
         onBack={handleBack}
         onSaveToBoard={() => !isSaved && setSaveModalOpen(true)}
         isSaved={isSaved}
+        saveEnabled={!fromBoard}
         bookmarkEnabled={!!fromProjectId && !!rank}
         bookmarkPending={bookmarkPending}
         isBookmarked={isBookmarked}
