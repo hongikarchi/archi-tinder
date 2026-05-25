@@ -45,7 +45,8 @@ function kindLabel(kind) {
 function LoadingState({ onBack }) {
   return (
     <div style={{
-      minHeight: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+      height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+      overflowY: 'auto',
       background: 'var(--color-bg)',
       color: 'var(--color-text)',
     }}>
@@ -67,7 +68,8 @@ function LoadingState({ onBack }) {
 function ErrorState({ message, onBack, onRetry }) {
   return (
     <div style={{
-      minHeight: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+      height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+      overflowY: 'auto',
       background: 'var(--color-bg)',
       color: 'var(--color-text)',
       display: 'flex',
@@ -301,7 +303,7 @@ export default function BuildingDetailPage() {
 
   return (
     <div style={{
-      minHeight: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+      height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
       background: 'var(--color-bg)',
       color: 'var(--color-text)',
       overflowY: 'auto',
