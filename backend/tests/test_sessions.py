@@ -101,13 +101,15 @@ _SWIPE_VIEW = 'apps.recommendation.views.swipe'
 
 
 class _SyncThread:
-    """threading.Thread replacement: runs target synchronously so test transaction sees DB writes."""
+    """Run telemetry synchronously while suppressing async prefetch in tests."""
     def __init__(self, target=None, args=(), kwargs=None, daemon=None, **kw):
         self._target = target
         self._args = args
         self._kwargs = kwargs or {}
 
     def start(self):
+        if getattr(self._target, '__name__', '') == '_async_prefetch_thread':
+            return
         if self._target:
             self._target(*self._args, **self._kwargs)
 

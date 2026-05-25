@@ -692,12 +692,13 @@ class TestBackwardCompat:
         """Clear cache before each test to prevent cross-test pollution."""
         cache.clear()
 
-    def test_flag_off_is_default(self):
-        """async_prefetch_enabled defaults to False."""
-        assert settings.RECOMMENDATION.get('async_prefetch_enabled') is False
+    def test_async_prefetch_is_default(self):
+        """async_prefetch_enabled defaults to True for the sub-1s swipe target."""
+        assert settings.RECOMMENDATION.get('async_prefetch_enabled') is True
 
-    def test_swipe_200_flag_off(self, auth_client, user_profile):
-        """Standard swipe succeeds with flag at default (OFF)."""
+    def test_swipe_200_flag_off(self, auth_client, user_profile, settings):
+        """Standard swipe still succeeds when the legacy sync path is explicitly enabled."""
+        settings.RECOMMENDATION = {**settings.RECOMMENDATION, 'async_prefetch_enabled': False}
         session, pool_ids = _create_session_and_project(user_profile)
         patchers = _apply_patches(_base_engine_patches(pool_ids))
 
@@ -715,8 +716,9 @@ class TestBackwardCompat:
         assert data['accepted'] is True
         assert data['next_image'] is not None
 
-    def test_flag_off_no_thread_spawned(self, auth_client, user_profile):
-        """No bg thread is ever spawned when flag is OFF."""
+    def test_flag_off_no_thread_spawned(self, auth_client, user_profile, settings):
+        """No bg prefetch thread is spawned when the sync path is explicitly enabled."""
+        settings.RECOMMENDATION = {**settings.RECOMMENDATION, 'async_prefetch_enabled': False}
         session, pool_ids = _create_session_and_project(user_profile)
         patchers = _apply_patches(_base_engine_patches(pool_ids))
         spawned = []
@@ -739,8 +741,9 @@ class TestBackwardCompat:
 
         assert len(spawned) == 1, 'Only telemetry thread spawned; no async prefetch thread when flag is OFF'
 
-    def test_flag_off_no_cache_write(self, auth_client, user_profile):
-        """No cache entries are written when flag is OFF."""
+    def test_flag_off_no_cache_write(self, auth_client, user_profile, settings):
+        """No async prefetch cache entries are written when the sync path is explicitly enabled."""
+        settings.RECOMMENDATION = {**settings.RECOMMENDATION, 'async_prefetch_enabled': False}
         session, pool_ids = _create_session_and_project(user_profile)
         patchers = _apply_patches(_base_engine_patches(pool_ids))
 
@@ -767,8 +770,8 @@ class TestBackwardCompat:
 class TestSettingsFlagsImp8:
     """New IMP-8 settings keys exist with correct defaults."""
 
-    def test_async_prefetch_enabled_default_false(self):
-        assert settings.RECOMMENDATION.get('async_prefetch_enabled') is False
+    def test_async_prefetch_enabled_default_true(self):
+        assert settings.RECOMMENDATION.get('async_prefetch_enabled') is True
 
     def test_async_prefetch_cache_timeout_seconds_default(self):
         assert settings.RECOMMENDATION.get('async_prefetch_cache_timeout_seconds') == 60

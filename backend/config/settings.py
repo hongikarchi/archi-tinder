@@ -177,9 +177,12 @@ RECOMMENDATION = {
     'min_likes_for_clustering': 4,  # Spec v1.8 Topic 06 N>=4 activation-cliff mitigation per Investigation 21 §closure -- defer K-Means until N>=4 to avoid the Investigation 09 worst-case window (1 Love + 2 Likes, k=2 forces centroid collapse onto Love)
     'decay_rate': 0.05,              # gamma -- recency weight decay
     'mmr_penalty': 0.3,              # lambda -- diversity penalty
-    'convergence_threshold': 0.08,   # epsilon -- delta-V threshold
+    'convergence_threshold': 0.13,   # epsilon -- tuned for convergence inside the 10-swipe target window
     'convergence_window': 3,
+    'target_swipes': 10,             # product goal: taste should be captured within ~10 swipes
+    'convergence_min_recent_likes': 2,  # recent positive evidence required before backend declares convergence
     'k_clusters': 2,
+    'min_likes_for_multimodal': 11,  # keep the <=10-swipe loop single-centroid; KMeans only after the target window
     'max_consecutive_dislikes': 5,
     'top_k_results': 20,
     'like_weight': 0.5,              # kept for pref vector update
@@ -210,7 +213,7 @@ RECOMMENDATION = {
                                              # paths (e.g., IMP-8 async background warming).
     'pool_embedding_cache_max_size': 5000,   # IMP-7 FIFO eviction bound; ~5MB max. Bump for larger corpora.
     # IMP-8 (Spec v1.6 §11.1): async prefetch background thread
-    'async_prefetch_enabled': False,                   # default OFF for safe rollout; flip True after Redis wired in prod
+    'async_prefetch_enabled': True,                    # keep swipe responses under the 10-swipe/1s UX target
     'async_prefetch_cache_timeout_seconds': 60,        # Django cache TTL for prefetch entries (seconds)
     # Per-card LRU TTL (PR #22 absorb): cache.get/set under 'bcard:<id>' keys.
     # 3600s default keeps building-card payloads warm across requests without

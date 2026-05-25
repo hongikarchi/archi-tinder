@@ -38,6 +38,17 @@ def _merge_buffer_into_exposed(exposed_ids, client_buffer_ids):
     return merged
 
 
+def _recent_actions(session, window):
+    return list(
+        reversed(
+            list(
+                session.swipes.order_by('-created_at')
+                .values_list('action', flat=True)[:window]
+            )
+        )
+    )
+
+
 # ── Async telemetry thread ────────────────────────────────────────────────────
 
 def _emit_telemetry_thread(swipe_kwargs, confidence_kwargs):
@@ -463,9 +474,8 @@ class SwipeView(APIView):
                 session_id=session_id, user=profile
             )
             _mark('lock_acquired')
-            # Lock Project row before mutating its JSON lists (liked_ids / disliked_ids).
-            # Lock order: Session -> Project (no deadlock vs. bookmark POST which takes
-            # only Project and never acquires Session first).
+            # Keep Project JSON lists synchronized per existing API contract.
+            # Lock order: Session -> Project (bookmark POST takes only Project).
             project = Project.objects.select_for_update().get(pk=session.project_id)
 
             # 1. Get embedding and update preference vector
@@ -504,21 +514,19 @@ class SwipeView(APIView):
                     'detail': 'duplicate',
                 })
 
-            # 3. Update project liked/disliked lists (use the locked `project` from above)
+            # 3. Update project liked/disliked lists and in-session like vectors.
             if action == 'like':
                 existing_ids = _liked_id_only(project.liked_ids)
                 if canonical_bld_id not in existing_ids:
-                    # Default intensity 1.0 for plain Like. Love (intensity 1.8) lands in Sprint 3 A-1
-                    # when the frontend wires up the up-swipe gesture; for now all backend writes
-                    # use 1.0 unless the request explicitly carries an intensity field (future-proofing).
                     try:
                         raw_intensity = request.data.get('intensity', 1.0)
                         intensity = float(raw_intensity) if raw_intensity is not None else 1.0
                     except (TypeError, ValueError):
                         intensity = 1.0
                     intensity = max(0.0, min(2.0, intensity))
-                    project.liked_ids = project.liked_ids + [{'id': canonical_bld_id, 'intensity': intensity}]
-                # Append to session.like_vectors
+                    project.liked_ids = project.liked_ids + [
+                        {'id': canonical_bld_id, 'intensity': intensity}
+                    ]
                 if embedding:
                     session.like_vectors = session.like_vectors + [{'embedding': embedding, 'round': session.current_round}]
             else:
@@ -578,8 +586,19 @@ class SwipeView(APIView):
                 session.previous_pref_vector = []
                 logger.info('Session %s: exploring -> analyzing (likes=%d)', session.session_id, like_count)
 
+            _convergence_window = RC.get('convergence_window', 3)
+            _recent_action_window = max(
+                _convergence_window,
+                RC.get('max_consecutive_dislikes', 5),
+            )
+            _recent_actions_window = _recent_actions(session, _recent_action_window)
+            _recent_convergence_actions = _recent_actions_window[-_convergence_window:]
             if session.phase == 'analyzing' and engine.check_convergence(
-                session.convergence_history, RC.get('convergence_threshold', 0.08), RC.get('convergence_window', 3)
+                session.convergence_history,
+                RC.get('convergence_threshold', 0.08),
+                _convergence_window,
+                _recent_convergence_actions,
+                RC.get('convergence_min_recent_likes', 0),
             ):
                 session.phase = 'converged'
                 logger.info('Session %s: analyzing -> converged', session.session_id)
@@ -623,7 +642,11 @@ class SwipeView(APIView):
                             session.pool_ids, session.exposed_ids, pool_embeddings
                         )
                 else:
-                    recent_swipes = list(session.swipes.order_by('-created_at').values_list('action', flat=True)[:RC.get('max_consecutive_dislikes', 5)])
+                    recent_swipes = list(
+                        reversed(
+                            _recent_actions_window[-RC.get('max_consecutive_dislikes', 5):]
+                        )
+                    )
                     consecutive_dislikes = 0
                     for s in recent_swipes:
                         if s == 'dislike':
@@ -633,7 +656,12 @@ class SwipeView(APIView):
 
                     if consecutive_dislikes >= RC.get('max_consecutive_dislikes', 5):
                         # Batch-fetch dislike embeddings (single query instead of N individual calls)
-                        dislike_ids = project.disliked_ids[-10:]
+                        dislike_ids = list(
+                            session.swipes
+                            .filter(action='dislike')
+                            .order_by('-created_at')
+                            .values_list('canonical_bld_id', flat=True)[:10]
+                        )
                         dislike_embeds = []
                         if dislike_ids:
                             dislike_emb_map = engine.get_pool_embeddings(dislike_ids)
@@ -679,6 +707,7 @@ class SwipeView(APIView):
             saved_phase = session.phase
             # Cache pool_embeddings -- same pool_ids, no need to re-fetch outside transaction
             saved_pool_embeddings = pool_embeddings
+            saved_recent_actions = list(_recent_actions_window)
 
         # 9. Card fetch + prefetch (outside transaction — no lock held)
         # All building IDs were resolved inside the transaction (step 8).
@@ -832,6 +861,8 @@ class SwipeView(APIView):
             session.convergence_history,
             RC.get('convergence_threshold', 0.08),
             window=RC.get('convergence_window', 3),
+            recent_actions=saved_recent_actions[-RC.get('convergence_window', 3):],
+            min_recent_likes=RC.get('convergence_min_recent_likes', 0),
         )
 
         # Build telemetry kwargs and fire off background thread.
