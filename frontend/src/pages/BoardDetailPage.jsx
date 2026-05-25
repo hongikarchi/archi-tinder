@@ -185,8 +185,8 @@ function BuildingTile({ building, fromProjectId, rank, savedIds, referrer, isEdi
         if (isEditMode) { onToggleSelect?.(buildingId); return }
         if (!buildingId) return
         const state = fromProjectId
-          ? { fromProjectId, rank, savedIds, referrer }
-          : undefined
+          ? { fromProjectId, rank, savedIds, referrer, fromBoard: true }
+          : { fromBoard: true }
         navigate(`/buildings/${buildingId}`, { state })
       }}
       style={{

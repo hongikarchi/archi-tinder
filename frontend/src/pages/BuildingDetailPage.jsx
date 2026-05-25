@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { bookmarkBuilding, getBuildings } from '../api/client.js'
+import SaveToBoardModal from '../components/SaveToBoardModal.jsx'
 
 const BUILDING_ID_RE = /^[A-Za-z0-9_-]{1,32}$/
 
@@ -45,7 +46,8 @@ function kindLabel(kind) {
 function LoadingState({ onBack }) {
   return (
     <div style={{
-      minHeight: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+      height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+      overflowY: 'auto',
       background: 'var(--color-bg)',
       color: 'var(--color-text)',
     }}>
@@ -67,7 +69,8 @@ function LoadingState({ onBack }) {
 function ErrorState({ message, onBack, onRetry }) {
   return (
     <div style={{
-      minHeight: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+      height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+      overflowY: 'auto',
       background: 'var(--color-bg)',
       color: 'var(--color-text)',
       display: 'flex',
@@ -113,7 +116,7 @@ function ErrorState({ message, onBack, onRetry }) {
   )
 }
 
-function Header({ onBack, bookmarkEnabled, bookmarkPending, isBookmarked, onToggleBookmark }) {
+function Header({ onBack, onSaveToBoard, isSaved, saveEnabled, bookmarkEnabled, bookmarkPending, isBookmarked, onToggleBookmark }) {
   return (
     <div style={{
       position: 'sticky',
@@ -150,28 +153,70 @@ function Header({ onBack, bookmarkEnabled, bookmarkPending, isBookmarked, onTogg
           <polyline points="12 19 5 12 12 5" />
         </svg>
       </button>
-      {bookmarkEnabled && (
-        <button
+
+      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+        {/* Save to Board — only on recommended buildings, not on board-saved ones */}
+        {saveEnabled && <button
           type="button"
-          onClick={onToggleBookmark}
-          disabled={bookmarkPending}
-          aria-label={isBookmarked ? 'Remove bookmark' : 'Save bookmark'}
+          onClick={onSaveToBoard}
+          aria-label={isSaved ? 'Saved to board' : 'Save to board'}
           style={{
-            marginLeft: 'auto',
-            width: 44,
-            height: 44,
-            borderRadius: 12,
-            border: isBookmarked ? '1px solid rgba(251,191,36,0.65)' : '1px solid var(--color-border-soft)',
-            background: isBookmarked ? 'rgba(251,191,36,0.18)' : 'transparent',
-            color: isBookmarked ? '#fbbf24' : 'var(--color-text)',
-            cursor: bookmarkPending ? 'default' : 'pointer',
-            opacity: bookmarkPending ? 0.65 : 1,
-            fontSize: 20,
+            height: 36,
+            padding: '0 14px',
+            borderRadius: 10,
+            border: isSaved ? '1px solid rgba(251,191,36,0.5)' : 'none',
+            background: isSaved ? 'rgba(251,191,36,0.12)' : 'linear-gradient(135deg, #ec4899, #f43f5e)',
+            color: isSaved ? '#fbbf24' : '#fff',
+            fontSize: 13,
+            fontWeight: 700,
+            cursor: isSaved ? 'default' : 'pointer',
+            fontFamily: 'inherit',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            transition: 'background 0.2s, color 0.2s',
           }}
         >
-          {isBookmarked ? '★' : '☆'}
-        </button>
-      )}
+          {isSaved ? (
+            <>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              저장됨
+            </>
+          ) : (
+            <>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              보드에 추가
+            </>
+          )}
+        </button>}
+
+        {bookmarkEnabled && (
+          <button
+            type="button"
+            onClick={onToggleBookmark}
+            disabled={bookmarkPending}
+            aria-label={isBookmarked ? 'Remove bookmark' : 'Save bookmark'}
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: 12,
+              border: isBookmarked ? '1px solid rgba(251,191,36,0.65)' : '1px solid var(--color-border-soft)',
+              background: isBookmarked ? 'rgba(251,191,36,0.18)' : 'transparent',
+              color: isBookmarked ? '#fbbf24' : 'var(--color-text)',
+              cursor: bookmarkPending ? 'default' : 'pointer',
+              opacity: bookmarkPending ? 0.65 : 1,
+              fontSize: 20,
+            }}
+          >
+            {isBookmarked ? '★' : '☆'}
+          </button>
+        )}
+      </div>
     </div>
   )
 }
@@ -184,6 +229,7 @@ export default function BuildingDetailPage() {
   const fromProjectId = location.state?.fromProjectId || null
   const fromSessionId = location.state?.fromSessionId || null
   const referrer = location.state?.referrer || null
+  const fromRecommended = !!location.state?.fromRecommended
   const rank = isValidRank(location.state?.rank) ? location.state.rank : null
   const savedIds = useMemo(
     () => (Array.isArray(location.state?.savedIds) ? location.state.savedIds : []),
@@ -197,6 +243,8 @@ export default function BuildingDetailPage() {
   const [reloadKey, setReloadKey] = useState(0)
   const [isBookmarked, setIsBookmarked] = useState(initialBookmarked)
   const [bookmarkPending, setBookmarkPending] = useState(false)
+  const [saveModalOpen, setSaveModalOpen] = useState(false)
+  const [isSaved, setIsSaved] = useState(false)
 
   useEffect(() => {
     const next = !!buildingId && savedIds.includes(buildingId)
@@ -301,7 +349,7 @@ export default function BuildingDetailPage() {
 
   return (
     <div style={{
-      minHeight: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+      height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
       background: 'var(--color-bg)',
       color: 'var(--color-text)',
       overflowY: 'auto',
@@ -309,11 +357,112 @@ export default function BuildingDetailPage() {
     }}>
       <Header
         onBack={handleBack}
+        onSaveToBoard={() => !isSaved && setSaveModalOpen(true)}
+        isSaved={isSaved}
+        saveEnabled={fromRecommended}
         bookmarkEnabled={!!fromProjectId && !!rank}
         bookmarkPending={bookmarkPending}
         isBookmarked={isBookmarked}
         onToggleBookmark={handleToggleBookmark}
       />
+
+      {saveModalOpen && building && (
+        <SaveToBoardModal
+          card={{ ...building, canonical_bld_id: buildingId }}
+          onClose={() => setSaveModalOpen(false)}
+          onSaved={() => { setSaveModalOpen(false); setIsSaved(true) }}
+        />
+      )}
+
+      <main style={{ maxWidth: 820, margin: '0 auto', padding: '24px 20px 16px' }}>
+        <p style={{
+          color: 'var(--color-text-muted)',
+          fontSize: 11,
+          fontWeight: 800,
+          letterSpacing: '0.1em',
+          textTransform: 'uppercase',
+          margin: '0 0 8px',
+        }}>
+          Building detail
+        </p>
+        <h1 style={{
+          color: 'var(--color-text)',
+          fontSize: 'clamp(28px, 7vw, 42px)',
+          fontWeight: 800,
+          lineHeight: 1.08,
+          margin: '0 0 8px',
+        }}>
+          {title}
+        </h1>
+        {architect && (
+          <p style={{
+            color: 'var(--color-text-dim)',
+            fontSize: 15,
+            fontStyle: 'italic',
+            lineHeight: 1.45,
+            margin: '0 0 20px',
+          }}>
+            {architect}
+          </p>
+        )}
+
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(138px, 1fr))',
+          gap: 10,
+          marginBottom: 24,
+        }}>
+          {items.map(([label, value]) => (
+            <div key={label} style={{
+              minHeight: 58,
+              borderRadius: 12,
+              border: '1px solid var(--color-border-soft)',
+              background: 'var(--color-surface)',
+              padding: '10px 12px',
+            }}>
+              <div style={{
+                color: 'var(--color-text-muted)',
+                fontSize: 10,
+                fontWeight: 800,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                marginBottom: 4,
+              }}>
+                {label}
+              </div>
+              <div style={{
+                color: 'var(--color-text)',
+                fontSize: 13,
+                fontWeight: 700,
+                lineHeight: 1.3,
+              }}>
+                {value}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {building.source_url && (
+          <a
+            href={building.source_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              color: 'var(--color-text-dim)',
+              fontSize: 13,
+              fontWeight: 700,
+              textDecoration: 'none',
+              marginBottom: 24,
+            }}
+          >
+            View on source
+            <span aria-hidden="true">↗</span>
+          </a>
+        )}
+      </main>
 
       {galleryMeta.length > 0 ? (
         <>
@@ -508,95 +657,7 @@ export default function BuildingDetailPage() {
         </section>
       ) : null}
 
-      <main style={{ maxWidth: 820, margin: '0 auto', padding: '24px 20px 0' }}>
-        <p style={{
-          color: 'var(--color-text-muted)',
-          fontSize: 11,
-          fontWeight: 800,
-          letterSpacing: '0.1em',
-          textTransform: 'uppercase',
-          margin: '0 0 8px',
-        }}>
-          Building detail
-        </p>
-        <h1 style={{
-          color: 'var(--color-text)',
-          fontSize: 'clamp(28px, 7vw, 42px)',
-          fontWeight: 800,
-          lineHeight: 1.08,
-          margin: '0 0 8px',
-        }}>
-          {title}
-        </h1>
-        {architect && (
-          <p style={{
-            color: 'var(--color-text-dim)',
-            fontSize: 15,
-            fontStyle: 'italic',
-            lineHeight: 1.45,
-            margin: '0 0 20px',
-          }}>
-            {architect}
-          </p>
-        )}
-
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(138px, 1fr))',
-          gap: 10,
-          marginBottom: 24,
-        }}>
-          {items.map(([label, value]) => (
-            <div key={label} style={{
-              minHeight: 58,
-              borderRadius: 12,
-              border: '1px solid var(--color-border-soft)',
-              background: 'var(--color-surface)',
-              padding: '10px 12px',
-            }}>
-              <div style={{
-                color: 'var(--color-text-muted)',
-                fontSize: 10,
-                fontWeight: 800,
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-                marginBottom: 4,
-              }}>
-                {label}
-              </div>
-              <div style={{
-                color: 'var(--color-text)',
-                fontSize: 13,
-                fontWeight: 700,
-                lineHeight: 1.3,
-              }}>
-                {value}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {building.source_url && (
-          <a
-            href={building.source_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              color: 'var(--color-text-dim)',
-              fontSize: 13,
-              fontWeight: 700,
-              textDecoration: 'none',
-              marginBottom: 24,
-            }}
-          >
-            View on source
-            <span aria-hidden="true">↗</span>
-          </a>
-        )}
-
+      <div style={{ maxWidth: 820, margin: '0 auto', padding: '0 20px' }}>
         {detailDescription && (
           <section style={{
             borderTop: '1px solid var(--color-border-soft)',
@@ -644,7 +705,7 @@ export default function BuildingDetailPage() {
             {description}
           </p>
         </section>
-      </main>
+      </div>
     </div>
   )
 }
