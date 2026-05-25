@@ -317,6 +317,96 @@ export default function BuildingDetailPage() {
         onToggleBookmark={handleToggleBookmark}
       />
 
+      <main style={{ maxWidth: 820, margin: '0 auto', padding: '24px 20px 16px' }}>
+        <p style={{
+          color: 'var(--color-text-muted)',
+          fontSize: 11,
+          fontWeight: 800,
+          letterSpacing: '0.1em',
+          textTransform: 'uppercase',
+          margin: '0 0 8px',
+        }}>
+          Building detail
+        </p>
+        <h1 style={{
+          color: 'var(--color-text)',
+          fontSize: 'clamp(28px, 7vw, 42px)',
+          fontWeight: 800,
+          lineHeight: 1.08,
+          margin: '0 0 8px',
+        }}>
+          {title}
+        </h1>
+        {architect && (
+          <p style={{
+            color: 'var(--color-text-dim)',
+            fontSize: 15,
+            fontStyle: 'italic',
+            lineHeight: 1.45,
+            margin: '0 0 20px',
+          }}>
+            {architect}
+          </p>
+        )}
+
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(138px, 1fr))',
+          gap: 10,
+          marginBottom: 24,
+        }}>
+          {items.map(([label, value]) => (
+            <div key={label} style={{
+              minHeight: 58,
+              borderRadius: 12,
+              border: '1px solid var(--color-border-soft)',
+              background: 'var(--color-surface)',
+              padding: '10px 12px',
+            }}>
+              <div style={{
+                color: 'var(--color-text-muted)',
+                fontSize: 10,
+                fontWeight: 800,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                marginBottom: 4,
+              }}>
+                {label}
+              </div>
+              <div style={{
+                color: 'var(--color-text)',
+                fontSize: 13,
+                fontWeight: 700,
+                lineHeight: 1.3,
+              }}>
+                {value}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {building.source_url && (
+          <a
+            href={building.source_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              color: 'var(--color-text-dim)',
+              fontSize: 13,
+              fontWeight: 700,
+              textDecoration: 'none',
+              marginBottom: 24,
+            }}
+          >
+            View on source
+            <span aria-hidden="true">↗</span>
+          </a>
+        )}
+      </main>
+
       {galleryMeta.length > 0 ? (
         <>
           {/* Filter toggle chips */}
@@ -510,95 +600,7 @@ export default function BuildingDetailPage() {
         </section>
       ) : null}
 
-      <main style={{ maxWidth: 820, margin: '0 auto', padding: '24px 20px 0' }}>
-        <p style={{
-          color: 'var(--color-text-muted)',
-          fontSize: 11,
-          fontWeight: 800,
-          letterSpacing: '0.1em',
-          textTransform: 'uppercase',
-          margin: '0 0 8px',
-        }}>
-          Building detail
-        </p>
-        <h1 style={{
-          color: 'var(--color-text)',
-          fontSize: 'clamp(28px, 7vw, 42px)',
-          fontWeight: 800,
-          lineHeight: 1.08,
-          margin: '0 0 8px',
-        }}>
-          {title}
-        </h1>
-        {architect && (
-          <p style={{
-            color: 'var(--color-text-dim)',
-            fontSize: 15,
-            fontStyle: 'italic',
-            lineHeight: 1.45,
-            margin: '0 0 20px',
-          }}>
-            {architect}
-          </p>
-        )}
-
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(138px, 1fr))',
-          gap: 10,
-          marginBottom: 24,
-        }}>
-          {items.map(([label, value]) => (
-            <div key={label} style={{
-              minHeight: 58,
-              borderRadius: 12,
-              border: '1px solid var(--color-border-soft)',
-              background: 'var(--color-surface)',
-              padding: '10px 12px',
-            }}>
-              <div style={{
-                color: 'var(--color-text-muted)',
-                fontSize: 10,
-                fontWeight: 800,
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-                marginBottom: 4,
-              }}>
-                {label}
-              </div>
-              <div style={{
-                color: 'var(--color-text)',
-                fontSize: 13,
-                fontWeight: 700,
-                lineHeight: 1.3,
-              }}>
-                {value}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {building.source_url && (
-          <a
-            href={building.source_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              color: 'var(--color-text-dim)',
-              fontSize: 13,
-              fontWeight: 700,
-              textDecoration: 'none',
-              marginBottom: 24,
-            }}
-          >
-            View on source
-            <span aria-hidden="true">↗</span>
-          </a>
-        )}
-
+      <div style={{ maxWidth: 820, margin: '0 auto', padding: '0 20px' }}>
         {detailDescription && (
           <section style={{
             borderTop: '1px solid var(--color-border-soft)',
@@ -646,7 +648,7 @@ export default function BuildingDetailPage() {
             {description}
           </p>
         </section>
-      </main>
+      </div>
     </div>
   )
 }
