@@ -328,8 +328,9 @@ export default function SwipePage({
   useEffect(() => {
     if (isCompleted) { setFinishUnlocked(false); return }
     const reached = (
+      phase === 'converged' ||
       (phase === 'exploring' && like_count >= 4) ||
-      ((phase === 'analyzing' || phase === 'converged') && confidence != null && confidence >= 1.0)
+      (phase === 'analyzing' && confidence != null && confidence >= 1.0)
     )
     if (reached) setFinishUnlocked(true)
   }, [phase, like_count, confidence, isCompleted])
