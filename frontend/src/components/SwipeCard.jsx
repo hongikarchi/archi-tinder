@@ -17,11 +17,10 @@ import { useImageTelemetry } from '../hooks/useImageTelemetry.js'
  * unchanged.
  */
 
-export const CARD_WIDTH = Math.min(
-  340,
-  (typeof window !== 'undefined' ? window.innerWidth : 375) - 32,
-)
-export const CARD_HEIGHT = Math.round(CARD_WIDTH * (480 / 340))
+const _vw = typeof window !== 'undefined' ? window.innerWidth : 375
+const _vh = typeof window !== 'undefined' ? window.innerHeight : 812
+export const CARD_WIDTH  = Math.min(420, _vw - 32)
+export const CARD_HEIGHT = Math.min(Math.round(CARD_WIDTH * 1.55), _vh - 220)
 export const TAP_THRESHOLD = 8
 
 /* ── InfoRow ─────────────────────────────────────────────────────────────── */
@@ -167,11 +166,7 @@ export default function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
   const material     = materialList.length ? materialList.join(', ') : null
   const gallery         = card.gallery || []
   const drawingStart    = card.gallery_drawing_start ?? gallery.length
-  // Wide-aspect cards need contain-fit to avoid side-crop. Two signals:
-  // - image_focus: what the caller requested (sessions.py forwards LLM choice)
-  // - image_kind: actual kind of resolved image_url (Discovery / fallback path)
-  const wideKinds = ['drawing', 'aerial']
-  const isWideAspect = wideKinds.includes(card.image_focus) || wideKinds.includes(card.image_kind)
+  const isDrawingKind = card.image_focus === 'drawing' || card.image_kind === 'drawing'
 
   return (
     <div
@@ -219,7 +214,7 @@ export default function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
             </div>
           ) : (
             <>
-              <div className="skeleton-shimmer" style={{ position: 'absolute', inset: 0, background: isWideAspect ? '#fff' : undefined }} />
+              <div className="skeleton-shimmer" style={{ position: 'absolute', inset: 0, background: isDrawingKind ? '#fff' : '#111' }} />
               <img
                 ref={imgRef}
                 src={card.image_url}
@@ -234,8 +229,8 @@ export default function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
                 style={{
                   position: 'absolute', inset: 0,
                   width: '100%', height: '100%',
-                  objectFit: isWideAspect ? 'contain' : 'cover', objectPosition: 'center',
-                  background: isWideAspect ? '#fff' : undefined,
+                  objectFit: 'contain', objectPosition: 'center',
+                  background: isDrawingKind ? '#fff' : '#111',
                   opacity: imgLoaded ? 1 : 0,
                   transition: 'opacity 0.2s ease',
                 }}
@@ -374,7 +369,7 @@ export default function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
                     style={{
                       width: '100%',
                       height: '100%',
-                      objectFit: isDrawing ? 'contain' : 'cover',
+                      objectFit: 'contain',
                       objectPosition: 'center',
                       display: 'block',
                     }}

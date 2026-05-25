@@ -178,7 +178,8 @@ export default function App() {
     const confidence = sessionProgress?.confidence ?? null
     const at100 = (
       (phase === 'exploring' && likeCount >= 4) ||
-      ((phase === 'analyzing' || phase === 'converged') && confidence != null && confidence >= 1.0)
+      (phase === 'converged') ||
+      (phase === 'analyzing' && confidence != null && confidence >= 1.0)
     )
     if (!isSessionCompleted && !at100) return
     const sessionId = projects.find(p => p.id === activeProjectId)?.sessionId
