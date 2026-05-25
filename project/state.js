@@ -24,22 +24,29 @@
  * so the value can be re-parsed by any consumer. In-flight (not-yet-merged)
  * PRs carry `mergedAt: null` sentinel; next reporter-inline pass backfills.
  */
-// Reporter: Mermaid sources may be stale — commit 505717a touched backend/apps/recommendation/views/projects.py + .claude/skills/orchestrate/SKILL.md. PERF-1 added projects-list cache layer not reflected in recommendationFlow Mermaid; next session may want to extend the diagram if the layer becomes architecturally load-bearing.
+// Reporter: Mermaid sources may be stale — commit fb669b6 touched backend/apps/recommendation/engine.py + views/sessions.py + event_log.py (PERF-3 Tier1 cache + async emit). recommendationFlow still accurate at function-graph level; next session may want to add a "cache layer" hint if architectural drift becomes load-bearing.
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-05-26 03:24 KST',
-    head: '58b111e',
-    branch: 'feature/algo-perf-projects-list',
+    updatedAt: '2026-05-26 04:51 KST',
+    head: '0c8fe6f',
+    branch: 'feature/algo-perf-session-create',
   },
 
   done: [
+    {
+      id: 'BACK-PERFORMANCE-3',
+      title: 'Search 후 첫 카드까지 5-8초',
+      completedAt: '2026-05-26',
+      prs: [125],
+      note: 'POST /api/v1/analysis/sessions/ local sessions create p50 2567 → 1508 ms realistic / 1484 ms worst-case (-42%). Both PASS ≤ 2000 ms. Tier 1 pool cache (filter signature SHA1 key, 30 min TTL): _tier1_cache_key(filters, filter_priority, seed_ids, v_initial, q_text) — pool ordering preserved (full tuple cached pre-exclude), exclude_ids applied post-fetch (per-session state, not in key). _random_pool 30 min in-memory cache (module-level dict); Tier 3 random fallback ~1040 → ~5 ms warm. emit_events → threading.Thread daemon fire-and-forget; close_old_connections() entry+finally; analytics events lost on process crash mid-thread (acceptable per spec). emit_event_batch in event_log.py via bulk_create. perf_timing sub-stages on engine.create_pool_with_relaxation / create_bounded_pool / get_pool_embeddings (data-driven hypothesis formation). perf_measure --filters JSON CLI option (realistic Tier 1 measurement). Algorithm-territory edits per user authorization; pool ordering + initial_batch shape + swipe-loop determinism preserved (code-review AC1). Measurement scope local Neon local-dev-2 only (development proxy); prod Singapore p50 = post-deploy Codex retest. Multi-worker prod = per-worker cache, warm-up cost per worker. Cold path ~2400-2600 ms unchanged — cache hit dominates 3-run p50. sha fb669b6-pre-squash.',
+    },
     {
       id: 'BACK-PERFORMANCE-1',
       title: '/projects/ 응답 600ms (목표 300ms)',
       completedAt: '2026-05-26',
       prs: [124],
-      note: 'GET /api/v1/projects/ local p50 1136 → 661 ms (-42%). Goal ≤300 ms 미달 — auth floor ~590 ms 잔존. Response cache 60s TTL + evict POST/PATCH/DELETE/Bookmark (per-profile.id key isolation). ProjectListSerializer drops analysis_report (LLM JSON list-unused). defer(analysis_report) on QS. _latest_like_count via jsonb_array_length (no full like_vectors fetch). page_size+1 trick — no count() query. CONN_MAX_AGE=600 + CONN_HEALTH_CHECKS=True on default DB. buildings DB CONN_MAX_AGE removed (Make-DB owner territory). perf_timing ctx manager + perf_measure CLI (reused PERF-3/PERF-2). orchestrate skill Step 6/9 deprecated agent refs → git-commit/reporter-inline skills. Measurement scope local Neon local-dev-2 only (development proxy); prod Singapore Railway p50 = post-deploy Codex retest (admin). Deferred: BACK-AUTH-1 — simplejwt JWT blacklist DB query (~590 ms, security territory; explicit user approval required before touching auth path). sha 505717a-pre-squash.',
+      note: 'GET /api/v1/projects/ local p50 1136 → 661 ms (-42%). Goal ≤300 ms 미달 — auth floor ~590 ms 잔존. Response cache 60s TTL + evict POST/PATCH/DELETE/Bookmark (per-profile.id key isolation). ProjectListSerializer drops analysis_report (LLM JSON list-unused). defer(analysis_report) on QS. _latest_like_count via jsonb_array_length (no full like_vectors fetch). page_size+1 trick — no count() query. CONN_MAX_AGE=600 + CONN_HEALTH_CHECKS=True on default DB. buildings DB CONN_MAX_AGE removed (Make-DB owner territory). perf_timing ctx manager + perf_measure CLI (reused PERF-3/PERF-2). orchestrate skill Step 6/9 deprecated agent refs → git-commit/reporter-inline skills. Measurement scope local Neon local-dev-2 only (development proxy); prod Singapore Railway p50 = post-deploy Codex retest (admin). Deferred: BACK-AUTH-1 — simplejwt JWT blacklist DB query (~590 ms, security territory; explicit user approval required before touching auth path). sha 505717a-pre-squash (squash 0c8fe6f).',
     },
     {
       id: 'INFRA-WORKFLOW-1',
@@ -83,13 +90,6 @@ window.PROJECT_STATE = {
       prs: [116],
       note: 'Re-provisioned local-dev-2 (br-shy-thunder-a1p5glmo, ep-holy-band-a1w0u5am, no TTL) off production. Repointed local .env DB_HOST + BUILDINGS_DB_HOST from prod ep-broad-hat-a1jaomn7 → dev endpoint; Railway prod env untouched. Smoke: manage.py check OK, default+buildings host = dev endpoint, auth_user count = 3, canonical_v2_buildings = 39,478, is_publishable=true = 36,864. Docs: .env.example DEV-vs-PROD discipline block + neonctl command + dev-branch note; MAKEWEB_DB_SWAP_RESPONSE.md restoration paragraph. Pure docs/meta carve-out — no code touched. sha 4b900da.',
     },
-    {
-      id: 'INFRA-DEPLOY-1',
-      title: '2026-05-25 develop → main 배포 (PR #99–#111)',
-      completedAt: '2026-05-25',
-      prs: [112],
-      note: 'develop → main squash-merged carrying 11 PRs (#99–#111). main = 1888b5f. Railway prod auto-deploy triggered. Bug #5 carve-out applied: origin/develop force-reset to origin/main (1888b5f).',
-    },
   ],
 
   now: [],
@@ -132,11 +132,6 @@ window.PROJECT_STATE = {
         note: 'Codex Round 2: discovery cache-hit p50 = 450 ms vs spec <200 ms. Retest 2026-05-25: cache-cold 4.11 s with external image retries. Taste cache shipped PR #87 (1h TTL, evict on liked_ids change). Suspect: serialization floor on 12 cards / raw SQL still on hit path / low true hit-rate from key fragmentation. Investigation: per-stage timing in views/discovery.py → trim payload, batch URLs, extend cache to hold card payloads, audit key shape. Acceptance: hit-path p50 <200 ms Singapore deploy; no SwipePage card-shape regression.',
       },
       {
-        id: 'BACK-PERFORMANCE-3',
-        title: 'Search 후 첫 카드까지 5-8초',
-        note: 'Single heaviest delay in the funnel — 5–8 s between Search click and first swipe card. Pipeline (views/sessions.py:28-160): project resolve → v_initial embedding → create_pool_with_relaxation (3-tier SQL fan-out) → get_pool_embeddings (150 × 384) → tier-ordered initial_batch via repeated farthest_point_from_pool matmul (same code path emitting Codex divide/overflow/invalid warnings) → AnalysisSession INSERT. Investigation: per-step timing log on prod → cache by (filter_signature, tier) if pool dominates / batch-prefetch embeddings / vectorise initial-batch farthest-point loop. Acceptance: p50 ≤ 2 s Singapore deploy (≈ 3× improvement); pool + initial_batch determinism preserved.',
-      },
-      {
         id: 'FRONT-DESIGN-1',
         title: '디자인 시스템 컴포넌트 리워크 (paused)',
         note: 'Foundation shipped: PR #54 (tokens.css 4 themes + ThemeContext + AppearanceSettings) + PR #59 (theme/font server persistence). Remaining: per-component visual rework (~7,700 LOC) — inline styles → CSS Modules + :hover/:focus/:active, light-theme polish, leaf→hub order. Resume via /plan per slice; each slice ships its own PR via orchestrate skill. Acceptance per slice: lint+build clean, light+dark variants regression-free, no token added without DESIGN.md update.',
@@ -146,7 +141,7 @@ window.PROJECT_STATE = {
       {
         id: 'BACK-AUTH-1',
         title: 'JWT blacklist DB ~590ms 차지',
-        note: 'PERF-1 (PR #124) 발견: /projects/ local p50 cache-hit path 661 ms 중 ~590 ms는 simplejwt JWTAuthentication.authenticate() → BlacklistMixin → Neon round-trip per authenticated request. 모든 인증된 endpoint floor latency. PERF-2/PERF-3 측정에도 같이 잡힘. Investigation: (1) JWT validation result in-memory cache JTI 기반 key, token expiry TTL — custom JWTAuthentication subclass; (2) Blacklist DB query 인덱스 검사 (Neon round-trip 자체는 한 번이라 cache 외 효과 제한적); (3) Multi-worker prod 환경에서 in-memory cache hit rate 낮음 → Redis 필요. Acceptance: 인증된 요청 floor 600 → 100 ms 이하; 보안 영향 0 (logout 토큰 무효화 즉시 또는 ≤30s 이내). security-manager 사전 검토 필수.',
+        note: 'PERF-1 (PR #124) 발견: /projects/ local p50 cache-hit path 661 ms 중 ~590 ms는 simplejwt JWTAuthentication.authenticate() → BlacklistMixin → Neon round-trip per authenticated request. 모든 인증된 endpoint floor latency. PERF-3 (PR #125) 측정에서도 같이 잡힘. Investigation: (1) JWT validation result in-memory cache JTI 기반 key, token expiry TTL — custom JWTAuthentication subclass; (2) Blacklist DB query 인덱스 검사 (Neon round-trip 자체는 한 번이라 cache 외 효과 제한적); (3) Multi-worker prod 환경에서 in-memory cache hit rate 낮음 → Redis 필요. Acceptance: 인증된 요청 floor 600 → 100 ms 이하; 보안 영향 0 (logout 토큰 무효화 즉시 또는 ≤30s 이내). security-manager 사전 검토 필수.',
       },
       {
         id: 'FRONT-LAYOUT-1',
@@ -195,11 +190,18 @@ window.PROJECT_STATE = {
 
   prs: [
     {
-      number: 124,
-      title: 'perf(BACK-PERFORMANCE-1): /projects/ p50 1136→661ms — cache + serializer trim',
+      number: 125,
+      title: 'perf(BACK-PERFORMANCE-3): sessions create p50 2567→1508ms — Tier1 cache + async emit',
       mergedAt: null,
       mergedAtKST: null,
       sha: null,
+    },
+    {
+      number: 124,
+      title: 'perf(BACK-PERFORMANCE-1): /projects/ p50 1136→661ms — cache + serializer trim',
+      mergedAt: '2026-05-25T18:30:31Z',
+      mergedAtKST: '2026-05-26 03:30 KST',
+      sha: '0c8fe6f',
     },
     {
       number: 123,
@@ -236,12 +238,6 @@ window.PROJECT_STATE = {
       title: 'feat(FRONT-DESIGN-2): 카드 이미지 contain 전환 + 카드 크기 확대',
       mergedAt: '2026-05-25T15:57:48Z',
       mergedAtKST: '2026-05-26 00:57 KST',
-    },
-    {
-      number: 117,
-      title: 'chore(INFRA-DOC-5): session-end reporter housekeeping — PR #116 INFRA-ENV-1',
-      mergedAt: '2026-05-25T07:00:05Z',
-      mergedAtKST: '2026-05-25 16:00 KST',
     },
   ],
 
