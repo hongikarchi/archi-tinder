@@ -228,28 +228,6 @@ Acceptance:
 - `make_web_app` cannot `DROP TABLE` or `CREATE ROLE` (verified via psql).
 - `manage.py migrate` still works under `neondb_owner` from operator machine.
 
-#### INFRA-ENV-1 — local-dev Neon branch 사라짐 — prod 직격 위험
-**Confirmed 2026-05-25 via `docs/MAKEWEB_DB_SWAP_RESPONSE.md` line 10-12.** The DEV-ENV1 `local-dev` Neon branch was dropped during the 2026-05-24 buildings-DB swap (PR #93 / `BUILDINGS-DB-SWAP`). At that point `backend/.env` `DB_HOST` was deliberately repointed to `ep-broad-hat-a1jaomn7` — **the production endpoint** — "for local development to function" (admin note in the swap response doc).
-
-Net effect right now: **local `python3 manage.py runserver` writes directly to the production `user_data` Neon branch.** DEV-ENV1's mechanical isolation is broken. Any local swipe / project create / save lands in real prod rows.
-
-Architecture context:
-- `backend/.env` is `.gitignored`; values exist only on the local machine. `python-dotenv` loads it into `os.environ` at Django boot.
-- Railway prod injects its own env vars into the gunicorn container; `.env` file is never deployed.
-- → Local and prod *can* point at different Neon branches via the same `settings.py` code reading `os.environ.get('DB_HOST')` — but only if local `.env` actually points at a dev branch.
-
-Tasks:
-1. **Re-provision a persistent dev child branch** off `production` (no TTL) via `neonctl branches create --name local-dev-2 --parent production`. Capture the new endpoint hostname.
-2. **Repoint local `.env`** — `DB_HOST` and `BUILDINGS_DB_HOST` (currently both `ep-broad-hat-a1jaomn7`) → new dev-branch endpoint. Leave Railway prod env vars untouched.
-3. **Document the separation** in `CLAUDE.md` `## Backend Conventions`. Make explicit:
-   - Local `.env` → dev Neon branch
-   - Railway prod env → `production` Neon branch
-   - Migrations run from operator machine against `production` only when a deploy demands it
-4. **(Stretch)** add a Django `apps.py` `ready()` log line that prints the resolved DB host on startup — so future drift is visible at runserver-boot time.
-5. **(Stretch)** patch the prod rows that local development accidentally created since 2026-05-24 if any tainted rows are identified (e.g., any `auth_user` row with a local-style email).
-
-Acceptance: local writes land on a dev branch, not on prod; Neon dashboard shows a persistent dev branch; CLAUDE.md documents the env-source mapping; startup log confirms which branch the runtime is pointing at.
-
 #### FRONT-DESIGN-1 — 디자인 시스템 컴포넌트 리워크 (paused)
 Foundation shipped: PR #54 (`tokens.css` 4 themes + `ThemeContext` + `AppearanceSettings`) + PR #59 (theme/font server persistence). Remaining: per-component visual rework (≈ 7,700 LOC) — inline `style={{}}` → CSS Modules + `:hover/:focus`/`:active`, light-theme polish where dark-only assumptions still leak through, leaf→hub component order (small leaf components first, then containers).
 
@@ -311,6 +289,14 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 ---
 
 ## Done
+
+### INFRA-ENV-1 — Neon dev branch 복구 + prod 격리 — RESOLVED 2026-05-25 (PR #116 `4b900da`)
+- [x] Re-provisioned persistent Neon child branch `local-dev-2` (`br-shy-thunder-a1p5glmo`, endpoint `ep-holy-band-a1w0u5am`, no TTL) off `production` via `neonctl branches create --name local-dev-2 --parent production --project-id holy-pond-45504245`.
+- [x] Repointed local `backend/.env` `DB_HOST` + `BUILDINGS_DB_HOST` from prod endpoint `ep-broad-hat-a1jaomn7` → dev endpoint `ep-holy-band-a1w0u5am`. Railway prod env untouched.
+- [x] Smoke verified: `manage.py check` OK; `default` host = dev endpoint; `buildings` host = dev endpoint; `auth_user` count = 3; `archi_data` current_db/user = `('archi_data', 'make_web')`; `canonical_v2_buildings` count = 39,478; `is_publishable=true` count = 36,864.
+- [x] `backend/.env.example` updated: DEV-vs-PROD endpoint discipline block + neonctl create command + dev-branch note on `BUILDINGS_DB_HOST`.
+- [x] `docs/MAKEWEB_DB_SWAP_RESPONSE.md` updated: 2026-05-25 follow-up paragraph documenting the restoration.
+- [x] Pure docs/meta — direct-edit carve-out per CLAUDE.md `## Implementation delegation — HARD RULE`. No code touched. `backend/.env` itself is gitignored.
 
 ### INFRA-DEPLOY-1 — 2026-05-25 develop → main 배포 (PR #99–#111) — RESOLVED 2026-05-25 (PR #112 `1888b5f`)
 - [x] develop → main squash-merged, carrying 11 PRs: #99 (CI hang fix + deploy #98 reporter), #100 (Product Identity CLAUDE.md), #101 (docs/specs → Task.md Next), #102 (reporter housekeeping PRs #100/#101), #103 (DESIGN-REWORK → Next), #104 (Task.md restructure v2), #107 (reporter housekeeping PRs #103/#104 redo), #108 (ConfidenceBar Calibrating fix), #109 (publish-gate + reporter no-git-ops codification), #110 (reporter housekeeping PR #108), #111 (Task.md ID convention + bucket + stale doc cleanup).

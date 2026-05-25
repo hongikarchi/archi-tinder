@@ -25,12 +25,19 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-05-25 03:54 KST',
-    head: '1888b5f',
+    updatedAt: '2026-05-25 15:55 KST',
+    head: '4b900da',
     branch: 'develop',
   },
 
   done: [
+    {
+      id: 'INFRA-ENV-1',
+      title: 'Neon dev branch 복구 + prod 격리',
+      completedAt: '2026-05-25',
+      prs: [116],
+      note: 'Re-provisioned local-dev-2 (br-shy-thunder-a1p5glmo, ep-holy-band-a1w0u5am, no TTL) off production. Repointed local .env DB_HOST + BUILDINGS_DB_HOST from prod ep-broad-hat-a1jaomn7 → dev endpoint; Railway prod env untouched. Smoke: manage.py check OK, default+buildings host = dev endpoint, auth_user count = 3, canonical_v2_buildings = 39,478, is_publishable=true = 36,864. Docs: .env.example DEV-vs-PROD discipline block + neonctl command + dev-branch note; MAKEWEB_DB_SWAP_RESPONSE.md restoration paragraph. Pure docs/meta carve-out — no code touched. sha 4b900da.',
+    },
     {
       id: 'INFRA-DEPLOY-1',
       title: '2026-05-25 develop → main 배포 (PR #99–#111)',
@@ -172,11 +179,6 @@ window.PROJECT_STATE = {
         note: 'Decision 2026-05-25: split Django runtime off neondb_owner. Today DB_USER=neondb_owner (full DDL/DML/role/extension). Create new Neon role make_web_app (SELECT+INSERT+UPDATE+DELETE on app tables + USAGE/SELECT on sequences; no DDL); switch .env + .env.example + Railway DB_USER → make_web_app; keep neondb_owner alive for operator-run manage.py migrate. Mirrors buildings-DB make_web role (PR #93) but write-enabled since user_data is read+write. Open: ALTER DEFAULT PRIVILEGES so future migrations auto-grant to app role; cutover order. Acceptance: app runtime green under make_web_app; psql confirms DDL is blocked; manage.py migrate still works under neondb_owner.',
       },
       {
-        id: 'INFRA-ENV-1',
-        title: 'local-dev Neon branch 사라짐 — prod 직격 위험',
-        note: 'Confirmed 2026-05-25 via docs/MAKEWEB_DB_SWAP_RESPONSE.md line 10-12: local-dev branch was dropped during PR #93 buildings-DB swap; .env DB_HOST was deliberately repointed to ep-broad-hat-a1jaomn7 (production endpoint) "for local development to function." Net: local runserver writes directly to prod user_data right now — DEV-ENV1 isolation broken. Tasks: (1) provision new persistent dev child branch off production; (2) repoint local .env DB_HOST + BUILDINGS_DB_HOST; (3) document local-vs-Railway env separation in CLAUDE.md ## Backend Conventions; (4) stretch: Django apps.py ready() log line printing resolved DB host on boot; (5) stretch: identify + patch any tainted prod rows created since 2026-05-24. Acceptance: local writes land on dev branch; CLAUDE.md documents the mapping; startup log confirms branch.',
-      },
-      {
         id: 'FRONT-DESIGN-1',
         title: '디자인 시스템 컴포넌트 리워크 (paused)',
         note: 'Foundation shipped: PR #54 (tokens.css 4 themes + ThemeContext + AppearanceSettings) + PR #59 (theme/font server persistence). Remaining: per-component visual rework (~7,700 LOC) — inline styles → CSS Modules + :hover/:focus/:active, light-theme polish, leaf→hub order. Resume via /plan per slice; each slice ships its own PR via orchestrate skill. Acceptance per slice: lint+build clean, light+dark variants regression-free, no token added without DESIGN.md update.',
@@ -230,6 +232,12 @@ window.PROJECT_STATE = {
 
   prs: [
     {
+      number: 116,
+      title: 'chore(INFRA-ENV-1): restore Neon child branch for local dev (prod isolation)',
+      mergedAt: '2026-05-25T06:50:37Z',
+      mergedAtKST: '2026-05-25 15:50 KST',
+    },
+    {
       number: 112,
       title: 'Release: 2026-05-25 — Task.md ID convention + stale doc cleanup + bucket review',
       mergedAt: '2026-05-24T18:50:49Z',
@@ -270,12 +278,6 @@ window.PROJECT_STATE = {
       title: 'docs: restructure Task.md (Workflow Rules + Now/Next discipline) + update AUTH1/AUDIT-T4',
       mergedAt: '2026-05-24T15:29:32Z',
       mergedAtKST: '2026-05-25 00:29 KST',
-    },
-    {
-      number: 103,
-      title: 'docs: move DESIGN-REWORK out of Now (paused, no PR in flight) → Next',
-      mergedAt: '2026-05-24T15:15:51Z',
-      mergedAtKST: '2026-05-25 00:15 KST',
     },
   ],
 
