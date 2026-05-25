@@ -166,6 +166,26 @@ export default function App() {
     return () => clearTimeout(timer)
   }, [swipeError])
 
+  // Auto-navigate to /result/:sessionId when:
+  //   (a) session is completed (pool exhausted) — backend says no more cards, OR
+  //   (b) frontend latch threshold reached — exploring with like_count >= 4,
+  //       OR analyzing/converged with confidence >= 1.0. Skips the Finish-button
+  //       click since the user has clearly produced enough signal.
+  useEffect(() => {
+    if (location.pathname !== '/swipe') return
+    const phase = sessionProgress?.phase
+    const likeCount = sessionProgress?.like_count ?? 0
+    const confidence = sessionProgress?.confidence ?? null
+    const at100 = (
+      (phase === 'exploring' && likeCount >= 4) ||
+      ((phase === 'analyzing' || phase === 'converged') && confidence != null && confidence >= 1.0)
+    )
+    if (!isSessionCompleted && !at100) return
+    const sessionId = projects.find(p => p.id === activeProjectId)?.sessionId
+    if (!sessionId) return
+    navigate('/result/' + sessionId)
+  }, [isSessionCompleted, sessionProgress?.phase, sessionProgress?.like_count, sessionProgress?.confidence]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Persist current card id to localStorage per active project so refresh can
   // restore the exact card the user was looking at (not just the backend's last
   // next_image). Cleared when currentCard becomes null or session completes.
