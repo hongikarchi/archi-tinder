@@ -322,11 +322,18 @@ export default function SwipePage({
   const filter_relaxed   = progress?.filter_relaxed || false
   const confidence       = progress?.confidence ?? null
 
-  // Show "Finish & View Report" button when progress hits 100% (still swiping, not yet completed)
-  const isAt100 = !isCompleted && (
-    (phase === 'exploring' && like_count >= 4) ||
-    ((phase === 'analyzing' || phase === 'converged') && confidence != null && confidence >= 1.0)
-  )
+  // Latch: once 100% is reached the button stays visible even if further swipes
+  // change phase/confidence. Resets only when the session completes.
+  const [finishUnlocked, setFinishUnlocked] = useState(false)
+  useEffect(() => {
+    if (isCompleted) { setFinishUnlocked(false); return }
+    const reached = (
+      (phase === 'exploring' && like_count >= 4) ||
+      ((phase === 'analyzing' || phase === 'converged') && confidence != null && confidence >= 1.0)
+    )
+    if (reached) setFinishUnlocked(true)
+  }, [phase, like_count, confidence, isCompleted])
+  const isAt100 = !isCompleted && finishUnlocked
 
   function onTinderSwipe(dir) {
     // F4: intercept first-ever left swipe to show dismiss tutorial
@@ -555,7 +562,7 @@ export default function SwipePage({
 
       <div style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center',
-        justifyContent: 'space-between', height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))', overflow: 'hidden',
+        justifyContent: 'flex-start', height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))', overflow: 'hidden',
         background: 'var(--color-bg)', padding: '20px 16px',
         position: 'relative',
       }}>
@@ -600,7 +607,13 @@ export default function SwipePage({
           </div>
         </div>
 
-        {/* Finish button — appears between progress bar and card when progress hits 100% */}
+        {/* Card + finish button — vertically centered in remaining space */}
+        <div style={{
+          flex: 1,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          gap: 12, width: '100%',
+        }}>
+
         {isAt100 && (
           <div style={{ width: CARD_WIDTH }}>
             <button
@@ -666,8 +679,10 @@ export default function SwipePage({
           ) : null}
         </div>
 
+        </div>{/* end center wrapper */}
+
         {/* Action Buttons */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, flexShrink: 0 }}>
           <p style={{ color: 'var(--color-text-dimmest)', fontSize: 11, margin: 0 }}>← skip · tap card · save →</p>
         </div>
 
