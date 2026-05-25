@@ -9,6 +9,7 @@ import SurpriseBoardModal from '../components/SurpriseBoardModal.jsx'
 const PAGE_LIMIT = 12
 const SURPRISE_THRESHOLD = 5
 const PREFETCH_AT_REMAINING = 3 // when deck size <= this, fetch next page
+const SWIPE_KEYS = { ArrowLeft: 'left', ArrowRight: 'right' }
 
 /* ── preloadImage helper (mirrors App.jsx preloadImage pattern) ──────────── */
 function makeImagePreloader() {
@@ -46,6 +47,8 @@ export default function DiscoveryPage() {
   const fetchingRef = useRef(false)
   const preloadRef = useRef(makeImagePreloader())
   const pendingActionRef = useRef(null)
+  const cardRef = useRef(null)
+  const keySwipingRef = useRef(false)
 
   const [deck, setDeck] = useState([])          // queue of cards (front = top)
   const [cursor, setCursor] = useState(0)
@@ -62,6 +65,25 @@ export default function DiscoveryPage() {
     isActiveRef.current = true
     return () => { isActiveRef.current = false }
   }, [])
+
+  // Keyboard swipe: ← pass, → save. Blocked while either modal is open so
+  // the user can type in the modal's text field without triggering deck swipes.
+  useEffect(() => {
+    async function onKey(e) {
+      const dir = SWIPE_KEYS[e.key]
+      if (!dir || !cardRef.current || keySwipingRef.current) return
+      if (saveModalCard || surpriseOpen) return
+      if (!deck.length) return
+      keySwipingRef.current = true
+      try {
+        await cardRef.current.swipe(dir)
+      } finally {
+        keySwipingRef.current = false
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [deck.length, saveModalCard, surpriseOpen])
 
   // Surprise trigger: fires once per visit after SURPRISE_THRESHOLD saves
   useEffect(() => {
@@ -273,6 +295,7 @@ export default function DiscoveryPage() {
                 return (
                   <TinderCard
                     key={`top-${id}`}
+                    ref={cardRef}
                     onSwipe={onTinderSwipe}
                     onCardLeftScreen={onCardLeftScreen}
                     preventSwipe={['up', 'down']}
@@ -327,7 +350,7 @@ export default function DiscoveryPage() {
       {/* Hint */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
         <p style={{ color: 'var(--color-text-dimmest)', fontSize: 11, margin: 0 }}>
-          ← skip · tap card · save →
+          ← skip · tap card · save →&nbsp;&nbsp;·&nbsp;&nbsp;arrow keys supported
         </p>
       </div>
 
