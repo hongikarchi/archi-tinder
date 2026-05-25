@@ -25,12 +25,26 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-05-25 15:55 KST',
-    head: '4b900da',
+    updatedAt: '2026-05-26 00:24 KST',
+    head: '80b519c',
     branch: 'develop',
   },
 
   done: [
+    {
+      id: 'FRONT-UX-2',
+      title: '스와이프 자동 이동 + 키보드 입력',
+      completedAt: '2026-05-26',
+      prs: [121],
+      note: 'App.jsx useEffect auto-navigates /swipe → /result/:sessionId on phase=completed/results, or latch threshold (exploring like_count>=4, analyzing/converged confidence>=1.0). DiscoveryPage.jsx keydown ← (skip) / → (save) arrow-key swipe. Supersedes PR #114 (feature/admin-swipe-finish-ux) + PR #115 (feature/front-ux-keyboard-swipe) — both had wrong base main (HARD RULE 5); re-based as PR #121 onto develop. 4 Codex fixes baked in: (1) P2/#114 auto-nav swallowed Keep-exploring path — only nav on 100% latch or pool-exhaust; (2) P2/#114 finishUnlocked latch leaked across sessions — dropped, 1-shot calc kept as SwipePage Finish-button safety net; (3) P2/#115 surpriseOpen modal guard — arrow-key handler checks surpriseOpen before firing; (4) P3/#115 keySwipingRef permanent lock on async throw — try/finally ensures ref release. sha 80b519c.',
+    },
+    {
+      id: 'INFRA-DB-1',
+      title: 'Django app이 owner 권한으로 DB 접근',
+      completedAt: '2026-05-25',
+      prs: [119],
+      note: 'Created make_web_app Neon role on production + local-dev-2 via psql CREATE ROLE (NOT neonctl — that grants neon_superuser transitively). GRANT SELECT/INSERT/UPDATE/DELETE on ALL TABLES + USAGE/SELECT on ALL SEQUENCES + ALTER DEFAULT PRIVILEGES for future migration tables. Local .env swapped DB_USER neondb_owner → make_web_app + rotated password; manage.py check clean; ORM + buildings smoke unchanged; DDL rejected. Railway prod: first redeploy d203e2bf FAILED (password mispaste), second redeploy 820de476 SUCCESS (active deployment 2026-05-25 07:43). 8-probe psql matrix: CRUD pass, CREATE TABLE/DROP TABLE/CREATE ROLE/CREATE EXTENSION/ALTER TABLE all blocked. Files: .env.example (role-separation block), CLAUDE.md (Backend Conventions Neon role bullets), docs/MAKEWEB_DB_SWAP_RESPONSE.md (Q2 RESOLVED block + BUILDINGS_DB_PASSWORD rotation action item). Pure docs/meta carve-out — no production code touched. Outstanding: BUILDINGS_DB_PASSWORD rotation tracked outside this entry. sha 1d3bfdc.',
+    },
     {
       id: 'INFRA-ENV-1',
       title: 'Neon dev branch 복구 + prod 격리',
@@ -79,48 +93,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-05-25',
       prs: [104],
       note: 'Task.md 394→305 lines: dropped Phase 1-18 Development Roadmap section (duplicates of Done), replaced with compact Roadmap (Historical) at bottom + new Workflow Rules block at top. Reordered: header → Workflow Rules → Now → Next → Done → Roadmap (Historical). AUTH1 scope narrowed to frontend only (backend Kakao+Naver already shipped). AUDIT-T4 LOC re-verified 2026-05-25 (engine.py 2139, FirmProfilePage 540 refactored down). Codified Now/Next discipline in orchestrate/SKILL.md.',
-    },
-    {
-      id: 'DESIGN-REWORK-MOVE',
-      title: '#19 DESIGN-REWORK-MOVE — move DESIGN-REWORK out of Now (paused, no PR in flight) → Next',
-      completedAt: '2026-05-25',
-      prs: [103],
-      note: 'DESIGN-REWORK moved from Task.md ## Now to ## Next with paused tag — Now definition is "PR in flight" and no design PR in 50+ commits + memory marked paused. state.js now[] → [], DESIGN-REWORK appended to next[]. CLAUDE.md Current State refreshed. dashboard.html emptyMsg already handles empty array.',
-    },
-    {
-      id: 'TASK-NEXT-RESTRUCTURE',
-      title: '#18 TASK-NEXT-RESTRUCTURE — absorb docs/specs into Task.md Next, fix orchestrate stale refs',
-      completedAt: '2026-05-24',
-      prs: [101],
-      note: 'docs/specs/*.md (4 files) absorbed into Task.md ## Next flat backlog, folder deleted. orchestrate/SKILL.md stale refs fixed (Goal.md → CLAUDE.md constitution, Report.md → code+state.js, token-saving.md → WORKFLOW.md). 10 operational deferrals surfaced as ## Next entries. reporter.md sub-step 2a added (Deferred→Next surfacing). back-maker/front-maker/code-review agent refs updated.',
-    },
-    {
-      id: 'PRODUCT-IDENTITY',
-      title: '#17 PRODUCT-IDENTITY — add Product Identity section to CLAUDE.md (Core Promise anchor)',
-      completedAt: '2026-05-24',
-      prs: [100],
-      note: 'New ## Product Identity section added to CLAUDE.md between What This Repo Does and Branch Model. ### Core Promise sub-section: 10-15 swipes → Aha! moment, Korean user-quote anchor, two-pillars one-liner (algorithm + corpus), pointer to docs/algorithm.md. Surfaces positive product identity previously implicit. +8 lines.',
-    },
-    {
-      id: 'DEPLOY-2026-05-24-v2',
-      title: '#16 DEPLOY-2026-05-24-v2 — develop → main deploy, 1 PR (#97)',
-      completedAt: '2026-05-24',
-      prs: [98],
-      note: 'Release PR #98 squash-merged CI hang fix to main (fd063e0). Railway deployment a98725bf Online. Bug #5 carve-out applied (develop force-reset to fd063e0). Prod functional pre-deploy (PR #94 cap working); this deploy = CI baseline alignment + main/develop sync.',
-    },
-    {
-      id: 'CI-HANG-FIX',
-      title: '#15 CI-HANG-FIX — _retry_gemini_call executor → daemon Thread + Queue',
-      completedAt: '2026-05-24',
-      prs: [97],
-      note: 'ThreadPoolExecutor + future.result(timeout) → threading.Thread(daemon=True) + queue.Queue.get(timeout). _Thread captured at module-load to bypass test_imp8 _DiscThread global mock leak. Same 15s/45s deadline + FATAL + retry semantics. PR #94 ThreadPoolExecutor hung pytest CI 15min, cascading 5 CI failures. Full suite: 683 passed / 11 skipped / 0 failed.',
-    },
-    {
-      id: 'GEMINI-TIMEOUT-CAP',
-      title: '#13 GEMINI-TIMEOUT-CAP — hard 15s timeout cap on Gemini retry wrapper',
-      completedAt: '2026-05-24',
-      prs: [94],
-      note: '_retry_gemini_call caps every Gemini SDK call at 15s (45s Imagen3) via ThreadPoolExecutor + future.result(timeout). 228s /parse-query/ hang → ≤31s. 4 new tests + 5 regression. Deferred: _caches.py:92 IMP-5 create call bypasses wrapper (context_caching_enabled default False, zero prod impact).',
     },
   ],
 
@@ -172,11 +144,6 @@ window.PROJECT_STATE = {
         id: 'BACK-PERFORMANCE-3',
         title: 'Search 후 첫 카드까지 5-8초',
         note: 'Single heaviest delay in the funnel — 5–8 s between Search click and first swipe card. Pipeline (views/sessions.py:28-160): project resolve → v_initial embedding → create_pool_with_relaxation (3-tier SQL fan-out) → get_pool_embeddings (150 × 384) → tier-ordered initial_batch via repeated farthest_point_from_pool matmul (same code path emitting Codex divide/overflow/invalid warnings) → AnalysisSession INSERT. Investigation: per-step timing log on prod → cache by (filter_signature, tier) if pool dominates / batch-prefetch embeddings / vectorise initial-batch farthest-point loop. Acceptance: p50 ≤ 2 s Singapore deploy (≈ 3× improvement); pool + initial_batch determinism preserved.',
-      },
-      {
-        id: 'INFRA-DB-1',
-        title: 'Django app이 owner 권한으로 DB 접근',
-        note: 'Decision 2026-05-25: split Django runtime off neondb_owner. Today DB_USER=neondb_owner (full DDL/DML/role/extension). Create new Neon role make_web_app (SELECT+INSERT+UPDATE+DELETE on app tables + USAGE/SELECT on sequences; no DDL); switch .env + .env.example + Railway DB_USER → make_web_app; keep neondb_owner alive for operator-run manage.py migrate. Mirrors buildings-DB make_web role (PR #93) but write-enabled since user_data is read+write. Open: ALTER DEFAULT PRIVILEGES so future migrations auto-grant to app role; cutover order. Acceptance: app runtime green under make_web_app; psql confirms DDL is blocked; manage.py migrate still works under neondb_owner.',
       },
       {
         id: 'FRONT-DESIGN-1',
@@ -232,6 +199,18 @@ window.PROJECT_STATE = {
 
   prs: [
     {
+      number: 121,
+      title: 'feat(swipe,discovery): auto-result nav + arrow-key swipe (supersedes PR #114, #115)',
+      mergedAt: '2026-05-25T15:24:52Z',
+      mergedAtKST: '2026-05-26 00:24 KST',
+    },
+    {
+      number: 119,
+      title: 'docs(INFRA-DB-1): Railway cutover COMPLETED 2026-05-25 — make_web_app live in prod',
+      mergedAt: '2026-05-25T07:50:10Z',
+      mergedAtKST: '2026-05-25 16:50 KST',
+    },
+    {
       number: 116,
       title: 'chore(INFRA-ENV-1): restore Neon child branch for local dev (prod isolation)',
       mergedAt: '2026-05-25T06:50:37Z',
@@ -266,18 +245,6 @@ window.PROJECT_STATE = {
       title: 'fix(frontend): ConfidenceBar Calibrating label when analyzing+null',
       mergedAt: '2026-05-24T16:33:11Z',
       mergedAtKST: '2026-05-25 01:33 KST',
-    },
-    {
-      number: 107,
-      title: 'chore: session-end reporter housekeeping — docs PRs #103/#104 (redo, correct base=develop)',
-      mergedAt: '2026-05-24T15:51:54Z',
-      mergedAtKST: '2026-05-25 00:51 KST',
-    },
-    {
-      number: 104,
-      title: 'docs: restructure Task.md (Workflow Rules + Now/Next discipline) + update AUTH1/AUDIT-T4',
-      mergedAt: '2026-05-24T15:29:32Z',
-      mergedAtKST: '2026-05-25 00:29 KST',
     },
   ],
 
