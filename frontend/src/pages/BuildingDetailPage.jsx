@@ -229,7 +229,7 @@ export default function BuildingDetailPage() {
   const fromProjectId = location.state?.fromProjectId || null
   const fromSessionId = location.state?.fromSessionId || null
   const referrer = location.state?.referrer || null
-  const fromBoard = !!location.state?.fromBoard
+  const fromRecommended = !!location.state?.fromRecommended
   const rank = isValidRank(location.state?.rank) ? location.state.rank : null
   const savedIds = useMemo(
     () => (Array.isArray(location.state?.savedIds) ? location.state.savedIds : []),
@@ -359,7 +359,7 @@ export default function BuildingDetailPage() {
         onBack={handleBack}
         onSaveToBoard={() => !isSaved && setSaveModalOpen(true)}
         isSaved={isSaved}
-        saveEnabled={!fromBoard}
+        saveEnabled={fromRecommended}
         bookmarkEnabled={!!fromProjectId && !!rank}
         bookmarkPending={bookmarkPending}
         isBookmarked={isBookmarked}

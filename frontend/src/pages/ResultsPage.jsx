@@ -204,6 +204,7 @@ export default function ResultsPage({ projects, setProjects }) {
         rank,
         savedIds,
         referrer: location.pathname,
+        fromRecommended: true,
       },
     })
   }
