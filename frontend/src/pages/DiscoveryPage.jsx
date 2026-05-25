@@ -6,6 +6,8 @@ import SwipeCard, { CARD_WIDTH, CARD_HEIGHT } from '../components/SwipeCard.jsx'
 import SaveToBoardModal from '../components/SaveToBoardModal.jsx'
 import SurpriseBoardModal from '../components/SurpriseBoardModal.jsx'
 
+const SWIPE_KEYS = { ArrowLeft: 'left', ArrowRight: 'right' }
+
 const PAGE_LIMIT = 12
 const SURPRISE_THRESHOLD = 5
 const PREFETCH_AT_REMAINING = 3 // when deck size <= this, fetch next page
@@ -47,6 +49,9 @@ export default function DiscoveryPage() {
   const preloadRef = useRef(makeImagePreloader())
   const pendingActionRef = useRef(null)
 
+  const cardRef = useRef(null)
+  const keySwipingRef = useRef(false)
+
   const [deck, setDeck] = useState([])          // queue of cards (front = top)
   const [cursor, setCursor] = useState(0)
   const [hasMore, setHasMore] = useState(true)
@@ -62,6 +67,20 @@ export default function DiscoveryPage() {
     isActiveRef.current = true
     return () => { isActiveRef.current = false }
   }, [])
+
+  // Keyboard swipe: ← pass, → save
+  useEffect(() => {
+    async function onKey(e) {
+      const dir = SWIPE_KEYS[e.key]
+      if (!dir || !cardRef.current || keySwipingRef.current || saveModalCard) return
+      if (!deck.length) return
+      keySwipingRef.current = true
+      await cardRef.current.swipe(dir)
+      keySwipingRef.current = false
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [deck.length, saveModalCard])
 
   // Surprise trigger: fires once per visit after SURPRISE_THRESHOLD saves
   useEffect(() => {
@@ -273,6 +292,7 @@ export default function DiscoveryPage() {
                 return (
                   <TinderCard
                     key={`top-${id}`}
+                    ref={cardRef}
                     onSwipe={onTinderSwipe}
                     onCardLeftScreen={onCardLeftScreen}
                     preventSwipe={['up', 'down']}
@@ -327,7 +347,7 @@ export default function DiscoveryPage() {
       {/* Hint */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
         <p style={{ color: 'var(--color-text-dimmest)', fontSize: 11, margin: 0 }}>
-          ← skip · tap card · save →
+          ← skip · tap card · save →&nbsp;&nbsp;·&nbsp;&nbsp;arrow keys supported
         </p>
       </div>
 
