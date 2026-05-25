@@ -116,7 +116,7 @@ function ErrorState({ message, onBack, onRetry }) {
   )
 }
 
-function Header({ onBack, onSaveToBoard, bookmarkEnabled, bookmarkPending, isBookmarked, onToggleBookmark }) {
+function Header({ onBack, onSaveToBoard, isSaved, bookmarkEnabled, bookmarkPending, isBookmarked, onToggleBookmark }) {
   return (
     <div style={{
       position: 'sticky',
@@ -159,28 +159,40 @@ function Header({ onBack, onSaveToBoard, bookmarkEnabled, bookmarkPending, isBoo
         <button
           type="button"
           onClick={onSaveToBoard}
-          aria-label="Save to board"
+          aria-label={isSaved ? 'Saved to board' : 'Save to board'}
           style={{
             height: 36,
             padding: '0 14px',
             borderRadius: 10,
-            border: 'none',
-            background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
-            color: '#fff',
+            border: isSaved ? '1px solid rgba(251,191,36,0.5)' : 'none',
+            background: isSaved ? 'rgba(251,191,36,0.12)' : 'linear-gradient(135deg, #ec4899, #f43f5e)',
+            color: isSaved ? '#fbbf24' : '#fff',
             fontSize: 13,
             fontWeight: 700,
-            cursor: 'pointer',
+            cursor: isSaved ? 'default' : 'pointer',
             fontFamily: 'inherit',
             display: 'flex',
             alignItems: 'center',
             gap: 6,
+            transition: 'background 0.2s, color 0.2s',
           }}
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-          보드에 추가
+          {isSaved ? (
+            <>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              저장됨
+            </>
+          ) : (
+            <>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              보드에 추가
+            </>
+          )}
         </button>
 
         {bookmarkEnabled && (
@@ -231,6 +243,7 @@ export default function BuildingDetailPage() {
   const [isBookmarked, setIsBookmarked] = useState(initialBookmarked)
   const [bookmarkPending, setBookmarkPending] = useState(false)
   const [saveModalOpen, setSaveModalOpen] = useState(false)
+  const [isSaved, setIsSaved] = useState(false)
 
   useEffect(() => {
     const next = !!buildingId && savedIds.includes(buildingId)
@@ -343,7 +356,8 @@ export default function BuildingDetailPage() {
     }}>
       <Header
         onBack={handleBack}
-        onSaveToBoard={() => setSaveModalOpen(true)}
+        onSaveToBoard={() => !isSaved && setSaveModalOpen(true)}
+        isSaved={isSaved}
         bookmarkEnabled={!!fromProjectId && !!rank}
         bookmarkPending={bookmarkPending}
         isBookmarked={isBookmarked}
@@ -354,7 +368,7 @@ export default function BuildingDetailPage() {
         <SaveToBoardModal
           card={{ ...building, canonical_bld_id: buildingId }}
           onClose={() => setSaveModalOpen(false)}
-          onSaved={() => setSaveModalOpen(false)}
+          onSaved={() => { setSaveModalOpen(false); setIsSaved(true) }}
         />
       )}
 
