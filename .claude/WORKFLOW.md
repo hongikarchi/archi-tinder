@@ -1,40 +1,58 @@
 # ArchiTinder — Workflow
 
 > **Read this when:** you want to understand how the project is built — the
-> single Claude Code session, its sub-agents, the `orchestrate` skill, the
+> single Claude Code session, its sub-agents, the skills it runs itself, the
 > session model, the pre-push gate, and the token-saving rules.
 > Branch model + PR rules + file ownership live in `CONTRIBUTING.md`.
 
 ---
 
-## 1. Architecture — one session, many sub-agents
+## 1. Architecture — one session, agents + skills
 
 ArchiTinder Make Web is built from **one Claude Code session** (the
 orchestrator). It owns architecture, schema, auth, product + release decisions,
 and review. It does not write feature code itself — it **dispatches sub-agents**
-and runs the `orchestrate` skill.
+for isolated work that returns a result, and runs **skills** itself for
+procedures that benefit from staying in the main session context.
 
 ```mermaid
 flowchart TD
-    Main["Claude Code session<br/>(orchestrator)<br/>runs the orchestrate skill"]
+    Main["Claude Code session<br/>(orchestrator)<br/>runs skills + dispatches agents"]
     Main -->|dispatches| Impl["back-maker · front-maker<br/>(implementation)"]
     Main -->|dispatches| Rev["code-review · security-manager<br/>(inner loop — per change)"]
     Main -->|dispatches| Gate["app-test<br/>(pre-push: browser journey + drift)"]
-    Main -->|dispatches| Commit["git-manager (commit)"]
-    Main -->|dispatches| Pub["git-publisher (push / PR / merge / deploy)"]
-    Main -->|dispatches| Rep["reporter (session-end state)"]
+    Main -->|runs skill| RIn["reporter-inline<br/>(Task.md + state.js + algorithm.md)"]
+    Main -->|runs skill| Cmt["git-commit<br/>(single commit on feature branch)"]
+    Main -->|runs skill| Pub["git-publish<br/>(Mode 2: feature → develop)"]
+    Main -.->|escalation only| PubA["git-publisher agent<br/>(Mode 3 deploy / external PR / rebase)"]
     Impl --> Code["backend/ · frontend/"]
-    Pub --> Remote["origin/develop → main"]
+    Pub --> Remote["origin/develop"]
+    PubA --> Remote2["origin/main (Mode 3)"]
 
     style Main fill:#3b82f6,color:#fff
     style Gate fill:#8b5cf6,color:#fff
     style Pub fill:#10b981,color:#fff
+    style RIn fill:#10b981,color:#fff
+    style Cmt fill:#10b981,color:#fff
+    style PubA fill:#6b7280,color:#fff
 ```
 
 No Codex, no cmux terminals, no cross-session handoff signals — every worker is
-a sub-agent that returns its result directly to the session that dispatched it.
+either a sub-agent (isolated context) or a skill (main session context). Both
+return their results to the session that ran them.
 
-## 2. Agent roster
+## 2. Agent + skill roster
+
+### Skills (`.claude/skills/`) — main session runs these itself
+
+| Skill | Role | Touches |
+|-------|------|---------|
+| **orchestrate** | Feature-implementation playbook — dispatches back-maker/front-maker, runs review/security, runs git-commit/git-publish, runs reporter-inline | — (orchestrates others) |
+| **reporter-inline** | Session-end audit — `.claude/Task.md` `## Done` + `project/state.js` + conditional `docs/algorithm.md`. Runs INLINE before squash so audit ships in the same PR as the work | `.claude/Task.md`, `project/state.js`, narrow `docs/algorithm.md` |
+| **git-commit** | Single commit on a feature branch — caveman conventional commit + secret guards. Never pushes | `git commit` |
+| **git-publish** | Mode 2: feature branch → develop (push + PR + admin squash + cleanup). Publish gate enforced at Step 0 | `git push`, `gh pr create/merge` |
+
+### Sub-agents (`.claude/agents/`) — dispatched for isolated-context work
 
 | Agent | Role | Touches |
 |-------|------|---------|
@@ -43,17 +61,20 @@ a sub-agent that returns its result directly to the session that dispatched it.
 | **code-review** | Static code review — API contracts, logic bugs, error handling, integration correctness | read-only |
 | **security-manager** | Security scan — SQL injection, auth bypass, XSS, secret/token leakage | read-only |
 | **app-test** | Pre-push gate — live browser user-journey test + HEAD/origin drift check; FULL / FEATURE-SCOPED modes | read-only |
-| **git-manager** | Single commit only — never pushes | `git commit` |
-| **git-publisher** | Push / PR open / PR poll / squash merge / external PR triage / develop→main deploy | `git push`, `gh pr *` |
-| **reporter** | Session-end — updates `.claude/Task.md` + the `project/` dashboard state | `.claude/`, `project/` |
+| **git-publisher** | Edge case escalation only: Mode 3 `develop → main` deploy, external collaborator PR triage, complex rebase/force-with-lease conflicts | `git push`, `gh pr *` |
 
-Plus the **`orchestrate` skill** — the feature playbook the session runs itself
-(a skill, not an agent, because only the main session can dispatch sub-agents).
+### Deprecated agents (`.claude/agents/` with `deprecated: true`) — fallback only
 
-**Agent vs skill rule:** isolated work that returns a result → an **agent**
-(`.claude/agents/*.md`). A procedure the main session runs itself, including
-anything that dispatches agents → a **skill** (`.claude/skills/*/SKILL.md`).
-There are no slash commands.
+| Agent | Status | Use |
+|-------|--------|-----|
+| **git-manager** | Deprecated 2026-05-26 — superseded by `git-commit` skill | Fallback only — when `git-commit` skill hits an unfamiliar failure |
+| **reporter** | Deprecated 2026-05-26 — superseded by `reporter-inline` skill | Fallback only — when skill produces a `state.js` that fails parse, or multi-PR batch needs broader-scope audit |
+
+These agent files are kept for ~1 week of skill-only validation, then slated for deletion in a follow-up PR.
+
+**Agent vs skill rule:** isolated work that returns a result → **agent**. A
+procedure the main session runs itself, including ones that dispatch agents →
+**skill**. There are no slash commands.
 
 ## 3. The orchestrate skill — feature pipeline
 
@@ -74,16 +95,22 @@ flowchart TD
     SC --> Dec
     Dec -->|NO| FL["Fix loop — translate issues → fix orders<br/>→ back/front-maker (max 2 cycles)"]
     FL --> Par
-    Dec -->|YES| GM[git-manager — commit]
-    GM --> AT[app-test — browser + drift gate]
+    Dec -->|YES| GC["git-commit skill — code commit"]
+    GC --> AT[app-test — browser + drift gate]
     AT --> ATv{PASS?}
     ATv -->|FAIL — counts as 1 fix cycle| FL
-    ATv -->|PASS| Pub[git-publisher — push + PR + merge]
-    Pub --> RP[reporter — session-end state]
+    ATv -->|PASS| PG["git-publish skill Step 1-3 — push + PR open"]
+    PG --> RIn["reporter-inline skill — audit on same branch"]
+    RIn --> GC2["git-commit skill — audit commit"]
+    GC2 --> PG4["git-publish skill Step 4-5 — admin squash + cleanup"]
 
     style Start fill:#3b82f6,color:#fff
     style FL fill:#f59e0b,color:#000
-    style RP fill:#3b82f6,color:#fff
+    style RIn fill:#10b981,color:#fff
+    style GC fill:#10b981,color:#fff
+    style GC2 fill:#10b981,color:#fff
+    style PG fill:#10b981,color:#fff
+    style PG4 fill:#10b981,color:#fff
 ```
 
 **Fix-cycle accounting:** max 2 cycles total across code-review / security /
@@ -94,12 +121,18 @@ guidance.
 *code* (static, per change, pre-commit). `app-test` checks the *running app*
 (browser journey + drift, pre-push). Different activities, no overlap.
 
+**Reporter-inline placement (2026-05-26 change):** Reporter runs AFTER the PR
+is opened (so the PR number is known) but BEFORE admin squash merge. The audit
+commits land on the same feature branch as the code, get squashed together,
+and ship as a single PR. No more separate reporter PR cycle.
+
 A plain question or explanation spawns no agents — answer directly.
 
 ## 4. Session model
 
 A **session** is one push-worthy unit of work (typically 1 PR). Multiple commits
-accumulate locally on a `feature/*` branch; one push sweeps them as a PR.
+accumulate locally on a `feature/*` branch; one push sweeps them as a PR. As of
+2026-05-26, the audit commit is one of those bundled commits — same PR.
 
 **Session start:**
 1. `git status && git branch --show-current`. If on `main`/`develop`, do not
@@ -109,10 +142,12 @@ accumulate locally on a `feature/*` branch; one push sweeps them as a PR.
 3. Scan `.claude/Task.md` for any `SESSION-START-TODO` pending action; surface
    it to the user before starting their request.
 
-**Session end** (after the PR merges):
-1. `reporter` pass — update `.claude/Task.md` + regenerate the `project/`
-   dashboard state. Once per session, not per commit.
-2. Append a `SESSION-START-TODO` line to `Task.md` if something must fire on
+**Session end** (before the PR squash merges):
+1. `reporter-inline` skill — update `.claude/Task.md` + `project/state.js`
+   (conditionally `docs/algorithm.md`). Once per push-worthy unit, not per commit.
+2. `git-commit` skill — audit commit on the same feature branch.
+3. `git-publish` Step 4 — admin squash merge.
+4. Append a `SESSION-START-TODO` line to `Task.md` if something must fire on
    the next session's start.
 
 ## 5. Planning — before substantive work
@@ -155,25 +190,33 @@ surface).
 
 ## 7. Token-saving rules
 
-1. **Defer reporter to session end** — accumulate `Task.md` / dashboard changes,
-   run `reporter` once per session. Override: "지금 reporter 돌려".
+1. **Reporter inline (2026-05-26)** — `reporter-inline` skill runs in the same
+   feature PR as the work. No separate reporter PR. Accumulate `Task.md` /
+   dashboard changes across the session's commits, then run the skill once
+   before `git-publish` admin squash. Override: "지금 reporter 돌려" — but the
+   skill is fast enough that the override is rarely needed.
 2. **Skip code-review + security-manager on trivial commits** — a commit is
    trivial when ALL of: `<50 LOC` or pure docs/policy/agent-file (zero source
    code); no migration; no production code; no auth/network/model-layer change.
-   Trivial commits go straight to `git-manager`. Override: "리뷰 돌려".
-3. **Bundle trivial commits; push only on push-worthy** — don't gate+push after
+   Trivial commits go straight to `git-commit` skill. Override: "리뷰 돌려".
+3. **Skill-first, agent-second** (2026-05-26) — for git operations, default to
+   the skill (`git-commit`, `git-publish`). Dispatch `git-publisher` agent only
+   on the escalation matrix (Mode 3 deploy / external PR / complex rebase).
+   Dispatch the deprecated `reporter` / `git-manager` agents only as documented
+   fallback. Why: each agent dispatch costs 14-46k tokens + 23-150 seconds of
+   round-trip latency; skills run in-context for 1/3 the cost on routine work.
+4. **Bundle trivial commits; push only on push-worthy** — don't gate+push after
    every commit. Push-worthy = milestone / production code / migration /
    risky-zone (auth, token, external API, cross-cutting refactor) / explicit
    "지금 push" / session end. Bundle-worthy = pure docs/policy, tooling,
    sub-MINOR follow-ups. Each push still runs `app-test`'s drift check over the
    whole range, so bundling loses no protection.
-   **Enforcement (codified post-PR #105 incident 2026-05-25)**:
-   `.claude/skills/orchestrate/SKILL.md` Step 8 Publish gate (default-STOP after
-   commit; opens only on explicit user trigger or active-plan `## PR Plan`
-   reference). `.claude/agents/git-publisher.md` hard guardrails 7 + 8
-   (refuse-without-trigger + base=main precondition requiring deploy keyword).
-   `.claude/agents/reporter.md` Hard scope (writes files only; refuses any
-   dispatch prompt that instructs git/gh state-mutating commands).
+   **Publish gate enforcement (codified post-PR #105 / #116 / #117 incidents)**:
+   the `git-publish` skill Step 0 enforces — after commit, default action is
+   STOP. Push / PR / merge requires explicit publish keyword (`push`, `올려`,
+   `PR`, `배포`, `merge`, `deploy`, `ship`) OR an active `.claude/plans/<slug>.md`
+   authorizing the action. The `orchestrate` skill Step 8 and `git-publisher`
+   agent hard guardrails 7 + 8 mirror this for the escalation path.
 
 ## 8. Known issues
 
@@ -181,21 +224,26 @@ surface).
 |---|---|---|
 | `tools/git-new-feature.sh` refuses a dirty working tree without auto-stash | LOW | `git stash push <paths>` → `git-new-feature.sh` → `git stash pop` |
 | Local `pytest` gives a false-pass signal — `backend/conftest.py`'s SQLite override is not load-bearing for tests that open direct DB connections; they pass locally (dev Postgres on :5432) but fail in CI without it | MEDIUM | CI is the validation gate — green CI, not local pytest, is the proof |
+| `reporter-inline` skill's `meta.head` in `state.js` is the pre-squash develop SHA, so it lags by one PR until the next pass | LOW (by design) | Steady-state self-correcting — next reporter-inline pass picks up the new develop HEAD |
 
 ## 9. Key rules
 
 | Rule | Detail |
 |------|--------|
 | Feature work runs through the `orchestrate` skill | The session never implements feature code directly from the main thread |
-| Direct edit allowed for | meta/infra (`tools/`, `hooks/`, `.github/`), single-line fixes, sub-MINOR follow-ups, pure docs (`CLAUDE.md`, `.claude/*`, `docs/*`, `CONTRIBUTING.md`, `DESIGN.md`, `README.md`) |
+| Direct edit allowed for | meta/infra (`tools/`, `hooks/`, `.github/`), single-line fixes, sub-MINOR follow-ups, pure docs (`CLAUDE.md`, `.claude/*`, `docs/*`, `CONTRIBUTING.md`, `DESIGN.md`, `README.md`) — direct edit + `git-commit` skill |
 | Makers are sandboxed | `back-maker`: `backend/` only · `front-maker`: `frontend/` only |
-| `git-manager` only commits | Never pushes — push is `git-publisher`'s job |
-| `git-publisher` only pushes / opens PRs / merges | Never commits source code |
+| Git operations use skills first | `git-commit` for commits, `git-publish` for Mode 2 push/PR/merge. `git-publisher` agent only for Mode 3 deploy / external PR / complex rebase |
+| Audit recording uses `reporter-inline` skill | Runs INLINE before squash so audit ships in same PR. Reporter no longer needs a separate PR |
 | Fix-cycle limit = 2 | After 2 failed cycles, stop and report to the user |
-| Keep this file in sync | When the workflow / agents / pre-push gate change, update `WORKFLOW.md` (text + Mermaid) in the same commit |
+| Keep this file in sync | When workflow / agents / skills / pre-push gate change, update `WORKFLOW.md` (text + Mermaid) in the same commit |
 
 ---
 
 _History: pre-2026-05-22 the project ran across multiple cmux terminals with
 Codex CLI workers. Collapsed to a single Claude Code session + sub-agents once
-sub-agents provided the same context isolation; Codex dropped the same date._
+sub-agents provided the same context isolation; Codex dropped the same date.
+2026-05-26: routine reporter / git-manager / git-publisher Mode 2 absorbed into
+`reporter-inline` / `git-commit` / `git-publish` skills to eliminate per-cycle
+Agent dispatch overhead (~30-40k tokens, ~150-300 seconds saved per PR cycle).
+Agent files for the deprecated two kept ~1 week for fallback._

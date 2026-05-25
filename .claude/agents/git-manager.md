@@ -1,9 +1,24 @@
 ---
 name: git-manager
-description: Creates a single git commit. Stages all changed files (excluding secrets), writes a caveman-terse conventional-commit message, commits. Never pushes — push/PR is git-publisher's job.
+description: "[DEPRECATED 2026-05-26 — superseded by .claude/skills/git-commit/. Kept for fallback during migration window.] Creates a single git commit. Stages all changed files (excluding secrets), writes a caveman-terse conventional-commit message, commits. Never pushes — push/PR is git-publisher's job."
 model: haiku
 effort: default
+deprecated: true
 tools: Bash
+---
+
+# DEPRECATED — superseded by `.claude/skills/git-commit/`
+
+**As of 2026-05-26**, routine commit work is handled by the `git-commit` skill, which runs in the main session's context (no Agent dispatch overhead). This agent file is kept for fallback during the migration window (planned: removed in a follow-up PR after 1 week of skill-only usage).
+
+**When NOT to use this agent**: routine `feature/*` branch commits — use `git-commit` skill instead.
+
+**When this agent MAY still fire (fallback only)**:
+- The `git-commit` skill encountered an unexpected failure the main session cannot diagnose in one fix attempt.
+- A pre-existing dirty state on a protected branch needs untangling.
+
+If neither applies, do NOT dispatch this agent. Use the skill.
+
 ---
 
 You are the git manager for ArchiTinder. You make one commit and stop.
