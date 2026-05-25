@@ -13,16 +13,20 @@ Hard rules:
   - Image URLs are full source-CDN URLs (Divisare/etc.). R2 composition is no
     longer used. `covers_by_type` JSONB allows per-focus cover selection.
 """
+import hashlib
+import json
 import math
 import random
 import logging
 import threading
+import time as _time
 import numpy as np
 from django.conf import settings
 from django.core.cache import cache
 from django.db import connections as _connections
 
 from . import event_log
+from .perf_timing import stage
 
 
 class _EngineConnectionProxy:
@@ -664,19 +668,81 @@ def search_by_filters(filters, limit=20, image_focus=None):
 
 # ── Phase-Aware Algorithm (PRD v4.0) ──────────────────────────────────────────────
 
+_random_pool_cache: dict = {'ids': None, 'fetched_at': 0.0}
+_RANDOM_POOL_TTL = 1800  # 30 min — Make-DB rebuilds are infrequent
+
 
 def _random_pool(target):
     """Fallback: random pool when no filters are provided.
 
-    Two-query pattern (Finding #14a): fetch all publishable IDs, sample in Python,
-    return sampled list. Avoids ORDER BY RANDOM() full-table sort on ~39k rows.
+    Two-query pattern (Finding #14a) preserved on cache miss: fetch all
+    publishable IDs from the buildings DB once per TTL window, sample in
+    Python, return.
+
+    PERF-3 caching: the full ID list is cached for _RANDOM_POOL_TTL seconds.
+    Cache miss = SQL fetch (~1 s on Singapore Neon); hit = ~5 ms in-process
+    sample. Make-DB ownership rule still holds (read-only access only).
+
+    Multi-worker: each worker has an independent in-process cache. Initial
+    requests per worker pay the SQL cost; subsequent hits within 30 min are
+    free per worker. Process restart clears cache. Stale Make-DB rebuilds
+    produce slightly stale random samples for <=30 min — acceptable given
+    infrequent Make-DB cadence.
     """
-    with connection.cursor() as cur:
-        cur.execute(
-            'SELECT canonical_bld_id FROM canonical_v2_buildings WHERE is_publishable = true',
-        )
-        all_ids = [row[0] for row in cur.fetchall()]
+    now = _time.time()
+    _cache = _random_pool_cache
+    expired = (now - _cache['fetched_at']) > _RANDOM_POOL_TTL
+    if _cache['ids'] is None or expired:
+        with stage('random_pool_sql_refresh'):
+            with connection.cursor() as cur:
+                cur.execute(
+                    'SELECT canonical_bld_id FROM canonical_v2_buildings'
+                    ' WHERE is_publishable = true',
+                )
+                _cache['ids'] = [row[0] for row in cur.fetchall()]
+        _cache['fetched_at'] = now
+    all_ids = _cache['ids'] or []
     return random.sample(all_ids, min(target, len(all_ids))) if all_ids else []
+
+
+def clear_random_pool_cache():
+    """Clear the random pool ID cache (for testing). Forces re-fetch."""
+    _random_pool_cache['ids'] = None
+    _random_pool_cache['fetched_at'] = 0.0
+
+
+# ── Tier 1 Pool Cache (PERF-3 Step 4) ────────────────────────────────────────
+# Caches the (pool_ids, pool_scores) result of create_bounded_pool for the
+# same (filters, filter_priority, seed_ids, v_initial, q_text) inputs.
+# exclude_ids is NOT in the key — it is per-session state (already-exposed cards)
+# applied at filter time after cache fetch.
+# Per-worker (LocMemCache). Process restart clears. TTL mirrors _RANDOM_POOL_TTL.
+
+_TIER1_POOL_CACHE_TTL = 1800  # 30 min, mirrors random pool TTL
+
+
+def _tier1_cache_key(filters, filter_priority, seed_ids, v_initial, q_text):
+    """Stable cache key from the cacheable inputs to create_pool_with_relaxation Tier 1."""
+    filters_json = json.dumps(filters or {}, sort_keys=True, default=str)
+    fp_json = json.dumps(list(filter_priority or []))
+    seeds_json = json.dumps(list(seed_ids or []))
+    if v_initial:
+        v_hash = hashlib.sha1(
+            json.dumps([float(x) for x in v_initial]).encode()
+        ).hexdigest()[:12]
+    else:
+        v_hash = 'none'
+    if q_text:
+        q_hash = hashlib.sha1(q_text.encode()).hexdigest()[:12]
+    else:
+        q_hash = 'none'
+    raw = f'{filters_json}|{fp_json}|{seeds_json}|{v_hash}|{q_hash}'
+    return 'tier1_pool:' + hashlib.sha1(raw.encode()).hexdigest()[:24]
+
+
+def clear_tier1_pool_cache_key(filters, filter_priority, seed_ids, v_initial=None, q_text=None):
+    """Explicitly invalidate a single Tier 1 cache entry (for testing)."""
+    cache.delete(_tier1_cache_key(filters, filter_priority, seed_ids, v_initial, q_text))
 
 
 def create_pool_with_relaxation(
@@ -705,12 +771,24 @@ def create_pool_with_relaxation(
         target = RC['bounded_pool_target']
     exclude_set = set(exclude_ids or [])
 
-    # Tier 1
+    # Tier 1 — cache-aware (PERF-3 Step 4)
+    # exclude_ids not in key: per-session state applied after cache fetch.
     if start_tier <= 1:
-        pool_ids, pool_scores = create_bounded_pool(
-            filters or {}, filter_priority, seed_ids, target=target,
-            v_initial=v_initial, q_text=q_text,
-        )
+        _t1_key = _tier1_cache_key(filters, filter_priority, seed_ids, v_initial, q_text)
+        _cached = cache.get(_t1_key)
+        if _cached is not None:
+            with stage('pool_tier_1_cache_hit'):
+                cached_pool_ids, cached_pool_scores = _cached
+                filtered_ids = [bid for bid in cached_pool_ids if bid not in exclude_set]
+            if filtered_ids:
+                filtered_scores = {bid: s for bid, s in cached_pool_scores.items() if bid not in exclude_set}
+                return filtered_ids, filtered_scores, 1
+        with stage('pool_tier_1_cache_miss', filter_count=len(filters or {})):
+            pool_ids, pool_scores = create_bounded_pool(
+                filters or {}, filter_priority, seed_ids, target=target,
+                v_initial=v_initial, q_text=q_text,
+            )
+        cache.set(_t1_key, (pool_ids, dict(pool_scores)), _TIER1_POOL_CACHE_TTL)
         filtered_ids = [bid for bid in pool_ids if bid not in exclude_set]
         if filtered_ids:
             filtered_scores = {bid: s for bid, s in pool_scores.items() if bid not in exclude_set}
@@ -722,17 +800,19 @@ def create_pool_with_relaxation(
                    if k not in ('location_country', 'year_min', 'year_max', 'min_area', 'max_area')}
         if relaxed and relaxed != (filters or {}):
             relaxed_priority = [k for k in (filter_priority or []) if k in relaxed]
-            pool_ids, pool_scores = create_bounded_pool(
-                relaxed, relaxed_priority, seed_ids, target=target,
-                v_initial=v_initial, q_text=q_text,
-            )
-            filtered_ids = [bid for bid in pool_ids if bid not in exclude_set]
+            with stage('pool_tier_2', filter_count=len(relaxed)):
+                pool_ids, pool_scores = create_bounded_pool(
+                    relaxed, relaxed_priority, seed_ids, target=target,
+                    v_initial=v_initial, q_text=q_text,
+                )
+                filtered_ids = [bid for bid in pool_ids if bid not in exclude_set]
             if filtered_ids:
                 filtered_scores = {bid: s for bid, s in pool_scores.items() if bid not in exclude_set}
                 return filtered_ids, filtered_scores, 2
 
     # Tier 3 — random pool (v_initial and q_text not used; random fallback is relevance-blind)
-    pool_ids = [bid for bid in _random_pool(target) if bid not in exclude_set]
+    with stage('pool_tier_3_random'):
+        pool_ids = [bid for bid in _random_pool(target) if bid not in exclude_set]
     if pool_ids:
         return pool_ids, {}, 3
     return [], {}, 0
@@ -859,7 +939,6 @@ def _run_hybrid_rrf_pool(filters, filter_priority, seed_ids, target, v_initial, 
     Returns (pool_ids, pool_scores) where pool_scores is {canonical_bld_id: float rrf_score}.
     On SQL failure, raises the exception (caller wraps in try/except).
     """
-    import time as _time
     _t0 = _time.perf_counter()
 
     rrf_k = int(RC.get('hybrid_rrf_k', 60))
@@ -1125,13 +1204,16 @@ def create_bounded_pool(filters, filter_priority=None, seed_ids=None, target=Non
                     error_message=str(exc)[:200],
                 )
                 v_initial = None  # noqa: F841 — signals fall-through intent
-        return _random_pool(target), {}
+        with stage('execute_pool_sql_random', target=target):
+            result = _random_pool(target)
+        return result, {}
 
     priority = filter_priority or list(filters.keys())
     n = len(priority)
     weights = {key: n - i for i, key in enumerate(priority)}
 
-    cases, params, total_weight = _build_score_cases(filters, weights)
+    with stage('build_filter_sql', n_filters=len(filters)):
+        cases, params, total_weight = _build_score_cases(filters, weights)
     if not cases:
         if use_hyde:
             # HyDE-only path: same as the empty-filters branch above
@@ -1216,18 +1298,21 @@ def create_bounded_pool(filters, filter_priority=None, seed_ids=None, target=Non
             ' ORDER BY relevance_score DESC, RANDOM()'
             ' LIMIT %s'
         )
-        with connection.cursor() as cur:
-            cur.execute(sql, params + params + [target])
-            rows = cur.fetchall()
+        with stage('execute_pool_sql', target=target):
+            with connection.cursor() as cur:
+                cur.execute(sql, params + params + [target])
+                rows = cur.fetchall()
 
-    pool_ids = [row[0] for row in rows]
-    pool_scores = {row[0]: float(row[1]) for row in rows}
+    with stage('process_scores', n_rows=len(rows)):
+        pool_ids = [row[0] for row in rows]
+        pool_scores = {row[0]: float(row[1]) for row in rows}
 
     if seed_ids:
-        for sid in seed_ids:
-            if sid not in pool_scores:
-                pool_ids.insert(0, sid)
-            pool_scores[sid] = 1.1
+        with stage('seed_inject', n_seeds=len(seed_ids)):
+            for sid in seed_ids:
+                if sid not in pool_scores:
+                    pool_ids.insert(0, sid)
+                pool_scores[sid] = 1.1
 
     return pool_ids, pool_scores
 
@@ -1252,31 +1337,34 @@ def get_pool_embeddings(pool_ids):
         _telemetry.embedding_call_stats = {'requested': 0, 'cache_hits': 0, 'cache_misses': 0}
         return {}
 
-    missing_ids = [bid for bid in pool_ids if bid not in _building_embedding_cache]
+    with stage('embeddings_partition', pool_size=len(pool_ids)):
+        missing_ids = [bid for bid in pool_ids if bid not in _building_embedding_cache]
 
     if missing_ids:
         placeholders = ','.join(['%s'] * len(missing_ids))
-        with connection.cursor() as cur:
-            cur.execute(
-                f'SELECT canonical_bld_id, embedding::text FROM canonical_v2_buildings'
-                f' WHERE canonical_bld_id IN ({placeholders}) AND is_publishable = true',
-                missing_ids,
-            )
-            rows = _dictfetchall(cur)
+        with stage('embeddings_sql', n=len(missing_ids)):
+            with connection.cursor() as cur:
+                cur.execute(
+                    f'SELECT canonical_bld_id, embedding::text FROM canonical_v2_buildings'
+                    f' WHERE canonical_bld_id IN ({placeholders}) AND is_publishable = true',
+                    missing_ids,
+                )
+                rows = _dictfetchall(cur)
 
-        for row in rows:
-            embedding_str = row['embedding']
-            embedding = np.array([float(x) for x in embedding_str.strip('[]').split(',')])
-            norm = np.linalg.norm(embedding)
-            if norm > 0:
-                embedding = embedding / norm
-            _building_embedding_cache[row['canonical_bld_id']] = embedding
+        with stage('embeddings_parse_normalize', n=len(rows)):
+            for row in rows:
+                embedding_str = row['embedding']
+                embedding = np.array([float(x) for x in embedding_str.strip('[]').split(',')])
+                norm = np.linalg.norm(embedding)
+                if norm > 0:
+                    embedding = embedding / norm
+                _building_embedding_cache[row['canonical_bld_id']] = embedding
 
-        # FIFO eviction when cache exceeds max size (Python 3.7+ dict preserves insertion order)
-        if len(_building_embedding_cache) > _BUILDING_CACHE_MAX_SIZE:
-            excess = len(_building_embedding_cache) - _BUILDING_CACHE_MAX_SIZE
-            for old_bid in list(_building_embedding_cache.keys())[:excess]:
-                del _building_embedding_cache[old_bid]
+            # FIFO eviction when cache exceeds max size (Python 3.7+ dict preserves insertion order)
+            if len(_building_embedding_cache) > _BUILDING_CACHE_MAX_SIZE:
+                excess = len(_building_embedding_cache) - _BUILDING_CACHE_MAX_SIZE
+                for old_bid in list(_building_embedding_cache.keys())[:excess]:
+                    del _building_embedding_cache[old_bid]
 
     # Record stats for §6 swipe telemetry (most-recent call on this thread; overwritten per call)
     _telemetry.embedding_call_stats = {
@@ -1285,8 +1373,8 @@ def get_pool_embeddings(pool_ids):
         'cache_misses': len(missing_ids),
     }
 
-    # Build result dict in pool_ids order (caller accesses by key; order preserved for dict)
-    return {bid: _building_embedding_cache[bid] for bid in pool_ids if bid in _building_embedding_cache}
+    with stage('embeddings_assemble', n=len(pool_ids)):
+        return {bid: _building_embedding_cache[bid] for bid in pool_ids if bid in _building_embedding_cache}
 
 
 def get_last_embedding_call_stats():

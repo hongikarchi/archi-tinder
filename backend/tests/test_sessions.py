@@ -96,6 +96,7 @@ def _mock_mmr_next(pool_ids, exposed_ids, pool_embeddings, like_vectors, round_n
 
 # Shared patch decorator for engine functions used in session creation
 _ENGINE = 'apps.recommendation.views.engine'
+_SESSIONS_VIEW = 'apps.recommendation.views.sessions'
 _SWIPE_VIEW = 'apps.recommendation.views.swipe'
 
 
@@ -132,6 +133,7 @@ _SESSION_PATCHES = {
     f'{_ENGINE}.check_convergence': lambda *a: False,
     f'{_ENGINE}.get_dislike_fallback': lambda *a, **kw: 'B00010',
     f'{_ENGINE}._random_pool': lambda target: _FAKE_POOL[:target],
+    f'{_SESSIONS_VIEW}.threading.Thread': _SyncThread,
     f'{_SWIPE_VIEW}.threading.Thread': _SyncThread,
     f'{_SWIPE_VIEW}._emit_telemetry_thread': _sync_emit_telemetry,
 }
