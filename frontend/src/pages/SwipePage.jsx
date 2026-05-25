@@ -322,19 +322,13 @@ export default function SwipePage({
   const filter_relaxed   = progress?.filter_relaxed || false
   const confidence       = progress?.confidence ?? null
 
-  // Latch: once 100% is reached the button stays visible even if further swipes
-  // change phase/confidence. Resets only when the session completes.
-  const [finishUnlocked, setFinishUnlocked] = useState(false)
-  useEffect(() => {
-    if (isCompleted) { setFinishUnlocked(false); return }
-    const reached = (
-      phase === 'converged' ||
-      (phase === 'exploring' && like_count >= 4) ||
-      (phase === 'analyzing' && confidence != null && confidence >= 1.0)
-    )
-    if (reached) setFinishUnlocked(true)
-  }, [phase, like_count, confidence, isCompleted])
-  const isAt100 = !isCompleted && finishUnlocked
+  // 1-shot: show finish button whenever threshold is reached (no latch needed —
+  // App.jsx auto-nav handles the converged/100% transition).
+  const isAt100 = !isCompleted && (
+    (phase === 'exploring' && like_count >= 4) ||
+    (phase === 'converged') ||
+    (phase === 'analyzing' && confidence != null && confidence >= 1.0)
+  )
 
   function onTinderSwipe(dir) {
     // F4: intercept first-ever left swipe to show dismiss tutorial

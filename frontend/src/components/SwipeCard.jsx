@@ -19,7 +19,7 @@ import { useImageTelemetry } from '../hooks/useImageTelemetry.js'
 
 const _vw = typeof window !== 'undefined' ? window.innerWidth : 375
 const _vh = typeof window !== 'undefined' ? window.innerHeight : 812
-export const CARD_WIDTH  = Math.min(420, _vw - 16)
+export const CARD_WIDTH  = Math.min(420, _vw - 32)
 export const CARD_HEIGHT = Math.min(Math.round(CARD_WIDTH * 1.55), _vh - 220)
 export const TAP_THRESHOLD = 8
 
