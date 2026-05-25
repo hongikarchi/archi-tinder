@@ -24,22 +24,29 @@
  * so the value can be re-parsed by any consumer. In-flight (not-yet-merged)
  * PRs carry `mergedAt: null` sentinel; next reporter-inline pass backfills.
  */
-// Reporter: Mermaid sources may be stale — commit fb669b6 touched backend/apps/recommendation/engine.py + views/sessions.py + event_log.py (PERF-3 Tier1 cache + async emit). recommendationFlow still accurate at function-graph level; next session may want to add a "cache layer" hint if architectural drift becomes load-bearing.
+// Reporter: Mermaid sources may be stale — commit b40cfea touched backend/apps/recommendation/{caches,views/discovery,views/swipe,views/projects}.py (PERF-2 discovery response cache + mutation evict hooks). recommendationFlow Mermaid still accurate at function-graph level.
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-05-26 04:51 KST',
-    head: '0c8fe6f',
-    branch: 'feature/algo-perf-session-create',
+    updatedAt: '2026-05-26 05:16 KST',
+    head: '5593f6c',
+    branch: 'feature/algo-perf-discovery-cache',
   },
 
   done: [
+    {
+      id: 'BACK-PERFORMANCE-2',
+      title: 'Discovery 캐시 hit 450ms (목표 <200ms)',
+      completedAt: '2026-05-26',
+      prs: [126],
+      note: 'GET /api/v1/discovery/ warm cache hit p50 1572 → 672 ms (-57%). Goal <200 ms 미달 — auth floor ~600 ms (BACK-AUTH-1) + get_profile 74 ms 잔존. Response cache 60 s TTL — get_or_build_discovery_feed + evict_discovery_feed (per-profile.id+cursor+limit key, mirror PERF-1 pattern). Mutation evict hooks: SwipeView.post (liked/disliked) + ProjectBookmarkView.post (saved) + ProjectDetailView.patch remove_building_ids. Per-stage perf_timing: get_profile / build_exclude_set / get_or_build_taste / taste_ranked_page / cache_lookup_or_build. taste_ranked_page (814 ms, 84% of body, dominant) absent on cache hits — verified. Not evicted (60 s TTL self-cleans, no security impact): ProjectDetailView.delete (UX-only stale exclude_set), ProjectListCreateView.post (empty IDs at create). Measurement scope: local Neon local-dev-2 only (development proxy). Prod Singapore Railway p50 = post-deploy Codex retest (admin). Multi-worker prod = per-worker LocMemCache, 60 s TTL eventual consistency. Deferred: BACK-AUTH-1 — auth-layer optimization required for sub-200 ms total. sha b40cfea-pre-squash.',
+    },
     {
       id: 'BACK-PERFORMANCE-3',
       title: 'Search 후 첫 카드까지 5-8초',
       completedAt: '2026-05-26',
       prs: [125],
-      note: 'POST /api/v1/analysis/sessions/ local sessions create p50 2567 → 1508 ms realistic / 1484 ms worst-case (-42%). Both PASS ≤ 2000 ms. Tier 1 pool cache (filter signature SHA1 key, 30 min TTL): _tier1_cache_key(filters, filter_priority, seed_ids, v_initial, q_text) — pool ordering preserved (full tuple cached pre-exclude), exclude_ids applied post-fetch (per-session state, not in key). _random_pool 30 min in-memory cache (module-level dict); Tier 3 random fallback ~1040 → ~5 ms warm. emit_events → threading.Thread daemon fire-and-forget; close_old_connections() entry+finally; analytics events lost on process crash mid-thread (acceptable per spec). emit_event_batch in event_log.py via bulk_create. perf_timing sub-stages on engine.create_pool_with_relaxation / create_bounded_pool / get_pool_embeddings (data-driven hypothesis formation). perf_measure --filters JSON CLI option (realistic Tier 1 measurement). Algorithm-territory edits per user authorization; pool ordering + initial_batch shape + swipe-loop determinism preserved (code-review AC1). Measurement scope local Neon local-dev-2 only (development proxy); prod Singapore p50 = post-deploy Codex retest. Multi-worker prod = per-worker cache, warm-up cost per worker. Cold path ~2400-2600 ms unchanged — cache hit dominates 3-run p50. sha fb669b6-pre-squash.',
+      note: 'POST /api/v1/analysis/sessions/ local sessions create p50 2567 → 1508 ms realistic / 1484 ms worst-case (-42%). Both PASS ≤ 2000 ms. Tier 1 pool cache (filter signature SHA1 key, 30 min TTL): _tier1_cache_key(filters, filter_priority, seed_ids, v_initial, q_text) — pool ordering preserved (full tuple cached pre-exclude), exclude_ids applied post-fetch (per-session state, not in key). _random_pool 30 min in-memory cache (module-level dict); Tier 3 random fallback ~1040 → ~5 ms warm. emit_events → threading.Thread daemon fire-and-forget; close_old_connections() entry+finally; analytics events lost on process crash mid-thread (acceptable per spec). emit_event_batch in event_log.py via bulk_create. perf_timing sub-stages on engine.create_pool_with_relaxation / create_bounded_pool / get_pool_embeddings (data-driven hypothesis formation). perf_measure --filters JSON CLI option (realistic Tier 1 measurement). Algorithm-territory edits per user authorization; pool ordering + initial_batch shape + swipe-loop determinism preserved (code-review AC1). Measurement scope local Neon local-dev-2 only (development proxy); prod Singapore p50 = post-deploy Codex retest. Multi-worker prod = per-worker cache, warm-up cost per worker. Cold path ~2400-2600 ms unchanged — cache hit dominates 3-run p50. sha fb669b6-pre-squash (squash 5593f6c).',
     },
     {
       id: 'BACK-PERFORMANCE-1',
@@ -83,13 +90,6 @@ window.PROJECT_STATE = {
       prs: [119],
       note: 'Created make_web_app Neon role on production + local-dev-2 via psql CREATE ROLE (NOT neonctl — that grants neon_superuser transitively). GRANT SELECT/INSERT/UPDATE/DELETE on ALL TABLES + USAGE/SELECT on ALL SEQUENCES + ALTER DEFAULT PRIVILEGES for future migration tables. Local .env swapped DB_USER neondb_owner → make_web_app + rotated password; manage.py check clean; ORM + buildings smoke unchanged; DDL rejected. Railway prod: first redeploy d203e2bf FAILED (password mispaste), second redeploy 820de476 SUCCESS (active deployment 2026-05-25 07:43). 8-probe psql matrix: CRUD pass, CREATE TABLE/DROP TABLE/CREATE ROLE/CREATE EXTENSION/ALTER TABLE all blocked. Files: .env.example (role-separation block), CLAUDE.md (Backend Conventions Neon role bullets), docs/MAKEWEB_DB_SWAP_RESPONSE.md (Q2 RESOLVED block + BUILDINGS_DB_PASSWORD rotation action item). Pure docs/meta carve-out — no production code touched. Outstanding: BUILDINGS_DB_PASSWORD rotation tracked outside this entry. sha 1d3bfdc.',
     },
-    {
-      id: 'INFRA-ENV-1',
-      title: 'Neon dev branch 복구 + prod 격리',
-      completedAt: '2026-05-25',
-      prs: [116],
-      note: 'Re-provisioned local-dev-2 (br-shy-thunder-a1p5glmo, ep-holy-band-a1w0u5am, no TTL) off production. Repointed local .env DB_HOST + BUILDINGS_DB_HOST from prod ep-broad-hat-a1jaomn7 → dev endpoint; Railway prod env untouched. Smoke: manage.py check OK, default+buildings host = dev endpoint, auth_user count = 3, canonical_v2_buildings = 39,478, is_publishable=true = 36,864. Docs: .env.example DEV-vs-PROD discipline block + neonctl command + dev-branch note; MAKEWEB_DB_SWAP_RESPONSE.md restoration paragraph. Pure docs/meta carve-out — no code touched. sha 4b900da.',
-    },
   ],
 
   now: [],
@@ -127,11 +127,6 @@ window.PROJECT_STATE = {
         note: '_caches.py:92 IMP-5 Gemini context-cache create call bypasses the _retry_gemini_call timeout wrapper (PR #94 15s cap). Gated by context_caching_enabled flag (default OFF) — zero prod impact until toggled on. Fix: wrap call in _retry_gemini_call; ~5 LOC backend edit. Pre-emptive safety before flag toggle. Acceptance: _caches.py:92 flows through wrapper; existing IMP-5 tests pass; flag behaviour unchanged.',
       },
       {
-        id: 'BACK-PERFORMANCE-2',
-        title: 'Discovery 캐시 hit 450ms (목표 <200ms)',
-        note: 'Codex Round 2: discovery cache-hit p50 = 450 ms vs spec <200 ms. Retest 2026-05-25: cache-cold 4.11 s with external image retries. Taste cache shipped PR #87 (1h TTL, evict on liked_ids change). Suspect: serialization floor on 12 cards / raw SQL still on hit path / low true hit-rate from key fragmentation. Investigation: per-stage timing in views/discovery.py → trim payload, batch URLs, extend cache to hold card payloads, audit key shape. Acceptance: hit-path p50 <200 ms Singapore deploy; no SwipePage card-shape regression.',
-      },
-      {
         id: 'FRONT-DESIGN-1',
         title: '디자인 시스템 컴포넌트 리워크 (paused)',
         note: 'Foundation shipped: PR #54 (tokens.css 4 themes + ThemeContext + AppearanceSettings) + PR #59 (theme/font server persistence). Remaining: per-component visual rework (~7,700 LOC) — inline styles → CSS Modules + :hover/:focus/:active, light-theme polish, leaf→hub order. Resume via /plan per slice; each slice ships its own PR via orchestrate skill. Acceptance per slice: lint+build clean, light+dark variants regression-free, no token added without DESIGN.md update.',
@@ -141,7 +136,7 @@ window.PROJECT_STATE = {
       {
         id: 'BACK-AUTH-1',
         title: 'JWT blacklist DB ~590ms 차지',
-        note: 'PERF-1 (PR #124) 발견: /projects/ local p50 cache-hit path 661 ms 중 ~590 ms는 simplejwt JWTAuthentication.authenticate() → BlacklistMixin → Neon round-trip per authenticated request. 모든 인증된 endpoint floor latency. PERF-3 (PR #125) 측정에서도 같이 잡힘. Investigation: (1) JWT validation result in-memory cache JTI 기반 key, token expiry TTL — custom JWTAuthentication subclass; (2) Blacklist DB query 인덱스 검사 (Neon round-trip 자체는 한 번이라 cache 외 효과 제한적); (3) Multi-worker prod 환경에서 in-memory cache hit rate 낮음 → Redis 필요. Acceptance: 인증된 요청 floor 600 → 100 ms 이하; 보안 영향 0 (logout 토큰 무효화 즉시 또는 ≤30s 이내). security-manager 사전 검토 필수.',
+        note: 'PERF-1 (PR #124) 발견 + PERF-3 (PR #125) + PERF-2 (PR #126) 측정 모두 같은 floor 확인: /projects/ + sessions create + /discovery/ cache-hit path 모두 ~590-600 ms는 simplejwt JWTAuthentication.authenticate() → BlacklistMixin → Neon round-trip per authenticated request. 모든 인증된 endpoint floor latency. Investigation: (1) JWT validation result in-memory cache JTI 기반 key, token expiry TTL — custom JWTAuthentication subclass; (2) Blacklist DB query 인덱스 검사 (Neon round-trip 자체는 한 번이라 cache 외 효과 제한적); (3) Multi-worker prod 환경에서 in-memory cache hit rate 낮음 → Redis 필요. Acceptance: 인증된 요청 floor 600 → 100 ms 이하; 보안 영향 0 (logout 토큰 무효화 즉시 또는 ≤30s 이내). security-manager 사전 검토 필수.',
       },
       {
         id: 'FRONT-LAYOUT-1',
@@ -190,11 +185,18 @@ window.PROJECT_STATE = {
 
   prs: [
     {
-      number: 125,
-      title: 'perf(BACK-PERFORMANCE-3): sessions create p50 2567→1508ms — Tier1 cache + async emit',
+      number: 126,
+      title: 'perf(BACK-PERFORMANCE-2): /discovery/ cache-hit p50 1572→672ms',
       mergedAt: null,
       mergedAtKST: null,
       sha: null,
+    },
+    {
+      number: 125,
+      title: 'perf(BACK-PERFORMANCE-3): sessions create p50 2567→1508ms — Tier1 cache + async emit',
+      mergedAt: '2026-05-25T19:55:44Z',
+      mergedAtKST: '2026-05-26 04:55 KST',
+      sha: '5593f6c',
     },
     {
       number: 124,
@@ -232,12 +234,6 @@ window.PROJECT_STATE = {
       title: 'docs(INFRA-DB-1): Railway cutover COMPLETED 2026-05-25 — make_web_app live in prod',
       mergedAt: '2026-05-25T07:50:10Z',
       mergedAtKST: '2026-05-25 16:50 KST',
-    },
-    {
-      number: 118,
-      title: 'feat(FRONT-DESIGN-2): 카드 이미지 contain 전환 + 카드 크기 확대',
-      mergedAt: '2026-05-25T15:57:48Z',
-      mergedAtKST: '2026-05-26 00:57 KST',
     },
   ],
 

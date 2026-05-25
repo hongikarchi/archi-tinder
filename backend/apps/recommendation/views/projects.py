@@ -12,7 +12,7 @@ from rest_framework.views import APIView
 
 from ..models import AnalysisSession, Project
 from ..serializers import ProjectListSerializer, ProjectSerializer, ProjectSelfUpdateSerializer
-from ..caches import evict_taste, get_or_build_projects_list, evict_projects_list
+from ..caches import evict_taste, get_or_build_projects_list, evict_projects_list, evict_discovery_feed
 from ..perf_timing import endpoint, stage
 from ._shared import _get_profile
 
@@ -172,6 +172,7 @@ class ProjectDetailView(APIView):
                 project.saved_ids = [item for item in project.saved_ids if item.get('id') not in remove_set]
                 project.save(update_fields=['liked_ids', 'saved_ids'])
                 evict_taste(profile.id)
+                evict_discovery_feed(profile.id)
             if serializer is not None:
                 serializer.save()
 

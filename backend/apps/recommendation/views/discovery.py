@@ -7,8 +7,9 @@ from rest_framework.views import APIView
 
 from ..models import Project
 from .. import engine
-from ..caches import get_or_build_taste
+from ..caches import get_or_build_taste, get_or_build_discovery_feed
 from ._shared import _get_profile, _liked_id_only
+from ..perf_timing import endpoint, stage
 
 logger = logging.getLogger('apps.recommendation')
 
@@ -25,67 +26,79 @@ class DiscoveryFeedView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        profile = _get_profile(request)
-        if profile is None:
-            return Response({'detail': 'unauthenticated'}, status=status.HTTP_401_UNAUTHORIZED)
+        with endpoint('discovery_feed'):
+            with stage('get_profile'):
+                profile = _get_profile(request)
+            if profile is None:
+                return Response(
+                    {'detail': 'unauthenticated'},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
 
-        # --- Parse and validate request params ---
-        try:
-            cursor = int(request.query_params.get('cursor', 0))
-            if cursor < 0:
-                raise ValueError
-        except (TypeError, ValueError):
-            return Response({'detail': 'cursor must be an integer >= 0'}, status=status.HTTP_400_BAD_REQUEST)
+            # --- Parse and validate request params (NOT instrumented — µs) ---
+            try:
+                cursor = int(request.query_params.get('cursor', 0))
+                if cursor < 0:
+                    raise ValueError
+            except (TypeError, ValueError):
+                return Response({'detail': 'cursor must be an integer >= 0'}, status=status.HTTP_400_BAD_REQUEST)
 
-        try:
-            limit = int(request.query_params.get('limit', 12))
-            if not 1 <= limit <= 30:
-                raise ValueError
-        except (TypeError, ValueError):
-            return Response({'detail': 'limit must be an integer in [1, 30]'}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                limit = int(request.query_params.get('limit', 12))
+                if not 1 <= limit <= 30:
+                    raise ValueError
+            except (TypeError, ValueError):
+                return Response({'detail': 'limit must be an integer in [1, 30]'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # --- Build exclusion set from profile's signed projects ---
-        projects = Project.objects.filter(user=profile).values('liked_ids', 'disliked_ids', 'saved_ids')
-        liked_ids = []
-        disliked_ids = []
-        saved_ids = []
-        for project in projects:
-            liked_ids.extend(_liked_id_only(project.get('liked_ids')))
-            disliked_ids.extend(project.get('disliked_ids') or [])
-            saved_ids.extend(
-                e.get('id')
-                for e in (project.get('saved_ids') or [])
-                if isinstance(e, dict) and e.get('id')
-            )
+            def _build():
+                with stage('build_exclude_set'):
+                    projects = Project.objects.filter(user=profile).values('liked_ids', 'disliked_ids', 'saved_ids')
+                    liked_ids = []
+                    disliked_ids = []
+                    saved_ids = []
+                    for project in projects:
+                        liked_ids.extend(_liked_id_only(project.get('liked_ids')))
+                        disliked_ids.extend(project.get('disliked_ids') or [])
+                        saved_ids.extend(
+                            e.get('id')
+                            for e in (project.get('saved_ids') or [])
+                            if isinstance(e, dict) and e.get('id')
+                        )
+                    exclude_ids = []
+                    seen = set()
+                    for bid in liked_ids + disliked_ids + saved_ids:
+                        if isinstance(bid, str) and bid not in seen:
+                            exclude_ids.append(bid)
+                            seen.add(bid)
+                    exclude_set = set(exclude_ids)
 
-        exclude_ids = []
-        seen = set()
-        for bid in liked_ids + disliked_ids + saved_ids:
-            if isinstance(bid, str) and bid not in seen:
-                exclude_ids.append(bid)
-                seen.add(bid)
-        exclude_set = set(exclude_ids)
+                with stage('get_or_build_taste'):
+                    v_taste = get_or_build_taste(profile)
 
-        # --- Compute taste vector and serve cold or warm path ---
-        v_taste = get_or_build_taste(profile)
-        if v_taste is None:
-            cards = engine.get_diverse_random(n=limit, filters=None)
-            cards = [card for card in cards if card.get('canonical_bld_id') not in exclude_set]
-            return Response({
-                'cards': cards,
-                'next_cursor': None,
-                'has_more': False,
-                'taste_state': 'cold',
-            })
+                if v_taste is None:
+                    with stage('diverse_random_cold', limit=limit):
+                        cards = engine.get_diverse_random(n=limit, filters=None)
+                        cards = [card for card in cards if card.get('canonical_bld_id') not in exclude_set]
+                    return {
+                        'cards': cards,
+                        'next_cursor': None,
+                        'has_more': False,
+                        'taste_state': 'cold',
+                    }
 
-        cards = engine.taste_ranked_page(v_taste, exclude_ids, limit=limit, offset=cursor)
-        has_more = len(cards) == limit
-        return Response({
-            'cards': cards,
-            'next_cursor': cursor + len(cards) if has_more else None,
-            'has_more': has_more,
-            'taste_state': 'warm',
-        })
+                with stage('taste_ranked_page', limit=limit, offset=cursor):
+                    cards = engine.taste_ranked_page(v_taste, exclude_ids, limit=limit, offset=cursor)
+                has_more = len(cards) == limit
+                return {
+                    'cards': cards,
+                    'next_cursor': cursor + len(cards) if has_more else None,
+                    'has_more': has_more,
+                    'taste_state': 'warm',
+                }
+
+            with stage('cache_lookup_or_build'):
+                payload = get_or_build_discovery_feed(profile, cursor, limit, _build)
+            return Response(payload)
 
 
 class BoardSurpriseView(APIView):

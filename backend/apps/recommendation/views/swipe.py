@@ -15,7 +15,7 @@ from rest_framework.views import APIView
 
 from ..models import Project, AnalysisSession, SwipeEvent
 from .. import engine, event_log
-from ..caches import evict_taste, evict_projects_list
+from ..caches import evict_taste, evict_projects_list, evict_discovery_feed
 from ._shared import _get_profile, _progress, _liked_id_only
 
 logger = logging.getLogger('apps.recommendation')
@@ -263,6 +263,7 @@ class ProjectBookmarkView(APIView):
             project.save(update_fields=['saved_ids', 'updated_at'])
 
         evict_projects_list(profile.id)
+        evict_discovery_feed(profile.id)
 
         # --- Resolve optional session for event association ---
         session = None
@@ -525,6 +526,7 @@ class SwipeView(APIView):
                     project.disliked_ids = project.disliked_ids + [canonical_bld_id]
             project.save(update_fields=['liked_ids', 'disliked_ids'])
             evict_taste(profile.id)
+            evict_discovery_feed(profile.id)
 
             # 4. Increment round
             session.current_round += 1

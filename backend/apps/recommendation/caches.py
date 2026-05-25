@@ -76,3 +76,42 @@ def evict_projects_list(profile_id):
     # Also evict common page_size variants to be safe
     for ps in (10, 20, 25):
         cache.delete(_projects_list_key(profile_id, 1, ps))
+
+
+# ── Discovery feed cache ──────────────────────────────────────────────────────
+
+DISCOVERY_FEED_TTL = 60  # seconds — same UX staleness window as PERF-1 projects list
+
+
+def _discovery_feed_key(profile_id, cursor, limit):
+    return f"discovery_feed:{profile_id}:cursor{cursor}:limit{limit}"
+
+
+def get_or_build_discovery_feed(profile, cursor, limit, builder):
+    """Cached wrapper around the discovery-feed response payload.
+
+    `builder` is a zero-arg callable that returns the response dict
+    {cards, next_cursor, has_more, taste_state}. Result is cached per
+    (profile_id, cursor, limit) for DISCOVERY_FEED_TTL seconds.
+    Invalidation: call evict_discovery_feed(profile_id) on swipe/bookmark/
+    project mutations.
+    """
+    key = _discovery_feed_key(profile.id, cursor, limit)
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+    data = builder()
+    cache.set(key, data, DISCOVERY_FEED_TTL)
+    return data
+
+
+def evict_discovery_feed(profile_id):
+    """Invalidate the canonical cursor=0, limit=12 discovery-feed cache entry.
+
+    Other cursor offsets / limits self-expire via the TTL. The canonical entry
+    (cursor=0, limit=12) covers the Discovery-tab default fetch.
+    """
+    cache.delete(_discovery_feed_key(profile_id, 0, 12))
+    # Also evict common limit variants
+    for limit in (10, 20, 30):
+        cache.delete(_discovery_feed_key(profile_id, 0, limit))
