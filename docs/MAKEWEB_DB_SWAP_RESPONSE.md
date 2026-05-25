@@ -93,21 +93,48 @@ DDL (`CREATE TABLE migrate_probe …`) correctly rejected — operator must
 temporarily swap to `DB_USER=neondb_owner` when running `manage.py
 migrate`, then swap back.
 
-**Railway prod cutover — PENDING (admin manual)**. Steps for the operator:
+**Railway prod cutover — COMPLETED 2026-05-25**. Sequence executed:
 
-1. Railway dashboard → service env vars:
-   - `DB_USER` `neondb_owner` → `make_web_app`
-   - `DB_PASSWORD` → rotated (handed off out-of-band; not committed)
-2. Trigger redeploy. Confirm container comes up Online.
-3. Verification SQL block (run as `make_web_app` against the production
-   endpoint): the 8-probe matrix above. CRUD round-trip MUST work; DDL /
-   role / extension MUST fail.
-4. If anything fails, rollback = flip env vars back to `neondb_owner`. Both
-   roles coexist on the production branch.
+1. Railway dashboard → service env vars rotated:
+   - `DB_USER`: `neondb_owner` → `make_web_app`
+   - `DB_PASSWORD`: rotated to the `make_web_app` prod password
+     (out-of-band hand-off via `/tmp/.makewebapp_pw_prod`; never committed).
+2. First Railway redeploy attempt (deployment `d203e2bf`, 07:28:53Z) FAILED
+   at the `manage.py migrate --noinput` build step with
+   `OperationalError: password authentication failed for user 'make_web_app'`
+   — the rotated `DB_PASSWORD` was mis-pasted in the dashboard. Old
+   deployment (`9e5d4a69`, 2026-05-24 18:50, still serving with the prior
+   `neondb_owner` env) stayed online — no prod outage.
+3. `DB_PASSWORD` re-pasted exactly from `/tmp/.makewebapp_pw_prod`. Second
+   redeploy (`820de476`, 07:43:29Z) build phase:
+   - `pip install` clean.
+   - `manage.py migrate --noinput`: `No migrations to apply` ✓
+     (SELECT-only on `django_migrations` — `make_web_app` allowed).
+   - `collectstatic --noinput`: 152 static files copied ✓.
+   - Image push ✓.
+4. Deploy phase SUCCESS; `820de476` swapped in as the active deployment.
+5. Post-cutover smoke (HTTPS against `archi-tinder.up.railway.app`):
+   `/api/v1/auth/me/` → 401 (auth required, container reachable),
+   `/api/v1/users/me/` → 401, POST `/api/v1/auth/token/refresh/` with bogus
+   token → 401 `{"detail":"Invalid or expired token"}` (Django Simple JWT
+   queried `token_blacklist` as `make_web_app` ✓). DDL endpoint surfaces
+   would 5xx if the role were over-restricted — none observed.
 
-Once the Railway cutover passes verification, `neondb_owner` keeps its
-privileges but is used ONLY from the operator machine for `migrate`. The
-Make-DB-managed `make_web` role on `archi_data` (PR #93) is unaffected.
+Rollback path (if needed later): Railway dashboard → flip `DB_USER` back
+to `neondb_owner` + restore the prior `DB_PASSWORD`. Both roles coexist on
+the production branch; no DDL needed to revert.
+
+`neondb_owner` is now used **only** from the operator machine for
+`manage.py migrate` (with a temporary `backend/.env` `DB_USER=neondb_owner`
+swap, then revert). The Make-DB-managed `make_web` role on `archi_data`
+(PR #93) is unaffected.
+
+**Action item — BUILDINGS_DB_PASSWORD rotation**: `make_web` (buildings)
+password was accidentally surfaced in this session's transcript by a
+`railway variables` grep that matched too broadly. Rotate via
+`neonctl roles reset-password make_web --branch production --project-id
+holy-pond-45504245` then update Railway `BUILDINGS_DB_PASSWORD` + redeploy.
+Tracked outside this doc.
 
 ### Q3 — Cache invalidation
 No additional work required.
