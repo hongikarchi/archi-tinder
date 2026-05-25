@@ -162,17 +162,6 @@ Fix: wrap the create call in `_retry_gemini_call(...)` so it inherits the same 1
 
 Acceptance: `_caches.py:92` flows through the wrapper; existing IMP-5 unit tests still pass; flag toggle behaviour unchanged.
 
-#### BACK-PERFORMANCE-1 — `/projects/` 응답 600ms (목표 300ms)
-Codex Round 2 (2026-05-24) measured `GET /api/v1/projects/` at p50 = 600 ms, spec budget = 300 ms. Codex retest (2026-05-25) also observed double-fetch in dev (React StrictMode artefact + real prefetch — both contribute). User-visible: Projects list is the post-login first paint surface; >300 ms reads as sluggish.
-
-Investigation outline:
-1. Measure SQL count via `connection.queries` or Django Debug Toolbar against `ProjectListView`.
-2. If N+1 → port the `Subquery` / `prefetch_related` pattern shipped in PR #83 (`ProjectListView` + `OfficeProjectListView` already use this; new offenders likely live in serializer relations).
-3. If serializer-heavy → trim fields, introduce a `ProjectListSerializer` (lightweight) distinct from `ProjectDetailSerializer`.
-4. If neither → add a Django cache-framework layer (taste cache at `caches.py` is the existing template).
-
-Acceptance: p50 ≤ 300 ms on Singapore-deploy `/projects/`; no regression on serializer field shape consumed by HomePage / BoardCard.
-
 #### BACK-PERFORMANCE-2 — Discovery 캐시 hit 450ms (목표 <200ms)
 Codex Round 2: `GET /api/v1/discovery/` cache-hit p50 = 450 ms vs spec budget < 200 ms. Codex retest 2026-05-25 observed cache-cold path 4.11 s with external image retries — cache-hit re-measure pending. Taste cache shipped in PR #87 (`get_or_build_taste` / `evict_taste`, 1 h TTL, evict on `liked_ids` change).
 
@@ -218,6 +207,16 @@ Resume via `/plan per slice` — each slice = one logical component cluster (e.g
 Acceptance per slice: `npm run lint` + `npm run build` clean; light + all dark variants render the touched components without visual regressions (compare against pre-slice screenshot); no new global token added without DESIGN.md update.
 
 ### MEDIUM
+
+#### BACK-AUTH-1 — JWT blacklist DB ~590ms 차지
+PERF-1 (PR #124) 발견: `/projects/` local p50 cache-hit path 661 ms 중 ~590 ms는 simplejwt `JWTAuthentication.authenticate()` → `BlacklistMixin` → Neon round-trip per authenticated request. 모든 인증된 endpoint의 floor latency. PERF-2 / PERF-3 측정에도 같이 잡힘.
+
+Investigation outline:
+1. JWT validation result in-memory cache (JTI 기반 key, token expiry까지 TTL) — `JWTAuthentication` custom subclass 또는 simplejwt internals patching.
+2. Blacklist DB query 인덱스 검사 (Neon round-trip 자체는 한 번이라 cache 외 효과 제한적).
+3. Multi-worker prod 환경에서 in-memory cache hit rate 낮음 → Redis 도입 필요.
+
+Acceptance: 인증된 요청 floor latency 절감 (예: 600ms → 100ms 이하); 보안 영향 0 (logout 토큰 무효화 즉시 또는 ≤30s 이내). security-manager 사전 검토 필수.
 
 #### FRONT-LAYOUT-1 — Desktop wide-screen 레이아웃 어색함
 Current viewport-lock layout is mobile-first. Detail pages on desktop work but unoptimised. Low priority — desktop is secondary.
@@ -271,6 +270,16 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 ---
 
 ## Done
+
+### BACK-PERFORMANCE-1 — `/projects/` 응답 600ms (목표 300ms) — RESOLVED 2026-05-26 (PR #124 `505717a-pre-squash`)
+- [x] Local p50 1136 → 661 ms (-42%). Goal ≤ 300 ms 미달 — auth floor ~590 ms 잔존.
+- [x] Response cache 60 s TTL + evict POST/PATCH/DELETE/Bookmark. Per-`profile.id` key isolation.
+- [x] `ProjectListSerializer` drops `analysis_report` (LLM JSON list-unused). `defer('analysis_report')` on queryset. `_latest_like_count` via `jsonb_array_length` (no full `like_vectors` fetch). `page_size+1` trick — no `count()` query.
+- [x] `CONN_MAX_AGE=600` + `CONN_HEALTH_CHECKS=True` on `default` DB. `buildings` DB `CONN_MAX_AGE` removed (Make-DB owner territory per Backend Conventions).
+- [x] `perf_timing` ctx manager + `perf_measure` CLI (reused by PERF-3 / PERF-2).
+- [x] `orchestrate` skill Step 6/9 deprecated agent refs → `git-commit` / `reporter-inline` skills.
+- Measurement scope: local Neon `local-dev-2` only (development proxy). Prod Singapore Railway p50 = post-deploy Codex retest (admin).
+- Deferred: BACK-AUTH-1 — simplejwt JWT blacklist DB query (~590 ms, security territory; explicit user approval required before touching auth path).
 
 ### INFRA-WORKFLOW-1 — Reporter / git-manager 흡수 + 3 skill 도입 — RESOLVED 2026-05-26 (PR #123 `bbadcf1-pre-squash`)
 - [x] `.claude/skills/git-commit/` — single commit + secret guards + caveman convention. Replaces routine `git-manager` agent dispatch.

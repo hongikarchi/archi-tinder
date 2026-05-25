@@ -27,12 +27,13 @@ class TestProjectListN1:
         AnalysisSession.objects.get() per project row (N=5 extra queries).
         With the fix, all session fields come from the annotated queryset.
 
-        Expected queries with fix:
+        PERF-1 (change C): COUNT(*) removed via page_size+1 trick.
+
+        Expected queries with PERF-1 fix:
           1. JWT auth token validation
           2. _get_profile() UserProfile lookup
-          3. COUNT(*) for pagination total
-          4. SELECT with JOINs + Subquery annotations (projects + user + session fields)
-        Plus up to a few ancillary lookups → ceiling of 8 is conservative.
+          3. SELECT with JOINs + Subquery annotations (projects + user + session fields)
+        Plus up to a few ancillary lookups → ceiling of 7 is conservative.
         """
         for i in range(5):
             project = Project.objects.create(user=user_profile, name=f'P{i}')
@@ -47,14 +48,16 @@ class TestProjectListN1:
 
         assert resp.status_code == 200
         data = resp.json()
-        assert data['total'] == 5
+        # PERF-1: total is now None (deprecated); frontend uses has_more
+        assert data['total'] is None
 
         query_count = len(ctx.captured_queries)
-        # With N+1 bug: 8 + 5 = 13 queries (one get() per project)
-        # With fix: <= 8 queries (constant regardless of project count)
-        assert query_count < 9, (
-            f'Expected < 9 queries (N+1 fix), got {query_count}. '
-            'Did the Subquery annotation stop suppressing per-row session lookups?'
+        # With N+1 bug: 7 + 5 = 12 queries (one get() per project)
+        # With PERF-1 fix: <= 7 queries (constant regardless of project count;
+        # no COUNT query compared to the previous ceiling of 8)
+        assert query_count < 8, (
+            f'Expected < 8 queries (N+1 + PERF-1 fix), got {query_count}. '
+            'Did the Subquery annotation or page_size+1 trick regress?'
         )
 
     def test_like_count_correct_from_annotations(self, auth_client, user_profile):

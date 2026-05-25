@@ -93,9 +93,18 @@ class ProjectSerializer(serializers.ModelSerializer):
         # that the old code issued once per project in the list response.
         if hasattr(obj, '_latest_session_id'):
             if obj._latest_session_id:
+                # PERF-1 change B: consume the like-count annotation when present
+                # (list-view path), avoiding the 384-dim × N float vector transfer.
+                # Fall back to len(like_vectors) for the detail-view path where
+                # the annotation is absent and a real AnalysisSession is fetched.
+                if hasattr(obj, '_latest_like_count'):
+                    like_count = obj._latest_like_count or 0
+                else:
+                    lvs = getattr(obj, '_latest_like_vectors', None) or []
+                    like_count = len(lvs)
                 session = SimpleNamespace(
                     session_id=obj._latest_session_id,
-                    like_vectors=getattr(obj, '_latest_like_vectors', None) or [],
+                    _like_count=like_count,
                     created_at=getattr(obj, '_latest_session_created_at', None),
                 )
         else:
@@ -118,10 +127,16 @@ class ProjectSerializer(serializers.ModelSerializer):
         session = self._get_latest_session(obj)
         if not session:
             return None
+        # PERF-1 change B: SimpleNamespace (list-view path) carries _like_count;
+        # real AnalysisSession (detail-view fallback) carries like_vectors.
+        if hasattr(session, '_like_count'):
+            like_count = session._like_count
+        else:
+            like_count = len(getattr(session, 'like_vectors', None) or [])
         return {
             'id': str(session.session_id),
-            'like_count': len(session.like_vectors or []),
-            'created_at': session.created_at.isoformat(),
+            'like_count': like_count,
+            'created_at': session.created_at.isoformat() if session.created_at else None,
         }
 
     class Meta:
@@ -160,6 +175,24 @@ class ProjectSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
         # `disliked_ids` intentionally excluded — never serialized to any caller
+
+
+class ProjectListSerializer(ProjectSerializer):
+    """List-view variant of ProjectSerializer.
+
+    Excludes ``analysis_report`` — the heavy LLM JSON field is deferred by
+    `.defer('analysis_report')` on the list queryset (PERF-1 change C).
+    If DRF read it from Meta.fields it would trigger a lazy DB round-trip per
+    row (N+1).  Dropping it here keeps the output consistent with the deferred
+    query and preserves the detail-view contract where ``analysis_report`` is
+    still returned (ProjectDetailView uses ProjectSerializer, not this class).
+    """
+
+    class Meta(ProjectSerializer.Meta):
+        fields = [f for f in ProjectSerializer.Meta.fields if f != 'analysis_report']
+        read_only_fields = [
+            f for f in ProjectSerializer.Meta.read_only_fields if f != 'analysis_report'
+        ]
 
 
 class ProjectSelfUpdateSerializer(serializers.ModelSerializer):

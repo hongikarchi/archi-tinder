@@ -24,16 +24,23 @@
  * so the value can be re-parsed by any consumer. In-flight (not-yet-merged)
  * PRs carry `mergedAt: null` sentinel; next reporter-inline pass backfills.
  */
-// Reporter: Mermaid sources may be stale — commit bbadcf1 touched .claude/agents/{git-manager,reporter}.md (deprecate marker) + .claude/skills/{git-commit,git-publish,reporter-inline}/ (new). Next session should refresh `agentFlow` to reflect the skill-first roster.
+// Reporter: Mermaid sources may be stale — commit 505717a touched backend/apps/recommendation/views/projects.py + .claude/skills/orchestrate/SKILL.md. PERF-1 added projects-list cache layer not reflected in recommendationFlow Mermaid; next session may want to extend the diagram if the layer becomes architecturally load-bearing.
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-05-26 01:51 KST',
-    head: '8f90104',
-    branch: 'feature/admin-workflow-skill-absorption',
+    updatedAt: '2026-05-26 03:24 KST',
+    head: '58b111e',
+    branch: 'feature/algo-perf-projects-list',
   },
 
   done: [
+    {
+      id: 'BACK-PERFORMANCE-1',
+      title: '/projects/ 응답 600ms (목표 300ms)',
+      completedAt: '2026-05-26',
+      prs: [124],
+      note: 'GET /api/v1/projects/ local p50 1136 → 661 ms (-42%). Goal ≤300 ms 미달 — auth floor ~590 ms 잔존. Response cache 60s TTL + evict POST/PATCH/DELETE/Bookmark (per-profile.id key isolation). ProjectListSerializer drops analysis_report (LLM JSON list-unused). defer(analysis_report) on QS. _latest_like_count via jsonb_array_length (no full like_vectors fetch). page_size+1 trick — no count() query. CONN_MAX_AGE=600 + CONN_HEALTH_CHECKS=True on default DB. buildings DB CONN_MAX_AGE removed (Make-DB owner territory). perf_timing ctx manager + perf_measure CLI (reused PERF-3/PERF-2). orchestrate skill Step 6/9 deprecated agent refs → git-commit/reporter-inline skills. Measurement scope local Neon local-dev-2 only (development proxy); prod Singapore Railway p50 = post-deploy Codex retest (admin). Deferred: BACK-AUTH-1 — simplejwt JWT blacklist DB query (~590 ms, security territory; explicit user approval required before touching auth path). sha 505717a-pre-squash.',
+    },
     {
       id: 'INFRA-WORKFLOW-1',
       title: 'Reporter / git-manager 흡수 + 3 skill 도입',
@@ -83,13 +90,6 @@ window.PROJECT_STATE = {
       prs: [112],
       note: 'develop → main squash-merged carrying 11 PRs (#99–#111). main = 1888b5f. Railway prod auto-deploy triggered. Bug #5 carve-out applied: origin/develop force-reset to origin/main (1888b5f).',
     },
-    {
-      id: 'INFRA-DOC-1',
-      title: 'Task.md ID 규칙 + bucket + stale doc 정리',
-      completedAt: '2026-05-25',
-      prs: [111],
-      note: '## Next flat list → HIGH/MEDIUM/LOW buckets; 20 entries renamed to <SURFACE>-<TOPIC>-<N> + Korean ≤25-char title. ID convention codified in Workflow Rules; cross-refs updated in reporter.md, orchestrate/SKILL.md, maker agents. 5 stale doc spots cleaned (WORKFLOW.md Mermaid, orchestrate old phase block, README.md, SWAP_RESPONSE doc status, .env.example unused vars). INFRA-ENV-1 status upgraded confirmed (prod endpoint direct write risk).',
-    },
   ],
 
   now: [],
@@ -127,11 +127,6 @@ window.PROJECT_STATE = {
         note: '_caches.py:92 IMP-5 Gemini context-cache create call bypasses the _retry_gemini_call timeout wrapper (PR #94 15s cap). Gated by context_caching_enabled flag (default OFF) — zero prod impact until toggled on. Fix: wrap call in _retry_gemini_call; ~5 LOC backend edit. Pre-emptive safety before flag toggle. Acceptance: _caches.py:92 flows through wrapper; existing IMP-5 tests pass; flag behaviour unchanged.',
       },
       {
-        id: 'BACK-PERFORMANCE-1',
-        title: '/projects/ 응답 600ms (목표 300ms)',
-        note: 'Codex Round 2 measured p50 = 600 ms vs spec 300 ms. Codex retest 2026-05-25 also saw dev double-fetch (StrictMode + real prefetch). User-visible: post-login first paint surface. Investigation: SQL-count probe → port PR #83 Subquery/prefetch_related pattern if N+1 → trim serializer or add light ProjectListSerializer → cache layer last resort. Acceptance: p50 ≤300 ms Singapore deploy, no serializer-shape regression on HomePage/BoardCard.',
-      },
-      {
         id: 'BACK-PERFORMANCE-2',
         title: 'Discovery 캐시 hit 450ms (목표 <200ms)',
         note: 'Codex Round 2: discovery cache-hit p50 = 450 ms vs spec <200 ms. Retest 2026-05-25: cache-cold 4.11 s with external image retries. Taste cache shipped PR #87 (1h TTL, evict on liked_ids change). Suspect: serialization floor on 12 cards / raw SQL still on hit path / low true hit-rate from key fragmentation. Investigation: per-stage timing in views/discovery.py → trim payload, batch URLs, extend cache to hold card payloads, audit key shape. Acceptance: hit-path p50 <200 ms Singapore deploy; no SwipePage card-shape regression.',
@@ -148,6 +143,11 @@ window.PROJECT_STATE = {
       },
     ],
     medium: [
+      {
+        id: 'BACK-AUTH-1',
+        title: 'JWT blacklist DB ~590ms 차지',
+        note: 'PERF-1 (PR #124) 발견: /projects/ local p50 cache-hit path 661 ms 중 ~590 ms는 simplejwt JWTAuthentication.authenticate() → BlacklistMixin → Neon round-trip per authenticated request. 모든 인증된 endpoint floor latency. PERF-2/PERF-3 측정에도 같이 잡힘. Investigation: (1) JWT validation result in-memory cache JTI 기반 key, token expiry TTL — custom JWTAuthentication subclass; (2) Blacklist DB query 인덱스 검사 (Neon round-trip 자체는 한 번이라 cache 외 효과 제한적); (3) Multi-worker prod 환경에서 in-memory cache hit rate 낮음 → Redis 필요. Acceptance: 인증된 요청 floor 600 → 100 ms 이하; 보안 영향 0 (logout 토큰 무효화 즉시 또는 ≤30s 이내). security-manager 사전 검토 필수.',
+      },
       {
         id: 'FRONT-LAYOUT-1',
         title: 'Desktop wide-screen 레이아웃 어색함',
@@ -195,10 +195,17 @@ window.PROJECT_STATE = {
 
   prs: [
     {
-      number: 123,
-      title: 'feat(workflow): absorb reporter + git-manager into 3 skills (PR cycle halved)',
+      number: 124,
+      title: 'perf(BACK-PERFORMANCE-1): /projects/ p50 1136→661ms — cache + serializer trim',
       mergedAt: null,
       mergedAtKST: null,
+      sha: null,
+    },
+    {
+      number: 123,
+      title: 'feat(workflow): absorb reporter + git-manager into 3 skills (PR cycle halved)',
+      mergedAt: '2026-05-25T16:55:24Z',
+      mergedAtKST: '2026-05-26 01:55 KST',
     },
     {
       number: 122,
@@ -235,12 +242,6 @@ window.PROJECT_STATE = {
       title: 'chore(INFRA-DOC-5): session-end reporter housekeeping — PR #116 INFRA-ENV-1',
       mergedAt: '2026-05-25T07:00:05Z',
       mergedAtKST: '2026-05-25 16:00 KST',
-    },
-    {
-      number: 116,
-      title: 'chore(INFRA-ENV-1): restore Neon child branch for local dev (prod isolation)',
-      mergedAt: '2026-05-25T06:50:38Z',
-      mergedAtKST: '2026-05-25 15:50 KST',
     },
   ],
 

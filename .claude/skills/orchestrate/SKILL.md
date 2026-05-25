@@ -145,8 +145,11 @@ app-test failures, and architectural-fit rejections all draw from the same budge
 of 2. Track it explicitly.
 
 ### Step 6 — Commit (local only)
-Dispatch `git-manager` with a one-line commit message describing what was done.
-`git-manager` commits but never pushes — pushing happens in Step 8 via `git-publisher`.
+Run the `git-commit` skill directly in the main session. **Do NOT dispatch the
+`git-manager` agent — it is deprecated as of 2026-05-26.** The skill stages with
+secret exclusions, builds a caveman conventional-commit message, and commits on
+the feature branch. It never pushes — pushing happens in Step 9 via the
+`git-publish` skill.
 
 ### Step 7 — Pre-push browser test + drift gate
 Dispatch `app-test`. It does two things:
@@ -188,15 +191,32 @@ Once the gate opens, dispatch `git-publisher` with the work and cite the trigger
 
 **Hard rule — base=main is a separate gate.** `git-publisher` enforces a second precondition: base=main PRs require the trigger keyword to be `"deploy"` / `"release"` / `"배포"` specifically. Plain `"PR 올려"` authorizes only base=develop. Codified post-PR #105 main-merge incident (2026-05-25).
 
-### Step 9 — Report (session-end)
-Dispatch `reporter`. It **writes files only** — `.claude/Task.md`, `project/state.js`, conditionally `docs/algorithm.md`. It does NOT run `git commit`, `git push`, `gh pr create`, or `gh pr merge`. Its dispatch prompt must NOT instruct it to commit or PR. (Codified post-PR #105 incident 2026-05-25 — reporter mis-targeted `main` because the dispatch prompt told it to open a PR; the agent body now refuses such instructions.)
+### Step 9 — Audit-then-publish (reporter-inline + git-publish)
 
-Reporter's outputs:
-1. Move completed tasks from `.claude/Task.md` `## Now` / `## Next` into `## Done` under a dated `### <title> — RESOLVED YYYY-MM-DD (PR #N)` header.
-2. Regenerate `project/state.js` (meta + done[] + now[] + next[] + prs[] + agents[]) so `project/dashboard.html` reflects current state.
-3. Conditionally sync `docs/algorithm.md` (Production Value column + section annotations + Last Synced line) when the commit touched algorithm-relevant code.
+Run the `reporter-inline` skill directly in the main session **BEFORE** the
+publish step. **Do NOT dispatch the `reporter` agent — it is deprecated as of
+2026-05-26.** The skill updates `.claude/Task.md`, `project/state.js`, and
+conditionally `docs/algorithm.md`, then calls the `git-commit` skill to commit
+the audit on the SAME feature branch as the work commit. The audit + work
+squash together into a single commit on `develop`. The legacy 2-PR pattern
+(feature PR + separate reporter PR) is dropped.
 
-After reporter returns, the main session reviews the reporter's diff and runs the standard Step 6-8 pipeline (commit via `git-manager`, then Publish gate, then `git-publisher` if the gate opens) to land the reporter's changes. Reporter's diff is a separate commit/PR from the feature work it documents.
+`reporter-inline` outputs:
+1. Move completed tasks from `.claude/Task.md` `## Now` / `## Next` into
+   `## Done` under a dated `### <title> — RESOLVED YYYY-MM-DD (PR #N)` header
+   (PR # may be a placeholder if PR not yet opened — backfill on next pass).
+2. Regenerate `project/state.js` (meta + done[] + now[] + next[] + prs[] +
+   agents[]) so `project/dashboard.html` reflects current state. `meta.head`
+   captures pre-squash `origin/develop` SHA — 1-PR stale window is intentional.
+3. Conditionally sync `docs/algorithm.md` (Production Value column + section
+   annotations + Last Synced line) when the commit touched algorithm-relevant
+   code.
+
+After `reporter-inline` + audit commit, run the `git-publish` skill (Step 0
+publish gate first, then push + PR open base=`develop` + admin squash + delete
+branch). **Do NOT dispatch the `git-publisher` agent for Mode 2 / feature →
+develop merges — that agent is reserved for Mode 3 deploy, external PR triage,
+or complex rebase conflicts.**
 
 ### Step 10 — Stop and report to user
 After reporter finishes, STOP. Summarize for the user what was implemented, the
