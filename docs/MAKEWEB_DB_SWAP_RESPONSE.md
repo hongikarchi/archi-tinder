@@ -53,14 +53,61 @@ Final prod env values after the swap:
 Pending. Will run verification SQL block from §4 of the handoff doc against
 the production endpoint immediately after the Railway env swap completes.
 
-### Q2 — `user_data` DB role separation
-Deferred. `user_data` currently uses `neondb_owner` for read+write (the
-Make-DB-managed writer role). Recommendation: separate session to create
-a `make_web_user_data_rw` role with grants limited to `user_data.public.*`,
-then swap `DB_USER` / `DB_PASSWORD` on Railway. Not urgent — `user_data` is
-owned by Make Web and the only writer is the Django app, so role overlap
-with Make DB's `neondb_owner` is administrative tidiness rather than a
-security gap.
+### Q2 — `user_data` DB role separation — RESOLVED 2026-05-25 (INFRA-DB-1)
+Created `make_web_app` on both `production` and `local-dev-2` branches via
+psql (NOT `neonctl roles create`; that grants `neon_superuser` membership by
+default, which transitively grants CREATEDB/CREATEROLE/CREATEEXTENSION —
+unacceptable for a runtime role). Definition:
+
+```sql
+CREATE ROLE make_web_app
+  WITH LOGIN PASSWORD '<rotated>'
+  NOSUPERUSER NOCREATEDB NOCREATEROLE
+  NOINHERIT NOREPLICATION NOBYPASSRLS;
+GRANT CONNECT ON DATABASE user_data TO make_web_app;
+GRANT USAGE ON SCHEMA public TO make_web_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO make_web_app;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO make_web_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE neondb_owner IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO make_web_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE neondb_owner IN SCHEMA public
+  GRANT USAGE, SELECT ON SEQUENCES TO make_web_app;
+```
+
+Smoke verified on `local-dev-2`:
+
+| Probe (as `make_web_app`) | Result |
+|---|---|
+| `SELECT COUNT(*) FROM auth_user` | 3 ✓ |
+| `INSERT/UPDATE/DELETE` round-trip on `auth_user` | ✓ |
+| `has_sequence_privilege('auth_user_id_seq')` | t ✓ |
+| `CREATE TABLE …` | ERROR: permission denied for schema public ✓ |
+| `DROP TABLE auth_user` | ERROR: must be owner of table ✓ |
+| `CREATE ROLE …` | ERROR: permission denied to create role ✓ |
+| `CREATE EXTENSION hstore` | ERROR: permission denied to create extension ✓ |
+| `ALTER TABLE …` | ERROR: must be owner of table ✓ |
+
+Local `backend/.env` swapped to `DB_USER=make_web_app` + rotated password;
+Django `manage.py check` clean; ORM + raw SQL smoke unchanged. Migration
+DDL (`CREATE TABLE migrate_probe …`) correctly rejected — operator must
+temporarily swap to `DB_USER=neondb_owner` when running `manage.py
+migrate`, then swap back.
+
+**Railway prod cutover — PENDING (admin manual)**. Steps for the operator:
+
+1. Railway dashboard → service env vars:
+   - `DB_USER` `neondb_owner` → `make_web_app`
+   - `DB_PASSWORD` → rotated (handed off out-of-band; not committed)
+2. Trigger redeploy. Confirm container comes up Online.
+3. Verification SQL block (run as `make_web_app` against the production
+   endpoint): the 8-probe matrix above. CRUD round-trip MUST work; DDL /
+   role / extension MUST fail.
+4. If anything fails, rollback = flip env vars back to `neondb_owner`. Both
+   roles coexist on the production branch.
+
+Once the Railway cutover passes verification, `neondb_owner` keeps its
+privileges but is used ONLY from the operator machine for `migrate`. The
+Make-DB-managed `make_web` role on `archi_data` (PR #93) is unaffected.
 
 ### Q3 — Cache invalidation
 No additional work required.
