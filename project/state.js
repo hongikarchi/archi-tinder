@@ -25,12 +25,19 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-05-25 16:50 KST',
-    head: '1d3bfdc',
+    updatedAt: '2026-05-26 00:24 KST',
+    head: '80b519c',
     branch: 'develop',
   },
 
   done: [
+    {
+      id: 'FRONT-UX-2',
+      title: '스와이프 자동 이동 + 키보드 입력',
+      completedAt: '2026-05-26',
+      prs: [121],
+      note: 'App.jsx useEffect auto-navigates /swipe → /result/:sessionId on phase=completed/results, or latch threshold (exploring like_count>=4, analyzing/converged confidence>=1.0). DiscoveryPage.jsx keydown ← (skip) / → (save) arrow-key swipe. Supersedes PR #114 (feature/admin-swipe-finish-ux) + PR #115 (feature/front-ux-keyboard-swipe) — both had wrong base main (HARD RULE 5); re-based as PR #121 onto develop. 4 Codex fixes baked in: (1) P2/#114 auto-nav swallowed Keep-exploring path — only nav on 100% latch or pool-exhaust; (2) P2/#114 finishUnlocked latch leaked across sessions — dropped, 1-shot calc kept as SwipePage Finish-button safety net; (3) P2/#115 surpriseOpen modal guard — arrow-key handler checks surpriseOpen before firing; (4) P3/#115 keySwipingRef permanent lock on async throw — try/finally ensures ref release. sha 80b519c.',
+    },
     {
       id: 'INFRA-DB-1',
       title: 'Django app이 owner 권한으로 DB 접근',
@@ -192,6 +199,12 @@ window.PROJECT_STATE = {
 
   prs: [
     {
+      number: 121,
+      title: 'feat(swipe,discovery): auto-result nav + arrow-key swipe (supersedes PR #114, #115)',
+      mergedAt: '2026-05-25T15:24:52Z',
+      mergedAtKST: '2026-05-26 00:24 KST',
+    },
+    {
       number: 119,
       title: 'docs(INFRA-DB-1): Railway cutover COMPLETED 2026-05-25 — make_web_app live in prod',
       mergedAt: '2026-05-25T07:50:10Z',
@@ -232,12 +245,6 @@ window.PROJECT_STATE = {
       title: 'fix(frontend): ConfidenceBar Calibrating label when analyzing+null',
       mergedAt: '2026-05-24T16:33:11Z',
       mergedAtKST: '2026-05-25 01:33 KST',
-    },
-    {
-      number: 107,
-      title: 'chore: session-end reporter housekeeping — docs PRs #103/#104 (redo, correct base=develop)',
-      mergedAt: '2026-05-24T15:51:54Z',
-      mergedAtKST: '2026-05-25 00:51 KST',
     },
   ],
 
