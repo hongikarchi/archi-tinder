@@ -71,6 +71,7 @@ DATABASES = {
         'USER':     os.environ['DB_USER'],
         'PASSWORD': os.environ['DB_PASSWORD'],
         'CONN_MAX_AGE': 600,  # Reuse DB connections for 10 minutes
+        'CONN_HEALTH_CHECKS': True,  # Django 4.2+: close broken pooled connections proactively
         'OPTIONS': {
             'sslmode': os.getenv('DB_SSLMODE', 'require'),
         },
@@ -86,7 +87,6 @@ DATABASES = {
         'NAME':     os.environ['BUILDINGS_DB_NAME'],
         'USER':     os.environ['BUILDINGS_DB_USER'],
         'PASSWORD': os.environ['BUILDINGS_DB_PASSWORD'],
-        'CONN_MAX_AGE': 600,
         'OPTIONS': {
             'sslmode': os.getenv('BUILDINGS_DB_SSLMODE', 'require'),
         },
@@ -236,6 +236,9 @@ RECOMMENDATION = {
 }
 
 # -- External API keys -----------------------------------------------------
+PERF_TIMING_ENABLED = os.environ.get('PERF_TIMING_ENABLED', 'False').lower() == 'true'
+
+# -- External API keys -----------------------------------------------------
 GEMINI_API_KEY    = os.getenv('GEMINI_API_KEY', '')
 HF_TOKEN          = os.getenv('HF_TOKEN', '')
 IMAGE_BASE_URL    = os.getenv('IMAGE_BASE_URL', 'https://pub-5d2133d166fc4b65ad05295df352519f.r2.dev')
@@ -286,6 +289,11 @@ LOGGING = {
         'apps': {
             'handlers': ['console'],
             'level': 'DEBUG',
+            'propagate': False,
+        },
+        'perf_timing': {
+            'handlers': ['console'],
+            'level': 'INFO' if PERF_TIMING_ENABLED else 'WARNING',
             'propagate': False,
         },
     },

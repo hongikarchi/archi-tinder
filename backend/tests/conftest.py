@@ -14,6 +14,7 @@ duration and this autouse mock resumes when the inner patch exits.
 """
 import pytest
 from unittest.mock import patch
+from django.core.cache import cache
 
 
 def _fake_card(canonical_bld_id):
@@ -40,6 +41,14 @@ def _fake_card(canonical_bld_id):
             'visual_description': '',
         },
     }
+
+
+@pytest.fixture(autouse=True)
+def _clear_cache():
+    """Clear Django LocMemCache between tests to prevent cache pollution."""
+    cache.clear()
+    yield
+    cache.clear()
 
 
 @pytest.fixture(autouse=True)

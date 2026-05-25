@@ -209,7 +209,8 @@ class TestUserProjectsListView:
         data = resp.json()
         # page_size=999 is capped to 50; all 5 fit within that cap
         assert len(data['results']) == 5
-        assert data['total'] == 5
+        # PERF-1: total is now None (deprecated); frontend uses has_more
+        assert data['total'] is None
         assert 'page' in data
         assert 'has_more' in data
 
@@ -217,22 +218,24 @@ class TestUserProjectsListView:
         """UserProjectsListView must not issue N per-row FK queries for nested user data.
 
         With select_related('user__user') the view executes a fixed number of queries
-        regardless of project count: auth lookup + profile lookup + COUNT + one JOIN SELECT.
+        regardless of project count: auth lookup + profile lookup + one JOIN SELECT.
         Without select_related, each project row would trigger 2 extra FK lookups (N+1).
+
+        PERF-1: COUNT(*) removed (page_size+1 trick) so query count is now 4, not 5.
         """
         for i in range(5):
             Project.objects.create(user=user_profile, name=f'P{i}', visibility='public')
-        # 5 queries observed empirically with select_related in place:
+        # 4 queries with PERF-1 optimisation in place:
         #   1. JWT auth lookup (OutstandingToken / auth_user)
         #   2. _get_profile() UserProfile lookup for requester
         #   3. target_profile lookup (get_object_or_404 UserProfile)
-        #   4. COUNT(*) on filtered queryset
-        #   5. SELECT with INNER JOINs (select_related fetches user+auth_user in one query)
-        # If select_related is removed, this would grow to 5 + 2×N queries (N=5 → 15).
-        with django_assert_num_queries(5):
+        #   4. SELECT with INNER JOINs + Subquery annotations (no COUNT)
+        # If select_related is removed, this would grow to 4 + 2×N queries (N=5 → 14).
+        with django_assert_num_queries(4):
             resp = auth_client.get(f'/api/v1/users/{user_profile.user.id}/projects/')
         assert resp.status_code == 200
-        assert resp.json()['total'] == 5
+        # total is None after PERF-1 — frontend uses has_more instead
+        assert resp.json()['total'] is None
 
     def test_pagination_returns_page_field(self, auth_client, user_profile):
         """Response shape includes page + has_more (mirrors ProjectListCreateView)."""

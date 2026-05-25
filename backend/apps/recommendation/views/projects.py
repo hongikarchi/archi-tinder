@@ -2,7 +2,8 @@ import logging
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import OuterRef, Subquery
+from django.db.models import IntegerField, OuterRef, Subquery
+from django.db.models.expressions import RawSQL
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -10,8 +11,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from ..models import AnalysisSession, Project
-from ..serializers import ProjectSerializer, ProjectSelfUpdateSerializer
-from ..caches import evict_taste
+from ..serializers import ProjectListSerializer, ProjectSerializer, ProjectSelfUpdateSerializer
+from ..caches import evict_taste, get_or_build_projects_list, evict_projects_list
+from ..perf_timing import endpoint, stage
 from ._shared import _get_profile
 
 logger = logging.getLogger('apps.recommendation')
@@ -24,46 +26,74 @@ class ProjectListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        profile = _get_profile(request)
-        if not profile:
-            return Response({'results': [], 'total': 0, 'has_more': False})
-        try:
-            page      = max(1, int(request.query_params.get('page', 1)))
-            page_size = min(max(1, int(request.query_params.get('page_size', 50))), 50)
-        except (ValueError, TypeError):
-            page, page_size = 1, 50
-        _latest_sid_sq = Subquery(
-            AnalysisSession.objects.filter(project=OuterRef('pk'))
-            .order_by('-created_at').values('session_id')[:1]
-        )
-        _latest_lv_sq = Subquery(
-            AnalysisSession.objects.filter(project=OuterRef('pk'))
-            .order_by('-created_at').values('like_vectors')[:1]
-        )
-        _latest_ca_sq = Subquery(
-            AnalysisSession.objects.filter(project=OuterRef('pk'))
-            .order_by('-created_at').values('created_at')[:1]
-        )
-        qs = (
-            Project.objects
-            .filter(user=profile)
-            .select_related('user__user')
-            .annotate(
-                _latest_session_id=_latest_sid_sq,
-                _latest_like_vectors=_latest_lv_sq,
-                _latest_session_created_at=_latest_ca_sq,
-            )
-            .order_by('-created_at')
-        )
-        total  = qs.count()
-        start  = (page - 1) * page_size
-        chunk  = qs[start:start + page_size]
-        return Response({
-            'results':  ProjectSerializer(chunk, many=True, context={'request': request}).data,
-            'total':    total,
-            'page':     page,
-            'has_more': (page * page_size) < total,
-        })
+        with endpoint('projects_list'):
+            with stage('get_profile'):
+                profile = _get_profile(request)
+            if not profile:
+                return Response({'results': [], 'total': None, 'has_more': False})
+            try:
+                page      = max(1, int(request.query_params.get('page', 1)))
+                page_size = min(max(1, int(request.query_params.get('page_size', 50))), 50)
+            except (ValueError, TypeError):
+                page, page_size = 1, 50
+
+            def _build():
+                with stage('build_subqueries'):
+                    _latest_sid_sq = Subquery(
+                        AnalysisSession.objects.filter(project=OuterRef('pk'))
+                        .order_by('-created_at').values('session_id')[:1]
+                    )
+                    # PERF-1 change A: replace full like_vectors fetch with a count.
+                    # jsonb_array_length on the JSONField (mapped to jsonb in Postgres)
+                    # returns only an int instead of transferring the entire 384-dim
+                    # float list × N likes across the wire.
+                    _latest_lc_sq = Subquery(
+                        AnalysisSession.objects
+                        .filter(project=OuterRef('pk'))
+                        .order_by('-created_at')
+                        .annotate(_lc=RawSQL('jsonb_array_length(like_vectors)', []))
+                        .values('_lc')[:1],
+                        output_field=IntegerField(),
+                    )
+                    _latest_ca_sq = Subquery(
+                        AnalysisSession.objects.filter(project=OuterRef('pk'))
+                        .order_by('-created_at').values('created_at')[:1]
+                    )
+                with stage('build_qs'):
+                    qs = (
+                        Project.objects
+                        .filter(user=profile)
+                        .select_related('user__user')
+                        # PERF-1 change C: heavy LLM JSON not consumed by list view.
+                        .defer('analysis_report')
+                        .annotate(
+                            _latest_session_id=_latest_sid_sq,
+                            _latest_like_count=_latest_lc_sq,
+                            _latest_session_created_at=_latest_ca_sq,
+                        )
+                        .order_by('-created_at')
+                    )
+                start = (page - 1) * page_size
+                with stage('fetch_chunk_plus_one'):
+                    # PERF-1 change C: page_size+1 trick eliminates the separate
+                    # COUNT(*) query. has_more is derived from the extra row.
+                    chunk_plus_one = list(qs[start:start + page_size + 1])
+                has_more = len(chunk_plus_one) > page_size
+                chunk = chunk_plus_one[:page_size]
+                with stage('serialize', n=len(chunk)):
+                    data = ProjectListSerializer(
+                        chunk, many=True, context={'request': request}
+                    ).data
+                return {
+                    'results':  list(data),
+                    'total':    None,   # deprecated — frontend uses has_more
+                    'page':     page,
+                    'has_more': has_more,
+                }
+
+            with stage('cache_lookup_or_build'):
+                payload = get_or_build_projects_list(profile, page, page_size, _build)
+            return Response(payload)
 
     def post(self, request):
         profile = _get_profile(request)
@@ -72,6 +102,7 @@ class ProjectListCreateView(APIView):
         serializer = ProjectSerializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         project = serializer.save(user=profile)
+        evict_projects_list(profile.id)
         logger.info('Project created: %s by user %s', project.project_id, profile.pk)
         return Response(
             ProjectSerializer(project, context={'request': request}).data,
@@ -145,6 +176,7 @@ class ProjectDetailView(APIView):
                 serializer.save()
 
         project.refresh_from_db()
+        evict_projects_list(profile.id)
         return Response(ProjectSerializer(project, context={'request': request}).data)
 
     def delete(self, request, pk):
@@ -155,6 +187,7 @@ class ProjectDetailView(APIView):
         # matching the security-manager recommendation and ProjectBookmarkView pattern.
         project = get_object_or_404(Project.objects.filter(user=profile), project_id=pk)
         project.delete()
+        evict_projects_list(profile.id)
         logger.info('Project deleted: %s', pk)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -181,9 +214,14 @@ class UserProjectsListView(APIView):
             AnalysisSession.objects.filter(project=OuterRef('pk'))
             .order_by('-created_at').values('session_id')[:1]
         )
-        _latest_lv_sq = Subquery(
-            AnalysisSession.objects.filter(project=OuterRef('pk'))
-            .order_by('-created_at').values('like_vectors')[:1]
+        # PERF-1 change A: like-count annotation instead of full vector fetch.
+        _latest_lc_sq = Subquery(
+            AnalysisSession.objects
+            .filter(project=OuterRef('pk'))
+            .order_by('-created_at')
+            .annotate(_lc=RawSQL('jsonb_array_length(like_vectors)', []))
+            .values('_lc')[:1],
+            output_field=IntegerField(),
         )
         _latest_ca_sq = Subquery(
             AnalysisSession.objects.filter(project=OuterRef('pk'))
@@ -193,21 +231,25 @@ class UserProjectsListView(APIView):
             Project.objects
             .filter(user=target_profile)
             .select_related('user__user')
+            # PERF-1 change C: heavy LLM JSON not consumed by list view.
+            .defer('analysis_report')
             .annotate(
                 _latest_session_id=_latest_sid_sq,
-                _latest_like_vectors=_latest_lv_sq,
+                _latest_like_count=_latest_lc_sq,
                 _latest_session_created_at=_latest_ca_sq,
             )
             .order_by('-created_at')
         )
         if not is_owner:
             qs = qs.filter(visibility='public')
-        total = qs.count()
         start = (page - 1) * page_size
-        chunk = list(qs[start:start + page_size])
+        # PERF-1 change C: page_size+1 trick eliminates the separate COUNT query.
+        chunk_plus_one = list(qs[start:start + page_size + 1])
+        has_more = len(chunk_plus_one) > page_size
+        chunk = chunk_plus_one[:page_size]
         return Response({
-            'results':  ProjectSerializer(chunk, many=True, context={'request': request}).data,
-            'total':    total,
+            'results':  ProjectListSerializer(chunk, many=True, context={'request': request}).data,
+            'total':    None,   # deprecated — frontend uses has_more
             'page':     page,
-            'has_more': (page * page_size) < total,
+            'has_more': has_more,
         })
