@@ -10,6 +10,14 @@ following the cleanup).
 - `backend/.env` `DB_HOST` also updated — the old `ep-summer-king-a1xldgwi`
   endpoint was the dropped `local-dev` branch, so `user_data` had to follow
   to `ep-broad-hat-a1jaomn7` for local development to function.
+  **2026-05-25 follow-up (INFRA-ENV-1)**: pointing local `.env` at the
+  production endpoint was a temporary measure — it caused local
+  `manage.py runserver` to write straight into the prod `user_data` branch.
+  Resolved by re-provisioning a persistent Neon child branch
+  `local-dev-2` (`br-shy-thunder-a1p5glmo`, endpoint
+  `ep-holy-band-a1w0u5am`, no TTL) off `production`, then repointing
+  `backend/.env` `DB_HOST` and `BUILDINGS_DB_HOST` to the new dev
+  endpoint. Railway prod env vars (`ep-broad-hat-a1jaomn7`) untouched.
 - `backend/.env.example` template refreshed (new role + DB name + comment).
 - Verified locally via psql + Django `manage.py check` + ORM smoke through
   `connections['buildings']`:
