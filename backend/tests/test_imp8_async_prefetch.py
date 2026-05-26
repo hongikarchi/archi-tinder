@@ -258,7 +258,7 @@ class TestFlagGating:
             f'Expected None for prefetch_image_2 in async path, got {data["prefetch_image_2"]}'
         )
         # Async prefetch thread + telemetry thread both spawned when flag is ON
-        assert len(spawned_threads) == 3, 'Async prefetch + telemetry + async_warm_taste threads spawned when flag is ON'
+        assert len(spawned_threads) == 2, 'Async prefetch + telemetry threads spawned when flag is ON'
 
     def test_flag_on_prefetch_strategy_async_thread_in_event(self, auth_client, user_profile, settings):
         """With flag ON, swipe event has prefetch_strategy='async-thread'."""
@@ -741,7 +741,7 @@ class TestBackwardCompat:
         finally:
             _stop_patches(patchers)
 
-        assert len(spawned) == 1, 'Only telemetry thread spawned when async prefetch flag is OFF (warm thread now flag-gated)'
+        assert len(spawned) == 1, 'Only telemetry thread spawned; no async prefetch thread when flag is OFF'
 
     def test_flag_off_no_cache_write(self, auth_client, user_profile, settings):
         """No async prefetch cache entries are written when the sync path is explicitly enabled."""

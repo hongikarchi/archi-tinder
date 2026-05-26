@@ -67,35 +67,6 @@ def _emit_telemetry_thread(swipe_kwargs, confidence_kwargs):
         _connections.close_all()
 
 
-# ── 2026-05-27 BACK-PERFORMANCE-4: async taste-cache warm thread ─────────────
-
-def _async_warm_taste(profile_id):
-    """Repopulate taste vector cache after eviction.
-
-    Daemon thread, best-effort. Mirrors _async_prefetch_thread pattern.
-    Prevents Discovery cold-rebuild on the next page load after every swipe.
-    """
-    from django.db import connections as _connections
-    _connections.close_all()
-    try:
-        from ..models import UserProfile
-        from ..caches import get_or_build_taste
-        profile = UserProfile.objects.filter(id=profile_id).first()
-        if profile is not None:
-            get_or_build_taste(profile)  # writes cache as side-effect
-    except Exception as exc:
-        try:
-            logger.warning('async_warm_taste: failed for profile %s (%s)', profile_id, exc)
-        except Exception:
-            pass
-    finally:
-        try:
-            from django.db import connections as _connections2
-            _connections2.close_all()
-        except Exception:
-            pass
-
-
 # ── IMP-8: async prefetch background thread ───────────────────────────────────
 
 def _async_prefetch_thread(
@@ -572,10 +543,6 @@ class SwipeView(APIView):
             evict_discovery_feed(profile.id)
             # Fix 1: evict /projects/ cache — liked_ids/disliked_ids counts changed.
             evict_projects_list(profile.id)
-            # NOTE: _async_warm_taste thread is intentionally spawned AFTER this
-            # transaction.atomic() block exits (see below). Do NOT move it here.
-            # Eviction-before-commit is safe (cache cleared; if transaction rolls back,
-            # empty cache rebuilds on next read). Warm-thread-before-commit is NOT safe.
 
             # 4. Increment round
             session.current_round += 1
@@ -749,25 +716,6 @@ class SwipeView(APIView):
             # Cache pool_embeddings -- same pool_ids, no need to re-fetch outside transaction
             saved_pool_embeddings = pool_embeddings
             saved_recent_actions = list(_recent_actions_window)
-
-        # NOTE: spawn AFTER the transaction.atomic() block. The warm thread opens a
-        # fresh DB connection (connections.close_all() in _async_warm_taste); under
-        # READ COMMITTED isolation it cannot see the parent transaction's uncommitted
-        # project.save. Spawning inside the atomic block causes the cache to be
-        # permanently 1 swipe behind. See code-review fix-loop 2026-05-27.
-        #
-        # Gated by async_prefetch_enabled — same flag as _async_prefetch_thread.
-        # When the perf flag is OFF (default in test environments), no background
-        # thread spawns. Prevents pytest-django connection-pool race where the
-        # daemon thread's connections.close_all() in finally interferes with the
-        # test runner's transactional connection (root cause of InterfaceError
-        # cascade in 24+ swipe-touching tests on PR #146 CI).
-        if settings.RECOMMENDATION.get('async_prefetch_enabled', False):
-            threading.Thread(
-                target=_async_warm_taste,
-                args=(profile.id,),
-                daemon=True,
-            ).start()
 
         # 9. Card fetch + prefetch (outside transaction — no lock held)
         # All building IDs were resolved inside the transaction (step 8).
