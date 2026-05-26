@@ -10,7 +10,7 @@ Covers:
 import pytest
 import numpy as np
 from unittest.mock import patch
-from apps.recommendation.models import Project, AnalysisSession
+from apps.recommendation.models import Project, AnalysisSession, SwipeEvent
 
 
 # ---------------------------------------------------------------------------
@@ -83,13 +83,15 @@ _SWIPE_VIEW = 'apps.recommendation.views.swipe'
 
 
 class _SyncThread:
-    """threading.Thread replacement: runs target synchronously so test sees DB writes."""
+    """Run telemetry synchronously while suppressing async prefetch in tests."""
     def __init__(self, target=None, args=(), kwargs=None, daemon=None, **kw):
         self._target = target
         self._args = args
         self._kwargs = kwargs or {}
 
     def start(self):
+        if getattr(self._target, '__name__', '') == '_async_prefetch_thread':
+            return
         if self._target:
             self._target(*self._args, **self._kwargs)
 
@@ -253,6 +255,13 @@ class TestConfidenceBarIntegration:
         session.preference_vector = list(np.random.RandomState(3).randn(384))
         session.current_round = max(3, len(history))
         session.save()
+        for idx in range(2):
+            SwipeEvent.objects.create(
+                session=session,
+                canonical_bld_id=f'B{str(idx + 10).zfill(5)}',
+                action='like',
+                idempotency_key=f'confidence_seed_like_{idx}_{session.session_id}',
+            )
 
         return session_id, session
 

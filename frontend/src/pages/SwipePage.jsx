@@ -29,42 +29,37 @@ function LoadingCard() {
 function ConfidenceBar({ value, phase, progress }) {
   // value: confidence in [0, 1] (analyzing+ phases) or null (exploring / pre-reset)
   // progress: full progress object for swipe count
-  const likeCount = progress?.like_count ?? 0
+  const swipeCount = progress?.swipe_count ?? progress?.current_round ?? 0
+  const targetSwipes = Math.max(1, progress?.target_swipes ?? 10)
+  const swipePct = Math.min(95, Math.round((Math.min(swipeCount, targetSwipes) / targetSwipes) * 100))
   let pct = 0
   let stageLabel = 'Loading…'
 
   if (phase === 'converged' || phase === 'completed') {
-    pct = value != null ? Math.round(value * 100) : 100
-    stageLabel = 'Converged'
+    pct = 100
+    stageLabel = 'Taste found'
   } else if (phase === 'analyzing') {
     if (value != null) {
-      pct = Math.round(value * 100)
-      stageLabel = 'Analyzing'
+      pct = Math.max(swipePct, Math.round(value * 100))
+      stageLabel = 'Tuning taste'
     } else {
-      // Post-transition calibration window: backend has reset convergence_history
-      // and needs `convergence_window` (=3) more delta_v entries before
-      // compute_confidence returns a non-null float. Until then we keep the
-      // exploring-phase visual semantic (progress driven by like_count) so the
-      // bar never falsely reads 100%. See plans/merry-toasting-dove.md.
-      const likes = Math.min(likeCount, 4)
-      pct = Math.round((likes / 4) * 100)
+      pct = swipePct
       stageLabel = 'Calibrating…'
     }
   } else if (phase === 'exploring') {
-    const likes = Math.min(likeCount, 4)
-    pct = Math.round((likes / 4) * 100)
+    pct = swipePct
     stageLabel = 'Exploring'
   } else if (value != null) {
-    pct = Math.round(value * 100)
-    stageLabel = 'Analyzing'
+    pct = Math.max(swipePct, Math.round(value * 100))
+    stageLabel = 'Tuning taste'
   }
 
   // Swipe count: prefer swipe_count, fallback to like+dislike sum, fallback to likes only
   let swipeCountLabel = ''
   if (progress?.swipe_count != null) {
-    swipeCountLabel = `${progress.swipe_count} swipes`
+    swipeCountLabel = `${progress.swipe_count}/${targetSwipes} swipes`
   } else if (progress?.like_count != null && progress?.dislike_count != null) {
-    swipeCountLabel = `${progress.like_count + progress.dislike_count} swipes`
+    swipeCountLabel = `${progress.like_count + progress.dislike_count}/${targetSwipes} swipes`
   } else if (progress?.like_count != null) {
     swipeCountLabel = `${progress.like_count} ♥`
   }
@@ -321,12 +316,15 @@ export default function SwipePage({
   const phase            = progress?.phase
   const filter_relaxed   = progress?.filter_relaxed || false
   const confidence       = progress?.confidence ?? null
-
-  // Show "Finish & View Report" button when progress hits 100% (still swiping, not yet completed)
-  const isAt100 = !isCompleted && (
-    (phase === 'exploring' && like_count >= 4) ||
-    ((phase === 'analyzing' || phase === 'converged') && confidence != null && confidence >= 1.0)
-  )
+  const swipeCount       = progress?.swipe_count ?? progress?.current_round ?? 0
+  const targetSwipes     = Math.max(1, progress?.target_swipes ?? 10)
+  // Safety floor: once the user has swiped 5 beyond the product target window,
+  // expose the Finish button regardless of backend convergence state. Backend
+  // can withhold `phase='converged'` indefinitely when the recent-likes gate
+  // blocks it (e.g. dislike streak post-target) — without this floor the user
+  // is stranded until pool exhaustion.
+  const beyondTargetFloor = swipeCount >= targetSwipes + 5
+  const isAt100 = !isCompleted && (phase === 'converged' || beyondTargetFloor)
 
   function onTinderSwipe(dir) {
     // F4: intercept first-ever left swipe to show dismiss tutorial
@@ -555,7 +553,7 @@ export default function SwipePage({
 
       <div style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center',
-        justifyContent: 'space-between', height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))', overflow: 'hidden',
+        justifyContent: 'flex-start', height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))', overflow: 'hidden',
         background: 'var(--color-bg)', padding: '20px 16px',
         position: 'relative',
       }}>
@@ -600,7 +598,13 @@ export default function SwipePage({
           </div>
         </div>
 
-        {/* Finish button — appears between progress bar and card when progress hits 100% */}
+        {/* Card + finish button — vertically centered in remaining space */}
+        <div style={{
+          flex: 1,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          gap: 12, width: '100%',
+        }}>
+
         {isAt100 && (
           <div style={{ width: CARD_WIDTH }}>
             <button
@@ -666,8 +670,10 @@ export default function SwipePage({
           ) : null}
         </div>
 
+        </div>{/* end center wrapper */}
+
         {/* Action Buttons */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, flexShrink: 0 }}>
           <p style={{ color: 'var(--color-text-dimmest)', fontSize: 11, margin: 0 }}>← skip · tap card · save →</p>
         </div>
 

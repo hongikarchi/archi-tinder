@@ -15,7 +15,7 @@ from rest_framework.views import APIView
 
 from ..models import Project, AnalysisSession, SwipeEvent
 from .. import engine, event_log
-from ..caches import evict_taste
+from ..caches import evict_taste, evict_projects_list, evict_discovery_feed
 from ._shared import _get_profile, _progress, _liked_id_only
 
 logger = logging.getLogger('apps.recommendation')
@@ -36,6 +36,17 @@ def _merge_buffer_into_exposed(exposed_ids, client_buffer_ids):
             merged.append(bid)
             exposed_set.add(bid)
     return merged
+
+
+def _recent_actions(session, window):
+    return list(
+        reversed(
+            list(
+                session.swipes.order_by('-created_at')
+                .values_list('action', flat=True)[:window]
+            )
+        )
+    )
 
 
 # ── Async telemetry thread ────────────────────────────────────────────────────
@@ -89,11 +100,14 @@ def _async_prefetch_thread(
         prefetch_card = None
         prefetch_card_2 = None
 
-        # Compute prefetch_card (round+1 equivalent)
+        # Compute prefetch_card (T+1 swipe's prefetch slot, i.e. round+2 from the
+        # snapshot perspective). The main thread at T+1 selects next_card =
+        # initial_batch[current_round_snap+1]; the cache consumer needs the card
+        # that fills the *prefetch* slot of that same response, which is index +2.
         if phase == 'exploring':
             exposed_set = set(exposed_ids_snap)
-            if current_round_snap + 1 < len(initial_batch_snap):
-                pf_bid = initial_batch_snap[current_round_snap + 1]
+            if current_round_snap + 2 < len(initial_batch_snap):
+                pf_bid = initial_batch_snap[current_round_snap + 2]
                 if pf_bid and pf_bid not in exposed_set:
                     prefetch_card = engine.get_building_card(pf_bid)
                 else:
@@ -105,17 +119,18 @@ def _async_prefetch_thread(
         elif phase == 'analyzing':
             pf_id = engine.compute_mmr_next(
                 pool_ids_snap, exposed_ids_snap, pool_embeddings_snap,
-                like_vectors_snap, current_round_snap + 1
+                like_vectors_snap, current_round_snap + 2
             )
             prefetch_card = engine.get_building_card(pf_id) if pf_id else None
 
-        # Compute prefetch_card_2 (round+2 equivalent)
+        # Compute prefetch_card_2 (T+1 swipe's prefetch_2 slot, i.e. round+3 from
+        # the snapshot perspective, index +3 in initial_batch).
         if prefetch_card and prefetch_card.get('canonical_bld_id') != '__action_card__':
             temp_exposed = exposed_ids_snap + [prefetch_card['canonical_bld_id']]
             if phase == 'exploring':
                 exposed_set_2 = set(temp_exposed)
-                if current_round_snap + 2 < len(initial_batch_snap):
-                    pf2_bid = initial_batch_snap[current_round_snap + 2]
+                if current_round_snap + 3 < len(initial_batch_snap):
+                    pf2_bid = initial_batch_snap[current_round_snap + 3]
                     if pf2_bid and pf2_bid not in exposed_set_2:
                         prefetch_card_2 = engine.get_building_card(pf2_bid)
                     else:
@@ -127,7 +142,7 @@ def _async_prefetch_thread(
             elif phase == 'analyzing':
                 pf2_id = engine.compute_mmr_next(
                     pool_ids_snap, temp_exposed, pool_embeddings_snap,
-                    like_vectors_snap, current_round_snap + 2
+                    like_vectors_snap, current_round_snap + 3
                 )
                 prefetch_card_2 = engine.get_building_card(pf2_id) if pf2_id else None
 
@@ -261,6 +276,9 @@ class ProjectBookmarkView(APIView):
 
             project.saved_ids = existing
             project.save(update_fields=['saved_ids', 'updated_at'])
+
+        evict_projects_list(profile.id)
+        evict_discovery_feed(profile.id)
 
         # --- Resolve optional session for event association ---
         session = None
@@ -460,9 +478,8 @@ class SwipeView(APIView):
                 session_id=session_id, user=profile
             )
             _mark('lock_acquired')
-            # Lock Project row before mutating its JSON lists (liked_ids / disliked_ids).
-            # Lock order: Session -> Project (no deadlock vs. bookmark POST which takes
-            # only Project and never acquires Session first).
+            # Keep Project JSON lists synchronized per existing API contract.
+            # Lock order: Session -> Project (bookmark POST takes only Project).
             project = Project.objects.select_for_update().get(pk=session.project_id)
 
             # 1. Get embedding and update preference vector
@@ -501,21 +518,19 @@ class SwipeView(APIView):
                     'detail': 'duplicate',
                 })
 
-            # 3. Update project liked/disliked lists (use the locked `project` from above)
+            # 3. Update project liked/disliked lists and in-session like vectors.
             if action == 'like':
                 existing_ids = _liked_id_only(project.liked_ids)
                 if canonical_bld_id not in existing_ids:
-                    # Default intensity 1.0 for plain Like. Love (intensity 1.8) lands in Sprint 3 A-1
-                    # when the frontend wires up the up-swipe gesture; for now all backend writes
-                    # use 1.0 unless the request explicitly carries an intensity field (future-proofing).
                     try:
                         raw_intensity = request.data.get('intensity', 1.0)
                         intensity = float(raw_intensity) if raw_intensity is not None else 1.0
                     except (TypeError, ValueError):
                         intensity = 1.0
                     intensity = max(0.0, min(2.0, intensity))
-                    project.liked_ids = project.liked_ids + [{'id': canonical_bld_id, 'intensity': intensity}]
-                # Append to session.like_vectors
+                    project.liked_ids = project.liked_ids + [
+                        {'id': canonical_bld_id, 'intensity': intensity}
+                    ]
                 if embedding:
                     session.like_vectors = session.like_vectors + [{'embedding': embedding, 'round': session.current_round}]
             else:
@@ -523,6 +538,7 @@ class SwipeView(APIView):
                     project.disliked_ids = project.disliked_ids + [canonical_bld_id]
             project.save(update_fields=['liked_ids', 'disliked_ids'])
             evict_taste(profile.id)
+            evict_discovery_feed(profile.id)
 
             # 4. Increment round
             session.current_round += 1
@@ -574,8 +590,19 @@ class SwipeView(APIView):
                 session.previous_pref_vector = []
                 logger.info('Session %s: exploring -> analyzing (likes=%d)', session.session_id, like_count)
 
+            _convergence_window = RC.get('convergence_window', 3)
+            _recent_action_window = max(
+                _convergence_window,
+                RC.get('max_consecutive_dislikes', 5),
+            )
+            _recent_actions_window = _recent_actions(session, _recent_action_window)
+            _recent_convergence_actions = _recent_actions_window[-_convergence_window:]
             if session.phase == 'analyzing' and engine.check_convergence(
-                session.convergence_history, RC.get('convergence_threshold', 0.08), RC.get('convergence_window', 3)
+                session.convergence_history,
+                RC.get('convergence_threshold', 0.13),
+                _convergence_window,
+                _recent_convergence_actions,
+                RC.get('convergence_min_recent_likes', 0),
             ):
                 session.phase = 'converged'
                 logger.info('Session %s: analyzing -> converged', session.session_id)
@@ -619,7 +646,11 @@ class SwipeView(APIView):
                             session.pool_ids, session.exposed_ids, pool_embeddings
                         )
                 else:
-                    recent_swipes = list(session.swipes.order_by('-created_at').values_list('action', flat=True)[:RC.get('max_consecutive_dislikes', 5)])
+                    recent_swipes = list(
+                        reversed(
+                            _recent_actions_window[-RC.get('max_consecutive_dislikes', 5):]
+                        )
+                    )
                     consecutive_dislikes = 0
                     for s in recent_swipes:
                         if s == 'dislike':
@@ -629,7 +660,12 @@ class SwipeView(APIView):
 
                     if consecutive_dislikes >= RC.get('max_consecutive_dislikes', 5):
                         # Batch-fetch dislike embeddings (single query instead of N individual calls)
-                        dislike_ids = project.disliked_ids[-10:]
+                        dislike_ids = list(
+                            session.swipes
+                            .filter(action='dislike')
+                            .order_by('-created_at')
+                            .values_list('canonical_bld_id', flat=True)[:10]
+                        )
                         dislike_embeds = []
                         if dislike_ids:
                             dislike_emb_map = engine.get_pool_embeddings(dislike_ids)
@@ -675,6 +711,7 @@ class SwipeView(APIView):
             saved_phase = session.phase
             # Cache pool_embeddings -- same pool_ids, no need to re-fetch outside transaction
             saved_pool_embeddings = pool_embeddings
+            saved_recent_actions = list(_recent_actions_window)
 
         # 9. Card fetch + prefetch (outside transaction — no lock held)
         # All building IDs were resolved inside the transaction (step 8).
@@ -697,13 +734,58 @@ class SwipeView(APIView):
             pass
 
         elif settings.RECOMMENDATION.get('async_prefetch_enabled', False):
-            # IMP-8 async path: fetch next_card in main thread, offload prefetch.
-            next_card = engine.get_building_card(next_bid)
+            # IMP-8 async path (PERF-PREFETCH-CHAIN): consume prior swipe's thread
+            # cache write BEFORE spawning this swipe's thread, then batch-fetch
+            # next + prefetch + prefetch_2 in a single get_buildings_by_ids RTT.
+            #
+            # Key algebra:
+            #   Prior swipe wrote: prefetch:{sid}:{prior_saved_current_round + 1}
+            #   prior_saved_current_round + 1 == current saved_current_round (both = N)
+            # So cache.get('prefetch:{sid}:{saved_current_round}') reads the prior write.
+            #
+            # cache.get before t.start() for readability; thread writes key N+1,
+            # consumer reads N — no race on the cache key.
+            #
+            # Note: exposed_ids_snap passed to the thread DOES include T's next_card
+            # (session.exposed_ids already had it added before line 703 snapshot).
+            # It does NOT include T+1's not-yet-selected next_card. So on the
+            # analyzing path, compute_mmr_next(round=N+2, exposed=exposed_at_T) may
+            # return the same card T+1's main thread independently picks as next_bid
+            # (via compute_mmr_next(round=N+1, exposed=exposed_at_T+1)). Cache hit
+            # would then put the same card in both next_image and prefetch_image.
+            # Fixed: dedupe guards below degrade such collisions to None (same as
+            # cache miss) before the batch fetch. Frontend never sees a duplicate.
+            cached = cache.get(f'prefetch:{session.session_id}:{saved_current_round}')
+            pf_id = cached.get('prefetch_card_id') if cached else None
+            pf2_id = cached.get('prefetch_card_2_id') if cached else None
+
+            # Dedupe against next_bid + against each other. On the analyzing path,
+            # compute_mmr_next can return the same card for T's lookahead (round=N+2,
+            # exposed_at_T) as T+1's main pick (round=N+1, exposed_at_T+1) when the
+            # inputs are similar (e.g., dislike streak keeps like_vectors stable).
+            # Frontend does NOT dedupe (App.jsx:521+536 non-instant-swap path), so
+            # duplicate-card-in-prefetch would surface as the user seeing the same
+            # building twice. Degrade dupes to None — same as a cache miss.
+            if pf_id == next_bid:
+                pf_id = None
+            if pf2_id and (pf2_id == next_bid or pf2_id == pf_id):
+                pf2_id = None
+
+            # Batch-fetch next + prefetch + prefetch_2 in a single DB RTT.
+            _async_ids = [bid for bid in [next_bid, pf_id, pf2_id] if bid]
+            _async_fetched = {
+                c['canonical_bld_id']: c
+                for c in engine.get_buildings_by_ids(_async_ids)
+            }
+            next_card = _async_fetched.get(next_bid)
+            prefetch_card = _async_fetched.get(pf_id) if pf_id else None
+            prefetch_card_2 = _async_fetched.get(pf2_id) if pf2_id else None
+
             t = threading.Thread(
                 target=_async_prefetch_thread,
                 args=(
                     str(session.session_id),
-                    saved_current_round + 1,     # cache_round key
+                    saved_current_round + 1,     # cache_round key (writes prefetch:{sid}:{N+1})
                     saved_phase,
                     saved_pool_ids,
                     saved_exposed_ids,
@@ -716,7 +798,6 @@ class SwipeView(APIView):
             )
             t.start()
             prefetch_strategy = 'async-thread'
-            # prefetch_card and prefetch_card_2 stay None -- frontend handles gracefully
 
         else:
             # ── Phase 1: prefetch ID selection (CPU-only, no DB) ─────────────
@@ -826,8 +907,10 @@ class SwipeView(APIView):
         # Compute user-facing confidence (Python-only, fast — must stay on hot path)
         confidence = engine.compute_confidence(
             session.convergence_history,
-            RC.get('convergence_threshold', 0.08),
+            RC.get('convergence_threshold', 0.13),
             window=RC.get('convergence_window', 3),
+            recent_actions=saved_recent_actions[-RC.get('convergence_window', 3):],
+            min_recent_likes=RC.get('convergence_min_recent_likes', 0),
         )
 
         # Build telemetry kwargs and fire off background thread.

@@ -49,6 +49,69 @@ def emit_event(event_type, session=None, user=None, **payload):
         return None
 
 
+def emit_event_batch(events):
+    """
+    Emit multiple SessionEvent records in a single bulk_create (one SQL round-trip).
+
+    `events` is a list of dicts, each with keys:
+        event_type  (str, required)
+        session     (AnalysisSession | None)
+        user        (UserProfile | None)
+        **payload   (all other keys → stored as JSONField payload)
+
+    sequence_no assignment: one COUNT(*) per unique session in the batch, then
+    events sharing that session are numbered seq, seq+1, seq+2, ... in list order.
+    Sessions that appear multiple times share one DB round-trip for count.
+
+    Returns list of created SessionEvent instances on success, [] on failure.
+    Never raises -- failure to log must not block the request.
+    """
+    if not events:
+        return []
+
+    from apps.recommendation.models import SessionEvent
+
+    try:
+        # Compute base sequence numbers per unique session (one query per unique session).
+        _session_seqs = {}
+        for ev in events:
+            s = ev.get('session')
+            key = getattr(s, 'pk', None)
+            if key not in _session_seqs:
+                base = SessionEvent.objects.filter(session=s).count() if s is not None else 0
+                _session_seqs[key] = base
+
+        # Build model instances, incrementing seq per session as we go.
+        _session_offsets = {}
+        instances = []
+        for ev in events:
+            s = ev.get('session')
+            u = ev.get('user')
+            et = ev['event_type']
+            payload = {k: v for k, v in ev.items() if k not in ('event_type', 'session', 'user')}
+            key = getattr(s, 'pk', None)
+            offset = _session_offsets.get(key, 0)
+            seq = _session_seqs[key] + offset
+            _session_offsets[key] = offset + 1
+            instances.append(SessionEvent(
+                event_type=et,
+                session=s,
+                user=u,
+                payload=payload,
+                sequence_no=seq,
+            ))
+
+        SessionEvent.objects.bulk_create(instances)
+        return instances
+    except Exception as e:
+        session_id = getattr(events[0].get('session'), 'session_id', None) if events else None
+        logger.warning(
+            'emit_event_batch failed: %s (count=%d, first_event_type=%s, session_id=%s)',
+            e, len(events), events[0].get('event_type') if events else None, session_id,
+        )
+        return []
+
+
 def aggregate_session_clustering_stats(session_id):
     """
     Topic 06 / IMP-10 sub-task A: aggregate cluster_count_used + silhouette_score

@@ -166,6 +166,23 @@ export default function App() {
     return () => clearTimeout(timer)
   }, [swipeError])
 
+  // Auto-navigate when the backend declares a terminal state OR the user has
+  // swiped meaningfully past the target window. The post-target floor mirrors
+  // SwipePage's beyondTargetFloor so users on dislike-heavy paths don't get
+  // stranded (backend convergence can be withheld by the recent-likes gate).
+  useEffect(() => {
+    if (location.pathname !== '/swipe') return
+    const phase = sessionProgress?.phase
+    const swipeCount = sessionProgress?.swipe_count ?? sessionProgress?.current_round ?? 0
+    const targetSwipes = Math.max(1, sessionProgress?.target_swipes ?? 10)
+    const beyondTargetFloor = swipeCount >= targetSwipes + 5
+    const backendDone = isSessionCompleted || phase === 'converged' || beyondTargetFloor
+    if (!backendDone) return
+    const sessionId = projects.find(p => p.id === activeProjectId)?.sessionId
+    if (!sessionId) return
+    navigate('/result/' + sessionId)
+  }, [isSessionCompleted, sessionProgress?.phase, sessionProgress?.swipe_count, sessionProgress?.current_round]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Persist current card id to localStorage per active project so refresh can
   // restore the exact card the user was looking at (not just the backend's last
   // next_image). Cleared when currentCard becomes null or session completes.
@@ -434,7 +451,11 @@ export default function App() {
 
       swipeRetryCount.current = 0
       setSwipeError(null)
-      setSessionProgress({ ...result.progress, confidence: result.confidence ?? null })
+      setSessionProgress({
+        ...result.progress,
+        confidence: result.confidence ?? null,
+        can_continue: result.can_continue ?? false,
+      })
 
       if (result.is_analysis_completed) {
         setIsSessionCompleted(true)

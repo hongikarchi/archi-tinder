@@ -71,6 +71,8 @@ DATABASES = {
         'USER':     os.environ['DB_USER'],
         'PASSWORD': os.environ['DB_PASSWORD'],
         'CONN_MAX_AGE': 600,  # Reuse DB connections for 10 minutes
+        'CONN_HEALTH_CHECKS': True,  # Django 4.2+: close broken pooled connections proactively
+        'TIME_ZONE': None,  # explicit so settings_dict["TIME_ZONE"] never raises on reconnect
         'OPTIONS': {
             'sslmode': os.getenv('DB_SSLMODE', 'require'),
         },
@@ -86,7 +88,7 @@ DATABASES = {
         'NAME':     os.environ['BUILDINGS_DB_NAME'],
         'USER':     os.environ['BUILDINGS_DB_USER'],
         'PASSWORD': os.environ['BUILDINGS_DB_PASSWORD'],
-        'CONN_MAX_AGE': 600,
+        'TIME_ZONE': None,  # explicit so settings_dict["TIME_ZONE"] never raises on reconnect
         'OPTIONS': {
             'sslmode': os.getenv('BUILDINGS_DB_SSLMODE', 'require'),
         },
@@ -106,7 +108,7 @@ AUTH_PASSWORD_VALIDATORS = [
 # -- REST Framework --------------------------------------------------------
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'apps.accounts.authentication.CachedJWTAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
@@ -136,22 +138,53 @@ SIMPLE_JWT = {
 CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:5173,http://localhost:5174').split(',')
 CORS_ALLOW_CREDENTIALS = True
 
-# -- Cache (required for DRF throttling) -----------------------------------
+# -- Cache (required for DRF throttling, IMP-5 Gemini context-cache, IMP-8 async prefetch) --
+# INFRA-REDIS-1 (2026-05-26): Redis is the prod cache backend so PR 3 (BACK-AUTH-1 JTI
+# cache) and PR 4 (PERF-PREFETCH-CHAIN async consume) work across Railway's multi-worker
+# Gunicorn (LocMemCache is per-process; bg thread in worker A -> next swipe in worker B
+# would always miss). Local dev keeps LocMemCache when REDIS_URL is unset, so devs do
+# not need to run a Redis daemon to spin up backend.
 # IMP-8 (v1.6 §11.1): async prefetch background thread writes to default cache.
 # IMP-5 (v1.5 §11.1): Gemini context-cache resource name stored in default cache.
-# Production multi-worker deploys SHOULD swap LocMemCache for Redis (django-redis)
-# to share cache across workers -- LocMemCache is per-process, so cache writes from
-# bg thread in worker A are not visible to next swipe arriving on worker B.
-# Single-worker dev / Render free tier with 1 worker: LocMemCache works fine.
-CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-        # Default MAX_ENTRIES=300 thrashes with ~150-card pools per session;
-        # bump to 2000 (~13 concurrent sessions × 150 building-card payloads).
-        # Re-tune when swapping in Redis for prod.
-        'OPTIONS': {'MAX_ENTRIES': 2000},
+
+
+def _build_caches_dict(redis_url: str) -> dict:
+    """Return a CACHES dict for the given redis_url (empty string -> LocMemCache).
+
+    Extracted as a module-level helper so unit tests can call it directly
+    without monkeypatching os.environ or reloading the module.
+    Connection failures with a configured Redis URL are NOT swallowed -- ops
+    team should see them loudly rather than silently falling back to
+    LocMemCache, which would cause multi-worker cache incoherence in prod.
+    """
+    if redis_url:
+        return {
+            'default': {
+                'BACKEND': 'django_redis.cache.RedisCache',
+                'LOCATION': redis_url,
+                'OPTIONS': {
+                    'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+                    # Sensible default timeout; matches the implicit 300s default Django
+                    # cache TTL -- explicit so reviewers see it.
+                    'SOCKET_CONNECT_TIMEOUT': 3,
+                    'SOCKET_TIMEOUT': 3,
+                },
+                # Optional key prefix protects against accidentally sharing keys with
+                # another app using the same Redis instance.
+                'KEY_PREFIX': 'makeweb',
+            }
+        }
+    return {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            # Default MAX_ENTRIES=300 thrashes with ~150-card pools per session;
+            # bump to 2000 (~13 concurrent sessions x 150 building-card payloads).
+            'OPTIONS': {'MAX_ENTRIES': 2000},
+        }
     }
-}
+
+
+CACHES = _build_caches_dict(os.getenv('REDIS_URL', '').strip())
 
 # -- Internationalization --------------------------------------------------
 LANGUAGE_CODE = 'en-us'
@@ -175,9 +208,12 @@ RECOMMENDATION = {
     'min_likes_for_clustering': 4,  # Spec v1.8 Topic 06 N>=4 activation-cliff mitigation per Investigation 21 §closure -- defer K-Means until N>=4 to avoid the Investigation 09 worst-case window (1 Love + 2 Likes, k=2 forces centroid collapse onto Love)
     'decay_rate': 0.05,              # gamma -- recency weight decay
     'mmr_penalty': 0.3,              # lambda -- diversity penalty
-    'convergence_threshold': 0.08,   # epsilon -- delta-V threshold
+    'convergence_threshold': 0.13,   # epsilon -- tuned for convergence inside the 10-swipe target window
     'convergence_window': 3,
+    'target_swipes': 10,             # product goal: taste should be captured within ~10 swipes
+    'convergence_min_recent_likes': 2,  # recent positive evidence required before backend declares convergence
     'k_clusters': 2,
+    'min_likes_for_multimodal': 11,  # keep the <=10-swipe loop single-centroid; KMeans only after the target window
     'max_consecutive_dislikes': 5,
     'top_k_results': 20,
     'like_weight': 0.5,              # kept for pref vector update
@@ -208,7 +244,7 @@ RECOMMENDATION = {
                                              # paths (e.g., IMP-8 async background warming).
     'pool_embedding_cache_max_size': 5000,   # IMP-7 FIFO eviction bound; ~5MB max. Bump for larger corpora.
     # IMP-8 (Spec v1.6 §11.1): async prefetch background thread
-    'async_prefetch_enabled': False,                   # default OFF for safe rollout; flip True after Redis wired in prod
+    'async_prefetch_enabled': True,                    # Re-enabled after PERF-PREFETCH-CHAIN (PR 4 of 4 perf sweep): thread write off-by-one fixed + cache.get consumer wired + Redis backend (INFRA-REDIS-1) provides multi-worker cache coherence.
     'async_prefetch_cache_timeout_seconds': 60,        # Django cache TTL for prefetch entries (seconds)
     # Per-card LRU TTL (PR #22 absorb): cache.get/set under 'bcard:<id>' keys.
     # 3600s default keeps building-card payloads warm across requests without
@@ -234,6 +270,9 @@ RECOMMENDATION = {
     # distribution + Brutalist sys_p50 trend post-flip.
     'stage_decouple_enabled': os.getenv('STAGE_DECOUPLE_ENABLED', 'false').lower() == 'true',  # default OFF; set STAGE_DECOUPLE_ENABLED=true in env to flip
 }
+
+# -- External API keys -----------------------------------------------------
+PERF_TIMING_ENABLED = os.environ.get('PERF_TIMING_ENABLED', 'False').lower() == 'true'
 
 # -- External API keys -----------------------------------------------------
 GEMINI_API_KEY    = os.getenv('GEMINI_API_KEY', '')
@@ -286,6 +325,11 @@ LOGGING = {
         'apps': {
             'handlers': ['console'],
             'level': 'DEBUG',
+            'propagate': False,
+        },
+        'perf_timing': {
+            'handlers': ['console'],
+            'level': 'INFO' if PERF_TIMING_ENABLED else 'WARNING',
             'propagate': False,
         },
     },

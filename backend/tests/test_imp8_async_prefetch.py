@@ -692,12 +692,13 @@ class TestBackwardCompat:
         """Clear cache before each test to prevent cross-test pollution."""
         cache.clear()
 
-    def test_flag_off_is_default(self):
-        """async_prefetch_enabled defaults to False."""
-        assert settings.RECOMMENDATION.get('async_prefetch_enabled') is False
+    def test_async_prefetch_is_default(self):
+        """async_prefetch_enabled defaults to True after PERF-PREFETCH-CHAIN: thread off-by-one fixed + consumer wired."""
+        assert settings.RECOMMENDATION.get('async_prefetch_enabled') is True
 
-    def test_swipe_200_flag_off(self, auth_client, user_profile):
-        """Standard swipe succeeds with flag at default (OFF)."""
+    def test_swipe_200_flag_off(self, auth_client, user_profile, settings):
+        """Standard swipe still succeeds when the legacy sync path is explicitly enabled."""
+        settings.RECOMMENDATION = {**settings.RECOMMENDATION, 'async_prefetch_enabled': False}
         session, pool_ids = _create_session_and_project(user_profile)
         patchers = _apply_patches(_base_engine_patches(pool_ids))
 
@@ -715,8 +716,9 @@ class TestBackwardCompat:
         assert data['accepted'] is True
         assert data['next_image'] is not None
 
-    def test_flag_off_no_thread_spawned(self, auth_client, user_profile):
-        """No bg thread is ever spawned when flag is OFF."""
+    def test_flag_off_no_thread_spawned(self, auth_client, user_profile, settings):
+        """No bg prefetch thread is spawned when the sync path is explicitly enabled."""
+        settings.RECOMMENDATION = {**settings.RECOMMENDATION, 'async_prefetch_enabled': False}
         session, pool_ids = _create_session_and_project(user_profile)
         patchers = _apply_patches(_base_engine_patches(pool_ids))
         spawned = []
@@ -739,8 +741,9 @@ class TestBackwardCompat:
 
         assert len(spawned) == 1, 'Only telemetry thread spawned; no async prefetch thread when flag is OFF'
 
-    def test_flag_off_no_cache_write(self, auth_client, user_profile):
-        """No cache entries are written when flag is OFF."""
+    def test_flag_off_no_cache_write(self, auth_client, user_profile, settings):
+        """No async prefetch cache entries are written when the sync path is explicitly enabled."""
+        settings.RECOMMENDATION = {**settings.RECOMMENDATION, 'async_prefetch_enabled': False}
         session, pool_ids = _create_session_and_project(user_profile)
         patchers = _apply_patches(_base_engine_patches(pool_ids))
 
@@ -761,14 +764,265 @@ class TestBackwardCompat:
 
 
 # ---------------------------------------------------------------------------
+# TestAsyncBranchConsumerIntegration
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestAsyncBranchConsumerIntegration:
+    """Async branch reads the prior swipe's thread cache write to hydrate prefetch slots.
+
+    Seed: cache.set('prefetch:{sid}:{N}', {prefetch_card_id: pf_id, prefetch_card_2_id: pf2_id})
+    Swipe with saved_current_round == N -> consumer reads key N -> response has hydrated cards.
+    """
+
+    def setup_method(self):
+        """Clear cache before each test."""
+        cache.clear()
+
+    def test_async_branch_consumes_prior_thread_write(self, auth_client, user_profile, settings):
+        """Async branch reads cache entry seeded by prior swipe's thread and hydrates prefetch slots.
+
+        The session starts at current_round=0. After the swipe current_round becomes 1
+        (saved_current_round=1). Consumer key is prefetch:{sid}:1. We pre-seed that key
+        before the swipe so the consumer finds a cache hit.
+        """
+        settings.RECOMMENDATION = {**settings.RECOMMENDATION, 'async_prefetch_enabled': True}
+        session, pool_ids = _create_session_and_project(user_profile)
+
+        pf_bld_id = 'bld_test_pf_001'
+        pf2_bld_id = 'bld_test_pf_002'
+
+        # Pre-seed the cache at the key the consumer will read: prefetch:{sid}:1
+        # (saved_current_round will be 1 after the swipe increments current_round 0->1)
+        cache_key = f'prefetch:{session.session_id}:1'
+        cache.set(cache_key, {
+            'prefetch_card_id': pf_bld_id,
+            'prefetch_card_2_id': pf2_bld_id,
+            'computed_at': '2026-05-26T00:00:00+00:00',
+        }, timeout=60)
+
+        # Extend mock cards to include the seeded IDs so get_buildings_by_ids can return them
+        def _extended_mock_buildings(ids):
+            result = []
+            for bid in ids:
+                if bid:
+                    result.append({
+                        'canonical_bld_id': bid,
+                        'name_en': f'Building {bid}',
+                        'project_name': '',
+                        'image_url': f'https://example.com/{bid}.jpg',
+                        'url': None,
+                        'gallery': [],
+                        'gallery_drawing_start': 0,
+                        'metadata': {
+                            'axis_typology': 'Museum',
+                            'axis_architects': None,
+                            'axis_country': None,
+                            'axis_area_m2': None,
+                            'axis_year': None,
+                            'axis_style': None,
+                            'axis_atmosphere': 'calm',
+                            'axis_color_tone': None,
+                            'axis_material': None,
+                            'axis_material_visual': [],
+                            'axis_tags': [],
+                        },
+                    })
+            return result
+
+        patchers = _apply_patches(_base_engine_patches(pool_ids))
+        # Override get_buildings_by_ids to handle the seeded IDs as well
+        buildings_patcher = patch(
+            'apps.recommendation.views.engine.get_buildings_by_ids',
+            side_effect=_extended_mock_buildings,
+        )
+        buildings_patcher.start()
+        patchers.append(buildings_patcher)
+
+        # Use _NoopThread: suppresses async prefetch thread so the seeded cache entry
+        # is not overwritten by a concurrent thread write during the test.
+        thread_patcher = patch(
+            'apps.recommendation.views.threading.Thread',
+            side_effect=lambda *a, **kw: _NoopThread(*a, **kw),
+        )
+        thread_patcher.start()
+        patchers.append(thread_patcher)
+
+        try:
+            resp = auth_client.post(
+                f'/api/v1/analysis/sessions/{session.session_id}/swipes/',
+                {'building_id': pool_ids[0], 'action': 'like'},
+                format='json',
+            )
+        finally:
+            _stop_patches(patchers)
+
+        assert resp.status_code == 200, f'Swipe failed: {resp.json()}'
+        data = resp.json()
+        assert data['accepted'] is True
+
+        # Cache hit: prefetch_image and prefetch_image_2 must be hydrated card dicts.
+        pf = data['prefetch_image']
+        pf2 = data['prefetch_image_2']
+        assert pf is not None, 'prefetch_image should be hydrated from cache hit'
+        assert pf2 is not None, 'prefetch_image_2 should be hydrated from cache hit'
+        assert pf['canonical_bld_id'] == pf_bld_id, (
+            f'Expected prefetch_image={pf_bld_id}, got {pf.get("canonical_bld_id")}'
+        )
+        assert pf2['canonical_bld_id'] == pf2_bld_id, (
+            f'Expected prefetch_image_2={pf2_bld_id}, got {pf2.get("canonical_bld_id")}'
+        )
+        # Verify response shape parity with sync path (required fields present)
+        for card in (pf, pf2):
+            assert 'canonical_bld_id' in card
+            assert 'image_url' in card
+            assert 'metadata' in card
+
+    def test_async_branch_cache_miss_graceful(self, auth_client, user_profile, settings):
+        """Cache miss on async path: prefetch slots remain None; swipe still 200."""
+        settings.RECOMMENDATION = {**settings.RECOMMENDATION, 'async_prefetch_enabled': True}
+        session, pool_ids = _create_session_and_project(user_profile)
+
+        # Do NOT seed the cache -- test cache miss path
+        patchers = _apply_patches(_base_engine_patches(pool_ids))
+        thread_patcher = patch(
+            'apps.recommendation.views.threading.Thread',
+            side_effect=lambda *a, **kw: _NoopThread(*a, **kw),
+        )
+        thread_patcher.start()
+        patchers.append(thread_patcher)
+
+        try:
+            resp = auth_client.post(
+                f'/api/v1/analysis/sessions/{session.session_id}/swipes/',
+                {'building_id': pool_ids[0], 'action': 'like'},
+                format='json',
+            )
+        finally:
+            _stop_patches(patchers)
+
+        assert resp.status_code == 200, f'Swipe failed: {resp.json()}'
+        data = resp.json()
+        assert data['accepted'] is True
+        # Cache miss: prefetch slots are None (graceful fallback; frontend handles)
+        assert data['prefetch_image'] is None, (
+            f'Cache miss should leave prefetch_image=None, got {data["prefetch_image"]}'
+        )
+        assert data['prefetch_image_2'] is None, (
+            f'Cache miss should leave prefetch_image_2=None, got {data["prefetch_image_2"]}'
+        )
+
+    def test_async_branch_dedupe_pf_id_matches_next_bid(self, auth_client, user_profile, settings):
+        """Regression test for the analyzing-path duplicate.
+
+        Pre-fix: cache had pf_id == next_bid; both response slots returned
+        the same card to the user. Post-fix: pf_id is degraded to None
+        (same as cache miss) — user never sees a dupe.
+
+        Setup: session starts exploring, current_round=0, initial_batch=pool_ids[:5].
+        After swipe on pool_ids[0]:
+          - current_round becomes 1 (saved_current_round=1)
+          - exploring picker: initial_batch[1] = pool_ids[1] -> next_bid = pool_ids[1]
+          - consumer reads prefetch:{sid}:1 -> pf_id = pool_ids[1] (== next_bid)
+          - dedupe guard: pf_id degraded to None
+        Response: next_image.canonical_bld_id == pool_ids[1], prefetch_image is None.
+        """
+        settings.RECOMMENDATION = {**settings.RECOMMENDATION, 'async_prefetch_enabled': True}
+        session, pool_ids = _create_session_and_project(user_profile)
+
+        # Seed cache with pf_id == pool_ids[1], which is the same ID the swipe handler
+        # will pick as next_bid (exploring path: initial_batch[current_round=1] = pool_ids[1]).
+        saved_current_round = 1  # current_round goes 0->1 during swipe processing
+        cache_key = f'prefetch:{session.session_id}:{saved_current_round}'
+        cache.set(cache_key, {
+            'prefetch_card_id': pool_ids[1],  # SAME as next_bid — collision scenario
+            'prefetch_card_2_id': pool_ids[2],
+            'computed_at': '2026-05-26T00:00:00+00:00',
+        }, timeout=60)
+
+        def _extended_mock_buildings(ids):
+            result = []
+            for bid in ids:
+                if bid:
+                    result.append({
+                        'canonical_bld_id': bid,
+                        'name_en': f'Building {bid}',
+                        'project_name': '',
+                        'image_url': f'https://example.com/{bid}.jpg',
+                        'url': None,
+                        'gallery': [],
+                        'gallery_drawing_start': 0,
+                        'metadata': {
+                            'axis_typology': 'Museum',
+                            'axis_architects': None,
+                            'axis_country': None,
+                            'axis_area_m2': None,
+                            'axis_year': None,
+                            'axis_style': None,
+                            'axis_atmosphere': 'calm',
+                            'axis_color_tone': None,
+                            'axis_material': None,
+                            'axis_material_visual': [],
+                            'axis_tags': [],
+                        },
+                    })
+            return result
+
+        patchers = _apply_patches(_base_engine_patches(pool_ids))
+        buildings_patcher = patch(
+            'apps.recommendation.views.engine.get_buildings_by_ids',
+            side_effect=_extended_mock_buildings,
+        )
+        buildings_patcher.start()
+        patchers.append(buildings_patcher)
+
+        thread_patcher = patch(
+            'apps.recommendation.views.threading.Thread',
+            side_effect=lambda *a, **kw: _NoopThread(*a, **kw),
+        )
+        thread_patcher.start()
+        patchers.append(thread_patcher)
+
+        try:
+            resp = auth_client.post(
+                f'/api/v1/analysis/sessions/{session.session_id}/swipes/',
+                {'building_id': pool_ids[0], 'action': 'like'},
+                format='json',
+            )
+        finally:
+            _stop_patches(patchers)
+
+        assert resp.status_code == 200, f'Swipe failed: {resp.json()}'
+        data = resp.json()
+        assert data['accepted'] is True
+
+        # next_image must be the canonical pick (pool_ids[1])
+        assert data['next_image'] is not None, 'next_image must not be None'
+        assert data['next_image']['canonical_bld_id'] == pool_ids[1], (
+            f'Expected next_image={pool_ids[1]}, got {data["next_image"].get("canonical_bld_id")}'
+        )
+
+        # prefetch_image must be None: dedupe guard degraded pf_id (== next_bid) to None
+        assert data['prefetch_image'] is None, (
+            f'Dedupe guard should degrade pf_id==next_bid to None, '
+            f'got prefetch_image={data["prefetch_image"]}'
+        )
+
+        # prefetch_image_2 may still be hydrated (pool_ids[2] != next_bid)
+        # — we only assert the main dupe is gone, not the secondary slot
+        # (pf2 is still valid here since pool_ids[2] != pool_ids[1] != None after pf degrade)
+
+
+# ---------------------------------------------------------------------------
 # TestSettingsFlagsImp8
 # ---------------------------------------------------------------------------
 
 class TestSettingsFlagsImp8:
     """New IMP-8 settings keys exist with correct defaults."""
 
-    def test_async_prefetch_enabled_default_false(self):
-        assert settings.RECOMMENDATION.get('async_prefetch_enabled') is False
+    def test_async_prefetch_enabled_default_true(self):
+        """async_prefetch_enabled defaults to True after PERF-PREFETCH-CHAIN."""
+        assert settings.RECOMMENDATION.get('async_prefetch_enabled') is True
 
     def test_async_prefetch_cache_timeout_seconds_default(self):
         assert settings.RECOMMENDATION.get('async_prefetch_cache_timeout_seconds') == 60

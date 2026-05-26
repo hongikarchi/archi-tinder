@@ -13,16 +13,22 @@ Hard rules:
   - Image URLs are full source-CDN URLs (Divisare/etc.). R2 composition is no
     longer used. `covers_by_type` JSONB allows per-focus cover selection.
 """
+import hashlib
+import json
 import math
 import random
 import logging
 import threading
+import time as _time
 import numpy as np
 from django.conf import settings
 from django.core.cache import cache
 from django.db import connections as _connections
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_samples
 
 from . import event_log
+from .perf_timing import stage
 
 
 class _EngineConnectionProxy:
@@ -53,6 +59,44 @@ _AVAILABLE_COLUMNS = None                  # frozenset of column names in canoni
 # other's stats. threading.local() gives each request-thread its own copy so reads
 # always reflect the call made on THIS thread, not a concurrent request's call.
 _telemetry = threading.local()             # attrs: embedding_call_stats, clustering_stats
+
+
+def _finite_unit_vector(raw_vec):
+    """Return a finite 384-dim vector, normalized when possible."""
+    vec = np.asarray(raw_vec, dtype=np.float64)
+    if vec.shape != (384,):
+        return None
+    if not np.isfinite(vec).all():
+        return None
+    norm = float(np.linalg.norm(vec))
+    if not math.isfinite(norm) or norm <= 0:
+        return vec
+    return vec / norm
+
+
+def _parse_embedding_text(raw):
+    try:
+        return _finite_unit_vector(np.fromstring(raw.strip('[]'), sep=',', dtype=np.float64))
+    except (AttributeError, ValueError):
+        return None
+
+
+def _cosine_sim_matrix(left, right):
+    """Small-matrix cosine similarity without noisy BLAS overflow warnings."""
+    sim = np.einsum('ij,kj->ik', left, right, optimize=True)
+    return np.nan_to_num(sim, nan=0.0, posinf=0.0, neginf=0.0)
+
+
+def _silenced_kmeans_fit(kmeans, X, sample_weight=None):
+    """Run kmeans.fit silencing sklearn's matmul divide-by-zero RuntimeWarning.
+
+    The warning fires inside sklearn's KMeans centroid normalization
+    (sklearn/utils/extmath.py matmul) on high-dim unit-norm vectors. It is
+    sklearn-internal noise — does NOT affect cluster centroid correctness.
+    BACK-RECOMMEND-2.
+    """
+    with np.errstate(divide='ignore', invalid='ignore', over='ignore'):
+        kmeans.fit(X, sample_weight=sample_weight)
 
 
 # ── Schema-probe helpers ──────────────────────────────────────────────────────
@@ -426,7 +470,8 @@ def get_building_embedding(canonical_bld_id):
         row = cur.fetchone()
     if not row:
         return None
-    return [float(x) for x in row[0].strip('[]').split(',')]
+    embedding = _parse_embedding_text(row[0])
+    return embedding.tolist() if embedding is not None else None
 
 
 _CARD_CACHE_TTL = None   # resolved lazily from RC to avoid import-time RC access
@@ -448,6 +493,53 @@ def _card_cache_key(canonical_bld_id):
     return f'bcard:{_CARD_CACHE_SCHEMA}:{canonical_bld_id}'
 
 
+def _with_image_focus(card, image_focus):
+    if not image_focus or image_focus not in _VALID_IMAGE_FOCUS or not card:
+        return card
+
+    focused = dict(card)
+    focused['metadata'] = dict(card.get('metadata') or {})
+    focused['covers_by_type'] = dict(card.get('covers_by_type') or {})
+    focus_url = focused['covers_by_type'].get(image_focus)
+    focused['image_focus'] = image_focus
+    if not focus_url:
+        return focused
+
+    focused['image_url'] = focus_url
+    focused['image_kind'] = image_focus
+    gallery = list(card.get('gallery') or [])
+    gallery_meta = list(card.get('gallery_meta') or [])
+
+    original_drawing_start = card.get('gallery_drawing_start')
+    try:
+        removed_index = gallery.index(focus_url)
+    except ValueError:
+        removed_index = None
+
+    filtered = [
+        (url, meta) for url, meta in zip(gallery, gallery_meta)
+        if url != focus_url
+    ]
+    focused['gallery'] = [url for url, _ in filtered]
+    focused['gallery_meta'] = [meta for _, meta in filtered]
+
+    # Shift drawing_start down when focus_url was strictly before the drawing
+    # section (its removal pulls the drawing section forward by 1). Otherwise
+    # leave drawing_start untouched. Clamp guards against malformed input.
+    new_drawing_start = original_drawing_start
+    if (new_drawing_start is not None
+            and removed_index is not None
+            and removed_index < new_drawing_start):
+        new_drawing_start -= 1
+
+    fallback = len(focused['gallery'])
+    focused['gallery_drawing_start'] = min(
+        new_drawing_start if new_drawing_start is not None else fallback,
+        len(focused['gallery']),
+    )
+    return focused
+
+
 def get_building_card(canonical_bld_id, image_focus=None):
     """Fetch a single building as an ImageCard dict. Results cached per canonical_bld_id.
 
@@ -456,16 +548,10 @@ def get_building_card(canonical_bld_id, image_focus=None):
     cover field at row-to-card time; the cached card holds full covers_by_type +
     all_images so a different focus can be selected without re-fetching.
     """
-    if image_focus:
-        # When focus is requested, recompute card from cached source row data
-        # only if cache holds full payload (it does, since v2 cards include
-        # covers_by_type + all_images). Simplest path: bypass cache + re-build.
-        key = None
-    else:
-        key = _card_cache_key(canonical_bld_id)
-        cached = cache.get(key)
-        if cached is not None:
-            return cached
+    key = _card_cache_key(canonical_bld_id)
+    cached = cache.get(key)
+    if cached is not None:
+        return _with_image_focus(cached, image_focus)
 
     _required_cols = [
         'canonical_bld_id', 'name', 'architect_names', 'architects_text',
@@ -484,8 +570,8 @@ def get_building_card(canonical_bld_id, image_focus=None):
         )
         rows = _dictfetchall(cur)
     card = _row_to_card(rows[0], image_focus=image_focus) if rows else None
-    if card is not None and key is not None:
-        cache.set(key, card, _card_cache_ttl())
+    if card is not None:
+        cache.set(key, _row_to_card(rows[0]), _card_cache_ttl())
     return card
 
 
@@ -583,20 +669,16 @@ def get_buildings_by_ids(canonical_bld_ids, image_focus=None):
     if not canonical_bld_ids:
         return []
 
-    # Phase 1: cache lookup (skipped when image_focus is set; per-focus covers
-    # require fresh _row_to_card pass, but DB row data is still cacheable —
-    # caller can refetch with image_focus=None to use cache. For now, bypass.)
+    # Phase 1: cache lookup. Cache stores focus-less base cards; callers can
+    # derive per-focus covers from covers_by_type without another DB round-trip.
     card_map = {}
     miss_ids = []
-    if image_focus:
-        miss_ids = list(canonical_bld_ids)
-    else:
-        for bid in canonical_bld_ids:
-            cached = cache.get(_card_cache_key(bid))
-            if cached is not None:
-                card_map[bid] = cached
-            else:
-                miss_ids.append(bid)
+    for bid in canonical_bld_ids:
+        cached = cache.get(_card_cache_key(bid))
+        if cached is not None:
+            card_map[bid] = _with_image_focus(cached, image_focus)
+        else:
+            miss_ids.append(bid)
 
     # Phase 2: batch DB fetch for cache misses only
     if miss_ids:
@@ -622,9 +704,7 @@ def get_buildings_by_ids(canonical_bld_ids, image_focus=None):
         for row in rows:
             card = _row_to_card(row, image_focus=image_focus)
             card_map[row['canonical_bld_id']] = card
-            # Only cache the focus-less card so the cache key remains shared.
-            if not image_focus:
-                cache.set(_card_cache_key(row['canonical_bld_id']), card, ttl)
+            cache.set(_card_cache_key(row['canonical_bld_id']), _row_to_card(row), ttl)
 
     # Phase 3: restore input order
     return [card_map[bid] for bid in canonical_bld_ids if bid in card_map]
@@ -664,19 +744,81 @@ def search_by_filters(filters, limit=20, image_focus=None):
 
 # ── Phase-Aware Algorithm (PRD v4.0) ──────────────────────────────────────────────
 
+_random_pool_cache: dict = {'ids': None, 'fetched_at': 0.0}
+_RANDOM_POOL_TTL = 1800  # 30 min — Make-DB rebuilds are infrequent
+
 
 def _random_pool(target):
     """Fallback: random pool when no filters are provided.
 
-    Two-query pattern (Finding #14a): fetch all publishable IDs, sample in Python,
-    return sampled list. Avoids ORDER BY RANDOM() full-table sort on ~39k rows.
+    Two-query pattern (Finding #14a) preserved on cache miss: fetch all
+    publishable IDs from the buildings DB once per TTL window, sample in
+    Python, return.
+
+    PERF-3 caching: the full ID list is cached for _RANDOM_POOL_TTL seconds.
+    Cache miss = SQL fetch (~1 s on Singapore Neon); hit = ~5 ms in-process
+    sample. Make-DB ownership rule still holds (read-only access only).
+
+    Multi-worker: each worker has an independent in-process cache. Initial
+    requests per worker pay the SQL cost; subsequent hits within 30 min are
+    free per worker. Process restart clears cache. Stale Make-DB rebuilds
+    produce slightly stale random samples for <=30 min — acceptable given
+    infrequent Make-DB cadence.
     """
-    with connection.cursor() as cur:
-        cur.execute(
-            'SELECT canonical_bld_id FROM canonical_v2_buildings WHERE is_publishable = true',
-        )
-        all_ids = [row[0] for row in cur.fetchall()]
+    now = _time.time()
+    _cache = _random_pool_cache
+    expired = (now - _cache['fetched_at']) > _RANDOM_POOL_TTL
+    if _cache['ids'] is None or expired:
+        with stage('random_pool_sql_refresh'):
+            with connection.cursor() as cur:
+                cur.execute(
+                    'SELECT canonical_bld_id FROM canonical_v2_buildings'
+                    ' WHERE is_publishable = true',
+                )
+                _cache['ids'] = [row[0] for row in cur.fetchall()]
+        _cache['fetched_at'] = now
+    all_ids = _cache['ids'] or []
     return random.sample(all_ids, min(target, len(all_ids))) if all_ids else []
+
+
+def clear_random_pool_cache():
+    """Clear the random pool ID cache (for testing). Forces re-fetch."""
+    _random_pool_cache['ids'] = None
+    _random_pool_cache['fetched_at'] = 0.0
+
+
+# ── Tier 1 Pool Cache (PERF-3 Step 4) ────────────────────────────────────────
+# Caches the (pool_ids, pool_scores) result of create_bounded_pool for the
+# same (filters, filter_priority, seed_ids, v_initial, q_text) inputs.
+# exclude_ids is NOT in the key — it is per-session state (already-exposed cards)
+# applied at filter time after cache fetch.
+# Per-worker (LocMemCache). Process restart clears. TTL mirrors _RANDOM_POOL_TTL.
+
+_TIER1_POOL_CACHE_TTL = 1800  # 30 min, mirrors random pool TTL
+
+
+def _tier1_cache_key(filters, filter_priority, seed_ids, v_initial, q_text):
+    """Stable cache key from the cacheable inputs to create_pool_with_relaxation Tier 1."""
+    filters_json = json.dumps(filters or {}, sort_keys=True, default=str)
+    fp_json = json.dumps(list(filter_priority or []))
+    seeds_json = json.dumps(list(seed_ids or []))
+    if v_initial:
+        v_hash = hashlib.sha1(
+            json.dumps([float(x) for x in v_initial]).encode()
+        ).hexdigest()[:12]
+    else:
+        v_hash = 'none'
+    if q_text:
+        q_hash = hashlib.sha1(q_text.encode()).hexdigest()[:12]
+    else:
+        q_hash = 'none'
+    raw = f'{filters_json}|{fp_json}|{seeds_json}|{v_hash}|{q_hash}'
+    return 'tier1_pool:' + hashlib.sha1(raw.encode()).hexdigest()[:24]
+
+
+def clear_tier1_pool_cache_key(filters, filter_priority, seed_ids, v_initial=None, q_text=None):
+    """Explicitly invalidate a single Tier 1 cache entry (for testing)."""
+    cache.delete(_tier1_cache_key(filters, filter_priority, seed_ids, v_initial, q_text))
 
 
 def create_pool_with_relaxation(
@@ -705,12 +847,24 @@ def create_pool_with_relaxation(
         target = RC['bounded_pool_target']
     exclude_set = set(exclude_ids or [])
 
-    # Tier 1
+    # Tier 1 — cache-aware (PERF-3 Step 4)
+    # exclude_ids not in key: per-session state applied after cache fetch.
     if start_tier <= 1:
-        pool_ids, pool_scores = create_bounded_pool(
-            filters or {}, filter_priority, seed_ids, target=target,
-            v_initial=v_initial, q_text=q_text,
-        )
+        _t1_key = _tier1_cache_key(filters, filter_priority, seed_ids, v_initial, q_text)
+        _cached = cache.get(_t1_key)
+        if _cached is not None:
+            with stage('pool_tier_1_cache_hit'):
+                cached_pool_ids, cached_pool_scores = _cached
+                filtered_ids = [bid for bid in cached_pool_ids if bid not in exclude_set]
+            if filtered_ids:
+                filtered_scores = {bid: s for bid, s in cached_pool_scores.items() if bid not in exclude_set}
+                return filtered_ids, filtered_scores, 1
+        with stage('pool_tier_1_cache_miss', filter_count=len(filters or {})):
+            pool_ids, pool_scores = create_bounded_pool(
+                filters or {}, filter_priority, seed_ids, target=target,
+                v_initial=v_initial, q_text=q_text,
+            )
+        cache.set(_t1_key, (pool_ids, dict(pool_scores)), _TIER1_POOL_CACHE_TTL)
         filtered_ids = [bid for bid in pool_ids if bid not in exclude_set]
         if filtered_ids:
             filtered_scores = {bid: s for bid, s in pool_scores.items() if bid not in exclude_set}
@@ -719,20 +873,22 @@ def create_pool_with_relaxation(
     # Tier 2
     if start_tier <= 2:
         relaxed = {k: v for k, v in (filters or {}).items()
-                   if k not in ('location_country', 'year_min', 'year_max', 'min_area', 'max_area')}
+                   if k not in ('location_country', 'location_city', 'year_min', 'year_max', 'min_area', 'max_area')}
         if relaxed and relaxed != (filters or {}):
             relaxed_priority = [k for k in (filter_priority or []) if k in relaxed]
-            pool_ids, pool_scores = create_bounded_pool(
-                relaxed, relaxed_priority, seed_ids, target=target,
-                v_initial=v_initial, q_text=q_text,
-            )
-            filtered_ids = [bid for bid in pool_ids if bid not in exclude_set]
+            with stage('pool_tier_2', filter_count=len(relaxed)):
+                pool_ids, pool_scores = create_bounded_pool(
+                    relaxed, relaxed_priority, seed_ids, target=target,
+                    v_initial=v_initial, q_text=q_text,
+                )
+                filtered_ids = [bid for bid in pool_ids if bid not in exclude_set]
             if filtered_ids:
                 filtered_scores = {bid: s for bid, s in pool_scores.items() if bid not in exclude_set}
                 return filtered_ids, filtered_scores, 2
 
     # Tier 3 — random pool (v_initial and q_text not used; random fallback is relevance-blind)
-    pool_ids = [bid for bid in _random_pool(target) if bid not in exclude_set]
+    with stage('pool_tier_3_random'):
+        pool_ids = [bid for bid in _random_pool(target) if bid not in exclude_set]
     if pool_ids:
         return pool_ids, {}, 3
     return [], {}, 0
@@ -859,7 +1015,6 @@ def _run_hybrid_rrf_pool(filters, filter_priority, seed_ids, target, v_initial, 
     Returns (pool_ids, pool_scores) where pool_scores is {canonical_bld_id: float rrf_score}.
     On SQL failure, raises the exception (caller wraps in try/except).
     """
-    import time as _time
     _t0 = _time.perf_counter()
 
     rrf_k = int(RC.get('hybrid_rrf_k', 60))
@@ -1125,13 +1280,16 @@ def create_bounded_pool(filters, filter_priority=None, seed_ids=None, target=Non
                     error_message=str(exc)[:200],
                 )
                 v_initial = None  # noqa: F841 — signals fall-through intent
-        return _random_pool(target), {}
+        with stage('execute_pool_sql_random', target=target):
+            result = _random_pool(target)
+        return result, {}
 
     priority = filter_priority or list(filters.keys())
     n = len(priority)
     weights = {key: n - i for i, key in enumerate(priority)}
 
-    cases, params, total_weight = _build_score_cases(filters, weights)
+    with stage('build_filter_sql', n_filters=len(filters)):
+        cases, params, total_weight = _build_score_cases(filters, weights)
     if not cases:
         if use_hyde:
             # HyDE-only path: same as the empty-filters branch above
@@ -1216,18 +1374,21 @@ def create_bounded_pool(filters, filter_priority=None, seed_ids=None, target=Non
             ' ORDER BY relevance_score DESC, RANDOM()'
             ' LIMIT %s'
         )
-        with connection.cursor() as cur:
-            cur.execute(sql, params + params + [target])
-            rows = cur.fetchall()
+        with stage('execute_pool_sql', target=target):
+            with connection.cursor() as cur:
+                cur.execute(sql, params + params + [target])
+                rows = cur.fetchall()
 
-    pool_ids = [row[0] for row in rows]
-    pool_scores = {row[0]: float(row[1]) for row in rows}
+    with stage('process_scores', n_rows=len(rows)):
+        pool_ids = [row[0] for row in rows]
+        pool_scores = {row[0]: float(row[1]) for row in rows}
 
     if seed_ids:
-        for sid in seed_ids:
-            if sid not in pool_scores:
-                pool_ids.insert(0, sid)
-            pool_scores[sid] = 1.1
+        with stage('seed_inject', n_seeds=len(seed_ids)):
+            for sid in seed_ids:
+                if sid not in pool_scores:
+                    pool_ids.insert(0, sid)
+                pool_scores[sid] = 1.1
 
     return pool_ids, pool_scores
 
@@ -1252,31 +1413,31 @@ def get_pool_embeddings(pool_ids):
         _telemetry.embedding_call_stats = {'requested': 0, 'cache_hits': 0, 'cache_misses': 0}
         return {}
 
-    missing_ids = [bid for bid in pool_ids if bid not in _building_embedding_cache]
+    with stage('embeddings_partition', pool_size=len(pool_ids)):
+        missing_ids = [bid for bid in pool_ids if bid not in _building_embedding_cache]
 
     if missing_ids:
         placeholders = ','.join(['%s'] * len(missing_ids))
-        with connection.cursor() as cur:
-            cur.execute(
-                f'SELECT canonical_bld_id, embedding::text FROM canonical_v2_buildings'
-                f' WHERE canonical_bld_id IN ({placeholders}) AND is_publishable = true',
-                missing_ids,
-            )
-            rows = _dictfetchall(cur)
+        with stage('embeddings_sql', n=len(missing_ids)):
+            with connection.cursor() as cur:
+                cur.execute(
+                    f'SELECT canonical_bld_id, embedding::text FROM canonical_v2_buildings'
+                    f' WHERE canonical_bld_id IN ({placeholders}) AND is_publishable = true',
+                    missing_ids,
+                )
+                rows = _dictfetchall(cur)
 
-        for row in rows:
-            embedding_str = row['embedding']
-            embedding = np.array([float(x) for x in embedding_str.strip('[]').split(',')])
-            norm = np.linalg.norm(embedding)
-            if norm > 0:
-                embedding = embedding / norm
-            _building_embedding_cache[row['canonical_bld_id']] = embedding
+        with stage('embeddings_parse_normalize', n=len(rows)):
+            for row in rows:
+                embedding = _parse_embedding_text(row['embedding'])
+                if embedding is not None:
+                    _building_embedding_cache[row['canonical_bld_id']] = embedding
 
-        # FIFO eviction when cache exceeds max size (Python 3.7+ dict preserves insertion order)
-        if len(_building_embedding_cache) > _BUILDING_CACHE_MAX_SIZE:
-            excess = len(_building_embedding_cache) - _BUILDING_CACHE_MAX_SIZE
-            for old_bid in list(_building_embedding_cache.keys())[:excess]:
-                del _building_embedding_cache[old_bid]
+            # FIFO eviction when cache exceeds max size (Python 3.7+ dict preserves insertion order)
+            if len(_building_embedding_cache) > _BUILDING_CACHE_MAX_SIZE:
+                excess = len(_building_embedding_cache) - _BUILDING_CACHE_MAX_SIZE
+                for old_bid in list(_building_embedding_cache.keys())[:excess]:
+                    del _building_embedding_cache[old_bid]
 
     # Record stats for §6 swipe telemetry (most-recent call on this thread; overwritten per call)
     _telemetry.embedding_call_stats = {
@@ -1285,8 +1446,8 @@ def get_pool_embeddings(pool_ids):
         'cache_misses': len(missing_ids),
     }
 
-    # Build result dict in pool_ids order (caller accesses by key; order preserved for dict)
-    return {bid: _building_embedding_cache[bid] for bid in pool_ids if bid in _building_embedding_cache}
+    with stage('embeddings_assemble', n=len(pool_ids)):
+        return {bid: _building_embedding_cache[bid] for bid in pool_ids if bid in _building_embedding_cache}
 
 
 def get_last_embedding_call_stats():
@@ -1412,7 +1573,7 @@ def farthest_point_from_pool(pool_ids, exposed_ids, pool_embeddings):
     C = np.stack([pool_embeddings[bid] for bid in candidate_ids])   # (N, 384)
     E = np.stack([pool_embeddings[bid] for bid in exposed_valid])   # (M, 384)
 
-    sim = C @ E.T                            # (N, M) -- single BLAS matmul
+    sim = _cosine_sim_matrix(C, E)           # (N, M)
     max_sim_per_candidate = sim.max(axis=1)  # (N,) -- nearest-exposed similarity
     best_idx = int(np.argmin(max_sim_per_candidate))
     return candidate_ids[best_idx]
@@ -1474,16 +1635,33 @@ def compute_taste_centroids(like_vectors, round_num):
         _centroid_cache[cache_key] = result
         return centroids, centroid
 
-    from sklearn.cluster import KMeans
-    from sklearn.metrics import silhouette_samples
     like_embeddings = np.array([w[0] for w in weighted_likes])
     like_weights = np.array([w[1] for w in weighted_likes])
     global_centroid = _weighted_centroid(weighted_likes)
 
+    min_likes_for_multimodal = max(
+        2,
+        int(RC.get('min_likes_for_multimodal', RC.get('target_swipes', 10))),
+    )
+    if len(weighted_likes) < min_likes_for_multimodal:
+        centroids = [global_centroid]
+        stats = {
+            'cluster_count_used': 1,
+            'silhouette_score': None,
+            'soft_relevance_used': False,
+            'n_likes_at_decision': n_likes,
+        }
+        _telemetry.clustering_stats = stats
+        result = (centroids, global_centroid, stats)
+        if len(_centroid_cache) > 20:
+            _centroid_cache.clear()
+        _centroid_cache[cache_key] = result
+        return centroids, global_centroid
+
     # Path 2 & 3: Topic 06 silhouette-based adaptive k (flag-gated, N>=4 required)
     if RC.get('adaptive_k_clustering_enabled', False) and len(weighted_likes) >= 4:
         kmeans2 = KMeans(n_clusters=2, random_state=42, n_init=3)
-        kmeans2.fit(like_embeddings, sample_weight=like_weights)
+        _silenced_kmeans_fit(kmeans2, like_embeddings, sample_weight=like_weights)
         if len(set(kmeans2.labels_)) > 1:
             # Weighted silhouette: per-sample silhouette × recency weights, averaged.
             # sklearn 1.6.1's silhouette_score doesn't accept sample_weight, so we
@@ -1520,7 +1698,7 @@ def compute_taste_centroids(like_vectors, round_num):
     # Path 4: Default k=min(k_clusters, N) KMeans (flag off or N<4)
     k_clusters = min(RC['k_clusters'], len(weighted_likes))
     kmeans = KMeans(n_clusters=k_clusters, random_state=42, n_init=3)
-    kmeans.fit(like_embeddings, sample_weight=like_weights)
+    _silenced_kmeans_fit(kmeans, like_embeddings, sample_weight=like_weights)
     centroids = list(kmeans.cluster_centers_)
     stats = {
         'cluster_count_used': len(centroids),
@@ -1566,7 +1744,7 @@ def compute_mmr_next(pool_ids, exposed_ids, pool_embeddings, like_vectors, round
 
     # ── Relevance (vectorized) ────────────────────────────────────────────
     K_mat = np.stack(centroids)   # (K, 384)
-    sim_mat = C @ K_mat.T         # (N, K)
+    sim_mat = _cosine_sim_matrix(C, K_mat)  # (N, K)
 
     if RC.get('soft_relevance_enabled', False) and len(centroids) > 1:
         # Numerically stable softmax-weighted average per candidate (Topic 06)
@@ -1581,7 +1759,7 @@ def compute_mmr_next(pool_ids, exposed_ids, pool_embeddings, like_vectors, round
     exposed_valid = [e for e in exposed_ids if e in pool_embeddings]
     if exposed_valid:
         E = np.stack([pool_embeddings[e] for e in exposed_valid])  # (M, 384)
-        redundancy = (C @ E.T).max(axis=1)                         # (N,)
+        redundancy = _cosine_sim_matrix(C, E).max(axis=1)           # (N,)
     else:
         redundancy = np.zeros(len(valid_candidates))
 
@@ -1597,7 +1775,9 @@ def _apply_recency_weights(like_vectors, round_num, gamma):
     """
     weighted_vecs = []
     for entry in like_vectors:
-        embedding = np.array(entry['embedding'])
+        embedding = _finite_unit_vector(entry['embedding'])
+        if embedding is None:
+            continue
         entry_round = entry['round']
         weight = math.exp(-gamma * max(0, round_num - entry_round))
         weighted_vecs.append((embedding, weight))
@@ -1645,19 +1825,29 @@ def compute_convergence(current_pref, previous_pref):
     return delta_v
 
 
-def check_convergence(history, threshold, window=3):
+def _recent_like_count(recent_actions, window):
+    if recent_actions is None:
+        return None
+    return sum(1 for action in list(recent_actions)[-window:] if action == 'like')
+
+
+def check_convergence(history, threshold, window=3, recent_actions=None, min_recent_likes=0):
     """
     Check if convergence has been reached based on moving average.
     Returns bool
     """
     if len(history) < window:
         return False
+    if min_recent_likes > 0:
+        recent_likes = _recent_like_count(recent_actions, window)
+        if recent_likes is not None and recent_likes < min_recent_likes:
+            return False
 
     moving_avg = np.mean(history[-window:])
     return bool(moving_avg < threshold)
 
 
-def compute_confidence(history, threshold, window=3):
+def compute_confidence(history, threshold, window=3, recent_actions=None, min_recent_likes=0):
     """
     Compute the user-facing confidence value (Spec C-1 통합안 1).
 
@@ -1682,6 +1872,10 @@ def compute_confidence(history, threshold, window=3):
     """
     if len(history) < window:
         return None
+    if min_recent_likes > 0:
+        recent_likes = _recent_like_count(recent_actions, window)
+        if recent_likes is not None and recent_likes < min_recent_likes:
+            return None
     safe_threshold = max(float(threshold), 1e-6)
     avg = sum(history[-window:]) / window
     return max(0.0, 1.0 - avg / safe_threshold)

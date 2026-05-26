@@ -12,6 +12,49 @@ from .. import engine, services
 logger = logging.getLogger('apps.recommendation')
 RC = settings.RECOMMENDATION
 
+_NULLISH_FILTER_STRINGS = {'', 'null', 'none', 'n/a', 'na', 'undefined'}
+
+
+def _first_user_text(conversation_history):
+    for entry in conversation_history:
+        if entry.get('role') == 'user':
+            return (entry.get('text') or '').strip()
+    return ''
+
+
+def _clean_filter_value(value):
+    if isinstance(value, str):
+        value = value.strip()
+        if value.lower() in _NULLISH_FILTER_STRINGS:
+            return None
+        if not any(ch.isalnum() for ch in value):
+            return None
+    return value
+
+
+def _clean_filters(filters):
+    cleaned = {}
+    for key, value in (filters or {}).items():
+        cleaned_value = _clean_filter_value(value)
+        if key in ('year_min', 'year_max') and cleaned_value is not None:
+            try:
+                cleaned_value = int(cleaned_value)
+            except (TypeError, ValueError):
+                cleaned_value = None
+            if cleaned_value is not None and not (1800 <= cleaned_value <= 2100):
+                cleaned_value = None
+        if cleaned_value is not None:
+            cleaned[key] = cleaned_value
+    return cleaned
+
+
+def _clean_filter_priority(priority, filters):
+    filter_keys = set(filters.keys())
+    return [
+        key for key in (priority or [])
+        if isinstance(key, str) and key in filter_keys
+    ][:10]
+
 
 # ── IMP-6 Commit 2: Stage 2 background thread spawn helper ───────────────────
 
@@ -104,6 +147,9 @@ class ParseQueryView(APIView):
             )
 
         parsed = services.parse_query(conversation_history)
+        parsed_filters = _clean_filters(parsed.get('filters') or {})
+        parsed_priority = _clean_filter_priority(parsed.get('filter_priority') or [], parsed_filters)
+        raw_query = _first_user_text(conversation_history) or parsed.get('raw_query', '')
 
         # When probe_needed=True: return probe payload immediately without
         # touching the search engine. Frontend renders the probe question.
@@ -112,9 +158,9 @@ class ParseQueryView(APIView):
                 'probe_needed': True,
                 'probe_question': parsed.get('probe_question'),
                 'reply': parsed.get('reply', ''),
-                'raw_query': parsed.get('raw_query', ''),
-                'structured_filters': parsed.get('filters', {}),
-                'filter_priority': parsed.get('filter_priority', []),
+                'raw_query': raw_query,
+                'structured_filters': parsed_filters,
+                'filter_priority': parsed_priority,
                 'visual_description': parsed.get('visual_description'),
                 'suggestions': [],
                 'results': [],
@@ -129,13 +175,13 @@ class ParseQueryView(APIView):
         # this point with an unstable filter set.
         if RC.get('stage_decouple_enabled', False):
             _spawn_stage2(
-                filters=parsed.get('filters') or {},
-                raw_query=parsed.get('raw_query', ''),
+                filters=parsed_filters,
+                raw_query=raw_query,
                 user_id=request.user.id,
             )
 
         # Terminal path (probe_needed=False): run search engine.
-        filters = {k: v for k, v in (parsed.get('filters') or {}).items() if v is not None}
+        filters = dict(parsed_filters)
         # image_focus lives outside the WHERE-clause filter dict but riders along
         # so cards get the user-requested cover variant.
         image_focus = parsed.get('image_focus')
@@ -170,10 +216,10 @@ class ParseQueryView(APIView):
             'probe_needed': False,
             'probe_question': None,
             'reply': parsed.get('reply', ''),
-            'raw_query': parsed.get('raw_query', ''),
+            'raw_query': raw_query,
             'visual_description': parsed.get('visual_description'),
-            'structured_filters': parsed.get('filters', {}),
-            'filter_priority': parsed.get('filter_priority', []),
+            'structured_filters': parsed_filters,
+            'filter_priority': parsed_priority,
             'image_focus': image_focus,
             'suggestions': [],
             'results': results,

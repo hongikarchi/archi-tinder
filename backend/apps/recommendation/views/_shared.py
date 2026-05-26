@@ -32,10 +32,15 @@ def _get_profile(request):
 
 def _progress(session):
     like_count = len(session.like_vectors) if session.like_vectors else 0
+    target_swipes = max(1, int(RC.get('target_swipes', 10)))
+    swipe_count = max(0, int(session.current_round or 0))
     return {
-        'current_round': session.current_round,
+        'current_round': swipe_count,
+        'swipe_count':   swipe_count,
+        'target_swipes': target_swipes,
+        'swipe_target_remaining': max(0, target_swipes - swipe_count),
         'like_count':    like_count,
-        'dislike_count': session.current_round - like_count,
+        'dislike_count': swipe_count - like_count,
         'phase':         session.phase,
         'pool_size': len(session.pool_ids) if session.pool_ids else 0,
         'pool_remaining': len(set(session.pool_ids or []) - set(session.exposed_ids or [])),
