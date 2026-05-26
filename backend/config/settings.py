@@ -139,13 +139,35 @@ CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:5173,
 CORS_ALLOW_CREDENTIALS = True
 
 # -- Cache (required for DRF throttling, IMP-5 Gemini context-cache, IMP-8 async prefetch) --
-# INFRA-REDIS-1 (2026-05-26): Redis is the prod cache backend so PR 3 (BACK-AUTH-1 JTI
-# cache) and PR 4 (PERF-PREFETCH-CHAIN async consume) work across Railway's multi-worker
+# INFRA-REDIS-1 (2026-05-26): Redis is the prod cache backend so PR 3 (BACK-AUTH-1 JWT user-row cache)
+# and PR 4 (PERF-PREFETCH-CHAIN async consume) work across Railway's multi-worker
 # Gunicorn (LocMemCache is per-process; bg thread in worker A -> next swipe in worker B
 # would always miss). Local dev keeps LocMemCache when REDIS_URL is unset, so devs do
 # not need to run a Redis daemon to spin up backend.
 # IMP-8 (v1.6 §11.1): async prefetch background thread writes to default cache.
 # IMP-5 (v1.5 §11.1): Gemini context-cache resource name stored in default cache.
+
+
+def _check_async_prefetch_safety(debug: bool, async_prefetch_enabled: bool, redis_url: str) -> None:
+    """Cache safety guard (INFRA-REDIS-1 follow-up, 2026-05-26 Codex retest).
+
+    In production (DEBUG=False), if async prefetch is enabled, REDIS_URL MUST be
+    set. LocMemCache is per-process; the async prefetch thread writes to worker
+    A's cache and the next-swipe consumer in worker B reads its own empty cache.
+    The chain silently degrades to zero benefit + wasted thread cost. Fail loud at
+    startup instead so ops sees the misconfiguration immediately.
+
+    Extracted as a module-level helper so unit tests can call it directly without
+    monkeypatching os.environ or reloading the module (same pattern as
+    _build_caches_dict).
+    """
+    if not debug and async_prefetch_enabled and not redis_url.strip():
+        from django.core.exceptions import ImproperlyConfigured
+        raise ImproperlyConfigured(
+            "async_prefetch_enabled=True in prod requires REDIS_URL. Set it on the "
+            "Railway service to ${{Redis.REDIS_URL}}, or disable async prefetch in "
+            "RECOMMENDATION['async_prefetch_enabled']."
+        )
 
 
 def _build_caches_dict(redis_url: str) -> dict:
@@ -270,6 +292,12 @@ RECOMMENDATION = {
     # distribution + Brutalist sys_p50 trend post-flip.
     'stage_decouple_enabled': os.getenv('STAGE_DECOUPLE_ENABLED', 'false').lower() == 'true',  # default OFF; set STAGE_DECOUPLE_ENABLED=true in env to flip
 }
+
+_check_async_prefetch_safety(
+    DEBUG,
+    RECOMMENDATION.get('async_prefetch_enabled', False),
+    os.getenv('REDIS_URL', ''),
+)
 
 # -- External API keys -----------------------------------------------------
 PERF_TIMING_ENABLED = os.environ.get('PERF_TIMING_ENABLED', 'False').lower() == 'true'

@@ -24,71 +24,71 @@
  * so the value can be re-parsed by any consumer. In-flight (not-yet-merged)
  * PRs carry `mergedAt: null` sentinel; next reporter-inline pass backfills.
  */
-// Reporter: Mermaid sources may be stale — commit dc296bc touched apps/recommendation/views/swipe.py (async prefetch thread off-by-one + consumer cache.get + dedupe guards + flag flip). Recommendation flow Mermaid still accurate at function-graph level; system flow Redis node already reflects async prefetch usage from PR #131.
+// Reporter: Mermaid sources may be stale — commit 3fcbe3c touched backend/apps/recommendation/views/sessions.py (added dedupe guard at start of SessionCreateView.post). recommendationFlow shows SessionCreate → SwipeUI; dedupe is a new branch at SessionCreate returning existing session instead of fresh. Next session may add a branch annotation.
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-05-26 16:31 KST',
-    head: '4c72513',
-    branch: 'feature/algo-prefetch-chain-consume',
+    updatedAt: '2026-05-26 19:00 KST',
+    head: 'ffc55e3',
+    branch: 'feature/admin-session-create-dedupe',
   },
 
   done: [
+    {
+      id: 'FULL-SESSION-DEDUPE-1',
+      title: 'Session create POST retry → 중복 Project/Session',
+      completedAt: '2026-05-26',
+      prs: [138],
+      note: 'P0 data-integrity bug surfaced by Codex retest 2026-05-26 of develop=d53b232. POST /analysis/sessions/ takes ~15s on cold pool (execute_pool_sql=14.7s). Frontend api/core.js retry loop retried ALL methods on AbortError → server created 2 Project + 2 AnalysisSession rows. User reproduction: 2 boards same name, one with 4 photos one with 0. Belt + suspenders fix. Frontend api/core.js: _IDEMPOTENT_METHODS={GET,HEAD,OPTIONS}; POST/PATCH/DELETE throw on first network error. Frontend api/sessions.js: SESSION_CREATE_TIMEOUT_MS=30000 per-call override. Backend views/sessions.py: dedupe guard at start of SessionCreateView.post; 30s window matching (user, project.name, project.raw_query, project.filters); hit returns existing session with deduped:true HTTP 200 (vs 201 fresh). tests/test_session_create_dedupe.py 8 cases (baseline 201, hit 200, 30s expiry, different raw_query/name/filters, project_id=None retry, response shape). Trade-off: recordSwipe (POST) no-retry; backend idempotency_key still guards server-side. Race window ~100ms unreachable from single-tab client with retry-gate. code-review + security-manager PASS. app-test FEATURE-SCOPED PASS 5/5 incl. dedupe path 200 + deduped:true + same session_id + only 1 Project row (Django shell verified). Deferred to Next ### MEDIUM: BACK-PERFORMANCE-4 (Discovery 4.6s) + BACK-PERFORMANCE-5 (Swipe latency variability) + FRONT-UX-5 (View Gallery click no-op). sha 3fcbe3c-pre-squash.',
+    },
+    {
+      id: 'INFRA-DEPLOY-3',
+      title: 'railway migrate align + Redis prod guard + docs drift',
+      completedAt: '2026-05-26',
+      prs: [137],
+      note: 'Codex retest of develop=d53b232 surfaced 3 prod-safety drifts. railway.toml buildCommand: dropped migrate --noinput per INFRA-DB-1 (Railway runtime make_web_app has no DDL; next schema migration would have failed); operator runs migrate manually with DB_USER=neondb_owner swap. collectstatic kept. settings.py _check_async_prefetch_safety() helper: raises ImproperlyConfigured at module import when DEBUG=False && async_prefetch_enabled && !REDIS_URL — silent LocMem fallback in prod = thread cost without multi-worker coherence (same bug class PR #134 PERF-PREFETCH-CHAIN just fixed). Helper extracted mirroring _build_caches_dict pattern; called after RECOMMENDATION dict closes. .env.example default DJANGO_DEBUG=True keeps operator migrate path safe (guard short-circuits). tests/test_cache_backend.py TestAsyncPrefetchSafetyGuard 4 cases (prod+REDIS_URL OK, DEBUG bypass, async_prefetch=False bypass, prod misconfig raises). Docs drift: swipe.py:79+:723 "primary path does NOT consume" stale (PR #134 now consumes); settings.py:142 + .env.example:72 "JTI cache" stale (PR #133 final = JWT user-row cache). manage.py check PASS · pytest 20/20 · code-review PASS · security-manager PASS. Deferred surfaced to Next ### MEDIUM: BACK-AUTH-2 (cache JWT integration test hardening) + INFRA-DB-2 (test DB role CREATE DATABASE permission). sha 09a3b7c-pre-squash.',
+    },
+    {
+      id: 'INFRA-DOC-6',
+      title: 'orchestrate / git-publisher / web-testing AGENTS skill-regime 정렬',
+      completedAt: '2026-05-26',
+      prs: [136],
+      note: 'Cherry-picked session-start docs work (010edf8) onto post-deploy develop. 3 files re-aligned with 2026-05-26 skill-migration regime (INFRA-WORKFLOW-1, PR #123). orchestrate/SKILL.md: drop git-manager/reporter agent refs from frontmatter, Step 5/7/8/10, Rules. Step 6→git-commit skill, Step 8 default=git-publish skill, Step 9=reporter-inline+git-commit+git-publish. git-publisher.md: edge-case role (Mode 3 deploy / external PR / complex rebase / push rejection / mid-merge failure). New "When this agent is called" preamble refuses routine publish. Mode 1 renamed "Internal push escalation (fallback only)". web-testing/AGENTS.md: scope split (agent contract → .claude/agents/app-test.md, this doc → runner + shared dev-login). web-tester→app-test rename 2026-04-28. Dev-login 404 hard-FAIL (no skip-auth fallback). skip_login flag removed. Modes table FULL vs FEATURE-SCOPED (supersedes fast/strict /review). Pure docs/policy edit per CLAUDE.md carve-out. Skipped code-review + security + app-test (sub-MINOR meta). Old feature/admin-docs-skill-migration-sync branch (orphan, base pre-deploy) replaced. sha 80e7d86-pre-squash.',
+    },
+    {
+      id: 'INFRA-DEPLOY-2',
+      title: '2026-05-26 develop → main 배포 (PRs #116-#134, perf sweep + Redis)',
+      completedAt: '2026-05-26',
+      prs: [135],
+      note: 'develop → main squash-merged. main = d53b232. Railway prod auto-deploy SUCCESS (deployment 047a6e2f RUNNING). Carried 15 PRs since main 1888b5f (PR #112 prior release): #116-#134 inclusive. Bug #5 carve-out applied (HARD RULE 4 SOLE permitted force) — origin/develop force-reset to origin/main via gh api PATCH refs/heads/develop --force=true. Precondition checked (no in-flight feature PR targeting develop). Tree-equivalence verified empty diff origin/main origin/develop. Railway Redis service (redis:8.2.1) provisioned admin via dashboard + REDIS_URL=${{Redis.REDIS_URL}} env set on backend service before merge. Post-deploy: gunicorn 4 workers booted clean, no django_redis import errors. Prod smoke (CLI): / 404 no-route, /auth/dev-login/ 404 (DEBUG=False gates per design), /api/v1/projects/ unauthenticated 401, /auth/token/refresh/ empty 400. No 5xx. Direct cache-hit latency NOT measurable from CLI (DEBUG=False blocks dev-login + Google OAuth needs browser) — admin runs Codex retest separately. Outstanding: PERF-PREFETCH-POOL-RISK monitoring (Neon free-tier 25 conn limit; async prefetch daemon thread + main worker = 2 conns/swipe at peak).',
+    },
     {
       id: 'PERF-PREFETCH-CHAIN',
       title: 'async_prefetch chain end-to-end (PR 4/4 FINAL of perf sweep)',
       completedAt: '2026-05-26',
       prs: [134],
-      note: 'PR 4 (FINAL) of 4 in plan merry-toasting-dove.md. Depends on PR 1 INFRA-REDIS-1 (Redis multi-worker coherence). Plan complete after merge. Three changes restore IMP-8 chain: (1) _async_prefetch_thread off-by-one fix — pf_bid index +2, pf2_bid +3 (prior was +1, +2; stored cards matched next_card slot not prefetch slot). 4 formula sites updated (exploring pf/pf2 + analyzing pf/pf2 via compute_mmr_next round arg). (2) Async-branch consumer in SwipeView.post: cache.get(prefetch:{sid}:{saved_current_round}) reads prior thread write; batched engine.get_buildings_by_ids([next, pf, pf2]) for 1-RTT hydration; cache miss preserves None graceful fallback. (3) Dedupe guards (code-review fix-loop MAJOR): pf_id=None if ==next_bid, pf2_id=None if ==next_bid or ==pf_id. Prevents analyzing-path collision where compute_mmr_next can return same card for T lookahead + T+1 main pick. Frontend App.jsx:521+536 non-instant-swap path does NOT dedupe; without backend guard user would see same card twice. async_prefetch_enabled False→True. test_imp7_pool_cache line 635 sync→async-thread. test_imp8_async_prefetch new TestAsyncBranchConsumerIntegration with cache-hit + miss + dedupe regression tests. docs/algorithm.md Hyperparameter Space async_prefetch_enabled False→True. security-manager PASS with availability warning (filed as PERF-PREFETCH-POOL-RISK in Next medium — Neon conn pool monitoring; under high concurrent swipe, conns ≈ requests×2 could approach 25 free-tier limit). sha dc296bc-pre-squash.',
+      note: 'PR 4 (FINAL) of 4 in plan merry-toasting-dove.md. Three changes restore IMP-8 chain: (1) _async_prefetch_thread off-by-one fix — pf_bid +2, pf2_bid +3 (4 sites: exploring pf/pf2 + analyzing pf/pf2 via compute_mmr_next round arg). Prior stored cards for next_card slot not prefetch slot. (2) Async-branch consumer in SwipeView.post: cache.get(prefetch:{sid}:{saved_current_round}) reads prior thread write; batched get_buildings_by_ids 1-RTT. Cache miss preserves None graceful fallback. (3) Dedupe guards (code-review fix-loop): pf_id=None if ==next_bid, pf2_id=None if ==next_bid or ==pf_id. Prevents analyzing-path collision (compute_mmr_next can return same card for T lookahead + T+1 main pick; frontend non-instant-swap path no dedupe). async_prefetch_enabled False→True. test_imp7 sync→async-thread. test_imp8 new TestAsyncBranchConsumerIntegration. docs/algorithm.md Hyperparameter Space async_prefetch_enabled False→True. security-manager PASS with availability warning (PERF-PREFETCH-POOL-RISK filed). sha dc296bc-pre-squash (squash 26626a4).',
     },
     {
       id: 'BACK-AUTH-1',
       title: 'JWT user-row cache (PR 3/4 of perf sweep)',
       completedAt: '2026-05-26',
       prs: [133],
-      note: 'PR 3 of 4 in plan merry-toasting-dove.md. RE-SCOPED: simplejwt source inspection confirmed AccessToken does NOT inherit BlacklistMixin, so blacklist DB never runs on access-token validation. Real ~590ms hit is JWTAuthentication.get_user() → User.objects.get(id=user_id). CachedJWTAuthentication subclass overrides get_user to Redis-cache the User row. Key jwt_user:<user_id>, TTL min(token_exp_unix - now, 3600). Invalidation contract: LogoutView post-blacklist + TokenRefreshView post-rotation explicit invalidate_user_cache calls; post_save + post_delete signals on User as safety net (wired via AccountsConfig.ready). settings.py:111 DEFAULT_AUTHENTICATION_CLASSES swap. tests/test_jwt_cache.py NEW 12 tests. Security: sig check via parent get_validated_token runs BEFORE get_user override, bad sig never reaches cache. Expected ~590ms → ~10-20ms on cache hit. code-review + security-manager PASS (12 critical-chain checks clear). sha 5a1e914-pre-squash (squash 4c72513).',
+      note: 'PR 3 of 4. RE-SCOPED: simplejwt source inspection confirmed AccessToken does NOT inherit BlacklistMixin, so blacklist DB never runs on access-token validation. Real ~590ms hit is JWTAuthentication.get_user() → User.objects.get(id=user_id). CachedJWTAuthentication subclass overrides get_user to Redis-cache the User row. Key jwt_user:<user_id>, TTL min(token_exp_unix - now, 3600). Invalidation: LogoutView + TokenRefreshView explicit invalidate_user_cache; post_save + post_delete signals safety net (AccountsConfig.ready). settings.py:111 DEFAULT_AUTHENTICATION_CLASSES swap. tests/test_jwt_cache.py NEW 12 tests. Security: sig check via parent get_validated_token runs BEFORE get_user override. Expected ~590ms → ~10-20ms on cache hit. code-review + security-manager PASS. sha 5a1e914-pre-squash (squash 4c72513).',
     },
     {
       id: 'BACK-RECOMMEND-2',
       title: 'sklearn KMeans matmul warning 압제 (PR 2/4 of perf sweep)',
       completedAt: '2026-05-26',
       prs: [132],
-      note: 'PR 2 of 4 in plan merry-toasting-dove.md. Re-scoped from "dtype align" to np.errstate suppression after empirical falsification: like_embeddings.dtype already float64 (_finite_unit_vector engine.py:66 np.asarray dtype=np.float64). Real cause: sklearn KMeans centroid normalization on high-dim unit-norm vectors. New helper engine.py:90-99 _silenced_kmeans_fit. Two call sites swapped: engine.py:1664 + 1701. sample_weight=like_weights preserved. Computation byte-identical (random_state=42 + n_init=3 deterministic; topic06 silhouette tests 9/9 PASS under -W error::RuntimeWarning). code-review + security-manager PASS (np.errstate thread-local NumPy>=1.17, multi-worker safe). sha 785f4ad-pre-squash (squash b53e633).',
-    },
-    {
-      id: 'INFRA-REDIS-1',
-      title: 'Redis cache 도입 (PR 1/4 of perf sweep)',
-      completedAt: '2026-05-26',
-      prs: [131],
-      note: 'PR 1 of 4 in plan merry-toasting-dove.md. Foundation enabling PR 3 + PR 4. settings.py CACHES reads REDIS_URL env: set → django_redis.cache.RedisCache (KEY_PREFIX=makeweb, SOCKET_TIMEOUT=3), unset → LocMemCache fallback with MAX_ENTRIES=2000 preserved. _build_caches_dict(redis_url) helper. requirements.txt django-redis>=5.4,<6.0. .env.example Cache section + CLAUDE.md Backend Conventions bullet. backend/tests/test_cache_backend.py NEW 16 tests. Connection failure NOT swallowed. KEY_PREFIX prevents cross-service collision. code-review + security-manager PASS. User manual step: Railway dashboard Redis service + REDIS_URL=${{Redis.REDIS_URL}}. sha d5b6c18-pre-squash (squash 34a0c9e).',
+      note: 'PR 2 of 4. Re-scoped from "dtype align" to np.errstate suppression after empirical falsification (input already float64). Real cause: sklearn KMeans centroid normalization on high-dim unit-norm vectors. Helper engine.py:90-99 _silenced_kmeans_fit. Two call sites swapped (1664 + 1701). sample_weight preserved. Byte-identical (random_state=42 + n_init=3 deterministic; topic06 9/9 PASS under -W error::RuntimeWarning). code-review + security-manager PASS. sha 785f4ad-pre-squash (squash b53e633).',
     },
     {
       id: 'SWIPE-CONVERGENCE-10',
       title: '10-swipe target + multimodal escalation + stuck-state safety',
       completedAt: '2026-05-26',
       prs: [130],
-      note: 'Replaces closed PR #127 (codex feature/algo-convergence-study). Algorithm policy synced to docs/algorithm.md: convergence_threshold 0.08→0.13, target_swipes=10, min_likes_for_multimodal=11 (K-Means K=2 gated behind target+1), convergence_min_recent_likes=2 (positive-evidence gate). Frontend stuck-state safety floor beyondTargetFloor (swipe_count >= target+5). Engine _with_image_focus bug fix. async_prefetch_enabled True→False reverted (chain broken; later resolved in PR 4 PERF-PREFETCH-CHAIN). Swipe.py stale 0.08 defaults → 0.13. 2 commits squashed at merge to 83db42c.',
-    },
-    {
-      id: 'INFRA-CI-1',
-      title: 'PR #125 PERF-3 CI fail hotfix',
-      completedAt: '2026-05-26',
-      prs: [128],
-      note: 'Root cause: PERF-3 _async_emit daemon thread silent fail. settings_dict["TIME_ZONE"] KeyError on first thread connection setup. Sync emit revert achieved CI green. Cost ~290ms sync emit restored. PERF-3 ~1800 ms still PASS ≤2000 ms goal. sha 198eca4-pre-squash.',
-    },
-    {
-      id: 'BACK-PERFORMANCE-2',
-      title: 'Discovery 캐시 hit 450ms (목표 <200ms)',
-      completedAt: '2026-05-26',
-      prs: [126],
-      note: 'GET /api/v1/discovery/ warm cache hit p50 1572 → 672 ms (-57%). Goal <200 ms 미달 — auth floor ~600 ms (BACK-AUTH-1) + get_profile 74 ms 잔존. Response cache 60 s TTL. Mutation evict hooks. taste_ranked_page absent on cache hits. sha b40cfea-pre-squash (squash 28b7242).',
-    },
-    {
-      id: 'BACK-PERFORMANCE-3',
-      title: 'Search 후 첫 카드까지 5-8초',
-      completedAt: '2026-05-26',
-      prs: [125],
-      note: 'POST /api/v1/analysis/sessions/ local p50 2567 → 1508 ms (-42%) / PR #128 hotfix ~1800 ms still PASS. Tier 1 pool cache (filter SHA1, 30 min TTL). _random_pool 30 min cache. emit_events: PR #125 threading.Thread → PR #128 sync revert. perf_timing + perf_measure --filters CLI. sha fb669b6-pre-squash (squash 5593f6c).',
+      note: 'Replaces closed PR #127 (codex feature/algo-convergence-study). Algorithm policy synced to docs/algorithm.md: convergence_threshold 0.08→0.13, target_swipes=10, min_likes_for_multimodal=11 (K-Means K=2 gated behind target+1), convergence_min_recent_likes=2. Frontend stuck-state safety floor beyondTargetFloor. Engine _with_image_focus bug fix. async_prefetch_enabled True→False reverted (chain broken; later resolved in PR 4). Swipe.py stale 0.08 defaults → 0.13. 2 commits squashed at merge to 83db42c.',
     },
   ],
 
@@ -134,6 +134,31 @@ window.PROJECT_STATE = {
     ],
     medium: [
       {
+        id: 'BACK-PERFORMANCE-4',
+        title: 'Discovery 첫 로딩 4.6s',
+        note: 'Codex retest 2026-05-26: /discovery 4.63s + /images/batch 1.61s. Backend stage breakdown: get_or_build_taste 1.55s + taste_ranked_page 2.23s. Origin: Discovery computes taste vector then pgvector rank page. Target: warm-cache <500ms, cold <1.5s. Investigate caching of taste vector (per-user TTL?) + pgvector index tuning.',
+      },
+      {
+        id: 'BACK-PERFORMANCE-5',
+        title: 'Swipe latency 0.7-1.5s 흔들림',
+        note: 'Codex retest 2026-05-26: browser swipe 1.82s/1.75s/1.12s/1.81s; server swipe 1.50s/1.38s/0.746s/1.36s. PR4 async prefetch consume IS working — 3rd swipe with cache hit drops to 156ms prefetch stage. But variability is high. Identify which stage causes 0.7→1.5s spread (DB latency? embedding cache miss? pgvector?). Target swipe p95 ≤1.0s and p50 ≤0.5s on Singapore prod.',
+      },
+      {
+        id: 'FRONT-UX-5',
+        title: 'View Gallery 클릭 가끔 no-op',
+        note: 'Codex retest 2026-05-26: Profile card View Gallery 버튼 클릭 시 가끔 navigate 안 됨. 재현 1회. 직접 /board/<id> URL 접근은 정상. 원인 의심: button handler event propagation 또는 React Router race. 로그 + 재현 시나리오 필요.',
+      },
+      {
+        id: 'BACK-AUTH-2',
+        title: 'Cache JWT 통합 테스트 hardening',
+        note: 'apps/accounts/authentication.py:74 cache-hit path skips parent get_user(). Current tests unit-level (CachedJWTAuthentication.get_user direct). Need integration: DRF authenticate() pipeline end-to-end, User.save() post_save signal auto-invalidation, is_active=False stale cache must NOT return 200, cross-instance Redis multi-worker correctness. Codex retest 2026-05-26 P3 hardening. Not a blocker (security-manager PASS\'d PR #133); defense-in-depth for future cache-key drift or signal-wiring regression.',
+      },
+      {
+        id: 'INFRA-DB-2',
+        title: 'test DB role CREATE DATABASE permission',
+        note: 'Codex retest 2026-05-26 — Full test_imp8_async_prefetch.py blocked at DB setup; make_web_app role has no CREATE DATABASE permission. test_user_data DB creation fails. Options: (a) operator migrate / test-DB-provision with DB_USER=neondb_owner pre-pytest, (b) dedicated make_web_test role with CREATEDB grant on Neon, (c) pytest-django --reuse-db against pre-provisioned test_user_data. Choose one + document in CONTRIBUTING.md / .env.example.',
+      },
+      {
         id: 'FRONT-LAYOUT-1',
         title: 'Desktop wide-screen 레이아웃 어색함',
         note: 'Current viewport-lock layout is mobile-first. Detail pages on desktop work but unoptimised. Low priority — desktop is secondary.',
@@ -145,7 +170,7 @@ window.PROJECT_STATE = {
       },
       {
         id: 'PERF-PREFETCH-POOL-RISK',
-        title: 'Neon connection pool 모니터링 (post PR #134)',
+        title: 'Neon connection pool 모니터링 (post PR #134 deploy)',
         note: 'PR 4 PERF-PREFETCH-CHAIN flipped async_prefetch_enabled True — every prod swipe now spawns a daemon thread holding its own DB connection until _connections.close_all() runs in finally. Under high concurrent swipe load: connections ≈ (concurrent_requests × 2) — main worker + prefetch thread. Neon free tier 25 conns; Railway Gunicorn 2-4 workers. Acceptable current scale (~tens of daily users). Monitor Neon dashboard post-deploy + revisit if peak concurrency exceeds 8-10 conns. Mitigation: (a) connection pool size increase, (b) explicit thread-local pool, (c) PgBouncer in front. security-manager flagged on PR #134.',
       },
     ],
@@ -180,11 +205,39 @@ window.PROJECT_STATE = {
 
   prs: [
     {
-      number: 134,
-      title: 'feat(PERF-PREFETCH-CHAIN): wire async prefetch chain end-to-end',
+      number: 138,
+      title: 'fix(FULL-SESSION-DEDUPE-1): session create POST retry → duplicate Project/Session',
       mergedAt: null,
       mergedAtKST: null,
       sha: null,
+    },
+    {
+      number: 137,
+      title: 'fix(INFRA-DEPLOY-3): railway migrate align + Redis prod guard + docs drift',
+      mergedAt: '2026-05-26T09:33:00Z',
+      mergedAtKST: '2026-05-26 18:33 KST',
+      sha: 'ffc55e3',
+    },
+    {
+      number: 136,
+      title: 'docs(INFRA-DOC-6): align orchestrate + git-publisher + web-testing with skill regime',
+      mergedAt: '2026-05-26T08:34:41Z',
+      mergedAtKST: '2026-05-26 17:34 KST',
+      sha: '54d4d1e',
+    },
+    {
+      number: 135,
+      title: 'Release: 2026-05-26 — perf sweep + Redis + swipe fixes (PRs #116-#134)',
+      mergedAt: '2026-05-26T08:11:28Z',
+      mergedAtKST: '2026-05-26 17:11 KST',
+      sha: 'd53b232',
+    },
+    {
+      number: 134,
+      title: 'feat(PERF-PREFETCH-CHAIN): wire async prefetch chain end-to-end',
+      mergedAt: '2026-05-26T07:38:03Z',
+      mergedAtKST: '2026-05-26 16:38 KST',
+      sha: '26626a4',
     },
     {
       number: 133,
@@ -206,34 +259,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-05-26T04:56:32Z',
       mergedAtKST: '2026-05-26 13:56 KST',
       sha: '34a0c9e',
-    },
-    {
-      number: 130,
-      title: 'fix: swipe convergence — 10-swipe target + multimodal escalation + stuck-state safety',
-      mergedAt: '2026-05-26T02:23:10Z',
-      mergedAtKST: '2026-05-26 11:23 KST',
-      sha: '83db42c',
-    },
-    {
-      number: 129,
-      title: 'fix(dashboard): state.js block comment */ early termination',
-      mergedAt: '2026-05-26T00:52:54Z',
-      mergedAtKST: '2026-05-26 09:52 KST',
-      sha: 'b4d24d6',
-    },
-    {
-      number: 128,
-      title: 'fix(ci): PR #125 CI fail — settings TIME_ZONE + test patch',
-      mergedAt: '2026-05-26T00:25:28Z',
-      mergedAtKST: '2026-05-26 09:25 KST',
-      sha: '9681270',
-    },
-    {
-      number: 126,
-      title: 'perf(BACK-PERFORMANCE-2): /discovery/ cache-hit p50 1572→672ms',
-      mergedAt: '2026-05-25T20:20:03Z',
-      mergedAtKST: '2026-05-26 05:20 KST',
-      sha: '28b7242',
     },
   ],
 
@@ -276,7 +301,7 @@ window.PROJECT_STATE = {
     },
     {
       name: 'git-publisher',
-      role: 'Push + PR open/poll + squash merge + branch cleanup + develop→main deploy PRs. Never commits source code. Default Mode 2 routine path absorbed by .claude/skills/git-publish/; agent still fires for Mode 3 deploy / external PR triage / complex rebase.',
+      role: 'Edge-case publisher. Mode 3 develop→main deploy + post-deploy develop force-reset + external PR triage + complex rebase + push rejection / mid-merge failure. Routine feature→develop publishes go through git-publish skill (not this agent).',
       model: 'sonnet',
       effort: 'default',
     },

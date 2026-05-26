@@ -1,6 +1,6 @@
 ---
 name: orchestrate
-description: Use this skill to implement any feature or fix end-to-end. It reads the project context, breaks the task into backend/frontend specs, dispatches back-maker and front-maker sub-agents, runs code-review and security-manager in parallel, manages the fix loop (max 2 cycles), then dispatches git-manager (commit), app-test (pre-push browser + drift gate), git-publisher (push/PR/merge), and reporter (session-end).
+description: Use this skill to implement any feature or fix end-to-end. It reads the project context, breaks the task into backend/frontend specs, dispatches back-maker and front-maker sub-agents, runs code-review and security-manager in parallel, manages the fix loop (max 2 cycles), then runs the git-commit skill (commit), dispatches app-test (pre-push browser + drift gate), runs the reporter-inline skill (audit), and runs the git-publish skill (push/PR/merge). The git-publisher agent is reserved for Mode 3 deploy, external PR triage, and complex rebase recovery.
 ---
 
 # Orchestrate — feature-implementation playbook
@@ -26,10 +26,16 @@ Minimal valid dispatch shape:
 ```
 Agent({
   description: "<one-line summary>",
-  subagent_type: "back-maker",  // or front-maker, code-review, security-manager, app-test, git-manager, git-publisher, reporter
+  subagent_type: "back-maker",  // or front-maker, code-review, security-manager, app-test, git-publisher (Mode 3 only)
   prompt: "<full self-contained brief for the subagent>"
 })
 ```
+
+The `git-manager` and `reporter` agents are **deprecated as of 2026-05-26** —
+do not dispatch them. Use the `git-commit` and `reporter-inline` skills
+instead (Step 6 and Step 9 below). The `git-publisher` agent stays for Mode 3
+deploy / external PR triage / complex rebase only; the `git-publish` skill is
+the default for feature → develop publishes (Step 9).
 
 For parallel dispatches (Step 4: code-review + security-manager), emit both `Agent`
 calls in a single assistant message so they run concurrently.
@@ -53,7 +59,7 @@ is absolute.
 2. Read `CLAUDE.md` `## Product Identity` + `## Product Constitution` + scan relevant code.
 3. Execute (back-maker / front-maker / etc.).
 4. **Mid-session deferral** — if the user says "미루자" / "later" / "defer", move the Now entry **back to `## Next`** with a one-line rationale note (demote one heading level to `#### <SLUG>` and place under the bucket that matches its new status — usually `### MEDIUM` for normal deferrals, `### LOW` for explicit skip). Do not silently leave it in Now.
-5. **Session end (success)** — `reporter` agent moves the Now entry to `## Done` under `### <title> — RESOLVED YYYY-MM-DD (PR #N)` with PR ref + SHA. Any `Deferred: ...` text in the Done note auto-surfaces as a new `#### <SLUG>` under `### MEDIUM` in `## Next` (reporter sub-step 2a; HIGH / LOW only when the Done note explicitly tags it).
+5. **Session end (success)** — the `reporter-inline` skill (run inline by the main session, NOT the deprecated `reporter` agent) moves the Now entry to `## Done` under `### <title> — RESOLVED YYYY-MM-DD (PR #N)` with PR ref + SHA. Any `Deferred: ...` text in the Done note auto-surfaces as a new `#### <SLUG>` under `### MEDIUM` in `## Next` (reporter-inline Step 2b; HIGH / LOW only when the Done note explicitly tags it).
 6. **Failure after 2 cycles** — leave the entry in `## Now`, add failure notes inline, report to user. Do not move to Done.
 
 ## When user says "오늘 개발 진행해" or "continue development"
@@ -163,7 +169,7 @@ It returns a single PASS/FAIL verdict.
 - **app-test FAIL (browser test failed):** treat as a code-review FAIL — go to the
   Fix Loop (Step 5b). app-test failures count toward the shared 2-cycle limit. The
   fix cycle re-runs back-maker / front-maker → code-review + security-manager →
-  git-manager (a new commit) → app-test.
+  `git-commit` skill (a new commit on the same feature branch) → app-test.
 - **app-test FAIL (drift detected — `origin/develop` moved):** no code fix is
   needed. Inform the user, run `git pull --rebase origin develop` (resolving any
   conflicts via the Fix Loop if they arise), then re-dispatch `app-test`. Drift does
@@ -174,22 +180,22 @@ It returns a single PASS/FAIL verdict.
 
 ### Step 8 — Publish gate (BLOCKING by default)
 
-**Default behavior: STOP after commit (Step 6). Do NOT dispatch `git-publisher`.**
+**Default behavior: STOP after commit (Step 6). Do NOT run the `git-publish` skill, do NOT dispatch the `git-publisher` agent.**
 
-Check the publish gate before dispatching `git-publisher`. The gate opens only when one of the following is explicitly true:
+Check the publish gate before publishing. The gate opens only when one of the following is explicitly true:
 
 - **(a) User explicit trigger in current turn** — the user typed one of: `"PR 올려"`, `"push"`, `"publish"`, `"merge"`, `"PR 열어"`, `"deploy"`, `"배포"`, `"release"`. Cite the user's literal phrase when invoking the gate.
-- **(b) Active plan with `## PR Plan` section** — if a plan file `.claude/plans/<name>.md` is active for this work and contains an explicit `## PR Plan` section listing N slices, the plan acts as authorization for those N PRs. Each slice's commit may dispatch `git-publisher` automatically. After the last planned slice, the gate closes (returns to default).
+- **(b) Active plan with `## PR Plan` section** — if a plan file `.claude/plans/<name>.md` is active for this work and contains an explicit `## PR Plan` section listing N slices, the plan acts as authorization for those N PRs. Each slice's commit may proceed to publish automatically. After the last planned slice, the gate closes (returns to default).
 - **(c) In-flight fix-loop** — if `app-test` or `code-review` already gated this work in the current dispatch and a tiny follow-up commit is the result of the fix-loop, that continues the original (a) or (b) authorization. No fresh trigger needed.
 
 If neither (a), (b), nor (c) is true:
-1. STOP. Do NOT dispatch `git-publisher`.
+1. STOP. Do NOT run `git-publish` skill, do NOT dispatch `git-publisher` agent.
 2. Report to user: `commit <SHA> ready on <branch>. Say "PR 올려" when ready to publish, or accumulate more commits first.`
 3. Wait for explicit signal.
 
-Once the gate opens, dispatch `git-publisher` with the work and cite the trigger in the dispatch prompt.
+Once the gate opens, proceed to Step 9 (audit-then-publish). The default publish path is the `git-publish` skill. Escalate to the `git-publisher` agent only for the edge cases listed in CLAUDE.md `## Git Operations — HARD RULE`: Mode 3 develop→main deploy, external collaborator PR triage, complex rebase conflicts, push rejection with unclear cause, mid-merge failure.
 
-**Hard rule — base=main is a separate gate.** `git-publisher` enforces a second precondition: base=main PRs require the trigger keyword to be `"deploy"` / `"release"` / `"배포"` specifically. Plain `"PR 올려"` authorizes only base=develop. Codified post-PR #105 main-merge incident (2026-05-25).
+**Hard rule — base=main is a separate gate.** Base=main PRs require the trigger keyword to be `"deploy"` / `"release"` / `"배포"` specifically. Plain `"PR 올려"` authorizes only base=develop. Codified post-PR #105 main-merge incident (2026-05-25). The `git-publish` skill targets base=develop only; base=main is always Mode 3 via the `git-publisher` agent.
 
 ### Step 9 — Audit-then-publish (reporter-inline + git-publish)
 
@@ -219,8 +225,9 @@ develop merges — that agent is reserved for Mode 3 deploy, external PR triage,
 or complex rebase conflicts.**
 
 ### Step 10 — Stop and report to user
-After reporter finishes, STOP. Summarize for the user what was implemented, the
-commit/PR, the app-test verdict, and any open follow-ups.
+After `reporter-inline` + `git-publish` finish, STOP. Summarize for the user
+what was implemented, the commit/PR, the app-test verdict, and any open
+follow-ups.
 
 ## Algorithm work — externally owned
 
@@ -239,9 +246,14 @@ persona) remains in scope — dispatch as a normal feature through back-maker.
 - Never write source code yourself. Always delegate to back-maker or front-maker via
   the `Agent` tool. If `Agent` appears unavailable, STOP and report the blockage to
   the user — do not work around it by editing files directly.
-- Never commit yourself. Always delegate to git-manager.
-- Never push yourself. Always delegate to git-publisher. With `main` + `develop`
-  branch protection, even admin pushes go via PR — see `CONTRIBUTING.md`.
+- Never commit ad-hoc. Default: run the `git-commit` skill directly in the main
+  session. Escalate to the `git-publisher` agent only for diagnosis failure /
+  multi-commit reorganization. Do NOT dispatch the deprecated `git-manager` agent.
+- Never push ad-hoc. Default: run the `git-publish` skill directly for
+  feature → develop (base=develop only). Escalate to the `git-publisher` agent only
+  for Mode 3 develop→main deploy, external PR triage, complex rebase, push
+  rejection unclear cause, mid-merge failure. With `main` + `develop` branch
+  protection, even admin pushes go via PR — see `CONTRIBUTING.md`.
 - If a task is ambiguous, ask the user ONE clarifying question before planning.
 - The fix-cycle count is shared across all loops. Track it.
 - If you notice a `CLAUDE.md` convention that needs updating, propose the change in
