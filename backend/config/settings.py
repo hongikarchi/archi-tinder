@@ -72,6 +72,7 @@ DATABASES = {
         'PASSWORD': os.environ['DB_PASSWORD'],
         'CONN_MAX_AGE': 600,  # Reuse DB connections for 10 minutes
         'CONN_HEALTH_CHECKS': True,  # Django 4.2+: close broken pooled connections proactively
+        'TIME_ZONE': None,  # explicit so settings_dict["TIME_ZONE"] never raises on reconnect
         'OPTIONS': {
             'sslmode': os.getenv('DB_SSLMODE', 'require'),
         },
@@ -87,6 +88,7 @@ DATABASES = {
         'NAME':     os.environ['BUILDINGS_DB_NAME'],
         'USER':     os.environ['BUILDINGS_DB_USER'],
         'PASSWORD': os.environ['BUILDINGS_DB_PASSWORD'],
+        'TIME_ZONE': None,  # explicit so settings_dict["TIME_ZONE"] never raises on reconnect
         'OPTIONS': {
             'sslmode': os.getenv('BUILDINGS_DB_SSLMODE', 'require'),
         },
