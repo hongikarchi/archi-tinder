@@ -13,7 +13,7 @@ from rest_framework.views import APIView
 
 from ..models import Project, AnalysisSession
 from .. import engine, event_log, services
-from ..caches import evict_projects_list, evict_user_profile_detail
+from ..caches import evict_projects_list, evict_user_profile_detail, evict_project_detail
 from ..perf_timing import endpoint, stage
 from ._shared import _get_profile, _progress
 
@@ -255,6 +255,8 @@ class SessionCreateView(APIView):
             # The cache includes latest_session_meta and project counts; stale up to 60s otherwise.
             evict_projects_list(profile.id)
             evict_user_profile_detail(profile.user.id)
+            # BACK-BOARD-PERF-1: evict project detail — latest_session_id changes on session create.
+            evict_project_detail(str(project.project_id))
 
             # F4: seed prefetch cache for round 1 (first swipe's cache-read key).
             # IMP-8 consumer (swipe.py L764) reads prefetch:{sid}:{saved_current_round}

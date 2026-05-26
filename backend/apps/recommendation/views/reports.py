@@ -8,7 +8,7 @@ from rest_framework.views import APIView
 
 from ..models import Project
 from .. import services
-from ..caches import evict_projects_list
+from ..caches import evict_projects_list, evict_project_detail
 from ._shared import _get_profile, _liked_id_only
 
 logger = logging.getLogger('apps.recommendation')
@@ -47,6 +47,7 @@ class ProjectReportGenerateView(APIView):
         project.final_report = report
         project.save(update_fields=['final_report'])
         evict_projects_list(profile.id)
+        evict_project_detail(str(pk))
         logger.info('Persona report generated for project %s', pk)
         return Response({'final_report': report})
 
@@ -70,6 +71,7 @@ class ProjectReportImageView(APIView):
         project.report_image = result['image_data']
         project.save(update_fields=['report_image'])
         evict_projects_list(profile.id)
+        evict_project_detail(str(pk))
         logger.info('Persona image generated for project %s', pk)
         return Response({
             'image_data': result['image_data'],

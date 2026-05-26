@@ -35,6 +35,7 @@ from apps.accounts.models import UserProfile
 from apps.accounts.serializers import UserMiniSerializer
 from apps.recommendation.caches import evict_user_profile_detail
 from apps.social.models import Follow, OfficeFollow, Reaction
+from apps.recommendation.caches import evict_project_detail
 
 logger = logging.getLogger('apps.social')
 
@@ -264,6 +265,9 @@ class ReactionView(APIView):
         # Counter update handled by _reaction_post_save signal when created=True.
 
         project.refresh_from_db(fields=['reaction_count'])
+        if created:
+            # reaction_count changed — evict project detail cache (BACK-BOARD-PERF-1)
+            evict_project_detail(str(project_id))
         response_status = status.HTTP_201_CREATED if created else status.HTTP_200_OK
         return Response(
             {'reaction_count': project.reaction_count, 'reacted': True},
@@ -287,6 +291,8 @@ class ReactionView(APIView):
 
         if deleted_count == 0:
             return Response({'detail': 'Not reacted.'}, status=status.HTTP_404_NOT_FOUND)
+        # reaction_count changed — evict project detail cache (BACK-BOARD-PERF-1)
+        evict_project_detail(str(project_id))
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

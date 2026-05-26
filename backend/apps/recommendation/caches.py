@@ -162,3 +162,41 @@ def evict_discovery_feed(profile_id):
     # Also evict common limit variants
     for limit in (10, 20, 30):
         cache.delete(_discovery_feed_key(profile_id, 0, limit))
+
+
+# ── Project detail cache (BACK-BOARD-PERF-1) ─────────────────────────────────
+
+PROJECT_DETAIL_TTL = 60  # seconds — same UX staleness window as projects list
+
+
+def _project_detail_version_key(project_uuid):
+    """Per-Project version counter key — incremented on any mutation."""
+    return f'project_detail_version:{project_uuid}'
+
+
+def _project_detail_version(project_uuid):
+    """Current version int (0 if not yet set). Used in cache key composition."""
+    return cache.get(_project_detail_version_key(project_uuid), 0)
+
+
+def evict_project_detail(project_uuid):
+    """Bump the version counter — all existing cache keys for this project become unreachable."""
+    try:
+        cache.incr(_project_detail_version_key(project_uuid))
+    except ValueError:
+        # cache.incr raises ValueError on missing key (LocMemCache) — initialize to 1
+        cache.set(_project_detail_version_key(project_uuid), 1, None)
+
+
+def get_project_detail_cache_key(project_uuid, requester_id_for_cache):
+    """Compose the response cache key for ProjectDetailView GET.
+
+    project_uuid: str(Project.project_id)
+    requester_id_for_cache: str(requester profile.id) for authenticated callers,
+        'anon' for unauthenticated.
+
+    Partitions by requester because `is_reacted` and `is_owner` are per-caller.
+    Version counter in the key makes all prior entries unreachable on eviction.
+    """
+    ver = _project_detail_version(project_uuid)
+    return f'project_detail:{project_uuid}:v{ver}:r{requester_id_for_cache}'
