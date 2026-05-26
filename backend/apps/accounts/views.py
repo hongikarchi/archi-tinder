@@ -12,6 +12,9 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.conf import settings
 
+from rest_framework_simplejwt.settings import api_settings
+
+from .authentication import invalidate_user_cache
 from .models import UserProfile, SocialAccount
 from .serializers import UserSerializer, UserProfileSerializer, UserProfileSelfUpdateSerializer
 
@@ -274,10 +277,13 @@ class TokenRefreshView(APIView):
         try:
             refresh = RefreshToken(refresh_token)
             data = {'access': str(refresh.access_token)}
+            user_id_from_refresh = refresh.get(api_settings.USER_ID_CLAIM)
             if settings.SIMPLE_JWT.get('ROTATE_REFRESH_TOKENS'):
                 if settings.SIMPLE_JWT.get('BLACKLIST_AFTER_ROTATION'):
                     try:
                         refresh.blacklist()
+                        if user_id_from_refresh is not None:
+                            invalidate_user_cache(user_id_from_refresh)
                     except AttributeError:
                         # token_blacklist app not installed (dev mode without migrations)
                         pass
@@ -314,6 +320,11 @@ class LogoutView(APIView):
                 RefreshToken(refresh_token).blacklist()
             except Exception:
                 pass
+        # Evict the user cache. The access token still has its natural exp
+        # but cache eviction forces the next authenticated request to re-fetch
+        # User state from DB — picks up any out-of-band is_active/password change.
+        if request.user and request.user.is_authenticated:
+            invalidate_user_cache(request.user.id)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
