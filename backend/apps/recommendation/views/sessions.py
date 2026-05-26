@@ -1,9 +1,8 @@
 import logging
-import threading
 from collections import defaultdict
 
 from django.conf import settings
-from django.db import close_old_connections, transaction
+from django.db import transaction
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -189,51 +188,35 @@ class SessionCreateView(APIView):
 
             logger.info('Session created: %s (pool=%d, tiers=%d, relaxed=%s)', session.session_id, len(pool_ids), len(tiers), filter_relaxed)
 
-            # §6 logging: session_start + pool_creation — fire-and-forget.
-            # Analytics events are not response-critical; dispatching off the
-            # request thread saves ~292 ms synchronous DB round-trip.
-            # Values captured by closure are immutable at this point (post-return
-            # path does not mutate session, active_filters, etc.).
-            _emit_payload = [
-                {
-                    'event_type': 'session_start',
-                    'session': session,
-                    'user': profile,
-                    'query': raw_query or None,
-                    'filters': active_filters,
-                    'filter_priority': list(filter_priority or []),
-                    'raw_query': raw_query or None,
-                    'visual_description': visual_description,
-                    'v_initial_success': v_initial is not None,
-                },
-                {
-                    'event_type': 'pool_creation',
-                    'session': session,
-                    'user': profile,
-                    'pool_size': len(pool_ids),
-                    'tier_used': current_pool_tier,
-                    'filter_relaxed': filter_relaxed,
-                    'seed_count': len(seed_ids or []),
-                },
-            ]
-            _session_id_for_log = session.session_id  # safe copy for thread log
-
-            def _async_emit():
-                # New thread gets its own DB connection; close stale ones at
-                # entry and exit to prevent connection leaks under gunicorn.
-                close_old_connections()
-                try:
-                    event_log.emit_event_batch(_emit_payload)
-                except Exception as _exc:
-                    logger.warning(
-                        'Async emit_events failed for session %s: %s',
-                        _session_id_for_log, _exc,
-                    )
-                finally:
-                    close_old_connections()
-
-            with stage('emit_events_dispatch'):
-                threading.Thread(target=_async_emit, daemon=True).start()
+            # §6 logging: session_start + pool_creation. Sync emit (was daemon
+            # thread in PERF-3 but reverted in PR #128 — daemon thread DB
+            # access hit settings_dict['TIME_ZONE'] KeyError on first connection
+            # setup and silently failed all analytics; sync emit on main thread
+            # uses the established connection and avoids both issues. ~290 ms
+            # cost is acceptable; PERF-3 still meets ≤2000 ms goal at ~1800 ms.
+            with stage('emit_events'):
+                event_log.emit_event_batch([
+                    {
+                        'event_type': 'session_start',
+                        'session': session,
+                        'user': profile,
+                        'query': raw_query or None,
+                        'filters': active_filters,
+                        'filter_priority': list(filter_priority or []),
+                        'raw_query': raw_query or None,
+                        'visual_description': visual_description,
+                        'v_initial_success': v_initial is not None,
+                    },
+                    {
+                        'event_type': 'pool_creation',
+                        'session': session,
+                        'user': profile,
+                        'pool_size': len(pool_ids),
+                        'tier_used': current_pool_tier,
+                        'filter_relaxed': filter_relaxed,
+                        'seed_count': len(seed_ids or []),
+                    },
+                ])
 
             return Response({
                 'session_id':      str(session.session_id),

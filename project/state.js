@@ -24,71 +24,71 @@
  * so the value can be re-parsed by any consumer. In-flight (not-yet-merged)
  * PRs carry `mergedAt: null` sentinel; next reporter-inline pass backfills.
  */
-// Reporter: Mermaid sources may be stale — commit b40cfea touched backend/apps/recommendation/{caches,views/discovery,views/swipe,views/projects}.py (PERF-2 discovery response cache + mutation evict hooks). recommendationFlow Mermaid still accurate at function-graph level.
+// Reporter: Mermaid sources may be stale — commit 198eca4 reverted PERF-3 emit threading + added defensive TIME_ZONE settings declaration. Mermaid bodies unaffected at function-graph level.
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-05-26 05:16 KST',
-    head: '5593f6c',
-    branch: 'feature/algo-perf-discovery-cache',
+    updatedAt: '2026-05-26 09:19 KST',
+    head: '28b7242',
+    branch: 'feature/algo-perf-ci-hotfix-tz',
   },
 
   done: [
+    {
+      id: 'INFRA-CI-1',
+      title: 'PR #125 PERF-3 CI fail hotfix',
+      completedAt: '2026-05-26',
+      prs: [128],
+      note: 'Root cause: PERF-3 _async_emit daemon thread silent fail. First thread connection setup hit settings_dict["TIME_ZONE"] KeyError (Django backend timezone_name cached_property); emit_event_batch try/except 잡혀 silent → test_imp6_stage_decouple evt is not None assert fail (prod analytics 손실 + test 회귀). Two-prong fix attempted (settings TIME_ZONE explicit + test patch close_old_connections no-op + close_old_connections removal); only third-cycle root revert (sync emit on main thread, drop _async_emit closure + threading import) achieved CI green. Cost ~290ms sync emit restored to request path; PERF-3 1508 → ~1800 ms still PASS ≤2000 ms goal. emit_event_batch bulk_create preserved (1 SQL round-trip). 3 commits squashed: TIME_ZONE settings + close_old_connections removal + sync emit revert. sha 198eca4-pre-squash.',
+    },
     {
       id: 'BACK-PERFORMANCE-2',
       title: 'Discovery 캐시 hit 450ms (목표 <200ms)',
       completedAt: '2026-05-26',
       prs: [126],
-      note: 'GET /api/v1/discovery/ warm cache hit p50 1572 → 672 ms (-57%). Goal <200 ms 미달 — auth floor ~600 ms (BACK-AUTH-1) + get_profile 74 ms 잔존. Response cache 60 s TTL — get_or_build_discovery_feed + evict_discovery_feed (per-profile.id+cursor+limit key, mirror PERF-1 pattern). Mutation evict hooks: SwipeView.post (liked/disliked) + ProjectBookmarkView.post (saved) + ProjectDetailView.patch remove_building_ids. Per-stage perf_timing: get_profile / build_exclude_set / get_or_build_taste / taste_ranked_page / cache_lookup_or_build. taste_ranked_page (814 ms, 84% of body, dominant) absent on cache hits — verified. Not evicted (60 s TTL self-cleans, no security impact): ProjectDetailView.delete (UX-only stale exclude_set), ProjectListCreateView.post (empty IDs at create). Measurement scope: local Neon local-dev-2 only (development proxy). Prod Singapore Railway p50 = post-deploy Codex retest (admin). Multi-worker prod = per-worker LocMemCache, 60 s TTL eventual consistency. Deferred: BACK-AUTH-1 — auth-layer optimization required for sub-200 ms total. sha b40cfea-pre-squash.',
+      note: 'GET /api/v1/discovery/ warm cache hit p50 1572 → 672 ms (-57%). Goal <200 ms 미달 — auth floor ~600 ms (BACK-AUTH-1) + get_profile 74 ms 잔존. Response cache 60 s TTL — get_or_build_discovery_feed + evict_discovery_feed (per-profile.id+cursor+limit key, mirror PERF-1 pattern). Mutation evict hooks: SwipeView.post (liked/disliked) + ProjectBookmarkView.post (saved) + ProjectDetailView.patch remove_building_ids. Per-stage perf_timing: get_profile / build_exclude_set / get_or_build_taste / taste_ranked_page / cache_lookup_or_build. taste_ranked_page (814 ms, 84% of body, dominant) absent on cache hits — verified. Not evicted (60 s TTL self-cleans, no security impact): ProjectDetailView.delete (UX-only stale exclude_set), ProjectListCreateView.post (empty IDs at create). Measurement scope: local Neon local-dev-2 only (development proxy). Prod Singapore Railway p50 = post-deploy Codex retest (admin). Multi-worker prod = per-worker LocMemCache, 60 s TTL eventual consistency. Deferred: BACK-AUTH-1 — auth-layer optimization required for sub-200 ms total. sha b40cfea-pre-squash (squash 28b7242).',
     },
     {
       id: 'BACK-PERFORMANCE-3',
       title: 'Search 후 첫 카드까지 5-8초',
       completedAt: '2026-05-26',
       prs: [125],
-      note: 'POST /api/v1/analysis/sessions/ local sessions create p50 2567 → 1508 ms realistic / 1484 ms worst-case (-42%). Both PASS ≤ 2000 ms. Tier 1 pool cache (filter signature SHA1 key, 30 min TTL): _tier1_cache_key(filters, filter_priority, seed_ids, v_initial, q_text) — pool ordering preserved (full tuple cached pre-exclude), exclude_ids applied post-fetch (per-session state, not in key). _random_pool 30 min in-memory cache (module-level dict); Tier 3 random fallback ~1040 → ~5 ms warm. emit_events → threading.Thread daemon fire-and-forget; close_old_connections() entry+finally; analytics events lost on process crash mid-thread (acceptable per spec). emit_event_batch in event_log.py via bulk_create. perf_timing sub-stages on engine.create_pool_with_relaxation / create_bounded_pool / get_pool_embeddings (data-driven hypothesis formation). perf_measure --filters JSON CLI option (realistic Tier 1 measurement). Algorithm-territory edits per user authorization; pool ordering + initial_batch shape + swipe-loop determinism preserved (code-review AC1). Measurement scope local Neon local-dev-2 only (development proxy); prod Singapore p50 = post-deploy Codex retest. Multi-worker prod = per-worker cache, warm-up cost per worker. Cold path ~2400-2600 ms unchanged — cache hit dominates 3-run p50. sha fb669b6-pre-squash (squash 5593f6c).',
+      note: 'POST /api/v1/analysis/sessions/ local sessions create p50 2567 → 1508 ms realistic / 1484 ms worst-case (-42%). Both PASS ≤ 2000 ms (PR #128 hotfix sync emit revert → 효과 ~1800 ms 여전히 PASS). Tier 1 pool cache (filter signature SHA1 key, 30 min TTL): _tier1_cache_key(filters, filter_priority, seed_ids, v_initial, q_text) — pool ordering preserved (full tuple cached pre-exclude), exclude_ids applied post-fetch (per-session state, not in key). _random_pool 30 min in-memory cache (module-level dict); Tier 3 random fallback ~1040 → ~5 ms warm. emit_events: PR #125 시 threading.Thread daemon fire-and-forget 도입 → PR #128 sync revert (daemon thread settings_dict TIME_ZONE KeyError silent fail issue). emit_event_batch in event_log.py via bulk_create. perf_timing sub-stages on engine.create_pool_with_relaxation / create_bounded_pool / get_pool_embeddings. perf_measure --filters JSON CLI option. Algorithm-territory edits per user authorization; pool ordering + initial_batch shape + swipe-loop determinism preserved. Measurement scope local Neon local-dev-2 only; prod Singapore p50 = post-deploy Codex retest. sha fb669b6-pre-squash (squash 5593f6c).',
     },
     {
       id: 'BACK-PERFORMANCE-1',
       title: '/projects/ 응답 600ms (목표 300ms)',
       completedAt: '2026-05-26',
       prs: [124],
-      note: 'GET /api/v1/projects/ local p50 1136 → 661 ms (-42%). Goal ≤300 ms 미달 — auth floor ~590 ms 잔존. Response cache 60s TTL + evict POST/PATCH/DELETE/Bookmark (per-profile.id key isolation). ProjectListSerializer drops analysis_report (LLM JSON list-unused). defer(analysis_report) on QS. _latest_like_count via jsonb_array_length (no full like_vectors fetch). page_size+1 trick — no count() query. CONN_MAX_AGE=600 + CONN_HEALTH_CHECKS=True on default DB. buildings DB CONN_MAX_AGE removed (Make-DB owner territory). perf_timing ctx manager + perf_measure CLI (reused PERF-3/PERF-2). orchestrate skill Step 6/9 deprecated agent refs → git-commit/reporter-inline skills. Measurement scope local Neon local-dev-2 only (development proxy); prod Singapore Railway p50 = post-deploy Codex retest (admin). Deferred: BACK-AUTH-1 — simplejwt JWT blacklist DB query (~590 ms, security territory; explicit user approval required before touching auth path). sha 505717a-pre-squash (squash 0c8fe6f).',
+      note: 'GET /api/v1/projects/ local p50 1136 → 661 ms (-42%). Goal ≤300 ms 미달 — auth floor ~590 ms 잔존. Response cache 60s TTL + evict POST/PATCH/DELETE/Bookmark (per-profile.id key isolation). ProjectListSerializer drops analysis_report (LLM JSON list-unused). defer(analysis_report) on QS. _latest_like_count via jsonb_array_length (no full like_vectors fetch). page_size+1 trick — no count() query. CONN_MAX_AGE=600 + CONN_HEALTH_CHECKS=True on default DB. buildings DB CONN_MAX_AGE removed (Make-DB owner territory). perf_timing ctx manager + perf_measure CLI (reused PERF-3/PERF-2). orchestrate skill Step 6/9 deprecated agent refs → git-commit/reporter-inline skills. Measurement scope local Neon local-dev-2 only; prod Singapore p50 = post-deploy Codex retest. Deferred: BACK-AUTH-1. sha 505717a-pre-squash (squash 0c8fe6f).',
     },
     {
       id: 'INFRA-WORKFLOW-1',
       title: 'Reporter / git-manager 흡수 + 3 skill 도입',
       completedAt: '2026-05-26',
       prs: [123],
-      note: '3 new skills replace routine agent paths: git-commit (single commit + secret guards), git-publish (push + PR + admin squash + Step 0 publish gate), reporter-inline (Task.md + state.js + algorithm.md inline before squash; in-flight PR mergedAt:null sentinel + next-pass backfill; 9-step behavior 1-to-1 from reporter agent). git-manager + reporter agents → deprecated:true frontmatter + body fallback note (two-PR migration; delete in follow-up PR after ~1 week skill-only validation). git-publisher kept (Mode 3 deploy / external PR triage / complex rebase). CLAUDE.md new ## Git Operations — HARD RULE section. WORKFLOW.md Mermaid rebuilt with skill labels. MEMORY feedback_orchestrator rewritten + new feedback_workflow_skill_absorption. Per PR cycle agent dispatches 8 → 3, ~30-40k tokens + ~150-300s saved. Reporter audit ships in same PR as work — PR count halved. sha bbadcf1-pre-squash (post-squash backfill at next reporter-inline pass).',
+      note: '3 new skills replace routine agent paths: git-commit (single commit + secret guards), git-publish (push + PR + admin squash + Step 0 publish gate), reporter-inline (Task.md + state.js + algorithm.md inline before squash; in-flight PR mergedAt:null sentinel + next-pass backfill; 9-step behavior 1-to-1 from reporter agent). git-manager + reporter agents → deprecated:true frontmatter + body fallback note. git-publisher kept (Mode 3 deploy / external PR triage / complex rebase). CLAUDE.md new ## Git Operations — HARD RULE section. WORKFLOW.md Mermaid rebuilt with skill labels. Per PR cycle agent dispatches 8 → 3, ~30-40k tokens + ~150-300s saved. Reporter audit ships in same PR as work — PR count halved. sha bbadcf1-pre-squash.',
     },
     {
       id: 'FRONT-UX-4',
       title: 'BuildingDetailPage UX 개선 (스크롤 + 순서 + 보드 저장)',
       completedAt: '2026-05-26',
       prs: [120],
-      note: 'BuildingDetailPage minHeight → height + overflowY:auto (MainLayout overflow:hidden 부모 안에서 자체 스크롤 회복). Title/architect/meta 갤러리 위로 재배치. 상단 우측 "+ 보드에 추가" 핑크 그라디언트 버튼 + SaveToBoardModal 트리거. 저장 후 골드 체크 상태. BoardDetailPage buildings 이동 시 fromBoard:true location.state. Codex P2 fix: saveEnabled={!fromBoard} (negative gate too broad — firm profile / direct URL / BoardDetail recommended tile 모두 노출) → saveEnabled={fromRecommended} (positive gate, ResultsPage 추천만). ResultsPage.handleOpenBuilding fromRecommended:true state 추가. fromBoard derivation 제거 (ESLint no-unused-vars). BoardDetailPage fromBoard:true writes 살아 있되 dead harmless. sha 8f90104.',
+      note: 'BuildingDetailPage minHeight → height + overflowY:auto. Title/architect/meta 갤러리 위로 재배치. 상단 우측 "+ 보드에 추가" 핑크 그라디언트 버튼 + SaveToBoardModal 트리거. BoardDetailPage buildings 이동 시 fromBoard:true location.state. Codex P2 fix: saveEnabled negative gate → positive (saveEnabled={fromRecommended} ResultsPage 추천만). sha 8f90104.',
     },
     {
       id: 'FRONT-DESIGN-2',
       title: '카드 이미지 contain 전환 + 카드 크기 확대',
       completedAt: '2026-05-26',
       prs: [118],
-      note: 'SwipeCard objectFit cover → contain (사진 잘림 해소). 갤러리 뒷면 contain 통일. Letterbox 배경 #111 (도면 #fff 유지). CARD_WIDTH min(420, vw-32) (16+16 컨테이너 padding 보정), CARD_HEIGHT min(width×1.55, vh-220). SwipePage flex centering wrapper (header/hint 높이 무관 수직 정중앙). Converged phase confidence 무관 finish 버튼 활성화. App.jsx auto-nav at100 조건에서 (phase === \'converged\') 단독 분기 (confidence null이어도 nav). Codex P1 fix: CARD_WIDTH vw-16 → vw-32 (390폰 16px 클립 해소). Codex P2 fix: finishUnlocked latch 재도입 drop. PR #121 1-shot isAt100 설계 보존 (App.jsx auto-nav 주 trigger, Finish 버튼 safety net). sha 9fcd078.',
+      note: 'SwipeCard objectFit cover → contain. Letterbox 배경 #111. CARD_WIDTH min(420, vw-32). SwipePage flex centering wrapper. Converged phase confidence 무관 finish 버튼 활성화. App.jsx auto-nav at100 condition (phase===converged) standalone branch. Codex P1: CARD_WIDTH vw-16 → vw-32 (390폰 16px 클립 해소). Codex P2: finishUnlocked latch drop, PR #121 1-shot isAt100 보존. sha 9fcd078.',
     },
     {
       id: 'FRONT-UX-2',
       title: '스와이프 자동 이동 + 키보드 입력',
       completedAt: '2026-05-26',
       prs: [121],
-      note: 'App.jsx useEffect auto-navigates /swipe → /result/:sessionId on phase=completed/results, or latch threshold (exploring like_count>=4, analyzing/converged confidence>=1.0). DiscoveryPage.jsx keydown ← (skip) / → (save) arrow-key swipe. Supersedes PR #114 (feature/admin-swipe-finish-ux) + PR #115 (feature/front-ux-keyboard-swipe) — both had wrong base main (HARD RULE 5); re-based as PR #121 onto develop. 4 Codex fixes baked in: (1) P2/#114 auto-nav swallowed Keep-exploring path — only nav on 100% latch or pool-exhaust; (2) P2/#114 finishUnlocked latch leaked across sessions — dropped, 1-shot calc kept as SwipePage Finish-button safety net; (3) P2/#115 surpriseOpen modal guard — arrow-key handler checks surpriseOpen before firing; (4) P3/#115 keySwipingRef permanent lock on async throw — try/finally ensures ref release. sha 80b519c.',
-    },
-    {
-      id: 'INFRA-DB-1',
-      title: 'Django app이 owner 권한으로 DB 접근',
-      completedAt: '2026-05-25',
-      prs: [119],
-      note: 'Created make_web_app Neon role on production + local-dev-2 via psql CREATE ROLE (NOT neonctl — that grants neon_superuser transitively). GRANT SELECT/INSERT/UPDATE/DELETE on ALL TABLES + USAGE/SELECT on ALL SEQUENCES + ALTER DEFAULT PRIVILEGES for future migration tables. Local .env swapped DB_USER neondb_owner → make_web_app + rotated password; manage.py check clean; ORM + buildings smoke unchanged; DDL rejected. Railway prod: first redeploy d203e2bf FAILED (password mispaste), second redeploy 820de476 SUCCESS (active deployment 2026-05-25 07:43). 8-probe psql matrix: CRUD pass, CREATE TABLE/DROP TABLE/CREATE ROLE/CREATE EXTENSION/ALTER TABLE all blocked. Files: .env.example (role-separation block), CLAUDE.md (Backend Conventions Neon role bullets), docs/MAKEWEB_DB_SWAP_RESPONSE.md (Q2 RESOLVED block + BUILDINGS_DB_PASSWORD rotation action item). Pure docs/meta carve-out — no production code touched. Outstanding: BUILDINGS_DB_PASSWORD rotation tracked outside this entry. sha 1d3bfdc.',
+      note: 'App.jsx auto-navigate /swipe → /result/:sessionId on phase=completed/results, or latch threshold. DiscoveryPage.jsx keydown ← (skip) / → (save) arrow-key swipe. Supersedes PR #114 + PR #115 (wrong base main). 4 Codex fixes baked in. sha 80b519c.',
     },
   ],
 
@@ -104,39 +104,39 @@ window.PROJECT_STATE = {
       {
         id: 'BACK-RECOMMEND-1',
         title: 'Project 두번째 세션이 이전 taste를 모름',
-        note: 'Same Project can host multiple AnalysisSession rows; user "Resume" creates a fresh session while Project.liked_ids accumulates. Today session #2 algorithm state (like_vectors, convergence_history, phase) starts from scratch despite the user having liked 12 buildings in session #1. Open: carry policy (A independent / B exposure-only / C dislike-only / D fade-decay / E full warm-start / F user toggle); warm-start phase entry; SessionCreateView wiring at views/sessions.py:28 (currently just resolves project_id, carry would seed like_vectors from Project.liked_ids embeddings at create time). Acceptance: deterministic behaviour, session #2 TTFC not regressed, A/B on saved_ids growth + completion rate.',
+        note: 'Same Project can host multiple AnalysisSession rows; user "Resume" creates a fresh session while Project.liked_ids accumulates. Today session #2 algorithm state (like_vectors, convergence_history, phase) starts from scratch despite the user having liked 12 buildings in session #1. Open: carry policy (A independent / B exposure-only / C dislike-only / D fade-decay / E full warm-start / F user toggle); warm-start phase entry; SessionCreateView wiring at views/sessions.py:28. Acceptance: deterministic behaviour, session #2 TTFC not regressed, A/B on saved_ids growth + completion rate.',
       },
       {
         id: 'FRONT-UX-1',
         title: '신규 사용자에게 홈이 빈 화면',
-        note: 'First-time user with 0 projects lands on Home → project picker — currently shows nothing deliberate. Frontend-only (HomePage / ProjectListPage). Open: onboarding shape (guided CTA / placeholder + create button / demo query / hybrid), copy + voice, visual illustration. Acceptance: 0-project user sees deliberate empty state; CTA path to first swipe ≤2 clicks; no regression on existing-projects rendering.',
+        note: 'First-time user with 0 projects lands on Home → project picker — currently shows nothing deliberate. Frontend-only (HomePage / ProjectListPage). Open: onboarding shape, copy + voice, visual illustration. Acceptance: 0-project user sees deliberate empty state; CTA path to first swipe ≤2 clicks; no regression on existing-projects rendering.',
       },
       {
         id: 'FULL-LANGUAGE-1',
         title: '한/영 언어 설정 토글 없음',
-        note: 'Decision 2026-05-25: language is a user setting (Korean / English), not browser-locale auto-detected. Pattern mirrors PR #54 + PR #59 theme/font persistence. Backend: UserProfile.language CharField, default ko. Frontend: LanguageContext mirroring ThemeContext, toggle in AppearanceSettings (or sibling page). Drives LLM chat answer language (parse_query.py reads from profile, overrides message-language inference) + UI label rendering (hand-rolled t() helper, no react-i18next dependency). Open: scope priority (TabBar first?), translation source (admin / Gemini + review), settings UI placement, untranslated fallback. Acceptance: language PATCH round-trip, LLM chat follows setting, ≥1 high-traffic UI surface bilingual, no theme/font regression.',
+        note: 'Decision 2026-05-25: language is a user setting (Korean / English), not browser-locale auto-detected. Pattern mirrors PR #54 + PR #59 theme/font persistence. Backend: UserProfile.language CharField, default ko. Frontend: LanguageContext mirroring ThemeContext. Drives LLM chat answer language + UI label rendering. Acceptance: language PATCH round-trip, LLM chat follows setting, ≥1 high-traffic UI surface bilingual, no theme/font regression.',
       },
       {
         id: 'BACK-LLM-2',
         title: '채팅 기록이 다른 기기에서 사라짐',
-        note: 'Decision 2026-05-25: persist chat conversation to backend DB, not just browser localStorage. Today LLMSearchPage.jsx:186–205 stores conversationHistory in localStorage — single-browser, lost on logout / device switch / cache clear. Resume + Exit UX already shipped (SwipePage.jsx ExitConfirmPopup). Backend currently has no conversation field. Plan: add Project.conversation_history JSONField (or ConversationTurn table — open) + migration + serializer + idempotent append endpoint; swap LLMSearchPage localStorage reads for API; optionally keep localStorage as write-through cache. Open: storage shape (JSONField vs table), per-session vs per-project, localStorage retention, retention policy, migration of existing local data. Acceptance: logout + re-login on any browser re-hydrates conversation; idempotent append survives network retry; Resume/Exit UX unchanged.',
+        note: 'Decision 2026-05-25: persist chat conversation to backend DB, not just browser localStorage. Today LLMSearchPage.jsx stores conversationHistory in localStorage — single-browser, lost on logout / device switch. Backend currently has no conversation field. Plan: add Project.conversation_history JSONField (or ConversationTurn table — open) + migration + serializer + idempotent append endpoint. Acceptance: logout + re-login on any browser re-hydrates conversation; idempotent append survives network retry.',
       },
       {
         id: 'BACK-LLM-3',
         title: 'Gemini cache 호출에 timeout 없음',
-        note: '_caches.py:92 IMP-5 Gemini context-cache create call bypasses the _retry_gemini_call timeout wrapper (PR #94 15s cap). Gated by context_caching_enabled flag (default OFF) — zero prod impact until toggled on. Fix: wrap call in _retry_gemini_call; ~5 LOC backend edit. Pre-emptive safety before flag toggle. Acceptance: _caches.py:92 flows through wrapper; existing IMP-5 tests pass; flag behaviour unchanged.',
+        note: '_caches.py:92 IMP-5 Gemini context-cache create call bypasses the _retry_gemini_call timeout wrapper (PR #94 15s cap). Gated by context_caching_enabled flag (default OFF) — zero prod impact until toggled on. Fix: wrap call in _retry_gemini_call; ~5 LOC backend edit.',
       },
       {
         id: 'FRONT-DESIGN-1',
         title: '디자인 시스템 컴포넌트 리워크 (paused)',
-        note: 'Foundation shipped: PR #54 (tokens.css 4 themes + ThemeContext + AppearanceSettings) + PR #59 (theme/font server persistence). Remaining: per-component visual rework (~7,700 LOC) — inline styles → CSS Modules + :hover/:focus/:active, light-theme polish, leaf→hub order. Resume via /plan per slice; each slice ships its own PR via orchestrate skill. Acceptance per slice: lint+build clean, light+dark variants regression-free, no token added without DESIGN.md update.',
+        note: 'Foundation shipped: PR #54 (tokens.css 4 themes) + PR #59 (theme/font server persistence). Remaining: per-component visual rework (~7,700 LOC) — inline styles → CSS Modules, light-theme polish, leaf→hub order. Resume via /plan per slice. Acceptance per slice: lint+build clean, light+dark variants regression-free, no token added without DESIGN.md update.',
       },
     ],
     medium: [
       {
         id: 'BACK-AUTH-1',
         title: 'JWT blacklist DB ~590ms 차지',
-        note: 'PERF-1 (PR #124) 발견 + PERF-3 (PR #125) + PERF-2 (PR #126) 측정 모두 같은 floor 확인: /projects/ + sessions create + /discovery/ cache-hit path 모두 ~590-600 ms는 simplejwt JWTAuthentication.authenticate() → BlacklistMixin → Neon round-trip per authenticated request. 모든 인증된 endpoint floor latency. Investigation: (1) JWT validation result in-memory cache JTI 기반 key, token expiry TTL — custom JWTAuthentication subclass; (2) Blacklist DB query 인덱스 검사 (Neon round-trip 자체는 한 번이라 cache 외 효과 제한적); (3) Multi-worker prod 환경에서 in-memory cache hit rate 낮음 → Redis 필요. Acceptance: 인증된 요청 floor 600 → 100 ms 이하; 보안 영향 0 (logout 토큰 무효화 즉시 또는 ≤30s 이내). security-manager 사전 검토 필수.',
+        note: 'PERF-1 (PR #124) + PERF-3 (PR #125) + PERF-2 (PR #126) 측정 모두 ~590-600 ms는 simplejwt JWTAuthentication.authenticate() → BlacklistMixin → Neon round-trip per authenticated request. 모든 인증된 endpoint floor latency. Investigation: (1) JWT validation result in-memory cache JTI 기반 key, token expiry TTL — custom JWTAuthentication subclass; (2) Blacklist DB query 인덱스 검사; (3) Multi-worker prod 환경에서 Redis 필요. Acceptance: 인증된 요청 floor 600 → 100 ms 이하; 보안 영향 0. security-manager 사전 검토 필수.',
       },
       {
         id: 'FRONT-LAYOUT-1',
@@ -158,38 +158,45 @@ window.PROJECT_STATE = {
       {
         id: 'FRONT-AUTH-1',
         title: 'LoginPage에 Kakao/Naver 버튼 없음',
-        note: 'Backend Kakao + Naver implementation shipped: apps/accounts/views.py KakaoLoginView + NaverLoginView, urls.py auth/social/kakao/ + auth/social/naver/. Frontend LoginPage.jsx has Google button only — Kakao + Naver buttons remaining.',
+        note: 'Backend Kakao + Naver implementation shipped. Frontend LoginPage.jsx has Google button only — Kakao + Naver buttons remaining.',
       },
       {
         id: 'FULL-REFACTOR-1',
         title: '큰 파일 분해 필요 (engine.py 2139 LOC 등)',
-        note: 'File decomp (LOC verified 2026-05-25): engine.py 2139 (+60 since first flagged), App.jsx 817, BoardDetailPage 1045, UserProfilePage 992, PostSwipeLandingPage 696, SwipePage 666, FirmProfilePage 540 (recently refactored down from 611).',
+        note: 'File decomp: engine.py 2139, App.jsx 817, BoardDetailPage 1045, UserProfilePage 992, PostSwipeLandingPage 696, SwipePage 666, FirmProfilePage 540.',
       },
       {
         id: 'BACK-RECOMMEND-3',
         title: 'Profile-tab 사무소/유저 추천 endpoint 없음',
-        note: 'REC1 shipped as Push S3. REC2 (firm) + REC3 (user) target GET /api/v1/recommendations/profile/ returning {offices, users} for a Profile-tab button. Open: firm vector composition, user taste vector, cold-start strategy, match score visibility, diversity/follow-exclusion, tie-breakers, trigger surface UX. Acceptance: p95 ≤800ms Singapore, cold-start graceful, is_publishable=true gating preserved.',
+        note: 'REC1 shipped as Push S3. REC2 (firm) + REC3 (user) target GET /api/v1/recommendations/profile/. Acceptance: p95 ≤800ms Singapore, cold-start graceful, is_publishable=true gating preserved.',
       },
       {
         id: 'BACK-EXTERNAL-1',
         title: 'FirmProfilePage에 외부 기사 surface 없음',
-        note: 'Surfaces external articles about a firm on FirmProfilePage (Space / ArchDaily / news keyword match). Phase 15 already shipped External DM wiring. Open: article source priority, crawl freshness, storage, article fallback. Acceptance: ≤10 most recent articles per firm, open in new tab, no FirmProfilePage TTFC regression.',
+        note: 'Surfaces external articles about a firm on FirmProfilePage (Space / ArchDaily / news keyword match). Phase 15 shipped External DM wiring. Acceptance: ≤10 most recent articles per firm, open in new tab, no FirmProfilePage TTFC regression.',
       },
       {
         id: 'INFRA-QUEUE-1',
         title: 'corpus_rank telemetry 꺼져있음',
-        note: 'corpus_rank telemetry field currently None on every swipe (PR #79 turned off the synchronous O(corpus_size) scan; product does not consume the field). Re-enabling requires Celery + Redis + worker process + monitoring — over-investment for one telemetry column. Revisit when multiple background jobs accumulate (image batch, embedding refresh, scheduled snapshot drops) so the infra cost amortises.',
+        note: 'corpus_rank telemetry field currently None on every swipe (PR #79 turned off the synchronous O(corpus_size) scan; product does not consume the field). Re-enabling requires Celery + Redis + worker process + monitoring — over-investment for one telemetry column. Revisit when multiple background jobs accumulate.',
       },
     ],
   },
 
   prs: [
     {
-      number: 126,
-      title: 'perf(BACK-PERFORMANCE-2): /discovery/ cache-hit p50 1572→672ms',
+      number: 128,
+      title: 'fix(ci): PR #125 CI fail — settings TIME_ZONE + test patch',
       mergedAt: null,
       mergedAtKST: null,
       sha: null,
+    },
+    {
+      number: 126,
+      title: 'perf(BACK-PERFORMANCE-2): /discovery/ cache-hit p50 1572→672ms',
+      mergedAt: '2026-05-25T20:20:03Z',
+      mergedAtKST: '2026-05-26 05:20 KST',
+      sha: '28b7242',
     },
     {
       number: 125,
@@ -228,12 +235,6 @@ window.PROJECT_STATE = {
       title: 'feat: BuildingDetailPage UX 개선 — 스크롤·순서·보드 저장',
       mergedAt: '2026-05-25T16:06:40Z',
       mergedAtKST: '2026-05-26 01:06 KST',
-    },
-    {
-      number: 119,
-      title: 'docs(INFRA-DB-1): Railway cutover COMPLETED 2026-05-25 — make_web_app live in prod',
-      mergedAt: '2026-05-25T07:50:10Z',
-      mergedAtKST: '2026-05-25 16:50 KST',
     },
   ],
 
