@@ -33,6 +33,7 @@ from rest_framework.views import APIView
 
 from apps.accounts.models import UserProfile
 from apps.accounts.serializers import UserMiniSerializer
+from apps.recommendation.caches import evict_user_profile_detail
 from apps.social.models import Follow, OfficeFollow, Reaction
 
 logger = logging.getLogger('apps.social')
@@ -98,6 +99,10 @@ class FollowView(APIView):
 
         followee.refresh_from_db(fields=['follower_count'])
         response_status = status.HTTP_201_CREATED if created else status.HTTP_200_OK
+        # Evict profile-detail cache for both parties:
+        # followee's follower_count changed; requester's following_count changed.
+        evict_user_profile_detail(followee.user_id)
+        evict_user_profile_detail(requester.user_id)
         return Response(
             {'follower_count': followee.follower_count, 'following': True},
             status=response_status,
@@ -122,6 +127,9 @@ class FollowView(APIView):
 
         if deleted_count == 0:
             return Response({'detail': 'Not following.'}, status=status.HTTP_404_NOT_FOUND)
+        # Evict profile-detail cache for both parties.
+        evict_user_profile_detail(followee.user_id)
+        evict_user_profile_detail(requester.user_id)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

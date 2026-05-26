@@ -78,6 +78,53 @@ def evict_projects_list(profile_id):
         cache.delete(_projects_list_key(profile_id, 1, ps))
 
 
+# ── User profile detail cache ────────────────────────────────────────────────
+
+PROFILE_DETAIL_TTL = 60  # seconds — same staleness budget as projects list
+
+
+def _user_profile_version(viewed_user_id):
+    """Return current version int for the viewed user's profile detail cache.
+
+    Default 0 when key is absent (first request, or after Redis LRU eviction).
+    Version is stored with no expiry so it survives across the 60s payload TTL.
+    """
+    return cache.get(f'user_profile_version:{viewed_user_id}', 0)
+
+
+def evict_user_profile_detail(viewed_user_id):
+    """Invalidate all cached profile-detail payloads for a user by bumping version.
+
+    All existing cache keys embed the version number; bumping makes them
+    unreachable (they TTL-expire harmlessly on their own). Concurrent callers
+    that fetched the old version will serve stale data until their 60s TTL lapses
+    — acceptable trade-off (next GET after that will see fresh data).
+
+    Call when:
+      - viewed user updates their own profile (UserProfileSelfUpdateView.patch)
+      - a Project owned by this user is created / updated / deleted
+      - another user follows / unfollows this user (follower_count change)
+      - this user follows / unfollows another user (following_count change)
+    """
+    ver_key = f'user_profile_version:{viewed_user_id}'
+    try:
+        cache.incr(ver_key)
+    except ValueError:
+        # Key absent (first call or evicted) — initialise to 1.
+        cache.set(ver_key, 1, None)
+
+
+def get_user_profile_detail_cache_key(viewed_user_id, requester_id_for_cache, page, page_size):
+    """Build cache key for UserProfileDetailView response payload."""
+    ver = _user_profile_version(viewed_user_id)
+    return (
+        f'user_profile_detail:{viewed_user_id}'
+        f':v{ver}'
+        f':r{requester_id_for_cache}'
+        f':p{page}:ps{page_size}'
+    )
+
+
 # ── Discovery feed cache ──────────────────────────────────────────────────────
 
 DISCOVERY_FEED_TTL = 60  # seconds — same UX staleness window as PERF-1 projects list

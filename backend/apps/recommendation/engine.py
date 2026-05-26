@@ -747,6 +747,65 @@ def get_buildings_by_ids(canonical_bld_ids, image_focus=None):
     return [card_map[bid] for bid in canonical_bld_ids if bid in card_map]
 
 
+_THUMB_CACHE_KEY_PREFIX = 'thumb:'
+
+
+def get_building_thumbnails(canonical_bld_ids):
+    """Lightweight thumbnail-only fetch for board/profile card display.
+
+    Returns [{'canonical_bld_id': str, 'image_url': str}] preserving input order.
+    Use this when you need just the thumbnail URL (Profile board cards, Discovery
+    feed cards, etc.) and NOT the full ImageCard payload.
+
+    Cache namespace ``thumb:<bid>`` — separate from full-card cache to avoid
+    cross-contamination. TTL matches card cache.
+
+    COALESCE priority mirrors _row_to_card fallback chain:
+      display_cover_url -> cover_image_url_default -> covers_by_type->>'exterior'
+    (skipping all_images[0] to avoid JSONB array extraction overhead; callers
+    filter out empty-string thumbnails via ``if image_map.get(bid)``).
+    """
+    if not canonical_bld_ids:
+        return []
+
+    out = {}
+    miss_ids = []
+    for bid in canonical_bld_ids:
+        cached = cache.get(f'{_THUMB_CACHE_KEY_PREFIX}{bid}')
+        if cached is not None:
+            out[bid] = cached
+        else:
+            miss_ids.append(bid)
+
+    if miss_ids:
+        placeholders = ','.join(['%s'] * len(miss_ids))
+        with connection.cursor() as cur:
+            cur.execute(
+                f'SELECT canonical_bld_id,'
+                f'   COALESCE('
+                f'     display_cover_url,'
+                f'     cover_image_url_default,'
+                f"     covers_by_type->>'exterior',"
+                f"     ''"
+                f'   ) AS image_url'
+                f' FROM canonical_v2_buildings'
+                f' WHERE canonical_bld_id IN ({placeholders}) AND is_publishable = true',
+                miss_ids,
+            )
+            rows = _dictfetchall(cur)
+
+        ttl = _card_cache_ttl()
+        for row in rows:
+            thumb = {
+                'canonical_bld_id': row['canonical_bld_id'],
+                'image_url': row.get('image_url') or '',
+            }
+            out[row['canonical_bld_id']] = thumb
+            cache.set(f'{_THUMB_CACHE_KEY_PREFIX}{row["canonical_bld_id"]}', thumb, ttl)
+
+    return [out[bid] for bid in canonical_bld_ids if bid in out]
+
+
 def search_by_filters(filters, limit=20, image_focus=None):
     """
     Return buildings matching the given filters dict.
