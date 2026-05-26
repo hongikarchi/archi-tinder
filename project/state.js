@@ -24,16 +24,22 @@
  * so the value can be re-parsed by any consumer. In-flight (not-yet-merged)
  * PRs carry `mergedAt: null` sentinel; next reporter-inline pass backfills.
  */
-// Reporter: Mermaid sources may be stale — commit 3fcbe3c touched backend/apps/recommendation/views/sessions.py (added dedupe guard at start of SessionCreateView.post). recommendationFlow shows SessionCreate → SwipeUI; dedupe is a new branch at SessionCreate returning existing session instead of fresh. Next session may add a branch annotation.
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-05-26 19:00 KST',
-    head: 'ffc55e3',
-    branch: 'feature/admin-session-create-dedupe',
+    updatedAt: '2026-05-26 20:27 KST',
+    head: '17f7d65',
+    branch: 'feature/back-llm3-gemini-cache-timeout',
   },
 
   done: [
+    {
+      id: 'BACK-LLM-3',
+      title: 'Gemini cache 호출에 timeout 없음',
+      completedAt: '2026-05-26',
+      prs: [140],
+      note: 'codex-authored branch cherry-pick. _caches.py:92 client.caches.create wrapped in zero-arg _create_cache closure routed through _svc._retry_gemini_call(_create_cache) — inherits existing 15s timeout cap (PR #94). context_caching_enabled flag default OFF preserved; zero prod impact. Pre-emptive safety. test_imp5_context_caching.py +17 LOC test_gemini_create_runs_through_retry_timeout_wrapper — MagicMock-based, no Gemini network hit. code-review PASS (~5 LOC budget honored). security-manager PASS (closure captures no secrets, _retry_gemini_call logs only type+str(e) no API key). 9 pre-existing DB-requiring tests blocked by INFRA-DB-2 (permission denied to create database); not introduced by this PR. sha 715e06e-pre-squash.',
+    },
     {
       id: 'FULL-SESSION-DEDUPE-1',
       title: 'Session create POST retry → 중복 Project/Session',
@@ -68,13 +74,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-05-26',
       prs: [134],
       note: 'PR 4 (FINAL) of 4 in plan merry-toasting-dove.md. Three changes restore IMP-8 chain: (1) _async_prefetch_thread off-by-one fix — pf_bid +2, pf2_bid +3 (4 sites: exploring pf/pf2 + analyzing pf/pf2 via compute_mmr_next round arg). Prior stored cards for next_card slot not prefetch slot. (2) Async-branch consumer in SwipeView.post: cache.get(prefetch:{sid}:{saved_current_round}) reads prior thread write; batched get_buildings_by_ids 1-RTT. Cache miss preserves None graceful fallback. (3) Dedupe guards (code-review fix-loop): pf_id=None if ==next_bid, pf2_id=None if ==next_bid or ==pf_id. Prevents analyzing-path collision (compute_mmr_next can return same card for T lookahead + T+1 main pick; frontend non-instant-swap path no dedupe). async_prefetch_enabled False→True. test_imp7 sync→async-thread. test_imp8 new TestAsyncBranchConsumerIntegration. docs/algorithm.md Hyperparameter Space async_prefetch_enabled False→True. security-manager PASS with availability warning (PERF-PREFETCH-POOL-RISK filed). sha dc296bc-pre-squash (squash 26626a4).',
-    },
-    {
-      id: 'BACK-AUTH-1',
-      title: 'JWT user-row cache (PR 3/4 of perf sweep)',
-      completedAt: '2026-05-26',
-      prs: [133],
-      note: 'PR 3 of 4. RE-SCOPED: simplejwt source inspection confirmed AccessToken does NOT inherit BlacklistMixin, so blacklist DB never runs on access-token validation. Real ~590ms hit is JWTAuthentication.get_user() → User.objects.get(id=user_id). CachedJWTAuthentication subclass overrides get_user to Redis-cache the User row. Key jwt_user:<user_id>, TTL min(token_exp_unix - now, 3600). Invalidation: LogoutView + TokenRefreshView explicit invalidate_user_cache; post_save + post_delete signals safety net (AccountsConfig.ready). settings.py:111 DEFAULT_AUTHENTICATION_CLASSES swap. tests/test_jwt_cache.py NEW 12 tests. Security: sig check via parent get_validated_token runs BEFORE get_user override. Expected ~590ms → ~10-20ms on cache hit. code-review + security-manager PASS. sha 5a1e914-pre-squash (squash 4c72513).',
     },
     {
       id: 'BACK-RECOMMEND-2',
@@ -205,11 +204,25 @@ window.PROJECT_STATE = {
 
   prs: [
     {
-      number: 138,
-      title: 'fix(FULL-SESSION-DEDUPE-1): session create POST retry → duplicate Project/Session',
+      number: 140,
+      title: 'fix(BACK-LLM-3): wrap Gemini cache creation with timeout',
       mergedAt: null,
       mergedAtKST: null,
       sha: null,
+    },
+    {
+      number: 139,
+      title: 'Release: 2026-05-26 — Codex retest follow-ups + skill docs alignment (PRs #136-#138)',
+      mergedAt: '2026-05-26T10:18:28Z',
+      mergedAtKST: '2026-05-26 19:18 KST',
+      sha: '17f7d65',
+    },
+    {
+      number: 138,
+      title: 'fix(FULL-SESSION-DEDUPE-1): session create POST retry → duplicate Project/Session',
+      mergedAt: '2026-05-26T10:30:00Z',
+      mergedAtKST: '2026-05-26 19:30 KST',
+      sha: 'b209aa1',
     },
     {
       number: 137,
@@ -245,20 +258,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-05-26T06:47:23Z',
       mergedAtKST: '2026-05-26 15:47 KST',
       sha: '4c72513',
-    },
-    {
-      number: 132,
-      title: 'fix(BACK-RECOMMEND-2): silence sklearn KMeans matmul warnings',
-      mergedAt: '2026-05-26T05:26:32Z',
-      mergedAtKST: '2026-05-26 14:26 KST',
-      sha: 'b53e633',
-    },
-    {
-      number: 131,
-      title: 'feat(INFRA-REDIS-1): Redis cache + LocMemCache fallback',
-      mergedAt: '2026-05-26T04:56:32Z',
-      mergedAtKST: '2026-05-26 13:56 KST',
-      sha: '34a0c9e',
     },
   ],
 
