@@ -632,7 +632,7 @@ class TestSwipeEventPayload:
         assert 'cache_partial_miss_count' in payload
         assert isinstance(payload['cache_partial_miss_count'], int)
         assert 'prefetch_strategy' in payload
-        assert payload['prefetch_strategy'] == 'sync'
+        assert payload['prefetch_strategy'] == 'async-thread'
         assert 'db_call_count' in payload
         assert payload['db_call_count'] is None  # IMP-9 deferred
         assert 'pool_escalation_fired' in payload
