@@ -484,3 +484,93 @@ class TestNoOrphanProject:
             f'No Project must be created on pool exception. '
             f'Before={project_count_before}, after={project_count_after}'
         )
+
+
+# ---------------------------------------------------------------------------
+# F4: session create seeds prefetch cache for round 1 (first swipe cache key)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestPrefetchCacheSeeding:
+    """
+    F4 fix: SessionCreateView.post writes prefetch:{sid}:1 so first swipe
+    reads a cache hit instead of falling to the ~770ms sync compute path.
+
+    IMP-8 consumer (swipe.py:764) reads:
+        cache.get(f'prefetch:{session_id}:{saved_current_round}')
+    where saved_current_round = session.current_round AFTER first swipe's
+    current_round += 1 (0 → 1). So session create must seed key ':1'.
+    """
+
+    def test_session_create_seeds_prefetch_cache_round1(self, auth_client, user_profile):
+        """
+        After successful session create, cache key prefetch:{sid}:1 must be set
+        with prefetch_card_id = initial_batch[1] and prefetch_card_2_id = initial_batch[2].
+        """
+        resp = _post_session(auth_client)
+        assert resp.status_code == 201, f'Expected 201, got {resp.status_code}: {resp.json()}'
+
+        session_id = resp.json()['session_id']
+        cached = cache.get(f'prefetch:{session_id}:1')
+
+        assert cached is not None, (
+            f'prefetch:{session_id}:1 must be set by session create (F4 fix)'
+        )
+        assert 'prefetch_card_id' in cached, 'Cached value must have prefetch_card_id key'
+        assert 'prefetch_card_2_id' in cached, 'Cached value must have prefetch_card_2_id key'
+
+        # initial_batch is built from farthest-point sampling over _FAKE_POOL.
+        # _mock_farthest_point returns the first non-exposed ID each call.
+        # After session create, initial_batch[0]=B00001, [1]=B00002, [2]=B00003
+        # (mock picks sequentially). We just assert the IDs are valid pool members.
+        pf_id = cached['prefetch_card_id']
+        pf2_id = cached['prefetch_card_2_id']
+        if pf_id is not None:
+            assert pf_id in _FAKE_POOL, f'prefetch_card_id {pf_id!r} not in fake pool'
+        if pf2_id is not None:
+            assert pf2_id in _FAKE_POOL, f'prefetch_card_2_id {pf2_id!r} not in fake pool'
+
+    def test_first_swipe_hits_prefetch_cache(self, auth_client, user_profile):
+        """
+        Given that session create seeded prefetch:{sid}:1, the first swipe on the
+        async path must read a cache hit (cached is not None). This indirectly
+        verifies the seeded key has the correct round number by driving the full
+        swipe endpoint with async_prefetch_enabled=True.
+        """
+        from django.test import override_settings
+
+        # Create session (seeds prefetch:{sid}:1)
+        resp = _post_session(auth_client)
+        assert resp.status_code == 201
+        session_id = resp.json()['session_id']
+
+        # Confirm the seed is present before swipe
+        assert cache.get(f'prefetch:{session_id}:1') is not None, (
+            'Precondition: session create must seed prefetch cache'
+        )
+
+        first_card_id = _FAKE_POOL[0]
+        patchers = _apply_patches()
+        try:
+            with override_settings(RECOMMENDATION={
+                **__import__('django.conf', fromlist=['settings']).settings.RECOMMENDATION,
+                'async_prefetch_enabled': True,
+            }):
+                swipe_resp = auth_client.post(
+                    f'/api/v1/analysis/sessions/{session_id}/swipes/',
+                    {'canonical_bld_id': first_card_id, 'action': 'like'},
+                    format='json',
+                )
+        finally:
+            _stop_patches(patchers)
+
+        assert swipe_resp.status_code == 200, f'Swipe failed: {swipe_resp.json()}'
+
+        data = swipe_resp.json()
+        # async path was taken — prefetch_strategy field should be 'async-thread'
+        # (the _SyncThread mock suppresses the background thread execution but
+        # the consumer cache read still happens on the main path)
+        assert data.get('prefetch_strategy') == 'async-thread', (
+            f'Expected async-thread strategy, got: {data.get("prefetch_strategy")!r}. '
+            'First swipe should hit the prefetch cache seeded by session create.'
+        )

@@ -3,6 +3,7 @@ from collections import defaultdict
 from datetime import timedelta
 
 from django.conf import settings
+from django.core.cache import cache
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import status
@@ -252,6 +253,21 @@ class SessionCreateView(APIView):
             # Fix 1: evict /projects/ cache after new session+project created.
             # The cache includes latest_session_meta and project counts; stale up to 60s otherwise.
             evict_projects_list(profile.id)
+
+            # F4: seed prefetch cache for round 1 (first swipe's cache-read key).
+            # IMP-8 consumer (swipe.py L764) reads prefetch:{sid}:{saved_current_round}
+            # where saved_current_round = session.current_round AFTER first swipe's
+            # increment (0 → 1). Without this seed, first swipe always misses.
+            # Cache value shape mirrors _async_prefetch_thread's write (swipe.py L151-155).
+            _pf_seed = {
+                'prefetch_card_id': initial_batch[1] if len(initial_batch) > 1 else None,
+                'prefetch_card_2_id': initial_batch[2] if len(initial_batch) > 2 else None,
+            }
+            cache.set(
+                f'prefetch:{session.session_id}:1',
+                _pf_seed,
+                timeout=RC.get('async_prefetch_cache_timeout_seconds', 60),
+            )
 
             logger.info('Session created: %s (pool=%d, tiers=%d, relaxed=%s)', session.session_id, len(pool_ids), len(tiers), filter_relaxed)
 
