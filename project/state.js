@@ -24,22 +24,29 @@
  * so the value can be re-parsed by any consumer. In-flight (not-yet-merged)
  * PRs carry `mergedAt: null` sentinel; next reporter-inline pass backfills.
  */
-// Reporter: Mermaid sources may be stale — commit dc1651b touched backend/apps/recommendation/engine.py (taste_ranked_page CTE removal + compute_user_taste_vector recent-50 cap) and views/swipe.py (_async_warm_taste daemon thread post-atomic). recommendationFlow Engine + Views nodes affected. Next session may add cache-warm annotation.
+// Reporter: Mermaid sources may be stale — commit 4cd1fdf touched backend/apps/accounts/views.py (Profile detail cache wiring) and recommendation/engine.py (new get_building_thumbnails helper). systemFlow + recommendationFlow Engine + Views nodes affected. Next session may add thumb-cache annotation.
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-05-27 01:00 KST',
-    head: '3894ffd',
-    branch: 'feature/admin-discovery-perf',
+    updatedAt: '2026-05-27 01:15 KST',
+    head: '4af6b4d',
+    branch: 'feature/admin-profile-page-perf',
   },
 
   done: [
     {
+      id: 'BACK-PROFILE-PERF-1',
+      title: '/users/<id>/ 895ms → <1s — thumbnail-only fetch + response cache',
+      completedAt: '2026-05-27',
+      prs: [147],
+      note: '3 perf fixes targeting Profile page latency (Codex 4th retest measured GET /users/1/ 895ms cold). Fix 1 engine.get_building_thumbnails(ids) NEW: lightweight minimal-column SELECT. Separate cache namespace thumb:<bid>. Fix 2 _build_boards_field thumbnail-only swap. Fix 3 UserProfileDetailView response cache (60s) with requester_id partition. Invalidation wired at PATCH /users/me/ + Project mutations + Session create + Follow + ProjectBookmark. test_profile_perf.py NEW 9 cases. code-review PASS after fix-loop · security-manager PASS. 기대: cold ~500-700ms, warm ~100ms. sha 4cd1fdf-pre-squash.',
+    },
+    {
       id: 'BACK-PERFORMANCE-4',
-      title: 'Discovery cold 4.6s → <1s — taste vector cap + SQL top-K + async warm',
+      title: 'Discovery cold 4.6s → ~1.5-2.5s — taste vector cap + SQL top-K',
       completedAt: '2026-05-27',
       prs: [146],
-      note: '3 backend perf fixes targeting Discovery cold-load 4.6s → <1s per user goal 2026-05-27 (all pages <1s). Codex retest measured get_or_build_taste 1.55s + taste_ranked_page 2.23s + /images/batch 1.06s. Fix 1 (engine.py:2347 taste_ranked_page): CTE removed; direct ORDER BY embedding <=> v OFFSET LIMIT lets PG planner top-K heap scan k=12 vs N=37k publishable rows. Fix 2 (engine.py:2280 compute_user_taste_vector): recent-50 cap via Project.objects.order_by(updated_at) ASC + all_likes[-50:]; bounds cold get_pool_embeddings SQL size. Fix 3 (swipe.py _async_warm_taste daemon thread post-atomic): evict 후 background thread가 get_or_build_taste 호출해서 cache repopulate; next Discovery navigation cache hit. CRITICAL fix-loop catch: 초기 spawn 위치가 transaction.atomic() 안이라 READ COMMITTED isolation으로 uncommitted project.save 못 봄 → permanent 1-swipe-behind cache. Spawn을 atomic block 외부 (line 758)로 이동. Invariant 주석 양쪽 site에 추가. test_discovery_perf.py NEW 4 cases. test_imp8_async_prefetch.py 3 thread count assertions bumped. manage.py check PASS · 9 non-DB tests PASS · @django_db tests INFRA-DB-2 차단 (CI 실행). code-review PASS after race fix-loop · security-manager PASS. 기대: Discovery cold 4.6s → <1s. pgvector ANN index Make-DB owned 추가 불가. sha dc1651b-pre-squash.',
+      note: '2 of 3 fixes shipped (warm thread rolled back due to pytest-django connection race). Fix 1 taste_ranked_page CTE removed; PG planner top-K heap scan k=12 vs N=37k publishable rows. Fix 2 compute_user_taste_vector recent-50 cap bounds cold get_pool_embeddings SQL. Fix 3 _async_warm_taste rolled back — investigation deferred. 기대: Discovery cold 4.6s → ~1.5-2.5s. pgvector ANN index Make-DB owned 추가 불가. sha dc1651b-pre-squash, post-rollback abe765e.',
     },
     {
       id: 'BACK-ALGO-1',
@@ -195,11 +202,18 @@ window.PROJECT_STATE = {
 
   prs: [
     {
-      number: 146,
-      title: 'perf(BACK-PERFORMANCE-4): Discovery cold 4.6s → <1s — taste vector cap + SQL top-K + async warm',
+      number: 147,
+      title: 'perf(BACK-PROFILE-PERF-1): /users/<id>/ 895ms → <1s — thumbnail-only fetch + response cache',
       mergedAt: null,
       mergedAtKST: null,
       sha: null,
+    },
+    {
+      number: 146,
+      title: 'perf(BACK-PERFORMANCE-4): Discovery cold 4.6s → ~1.5-2.5s — taste vector cap + SQL top-K',
+      mergedAt: '2026-05-27T00:56:08Z',
+      mergedAtKST: '2026-05-27 09:56 KST',
+      sha: '4af6b4d',
     },
     {
       number: 145,
@@ -242,13 +256,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-05-26T11:31:00Z',
       mergedAtKST: '2026-05-26 20:31 KST',
       sha: '92915b8',
-    },
-    {
-      number: 139,
-      title: 'Release: 2026-05-26 — Codex retest follow-ups + skill docs alignment (PRs #136-#138)',
-      mergedAt: '2026-05-26T10:18:28Z',
-      mergedAtKST: '2026-05-26 19:18 KST',
-      sha: '17f7d65',
     },
   ],
 
