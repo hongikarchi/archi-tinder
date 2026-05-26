@@ -140,7 +140,7 @@ const MOCK_BOARD = {
 /**
  * InfoCol — local primitive for §3.5.2 RICH PATTERN 2-col info grid.
  *   Caps label (10/600 uppercase 0.06em) + single-line ellipsis value (13/600 white).
- *   Mirrors the InfoCol used in FirmProfile + UserProfile + PostSwipeLanding.
+ *   Mirrors the InfoCol used in FirmProfile + UserProfile.
  */
 function InfoCol({ label, value }) {
   return (

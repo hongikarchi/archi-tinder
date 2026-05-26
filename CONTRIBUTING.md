@@ -26,7 +26,7 @@ run `./tools/install-hooks.sh` directly instead.
 | Role | Owner | Primary territory |
 |---|---|---|
 | **A** | Algorithm | `backend/apps/recommendation/engine.py`, `backend/apps/recommendation/services/{embeddings,rerank,generation,parse_query,_caches,_gemini}.py`, `backend/config/settings.py` (RECOMMENDATION dict only), `backend/tests/` (algorithm tests: `test_topic*`, `test_hyde`, `test_hybrid_retrieval`, `test_imp*`, `test_chat_phase`, `test_confidence`, etc.) |
-| **B** | Post-swipe SNS | `backend/apps/social/`, `backend/apps/profiles/`, `frontend/src/pages/PostSwipeLandingPage.jsx`, `FirmProfilePage.jsx`, `UserProfilePage.jsx`, `BoardDetailPage.jsx`, `frontend/src/api/social.js`, `frontend/src/api/profiles.js`, `frontend/src/components/profile/` (BoardCard, BioPersonaFlipCard, DescriptionAboutFlipCard, ProjectCard, ArticleCard, InfoCol) |
+| **B** | Post-swipe SNS | `backend/apps/social/`, `backend/apps/profiles/`, `frontend/src/pages/FirmProfilePage.jsx`, `UserProfilePage.jsx`, `BoardDetailPage.jsx`, `frontend/src/api/social.js`, `frontend/src/api/profiles.js`, `frontend/src/components/profile/` (BoardCard, BioPersonaFlipCard, DescriptionAboutFlipCard, ProjectCard, ArticleCard, InfoCol) |
 | **C** (admin) | Everything else | `backend/apps/accounts/`, `backend/apps/recommendation/views/sessions.py`, `views/projects.py`, `views/swipe.py`, `views/search.py`, `views/reports.py`, `views/telemetry.py`, `frontend/src/pages/SwipePage.jsx`, `LLMSearchPage.jsx`, `FavoritesPage.jsx`, `LoginPage.jsx`, `ProjectSetupPage.jsx`, Django admin, deployment config |
 
 ## Shared / coordinated edit files
