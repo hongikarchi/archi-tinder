@@ -300,6 +300,32 @@ Replace any prior stale-flag with the newer one. If the commit did not touch any
 
 Use `Write` — small structured JS file. Keep `window.PROJECT_STATE = { ... };` shape + header comment block intact (including stale-flag if applicable).
 
+**CRITICAL — block comment `*/` early-termination pitfall (2026-05-26 incident)**:
+The opening `/* … */` header block contains backtick-wrapped path examples
+(e.g., `` `.claude/skills/<slug>/SKILL.md` ``). Any backtick path that includes
+`*/` as a literal substring (e.g., `` `.claude/skills/*/SKILL.md` ``) closes
+the block comment prematurely — the JS parser sees `*/`, ends the comment,
+treats everything after as code, errors out on the next identifier → 
+`window.PROJECT_STATE` is never assigned → `dashboard.html` renders blank
+(panels all empty).
+
+Forbidden inside the opening block comment:
+- ``...`.../*` `... ` — backtick path that contains `*/` substring.
+- Any literal `*/` that you did not intend to close the comment.
+
+Safe substitutions: use `<slug>`, `<name>`, `<*>` placeholders instead of
+glob-style `*/`. The skill body uses `` `.claude/skills/<slug>/SKILL.md` ``
+(safe) instead of `` `.claude/skills/*/SKILL.md` `` (bug).
+
+**Always verify** state.js parses after write:
+
+```bash
+node -e "global.window={}; eval(require('fs').readFileSync('project/state.js','utf8')); console.log('OK keys:', Object.keys(window.PROJECT_STATE).length, 'done:', window.PROJECT_STATE.done.length, 'prs:', window.PROJECT_STATE.prs.length)"
+```
+
+Must print `OK keys: 9 done: N prs: M` (or similar). If it errors, scan the
+opening block comment line-by-line for `*/` substrings inside backticks.
+
 ---
 
 ## Step 5 — Report
