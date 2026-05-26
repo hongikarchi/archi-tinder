@@ -24,16 +24,22 @@
  * so the value can be re-parsed by any consumer. In-flight (not-yet-merged)
  * PRs carry `mergedAt: null` sentinel; next reporter-inline pass backfills.
  */
-// Reporter: Mermaid sources may be stale — commit d87a5f9 touched backend/apps/recommendation/views/{sessions,swipe,reports}.py (cache eviction additions, dedupe scope, deferred Project create + transaction.atomic). recommendationFlow Views node semantics broaden (cache eviction wiring). Next session may add eviction annotation.
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-05-26 22:46 KST',
-    head: '9872ab0',
-    branch: 'feature/admin-session-create-correctness-3fixes',
+    updatedAt: '2026-05-26 23:15 KST',
+    head: '6e23c82',
+    branch: 'feature/admin-frontend-ux-3fixes',
   },
 
   done: [
+    {
+      id: 'FRONT-UX-FIXES-1',
+      title: 'Image timeout + Gallery CTA nav + Board card click',
+      completedAt: '2026-05-26',
+      prs: [144],
+      note: '3 frontend UX correctness fixes from 4th Codex retest 2026-05-26 of develop=72bf8d3. F2 SwipeCard image timeout 2000ms→4000ms + ?retry=1 cache-bust 삭제 (별도 URL 없음 대역폭만 2배). Singapore R2 1.7-2.6s 정상 처리. Fallback chain covers_by_type.exterior→interior→aerial→detail→drawing→gallery[N]. F5 Gallery CTA: 이전 openGallery() in-card 3D flip이 실제 no-op (back-face JSX setShowGallery(true) unreachable). 현재 navigate(/buildings/${card.image_id}) → BuildingDetailPage. SwipePage onGalleryOpen prop 무해 drop. 죽은 코드 (back-face JSX, hasBeenOpened) 별도 cleanup PR. F7 BoardDetail building card click: building.id를 OR chain 3 sites 추가 (BuildingTile 180, handleDeleteSelected 458, render bid 926). Stored {id: bld_...} shape 정상 인식 → 클릭 navigate. FRONT-UX-5 (Gallery CTA backlog) closed by F5. code-review PASS · security-manager PASS (XSS-safe — image_id BUILDING_ID_RE 검증; IDOR-safe — board-scoped ownership). npm run lint clean + build PASS. sha b5c53f2-pre-squash.',
+    },
     {
       id: 'BACK-CORRECTNESS-1',
       title: '/projects/ cache evict + dedupe project_id + orphan project',
@@ -82,13 +88,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-05-26',
       prs: [136],
       note: 'Cherry-picked session-start docs work (010edf8) onto post-deploy develop. 3 files re-aligned with 2026-05-26 skill-migration regime (INFRA-WORKFLOW-1, PR #123). orchestrate/SKILL.md: drop git-manager/reporter agent refs from frontmatter, Step 5/7/8/10, Rules. Step 6→git-commit skill, Step 8 default=git-publish skill, Step 9=reporter-inline+git-commit+git-publish. git-publisher.md: edge-case role (Mode 3 deploy / external PR / complex rebase / push rejection / mid-merge failure). New "When this agent is called" preamble refuses routine publish. Mode 1 renamed "Internal push escalation (fallback only)". web-testing/AGENTS.md: scope split (agent contract → .claude/agents/app-test.md, this doc → runner + shared dev-login). web-tester→app-test rename 2026-04-28. Dev-login 404 hard-FAIL (no skip-auth fallback). skip_login flag removed. Modes table FULL vs FEATURE-SCOPED (supersedes fast/strict /review). Pure docs/policy edit per CLAUDE.md carve-out. Skipped code-review + security + app-test (sub-MINOR meta). Old feature/admin-docs-skill-migration-sync branch (orphan, base pre-deploy) replaced. sha 80e7d86-pre-squash.',
-    },
-    {
-      id: 'INFRA-DEPLOY-2',
-      title: '2026-05-26 develop → main 배포 (PRs #116-#134, perf sweep + Redis)',
-      completedAt: '2026-05-26',
-      prs: [135],
-      note: 'develop → main squash-merged. main = d53b232. Railway prod auto-deploy SUCCESS (deployment 047a6e2f RUNNING). Carried 15 PRs since main 1888b5f (PR #112 prior release): #116-#134 inclusive. Bug #5 carve-out applied (HARD RULE 4 SOLE permitted force) — origin/develop force-reset to origin/main via gh api PATCH refs/heads/develop --force=true. Precondition checked (no in-flight feature PR targeting develop). Tree-equivalence verified empty diff origin/main origin/develop. Railway Redis service (redis:8.2.1) provisioned admin via dashboard + REDIS_URL=${{Redis.REDIS_URL}} env set on backend service before merge. Post-deploy: gunicorn 4 workers booted clean, no django_redis import errors. Prod smoke (CLI): / 404 no-route, /auth/dev-login/ 404 (DEBUG=False gates per design), /api/v1/projects/ unauthenticated 401, /auth/token/refresh/ empty 400. No 5xx. Direct cache-hit latency NOT measurable from CLI (DEBUG=False blocks dev-login + Google OAuth needs browser) — admin runs Codex retest separately. Outstanding: PERF-PREFETCH-POOL-RISK monitoring (Neon free-tier 25 conn limit; async prefetch daemon thread + main worker = 2 conns/swipe at peak).',
     },
   ],
 
@@ -195,11 +194,18 @@ window.PROJECT_STATE = {
 
   prs: [
     {
-      number: 143,
-      title: 'fix(BACK-CORRECTNESS-1): /projects/ cache evict + dedupe project_id + orphan project',
+      number: 144,
+      title: 'fix(FRONT-UX-FIXES-1): image timeout + Gallery CTA nav + Board card click',
       mergedAt: null,
       mergedAtKST: null,
       sha: null,
+    },
+    {
+      number: 143,
+      title: 'fix(BACK-CORRECTNESS-1): /projects/ cache evict + dedupe project_id + orphan project',
+      mergedAt: '2026-05-26T13:50:00Z',
+      mergedAtKST: '2026-05-26 22:50 KST',
+      sha: '6e23c82',
     },
     {
       number: 142,
@@ -242,13 +248,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-05-26T09:33:00Z',
       mergedAtKST: '2026-05-26 18:33 KST',
       sha: 'ffc55e3',
-    },
-    {
-      number: 136,
-      title: 'docs(INFRA-DOC-6): align orchestrate + git-publisher + web-testing with skill regime',
-      mergedAt: '2026-05-26T08:34:41Z',
-      mergedAtKST: '2026-05-26 17:34 KST',
-      sha: '54d4d1e',
     },
   ],
 
