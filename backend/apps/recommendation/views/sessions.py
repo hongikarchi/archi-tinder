@@ -1,8 +1,10 @@
 import logging
 from collections import defaultdict
+from datetime import timedelta
 
 from django.conf import settings
 from django.db import transaction
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -55,6 +57,50 @@ class SessionCreateView(APIView):
             # raw_query: accept 'raw_query' (new FE key) with 'query' fallback for old clients.
             # Separate from _raw_query_early below (which is coerced to None > 1000 chars for RRF).
             raw_query = (request.data.get('raw_query') or request.data.get('query') or '').strip()[:2000]
+
+            # Dedupe guard (2026-05-26 Codex retest INFRA-DEPLOY-3 follow-up):
+            # If the same user has an active session created in the last 30s with the
+            # same name + raw_query + filters, the inbound POST is most likely a duplicate
+            # caused by client-side retry-on-timeout (the frontend's earlier behavior).
+            # Reuse the existing session instead of creating a second Project/Session pair.
+            # See sessions.js startSession; core.js retry loop; tests/test_session_create_dedupe.py.
+            recent_cutoff = timezone.now() - timedelta(seconds=30)
+            existing_session = (
+                AnalysisSession.objects.filter(
+                    user=profile,
+                    created_at__gte=recent_cutoff,
+                    project__name=project_name,
+                    project__raw_query=raw_query,
+                )
+                .order_by('-created_at')
+                .first()
+            )
+            # Verify filters match (filters is JSONField, no direct lookup; compare in Python)
+            if existing_session and existing_session.project.filters == (filters or {}):
+                with stage('dedupe_return_existing', session_id=str(existing_session.session_id)):
+                    initial_batch = list(existing_session.initial_batch or [])
+                    image_focus = (existing_session.original_filters or {}).get('image_focus')
+                    first_card = (
+                        engine.get_building_card(initial_batch[0], image_focus=image_focus)
+                        if initial_batch else None
+                    )
+                    logger.info(
+                        'Session create dedupe hit: returning existing session %s for user %s '
+                        '(name=%r raw_query=%r)',
+                        existing_session.session_id, profile.id, project_name,
+                        raw_query[:40] if raw_query else '',
+                    )
+                    return Response({
+                        'session_id': str(existing_session.session_id),
+                        'project_id': str(existing_session.project.project_id),
+                        'session_status': existing_session.status,
+                        'next_image': first_card,
+                        'prefetch_image': None,
+                        'prefetch_image_2': None,
+                        'progress': _progress(existing_session),
+                        'filter_relaxed': False,
+                        'deduped': True,
+                    }, status=status.HTTP_200_OK)
 
             with stage('resolve_or_create_project'):
                 # Resolve project (project_id may be a local ID like 'proj_xxx' -- ignore gracefully)
