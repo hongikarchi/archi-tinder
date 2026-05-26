@@ -1,12 +1,20 @@
 # Web Testing — Agent Reference
 
-Scope: this document covers the `web-tester` agent (in-session `/review` Part B
-+ orchestrator inner loop) and the standalone E2E visual test runner under
-`web-testing/`. Read this first before running any browser-driven test.
+Scope: this document covers (1) the standalone E2E visual test runner under
+`web-testing/` and (2) the shared dev-login procedure used by both the runner
+and the in-session `app-test` agent. The full `app-test` agent contract (modes,
+gates, latency budgets, drift check, verdict shape) lives in
+`.claude/agents/app-test.md` — that file is the source of truth for the agent;
+the procedure in §"Dev Login" below is the only piece duplicated here for
+convenience. Read this first before running any browser-driven test.
+
+> **Naming note**: the agent was renamed from `web-tester` → `app-test` on
+> 2026-04-28. Any historical reference to `web-tester` in this doc means the
+> current `app-test` agent.
 
 ## Dev Login — Authenticating Without OAuth
 
-The `web-tester` agent must use dev-login to obtain a JWT for testing
+The `app-test` agent must use dev-login to obtain a JWT for testing
 authenticated flows. Google OAuth is not available in automated/headless
 contexts, so dev-login is the only path.
 
@@ -31,7 +39,15 @@ DEBUG=False.
 ```
 
 If `DEV_LOGIN_SECRET` is not set in `backend/.env`, the endpoint returns 404.
-In that case, skip authenticated flows and test page-load only.
+
+**`app-test` agent — hard FAIL on 404** (per `.claude/agents/app-test.md` Step
+B1d): deep verification cannot proceed without auth, so the agent returns
+`APP-TEST: FAIL` with reason `dev-login endpoint missing (DEV_LOGIN_SECRET not
+in env)`. There is no "skip authenticated flows" fallback for the agent.
+
+**Standalone runner** (`web-testing/run.py`) — also requires
+`DEV_LOGIN_SECRET`; the runner exits with a clear error if the secret is
+missing (no silent skip).
 
 ### Injecting tokens into the browser
 
@@ -59,7 +75,7 @@ localStorage.setItem('__debugMode', 'true')
 This activates `DebugOverlay.jsx`, a fixed panel showing JWT expiry, last
 API call (method/URL/status/latency), current session ID, swipe progress,
 user ID. The overlay is read-only (`pointerEvents: 'none'`) and survives
-page reloads. `web-tester` should screenshot after enabling it to confirm
+page reloads. `app-test` should screenshot after enabling it to confirm
 login state.
 
 ### Django admin
@@ -81,11 +97,11 @@ Once logged in via dev-login:
 4. **Persona report** — "Generate Persona Report" button visible when likes exist.
 5. **API connectivity** — no 401 errors on authenticated endpoints.
 
-### Important: orchestrator must NOT pass `skip_login`
-
-The orchestrator must NOT tell `web-tester` to skip login. Dev-login exists
-specifically for automated testing. Let `web-tester` run its Step 0
-(dev-login) before visual tests.
+> **Authoritative procedure**: the `app-test` agent runs its own dev-login
+> Step (B1d) as part of FULL or FEATURE-SCOPED mode — see
+> `.claude/agents/app-test.md`. The `skip_login` flag from the old `web-tester`
+> contract is **removed** as of the 2026-04-28 rename; the orchestrator does
+> not pass any auth-skip flag and the agent has no auth-skip branch.
 
 ---
 
@@ -144,12 +160,21 @@ python web-testing/run.py --auto-fix
 - `web-testing/reports/{run_id}/screenshots/` — step screenshots
 - `web-testing/dashboard/data/latest/` — symlinked latest report for dashboard
 
-## Strict vs fast mode
+## `app-test` modes — FULL vs FEATURE-SCOPED (2026-05-22)
 
-| Mode | Used by | Behavior |
+`app-test` runs in one of two modes. The caller (orchestrator or the
+`git-publish` skill via the pre-push gate) chooses the mode; the default is
+FULL.
+
+| Mode | When to run | Behavior |
 |---|---|---|
-| **Fast (inner loop)** | orchestrator pipeline | 1 persona, ≥10 swipes, no latency assertion, retries on flake, console errors reported but not failed. Avoids blocking iteration. |
-| **Strict (Part B of /review)** | review terminal | spec-aligned latency budgets (TTFC < 4s / 5s bare; per-swipe p95 < 700 ms), 3 personas × ≥25 swipes, zero-tolerance error gates, edge-case coverage. No retries. |
+| **FULL** (default) | Recommendation / swipe path touched — `backend/apps/recommendation/**`, RECOMMENDATION dict in `backend/config/settings.py`, session lifecycle, `SwipePage.jsx` / `LLMSearchPage.jsx`, swipe / session logic in `App.jsx`. Always required pre-deploy (Mode 3). | 3 personas × 25 swipes × 3-run TTFC p50, spec-aligned latency budgets (Brutalist / Sustainable Korean TTFC < 4s; Bare Query < 5s; per-swipe outer < 1500 ms / backend < 1000 ms), edge-case coverage (refresh-resume, action card, network failure), zero-tolerance console/network error gates. No retries on flake. |
+| **FEATURE-SCOPED** | Changes that do not touch the recommendation / swipe path — e.g. profile, theme/font, boards, social, accounts, settings UI. | Preflight (dev-login, migrations, console baseline) + caller-supplied feature checklist + light regression smoke (1 AI search, ~5 swipes, no latency gate). The dispatch MUST include a feature-verification checklist or the agent fails the run. |
 
-The two are complementary; strict mode does NOT replace the fast inner-loop
-`web-tester`. See `.claude/commands/review.md` for the full Part B spec.
+Both modes end with an `origin/develop` drift check (Part C). The legacy
+"fast inner-loop / strict /review" split is **superseded** by these two modes
+as of 2026-05-22 — see `.claude/agents/app-test.md` for the full contract.
+There is no `/review` slash command — per CLAUDE.md `## Workflow — one
+session + sub-agents + skills`, the repo has no slash commands; reviews run
+via the `code-review` agent and pre-push verification via this `app-test`
+agent.
