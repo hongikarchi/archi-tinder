@@ -24,71 +24,71 @@
  * so the value can be re-parsed by any consumer. In-flight (not-yet-merged)
  * PRs carry `mergedAt: null` sentinel; next reporter-inline pass backfills.
  */
-// Reporter: Mermaid sources may be stale — commit 785f4ad touched apps/recommendation/engine.py (added _silenced_kmeans_fit helper + 2 call-site swaps; no behavioral change). Recommendation flow graph still accurate at function-graph level; no refresh needed.
+// Reporter: Mermaid sources may be stale — commit 5a1e914 touched apps/accounts/ (CachedJWTAuthentication subclass + post_save/post_delete signals + LogoutView/TokenRefreshView invalidate calls). System flow diagram unchanged — auth path still Browser→Vercel→Django→User row lookup (now with Redis cache layer in front).
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-05-26 14:19 KST',
-    head: '34a0c9e',
-    branch: 'feature/algo-engine-warning-suppress',
+    updatedAt: '2026-05-26 15:40 KST',
+    head: 'b53e633',
+    branch: 'feature/admin-jwt-user-cache',
   },
 
   done: [
+    {
+      id: 'BACK-AUTH-1',
+      title: 'JWT user-row cache (PR 3/4 of perf sweep)',
+      completedAt: '2026-05-26',
+      prs: [133],
+      note: 'PR 3 of 4 in plan merry-toasting-dove.md (backend performance sweep). RE-SCOPED: simplejwt source inspection confirmed AccessToken does NOT inherit BlacklistMixin (only RefreshToken does), so blacklist DB never runs on access-token validation. Real ~590ms hit is JWTAuthentication.get_user() → User.objects.get(id=user_id). CachedJWTAuthentication subclass (apps/accounts/authentication.py NEW) overrides get_user to Redis-cache the User row. Key jwt_user:<user_id>, TTL min(token_exp_unix - now, 3600). Invalidation contract: LogoutView post-blacklist + TokenRefreshView post-rotation explicit invalidate_user_cache calls; post_save + post_delete signals on User as safety net (wired via AccountsConfig.ready). settings.py:111 DEFAULT_AUTHENTICATION_CLASSES swap. tests/test_jwt_cache.py NEW 12 tests across miss/hit/TTL/invalidate/signals/tampered-sig/expired/cross-instance/is_active/malformed-exp/missing-USER_ID_CLAIM. Security: sig check via parent get_validated_token runs BEFORE get_user override, bad sig never reaches cache; cache key from signature-verified user_id claim; cache value always super().get_user() result on miss only (no poisoning vector). Expected ~590ms → ~10-20ms on cache hit. code-review PASS + security-manager PASS (12 critical-chain checks clear; non-blocking note: signal-wiring integration tested via direct handler call rather than user.save() ORM round-trip due to INFRA-DB-1 local DB perm constraint). sha 5a1e914-pre-squash.',
+    },
     {
       id: 'BACK-RECOMMEND-2',
       title: 'sklearn KMeans matmul warning 압제 (PR 2/4 of perf sweep)',
       completedAt: '2026-05-26',
       prs: [132],
-      note: 'PR 2 of 4 in plan merry-toasting-dove.md (backend performance sweep). Re-scoped from "dtype align" to np.errstate suppression after empirical falsification: like_embeddings.dtype == float64 already pre-edit (_finite_unit_vector engine.py:66 calls np.asarray(raw_vec, dtype=np.float64)). Real cause: sklearn KMeans centroid normalization (sklearn/utils/extmath.py:203 ret = a @ b) on high-dim unit-norm vectors. Sklearn-internal noise — cosmetic per Task.md. New helper engine.py:90-99 _silenced_kmeans_fit(kmeans, X, sample_weight=None) wraps fit with np.errstate(divide=ignore, invalid=ignore, over=ignore). Two call sites swapped: engine.py:1664 (Path 2 adaptive k=2) + engine.py:1701 (Path 4 default k). sample_weight=like_weights preserved both paths. Computation byte-identical (random_state=42 + n_init=3 deterministic; topic06 silhouette tests 9/9 PASS under pytest -W error::RuntimeWarning — previously failing). code-review + security-manager PASS (np.errstate thread-local NumPy>=1.17, multi-worker safe; sample_weight provenance clean). app-test skipped per [[feedback_app_test_policy]]. algorithm.md Last Synced bumped, 3b inline annotation skipped (algorithm behavior byte-identical). sha 785f4ad-pre-squash.',
+      note: 'PR 2 of 4 in plan merry-toasting-dove.md. Re-scoped from "dtype align" to np.errstate suppression after empirical falsification: like_embeddings.dtype already float64 (_finite_unit_vector engine.py:66 np.asarray dtype=np.float64). Real cause: sklearn KMeans centroid normalization on high-dim unit-norm vectors. New helper engine.py:90-99 _silenced_kmeans_fit. Two call sites swapped: engine.py:1664 (Path 2 adaptive k=2) + engine.py:1701 (Path 4 default k). sample_weight=like_weights preserved. Computation byte-identical (random_state=42 + n_init=3 deterministic; topic06 silhouette tests 9/9 PASS under -W error::RuntimeWarning). code-review + security-manager PASS (np.errstate thread-local NumPy>=1.17, multi-worker safe). sha 785f4ad-pre-squash (squash b53e633).',
     },
     {
       id: 'INFRA-REDIS-1',
       title: 'Redis cache 도입 (PR 1/4 of perf sweep)',
       completedAt: '2026-05-26',
       prs: [131],
-      note: 'PR 1 of 4 in plan merry-toasting-dove.md (backend performance sweep). Foundation enabling PR 3 (BACK-AUTH-1 JTI cache) + PR 4 (PERF-PREFETCH-CHAIN async consume) — both need shared cache across Railway multi-worker Gunicorn that LocMemCache per-process cannot provide. settings.py CACHES reads REDIS_URL env: set → django_redis.cache.RedisCache (KEY_PREFIX=makeweb, SOCKET_TIMEOUT=3), unset → LocMemCache fallback with MAX_ENTRIES=2000 preserved. _build_caches_dict(redis_url) helper for clean unit testing without env monkeypatching. requirements.txt django-redis>=5.4,<6.0 added (transitively pulls redis-py>=4.x). .env.example Cache section + CLAUDE.md Backend Conventions bullet. backend/tests/test_cache_backend.py NEW 16 tests across LocMem / Redis / mutual-exclusion. Connection failure with REDIS_URL set NOT swallowed — loud beats silent multi-worker incoherence. KEY_PREFIX prevents cross-service collision. code-review PASS, security-manager PASS (rediss:// TLS supported, no CVE at version range, .env gitignored, no logger leak, ConnectionError carries no creds). app-test skipped per [[feedback_app_test_policy]]. User manual step: Railway dashboard → Add Redis service → REDIS_URL=${{Redis.REDIS_URL}} on backend service. sha d5b6c18-pre-squash (squash 34a0c9e).',
+      note: 'PR 1 of 4 in plan merry-toasting-dove.md (backend performance sweep). Foundation enabling PR 3 (BACK-AUTH-1 JTI cache) + PR 4 (PERF-PREFETCH-CHAIN async consume). settings.py CACHES reads REDIS_URL env: set → django_redis.cache.RedisCache (KEY_PREFIX=makeweb, SOCKET_TIMEOUT=3), unset → LocMemCache fallback with MAX_ENTRIES=2000 preserved. _build_caches_dict(redis_url) helper. requirements.txt django-redis>=5.4,<6.0. .env.example Cache section + CLAUDE.md Backend Conventions bullet. backend/tests/test_cache_backend.py NEW 16 tests. Connection failure NOT swallowed. KEY_PREFIX prevents cross-service collision. code-review + security-manager PASS. User manual step: Railway dashboard → Add Redis service → REDIS_URL=${{Redis.REDIS_URL}}. sha d5b6c18-pre-squash (squash 34a0c9e).',
     },
     {
       id: 'SWIPE-CONVERGENCE-10',
       title: '10-swipe target + multimodal escalation + stuck-state safety',
       completedAt: '2026-05-26',
       prs: [130],
-      note: 'Replaces closed PR #127 (codex feature/algo-convergence-study). Algorithm policy synced to docs/algorithm.md: convergence_threshold 0.08→0.13, target_swipes=10 (product window), min_likes_for_multimodal=11 (K-Means K=2 gated behind target+1 — single centroid default for 10-swipe sessions, multimodal escalation on continue-past-target), convergence_min_recent_likes=2 (positive-evidence gate, blocks false convergence on dislike streaks). Frontend stuck-state safety floor (new vs #127): SwipePage isAt100 + App.jsx auto-nav get beyondTargetFloor (swipe_count >= target+5) — backend min_recent_likes gate can withhold phase=converged indefinitely on dislike-heavy paths; without floor user stranded until pool exhaust. Engine _with_image_focus bug fix: gallery_drawing_start decrements by 1 when focus_url removed from index < original drawing_start (prior clamp-only allowed boundary drift). async_prefetch_enabled True→False reverted (code-review caught: async branch writes prefetch cache, next-swipe handler never reads it back — chain broken, flag flip yields zero latency + daemon-thread DB lifecycle risk; tracked as PERF-PREFETCH-CHAIN in ### MEDIUM). Swipe.py stale 0.08 defaults → 0.13. 2 commits (e4677fb + 7f6a056) squashed at merge to 83db42c.',
+      note: 'Replaces closed PR #127 (codex feature/algo-convergence-study). Algorithm policy synced to docs/algorithm.md: convergence_threshold 0.08→0.13, target_swipes=10, min_likes_for_multimodal=11 (K-Means K=2 gated behind target+1), convergence_min_recent_likes=2 (positive-evidence gate). Frontend stuck-state safety floor beyondTargetFloor (swipe_count >= target+5). Engine _with_image_focus bug fix. async_prefetch_enabled True→False reverted (chain broken; tracked as PERF-PREFETCH-CHAIN). Swipe.py stale 0.08 defaults → 0.13. 2 commits squashed at merge to 83db42c.',
     },
     {
       id: 'INFRA-CI-1',
       title: 'PR #125 PERF-3 CI fail hotfix',
       completedAt: '2026-05-26',
       prs: [128],
-      note: 'Root cause: PERF-3 _async_emit daemon thread silent fail. First thread connection setup hit settings_dict["TIME_ZONE"] KeyError; emit_event_batch try/except silent → test_imp6_stage_decouple assert fail. Sync emit revert (drop _async_emit closure + threading import) achieved CI green. Cost ~290ms sync emit restored. PERF-3 1508 → ~1800 ms still PASS ≤2000 ms goal. emit_event_batch bulk_create preserved. sha 198eca4-pre-squash.',
+      note: 'Root cause: PERF-3 _async_emit daemon thread silent fail. settings_dict["TIME_ZONE"] KeyError on first thread connection setup. Sync emit revert achieved CI green. Cost ~290ms sync emit restored. PERF-3 ~1800 ms still PASS ≤2000 ms goal. sha 198eca4-pre-squash.',
     },
     {
       id: 'BACK-PERFORMANCE-2',
       title: 'Discovery 캐시 hit 450ms (목표 <200ms)',
       completedAt: '2026-05-26',
       prs: [126],
-      note: 'GET /api/v1/discovery/ warm cache hit p50 1572 → 672 ms (-57%). Goal <200 ms 미달 — auth floor ~600 ms (BACK-AUTH-1) + get_profile 74 ms 잔존. Response cache 60 s TTL — get_or_build_discovery_feed + evict_discovery_feed. Mutation evict hooks: SwipeView.post + ProjectBookmarkView.post + ProjectDetailView.patch. taste_ranked_page (814 ms, 84% of body) absent on cache hits. Deferred: BACK-AUTH-1 for sub-200 ms total. sha b40cfea-pre-squash (squash 28b7242).',
+      note: 'GET /api/v1/discovery/ warm cache hit p50 1572 → 672 ms (-57%). Goal <200 ms 미달 — auth floor ~600 ms (BACK-AUTH-1) + get_profile 74 ms 잔존. Response cache 60 s TTL. Mutation evict hooks. taste_ranked_page absent on cache hits. sha b40cfea-pre-squash (squash 28b7242).',
     },
     {
       id: 'BACK-PERFORMANCE-3',
       title: 'Search 후 첫 카드까지 5-8초',
       completedAt: '2026-05-26',
       prs: [125],
-      note: 'POST /api/v1/analysis/sessions/ local sessions create p50 2567 → 1508 ms (-42%) / PR #128 hotfix ~1800 ms 여전히 PASS ≤2000 ms. Tier 1 pool cache (filter signature SHA1, 30 min TTL). _random_pool 30 min in-memory cache. emit_events PR #125 시 threading.Thread daemon → PR #128 sync revert. perf_timing sub-stages + perf_measure --filters CLI. Algorithm-territory edits per user authorization. sha fb669b6-pre-squash (squash 5593f6c).',
+      note: 'POST /api/v1/analysis/sessions/ local p50 2567 → 1508 ms (-42%) / PR #128 hotfix ~1800 ms still PASS. Tier 1 pool cache (filter SHA1, 30 min TTL). _random_pool 30 min cache. emit_events: PR #125 threading.Thread → PR #128 sync revert. perf_timing + perf_measure --filters CLI. sha fb669b6-pre-squash (squash 5593f6c).',
     },
     {
       id: 'BACK-PERFORMANCE-1',
       title: '/projects/ 응답 600ms (목표 300ms)',
       completedAt: '2026-05-26',
       prs: [124],
-      note: 'GET /api/v1/projects/ local p50 1136 → 661 ms (-42%). Goal ≤300 ms 미달 — auth floor ~590 ms 잔존. Response cache 60s TTL + evict hooks. Serializer drops analysis_report. CONN_MAX_AGE=600 default DB. orchestrate skill Step 6/9 deprecated agent refs → skills. Deferred: BACK-AUTH-1. sha 505717a-pre-squash (squash 0c8fe6f).',
-    },
-    {
-      id: 'INFRA-WORKFLOW-1',
-      title: 'Reporter / git-manager 흡수 + 3 skill 도입',
-      completedAt: '2026-05-26',
-      prs: [123],
-      note: '3 new skills replace routine agent paths: git-commit, git-publish, reporter-inline. git-manager + reporter agents → deprecated:true. git-publisher kept (Mode 3 deploy / external PR / complex rebase). CLAUDE.md new ## Git Operations — HARD RULE section. Per PR cycle agent dispatches 8 → 3, ~30-40k tokens + ~150-300s saved. Reporter audit ships in same PR as work. sha bbadcf1-pre-squash.',
+      note: 'GET /api/v1/projects/ local p50 1136 → 661 ms (-42%). Goal ≤300 ms 미달 — auth floor ~590 ms 잔존. Response cache 60s TTL + evict hooks. Serializer drops analysis_report. CONN_MAX_AGE=600. Deferred: BACK-AUTH-1. sha 505717a-pre-squash (squash 0c8fe6f).',
     },
   ],
 
@@ -133,11 +133,6 @@ window.PROJECT_STATE = {
       },
     ],
     medium: [
-      {
-        id: 'BACK-AUTH-1',
-        title: 'JWT blacklist DB ~590ms 차지',
-        note: 'PERF-1 (PR #124) + PERF-3 (PR #125) + PERF-2 (PR #126) 측정 모두 ~590-600 ms는 simplejwt JWTAuthentication.authenticate() → BlacklistMixin → Neon round-trip per authenticated request. 모든 인증된 endpoint floor latency. Plan PR 3 (.claude/plans/merry-toasting-dove.md) — JTI cache via Redis (PR 1 INFRA-REDIS-1 dependency satisfied 2026-05-26). Implementation: apps/accounts/authentication.py CachedJWTAuthentication subclass + logout path cache.delete + REST_FRAMEWORK swap. Acceptance: 인증된 요청 floor 600 → ~150 ms (10x JTI cache); 보안 영향 0; security-manager mandatory.',
-      },
       {
         id: 'FRONT-LAYOUT-1',
         title: 'Desktop wide-screen 레이아웃 어색함',
@@ -185,11 +180,18 @@ window.PROJECT_STATE = {
 
   prs: [
     {
-      number: 132,
-      title: 'fix(BACK-RECOMMEND-2): silence sklearn KMeans matmul warnings',
+      number: 133,
+      title: 'feat(BACK-AUTH-1): cache JWTAuthentication.get_user() per-user',
       mergedAt: null,
       mergedAtKST: null,
       sha: null,
+    },
+    {
+      number: 132,
+      title: 'fix(BACK-RECOMMEND-2): silence sklearn KMeans matmul warnings',
+      mergedAt: '2026-05-26T05:26:32Z',
+      mergedAtKST: '2026-05-26 14:26 KST',
+      sha: 'b53e633',
     },
     {
       number: 131,
@@ -232,13 +234,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-05-25T19:55:44Z',
       mergedAtKST: '2026-05-26 04:55 KST',
       sha: '5593f6c',
-    },
-    {
-      number: 124,
-      title: 'perf(BACK-PERFORMANCE-1): /projects/ p50 1136→661ms — cache + serializer trim',
-      mergedAt: '2026-05-25T18:30:31Z',
-      mergedAtKST: '2026-05-26 03:30 KST',
-      sha: '0c8fe6f',
     },
   ],
 
@@ -305,7 +300,7 @@ window.PROJECT_STATE = {
   Engine["engine.py<br/>services/parse_query.py"]
   DefaultDB[("default DB · Neon<br/>User · Project · AnalysisSession · SwipeEvent")]
   BuildingsDB[("buildings DB · Neon<br/>canonical_v2_buildings (read-only raw SQL)")]
-  Redis[("Redis cache (prod) · LocMemCache (local)<br/>JTI cache · prefetch · response cache")]
+  Redis[("Redis cache (prod) · LocMemCache (local)<br/>JWT user-row cache · prefetch · response cache")]
   Gemini["Gemini API"]
   R2["Cloudflare R2 image CDN"]
   OAuth["Google · Kakao · Naver OAuth"]
