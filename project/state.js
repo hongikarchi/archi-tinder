@@ -24,15 +24,23 @@
  * so the value can be re-parsed by any consumer. In-flight (not-yet-merged)
  * PRs carry `mergedAt: null` sentinel; next reporter-inline pass backfills.
  */
+// Reporter: Mermaid sources may be stale — commit cdbf5c7 touched backend/apps/recommendation/services/parse_query.py (refines LLM probe to required-slate). recommendationFlow shows ParseSvc node — semantics now narrower (deterministic slate probe vs free axis). Next session may add slate annotation.
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-05-26 20:27 KST',
-    head: '17f7d65',
-    branch: 'feature/back-llm3-gemini-cache-timeout',
+    updatedAt: '2026-05-26 20:33 KST',
+    head: '92915b8',
+    branch: 'feature/back-llm1-required-slate',
   },
 
   done: [
+    {
+      id: 'BACK-LLM-1',
+      title: 'LLM 채팅이 검색에 필요한 정보를 다 안 모음',
+      completedAt: '2026-05-26',
+      prs: [141],
+      note: 'codex-authored branch cherry-pick. parse_query.py +87 LOC refines LLM chat-phase to deterministically target missing required-slate filter fields. REQUIRED_SLATE_FIELDS=(program, material, style, location_country) + REQUIRED_SLATE_PROBE_PRIORITY module constants. System prompt + few-shot examples rewritten (drop prior free A-vs-B axis selection). _normalise_filter_priority promotes required-slate keys to front. _repair_required_slate injects style: Contemporary when slate gap present (intermediate probe OR terminal). Korean probe examples updated; Korea-first preserved. test_back_llm1_required_slate.py NEW 5 tests (prompt content, slate promotion, default injection, terminal repair). Open dimensions resolved: 4-field slate; priority = program > material > style > location; fallback = Contemporary; mix of direct + axis Korean probes. Deferred: A/B 50-query benchmark harness (acceptance criterion c) = post-merge measurement. Behavioral note: _normalise_filter_priority shifts engine._build_score_cases rank weights (required-slate outranks temporal). Intended. code-review PASS · security-manager PASS (no prompt injection; user input never touches system prompt; mocks-only tests). sha cdbf5c7-pre-squash.',
+    },
     {
       id: 'BACK-LLM-3',
       title: 'Gemini cache 호출에 timeout 없음',
@@ -81,13 +89,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-05-26',
       prs: [132],
       note: 'PR 2 of 4. Re-scoped from "dtype align" to np.errstate suppression after empirical falsification (input already float64). Real cause: sklearn KMeans centroid normalization on high-dim unit-norm vectors. Helper engine.py:90-99 _silenced_kmeans_fit. Two call sites swapped (1664 + 1701). sample_weight preserved. Byte-identical (random_state=42 + n_init=3 deterministic; topic06 9/9 PASS under -W error::RuntimeWarning). code-review + security-manager PASS. sha 785f4ad-pre-squash (squash b53e633).',
-    },
-    {
-      id: 'SWIPE-CONVERGENCE-10',
-      title: '10-swipe target + multimodal escalation + stuck-state safety',
-      completedAt: '2026-05-26',
-      prs: [130],
-      note: 'Replaces closed PR #127 (codex feature/algo-convergence-study). Algorithm policy synced to docs/algorithm.md: convergence_threshold 0.08→0.13, target_swipes=10, min_likes_for_multimodal=11 (K-Means K=2 gated behind target+1), convergence_min_recent_likes=2. Frontend stuck-state safety floor beyondTargetFloor. Engine _with_image_focus bug fix. async_prefetch_enabled True→False reverted (chain broken; later resolved in PR 4). Swipe.py stale 0.08 defaults → 0.13. 2 commits squashed at merge to 83db42c.',
     },
   ],
 
@@ -204,11 +205,18 @@ window.PROJECT_STATE = {
 
   prs: [
     {
-      number: 140,
-      title: 'fix(BACK-LLM-3): wrap Gemini cache creation with timeout',
+      number: 141,
+      title: 'fix(BACK-LLM-1): enforce LLM required slate',
       mergedAt: null,
       mergedAtKST: null,
       sha: null,
+    },
+    {
+      number: 140,
+      title: 'fix(BACK-LLM-3): wrap Gemini cache creation with timeout',
+      mergedAt: '2026-05-26T11:31:00Z',
+      mergedAtKST: '2026-05-26 20:31 KST',
+      sha: '92915b8',
     },
     {
       number: 139,
@@ -251,13 +259,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-05-26T07:38:03Z',
       mergedAtKST: '2026-05-26 16:38 KST',
       sha: '26626a4',
-    },
-    {
-      number: 133,
-      title: 'feat(BACK-AUTH-1): cache JWTAuthentication.get_user() per-user',
-      mergedAt: '2026-05-26T06:47:23Z',
-      mergedAtKST: '2026-05-26 15:47 KST',
-      sha: '4c72513',
     },
   ],
 
