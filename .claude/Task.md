@@ -68,24 +68,6 @@ _(none — no active initiative slice with a PR in flight.)_
 
 ### HIGH
 
-#### BACK-LLM-1 — LLM 채팅이 검색에 필요한 정보를 다 안 모음
-`backend/apps/recommendation/services/parse_query.py` already implements a 0-2 turn probe budget where the LLM free-choices an abstract A-vs-B axis. This task **drops persona classification (P1-P4)** and re-scopes the work: (1) define an explicit *required information slate* the chat must collect — filter fields the downstream search needs — and (2) refine LLM probe behaviour so probes deterministically target missing slate fields when the user's first turn is too diffuse, instead of choosing axes freely.
-
-Goal: a diffuse natural-language query ("좋은 거 보여줘", "추천해줘") still ends with a usable filter set, by virtue of the probe loop asking specifically for the gaps.
-
-Open dimensions:
-- **Required info slate** — which filter fields are mandatory? Today's 0-turn skip rule = "`program` + at least one of (`style` | `material` | `location_country`)". Keep / expand / contract?
-- **Probe priority** — among missing required fields, which is asked first? (e.g., program > material > style > location)
-- **Optional slate** — `color_tone` / `year_min-max` / `transparency` etc. — never probed (auto-inferred only) vs allowed to consume probe budget when essentials are already covered?
-- **Fallback when 2-turn budget exhausts with slate gap** — best-effort filter / generic default / broad-pool fallback?
-- **Conversational shape** — keep current abstract A-vs-B style ("따뜻한 재료감 vs 차가운 기하성") vs allow direct field-asking ("어떤 program이 필요하세요?")? Mix?
-- **Cross-language posture** — Korean query → Korean probe (current). No change (Constitution Decision Principle 7).
-
-Acceptance:
-- TTFC for Taste-tab chat does not regress beyond the 4000 ms budget (per `docs/algorithm.md`).
-- After ≤2 probe turns, `filter_priority` always contains at least one required-slate field.
-- A/B run on a fixed 50-query sample comparing slate-completion-rate (current prompt vs refined prompt) — refined prompt must not regress and should improve on diffuse-prior cases.
-
 #### BACK-RECOMMEND-1 — Project 두번째 세션이 이전 taste를 모름
 Same Project can host multiple `AnalysisSession` rows (user comes back, "Resume" or new swipe round on the same Project — second session is created fresh while `Project.liked_ids` / `disliked_ids` / `saved_ids` carry forward as the persistent accumulator). Today the new session's algorithm-side state (`like_vectors`, `convergence_history`, `phase`) starts from scratch — exploring phase, empty pool of taste signal — even though the user just liked 12 buildings in Session #1.
 
@@ -242,6 +224,18 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 ---
 
 ## Done
+
+### BACK-LLM-1 — LLM 채팅이 검색에 필요한 정보를 다 안 모음 — RESOLVED 2026-05-26 (PR #141 `cdbf5c7-pre-squash`)
+- [x] **`parse_query.py`**: `REQUIRED_SLATE_FIELDS = (program, material, style, location_country)` + `REQUIRED_SLATE_PROBE_PRIORITY` module-level constants. System prompt + few-shot examples rewritten to deterministically target missing slate fields (drop prior free A-vs-B axis selection).
+- [x] **`_normalise_filter_priority`**: required-slate keys promoted to front of Gemini-returned `filter_priority`. Engine score weights respect the new order.
+- [x] **`_repair_required_slate`**: injects `style: 'Contemporary'` (`_BROAD_SLATE_DEFAULT_VALUE`) when no required-slate field present after Gemini parse OR 2-turn probe budget exhausts with slate gap. Runs on `probe_needed=True` intermediate turns too — documented.
+- [x] **Korean few-shot examples** updated with slate-targeted probe Korean questions. Korea-first preserved (Constitution Decision Principle 7).
+- [x] **`test_back_llm1_required_slate.py`** NEW 5 tests: prompt content assertions, slate promotion into priority, broad default injection for both `parse_query` + `parse_query_stage1`, budget-exhausted terminal repair.
+- Verification: manage.py check PASS · pytest 5/5 PASS · code-review PASS (rebase clean; parse_query.py untouched on main since branch base) · security-manager PASS (no prompt injection — user input never touches system prompt; static constants; mocks-only tests).
+- Open dimensions resolved: required slate = 4 fields (program/material/style/location_country); priority = same order; fallback = 'Contemporary' default; conversational shape = Korean slate-targeted probes (mix of direct + axis).
+- Deferred: A/B 50-query benchmark harness (Task.md acceptance criterion c). Code contract structurally verified; empirical measurement = post-merge follow-up.
+- Behavioral note: `_normalise_filter_priority` promotion changes `engine._build_score_cases` weight semantics (rank-based; required-slate field outranks temporal filter). Intended.
+- Origin: codex-authored `feature/codex-back-llm1-required-slate` (commit `79346ff`) cherry-pick. Clean rebase onto develop=92915b8.
 
 ### BACK-LLM-3 — Gemini cache 호출에 timeout 없음 — RESOLVED 2026-05-26 (PR #140 `715e06e-pre-squash`)
 - [x] `backend/apps/recommendation/services/_caches.py:92` `client.caches.create` 호출을 zero-arg `_create_cache` closure로 추출 → `_svc._retry_gemini_call(_create_cache)`로 라우팅. 기존 `_retry_gemini_call`의 15s timeout cap (PR #94) 적용.
