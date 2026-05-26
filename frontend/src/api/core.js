@@ -10,6 +10,13 @@ const FETCH_TIMEOUT_MS = 15000          // 15-second default timeout (per-call o
 const MAX_NETWORK_RETRIES = 2           // retry count for network failures
 const BACKOFF_BASE_MS = 300             // exponential backoff base (300ms, 900ms)
 
+// -- Idempotency check -------------------------------------------------------
+// Only GET/HEAD/OPTIONS are safe to retry on network failure. POST/PATCH/DELETE
+// may trigger server-side side effects; retrying risks duplicates (P0 origin:
+// /analysis/sessions/ POST timeout → retry → duplicate Project+Session+Board,
+// Codex retest 2026-05-26).
+const _IDEMPOTENT_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
+
 // -- API call tracker (for DebugOverlay) -----------------------------------
 
 const _CALL_HISTORY_SIZE = 8
@@ -97,13 +104,17 @@ export async function callApi(method, path, body, retry = true, timeoutMs = FETC
       lastNetworkErr = null
       break
     } catch (err) {
-      if (_isNetworkError(err) && attempt < MAX_NETWORK_RETRIES) {
+      // Only retry network errors on idempotent methods. POST/PATCH/DELETE may
+      // have triggered a side effect on the server (the timeout aborts the
+      // client wait but not the server work), and a retry causes duplicates.
+      const canRetry = _IDEMPOTENT_METHODS.has(method) && _isNetworkError(err) && attempt < MAX_NETWORK_RETRIES
+      if (canRetry) {
         lastNetworkErr = err
         const delay = BACKOFF_BASE_MS * Math.pow(3, attempt)  // 300ms, 900ms
         await new Promise(r => setTimeout(r, delay))
         continue
       }
-      // Non-network error or exhausted retries
+      // Non-network error, exhausted retries, OR non-idempotent method
       _recordCall({ method, url: path, status: 0, ms: Date.now() - t0 })
       throw err
     }

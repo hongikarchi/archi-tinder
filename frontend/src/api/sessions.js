@@ -7,6 +7,7 @@ import { callApi } from './core.js'
 import { normalizeCard } from './images.js'
 
 const PARSE_QUERY_TIMEOUT_MS = 60000    // Gemini LLM generation can take 10-30s
+const SESSION_CREATE_TIMEOUT_MS = 30000 // Cold pool path: execute_pool_sql ~14.7s, total backend time can exceed 15s default
 
 /**
  * Start an analysis session.
@@ -25,7 +26,7 @@ export async function startSession(params) {
     raw_query:       params.raw_query || '',
     ...(params.visual_description ? { visual_description: params.visual_description } : {}),
     ...(params.image_focus ? { image_focus: params.image_focus } : {}),
-  })
+  }, true, SESSION_CREATE_TIMEOUT_MS)
   return {
     ...result,
     next_image:      normalizeCard(result.next_image),
