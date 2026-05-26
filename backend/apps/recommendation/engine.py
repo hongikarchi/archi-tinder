@@ -87,6 +87,18 @@ def _cosine_sim_matrix(left, right):
     return np.nan_to_num(sim, nan=0.0, posinf=0.0, neginf=0.0)
 
 
+def _silenced_kmeans_fit(kmeans, X, sample_weight=None):
+    """Run kmeans.fit silencing sklearn's matmul divide-by-zero RuntimeWarning.
+
+    The warning fires inside sklearn's KMeans centroid normalization
+    (sklearn/utils/extmath.py matmul) on high-dim unit-norm vectors. It is
+    sklearn-internal noise — does NOT affect cluster centroid correctness.
+    BACK-RECOMMEND-2.
+    """
+    with np.errstate(divide='ignore', invalid='ignore', over='ignore'):
+        kmeans.fit(X, sample_weight=sample_weight)
+
+
 # ── Schema-probe helpers ──────────────────────────────────────────────────────
 
 def _get_available_columns():
@@ -1649,7 +1661,7 @@ def compute_taste_centroids(like_vectors, round_num):
     # Path 2 & 3: Topic 06 silhouette-based adaptive k (flag-gated, N>=4 required)
     if RC.get('adaptive_k_clustering_enabled', False) and len(weighted_likes) >= 4:
         kmeans2 = KMeans(n_clusters=2, random_state=42, n_init=3)
-        kmeans2.fit(like_embeddings, sample_weight=like_weights)
+        _silenced_kmeans_fit(kmeans2, like_embeddings, sample_weight=like_weights)
         if len(set(kmeans2.labels_)) > 1:
             # Weighted silhouette: per-sample silhouette × recency weights, averaged.
             # sklearn 1.6.1's silhouette_score doesn't accept sample_weight, so we
@@ -1686,7 +1698,7 @@ def compute_taste_centroids(like_vectors, round_num):
     # Path 4: Default k=min(k_clusters, N) KMeans (flag off or N<4)
     k_clusters = min(RC['k_clusters'], len(weighted_likes))
     kmeans = KMeans(n_clusters=k_clusters, random_state=42, n_init=3)
-    kmeans.fit(like_embeddings, sample_weight=like_weights)
+    _silenced_kmeans_fit(kmeans, like_embeddings, sample_weight=like_weights)
     centroids = list(kmeans.cluster_centers_)
     stats = {
         'cluster_count_used': len(centroids),

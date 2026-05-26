@@ -24,70 +24,71 @@
  * so the value can be re-parsed by any consumer. In-flight (not-yet-merged)
  * PRs carry `mergedAt: null` sentinel; next reporter-inline pass backfills.
  */
+// Reporter: Mermaid sources may be stale — commit 785f4ad touched apps/recommendation/engine.py (added _silenced_kmeans_fit helper + 2 call-site swaps; no behavioral change). Recommendation flow graph still accurate at function-graph level; no refresh needed.
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-05-26 13:49 KST',
-    head: '83db42c',
-    branch: 'feature/admin-redis-adoption',
+    updatedAt: '2026-05-26 14:19 KST',
+    head: '34a0c9e',
+    branch: 'feature/algo-engine-warning-suppress',
   },
 
   done: [
+    {
+      id: 'BACK-RECOMMEND-2',
+      title: 'sklearn KMeans matmul warning 압제 (PR 2/4 of perf sweep)',
+      completedAt: '2026-05-26',
+      prs: [132],
+      note: 'PR 2 of 4 in plan merry-toasting-dove.md (backend performance sweep). Re-scoped from "dtype align" to np.errstate suppression after empirical falsification: like_embeddings.dtype == float64 already pre-edit (_finite_unit_vector engine.py:66 calls np.asarray(raw_vec, dtype=np.float64)). Real cause: sklearn KMeans centroid normalization (sklearn/utils/extmath.py:203 ret = a @ b) on high-dim unit-norm vectors. Sklearn-internal noise — cosmetic per Task.md. New helper engine.py:90-99 _silenced_kmeans_fit(kmeans, X, sample_weight=None) wraps fit with np.errstate(divide=ignore, invalid=ignore, over=ignore). Two call sites swapped: engine.py:1664 (Path 2 adaptive k=2) + engine.py:1701 (Path 4 default k). sample_weight=like_weights preserved both paths. Computation byte-identical (random_state=42 + n_init=3 deterministic; topic06 silhouette tests 9/9 PASS under pytest -W error::RuntimeWarning — previously failing). code-review + security-manager PASS (np.errstate thread-local NumPy>=1.17, multi-worker safe; sample_weight provenance clean). app-test skipped per [[feedback_app_test_policy]]. algorithm.md Last Synced bumped, 3b inline annotation skipped (algorithm behavior byte-identical). sha 785f4ad-pre-squash.',
+    },
     {
       id: 'INFRA-REDIS-1',
       title: 'Redis cache 도입 (PR 1/4 of perf sweep)',
       completedAt: '2026-05-26',
       prs: [131],
-      note: 'PR 1 of 4 in plan merry-toasting-dove.md (backend performance sweep). Foundation enabling PR 3 (BACK-AUTH-1 JTI cache) + PR 4 (PERF-PREFETCH-CHAIN async consume) — both need shared cache across Railway multi-worker Gunicorn that LocMemCache per-process cannot provide. settings.py CACHES reads REDIS_URL env: set → django_redis.cache.RedisCache (KEY_PREFIX=makeweb, SOCKET_TIMEOUT=3), unset → LocMemCache fallback with MAX_ENTRIES=2000 preserved. _build_caches_dict(redis_url) helper for clean unit testing without env monkeypatching. requirements.txt django-redis>=5.4,<6.0 added (transitively pulls redis-py>=4.x). .env.example Cache section + CLAUDE.md Backend Conventions bullet. backend/tests/test_cache_backend.py NEW 16 tests across LocMem / Redis / mutual-exclusion. Connection failure with REDIS_URL set NOT swallowed — loud beats silent multi-worker incoherence. KEY_PREFIX prevents cross-service collision. code-review PASS, security-manager PASS (rediss:// TLS supported, no CVE at version range, .env gitignored, no logger leak, ConnectionError carries no creds). app-test skipped per [[feedback_app_test_policy]] (4-gate stack PASS + REDIS_URL unset → identical to prior develop). User manual step: Railway dashboard → Add Redis service → REDIS_URL=${{Redis.REDIS_URL}} on backend service. sha d5b6c18-pre-squash.',
+      note: 'PR 1 of 4 in plan merry-toasting-dove.md (backend performance sweep). Foundation enabling PR 3 (BACK-AUTH-1 JTI cache) + PR 4 (PERF-PREFETCH-CHAIN async consume) — both need shared cache across Railway multi-worker Gunicorn that LocMemCache per-process cannot provide. settings.py CACHES reads REDIS_URL env: set → django_redis.cache.RedisCache (KEY_PREFIX=makeweb, SOCKET_TIMEOUT=3), unset → LocMemCache fallback with MAX_ENTRIES=2000 preserved. _build_caches_dict(redis_url) helper for clean unit testing without env monkeypatching. requirements.txt django-redis>=5.4,<6.0 added (transitively pulls redis-py>=4.x). .env.example Cache section + CLAUDE.md Backend Conventions bullet. backend/tests/test_cache_backend.py NEW 16 tests across LocMem / Redis / mutual-exclusion. Connection failure with REDIS_URL set NOT swallowed — loud beats silent multi-worker incoherence. KEY_PREFIX prevents cross-service collision. code-review PASS, security-manager PASS (rediss:// TLS supported, no CVE at version range, .env gitignored, no logger leak, ConnectionError carries no creds). app-test skipped per [[feedback_app_test_policy]]. User manual step: Railway dashboard → Add Redis service → REDIS_URL=${{Redis.REDIS_URL}} on backend service. sha d5b6c18-pre-squash (squash 34a0c9e).',
     },
     {
       id: 'SWIPE-CONVERGENCE-10',
       title: '10-swipe target + multimodal escalation + stuck-state safety',
       completedAt: '2026-05-26',
       prs: [130],
-      note: 'Replaces closed PR #127 (codex feature/algo-convergence-study). Algorithm policy synced to docs/algorithm.md: convergence_threshold 0.08→0.13, target_swipes=10 (product window), min_likes_for_multimodal=11 (K-Means K=2 gated behind target+1 — single centroid default for 10-swipe sessions, multimodal escalation on continue-past-target), convergence_min_recent_likes=2 (positive-evidence gate, blocks false convergence on dislike streaks). Frontend stuck-state safety floor (new vs #127): SwipePage isAt100 + App.jsx auto-nav get beyondTargetFloor (swipe_count >= target+5) — backend min_recent_likes gate can withhold phase=converged indefinitely on dislike-heavy paths; without floor user stranded until pool exhaust. Engine _with_image_focus bug fix: gallery_drawing_start decrements by 1 when focus_url removed from index < original drawing_start (prior clamp-only allowed boundary drift). async_prefetch_enabled True→False reverted (code-review caught: async branch writes prefetch cache, next-swipe handler never reads it back — chain broken, flag flip yields zero latency + daemon-thread DB lifecycle risk; tracked as PERF-PREFETCH-CHAIN in ### MEDIUM). Swipe.py stale 0.08 defaults → 0.13. test_imp7 prefetch_strategy "async-thread"→"sync", test_imp8 default-flag assertions True→False. code-review (sonnet) FAIL → all 4 findings resolved pre-commit. security-manager PASS. Plan file merry-toasting-dove.md superseded — Calibrating label preserved in broader ConfidenceBar rewrite. 2 commits (e4677fb PR #127 base + 7f6a056 follow-up) squashed at merge to 83db42c.',
+      note: 'Replaces closed PR #127 (codex feature/algo-convergence-study). Algorithm policy synced to docs/algorithm.md: convergence_threshold 0.08→0.13, target_swipes=10 (product window), min_likes_for_multimodal=11 (K-Means K=2 gated behind target+1 — single centroid default for 10-swipe sessions, multimodal escalation on continue-past-target), convergence_min_recent_likes=2 (positive-evidence gate, blocks false convergence on dislike streaks). Frontend stuck-state safety floor (new vs #127): SwipePage isAt100 + App.jsx auto-nav get beyondTargetFloor (swipe_count >= target+5) — backend min_recent_likes gate can withhold phase=converged indefinitely on dislike-heavy paths; without floor user stranded until pool exhaust. Engine _with_image_focus bug fix: gallery_drawing_start decrements by 1 when focus_url removed from index < original drawing_start (prior clamp-only allowed boundary drift). async_prefetch_enabled True→False reverted (code-review caught: async branch writes prefetch cache, next-swipe handler never reads it back — chain broken, flag flip yields zero latency + daemon-thread DB lifecycle risk; tracked as PERF-PREFETCH-CHAIN in ### MEDIUM). Swipe.py stale 0.08 defaults → 0.13. 2 commits (e4677fb + 7f6a056) squashed at merge to 83db42c.',
     },
     {
       id: 'INFRA-CI-1',
       title: 'PR #125 PERF-3 CI fail hotfix',
       completedAt: '2026-05-26',
       prs: [128],
-      note: 'Root cause: PERF-3 _async_emit daemon thread silent fail. First thread connection setup hit settings_dict["TIME_ZONE"] KeyError (Django backend timezone_name cached_property); emit_event_batch try/except 잡혀 silent → test_imp6_stage_decouple evt is not None assert fail (prod analytics 손실 + test 회귀). Two-prong fix attempted (settings TIME_ZONE explicit + test patch close_old_connections no-op + close_old_connections removal); only third-cycle root revert (sync emit on main thread, drop _async_emit closure + threading import) achieved CI green. Cost ~290ms sync emit restored to request path; PERF-3 1508 → ~1800 ms still PASS ≤2000 ms goal. emit_event_batch bulk_create preserved (1 SQL round-trip). 3 commits squashed: TIME_ZONE settings + close_old_connections removal + sync emit revert. sha 198eca4-pre-squash.',
+      note: 'Root cause: PERF-3 _async_emit daemon thread silent fail. First thread connection setup hit settings_dict["TIME_ZONE"] KeyError; emit_event_batch try/except silent → test_imp6_stage_decouple assert fail. Sync emit revert (drop _async_emit closure + threading import) achieved CI green. Cost ~290ms sync emit restored. PERF-3 1508 → ~1800 ms still PASS ≤2000 ms goal. emit_event_batch bulk_create preserved. sha 198eca4-pre-squash.',
     },
     {
       id: 'BACK-PERFORMANCE-2',
       title: 'Discovery 캐시 hit 450ms (목표 <200ms)',
       completedAt: '2026-05-26',
       prs: [126],
-      note: 'GET /api/v1/discovery/ warm cache hit p50 1572 → 672 ms (-57%). Goal <200 ms 미달 — auth floor ~600 ms (BACK-AUTH-1) + get_profile 74 ms 잔존. Response cache 60 s TTL — get_or_build_discovery_feed + evict_discovery_feed (per-profile.id+cursor+limit key, mirror PERF-1 pattern). Mutation evict hooks: SwipeView.post (liked/disliked) + ProjectBookmarkView.post (saved) + ProjectDetailView.patch remove_building_ids. Per-stage perf_timing: get_profile / build_exclude_set / get_or_build_taste / taste_ranked_page / cache_lookup_or_build. taste_ranked_page (814 ms, 84% of body, dominant) absent on cache hits — verified. Not evicted (60 s TTL self-cleans, no security impact): ProjectDetailView.delete (UX-only stale exclude_set), ProjectListCreateView.post (empty IDs at create). Measurement scope: local Neon local-dev-2 only (development proxy). Prod Singapore Railway p50 = post-deploy Codex retest (admin). Multi-worker prod = per-worker LocMemCache, 60 s TTL eventual consistency. Deferred: BACK-AUTH-1 — auth-layer optimization required for sub-200 ms total. sha b40cfea-pre-squash (squash 28b7242).',
+      note: 'GET /api/v1/discovery/ warm cache hit p50 1572 → 672 ms (-57%). Goal <200 ms 미달 — auth floor ~600 ms (BACK-AUTH-1) + get_profile 74 ms 잔존. Response cache 60 s TTL — get_or_build_discovery_feed + evict_discovery_feed. Mutation evict hooks: SwipeView.post + ProjectBookmarkView.post + ProjectDetailView.patch. taste_ranked_page (814 ms, 84% of body) absent on cache hits. Deferred: BACK-AUTH-1 for sub-200 ms total. sha b40cfea-pre-squash (squash 28b7242).',
     },
     {
       id: 'BACK-PERFORMANCE-3',
       title: 'Search 후 첫 카드까지 5-8초',
       completedAt: '2026-05-26',
       prs: [125],
-      note: 'POST /api/v1/analysis/sessions/ local sessions create p50 2567 → 1508 ms realistic / 1484 ms worst-case (-42%). Both PASS ≤ 2000 ms (PR #128 hotfix sync emit revert → 효과 ~1800 ms 여전히 PASS). Tier 1 pool cache (filter signature SHA1 key, 30 min TTL): _tier1_cache_key(filters, filter_priority, seed_ids, v_initial, q_text) — pool ordering preserved (full tuple cached pre-exclude), exclude_ids applied post-fetch (per-session state, not in key). _random_pool 30 min in-memory cache (module-level dict); Tier 3 random fallback ~1040 → ~5 ms warm. emit_events: PR #125 시 threading.Thread daemon fire-and-forget 도입 → PR #128 sync revert (daemon thread settings_dict TIME_ZONE KeyError silent fail issue). emit_event_batch in event_log.py via bulk_create. perf_timing sub-stages on engine.create_pool_with_relaxation / create_bounded_pool / get_pool_embeddings. perf_measure --filters JSON CLI option. Algorithm-territory edits per user authorization; pool ordering + initial_batch shape + swipe-loop determinism preserved. Measurement scope local Neon local-dev-2 only; prod Singapore p50 = post-deploy Codex retest. sha fb669b6-pre-squash (squash 5593f6c).',
+      note: 'POST /api/v1/analysis/sessions/ local sessions create p50 2567 → 1508 ms (-42%) / PR #128 hotfix ~1800 ms 여전히 PASS ≤2000 ms. Tier 1 pool cache (filter signature SHA1, 30 min TTL). _random_pool 30 min in-memory cache. emit_events PR #125 시 threading.Thread daemon → PR #128 sync revert. perf_timing sub-stages + perf_measure --filters CLI. Algorithm-territory edits per user authorization. sha fb669b6-pre-squash (squash 5593f6c).',
     },
     {
       id: 'BACK-PERFORMANCE-1',
       title: '/projects/ 응답 600ms (목표 300ms)',
       completedAt: '2026-05-26',
       prs: [124],
-      note: 'GET /api/v1/projects/ local p50 1136 → 661 ms (-42%). Goal ≤300 ms 미달 — auth floor ~590 ms 잔존. Response cache 60s TTL + evict POST/PATCH/DELETE/Bookmark (per-profile.id key isolation). ProjectListSerializer drops analysis_report (LLM JSON list-unused). defer(analysis_report) on QS. _latest_like_count via jsonb_array_length (no full like_vectors fetch). page_size+1 trick — no count() query. CONN_MAX_AGE=600 + CONN_HEALTH_CHECKS=True on default DB. buildings DB CONN_MAX_AGE removed (Make-DB owner territory). perf_timing ctx manager + perf_measure CLI (reused PERF-3/PERF-2). orchestrate skill Step 6/9 deprecated agent refs → git-commit/reporter-inline skills. Measurement scope local Neon local-dev-2 only; prod Singapore p50 = post-deploy Codex retest. Deferred: BACK-AUTH-1. sha 505717a-pre-squash (squash 0c8fe6f).',
+      note: 'GET /api/v1/projects/ local p50 1136 → 661 ms (-42%). Goal ≤300 ms 미달 — auth floor ~590 ms 잔존. Response cache 60s TTL + evict hooks. Serializer drops analysis_report. CONN_MAX_AGE=600 default DB. orchestrate skill Step 6/9 deprecated agent refs → skills. Deferred: BACK-AUTH-1. sha 505717a-pre-squash (squash 0c8fe6f).',
     },
     {
       id: 'INFRA-WORKFLOW-1',
       title: 'Reporter / git-manager 흡수 + 3 skill 도입',
       completedAt: '2026-05-26',
       prs: [123],
-      note: '3 new skills replace routine agent paths: git-commit (single commit + secret guards), git-publish (push + PR + admin squash + Step 0 publish gate), reporter-inline (Task.md + state.js + algorithm.md inline before squash; in-flight PR mergedAt:null sentinel + next-pass backfill; 9-step behavior 1-to-1 from reporter agent). git-manager + reporter agents → deprecated:true frontmatter + body fallback note. git-publisher kept (Mode 3 deploy / external PR triage / complex rebase). CLAUDE.md new ## Git Operations — HARD RULE section. WORKFLOW.md Mermaid rebuilt with skill labels. Per PR cycle agent dispatches 8 → 3, ~30-40k tokens + ~150-300s saved. Reporter audit ships in same PR as work — PR count halved. sha bbadcf1-pre-squash.',
-    },
-    {
-      id: 'FRONT-UX-4',
-      title: 'BuildingDetailPage UX 개선 (스크롤 + 순서 + 보드 저장)',
-      completedAt: '2026-05-26',
-      prs: [120],
-      note: 'BuildingDetailPage minHeight → height + overflowY:auto. Title/architect/meta 갤러리 위로 재배치. 상단 우측 "+ 보드에 추가" 핑크 그라디언트 버튼 + SaveToBoardModal 트리거. BoardDetailPage buildings 이동 시 fromBoard:true location.state. Codex P2 fix: saveEnabled negative gate → positive (saveEnabled={fromRecommended} ResultsPage 추천만). sha 8f90104.',
+      note: '3 new skills replace routine agent paths: git-commit, git-publish, reporter-inline. git-manager + reporter agents → deprecated:true. git-publisher kept (Mode 3 deploy / external PR / complex rebase). CLAUDE.md new ## Git Operations — HARD RULE section. Per PR cycle agent dispatches 8 → 3, ~30-40k tokens + ~150-300s saved. Reporter audit ships in same PR as work. sha bbadcf1-pre-squash.',
     },
   ],
 
@@ -148,11 +149,6 @@ window.PROJECT_STATE = {
         note: 'Phase 13+ Profile/Board public/private visibility shipped. PIPA + GDPR posture for signup data collection / consent flow / retention policy still open. Required before public launch.',
       },
       {
-        id: 'BACK-RECOMMEND-2',
-        title: 'engine.py matmul warning 정리',
-        note: 'sklearn emits matmul dtype warning during clustering. Cosmetic noise but indicates float32/float64 mismatch — quick fix is dtype-align embedding ndarrays before kmeans. Plan PR 2 (.claude/plans/merry-toasting-dove.md) — engine.py:1626 dtype=np.float64 explicit on np.array(weighted_likes).',
-      },
-      {
         id: 'PERF-PREFETCH-CHAIN',
         title: 'async_prefetch chain completion (Redis swap blocker)',
         note: 'backend/config/settings.py:216 async_prefetch_enabled: False (intentional). Async branch in views/swipe.py spawns background thread that writes cache.set("prefetch:<session>:<round>", card) but next-swipe handler never reads that key — instant-swap chain broken, flag-flip yields zero latency benefit. Two-step fix: (1) add cache.get("prefetch:<session>:<saved_current_round+1>") to async branch so prior thread write feeds current response; (2) Redis backend now in place (INFRA-REDIS-1, PR #131) so multi-worker Railway prod actually shares cache. Re-flip True only after (1) lands. Plan PR 4 (.claude/plans/merry-toasting-dove.md) — depends on PR 1 INFRA-REDIS-1 merged.',
@@ -189,11 +185,18 @@ window.PROJECT_STATE = {
 
   prs: [
     {
-      number: 131,
-      title: 'feat(INFRA-REDIS-1): Redis cache + LocMemCache fallback',
+      number: 132,
+      title: 'fix(BACK-RECOMMEND-2): silence sklearn KMeans matmul warnings',
       mergedAt: null,
       mergedAtKST: null,
       sha: null,
+    },
+    {
+      number: 131,
+      title: 'feat(INFRA-REDIS-1): Redis cache + LocMemCache fallback',
+      mergedAt: '2026-05-26T04:56:32Z',
+      mergedAtKST: '2026-05-26 13:56 KST',
+      sha: '34a0c9e',
     },
     {
       number: 130,
@@ -236,12 +239,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-05-25T18:30:31Z',
       mergedAtKST: '2026-05-26 03:30 KST',
       sha: '0c8fe6f',
-    },
-    {
-      number: 123,
-      title: 'feat(workflow): absorb reporter + git-manager into 3 skills (PR cycle halved)',
-      mergedAt: '2026-05-25T16:55:24Z',
-      mergedAtKST: '2026-05-26 01:55 KST',
     },
   ],
 
