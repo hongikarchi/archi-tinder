@@ -138,22 +138,53 @@ SIMPLE_JWT = {
 CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:5173,http://localhost:5174').split(',')
 CORS_ALLOW_CREDENTIALS = True
 
-# -- Cache (required for DRF throttling) -----------------------------------
+# -- Cache (required for DRF throttling, IMP-5 Gemini context-cache, IMP-8 async prefetch) --
+# INFRA-REDIS-1 (2026-05-26): Redis is the prod cache backend so PR 3 (BACK-AUTH-1 JTI
+# cache) and PR 4 (PERF-PREFETCH-CHAIN async consume) work across Railway's multi-worker
+# Gunicorn (LocMemCache is per-process; bg thread in worker A -> next swipe in worker B
+# would always miss). Local dev keeps LocMemCache when REDIS_URL is unset, so devs do
+# not need to run a Redis daemon to spin up backend.
 # IMP-8 (v1.6 §11.1): async prefetch background thread writes to default cache.
 # IMP-5 (v1.5 §11.1): Gemini context-cache resource name stored in default cache.
-# Production multi-worker deploys SHOULD swap LocMemCache for Redis (django-redis)
-# to share cache across workers -- LocMemCache is per-process, so cache writes from
-# bg thread in worker A are not visible to next swipe arriving on worker B.
-# Single-worker dev / Render free tier with 1 worker: LocMemCache works fine.
-CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-        # Default MAX_ENTRIES=300 thrashes with ~150-card pools per session;
-        # bump to 2000 (~13 concurrent sessions × 150 building-card payloads).
-        # Re-tune when swapping in Redis for prod.
-        'OPTIONS': {'MAX_ENTRIES': 2000},
+
+
+def _build_caches_dict(redis_url: str) -> dict:
+    """Return a CACHES dict for the given redis_url (empty string -> LocMemCache).
+
+    Extracted as a module-level helper so unit tests can call it directly
+    without monkeypatching os.environ or reloading the module.
+    Connection failures with a configured Redis URL are NOT swallowed -- ops
+    team should see them loudly rather than silently falling back to
+    LocMemCache, which would cause multi-worker cache incoherence in prod.
+    """
+    if redis_url:
+        return {
+            'default': {
+                'BACKEND': 'django_redis.cache.RedisCache',
+                'LOCATION': redis_url,
+                'OPTIONS': {
+                    'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+                    # Sensible default timeout; matches the implicit 300s default Django
+                    # cache TTL -- explicit so reviewers see it.
+                    'SOCKET_CONNECT_TIMEOUT': 3,
+                    'SOCKET_TIMEOUT': 3,
+                },
+                # Optional key prefix protects against accidentally sharing keys with
+                # another app using the same Redis instance.
+                'KEY_PREFIX': 'makeweb',
+            }
+        }
+    return {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            # Default MAX_ENTRIES=300 thrashes with ~150-card pools per session;
+            # bump to 2000 (~13 concurrent sessions x 150 building-card payloads).
+            'OPTIONS': {'MAX_ENTRIES': 2000},
+        }
     }
-}
+
+
+CACHES = _build_caches_dict(os.getenv('REDIS_URL', '').strip())
 
 # -- Internationalization --------------------------------------------------
 LANGUAGE_CODE = 'en-us'
