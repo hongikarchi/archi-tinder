@@ -24,22 +24,28 @@
  * so the value can be re-parsed by any consumer. In-flight (not-yet-merged)
  * PRs carry `mergedAt: null` sentinel; next reporter-inline pass backfills.
  */
-// Reporter: Mermaid sources may be stale — commit 7f6a056 touched apps/recommendation/views/swipe.py + engine.py + frontend/src/pages/SwipePage.jsx + App.jsx. Recommendation flow graph still accurate at function-graph level; refresh by hand only if MMR/centroid block needs the multimodal-escalation gate annotated.
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-05-26 11:15 KST',
-    head: 'b4d24d6',
-    branch: 'feature/algo-convergence-10-swipe-target',
+    updatedAt: '2026-05-26 13:49 KST',
+    head: '83db42c',
+    branch: 'feature/admin-redis-adoption',
   },
 
   done: [
+    {
+      id: 'INFRA-REDIS-1',
+      title: 'Redis cache 도입 (PR 1/4 of perf sweep)',
+      completedAt: '2026-05-26',
+      prs: [131],
+      note: 'PR 1 of 4 in plan merry-toasting-dove.md (backend performance sweep). Foundation enabling PR 3 (BACK-AUTH-1 JTI cache) + PR 4 (PERF-PREFETCH-CHAIN async consume) — both need shared cache across Railway multi-worker Gunicorn that LocMemCache per-process cannot provide. settings.py CACHES reads REDIS_URL env: set → django_redis.cache.RedisCache (KEY_PREFIX=makeweb, SOCKET_TIMEOUT=3), unset → LocMemCache fallback with MAX_ENTRIES=2000 preserved. _build_caches_dict(redis_url) helper for clean unit testing without env monkeypatching. requirements.txt django-redis>=5.4,<6.0 added (transitively pulls redis-py>=4.x). .env.example Cache section + CLAUDE.md Backend Conventions bullet. backend/tests/test_cache_backend.py NEW 16 tests across LocMem / Redis / mutual-exclusion. Connection failure with REDIS_URL set NOT swallowed — loud beats silent multi-worker incoherence. KEY_PREFIX prevents cross-service collision. code-review PASS, security-manager PASS (rediss:// TLS supported, no CVE at version range, .env gitignored, no logger leak, ConnectionError carries no creds). app-test skipped per [[feedback_app_test_policy]] (4-gate stack PASS + REDIS_URL unset → identical to prior develop). User manual step: Railway dashboard → Add Redis service → REDIS_URL=${{Redis.REDIS_URL}} on backend service. sha d5b6c18-pre-squash.',
+    },
     {
       id: 'SWIPE-CONVERGENCE-10',
       title: '10-swipe target + multimodal escalation + stuck-state safety',
       completedAt: '2026-05-26',
       prs: [130],
-      note: 'Replaces closed PR #127 (codex feature/algo-convergence-study). Algorithm policy synced to docs/algorithm.md: convergence_threshold 0.08→0.13, target_swipes=10 (product window), min_likes_for_multimodal=11 (K-Means K=2 gated behind target+1 — single centroid default for 10-swipe sessions, multimodal escalation on continue-past-target), convergence_min_recent_likes=2 (positive-evidence gate, blocks false convergence on dislike streaks). Frontend stuck-state safety floor (new vs #127): SwipePage isAt100 + App.jsx auto-nav get beyondTargetFloor (swipe_count >= target+5) — backend min_recent_likes gate can withhold phase=converged indefinitely on dislike-heavy paths; without floor user stranded until pool exhaust. Engine _with_image_focus bug fix: gallery_drawing_start decrements by 1 when focus_url removed from index < original drawing_start (prior clamp-only allowed boundary drift). async_prefetch_enabled True→False reverted (code-review caught: async branch writes prefetch cache, next-swipe handler never reads it back — chain broken, flag flip yields zero latency + daemon-thread DB lifecycle risk; tracked as PERF-PREFETCH-CHAIN in ### LOW). Swipe.py stale 0.08 defaults → 0.13. test_imp7 prefetch_strategy "async-thread"→"sync", test_imp8 default-flag assertions True→False. code-review (sonnet) FAIL → all 4 findings resolved pre-commit. security-manager PASS. Plan file merry-toasting-dove.md superseded — Calibrating label preserved in broader ConfidenceBar rewrite. 2 commits (e4677fb PR #127 base + 7f6a056 follow-up) — will squash. sha 7f6a056-pre-squash.',
+      note: 'Replaces closed PR #127 (codex feature/algo-convergence-study). Algorithm policy synced to docs/algorithm.md: convergence_threshold 0.08→0.13, target_swipes=10 (product window), min_likes_for_multimodal=11 (K-Means K=2 gated behind target+1 — single centroid default for 10-swipe sessions, multimodal escalation on continue-past-target), convergence_min_recent_likes=2 (positive-evidence gate, blocks false convergence on dislike streaks). Frontend stuck-state safety floor (new vs #127): SwipePage isAt100 + App.jsx auto-nav get beyondTargetFloor (swipe_count >= target+5) — backend min_recent_likes gate can withhold phase=converged indefinitely on dislike-heavy paths; without floor user stranded until pool exhaust. Engine _with_image_focus bug fix: gallery_drawing_start decrements by 1 when focus_url removed from index < original drawing_start (prior clamp-only allowed boundary drift). async_prefetch_enabled True→False reverted (code-review caught: async branch writes prefetch cache, next-swipe handler never reads it back — chain broken, flag flip yields zero latency + daemon-thread DB lifecycle risk; tracked as PERF-PREFETCH-CHAIN in ### MEDIUM). Swipe.py stale 0.08 defaults → 0.13. test_imp7 prefetch_strategy "async-thread"→"sync", test_imp8 default-flag assertions True→False. code-review (sonnet) FAIL → all 4 findings resolved pre-commit. security-manager PASS. Plan file merry-toasting-dove.md superseded — Calibrating label preserved in broader ConfidenceBar rewrite. 2 commits (e4677fb PR #127 base + 7f6a056 follow-up) squashed at merge to 83db42c.',
     },
     {
       id: 'INFRA-CI-1',
@@ -82,13 +88,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-05-26',
       prs: [120],
       note: 'BuildingDetailPage minHeight → height + overflowY:auto. Title/architect/meta 갤러리 위로 재배치. 상단 우측 "+ 보드에 추가" 핑크 그라디언트 버튼 + SaveToBoardModal 트리거. BoardDetailPage buildings 이동 시 fromBoard:true location.state. Codex P2 fix: saveEnabled negative gate → positive (saveEnabled={fromRecommended} ResultsPage 추천만). sha 8f90104.',
-    },
-    {
-      id: 'FRONT-UX-2',
-      title: '스와이프 자동 이동 + 키보드 입력',
-      completedAt: '2026-05-26',
-      prs: [121],
-      note: 'App.jsx auto-navigate /swipe → /result/:sessionId on phase=completed/results, or latch threshold. DiscoveryPage.jsx keydown ← (skip) / → (save) arrow-key swipe. Supersedes PR #114 + PR #115 (wrong base main). 4 Codex fixes baked in. sha 80b519c.',
     },
   ],
 
@@ -136,7 +135,7 @@ window.PROJECT_STATE = {
       {
         id: 'BACK-AUTH-1',
         title: 'JWT blacklist DB ~590ms 차지',
-        note: 'PERF-1 (PR #124) + PERF-3 (PR #125) + PERF-2 (PR #126) 측정 모두 ~590-600 ms는 simplejwt JWTAuthentication.authenticate() → BlacklistMixin → Neon round-trip per authenticated request. 모든 인증된 endpoint floor latency. Investigation: (1) JWT validation result in-memory cache JTI 기반 key, token expiry TTL — custom JWTAuthentication subclass; (2) Blacklist DB query 인덱스 검사; (3) Multi-worker prod 환경에서 Redis 필요. Acceptance: 인증된 요청 floor 600 → 100 ms 이하; 보안 영향 0. security-manager 사전 검토 필수.',
+        note: 'PERF-1 (PR #124) + PERF-3 (PR #125) + PERF-2 (PR #126) 측정 모두 ~590-600 ms는 simplejwt JWTAuthentication.authenticate() → BlacklistMixin → Neon round-trip per authenticated request. 모든 인증된 endpoint floor latency. Plan PR 3 (.claude/plans/merry-toasting-dove.md) — JTI cache via Redis (PR 1 INFRA-REDIS-1 dependency satisfied 2026-05-26). Implementation: apps/accounts/authentication.py CachedJWTAuthentication subclass + logout path cache.delete + REST_FRAMEWORK swap. Acceptance: 인증된 요청 floor 600 → ~150 ms (10x JTI cache); 보안 영향 0; security-manager mandatory.',
       },
       {
         id: 'FRONT-LAYOUT-1',
@@ -151,12 +150,12 @@ window.PROJECT_STATE = {
       {
         id: 'BACK-RECOMMEND-2',
         title: 'engine.py matmul warning 정리',
-        note: 'sklearn emits matmul dtype warning during clustering. Cosmetic noise but indicates float32/float64 mismatch — quick fix is dtype-align embedding ndarrays before kmeans.',
+        note: 'sklearn emits matmul dtype warning during clustering. Cosmetic noise but indicates float32/float64 mismatch — quick fix is dtype-align embedding ndarrays before kmeans. Plan PR 2 (.claude/plans/merry-toasting-dove.md) — engine.py:1626 dtype=np.float64 explicit on np.array(weighted_likes).',
       },
       {
         id: 'PERF-PREFETCH-CHAIN',
         title: 'async_prefetch chain completion (Redis swap blocker)',
-        note: 'backend/config/settings.py:216 async_prefetch_enabled: False (intentional). Async branch in views/swipe.py spawns background thread that writes cache.set("prefetch:<session>:<round>", card) but next-swipe handler never reads that key — instant-swap chain broken, flag-flip yields zero latency benefit. Two-step fix: (1) add cache.get("prefetch:<session>:<saved_current_round>") to async branch so prior thread write feeds current response; (2) swap LocMemCache → Redis so multi-worker Railway prod actually shares cache across processes. Re-flip True only after both land. Hyperparam table in docs/algorithm.md tracks this flag — keep in sync.',
+        note: 'backend/config/settings.py:216 async_prefetch_enabled: False (intentional). Async branch in views/swipe.py spawns background thread that writes cache.set("prefetch:<session>:<round>", card) but next-swipe handler never reads that key — instant-swap chain broken, flag-flip yields zero latency benefit. Two-step fix: (1) add cache.get("prefetch:<session>:<saved_current_round+1>") to async branch so prior thread write feeds current response; (2) Redis backend now in place (INFRA-REDIS-1, PR #131) so multi-worker Railway prod actually shares cache. Re-flip True only after (1) lands. Plan PR 4 (.claude/plans/merry-toasting-dove.md) — depends on PR 1 INFRA-REDIS-1 merged.',
       },
     ],
     low: [
@@ -190,11 +189,18 @@ window.PROJECT_STATE = {
 
   prs: [
     {
-      number: 130,
-      title: 'fix: swipe convergence — 10-swipe target + multimodal escalation + stuck-state safety',
+      number: 131,
+      title: 'feat(INFRA-REDIS-1): Redis cache + LocMemCache fallback',
       mergedAt: null,
       mergedAtKST: null,
       sha: null,
+    },
+    {
+      number: 130,
+      title: 'fix: swipe convergence — 10-swipe target + multimodal escalation + stuck-state safety',
+      mergedAt: '2026-05-26T02:23:10Z',
+      mergedAtKST: '2026-05-26 11:23 KST',
+      sha: '83db42c',
     },
     {
       number: 129,
@@ -236,12 +242,6 @@ window.PROJECT_STATE = {
       title: 'feat(workflow): absorb reporter + git-manager into 3 skills (PR cycle halved)',
       mergedAt: '2026-05-25T16:55:24Z',
       mergedAtKST: '2026-05-26 01:55 KST',
-    },
-    {
-      number: 122,
-      title: 'chore(reporter): session-end housekeeping — PR #119 + #121',
-      mergedAt: '2026-05-25T15:32:52Z',
-      mergedAtKST: '2026-05-26 00:32 KST',
     },
   ],
 
@@ -308,6 +308,7 @@ window.PROJECT_STATE = {
   Engine["engine.py<br/>services/parse_query.py"]
   DefaultDB[("default DB · Neon<br/>User · Project · AnalysisSession · SwipeEvent")]
   BuildingsDB[("buildings DB · Neon<br/>canonical_v2_buildings (read-only raw SQL)")]
+  Redis[("Redis cache (prod) · LocMemCache (local)<br/>JTI cache · prefetch · response cache")]
   Gemini["Gemini API"]
   R2["Cloudflare R2 image CDN"]
   OAuth["Google · Kakao · Naver OAuth"]
@@ -315,7 +316,9 @@ window.PROJECT_STATE = {
   Browser --> Vercel --> ApiClients --> Django --> Apps --> Views
   Views --> Engine
   Views --> DefaultDB
+  Views --> Redis
   Engine --> BuildingsDB
+  Engine --> Redis
   Engine --> Gemini
   Views --> OAuth
   Browser -. images .-> R2`,
