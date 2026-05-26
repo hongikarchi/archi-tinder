@@ -24,16 +24,22 @@
  * so the value can be re-parsed by any consumer. In-flight (not-yet-merged)
  * PRs carry `mergedAt: null` sentinel; next reporter-inline pass backfills.
  */
-// Reporter: Mermaid sources may be stale — commit cdbf5c7 touched backend/apps/recommendation/services/parse_query.py (refines LLM probe to required-slate). recommendationFlow shows ParseSvc node — semantics now narrower (deterministic slate probe vs free axis). Next session may add slate annotation.
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-05-26 20:33 KST',
-    head: '92915b8',
-    branch: 'feature/back-llm1-required-slate',
+    updatedAt: '2026-05-26 22:03 KST',
+    head: '72bf8d3',
+    branch: 'feature/admin-dead-code-cleanup',
   },
 
   done: [
+    {
+      id: 'INFRA-CLEANUP-1',
+      title: 'Dead code 정리 (-1124 LOC)',
+      completedAt: '2026-05-26',
+      prs: [142],
+      note: 'Salvaged from codex feature/codex-cleanup-stale-develop (commit 986bd5e). Codex branch docs/skill changes rejected as PR #136 INFRA-DOC-6 regressions; only file deletions kept. Removed: frontend/src/pages/PostSwipeLandingPage.jsx (696 LOC, PROF3+PROF4 mockup with unwired backend TODOs), frontend/src/components/GalleryOverlay.jsx (181 LOC, initial-commit artifact; PR #120 BuildingDetailPage rolled its own inline gallery), backend/tools/optimization_results.json (247 LOC, Optuna search artifact, zero refs). Doc refs cleaned: CONTRIBUTING.md role B table drops PostSwipeLandingPage; BoardDetailPage.jsx:143 JSDoc drops PostSwipeLanding mirror. Session decisions batched in this audit: (1) FRONT-UX-1 obsolete (App.jsx:783 already redirects index → /discovery, no empty home needed); removed from ## Next ### HIGH. (2) FULL-LOGIN-REDESIGN-1 added to ## Next ### HIGH after codex guest-auth branches (guest-first onboarding direction) archived locally; 6 issues require re-design before re-implementation (upgrade path, PIPA consent, JWT distinction, cleanup job, clientId fix, LoginPage conflict). (3) FULL-REFACTOR-1 LOC list updated. npm run lint clean. Cross-cutting grep verified zero non-self refs for all 3 deleted files. sha beb1d74-pre-squash.',
+    },
     {
       id: 'BACK-LLM-1',
       title: 'LLM 채팅이 검색에 필요한 정보를 다 안 모음',
@@ -83,13 +89,6 @@ window.PROJECT_STATE = {
       prs: [134],
       note: 'PR 4 (FINAL) of 4 in plan merry-toasting-dove.md. Three changes restore IMP-8 chain: (1) _async_prefetch_thread off-by-one fix — pf_bid +2, pf2_bid +3 (4 sites: exploring pf/pf2 + analyzing pf/pf2 via compute_mmr_next round arg). Prior stored cards for next_card slot not prefetch slot. (2) Async-branch consumer in SwipeView.post: cache.get(prefetch:{sid}:{saved_current_round}) reads prior thread write; batched get_buildings_by_ids 1-RTT. Cache miss preserves None graceful fallback. (3) Dedupe guards (code-review fix-loop): pf_id=None if ==next_bid, pf2_id=None if ==next_bid or ==pf_id. Prevents analyzing-path collision (compute_mmr_next can return same card for T lookahead + T+1 main pick; frontend non-instant-swap path no dedupe). async_prefetch_enabled False→True. test_imp7 sync→async-thread. test_imp8 new TestAsyncBranchConsumerIntegration. docs/algorithm.md Hyperparameter Space async_prefetch_enabled False→True. security-manager PASS with availability warning (PERF-PREFETCH-POOL-RISK filed). sha dc296bc-pre-squash (squash 26626a4).',
     },
-    {
-      id: 'BACK-RECOMMEND-2',
-      title: 'sklearn KMeans matmul warning 압제 (PR 2/4 of perf sweep)',
-      completedAt: '2026-05-26',
-      prs: [132],
-      note: 'PR 2 of 4. Re-scoped from "dtype align" to np.errstate suppression after empirical falsification (input already float64). Real cause: sklearn KMeans centroid normalization on high-dim unit-norm vectors. Helper engine.py:90-99 _silenced_kmeans_fit. Two call sites swapped (1664 + 1701). sample_weight preserved. Byte-identical (random_state=42 + n_init=3 deterministic; topic06 9/9 PASS under -W error::RuntimeWarning). code-review + security-manager PASS. sha 785f4ad-pre-squash (squash b53e633).',
-    },
   ],
 
   now: [],
@@ -97,19 +96,14 @@ window.PROJECT_STATE = {
   next: {
     high: [
       {
-        id: 'BACK-LLM-1',
-        title: 'LLM 채팅이 검색에 필요한 정보를 다 안 모음',
-        note: 'parse_query.py already implements a 0-2 turn probe budget with free-choice abstract A-vs-B axes. This task drops persona classification (P1-P4) and re-scopes the work to (1) define an explicit "required info slate" the chat must collect (filter fields like program / style / material / location_country), and (2) refine LLM probe behaviour so it deterministically targets missing slate fields instead of free-choice axes. Open: which fields are required vs optional, probe priority order, optional-slate inclusion, fallback when 2-turn budget exhausts with slate gap, conversational shape (abstract A-vs-B vs direct field-asking), cross-language posture (Korea-first preserved). Acceptance: TTFC budget 4000ms not regressed; 2-turn probe always lands required-slate ≥1 field; A/B slate-completion-rate vs current prompt.',
-      },
-      {
         id: 'BACK-RECOMMEND-1',
         title: 'Project 두번째 세션이 이전 taste를 모름',
         note: 'Same Project can host multiple AnalysisSession rows; user "Resume" creates a fresh session while Project.liked_ids accumulates. Today session #2 algorithm state (like_vectors, convergence_history, phase) starts from scratch despite the user having liked 12 buildings in session #1. Open: carry policy (A independent / B exposure-only / C dislike-only / D fade-decay / E full warm-start / F user toggle); warm-start phase entry; SessionCreateView wiring at views/sessions.py:28. Acceptance: deterministic behaviour, session #2 TTFC not regressed, A/B on saved_ids growth + completion rate.',
       },
       {
-        id: 'FRONT-UX-1',
-        title: '신규 사용자에게 홈이 빈 화면',
-        note: 'First-time user with 0 projects lands on Home → project picker — currently shows nothing deliberate. Frontend-only (HomePage / ProjectListPage). Open: onboarding shape, copy + voice, visual illustration. Acceptance: 0-project user sees deliberate empty state; CTA path to first swipe ≤2 clicks; no regression on existing-projects rendering.',
+        id: 'FULL-LOGIN-REDESIGN-1',
+        title: 'Guest-first onboarding + login UX 재설계',
+        note: 'User decision 2026-05-26: codex guest-auth branches (guest-first + 터미널 UX + 3-step intro/name/role wizard + OAuth secondary) 방향 채택. 단 codex 구현은 6 issues로 폐기 (local archive). 6 issues to resolve: (1) upgrade path — guest → OAuth 시 swipe history merge 로직, (2) PIPA consent 라인 재추가 (LoginPage), (3) unbounded row 누적 — CAPTCHA + cleanup job, (4) JWT 구분 — is_guest claim + IsNotGuest permission, (5) clientId guest-only-google-disabled literal 제거, (6) LoginPage 충돌 surface 확인. Open: guest vs OAuth balance, onboarding step 수, role enum 매핑 P1-P4, terminal UI vs DESIGN.md §3 적합성. Acceptance: guest+upgrade round-trip preserves history+boards; PIPA 유지; JWT 구분; cleanup job 운영.',
       },
       {
         id: 'FULL-LANGUAGE-1',
@@ -120,11 +114,6 @@ window.PROJECT_STATE = {
         id: 'BACK-LLM-2',
         title: '채팅 기록이 다른 기기에서 사라짐',
         note: 'Decision 2026-05-25: persist chat conversation to backend DB, not just browser localStorage. Today LLMSearchPage.jsx stores conversationHistory in localStorage — single-browser, lost on logout / device switch. Backend currently has no conversation field. Plan: add Project.conversation_history JSONField (or ConversationTurn table — open) + migration + serializer + idempotent append endpoint. Acceptance: logout + re-login on any browser re-hydrates conversation; idempotent append survives network retry.',
-      },
-      {
-        id: 'BACK-LLM-3',
-        title: 'Gemini cache 호출에 timeout 없음',
-        note: '_caches.py:92 IMP-5 Gemini context-cache create call bypasses the _retry_gemini_call timeout wrapper (PR #94 15s cap). Gated by context_caching_enabled flag (default OFF) — zero prod impact until toggled on. Fix: wrap call in _retry_gemini_call; ~5 LOC backend edit.',
       },
       {
         id: 'FRONT-DESIGN-1',
@@ -205,11 +194,18 @@ window.PROJECT_STATE = {
 
   prs: [
     {
-      number: 141,
-      title: 'fix(BACK-LLM-1): enforce LLM required slate',
+      number: 142,
+      title: 'chore(INFRA-CLEANUP-1): prune dead pages + optuna artifact (-1124 LOC)',
       mergedAt: null,
       mergedAtKST: null,
       sha: null,
+    },
+    {
+      number: 141,
+      title: 'fix(BACK-LLM-1): enforce LLM required slate',
+      mergedAt: '2026-05-26T11:38:00Z',
+      mergedAtKST: '2026-05-26 20:38 KST',
+      sha: '72bf8d3',
     },
     {
       number: 140,
@@ -252,13 +248,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-05-26T08:11:28Z',
       mergedAtKST: '2026-05-26 17:11 KST',
       sha: 'd53b232',
-    },
-    {
-      number: 134,
-      title: 'feat(PERF-PREFETCH-CHAIN): wire async prefetch chain end-to-end',
-      mergedAt: '2026-05-26T07:38:03Z',
-      mergedAtKST: '2026-05-26 16:38 KST',
-      sha: '26626a4',
     },
   ],
 

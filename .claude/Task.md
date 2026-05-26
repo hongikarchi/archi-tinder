@@ -78,15 +78,39 @@ Open dimensions:
 
 Acceptance: behavior matches chosen option deterministically; session 2 TTFC not regressed beyond session 1 (warm-start should be ≤ or equal); A/B telemetry on session 2 satisfaction (saved_ids growth rate, completion rate) vs status quo.
 
-#### FRONT-UX-1 — 신규 사용자에게 홈이 빈 화면
-First-time user with 0 projects sees Home → project picker. Need explicit empty-state path so new sign-ups don't bounce off a blank Home. Frontend-only (HomePage / ProjectListPage).
+#### FULL-LOGIN-REDESIGN-1 — Guest-first onboarding + login UX 재설계
+**User decision 2026-05-26**: codex의 `feature/codex-guest-auth-*` 두 branch가 제안한 방향 (guest-first + 터미널 UX + 3-step intro/name/role wizard + OAuth secondary) 채택. 단, codex 구현은 6개 issue로 인해 폐기 (local archive). 재설계 후 새 구현.
 
-Open dimensions:
-- **Onboarding shape** — guided flow (single CTA "Start your first taste analysis" → jump straight to AI Search) / empty-state placeholder + create button / demo query (pre-baked example, zero-friction swipe immediately) / hybrid (placeholder + demo CTA together).
-- **Copy + voice** — direct ("아직 프로젝트가 없어요") vs product-voice ("취향 첫 발견을 시작해볼까요?").
-- **Visual** — illustration / icon-only / none?
+Codex가 제안한 구조:
+- Terminal-style typing UI ("boot architinder://profile")
+- 3-step intro → name → role onboarding (`displayName` + `role` 입력)
+- `POST /api/v1/auth/guest/` endpoint (`auth/guest/` URL)
+- `UserProfile.is_guest` column (migration `accounts.0004_userprofile_guest_onboarding`)
+- `GuestLoginThrottle` 10/min
+- `frontend/src/utils/loginFlow.js` + `loginFlow.test.mjs`
 
-Acceptance: 0-project user sees a deliberate empty state on Home (no broken-looking blank); CTA path to first swipe ≤2 clicks; no regression on existing-projects rendering.
+6 issues to resolve before re-implementation:
+- [ ] **Upgrade path** — guest → OAuth promotion 시 swipe history + saved boards를 새 계정에 merge. `email=''`로 `_get_or_create_user` 매칭 실패. `Guest → User` row migration 로직 필요 (e.g., `POST /api/v1/auth/promote/` endpoint).
+- [ ] **PIPA consent** — codex가 `LoginPage.jsx`에서 "By continuing, you agree..." 라인 삭제. PIPA/GDPR (`FULL-LEGAL-1`) 미해결 상태에서 regression. 재구현 시 consent 라인 필수.
+- [ ] **Unbounded guest row 누적** — 10/min throttle 외에 CAPTCHA / cleanup job 필요. 옵션: (a) Cloudflare Turnstile, (b) periodic Celery job to delete guests with `last_active < 30 days ago AND 0 swipes`, (c) hard cap per IP.
+- [ ] **JWT 구분** — guest token = 일반 user 동일 TTL + localStorage key. `IsNotGuest` DRF permission class 만들어 sensitive endpoints (e.g., `/social/dm/`, `/profile/update/`) 차단. `is_guest` claim을 JWT payload에 추가.
+- [ ] **`clientId='guest-only-google-disabled'`** literal 제거. Google OAuth disabled 환경에서는 `<GoogleOAuthProvider>` 자체를 mount 안 하거나 `null` 처리.
+- [ ] **LoginPage 충돌** — PR #138 (FULL-SESSION-DEDUPE-1) 이후 LoginPage가 변경되었을 수 있음. 충돌 surface 확인 + clean rebase.
+
+Open dimensions (design 결정 선행):
+- **Guest vs OAuth balance** — guest를 default surface (Google이 secondary)? 아니면 동등 비중? Persona priority 고려.
+- **Onboarding step 수** — 3-step (intro/name/role) 유지? 또는 더 짧게 (name만)?
+- **`role` enum** — codex의 `ONBOARDING_ROLES` 값들이 무엇? Persona P1-P4와 매핑?
+- **Terminal UI** — 시각적 직관성 측면에서 적합한지 (DESIGN.md §3 visual identity 검토).
+
+Acceptance:
+- New `UserProfile.is_guest` + JWT `is_guest` claim + `IsNotGuest` permission.
+- Guest login + upgrade-to-OAuth round-trip preserves swipe history + boards.
+- PIPA consent 라인 LoginPage 유지.
+- Guest cleanup job 운영.
+- LoginPage build + lint + manual test PASS.
+
+Codex code (local archive): branches `feature/codex-guest-auth-backend` (3 commits up to `3049b40`) + `feature/codex-guest-auth-frontend` (1 commit `f488ccd`) — remote 삭제 완료, local 보관. 재구현 시 참고용. `docs/guest-auth-rollout.md` (in branch) 운영 runbook 참고.
 
 #### FULL-LANGUAGE-1 — 한/영 언어 설정 토글 없음
 **Decision (user 2026-05-25)**: language is a user-controlled setting, NOT browser-locale auto-detected. Pattern mirrors the existing theme/font persistence shipped in PR #54 + PR #59. User toggles language in Settings (Korean / English); the choice drives both LLM chat answer language and UI label rendering across the app.
@@ -189,7 +213,7 @@ Backend Kakao + Naver implementation shipped: `apps/accounts/views.py` KakaoLogi
 - [ ] Naver button on `LoginPage.jsx` (loading state not yet typed `'naver'`)
 
 #### FULL-REFACTOR-1 — 큰 파일 분해 필요 (engine.py 2139 LOC 등)
-File decomp (LOC verified 2026-05-25): engine.py 2139 (+60 since first flagged), App.jsx 817, BoardDetailPage 1045, UserProfilePage 992, PostSwipeLandingPage 696, SwipePage 666, FirmProfilePage 540 (recently refactored down from 611).
+File decomp (LOC verified 2026-05-25): engine.py 2139 (+60 since first flagged), App.jsx 817, BoardDetailPage 1045, UserProfilePage 992, SwipePage 666, FirmProfilePage 540 (recently refactored down from 611). PostSwipeLandingPage 696 removed in INFRA-CLEANUP-1 (PR #142, 2026-05-26).
 
 #### BACK-RECOMMEND-3 — Profile-tab 사무소/유저 추천 endpoint 없음
 Re-scoped 2026-05-14 (REC1 already shipped as Push S3). REC2 (firm) + REC3 (user) target a single composite endpoint `GET /api/v1/recommendations/profile/` returning `{offices: [...], users: [...]}` for a Profile-tab button. Landing tab removed (Push S6).
@@ -224,6 +248,19 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 ---
 
 ## Done
+
+### INFRA-CLEANUP-1 — Dead code 정리 (-1124 LOC) — RESOLVED 2026-05-26 (PR #142 `beb1d74-pre-squash`)
+- [x] **Files removed (-1124 LOC)**:
+  - `frontend/src/pages/PostSwipeLandingPage.jsx` (696 LOC) — PROF3+PROF4 mockup with unwired backend TODOs.
+  - `frontend/src/components/GalleryOverlay.jsx` (181 LOC) — initial-commit artifact; PR #120 BuildingDetailPage rolled its own inline gallery.
+  - `backend/tools/optimization_results.json` (247 LOC) — Optuna search artifact. Zero refs.
+- [x] **Doc references**: CONTRIBUTING.md role B table drops PostSwipeLandingPage; BoardDetailPage.jsx:143 JSDoc drops PostSwipeLanding mirror reference.
+- [x] **Session decisions batched in this audit**:
+  - **FRONT-UX-1 obsolete** — App.jsx:783 already `<Route index element={<Navigate to="/discovery">>` ; first-login lands on /discovery directly. Removed from ## Next ### HIGH.
+  - **FULL-LOGIN-REDESIGN-1** added to ## Next ### HIGH — codex guest-auth direction (guest-first + 3-step onboarding) accepted; codex code archived (local only) due to 6 issues; re-design pending.
+  - **FULL-REFACTOR-1** LOC list updated.
+- Verification: npm run lint clean · cross-cutting grep verified zero non-self refs for all 3 deleted files · git history confirms abandoned status.
+- Origin: salvaged from codex-authored `feature/codex-cleanup-stale-develop` (commit `986bd5e`). Codex branch's docs/skill changes rejected (regressions of PR #136 INFRA-DOC-6); only file deletions kept.
 
 ### BACK-LLM-1 — LLM 채팅이 검색에 필요한 정보를 다 안 모음 — RESOLVED 2026-05-26 (PR #141 `cdbf5c7-pre-squash`)
 - [x] **`parse_query.py`**: `REQUIRED_SLATE_FIELDS = (program, material, style, location_country)` + `REQUIRED_SLATE_PROBE_PRIORITY` module-level constants. System prompt + few-shot examples rewritten to deterministically target missing slate fields (drop prior free A-vs-B axis selection).
