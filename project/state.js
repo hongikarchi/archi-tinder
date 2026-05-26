@@ -24,15 +24,23 @@
  * so the value can be re-parsed by any consumer. In-flight (not-yet-merged)
  * PRs carry `mergedAt: null` sentinel; next reporter-inline pass backfills.
  */
+// Reporter: Mermaid sources may be stale — commit d87a5f9 touched backend/apps/recommendation/views/{sessions,swipe,reports}.py (cache eviction additions, dedupe scope, deferred Project create + transaction.atomic). recommendationFlow Views node semantics broaden (cache eviction wiring). Next session may add eviction annotation.
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-05-26 22:03 KST',
-    head: '72bf8d3',
-    branch: 'feature/admin-dead-code-cleanup',
+    updatedAt: '2026-05-26 22:46 KST',
+    head: '9872ab0',
+    branch: 'feature/admin-session-create-correctness-3fixes',
   },
 
   done: [
+    {
+      id: 'BACK-CORRECTNESS-1',
+      title: '/projects/ cache evict + dedupe project_id + orphan project',
+      completedAt: '2026-05-26',
+      prs: [143],
+      note: '3 backend correctness fixes from 3rd Codex retest 2026-05-26 of develop=17f7d65. Fix 1 cache evict: evict_projects_list(profile.id) added at 5 sites — sessions.py dedupe-hit return path + sessions.py post-create + swipe.py post-liked/disliked save + reports.py post-final_report + reports.py post-report_image. ProjectListSerializer exposes liked_ids/saved_ids/final_report/report_image so all 5 sites needed eviction. Fix 2 dedupe scope: PR #138 dedupe extended — early project_id resolve before dedupe lookup; if project_id provided + matches user-owned Project, dedupe SKIPPED (App.jsx:723 fresh-swipe flow honored); project_id missing or no match → existing (user, name, raw_query, filters) scope runs. Fix 3 orphan Project: Project.objects.create() deferred to inside session_insert stage AND wrapped in transaction.atomic() with AnalysisSession.objects.create() (fix-loop catch — closes session_insert-step orphan too). tests/test_session_create_correctness.py NEW 9 tests. Full suite 553 passed (zero regression). code-review PASS after 1 fix-loop (reports.py + transaction.atomic). security-manager PASS (IDOR-safe — user= clause on early project_id resolve; cache eviction scoped to profile.id). P2-4 pytest bootstrap finding merged into existing INFRA-DB-2 backlog. sha d87a5f9-pre-squash.',
+    },
     {
       id: 'INFRA-CLEANUP-1',
       title: 'Dead code 정리 (-1124 LOC)',
@@ -81,13 +89,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-05-26',
       prs: [135],
       note: 'develop → main squash-merged. main = d53b232. Railway prod auto-deploy SUCCESS (deployment 047a6e2f RUNNING). Carried 15 PRs since main 1888b5f (PR #112 prior release): #116-#134 inclusive. Bug #5 carve-out applied (HARD RULE 4 SOLE permitted force) — origin/develop force-reset to origin/main via gh api PATCH refs/heads/develop --force=true. Precondition checked (no in-flight feature PR targeting develop). Tree-equivalence verified empty diff origin/main origin/develop. Railway Redis service (redis:8.2.1) provisioned admin via dashboard + REDIS_URL=${{Redis.REDIS_URL}} env set on backend service before merge. Post-deploy: gunicorn 4 workers booted clean, no django_redis import errors. Prod smoke (CLI): / 404 no-route, /auth/dev-login/ 404 (DEBUG=False gates per design), /api/v1/projects/ unauthenticated 401, /auth/token/refresh/ empty 400. No 5xx. Direct cache-hit latency NOT measurable from CLI (DEBUG=False blocks dev-login + Google OAuth needs browser) — admin runs Codex retest separately. Outstanding: PERF-PREFETCH-POOL-RISK monitoring (Neon free-tier 25 conn limit; async prefetch daemon thread + main worker = 2 conns/swipe at peak).',
-    },
-    {
-      id: 'PERF-PREFETCH-CHAIN',
-      title: 'async_prefetch chain end-to-end (PR 4/4 FINAL of perf sweep)',
-      completedAt: '2026-05-26',
-      prs: [134],
-      note: 'PR 4 (FINAL) of 4 in plan merry-toasting-dove.md. Three changes restore IMP-8 chain: (1) _async_prefetch_thread off-by-one fix — pf_bid +2, pf2_bid +3 (4 sites: exploring pf/pf2 + analyzing pf/pf2 via compute_mmr_next round arg). Prior stored cards for next_card slot not prefetch slot. (2) Async-branch consumer in SwipeView.post: cache.get(prefetch:{sid}:{saved_current_round}) reads prior thread write; batched get_buildings_by_ids 1-RTT. Cache miss preserves None graceful fallback. (3) Dedupe guards (code-review fix-loop): pf_id=None if ==next_bid, pf2_id=None if ==next_bid or ==pf_id. Prevents analyzing-path collision (compute_mmr_next can return same card for T lookahead + T+1 main pick; frontend non-instant-swap path no dedupe). async_prefetch_enabled False→True. test_imp7 sync→async-thread. test_imp8 new TestAsyncBranchConsumerIntegration. docs/algorithm.md Hyperparameter Space async_prefetch_enabled False→True. security-manager PASS with availability warning (PERF-PREFETCH-POOL-RISK filed). sha dc296bc-pre-squash (squash 26626a4).',
     },
   ],
 
@@ -194,11 +195,18 @@ window.PROJECT_STATE = {
 
   prs: [
     {
-      number: 142,
-      title: 'chore(INFRA-CLEANUP-1): prune dead pages + optuna artifact (-1124 LOC)',
+      number: 143,
+      title: 'fix(BACK-CORRECTNESS-1): /projects/ cache evict + dedupe project_id + orphan project',
       mergedAt: null,
       mergedAtKST: null,
       sha: null,
+    },
+    {
+      number: 142,
+      title: 'chore(INFRA-CLEANUP-1): prune dead pages + optuna artifact (-1124 LOC)',
+      mergedAt: '2026-05-26T12:50:00Z',
+      mergedAtKST: '2026-05-26 21:50 KST',
+      sha: '9872ab0',
     },
     {
       number: 141,
@@ -241,13 +249,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-05-26T08:34:41Z',
       mergedAtKST: '2026-05-26 17:34 KST',
       sha: '54d4d1e',
-    },
-    {
-      number: 135,
-      title: 'Release: 2026-05-26 — perf sweep + Redis + swipe fixes (PRs #116-#134)',
-      mergedAt: '2026-05-26T08:11:28Z',
-      mergedAtKST: '2026-05-26 17:11 KST',
-      sha: 'd53b232',
     },
   ],
 

@@ -541,6 +541,8 @@ class SwipeView(APIView):
             project.save(update_fields=['liked_ids', 'disliked_ids'])
             evict_taste(profile.id)
             evict_discovery_feed(profile.id)
+            # Fix 1: evict /projects/ cache — liked_ids/disliked_ids counts changed.
+            evict_projects_list(profile.id)
 
             # 4. Increment round
             session.current_round += 1
