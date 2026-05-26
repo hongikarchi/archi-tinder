@@ -134,12 +134,6 @@ _SESSION_PATCHES = {
     f'{_ENGINE}.get_dislike_fallback': lambda *a, **kw: 'B00010',
     f'{_ENGINE}._random_pool': lambda target: _FAKE_POOL[:target],
     f'{_SESSIONS_VIEW}.threading.Thread': _SyncThread,
-    # PERF-3 hotfix: when _SyncThread runs _async_emit synchronously in the test
-    # main thread, the production close_old_connections() call would close the
-    # main thread's own DB connection. Patch it to no-op so subsequent test
-    # assertions (Project.objects.filter().exists(), etc.) keep their connection.
-    # Production daemon thread path is unaffected (this patch only applies in tests).
-    f'{_SESSIONS_VIEW}.close_old_connections': lambda: None,
     f'{_SWIPE_VIEW}.threading.Thread': _SyncThread,
     f'{_SWIPE_VIEW}._emit_telemetry_thread': _sync_emit_telemetry,
 }

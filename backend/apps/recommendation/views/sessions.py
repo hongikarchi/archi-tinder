@@ -3,7 +3,7 @@ import threading
 from collections import defaultdict
 
 from django.conf import settings
-from django.db import close_old_connections, transaction
+from django.db import transaction
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -219,9 +219,13 @@ class SessionCreateView(APIView):
             _session_id_for_log = session.session_id  # safe copy for thread log
 
             def _async_emit():
-                # New thread gets its own DB connection; close stale ones at
-                # entry and exit to prevent connection leaks under gunicorn.
-                close_old_connections()
+                # Daemon thread; process-scoped lifetime. We intentionally do
+                # NOT call close_old_connections() here — under _SyncThread
+                # test patch the call would close the main test thread's own
+                # connection mid-test. Production daemon thread connections
+                # are reaped at process exit; CONN_MAX_AGE (10 min) handles
+                # the steady-state pool. The small leak window is acceptable
+                # for fire-and-forget analytics.
                 try:
                     event_log.emit_event_batch(_emit_payload)
                 except Exception as _exc:
@@ -229,8 +233,6 @@ class SessionCreateView(APIView):
                         'Async emit_events failed for session %s: %s',
                         _session_id_for_log, _exc,
                     )
-                finally:
-                    close_old_connections()
 
             with stage('emit_events_dispatch'):
                 threading.Thread(target=_async_emit, daemon=True).start()
