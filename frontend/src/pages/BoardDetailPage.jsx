@@ -505,6 +505,7 @@ export default function BoardDetailPage() {
           <img
             src={coverImage}
             alt={board?.name || 'Board cover'}
+            fetchpriority="high"
             style={{
               position: 'absolute',
               inset: 0,
