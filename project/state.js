@@ -6,7 +6,7 @@
  * fallback. Hand-edited only inside `systemFlow` / `recommendationFlow` /
  * `agentFlow` Mermaid bodies and the `milestones` archive (semi-static); all
  * other sections are rebuilt from `.claude/Task.md`, `gh pr list`, and
- * `.claude/agents/*.md` + `.claude/skills/*/SKILL.md` frontmatter.
+ * `.claude/agents/*.md` + `.claude/skills/<slug>/SKILL.md` frontmatter.
  *
  * Loaded via <script> by `project/dashboard.html`, which opens by double-click
  * via file:// — no fetch, no server, no build step.
