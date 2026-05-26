@@ -49,6 +49,12 @@ logger = logging.getLogger('apps.recommendation')
 
 RC = settings.RECOMMENDATION  # shorthand for constants
 
+# F3: required-slate fields are user-explicit intent — must be hard WHERE constraints,
+# not soft CASE WHEN scoring. Mirrors parse_query.REQUIRED_SLATE_FIELDS (no import to
+# avoid circular-import risk between services and engine).
+# Cross-ref: services/parse_query.REQUIRED_SLATE_FIELDS — keep in sync; divergence breaks hard-WHERE silently.
+_REQUIRED_SLATE_FIELDS_SET = frozenset(('program', 'material', 'style', 'location_country'))
+
 _building_embedding_cache = {}             # canonical_bld_id (str) -> np.ndarray (384-dim, L2-normalized)
 _BUILDING_CACHE_MAX_SIZE = RC.get('pool_embedding_cache_max_size', 5000)  # ~5MB max; configurable via RECOMMENDATION setting
 _centroid_cache = {}
@@ -347,6 +353,37 @@ def _build_filter_sql(filters):
         params.append(filters['year_max'])
     where = 'WHERE ' + ' AND '.join(clauses)
     return where, params
+
+
+def _build_required_slate_where(filters):
+    """Build hard WHERE clauses for required-slate filter fields present in `filters`.
+
+    F3 fix: fields in _REQUIRED_SLATE_FIELDS_SET that the user explicitly requested
+    are hard constraints — buildings that don't match must be excluded, not just
+    scored lower. Returns (clauses_list, params_list). Empty if no slate fields match.
+
+    Uses same SQL fragments as _build_filter_sql for consistency (ILIKE, EXISTS/unnest).
+    Does NOT include `is_publishable = true` (caller already has it).
+    """
+    clauses = []
+    params = []
+    if not filters:
+        return clauses, params
+    if filters.get('program') and 'program' in _REQUIRED_SLATE_FIELDS_SET:
+        clauses.append('program = %s')
+        params.append(filters['program'])
+    if filters.get('location_country') and 'location_country' in _REQUIRED_SLATE_FIELDS_SET:
+        clauses.append('location_country ILIKE %s')
+        params.append(f"%{filters['location_country']}%")
+    if filters.get('material') and 'material' in _REQUIRED_SLATE_FIELDS_SET:
+        clauses.append(
+            'EXISTS (SELECT 1 FROM unnest(material_visual) m WHERE m ILIKE %s)'
+        )
+        params.append(f"%{filters['material']}%")
+    if filters.get('style') and 'style' in _REQUIRED_SLATE_FIELDS_SET:
+        clauses.append('style ILIKE %s')
+        params.append(f"%{filters['style']}%")
+    return clauses, params
 
 
 def _vec_to_pg(vec):
@@ -1327,6 +1364,12 @@ def create_bounded_pool(filters, filter_priority=None, seed_ids=None, target=Non
                 use_hyde = False  # noqa: F841 — signals fall-through intent
         return _random_pool(target), {}
 
+    # F3: build hard WHERE clauses for required-slate fields (user-explicit intent).
+    # Applied to both Mode V and Mode F paths. Mode H (RRF) excluded — different
+    # ranking semantics; RRF already effectively surfaces matching records first.
+    _slate_clauses, _slate_params = _build_required_slate_where(filters)
+    _slate_where_sql = (' AND ' + ' AND '.join(_slate_clauses)) if _slate_clauses else ''
+
     _hyde_failed = False
     if use_hyde:
         # Filter + HyDE blend: score = (filter_sum + hyde_weight * cosine_sim) / (total_weight + hyde_weight)
@@ -1338,21 +1381,26 @@ def create_bounded_pool(filters, filter_priority=None, seed_ids=None, target=Non
             '((' + filter_sum_sql + ' + %s::float * (1 - (embedding <=> %s::vector)))'
             ' / ' + str(denom) + ')'
         )
-        # WHERE: any filter match OR positive cosine similarity
+        # WHERE: required-slate hard constraints AND (any filter match OR positive cosine similarity)
         where_sql = '((' + filter_sum_sql + ') > 0 OR (1 - (embedding <=> %s::vector)) > 0)'
         sql = (
             'SELECT canonical_bld_id, (' + score_sql + ') AS relevance_score'
-            ' FROM canonical_v2_buildings WHERE is_publishable = true AND ('
+            ' FROM canonical_v2_buildings WHERE is_publishable = true'
+            + _slate_where_sql
+            + ' AND ('
             + where_sql
             + ')'
             ' ORDER BY relevance_score DESC, RANDOM()'
             ' LIMIT %s'
         )
-        # params order: cases (score_sql filter args), hyde_weight, vec_str (cosine),
-        #               cases (where_sql filter args), vec_str (where cosine), target
+        # params order matches SQL placeholder order:
+        #   score_sql consumes: cases (params), hyde_weight, vec_str
+        #   _slate_where_sql consumes: _slate_params
+        #   where_sql consumes: cases (params again), vec_str
+        #   LIMIT consumes: target
         try:
             with connection.cursor() as cur:
-                cur.execute(sql, params + [hyde_weight, vec_str] + params + [vec_str, target])
+                cur.execute(sql, params + [hyde_weight, vec_str] + _slate_params + params + [vec_str, target])
                 rows = cur.fetchall()
         except Exception as exc:
             logger.warning('create_bounded_pool: HyDE query failed, falling back (%s)', exc)
@@ -1370,13 +1418,15 @@ def create_bounded_pool(filters, filter_priority=None, seed_ids=None, target=Non
         sql = (
             'SELECT canonical_bld_id, (' + score_sql + ') AS relevance_score'
             ' FROM canonical_v2_buildings'
-            ' WHERE is_publishable = true AND (' + score_sql + ') > 0'
+            ' WHERE is_publishable = true'
+            + _slate_where_sql
+            + ' AND (' + score_sql + ') > 0'
             ' ORDER BY relevance_score DESC, RANDOM()'
             ' LIMIT %s'
         )
         with stage('execute_pool_sql', target=target):
             with connection.cursor() as cur:
-                cur.execute(sql, params + params + [target])
+                cur.execute(sql, params + _slate_params + params + [target])
                 rows = cur.fetchall()
 
     with stage('process_scores', n_rows=len(rows)):
