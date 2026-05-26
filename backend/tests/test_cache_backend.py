@@ -19,7 +19,8 @@ Tests:
 # so we can import the helper from the already-loaded module.
 # ---------------------------------------------------------------------------
 
-from config.settings import _build_caches_dict
+import pytest
+from config.settings import _build_caches_dict, _check_async_prefetch_safety
 
 
 # ---------------------------------------------------------------------------
@@ -132,3 +133,50 @@ class TestMutualExclusion:
         d2 = _build_caches_dict('')
         d1['default']['OPTIONS']['MAX_ENTRIES'] = 1
         assert d2['default']['OPTIONS']['MAX_ENTRIES'] == 2000
+
+
+# ---------------------------------------------------------------------------
+# TestAsyncPrefetchSafetyGuard
+# ---------------------------------------------------------------------------
+
+class TestAsyncPrefetchSafetyGuard:
+    """INFRA-REDIS-1 follow-up: _check_async_prefetch_safety startup guard.
+
+    Prod (DEBUG=False) + async_prefetch_enabled=True + no REDIS_URL must
+    raise ImproperlyConfigured so ops sees the misconfiguration immediately
+    rather than silently running per-process LocMemCache with broken prefetch.
+    """
+
+    def test_redis_required_in_prod_when_async_prefetch_enabled(self):
+        """Prod + async prefetch ON + no REDIS_URL -> ImproperlyConfigured."""
+        from django.core.exceptions import ImproperlyConfigured
+        with pytest.raises(ImproperlyConfigured):
+            _check_async_prefetch_safety(
+                debug=False,
+                async_prefetch_enabled=True,
+                redis_url='',
+            )
+
+    def test_no_error_when_redis_url_set_in_prod(self):
+        """Prod + async prefetch ON + REDIS_URL set -> no error."""
+        _check_async_prefetch_safety(
+            debug=False,
+            async_prefetch_enabled=True,
+            redis_url='redis://redis.railway.internal:6379',
+        )
+
+    def test_no_error_in_debug_mode_without_redis(self):
+        """Debug=True (local dev) + no REDIS_URL -> no error (LocMemCache OK for dev)."""
+        _check_async_prefetch_safety(
+            debug=True,
+            async_prefetch_enabled=True,
+            redis_url='',
+        )
+
+    def test_no_error_when_async_prefetch_disabled_in_prod(self):
+        """Prod + async prefetch OFF + no REDIS_URL -> no error (flag guards the path)."""
+        _check_async_prefetch_safety(
+            debug=False,
+            async_prefetch_enabled=False,
+            redis_url='',
+        )

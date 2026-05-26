@@ -75,9 +75,11 @@ def _async_prefetch_thread(
     like_vectors_snap, initial_batch_snap, current_round_snap,
 ):
     """IMP-8 (Spec v1.6 §11.1): background thread to compute prefetch cards
-    after primary swipe response returns. Result cached for telemetry / future
-    Half-B optimization (currently primary path does NOT consume the cache --
-    see design notes in commit body).
+    after primary swipe response returns. Result cached for the NEXT swipe's
+    primary path. The consumer at the top of swipe handling
+    (cache.get('prefetch:{sid}:{round}')) reads what this thread wrote on the
+    prior swipe, then hydrates next_card + prefetch_card_2 from the cached IDs
+    (PR #134 PERF-PREFETCH-CHAIN).
 
     Snapshots are passed as args (NOT the session object) because the session
     may have been further mutated by the time the bg thread runs; prefetch
@@ -720,8 +722,10 @@ class SwipeView(APIView):
         # Paths:
         #   next_bid is None  → converged/exhausted; next_card stays None
         #     (S3: no end-of-stream card — frontend renders end-screen on is_analysis_completed).
-        #   async_prefetch_enabled=True  → fetch next_card alone (1 RTT),
-        #     delegate prefetch to background thread (IMP-8 unchanged).
+        #   async_prefetch_enabled=True  → reads prefetch:{sid}:{round} cache populated
+        #     by the previous swipe's background thread (PERF-PREFETCH-CHAIN), hydrates
+        #     next_card + prefetch_card_2 from cached IDs, and spawns this swipe's
+        #     background thread to populate the cache for the next swipe.
         #   sync (default)  → compute pf_bid + pf2_bid (CPU-only), then
         #     fetch all three IDs in a single get_buildings_by_ids call (1 RTT).
         prefetch_strategy = 'sync'

@@ -1,9 +1,10 @@
 [build]
-# `migrate --noinput` runs on every deploy. Migrations are idempotent
-# (no-op when already applied) so this is safe and hardens deploys against
-# future schema additions (e.g. PROF2 / BOARD1 / Phase 14+) without
-# requiring manual `manage.py migrate` runs from a Railway shell.
-buildCommand = "pip install -r requirements.txt && python manage.py migrate --noinput && python manage.py collectstatic --noinput"
+# INFRA-DB-1 (2026-05-25): Railway runtime logs in as `make_web_app` (no DDL).
+# `manage.py migrate` must be run manually from an operator machine with
+# DB_USER=neondb_owner temporarily swapped in. Running migrate here would fail
+# on any schema-changing migration. See backend/.env.example role separation
+# section for the operator-side runbook.
+buildCommand = "pip install -r requirements.txt && python manage.py collectstatic --noinput"
 
 [deploy]
 # --workers 3: a single sync worker serializes every request, so one slow
