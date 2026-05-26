@@ -166,17 +166,22 @@ export default function App() {
     return () => clearTimeout(timer)
   }, [swipeError])
 
-  // Auto-navigate only when the backend declares a real terminal state. Four likes
-  // means clustering can start, not that taste has converged.
+  // Auto-navigate when the backend declares a terminal state OR the user has
+  // swiped meaningfully past the target window. The post-target floor mirrors
+  // SwipePage's beyondTargetFloor so users on dislike-heavy paths don't get
+  // stranded (backend convergence can be withheld by the recent-likes gate).
   useEffect(() => {
     if (location.pathname !== '/swipe') return
     const phase = sessionProgress?.phase
-    const backendDone = isSessionCompleted || phase === 'converged'
+    const swipeCount = sessionProgress?.swipe_count ?? sessionProgress?.current_round ?? 0
+    const targetSwipes = Math.max(1, sessionProgress?.target_swipes ?? 10)
+    const beyondTargetFloor = swipeCount >= targetSwipes + 5
+    const backendDone = isSessionCompleted || phase === 'converged' || beyondTargetFloor
     if (!backendDone) return
     const sessionId = projects.find(p => p.id === activeProjectId)?.sessionId
     if (!sessionId) return
     navigate('/result/' + sessionId)
-  }, [isSessionCompleted, sessionProgress?.phase]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isSessionCompleted, sessionProgress?.phase, sessionProgress?.swipe_count, sessionProgress?.current_round]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Persist current card id to localStorage per active project so refresh can
   // restore the exact card the user was looking at (not just the backend's last

@@ -497,14 +497,32 @@ def _with_image_focus(card, image_focus):
     focused['image_kind'] = image_focus
     gallery = list(card.get('gallery') or [])
     gallery_meta = list(card.get('gallery_meta') or [])
+
+    original_drawing_start = card.get('gallery_drawing_start')
+    try:
+        removed_index = gallery.index(focus_url)
+    except ValueError:
+        removed_index = None
+
     filtered = [
         (url, meta) for url, meta in zip(gallery, gallery_meta)
         if url != focus_url
     ]
     focused['gallery'] = [url for url, _ in filtered]
     focused['gallery_meta'] = [meta for _, meta in filtered]
+
+    # Shift drawing_start down when focus_url was strictly before the drawing
+    # section (its removal pulls the drawing section forward by 1). Otherwise
+    # leave drawing_start untouched. Clamp guards against malformed input.
+    new_drawing_start = original_drawing_start
+    if (new_drawing_start is not None
+            and removed_index is not None
+            and removed_index < new_drawing_start):
+        new_drawing_start -= 1
+
+    fallback = len(focused['gallery'])
     focused['gallery_drawing_start'] = min(
-        focused.get('gallery_drawing_start') or len(focused['gallery']),
+        new_drawing_start if new_drawing_start is not None else fallback,
         len(focused['gallery']),
     )
     return focused

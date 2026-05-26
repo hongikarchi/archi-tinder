@@ -693,8 +693,8 @@ class TestBackwardCompat:
         cache.clear()
 
     def test_async_prefetch_is_default(self):
-        """async_prefetch_enabled defaults to True for the sub-1s swipe target."""
-        assert settings.RECOMMENDATION.get('async_prefetch_enabled') is True
+        """async_prefetch_enabled defaults to False until the cache-read chain + Redis swap land (PERF-PREFETCH-CHAIN)."""
+        assert settings.RECOMMENDATION.get('async_prefetch_enabled') is False
 
     def test_swipe_200_flag_off(self, auth_client, user_profile, settings):
         """Standard swipe still succeeds when the legacy sync path is explicitly enabled."""
@@ -770,8 +770,8 @@ class TestBackwardCompat:
 class TestSettingsFlagsImp8:
     """New IMP-8 settings keys exist with correct defaults."""
 
-    def test_async_prefetch_enabled_default_true(self):
-        assert settings.RECOMMENDATION.get('async_prefetch_enabled') is True
+    def test_async_prefetch_enabled_default_false(self):
+        assert settings.RECOMMENDATION.get('async_prefetch_enabled') is False
 
     def test_async_prefetch_cache_timeout_seconds_default(self):
         assert settings.RECOMMENDATION.get('async_prefetch_cache_timeout_seconds') == 60

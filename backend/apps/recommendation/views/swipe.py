@@ -595,7 +595,7 @@ class SwipeView(APIView):
             _recent_convergence_actions = _recent_actions_window[-_convergence_window:]
             if session.phase == 'analyzing' and engine.check_convergence(
                 session.convergence_history,
-                RC.get('convergence_threshold', 0.08),
+                RC.get('convergence_threshold', 0.13),
                 _convergence_window,
                 _recent_convergence_actions,
                 RC.get('convergence_min_recent_likes', 0),
@@ -859,7 +859,7 @@ class SwipeView(APIView):
         # Compute user-facing confidence (Python-only, fast — must stay on hot path)
         confidence = engine.compute_confidence(
             session.convergence_history,
-            RC.get('convergence_threshold', 0.08),
+            RC.get('convergence_threshold', 0.13),
             window=RC.get('convergence_window', 3),
             recent_actions=saved_recent_actions[-RC.get('convergence_window', 3):],
             min_recent_likes=RC.get('convergence_min_recent_likes', 0),

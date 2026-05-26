@@ -191,6 +191,9 @@ Phase 13+ Profile/Board public/private visibility shipped. PIPA + GDPR posture f
 #### BACK-RECOMMEND-2 — engine.py matmul warning 정리
 sklearn emits matmul dtype warning during clustering. Cosmetic noise but indicates float32 / float64 mismatch — quick fix is dtype-align embedding ndarrays before kmeans.
 
+#### PERF-PREFETCH-CHAIN — async_prefetch chain completion (Redis swap blocker)
+`backend/config/settings.py:216` `async_prefetch_enabled: False` (intentional). The async branch in `apps/recommendation/views/swipe.py` currently spawns a background thread that writes `cache.set('prefetch:<session>:<round>', card)` but the next-swipe handler never reads that key — instant-swap chain is broken, flag-flip yields zero latency benefit. Two-step fix: (1) add `cache.get('prefetch:<session>:<saved_current_round>')` to the async branch so the prior thread's write feeds the current response; (2) swap LocMemCache → Redis so multi-worker Railway prod actually shares the cache across processes. Re-flip `async_prefetch_enabled: True` only after both land. Note: hyperparam table in `docs/algorithm.md` also tracks this flag — keep in sync.
+
 ### LOW
 
 #### FRONT-AUTH-1 — LoginPage에 Kakao/Naver 버튼 없음

@@ -316,8 +316,15 @@ export default function SwipePage({
   const phase            = progress?.phase
   const filter_relaxed   = progress?.filter_relaxed || false
   const confidence       = progress?.confidence ?? null
-
-  const isAt100 = !isCompleted && phase === 'converged'
+  const swipeCount       = progress?.swipe_count ?? progress?.current_round ?? 0
+  const targetSwipes     = Math.max(1, progress?.target_swipes ?? 10)
+  // Safety floor: once the user has swiped 5 beyond the product target window,
+  // expose the Finish button regardless of backend convergence state. Backend
+  // can withhold `phase='converged'` indefinitely when the recent-likes gate
+  // blocks it (e.g. dislike streak post-target) — without this floor the user
+  // is stranded until pool exhaustion.
+  const beyondTargetFloor = swipeCount >= targetSwipes + 5
+  const isAt100 = !isCompleted && (phase === 'converged' || beyondTargetFloor)
 
   function onTinderSwipe(dir) {
     // F4: intercept first-ever left swipe to show dismiss tutorial
