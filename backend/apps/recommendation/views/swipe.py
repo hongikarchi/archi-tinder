@@ -755,11 +755,19 @@ class SwipeView(APIView):
         # READ COMMITTED isolation it cannot see the parent transaction's uncommitted
         # project.save. Spawning inside the atomic block causes the cache to be
         # permanently 1 swipe behind. See code-review fix-loop 2026-05-27.
-        threading.Thread(
-            target=_async_warm_taste,
-            args=(profile.id,),
-            daemon=True,
-        ).start()
+        #
+        # Gated by async_prefetch_enabled — same flag as _async_prefetch_thread.
+        # When the perf flag is OFF (default in test environments), no background
+        # thread spawns. Prevents pytest-django connection-pool race where the
+        # daemon thread's connections.close_all() in finally interferes with the
+        # test runner's transactional connection (root cause of InterfaceError
+        # cascade in 24+ swipe-touching tests on PR #146 CI).
+        if settings.RECOMMENDATION.get('async_prefetch_enabled', False):
+            threading.Thread(
+                target=_async_warm_taste,
+                args=(profile.id,),
+                daemon=True,
+            ).start()
 
         # 9. Card fetch + prefetch (outside transaction — no lock held)
         # All building IDs were resolved inside the transaction (step 8).

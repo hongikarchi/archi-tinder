@@ -217,8 +217,10 @@ class TestFlagGating:
         assert data['accepted'] is True
         # Sync path: prefetch_image should be a card dict (not None)
         assert data['prefetch_image'] is not None
-        # Only the telemetry thread is spawned; no async prefetch thread when flag is OFF
-        assert len(spawned) == 2, 'Telemetry + async_warm_taste threads spawned when async prefetch flag is OFF'
+        # Only the telemetry thread is spawned; no async prefetch thread when flag is OFF.
+        # _async_warm_taste is now gated by async_prefetch_enabled (BACK-CI-HOTFIX-2),
+        # so flag=OFF means no warm thread either.
+        assert len(spawned) == 1, 'Only telemetry thread spawned when async prefetch flag is OFF'
 
     def test_flag_on_async_path_prefetch_null(self, auth_client, user_profile, settings):
         """With async_prefetch_enabled=True, primary response has null prefetches."""
@@ -739,7 +741,7 @@ class TestBackwardCompat:
         finally:
             _stop_patches(patchers)
 
-        assert len(spawned) == 2, 'Telemetry + async_warm_taste threads spawned; no async prefetch thread when flag is OFF'
+        assert len(spawned) == 1, 'Only telemetry thread spawned when async prefetch flag is OFF (warm thread now flag-gated)'
 
     def test_flag_off_no_cache_write(self, auth_client, user_profile, settings):
         """No async prefetch cache entries are written when the sync path is explicitly enabled."""
