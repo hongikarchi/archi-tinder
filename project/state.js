@@ -24,15 +24,23 @@
  * so the value can be re-parsed by any consumer. In-flight (not-yet-merged)
  * PRs carry `mergedAt: null` sentinel; next reporter-inline pass backfills.
  */
+// Reporter: Mermaid sources may be stale — commit 72f8f27 touched backend/apps/recommendation/engine.py (hard WHERE for required-slate fields in create_bounded_pool Mode V + F) and views/sessions.py (prefetch cache seed for first swipe). recommendationFlow Engine node semantics narrow (filter hard constraint). Next session may add slate annotation.
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-05-26 23:15 KST',
-    head: '6e23c82',
-    branch: 'feature/admin-frontend-ux-3fixes',
+    updatedAt: '2026-05-27 00:36 KST',
+    head: '77e1aef',
+    branch: 'feature/admin-backend-algorithm-f3f4',
   },
 
   done: [
+    {
+      id: 'BACK-ALGO-1',
+      title: 'Required-slate hard WHERE + first-swipe prefetch cache seed',
+      completedAt: '2026-05-27',
+      prs: [145],
+      note: '2 backend algorithm/perf fixes from 4th Codex retest 2026-05-26 (base 72bf8d3). F3 required-slate hard WHERE: "Japan museum" search → Bolivia card bug. Root cause filters as score CASE only; pool SQL WHERE only is_publishable=true AND score > 0. Bolivia 통과 because style/program positive score. Fix: _REQUIRED_SLATE_FIELDS_SET frozenset (mirrors services/parse_query.REQUIRED_SLATE_FIELDS + cross-ref comment) + _build_required_slate_where(filters) helper. Mode V (HyDE blend) + Mode F (filter-only) applied; Mode H (RRF) excluded — rank-fusion semantics differ. Tier 2 relaxation drops location_country before create_bounded_pool — slate WHERE auto-absent. F4 first-swipe prefetch cache seed: saved_current_round=1 (incremented at swipe.py:548 BEFORE save) → cache.get(prefetch:{sid}:1) always miss → sync compute 770ms vs 156ms cache hit. SPEC DEVIATION: back-maker source-reading caught — spec :0 → actual :1. SessionCreate seeds cache.set(prefetch:{sid}:1, {prefetch_card_id: initial_batch[1], prefetch_card_2_id: initial_batch[2]}, timeout=60). code-review fix-loop CRITICAL caught SQL param order inversion in 2 execute call sites: _slate_params + params + ... → corrected to params + ... + _slate_params + params + .... Without fix, mixed slate+non-slate filters caused psycopg2 cast errors (Mode V silent fallback) or filter cross-contamination (Mode F). test_engine_filter_hard_constraint.py NEW 4 cases incl Mode V param order regression catch. test_session_create_correctness.py +2 F4 cases. code-review PASS after fix-loop. security-manager PASS (parameterized SQL, UUID-isolated cache). F4 tests local INFRA-DB-2 blocked; CI runs them. sha 72f8f27-pre-squash.',
+    },
     {
       id: 'FRONT-UX-FIXES-1',
       title: 'Image timeout + Gallery CTA nav + Board card click',
@@ -81,13 +89,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-05-26',
       prs: [137],
       note: 'Codex retest of develop=d53b232 surfaced 3 prod-safety drifts. railway.toml buildCommand: dropped migrate --noinput per INFRA-DB-1 (Railway runtime make_web_app has no DDL; next schema migration would have failed); operator runs migrate manually with DB_USER=neondb_owner swap. collectstatic kept. settings.py _check_async_prefetch_safety() helper: raises ImproperlyConfigured at module import when DEBUG=False && async_prefetch_enabled && !REDIS_URL — silent LocMem fallback in prod = thread cost without multi-worker coherence (same bug class PR #134 PERF-PREFETCH-CHAIN just fixed). Helper extracted mirroring _build_caches_dict pattern; called after RECOMMENDATION dict closes. .env.example default DJANGO_DEBUG=True keeps operator migrate path safe (guard short-circuits). tests/test_cache_backend.py TestAsyncPrefetchSafetyGuard 4 cases (prod+REDIS_URL OK, DEBUG bypass, async_prefetch=False bypass, prod misconfig raises). Docs drift: swipe.py:79+:723 "primary path does NOT consume" stale (PR #134 now consumes); settings.py:142 + .env.example:72 "JTI cache" stale (PR #133 final = JWT user-row cache). manage.py check PASS · pytest 20/20 · code-review PASS · security-manager PASS. Deferred surfaced to Next ### MEDIUM: BACK-AUTH-2 (cache JWT integration test hardening) + INFRA-DB-2 (test DB role CREATE DATABASE permission). sha 09a3b7c-pre-squash.',
-    },
-    {
-      id: 'INFRA-DOC-6',
-      title: 'orchestrate / git-publisher / web-testing AGENTS skill-regime 정렬',
-      completedAt: '2026-05-26',
-      prs: [136],
-      note: 'Cherry-picked session-start docs work (010edf8) onto post-deploy develop. 3 files re-aligned with 2026-05-26 skill-migration regime (INFRA-WORKFLOW-1, PR #123). orchestrate/SKILL.md: drop git-manager/reporter agent refs from frontmatter, Step 5/7/8/10, Rules. Step 6→git-commit skill, Step 8 default=git-publish skill, Step 9=reporter-inline+git-commit+git-publish. git-publisher.md: edge-case role (Mode 3 deploy / external PR / complex rebase / push rejection / mid-merge failure). New "When this agent is called" preamble refuses routine publish. Mode 1 renamed "Internal push escalation (fallback only)". web-testing/AGENTS.md: scope split (agent contract → .claude/agents/app-test.md, this doc → runner + shared dev-login). web-tester→app-test rename 2026-04-28. Dev-login 404 hard-FAIL (no skip-auth fallback). skip_login flag removed. Modes table FULL vs FEATURE-SCOPED (supersedes fast/strict /review). Pure docs/policy edit per CLAUDE.md carve-out. Skipped code-review + security + app-test (sub-MINOR meta). Old feature/admin-docs-skill-migration-sync branch (orphan, base pre-deploy) replaced. sha 80e7d86-pre-squash.',
     },
   ],
 
@@ -194,11 +195,18 @@ window.PROJECT_STATE = {
 
   prs: [
     {
-      number: 144,
-      title: 'fix(FRONT-UX-FIXES-1): image timeout + Gallery CTA nav + Board card click',
+      number: 145,
+      title: 'fix(BACK-ALGO-1): required-slate hard WHERE + first-swipe prefetch cache seed',
       mergedAt: null,
       mergedAtKST: null,
       sha: null,
+    },
+    {
+      number: 144,
+      title: 'fix(FRONT-UX-FIXES-1): image timeout + Gallery CTA nav + Board card click',
+      mergedAt: '2026-05-26T14:50:00Z',
+      mergedAtKST: '2026-05-26 23:50 KST',
+      sha: '77e1aef',
     },
     {
       number: 143,
@@ -241,13 +249,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-05-26T10:30:00Z',
       mergedAtKST: '2026-05-26 19:30 KST',
       sha: 'b209aa1',
-    },
-    {
-      number: 137,
-      title: 'fix(INFRA-DEPLOY-3): railway migrate align + Redis prod guard + docs drift',
-      mergedAt: '2026-05-26T09:33:00Z',
-      mergedAtKST: '2026-05-26 18:33 KST',
-      sha: 'ffc55e3',
     },
   ],
 
