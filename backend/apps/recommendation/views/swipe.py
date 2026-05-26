@@ -1023,4 +1023,8 @@ class SwipeView(APIView):
                 and session.extended_rounds < 5
             ),
             'confidence': confidence,  # float [0,1] or null per spec C-1
+            # 'sync' | 'async-thread' (matches telemetry payload). Exposes which
+            # prefetch path served the response — useful for client perf debug +
+            # required by test_first_swipe_hits_prefetch_cache (PR #145 F4).
+            'prefetch_strategy': prefetch_strategy,
         })
