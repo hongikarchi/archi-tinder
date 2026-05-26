@@ -24,43 +24,50 @@
  * so the value can be re-parsed by any consumer. In-flight (not-yet-merged)
  * PRs carry `mergedAt: null` sentinel; next reporter-inline pass backfills.
  */
-// Reporter: Mermaid sources may be stale — commit 5a1e914 touched apps/accounts/ (CachedJWTAuthentication subclass + post_save/post_delete signals + LogoutView/TokenRefreshView invalidate calls). System flow diagram unchanged — auth path still Browser→Vercel→Django→User row lookup (now with Redis cache layer in front).
+// Reporter: Mermaid sources may be stale — commit dc296bc touched apps/recommendation/views/swipe.py (async prefetch thread off-by-one + consumer cache.get + dedupe guards + flag flip). Recommendation flow Mermaid still accurate at function-graph level; system flow Redis node already reflects async prefetch usage from PR #131.
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-05-26 15:40 KST',
-    head: 'b53e633',
-    branch: 'feature/admin-jwt-user-cache',
+    updatedAt: '2026-05-26 16:31 KST',
+    head: '4c72513',
+    branch: 'feature/algo-prefetch-chain-consume',
   },
 
   done: [
+    {
+      id: 'PERF-PREFETCH-CHAIN',
+      title: 'async_prefetch chain end-to-end (PR 4/4 FINAL of perf sweep)',
+      completedAt: '2026-05-26',
+      prs: [134],
+      note: 'PR 4 (FINAL) of 4 in plan merry-toasting-dove.md. Depends on PR 1 INFRA-REDIS-1 (Redis multi-worker coherence). Plan complete after merge. Three changes restore IMP-8 chain: (1) _async_prefetch_thread off-by-one fix — pf_bid index +2, pf2_bid +3 (prior was +1, +2; stored cards matched next_card slot not prefetch slot). 4 formula sites updated (exploring pf/pf2 + analyzing pf/pf2 via compute_mmr_next round arg). (2) Async-branch consumer in SwipeView.post: cache.get(prefetch:{sid}:{saved_current_round}) reads prior thread write; batched engine.get_buildings_by_ids([next, pf, pf2]) for 1-RTT hydration; cache miss preserves None graceful fallback. (3) Dedupe guards (code-review fix-loop MAJOR): pf_id=None if ==next_bid, pf2_id=None if ==next_bid or ==pf_id. Prevents analyzing-path collision where compute_mmr_next can return same card for T lookahead + T+1 main pick. Frontend App.jsx:521+536 non-instant-swap path does NOT dedupe; without backend guard user would see same card twice. async_prefetch_enabled False→True. test_imp7_pool_cache line 635 sync→async-thread. test_imp8_async_prefetch new TestAsyncBranchConsumerIntegration with cache-hit + miss + dedupe regression tests. docs/algorithm.md Hyperparameter Space async_prefetch_enabled False→True. security-manager PASS with availability warning (filed as PERF-PREFETCH-POOL-RISK in Next medium — Neon conn pool monitoring; under high concurrent swipe, conns ≈ requests×2 could approach 25 free-tier limit). sha dc296bc-pre-squash.',
+    },
     {
       id: 'BACK-AUTH-1',
       title: 'JWT user-row cache (PR 3/4 of perf sweep)',
       completedAt: '2026-05-26',
       prs: [133],
-      note: 'PR 3 of 4 in plan merry-toasting-dove.md (backend performance sweep). RE-SCOPED: simplejwt source inspection confirmed AccessToken does NOT inherit BlacklistMixin (only RefreshToken does), so blacklist DB never runs on access-token validation. Real ~590ms hit is JWTAuthentication.get_user() → User.objects.get(id=user_id). CachedJWTAuthentication subclass (apps/accounts/authentication.py NEW) overrides get_user to Redis-cache the User row. Key jwt_user:<user_id>, TTL min(token_exp_unix - now, 3600). Invalidation contract: LogoutView post-blacklist + TokenRefreshView post-rotation explicit invalidate_user_cache calls; post_save + post_delete signals on User as safety net (wired via AccountsConfig.ready). settings.py:111 DEFAULT_AUTHENTICATION_CLASSES swap. tests/test_jwt_cache.py NEW 12 tests across miss/hit/TTL/invalidate/signals/tampered-sig/expired/cross-instance/is_active/malformed-exp/missing-USER_ID_CLAIM. Security: sig check via parent get_validated_token runs BEFORE get_user override, bad sig never reaches cache; cache key from signature-verified user_id claim; cache value always super().get_user() result on miss only (no poisoning vector). Expected ~590ms → ~10-20ms on cache hit. code-review PASS + security-manager PASS (12 critical-chain checks clear; non-blocking note: signal-wiring integration tested via direct handler call rather than user.save() ORM round-trip due to INFRA-DB-1 local DB perm constraint). sha 5a1e914-pre-squash.',
+      note: 'PR 3 of 4 in plan merry-toasting-dove.md. RE-SCOPED: simplejwt source inspection confirmed AccessToken does NOT inherit BlacklistMixin, so blacklist DB never runs on access-token validation. Real ~590ms hit is JWTAuthentication.get_user() → User.objects.get(id=user_id). CachedJWTAuthentication subclass overrides get_user to Redis-cache the User row. Key jwt_user:<user_id>, TTL min(token_exp_unix - now, 3600). Invalidation contract: LogoutView post-blacklist + TokenRefreshView post-rotation explicit invalidate_user_cache calls; post_save + post_delete signals on User as safety net (wired via AccountsConfig.ready). settings.py:111 DEFAULT_AUTHENTICATION_CLASSES swap. tests/test_jwt_cache.py NEW 12 tests. Security: sig check via parent get_validated_token runs BEFORE get_user override, bad sig never reaches cache. Expected ~590ms → ~10-20ms on cache hit. code-review + security-manager PASS (12 critical-chain checks clear). sha 5a1e914-pre-squash (squash 4c72513).',
     },
     {
       id: 'BACK-RECOMMEND-2',
       title: 'sklearn KMeans matmul warning 압제 (PR 2/4 of perf sweep)',
       completedAt: '2026-05-26',
       prs: [132],
-      note: 'PR 2 of 4 in plan merry-toasting-dove.md. Re-scoped from "dtype align" to np.errstate suppression after empirical falsification: like_embeddings.dtype already float64 (_finite_unit_vector engine.py:66 np.asarray dtype=np.float64). Real cause: sklearn KMeans centroid normalization on high-dim unit-norm vectors. New helper engine.py:90-99 _silenced_kmeans_fit. Two call sites swapped: engine.py:1664 (Path 2 adaptive k=2) + engine.py:1701 (Path 4 default k). sample_weight=like_weights preserved. Computation byte-identical (random_state=42 + n_init=3 deterministic; topic06 silhouette tests 9/9 PASS under -W error::RuntimeWarning). code-review + security-manager PASS (np.errstate thread-local NumPy>=1.17, multi-worker safe). sha 785f4ad-pre-squash (squash b53e633).',
+      note: 'PR 2 of 4 in plan merry-toasting-dove.md. Re-scoped from "dtype align" to np.errstate suppression after empirical falsification: like_embeddings.dtype already float64 (_finite_unit_vector engine.py:66 np.asarray dtype=np.float64). Real cause: sklearn KMeans centroid normalization on high-dim unit-norm vectors. New helper engine.py:90-99 _silenced_kmeans_fit. Two call sites swapped: engine.py:1664 + 1701. sample_weight=like_weights preserved. Computation byte-identical (random_state=42 + n_init=3 deterministic; topic06 silhouette tests 9/9 PASS under -W error::RuntimeWarning). code-review + security-manager PASS (np.errstate thread-local NumPy>=1.17, multi-worker safe). sha 785f4ad-pre-squash (squash b53e633).',
     },
     {
       id: 'INFRA-REDIS-1',
       title: 'Redis cache 도입 (PR 1/4 of perf sweep)',
       completedAt: '2026-05-26',
       prs: [131],
-      note: 'PR 1 of 4 in plan merry-toasting-dove.md (backend performance sweep). Foundation enabling PR 3 (BACK-AUTH-1 JTI cache) + PR 4 (PERF-PREFETCH-CHAIN async consume). settings.py CACHES reads REDIS_URL env: set → django_redis.cache.RedisCache (KEY_PREFIX=makeweb, SOCKET_TIMEOUT=3), unset → LocMemCache fallback with MAX_ENTRIES=2000 preserved. _build_caches_dict(redis_url) helper. requirements.txt django-redis>=5.4,<6.0. .env.example Cache section + CLAUDE.md Backend Conventions bullet. backend/tests/test_cache_backend.py NEW 16 tests. Connection failure NOT swallowed. KEY_PREFIX prevents cross-service collision. code-review + security-manager PASS. User manual step: Railway dashboard → Add Redis service → REDIS_URL=${{Redis.REDIS_URL}}. sha d5b6c18-pre-squash (squash 34a0c9e).',
+      note: 'PR 1 of 4 in plan merry-toasting-dove.md. Foundation enabling PR 3 + PR 4. settings.py CACHES reads REDIS_URL env: set → django_redis.cache.RedisCache (KEY_PREFIX=makeweb, SOCKET_TIMEOUT=3), unset → LocMemCache fallback with MAX_ENTRIES=2000 preserved. _build_caches_dict(redis_url) helper. requirements.txt django-redis>=5.4,<6.0. .env.example Cache section + CLAUDE.md Backend Conventions bullet. backend/tests/test_cache_backend.py NEW 16 tests. Connection failure NOT swallowed. KEY_PREFIX prevents cross-service collision. code-review + security-manager PASS. User manual step: Railway dashboard Redis service + REDIS_URL=${{Redis.REDIS_URL}}. sha d5b6c18-pre-squash (squash 34a0c9e).',
     },
     {
       id: 'SWIPE-CONVERGENCE-10',
       title: '10-swipe target + multimodal escalation + stuck-state safety',
       completedAt: '2026-05-26',
       prs: [130],
-      note: 'Replaces closed PR #127 (codex feature/algo-convergence-study). Algorithm policy synced to docs/algorithm.md: convergence_threshold 0.08→0.13, target_swipes=10, min_likes_for_multimodal=11 (K-Means K=2 gated behind target+1), convergence_min_recent_likes=2 (positive-evidence gate). Frontend stuck-state safety floor beyondTargetFloor (swipe_count >= target+5). Engine _with_image_focus bug fix. async_prefetch_enabled True→False reverted (chain broken; tracked as PERF-PREFETCH-CHAIN). Swipe.py stale 0.08 defaults → 0.13. 2 commits squashed at merge to 83db42c.',
+      note: 'Replaces closed PR #127 (codex feature/algo-convergence-study). Algorithm policy synced to docs/algorithm.md: convergence_threshold 0.08→0.13, target_swipes=10, min_likes_for_multimodal=11 (K-Means K=2 gated behind target+1), convergence_min_recent_likes=2 (positive-evidence gate). Frontend stuck-state safety floor beyondTargetFloor (swipe_count >= target+5). Engine _with_image_focus bug fix. async_prefetch_enabled True→False reverted (chain broken; later resolved in PR 4 PERF-PREFETCH-CHAIN). Swipe.py stale 0.08 defaults → 0.13. 2 commits squashed at merge to 83db42c.',
     },
     {
       id: 'INFRA-CI-1',
@@ -82,13 +89,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-05-26',
       prs: [125],
       note: 'POST /api/v1/analysis/sessions/ local p50 2567 → 1508 ms (-42%) / PR #128 hotfix ~1800 ms still PASS. Tier 1 pool cache (filter SHA1, 30 min TTL). _random_pool 30 min cache. emit_events: PR #125 threading.Thread → PR #128 sync revert. perf_timing + perf_measure --filters CLI. sha fb669b6-pre-squash (squash 5593f6c).',
-    },
-    {
-      id: 'BACK-PERFORMANCE-1',
-      title: '/projects/ 응답 600ms (목표 300ms)',
-      completedAt: '2026-05-26',
-      prs: [124],
-      note: 'GET /api/v1/projects/ local p50 1136 → 661 ms (-42%). Goal ≤300 ms 미달 — auth floor ~590 ms 잔존. Response cache 60s TTL + evict hooks. Serializer drops analysis_report. CONN_MAX_AGE=600. Deferred: BACK-AUTH-1. sha 505717a-pre-squash (squash 0c8fe6f).',
     },
   ],
 
@@ -144,9 +144,9 @@ window.PROJECT_STATE = {
         note: 'Phase 13+ Profile/Board public/private visibility shipped. PIPA + GDPR posture for signup data collection / consent flow / retention policy still open. Required before public launch.',
       },
       {
-        id: 'PERF-PREFETCH-CHAIN',
-        title: 'async_prefetch chain completion (Redis swap blocker)',
-        note: 'backend/config/settings.py:216 async_prefetch_enabled: False (intentional). Async branch in views/swipe.py spawns background thread that writes cache.set("prefetch:<session>:<round>", card) but next-swipe handler never reads that key — instant-swap chain broken, flag-flip yields zero latency benefit. Two-step fix: (1) add cache.get("prefetch:<session>:<saved_current_round+1>") to async branch so prior thread write feeds current response; (2) Redis backend now in place (INFRA-REDIS-1, PR #131) so multi-worker Railway prod actually shares cache. Re-flip True only after (1) lands. Plan PR 4 (.claude/plans/merry-toasting-dove.md) — depends on PR 1 INFRA-REDIS-1 merged.',
+        id: 'PERF-PREFETCH-POOL-RISK',
+        title: 'Neon connection pool 모니터링 (post PR #134)',
+        note: 'PR 4 PERF-PREFETCH-CHAIN flipped async_prefetch_enabled True — every prod swipe now spawns a daemon thread holding its own DB connection until _connections.close_all() runs in finally. Under high concurrent swipe load: connections ≈ (concurrent_requests × 2) — main worker + prefetch thread. Neon free tier 25 conns; Railway Gunicorn 2-4 workers. Acceptable current scale (~tens of daily users). Monitor Neon dashboard post-deploy + revisit if peak concurrency exceeds 8-10 conns. Mitigation: (a) connection pool size increase, (b) explicit thread-local pool, (c) PgBouncer in front. security-manager flagged on PR #134.',
       },
     ],
     low: [
@@ -180,11 +180,18 @@ window.PROJECT_STATE = {
 
   prs: [
     {
-      number: 133,
-      title: 'feat(BACK-AUTH-1): cache JWTAuthentication.get_user() per-user',
+      number: 134,
+      title: 'feat(PERF-PREFETCH-CHAIN): wire async prefetch chain end-to-end',
       mergedAt: null,
       mergedAtKST: null,
       sha: null,
+    },
+    {
+      number: 133,
+      title: 'feat(BACK-AUTH-1): cache JWTAuthentication.get_user() per-user',
+      mergedAt: '2026-05-26T06:47:23Z',
+      mergedAtKST: '2026-05-26 15:47 KST',
+      sha: '4c72513',
     },
     {
       number: 132,
@@ -227,13 +234,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-05-25T20:20:03Z',
       mergedAtKST: '2026-05-26 05:20 KST',
       sha: '28b7242',
-    },
-    {
-      number: 125,
-      title: 'perf(BACK-PERFORMANCE-3): sessions create p50 2567→1508ms — Tier1 cache + async emit',
-      mergedAt: '2026-05-25T19:55:44Z',
-      mergedAtKST: '2026-05-26 04:55 KST',
-      sha: '5593f6c',
     },
   ],
 
@@ -300,7 +300,7 @@ window.PROJECT_STATE = {
   Engine["engine.py<br/>services/parse_query.py"]
   DefaultDB[("default DB · Neon<br/>User · Project · AnalysisSession · SwipeEvent")]
   BuildingsDB[("buildings DB · Neon<br/>canonical_v2_buildings (read-only raw SQL)")]
-  Redis[("Redis cache (prod) · LocMemCache (local)<br/>JWT user-row cache · prefetch · response cache")]
+  Redis[("Redis cache (prod) · LocMemCache (local)<br/>JWT user-row cache · async prefetch · response cache")]
   Gemini["Gemini API"]
   R2["Cloudflare R2 image CDN"]
   OAuth["Google · Kakao · Naver OAuth"]

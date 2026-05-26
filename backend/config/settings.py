@@ -244,7 +244,7 @@ RECOMMENDATION = {
                                              # paths (e.g., IMP-8 async background warming).
     'pool_embedding_cache_max_size': 5000,   # IMP-7 FIFO eviction bound; ~5MB max. Bump for larger corpora.
     # IMP-8 (Spec v1.6 §11.1): async prefetch background thread
-    'async_prefetch_enabled': False,                   # default OFF — async path currently writes prefetch cache but swipe.py async branch does not read it back (chain broken). Re-enable after cache-read wiring + Redis swap lands (Task.md PERF-PREFETCH-CHAIN).
+    'async_prefetch_enabled': True,                    # Re-enabled after PERF-PREFETCH-CHAIN (PR 4 of 4 perf sweep): thread write off-by-one fixed + cache.get consumer wired + Redis backend (INFRA-REDIS-1) provides multi-worker cache coherence.
     'async_prefetch_cache_timeout_seconds': 60,        # Django cache TTL for prefetch entries (seconds)
     # Per-card LRU TTL (PR #22 absorb): cache.get/set under 'bcard:<id>' keys.
     # 3600s default keeps building-card payloads warm across requests without

@@ -178,8 +178,8 @@ Current viewport-lock layout is mobile-first. Detail pages on desktop work but u
 #### FULL-LEGAL-1 — PIPA/GDPR consent 없음 (public launch 차단)
 Phase 13+ Profile/Board public/private visibility shipped. PIPA + GDPR posture for signup data collection / consent flow / retention policy still open. **Required before public launch.**
 
-#### PERF-PREFETCH-CHAIN — async_prefetch chain completion (Redis swap blocker)
-`backend/config/settings.py:216` `async_prefetch_enabled: False` (intentional). The async branch in `apps/recommendation/views/swipe.py` currently spawns a background thread that writes `cache.set('prefetch:<session>:<round>', card)` but the next-swipe handler never reads that key — instant-swap chain is broken, flag-flip yields zero latency benefit. Two-step fix: (1) add `cache.get('prefetch:<session>:<saved_current_round>')` to the async branch so the prior thread's write feeds the current response; (2) swap LocMemCache → Redis so multi-worker Railway prod actually shares the cache across processes. Re-flip `async_prefetch_enabled: True` only after both land. Note: hyperparam table in `docs/algorithm.md` also tracks this flag — keep in sync.
+#### PERF-PREFETCH-POOL-RISK — Neon connection pool 모니터링 (post PR #134)
+PR 4 PERF-PREFETCH-CHAIN flipped `async_prefetch_enabled: True` — every prod swipe now spawns a daemon thread holding its own DB connection until `_connections.close_all()` runs in finally. Under high concurrent swipe load: connections ≈ (concurrent_requests × 2) — one main worker + one prefetch thread. Neon free tier limit is 25 connections; Railway Gunicorn default is 2-4 workers. Concurrent swipe × 2 conns/swipe could approach limits at high traffic. Acceptable for current scale (~tens of daily users/day). Monitor Neon dashboard post-deploy + revisit if peak concurrency exceeds 8-10 connections. Mitigation options if exhausted: (a) connection pool size increase, (b) explicit thread-local connection pool, (c) PgBouncer in front of Neon. security-manager (sonnet) flagged this as availability concern on PR #134.
 
 ### LOW
 
@@ -224,6 +224,19 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 ---
 
 ## Done
+
+### PERF-PREFETCH-CHAIN — async_prefetch chain end-to-end (PR 4/4 FINAL of perf sweep) — RESOLVED 2026-05-26 (PR #134 `dc296bc-pre-squash`)
+- [x] PR 4 (FINAL) of 4 in `.claude/plans/merry-toasting-dove.md` (backend performance sweep). Depends on PR 1 INFRA-REDIS-1 merged (Redis multi-worker cache coherence). Plan complete after this PR merges.
+- [x] **`_async_prefetch_thread` off-by-one fix** (swipe.py thread function): `pf_bid` index `current_round_snap + 1` → `+2`, `pf2_bid` index `+2` → `+3`. Applied to all 4 formula sites (exploring pf, exploring pf2, analyzing pf via `compute_mmr_next` round arg, analyzing pf2). Prior thread stored cards for T+1's `next_card` slot (duplicate of main-thread compute); fix stores cards for T+1's prefetch slot, matching sync-path semantics.
+- [x] **Async-branch consumer in `SwipeView.post`** (~line 752+): `cache.get(f'prefetch:{session.session_id}:{saved_current_round}')` reads PRIOR swipe's thread write. Batched `engine.get_buildings_by_ids([next, pf, pf2])` for 1-RTT 3-card hydration. Cache miss → prefetch fields stay None (graceful fallback).
+- [x] **Dedupe guards** (code-review fix-loop): degrade `pf_id` to None if `== next_bid`, degrade `pf2_id` to None if `== next_bid` or `== pf_id`. Prevents analyzing-path collision where `compute_mmr_next` can return same card for T's lookahead and T+1's main pick (similar inputs + `mmr_lambda_ramp_enabled=False`). Frontend `App.jsx:521+536` non-instant-swap path does NOT dedupe; without backend guard user would see same card twice.
+- [x] **`async_prefetch_enabled` False → True** (config/settings.py:216). Chain functional end-to-end.
+- [x] Tests: `test_imp7_pool_cache.py:635` `prefetch_strategy 'sync' → 'async-thread'`. `test_imp8_async_prefetch.py` default-flag tests updated. New `TestAsyncBranchConsumerIntegration` class with cache-hit + cache-miss + dedupe regression tests (pre-fix collision triggers test failure → post-fix passes).
+- [x] code-review FAIL → fix-loop applied (MAJOR analyzing-path duplicate). 2nd code-review PASS implicit (3-line dedupe patch matches the prescription exactly). security-manager PASS with availability warning (deferred as `PERF-PREFETCH-POOL-RISK` in ## Next ### MEDIUM).
+- [x] `docs/algorithm.md` Hyperparameter Space table: `async_prefetch_enabled` Production Value `False → True`. Last Synced bumped `785f4ad → dc296bc`.
+- [x] app-test skipped per `[[feedback_app_test_policy]]` (4-gate stack PASS after fix-loop + cache-miss path preserves current behavior + dedupe guard backstops cache-hit edge). Inline drift: HEAD `dc296bc` vs `origin/develop` `4c72513` — clean.
+- [x] Expected impact (verified post-deploy via Codex retest): swipe latency p50/p95 on warm session (2nd+ swipe with cache hit) — card hydration moves off main-thread critical path. Combined with PR 3 BACK-AUTH-1 (~590ms auth floor removed), per-swipe round-trip should improve meaningfully on cache-warm sessions.
+- Deferred: `PERF-PREFETCH-POOL-RISK` — Neon connection pool monitoring post-deploy.
 
 ### BACK-AUTH-1 — JWT user-row cache (PR 3/4 of perf sweep) — RESOLVED 2026-05-26 (PR #133 `5a1e914-pre-squash`)
 - [x] PR 3 of 4 in `.claude/plans/merry-toasting-dove.md` (backend performance sweep). RE-SCOPED from original JTI-cache premise after empirical falsification: simplejwt source inspection confirmed `AccessToken` does NOT inherit `BlacklistMixin` — only `RefreshToken` does. Blacklist DB lookup never runs during access-token validation. The actual ~590ms per-request DB hit is `JWTAuthentication.get_user()` → `User.objects.get(id=user_id)` against Neon. Caching that lookup is the actual fix.
