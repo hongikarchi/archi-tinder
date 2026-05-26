@@ -89,14 +89,17 @@ def _ensure_chat_cache(client):
 
     # --- Slow path: create Gemini cache and store name in Django cache -------
     try:
-        cache_obj = client.caches.create(
-            model='gemini-2.5-flash',
-            config=types.CreateCachedContentConfig(
-                display_name=_get_cache_name(),
-                system_instruction=_svc._CHAT_PHASE_SYSTEM_PROMPT,
-                ttl=f'{ttl}s',
-            ),
-        )
+        def _create_cache():
+            return client.caches.create(
+                model='gemini-2.5-flash',
+                config=types.CreateCachedContentConfig(
+                    display_name=_get_cache_name(),
+                    system_instruction=_svc._CHAT_PHASE_SYSTEM_PROMPT,
+                    ttl=f'{ttl}s',
+                ),
+            )
+
+        cache_obj = _svc._retry_gemini_call(_create_cache)
         resource_name = cache_obj.name
         # Django cache TTL = 80% of Gemini TTL -- recreate before Gemini expiry to avoid
         # the stale-name-passed-to-generate_content double-retry pattern. The 20% safety

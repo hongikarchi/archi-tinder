@@ -149,6 +149,23 @@ class TestEnsureChatCacheLazyInit:
         assert result is None
         assert cache.get(_get_django_cache_key()) is None
 
+    def test_gemini_create_runs_through_retry_timeout_wrapper(self):
+        from apps.recommendation.services import _ensure_chat_cache
+        mock_client = MagicMock()
+        mock_client.caches.create.return_value = _make_cache_obj('cachedContents/wrapped')
+
+        def run_wrapped(fn, *args, **kwargs):
+            assert kwargs.get('timeout', 15.0) == 15.0
+            return fn(*args, **kwargs)
+
+        with patch('apps.recommendation.services._retry_gemini_call',
+                   side_effect=run_wrapped) as mock_retry:
+            result = _ensure_chat_cache(mock_client)
+
+        assert result == 'cachedContents/wrapped'
+        mock_retry.assert_called_once()
+        mock_client.caches.create.assert_called_once()
+
     def test_gemini_create_uses_correct_model_and_ttl(self):
         from apps.recommendation.services import _ensure_chat_cache
         mock_client = MagicMock()
