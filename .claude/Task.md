@@ -170,9 +170,6 @@ Acceptance per slice: `npm run lint` + `npm run build` clean; light + all dark v
 
 ### MEDIUM
 
-#### BACK-PERFORMANCE-4 — Discovery 첫 로딩 4.6s
-Codex retest 2026-05-26: `/discovery` 4.63s + `/images/batch` 1.61s. Backend stage breakdown: `get_or_build_taste` 1.55s + `taste_ranked_page` 2.23s. Origin: Discovery computes taste vector then pgvector rank page. Target: warm-cache <500ms, cold <1.5s. Investigate caching of taste vector (per-user TTL?) + pgvector index tuning.
-
 #### BACK-PERFORMANCE-5 — Swipe latency 0.7-1.5s 흔들림
 Codex retest 2026-05-26: browser swipe 1.82s/1.75s/1.12s/1.81s; server swipe 1.50s/1.38s/0.746s/1.36s. **PR4 async prefetch consume IS working** — 3rd swipe with cache hit drops to 156ms prefetch stage. But variability is high. Identify which stage causes the 0.7→1.5s spread (DB query latency? embedding cache miss? pgvector?). Aim for swipe p95 ≤1.0s and p50 ≤0.5s on Singapore prod.
 
@@ -245,6 +242,14 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 ---
 
 ## Done
+
+### BACK-PERFORMANCE-4 — Discovery cold 4.6s → <1s — taste vector cap + SQL top-K + async warm — RESOLVED 2026-05-27 (PR #146 `dc1651b-pre-squash`)
+- [x] **Fix 1 `taste_ranked_page` CTE 제거** (engine.py:2347): `WITH ranked AS (...) SELECT * FROM ranked OFFSET LIMIT` → direct `SELECT ... FROM ... ORDER BY ... OFFSET LIMIT`. PG planner top-K heap scan (k=12 vs N=37k publishable rows).
+- [x] **Fix 2 `compute_user_taste_vector` recent-50 cap** (engine.py:2280): `Project.objects.order_by('updated_at') ASC` + `all_likes[-50:]`. Bounded cold `get_pool_embeddings` SQL size.
+- [x] **Fix 3 `_async_warm_taste` daemon thread** (swipe.py): evict 후 background thread가 `get_or_build_taste(profile)` 호출 → cache repopulate. **CRITICAL fix-loop catch**: 초기 spawn이 `transaction.atomic()` 안 → READ COMMITTED isolation으로 uncommitted save 못 봄 → permanent 1-swipe-behind cache. Spawn outside atomic block (line 758). Invariant 주석.
+- Verification: manage.py check PASS · 9 non-DB tests PASS · `@django_db` tests INFRA-DB-2 차단 (CI 실행) · code-review PASS after race fix-loop · security-manager PASS.
+- 기대 효과: Discovery cold ~4.6s → <1s. First post-swipe Discovery = warm cache. pgvector ANN index Make-DB owned이라 불가.
+- Origin: User goal 2026-05-27 — 모든 페이지 로딩 <1s. PR 1/N of iterative perf sweep.
 
 ### BACK-ALGO-1 — Required-slate hard WHERE + first-swipe prefetch cache seed — RESOLVED 2026-05-27 (PR #145 `72f8f27-pre-squash`)
 - [x] **F3 required-slate hard WHERE** (engine.py): "Japan museum" search 후 첫 save → Bolivia card 표시되던 버그. Root cause: filters가 score CASE만 emit, pool SQL WHERE는 `is_publishable=true AND score > 0`만 — Bolivia가 country 0이어도 style/program 양의 점수로 통과. Fix: `_REQUIRED_SLATE_FIELDS_SET` frozenset (services/parse_query.REQUIRED_SLATE_FIELDS 미러 + cross-ref 주석) + `_build_required_slate_where(filters)` helper. Mode V (HyDE) + Mode F (filter-only) 적용. Mode H (RRF) excluded — rank-fusion 의미 다름. Tier 2 relaxation은 기존 location_country drop 동작 그대로.
