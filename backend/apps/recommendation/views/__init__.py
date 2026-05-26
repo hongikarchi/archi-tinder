@@ -35,6 +35,7 @@ from .swipe import (
     # Private helpers accessed by tests
     _merge_buffer_into_exposed,
     _async_prefetch_thread,
+    _async_warm_taste,
 )
 from .search import (
     ParseQueryView,
@@ -85,5 +86,6 @@ __all__ = [
     '_progress',
     '_merge_buffer_into_exposed',
     '_async_prefetch_thread',
+    '_async_warm_taste',
     '_spawn_stage2',
 ]
