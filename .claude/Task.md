@@ -172,6 +172,23 @@ Acceptance per slice: `npm run lint` + `npm run build` clean; light + all dark v
 
 ### MEDIUM
 
+#### BACK-AUTH-2 — Cache JWT 통합 테스트 hardening
+`apps/accounts/authentication.py:74` cache-hit path skips parent `get_user()`. Current tests are unit-level (CachedJWTAuthentication.get_user direct call). Need integration coverage:
+- [ ] DRF `authenticate()` pipeline end-to-end (request → middleware → cache hit → user resolved → view executes)
+- [ ] `User.save()` post_save signal auto-invalidation (`auth_user` row mutation → cache.delete fires)
+- [ ] `is_active=False` user → cache hit on stale entry must NOT return 200; either auto-invalidate before hit or re-check `is_active` on cached user
+- [ ] cross-instance: cache populated from one auth instance, read from another (Redis multi-worker correctness)
+
+Codex retest 2026-05-26 flagged as P3 hardening. Not a blocker — security-manager PASS'd PR #133 — but defense-in-depth for any future cache-key drift or signal-wiring regression.
+
+#### INFRA-DB-2 — test DB role permissions for CREATE DATABASE
+Codex retest 2026-05-26 — Full `test_imp8_async_prefetch.py` blocked at DB setup because `make_web_app` role has no CREATE DATABASE permission. `test_user_data` DB creation fails. Options:
+- (a) operator runs migrate / test-DB-provision with `DB_USER=neondb_owner` swap pre-pytest
+- (b) test conftest uses a dedicated `make_web_test` role with `CREATEDB` grant on Neon
+- (c) `pytest-django --reuse-db` against a pre-provisioned `test_user_data` DB
+
+Choose one + document in CONTRIBUTING.md / backend/.env.example. Currently the test-DB gap means some integration tests can only run with a manual role swap.
+
 #### FRONT-LAYOUT-1 — Desktop wide-screen 레이아웃 어색함
 Current viewport-lock layout is mobile-first. Detail pages on desktop work but unoptimised. Low priority — desktop is secondary.
 
@@ -224,6 +241,14 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 ---
 
 ## Done
+
+### INFRA-DEPLOY-3 — railway migrate align + Redis prod guard + docs drift — RESOLVED 2026-05-26 (PR #137 `09a3b7c-pre-squash`)
+- [x] `backend/railway.toml` buildCommand: dropped `migrate --noinput`. Per INFRA-DB-1, Railway runtime is `make_web_app` (no DDL); next schema migration would have failed at deploy time. Comment block rewritten to cite INFRA-DB-1 + operator runbook in `.env.example`. `collectstatic` kept.
+- [x] `backend/config/settings.py` `_check_async_prefetch_safety()` helper: raises `ImproperlyConfigured` at module import when `DEBUG=False && async_prefetch_enabled && !REDIS_URL`. Silent LocMem fallback in prod = thread cost without multi-worker coherence (same bug class PR #134 just fixed). Operator migrate path safe because `.env.example` defaults `DJANGO_DEBUG=True` → guard short-circuits.
+- [x] `backend/tests/test_cache_backend.py` `TestAsyncPrefetchSafetyGuard` (4 cases): prod+REDIS_URL set OK, DEBUG=True bypass, async_prefetch=False bypass, prod misconfig raises.
+- [x] Docs drift: `swipe.py:79`+`:723` "primary path does NOT consume" stale (PR #134 PERF-PREFETCH-CHAIN consumes); `settings.py:142` + `.env.example:72` "JTI cache" stale (PR #133 BACK-AUTH-1 final = JWT user-row cache).
+- Verification: `manage.py check` PASS · `pytest test_cache_backend.py` 20/20 · code-review PASS · security-manager PASS.
+- Origin: Codex retest of develop=`d53b232` 2026-05-26 surfaced P2-railway-migrate + P2-Redis-silent-fallback + P3-docs-drift; P3-cache-integration-tests + P3-test-DB-role surfaced as `BACK-AUTH-2` + `INFRA-DB-2` in Next.
 
 ### INFRA-DOC-6 — orchestrate / git-publisher / web-testing AGENTS skill-regime 정렬 — RESOLVED 2026-05-26 (PR #136 `80e7d86-pre-squash`)
 - [x] Cherry-picked session-start docs work (`010edf8`) onto post-deploy develop. Three files re-aligned with the 2026-05-26 skill-migration regime (INFRA-WORKFLOW-1, PR #123).

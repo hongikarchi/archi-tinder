@@ -24,15 +24,23 @@
  * so the value can be re-parsed by any consumer. In-flight (not-yet-merged)
  * PRs carry `mergedAt: null` sentinel; next reporter-inline pass backfills.
  */
+// Reporter: Mermaid sources may be stale — commit 09a3b7c touched backend/apps/recommendation/views/swipe.py (docstring + block comment only; no behavior change, diagrams still accurate). Next session may verify recommendationFlow.
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-05-26 17:27 KST',
-    head: 'd53b232',
-    branch: 'feature/admin-skill-docs-align',
+    updatedAt: '2026-05-26 18:03 KST',
+    head: '54d4d1e',
+    branch: 'feature/admin-deploy-hardening',
   },
 
   done: [
+    {
+      id: 'INFRA-DEPLOY-3',
+      title: 'railway migrate align + Redis prod guard + docs drift',
+      completedAt: '2026-05-26',
+      prs: [137],
+      note: 'Codex retest of develop=d53b232 surfaced 3 prod-safety drifts. railway.toml buildCommand: dropped migrate --noinput per INFRA-DB-1 (Railway runtime make_web_app has no DDL; next schema migration would have failed); operator runs migrate manually with DB_USER=neondb_owner swap. collectstatic kept. settings.py _check_async_prefetch_safety() helper: raises ImproperlyConfigured at module import when DEBUG=False && async_prefetch_enabled && !REDIS_URL — silent LocMem fallback in prod = thread cost without multi-worker coherence (same bug class PR #134 PERF-PREFETCH-CHAIN just fixed). Helper extracted mirroring _build_caches_dict pattern; called after RECOMMENDATION dict closes. .env.example default DJANGO_DEBUG=True keeps operator migrate path safe (guard short-circuits). tests/test_cache_backend.py TestAsyncPrefetchSafetyGuard 4 cases (prod+REDIS_URL OK, DEBUG bypass, async_prefetch=False bypass, prod misconfig raises). Docs drift: swipe.py:79+:723 "primary path does NOT consume" stale (PR #134 now consumes); settings.py:142 + .env.example:72 "JTI cache" stale (PR #133 final = JWT user-row cache). manage.py check PASS · pytest 20/20 · code-review PASS · security-manager PASS. Deferred surfaced to Next ### MEDIUM: BACK-AUTH-2 (cache JWT integration test hardening) + INFRA-DB-2 (test DB role CREATE DATABASE permission). sha 09a3b7c-pre-squash.',
+    },
     {
       id: 'INFRA-DOC-6',
       title: 'orchestrate / git-publisher / web-testing AGENTS skill-regime 정렬',
@@ -82,13 +90,6 @@ window.PROJECT_STATE = {
       prs: [130],
       note: 'Replaces closed PR #127 (codex feature/algo-convergence-study). Algorithm policy synced to docs/algorithm.md: convergence_threshold 0.08→0.13, target_swipes=10, min_likes_for_multimodal=11 (K-Means K=2 gated behind target+1), convergence_min_recent_likes=2. Frontend stuck-state safety floor beyondTargetFloor. Engine _with_image_focus bug fix. async_prefetch_enabled True→False reverted (chain broken; later resolved in PR 4). Swipe.py stale 0.08 defaults → 0.13. 2 commits squashed at merge to 83db42c.',
     },
-    {
-      id: 'INFRA-CI-1',
-      title: 'PR #125 PERF-3 CI fail hotfix',
-      completedAt: '2026-05-26',
-      prs: [128],
-      note: 'Root cause: PERF-3 _async_emit daemon thread silent fail. settings_dict["TIME_ZONE"] KeyError on first thread connection setup. Sync emit revert achieved CI green. Cost ~290ms sync emit restored. PERF-3 ~1800 ms still PASS ≤2000 ms goal. sha 198eca4-pre-squash.',
-    },
   ],
 
   now: [],
@@ -132,6 +133,16 @@ window.PROJECT_STATE = {
       },
     ],
     medium: [
+      {
+        id: 'BACK-AUTH-2',
+        title: 'Cache JWT 통합 테스트 hardening',
+        note: 'apps/accounts/authentication.py:74 cache-hit path skips parent get_user(). Current tests unit-level (CachedJWTAuthentication.get_user direct). Need integration: DRF authenticate() pipeline end-to-end, User.save() post_save signal auto-invalidation, is_active=False stale cache must NOT return 200, cross-instance Redis multi-worker correctness. Codex retest 2026-05-26 P3 hardening. Not a blocker (security-manager PASS\'d PR #133); defense-in-depth for future cache-key drift or signal-wiring regression.',
+      },
+      {
+        id: 'INFRA-DB-2',
+        title: 'test DB role CREATE DATABASE permission',
+        note: 'Codex retest 2026-05-26 — Full test_imp8_async_prefetch.py blocked at DB setup; make_web_app role has no CREATE DATABASE permission. test_user_data DB creation fails. Options: (a) operator migrate / test-DB-provision with DB_USER=neondb_owner pre-pytest, (b) dedicated make_web_test role with CREATEDB grant on Neon, (c) pytest-django --reuse-db against pre-provisioned test_user_data. Choose one + document in CONTRIBUTING.md / .env.example.',
+      },
       {
         id: 'FRONT-LAYOUT-1',
         title: 'Desktop wide-screen 레이아웃 어색함',
@@ -179,11 +190,18 @@ window.PROJECT_STATE = {
 
   prs: [
     {
-      number: 136,
-      title: 'docs(INFRA-DOC-6): align orchestrate + git-publisher + web-testing with skill regime',
+      number: 137,
+      title: 'fix(INFRA-DEPLOY-3): railway migrate align + Redis prod guard + docs drift',
       mergedAt: null,
       mergedAtKST: null,
       sha: null,
+    },
+    {
+      number: 136,
+      title: 'docs(INFRA-DOC-6): align orchestrate + git-publisher + web-testing with skill regime',
+      mergedAt: '2026-05-26T08:34:41Z',
+      mergedAtKST: '2026-05-26 17:34 KST',
+      sha: '54d4d1e',
     },
     {
       number: 135,
@@ -226,13 +244,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-05-26T02:23:10Z',
       mergedAtKST: '2026-05-26 11:23 KST',
       sha: '83db42c',
-    },
-    {
-      number: 129,
-      title: 'fix(dashboard): state.js block comment */ early termination',
-      mergedAt: '2026-05-26T00:52:54Z',
-      mergedAtKST: '2026-05-26 09:52 KST',
-      sha: 'b4d24d6',
     },
   ],
 
