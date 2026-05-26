@@ -24,16 +24,23 @@
  * so the value can be re-parsed by any consumer. In-flight (not-yet-merged)
  * PRs carry `mergedAt: null` sentinel; next reporter-inline pass backfills.
  */
-// Reporter: Mermaid sources may be stale — commit 09a3b7c touched backend/apps/recommendation/views/swipe.py (docstring + block comment only; no behavior change, diagrams still accurate). Next session may verify recommendationFlow.
+// Reporter: Mermaid sources may be stale — commit 3fcbe3c touched backend/apps/recommendation/views/sessions.py (added dedupe guard at start of SessionCreateView.post). recommendationFlow shows SessionCreate → SwipeUI; dedupe is a new branch at SessionCreate returning existing session instead of fresh. Next session may add a branch annotation.
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-05-26 18:03 KST',
-    head: '54d4d1e',
-    branch: 'feature/admin-deploy-hardening',
+    updatedAt: '2026-05-26 19:00 KST',
+    head: 'ffc55e3',
+    branch: 'feature/admin-session-create-dedupe',
   },
 
   done: [
+    {
+      id: 'FULL-SESSION-DEDUPE-1',
+      title: 'Session create POST retry → 중복 Project/Session',
+      completedAt: '2026-05-26',
+      prs: [138],
+      note: 'P0 data-integrity bug surfaced by Codex retest 2026-05-26 of develop=d53b232. POST /analysis/sessions/ takes ~15s on cold pool (execute_pool_sql=14.7s). Frontend api/core.js retry loop retried ALL methods on AbortError → server created 2 Project + 2 AnalysisSession rows. User reproduction: 2 boards same name, one with 4 photos one with 0. Belt + suspenders fix. Frontend api/core.js: _IDEMPOTENT_METHODS={GET,HEAD,OPTIONS}; POST/PATCH/DELETE throw on first network error. Frontend api/sessions.js: SESSION_CREATE_TIMEOUT_MS=30000 per-call override. Backend views/sessions.py: dedupe guard at start of SessionCreateView.post; 30s window matching (user, project.name, project.raw_query, project.filters); hit returns existing session with deduped:true HTTP 200 (vs 201 fresh). tests/test_session_create_dedupe.py 8 cases (baseline 201, hit 200, 30s expiry, different raw_query/name/filters, project_id=None retry, response shape). Trade-off: recordSwipe (POST) no-retry; backend idempotency_key still guards server-side. Race window ~100ms unreachable from single-tab client with retry-gate. code-review + security-manager PASS. app-test FEATURE-SCOPED PASS 5/5 incl. dedupe path 200 + deduped:true + same session_id + only 1 Project row (Django shell verified). Deferred to Next ### MEDIUM: BACK-PERFORMANCE-4 (Discovery 4.6s) + BACK-PERFORMANCE-5 (Swipe latency variability) + FRONT-UX-5 (View Gallery click no-op). sha 3fcbe3c-pre-squash.',
+    },
     {
       id: 'INFRA-DEPLOY-3',
       title: 'railway migrate align + Redis prod guard + docs drift',
@@ -75,13 +82,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-05-26',
       prs: [132],
       note: 'PR 2 of 4. Re-scoped from "dtype align" to np.errstate suppression after empirical falsification (input already float64). Real cause: sklearn KMeans centroid normalization on high-dim unit-norm vectors. Helper engine.py:90-99 _silenced_kmeans_fit. Two call sites swapped (1664 + 1701). sample_weight preserved. Byte-identical (random_state=42 + n_init=3 deterministic; topic06 9/9 PASS under -W error::RuntimeWarning). code-review + security-manager PASS. sha 785f4ad-pre-squash (squash b53e633).',
-    },
-    {
-      id: 'INFRA-REDIS-1',
-      title: 'Redis cache 도입 (PR 1/4 of perf sweep)',
-      completedAt: '2026-05-26',
-      prs: [131],
-      note: 'PR 1 of 4 in plan merry-toasting-dove.md. Foundation enabling PR 3 + PR 4. settings.py CACHES reads REDIS_URL env: set → django_redis.cache.RedisCache (KEY_PREFIX=makeweb, SOCKET_TIMEOUT=3), unset → LocMemCache fallback. _build_caches_dict(redis_url) helper. requirements.txt django-redis>=5.4,<6.0. .env.example Cache section + CLAUDE.md Backend Conventions bullet. backend/tests/test_cache_backend.py NEW 16 tests. Connection failure NOT swallowed. KEY_PREFIX prevents cross-service collision. code-review + security-manager PASS. sha d5b6c18-pre-squash (squash 34a0c9e).',
     },
     {
       id: 'SWIPE-CONVERGENCE-10',
@@ -133,6 +133,21 @@ window.PROJECT_STATE = {
       },
     ],
     medium: [
+      {
+        id: 'BACK-PERFORMANCE-4',
+        title: 'Discovery 첫 로딩 4.6s',
+        note: 'Codex retest 2026-05-26: /discovery 4.63s + /images/batch 1.61s. Backend stage breakdown: get_or_build_taste 1.55s + taste_ranked_page 2.23s. Origin: Discovery computes taste vector then pgvector rank page. Target: warm-cache <500ms, cold <1.5s. Investigate caching of taste vector (per-user TTL?) + pgvector index tuning.',
+      },
+      {
+        id: 'BACK-PERFORMANCE-5',
+        title: 'Swipe latency 0.7-1.5s 흔들림',
+        note: 'Codex retest 2026-05-26: browser swipe 1.82s/1.75s/1.12s/1.81s; server swipe 1.50s/1.38s/0.746s/1.36s. PR4 async prefetch consume IS working — 3rd swipe with cache hit drops to 156ms prefetch stage. But variability is high. Identify which stage causes 0.7→1.5s spread (DB latency? embedding cache miss? pgvector?). Target swipe p95 ≤1.0s and p50 ≤0.5s on Singapore prod.',
+      },
+      {
+        id: 'FRONT-UX-5',
+        title: 'View Gallery 클릭 가끔 no-op',
+        note: 'Codex retest 2026-05-26: Profile card View Gallery 버튼 클릭 시 가끔 navigate 안 됨. 재현 1회. 직접 /board/<id> URL 접근은 정상. 원인 의심: button handler event propagation 또는 React Router race. 로그 + 재현 시나리오 필요.',
+      },
       {
         id: 'BACK-AUTH-2',
         title: 'Cache JWT 통합 테스트 hardening',
@@ -190,11 +205,18 @@ window.PROJECT_STATE = {
 
   prs: [
     {
-      number: 137,
-      title: 'fix(INFRA-DEPLOY-3): railway migrate align + Redis prod guard + docs drift',
+      number: 138,
+      title: 'fix(FULL-SESSION-DEDUPE-1): session create POST retry → duplicate Project/Session',
       mergedAt: null,
       mergedAtKST: null,
       sha: null,
+    },
+    {
+      number: 137,
+      title: 'fix(INFRA-DEPLOY-3): railway migrate align + Redis prod guard + docs drift',
+      mergedAt: '2026-05-26T09:33:00Z',
+      mergedAtKST: '2026-05-26 18:33 KST',
+      sha: 'ffc55e3',
     },
     {
       number: 136,
@@ -237,13 +259,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-05-26T04:56:32Z',
       mergedAtKST: '2026-05-26 13:56 KST',
       sha: '34a0c9e',
-    },
-    {
-      number: 130,
-      title: 'fix: swipe convergence — 10-swipe target + multimodal escalation + stuck-state safety',
-      mergedAt: '2026-05-26T02:23:10Z',
-      mergedAtKST: '2026-05-26 11:23 KST',
-      sha: '83db42c',
     },
   ],
 

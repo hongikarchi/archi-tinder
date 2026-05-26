@@ -172,6 +172,15 @@ Acceptance per slice: `npm run lint` + `npm run build` clean; light + all dark v
 
 ### MEDIUM
 
+#### BACK-PERFORMANCE-4 — Discovery 첫 로딩 4.6s
+Codex retest 2026-05-26: `/discovery` 4.63s + `/images/batch` 1.61s. Backend stage breakdown: `get_or_build_taste` 1.55s + `taste_ranked_page` 2.23s. Origin: Discovery computes taste vector then pgvector rank page. Target: warm-cache <500ms, cold <1.5s. Investigate caching of taste vector (per-user TTL?) + pgvector index tuning.
+
+#### BACK-PERFORMANCE-5 — Swipe latency 0.7-1.5s 흔들림
+Codex retest 2026-05-26: browser swipe 1.82s/1.75s/1.12s/1.81s; server swipe 1.50s/1.38s/0.746s/1.36s. **PR4 async prefetch consume IS working** — 3rd swipe with cache hit drops to 156ms prefetch stage. But variability is high. Identify which stage causes the 0.7→1.5s spread (DB query latency? embedding cache miss? pgvector?). Aim for swipe p95 ≤1.0s and p50 ≤0.5s on Singapore prod.
+
+#### FRONT-UX-5 — View Gallery 클릭 가끔 no-op
+Codex retest 2026-05-26: Profile card "View Gallery" 버튼 클릭 시 가끔 navigate 안 됨. 재현 1회. 직접 `/board/<id>` URL 접근은 정상. 원인 의심: button handler event propagation 또는 React Router race. 로그 + 재현 시나리오 필요.
+
 #### BACK-AUTH-2 — Cache JWT 통합 테스트 hardening
 `apps/accounts/authentication.py:74` cache-hit path skips parent `get_user()`. Current tests are unit-level (CachedJWTAuthentication.get_user direct call). Need integration coverage:
 - [ ] DRF `authenticate()` pipeline end-to-end (request → middleware → cache hit → user resolved → view executes)
@@ -241,6 +250,16 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 ---
 
 ## Done
+
+### FULL-SESSION-DEDUPE-1 — Session create POST retry → 중복 Project/Session — RESOLVED 2026-05-26 (PR #138 `3fcbe3c-pre-squash`)
+- [x] **Frontend `api/core.js`**: retry gate by HTTP method. `_IDEMPOTENT_METHODS = {GET, HEAD, OPTIONS}`. POST/PATCH/DELETE throw on first network error (no retry).
+- [x] **Frontend `api/sessions.js`**: `SESSION_CREATE_TIMEOUT_MS=30000` per-call override for `startSession` (cold pool ~16s requires >15s default).
+- [x] **Backend `views/sessions.py`**: dedupe guard at start of `SessionCreateView.post`. 30s window; match (`user`, `project.name`, `project.raw_query`, `project.filters`). Hit → returns existing session with `deduped:true` HTTP 200 (vs 201 fresh).
+- [x] **Tests `test_session_create_dedupe.py`** NEW: 8 cases (baseline 201, hit 200, expiry, different raw_query/name/filters, project_id=None retry, response shape).
+- Trade-offs: `recordSwipe` (POST) no-retry — backend `idempotency_key` (sessions.js:68) still guards server-side. Race window ~100ms (POST 1 commit → POST 2 SELECT) unreachable from single-tab client with retry-gate above.
+- Verification: manage.py check PASS · flake8 zero new · npm run lint+build PASS · code-review PASS · security-manager PASS · app-test FEATURE-SCOPED PASS (5/5 checklist incl. dedupe path HTTP 200 + `deduped:true` + same session_id + only 1 Project row).
+- Origin: Codex retest 2026-05-26 of develop=d53b232. P0 finding: 15s timeout → retry → 2 boards same name (one with 4 photos, one with 0).
+- Deferred surfaced to Next ### MEDIUM: BACK-PERFORMANCE-4 (Discovery 4.6s) + BACK-PERFORMANCE-5 (Swipe latency variability) + FRONT-UX-5 (View Gallery click no-op).
 
 ### INFRA-DEPLOY-3 — railway migrate align + Redis prod guard + docs drift — RESOLVED 2026-05-26 (PR #137 `09a3b7c-pre-squash`)
 - [x] `backend/railway.toml` buildCommand: dropped `migrate --noinput`. Per INFRA-DB-1, Railway runtime is `make_web_app` (no DDL); next schema migration would have failed at deploy time. Comment block rewritten to cite INFRA-DB-1 + operator runbook in `.env.example`. `collectstatic` kept.
