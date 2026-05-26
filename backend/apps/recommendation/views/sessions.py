@@ -188,12 +188,9 @@ class SessionCreateView(APIView):
 
             logger.info('Session created: %s (pool=%d, tiers=%d, relaxed=%s)', session.session_id, len(pool_ids), len(tiers), filter_relaxed)
 
-            # §6 logging: session_start + pool_creation. Sync emit (was daemon
-            # thread in PERF-3 but reverted in PR #128 — daemon thread DB
-            # access hit settings_dict['TIME_ZONE'] KeyError on first connection
-            # setup and silently failed all analytics; sync emit on main thread
-            # uses the established connection and avoids both issues. ~290 ms
-            # cost is acceptable; PERF-3 still meets ≤2000 ms goal at ~1800 ms.
+            # §6 logging: session_start + pool_creation. Keep this synchronous:
+            # emit_event_batch is best-effort, and using the established request
+            # connection avoids thread-local DB connection setup failures.
             with stage('emit_events'):
                 event_log.emit_event_batch([
                     {

@@ -6,7 +6,7 @@
  * fallback. Hand-edited only inside `systemFlow` / `recommendationFlow` /
  * `agentFlow` Mermaid bodies and the `milestones` archive (semi-static); all
  * other sections are rebuilt from `.claude/Task.md`, `gh pr list`, and
- * `.claude/agents/*.md` + `.claude/skills/<slug>/SKILL.md` frontmatter.
+ * `.claude/agents/<name>.md` + `.claude/skills/<slug>/SKILL.md` frontmatter.
  *
  * Loaded via <script> by `project/dashboard.html`, which opens by double-click
  * via file:// — no fetch, no server, no build step.
@@ -24,16 +24,23 @@
  * so the value can be re-parsed by any consumer. In-flight (not-yet-merged)
  * PRs carry `mergedAt: null` sentinel; next reporter-inline pass backfills.
  */
-// Reporter: Mermaid sources may be stale — commit 198eca4 reverted PERF-3 emit threading + added defensive TIME_ZONE settings declaration. Mermaid bodies unaffected at function-graph level.
+// Reporter: Mermaid sources may be stale — commit 7f6a056 touched apps/recommendation/views/swipe.py + engine.py + frontend/src/pages/SwipePage.jsx + App.jsx. Recommendation flow graph still accurate at function-graph level; refresh by hand only if MMR/centroid block needs the multimodal-escalation gate annotated.
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-05-26 09:19 KST',
-    head: '28b7242',
-    branch: 'feature/algo-perf-ci-hotfix-tz',
+    updatedAt: '2026-05-26 11:15 KST',
+    head: 'b4d24d6',
+    branch: 'feature/algo-convergence-10-swipe-target',
   },
 
   done: [
+    {
+      id: 'SWIPE-CONVERGENCE-10',
+      title: '10-swipe target + multimodal escalation + stuck-state safety',
+      completedAt: '2026-05-26',
+      prs: [130],
+      note: 'Replaces closed PR #127 (codex feature/algo-convergence-study). Algorithm policy synced to docs/algorithm.md: convergence_threshold 0.08→0.13, target_swipes=10 (product window), min_likes_for_multimodal=11 (K-Means K=2 gated behind target+1 — single centroid default for 10-swipe sessions, multimodal escalation on continue-past-target), convergence_min_recent_likes=2 (positive-evidence gate, blocks false convergence on dislike streaks). Frontend stuck-state safety floor (new vs #127): SwipePage isAt100 + App.jsx auto-nav get beyondTargetFloor (swipe_count >= target+5) — backend min_recent_likes gate can withhold phase=converged indefinitely on dislike-heavy paths; without floor user stranded until pool exhaust. Engine _with_image_focus bug fix: gallery_drawing_start decrements by 1 when focus_url removed from index < original drawing_start (prior clamp-only allowed boundary drift). async_prefetch_enabled True→False reverted (code-review caught: async branch writes prefetch cache, next-swipe handler never reads it back — chain broken, flag flip yields zero latency + daemon-thread DB lifecycle risk; tracked as PERF-PREFETCH-CHAIN in ### LOW). Swipe.py stale 0.08 defaults → 0.13. test_imp7 prefetch_strategy "async-thread"→"sync", test_imp8 default-flag assertions True→False. code-review (sonnet) FAIL → all 4 findings resolved pre-commit. security-manager PASS. Plan file merry-toasting-dove.md superseded — Calibrating label preserved in broader ConfidenceBar rewrite. 2 commits (e4677fb PR #127 base + 7f6a056 follow-up) — will squash. sha 7f6a056-pre-squash.',
+    },
     {
       id: 'INFRA-CI-1',
       title: 'PR #125 PERF-3 CI fail hotfix',
@@ -75,13 +82,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-05-26',
       prs: [120],
       note: 'BuildingDetailPage minHeight → height + overflowY:auto. Title/architect/meta 갤러리 위로 재배치. 상단 우측 "+ 보드에 추가" 핑크 그라디언트 버튼 + SaveToBoardModal 트리거. BoardDetailPage buildings 이동 시 fromBoard:true location.state. Codex P2 fix: saveEnabled negative gate → positive (saveEnabled={fromRecommended} ResultsPage 추천만). sha 8f90104.',
-    },
-    {
-      id: 'FRONT-DESIGN-2',
-      title: '카드 이미지 contain 전환 + 카드 크기 확대',
-      completedAt: '2026-05-26',
-      prs: [118],
-      note: 'SwipeCard objectFit cover → contain. Letterbox 배경 #111. CARD_WIDTH min(420, vw-32). SwipePage flex centering wrapper. Converged phase confidence 무관 finish 버튼 활성화. App.jsx auto-nav at100 condition (phase===converged) standalone branch. Codex P1: CARD_WIDTH vw-16 → vw-32 (390폰 16px 클립 해소). Codex P2: finishUnlocked latch drop, PR #121 1-shot isAt100 보존. sha 9fcd078.',
     },
     {
       id: 'FRONT-UX-2',
@@ -153,6 +153,11 @@ window.PROJECT_STATE = {
         title: 'engine.py matmul warning 정리',
         note: 'sklearn emits matmul dtype warning during clustering. Cosmetic noise but indicates float32/float64 mismatch — quick fix is dtype-align embedding ndarrays before kmeans.',
       },
+      {
+        id: 'PERF-PREFETCH-CHAIN',
+        title: 'async_prefetch chain completion (Redis swap blocker)',
+        note: 'backend/config/settings.py:216 async_prefetch_enabled: False (intentional). Async branch in views/swipe.py spawns background thread that writes cache.set("prefetch:<session>:<round>", card) but next-swipe handler never reads that key — instant-swap chain broken, flag-flip yields zero latency benefit. Two-step fix: (1) add cache.get("prefetch:<session>:<saved_current_round>") to async branch so prior thread write feeds current response; (2) swap LocMemCache → Redis so multi-worker Railway prod actually shares cache across processes. Re-flip True only after both land. Hyperparam table in docs/algorithm.md tracks this flag — keep in sync.',
+      },
     ],
     low: [
       {
@@ -185,11 +190,25 @@ window.PROJECT_STATE = {
 
   prs: [
     {
-      number: 128,
-      title: 'fix(ci): PR #125 CI fail — settings TIME_ZONE + test patch',
+      number: 130,
+      title: 'fix: swipe convergence — 10-swipe target + multimodal escalation + stuck-state safety',
       mergedAt: null,
       mergedAtKST: null,
       sha: null,
+    },
+    {
+      number: 129,
+      title: 'fix(dashboard): state.js block comment */ early termination',
+      mergedAt: '2026-05-26T00:52:54Z',
+      mergedAtKST: '2026-05-26 09:52 KST',
+      sha: 'b4d24d6',
+    },
+    {
+      number: 128,
+      title: 'fix(ci): PR #125 CI fail — settings TIME_ZONE + test patch',
+      mergedAt: '2026-05-26T00:25:28Z',
+      mergedAtKST: '2026-05-26 09:25 KST',
+      sha: '9681270',
     },
     {
       number: 126,
@@ -223,18 +242,6 @@ window.PROJECT_STATE = {
       title: 'chore(reporter): session-end housekeeping — PR #119 + #121',
       mergedAt: '2026-05-25T15:32:52Z',
       mergedAtKST: '2026-05-26 00:32 KST',
-    },
-    {
-      number: 121,
-      title: 'feat(swipe,discovery): auto-result nav + arrow-key swipe (supersedes #114 #115)',
-      mergedAt: '2026-05-25T15:24:53Z',
-      mergedAtKST: '2026-05-26 00:24 KST',
-    },
-    {
-      number: 120,
-      title: 'feat: BuildingDetailPage UX 개선 — 스크롤·순서·보드 저장',
-      mergedAt: '2026-05-25T16:06:40Z',
-      mergedAtKST: '2026-05-26 01:06 KST',
     },
   ],
 

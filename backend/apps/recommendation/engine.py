@@ -24,6 +24,8 @@ import numpy as np
 from django.conf import settings
 from django.core.cache import cache
 from django.db import connections as _connections
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_samples
 
 from . import event_log
 from .perf_timing import stage
@@ -57,6 +59,32 @@ _AVAILABLE_COLUMNS = None                  # frozenset of column names in canoni
 # other's stats. threading.local() gives each request-thread its own copy so reads
 # always reflect the call made on THIS thread, not a concurrent request's call.
 _telemetry = threading.local()             # attrs: embedding_call_stats, clustering_stats
+
+
+def _finite_unit_vector(raw_vec):
+    """Return a finite 384-dim vector, normalized when possible."""
+    vec = np.asarray(raw_vec, dtype=np.float64)
+    if vec.shape != (384,):
+        return None
+    if not np.isfinite(vec).all():
+        return None
+    norm = float(np.linalg.norm(vec))
+    if not math.isfinite(norm) or norm <= 0:
+        return vec
+    return vec / norm
+
+
+def _parse_embedding_text(raw):
+    try:
+        return _finite_unit_vector(np.fromstring(raw.strip('[]'), sep=',', dtype=np.float64))
+    except (AttributeError, ValueError):
+        return None
+
+
+def _cosine_sim_matrix(left, right):
+    """Small-matrix cosine similarity without noisy BLAS overflow warnings."""
+    sim = np.einsum('ij,kj->ik', left, right, optimize=True)
+    return np.nan_to_num(sim, nan=0.0, posinf=0.0, neginf=0.0)
 
 
 # ── Schema-probe helpers ──────────────────────────────────────────────────────
@@ -430,7 +458,8 @@ def get_building_embedding(canonical_bld_id):
         row = cur.fetchone()
     if not row:
         return None
-    return [float(x) for x in row[0].strip('[]').split(',')]
+    embedding = _parse_embedding_text(row[0])
+    return embedding.tolist() if embedding is not None else None
 
 
 _CARD_CACHE_TTL = None   # resolved lazily from RC to avoid import-time RC access
@@ -452,6 +481,53 @@ def _card_cache_key(canonical_bld_id):
     return f'bcard:{_CARD_CACHE_SCHEMA}:{canonical_bld_id}'
 
 
+def _with_image_focus(card, image_focus):
+    if not image_focus or image_focus not in _VALID_IMAGE_FOCUS or not card:
+        return card
+
+    focused = dict(card)
+    focused['metadata'] = dict(card.get('metadata') or {})
+    focused['covers_by_type'] = dict(card.get('covers_by_type') or {})
+    focus_url = focused['covers_by_type'].get(image_focus)
+    focused['image_focus'] = image_focus
+    if not focus_url:
+        return focused
+
+    focused['image_url'] = focus_url
+    focused['image_kind'] = image_focus
+    gallery = list(card.get('gallery') or [])
+    gallery_meta = list(card.get('gallery_meta') or [])
+
+    original_drawing_start = card.get('gallery_drawing_start')
+    try:
+        removed_index = gallery.index(focus_url)
+    except ValueError:
+        removed_index = None
+
+    filtered = [
+        (url, meta) for url, meta in zip(gallery, gallery_meta)
+        if url != focus_url
+    ]
+    focused['gallery'] = [url for url, _ in filtered]
+    focused['gallery_meta'] = [meta for _, meta in filtered]
+
+    # Shift drawing_start down when focus_url was strictly before the drawing
+    # section (its removal pulls the drawing section forward by 1). Otherwise
+    # leave drawing_start untouched. Clamp guards against malformed input.
+    new_drawing_start = original_drawing_start
+    if (new_drawing_start is not None
+            and removed_index is not None
+            and removed_index < new_drawing_start):
+        new_drawing_start -= 1
+
+    fallback = len(focused['gallery'])
+    focused['gallery_drawing_start'] = min(
+        new_drawing_start if new_drawing_start is not None else fallback,
+        len(focused['gallery']),
+    )
+    return focused
+
+
 def get_building_card(canonical_bld_id, image_focus=None):
     """Fetch a single building as an ImageCard dict. Results cached per canonical_bld_id.
 
@@ -460,16 +536,10 @@ def get_building_card(canonical_bld_id, image_focus=None):
     cover field at row-to-card time; the cached card holds full covers_by_type +
     all_images so a different focus can be selected without re-fetching.
     """
-    if image_focus:
-        # When focus is requested, recompute card from cached source row data
-        # only if cache holds full payload (it does, since v2 cards include
-        # covers_by_type + all_images). Simplest path: bypass cache + re-build.
-        key = None
-    else:
-        key = _card_cache_key(canonical_bld_id)
-        cached = cache.get(key)
-        if cached is not None:
-            return cached
+    key = _card_cache_key(canonical_bld_id)
+    cached = cache.get(key)
+    if cached is not None:
+        return _with_image_focus(cached, image_focus)
 
     _required_cols = [
         'canonical_bld_id', 'name', 'architect_names', 'architects_text',
@@ -488,8 +558,8 @@ def get_building_card(canonical_bld_id, image_focus=None):
         )
         rows = _dictfetchall(cur)
     card = _row_to_card(rows[0], image_focus=image_focus) if rows else None
-    if card is not None and key is not None:
-        cache.set(key, card, _card_cache_ttl())
+    if card is not None:
+        cache.set(key, _row_to_card(rows[0]), _card_cache_ttl())
     return card
 
 
@@ -587,20 +657,16 @@ def get_buildings_by_ids(canonical_bld_ids, image_focus=None):
     if not canonical_bld_ids:
         return []
 
-    # Phase 1: cache lookup (skipped when image_focus is set; per-focus covers
-    # require fresh _row_to_card pass, but DB row data is still cacheable —
-    # caller can refetch with image_focus=None to use cache. For now, bypass.)
+    # Phase 1: cache lookup. Cache stores focus-less base cards; callers can
+    # derive per-focus covers from covers_by_type without another DB round-trip.
     card_map = {}
     miss_ids = []
-    if image_focus:
-        miss_ids = list(canonical_bld_ids)
-    else:
-        for bid in canonical_bld_ids:
-            cached = cache.get(_card_cache_key(bid))
-            if cached is not None:
-                card_map[bid] = cached
-            else:
-                miss_ids.append(bid)
+    for bid in canonical_bld_ids:
+        cached = cache.get(_card_cache_key(bid))
+        if cached is not None:
+            card_map[bid] = _with_image_focus(cached, image_focus)
+        else:
+            miss_ids.append(bid)
 
     # Phase 2: batch DB fetch for cache misses only
     if miss_ids:
@@ -626,9 +692,7 @@ def get_buildings_by_ids(canonical_bld_ids, image_focus=None):
         for row in rows:
             card = _row_to_card(row, image_focus=image_focus)
             card_map[row['canonical_bld_id']] = card
-            # Only cache the focus-less card so the cache key remains shared.
-            if not image_focus:
-                cache.set(_card_cache_key(row['canonical_bld_id']), card, ttl)
+            cache.set(_card_cache_key(row['canonical_bld_id']), _row_to_card(row), ttl)
 
     # Phase 3: restore input order
     return [card_map[bid] for bid in canonical_bld_ids if bid in card_map]
@@ -797,7 +861,7 @@ def create_pool_with_relaxation(
     # Tier 2
     if start_tier <= 2:
         relaxed = {k: v for k, v in (filters or {}).items()
-                   if k not in ('location_country', 'year_min', 'year_max', 'min_area', 'max_area')}
+                   if k not in ('location_country', 'location_city', 'year_min', 'year_max', 'min_area', 'max_area')}
         if relaxed and relaxed != (filters or {}):
             relaxed_priority = [k for k in (filter_priority or []) if k in relaxed]
             with stage('pool_tier_2', filter_count=len(relaxed)):
@@ -1353,12 +1417,9 @@ def get_pool_embeddings(pool_ids):
 
         with stage('embeddings_parse_normalize', n=len(rows)):
             for row in rows:
-                embedding_str = row['embedding']
-                embedding = np.array([float(x) for x in embedding_str.strip('[]').split(',')])
-                norm = np.linalg.norm(embedding)
-                if norm > 0:
-                    embedding = embedding / norm
-                _building_embedding_cache[row['canonical_bld_id']] = embedding
+                embedding = _parse_embedding_text(row['embedding'])
+                if embedding is not None:
+                    _building_embedding_cache[row['canonical_bld_id']] = embedding
 
             # FIFO eviction when cache exceeds max size (Python 3.7+ dict preserves insertion order)
             if len(_building_embedding_cache) > _BUILDING_CACHE_MAX_SIZE:
@@ -1500,7 +1561,7 @@ def farthest_point_from_pool(pool_ids, exposed_ids, pool_embeddings):
     C = np.stack([pool_embeddings[bid] for bid in candidate_ids])   # (N, 384)
     E = np.stack([pool_embeddings[bid] for bid in exposed_valid])   # (M, 384)
 
-    sim = C @ E.T                            # (N, M) -- single BLAS matmul
+    sim = _cosine_sim_matrix(C, E)           # (N, M)
     max_sim_per_candidate = sim.max(axis=1)  # (N,) -- nearest-exposed similarity
     best_idx = int(np.argmin(max_sim_per_candidate))
     return candidate_ids[best_idx]
@@ -1562,11 +1623,28 @@ def compute_taste_centroids(like_vectors, round_num):
         _centroid_cache[cache_key] = result
         return centroids, centroid
 
-    from sklearn.cluster import KMeans
-    from sklearn.metrics import silhouette_samples
     like_embeddings = np.array([w[0] for w in weighted_likes])
     like_weights = np.array([w[1] for w in weighted_likes])
     global_centroid = _weighted_centroid(weighted_likes)
+
+    min_likes_for_multimodal = max(
+        2,
+        int(RC.get('min_likes_for_multimodal', RC.get('target_swipes', 10))),
+    )
+    if len(weighted_likes) < min_likes_for_multimodal:
+        centroids = [global_centroid]
+        stats = {
+            'cluster_count_used': 1,
+            'silhouette_score': None,
+            'soft_relevance_used': False,
+            'n_likes_at_decision': n_likes,
+        }
+        _telemetry.clustering_stats = stats
+        result = (centroids, global_centroid, stats)
+        if len(_centroid_cache) > 20:
+            _centroid_cache.clear()
+        _centroid_cache[cache_key] = result
+        return centroids, global_centroid
 
     # Path 2 & 3: Topic 06 silhouette-based adaptive k (flag-gated, N>=4 required)
     if RC.get('adaptive_k_clustering_enabled', False) and len(weighted_likes) >= 4:
@@ -1654,7 +1732,7 @@ def compute_mmr_next(pool_ids, exposed_ids, pool_embeddings, like_vectors, round
 
     # ── Relevance (vectorized) ────────────────────────────────────────────
     K_mat = np.stack(centroids)   # (K, 384)
-    sim_mat = C @ K_mat.T         # (N, K)
+    sim_mat = _cosine_sim_matrix(C, K_mat)  # (N, K)
 
     if RC.get('soft_relevance_enabled', False) and len(centroids) > 1:
         # Numerically stable softmax-weighted average per candidate (Topic 06)
@@ -1669,7 +1747,7 @@ def compute_mmr_next(pool_ids, exposed_ids, pool_embeddings, like_vectors, round
     exposed_valid = [e for e in exposed_ids if e in pool_embeddings]
     if exposed_valid:
         E = np.stack([pool_embeddings[e] for e in exposed_valid])  # (M, 384)
-        redundancy = (C @ E.T).max(axis=1)                         # (N,)
+        redundancy = _cosine_sim_matrix(C, E).max(axis=1)           # (N,)
     else:
         redundancy = np.zeros(len(valid_candidates))
 
@@ -1685,7 +1763,9 @@ def _apply_recency_weights(like_vectors, round_num, gamma):
     """
     weighted_vecs = []
     for entry in like_vectors:
-        embedding = np.array(entry['embedding'])
+        embedding = _finite_unit_vector(entry['embedding'])
+        if embedding is None:
+            continue
         entry_round = entry['round']
         weight = math.exp(-gamma * max(0, round_num - entry_round))
         weighted_vecs.append((embedding, weight))
@@ -1733,19 +1813,29 @@ def compute_convergence(current_pref, previous_pref):
     return delta_v
 
 
-def check_convergence(history, threshold, window=3):
+def _recent_like_count(recent_actions, window):
+    if recent_actions is None:
+        return None
+    return sum(1 for action in list(recent_actions)[-window:] if action == 'like')
+
+
+def check_convergence(history, threshold, window=3, recent_actions=None, min_recent_likes=0):
     """
     Check if convergence has been reached based on moving average.
     Returns bool
     """
     if len(history) < window:
         return False
+    if min_recent_likes > 0:
+        recent_likes = _recent_like_count(recent_actions, window)
+        if recent_likes is not None and recent_likes < min_recent_likes:
+            return False
 
     moving_avg = np.mean(history[-window:])
     return bool(moving_avg < threshold)
 
 
-def compute_confidence(history, threshold, window=3):
+def compute_confidence(history, threshold, window=3, recent_actions=None, min_recent_likes=0):
     """
     Compute the user-facing confidence value (Spec C-1 통합안 1).
 
@@ -1770,6 +1860,10 @@ def compute_confidence(history, threshold, window=3):
     """
     if len(history) < window:
         return None
+    if min_recent_likes > 0:
+        recent_likes = _recent_like_count(recent_actions, window)
+        if recent_likes is not None and recent_likes < min_recent_likes:
+            return None
     safe_threshold = max(float(threshold), 1e-6)
     avg = sum(history[-window:]) / window
     return max(0.0, 1.0 - avg / safe_threshold)

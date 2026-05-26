@@ -3,7 +3,7 @@
 > Phase logic, mathematical formulas, and hyperparameter theory.
 > Research agent updates this file. Orchestrator references it for algorithm tasks.
 
-**Last Synced (Reporter):** 2026-05-24 fd063e0
+**Last Synced (Reporter):** 2026-05-26 7f6a056
 
 ---
 
@@ -45,9 +45,11 @@ _(Updated 2026-04-29 6337f84: Tier 4 harness fix — review/.claude/commands/rev
 Gathers initial user feedback within the bounded pool while ensuring visual diversity.
 
 - Execute **Greedy Farthest-point Sampling** within the pool to serve cards that are as visually distinct from one another as possible.
-- **Transition:** Phase 1 -> Phase 2 when Like count reaches `min_likes_for_clustering` (e.g., 4).
+- **Transition:** Phase 1 -> Phase 2 (Analyzing) when Like count reaches `min_likes_for_clustering` (e.g., 4). At this point a *single global weighted centroid* (K=1) drives MMR — K-Means with K>=2 is held back until `min_likes_for_multimodal` (default `target_swipes + 1`, e.g., 11) so the bounded 10-swipe target window stays single-mode for speed + early-noise resilience.
 
 _(Updated 2026-04-26 da547cb: min_likes_for_clustering 3→4 per Spec v1.8 Topic 06 N≥4 cliff mitigation — defers K-Means until N≥4 to avoid Investigation 09 worst-case 1 Love + 2 Likes pathology.)_
+
+_(Updated 2026-05-26: 10-swipe target adopted as default product window — Phase 2 still activates at N>=`min_likes_for_clustering` (4) with K=1 single-centroid, but multimodal K-Means is gated behind `min_likes_for_multimodal` (default 11 = target_swipes + 1). Multi-mode capture therefore activates only when a user continues swiping past the target window (e.g. "more recommendations" resume flow). Trade: ~70-100 ms per-swipe latency win for default users, multi-mode capability deferred to post-target swipes.)_
 
 _(Updated 2026-04-26 1491c5d: IMP-8 async prefetch background thread — flag-gated default OFF; activates daemon thread spawn for prefetch_card+_2 computation when enabled, primary swipe response returns immediately with prefetch=None. Combined with IMP-7 cache fix (06c6c5a): total_ms ~600ms→~300ms per spec v1.6 §4 re-tightening pathway.)_
 
@@ -88,7 +90,11 @@ gamma (decay_rate) range: 0.01-0.1. Current production value: 0.05.
 Group the weighted Like vectors into K clusters (e.g., 2). The centroids represent the user's multi-modal preference (V_pref).
 Uses `sample_weight` parameter with recency weights.
 
+Multimodal K-Means is gated behind `min_likes_for_multimodal` (default `target_swipes + 1`). Below the gate the engine returns the global recency-weighted single centroid (K=1) — same code path that the legacy `adaptive_k_clustering_enabled` flag uses when silhouette falls below 0.15. Above the gate the existing adaptive-k / soft-relevance machinery applies.
+
 _(Updated 2026-04-25 96b91a6: Sprint 4 Topic 06 adaptive k — when `adaptive_k_clustering_enabled` (default OFF), N>=4 likes triggers silhouette-weighted k {1,2} selection (threshold 0.15). Weak cluster signal degrades to k=1 (single global weighted centroid). Implementation uses silhouette_samples + np.average(weights=like_weights) for sklearn 1.6.1 API compat.)_
+
+_(Updated 2026-05-26: `min_likes_for_multimodal` gate added in `compute_taste_centroids` — short-circuits to K=1 (global recency-weighted centroid) until N>=11. Topic 06 adaptive-k + soft-relevance paths therefore execute only after the gate passes, e.g. on continue-past-target resume flows.)_
 
 ### MMR Scoring
 ```
@@ -107,10 +113,13 @@ _(Updated 2026-04-25 de9bfa3: Sprint 4 Topic 04(a) MMR λ ramp — when `mmr_lam
 delta_V = ||centroid_now - centroid_prev|| / ||centroid_prev||
 ```
 
-Moving average over `convergence_window` rounds. Converged when delta_V < epsilon.
-epsilon (convergence_threshold) range: 0.05-0.15. Current production value: 0.08.
+Moving average over `convergence_window` rounds. Converged when delta_V < epsilon AND the last `convergence_window` swipes contain at least `convergence_min_recent_likes` likes (recent positive-evidence gate). Without recent positive evidence the engine declines to declare convergence even if delta_V settles — protects against false convergence on extended dislike streaks.
 
-_(Updated 2026-04-25 f3b8381: Sprint 3 C-1 confidence bar shipped — engine.compute_confidence(history, threshold, window=3) returns user-facing confidence in [0,1] (or None for hide-bar) per spec formula `1 − min(1, avg(last 3 Δv) / ε_threshold)`. SwipeView response includes 'confidence' field in all 3 paths (normal-swipe / action-card reset / complete). confidence_update SessionEvent emitted with `action` field for Spec v1.2 dislike-bias telemetry. Bar visible threshold = phase transition threshold = 0.08 (settings.py); informational vs decisional signals at the same numeric threshold but different semantic targets per Investigation 13.)_
+epsilon (convergence_threshold) range: 0.05-0.15. Current production value: 0.13 (loosened so the moving average can clear epsilon within the 10-swipe target window).
+
+_(Updated 2026-04-25 f3b8381: Sprint 3 C-1 confidence bar shipped — engine.compute_confidence(history, threshold, window=3) returns user-facing confidence in [0,1] (or None for hide-bar) per spec formula `1 − min(1, avg(last 3 Δv) / ε_threshold)`. SwipeView response includes 'confidence' field in all 3 paths (normal-swipe / action-card reset / complete). confidence_update SessionEvent emitted with `action` field for Spec v1.2 dislike-bias telemetry.)_
+
+_(Updated 2026-05-26: convergence_threshold 0.08→0.13 + `convergence_min_recent_likes=2` recent-likes gate added to `check_convergence` / `compute_confidence`. Both gates protect against false convergence on dislike-dominant windows: the moving-average threshold alone can be reached by stable-low-delta dislike chains, so a positive-evidence requirement is layered in. Confidence-bar reads `None` (Calibrating…) when the gate withholds convergence — frontend SwipePage `ConfidenceBar` renders calibration semantic rather than 100%.)_
 
 ### Preference Vector Updates
 - Like: +like_weight (0.5) added to preference vector, L2-normalized
@@ -137,11 +146,14 @@ _(Updated 2026-04-25 190c830: Like writes now carry an `intensity` field (defaul
 |-------|------|-------|-----------------|
 | decay_rate | float | 0.01-0.1 | 0.05 |
 | mmr_penalty | float | 0.1-0.4 | 0.3 |
-| convergence_threshold | float | 0.05-0.15 | 0.08 |
+| convergence_threshold | float | 0.05-0.15 | 0.13 |
+| convergence_min_recent_likes | int | 0-5 | 2 |
 | like_weight | float | 0.1-1.0 | 0.5 |
 | dislike_weight | float | -2.0 to -0.1 | -1.0 |
 | bounded_pool_target | int | 50-300 | 150 |
 | min_likes_for_clustering | int | 2-5 | 4 |
+| min_likes_for_multimodal | int | 2-25 | 11 |
+| target_swipes | int | 5-25 | 10 |
 | convergence_window | int | 2-5 | 3 |
 | k_clusters | int | 1-3 | 2 |
 | max_consecutive_dislikes | int | 5-20 | 5 |
@@ -185,7 +197,7 @@ Originally specified as Grid Search, now implemented as **Optuna Bayesian optimi
 - Scoring: composite of precision and average swipe count
 - Production baseline seeded as first Optuna trial for fair comparison
 
-Target: convergence in 15-25 swipes with high precision in Top-K results.
+Target: convergence in ~10 swipes for the default product window (target_swipes=10). Continue-past-target / "more recommendations" resume flows can extend N past `min_likes_for_multimodal` (11) and engage K-Means multi-mode capture for power users.
 
 _(Updated 2026-05-24 8b4df92: `backend/tools/algorithm_tester.py` deleted in PR #92 (v1 legacy cleanup); the Optuna Bayesian search description above is preserved as past-implementation documentation — no in-repo search-space source remains.)_
 
