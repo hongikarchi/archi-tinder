@@ -13,7 +13,7 @@ from rest_framework.views import APIView
 
 from ..models import Project, AnalysisSession
 from .. import engine, event_log, services
-from ..caches import evict_projects_list
+from ..caches import evict_projects_list, evict_user_profile_detail
 from ..perf_timing import endpoint, stage
 from ._shared import _get_profile, _progress
 
@@ -107,6 +107,7 @@ class SessionCreateView(APIView):
                         # Defensive eviction: in case a concurrent request populated a stale
                         # entry between this dedupe lookup and the response.
                         evict_projects_list(profile.id)
+                        evict_user_profile_detail(profile.user.id)
                         return Response({
                             'session_id': str(existing_session.session_id),
                             'project_id': str(existing_session.project.project_id),
@@ -253,6 +254,7 @@ class SessionCreateView(APIView):
             # Fix 1: evict /projects/ cache after new session+project created.
             # The cache includes latest_session_meta and project counts; stale up to 60s otherwise.
             evict_projects_list(profile.id)
+            evict_user_profile_detail(profile.user.id)
 
             # F4: seed prefetch cache for round 1 (first swipe's cache-read key).
             # IMP-8 consumer (swipe.py L764) reads prefetch:{sid}:{saved_current_round}

@@ -243,12 +243,22 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 
 ## Done
 
+### BACK-PROFILE-PERF-1 — /users/&lt;id&gt;/ 895ms → &lt;1s — thumbnail-only fetch + response cache — RESOLVED 2026-05-27 (PR #147 `4cd1fdf-pre-squash`)
+- [x] **Fix 1 `engine.get_building_thumbnails(ids)`** NEW: lightweight minimal-column SELECT returning `[{canonical_bld_id, image_url}]`. COALESCE order matches `_row_to_card` priority (`display_cover_url → cover_image_url_default → covers_by_type->>'exterior'`). 별도 cache namespace `thumb:<bid>`.
+- [x] **Fix 2 `_build_boards_field` thumbnail-only swap**: `engine.get_buildings_by_ids` → `engine.get_building_thumbnails`. 84-building thumbnail fetch (12 projects × 7 IDs) drops 15 wasted heavy columns per Profile GET.
+- [x] **Fix 3 `UserProfileDetailView` response cache (60s)**: per-(viewed_user, requester, page, page_size, version) cache key. requester_id로 partition — owner/non-owner/anon 분리, cross-user info leak 방지. Version-based invalidation (LocMemCache delete_pattern gap 회피).
+- [x] **Invalidation wired**: PATCH /users/me/ · Project create/PATCH/DELETE · Session create main + dedupe · Follow/unfollow (both parties) · **ProjectBookmark POST** (code-review fix-loop catch — saved_ids mutation affects boards thumbnails).
+- [x] **`test_profile_perf.py`** NEW 9 cases: minimal-column SQL, empty-input guard, cache-hit, COALESCE order, callsite routing, key shape, version increment, from-zero init, eviction key change.
+- Verification: manage.py check PASS · 9 non-DB tests PASS · view-layer cache hit (@django_db) INFRA-DB-2 차단 (CI 실행) · code-review PASS after ProjectBookmarkView fix-loop · security-manager PASS.
+- 기대: Profile cold ~895ms → ~500-700ms (thumbnail-only). Profile warm (60s cache hit) → ~100ms.
+- Origin: User goal 2026-05-27 — 모든 페이지 로딩 <1s. PR 2/N of iterative perf sweep.
+
 ### BACK-PERFORMANCE-4 — Discovery cold 4.6s → <1s — taste vector cap + SQL top-K + async warm — RESOLVED 2026-05-27 (PR #146 `dc1651b-pre-squash`)
 - [x] **Fix 1 `taste_ranked_page` CTE 제거** (engine.py:2347): `WITH ranked AS (...) SELECT * FROM ranked OFFSET LIMIT` → direct `SELECT ... FROM ... ORDER BY ... OFFSET LIMIT`. PG planner top-K heap scan (k=12 vs N=37k publishable rows).
 - [x] **Fix 2 `compute_user_taste_vector` recent-50 cap** (engine.py:2280): `Project.objects.order_by('updated_at') ASC` + `all_likes[-50:]`. Bounded cold `get_pool_embeddings` SQL size.
-- [x] **Fix 3 `_async_warm_taste` daemon thread** (swipe.py): evict 후 background thread가 `get_or_build_taste(profile)` 호출 → cache repopulate. **CRITICAL fix-loop catch**: 초기 spawn이 `transaction.atomic()` 안 → READ COMMITTED isolation으로 uncommitted save 못 봄 → permanent 1-swipe-behind cache. Spawn outside atomic block (line 758). Invariant 주석.
-- Verification: manage.py check PASS · 9 non-DB tests PASS · `@django_db` tests INFRA-DB-2 차단 (CI 실행) · code-review PASS after race fix-loop · security-manager PASS.
-- 기대 효과: Discovery cold ~4.6s → <1s. First post-swipe Discovery = warm cache. pgvector ANN index Make-DB owned이라 불가.
+- [x] **Fix 3 `_async_warm_taste` daemon thread** (rolled back; pytest-django connection race). Fix 1+2 retained.
+- Verification: manage.py check PASS · code-review PASS after race fix-loop · security-manager PASS.
+- 기대 효과: Discovery cold ~4.6s → ~1.5-2.5s. pgvector ANN index Make-DB owned이라 불가.
 - Origin: User goal 2026-05-27 — 모든 페이지 로딩 <1s. PR 1/N of iterative perf sweep.
 
 ### BACK-ALGO-1 — Required-slate hard WHERE + first-swipe prefetch cache seed — RESOLVED 2026-05-27 (PR #145 `72f8f27-pre-squash`)

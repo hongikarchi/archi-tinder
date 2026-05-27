@@ -14,6 +14,8 @@ from django.conf import settings
 
 from rest_framework_simplejwt.settings import api_settings
 
+from django.core.cache import cache
+
 from .authentication import invalidate_user_cache
 from .models import UserProfile, SocialAccount
 from .serializers import UserSerializer, UserProfileSerializer, UserProfileSelfUpdateSerializer
@@ -405,11 +407,13 @@ def _build_boards_field(target_profile, is_owner, page=1, page_size=12):
     project_bid_lists = {p.project_id: _extract_ids(p) for p in projects}
     all_bids = list({bid for bids in project_bid_lists.values() for bid in bids})
 
-    # Single batch query for the paged slice's buildings only
+    # Single batch query for the paged slice's buildings only.
+    # Use thumbnail-only fetch (2 columns) instead of full card (17 columns)
+    # to avoid transferring heavy text/JSONB fields we don't use here.
     image_map = {}  # canonical_bld_id → image_url
     if all_bids:
-        cards = engine.get_buildings_by_ids(all_bids)
-        image_map = {c['canonical_bld_id']: c.get('image_url', '') for c in cards}
+        thumbs = engine.get_building_thumbnails(all_bids)
+        image_map = {t['canonical_bld_id']: t['image_url'] for t in thumbs}
 
     items = []
     for p in projects:
@@ -455,6 +459,11 @@ class UserProfileDetailView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request, user_id):
+        from apps.recommendation.caches import (
+            get_user_profile_detail_cache_key,
+            PROFILE_DETAIL_TTL,
+        )
+
         profile = get_object_or_404(UserProfile, user__id=user_id)
         requester_profile = getattr(request.user, 'profile', None) if request.user.is_authenticated else None
         is_owner = requester_profile and requester_profile.pk == profile.pk
@@ -466,6 +475,20 @@ class UserProfileDetailView(APIView):
             page_size = int(request.query_params.get("boards_page_size", 12))
         except (TypeError, ValueError):
             page_size = 12
+
+        # Response-level cache: key includes viewer identity + pagination params
+        # so owner/non-owner payloads (boards visibility) and pagination state
+        # are never mixed. Version-based invalidation bumps the version key on
+        # any profile mutation, rendering old entries unreachable without explicit
+        # delete_pattern (which LocMemCache doesn't support).
+        requester_id_for_cache = str(requester_profile.id) if requester_profile else 'anon'
+        cache_key = get_user_profile_detail_cache_key(
+            user_id, requester_id_for_cache, page, page_size
+        )
+        cached_payload = cache.get(cache_key)
+        if cached_payload is not None:
+            return Response(cached_payload)
+
         data = UserProfileSerializer(profile).data
         data['boards'] = _build_boards_field(profile, is_owner, page=page, page_size=page_size)
 
@@ -479,6 +502,9 @@ class UserProfileDetailView(APIView):
         else:
             data['is_following'] = False
 
+        # Serialiser returns OrderedDict; cast to plain dict for cache storage
+        # so it round-trips cleanly through pickle / JSON.
+        cache.set(cache_key, dict(data), PROFILE_DETAIL_TTL)
         return Response(data)
 
 
@@ -500,5 +526,9 @@ class UserProfileSelfUpdateView(APIView):
         serializer = UserProfileSelfUpdateSerializer(profile, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
+        # Invalidate all profile-detail cache entries for this user so the next
+        # GET sees updated display_name / avatar_url / bio / etc.
+        from apps.recommendation.caches import evict_user_profile_detail
+        evict_user_profile_detail(profile.user.id)
         # Return full UserProfileSerializer shape (consistent with GET)
         return Response(UserProfileSerializer(profile).data)

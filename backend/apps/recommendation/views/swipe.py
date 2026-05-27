@@ -15,7 +15,12 @@ from rest_framework.views import APIView
 
 from ..models import Project, AnalysisSession, SwipeEvent
 from .. import engine, event_log
-from ..caches import evict_taste, evict_projects_list, evict_discovery_feed
+from ..caches import (
+    evict_taste,
+    evict_projects_list,
+    evict_discovery_feed,
+    evict_user_profile_detail,
+)
 from ._shared import _get_profile, _progress, _liked_id_only
 
 logger = logging.getLogger('apps.recommendation')
@@ -281,6 +286,9 @@ class ProjectBookmarkView(APIView):
 
         evict_projects_list(profile.id)
         evict_discovery_feed(profile.id)
+        # Profile detail boards payload uses saved_ids for cover/thumbnails;
+        # bookmark mutation must invalidate. Missed in initial PR — code-review catch.
+        evict_user_profile_detail(profile.user_id)
 
         # --- Resolve optional session for event association ---
         session = None

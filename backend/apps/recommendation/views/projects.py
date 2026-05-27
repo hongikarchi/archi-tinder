@@ -12,7 +12,10 @@ from rest_framework.views import APIView
 
 from ..models import AnalysisSession, Project
 from ..serializers import ProjectListSerializer, ProjectSerializer, ProjectSelfUpdateSerializer
-from ..caches import evict_taste, get_or_build_projects_list, evict_projects_list, evict_discovery_feed
+from ..caches import (
+    evict_taste, get_or_build_projects_list, evict_projects_list,
+    evict_discovery_feed, evict_user_profile_detail,
+)
 from ..perf_timing import endpoint, stage
 from ._shared import _get_profile
 
@@ -103,6 +106,7 @@ class ProjectListCreateView(APIView):
         serializer.is_valid(raise_exception=True)
         project = serializer.save(user=profile)
         evict_projects_list(profile.id)
+        evict_user_profile_detail(profile.user.id)
         logger.info('Project created: %s by user %s', project.project_id, profile.pk)
         return Response(
             ProjectSerializer(project, context={'request': request}).data,
@@ -178,6 +182,7 @@ class ProjectDetailView(APIView):
 
         project.refresh_from_db()
         evict_projects_list(profile.id)
+        evict_user_profile_detail(profile.user.id)
         return Response(ProjectSerializer(project, context={'request': request}).data)
 
     def delete(self, request, pk):
@@ -189,6 +194,7 @@ class ProjectDetailView(APIView):
         project = get_object_or_404(Project.objects.filter(user=profile), project_id=pk)
         project.delete()
         evict_projects_list(profile.id)
+        evict_user_profile_detail(profile.user.id)
         logger.info('Project deleted: %s', pk)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
