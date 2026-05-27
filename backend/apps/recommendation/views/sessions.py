@@ -3,6 +3,7 @@ from collections import defaultdict
 from datetime import timedelta
 
 from django.conf import settings
+from django.core.cache import cache
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import status
@@ -12,6 +13,7 @@ from rest_framework.views import APIView
 
 from ..models import Project, AnalysisSession
 from .. import engine, event_log, services
+from ..caches import evict_projects_list, evict_user_profile_detail, evict_project_detail
 from ..perf_timing import endpoint, stage
 from ._shared import _get_profile, _progress
 
@@ -58,62 +60,68 @@ class SessionCreateView(APIView):
             # Separate from _raw_query_early below (which is coerced to None > 1000 chars for RRF).
             raw_query = (request.data.get('raw_query') or request.data.get('query') or '').strip()[:2000]
 
+            # Fix 2: resolve project_id early so dedupe can skip when client targets a specific project.
+            # If project_id is provided and matches an owned Project, the user intent is unambiguous
+            # ("new session on THIS project") -- dedupe is inappropriate in that case.
+            project = None
+            if project_id:
+                try:
+                    project = Project.objects.filter(project_id=project_id, user=profile).first()
+                except Exception:
+                    project = None
+
             # Dedupe guard (2026-05-26 Codex retest INFRA-DEPLOY-3 follow-up):
             # If the same user has an active session created in the last 30s with the
             # same name + raw_query + filters, the inbound POST is most likely a duplicate
             # caused by client-side retry-on-timeout (the frontend's earlier behavior).
             # Reuse the existing session instead of creating a second Project/Session pair.
+            # Only runs when client did NOT supply a valid project_id (implicit project intent).
             # See sessions.js startSession; core.js retry loop; tests/test_session_create_dedupe.py.
-            recent_cutoff = timezone.now() - timedelta(seconds=30)
-            existing_session = (
-                AnalysisSession.objects.filter(
-                    user=profile,
-                    created_at__gte=recent_cutoff,
-                    project__name=project_name,
-                    project__raw_query=raw_query,
+            if project is None:
+                recent_cutoff = timezone.now() - timedelta(seconds=30)
+                existing_session = (
+                    AnalysisSession.objects.filter(
+                        user=profile,
+                        created_at__gte=recent_cutoff,
+                        project__name=project_name,
+                        project__raw_query=raw_query,
+                    )
+                    .order_by('-created_at')
+                    .first()
                 )
-                .order_by('-created_at')
-                .first()
-            )
-            # Verify filters match (filters is JSONField, no direct lookup; compare in Python)
-            if existing_session and existing_session.project.filters == (filters or {}):
-                with stage('dedupe_return_existing', session_id=str(existing_session.session_id)):
-                    initial_batch = list(existing_session.initial_batch or [])
-                    image_focus = (existing_session.original_filters or {}).get('image_focus')
-                    first_card = (
-                        engine.get_building_card(initial_batch[0], image_focus=image_focus)
-                        if initial_batch else None
-                    )
-                    logger.info(
-                        'Session create dedupe hit: returning existing session %s for user %s '
-                        '(name=%r raw_query=%r)',
-                        existing_session.session_id, profile.id, project_name,
-                        raw_query[:40] if raw_query else '',
-                    )
-                    return Response({
-                        'session_id': str(existing_session.session_id),
-                        'project_id': str(existing_session.project.project_id),
-                        'session_status': existing_session.status,
-                        'next_image': first_card,
-                        'prefetch_image': None,
-                        'prefetch_image_2': None,
-                        'progress': _progress(existing_session),
-                        'filter_relaxed': False,
-                        'deduped': True,
-                    }, status=status.HTTP_200_OK)
+                # Verify filters match (filters is JSONField, no direct lookup; compare in Python)
+                if existing_session and existing_session.project.filters == (filters or {}):
+                    with stage('dedupe_return_existing', session_id=str(existing_session.session_id)):
+                        initial_batch = list(existing_session.initial_batch or [])
+                        image_focus = (existing_session.original_filters or {}).get('image_focus')
+                        first_card = (
+                            engine.get_building_card(initial_batch[0], image_focus=image_focus)
+                            if initial_batch else None
+                        )
+                        logger.info(
+                            'Session create dedupe hit: returning existing session %s for user %s '
+                            '(name=%r raw_query=%r)',
+                            existing_session.session_id, profile.id, project_name,
+                            raw_query[:40] if raw_query else '',
+                        )
+                        # Defensive eviction: in case a concurrent request populated a stale
+                        # entry between this dedupe lookup and the response.
+                        evict_projects_list(profile.id)
+                        evict_user_profile_detail(profile.user.id)
+                        return Response({
+                            'session_id': str(existing_session.session_id),
+                            'project_id': str(existing_session.project.project_id),
+                            'session_status': existing_session.status,
+                            'next_image': first_card,
+                            'prefetch_image': None,
+                            'prefetch_image_2': None,
+                            'progress': _progress(existing_session),
+                            'filter_relaxed': False,
+                            'deduped': True,
+                        }, status=status.HTTP_200_OK)
 
-            with stage('resolve_or_create_project'):
-                # Resolve project (project_id may be a local ID like 'proj_xxx' -- ignore gracefully)
-                project = None
-                if project_id:
-                    try:
-                        project = Project.objects.filter(project_id=project_id, user=profile).first()
-                    except Exception:
-                        project = None
-                if not project:
-                    project = Project.objects.create(
-                        user=profile, name=project_name, filters=filters, raw_query=raw_query,
-                    )
+            # Fix 3: project creation deferred to after pool fetch to avoid orphan rows.
+            # (was: Project.objects.create here when project is None)
 
             # Topic 01 RRF: extract raw_query early — needed for both RRF q_text and
             # IMP-6 cache key. Accept 'raw_query' (FE key, sessions.js:25) with
@@ -150,7 +158,8 @@ class SessionCreateView(APIView):
                     )
 
             # Create bounded pool with weighted scoring (3-tier relaxation fallback via helper)
-            active_filters = dict(filters or project.filters or {})
+            # Fix 3: project may be None here (deferred create) -- use request filters directly.
+            active_filters = dict(filters or (project.filters if project else None) or {})
 
             # image_focus: rider on filters dict (NOT a WHERE-clause filter, but
             # threads through to _row_to_card so cards get the user-picked cover).
@@ -211,26 +220,58 @@ class SessionCreateView(APIView):
             prefetch_card_2 = _initial_cards[2] if len(_initial_cards) > 2 else None
 
             with stage('session_insert'):
-                session = AnalysisSession.objects.create(
-                    user                     = profile,
-                    project                  = project,
-                    phase                    = 'exploring',
-                    pool_ids                 = pool_ids,
-                    pool_scores              = pool_scores,
-                    current_round            = 0,
-                    preference_vector        = [],
-                    exposed_ids              = [initial_batch[0]],
-                    initial_batch            = initial_batch,
-                    like_vectors             = [],
-                    convergence_history      = [],
-                    previous_pref_vector     = [],
-                    original_filters         = active_filters,
-                    original_filter_priority = list(filter_priority or []),
-                    original_seed_ids        = list(seed_ids or []),
-                    current_pool_tier        = current_pool_tier,
-                    v_initial                = v_initial,
-                    original_q_text          = q_text_param,  # Topic 01 RRF: persisted for re-relaxation
-                )
+                # Fix 3: auto-create Project only after pool/initial_batch succeeded.
+                # Deferred from the old position (~line 113) to avoid orphan Project rows
+                # when create_pool_with_relaxation fails or returns empty (404 branch above).
+                # Fix 2: wrap both creates in a savepoint so a session-insert failure
+                # rolls back the project create, leaving no orphan row.
+                with transaction.atomic():
+                    if project is None:
+                        project = Project.objects.create(
+                            user=profile, name=project_name, filters=filters, raw_query=raw_query,
+                        )
+                    session = AnalysisSession.objects.create(
+                        user                     = profile,
+                        project                  = project,
+                        phase                    = 'exploring',
+                        pool_ids                 = pool_ids,
+                        pool_scores              = pool_scores,
+                        current_round            = 0,
+                        preference_vector        = [],
+                        exposed_ids              = [initial_batch[0]],
+                        initial_batch            = initial_batch,
+                        like_vectors             = [],
+                        convergence_history      = [],
+                        previous_pref_vector     = [],
+                        original_filters         = active_filters,
+                        original_filter_priority = list(filter_priority or []),
+                        original_seed_ids        = list(seed_ids or []),
+                        current_pool_tier        = current_pool_tier,
+                        v_initial                = v_initial,
+                        original_q_text          = q_text_param,  # Topic 01 RRF: persisted for re-relaxation
+                    )
+
+            # Fix 1: evict /projects/ cache after new session+project created.
+            # The cache includes latest_session_meta and project counts; stale up to 60s otherwise.
+            evict_projects_list(profile.id)
+            evict_user_profile_detail(profile.user.id)
+            # BACK-BOARD-PERF-1: evict project detail — latest_session_id changes on session create.
+            evict_project_detail(str(project.project_id))
+
+            # F4: seed prefetch cache for round 1 (first swipe's cache-read key).
+            # IMP-8 consumer (swipe.py L764) reads prefetch:{sid}:{saved_current_round}
+            # where saved_current_round = session.current_round AFTER first swipe's
+            # increment (0 → 1). Without this seed, first swipe always misses.
+            # Cache value shape mirrors _async_prefetch_thread's write (swipe.py L151-155).
+            _pf_seed = {
+                'prefetch_card_id': initial_batch[1] if len(initial_batch) > 1 else None,
+                'prefetch_card_2_id': initial_batch[2] if len(initial_batch) > 2 else None,
+            }
+            cache.set(
+                f'prefetch:{session.session_id}:1',
+                _pf_seed,
+                timeout=RC.get('async_prefetch_cache_timeout_seconds', 60),
+            )
 
             logger.info('Session created: %s (pool=%d, tiers=%d, relaxed=%s)', session.session_id, len(pool_ids), len(tiers), filter_relaxed)
 

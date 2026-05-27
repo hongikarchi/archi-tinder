@@ -140,7 +140,7 @@ const MOCK_BOARD = {
 /**
  * InfoCol — local primitive for §3.5.2 RICH PATTERN 2-col info grid.
  *   Caps label (10/600 uppercase 0.06em) + single-line ellipsis value (13/600 white).
- *   Mirrors the InfoCol used in FirmProfile + UserProfile + PostSwipeLanding.
+ *   Mirrors the InfoCol used in FirmProfile + UserProfile.
  */
 function InfoCol({ label, value }) {
   return (
@@ -173,7 +173,11 @@ function InfoCol({ label, value }) {
  */
 function BuildingTile({ building, fromProjectId, rank, savedIds, referrer, isEditMode, isSelected, onToggleSelect }) {
   const navigate = useNavigate()
-  const buildingId = building.image_id || building.canonical_bld_id || building.building_id
+  // FIX F7 (Codex retest 2026-05-26): board saved_ids arrive from the API as
+  // {id: "bld_..."} objects. Added building.id as the final fallback so real
+  // API items can navigate correctly. MOCK_BOARD uses building_id; new API shape
+  // uses id; image_id / canonical_bld_id keep backwards compat.
+  const buildingId = building.image_id || building.canonical_bld_id || building.building_id || building.id
   const { onLoad, onError } = useImageTelemetry({
     buildingId,
     context: 'board_detail_gallery',
@@ -451,7 +455,7 @@ export default function BoardDetailPage() {
     try {
       await updateProject(boardId, { remove_building_ids: ids })
       setLocalBuildings(prev => (prev || []).filter(b => {
-        const bid = b.image_id || b.canonical_bld_id || b.building_id
+        const bid = b.image_id || b.canonical_bld_id || b.building_id || b.id
         return !ids.includes(bid)
       }))
       setSelectedIds(new Set())
@@ -501,6 +505,7 @@ export default function BoardDetailPage() {
           <img
             src={coverImage}
             alt={board?.name || 'Board cover'}
+            fetchpriority="high"
             style={{
               position: 'absolute',
               inset: 0,
@@ -919,7 +924,7 @@ export default function BoardDetailPage() {
             padding: '0 20px',
           }}>
             {buildings.map((building, index) => {
-              const bid = building.image_id || building.canonical_bld_id || building.building_id
+              const bid = building.image_id || building.canonical_bld_id || building.building_id || building.id
               return (
               <BuildingTile
                 key={bid}

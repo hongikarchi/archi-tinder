@@ -28,6 +28,11 @@ PROGRAM_VALUES = [
     'Landscape', 'Infrastructure', 'Other',
 ]
 
+REQUIRED_SLATE_FIELDS = ('program', 'material', 'style', 'location_country')
+REQUIRED_SLATE_PROBE_PRIORITY = ('program', 'material', 'style', 'location_country')
+_BROAD_SLATE_DEFAULT_FIELD = 'style'
+_BROAD_SLATE_DEFAULT_VALUE = 'Contemporary'
+
 # ---------------------------------------------------------------------------
 # Large prompt constants (module-level so _CHAT_PHASE_SYSTEM_PROMPT can be
 # imported directly and hashed by _caches._get_prompt_hash at call time).
@@ -44,13 +49,31 @@ Your output is always a single JSON object. No prose, no code fences, no explana
 3. `visual_description` is ALWAYS English — it seeds a multilingual embedding that matches an English corpus field. Even for Korean queries, produce a vivid English architectural description.
 4. `raw_query` is ALWAYS the user's FIRST message, verbatim, unchanged across turns. Do not translate, paraphrase, or update it.
 
+## Required information slate
+
+Downstream search and swipe-session creation need at least one non-null required-slate field. The required slate fields are:
+
+`program`, `material`, `style`, `location_country`
+
+Preferred terminal completeness is `program` plus at least one of `material`, `style`, or `location_country`. If that is not possible, terminal output must still contain at least one required-slate field.
+
+Probe priority is deterministic: program > material > style > location_country.
+
+- If `program` is missing, ask for program/use first. You may offer examples or two broad buckets, but the missing field is program.
+- If `program` is present but all secondary slate fields are missing, ask for `material` first.
+- If material is explicitly unimportant or unavailable, ask for `style`; if style is unavailable, ask for `location_country`.
+- Optional filters such as `year_min`, `year_max`, image focus, openness, scale, color tone, transparency, or atmosphere can enrich `reply` and `visual_description`, but they do not satisfy the required slate by themselves.
+- If the 2-turn budget is exhausted and no required-slate field can be inferred, use the broad fallback `style: "Contemporary"` and put `"style"` first in `filter_priority`. This preserves a broad candidate pool while avoiding an empty or year-only filter contract.
+
+Do not choose a free abstract axis before checking the missing required slate. Abstract A-vs-B questions are allowed only when they directly collect the next missing slate field.
+
 ## Your turn-budget rule
 
 You have a 0-2 turn probe budget.
 
 - **0 turns (skip)**: If the user's query is precise enough that you can fill `filters` meaningfully (at least `program` plus one of `style`, `material`, or `location_country`) AND the query implies a clear visual direction, set `probe_needed=false` and produce the terminal output immediately.
-- **1 turn**: If the query is ambiguous on a load-bearing axis, ask one abstract A-vs-B probe. You are free to choose the axis. After the user answers, produce the terminal output.
-- **2 turns**: Only used when the prior is genuinely diffuse (e.g., "좋은 거 보여줘", "추천해줘"). After turn 1 you may probe once more if you are still uncertain on an orthogonal second axis. Never exceed 2 probe turns.
+- **1 turn**: If the query is ambiguous because a required-slate field is missing, ask one short probe targeting the highest-priority missing slate field. After the user answers, produce the terminal output if you have any required-slate field.
+- **2 turns**: Only used when the prior is genuinely diffuse (e.g., "좋은 거 보여줘", "추천해줘"). Turn 1 targets program/use. Turn 2 targets the highest-priority remaining slate field. Never exceed 2 probe turns.
 
 **HARD CAP: Maximum 2 clarification turns per session.**
 - If the conversation history shows 3 or more user messages (the user has already answered 2 clarifying questions), you MUST set `probe_needed=false` and return terminal output immediately with whatever filters can be extracted from the accumulated conversation.
@@ -59,7 +82,7 @@ You have a 0-2 turn probe budget.
 
 ## Your probe-quality guidance (when asking a question)
 
-You are picking an axis on which the user's preference is currently under-determined. An axis is a binary-ish dichotomy the user can resolve verbally without a building image. Good axes:
+You are picking the highest-priority missing required-slate field, then phrasing it as an axis or compact choice the user can resolve verbally without a building image. Good axes:
 
 - Span the user's residual uncertainty (what is NOT already determined by their query / existing filters).
 - Are orthogonal to axes you have already probed this session.
@@ -156,27 +179,27 @@ USER: 물성은 상관없고 규모가 커야 돼요. 최소 20층 이상.
 ASSISTANT: {"probe_needed": false, "probe_question": null, "reply": "이해했어요: 서울 도심의 대규모 오피스 타워 — 최소 20층 이상의 기념비적 스케일, 물성보다는 도시 존재감이 중심. 재료감이나 스타일은 폭넓게 탐색하는 방향으로 찾을게요.", "filters": {"location_country": "South Korea", "program": "Office", "material": null, "style": null, "year_min": null, "year_max": null}, "filter_priority": ["program", "location_country"], "raw_query": "서울 도심 오피스빌딩 찾아요.", "visual_description": "A large-scale downtown office tower in Seoul's urban core, rising at least 20 stories as a monumental civic presence. The tower defines a street-wall and block figure in the dense metropolitan fabric; materiality spans a broad range from glass curtain wall and metal cladding to stone or concrete envelopes. The massing is vertical and commanding, with a significant floor-plate footprint and a strong silhouette in the skyline."}
 
 USER: 좋은 레퍼런스 있으면 보여주세요.
-ASSISTANT: {"probe_needed": true, "probe_question": "감 잡기 위해 먼저 여쭤볼게요: 작고 내밀한 공간이 끌리세요, 아니면 크고 개방감 있는 공간이 끌리세요?", "reply": "좋은 레퍼런스 보여드릴게요. 방향 잡는 것부터 도와주세요.", "filters": {"location_country": null, "program": null, "material": null, "style": null, "year_min": null, "year_max": null}, "filter_priority": [], "raw_query": "좋은 레퍼런스 있으면 보여주세요.", "visual_description": null}
+ASSISTANT: {"probe_needed": true, "probe_question": "먼저 용도를 좁혀볼게요: 주택·오피스 같은 생활/업무 공간이 필요하세요, 아니면 미술관·공공시설 같은 문화/공공 공간이 필요하세요?", "reply": "좋은 레퍼런스를 폭넓게 보되, 시작점은 현대 건축 쪽으로 잡아둘게요.", "filters": {"location_country": null, "program": null, "material": null, "style": "Contemporary", "year_min": null, "year_max": null}, "filter_priority": ["style"], "raw_query": "좋은 레퍼런스 있으면 보여주세요.", "visual_description": null}
 
 USER: 좋은 레퍼런스 있으면 보여주세요.
-ASSISTANT: {"probe_needed": true, "probe_question": "감 잡기 위해 먼저 여쭤볼게요: 작고 내밀한 공간이 끌리세요, 아니면 크고 개방감 있는 공간이 끌리세요?", "reply": "좋은 레퍼런스 보여드릴게요. 방향 잡는 것부터 도와주세요.", "filters": {"location_country": null, "program": null, "material": null, "style": null, "year_min": null, "year_max": null}, "filter_priority": [], "raw_query": "좋은 레퍼런스 있으면 보여주세요.", "visual_description": null}
+ASSISTANT: {"probe_needed": true, "probe_question": "먼저 용도를 좁혀볼게요: 주택·오피스 같은 생활/업무 공간이 필요하세요, 아니면 미술관·공공시설 같은 문화/공공 공간이 필요하세요?", "reply": "좋은 레퍼런스를 폭넓게 보되, 시작점은 현대 건축 쪽으로 잡아둘게요.", "filters": {"location_country": null, "program": null, "material": null, "style": "Contemporary", "year_min": null, "year_max": null}, "filter_priority": ["style"], "raw_query": "좋은 레퍼런스 있으면 보여주세요.", "visual_description": null}
 USER: 개방감 있는 쪽.
-ASSISTANT: {"probe_needed": true, "probe_question": "한 번만 더 여쭤볼게요: 직교적·격자형 공간이 끌리세요, 곡선적·흐르는 형태가 끌리세요?", "reply": "개방감 있는 쪽, 메모했어요.", "filters": {"location_country": null, "program": null, "material": null, "style": null, "year_min": null, "year_max": null}, "filter_priority": [], "raw_query": "좋은 레퍼런스 있으면 보여주세요.", "visual_description": null}
+ASSISTANT: {"probe_needed": true, "probe_question": "한 번만 더 여쭤볼게요: 직교적·격자형 공간이 끌리세요, 곡선적·흐르는 형태가 끌리세요?", "reply": "용도는 넓게 두고, 개방감 있는 현대 건축으로 잡았어요.", "filters": {"location_country": null, "program": null, "material": null, "style": "Contemporary", "year_min": null, "year_max": null}, "filter_priority": ["style"], "raw_query": "좋은 레퍼런스 있으면 보여주세요.", "visual_description": null}
 
 USER: 좋은 레퍼런스 있으면 보여주세요.
-ASSISTANT: {"probe_needed": true, "probe_question": "감 잡기 위해 먼저 여쭤볼게요: 작고 내밀한 공간이 끌리세요, 아니면 크고 개방감 있는 공간이 끌리세요?", "reply": "좋은 레퍼런스 보여드릴게요. 방향 잡는 것부터 도와주세요.", "filters": {"location_country": null, "program": null, "material": null, "style": null, "year_min": null, "year_max": null}, "filter_priority": [], "raw_query": "좋은 레퍼런스 있으면 보여주세요.", "visual_description": null}
+ASSISTANT: {"probe_needed": true, "probe_question": "먼저 용도를 좁혀볼게요: 주택·오피스 같은 생활/업무 공간이 필요하세요, 아니면 미술관·공공시설 같은 문화/공공 공간이 필요하세요?", "reply": "좋은 레퍼런스를 폭넓게 보되, 시작점은 현대 건축 쪽으로 잡아둘게요.", "filters": {"location_country": null, "program": null, "material": null, "style": "Contemporary", "year_min": null, "year_max": null}, "filter_priority": ["style"], "raw_query": "좋은 레퍼런스 있으면 보여주세요.", "visual_description": null}
 USER: 개방감 있는 쪽.
-ASSISTANT: {"probe_needed": true, "probe_question": "한 번만 더 여쭤볼게요: 직교적·격자형 공간이 끌리세요, 곡선적·흐르는 형태가 끌리세요?", "reply": "개방감 있는 쪽, 메모했어요.", "filters": {"location_country": null, "program": null, "material": null, "style": null, "year_min": null, "year_max": null}, "filter_priority": [], "raw_query": "좋은 레퍼런스 있으면 보여주세요.", "visual_description": null}
+ASSISTANT: {"probe_needed": true, "probe_question": "한 번만 더 여쭤볼게요: 직교적·격자형 공간이 끌리세요, 곡선적·흐르는 형태가 끌리세요?", "reply": "용도는 넓게 두고, 개방감 있는 현대 건축으로 잡았어요.", "filters": {"location_country": null, "program": null, "material": null, "style": "Contemporary", "year_min": null, "year_max": null}, "filter_priority": ["style"], "raw_query": "좋은 레퍼런스 있으면 보여주세요.", "visual_description": null}
 USER: 직교적인 거.
 ASSISTANT: {"probe_needed": false, "probe_question": null, "reply": "이해했어요: 개방감 있으면서도 직교적 격자에 충실한, 미스적·SANAA 계열의 투명한 단순성을 가진 건축들 — 경량감과 보편 공간의 감각이 중심. 이 방향으로 탐색해볼게요.", "filters": {"location_country": null, "program": null, "material": null, "style": "Modernist", "year_min": null, "year_max": null}, "filter_priority": ["style"], "raw_query": "좋은 레퍼런스 있으면 보여주세요.", "visual_description": "An expansive, open-plan architectural work with strict orthogonal geometry and a Miesian universal-space quality — thin columns, large glazed apertures, a flat planar roof, and minimal interior subdivision. Floors extend uninterrupted; the envelope is transparent, emphasising continuity between inside and outside. The material palette skews cool and precise (glass, polished concrete, thin steel, white surfaces), with refined reduction rather than rich warmth. Spaces feel weightless, airy, and phenomenologically transparent in the Rowe-Slutzky sense."}
 
 USER: 그냥 멋진 거 보여줘.
-ASSISTANT: {"probe_needed": true, "probe_question": "폭넓게 보여드릴게요. 감만 하나 여쭤볼게요 — 따뜻한 재료감이 끌리세요, 차가운 기하성이 끌리세요?", "reply": "멋진 레퍼런스 탐색 모드, 좋아요.", "filters": {"location_country": null, "program": null, "material": null, "style": null, "year_min": null, "year_max": null}, "filter_priority": [], "raw_query": "그냥 멋진 거 보여줘.", "visual_description": null}
+ASSISTANT: {"probe_needed": true, "probe_question": "먼저 용도를 하나만 골라볼게요: 주거·오피스 같은 실무 레퍼런스가 필요하세요, 아니면 문화·공공 건축처럼 인상적인 사례가 필요하세요?", "reply": "멋진 레퍼런스를 폭넓게 보되, 시작점은 현대 건축으로 잡아둘게요.", "filters": {"location_country": null, "program": null, "material": null, "style": "Contemporary", "year_min": null, "year_max": null}, "filter_priority": ["style"], "raw_query": "그냥 멋진 거 보여줘.", "visual_description": null}
 
 USER: 그냥 멋진 거 보여줘.
-ASSISTANT: {"probe_needed": true, "probe_question": "폭넓게 보여드릴게요. 감만 하나 여쭤볼게요 — 따뜻한 재료감이 끌리세요, 차가운 기하성이 끌리세요?", "reply": "멋진 레퍼런스 탐색 모드, 좋아요.", "filters": {"location_country": null, "program": null, "material": null, "style": null, "year_min": null, "year_max": null}, "filter_priority": [], "raw_query": "그냥 멋진 거 보여줘.", "visual_description": null}
+ASSISTANT: {"probe_needed": true, "probe_question": "먼저 용도를 하나만 골라볼게요: 주거·오피스 같은 실무 레퍼런스가 필요하세요, 아니면 문화·공공 건축처럼 인상적인 사례가 필요하세요?", "reply": "멋진 레퍼런스를 폭넓게 보되, 시작점은 현대 건축으로 잡아둘게요.", "filters": {"location_country": null, "program": null, "material": null, "style": "Contemporary", "year_min": null, "year_max": null}, "filter_priority": ["style"], "raw_query": "그냥 멋진 거 보여줘.", "visual_description": null}
 USER: 둘 다 괜찮아. 그냥 좋은 거.
-ASSISTANT: {"probe_needed": false, "probe_question": null, "reply": "알겠습니다: 제약 없이 다양하게, 퀄리티 높은 현대 건축을 폭넓게 보여드릴게요. 스와이프하면서 취향 잡아가면 됩니다.", "filters": {"location_country": null, "program": null, "material": null, "style": null, "year_min": 2000, "year_max": null}, "filter_priority": ["year_min"], "raw_query": "그냥 멋진 거 보여줘.", "visual_description": "A collection of high-quality, internationally recognised contemporary architectural works spanning a diverse range of programs, scales, styles, and materialities. These are refined, considered buildings with strong formal presence and design intelligence — including both warm material-led and cool geometry-led works, both site-specific and autonomous, across civic, residential, cultural, and commercial typologies."}
+ASSISTANT: {"probe_needed": false, "probe_question": null, "reply": "알겠습니다: 용도·재료·국가는 넓게 열어두고, 퀄리티 높은 현대 건축을 다양하게 보여드릴게요. 스와이프하면서 취향을 더 좁히면 됩니다.", "filters": {"location_country": null, "program": null, "material": null, "style": "Contemporary", "year_min": 2000, "year_max": null}, "filter_priority": ["style", "year_min"], "raw_query": "그냥 멋진 거 보여줘.", "visual_description": "A broad collection of high-quality contemporary architectural works spanning diverse programs, scales, countries, and material strategies. The common thread is strong design resolution, clear spatial intelligence, and contemporary architectural relevance. Include both warm material-led and cool geometry-led works, both site-specific and autonomous, across civic, residential, cultural, and commercial typologies."}
 
 USER: Mixed-use 단지. 공공 공간이 1층에 넓게 있고 위는 주거랑 오피스 섞여 있는 거.
 ASSISTANT: {"probe_needed": false, "probe_question": null, "reply": "이해했어요: 지상 공공 공간 위로 주거와 업무가 섞인 복합 단지 — 프로그램적 하이브리드가 명시적 의도인 도시형 개발 유형. 맞을까요?", "filters": {"location_country": null, "program": "Mixed Use", "material": null, "style": null, "year_min": null, "year_max": null}, "filter_priority": ["program"], "raw_query": "Mixed-use 단지. 공공 공간이 1층에 넓게 있고 위는 주거랑 오피스 섞여 있는 거.", "visual_description": "A multi-building mixed-use urban complex with an expansive, programmatically porous public ground plane that spans retail, lobby, and civic space. Above the ground level, residential and office functions stack and interleave — towers, slabs, or podium-plus-tower typologies hosting hybrid programs. The building defines new street fronts and plazas at ground level and maintains a legible urban-block presence at the top; the architecture embraces programmatic hybridity and civic porosity as explicit intent."}
@@ -308,6 +331,36 @@ def _classify_query_complexity(text: str) -> str:
         return 'barequery'
     else:
         return 'barequery'
+
+
+def _has_required_slate(filters: dict) -> bool:
+    """Return True when any downstream-useful slate field is present."""
+    return any(filters.get(key) is not None for key in REQUIRED_SLATE_FIELDS)
+
+
+def _normalise_filter_priority(filters: dict, raw_priority) -> list:
+    """Keep valid non-null keys and promote required slate keys to the front.
+
+    Gemini occasionally emits a useful required-slate filter but forgets to list
+    it in `filter_priority`, or lists only `year_min`. Downstream pool creation
+    treats `filter_priority` as a weight vector, so the slate field must be
+    visible there too.
+    """
+    priority = []
+    for key in REQUIRED_SLATE_PROBE_PRIORITY:
+        if filters.get(key) is not None and key not in priority:
+            priority.append(key)
+    for key in raw_priority or []:
+        if isinstance(key, str) and filters.get(key) is not None and key not in priority:
+            priority.append(key)
+    return priority
+
+
+def _repair_required_slate(filters: dict, raw_priority) -> tuple[dict, list]:
+    """Ensure successful LLM payloads do not leave the parser slate-empty."""
+    if not _has_required_slate(filters):
+        filters[_BROAD_SLATE_DEFAULT_FIELD] = _BROAD_SLATE_DEFAULT_VALUE
+    return filters, _normalise_filter_priority(filters, raw_priority)
 
 
 def parse_query(conversation_history):
@@ -560,9 +613,11 @@ def parse_query(conversation_history):
                 titled = program.title()
                 filters['program'] = titled if titled in PROGRAM_VALUES else None
 
-        # Sanitize filter_priority: keep only non-null filter keys
+        # Sanitize/repair filter_priority: keep only non-null filter keys, but
+        # never let a successful Gemini payload proceed without any required
+        # slate field. Diffuse prompts get a broad Contemporary default.
         raw_priority = data.get('filter_priority') or []
-        filter_priority = [k for k in raw_priority if filters.get(k) is not None]
+        filters, filter_priority = _repair_required_slate(filters, raw_priority)
 
         # raw_query: spec §3 says always verbatim first user message
         raw_query = data.get('raw_query') or first_user_text
@@ -801,9 +856,11 @@ def parse_query_stage1(conversation_history):
                 titled = program.title()
                 filters['program'] = titled if titled in PROGRAM_VALUES else None
 
-        # Sanitize filter_priority: keep only non-null filter keys
+        # Sanitize/repair filter_priority: keep only non-null filter keys, but
+        # never let a successful Gemini payload proceed without any required
+        # slate field. Diffuse prompts get a broad Contemporary default.
         raw_priority = data.get('filter_priority') or []
-        filter_priority = [k for k in raw_priority if filters.get(k) is not None]
+        filters, filter_priority = _repair_required_slate(filters, raw_priority)
 
         # raw_query: spec §3 says always verbatim first user message
         raw_query = data.get('raw_query') or first_user_text

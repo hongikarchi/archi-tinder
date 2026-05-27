@@ -55,6 +55,7 @@ const Thumbnail = memo(function Thumbnail({ r }) {
         <img
           src={r.image_url}
           alt={r.image_title || ''}
+          loading="lazy"
           style={{
             width: '100%', height: 72, objectFit: 'cover', display: 'block',
             opacity: imgLoading ? 0 : 1, transition: 'opacity 0.3s',

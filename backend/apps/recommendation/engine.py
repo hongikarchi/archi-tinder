@@ -49,6 +49,12 @@ logger = logging.getLogger('apps.recommendation')
 
 RC = settings.RECOMMENDATION  # shorthand for constants
 
+# F3: required-slate fields are user-explicit intent — must be hard WHERE constraints,
+# not soft CASE WHEN scoring. Mirrors parse_query.REQUIRED_SLATE_FIELDS (no import to
+# avoid circular-import risk between services and engine).
+# Cross-ref: services/parse_query.REQUIRED_SLATE_FIELDS — keep in sync; divergence breaks hard-WHERE silently.
+_REQUIRED_SLATE_FIELDS_SET = frozenset(('program', 'material', 'style', 'location_country'))
+
 _building_embedding_cache = {}             # canonical_bld_id (str) -> np.ndarray (384-dim, L2-normalized)
 _BUILDING_CACHE_MAX_SIZE = RC.get('pool_embedding_cache_max_size', 5000)  # ~5MB max; configurable via RECOMMENDATION setting
 _centroid_cache = {}
@@ -347,6 +353,37 @@ def _build_filter_sql(filters):
         params.append(filters['year_max'])
     where = 'WHERE ' + ' AND '.join(clauses)
     return where, params
+
+
+def _build_required_slate_where(filters):
+    """Build hard WHERE clauses for required-slate filter fields present in `filters`.
+
+    F3 fix: fields in _REQUIRED_SLATE_FIELDS_SET that the user explicitly requested
+    are hard constraints — buildings that don't match must be excluded, not just
+    scored lower. Returns (clauses_list, params_list). Empty if no slate fields match.
+
+    Uses same SQL fragments as _build_filter_sql for consistency (ILIKE, EXISTS/unnest).
+    Does NOT include `is_publishable = true` (caller already has it).
+    """
+    clauses = []
+    params = []
+    if not filters:
+        return clauses, params
+    if filters.get('program') and 'program' in _REQUIRED_SLATE_FIELDS_SET:
+        clauses.append('program = %s')
+        params.append(filters['program'])
+    if filters.get('location_country') and 'location_country' in _REQUIRED_SLATE_FIELDS_SET:
+        clauses.append('location_country ILIKE %s')
+        params.append(f"%{filters['location_country']}%")
+    if filters.get('material') and 'material' in _REQUIRED_SLATE_FIELDS_SET:
+        clauses.append(
+            'EXISTS (SELECT 1 FROM unnest(material_visual) m WHERE m ILIKE %s)'
+        )
+        params.append(f"%{filters['material']}%")
+    if filters.get('style') and 'style' in _REQUIRED_SLATE_FIELDS_SET:
+        clauses.append('style ILIKE %s')
+        params.append(f"%{filters['style']}%")
+    return clauses, params
 
 
 def _vec_to_pg(vec):
@@ -708,6 +745,65 @@ def get_buildings_by_ids(canonical_bld_ids, image_focus=None):
 
     # Phase 3: restore input order
     return [card_map[bid] for bid in canonical_bld_ids if bid in card_map]
+
+
+_THUMB_CACHE_KEY_PREFIX = 'thumb:'
+
+
+def get_building_thumbnails(canonical_bld_ids):
+    """Lightweight thumbnail-only fetch for board/profile card display.
+
+    Returns [{'canonical_bld_id': str, 'image_url': str}] preserving input order.
+    Use this when you need just the thumbnail URL (Profile board cards, Discovery
+    feed cards, etc.) and NOT the full ImageCard payload.
+
+    Cache namespace ``thumb:<bid>`` — separate from full-card cache to avoid
+    cross-contamination. TTL matches card cache.
+
+    COALESCE priority mirrors _row_to_card fallback chain:
+      display_cover_url -> cover_image_url_default -> covers_by_type->>'exterior'
+    (skipping all_images[0] to avoid JSONB array extraction overhead; callers
+    filter out empty-string thumbnails via ``if image_map.get(bid)``).
+    """
+    if not canonical_bld_ids:
+        return []
+
+    out = {}
+    miss_ids = []
+    for bid in canonical_bld_ids:
+        cached = cache.get(f'{_THUMB_CACHE_KEY_PREFIX}{bid}')
+        if cached is not None:
+            out[bid] = cached
+        else:
+            miss_ids.append(bid)
+
+    if miss_ids:
+        placeholders = ','.join(['%s'] * len(miss_ids))
+        with connection.cursor() as cur:
+            cur.execute(
+                f'SELECT canonical_bld_id,'
+                f'   COALESCE('
+                f'     display_cover_url,'
+                f'     cover_image_url_default,'
+                f"     covers_by_type->>'exterior',"
+                f"     ''"
+                f'   ) AS image_url'
+                f' FROM canonical_v2_buildings'
+                f' WHERE canonical_bld_id IN ({placeholders}) AND is_publishable = true',
+                miss_ids,
+            )
+            rows = _dictfetchall(cur)
+
+        ttl = _card_cache_ttl()
+        for row in rows:
+            thumb = {
+                'canonical_bld_id': row['canonical_bld_id'],
+                'image_url': row.get('image_url') or '',
+            }
+            out[row['canonical_bld_id']] = thumb
+            cache.set(f'{_THUMB_CACHE_KEY_PREFIX}{row["canonical_bld_id"]}', thumb, ttl)
+
+    return [out[bid] for bid in canonical_bld_ids if bid in out]
 
 
 def search_by_filters(filters, limit=20, image_focus=None):
@@ -1327,6 +1423,12 @@ def create_bounded_pool(filters, filter_priority=None, seed_ids=None, target=Non
                 use_hyde = False  # noqa: F841 — signals fall-through intent
         return _random_pool(target), {}
 
+    # F3: build hard WHERE clauses for required-slate fields (user-explicit intent).
+    # Applied to both Mode V and Mode F paths. Mode H (RRF) excluded — different
+    # ranking semantics; RRF already effectively surfaces matching records first.
+    _slate_clauses, _slate_params = _build_required_slate_where(filters)
+    _slate_where_sql = (' AND ' + ' AND '.join(_slate_clauses)) if _slate_clauses else ''
+
     _hyde_failed = False
     if use_hyde:
         # Filter + HyDE blend: score = (filter_sum + hyde_weight * cosine_sim) / (total_weight + hyde_weight)
@@ -1338,21 +1440,26 @@ def create_bounded_pool(filters, filter_priority=None, seed_ids=None, target=Non
             '((' + filter_sum_sql + ' + %s::float * (1 - (embedding <=> %s::vector)))'
             ' / ' + str(denom) + ')'
         )
-        # WHERE: any filter match OR positive cosine similarity
+        # WHERE: required-slate hard constraints AND (any filter match OR positive cosine similarity)
         where_sql = '((' + filter_sum_sql + ') > 0 OR (1 - (embedding <=> %s::vector)) > 0)'
         sql = (
             'SELECT canonical_bld_id, (' + score_sql + ') AS relevance_score'
-            ' FROM canonical_v2_buildings WHERE is_publishable = true AND ('
+            ' FROM canonical_v2_buildings WHERE is_publishable = true'
+            + _slate_where_sql
+            + ' AND ('
             + where_sql
             + ')'
             ' ORDER BY relevance_score DESC, RANDOM()'
             ' LIMIT %s'
         )
-        # params order: cases (score_sql filter args), hyde_weight, vec_str (cosine),
-        #               cases (where_sql filter args), vec_str (where cosine), target
+        # params order matches SQL placeholder order:
+        #   score_sql consumes: cases (params), hyde_weight, vec_str
+        #   _slate_where_sql consumes: _slate_params
+        #   where_sql consumes: cases (params again), vec_str
+        #   LIMIT consumes: target
         try:
             with connection.cursor() as cur:
-                cur.execute(sql, params + [hyde_weight, vec_str] + params + [vec_str, target])
+                cur.execute(sql, params + [hyde_weight, vec_str] + _slate_params + params + [vec_str, target])
                 rows = cur.fetchall()
         except Exception as exc:
             logger.warning('create_bounded_pool: HyDE query failed, falling back (%s)', exc)
@@ -1370,13 +1477,15 @@ def create_bounded_pool(filters, filter_priority=None, seed_ids=None, target=Non
         sql = (
             'SELECT canonical_bld_id, (' + score_sql + ') AS relevance_score'
             ' FROM canonical_v2_buildings'
-            ' WHERE is_publishable = true AND (' + score_sql + ') > 0'
+            ' WHERE is_publishable = true'
+            + _slate_where_sql
+            + ' AND (' + score_sql + ') > 0'
             ' ORDER BY relevance_score DESC, RANDOM()'
             ' LIMIT %s'
         )
         with stage('execute_pool_sql', target=target):
             with connection.cursor() as cur:
-                cur.execute(sql, params + params + [target])
+                cur.execute(sql, params + _slate_params + params + [target])
                 rows = cur.fetchall()
 
     with stage('process_scores', n_rows=len(rows)):
@@ -2237,8 +2346,11 @@ def compute_user_taste_vector(profile):
     """
     from .models import Project
 
-    liked_records = Project.objects.filter(user=profile).values_list('liked_ids', flat=True)
-    weighted = []
+    # 2026-05-27 perf: recent-50 cap to bound get_pool_embeddings cold cost.
+    # Order projects oldest→newest; append per-list entries in order; take last 50
+    # so the slice contains the most-recently-liked buildings across all projects.
+    liked_records = Project.objects.filter(user=profile).order_by('updated_at').values_list('liked_ids', flat=True)
+    all_likes = []  # (bid, intensity) oldest→newest across projects
     for liked_ids in liked_records:
         for entry in (liked_ids or []):
             if isinstance(entry, dict):
@@ -2250,14 +2362,16 @@ def compute_user_taste_vector(profile):
                 except (TypeError, ValueError):
                     intensity = 1.0
             elif isinstance(entry, str):
-                bid = entry
-                intensity = 1.0
+                bid, intensity = entry, 1.0
             else:
                 continue
-            weighted.append((bid, intensity))
+            all_likes.append((bid, intensity))
 
-    if not weighted:
+    if not all_likes:
         return None
+
+    # Cap to recent 50 (newest at end after order_by('updated_at') ASC + per-list append order).
+    weighted = all_likes[-50:]
 
     seen = set()
     ordered_ids = []
@@ -2314,14 +2428,13 @@ def taste_ranked_page(v_taste, exclude_ids, limit, offset, image_focus=None):
     exclude = [bid for bid in (exclude_ids or []) if isinstance(bid, str)]
     try:
         with connection.cursor() as cur:
+            # 2026-05-27 perf: drop CTE barrier — direct ORDER BY ... LIMIT lets planner
+            # use a top-K heap scan (O(N) vs O(N log N) for k=12 vs N≈37k publishable).
             cur.execute(
-                f'WITH ranked AS ('
-                f' SELECT {_cols}, embedding <=> %s::vector AS score'
+                f'SELECT {_cols}, embedding <=> %s::vector AS score'
                 f' FROM canonical_v2_buildings'
                 f' WHERE is_publishable = true AND canonical_bld_id <> ALL(%s::text[])'
                 f' ORDER BY embedding <=> %s::vector ASC'
-                f')'
-                f' SELECT * FROM ranked'
                 f' OFFSET %s LIMIT %s',
                 [_vec_to_pg(v_taste), exclude, _vec_to_pg(v_taste), int(offset), int(limit)],
             )

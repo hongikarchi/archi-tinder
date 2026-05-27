@@ -57,6 +57,8 @@ from ._caches import (  # noqa: F401
 # ---------------------------------------------------------------------------
 from .parse_query import (  # noqa: F401
     PROGRAM_VALUES,
+    REQUIRED_SLATE_FIELDS,
+    REQUIRED_SLATE_PROBE_PRIORITY,
     _CHAT_PHASE_SYSTEM_PROMPT,
     _STAGE1_RESPONSE_SCHEMA,
     _STYLE_TOKENS,
@@ -65,6 +67,9 @@ from .parse_query import (  # noqa: F401
     _ADJECTIVE_TOKENS,
     _ALL_SPECIFICITY_TOKENS,
     _classify_query_complexity,
+    _has_required_slate,
+    _normalise_filter_priority,
+    _repair_required_slate,
     parse_query,
     parse_query_stage1,
 )

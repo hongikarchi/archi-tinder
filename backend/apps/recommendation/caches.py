@@ -78,6 +78,53 @@ def evict_projects_list(profile_id):
         cache.delete(_projects_list_key(profile_id, 1, ps))
 
 
+# ── User profile detail cache ────────────────────────────────────────────────
+
+PROFILE_DETAIL_TTL = 60  # seconds — same staleness budget as projects list
+
+
+def _user_profile_version(viewed_user_id):
+    """Return current version int for the viewed user's profile detail cache.
+
+    Default 0 when key is absent (first request, or after Redis LRU eviction).
+    Version is stored with no expiry so it survives across the 60s payload TTL.
+    """
+    return cache.get(f'user_profile_version:{viewed_user_id}', 0)
+
+
+def evict_user_profile_detail(viewed_user_id):
+    """Invalidate all cached profile-detail payloads for a user by bumping version.
+
+    All existing cache keys embed the version number; bumping makes them
+    unreachable (they TTL-expire harmlessly on their own). Concurrent callers
+    that fetched the old version will serve stale data until their 60s TTL lapses
+    — acceptable trade-off (next GET after that will see fresh data).
+
+    Call when:
+      - viewed user updates their own profile (UserProfileSelfUpdateView.patch)
+      - a Project owned by this user is created / updated / deleted
+      - another user follows / unfollows this user (follower_count change)
+      - this user follows / unfollows another user (following_count change)
+    """
+    ver_key = f'user_profile_version:{viewed_user_id}'
+    try:
+        cache.incr(ver_key)
+    except ValueError:
+        # Key absent (first call or evicted) — initialise to 1.
+        cache.set(ver_key, 1, None)
+
+
+def get_user_profile_detail_cache_key(viewed_user_id, requester_id_for_cache, page, page_size):
+    """Build cache key for UserProfileDetailView response payload."""
+    ver = _user_profile_version(viewed_user_id)
+    return (
+        f'user_profile_detail:{viewed_user_id}'
+        f':v{ver}'
+        f':r{requester_id_for_cache}'
+        f':p{page}:ps{page_size}'
+    )
+
+
 # ── Discovery feed cache ──────────────────────────────────────────────────────
 
 DISCOVERY_FEED_TTL = 60  # seconds — same UX staleness window as PERF-1 projects list
@@ -115,3 +162,41 @@ def evict_discovery_feed(profile_id):
     # Also evict common limit variants
     for limit in (10, 20, 30):
         cache.delete(_discovery_feed_key(profile_id, 0, limit))
+
+
+# ── Project detail cache (BACK-BOARD-PERF-1) ─────────────────────────────────
+
+PROJECT_DETAIL_TTL = 60  # seconds — same UX staleness window as projects list
+
+
+def _project_detail_version_key(project_uuid):
+    """Per-Project version counter key — incremented on any mutation."""
+    return f'project_detail_version:{project_uuid}'
+
+
+def _project_detail_version(project_uuid):
+    """Current version int (0 if not yet set). Used in cache key composition."""
+    return cache.get(_project_detail_version_key(project_uuid), 0)
+
+
+def evict_project_detail(project_uuid):
+    """Bump the version counter — all existing cache keys for this project become unreachable."""
+    try:
+        cache.incr(_project_detail_version_key(project_uuid))
+    except ValueError:
+        # cache.incr raises ValueError on missing key (LocMemCache) — initialize to 1
+        cache.set(_project_detail_version_key(project_uuid), 1, None)
+
+
+def get_project_detail_cache_key(project_uuid, requester_id_for_cache):
+    """Compose the response cache key for ProjectDetailView GET.
+
+    project_uuid: str(Project.project_id)
+    requester_id_for_cache: str(requester profile.id) for authenticated callers,
+        'anon' for unauthenticated.
+
+    Partitions by requester because `is_reacted` and `is_owner` are per-caller.
+    Version counter in the key makes all prior entries unreachable on eviction.
+    """
+    ver = _project_detail_version(project_uuid)
+    return f'project_detail:{project_uuid}:v{ver}:r{requester_id_for_cache}'

@@ -15,7 +15,13 @@ from rest_framework.views import APIView
 
 from ..models import Project, AnalysisSession, SwipeEvent
 from .. import engine, event_log
-from ..caches import evict_taste, evict_projects_list, evict_discovery_feed
+from ..caches import (
+    evict_taste,
+    evict_projects_list,
+    evict_discovery_feed,
+    evict_user_profile_detail,
+    evict_project_detail,
+)
 from ._shared import _get_profile, _progress, _liked_id_only
 
 logger = logging.getLogger('apps.recommendation')
@@ -99,58 +105,64 @@ def _async_prefetch_thread(
 
     _connections.close_all()  # release parent thread's connections; bg thread gets its own
     try:
-        prefetch_card = None
-        prefetch_card_2 = None
+        # Cache stores IDs only — no card hydration needed in thread.
+        # Earlier impl called engine.get_building_card() just to extract
+        # canonical_bld_id back; but pf_bid IS canonical_bld_id (compute_mmr_next
+        # returns IDs, initial_batch[idx] is an ID, farthest_point_from_pool
+        # returns an ID). Removing the DB roundtrips drops thread runtime
+        # ~700ms → ~50ms (compute_mmr_next/farthest_point are pure Python),
+        # dramatically improving cache hit rate for fast swipers (cache writes
+        # before next swipe arrives). Consumer at swipe.py:764 calls
+        # engine.get_buildings_by_ids([next, pf, pf2]) in 1 batch RTT anyway.
+        pf_bid = None
+        pf2_bid = None
 
-        # Compute prefetch_card (T+1 swipe's prefetch slot, i.e. round+2 from the
+        # Compute prefetch_card_id (T+1 swipe's prefetch slot, i.e. round+2 from
         # snapshot perspective). The main thread at T+1 selects next_card =
-        # initial_batch[current_round_snap+1]; the cache consumer needs the card
+        # initial_batch[current_round_snap+1]; the cache consumer needs the ID
         # that fills the *prefetch* slot of that same response, which is index +2.
         if phase == 'exploring':
             exposed_set = set(exposed_ids_snap)
             if current_round_snap + 2 < len(initial_batch_snap):
-                pf_bid = initial_batch_snap[current_round_snap + 2]
-                if pf_bid and pf_bid not in exposed_set:
-                    prefetch_card = engine.get_building_card(pf_bid)
+                cand = initial_batch_snap[current_round_snap + 2]
+                if cand and cand not in exposed_set:
+                    pf_bid = cand
                 else:
                     pf_bid = engine.farthest_point_from_pool(pool_ids_snap, exposed_ids_snap, pool_embeddings_snap)
-                    prefetch_card = engine.get_building_card(pf_bid) if pf_bid else None
             else:
                 pf_bid = engine.farthest_point_from_pool(pool_ids_snap, exposed_ids_snap, pool_embeddings_snap)
-                prefetch_card = engine.get_building_card(pf_bid) if pf_bid else None
         elif phase == 'analyzing':
-            pf_id = engine.compute_mmr_next(
+            pf_bid = engine.compute_mmr_next(
                 pool_ids_snap, exposed_ids_snap, pool_embeddings_snap,
                 like_vectors_snap, current_round_snap + 2
             )
-            prefetch_card = engine.get_building_card(pf_id) if pf_id else None
 
-        # Compute prefetch_card_2 (T+1 swipe's prefetch_2 slot, i.e. round+3 from
-        # the snapshot perspective, index +3 in initial_batch).
-        if prefetch_card and prefetch_card.get('canonical_bld_id') != '__action_card__':
-            temp_exposed = exposed_ids_snap + [prefetch_card['canonical_bld_id']]
+        # Compute prefetch_card_2_id (T+1 swipe's prefetch_2 slot, i.e. round+3
+        # from snapshot perspective). Skip if pf_bid is None (end-of-stream).
+        # Action-card sentinel '__action_card__' is never emitted by compute_mmr_next
+        # or initial_batch (both produce real building IDs), so no explicit guard
+        # needed — the `if pf_bid` already excludes empty/None.
+        if pf_bid:
+            temp_exposed = exposed_ids_snap + [pf_bid]
             if phase == 'exploring':
                 exposed_set_2 = set(temp_exposed)
                 if current_round_snap + 3 < len(initial_batch_snap):
-                    pf2_bid = initial_batch_snap[current_round_snap + 3]
-                    if pf2_bid and pf2_bid not in exposed_set_2:
-                        prefetch_card_2 = engine.get_building_card(pf2_bid)
+                    cand2 = initial_batch_snap[current_round_snap + 3]
+                    if cand2 and cand2 not in exposed_set_2:
+                        pf2_bid = cand2
                     else:
                         pf2_bid = engine.farthest_point_from_pool(pool_ids_snap, temp_exposed, pool_embeddings_snap)
-                        prefetch_card_2 = engine.get_building_card(pf2_bid) if pf2_bid else None
                 else:
                     pf2_bid = engine.farthest_point_from_pool(pool_ids_snap, temp_exposed, pool_embeddings_snap)
-                    prefetch_card_2 = engine.get_building_card(pf2_bid) if pf2_bid else None
             elif phase == 'analyzing':
-                pf2_id = engine.compute_mmr_next(
+                pf2_bid = engine.compute_mmr_next(
                     pool_ids_snap, temp_exposed, pool_embeddings_snap,
                     like_vectors_snap, current_round_snap + 3
                 )
-                prefetch_card_2 = engine.get_building_card(pf2_id) if pf2_id else None
 
         result = {
-            'prefetch_card_id': prefetch_card.get('canonical_bld_id') if prefetch_card else None,
-            'prefetch_card_2_id': prefetch_card_2.get('canonical_bld_id') if prefetch_card_2 else None,
+            'prefetch_card_id': pf_bid,
+            'prefetch_card_2_id': pf2_bid,
             'computed_at': timezone.now().isoformat(),
         }
         cache_key = f'prefetch:{session_id}:{cache_round}'
@@ -281,6 +293,10 @@ class ProjectBookmarkView(APIView):
 
         evict_projects_list(profile.id)
         evict_discovery_feed(profile.id)
+        # Profile detail boards payload uses saved_ids for cover/thumbnails;
+        # bookmark mutation must invalidate. Missed in initial PR — code-review catch.
+        evict_user_profile_detail(profile.user_id)
+        evict_project_detail(str(project_id))
 
         # --- Resolve optional session for event association ---
         session = None
@@ -541,6 +557,9 @@ class SwipeView(APIView):
             project.save(update_fields=['liked_ids', 'disliked_ids'])
             evict_taste(profile.id)
             evict_discovery_feed(profile.id)
+            # Fix 1: evict /projects/ cache — liked_ids/disliked_ids counts changed.
+            evict_projects_list(profile.id)
+            evict_project_detail(str(project.project_id))
 
             # 4. Increment round
             session.current_round += 1
@@ -969,4 +988,8 @@ class SwipeView(APIView):
                 and session.extended_rounds < 5
             ),
             'confidence': confidence,  # float [0,1] or null per spec C-1
+            # 'sync' | 'async-thread' (matches telemetry payload). Exposes which
+            # prefetch path served the response — useful for client perf debug +
+            # required by test_first_swipe_hits_prefetch_cache (PR #145 F4).
+            'prefetch_strategy': prefetch_strategy,
         })

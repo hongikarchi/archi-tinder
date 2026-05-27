@@ -68,43 +68,74 @@ _(none — no active initiative slice with a PR in flight.)_
 
 ### HIGH
 
-#### BACK-LLM-1 — LLM 채팅이 검색에 필요한 정보를 다 안 모음
-`backend/apps/recommendation/services/parse_query.py` already implements a 0-2 turn probe budget where the LLM free-choices an abstract A-vs-B axis. This task **drops persona classification (P1-P4)** and re-scopes the work: (1) define an explicit *required information slate* the chat must collect — filter fields the downstream search needs — and (2) refine LLM probe behaviour so probes deterministically target missing slate fields when the user's first turn is too diffuse, instead of choosing axes freely.
-
-Goal: a diffuse natural-language query ("좋은 거 보여줘", "추천해줘") still ends with a usable filter set, by virtue of the probe loop asking specifically for the gaps.
-
-Open dimensions:
-- **Required info slate** — which filter fields are mandatory? Today's 0-turn skip rule = "`program` + at least one of (`style` | `material` | `location_country`)". Keep / expand / contract?
-- **Probe priority** — among missing required fields, which is asked first? (e.g., program > material > style > location)
-- **Optional slate** — `color_tone` / `year_min-max` / `transparency` etc. — never probed (auto-inferred only) vs allowed to consume probe budget when essentials are already covered?
-- **Fallback when 2-turn budget exhausts with slate gap** — best-effort filter / generic default / broad-pool fallback?
-- **Conversational shape** — keep current abstract A-vs-B style ("따뜻한 재료감 vs 차가운 기하성") vs allow direct field-asking ("어떤 program이 필요하세요?")? Mix?
-- **Cross-language posture** — Korean query → Korean probe (current). No change (Constitution Decision Principle 7).
-
-Acceptance:
-- TTFC for Taste-tab chat does not regress beyond the 4000 ms budget (per `docs/algorithm.md`).
-- After ≤2 probe turns, `filter_priority` always contains at least one required-slate field.
-- A/B run on a fixed 50-query sample comparing slate-completion-rate (current prompt vs refined prompt) — refined prompt must not regress and should improve on diffuse-prior cases.
-
 #### BACK-RECOMMEND-1 — Project 두번째 세션이 이전 taste를 모름
 Same Project can host multiple `AnalysisSession` rows (user comes back, "Resume" or new swipe round on the same Project — second session is created fresh while `Project.liked_ids` / `disliked_ids` / `saved_ids` carry forward as the persistent accumulator). Today the new session's algorithm-side state (`like_vectors`, `convergence_history`, `phase`) starts from scratch — exploring phase, empty pool of taste signal — even though the user just liked 12 buildings in Session #1.
+
+Code audit 2026-05-27 (`develop@3894ffd`):
+- `backend/apps/recommendation/views/sessions.py` `SessionCreateView.post()` resolves an owned `project_id` early only to skip retry-dedupe. In `session_insert`, every new `AnalysisSession` is still created with `phase='exploring'`, `like_vectors=[]`, `convergence_history=[]`, `previous_pref_vector=[]`, `preference_vector=[]`.
+- Persistent taste lives on `Project.liked_ids` as `[{id, intensity}]`; `Project.disliked_ids` and `Project.saved_ids` also carry across sessions. The create path does not read these fields when `project` already exists.
+- `backend/apps/recommendation/engine.py` already has `compute_user_taste_vector(profile)` for Discovery-level cross-project taste and `get_pool_embeddings(ids)` for batch embedding fetch. A session-specific warm-start should not call `compute_user_taste_vector(profile)` blindly because it aggregates all Projects, not just the active Project.
+- `SwipeView.post()` phase transition still keys off `len(session.like_vectors)` and `min_likes_for_clustering`; any warm-start that seeds `like_vectors` changes phase/progress semantics immediately.
 
 Open dimensions:
 - **Carry policy** — A independent (status quo) / B exposure-only carry (don't re-show prior cards, taste fresh) / C asymmetric negative-only (carry dislikes, drop likes) / D fade-decay carry (recency-weight prior `liked_ids` into `like_vectors`) / E full warm-start (replay prior `liked_ids` → `like_vectors`, skip exploring phase) / F user-controlled toggle ("Resume taste?" prompt at session 2 start).
 - **Phase entry on warm-start** — if D or E chosen: enter `analyzing` immediately (3+ likes already), or still play 1-2 exploring rounds for diversity?
 - **Backend wiring** — `SessionCreateView` (`views/sessions.py:28`) currently treats project lookup as cosmetic (just resolves project_id). Carry would require reading `Project.liked_ids` → embedding fetch → seeding `AnalysisSession.like_vectors` at create time.
+- **Exposure carry** — decide whether previous `liked_ids` / `disliked_ids` / `saved_ids` should seed `session.exposed_ids`. Without this, session 2 may show cards the user already judged even if taste is warm-started.
+- **Progress semantics** — if seed vectors count toward `min_likes_for_clustering`, `frontend/src/pages/SwipePage.jsx` progress/Finish logic may jump. If seed vectors are algorithm-only, add metadata or keep them separate to avoid UX mismatch.
+
+Likely tests:
+- `backend/tests/test_session_create_correctness.py`: create Project with prior `liked_ids`, start a new session with `project_id`, assert selected policy (`like_vectors` seeded or explicitly not seeded), no cross-project leakage, invalid/foreign `project_id` remains current contract.
+- API smoke: session 2 first response latency should not exceed session 1 beyond one extra `get_pool_embeddings(prior_liked_ids)` batch.
 
 Acceptance: behavior matches chosen option deterministically; session 2 TTFC not regressed beyond session 1 (warm-start should be ≤ or equal); A/B telemetry on session 2 satisfaction (saved_ids growth rate, completion rate) vs status quo.
 
-#### FRONT-UX-1 — 신규 사용자에게 홈이 빈 화면
-First-time user with 0 projects sees Home → project picker. Need explicit empty-state path so new sign-ups don't bounce off a blank Home. Frontend-only (HomePage / ProjectListPage).
+#### FULL-LOGIN-REDESIGN-1 — Guest-first onboarding + login UX 재설계
+**User decision 2026-05-26**: codex의 `feature/codex-guest-auth-*` 두 branch가 제안한 방향 (guest-first + 터미널 UX + 3-step intro/name/role wizard + OAuth secondary) 채택. 단, codex 구현은 6개 issue로 인해 폐기 (local archive). 재설계 후 새 구현.
 
-Open dimensions:
-- **Onboarding shape** — guided flow (single CTA "Start your first taste analysis" → jump straight to AI Search) / empty-state placeholder + create button / demo query (pre-baked example, zero-friction swipe immediately) / hybrid (placeholder + demo CTA together).
-- **Copy + voice** — direct ("아직 프로젝트가 없어요") vs product-voice ("취향 첫 발견을 시작해볼까요?").
-- **Visual** — illustration / icon-only / none?
+Codex가 제안한 구조:
+- Terminal-style typing UI ("boot architinder://profile")
+- 3-step intro → name → role onboarding (`displayName` + `role` 입력)
+- `POST /api/v1/auth/guest/` endpoint (`auth/guest/` URL)
+- `UserProfile.is_guest` column (migration `accounts.0004_userprofile_guest_onboarding`)
+- `GuestLoginThrottle` 10/min
+- `frontend/src/utils/loginFlow.js` + `loginFlow.test.mjs`
 
-Acceptance: 0-project user sees a deliberate empty state on Home (no broken-looking blank); CTA path to first swipe ≤2 clicks; no regression on existing-projects rendering.
+6 issues to resolve before re-implementation:
+- [ ] **Upgrade path** — guest → OAuth promotion 시 swipe history + saved boards를 새 계정에 merge. `email=''`로 `_get_or_create_user` 매칭 실패. `Guest → User` row migration 로직 필요 (e.g., `POST /api/v1/auth/promote/` endpoint).
+- [ ] **PIPA consent** — codex가 `LoginPage.jsx`에서 "By continuing, you agree..." 라인 삭제. PIPA/GDPR (`FULL-LEGAL-1`) 미해결 상태에서 regression. 재구현 시 consent 라인 필수.
+- [ ] **Unbounded guest row 누적** — 10/min throttle 외에 CAPTCHA / cleanup job 필요. 옵션: (a) Cloudflare Turnstile, (b) periodic Celery job to delete guests with `last_active < 30 days ago AND 0 swipes`, (c) hard cap per IP.
+- [ ] **JWT 구분** — guest token = 일반 user 동일 TTL + localStorage key. `IsNotGuest` DRF permission class 만들어 sensitive endpoints (e.g., `/social/dm/`, `/profile/update/`) 차단. `is_guest` claim을 JWT payload에 추가.
+- [ ] **`clientId='guest-only-google-disabled'`** literal 제거. Google OAuth disabled 환경에서는 `<GoogleOAuthProvider>` 자체를 mount 안 하거나 `null` 처리.
+- [ ] **LoginPage 충돌** — PR #138 (FULL-SESSION-DEDUPE-1) 이후 LoginPage가 변경되었을 수 있음. 충돌 surface 확인 + clean rebase.
+
+Code audit 2026-05-27 (`develop@3894ffd`):
+- Backend auth already has provider exchange endpoints: `GoogleLoginView`, `KakaoLoginView`, `NaverLoginView`, `DevLoginView` in `backend/apps/accounts/views.py`; URLs are `/auth/social/{provider}/` and DEBUG-only `/auth/dev-login/`.
+- `_get_or_create_user(provider, provider_id, email, display_name, avatar_url)` links by existing `SocialAccount` or email match. There is no guest identity, no guest promotion endpoint, and no merge path for `Project`, `AnalysisSession`, `SwipeEvent`, `SessionEvent`, `Follow`, `OfficeFollow`, or `Reaction` rows.
+- `backend/apps/accounts/models.py` `UserProfile` has no `is_guest`, `onboarding_role`, consent timestamp, or guest cleanup marker. `SocialAccount.PROVIDER_CHOICES` only has Google/Kakao/Naver.
+- `backend/apps/accounts/serializers.py` `UserSerializer` returns only `user_id`, `display_name`, `avatar_url`, `providers`, `theme`, `font`; JWT response has no guest claim.
+- `frontend/src/main.jsx` always mounts `<GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID || ''}>`; guest-first or OAuth-disabled mode should avoid mounting provider with an empty/literal client id.
+- `frontend/src/pages/LoginPage.jsx` is still Google + dev-login only; it has the PIPA-lite line ("By continuing...") and a stale loading comment (`'google' | 'kakao' | null`, while code also uses `'dev'`).
+
+Implementation split for Claude:
+- Backend PR first: `UserProfile.is_guest`, guest login endpoint, throttle, token claim, `IsNotGuest` permission, promotion/merge endpoint, cleanup management command or scheduled job hook. Migration owner must apply the new column before local/prod e2e.
+- Frontend PR second: terminal-style onboarding UI, guest-login call, OAuth secondary flow, provider-disabled mounting, and login-flow tests. Keep the current consent line or replace it with a legally reviewed consent component from `FULL-LEGAL-1`.
+- Cross-PR contract: backend response must include enough data for `App.handleLogin()` and `ThemeContext.hydrate()` to keep working; guest flow should not bypass theme/font defaults.
+
+Open dimensions (design 결정 선행):
+- **Guest vs OAuth balance** — guest를 default surface (Google이 secondary)? 아니면 동등 비중? Persona priority 고려.
+- **Onboarding step 수** — 3-step (intro/name/role) 유지? 또는 더 짧게 (name만)?
+- **`role` enum** — codex의 `ONBOARDING_ROLES` 값들이 무엇? Persona P1-P4와 매핑?
+- **Terminal UI** — 시각적 직관성 측면에서 적합한지 (DESIGN.md §3 visual identity 검토).
+
+Acceptance:
+- New `UserProfile.is_guest` + JWT `is_guest` claim + `IsNotGuest` permission.
+- Guest login + upgrade-to-OAuth round-trip preserves swipe history + boards.
+- PIPA consent 라인 LoginPage 유지.
+- Guest cleanup job 운영.
+- LoginPage build + lint + manual test PASS.
+
+Codex code (local archive): branches `feature/codex-guest-auth-backend` (3 commits up to `3049b40`) + `feature/codex-guest-auth-frontend` (1 commit `f488ccd`) — remote 삭제 완료, local 보관. 재구현 시 참고용. `docs/guest-auth-rollout.md` (in branch) 운영 runbook 참고.
 
 #### FULL-LANGUAGE-1 — 한/영 언어 설정 토글 없음
 **Decision (user 2026-05-25)**: language is a user-controlled setting, NOT browser-locale auto-detected. Pattern mirrors the existing theme/font persistence shipped in PR #54 + PR #59. User toggles language in Settings (Korean / English); the choice drives both LLM chat answer language and UI label rendering across the app.
@@ -113,10 +144,17 @@ Current state:
 - Chat phase (`parse_query.py`) already adapts to the user's latest message language inline ("`reply` and `probe_question` are written in the user's primary language"). With this setting wired through, the chat will instead use the user's profile language deterministically — no language inference from message text.
 - Theme + font already follow this exact pattern: `UserProfile.theme` + `UserProfile.font` server-persisted, `ThemeContext` hydrates on login, `AppearanceSettings.jsx` exposes the toggle, `updateMyProfile({ theme })` PATCH on change.
 
+Code audit 2026-05-27 (`develop@3894ffd`):
+- `backend/apps/accounts/models.py` `UserProfile` app preferences are only `theme` and `font`.
+- `backend/apps/accounts/serializers.py` `UserSerializer` includes theme/font in login and `/auth/me/`; `UserProfileSelfUpdateSerializer` accepts theme/font in PATCH `/users/me/`. Add language in both places for cross-device sync.
+- `frontend/src/context/ThemeContext.jsx` is the best local pattern: validate allowed values, persist to `localStorage`, patch only when a token exists, hydrate from server on login via `App.jsx`.
+- `frontend/src/components/AppearanceSettings.jsx` currently renders only Theme and Font. A Language segmented control belongs here unless Product wants a separate Settings page.
+- `backend/apps/recommendation/services/parse_query.py` `parse_query()` and `parse_query_stage1()` currently receive only `conversation_history`. `backend/apps/recommendation/views/search.py` calls `services.parse_query(conversation_history)` with no user preference, so prompt language cannot be deterministic yet.
+
 Implementation outline:
 - Backend — add `UserProfile.language` CharField with choices `[('ko', 'Korean'), ('en', 'English')]`, default `'ko'` (Korea-first). Migration + serializer wiring + login-response inclusion (parity with theme/font).
-- Frontend — `LanguageContext` mirroring `ThemeContext`; hydrate from login response; `setLanguage()` PATCHes `updateMyProfile({ language })`. Add language toggle to `AppearanceSettings.jsx` (or a sibling settings panel — admin call).
-- Wire-through — `parse_query.py` accepts `language` parameter from `SessionCreateView`/`SwipeView`/etc., overrides the "match user's message language" rule. UI labels via a small dictionary-lookup helper (`t('home.title')`-style) — no full i18n lib (`react-i18next` adds bundle weight; Korea-first + bilingual-only justifies a hand-rolled lookup).
+- Frontend — either extend `ThemeContext` into a broader `PreferencesContext` or add `LanguageContext` mirroring it; hydrate from login response; `setLanguage()` PATCHes `updateMyProfile({ language })`. Add language toggle to `AppearanceSettings.jsx` (or a sibling settings panel — admin call).
+- Wire-through — `parse_query.py` accepts `language` parameter from `ParseQueryView` (via `request.user.profile.language`) and overrides the "match user's message language" rule. UI labels via a small dictionary-lookup helper (`t('home.title')`-style) — no full i18n lib (`react-i18next` adds bundle weight; Korea-first + bilingual-only justifies a hand-rolled lookup).
 
 Open dimensions:
 - **Scope priority** — TabBar / button copy / page titles first (high-traffic surfaces) → page bodies → error messages → modal alerts? Or sweep alphabetically?
@@ -138,6 +176,13 @@ Current state:
 - Resume + Exit UX already shipped: `SwipePage.jsx:122–123` `ExitConfirmPopup` (Exit to New Project / Home / Cancel); chat re-enters with the prior history populated from `localStorage`.
 - Backend has no conversation field today: `Project.raw_query` stores only the first user message; `AnalysisSession` has algorithm state only.
 
+Code audit 2026-05-27 (`develop@3894ffd`):
+- `frontend/src/pages/LLMSearchPage.jsx` stores `messages`, `conversationHistory`, `latestResults`, `latestFilters`, `latestFilterPriority`, `latestVisualDescription`, `latestImageFocus`, `latestRawQuery`, and `showStart` under `archithon_chat_${userId}_${mode}_${projectId || 'new'}`. That key is browser-local and userId/mode/project scoped, but not backend synced.
+- `backend/apps/recommendation/models.py` `Project` has `raw_query` but no `conversation_history`; `AnalysisSession` has no chat fields.
+- `backend/apps/recommendation/views/search.py` validates incoming `conversation_history` and sends it to Gemini, but does not persist it. It already caps history length/text length, so backend persistence should reuse these validation limits or centralize them.
+- `backend/apps/recommendation/views/projects.py` `ProjectDetailView` and `ProjectSerializer` are the natural read surface if history is stored on `Project`. For append/update, a dedicated endpoint is safer than overloading `PATCH /projects/{id}/`, because chat appends need idempotency and ownership checks.
+- `frontend/src/api/projects.js` has `getProject()` and `updateProject()` only; a new `appendConversationTurn(projectId, turn)` or `saveConversation(projectId, history, revision)` API helper is needed.
+
 Implementation outline:
 - Backend — add `Project.conversation_history` JSONField (default `list`) OR a new `ConversationTurn` row table — see open dimension. Migration. Serializer wiring. Endpoint: probably extend `ProjectSerializer` round-trip + a dedicated `POST /api/v1/projects/<id>/conversation/` for append (idempotent on turn-id).
 - Frontend — `LLMSearchPage.jsx` swaps `localStorage` reads for an API fetch on mount; appends to backend on each turn; keep `localStorage` as a write-through cache for offline resume + read-fallback when API is slow.
@@ -155,16 +200,13 @@ Acceptance:
 - No regression in current Resume / Exit UX.
 - localStorage cache (if kept) is purged on logout or Project delete to prevent stale cross-user contamination.
 
-#### BACK-LLM-3 — Gemini cache 호출에 timeout 없음
-`backend/apps/recommendation/services/_caches.py:92` IMP-5 Gemini context-cache create call bypasses the `_retry_gemini_call` timeout wrapper that every other Gemini SDK call goes through (PR #94 hard-cap 15s, 45s for Imagen). Gated by `context_caching_enabled` flag (default OFF) — zero prod impact until the flag is toggled on, at which point an SDK hang would have no cap.
-
-Fix: wrap the create call in `_retry_gemini_call(...)` so it inherits the same 15s deadline. ~5 LOC backend edit. Pre-emptive safety — easier to do now than to discover the gap when toggling the flag under load.
-
-Acceptance: `_caches.py:92` flows through the wrapper; existing IMP-5 unit tests still pass; flag toggle behaviour unchanged.
-
-
 #### FRONT-DESIGN-1 — 디자인 시스템 컴포넌트 리워크 (paused)
 Foundation shipped: PR #54 (`tokens.css` 4 themes + `ThemeContext` + `AppearanceSettings`) + PR #59 (theme/font server persistence). Remaining: per-component visual rework (≈ 7,700 LOC) — inline `style={{}}` → CSS Modules + `:hover/:focus`/`:active`, light-theme polish where dark-only assumptions still leak through, leaf→hub component order (small leaf components first, then containers).
+
+Code audit 2026-05-27 (`develop@3894ffd`):
+- `rg "style={{" frontend/src | wc -l` = 581 inline style call sites. The largest hot files are `BoardDetailPage.jsx` 1049 LOC, `UserProfilePage.jsx` 992 LOC, `App.jsx` 838 LOC, `BuildingDetailPage.jsx` 711 LOC, `SwipePage.jsx` 683 LOC, `FirmProfilePage.jsx` 540 LOC.
+- `frontend/src/tokens.css` now has theme/font tokens; `frontend/src/index.css` has only shared animations/utilities plus one masonry media query. Most hover/focus/active behavior still lives in JS handlers.
+- Good first slices: `ArticleCard`/`ProjectCard`/`BoardCard` leaf components before page containers; then `SwipeCard` and `BuildingDetailPage` because they have the most visible style state.
 
 Resume via `/plan per slice` — each slice = one logical component cluster (e.g. SwipeCard + LoadingCard, then BoardCard, then HomePage, etc.). Each slice ships its own PR via the orchestrate skill; the full sweep takes many sessions.
 
@@ -172,14 +214,19 @@ Acceptance per slice: `npm run lint` + `npm run build` clean; light + all dark v
 
 ### MEDIUM
 
-#### BACK-PERFORMANCE-4 — Discovery 첫 로딩 4.6s
-Codex retest 2026-05-26: `/discovery` 4.63s + `/images/batch` 1.61s. Backend stage breakdown: `get_or_build_taste` 1.55s + `taste_ranked_page` 2.23s. Origin: Discovery computes taste vector then pgvector rank page. Target: warm-cache <500ms, cold <1.5s. Investigate caching of taste vector (per-user TTL?) + pgvector index tuning.
-
 #### BACK-PERFORMANCE-5 — Swipe latency 0.7-1.5s 흔들림
 Codex retest 2026-05-26: browser swipe 1.82s/1.75s/1.12s/1.81s; server swipe 1.50s/1.38s/0.746s/1.36s. **PR4 async prefetch consume IS working** — 3rd swipe with cache hit drops to 156ms prefetch stage. But variability is high. Identify which stage causes the 0.7→1.5s spread (DB query latency? embedding cache miss? pgvector?). Aim for swipe p95 ≤1.0s and p50 ≤0.5s on Singapore prod.
 
-#### FRONT-UX-5 — View Gallery 클릭 가끔 no-op
-Codex retest 2026-05-26: Profile card "View Gallery" 버튼 클릭 시 가끔 navigate 안 됨. 재현 1회. 직접 `/board/<id>` URL 접근은 정상. 원인 의심: button handler event propagation 또는 React Router race. 로그 + 재현 시나리오 필요.
+Code audit 2026-05-27 (`develop@3894ffd`):
+- `backend/apps/recommendation/views/swipe.py` still performs the algorithmic card selection inside the request transaction: update Project/session, phase transition, `engine.refresh_pool_if_low()`, `engine.get_pool_embeddings(session.pool_ids)`, then `engine.farthest_point_from_pool()` or `engine.compute_mmr_next()`.
+- PERF-PREFETCH-CHAIN moved card data lookahead off-path only after `next_bid` is selected. The cache-hit path avoids some prefetch-card compute/fetch, but it does not skip `get_pool_embeddings()` or MMR/farthest selection for the next visible card.
+- The response already logs `[SWIPE TIMING] lock/embed/select/prefetch/total` and captures `engine.get_last_embedding_call_stats()` for cache miss counts. That is the fastest way to classify the spread before editing.
+- `engine.get_pool_embeddings()` has an in-process LRU-like building embedding cache; cache misses can still trigger a DB fetch against `canonical_v2_buildings`. Under multi-worker prod, this cache is per process.
+
+Diagnostic plan:
+- Re-run a fixed 8-10 swipe session and bucket slow responses by timing stage: `embed_ms` > selection, `select_ms` > MMR/farthest CPU, `prefetch_ms` > buildings batch fetch / cache miss, `lock_ms` > transaction contention.
+- Compare first session after worker boot vs warmed worker. If first swipes are slow and later cache-hit swipes are fast, embedding cache warmup is the likely source.
+- If `select_ms` dominates in analyzing phase, inspect `engine.compute_mmr_next()` vector math and pool size. If `embed_ms` dominates, inspect `get_pool_embeddings()` DB batch and cache-hit ratio.
 
 #### BACK-AUTH-2 — Cache JWT 통합 테스트 hardening
 `apps/accounts/authentication.py:74` cache-hit path skips parent `get_user()`. Current tests are unit-level (CachedJWTAuthentication.get_user direct call). Need integration coverage:
@@ -187,6 +234,17 @@ Codex retest 2026-05-26: Profile card "View Gallery" 버튼 클릭 시 가끔 na
 - [ ] `User.save()` post_save signal auto-invalidation (`auth_user` row mutation → cache.delete fires)
 - [ ] `is_active=False` user → cache hit on stale entry must NOT return 200; either auto-invalidate before hit or re-check `is_active` on cached user
 - [ ] cross-instance: cache populated from one auth instance, read from another (Redis multi-worker correctness)
+
+Code audit 2026-05-27 (`develop@3894ffd`):
+- `backend/apps/accounts/authentication.py` cache-hit branch returns `cached_user` directly. It relies on token validation having already happened and on cache invalidation for user-state changes.
+- `backend/apps/accounts/signals.py` invalidates on `post_save` and `post_delete` for `User`. This covers admin `.save()` but not `User.objects.filter(...).update(...)`; the docstring calls this out.
+- `backend/tests/test_jwt_cache.py` patches cache methods and calls `CachedJWTAuthentication.get_user()` directly with mocked tokens/users. It does not prove the full DRF request pipeline, SimpleJWT token validation, or real cache serialization.
+- `backend/apps/social/models.py` intentionally uses queryset `.update()` for counter caches; that is not auth-relevant. A future auth-relevant bulk update would need explicit `invalidate_user_cache()`.
+
+Implementation map:
+- Add integration tests around a tiny authenticated endpoint such as `/api/v1/auth/me/` or a protected test view. Populate cache via first request, mutate `auth_user.is_active`, then assert the next request is rejected after signal invalidation.
+- Add a stale-cache negative test by manually `cache.set(_user_cache_key(user.id), user)` after setting `user.is_active=False`; decide whether code should re-check `cached_user.is_active` or rely strictly on invalidation. This clarifies the security posture.
+- Cross-instance can be simulated by two `CachedJWTAuthentication()` objects with the same Django cache backend; Redis-specific behavior belongs in cache backend tests if local Redis is available.
 
 Codex retest 2026-05-26 flagged as P3 hardening. Not a blocker — security-manager PASS'd PR #133 — but defense-in-depth for any future cache-key drift or signal-wiring regression.
 
@@ -198,14 +256,52 @@ Codex retest 2026-05-26 — Full `test_imp8_async_prefetch.py` blocked at DB set
 
 Choose one + document in CONTRIBUTING.md / backend/.env.example. Currently the test-DB gap means some integration tests can only run with a manual role swap.
 
+Code audit 2026-05-27 (`develop@3894ffd`):
+- `backend/config/settings.py` defines PostgreSQL `default` and `buildings` from env vars at import time. Runtime role guidance in `backend/.env.example` says local/prod should use `make_web_app` for `user_data`; that role deliberately has `NOCREATEDB`.
+- `backend/conftest.py` tries to route pytest DB work to in-memory SQLite via `django_db_modify_db_settings()` and mirrors `buildings` to `default`. App-local conftests (`backend/apps/*/tests/conftest.py`) duplicate only part of that setup and may be invoked differently when running sub-suites.
+- The practical failure mode is pytest-django trying to create a test DB from the Neon `DB_NAME` using `make_web_app`, which fails before tests can run. This is infra/test-runner config, not app correctness.
+
+Decision needed:
+- Preferred path for local/Claude testability is either a dedicated `make_web_test CREATEDB` role on `local-dev-2`, or a documented `--reuse-db` workflow against a pre-provisioned `test_user_data`. Using `neondb_owner` for every pytest run works but weakens the role-separation habit.
+- Any chosen path should be encoded in `CONTRIBUTING.md`, `backend/.env.example`, and the Claude test instructions so future agents do not rediscover the same permission wall.
+
 #### FRONT-LAYOUT-1 — Desktop wide-screen 레이아웃 어색함
 Current viewport-lock layout is mobile-first. Detail pages on desktop work but unoptimised. Low priority — desktop is secondary.
+
+Code audit 2026-05-27 (`develop@3894ffd`):
+- `frontend/src/index.css` sets `body { height: 100vh; overflow: hidden; }`; each page owns its own scroll region. This works for mobile-app feel but makes desktop layout tuning page-by-page.
+- `BuildingDetailPage.jsx` uses `maxWidth: 820` for most content and only one `.building-masonry` media query. On wide screens it stays narrow rather than using a split gallery/details layout.
+- `BoardDetailPage.jsx` and `UserProfilePage.jsx` use `maxWidth: 1100` and auto-fill grids, but hero/profile sections remain mostly mobile-centered; there is no desktop-specific information hierarchy.
+- `App.jsx` routes everything through `MainLayout`; wide-screen fixes should start in page components plus any shared shell constraints, not TabBar.
+
+Likely slices:
+- Building detail desktop pass first: full-bleed or two-column gallery + sticky metadata/read actions.
+- Board/User profile second: keep existing mobile layout, add desktop breakpoints for hero + board grid density.
 
 #### FULL-LEGAL-1 — PIPA/GDPR consent 없음 (public launch 차단)
 Phase 13+ Profile/Board public/private visibility shipped. PIPA + GDPR posture for signup data collection / consent flow / retention policy still open. **Required before public launch.**
 
+Code audit 2026-05-27 (`develop@3894ffd`):
+- Only visible consent surface found is `frontend/src/pages/LoginPage.jsx` line text: "By continuing, you agree to our terms of service". There are no Terms/Privacy routes in `App.jsx`, and no stored consent/version fields on `UserProfile`.
+- `backend/apps/accounts/models.py` marks `external_links` as privacy-sensitive and opt-in, but there is no retention policy, export/delete workflow, or policy-version audit trail.
+- Guest-first auth (`FULL-LOGIN-REDESIGN-1`) will collect at least display name/role and may create anonymous user rows; it should not ship publicly until legal consent and retention are explicit.
+
+Implementation map:
+- Backend fields likely belong on `UserProfile` or a separate `ConsentRecord`: `terms_accepted_at`, `privacy_accepted_at`, `policy_version`, optional marketing consent. Keep immutable history if policy versioning matters.
+- Frontend needs Terms/Privacy pages or external links plus a blocking checkbox/continue copy in login/onboarding. Korean-first copy should be reviewed outside Codex.
+- Account deletion/export is not currently in scope but should be tracked before public launch if GDPR-like obligations apply.
+
 #### PERF-PREFETCH-POOL-RISK — Neon connection pool 모니터링 (post PR #134)
 PR 4 PERF-PREFETCH-CHAIN flipped `async_prefetch_enabled: True` — every prod swipe now spawns a daemon thread holding its own DB connection until `_connections.close_all()` runs in finally. Under high concurrent swipe load: connections ≈ (concurrent_requests × 2) — one main worker + one prefetch thread. Neon free tier limit is 25 connections; Railway Gunicorn default is 2-4 workers. Concurrent swipe × 2 conns/swipe could approach limits at high traffic. Acceptable for current scale (~tens of daily users/day). Monitor Neon dashboard post-deploy + revisit if peak concurrency exceeds 8-10 connections. Mitigation options if exhausted: (a) connection pool size increase, (b) explicit thread-local connection pool, (c) PgBouncer in front of Neon. security-manager (sonnet) flagged this as availability concern on PR #134.
+
+Code audit 2026-05-27 (`develop@3894ffd`):
+- `backend/apps/recommendation/views/swipe.py` now starts two daemon-style background paths per successful swipe when enabled: `_async_prefetch_thread` and `_emit_telemetry_thread`. Both call `_connections.close_all()` in `finally`, but each can open its own thread-local DB connection while alive.
+- Main request can hold `default` DB inside transaction; telemetry writes to `user_data`; async prefetch may read buildings data for next-card hydration. Practical transient footprint can be main + telemetry + prefetch, not just main + prefetch, depending on timing.
+- `backend/config/settings.py` has `CONN_MAX_AGE=600` on default DB; buildings alias has no explicit `CONN_MAX_AGE`. Thread cleanup makes leaks unlikely, but peak connection count is still a traffic/concurrency risk.
+
+Monitoring map:
+- Track Neon active connections during swipe bursts and Railway worker/thread counts. If peak >8-10 at current traffic, promote this from MEDIUM risk to HIGH infra work.
+- If slow swipes correlate with connection pressure, evaluate a bounded executor or queue instead of unbounded per-swipe `threading.Thread`.
 
 ### LOW
 
@@ -214,11 +310,39 @@ Backend Kakao + Naver implementation shipped: `apps/accounts/views.py` KakaoLogi
 - [ ] Kakao button on `LoginPage.jsx` (loading state already typed `'kakao'`)
 - [ ] Naver button on `LoginPage.jsx` (loading state not yet typed `'naver'`)
 
-#### FULL-REFACTOR-1 — 큰 파일 분해 필요 (engine.py 2139 LOC 등)
-File decomp (LOC verified 2026-05-25): engine.py 2139 (+60 since first flagged), App.jsx 817, BoardDetailPage 1045, UserProfilePage 992, PostSwipeLandingPage 696, SwipePage 666, FirmProfilePage 540 (recently refactored down from 611).
+Code audit 2026-05-27 (`develop@3894ffd`):
+- `frontend/src/api/auth.js` already has generic `socialLogin(provider, accessToken, code)` for `'google' | 'kakao' | 'naver'`, so the API helper is not the blocker.
+- Backend accepts either `access_token` or `code` depending on provider view behavior. Frontend still lacks Kakao/Naver SDK or redirect-code handling, so this is a UX/OAuth-client integration task.
+- `frontend/src/pages/LoginPage.jsx` loading state should include `'naver'`; the current comment is stale and button icons/styles need design approval.
+
+Decision needed:
+- Choose provider integration style: JS SDK popup/access-token vs OAuth redirect/auth-code. Match mobile browser behavior and Vercel callback envs before implementing.
+- This may be superseded or reshaped by `FULL-LOGIN-REDESIGN-1`; if guest-first ships first, Kakao/Naver should be secondary account-upgrade options, not necessarily primary login buttons.
+
+#### FULL-REFACTOR-1 — 큰 파일 분해 필요 (engine.py 2383 LOC 등)
+File decomp (LOC verified 2026-05-27 on `develop@3894ffd`): `engine.py` 2383, `BoardDetailPage.jsx` 1049, `UserProfilePage.jsx` 992, `App.jsx` 838, `BuildingDetailPage.jsx` 711, `SwipePage.jsx` 683, `FirmProfilePage.jsx` 540. `PostSwipeLandingPage.jsx` removed in INFRA-CLEANUP-1 (PR #142, 2026-05-26). `rg "style={{" frontend/src | wc -l` = 581, so frontend refactor overlaps with `FRONT-DESIGN-1`.
+
+Code audit:
+- `engine.py` mixes DB row-to-card mapping, search SQL, pool creation, embedding caches, MMR/DPP/KMeans, telemetry helpers, Discovery taste ranking, and corpus-rank helpers. Split only after active algorithm work stabilizes; algorithm ownership lives in `docs/algorithm.md`.
+- `App.jsx` owns auth/session/project state, routing, swipe orchestration, and localStorage persistence. Good future split: `useSessionController`, `useProjectStore`, route shell.
+- `BoardDetailPage.jsx` and `UserProfilePage.jsx` combine data fetching, optimistic mutations, selection state, modals, and large inline style blocks. Extract hooks before moving visual components.
+
+Refactor rule: no behavior change PRs. Each slice needs before/after tests or app-test screenshots because these files are user-facing and regression-prone.
 
 #### BACK-RECOMMEND-3 — Profile-tab 사무소/유저 추천 endpoint 없음
 Re-scoped 2026-05-14 (REC1 already shipped as Push S3). REC2 (firm) + REC3 (user) target a single composite endpoint `GET /api/v1/recommendations/profile/` returning `{offices: [...], users: [...]}` for a Profile-tab button. Landing tab removed (Push S6).
+
+Code audit 2026-05-27 (`develop@3894ffd`):
+- No route exists today in `backend/apps/recommendation/urls.py`, `backend/apps/profiles/urls.py`, or `backend/apps/social/urls.py` for `/recommendations/profile/`; the only recommendation-style public route is `recommendations/board-surprise/`.
+- Firm data model exists in `backend/apps/profiles/models.py`: `Office`, `OfficeProjectLink`, `Office.canonical_id`, follower counters. `OfficeDetailView` already hydrates office projects from `OfficeProjectLink` + `canonical_v2_buildings`.
+- User taste helper exists as `engine.compute_user_taste_vector(profile)`, but it aggregates the requester only. For recommending users, a batch scoring strategy is needed; do not loop all users and run per-user DB fetches in request path.
+- Social graph exists (`Follow`, `OfficeFollow`) and should be used to exclude already-followed users/offices unless Product decides otherwise.
+- Frontend profile stats buttons have TODOs for followers/following routes, but no recommendation trigger UI yet.
+
+Implementation map:
+- Backend endpoint probably belongs in a new recommendation view/module because it combines Make Web user_data and Make DB building vectors. Keep office/user recommendation payload minimal for p95 <= 800 ms.
+- For firms, precompute or cache office vectors from `OfficeProjectLink.building_id` embeddings; query-time max-sim over each office's projects will get expensive if done naively.
+- For users, use each user's aggregated liked vector and follower/exclusion filters. Cold-start needs a separate branch (popular offices/users or disable with CTA).
 
 Open dimensions (admin decision before implementation):
 - **Firm vector composition** — Mean / weighted-mean / curated-subset / max-sim of firm's project embeddings?
@@ -234,6 +358,17 @@ Acceptance: `/recommendations/profile/` p95 ≤ 800 ms on Singapore deploy; cold
 #### BACK-EXTERNAL-1 — FirmProfilePage에 외부 기사 surface 없음
 Surfaces external articles about a firm on FirmProfilePage (Space / ArchDaily / news keyword match). Phase 15 already shipped External DM wiring (`Office.contact_email`, `Office.website`, `UserProfile.external_links`).
 
+Code audit 2026-05-27 (`develop@3894ffd`):
+- `frontend/src/pages/FirmProfilePage.jsx` already renders an Articles section only when `office.articles?.length > 0`; it defaults `articles` to `[]` because backend omits the field.
+- `frontend/src/components/profile/ArticleCard.jsx` is already present and expects `{title, url, source, date}`.
+- `backend/apps/profiles/serializers.py` explicitly documents `articles[] -> EXCLUDED (Phase 18 External — deferred)`.
+- `backend/apps/profiles/models.py` has no article table/fields; `OfficeDetailView` only returns office metadata + projects + `is_following`.
+
+Implementation map:
+- If article fetch is real-time, it must not block `OfficeDetailView` TTFC; use async frontend fetch or backend cached endpoint.
+- If stored, a separate `OfficeArticle` model is cleaner than denormalizing a mutable article list into `Office`, because source/date/url uniqueness and refresh state matter.
+- External URL opening is already handled by `ArticleCard` (`target="_blank" rel="noreferrer"`); backend must sanitize/validate stored URLs.
+
 Open dimensions:
 - **Article source priority** — Space-first (Korean) vs ArchDaily-first (global) vs parity? (Korea-first principle suggests Space)
 - **Crawl freshness** — real-time on view / scheduled daily-weekly / event-driven?
@@ -243,13 +378,107 @@ Open dimensions:
 Acceptance: ≤10 most recent articles per firm; open in new tab (legal posture); no FirmProfilePage TTFC regression (article fetch async, doesn't block initial paint).
 
 #### INFRA-QUEUE-1 — corpus_rank telemetry 꺼져있음
-`recommendation_swipeevent` row inserts used to compute `corpus_rank` synchronously (O(corpus_size) scan on every swipe). PR #79 turned this off on the bookmark path (`rank_corpus = None` + TODO). Today the field is None on every write — telemetry slightly degraded but swipe response is fast. Celery + Redis would let us re-enable the calculation off the hot path.
+Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) scan) before emitting a `SessionEvent` bookmark payload. PR #79 turned this off on the bookmark path (`rank_corpus = None` + TODO). Today the field is None on every bookmark event — telemetry slightly degraded but bookmark response is fast. Celery + Redis would let us re-enable the calculation off the hot path.
+
+Code audit 2026-05-27 (`develop@3894ffd`):
+- `backend/apps/recommendation/engine.py` still has `compute_corpus_rank(card_id, v_initial)` implemented as a corpus-wide pgvector `ROW_NUMBER() OVER (ORDER BY embedding <=> vector)` query.
+- `backend/apps/recommendation/views/swipe.py` `ProjectBookmarkView` sets `rank_corpus = None` with a TODO before `event_log.emit_event('bookmark', ...)`.
+- Tests intentionally lock the deferred behavior: `backend/tests/test_bookmark.py::test_rank_corpus_is_none_placeholder` and `backend/tests/test_imp10_topic06_telemetry.py` assert `compute_corpus_rank` is not called and payload `rank_corpus` remains null.
+- No Celery/worker dependency is present in `backend/requirements.txt`; Redis exists as a cache backend, not a task queue.
+
+Implementation map:
+- Do not re-enable synchronous `compute_corpus_rank()` in the bookmark path. The only acceptable path is queue/background worker with bounded retries and failure-tolerant telemetry update.
+- If introduced, update tests from "placeholder None" to "enqueued job" and add worker tests around success/failure without blocking bookmark response.
 
 Why LOW: introducing Celery just for this one field is over-investment. Adds Redis (Railway add-on cost), a worker process, monitoring surface, and a deploy step — all for one telemetry column the product doesn't currently consume. Revisit when other background jobs accumulate (image batch processing, periodic embedding refresh, scheduled snapshot drops) so Celery earns its keep across multiple tasks.
 
 ---
 
 ## Done
+
+### BACK-BOARD-PERF-1 — /projects/&lt;id&gt;/ ~879ms → &lt;500ms — response cache 60s — RESOLVED 2026-05-27 (PR #148 `4573623-pre-squash`)
+- [x] **Response cache 60s** (projects.py ProjectDetailView.get): PR #147 Profile detail pattern을 ProjectDetailView에 적용. Per-(project_uuid, requester_id, version) key. requester_id partition (anon / profile.id) → is_owner / is_reacted / visibility-gated payload cross-user leak 방지.
+- [x] **caches.py helpers**: PROJECT_DETAIL_TTL=60 + version key + evict_project_detail(uuid) + get_project_detail_cache_key(uuid, requester_id). Version-based invalidation.
+- [x] **Invalidation 8 mutation sites**: ProjectDetailView patch/delete · ProjectListCreateView.post · ProjectBookmarkView · SwipeView (transaction-safe) · SessionCreateView · ProjectReportGenerate/ImageView · ReactionView post/delete (gated).
+- [x] **CRITICAL fix-loop**: ProjectDetailView.delete 초기 evict가 row delete 전 → race window. 정정: evict AFTER delete.
+- [x] **test_board_detail_perf.py** NEW 7 pure-mock cases.
+- Verification: manage.py check PASS · 7 non-DB tests PASS · code-review PASS · security-manager PASS.
+- 기대: cold ~879ms → ~500ms, warm ~50ms.
+- Origin: User goal 2026-05-27 — PR 3/N of iterative perf sweep.
+
+### BACK-PROFILE-PERF-1 — /users/&lt;id&gt;/ 895ms → &lt;1s — thumbnail-only fetch + response cache — RESOLVED 2026-05-27 (PR #147 `4cd1fdf-pre-squash`)
+- [x] **Fix 1 `engine.get_building_thumbnails(ids)`** NEW: lightweight minimal-column SELECT.
+- [x] **Fix 2 `_build_boards_field` thumbnail-only swap**.
+- [x] **Fix 3 `UserProfileDetailView` response cache (60s)**: per-(viewed_user, requester, page, page_size, version) key. Cross-user leak partition.
+- [x] **Invalidation wired**: PATCH /users/me/ · Project mutations · Session create · Follow/unfollow · ProjectBookmark POST.
+- [x] **`test_profile_perf.py`** NEW 9 cases.
+- Verification: manage.py check PASS · 9 non-DB tests PASS · code-review PASS · security-manager PASS.
+- 기대: cold ~500-700ms, warm ~100ms.
+
+### BACK-PERFORMANCE-4 — Discovery cold 4.6s → ~1.5-2.5s — taste vector cap + SQL top-K — RESOLVED 2026-05-27 (PR #146 `dc1651b-pre-squash`)
+- [x] **Fix 1 `taste_ranked_page` CTE 제거**: PG planner top-K heap scan.
+- [x] **Fix 2 `compute_user_taste_vector` recent-50 cap**: bounded cold get_pool_embeddings.
+- [x] **Fix 3 `_async_warm_taste` daemon thread** (rolled back; pytest-django connection race).
+- Verification: manage.py check PASS · code-review PASS · security-manager PASS.
+- 기대 효과: Discovery cold ~4.6s → ~1.5-2.5s.
+
+### BACK-ALGO-1 — Required-slate hard WHERE + first-swipe prefetch cache seed — RESOLVED 2026-05-27 (PR #145 `72f8f27-pre-squash`)
+- [x] **F3 required-slate hard WHERE** (engine.py): "Japan museum" search 후 첫 save → Bolivia card 표시되던 버그. Root cause: filters가 score CASE만 emit, pool SQL WHERE는 `is_publishable=true AND score > 0`만 — Bolivia가 country 0이어도 style/program 양의 점수로 통과. Fix: `_REQUIRED_SLATE_FIELDS_SET` frozenset (services/parse_query.REQUIRED_SLATE_FIELDS 미러 + cross-ref 주석) + `_build_required_slate_where(filters)` helper. Mode V (HyDE) + Mode F (filter-only) 적용. Mode H (RRF) excluded — rank-fusion 의미 다름. Tier 2 relaxation은 기존 location_country drop 동작 그대로.
+- [x] **F4 first-swipe prefetch cache seed** (sessions.py): 첫 swipe `saved_current_round=1` (current_round가 swipe.py:548에서 save 전 증가) → `cache.get('prefetch:{sid}:1')` always miss → sync compute 770ms. **SPEC DEVIATION**: back-maker source-reading으로 spec :0 → 실제 :1로 정정. SessionCreate 끝에 `cache.set('prefetch:{sid}:1', {prefetch_card_id: initial_batch[1], prefetch_card_2_id: initial_batch[2]}, timeout=60)` 시드. `_async_prefetch_thread` write shape 미러.
+- [x] **`test_engine_filter_hard_constraint.py`** NEW 4 cases: slate WHERE emit, Tier 2 relaxation, optional fields stay soft, **Mode V param order** (param-position regression catch).
+- [x] **`test_session_create_correctness.py`** +2 F4 `TestPrefetchCacheSeeding` cases.
+- **code-review fix-loop CRITICAL catch**: 초기 구현 2개 SQL execute call에서 **param order inversion**. 정정 후 테스트가 param positions 검증.
+- Verification: manage.py check PASS · F3 4/4 tests PASS · F4 tests local INFRA-DB-2 차단 (CI 실행) · code-review PASS (after fix-loop) · security-manager PASS (parameterized SQL, UUID-isolated cache keys).
+- Origin: 4th Codex retest 2026-05-26 of develop=72bf8d3. F3+F4 알고리즘 territory.
+
+### FRONT-UX-FIXES-1 — Image timeout + Gallery CTA nav + Board card click — RESOLVED 2026-05-26 (PR #144 `b5c53f2-pre-squash`)
+- [x] **F2 SwipeCard image timeout**: 2000ms → 4000ms. `?retry=1` cache-bust path 전부 삭제 (별도 URL 없음, 대역폭만 2배). Fallback chain: `covers_by_type.exterior → interior → aerial → detail → drawing → gallery[N]`. Singapore R2 cold-cache 1.7-2.6s 정상 처리.
+- [x] **F5 Gallery CTA navigation**: 동작 변경. 이전 `openGallery()` → in-card 3D flip back-face. 현재 `navigate('/buildings/${card.image_id}')` → BuildingDetailPage 전체 갤러리. 3D flip path가 실제 no-op surface (back-face JSX는 `setShowGallery(true)` unreachable로 절대 안 렌더링). SwipePage `onGalleryOpen` prop 무해하게 drop. 죽은 코드 (back-face JSX, `hasBeenOpened`) 별도 cleanup PR로.
+- [x] **F7 BoardDetail building card click**: ID 정규화 OR chain에 `building.id` 추가 (3 sites: BuildingTile line 180, handleDeleteSelected filter line 458, render bid line 926). MOCK_BOARD `building_id` priority 유지. Stored `{id: "bld_..."}` shape 정상 인식 → 클릭 navigate.
+- Verification: npm run lint clean · npm run build PASS · code-review PASS (3 dead-code items flagged out-of-scope) · security-manager PASS (XSS-safe — image_id BUILDING_ID_RE 검증; IDOR-safe — board-scoped ownership server-side).
+- FRONT-UX-5 (Gallery CTA backlog) closed by F5.
+- Origin: 4th Codex retest 2026-05-26 of develop=72bf8d3. F1 (session 2.11s) positive PR #137+138 작동 확인. F3+F4 → Group B separate PR. F6 (StrictMode dup GET) dev-only → 별도 backlog 검토.
+
+### BACK-CORRECTNESS-1 — /projects/ cache evict + dedupe project_id + orphan project — RESOLVED 2026-05-26 (PR #143 `d87a5f9-pre-squash`)
+- [x] **Fix 1 — `/projects/` cache eviction**: `evict_projects_list(profile.id)` added at 5 mutation sites: sessions.py dedupe-hit return path + sessions.py post-create + swipe.py post-save + reports.py post-final_report + reports.py post-report_image. ProjectListSerializer exposes liked_ids/saved_ids/final_report/report_image — eviction now covers all paths.
+- [x] **Fix 2 — dedupe + project_id intent**: PR #138 dedupe scope extended. Early project_id resolve before dedupe lookup. If project_id provided + matches user-owned Project → dedupe SKIPPED (App.jsx:723 fresh-swipe flow honored). project_id missing or no match → existing (user, name, raw_query, filters) dedupe runs.
+- [x] **Fix 3 — orphan Project on mid-failure**: Project.objects.create() deferred from line ~113 to inside `session_insert` stage. Pool fetch failure / empty pool 404 no longer leaks Project rows. Project + AnalysisSession pair wrapped in `transaction.atomic()` savepoint (fix-loop catch — closes session_insert-step orphan too).
+- [x] **`test_session_create_correctness.py`** NEW 9 tests: 3 cache evict (session create / swipe write / dedupe hit) + 1 project_id-skip-dedupe + 2 no-orphan (pool empty / pool exception) + 2 cache evict on reports + 1 session insert rollback.
+- Verification: manage.py check PASS · pytest full suite **553 passed** (was 550, +3 new tests, zero regression) · PR #138 dedupe tests 8/8 still PASS · code-review PASS (after 1 fix-loop catching reports.py + transaction.atomic) · security-manager PASS (IDOR-safe: user= clause on early project_id resolve; cache eviction scoped to profile.id).
+- Origin: 3rd Codex retest 2026-05-26 of develop=17f7d65 (worktree `/private/tmp/make_web_review_develop`). P2-1/2/3 shipped here. P2-4 (pytest bootstrap) merged into existing INFRA-DB-2. P3 findings (daemon thread / large files / LLM localStorage / PostSwipeLandingPage) all already tracked — PostSwipeLandingPage finding superseded by PR #142 INFRA-CLEANUP-1.
+
+### INFRA-CLEANUP-1 — Dead code 정리 (-1124 LOC) — RESOLVED 2026-05-26 (PR #142 `beb1d74-pre-squash`)
+- [x] **Files removed (-1124 LOC)**:
+  - `frontend/src/pages/PostSwipeLandingPage.jsx` (696 LOC) — PROF3+PROF4 mockup with unwired backend TODOs.
+  - `frontend/src/components/GalleryOverlay.jsx` (181 LOC) — initial-commit artifact; PR #120 BuildingDetailPage rolled its own inline gallery.
+  - `backend/tools/optimization_results.json` (247 LOC) — Optuna search artifact. Zero refs.
+- [x] **Doc references**: CONTRIBUTING.md role B table drops PostSwipeLandingPage; BoardDetailPage.jsx:143 JSDoc drops PostSwipeLanding mirror reference.
+- [x] **Session decisions batched in this audit**:
+  - **FRONT-UX-1 obsolete** — App.jsx:783 already `<Route index element={<Navigate to="/discovery">>` ; first-login lands on /discovery directly. Removed from ## Next ### HIGH.
+  - **FULL-LOGIN-REDESIGN-1** added to ## Next ### HIGH — codex guest-auth direction (guest-first + 3-step onboarding) accepted; codex code archived (local only) due to 6 issues; re-design pending.
+  - **FULL-REFACTOR-1** LOC list updated.
+- Verification: npm run lint clean · cross-cutting grep verified zero non-self refs for all 3 deleted files · git history confirms abandoned status.
+- Origin: salvaged from codex-authored `feature/codex-cleanup-stale-develop` (commit `986bd5e`). Codex branch's docs/skill changes rejected (regressions of PR #136 INFRA-DOC-6); only file deletions kept.
+
+### BACK-LLM-1 — LLM 채팅이 검색에 필요한 정보를 다 안 모음 — RESOLVED 2026-05-26 (PR #141 `cdbf5c7-pre-squash`)
+- [x] **`parse_query.py`**: `REQUIRED_SLATE_FIELDS = (program, material, style, location_country)` + `REQUIRED_SLATE_PROBE_PRIORITY` module-level constants. System prompt + few-shot examples rewritten to deterministically target missing slate fields (drop prior free A-vs-B axis selection).
+- [x] **`_normalise_filter_priority`**: required-slate keys promoted to front of Gemini-returned `filter_priority`. Engine score weights respect the new order.
+- [x] **`_repair_required_slate`**: injects `style: 'Contemporary'` (`_BROAD_SLATE_DEFAULT_VALUE`) when no required-slate field present after Gemini parse OR 2-turn probe budget exhausts with slate gap. Runs on `probe_needed=True` intermediate turns too — documented.
+- [x] **Korean few-shot examples** updated with slate-targeted probe Korean questions. Korea-first preserved (Constitution Decision Principle 7).
+- [x] **`test_back_llm1_required_slate.py`** NEW 5 tests: prompt content assertions, slate promotion into priority, broad default injection for both `parse_query` + `parse_query_stage1`, budget-exhausted terminal repair.
+- Verification: manage.py check PASS · pytest 5/5 PASS · code-review PASS (rebase clean; parse_query.py untouched on main since branch base) · security-manager PASS (no prompt injection — user input never touches system prompt; static constants; mocks-only tests).
+- Open dimensions resolved: required slate = 4 fields (program/material/style/location_country); priority = same order; fallback = 'Contemporary' default; conversational shape = Korean slate-targeted probes (mix of direct + axis).
+- Deferred: A/B 50-query benchmark harness (Task.md acceptance criterion c). Code contract structurally verified; empirical measurement = post-merge follow-up.
+- Behavioral note: `_normalise_filter_priority` promotion changes `engine._build_score_cases` weight semantics (rank-based; required-slate field outranks temporal filter). Intended.
+- Origin: codex-authored `feature/codex-back-llm1-required-slate` (commit `79346ff`) cherry-pick. Clean rebase onto develop=92915b8.
+
+### BACK-LLM-3 — Gemini cache 호출에 timeout 없음 — RESOLVED 2026-05-26 (PR #140 `715e06e-pre-squash`)
+- [x] `backend/apps/recommendation/services/_caches.py:92` `client.caches.create` 호출을 zero-arg `_create_cache` closure로 추출 → `_svc._retry_gemini_call(_create_cache)`로 라우팅. 기존 `_retry_gemini_call`의 15s timeout cap (PR #94) 적용.
+- [x] `backend/tests/test_imp5_context_caching.py` `+17` LOC `test_gemini_create_runs_through_retry_timeout_wrapper`: MagicMock으로 Gemini 네트워크 hit 없이 patch 검증.
+- [x] `context_caching_enabled` 플래그 default OFF 유지 — 프로덕션 영향 없음. SDK hang 시 cap 적용. Pre-emptive safety.
+- Verification: manage.py check PASS · 새 테스트 PASS (12 passed) · code-review PASS (~5 LOC budget 정확히 준수) · security-manager PASS (no secret leakage, closure capture 안전).
+- 9 pre-existing DB-요구 tests는 `INFRA-DB-2` (`permission denied to create database`)로 차단됨; 본 PR이 도입한 게 아님.
+- Origin: codex-authored `feature/codex-back-llm3-timeout` (commit `5ac1f6d`)에서 cherry-pick. 원 branch가 stale develop에 stacked되어 있어서 fresh feature branch에 cherry-pick. Clean rebase.
 
 ### FULL-SESSION-DEDUPE-1 — Session create POST retry → 중복 Project/Session — RESOLVED 2026-05-26 (PR #138 `3fcbe3c-pre-squash`)
 - [x] **Frontend `api/core.js`**: retry gate by HTTP method. `_IDEMPOTENT_METHODS = {GET, HEAD, OPTIONS}`. POST/PATCH/DELETE throw on first network error (no retry).

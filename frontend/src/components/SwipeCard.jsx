@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useImageTelemetry } from '../hooks/useImageTelemetry.js'
 
 /**
@@ -9,12 +10,13 @@ import { useImageTelemetry } from '../hooks/useImageTelemetry.js'
  * version EXCEPT:
  *   - <img decoding="async"> (was "sync" — sync blocks render)
  *   - explicit width/height on the <img> (prevent layout thrash)
- *   - 2-second image-load timeout that triggers the covers_by_type fallback
- *     chain if the main URL hasn't fired onLoad yet
+ *   - 4-second image-load timeout that triggers the covers_by_type fallback
+ *     chain if the main URL hasn't fired onLoad yet (was 2s; bumped FIX F2)
  *
- * The fallback chain itself is unchanged: cache-bust → covers_by_type.exterior
- * → interior → aerial → detail → drawing → gallery[0]. Telemetry behavior is
- * unchanged.
+ * The fallback chain: covers_by_type.exterior → interior → aerial → detail →
+ * drawing → gallery[0]. The ?retry=1 cache-bust step was removed (FIX F2 —
+ * it doubled bandwidth without salvaging same-origin in-flight requests).
+ * Telemetry behavior is unchanged.
  */
 
 const _vw = typeof window !== 'undefined' ? window.innerWidth : 375
@@ -37,7 +39,8 @@ function InfoRow({ label, value }) {
 }
 
 /* ── SwipeCard ───────────────────────────────────────────────────────────── */
-export default function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
+export default function SwipeCard({ card, onGalleryClose }) {
+  const navigate = useNavigate()
   const [isExpanded,     setIsExpanded]     = useState(false)
   const [showGallery,    setShowGallery]    = useState(false)
   const [hasBeenOpened,  setHasBeenOpened]  = useState(false)
@@ -56,7 +59,8 @@ export default function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
     context: 'swipe_card',
   })
 
-  function openGallery()  { setHasBeenOpened(true); setShowGallery(true);  onGalleryOpen && onGalleryOpen()  }
+  // openGallery() removed (FIX F5, Codex retest 2026-05-26): View Gallery button
+  // now navigates to BuildingDetailPage; the in-card flip path is no longer used.
   function closeGallery() { setShowGallery(false); onGalleryClose && onGalleryClose() }
 
   function handlePointerDown(e) {
@@ -76,8 +80,14 @@ export default function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
   }
 
   // Multi-step fallback chain for cold/warm + external-CDN flakiness (S2).
-  // Order: cache-bust retry -> covers_by_type.exterior (canonical default) ->
-  //        any other covers_by_type variant -> first gallery URL -> give up.
+  // Order: covers_by_type.exterior (canonical default) -> other covers_by_type
+  //        variants -> first gallery URL -> give up.
+  //
+  // FIX F2 (Codex retest 2026-05-26): dropped the ?retry=1 cache-bust step.
+  // R2/external CDN images take 1.7-2.6s; the cache-bust was firing on normal-
+  // latency loads, adding a duplicate request to the same origin that never
+  // salvages the original in-flight GET. The covers_by_type chain handles real
+  // failures already; retry=1 only doubled bandwidth.
   function advanceFallback(target) {
     if (!target) return false
     const cbt = card.covers_by_type || {}
@@ -87,12 +97,6 @@ export default function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
     ].filter(u => u && typeof u === 'string')
     if (!(imgRetried.current instanceof Set)) {
       imgRetried.current = new Set([card.image_url])
-    }
-    if (!imgRetried.current.has(card.image_url + '?retry=1')) {
-      imgRetried.current.add(card.image_url + '?retry=1')
-      const sep = (card.image_url || '').includes('?') ? '&' : '?'
-      target.src = (card.image_url || '') + sep + 'retry=1'
-      return true
     }
     for (const url of fallbackChain) {
       if (!imgRetried.current.has(url)) {
@@ -125,8 +129,10 @@ export default function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
     telemetryOnLoad(e)
   }
 
-  // 2-second load timeout — if the main URL hasn't fired onLoad, advance to
-  // the covers_by_type fallback chain. Cleared on onLoad / onError / unmount.
+  // FIX F2 (Codex retest 2026-05-26): bumped timeout 2000ms → 4000ms.
+  // R2 cold cache + Singapore latency regularly takes 1.7-2.6s; the old 2s
+  // timer was firing prematurely on normal loads. 4s matches the observed
+  // worst-case cold-CDN P99 and avoids false-positive fallback triggers.
   useEffect(() => {
     setImgLoaded(false)
     setImgFailed(false)
@@ -141,7 +147,7 @@ export default function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
         setImgFailed(true)
       }
       timeoutRef.current = null
-    }, 2000)
+    }, 4000)
     return () => {
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current)
@@ -303,10 +309,15 @@ export default function SwipeCard({ card, onGalleryOpen, onGalleryClose }) {
 
             </div>
             {gallery.length > 0 && (
+              // FIX F5 (Codex retest 2026-05-26): button now navigates to
+              // BuildingDetailPage (/buildings/:id) instead of calling the in-card
+              // openGallery() flip. DiscoveryPage passed an empty () => {} callback
+              // for onGalleryOpen, so the old path was a no-op. The /buildings/ route
+              // (plural) matches the existing site pattern used in BoardDetailPage.
               <button
                 onPointerDown={e => e.stopPropagation()}
                 onPointerUp={e => e.stopPropagation()}
-                onClick={e => { e.stopPropagation(); openGallery() }}
+                onClick={e => { e.stopPropagation(); navigate(`/buildings/${card.image_id}`) }}
                 style={{
                   marginTop: 12, width: '100%', padding: '10px 14px', borderRadius: 10,
                   background: 'rgba(255,255,255,0.09)', border: '1px solid rgba(255,255,255,0.18)',
