@@ -108,6 +108,17 @@ class ProjectListCreateView(APIView):
         profile = _get_profile(request)
         if not profile:
             return Response({'detail': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        # FULL-LOGIN-REDESIGN-1: guest users may create up to 3 boards.
+        # The 4th attempt triggers the verify-gate — frontend catches this 403
+        # and opens VerifyGateModal to prompt Google OAuth promotion.
+        # Gate is on post() only; get() (list) is not restricted.
+        if profile.is_guest and Project.objects.filter(user=profile).count() >= 3:
+            return Response(
+                {'detail': 'verify_required', 'reason': 'board_limit_reached', 'limit': 3},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         serializer = ProjectSerializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         project = serializer.save(user=profile)

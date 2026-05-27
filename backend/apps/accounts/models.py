@@ -13,6 +13,13 @@ class UserProfile(models.Model):
         ('plex', 'IBM Plex Sans KR'),
         ('noto-serif', 'Noto Serif KR'),
     ]
+    ONBOARDING_ROLE_CHOICES = [
+        ('student',    'Student'),
+        ('architect',  'Architect'),
+        ('designer',   'Designer'),
+        ('enthusiast', 'Architecture Enthusiast'),
+        ('other',      'Other'),
+    ]
 
     # -- Existing fields (PROF1 baseline) --
     user         = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
@@ -58,6 +65,17 @@ class UserProfile(models.Model):
     # -- App-preference fields (design-system PR2) --
     theme = models.CharField(max_length=20, choices=THEME_CHOICES, default='github-light')
     font = models.CharField(max_length=20, choices=FONT_CHOICES, default='plex')
+
+    # -- Guest-first auth / terminal onboarding (FULL-LOGIN-REDESIGN-1) --
+    is_guest = models.BooleanField(default=False)
+    onboarding_role = models.CharField(
+        max_length=20,
+        choices=ONBOARDING_ROLE_CHOICES,
+        blank=True,
+        default='',
+    )
+    consent_accepted_at = models.DateTimeField(null=True, blank=True)
+    consent_policy_version = models.CharField(max_length=10, default='1.0')
 
     def __str__(self):
         return self.display_name
