@@ -24,13 +24,13 @@
  * so the value can be re-parsed by any consumer. In-flight (not-yet-merged)
  * PRs carry `mergedAt: null` sentinel; next reporter-inline pass backfills.
  */
-// Codex planning audit 2026-05-27: next-task notes were expanded from source reads on develop@3894ffd. Mermaid sources may still be stale for recent algorithm changes.
+// Reporter: Mermaid sources may be stale — commit 8098041 touched backend/apps/recommendation/views/projects.py (verify gate inline check) + backend/apps/accounts/views.py (GuestLoginView + GuestPromoteView). Next session should refresh systemFlow + agentFlow diagrams by hand.
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-05-27 01:30 KST',
-    head: 'be6c8f5',
-    branch: 'feature/admin-codex-task-plans-cherry',
+    updatedAt: '2026-05-27 19:30 KST',
+    head: '7975d61',
+    branch: 'feature/admin-guest-auth-backend',
   },
 
   done: [
@@ -39,74 +39,67 @@ window.PROJECT_STATE = {
       title: '/projects/<id>/ ~879ms → <500ms — response cache 60s',
       completedAt: '2026-05-27',
       prs: [148],
-      note: 'Board detail PR #147 pattern applied. PROJECT_DETAIL_TTL=60 + version key + evict_project_detail. Invalidation 8 sites. CRITICAL fix-loop: delete evict order race. test_board_detail_perf.py 7 cases. sha 4573623-pre-squash.',
+      note: 'Board detail PR #147 pattern applied. PROJECT_DETAIL_TTL=60 + version key + evict_project_detail. Invalidation 8 sites. CRITICAL fix-loop: delete evict order race. test_board_detail_perf.py 7 cases. sha be6c8f5.',
     },
     {
       id: 'BACK-PROFILE-PERF-1',
       title: '/users/<id>/ 895ms → <1s — thumbnail-only fetch + response cache',
       completedAt: '2026-05-27',
       prs: [147],
-      note: 'engine.get_building_thumbnails NEW + thumbnail swap + UserProfileDetailView 60s cache + invalidation 5 sites + test_profile_perf.py 9 cases. 기대: cold ~500-700ms, warm ~100ms. sha 4cd1fdf-pre-squash.',
+      note: 'engine.get_building_thumbnails NEW + thumbnail swap + UserProfileDetailView 60s cache + invalidation 5 sites + test_profile_perf.py 9 cases. 기대: cold ~500-700ms, warm ~100ms. sha d3e110c.',
     },
     {
       id: 'BACK-PERFORMANCE-4',
       title: 'Discovery cold 4.6s → ~1.5-2.5s — taste vector cap + SQL top-K',
       completedAt: '2026-05-27',
       prs: [146],
-      note: '2/3 fixes (warm thread rolled back). taste_ranked_page CTE removed + compute_user_taste_vector recent-50 cap. 기대: 4.6s → ~1.5-2.5s.',
+      note: '2/3 fixes (warm thread rolled back). taste_ranked_page CTE removed + compute_user_taste_vector recent-50 cap. 기대: 4.6s → ~1.5-2.5s. sha 4af6b4d.',
     },
     {
       id: 'BACK-ALGO-1',
       title: 'Required-slate hard WHERE + first-swipe prefetch cache seed',
       completedAt: '2026-05-27',
       prs: [145],
-      note: '2 backend algorithm/perf fixes from 4th Codex retest 2026-05-26 (base 72bf8d3). F3 required-slate hard WHERE: "Japan museum" search → Bolivia card bug. Root cause filters as score CASE only; pool SQL WHERE only is_publishable=true AND score > 0. Bolivia 통과 because style/program positive score. Fix: _REQUIRED_SLATE_FIELDS_SET frozenset (mirrors services/parse_query.REQUIRED_SLATE_FIELDS + cross-ref comment) + _build_required_slate_where(filters) helper. Mode V (HyDE blend) + Mode F (filter-only) applied; Mode H (RRF) excluded — rank-fusion semantics differ. Tier 2 relaxation drops location_country before create_bounded_pool — slate WHERE auto-absent. F4 first-swipe prefetch cache seed: saved_current_round=1 (incremented at swipe.py:548 BEFORE save) → cache.get(prefetch:{sid}:1) always miss → sync compute 770ms vs 156ms cache hit. SPEC DEVIATION: back-maker source-reading caught — spec :0 → actual :1. SessionCreate seeds cache.set(prefetch:{sid}:1, {prefetch_card_id: initial_batch[1], prefetch_card_2_id: initial_batch[2]}, timeout=60). code-review fix-loop CRITICAL caught SQL param order inversion in 2 execute call sites: _slate_params + params + ... → corrected to params + ... + _slate_params + params + .... Without fix, mixed slate+non-slate filters caused psycopg2 cast errors (Mode V silent fallback) or filter cross-contamination (Mode F). test_engine_filter_hard_constraint.py NEW 4 cases incl Mode V param order regression catch. test_session_create_correctness.py +2 F4 cases. code-review PASS after fix-loop. security-manager PASS (parameterized SQL, UUID-isolated cache). F4 tests local INFRA-DB-2 blocked; CI runs them. sha 72f8f27-pre-squash.',
+      note: '2 backend algorithm/perf fixes from 4th Codex retest 2026-05-26. F3 required-slate hard WHERE: _REQUIRED_SLATE_FIELDS_SET frozenset + _build_required_slate_where(filters) helper for Modes V+F. F4 first-swipe prefetch cache seed: SessionCreate seeds cache.set(prefetch:{sid}:1, ...). code-review fix-loop CRITICAL caught SQL param order inversion. test_engine_filter_hard_constraint.py NEW 4 cases. sha 3894ffd.',
     },
     {
       id: 'FRONT-UX-FIXES-1',
       title: 'Image timeout + Gallery CTA nav + Board card click',
       completedAt: '2026-05-26',
       prs: [144],
-      note: '3 frontend UX correctness fixes from 4th Codex retest 2026-05-26 of develop=72bf8d3. F2 SwipeCard image timeout 2000ms→4000ms + ?retry=1 cache-bust 삭제 (별도 URL 없음 대역폭만 2배). Singapore R2 1.7-2.6s 정상 처리. Fallback chain covers_by_type.exterior→interior→aerial→detail→drawing→gallery[N]. F5 Gallery CTA: 이전 openGallery() in-card 3D flip이 실제 no-op (back-face JSX setShowGallery(true) unreachable). 현재 navigate(/buildings/${card.image_id}) → BuildingDetailPage. SwipePage onGalleryOpen prop 무해 drop. 죽은 코드 (back-face JSX, hasBeenOpened) 별도 cleanup PR. F7 BoardDetail building card click: building.id를 OR chain 3 sites 추가 (BuildingTile 180, handleDeleteSelected 458, render bid 926). Stored {id: bld_...} shape 정상 인식 → 클릭 navigate. FRONT-UX-5 (Gallery CTA backlog) closed by F5. code-review PASS · security-manager PASS (XSS-safe — image_id BUILDING_ID_RE 검증; IDOR-safe — board-scoped ownership). npm run lint clean + build PASS. sha b5c53f2-pre-squash.',
+      note: '3 frontend UX correctness fixes. F2 SwipeCard image timeout 2000ms→4000ms + retry path removed. F5 Gallery CTA: navigate(/buildings/${card.image_id}). F7 BoardDetail building card click: building.id OR chain at 3 sites. FRONT-UX-5 (Gallery CTA backlog) closed by F5. sha 77e1aef.',
     },
     {
       id: 'BACK-CORRECTNESS-1',
       title: '/projects/ cache evict + dedupe project_id + orphan project',
       completedAt: '2026-05-26',
       prs: [143],
-      note: '3 backend correctness fixes from 3rd Codex retest 2026-05-26 of develop=17f7d65. Fix 1 cache evict: evict_projects_list(profile.id) added at 5 sites — sessions.py dedupe-hit return path + sessions.py post-create + swipe.py post-liked/disliked save + reports.py post-final_report + reports.py post-report_image. ProjectListSerializer exposes liked_ids/saved_ids/final_report/report_image so all 5 sites needed eviction. Fix 2 dedupe scope: PR #138 dedupe extended — early project_id resolve before dedupe lookup; if project_id provided + matches user-owned Project, dedupe SKIPPED (App.jsx:723 fresh-swipe flow honored); project_id missing or no match → existing (user, name, raw_query, filters) scope runs. Fix 3 orphan Project: Project.objects.create() deferred to inside session_insert stage AND wrapped in transaction.atomic() with AnalysisSession.objects.create() (fix-loop catch — closes session_insert-step orphan too). tests/test_session_create_correctness.py NEW 9 tests. Full suite 553 passed (zero regression). code-review PASS after 1 fix-loop (reports.py + transaction.atomic). security-manager PASS (IDOR-safe — user= clause on early project_id resolve; cache eviction scoped to profile.id). P2-4 pytest bootstrap finding merged into existing INFRA-DB-2 backlog. sha d87a5f9-pre-squash.',
+      note: '3 backend correctness fixes. Fix 1 cache evict: evict_projects_list at 5 sites. Fix 2 dedupe scope: early project_id resolve. Fix 3 orphan Project: deferred to inside session_insert + transaction.atomic. tests/test_session_create_correctness.py NEW 9 tests. sha 6e23c82.',
     },
     {
       id: 'INFRA-CLEANUP-1',
       title: 'Dead code 정리 (-1124 LOC)',
       completedAt: '2026-05-26',
       prs: [142],
-      note: 'Salvaged from codex feature/codex-cleanup-stale-develop (commit 986bd5e). Codex branch docs/skill changes rejected as PR #136 INFRA-DOC-6 regressions; only file deletions kept. Removed: frontend/src/pages/PostSwipeLandingPage.jsx (696 LOC, PROF3+PROF4 mockup with unwired backend TODOs), frontend/src/components/GalleryOverlay.jsx (181 LOC, initial-commit artifact; PR #120 BuildingDetailPage rolled its own inline gallery), backend/tools/optimization_results.json (247 LOC, Optuna search artifact, zero refs). Doc refs cleaned: CONTRIBUTING.md role B table drops PostSwipeLandingPage; BoardDetailPage.jsx:143 JSDoc drops PostSwipeLanding mirror. Session decisions batched in this audit: (1) FRONT-UX-1 obsolete (App.jsx:783 already redirects index → /discovery, no empty home needed); removed from ## Next ### HIGH. (2) FULL-LOGIN-REDESIGN-1 added to ## Next ### HIGH after codex guest-auth branches (guest-first onboarding direction) archived locally; 6 issues require re-design before re-implementation (upgrade path, PIPA consent, JWT distinction, cleanup job, clientId fix, LoginPage conflict). (3) FULL-REFACTOR-1 LOC list updated. npm run lint clean. Cross-cutting grep verified zero non-self refs for all 3 deleted files. sha beb1d74-pre-squash.',
+      note: 'Salvaged from codex feature/codex-cleanup-stale-develop. Removed: PostSwipeLandingPage.jsx (696 LOC) + GalleryOverlay.jsx (181 LOC) + optimization_results.json (247 LOC). Doc refs cleaned. FRONT-UX-1 obsolete (App.jsx already redirects to /discovery). FULL-LOGIN-REDESIGN-1 added to backlog after codex archive. sha 9872ab0.',
     },
     {
       id: 'BACK-LLM-1',
       title: 'LLM 채팅이 검색에 필요한 정보를 다 안 모음',
       completedAt: '2026-05-26',
       prs: [141],
-      note: 'codex-authored branch cherry-pick. parse_query.py +87 LOC refines LLM chat-phase to deterministically target missing required-slate filter fields. REQUIRED_SLATE_FIELDS=(program, material, style, location_country) + REQUIRED_SLATE_PROBE_PRIORITY module constants. System prompt + few-shot examples rewritten (drop prior free A-vs-B axis selection). _normalise_filter_priority promotes required-slate keys to front. _repair_required_slate injects style: Contemporary when slate gap present (intermediate probe OR terminal). Korean probe examples updated; Korea-first preserved. test_back_llm1_required_slate.py NEW 5 tests (prompt content, slate promotion, default injection, terminal repair). Open dimensions resolved: 4-field slate; priority = program > material > style > location; fallback = Contemporary; mix of direct + axis Korean probes. Deferred: A/B 50-query benchmark harness (acceptance criterion c) = post-merge measurement. Behavioral note: _normalise_filter_priority shifts engine._build_score_cases rank weights (required-slate outranks temporal). Intended. code-review PASS · security-manager PASS (no prompt injection; user input never touches system prompt; mocks-only tests). sha cdbf5c7-pre-squash.',
-    },
-    {
-      id: 'BACK-LLM-3',
-      title: 'Gemini cache 호출에 timeout 없음',
-      completedAt: '2026-05-26',
-      prs: [140],
-      note: 'codex-authored branch cherry-pick. _caches.py:92 client.caches.create wrapped in zero-arg _create_cache closure routed through _svc._retry_gemini_call(_create_cache) — inherits existing 15s timeout cap (PR #94). context_caching_enabled flag default OFF preserved; zero prod impact. Pre-emptive safety. test_imp5_context_caching.py +17 LOC test_gemini_create_runs_through_retry_timeout_wrapper — MagicMock-based, no Gemini network hit. code-review PASS (~5 LOC budget honored). security-manager PASS (closure captures no secrets, _retry_gemini_call logs only type+str(e) no API key). 9 pre-existing DB-requiring tests blocked by INFRA-DB-2 (permission denied to create database); not introduced by this PR. sha 715e06e-pre-squash.',
-    },
-    {
-      id: 'FULL-SESSION-DEDUPE-1',
-      title: 'Session create POST retry → 중복 Project/Session',
-      completedAt: '2026-05-26',
-      prs: [138],
-      note: 'P0 data-integrity bug surfaced by Codex retest 2026-05-26 of develop=d53b232. POST /analysis/sessions/ takes ~15s on cold pool (execute_pool_sql=14.7s). Frontend api/core.js retry loop retried ALL methods on AbortError → server created 2 Project + 2 AnalysisSession rows. User reproduction: 2 boards same name, one with 4 photos one with 0. Belt + suspenders fix. Frontend api/core.js: _IDEMPOTENT_METHODS={GET,HEAD,OPTIONS}; POST/PATCH/DELETE throw on first network error. Frontend api/sessions.js: SESSION_CREATE_TIMEOUT_MS=30000 per-call override. Backend views/sessions.py: dedupe guard at start of SessionCreateView.post; 30s window matching (user, project.name, project.raw_query, project.filters); hit returns existing session with deduped:true HTTP 200 (vs 201 fresh). tests/test_session_create_dedupe.py 8 cases (baseline 201, hit 200, 30s expiry, different raw_query/name/filters, project_id=None retry, response shape). Trade-off: recordSwipe (POST) no-retry; backend idempotency_key still guards server-side. Race window ~100ms unreachable from single-tab client with retry-gate. code-review + security-manager PASS. app-test FEATURE-SCOPED PASS 5/5 incl. dedupe path 200 + deduped:true + same session_id + only 1 Project row (Django shell verified). Deferred to Next ### MEDIUM: BACK-PERFORMANCE-4 (Discovery 4.6s) + BACK-PERFORMANCE-5 (Swipe latency variability) + FRONT-UX-5 (View Gallery click no-op). sha 3fcbe3c-pre-squash.',
+      note: 'parse_query.py +87 LOC refines LLM chat-phase to deterministically target missing required-slate filter fields. REQUIRED_SLATE_FIELDS=(program, material, style, location_country) + REQUIRED_SLATE_PROBE_PRIORITY. _repair_required_slate injects style: Contemporary. test_back_llm1_required_slate.py NEW 5 tests. sha 72bf8d3.',
     },
   ],
 
-  now: [],
+  now: [
+    {
+      id: 'FULL-LOGIN-REDESIGN-1',
+      title: 'Guest-first onboarding + 보드 4번째 verify gate (IN PROGRESS)',
+      startedAt: '2026-05-27',
+      note: 'PR 1 of 2 open — PR #154 (backend half). Frontend follows after PR 1 merges + Railway deploy migrates 0004. User decisions Q1-Q6: Board 4번째 gate (3 free) · Board만 차단 (Follow/Reaction 자유) · Google OAuth만 · cross-device collision = atomic merge (8 FK rules) · 3/min throttle no-cleanup · PIPA 동의합니다 server-persisted. Assumptions: codex 5-value role enum · modal w/ terminal aesthetic · returning-user CTA preserved. Plan: ~/.claude/plans/merry-toasting-dove.md.',
+    },
+  ],
 
   next: {
     high: [
@@ -114,11 +107,6 @@ window.PROJECT_STATE = {
         id: 'BACK-RECOMMEND-1',
         title: 'Project 두번째 세션이 이전 taste를 모름',
         note: 'Code audit 2026-05-27: SessionCreateView resolves project_id only to skip dedupe; session_insert still creates phase=exploring with empty like_vectors/convergence/preference state. Project.liked_ids/disliked_ids/saved_ids persist but are not read. Primary edit: views/sessions.py warm-start policy + engine.get_pool_embeddings(project liked_ids) scoped to active project; tests in test_session_create_correctness.py for no cross-project leakage and progress semantics.',
-      },
-      {
-        id: 'FULL-LOGIN-REDESIGN-1',
-        title: 'Guest-first onboarding + login UX 재설계',
-        note: 'Code audit 2026-05-27: backend has Google/Kakao/Naver/dev endpoints but no guest identity, promotion endpoint, JWT guest claim, IsNotGuest permission, or merge path for Project/AnalysisSession/Social rows. UserProfile lacks is_guest/onboarding/consent fields. main.jsx always mounts GoogleOAuthProvider even with empty client id; LoginPage is Google+dev only. Split backend migration/contract first, frontend terminal onboarding second.',
       },
       {
         id: 'FULL-LANGUAGE-1',
@@ -137,11 +125,6 @@ window.PROJECT_STATE = {
       },
     ],
     medium: [
-      {
-        id: 'BACK-PERFORMANCE-4',
-        title: 'Discovery 첫 로딩 4.6s',
-        note: 'Code audit 2026-05-27: DiscoveryFeedView wraps get_or_build_discovery_feed(profile,cursor,limit), then get_or_build_taste(TTL 300s) and engine.taste_ranked_page(). taste_ranked_page orders publishable canonical_v2_buildings by pgvector distance while excluding prior IDs. Diagnose cache hit/miss vs eviction/multi-worker Redis first; if DB dominates, EXPLAIN ANALYZE is Make DB/index territory.',
-      },
       {
         id: 'BACK-PERFORMANCE-5',
         title: 'Swipe latency 0.7-1.5s 흔들림',
@@ -165,7 +148,7 @@ window.PROJECT_STATE = {
       {
         id: 'FULL-LEGAL-1',
         title: 'PIPA/GDPR consent 없음 (public launch 차단)',
-        note: 'Code audit 2026-05-27: only consent surface is LoginPage text "By continuing..."; no Terms/Privacy routes, no consent/version fields on UserProfile, no retention/export/delete flow. Guest-first onboarding will collect display name/role and must wait on consent + retention decisions before public launch.',
+        note: 'Code audit 2026-05-27: only consent surface is LoginPage text "By continuing..."; no Terms/Privacy routes, no consent/version fields on UserProfile, no retention/export/delete flow. Guest-first onboarding will collect display name/role and must wait on consent + retention decisions before public launch. NOTE FULL-LOGIN-REDESIGN-1 PR 1 added consent_accepted_at + consent_policy_version to UserProfile + 동의합니다 terminal-style capture — partial mitigation. Full legal copy + retention still pending.',
       },
       {
         id: 'PERF-PREFETCH-POOL-RISK',
@@ -177,7 +160,7 @@ window.PROJECT_STATE = {
       {
         id: 'FRONT-AUTH-1',
         title: 'LoginPage에 Kakao/Naver 버튼 없음',
-        note: 'Code audit 2026-05-27: api/auth.js already supports generic socialLogin(provider). Backend has Kakao/Naver endpoints; LoginPage is still Google+dev only and lacks provider SDK/redirect handling. Decide JS SDK popup vs OAuth redirect-code; may be reshaped by guest-first login redesign.',
+        note: 'Code audit 2026-05-27: api/auth.js already supports generic socialLogin(provider). Backend has Kakao/Naver endpoints; LoginPage is still Google+dev only and lacks provider SDK/redirect handling. After FULL-LOGIN-REDESIGN-1 ships, Kakao/Naver should be secondary upgrade options on terminal wizard returning-user CTA + Settings → linked-providers section.',
       },
       {
         id: 'FULL-REFACTOR-1',
@@ -204,61 +187,60 @@ window.PROJECT_STATE = {
 
   prs: [
     {
-      number: 148,
-      title: 'perf(BACK-BOARD-PERF-1): /projects/<id>/ ~879ms → <500ms — response cache 60s',
+      number: 154,
+      title: 'feat(FULL-LOGIN-REDESIGN-1): guest auth + board-4 verify gate (PR 1 of 2)',
       mergedAt: null,
       mergedAtKST: null,
       sha: null,
     },
     {
+      number: 152,
+      title: 'docs(BACKLOG-DETAIL-1): code-audit detail for pending Task.md backlog items',
+      mergedAt: '2026-05-27T01:16:56Z',
+      mergedAtKST: '2026-05-27 10:16 KST',
+      sha: '91a4771',
+    },
+    {
+      number: 151,
+      title: 'fix(BACK-CI-HOTFIX-1): expose prefetch_strategy in swipe response — PR #145 test repair',
+      mergedAt: '2026-05-27T00:55:45Z',
+      mergedAtKST: '2026-05-27 09:55 KST',
+      sha: 'f4eeee9',
+    },
+    {
+      number: 150,
+      title: 'perf(BACK-SWIPE-PERF-1): drop wasteful card lookups in _async_prefetch_thread',
+      mergedAt: '2026-05-27T01:16:31Z',
+      mergedAtKST: '2026-05-27 10:16 KST',
+      sha: '7d62d43',
+    },
+    {
+      number: 149,
+      title: 'perf(FRONT-IMG-LAZY-1): image lazy-load gap fill — 2 sites + LCP fetchpriority',
+      mergedAt: '2026-05-27T01:13:23Z',
+      mergedAtKST: '2026-05-27 10:13 KST',
+      sha: '77ab03a',
+    },
+    {
+      number: 148,
+      title: 'perf(BACK-BOARD-PERF-1): /projects/<id>/ ~879ms → <500ms — response cache (60s)',
+      mergedAt: '2026-05-27T01:09:47Z',
+      mergedAtKST: '2026-05-27 10:09 KST',
+      sha: 'be6c8f5',
+    },
+    {
       number: 147,
       title: 'perf(BACK-PROFILE-PERF-1): /users/<id>/ 895ms → <1s — thumbnail-only fetch + response cache',
-      mergedAt: '2026-05-27T01:30:00Z',
-      mergedAtKST: '2026-05-27 10:30 KST',
+      mergedAt: '2026-05-27T01:02:21Z',
+      mergedAtKST: '2026-05-27 10:02 KST',
       sha: 'd3e110c',
     },
     {
       number: 146,
-      title: 'perf(BACK-PERFORMANCE-4): Discovery cold 4.6s → ~1.5-2.5s — taste vector cap + SQL top-K',
+      title: 'perf(BACK-PERFORMANCE-4): Discovery cold 4.6s → <1s — taste vector cap + SQL top-K + async warm',
       mergedAt: '2026-05-27T00:56:08Z',
       mergedAtKST: '2026-05-27 09:56 KST',
       sha: '4af6b4d',
-      sha: null,
-    },
-    {
-      number: 145,
-      title: 'fix(BACK-ALGO-1): required-slate hard WHERE + first-swipe prefetch cache seed',
-      mergedAt: '2026-05-27T00:25:00Z',
-      mergedAtKST: '2026-05-27 09:25 KST',
-      sha: '3894ffd',
-    },
-    {
-      number: 144,
-      title: 'fix(FRONT-UX-FIXES-1): image timeout + Gallery CTA nav + Board card click',
-      mergedAt: '2026-05-26T14:50:00Z',
-      mergedAtKST: '2026-05-26 23:50 KST',
-      sha: '77e1aef',
-    },
-    {
-      number: 143,
-      title: 'fix(BACK-CORRECTNESS-1): /projects/ cache evict + dedupe project_id + orphan project',
-      mergedAt: '2026-05-26T13:50:00Z',
-      mergedAtKST: '2026-05-26 22:50 KST',
-      sha: '6e23c82',
-    },
-    {
-      number: 142,
-      title: 'chore(INFRA-CLEANUP-1): prune dead pages + optuna artifact (-1124 LOC)',
-      mergedAt: '2026-05-26T12:50:00Z',
-      mergedAtKST: '2026-05-26 21:50 KST',
-      sha: '9872ab0',
-    },
-    {
-      number: 141,
-      title: 'fix(BACK-LLM-1): enforce LLM required slate',
-      mergedAt: '2026-05-26T11:38:00Z',
-      mergedAtKST: '2026-05-26 20:38 KST',
-      sha: '72bf8d3',
     },
   ],
 

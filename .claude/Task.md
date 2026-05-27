@@ -53,7 +53,48 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(none — no active initiative slice with a PR in flight.)_
+### FULL-LOGIN-REDESIGN-1 — Guest-first onboarding + 보드 4번째 verify gate (IN PROGRESS)
+
+**Status (2026-05-27 19:30 KST)**: PR 1 of 2 open — **PR #154** `8098041`. Backend half. Frontend PR follows after PR 1 merges + Railway deploy applies migration `0004`.
+
+**Plan**: `/Users/kms_laptop/.claude/plans/merry-toasting-dove.md` (supersedes prior Redis-foundation plan).
+
+**User decisions (Q1–Q6, 2026-05-27)**:
+1. Verify gate trigger = Board 4번째 만들 때 (3 boards free for unverified users).
+2. Verify scope = Board creation only (Follow/Reaction/public visibility 자유).
+3. Verify method = Google OAuth만. Kakao/Naver/email magic-link = `FRONT-AUTH-1` 후속.
+4. Cross-device collision (same Google email already on verified user) = merge unverified data into existing verified user (atomic transaction, 8 FK update rules: Project / AnalysisSession / SessionEvent / Follow×2 / OfficeFollow / Reaction; SwipeEvent skipped because no direct user FK).
+5. Cleanup = 없음. Throttle 강화: 3/min/IP `/auth/guest/`, 5/min `/auth/promote/`. Monitor Neon row growth post-deploy.
+6. PIPA consent = terminal-style "동의합니다" 버튼; server-persists `UserProfile.consent_accepted_at` + `consent_policy_version`.
+
+**Assumptions (not user-confirmed)**:
+- Role enum = codex 5-value (`student` / `architect` / `designer` / `enthusiast` / `other`). UI cosmetic, no algorithm impact.
+- Verify gate UI = modal with terminal aesthetic.
+- Returning-user CTA = LoginPage shows both "Yes, start here" wizard + "Continue with Google".
+
+**PR 1 (backend, this commit)**:
+- 11 files (5 new + 6 modified) + 14 pytest tests.
+- New: `jwt_serializers.py` (CustomTokenObtainPairSerializer w/ is_guest claim on refresh→access), `permissions.py` (IsVerifiedUser), `throttling.py` (GuestLoginThrottle 3/min + GuestPromoteThrottle 5/min), migration `0004`, `test_guest_auth.py`.
+- Modified: UserProfile (4 fields), GuestLoginView + GuestPromoteView in views.py, UserSerializer + UserProfileSelfUpdateSerializer, urls.py (auth/guest/ + auth/promote/), settings.py (SIMPLE_JWT TOKEN_OBTAIN_SERIALIZER + DEFAULT_THROTTLE_RATES), ProjectListCreateView (inline gate `is_guest AND count>=3 → 403 verify_required`).
+- Reviewers: security-manager PASS (3 warnings, all fixed in pass 2). code-review FAIL pass 1 (1 HIGH + 3 MED + 1 LOW). Fix-loop pass 2 applied all 7 fixes.
+- Local pytest blocked by INFRA-DB-2 (`make_web_app` no CREATEDB). CI Postgres service container runs them. **Option 4**: Railway deploy auto-migrates `0004` on develop push; CI verifies model integrity.
+
+**PR 2 (frontend) — pending**, depends on PR 1 merge + Railway migrate applied:
+- `frontend/src/main.jsx` conditional GoogleOAuthProvider mount.
+- `frontend/src/pages/LoginPage.jsx` rewrite — terminal wizard 3-step + "동의합니다" + returning Google CTA.
+- `frontend/src/components/VerifyGateModal.jsx` (NEW) — captures backend 403 `verify_required` on board-create → Google OAuth → `promoteAccount` → JWT swap → retry board create.
+- `frontend/src/utils/loginFlow.js` + tests.
+- app-test FULL mode (auth + onboarding journey + verify gate + cross-device merge stub).
+
+**Risks (from plan Risk register)**:
+- Unverified row growth — cleanup deferred; monitor Neon weekly. If growth > 500 rows/week, open `INFRA-DB-CLEANUP-1`.
+- Promote endpoint security — security-manager PASS. Atomic transaction + 8 FK update rules + dual-branch blacklist + replay protection (is_guest re-check).
+- localStorage cleared between create and verify → user can't promote → fresh OAuth = new account. Acceptable failure mode.
+- Migration ordering — must apply before frontend PR 2 ships (live traffic with guest JWTs would AttributeError otherwise).
+
+Deferred:
+- `FRONT-AUTH-1` — Kakao + Naver LoginPage buttons (backend already has the views).
+- `INFRA-DB-CLEANUP-1` (conditional, only if growth threshold hit).
 
 ---
 
@@ -89,53 +130,6 @@ Likely tests:
 - API smoke: session 2 first response latency should not exceed session 1 beyond one extra `get_pool_embeddings(prior_liked_ids)` batch.
 
 Acceptance: behavior matches chosen option deterministically; session 2 TTFC not regressed beyond session 1 (warm-start should be ≤ or equal); A/B telemetry on session 2 satisfaction (saved_ids growth rate, completion rate) vs status quo.
-
-#### FULL-LOGIN-REDESIGN-1 — Guest-first onboarding + login UX 재설계
-**User decision 2026-05-26**: codex의 `feature/codex-guest-auth-*` 두 branch가 제안한 방향 (guest-first + 터미널 UX + 3-step intro/name/role wizard + OAuth secondary) 채택. 단, codex 구현은 6개 issue로 인해 폐기 (local archive). 재설계 후 새 구현.
-
-Codex가 제안한 구조:
-- Terminal-style typing UI ("boot architinder://profile")
-- 3-step intro → name → role onboarding (`displayName` + `role` 입력)
-- `POST /api/v1/auth/guest/` endpoint (`auth/guest/` URL)
-- `UserProfile.is_guest` column (migration `accounts.0004_userprofile_guest_onboarding`)
-- `GuestLoginThrottle` 10/min
-- `frontend/src/utils/loginFlow.js` + `loginFlow.test.mjs`
-
-6 issues to resolve before re-implementation:
-- [ ] **Upgrade path** — guest → OAuth promotion 시 swipe history + saved boards를 새 계정에 merge. `email=''`로 `_get_or_create_user` 매칭 실패. `Guest → User` row migration 로직 필요 (e.g., `POST /api/v1/auth/promote/` endpoint).
-- [ ] **PIPA consent** — codex가 `LoginPage.jsx`에서 "By continuing, you agree..." 라인 삭제. PIPA/GDPR (`FULL-LEGAL-1`) 미해결 상태에서 regression. 재구현 시 consent 라인 필수.
-- [ ] **Unbounded guest row 누적** — 10/min throttle 외에 CAPTCHA / cleanup job 필요. 옵션: (a) Cloudflare Turnstile, (b) periodic Celery job to delete guests with `last_active < 30 days ago AND 0 swipes`, (c) hard cap per IP.
-- [ ] **JWT 구분** — guest token = 일반 user 동일 TTL + localStorage key. `IsNotGuest` DRF permission class 만들어 sensitive endpoints (e.g., `/social/dm/`, `/profile/update/`) 차단. `is_guest` claim을 JWT payload에 추가.
-- [ ] **`clientId='guest-only-google-disabled'`** literal 제거. Google OAuth disabled 환경에서는 `<GoogleOAuthProvider>` 자체를 mount 안 하거나 `null` 처리.
-- [ ] **LoginPage 충돌** — PR #138 (FULL-SESSION-DEDUPE-1) 이후 LoginPage가 변경되었을 수 있음. 충돌 surface 확인 + clean rebase.
-
-Code audit 2026-05-27 (`develop@3894ffd`):
-- Backend auth already has provider exchange endpoints: `GoogleLoginView`, `KakaoLoginView`, `NaverLoginView`, `DevLoginView` in `backend/apps/accounts/views.py`; URLs are `/auth/social/{provider}/` and DEBUG-only `/auth/dev-login/`.
-- `_get_or_create_user(provider, provider_id, email, display_name, avatar_url)` links by existing `SocialAccount` or email match. There is no guest identity, no guest promotion endpoint, and no merge path for `Project`, `AnalysisSession`, `SwipeEvent`, `SessionEvent`, `Follow`, `OfficeFollow`, or `Reaction` rows.
-- `backend/apps/accounts/models.py` `UserProfile` has no `is_guest`, `onboarding_role`, consent timestamp, or guest cleanup marker. `SocialAccount.PROVIDER_CHOICES` only has Google/Kakao/Naver.
-- `backend/apps/accounts/serializers.py` `UserSerializer` returns only `user_id`, `display_name`, `avatar_url`, `providers`, `theme`, `font`; JWT response has no guest claim.
-- `frontend/src/main.jsx` always mounts `<GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID || ''}>`; guest-first or OAuth-disabled mode should avoid mounting provider with an empty/literal client id.
-- `frontend/src/pages/LoginPage.jsx` is still Google + dev-login only; it has the PIPA-lite line ("By continuing...") and a stale loading comment (`'google' | 'kakao' | null`, while code also uses `'dev'`).
-
-Implementation split for Claude:
-- Backend PR first: `UserProfile.is_guest`, guest login endpoint, throttle, token claim, `IsNotGuest` permission, promotion/merge endpoint, cleanup management command or scheduled job hook. Migration owner must apply the new column before local/prod e2e.
-- Frontend PR second: terminal-style onboarding UI, guest-login call, OAuth secondary flow, provider-disabled mounting, and login-flow tests. Keep the current consent line or replace it with a legally reviewed consent component from `FULL-LEGAL-1`.
-- Cross-PR contract: backend response must include enough data for `App.handleLogin()` and `ThemeContext.hydrate()` to keep working; guest flow should not bypass theme/font defaults.
-
-Open dimensions (design 결정 선행):
-- **Guest vs OAuth balance** — guest를 default surface (Google이 secondary)? 아니면 동등 비중? Persona priority 고려.
-- **Onboarding step 수** — 3-step (intro/name/role) 유지? 또는 더 짧게 (name만)?
-- **`role` enum** — codex의 `ONBOARDING_ROLES` 값들이 무엇? Persona P1-P4와 매핑?
-- **Terminal UI** — 시각적 직관성 측면에서 적합한지 (DESIGN.md §3 visual identity 검토).
-
-Acceptance:
-- New `UserProfile.is_guest` + JWT `is_guest` claim + `IsNotGuest` permission.
-- Guest login + upgrade-to-OAuth round-trip preserves swipe history + boards.
-- PIPA consent 라인 LoginPage 유지.
-- Guest cleanup job 운영.
-- LoginPage build + lint + manual test PASS.
-
-Codex code (local archive): branches `feature/codex-guest-auth-backend` (3 commits up to `3049b40`) + `feature/codex-guest-auth-frontend` (1 commit `f488ccd`) — remote 삭제 완료, local 보관. 재구현 시 참고용. `docs/guest-auth-rollout.md` (in branch) 운영 runbook 참고.
 
 #### FULL-LANGUAGE-1 — 한/영 언어 설정 토글 없음
 **Decision (user 2026-05-25)**: language is a user-controlled setting, NOT browser-locale auto-detected. Pattern mirrors the existing theme/font persistence shipped in PR #54 + PR #59. User toggles language in Settings (Korean / English); the choice drives both LLM chat answer language and UI label rendering across the app.
