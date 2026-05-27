@@ -4,9 +4,14 @@ from .views import (
     GoogleLoginView, KakaoLoginView, NaverLoginView,
     TokenRefreshView, MeView, LogoutView, DevLoginView,
     UserProfileDetailView, UserProfileSelfUpdateView,
+    GuestLoginView, GuestPromoteView,
 )
 
 urlpatterns = [
+    # -- Guest-first onboarding (FULL-LOGIN-REDESIGN-1) --
+    path('auth/guest/',              GuestLoginView.as_view()),
+    path('auth/promote/',            GuestPromoteView.as_view()),
+    # -- Social OAuth --
     path('auth/social/google/',      GoogleLoginView.as_view()),
     path('auth/social/kakao/',       KakaoLoginView.as_view()),
     path('auth/social/naver/',       NaverLoginView.as_view()),

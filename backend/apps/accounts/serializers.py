@@ -9,13 +9,19 @@ class UserSerializer(serializers.ModelSerializer):
     the frontend must know the correct theme/font immediately on login to avoid a flash
     of the wrong design system. PROF2 *profile-content* fields (bio, mbti,
     external_links, persona_summary) must stay out of this serializer.
+
+    FULL-LOGIN-REDESIGN-1: added is_guest, onboarding_role, consent_accepted_at
+    so the frontend can gate the verify-gate modal without a separate /auth/me/ call.
     """
     user_id   = serializers.IntegerField(source='user.id', read_only=True)
     providers = serializers.SerializerMethodField()
 
     class Meta:
         model  = UserProfile
-        fields = ['user_id', 'display_name', 'avatar_url', 'providers', 'theme', 'font']
+        fields = [
+            'user_id', 'display_name', 'avatar_url', 'providers', 'theme', 'font',
+            'is_guest', 'onboarding_role', 'consent_accepted_at',
+        ]
 
     def get_providers(self, obj):
         return list(obj.social_accounts.values_list('provider', flat=True))
@@ -84,7 +90,7 @@ class UserProfileSelfUpdateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = UserProfile
-        fields = ['display_name', 'bio', 'mbti', 'external_links', 'theme', 'font']
+        fields = ['display_name', 'bio', 'mbti', 'external_links', 'theme', 'font', 'onboarding_role']
 
     def validate_display_name(self, value):
         """display_name: 1-30 chars after .strip(); reject whitespace-only."""

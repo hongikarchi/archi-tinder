@@ -121,6 +121,9 @@ REST_FRAMEWORK = {
         'follow_write': '60/min',
         # React/unreact write throttle — prevents bulk-reaction abuse (SOC2).
         'reaction_write': '60/min',
+        # Guest auth throttles — operator-overridable without code changes.
+        'guest_login': '3/min',
+        'guest_promote': '5/min',
         # Global fallback rates (applied to views that reference these scopes directly).
         'anon': '60/min',
         'user': '300/min',
@@ -132,6 +135,11 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': timedelta(days=30),
     'ROTATE_REFRESH_TOKENS':  True,
     'BLACKLIST_AFTER_ROTATION': True,
+    # FULL-LOGIN-REDESIGN-1: add is_guest claim to all tokens issued via
+    # the standard obtain-pair endpoint (guest + promote endpoints inject
+    # the claim directly via RefreshToken.for_user path).
+    'TOKEN_OBTAIN_SERIALIZER':
+        'apps.accounts.jwt_serializers.CustomTokenObtainPairSerializer',
 }
 
 # -- CORS ------------------------------------------------------------------
