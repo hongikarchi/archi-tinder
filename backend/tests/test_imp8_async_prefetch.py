@@ -217,7 +217,9 @@ class TestFlagGating:
         assert data['accepted'] is True
         # Sync path: prefetch_image should be a card dict (not None)
         assert data['prefetch_image'] is not None
-        # Only the telemetry thread is spawned; no async prefetch thread when flag is OFF
+        # Only the telemetry thread is spawned; no async prefetch thread when flag is OFF.
+        # _async_warm_taste is now gated by async_prefetch_enabled (BACK-CI-HOTFIX-2),
+        # so flag=OFF means no warm thread either.
         assert len(spawned) == 1, 'Only telemetry thread spawned when async prefetch flag is OFF'
 
     def test_flag_on_async_path_prefetch_null(self, auth_client, user_profile, settings):

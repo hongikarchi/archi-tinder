@@ -2287,8 +2287,11 @@ def compute_user_taste_vector(profile):
     """
     from .models import Project
 
-    liked_records = Project.objects.filter(user=profile).values_list('liked_ids', flat=True)
-    weighted = []
+    # 2026-05-27 perf: recent-50 cap to bound get_pool_embeddings cold cost.
+    # Order projects oldest→newest; append per-list entries in order; take last 50
+    # so the slice contains the most-recently-liked buildings across all projects.
+    liked_records = Project.objects.filter(user=profile).order_by('updated_at').values_list('liked_ids', flat=True)
+    all_likes = []  # (bid, intensity) oldest→newest across projects
     for liked_ids in liked_records:
         for entry in (liked_ids or []):
             if isinstance(entry, dict):
@@ -2300,14 +2303,16 @@ def compute_user_taste_vector(profile):
                 except (TypeError, ValueError):
                     intensity = 1.0
             elif isinstance(entry, str):
-                bid = entry
-                intensity = 1.0
+                bid, intensity = entry, 1.0
             else:
                 continue
-            weighted.append((bid, intensity))
+            all_likes.append((bid, intensity))
 
-    if not weighted:
+    if not all_likes:
         return None
+
+    # Cap to recent 50 (newest at end after order_by('updated_at') ASC + per-list append order).
+    weighted = all_likes[-50:]
 
     seen = set()
     ordered_ids = []
@@ -2364,14 +2369,13 @@ def taste_ranked_page(v_taste, exclude_ids, limit, offset, image_focus=None):
     exclude = [bid for bid in (exclude_ids or []) if isinstance(bid, str)]
     try:
         with connection.cursor() as cur:
+            # 2026-05-27 perf: drop CTE barrier — direct ORDER BY ... LIMIT lets planner
+            # use a top-K heap scan (O(N) vs O(N log N) for k=12 vs N≈37k publishable).
             cur.execute(
-                f'WITH ranked AS ('
-                f' SELECT {_cols}, embedding <=> %s::vector AS score'
+                f'SELECT {_cols}, embedding <=> %s::vector AS score'
                 f' FROM canonical_v2_buildings'
                 f' WHERE is_publishable = true AND canonical_bld_id <> ALL(%s::text[])'
                 f' ORDER BY embedding <=> %s::vector ASC'
-                f')'
-                f' SELECT * FROM ranked'
                 f' OFFSET %s LIMIT %s',
                 [_vec_to_pg(v_taste), exclude, _vec_to_pg(v_taste), int(offset), int(limit)],
             )

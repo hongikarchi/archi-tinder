@@ -24,16 +24,23 @@
  * so the value can be re-parsed by any consumer. In-flight (not-yet-merged)
  * PRs carry `mergedAt: null` sentinel; next reporter-inline pass backfills.
  */
-// Reporter: Mermaid sources may be stale — commit 72f8f27 touched backend/apps/recommendation/engine.py (hard WHERE for required-slate fields in create_bounded_pool Mode V + F) and views/sessions.py (prefetch cache seed for first swipe). recommendationFlow Engine node semantics narrow (filter hard constraint). Next session may add slate annotation.
+// Reporter: Mermaid sources may be stale — commit dc1651b touched backend/apps/recommendation/engine.py (taste_ranked_page CTE removal + compute_user_taste_vector recent-50 cap) and views/swipe.py (_async_warm_taste daemon thread post-atomic). recommendationFlow Engine + Views nodes affected. Next session may add cache-warm annotation.
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-05-27 00:36 KST',
-    head: '77e1aef',
-    branch: 'feature/admin-backend-algorithm-f3f4',
+    updatedAt: '2026-05-27 01:00 KST',
+    head: '3894ffd',
+    branch: 'feature/admin-discovery-perf',
   },
 
   done: [
+    {
+      id: 'BACK-PERFORMANCE-4',
+      title: 'Discovery cold 4.6s → <1s — taste vector cap + SQL top-K + async warm',
+      completedAt: '2026-05-27',
+      prs: [146],
+      note: '3 backend perf fixes targeting Discovery cold-load 4.6s → <1s per user goal 2026-05-27 (all pages <1s). Codex retest measured get_or_build_taste 1.55s + taste_ranked_page 2.23s + /images/batch 1.06s. Fix 1 (engine.py:2347 taste_ranked_page): CTE removed; direct ORDER BY embedding <=> v OFFSET LIMIT lets PG planner top-K heap scan k=12 vs N=37k publishable rows. Fix 2 (engine.py:2280 compute_user_taste_vector): recent-50 cap via Project.objects.order_by(updated_at) ASC + all_likes[-50:]; bounds cold get_pool_embeddings SQL size. Fix 3 (swipe.py _async_warm_taste daemon thread post-atomic): evict 후 background thread가 get_or_build_taste 호출해서 cache repopulate; next Discovery navigation cache hit. CRITICAL fix-loop catch: 초기 spawn 위치가 transaction.atomic() 안이라 READ COMMITTED isolation으로 uncommitted project.save 못 봄 → permanent 1-swipe-behind cache. Spawn을 atomic block 외부 (line 758)로 이동. Invariant 주석 양쪽 site에 추가. test_discovery_perf.py NEW 4 cases. test_imp8_async_prefetch.py 3 thread count assertions bumped. manage.py check PASS · 9 non-DB tests PASS · @django_db tests INFRA-DB-2 차단 (CI 실행). code-review PASS after race fix-loop · security-manager PASS. 기대: Discovery cold 4.6s → <1s. pgvector ANN index Make-DB owned 추가 불가. sha dc1651b-pre-squash.',
+    },
     {
       id: 'BACK-ALGO-1',
       title: 'Required-slate hard WHERE + first-swipe prefetch cache seed',
@@ -82,13 +89,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-05-26',
       prs: [138],
       note: 'P0 data-integrity bug surfaced by Codex retest 2026-05-26 of develop=d53b232. POST /analysis/sessions/ takes ~15s on cold pool (execute_pool_sql=14.7s). Frontend api/core.js retry loop retried ALL methods on AbortError → server created 2 Project + 2 AnalysisSession rows. User reproduction: 2 boards same name, one with 4 photos one with 0. Belt + suspenders fix. Frontend api/core.js: _IDEMPOTENT_METHODS={GET,HEAD,OPTIONS}; POST/PATCH/DELETE throw on first network error. Frontend api/sessions.js: SESSION_CREATE_TIMEOUT_MS=30000 per-call override. Backend views/sessions.py: dedupe guard at start of SessionCreateView.post; 30s window matching (user, project.name, project.raw_query, project.filters); hit returns existing session with deduped:true HTTP 200 (vs 201 fresh). tests/test_session_create_dedupe.py 8 cases (baseline 201, hit 200, 30s expiry, different raw_query/name/filters, project_id=None retry, response shape). Trade-off: recordSwipe (POST) no-retry; backend idempotency_key still guards server-side. Race window ~100ms unreachable from single-tab client with retry-gate. code-review + security-manager PASS. app-test FEATURE-SCOPED PASS 5/5 incl. dedupe path 200 + deduped:true + same session_id + only 1 Project row (Django shell verified). Deferred to Next ### MEDIUM: BACK-PERFORMANCE-4 (Discovery 4.6s) + BACK-PERFORMANCE-5 (Swipe latency variability) + FRONT-UX-5 (View Gallery click no-op). sha 3fcbe3c-pre-squash.',
-    },
-    {
-      id: 'INFRA-DEPLOY-3',
-      title: 'railway migrate align + Redis prod guard + docs drift',
-      completedAt: '2026-05-26',
-      prs: [137],
-      note: 'Codex retest of develop=d53b232 surfaced 3 prod-safety drifts. railway.toml buildCommand: dropped migrate --noinput per INFRA-DB-1 (Railway runtime make_web_app has no DDL; next schema migration would have failed); operator runs migrate manually with DB_USER=neondb_owner swap. collectstatic kept. settings.py _check_async_prefetch_safety() helper: raises ImproperlyConfigured at module import when DEBUG=False && async_prefetch_enabled && !REDIS_URL — silent LocMem fallback in prod = thread cost without multi-worker coherence (same bug class PR #134 PERF-PREFETCH-CHAIN just fixed). Helper extracted mirroring _build_caches_dict pattern; called after RECOMMENDATION dict closes. .env.example default DJANGO_DEBUG=True keeps operator migrate path safe (guard short-circuits). tests/test_cache_backend.py TestAsyncPrefetchSafetyGuard 4 cases (prod+REDIS_URL OK, DEBUG bypass, async_prefetch=False bypass, prod misconfig raises). Docs drift: swipe.py:79+:723 "primary path does NOT consume" stale (PR #134 now consumes); settings.py:142 + .env.example:72 "JTI cache" stale (PR #133 final = JWT user-row cache). manage.py check PASS · pytest 20/20 · code-review PASS · security-manager PASS. Deferred surfaced to Next ### MEDIUM: BACK-AUTH-2 (cache JWT integration test hardening) + INFRA-DB-2 (test DB role CREATE DATABASE permission). sha 09a3b7c-pre-squash.',
     },
   ],
 
@@ -195,11 +195,18 @@ window.PROJECT_STATE = {
 
   prs: [
     {
-      number: 145,
-      title: 'fix(BACK-ALGO-1): required-slate hard WHERE + first-swipe prefetch cache seed',
+      number: 146,
+      title: 'perf(BACK-PERFORMANCE-4): Discovery cold 4.6s → <1s — taste vector cap + SQL top-K + async warm',
       mergedAt: null,
       mergedAtKST: null,
       sha: null,
+    },
+    {
+      number: 145,
+      title: 'fix(BACK-ALGO-1): required-slate hard WHERE + first-swipe prefetch cache seed',
+      mergedAt: '2026-05-27T00:25:00Z',
+      mergedAtKST: '2026-05-27 09:25 KST',
+      sha: '3894ffd',
     },
     {
       number: 144,
@@ -242,13 +249,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-05-26T10:18:28Z',
       mergedAtKST: '2026-05-26 19:18 KST',
       sha: '17f7d65',
-    },
-    {
-      number: 138,
-      title: 'fix(FULL-SESSION-DEDUPE-1): session create POST retry → duplicate Project/Session',
-      mergedAt: '2026-05-26T10:30:00Z',
-      mergedAtKST: '2026-05-26 19:30 KST',
-      sha: 'b209aa1',
     },
   ],
 
