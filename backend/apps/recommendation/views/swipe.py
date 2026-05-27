@@ -20,6 +20,7 @@ from ..caches import (
     evict_projects_list,
     evict_discovery_feed,
     evict_user_profile_detail,
+    evict_project_detail,
 )
 from ._shared import _get_profile, _progress, _liked_id_only
 
@@ -289,6 +290,7 @@ class ProjectBookmarkView(APIView):
         # Profile detail boards payload uses saved_ids for cover/thumbnails;
         # bookmark mutation must invalidate. Missed in initial PR — code-review catch.
         evict_user_profile_detail(profile.user_id)
+        evict_project_detail(str(project_id))
 
         # --- Resolve optional session for event association ---
         session = None
@@ -551,6 +553,7 @@ class SwipeView(APIView):
             evict_discovery_feed(profile.id)
             # Fix 1: evict /projects/ cache — liked_ids/disliked_ids counts changed.
             evict_projects_list(profile.id)
+            evict_project_detail(str(project.project_id))
 
             # 4. Increment round
             session.current_round += 1

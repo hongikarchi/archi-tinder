@@ -13,8 +13,14 @@ from rest_framework.views import APIView
 from ..models import AnalysisSession, Project
 from ..serializers import ProjectListSerializer, ProjectSerializer, ProjectSelfUpdateSerializer
 from ..caches import (
-    evict_taste, get_or_build_projects_list, evict_projects_list,
-    evict_discovery_feed, evict_user_profile_detail,
+    evict_taste,
+    get_or_build_projects_list,
+    evict_projects_list,
+    evict_discovery_feed,
+    evict_user_profile_detail,
+    evict_project_detail,
+    get_project_detail_cache_key,
+    PROJECT_DETAIL_TTL,
 )
 from ..perf_timing import endpoint, stage
 from ._shared import _get_profile
@@ -107,6 +113,7 @@ class ProjectListCreateView(APIView):
         project = serializer.save(user=profile)
         evict_projects_list(profile.id)
         evict_user_profile_detail(profile.user.id)
+        evict_project_detail(str(project.project_id))
         logger.info('Project created: %s by user %s', project.project_id, profile.pk)
         return Response(
             ProjectSerializer(project, context={'request': request}).data,
@@ -125,8 +132,17 @@ class ProjectDetailView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request, pk):
-        project = get_object_or_404(Project.objects.select_related('user__user'), project_id=pk)
+        from django.core.cache import cache as _cache
+
         profile = _get_profile(request)
+        requester_id_for_cache = str(profile.id) if profile else 'anon'
+
+        cache_key = get_project_detail_cache_key(str(pk), requester_id_for_cache)
+        cached = _cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
+
+        project = get_object_or_404(Project.objects.select_related('user__user'), project_id=pk)
         is_owner = profile and project.user_id == profile.pk
         if not is_owner and project.visibility != 'public':
             return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
@@ -136,6 +152,8 @@ class ProjectDetailView(APIView):
             data['is_reacted'] = Reaction.objects.filter(user=profile, project=project).exists()
         else:
             data['is_reacted'] = False
+
+        _cache.set(cache_key, data, PROJECT_DETAIL_TTL)
         return Response(data)
 
     def patch(self, request, pk):
@@ -183,6 +201,7 @@ class ProjectDetailView(APIView):
         project.refresh_from_db()
         evict_projects_list(profile.id)
         evict_user_profile_detail(profile.user.id)
+        evict_project_detail(str(pk))
         return Response(ProjectSerializer(project, context={'request': request}).data)
 
     def delete(self, request, pk):
@@ -193,6 +212,10 @@ class ProjectDetailView(APIView):
         # matching the security-manager recommendation and ProjectBookmarkView pattern.
         project = get_object_or_404(Project.objects.filter(user=profile), project_id=pk)
         project.delete()
+        # Evict AFTER delete: a concurrent GET arriving between the version bump
+        # and the row delete would see the live row and cache a phantom payload
+        # under the freshly-bumped key (60s phantom-read). Code-review fix-loop.
+        evict_project_detail(str(pk))
         evict_projects_list(profile.id)
         evict_user_profile_detail(profile.user.id)
         logger.info('Project deleted: %s', pk)

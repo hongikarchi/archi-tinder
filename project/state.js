@@ -24,29 +24,36 @@
  * so the value can be re-parsed by any consumer. In-flight (not-yet-merged)
  * PRs carry `mergedAt: null` sentinel; next reporter-inline pass backfills.
  */
-// Reporter: Mermaid sources may be stale — commit 4cd1fdf touched backend/apps/accounts/views.py (Profile detail cache wiring) and recommendation/engine.py (new get_building_thumbnails helper). systemFlow + recommendationFlow Engine + Views nodes affected. Next session may add thumb-cache annotation.
+// Reporter: Mermaid sources may be stale — commit 4573623 touched backend/apps/recommendation/views/projects.py (ProjectDetailView 60s response cache + invalidation wiring at 8 sites). systemFlow Views node + recommendationFlow ResultUI/Reports nodes affected. Next session may add cache annotation.
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-05-27 01:15 KST',
-    head: '4af6b4d',
-    branch: 'feature/admin-profile-page-perf',
+    updatedAt: '2026-05-27 01:35 KST',
+    head: 'd3e110c',
+    branch: 'feature/admin-board-detail-perf',
   },
 
   done: [
+    {
+      id: 'BACK-BOARD-PERF-1',
+      title: '/projects/<id>/ ~879ms → <500ms — response cache 60s',
+      completedAt: '2026-05-27',
+      prs: [148],
+      note: 'Board detail PR #147 pattern applied. PROJECT_DETAIL_TTL=60 + version key + evict_project_detail. Invalidation 8 sites. CRITICAL fix-loop: delete evict order race. test_board_detail_perf.py 7 cases. sha 4573623-pre-squash.',
+    },
     {
       id: 'BACK-PROFILE-PERF-1',
       title: '/users/<id>/ 895ms → <1s — thumbnail-only fetch + response cache',
       completedAt: '2026-05-27',
       prs: [147],
-      note: '3 perf fixes targeting Profile page latency (Codex 4th retest measured GET /users/1/ 895ms cold). Fix 1 engine.get_building_thumbnails(ids) NEW: lightweight minimal-column SELECT. Separate cache namespace thumb:<bid>. Fix 2 _build_boards_field thumbnail-only swap. Fix 3 UserProfileDetailView response cache (60s) with requester_id partition. Invalidation wired at PATCH /users/me/ + Project mutations + Session create + Follow + ProjectBookmark. test_profile_perf.py NEW 9 cases. code-review PASS after fix-loop · security-manager PASS. 기대: cold ~500-700ms, warm ~100ms. sha 4cd1fdf-pre-squash.',
+      note: 'engine.get_building_thumbnails NEW + thumbnail swap + UserProfileDetailView 60s cache + invalidation 5 sites + test_profile_perf.py 9 cases. 기대: cold ~500-700ms, warm ~100ms. sha 4cd1fdf-pre-squash.',
     },
     {
       id: 'BACK-PERFORMANCE-4',
       title: 'Discovery cold 4.6s → ~1.5-2.5s — taste vector cap + SQL top-K',
       completedAt: '2026-05-27',
       prs: [146],
-      note: '2 of 3 fixes shipped (warm thread rolled back due to pytest-django connection race). Fix 1 taste_ranked_page CTE removed; PG planner top-K heap scan k=12 vs N=37k publishable rows. Fix 2 compute_user_taste_vector recent-50 cap bounds cold get_pool_embeddings SQL. Fix 3 _async_warm_taste rolled back — investigation deferred. 기대: Discovery cold 4.6s → ~1.5-2.5s. pgvector ANN index Make-DB owned 추가 불가. sha dc1651b-pre-squash, post-rollback abe765e.',
+      note: '2/3 fixes (warm thread rolled back). taste_ranked_page CTE removed + compute_user_taste_vector recent-50 cap. 기대: 4.6s → ~1.5-2.5s.',
     },
     {
       id: 'BACK-ALGO-1',
@@ -202,11 +209,18 @@ window.PROJECT_STATE = {
 
   prs: [
     {
-      number: 147,
-      title: 'perf(BACK-PROFILE-PERF-1): /users/<id>/ 895ms → <1s — thumbnail-only fetch + response cache',
+      number: 148,
+      title: 'perf(BACK-BOARD-PERF-1): /projects/<id>/ ~879ms → <500ms — response cache 60s',
       mergedAt: null,
       mergedAtKST: null,
       sha: null,
+    },
+    {
+      number: 147,
+      title: 'perf(BACK-PROFILE-PERF-1): /users/<id>/ 895ms → <1s — thumbnail-only fetch + response cache',
+      mergedAt: '2026-05-27T01:30:00Z',
+      mergedAtKST: '2026-05-27 10:30 KST',
+      sha: 'd3e110c',
     },
     {
       number: 146,
@@ -214,6 +228,7 @@ window.PROJECT_STATE = {
       mergedAt: '2026-05-27T00:56:08Z',
       mergedAtKST: '2026-05-27 09:56 KST',
       sha: '4af6b4d',
+      sha: null,
     },
     {
       number: 145,
@@ -249,13 +264,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-05-26T11:38:00Z',
       mergedAtKST: '2026-05-26 20:38 KST',
       sha: '72bf8d3',
-    },
-    {
-      number: 140,
-      title: 'fix(BACK-LLM-3): wrap Gemini cache creation with timeout',
-      mergedAt: '2026-05-26T11:31:00Z',
-      mergedAtKST: '2026-05-26 20:31 KST',
-      sha: '92915b8',
     },
   ],
 

@@ -243,23 +243,31 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 
 ## Done
 
-### BACK-PROFILE-PERF-1 — /users/&lt;id&gt;/ 895ms → &lt;1s — thumbnail-only fetch + response cache — RESOLVED 2026-05-27 (PR #147 `4cd1fdf-pre-squash`)
-- [x] **Fix 1 `engine.get_building_thumbnails(ids)`** NEW: lightweight minimal-column SELECT returning `[{canonical_bld_id, image_url}]`. COALESCE order matches `_row_to_card` priority (`display_cover_url → cover_image_url_default → covers_by_type->>'exterior'`). 별도 cache namespace `thumb:<bid>`.
-- [x] **Fix 2 `_build_boards_field` thumbnail-only swap**: `engine.get_buildings_by_ids` → `engine.get_building_thumbnails`. 84-building thumbnail fetch (12 projects × 7 IDs) drops 15 wasted heavy columns per Profile GET.
-- [x] **Fix 3 `UserProfileDetailView` response cache (60s)**: per-(viewed_user, requester, page, page_size, version) cache key. requester_id로 partition — owner/non-owner/anon 분리, cross-user info leak 방지. Version-based invalidation (LocMemCache delete_pattern gap 회피).
-- [x] **Invalidation wired**: PATCH /users/me/ · Project create/PATCH/DELETE · Session create main + dedupe · Follow/unfollow (both parties) · **ProjectBookmark POST** (code-review fix-loop catch — saved_ids mutation affects boards thumbnails).
-- [x] **`test_profile_perf.py`** NEW 9 cases: minimal-column SQL, empty-input guard, cache-hit, COALESCE order, callsite routing, key shape, version increment, from-zero init, eviction key change.
-- Verification: manage.py check PASS · 9 non-DB tests PASS · view-layer cache hit (@django_db) INFRA-DB-2 차단 (CI 실행) · code-review PASS after ProjectBookmarkView fix-loop · security-manager PASS.
-- 기대: Profile cold ~895ms → ~500-700ms (thumbnail-only). Profile warm (60s cache hit) → ~100ms.
-- Origin: User goal 2026-05-27 — 모든 페이지 로딩 <1s. PR 2/N of iterative perf sweep.
+### BACK-BOARD-PERF-1 — /projects/&lt;id&gt;/ ~879ms → &lt;500ms — response cache 60s — RESOLVED 2026-05-27 (PR #148 `4573623-pre-squash`)
+- [x] **Response cache 60s** (projects.py ProjectDetailView.get): PR #147 Profile detail pattern을 ProjectDetailView에 적용. Per-(project_uuid, requester_id, version) key. requester_id partition (anon / profile.id) → is_owner / is_reacted / visibility-gated payload cross-user leak 방지.
+- [x] **caches.py helpers**: PROJECT_DETAIL_TTL=60 + version key + evict_project_detail(uuid) + get_project_detail_cache_key(uuid, requester_id). Version-based invalidation.
+- [x] **Invalidation 8 mutation sites**: ProjectDetailView patch/delete · ProjectListCreateView.post · ProjectBookmarkView · SwipeView (transaction-safe) · SessionCreateView · ProjectReportGenerate/ImageView · ReactionView post/delete (gated).
+- [x] **CRITICAL fix-loop**: ProjectDetailView.delete 초기 evict가 row delete 전 → race window. 정정: evict AFTER delete.
+- [x] **test_board_detail_perf.py** NEW 7 pure-mock cases.
+- Verification: manage.py check PASS · 7 non-DB tests PASS · code-review PASS · security-manager PASS.
+- 기대: cold ~879ms → ~500ms, warm ~50ms.
+- Origin: User goal 2026-05-27 — PR 3/N of iterative perf sweep.
 
-### BACK-PERFORMANCE-4 — Discovery cold 4.6s → <1s — taste vector cap + SQL top-K + async warm — RESOLVED 2026-05-27 (PR #146 `dc1651b-pre-squash`)
-- [x] **Fix 1 `taste_ranked_page` CTE 제거** (engine.py:2347): `WITH ranked AS (...) SELECT * FROM ranked OFFSET LIMIT` → direct `SELECT ... FROM ... ORDER BY ... OFFSET LIMIT`. PG planner top-K heap scan (k=12 vs N=37k publishable rows).
-- [x] **Fix 2 `compute_user_taste_vector` recent-50 cap** (engine.py:2280): `Project.objects.order_by('updated_at') ASC` + `all_likes[-50:]`. Bounded cold `get_pool_embeddings` SQL size.
-- [x] **Fix 3 `_async_warm_taste` daemon thread** (rolled back; pytest-django connection race). Fix 1+2 retained.
-- Verification: manage.py check PASS · code-review PASS after race fix-loop · security-manager PASS.
-- 기대 효과: Discovery cold ~4.6s → ~1.5-2.5s. pgvector ANN index Make-DB owned이라 불가.
-- Origin: User goal 2026-05-27 — 모든 페이지 로딩 <1s. PR 1/N of iterative perf sweep.
+### BACK-PROFILE-PERF-1 — /users/&lt;id&gt;/ 895ms → &lt;1s — thumbnail-only fetch + response cache — RESOLVED 2026-05-27 (PR #147 `4cd1fdf-pre-squash`)
+- [x] **Fix 1 `engine.get_building_thumbnails(ids)`** NEW: lightweight minimal-column SELECT.
+- [x] **Fix 2 `_build_boards_field` thumbnail-only swap**.
+- [x] **Fix 3 `UserProfileDetailView` response cache (60s)**: per-(viewed_user, requester, page, page_size, version) key. Cross-user leak partition.
+- [x] **Invalidation wired**: PATCH /users/me/ · Project mutations · Session create · Follow/unfollow · ProjectBookmark POST.
+- [x] **`test_profile_perf.py`** NEW 9 cases.
+- Verification: manage.py check PASS · 9 non-DB tests PASS · code-review PASS · security-manager PASS.
+- 기대: cold ~500-700ms, warm ~100ms.
+
+### BACK-PERFORMANCE-4 — Discovery cold 4.6s → ~1.5-2.5s — taste vector cap + SQL top-K — RESOLVED 2026-05-27 (PR #146 `dc1651b-pre-squash`)
+- [x] **Fix 1 `taste_ranked_page` CTE 제거**: PG planner top-K heap scan.
+- [x] **Fix 2 `compute_user_taste_vector` recent-50 cap**: bounded cold get_pool_embeddings.
+- [x] **Fix 3 `_async_warm_taste` daemon thread** (rolled back; pytest-django connection race).
+- Verification: manage.py check PASS · code-review PASS · security-manager PASS.
+- 기대 효과: Discovery cold ~4.6s → ~1.5-2.5s.
 
 ### BACK-ALGO-1 — Required-slate hard WHERE + first-swipe prefetch cache seed — RESOLVED 2026-05-27 (PR #145 `72f8f27-pre-squash`)
 - [x] **F3 required-slate hard WHERE** (engine.py): "Japan museum" search 후 첫 save → Bolivia card 표시되던 버그. Root cause: filters가 score CASE만 emit, pool SQL WHERE는 `is_publishable=true AND score > 0`만 — Bolivia가 country 0이어도 style/program 양의 점수로 통과. Fix: `_REQUIRED_SLATE_FIELDS_SET` frozenset (services/parse_query.REQUIRED_SLATE_FIELDS 미러 + cross-ref 주석) + `_build_required_slate_where(filters)` helper. Mode V (HyDE) + Mode F (filter-only) 적용. Mode H (RRF) excluded — rank-fusion 의미 다름. Tier 2 relaxation은 기존 location_country drop 동작 그대로.
