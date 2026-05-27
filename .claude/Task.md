@@ -53,48 +53,7 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-### FULL-LOGIN-REDESIGN-1 — Guest-first onboarding + 보드 4번째 verify gate (IN PROGRESS)
-
-**Status (2026-05-27 19:30 KST)**: PR 1 of 2 open — **PR #154** `8098041`. Backend half. Frontend PR follows after PR 1 merges + Railway deploy applies migration `0004`.
-
-**Plan**: `/Users/kms_laptop/.claude/plans/merry-toasting-dove.md` (supersedes prior Redis-foundation plan).
-
-**User decisions (Q1–Q6, 2026-05-27)**:
-1. Verify gate trigger = Board 4번째 만들 때 (3 boards free for unverified users).
-2. Verify scope = Board creation only (Follow/Reaction/public visibility 자유).
-3. Verify method = Google OAuth만. Kakao/Naver/email magic-link = `FRONT-AUTH-1` 후속.
-4. Cross-device collision (same Google email already on verified user) = merge unverified data into existing verified user (atomic transaction, 8 FK update rules: Project / AnalysisSession / SessionEvent / Follow×2 / OfficeFollow / Reaction; SwipeEvent skipped because no direct user FK).
-5. Cleanup = 없음. Throttle 강화: 3/min/IP `/auth/guest/`, 5/min `/auth/promote/`. Monitor Neon row growth post-deploy.
-6. PIPA consent = terminal-style "동의합니다" 버튼; server-persists `UserProfile.consent_accepted_at` + `consent_policy_version`.
-
-**Assumptions (not user-confirmed)**:
-- Role enum = codex 5-value (`student` / `architect` / `designer` / `enthusiast` / `other`). UI cosmetic, no algorithm impact.
-- Verify gate UI = modal with terminal aesthetic.
-- Returning-user CTA = LoginPage shows both "Yes, start here" wizard + "Continue with Google".
-
-**PR 1 (backend, this commit)**:
-- 11 files (5 new + 6 modified) + 14 pytest tests.
-- New: `jwt_serializers.py` (CustomTokenObtainPairSerializer w/ is_guest claim on refresh→access), `permissions.py` (IsVerifiedUser), `throttling.py` (GuestLoginThrottle 3/min + GuestPromoteThrottle 5/min), migration `0004`, `test_guest_auth.py`.
-- Modified: UserProfile (4 fields), GuestLoginView + GuestPromoteView in views.py, UserSerializer + UserProfileSelfUpdateSerializer, urls.py (auth/guest/ + auth/promote/), settings.py (SIMPLE_JWT TOKEN_OBTAIN_SERIALIZER + DEFAULT_THROTTLE_RATES), ProjectListCreateView (inline gate `is_guest AND count>=3 → 403 verify_required`).
-- Reviewers: security-manager PASS (3 warnings, all fixed in pass 2). code-review FAIL pass 1 (1 HIGH + 3 MED + 1 LOW). Fix-loop pass 2 applied all 7 fixes.
-- Local pytest blocked by INFRA-DB-2 (`make_web_app` no CREATEDB). CI Postgres service container runs them. **Option 4**: Railway deploy auto-migrates `0004` on develop push; CI verifies model integrity.
-
-**PR 2 (frontend) — pending**, depends on PR 1 merge + Railway migrate applied:
-- `frontend/src/main.jsx` conditional GoogleOAuthProvider mount.
-- `frontend/src/pages/LoginPage.jsx` rewrite — terminal wizard 3-step + "동의합니다" + returning Google CTA.
-- `frontend/src/components/VerifyGateModal.jsx` (NEW) — captures backend 403 `verify_required` on board-create → Google OAuth → `promoteAccount` → JWT swap → retry board create.
-- `frontend/src/utils/loginFlow.js` + tests.
-- app-test FULL mode (auth + onboarding journey + verify gate + cross-device merge stub).
-
-**Risks (from plan Risk register)**:
-- Unverified row growth — cleanup deferred; monitor Neon weekly. If growth > 500 rows/week, open `INFRA-DB-CLEANUP-1`.
-- Promote endpoint security — security-manager PASS. Atomic transaction + 8 FK update rules + dual-branch blacklist + replay protection (is_guest re-check).
-- localStorage cleared between create and verify → user can't promote → fresh OAuth = new account. Acceptable failure mode.
-- Migration ordering — must apply before frontend PR 2 ships (live traffic with guest JWTs would AttributeError otherwise).
-
-Deferred:
-- `FRONT-AUTH-1` — Kakao + Naver LoginPage buttons (backend already has the views).
-- `INFRA-DB-CLEANUP-1` (conditional, only if growth threshold hit).
+_(none — no active initiative slice with a PR in flight.)_
 
 ---
 
@@ -389,6 +348,20 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 ---
 
 ## Done
+
+### FULL-LOGIN-REDESIGN-1 — Guest-first onboarding + 보드 4번째 verify gate — RESOLVED 2026-05-27 (PRs #154 / #155 `db81e0f` + `e8296f5-pre-squash`)
+- [x] **Backend PR #154** (squashed `db81e0f`): `UserProfile.is_guest` + `onboarding_role` + `consent_accepted_at` + `consent_policy_version` + migration `0004`. `GuestLoginView` (3/min/IP `GuestLoginThrottle`) + `GuestPromoteView` (5/min `GuestPromoteThrottle UserRateThrottle`). `CustomTokenObtainPairSerializer` adds `is_guest` claim on refresh → propagates to access via simplejwt's claim copy (rotation-safe). `IsVerifiedUser` permission (future-proof). `ProjectListCreateView.post()` inline gate: `is_guest AND Project.count() >= 3 → 403 {detail:'verify_required', reason:'board_limit_reached', limit:3}`. `GuestPromoteView` atomic: Branch 1 cross-device merge (8 FK update rules: Project/AnalysisSession/SessionEvent/Follow×2/OfficeFollow/Reaction; SwipeEvent skipped — no direct user FK) + delete guest + blacklist refresh; Branch 2 in-place transform + username collision guard (`google_{provider_id}` fallback) + blacklist refresh. 14 pytest tests. CI Postgres service container verifies; INFRA-DB-2 blocks local. Railway auto-applied migration on develop merge.
+- [x] **Frontend PR #155** (pre-squash `e8296f5`): `LoginPage.jsx` full rewrite — terminal 3-step wizard (intro → name → role) + "동의합니다" PIPA capture (server-persisted; strict `is True` check rejects coerced values) + dual CTA (returning Google secondary). `VerifyGateModal.jsx` (NEW) — catches `403 verify_required`, fires Google verify → `promoteAccount` → token swap → retry. `useGoogleLogin` extracted to `GoogleLoginButton.jsx` + `GoogleVerifyButton.jsx` child components (conditional mount under provider tree — prevents "must be used within GoogleOAuthProvider" throw when `VITE_GOOGLE_CLIENT_ID` unset). Cross-device merge: `onPromoted(user, merged)` → `handleLogin(user)` on `merged:true` re-syncs `userId` + project keys. `SaveToBoardModal` Option A (stash `{name, visibility}` + auto-retry post-promote); `SurpriseBoardModal` Option B (10-card payload too fat → toast "Verified! Now try again", 3s per DESIGN.md §8.11). Conditional `GoogleOAuthProvider` mount (no `'guest-only-google-disabled'` literal anywhere). 24/24 `loginFlow.test.mjs` PASS. `is_guest` source: `/auth/me/` response (not jwt-decode) per security-manager PR1 warning.
+- User decisions Q1–Q6 (2026-05-27): Board 4번째 gate · Board만 차단 (Follow/Reaction 자유) · Google OAuth만 · cross-device merge (atomic 8 FK rules) · 3/min throttle · "동의합니다" server-persisted.
+- Reviews: PR1 sec-mgr PASS (3 warnings → fixed pass 2); code-review FAIL pass 1 (1 HIGH + 3 MED + 1 LOW → 7 fixes pass 2). PR2 sec-mgr PASS clean; code-review FAIL pass 1 (3 HIGH + 2 MED → all fixed pass 2: `useGoogleLogin` extraction · `not_a_guest`/400 string · retry path · Branch 1 merge re-login · JSDoc).
+- Plan: `~/.claude/plans/merry-toasting-dove.md` — FULL-LOGIN-REDESIGN-1 rebuild after codex `feature/codex-guest-auth-*` archived for 6 issues; all resolved.
+- Codex archive: `feature/codex-guest-auth-backend` (3049b40) + `feature/codex-guest-auth-frontend` (f488ccd) — remote 삭제, local 보관, 재구현 참조용.
+
+Deferred:
+- `FRONT-AUTH-1` — LoginPage Kakao + Naver 버튼 (backend ready).
+- `INFRA-DB-CLEANUP-1` (conditional — monitor Neon `auth_user WHERE email='' AND is_active=True` weekly; open if growth > 500/week).
+- `FULL-LEGAL-1` — PIPA copy legal review (partial mitigation shipped: `consent_accepted_at` + policy version field).
+- PIPA copy not yet legally reviewed — terminal "동의합니다" placeholder copy; `FULL-LEGAL-1` to produce final + Privacy/Terms routes.
 
 ### BACK-BOARD-PERF-1 — /projects/&lt;id&gt;/ ~879ms → &lt;500ms — response cache 60s — RESOLVED 2026-05-27 (PR #148 `4573623-pre-squash`)
 - [x] **Response cache 60s** (projects.py ProjectDetailView.get): PR #147 Profile detail pattern을 ProjectDetailView에 적용. Per-(project_uuid, requester_id, version) key. requester_id partition (anon / profile.id) → is_owner / is_reacted / visibility-gated payload cross-user leak 방지.

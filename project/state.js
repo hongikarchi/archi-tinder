@@ -24,16 +24,23 @@
  * so the value can be re-parsed by any consumer. In-flight (not-yet-merged)
  * PRs carry `mergedAt: null` sentinel; next reporter-inline pass backfills.
  */
-// Reporter: Mermaid sources may be stale — commit 8098041 touched backend/apps/recommendation/views/projects.py (verify gate inline check) + backend/apps/accounts/views.py (GuestLoginView + GuestPromoteView). Next session should refresh systemFlow + agentFlow diagrams by hand.
+// Reporter: Mermaid sources may be stale — commit e8296f5 touched frontend/src/api/{auth,projects,client}.js + new components/{GoogleLoginButton,GoogleVerifyButton,VerifyGateModal}.jsx. Next session should refresh systemFlow + agentFlow diagrams by hand.
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-05-27 19:30 KST',
-    head: '7975d61',
-    branch: 'feature/admin-guest-auth-backend',
+    updatedAt: '2026-05-27 20:23 KST',
+    head: 'db81e0f',
+    branch: 'feature/admin-guest-auth-frontend',
   },
 
   done: [
+    {
+      id: 'FULL-LOGIN-REDESIGN-1',
+      title: 'Guest-first onboarding + 보드 4번째 verify gate',
+      completedAt: '2026-05-27',
+      prs: [154, 155],
+      note: 'Rebuilt after codex feature/codex-guest-auth-* archived for 6 issues — all resolved. Backend PR #154 db81e0f: UserProfile.is_guest + onboarding_role + consent_accepted_at + consent_policy_version + migration 0004 + GuestLoginView (3/min throttle) + GuestPromoteView (atomic Branch 1 merge 8 FK rules + Branch 2 in-place transform w/ username collision guard) + CustomTokenObtainPairSerializer is_guest claim on refresh→access + IsVerifiedUser + ProjectListCreateView inline gate (403 verify_required). 14 pytest. Frontend PR #155 e8296f5-pre-squash: LoginPage terminal 3-step wizard + 동의합니다 PIPA + dual CTA + VerifyGateModal + useGoogleLogin extracted to GoogleLoginButton/GoogleVerifyButton (conditional mount safety) + cross-device merge onPromoted(user,merged) handleLogin re-sync + SaveToBoardModal Option A auto-retry + SurpriseBoardModal Option B toast + conditional GoogleOAuthProvider mount (no literal fallback). 24/24 loginFlow.test.mjs. Plan: ~/.claude/plans/merry-toasting-dove.md.',
+    },
     {
       id: 'BACK-BOARD-PERF-1',
       title: '/projects/<id>/ ~879ms → <500ms — response cache 60s',
@@ -83,23 +90,9 @@ window.PROJECT_STATE = {
       prs: [142],
       note: 'Salvaged from codex feature/codex-cleanup-stale-develop. Removed: PostSwipeLandingPage.jsx (696 LOC) + GalleryOverlay.jsx (181 LOC) + optimization_results.json (247 LOC). Doc refs cleaned. FRONT-UX-1 obsolete (App.jsx already redirects to /discovery). FULL-LOGIN-REDESIGN-1 added to backlog after codex archive. sha 9872ab0.',
     },
-    {
-      id: 'BACK-LLM-1',
-      title: 'LLM 채팅이 검색에 필요한 정보를 다 안 모음',
-      completedAt: '2026-05-26',
-      prs: [141],
-      note: 'parse_query.py +87 LOC refines LLM chat-phase to deterministically target missing required-slate filter fields. REQUIRED_SLATE_FIELDS=(program, material, style, location_country) + REQUIRED_SLATE_PROBE_PRIORITY. _repair_required_slate injects style: Contemporary. test_back_llm1_required_slate.py NEW 5 tests. sha 72bf8d3.',
-    },
   ],
 
-  now: [
-    {
-      id: 'FULL-LOGIN-REDESIGN-1',
-      title: 'Guest-first onboarding + 보드 4번째 verify gate (IN PROGRESS)',
-      startedAt: '2026-05-27',
-      note: 'PR 1 of 2 open — PR #154 (backend half). Frontend follows after PR 1 merges + Railway deploy migrates 0004. User decisions Q1-Q6: Board 4번째 gate (3 free) · Board만 차단 (Follow/Reaction 자유) · Google OAuth만 · cross-device collision = atomic merge (8 FK rules) · 3/min throttle no-cleanup · PIPA 동의합니다 server-persisted. Assumptions: codex 5-value role enum · modal w/ terminal aesthetic · returning-user CTA preserved. Plan: ~/.claude/plans/merry-toasting-dove.md.',
-    },
-  ],
+  now: [],
 
   next: {
     high: [
@@ -148,19 +141,24 @@ window.PROJECT_STATE = {
       {
         id: 'FULL-LEGAL-1',
         title: 'PIPA/GDPR consent 없음 (public launch 차단)',
-        note: 'Code audit 2026-05-27: only consent surface is LoginPage text "By continuing..."; no Terms/Privacy routes, no consent/version fields on UserProfile, no retention/export/delete flow. Guest-first onboarding will collect display name/role and must wait on consent + retention decisions before public launch. NOTE FULL-LOGIN-REDESIGN-1 PR 1 added consent_accepted_at + consent_policy_version to UserProfile + 동의합니다 terminal-style capture — partial mitigation. Full legal copy + retention still pending.',
+        note: 'Partial mitigation shipped via FULL-LOGIN-REDESIGN-1: UserProfile.consent_accepted_at + consent_policy_version fields + terminal-style "동의합니다" capture on guest wizard. Still pending: legally-reviewed copy, Privacy/Terms routes, retention/export/delete flow. PIPA-compliant copy + UI/UX legal review required before public launch.',
       },
       {
         id: 'PERF-PREFETCH-POOL-RISK',
         title: 'Neon connection pool 모니터링 (post PR #134 deploy)',
         note: 'Code audit 2026-05-27: SwipeView can spawn _async_prefetch_thread and _emit_telemetry_thread; both close connections in finally but can open thread-local DB connections while main request holds one. Practical transient footprint is main + telemetry + prefetch, depending on timing. Monitor Neon active conns during swipe bursts; consider bounded executor if peak rises.',
       },
+      {
+        id: 'INFRA-DB-CLEANUP-1',
+        title: 'Unverified guest row 누적 정리 (conditional)',
+        note: 'FULL-LOGIN-REDESIGN-1 PR #154/#155 ships guest accounts with no cleanup (user explicit decision — Q5). Throttle is 3/min/IP for /auth/guest/ but botnet w/ IP rotation can still grow rows. Monitor Neon "auth_user WHERE email = \'\' AND is_active = True" row count weekly. If growth > 500 rows/week sustained, open this and implement: Django management command "delete unverified WHERE last_active < 30 days AND swipe_count == 0" + cron/Railway scheduled job.',
+      },
     ],
     low: [
       {
         id: 'FRONT-AUTH-1',
         title: 'LoginPage에 Kakao/Naver 버튼 없음',
-        note: 'Code audit 2026-05-27: api/auth.js already supports generic socialLogin(provider). Backend has Kakao/Naver endpoints; LoginPage is still Google+dev only and lacks provider SDK/redirect handling. After FULL-LOGIN-REDESIGN-1 ships, Kakao/Naver should be secondary upgrade options on terminal wizard returning-user CTA + Settings → linked-providers section.',
+        note: 'Code audit 2026-05-27: api/auth.js already supports generic socialLogin(provider). Backend has Kakao/Naver endpoints; LoginPage rewrite (FULL-LOGIN-REDESIGN-1 PR #155) now uses terminal-style wizard but Kakao/Naver still missing. After FULL-LOGIN-REDESIGN-1 ships, Kakao/Naver should be secondary upgrade options on returning-user CTA + Settings → linked-providers section.',
       },
       {
         id: 'FULL-REFACTOR-1',
@@ -187,11 +185,18 @@ window.PROJECT_STATE = {
 
   prs: [
     {
-      number: 154,
-      title: 'feat(FULL-LOGIN-REDESIGN-1): guest auth + board-4 verify gate (PR 1 of 2)',
+      number: 155,
+      title: 'feat(FULL-LOGIN-REDESIGN-1): terminal wizard + verify gate (PR 2 of 2)',
       mergedAt: null,
       mergedAtKST: null,
       sha: null,
+    },
+    {
+      number: 154,
+      title: 'feat(FULL-LOGIN-REDESIGN-1): guest auth + board-4 verify gate (PR 1 of 2)',
+      mergedAt: '2026-05-27T10:47:11Z',
+      mergedAtKST: '2026-05-27 19:47 KST',
+      sha: 'db81e0f',
     },
     {
       number: 152,
@@ -234,13 +239,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-05-27T01:02:21Z',
       mergedAtKST: '2026-05-27 10:02 KST',
       sha: 'd3e110c',
-    },
-    {
-      number: 146,
-      title: 'perf(BACK-PERFORMANCE-4): Discovery cold 4.6s → <1s — taste vector cap + SQL top-K + async warm',
-      mergedAt: '2026-05-27T00:56:08Z',
-      mergedAtKST: '2026-05-27 09:56 KST',
-      sha: '4af6b4d',
     },
   ],
 
