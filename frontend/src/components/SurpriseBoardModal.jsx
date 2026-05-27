@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { fetchBoardSurprise } from '../api/discovery.js'
 import { bookmarkBuilding } from '../api/client.js'
-import { callApi } from '../api/core.js'
+import { createProject, VerifyRequiredError } from '../api/projects.js'
 
 /**
  * SurpriseBoardModal
@@ -51,7 +51,7 @@ export default function SurpriseBoardModal({ onClose, onSaved }) {
     setPhase('saving')
 
     try {
-      const created = await callApi('POST', '/projects/', { name: trimmedName, visibility: 'private' })
+      const created = await createProject({ name: trimmedName, visibility: 'private' })
       const projectId = created?.project_id || created?.id
       if (!projectId) throw new Error('No project_id in response')
 
@@ -65,7 +65,16 @@ export default function SurpriseBoardModal({ onClose, onSaved }) {
 
       onSaved()
       onClose()
-    } catch {
+    } catch (err) {
+      if (err instanceof VerifyRequiredError) {
+        // VerifyGateModal is mounted globally via 'archithon:verify-required' event.
+        // The board payload (10 cards + bulk bookmark) is too large to stash for
+        // automatic retry, so we emit a toast-request event that App.jsx will
+        // surface after the user verifies. (Fix 3 Option B for SurpriseBoardModal.)
+        window.dispatchEvent(new CustomEvent('archithon:verify-required:surprise-pending'))
+        onClose()
+        return
+      }
       setPhase('error')
     }
   }

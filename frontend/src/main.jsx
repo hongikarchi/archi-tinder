@@ -7,14 +7,23 @@ import './index.css'
 import { ThemeProvider } from './context/ThemeContext.jsx'
 import App from './App.jsx'
 
-createRoot(document.getElementById('root')).render(
+const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
+
+// Conditional provider mount — if VITE_GOOGLE_CLIENT_ID is empty or unset,
+// render App directly (no GoogleOAuthProvider wrapper, no literal fallback string).
+// If set, wrap with GoogleOAuthProvider so @react-oauth/google hooks work.
+const tree = (
   <StrictMode>
-    <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID || ''}>
-      <BrowserRouter>
-        <ThemeProvider>
-          <App />
-        </ThemeProvider>
-      </BrowserRouter>
-    </GoogleOAuthProvider>
-  </StrictMode>,
+    <BrowserRouter>
+      <ThemeProvider>
+        <App />
+      </ThemeProvider>
+    </BrowserRouter>
+  </StrictMode>
+)
+
+createRoot(document.getElementById('root')).render(
+  clientId
+    ? <GoogleOAuthProvider clientId={clientId}>{tree}</GoogleOAuthProvider>
+    : tree
 )

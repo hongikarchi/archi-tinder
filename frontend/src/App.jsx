@@ -12,7 +12,9 @@ import BoardDetailPage from './pages/BoardDetailPage.jsx'
 import ResultsPage from './pages/ResultsPage.jsx'
 import BuildingDetailPage from './pages/BuildingDetailPage.jsx'
 import DiscoveryPage from './pages/DiscoveryPage.jsx'
+import VerifyGateModal from './components/VerifyGateModal.jsx'
 import * as api from './api/client.js'
+import { createProject } from './api/projects.js'
 
 function normalizeFilters(filters) {
   if (!filters) return {}
@@ -134,6 +136,17 @@ export default function App() {
     return JSON.parse(localStorage.getItem(`archithon_projects_${id}`) || '[]')
   })
 
+  // VerifyGateModal — shown when guest hits the 3-board limit
+  const [verifyGateOpen, setVerifyGateOpen] = useState(false)
+  // Pending board-create payload from SaveToBoardModal (Fix 3 Option A).
+  // Stored when VerifyRequiredError fires during board creation; retried on promote.
+  const [pendingBoardCreate, setPendingBoardCreate] = useState(null)
+  // Tracks whether a SurpriseBoardModal board-create was interrupted by verify gate.
+  // After promote we show a toast asking the user to re-open the modal (Fix 3 Option B).
+  const [surprisePending, setSurprisePending] = useState(false)
+  // Global toast state (type: 'info' | 'success' | 'warning' | 'error')
+  const [globalToast, setGlobalToast] = useState(null) // {message, type}
+
   // If session has a user but no access token, clear immediately
   useEffect(() => {
     if (userId && !api.getToken()) {
@@ -147,6 +160,36 @@ export default function App() {
     window.addEventListener('archithon:session-expired', onExpired)
     return () => window.removeEventListener('archithon:session-expired', onExpired)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Listen for verify-required event dispatched by api/projects.js createProject()
+  useEffect(() => {
+    const onVerifyRequired = () => setVerifyGateOpen(true)
+    window.addEventListener('archithon:verify-required', onVerifyRequired)
+    return () => window.removeEventListener('archithon:verify-required', onVerifyRequired)
+  }, [])
+
+  // Capture pending board-create payload from SaveToBoardModal (Fix 3 Option A)
+  useEffect(() => {
+    const onPendingCreate = (e) => {
+      if (e?.detail) setPendingBoardCreate(e.detail)
+    }
+    window.addEventListener('archithon:pending-board-create', onPendingCreate)
+    return () => window.removeEventListener('archithon:pending-board-create', onPendingCreate)
+  }, [])
+
+  // Capture surprise-board pending flag (Fix 3 Option B)
+  useEffect(() => {
+    const onSurprisePending = () => setSurprisePending(true)
+    window.addEventListener('archithon:verify-required:surprise-pending', onSurprisePending)
+    return () => window.removeEventListener('archithon:verify-required:surprise-pending', onSurprisePending)
+  }, [])
+
+  // Auto-dismiss global toast after 3s (DESIGN.md §8.11 toast-duration default)
+  useEffect(() => {
+    if (!globalToast) return
+    const timer = setTimeout(() => setGlobalToast(null), 3000)
+    return () => clearTimeout(timer)
+  }, [globalToast])
 
   useEffect(() => {
     if (!userId) return
@@ -832,6 +875,83 @@ export default function App() {
         }}>
           {swipeError}
         </div>
+      )}
+
+      {globalToast && (
+        <div style={{
+          position: 'fixed',
+          bottom: 'calc(64px + 16px)',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: 'color-mix(in srgb, var(--color-surface, #F6F8FA) 72%, transparent)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          border: globalToast.type === 'success'
+            ? '1px solid var(--accent-2, #8250DF)'
+            : globalToast.type === 'error'
+              ? '1px solid var(--color-destructive, #D73A49)'
+              : '1px solid var(--color-border, rgba(0,0,0,0.08))',
+          borderRadius: 999,
+          padding: '10px 16px',
+          fontSize: 14,
+          fontWeight: 500,
+          color: 'var(--color-text, #1F2328)',
+          zIndex: 9998,
+          pointerEvents: 'none',
+          whiteSpace: 'nowrap',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+        }}>
+          {globalToast.message}
+        </div>
+      )}
+
+      {verifyGateOpen && (
+        <VerifyGateModal
+          onClose={() => {
+            setVerifyGateOpen(false)
+            setPendingBoardCreate(null)
+            setSurprisePending(false)
+          }}
+          onPromoted={async (user, merged) => {
+            setVerifyGateOpen(false)
+
+            if (merged) {
+              // Branch 1: guest deleted, merged into existing verified account.
+              // Re-run full login flow to re-sync userId, projects, localStorage.
+              if (user) await handleLogin(user)
+              setGlobalToast({ message: 'Verified — your existing account is now loaded.', type: 'success' })
+              setPendingBoardCreate(null)
+              setSurprisePending(false)
+              return
+            }
+
+            // Branch 2: in-place promote (guest user_id preserved, is_guest → false).
+            // Update user object if provided (e.g. re-fetch /auth/me/ to refresh state).
+            if (user) {
+              const id = user.user_id || user.id
+              if (id) sessionStorage.setItem('archithon_user', String(id))
+              if (user.access) api.setTokens(user.access, user.refresh)
+            }
+
+            // Retry pending SaveToBoardModal board-create (Fix 3 Option A).
+            if (pendingBoardCreate) {
+              try {
+                await createProject(pendingBoardCreate)
+                setGlobalToast({ message: 'Board created! You can now save to it.', type: 'success' })
+              } catch {
+                setGlobalToast({ message: 'Verified! Please try creating the board again.', type: 'info' })
+              } finally {
+                setPendingBoardCreate(null)
+              }
+            } else if (surprisePending) {
+              // Fix 3 Option B: fat payload — prompt user to re-open the surprise modal.
+              setGlobalToast({ message: 'Verified! Please try saving the board again.', type: 'success' })
+              setSurprisePending(false)
+            } else {
+              setGlobalToast({ message: 'Verified! You can now create boards.', type: 'success' })
+            }
+          }}
+        />
       )}
     </ErrorBoundary>
   )

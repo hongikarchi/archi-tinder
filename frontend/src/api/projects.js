@@ -6,6 +6,39 @@
 import { callApi } from './core.js'
 import { normalizeCard } from './images.js'
 
+/**
+ * Typed error thrown when the backend returns 403 with reason=board_limit_reached.
+ * Callers catch this to mount VerifyGateModal instead of showing a generic error.
+ */
+export class VerifyRequiredError extends Error {
+  constructor(reason) {
+    super('verify_required')
+    this.name = 'VerifyRequiredError'
+    this.reason = reason
+  }
+}
+
+/**
+ * Create a new project (board).
+ * On 403 verify_required → throws VerifyRequiredError (caller must handle).
+ * Also dispatches 'archithon:verify-required' event for the global VerifyGateModal.
+ */
+export async function createProject(body) {
+  try {
+    return await callApi('POST', '/projects/', body)
+  } catch (err) {
+    if (err?.status === 403 && err?.data?.detail === 'verify_required') {
+      const reason = err?.data?.reason || 'board_limit_reached'
+      const verifyErr = new VerifyRequiredError(reason)
+      window.dispatchEvent(new CustomEvent('archithon:verify-required', {
+        detail: { reason },
+      }))
+      throw verifyErr
+    }
+    throw err
+  }
+}
+
 export async function listProjects(page = 1, pageSize = 50) {
   try {
     const data = await callApi('GET', `/projects/?page=${page}&page_size=${pageSize}`)

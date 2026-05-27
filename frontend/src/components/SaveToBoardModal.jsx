@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { bookmarkBuilding, listProjects } from '../api/client.js'
-import { callApi } from '../api/core.js'
+import { createProject, VerifyRequiredError } from '../api/projects.js'
 
 function getCardId(card) {
   return card?.canonical_bld_id || card?.image_id || card?.building_id || null
@@ -87,7 +87,7 @@ export default function SaveToBoardModal({ card, onClose, onSaved }) {
     setCreateError('')
 
     try {
-      const created = await callApi('POST', '/projects/', {
+      const created = await createProject({
         name: trimmedName,
         visibility: 'private',
       })
@@ -95,6 +95,16 @@ export default function SaveToBoardModal({ card, onClose, onSaved }) {
       setNewBoardName('')
       setShowCreateForm(false)
     } catch (err) {
+      if (err instanceof VerifyRequiredError) {
+        // Stash the pending board-create payload so App.jsx can retry it after
+        // the user verifies. archithon:verify-required is already dispatched by
+        // createProject; we dispatch a companion event with the payload here.
+        window.dispatchEvent(new CustomEvent('archithon:pending-board-create', {
+          detail: { name: trimmedName, visibility: 'private' },
+        }))
+        onClose()
+        return
+      }
       setCreateError(err?.message || 'Failed to create board.')
     } finally {
       setCreating(false)
