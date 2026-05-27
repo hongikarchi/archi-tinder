@@ -24,13 +24,13 @@
  * so the value can be re-parsed by any consumer. In-flight (not-yet-merged)
  * PRs carry `mergedAt: null` sentinel; next reporter-inline pass backfills.
  */
-// Reporter: Mermaid sources may be stale — commit 4573623 touched backend/apps/recommendation/views/projects.py (ProjectDetailView 60s response cache + invalidation wiring at 8 sites). systemFlow Views node + recommendationFlow ResultUI/Reports nodes affected. Next session may add cache annotation.
+// Codex planning audit 2026-05-27: next-task notes were expanded from source reads on develop@3894ffd. Mermaid sources may still be stale for recent algorithm changes.
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-05-27 01:35 KST',
-    head: 'd3e110c',
-    branch: 'feature/admin-board-detail-perf',
+    updatedAt: '2026-05-27 01:30 KST',
+    head: 'be6c8f5',
+    branch: 'feature/admin-codex-task-plans-cherry',
   },
 
   done: [
@@ -113,96 +113,91 @@ window.PROJECT_STATE = {
       {
         id: 'BACK-RECOMMEND-1',
         title: 'Project 두번째 세션이 이전 taste를 모름',
-        note: 'Same Project can host multiple AnalysisSession rows; user "Resume" creates a fresh session while Project.liked_ids accumulates. Today session #2 algorithm state (like_vectors, convergence_history, phase) starts from scratch despite the user having liked 12 buildings in session #1. Open: carry policy (A independent / B exposure-only / C dislike-only / D fade-decay / E full warm-start / F user toggle); warm-start phase entry; SessionCreateView wiring at views/sessions.py:28. Acceptance: deterministic behaviour, session #2 TTFC not regressed, A/B on saved_ids growth + completion rate.',
+        note: 'Code audit 2026-05-27: SessionCreateView resolves project_id only to skip dedupe; session_insert still creates phase=exploring with empty like_vectors/convergence/preference state. Project.liked_ids/disliked_ids/saved_ids persist but are not read. Primary edit: views/sessions.py warm-start policy + engine.get_pool_embeddings(project liked_ids) scoped to active project; tests in test_session_create_correctness.py for no cross-project leakage and progress semantics.',
       },
       {
         id: 'FULL-LOGIN-REDESIGN-1',
         title: 'Guest-first onboarding + login UX 재설계',
-        note: 'User decision 2026-05-26: codex guest-auth branches (guest-first + 터미널 UX + 3-step intro/name/role wizard + OAuth secondary) 방향 채택. 단 codex 구현은 6 issues로 폐기 (local archive). 6 issues to resolve: (1) upgrade path — guest → OAuth 시 swipe history merge 로직, (2) PIPA consent 라인 재추가 (LoginPage), (3) unbounded row 누적 — CAPTCHA + cleanup job, (4) JWT 구분 — is_guest claim + IsNotGuest permission, (5) clientId guest-only-google-disabled literal 제거, (6) LoginPage 충돌 surface 확인. Open: guest vs OAuth balance, onboarding step 수, role enum 매핑 P1-P4, terminal UI vs DESIGN.md §3 적합성. Acceptance: guest+upgrade round-trip preserves history+boards; PIPA 유지; JWT 구분; cleanup job 운영.',
+        note: 'Code audit 2026-05-27: backend has Google/Kakao/Naver/dev endpoints but no guest identity, promotion endpoint, JWT guest claim, IsNotGuest permission, or merge path for Project/AnalysisSession/Social rows. UserProfile lacks is_guest/onboarding/consent fields. main.jsx always mounts GoogleOAuthProvider even with empty client id; LoginPage is Google+dev only. Split backend migration/contract first, frontend terminal onboarding second.',
       },
       {
         id: 'FULL-LANGUAGE-1',
         title: '한/영 언어 설정 토글 없음',
-        note: 'Decision 2026-05-25: language is a user setting (Korean / English), not browser-locale auto-detected. Pattern mirrors PR #54 + PR #59 theme/font persistence. Backend: UserProfile.language CharField, default ko. Frontend: LanguageContext mirroring ThemeContext. Drives LLM chat answer language + UI label rendering. Acceptance: language PATCH round-trip, LLM chat follows setting, ≥1 high-traffic UI surface bilingual, no theme/font regression.',
+        note: 'Code audit 2026-05-27: UserProfile preferences are theme/font only; UserSerializer and UserProfileSelfUpdateSerializer need language parity. ThemeContext + AppearanceSettings are the local persistence/UI pattern. ParseQueryView currently calls services.parse_query(conversation_history) with no user preference, so language must be passed from request.user.profile.language and prompt inference overridden.',
       },
       {
         id: 'BACK-LLM-2',
         title: '채팅 기록이 다른 기기에서 사라짐',
-        note: 'Decision 2026-05-25: persist chat conversation to backend DB, not just browser localStorage. Today LLMSearchPage.jsx stores conversationHistory in localStorage — single-browser, lost on logout / device switch. Backend currently has no conversation field. Plan: add Project.conversation_history JSONField (or ConversationTurn table — open) + migration + serializer + idempotent append endpoint. Acceptance: logout + re-login on any browser re-hydrates conversation; idempotent append survives network retry.',
+        note: 'Code audit 2026-05-27: LLMSearchPage stores messages/conversationHistory/latest* under archithon_chat_${userId}_${mode}_${projectId||new}; backend Project only has raw_query and AnalysisSession has no chat field. ParseQueryView validates conversation_history but does not persist it. Likely edit: Project conversation_history or ConversationTurn + dedicated idempotent append endpoint + frontend write-through cache.',
       },
       {
         id: 'FRONT-DESIGN-1',
         title: '디자인 시스템 컴포넌트 리워크 (paused)',
-        note: 'Foundation shipped: PR #54 (tokens.css 4 themes) + PR #59 (theme/font server persistence). Remaining: per-component visual rework (~7,700 LOC) — inline styles → CSS Modules, light-theme polish, leaf→hub order. Resume via /plan per slice. Acceptance per slice: lint+build clean, light+dark variants regression-free, no token added without DESIGN.md update.',
+        note: 'Code audit 2026-05-27: 581 inline style call sites. Largest FE files: BoardDetailPage 1049, UserProfilePage 992, App 838, BuildingDetailPage 711, SwipePage 683, FirmProfilePage 540. tokens.css exists; index.css is mostly utilities. Slice leaf components first (ArticleCard/ProjectCard/BoardCard), then SwipeCard/BuildingDetailPage; each slice lint+build+screenshot.',
       },
     ],
     medium: [
       {
         id: 'BACK-PERFORMANCE-4',
         title: 'Discovery 첫 로딩 4.6s',
-        note: 'Codex retest 2026-05-26: /discovery 4.63s + /images/batch 1.61s. Backend stage breakdown: get_or_build_taste 1.55s + taste_ranked_page 2.23s. Origin: Discovery computes taste vector then pgvector rank page. Target: warm-cache <500ms, cold <1.5s. Investigate caching of taste vector (per-user TTL?) + pgvector index tuning.',
+        note: 'Code audit 2026-05-27: DiscoveryFeedView wraps get_or_build_discovery_feed(profile,cursor,limit), then get_or_build_taste(TTL 300s) and engine.taste_ranked_page(). taste_ranked_page orders publishable canonical_v2_buildings by pgvector distance while excluding prior IDs. Diagnose cache hit/miss vs eviction/multi-worker Redis first; if DB dominates, EXPLAIN ANALYZE is Make DB/index territory.',
       },
       {
         id: 'BACK-PERFORMANCE-5',
         title: 'Swipe latency 0.7-1.5s 흔들림',
-        note: 'Codex retest 2026-05-26: browser swipe 1.82s/1.75s/1.12s/1.81s; server swipe 1.50s/1.38s/0.746s/1.36s. PR4 async prefetch consume IS working — 3rd swipe with cache hit drops to 156ms prefetch stage. But variability is high. Identify which stage causes 0.7→1.5s spread (DB latency? embedding cache miss? pgvector?). Target swipe p95 ≤1.0s and p50 ≤0.5s on Singapore prod.',
-      },
-      {
-        id: 'FRONT-UX-5',
-        title: 'View Gallery 클릭 가끔 no-op',
-        note: 'Codex retest 2026-05-26: Profile card View Gallery 버튼 클릭 시 가끔 navigate 안 됨. 재현 1회. 직접 /board/<id> URL 접근은 정상. 원인 의심: button handler event propagation 또는 React Router race. 로그 + 재현 시나리오 필요.',
+        note: 'Code audit 2026-05-27: SwipeView still does update/phase/refresh_pool/get_pool_embeddings/MMR-or-farthest selection in request transaction. Async prefetch only helps after next_bid is selected. Use existing [SWIPE TIMING] lock/embed/select/prefetch/total + embedding cache stats to bucket variance before code changes.',
       },
       {
         id: 'BACK-AUTH-2',
         title: 'Cache JWT 통합 테스트 hardening',
-        note: 'apps/accounts/authentication.py:74 cache-hit path skips parent get_user(). Current tests unit-level (CachedJWTAuthentication.get_user direct). Need integration: DRF authenticate() pipeline end-to-end, User.save() post_save signal auto-invalidation, is_active=False stale cache must NOT return 200, cross-instance Redis multi-worker correctness. Codex retest 2026-05-26 P3 hardening. Not a blocker (security-manager PASS\'d PR #133); defense-in-depth for future cache-key drift or signal-wiring regression.',
+        note: 'Code audit 2026-05-27: CachedJWTAuthentication cache-hit returns cached_user directly; signals invalidate User save/delete but not bulk update. test_jwt_cache is unit-level with patched cache and mocked tokens. Add DRF pipeline tests via /auth/me, signal invalidation test, stale inactive-user cache negative test, and cross-instance shared-cache check.',
       },
       {
         id: 'INFRA-DB-2',
         title: 'test DB role CREATE DATABASE permission',
-        note: 'Codex retest 2026-05-26 — Full test_imp8_async_prefetch.py blocked at DB setup; make_web_app role has no CREATE DATABASE permission. test_user_data DB creation fails. Options: (a) operator migrate / test-DB-provision with DB_USER=neondb_owner pre-pytest, (b) dedicated make_web_test role with CREATEDB grant on Neon, (c) pytest-django --reuse-db against pre-provisioned test_user_data. Choose one + document in CONTRIBUTING.md / .env.example.',
+        note: 'Code audit 2026-05-27: settings.py imports PG default/buildings from env; .env.example correctly says runtime role make_web_app has NOCREATEDB. Root conftest tries SQLite/mirrored buildings, but app-local conftests differ and some invocations still hit pytest-django DB creation. Decide make_web_test CREATEDB vs --reuse-db preprovisioned test_user_data vs temporary owner swap; document in CONTRIBUTING + backend/.env.example.',
       },
       {
         id: 'FRONT-LAYOUT-1',
         title: 'Desktop wide-screen 레이아웃 어색함',
-        note: 'Current viewport-lock layout is mobile-first. Detail pages on desktop work but unoptimised. Low priority — desktop is secondary.',
+        note: 'Code audit 2026-05-27: body is 100vh/overflow hidden and each page owns scroll. BuildingDetail stays maxWidth 820 with only masonry media query; BoardDetail/UserProfile maxWidth 1100 but hero/profile remain mobile-centered. Start with BuildingDetail desktop split, then Board/User grids.',
       },
       {
         id: 'FULL-LEGAL-1',
         title: 'PIPA/GDPR consent 없음 (public launch 차단)',
-        note: 'Phase 13+ Profile/Board public/private visibility shipped. PIPA + GDPR posture for signup data collection / consent flow / retention policy still open. Required before public launch.',
+        note: 'Code audit 2026-05-27: only consent surface is LoginPage text "By continuing..."; no Terms/Privacy routes, no consent/version fields on UserProfile, no retention/export/delete flow. Guest-first onboarding will collect display name/role and must wait on consent + retention decisions before public launch.',
       },
       {
         id: 'PERF-PREFETCH-POOL-RISK',
         title: 'Neon connection pool 모니터링 (post PR #134 deploy)',
-        note: 'PR 4 PERF-PREFETCH-CHAIN flipped async_prefetch_enabled True — every prod swipe now spawns a daemon thread holding its own DB connection until _connections.close_all() runs in finally. Under high concurrent swipe load: connections ≈ (concurrent_requests × 2) — main worker + prefetch thread. Neon free tier 25 conns; Railway Gunicorn 2-4 workers. Acceptable current scale (~tens of daily users). Monitor Neon dashboard post-deploy + revisit if peak concurrency exceeds 8-10 conns. Mitigation: (a) connection pool size increase, (b) explicit thread-local pool, (c) PgBouncer in front. security-manager flagged on PR #134.',
+        note: 'Code audit 2026-05-27: SwipeView can spawn _async_prefetch_thread and _emit_telemetry_thread; both close connections in finally but can open thread-local DB connections while main request holds one. Practical transient footprint is main + telemetry + prefetch, depending on timing. Monitor Neon active conns during swipe bursts; consider bounded executor if peak rises.',
       },
     ],
     low: [
       {
         id: 'FRONT-AUTH-1',
         title: 'LoginPage에 Kakao/Naver 버튼 없음',
-        note: 'Backend Kakao + Naver implementation shipped. Frontend LoginPage.jsx has Google button only — Kakao + Naver buttons remaining.',
+        note: 'Code audit 2026-05-27: api/auth.js already supports generic socialLogin(provider). Backend has Kakao/Naver endpoints; LoginPage is still Google+dev only and lacks provider SDK/redirect handling. Decide JS SDK popup vs OAuth redirect-code; may be reshaped by guest-first login redesign.',
       },
       {
         id: 'FULL-REFACTOR-1',
-        title: '큰 파일 분해 필요 (engine.py 2139 LOC 등)',
-        note: 'File decomp: engine.py 2139, App.jsx 817, BoardDetailPage 1045, UserProfilePage 992, PostSwipeLandingPage 696, SwipePage 666, FirmProfilePage 540.',
+        title: '큰 파일 분해 필요 (engine.py 2383 LOC 등)',
+        note: 'Code audit 2026-05-27: engine.py 2383, BoardDetailPage 1049, UserProfilePage 992, App 838, BuildingDetailPage 711, SwipePage 683, FirmProfilePage 540. engine.py mixes SQL/search/pool/embedding/MMR/telemetry; App owns auth/session/routing; big pages mix data+mutations+styles. Refactor only behavior-neutral slices with tests/screenshots.',
       },
       {
         id: 'BACK-RECOMMEND-3',
         title: 'Profile-tab 사무소/유저 추천 endpoint 없음',
-        note: 'REC1 shipped as Push S3. REC2 (firm) + REC3 (user) target GET /api/v1/recommendations/profile/. Acceptance: p95 ≤800ms Singapore, cold-start graceful, is_publishable=true gating preserved.',
+        note: 'Code audit 2026-05-27: no /recommendations/profile/ route exists. Office + OfficeProjectLink models and OfficeDetail project hydration exist; social Follow/OfficeFollow exists for exclusions. engine.compute_user_taste_vector helps requester taste only; firm/user recommendations need cached/precomputed vectors, not per-request loops. Cold-start branch required.',
       },
       {
         id: 'BACK-EXTERNAL-1',
         title: 'FirmProfilePage에 외부 기사 surface 없음',
-        note: 'Surfaces external articles about a firm on FirmProfilePage (Space / ArchDaily / news keyword match). Phase 15 shipped External DM wiring. Acceptance: ≤10 most recent articles per firm, open in new tab, no FirmProfilePage TTFC regression.',
+        note: 'Code audit 2026-05-27: FirmProfilePage already renders office.articles when present and ArticleCard expects {title,url,source,date}; backend serializer explicitly excludes articles and Office model has no article table. Add async/cached endpoint or OfficeArticle model; do not block OfficeDetail TTFC.',
       },
       {
         id: 'INFRA-QUEUE-1',
         title: 'corpus_rank telemetry 꺼져있음',
-        note: 'corpus_rank telemetry field currently None on every swipe (PR #79 turned off the synchronous O(corpus_size) scan; product does not consume the field). Re-enabling requires Celery + Redis + worker process + monitoring — over-investment for one telemetry column. Revisit when multiple background jobs accumulate.',
+        note: 'Code audit 2026-05-27: engine.compute_corpus_rank still exists as corpus-wide pgvector ROW_NUMBER query, but ProjectBookmarkView sets bookmark telemetry rank_corpus=None and tests assert it is not called. Do not restore sync path; only background queue with tests moving from placeholder-null to enqueued-job semantics. Low until more background jobs justify worker infra.',
       },
     ],
   },
