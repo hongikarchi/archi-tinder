@@ -77,6 +77,14 @@ class UserProfile(models.Model):
     consent_accepted_at = models.DateTimeField(null=True, blank=True)
     consent_policy_version = models.CharField(max_length=10, default='1.0')
 
+    # -- Discovery right-swipe liked buildings (SNS-LIKED-PROJECTS) --
+    liked_building_ids = models.JSONField(
+        default=list,
+        blank=True,
+        # list[str] — canonical_bld_id strings from Discovery right-swipe.
+        # Ordered newest-first (prepend on add). Deduped. Capped at 200 in view.
+    )
+
     def __str__(self):
         return self.display_name
 

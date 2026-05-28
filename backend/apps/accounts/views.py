@@ -1,9 +1,10 @@
 import logging
 import os
+import re
 import uuid as _uuid
 import requests
 from django.contrib.auth.models import User
-from django.db import transaction
+from django.db import connections as _dj_connections, transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
@@ -842,3 +843,97 @@ class UserProfileSelfUpdateView(APIView):
         evict_user_profile_detail(profile.user.id)
         # Return full UserProfileSerializer shape (consistent with GET)
         return Response(UserProfileSerializer(profile).data)
+
+
+# -- Liked Buildings (SNS-LIKED-PROJECTS) ----------------------------------
+
+_LIKED_BUILDINGS_CAP = 200
+_BLD_ID_MAX_LEN = 20
+_BLD_ID_RE = re.compile(r'^bld_\d{6}$')
+
+
+class LikedBuildingsView(APIView):
+    """POST/GET /api/v1/liked-buildings/
+
+    POST — add a building to the authenticated user's liked list.
+      Body:   {"canonical_bld_id": "bld_000123"}
+      200:    {"liked_count": N}
+      400:    {"detail": "<reason>"}
+
+    GET — return the user's liked buildings as full card objects.
+      200:    {"buildings": [...], "total": N}
+
+    Ordering: newest first (prepend on POST). Deduped. Capped at
+    _LIKED_BUILDINGS_CAP entries; the cap is silently enforced on write.
+    get_building_card gates on is_publishable=true and returns None for
+    unpublished / missing buildings — those are silently filtered from GET.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        bld_id = request.data.get('canonical_bld_id', '')
+        if not bld_id or not isinstance(bld_id, str):
+            return Response(
+                {'detail': 'canonical_bld_id required'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        bld_id = bld_id.strip()
+        if not bld_id:
+            return Response(
+                {'detail': 'canonical_bld_id required'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if len(bld_id) > _BLD_ID_MAX_LEN:
+            return Response(
+                {'detail': 'canonical_bld_id too long'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not _BLD_ID_RE.match(bld_id):
+            return Response(
+                {'detail': 'invalid canonical_bld_id format'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        with _dj_connections['buildings'].cursor() as cur:
+            cur.execute(
+                'SELECT 1 FROM canonical_v2_buildings'
+                ' WHERE canonical_bld_id = %s AND is_publishable = true',
+                [bld_id],
+            )
+            if not cur.fetchone():
+                return Response(
+                    {'detail': 'building not found'},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+        try:
+            profile = request.user.profile
+        except UserProfile.DoesNotExist:
+            return Response(
+                {'detail': 'Profile not found'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        current = list(profile.liked_building_ids or [])
+        if bld_id not in current:
+            current.insert(0, bld_id)
+            # Enforce cap silently
+            current = current[:_LIKED_BUILDINGS_CAP]
+            profile.liked_building_ids = current
+            profile.save(update_fields=['liked_building_ids'])
+
+        return Response({'liked_count': len(profile.liked_building_ids)})
+
+    def get(self, request):
+        try:
+            profile = request.user.profile
+        except UserProfile.DoesNotExist:
+            return Response(
+                {'detail': 'Profile not found'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        from apps.recommendation import engine
+
+        bld_ids = list(profile.liked_building_ids or [])[:_LIKED_BUILDINGS_CAP]
+        cards = engine.get_buildings_by_ids(bld_ids)
+        return Response({'buildings': cards, 'total': len(cards)})
