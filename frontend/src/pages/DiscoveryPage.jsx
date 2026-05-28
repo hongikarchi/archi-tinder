@@ -11,6 +11,22 @@ const SURPRISE_THRESHOLD = 5
 const PREFETCH_AT_REMAINING = 3 // when deck size <= this, fetch next page
 const SWIPE_KEYS = { ArrowLeft: 'left', ArrowRight: 'right' }
 
+const DECK_CACHE_KEY = 'discovery_deck_v1'
+const DECK_CACHE_TTL_MS = 30 * 60 * 1000  // 30 min
+
+function loadDeckCache() {
+  try {
+    const raw = sessionStorage.getItem(DECK_CACHE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (!parsed.ts || Date.now() - parsed.ts > DECK_CACHE_TTL_MS) return null
+    if (!Array.isArray(parsed.deck) || parsed.deck.length === 0) return null
+    return parsed
+  } catch {
+    return null
+  }
+}
+
 /* ── preloadImage helper (mirrors App.jsx preloadImage pattern) ──────────── */
 function makeImagePreloader() {
   const cache = new Set()
@@ -53,16 +69,19 @@ export default function DiscoveryPage() {
   const longPressFired = useRef(false)
   const touchStartPos = useRef(null)
 
-  const [deck, setDeck] = useState([])          // queue of cards (front = top)
-  const [cursor, setCursor] = useState(0)
-  const [hasMore, setHasMore] = useState(true)
-  const [tasteState, setTasteState] = useState('cold')
+  const _cached = loadDeckCache()
+  const [deck, setDeck] = useState(_cached ? _cached.deck : [])
+  const [cursor, setCursor] = useState(_cached ? _cached.cursor : 0)
+  const [hasMore, setHasMore] = useState(_cached ? _cached.hasMore : true)
+  const [tasteState, setTasteState] = useState(_cached ? (_cached.tasteState || 'cold') : 'cold')
   const [loading, setLoading] = useState(false)  // page fetch in flight
   const [error, setError] = useState('')
   const [saveModalCard, setSaveModalCard] = useState(null)  // long-press save target
   const [savesThisVisit, setSavesThisVisit] = useState(0)
   const [surpriseShown, setSurpriseShown] = useState(false)
   const [surpriseOpen, setSurpriseOpen] = useState(false)
+
+  const initialDeckLengthRef = useRef(deck.length)
 
   useEffect(() => {
     isActiveRef.current = true
@@ -132,8 +151,9 @@ export default function DiscoveryPage() {
     }
   }, [hasMore])
 
-  // Initial load
+  // Initial load — skip if deck was restored from sessionStorage cache
   useEffect(() => {
+    if (initialDeckLengthRef.current > 0) return  // restored from cache, skip fetch
     fetchPage(0, true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -146,6 +166,18 @@ export default function DiscoveryPage() {
       fetchPage(cursor)
     }
   }, [deck.length, hasMore, cursor, fetchPage])
+
+  // Persist deck state to sessionStorage so back-navigation restores position
+  useEffect(() => {
+    if (deck.length === 0) return  // don't persist empty state
+    try {
+      sessionStorage.setItem(DECK_CACHE_KEY, JSON.stringify({
+        deck, cursor, hasMore, tasteState, ts: Date.now(),
+      }))
+    } catch {
+      // sessionStorage quota exceeded or unavailable — ignore
+    }
+  }, [deck, cursor, hasMore, tasteState])
 
   const topCard = deck[0] || null
 
@@ -169,8 +201,9 @@ export default function DiscoveryPage() {
     if (action === 'like') {
       const card = topCard
       advance()
-      if (card?.canonical_bld_id) {
-        addLikedBuilding(card.canonical_bld_id).catch(() => {
+      const bldId = card?.canonical_bld_id || card?.image_id
+      if (bldId && bldId !== '__action_card__') {
+        addLikedBuilding(bldId).catch(() => {
           // Fire-and-forget; errors are silent (card is already advanced)
         })
         setSavesThisVisit(s => s + 1)
@@ -185,6 +218,7 @@ export default function DiscoveryPage() {
     longPressFired.current = false
     setSaveModalCard(null)
     setSavesThisVisit(s => s + 1)
+    advance()
   }
 
   function handleSaveCancel() {
@@ -216,7 +250,35 @@ export default function DiscoveryPage() {
     if (dx > 10 || dy > 10) clearTimeout(longPressTimer.current)
   }
 
+  function handleMouseDown(e) {
+    touchStartPos.current = { x: e.clientX, y: e.clientY }
+    longPressFired.current = false
+    clearTimeout(longPressTimer.current)
+    longPressTimer.current = setTimeout(() => {
+      longPressFired.current = true
+      if (topCard) {
+        setSaveModalCard(topCard)
+      }
+    }, 400)
+  }
+
+  function handleMouseUp() {
+    clearTimeout(longPressTimer.current)
+  }
+
+  function handleMouseLeave() {
+    clearTimeout(longPressTimer.current)
+  }
+
+  function handleMouseMove(e) {
+    if (!touchStartPos.current) return
+    const dx = Math.abs(e.clientX - touchStartPos.current.x)
+    const dy = Math.abs(e.clientY - touchStartPos.current.y)
+    if (dx > 10 || dy > 10) clearTimeout(longPressTimer.current)
+  }
+
   function handleRetry() {
+    sessionStorage.removeItem(DECK_CACHE_KEY)
     setDeck([])
     setCursor(0)
     setHasMore(true)
@@ -256,6 +318,10 @@ export default function DiscoveryPage() {
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
         onTouchMove={handleTouchMove}
+        onMouseDown={handleMouseDown}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseLeave}
+        onMouseMove={handleMouseMove}
       >
         {error && deck.length === 0 ? (
           <div style={{
