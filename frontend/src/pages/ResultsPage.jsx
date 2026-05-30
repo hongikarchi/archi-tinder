@@ -12,8 +12,8 @@ function personaFields(result, project) {
   return {
     type: report.persona_type || report.title || 'Your Architecture Persona',
     line: report.one_liner || report.summary || 'A compact read of the forms, programs, and atmospheres you kept choosing.',
-    styles: report.styles || report.style_tags || [],
-    programs: report.programs || report.program_tags || [],
+    styles: report.dominant_styles || report.styles || report.style_tags || [],
+    programs: report.dominant_programs || report.programs || report.program_tags || [],
   }
 }
 
