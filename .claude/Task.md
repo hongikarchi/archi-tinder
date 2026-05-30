@@ -167,6 +167,58 @@ Acceptance per slice: `npm run lint` + `npm run build` clean; light + all dark v
 
 ### MEDIUM
 
+#### FRONT-UX-6 — SwipeCard gallery flip 부모 state 동기화 누락
+PR #158 (`0071c3f`, 2026-05-29) restored in-card gallery flip but made `openGallery()` purely local — it no longer notifies the parent page via `onGalleryOpen` callback. SwipePage's `galleryOpen` state never flips to `true`. Two visible regressions on the swipe surface:
+- **Desktop mouse drag on gallery face → unintended card swipe.** The gallery scroll wrapper stops `onTouchStart`/`onTouchMove` propagation but not mouse events. On mobile this is fine; on desktop, mouse drag while viewing photos triggers the underlying `react-tinder-card` swipe gesture and the card flies away mid-view.
+- **ESC key no longer closes the gallery.** `SwipePage.jsx:399/405` keyboard handler checks `if (galleryOpen) setGalleryOpen(false)`; since `galleryOpen` stays false, ESC is a no-op while the back-face is visible.
+
+Code refs (`develop@6ce7260` post-PR #158):
+- `frontend/src/components/SwipeCard.jsx:60-63` — `openGallery()` sets only local state (`setShowGallery(true)`, `setHasBeenOpened(true)`); no parent callback.
+- `frontend/src/pages/SwipePage.jsx:649` — passes `onGalleryOpen={() => setGalleryOpen(true)}` but it is never invoked.
+- `frontend/src/pages/SwipePage.jsx:643` — `preventSwipe={galleryOpen ? ['left','right','up','down'] : ['up','down']}` blocks horizontal swipe only when `galleryOpen=true`, which now never happens.
+- DiscoveryPage passes `onGalleryOpen={() => {}}` and does not track `galleryOpen`; this entry is SwipePage-only.
+
+Three implementation options (admin decision needed before fix):
+- **Option 1 (3-line)** — restore parent notification: add `onGalleryOpen` to SwipeCard props destructure and call it inside `openGallery()` after `setShowGallery(true)`. Minimal change; SwipePage's existing ESC + preventSwipe logic re-engages.
+- **Option 2 (gallery self-contained)** — add `onMouseDown`/`onMouseMove` `stopPropagation` to the gallery-face scroll wrapper (matches the existing touch handlers) and move ESC handling inside SwipeCard. SwipePage's `galleryOpen` state becomes dead code; cleanup required.
+- **Option 3 (refactor)** — remove `galleryOpen` from SwipePage entirely, fold gesture-blocking + ESC into SwipeCard. Cleaner separation; broader diff.
+
+Acceptance: ESC closes the gallery on SwipePage; desktop mouse drag on the gallery face does not discard the card; DiscoveryPage unchanged. Authorized to defer follow-up per user decision 2026-05-29 ("PR 그대로 merge — 작은 버그는 후속").
+
+#### FRONT-UX-7 — Discovery 우측 스와이프 좋아요 무음 실패
+PR #157 (`77ffd6e`, 2026-05-29) `DiscoveryPage.jsx` right-swipe handler calls `addLikedBuilding(card.image_id).catch(() => {})`. On API failure (network blip, 5xx, auth gone, rate limit) the user gets no feedback — the swipe animation completes and the like silently does not persist. User believes the building is saved when it is not.
+
+Code refs (`develop@6ce7260` post-PR #157):
+- `frontend/src/pages/DiscoveryPage.jsx` — right-swipe handler fire-and-forget pattern; no toast, no console signal, no retry queue.
+- `frontend/src/api/liked.js` (NEW in PR #157) — POST `/api/v1/auth/me/liked-buildings/` returns 200/4xx/5xx normally; client just swallows.
+- `frontend/src/App.jsx` glassmorphic toast helper already exists (used by VerifyGateModal on Board-create retry) and can be reused.
+
+Implementation options:
+- **Minimum** — `console.error` on catch so devs can see failures in the browser console; user-visible UX unchanged.
+- **Recommended** — minimal toast on failure ("저장 실패 — 다시 시도해주세요") with 3s auto-dismiss matching DESIGN.md §8.11 glassmorphic pattern; no retry.
+- **Stretch** — queue failed likes in a session store, retry on next online event / next API success; surface a "X likes pending sync" indicator.
+
+Open dimension: should DiscoveryPage rely on the existing `App.jsx` toast helper or own a local UI affordance to avoid coupling to the global mount? Recommended pattern is to dispatch a `archithon:toast` custom event that `App.jsx` already listens for, mirroring the VerifyGateModal flow.
+
+Acceptance: failed liked-building save no longer silent; user sees an indication (toast or visible retry cue); no regression to successful-swipe latency. Author yywon1 awaiting follow-up decision per PR #157 review comment (`#issuecomment-4583211223`).
+
+#### BACK-AUTH-3 — LikedBuildingsView guest 사용자 가드 정책 확인
+PR #157 (`77ffd6e`, 2026-05-29) added `LikedBuildingsView` with `permission_classes = [IsAuthenticated]` only. No `is_guest=False` check. Guest users (post-FULL-LOGIN-REDESIGN-1: `UserProfile.is_guest=True`, no email, no SocialAccount) can freely write to `UserProfile.liked_building_ids` without hitting the Board-4 verify gate, because the gate fires on `ProjectListCreateView.post()` — a different surface.
+
+Two product interpretations possible:
+- **(A) Free for guests (current behavior)** — likes are weightless interactions, no verification needed. Only board creation triggers Google OAuth. This keeps onboarding friction-free and lets guests build up taste signal before deciding to verify.
+- **(B) Gate guest likes** — match the board policy: after N liked buildings, force Google OAuth. Argument: liked_buildings is persistent storage tied to a long-lived user row; PIPA-style data collection should be gated.
+
+Code refs (`develop@6ce7260` post-PR #157):
+- `backend/apps/accounts/views.py` — `LikedBuildingsView` GET + POST; permission_classes line is the only auth gate.
+- `backend/apps/accounts/models.py` — `UserProfile.liked_building_ids` JSONField on the row itself (not a separate FK table).
+- `backend/apps/recommendation/views/projects.py` — `ProjectListCreateView` inline gate as reference precedent: `if request.user.profile.is_guest and Project.objects.filter(user=profile).count() >= 3: return Response({'detail':'verify_required',...}, 403)`.
+
+Decision needed:
+- Product call. If (A), document the intent in the view docstring + close this entry. If (B), add the same inline gate pattern as `ProjectListCreateView` with an appropriate threshold and a `reason='liked_limit_reached'` payload so the frontend `VerifyGateModal` can reuse its existing 403 catcher.
+
+Author yywon1 awaiting decision per PR #157 review comment (`#issuecomment-4583211223`).
+
 #### BACK-PERFORMANCE-5 — Swipe latency 0.7-1.5s 흔들림
 Codex retest 2026-05-26: browser swipe 1.82s/1.75s/1.12s/1.81s; server swipe 1.50s/1.38s/0.746s/1.36s. **PR4 async prefetch consume IS working** — 3rd swipe with cache hit drops to 156ms prefetch stage. But variability is high. Identify which stage causes the 0.7→1.5s spread (DB query latency? embedding cache miss? pgvector?). Aim for swipe p95 ≤1.0s and p50 ≤0.5s on Singapore prod.
 
