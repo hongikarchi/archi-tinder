@@ -294,12 +294,6 @@ export default function ResultsPage({ projects, setProjects }) {
             {persona.line}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <div className="skeleton-shimmer" style={{ width: 72, height: 44, borderRadius: 12 }} />
-          <div style={{ color: 'var(--color-text-dimmer)', fontSize: 12, fontWeight: 600 }}>
-            Imagen persona preview queued for Phase 2
-          </div>
-        </div>
       </section>
 
       {/* Liked buildings — 가로 스크롤, 큰 카드 */}
