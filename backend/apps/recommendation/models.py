@@ -79,6 +79,11 @@ class AnalysisSession(models.Model):
     cosine_top10_ids  = models.JSONField(null=True, blank=True)  # first 10 cosine-ordered ids at result time
     gemini_top10_ids  = models.JSONField(null=True, blank=True)  # first 10 Gemini-rerank ids (None when flag off)
     dpp_top10_ids     = models.JSONField(null=True, blank=True)  # first 10 DPP-ordered ids (None when flag off)
+    # Question card trigger state (ALGO-QCARD-1)
+    tag_axis_counts = models.JSONField(default=dict)   # {"style": {"minimal": 3}, ...}
+    recent_like_tag_sets = models.JSONField(default=list)   # last 3 liked-card tag lists
+    question_cooldown = models.IntegerField(default=0)   # swipe-down counter; set to 5 on trigger/answer
+    q_card_consecutive_dislikes = models.IntegerField(default=0)   # consecutive dislike counter for refresh trigger
     created_at        = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

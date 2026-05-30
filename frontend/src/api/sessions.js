@@ -72,9 +72,10 @@ export async function recordSwipe({ session_id, image_id, action, client_buffer_
   })
   return {
     ...result,
-    next_image:      normalizeCard(result.next_image),
-    prefetch_image:  normalizeCard(result.prefetch_image),
+    next_image:       normalizeCard(result.next_image),
+    prefetch_image:   normalizeCard(result.prefetch_image),
     prefetch_image_2: normalizeCard(result.prefetch_image_2),
+    question_trigger: result.question_trigger ?? null,
   }
 }
 
@@ -108,4 +109,16 @@ export async function getResult({ session_id }) {
     liked_images:           (result.liked_images || []).map(normalizeCard),
     predicted_like_images:  (result.predicted_images || []).map(normalizeCard),
   }
+}
+
+/**
+ * Submit a user's response to an in-session question card.
+ * option: "A" | "B" | "skip"
+ */
+export async function submitQuestionResponse({ session_id, question_type, axis, selected_option }) {
+  return await callApi('POST', `/analysis/sessions/${session_id}/question-responses/`, {
+    question_type,
+    axis,
+    selected_option,
+  })
 }

@@ -32,6 +32,7 @@ from .swipe import (
     ProjectBookmarkView,
     BuildingBatchView,
     DiverseRandomView,
+    QuestionResponseView,
     # Private helpers accessed by tests
     _merge_buffer_into_exposed,
     _async_prefetch_thread,
@@ -72,6 +73,7 @@ __all__ = [
     'ProjectBookmarkView',
     'BuildingBatchView',
     'DiverseRandomView',
+    'QuestionResponseView',
     'ParseQueryView',
     'DiscoveryFeedView',
     'BoardSurpriseView',
