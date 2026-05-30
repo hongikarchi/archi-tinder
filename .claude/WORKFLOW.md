@@ -137,9 +137,12 @@ accumulate locally on a `feature/*` branch; one push sweeps them as a PR. As of
 **Session start:**
 1. `git status && git branch --show-current`. If on `main`/`develop`, do not
    edit — create a `feature/*` branch first (HARD RULE, `CONTRIBUTING.md`).
-2. `git fetch origin develop --quiet`; if the branch is behind, ask before
+2. `git worktree list`. If another agent (Claude/Codex) shares this checkout,
+   STOP — move to your own worktree (`CONTRIBUTING.md` § Concurrent agents)
+   before editing. One session per working directory.
+3. `git fetch origin develop --quiet`; if the branch is behind, ask before
    rebasing.
-3. Scan `.claude/Task.md` for any `SESSION-START-TODO` pending action; surface
+4. Scan `.claude/Task.md` for any `SESSION-START-TODO` pending action; surface
    it to the user before starting their request.
 
 **Session end** (before the PR squash merges):

@@ -41,6 +41,7 @@
      ./tools/install-hooks.sh
      ```
      Without this, your local does not have the migration-numbering pre-push hook, and you may push a duplicate-numbered Django migration that breaks the team.
+  7. **One agent session per working directory (concurrent-agent isolation).** Never run two agent sessions (e.g. Claude Code + Codex) in the same checkout — a single working tree has one `HEAD`, so a second session's checkout crosses branches and a stray `git pull` fast-forwards the wrong branch (this happened 2026-05-31). Each additional concurrent agent works in its own **git worktree** (`git worktree add ../make_web-<agent> -b feature/<role>-<topic> develop`); see `CONTRIBUTING.md` § "Concurrent agents — working-directory isolation". The Agent tool's `isolation:"worktree"` is for parallel *sub-agents* only — it does NOT prevent session↔session collision. **Session-start check**: run `git worktree list`; if you share the main checkout with another active agent, STOP and move to your own worktree before editing.
 
   **If `git status` at session start shows you are on `main` or `develop` with uncommitted changes**: the previous session likely did not switch to a feature branch. Stash or save the work, then create a proper feature branch before continuing. Do not stage or commit while on a protected branch.
 

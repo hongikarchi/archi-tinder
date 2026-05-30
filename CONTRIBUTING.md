@@ -125,6 +125,51 @@ git checkout develop && git pull origin develop
 git branch -d feature/algo-mmr-lambda-tuning
 ```
 
+## Concurrent agents — working-directory isolation (git worktree)
+
+Multiple AI agents (Claude Code, Codex, …) sometimes work on this repo at the
+same time. **Never run two agent sessions in the same checkout.** A single
+working tree has one `HEAD`; if agent B checks out its branch, agent A's `HEAD`
+moves too — branches cross, a stray `git pull` fast-forwards the wrong branch,
+and uncommitted work tangles. (This bit us 2026-05-31 when a Claude and a Codex
+session shared the main checkout.)
+
+**Rule: one session per working directory.** The main checkout (`make_web/`) is
+the primary session; each additional concurrent agent gets its own **git
+worktree** — a separate working dir + `HEAD` that shares the one `.git`.
+
+```bash
+# Give another agent its own worktree (persistent SIBLING dir — NOT /tmp, which a
+# reboot wipes along with any uncommitted work):
+git worktree add ../make_web-<agent> -b feature/<role>-<topic> develop
+
+git worktree list                       # all worktrees + their branches
+git worktree remove ../make_web-<agent> # when done (refuses if dirty — commit/push first)
+git worktree prune                      # drop stale links
+```
+
+- The same branch can be checked out in only one worktree (git enforces this), so
+  the cross-wire collision is structurally impossible across worktrees.
+- Branch naming and the `feature/<role>-<topic>` → PR → `develop` model are
+  unchanged. The worktree **directory name** disambiguates the agent.
+- **Per-worktree setup**: copy in your own `.env`, run your own `npm install` /
+  venv — only `.git` is shared, working files are not. **Hooks are inherited
+  automatically** (worktrees share the common `.git/hooks`), so the migration
+  pre-push hook needs no reinstall. **Do NOT run `tools/install-hooks.sh` or
+  `tools/onboarding.sh` from inside a worktree** — a worktree's `.git` is a
+  pointer *file*, not a directory, so those scripts error. Run them only from the
+  main checkout.
+- **Sub-agent isolation is a different thing.** Claude Code's Agent tool
+  `isolation:"worktree"` (and Codex's worktree/sandbox mode, if used) isolate
+  parallel file-mutating *sub-agents* within one session. That does NOT replace
+  the session-level placement above and does NOT prevent two top-level sessions
+  from colliding.
+
+The **launch convention is the reliable layer**: whoever starts a second agent
+points it at its own worktree dir before it begins. The session-start
+`git worktree list` check in `CLAUDE.md` / `AGENTS.md` is a backstop, not the
+guarantee.
+
 ## First PR sanity check (recommended after onboarding)
 
 After cloning + running `./tools/install-hooks.sh`, do one tiny verification PR
