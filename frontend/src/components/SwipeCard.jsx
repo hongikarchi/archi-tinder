@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useImageTelemetry } from '../hooks/useImageTelemetry.js'
 
 /**
@@ -40,7 +39,6 @@ function InfoRow({ label, value }) {
 
 /* ── SwipeCard ───────────────────────────────────────────────────────────── */
 export default function SwipeCard({ card, onGalleryClose }) {
-  const navigate = useNavigate()
   const [isExpanded,     setIsExpanded]     = useState(false)
   const [showGallery,    setShowGallery]    = useState(false)
   const [hasBeenOpened,  setHasBeenOpened]  = useState(false)
@@ -59,8 +57,10 @@ export default function SwipeCard({ card, onGalleryClose }) {
     context: 'swipe_card',
   })
 
-  // openGallery() removed (FIX F5, Codex retest 2026-05-26): View Gallery button
-  // now navigates to BuildingDetailPage; the in-card flip path is no longer used.
+  function openGallery() {
+    setHasBeenOpened(true)
+    setShowGallery(true)
+  }
   function closeGallery() { setShowGallery(false); onGalleryClose && onGalleryClose() }
 
   function handlePointerDown(e) {
@@ -309,15 +309,10 @@ export default function SwipeCard({ card, onGalleryClose }) {
 
             </div>
             {gallery.length > 0 && (
-              // FIX F5 (Codex retest 2026-05-26): button now navigates to
-              // BuildingDetailPage (/buildings/:id) instead of calling the in-card
-              // openGallery() flip. DiscoveryPage passed an empty () => {} callback
-              // for onGalleryOpen, so the old path was a no-op. The /buildings/ route
-              // (plural) matches the existing site pattern used in BoardDetailPage.
               <button
                 onPointerDown={e => e.stopPropagation()}
                 onPointerUp={e => e.stopPropagation()}
-                onClick={e => { e.stopPropagation(); navigate(`/buildings/${card.image_id}`) }}
+                onClick={e => { e.stopPropagation(); openGallery() }}
                 style={{
                   marginTop: 12, width: '100%', padding: '10px 14px', borderRadius: 10,
                   background: 'rgba(255,255,255,0.09)', border: '1px solid rgba(255,255,255,0.18)',
@@ -389,6 +384,22 @@ export default function SwipeCard({ card, onGalleryClose }) {
               )
             })}
           </div>
+
+          {/* Close button */}
+          <button
+            onPointerDown={e => e.stopPropagation()}
+            onPointerUp={e => e.stopPropagation()}
+            onClick={e => { e.stopPropagation(); closeGallery() }}
+            style={{
+              position: 'absolute', top: 14, right: 14,
+              width: 32, height: 32, borderRadius: '50%',
+              background: 'rgba(0,0,0,0.55)', border: '1px solid rgba(255,255,255,0.2)',
+              color: '#fff', fontSize: 16, lineHeight: 1,
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            ✕
+          </button>
 
           {/* Top arrow */}
           <div style={{ position: 'absolute', top: 14, left: 0, right: 0, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
