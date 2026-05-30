@@ -1226,7 +1226,9 @@ class TestExtendSessionFlow:
         assert session.extended_rounds == 1
         assert session.phase == 'analyzing'
         assert session.convergence_history == []
-        assert session.previous_pref_vector == []
+        # previous_pref_vector is seeded from the current centroid on extend
+        # (not cleared to []) so delta_v tracking resumes on the first post-extend swipe.
+        assert len(session.previous_pref_vector) == len(_FAKE_EMBEDDINGS['B00001'])
 
     def test_extend_works_when_carrier_idempotency_key_collides(self, auth_client, user_profile):
         """Frontend reuse of the last swipe key must not block real extend."""

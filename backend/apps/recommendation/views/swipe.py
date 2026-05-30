@@ -427,7 +427,16 @@ class SwipeView(APIView):
                 session.extended_rounds += 1
                 session.phase = 'analyzing'
                 session.convergence_history = []
-                session.previous_pref_vector = []
+                # Seed previous_pref_vector from the current centroid so delta_v tracking
+                # resumes on the first post-extend swipe. Clearing to [] (old behaviour)
+                # made compute_confidence always return None in the extended session.
+                if session.like_vectors:
+                    _, global_centroid = engine.compute_taste_centroids(
+                        session.like_vectors, session.current_round
+                    )
+                    session.previous_pref_vector = global_centroid.tolist()
+                else:
+                    session.previous_pref_vector = []
 
                 if client_buffer_ids:
                     session.exposed_ids = _merge_buffer_into_exposed(session.exposed_ids, client_buffer_ids)
