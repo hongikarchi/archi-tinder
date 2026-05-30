@@ -65,9 +65,10 @@ def _update_question_state(session, action, canonical_bld_id):
             row = None
 
         if row:
-            style_tags = row[0] or []
-            atm_tags = row[1] or []
-            mat_tags = row[2] or []
+            # style/atmosphere are TEXT (single string), material_visual is TEXT[]
+            style_tags = [row[0]] if row[0] else []
+            atm_tags = [row[1]] if row[1] else []
+            mat_tags = list(row[2]) if row[2] else []
             axis_tags = {
                 'style': style_tags,
                 'atmosphere': atm_tags,
