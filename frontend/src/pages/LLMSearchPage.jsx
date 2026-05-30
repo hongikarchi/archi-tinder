@@ -361,84 +361,93 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
       {/* Messages */}
       <div style={{
         flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '24px 16px',
-        display: 'flex', flexDirection: 'column', gap: 20,
+        display: 'flex', flexDirection: 'column',
         paddingBottom: bottomOffset,
       }}>
-        {messages.map((msg, i) => (
-          <div key={i} style={{
-            display: 'flex', flexDirection: 'column',
-            alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start',
-            alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-            maxWidth: '100%',
-          }}>
-            <div style={{
-              padding: '12px 16px', borderRadius: 16, fontSize: 14, lineHeight: 1.6,
-              whiteSpace: 'pre-wrap', maxWidth: '100%', overflowX: 'hidden',
-              ...(msg.role === 'user' ? {
-                background: 'var(--color-user-bubble)',
-                color: 'var(--color-user-bubble-text)',
-                borderBottomRightRadius: 4,
-              } : {
-                background: 'var(--color-ai-bubble)',
-                border: '1px solid var(--color-ai-bubble-border)',
-                color: 'var(--color-text-2)', borderBottomLeftRadius: 4,
-              })
+        <div style={{
+          width: '100%',
+          maxWidth: 680,
+          margin: '0 auto',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 20,
+        }}>
+          {messages.map((msg, i) => (
+            <div key={i} style={{
+              display: 'flex', flexDirection: 'column',
+              alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start',
+              alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+              maxWidth: '100%',
             }}>
-              {msg.text}
-              {msg.role === 'ai' && <FilterChips filters={msg.filters} />}
-              {msg.role === 'ai' && <ResultStrip results={msg.results} isFallback={msg.isFallback} />}
+              <div style={{
+                padding: '12px 16px', borderRadius: 16, fontSize: 14, lineHeight: 1.6,
+                whiteSpace: 'pre-wrap', maxWidth: '100%', overflowX: 'hidden',
+                ...(msg.role === 'user' ? {
+                  background: 'var(--color-user-bubble)',
+                  color: 'var(--color-user-bubble-text)',
+                  borderBottomRightRadius: 4,
+                } : {
+                  background: 'var(--color-ai-bubble)',
+                  border: '1px solid var(--color-ai-bubble-border)',
+                  color: 'var(--color-text-2)', borderBottomLeftRadius: 4,
+                })
+              }}>
+                {msg.text}
+                {msg.role === 'ai' && <FilterChips filters={msg.filters} />}
+                {msg.role === 'ai' && <ResultStrip results={msg.results} isFallback={msg.isFallback} />}
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
 
-        {/* Preset chips -- shown only before first user message */}
-        {messages.length === 1 && !isLoading && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, paddingLeft: 2 }}>
-            {PRESETS.map(p => (
-              <button
-                key={p.label}
-                onClick={() => handlePreset(p.query)}
-                style={{
-                  padding: '8px 14px', borderRadius: 999, fontSize: 12, fontWeight: 500,
-                  background: 'rgba(236,72,153,0.12)',
-                  border: '1px solid rgba(236,72,153,0.35)',
-                  color: '#f9a8d4', cursor: 'pointer', fontFamily: 'inherit',
-                  transition: 'background 0.15s, border-color 0.15s',
-                  whiteSpace: 'nowrap',
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = 'rgba(236,72,153,0.25)'
-                  e.currentTarget.style.borderColor = 'rgba(236,72,153,0.6)'
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = 'rgba(236,72,153,0.12)'
-                  e.currentTarget.style.borderColor = 'rgba(236,72,153,0.35)'
-                }}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {isLoading && (
-          <div style={{ alignSelf: 'flex-start' }}>
-            <div style={{
-              padding: '12px 18px', background: 'var(--color-ai-bubble)',
-              border: '1px solid var(--color-ai-bubble-border)',
-              borderRadius: 16, borderBottomLeftRadius: 4,
-              display: 'flex', gap: 5, alignItems: 'center',
-            }}>
-              {[0, 0.16, 0.32].map(d => (
-                <div key={d} style={{
-                  width: 6, height: 6, borderRadius: '50%', background: '#6b7280',
-                  animation: `bounce 1.4s ${d}s infinite ease-in-out both`,
-                }} />
+          {/* Preset chips -- shown only before first user message */}
+          {messages.length === 1 && !isLoading && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, paddingLeft: 2 }}>
+              {PRESETS.map(p => (
+                <button
+                  key={p.label}
+                  onClick={() => handlePreset(p.query)}
+                  style={{
+                    padding: '8px 14px', borderRadius: 999, fontSize: 12, fontWeight: 500,
+                    background: 'rgba(236,72,153,0.12)',
+                    border: '1px solid rgba(236,72,153,0.35)',
+                    color: '#f9a8d4', cursor: 'pointer', fontFamily: 'inherit',
+                    transition: 'background 0.15s, border-color 0.15s',
+                    whiteSpace: 'nowrap',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = 'rgba(236,72,153,0.25)'
+                    e.currentTarget.style.borderColor = 'rgba(236,72,153,0.6)'
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'rgba(236,72,153,0.12)'
+                    e.currentTarget.style.borderColor = 'rgba(236,72,153,0.35)'
+                  }}
+                >
+                  {p.label}
+                </button>
               ))}
             </div>
-          </div>
-        )}
-        <div ref={messagesEndRef} />
+          )}
+
+          {isLoading && (
+            <div style={{ alignSelf: 'flex-start' }}>
+              <div style={{
+                padding: '12px 18px', background: 'var(--color-ai-bubble)',
+                border: '1px solid var(--color-ai-bubble-border)',
+                borderRadius: 16, borderBottomLeftRadius: 4,
+                display: 'flex', gap: 5, alignItems: 'center',
+              }}>
+                {[0, 0.16, 0.32].map(d => (
+                  <div key={d} style={{
+                    width: 6, height: 6, borderRadius: '50%', background: '#6b7280',
+                    animation: `bounce 1.4s ${d}s infinite ease-in-out both`,
+                  }} />
+                ))}
+              </div>
+            </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
       </div>
 
       {/* Start swiping panel */}
