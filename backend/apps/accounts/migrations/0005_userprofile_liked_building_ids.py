@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('accounts', '0003_userprofile_font_userprofile_theme'),
+        ('accounts', '0004_userprofile_guest_onboarding_consent'),
     ]
 
     operations = [
