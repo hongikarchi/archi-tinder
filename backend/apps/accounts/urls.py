@@ -5,6 +5,7 @@ from .views import (
     TokenRefreshView, MeView, LogoutView, DevLoginView,
     UserProfileDetailView, UserProfileSelfUpdateView,
     GuestLoginView, GuestPromoteView,
+    LikedBuildingsView,
 )
 
 urlpatterns = [
@@ -23,6 +24,8 @@ urlpatterns = [
     # though Django's int converter auto-disambiguates them.
     path('users/me/', UserProfileSelfUpdateView.as_view(), name='user-profile-self-update'),
     path('users/<int:user_id>/', UserProfileDetailView.as_view(), name='user-profile-detail'),
+    # SNS-LIKED-PROJECTS — Discovery right-swipe liked buildings
+    path('liked-buildings/', LikedBuildingsView.as_view(), name='liked-buildings'),
 ]
 
 if settings.DEBUG:

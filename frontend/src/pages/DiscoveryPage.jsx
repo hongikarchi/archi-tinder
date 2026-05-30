@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import TinderCard from 'react-tinder-card'
-import { fetchDiscoveryFeed } from '../api/client.js'
+import { fetchDiscoveryFeed, addLikedBuilding } from '../api/client.js'
 import SwipeCard, { CARD_WIDTH, CARD_HEIGHT } from '../components/SwipeCard.jsx'
 import SaveToBoardModal from '../components/SaveToBoardModal.jsx'
 import SurpriseBoardModal from '../components/SurpriseBoardModal.jsx'
@@ -10,6 +10,22 @@ const PAGE_LIMIT = 12
 const SURPRISE_THRESHOLD = 5
 const PREFETCH_AT_REMAINING = 3 // when deck size <= this, fetch next page
 const SWIPE_KEYS = { ArrowLeft: 'left', ArrowRight: 'right' }
+
+const DECK_CACHE_KEY = 'discovery_deck_v1'
+const DECK_CACHE_TTL_MS = 30 * 60 * 1000  // 30 min
+
+function loadDeckCache() {
+  try {
+    const raw = sessionStorage.getItem(DECK_CACHE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (!parsed.ts || Date.now() - parsed.ts > DECK_CACHE_TTL_MS) return null
+    if (!Array.isArray(parsed.deck) || parsed.deck.length === 0) return null
+    return parsed
+  } catch {
+    return null
+  }
+}
 
 /* ── preloadImage helper (mirrors App.jsx preloadImage pattern) ──────────── */
 function makeImagePreloader() {
@@ -49,17 +65,23 @@ export default function DiscoveryPage() {
   const pendingActionRef = useRef(null)
   const cardRef = useRef(null)
   const keySwipingRef = useRef(false)
+  const longPressTimer = useRef(null)
+  const longPressFired = useRef(false)
+  const touchStartPos = useRef(null)
 
-  const [deck, setDeck] = useState([])          // queue of cards (front = top)
-  const [cursor, setCursor] = useState(0)
-  const [hasMore, setHasMore] = useState(true)
-  const [tasteState, setTasteState] = useState('cold')
+  const _cached = loadDeckCache()
+  const [deck, setDeck] = useState(_cached ? _cached.deck : [])
+  const [cursor, setCursor] = useState(_cached ? _cached.cursor : 0)
+  const [hasMore, setHasMore] = useState(_cached ? _cached.hasMore : true)
+  const [tasteState, setTasteState] = useState(_cached ? (_cached.tasteState || 'cold') : 'cold')
   const [loading, setLoading] = useState(false)  // page fetch in flight
   const [error, setError] = useState('')
-  const [saveModalCard, setSaveModalCard] = useState(null)  // pending save target
+  const [saveModalCard, setSaveModalCard] = useState(null)  // long-press save target
   const [savesThisVisit, setSavesThisVisit] = useState(0)
   const [surpriseShown, setSurpriseShown] = useState(false)
   const [surpriseOpen, setSurpriseOpen] = useState(false)
+
+  const initialDeckLengthRef = useRef(deck.length)
 
   useEffect(() => {
     isActiveRef.current = true
@@ -129,8 +151,9 @@ export default function DiscoveryPage() {
     }
   }, [hasMore])
 
-  // Initial load
+  // Initial load — skip if deck was restored from sessionStorage cache
   useEffect(() => {
+    if (initialDeckLengthRef.current > 0) return  // restored from cache, skip fetch
     fetchPage(0, true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -144,6 +167,18 @@ export default function DiscoveryPage() {
     }
   }, [deck.length, hasMore, cursor, fetchPage])
 
+  // Persist deck state to sessionStorage so back-navigation restores position
+  useEffect(() => {
+    if (deck.length === 0) return  // don't persist empty state
+    try {
+      sessionStorage.setItem(DECK_CACHE_KEY, JSON.stringify({
+        deck, cursor, hasMore, tasteState, ts: Date.now(),
+      }))
+    } catch {
+      // sessionStorage quota exceeded or unavailable — ignore
+    }
+  }, [deck, cursor, hasMore, tasteState])
+
   const topCard = deck[0] || null
 
   function advance() {
@@ -151,41 +186,99 @@ export default function DiscoveryPage() {
   }
 
   // -- Swipe handlers --
-  // Right (save): card slides off; deck pauses while modal awaits user choice.
-  // The card itself has already physically left, so we advance the deck and
-  // open the modal for the just-swiped card. Save success increments
-  // savesThisVisit. Save cancel = silent skip (still advanced — swipes are
-  // committal, mainstream Tinder semantics).
+  // Right (like): card slides off; call addLikedBuilding directly — no modal.
+  //   savesThisVisit increments to trigger the Surprise threshold.
   // Left (pass): card slides off; advance immediately.
   function onTinderSwipe(dir) {
-    pendingActionRef.current = dir === 'right' ? 'save' : 'pass'
+    if (longPressFired.current) return  // modal is open; suppress swipe
+    pendingActionRef.current = dir === 'right' ? 'like' : 'pass'
   }
 
   function onCardLeftScreen() {
     const action = pendingActionRef.current
     pendingActionRef.current = null
     if (!action) return
-    if (action === 'save') {
+    if (action === 'like') {
       const card = topCard
-      if (card) {
-        setSaveModalCard(card)
-      }
       advance()
+      const bldId = card?.canonical_bld_id || card?.image_id
+      if (bldId && bldId !== '__action_card__') {
+        addLikedBuilding(bldId).catch(() => {
+          // Fire-and-forget; errors are silent (card is already advanced)
+        })
+        setSavesThisVisit(s => s + 1)
+      }
     } else {
       advance()
     }
   }
 
+  // Long-press modal callbacks (SaveToBoardModal opened by 400ms long-press)
   function handleSaved() {
+    longPressFired.current = false
     setSaveModalCard(null)
     setSavesThisVisit(s => s + 1)
+    advance()
   }
 
   function handleSaveCancel() {
+    longPressFired.current = false
     setSaveModalCard(null)
   }
 
+  // -- Long-press handlers (400ms) --
+  function handleTouchStart(e) {
+    touchStartPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+    longPressFired.current = false
+    clearTimeout(longPressTimer.current)
+    longPressTimer.current = setTimeout(() => {
+      longPressFired.current = true
+      if (topCard) {
+        setSaveModalCard(topCard)
+      }
+    }, 400)
+  }
+
+  function handleTouchEnd() {
+    clearTimeout(longPressTimer.current)
+  }
+
+  function handleTouchMove(e) {
+    if (!touchStartPos.current) return
+    const dx = Math.abs(e.touches[0].clientX - touchStartPos.current.x)
+    const dy = Math.abs(e.touches[0].clientY - touchStartPos.current.y)
+    if (dx > 10 || dy > 10) clearTimeout(longPressTimer.current)
+  }
+
+  function handleMouseDown(e) {
+    touchStartPos.current = { x: e.clientX, y: e.clientY }
+    longPressFired.current = false
+    clearTimeout(longPressTimer.current)
+    longPressTimer.current = setTimeout(() => {
+      longPressFired.current = true
+      if (topCard) {
+        setSaveModalCard(topCard)
+      }
+    }, 400)
+  }
+
+  function handleMouseUp() {
+    clearTimeout(longPressTimer.current)
+  }
+
+  function handleMouseLeave() {
+    clearTimeout(longPressTimer.current)
+  }
+
+  function handleMouseMove(e) {
+    if (!touchStartPos.current) return
+    const dx = Math.abs(e.clientX - touchStartPos.current.x)
+    const dy = Math.abs(e.clientY - touchStartPos.current.y)
+    if (dx > 10 || dy > 10) clearTimeout(longPressTimer.current)
+  }
+
   function handleRetry() {
+    sessionStorage.removeItem(DECK_CACHE_KEY)
     setDeck([])
     setCursor(0)
     setHasMore(true)
@@ -220,7 +313,16 @@ export default function DiscoveryPage() {
       </div>
 
       {/* Card stack */}
-      <div style={{ width: CARD_WIDTH, height: CARD_HEIGHT, position: 'relative' }}>
+      <div
+        style={{ width: CARD_WIDTH, height: CARD_HEIGHT, position: 'relative' }}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        onTouchMove={handleTouchMove}
+        onMouseDown={handleMouseDown}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseLeave}
+        onMouseMove={handleMouseMove}
+      >
         {error && deck.length === 0 ? (
           <div style={{
             position: 'absolute', inset: 0,

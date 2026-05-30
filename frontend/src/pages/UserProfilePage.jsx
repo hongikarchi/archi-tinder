@@ -779,7 +779,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             marginBottom: 20, padding: '0 4px',
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <h3 style={{
                 color: 'var(--color-text)', fontSize: 20, fontWeight: 700,
                 margin: 0, letterSpacing: '-0.01em',
@@ -791,6 +791,36 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
               }}>
                 {boardsTotalCount}
               </span>
+              {isMe && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/liked-projects')}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    background: 'transparent',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 10, cursor: 'pointer',
+                    color: 'var(--color-text-2)', fontSize: 13, fontWeight: 600,
+                    padding: '0 12px', minHeight: 36,
+                    fontFamily: 'inherit',
+                    transition: 'border-color 0.18s cubic-bezier(0.4,0,0.2,1), color 0.18s cubic-bezier(0.4,0,0.2,1)',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = 'rgba(236,72,153,0.55)'
+                    e.currentTarget.style.color = '#ec4899'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = 'var(--color-border)'
+                    e.currentTarget.style.color = 'var(--color-text-2)'
+                  }}
+                >
+                  {/* Heart icon */}
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                  </svg>
+                  Liked Projects
+                </button>
+              )}
             </div>
             {/* P6: Edit button — owner-only, only when boards exist */}
             {isMe && boards.length > 0 && (

@@ -15,3 +15,4 @@ export { listProjects, getProject, updateProject, deleteProject, getBuildings, g
 export { fetchDiscoveryFeed, fetchBoardSurprise } from './discovery.js'
 export { getOffice, getUserProfile } from './profiles.js'
 export { followUser, unfollowUser, followOffice, unfollowOffice, getProjectReactors, reactToProject, unreactToProject } from './social.js'
+export { addLikedBuilding, getLikedBuildings } from './liked.js'
