@@ -520,12 +520,15 @@ export default function App() {
         }))
         setIsResultLoading(true)
         try {
-          const resultData = await api.getResult({
-            session_id: project.sessionId,
-          })
+          const backendId = project?.backendId
+          const [resultData, reportData] = await Promise.all([
+            api.getResult({ session_id: project.sessionId }),
+            backendId ? api.generateReport(backendId).catch(() => null) : Promise.resolve(null),
+          ])
           setProjects(prev => prev.map(p => p.id === activeProjectId ? {
             ...p,
             predictedLikes: resultData.predicted_like_images || [],
+            ...(reportData?.final_report ? { finalReport: reportData.final_report } : {}),
           } : p))
         } catch {
           // ResultsPage will attempt a fresh GET /result/ on entry.
