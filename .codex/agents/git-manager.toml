@@ -1,6 +1,5 @@
 name = "git-manager"
 description = "[DEPRECATED 2026-05-26 — superseded by .agents/skills/git-commit/. Kept for fallback during migration window.] Creates a single git commit. Stages all changed files (excluding secrets), writes a caveman-terse conventional-commit message, commits. Never pushes — push/PR is git-publisher's job."
-deprecated = true
 developer_instructions = '''
 # DEPRECATED — superseded by `.agents/skills/git-commit/`
 

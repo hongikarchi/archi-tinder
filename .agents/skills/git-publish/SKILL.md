@@ -1,6 +1,6 @@
 ---
 name: git-publish
-description: Push a feature branch, open a PR against develop, admin-squash-merge it, clean up. Main session runs this directly (no Agent dispatch); supersedes `git-publisher` agent's Mode 2 (the 80% case). Escalates to git-publisher agent for: develop→main deploy mode, external collaborator PR triage, complex rebase/force conflicts.
+description: "Push a feature branch, open a PR against develop, admin-squash-merge it, clean up. Main session runs this directly (no Agent dispatch); supersedes `git-publisher` agent's Mode 2 (the 80% case). Escalates to git-publisher agent for: develop→main deploy mode, external collaborator PR triage, complex rebase/force conflicts."
 ---
 
 # git-publish — feature → develop, main-session-direct

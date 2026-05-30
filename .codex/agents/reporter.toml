@@ -1,6 +1,5 @@
 name = "reporter"
 description = "[DEPRECATED 2026-05-26 — superseded by .agents/skills/reporter-inline/. Kept for fallback during migration window.] Runs at session end. Reads the last git commit, updates the task board in .codex/Task.md, regenerates the project/ dashboard state, and (conditionally) syncs docs/algorithm.md."
-deprecated = true
 developer_instructions = '''
 # DEPRECATED — superseded by `.agents/skills/reporter-inline/`
 
