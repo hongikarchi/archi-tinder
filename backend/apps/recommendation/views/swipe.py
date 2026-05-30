@@ -27,6 +27,135 @@ from ._shared import _get_profile, _progress, _liked_id_only
 logger = logging.getLogger('apps.recommendation')
 RC = settings.RECOMMENDATION
 
+# ── Question card constants (ALGO-QCARD-1) ────────────────────────────────────
+
+_AXIS_FIELDS = ('style', 'atmosphere', 'material_visual')
+
+_AXIS_QUESTIONS = {
+    'atmosphere': {'q': '어떤 분위기에 더 끌리세요?', 'a': '따뜻하고 아늑한', 'b': '차갑고 절제된'},
+    'material_visual': {'q': '재료감은 어느 쪽이 더 끌리세요?', 'a': '나무·돌 같은 자연재료', 'b': '콘크리트·유리 같은 인공재료'},
+    'style': {'q': '디자인 방향은 어느 쪽이 더 끌리세요?', 'a': '간결하고 미니멀한', 'b': '풍부하고 디테일한'},
+}
+
+_REFRESH_QUESTION = {
+    'type': 'refresh', 'axis': None,
+    'q': '마음에 드는 건물이 잘 없었네요.',
+    'a': '더 다양한 유형 보여줘',
+    'b': '지금 타입으로 계속',
+}
+
+
+def _update_question_state(session, action, canonical_bld_id):
+    """Update tag counts and consecutive-dislike counter for question card triggering."""
+    session.question_cooldown = max(0, (session.question_cooldown or 0) - 1)
+
+    if action == 'like':
+        from django.db import connections
+        try:
+            with connections['buildings'].cursor() as cur:
+                cur.execute(
+                    "SELECT style, atmosphere, material_visual"
+                    " FROM canonical_v2_buildings"
+                    " WHERE canonical_bld_id = %s AND is_publishable = true",
+                    [canonical_bld_id],
+                )
+                row = cur.fetchone()
+        except Exception as exc:
+            logger.warning('_update_question_state buildings fetch failed: %s', exc)
+            row = None
+
+        if row:
+            style_tags = row[0] or []
+            atm_tags = row[1] or []
+            mat_tags = row[2] or []
+            axis_tags = {
+                'style': style_tags,
+                'atmosphere': atm_tags,
+                'material_visual': mat_tags,
+            }
+            counts = dict(session.tag_axis_counts or {})
+            for axis, tags in axis_tags.items():
+                axis_counts = dict(counts.get(axis, {}))
+                for tag in tags:
+                    axis_counts[tag] = axis_counts.get(tag, 0) + 1
+                counts[axis] = axis_counts
+            session.tag_axis_counts = counts
+
+            all_tags = style_tags + atm_tags + mat_tags
+            recent = list(session.recent_like_tag_sets or [])
+            recent.append(all_tags)
+            if len(recent) > 3:
+                recent = recent[-3:]
+            session.recent_like_tag_sets = recent
+
+        session.q_card_consecutive_dislikes = 0
+
+    elif action == 'dislike':
+        session.q_card_consecutive_dislikes = (session.q_card_consecutive_dislikes or 0) + 1
+
+
+def _dominant_axis(counts, intersection_tags):
+    """Return the axis with the highest absolute count among intersection tags."""
+    best_axis, best_count = None, 0
+    for axis, axis_counts in counts.items():
+        if axis not in _AXIS_QUESTIONS:
+            continue
+        axis_total = sum(axis_counts.get(t, 0) for t in intersection_tags)
+        if axis_total > best_count:
+            best_count, best_axis = axis_total, axis
+    return best_axis
+
+
+def _build_refine_trigger(axis):
+    q = _AXIS_QUESTIONS.get(axis)
+    if not q:
+        return None
+    return {'type': 'refine', 'axis': axis,
+            'question': q['q'], 'option_a': q['a'], 'option_b': q['b']}
+
+
+def _check_question_trigger(session, action):
+    """Return question_trigger dict if a trigger condition is met, else None."""
+    if (session.question_cooldown or 0) > 0:
+        return None
+
+    # Refresh: consecutive dislikes >= 4
+    if action == 'dislike' and (session.q_card_consecutive_dislikes or 0) >= 4:
+        session.question_cooldown = 5
+        return {
+            'type': _REFRESH_QUESTION['type'],
+            'axis': _REFRESH_QUESTION['axis'],
+            'question': _REFRESH_QUESTION['q'],
+            'option_a': _REFRESH_QUESTION['a'],
+            'option_b': _REFRESH_QUESTION['b'],
+        }
+
+    if action != 'like':
+        return None
+
+    counts = session.tag_axis_counts or {}
+    total_count = sum(sum(v.values()) for v in counts.values())
+
+    # Refine condition A: intersection of last 3 liked card tags
+    recent = session.recent_like_tag_sets or []
+    if len(recent) == 3:
+        intersection = set(recent[0]) & set(recent[1]) & set(recent[2])
+        if intersection:
+            winning_axis = _dominant_axis(counts, intersection)
+            if winning_axis:
+                session.question_cooldown = 5
+                return _build_refine_trigger(winning_axis)
+
+    # Refine condition B: single tag >= 70% of total likes
+    if total_count >= 3:
+        for axis, axis_counts in counts.items():
+            for tag, cnt in axis_counts.items():
+                if cnt / total_count >= 0.70:
+                    session.question_cooldown = 5
+                    return _build_refine_trigger(axis)
+
+    return None
+
 
 def _merge_buffer_into_exposed(exposed_ids, client_buffer_ids):
     """
@@ -714,6 +843,11 @@ class SwipeView(APIView):
 
             _mark('select_done')
 
+            # Question card trigger state update (ALGO-QCARD-1).
+            # Called inside the transaction so question state is consistent with swipe row.
+            _update_question_state(session, action, canonical_bld_id)
+            question_trigger = _check_question_trigger(session, action)
+
             # Save session BEFORE prefetch so concurrent requests see updated exposed_ids.
             # pool_ids/pool_scores/current_pool_tier included unconditionally to persist
             # any in-place mutations from refresh_pool_if_low (A4 pool exhaustion guard).
@@ -721,6 +855,8 @@ class SwipeView(APIView):
                 'preference_vector', 'current_round', 'exposed_ids',
                 'phase', 'like_vectors', 'convergence_history', 'previous_pref_vector',
                 'pool_ids', 'pool_scores', 'current_pool_tier',
+                'tag_axis_counts', 'recent_like_tag_sets',
+                'question_cooldown', 'q_card_consecutive_dislikes',
             ])
 
             # Save copies for prefetch calculation outside transaction
@@ -992,4 +1128,68 @@ class SwipeView(APIView):
             # prefetch path served the response — useful for client perf debug +
             # required by test_first_swipe_hits_prefetch_cache (PR #145 F4).
             'prefetch_strategy': prefetch_strategy,
+            # ALGO-QCARD-1: question card trigger (null or {type, axis, question, option_a, option_b})
+            'question_trigger': question_trigger,
         })
+
+
+# ── Question Response (ALGO-QCARD-1) ─────────────────────────────────────────
+
+class QuestionResponseView(APIView):
+    """
+    POST /api/v1/analysis/sessions/<uuid:session_id>/question-responses/
+
+    Record the user's answer to a question card (type: refine | refresh).
+    Resets cooldown and consecutive-dislike counter. Emits a tag_answer SessionEvent.
+
+    Request body:
+        question_type:   "refine" | "refresh"
+        axis:            str | null   (axis name for refine; null for refresh)
+        selected_option: "A" | "B" | "skip"
+
+    Response 200:
+        { "accepted": true }
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, session_id):
+        profile = _get_profile(request)
+        if not profile:
+            return Response({'detail': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        session = AnalysisSession.objects.filter(session_id=session_id, user=profile).first()
+        if not session:
+            return Response({'detail': 'Session not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        question_type = request.data.get('question_type', '')
+        axis = request.data.get('axis')
+        selected_option = request.data.get('selected_option', '')
+
+        if question_type not in ('refine', 'refresh'):
+            return Response(
+                {'detail': 'question_type must be refine or refresh'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if selected_option not in ('A', 'B', 'skip'):
+            return Response(
+                {'detail': 'selected_option must be A, B, or skip'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Emit tag_answer event (fire-and-forget; never raises)
+        event_log.emit_event(
+            'tag_answer',
+            session=session,
+            user=profile,
+            question_type=question_type,
+            axis=axis,
+            selected_option=selected_option,
+        )
+
+        with transaction.atomic():
+            s = AnalysisSession.objects.select_for_update().get(session_id=session_id, user=profile)
+            s.question_cooldown = 5
+            s.q_card_consecutive_dislikes = 0
+            s.save(update_fields=['question_cooldown', 'q_card_consecutive_dislikes'])
+
+        return Response({'accepted': True}, status=status.HTTP_200_OK)

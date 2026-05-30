@@ -146,6 +146,8 @@ export default function App() {
   const [surprisePending, setSurprisePending] = useState(false)
   // Global toast state (type: 'info' | 'success' | 'warning' | 'error')
   const [globalToast, setGlobalToast] = useState(null) // {message, type}
+  // Pending in-session question triggered by the backend after a swipe
+  const [pendingQuestion, setPendingQuestion] = useState(null)
 
   // If session has a user but no access token, clear immediately
   useEffect(() => {
@@ -324,6 +326,7 @@ export default function App() {
   }
 
   async function initSession(projectId, filters, filterPriority = [], seedIds = [], existingSessionId = null, currentHint = null, visualDescription = null, projectName = 'Untitled', rawQuery = '', imageFocus = null) {
+    setPendingQuestion(null)
     setIsSwipeLoading(true)
     setIsSessionCompleted(false)
     try {
@@ -494,6 +497,9 @@ export default function App() {
 
       swipeRetryCount.current = 0
       setSwipeError(null)
+      if (result.question_trigger) {
+        setPendingQuestion(result.question_trigger)
+      }
       setSessionProgress({
         ...result.progress,
         confidence: result.confidence ?? null,
@@ -673,6 +679,18 @@ export default function App() {
     }
   }
 
+  async function handleQuestionAnswer(option) {
+    const q = pendingQuestion
+    setPendingQuestion(null)
+    if (!activeProject?.sessionId) return
+    api.submitQuestionResponse({
+      session_id: activeProject.sessionId,
+      question_type: q.type,
+      axis: q.axis ?? null,
+      selected_option: option,
+    }).catch(() => {})
+  }
+
   async function handleUpdateWithImages(id, preloadedImages, llmFilters = {}, filterPriority = [], visualDescription = null, imageFocus = null) {
     const project = projects.find(p => p.id === id)
     if (!project) return
@@ -809,6 +827,8 @@ export default function App() {
     },
     onResumeProject: handleResumeProject,
     onNewProjectSession: handleNewProjectSession,
+    questionTrigger: pendingQuestion,
+    onQuestionAnswer: handleQuestionAnswer,
   }
 
   return (

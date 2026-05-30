@@ -10,7 +10,7 @@
 export { getToken, setTokens, clearTokens, getLastCall } from './core.js'
 export { socialLogin, guestLogin, promoteAccount, devLogin, logout } from './auth.js'
 export { normalizeCard, getImageSource, emitImageLoadEvent } from './images.js'
-export { startSession, getSessionState, recordSwipe, parseQuery, getResult } from './sessions.js'
+export { startSession, getSessionState, recordSwipe, parseQuery, getResult, submitQuestionResponse } from './sessions.js'
 export { listProjects, getProject, updateProject, deleteProject, getBuildings, getBoardBuildings, bookmarkBuilding, generateReport, generateReportImage, createProject, VerifyRequiredError } from './projects.js'
 export { fetchDiscoveryFeed, fetchBoardSurprise } from './discovery.js'
 export { getOffice, getUserProfile } from './profiles.js'

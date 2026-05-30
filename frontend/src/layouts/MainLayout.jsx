@@ -9,6 +9,8 @@ export default function MainLayout({
   currentCard, cardResetToken, sessionProgress, isSessionCompleted, isSwipeLoading, isResultLoading, swipePending,
   onSwipe, onViewResults, onExtendSession,
   onExitToNewProject, onExitToHome,
+  questionTrigger = null,
+  onQuestionAnswer,
 }) {
   const location = useLocation()
   const navigate = useNavigate()
@@ -66,6 +68,8 @@ export default function MainLayout({
           onExtendSession={onExtendSession}
           onExitToNewProject={onExitToNewProject}
           onExitToHome={onExitToHome}
+          questionTrigger={questionTrigger}
+          onQuestionAnswer={onQuestionAnswer}
         />
       </div>
 

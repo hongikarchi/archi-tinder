@@ -2,6 +2,7 @@ import { useRef, useState, useEffect } from 'react'
 import TinderCard from 'react-tinder-card'
 import TutorialPopup from '../components/TutorialPopup.jsx'
 import SwipeCard, { CARD_WIDTH, CARD_HEIGHT } from '../components/SwipeCard.jsx'
+import QuestionCard from '../components/QuestionCard.jsx'
 
 /* ── LoadingCard ─────────────────────────────────────────────────────────── */
 function LoadingCard() {
@@ -300,6 +301,8 @@ export default function SwipePage({
   currentCard, cardResetToken = 0, progress, isCompleted, isLoading, isResultLoading = false, swipePending = 0,
   projectName, onSwipe, onViewResults, onExtendSession,
   onExitToNewProject, onExitToHome,
+  questionTrigger = null,
+  onQuestionAnswer,
 }) {
   const cardRef = useRef(null)
   const pendingAction = useRef(null)
@@ -391,6 +394,7 @@ export default function SwipePage({
 
   useEffect(() => {
     function handleKeyDown(e) {
+      if (questionTrigger) return
       if (isLoading || !currentCard) return
       if (showTutorial || showExitConfirm || showDismissConfirm || pendingAction.current) return
       if (swipedCardId.current === currentCard.image_id) return
@@ -408,7 +412,7 @@ export default function SwipePage({
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isLoading, currentCard, showTutorial, showExitConfirm, showDismissConfirm, galleryOpen]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isLoading, currentCard, showTutorial, showExitConfirm, showDismissConfirm, galleryOpen, questionTrigger]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (isCompleted) {
     const canContinue = !!progress?.can_continue
@@ -634,37 +638,44 @@ export default function SwipePage({
         {/* Card */}
         <div style={{ width: CARD_WIDTH, height: CARD_HEIGHT, position: 'relative' }}>
           {currentCard ? (
-            <>
-              <TinderCard
-                ref={cardRef}
-                key={`${currentCard.image_id}_${cardResetToken}_${localResetTick}`}
-                onSwipe={onTinderSwipe}
-                onCardLeftScreen={onCardLeftScreen}
-                preventSwipe={galleryOpen ? ['left', 'right', 'up', 'down'] : ['up', 'down']}
-                swipeRequirementType='position'
-                swipeThreshold={120}
-              >
-                <SwipeCard
-                  card={currentCard}
-                  onGalleryOpen={() => setGalleryOpen(true)}
-                  onGalleryClose={() => setGalleryOpen(false)}
-                />
-              </TinderCard>
-              {isLoading && (
-                <div style={{
-                  position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  borderRadius: 20, background: 'rgba(0,0,0,0.15)', pointerEvents: 'none',
-                }}>
+            questionTrigger ? (
+              <QuestionCard
+                trigger={questionTrigger}
+                onAnswer={onQuestionAnswer}
+              />
+            ) : (
+              <>
+                <TinderCard
+                  ref={cardRef}
+                  key={`${currentCard.image_id}_${cardResetToken}_${localResetTick}`}
+                  onSwipe={onTinderSwipe}
+                  onCardLeftScreen={onCardLeftScreen}
+                  preventSwipe={galleryOpen ? ['left', 'right', 'up', 'down'] : ['up', 'down']}
+                  swipeRequirementType='position'
+                  swipeThreshold={120}
+                >
+                  <SwipeCard
+                    card={currentCard}
+                    onGalleryOpen={() => setGalleryOpen(true)}
+                    onGalleryClose={() => setGalleryOpen(false)}
+                  />
+                </TinderCard>
+                {isLoading && (
                   <div style={{
-                    width: 32, height: 32, borderRadius: '50%',
-                    border: '3px solid rgba(255,255,255,0.2)',
-                    borderTopColor: '#fff',
-                    animation: 'spin 0.8s linear infinite',
-                  }} />
-                </div>
-              )}
-            </>
+                    position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    borderRadius: 20, background: 'rgba(0,0,0,0.15)', pointerEvents: 'none',
+                  }}>
+                    <div style={{
+                      width: 32, height: 32, borderRadius: '50%',
+                      border: '3px solid rgba(255,255,255,0.2)',
+                      borderTopColor: '#fff',
+                      animation: 'spin 0.8s linear infinite',
+                    }} />
+                  </div>
+                )}
+              </>
+            )
           ) : isLoading ? (
             <LoadingCard />
           ) : null}
