@@ -7,7 +7,7 @@
 
 ## Workflow Rules
 
-- **Session start** — read `## Now` first. If empty and the user is starting new work, move the matched `## Next` entry (under `### HIGH` / `### MEDIUM` / `### LOW`) into `## Now`. Or write a fresh entry if brand-new. One initiative slice at a time.
+- **Session start** — read `## Now` first. If empty and the user is starting new work, move the matched `## Next` entry (under `### X-HIGH` / `### HIGH` / `### MEDIUM` / `### LOW`) into `## Now`. Or write a fresh entry if brand-new. One initiative slice at a time.
 - **Mid-session** — if work in `## Now` gets deferred ("미루자"), move it back to `## Next` with a one-line rationale note. If a new sub-task appears, add it under the active Now entry's body or create a new Now entry.
 - **Session end (success)** — reporter moves `## Now` → `## Done` with PR ref + SHA. If the Now entry's note mentions a deferred follow-up (`Deferred: ...`), reporter also auto-surfaces a matching `## Next` entry per its sub-step 2a (see `.claude/agents/reporter.md`).
 
@@ -43,6 +43,7 @@
 - Long historical Done entries from before 2026-05-25 keep their legacy headers (`### #21 SWIPE-CALIBRATING — ...`) as archive — do not rewrite history.
 
 **Priority bucket semantics** (`## Next`):
+- **X-HIGH** — critical: a confirmed defect against the core taste-match promise or against data correctness, with file:line evidence (e.g. the 2026-05-31 swipe/discovery review). Pull before HIGH.
 - **HIGH** — specced, ready to pull into `## Now`. Open dimensions resolved or acceptable to resolve during implementation.
 - **MEDIUM** — uncategorised pending. Needs review before promotion (scope, urgency, prerequisites).
 - **LOW** — explicitly deferred / skipped. Not blocking; revisit when context shifts (traffic, prereq shipped, priority change).
@@ -59,12 +60,55 @@ _(none — no active initiative slice with a PR in flight.)_
 
 ## Next
 
-> Backlog grouped by priority bucket (`### HIGH` / `### MEDIUM` / `### LOW`). Each
+> Backlog grouped by priority bucket (`### X-HIGH` / `### HIGH` / `### MEDIUM` / `### LOW`). Each
 > item is a `#### <SLUG>` entry one level deeper. Bucket semantics described in
 > `## Workflow Rules` above. Phase 16-18 dimensions inlined here (formerly
 > `docs/specs/*`, absorbed 2026-05-24). Algorithm theory + production
 > hyperparameters still live in `docs/algorithm.md` (admin-owned, reporter syncs
 > Production Value column only).
+
+### X-HIGH
+
+> Critical — confirmed defect against the core taste-match promise or against data
+> correctness, surfaced by the 2026-05-31 swipe / discovery review
+> (`.claude/reviews/2026-05-31-swipe-discovery-review.md`). Pull before `### HIGH`.
+
+#### BACK-RECOMMEND-4 — Discovery 좋아요가 추천에 안 먹힘
+Discovery right-swipe likes are write-only to the recommendation engine: they land in `UserProfile.liked_building_ids` but nothing reads that field back into Discovery's own ranking or exclusion. A Discovery-only user (never runs a Taste session) gets a permanently random, "cold" feed no matter how many buildings they like — directly violating the core promise ("the app already noticed my taste") on the Discovery surface itself.
+
+Verified 2026-05-31 (`develop@0a0e959`):
+- `backend/apps/recommendation/engine.py:2352` — `compute_user_taste_vector(profile)` reads `Project.objects...values_list('liked_ids')` ONLY; never reads `UserProfile.liked_building_ids`.
+- `backend/apps/recommendation/views/discovery.py:55-73` — the feed exclude-set is built from `Project.liked_ids/disliked_ids/saved_ids` only; `liked_building_ids` is absent → a Discovery-liked building can REAPPEAR in the feed later (the F1b half).
+- `backend/apps/accounts/views.py:916-922` — `liked_building_ids` is written only by `LikedBuildingsView`, read only by its own GET + the profile grid (PR #157).
+- Taste likes (`project.liked_ids`) DO warm Discovery already, so this bug is Discovery-native-likes-only, not a total break.
+
+Fix direction:
+- Feed `UserProfile.liked_building_ids` into BOTH `compute_user_taste_vector` (weighted comparably to project likes) AND the Discovery + board-surprise exclude-sets.
+- Fire `evict_taste(profile.id)` (`caches.py:42`) inside `LikedBuildingsView.post` once the taste vector depends on `liked_building_ids`, else the 5-min cached vector ignores fresh likes.
+- `engine.py` is collaborator-owned per CLAUDE.md `## Rules` — coordinate with the algorithm owner before touching `compute_user_taste_vector`.
+
+Acceptance: a fresh profile that likes N buildings in Discovery (no Taste session) flips `taste_state` cold→warm and stops re-showing already-liked buildings; pytest covering taste-vector inclusion + exclude-set membership; Discovery TTFC not regressed.
+
+#### FRONT-UX-8 — 질문 답변 전송 실패 시 무음 유실
+In-session QuestionCard answers are fire-and-forget: a failed POST drops the answer with no retry and no user feedback, while the UI advances as if it succeeded — so the taste-axis adjustment from that question silently never lands on the backend.
+
+Code ref (`develop@0a0e959`):
+- `frontend/src/App.jsx:683-692` — `handleQuestionAnswer` calls `setPendingQuestion(null)` first, then `api.submitQuestionResponse({...}).catch(() => {})`. The empty catch swallows network / 5xx errors after the card is already dismissed.
+
+Fix direction: keep the optimistic clear (UX needs the card to dismiss), but on `.catch` surface a toast and either re-queue the question or emit telemetry. Same anti-pattern as `FRONT-UX-7` (Discovery like silent failure) — consider one shared `reportWriteError(toast)` helper (or the existing `archithon:toast` custom-event path) for both call sites.
+
+Acceptance: a forced submit failure shows user feedback and does not silently lose the answer; no regression to the normal answer→next-card flow.
+
+#### FRONT-UX-9 — 모바일 갤러리 세로 스크롤 깨짐 (검증 필요)
+Suspected (high-confidence, NOT yet browser-confirmed): the in-card gallery's vertical scroll is dead on mobile because the swipe machinery cancels the native touch scroll. Likely a PR #158 regression — the in-card flip was only just restored from the F5 navigation band-aid, so this surface is freshly re-exposed.
+
+Two converging code mechanisms (`develop@0a0e959`):
+- `frontend/src/components/SwipeCard.jsx:183` sets `touchAction: 'none'` on the card root; the gallery scroll div (`:346-355`) sets no `touch-action` of its own → an ancestor `none` disables pan on descendant scroll containers in WebKit/Blink.
+- `react-tinder-card/index.js:174-176` calls `ev.preventDefault()` on `touchstart` for any element whose `className` lacks `'pressable'`; the gallery scroll div has no such class → the library cancels the scroll gesture.
+
+VERIFY FIRST: drive a mobile viewport (e.g. 390×844), open a card gallery, attempt a vertical drag-scroll. If broken, fix = `touchAction: 'pan-y'` on the gallery scroll div and/or add the `'pressable'` className escape hatch to it. If NOT reproduced, downgrade or close this entry.
+
+Acceptance: mobile gallery scrolls vertically through all photos; front-face swipe gesture still works.
 
 ### HIGH
 
@@ -183,7 +227,21 @@ Three implementation options (admin decision needed before fix):
 - **Option 2 (gallery self-contained)** — add `onMouseDown`/`onMouseMove` `stopPropagation` to the gallery-face scroll wrapper (matches the existing touch handlers) and move ESC handling inside SwipeCard. SwipePage's `galleryOpen` state becomes dead code; cleanup required.
 - **Option 3 (refactor)** — remove `galleryOpen` from SwipePage entirely, fold gesture-blocking + ESC into SwipeCard. Cleaner separation; broader diff.
 
+2026-05-31 review (`.claude/reviews/2026-05-31-swipe-discovery-review.md` F3) added two facts: (1) `preventSwipe` IS read live — react-tinder-card rebinds its gesture listeners when the prop changes (`node_modules/react-tinder-card/index.js:146/262`), so Option 1 works without a card remount (no flip reset). (2) The deeper root cause is that react-tinder-card binds NATIVE `mousedown`/`touchstart` listeners on its own element (`:183/192`); a React-synthetic `stopPropagation` from the gallery child fires AFTER those native listeners, so a child cannot fully suppress the parent drag via synthetic events. This favors Option 3 (lift the gallery into a sibling overlay) as the real fix — Options 1/2 still leave a visual drag-wobble because `handleMove` runs on every mousemove while `preventSwipe` only gates the release flick.
+
 Acceptance: ESC closes the gallery on SwipePage; desktop mouse drag on the gallery face does not discard the card; DiscoveryPage unchanged. Authorized to defer follow-up per user decision 2026-05-29 ("PR 그대로 merge — 작은 버그는 후속").
+
+#### FRONT-UX-10 — Discovery 갤러리 위 long-press 오작동
+On the Discovery page (desktop only), pressing-and-holding the mouse (>400ms) over an open card gallery opens the Save-to-Board modal over it, because the gallery's pointer-event `stopPropagation` does not stop the separate `mousedown` that DiscoveryPage's long-press listener uses.
+
+Code refs (`develop@0a0e959`):
+- `frontend/src/pages/DiscoveryPage.jsx:316-325` — card-stack container wires `onMouseDown={handleMouseDown}` → 400ms long-press → `SaveToBoardModal`.
+- `frontend/src/components/SwipeCard.jsx:313-314,390-391` — gallery buttons stop only `onPointerDown`/`onPointerUp`; `:347-348` gallery scroll stops only `onTouchStart`/`onTouchMove`. No mouse handler on the gallery, and pointer `stopPropagation` ≠ `mousedown`.
+- Touch is masked by the existing touch stopPropagation → desktop-only.
+
+Fix direction: subsumed by the FRONT-UX-6 structural fix (lift gallery out of TinderCard into a sibling overlay); interim = add `onMouseDown` `stopPropagation` to the gallery scroll wrapper + buttons. Cross-ref the 2026-05-31 review F5.
+
+Acceptance: holding the mouse over the Discovery gallery does not open the Save-to-Board modal; long-press still works on the card front face.
 
 #### FRONT-UX-7 — Discovery 우측 스와이프 좋아요 무음 실패
 PR #157 (`77ffd6e`, 2026-05-29) `DiscoveryPage.jsx` right-swipe handler calls `addLikedBuilding(card.image_id).catch(() => {})`. On API failure (network blip, 5xx, auth gone, rate limit) the user gets no feedback — the swipe animation completes and the like silently does not persist. User believes the building is saved when it is not.
