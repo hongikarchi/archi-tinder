@@ -23,10 +23,11 @@ cd make_web
 ./tools/onboarding.sh           # interactive: hooks + CODEOWNERS handle registration
 ```
 
-The script asks for your role (A=Algorithm / B=SNS / C=Admin) and your GitHub
-handle, then replaces the matching `@TODO-role-*` placeholder in `.github/CODEOWNERS`.
-Commit the CODEOWNERS edit on your first feature branch — see "Common pitfalls"
-below.
+The script installs the hooks and asks for your role + GitHub handle.
+`.github/CODEOWNERS` is currently pre-filled with `@hongikarchi` (sole admin) —
+no `@TODO-role-*` placeholders remain, so onboarding just flags this. When a real
+Role A/B collaborator joins, replace the relevant `@hongikarchi` entries with
+their handle on the first feature branch.
 
 Then set up your environment:
 

@@ -29,7 +29,7 @@
 
 ## Risk zone
 
-<!-- Check any that apply. Triggers extra reviewer/security pass per CLAUDE.md hybrid policy. -->
+<!-- Check any that apply. Triggers an extra code-review + security-manager pass. -->
 
 - [ ] Auth / token / session handling
 - [ ] New external API integration (Gemini, Google OAuth, etc.)

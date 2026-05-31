@@ -16,9 +16,11 @@ cd make_web
 `onboarding.sh` walks you through 3 steps:
 1. Installs the migration-conflict pre-push hook (calls `install-hooks.sh`)
 2. Asks your role (A=Algorithm / B=SNS / C=Admin)
-3. Asks your GitHub handle and replaces the matching `@TODO-role-*` placeholder
-   in `.github/CODEOWNERS` with `@yourhandle`. You commit the CODEOWNERS edit
-   yourself on your first feature branch — see "First PR sanity check" below.
+3. Asks your GitHub handle. `.github/CODEOWNERS` is currently pre-filled with
+   `@hongikarchi` (sole admin) — no `@TODO-role-*` placeholders remain, so
+   onboarding just flags this. When a real Role A/B collaborator joins, replace
+   the relevant `@hongikarchi` entries with their handle (per the CODEOWNERS
+   header) on the first feature branch.
 
 If you only want to install hooks (e.g. CODEOWNERS already has your handle),
 run `./tools/install-hooks.sh` directly instead.
@@ -225,7 +227,8 @@ to confirm your local + GitHub setup works end-to-end:
 6. `gh pr create --base develop`
 7. Confirm visually on GitHub: CI runs (status checks `backend` + `frontend`),
    CODEOWNERS auto-assigns admin as reviewer.
-8. After admin approves + CI green: Squash and merge.
+8. After CI green → admin squash-merges via `gh pr merge --admin --squash`
+   (sole-admin Code Owner gate is self-unsatisfiable — see Branch model).
 
 If any step fails, surface the error to the admin — usually a setup detail to
 fix (e.g., status check name mismatch, missing CODEOWNERS handle, hook not
