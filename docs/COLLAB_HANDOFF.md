@@ -34,7 +34,8 @@ protection will reject the push.
 
 Role prefixes: `algo-` (algorithm), `sns-` (social/profile), `admin-`
 (everything else). The Make DB owner uses `db-` or `algo-`; pick one and stay
-consistent.
+consistent. Local AI agents (Claude Code / Codex) use `claude-` / `codex-` — see
+`CONTRIBUTING.md` § Concurrent agents.
 
 Full rules: `CLAUDE.md` § Branch Model + `CONTRIBUTING.md` § Branch model.
 

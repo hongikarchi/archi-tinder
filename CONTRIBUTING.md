@@ -77,17 +77,23 @@ develop (integration — PR target for all feature work)
 feature/algo-<topic>      ← Role A's work branch
 feature/sns-<topic>       ← Role B's work branch
 feature/admin-<topic>     ← Role C's (admin) work branch
+feature/claude-<topic>    ← local Claude Code  (§ Concurrent agents)
+feature/codex-<topic>     ← local Codex        (§ Concurrent agents)
 ```
 
 **Rules:**
 
 1. `main` is **protected** — PR + status check + Code Owner approval required.
-2. `develop` is **protected** — PR + status check required (admin bypass disabled;
-   admin's PRs go through the same gate).
+2. `develop` is **protected** — PR + status check required. Code Owner review is
+   nominally required too, but sole-admin CODEOWNERS = PR author makes it
+   structurally unsatisfiable → **admin-bypass squash-merge** (`gh pr merge
+   --admin --squash`) is the current workflow until collaborators join (mirrors
+   `CLAUDE.md`). The PR + status-check requirement still holds — never direct-push.
 3. Each developer creates `feature/<role>-<short-topic>` per task. Examples:
    - `feature/algo-mmr-lambda-tuning`
    - `feature/sns-board-detail-integration`
    - `feature/admin-search-relevance-tweak`
+   - `feature/claude-<topic>` / `feature/codex-<topic>` — local AI agents (§ Concurrent agents)
 4. PRs target **`develop`**, not `main`.
 5. Periodically (when develop has accumulated enough vetted features), admin opens
    a `develop → main` PR and squash-merges to deploy.
@@ -119,8 +125,9 @@ EOF
 # 6. CI runs (.github/workflows/ci.yml — pytest + lint + makemigrations check).
 #    Admin reviews the PR for deeper analysis.
 
-# 7. After review pass + Code Owner approval + CI green → admin clicks
-#    "Squash and merge" on GitHub.
+# 7. After admin review + CI green → admin squash-merges with
+#    `gh pr merge <N> --admin --squash` (Code Owner review is self-unsatisfiable
+#    for the sole admin → bypassed until collaborators join; see Branch model).
 
 # 8. Local cleanup
 git checkout develop && git pull origin develop

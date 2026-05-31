@@ -4,12 +4,12 @@
 
 -
 
-## Spec ref
+## Spec / task ref
 
-<!-- Link to docs/specs/<file>.md §<section>, or N/A if no spec applies. -->
+<!-- Link to the relevant `.claude/Task.md` entry, or N/A if none applies.
+     (The old docs/specs/*.md folder was absorbed into .claude/Task.md 2026-05-24.) -->
 
-- spec: <!-- e.g. docs/specs/phase16-recommendation-expansion.md §2 -->
-- task id: <!-- e.g. REC1, BOARD3, etc. (from .claude/Task.md Development Roadmap) -->
+- task: <!-- e.g. `.claude/Task.md` #### BACK-RECOMMEND-4 (from ## Now / ## Next) -->
 
 ## Test plan
 
@@ -19,13 +19,13 @@
 - [ ] Manual smoke test in browser (if UI-affecting)
 - [ ] Migration applied to local dev DB (if schema change)
 
-## /review status
+## Review status
 
-<!-- Admin runs /review in review terminal. Check the box that matches. -->
+<!-- code-review + security-manager agents run pre-push (no slash command). -->
 
-- [ ] REVIEW-PASSED (clean)
-- [ ] REVIEW-PASSED with N MINOR (non-blocking; see `.claude/reviews/<sha>.md`)
-- [ ] /review not yet run
+- [ ] code-review + security PASS (clean)
+- [ ] PASS with N MINOR (non-blocking; see `.claude/reviews/<sha>.md`)
+- [ ] not yet reviewed
 
 ## Risk zone
 

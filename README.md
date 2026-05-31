@@ -58,6 +58,7 @@ will reject violations, but the AI may still try and waste time.
    - Role A (algorithm) → `feature/algo-<topic>`, e.g. `feature/algo-mmr-tuning`
    - Role B (SNS / profiles / boards) → `feature/sns-<topic>`
    - Role C (admin / everything else) → `feature/admin-<topic>`
+   - Local AI agents (Claude Code / Codex) → `feature/claude-<topic>` / `feature/codex-<topic>` (see `CONTRIBUTING.md` § Concurrent agents)
 2. **Always sync from `develop` before starting**:
    ```bash
    git checkout develop
@@ -108,7 +109,9 @@ git push -u origin feature/algo-mmr-tuning
 gh pr create --base develop
 
 # 7. Admin reviews the PR
-# 8. After CI green + admin approval → admin clicks "Squash and merge"
+# 8. After CI green + admin review → admin squash-merges
+#    (`gh pr merge --admin --squash`; Code Owner gate self-unsatisfiable for the
+#    sole admin, bypassed until collaborators join)
 
 # 9. Local cleanup
 git checkout develop && git pull origin develop
