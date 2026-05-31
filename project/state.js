@@ -2,10 +2,10 @@
  * project/state.js — ArchiTinder Make Web project state.
  *
  * Maintained by `reporter-inline` skill (2026-05-26+) — runs INLINE in the
- * feature PR before squash merge. Legacy `reporter` agent kept as deprecated
- * fallback. Hand-edited only inside `systemFlow` / `recommendationFlow` /
+ * feature PR before squash merge. Hand-edited only inside `systemFlow` /
+ * `recommendationFlow` /
  * `agentFlow` Mermaid bodies and the `milestones` archive (semi-static); all
- * other sections are rebuilt from `.claude/Task.md`, `gh pr list`, and
+ * other sections are rebuilt from `Task.md`, `gh pr list`, and
  * `.claude/agents/<name>.md` + `.claude/skills/<slug>/SKILL.md` frontmatter.
  *
  * Loaded via <script> by `project/dashboard.html`, which opens by double-click
@@ -28,12 +28,19 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-05-31 09:30 KST',
+    updatedAt: '2026-06-01 KST',
     head: '61c9ee1',
     branch: 'develop',
   },
 
   done: [
+    {
+      id: 'INFRA-MULTIAGENT-1',
+      title: 'One-clone-per-worker 모델 + 에이전트 config 전면 정비 (supersedes PR #166 worktree)',
+      completedAt: '2026-06-01',
+      prs: [],
+      note: 'PR #166 worktree 격리 폐기 → one-clone-per-worker: 작업자(사람/AI)마다 자기 clone + 자기 .git + 자기 feature 브랜치 + 자기 PR. 공유 .git이 2026-05-31 HEAD 오염 경로였음(Codex checkout이 메인 clone HEAD를 develop 밖으로 이동). 실패모드 분리: HEAD 충돌(해결=별도 .git) + merge 충돌(해결=파일 스코프 분리). Claude=메인 clone make_web(터미널/백엔드 경향), Codex=make_web-codex(브라우저/프론트 경향) — 경향=기본값이지 벽 아님. 브랜치 prefix: 팀 feature/<role>-(algo/sns/admin) 유지, 로컬 에이전트 feature/claude-* / feature/codex-*. Task 보드 루트 통합(.claude+.codex → 루트 Task.md, 76 refs / 33 files). deprecated agent git-manager+reporter 삭제(git-commit+reporter-inline skill 대체). reporter-inline Model 1(publish 전, task-ID 키잉). 해결된 plan 4개 archive + stale ## PR Plan neuter(publish 게이트 오작동 방지). CONTRIBUTING canonical + CLAUDE/AGENTS/WORKFLOW×2 미러. Pure docs/config → app-test skip. PR# pending squash.',
+    },
     {
       id: 'SNS-RESULTS-UI-1',
       title: 'ResultsPage UI overhaul — Liked 카드 노출 + 추천 그리드',
@@ -312,20 +319,8 @@ window.PROJECT_STATE = {
       effort: 'default',
     },
     {
-      name: 'git-manager',
-      role: 'Single commit — stages changed files (excluding secrets), writes caveman-terse conventional-commit message. Never pushes. (deprecated — superseded by .claude/skills/git-commit/)',
-      model: 'haiku',
-      effort: 'default',
-    },
-    {
       name: 'git-publisher',
       role: 'Edge-case publisher. Mode 3 develop→main deploy + post-deploy develop force-reset + external PR triage + complex rebase + push rejection / mid-merge failure. Routine feature→develop publishes go through git-publish skill (not this agent).',
-      model: 'sonnet',
-      effort: 'default',
-    },
-    {
-      name: 'reporter',
-      role: 'Session-end — updates Task.md, regenerates this dashboard state, conditionally syncs docs/algorithm.md. (deprecated — superseded by .claude/skills/reporter-inline/)',
       model: 'sonnet',
       effort: 'default',
     },

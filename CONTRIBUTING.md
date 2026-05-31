@@ -1,7 +1,9 @@
 # Contributing to Make Web
 
 3-person team workflow. main + develop + feature/* branches with PR-only landing
-and admin review. Read this once before your first commit.
+and admin review. Read this once before your first commit. Local AI agents
+(Claude Code, Codex) are workers too — same model, each in its **own clone** (see
+§ Concurrent agents).
 
 ## Setup (one-time per clone)
 
@@ -14,9 +16,11 @@ cd make_web
 `onboarding.sh` walks you through 3 steps:
 1. Installs the migration-conflict pre-push hook (calls `install-hooks.sh`)
 2. Asks your role (A=Algorithm / B=SNS / C=Admin)
-3. Asks your GitHub handle and replaces the matching `@TODO-role-*` placeholder
-   in `.github/CODEOWNERS` with `@yourhandle`. You commit the CODEOWNERS edit
-   yourself on your first feature branch — see "First PR sanity check" below.
+3. Asks your GitHub handle. `.github/CODEOWNERS` is currently pre-filled with
+   `@hongikarchi` (sole admin) — no `@TODO-role-*` placeholders remain, so
+   onboarding just flags this. When a real Role A/B collaborator joins, replace
+   the relevant `@hongikarchi` entries with their handle (per the CODEOWNERS
+   header) on the first feature branch.
 
 If you only want to install hooks (e.g. CODEOWNERS already has your handle),
 run `./tools/install-hooks.sh` directly instead.
@@ -75,17 +79,23 @@ develop (integration — PR target for all feature work)
 feature/algo-<topic>      ← Role A's work branch
 feature/sns-<topic>       ← Role B's work branch
 feature/admin-<topic>     ← Role C's (admin) work branch
+feature/claude-<topic>    ← local Claude Code  (§ Concurrent agents)
+feature/codex-<topic>     ← local Codex        (§ Concurrent agents)
 ```
 
 **Rules:**
 
 1. `main` is **protected** — PR + status check + Code Owner approval required.
-2. `develop` is **protected** — PR + status check required (admin bypass disabled;
-   admin's PRs go through the same gate).
+2. `develop` is **protected** — PR + status check required. Code Owner review is
+   nominally required too, but sole-admin CODEOWNERS = PR author makes it
+   structurally unsatisfiable → **admin-bypass squash-merge** (`gh pr merge
+   --admin --squash`) is the current workflow until collaborators join (mirrors
+   `CLAUDE.md`). The PR + status-check requirement still holds — never direct-push.
 3. Each developer creates `feature/<role>-<short-topic>` per task. Examples:
    - `feature/algo-mmr-lambda-tuning`
    - `feature/sns-board-detail-integration`
    - `feature/admin-search-relevance-tweak`
+   - `feature/claude-<topic>` / `feature/codex-<topic>` — local AI agents (§ Concurrent agents)
 4. PRs target **`develop`**, not `main`.
 5. Periodically (when develop has accumulated enough vetted features), admin opens
    a `develop → main` PR and squash-merges to deploy.
@@ -117,58 +127,92 @@ EOF
 # 6. CI runs (.github/workflows/ci.yml — pytest + lint + makemigrations check).
 #    Admin reviews the PR for deeper analysis.
 
-# 7. After review pass + Code Owner approval + CI green → admin clicks
-#    "Squash and merge" on GitHub.
+# 7. After admin review + CI green → admin squash-merges with
+#    `gh pr merge <N> --admin --squash` (Code Owner review is self-unsatisfiable
+#    for the sole admin → bypassed until collaborators join; see Branch model).
 
 # 8. Local cleanup
 git checkout develop && git pull origin develop
 git branch -d feature/algo-mmr-lambda-tuning
 ```
 
-## Concurrent agents — working-directory isolation (git worktree)
+## Concurrent agents — one clone per worker (Claude Code + Codex)
 
-Multiple AI agents (Claude Code, Codex, …) sometimes work on this repo at the
-same time. **Never run two agent sessions in the same checkout.** A single
-working tree has one `HEAD`; if agent B checks out its branch, agent A's `HEAD`
-moves too — branches cross, a stray `git pull` fast-forwards the wrong branch,
-and uncommitted work tangles. (This bit us 2026-05-31 when a Claude and a Codex
-session shared the main checkout.)
+This repo is often worked by more than one agent at once. Locally the maintainer
+runs **Claude Code** (in a cmux terminal) and **Codex** (in a web browser, for
+visual UI/UX) at the same time — on top of the distributed human team above. One
+rule keeps all of them from colliding:
 
-**Rule: one session per working directory.** The main checkout (`make_web/`) is
-the primary session; each additional concurrent agent gets its own **git
-worktree** — a separate working dir + `HEAD` that shares the one `.git`.
+> **Every worker — a remote human teammate OR a local AI tool — owns ONE working
+> directory with its OWN `.git`, works on its own `feature/*` branch, and opens
+> its own PR to `develop`. No worker ever checks out or commits in another
+> worker's directory.**
+
+The human team already lives by this: each teammate has their own **clone**, so
+their `HEAD`s can never touch. Local AI tools get the same treatment — **each its
+own clone** — which makes them first-class workers, indistinguishable from a
+remote teammate. There is no special "local multi-agent" model; it is the same
+clone-per-worker model.
+
+Two **independent** failure modes — you need both fixes:
+
+| Failure | Cause | Fix |
+|---|---|---|
+| **HEAD collision** | two sessions share ONE working dir → one `HEAD`; one's `checkout`/`pull` drags the other's | **separate `.git`** (own clone) |
+| **Merge conflict** | two workers edit the same files on different branches | **scope split** (assign files per task) |
+
+Scope-naming alone does NOT prevent the HEAD collision; isolation alone does NOT
+prevent merge conflicts.
+
+### Mechanism: a separate clone (NOT a worktree)
 
 ```bash
-# Give another agent its own worktree (persistent SIBLING dir — NOT /tmp, which a
-# reboot wipes along with any uncommitted work):
-git worktree add ../make_web-<agent> -b feature/<role>-<topic> develop
-
-git worktree list                       # all worktrees + their branches
-git worktree remove ../make_web-<agent> # when done (refuses if dirty — commit/push first)
-git worktree prune                      # drop stale links
+# Give a second local agent (e.g. Codex) its OWN clone — its own .git:
+git clone <repo-url> ../make_web-codex
+cd ../make_web-codex
+./tools/install-hooks.sh                     # own clone → own hooks (one-time; a clone's .git is a real dir, so this works)
+cp ../make_web/backend/.env backend/.env     # working files are NOT shared between clones
+cd frontend && npm install                   # own node_modules
+# then launch the agent with ../make_web-codex as its working directory
 ```
 
-- The same branch can be checked out in only one worktree (git enforces this), so
-  the cross-wire collision is structurally impossible across worktrees.
-- Branch naming and the `feature/<role>-<topic>` → PR → `develop` model are
-  unchanged. The worktree **directory name** disambiguates the agent.
-- **Per-worktree setup**: copy in your own `.env`, run your own `npm install` /
-  venv — only `.git` is shared, working files are not. **Hooks are inherited
-  automatically** (worktrees share the common `.git/hooks`), so the migration
-  pre-push hook needs no reinstall. **Do NOT run `tools/install-hooks.sh` or
-  `tools/onboarding.sh` from inside a worktree** — a worktree's `.git` is a
-  pointer *file*, not a directory, so those scripts error. Run them only from the
-  main checkout.
-- **Sub-agent isolation is a different thing.** Claude Code's Agent tool
-  `isolation:"worktree"` (and Codex's worktree/sandbox mode, if used) isolate
-  parallel file-mutating *sub-agents* within one session. That does NOT replace
-  the session-level placement above and does NOT prevent two top-level sessions
-  from colliding.
+A clone has its **own `.git`** → another tool literally cannot reach in to move a
+`HEAD`. We deliberately do **NOT** use `git worktree` for session isolation:
+worktrees **share one `.git`**, and on **2026-05-31** that shared `.git` was
+exactly how a Codex session moved the main checkout's `HEAD` onto its own branch
+(`feature/codex-loginpage`) — the collision recurred *despite* the worktree docs.
+The disk cost of a clone over a worktree is only the `.git` objects;
+`node_modules`/venv/`.env` are per-directory either way.
 
-The **launch convention is the reliable layer**: whoever starts a second agent
-points it at its own worktree dir before it begins. The session-start
-`git worktree list` check in `CLAUDE.md` / `AGENTS.md` is a backstop, not the
-guarantee.
+### Who works where
+
+| Agent | Launch | Clone | Tendency (a default, NOT a hard wall) |
+|---|---|---|---|
+| **Claude Code** | cmux terminal | the main clone `make_web/` | backend / API / recommendation-algorithm / DB |
+| **Codex** | web browser (visual UI/UX) | a separate clone `make_web-codex/` | frontend / UI / UX (`frontend/src/**`) |
+
+- Scope is assigned **per task** — the back/front split is just the usual
+  tendency. At task start, name which files/area each tool owns and keep them
+  non-overlapping so the two branches don't merge-conflict. If a task genuinely
+  needs both to touch the same files: sequence it, or use one tool.
+- **API contract = a named hand-off**, not free concurrency: when a backend change
+  alters a request/response shape the frontend consumes, coordinate it explicitly.
+- **Branch naming**: local AI agents use `feature/claude-<topic>` /
+  `feature/codex-<topic>` (the prefix tells the admin which clone a PR came from).
+  The human team's `feature/<role>-<topic>` (algo/sns/admin) is unchanged.
+- Both clones push to the same remote and PR to `develop` exactly like a human.
+
+### Sub-agent isolation is a different thing
+
+Claude Code's Agent tool `isolation:"worktree"` (and Codex's worktree/sandbox
+mode) isolate parallel file-mutating *sub-agents* within ONE session. That is
+unrelated to the per-session clone above and does NOT prevent two top-level
+sessions from colliding.
+
+The **reliable layer is launch placement**: each tool is started in its own clone
+(Claude in `make_web/`, Codex in `make_web-codex/`). The session-start check in
+`CLAUDE.md` / `AGENTS.md` (confirm you are in your own clone on your own branch)
+is a backstop, not the guarantee.
 
 ## First PR sanity check (recommended after onboarding)
 
@@ -183,7 +227,8 @@ to confirm your local + GitHub setup works end-to-end:
 6. `gh pr create --base develop`
 7. Confirm visually on GitHub: CI runs (status checks `backend` + `frontend`),
    CODEOWNERS auto-assigns admin as reviewer.
-8. After admin approves + CI green: Squash and merge.
+8. After CI green → admin squash-merges via `gh pr merge --admin --squash`
+   (sole-admin Code Owner gate is self-unsatisfiable — see Branch model).
 
 If any step fails, surface the error to the admin — usually a setup detail to
 fix (e.g., status check name mismatch, missing CODEOWNERS handle, hook not
@@ -212,7 +257,7 @@ git checkout develop && git fetch origin develop && git reset --hard origin/deve
 ```
 
 **This is the only permitted force on a shared branch.** It is codified as a
-carve-out in `CLAUDE.md` § HARD RULE 4 and in `.claude/agents/git-publisher.md`
+carve-out in `CLAUDE.md` / `AGENTS.md` § HARD RULE 4 and in `.claude/agents/git-publisher.md`
 § Mode 3 step 5. Precondition: every commit on `origin/develop` must be
 content-equal to `origin/main` (no in-flight feature PR targets `develop`).
 The `git-publisher` agent runs this automatically after a deploy merge.
@@ -233,10 +278,10 @@ Body: include context (spec ref, investigation #, decision rationale).
 ## Review
 
 The `orchestrate` skill runs the `code-review` and `security-manager` sub-agents
-on a feature branch before push (the `app-test` sub-agent runs the pre-push
-browser + drift gate). Each returns a PASS / FAIL verdict; FAIL feeds the fix
-loop. Review scope is the unmerged commits that would land in develop on PR
-merge (`origin/develop..HEAD`).
+on a feature branch before push. The pre-push browser + drift gate is the
+`app-test` sub-agent on Claude Code and the `browser-verify` skill on Codex. Each
+returns a PASS / FAIL verdict; FAIL feeds the fix loop. Review scope is the
+unmerged commits that would land in develop on PR merge (`origin/develop..HEAD`).
 
 `develop → main` PRs typically don't need a fresh review since each underlying
 feature was already reviewed; admin self-merges based on CI green.
@@ -285,4 +330,4 @@ If two roles need to edit the same file, coordinate via:
 - Reporter is deferred to session end. Don't spawn after every commit.
 - Trivial commits (<50 LOC, no migration, no production logic) skip code-review/security.
 
-See `.claude/WORKFLOW.md` for the full token-saving policy.
+See `.claude/WORKFLOW.md` (Claude) / `.codex/WORKFLOW.md` (Codex) for the full token-saving policy.

@@ -38,7 +38,7 @@ Railway prod env vars swapped on 2026-05-24 as part of PR #93
 (`BUILDINGS-DB-SWAP`). Auto-redeploy `04e7633e` came up Online and the
 verification SQL block from §4 of the handoff doc was run successfully
 against the production endpoint — same probe results as the local table
-above. See `.claude/Task.md` `## Done` `#12 BUILDINGS-DB-SWAP` for the
+above. See `Task.md` `## Done` `#12 BUILDINGS-DB-SWAP` for the
 audit trail.
 
 Final prod env values after the swap:

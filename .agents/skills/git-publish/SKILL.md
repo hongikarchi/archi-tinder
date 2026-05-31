@@ -190,5 +190,5 @@ Dispatch shape:
 ---
 
 ## Related skills
-- `reporter-inline` — runs BEFORE this skill so the audit ships in the same PR.
+- `reporter-inline` — runs BEFORE this skill; its audit commit lands on the same feature branch and squashes into the same PR as the work.
 - `git-commit` — runs to create the commit(s) that this skill then publishes.

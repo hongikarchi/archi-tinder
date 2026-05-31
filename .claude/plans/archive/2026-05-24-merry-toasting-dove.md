@@ -1,5 +1,8 @@
 # Plan: merry-toasting-dove
 
+> **HISTORICAL ONLY — do not execute.** Archived plan; references may name removed
+> agents/files (`git-manager`, `reporter`, `app-test`, etc.) or superseded paths.
+
 ## Session-end snapshot — 2026-05-23 (develop @ 08fac3d)
 
 **develop now at:** `08fac3d` — 11 commits ahead of main

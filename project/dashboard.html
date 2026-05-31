@@ -442,7 +442,7 @@
     } else {
       h += emptyMsg("nothing in flight");
     }
-    h += '<div class="note-line">Each entry is a single in-flight initiative — may span one PR (single fix) or many PRs (design-system rework, dashboard rework). Update <code>.claude/Task.md</code> <code>## Now</code> section to add or remove.</div>';
+    h += '<div class="note-line">Each entry is a single in-flight initiative — may span one PR (single fix) or many PRs (design-system rework, dashboard rework). Update <code>Task.md</code> <code>## Now</code> section to add or remove.</div>';
     set("panel-now", h);
   }
 
@@ -476,7 +476,7 @@
         }
       });
     }
-    h += '<div class="note-line">Source: <code>.claude/Task.md</code> <code>## Next</code> section. HIGH = specced, ready to pull into <code>## Now</code>; MEDIUM = pending review; LOW = explicitly deferred — revisit when context shifts.</div>';
+    h += '<div class="note-line">Source: <code>Task.md</code> <code>## Next</code> section. HIGH = specced, ready to pull into <code>## Now</code>; MEDIUM = pending review; LOW = explicitly deferred — revisit when context shifts.</div>';
     set("panel-next", h);
   }
 

@@ -2,7 +2,7 @@
 # git-new-feature.sh — sync develop + create new feature branch.
 #
 # Usage:    ./tools/git-new-feature.sh <role> <topic>
-#   role  ∈ {algo, sns, admin}
+#   role  ∈ {algo, sns, admin, claude, codex}
 #   topic = short slug, kebab-case (e.g. "mmr-lambda-tuning")
 #
 # Result: local branch `feature/<role>-<topic>` checked out from latest origin/develop.
@@ -10,10 +10,10 @@
 # Refuses if:
 #   - working tree has uncommitted SOURCE-CODE changes (would lose work)
 #   - branch already exists (re-use existing branch)
-#   - role is not in {algo, sns, admin}
+#   - role is not in {algo, sns, admin, claude, codex}
 #
 # Auto-stashes (and restores after branch creation):
-#   - `.claude/Task.md` — task-ledger edits
+#   - `Task.md` — task-ledger edits
 #   - `.claude/resolved-archive.md` — historical resolved entries
 #   These are bookkeeping that the next feature commit needs to sweep in.
 #
@@ -24,7 +24,7 @@ set -euo pipefail
 
 # Path pattern for review-terminal artifacts that are safe to auto-stash.
 # Matches against `git status --porcelain` second-field paths.
-SAFE_PATHS_REGEX='^\.claude/Task\.md'
+SAFE_PATHS_REGEX='^Task\.md'
 
 # Helper: list dirty paths (modified + staged + untracked); return only those
 # NOT matching SAFE_PATHS_REGEX.
@@ -65,7 +65,7 @@ fi
 if [ "$#" -ne 2 ]; then
     echo "Usage: $0 <role> <topic>          # create new feature branch" >&2
     echo "       $0 --check                 # environment sanity check only" >&2
-    echo "  role  ∈ {algo, sns, admin}" >&2
+    echo "  role  ∈ {algo, sns, admin, claude, codex}" >&2
     echo "  topic = short slug (e.g. 'mmr-lambda-tuning')" >&2
     exit 1
 fi
@@ -74,9 +74,9 @@ ROLE="$1"
 TOPIC="$2"
 
 case "$ROLE" in
-    algo|sns|admin) ;;
+    algo|sns|admin|claude|codex) ;;
     *)
-        echo "ERROR: role must be one of {algo, sns, admin}. Got: '$ROLE'" >&2
+        echo "ERROR: role must be one of {algo, sns, admin, claude, codex}. Got: '$ROLE'" >&2
         exit 1
         ;;
 esac
@@ -107,7 +107,7 @@ fi
 # Auto-stash review-terminal artifacts (handoffs / reviews / postmortems).
 # These need to be carried into the new feature branch and bundled with the
 # next commit (per the long-standing "review terminal is read-only on source
-# code but writes Task.md handoffs" pattern from .claude/commands/review.md).
+# code but writes Task.md handoffs" pattern — see CONTRIBUTING.md § Review).
 SAFE=$(safe_dirty_paths)
 STASHED=0
 if [ -n "$SAFE" ]; then
@@ -138,5 +138,5 @@ echo ""
 echo "Next steps:"
 echo "  1. Make your code changes"
 echo "  2. Commit: ./tools/git-stage-and-commit.sh \"<message>\""
-echo "  3. Pre-push gate: app-test (or skip for trivial commits)"
-echo "  4. Push + PR: git-publisher runs ./tools/git-push-pr.sh"
+echo "  3. Pre-push gate: app-test (Claude) / browser-verify (Codex) (or skip for trivial commits)"
+echo "  4. Push + PR: git-publish skill (git-publisher agent only for Mode 3 / edge cases)"

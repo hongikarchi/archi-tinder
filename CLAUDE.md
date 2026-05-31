@@ -24,6 +24,7 @@
     - Role A (algorithm) → `feature/algo-<topic>`
     - Role B (SNS / profiles / boards) → `feature/sns-<topic>`
     - Role C (admin / everything else) → `feature/admin-<topic>`
+    - Local AI agents → `feature/claude-<topic>` (Claude Code) / `feature/codex-<topic>` (Codex) — each in its OWN clone
 
   **Hard rules — NEVER violate:**
 
@@ -41,7 +42,7 @@
      ./tools/install-hooks.sh
      ```
      Without this, your local does not have the migration-numbering pre-push hook, and you may push a duplicate-numbered Django migration that breaks the team.
-  7. **One agent session per working directory (concurrent-agent isolation).** Never run two agent sessions (e.g. Claude Code + Codex) in the same checkout — a single working tree has one `HEAD`, so a second session's checkout crosses branches and a stray `git pull` fast-forwards the wrong branch (this happened 2026-05-31). Each additional concurrent agent works in its own **git worktree** (`git worktree add ../make_web-<agent> -b feature/<role>-<topic> develop`); see `CONTRIBUTING.md` § "Concurrent agents — working-directory isolation". The Agent tool's `isolation:"worktree"` is for parallel *sub-agents* only — it does NOT prevent session↔session collision. **Session-start check**: run `git worktree list`; if you share the main checkout with another active agent, STOP and move to your own worktree before editing.
+  7. **One clone per worker — never operate in another worker's directory (concurrent-agent isolation).** Every worker (remote human OR local AI tool) owns ONE working directory with its OWN `.git`, on its own `feature/*` branch, with its own PR. **Claude's working dir = the main clone `make_web/`** (cmux terminal; tendency: backend / API / recommendation-algorithm / DB — a default, not a hard wall, scope assigned per task). **Codex** works in its OWN separate clone `make_web-codex/` (browser, UI/UX), never in the main clone. **Do NOT use `git worktree` for session isolation** — worktrees share one `.git`, and on 2026-05-31 that shared `.git` let a Codex session move the main checkout's `HEAD` onto its branch (`feature/codex-loginpage`); a separate clone (own `.git`) is structurally immune. (The Agent tool's `isolation:"worktree"` is for parallel *sub-agents* within one session — unrelated to session isolation.) **Session-start check**: confirm you are in the main clone `make_web/` on `develop` or a `feature/claude-*` branch; if you are in the wrong directory, switch to the main clone before editing — do NOT `git reset` (separate clones make cross-contamination structurally impossible, so a wrong working dir is the only failure mode). Local branch prefix: `feature/claude-<topic>`. Full model: `CONTRIBUTING.md` § "Concurrent agents — one clone per worker".
 
   **If `git status` at session start shows you are on `main` or `develop` with uncommitted changes**: the previous session likely did not switch to a feature branch. Stash or save the work, then create a proper feature branch before continuing. Do not stage or commit while on a protected branch.
 
@@ -49,10 +50,10 @@
 
   ## Workflow — one session + sub-agents + skills
 
-  ArchiTinder Make Web is built from **one Claude Code session** (the orchestrator). It owns architecture, schema, auth, product + release decisions, and review — it does not write feature code itself; it dispatches sub-agents and runs skills.
+  ArchiTinder Make Web's Claude side runs as **one Claude Code orchestrator session** (concurrent with Codex in its own clone — HARD RULE 7). It owns architecture, schema, auth, product + release decisions, and review — it does not write feature code itself; it dispatches sub-agents and runs skills.
 
   - **Skills** (`.claude/skills/`) — procedures the main session runs itself:
-    - `orchestrate` — feature-implementation playbook (back-maker/front-maker → review → security → git → publish → reporter).
+    - `orchestrate` — feature-implementation playbook (back-maker/front-maker → review → security → git-commit → reporter-inline → git-publish).
     - `reporter-inline` — session-end audit (Task.md + state.js + algorithm.md). Runs inline before squash merge so audit ships in the SAME PR as the work. **Replaces the `reporter` agent for routine housekeeping** (2026-05-26).
     - `git-commit` — single-commit creator with branch + secret guards. **Replaces the `git-manager` agent for routine commits** (2026-05-26).
     - `git-publish` — feature → develop push + PR open + admin squash + cleanup (Mode 2). **Replaces the `git-publisher` agent's Mode 2** (2026-05-26); the agent stays for Mode 3 deploy / external PR triage / complex rebase.
@@ -61,25 +62,22 @@
     - `code-review` · `security-manager` — inner-loop review (parallel pre-commit gate).
     - `app-test` — pre-push browser + drift gate.
     - `git-publisher` — push/PR/merge/deploy (Mode 2 default goes through `git-publish` skill; agent only fires for Mode 3 + edge cases).
-  - **2 deprecated agents** (`.claude/agents/` with `deprecated: true`) — kept for fallback during 2026-05-26 migration; slated for removal after 1 week of skill-only usage: `git-manager` · `reporter`.
+  - **Removed agents** (deleted 2026-05-31): `git-manager` · `reporter` — fully replaced by the `git-commit` / `reporter-inline` skills (the 2026-05-26 fallback window closed after stable skill-only usage). Recoverable from git history.
   - **agent vs skill**: isolated work that returns a result → agent. A procedure the main session runs itself (including ones that dispatch agents) → skill. There are no slash commands.
 
   Full pipeline, session model, planning protocol, token-saving rules: **`.claude/WORKFLOW.md`**.
 
   ## Git Operations — HARD RULE (2026-05-26)
 
-  - **Default git ops** (commit / push / PR open / squash merge) → use the appropriate **skill** (`git-commit`, `git-publish`), executed by the main session. Do NOT dispatch `git-manager` agent for routine commits. The `git-publisher` agent still fires for Mode 3 / edge cases (see escalation matrix below).
-  - **Audit recording** (`.claude/Task.md ## Done` + `project/state.js` + conditional `docs/algorithm.md`) → use the **`reporter-inline` skill** BEFORE the publish step, in the same feature PR. **Reporter no longer ships a separate PR** — the audit commit lands on the same feature branch as the code commit and gets squashed together. Do NOT dispatch `reporter` agent for routine housekeeping.
+  - **Default git ops** (commit / push / PR open / squash merge) → use the appropriate **skill** (`git-commit`, `git-publish`), executed by the main session. Routine commits use the `git-commit` skill (the `git-manager` agent was removed 2026-05-31). The `git-publisher` agent still fires for Mode 3 / edge cases (see escalation matrix below).
+  - **Audit recording** (`Task.md ## Done` + `project/state.js` + conditional `docs/algorithm.md`) → use the **`reporter-inline` skill** BEFORE the publish step, in the same feature PR. **Reporter no longer ships a separate PR** — the audit commit lands on the same feature branch as the code commit and gets squashed together. (The `reporter` agent was removed 2026-05-31.)
   - **Escalation matrix → `git-publisher` agent** (Mode 3 territory or edge cases the skill cannot safely handle):
     - `develop → main` deploy mode (multi-PR batch + post-deploy `develop` force-reset to match `main`; requires explicit deploy keyword AND HARD RULE 4 carve-out citation).
     - External collaborator PR triage (PR from someone other than admin needs review + decision).
     - Rebase conflicts requiring multi-step recovery (`--force-with-lease` lease retries).
     - Push rejection with unclear cause.
     - Mid-merge failure with non-trivial error.
-  - **Escalation matrix → `reporter` agent** (fallback during migration window):
-    - `reporter-inline` skill produced a `state.js` that fails parse (Mermaid escaping, JSON-like structure error, etc.) and quick fix is unclear.
-    - Multi-PR batch audit (deploy mode) where broader agent scope helps consistency.
-    - Unfamiliar `state.js` field structure surfaces.
+  - **`reporter-inline` skill failure** → fix the `state.js` / `Task.md` issue directly (e.g. a parse error from Mermaid escaping). The deprecated `reporter` agent fallback was removed 2026-05-31 — there is no agent to escalate to.
   - **Forbidden** (mirror HARD RULE 1, 3, 4):
     - Ad-hoc `git push origin develop` / `git push origin main`. Pushes go from `feature/*` only.
     - `gh pr create --base main` outside Mode 3 deploy. Default base is `develop`.
@@ -92,7 +90,7 @@
   - Do NOT create or migrate the `canonical_v2_buildings` table -- it is owned by Make DB.
   - Every building query MUST gate on `is_publishable = true` (2,614 of 39,478 rows ~6.6% are non-publishable as of C23 on 2026-05-24). `engine._build_filter_sql` already emits this clause; raw SQL elsewhere must add it.
   - SentenceTransformers is NOT a dependency here -- embeddings are pre-computed.
-  - **`docs/algorithm.md` reporter sync (narrow write permission)**: only the `reporter-inline` skill (and the deprecated `reporter` agent on fallback) updates `docs/algorithm.md`, and only to keep it in sync with implementation. Permitted writes: (a) sync the **Production Value** column in the Hyperparameter Space table when `backend/config/settings.py` RECOMMENDATION dict changes; (b) append a one-line `_(Updated YYYY-MM-DD <sha_short>: <one-line>)_` annotation under any phase / formula / edge-case section whose corresponding implementation just changed; (c) maintain a `**Last Synced (Reporter):** YYYY-MM-DD <sha_short>` line near the top. Forbidden: rewriting algorithm theory, removing existing content, adding new sections. Other `docs/` files (specs, etc.) are admin-owned plain documents — anyone can edit via PR per CONTRIBUTING.md.
+  - **`docs/algorithm.md` reporter sync (narrow write permission)**: only the `reporter-inline` skill updates `docs/algorithm.md`, and only to keep it in sync with implementation. Permitted writes: (a) sync the **Production Value** column in the Hyperparameter Space table when `backend/config/settings.py` RECOMMENDATION dict changes; (b) append a one-line `_(Updated YYYY-MM-DD <sha_short>: <one-line>)_` annotation under any phase / formula / edge-case section whose corresponding implementation just changed; (c) maintain a `**Last Synced (Reporter):** YYYY-MM-DD <sha_short>` line near the top. Forbidden: rewriting algorithm theory, removing existing content, adding new sections. Other `docs/` files (specs, etc.) are admin-owned plain documents — anyone can edit via PR per CONTRIBUTING.md.
   - **Plan mode protocol — Korean summary + multiple choice + one question at a time** (durable across sessions). When entering plan mode:
     1. **Data gathering** — read-only exploration (Explore agent or direct reads). Collect facts before analysis.
     2. **Korean summary in chat** — a *short* (5-15 line) Korean summary of the diagnosis / proposal. Do NOT dump long English plan files into chat; the plan file can be detailed, the chat presentation is summarized + Korean.
@@ -101,7 +99,7 @@
     5. **Plan file finalize** — once decisions are answered, update the plan file. Korean summary block; English for code identifiers.
     6. **ExitPlanMode** — only AFTER all decisions are settled. Do not ask "should I proceed?" — that is what `ExitPlanMode` does.
     Why: user request 2026-04-29 — long English plan dumps overwhelm; sequential multiple-choice supports careful per-topic decisions. Applies to all plan-mode entries.
-  - **Implementation delegation — HARD RULE** (durable across sessions). The session owns *architecture, schema, auth, product + release decisions, and review* — it does **NOT** write production feature code directly. Every `backend/` or `frontend/` feature / bug-fix / refactor edit is delegated: full features, unclear-root-cause bugs, or cross-cutting refactors → the `orchestrate` skill; bounded mechanical changes → `back-maker` / `front-maker` (`model: sonnet`) sub-agents. The session picks the model / effort per task and dispatches — it does not fall back to implementing in opus because delegation feels like overhead. **Carve-out (direct edit OK)**: meta / infra (`tools/`, `hooks/`, `.github/`), single-line policy fixes, sub-MINOR follow-ups, and pure docs (`CLAUDE.md`, `.claude/*`, `docs/*`, `CONTRIBUTING.md`, `DESIGN.md`, `README.md`) — direct edit + `git-commit` skill (the `git-manager` agent is deprecated as of 2026-05-26). Why: codified 2026-05-15 — `back-maker` / `front-maker` carry `model: sonnet`; the session must not implement feature code in opus "because delegating feels like overhead."
+  - **Implementation delegation — HARD RULE** (durable across sessions). The session owns *architecture, schema, auth, product + release decisions, and review* — it does **NOT** write production feature code directly. Every `backend/` or `frontend/` feature / bug-fix / refactor edit is delegated: full features, unclear-root-cause bugs, or cross-cutting refactors → the `orchestrate` skill; bounded mechanical changes → `back-maker` / `front-maker` (`model: sonnet`) sub-agents. The session picks the model / effort per task and dispatches — it does not fall back to implementing in opus because delegation feels like overhead. **Carve-out (direct edit OK)**: meta / infra (`tools/`, `hooks/`, `.github/`), single-line policy fixes, sub-MINOR follow-ups, and pure docs (`CLAUDE.md`, `.claude/*`, `docs/*`, `CONTRIBUTING.md`, `DESIGN.md`, `README.md`) — direct edit + `git-commit` skill (the `git-manager` agent was removed 2026-05-31). Why: codified 2026-05-15 — `back-maker` / `front-maker` carry `model: sonnet`; the session must not implement feature code in opus "because delegating feels like overhead."
 
   ## Product Constitution
 
@@ -127,10 +125,10 @@
   ## Audit Trail Locations
   | Category | Location | Writer |
   |---|---|---|
-  | **Task board** (roadmap + Next backlog + Done log) | `.claude/Task.md` | reporter agent (Phase 16-18 dimensions inlined here as of 2026-05-24; the prior `docs/specs/*.md` folder was absorbed) |
+  | **Task board** (roadmap + Next backlog + Done log) | `Task.md` | reporter-inline skill (Phase 16-18 dimensions inlined here as of 2026-05-24; the prior `docs/specs/*.md` folder was absorbed) |
   | **Algorithm reference** (theory + hyperparams) | `docs/algorithm.md` | admin (reporter syncs prod values) |
   | **Plan** (`/plan` artifacts) | `.claude/plans/*.md` | the session |
-  | **Project dashboard** (live state, human-facing) | `project/dashboard.html` + `project/state.js` | reporter agent |
+  | **Project dashboard** (live state, human-facing) | `project/dashboard.html` + `project/state.js` | reporter-inline skill |
 
   ## Target Structure
   frontend/   <- React 18 + Vite

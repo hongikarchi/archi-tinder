@@ -5,17 +5,16 @@ description: Update Task.md + state.js + conditional algorithm.md to record a ju
 
 # reporter-inline — audit recorded in same PR as work
 
-Use this skill after `git-commit` skill creates the code commit on a feature branch, and AFTER `git-publish` opens the PR (so the PR number is known), but BEFORE `git-publish` admin-squash-merges. The audit lands as an additional commit on the same feature branch, gets squashed together with the code, and ends up as a single PR.
+Use this skill after `git-commit` creates the code commit on a feature branch, and BEFORE `git-publish` ships the PR. The audit is keyed on the stable **TASK ID** (e.g. `SNS-RESULTS-UI-1`) — the GitHub PR# is NOT needed at write-time: `gh pr merge` auto-stamps `(#N)` onto the squash commit, recoverable from `git log`, so cite the PR# only as an optional backfill. The audit lands as an additional commit on the same feature branch, squashed together with the code into a single PR.
 
 **Pipeline position**:
 ```
-front-maker/back-maker → code commit (git-commit) → push + PR open (git-publish Steps 1-3)
-   → [REPORTER-INLINE HERE] → audit commit (git-commit) → push → admin squash (git-publish Step 4)
+front-maker/back-maker → code commit (git-commit) → [REPORTER-INLINE HERE] → audit commit (git-commit) → git-publish (push + PR open + admin squash)
 ```
 
 Result: 1 PR carrying both code + audit. No separate reporter PR cycle.
 
-**Do NOT dispatch `reporter` agent for routine housekeeping** — that agent is deprecated as of 2026-05-26.
+**(The `reporter` agent was removed 2026-05-31 — this skill replaces it.)**
 
 ---
 
@@ -26,7 +25,7 @@ Read git state for context. NEVER run state-mutating git/gh commands in this ski
 - ❌ `gh pr create`, `gh pr edit`, `gh pr merge`, `gh pr close`
 
 You write only:
-- `.codex/Task.md`
+- `Task.md`
 - `project/state.js`
 - Conditionally: `docs/algorithm.md` (per Step 3 narrow scope)
 
@@ -39,10 +38,10 @@ After file writes, STOP. The main session's next step is `git-commit` skill for 
 Verify all are true:
 - Current branch is `feature/*` (not main/develop). Abort otherwise.
 - A code commit already exists on this branch ahead of `origin/develop`.
-- A PR has been opened (`gh pr view <PR_NUMBER>` returns success). Capture the PR number.
+- No PR is needed yet — this skill runs BEFORE `git-publish`. The audit is keyed on the TASK ID; the GitHub PR# is optional (backfilled once known).
 - The change you're auditing is "audit-worthy" — anything more than a typo / trivial whitespace fix. For genuinely trivial changes (single-character typo, comment fix), **skip this skill** entirely.
 
-If the change closes a `## Now` entry in `.codex/Task.md`, capture the entry's ID + title for the Done section.
+If the change closes a `## Now` entry in `Task.md`, capture the entry's ID + title for the Done section.
 
 ---
 
@@ -57,11 +56,11 @@ git rev-parse --abbrev-ref HEAD           # branch name
 git fetch origin develop && git rev-parse --short origin/develop  # develop HEAD (used for meta.head)
 ```
 
-Read `.codex/Task.md` once before editing.
+Read `Task.md` once before editing.
 
 ---
 
-## Step 2 — Update `.codex/Task.md`
+## Step 2 — Update `Task.md`
 
 Use `Edit` tool (NOT `Write`) so the rest of the file stays intact.
 
@@ -70,15 +69,15 @@ Use `Edit` tool (NOT `Write`) so the rest of the file stays intact.
 If the change closes a `## Now` entry: cut the entry from `## Now`, paste at the TOP of `## Done` under a new header:
 
 ```
-### <TASK_ID> — <Korean title> — RESOLVED YYYY-MM-DD (PR #<N> `<sha-pre-squash>`)
+### <TASK_ID> — <Korean title> — RESOLVED YYYY-MM-DD (`<sha-pre-squash>`)
 - <bullet 1 — what shipped>
 - <bullet 2>
 - ...
 ```
 
+- `<TASK_ID>` = the stable task identifier — the PRIMARY key for the entry.
 - `YYYY-MM-DD` = today's date in KST.
-- `<N>` = PR number (captured in Step 0).
-- `<sha-pre-squash>` = feature branch tip SHA from Step 1. Annotated as "pre-squash" because post-merge the canonical SHA will be the squash commit on `develop`, which we don't know yet. Next reporter-inline run can backfill.
+- `<sha-pre-squash>` = feature branch tip SHA from Step 1. "pre-squash" because post-merge the canonical SHA is the squash commit on `develop`, not yet known. A later reporter-inline pass can backfill the post-squash SHA and the GitHub PR# `(#N)` if desired — neither is required at write-time (the TASK ID is the key).
 
 Sub-task checkboxes that were completed by this commit get `[x]` before moving.
 
@@ -108,7 +107,7 @@ If `Deferred:` already has a matching Next entry (pre-surfaced during this same 
 
 ### 2c. Section vocabulary
 
-`.codex/Task.md` uses:
+`Task.md` uses:
 - `## Next` — backlog, bucketed `### HIGH` / `### MEDIUM` / `### LOW`. Each item = `#### <SLUG>` one level deeper.
 - `## Now` — current initiative slice.
 - `## Done` — resolved log, append-only at top, one dated group per shipped batch.
@@ -200,7 +199,7 @@ Do NOT rename keys or change top-level structure. Dashboard reads positionally.
 
 ### 4b. `done`
 
-Read `.codex/Task.md` `## Done` after your Step 2 edits. Take the most recent 5–8 dated groups (one per shipped batch). For each:
+Read `Task.md` `## Done` after your Step 2 edits. Take the most recent 5–8 dated groups (one per shipped batch). For each:
 - `id` — stable slug from group title (or carry from prior state.js).
 - `title` — human-readable line minus the "— RESOLVED …" suffix.
 - `completedAt` — YYYY-MM-DD from group header.
@@ -334,7 +333,7 @@ After file writes complete, report:
 
 ```
 REPORTER-INLINE: WRITTEN
-Files: .codex/Task.md, project/state.js[, docs/algorithm.md]
+Files: Task.md, project/state.js[, docs/algorithm.md]
 Task.md ## Done: <new entry header>
 state.js prs[]: prepended in-flight PR #<N> (mergedAt: null)
 state.js meta.head: <pre-squash develop SHA — stale by 1 PR until next pass>
@@ -357,32 +356,23 @@ Test fixture: PR #121's `reporter` agent pass (commit `e36648b`) shows the canon
 
 ---
 
-## Rules (mirror reporter agent's Rules section)
+## Rules
 
 - NEVER delete existing content in Task.md.
 - Use `Edit` (NOT `Write`) for Task.md so the rest stays untouched.
-- Writes are: `.codex/Task.md`, `project/state.js`, narrow `docs/algorithm.md`. All other `docs/*` files are admin-owned (PR-edited).
+- Writes are: `Task.md`, `project/state.js`, narrow `docs/algorithm.md`. All other `docs/*` files are admin-owned (PR-edited).
 - Time convention: every human-facing timestamp is `YYYY-MM-DD HH:mm KST`. PR records also carry raw ISO 8601 UTC (`mergedAt`).
 - 2026-05-24 vocabulary: `## Done` / `## Now` / `## Next` (NOT `Resolved` / `In Progress` / `Open`).
 - 2026-05-26 (this skill): runs INLINE before squash merge. Separate reporter PR is deprecated.
 
 ---
 
-## When to escalate to reporter agent
+## If this skill fails
 
-The reporter agent (deprecated marker) remains available for fallback during the 2026-05-26 migration window. Escalate if:
-
-- The change touched an unfamiliar `state.js` field structure not covered by Step 4.
-- A multi-PR batch must be audited at once (deploy mode) — escalate to keep audit consistent.
-- This skill produces a state.js that fails JSON-like parse (Mermaid escaping issue, etc.) and quick fix is unclear.
-
-Dispatch:
-```json
-{
-  "agent_type": "reporter",
-  "message": "reporter fallback — <reason>. <precise problem + current state>"
-}
-```
+Fix the `state.js` / `Task.md` issue directly (e.g. a JSON-like parse error from
+Mermaid escaping, an unfamiliar `state.js` field, or a multi-PR batch audit). The
+deprecated `reporter` agent fallback was removed 2026-05-31 — there is no agent
+to dispatch.
 
 ---
 
