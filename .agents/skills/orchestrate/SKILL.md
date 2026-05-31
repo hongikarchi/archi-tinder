@@ -65,7 +65,7 @@ bypass delegation by writing source code yourself. The no-direct-code rule in
 Follow the `## Now` / `## Next` discipline at the top of `Task.md`:
 1. Read `## Now` first. If non-empty, continue that entry.
 2. If empty, pull the highest-priority item from `## Next ### HIGH` and promote it to `## Now` (cut from Next, paste into Now, raise heading level one — see `Task.md ## Workflow Rules`).
-3. Execute that one initiative slice through the full pipeline (plan → makers → review → security → commit → browser-verify → publish → reporter at session end).
+3. Execute that one initiative slice through the full pipeline (plan → makers → review → security → commit → browser-verify → reporter-inline → publish).
 4. After the PR merges, ask the user before pulling the next HIGH item — do not auto-chain across initiatives.
 
 ## Workflow

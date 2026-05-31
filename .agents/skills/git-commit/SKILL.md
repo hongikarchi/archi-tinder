@@ -64,10 +64,11 @@ If any of `.env*`, `*.key`, `*.pem`, `credentials.*`, `secrets/*` appears in the
 
 **Trailer** (required boilerplate, NEVER drop or compress):
 ```
-Co-Authored-By: Codex Opus 4.7 (1M context) <noreply@anthropic.com>
+Co-Authored-By: <current Codex session name/model> <configured co-author email>
 ```
 
-Adjust the model name to match the actual model the main session is using.
+Use the actual Codex session identity and configured co-author email. Do not
+hardcode Claude, Anthropic, or Opus identity in the Codex skill.
 
 **Examples** (good caveman):
 - `feat: add Office.claim_token + claim API per PROF1 §2.3`
@@ -86,7 +87,7 @@ git commit -m "$(cat <<'EOF'
 
 <body lines, optional>
 
-Co-Authored-By: Codex Opus 4.7 (1M context) <noreply@anthropic.com>
+Co-Authored-By: <current Codex session name/model> <configured co-author email>
 EOF
 )"
 ```
