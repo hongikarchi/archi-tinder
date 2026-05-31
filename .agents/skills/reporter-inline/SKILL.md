@@ -25,7 +25,7 @@ Read git state for context. NEVER run state-mutating git/gh commands in this ski
 - ❌ `gh pr create`, `gh pr edit`, `gh pr merge`, `gh pr close`
 
 You write only:
-- `.codex/Task.md`
+- `Task.md`
 - `project/state.js`
 - Conditionally: `docs/algorithm.md` (per Step 3 narrow scope)
 
@@ -41,7 +41,7 @@ Verify all are true:
 - No PR is needed yet — this skill runs BEFORE `git-publish`. The audit is keyed on the TASK ID; the GitHub PR# is optional (backfilled once known).
 - The change you're auditing is "audit-worthy" — anything more than a typo / trivial whitespace fix. For genuinely trivial changes (single-character typo, comment fix), **skip this skill** entirely.
 
-If the change closes a `## Now` entry in `.codex/Task.md`, capture the entry's ID + title for the Done section.
+If the change closes a `## Now` entry in `Task.md`, capture the entry's ID + title for the Done section.
 
 ---
 
@@ -56,11 +56,11 @@ git rev-parse --abbrev-ref HEAD           # branch name
 git fetch origin develop && git rev-parse --short origin/develop  # develop HEAD (used for meta.head)
 ```
 
-Read `.codex/Task.md` once before editing.
+Read `Task.md` once before editing.
 
 ---
 
-## Step 2 — Update `.codex/Task.md`
+## Step 2 — Update `Task.md`
 
 Use `Edit` tool (NOT `Write`) so the rest of the file stays intact.
 
@@ -107,7 +107,7 @@ If `Deferred:` already has a matching Next entry (pre-surfaced during this same 
 
 ### 2c. Section vocabulary
 
-`.codex/Task.md` uses:
+`Task.md` uses:
 - `## Next` — backlog, bucketed `### HIGH` / `### MEDIUM` / `### LOW`. Each item = `#### <SLUG>` one level deeper.
 - `## Now` — current initiative slice.
 - `## Done` — resolved log, append-only at top, one dated group per shipped batch.
@@ -199,7 +199,7 @@ Do NOT rename keys or change top-level structure. Dashboard reads positionally.
 
 ### 4b. `done`
 
-Read `.codex/Task.md` `## Done` after your Step 2 edits. Take the most recent 5–8 dated groups (one per shipped batch). For each:
+Read `Task.md` `## Done` after your Step 2 edits. Take the most recent 5–8 dated groups (one per shipped batch). For each:
 - `id` — stable slug from group title (or carry from prior state.js).
 - `title` — human-readable line minus the "— RESOLVED …" suffix.
 - `completedAt` — YYYY-MM-DD from group header.
@@ -333,7 +333,7 @@ After file writes complete, report:
 
 ```
 REPORTER-INLINE: WRITTEN
-Files: .codex/Task.md, project/state.js[, docs/algorithm.md]
+Files: Task.md, project/state.js[, docs/algorithm.md]
 Task.md ## Done: <new entry header>
 state.js prs[]: prepended in-flight PR #<N> (mergedAt: null)
 state.js meta.head: <pre-squash develop SHA — stale by 1 PR until next pass>
@@ -360,7 +360,7 @@ Test fixture: PR #121's `reporter` agent pass (commit `e36648b`) shows the canon
 
 - NEVER delete existing content in Task.md.
 - Use `Edit` (NOT `Write`) for Task.md so the rest stays untouched.
-- Writes are: `.codex/Task.md`, `project/state.js`, narrow `docs/algorithm.md`. All other `docs/*` files are admin-owned (PR-edited).
+- Writes are: `Task.md`, `project/state.js`, narrow `docs/algorithm.md`. All other `docs/*` files are admin-owned (PR-edited).
 - Time convention: every human-facing timestamp is `YYYY-MM-DD HH:mm KST`. PR records also carry raw ISO 8601 UTC (`mergedAt`).
 - 2026-05-24 vocabulary: `## Done` / `## Now` / `## Next` (NOT `Resolved` / `In Progress` / `Open`).
 - 2026-05-26 (this skill): runs INLINE before squash merge. Separate reporter PR is deprecated.

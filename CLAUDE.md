@@ -70,7 +70,7 @@
   ## Git Operations — HARD RULE (2026-05-26)
 
   - **Default git ops** (commit / push / PR open / squash merge) → use the appropriate **skill** (`git-commit`, `git-publish`), executed by the main session. Routine commits use the `git-commit` skill (the `git-manager` agent was removed 2026-05-31). The `git-publisher` agent still fires for Mode 3 / edge cases (see escalation matrix below).
-  - **Audit recording** (`.claude/Task.md ## Done` + `project/state.js` + conditional `docs/algorithm.md`) → use the **`reporter-inline` skill** BEFORE the publish step, in the same feature PR. **Reporter no longer ships a separate PR** — the audit commit lands on the same feature branch as the code commit and gets squashed together. (The `reporter` agent was removed 2026-05-31.)
+  - **Audit recording** (`Task.md ## Done` + `project/state.js` + conditional `docs/algorithm.md`) → use the **`reporter-inline` skill** BEFORE the publish step, in the same feature PR. **Reporter no longer ships a separate PR** — the audit commit lands on the same feature branch as the code commit and gets squashed together. (The `reporter` agent was removed 2026-05-31.)
   - **Escalation matrix → `git-publisher` agent** (Mode 3 territory or edge cases the skill cannot safely handle):
     - `develop → main` deploy mode (multi-PR batch + post-deploy `develop` force-reset to match `main`; requires explicit deploy keyword AND HARD RULE 4 carve-out citation).
     - External collaborator PR triage (PR from someone other than admin needs review + decision).
@@ -90,7 +90,7 @@
   - Do NOT create or migrate the `canonical_v2_buildings` table -- it is owned by Make DB.
   - Every building query MUST gate on `is_publishable = true` (2,614 of 39,478 rows ~6.6% are non-publishable as of C23 on 2026-05-24). `engine._build_filter_sql` already emits this clause; raw SQL elsewhere must add it.
   - SentenceTransformers is NOT a dependency here -- embeddings are pre-computed.
-  - **`docs/algorithm.md` reporter sync (narrow write permission)**: only the `reporter-inline` skill (and the deprecated `reporter` agent on fallback) updates `docs/algorithm.md`, and only to keep it in sync with implementation. Permitted writes: (a) sync the **Production Value** column in the Hyperparameter Space table when `backend/config/settings.py` RECOMMENDATION dict changes; (b) append a one-line `_(Updated YYYY-MM-DD <sha_short>: <one-line>)_` annotation under any phase / formula / edge-case section whose corresponding implementation just changed; (c) maintain a `**Last Synced (Reporter):** YYYY-MM-DD <sha_short>` line near the top. Forbidden: rewriting algorithm theory, removing existing content, adding new sections. Other `docs/` files (specs, etc.) are admin-owned plain documents — anyone can edit via PR per CONTRIBUTING.md.
+  - **`docs/algorithm.md` reporter sync (narrow write permission)**: only the `reporter-inline` skill updates `docs/algorithm.md`, and only to keep it in sync with implementation. Permitted writes: (a) sync the **Production Value** column in the Hyperparameter Space table when `backend/config/settings.py` RECOMMENDATION dict changes; (b) append a one-line `_(Updated YYYY-MM-DD <sha_short>: <one-line>)_` annotation under any phase / formula / edge-case section whose corresponding implementation just changed; (c) maintain a `**Last Synced (Reporter):** YYYY-MM-DD <sha_short>` line near the top. Forbidden: rewriting algorithm theory, removing existing content, adding new sections. Other `docs/` files (specs, etc.) are admin-owned plain documents — anyone can edit via PR per CONTRIBUTING.md.
   - **Plan mode protocol — Korean summary + multiple choice + one question at a time** (durable across sessions). When entering plan mode:
     1. **Data gathering** — read-only exploration (Explore agent or direct reads). Collect facts before analysis.
     2. **Korean summary in chat** — a *short* (5-15 line) Korean summary of the diagnosis / proposal. Do NOT dump long English plan files into chat; the plan file can be detailed, the chat presentation is summarized + Korean.
@@ -125,7 +125,7 @@
   ## Audit Trail Locations
   | Category | Location | Writer |
   |---|---|---|
-  | **Task board** (roadmap + Next backlog + Done log) | `.claude/Task.md` | reporter-inline skill (Phase 16-18 dimensions inlined here as of 2026-05-24; the prior `docs/specs/*.md` folder was absorbed) |
+  | **Task board** (roadmap + Next backlog + Done log) | `Task.md` | reporter-inline skill (Phase 16-18 dimensions inlined here as of 2026-05-24; the prior `docs/specs/*.md` folder was absorbed) |
   | **Algorithm reference** (theory + hyperparams) | `docs/algorithm.md` | admin (reporter syncs prod values) |
   | **Plan** (`/plan` artifacts) | `.claude/plans/*.md` | the session |
   | **Project dashboard** (live state, human-facing) | `project/dashboard.html` + `project/state.js` | reporter-inline skill |

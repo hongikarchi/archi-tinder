@@ -7,9 +7,9 @@
 
 ## Workflow Rules
 
-- **Session start** — read `## Now` first. If empty and the user is starting new work, move the matched `## Next` entry (under `### HIGH` / `### MEDIUM` / `### LOW`) into `## Now`. Or write a fresh entry if brand-new. One initiative slice at a time.
+- **Session start** — read `## Now` first. If empty and the user is starting new work, move the matched `## Next` entry (under `### X-HIGH` / `### HIGH` / `### MEDIUM` / `### LOW`) into `## Now`. Or write a fresh entry if brand-new. One initiative slice at a time.
 - **Mid-session** — if work in `## Now` gets deferred ("미루자"), move it back to `## Next` with a one-line rationale note. If a new sub-task appears, add it under the active Now entry's body or create a new Now entry.
-- **Session end (success)** — `reporter-inline` moves `## Now` → `## Done` with PR ref + SHA. If the Now entry's note mentions a deferred follow-up (`Deferred: ...`), `reporter-inline` also auto-surfaces a matching `## Next` entry per its Step 2b (see `.agents/skills/reporter-inline/SKILL.md`).
+- **Session end (success)** — the `reporter-inline` skill moves `## Now` → `## Done` with SHA + optional PR ref (keyed on the task ID). If the Now entry's note mentions a deferred follow-up (`Deferred: ...`), it also auto-surfaces a matching `## Next` entry (see the `reporter-inline` skill).
 
 **ID convention** (since 2026-05-25): `<SURFACE>-<TOPIC>-<N>`.
 - **SURFACE** = `FRONT` / `BACK` / `FULL` / `INFRA`. Tells where the work lives.
@@ -43,6 +43,7 @@
 - Long historical Done entries from before 2026-05-25 keep their legacy headers (`### #21 SWIPE-CALIBRATING — ...`) as archive — do not rewrite history.
 
 **Priority bucket semantics** (`## Next`):
+- **X-HIGH** — critical: a confirmed defect against the core taste-match promise or against data correctness, with file:line evidence (e.g. the 2026-05-31 swipe/discovery review). Pull before HIGH.
 - **HIGH** — specced, ready to pull into `## Now`. Open dimensions resolved or acceptable to resolve during implementation.
 - **MEDIUM** — uncategorised pending. Needs review before promotion (scope, urgency, prerequisites).
 - **LOW** — explicitly deferred / skipped. Not blocking; revisit when context shifts (traffic, prereq shipped, priority change).
@@ -59,12 +60,55 @@ _(none — no active initiative slice with a PR in flight.)_
 
 ## Next
 
-> Backlog grouped by priority bucket (`### HIGH` / `### MEDIUM` / `### LOW`). Each
+> Backlog grouped by priority bucket (`### X-HIGH` / `### HIGH` / `### MEDIUM` / `### LOW`). Each
 > item is a `#### <SLUG>` entry one level deeper. Bucket semantics described in
 > `## Workflow Rules` above. Phase 16-18 dimensions inlined here (formerly
 > `docs/specs/*`, absorbed 2026-05-24). Algorithm theory + production
 > hyperparameters still live in `docs/algorithm.md` (admin-owned, reporter syncs
 > Production Value column only).
+
+### X-HIGH
+
+> Critical — confirmed defect against the core taste-match promise or against data
+> correctness, surfaced by the 2026-05-31 swipe / discovery review
+> (`.claude/reviews/2026-05-31-swipe-discovery-review.md`). Pull before `### HIGH`.
+
+#### BACK-RECOMMEND-4 — Discovery 좋아요가 추천에 안 먹힘
+Discovery right-swipe likes are write-only to the recommendation engine: they land in `UserProfile.liked_building_ids` but nothing reads that field back into Discovery's own ranking or exclusion. A Discovery-only user (never runs a Taste session) gets a permanently random, "cold" feed no matter how many buildings they like — directly violating the core promise ("the app already noticed my taste") on the Discovery surface itself.
+
+Verified 2026-05-31 (`develop@0a0e959`):
+- `backend/apps/recommendation/engine.py:2352` — `compute_user_taste_vector(profile)` reads `Project.objects...values_list('liked_ids')` ONLY; never reads `UserProfile.liked_building_ids`.
+- `backend/apps/recommendation/views/discovery.py:55-73` — the feed exclude-set is built from `Project.liked_ids/disliked_ids/saved_ids` only; `liked_building_ids` is absent → a Discovery-liked building can REAPPEAR in the feed later (the F1b half).
+- `backend/apps/accounts/views.py:916-922` — `liked_building_ids` is written only by `LikedBuildingsView`, read only by its own GET + the profile grid (PR #157).
+- Taste likes (`project.liked_ids`) DO warm Discovery already, so this bug is Discovery-native-likes-only, not a total break.
+
+Fix direction:
+- Feed `UserProfile.liked_building_ids` into BOTH `compute_user_taste_vector` (weighted comparably to project likes) AND the Discovery + board-surprise exclude-sets.
+- Fire `evict_taste(profile.id)` (`caches.py:42`) inside `LikedBuildingsView.post` once the taste vector depends on `liked_building_ids`, else the 5-min cached vector ignores fresh likes.
+- `engine.py` is collaborator-owned per CLAUDE.md `## Rules` — coordinate with the algorithm owner before touching `compute_user_taste_vector`.
+
+Acceptance: a fresh profile that likes N buildings in Discovery (no Taste session) flips `taste_state` cold→warm and stops re-showing already-liked buildings; pytest covering taste-vector inclusion + exclude-set membership; Discovery TTFC not regressed.
+
+#### FRONT-UX-8 — 질문 답변 전송 실패 시 무음 유실
+In-session QuestionCard answers are fire-and-forget: a failed POST drops the answer with no retry and no user feedback, while the UI advances as if it succeeded — so the taste-axis adjustment from that question silently never lands on the backend.
+
+Code ref (`develop@0a0e959`):
+- `frontend/src/App.jsx:683-692` — `handleQuestionAnswer` calls `setPendingQuestion(null)` first, then `api.submitQuestionResponse({...}).catch(() => {})`. The empty catch swallows network / 5xx errors after the card is already dismissed.
+
+Fix direction: keep the optimistic clear (UX needs the card to dismiss), but on `.catch` surface a toast and either re-queue the question or emit telemetry. Same anti-pattern as `FRONT-UX-7` (Discovery like silent failure) — consider one shared `reportWriteError(toast)` helper (or the existing `archithon:toast` custom-event path) for both call sites.
+
+Acceptance: a forced submit failure shows user feedback and does not silently lose the answer; no regression to the normal answer→next-card flow.
+
+#### FRONT-UX-9 — 모바일 갤러리 세로 스크롤 깨짐 (검증 필요)
+Suspected (high-confidence, NOT yet browser-confirmed): the in-card gallery's vertical scroll is dead on mobile because the swipe machinery cancels the native touch scroll. Likely a PR #158 regression — the in-card flip was only just restored from the F5 navigation band-aid, so this surface is freshly re-exposed.
+
+Two converging code mechanisms (`develop@0a0e959`):
+- `frontend/src/components/SwipeCard.jsx:183` sets `touchAction: 'none'` on the card root; the gallery scroll div (`:346-355`) sets no `touch-action` of its own → an ancestor `none` disables pan on descendant scroll containers in WebKit/Blink.
+- `react-tinder-card/index.js:174-176` calls `ev.preventDefault()` on `touchstart` for any element whose `className` lacks `'pressable'`; the gallery scroll div has no such class → the library cancels the scroll gesture.
+
+VERIFY FIRST: drive a mobile viewport (e.g. 390×844), open a card gallery, attempt a vertical drag-scroll. If broken, fix = `touchAction: 'pan-y'` on the gallery scroll div and/or add the `'pressable'` className escape hatch to it. If NOT reproduced, downgrade or close this entry.
+
+Acceptance: mobile gallery scrolls vertically through all photos; front-face swipe gesture still works.
 
 ### HIGH
 
@@ -166,6 +210,72 @@ Resume via `/plan per slice` — each slice = one logical component cluster (e.g
 Acceptance per slice: `npm run lint` + `npm run build` clean; light + all dark variants render the touched components without visual regressions (compare against pre-slice screenshot); no new global token added without DESIGN.md update.
 
 ### MEDIUM
+
+#### FRONT-UX-6 — SwipeCard gallery flip 부모 state 동기화 누락
+PR #158 (`0071c3f`, 2026-05-29) restored in-card gallery flip but made `openGallery()` purely local — it no longer notifies the parent page via `onGalleryOpen` callback. SwipePage's `galleryOpen` state never flips to `true`. Two visible regressions on the swipe surface:
+- **Desktop mouse drag on gallery face → unintended card swipe.** The gallery scroll wrapper stops `onTouchStart`/`onTouchMove` propagation but not mouse events. On mobile this is fine; on desktop, mouse drag while viewing photos triggers the underlying `react-tinder-card` swipe gesture and the card flies away mid-view.
+- **ESC key no longer closes the gallery.** `SwipePage.jsx:399/405` keyboard handler checks `if (galleryOpen) setGalleryOpen(false)`; since `galleryOpen` stays false, ESC is a no-op while the back-face is visible.
+
+Code refs (`develop@6ce7260` post-PR #158):
+- `frontend/src/components/SwipeCard.jsx:60-63` — `openGallery()` sets only local state (`setShowGallery(true)`, `setHasBeenOpened(true)`); no parent callback.
+- `frontend/src/pages/SwipePage.jsx:649` — passes `onGalleryOpen={() => setGalleryOpen(true)}` but it is never invoked.
+- `frontend/src/pages/SwipePage.jsx:643` — `preventSwipe={galleryOpen ? ['left','right','up','down'] : ['up','down']}` blocks horizontal swipe only when `galleryOpen=true`, which now never happens.
+- DiscoveryPage passes `onGalleryOpen={() => {}}` and does not track `galleryOpen`; this entry is SwipePage-only.
+
+Three implementation options (admin decision needed before fix):
+- **Option 1 (3-line)** — restore parent notification: add `onGalleryOpen` to SwipeCard props destructure and call it inside `openGallery()` after `setShowGallery(true)`. Minimal change; SwipePage's existing ESC + preventSwipe logic re-engages.
+- **Option 2 (gallery self-contained)** — add `onMouseDown`/`onMouseMove` `stopPropagation` to the gallery-face scroll wrapper (matches the existing touch handlers) and move ESC handling inside SwipeCard. SwipePage's `galleryOpen` state becomes dead code; cleanup required.
+- **Option 3 (refactor)** — remove `galleryOpen` from SwipePage entirely, fold gesture-blocking + ESC into SwipeCard. Cleaner separation; broader diff.
+
+2026-05-31 review (`.claude/reviews/2026-05-31-swipe-discovery-review.md` F3) added two facts: (1) `preventSwipe` IS read live — react-tinder-card rebinds its gesture listeners when the prop changes (`node_modules/react-tinder-card/index.js:146/262`), so Option 1 works without a card remount (no flip reset). (2) The deeper root cause is that react-tinder-card binds NATIVE `mousedown`/`touchstart` listeners on its own element (`:183/192`); a React-synthetic `stopPropagation` from the gallery child fires AFTER those native listeners, so a child cannot fully suppress the parent drag via synthetic events. This favors Option 3 (lift the gallery into a sibling overlay) as the real fix — Options 1/2 still leave a visual drag-wobble because `handleMove` runs on every mousemove while `preventSwipe` only gates the release flick.
+
+Acceptance: ESC closes the gallery on SwipePage; desktop mouse drag on the gallery face does not discard the card; DiscoveryPage unchanged. Authorized to defer follow-up per user decision 2026-05-29 ("PR 그대로 merge — 작은 버그는 후속").
+
+#### FRONT-UX-10 — Discovery 갤러리 위 long-press 오작동
+On the Discovery page (desktop only), pressing-and-holding the mouse (>400ms) over an open card gallery opens the Save-to-Board modal over it, because the gallery's pointer-event `stopPropagation` does not stop the separate `mousedown` that DiscoveryPage's long-press listener uses.
+
+Code refs (`develop@0a0e959`):
+- `frontend/src/pages/DiscoveryPage.jsx:316-325` — card-stack container wires `onMouseDown={handleMouseDown}` → 400ms long-press → `SaveToBoardModal`.
+- `frontend/src/components/SwipeCard.jsx:313-314,390-391` — gallery buttons stop only `onPointerDown`/`onPointerUp`; `:347-348` gallery scroll stops only `onTouchStart`/`onTouchMove`. No mouse handler on the gallery, and pointer `stopPropagation` ≠ `mousedown`.
+- Touch is masked by the existing touch stopPropagation → desktop-only.
+
+Fix direction: subsumed by the FRONT-UX-6 structural fix (lift gallery out of TinderCard into a sibling overlay); interim = add `onMouseDown` `stopPropagation` to the gallery scroll wrapper + buttons. Cross-ref the 2026-05-31 review F5.
+
+Acceptance: holding the mouse over the Discovery gallery does not open the Save-to-Board modal; long-press still works on the card front face.
+
+#### FRONT-UX-7 — Discovery 우측 스와이프 좋아요 무음 실패
+PR #157 (`77ffd6e`, 2026-05-29) `DiscoveryPage.jsx` right-swipe handler calls `addLikedBuilding(card.image_id).catch(() => {})`. On API failure (network blip, 5xx, auth gone, rate limit) the user gets no feedback — the swipe animation completes and the like silently does not persist. User believes the building is saved when it is not.
+
+Code refs (`develop@6ce7260` post-PR #157):
+- `frontend/src/pages/DiscoveryPage.jsx` — right-swipe handler fire-and-forget pattern; no toast, no console signal, no retry queue.
+- `frontend/src/api/liked.js` (NEW in PR #157) — POST `/api/v1/auth/me/liked-buildings/` returns 200/4xx/5xx normally; client just swallows.
+- `frontend/src/App.jsx` glassmorphic toast helper already exists (used by VerifyGateModal on Board-create retry) and can be reused.
+
+Implementation options:
+- **Minimum** — `console.error` on catch so devs can see failures in the browser console; user-visible UX unchanged.
+- **Recommended** — minimal toast on failure ("저장 실패 — 다시 시도해주세요") with 3s auto-dismiss matching DESIGN.md §8.11 glassmorphic pattern; no retry.
+- **Stretch** — queue failed likes in a session store, retry on next online event / next API success; surface a "X likes pending sync" indicator.
+
+Open dimension: should DiscoveryPage rely on the existing `App.jsx` toast helper or own a local UI affordance to avoid coupling to the global mount? Recommended pattern is to dispatch a `archithon:toast` custom event that `App.jsx` already listens for, mirroring the VerifyGateModal flow.
+
+Acceptance: failed liked-building save no longer silent; user sees an indication (toast or visible retry cue); no regression to successful-swipe latency. Author yywon1 awaiting follow-up decision per PR #157 review comment (`#issuecomment-4583211223`).
+
+#### BACK-AUTH-3 — LikedBuildingsView guest 사용자 가드 정책 확인
+PR #157 (`77ffd6e`, 2026-05-29) added `LikedBuildingsView` with `permission_classes = [IsAuthenticated]` only. No `is_guest=False` check. Guest users (post-FULL-LOGIN-REDESIGN-1: `UserProfile.is_guest=True`, no email, no SocialAccount) can freely write to `UserProfile.liked_building_ids` without hitting the Board-4 verify gate, because the gate fires on `ProjectListCreateView.post()` — a different surface.
+
+Two product interpretations possible:
+- **(A) Free for guests (current behavior)** — likes are weightless interactions, no verification needed. Only board creation triggers Google OAuth. This keeps onboarding friction-free and lets guests build up taste signal before deciding to verify.
+- **(B) Gate guest likes** — match the board policy: after N liked buildings, force Google OAuth. Argument: liked_buildings is persistent storage tied to a long-lived user row; PIPA-style data collection should be gated.
+
+Code refs (`develop@6ce7260` post-PR #157):
+- `backend/apps/accounts/views.py` — `LikedBuildingsView` GET + POST; permission_classes line is the only auth gate.
+- `backend/apps/accounts/models.py` — `UserProfile.liked_building_ids` JSONField on the row itself (not a separate FK table).
+- `backend/apps/recommendation/views/projects.py` — `ProjectListCreateView` inline gate as reference precedent: `if request.user.profile.is_guest and Project.objects.filter(user=profile).count() >= 3: return Response({'detail':'verify_required',...}, 403)`.
+
+Decision needed:
+- Product call. If (A), document the intent in the view docstring + close this entry. If (B), add the same inline gate pattern as `ProjectListCreateView` with an appropriate threshold and a `reason='liked_limit_reached'` payload so the frontend `VerifyGateModal` can reuse its existing 403 catcher.
+
+Author yywon1 awaiting decision per PR #157 review comment (`#issuecomment-4583211223`).
 
 #### BACK-PERFORMANCE-5 — Swipe latency 0.7-1.5s 흔들림
 Codex retest 2026-05-26: browser swipe 1.82s/1.75s/1.12s/1.81s; server swipe 1.50s/1.38s/0.746s/1.36s. **PR4 async prefetch consume IS working** — 3rd swipe with cache hit drops to 156ms prefetch stage. But variability is high. Identify which stage causes the 0.7→1.5s spread (DB query latency? embedding cache miss? pgvector?). Aim for swipe p95 ≤1.0s and p50 ≤0.5s on Singapore prod.
@@ -354,7 +464,7 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 - [x] **Frontend PR #155** (pre-squash `e8296f5`): `LoginPage.jsx` full rewrite — terminal 3-step wizard (intro → name → role) + "동의합니다" PIPA capture (server-persisted; strict `is True` check rejects coerced values) + dual CTA (returning Google secondary). `VerifyGateModal.jsx` (NEW) — catches `403 verify_required`, fires Google verify → `promoteAccount` → token swap → retry. `useGoogleLogin` extracted to `GoogleLoginButton.jsx` + `GoogleVerifyButton.jsx` child components (conditional mount under provider tree — prevents "must be used within GoogleOAuthProvider" throw when `VITE_GOOGLE_CLIENT_ID` unset). Cross-device merge: `onPromoted(user, merged)` → `handleLogin(user)` on `merged:true` re-syncs `userId` + project keys. `SaveToBoardModal` Option A (stash `{name, visibility}` + auto-retry post-promote); `SurpriseBoardModal` Option B (10-card payload too fat → toast "Verified! Now try again", 3s per DESIGN.md §8.11). Conditional `GoogleOAuthProvider` mount (no `'guest-only-google-disabled'` literal anywhere). 24/24 `loginFlow.test.mjs` PASS. `is_guest` source: `/auth/me/` response (not jwt-decode) per security-manager PR1 warning.
 - User decisions Q1–Q6 (2026-05-27): Board 4번째 gate · Board만 차단 (Follow/Reaction 자유) · Google OAuth만 · cross-device merge (atomic 8 FK rules) · 3/min throttle · "동의합니다" server-persisted.
 - Reviews: PR1 sec-mgr PASS (3 warnings → fixed pass 2); code-review FAIL pass 1 (1 HIGH + 3 MED + 1 LOW → 7 fixes pass 2). PR2 sec-mgr PASS clean; code-review FAIL pass 1 (3 HIGH + 2 MED → all fixed pass 2: `useGoogleLogin` extraction · `not_a_guest`/400 string · retry path · Branch 1 merge re-login · JSDoc).
-- Plan: `~/.codex/plans/merry-toasting-dove.md` — FULL-LOGIN-REDESIGN-1 rebuild after codex `feature/codex-guest-auth-*` archived for 6 issues; all resolved.
+- Plan: `~/.claude/plans/merry-toasting-dove.md` — FULL-LOGIN-REDESIGN-1 rebuild after codex `feature/codex-guest-auth-*` archived for 6 issues; all resolved.
 - Codex archive: `feature/codex-guest-auth-backend` (3049b40) + `feature/codex-guest-auth-frontend` (f488ccd) — remote 삭제, local 보관, 재구현 참조용.
 
 Deferred:
@@ -467,9 +577,9 @@ Deferred:
 
 ### INFRA-DOC-6 — orchestrate / git-publisher / web-testing AGENTS skill-regime 정렬 — RESOLVED 2026-05-26 (PR #136 `80e7d86-pre-squash`)
 - [x] Cherry-picked session-start docs work (`010edf8`) onto post-deploy develop. Three files re-aligned with the 2026-05-26 skill-migration regime (INFRA-WORKFLOW-1, PR #123).
-- [x] `.agents/skills/orchestrate/SKILL.md` — drop deprecated `git-manager` / `reporter` agent refs from frontmatter, dispatch list, Step 5 session-end, Step 7 fix-cycle, Step 8 publish gate, Step 10, Rules. Step 6 → `git-commit` skill. Step 8 default = `git-publish` skill (git-publisher agent only for Mode 3 / external / complex rebase). Step 9 = `reporter-inline` + `git-commit` + `git-publish`.
-- [x] `.codex/agents/git-publisher.toml` — frontmatter repositioned as edge-case agent (Mode 3 deploy, external PR triage, complex rebase, push rejection unclear, mid-merge failure). New "When this agent is called" preamble enforces refuse-on-routine-publish. Mode 1 header renamed "Internal push escalation (fallback only)". Hard guardrails + Tools footer point at `git-commit` skill.
-- [x] `web-testing/AGENTS.md` — scope clarified (agent contract owned by `.codex/agents/app-test.toml`; this doc = standalone runner + shared dev-login). 2026-04-28 `web-tester` → `app-test` rename documented. Dev-login 404 fallback rewritten to match `app-test.md` hard-FAIL. `skip_login` flag note marked removed. Modes table rewritten FULL vs FEATURE-SCOPED (supersedes legacy fast/strict /review split).
+- [x] `.claude/skills/orchestrate/SKILL.md` — drop deprecated `git-manager` / `reporter` agent refs from frontmatter, dispatch list, Step 5 session-end, Step 7 fix-cycle, Step 8 publish gate, Step 10, Rules. Step 6 → `git-commit` skill. Step 8 default = `git-publish` skill (git-publisher agent only for Mode 3 / external / complex rebase). Step 9 = `reporter-inline` + `git-commit` + `git-publish`.
+- [x] `.claude/agents/git-publisher.md` — frontmatter repositioned as edge-case agent (Mode 3 deploy, external PR triage, complex rebase, push rejection unclear, mid-merge failure). New "When this agent is called" preamble enforces refuse-on-routine-publish. Mode 1 header renamed "Internal push escalation (fallback only)". Hard guardrails + Tools footer point at `git-commit` skill.
+- [x] `web-testing/AGENTS.md` — scope clarified (agent contract owned by `.claude/agents/app-test.md`; this doc = standalone runner + shared dev-login). 2026-04-28 `web-tester` → `app-test` rename documented. Dev-login 404 fallback rewritten to match `app-test.md` hard-FAIL. `skip_login` flag note marked removed. Modes table rewritten FULL vs FEATURE-SCOPED (supersedes legacy fast/strict /review split).
 - [x] Pure docs/policy edit per CLAUDE.md `## Implementation delegation — HARD RULE` carve-out. Skipped code-review + security-manager + app-test (sub-MINOR meta cleanup, no migration / production code / auth / network / model change).
 - [x] Stale `feature/admin-docs-skill-migration-sync` branch (session-start orphan, base pre-deploy develop) replaced by fresh `feature/admin-skill-docs-align` cherry-picked onto post-deploy develop. Old branch deleted locally post-merge.
 
@@ -483,7 +593,7 @@ Deferred:
 - Outstanding: `PERF-PREFETCH-POOL-RISK` (## Next ### MEDIUM) — monitor Neon connection count post-deploy. Async prefetch daemon thread + main worker = 2 conns/swipe; Neon free-tier 25 limit.
 
 ### PERF-PREFETCH-CHAIN — async_prefetch chain end-to-end (PR 4/4 FINAL of perf sweep) — RESOLVED 2026-05-26 (PR #134 `dc296bc-pre-squash`)
-- [x] PR 4 (FINAL) of 4 in `.codex/plans/merry-toasting-dove.md` (backend performance sweep). Depends on PR 1 INFRA-REDIS-1 merged (Redis multi-worker cache coherence). Plan complete after this PR merges.
+- [x] PR 4 (FINAL) of 4 in `.claude/plans/merry-toasting-dove.md` (backend performance sweep). Depends on PR 1 INFRA-REDIS-1 merged (Redis multi-worker cache coherence). Plan complete after this PR merges.
 - [x] **`_async_prefetch_thread` off-by-one fix** (swipe.py thread function): `pf_bid` index `current_round_snap + 1` → `+2`, `pf2_bid` index `+2` → `+3`. Applied to all 4 formula sites (exploring pf, exploring pf2, analyzing pf via `compute_mmr_next` round arg, analyzing pf2). Prior thread stored cards for T+1's `next_card` slot (duplicate of main-thread compute); fix stores cards for T+1's prefetch slot, matching sync-path semantics.
 - [x] **Async-branch consumer in `SwipeView.post`** (~line 752+): `cache.get(f'prefetch:{session.session_id}:{saved_current_round}')` reads PRIOR swipe's thread write. Batched `engine.get_buildings_by_ids([next, pf, pf2])` for 1-RTT 3-card hydration. Cache miss → prefetch fields stay None (graceful fallback).
 - [x] **Dedupe guards** (code-review fix-loop): degrade `pf_id` to None if `== next_bid`, degrade `pf2_id` to None if `== next_bid` or `== pf_id`. Prevents analyzing-path collision where `compute_mmr_next` can return same card for T's lookahead and T+1's main pick (similar inputs + `mmr_lambda_ramp_enabled=False`). Frontend `App.jsx:521+536` non-instant-swap path does NOT dedupe; without backend guard user would see same card twice.
@@ -496,7 +606,7 @@ Deferred:
 - Deferred: `PERF-PREFETCH-POOL-RISK` — Neon connection pool monitoring post-deploy.
 
 ### BACK-AUTH-1 — JWT user-row cache (PR 3/4 of perf sweep) — RESOLVED 2026-05-26 (PR #133 `5a1e914-pre-squash`)
-- [x] PR 3 of 4 in `.codex/plans/merry-toasting-dove.md` (backend performance sweep). RE-SCOPED from original JTI-cache premise after empirical falsification: simplejwt source inspection confirmed `AccessToken` does NOT inherit `BlacklistMixin` — only `RefreshToken` does. Blacklist DB lookup never runs during access-token validation. The actual ~590ms per-request DB hit is `JWTAuthentication.get_user()` → `User.objects.get(id=user_id)` against Neon. Caching that lookup is the actual fix.
+- [x] PR 3 of 4 in `.claude/plans/merry-toasting-dove.md` (backend performance sweep). RE-SCOPED from original JTI-cache premise after empirical falsification: simplejwt source inspection confirmed `AccessToken` does NOT inherit `BlacklistMixin` — only `RefreshToken` does. Blacklist DB lookup never runs during access-token validation. The actual ~590ms per-request DB hit is `JWTAuthentication.get_user()` → `User.objects.get(id=user_id)` against Neon. Caching that lookup is the actual fix.
 - [x] `backend/apps/accounts/authentication.py` **NEW** — `CachedJWTAuthentication(JWTAuthentication)` subclass overrides `get_user(validated_token)`. Cache key `jwt_user:<user_id>` (Django KEY_PREFIX `makeweb:` auto-applied). TTL = `min(token_exp_unix - now, 3600s)` — entry cannot outlast access token's natural lifetime. Exports `invalidate_user_cache(user_id)` helper.
 - [x] `backend/apps/accounts/views.py` — `invalidate_user_cache(...)` calls at LogoutView (after `RefreshToken.blacklist()`, uses `request.user.id`) and TokenRefreshView (after rotation `refresh.blacklist()`, uses `refresh.get(api_settings.USER_ID_CLAIM)` from signature-verified RefreshToken).
 - [x] `backend/apps/accounts/signals.py` **NEW** — `post_save` + `post_delete` on `User` invalidate cache. Safety net for ORM/admin mutations. Wired via `AccountsConfig.ready()` in `apps.py`.
@@ -509,7 +619,7 @@ Deferred:
 - Non-blocking note: signal-wiring integration test exercised handler functions directly rather than `user.save()` ORM call (avoids INFRA-DB-1 `make_web_app` no-DDL constraint blocking full ORM-flow tests). Code-read confirms `apps.py.ready()` import + Django 4.2 short-form INSTALLED_APPS auto-discovery of AccountsConfig.
 
 ### BACK-RECOMMEND-2 — sklearn KMeans matmul warning 압제 (PR 2/4 of perf sweep) — RESOLVED 2026-05-26 (PR #132 `785f4ad-pre-squash`)
-- [x] PR 2 of 4 in `.codex/plans/merry-toasting-dove.md` (backend performance sweep). Re-scoped from original "dtype align" to `np.errstate` suppression after empirical falsification: `like_embeddings.dtype == float64` already pre-edit because `_finite_unit_vector` (engine.py:66) calls `np.asarray(raw_vec, dtype=np.float64)`. The matmul `RuntimeWarning: divide by zero / overflow / invalid` originates inside sklearn's KMeans centroid normalization (`sklearn/utils/extmath.py:203 ret = a @ b`) on high-dim unit-norm vectors — sklearn-internal noise, cosmetic per Task.md original entry.
+- [x] PR 2 of 4 in `.claude/plans/merry-toasting-dove.md` (backend performance sweep). Re-scoped from original "dtype align" to `np.errstate` suppression after empirical falsification: `like_embeddings.dtype == float64` already pre-edit because `_finite_unit_vector` (engine.py:66) calls `np.asarray(raw_vec, dtype=np.float64)`. The matmul `RuntimeWarning: divide by zero / overflow / invalid` originates inside sklearn's KMeans centroid normalization (`sklearn/utils/extmath.py:203 ret = a @ b`) on high-dim unit-norm vectors — sklearn-internal noise, cosmetic per Task.md original entry.
 - [x] `engine.py:90-99` new helper `_silenced_kmeans_fit(kmeans, X, sample_weight=None)` wraps `kmeans.fit(X, sample_weight=sample_weight)` with `np.errstate(divide='ignore', invalid='ignore', over='ignore')`. Placed near other small helpers (`_parse_embedding_text`, `_finite_unit_vector`, `_cosine_sim_matrix`).
 - [x] `engine.py:1664` Path 2 adaptive k=2 + `engine.py:1701` Path 4 default k — `kmeans.fit(...)` call sites swapped to `_silenced_kmeans_fit(...)`. `sample_weight=like_weights` recency weighting preserved on both paths.
 - [x] **Computation byte-identical** — `np.errstate` ONLY changes NumPy's warning/error behavior, never numerical results. `random_state=42` + `n_init=3` deterministic. `test_topic06.py` 9/9 PASS (silhouette + cluster-correctness assertions) — empirical proof cluster output unchanged.
@@ -519,7 +629,7 @@ Deferred:
 - [x] `docs/algorithm.md` Last Synced line bumped (engine.py touched). Step 3b inline annotation skipped — algorithm behavior byte-identical pre/post; only warning output silenced.
 
 ### INFRA-REDIS-1 — Redis cache 도입 (PR 1/4 of perf sweep) — RESOLVED 2026-05-26 (PR #131 `d5b6c18-pre-squash`)
-- [x] PR 1 of 4 in `.codex/plans/merry-toasting-dove.md` (backend performance sweep). Foundation enabling PR 3 (BACK-AUTH-1 JTI cache) + PR 4 (PERF-PREFETCH-CHAIN async consume) — both require shared cache across Railway multi-worker Gunicorn that LocMemCache per-process cannot provide.
+- [x] PR 1 of 4 in `.claude/plans/merry-toasting-dove.md` (backend performance sweep). Foundation enabling PR 3 (BACK-AUTH-1 JTI cache) + PR 4 (PERF-PREFETCH-CHAIN async consume) — both require shared cache across Railway multi-worker Gunicorn that LocMemCache per-process cannot provide.
 - [x] `backend/config/settings.py` `CACHES` block reads `REDIS_URL` env. Set → `django_redis.cache.RedisCache` (`KEY_PREFIX=makeweb`, `SOCKET_CONNECT_TIMEOUT=3`, `SOCKET_TIMEOUT=3`). Unset → existing `LocMemCache` with `MAX_ENTRIES=2000` preserved (local dev parity). `_build_caches_dict(redis_url)` helper extracted for clean unit testing without env monkeypatching.
 - [x] `backend/requirements.txt` `django-redis>=5.4,<6.0` added (alphabetical position between `django-cors-headers` and `djangorestframework`; transitively pulls `redis-py>=4.x`).
 - [x] `backend/.env.example` new Cache section between Feature flags + CORS, commented `REDIS_URL=` placeholder.
@@ -540,7 +650,7 @@ Deferred:
 - [x] **`async_prefetch_enabled` revert True → False** — code-review (sonnet) caught: PR #127 flipped True but swipe.py async branch writes prefetch cache without next-swipe handler reading it back. Chain broken; flag flip yields zero latency gain plus daemon-thread DB lifecycle risk (echo of PERF-3 PR #128 TIME_ZONE KeyError class of bug). `test_imp7_pool_cache` + `test_imp8_async_prefetch` assertions reverted to match False default. Deferred: `PERF-PREFETCH-CHAIN` surfaced in `## Next ### LOW`.
 - [x] **Swipe.py stale defaults** — `RC.get('convergence_threshold', 0.08)` at lines 598 + 862 → `0.13` matching settings prod.
 - Code-review (sonnet) FAIL → all 4 findings resolved before commit (async revert + stale defaults + dislike_ids semantics confirmed intentional + PR body cleaned). Security-manager (sonnet) PASS. Frontend lint+build PASS. Local pytest deferred to CI (env DB unavailable).
-- Plan file `.codex/plans/merry-toasting-dove.md` (Codex retest fix — Analyzing-Phase Calibrating UX) is now superseded by this PR's broader ConfidenceBar rewrite. Calibrating label preserved.
+- Plan file `.claude/plans/merry-toasting-dove.md` (Codex retest fix — Analyzing-Phase Calibrating UX) is now superseded by this PR's broader ConfidenceBar rewrite. Calibrating label preserved.
 - 2 commits on branch (will be squashed): `e4677fb` "Study swipe convergence latency" (PR #127 base content carried forward) + `7f6a056` follow-up (this audit-bearing commit).
 - Deferred: `PERF-PREFETCH-CHAIN` — async prefetch cache-read wiring + Redis swap (Task.md ### LOW). `BACK-AUTH-1` simplejwt blacklist ~590ms unchanged. `BACK-RECOMMEND-2` sklearn matmul warnings unchanged.
 
@@ -583,13 +693,13 @@ Deferred:
 - Deferred: BACK-AUTH-1 — simplejwt JWT blacklist DB query (~590 ms, security territory; explicit user approval required before touching auth path).
 
 ### INFRA-WORKFLOW-1 — Reporter / git-manager 흡수 + 3 skill 도입 — RESOLVED 2026-05-26 (PR #123 `bbadcf1-pre-squash`)
-- [x] `.agents/skills/git-commit/` — single commit + secret guards + caveman convention. Replaces routine `git-manager` agent dispatch.
-- [x] `.agents/skills/git-publish/` — push + PR open + admin squash + cleanup (Mode 2 feature → develop). Step 0 publish gate codified (keyword OR active plan precondition; mirrors `[[feedback_publish_gate]]`).
-- [x] `.agents/skills/reporter-inline/` — Task.md + state.js + algorithm.md inline before squash. In-flight PR `mergedAt:null` sentinel + next-pass backfill (advisor #1 policy). 9-step behavior 1-to-1 from legacy `reporter` agent (advisor #3 checklist).
-- [x] `.codex/agents/git-manager.toml` + `reporter.md` → `deprecated:true` frontmatter + body fallback note. Two-PR migration (advisor #2): delete in follow-up PR after ~1 week of skill-only validation.
-- [x] `.codex/agents/git-publisher.toml` kept indefinitely — Mode 3 deploy / external PR triage / complex rebase escalation.
+- [x] `.claude/skills/git-commit/` — single commit + secret guards + caveman convention. Replaces routine `git-manager` agent dispatch.
+- [x] `.claude/skills/git-publish/` — push + PR open + admin squash + cleanup (Mode 2 feature → develop). Step 0 publish gate codified (keyword OR active plan precondition; mirrors `[[feedback_publish_gate]]`).
+- [x] `.claude/skills/reporter-inline/` — Task.md + state.js + algorithm.md inline before squash. In-flight PR `mergedAt:null` sentinel + next-pass backfill (advisor #1 policy). 9-step behavior 1-to-1 from legacy `reporter` agent (advisor #3 checklist).
+- [x] `.claude/agents/git-manager.md` + `reporter.md` → `deprecated:true` frontmatter + body fallback note. Two-PR migration (advisor #2): delete in follow-up PR after ~1 week of skill-only validation.
+- [x] `.claude/agents/git-publisher.md` kept indefinitely — Mode 3 deploy / external PR triage / complex rebase escalation.
 - [x] `CLAUDE.md` — new `## Git Operations — HARD RULE` section (skill-first matrix + escalation criteria + publish-gate keywords). Workflow section bullets + reporter sync rule refreshed.
-- [x] `.codex/WORKFLOW.md` — Mermaid rebuilt with skill labels. § Agent + skill roster split into 3 tables. § 7 Token-saving + § 9 Key rules updated.
+- [x] `.claude/WORKFLOW.md` — Mermaid rebuilt with skill labels. § Agent + skill roster split into 3 tables. § 7 Token-saving + § 9 Key rules updated.
 - [x] MEMORY: `feedback_orchestrator.md` rewritten (skill matrix). `feedback_workflow_skill_absorption.md` new (migration rationale + per-agent measurement).
 - [x] Validation: this PR audited via the new `reporter-inline` skill (this entry + PR #118 + #120 backfill entries). Skills self-validated by shipping this very PR through `git-commit` + `git-publish` flow.
 - [x] Savings: per PR cycle agent dispatches 8 → 3, ~30-40k tokens + ~150-300s saved. Reporter audit ships in same PR as work — PR count halved.
@@ -660,7 +770,7 @@ Outstanding: `BUILDINGS_DB_PASSWORD` rotate (transcript leak via railway variabl
 Deferred (surfaced by Codex retest, intentionally NOT fixed this session): MATMUL-WARN (engine.py matmul warnings), PERF-DISCOVERY (4.11s cold load), PERF-SESSION-CREATE (7.71s POST /analysis/sessions/), PERF-PROJECTS (double-fetch in dev StrictMode). All remain in `## Next`.
 
 ### #20 TASK-MD-RESTRUCTURE-V2 — RESOLVED 2026-05-25 (PR #104 `0690b85`)
-[x] Restructured `.codex/Task.md` 394 → 305 lines: dropped 100+ lines of `## Development Roadmap` Phase 1-18 (duplicates of Done content), replaced with compact `## Roadmap (Historical)` at file bottom + new `## Workflow Rules` block at top.
+[x] Restructured `Task.md` 394 → 305 lines: dropped 100+ lines of `## Development Roadmap` Phase 1-18 (duplicates of Done content), replaced with compact `## Roadmap (Historical)` at file bottom + new `## Workflow Rules` block at top.
 [x] File order now: header → Workflow Rules → `## Now` → `## Next` → `## Done` → `## Roadmap (Historical)`.
 [x] AUTH1 scope narrowed to frontend buttons only (backend Kakao + Naver already shipped in `apps/accounts/views.py` KakaoLoginView / NaverLoginView).
 [x] AUDIT-T4 LOC counts re-verified 2026-05-25: engine.py 2079→2139, FirmProfilePage 611→540 (refactored down).
@@ -673,8 +783,8 @@ Deferred (surfaced by Codex retest, intentionally NOT fixed this session): MATMU
 [x] Memory `project_design_redesign.md` updated to reflect paused-in-Next status.
 
 ### #18 TASK-NEXT-RESTRUCTURE — RESOLVED 2026-05-24 (PR #101 `19694aa`)
-[x] Absorbed `docs/specs/*.md` (4 files: phase16-recommendation-expansion.md, phase17-llm-reverse-q.md, phase18-external-connections.md, requirements.md) into `.codex/Task.md ## Next` as a flat backlog. Deleted the folder.
-[x] Fixed `orchestrate/SKILL.md` stale refs: `.claude/Goal.md` → `CLAUDE.md ## Product Identity + ## Product Constitution`; `.claude/Report.md` → "read code directly + state.js"; `docs/token-saving.md` → `.codex/WORKFLOW.md § Token-saving rules`.
+[x] Absorbed `docs/specs/*.md` (4 files: phase16-recommendation-expansion.md, phase17-llm-reverse-q.md, phase18-external-connections.md, requirements.md) into `Task.md ## Next` as a flat backlog. Deleted the folder.
+[x] Fixed `orchestrate/SKILL.md` stale refs: `.claude/Goal.md` → `CLAUDE.md ## Product Identity + ## Product Constitution`; `.claude/Report.md` → "read code directly + state.js"; `docs/token-saving.md` → `.claude/WORKFLOW.md § Token-saving rules`.
 [x] Surfaced 10 operational deferrals previously buried in Done note text (IMP-5 bypass, Codex Stage 3 re-audit, perf observations, architects-wiring, security backlog, etc.) as individual `## Next ### <SLUG>` entries.
 [x] Added `reporter.md` sub-step 2a "Deferred-item surfacing (Done note → Next)" so future Done `Deferred: ...` lines auto-surface to `## Next` going forward.
 [x] Stripped stale `docs/specs/*` READ-rights mentions from back-maker.md, front-maker.md, code-review.md — pointed at Task.md `## Next § PHASE16/17/18` instead.
@@ -713,8 +823,8 @@ Deferred: `_caches.py:92` IMP-5 cache create call still bypasses wrapper (gated 
 ### #11 V1-LEGACY-CLEANUP — RESOLVED 2026-05-24 (PR #92 `5957df9`)
 [x] Neondb `local-dev` branch drop + 23 orphan user/app tables + legacy `architecture_vectors` dropped.
 [x] 3 backend files referencing v1 deleted: `tools/algorithm_tester.py`, `apps/recommendation/management/commands/profile_image_latency.py`, `tests/test_chat_phase.py::test_chat_phase_style_labels_in_corpus`.
-[x] 5 stale doc refs refreshed: CLAUDE.md / docs/database-schema.md / docs/COLLAB_HANDOFF.md / .codex/agents/reporter.toml / .codex/agents/code-review.toml.
-Plan `.codex/plans/merry-toasting-dove.md` archived to `.codex/plans/archive/2026-05-24-merry-toasting-dove.md`.
+[x] 5 stale doc refs refreshed: CLAUDE.md / docs/database-schema.md / docs/COLLAB_HANDOFF.md / .claude/agents/reporter.md / .claude/agents/code-review.md.
+Plan `.claude/plans/merry-toasting-dove.md` archived to `.claude/plans/archive/2026-05-24-merry-toasting-dove.md`.
 
 ### develop → main deploy — 21 PRs (#68–#89) — RESOLVED 2026-05-24 (PR #90 merge `179d6f6`)
 [x] Release PR #90 squash-merged develop → main (`179d6f6`). Carried PRs #68–#89 (21 PRs).

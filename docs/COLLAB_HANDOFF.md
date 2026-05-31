@@ -65,9 +65,9 @@ newcomer:
 **Shared (in git, you get them on fetch):**
 - `tools/*` (CLI scripts)
 - `docs/` (specs, algorithm, database schema)
-- `.claude/agents/`, `.claude/skills/` (sub-agent definitions + the orchestrate skill)
-- `.claude/Task.md`, `.claude/WORKFLOW.md`, `.claude/plans/`
-- Root: `CLAUDE.md`, `CONTRIBUTING.md`, `DESIGN.md`, `README.md`
+- `.claude/agents/`, `.claude/skills/` (Claude) + `.codex/agents/`, `.agents/skills/` (Codex) — sub-agent definitions + skills
+- `Task.md` (shared root board, both tools), `.claude/WORKFLOW.md` + `.codex/WORKFLOW.md`, `.claude/plans/` + `.codex/plans/`
+- Root: `CLAUDE.md` (Claude) + `AGENTS.md` (Codex), `CONTRIBUTING.md`, `DESIGN.md`, `README.md`
 
 **Not shared (each clone has its own copy or none):**
 - `.claude/settings*.json` (personal harness settings)
@@ -76,8 +76,9 @@ newcomer:
 - `node_modules/`, `.venv/`, `__pycache__/`, build artifacts
 
 If you fetch the repo and run `claude` from the project root, `CLAUDE.md` and
-the agent definitions auto-load. Other contributors' Claude instances therefore
-share the same workflow guidance once they pull develop.
+the agent definitions auto-load (Codex reads `AGENTS.md` + `.codex/*` the same
+way). Other contributors' Claude/Codex instances therefore share the same
+workflow guidance once they pull develop.
 
 ---
 

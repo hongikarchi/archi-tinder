@@ -52,7 +52,7 @@ agents).
 |-------|------|---------|
 | **orchestrate** | Feature-implementation playbook — dispatches back-maker/front-maker, runs review/security, runs git-commit/git-publish, runs reporter-inline | — (orchestrates others) |
 | **browser-verify** | Runtime verification checklist — main Codex session drives the in-app browser; SKIP / SMOKE / FEATURE-SCOPED / FULL-SWIPE | in-app browser |
-| **reporter-inline** | Session-end audit — `.codex/Task.md` `## Done` + `project/state.js` + conditional `docs/algorithm.md`. Runs INLINE before squash so audit ships in the same PR as the work | `.codex/Task.md`, `project/state.js`, narrow `docs/algorithm.md` |
+| **reporter-inline** | Session-end audit — `Task.md` `## Done` + `project/state.js` + conditional `docs/algorithm.md`. Runs INLINE before squash so audit ships in the same PR as the work | `Task.md`, `project/state.js`, narrow `docs/algorithm.md` |
 | **git-commit** | Single commit on a feature branch — caveman conventional commit + secret guards. Never pushes | `git commit` |
 | **git-publish** | Mode 2: feature branch → develop (push + PR + admin squash + cleanup). Publish gate enforced at Step 0 | `git push`, `gh pr create/merge` |
 
@@ -99,10 +99,9 @@ flowchart TD
     GC --> AT[browser-verify — in-app browser + drift gate]
     AT --> ATv{PASS?}
     ATv -->|FAIL — counts as 1 fix cycle| FL
-    ATv -->|PASS| PG["git-publish skill Step 1-3 — push + PR open"]
-    PG --> RIn["reporter-inline skill — audit on same branch"]
+    ATv -->|PASS| RIn["reporter-inline skill — audit on same branch"]
     RIn --> GC2["git-commit skill — audit commit"]
-    GC2 --> PG4["git-publish skill Step 4-5 — admin squash + cleanup"]
+    GC2 --> PG["git-publish skill — push + PR open + admin squash + cleanup"]
 
     style Start fill:#3b82f6,color:#fff
     style FL fill:#f59e0b,color:#000
@@ -110,7 +109,7 @@ flowchart TD
     style GC fill:#10b981,color:#fff
     style GC2 fill:#10b981,color:#fff
     style PG fill:#10b981,color:#fff
-    style PG4 fill:#10b981,color:#fff
+    style PG fill:#10b981,color:#fff
 ```
 
 **Fix-cycle accounting:** max 2 cycles total across code-review / security /
@@ -143,11 +142,11 @@ accumulate locally on a `feature/*` branch; one push sweeps them as a PR. As of
    (`CONTRIBUTING.md` § Concurrent agents).
 3. `git fetch origin develop --quiet`; if the branch is behind, ask before
    rebasing.
-4. Scan `.codex/Task.md` for any `SESSION-START-TODO` pending action; surface
+4. Scan `Task.md` for any `SESSION-START-TODO` pending action; surface
    it to the user before starting their request.
 
 **Session end** (before the PR squash merges):
-1. `reporter-inline` skill — update `.codex/Task.md` + `project/state.js`
+1. `reporter-inline` skill — update `Task.md` + `project/state.js`
    (conditionally `docs/algorithm.md`). Once per push-worthy unit, not per commit.
 2. `git-commit` skill — audit commit on the same feature branch.
 3. `git-publish` Step 4 — admin squash merge.

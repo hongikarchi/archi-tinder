@@ -157,7 +157,7 @@ Test:
 - npm run build — clean
 - Manual: complete a swipe session in dev → verify /result/{sessionId} loads + 10 cards display + bookmark toggles persist
 
-When done append: `- [<date>] FRONT-DONE: RESULTS-P1 — ResultsPage Phase 1 (Top-K rank 1-10 + bookmark + persona text). N files. lint/build clean.` to .claude/Task.md § Handoffs.
+When done append: `- [<date>] FRONT-DONE: RESULTS-P1 — ResultsPage Phase 1 (Top-K rank 1-10 + bookmark + persona text). N files. lint/build clean.` to Task.md § Handoffs.
 ```
 
 ---

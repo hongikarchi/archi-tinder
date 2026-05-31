@@ -118,7 +118,7 @@ Other deltas (Mermaid changes, milestone changes, Task.md formatting) must be ZE
 **Trigger**: main session before push, after final code commit on a feature branch. Runs inline as part of the feature PR (not a separate PR).
 
 **Scope**:
-- Update `.codex/Task.md` `## Done` (prepend new entry with ID + title + body + PR #).
+- Update `Task.md` `## Done` (prepend new entry with ID + title + body + PR #).
 - Update `project/state.js`:
   - `done[]` prepend new entry
   - `prs[]` prepend new PR (sha field `null` or feature branch SHA — post-squash backfill happens at next reporter pass or daily batch)

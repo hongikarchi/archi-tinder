@@ -254,7 +254,7 @@ Defense-in-depth: buildingId regex /^[A-Za-z0-9_-]{1,32}$/ before fetch (mirror 
 
 NO bookmark in Phase 1 (Phase 2 plumbs route state + bookmark visibility logic).
 
-Acceptance: direct URL loads building info. Lint+build clean. Append `FRONT-DONE: BUILDING-DETAIL-P1 — BuildingDetailPage with gallery + metadata + back. <N> files. lint/build clean.` to .claude/Task.md § Handoffs.
+Acceptance: direct URL loads building info. Lint+build clean. Append `FRONT-DONE: BUILDING-DETAIL-P1 — BuildingDetailPage with gallery + metadata + back. <N> files. lint/build clean.` to Task.md § Handoffs.
 
 Hard rules per AGENTS.md + team-front.md self-review checklist (8 items including fix-loop regression check). Codex /fast may be on — proceed normally.
 ```

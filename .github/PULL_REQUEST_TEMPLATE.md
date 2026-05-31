@@ -6,10 +6,10 @@
 
 ## Spec / task ref
 
-<!-- Link to the relevant `.claude/Task.md` entry, or N/A if none applies.
-     (The old docs/specs/*.md folder was absorbed into .claude/Task.md 2026-05-24.) -->
+<!-- Link to the relevant `Task.md` entry, or N/A if none applies.
+     (The old docs/specs/*.md folder was absorbed into Task.md 2026-05-24.) -->
 
-- task: <!-- e.g. `.claude/Task.md` #### BACK-RECOMMEND-4 (from ## Now / ## Next) -->
+- task: <!-- e.g. `Task.md` #### BACK-RECOMMEND-4 (from ## Now / ## Next) -->
 
 ## Test plan
 

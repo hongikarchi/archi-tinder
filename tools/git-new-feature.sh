@@ -13,7 +13,7 @@
 #   - role is not in {algo, sns, admin, claude, codex}
 #
 # Auto-stashes (and restores after branch creation):
-#   - `.claude/Task.md` — task-ledger edits
+#   - `Task.md` — task-ledger edits
 #   - `.claude/resolved-archive.md` — historical resolved entries
 #   These are bookkeeping that the next feature commit needs to sweep in.
 #
@@ -24,7 +24,7 @@ set -euo pipefail
 
 # Path pattern for review-terminal artifacts that are safe to auto-stash.
 # Matches against `git status --porcelain` second-field paths.
-SAFE_PATHS_REGEX='^\.claude/Task\.md'
+SAFE_PATHS_REGEX='^Task\.md'
 
 # Helper: list dirty paths (modified + staged + untracked); return only those
 # NOT matching SAFE_PATHS_REGEX.
