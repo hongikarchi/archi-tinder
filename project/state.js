@@ -28,12 +28,33 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-05-27 20:23 KST',
-    head: 'db81e0f',
-    branch: 'feature/admin-guest-auth-frontend',
+    updatedAt: '2026-05-31 09:30 KST',
+    head: '61c9ee1',
+    branch: 'develop',
   },
 
   done: [
+    {
+      id: 'SNS-RESULTS-UI-1',
+      title: 'ResultsPage UI overhaul — Liked 카드 노출 + 추천 그리드',
+      completedAt: '2026-05-31',
+      prs: [165],
+      note: 'Top-K 추천 4-column 그리드 + 신규 "My Likes" 가로 스크롤 섹션 (result.liked_images 소비). Imagen placeholder/rank-10 divider 제거, Fragment import drop. frontend/src/pages/ResultsPage.jsx +118/-69. 모바일 4-col 9-10px 폰트 빽빽 (작성자 의도). sha 61c9ee1.',
+    },
+    {
+      id: 'SNS-REPORT-CONNECT',
+      title: '페르소나 리포트 생성 연결 + 필드명 수정',
+      completedAt: '2026-05-31',
+      prs: [163],
+      note: 'Persona report 생성 경로 연결 + personaFields/dominant_styles 필드명 정합. #165 ResultsPage 변경과 무충돌 (별도 라인). sha fc9a5c6.',
+    },
+    {
+      id: 'DOCS-SESSION-2026-05-31',
+      title: '세션 하우스키핑 — worktree 격리 + Codex 경고 + 리뷰 백로그',
+      completedAt: '2026-05-31',
+      prs: [164, 166, 167],
+      note: '동시-에이전트 working-dir 격리(git worktree) CONTRIBUTING + CLAUDE/AGENTS + WORKFLOW 미러 (#166 32a0f7d). Codex startup metadata 경고 수정 (#167 43de2b1). 2026-05-31 swipe/discovery 리뷰 → Task.md ### X-HIGH 버킷 + .claude/reviews/ 문서 (#164 6c5cd66).',
+    },
     {
       id: 'FULL-LOGIN-REDESIGN-1',
       title: 'Guest-first onboarding + 보드 4번째 verify gate',
@@ -95,6 +116,23 @@ window.PROJECT_STATE = {
   now: [],
 
   next: {
+    xhigh: [
+      {
+        id: 'BACK-RECOMMEND-4',
+        title: 'Discovery 좋아요가 추천에 안 먹힘',
+        note: '2026-05-31 swipe/discovery 리뷰 F1a/F1b. Discovery right-swipe like는 UserProfile.liked_building_ids에만 기록되고 추천 엔진이 읽지 않음 → Discovery-only 유저는 아무리 like해도 영구 cold/random feed (core promise 위반). engine.py:2352 compute_user_taste_vector는 Project.liked_ids만 읽음, discovery.py:55-73 exclude-set에 liked_building_ids 없음 → 이미 like한 빌딩 재등장. Fix: liked_building_ids를 taste vector + exclude-set에 투입 + LikedBuildingsView.post에서 evict_taste. engine.py collaborator-owned → 알고리즘 오너 협의.',
+      },
+      {
+        id: 'FRONT-UX-8',
+        title: '질문 답변 전송 실패 시 무음 유실',
+        note: '2026-05-31 리뷰 F2. App.jsx:683-692 handleQuestionAnswer가 setPendingQuestion(null) 후 submitQuestionResponse().catch(() => {}) — 실패 시 답변 무음 유실, UI는 성공처럼 진행 → taste-axis 조정 미반영. Fix: optimistic clear 유지하되 .catch에서 toast + 재큐/텔레메트리. FRONT-UX-7과 동일 패턴 → 공유 reportWriteError 헬퍼.',
+      },
+      {
+        id: 'FRONT-UX-9',
+        title: '모바일 갤러리 세로 스크롤 깨짐 (검증 필요)',
+        note: '2026-05-31 리뷰 F4 (high-confidence, 브라우저 미확인). SwipeCard.jsx:183 root touchAction:none + react-tinder-card index.js:174-176 touchstart preventDefault (className에 pressable 없으면) → 카드 내 갤러리 세로 스크롤 native gesture 취소 추정. PR #158 flip 복원 회귀 가능. VERIFY FIRST: 390x844 뷰포트에서 갤러리 세로 드래그. 깨지면 fix=갤러리 스크롤 div에 touchAction:pan-y + pressable className. 재현 안 되면 downgrade/close.',
+      },
+    ],
     high: [
       {
         id: 'BACK-RECOMMEND-1',
