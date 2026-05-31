@@ -50,7 +50,7 @@
 
   ## Workflow — one session + sub-agents + skills
 
-  ArchiTinder Make Web is built from **one Claude Code session** (the orchestrator). It owns architecture, schema, auth, product + release decisions, and review — it does not write feature code itself; it dispatches sub-agents and runs skills.
+  ArchiTinder Make Web's Claude side runs as **one Claude Code orchestrator session** (concurrent with Codex in its own clone — HARD RULE 7). It owns architecture, schema, auth, product + release decisions, and review — it does not write feature code itself; it dispatches sub-agents and runs skills.
 
   - **Skills** (`.claude/skills/`) — procedures the main session runs itself:
     - `orchestrate` — feature-implementation playbook (back-maker/front-maker → review → security → git → publish → reporter).

@@ -9,11 +9,12 @@
 
 ## 1. Architecture — one session, agents + skills
 
-ArchiTinder Make Web is built from **one Claude Code session** (the
-orchestrator). It owns architecture, schema, auth, product + release decisions,
-and review. It does not write feature code itself — it **dispatches sub-agents**
-for isolated work that returns a result, and runs **skills** itself for
-procedures that benefit from staying in the main session context.
+ArchiTinder Make Web's Claude side runs as **one Claude Code orchestrator
+session** (this tool, in a cmux terminal). It owns architecture, schema, auth,
+product + release decisions, and review. It does not write feature code itself —
+it **dispatches sub-agents** for isolated work that returns a result, and runs
+**skills** itself for procedures that benefit from staying in the main session
+context.
 
 ```mermaid
 flowchart TD
@@ -37,9 +38,12 @@ flowchart TD
     style PubA fill:#6b7280,color:#fff
 ```
 
-No Codex, no cmux terminals, no cross-session handoff signals — every worker is
-either a sub-agent (isolated context) or a skill (main session context). Both
-return their results to the session that ran them.
+Within this session every worker is a sub-agent (isolated context) or a skill
+(main session context) — no mid-task cross-session handoff signals; both return
+their results to the session that ran them. **Codex runs concurrently as a peer
+worker in its own clone** (`make_web-codex/`, separate `.git`) — not a sub-agent
+of this session, never sharing this working dir (`CONTRIBUTING.md` § Concurrent
+agents).
 
 ## 2. Agent + skill roster
 
@@ -247,8 +251,11 @@ surface).
 
 _History: pre-2026-05-22 the project ran across multiple cmux terminals with
 Codex CLI workers. Collapsed to a single Claude Code session + sub-agents once
-sub-agents provided the same context isolation; Codex dropped the same date.
-2026-05-26: routine reporter / git-manager / git-publisher Mode 2 absorbed into
-`reporter-inline` / `git-commit` / `git-publish` skills to eliminate per-cycle
-Agent dispatch overhead (~30-40k tokens, ~150-300 seconds saved per PR cycle).
-Agent files for the deprecated two kept ~1 week for fallback._
+sub-agents provided the same context isolation; the old cross-cmux Codex CLI
+handoff dropped the same date. 2026-05-26: routine reporter / git-manager /
+git-publisher Mode 2 absorbed into `reporter-inline` / `git-commit` /
+`git-publish` skills to eliminate per-cycle Agent dispatch overhead (~30-40k
+tokens, ~150-300 seconds saved per PR cycle). Agent files for the deprecated two
+kept ~1 week for fallback. 2026-05-31: Codex re-introduced as a CONCURRENT PEER
+in its own clone (`make_web-codex`, one-clone-per-worker) — not the old
+cross-cmux CLI handoff; see `CONTRIBUTING.md` § Concurrent agents._

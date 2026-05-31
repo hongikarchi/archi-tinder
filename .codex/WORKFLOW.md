@@ -9,11 +9,11 @@
 
 ## 1. Architecture — one session, agents + skills
 
-ArchiTinder Make Web is built from **one Codex app session** (the
-orchestrator). It owns architecture, schema, auth, product + release decisions,
-and review. It does not write feature code itself — it **dispatches sub-agents**
-for isolated work that returns a result, and runs **skills** itself for
-procedures that benefit from staying in the main session context.
+ArchiTinder Make Web's Codex side runs as **one Codex app orchestrator
+session** (this tool). It owns architecture, schema, auth, product + release
+decisions, and review. It does not write feature code itself — it **dispatches
+sub-agents** for isolated work that returns a result, and runs **skills** itself
+for procedures that benefit from staying in the main session context.
 
 ```mermaid
 flowchart TD
@@ -37,9 +37,12 @@ flowchart TD
     style PubA fill:#6b7280,color:#fff
 ```
 
-No Claude Code, no cmux terminals, no cross-session handoff signals — every worker is
-either a sub-agent (isolated context) or a skill (main session context). Both
-return their results to the session that ran them.
+Within this session every worker is a sub-agent (isolated context) or a skill
+(main session context) — no mid-task cross-session handoff signals; both return
+their results to the session that ran them. **Claude Code runs concurrently as a
+peer worker in the main clone** (`make_web/`, separate `.git`) — not a sub-agent
+of this session, never sharing this working dir (`CONTRIBUTING.md` § Concurrent
+agents).
 
 ## 2. Agent + skill roster
 
@@ -258,4 +261,7 @@ was ported to Codex app with local `.codex/agents` and `.agents/skills`.
 2026-05-26: routine reporter / git-manager / git-publisher Mode 2 absorbed into
 `reporter-inline` / `git-commit` / `git-publish` skills to eliminate per-cycle
 Agent dispatch overhead (~30-40k tokens, ~150-300 seconds saved per PR cycle).
-Agent files for the deprecated two kept ~1 week for fallback._
+Agent files for the deprecated two kept ~1 week for fallback. 2026-05-31:
+formalized as a CONCURRENT PEER model — Codex works in its own clone
+(`make_web-codex`), Claude Code in the main clone (`make_web`), each its own
+`.git`; one-clone-per-worker (`CONTRIBUTING.md` § Concurrent agents)._
