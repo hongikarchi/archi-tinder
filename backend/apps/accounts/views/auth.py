@@ -45,8 +45,10 @@ def _exchange_google_code(code):
     Returns dict with keys: provider_id, email, display_name, avatar_url.
     Raises ValueError on any failure so callers can return 400/502.
 
-    Defined as a module-level function so tests can monkeypatch it:
-        monkeypatch.setattr('apps.accounts.views._exchange_google_code',
+    Defined as a module-level function so tests can monkeypatch it at its own
+    module path (NOT the facade path — the facade re-export is a name copy and
+    does not intercept this binding):
+        monkeypatch.setattr('apps.accounts.views.auth._exchange_google_code',
                             lambda code: {'provider_id': '...', ...})
     """
     try:

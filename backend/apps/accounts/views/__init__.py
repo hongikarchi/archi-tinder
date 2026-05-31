@@ -1,13 +1,19 @@
 """accounts.views facade — re-exports every public name from the sub-modules.
 
-PATCH-PATH CONTRACT (do not remove without updating tests):
-  apps.accounts.views._dj_connections  → from .profile (used by LikedBuildingsView)
-  apps.accounts.views.requests         → from .auth (used by GoogleLoginView / KakaoLoginView / NaverLoginView)
-  apps.accounts.views._exchange_google_code → from .auth (patched in test_guest_auth.py)
+IMPORT COMPATIBILITY: `from apps.accounts.views import X` and urls.py imports
+resolve here for every view class + helper re-exported below.
 
-All view classes imported by urls.py are also re-exported here so that
-  from apps.accounts.views import X
-and the patch path  apps.accounts.views.X  keep working unchanged.
+MOCK-PATCH CONTRACT (facade re-export is a NAME COPY — read before patching):
+  - `requests` is a MODULE → patch('apps.accounts.views.requests.post') works:
+    the attribute is set on the shared module object that auth.py resolves at
+    call time. (test_auth.py relies on this.)
+  - `_exchange_google_code` (function) / `_dj_connections` (connections object)
+    are NOT interceptable at the facade path. The re-export below is a separate
+    binding, so patching `apps.accounts.views._exchange_google_code` does NOT
+    rebind the global that auth.py / profile.py actually call. Patch the
+    SUBMODULE path instead:
+        apps.accounts.views.auth._exchange_google_code      (test_guest_auth.py)
+        apps.accounts.views.profile._dj_connections         (test_liked_buildings.py)
 """
 
 # -- auth sub-module names -------------------------------------------------
@@ -37,9 +43,10 @@ from .auth import (  # noqa: F401
 )
 
 # -- profile sub-module names ----------------------------------------------
-# Import `_dj_connections` into this namespace so
-# patch('apps.accounts.views._dj_connections', ...) intercepts the right binding.
-from .profile import _dj_connections  # noqa: F401  (patch target)
+# Re-exported for `from apps.accounts.views import _dj_connections` compatibility.
+# To mock.patch it, patch apps.accounts.views.profile._dj_connections — this
+# facade name is a copy and does NOT intercept profile.py's own binding.
+from .profile import _dj_connections  # noqa: F401  (import compat; patch via .profile)
 
 from .profile import (  # noqa: F401
     # module-level helpers / constants
