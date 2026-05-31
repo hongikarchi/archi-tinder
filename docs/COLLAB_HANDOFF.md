@@ -114,8 +114,8 @@ from 4 tabs to 3 (Discovery / Taste / Profile), DB cutover to
 
 ## 7. When stuck
 
-- Workflow questions → `.claude/WORKFLOW.md`
-- Branch / push errors → `CLAUDE.md` § Branch Model + `CONTRIBUTING.md`
+- Workflow questions → `.claude/WORKFLOW.md` (Claude) / `.codex/WORKFLOW.md` (Codex)
+- Branch / push errors → `CLAUDE.md` / `AGENTS.md` § Branch Model + `CONTRIBUTING.md`
 - Algorithm theory → `docs/algorithm.md`
 - DB schema → `docs/database-schema.md`
 - Anything else → ask the admin (Role C) in chat.

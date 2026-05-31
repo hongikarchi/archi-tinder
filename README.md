@@ -127,7 +127,7 @@ git branch -d feature/algo-mmr-tuning
 |--------|------|-----|
 | `git push` rejected with "protected branch" | Tried to push to `main` or `develop` | Create a feature branch: `git checkout -b feature/<role>-<topic>` and push that |
 | `pre-push` hook says "migration order conflict" | Someone else merged a migration with the same number | `git checkout develop && git pull && git checkout - && git rebase develop`, then `python manage.py makemigrations <app>` to renumber |
-| PR shows "1 file is unreviewed" forever | CODEOWNERS placeholder still has `@TODO-role-*` | Admin replaces placeholders with real GitHub handles |
+| PR shows "1 file is unreviewed" forever | CODEOWNERS is pre-filled with `@hongikarchi`; no `@TODO-role-*` placeholders remain | Add the real collaborator's handle to `.github/CODEOWNERS` and merge via PR |
 | CI fails on `makemigrations --check` | Model change without migration file | `cd backend && python manage.py makemigrations <app>` and commit the file |
 
 ---
@@ -137,4 +137,4 @@ git branch -d feature/algo-mmr-tuning
 `frontend/` (React 18 + Vite) ↔ `backend/` (Django 4.2 + DRF + pgvector + Gemini)
 ↔ Neon PostgreSQL (`canonical_v2_buildings` table owned by Make DB, read-only here).
 
-DB schema: `docs/database-schema.md`. Workflow + agents: `.claude/WORKFLOW.md`.
+DB schema: `docs/database-schema.md`. Workflow + agents: `.claude/WORKFLOW.md` (Claude) / `.codex/WORKFLOW.md` (Codex).

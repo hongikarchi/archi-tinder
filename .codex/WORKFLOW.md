@@ -109,7 +109,6 @@ flowchart TD
     style GC fill:#10b981,color:#fff
     style GC2 fill:#10b981,color:#fff
     style PG fill:#10b981,color:#fff
-    style PG fill:#10b981,color:#fff
 ```
 
 **Fix-cycle accounting:** max 2 cycles total across code-review / security /
@@ -120,10 +119,10 @@ guidance.
 *code* (static, per change, pre-commit). `browser-verify` checks the *running app*
 (in-app browser journey + drift, pre-push). Different activities, no overlap.
 
-**Reporter-inline placement (2026-05-26 change):** Reporter runs AFTER the PR
-is opened (so the PR number is known) but BEFORE admin squash merge. The audit
-commits land on the same feature branch as the code, get squashed together,
-and ship as a single PR. No more separate reporter PR cycle.
+**Reporter-inline placement (2026-05-26 change):** Reporter-inline runs BEFORE
+`git-publish` — the audit commits onto the feature branch and ships in the same
+PR; keyed on the task ID, the GitHub PR# is optional (auto-stamped on the squash
+commit).
 
 A plain question or explanation spawns no agents — answer directly.
 

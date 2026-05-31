@@ -64,7 +64,7 @@ If any of `.env*`, `*.key`, `*.pem`, `credentials.*`, `secrets/*` appears in the
 
 **Trailer** (required boilerplate, NEVER drop or compress):
 ```
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
 ```
 
 Adjust the model name to match the actual model the main session is using.
@@ -86,7 +86,7 @@ git commit -m "$(cat <<'EOF'
 
 <body lines, optional>
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
 EOF
 )"
 ```

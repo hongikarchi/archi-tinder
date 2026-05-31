@@ -2,8 +2,8 @@
  * project/state.js — ArchiTinder Make Web project state.
  *
  * Maintained by `reporter-inline` skill (2026-05-26+) — runs INLINE in the
- * feature PR before squash merge. Legacy `reporter` agent kept as deprecated
- * fallback. Hand-edited only inside `systemFlow` / `recommendationFlow` /
+ * feature PR before squash merge. Hand-edited only inside `systemFlow` /
+ * `recommendationFlow` /
  * `agentFlow` Mermaid bodies and the `milestones` archive (semi-static); all
  * other sections are rebuilt from `Task.md`, `gh pr list`, and
  * `.claude/agents/<name>.md` + `.claude/skills/<slug>/SKILL.md` frontmatter.
@@ -312,20 +312,8 @@ window.PROJECT_STATE = {
       effort: 'default',
     },
     {
-      name: 'git-manager',
-      role: 'Single commit — stages changed files (excluding secrets), writes caveman-terse conventional-commit message. Never pushes. (deprecated — superseded by .claude/skills/git-commit/)',
-      model: 'haiku',
-      effort: 'default',
-    },
-    {
       name: 'git-publisher',
       role: 'Edge-case publisher. Mode 3 develop→main deploy + post-deploy develop force-reset + external PR triage + complex rebase + push rejection / mid-merge failure. Routine feature→develop publishes go through git-publish skill (not this agent).',
-      model: 'sonnet',
-      effort: 'default',
-    },
-    {
-      name: 'reporter',
-      role: 'Session-end — updates Task.md, regenerates this dashboard state, conditionally syncs docs/algorithm.md. (deprecated — superseded by .claude/skills/reporter-inline/)',
       model: 'sonnet',
       effort: 'default',
     },

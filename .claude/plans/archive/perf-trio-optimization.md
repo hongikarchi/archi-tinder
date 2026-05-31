@@ -130,8 +130,7 @@ Each slice runs through the `orchestrate` skill:
 
 ## Historical PR Plan (resolved — NOT a live publish gate) (Step 8 publish-gate authorization)
 
-This section opens `git-publish` Step 0 publish gate (b) — Active plan with
-`## PR Plan` section explicitly authorizes the listed PRs.
+(Historical — this plan is resolved and archived; it does NOT open any publish gate.)
 
 | Slice | Feature branch | PR base | Merge strategy |
 |---|---|---|---|

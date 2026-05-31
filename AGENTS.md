@@ -53,7 +53,7 @@
   ArchiTinder Make Web's Codex side runs as **one Codex orchestrator session** (concurrent with Claude Code in the main clone — HARD RULE 7). It owns architecture, schema, auth, product + release decisions, and review — it does not write feature code itself; it dispatches sub-agents and runs skills.
 
   - **Skills** (`.agents/skills/`) — procedures the main session runs itself:
-    - `orchestrate` — feature-implementation playbook (back-maker/front-maker → review → security → browser verification → git → publish → reporter).
+    - `orchestrate` — feature-implementation playbook (back-maker/front-maker → review → security → browser verification → git-commit → reporter-inline → git-publish).
     - `browser-verify` — Codex in-app browser verification checklist; default runtime gate before publish.
     - `reporter-inline` — session-end audit (Task.md + state.js + algorithm.md). Runs inline before squash merge so audit ships in the SAME PR as the work. **Replaces the `reporter` agent for routine housekeeping** (2026-05-26).
     - `git-commit` — single-commit creator with branch + secret guards. **Replaces the `git-manager` agent for routine commits** (2026-05-26).

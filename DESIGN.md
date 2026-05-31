@@ -8,7 +8,7 @@
 >
 > Editorial rights: admin-owned via PR (sibling of `CLAUDE.md`). Reporter
 > updates are not applicable here. Other agents (`front-maker`, `code-review`,
-> `app-test`) read but never write.
+> `app-test` (Claude) / `browser-verify` (Codex)) read but never write.
 >
 > **Adopted 2026-05-21 — full redesign.** Light-mode default, 4 user-selectable
 > themes + theme switcher, font switcher, CSS-variable design tokens

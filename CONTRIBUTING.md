@@ -257,7 +257,7 @@ git checkout develop && git fetch origin develop && git reset --hard origin/deve
 ```
 
 **This is the only permitted force on a shared branch.** It is codified as a
-carve-out in `CLAUDE.md` § HARD RULE 4 and in `.claude/agents/git-publisher.md`
+carve-out in `CLAUDE.md` / `AGENTS.md` § HARD RULE 4 and in `.claude/agents/git-publisher.md`
 § Mode 3 step 5. Precondition: every commit on `origin/develop` must be
 content-equal to `origin/main` (no in-flight feature PR targets `develop`).
 The `git-publisher` agent runs this automatically after a deploy merge.
@@ -330,4 +330,4 @@ If two roles need to edit the same file, coordinate via:
 - Reporter is deferred to session end. Don't spawn after every commit.
 - Trivial commits (<50 LOC, no migration, no production logic) skip code-review/security.
 
-See `.claude/WORKFLOW.md` for the full token-saving policy.
+See `.claude/WORKFLOW.md` (Claude) / `.codex/WORKFLOW.md` (Codex) for the full token-saving policy.

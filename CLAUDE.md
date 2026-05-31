@@ -53,7 +53,7 @@
   ArchiTinder Make Web's Claude side runs as **one Claude Code orchestrator session** (concurrent with Codex in its own clone — HARD RULE 7). It owns architecture, schema, auth, product + release decisions, and review — it does not write feature code itself; it dispatches sub-agents and runs skills.
 
   - **Skills** (`.claude/skills/`) — procedures the main session runs itself:
-    - `orchestrate` — feature-implementation playbook (back-maker/front-maker → review → security → git → publish → reporter).
+    - `orchestrate` — feature-implementation playbook (back-maker/front-maker → review → security → git-commit → reporter-inline → git-publish).
     - `reporter-inline` — session-end audit (Task.md + state.js + algorithm.md). Runs inline before squash merge so audit ships in the SAME PR as the work. **Replaces the `reporter` agent for routine housekeeping** (2026-05-26).
     - `git-commit` — single-commit creator with branch + secret guards. **Replaces the `git-manager` agent for routine commits** (2026-05-26).
     - `git-publish` — feature → develop push + PR open + admin squash + cleanup (Mode 2). **Replaces the `git-publisher` agent's Mode 2** (2026-05-26); the agent stays for Mode 3 deploy / external PR triage / complex rebase.
