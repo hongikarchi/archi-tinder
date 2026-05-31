@@ -53,7 +53,14 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(none — no active initiative slice with a PR in flight.)_
+### FRONT-AUTH-2 — 로그인 스와이프 온보딩
+Redesign `/login` as conversational swipe onboarding while preserving the existing guest auth API contract.
+
+- [ ] Sync `feature/admin-login-page` from latest `origin/develop` before editing.
+- [ ] Extract shared `react-tinder-card` gesture config/wrapper for Login, SwipePage, and DiscoveryPage.
+- [ ] Rebuild LoginPage: first card right=new user / left=returning user, required display name, required role, consent card with right-swipe or button submit.
+- [ ] Preserve `/discovery` handoff, dev login, Google conditional mount, and `buildGuestLoginPayload` wire shape.
+- [ ] Verify with frontend unit test, lint, build, and feature-scoped browser check.
 
 ---
 

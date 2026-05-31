@@ -1,8 +1,9 @@
 import { useRef, useState, useEffect } from 'react'
-import TinderCard from 'react-tinder-card'
 import TutorialPopup from '../components/TutorialPopup.jsx'
 import SwipeCard, { CARD_WIDTH, CARD_HEIGHT } from '../components/SwipeCard.jsx'
 import QuestionCard from '../components/QuestionCard.jsx'
+import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
+import { SWIPE_PREVENT_ALL } from '../components/swipeGestureConfig.js'
 
 /* ── LoadingCard ─────────────────────────────────────────────────────────── */
 function LoadingCard() {
@@ -645,21 +646,19 @@ export default function SwipePage({
               />
             ) : (
               <>
-                <TinderCard
+                <SwipeGestureFrame
                   ref={cardRef}
                   key={`${currentCard.image_id}_${cardResetToken}_${localResetTick}`}
                   onSwipe={onTinderSwipe}
                   onCardLeftScreen={onCardLeftScreen}
-                  preventSwipe={galleryOpen ? ['left', 'right', 'up', 'down'] : ['up', 'down']}
-                  swipeRequirementType='position'
-                  swipeThreshold={120}
+                  preventSwipe={galleryOpen ? SWIPE_PREVENT_ALL : undefined}
                 >
                   <SwipeCard
                     card={currentCard}
                     onGalleryOpen={() => setGalleryOpen(true)}
                     onGalleryClose={() => setGalleryOpen(false)}
                   />
-                </TinderCard>
+                </SwipeGestureFrame>
                 {isLoading && (
                   <div style={{
                     position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',

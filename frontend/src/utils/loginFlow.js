@@ -12,6 +12,24 @@ export const ONBOARDING_ROLES = [
   { value: 'other',       label: 'Just exploring' },
 ]
 
+export const LOGIN_SWIPE_ACTIONS = { left: 'returning', right: 'new' }
+
+export function getLoginSwipeAction(direction) {
+  return LOGIN_SWIPE_ACTIONS[direction] || null
+}
+
+export function isDisplayNameReady(value) {
+  return typeof value === 'string' && value.trim().length > 0
+}
+
+export function isRoleReady(value) {
+  return ONBOARDING_ROLES.some(role => role.value === value)
+}
+
+export function isGuestProfileReady(profile = {}) {
+  return isDisplayNameReady(profile.displayName) && isRoleReady(profile.role)
+}
+
 /**
  * Normalize a user-supplied display name.
  * - Trims whitespace.

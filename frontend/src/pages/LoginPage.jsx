@@ -1,64 +1,88 @@
 /**
  * pages/LoginPage.jsx
- * Guest-first onboarding wizard (3 steps: intro → name → role).
- * Terminal-style typing animation on each step.
- * PIPA consent capture on intro step before wizard can proceed.
- * "Continue with Google" CTA for returning verified users (no re-consent needed).
+ * Conversational swipe onboarding for returning Google users and new guests.
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import * as api from '../api/client.js'
+import GoogleLoginButton from '../components/GoogleLoginButton.jsx'
+import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
+import { SWIPE_PREVENT_ALL } from '../components/swipeGestureConfig.js'
 import {
+  LOGIN_SWIPE_ACTIONS,
   ONBOARDING_ROLES,
   buildGuestLoginPayload,
+  getLoginSwipeAction,
   hasGoogleLogin,
+  isDisplayNameReady,
+  isGuestProfileReady,
+  isRoleReady,
 } from '../utils/loginFlow.js'
-import GoogleLoginButton from '../components/GoogleLoginButton.jsx'
 
-// Terminal prompt lines per step
-const STEP_COPY = {
-  intro: ['boot architinder://profile', 'First time here?'],
-  name:  ['guest profile selected',     'What should we call you?'],
-  role:  ['name saved',                 'Which one fits you best?'],
+const FLOW_STEPS = {
+  choice: 'choice',
+  returning: 'returning',
+  profile: 'profile',
+  consent: 'consent',
 }
+
+const STEP_PROMPTS = {
+  choice: 'Tell me how to welcome you.',
+  returning: 'I can restore your verified profile.',
+  profile: 'A name and objective shape your first deck.',
+  consent: 'One right swipe creates the guest profile.',
+}
+
+const AUTH_STAGE_WIDTH = 'min(420px, calc(100vw - 32px))'
+const AUTH_CARD_HEIGHT = 'clamp(420px, calc(100vh - 190px), 520px)'
+const RIGHT_ONLY_PREVENT_SWIPE = ['left', 'up', 'down']
 
 export default function LoginPage({ onLogin }) {
   const googleConfigured = hasGoogleLogin(import.meta.env.VITE_GOOGLE_CLIENT_ID)
+  const pendingChoiceAction = useRef(null)
+  const pendingConsentSubmit = useRef(false)
 
-  // Wizard state
-  const [step, setStep] = useState('intro')
-  const [consentGiven, setConsentGiven] = useState(false)
+  const [step, setStep] = useState(FLOW_STEPS.choice)
   const [displayName, setDisplayName] = useState('')
   const [role, setRole] = useState('')
-
-  // Terminal typing animation
-  const [typedLine, setTypedLine] = useState('')
-  const terminalLines = useMemo(() => STEP_COPY[step] || STEP_COPY.intro, [step])
-  const activeLine = terminalLines[terminalLines.length - 1]
-
-  useEffect(() => {
-    setTypedLine('')
-    let index = 0
-    const timer = window.setInterval(() => {
-      index += 1
-      setTypedLine(activeLine.slice(0, index))
-      if (index >= activeLine.length) window.clearInterval(timer)
-    }, 24)
-    return () => window.clearInterval(timer)
-  }, [activeLine])
-
-  // Loading and error state
-  const [loading, setLoading] = useState(null)  // 'guest' | 'google' | 'dev' | null
+  const [consentGiven, setConsentGiven] = useState(false)
+  const [consentResetTick, setConsentResetTick] = useState(0)
+  const [loading, setLoading] = useState(null) // 'guest' | 'google' | 'dev' | null
   const [error, setError] = useState(null)
 
+  const typedLine = useTypedLine(STEP_PROMPTS[step] || STEP_PROMPTS.choice)
   const isBusy = loading !== null
+  const profileReady = isGuestProfileReady({ displayName, role })
 
-  // -- Google (returning verified users, auth-code flow) ---------------------
-  // useGoogleLogin is NOT called here — it lives inside GoogleLoginButton,
-  // which is only mounted when googleConfigured === true (inside GoogleOAuthProvider).
+  function moveToStep(nextStep) {
+    setError(null)
+    setStep(nextStep)
+  }
+
+  function handleChoiceAction(action) {
+    pendingChoiceAction.current = null
+    setConsentGiven(false)
+    if (action === LOGIN_SWIPE_ACTIONS.left) {
+      moveToStep(FLOW_STEPS.returning)
+    } else if (action === LOGIN_SWIPE_ACTIONS.right) {
+      moveToStep(FLOW_STEPS.profile)
+    }
+  }
+
+  function handleChoiceSwipe(direction) {
+    const action = getLoginSwipeAction(direction)
+    if (action) pendingChoiceAction.current = action
+  }
+
+  function handleChoiceLeftScreen() {
+    if (pendingChoiceAction.current) {
+      handleChoiceAction(pendingChoiceAction.current)
+    }
+  }
 
   async function handleGoogleSuccess(codeResponse) {
     setLoading('google')
+    setError(null)
     try {
       const user = await api.socialLogin('google', null, codeResponse.code)
       onLogin(user)
@@ -87,10 +111,34 @@ export default function LoginPage({ onLogin }) {
     setLoading(null)
   }
 
-  // -- Guest (wizard submit) ------------------------------------------------
-  async function handleGuestSubmit(event) {
-    event?.preventDefault()
+  function handleProfileContinue(event) {
+    event.preventDefault()
     setError(null)
+    if (!isDisplayNameReady(displayName)) {
+      setError('Enter a display name to continue.')
+      return
+    }
+    if (!isRoleReady(role)) {
+      setError('Choose an objective to continue.')
+      return
+    }
+    setConsentGiven(false)
+    moveToStep(FLOW_STEPS.consent)
+  }
+
+  async function handleGuestSubmit({ consentConfirmed = consentGiven } = {}) {
+    if (isBusy) return
+    setError(null)
+    if (!isGuestProfileReady({ displayName, role })) {
+      setError('Add a display name and objective before consent.')
+      setStep(FLOW_STEPS.profile)
+      return
+    }
+    if (!consentConfirmed) {
+      setError('Consent is required before creating a guest profile.')
+      return
+    }
+
     setLoading('guest')
     try {
       const user = await api.guestLogin(buildGuestLoginPayload({ displayName, role }))
@@ -98,18 +146,35 @@ export default function LoginPage({ onLogin }) {
     } catch (err) {
       const detail = err?.data?.detail || err?.message || 'Unknown error'
       if (detail === 'consent_required') {
-        setError('Consent is required to continue. Please accept the terms on the first screen.')
-        setStep('intro')
+        setError('Consent is required to continue. Please try the consent step again.')
         setConsentGiven(false)
       } else {
         setError(`Sign in failed: ${detail}`)
       }
+      setConsentResetTick(t => t + 1)
     } finally {
       setLoading(null)
     }
   }
 
-  // -- Dev bypass (dev env only) --------------------------------------------
+  function handleConsentAction() {
+    if (isBusy) return
+    setConsentGiven(true)
+    handleGuestSubmit({ consentConfirmed: true })
+  }
+
+  function handleConsentSwipe(direction) {
+    if (direction !== 'right') return
+    pendingConsentSubmit.current = true
+    setConsentGiven(true)
+  }
+
+  function handleConsentLeftScreen() {
+    if (!pendingConsentSubmit.current) return
+    pendingConsentSubmit.current = false
+    handleGuestSubmit({ consentConfirmed: true })
+  }
+
   async function handleDevClick() {
     setError(null)
     setLoading('dev')
@@ -126,111 +191,80 @@ export default function LoginPage({ onLogin }) {
   }
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: 'var(--color-bg)',
-      display: 'grid',
-      placeItems: 'center',
-      padding: 24,
-    }}>
-      <main style={{
-        width: '100%',
-        maxWidth: 420,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 22,
-      }}>
-        {/* Wordmark */}
-        <header style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <h1 style={{ fontSize: 34, fontWeight: 700, margin: 0, letterSpacing: 0 }}>
+    <div style={pageStyle}>
+      <main style={mainStyle}>
+        <header style={headerStyle}>
+          <h1 style={wordmarkStyle}>
             <span style={{ color: 'var(--color-text)' }}>Archi</span>
             <span style={{ color: 'var(--accent-1, #0969DA)' }}>Tinder</span>
           </h1>
-          <p style={{ color: 'var(--color-text-dimmer)', fontSize: 14, margin: 0 }}>
-            Build a taste profile before you build a board.
-          </p>
+          <p style={taglineStyle}>Start with a swipe, then tune a taste profile.</p>
         </header>
 
-        {/* Terminal card */}
-        <section
-          style={{
-            border: '1px solid var(--color-border)',
-            borderRadius: 8,
-            background: 'var(--color-surface)',
-            padding: 18,
-            boxShadow: '0 18px 40px rgba(0,0,0,0.14)',
-          }}
-          aria-label="Onboarding wizard"
-        >
-          {/* Terminal display */}
-          <div
-            aria-hidden="true"
-            style={{
-              minHeight: 104,
-              borderRadius: 6,
-              background: '#111827',
-              border: '1px solid rgba(255,255,255,0.10)',
-              padding: 14,
-              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-              fontSize: 13,
-              lineHeight: 1.7,
-              color: '#e5e7eb',
-            }}
-          >
-            <div style={{ color: '#94a3b8' }}>$ {terminalLines[0]}</div>
-            <div>
-              <span style={{ color: 'var(--accent-1, #0969DA)' }}>&gt; </span>
-              {typedLine}
-              <span style={{ opacity: typedLine.length === activeLine.length ? 1 : 0 }}>_</span>
-            </div>
-          </div>
+        <div style={stageStyle}>
+          {step === FLOW_STEPS.choice && (
+            <ChoiceStep
+              typedLine={typedLine}
+              disabled={isBusy}
+              onSwipe={handleChoiceSwipe}
+              onCardLeftScreen={handleChoiceLeftScreen}
+              onReturning={() => handleChoiceAction(LOGIN_SWIPE_ACTIONS.left)}
+              onNew={() => handleChoiceAction(LOGIN_SWIPE_ACTIONS.right)}
+            />
+          )}
 
-          {/* Step content */}
-          <div style={{ marginTop: 18 }}>
-            {step === 'intro' && (
-              <IntroStep
-                disabled={isBusy}
-                consentGiven={consentGiven}
-                onConsentToggle={() => setConsentGiven(prev => !prev)}
-                onNew={() => {
-                  setError(null)
-                  setStep('name')
-                }}
-                showGoogle={googleConfigured}
-                googleLoading={loading === 'google'}
-                onGoogleSuccess={handleGoogleSuccess}
-                onGoogleError={handleGoogleError}
-                onGoogleNonOAuthError={handleGoogleNonOAuthError}
-              />
-            )}
+          {step === FLOW_STEPS.returning && (
+            <ReturningStep
+              typedLine={typedLine}
+              showGoogle={googleConfigured}
+              disabled={isBusy}
+              googleLoading={loading === 'google'}
+              onBack={() => moveToStep(FLOW_STEPS.choice)}
+              onGoogleSuccess={handleGoogleSuccess}
+              onGoogleError={handleGoogleError}
+              onGoogleNonOAuthError={handleGoogleNonOAuthError}
+            />
+          )}
 
-            {step === 'name' && (
-              <NameStep
-                value={displayName}
-                disabled={isBusy}
-                onChange={setDisplayName}
-                onBack={() => setStep('intro')}
-                onNext={() => {
-                  setError(null)
-                  setStep('role')
-                }}
-              />
-            )}
+          {step === FLOW_STEPS.profile && (
+            <ProfileStep
+              typedLine={typedLine}
+              displayName={displayName}
+              role={role}
+              profileReady={profileReady}
+              disabled={isBusy}
+              onDisplayNameChange={(value) => {
+                setDisplayName(value)
+                setError(null)
+                setConsentGiven(false)
+              }}
+              onRoleChange={(value) => {
+                setRole(value)
+                setError(null)
+                setConsentGiven(false)
+              }}
+              onBack={() => moveToStep(FLOW_STEPS.choice)}
+              onSubmit={handleProfileContinue}
+            />
+          )}
 
-            {step === 'role' && (
-              <RoleStep
-                value={role}
-                disabled={isBusy}
-                loading={loading === 'guest'}
-                onChange={setRole}
-                onBack={() => setStep('name')}
-                onSubmit={handleGuestSubmit}
-              />
-            )}
-          </div>
-        </section>
+          {step === FLOW_STEPS.consent && (
+            <ConsentStep
+              key={`consent-step-${consentResetTick}`}
+              typedLine={typedLine}
+              displayName={displayName}
+              role={role}
+              profileReady={profileReady}
+              disabled={isBusy}
+              loading={loading === 'guest'}
+              onSwipe={handleConsentSwipe}
+              onCardLeftScreen={handleConsentLeftScreen}
+              onBack={() => moveToStep(FLOW_STEPS.profile)}
+              onSubmit={handleConsentAction}
+            />
+          )}
+        </div>
 
-        {/* Dev bypass */}
         {import.meta.env.DEV && (
           <button
             type="button"
@@ -242,14 +276,8 @@ export default function LoginPage({ onLogin }) {
           </button>
         )}
 
-        {/* Error display */}
         {error && (
-          <p role="alert" style={{
-            color: 'var(--color-destructive, #D73A49)',
-            fontSize: 13,
-            margin: 0,
-            textAlign: 'center',
-          }}>
+          <p role="alert" style={errorStyle}>
             {error}
           </p>
         )}
@@ -258,205 +286,276 @@ export default function LoginPage({ onLogin }) {
   )
 }
 
-// ---------------------------------------------------------------------------
-// Intro step — PIPA consent capture + both CTAs
-// ---------------------------------------------------------------------------
-function IntroStep({
-  disabled, consentGiven, onConsentToggle, onNew,
-  showGoogle, googleLoading,
-  onGoogleSuccess, onGoogleError, onGoogleNonOAuthError,
-}) {
-  // "Yes, start here" requires consent. "Continue with Google" is always available.
-  // GoogleLoginButton is ONLY rendered when showGoogle === true, keeping the
-  // useGoogleLogin hook inside GoogleOAuthProvider at all times.
+function useTypedLine(line) {
+  const [typedLine, setTypedLine] = useState('')
+
+  useEffect(() => {
+    setTypedLine('')
+    let index = 0
+    const timer = window.setInterval(() => {
+      index += 1
+      setTypedLine(line.slice(0, index))
+      if (index >= line.length) window.clearInterval(timer)
+    }, 24)
+    return () => window.clearInterval(timer)
+  }, [line])
+
+  return typedLine
+}
+
+function ChoiceStep({ typedLine, disabled, onSwipe, onCardLeftScreen, onReturning, onNew }) {
   return (
-    <div style={{ display: 'grid', gap: 12 }}>
-      {/* PIPA consent block */}
-      <div style={{
-        borderRadius: 8,
-        border: `1px solid ${consentGiven ? 'var(--accent-1, #0969DA)' : 'var(--color-border)'}`,
-        background: consentGiven
-          ? 'rgba(9,105,218,0.06)'
-          : 'var(--color-surface)',
-        padding: '12px 14px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 8,
-      }}>
-        <p style={{
-          margin: 0,
-          fontSize: 12,
-          color: 'var(--color-text-dimmer)',
-          lineHeight: 1.55,
-        }}>
-          이름·이메일 수집·이용에 동의합니다.{' '}
-          <span style={{ color: 'var(--color-text-dimmest, #8C959F)' }}>
-            (개인정보 처리 목적: 서비스 제공)
-          </span>
-        </p>
-        <button
-          type="button"
-          onClick={onConsentToggle}
-          disabled={disabled}
-          aria-pressed={consentGiven}
-          aria-label={consentGiven ? '동의 취소' : '동의합니다'}
-          style={{
-            alignSelf: 'flex-start',
-            padding: '5px 14px',
-            borderRadius: 6,
-            border: `1px solid ${consentGiven ? 'var(--accent-1, #0969DA)' : 'var(--color-border)'}`,
-            background: consentGiven ? 'var(--accent-1, #0969DA)' : 'transparent',
-            color: consentGiven ? '#fff' : 'var(--color-text)',
-            fontSize: 12,
-            fontWeight: 600,
-            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-            cursor: disabled ? 'default' : 'pointer',
-            opacity: disabled ? 0.65 : 1,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-          }}
+    <div style={swipeStepStyle}>
+      <div style={swipeDeckStyle}>
+        <SwipeGestureFrame
+          onSwipe={onSwipe}
+          onCardLeftScreen={onCardLeftScreen}
+          preventSwipe={disabled ? SWIPE_PREVENT_ALL : undefined}
         >
-          {consentGiven && (
-            <span aria-hidden="true" style={{ fontSize: 13 }}>✓</span>
-          )}
-          {consentGiven ? '동의됨' : '동의합니다'}
+          <AuthCard absolute ariaLabel="Choose login path">
+            <CardHeader
+              eyebrow="First card"
+              title="Are you new here?"
+              typedLine={typedLine}
+            />
+            <div style={choiceBodyStyle}>
+              <p style={bodyCopyStyle}>
+                Swipe left if you are returning. Swipe right if you want a new guest profile.
+              </p>
+              <div style={directionGridStyle} aria-hidden="true">
+                <DirectionHint tone="left" label="Returning" sublabel="Left" />
+                <DirectionHint tone="right" label="New profile" sublabel="Right" />
+              </div>
+            </div>
+          </AuthCard>
+        </SwipeGestureFrame>
+      </div>
+      <div style={buttonGridStyle}>
+        <button type="button" onClick={onReturning} disabled={disabled} style={secondaryButtonStyle(disabled)}>
+          Returning
+        </button>
+        <button type="button" onClick={onNew} disabled={disabled} style={primaryButtonStyle(disabled)}>
+          New here
         </button>
       </div>
+    </div>
+  )
+}
 
-      {/* Primary CTA — requires consent */}
-      <button
-        type="button"
-        onClick={onNew}
-        disabled={disabled || !consentGiven}
-        aria-label="Start guest onboarding wizard"
-        style={primaryButtonStyle(disabled || !consentGiven)}
-      >
-        Yes, start here
-      </button>
-
-      {/* Divider */}
-      {showGoogle && (
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
-          color: 'var(--color-text-dimmest, #8C959F)',
-          fontSize: 11,
-        }}>
-          <div style={{ flex: 1, height: 1, background: 'var(--color-border)' }} />
-          <span>or returning user</span>
-          <div style={{ flex: 1, height: 1, background: 'var(--color-border)' }} />
-        </div>
-      )}
-
-      {/* Google CTA — conditionally rendered so useGoogleLogin stays inside GoogleOAuthProvider */}
-      {showGoogle && (
+function ReturningStep({
+  typedLine,
+  showGoogle,
+  disabled,
+  googleLoading,
+  onBack,
+  onGoogleSuccess,
+  onGoogleError,
+  onGoogleNonOAuthError,
+}) {
+  return (
+    <AuthCard ariaLabel="Returning user login">
+      <CardHeader
+        eyebrow="Returning"
+        title="Continue with your saved profile."
+        typedLine={typedLine}
+      />
+      <p style={bodyCopyStyle}>
+        Verified profiles use Google sign-in. Starting Google stays on this button only.
+      </p>
+      {showGoogle ? (
         <GoogleLoginButton
           onSuccess={onGoogleSuccess}
           onError={onGoogleError}
           onNonOAuthError={onGoogleNonOAuthError}
           disabled={disabled}
           loading={googleLoading}
+          style={{ width: '100%', minHeight: 48, borderRadius: 12 }}
         />
+      ) : (
+        <div role="status" style={noticeStyle}>
+          Google login is unavailable in this environment. Set VITE_GOOGLE_CLIENT_ID to enable returning accounts.
+        </div>
       )}
+      <button type="button" onClick={onBack} disabled={disabled} style={ghostButtonStyle(disabled)}>
+        Back
+      </button>
+    </AuthCard>
+  )
+}
+
+function ProfileStep({
+  typedLine,
+  displayName,
+  role,
+  profileReady,
+  disabled,
+  onDisplayNameChange,
+  onRoleChange,
+  onBack,
+  onSubmit,
+}) {
+  const nameReady = isDisplayNameReady(displayName)
+
+  return (
+    <AuthCard ariaLabel="New guest profile">
+      <CardHeader
+        eyebrow="New guest"
+        title="Tell me who is swiping."
+        typedLine={typedLine}
+      />
+      <form onSubmit={onSubmit} style={formStyle}>
+        <label style={fieldLabelStyle} htmlFor="guest-display-name">
+          Display name
+        </label>
+        <input
+          id="guest-display-name"
+          autoFocus
+          required
+          value={displayName}
+          onChange={e => onDisplayNameChange(e.target.value)}
+          disabled={disabled}
+          placeholder="Alex"
+          maxLength={30}
+          aria-invalid={displayName.length > 0 && !nameReady ? 'true' : 'false'}
+          style={inputStyle}
+        />
+
+        <div style={roleHeaderStyle}>
+          <span style={fieldLabelStyle}>Objective</span>
+          <span style={captionStyle}>{isRoleReady(role) ? 'Selected' : 'Required'}</span>
+        </div>
+        <div role="radiogroup" aria-label="Select your objective" aria-required="true" style={roleGridStyle}>
+          {ONBOARDING_ROLES.map(roleOption => (
+            <button
+              key={roleOption.value}
+              type="button"
+              role="radio"
+              aria-checked={role === roleOption.value}
+              onClick={() => onRoleChange(roleOption.value)}
+              disabled={disabled}
+              style={roleButtonStyle(disabled, role === roleOption.value)}
+            >
+              {roleOption.label}
+            </button>
+          ))}
+        </div>
+
+        <div style={buttonGridStyle}>
+          <button type="button" onClick={onBack} disabled={disabled} style={secondaryButtonStyle(disabled)}>
+            Back
+          </button>
+          <button type="submit" disabled={disabled || !profileReady} style={primaryButtonStyle(disabled || !profileReady)}>
+            Continue
+          </button>
+        </div>
+      </form>
+    </AuthCard>
+  )
+}
+
+function ConsentStep({
+  typedLine,
+  displayName,
+  role,
+  profileReady,
+  disabled,
+  loading,
+  onSwipe,
+  onCardLeftScreen,
+  onBack,
+  onSubmit,
+}) {
+  const selectedRole = ONBOARDING_ROLES.find(roleOption => roleOption.value === role)
+  const lockSwipe = disabled || !profileReady
+
+  return (
+    <div style={swipeStepStyle}>
+      <div style={swipeDeckStyle}>
+        <SwipeGestureFrame
+          onSwipe={onSwipe}
+          onCardLeftScreen={onCardLeftScreen}
+          preventSwipe={lockSwipe ? SWIPE_PREVENT_ALL : RIGHT_ONLY_PREVENT_SWIPE}
+        >
+          <AuthCard absolute ariaLabel="Guest consent">
+            <CardHeader
+              eyebrow="Consent"
+              title="Create the guest account."
+              typedLine={typedLine}
+            />
+            <div style={summaryBoxStyle}>
+              <div>
+                <span style={summaryLabelStyle}>Name</span>
+                <strong style={summaryValueStyle}>{displayName.trim()}</strong>
+              </div>
+              <div>
+                <span style={summaryLabelStyle}>Objective</span>
+                <strong style={summaryValueStyle}>{selectedRole?.label || 'Not selected'}</strong>
+              </div>
+            </div>
+            <p style={bodyCopyStyle}>
+              By continuing, you agree that ArchiTinder can use this guest profile to provide the service and save your taste signals.
+            </p>
+            <DirectionHint tone="right" label="Consent and enter" sublabel="Right swipe" />
+          </AuthCard>
+        </SwipeGestureFrame>
+      </div>
+      <div style={buttonGridStyle}>
+        <button type="button" onClick={onBack} disabled={disabled} style={secondaryButtonStyle(disabled)}>
+          Back
+        </button>
+        <button
+          type="button"
+          onClick={onSubmit}
+          disabled={disabled || !profileReady}
+          style={primaryButtonStyle(disabled || !profileReady)}
+        >
+          {loading ? <Spinner /> : 'Create guest'}
+        </button>
+      </div>
     </div>
   )
 }
 
-// ---------------------------------------------------------------------------
-// Name step
-// ---------------------------------------------------------------------------
-function NameStep({ value, disabled, onChange, onBack, onNext }) {
+function CardHeader({ eyebrow, title, typedLine }) {
   return (
-    <form
-      onSubmit={(e) => { e.preventDefault(); onNext() }}
-      style={{ display: 'grid', gap: 12 }}
+    <div style={cardHeaderStyle}>
+      <p style={eyebrowStyle}>{eyebrow}</p>
+      <h2 style={titleStyle}>{title}</h2>
+      <p style={typedLineStyle}>
+        {typedLine}
+        <span aria-hidden="true" style={{ opacity: typedLine ? 1 : 0 }}>_</span>
+      </p>
+    </div>
+  )
+}
+
+function AuthCard({ children, absolute = false, ariaLabel }) {
+  return (
+    <section
+      aria-label={ariaLabel}
+      style={{
+        ...authCardStyle,
+        ...(absolute ? absoluteCardStyle : staticCardStyle),
+      }}
     >
-      <input
-        autoFocus
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        disabled={disabled}
-        placeholder="Guest"
-        maxLength={30}
-        aria-label="Display name"
-        style={inputStyle}
-      />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-        <button
-          type="button"
-          onClick={onBack}
-          disabled={disabled}
-          aria-label="Back to intro"
-          style={secondaryButtonStyle(disabled)}
-        >
-          Back
-        </button>
-        <button
-          type="submit"
-          disabled={disabled}
-          aria-label="Proceed to role selection"
-          style={primaryButtonStyle(disabled)}
-        >
-          Next
-        </button>
-      </div>
-    </form>
+      {children}
+    </section>
   )
 }
 
-// ---------------------------------------------------------------------------
-// Role step
-// ---------------------------------------------------------------------------
-function RoleStep({ value, disabled, loading, onChange, onBack, onSubmit }) {
+function DirectionHint({ tone, label, sublabel }) {
+  const isLeft = tone === 'left'
   return (
-    <form onSubmit={onSubmit} style={{ display: 'grid', gap: 12 }}>
-      <div
-        role="radiogroup"
-        aria-label="Select your role"
-        style={{ display: 'grid', gap: 8 }}
-      >
-        {ONBOARDING_ROLES.map(roleOption => (
-          <button
-            key={roleOption.value}
-            type="button"
-            role="radio"
-            aria-checked={value === roleOption.value}
-            onClick={() => onChange(roleOption.value)}
-            disabled={disabled}
-            style={roleButtonStyle(disabled, value === roleOption.value)}
-          >
-            {roleOption.label}
-          </button>
-        ))}
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-        <button
-          type="button"
-          onClick={onBack}
-          disabled={disabled}
-          aria-label="Back to name step"
-          style={secondaryButtonStyle(disabled)}
-        >
-          Back
-        </button>
-        <button
-          type="submit"
-          disabled={disabled}
-          aria-label="Create guest account and enter"
-          style={primaryButtonStyle(disabled)}
-        >
-          {loading ? <Spinner /> : 'Enter'}
-        </button>
-      </div>
-    </form>
+    <div style={{
+      ...directionHintStyle,
+      borderColor: isLeft ? 'var(--color-destructive, #D73A49)' : 'var(--accent-1, #0969DA)',
+      color: isLeft ? 'var(--color-destructive, #D73A49)' : 'var(--accent-1, #0969DA)',
+    }}>
+      <span style={directionLabelStyle}>{label}</span>
+      <span style={directionSublabelStyle}>{sublabel}</span>
+    </div>
   )
 }
-
-// ---------------------------------------------------------------------------
-// Shared micro-components
-// ---------------------------------------------------------------------------
 
 function Spinner() {
   return (
@@ -472,14 +571,10 @@ function Spinner() {
   )
 }
 
-// ---------------------------------------------------------------------------
-// Style helpers
-// ---------------------------------------------------------------------------
-
 function primaryButtonStyle(disabled) {
   return {
     minHeight: 46,
-    borderRadius: 8,
+    borderRadius: 12,
     border: '1px solid var(--accent-1, #0969DA)',
     background: 'var(--accent-1, #0969DA)',
     color: '#fff',
@@ -494,7 +589,7 @@ function primaryButtonStyle(disabled) {
 function secondaryButtonStyle(disabled) {
   return {
     minHeight: 46,
-    borderRadius: 8,
+    borderRadius: 12,
     border: '1px solid var(--color-border)',
     background: 'var(--color-surface)',
     color: 'var(--color-text)',
@@ -506,12 +601,27 @@ function secondaryButtonStyle(disabled) {
   }
 }
 
+function ghostButtonStyle(disabled) {
+  return {
+    minHeight: 42,
+    borderRadius: 12,
+    border: '1px solid transparent',
+    background: 'transparent',
+    color: 'var(--color-text-dim)',
+    fontSize: 13,
+    fontWeight: 600,
+    fontFamily: 'inherit',
+    cursor: disabled ? 'default' : 'pointer',
+    opacity: disabled ? 0.65 : 1,
+  }
+}
+
 function roleButtonStyle(disabled, active) {
   return {
     minHeight: 42,
-    borderRadius: 8,
+    borderRadius: 12,
     border: active ? '1px solid var(--accent-1, #0969DA)' : '1px solid var(--color-border)',
-    background: active ? 'rgba(9,105,218,0.12)' : 'transparent',
+    background: active ? 'rgba(9,105,218,0.10)' : 'var(--color-bg)',
     color: active ? 'var(--accent-1, #0969DA)' : 'var(--color-text)',
     textAlign: 'left',
     padding: '0 13px',
@@ -523,9 +633,205 @@ function roleButtonStyle(disabled, active) {
   }
 }
 
+const pageStyle = {
+  minHeight: '100vh',
+  background: 'var(--color-bg)',
+  display: 'grid',
+  placeItems: 'center',
+  padding: 16,
+  boxSizing: 'border-box',
+}
+
+const mainStyle = {
+  width: '100%',
+  maxWidth: 420,
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: 16,
+}
+
+const headerStyle = {
+  width: '100%',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 4,
+}
+
+const wordmarkStyle = {
+  fontSize: 30,
+  fontWeight: 700,
+  margin: 0,
+  letterSpacing: 0,
+  lineHeight: 1.1,
+}
+
+const taglineStyle = {
+  color: 'var(--color-text-dim)',
+  fontSize: 14,
+  margin: 0,
+  lineHeight: 1.45,
+}
+
+const stageStyle = {
+  width: AUTH_STAGE_WIDTH,
+}
+
+const swipeStepStyle = {
+  width: '100%',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 12,
+}
+
+const swipeDeckStyle = {
+  width: '100%',
+  height: AUTH_CARD_HEIGHT,
+  position: 'relative',
+}
+
+const authCardStyle = {
+  borderRadius: 20,
+  border: '1px solid var(--color-border-soft)',
+  background: 'var(--color-surface)',
+  color: 'var(--color-text)',
+  boxShadow: '0 24px 52px rgba(0,0,0,0.18)',
+  padding: 22,
+  boxSizing: 'border-box',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 18,
+  overflowY: 'auto',
+}
+
+const absoluteCardStyle = {
+  position: 'absolute',
+  top: 0,
+  left: 0,
+  width: AUTH_STAGE_WIDTH,
+  height: AUTH_CARD_HEIGHT,
+  cursor: 'grab',
+  userSelect: 'none',
+  WebkitUserSelect: 'none',
+}
+
+const staticCardStyle = {
+  position: 'relative',
+  width: '100%',
+  minHeight: 420,
+  maxHeight: 'calc(100vh - 170px)',
+}
+
+const cardHeaderStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 8,
+}
+
+const eyebrowStyle = {
+  margin: 0,
+  color: 'var(--accent-1, #0969DA)',
+  fontSize: 12,
+  fontWeight: 700,
+  textTransform: 'uppercase',
+  letterSpacing: 0,
+}
+
+const titleStyle = {
+  margin: 0,
+  color: 'var(--color-text)',
+  fontSize: 26,
+  fontWeight: 700,
+  lineHeight: 1.16,
+  letterSpacing: 0,
+}
+
+const typedLineStyle = {
+  minHeight: 44,
+  margin: 0,
+  color: 'var(--color-text-2)',
+  fontSize: 16,
+  lineHeight: 1.45,
+}
+
+const bodyCopyStyle = {
+  margin: 0,
+  color: 'var(--color-text-dim)',
+  fontSize: 14,
+  lineHeight: 1.55,
+}
+
+const choiceBodyStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 18,
+  marginTop: 'auto',
+}
+
+const directionGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: '1fr 1fr',
+  gap: 10,
+}
+
+const directionHintStyle = {
+  minHeight: 74,
+  borderRadius: 16,
+  border: '1px solid',
+  background: 'var(--color-bg)',
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 4,
+}
+
+const directionLabelStyle = {
+  fontSize: 14,
+  fontWeight: 700,
+  lineHeight: 1.2,
+  textAlign: 'center',
+}
+
+const directionSublabelStyle = {
+  fontSize: 12,
+  fontWeight: 600,
+  color: 'var(--color-text-dim)',
+  lineHeight: 1.2,
+}
+
+const buttonGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: '1fr 1fr',
+  gap: 10,
+}
+
+const noticeStyle = {
+  borderRadius: 12,
+  border: '1px solid var(--color-border)',
+  background: 'var(--color-bg)',
+  color: 'var(--color-text-dim)',
+  padding: '14px 16px',
+  fontSize: 13,
+  lineHeight: 1.55,
+}
+
+const formStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 12,
+}
+
+const fieldLabelStyle = {
+  color: 'var(--color-text)',
+  fontSize: 13,
+  fontWeight: 700,
+  lineHeight: 1.2,
+}
+
 const inputStyle = {
   minHeight: 46,
-  borderRadius: 8,
+  borderRadius: 12,
   border: '1px solid var(--color-border)',
   background: 'var(--color-bg)',
   color: 'var(--color-text)',
@@ -535,4 +841,58 @@ const inputStyle = {
   outline: 'none',
   width: '100%',
   boxSizing: 'border-box',
+}
+
+const roleHeaderStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 12,
+  marginTop: 4,
+}
+
+const captionStyle = {
+  color: 'var(--color-text-dim)',
+  fontSize: 12,
+  fontWeight: 600,
+}
+
+const roleGridStyle = {
+  display: 'grid',
+  gap: 8,
+}
+
+const summaryBoxStyle = {
+  borderRadius: 16,
+  border: '1px solid var(--color-border)',
+  background: 'var(--color-bg)',
+  padding: 14,
+  display: 'grid',
+  gap: 12,
+}
+
+const summaryLabelStyle = {
+  display: 'block',
+  color: 'var(--color-text-dim)',
+  fontSize: 11,
+  fontWeight: 700,
+  textTransform: 'uppercase',
+  letterSpacing: 0,
+  marginBottom: 4,
+}
+
+const summaryValueStyle = {
+  display: 'block',
+  color: 'var(--color-text)',
+  fontSize: 15,
+  fontWeight: 700,
+  lineHeight: 1.3,
+}
+
+const errorStyle = {
+  color: 'var(--color-destructive, #D73A49)',
+  fontSize: 13,
+  margin: 0,
+  textAlign: 'center',
+  lineHeight: 1.45,
 }
