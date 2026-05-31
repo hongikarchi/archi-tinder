@@ -128,7 +128,7 @@ Each slice runs through the `orchestrate` skill:
   → develop sync local
 ```
 
-## PR Plan (Step 8 publish-gate authorization)
+## Historical PR Plan (resolved — NOT a live publish gate) (Step 8 publish-gate authorization)
 
 This section opens `git-publish` Step 0 publish gate (b) — Active plan with
 `## PR Plan` section explicitly authorizes the listed PRs.
