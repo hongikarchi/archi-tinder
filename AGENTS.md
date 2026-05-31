@@ -24,6 +24,7 @@
     - Role A (algorithm) → `feature/algo-<topic>`
     - Role B (SNS / profiles / boards) → `feature/sns-<topic>`
     - Role C (admin / everything else) → `feature/admin-<topic>`
+    - Local AI agents → `feature/codex-<topic>` (Codex) / `feature/claude-<topic>` (Claude Code) — each in its OWN clone
 
   **Hard rules — NEVER violate:**
 
@@ -41,7 +42,7 @@
      ./tools/install-hooks.sh
      ```
      Without this, your local does not have the migration-numbering pre-push hook, and you may push a duplicate-numbered Django migration that breaks the team.
-  7. **One agent session per working directory (concurrent-agent isolation).** Never run two agent sessions (e.g. Codex + Claude Code) in the same checkout — a single working tree has one `HEAD`, so a second session's checkout crosses branches and a stray `git pull` fast-forwards the wrong branch (this happened 2026-05-31). Each additional concurrent agent works in its own **git worktree** (`git worktree add ../make_web-<agent> -b feature/<role>-<topic> develop`); see `CONTRIBUTING.md` § "Concurrent agents — working-directory isolation". Codex's worktree/sandbox run mode (if used) isolates parallel *sub-agents* only — it does NOT prevent session↔session collision. **Session-start check**: run `git worktree list`; if you share the main checkout with another active agent, STOP and move to your own worktree before editing.
+  7. **One clone per worker — never operate in another worker's directory (concurrent-agent isolation).** Every worker (remote human OR local AI tool) owns ONE working directory with its OWN `.git`, on its own `feature/*` branch, with its own PR. **Codex's working dir = its OWN separate clone `make_web-codex/`** (browser, UI/UX; tendency: frontend / UI / UX — a default, not a hard wall, scope assigned per task). **Claude Code** works in the main clone `make_web/` (cmux terminal, backend / API); Codex never checks out or commits in the main clone. **Do NOT use `git worktree` for session isolation** — worktrees share one `.git`, and on 2026-05-31 that shared `.git` let a Codex session move the main checkout's `HEAD` onto its branch (`feature/codex-loginpage`); a separate clone (own `.git`) is structurally immune. (Codex's worktree/sandbox mode is for parallel *sub-agents* within one session — unrelated to session isolation.) **Session-start check**: confirm you are in your own clone `make_web-codex/` (NOT the main `make_web/`) on a `feature/codex-*` branch; if not, STOP and relocate before editing. Local branch prefix: `feature/codex-<topic>`. Full model: `CONTRIBUTING.md` § "Concurrent agents — one clone per worker".
 
   **If `git status` at session start shows you are on `main` or `develop` with uncommitted changes**: the previous session likely did not switch to a feature branch. Stash or save the work, then create a proper feature branch before continuing. Do not stage or commit while on a protected branch.
 

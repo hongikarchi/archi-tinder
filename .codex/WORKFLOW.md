@@ -137,9 +137,10 @@ accumulate locally on a `feature/*` branch; one push sweeps them as a PR. As of
 **Session start:**
 1. `git status && git branch --show-current`. If on `main`/`develop`, do not
    edit — create a `feature/*` branch first (HARD RULE, `CONTRIBUTING.md`).
-2. `git worktree list`. If another agent (Claude/Codex) shares this checkout,
-   STOP — move to your own worktree (`CONTRIBUTING.md` § Concurrent agents)
-   before editing. One session per working directory.
+2. Confirm you are in your **own clone `make_web-codex/`** (NOT the main
+   `make_web/`) on a `feature/codex-*` branch. If you are in the main clone, STOP
+   and relocate before editing — one clone per worker, never operate in another's
+   (`CONTRIBUTING.md` § Concurrent agents).
 3. `git fetch origin develop --quiet`; if the branch is behind, ask before
    rebasing.
 4. Scan `.codex/Task.md` for any `SESSION-START-TODO` pending action; surface
