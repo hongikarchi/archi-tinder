@@ -80,7 +80,7 @@ class TestLikedBuildingsPost:
         """POST with valid canonical_bld_id returns 200 with liked_count=1."""
         _, profile = lb_user_and_profile
         conn_mock = _make_buildings_cursor_mock(exists=True)
-        with patch('apps.accounts.views._dj_connections', {'buildings': conn_mock}):
+        with patch('apps.accounts.views.profile._dj_connections', {'buildings': conn_mock}):
             response = lb_auth_client.post(
                 _LIKED_URL,
                 {'canonical_bld_id': 'bld_000123'},
@@ -97,7 +97,7 @@ class TestLikedBuildingsPost:
         """Posting the same bld_id twice does not duplicate the entry."""
         _, profile = lb_user_and_profile
         conn_mock = _make_buildings_cursor_mock(exists=True)
-        with patch('apps.accounts.views._dj_connections', {'buildings': conn_mock}):
+        with patch('apps.accounts.views.profile._dj_connections', {'buildings': conn_mock}):
             lb_auth_client.post(_LIKED_URL, {'canonical_bld_id': 'bld_000123'}, format='json')
             response = lb_auth_client.post(_LIKED_URL, {'canonical_bld_id': 'bld_000123'}, format='json')
         assert response.status_code == 200
@@ -110,7 +110,7 @@ class TestLikedBuildingsPost:
         """Second distinct building is prepended so newest appears first."""
         _, profile = lb_user_and_profile
         conn_mock = _make_buildings_cursor_mock(exists=True)
-        with patch('apps.accounts.views._dj_connections', {'buildings': conn_mock}):
+        with patch('apps.accounts.views.profile._dj_connections', {'buildings': conn_mock}):
             lb_auth_client.post(_LIKED_URL, {'canonical_bld_id': 'bld_000001'}, format='json')
             lb_auth_client.post(_LIKED_URL, {'canonical_bld_id': 'bld_000002'}, format='json')
         profile.refresh_from_db()
@@ -217,7 +217,7 @@ class TestLikedBuildingsCap:
 
         # Post one more unique entry
         conn_mock = _make_buildings_cursor_mock(exists=True)
-        with patch('apps.accounts.views._dj_connections', {'buildings': conn_mock}):
+        with patch('apps.accounts.views.profile._dj_connections', {'buildings': conn_mock}):
             response = lb_auth_client.post(
                 _LIKED_URL,
                 {'canonical_bld_id': 'bld_999999'},

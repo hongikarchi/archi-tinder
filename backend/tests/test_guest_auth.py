@@ -278,7 +278,7 @@ def test_promote_branch_2_in_place_transform(db):
     for i in range(3):
         Project.objects.create(user=profile, name=f'Board {i}')
 
-    with patch('apps.accounts.views._exchange_google_code', return_value=_FAKE_GOOGLE_DATA):
+    with patch('apps.accounts.views.auth._exchange_google_code', return_value=_FAKE_GOOGLE_DATA):
         resp = client.post(
             '/api/v1/auth/promote/',
             {'provider': 'google', 'code': 'mock_code'},
@@ -331,7 +331,7 @@ def test_promote_branch_1_merge_cross_device(db):
     Project.objects.create(user=guest_profile, name='Guest Board A')
     Project.objects.create(user=guest_profile, name='Guest Board B')
 
-    with patch('apps.accounts.views._exchange_google_code', return_value=_FAKE_GOOGLE_DATA):
+    with patch('apps.accounts.views.auth._exchange_google_code', return_value=_FAKE_GOOGLE_DATA):
         resp = client.post(
             '/api/v1/auth/promote/',
             {'provider': 'google', 'code': 'mock_code'},
@@ -374,7 +374,7 @@ def test_promote_blacklists_guest_refresh(db):
     client = APIClient()
     client.credentials(HTTP_AUTHORIZATION=f'Bearer {str(refresh.access_token)}')
 
-    with patch('apps.accounts.views._exchange_google_code', return_value=_FAKE_GOOGLE_DATA):
+    with patch('apps.accounts.views.auth._exchange_google_code', return_value=_FAKE_GOOGLE_DATA):
         promote_resp = client.post(
             '/api/v1/auth/promote/',
             {'provider': 'google', 'code': 'mock_code'},
@@ -415,7 +415,7 @@ def test_promote_branch_1_blacklists_guest_refresh(db):
     client = APIClient()
     client.credentials(HTTP_AUTHORIZATION=f'Bearer {str(guest_refresh.access_token)}')
 
-    with patch('apps.accounts.views._exchange_google_code', return_value=_FAKE_GOOGLE_DATA):
+    with patch('apps.accounts.views.auth._exchange_google_code', return_value=_FAKE_GOOGLE_DATA):
         promote_resp = client.post(
             '/api/v1/auth/promote/',
             {'provider': 'google', 'code': 'mock_code'},
@@ -442,7 +442,7 @@ def test_promote_rejects_non_guest(db):
     profile = _make_verified()
     client = _auth_client_for(profile)
 
-    with patch('apps.accounts.views._exchange_google_code', return_value=_FAKE_GOOGLE_DATA):
+    with patch('apps.accounts.views.auth._exchange_google_code', return_value=_FAKE_GOOGLE_DATA):
         resp = client.post(
             '/api/v1/auth/promote/',
             {'provider': 'google', 'code': 'mock_code'},
