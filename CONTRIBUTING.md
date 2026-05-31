@@ -278,10 +278,10 @@ Body: include context (spec ref, investigation #, decision rationale).
 ## Review
 
 The `orchestrate` skill runs the `code-review` and `security-manager` sub-agents
-on a feature branch before push (the `app-test` sub-agent runs the pre-push
-browser + drift gate). Each returns a PASS / FAIL verdict; FAIL feeds the fix
-loop. Review scope is the unmerged commits that would land in develop on PR
-merge (`origin/develop..HEAD`).
+on a feature branch before push. The pre-push browser + drift gate is the
+`app-test` sub-agent on Claude Code and the `browser-verify` skill on Codex. Each
+returns a PASS / FAIL verdict; FAIL feeds the fix loop. Review scope is the
+unmerged commits that would land in develop on PR merge (`origin/develop..HEAD`).
 
 `develop → main` PRs typically don't need a fresh review since each underlying
 feature was already reviewed; admin self-merges based on CI green.
