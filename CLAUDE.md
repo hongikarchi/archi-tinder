@@ -77,10 +77,7 @@
     - Rebase conflicts requiring multi-step recovery (`--force-with-lease` lease retries).
     - Push rejection with unclear cause.
     - Mid-merge failure with non-trivial error.
-  - **Escalation matrix → `reporter` agent** (fallback during migration window):
-    - `reporter-inline` skill produced a `state.js` that fails parse (Mermaid escaping, JSON-like structure error, etc.) and quick fix is unclear.
-    - Multi-PR batch audit (deploy mode) where broader agent scope helps consistency.
-    - Unfamiliar `state.js` field structure surfaces.
+  - **`reporter-inline` skill failure** → fix the `state.js` / `Task.md` issue directly (e.g. a parse error from Mermaid escaping). The deprecated `reporter` agent fallback was removed 2026-05-31 — there is no agent to escalate to.
   - **Forbidden** (mirror HARD RULE 1, 3, 4):
     - Ad-hoc `git push origin develop` / `git push origin main`. Pushes go from `feature/*` only.
     - `gh pr create --base main` outside Mode 3 deploy. Default base is `develop`.

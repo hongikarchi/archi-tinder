@@ -122,5 +122,5 @@ If you encounter:
 Dispatch `git-publisher` agent with a precise problem description. **Do NOT improvise destructive recovery** (`git reset --hard`, `git checkout .`).
 
 ## Related skills
-- `reporter-inline` — produces the audit; per the canonical order it runs AFTER `git-publish` opens the PR (so the PR number is known), then THIS skill commits the audit as a separate commit that squashes into the same PR.
+- `reporter-inline` — runs BEFORE the publish step; it produces the audit that THIS skill then commits on the same feature branch, squashed into the same PR as the work.
 - `git-publish` — fires after this skill, on explicit user publish trigger.

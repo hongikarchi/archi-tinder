@@ -191,5 +191,5 @@ Agent({
 ---
 
 ## Related skills
-- `reporter-inline` — runs AFTER this skill opens the PR (Steps 1-3, so the PR number is known) and BEFORE Step 4 admin-squash; its audit commit squashes into the same PR.
+- `reporter-inline` — runs BEFORE this skill; its audit commit lands on the same feature branch and squashes into the same PR as the work.
 - `git-commit` — runs to create the commit(s) that this skill then publishes.

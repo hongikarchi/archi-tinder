@@ -200,13 +200,13 @@ Once the gate opens, proceed to Step 9 (audit-then-publish). The default publish
 
 ### Step 9 — Audit-then-publish (reporter-inline + git-publish)
 
-Run `git-publish` Steps 1-3 (push + open the PR) FIRST so the PR number is known,
-then run the `reporter-inline` skill directly in the main session.
-**(The `reporter` agent was removed 2026-05-31 — use this skill.)** The skill
-updates `.codex/Task.md` (`## Done`, citing the PR#), `project/state.js`, and
+Run the `reporter-inline` skill directly in the main session BEFORE the publish
+step. **(The `reporter` agent was removed 2026-05-31 — use this skill.)** The
+skill updates `.codex/Task.md` (`## Done`; the PR# may be a placeholder if the
+PR is not yet open — backfilled on the next pass), `project/state.js`, and
 conditionally `docs/algorithm.md`, then calls the `git-commit` skill to commit
-the audit on the SAME feature branch. Pushing the audit, then `git-publish`
-Step 4 (admin squash), folds audit + work into a single commit on `develop`. The legacy 2-PR pattern
+the audit on the SAME feature branch as the work commit. The audit + work
+squash together into a single commit on `develop`. The legacy 2-PR pattern
 (feature PR + separate reporter PR) is dropped.
 
 `reporter-inline` outputs:

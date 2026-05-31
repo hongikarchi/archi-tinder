@@ -357,7 +357,7 @@ Test fixture: PR #121's `reporter` agent pass (commit `e36648b`) shows the canon
 
 ---
 
-## Rules (mirror reporter agent's Rules section)
+## Rules
 
 - NEVER delete existing content in Task.md.
 - Use `Edit` (NOT `Write`) for Task.md so the rest stays untouched.
@@ -368,21 +368,12 @@ Test fixture: PR #121's `reporter` agent pass (commit `e36648b`) shows the canon
 
 ---
 
-## When to escalate to reporter agent
+## If this skill fails
 
-The reporter agent (deprecated marker) remains available for fallback during the 2026-05-26 migration window. Escalate if:
-
-- The change touched an unfamiliar `state.js` field structure not covered by Step 4.
-- A multi-PR batch must be audited at once (deploy mode) — escalate to keep audit consistent.
-- This skill produces a state.js that fails JSON-like parse (Mermaid escaping issue, etc.) and quick fix is unclear.
-
-Dispatch:
-```json
-{
-  "agent_type": "reporter",
-  "message": "reporter fallback — <reason>. <precise problem + current state>"
-}
-```
+Fix the `state.js` / `Task.md` issue directly (e.g. a JSON-like parse error from
+Mermaid escaping, an unfamiliar `state.js` field, or a multi-PR batch audit). The
+deprecated `reporter` agent fallback was removed 2026-05-31 — there is no agent
+to dispatch.
 
 ---
 
