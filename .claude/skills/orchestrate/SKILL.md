@@ -31,11 +31,11 @@ Agent({
 })
 ```
 
-The `git-manager` and `reporter` agents are **deprecated as of 2026-05-26** —
-do not dispatch them. Use the `git-commit` and `reporter-inline` skills
-instead (Step 6 and Step 9 below). The `git-publisher` agent stays for Mode 3
-deploy / external PR triage / complex rebase only; the `git-publish` skill is
-the default for feature → develop publishes (Step 9).
+The `git-manager` and `reporter` agents were **removed 2026-05-31** — use the
+`git-commit` and `reporter-inline` skills (Step 6 and Step 9 below). The
+`git-publisher` agent stays for Mode 3 deploy / external PR triage / complex
+rebase only; the `git-publish` skill is the default for feature → develop
+publishes (Step 9).
 
 For parallel dispatches (Step 4: code-review + security-manager), emit both `Agent`
 calls in a single assistant message so they run concurrently.
@@ -151,8 +151,8 @@ app-test failures, and architectural-fit rejections all draw from the same budge
 of 2. Track it explicitly.
 
 ### Step 6 — Commit (local only)
-Run the `git-commit` skill directly in the main session. **Do NOT dispatch the
-`git-manager` agent — it is deprecated as of 2026-05-26.** The skill stages with
+Run the `git-commit` skill directly in the main session. **(The `git-manager`
+agent was removed 2026-05-31 — use this skill.)** The skill stages with
 secret exclusions, builds a caveman conventional-commit message, and commits on
 the feature branch. It never pushes — pushing happens in Step 9 via the
 `git-publish` skill.
@@ -199,12 +199,13 @@ Once the gate opens, proceed to Step 9 (audit-then-publish). The default publish
 
 ### Step 9 — Audit-then-publish (reporter-inline + git-publish)
 
-Run the `reporter-inline` skill directly in the main session **BEFORE** the
-publish step. **Do NOT dispatch the `reporter` agent — it is deprecated as of
-2026-05-26.** The skill updates `.claude/Task.md`, `project/state.js`, and
+Run `git-publish` Steps 1-3 (push + open the PR) FIRST so the PR number is known,
+then run the `reporter-inline` skill directly in the main session.
+**(The `reporter` agent was removed 2026-05-31 — use this skill.)** The skill
+updates `.claude/Task.md` (`## Done`, citing the PR#), `project/state.js`, and
 conditionally `docs/algorithm.md`, then calls the `git-commit` skill to commit
-the audit on the SAME feature branch as the work commit. The audit + work
-squash together into a single commit on `develop`. The legacy 2-PR pattern
+the audit on the SAME feature branch. Pushing the audit, then `git-publish`
+Step 4 (admin squash), folds audit + work into a single commit on `develop`. The legacy 2-PR pattern
 (feature PR + separate reporter PR) is dropped.
 
 `reporter-inline` outputs:
@@ -248,7 +249,7 @@ persona) remains in scope — dispatch as a normal feature through back-maker.
   the user — do not work around it by editing files directly.
 - Never commit ad-hoc. Default: run the `git-commit` skill directly in the main
   session. Escalate to the `git-publisher` agent only for diagnosis failure /
-  multi-commit reorganization. Do NOT dispatch the deprecated `git-manager` agent.
+  multi-commit reorganization. (The `git-manager` agent was removed 2026-05-31.)
 - Never push ad-hoc. Default: run the `git-publish` skill directly for
   feature → develop (base=develop only). Escalate to the `git-publisher` agent only
   for Mode 3 develop→main deploy, external PR triage, complex rebase, push

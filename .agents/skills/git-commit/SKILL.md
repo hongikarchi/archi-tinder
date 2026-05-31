@@ -5,7 +5,7 @@ description: Stage + commit a single coherent change on a feature branch. Cavema
 
 # git-commit — single commit, main-session-direct
 
-Use this skill when a coherent change is ready to commit on a feature branch. The main session executes the steps below itself. **Do NOT dispatch `git-manager` agent for routine commits** — that agent is deprecated as of 2026-05-26; this skill replaces it.
+Use this skill when a coherent change is ready to commit on a feature branch. The main session executes the steps below itself. (The `git-manager` agent was removed 2026-05-31 — this skill replaces it.)
 
 ## Hard rules (mirror AGENTS.md HARD RULE 4)
 
@@ -122,5 +122,5 @@ If you encounter:
 Dispatch `git-publisher` agent with a precise problem description. **Do NOT improvise destructive recovery** (`git reset --hard`, `git checkout .`).
 
 ## Related skills
-- `reporter-inline` — should run BEFORE `git-commit` for audit-bearing changes, so the audit lands in the same commit as the work.
+- `reporter-inline` — produces the audit; per the canonical order it runs AFTER `git-publish` opens the PR (so the PR number is known), then THIS skill commits the audit as a separate commit that squashes into the same PR.
 - `git-publish` — fires after this skill, on explicit user publish trigger.

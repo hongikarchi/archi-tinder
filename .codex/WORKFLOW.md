@@ -66,14 +66,11 @@ agents).
 | **security-manager** | Security scan — SQL injection, auth bypass, XSS, secret/token leakage | read-only |
 | **git-publisher** | Edge case escalation only: Mode 3 `develop → main` deploy, external collaborator PR triage, complex rebase/force-with-lease conflicts | `git push`, `gh pr *` |
 
-### Deprecated agents (`.codex/agents/` with `deprecated = true`) — fallback only
+### Removed agents (deleted 2026-05-31)
 
-| Agent | Status | Use |
-|-------|--------|-----|
-| **git-manager** | Deprecated 2026-05-26 — superseded by `git-commit` skill | Fallback only — when `git-commit` skill hits an unfamiliar failure |
-| **reporter** | Deprecated 2026-05-26 — superseded by `reporter-inline` skill | Fallback only — when skill produces a `state.js` that fails parse, or multi-PR batch needs broader-scope audit |
-
-These agent files are kept for ~1 week of skill-only validation, then slated for deletion in a follow-up PR.
+`git-manager` and `reporter` agents were deleted — fully replaced by the
+`git-commit` and `reporter-inline` skills (the 2026-05-26 fallback window closed
+after stable skill-only usage). Recoverable from git history if ever needed.
 
 **Agent vs skill rule:** isolated work that returns a result → **agent**. A
 procedure the main session runs itself, including ones that dispatch agents →
@@ -216,8 +213,7 @@ changes auto-skip browser verification.
 3. **Skill-first, agent-second** (2026-05-26) — for git operations, default to
    the skill (`git-commit`, `git-publish`). Dispatch `git-publisher` agent only
    on the escalation matrix (Mode 3 deploy / external PR / complex rebase).
-   Dispatch the deprecated `reporter` / `git-manager` agents only as documented
-   fallback. Why: each agent dispatch costs 14-46k tokens + 23-150 seconds of
+   Why: each agent dispatch costs 14-46k tokens + 23-150 seconds of
    round-trip latency; skills run in-context for 1/3 the cost on routine work.
 4. **Bundle trivial commits; push only on push-worthy** — don't gate+push after
    every commit. Push-worthy = milestone / production code / migration /

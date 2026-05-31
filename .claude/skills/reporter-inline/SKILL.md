@@ -15,7 +15,7 @@ front-maker/back-maker → code commit (git-commit) → push + PR open (git-publ
 
 Result: 1 PR carrying both code + audit. No separate reporter PR cycle.
 
-**Do NOT dispatch `reporter` agent for routine housekeeping** — that agent is deprecated as of 2026-05-26.
+**(The `reporter` agent was removed 2026-05-31 — this skill replaces it.)**
 
 ---
 

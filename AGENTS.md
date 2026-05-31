@@ -62,15 +62,15 @@
     - `back-maker` · `front-maker` — implementation (isolated Codex sub-agent context).
     - `code-review` · `security-manager` — inner-loop review (parallel pre-commit gate).
     - `git-publisher` — push/PR/merge/deploy (Mode 2 default goes through `git-publish` skill; agent only fires for Mode 3 + edge cases).
-  - **2 deprecated agents** (`.codex/agents/` with `deprecated = true`) — kept for fallback during 2026-05-26 migration; slated for removal after 1 week of skill-only usage: `git-manager` · `reporter`.
+  - **Removed agents** (deleted 2026-05-31): `git-manager` · `reporter` — fully replaced by the `git-commit` / `reporter-inline` skills (the 2026-05-26 fallback window closed after stable skill-only usage). Recoverable from git history.
   - **agent vs skill**: isolated work that returns a result → agent. A procedure the main session runs itself (including ones that dispatch agents) → skill. There are no slash commands.
 
   Full pipeline, session model, planning protocol, token-saving rules: **`.codex/WORKFLOW.md`**.
 
   ## Git Operations — HARD RULE (2026-05-26)
 
-  - **Default git ops** (commit / push / PR open / squash merge) → use the appropriate **skill** (`git-commit`, `git-publish`), executed by the main session. Do NOT dispatch `git-manager` agent for routine commits. The `git-publisher` agent still fires for Mode 3 / edge cases (see escalation matrix below).
-  - **Audit recording** (`.codex/Task.md ## Done` + `project/state.js` + conditional `docs/algorithm.md`) → use the **`reporter-inline` skill** BEFORE the publish step, in the same feature PR. **Reporter no longer ships a separate PR** — the audit commit lands on the same feature branch as the code commit and gets squashed together. Do NOT dispatch `reporter` agent for routine housekeeping.
+  - **Default git ops** (commit / push / PR open / squash merge) → use the appropriate **skill** (`git-commit`, `git-publish`), executed by the main session. Routine commits use the `git-commit` skill (the `git-manager` agent was removed 2026-05-31). The `git-publisher` agent still fires for Mode 3 / edge cases (see escalation matrix below).
+  - **Audit recording** (`.codex/Task.md ## Done` + `project/state.js` + conditional `docs/algorithm.md`) → use the **`reporter-inline` skill** BEFORE the publish step, in the same feature PR. **Reporter no longer ships a separate PR** — the audit commit lands on the same feature branch as the code commit and gets squashed together. (The `reporter` agent was removed 2026-05-31.)
   - **Escalation matrix → `git-publisher` agent** (Mode 3 territory or edge cases the skill cannot safely handle):
     - `develop → main` deploy mode (multi-PR batch + post-deploy `develop` force-reset to match `main`; requires explicit deploy keyword AND HARD RULE 4 carve-out citation).
     - External collaborator PR triage (PR from someone other than admin needs review + decision).
@@ -102,7 +102,7 @@
     5. **Plan file finalize** — once decisions are answered, update the plan file. Korean summary block; English for code identifiers.
     6. **ExitPlanMode** — only AFTER all decisions are settled. Do not ask "should I proceed?" — that is what `ExitPlanMode` does.
     Why: user request 2026-04-29 — long English plan dumps overwhelm; sequential multiple-choice supports careful per-topic decisions. Applies to all plan-mode entries.
-  - **Implementation delegation — HARD RULE** (durable across sessions). The session owns *architecture, schema, auth, product + release decisions, and review* — it does **NOT** write production feature code directly. Every `backend/` or `frontend/` feature / bug-fix / refactor edit is delegated: full features, unclear-root-cause bugs, or cross-cutting refactors → the `orchestrate` skill; bounded mechanical changes → `back-maker` / `front-maker` sub-agents. The session picks the model / effort per task and dispatches — it does not fall back to direct implementation because delegation feels like overhead. **Carve-out (direct edit OK)**: meta / infra (`tools/`, `hooks/`, `.github/`), single-line policy fixes, sub-MINOR follow-ups, and pure docs (`AGENTS.md`, `.codex/*`, `.agents/*`, `docs/*`, `CONTRIBUTING.md`, `DESIGN.md`, `README.md`) — direct edit + `git-commit` skill (the `git-manager` agent is deprecated as of 2026-05-26). Why: codified 2026-05-15 — implementation workers carry isolated context; the session must not implement feature code directly "because delegating feels like overhead."
+  - **Implementation delegation — HARD RULE** (durable across sessions). The session owns *architecture, schema, auth, product + release decisions, and review* — it does **NOT** write production feature code directly. Every `backend/` or `frontend/` feature / bug-fix / refactor edit is delegated: full features, unclear-root-cause bugs, or cross-cutting refactors → the `orchestrate` skill; bounded mechanical changes → `back-maker` / `front-maker` sub-agents. The session picks the model / effort per task and dispatches — it does not fall back to direct implementation because delegation feels like overhead. **Carve-out (direct edit OK)**: meta / infra (`tools/`, `hooks/`, `.github/`), single-line policy fixes, sub-MINOR follow-ups, and pure docs (`AGENTS.md`, `.codex/*`, `.agents/*`, `docs/*`, `CONTRIBUTING.md`, `DESIGN.md`, `README.md`) — direct edit + `git-commit` skill (the `git-manager` agent was removed 2026-05-31). Why: codified 2026-05-15 — implementation workers carry isolated context; the session must not implement feature code directly "because delegating feels like overhead."
 
   ## Product Constitution
 
@@ -128,10 +128,10 @@
   ## Audit Trail Locations
   | Category | Location | Writer |
   |---|---|---|
-  | **Task board** (roadmap + Next backlog + Done log) | `.codex/Task.md` | reporter agent (Phase 16-18 dimensions inlined here as of 2026-05-24; the prior `docs/specs/*.md` folder was absorbed) |
+  | **Task board** (roadmap + Next backlog + Done log) | `.codex/Task.md` | reporter-inline skill (Phase 16-18 dimensions inlined here as of 2026-05-24; the prior `docs/specs/*.md` folder was absorbed) |
   | **Algorithm reference** (theory + hyperparams) | `docs/algorithm.md` | admin (reporter syncs prod values) |
   | **Plan** (`/plan` artifacts) | `.codex/plans/*.md` | the session |
-  | **Project dashboard** (live state, human-facing) | `project/dashboard.html` + `project/state.js` | reporter agent |
+  | **Project dashboard** (live state, human-facing) | `project/dashboard.html` + `project/state.js` | reporter-inline skill |
 
   ## Target Structure
   frontend/   <- React 18 + Vite
