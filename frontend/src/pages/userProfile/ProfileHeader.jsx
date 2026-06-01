@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom'
+import { IconBack } from '../../components/icons'
 
 export default function ProfileHeader({ isMe, onLogout }) {
   const navigate = useNavigate()
@@ -28,10 +29,7 @@ export default function ProfileHeader({ isMe, onLogout }) {
         onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-surface-2, rgba(255,255,255,0.05))' }}
         onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
       >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-          <line x1="19" y1="12" x2="5" y2="12"></line>
-          <polyline points="12 19 5 12 12 5"></polyline>
-        </svg>
+        <IconBack width={20} height={20} />
       </button>
 
       <h2 style={{
