@@ -25,7 +25,7 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-06-01 16:55 KST',
+    updatedAt: '2026-06-01 17:23 KST',
     head: 'fefa830',
     branch: 'feature/claude-dashboard-autogen',
   },
@@ -306,1351 +306,1351 @@ window.PROJECT_STATE = {
   fileTree: [
     {
       path: '.agents/skills/browser-verify/SKILL.md',
-      role: '',
+      role: '브라우저 검증 스킬 정의',
     },
     {
       path: '.agents/skills/git-commit/SKILL.md',
-      role: '',
+      role: 'git 커밋 스킬 정의',
     },
     {
       path: '.agents/skills/git-publish/SKILL.md',
-      role: '',
+      role: 'git 퍼블리시 스킬 정의',
     },
     {
       path: '.agents/skills/orchestrate/SKILL.md',
-      role: '',
+      role: '오케스트레이션 스킬 정의',
     },
     {
       path: '.agents/skills/reporter-inline/SKILL.md',
-      role: '',
+      role: '감사 기록 스킬 정의',
     },
     {
       path: '.claude/WORKFLOW.md',
-      role: '',
+      role: 'Claude 워크플로 문서',
     },
     {
       path: '.claude/agents/app-test.md',
-      role: '',
+      role: 'app-test 에이전트 정의',
     },
     {
       path: '.claude/agents/back-maker.md',
-      role: '',
+      role: 'back-maker 에이전트 정의',
     },
     {
       path: '.claude/agents/code-review.md',
-      role: '',
+      role: 'code-review 에이전트 정의',
     },
     {
       path: '.claude/agents/front-maker.md',
-      role: '',
+      role: 'front-maker 에이전트 정의',
     },
     {
       path: '.claude/agents/git-publisher.md',
-      role: '',
+      role: 'git-publisher 에이전트 정의',
     },
     {
       path: '.claude/agents/security-manager.md',
-      role: '',
+      role: 'security-manager 에이전트 정의',
     },
     {
       path: '.claude/plans/README.md',
-      role: '',
+      role: '플랜 디렉터리 안내',
     },
     {
       path: '.claude/plans/archive/2026-05-24-merry-toasting-dove.md',
-      role: '',
+      role: '아카이브 플랜 문서',
     },
     {
       path: '.claude/plans/archive/building-detail-page.md',
-      role: '',
+      role: '건물 상세 페이지 플랜',
     },
     {
       path: '.claude/plans/archive/perf-trio-optimization.md',
-      role: '',
+      role: '성능 최적화 플랜',
     },
     {
       path: '.claude/plans/archive/results-page.md',
-      role: '',
+      role: '결과 페이지 플랜',
     },
     {
       path: '.claude/plans/archive/workflow-skill-absorption.md',
-      role: '',
+      role: '워크플로 스킬 흡수 플랜',
     },
     {
       path: '.claude/plans/dashboard-autogen-1.md',
-      role: '',
+      role: '대시보드 자동생성 플랜',
     },
     {
       path: '.claude/reviews/2026-05-31-swipe-discovery-review.md',
-      role: '',
+      role: '스와이프 디스커버리 리뷰 기록',
     },
     {
       path: '.claude/skills/git-commit/SKILL.md',
-      role: '',
+      role: 'git 커밋 스킬 정의',
     },
     {
       path: '.claude/skills/git-publish/SKILL.md',
-      role: '',
+      role: 'git 퍼블리시 스킬 정의',
     },
     {
       path: '.claude/skills/orchestrate/SKILL.md',
-      role: '',
+      role: '오케스트레이션 스킬 정의',
     },
     {
       path: '.claude/skills/reporter-inline/SKILL.md',
-      role: '',
+      role: '감사 기록 스킬 정의',
     },
     {
       path: '.codex/WORKFLOW.md',
-      role: '',
+      role: 'Codex 워크플로 문서',
     },
     {
       path: '.codex/agents/back-maker.toml',
-      role: '',
+      role: 'Codex back-maker 설정',
     },
     {
       path: '.codex/agents/code-review.toml',
-      role: '',
+      role: 'Codex code-review 설정',
     },
     {
       path: '.codex/agents/front-maker.toml',
-      role: '',
+      role: 'Codex front-maker 설정',
     },
     {
       path: '.codex/agents/git-publisher.toml',
-      role: '',
+      role: 'Codex git-publisher 설정',
     },
     {
       path: '.codex/agents/security-manager.toml',
-      role: '',
+      role: 'Codex security-manager 설정',
     },
     {
       path: '.codex/config.toml',
-      role: '',
+      role: 'Codex 설정',
     },
     {
       path: '.codex/plans/README.md',
-      role: '',
+      role: 'Codex 플랜 디렉터리 안내',
     },
     {
       path: '.codex/plans/archive/2026-05-24-merry-toasting-dove.md',
-      role: '',
+      role: 'Codex 아카이브 플랜',
     },
     {
       path: '.codex/plans/archive/building-detail-page.md',
-      role: '',
+      role: 'Codex 건물 상세 플랜',
     },
     {
       path: '.codex/plans/archive/perf-trio-optimization.md',
-      role: '',
+      role: '성능 최적화 계획 아카이브',
     },
     {
       path: '.codex/plans/archive/results-page.md',
-      role: '',
+      role: '결과 페이지 계획 아카이브',
     },
     {
       path: '.codex/plans/archive/workflow-skill-absorption.md',
-      role: '',
+      role: '워크플로우 스킬 계획 아카이브',
     },
     {
       path: '.github/CODEOWNERS',
-      role: '',
+      role: '코드 오너 설정',
     },
     {
       path: '.github/PULL_REQUEST_TEMPLATE.md',
-      role: '',
+      role: 'PR 템플릿',
     },
     {
       path: '.github/workflows/ci.yml',
-      role: '',
+      role: 'CI 워크플로우 설정',
     },
     {
       path: '.gitignore',
-      role: '',
+      role: 'git 무시 설정',
     },
     {
       path: 'AGENTS.md',
-      role: '',
+      role: '에이전트 안내 문서',
     },
     {
       path: 'CLAUDE.md',
-      role: '',
+      role: 'Claude 프로젝트 지침',
     },
     {
       path: 'CONTRIBUTING.md',
-      role: '',
+      role: '협업 워크플로우 문서',
     },
     {
       path: 'DESIGN.md',
-      role: '',
+      role: '디자인 시스템 문서',
     },
     {
       path: 'Makefile',
-      role: '',
+      role: '빌드 태스크 설정',
     },
     {
       path: 'README.md',
-      role: '',
+      role: '프로젝트 안내 문서',
     },
     {
       path: 'Task.md',
-      role: '',
+      role: '태스크 보드 문서',
     },
     {
       path: 'backend/.env.example',
-      role: '',
+      role: '백엔드 환경변수 예시',
     },
     {
       path: 'backend/apps/__init__.py',
-      role: '',
+      role: '패키지 init',
     },
     {
       path: 'backend/apps/accounts/__init__.py',
-      role: '',
+      role: '패키지 init',
     },
     {
       path: 'backend/apps/accounts/apps.py',
-      role: '',
+      role: 'accounts 앱 설정',
     },
     {
       path: 'backend/apps/accounts/authentication.py',
-      role: '',
+      role: 'JWT 유저 캐시 인증',
     },
     {
       path: 'backend/apps/accounts/jwt_serializers.py',
-      role: '',
+      role: 'JWT 토큰 직렬화기',
     },
     {
       path: 'backend/apps/accounts/migrations/0001_initial.py',
-      role: '',
+      role: 'DB 마이그레이션 초기',
     },
     {
       path: 'backend/apps/accounts/migrations/0002_userprofile_phase13_extension.py',
-      role: '',
+      role: 'DB 마이그레이션 Phase13 확장',
     },
     {
       path: 'backend/apps/accounts/migrations/0003_userprofile_font_userprofile_theme.py',
-      role: '',
+      role: 'DB 마이그레이션 테마/폰트',
     },
     {
       path: 'backend/apps/accounts/migrations/0004_userprofile_guest_onboarding_consent.py',
-      role: '',
+      role: 'DB 마이그레이션 게스트 온보딩',
     },
     {
       path: 'backend/apps/accounts/migrations/0005_userprofile_liked_building_ids.py',
-      role: '',
+      role: 'DB 마이그레이션 좋아요 건물',
     },
     {
       path: 'backend/apps/accounts/migrations/__init__.py',
-      role: '',
+      role: '패키지 init',
     },
     {
       path: 'backend/apps/accounts/models.py',
-      role: '',
+      role: 'UserProfile 모델',
     },
     {
       path: 'backend/apps/accounts/permissions.py',
-      role: '',
+      role: '게스트 차단 권한',
     },
     {
       path: 'backend/apps/accounts/serializers.py',
-      role: '',
+      role: '유저 프로필 직렬화기',
     },
     {
       path: 'backend/apps/accounts/signals.py',
-      role: '',
+      role: '유저 캐시 무효화 시그널',
     },
     {
       path: 'backend/apps/accounts/tests/__init__.py',
-      role: '',
+      role: '패키지 init',
     },
     {
       path: 'backend/apps/accounts/tests/conftest.py',
-      role: '',
+      role: 'accounts 테스트 픽스처',
     },
     {
       path: 'backend/apps/accounts/tests/test_liked_buildings.py',
-      role: '',
+      role: '좋아요 건물 테스트',
     },
     {
       path: 'backend/apps/accounts/tests/test_phase13_userprofile.py',
-      role: '',
+      role: 'UserProfile Phase13 테스트',
     },
     {
       path: 'backend/apps/accounts/tests/test_theme_font.py',
-      role: '',
+      role: '테마·폰트 설정 테스트',
     },
     {
       path: 'backend/apps/accounts/tests/test_userserializer.py',
-      role: '',
+      role: 'UserSerializer 테스트',
     },
     {
       path: 'backend/apps/accounts/throttling.py',
-      role: '',
+      role: '게스트 인증 throttle 클래스',
     },
     {
       path: 'backend/apps/accounts/urls.py',
-      role: '',
+      role: 'accounts 인증·프로필 URL 라우팅',
     },
     {
       path: 'backend/apps/accounts/views/__init__.py',
-      role: '',
+      role: 'accounts.views facade 재노출',
     },
     {
       path: 'backend/apps/accounts/views/auth.py',
-      role: '',
+      role: '소셜·게스트 로그인 인증 뷰',
     },
     {
       path: 'backend/apps/accounts/views/profile.py',
-      role: '',
+      role: '유저 프로필·좋아요 건물 뷰',
     },
     {
       path: 'backend/apps/profiles/__init__.py',
-      role: '',
+      role: 'profiles 패키지 init',
     },
     {
       path: 'backend/apps/profiles/apps.py',
-      role: '',
+      role: 'profiles 앱 설정',
     },
     {
       path: 'backend/apps/profiles/migrations/0001_initial.py',
-      role: '',
+      role: 'DB 마이그레이션 (Office 초기)',
     },
     {
       path: 'backend/apps/profiles/migrations/0002_alter_officeprojectlink_confidence.py',
-      role: '',
+      role: 'DB 마이그레이션 (confidence 변경)',
     },
     {
       path: 'backend/apps/profiles/migrations/__init__.py',
-      role: '',
+      role: '마이그레이션 패키지 init',
     },
     {
       path: 'backend/apps/profiles/models.py',
-      role: '',
+      role: 'Office·프로젝트링크 모델',
     },
     {
       path: 'backend/apps/profiles/serializers.py',
-      role: '',
+      role: 'Office 직렬화·클레임 시리얼라이저',
     },
     {
       path: 'backend/apps/profiles/tests/__init__.py',
-      role: '',
+      role: 'profiles 테스트 패키지 init',
     },
     {
       path: 'backend/apps/profiles/tests/conftest.py',
-      role: '',
+      role: 'profiles 테스트 fixture 설정',
     },
     {
       path: 'backend/apps/profiles/tests/test_phase13_office.py',
-      role: '',
+      role: 'Office 클레임 플로우 테스트',
     },
     {
       path: 'backend/apps/profiles/throttles.py',
-      role: '',
+      role: 'Office 클레임 throttle 클래스',
     },
     {
       path: 'backend/apps/profiles/urls.py',
-      role: '',
+      role: 'Office·클레임 URL 라우팅',
     },
     {
       path: 'backend/apps/profiles/views.py',
-      role: '',
+      role: 'Office 상세·클레임·관리 뷰',
     },
     {
       path: 'backend/apps/recommendation/__init__.py',
-      role: '',
+      role: 'recommendation 패키지 init',
     },
     {
       path: 'backend/apps/recommendation/apps.py',
-      role: '',
+      role: 'recommendation 앱 설정',
     },
     {
       path: 'backend/apps/recommendation/caches.py',
-      role: '',
+      role: '추천 TTL 캐시 헬퍼',
     },
     {
       path: 'backend/apps/recommendation/engine.py',
-      role: '',
+      role: '추천 엔진 핵심',
     },
     {
       path: 'backend/apps/recommendation/engine_cards.py',
-      role: '',
+      role: '건물 카드 변환 헬퍼',
     },
     {
       path: 'backend/apps/recommendation/engine_convergence.py',
-      role: '',
+      role: '수렴·신뢰도 수학',
     },
     {
       path: 'backend/apps/recommendation/engine_filters.py',
-      role: '',
+      role: '필터 SQL 빌더',
     },
     {
       path: 'backend/apps/recommendation/engine_vecmath.py',
-      role: '',
+      role: '벡터 수학 헬퍼',
     },
     {
       path: 'backend/apps/recommendation/event_log.py',
-      role: '',
+      role: '세션 이벤트 로깅 헬퍼',
     },
     {
       path: 'backend/apps/recommendation/management/__init__.py',
-      role: '',
+      role: 'management 패키지 init',
     },
     {
       path: 'backend/apps/recommendation/management/commands/__init__.py',
-      role: '',
+      role: 'commands 패키지 init',
     },
     {
       path: 'backend/apps/recommendation/management/commands/purge_legacy_projects.py',
-      role: '',
+      role: '레거시 프로젝트 정리 커맨드',
     },
     {
       path: 'backend/apps/recommendation/migrations/0001_initial.py',
-      role: '',
+      role: 'DB 마이그레이션 (추천 초기)',
     },
     {
       path: 'backend/apps/recommendation/migrations/0002_analysissession_initial_batch.py',
-      role: '',
+      role: 'DB 마이그레이션 (initial_batch 추가)',
     },
     {
       path: 'backend/apps/recommendation/migrations/0003_analysissession_convergence_history_and_more.py',
-      role: '',
+      role: 'DB 마이그레이션 0003 수렴 이력 필드',
     },
     {
       path: 'backend/apps/recommendation/migrations/0004_analysissession_pool_scores.py',
-      role: '',
+      role: 'DB 마이그레이션 0004 풀 점수 필드',
     },
     {
       path: 'backend/apps/recommendation/migrations/0005_project_report_image.py',
-      role: '',
+      role: 'DB 마이그레이션 0005 리포트 이미지 필드',
     },
     {
       path: 'backend/apps/recommendation/migrations/0006_remove_total_rounds_and_scope_idempotency.py',
-      role: '',
+      role: 'DB 마이그레이션 0006 멱등성 스코프',
     },
     {
       path: 'backend/apps/recommendation/migrations/0007_project_saved_ids_and_liked_intensity.py',
-      role: '',
+      role: 'DB 마이그레이션 0007 북마크·좋아요 강도',
     },
     {
       path: 'backend/apps/recommendation/migrations/0008_analysissession_pool_relaxation_state.py',
-      role: '',
+      role: 'DB 마이그레이션 0008 풀 완화 상태',
     },
     {
       path: 'backend/apps/recommendation/migrations/0009_sessionevent.py',
-      role: '',
+      role: 'DB 마이그레이션 0009 세션 이벤트 모델',
     },
     {
       path: 'backend/apps/recommendation/migrations/0010_alter_sessionevent_event_type.py',
-      role: '',
+      role: 'DB 마이그레이션 0010 이벤트 타입 변경',
     },
     {
       path: 'backend/apps/recommendation/migrations/0011_add_hyde_topic03.py',
-      role: '',
+      role: 'DB 마이그레이션 0011 HyDE Topic03',
     },
     {
       path: 'backend/apps/recommendation/migrations/0012_add_topic01_q_text.py',
-      role: '',
+      role: 'DB 마이그레이션 0012 Topic01 q_text',
     },
     {
       path: 'backend/apps/recommendation/migrations/0013_imp10_topic06_telemetry.py',
-      role: '',
+      role: 'DB 마이그레이션 0013 IMP10 텔레메트리',
     },
     {
       path: 'backend/apps/recommendation/migrations/0014_add_stage2_timing_event_type.py',
-      role: '',
+      role: 'DB 마이그레이션 0014 Stage2 타이밍 이벤트',
     },
     {
       path: 'backend/apps/recommendation/migrations/0015_project_visibility_reaction_count.py',
-      role: '',
+      role: 'DB 마이그레이션 0015 공개여부·반응수',
     },
     {
       path: 'backend/apps/recommendation/migrations/0016_alter_sessionevent_event_type.py',
-      role: '',
+      role: 'DB 마이그레이션 0016 이벤트 타입 변경',
     },
     {
       path: 'backend/apps/recommendation/migrations/0017_add_extended_rounds.py',
-      role: '',
+      role: 'DB 마이그레이션 0017 연장 라운드 필드',
     },
     {
       path: 'backend/apps/recommendation/migrations/0018_rename_swipeevent_canonical_bld_id.py',
-      role: '',
+      role: 'DB 마이그레이션 0018 스와이프 필드명 변경',
     },
     {
       path: 'backend/apps/recommendation/migrations/0019_normalize_legacy_entry_shapes.py',
-      role: '',
+      role: 'DB 마이그레이션 0019 레거시 엔트리 정규화',
     },
     {
       path: 'backend/apps/recommendation/migrations/0020_question_card_fields.py',
-      role: '',
+      role: 'DB 마이그레이션 0020 질문 카드 필드',
     },
     {
       path: 'backend/apps/recommendation/migrations/__init__.py',
-      role: '',
+      role: '마이그레이션 패키지 init',
     },
     {
       path: 'backend/apps/recommendation/models.py',
-      role: '',
+      role: 'Project·세션 ORM 모델',
     },
     {
       path: 'backend/apps/recommendation/perf_timing.py',
-      role: '',
+      role: '단계별 성능 타이밍 계측',
     },
     {
       path: 'backend/apps/recommendation/serializers.py',
-      role: '',
+      role: 'Project 보드 직렬화기',
     },
     {
       path: 'backend/apps/recommendation/services/__init__.py',
-      role: '',
+      role: 'services 패키지 facade',
     },
     {
       path: 'backend/apps/recommendation/services/_caches.py',
-      role: '',
+      role: 'Gemini·V_initial 캐시 헬퍼',
     },
     {
       path: 'backend/apps/recommendation/services/_gemini.py',
-      role: '',
+      role: 'Gemini 클라이언트·재시도 래퍼',
     },
     {
       path: 'backend/apps/recommendation/services/_prompts.py',
-      role: '',
+      role: '파싱 프롬프트·어휘 상수',
     },
     {
       path: 'backend/apps/recommendation/services/embeddings.py',
-      role: '',
+      role: 'HuggingFace 임베딩 호출',
     },
     {
       path: 'backend/apps/recommendation/services/generation.py',
-      role: '',
+      role: 'Gemini 페르소나·비주얼 생성',
     },
     {
       path: 'backend/apps/recommendation/services/parse_query.py',
-      role: '',
+      role: 'Gemini 쿼리 파싱 서비스',
     },
     {
       path: 'backend/apps/recommendation/services/rerank.py',
-      role: '',
+      role: 'Gemini 셋와이즈 리랭크',
     },
     {
       path: 'backend/apps/recommendation/services/session_service.py',
-      role: '',
+      role: '세션 생성·결과 오케스트레이션',
     },
     {
       path: 'backend/apps/recommendation/services/swipe_service.py',
-      role: '',
+      role: '스와이프·질문카드 오케스트레이션',
     },
     {
       path: 'backend/apps/recommendation/tests/__init__.py',
-      role: '',
+      role: '테스트 패키지 init',
     },
     {
       path: 'backend/apps/recommendation/tests/conftest.py',
-      role: '',
+      role: 'recommendation 테스트 픽스처',
     },
     {
       path: 'backend/apps/recommendation/tests/test_discovery.py',
-      role: '',
+      role: 'Discovery 피드 테스트',
     },
     {
       path: 'backend/apps/recommendation/tests/test_phase13_board.py',
-      role: '',
+      role: 'Phase13 보드 테스트',
     },
     {
       path: 'backend/apps/recommendation/tests/test_row_to_card.py',
-      role: '',
+      role: 'row_to_card 변환 테스트',
     },
     {
       path: 'backend/apps/recommendation/urls.py',
-      role: '',
+      role: '추천 API URL 라우팅',
     },
     {
       path: 'backend/apps/recommendation/views/__init__.py',
-      role: '',
+      role: 'views facade 재노출',
     },
     {
       path: 'backend/apps/recommendation/views/_shared.py',
-      role: '',
+      role: '뷰 공용 헬퍼',
     },
     {
       path: 'backend/apps/recommendation/views/discovery.py',
-      role: '',
+      role: 'Discovery 피드 뷰',
     },
     {
       path: 'backend/apps/recommendation/views/projects.py',
-      role: '',
+      role: '프로젝트 CRUD 뷰',
     },
     {
       path: 'backend/apps/recommendation/views/reports.py',
-      role: '',
+      role: '페르소나 리포트 뷰',
     },
     {
       path: 'backend/apps/recommendation/views/search.py',
-      role: '',
+      role: '쿼리 파싱 검색 뷰',
     },
     {
       path: 'backend/apps/recommendation/views/sessions.py',
-      role: '',
+      role: '분석 세션 뷰',
     },
     {
       path: 'backend/apps/recommendation/views/swipe.py',
-      role: '',
+      role: '스와이프 처리 뷰',
     },
     {
       path: 'backend/apps/recommendation/views/telemetry.py',
-      role: '',
+      role: '이미지 로드 텔레메트리 뷰',
     },
     {
       path: 'backend/apps/social/__init__.py',
-      role: '',
+      role: '패키지 init',
     },
     {
       path: 'backend/apps/social/apps.py',
-      role: '',
+      role: 'social 앱 설정',
     },
     {
       path: 'backend/apps/social/migrations/0001_initial.py',
-      role: '',
+      role: 'DB 마이그레이션 초기 스키마',
     },
     {
       path: 'backend/apps/social/migrations/0002_rename_social_foll_followee_idx_social_foll_followe_0eabb0_idx_and_more.py',
-      role: '',
+      role: 'DB 마이그레이션 follow 인덱스 변경',
     },
     {
       path: 'backend/apps/social/migrations/0003_reaction.py',
-      role: '',
+      role: 'DB 마이그레이션 Reaction',
     },
     {
       path: 'backend/apps/social/migrations/0004_officefollow.py',
-      role: '',
+      role: 'DB 마이그레이션 OfficeFollow',
     },
     {
       path: 'backend/apps/social/migrations/__init__.py',
-      role: '',
+      role: '패키지 init',
     },
     {
       path: 'backend/apps/social/models.py',
-      role: '',
+      role: '팔로우/리액션 모델',
     },
     {
       path: 'backend/apps/social/serializers.py',
-      role: '',
+      role: 'social 직렬화기 재노출',
     },
     {
       path: 'backend/apps/social/tests/__init__.py',
-      role: '',
+      role: '패키지 init',
     },
     {
       path: 'backend/apps/social/tests/conftest.py',
-      role: '',
+      role: 'social 테스트 픽스처',
     },
     {
       path: 'backend/apps/social/tests/test_follow.py',
-      role: '',
+      role: '유저 팔로우 테스트',
     },
     {
       path: 'backend/apps/social/tests/test_office_follow.py',
-      role: '',
+      role: '오피스 팔로우 테스트',
     },
     {
       path: 'backend/apps/social/tests/test_reaction.py',
-      role: '',
+      role: '프로젝트 리액션 테스트',
     },
     {
       path: 'backend/apps/social/urls.py',
-      role: '',
+      role: 'social API URL 라우팅',
     },
     {
       path: 'backend/apps/social/views.py',
-      role: '',
+      role: '팔로우/리액션 뷰',
     },
     {
       path: 'backend/config/__init__.py',
-      role: '',
+      role: '패키지 init',
     },
     {
       path: 'backend/config/db_router.py',
-      role: '',
+      role: '멀티 DB 라우터',
     },
     {
       path: 'backend/config/settings.py',
-      role: '',
+      role: 'Django 프로젝트 설정',
     },
     {
       path: 'backend/config/urls.py',
-      role: '',
+      role: '루트 URL 라우팅',
     },
     {
       path: 'backend/config/wsgi.py',
-      role: '',
+      role: 'WSGI 진입점',
     },
     {
       path: 'backend/conftest.py',
-      role: '',
+      role: 'pytest 루트 픽스처 설정',
     },
     {
       path: 'backend/manage.py',
-      role: '',
+      role: 'Django 관리 명령 진입점',
     },
     {
       path: 'backend/pytest.ini',
-      role: '',
+      role: 'pytest 설정',
     },
     {
       path: 'backend/railway.toml',
-      role: '',
+      role: 'Railway 배포 설정',
     },
     {
       path: 'backend/requirements-dev.txt',
-      role: '',
+      role: '개발 의존성 설정',
     },
     {
       path: 'backend/requirements.txt',
-      role: '',
+      role: '런타임 의존성 설정',
     },
     {
       path: 'backend/tests/__init__.py',
-      role: '',
+      role: '테스트 패키지 init',
     },
     {
       path: 'backend/tests/conftest.py',
-      role: '',
+      role: '테스트 공용 픽스처 설정',
     },
     {
       path: 'backend/tests/test_auth.py',
-      role: '',
+      role: '인증 테스트',
     },
     {
       path: 'backend/tests/test_back_llm1_required_slate.py',
-      role: '',
+      role: 'LLM 필수 슬레이트 테스트',
     },
     {
       path: 'backend/tests/test_board_detail_perf.py',
-      role: '',
+      role: '보드 상세 성능 테스트',
     },
     {
       path: 'backend/tests/test_bookmark.py',
-      role: '',
+      role: '북마크 테스트',
     },
     {
       path: 'backend/tests/test_cache_backend.py',
-      role: '',
+      role: '캐시 백엔드 테스트',
     },
     {
       path: 'backend/tests/test_chat_phase.py',
-      role: '',
+      role: '채팅 단계 테스트',
     },
     {
       path: 'backend/tests/test_confidence.py',
-      role: '',
+      role: '신뢰도 테스트',
     },
     {
       path: 'backend/tests/test_discovery_perf.py',
-      role: '',
+      role: '디스커버리 성능 테스트',
     },
     {
       path: 'backend/tests/test_discovery_taste_cache.py',
-      role: '',
+      role: '디스커버리 취향 캐시 테스트',
     },
     {
       path: 'backend/tests/test_dpp_overfetch.py',
-      role: '',
+      role: 'DPP 오버페치 테스트',
     },
     {
       path: 'backend/tests/test_engine_filter_hard_constraint.py',
-      role: '',
+      role: '엔진 하드 제약 필터 테스트',
     },
     {
       path: 'backend/tests/test_gemini_fail_fast.py',
-      role: '',
+      role: 'Gemini fail-fast 테스트',
     },
     {
       path: 'backend/tests/test_gemini_timeout.py',
-      role: '',
+      role: 'Gemini 타임아웃 테스트',
     },
     {
       path: 'backend/tests/test_get_diverse_random_random.py',
-      role: '',
+      role: '다양성 랜덤 추출 테스트',
     },
     {
       path: 'backend/tests/test_get_top_k_no_pref_order.py',
-      role: '',
+      role: 'top-k 무선호 순서 테스트',
     },
     {
       path: 'backend/tests/test_guest_auth.py',
-      role: '',
+      role: '게스트 인증 테스트',
     },
     {
       path: 'backend/tests/test_hybrid_retrieval.py',
-      role: '',
+      role: '하이브리드 검색 테스트',
     },
     {
       path: 'backend/tests/test_hyde.py',
-      role: '',
+      role: 'HyDE 검색 테스트',
     },
     {
       path: 'backend/tests/test_image_hosting_fallback.py',
-      role: '',
+      role: '이미지 호스팅 폴백 테스트',
     },
     {
       path: 'backend/tests/test_imp10_topic06_telemetry.py',
-      role: '',
+      role: 'IMP10 텔레메트리 테스트',
     },
     {
       path: 'backend/tests/test_imp5_context_caching.py',
-      role: '',
+      role: 'IMP5 컨텍스트 캐싱 테스트',
     },
     {
       path: 'backend/tests/test_imp6_late_binding_plumbing.py',
-      role: '',
+      role: 'IMP6 지연 바인딩 테스트',
     },
     {
       path: 'backend/tests/test_imp6_stage_decouple.py',
-      role: '',
+      role: 'IMP6 스테이지 분리 테스트',
     },
     {
       path: 'backend/tests/test_imp7_pool_cache.py',
-      role: '',
+      role: 'IMP7 풀 캐시 테스트',
     },
     {
       path: 'backend/tests/test_imp8_async_prefetch.py',
-      role: '',
+      role: 'IMP8 비동기 프리페치 테스트',
     },
     {
       path: 'backend/tests/test_jwt_cache.py',
-      role: '',
+      role: 'JWT 캐시 테스트',
     },
     {
       path: 'backend/tests/test_jwt_refresh_blacklist.py',
-      role: '',
+      role: 'JWT 리프레시 블랙리스트 테스트',
     },
     {
       path: 'backend/tests/test_m1_clarification_cap.py',
-      role: '',
+      role: 'M1 질문 카드 상한 테스트',
     },
     {
       path: 'backend/tests/test_m4_clarification_telemetry.py',
-      role: '',
+      role: 'M4 질문 카드 텔레메트리 테스트',
     },
     {
       path: 'backend/tests/test_migrations_legacy_entries.py',
-      role: '',
+      role: '레거시 마이그레이션 항목 테스트',
     },
     {
       path: 'backend/tests/test_profile_perf.py',
-      role: '',
+      role: '프로필 성능 테스트',
     },
     {
       path: 'backend/tests/test_projects.py',
-      role: '',
+      role: '프로젝트 API 테스트',
     },
     {
       path: 'backend/tests/test_projects_n_plus_one.py',
-      role: '',
+      role: '프로젝트 N+1 쿼리 테스트',
     },
     {
       path: 'backend/tests/test_rerank_shape.py',
-      role: '',
+      role: '리랭크 결과 형태 테스트',
     },
     {
       path: 'backend/tests/test_schema_robustness.py',
-      role: '',
+      role: '스키마 견고성 테스트',
     },
     {
       path: 'backend/tests/test_session_create_correctness.py',
-      role: '',
+      role: '세션 생성 정확성 테스트',
     },
     {
       path: 'backend/tests/test_session_create_dedupe.py',
-      role: '',
+      role: '세션 생성 중복 제거 테스트',
     },
     {
       path: 'backend/tests/test_sessions.py',
-      role: '',
+      role: '세션 API 테스트',
     },
     {
       path: 'backend/tests/test_swipe.py',
-      role: '',
+      role: '스와이프 처리 테스트',
     },
     {
       path: 'backend/tests/test_swipe_goal.py',
-      role: '',
+      role: '스와이프 목표 달성 테스트',
     },
     {
       path: 'backend/tests/test_topic02.py',
-      role: '',
+      role: '토픽02 추천 테스트',
     },
     {
       path: 'backend/tests/test_topic04.py',
-      role: '',
+      role: '토픽04 추천 테스트',
     },
     {
       path: 'backend/tests/test_topic06.py',
-      role: '',
+      role: '토픽06 추천 테스트',
     },
     {
       path: 'backend/tests/test_topic_composition.py',
-      role: '',
+      role: '토픽 구성 테스트',
     },
     {
       path: 'backend/tools/perf_measure.py',
-      role: '',
+      role: '엔드포인트 지연 측정 도구',
     },
     {
       path: 'docs/COLLAB_HANDOFF.md',
-      role: '',
+      role: '협업 인수인계 문서',
     },
     {
       path: 'docs/MAKEWEB_DB_SWAP_RESPONSE.md',
-      role: '',
+      role: 'DB 교체 대응 문서',
     },
     {
       path: 'docs/algorithm.md',
-      role: '',
+      role: '추천 알고리즘 레퍼런스 문서',
     },
     {
       path: 'docs/database-schema.md',
-      role: '',
+      role: 'DB 스키마 문서',
     },
     {
       path: 'frontend/.env.example',
-      role: '',
+      role: '프론트 환경변수 예시 설정',
     },
     {
       path: 'frontend/.gitignore',
-      role: '',
+      role: '프론트 Git 무시 설정',
     },
     {
       path: 'frontend/eslint.config.js',
-      role: '',
+      role: 'ESLint 설정',
     },
     {
       path: 'frontend/index.html',
-      role: '',
+      role: 'Vite 진입 HTML',
     },
     {
       path: 'frontend/package-lock.json',
-      role: '',
+      role: '의존성 잠금 파일',
     },
     {
       path: 'frontend/package.json',
-      role: '',
+      role: '프론트 패키지 매니페스트',
     },
     {
       path: 'frontend/public/favicon.svg',
-      role: '',
+      role: '파비콘 에셋',
     },
     {
       path: 'frontend/src/App.jsx',
-      role: '',
+      role: '앱 루트 라우팅 컴포넌트',
     },
     {
       path: 'frontend/src/api/auth.js',
-      role: '',
+      role: '인증 API 클라이언트',
     },
     {
       path: 'frontend/src/api/client.js',
-      role: '',
+      role: 'API 클라이언트 facade',
     },
     {
       path: 'frontend/src/api/core.js',
-      role: '',
+      role: 'JWT 토큰·fetch 코어',
     },
     {
       path: 'frontend/src/api/discovery.js',
-      role: '',
+      role: '디스커버리 피드 API 클라이언트',
     },
     {
       path: 'frontend/src/api/images.js',
-      role: '',
+      role: '이미지 카드 정규화·텔레메트리 헬퍼',
     },
     {
       path: 'frontend/src/api/liked.js',
-      role: '',
+      role: '좋아요 건물 API 클라이언트',
     },
     {
       path: 'frontend/src/api/profiles.js',
-      role: '',
+      role: '사무소·유저 프로필 API 클라이언트',
     },
     {
       path: 'frontend/src/api/projects.js',
-      role: '',
+      role: '프로젝트·보드 CRUD API 클라이언트',
     },
     {
       path: 'frontend/src/api/sessions.js',
-      role: '',
+      role: '분석 세션·스와이프 API 클라이언트',
     },
     {
       path: 'frontend/src/api/social.js',
-      role: '',
+      role: '팔로우·리액션 소셜 API 클라이언트',
     },
     {
       path: 'frontend/src/components/AppearanceSettings.jsx',
-      role: '',
+      role: '테마·폰트 설정 UI',
     },
     {
       path: 'frontend/src/components/DebugOverlay.jsx',
-      role: '',
+      role: '세션·스와이프 디버그 오버레이',
     },
     {
       path: 'frontend/src/components/ErrorBoundary.jsx',
-      role: '',
+      role: '에러 바운더리 컴포넌트',
     },
     {
       path: 'frontend/src/components/GoogleLoginButton.jsx',
-      role: '',
+      role: '구글 로그인 버튼',
     },
     {
       path: 'frontend/src/components/GoogleVerifyButton.jsx',
-      role: '',
+      role: '구글 계정 인증 버튼',
     },
     {
       path: 'frontend/src/components/LLMSearchUpdateWrapper.jsx',
-      role: '',
+      role: 'LLM 검색 업데이트 모드 래퍼',
     },
     {
       path: 'frontend/src/components/ProtectedRoute.jsx',
-      role: '',
+      role: '인증 보호 라우트 가드',
     },
     {
       path: 'frontend/src/components/QuestionCard.jsx',
-      role: '',
+      role: '취향 보정 질문 카드',
     },
     {
       path: 'frontend/src/components/SaveToBoardModal.jsx',
-      role: '',
+      role: '보드 저장 모달',
     },
     {
       path: 'frontend/src/components/SurpriseBoardModal.jsx',
-      role: '',
+      role: '큐레이션 보드 제안 모달',
     },
     {
       path: 'frontend/src/components/SwipeCard.jsx',
-      role: '',
+      role: '스와이프 카드 컴포넌트',
     },
     {
       path: 'frontend/src/components/TabBar.jsx',
-      role: '',
+      role: '하단 탭바 내비게이션',
     },
     {
       path: 'frontend/src/components/TutorialPopup.jsx',
-      role: '',
+      role: '스와이프 튜토리얼 팝업',
     },
     {
       path: 'frontend/src/components/VerifyGateModal.jsx',
-      role: '',
+      role: '보드 한도 인증 게이트 모달',
     },
     {
       path: 'frontend/src/components/profile/ArticleCard.jsx',
-      role: '',
+      role: '프로필 아티클 카드',
     },
     {
       path: 'frontend/src/components/profile/BioPersonaFlipCard.jsx',
-      role: '',
+      role: '바이오·페르소나 플립 카드',
     },
     {
       path: 'frontend/src/components/profile/BoardCard.jsx',
-      role: '',
+      role: '프로필 보드 플립 카드',
     },
     {
       path: 'frontend/src/components/profile/DescriptionAboutFlipCard.jsx',
-      role: '',
+      role: '사무소 소개 플립 카드',
     },
     {
       path: 'frontend/src/components/profile/InfoCol.jsx',
-      role: '',
+      role: '카드 정보 컬럼 프리미티브',
     },
     {
       path: 'frontend/src/components/profile/ProjectCard.jsx',
-      role: '',
+      role: '사무소 프로젝트 카드',
     },
     {
       path: 'frontend/src/context/ThemeContext.jsx',
-      role: '',
+      role: '테마·폰트 Provider',
     },
     {
       path: 'frontend/src/context/_themeContext.js',
-      role: '',
+      role: '테마 React context 정의',
     },
     {
       path: 'frontend/src/hooks/useBoard.js',
-      role: '',
+      role: '보드 상세 로딩 훅',
     },
     {
       path: 'frontend/src/hooks/useImageTelemetry.js',
-      role: '',
+      role: '이미지 로드 텔레메트리 훅',
     },
     {
       path: 'frontend/src/hooks/useProjectReactors.js',
-      role: '',
+      role: '프로젝트 리액터 페이지네이션 훅',
     },
     {
       path: 'frontend/src/hooks/useResults.js',
-      role: '',
+      role: '세션 결과·북마크 훅',
     },
     {
       path: 'frontend/src/hooks/useTheme.js',
-      role: '',
+      role: '테마 context 소비 훅',
     },
     {
       path: 'frontend/src/index.css',
-      role: '',
+      role: '전역 기본 스타일',
     },
     {
       path: 'frontend/src/layouts/MainLayout.jsx',
-      role: '',
+      role: '메인 레이아웃 + TabBar 셸',
     },
     {
       path: 'frontend/src/main.jsx',
-      role: '',
+      role: 'React 앱 진입점',
     },
     {
       path: 'frontend/src/pages/BoardDetailPage.jsx',
-      role: '',
+      role: '보드 상세 페이지',
     },
     {
       path: 'frontend/src/pages/BuildingDetailPage.jsx',
-      role: '',
+      role: '건물 상세 페이지',
     },
     {
       path: 'frontend/src/pages/DiscoveryPage.jsx',
-      role: '',
+      role: '디스커버리 스와이프 피드',
     },
     {
       path: 'frontend/src/pages/FirmProfilePage.jsx',
-      role: '',
+      role: '사무소 프로필 페이지',
     },
     {
       path: 'frontend/src/pages/LLMSearchPage.jsx',
-      role: '',
+      role: 'LLM 검색 페이지',
     },
     {
       path: 'frontend/src/pages/LikedProjectsPage.jsx',
-      role: '',
+      role: '좋아요 건물 그리드 페이지',
     },
     {
       path: 'frontend/src/pages/LoginPage.jsx',
-      role: '',
+      role: '게스트 온보딩 로그인 페이지',
     },
     {
       path: 'frontend/src/pages/ProjectSetupPage.jsx',
-      role: '',
+      role: '프로젝트 생성 설정 페이지',
     },
     {
       path: 'frontend/src/pages/ResultsPage.jsx',
-      role: '',
+      role: '추천 결과 페이지',
     },
     {
       path: 'frontend/src/pages/SwipePage.jsx',
-      role: '',
+      role: '취향 분석 스와이프 페이지',
     },
     {
       path: 'frontend/src/pages/UserProfilePage.jsx',
-      role: '',
+      role: '유저 프로필 페이지',
     },
     {
       path: 'frontend/src/pages/boardDetail/BuildingTile.jsx',
-      role: '',
+      role: '보드 건물 타일 카드',
     },
     {
       path: 'frontend/src/pages/boardDetail/RecommendedTile.jsx',
-      role: '',
+      role: '보드 추천 타일 카드',
     },
     {
       path: 'frontend/src/pages/buildingDetail/ErrorState.jsx',
-      role: '',
+      role: '건물 상세 에러 상태',
     },
     {
       path: 'frontend/src/pages/buildingDetail/Header.jsx',
-      role: '',
+      role: '건물 상세 헤더 바',
     },
     {
       path: 'frontend/src/pages/buildingDetail/LoadingState.jsx',
-      role: '',
+      role: '건물 상세 로딩 상태',
     },
     {
       path: 'frontend/src/pages/buildingDetail/helpers.js',
-      role: '',
+      role: '건물 상세 메타 헬퍼',
     },
     {
       path: 'frontend/src/pages/firmProfile/FirmArticlesSection.jsx',
-      role: '',
+      role: '사무소 아티클 섹션',
     },
     {
       path: 'frontend/src/pages/firmProfile/FirmProfileHeader.jsx',
-      role: '',
+      role: '사무소 프로필 헤더 바',
     },
     {
       path: 'frontend/src/pages/firmProfile/FirmProfileHero.jsx',
-      role: '',
+      role: '사무소 프로필 히어로',
     },
     {
       path: 'frontend/src/pages/firmProfile/FirmProjectsSection.jsx',
-      role: '',
+      role: '사무소 프로젝트 섹션',
     },
     {
       path: 'frontend/src/pages/userProfile/BoardGrid.jsx',
-      role: '',
+      role: '프로필 보드 그리드',
     },
     {
       path: 'frontend/src/pages/userProfile/ProfileHeader.jsx',
-      role: '',
+      role: '유저 프로필 헤더 바',
     },
     {
       path: 'frontend/src/pages/userProfile/ProfileHero.jsx',
-      role: '',
+      role: '유저 프로필 히어로',
     },
     {
       path: 'frontend/src/tokens.css',
-      role: '',
+      role: '디자인 토큰 CSS 변수',
     },
     {
       path: 'frontend/src/utils/appHelpers.js',
-      role: '',
+      role: '앱 필터·에러 헬퍼',
     },
     {
       path: 'frontend/src/utils/loginFlow.js',
-      role: '',
+      role: '게스트 온보딩 유틸',
     },
     {
       path: 'frontend/src/utils/loginFlow.test.mjs',
-      role: '',
+      role: 'loginFlow 테스트',
     },
     {
       path: 'frontend/src/utils/resolveProjectBackendId.js',
-      role: '',
+      role: '프로젝트 백엔드 ID 해석 유틸',
     },
     {
       path: 'frontend/vercel.json',
-      role: '',
+      role: 'Vercel 배포 설정',
     },
     {
       path: 'frontend/vite.config.js',
-      role: '',
+      role: 'Vite 빌드 설정',
     },
     {
       path: 'hooks/pre-push',
-      role: '',
+      role: '마이그레이션 번호 충돌 검사 훅',
     },
     {
       path: 'project/dashboard.html',
-      role: '',
+      role: '프로젝트 상태 대시보드 페이지',
     },
     {
       path: 'project/mermaid.min.js',
-      role: '',
+      role: 'Mermaid 다이어그램 번들',
     },
     {
       path: 'project/state.js',
-      role: '',
+      role: '대시보드 상태 데이터',
     },
     {
       path: 'tools/.smoke.sh',
-      role: '',
+      role: 'git 스크립트 환경 스모크 검사',
     },
     {
       path: 'tools/back-validate.sh',
-      role: '',
+      role: '백엔드 검증 체인 스크립트',
     },
     {
       path: 'tools/check-frontend.sh',
-      role: '',
+      role: '프론트 lint+빌드 래퍼',
     },
     {
       path: 'tools/front-validate.sh',
-      role: '',
+      role: '프론트 검증 체인 스크립트',
     },
     {
       path: 'tools/gen-state.js',
-      role: '',
+      role: 'state.js 생성 스크립트',
     },
     {
       path: 'tools/git-new-feature.sh',
-      role: '',
+      role: '피처 브랜치 생성 스크립트',
     },
     {
       path: 'tools/git-poll-merge.sh',
-      role: '',
+      role: 'PR CI 폴링 스크립트',
     },
     {
       path: 'tools/git-push-pr.sh',
-      role: '',
+      role: '브랜치 푸시+PR 생성 스크립트',
     },
     {
       path: 'tools/git-stage-and-commit.sh',
-      role: '',
+      role: '안전 커밋 스크립트',
     },
     {
       path: 'tools/install-hooks.sh',
-      role: '',
+      role: 'git 훅 설치 스크립트',
     },
     {
       path: 'tools/migrate.sh',
-      role: '',
+      role: '마이그레이션 적용 스크립트',
     },
     {
       path: 'tools/onboarding.sh',
-      role: '',
+      role: '협업자 온보딩 스크립트',
     },
     {
       path: 'tools/test-backend.sh',
-      role: '',
+      role: 'pytest 래퍼 스크립트',
     },
     {
       path: 'web-testing/AGENTS.md',
-      role: '',
+      role: '테스트 러너 에이전트 가이드',
     },
     {
       path: 'web-testing/dashboard/app.js',
-      role: '',
+      role: 'E2E 테스트 대시보드 SPA',
     },
     {
       path: 'web-testing/dashboard/index.html',
-      role: '',
+      role: '테스트 대시보드 페이지',
     },
     {
       path: 'web-testing/dashboard/style.css',
-      role: '',
+      role: '테스트 대시보드 스타일',
     },
     {
       path: 'web-testing/requirements.txt',
-      role: '',
+      role: '테스트 의존성 설정',
     },
     {
       path: 'web-testing/research/__init__.py',
-      role: '',
+      role: 'research 패키지 init',
     },
     {
       path: 'web-testing/research/persona.py',
-      role: '',
+      role: '테스트 페르소나 생성기',
     },
     {
       path: 'web-testing/research/scenarios.py',
-      role: '',
+      role: '페르소나 스와이프 시나리오 매핑',
     },
     {
       path: 'web-testing/run.py',
-      role: '',
+      role: 'E2E 테스트 러너 CLI',
     },
     {
       path: 'web-testing/runner/__init__.py',
-      role: '',
+      role: 'runner 패키지 init',
     },
     {
       path: 'web-testing/runner/collector.py',
-      role: '',
+      role: '테스트 실행 데이터 수집기',
     },
     {
       path: 'web-testing/runner/feedback.py',
-      role: '',
+      role: '구조화 피드백 생성기',
     },
     {
       path: 'web-testing/runner/reporter.py',
-      role: '',
+      role: '테스트 리포트 생성기',
     },
     {
       path: 'web-testing/runner/runner.py',
-      role: '',
+      role: 'Playwright E2E 실행 오케스트레이션',
     },
   ],
   systemFlow: {
