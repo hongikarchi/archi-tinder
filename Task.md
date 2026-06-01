@@ -54,7 +54,16 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(none — no active initiative slice with a PR in flight.)_
+### FRONT-AUTH-2 — 로그인 스와이프 온보딩
+Redesign `/login` as conversational swipe onboarding while preserving the existing guest auth API contract. **1차 merged to develop 2026-06-01** (Codex; code-review + security PASS, no blockers; further passes + PIPA copy pending).
+
+- [x] Sync `feature/admin-login-page` from latest `origin/develop` before editing.
+- [x] Extract shared `react-tinder-card` gesture config/wrapper (`SwipeGestureFrame.jsx` + `swipeGestureConfig.js`) for Login, SwipePage, DiscoveryPage.
+- [x] Rebuild LoginPage: first card right=new / left=returning, required display name, required role, consent card right-swipe submit.
+- [x] Preserve `/discovery` handoff, dev login, Google conditional mount, `buildGuestLoginPayload` wire shape (code-review confirmed contract intact).
+- [x] unit test + lint + build green.
+- [ ] app-test FULL (swipe path) — **deferred, run before prod**.
+- [ ] ⚠️ consent UX regressed vs #155 (한국어 PIPA 버튼 → 영어 swipe) → tracked in FULL-LEGAL-1, restore before public launch.
 
 ---
 
@@ -343,6 +352,8 @@ Likely slices:
 
 #### FULL-LEGAL-1 — PIPA/GDPR consent 없음 (public launch 차단)
 Phase 13+ Profile/Board public/private visibility shipped. PIPA + GDPR posture for signup data collection / consent flow / retention policy still open. **Required before public launch.**
+
+**FRONT-AUTH-2 consent regression (2026-06-01):** the swipe-onboarding login (merged to develop) replaced #155's explicit Korean "동의합니다" PIPA button with a right-swipe gesture + generic English consent copy (`LoginPage.jsx` ConsentStep). Backend `consent_accepted` / `consent_policy_version` contract intact, but Korea-first + PIPA favor an explicit affirmative act (button/checkbox) + Korean disclosure. Restore Korean PIPA copy + explicit affirmative before public launch (flagged by both code-review + security in the merge gate).
 
 Code audit 2026-05-27 (`develop@3894ffd`):
 - Only visible consent surface found is `frontend/src/pages/LoginPage.jsx` line text: "By continuing, you agree to our terms of service". There are no Terms/Privacy routes in `App.jsx`, and no stored consent/version fields on `UserProfile`.

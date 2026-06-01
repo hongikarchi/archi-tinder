@@ -9,18 +9,23 @@ import assert from 'node:assert/strict'
 // Import the module under test. Node ESM resolves relative paths from cwd,
 // so run from the repo root or frontend/ directory.
 import {
+  LOGIN_SWIPE_ACTIONS,
   ONBOARDING_ROLES,
   normalizeGuestName,
   buildGuestLoginPayload,
   hasGoogleLogin,
+  getLoginSwipeAction,
+  isDisplayNameReady,
+  isRoleReady,
+  isGuestProfileReady,
 } from './loginFlow.js'
 
 // ---------------------------------------------------------------------------
 // ONBOARDING_ROLES shape
 // ---------------------------------------------------------------------------
 describe('ONBOARDING_ROLES', () => {
-  test('has exactly 5 entries', () => {
-    assert.equal(ONBOARDING_ROLES.length, 5)
+  test('has exactly 3 entries', () => {
+    assert.equal(ONBOARDING_ROLES.length, 3)
   })
 
   test('each entry has {value, label} string properties', () => {
@@ -32,12 +37,89 @@ describe('ONBOARDING_ROLES', () => {
     }
   })
 
-  test('contains the required 5 values', () => {
+  test('contains the required 3 values', () => {
     const values = ONBOARDING_ROLES.map(r => r.value)
-    const required = ['student', 'architect', 'designer', 'enthusiast', 'other']
+    const required = ['student', 'architect', 'other']
     for (const v of required) {
       assert.ok(values.includes(v), `missing role value: ${v}`)
     }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Login swipe action helpers
+// ---------------------------------------------------------------------------
+describe('LOGIN_SWIPE_ACTIONS', () => {
+  test('maps left to returning and right to new', () => {
+    assert.deepEqual(LOGIN_SWIPE_ACTIONS, { left: 'returning', right: 'new' })
+  })
+})
+
+describe('getLoginSwipeAction', () => {
+  test('returns returning for left swipes', () => {
+    assert.equal(getLoginSwipeAction('left'), 'returning')
+  })
+
+  test('returns new for right swipes', () => {
+    assert.equal(getLoginSwipeAction('right'), 'new')
+  })
+
+  test('returns null for unsupported directions', () => {
+    assert.equal(getLoginSwipeAction('up'), null)
+    assert.equal(getLoginSwipeAction('down'), null)
+    assert.equal(getLoginSwipeAction(''), null)
+    assert.equal(getLoginSwipeAction(null), null)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// UI readiness helpers
+// ---------------------------------------------------------------------------
+describe('isDisplayNameReady', () => {
+  test('accepts strings with non-whitespace after trim', () => {
+    assert.equal(isDisplayNameReady('Alice'), true)
+    assert.equal(isDisplayNameReady('  Alice  '), true)
+  })
+
+  test('rejects blank and non-string values', () => {
+    assert.equal(isDisplayNameReady(''), false)
+    assert.equal(isDisplayNameReady('   '), false)
+    assert.equal(isDisplayNameReady(null), false)
+    assert.equal(isDisplayNameReady(undefined), false)
+    assert.equal(isDisplayNameReady(42), false)
+  })
+})
+
+describe('isRoleReady', () => {
+  test('accepts only values from ONBOARDING_ROLES', () => {
+    for (const role of ONBOARDING_ROLES) {
+      assert.equal(isRoleReady(role.value), true, `${role.value} should be ready`)
+    }
+  })
+
+  test('rejects missing, blank, and unknown roles', () => {
+    assert.equal(isRoleReady(''), false)
+    assert.equal(isRoleReady('architects'), false)
+    assert.equal(isRoleReady(' student '), false)
+    assert.equal(isRoleReady(null), false)
+  })
+})
+
+describe('isGuestProfileReady', () => {
+  test('requires display name and role readiness', () => {
+    assert.equal(isGuestProfileReady({ displayName: 'Alice', role: 'student' }), true)
+  })
+
+  test('rejects blank display name with valid role', () => {
+    assert.equal(isGuestProfileReady({ displayName: '   ', role: 'student' }), false)
+  })
+
+  test('rejects valid display name with invalid role', () => {
+    assert.equal(isGuestProfileReady({ displayName: 'Alice', role: 'unknown' }), false)
+  })
+
+  test('rejects missing profile object', () => {
+    assert.equal(isGuestProfileReady(), false)
   })
 })
 
@@ -100,8 +182,8 @@ describe('buildGuestLoginPayload', () => {
   })
 
   test('onboarding_role is passed through', () => {
-    const payload = buildGuestLoginPayload({ displayName: 'Alice', role: 'designer' })
-    assert.equal(payload.onboarding_role, 'designer')
+    const payload = buildGuestLoginPayload({ displayName: 'Alice', role: 'architect' })
+    assert.equal(payload.onboarding_role, 'architect')
   })
 
   test('onboarding_role defaults to empty string when omitted', () => {

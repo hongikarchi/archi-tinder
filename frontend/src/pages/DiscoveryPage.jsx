@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import TinderCard from 'react-tinder-card'
 import { fetchDiscoveryFeed, addLikedBuilding } from '../api/client.js'
 import SwipeCard, { CARD_WIDTH, CARD_HEIGHT } from '../components/SwipeCard.jsx'
 import SaveToBoardModal from '../components/SaveToBoardModal.jsx'
 import SurpriseBoardModal from '../components/SurpriseBoardModal.jsx'
+import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
 
 const PAGE_LIMIT = 12
 const SURPRISE_THRESHOLD = 5
@@ -395,21 +395,18 @@ export default function DiscoveryPage() {
               const id = getCardId(card)
               if (isTop) {
                 return (
-                  <TinderCard
+                  <SwipeGestureFrame
                     key={`top-${id}`}
                     ref={cardRef}
                     onSwipe={onTinderSwipe}
                     onCardLeftScreen={onCardLeftScreen}
-                    preventSwipe={['up', 'down']}
-                    swipeRequirementType='position'
-                    swipeThreshold={120}
                   >
                     <SwipeCard
                       card={card}
                       onGalleryOpen={() => {}}
                       onGalleryClose={() => {}}
                     />
-                  </TinderCard>
+                  </SwipeGestureFrame>
                 )
               }
               return (
