@@ -24,8 +24,8 @@ import {
 // ONBOARDING_ROLES shape
 // ---------------------------------------------------------------------------
 describe('ONBOARDING_ROLES', () => {
-  test('has exactly 5 entries', () => {
-    assert.equal(ONBOARDING_ROLES.length, 5)
+  test('has exactly 3 entries', () => {
+    assert.equal(ONBOARDING_ROLES.length, 3)
   })
 
   test('each entry has {value, label} string properties', () => {
@@ -37,9 +37,9 @@ describe('ONBOARDING_ROLES', () => {
     }
   })
 
-  test('contains the required 5 values', () => {
+  test('contains the required 3 values', () => {
     const values = ONBOARDING_ROLES.map(r => r.value)
-    const required = ['student', 'architect', 'designer', 'enthusiast', 'other']
+    const required = ['student', 'architect', 'other']
     for (const v of required) {
       assert.ok(values.includes(v), `missing role value: ${v}`)
     }
@@ -182,8 +182,8 @@ describe('buildGuestLoginPayload', () => {
   })
 
   test('onboarding_role is passed through', () => {
-    const payload = buildGuestLoginPayload({ displayName: 'Alice', role: 'designer' })
-    assert.equal(payload.onboarding_role, 'designer')
+    const payload = buildGuestLoginPayload({ displayName: 'Alice', role: 'architect' })
+    assert.equal(payload.onboarding_role, 'architect')
   })
 
   test('onboarding_role defaults to empty string when omitted', () => {

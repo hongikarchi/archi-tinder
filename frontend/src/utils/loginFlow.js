@@ -7,8 +7,6 @@
 export const ONBOARDING_ROLES = [
   { value: 'student',     label: 'Student' },
   { value: 'architect',   label: 'Architect' },
-  { value: 'designer',    label: 'Designer' },
-  { value: 'enthusiast',  label: 'Architecture enthusiast' },
   { value: 'other',       label: 'Just exploring' },
 ]
 

@@ -6,8 +6,9 @@
 import { useEffect, useRef, useState } from 'react'
 import * as api from '../api/client.js'
 import GoogleLoginButton from '../components/GoogleLoginButton.jsx'
+import { CARD_HEIGHT, CARD_WIDTH } from '../components/SwipeCard.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
-import { SWIPE_PREVENT_ALL } from '../components/swipeGestureConfig.js'
+import { SWIPE_PREVENT_ALL, SWIPE_PREVENT_VERTICAL } from '../components/swipeGestureConfig.js'
 import {
   LOGIN_SWIPE_ACTIONS,
   ONBOARDING_ROLES,
@@ -33,14 +34,13 @@ const STEP_PROMPTS = {
   consent: 'One right swipe creates the guest profile.',
 }
 
-const AUTH_STAGE_WIDTH = 'min(420px, calc(100vw - 32px))'
-const AUTH_CARD_HEIGHT = 'clamp(420px, calc(100vh - 190px), 520px)'
-const RIGHT_ONLY_PREVENT_SWIPE = ['left', 'up', 'down']
+const AUTH_STAGE_WIDTH = `${CARD_WIDTH}px`
+const AUTH_CARD_HEIGHT = `${CARD_HEIGHT}px`
 
 export default function LoginPage({ onLogin }) {
   const googleConfigured = hasGoogleLogin(import.meta.env.VITE_GOOGLE_CLIENT_ID)
   const pendingChoiceAction = useRef(null)
-  const pendingConsentSubmit = useRef(false)
+  const pendingConsentAction = useRef(null)
 
   const [step, setStep] = useState(FLOW_STEPS.choice)
   const [displayName, setDisplayName] = useState('')
@@ -157,21 +157,25 @@ export default function LoginPage({ onLogin }) {
     }
   }
 
-  function handleConsentAction() {
-    if (isBusy) return
-    setConsentGiven(true)
-    handleGuestSubmit({ consentConfirmed: true })
-  }
-
   function handleConsentSwipe(direction) {
-    if (direction !== 'right') return
-    pendingConsentSubmit.current = true
-    setConsentGiven(true)
+    if (isBusy) return
+    if (direction === 'left') {
+      pendingConsentAction.current = 'back'
+    } else if (direction === 'right') {
+      pendingConsentAction.current = 'submit'
+      setConsentGiven(true)
+    }
   }
 
   function handleConsentLeftScreen() {
-    if (!pendingConsentSubmit.current) return
-    pendingConsentSubmit.current = false
+    const action = pendingConsentAction.current
+    if (!action) return
+    pendingConsentAction.current = null
+    if (action === 'back') {
+      setConsentGiven(false)
+      moveToStep(FLOW_STEPS.profile)
+      return
+    }
     handleGuestSubmit({ consentConfirmed: true })
   }
 
@@ -208,8 +212,6 @@ export default function LoginPage({ onLogin }) {
               disabled={isBusy}
               onSwipe={handleChoiceSwipe}
               onCardLeftScreen={handleChoiceLeftScreen}
-              onReturning={() => handleChoiceAction(LOGIN_SWIPE_ACTIONS.left)}
-              onNew={() => handleChoiceAction(LOGIN_SWIPE_ACTIONS.right)}
             />
           )}
 
@@ -256,11 +258,8 @@ export default function LoginPage({ onLogin }) {
               role={role}
               profileReady={profileReady}
               disabled={isBusy}
-              loading={loading === 'guest'}
               onSwipe={handleConsentSwipe}
               onCardLeftScreen={handleConsentLeftScreen}
-              onBack={() => moveToStep(FLOW_STEPS.profile)}
-              onSubmit={handleConsentAction}
             />
           )}
         </div>
@@ -303,7 +302,7 @@ function useTypedLine(line) {
   return typedLine
 }
 
-function ChoiceStep({ typedLine, disabled, onSwipe, onCardLeftScreen, onReturning, onNew }) {
+function ChoiceStep({ typedLine, disabled, onSwipe, onCardLeftScreen }) {
   return (
     <div style={swipeStepStyle}>
       <div style={swipeDeckStyle}>
@@ -319,9 +318,6 @@ function ChoiceStep({ typedLine, disabled, onSwipe, onCardLeftScreen, onReturnin
               typedLine={typedLine}
             />
             <div style={choiceBodyStyle}>
-              <p style={bodyCopyStyle}>
-                Swipe left if you are returning. Swipe right if you want a new guest profile.
-              </p>
               <div style={directionGridStyle} aria-hidden="true">
                 <DirectionHint tone="left" label="Returning" sublabel="Left" />
                 <DirectionHint tone="right" label="New profile" sublabel="Right" />
@@ -329,14 +325,6 @@ function ChoiceStep({ typedLine, disabled, onSwipe, onCardLeftScreen, onReturnin
             </div>
           </AuthCard>
         </SwipeGestureFrame>
-      </div>
-      <div style={buttonGridStyle}>
-        <button type="button" onClick={onReturning} disabled={disabled} style={secondaryButtonStyle(disabled)}>
-          Returning
-        </button>
-        <button type="button" onClick={onNew} disabled={disabled} style={primaryButtonStyle(disabled)}>
-          New here
-        </button>
       </div>
     </div>
   )
@@ -459,11 +447,8 @@ function ConsentStep({
   role,
   profileReady,
   disabled,
-  loading,
   onSwipe,
   onCardLeftScreen,
-  onBack,
-  onSubmit,
 }) {
   const selectedRole = ONBOARDING_ROLES.find(roleOption => roleOption.value === role)
   const lockSwipe = disabled || !profileReady
@@ -474,7 +459,7 @@ function ConsentStep({
         <SwipeGestureFrame
           onSwipe={onSwipe}
           onCardLeftScreen={onCardLeftScreen}
-          preventSwipe={lockSwipe ? SWIPE_PREVENT_ALL : RIGHT_ONLY_PREVENT_SWIPE}
+          preventSwipe={lockSwipe ? SWIPE_PREVENT_ALL : SWIPE_PREVENT_VERTICAL}
         >
           <AuthCard absolute ariaLabel="Guest consent">
             <CardHeader
@@ -495,22 +480,12 @@ function ConsentStep({
             <p style={bodyCopyStyle}>
               By continuing, you agree that ArchiTinder can use this guest profile to provide the service and save your taste signals.
             </p>
-            <DirectionHint tone="right" label="Consent and enter" sublabel="Right swipe" />
+            <div style={directionGridStyle} aria-hidden="true">
+              <DirectionHint tone="left" label="Back" sublabel="Left swipe" />
+              <DirectionHint tone="right" label="Consent and enter" sublabel="Right swipe" />
+            </div>
           </AuthCard>
         </SwipeGestureFrame>
-      </div>
-      <div style={buttonGridStyle}>
-        <button type="button" onClick={onBack} disabled={disabled} style={secondaryButtonStyle(disabled)}>
-          Back
-        </button>
-        <button
-          type="button"
-          onClick={onSubmit}
-          disabled={disabled || !profileReady}
-          style={primaryButtonStyle(disabled || !profileReady)}
-        >
-          {loading ? <Spinner /> : 'Create guest'}
-        </button>
       </div>
     </div>
   )
@@ -718,8 +693,7 @@ const absoluteCardStyle = {
 const staticCardStyle = {
   position: 'relative',
   width: '100%',
-  minHeight: 420,
-  maxHeight: 'calc(100vh - 170px)',
+  height: AUTH_CARD_HEIGHT,
 }
 
 const cardHeaderStyle = {
