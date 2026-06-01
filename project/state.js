@@ -25,9 +25,9 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-06-01 17:28 KST',
-    head: 'fefa830',
-    branch: 'feature/claude-dashboard-autogen',
+    updatedAt: '2026-06-01 22:07 KST',
+    head: '4e72b07',
+    branch: 'feature/admin-login-page',
   },
   done: [
     {
@@ -85,7 +85,13 @@ window.PROJECT_STATE = {
       note: 'Board detail PR #147 pattern applied. PROJECT_DETAIL_TTL=60 + version key + evict_project_detail. Invalidation 8 sites. CRITICAL fix-loop: delete evict order race. test_board_detail_perf.py 7 cases. sha be6c8f5.',
     },
   ],
-  now: [],
+  now: [
+    {
+      id: 'FRONT-AUTH-2',
+      title: '로그인 스와이프 온보딩',
+      note: 'Redesign `/login` as conversational swipe onboarding while preserving the existing guest auth API contract. 1차 merged to develop 2026-06-01 (Codex; code-review + security PASS, no blockers; further passes + PIPA copy pending).',
+    },
+  ],
   next: {
     xhigh: [
       {
@@ -208,6 +214,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 174,
+      title: 'feat(dashboard): Files tab + self-generating state.js (DASHBOARD-AUTOGEN-1)',
+      mergedAt: '2026-06-01T10:55:34Z',
+      mergedAtKST: '2026-06-01 19:55 KST',
+      sha: '4e72b07',
+    },
+    {
       number: 173,
       title: 'refactor(recommendation): decompose engine.py — vecmath/convergence/filters/cards (FULL-REFACTOR-1 pt.4 FINAL)',
       mergedAt: '2026-06-01T06:20:26Z',
@@ -255,13 +268,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-05-30T23:53:38Z',
       mergedAtKST: '2026-05-31 08:53 KST',
       sha: '43de2b1',
-    },
-    {
-      number: 166,
-      title: 'docs: codify concurrent-agent worktree isolation',
-      mergedAt: '2026-05-30T23:51:26Z',
-      mergedAtKST: '2026-05-31 08:51 KST',
-      sha: '32a0f7d',
     },
   ],
   agents: [
@@ -1328,6 +1334,10 @@ window.PROJECT_STATE = {
       role: '스와이프 카드 컴포넌트',
     },
     {
+      path: 'frontend/src/components/SwipeGestureFrame.jsx',
+      role: '공통 swipe 제스처 래퍼',
+    },
+    {
       path: 'frontend/src/components/TabBar.jsx',
       role: '하단 탭바 내비게이션',
     },
@@ -1362,6 +1372,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/components/profile/ProjectCard.jsx',
       role: '사무소 프로젝트 카드',
+    },
+    {
+      path: 'frontend/src/components/swipeGestureConfig.js',
+      role: 'swipe 제스처 설정 상수',
     },
     {
       path: 'frontend/src/context/ThemeContext.jsx',
