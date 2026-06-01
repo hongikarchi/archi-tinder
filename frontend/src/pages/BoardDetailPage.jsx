@@ -159,6 +159,9 @@ export default function BoardDetailPage() {
   const [isEditingName, setIsEditingName] = useState(false)
   const [editName, setEditName] = useState('')
   const [nameSaving, setNameSaving] = useState(false)
+  const [shareCopied, setShareCopied] = useState(false)
+  const [showReport, setShowReport] = useState(false)
+  const reportRef = useRef(null)
   const nameInputRef = useRef(null)
   const [isEditMode, setIsEditMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState(new Set())
@@ -220,6 +223,24 @@ export default function BoardDetailPage() {
       setReactionError(err.message || 'Failed to update reaction.')
     } finally {
       setIsReactionPending(false)
+    }
+  }
+
+  async function handleShare() {
+    const report = board?.final_report
+    const shareData = {
+      title: (localName || board?.name || 'Board') + (report?.persona_type ? ` · ${report.persona_type}` : ''),
+      text: report?.one_liner || localName || '',
+      url: window.location.href,
+    }
+    if (navigator.share && navigator.canShare?.(shareData)) {
+      try { await navigator.share(shareData) } catch { /* user cancelled */ }
+    } else {
+      try {
+        await navigator.clipboard.writeText(window.location.href)
+        setShareCopied(true)
+        setTimeout(() => setShareCopied(false), 2000)
+      } catch { /* silent */ }
     }
   }
 
@@ -379,11 +400,7 @@ export default function BoardDetailPage() {
           </button>
 
           <button
-            onClick={() => {
-              // TODO(claude): wire share endpoint or use Web Share API.
-              // Likely client-side `navigator.share({ url })` with fallback;
-              // backend may expose a shareable short-link endpoint.
-            }}
+            onClick={handleShare}
             onMouseEnter={() => setIsShareHovered(true)}
             onMouseLeave={() => setIsShareHovered(false)}
             aria-label="Share"
@@ -395,7 +412,7 @@ export default function BoardDetailPage() {
               backdropFilter: 'blur(12px)',
               WebkitBackdropFilter: 'blur(12px)',
               border: '1px solid rgba(255,255,255,0.12)',
-              color: isShareHovered ? '#ec4899' : '#fff',
+              color: shareCopied ? '#34d399' : (isShareHovered ? '#ec4899' : '#fff'),
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
@@ -405,13 +422,19 @@ export default function BoardDetailPage() {
               transform: isShareHovered ? 'scale(1.05)' : 'scale(1)',
             }}
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="18" cy="5" r="3"></circle>
-              <circle cx="6" cy="12" r="3"></circle>
-              <circle cx="18" cy="19" r="3"></circle>
-              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
-              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
-            </svg>
+            {shareCopied ? (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            ) : (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="18" cy="5" r="3" />
+                <circle cx="6" cy="12" r="3" />
+                <circle cx="18" cy="19" r="3" />
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+              </svg>
+            )}
           </button>
         </div>
 
@@ -597,41 +620,58 @@ export default function BoardDetailPage() {
         </div>
       </div>
 
-      {/* Action row — owner sees edit controls, others see Love This */}
+      {/* Action row — owner sees edit controls, others see Love This; report button when final_report exists */}
       <div style={{
         padding: '24px 20px 8px',
         display: 'flex',
-        justifyContent: 'center',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 10,
       }}>
         {isOwner ? (
           <button
-            onClick={() => { setIsEditMode(true); setSelectedIds(new Set()) }}
-            disabled={!board || buildings.length === 0}
+            onClick={() => {
+              if (isEditMode) { setIsEditMode(false); setSelectedIds(new Set()) }
+              else { setIsEditMode(true); setSelectedIds(new Set()) }
+            }}
+            disabled={!isEditMode && (!board || buildings.length === 0)}
             style={{
               width: '100%',
               maxWidth: 320,
               minHeight: 44,
               padding: '14px 24px',
               borderRadius: 999,
-              background: 'var(--color-surface)',
-              color: 'var(--color-text)',
+              background: isEditMode ? 'var(--color-surface-2)' : 'var(--color-surface)',
+              color: isEditMode ? 'var(--color-text-dim)' : 'var(--color-text)',
               border: '1px solid var(--color-border)',
               fontSize: 15,
               fontWeight: 700,
-              cursor: buildings.length === 0 ? 'default' : 'pointer',
+              cursor: (!isEditMode && buildings.length === 0) ? 'default' : 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               gap: 10,
               fontFamily: 'inherit',
-              opacity: buildings.length === 0 ? 0.4 : 1,
+              opacity: (!isEditMode && buildings.length === 0) ? 0.4 : 1,
+              transition: 'background 0.2s, color 0.2s',
             }}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-            </svg>
-            <span>Edit Board</span>
+            {isEditMode ? (
+              <>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+                <span>취소</span>
+              </>
+            ) : (
+              <>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                </svg>
+                <span>Edit Board</span>
+              </>
+            )}
           </button>
         ) : (
           <button
@@ -677,6 +717,41 @@ export default function BoardDetailPage() {
             <span>{isReacted ? `Loved · ${reactionCount}` : 'Love this'}</span>
           </button>
         )}
+        {board?.final_report && (
+          <button
+            onClick={() => {
+              setShowReport(prev => !prev)
+              if (!showReport) setTimeout(() => reportRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
+            }}
+            style={{
+              width: '100%',
+              maxWidth: 320,
+              minHeight: 44,
+              padding: '12px 24px',
+              borderRadius: 999,
+              background: 'linear-gradient(135deg, rgba(236,72,153,0.12), rgba(244,63,94,0.12))',
+              color: '#ec4899',
+              border: '1px solid rgba(236,72,153,0.3)',
+              fontSize: 14,
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              fontFamily: 'inherit',
+            }}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+            <span>{showReport ? '리포트 닫기' : '페르소나 리포트 보기'}</span>
+          </button>
+        )}
       </div>
       {!isOwner && reactionError && (
         <div style={{
@@ -687,6 +762,97 @@ export default function BoardDetailPage() {
           textAlign: 'center',
         }}>
           {reactionError}
+        </div>
+      )}
+
+      {/* Persona Report section — only when final_report exists and showReport toggled on */}
+      {board?.final_report && showReport && (
+        <div ref={reportRef} style={{ maxWidth: 1100, margin: '0 auto', padding: '0 20px 28px' }}>
+          <div style={{
+            borderRadius: 16,
+            border: '1px solid var(--color-border-soft)',
+            background: 'var(--color-surface)',
+            padding: '20px',
+            position: 'relative',
+            overflow: 'hidden',
+          }}>
+            <div style={{
+              position: 'absolute', inset: 0,
+              background: 'radial-gradient(circle at 0% 0%, rgba(236,72,153,0.07), transparent 60%)',
+              pointerEvents: 'none',
+            }} />
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{
+                  color: 'var(--color-text-muted)',
+                  fontSize: 11, fontWeight: 800,
+                  letterSpacing: '0.1em', textTransform: 'uppercase',
+                  margin: '0 0 6px',
+                }}>
+                  Persona Report
+                </p>
+                <h3 style={{
+                  color: 'var(--color-text)',
+                  fontSize: 20, fontWeight: 800,
+                  margin: '0 0 6px', lineHeight: 1.1,
+                }}>
+                  {board.final_report.persona_type}
+                </h3>
+                <p style={{
+                  color: '#ec4899',
+                  fontSize: 13, fontWeight: 600,
+                  margin: '0 0 10px', lineHeight: 1.45,
+                }}>
+                  {board.final_report.one_liner}
+                </p>
+                {board.final_report.description && (
+                  <p style={{
+                    color: 'var(--color-text-dim)',
+                    fontSize: 13, lineHeight: 1.6,
+                    margin: '0 0 14px',
+                  }}>
+                    {board.final_report.description}
+                  </p>
+                )}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {(board.final_report.dominant_programs || []).map(tag => (
+                    <span key={tag} style={{
+                      padding: '4px 10px', borderRadius: 999,
+                      background: 'rgba(236,72,153,0.1)',
+                      border: '1px solid rgba(236,72,153,0.22)',
+                      color: '#ec4899',
+                      fontSize: 11, fontWeight: 700,
+                    }}>{tag}</span>
+                  ))}
+                  {(board.final_report.dominant_styles || []).map(tag => (
+                    <span key={tag} style={{
+                      padding: '4px 10px', borderRadius: 999,
+                      background: 'rgba(99,102,241,0.1)',
+                      border: '1px solid rgba(99,102,241,0.22)',
+                      color: 'var(--color-text-dim)',
+                      fontSize: 11, fontWeight: 700,
+                    }}>{tag}</span>
+                  ))}
+                  {(board.final_report.dominant_materials || []).map(tag => (
+                    <span key={tag} style={{
+                      padding: '4px 10px', borderRadius: 999,
+                      background: 'rgba(255,255,255,0.06)',
+                      border: '1px solid var(--color-border-soft)',
+                      color: 'var(--color-text-dim)',
+                      fontSize: 11, fontWeight: 700,
+                    }}>{tag}</span>
+                  ))}
+                </div>
+              </div>
+              {board.report_image && (
+                <img
+                  src={`data:image/png;base64,${board.report_image}`}
+                  alt="Persona"
+                  style={{ width: 80, height: 80, borderRadius: 12, objectFit: 'cover', flexShrink: 0 }}
+                />
+              )}
+            </div>
+          </div>
         </div>
       )}
 
