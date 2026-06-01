@@ -366,6 +366,11 @@ Monitoring map:
 - Track Neon active connections during swipe bursts and Railway worker/thread counts. If peak >8-10 at current traffic, promote this from MEDIUM risk to HIGH infra work.
 - If slow swipes correlate with connection pressure, evaluate a bounded executor or queue instead of unbounded per-swipe `threading.Thread`.
 
+#### INFRA-DB-CLEANUP-1 — Unverified guest row 누적 정리 (conditional)
+Guest 계정(FULL-LOGIN-REDESIGN-1 #154/#155)은 정리 로직 없음 (user Q5 결정). `/auth/guest/` throttle 3/min/IP이나 IP 로테이션 botnet은 row 증가 가능 → 조건부 모니터링 항목.
+
+Detail: Monitor Neon `auth_user WHERE email = '' AND is_active = True` row count weekly. If growth > 500 rows/week sustained, open this and implement a Django management command `delete unverified WHERE last_active < 30 days AND swipe_count == 0` + cron/Railway scheduled job.
+
 ### LOW
 
 #### FRONT-AUTH-1 — LoginPage에 Kakao/Naver 버튼 없음
@@ -449,6 +454,14 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 
 ## Done
 
+### DASHBOARD-AUTOGEN-1 — 대시보드 Files 탭 + state.js 자동생성 — RESOLVED 2026-06-01 (`feature/claude-dashboard-autogen` → develop)
+프로젝트 대시보드 2건: (1) 파일 구조 Files 탭 (collapsible 트리 + 파일별 role), (2) state.js를 reporter 수작업 재작성 대신 `tools/gen-state.js`로 자동생성.
+- [x] **gen-state.js** (1232e12): meta/done/now/next ← Task.md+git, agents ← `.claude/agents` frontmatter, prs ← gh(offline=prior 유지), fileTree ← `git ls-files` ∪ file-roles.json. mermaid×3+milestones는 이전 state.js verbatim 복사; done/next note + agent role은 id/name 캐리포워드(신규는 첫 bullet seed). self-check(11키+배열) + verifyCarry(캐리키 round-trip) + drift 리포트. `make dashboard` → `--local` state.local.js(gitignored, 미커밋 포함). reporter-inline Step 4 = 생성기 호출로 교체.
+- [x] **Files 탭** (918680b): native `<details>` collapsible 트리 + role 컬럼 + 폴더 file-count. `project/file-roles.json` 337개(짧은 한국어 noun-phrase, max 29자; 10-chunk agent workflow + critic + revise; 손-유지, 생성기는 병합만). jsdom 렌더 게이트 PASS(337 files/68 folders, 탭 토글, done/next 무회귀, state.local.js 부재=무음 no-op 확인).
+- [x] **drift 정규화** (d8c6250): 생성기가 노출한 state.js↔Task.md 드리프트 4건(SNS-RESULTS-UI-1/SNS-REPORT-CONNECT/DOCS-SESSION done + INFRA-DB-CLEANUP-1 medium) Task.md canonical 복원.
+- [x] **reporter-inline 정합** (b8d8c0f): note/role 캐리-바이-id 비대칭(seed 후 sticky) + 기존 note 수정 절차 + sentinel 정정 문서화.
+- 효과: reporter가 컨텍스트 다 읽고 state.js 424줄 재작성하던 비용 + `*/` 백지 버그 제거. Task.md 편집 → `node tools/gen-state.js` 한 줄. 픽셀 검증만 Codex lane(공유 Chrome 점유)로 이월.
+
 ### FULL-REFACTOR-1 — 큰 파일 분해 (engine.py 등) pure-move 분해 — RESOLVED 2026-06-01 (PRs #170 `6f54cc3` / #171 `7302ae6` / #172 `e1ff077` / engine `16e2a1a-pre-squash`)
 Behavior-preserving decomposition of the repo's largest files into focused modules. PURE MOVE — lines relocated, zero behavior change. 4 slices:
 - [x] **#170 `6f54cc3`** — recommendation backend: parse_query.py 906→656 (+`_prompts.py`), views/sessions.py 622→80 (+`session_service.py`), views/swipe.py 1205→497 (+`swipe_service.py`). Extracted services reference engine via MODULE (`from .. import engine`), never `from ..engine import X` — preserves `views.engine.*` patch-bite.
@@ -466,6 +479,15 @@ Behavior-preserving decomposition of the repo's largest files into focused modul
 - [x] **reporter-inline → Model 1**: runs BEFORE `git-publish`; audit commits onto the feature branch, ships in same PR; keyed on stable task ID (GitHub PR# optional, auto-stamped on squash). orchestrate Mermaid + both `WORKFLOW.md` + skill mirrors aligned; 0 Model-2 remnants.
 - [x] **Plan-gate safety**: 4 resolved plans archived (`.claude/plans/archive/` + `.codex/plans/archive/`); stale `## PR Plan` sections neutered so a resolved plan can't falsely open the publish gate. README guards in both plans dirs.
 - [x] **Codex-side**: Codex set its own commit-trailer identity; `browser-verify` placed after `git-commit`; AGENTS.md / `.codex/*` / `.agents/skills/` (Codex skills) aligned. Pure docs/config → app-test auto-skip.
+
+### SNS-RESULTS-UI-1 — ResultsPage UI overhaul — Liked 카드 노출 + 추천 그리드 — RESOLVED 2026-05-31 (PR #165 `61c9ee1`)
+Top-K 추천 4-column 그리드 + 신규 "My Likes" 가로 스크롤 섹션 (`result.liked_images` 소비). Imagen placeholder/rank-10 divider 제거, Fragment import drop. `frontend/src/pages/ResultsPage.jsx` +118/-69. 모바일 4-col 9-10px 폰트 빽빽 (작성자 의도).
+
+### SNS-REPORT-CONNECT — 페르소나 리포트 생성 연결 + 필드명 수정 — RESOLVED 2026-05-31 (PR #163 `fc9a5c6`)
+Persona report 생성 경로 연결 + `personaFields`/`dominant_styles` 필드명 정합. #165 ResultsPage 변경과 무충돌 (별도 라인).
+
+### DOCS-SESSION-2026-05-31 — 세션 하우스키핑 — worktree 격리 + Codex 경고 + 리뷰 백로그 — RESOLVED 2026-05-31 (PRs #164 `6c5cd66` / #166 `32a0f7d` / #167 `43de2b1`)
+동시-에이전트 working-dir 격리(git worktree) CONTRIBUTING + CLAUDE/AGENTS + WORKFLOW 미러 (#166 `32a0f7d`). Codex startup metadata 경고 수정 (#167 `43de2b1`). 2026-05-31 swipe/discovery 리뷰 → Task.md `### X-HIGH` 버킷 + `.claude/reviews/` 문서 (#164 `6c5cd66`).
 
 ### FULL-LOGIN-REDESIGN-1 — Guest-first onboarding + 보드 4번째 verify gate — RESOLVED 2026-05-27 (PRs #154 / #155 `db81e0f` + `e8296f5-pre-squash`)
 - [x] **Backend PR #154** (squashed `db81e0f`): `UserProfile.is_guest` + `onboarding_role` + `consent_accepted_at` + `consent_policy_version` + migration `0004`. `GuestLoginView` (3/min/IP `GuestLoginThrottle`) + `GuestPromoteView` (5/min `GuestPromoteThrottle UserRateThrottle`). `CustomTokenObtainPairSerializer` adds `is_guest` claim on refresh → propagates to access via simplejwt's claim copy (rotation-safe). `IsVerifiedUser` permission (future-proof). `ProjectListCreateView.post()` inline gate: `is_guest AND Project.count() >= 3 → 403 {detail:'verify_required', reason:'board_limit_reached', limit:3}`. `GuestPromoteView` atomic: Branch 1 cross-device merge (8 FK update rules: Project/AnalysisSession/SessionEvent/Follow×2/OfficeFollow/Reaction; SwipeEvent skipped — no direct user FK) + delete guest + blacklist refresh; Branch 2 in-place transform + username collision guard (`google_{provider_id}` fallback) + blacklist refresh. 14 pytest tests. CI Postgres service container verifies; INFRA-DB-2 blocks local. Railway auto-applied migration on develop merge.

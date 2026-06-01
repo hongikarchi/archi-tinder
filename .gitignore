@@ -80,3 +80,6 @@ Desktop.ini
 *.orig
 .#*
 \#*\#
+
+# Project dashboard — local-only generated view (`make dashboard`); committed project/state.js is canonical
+project/state.local.js
