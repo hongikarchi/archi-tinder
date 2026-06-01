@@ -25,7 +25,7 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-06-01 16:41 KST',
+    updatedAt: '2026-06-01 16:55 KST',
     head: 'fefa830',
     branch: 'feature/claude-dashboard-autogen',
   },
@@ -42,6 +42,27 @@ window.PROJECT_STATE = {
       title: 'one-clone-per-worker model + agent-config overhaul (supersedes PR #166 worktree)',
       completedAt: '2026-06-01',
       note: 'PR #166 worktree 격리 폐기 → one-clone-per-worker: 작업자(사람/AI)마다 자기 clone + 자기 .git + 자기 feature 브랜치 + 자기 PR. 공유 .git이 2026-05-31 HEAD 오염 경로였음(Codex checkout이 메인 clone HEAD를 develop 밖으로 이동). 실패모드 분리: HEAD 충돌(해결=별도 .git) + merge 충돌(해결=파일 스코프 분리). Claude=메인 clone make_web(터미널/백엔드 경향), Codex=make_web-codex(브라우저/프론트 경향) — 경향=기본값이지 벽 아님. 브랜치 prefix: 팀 feature/<role>-(algo/sns/admin) 유지, 로컬 에이전트 feature/claude-* / feature/codex-*. Task 보드 루트 통합(.claude+.codex → 루트 Task.md, 76 refs / 33 files). deprecated agent git-manager+reporter 삭제(git-commit+reporter-inline skill 대체). reporter-inline Model 1(publish 전, task-ID 키잉). 해결된 plan 4개 archive + stale ## PR Plan neuter(publish 게이트 오작동 방지). CONTRIBUTING canonical + CLAUDE/AGENTS/WORKFLOW×2 미러. Pure docs/config → app-test skip. PR# pending squash.',
+    },
+    {
+      id: 'SNS-RESULTS-UI-1',
+      title: 'ResultsPage UI overhaul — Liked 카드 노출 + 추천 그리드',
+      completedAt: '2026-05-31',
+      prs: [165],
+      note: 'Top-K 추천 4-column 그리드 + 신규 "My Likes" 가로 스크롤 섹션 (result.liked_images 소비). Imagen placeholder/rank-10 divider 제거, Fragment import drop. frontend/src/pages/ResultsPage.jsx +118/-69. 모바일 4-col 9-10px 폰트 빽빽 (작성자 의도). sha 61c9ee1.',
+    },
+    {
+      id: 'SNS-REPORT-CONNECT',
+      title: '페르소나 리포트 생성 연결 + 필드명 수정',
+      completedAt: '2026-05-31',
+      prs: [163],
+      note: 'Persona report 생성 경로 연결 + personaFields/dominant_styles 필드명 정합. #165 ResultsPage 변경과 무충돌 (별도 라인). sha fc9a5c6.',
+    },
+    {
+      id: 'DOCS-SESSION-2026-05-31',
+      title: '세션 하우스키핑 — worktree 격리 + Codex 경고 + 리뷰 백로그',
+      completedAt: '2026-05-31',
+      prs: [164, 166, 167],
+      note: '동시-에이전트 working-dir 격리(git worktree) CONTRIBUTING + CLAUDE/AGENTS + WORKFLOW 미러 (#166 32a0f7d). Codex startup metadata 경고 수정 (#167 43de2b1). 2026-05-31 swipe/discovery 리뷰 → Task.md ### X-HIGH 버킷 + .claude/reviews/ 문서 (#164 6c5cd66).',
     },
     {
       id: 'FULL-LOGIN-REDESIGN-1',
@@ -63,27 +84,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-05-27',
       prs: [147],
       note: 'engine.get_building_thumbnails NEW + thumbnail swap + UserProfileDetailView 60s cache + invalidation 5 sites + test_profile_perf.py 9 cases. 기대: cold ~500-700ms, warm ~100ms. sha d3e110c.',
-    },
-    {
-      id: 'BACK-PERFORMANCE-4',
-      title: 'Discovery cold 4.6s → ~1.5-2.5s — taste vector cap + SQL top-K',
-      completedAt: '2026-05-27',
-      prs: [146],
-      note: '2/3 fixes (warm thread rolled back). taste_ranked_page CTE removed + compute_user_taste_vector recent-50 cap. 기대: 4.6s → ~1.5-2.5s. sha 4af6b4d.',
-    },
-    {
-      id: 'BACK-ALGO-1',
-      title: 'Required-slate hard WHERE + first-swipe prefetch cache seed',
-      completedAt: '2026-05-27',
-      prs: [145],
-      note: '2 backend algorithm/perf fixes from 4th Codex retest 2026-05-26. F3 required-slate hard WHERE: _REQUIRED_SLATE_FIELDS_SET frozenset + _build_required_slate_where(filters) helper for Modes V+F. F4 first-swipe prefetch cache seed: SessionCreate seeds cache.set(prefetch:{sid}:1, ...). code-review fix-loop CRITICAL caught SQL param order inversion. test_engine_filter_hard_constraint.py NEW 4 cases. sha 3894ffd.',
-    },
-    {
-      id: 'FRONT-UX-FIXES-1',
-      title: 'Image timeout + Gallery CTA nav + Board card click',
-      completedAt: '2026-05-26',
-      prs: [144],
-      note: '3 frontend UX correctness fixes. F2 SwipeCard image timeout 2000ms→4000ms + retry path removed. F5 Gallery CTA: navigate(/buildings/${card.image_id}). F7 BoardDetail building card click: building.id OR chain at 3 sites. FRONT-UX-5 (Gallery CTA backlog) closed by F5. sha 77e1aef.',
     },
   ],
   now: [],
@@ -177,6 +177,11 @@ window.PROJECT_STATE = {
         id: 'PERF-PREFETCH-POOL-RISK',
         title: 'Neon connection pool 모니터링 (post PR #134)',
         note: 'Code audit 2026-05-27: SwipeView can spawn _async_prefetch_thread and _emit_telemetry_thread; both close connections in finally but can open thread-local DB connections while main request holds one. Practical transient footprint is main + telemetry + prefetch, depending on timing. Monitor Neon active conns during swipe bursts; consider bounded executor if peak rises.',
+      },
+      {
+        id: 'INFRA-DB-CLEANUP-1',
+        title: 'Unverified guest row 누적 정리 (conditional)',
+        note: 'FULL-LOGIN-REDESIGN-1 PR #154/#155 ships guest accounts with no cleanup (user explicit decision — Q5). Throttle is 3/min/IP for /auth/guest/ but botnet w/ IP rotation can still grow rows. Monitor Neon "auth_user WHERE email = \'\' AND is_active = True" row count weekly. If growth > 500 rows/week sustained, open this and implement: Django management command "delete unverified WHERE last_active < 30 days AND swipe_count == 0" + cron/Railway scheduled job.',
       },
     ],
     low: [
@@ -369,6 +374,10 @@ window.PROJECT_STATE = {
     },
     {
       path: '.claude/plans/archive/workflow-skill-absorption.md',
+      role: '',
+    },
+    {
+      path: '.claude/plans/dashboard-autogen-1.md',
       role: '',
     },
     {
@@ -1549,6 +1558,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'tools/front-validate.sh',
+      role: '',
+    },
+    {
+      path: 'tools/gen-state.js',
       role: '',
     },
     {

@@ -366,6 +366,11 @@ Monitoring map:
 - Track Neon active connections during swipe bursts and Railway worker/thread counts. If peak >8-10 at current traffic, promote this from MEDIUM risk to HIGH infra work.
 - If slow swipes correlate with connection pressure, evaluate a bounded executor or queue instead of unbounded per-swipe `threading.Thread`.
 
+#### INFRA-DB-CLEANUP-1 — Unverified guest row 누적 정리 (conditional)
+Guest 계정(FULL-LOGIN-REDESIGN-1 #154/#155)은 정리 로직 없음 (user Q5 결정). `/auth/guest/` throttle 3/min/IP이나 IP 로테이션 botnet은 row 증가 가능 → 조건부 모니터링 항목.
+
+Detail: Monitor Neon `auth_user WHERE email = '' AND is_active = True` row count weekly. If growth > 500 rows/week sustained, open this and implement a Django management command `delete unverified WHERE last_active < 30 days AND swipe_count == 0` + cron/Railway scheduled job.
+
 ### LOW
 
 #### FRONT-AUTH-1 — LoginPage에 Kakao/Naver 버튼 없음
@@ -466,6 +471,15 @@ Behavior-preserving decomposition of the repo's largest files into focused modul
 - [x] **reporter-inline → Model 1**: runs BEFORE `git-publish`; audit commits onto the feature branch, ships in same PR; keyed on stable task ID (GitHub PR# optional, auto-stamped on squash). orchestrate Mermaid + both `WORKFLOW.md` + skill mirrors aligned; 0 Model-2 remnants.
 - [x] **Plan-gate safety**: 4 resolved plans archived (`.claude/plans/archive/` + `.codex/plans/archive/`); stale `## PR Plan` sections neutered so a resolved plan can't falsely open the publish gate. README guards in both plans dirs.
 - [x] **Codex-side**: Codex set its own commit-trailer identity; `browser-verify` placed after `git-commit`; AGENTS.md / `.codex/*` / `.agents/skills/` (Codex skills) aligned. Pure docs/config → app-test auto-skip.
+
+### SNS-RESULTS-UI-1 — ResultsPage UI overhaul — Liked 카드 노출 + 추천 그리드 — RESOLVED 2026-05-31 (PR #165 `61c9ee1`)
+Top-K 추천 4-column 그리드 + 신규 "My Likes" 가로 스크롤 섹션 (`result.liked_images` 소비). Imagen placeholder/rank-10 divider 제거, Fragment import drop. `frontend/src/pages/ResultsPage.jsx` +118/-69. 모바일 4-col 9-10px 폰트 빽빽 (작성자 의도).
+
+### SNS-REPORT-CONNECT — 페르소나 리포트 생성 연결 + 필드명 수정 — RESOLVED 2026-05-31 (PR #163 `fc9a5c6`)
+Persona report 생성 경로 연결 + `personaFields`/`dominant_styles` 필드명 정합. #165 ResultsPage 변경과 무충돌 (별도 라인).
+
+### DOCS-SESSION-2026-05-31 — 세션 하우스키핑 — worktree 격리 + Codex 경고 + 리뷰 백로그 — RESOLVED 2026-05-31 (PRs #164 `6c5cd66` / #166 `32a0f7d` / #167 `43de2b1`)
+동시-에이전트 working-dir 격리(git worktree) CONTRIBUTING + CLAUDE/AGENTS + WORKFLOW 미러 (#166 `32a0f7d`). Codex startup metadata 경고 수정 (#167 `43de2b1`). 2026-05-31 swipe/discovery 리뷰 → Task.md `### X-HIGH` 버킷 + `.claude/reviews/` 문서 (#164 `6c5cd66`).
 
 ### FULL-LOGIN-REDESIGN-1 — Guest-first onboarding + 보드 4번째 verify gate — RESOLVED 2026-05-27 (PRs #154 / #155 `db81e0f` + `e8296f5-pre-squash`)
 - [x] **Backend PR #154** (squashed `db81e0f`): `UserProfile.is_guest` + `onboarding_role` + `consent_accepted_at` + `consent_policy_version` + migration `0004`. `GuestLoginView` (3/min/IP `GuestLoginThrottle`) + `GuestPromoteView` (5/min `GuestPromoteThrottle UserRateThrottle`). `CustomTokenObtainPairSerializer` adds `is_guest` claim on refresh → propagates to access via simplejwt's claim copy (rotation-safe). `IsVerifiedUser` permission (future-proof). `ProjectListCreateView.post()` inline gate: `is_guest AND Project.count() >= 3 → 403 {detail:'verify_required', reason:'board_limit_reached', limit:3}`. `GuestPromoteView` atomic: Branch 1 cross-device merge (8 FK update rules: Project/AnalysisSession/SessionEvent/Follow×2/OfficeFollow/Reaction; SwipeEvent skipped — no direct user FK) + delete guest + blacklist refresh; Branch 2 in-place transform + username collision guard (`google_{provider_id}` fallback) + blacklist refresh. 14 pytest tests. CI Postgres service container verifies; INFRA-DB-2 blocks local. Railway auto-applied migration on develop merge.
