@@ -382,16 +382,6 @@ Decision needed:
 - Choose provider integration style: JS SDK popup/access-token vs OAuth redirect/auth-code. Match mobile browser behavior and Vercel callback envs before implementing.
 - This may be superseded or reshaped by `FULL-LOGIN-REDESIGN-1`; if guest-first ships first, Kakao/Naver should be secondary account-upgrade options, not necessarily primary login buttons.
 
-#### FULL-REFACTOR-1 — 큰 파일 분해 필요 (engine.py 2383 LOC 등)
-File decomp (LOC verified 2026-05-27 on `develop@3894ffd`): `engine.py` 2383, `BoardDetailPage.jsx` 1049, `UserProfilePage.jsx` 992, `App.jsx` 838, `BuildingDetailPage.jsx` 711, `SwipePage.jsx` 683, `FirmProfilePage.jsx` 540. `PostSwipeLandingPage.jsx` removed in INFRA-CLEANUP-1 (PR #142, 2026-05-26). `rg "style={{" frontend/src | wc -l` = 581, so frontend refactor overlaps with `FRONT-DESIGN-1`.
-
-Code audit:
-- `engine.py` mixes DB row-to-card mapping, search SQL, pool creation, embedding caches, MMR/DPP/KMeans, telemetry helpers, Discovery taste ranking, and corpus-rank helpers. Split only after active algorithm work stabilizes; algorithm ownership lives in `docs/algorithm.md`.
-- `App.jsx` owns auth/session/project state, routing, swipe orchestration, and localStorage persistence. Good future split: `useSessionController`, `useProjectStore`, route shell.
-- `BoardDetailPage.jsx` and `UserProfilePage.jsx` combine data fetching, optimistic mutations, selection state, modals, and large inline style blocks. Extract hooks before moving visual components.
-
-Refactor rule: no behavior change PRs. Each slice needs before/after tests or app-test screenshots because these files are user-facing and regression-prone.
-
 #### BACK-RECOMMEND-3 — Profile-tab 사무소/유저 추천 endpoint 없음
 Re-scoped 2026-05-14 (REC1 already shipped as Push S3). REC2 (firm) + REC3 (user) target a single composite endpoint `GET /api/v1/recommendations/profile/` returning `{offices: [...], users: [...]}` for a Profile-tab button. Landing tab removed (Push S6).
 
@@ -458,6 +448,16 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 ---
 
 ## Done
+
+### FULL-REFACTOR-1 — 큰 파일 분해 (engine.py 등) pure-move 분해 — RESOLVED 2026-06-01 (PRs #170 `6f54cc3` / #171 `7302ae6` / #172 `e1ff077` / engine `16e2a1a-pre-squash`)
+Behavior-preserving decomposition of the repo's largest files into focused modules. PURE MOVE — lines relocated, zero behavior change. 4 slices:
+- [x] **#170 `6f54cc3`** — recommendation backend: parse_query.py 906→656 (+`_prompts.py`), views/sessions.py 622→80 (+`session_service.py`), views/swipe.py 1205→497 (+`swipe_service.py`). Extracted services reference engine via MODULE (`from .. import engine`), never `from ..engine import X` — preserves `views.engine.*` patch-bite.
+- [x] **#171 `7302ae6`** — accounts/views.py 939 → `views/` package (`auth.py` + `profile.py` + facade). CI caught the mock-patch landmine (facade re-export ≠ patch interception for function/object names) → fixed by repointing 9 test patch paths to the symbol's submodule + corrected docstrings.
+- [x] **#172 `e1ff077`** — frontend 5 stable pages → 16 co-located modules: BoardDetail 1050→862, UserProfile 1022→715, BuildingDetail 711→499, FirmProfile 540→156, App.jsx 983→897 (`utils/appHelpers` + `components/{ErrorBoundary,LLMSearchUpdateWrapper}`). Pages have 0 named exports (only default, consumed by App routing) → no facade needed. Codex mocked-API browser smoke confirmed the 4 swipe-journey-skipped pages render (desktop+mobile, no ErrorBoundary).
+- [x] **engine.py `16e2a1a-pre-squash`** — 2446→1976; 18 verified-pure leaf fns → `engine_{vecmath,convergence,filters,cards}.py` (4 acyclic siblings — siblings NEVER import engine; engine.py re-imports + re-exports as facade). Landmine defused by KEEPING all ~20 patch targets (`connection`/`RC`/patched fns) in engine.py → same-module bare-name patch interception unchanged. poison-mock confirmed facade reach (27 fail poisoned → 31 pass reverted). Residual ~1976 LOC stays patch-saturated; deeper split needs mass patch-repointing → deferred.
+- Verified per-slice: code-review PASS, lint/build/collect (810) green, bundle byte-stable (frontend), CI green on merged PRs, engine poison-mock.
+- 🔴 Durable lesson: facade re-export preserves IMPORT but NOT `mock.patch` interception for function/object names — only MODULE names survive. Repoint test patch paths to the symbol's new home (or keep patch targets co-located) + poison-mock to prove the patch still bites (green pytest ≠ proof; DB-gated tests run only on CI).
+- Excluded → Codex fresh frontend pass: LoginPage/SwipePage/DiscoveryPage + SwipeGestureFrame. Skipped: web-testing/runner.py.
 
 ### INFRA-MULTIAGENT-1 — one-clone-per-worker model + agent-config overhaul (supersedes PR #166 worktree) — RESOLVED 2026-06-01 (`feature/claude-multiagent-model-docs` → develop)
 - [x] **Isolation model**: every worker (human OR local AI tool) owns ONE clone + own `.git` + own `feature/*` branch + own PR. Replaces PR #166 worktree isolation — shared `.git` was the 2026-05-31 HEAD-contamination path (a Codex checkout moved the main clone's HEAD off `develop`). Two failure modes split: HEAD collision (fix = separate `.git`) + merge conflict (fix = non-overlapping file scope). Claude = main clone `make_web` (terminal; backend/API tendency); Codex = `make_web-codex` (browser; frontend tendency). Tendencies = defaults, not walls. Branch prefixes: team `feature/<role>-<topic>` (algo/sns/admin) UNCHANGED; local agents `feature/claude-<topic>` / `feature/codex-<topic>`. Canonical section in `CONTRIBUTING.md`; mirrored to CLAUDE.md + AGENTS.md HARD RULE 7 + both `WORKFLOW.md` session-start checks.
