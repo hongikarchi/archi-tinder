@@ -314,7 +314,6 @@ export default function SwipePage({
   const [showTutorial, setShowTutorial] = useState(() => !localStorage.getItem('archithon_tutorial_dismissed'))
   const [showExitConfirm, setShowExitConfirm] = useState(false)
   const [showDismissConfirm, setShowDismissConfirm] = useState(false)
-  const [reportAnalyzing, setReportAnalyzing] = useState(false)
 
   const like_count       = progress?.like_count    ?? 0
   const phase            = progress?.phase
@@ -386,14 +385,6 @@ export default function SwipePage({
     setLocalResetTick(t => t + 1)
   }
 
-  function handleViewResults() {
-    setReportAnalyzing(true)
-    setTimeout(() => {
-      setReportAnalyzing(false)
-      onViewResults()
-    }, 3000)
-  }
-
   // When cardResetToken changes the TinderCard was force-remounted after a
   // locked swipe. Clear the guard refs so the same card can be swiped again.
   useEffect(() => {
@@ -426,68 +417,6 @@ export default function SwipePage({
   if (isCompleted) {
     const canContinue = !!progress?.can_continue
     return (
-      <>
-      {reportAnalyzing && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          zIndex: 9999,
-          background: 'rgba(8, 8, 12, 0.92)',
-          backdropFilter: 'blur(16px)',
-          WebkitBackdropFilter: 'blur(16px)',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 28,
-        }}>
-          <div style={{
-            position: 'relative',
-            width: 72,
-            height: 72,
-          }}>
-            <div style={{
-              position: 'absolute',
-              inset: 0,
-              borderRadius: '50%',
-              border: '3px solid rgba(236,72,153,0.15)',
-            }} />
-            <div style={{
-              position: 'absolute',
-              inset: 0,
-              borderRadius: '50%',
-              border: '3px solid transparent',
-              borderTopColor: '#ec4899',
-              animation: 'spin 1s linear infinite',
-            }} />
-            <div style={{
-              position: 'absolute',
-              inset: 10,
-              borderRadius: '50%',
-              background: 'radial-gradient(circle, rgba(236,72,153,0.18), transparent 70%)',
-            }} />
-          </div>
-          <div style={{ textAlign: 'center' }}>
-            <p style={{
-              color: '#fff',
-              fontSize: 18,
-              fontWeight: 700,
-              margin: '0 0 8px',
-              letterSpacing: '-0.01em',
-            }}>
-              취향을 분석하고 있어요
-            </p>
-            <p style={{
-              color: 'rgba(255,255,255,0.48)',
-              fontSize: 13,
-              fontWeight: 500,
-              margin: 0,
-            }}>
-              페르소나 리포트 생성 중...
-            </p>
-          </div>
-        </div>
-      )}
       <div style={{
         height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
         overflow: 'hidden',
@@ -545,7 +474,7 @@ export default function SwipePage({
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: CARD_WIDTH }}>
           <button
-            onClick={handleViewResults}
+            onClick={onViewResults}
             disabled={isResultLoading}
             style={{
               padding: '14px 24px',
@@ -589,7 +518,6 @@ export default function SwipePage({
           )}
         </div>
       </div>
-      </>
     )
   }
 
@@ -610,68 +538,6 @@ export default function SwipePage({
 
   return (
     <>
-      {reportAnalyzing && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          zIndex: 9999,
-          background: 'rgba(8, 8, 12, 0.92)',
-          backdropFilter: 'blur(16px)',
-          WebkitBackdropFilter: 'blur(16px)',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 28,
-        }}>
-          <div style={{
-            position: 'relative',
-            width: 72,
-            height: 72,
-          }}>
-            <div style={{
-              position: 'absolute',
-              inset: 0,
-              borderRadius: '50%',
-              border: '3px solid rgba(236,72,153,0.15)',
-            }} />
-            <div style={{
-              position: 'absolute',
-              inset: 0,
-              borderRadius: '50%',
-              border: '3px solid transparent',
-              borderTopColor: '#ec4899',
-              animation: 'spin 1s linear infinite',
-            }} />
-            <div style={{
-              position: 'absolute',
-              inset: 10,
-              borderRadius: '50%',
-              background: 'radial-gradient(circle, rgba(236,72,153,0.18), transparent 70%)',
-            }} />
-          </div>
-          <div style={{ textAlign: 'center' }}>
-            <p style={{
-              color: '#fff',
-              fontSize: 18,
-              fontWeight: 700,
-              margin: '0 0 8px',
-              letterSpacing: '-0.01em',
-            }}>
-              취향을 분석하고 있어요
-            </p>
-            <p style={{
-              color: 'rgba(255,255,255,0.48)',
-              fontSize: 13,
-              fontWeight: 500,
-              margin: 0,
-            }}>
-              페르소나 리포트 생성 중...
-            </p>
-          </div>
-        </div>
-      )}
-
       <TutorialPopup visible={showTutorial} onClose={() => setShowTutorial(false)} />
 
       {showExitConfirm && (
@@ -746,7 +612,7 @@ export default function SwipePage({
         {isAt100 && (
           <div style={{ width: CARD_WIDTH }}>
             <button
-              onClick={handleViewResults}
+              onClick={onViewResults}
               disabled={isResultLoading || swipePending > 0}
               style={{
                 width: '100%',
