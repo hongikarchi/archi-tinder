@@ -193,6 +193,15 @@ canonical sources and writes `project/state.js`:
   the prior `state.js`. To change a diagram, hand-edit it in `project/state.js`, then re-run the
   generator (it preserves your edit). The generator never regenerates Mermaid.
 
+**Editing an existing note / agent role:** `note` (done/now/next) and agent `role` are
+**carried by id/name** from the prior `state.js`, so editing them in `Task.md` does NOT
+change them once the id already exists (the carry wins — this is why a Task.md note edit
+may "not take"). To rewrite an existing note/role, edit the string **directly in
+`project/state.js`** (it is the carried source for that field) and re-run — the generator
+preserves it; or delete the id's prior entry so the next run re-seeds from Task.md's first
+body line. Asymmetry to remember: `id` / `title` / `completedAt` / `prs` re-derive from
+`Task.md` every run, but `note` / `role` are **sticky after the first seed**.
+
 The generator self-checks (re-evals output, asserts the 11 keys + array shapes), exits
 non-zero on malformed output, and prints a one-line summary + a drift report to stderr
 (files lacking a `file-roles.json` role; role entries for deleted files).
@@ -202,10 +211,11 @@ No manual JSON, no `*/`-comment pitfall, no timestamp/SHA bookkeeping. Commit th
 `project/state.js` together with the `Task.md` change in the same audit commit.
 
 > The previous hand-authoring procedure (4a–4i) is superseded by the generator. The fixed
-> state shape, the carry-forward rules, and the in-flight-PR `mergedAt: null` sentinel are now
-> enforced by `tools/gen-state.js`. To open the dashboard with a fresher local view, run
-> `make dashboard` (writes the gitignored `project/state.local.js`; does not touch the
-> committed `project/state.js`).
+> state shape and the carry-forward rules are now enforced by `tools/gen-state.js`. Note:
+> `prs` lists `--state merged` only — the old in-flight-PR `mergedAt: null` sentinel is
+> dropped (the just-merged PR appears on the next generator run after the squash). To open
+> the dashboard with a fresher local view, run `make dashboard` (writes the gitignored
+> `project/state.local.js`; does not touch the committed `project/state.js`).
 
 ## Step 5 — Report
 
@@ -251,8 +261,9 @@ The generator's self-check asserts the 11 keys + array shapes; a non-zero exit m
 failure, read its stderr and fix the ROOT CAUSE — almost always a `Task.md`
 formatting deviation (a `### `/`#### ` header the parser cannot split, a missing
 `— RESOLVED <date>` anchor) or a `project/file-roles.json` JSON error — then re-run.
-Do NOT hand-patch `project/state.js`; it is generated and your edit is overwritten on
-the next run (hand-edits belong only in the carried Mermaid / milestones blocks). The
+Do NOT hand-patch the auto-derived sections of `project/state.js`; they are generated and
+your edit is overwritten on the next run. Hand-edits belong only in carried fields — the
+Mermaid / milestones blocks and the string values of carried `note` / `role` (see Step 4). The
 deprecated `reporter` agent fallback was removed 2026-05-31 — there is no agent to
 dispatch.
 
