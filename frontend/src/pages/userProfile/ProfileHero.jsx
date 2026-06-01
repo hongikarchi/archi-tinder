@@ -1,4 +1,5 @@
 import { Fragment } from 'react'
+import { useNavigate } from 'react-router-dom'
 import BioPersonaFlipCard from '../../components/profile/BioPersonaFlipCard'
 
 export default function ProfileHero({
@@ -10,6 +11,8 @@ export default function ProfileHero({
   isFollowingPending,
   onToggleFollow,
 }) {
+  const navigate = useNavigate()
+
   // External-link helpers (pure derivations — no hooks)
   const igHandle = user?.external_links?.instagram?.replace(/^@/, '') || ''
   const igUrl = igHandle ? `https://instagram.com/${igHandle}` : null
@@ -82,13 +85,12 @@ export default function ProfileHero({
             <Fragment key={stat.label}>
               <button
                 onClick={() => {
-                  if (stat.label === 'Boards') {
-                    // TODO(claude): navigate to user's boards list when route exists
-                  } else if (stat.label === 'Followers') {
-                    // TODO(claude): navigate to followers list — GET /api/v1/users/{id}/followers/
-                  } else {
-                    // TODO(claude): navigate to following list — GET /api/v1/users/{id}/following/
+                  if (stat.label === 'Followers' && user?.user_id) {
+                    navigate(`/user/${user.user_id}/followers`)
+                  } else if (stat.label === 'Following' && user?.user_id) {
+                    navigate(`/user/${user.user_id}/following`)
                   }
+                  // Boards: no dedicated list route yet — no-op
                 }}
                 style={{
                   flex: '0 0 auto',

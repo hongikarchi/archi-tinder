@@ -32,3 +32,11 @@ export async function reactToProject(projectId) {
 export async function unreactToProject(projectId) {
   return await callApi('DELETE', `/projects/${projectId}/react/`)
 }
+
+export async function getFollowers(userId, page = 1) {
+  return await callApi('GET', `/users/${userId}/followers/?page=${page}`)
+}
+
+export async function getFollowing(userId, page = 1) {
+  return await callApi('GET', `/users/${userId}/following/?page=${page}`)
+}

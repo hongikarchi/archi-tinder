@@ -14,6 +14,7 @@ import BuildingDetailPage from './pages/BuildingDetailPage.jsx'
 import DiscoveryPage from './pages/DiscoveryPage.jsx'
 import VerifyGateModal from './components/VerifyGateModal.jsx'
 import LikedProjectsPage from './pages/LikedProjectsPage.jsx'
+import FollowListPage from './pages/userProfile/FollowListPage.jsx'
 import * as api from './api/client.js'
 import { createProject } from './api/projects.js'
 import { normalizeFilters, classifySwipeError, isActionCard, extractLikedIds, extractSavedIds } from './utils/appHelpers.js'
@@ -795,6 +796,8 @@ export default function App() {
           <Route path="library/:folderId" element={<Navigate to="/user/me" replace />} />
           <Route path="user/me" element={<UserProfilePage {...sharedLayoutProps} />} />
           <Route path="user/:userId" element={<UserProfilePage {...sharedLayoutProps} />} />
+          <Route path="user/:userId/followers" element={<FollowListPage mode="followers" />} />
+          <Route path="user/:userId/following" element={<FollowListPage mode="following" />} />
           <Route path="office/:officeId" element={<FirmProfilePage {...sharedLayoutProps} />} />
           <Route path="result/:sessionId" element={<ResultsPage projects={projects} setProjects={setProjects} />} />
           <Route path="buildings/:buildingId" element={<BuildingDetailPage />} />
