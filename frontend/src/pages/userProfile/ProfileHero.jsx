@@ -1,6 +1,8 @@
-import { Fragment } from 'react'
+import { Fragment, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import BioPersonaFlipCard from '../../components/profile/BioPersonaFlipCard'
+import ShareCardModal from '../../components/ShareCardModal.jsx'
+import { IconShare } from '../../components/icons.jsx'
 
 export default function ProfileHero({
   user,
@@ -12,6 +14,7 @@ export default function ProfileHero({
   onToggleFollow,
 }) {
   const navigate = useNavigate()
+  const [shareOpen, setShareOpen] = useState(false)
 
   // External-link helpers (pure derivations — no hooks)
   const igHandle = user?.external_links?.instagram?.replace(/^@/, '') || ''
@@ -19,7 +22,8 @@ export default function ProfileHero({
   const emailUrl = user?.external_links?.email ? `mailto:${user.external_links.email}` : null
 
   return (
-    /* HERO BLOCK — narrower nested column (max-width 480) */
+    <>
+    {/* HERO BLOCK — narrower nested column (max-width 480) */}
     <div style={{ maxWidth: 480, margin: '0 auto 36px' }}>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
 
@@ -244,9 +248,62 @@ export default function ProfileHero({
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
               </svg>
             </button>
+            {/* Share button — opens BusinessCard modal (stub, QR not functional) */}
+            <button
+              type="button"
+              onClick={() => setShareOpen(true)}
+              aria-label="프로필 카드 공유"
+              title="프로필 카드 공유"
+              style={{
+                width: 44, height: 44, minWidth: 44, flexShrink: 0,
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 12, cursor: 'pointer',
+                color: 'var(--color-text-2)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                transition: 'border-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease)',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--color-border-soft)'; e.currentTarget.style.color = 'var(--color-text)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-2)' }}
+            >
+              <IconShare width={18} height={18} />
+            </button>
+          </div>
+        )}
+
+        {/* Share button for own profile (isMe) — sits below the external links section */}
+        {isMe && (
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16 }}>
+            <button
+              type="button"
+              onClick={() => setShareOpen(true)}
+              aria-label="프로필 카드 공유"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 7,
+                padding: '10px 16px', minHeight: 44,
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--color-border)',
+                background: 'transparent',
+                color: 'var(--color-text-2)',
+                fontSize: 13, fontWeight: 600,
+                cursor: 'pointer', fontFamily: 'inherit',
+                transition: 'border-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease)',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--color-border-soft)'; e.currentTarget.style.color = 'var(--color-text)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-2)' }}
+            >
+              <IconShare width={16} height={16} />
+              프로필 카드
+            </button>
           </div>
         )}
       </div>
     </div>
+
+    {/* ShareCardModal — mounted at hero level (has access to user) */}
+    {shareOpen && (
+      <ShareCardModal user={user} onClose={() => setShareOpen(false)} />
+    )}
+  </>
   )
 }
