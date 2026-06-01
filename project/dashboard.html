@@ -307,6 +307,8 @@
 <script src="./mermaid.min.js"></script>
 <!-- Data first, render second — both plain scripts so file:// double-click works -->
 <script src="state.js"></script>
+<!-- Local override (gitignored, written by `make dashboard`) — fresher view without commit churn; absent on plain file:// double-click = silent no-op -->
+<script src="state.local.js"></script>
 <script>
 (function () {
   "use strict";

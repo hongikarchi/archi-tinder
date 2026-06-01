@@ -6,7 +6,7 @@ DEV_SUPERUSER_PASSWORD ?= admin1234
 BACKEND_DIR  = backend
 FRONTEND_DIR = frontend
 
-.PHONY: setup dev backend frontend reset-db
+.PHONY: setup dev backend frontend reset-db dashboard
 
 # ── Setup ────────────────────────────────────────────────────────────────────
 setup:
@@ -39,3 +39,8 @@ frontend:
 # ── Reset DB (migrations only, no wipe) ─────────────────────────────────────
 reset-db:
 	cd $(BACKEND_DIR) && python3 manage.py migrate
+
+# ── Dashboard (regenerate local project state, then open) ────────────────────
+dashboard:
+	node tools/gen-state.js --local
+	@command -v open >/dev/null 2>&1 && open project/dashboard.html || echo "Open project/dashboard.html in a browser."
