@@ -1,6 +1,6 @@
 # Task Board
 
-> Authored by the session; updated by the `reporter` agent at session end. The dashboard
+> Authored by the session; updated by the `reporter-inline` skill at session end. The dashboard
 > (`project/dashboard.html` ← `project/state.js`) renders this file's three active
 > sections (`## Now` / `## Next` / `## Done`). The compact `## Roadmap (Historical)`
 > section at the bottom is a phase-level summary, not a task list.
@@ -9,7 +9,7 @@
 
 - **Session start** — read `## Now` first. If empty and the user is starting new work, move the matched `## Next` entry (under `### X-HIGH` / `### HIGH` / `### MEDIUM` / `### LOW`) into `## Now`. Or write a fresh entry if brand-new. One initiative slice at a time.
 - **Mid-session** — if work in `## Now` gets deferred ("미루자"), move it back to `## Next` with a one-line rationale note. If a new sub-task appears, add it under the active Now entry's body or create a new Now entry.
-- **Session end (success)** — reporter moves `## Now` → `## Done` with PR ref + SHA. If the Now entry's note mentions a deferred follow-up (`Deferred: ...`), reporter also auto-surfaces a matching `## Next` entry per its sub-step 2a (see `.claude/agents/reporter.md`).
+- **Session end (success)** — the `reporter-inline` skill moves `## Now` → `## Done` with SHA + optional PR ref (keyed on the task ID). If the Now entry's note mentions a deferred follow-up (`Deferred: ...`), it also auto-surfaces a matching `## Next` entry (see the `reporter-inline` skill).
 
 **ID convention** (since 2026-05-25): `<SURFACE>-<TOPIC>-<N>`.
 - **SURFACE** = `FRONT` / `BACK` / `FULL` / `INFRA`. Tells where the work lives.
@@ -54,7 +54,14 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(none — no active initiative slice with a PR in flight.)_
+### FRONT-AUTH-2 — 로그인 스와이프 온보딩
+Redesign `/login` as conversational swipe onboarding while preserving the existing guest auth API contract.
+
+- [ ] Sync `feature/admin-login-page` from latest `origin/develop` before editing.
+- [ ] Extract shared `react-tinder-card` gesture config/wrapper for Login, SwipePage, and DiscoveryPage.
+- [ ] Rebuild LoginPage: first card right=new user / left=returning user, required display name, required role, consent card with right-swipe or button submit.
+- [ ] Preserve `/discovery` handoff, dev login, Google conditional mount, and `buildGuestLoginPayload` wire shape.
+- [ ] Verify with frontend unit test, lint, build, and feature-scoped browser check.
 
 ---
 
@@ -366,6 +373,11 @@ Monitoring map:
 - Track Neon active connections during swipe bursts and Railway worker/thread counts. If peak >8-10 at current traffic, promote this from MEDIUM risk to HIGH infra work.
 - If slow swipes correlate with connection pressure, evaluate a bounded executor or queue instead of unbounded per-swipe `threading.Thread`.
 
+#### INFRA-DB-CLEANUP-1 — Unverified guest row 누적 정리 (conditional)
+Guest 계정(FULL-LOGIN-REDESIGN-1 #154/#155)은 정리 로직 없음 (user Q5 결정). `/auth/guest/` throttle 3/min/IP이나 IP 로테이션 botnet은 row 증가 가능 → 조건부 모니터링 항목.
+
+Detail: Monitor Neon `auth_user WHERE email = '' AND is_active = True` row count weekly. If growth > 500 rows/week sustained, open this and implement a Django management command `delete unverified WHERE last_active < 30 days AND swipe_count == 0` + cron/Railway scheduled job.
+
 ### LOW
 
 #### FRONT-AUTH-1 — LoginPage에 Kakao/Naver 버튼 없음
@@ -381,16 +393,6 @@ Code audit 2026-05-27 (`develop@3894ffd`):
 Decision needed:
 - Choose provider integration style: JS SDK popup/access-token vs OAuth redirect/auth-code. Match mobile browser behavior and Vercel callback envs before implementing.
 - This may be superseded or reshaped by `FULL-LOGIN-REDESIGN-1`; if guest-first ships first, Kakao/Naver should be secondary account-upgrade options, not necessarily primary login buttons.
-
-#### FULL-REFACTOR-1 — 큰 파일 분해 필요 (engine.py 2383 LOC 등)
-File decomp (LOC verified 2026-05-27 on `develop@3894ffd`): `engine.py` 2383, `BoardDetailPage.jsx` 1049, `UserProfilePage.jsx` 992, `App.jsx` 838, `BuildingDetailPage.jsx` 711, `SwipePage.jsx` 683, `FirmProfilePage.jsx` 540. `PostSwipeLandingPage.jsx` removed in INFRA-CLEANUP-1 (PR #142, 2026-05-26). `rg "style={{" frontend/src | wc -l` = 581, so frontend refactor overlaps with `FRONT-DESIGN-1`.
-
-Code audit:
-- `engine.py` mixes DB row-to-card mapping, search SQL, pool creation, embedding caches, MMR/DPP/KMeans, telemetry helpers, Discovery taste ranking, and corpus-rank helpers. Split only after active algorithm work stabilizes; algorithm ownership lives in `docs/algorithm.md`.
-- `App.jsx` owns auth/session/project state, routing, swipe orchestration, and localStorage persistence. Good future split: `useSessionController`, `useProjectStore`, route shell.
-- `BoardDetailPage.jsx` and `UserProfilePage.jsx` combine data fetching, optimistic mutations, selection state, modals, and large inline style blocks. Extract hooks before moving visual components.
-
-Refactor rule: no behavior change PRs. Each slice needs before/after tests or app-test screenshots because these files are user-facing and regression-prone.
 
 #### BACK-RECOMMEND-3 — Profile-tab 사무소/유저 추천 endpoint 없음
 Re-scoped 2026-05-14 (REC1 already shipped as Push S3). REC2 (firm) + REC3 (user) target a single composite endpoint `GET /api/v1/recommendations/profile/` returning `{offices: [...], users: [...]}` for a Profile-tab button. Landing tab removed (Push S6).
@@ -458,6 +460,41 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 ---
 
 ## Done
+
+### DASHBOARD-AUTOGEN-1 — 대시보드 Files 탭 + state.js 자동생성 — RESOLVED 2026-06-01 (`feature/claude-dashboard-autogen` → develop)
+프로젝트 대시보드 2건: (1) 파일 구조 Files 탭 (collapsible 트리 + 파일별 role), (2) state.js를 reporter 수작업 재작성 대신 `tools/gen-state.js`로 자동생성.
+- [x] **gen-state.js** (1232e12): meta/done/now/next ← Task.md+git, agents ← `.claude/agents` frontmatter, prs ← gh(offline=prior 유지), fileTree ← `git ls-files` ∪ file-roles.json. mermaid×3+milestones는 이전 state.js verbatim 복사; done/next note + agent role은 id/name 캐리포워드(신규는 첫 bullet seed). self-check(11키+배열) + verifyCarry(캐리키 round-trip) + drift 리포트. `make dashboard` → `--local` state.local.js(gitignored, 미커밋 포함). reporter-inline Step 4 = 생성기 호출로 교체.
+- [x] **Files 탭** (918680b): native `<details>` collapsible 트리 + role 컬럼 + 폴더 file-count. `project/file-roles.json` 337개(짧은 한국어 noun-phrase, max 29자; 10-chunk agent workflow + critic + revise; 손-유지, 생성기는 병합만). jsdom 렌더 게이트 PASS(337 files/68 folders, 탭 토글, done/next 무회귀, state.local.js 부재=무음 no-op 확인).
+- [x] **drift 정규화** (d8c6250): 생성기가 노출한 state.js↔Task.md 드리프트 4건(SNS-RESULTS-UI-1/SNS-REPORT-CONNECT/DOCS-SESSION done + INFRA-DB-CLEANUP-1 medium) Task.md canonical 복원.
+- [x] **reporter-inline 정합** (b8d8c0f): note/role 캐리-바이-id 비대칭(seed 후 sticky) + 기존 note 수정 절차 + sentinel 정정 문서화.
+- 효과: reporter가 컨텍스트 다 읽고 state.js 424줄 재작성하던 비용 + `*/` 백지 버그 제거. Task.md 편집 → `node tools/gen-state.js` 한 줄. 픽셀 검증만 Codex lane(공유 Chrome 점유)로 이월.
+
+### FULL-REFACTOR-1 — 큰 파일 분해 (engine.py 등) pure-move 분해 — RESOLVED 2026-06-01 (PRs #170 `6f54cc3` / #171 `7302ae6` / #172 `e1ff077` / engine `16e2a1a-pre-squash`)
+Behavior-preserving decomposition of the repo's largest files into focused modules. PURE MOVE — lines relocated, zero behavior change. 4 slices:
+- [x] **#170 `6f54cc3`** — recommendation backend: parse_query.py 906→656 (+`_prompts.py`), views/sessions.py 622→80 (+`session_service.py`), views/swipe.py 1205→497 (+`swipe_service.py`). Extracted services reference engine via MODULE (`from .. import engine`), never `from ..engine import X` — preserves `views.engine.*` patch-bite.
+- [x] **#171 `7302ae6`** — accounts/views.py 939 → `views/` package (`auth.py` + `profile.py` + facade). CI caught the mock-patch landmine (facade re-export ≠ patch interception for function/object names) → fixed by repointing 9 test patch paths to the symbol's submodule + corrected docstrings.
+- [x] **#172 `e1ff077`** — frontend 5 stable pages → 16 co-located modules: BoardDetail 1050→862, UserProfile 1022→715, BuildingDetail 711→499, FirmProfile 540→156, App.jsx 983→897 (`utils/appHelpers` + `components/{ErrorBoundary,LLMSearchUpdateWrapper}`). Pages have 0 named exports (only default, consumed by App routing) → no facade needed. Codex mocked-API browser smoke confirmed the 4 swipe-journey-skipped pages render (desktop+mobile, no ErrorBoundary).
+- [x] **engine.py `16e2a1a-pre-squash`** — 2446→1976; 18 verified-pure leaf fns → `engine_{vecmath,convergence,filters,cards}.py` (4 acyclic siblings — siblings NEVER import engine; engine.py re-imports + re-exports as facade). Landmine defused by KEEPING all ~20 patch targets (`connection`/`RC`/patched fns) in engine.py → same-module bare-name patch interception unchanged. poison-mock confirmed facade reach (27 fail poisoned → 31 pass reverted). Residual ~1976 LOC stays patch-saturated; deeper split needs mass patch-repointing → deferred.
+- Verified per-slice: code-review PASS, lint/build/collect (810) green, bundle byte-stable (frontend), CI green on merged PRs, engine poison-mock.
+- 🔴 Durable lesson: facade re-export preserves IMPORT but NOT `mock.patch` interception for function/object names — only MODULE names survive. Repoint test patch paths to the symbol's new home (or keep patch targets co-located) + poison-mock to prove the patch still bites (green pytest ≠ proof; DB-gated tests run only on CI).
+- Excluded → Codex fresh frontend pass: LoginPage/SwipePage/DiscoveryPage + SwipeGestureFrame. Skipped: web-testing/runner.py.
+
+### INFRA-MULTIAGENT-1 — one-clone-per-worker model + agent-config overhaul (supersedes PR #166 worktree) — RESOLVED 2026-06-01 (`feature/claude-multiagent-model-docs` → develop)
+- [x] **Isolation model**: every worker (human OR local AI tool) owns ONE clone + own `.git` + own `feature/*` branch + own PR. Replaces PR #166 worktree isolation — shared `.git` was the 2026-05-31 HEAD-contamination path (a Codex checkout moved the main clone's HEAD off `develop`). Two failure modes split: HEAD collision (fix = separate `.git`) + merge conflict (fix = non-overlapping file scope). Claude = main clone `make_web` (terminal; backend/API tendency); Codex = `make_web-codex` (browser; frontend tendency). Tendencies = defaults, not walls. Branch prefixes: team `feature/<role>-<topic>` (algo/sns/admin) UNCHANGED; local agents `feature/claude-<topic>` / `feature/codex-<topic>`. Canonical section in `CONTRIBUTING.md`; mirrored to CLAUDE.md + AGENTS.md HARD RULE 7 + both `WORKFLOW.md` session-start checks.
+- [x] **Task board → root**: `.claude/Task.md` + `.codex/Task.md` consolidated to one shared root `Task.md` (Claude + Codex same project; instructions stay per-tool, work-state shared). 76 path refs swept across 33 files; `.gitignore` negation dropped.
+- [x] **Deprecated agents deleted**: `git-manager` + `reporter` (`.claude/agents/` + `.codex/agents/`) removed — superseded by `git-commit` + `reporter-inline` skills (2026-05-26 fallback window closed). state.js roster + doc refs cleaned.
+- [x] **reporter-inline → Model 1**: runs BEFORE `git-publish`; audit commits onto the feature branch, ships in same PR; keyed on stable task ID (GitHub PR# optional, auto-stamped on squash). orchestrate Mermaid + both `WORKFLOW.md` + skill mirrors aligned; 0 Model-2 remnants.
+- [x] **Plan-gate safety**: 4 resolved plans archived (`.claude/plans/archive/` + `.codex/plans/archive/`); stale `## PR Plan` sections neutered so a resolved plan can't falsely open the publish gate. README guards in both plans dirs.
+- [x] **Codex-side**: Codex set its own commit-trailer identity; `browser-verify` placed after `git-commit`; AGENTS.md / `.codex/*` / `.agents/skills/` (Codex skills) aligned. Pure docs/config → app-test auto-skip.
+
+### SNS-RESULTS-UI-1 — ResultsPage UI overhaul — Liked 카드 노출 + 추천 그리드 — RESOLVED 2026-05-31 (PR #165 `61c9ee1`)
+Top-K 추천 4-column 그리드 + 신규 "My Likes" 가로 스크롤 섹션 (`result.liked_images` 소비). Imagen placeholder/rank-10 divider 제거, Fragment import drop. `frontend/src/pages/ResultsPage.jsx` +118/-69. 모바일 4-col 9-10px 폰트 빽빽 (작성자 의도).
+
+### SNS-REPORT-CONNECT — 페르소나 리포트 생성 연결 + 필드명 수정 — RESOLVED 2026-05-31 (PR #163 `fc9a5c6`)
+Persona report 생성 경로 연결 + `personaFields`/`dominant_styles` 필드명 정합. #165 ResultsPage 변경과 무충돌 (별도 라인).
+
+### DOCS-SESSION-2026-05-31 — 세션 하우스키핑 — worktree 격리 + Codex 경고 + 리뷰 백로그 — RESOLVED 2026-05-31 (PRs #164 `6c5cd66` / #166 `32a0f7d` / #167 `43de2b1`)
+동시-에이전트 working-dir 격리(git worktree) CONTRIBUTING + CLAUDE/AGENTS + WORKFLOW 미러 (#166 `32a0f7d`). Codex startup metadata 경고 수정 (#167 `43de2b1`). 2026-05-31 swipe/discovery 리뷰 → Task.md `### X-HIGH` 버킷 + `.claude/reviews/` 문서 (#164 `6c5cd66`).
 
 ### FULL-LOGIN-REDESIGN-1 — Guest-first onboarding + 보드 4번째 verify gate — RESOLVED 2026-05-27 (PRs #154 / #155 `db81e0f` + `e8296f5-pre-squash`)
 - [x] **Backend PR #154** (squashed `db81e0f`): `UserProfile.is_guest` + `onboarding_role` + `consent_accepted_at` + `consent_policy_version` + migration `0004`. `GuestLoginView` (3/min/IP `GuestLoginThrottle`) + `GuestPromoteView` (5/min `GuestPromoteThrottle UserRateThrottle`). `CustomTokenObtainPairSerializer` adds `is_guest` claim on refresh → propagates to access via simplejwt's claim copy (rotation-safe). `IsVerifiedUser` permission (future-proof). `ProjectListCreateView.post()` inline gate: `is_guest AND Project.count() >= 3 → 403 {detail:'verify_required', reason:'board_limit_reached', limit:3}`. `GuestPromoteView` atomic: Branch 1 cross-device merge (8 FK update rules: Project/AnalysisSession/SessionEvent/Follow×2/OfficeFollow/Reaction; SwipeEvent skipped — no direct user FK) + delete guest + blacklist refresh; Branch 2 in-place transform + username collision guard (`google_{provider_id}` fallback) + blacklist refresh. 14 pytest tests. CI Postgres service container verifies; INFRA-DB-2 blocks local. Railway auto-applied migration on develop merge.
@@ -770,7 +807,7 @@ Outstanding: `BUILDINGS_DB_PASSWORD` rotate (transcript leak via railway variabl
 Deferred (surfaced by Codex retest, intentionally NOT fixed this session): MATMUL-WARN (engine.py matmul warnings), PERF-DISCOVERY (4.11s cold load), PERF-SESSION-CREATE (7.71s POST /analysis/sessions/), PERF-PROJECTS (double-fetch in dev StrictMode). All remain in `## Next`.
 
 ### #20 TASK-MD-RESTRUCTURE-V2 — RESOLVED 2026-05-25 (PR #104 `0690b85`)
-[x] Restructured `.claude/Task.md` 394 → 305 lines: dropped 100+ lines of `## Development Roadmap` Phase 1-18 (duplicates of Done content), replaced with compact `## Roadmap (Historical)` at file bottom + new `## Workflow Rules` block at top.
+[x] Restructured `Task.md` 394 → 305 lines: dropped 100+ lines of `## Development Roadmap` Phase 1-18 (duplicates of Done content), replaced with compact `## Roadmap (Historical)` at file bottom + new `## Workflow Rules` block at top.
 [x] File order now: header → Workflow Rules → `## Now` → `## Next` → `## Done` → `## Roadmap (Historical)`.
 [x] AUTH1 scope narrowed to frontend buttons only (backend Kakao + Naver already shipped in `apps/accounts/views.py` KakaoLoginView / NaverLoginView).
 [x] AUDIT-T4 LOC counts re-verified 2026-05-25: engine.py 2079→2139, FirmProfilePage 611→540 (refactored down).
@@ -783,7 +820,7 @@ Deferred (surfaced by Codex retest, intentionally NOT fixed this session): MATMU
 [x] Memory `project_design_redesign.md` updated to reflect paused-in-Next status.
 
 ### #18 TASK-NEXT-RESTRUCTURE — RESOLVED 2026-05-24 (PR #101 `19694aa`)
-[x] Absorbed `docs/specs/*.md` (4 files: phase16-recommendation-expansion.md, phase17-llm-reverse-q.md, phase18-external-connections.md, requirements.md) into `.claude/Task.md ## Next` as a flat backlog. Deleted the folder.
+[x] Absorbed `docs/specs/*.md` (4 files: phase16-recommendation-expansion.md, phase17-llm-reverse-q.md, phase18-external-connections.md, requirements.md) into `Task.md ## Next` as a flat backlog. Deleted the folder.
 [x] Fixed `orchestrate/SKILL.md` stale refs: `.claude/Goal.md` → `CLAUDE.md ## Product Identity + ## Product Constitution`; `.claude/Report.md` → "read code directly + state.js"; `docs/token-saving.md` → `.claude/WORKFLOW.md § Token-saving rules`.
 [x] Surfaced 10 operational deferrals previously buried in Done note text (IMP-5 bypass, Codex Stage 3 re-audit, perf observations, architects-wiring, security backlog, etc.) as individual `## Next ### <SLUG>` entries.
 [x] Added `reporter.md` sub-step 2a "Deferred-item surfacing (Done note → Next)" so future Done `Deferred: ...` lines auto-surface to `## Next` going forward.

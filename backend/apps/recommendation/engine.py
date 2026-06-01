@@ -15,7 +15,6 @@ Hard rules:
 """
 import hashlib
 import json
-import math
 import random
 import logging
 import threading
@@ -29,6 +28,22 @@ from sklearn.metrics import silhouette_samples
 
 from . import event_log
 from .perf_timing import stage
+from .engine_vecmath import (  # noqa: F401  (re-export + KEEP-fn bare-call resolution)
+    _finite_unit_vector, _parse_embedding_text, _cosine_sim_matrix,
+    _silenced_kmeans_fit, _vec_to_pg, _normalize,
+)
+from .engine_convergence import (  # noqa: F401
+    _apply_recency_weights, _weighted_centroid, compute_convergence,
+    _recent_like_count, check_convergence, compute_confidence,
+)
+from .engine_filters import (  # noqa: F401
+    _build_filter_sql, _build_required_slate_where, _build_score_cases,
+    _REQUIRED_SLATE_FIELDS_SET,
+)
+from .engine_cards import (  # noqa: F401
+    _row_to_card, _card_cache_key, _with_image_focus,
+    _VALID_IMAGE_FOCUS, _CARD_CACHE_SCHEMA,
+)
 
 
 class _EngineConnectionProxy:
@@ -49,12 +64,6 @@ logger = logging.getLogger('apps.recommendation')
 
 RC = settings.RECOMMENDATION  # shorthand for constants
 
-# F3: required-slate fields are user-explicit intent — must be hard WHERE constraints,
-# not soft CASE WHEN scoring. Mirrors parse_query.REQUIRED_SLATE_FIELDS (no import to
-# avoid circular-import risk between services and engine).
-# Cross-ref: services/parse_query.REQUIRED_SLATE_FIELDS — keep in sync; divergence breaks hard-WHERE silently.
-_REQUIRED_SLATE_FIELDS_SET = frozenset(('program', 'material', 'style', 'location_country'))
-
 _building_embedding_cache = {}             # canonical_bld_id (str) -> np.ndarray (384-dim, L2-normalized)
 _BUILDING_CACHE_MAX_SIZE = RC.get('pool_embedding_cache_max_size', 5000)  # ~5MB max; configurable via RECOMMENDATION setting
 _centroid_cache = {}
@@ -65,44 +74,6 @@ _AVAILABLE_COLUMNS = None                  # frozenset of column names in canoni
 # other's stats. threading.local() gives each request-thread its own copy so reads
 # always reflect the call made on THIS thread, not a concurrent request's call.
 _telemetry = threading.local()             # attrs: embedding_call_stats, clustering_stats
-
-
-def _finite_unit_vector(raw_vec):
-    """Return a finite 384-dim vector, normalized when possible."""
-    vec = np.asarray(raw_vec, dtype=np.float64)
-    if vec.shape != (384,):
-        return None
-    if not np.isfinite(vec).all():
-        return None
-    norm = float(np.linalg.norm(vec))
-    if not math.isfinite(norm) or norm <= 0:
-        return vec
-    return vec / norm
-
-
-def _parse_embedding_text(raw):
-    try:
-        return _finite_unit_vector(np.fromstring(raw.strip('[]'), sep=',', dtype=np.float64))
-    except (AttributeError, ValueError):
-        return None
-
-
-def _cosine_sim_matrix(left, right):
-    """Small-matrix cosine similarity without noisy BLAS overflow warnings."""
-    sim = np.einsum('ij,kj->ik', left, right, optimize=True)
-    return np.nan_to_num(sim, nan=0.0, posinf=0.0, neginf=0.0)
-
-
-def _silenced_kmeans_fit(kmeans, X, sample_weight=None):
-    """Run kmeans.fit silencing sklearn's matmul divide-by-zero RuntimeWarning.
-
-    The warning fires inside sklearn's KMeans centroid normalization
-    (sklearn/utils/extmath.py matmul) on high-dim unit-norm vectors. It is
-    sklearn-internal noise — does NOT affect cluster centroid correctness.
-    BACK-RECOMMEND-2.
-    """
-    with np.errstate(divide='ignore', invalid='ignore', over='ignore'):
-        kmeans.fit(X, sample_weight=sample_weight)
 
 
 # ── Schema-probe helpers ──────────────────────────────────────────────────────
@@ -176,228 +147,6 @@ def _dictfetchall(cursor):
     """Return all rows from cursor as list of dicts."""
     cols = [c[0] for c in cursor.description]
     return [dict(zip(cols, row)) for row in cursor.fetchall()]
-
-
-_VALID_IMAGE_FOCUS = frozenset({'exterior', 'interior', 'drawing', 'aerial', 'detail'})
-
-
-def _row_to_card(row, image_focus=None):
-    """Convert a DB row dict (canonical_v2_buildings) to ImageCard format.
-
-    Image resolution (canonical_v2 schema):
-    - cover: covers_by_type[image_focus] when caller requested a focus and it
-      resolves to a URL; otherwise fallback chain:
-        display_cover_url -> cover_image_url_default -> covers_by_type.exterior
-        -> all_images[0].url -> ''.
-    - gallery: all_images sorted by (kind: cover→gallery→drawing, then
-      image_order, then rank). The URL chosen as cover is removed from gallery.
-    - gallery_drawing_start: index of first item with kind=='drawing' in gallery
-      (== len(gallery) when no drawings). Frontend renders items at index >=
-      gallery_drawing_start with contain-sizing on white background.
-    - image_focus: echoed verbatim in the returned dict so the frontend can
-      make objectFit decisions (e.g. 'contain' for drawings, 'cover' for
-      exterior/interior). None when caller did not specify a focus.
-    """
-    canonical_bld_id = row['canonical_bld_id']
-    covers_by_type = row.get('covers_by_type') or {}
-    if isinstance(covers_by_type, str):
-        import json as _json
-        try:
-            covers_by_type = _json.loads(covers_by_type)
-        except (ValueError, TypeError):
-            covers_by_type = {}
-    all_images_raw = row.get('all_images') or []
-    if isinstance(all_images_raw, str):
-        import json as _json
-        try:
-            all_images_raw = _json.loads(all_images_raw)
-        except (ValueError, TypeError):
-            all_images_raw = []
-    source_urls = row.get('source_urls') or {}
-    if isinstance(source_urls, str):
-        import json as _json
-        try:
-            source_urls = _json.loads(source_urls)
-        except (ValueError, TypeError):
-            source_urls = {}
-
-    # Cover resolution
-    image_url = ''
-    if image_focus and image_focus in _VALID_IMAGE_FOCUS:
-        image_url = covers_by_type.get(image_focus) or ''
-    if not image_url:
-        image_url = (
-            row.get('display_cover_url')
-            or row.get('cover_image_url_default')
-            or covers_by_type.get('exterior')
-            or ''
-        )
-    if not image_url and all_images_raw:
-        first = all_images_raw[0] if isinstance(all_images_raw[0], dict) else {}
-        image_url = first.get('url') or ''
-
-    # Detect actual kind of resolved image_url (for frontend aspect handling).
-    # Sources, in order: covers_by_type reverse-lookup, all_images entry match.
-    image_kind = None
-    if image_url and isinstance(covers_by_type, dict):
-        for k, u in covers_by_type.items():
-            if u == image_url:
-                image_kind = k
-                break
-    if image_kind is None and image_url:
-        for img in all_images_raw:
-            if isinstance(img, dict) and img.get('url') == image_url:
-                image_kind = img.get('kind')
-                break
-
-    # Gallery from all_images: sort by (kind rank, image_order, rank)
-    kind_order = {'cover': 0, 'gallery': 1, 'drawing': 2}
-    images = [img for img in all_images_raw if isinstance(img, dict) and img.get('url')]
-    images.sort(key=lambda img: (
-        kind_order.get(img.get('kind') or '', 1),
-        img.get('image_order') if img.get('image_order') is not None else 9999,
-        img.get('rank') if img.get('rank') is not None else 9999,
-    ))
-    gallery_urls = []
-    gallery_meta = []
-    seen = {image_url} if image_url else set()
-    drawing_start = None
-    for img in images:
-        url = img.get('url')
-        if not url or url in seen:
-            continue
-        seen.add(url)
-        if drawing_start is None and img.get('kind') == 'drawing':
-            drawing_start = len(gallery_urls)
-        gallery_urls.append(url)
-        gallery_meta.append({'url': url, 'kind': img.get('kind') or 'gallery'})
-    if drawing_start is None:
-        drawing_start = len(gallery_urls)
-
-    # source_urls is jsonb like {"divisare": ["https://..."]}; pick first URL.
-    src_url = None
-    if isinstance(source_urls, dict):
-        for vals in source_urls.values():
-            if isinstance(vals, list) and vals:
-                src_url = vals[0]
-                break
-
-    architect_names = row.get('architect_names') or []
-    if isinstance(architect_names, str):
-        # If DB driver returned text[] as raw text (rare); fall back to architects_text.
-        architect_names = []
-    architects_display = (
-        row.get('architects_text')
-        or (', '.join(architect_names) if architect_names else None)
-    )
-
-    return {
-        'canonical_bld_id':       canonical_bld_id,
-        'name':                   row.get('name') or '',
-        'image_url':              image_url,
-        'image_focus':            image_focus,
-        'image_kind':             image_kind,
-        'covers_by_type':         covers_by_type,
-        'url':                    src_url,
-        'gallery':                gallery_urls,
-        'gallery_meta':           gallery_meta,
-        'gallery_drawing_start':  drawing_start,
-        'metadata': {
-            'axis_typology':       row.get('program'),
-            'axis_architects':     architects_display,
-            'axis_country':        row.get('location_country'),
-            'axis_city':           row.get('location_city'),
-            'axis_year':           row.get('project_year'),
-            'axis_style':          row.get('style'),
-            'axis_atmosphere':     row.get('atmosphere'),
-            'axis_color_tone':     row.get('color_tone'),
-            'axis_material_visual': list(row.get('material_visual') or []),
-            'visual_description':  row.get('visual_description') or '',
-        },
-    }
-
-
-def _build_filter_sql(filters):
-    """Build WHERE clauses from a filters dict. Returns (clauses_str, params_list).
-
-    Always prepends `is_publishable = true` so that every building query in the
-    engine is publishable-gated. Callers do NOT need to add this themselves.
-    """
-    clauses = ['is_publishable = true']
-    params = []
-    if not filters:
-        filters = {}
-    if filters.get('program'):
-        clauses.append('program = %s')
-        params.append(filters['program'])
-    if filters.get('location_country'):
-        clauses.append('location_country ILIKE %s')
-        params.append(f"%{filters['location_country']}%")
-    if filters.get('location_city'):
-        clauses.append('location_city ILIKE %s')
-        params.append(f"%{filters['location_city']}%")
-    if filters.get('material'):
-        # material_visual is TEXT[] — match against any element.
-        clauses.append(
-            'EXISTS (SELECT 1 FROM unnest(material_visual) m WHERE m ILIKE %s)'
-        )
-        params.append(f"%{filters['material']}%")
-    if filters.get('style'):
-        clauses.append('style ILIKE %s')
-        params.append(f"%{filters['style']}%")
-    if filters.get('year_min') is not None:
-        clauses.append('project_year >= %s')
-        params.append(filters['year_min'])
-    if filters.get('year_max') is not None:
-        clauses.append('project_year <= %s')
-        params.append(filters['year_max'])
-    where = 'WHERE ' + ' AND '.join(clauses)
-    return where, params
-
-
-def _build_required_slate_where(filters):
-    """Build hard WHERE clauses for required-slate filter fields present in `filters`.
-
-    F3 fix: fields in _REQUIRED_SLATE_FIELDS_SET that the user explicitly requested
-    are hard constraints — buildings that don't match must be excluded, not just
-    scored lower. Returns (clauses_list, params_list). Empty if no slate fields match.
-
-    Uses same SQL fragments as _build_filter_sql for consistency (ILIKE, EXISTS/unnest).
-    Does NOT include `is_publishable = true` (caller already has it).
-    """
-    clauses = []
-    params = []
-    if not filters:
-        return clauses, params
-    if filters.get('program') and 'program' in _REQUIRED_SLATE_FIELDS_SET:
-        clauses.append('program = %s')
-        params.append(filters['program'])
-    if filters.get('location_country') and 'location_country' in _REQUIRED_SLATE_FIELDS_SET:
-        clauses.append('location_country ILIKE %s')
-        params.append(f"%{filters['location_country']}%")
-    if filters.get('material') and 'material' in _REQUIRED_SLATE_FIELDS_SET:
-        clauses.append(
-            'EXISTS (SELECT 1 FROM unnest(material_visual) m WHERE m ILIKE %s)'
-        )
-        params.append(f"%{filters['material']}%")
-    if filters.get('style') and 'style' in _REQUIRED_SLATE_FIELDS_SET:
-        clauses.append('style ILIKE %s')
-        params.append(f"%{filters['style']}%")
-    return clauses, params
-
-
-def _vec_to_pg(vec):
-    """Convert Python list of floats to pgvector literal string '[1,2,3]'."""
-    cleaned = [0.0 if (math.isnan(v) or math.isinf(v)) else v for v in vec]
-    return '[' + ','.join(str(v) for v in cleaned) + ']'
-
-
-def _normalize(vec):
-    """L2-normalize a list of floats. Returns list."""
-    mag = math.sqrt(sum(v * v for v in vec))
-    if mag == 0:
-        return vec
-    return [v / mag for v in vec]
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -519,62 +268,6 @@ def _card_cache_ttl():
     if _CARD_CACHE_TTL is None:
         _CARD_CACHE_TTL = RC.get('card_cache_ttl', 3600)
     return _CARD_CACHE_TTL
-
-
-# Bump _CARD_CACHE_SCHEMA when _row_to_card output shape changes so older Redis
-# entries are not silently served as stale shape after a deploy.
-_CARD_CACHE_SCHEMA = 'v2'
-
-
-def _card_cache_key(canonical_bld_id):
-    return f'bcard:{_CARD_CACHE_SCHEMA}:{canonical_bld_id}'
-
-
-def _with_image_focus(card, image_focus):
-    if not image_focus or image_focus not in _VALID_IMAGE_FOCUS or not card:
-        return card
-
-    focused = dict(card)
-    focused['metadata'] = dict(card.get('metadata') or {})
-    focused['covers_by_type'] = dict(card.get('covers_by_type') or {})
-    focus_url = focused['covers_by_type'].get(image_focus)
-    focused['image_focus'] = image_focus
-    if not focus_url:
-        return focused
-
-    focused['image_url'] = focus_url
-    focused['image_kind'] = image_focus
-    gallery = list(card.get('gallery') or [])
-    gallery_meta = list(card.get('gallery_meta') or [])
-
-    original_drawing_start = card.get('gallery_drawing_start')
-    try:
-        removed_index = gallery.index(focus_url)
-    except ValueError:
-        removed_index = None
-
-    filtered = [
-        (url, meta) for url, meta in zip(gallery, gallery_meta)
-        if url != focus_url
-    ]
-    focused['gallery'] = [url for url, _ in filtered]
-    focused['gallery_meta'] = [meta for _, meta in filtered]
-
-    # Shift drawing_start down when focus_url was strictly before the drawing
-    # section (its removal pulls the drawing section forward by 1). Otherwise
-    # leave drawing_start untouched. Clamp guards against malformed input.
-    new_drawing_start = original_drawing_start
-    if (new_drawing_start is not None
-            and removed_index is not None
-            and removed_index < new_drawing_start):
-        new_drawing_start -= 1
-
-    fallback = len(focused['gallery'])
-    focused['gallery_drawing_start'] = min(
-        new_drawing_start if new_drawing_start is not None else fallback,
-        len(focused['gallery']),
-    )
-    return focused
 
 
 def get_building_card(canonical_bld_id, image_focus=None):
@@ -1042,56 +735,6 @@ def refresh_pool_if_low(session, threshold=5):
         session.session_id, tier_used, len(new_pool_ids), len(session.pool_ids),
     )
     return session.pool_ids
-
-
-def _build_score_cases(filters, weights):
-    """Build CASE WHEN SQL for each active filter with priority weight.
-
-    Schema-aligned to canonical_v2_buildings: drops area_sqm; year -> project_year;
-    material ILIKE -> material_visual[] EXISTS match; adds location_city.
-    """
-    cases, params = [], []
-    total_weight = 0
-    if filters.get('program') and 'program' in weights:
-        w = weights['program']
-        cases.append(f'CASE WHEN program = %s THEN {w} ELSE 0 END')
-        params.append(filters['program'])
-        total_weight += w
-    if filters.get('location_country') and 'location_country' in weights:
-        w = weights['location_country']
-        cases.append(f'CASE WHEN location_country ILIKE %s THEN {w} ELSE 0 END')
-        params.append(f"%{filters['location_country']}%")
-        total_weight += w
-    if filters.get('location_city') and 'location_city' in weights:
-        w = weights['location_city']
-        cases.append(f'CASE WHEN location_city ILIKE %s THEN {w} ELSE 0 END')
-        params.append(f"%{filters['location_city']}%")
-        total_weight += w
-    if filters.get('style') and 'style' in weights:
-        w = weights['style']
-        cases.append(f'CASE WHEN style ILIKE %s THEN {w} ELSE 0 END')
-        params.append(f"%{filters['style']}%")
-        total_weight += w
-    if filters.get('material') and 'material' in weights:
-        w = weights['material']
-        cases.append(
-            'CASE WHEN EXISTS '
-            '(SELECT 1 FROM unnest(material_visual) m WHERE m ILIKE %s) '
-            f'THEN {w} ELSE 0 END'
-        )
-        params.append(f"%{filters['material']}%")
-        total_weight += w
-    if filters.get('year_min') is not None and 'year_min' in weights:
-        w = weights['year_min']
-        cases.append(f'CASE WHEN project_year >= %s THEN {w} ELSE 0 END')
-        params.append(filters['year_min'])
-        total_weight += w
-    if filters.get('year_max') is not None and 'year_max' in weights:
-        w = weights['year_max']
-        cases.append(f'CASE WHEN project_year <= %s THEN {w} ELSE 0 END')
-        params.append(filters['year_max'])
-        total_weight += w
-    return cases, params, total_weight
 
 
 def _run_hybrid_rrf_pool(filters, filter_priority, seed_ids, target, v_initial, q_text):
@@ -1875,119 +1518,6 @@ def compute_mmr_next(pool_ids, exposed_ids, pool_embeddings, like_vectors, round
     # ── MMR scores → best candidate ──────────────────────────────────────
     mmr_scores = relevance - mmr_lambda * redundancy  # (N,)
     return valid_candidates[int(np.argmax(mmr_scores))]
-
-
-def _apply_recency_weights(like_vectors, round_num, gamma):
-    """
-    Apply recency weights to like vectors.
-    Returns list of (np.array(embedding), weight)
-    """
-    weighted_vecs = []
-    for entry in like_vectors:
-        embedding = _finite_unit_vector(entry['embedding'])
-        if embedding is None:
-            continue
-        entry_round = entry['round']
-        weight = math.exp(-gamma * max(0, round_num - entry_round))
-        weighted_vecs.append((embedding, weight))
-    return weighted_vecs
-
-
-def _weighted_centroid(weighted_vecs):
-    """
-    Compute weighted centroid and L2-normalize the result.
-    weighted_vecs is list of (np.array, weight)
-    Returns np.ndarray
-    """
-    if not weighted_vecs:
-        return np.zeros(384)  # Default embedding dimension
-
-    total_weight = sum(weight for _, weight in weighted_vecs)
-    if total_weight == 0:
-        total_weight = 1
-
-    weighted_sum = np.zeros_like(weighted_vecs[0][0])
-    for vec, weight in weighted_vecs:
-        weighted_sum += weight * vec
-
-    centroid = weighted_sum / total_weight
-
-    # L2 normalize
-    norm = np.linalg.norm(centroid)
-    if norm > 0:
-        centroid = centroid / norm
-
-    return centroid
-
-
-def compute_convergence(current_pref, previous_pref):
-    """
-    Compute delta-V between current and previous preference vectors.
-    Returns float or None if either vector is empty.
-    """
-    if not current_pref or not previous_pref:
-        return None
-
-    current = np.array(current_pref)
-    previous = np.array(previous_pref)
-    delta_v = float(np.linalg.norm(current - previous))
-    return delta_v
-
-
-def _recent_like_count(recent_actions, window):
-    if recent_actions is None:
-        return None
-    return sum(1 for action in list(recent_actions)[-window:] if action == 'like')
-
-
-def check_convergence(history, threshold, window=3, recent_actions=None, min_recent_likes=0):
-    """
-    Check if convergence has been reached based on moving average.
-    Returns bool
-    """
-    if len(history) < window:
-        return False
-    if min_recent_likes > 0:
-        recent_likes = _recent_like_count(recent_actions, window)
-        if recent_likes is not None and recent_likes < min_recent_likes:
-            return False
-
-    moving_avg = np.mean(history[-window:])
-    return bool(moving_avg < threshold)
-
-
-def compute_confidence(history, threshold, window=3, recent_actions=None, min_recent_likes=0):
-    """
-    Compute the user-facing confidence value (Spec C-1 통합안 1).
-
-    Formula (Investigation 13): confidence = max(0, 1 - avg(last `window` Δv) / threshold).
-    Returns float in [0, 1] when len(history) >= window. Returns None otherwise
-    (Investigation 13 recommendation: skeleton/hide-bar semantic for the user-facing UI;
-    frontend treats null as "not enough data yet").
-
-    Spec rename note: spec text calls `threshold` ε_init or ε_threshold (Investigation
-    13 §Naming drift recommended ε_threshold). Code uses settings.RECOMMENDATION
-    'convergence_threshold' (the same value, 0.08 in production); pass that to this
-    function. The threshold is shared with check_convergence; informational vs decisional
-    signals at different thresholds is intentional (bar reaches 1.0 at Δv=0; phase
-    transition fires at avg<threshold mid-bar).
-
-    Edge cases per Investigation 13:
-    - n < window: return None (caller hides bar).
-    - All Δv = 0: returns 1.0 (vanishingly rare in practice).
-    - Single Δv spike: bar pins to 0 for `window` rounds until spike slides out
-      (intentional -- centroid jump = real instability).
-    - threshold = 0: defended via max(threshold, 1e-6) to avoid div-by-zero.
-    """
-    if len(history) < window:
-        return None
-    if min_recent_likes > 0:
-        recent_likes = _recent_like_count(recent_actions, window)
-        if recent_likes is not None and recent_likes < min_recent_likes:
-            return None
-    safe_threshold = max(float(threshold), 1e-6)
-    avg = sum(history[-window:]) / window
-    return max(0.0, 1.0 - avg / safe_threshold)
 
 
 def get_dislike_fallback(pool_ids, exposed_ids, pool_embeddings, dislike_vectors):

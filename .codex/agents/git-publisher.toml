@@ -97,12 +97,13 @@ publish itself.
    ```
    This script polls `gh pr checks <N>` every 30s up to 10 min. Report whether CI came back green or red (red → include a one-line failure summary).
 
-5. **Wait for admin approval.**
-   The admin self-reviews on GitHub UI and approves. (You do NOT auto-approve.)
+5. **Admin-bypass merge — no self-approval.**
+   The sole-admin Code Owner can't approve their own PR, so the Code-Owner gate is
+   bypassed via `--admin` (you do NOT click "approve").
 
-6. **Merge after green + approval:**
+6. **Merge after CI green:**
    ```bash
-   gh pr merge <N> --squash
+   gh pr merge <N> --admin --squash
    ```
    (Repo setting `delete_branch_on_merge: false` as of 2026-05-11 — see Bug #4 below for root-cause history. `--delete-branch` flag and `gh api PUT pulls/<N>/merge` path are now equivalent on head-branch preservation; both leave the head branch alive on origin.)
 
@@ -379,7 +380,7 @@ You don't rebase someone else's branch. Report `PR #<N> conflicts with develop �
 - `tools/git-push-pr.sh` — wraps the Mode 1 push + PR open
 - `tools/git-poll-merge.sh` — wraps CI poll
 - `tools/git-new-feature.sh` — when asked to create a new feature branch from develop (rare; usually done before code work)
-- `tools/git-stage-and-commit.sh` — NOT YOURS. This is the `git-commit` skill's territory (the deprecated `git-manager` agent's tool, kept on disk for the skill to invoke).
+- `tools/git-stage-and-commit.sh` — NOT YOURS. The `git-commit` skill's tool (kept on disk for the skill to invoke).
 
 ## Reporting
 

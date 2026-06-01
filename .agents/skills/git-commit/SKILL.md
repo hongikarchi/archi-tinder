@@ -5,7 +5,7 @@ description: Stage + commit a single coherent change on a feature branch. Cavema
 
 # git-commit — single commit, main-session-direct
 
-Use this skill when a coherent change is ready to commit on a feature branch. The main session executes the steps below itself. **Do NOT dispatch `git-manager` agent for routine commits** — that agent is deprecated as of 2026-05-26; this skill replaces it.
+Use this skill when a coherent change is ready to commit on a feature branch. The main session executes the steps below itself. (The `git-manager` agent was removed 2026-05-31 — this skill replaces it.)
 
 ## Hard rules (mirror AGENTS.md HARD RULE 4)
 
@@ -64,10 +64,11 @@ If any of `.env*`, `*.key`, `*.pem`, `credentials.*`, `secrets/*` appears in the
 
 **Trailer** (required boilerplate, NEVER drop or compress):
 ```
-Co-Authored-By: Codex Opus 4.7 (1M context) <noreply@anthropic.com>
+Co-Authored-By: <current Codex session name/model> <configured co-author email>
 ```
 
-Adjust the model name to match the actual model the main session is using.
+Use the actual Codex session identity and configured co-author email. Do not
+hardcode Claude, Anthropic, or Opus identity in the Codex skill.
 
 **Examples** (good caveman):
 - `feat: add Office.claim_token + claim API per PROF1 §2.3`
@@ -86,7 +87,7 @@ git commit -m "$(cat <<'EOF'
 
 <body lines, optional>
 
-Co-Authored-By: Codex Opus 4.7 (1M context) <noreply@anthropic.com>
+Co-Authored-By: <current Codex session name/model> <configured co-author email>
 EOF
 )"
 ```
@@ -122,5 +123,5 @@ If you encounter:
 Dispatch `git-publisher` agent with a precise problem description. **Do NOT improvise destructive recovery** (`git reset --hard`, `git checkout .`).
 
 ## Related skills
-- `reporter-inline` — should run BEFORE `git-commit` for audit-bearing changes, so the audit lands in the same commit as the work.
+- `reporter-inline` — runs BEFORE the publish step; it produces the audit that THIS skill then commits on the same feature branch, squashed into the same PR as the work.
 - `git-publish` — fires after this skill, on explicit user publish trigger.

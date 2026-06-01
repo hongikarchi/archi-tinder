@@ -9,11 +9,12 @@
 
 ## 1. Architecture — one session, agents + skills
 
-ArchiTinder Make Web is built from **one Claude Code session** (the
-orchestrator). It owns architecture, schema, auth, product + release decisions,
-and review. It does not write feature code itself — it **dispatches sub-agents**
-for isolated work that returns a result, and runs **skills** itself for
-procedures that benefit from staying in the main session context.
+ArchiTinder Make Web's Claude side runs as **one Claude Code orchestrator
+session** (this tool, in a cmux terminal). It owns architecture, schema, auth,
+product + release decisions, and review. It does not write feature code itself —
+it **dispatches sub-agents** for isolated work that returns a result, and runs
+**skills** itself for procedures that benefit from staying in the main session
+context.
 
 ```mermaid
 flowchart TD
@@ -37,9 +38,12 @@ flowchart TD
     style PubA fill:#6b7280,color:#fff
 ```
 
-No Codex, no cmux terminals, no cross-session handoff signals — every worker is
-either a sub-agent (isolated context) or a skill (main session context). Both
-return their results to the session that ran them.
+Within this session every worker is a sub-agent (isolated context) or a skill
+(main session context) — no mid-task cross-session handoff signals; both return
+their results to the session that ran them. **Codex runs concurrently as a peer
+worker in its own clone** (`make_web-codex/`, separate `.git`) — not a sub-agent
+of this session, never sharing this working dir (`CONTRIBUTING.md` § Concurrent
+agents).
 
 ## 2. Agent + skill roster
 
@@ -48,7 +52,7 @@ return their results to the session that ran them.
 | Skill | Role | Touches |
 |-------|------|---------|
 | **orchestrate** | Feature-implementation playbook — dispatches back-maker/front-maker, runs review/security, runs git-commit/git-publish, runs reporter-inline | — (orchestrates others) |
-| **reporter-inline** | Session-end audit — `.claude/Task.md` `## Done` + `project/state.js` + conditional `docs/algorithm.md`. Runs INLINE before squash so audit ships in the same PR as the work | `.claude/Task.md`, `project/state.js`, narrow `docs/algorithm.md` |
+| **reporter-inline** | Session-end audit — `Task.md` `## Done` + `project/state.js` + conditional `docs/algorithm.md`. Runs INLINE before squash so audit ships in the same PR as the work | `Task.md`, `project/state.js`, narrow `docs/algorithm.md` |
 | **git-commit** | Single commit on a feature branch — caveman conventional commit + secret guards. Never pushes | `git commit` |
 | **git-publish** | Mode 2: feature branch → develop (push + PR + admin squash + cleanup). Publish gate enforced at Step 0 | `git push`, `gh pr create/merge` |
 
@@ -63,14 +67,11 @@ return their results to the session that ran them.
 | **app-test** | Pre-push gate — live browser user-journey test + HEAD/origin drift check; FULL / FEATURE-SCOPED modes | read-only |
 | **git-publisher** | Edge case escalation only: Mode 3 `develop → main` deploy, external collaborator PR triage, complex rebase/force-with-lease conflicts | `git push`, `gh pr *` |
 
-### Deprecated agents (`.claude/agents/` with `deprecated: true`) — fallback only
+### Removed agents (deleted 2026-05-31)
 
-| Agent | Status | Use |
-|-------|--------|-----|
-| **git-manager** | Deprecated 2026-05-26 — superseded by `git-commit` skill | Fallback only — when `git-commit` skill hits an unfamiliar failure |
-| **reporter** | Deprecated 2026-05-26 — superseded by `reporter-inline` skill | Fallback only — when skill produces a `state.js` that fails parse, or multi-PR batch needs broader-scope audit |
-
-These agent files are kept for ~1 week of skill-only validation, then slated for deletion in a follow-up PR.
+`git-manager` and `reporter` agents were deleted — fully replaced by the
+`git-commit` and `reporter-inline` skills (the 2026-05-26 fallback window closed
+after stable skill-only usage). Recoverable from git history if ever needed.
 
 **Agent vs skill rule:** isolated work that returns a result → **agent**. A
 procedure the main session runs itself, including ones that dispatch agents →
@@ -99,10 +100,9 @@ flowchart TD
     GC --> AT[app-test — browser + drift gate]
     AT --> ATv{PASS?}
     ATv -->|FAIL — counts as 1 fix cycle| FL
-    ATv -->|PASS| PG["git-publish skill Step 1-3 — push + PR open"]
-    PG --> RIn["reporter-inline skill — audit on same branch"]
+    ATv -->|PASS| RIn["reporter-inline skill — audit on same branch"]
     RIn --> GC2["git-commit skill — audit commit"]
-    GC2 --> PG4["git-publish skill Step 4-5 — admin squash + cleanup"]
+    GC2 --> PG["git-publish skill — push + PR open + admin squash + cleanup"]
 
     style Start fill:#3b82f6,color:#fff
     style FL fill:#f59e0b,color:#000
@@ -110,7 +110,6 @@ flowchart TD
     style GC fill:#10b981,color:#fff
     style GC2 fill:#10b981,color:#fff
     style PG fill:#10b981,color:#fff
-    style PG4 fill:#10b981,color:#fff
 ```
 
 **Fix-cycle accounting:** max 2 cycles total across code-review / security /
@@ -121,10 +120,10 @@ guidance.
 *code* (static, per change, pre-commit). `app-test` checks the *running app*
 (browser journey + drift, pre-push). Different activities, no overlap.
 
-**Reporter-inline placement (2026-05-26 change):** Reporter runs AFTER the PR
-is opened (so the PR number is known) but BEFORE admin squash merge. The audit
-commits land on the same feature branch as the code, get squashed together,
-and ship as a single PR. No more separate reporter PR cycle.
+**Reporter-inline placement (2026-05-26 change):** Reporter-inline runs BEFORE
+`git-publish` — the audit commits onto the feature branch and ships in the same
+PR; keyed on the task ID, the GitHub PR# is optional (auto-stamped on the squash
+commit).
 
 A plain question or explanation spawns no agents — answer directly.
 
@@ -137,16 +136,19 @@ accumulate locally on a `feature/*` branch; one push sweeps them as a PR. As of
 **Session start:**
 1. `git status && git branch --show-current`. If on `main`/`develop`, do not
    edit — create a `feature/*` branch first (HARD RULE, `CONTRIBUTING.md`).
-2. `git worktree list`. If another agent (Claude/Codex) shares this checkout,
-   STOP — move to your own worktree (`CONTRIBUTING.md` § Concurrent agents)
-   before editing. One session per working directory.
+2. Confirm you are in the **main clone `make_web/`** (Claude's working dir) on
+   `develop` or a `feature/claude-*` branch. If you are in the wrong directory,
+   switch to the main clone before editing — do NOT `git reset` (separate clones
+   make cross-contamination impossible; a wrong working dir is the only failure).
+   One clone per worker, never operate in another's
+   (`CONTRIBUTING.md` § Concurrent agents).
 3. `git fetch origin develop --quiet`; if the branch is behind, ask before
    rebasing.
-4. Scan `.claude/Task.md` for any `SESSION-START-TODO` pending action; surface
+4. Scan `Task.md` for any `SESSION-START-TODO` pending action; surface
    it to the user before starting their request.
 
 **Session end** (before the PR squash merges):
-1. `reporter-inline` skill — update `.claude/Task.md` + `project/state.js`
+1. `reporter-inline` skill — update `Task.md` + `project/state.js`
    (conditionally `docs/algorithm.md`). Once per push-worthy unit, not per commit.
 2. `git-commit` skill — audit commit on the same feature branch.
 3. `git-publish` Step 4 — admin squash merge.
@@ -205,8 +207,7 @@ surface).
 3. **Skill-first, agent-second** (2026-05-26) — for git operations, default to
    the skill (`git-commit`, `git-publish`). Dispatch `git-publisher` agent only
    on the escalation matrix (Mode 3 deploy / external PR / complex rebase).
-   Dispatch the deprecated `reporter` / `git-manager` agents only as documented
-   fallback. Why: each agent dispatch costs 14-46k tokens + 23-150 seconds of
+   Why: each agent dispatch costs 14-46k tokens + 23-150 seconds of
    round-trip latency; skills run in-context for 1/3 the cost on routine work.
 4. **Bundle trivial commits; push only on push-worthy** — don't gate+push after
    every commit. Push-worthy = milestone / production code / migration /
@@ -245,8 +246,11 @@ surface).
 
 _History: pre-2026-05-22 the project ran across multiple cmux terminals with
 Codex CLI workers. Collapsed to a single Claude Code session + sub-agents once
-sub-agents provided the same context isolation; Codex dropped the same date.
-2026-05-26: routine reporter / git-manager / git-publisher Mode 2 absorbed into
-`reporter-inline` / `git-commit` / `git-publish` skills to eliminate per-cycle
-Agent dispatch overhead (~30-40k tokens, ~150-300 seconds saved per PR cycle).
-Agent files for the deprecated two kept ~1 week for fallback._
+sub-agents provided the same context isolation; the old cross-cmux Codex CLI
+handoff dropped the same date. 2026-05-26: routine reporter / git-manager /
+git-publisher Mode 2 absorbed into `reporter-inline` / `git-commit` /
+`git-publish` skills to eliminate per-cycle Agent dispatch overhead (~30-40k
+tokens, ~150-300 seconds saved per PR cycle). Agent files for the deprecated two
+kept ~1 week for fallback. 2026-05-31: Codex re-introduced as a CONCURRENT PEER
+in its own clone (`make_web-codex`, one-clone-per-worker) — not the old
+cross-cmux CLI handoff; see `CONTRIBUTING.md` § Concurrent agents._

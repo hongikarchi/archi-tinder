@@ -248,13 +248,13 @@ Estimate: ~30-50 LOC delta. Bundle-worthy.
 ## Codex dispatch plan (Phase 1) — for autonomous execution after #51 sweep settles
 
 ```
-BUILDING-DETAIL-P1: read .claude/plans/building-detail-page.md and execute the section "Phase 1 — page shell + gallery + metadata + back". Goal: NEW frontend/src/pages/BuildingDetailPage.jsx + /buildings/:buildingId route in App.jsx. Calls getBuildings([buildingId]) for data. Gallery from card.gallery[] (already merged photos+drawings via normalizeCard). Metadata strip from card.metadata.* fields. Long description from card.metadata.axis_atmosphere or card.atmosphere fallback. Back arrow uses navigate(-1).
+BUILDING-DETAIL-P1: read .codex/plans/building-detail-page.md and execute the section "Phase 1 — page shell + gallery + metadata + back". Goal: NEW frontend/src/pages/BuildingDetailPage.jsx + /buildings/:buildingId route in App.jsx. Calls getBuildings([buildingId]) for data. Gallery from card.gallery[] (already merged photos+drawings via normalizeCard). Metadata strip from card.metadata.* fields. Long description from card.metadata.axis_atmosphere or card.atmosphere fallback. Back arrow uses navigate(-1).
 
 Defense-in-depth: buildingId regex /^[A-Za-z0-9_-]{1,32}$/ before fetch (mirror FirmProfilePage officeId pattern). Cancellation guard on async effect. Loading skeleton + error state.
 
 NO bookmark in Phase 1 (Phase 2 plumbs route state + bookmark visibility logic).
 
-Acceptance: direct URL loads building info. Lint+build clean. Append `FRONT-DONE: BUILDING-DETAIL-P1 — BuildingDetailPage with gallery + metadata + back. <N> files. lint/build clean.` to .claude/Task.md § Handoffs.
+Acceptance: direct URL loads building info. Lint+build clean. Append `FRONT-DONE: BUILDING-DETAIL-P1 — BuildingDetailPage with gallery + metadata + back. <N> files. lint/build clean.` to Task.md § Handoffs.
 
 Hard rules per AGENTS.md + team-front.md self-review checklist (8 items including fix-loop regression check). Codex /fast may be on — proceed normally.
 ```

@@ -105,6 +105,36 @@
   .panel { display: none; padding-top: 22px; }
   .panel.active { display: block; }
 
+  /* ---- File tree ---- */
+  .tree-head { color: var(--text-faint); font-size: 12px; margin: 0 0 12px; }
+  .tree-wrap { font-family: var(--mono); font-size: 12.5px; line-height: 1.7; }
+  .tree-dir { margin: 0; }
+  .tree-dir > summary {
+    cursor: pointer; padding: 1px 0; list-style: none;
+    display: flex; align-items: center; gap: 7px;
+  }
+  .tree-dir > summary::-webkit-details-marker { display: none; }
+  .tree-dir > summary::before {
+    content: "▸"; color: var(--text-faint); font-size: 9px; width: 9px; flex: none;
+  }
+  .tree-dir[open] > summary::before { content: "▾"; }
+  .tree-dir > summary:hover .tree-folder { color: var(--accent); }
+  .tree-folder { font-weight: 600; color: var(--accent); }
+  .tree-count {
+    color: var(--text-faint); font-size: 10.5px;
+    background: var(--bg); border: 1px solid var(--border-soft);
+    border-radius: 999px; padding: 0 7px;
+  }
+  .tree-children {
+    padding-left: 13px; margin-left: 4px;
+    border-left: 1px solid var(--border-soft);
+  }
+  .tree-file {
+    display: flex; align-items: baseline; gap: 12px; padding: 0 0 0 16px;
+  }
+  .tree-name { color: var(--text); white-space: nowrap; }
+  .tree-role { color: var(--text-soft); font-family: var(--sans); font-size: 12px; }
+
   /* ---- Generic blocks ---- */
   .section-title {
     font-size: 12px;
@@ -299,6 +329,7 @@
   <section class="panel" id="panel-next"></section>
   <section class="panel" id="panel-systemflow"></section>
   <section class="panel" id="panel-agentflow"></section>
+  <section class="panel" id="panel-files"></section>
 
   <footer>Static project dashboard · renders <code>project/state.js</code> · no server required</footer>
 </div>
@@ -307,6 +338,8 @@
 <script src="./mermaid.min.js"></script>
 <!-- Data first, render second — both plain scripts so file:// double-click works -->
 <script src="state.js"></script>
+<!-- Local override (gitignored, written by `make dashboard`) — fresher view without commit churn; absent on plain file:// double-click = silent no-op -->
+<script src="state.local.js"></script>
 <script>
 (function () {
   "use strict";
@@ -442,7 +475,7 @@
     } else {
       h += emptyMsg("nothing in flight");
     }
-    h += '<div class="note-line">Each entry is a single in-flight initiative — may span one PR (single fix) or many PRs (design-system rework, dashboard rework). Update <code>.claude/Task.md</code> <code>## Now</code> section to add or remove.</div>';
+    h += '<div class="note-line">Each entry is a single in-flight initiative — may span one PR (single fix) or many PRs (design-system rework, dashboard rework). Update <code>Task.md</code> <code>## Now</code> section to add or remove.</div>';
     set("panel-now", h);
   }
 
@@ -461,6 +494,7 @@
       }
     } else {
       var buckets = [
+        { key: "xhigh",  label: "X-HIGH priority — confirmed defect vs core taste-match promise / data correctness" },
         { key: "high",   label: "HIGH priority — next initiative slice candidate" },
         { key: "medium", label: "MEDIUM priority — uncategorised pending" },
         { key: "low",    label: "LOW priority — explicitly deferred / skipped" },
@@ -475,7 +509,7 @@
         }
       });
     }
-    h += '<div class="note-line">Source: <code>.claude/Task.md</code> <code>## Next</code> section. HIGH = specced, ready to pull into <code>## Now</code>; MEDIUM = pending review; LOW = explicitly deferred — revisit when context shifts.</div>';
+    h += '<div class="note-line">Source: <code>Task.md</code> <code>## Next</code> section. HIGH = specced, ready to pull into <code>## Now</code>; MEDIUM = pending review; LOW = explicitly deferred — revisit when context shifts.</div>';
     set("panel-next", h);
   }
 
@@ -554,13 +588,63 @@
     }
   }
 
+  /* ---------- file tree ---------- */
+  function buildFileNode(files) {
+    var root = { dirs: {}, files: [] };
+    arr(files).forEach(function (f) {
+      if (!f || !f.path) return;
+      var parts = String(f.path).split("/");
+      var node = root;
+      for (var i = 0; i < parts.length - 1; i++) {
+        var d = parts[i];
+        if (!node.dirs[d]) node.dirs[d] = { dirs: {}, files: [] };
+        node = node.dirs[d];
+      }
+      node.files.push({ name: parts[parts.length - 1], role: f.role || "" });
+    });
+    return root;
+  }
+  function countFiles(node) {
+    var n = node.files.length;
+    Object.keys(node.dirs).forEach(function (d) { n += countFiles(node.dirs[d]); });
+    return n;
+  }
+  function renderFileNode(node, depth) {
+    var html = "";
+    Object.keys(node.dirs).sort().forEach(function (d) {
+      var child = node.dirs[d];
+      var open = depth < 1 ? " open" : "";
+      html += '<details class="tree-dir"' + open + '><summary>'
+            + '<span class="tree-folder">' + esc(d) + '/</span>'
+            + '<span class="tree-count">' + countFiles(child) + '</span>'
+            + '</summary><div class="tree-children">'
+            + renderFileNode(child, depth + 1)
+            + '</div></details>';
+    });
+    node.files.forEach(function (f) {
+      html += '<div class="tree-file"><span class="tree-name">' + esc(f.name) + '</span>'
+            + (f.role ? '<span class="tree-role">' + esc(f.role) + '</span>' : '')
+            + '</div>';
+    });
+    return html;
+  }
+  function renderFiles() {
+    var files = arr(S.fileTree);
+    if (!has(files)) { set("panel-files", emptyMsg("no file tree")); return; }
+    var root = buildFileNode(files);
+    set("panel-files",
+      '<div class="tree-head">' + files.length + ' tracked files · click a folder to expand</div>'
+      + '<div class="tree-wrap">' + renderFileNode(root, 0) + '</div>');
+  }
+
   /* ---------- tabs ---------- */
   var TABS = [
     { id: "done",        label: "Done" },
     { id: "now",         label: "Now" },
     { id: "next",        label: "Next" },
     { id: "systemflow",  label: "System Flow" },
-    { id: "agentflow",   label: "Agent Flow" }
+    { id: "agentflow",   label: "Agent Flow" },
+    { id: "files",       label: "Files" }
   ];
 
   function activateTab(id) {
@@ -615,6 +699,7 @@
     renderNext();
     renderSystemFlow();
     renderAgentFlow();
+    renderFiles();
     buildTabbar();
     activateTab("done"); // default landing tab; activateTab() lazy-loads Mermaid for flow tabs
   }
