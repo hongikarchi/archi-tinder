@@ -160,6 +160,7 @@ export default function BoardDetailPage() {
   const [editName, setEditName] = useState('')
   const [nameSaving, setNameSaving] = useState(false)
   const [shareCopied, setShareCopied] = useState(false)
+  const [showReport, setShowReport] = useState(false)
   const reportRef = useRef(null)
   const nameInputRef = useRef(null)
   const [isEditMode, setIsEditMode] = useState(false)
@@ -703,7 +704,10 @@ export default function BoardDetailPage() {
         )}
         {board?.final_report && (
           <button
-            onClick={() => reportRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            onClick={() => {
+              setShowReport(prev => !prev)
+              if (!showReport) setTimeout(() => reportRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
+            }}
             style={{
               width: '100%',
               maxWidth: 320,
@@ -730,7 +734,7 @@ export default function BoardDetailPage() {
               <line x1="16" y1="17" x2="8" y2="17"/>
               <polyline points="10 9 9 9 8 9"/>
             </svg>
-            <span>페르소나 리포트 보기</span>
+            <span>{showReport ? '리포트 닫기' : '페르소나 리포트 보기'}</span>
           </button>
         )}
       </div>
@@ -746,8 +750,8 @@ export default function BoardDetailPage() {
         </div>
       )}
 
-      {/* Persona Report section — only when final_report exists */}
-      {board?.final_report && (
+      {/* Persona Report section — only when final_report exists and showReport toggled on */}
+      {board?.final_report && showReport && (
         <div ref={reportRef} style={{ maxWidth: 1100, margin: '0 auto', padding: '0 20px 28px' }}>
           <div style={{
             borderRadius: 16,
