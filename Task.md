@@ -454,6 +454,14 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 
 ## Done
 
+### DASHBOARD-AUTOGEN-1 — 대시보드 Files 탭 + state.js 자동생성 — RESOLVED 2026-06-01 (`feature/claude-dashboard-autogen` → develop)
+프로젝트 대시보드 2건: (1) 파일 구조 Files 탭 (collapsible 트리 + 파일별 role), (2) state.js를 reporter 수작업 재작성 대신 `tools/gen-state.js`로 자동생성.
+- [x] **gen-state.js** (1232e12): meta/done/now/next ← Task.md+git, agents ← `.claude/agents` frontmatter, prs ← gh(offline=prior 유지), fileTree ← `git ls-files` ∪ file-roles.json. mermaid×3+milestones는 이전 state.js verbatim 복사; done/next note + agent role은 id/name 캐리포워드(신규는 첫 bullet seed). self-check(11키+배열) + verifyCarry(캐리키 round-trip) + drift 리포트. `make dashboard` → `--local` state.local.js(gitignored, 미커밋 포함). reporter-inline Step 4 = 생성기 호출로 교체.
+- [x] **Files 탭** (918680b): native `<details>` collapsible 트리 + role 컬럼 + 폴더 file-count. `project/file-roles.json` 337개(짧은 한국어 noun-phrase, max 29자; 10-chunk agent workflow + critic + revise; 손-유지, 생성기는 병합만). jsdom 렌더 게이트 PASS(337 files/68 folders, 탭 토글, done/next 무회귀, state.local.js 부재=무음 no-op 확인).
+- [x] **drift 정규화** (d8c6250): 생성기가 노출한 state.js↔Task.md 드리프트 4건(SNS-RESULTS-UI-1/SNS-REPORT-CONNECT/DOCS-SESSION done + INFRA-DB-CLEANUP-1 medium) Task.md canonical 복원.
+- [x] **reporter-inline 정합** (b8d8c0f): note/role 캐리-바이-id 비대칭(seed 후 sticky) + 기존 note 수정 절차 + sentinel 정정 문서화.
+- 효과: reporter가 컨텍스트 다 읽고 state.js 424줄 재작성하던 비용 + `*/` 백지 버그 제거. Task.md 편집 → `node tools/gen-state.js` 한 줄. 픽셀 검증만 Codex lane(공유 Chrome 점유)로 이월.
+
 ### FULL-REFACTOR-1 — 큰 파일 분해 (engine.py 등) pure-move 분해 — RESOLVED 2026-06-01 (PRs #170 `6f54cc3` / #171 `7302ae6` / #172 `e1ff077` / engine `16e2a1a-pre-squash`)
 Behavior-preserving decomposition of the repo's largest files into focused modules. PURE MOVE — lines relocated, zero behavior change. 4 slices:
 - [x] **#170 `6f54cc3`** — recommendation backend: parse_query.py 906→656 (+`_prompts.py`), views/sessions.py 622→80 (+`session_service.py`), views/swipe.py 1205→497 (+`swipe_service.py`). Extracted services reference engine via MODULE (`from .. import engine`), never `from ..engine import X` — preserves `views.engine.*` patch-bite.

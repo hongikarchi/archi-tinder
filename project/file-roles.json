@@ -307,6 +307,7 @@
   "frontend/vite.config.js": "Vite 빌드 설정",
   "hooks/pre-push": "마이그레이션 번호 충돌 검사 훅",
   "project/dashboard.html": "프로젝트 상태 대시보드 페이지",
+  "project/file-roles.json": "파일트리 role 설명 맵",
   "project/mermaid.min.js": "Mermaid 다이어그램 번들",
   "project/state.js": "대시보드 상태 데이터",
   "tools/.smoke.sh": "git 스크립트 환경 스모크 검사",

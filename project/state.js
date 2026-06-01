@@ -25,11 +25,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-06-01 17:23 KST',
+    updatedAt: '2026-06-01 17:28 KST',
     head: 'fefa830',
     branch: 'feature/claude-dashboard-autogen',
   },
   done: [
+    {
+      id: 'DASHBOARD-AUTOGEN-1',
+      title: '대시보드 Files 탭 + state.js 자동생성',
+      completedAt: '2026-06-01',
+      note: '프로젝트 대시보드 2건: (1) 파일 구조 Files 탭 (collapsible 트리 + 파일별 role), (2) state.js를 reporter 수작업 재작성 대신 `tools/gen-state.js`로 자동생성.',
+    },
     {
       id: 'FULL-REFACTOR-1',
       title: '큰 파일 분해 (engine.py 등) pure-move 분해',
@@ -77,13 +83,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-05-27',
       prs: [148],
       note: 'Board detail PR #147 pattern applied. PROJECT_DETAIL_TTL=60 + version key + evict_project_detail. Invalidation 8 sites. CRITICAL fix-loop: delete evict order race. test_board_detail_perf.py 7 cases. sha be6c8f5.',
-    },
-    {
-      id: 'BACK-PROFILE-PERF-1',
-      title: '/users/<id>/ 895ms → <1s — thumbnail-only fetch + response cache',
-      completedAt: '2026-05-27',
-      prs: [147],
-      note: 'engine.get_building_thumbnails NEW + thumbnail swap + UserProfileDetailView 60s cache + invalidation 5 sites + test_profile_perf.py 9 cases. 기대: cold ~500-700ms, warm ~100ms. sha d3e110c.',
     },
   ],
   now: [],
@@ -1535,6 +1534,10 @@ window.PROJECT_STATE = {
     {
       path: 'project/dashboard.html',
       role: '프로젝트 상태 대시보드 페이지',
+    },
+    {
+      path: 'project/file-roles.json',
+      role: '파일트리 role 설명 맵',
     },
     {
       path: 'project/mermaid.min.js',
