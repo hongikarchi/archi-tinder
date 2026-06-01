@@ -3,9 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { getUserProfile, followUser, unfollowUser } from '../api/client.js'
 import { updateProject, deleteProject } from '../api/projects.js'
 import AppearanceSettings from '../components/AppearanceSettings.jsx'
+import EditProfileModal from '../components/EditProfileModal.jsx'
 import ProfileHeader from './userProfile/ProfileHeader'
 import ProfileHero from './userProfile/ProfileHero'
 import BoardGrid from './userProfile/BoardGrid'
+import { IconEdit } from '../components/icons.jsx'
 
 /**
  * formatBoardDate — converts ISO 8601 timestamp to "Month YYYY" display string.
@@ -49,6 +51,9 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
   const [boardsHasMore, setBoardsHasMore] = useState(false)
   const [boardsLoading, setBoardsLoading] = useState(false)
   const sentinelRef = useRef(null)
+
+  // Edit profile modal
+  const [showEditProfile, setShowEditProfile] = useState(false)
 
   // MINOR #1: inline error banner for failed board actions (optimistic revert feedback)
   const [boardActionError, setBoardActionError] = useState(null)
@@ -406,6 +411,38 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
           onToggleFollow={handleToggleFollow}
         />
 
+        {/* Edit Profile button — isMe only, sits between hero and boards */}
+        {isMe && (
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 28 }}>
+            <button
+              type="button"
+              onClick={() => setShowEditProfile(true)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '8px 18px', minHeight: 36,
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--color-border)',
+                background: 'transparent',
+                color: 'var(--color-text-2)',
+                fontSize: 13, fontWeight: 600,
+                cursor: 'pointer', fontFamily: 'inherit',
+                transition: 'border-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease)',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = 'var(--accent-1)'
+                e.currentTarget.style.color = 'var(--accent-1)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'var(--color-border)'
+                e.currentTarget.style.color = 'var(--color-text-2)'
+              }}
+            >
+              <IconEdit width={14} height={14} />
+              Edit Profile
+            </button>
+          </div>
+        )}
+
         {/* MINOR #1: inline error banner for failed board actions */}
         {boardActionError && (
           <div aria-live="polite" style={{
@@ -710,6 +747,19 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         )}
 
       </div>
+
+      {/* Edit Profile modal — portal-like, outside scrollable container */}
+      {showEditProfile && user && (
+        <EditProfileModal
+          user={user}
+          onClose={() => setShowEditProfile(false)}
+          onSaved={(updated) => {
+            // Merge server-normalized fields back into profile state.
+            // Modal calls onClose() after this, so we don't close here.
+            setUser(prev => ({ ...prev, ...updated }))
+          }}
+        />
+      )}
     </div>
   )
 }
