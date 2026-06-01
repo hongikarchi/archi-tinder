@@ -1,0 +1,48 @@
+.section {
+  margin: 16px 0;
+  padding: 16px;
+  background: var(--color-surface);
+  border-radius: 12px;
+  border: 1px solid var(--color-border-soft);
+}
+
+.profileBtn {
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border-soft);
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: color var(--motion-fast) var(--motion-ease),
+              border-color var(--motion-fast) var(--motion-ease);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.profileBtn:hover {
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+
+.buildingCard {
+  width: 120px;
+  flex: 0 0 120px;
+  aspect-ratio: 2 / 3;
+  border-radius: 10px;
+  overflow: hidden;
+  position: relative;
+  cursor: pointer;
+  background: var(--color-surface-2);
+  transition: transform var(--motion-normal) var(--motion-ease);
+  flex-shrink: 0;
+}
+
+.buildingCard:hover {
+  transform: translateY(-3px);
+}

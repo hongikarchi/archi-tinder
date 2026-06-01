@@ -1,0 +1,41 @@
+.backBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border-soft);
+  font-size: 14px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: color var(--motion-fast) var(--motion-ease),
+              border-color var(--motion-fast) var(--motion-ease);
+}
+
+.backBtn:hover {
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+
+.buildingCard {
+  aspect-ratio: 2 / 3;
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+  cursor: pointer;
+  background: var(--color-surface-2);
+  transition: transform var(--motion-normal) var(--motion-ease);
+}
+
+.buildingCard:hover {
+  transform: translateY(-3px);
+}
+
+.skeletonCard {
+  aspect-ratio: 2 / 3;
+  border-radius: 12px;
+  background: var(--color-surface-2);
+}

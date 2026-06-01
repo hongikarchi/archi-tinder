@@ -14,6 +14,7 @@ import BuildingDetailPage from './pages/BuildingDetailPage.jsx'
 import DiscoveryPage from './pages/DiscoveryPage.jsx'
 import VerifyGateModal from './components/VerifyGateModal.jsx'
 import LikedProjectsPage from './pages/LikedProjectsPage.jsx'
+import ArchitectProfilePage from './pages/ArchitectProfilePage.jsx'
 import * as api from './api/client.js'
 import { createProject } from './api/projects.js'
 import { normalizeFilters, classifySwipeError, isActionCard, extractLikedIds, extractSavedIds } from './utils/appHelpers.js'
@@ -800,6 +801,7 @@ export default function App() {
           <Route path="buildings/:buildingId" element={<BuildingDetailPage />} />
           <Route path="board/:boardId" element={<BoardDetailPage />} />
           <Route path="liked-projects" element={<LikedProjectsPage />} />
+          <Route path="architects/:architectId" element={<ArchitectProfilePage />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getBoardBuildings, getProject } from '../api/projects.js'
 import { getResult } from '../api/sessions.js'
+import { getRecommendedArchitects } from '../api/architects.js'
 
 function collectBoardBuildingIds(project) {
   const ids = []
@@ -29,6 +30,7 @@ function adaptProjectToBoard(project, buildings) {
 export function useBoard(projectId) {
   const [board, setBoard] = useState(null)
   const [recommended, setRecommended] = useState([])
+  const [recommendedArchitects, setRecommendedArchitects] = useState([])
   const [buildingsLoading, setBuildingsLoading] = useState(true)
   const [resultLoading, setResultLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -47,6 +49,7 @@ export function useBoard(projectId) {
     setBuildingsLoading(true)
     setResultLoading(false)
     setRecommended([])
+    setRecommendedArchitects([])
     setError(null)
     setBoard(null)
 
@@ -86,6 +89,13 @@ export function useBoard(projectId) {
               if (!cancelled) setResultLoading(false)
             })
         }
+
+        // Fetch recommended architects in parallel — graceful degradation on failure.
+        getRecommendedArchitects(project.project_id)
+          .then(architects => {
+            if (cancelled) return
+            setRecommendedArchitects(architects)
+          })
       })
       .catch(err => {
         if (cancelled) return
@@ -102,5 +112,5 @@ export function useBoard(projectId) {
   // Expose a combined `loading` alias so existing consumers continue to work.
   const loading = buildingsLoading
 
-  return { board, recommended, loading, buildingsLoading, resultLoading, error }
+  return { board, recommended, recommendedArchitects, loading, buildingsLoading, resultLoading, error }
 }
