@@ -6,9 +6,16 @@ from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Office, OfficeProjectLink
+from .models import Office, OfficeProjectLink, SavedOffice
 from .serializers import OfficeSerializer, OfficeClaimSerializer, OfficeAdminSerializer
 from .throttles import OfficeClaimThrottle
+
+
+def _get_profile(request):
+    try:
+        return request.user.userprofile
+    except Exception:
+        return None
 
 
 class OfficeDetailView(APIView):
@@ -174,3 +181,45 @@ class OfficeAdminVerifyView(APIView):
             'claim_status': office.claim_status,
             'verified': office.verified,
         })
+
+
+class OfficeSaveView(APIView):
+    """POST /api/v1/offices/<canonical_id>/save/ -- save an office.
+    DELETE /api/v1/offices/<canonical_id>/save/ -- unsave an office.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, canonical_id):
+        office = get_object_or_404(Office, canonical_id=canonical_id)
+        saved_office, created = SavedOffice.objects.get_or_create(user=request.user, office=office)
+        return Response({'saved': True}, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+    def delete(self, request, canonical_id):
+        office = get_object_or_404(Office, canonical_id=canonical_id)
+        SavedOffice.objects.filter(user=request.user, office=office).delete()
+        return Response({'saved': False}, status=status.HTTP_200_OK)
+
+
+class SavedOfficeListView(APIView):
+    """GET /api/v1/offices/saved/ -- list saved offices for the authenticated user."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        saved = (
+            SavedOffice.objects
+            .filter(user=request.user)
+            .select_related('office')
+            .order_by('-saved_at')
+        )
+        result = [
+            {
+                'canonical_id': s.office.canonical_id,
+                'name': s.office.name,
+                'logo_url': s.office.logo_url,
+                'primary_city': s.office.primary_city,
+                'primary_country': s.office.primary_country,
+                'saved_at': s.saved_at.isoformat(),
+            }
+            for s in saved
+        ]
+        return Response(result)
