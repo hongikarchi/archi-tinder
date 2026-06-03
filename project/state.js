@@ -25,11 +25,18 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-06-01 22:07 KST',
-    head: '4e72b07',
-    branch: 'feature/admin-login-page',
+    updatedAt: '2026-06-04 08:15 KST',
+    head: 'c7ee138',
+    branch: 'feature/claude-profile-harvest',
   },
   done: [
+    {
+      id: 'FRONT-PROFILE-HARVEST-1',
+      title: '프로필 컴포넌트 하베스트 + 인스타식 재설계',
+      completedAt: '2026-06-04',
+      prs: [179],
+      note: 'archibe-profile에서 핵심 컴포넌트 채택 + 4테마 재토큰화 + 프로필 인스타식 재설계. Profile-area 컴포넌트 하베스트 + CSS-Module/hook 패턴 토대 — 명명된 ~646 인라인 부채(SwipePage/BoardDetailPage 등) 상환 아님(그 파일 안 건드림); FRONT-DESIGN-1 핵심 인라인 마이그레이션은 ## Next 잔존.',
+    },
     {
       id: 'DASHBOARD-AUTOGEN-1',
       title: '대시보드 Files 탭 + state.js 자동생성',
@@ -76,13 +83,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-05-27',
       prs: [154, 155],
       note: 'Rebuilt after codex feature/codex-guest-auth-* archived for 6 issues — all resolved. Backend PR #154 db81e0f: UserProfile.is_guest + onboarding_role + consent_accepted_at + consent_policy_version + migration 0004 + GuestLoginView (3/min throttle) + GuestPromoteView (atomic Branch 1 merge 8 FK rules + Branch 2 in-place transform w/ username collision guard) + CustomTokenObtainPairSerializer is_guest claim on refresh→access + IsVerifiedUser + ProjectListCreateView inline gate (403 verify_required). 14 pytest. Frontend PR #155 e8296f5-pre-squash: LoginPage terminal 3-step wizard + 동의합니다 PIPA + dual CTA + VerifyGateModal + useGoogleLogin extracted to GoogleLoginButton/GoogleVerifyButton (conditional mount safety) + cross-device merge onPromoted(user,merged) handleLogin re-sync + SaveToBoardModal Option A auto-retry + SurpriseBoardModal Option B toast + conditional GoogleOAuthProvider mount (no literal fallback). 24/24 loginFlow.test.mjs. Plan: ~/.claude/plans/merry-toasting-dove.md.',
-    },
-    {
-      id: 'BACK-BOARD-PERF-1',
-      title: '/projects/<id>/ ~879ms → <500ms — response cache 60s',
-      completedAt: '2026-05-27',
-      prs: [148],
-      note: 'Board detail PR #147 pattern applied. PROJECT_DETAIL_TTL=60 + version key + evict_project_detail. Invalidation 8 sites. CRITICAL fix-loop: delete evict order race. test_board_detail_perf.py 7 cases. sha be6c8f5.',
     },
   ],
   now: [
@@ -133,6 +133,16 @@ window.PROJECT_STATE = {
       },
     ],
     medium: [
+      {
+        id: 'FRONT-PROFILE-POLISH-1',
+        title: '프로필 재설계 브라우저 픽셀 패스 (Codex)',
+        note: 'FRONT-PROFILE-HARVEST-1(#179) 머지 후 Codex 브라우저 수정 (별도 PR). FollowListModal 모바일 bottom-sheet(≤768px, DESIGN.md §8.10) + backdrop opacity 0.6→0.4 + inline onMouseEnter→CSS `:hover` + 4테마 픽셀 검증(github-light 먼저). 원 하베스트 minor 4: FollowListPage 성공 경로 `setError(null)` 누락(stale 배너), E…',
+      },
+      {
+        id: 'BACK-PROFILE-SANITIZE-1',
+        title: 'external_links 검증 없음 (mailto/handle 주입)',
+        note: '`validate_external_links`에 instagram handle/email 포맷 검증 없음. ProfileHero가 `https://instagram.com/${handle}` + `mailto:${email}` 평문 조립 → 스킴-락이라 javascript: 차단되나 path-traversal/주입 nuisance. 영숫자+밑줄만 허용하도록 백엔드 검증 추가.',
+      },
       {
         id: 'FRONT-UX-6',
         title: 'SwipeCard gallery flip 부모 state 동기화 누락',
@@ -214,6 +224,48 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 182,
+      title: 'feat(SNS-OFFICE): architect profile redesign + follow + saved studios (rebased #181)',
+      mergedAt: '2026-06-03T15:47:43Z',
+      mergedAtKST: '2026-06-04 00:47 KST',
+      sha: 'c7ee138',
+    },
+    {
+      number: 180,
+      title: 'feat(office-save): Office 싱크 및 사무소 저장 기능 추가',
+      mergedAt: '2026-06-03T15:33:47Z',
+      mergedAtKST: '2026-06-04 00:33 KST',
+      sha: '2abb831',
+    },
+    {
+      number: 178,
+      title: 'feat(SNS-ARCH): 보드 상세 — 추천 사무소 섹션 + ArchitectProfilePage',
+      mergedAt: '2026-06-03T15:34:02Z',
+      mergedAtKST: '2026-06-04 00:34 KST',
+      sha: '54fa460',
+    },
+    {
+      number: 177,
+      title: 'feat(FRONT-AUTH-2): login swipe onboarding 1차 — guest auth contract preserved',
+      mergedAt: '2026-06-01T13:08:56Z',
+      mergedAtKST: '2026-06-01 22:08 KST',
+      sha: '83f6310',
+    },
+    {
+      number: 176,
+      title: 'feat(sns): BoardDetailPage 페르소나 리포트 섹션 복구 + 리포트 보기 버튼',
+      mergedAt: '2026-06-01T13:18:31Z',
+      mergedAtKST: '2026-06-01 22:18 KST',
+      sha: 'b8c1c7c',
+    },
+    {
+      number: 175,
+      title: 'fix(sns): swipe exit 버튼 아이콘 logout→restart 회전 화살표로 교체',
+      mergedAt: '2026-06-01T13:13:27Z',
+      mergedAtKST: '2026-06-01 22:13 KST',
+      sha: '3836c92',
+    },
+    {
       number: 174,
       title: 'feat(dashboard): Files tab + self-generating state.js (DASHBOARD-AUTOGEN-1)',
       mergedAt: '2026-06-01T10:55:34Z',
@@ -226,48 +278,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-06-01T06:20:26Z',
       mergedAtKST: '2026-06-01 15:20 KST',
       sha: 'fefa830',
-    },
-    {
-      number: 172,
-      title: 'refactor(frontend): decompose 5 stable pages — pure move (FULL-REFACTOR-1 pt.3)',
-      mergedAt: '2026-06-01T04:10:57Z',
-      mergedAtKST: '2026-06-01 13:10 KST',
-      sha: 'e1ff077',
-    },
-    {
-      number: 171,
-      title: 'refactor(accounts): split views.py into views/ package — auth + profile (FULL-REFACTOR-1 pt.2)',
-      mergedAt: '2026-06-01T00:04:18Z',
-      mergedAtKST: '2026-06-01 09:04 KST',
-      sha: '7302ae6',
-    },
-    {
-      number: 170,
-      title: 'refactor(recommendation): decompose parse_query/sessions/swipe to service modules (FULL-REFACTOR-1 pt.1)',
-      mergedAt: '2026-06-01T00:04:14Z',
-      mergedAtKST: '2026-06-01 09:04 KST',
-      sha: '6f54cc3',
-    },
-    {
-      number: 169,
-      title: 'docs(INFRA-MULTIAGENT-1): one-clone-per-worker model + agent-config overhaul (supersedes #166)',
-      mergedAt: '2026-05-31T16:59:06Z',
-      mergedAtKST: '2026-06-01 01:59 KST',
-      sha: 'da80f65',
-    },
-    {
-      number: 168,
-      title: 'chore(dashboard): sync state.js + X-HIGH render bucket',
-      mergedAt: '2026-05-31T00:33:10Z',
-      mergedAtKST: '2026-05-31 09:33 KST',
-      sha: 'be73c60',
-    },
-    {
-      number: 167,
-      title: 'chore: fix Codex startup metadata warnings',
-      mergedAt: '2026-05-30T23:53:38Z',
-      mergedAtKST: '2026-05-31 08:53 KST',
-      sha: '43de2b1',
     },
   ],
   agents: [
@@ -358,6 +368,14 @@ window.PROJECT_STATE = {
       role: 'security-manager 에이전트 정의',
     },
     {
+      path: '.claude/plans/2026-06-01-office-recommendation-design.md',
+      role: '',
+    },
+    {
+      path: '.claude/plans/2026-06-02-office-save.md',
+      role: '',
+    },
+    {
       path: '.claude/plans/README.md',
       role: '플랜 디렉터리 안내',
     },
@@ -384,6 +402,10 @@ window.PROJECT_STATE = {
     {
       path: '.claude/plans/dashboard-autogen-1.md',
       role: '대시보드 자동생성 플랜',
+    },
+    {
+      path: '.claude/plans/profile-harvest-redesign.wf.js',
+      role: '',
     },
     {
       path: '.claude/reviews/2026-05-31-swipe-discovery-review.md',
@@ -618,12 +640,32 @@ window.PROJECT_STATE = {
       role: 'profiles 앱 설정',
     },
     {
+      path: 'backend/apps/profiles/management/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/profiles/management/commands/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/profiles/management/commands/sync_offices.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/profiles/migrations/0001_initial.py',
       role: 'DB 마이그레이션 (Office 초기)',
     },
     {
       path: 'backend/apps/profiles/migrations/0002_alter_officeprojectlink_confidence.py',
       role: 'DB 마이그레이션 (confidence 변경)',
+    },
+    {
+      path: 'backend/apps/profiles/migrations/0003_office_is_recommendable_office_primary_city_and_more.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/profiles/migrations/0004_alter_office_canonical_id.py',
+      role: '',
     },
     {
       path: 'backend/apps/profiles/migrations/__init__.py',
@@ -882,6 +924,10 @@ window.PROJECT_STATE = {
       role: 'Discovery 피드 뷰',
     },
     {
+      path: 'backend/apps/recommendation/views/office_recommendation.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/recommendation/views/projects.py',
       role: '프로젝트 CRUD 뷰',
     },
@@ -928,6 +974,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/social/migrations/0004_officefollow.py',
       role: 'DB 마이그레이션 OfficeFollow',
+    },
+    {
+      path: 'backend/apps/social/migrations/0005_architectfollow.py',
+      role: '',
     },
     {
       path: 'backend/apps/social/migrations/__init__.py',
@@ -1250,6 +1300,10 @@ window.PROJECT_STATE = {
       role: '앱 루트 라우팅 컴포넌트',
     },
     {
+      path: 'frontend/src/api/architects.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/api/auth.js',
       role: '인증 API 클라이언트',
     },
@@ -1298,6 +1352,10 @@ window.PROJECT_STATE = {
       role: '세션·스와이프 디버그 오버레이',
     },
     {
+      path: 'frontend/src/components/EditProfileModal.jsx',
+      role: '프로필 편집 모달',
+    },
+    {
       path: 'frontend/src/components/ErrorBoundary.jsx',
       role: '에러 바운더리 컴포넌트',
     },
@@ -1326,6 +1384,10 @@ window.PROJECT_STATE = {
       role: '보드 저장 모달',
     },
     {
+      path: 'frontend/src/components/ShareCardModal.jsx',
+      role: '프로필 명함 공유 모달',
+    },
+    {
       path: 'frontend/src/components/SurpriseBoardModal.jsx',
       role: '큐레이션 보드 제안 모달',
     },
@@ -1350,6 +1412,10 @@ window.PROJECT_STATE = {
       role: '보드 한도 인증 게이트 모달',
     },
     {
+      path: 'frontend/src/components/icons.jsx',
+      role: '공통 stroke 아이콘 세트',
+    },
+    {
       path: 'frontend/src/components/profile/ArticleCard.jsx',
       role: '프로필 아티클 카드',
     },
@@ -1362,8 +1428,36 @@ window.PROJECT_STATE = {
       role: '프로필 보드 플립 카드',
     },
     {
+      path: 'frontend/src/components/profile/BusinessCard.jsx',
+      role: '프로필 명함 카드(3D 플립)',
+    },
+    {
       path: 'frontend/src/components/profile/DescriptionAboutFlipCard.jsx',
       role: '사무소 소개 플립 카드',
+    },
+    {
+      path: 'frontend/src/components/profile/EditCardForm.jsx',
+      role: '프로필 편집 폼',
+    },
+    {
+      path: 'frontend/src/components/profile/EditCardForm.module.css',
+      role: '프로필 편집 폼 스타일',
+    },
+    {
+      path: 'frontend/src/components/profile/FakeQr.jsx',
+      role: '공유 명함 스텁 QR',
+    },
+    {
+      path: 'frontend/src/components/profile/FollowList.jsx',
+      role: '팔로워·팔로잉 리스트',
+    },
+    {
+      path: 'frontend/src/components/profile/FollowList.module.css',
+      role: '팔로우 리스트 스타일',
+    },
+    {
+      path: 'frontend/src/components/profile/FollowListModal.jsx',
+      role: '팔로워·팔로잉 인스타식 팝업',
     },
     {
       path: 'frontend/src/components/profile/InfoCol.jsx',
@@ -1388,6 +1482,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/hooks/useBoard.js',
       role: '보드 상세 로딩 훅',
+    },
+    {
+      path: 'frontend/src/hooks/useFollowList.js',
+      role: '팔로워·팔로잉 페이지네이션 훅',
     },
     {
       path: 'frontend/src/hooks/useImageTelemetry.js',
@@ -1416,6 +1514,14 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/main.jsx',
       role: 'React 앱 진입점',
+    },
+    {
+      path: 'frontend/src/pages/ArchitectProfilePage.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/ArchitectProfilePage.module.css',
+      role: '',
     },
     {
       path: 'frontend/src/pages/BoardDetailPage.jsx',
@@ -1462,6 +1568,14 @@ window.PROJECT_STATE = {
       role: '유저 프로필 페이지',
     },
     {
+      path: 'frontend/src/pages/boardDetail/ArchitectSection.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/boardDetail/ArchitectSection.module.css',
+      role: '',
+    },
+    {
       path: 'frontend/src/pages/boardDetail/BuildingTile.jsx',
       role: '보드 건물 타일 카드',
     },
@@ -1504,6 +1618,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/pages/userProfile/BoardGrid.jsx',
       role: '프로필 보드 그리드',
+    },
+    {
+      path: 'frontend/src/pages/userProfile/FollowListPage.jsx',
+      role: '팔로워·팔로잉 deep-link 페이지',
     },
     {
       path: 'frontend/src/pages/userProfile/ProfileHeader.jsx',

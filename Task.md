@@ -218,7 +218,15 @@ Resume via `/plan per slice` — each slice = one logical component cluster (e.g
 
 Acceptance per slice: `npm run lint` + `npm run build` clean; light + all dark variants render the touched components without visual regressions (compare against pre-slice screenshot); no new global token added without DESIGN.md update.
 
+_Note: the Profile-area slice shipped separately as FRONT-PROFILE-HARVEST-1 (#179, 2026-06-04) — net-new component harvest + Instagram-style redesign + first CSS-Module/hook foundation, NOT the named ~646 inline-debt paydown. SwipePage / BoardDetailPage / etc. inline→CSS-Module migration remains the core of THIS item._
+
 ### MEDIUM
+
+#### FRONT-PROFILE-POLISH-1 — 프로필 재설계 브라우저 픽셀 패스 (Codex)
+FRONT-PROFILE-HARVEST-1(#179) 머지 후 Codex 브라우저 수정 (별도 PR). FollowListModal 모바일 bottom-sheet(≤768px, DESIGN.md §8.10) + backdrop opacity 0.6→0.4 + inline onMouseEnter→CSS `:hover` + 4테마 픽셀 검증(github-light 먼저). 원 하베스트 minor 4: FollowListPage 성공 경로 `setError(null)` 누락(stale 배너), EditProfileModal 에러박스 하드코딩 rgba→`color-mix`, ProfileHero 타인 Share `borderRadius:12`→`var(--radius-md)`, onMouseEnter→CSS hover. + FollowListModal `onClose` useCallback churn.
+
+#### BACK-PROFILE-SANITIZE-1 — external_links 검증 없음 (mailto/handle 주입)
+`validate_external_links`에 instagram handle/email 포맷 검증 없음. ProfileHero가 `https://instagram.com/${handle}` + `mailto:${email}` 평문 조립 → 스킴-락이라 javascript: 차단되나 path-traversal/주입 nuisance. 영숫자+밑줄만 허용하도록 백엔드 검증 추가.
 
 #### FRONT-UX-6 — SwipeCard gallery flip 부모 state 동기화 누락
 PR #158 (`0071c3f`, 2026-05-29) restored in-card gallery flip but made `openGallery()` purely local — it no longer notifies the parent page via `onGalleryOpen` callback. SwipePage's `galleryOpen` state never flips to `true`. Two visible regressions on the swipe surface:
@@ -464,6 +472,14 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 ---
 
 ## Done
+
+### FRONT-PROFILE-HARVEST-1 — 프로필 컴포넌트 하베스트 + 인스타식 재설계 — RESOLVED 2026-06-04 (`feature/claude-profile-harvest` → develop, PR #179)
+archibe-profile에서 핵심 컴포넌트 채택 + 4테마 재토큰화 + 프로필 인스타식 재설계. **Profile-area 컴포넌트 하베스트 + CSS-Module/hook 패턴 토대** — 명명된 ~646 인라인 부채(SwipePage/BoardDetailPage 등) 상환 아님(그 파일 안 건드림); FRONT-DESIGN-1 핵심 인라인 마이그레이션은 ## Next 잔존.
+- [x] **하베스트** (584d659/3619bbc/eb0d167/25c2a26): `icons.jsx` 8-아이콘(stroke currentColor), `FollowList`(+`.module.css` 첫 CSS Module), `EditCardForm`/`EditProfileModal`(PATCH /users/me/ 낙관적 머지), `BusinessCard`+`ShareCardModal`+스텁 `FakeQr`(흰 명함 PAPER/INK 의도적 하드코딩). 다크-온리 소스 → themed 토큰 재배선.
+- [x] **develop 머지** (1b2c566): #178/#180/#181→#182 통합. 충돌 2파일(App.jsx import + UserProfilePage state/JSX) keep-both.
+- [x] **재설계** (01c2e93): Share/Edit/Logout(isMe)+Share/Follow(타인) → ProfileHeader 우상단(ProfileHero에서 이동, Message DM 스텁 제거). Hero stat 4(Boards/Studios/Followers/Following) — Boards/Studios→탭, Followers/Following→인스타식 팝업. 신규 `FollowListModal`+`useFollowList` 훅; `FollowListPage` 훅 리팩터(동작 동일); deep-link 라우트 유지. 백엔드: `UserProfileSerializer.saved_studios_count` SerializerMethodField(COUNT ArchitectFollow, 마이그 0, social↔accounts 순환 회피 로컬 import).
+- 게이트: lint/build/django-check PASS, flake8 신규 0(4 pre-existing), code-review+security PASS(0 blocker). 로컬 pytest 불가(runtime DDL 없음, INFRA-DB-1) → CI가 DB-gated 게이트; 새 필드 field-set assert 무회귀 선제 grep 확인.
+- Deferred: Codex 브라우저 픽셀 패스 → FRONT-PROFILE-POLISH-1; external_links sanitize → BACK-PROFILE-SANITIZE-1.
 
 ### DASHBOARD-AUTOGEN-1 — 대시보드 Files 탭 + state.js 자동생성 — RESOLVED 2026-06-01 (`feature/claude-dashboard-autogen` → develop)
 프로젝트 대시보드 2건: (1) 파일 구조 Files 탭 (collapsible 트리 + 파일별 role), (2) state.js를 reporter 수작업 재작성 대신 `tools/gen-state.js`로 자동생성.
