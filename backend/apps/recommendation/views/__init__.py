@@ -54,6 +54,10 @@ from .telemetry import (
     ImageLoadTelemetryView,
     ImageLoadTelemetryThrottle,
 )
+from .office_recommendation import (
+    RecommendedArchitectsView,
+    ArchitectDetailView,
+)
 from ._shared import (
     # Private helpers accessed by tests
     _liked_id_only,
@@ -81,6 +85,8 @@ __all__ = [
     'ProjectReportImageView',
     'ImageLoadTelemetryView',
     'ImageLoadTelemetryThrottle',
+    'RecommendedArchitectsView',
+    'ArchitectDetailView',
     # Private helpers (re-exported for backward compat with test imports)
     '_liked_id_only',
     '_get_profile',
