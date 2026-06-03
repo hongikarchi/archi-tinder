@@ -342,3 +342,54 @@ class ProjectReactorsListView(APIView):
             'results': UserMiniSerializer(items, many=True).data,
             **meta,
         })
+
+
+class UserSavedStudiosView(APIView):
+    """GET /api/v1/users/<int:user_id>/saved_studios/
+
+    Returns list of architects the user follows (ArchitectFollow records),
+    enriched with name + logo_url from canonical_v2_architects (buildings DB).
+    Public endpoint — any authenticated user can view any user's saved studios.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, user_id):
+        from apps.social.models import ArchitectFollow
+        from django.db import connections
+
+        follows = list(
+            ArchitectFollow.objects.filter(follower__user_id=user_id)
+            .order_by('-followed_at')
+            .values('architect_id', 'followed_at')
+        )
+        if not follows:
+            return Response([], status=status.HTTP_200_OK)
+
+        arch_ids = [f['architect_id'] for f in follows]
+
+        with connections['buildings'].cursor() as cur:
+            cur.execute(
+                """
+                SELECT canonical_arch_id, canonical_name, logo_url, primary_country
+                FROM canonical_v2_architects
+                WHERE canonical_arch_id = ANY(%s)
+                """,
+                [arch_ids],
+            )
+            rows = cur.fetchall()
+
+        meta_map = {row[0]: row for row in rows}
+
+        result = []
+        for f in follows:
+            arch_id = f['architect_id']
+            row = meta_map.get(arch_id)
+            result.append({
+                'architect_id': arch_id,
+                'name': row[1] if row else '',
+                'logo_url': row[2] if row and row[2] else '',
+                'primary_country': row[3] if row and row[3] else '',
+                'followed_at': f['followed_at'],
+            })
+
+        return Response(result, status=status.HTTP_200_OK)

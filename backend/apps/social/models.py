@@ -74,6 +74,30 @@ class OfficeFollow(models.Model):
         return f'{self.follower_id} -> office:{self.followee_id}'
 
 
+class ArchitectFollow(models.Model):
+    """Asymmetric user-to-architect follow using architect_id text (arch_XXXXXX).
+
+    Uses text FK-free approach so follows work before Office sync runs.
+    follower_count is derived from COUNT(*) queries — no counter cache.
+    """
+    follower = models.ForeignKey(
+        'accounts.UserProfile',
+        on_delete=models.CASCADE,
+        related_name='architect_following_set',
+    )
+    architect_id = models.TextField(db_index=True)  # arch_XXXXXX format
+    followed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [('follower', 'architect_id')]
+        indexes = [
+            models.Index(fields=['follower', '-followed_at']),
+        ]
+
+    def __str__(self):
+        return f'{self.follower_id} -> arch:{self.architect_id}'
+
+
 # ---------------------------------------------------------------------------
 # Counter signals — single source of truth for follower_count / following_count
 # ---------------------------------------------------------------------------

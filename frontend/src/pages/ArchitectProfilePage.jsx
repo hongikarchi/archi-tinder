@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { getArchitectProfile } from '../api/architects.js'
+import { getArchitectProfile, followArchitect, unfollowArchitect } from '../api/architects.js'
 import styles from './ArchitectProfilePage.module.css'
 
 function BuildingCard({ building, onClick }) {
@@ -108,6 +108,9 @@ export default function ArchitectProfilePage() {
   const [profile, setProfile] = useState(undefined)
   const [error, setError] = useState(null)
   const [retryKey, setRetryKey] = useState(0)
+  const [isFollowing, setIsFollowing] = useState(false)
+  const [followerCount, setFollowerCount] = useState(0)
+  const [followPending, setFollowPending] = useState(false)
   useEffect(() => {
     if (!architectId) {
       setProfile(null)
@@ -116,11 +119,33 @@ export default function ArchitectProfilePage() {
     setProfile(undefined)
     setError(null)
     getArchitectProfile(architectId)
-      .then(data => setProfile(data))
+      .then(data => {
+        setProfile(data)
+        setIsFollowing(data?.is_following ?? false)
+        setFollowerCount(data?.follower_count ?? 0)
+      })
       .catch(() => setError(true))
   }, [architectId, retryKey])
 
   const isLoading = profile === undefined && !error
+
+  const handleFollow = async () => {
+    if (followPending) return
+    setFollowPending(true)
+    const wasFollowing = isFollowing
+    setIsFollowing(!wasFollowing)
+    setFollowerCount(c => c + (wasFollowing ? -1 : 1))
+    try {
+      const fn = wasFollowing ? unfollowArchitect : followArchitect
+      const res = await fn(architectId)
+      if (res?.follower_count != null) setFollowerCount(res.follower_count)
+    } catch {
+      setIsFollowing(wasFollowing)
+      setFollowerCount(c => c + (wasFollowing ? 1 : -1))
+    } finally {
+      setFollowPending(false)
+    }
+  }
 
   const handleShare = () => {
     if (navigator.share) {
@@ -401,30 +426,36 @@ export default function ArchitectProfilePage() {
             }} />
             <div style={{ textAlign: 'center', padding: '0 24px' }}>
               <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--color-text)' }}>
-                {profile.saved_count != null ? profile.saved_count.toLocaleString() : '—'}
+                {followerCount.toLocaleString()}
               </div>
               <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>
-                Saved
+                Followers
               </div>
             </div>
           </div>
 
           {/* Action buttons */}
           <div style={{ display: 'flex', gap: 8, padding: '0 16px 16px' }}>
-            {/* Follow — UI ready, backend TBD */}
+            {/* Follow / Following toggle */}
             <button
               type="button"
               className={styles.actionBtn}
               style={{
                 ...btnBase,
-                background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
-                color: '#fff',
-                border: 'none',
-                boxShadow: '0 4px 14px rgba(236,72,153,0.28)',
+                background: isFollowing
+                  ? 'var(--color-surface-2)'
+                  : 'linear-gradient(135deg, #ec4899, #f43f5e)',
+                color: isFollowing ? 'var(--color-text)' : '#fff',
+                border: isFollowing ? '1px solid var(--color-border)' : 'none',
+                boxShadow: isFollowing ? 'none' : '0 4px 14px rgba(236,72,153,0.28)',
+                opacity: followPending ? 0.7 : 1,
+                cursor: followPending ? 'default' : 'pointer',
               }}
-              aria-label="팔로우"
+              onClick={handleFollow}
+              disabled={followPending}
+              aria-label={isFollowing ? '언팔로우' : '팔로우'}
             >
-              Follow
+              {isFollowing ? 'Following' : 'Follow'}
             </button>
 
             {/* Website — show only when available */}
