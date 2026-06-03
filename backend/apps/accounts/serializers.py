@@ -51,6 +51,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
         - boards[]:     BOARD1 territory — view-injected when wired with Project visibility
     """
     user_id = serializers.IntegerField(source='user.id', read_only=True)
+    saved_studios_count = serializers.SerializerMethodField()
 
     class Meta:
         model = UserProfile
@@ -64,8 +65,16 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'persona_summary',
             'follower_count',
             'following_count',
+            'saved_studios_count',
         ]
         read_only_fields = ['user_id', 'follower_count', 'following_count', 'persona_summary']
+
+    def get_saved_studios_count(self, obj):
+        # Local import avoids circular dependency:
+        # apps.social.serializers already imports from apps.accounts.serializers
+        # at module level, so a top-level import here would form a cycle.
+        from apps.social.models import ArchitectFollow
+        return ArchitectFollow.objects.filter(follower=obj).count()
 
 
 class UserProfileSelfUpdateSerializer(serializers.ModelSerializer):

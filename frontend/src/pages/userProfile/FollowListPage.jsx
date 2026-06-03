@@ -8,56 +8,21 @@
  * Infinite scroll via IntersectionObserver (same pattern as UserProfilePage).
  * onOpenUser → navigate to /user/{user_id}.
  */
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getFollowers, getFollowing } from '../../api/social.js'
+import useFollowList from '../../hooks/useFollowList.js'
 import FollowList from '../../components/profile/FollowList.jsx'
 import { IconBack } from '../../components/icons.jsx'
 
 export default function FollowListPage({ mode }) {
   const { userId } = useParams()
   const navigate = useNavigate()
-
-  const [users, setUsers] = useState([])
-  const [page, setPage] = useState(1)
-  const [hasMore, setHasMore] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
   const sentinelRef = useRef(null)
+
+  const { users, loading, error, loadMore, retry } = useFollowList(userId, mode)
 
   const title = mode === 'followers' ? '팔로워' : '팔로잉'
   const emptyMessage = mode === 'followers' ? '팔로워가 없습니다.' : '팔로잉하는 사람이 없습니다.'
-
-  const fetchPage = useCallback(async (pageNum, append = false) => {
-    if (!userId) return
-    setLoading(true)
-    try {
-      const fetcher = mode === 'followers' ? getFollowers : getFollowing
-      const data = await fetcher(userId, pageNum)
-      const results = data.results || []
-      setUsers(prev => append ? [...prev, ...results] : results)
-      setHasMore(data.has_more ?? false)
-      setPage(pageNum)
-    } catch (err) {
-      setError(err.message || 'Failed to load.')
-    } finally {
-      setLoading(false)
-    }
-  }, [userId, mode])
-
-  // Initial load
-  useEffect(() => {
-    setUsers([])
-    setPage(1)
-    setHasMore(false)
-    setError(null)
-    fetchPage(1, false)
-  }, [fetchPage])
-
-  const loadMore = useCallback(() => {
-    if (loading || !hasMore) return
-    fetchPage(page + 1, true)
-  }, [loading, hasMore, page, fetchPage])
 
   // IntersectionObserver sentinel for infinite scroll
   useEffect(() => {
@@ -138,7 +103,7 @@ export default function FollowListPage({ mode }) {
           <br />
           <button
             type="button"
-            onClick={() => fetchPage(1, false)}
+            onClick={retry}
             style={{
               marginTop: 8,
               background: 'transparent',
@@ -183,7 +148,7 @@ export default function FollowListPage({ mode }) {
           추가 로딩 실패.{' '}
           <button
             type="button"
-            onClick={() => fetchPage(page + 1, true)}
+            onClick={loadMore}
             style={{
               background: 'transparent',
               border: 'none',

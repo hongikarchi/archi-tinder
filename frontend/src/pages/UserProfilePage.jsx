@@ -5,10 +5,11 @@ import { updateProject, deleteProject } from '../api/projects.js'
 import { getUserSavedStudios } from '../api/architects.js'
 import AppearanceSettings from '../components/AppearanceSettings.jsx'
 import EditProfileModal from '../components/EditProfileModal.jsx'
+import ShareCardModal from '../components/ShareCardModal.jsx'
+import FollowListModal from '../components/profile/FollowListModal.jsx'
 import ProfileHeader from './userProfile/ProfileHeader'
 import ProfileHero from './userProfile/ProfileHero'
 import BoardGrid from './userProfile/BoardGrid'
-import { IconEdit } from '../components/icons.jsx'
 
 /**
  * formatBoardDate — converts ISO 8601 timestamp to "Month YYYY" display string.
@@ -55,6 +56,10 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
 
   // Edit profile modal
   const [showEditProfile, setShowEditProfile] = useState(false)
+  // Share card modal
+  const [shareOpen, setShareOpen] = useState(false)
+  // Follow list modal — null | 'followers' | 'following'
+  const [followModal, setFollowModal] = useState(null)
   // Tab state — 'boards' | 'studios'
   const [activeTab, setActiveTab] = useState('boards')
   const [savedStudios, setSavedStudios] = useState(null)  // null = not loaded yet
@@ -415,7 +420,15 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         pointerEvents: 'none', zIndex: 0,
       }} />
 
-      <ProfileHeader isMe={isMe} onLogout={onLogout} />
+      <ProfileHeader
+        isMe={isMe}
+        onLogout={onLogout}
+        onShare={() => setShareOpen(true)}
+        onEdit={() => setShowEditProfile(true)}
+        onFollow={handleToggleFollow}
+        isFollowing={isFollowing}
+        isFollowingPending={isFollowingPending}
+      />
 
       {/* Unified responsive container (max-width 1100) */}
       <div style={{ position: 'relative', zIndex: 1, maxWidth: 1100, margin: '0 auto', padding: '32px 20px 40px' }}>
@@ -424,43 +437,10 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
           user={user}
           boardsTotalCount={boardsTotalCount}
           followerCount={followerCount}
-          isMe={isMe}
-          isFollowing={isFollowing}
-          isFollowingPending={isFollowingPending}
-          onToggleFollow={handleToggleFollow}
+          savedStudiosCount={user.saved_studios_count ?? 0}
+          onSelectTab={(t) => t === 'studios' ? handleStudiosTab() : setActiveTab('boards')}
+          onOpenFollowModal={(m) => setFollowModal(m)}
         />
-
-        {/* Edit Profile button — isMe only, sits between hero and boards */}
-        {isMe && (
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 28 }}>
-            <button
-              type="button"
-              onClick={() => setShowEditProfile(true)}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                padding: '8px 18px', minHeight: 36,
-                borderRadius: 'var(--radius-md)',
-                border: '1px solid var(--color-border)',
-                background: 'transparent',
-                color: 'var(--color-text-2)',
-                fontSize: 13, fontWeight: 600,
-                cursor: 'pointer', fontFamily: 'inherit',
-                transition: 'border-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease)',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = 'var(--accent-1)'
-                e.currentTarget.style.color = 'var(--accent-1)'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'var(--color-border)'
-                e.currentTarget.style.color = 'var(--color-text-2)'
-              }}
-            >
-              <IconEdit width={14} height={14} />
-              Edit Profile
-            </button>
-          </div>
-        )}
 
         {/* Tab bar — Boards | Studios */}
         <div style={{
@@ -916,6 +896,20 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
             // Modal calls onClose() after this, so we don't close here.
             setUser(prev => ({ ...prev, ...updated }))
           }}
+        />
+      )}
+
+      {/* Share card modal */}
+      {shareOpen && user && (
+        <ShareCardModal user={user} onClose={() => setShareOpen(false)} />
+      )}
+
+      {/* Follow list modal — followers / following */}
+      {followModal && user && (
+        <FollowListModal
+          userId={user.user_id}
+          mode={followModal}
+          onClose={() => setFollowModal(null)}
         />
       )}
     </div>

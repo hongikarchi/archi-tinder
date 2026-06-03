@@ -1,29 +1,28 @@
-import { Fragment, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Fragment } from 'react'
 import BioPersonaFlipCard from '../../components/profile/BioPersonaFlipCard'
-import ShareCardModal from '../../components/ShareCardModal.jsx'
-import { IconShare } from '../../components/icons.jsx'
 
 export default function ProfileHero({
   user,
   boardsTotalCount,
   followerCount,
-  isMe,
-  isFollowing,
-  isFollowingPending,
-  onToggleFollow,
+  savedStudiosCount,
+  onSelectTab,
+  onOpenFollowModal,
 }) {
-  const navigate = useNavigate()
-  const [shareOpen, setShareOpen] = useState(false)
-
   // External-link helpers (pure derivations — no hooks)
   const igHandle = user?.external_links?.instagram?.replace(/^@/, '') || ''
   const igUrl = igHandle ? `https://instagram.com/${igHandle}` : null
   const emailUrl = user?.external_links?.email ? `mailto:${user.external_links.email}` : null
 
+  const stats = [
+    { count: boardsTotalCount, label: 'Boards', onClick: () => onSelectTab('boards') },
+    { count: savedStudiosCount ?? 0, label: 'Studios', onClick: () => onSelectTab('studios') },
+    { count: followerCount, label: 'Followers', onClick: () => onOpenFollowModal('followers') },
+    { count: user.following_count, label: 'Following', onClick: () => onOpenFollowModal('following') },
+  ]
+
   return (
-    <>
-    {/* HERO BLOCK — narrower nested column (max-width 480) */}
+    /* HERO BLOCK — narrower nested column (max-width 480) */
     <div style={{ maxWidth: 480, margin: '0 auto 36px' }}>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
 
@@ -76,30 +75,19 @@ export default function ProfileHero({
           {user.display_name}
         </h1>
 
-        {/* §3.7 Compact stats row */}
+        {/* Compact stats row — 4 items: Boards · Studios · Followers · Following */}
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           gap: 0, marginTop: 14, marginBottom: 4,
         }}>
-          {[
-            { count: boardsTotalCount, label: 'Boards' },
-            { count: followerCount, label: 'Followers' },
-            { count: user.following_count, label: 'Following' },
-          ].map((stat, i, arr) => (
+          {stats.map((stat, i, arr) => (
             <Fragment key={stat.label}>
               <button
-                onClick={() => {
-                  if (stat.label === 'Followers' && user?.user_id) {
-                    navigate(`/user/${user.user_id}/followers`)
-                  } else if (stat.label === 'Following' && user?.user_id) {
-                    navigate(`/user/${user.user_id}/following`)
-                  }
-                  // Boards: no dedicated list route yet — no-op
-                }}
+                onClick={stat.onClick}
                 style={{
                   flex: '0 0 auto',
                   background: 'transparent', border: 'none', cursor: 'pointer',
-                  padding: '6px 18px', minHeight: 44,
+                  padding: '6px 14px', minHeight: 44,
                   display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
                   fontFamily: 'inherit', color: 'inherit',
                 }}
@@ -118,7 +106,7 @@ export default function ProfileHero({
           ))}
         </div>
 
-        {/* §3.5.4 Hero Flip — BioPersonaFlipCard */}
+        {/* Hero Flip — BioPersonaFlipCard */}
         {user.persona_summary && (
           <BioPersonaFlipCard
             bio={user.bio}
@@ -198,112 +186,7 @@ export default function ProfileHero({
           </div>
         )}
 
-        {/* §3.6 Profile Action Row — only for !isMe */}
-        {!isMe && (
-          <div style={{ display: 'flex', gap: 10, marginTop: 14, width: '100%' }}>
-            <button
-              onClick={onToggleFollow}
-              disabled={isFollowingPending}
-              onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)' }}
-              onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)' }}
-              onMouseDown={(e) => { e.currentTarget.style.transform = 'scale(0.98)' }}
-              onMouseUp={(e) => { e.currentTarget.style.transform = 'translateY(-1px)' }}
-              style={{
-                flex: 1,
-                minHeight: 44, padding: '12px 18px',
-                borderRadius: 12,
-                background: isFollowing ? 'var(--color-surface-2)' : 'linear-gradient(135deg, #ec4899, #f43f5e)',
-                color: isFollowing ? 'var(--color-text-2)' : '#fff',
-                border: isFollowing ? '1px solid var(--color-border)' : 'none',
-                fontSize: 14, fontWeight: 700,
-                cursor: isFollowingPending ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
-                boxShadow: isFollowing ? 'none' : '0 8px 22px rgba(236,72,153,0.32)',
-                transition: 'transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), background 0.2s, color 0.2s, box-shadow 0.2s',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-              }}
-            >
-              {/* TODO(designer): wire spinner UI when main pipeline wires the call */}
-              {isFollowing ? (
-                <>Following<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg></>
-              ) : 'Follow'}
-            </button>
-            <button
-              onClick={() => {
-                // TODO(claude): wire DM endpoint — POST /api/v1/messages/ or similar
-              }}
-              aria-label="Message"
-              style={{
-                width: 44, height: 44, minWidth: 44, flexShrink: 0,
-                background: 'var(--color-surface)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 12, cursor: 'pointer',
-                color: 'var(--color-text-2)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transition: 'border-color 0.18s, color 0.18s',
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(236,72,153,0.45)'; e.currentTarget.style.color = '#ec4899' }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-2)' }}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-              </svg>
-            </button>
-            {/* Share button — opens BusinessCard modal (stub, QR not functional) */}
-            <button
-              type="button"
-              onClick={() => setShareOpen(true)}
-              aria-label="프로필 카드 공유"
-              title="프로필 카드 공유"
-              style={{
-                width: 44, height: 44, minWidth: 44, flexShrink: 0,
-                background: 'var(--color-surface)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 12, cursor: 'pointer',
-                color: 'var(--color-text-2)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transition: 'border-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease)',
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--color-border-soft)'; e.currentTarget.style.color = 'var(--color-text)' }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-2)' }}
-            >
-              <IconShare width={18} height={18} />
-            </button>
-          </div>
-        )}
-
-        {/* Share button for own profile (isMe) — sits below the external links section */}
-        {isMe && (
-          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16 }}>
-            <button
-              type="button"
-              onClick={() => setShareOpen(true)}
-              aria-label="프로필 카드 공유"
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 7,
-                padding: '10px 16px', minHeight: 44,
-                borderRadius: 'var(--radius-md)',
-                border: '1px solid var(--color-border)',
-                background: 'transparent',
-                color: 'var(--color-text-2)',
-                fontSize: 13, fontWeight: 600,
-                cursor: 'pointer', fontFamily: 'inherit',
-                transition: 'border-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease)',
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--color-border-soft)'; e.currentTarget.style.color = 'var(--color-text)' }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-2)' }}
-            >
-              <IconShare width={16} height={16} />
-              프로필 카드
-            </button>
-          </div>
-        )}
       </div>
     </div>
-
-    {/* ShareCardModal — mounted at hero level (has access to user) */}
-    {shareOpen && (
-      <ShareCardModal user={user} onClose={() => setShareOpen(false)} />
-    )}
-  </>
   )
 }
