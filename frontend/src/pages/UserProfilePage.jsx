@@ -4,6 +4,9 @@ import { getUserProfile, followUser, unfollowUser } from '../api/client.js'
 import { updateProject, deleteProject } from '../api/projects.js'
 import { getUserSavedStudios } from '../api/architects.js'
 import AppearanceSettings from '../components/AppearanceSettings.jsx'
+import EditProfileModal from '../components/EditProfileModal.jsx'
+import ShareCardModal from '../components/ShareCardModal.jsx'
+import FollowListModal from '../components/profile/FollowListModal.jsx'
 import ProfileHeader from './userProfile/ProfileHeader'
 import ProfileHero from './userProfile/ProfileHero'
 import BoardGrid from './userProfile/BoardGrid'
@@ -51,6 +54,12 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
   const [boardsLoading, setBoardsLoading] = useState(false)
   const sentinelRef = useRef(null)
 
+  // Edit profile modal
+  const [showEditProfile, setShowEditProfile] = useState(false)
+  // Share card modal
+  const [shareOpen, setShareOpen] = useState(false)
+  // Follow list modal — null | 'followers' | 'following'
+  const [followModal, setFollowModal] = useState(null)
   // Tab state — 'boards' | 'studios'
   const [activeTab, setActiveTab] = useState('boards')
   const [savedStudios, setSavedStudios] = useState(null)  // null = not loaded yet
@@ -411,7 +420,15 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         pointerEvents: 'none', zIndex: 0,
       }} />
 
-      <ProfileHeader isMe={isMe} onLogout={onLogout} />
+      <ProfileHeader
+        isMe={isMe}
+        onLogout={onLogout}
+        onShare={() => setShareOpen(true)}
+        onEdit={() => setShowEditProfile(true)}
+        onFollow={handleToggleFollow}
+        isFollowing={isFollowing}
+        isFollowingPending={isFollowingPending}
+      />
 
       {/* Unified responsive container (max-width 1100) */}
       <div style={{ position: 'relative', zIndex: 1, maxWidth: 1100, margin: '0 auto', padding: '32px 20px 40px' }}>
@@ -420,10 +437,9 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
           user={user}
           boardsTotalCount={boardsTotalCount}
           followerCount={followerCount}
-          isMe={isMe}
-          isFollowing={isFollowing}
-          isFollowingPending={isFollowingPending}
-          onToggleFollow={handleToggleFollow}
+          savedStudiosCount={user.saved_studios_count ?? 0}
+          onSelectTab={(t) => t === 'studios' ? handleStudiosTab() : setActiveTab('boards')}
+          onOpenFollowModal={(m) => setFollowModal(m)}
         />
 
         {/* Tab bar — Boards | Studios */}
@@ -869,6 +885,33 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         )}
 
       </div>
+
+      {/* Edit Profile modal — portal-like, outside scrollable container */}
+      {showEditProfile && user && (
+        <EditProfileModal
+          user={user}
+          onClose={() => setShowEditProfile(false)}
+          onSaved={(updated) => {
+            // Merge server-normalized fields back into profile state.
+            // Modal calls onClose() after this, so we don't close here.
+            setUser(prev => ({ ...prev, ...updated }))
+          }}
+        />
+      )}
+
+      {/* Share card modal */}
+      {shareOpen && user && (
+        <ShareCardModal user={user} onClose={() => setShareOpen(false)} />
+      )}
+
+      {/* Follow list modal — followers / following */}
+      {followModal && user && (
+        <FollowListModal
+          userId={user.user_id}
+          mode={followModal}
+          onClose={() => setFollowModal(null)}
+        />
+      )}
     </div>
   )
 }
