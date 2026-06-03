@@ -53,7 +53,7 @@
 }
 
 .buildingCard {
-  aspect-ratio: 2 / 3;
+  aspect-ratio: 3 / 4;
   border-radius: 12px;
   overflow: hidden;
   position: relative;
@@ -67,7 +67,7 @@
 }
 
 .skeletonCard {
-  aspect-ratio: 2 / 3;
+  aspect-ratio: 3 / 4;
   border-radius: 12px;
   background: var(--color-surface-2);
 }

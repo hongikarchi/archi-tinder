@@ -108,8 +108,6 @@ export default function ArchitectProfilePage() {
   const [profile, setProfile] = useState(undefined)
   const [error, setError] = useState(null)
   const [retryKey, setRetryKey] = useState(0)
-  const [descExpanded, setDescExpanded] = useState(false)
-
   useEffect(() => {
     if (!architectId) {
       setProfile(null)
@@ -117,7 +115,6 @@ export default function ArchitectProfilePage() {
     }
     setProfile(undefined)
     setError(null)
-    setDescExpanded(false)
     getArchitectProfile(architectId)
       .then(data => setProfile(data))
       .catch(() => setError(true))
@@ -414,61 +411,56 @@ export default function ArchitectProfilePage() {
 
           {/* Action buttons */}
           <div style={{ display: 'flex', gap: 8, padding: '0 16px 16px' }}>
-            {/* Follow — UI only, feature not yet available */}
+            {/* Follow — UI ready, backend TBD */}
             <button
               type="button"
+              className={styles.actionBtn}
               style={{
                 ...btnBase,
                 background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
                 color: '#fff',
                 border: 'none',
-                opacity: 0.5,
-                cursor: 'default',
+                boxShadow: '0 4px 14px rgba(236,72,153,0.28)',
               }}
-              tabIndex={-1}
-              aria-disabled="true"
+              aria-label="팔로우"
             >
               Follow
             </button>
 
-            {/* Website */}
-            <button
-              type="button"
-              className={profile.website ? styles.actionBtn : undefined}
-              style={{
-                ...btnBase,
-                ...(profile.website ? {} : { opacity: 0.4, cursor: 'default' }),
-              }}
-              onClick={profile.website ? handleWebsite : undefined}
-              disabled={!profile.website}
-              aria-label="웹사이트 열기"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <circle cx="12" cy="12" r="10" />
-                <line x1="2" y1="12" x2="22" y2="12" />
-                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-              </svg>
-              Website
-            </button>
+            {/* Website — show only when available */}
+            {profile.website && (
+              <button
+                type="button"
+                className={styles.actionBtn}
+                style={btnBase}
+                onClick={handleWebsite}
+                aria-label="웹사이트 열기"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="2" y1="12" x2="22" y2="12" />
+                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                </svg>
+                Website
+              </button>
+            )}
 
-            {/* Contact */}
-            <button
-              type="button"
-              className={profile.email ? styles.actionBtn : undefined}
-              style={{
-                ...btnBase,
-                ...(profile.email ? {} : { opacity: 0.4, cursor: 'default' }),
-              }}
-              onClick={profile.email ? handleContact : undefined}
-              disabled={!profile.email}
-              aria-label="이메일 보내기"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-                <polyline points="22,6 12,13 2,6" />
-              </svg>
-              Contact
-            </button>
+            {/* Contact — show only when email available */}
+            {profile.email && (
+              <button
+                type="button"
+                className={styles.actionBtn}
+                style={btnBase}
+                onClick={handleContact}
+                aria-label="이메일 보내기"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                  <polyline points="22,6 12,13 2,6" />
+                </svg>
+                Contact
+              </button>
+            )}
           </div>
 
           {/* Description card */}
@@ -485,31 +477,9 @@ export default function ArchitectProfilePage() {
                 fontSize: 14,
                 color: 'var(--color-text)',
                 lineHeight: 1.6,
-                display: descExpanded ? 'block' : '-webkit-box',
-                WebkitLineClamp: descExpanded ? undefined : 3,
-                WebkitBoxOrient: 'vertical',
-                overflow: descExpanded ? 'visible' : 'hidden',
               }}>
                 {profile.description}
               </p>
-              <div style={{ textAlign: 'right', marginTop: 8 }}>
-                <button
-                  type="button"
-                  onClick={() => setDescExpanded(v => !v)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    padding: 0,
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: '#ec4899',
-                    cursor: 'pointer',
-                    fontFamily: 'inherit',
-                  }}
-                >
-                  {descExpanded ? '접기' : '더보기'}
-                </button>
-              </div>
             </div>
           )}
 
