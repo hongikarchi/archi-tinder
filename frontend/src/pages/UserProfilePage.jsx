@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { getUserProfile, followUser, unfollowUser } from '../api/client.js'
 import { updateProject, deleteProject } from '../api/projects.js'
+import { getUserSavedStudios } from '../api/architects.js'
 import AppearanceSettings from '../components/AppearanceSettings.jsx'
 import EditProfileModal from '../components/EditProfileModal.jsx'
 import ProfileHeader from './userProfile/ProfileHeader'
@@ -54,6 +55,10 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
 
   // Edit profile modal
   const [showEditProfile, setShowEditProfile] = useState(false)
+  // Tab state — 'boards' | 'studios'
+  const [activeTab, setActiveTab] = useState('boards')
+  const [savedStudios, setSavedStudios] = useState(null)  // null = not loaded yet
+  const [studiosLoading, setStudiosLoading] = useState(false)
 
   // MINOR #1: inline error banner for failed board actions (optimistic revert feedback)
   const [boardActionError, setBoardActionError] = useState(null)
@@ -78,6 +83,20 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
     setConfirmingBulkDelete(false)
     clearTimeout(bulkConfirmTimerRef.current)
   }, [])
+
+  const handleStudiosTab = async () => {
+    setActiveTab('studios')
+    if (savedStudios !== null) return  // already loaded
+    setStudiosLoading(true)
+    try {
+      const data = await getUserSavedStudios(effectiveUserId)
+      setSavedStudios(data)
+    } catch {
+      setSavedStudios([])
+    } finally {
+      setStudiosLoading(false)
+    }
+  }
 
   // Adapter: map project_id -> board_id + format ISO date -> "Month YYYY"
   function adaptBoard(b) {
@@ -443,6 +462,57 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
           </div>
         )}
 
+        {/* Tab bar — Boards | Studios */}
+        <div style={{
+          display: 'flex',
+          borderBottom: '1px solid var(--color-border-soft)',
+          marginBottom: 0,
+          marginTop: 8,
+        }}>
+          <button
+            type="button"
+            onClick={() => setActiveTab('boards')}
+            style={{
+              flex: 1,
+              padding: '12px 0',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: 14,
+              fontWeight: activeTab === 'boards' ? 700 : 500,
+              color: activeTab === 'boards' ? 'var(--color-text)' : 'var(--color-text-muted)',
+              borderBottom: activeTab === 'boards' ? '2px solid var(--color-text)' : '2px solid transparent',
+              marginBottom: -1,
+              fontFamily: 'inherit',
+              transition: 'color var(--motion-fast), border-color var(--motion-fast)',
+            }}
+          >
+            Boards
+          </button>
+          <button
+            type="button"
+            onClick={handleStudiosTab}
+            style={{
+              flex: 1,
+              padding: '12px 0',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: 14,
+              fontWeight: activeTab === 'studios' ? 700 : 500,
+              color: activeTab === 'studios' ? 'var(--color-text)' : 'var(--color-text-muted)',
+              borderBottom: activeTab === 'studios' ? '2px solid var(--color-text)' : '2px solid transparent',
+              marginBottom: -1,
+              fontFamily: 'inherit',
+              transition: 'color var(--motion-fast), border-color var(--motion-fast)',
+            }}
+          >
+            Studios
+          </button>
+        </div>
+
+        {activeTab === 'boards' && (<>
+
         {/* MINOR #1: inline error banner for failed board actions */}
         {boardActionError && (
           <div aria-live="polite" style={{
@@ -724,6 +794,94 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
               borderTopColor: '#ec4899',
               animation: 'spin 0.8s linear infinite',
             }} />
+          </div>
+        )}
+
+        </>)}
+
+        {/* Studios tab content */}
+        {activeTab === 'studios' && (
+          <div style={{ padding: '16px 0' }}>
+            {studiosLoading && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} style={{
+                    height: 100, borderRadius: 12,
+                    background: 'var(--color-surface-2)',
+                  }} />
+                ))}
+              </div>
+            )}
+            {!studiosLoading && savedStudios && savedStudios.length === 0 && (
+              <p style={{
+                textAlign: 'center', color: 'var(--color-text-muted)',
+                fontSize: 14, padding: '40px 0', margin: 0,
+              }}>
+                저장된 스튜디오가 없어요.
+              </p>
+            )}
+            {!studiosLoading && savedStudios && savedStudios.length > 0 && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+                {savedStudios.map(studio => (
+                  <button
+                    key={studio.architect_id}
+                    type="button"
+                    onClick={() => navigate('/architects/' + studio.architect_id)}
+                    style={{
+                      background: 'var(--color-surface)',
+                      border: '1px solid var(--color-border-soft)',
+                      borderRadius: 12,
+                      padding: '12px 8px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: 8,
+                      fontFamily: 'inherit',
+                      textAlign: 'center',
+                    }}
+                  >
+                    {studio.logo_url ? (
+                      <img
+                        src={studio.logo_url}
+                        alt={studio.name}
+                        style={{
+                          width: 48, height: 48, borderRadius: '50%',
+                          objectFit: 'cover',
+                          border: '1px solid var(--color-border-soft)',
+                          background: 'var(--color-surface-2)',
+                        }}
+                      />
+                    ) : (
+                      <div style={{
+                        width: 48, height: 48, borderRadius: '50%',
+                        background: 'var(--color-surface-2)',
+                        border: '1px solid var(--color-border-soft)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5">
+                          <rect x="3" y="3" width="18" height="18" rx="2"/>
+                          <path d="M9 9h6M9 12h6M9 15h6"/>
+                        </svg>
+                      </div>
+                    )}
+                    <p style={{
+                      margin: 0,
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: 'var(--color-text)',
+                      lineHeight: 1.3,
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                    }}>
+                      {studio.name}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

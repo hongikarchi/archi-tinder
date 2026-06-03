@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import path, re_path
 from .views import (
     ProjectListCreateView, ProjectDetailView, UserProjectsListView,
     SessionCreateView, SessionStateView, SwipeView, SessionResultView,
@@ -6,6 +6,7 @@ from .views import (
     ProjectReportGenerateView, ProjectReportImageView,
     ProjectBookmarkView, ImageLoadTelemetryView, BoardSurpriseView,
     QuestionResponseView,
+    RecommendedArchitectsView, ArchitectDetailView, ArchitectFollowView,
 )
 
 urlpatterns = [
@@ -34,4 +35,9 @@ urlpatterns = [
     path('parse-query/',                                 ParseQueryView.as_view()),
     # Telemetry
     path('telemetry/image-load/',                        ImageLoadTelemetryView.as_view(), name='telemetry_image_load'),
+    # Architect recommendation
+    path('projects/<uuid:pk>/recommended_architects/',   RecommendedArchitectsView.as_view()),
+    # Follow URL must come before the detail URL (more specific path first).
+    re_path(r'^architects/(?P<architect_id>arch_[0-9]{6})/follow/$', ArchitectFollowView.as_view()),
+    re_path(r'^architects/(?P<architect_id>arch_[0-9]{6})/$', ArchitectDetailView.as_view()),
 ]

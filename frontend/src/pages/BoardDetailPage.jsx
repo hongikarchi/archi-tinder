@@ -5,6 +5,7 @@ import { updateProject } from '../api/projects.js'
 import { reactToProject, unreactToProject } from '../api/social.js'
 import BuildingTile from './boardDetail/BuildingTile'
 import RecommendedTile from './boardDetail/RecommendedTile'
+import ArchitectSection from './boardDetail/ArchitectSection'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -143,7 +144,7 @@ export default function BoardDetailPage() {
   const location = useLocation()
   const rawBoardId = useParams().boardId
   const boardId = UUID_RE.test(String(rawBoardId || '')) ? rawBoardId : null
-  const { board, recommended: hookRecommended, loading, resultLoading, error } = useBoard(boardId)
+  const { board, recommended: hookRecommended, recommendedArchitects, loading, resultLoading, error } = useBoard(boardId)
 
   const [isReacted, setIsReacted] = useState(false)
   const [reactionCount, setReactionCount] = useState(0)
@@ -954,20 +955,42 @@ export default function BoardDetailPage() {
               }}>
                 Based on your preferences
               </p>
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
-                gap: 12,
-                padding: '0 20px',
-              }}>
-                {recommended.slice(0, 10).map(card => (
-                  <RecommendedTile
-                    key={card.image_id}
-                    card={card}
-                    onClick={() => navigate('/buildings/' + card.image_id)}
-                  />
-                ))}
-              </div>
+              {(() => {
+                const CHUNK_SIZE = 8
+                const cappedRec = recommended.slice(0, 20)
+                const chunks = []
+                for (let i = 0; i < cappedRec.length; i += CHUNK_SIZE) {
+                  chunks.push(cappedRec.slice(i, i + CHUNK_SIZE))
+                }
+                if (chunks.length === 0) return null
+                return chunks.map((chunk, chunkIdx) => (
+                  <div key={chunkIdx}>
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(4, 1fr)',
+                      gap: 12,
+                      padding: '0 20px',
+                    }}>
+                      {chunk.map(card => (
+                        <RecommendedTile
+                          key={card.image_id}
+                          card={card}
+                          onClick={() => navigate('/buildings/' + card.image_id)}
+                        />
+                      ))}
+                    </div>
+                    {recommendedArchitects[chunkIdx] && (
+                      <div style={{ padding: '0 20px' }}>
+                        <ArchitectSection
+                          architect={recommendedArchitects[chunkIdx]}
+                          onBuildingClick={id => navigate('/buildings/' + id)}
+                          onProfileClick={id => navigate('/architects/' + id)}
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))
+              })()}
             </>
           )}
         </div>
