@@ -254,6 +254,24 @@ class ArchitectDetailView(APIView):
         first_row_ids = rows[0][4]
         arch_name = _resolve_architect_name(architect_id, first_row_names, first_row_ids)
 
+        # Fetch profile metadata from canonical_v2_architects (buildings DB).
+        with connections['buildings'].cursor() as cur:
+            cur.execute(
+                """
+                SELECT canonical_name, logo_url, description, website, email,
+                       primary_country
+                FROM canonical_v2_architects
+                WHERE canonical_arch_id = %s
+                """,
+                [architect_id],
+            )
+            arch_row = cur.fetchone()
+
+        if arch_row:
+            canonical_name, logo_url, description, website, email, primary_country = arch_row
+        else:
+            canonical_name = logo_url = description = website = email = primary_country = ''
+
         buildings = []
         for row in rows:
             card, _, _ = _serialize_building_card(row, include_extra=True)
@@ -261,7 +279,13 @@ class ArchitectDetailView(APIView):
 
         return Response({
             'architect_id': architect_id,
-            'name': arch_name,
+            'name': arch_name or canonical_name or '',
+            'logo_url': logo_url or '',
+            'description': description or '',
+            'website': website or '',
+            'email': email or '',
+            'primary_country': primary_country or '',
             'building_count': total_count,
+            'saved_count': 0,
             'buildings': buildings,
         }, status=status.HTTP_200_OK)

@@ -41,7 +41,6 @@ function BuildingCard({ building, onClick }) {
           }}
         />
       )}
-      {/* Bottom gradient + name overlay */}
       <div style={{
         position: 'absolute',
         inset: 0,
@@ -86,6 +85,22 @@ function SkeletonGrid() {
   )
 }
 
+function SkeletonHeader() {
+  return (
+    <div style={{ background: 'linear-gradient(180deg, rgba(236,72,153,0.08) 0%, transparent 100%)', padding: '24px 16px 20px', textAlign: 'center' }}>
+      <div style={{
+        width: 108,
+        height: 108,
+        borderRadius: '50%',
+        background: 'var(--color-surface-2)',
+        margin: '0 auto 18px',
+      }} />
+      <div style={{ width: '50%', height: 22, borderRadius: 8, background: 'var(--color-surface-2)', margin: '0 auto 10px' }} />
+      <div style={{ width: '25%', height: 14, borderRadius: 999, background: 'var(--color-surface-2)', margin: '0 auto' }} />
+    </div>
+  )
+}
+
 export default function ArchitectProfilePage() {
   const { architectId } = useParams()
   const navigate = useNavigate()
@@ -93,6 +108,7 @@ export default function ArchitectProfilePage() {
   const [profile, setProfile] = useState(undefined)
   const [error, setError] = useState(null)
   const [retryKey, setRetryKey] = useState(0)
+  const [descExpanded, setDescExpanded] = useState(false)
 
   useEffect(() => {
     if (!architectId) {
@@ -101,12 +117,51 @@ export default function ArchitectProfilePage() {
     }
     setProfile(undefined)
     setError(null)
+    setDescExpanded(false)
     getArchitectProfile(architectId)
       .then(data => setProfile(data))
       .catch(() => setError(true))
   }, [architectId, retryKey])
 
   const isLoading = profile === undefined && !error
+
+  const handleShare = () => {
+    if (navigator.share) {
+      navigator.share({ title: profile?.name || 'ArchiTinder', url: window.location.href }).catch(() => {})
+    }
+  }
+
+  const handleWebsite = () => {
+    const url = profile?.website
+    if (url && /^https?:\/\//i.test(url)) {
+      window.open(url, '_blank', 'noopener,noreferrer')
+    }
+  }
+
+  const handleContact = () => {
+    const email = profile?.email
+    if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      window.open('mailto:' + email)
+    }
+  }
+
+  const btnBase = {
+    flex: 1,
+    minHeight: 44,
+    padding: '10px 12px',
+    borderRadius: 10,
+    border: '1px solid var(--color-border-soft)',
+    background: 'var(--color-surface)',
+    color: 'var(--color-text)',
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    fontFamily: 'inherit',
+  }
 
   return (
     <div style={{
@@ -115,9 +170,16 @@ export default function ArchitectProfilePage() {
       background: 'var(--color-bg)',
       paddingBottom: 'calc(80px + env(safe-area-inset-bottom, 0px))',
     }}>
-      {/* Top nav */}
+      {/* Sticky top header */}
       <div style={{
-        padding: '16px 16px 0',
+        position: 'sticky',
+        top: 0,
+        zIndex: 10,
+        background: 'var(--color-bg)',
+        padding: '12px 16px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
       }}>
         <button
           className={styles.backBtn}
@@ -129,32 +191,48 @@ export default function ArchitectProfilePage() {
             <line x1="19" y1="12" x2="5" y2="12" />
             <polyline points="12 19 5 12 12 5" />
           </svg>
-          뒤로
+        </button>
+
+        <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--color-text)' }}>
+          Office
+        </span>
+
+        <button
+          className={styles.iconBtn}
+          onClick={handleShare}
+          type="button"
+          aria-label="공유"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="18" cy="5" r="3" />
+            <circle cx="6" cy="12" r="3" />
+            <circle cx="18" cy="19" r="3" />
+            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+          </svg>
         </button>
       </div>
 
+      {/* Loading state */}
       {isLoading && (
         <>
-          {/* Skeleton header */}
-          <div style={{ padding: '24px 16px 20px' }}>
-            <div style={{
-              width: '55%',
-              height: 28,
-              borderRadius: 8,
-              background: 'var(--color-surface-2)',
-              marginBottom: 12,
-            }} />
-            <div style={{
-              width: 80,
-              height: 20,
-              borderRadius: 999,
-              background: 'var(--color-surface-2)',
-            }} />
+          <SkeletonHeader />
+          {/* Stats bar skeleton */}
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 40, padding: '12px 16px 16px' }}>
+            <div style={{ width: 70, height: 40, borderRadius: 8, background: 'var(--color-surface-2)' }} />
+            <div style={{ width: 70, height: 40, borderRadius: 8, background: 'var(--color-surface-2)' }} />
+          </div>
+          {/* Action buttons skeleton */}
+          <div style={{ display: 'flex', gap: 8, padding: '0 16px 16px' }}>
+            {[1, 2, 3].map(i => (
+              <div key={i} style={{ flex: 1, height: 44, borderRadius: 10, background: 'var(--color-surface-2)' }} />
+            ))}
           </div>
           <SkeletonGrid />
         </>
       )}
 
+      {/* Error state */}
       {error && (
         <div style={{
           display: 'flex',
@@ -176,7 +254,7 @@ export default function ArchitectProfilePage() {
             fontWeight: 600,
             margin: 0,
           }}>
-            불러오는 데 실패했어요. 다시 시도해주세요.
+            불러오는 데 실패했어요.
           </p>
           <button
             onClick={() => { setError(null); setProfile(undefined); setRetryKey(k => k + 1) }}
@@ -198,6 +276,7 @@ export default function ArchitectProfilePage() {
         </div>
       )}
 
+      {/* Not found state */}
       {!isLoading && !error && profile === null && (
         <div style={{
           display: 'flex',
@@ -209,10 +288,8 @@ export default function ArchitectProfilePage() {
           textAlign: 'center',
         }}>
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.4, color: 'var(--color-text-muted)' }}>
-            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-            <circle cx="9" cy="7" r="4" />
-            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <path d="M9 9h6M9 12h6M9 15h6" />
           </svg>
           <p style={{
             color: 'var(--color-text-muted)',
@@ -225,51 +302,258 @@ export default function ArchitectProfilePage() {
         </div>
       )}
 
+      {/* Loaded state */}
       {!isLoading && !error && profile && (
         <>
-          {/* Header */}
-          <div style={{ padding: '24px 16px 20px' }}>
+          {/* Profile hero area — pink gradient background */}
+          <div style={{
+            background: 'linear-gradient(180deg, rgba(236,72,153,0.12) 0%, transparent 100%)',
+            padding: '24px 16px 20px',
+            textAlign: 'center',
+          }}>
+            {/* Logo with pink halo */}
+            <div style={{ position: 'relative', display: 'inline-block', marginBottom: 18 }}>
+              {/* halo */}
+              <div style={{
+                position: 'absolute',
+                inset: -6,
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
+                opacity: 0.55,
+                filter: 'blur(12px)',
+              }} aria-hidden="true" />
+              {profile.logo_url ? (
+                <img
+                  src={profile.logo_url}
+                  alt={profile.name}
+                  style={{
+                    position: 'relative',
+                    zIndex: 2,
+                    width: 108,
+                    height: 108,
+                    borderRadius: '50%',
+                    border: '2px solid var(--color-border-soft)',
+                    objectFit: 'cover',
+                    background: 'var(--color-surface)',
+                    display: 'block',
+                  }}
+                />
+              ) : (
+                <div style={{
+                  position: 'relative',
+                  zIndex: 2,
+                  width: 108,
+                  height: 108,
+                  borderRadius: '50%',
+                  background: 'var(--color-surface)',
+                  border: '2px solid var(--color-border-soft)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <path d="M9 9h6M9 12h6M9 15h6" />
+                  </svg>
+                </div>
+              )}
+            </div>
+
+            {/* Office name */}
             <h1 style={{
-              fontSize: 'clamp(22px, 5vw, 28px)',
+              fontSize: 'clamp(20px, 5vw, 24px)',
               fontWeight: 700,
               color: 'var(--color-text)',
-              margin: '0 0 10px',
+              margin: '0 0 6px',
               lineHeight: 1.2,
             }}>
               {profile.name}
             </h1>
-            {profile.building_count != null && (
-              <span style={{
-                display: 'inline-block',
-                padding: '4px 12px',
-                borderRadius: 999,
-                background: 'var(--color-surface-2)',
+
+            {/* Country */}
+            {profile.primary_country && (
+              <p style={{
+                margin: 0,
+                fontSize: 14,
                 color: 'var(--color-text-muted)',
-                fontSize: 13,
-                fontWeight: 600,
               }}>
-                건물 {profile.building_count.toLocaleString()}개
-              </span>
+                {profile.primary_country}
+              </p>
             )}
           </div>
 
-          {/* Building grid */}
-          {Array.isArray(profile.buildings) && profile.buildings.length > 0 ? (
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(3, 1fr)',
-              gap: 8,
-              padding: '0 12px',
-            }}>
-              {profile.buildings.map(building => (
-                <BuildingCard
-                  key={building.canonical_bld_id}
-                  building={building}
-                  onClick={id => navigate('/buildings/' + id)}
-                />
-              ))}
+          {/* Stats bar */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '12px 16px 16px',
+          }}>
+            <div style={{ textAlign: 'center', padding: '0 24px' }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--color-text)' }}>
+                {profile.building_count != null ? profile.building_count.toLocaleString() : '—'}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>
+                Buildings
+              </div>
             </div>
-          ) : (
+            <div style={{
+              width: 1,
+              height: 28,
+              background: 'var(--color-border)',
+            }} />
+            <div style={{ textAlign: 'center', padding: '0 24px' }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--color-text)' }}>
+                {profile.saved_count != null ? profile.saved_count.toLocaleString() : '—'}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>
+                Saved
+              </div>
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div style={{ display: 'flex', gap: 8, padding: '0 16px 16px' }}>
+            {/* Follow — UI only, feature not yet available */}
+            <button
+              type="button"
+              style={{
+                ...btnBase,
+                background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
+                color: '#fff',
+                border: 'none',
+                opacity: 0.5,
+                cursor: 'default',
+              }}
+              tabIndex={-1}
+              aria-disabled="true"
+            >
+              Follow
+            </button>
+
+            {/* Website */}
+            <button
+              type="button"
+              className={profile.website ? styles.actionBtn : undefined}
+              style={{
+                ...btnBase,
+                ...(profile.website ? {} : { opacity: 0.4, cursor: 'default' }),
+              }}
+              onClick={profile.website ? handleWebsite : undefined}
+              disabled={!profile.website}
+              aria-label="웹사이트 열기"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="2" y1="12" x2="22" y2="12" />
+                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+              </svg>
+              Website
+            </button>
+
+            {/* Contact */}
+            <button
+              type="button"
+              className={profile.email ? styles.actionBtn : undefined}
+              style={{
+                ...btnBase,
+                ...(profile.email ? {} : { opacity: 0.4, cursor: 'default' }),
+              }}
+              onClick={profile.email ? handleContact : undefined}
+              disabled={!profile.email}
+              aria-label="이메일 보내기"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                <polyline points="22,6 12,13 2,6" />
+              </svg>
+              Contact
+            </button>
+          </div>
+
+          {/* Description card */}
+          {profile.description && (
+            <div style={{
+              margin: '0 16px 16px',
+              padding: 16,
+              borderRadius: 12,
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border-soft)',
+            }}>
+              <p style={{
+                margin: 0,
+                fontSize: 14,
+                color: 'var(--color-text)',
+                lineHeight: 1.6,
+                display: descExpanded ? 'block' : '-webkit-box',
+                WebkitLineClamp: descExpanded ? undefined : 3,
+                WebkitBoxOrient: 'vertical',
+                overflow: descExpanded ? 'visible' : 'hidden',
+              }}>
+                {profile.description}
+              </p>
+              <div style={{ textAlign: 'right', marginTop: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => setDescExpanded(v => !v)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: '#ec4899',
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  {descExpanded ? '접기' : '더보기'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Buildings section */}
+          {Array.isArray(profile.buildings) && profile.buildings.length > 0 && (
+            <>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '0 16px 12px',
+              }}>
+                <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-text)' }}>
+                  Buildings
+                </span>
+                <span style={{
+                  padding: '2px 10px',
+                  borderRadius: 999,
+                  background: 'var(--color-surface-2)',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: 'var(--color-text-muted)',
+                }}>
+                  {profile.building_count != null ? profile.building_count.toLocaleString() : profile.buildings.length}
+                </span>
+              </div>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: 8,
+                padding: '0 12px',
+              }}>
+                {profile.buildings.map(building => (
+                  <BuildingCard
+                    key={building.canonical_bld_id}
+                    building={building}
+                    onClick={id => navigate('/buildings/' + id)}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+
+          {(!Array.isArray(profile.buildings) || profile.buildings.length === 0) && (
             <p style={{
               padding: '40px 20px',
               color: 'var(--color-text-muted)',
