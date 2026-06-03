@@ -2,7 +2,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 14px;
+  padding: 8px 12px;
   border-radius: 8px;
   background: transparent;
   color: var(--color-text-muted);
@@ -20,8 +20,40 @@
   border-color: var(--color-border);
 }
 
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border-soft);
+  cursor: pointer;
+  font-family: inherit;
+  transition: color var(--motion-fast) var(--motion-ease),
+              border-color var(--motion-fast) var(--motion-ease);
+}
+
+.iconBtn:hover {
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+
+/* Enabled action buttons (Website / Contact) */
+.actionBtn {
+  transition: background var(--motion-fast) var(--motion-ease),
+              border-color var(--motion-fast) var(--motion-ease);
+}
+
+.actionBtn:hover {
+  background: var(--color-surface-2) !important;
+  border-color: var(--color-border) !important;
+}
+
 .buildingCard {
-  aspect-ratio: 2 / 3;
+  aspect-ratio: 3 / 4;
   border-radius: 12px;
   overflow: hidden;
   position: relative;
@@ -35,7 +67,7 @@
 }
 
 .skeletonCard {
-  aspect-ratio: 2 / 3;
+  aspect-ratio: 3 / 4;
   border-radius: 12px;
   background: var(--color-surface-2);
 }

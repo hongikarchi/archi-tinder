@@ -30,6 +30,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.social.models import ArchitectFollow
+
 from ..models import Project
 from ._shared import _get_profile, _liked_id_only
 
@@ -254,14 +256,78 @@ class ArchitectDetailView(APIView):
         first_row_ids = rows[0][4]
         arch_name = _resolve_architect_name(architect_id, first_row_names, first_row_ids)
 
+        # Fetch profile metadata from canonical_v2_architects (buildings DB).
+        with connections['buildings'].cursor() as cur:
+            cur.execute(
+                """
+                SELECT canonical_name, logo_url, description, website, email,
+                       primary_country
+                FROM canonical_v2_architects
+                WHERE canonical_arch_id = %s
+                """,
+                [architect_id],
+            )
+            arch_row = cur.fetchone()
+
+        if arch_row:
+            canonical_name, logo_url, description, website, email, primary_country = arch_row
+        else:
+            canonical_name = logo_url = description = website = email = primary_country = ''
+
         buildings = []
         for row in rows:
             card, _, _ = _serialize_building_card(row, include_extra=True)
             buildings.append(card)
 
+        is_following = ArchitectFollow.objects.filter(
+            follower=profile, architect_id=architect_id
+        ).exists()
+        follower_count = ArchitectFollow.objects.filter(architect_id=architect_id).count()
+
         return Response({
             'architect_id': architect_id,
-            'name': arch_name,
+            'name': arch_name or canonical_name or '',
+            'logo_url': logo_url or '',
+            'description': description or '',
+            'website': website or '',
+            'email': email or '',
+            'primary_country': primary_country or '',
             'building_count': total_count,
+            'follower_count': follower_count,
+            'is_following': is_following,
             'buildings': buildings,
         }, status=status.HTTP_200_OK)
+
+
+class ArchitectFollowView(APIView):
+    """POST + DELETE /api/v1/architects/<architect_id>/follow/"""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, architect_id):
+        profile = _get_profile(request)
+        if not profile:
+            return Response({'detail': 'Authentication required.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        _, created = ArchitectFollow.objects.get_or_create(
+            follower=profile,
+            architect_id=architect_id,
+        )
+        follower_count = ArchitectFollow.objects.filter(architect_id=architect_id).count()
+        return Response(
+            {'following': True, 'follower_count': follower_count},
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+    def delete(self, request, architect_id):
+        profile = _get_profile(request)
+        if not profile:
+            return Response({'detail': 'Authentication required.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        deleted_count, _ = ArchitectFollow.objects.filter(
+            follower=profile, architect_id=architect_id,
+        ).delete()
+        if deleted_count == 0:
+            return Response({'detail': 'Not following.'}, status=status.HTTP_404_NOT_FOUND)
+        follower_count = ArchitectFollow.objects.filter(architect_id=architect_id).count()
+        return Response({'following': False, 'follower_count': follower_count}, status=status.HTTP_200_OK)

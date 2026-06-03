@@ -23,3 +23,20 @@ export async function getArchitectProfile(architectId) {
     throw err
   }
 }
+
+export async function followArchitect(architectId) {
+  return callApi('POST', `/architects/${architectId}/follow/`)
+}
+
+export async function unfollowArchitect(architectId) {
+  try {
+    return await callApi('DELETE', `/architects/${architectId}/follow/`)
+  } catch (err) {
+    if (err?.status === 404) return {}
+    throw err
+  }
+}
+
+export async function getUserSavedStudios(userId) {
+  return callApi('GET', `/users/${userId}/saved_studios/`)
+}
