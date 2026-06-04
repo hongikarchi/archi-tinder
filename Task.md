@@ -23,6 +23,9 @@
   - FULL: `LANGUAGE` / `LEGAL` / `REFACTOR` / `LLM`
   - INFRA: `DB` / `ENV` / `DEPLOY` / `QUEUE` / `MONITOR`
 - **N** = integer counter per `<SURFACE>-<TOPIC>`, persistent across bucket moves. `BACK-LLM-1`, `BACK-LLM-2`, etc. Never re-used.
+- **SURFACE is a CLOSED set** — the first token MUST be exactly one of `FRONT` / `BACK` / `FULL` / `INFRA`. `PERF`, `OFFICE`, `UX`, `PROFILE` are NOT surfaces; map them: `PERF` to `BACK-PERFORMANCE`, `OFFICE` to `BACK-OFFICE`, `UX` to `FRONT-UX`, `PROFILE` to `FRONT-PROFILE`/`BACK-PROFILE`. Added topics: BACK gains `OFFICE` + `PROFILE`; FRONT gains `PROFILE`.
+- **TOPIC is exactly ONE word** (domain noun). Actions (`POLISH` / `SANITIZE` / `CLEANUP` / `CONSOLIDATION` / `HARVEST`) are NOT topics — they go in the title, never the ID.
+- **Renamed 2026-06-04 audit** (2축 enforce): `PERF-PREFETCH-POOL-RISK` to `BACK-PERFORMANCE-6`, `INFRA-DB-CLEANUP-1` to `INFRA-DB-3`, `FRONT-PROFILE-POLISH-1` to `FRONT-PROFILE-1`, `BACK-PROFILE-SANITIZE-1` to `BACK-PROFILE-1`, new `BACK-OFFICE-1`. `## Done` IDs are archive (never rewritten).
 
 **Title convention**: short Korean problem / goal statement, ≤ 25 chars. Says **what is wrong or what we want**, not **how**. The body carries the how. Examples:
 - ✅ `LLM 채팅이 검색에 필요한 정보를 다 안 모음`
@@ -76,19 +79,40 @@ Redesign `/login` as conversational swipe onboarding while preserving the existi
 > hyperparameters still live in `docs/algorithm.md` (admin-owned, reporter syncs
 > Production Value column only).
 
+> **2026-06-04 backlog audit** (25 items verified vs `develop@2f9a9c2`): 0 resolved/dead; ~13 had
+> file:line drift from **FULL-REFACTOR-1 (#170-173)** moving view bodies → `services/*.py`, splitting
+> `accounts/views.py` → `views/{auth,profile}.py`, decomposing `engine.py`. **Ref-drift convention:**
+> a backend item pinned to `views/swipe.py` / `views/sessions.py` at a pre-FULL-REFACTOR SHA now
+> lives in `services/swipe_service.py` / `services/session_service.py`; `accounts/views.py` →
+> `accounts/views/{auth,profile}.py`. Refs are re-pinned for the active-sequence items (X-HIGH bundles + the new HIGH
+> quick-wins BACK-OFFICE-1 / BACK-PROFILE-1); deferred items keep their original ref + this convention.
+>
+> **권장 실행 순서 (Claude lane, 2026-06-04 결정 — quick-wins·defects before the heavy FRONT-DESIGN-1 sweep):**
+> 1. `FRONT-UX-8`+`FRONT-UX-7` (bundle **UX-WRITE-FAIL**) — 2. `BACK-OFFICE-1` (SavedOffice 삭제)
+> — 3. `BACK-PROFILE-1` (external_links 검증) — 4. `FRONT-UX-6`+`9`+`10` (bundle **UX-GALLERY**)
+> — 5. `BACK-RECOMMEND-4` (engine 협업자 조율). `FRONT-DESIGN-1` stays **paused** (multi-session sweep);
+> `FULL-LANGUAGE-1` / `BACK-LLM-2` / `FULL-LEGAL-1` deferred.
+>
+> **1-PR bundles** (group for a single PR; IDs kept distinct for traceability — N never reused):
+> - **UX-WRITE-FAIL** = `FRONT-UX-8` + `FRONT-UX-7` — same empty-`.catch(()=>{})` write-loss → one
+>   shared `reportWriteError(toast)` helper over the existing `globalToast` mount.
+> - **UX-GALLERY** = `FRONT-UX-6` + `FRONT-UX-9` + `FRONT-UX-10` — one structural fix (lift the gallery
+>   out of `react-tinder-card` into a sibling overlay) resolves all three gesture bugs.
+
 ### X-HIGH
 
 > Critical — confirmed defect against the core taste-match promise or against data
 > correctness, surfaced by the 2026-05-31 swipe / discovery review
-> (`.claude/reviews/2026-05-31-swipe-discovery-review.md`). Pull before `### HIGH`.
+> (`.claude/reviews/2026-05-31-swipe-discovery-review.md`) + the 2026-06-04 backlog audit. Pull before `### HIGH`.
+> **Two 1-PR bundles live here** (2026-06-04): **UX-WRITE-FAIL** = FRONT-UX-8 + FRONT-UX-7 (shared empty-catch write-loss → one `reportWriteError` toast helper); **UX-GALLERY** = FRONT-UX-6 + FRONT-UX-9 + FRONT-UX-10 (one gallery sibling-overlay lift fixes all three gesture bugs). FRONT-UX-7/6/10 promoted from MEDIUM (bundle inherits the X-HIGH anchor).
 
 #### BACK-RECOMMEND-4 — Discovery 좋아요가 추천에 안 먹힘
 Discovery right-swipe likes are write-only to the recommendation engine: they land in `UserProfile.liked_building_ids` but nothing reads that field back into Discovery's own ranking or exclusion. A Discovery-only user (never runs a Taste session) gets a permanently random, "cold" feed no matter how many buildings they like — directly violating the core promise ("the app already noticed my taste") on the Discovery surface itself.
 
-Verified 2026-05-31 (`develop@0a0e959`):
-- `backend/apps/recommendation/engine.py:2352` — `compute_user_taste_vector(profile)` reads `Project.objects...values_list('liked_ids')` ONLY; never reads `UserProfile.liked_building_ids`.
-- `backend/apps/recommendation/views/discovery.py:55-73` — the feed exclude-set is built from `Project.liked_ids/disliked_ids/saved_ids` only; `liked_building_ids` is absent → a Discovery-liked building can REAPPEAR in the feed later (the F1b half).
-- `backend/apps/accounts/views.py:916-922` — `liked_building_ids` is written only by `LikedBuildingsView`, read only by its own GET + the profile grid (PR #157).
+Verified 2026-06-04 (`develop@2f9a9c2`; refs re-pinned after FULL-REFACTOR-1 #170-173 moved code — engine untouched, bug UNRESOLVED):
+- `backend/apps/recommendation/engine.py:1869` — `compute_user_taste_vector(profile)` (was line 2352; file now 1977 LOC) reads project liked_ids ONLY (read at L1882); zero `liked_building_ids` hits in engine.py.
+- `backend/apps/recommendation/views/discovery.py:54-73` — `build_exclude_set` reads project liked_ids/disliked_ids/saved_ids only (L55); `liked_building_ids` absent → a Discovery-liked building can REAPPEAR. Second identical copy at L130-149.
+- `backend/apps/accounts/views/profile.py:229-314` — `LikedBuildingsView` (was `accounts/views.py:916-922`, split by #171): `liked_building_ids` written only by `.post` (L290-296), read only by `.get` (L311); field at `models.py:81`, URL at `urls.py:28`.
 - Taste likes (`project.liked_ids`) DO warm Discovery already, so this bug is Discovery-native-likes-only, not a total break.
 
 Fix direction:
@@ -98,28 +122,82 @@ Fix direction:
 
 Acceptance: a fresh profile that likes N buildings in Discovery (no Taste session) flips `taste_state` cold→warm and stops re-showing already-liked buildings; pytest covering taste-vector inclusion + exclude-set membership; Discovery TTFC not regressed.
 
-#### FRONT-UX-8 — 질문 답변 전송 실패 시 무음 유실
+#### FRONT-UX-8 — 질문 답변 전송 실패 시 무음 유실  [BUNDLE UX-WRITE-FAIL]
 In-session QuestionCard answers are fire-and-forget: a failed POST drops the answer with no retry and no user feedback, while the UI advances as if it succeeded — so the taste-axis adjustment from that question silently never lands on the backend.
 
-Code ref (`develop@0a0e959`):
-- `frontend/src/App.jsx:683-692` — `handleQuestionAnswer` calls `setPendingQuestion(null)` first, then `api.submitQuestionResponse({...}).catch(() => {})`. The empty catch swallows network / 5xx errors after the card is already dismissed.
+Code ref (`develop@2f9a9c2`):
+- `frontend/src/App.jsx:602-612` — `handleQuestionAnswer` (was line 683-692; that range now holds `handleLogout`) clears `setPendingQuestion(null)` first, then fires `submitQuestionResponse` with an empty catch that swallows network / 5xx errors after the card is already dismissed. NOTE: no `reportWriteError` helper exists yet, but the `globalToast` mount (state App.jsx:65, render :824-848) is the existing surface to reuse — there is NO `archithon:toast` event.
 
 Fix direction: keep the optimistic clear (UX needs the card to dismiss), but on `.catch` surface a toast and either re-queue the question or emit telemetry. Same anti-pattern as `FRONT-UX-7` (Discovery like silent failure) — consider one shared `reportWriteError(toast)` helper (or the existing `archithon:toast` custom-event path) for both call sites.
 
 Acceptance: a forced submit failure shows user feedback and does not silently lose the answer; no regression to the normal answer→next-card flow.
 
-#### FRONT-UX-9 — 모바일 갤러리 세로 스크롤 깨짐 (검증 필요)
+#### FRONT-UX-7 — Discovery 우측 스와이프 좋아요 무음 실패  [BUNDLE UX-WRITE-FAIL, promoted from MEDIUM 2026-06-04]
+`DiscoveryPage.jsx` right-swipe handler fire-and-forgets the liked-building POST. On API failure (network blip, 5xx, auth gone, rate limit) the user gets no feedback — the swipe animation completes and the like silently does not persist. Same empty-catch class as FRONT-UX-8 → one shared `reportWriteError` toast helper fixes both (bundle UX-WRITE-FAIL).
+
+Code refs (`develop@2f9a9c2`, 2026-06-04 audit — premise corrected):
+- `frontend/src/pages/DiscoveryPage.jsx:204-208` — `onCardLeftScreen` (handler L197-214) likes via `addLikedBuilding` with an empty catch. The swallow is at the CALL SITE, not in the api module. The id arg is `canonical_bld_id`-first (then `image_id` fallback) per the repo rule, not `card.image_id`.
+- `frontend/src/api/liked.js:8-10` — `addLikedBuilding` cleanly returns the `callApi` promise with no try/catch; the resolved path is `/api/v1/liked-buildings/`, NOT `/auth/me/liked-buildings/`.
+- `frontend/src/App.jsx:824-848` — `globalToast` render with `setGlobalToast` (state :65, auto-dismiss :106-111). There is NO `archithon:toast` event; wire the shared helper to `setGlobalToast` directly.
+
+Implementation: minimal failure toast ("저장 실패 — 다시 시도해주세요") via the shared `reportWriteError` helper (DESIGN.md §8.11 glassmorphic, 3s auto-dismiss); no retry. Stretch (deferred): queue + retry-on-online.
+
+Acceptance: failed liked-building save no longer silent; user sees a toast; no regression to successful-swipe latency. Author yywon1 awaiting decision per PR #157 review comment.
+
+#### FRONT-UX-6 — SwipeCard gallery flip 부모 state 동기화 누락  [BUNDLE UX-GALLERY anchor, promoted from MEDIUM 2026-06-04]
+Post-PR #158, `openGallery()` is purely local — it no longer notifies the parent via `onGalleryOpen`. SwipePage's `galleryOpen` stays false. Two regressions: desktop mouse-drag on the gallery face triggers the underlying card swipe (the scroll wrapper stops touch propagation but not mouse), and the gallery cannot be gesture-isolated. The UX-GALLERY bundle fix (lift the gallery out of `react-tinder-card` into a sibling overlay) resolves this plus FRONT-UX-9 (touch-action) and FRONT-UX-10 (long-press) in one structural PR.
+
+Code refs (`develop@2f9a9c2`, 2026-06-04 audit):
+- `frontend/src/components/SwipeCard.jsx:60-63` — `openGallery()` sets only local state; no parent callback.
+- `frontend/src/pages/SwipePage.jsx:657` — passes `onGalleryOpen` that is never invoked.
+- `frontend/src/pages/SwipePage.jsx:653` — `preventSwipe` gates only when `galleryOpen` is true (now `SWIPE_PREVENT_ALL` from `swipeGestureConfig.js`), which never happens.
+- `frontend/src/pages/SwipePage.jsx:404,410` — `galleryOpen` is checked inside the ArrowLeft/ArrowRight keydown branches only; there is NO `Escape` branch (the earlier "ESC handler :399/405" was imprecise). DiscoveryPage reuses SwipeCard with a no-op `onGalleryOpen`.
+
+Root cause (2026-05-31 review F3): react-tinder-card binds NATIVE mousedown/touchstart on its own element (`index.js:183/192`); a React-synthetic `stopPropagation` from the gallery child fires AFTER, so a child cannot fully suppress the parent drag. The sibling-overlay lift is the real fix; the 3-line `onGalleryOpen` restore still leaves a drag-wobble.
+
+Acceptance: ESC closes the gallery on SwipePage; desktop mouse drag on the gallery face does not discard the card; DiscoveryPage unchanged.
+
+#### FRONT-UX-9 — 모바일 갤러리 세로 스크롤 깨짐 (검증 필요)  [BUNDLE UX-GALLERY, needs browser repro]
 Suspected (high-confidence, NOT yet browser-confirmed): the in-card gallery's vertical scroll is dead on mobile because the swipe machinery cancels the native touch scroll. Likely a PR #158 regression — the in-card flip was only just restored from the F5 navigation band-aid, so this surface is freshly re-exposed.
 
 Two converging code mechanisms (`develop@0a0e959`):
 - `frontend/src/components/SwipeCard.jsx:183` sets `touchAction: 'none'` on the card root; the gallery scroll div (`:346-355`) sets no `touch-action` of its own → an ancestor `none` disables pan on descendant scroll containers in WebKit/Blink.
 - `react-tinder-card/index.js:174-176` calls `ev.preventDefault()` on `touchstart` for any element whose `className` lacks `'pressable'`; the gallery scroll div has no such class → the library cancels the scroll gesture.
 
+2026-06-04 audit (`develop@2f9a9c2` — refs still accurate, SwipeCard untouched since #158): an existing partial mitigation already carries touch `stopPropagation` on the gallery scroll div (`SwipeCard.jsx:347-348`), but that React-synthetic stop fires AFTER react-tinder-card's NATIVE touchstart listener (`index.js:183`), so it is likely ineffective — browser repro still required. The real fix is subsumed by the UX-GALLERY sibling-overlay lift (FRONT-UX-6).
+
 VERIFY FIRST: drive a mobile viewport (e.g. 390×844), open a card gallery, attempt a vertical drag-scroll. If broken, fix = `touchAction: 'pan-y'` on the gallery scroll div and/or add the `'pressable'` className escape hatch to it. If NOT reproduced, downgrade or close this entry.
 
 Acceptance: mobile gallery scrolls vertically through all photos; front-face swipe gesture still works.
 
+#### FRONT-UX-10 — Discovery 갤러리 위 long-press 오작동  [BUNDLE UX-GALLERY, promoted from MEDIUM 2026-06-04]
+On the Discovery page (desktop only), press-and-hold (>400ms) over an open card gallery opens the Save-to-Board modal, because the gallery's pointer `stopPropagation` does not stop the separate `mousedown` DiscoveryPage's long-press listener uses. Subsumed by the UX-GALLERY sibling-overlay lift (FRONT-UX-6); interim = add mouse `stopPropagation` to the gallery wrapper and buttons.
+
+Code refs (`develop@2f9a9c2`, 2026-06-04 audit — refs verified accurate):
+- `frontend/src/pages/DiscoveryPage.jsx:316-325` — card-stack `onMouseDown` long-press (400ms) opens `SaveToBoardModal`.
+- `frontend/src/components/SwipeCard.jsx:313-314,390-391` — gallery buttons stop only pointer events; `:347-348` scroll stops only touch events; no mouse handler → desktop-only. Cross-ref 2026-05-31 review F5.
+
+Acceptance: holding the mouse over the Discovery gallery does not open the Save-to-Board modal; long-press still works on the card front face.
+
 ### HIGH
+
+#### BACK-OFFICE-1 — SavedOffice orphan 모델 제거 (office-interest 3중 중복 정리)
+office-interest 모델 3중 중복 (2026-06-04 audit 확인). 메모리 라벨 역전 정정: OfficeFollow가 LIVE(FirmProfilePage 팔로우 버튼이 `api/social.js` followOffice/unfollowOffice로 배선), 죽은 건 SavedOffice. 정리 타겟 = SavedOffice 제거 (OfficeFollow 아님 — 잘못 지우면 작동 기능 삭제).
+
+Code refs (`develop@2f9a9c2`, 2026-06-04 audit):
+- `backend/apps/profiles/models.py:91` — `SavedOffice` (migration profiles 0003, #180): 프론트 호출자 0 (offices/CANON/save/ + offices/saved/ 엔드포인트 caller 없음), 테스트 0, serializer/admin 0 — view+url만 존재 = orphan.
+- `backend/apps/social/models.py` — `OfficeFollow` (LIVE, FirmProfilePage 팔로우) + `ArchitectFollow` (migration social 0005, saved_studios 카운트의 실제 소스). SavedOffice는 OfficeFollow가 이미 커버하는 office-bookmark 개념을 중복하고, "saved" 네이밍은 ArchitectFollow가 가져감.
+
+정리: SavedOffice 모델 + view + url + drop 마이그레이션 제거. 배포 시 profiles 마이그레이션 DDL 필요(operator neondb_owner swap, INFRA-DB-1). SavedOffice는 프론트 orphan이라 런타임 영향 없음. 퀵윈 #2.
+
+Acceptance: SavedOffice 모델/뷰/url 삭제 + drop 마이그레이션; OfficeFollow + ArchitectFollow 무손상; pytest green; 프론트 빌드 무영향(호출자 없음 확인).
+
+#### BACK-PROFILE-1 — external_links 검증 없음 (mailto/handle 주입)
+`validate_external_links`에 instagram handle/email 포맷 검증 없음. ProfileHero가 instagram.com/HANDLE + mailto:EMAIL 평문 조립 → 스킴-락이라 javascript: 차단되나 path-traversal/주입 nuisance. 영숫자+밑줄만 허용하도록 백엔드 검증 추가. 퀵윈 #3.
+
+Code refs (`develop@2f9a9c2`, 2026-06-04 audit — 갭 확인):
+- `backend/apps/accounts/serializers.py` `validate_external_links` — dict + string keys/values + len<=500만 체크, handle/email 포맷 검증 없음.
+- 동류 mailto 조립 사이트 2곳 더: `FirmProfileHero.jsx:241`, `ArchitectProfilePage.jsx:166` — office/architect contact_email라 이 항목 범위 밖이나 같은 클래스(별도 후속 가능).
 
 #### BACK-RECOMMEND-1 — Project 두번째 세션이 이전 taste를 모름
 Same Project can host multiple `AnalysisSession` rows (user comes back, "Resume" or new swipe round on the same Project — second session is created fresh while `Project.liked_ids` / `disliked_ids` / `saved_ids` carry forward as the persistent accumulator). Today the new session's algorithm-side state (`like_vectors`, `convergence_history`, `phase`) starts from scratch — exploring phase, empty pool of taste signal — even though the user just liked 12 buildings in Session #1.
@@ -129,6 +207,7 @@ Code audit 2026-05-27 (`develop@3894ffd`):
 - Persistent taste lives on `Project.liked_ids` as `[{id, intensity}]`; `Project.disliked_ids` and `Project.saved_ids` also carry across sessions. The create path does not read these fields when `project` already exists.
 - `backend/apps/recommendation/engine.py` already has `compute_user_taste_vector(profile)` for Discovery-level cross-project taste and `get_pool_embeddings(ids)` for batch embedding fetch. A session-specific warm-start should not call `compute_user_taste_vector(profile)` blindly because it aggregates all Projects, not just the active Project.
 - `SwipeView.post()` phase transition still keys off `len(session.like_vectors)` and `min_likes_for_clustering`; any warm-start that seeds `like_vectors` changes phase/progress semantics immediately.
+- (2026-06-04 audit re-pin, `develop@2f9a9c2`) FULL-REFACTOR-1 moved this into services: create path = `services/session_service.py:46` create_session (project resolved L82-86 only to skip dedupe L78-80; `session_insert` L236-266 sets phase='exploring' L250, like_vectors=[] L257); phase transition = `services/swipe_service.py:531-534`; `compute_user_taste_vector` = `engine.py:1869`. Premise unchanged — 2nd session still starts cold.
 
 Open dimensions:
 - **Carry policy** — A independent (status quo) / B exposure-only carry (don't re-show prior cards, taste fresh) / C asymmetric negative-only (carry dislikes, drop likes) / D fade-decay carry (recency-weight prior `liked_ids` into `like_vectors`) / E full warm-start (replay prior `liked_ids` → `like_vectors`, skip exploring phase) / F user-controlled toggle ("Resume taste?" prompt at session 2 start).
@@ -210,7 +289,7 @@ Acceptance:
 Foundation shipped: PR #54 (`tokens.css` 4 themes + `ThemeContext` + `AppearanceSettings`) + PR #59 (theme/font server persistence). Remaining: per-component visual rework (≈ 7,700 LOC) — inline `style={{}}` → CSS Modules + `:hover/:focus`/`:active`, light-theme polish where dark-only assumptions still leak through, leaf→hub component order (small leaf components first, then containers).
 
 Code audit 2026-05-27 (`develop@3894ffd`):
-- `rg "style={{" frontend/src | wc -l` = 581 inline style call sites. The largest hot files are `BoardDetailPage.jsx` 1049 LOC, `UserProfilePage.jsx` 992 LOC, `App.jsx` 838 LOC, `BuildingDetailPage.jsx` 711 LOC, `SwipePage.jsx` 683 LOC, `FirmProfilePage.jsx` 540 LOC.
+- (2026-06-04 audit, `develop@2f9a9c2`) `rg "style={{" frontend/src | wc -l` = **801** call sites (was 581; +220). Current hot files: `BoardDetailPage.jsx` 1051, `App.jsx` 902, `SwipePage.jsx` 692, `BuildingDetailPage.jsx` 499 (shrank), `UserProfilePage.jsx` 917 (shrank post-#179), `FirmProfilePage.jsx` 156 (decomposed into `pages/firmProfile/`). NEW offender from #182: `pages/ArchitectProfilePage.jsx` 572 LOC / 48 inline sites (3rd-highest). `*.module.css` now = 4 (#179 profile-harvest first CSS Modules), not near-zero.
 - `frontend/src/tokens.css` now has theme/font tokens; `frontend/src/index.css` has only shared animations/utilities plus one masonry media query. Most hover/focus/active behavior still lives in JS handlers.
 - Good first slices: `ArticleCard`/`ProjectCard`/`BoardCard` leaf components before page containers; then `SwipeCard` and `BuildingDetailPage` because they have the most visible style state.
 
@@ -222,60 +301,8 @@ _Note: the Profile-area slice shipped separately as FRONT-PROFILE-HARVEST-1 (#17
 
 ### MEDIUM
 
-#### FRONT-PROFILE-POLISH-1 — 프로필 재설계 브라우저 픽셀 패스 (Codex)
-FRONT-PROFILE-HARVEST-1(#179) 머지 후 Codex 브라우저 수정 (별도 PR). FollowListModal 모바일 bottom-sheet(≤768px, DESIGN.md §8.10) + backdrop opacity 0.6→0.4 + inline onMouseEnter→CSS `:hover` + 4테마 픽셀 검증(github-light 먼저). 원 하베스트 minor 4: FollowListPage 성공 경로 `setError(null)` 누락(stale 배너), EditProfileModal 에러박스 하드코딩 rgba→`color-mix`, ProfileHero 타인 Share `borderRadius:12`→`var(--radius-md)`, onMouseEnter→CSS hover. + FollowListModal `onClose` useCallback churn.
-
-#### BACK-PROFILE-SANITIZE-1 — external_links 검증 없음 (mailto/handle 주입)
-`validate_external_links`에 instagram handle/email 포맷 검증 없음. ProfileHero가 `https://instagram.com/${handle}` + `mailto:${email}` 평문 조립 → 스킴-락이라 javascript: 차단되나 path-traversal/주입 nuisance. 영숫자+밑줄만 허용하도록 백엔드 검증 추가.
-
-#### FRONT-UX-6 — SwipeCard gallery flip 부모 state 동기화 누락
-PR #158 (`0071c3f`, 2026-05-29) restored in-card gallery flip but made `openGallery()` purely local — it no longer notifies the parent page via `onGalleryOpen` callback. SwipePage's `galleryOpen` state never flips to `true`. Two visible regressions on the swipe surface:
-- **Desktop mouse drag on gallery face → unintended card swipe.** The gallery scroll wrapper stops `onTouchStart`/`onTouchMove` propagation but not mouse events. On mobile this is fine; on desktop, mouse drag while viewing photos triggers the underlying `react-tinder-card` swipe gesture and the card flies away mid-view.
-- **ESC key no longer closes the gallery.** `SwipePage.jsx:399/405` keyboard handler checks `if (galleryOpen) setGalleryOpen(false)`; since `galleryOpen` stays false, ESC is a no-op while the back-face is visible.
-
-Code refs (`develop@6ce7260` post-PR #158):
-- `frontend/src/components/SwipeCard.jsx:60-63` — `openGallery()` sets only local state (`setShowGallery(true)`, `setHasBeenOpened(true)`); no parent callback.
-- `frontend/src/pages/SwipePage.jsx:649` — passes `onGalleryOpen={() => setGalleryOpen(true)}` but it is never invoked.
-- `frontend/src/pages/SwipePage.jsx:643` — `preventSwipe={galleryOpen ? ['left','right','up','down'] : ['up','down']}` blocks horizontal swipe only when `galleryOpen=true`, which now never happens.
-- DiscoveryPage passes `onGalleryOpen={() => {}}` and does not track `galleryOpen`; this entry is SwipePage-only.
-
-Three implementation options (admin decision needed before fix):
-- **Option 1 (3-line)** — restore parent notification: add `onGalleryOpen` to SwipeCard props destructure and call it inside `openGallery()` after `setShowGallery(true)`. Minimal change; SwipePage's existing ESC + preventSwipe logic re-engages.
-- **Option 2 (gallery self-contained)** — add `onMouseDown`/`onMouseMove` `stopPropagation` to the gallery-face scroll wrapper (matches the existing touch handlers) and move ESC handling inside SwipeCard. SwipePage's `galleryOpen` state becomes dead code; cleanup required.
-- **Option 3 (refactor)** — remove `galleryOpen` from SwipePage entirely, fold gesture-blocking + ESC into SwipeCard. Cleaner separation; broader diff.
-
-2026-05-31 review (`.claude/reviews/2026-05-31-swipe-discovery-review.md` F3) added two facts: (1) `preventSwipe` IS read live — react-tinder-card rebinds its gesture listeners when the prop changes (`node_modules/react-tinder-card/index.js:146/262`), so Option 1 works without a card remount (no flip reset). (2) The deeper root cause is that react-tinder-card binds NATIVE `mousedown`/`touchstart` listeners on its own element (`:183/192`); a React-synthetic `stopPropagation` from the gallery child fires AFTER those native listeners, so a child cannot fully suppress the parent drag via synthetic events. This favors Option 3 (lift the gallery into a sibling overlay) as the real fix — Options 1/2 still leave a visual drag-wobble because `handleMove` runs on every mousemove while `preventSwipe` only gates the release flick.
-
-Acceptance: ESC closes the gallery on SwipePage; desktop mouse drag on the gallery face does not discard the card; DiscoveryPage unchanged. Authorized to defer follow-up per user decision 2026-05-29 ("PR 그대로 merge — 작은 버그는 후속").
-
-#### FRONT-UX-10 — Discovery 갤러리 위 long-press 오작동
-On the Discovery page (desktop only), pressing-and-holding the mouse (>400ms) over an open card gallery opens the Save-to-Board modal over it, because the gallery's pointer-event `stopPropagation` does not stop the separate `mousedown` that DiscoveryPage's long-press listener uses.
-
-Code refs (`develop@0a0e959`):
-- `frontend/src/pages/DiscoveryPage.jsx:316-325` — card-stack container wires `onMouseDown={handleMouseDown}` → 400ms long-press → `SaveToBoardModal`.
-- `frontend/src/components/SwipeCard.jsx:313-314,390-391` — gallery buttons stop only `onPointerDown`/`onPointerUp`; `:347-348` gallery scroll stops only `onTouchStart`/`onTouchMove`. No mouse handler on the gallery, and pointer `stopPropagation` ≠ `mousedown`.
-- Touch is masked by the existing touch stopPropagation → desktop-only.
-
-Fix direction: subsumed by the FRONT-UX-6 structural fix (lift gallery out of TinderCard into a sibling overlay); interim = add `onMouseDown` `stopPropagation` to the gallery scroll wrapper + buttons. Cross-ref the 2026-05-31 review F5.
-
-Acceptance: holding the mouse over the Discovery gallery does not open the Save-to-Board modal; long-press still works on the card front face.
-
-#### FRONT-UX-7 — Discovery 우측 스와이프 좋아요 무음 실패
-PR #157 (`77ffd6e`, 2026-05-29) `DiscoveryPage.jsx` right-swipe handler calls `addLikedBuilding(card.image_id).catch(() => {})`. On API failure (network blip, 5xx, auth gone, rate limit) the user gets no feedback — the swipe animation completes and the like silently does not persist. User believes the building is saved when it is not.
-
-Code refs (`develop@6ce7260` post-PR #157):
-- `frontend/src/pages/DiscoveryPage.jsx` — right-swipe handler fire-and-forget pattern; no toast, no console signal, no retry queue.
-- `frontend/src/api/liked.js` (NEW in PR #157) — POST `/api/v1/auth/me/liked-buildings/` returns 200/4xx/5xx normally; client just swallows.
-- `frontend/src/App.jsx` glassmorphic toast helper already exists (used by VerifyGateModal on Board-create retry) and can be reused.
-
-Implementation options:
-- **Minimum** — `console.error` on catch so devs can see failures in the browser console; user-visible UX unchanged.
-- **Recommended** — minimal toast on failure ("저장 실패 — 다시 시도해주세요") with 3s auto-dismiss matching DESIGN.md §8.11 glassmorphic pattern; no retry.
-- **Stretch** — queue failed likes in a session store, retry on next online event / next API success; surface a "X likes pending sync" indicator.
-
-Open dimension: should DiscoveryPage rely on the existing `App.jsx` toast helper or own a local UI affordance to avoid coupling to the global mount? Recommended pattern is to dispatch a `archithon:toast` custom event that `App.jsx` already listens for, mirroring the VerifyGateModal flow.
-
-Acceptance: failed liked-building save no longer silent; user sees an indication (toast or visible retry cue); no regression to successful-swipe latency. Author yywon1 awaiting follow-up decision per PR #157 review comment (`#issuecomment-4583211223`).
+#### FRONT-PROFILE-1 — 프로필 재설계 브라우저 픽셀 패스 (Codex)
+FRONT-PROFILE-HARVEST-1(#179) 머지 후 Codex 브라우저 수정 (별도 PR). FollowListModal 모바일 bottom-sheet(≤768px, DESIGN.md §8.10) + backdrop opacity 0.6→0.4 + inline onMouseEnter→CSS hover + 4테마 픽셀 검증(github-light 먼저). 원 하베스트 minor (2026-06-04 audit 재확인): EditProfileModal(`components/EditProfileModal.jsx:147-149`, 경로는 components/ 직하 — components/profile/ 아님) 에러박스 하드코딩 rgba→color-mix, ProfileHeader.jsx:126(Share 버튼은 ProfileHeader 소유, ProfileHero 아님) 타인 Share borderRadius:12→var(--radius-md), onMouseEnter→CSS hover, FollowListModal onClose useCallback churn. 드롭됨: "FollowListPage setError(null) 누락" minor → useFollowList 훅(`:23,43`)이 fetch마다 setError(null) 호출하므로 stale 배너 위험 없음(audit 반증).
 
 #### BACK-AUTH-3 — LikedBuildingsView guest 사용자 가드 정책 확인
 PR #157 (`77ffd6e`, 2026-05-29) added `LikedBuildingsView` with `permission_classes = [IsAuthenticated]` only. No `is_guest=False` check. Guest users (post-FULL-LOGIN-REDESIGN-1: `UserProfile.is_guest=True`, no email, no SocialAccount) can freely write to `UserProfile.liked_building_ids` without hitting the Board-4 verify gate, because the gate fires on `ProjectListCreateView.post()` — a different surface.
@@ -313,7 +340,7 @@ Diagnostic plan:
 - [ ] DRF `authenticate()` pipeline end-to-end (request → middleware → cache hit → user resolved → view executes)
 - [ ] `User.save()` post_save signal auto-invalidation (`auth_user` row mutation → cache.delete fires)
 - [ ] `is_active=False` user → cache hit on stale entry must NOT return 200; either auto-invalidate before hit or re-check `is_active` on cached user
-- [ ] cross-instance: cache populated from one auth instance, read from another (Redis multi-worker correctness)
+- [x] cross-instance: ALREADY covered by `test_cross_instance_cache_hit` (test #9) — 2026-06-04 audit. Remaining real gaps = the DRF-pipeline + is_active stale-cache tests above.
 
 Code audit 2026-05-27 (`develop@3894ffd`):
 - `backend/apps/accounts/authentication.py` cache-hit branch returns `cached_user` directly. It relies on token validation having already happened and on cache invalidation for user-state changes.
@@ -373,7 +400,7 @@ Implementation map:
 - Frontend needs Terms/Privacy pages or external links plus a blocking checkbox/continue copy in login/onboarding. Korean-first copy should be reviewed outside Codex.
 - Account deletion/export is not currently in scope but should be tracked before public launch if GDPR-like obligations apply.
 
-#### PERF-PREFETCH-POOL-RISK — Neon connection pool 모니터링 (post PR #134)
+#### BACK-PERFORMANCE-6 — Neon connection pool 고갈 위험 (async prefetch thread)
 PR 4 PERF-PREFETCH-CHAIN flipped `async_prefetch_enabled: True` — every prod swipe now spawns a daemon thread holding its own DB connection until `_connections.close_all()` runs in finally. Under high concurrent swipe load: connections ≈ (concurrent_requests × 2) — one main worker + one prefetch thread. Neon free tier limit is 25 connections; Railway Gunicorn default is 2-4 workers. Concurrent swipe × 2 conns/swipe could approach limits at high traffic. Acceptable for current scale (~tens of daily users/day). Monitor Neon dashboard post-deploy + revisit if peak concurrency exceeds 8-10 connections. Mitigation options if exhausted: (a) connection pool size increase, (b) explicit thread-local connection pool, (c) PgBouncer in front of Neon. security-manager (sonnet) flagged this as availability concern on PR #134.
 
 Code audit 2026-05-27 (`develop@3894ffd`):
@@ -385,7 +412,7 @@ Monitoring map:
 - Track Neon active connections during swipe bursts and Railway worker/thread counts. If peak >8-10 at current traffic, promote this from MEDIUM risk to HIGH infra work.
 - If slow swipes correlate with connection pressure, evaluate a bounded executor or queue instead of unbounded per-swipe `threading.Thread`.
 
-#### INFRA-DB-CLEANUP-1 — Unverified guest row 누적 정리 (conditional)
+#### INFRA-DB-3 — Unverified guest row 누적 정리 (conditional)
 Guest 계정(FULL-LOGIN-REDESIGN-1 #154/#155)은 정리 로직 없음 (user Q5 결정). `/auth/guest/` throttle 3/min/IP이나 IP 로테이션 botnet은 row 증가 가능 → 조건부 모니터링 항목.
 
 Detail: Monitor Neon `auth_user WHERE email = '' AND is_active = True` row count weekly. If growth > 500 rows/week sustained, open this and implement a Django management command `delete unverified WHERE last_active < 30 days AND swipe_count == 0` + cron/Railway scheduled job.
@@ -408,6 +435,8 @@ Decision needed:
 
 #### BACK-RECOMMEND-3 — Profile-tab 사무소/유저 추천 endpoint 없음
 Re-scoped 2026-05-14 (REC1 already shipped as Push S3). REC2 (firm) + REC3 (user) target a single composite endpoint `GET /api/v1/recommendations/profile/` returning `{offices: [...], users: [...]}` for a Profile-tab button. Landing tab removed (Push S6).
+
+**2026-06-04 audit narrowing:** #178 shipped architect recommendation (`projects/PK/recommended_architects/` + `architects/ID/`, `views/office_recommendation.py`), partially satisfying the OFFICE/architect dimension (board-scoped, flat architect list). The literal `/recommendations/profile/` {offices,users} endpoint still does NOT exist, and the USER↔USER ("유저") recommendation dimension remains entirely unbuilt → narrow this item to the user-recommendation gap + the unified profile-tab endpoint.
 
 Code audit 2026-05-27 (`develop@3894ffd`):
 - No route exists today in `backend/apps/recommendation/urls.py`, `backend/apps/profiles/urls.py`, or `backend/apps/social/urls.py` for `/recommendations/profile/`; the only recommendation-style public route is `recommendations/board-surprise/`.

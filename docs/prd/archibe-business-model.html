@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>archibe Business Model PRD</title>
+<style>
+  :root {
+    --bg: #f6f8fa;
+    --panel: #ffffff;
+    --border: #d0d7de;
+    --border-soft: #e5e8eb;
+    --text: #1f2328;
+    --text-soft: #57606a;
+    --text-faint: #8c959f;
+    --accent: #0969da;
+    --accent-soft: #ddf4ff;
+    --green: #1a7f37;
+    --green-bg: #dafbe1;
+    --amber: #bf8700;
+    --amber-bg: #fff8c5;
+    --red: #cf222e;
+    --red-bg: #ffebe9;
+    --grey: #6e7781;
+    --grey-bg: #eaeef2;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  code, .mono { font-family: var(--mono); }
+
+  header {
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    padding: 18px 28px 14px;
+  }
+  header .title {
+    font-size: 19px;
+    font-weight: 600;
+    margin: 0 0 6px;
+  }
+  header .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    font-size: 12.5px;
+    color: var(--text-soft);
+  }
+  header .meta .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: var(--bg);
+    border: 1px solid var(--border-soft);
+    border-radius: 999px;
+    padding: 2px 9px;
+  }
+  header .meta .chip b { color: var(--text); font-weight: 600; }
+
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 28px 60px; }
+  .tabbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    border-bottom: 1px solid var(--border);
+    margin-top: 0;
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 5;
+    padding-top: 14px;
+  }
+  .tab-btn {
+    appearance: none;
+    border: none;
+    background: transparent;
+    font-family: var(--sans);
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--text-soft);
+    padding: 9px 14px 8px;
+    cursor: pointer;
+    border-bottom: 2.5px solid transparent;
+    margin-bottom: -1px;
+    border-radius: 6px 6px 0 0;
+  }
+  .tab-btn:hover { background: var(--panel); color: var(--text); }
+  .tab-btn.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+    background: var(--panel);
+  }
+  .panel { display: none; padding-top: 22px; }
+  .panel.active { display: block; }
+
+  .section-title {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    margin: 26px 0 10px;
+  }
+  .section-title:first-child { margin-top: 0; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+  }
+  .card h2, .card h3 {
+    font-size: 15px;
+    margin: 0 0 7px;
+  }
+  .card p { color: var(--text-soft); margin: 0 0 8px; }
+  .card p:last-child { margin-bottom: 0; }
+  .lead {
+    font-size: 16px;
+    color: var(--text);
+    max-width: 800px;
+  }
+  .muted { color: var(--text-soft); }
+  .small { font-size: 12.5px; color: var(--text-soft); }
+  .callout {
+    background: var(--accent-soft);
+    border: 1px solid #b6e3ff;
+    border-radius: 8px;
+    padding: 13px 15px;
+    margin-bottom: 14px;
+  }
+  .callout strong { color: var(--accent); }
+  .grid-2 {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .badge.blue { color: var(--accent); background: var(--accent-soft); }
+  .badge.green { color: var(--green); background: var(--green-bg); }
+  .badge.amber { color: var(--amber); background: var(--amber-bg); }
+  .badge.red { color: var(--red); background: var(--red-bg); }
+  .badge.grey { color: var(--grey); background: var(--grey-bg); }
+  .row-id {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-radius: 4px;
+    padding: 1px 6px;
+    margin-right: 8px;
+  }
+  ul.clean {
+    margin: 8px 0 0;
+    padding-left: 18px;
+    color: var(--text-soft);
+  }
+  ul.clean li { margin: 4px 0; }
+  table.grid {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  table.grid th, table.grid td {
+    text-align: left;
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--border-soft);
+    vertical-align: top;
+  }
+  table.grid th {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-faint);
+    background: var(--bg);
+  }
+  table.grid tr:last-child td { border-bottom: none; }
+  table.grid td.c-mono { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+  .source-list a { color: var(--accent); text-decoration: none; }
+  .source-list a:hover { text-decoration: underline; }
+  footer {
+    color: var(--text-faint);
+    font-size: 11.5px;
+    text-align: center;
+    padding-top: 30px;
+  }
+
+  @media (max-width: 780px) {
+    .wrap, header { padding-left: 16px; padding-right: 16px; }
+    .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    table.grid { display: block; overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1 class="title">archibe Business Model PRD</h1>
+  <div class="meta">
+    <span class="chip">status <b>strategy draft</b></span>
+    <span class="chip">date <b>2026-06-04 KST</b></span>
+    <span class="chip">scope <b>student data, office fit, portfolio logs</b></span>
+    <span class="chip">format <b>static HTML</b></span>
+  </div>
+</header>
+
+<div class="wrap">
+  <nav class="tabbar" id="tabbar">
+    <button class="tab-btn active" data-target="panel-thesis">Thesis</button>
+    <button class="tab-btn" data-target="panel-bm">BM</button>
+    <button class="tab-btn" data-target="panel-product">Product</button>
+    <button class="tab-btn" data-target="panel-roadmap">Roadmap</button>
+    <button class="tab-btn" data-target="panel-sources">Sources</button>
+  </nav>
+
+  <section class="panel active" id="panel-thesis">
+    <div class="section-title">Executive Thesis</div>
+    <div class="callout">
+      <p class="lead"><strong>archibe should not become another architecture job board.</strong> It should become a taste-based office discovery and talent intelligence layer for Korean architecture students, junior designers, and small to mid-size offices.</p>
+    </div>
+
+    <div class="grid-3">
+      <div class="card">
+        <span class="badge blue">User promise</span>
+        <h3>Find offices that fit my taste.</h3>
+        <p>Students use swipes, saved references, boards, and project logs to build a low-friction architecture identity before a polished portfolio exists.</p>
+      </div>
+      <div class="card">
+        <span class="badge green">Office promise</span>
+        <h3>Find students who fit our work.</h3>
+        <p>Offices see opt-in candidates whose taste, process, and project direction match the office's built work and hiring needs.</p>
+      </div>
+      <div class="card">
+        <span class="badge amber">Business promise</span>
+        <h3>Monetize fit, not raw job posts.</h3>
+        <p>Job posting is a commodity. Fit reports, verified profile campaigns, student shortlist insight, and studio reports are more defensible.</p>
+      </div>
+    </div>
+
+    <div class="section-title">Competitive Position</div>
+    <table class="grid">
+      <thead>
+        <tr><th>Dimension</th><th>VM SPACE Jobs</th><th>archibe</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="c-mono">Core asset</td>
+          <td>Architecture media traffic and job board habit.</td>
+          <td>Student taste graph, project logs, office-project graph, and fit explanation.</td>
+        </tr>
+        <tr>
+          <td class="c-mono">Revenue base</td>
+          <td>Free listings plus paid exposure slots.</td>
+          <td>Verified office profile, fit analytics, sponsored campaigns, opt-in shortlist reports, school reports.</td>
+        </tr>
+        <tr>
+          <td class="c-mono">Risk</td>
+          <td>Low price anchor makes paid posting hard to beat.</td>
+          <td>Must protect recommendation trust and avoid pay-to-rank behavior.</td>
+        </tr>
+        <tr>
+          <td class="c-mono">Winning line</td>
+          <td>Show the job ad.</td>
+          <td>Explain why this student and this office fit each other.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="section-title">Strategic Rule</div>
+    <div class="card">
+      <p><span class="row-id">RULE</span><strong>Do not sell organic ranking.</strong> Paid office products can improve profile quality, campaign targeting, analytics, and clearly labeled sponsored placement. They should not force low-fit offices into high-fit recommendation slots.</p>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-bm">
+    <div class="section-title">Business Model Ladder</div>
+    <table class="grid">
+      <thead>
+        <tr><th>Stage</th><th>Offer</th><th>Buyer</th><th>Why buyer pays</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="c-mono">0. Free supply</td>
+          <td>Free office profile, free basic job post, free student taste profile.</td>
+          <td>Students, offices.</td>
+          <td>Build useful database density before monetization pressure.</td>
+        </tr>
+        <tr>
+          <td class="c-mono">1. Pilot sponsor</td>
+          <td>Beta partner badge, profile polishing, fit-audience report, campaign exposure.</td>
+          <td>5 to 10 small/mid offices.</td>
+          <td>Low-cost brand access to architecture students and junior talent.</td>
+        </tr>
+        <tr>
+          <td class="c-mono">2. Verified office</td>
+          <td>Blue badge, editable profile, hiring CTA, analytics, rich office recommendation card.</td>
+          <td>Hiring offices.</td>
+          <td>Signals legitimacy and improves recruiting presentation.</td>
+        </tr>
+        <tr>
+          <td class="c-mono">3. Fit intelligence</td>
+          <td>Opt-in candidate shortlist, student-office fit report, project-log match explanation.</td>
+          <td>Offices hiring interns or juniors.</td>
+          <td>Reduces review time and reveals candidates who match the office's design direction.</td>
+        </tr>
+        <tr>
+          <td class="c-mono">4. Reports and schools</td>
+          <td>Aggregated trend reports, studio archive, portfolio workshop package.</td>
+          <td>Schools, offices, industry sponsors.</td>
+          <td>Turns anonymized student taste and project data into market insight.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="section-title">Pricing Hypotheses</div>
+    <div class="grid-2">
+      <div class="card">
+        <span class="badge green">Early pilot</span>
+        <h3>3 months, KRW 300k to 1M</h3>
+        <p>Use as a paid learning contract, not a full SaaS subscription. Include profile setup, one campaign, and one insight report.</p>
+      </div>
+      <div class="card">
+        <span class="badge blue">Verified office</span>
+        <h3>Monthly or seasonal subscription</h3>
+        <p>Start around a price that is materially higher than a job-board listing only if analytics and fit reports create visible value.</p>
+      </div>
+      <div class="card">
+        <span class="badge amber">Studio package</span>
+        <h3>Workshop or cohort pricing</h3>
+        <p>Offer taste profiling, project archive, and exportable student profile pages for architecture studios or portfolio classes.</p>
+      </div>
+      <div class="card">
+        <span class="badge grey">Ad revenue</span>
+        <h3>Peripheral, not survival core</h3>
+        <p>Display ads can offset small infrastructure cost on editorial pages, but app UX and recommendation trust are more valuable.</p>
+      </div>
+    </div>
+
+    <div class="section-title">AdSense Position</div>
+    <div class="card">
+      <p>AdSense can be added later to magazine-style, SEO-friendly pages if traffic becomes large. It should not be placed in the core swipe, profile, office recommendation, or recruiting flows.</p>
+      <ul class="clean">
+        <li>AdSense RPM is calculated as estimated earnings divided by page views, multiplied by 1000.</li>
+        <li>Even optimistic niche traffic usually does not fund team survival at early scale.</li>
+        <li>Architecture recruiting trust is worth more than generic ad impressions.</li>
+      </ul>
+    </div>
+
+    <div class="section-title">Legal and Trust Boundary</div>
+    <div class="card">
+      <p>Early BM should avoid success fees, direct placement fees, or anything framed as paid job placement. Keep the product framed as office discovery, recruiting brand tools, information service, and opt-in candidate insight.</p>
+      <ul class="clean">
+        <li>Label sponsored office exposure clearly.</li>
+        <li>Never expose private student data without explicit opt-in.</li>
+        <li>Do not charge based on hiring success until legal registration and process are reviewed.</li>
+        <li>Keep organic fit score separate from paid campaign placement.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-product">
+    <div class="section-title">Student Data Graph</div>
+    <div class="grid-2">
+      <div class="card">
+        <span class="badge blue">Taste graph</span>
+        <h3>Swipes, likes, saves, boards</h3>
+        <p>The existing recommendation loop creates a low-friction taste profile. This becomes the foundation for office recommendation and student-office fit.</p>
+      </div>
+      <div class="card">
+        <span class="badge green">Project graph</span>
+        <h3>Project-unit portfolio logs</h3>
+        <p>Students upload projects in smaller units instead of waiting for a finished portfolio. This captures process, growth, and real studio work.</p>
+      </div>
+    </div>
+
+    <div class="section-title">Office Follow</div>
+    <div class="card">
+      <p>Office follow should not behave like a daily social feed. Architecture offices do not publish new buildings every week. Follow should be treated as a career-intent signal.</p>
+      <table class="grid">
+        <thead>
+          <tr><th>User value</th><th>Office value</th><th>Product event</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Save offices I may want to join later.</td>
+            <td>See student interest pool and taste distribution.</td>
+            <td class="c-mono">office_follow</td>
+          </tr>
+          <tr>
+            <td>Get hiring, internship, open office, lecture, or exhibition alerts.</td>
+            <td>Reach students who already signaled interest.</td>
+            <td class="c-mono">office_update_alert</td>
+          </tr>
+          <tr>
+            <td>Understand why an office fits my taste.</td>
+            <td>Know which project types attract potential applicants.</td>
+            <td class="c-mono">office_fit_view</td>
+          </tr>
+          <tr>
+            <td>Prepare better portfolio direction for a target office.</td>
+            <td>Build brand relationship before hiring season.</td>
+            <td class="c-mono">target_office_saved</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section-title">Project Log MVP</div>
+    <div class="grid-3">
+      <div class="card">
+        <span class="badge blue">Low burden</span>
+        <h3>Post a project, not a full portfolio.</h3>
+        <p>Each project can have a title, cover image, 3 to 8 images, short description, tags, school year, and visibility setting.</p>
+      </div>
+      <div class="card">
+        <span class="badge green">Process value</span>
+        <h3>Show thinking, not only final renders.</h3>
+        <p>Stages can include concept, reference, diagram, model, plan, section, render, critique, and final.</p>
+      </div>
+      <div class="card">
+        <span class="badge amber">Recruiting value</span>
+        <h3>Give offices better evidence.</h3>
+        <p>Offices see how students define problems, iterate, handle feedback, and express spatial ideas.</p>
+      </div>
+    </div>
+
+    <div class="section-title">Visibility and Safety</div>
+    <div class="card">
+      <ul class="clean">
+        <li><strong>Private:</strong> visible only to the student.</li>
+        <li><strong>Profile public:</strong> visible on the student's public archibe profile.</li>
+        <li><strong>Recruiting only:</strong> visible to verified offices when the student opts into recruiting.</li>
+        <li><strong>Studio archive:</strong> visible inside a school/studio cohort, if the school partnership exists.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-roadmap">
+    <div class="section-title">Survival Strategy</div>
+    <table class="grid">
+      <thead>
+        <tr><th>Phase</th><th>Goal</th><th>What to build or sell</th><th>Primary metric</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="c-mono">Phase 1</td>
+          <td>Student density</td>
+          <td>Taste profiles, public boards, office follow, basic project logs.</td>
+          <td>500 to 1,000 activated student profiles.</td>
+        </tr>
+        <tr>
+          <td class="c-mono">Phase 2</td>
+          <td>Office supply</td>
+          <td>Free verified onboarding for 20 offices, profile cleanup, project matching.</td>
+          <td>20 useful office profiles with linked projects.</td>
+        </tr>
+        <tr>
+          <td class="c-mono">Phase 3</td>
+          <td>Paid proof</td>
+          <td>5 pilot sponsors, one campaign each, opt-in fit report.</td>
+          <td>At least 3 offices say the shortlist changed hiring or outreach behavior.</td>
+        </tr>
+        <tr>
+          <td class="c-mono">Phase 4</td>
+          <td>Repeatable BM</td>
+          <td>Verified badge subscription, recruiting campaign package, studio reports.</td>
+          <td>Renewal or second purchase by pilot offices.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="section-title">Key Metrics</div>
+    <div class="grid-3">
+      <div class="card">
+        <span class="badge blue">Student</span>
+        <ul class="clean">
+          <li>Profile completion</li>
+          <li>10-swipe session completion</li>
+          <li>Project log uploads</li>
+          <li>Office follows</li>
+          <li>Recruiting opt-in rate</li>
+        </ul>
+      </div>
+      <div class="card">
+        <span class="badge green">Office</span>
+        <ul class="clean">
+          <li>Profile claim rate</li>
+          <li>Verified office conversion</li>
+          <li>Campaign click-through</li>
+          <li>Shortlist usefulness score</li>
+          <li>Repeat purchase rate</li>
+        </ul>
+      </div>
+      <div class="card">
+        <span class="badge amber">Recommendation</span>
+        <ul class="clean">
+          <li>Office-fit view rate</li>
+          <li>Follow after recommendation</li>
+          <li>Student says "fit makes sense"</li>
+          <li>Office says "candidate makes sense"</li>
+          <li>Sponsored vs organic trust delta</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="section-title">Main Risks</div>
+    <div class="grid-2">
+      <div class="card">
+        <span class="badge red">Trust risk</span>
+        <h3>Pay-to-rank perception</h3>
+        <p>If students believe recommendations are bought, the core asset dies. Sponsored surfaces must be labeled and fit thresholds must remain real.</p>
+      </div>
+      <div class="card">
+        <span class="badge red">Supply risk</span>
+        <h3>Low project-log upload rate</h3>
+        <p>Students may avoid uploads if the flow feels like a finished portfolio. MVP must be lightweight and useful for profile/export.</p>
+      </div>
+      <div class="card">
+        <span class="badge red">Demand risk</span>
+        <h3>Small offices may not pay</h3>
+        <p>Do not assume willingness. Run paid pilots before building complex analytics or subscriptions.</p>
+      </div>
+      <div class="card">
+        <span class="badge red">Legal risk</span>
+        <h3>Placement-fee boundary</h3>
+        <p>Avoid success fees or direct placement framing until legal review and registration path are clear.</p>
+      </div>
+    </div>
+
+    <div class="section-title">Next Decisions</div>
+    <div class="card">
+      <ul class="clean">
+        <li>Choose first paid pilot package: sponsor profile, recruiting campaign, or office-fit report.</li>
+        <li>Define minimum student project-log schema and upload limits.</li>
+        <li>Decide whether office follow enters MVP before or after project logs.</li>
+        <li>Write sponsored recommendation policy before any paid office exposure ships.</li>
+        <li>Prepare 20-office interview script focused on VM SPACE usage, hiring pain, and fit-report willingness to pay.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-sources">
+    <div class="section-title">Referenced Sources</div>
+    <div class="card source-list">
+      <ul class="clean">
+        <li>VM SPACE job posting guidance: <a href="https://vmspace.com/job/job_guidance.html">https://vmspace.com/job/job_guidance.html</a></li>
+        <li>VM SPACE FAQ: <a href="https://www.vmspace.com/store/faq.html">https://www.vmspace.com/store/faq.html</a></li>
+        <li>Architizer Jobs products: <a href="https://architecture-jobs.architizer.com/products">https://architecture-jobs.architizer.com/products</a></li>
+        <li>Google AdSense Page RPM definition: <a href="https://support.google.com/adsense/answer/190515">https://support.google.com/adsense/answer/190515</a></li>
+        <li>Korean Architecture Service Industry report release: <a href="https://www.xn--s39a8hknmph62hpdbq8y.kr/board.es?act=view&amp;bid=0013&amp;list_no=7091&amp;mid=a10401030000">architecture policy board release</a></li>
+        <li>Korean employment agency legal boundary, Employment Security Act Article 19: <a href="https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&amp;joBrNo=00&amp;joNo=0019&amp;lsiSeq=259231&amp;urlMode=lsScJoRltInfoR">https://www.law.go.kr</a></li>
+      </ul>
+    </div>
+
+    <div class="section-title">Internal Product Assumptions</div>
+    <div class="card">
+      <ul class="clean">
+        <li>Core promise: 10 to 15 swipes should capture subtle taste.</li>
+        <li>Primary business persona priority: firm to jobseeker before person-to-person or firm-to-client.</li>
+        <li>Out of scope: romance, real-estate transactions, contractor matching, materials marketplace, CAD marketplace, and design-service marketplace.</li>
+        <li>Korea-first market: English can be supported, but Korean UX and Korean architecture community density drive early adoption.</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>Static PRD report - no server required - open this file in a browser</footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var buttons = Array.prototype.slice.call(document.querySelectorAll(".tab-btn"));
+  var panels = Array.prototype.slice.call(document.querySelectorAll(".panel"));
+  buttons.forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var target = btn.getAttribute("data-target");
+      buttons.forEach(function (b) { b.classList.remove("active"); });
+      panels.forEach(function (p) { p.classList.remove("active"); });
+      btn.classList.add("active");
+      var panel = document.getElementById(target);
+      if (panel) panel.classList.add("active");
+    });
+  });
+})();
+</script>
+</body>
+</html>

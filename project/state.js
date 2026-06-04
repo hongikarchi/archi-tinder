@@ -25,9 +25,9 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-06-04 08:15 KST',
-    head: 'c7ee138',
-    branch: 'feature/claude-profile-harvest',
+    updatedAt: '2026-06-04 09:22 KST',
+    head: '2f9a9c2',
+    branch: 'feature/claude-backlog-audit',
   },
   done: [
     {
@@ -101,16 +101,41 @@ window.PROJECT_STATE = {
       },
       {
         id: 'FRONT-UX-8',
-        title: '질문 답변 전송 실패 시 무음 유실',
+        title: '질문 답변 전송 실패 시 무음 유실  [BUNDLE UX-WRITE-FAIL]',
         note: '2026-05-31 리뷰 F2. App.jsx:683-692 handleQuestionAnswer가 setPendingQuestion(null) 후 submitQuestionResponse().catch(() => {}) — 실패 시 답변 무음 유실, UI는 성공처럼 진행 → taste-axis 조정 미반영. Fix: optimistic clear 유지하되 .catch에서 toast + 재큐/텔레메트리. FRONT-UX-7과 동일 패턴 → 공유 reportWriteError 헬퍼.',
       },
       {
+        id: 'FRONT-UX-7',
+        title: 'Discovery 우측 스와이프 좋아요 무음 실패  [BUNDLE UX-WRITE-FAIL, promoted from MEDIUM 2026-06-04]',
+        note: 'PR #157 (`77ffd6e`, 2026-05-29) `DiscoveryPage.jsx` right-swipe handler calls `addLikedBuilding(card.image_id).catch(() => {})`. On API failure (network blip, 5xx, auth gone, rate limit) the user gets no feedback — the swipe animation completes and the like silently does not p…',
+      },
+      {
+        id: 'FRONT-UX-6',
+        title: 'SwipeCard gallery flip 부모 state 동기화 누락  [BUNDLE UX-GALLERY anchor, promoted from MEDIUM 2026-06-04]',
+        note: 'PR #158 (`0071c3f`, 2026-05-29) restored in-card gallery flip but made `openGallery()` purely local — it no longer notifies the parent page via `onGalleryOpen` callback. SwipePage\'s `galleryOpen` state never flips to `true`. Two visible regressions on the swipe surface:',
+      },
+      {
         id: 'FRONT-UX-9',
-        title: '모바일 갤러리 세로 스크롤 깨짐 (검증 필요)',
+        title: '모바일 갤러리 세로 스크롤 깨짐 (검증 필요)  [BUNDLE UX-GALLERY, needs browser repro]',
         note: '2026-05-31 리뷰 F4 (high-confidence, 브라우저 미확인). SwipeCard.jsx:183 root touchAction:none + react-tinder-card index.js:174-176 touchstart preventDefault (className에 pressable 없으면) → 카드 내 갤러리 세로 스크롤 native gesture 취소 추정. PR #158 flip 복원 회귀 가능. VERIFY FIRST: 390x844 뷰포트에서 갤러리 세로 드래그. 깨지면 fix=갤러리 스크롤 div에 touchAction:pan-y + pressable className. 재현 안 되면 downgrade/close.',
+      },
+      {
+        id: 'FRONT-UX-10',
+        title: 'Discovery 갤러리 위 long-press 오작동  [BUNDLE UX-GALLERY, promoted from MEDIUM 2026-06-04]',
+        note: 'On the Discovery page (desktop only), pressing-and-holding the mouse (>400ms) over an open card gallery opens the Save-to-Board modal over it, because the gallery\'s pointer-event `stopPropagation` does not stop the separate `mousedown` that DiscoveryPage\'s long-press listener…',
       },
     ],
     high: [
+      {
+        id: 'BACK-OFFICE-1',
+        title: 'SavedOffice orphan 모델 제거 (office-interest 3중 중복 정리)',
+        note: 'office-interest 모델 3중 중복 (2026-06-04 audit 확인). 메모리 라벨 역전 정정: OfficeFollow가 LIVE(FirmProfilePage 팔로우 버튼이 `api/social.js` followOffice/unfollowOffice로 배선), 죽은 건 SavedOffice. 정리 타겟 = SavedOffice 제거 (OfficeFollow 아님 — 잘못 지우면 작동 기능 삭제).',
+      },
+      {
+        id: 'BACK-PROFILE-1',
+        title: 'external_links 검증 없음 (mailto/handle 주입)',
+        note: '`validate_external_links`에 instagram handle/email 포맷 검증 없음. ProfileHero가 instagram.com/HANDLE + mailto:EMAIL 평문 조립 → 스킴-락이라 javascript: 차단되나 path-traversal/주입 nuisance. 영숫자+밑줄만 허용하도록 백엔드 검증 추가. 퀵윈 #3.',
+      },
       {
         id: 'BACK-RECOMMEND-1',
         title: 'Project 두번째 세션이 이전 taste를 모름',
@@ -134,29 +159,9 @@ window.PROJECT_STATE = {
     ],
     medium: [
       {
-        id: 'FRONT-PROFILE-POLISH-1',
+        id: 'FRONT-PROFILE-1',
         title: '프로필 재설계 브라우저 픽셀 패스 (Codex)',
-        note: 'FRONT-PROFILE-HARVEST-1(#179) 머지 후 Codex 브라우저 수정 (별도 PR). FollowListModal 모바일 bottom-sheet(≤768px, DESIGN.md §8.10) + backdrop opacity 0.6→0.4 + inline onMouseEnter→CSS `:hover` + 4테마 픽셀 검증(github-light 먼저). 원 하베스트 minor 4: FollowListPage 성공 경로 `setError(null)` 누락(stale 배너), E…',
-      },
-      {
-        id: 'BACK-PROFILE-SANITIZE-1',
-        title: 'external_links 검증 없음 (mailto/handle 주입)',
-        note: '`validate_external_links`에 instagram handle/email 포맷 검증 없음. ProfileHero가 `https://instagram.com/${handle}` + `mailto:${email}` 평문 조립 → 스킴-락이라 javascript: 차단되나 path-traversal/주입 nuisance. 영숫자+밑줄만 허용하도록 백엔드 검증 추가.',
-      },
-      {
-        id: 'FRONT-UX-6',
-        title: 'SwipeCard gallery flip 부모 state 동기화 누락',
-        note: 'PR #158 (`0071c3f`, 2026-05-29) restored in-card gallery flip but made `openGallery()` purely local — it no longer notifies the parent page via `onGalleryOpen` callback. SwipePage\'s `galleryOpen` state never flips to `true`. Two visible regressions on the swipe surface:',
-      },
-      {
-        id: 'FRONT-UX-10',
-        title: 'Discovery 갤러리 위 long-press 오작동',
-        note: 'On the Discovery page (desktop only), pressing-and-holding the mouse (>400ms) over an open card gallery opens the Save-to-Board modal over it, because the gallery\'s pointer-event `stopPropagation` does not stop the separate `mousedown` that DiscoveryPage\'s long-press listener…',
-      },
-      {
-        id: 'FRONT-UX-7',
-        title: 'Discovery 우측 스와이프 좋아요 무음 실패',
-        note: 'PR #157 (`77ffd6e`, 2026-05-29) `DiscoveryPage.jsx` right-swipe handler calls `addLikedBuilding(card.image_id).catch(() => {})`. On API failure (network blip, 5xx, auth gone, rate limit) the user gets no feedback — the swipe animation completes and the like silently does not p…',
+        note: 'FRONT-PROFILE-HARVEST-1(#179) 머지 후 Codex 브라우저 수정 (별도 PR). FollowListModal 모바일 bottom-sheet(≤768px, DESIGN.md §8.10) + backdrop opacity 0.6→0.4 + inline onMouseEnter→CSS hover + 4테마 픽셀 검증(github-light 먼저). 원 하베스트 minor (2026-06-04 audit 재확인): EditProfileModal(`components/EditPr…',
       },
       {
         id: 'BACK-AUTH-3',
@@ -189,14 +194,14 @@ window.PROJECT_STATE = {
         note: 'Partial mitigation shipped via FULL-LOGIN-REDESIGN-1: UserProfile.consent_accepted_at + consent_policy_version fields + terminal-style "동의합니다" capture on guest wizard. Still pending: legally-reviewed copy, Privacy/Terms routes, retention/export/delete flow. PIPA-compliant copy + UI/UX legal review required before public launch.',
       },
       {
-        id: 'PERF-PREFETCH-POOL-RISK',
-        title: 'Neon connection pool 모니터링 (post PR #134)',
-        note: 'Code audit 2026-05-27: SwipeView can spawn _async_prefetch_thread and _emit_telemetry_thread; both close connections in finally but can open thread-local DB connections while main request holds one. Practical transient footprint is main + telemetry + prefetch, depending on timing. Monitor Neon active conns during swipe bursts; consider bounded executor if peak rises.',
+        id: 'BACK-PERFORMANCE-6',
+        title: 'Neon connection pool 고갈 위험 (async prefetch thread)',
+        note: 'PR 4 PERF-PREFETCH-CHAIN flipped `async_prefetch_enabled: True` — every prod swipe now spawns a daemon thread holding its own DB connection until `_connections.close_all()` runs in finally. Under high concurrent swipe load: connections ≈ (concurrent_requests × 2) — one main wo…',
       },
       {
-        id: 'INFRA-DB-CLEANUP-1',
+        id: 'INFRA-DB-3',
         title: 'Unverified guest row 누적 정리 (conditional)',
-        note: 'FULL-LOGIN-REDESIGN-1 PR #154/#155 ships guest accounts with no cleanup (user explicit decision — Q5). Throttle is 3/min/IP for /auth/guest/ but botnet w/ IP rotation can still grow rows. Monitor Neon "auth_user WHERE email = \'\' AND is_active = True" row count weekly. If growth > 500 rows/week sustained, open this and implement: Django management command "delete unverified WHERE last_active < 30 days AND swipe_count == 0" + cron/Railway scheduled job.',
+        note: 'Guest 계정(FULL-LOGIN-REDESIGN-1 #154/#155)은 정리 로직 없음 (user Q5 결정). `/auth/guest/` throttle 3/min/IP이나 IP 로테이션 botnet은 row 증가 가능 → 조건부 모니터링 항목.',
       },
     ],
     low: [
@@ -238,6 +243,13 @@ window.PROJECT_STATE = {
       sha: '2abb831',
     },
     {
+      number: 179,
+      title: 'feat(profile): FRONT-PROFILE-HARVEST-1 — harvest + Instagram redesign + studios count',
+      mergedAt: '2026-06-03T23:16:33Z',
+      mergedAtKST: '2026-06-04 08:16 KST',
+      sha: '2f9a9c2',
+    },
+    {
       number: 178,
       title: 'feat(SNS-ARCH): 보드 상세 — 추천 사무소 섹션 + ArchitectProfilePage',
       mergedAt: '2026-06-03T15:34:02Z',
@@ -271,13 +283,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-06-01T10:55:34Z',
       mergedAtKST: '2026-06-01 19:55 KST',
       sha: '4e72b07',
-    },
-    {
-      number: 173,
-      title: 'refactor(recommendation): decompose engine.py — vecmath/convergence/filters/cards (FULL-REFACTOR-1 pt.4 FINAL)',
-      mergedAt: '2026-06-01T06:20:26Z',
-      mergedAtKST: '2026-06-01 15:20 KST',
-      sha: 'fefa830',
     },
   ],
   agents: [
@@ -1266,6 +1271,10 @@ window.PROJECT_STATE = {
     {
       path: 'docs/database-schema.md',
       role: 'DB 스키마 문서',
+    },
+    {
+      path: 'docs/prd/archibe-business-model.html',
+      role: 'archibe 비즈니스 모델 PRD (정적 HTML)',
     },
     {
       path: 'frontend/.env.example',
