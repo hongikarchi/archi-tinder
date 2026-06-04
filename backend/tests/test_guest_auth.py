@@ -451,3 +451,242 @@ def test_promote_rejects_non_guest(db):
 
     assert resp.status_code == 400
     assert resp.json()['detail'] == 'not_a_guest'
+
+
+# ---------------------------------------------------------------------------
+# 12-18. merge_guest_into_target collision tests
+# ---------------------------------------------------------------------------
+# These tests call the helper directly — no Google mock / token-blacklist noise.
+
+def _make_follow(follower, followee):
+    """Create a Follow row directly (bypasses signals for counter manipulation)."""
+    from apps.social.models import Follow
+    return Follow.objects.create(follower=follower, followee=followee)
+
+
+def _make_architect_follow(follower, architect_id='arch_000001'):
+    from apps.social.models import ArchitectFollow
+    return ArchitectFollow.objects.create(follower=follower, architect_id=architect_id)
+
+
+def _make_reaction(user, project):
+    from apps.social.models import Reaction
+    return Reaction.objects.create(user=user, project=project)
+
+
+def _make_project(user, name='Test Board'):
+    from apps.recommendation.models import Project
+    return Project.objects.create(user=user, name=name)
+
+
+# (a) Follow follower-role dedup: guest + target both follow user X → no dup, no 500
+@pytest.mark.django_db
+def test_merge_follow_follower_dedup(db):
+    """Guest and target both follow user X → after merge target follows X once."""
+    from apps.accounts.merge import merge_guest_into_target
+    from apps.social.models import Follow
+
+    guest = _make_guest(display_name='GuestA')
+    target = _make_verified(email='target_a@example.com')
+    third = _make_verified(email='third_a@example.com')
+
+    _make_follow(guest, third)    # guest→third
+    _make_follow(target, third)   # target→third (collision)
+
+    merge_guest_into_target(guest, target)
+
+    # Exactly one Follow row: target→third
+    rows = Follow.objects.filter(follower=target, followee=third)
+    assert rows.count() == 1
+
+    # No guest rows remain
+    assert Follow.objects.filter(follower=guest).count() == 0
+
+    # Counter-cache correct
+    target.refresh_from_db()
+    assert target.following_count == Follow.objects.filter(follower=target).count()
+
+
+# (b) Follow followee-role dedup: someone follows both guest + target → no dup
+@pytest.mark.django_db
+def test_merge_follow_followee_dedup(db):
+    """User Y follows both guest and target → after merge only one follower row."""
+    from apps.accounts.merge import merge_guest_into_target
+    from apps.social.models import Follow
+
+    guest = _make_guest(display_name='GuestB')
+    target = _make_verified(email='target_b@example.com')
+    fan = _make_verified(email='fan_b@example.com')
+
+    _make_follow(fan, guest)     # fan→guest
+    _make_follow(fan, target)    # fan→target (collision)
+
+    merge_guest_into_target(guest, target)
+
+    rows = Follow.objects.filter(follower=fan, followee=target)
+    assert rows.count() == 1
+
+    assert Follow.objects.filter(followee=guest).count() == 0
+
+    target.refresh_from_db()
+    assert target.follower_count == Follow.objects.filter(followee=target).count()
+
+
+# (c) Reaction dedup: guest + target both reacted to same project → no dup, no 500
+@pytest.mark.django_db
+def test_merge_reaction_dedup(db):
+    """Guest and target both reacted to project P → after merge one reaction."""
+    from apps.accounts.merge import merge_guest_into_target
+    from apps.social.models import Reaction
+
+    guest = _make_guest(display_name='GuestC')
+    target = _make_verified(email='target_c@example.com')
+    project = _make_project(target, name='Shared Project')
+
+    _make_reaction(guest, project)
+    _make_reaction(target, project)
+
+    merge_guest_into_target(guest, target)
+
+    rows = Reaction.objects.filter(user=target, project=project)
+    assert rows.count() == 1
+
+    assert Reaction.objects.filter(user=guest).count() == 0
+
+
+# (d) ArchitectFollow merge + dedup
+@pytest.mark.django_db
+def test_merge_architect_follow(db):
+    """Guest ArchitectFollows are transferred; duplicates are dropped."""
+    from apps.accounts.merge import merge_guest_into_target
+    from apps.social.models import ArchitectFollow
+
+    guest = _make_guest(display_name='GuestD')
+    target = _make_verified(email='target_d@example.com')
+
+    _make_architect_follow(guest, 'arch_000001')   # collision
+    _make_architect_follow(guest, 'arch_000002')   # unique → reassign
+    _make_architect_follow(target, 'arch_000001')  # target already has this
+
+    merge_guest_into_target(guest, target)
+
+    # arch_000001: one row (target's), no dup
+    assert ArchitectFollow.objects.filter(follower=target, architect_id='arch_000001').count() == 1
+    # arch_000002 transferred
+    assert ArchitectFollow.objects.filter(follower=target, architect_id='arch_000002').count() == 1
+    # No guest rows remain
+    assert ArchitectFollow.objects.filter(follower=guest).count() == 0
+
+
+# (e) liked_building_ids: guest-first union, deduped, capped at 200
+@pytest.mark.django_db
+def test_merge_liked_building_ids(db):
+    """liked_building_ids: guest-first, deduped, within 200 cap."""
+    from apps.accounts.merge import merge_guest_into_target
+
+    guest = _make_guest(display_name='GuestE')
+    target = _make_verified(email='target_e@example.com')
+
+    guest.liked_building_ids = ['g1', 'g2', 'shared']
+    guest.save(update_fields=['liked_building_ids'])
+    target.liked_building_ids = ['shared', 't1']
+    target.save(update_fields=['liked_building_ids'])
+
+    merge_guest_into_target(guest, target)
+
+    target.refresh_from_db()
+    result = target.liked_building_ids
+    # Guest-first order; shared deduplicated; t1 at end
+    assert result == ['g1', 'g2', 'shared', 't1']
+    assert len(result) <= 200
+
+
+@pytest.mark.django_db
+def test_merge_liked_building_ids_cap(db):
+    """liked_building_ids cap: over-200 list is trimmed to 200."""
+    from apps.accounts.merge import merge_guest_into_target
+
+    guest = _make_guest(display_name='GuestE2')
+    target = _make_verified(email='target_e2@example.com')
+
+    # 150 guest + 100 target (50 overlap) = 200 unique after dedup → 200
+    guest.liked_building_ids = [f'g{i}' for i in range(150)]
+    target.liked_building_ids = [f'g{i}' for i in range(100, 200)]  # 100-199 overlap 100-149
+    guest.save(update_fields=['liked_building_ids'])
+    target.save(update_fields=['liked_building_ids'])
+
+    merge_guest_into_target(guest, target)
+
+    target.refresh_from_db()
+    assert len(target.liked_building_ids) <= 200
+
+
+# (f) Self-follow guard: guest follows target → after merge no self-follow
+@pytest.mark.django_db
+def test_merge_self_follow_guard(db):
+    """Guest follows target → that row is deleted, not reassigned (no self-follow)."""
+    from apps.accounts.merge import merge_guest_into_target
+    from apps.social.models import Follow
+
+    guest = _make_guest(display_name='GuestF')
+    target = _make_verified(email='target_f@example.com')
+
+    _make_follow(guest, target)  # guest→target: would become target→target
+
+    merge_guest_into_target(guest, target)
+
+    # No self-follow row
+    assert Follow.objects.filter(follower=target, followee=target).count() == 0
+
+
+# (g) Existing no-collision path still works end-to-end via promote endpoint
+@pytest.mark.django_db
+def test_merge_no_collision_via_promote_endpoint(db):
+    """Guest with boards + unique follows → merge into target with no shared data.
+
+    Verifies the full promote endpoint still works after the merge.py refactor.
+    """
+    from apps.recommendation.models import Project
+    from apps.social.models import Follow, ArchitectFollow
+
+    target_profile = _make_verified(email=_FAKE_GOOGLE_DATA['email'])
+    target_social = target_profile.social_accounts.first()
+    target_social.provider_id = _FAKE_GOOGLE_DATA['provider_id']
+    target_social.save()
+
+    guest_profile = _make_guest()
+    guest_user_id = guest_profile.user.id
+    client = _auth_client_for(guest_profile)
+
+    # Unique data on guest (no collisions)
+    Project.objects.create(user=guest_profile, name='Guest Board A')
+    third_user = _make_verified(email='third_nc@example.com')
+    _make_follow(guest_profile, third_user)
+    _make_architect_follow(guest_profile, 'arch_999001')
+
+    with patch('apps.accounts.views.auth._exchange_google_code', return_value=_FAKE_GOOGLE_DATA):
+        resp = client.post(
+            '/api/v1/auth/promote/',
+            {'provider': 'google', 'code': 'mock_code'},
+            format='json',
+        )
+
+    assert resp.status_code == 200, resp.data
+    data = resp.json()
+    assert data['merged'] is True
+    assert data['user']['user_id'] == target_profile.user.id
+
+    # Guest deleted
+    from django.contrib.auth.models import User as DjangoUser
+    assert not DjangoUser.objects.filter(id=guest_user_id).exists()
+
+    # Project migrated
+    assert Project.objects.filter(user=target_profile, name='Guest Board A').exists()
+
+    # Follow migrated
+    assert Follow.objects.filter(follower=target_profile, followee=third_user).exists()
+
+    # ArchitectFollow migrated
+    assert ArchitectFollow.objects.filter(
+        follower=target_profile, architect_id='arch_999001',
+    ).exists()
