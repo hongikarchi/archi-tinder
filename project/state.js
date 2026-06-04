@@ -23,7 +23,7 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-06-04 17:31 KST',
+    updatedAt: '2026-06-04 17:37 KST',
     head: 'e60918d',
     branch: 'feature/claude-architect-unify-c',
   },
@@ -113,7 +113,7 @@ window.PROJECT_STATE = {
       {
         id: 'ARCHITECT-UNIFY-1',
         title: 'firm-side Office→Architect 전면 통합 (deferred, firm-UX 착수 시)',
-        note: 'office-interest 3모델(OfficeFollow/ArchitectFollow/SavedOffice) + 프로필 2페이지(FirmProfilePage 도달불가 / ArchitectProfilePage LIVE)가 같은 스튜디오 엔티티를 세 갈래로 구현(건축가=회사=스튜디오=office=하나). 통합 = corpus `architect_id` canonical 수렴, Office UUID 통째복사 폐기, claim/projects/follow를 arch_id-overlay로 재키잉.…',
+        note: 'office-interest 모델 중복 해소됨: Phase 0(SavedOffice #188) + C(OfficeFollow, ARCHITECT-UNIFY-C)로 두 미배선 중복 삭제 → follow 모델 1개(ArchitectFollow). 남은 통합 = Office 서브시스템(table/claim/sync_offices/FirmProfilePage) arch_id 흡수 = firm-side 전면 재설계, deferred(firm-UX 착수 시). Office는 계획 기능 substrate(BACK-RECOMMEND-3/EXTERNAL-1/firm-claim)라 park.',
       },
       {
         id: 'BACK-RECOMMEND-1',
@@ -192,7 +192,7 @@ window.PROJECT_STATE = {
       {
         id: 'BACK-RECOMMEND-3',
         title: 'Profile-tab 사무소/유저 추천 endpoint 없음',
-        note: 'Code audit 2026-05-27: no /recommendations/profile/ route exists. Office + OfficeProjectLink models and OfficeDetail project hydration exist; social Follow/OfficeFollow exists for exclusions. engine.compute_user_taste_vector helps requester taste only; firm/user recommendations need cached/precomputed vectors, not per-request loops. Cold-start branch required.',
+        note: 'Code audit 2026-05-27: no /recommendations/profile/ route exists. Office + OfficeProjectLink models and OfficeDetail project hydration exist; social Follow/ArchitectFollow exists for exclusions (OfficeFollow removed in ARCHITECT-UNIFY-C). engine.compute_user_taste_vector helps requester taste only; firm/user recommendations need cached/precomputed vectors, not per-request loops. Cold-start branch required.',
       },
       {
         id: 'BACK-EXTERNAL-1',
