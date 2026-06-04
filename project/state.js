@@ -25,9 +25,9 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-06-04 09:22 KST',
-    head: '2f9a9c2',
-    branch: 'feature/claude-backlog-audit',
+    updatedAt: '2026-06-04 09:40 KST',
+    head: 'bc8f2f2',
+    branch: 'feature/claude-dashboard-roles',
   },
   done: [
     {
@@ -229,6 +229,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 183,
+      title: 'docs(backlog): 2026-06-04 Next audit + ID 2축 rename + BM PRD',
+      mergedAt: '2026-06-04T00:28:13Z',
+      mergedAtKST: '2026-06-04 09:28 KST',
+      sha: 'bc8f2f2',
+    },
+    {
       number: 182,
       title: 'feat(SNS-OFFICE): architect profile redesign + follow + saved studios (rebased #181)',
       mergedAt: '2026-06-03T15:47:43Z',
@@ -276,13 +283,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-06-01T13:13:27Z',
       mergedAtKST: '2026-06-01 22:13 KST',
       sha: '3836c92',
-    },
-    {
-      number: 174,
-      title: 'feat(dashboard): Files tab + self-generating state.js (DASHBOARD-AUTOGEN-1)',
-      mergedAt: '2026-06-01T10:55:34Z',
-      mergedAtKST: '2026-06-01 19:55 KST',
-      sha: '4e72b07',
     },
   ],
   agents: [
@@ -374,11 +374,11 @@ window.PROJECT_STATE = {
     },
     {
       path: '.claude/plans/2026-06-01-office-recommendation-design.md',
-      role: '',
+      role: '사무소/architect 추천 설계 플랜 (#178)',
     },
     {
       path: '.claude/plans/2026-06-02-office-save.md',
-      role: '',
+      role: '사무소 저장 기능 설계 플랜 (#180)',
     },
     {
       path: '.claude/plans/README.md',
@@ -410,7 +410,7 @@ window.PROJECT_STATE = {
     },
     {
       path: '.claude/plans/profile-harvest-redesign.wf.js',
-      role: '',
+      role: '프로필 하베스트 재설계 워크플로 스크립트 (#179)',
     },
     {
       path: '.claude/reviews/2026-05-31-swipe-discovery-review.md',
@@ -646,15 +646,15 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/profiles/management/__init__.py',
-      role: '',
+      role: 'profiles management 패키지 init',
     },
     {
       path: 'backend/apps/profiles/management/commands/__init__.py',
-      role: '',
+      role: 'profiles management commands 패키지 init',
     },
     {
       path: 'backend/apps/profiles/management/commands/sync_offices.py',
-      role: '',
+      role: 'canonical_v2_architects(is_recommendable) → Office 테이블 싱크 명령 (#180)',
     },
     {
       path: 'backend/apps/profiles/migrations/0001_initial.py',
@@ -666,11 +666,11 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/profiles/migrations/0003_office_is_recommendable_office_primary_city_and_more.py',
-      role: '',
+      role: 'Office is_recommendable/primary_city + SavedOffice 마이그레이션 (#180)',
     },
     {
       path: 'backend/apps/profiles/migrations/0004_alter_office_canonical_id.py',
-      role: '',
+      role: 'Office.canonical_id TextField unique 마이그레이션 (#180)',
     },
     {
       path: 'backend/apps/profiles/migrations/__init__.py',
@@ -930,7 +930,7 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/recommendation/views/office_recommendation.py',
-      role: '',
+      role: 'architect 추천/상세/팔로우 뷰 (#178/#182)',
     },
     {
       path: 'backend/apps/recommendation/views/projects.py',
@@ -982,7 +982,7 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/social/migrations/0005_architectfollow.py',
-      role: '',
+      role: 'ArchitectFollow 모델 마이그레이션 (#182)',
     },
     {
       path: 'backend/apps/social/migrations/__init__.py',
@@ -1310,7 +1310,7 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/api/architects.js',
-      role: '',
+      role: 'architect 추천/프로필/팔로우/saved studios API 래퍼 (#178/#182)',
     },
     {
       path: 'frontend/src/api/auth.js',
@@ -1526,11 +1526,11 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/pages/ArchitectProfilePage.jsx',
-      role: '',
+      role: 'architect 프로필 페이지 (#182)',
     },
     {
       path: 'frontend/src/pages/ArchitectProfilePage.module.css',
-      role: '',
+      role: 'architect 프로필 페이지 CSS 모듈 (#182)',
     },
     {
       path: 'frontend/src/pages/BoardDetailPage.jsx',
@@ -1578,11 +1578,11 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/pages/boardDetail/ArchitectSection.jsx',
-      role: '',
+      role: '보드 상세 architect 추천 섹션 (#178)',
     },
     {
       path: 'frontend/src/pages/boardDetail/ArchitectSection.module.css',
-      role: '',
+      role: '보드 상세 architect 섹션 CSS 모듈 (#178)',
     },
     {
       path: 'frontend/src/pages/boardDetail/BuildingTile.jsx',
