@@ -3,7 +3,7 @@ generation.py -- Gemini-backed generation functions.
 
 IMP-6 Commit 2: generate_visual_description (Stage 2 background worker).
 Sprint 4 §8: generate_persona_report.
-Imagen 3: generate_persona_image.
+Gemini-native image generation: generate_persona_image (replaces Imagen 3).
 
 Cross-module symbol access uses the late-bound package reference (_svc) so that
 mock.patch('apps.recommendation.services.X') continues to work in tests.
@@ -13,6 +13,8 @@ import json
 import logging
 import time
 
+from django.conf import settings
+from google.api_core import exceptions as gax_exceptions
 from google.genai import types
 
 logger = logging.getLogger('apps.recommendation')
@@ -93,9 +95,8 @@ def generate_visual_description(filters, raw_query, user_id):
         )
 
         t_gemini_start = time.perf_counter()
-        response = _svc._retry_gemini_call(
-            client.models.generate_content,
-            model='gemini-2.5-flash',
+        response = _svc.generate_content_with_fallback(
+            client,
             contents=stage2_prompt,
             config=types.GenerateContentConfig(
                 temperature=0.3,
@@ -251,19 +252,16 @@ def generate_persona_report(liked_building_ids):
     try:
         client = _svc._get_client()
 
-        def _call():
-            return client.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=summary,
-                config=types.GenerateContentConfig(
-                    system_instruction=_PERSONA_PROMPT,
-                    response_mime_type='application/json',
-                    temperature=0.7,
-                    thinking_config=types.ThinkingConfig(thinking_budget=0),
-                ),
-            )
-
-        response = _svc._retry_gemini_call(_call)
+        response = _svc.generate_content_with_fallback(
+            client,
+            contents=summary,
+            config=types.GenerateContentConfig(
+                system_instruction=_PERSONA_PROMPT,
+                response_mime_type='application/json',
+                temperature=0.7,
+                thinking_config=types.ThinkingConfig(thinking_budget=0),
+            ),
+        )
         return json.loads(response.text)
     except json.JSONDecodeError as e:
         logger.error('generate_persona_report JSON decode error: %s', e)
@@ -291,15 +289,84 @@ def generate_persona_report(liked_building_ids):
         raise RuntimeError(f'Persona report generation failed: {type(e).__name__}. Please try again later.')
 
 
+def _gen_native(client, prompt):
+    """
+    Attempt Gemini-native image generation with automatic model fallback.
+
+    Tries settings.GEMINI_IMAGE_MODEL first, then settings.GEMINI_IMAGE_MODEL_FALLBACK
+    on NotFound / InvalidArgument.  Returns (raw_bytes, mime_type, used_model) on
+    success, or (None, None, None) if no image part is found or both models fail.
+
+    raw_bytes is the raw image bytes from the SDK inline_data (not base64).
+    """
+    from apps.recommendation import services as _svc  # noqa: PLC0415
+
+    for model in (settings.GEMINI_IMAGE_MODEL, settings.GEMINI_IMAGE_MODEL_FALLBACK):
+        try:
+            resp = _svc._retry_gemini_call(
+                client.models.generate_content,
+                model=model,
+                contents=[prompt],
+                config=types.GenerateContentConfig(
+                    response_modalities=['TEXT', 'IMAGE'],
+                    image_config=types.ImageConfig(aspect_ratio='16:9'),
+                ),
+                timeout=45.0,
+            )
+            # Empty/safety-filtered response (no candidates or no parts) -> try next model.
+            cand = (resp.candidates or [None])[0]
+            content = getattr(cand, 'content', None) if cand else None
+            parts = getattr(content, 'parts', None) if content else None
+            for part in (parts or []):
+                idata = getattr(part, 'inline_data', None)
+                if idata and getattr(idata, 'data', None):
+                    return idata.data, idata.mime_type, model
+        except (gax_exceptions.NotFound, gax_exceptions.InvalidArgument):
+            logger.warning('image model %s rejected; trying next', model)
+            continue
+    return None, None, None
+
+
+def _to_webp(raw):
+    """
+    Convert raw image bytes to WebP format using Pillow.
+
+    Returns (webp_bytes, 'image/webp') on success, or (raw, None) if Pillow
+    fails (caller falls back to the native mime_type).
+    """
+    try:
+        from io import BytesIO
+
+        from PIL import Image
+        img = Image.open(BytesIO(raw)).convert('RGB')
+        buf = BytesIO()
+        img.save(buf, format='WEBP', quality=82, method=6)
+        return buf.getvalue(), 'image/webp'
+    except Exception as e:
+        logger.warning('webp convert failed: %s: %s', type(e).__name__, e)
+        return raw, None
+
+
 def generate_persona_image(report):
     """
-    Generate an AI architecture image from a persona report using Imagen 3.
-    Returns {'image_data': base64_str, 'mime_type': str, 'prompt': str} or None on failure.
+    Generate an AI architecture image from a persona report using Gemini-native
+    image generation (response_modalities=['TEXT','IMAGE']).
+
+    Falls back from settings.GEMINI_IMAGE_MODEL to settings.GEMINI_IMAGE_MODEL_FALLBACK
+    on model rejection.  Output is converted to WebP when settings.GEMINI_IMAGE_FORMAT
+    == 'webp' (default) using Pillow.
+
+    Returns {'image_data': base64_str, 'mime_type': str, 'prompt': str} or None on
+    failure.  Emits 'persona_image_timing' event with latency + outcome.
     """
     from apps.recommendation import services as _svc  # noqa: PLC0415
 
     if not report:
         return None
+
+    t_img_start = time.perf_counter()
+    used_model = None
+    outcome = 'none'
 
     try:
         style = (report.get('dominant_styles') or ['Contemporary'])[0]
@@ -311,31 +378,45 @@ def generate_persona_image(report):
             f"A photorealistic architectural photograph of a building. "
             f"{style} style, {program} typology, atmosphere: {one_liner}. "
             f"Materials: {materials}. "
-            f"Professional architectural photography, golden hour lighting, high quality, 8k resolution."
+            f"Professional architectural photography, golden hour lighting, "
+            f"high quality, 8k resolution. Wide 16:9 cinematic aspect ratio."
         )
 
         client = _svc._get_client()
 
-        def _call():
-            return client.models.generate_images(
-                model='imagen-3.0-generate-002',
-                prompt=prompt,
-                config=types.GenerateImagesConfig(
-                    number_of_images=1,
-                    aspect_ratio='16:9',
-                ),
-            )
+        raw, native_mime, used_model = _gen_native(client, prompt)
+        if raw is None:
+            outcome = 'model_failure'
+            return None
 
-        response = _svc._retry_gemini_call(_call, timeout=45.0)
-
-        image_bytes = response.generated_images[0].image.image_bytes
-        base64_str = base64.b64encode(image_bytes).decode('utf-8')
+        if settings.GEMINI_IMAGE_FORMAT == 'webp':
+            out, mime = _to_webp(raw)
+            if mime is None:
+                # Pillow conversion failed — use native bytes + native mime
+                mime = native_mime
+                outcome = 'convert_fallback'
+            else:
+                outcome = 'success'
+        else:
+            out, mime = raw, native_mime
+            outcome = 'success'
 
         return {
-            'image_data': base64_str,
-            'mime_type': 'image/png',
+            'image_data': base64.b64encode(out).decode('utf-8'),
+            'mime_type': mime,
             'prompt': prompt,
         }
     except Exception as e:
         logger.error('generate_persona_image error: %s: %s', type(e).__name__, e)
+        outcome = 'model_failure'
         return None
+    finally:
+        gemini_image_ms = round((time.perf_counter() - t_img_start) * 1000, 2)
+        _svc.event_log.emit_event(
+            'persona_image_timing',
+            session=None,
+            user=None,
+            gemini_image_ms=gemini_image_ms,
+            model=used_model,
+            outcome=outcome,
+        )

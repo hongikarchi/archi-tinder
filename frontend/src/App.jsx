@@ -457,6 +457,13 @@ export default function App() {
             predictedLikes: resultData.predicted_like_images || [],
             ...(reportData?.final_report ? { finalReport: reportData.final_report } : {}),
           } : p))
+          // Fire-and-forget: generate persona image without blocking the completion screen.
+          if (reportData?.final_report && backendId) {
+            api.generateReportImage(backendId)
+              .then(img => setProjects(prev => prev.map(p => p.id === activeProjectId
+                ? { ...p, reportImage: img.image_data, reportImageMime: img.mime_type } : p)))
+              .catch(() => null)  // image failure is non-fatal; report text already shown
+          }
         } catch {
           // ResultsPage will attempt a fresh GET /result/ on entry.
         } finally {
@@ -670,6 +677,7 @@ export default function App() {
           savedIds: extractSavedIds(p.saved_ids),
           finalReport: p.final_report || null,
           reportImage: p.report_image || null,
+          reportImageMime: p.report_image_mime || null,
           sessionId: p.latest_session_id || null,
           latestSessionMeta: p.latest_session_meta || null,
           createdAt: p.created_at,

@@ -20,7 +20,8 @@ class Project(models.Model):
     raw_query       = models.TextField(null=True, blank=True)  # original user search text, shown on public Board
     analysis_report = models.JSONField(null=True, blank=True)
     final_report    = models.JSONField(null=True, blank=True)
-    report_image    = models.TextField(null=True, blank=True)  # base64 image data
+    report_image      = models.TextField(null=True, blank=True)   # base64 image data
+    report_image_mime = models.CharField(max_length=32, null=True, blank=True)
     created_at      = models.DateTimeField(auto_now_add=True)
     updated_at      = models.DateTimeField(auto_now=True)
 
@@ -153,8 +154,9 @@ class SessionEvent(models.Model):
         ('parse_query_timing',  'Parse Query Timing'),
         ('hyde_call_timing',    'HyDE Call Timing'),
         ('hybrid_pool_timing',  'Hybrid Pool Timing'),
-        ('stage2_timing',       'Stage 2 Timing'),
-        ('image_load',          'Image Load'),
+        ('stage2_timing',           'Stage 2 Timing'),
+        ('image_load',              'Image Load'),
+        ('persona_image_timing',    'Persona Image Timing'),
     ]
 
     user        = models.ForeignKey(

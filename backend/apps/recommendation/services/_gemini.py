@@ -113,3 +113,41 @@ def _retry_gemini_call(func, *args, timeout=15.0, **kwargs):
             continue
 
         return value
+
+
+def generate_content_with_fallback(client, *, timeout=15.0, **kw):
+    """
+    Call client.models.generate_content with automatic model fallback.
+
+    Uses settings.GEMINI_TEXT_MODEL as the primary model and
+    settings.GEMINI_TEXT_MODEL_FALLBACK as the fallback.  Fallback fires when
+    the primary model returns NotFound or InvalidArgument (model not available
+    in the API key tier or region).
+
+    All keyword args (contents, config, etc.) are forwarded unchanged so the
+    caller's timing block, config, and telemetry keep working as before.
+
+    Returns the raw response object (same as _retry_gemini_call).
+    """
+    primary = settings.GEMINI_TEXT_MODEL
+    fb = settings.GEMINI_TEXT_MODEL_FALLBACK
+    try:
+        return _retry_gemini_call(
+            client.models.generate_content,
+            model=primary,
+            timeout=timeout,
+            **kw,
+        )
+    except (gax_exceptions.NotFound, gax_exceptions.InvalidArgument):
+        if fb and fb != primary:
+            logger.warning(
+                'text model %s rejected; fallback -> %s',
+                primary, fb,
+            )
+            return _retry_gemini_call(
+                client.models.generate_content,
+                model=fb,
+                timeout=timeout,
+                **kw,
+            )
+        raise

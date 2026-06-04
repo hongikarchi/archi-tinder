@@ -237,19 +237,16 @@ def rerank_candidates(candidates, liked_summary):
     try:
         client = _svc._get_client()
 
-        def _call():
-            return client.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=user_prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction=_RERANK_SYSTEM_PROMPT,
-                    response_mime_type='application/json',
-                    temperature=0.0,
-                    thinking_config=types.ThinkingConfig(thinking_budget=0),
-                ),
-            )
-
-        response = _svc._retry_gemini_call(_call)
+        response = _svc.generate_content_with_fallback(
+            client,
+            contents=user_prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=_RERANK_SYSTEM_PROMPT,
+                response_mime_type='application/json',
+                temperature=0.0,
+                thinking_config=types.ThinkingConfig(thinking_budget=0),
+            ),
+        )
         raw_text = response.text
 
     except Exception as e:
