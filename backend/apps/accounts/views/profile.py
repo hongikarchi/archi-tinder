@@ -222,6 +222,13 @@ class UserProfileSelfUpdateView(APIView):
 # -- Liked Buildings (SNS-LIKED-PROJECTS) ----------------------------------
 
 _LIKED_BUILDINGS_CAP = 200
+# FULL-LOGIN-REDESIGN-1 (BACK-AUTH-3): guest users may add up to 50 liked
+# buildings.  The 51st attempt triggers the verify-gate — frontend catches
+# this 403 and opens VerifyGateModal to prompt Google OAuth promotion.
+# Mirrors the board-gate precedent in apps/recommendation/views/projects.py.
+# Gate is on the ADD path only (new bld_id not yet in the list); the remove
+# path and re-liking an already-present id are unaffected.
+_GUEST_LIKE_LIMIT = 50
 _BLD_ID_MAX_LEN = 20
 _BLD_ID_RE = re.compile(r'^bld_\d{6}$')
 
@@ -289,6 +296,17 @@ class LikedBuildingsView(APIView):
 
         current = list(profile.liked_building_ids or [])
         if bld_id not in current:
+            # Guest verify-gate: block the add if the guest already has
+            # _GUEST_LIKE_LIMIT likes.  Verified users are not gated here.
+            if profile.is_guest and len(current) >= _GUEST_LIKE_LIMIT:
+                return Response(
+                    {
+                        'detail': 'verify_required',
+                        'reason': 'liked_limit_reached',
+                        'limit': _GUEST_LIKE_LIMIT,
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
             current.insert(0, bld_id)
             # Enforce cap silently
             current = current[:_LIKED_BUILDINGS_CAP]
