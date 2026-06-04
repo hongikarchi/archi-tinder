@@ -163,13 +163,6 @@ office-interest 3모델(OfficeFollow/ArchitectFollow/SavedOffice) + 프로필 2�
 
 상태: **Phase 0(SavedOffice 삭제) DONE**(아래 ## Done, BACK-OFFICE-1=Phase0). Phase 1-4(claim/projects 재키잉 → follow 통합 → 페이지 병합 → Office 테이블 정리)는 **예원 #180 / admin #182 / KMS Phase15 작업을 해체하므로 조율 필수 = 착수 전 합의 게이트**(ARCHITECT-UNIFY-1..4 분할 예정). Open: off-corpus firm 정책, sync_offices 운명(read-perf 캐시 측정, <1s 목표), PR 분할/배정.
 
-#### BACK-PROFILE-1 — external_links 검증 없음 (mailto/handle 주입)
-`validate_external_links`에 instagram handle/email 포맷 검증 없음. ProfileHero가 instagram.com/HANDLE + mailto:EMAIL 평문 조립 → 스킴-락이라 javascript: 차단되나 path-traversal/주입 nuisance. 영숫자+밑줄만 허용하도록 백엔드 검증 추가. 퀵윈 #3.
-
-Code refs (`develop@2f9a9c2`, 2026-06-04 audit — 갭 확인):
-- `backend/apps/accounts/serializers.py` `validate_external_links` — dict + string keys/values + len<=500만 체크, handle/email 포맷 검증 없음.
-- 동류 mailto 조립 사이트 2곳 더: `FirmProfileHero.jsx:241`, `ArchitectProfilePage.jsx:166` — office/architect contact_email라 이 항목 범위 밖이나 같은 클래스(별도 후속 가능).
-
 #### BACK-RECOMMEND-1 — Project 두번째 세션이 이전 taste를 모름
 Same Project can host multiple `AnalysisSession` rows (user comes back, "Resume" or new swipe round on the same Project — second session is created fresh while `Project.liked_ids` / `disliked_ids` / `saved_ids` carry forward as the persistent accumulator). Today the new session's algorithm-side state (`like_vectors`, `convergence_history`, `phase`) starts from scratch — exploring phase, empty pool of taste signal — even though the user just liked 12 buildings in Session #1.
 
@@ -472,6 +465,14 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 ---
 
 ## Done
+
+### BACK-PROFILE-1 — external_links 검증 강화 (handle/email/website + mailto 주입 차단) — RESOLVED 2026-06-04 (`feature/claude-back-profile-1` → develop)
+`validate_external_links`(accounts/serializers.py)에 키별 포맷 검증 추가 — 프론트가 검증 없이 `instagram.com/${handle}`·`mailto:${email}` 평문 조립하던 주입 nuisance를 서버에서 차단.
+- [x] instagram: 선행 `@` 1개 strip + `^[A-Za-z0-9._]{1,30}$` fullmatch(경로 break-out 문자 전부 배제), normalized 저장.
+- [x] email: Django EmailValidator + **mailto 헤더 주입 차단**(`?`/`&` reject — RFC5321은 local-part 허용하나 RFC6068 mailto hfield 구분자라 `user?cc=evil@x.com` 차단). security-manager 발견 수정.
+- [x] website: URLValidator(http/https) — javascript:/data:/protocol-relative 차단. 전 키: 제어문자(CRLF) reject, unknown 키 forward-compat, empty=skip, normalized dict 반환.
+- 게이트: `manage.py check` PASS, flake8 clean(3 E221 pre-existing 무관), sanity 10+케이스(주입/우회 reject·정상 통과). security-manager FAIL→fix→재검증. test_phase13 instagram assert 갱신(strip). app-test SKIP(API 검증, UI 무변경).
+- 후속(별도, 낮은 위험): office/architect contact_email mailto 조립 2곳(FirmProfileHero:241, ArchitectProfilePage:166)은 동일 클래스이나 **corpus-curated 이메일**(user-PATCH 불가)이라 위험 낮음 — 범위 밖.
 
 ### BACK-OFFICE-1 (ARCHITECT-UNIFY Phase 0) — SavedOffice orphan 제거 — RESOLVED 2026-06-04 (`feature/claude-architect-unify-p0` → develop)
 예원 #180의 미배선 SavedOffice(model+2뷰+2url) 삭제 + DROP 마이그 0005. ARCHITECT-UNIFY(Office↔Architect 통합) 스펙의 첫 안전 조각 — "스튜디오 저장"은 ArchitectFollow saved-studios(#179)가 이미 충족, SavedOffice는 프론트 콜러 0이라 무위험.

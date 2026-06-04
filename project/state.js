@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-06-04 15:05 KST',
-    head: '75542fc',
-    branch: 'feature/claude-architect-unify-p0',
+    updatedAt: '2026-06-04 16:12 KST',
+    head: '6a12156',
+    branch: 'feature/claude-back-profile-1',
   },
   done: [
+    {
+      id: 'BACK-PROFILE-1',
+      title: 'external_links 검증 강화 (handle/email/website + mailto 주입 차단)',
+      completedAt: '2026-06-04',
+      note: '`validate_external_links`(accounts/serializers.py)에 키별 포맷 검증 추가 — 프론트가 검증 없이 `instagram.com/${handle}`·`mailto:${email}` 평문 조립하던 주입 nuisance를 서버에서 차단.',
+    },
     {
       id: 'BACK-OFFICE-1',
       title: '(ARCHITECT-UNIFY Phase 0) — SavedOffice orphan 제거',
@@ -72,13 +78,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-06-01',
       note: 'PR #166 worktree 격리 폐기 → one-clone-per-worker: 작업자(사람/AI)마다 자기 clone + 자기 .git + 자기 feature 브랜치 + 자기 PR. 공유 .git이 2026-05-31 HEAD 오염 경로였음(Codex checkout이 메인 clone HEAD를 develop 밖으로 이동). 실패모드 분리: HEAD 충돌(해결=별도 .git) + merge 충돌(해결=파일 스코프 분리). Claude=메인 clone make_web(터미널/백엔드 경향), Codex=make_web-codex(브라우저/프론트 경향) — 경향=기본값이지 벽 아님. 브랜치 prefix: 팀 feature/<role>-(algo/sns/admin) 유지, 로컬 에이전트 feature/claude-* / feature/codex-*. Task 보드 루트 통합(.claude+.codex → 루트 Task.md, 76 refs / 33 files). deprecated agent git-manager+reporter 삭제(git-commit+reporter-inline skill 대체). reporter-inline Model 1(publish 전, task-ID 키잉). 해결된 plan 4개 archive + stale ## PR Plan neuter(publish 게이트 오작동 방지). CONTRIBUTING canonical + CLAUDE/AGENTS/WORKFLOW×2 미러. Pure docs/config → app-test skip. PR# pending squash.',
     },
-    {
-      id: 'SNS-RESULTS-UI-1',
-      title: 'ResultsPage UI overhaul — Liked 카드 노출 + 추천 그리드',
-      completedAt: '2026-05-31',
-      prs: [165],
-      note: 'Top-K 추천 4-column 그리드 + 신규 "My Likes" 가로 스크롤 섹션 (result.liked_images 소비). Imagen placeholder/rank-10 divider 제거, Fragment import drop. frontend/src/pages/ResultsPage.jsx +118/-69. 모바일 4-col 9-10px 폰트 빽빽 (작성자 의도). sha 61c9ee1.',
-    },
   ],
   now: [
     {
@@ -115,11 +114,6 @@ window.PROJECT_STATE = {
         id: 'ARCHITECT-UNIFY-1',
         title: 'Office↔Architect 엔티티 통합 (Phase 1-4, 조율-게이트)',
         note: 'office-interest 3모델(OfficeFollow/ArchitectFollow/SavedOffice) + 프로필 2페이지(FirmProfilePage 도달불가 / ArchitectProfilePage LIVE)가 같은 스튜디오 엔티티를 세 갈래로 구현(건축가=회사=스튜디오=office=하나). 통합 = corpus `architect_id` canonical 수렴, Office UUID 통째복사 폐기, claim/projects/follow를 arch_id-overlay로 재키잉.…',
-      },
-      {
-        id: 'BACK-PROFILE-1',
-        title: 'external_links 검증 없음 (mailto/handle 주입)',
-        note: '`validate_external_links`에 instagram handle/email 포맷 검증 없음. ProfileHero가 instagram.com/HANDLE + mailto:EMAIL 평문 조립 → 스킴-락이라 javascript: 차단되나 path-traversal/주입 nuisance. 영숫자+밑줄만 허용하도록 백엔드 검증 추가. 퀵윈 #3.',
       },
       {
         id: 'BACK-RECOMMEND-1',
@@ -214,6 +208,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 188,
+      title: 'refactor(profiles): delete SavedOffice orphan (ARCHITECT-UNIFY Phase 0)',
+      mergedAt: '2026-06-04T07:10:18Z',
+      mergedAtKST: '2026-06-04 16:10 KST',
+      sha: '6a12156',
+    },
+    {
       number: 187,
       title: 'chore(make): add migrate-local for safe local DDL migrate',
       mergedAt: '2026-06-04T05:04:00Z',
@@ -261,13 +262,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-06-03T15:33:47Z',
       mergedAtKST: '2026-06-04 00:33 KST',
       sha: '2abb831',
-    },
-    {
-      number: 179,
-      title: 'feat(profile): FRONT-PROFILE-HARVEST-1 — harvest + Instagram redesign + studios count',
-      mergedAt: '2026-06-03T23:16:33Z',
-      mergedAtKST: '2026-06-04 08:16 KST',
-      sha: '2f9a9c2',
     },
   ],
   agents: [
@@ -508,6 +502,14 @@ window.PROJECT_STATE = {
     {
       path: 'README.md',
       role: '프로젝트 안내 문서',
+    },
+    {
+      path: 'Task.md',
+      role: '태스크 보드 문서',
+    },
+    {
+      path: 'Task.md',
+      role: '태스크 보드 문서',
     },
     {
       path: 'Task.md',
@@ -1680,6 +1682,14 @@ window.PROJECT_STATE = {
     {
       path: 'project/mermaid.min.js',
       role: 'Mermaid 다이어그램 번들',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
     },
     {
       path: 'project/state.js',
