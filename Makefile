@@ -6,7 +6,9 @@ DEV_SUPERUSER_PASSWORD ?= admin1234
 BACKEND_DIR  = backend
 FRONTEND_DIR = frontend
 
-.PHONY: setup dev backend frontend reset-db dashboard
+SHELL := /bin/bash
+
+.PHONY: setup dev backend frontend reset-db dashboard migrate-local
 
 # ── Setup ────────────────────────────────────────────────────────────────────
 setup:
@@ -43,3 +45,21 @@ reset-db:
 # ── Dashboard (open committed project state view) ──────────────────────────
 dashboard:
 	@command -v open >/dev/null 2>&1 && open project/dashboard.html || echo "Open project/dashboard.html in a browser."
+
+# -- Local DB migrate (DDL via neondb_owner; prompts for pw, nothing persisted) --
+# Local runtime user make_web_app has no DDL (INFRA-DB-1). Applies pending migrations
+# to your LOCAL dev branch as neondb_owner, keeping DB_HOST/NAME from backend/.env so
+# DDL hits LOCAL, never prod. Password is prompted (read -s), never written to disk.
+# Runtime .env untouched. See memory project_local_db_migrate + CLAUDE.md INFRA-DB-1/ENV-1.
+migrate-local:
+	@cd $(BACKEND_DIR); \
+	HOST=$$(grep -E '^DB_HOST=' .env | cut -d= -f2-); \
+	NAME=$$(grep -E '^DB_NAME=' .env | cut -d= -f2-); \
+	echo; echo "Pending migrations (as current runtime user):"; \
+	python3 manage.py showmigrations 2>/dev/null | grep '\[ \]' || echo "  (none -- DB already current)"; \
+	echo; echo "LOCAL migrate target  ->  HOST=$$HOST  NAME=$$NAME  USER=neondb_owner"; \
+	echo "WARNING: runs DDL as neondb_owner. Confirm HOST above is your LOCAL dev branch, NOT production."; \
+	read -p "Proceed? type 'yes': " ANS; \
+	if [ "$$ANS" != "yes" ]; then echo "aborted."; exit 1; fi; \
+	read -s -p "neondb_owner password: " PW; echo; \
+	DB_USER=neondb_owner DB_PASSWORD="$$PW" python3 manage.py migrate && { echo; echo "Done. Runtime .env unchanged (still make_web_app)."; }
