@@ -137,6 +137,11 @@ export default function DiscoveryPage({ showToast }) {
   // Draft-id session state — persisted to sessionStorage
   const [draftId, setDraftId] = useState(() => sessionStorage.getItem(DRAFT_ID_KEY) || null)
   const [draftLikeCount, setDraftLikeCount] = useState(() => {
+    const hasDraft = sessionStorage.getItem(DRAFT_ID_KEY)
+    if (!hasDraft) {
+      sessionStorage.removeItem(DRAFT_LIKES_KEY)   // stale count with no board — discard
+      return 0
+    }
     const stored = sessionStorage.getItem(DRAFT_LIKES_KEY)
     return stored ? parseInt(stored, 10) : 0
   })
@@ -188,7 +193,7 @@ export default function DiscoveryPage({ showToast }) {
   // returns prev unchanged and triggerShownRef stays false, so the effect
   // re-fires correctly once the deck is refilled (draftLikeCount still ≥10).
   useEffect(() => {
-    if (draftLikeCount >= TASTE_NUDGE_THRESHOLD && !triggerShownRef.current) {
+    if (draftId && draftLikeCount >= TASTE_NUDGE_THRESHOLD && !triggerShownRef.current) {
       const triggerCard = { canonical_bld_id: TRIGGER_CARD_ID, __trigger: true }
       setDeck(prev => {
         // Deck cleared mid-fetch — don't inject; effect re-fires when refilled
@@ -203,7 +208,7 @@ export default function DiscoveryPage({ showToast }) {
         return next
       })
     }
-  }, [draftLikeCount])
+  }, [draftId, draftLikeCount])
 
   // Shake animation: when top card has already been seen (re-appearance), shake it
   useEffect(() => {
@@ -362,6 +367,10 @@ export default function DiscoveryPage({ showToast }) {
       navigate('/swipe')
     } catch (err) {
       if (err?.status === 400 && err?.data?.detail === 'not_enough_likes') {
+        // Phantom trigger from a stale count — clear it so the user isn't stuck.
+        setDeck(prev => prev.filter(c => !isTriggerCard(c)))
+        triggerShownRef.current = false
+        setDraftLikeCount(0)
         reportWriteError(showToast, '좋아요가 부족합니다 (최소 10개)')
       } else {
         reportWriteError(showToast, 'Taste 분석 시작 실패 — 다시 시도해주세요')

@@ -667,6 +667,13 @@ export default function App() {
       api.setTokens(user.access, user.refresh)
     }
     sessionStorage.setItem('archithon_user', id)
+    // Clear Discovery draft session so a re-login always starts a brand-new collection.
+    // Same four keys as handleLogout — prevents a stale draftLikeCount >= 10 from
+    // triggering a premature Taste card on the next Discovery visit.
+    sessionStorage.removeItem('discovery_draft_id')
+    sessionStorage.removeItem('discovery_draft_likes')
+    sessionStorage.removeItem('discovery_deck_v2')
+    sessionStorage.removeItem('discovery_seen_ids')
     setUserId(id)
     if (typeof user === 'object') hydrate(user.theme, user.font)
     setCurrentCard(null)
