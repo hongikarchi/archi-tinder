@@ -15,9 +15,7 @@
  *   systemFlow/recommendationFlow/agentFlow/milestones          [hand-curated, carried]
  *
  * Loaded via <script> by project/dashboard.html (file:// double-click — no fetch,
- * no server at LOAD time; generation is the build step). dashboard.html also loads
- * project/state.local.js (gitignored) after this file when present, so
- * `make dashboard` shows a fresher local view without dirtying this committed file.
+ * no server at LOAD time; generation is the build step).
  *
  * Time convention: human-facing timestamps are `YYYY-MM-DD HH:mm KST`; PRs also
  * carry raw ISO 8601 UTC (mergedAt).
@@ -25,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-06-04 09:40 KST',
-    head: 'bc8f2f2',
-    branch: 'feature/claude-dashboard-roles',
+    updatedAt: '2026-06-04 10:19 KST',
+    head: '80a2067',
+    branch: 'feature/claude-dashboard-localview-remove',
   },
   done: [
+    {
+      id: 'DASHBOARD-LOCALVIEW-REMOVE',
+      title: 'state.local.js 그림자 메커니즘 제거',
+      completedAt: '2026-06-04',
+      note: '`make dashboard`가 만드는 gitignored `project/state.local.js`가 신선도 가드 없이 committed `state.js`를 가리는 footgun 제거. 6/1 stale local이 6/4 audit 변경(BACK-OFFICE-1·BACK-PROFILE-1 등)을 영구히 가려 유저가 대시보드에서 못 봄. 대시보드 단일 소스 = committed `state.js`.',
+    },
     {
       id: 'FRONT-PROFILE-HARVEST-1',
       title: '프로필 컴포넌트 하베스트 + 인스타식 재설계',
@@ -76,13 +80,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-05-31',
       prs: [164, 166, 167],
       note: '동시-에이전트 working-dir 격리(git worktree) CONTRIBUTING + CLAUDE/AGENTS + WORKFLOW 미러 (#166 32a0f7d). Codex startup metadata 경고 수정 (#167 43de2b1). 2026-05-31 swipe/discovery 리뷰 → Task.md ### X-HIGH 버킷 + .claude/reviews/ 문서 (#164 6c5cd66).',
-    },
-    {
-      id: 'FULL-LOGIN-REDESIGN-1',
-      title: 'Guest-first onboarding + 보드 4번째 verify gate',
-      completedAt: '2026-05-27',
-      prs: [154, 155],
-      note: 'Rebuilt after codex feature/codex-guest-auth-* archived for 6 issues — all resolved. Backend PR #154 db81e0f: UserProfile.is_guest + onboarding_role + consent_accepted_at + consent_policy_version + migration 0004 + GuestLoginView (3/min throttle) + GuestPromoteView (atomic Branch 1 merge 8 FK rules + Branch 2 in-place transform w/ username collision guard) + CustomTokenObtainPairSerializer is_guest claim on refresh→access + IsVerifiedUser + ProjectListCreateView inline gate (403 verify_required). 14 pytest. Frontend PR #155 e8296f5-pre-squash: LoginPage terminal 3-step wizard + 동의합니다 PIPA + dual CTA + VerifyGateModal + useGoogleLogin extracted to GoogleLoginButton/GoogleVerifyButton (conditional mount safety) + cross-device merge onPromoted(user,merged) handleLogin re-sync + SaveToBoardModal Option A auto-retry + SurpriseBoardModal Option B toast + conditional GoogleOAuthProvider mount (no literal fallback). 24/24 loginFlow.test.mjs. Plan: ~/.claude/plans/merry-toasting-dove.md.',
     },
   ],
   now: [
@@ -229,6 +226,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 184,
+      title: 'chore(dashboard): file-roles 15개 추가 (#178/#180/#182 파일)',
+      mergedAt: '2026-06-04T00:41:03Z',
+      mergedAtKST: '2026-06-04 09:41 KST',
+      sha: '80a2067',
+    },
+    {
       number: 183,
       title: 'docs(backlog): 2026-06-04 Next audit + ID 2축 rename + BM PRD',
       mergedAt: '2026-06-04T00:28:13Z',
@@ -276,13 +280,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-06-01T13:18:31Z',
       mergedAtKST: '2026-06-01 22:18 KST',
       sha: 'b8c1c7c',
-    },
-    {
-      number: 175,
-      title: 'fix(sns): swipe exit 버튼 아이콘 logout→restart 회전 화살표로 교체',
-      mergedAt: '2026-06-01T13:13:27Z',
-      mergedAtKST: '2026-06-01 22:13 KST',
-      sha: '3836c92',
     },
   ],
   agents: [

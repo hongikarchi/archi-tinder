@@ -214,8 +214,8 @@ No manual JSON, no `*/`-comment pitfall, no timestamp/SHA bookkeeping. Commit th
 > state shape and the carry-forward rules are now enforced by `tools/gen-state.js`. Note:
 > `prs` lists `--state merged` only — the old in-flight-PR `mergedAt: null` sentinel is
 > dropped (the just-merged PR appears on the next generator run after the squash). To open
-> the dashboard with a fresher local view, run `make dashboard` (writes the gitignored
-> `project/state.local.js`; does not touch the committed `project/state.js`).
+> the dashboard, run `make dashboard`, which opens the committed `project/state.js`
+> view (no regeneration; reporter-inline refreshes `project/state.js` at PR time).
 
 ## Step 5 — Report
 

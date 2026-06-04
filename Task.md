@@ -502,6 +502,14 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 
 ## Done
 
+### DASHBOARD-LOCALVIEW-REMOVE — state.local.js 그림자 메커니즘 제거 — RESOLVED 2026-06-04 (`feature/claude-dashboard-localview-remove` → develop)
+`make dashboard`가 만드는 gitignored `project/state.local.js`가 신선도 가드 없이 committed `state.js`를 가리는 footgun 제거. 6/1 stale local이 6/4 audit 변경(BACK-OFFICE-1·BACK-PROFILE-1 등)을 영구히 가려 유저가 대시보드에서 못 봄. 대시보드 단일 소스 = committed `state.js`.
+- [x] **dashboard.html**: `state.local.js` 그림자 `<script>` 로더 삭제 → `window.PROJECT_STATE` 단일 소스.
+- [x] **gen-state.js**: `--local` 경로 전면 제거(LOCAL flag, untracked union, state.local.js 출력, 헤더+HEADER doc).
+- [x] **Makefile dashboard**: open-only(재생성 안 함 → git churn 0; committed state.js는 reporter-inline이 PR마다 갱신 = 항상 최신-committed). 미커밋 Task.md 프리뷰 니치 의도적 드롭(유저 승인).
+- [x] **.gitignore** state.local.js 엔트리 삭제 + stale 로컬 파일 제거 + `reporter-inline/SKILL.md` doc 동기화.
+- 게이트: gen-state self-check PASS(done:8 files:368), grep 잔여 0, `make -n dashboard` open-only. app-test 스킵(순수 tools/meta, 런타임 표면 0). code-review/security 스킵(기계적 삭제, session self-review).
+
 ### FRONT-PROFILE-HARVEST-1 — 프로필 컴포넌트 하베스트 + 인스타식 재설계 — RESOLVED 2026-06-04 (`feature/claude-profile-harvest` → develop, PR #179)
 archibe-profile에서 핵심 컴포넌트 채택 + 4테마 재토큰화 + 프로필 인스타식 재설계. **Profile-area 컴포넌트 하베스트 + CSS-Module/hook 패턴 토대** — 명명된 ~646 인라인 부채(SwipePage/BoardDetailPage 등) 상환 아님(그 파일 안 건드림); FRONT-DESIGN-1 핵심 인라인 마이그레이션은 ## Next 잔존.
 - [x] **하베스트** (584d659/3619bbc/eb0d167/25c2a26): `icons.jsx` 8-아이콘(stroke currentColor), `FollowList`(+`.module.css` 첫 CSS Module), `EditCardForm`/`EditProfileModal`(PATCH /users/me/ 낙관적 머지), `BusinessCard`+`ShareCardModal`+스텁 `FakeQr`(흰 명함 PAPER/INK 의도적 하드코딩). 다크-온리 소스 → themed 토큰 재배선.

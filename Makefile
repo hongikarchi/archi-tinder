@@ -40,7 +40,6 @@ frontend:
 reset-db:
 	cd $(BACKEND_DIR) && python3 manage.py migrate
 
-# ── Dashboard (regenerate local project state, then open) ────────────────────
+# ── Dashboard (open committed project state view) ──────────────────────────
 dashboard:
-	node tools/gen-state.js --local
 	@command -v open >/dev/null 2>&1 && open project/dashboard.html || echo "Open project/dashboard.html in a browser."
