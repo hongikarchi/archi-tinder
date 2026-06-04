@@ -23,11 +23,23 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-06-04 17:37 KST',
-    head: 'e60918d',
-    branch: 'feature/claude-architect-unify-c',
+    updatedAt: '2026-06-04 22:56 KST',
+    head: '2cc5efe',
+    branch: 'feature/claude-ux-gallery',
   },
   done: [
+    {
+      id: 'UX-GALLERY',
+      title: '갤러리 제스처 3버그 (FRONT-UX-6/9/10)',
+      completedAt: '2026-06-04',
+      note: '갤러리 3버그(부모-sync wobble·모바일 세로스크롤·Discovery long-press 오작동)를 lift 없이 해결. 원 premise(sibling-overlay lift)를 유저 product 재검토로 재정의 — 갤러리 보면서도 스와이프 유지 + 순수 Discovery. session 브라우저 spike로 "3D가 스크롤 안 깸"(원인은 touch-action·snap, 3D 아님) 확정 후 구현.',
+    },
+    {
+      id: 'BACK-RECOMMEND-4',
+      title: 'Discovery 좋아요가 추천에 반영 (taste vector + exclude + evict)',
+      completedAt: '2026-06-04',
+      note: 'Discovery 우-스와이프 like(`UserProfile.liked_building_ids`)가 추천 엔진에 안 먹히던 것 해결 — Discovery-only 유저가 영구 cold/random feed였던 core-promise 위반 수정. 3곳 주입, 전부 기존 infra 재사용.',
+    },
     {
       id: 'ARCHITECT-UNIFY-C',
       title: 'OfficeFollow 중복 제거 (follow 모델 통합)',
@@ -65,19 +77,6 @@ window.PROJECT_STATE = {
       prs: [179],
       note: 'archibe-profile에서 핵심 컴포넌트 채택 + 4테마 재토큰화 + 프로필 인스타식 재설계. Profile-area 컴포넌트 하베스트 + CSS-Module/hook 패턴 토대 — 명명된 ~646 인라인 부채(SwipePage/BoardDetailPage 등) 상환 아님(그 파일 안 건드림); FRONT-DESIGN-1 핵심 인라인 마이그레이션은 ## Next 잔존.',
     },
-    {
-      id: 'DASHBOARD-AUTOGEN-1',
-      title: '대시보드 Files 탭 + state.js 자동생성',
-      completedAt: '2026-06-01',
-      note: '프로젝트 대시보드 2건: (1) 파일 구조 Files 탭 (collapsible 트리 + 파일별 role), (2) state.js를 reporter 수작업 재작성 대신 `tools/gen-state.js`로 자동생성.',
-    },
-    {
-      id: 'FULL-REFACTOR-1',
-      title: '큰 파일 분해 (engine.py 등) pure-move 분해',
-      completedAt: '2026-06-01',
-      prs: [170, 171, 172],
-      note: 'Behavior-preserving 4-slice 분해, lines relocated/zero behavior change. #170 6f54cc3: recommendation 백엔드(parse_query 906→656 +_prompts, sessions 622→80 +session_service, swipe 1205→497 +swipe_service; 서비스는 engine을 MODULE로 참조→patch-bite 유지). #171 7302ae6: accounts/views.py 939→views/ 패키지(auth+profile+facade); CI가 mock-patch 지뢰 잡음→테스트 patch 경로 9개 submodule repoint. #172 e1ff077: 프론트 5페이지→16 co-located 모듈(BoardDetail 1050→862, UserProfile 1022→715, BuildingDetail 711→499, FirmProfile 540→156, App.jsx 983→897); 페이지 named export 0→facade 불필요; Codex mocked browser smoke 4페이지 렌더 확인. engine.py(16e2a1a-pre-squash): 2446→1976, 순수 leaf 18fn→engine_{vecmath,convergence,filters,cards} 4 acyclic sibling(sibling은 engine import 안 함; engine이 re-import+re-export facade); patch target 전부 engine.py 유지→landmine 무력화; poison-mock으로 facade reach 확인. 잔여 ~1976 LOC patch-saturated(connection/RC/~20fn)→추가 분해 deferred. Excluded→Codex: Login/Swipe/Discovery+SwipeGestureFrame. engine PR# pending squash.',
-    },
   ],
   now: [
     {
@@ -87,28 +86,7 @@ window.PROJECT_STATE = {
     },
   ],
   next: {
-    xhigh: [
-      {
-        id: 'BACK-RECOMMEND-4',
-        title: 'Discovery 좋아요가 추천에 안 먹힘',
-        note: '2026-05-31 swipe/discovery 리뷰 F1a/F1b. Discovery right-swipe like는 UserProfile.liked_building_ids에만 기록되고 추천 엔진이 읽지 않음 → Discovery-only 유저는 아무리 like해도 영구 cold/random feed (core promise 위반). engine.py:2352 compute_user_taste_vector는 Project.liked_ids만 읽음, discovery.py:55-73 exclude-set에 liked_building_ids 없음 → 이미 like한 빌딩 재등장. Fix: liked_building_ids를 taste vector + exclude-set에 투입 + LikedBuildingsView.post에서 evict_taste. engine.py collaborator-owned → 알고리즘 오너 협의.',
-      },
-      {
-        id: 'FRONT-UX-6',
-        title: 'SwipeCard gallery flip 부모 state 동기화 누락  [BUNDLE UX-GALLERY anchor, promoted from MEDIUM 2026-06-04]',
-        note: 'PR #158 (`0071c3f`, 2026-05-29) restored in-card gallery flip but made `openGallery()` purely local — it no longer notifies the parent page via `onGalleryOpen` callback. SwipePage\'s `galleryOpen` state never flips to `true`. Two visible regressions on the swipe surface:',
-      },
-      {
-        id: 'FRONT-UX-9',
-        title: '모바일 갤러리 세로 스크롤 깨짐 (검증 필요)  [BUNDLE UX-GALLERY, needs browser repro]',
-        note: '2026-05-31 리뷰 F4 (high-confidence, 브라우저 미확인). SwipeCard.jsx:183 root touchAction:none + react-tinder-card index.js:174-176 touchstart preventDefault (className에 pressable 없으면) → 카드 내 갤러리 세로 스크롤 native gesture 취소 추정. PR #158 flip 복원 회귀 가능. VERIFY FIRST: 390x844 뷰포트에서 갤러리 세로 드래그. 깨지면 fix=갤러리 스크롤 div에 touchAction:pan-y + pressable className. 재현 안 되면 downgrade/close.',
-      },
-      {
-        id: 'FRONT-UX-10',
-        title: 'Discovery 갤러리 위 long-press 오작동  [BUNDLE UX-GALLERY, promoted from MEDIUM 2026-06-04]',
-        note: 'On the Discovery page (desktop only), pressing-and-holding the mouse (>400ms) over an open card gallery opens the Save-to-Board modal over it, because the gallery\'s pointer-event `stopPropagation` does not stop the separate `mousedown` that DiscoveryPage\'s long-press listener…',
-      },
-    ],
+    xhigh: [],
     high: [
       {
         id: 'ARCHITECT-UNIFY-1',
@@ -208,6 +186,34 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 197,
+      title: 'chore(infra): make test-local — local pytest via neondb_owner (INFRA-DB-2)',
+      mergedAt: '2026-06-04T13:53:01Z',
+      mergedAtKST: '2026-06-04 22:53 KST',
+      sha: '87023f3',
+    },
+    {
+      number: 194,
+      title: 'feat(algo): TagAxisWeight 모델 + 5축 취향 axis_scores',
+      mergedAt: '2026-06-04T13:40:34Z',
+      mergedAtKST: '2026-06-04 22:40 KST',
+      sha: '73c872d',
+    },
+    {
+      number: 192,
+      title: 'fix(recommend): Discovery likes feed taste vector + exclude + evict (BACK-RECOMMEND-4)',
+      mergedAt: '2026-06-04T13:53:32Z',
+      mergedAtKST: '2026-06-04 22:53 KST',
+      sha: '2cc5efe',
+    },
+    {
+      number: 190,
+      title: 'refactor(social): delete OfficeFollow duplicate (ARCHITECT-UNIFY-C)',
+      mergedAt: '2026-06-04T08:39:41Z',
+      mergedAtKST: '2026-06-04 17:39 KST',
+      sha: 'df8dcd8',
+    },
+    {
       number: 189,
       title: 'security(accounts): harden external_links validation (BACK-PROFILE-1)',
       mergedAt: '2026-06-04T07:12:58Z',
@@ -234,34 +240,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-06-04T05:03:18Z',
       mergedAtKST: '2026-06-04 14:03 KST',
       sha: '9b581fb',
-    },
-    {
-      number: 185,
-      title: 'chore(dashboard): remove state.local.js shadow mechanism',
-      mergedAt: '2026-06-04T01:33:59Z',
-      mergedAtKST: '2026-06-04 10:33 KST',
-      sha: '4cb8a3c',
-    },
-    {
-      number: 184,
-      title: 'chore(dashboard): file-roles 15개 추가 (#178/#180/#182 파일)',
-      mergedAt: '2026-06-04T00:41:03Z',
-      mergedAtKST: '2026-06-04 09:41 KST',
-      sha: '80a2067',
-    },
-    {
-      number: 183,
-      title: 'docs(backlog): 2026-06-04 Next audit + ID 2축 rename + BM PRD',
-      mergedAt: '2026-06-04T00:28:13Z',
-      mergedAtKST: '2026-06-04 09:28 KST',
-      sha: 'bc8f2f2',
-    },
-    {
-      number: 182,
-      title: 'feat(SNS-OFFICE): architect profile redesign + follow + saved studios (rebased #181)',
-      mergedAt: '2026-06-03T15:47:43Z',
-      mergedAtKST: '2026-06-04 00:47 KST',
-      sha: 'c7ee138',
     },
   ],
   agents: [
@@ -502,6 +480,14 @@ window.PROJECT_STATE = {
     {
       path: 'README.md',
       role: '프로젝트 안내 문서',
+    },
+    {
+      path: 'Task.md',
+      role: '태스크 보드 문서',
+    },
+    {
+      path: 'Task.md',
+      role: '태스크 보드 문서',
     },
     {
       path: 'Task.md',
@@ -820,6 +806,10 @@ window.PROJECT_STATE = {
       role: 'DB 마이그레이션 0020 질문 카드 필드',
     },
     {
+      path: 'backend/apps/recommendation/migrations/0021_tagaxisweight.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/recommendation/migrations/__init__.py',
       role: '마이그레이션 패키지 init',
     },
@@ -852,6 +842,10 @@ window.PROJECT_STATE = {
       role: '파싱 프롬프트·어휘 상수',
     },
     {
+      path: 'backend/apps/recommendation/services/axis_scores.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/recommendation/services/embeddings.py',
       role: 'HuggingFace 임베딩 호출',
     },
@@ -882,6 +876,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/recommendation/tests/conftest.py',
       role: 'recommendation 테스트 픽스처',
+    },
+    {
+      path: 'backend/apps/recommendation/tests/test_back_recommend_4.py',
+      role: '',
     },
     {
       path: 'backend/apps/recommendation/tests/test_discovery.py',
@@ -1030,6 +1028,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/conftest.py',
       role: 'pytest 루트 픽스처 설정',
+    },
+    {
+      path: 'backend/fixtures/tag_axis_weights.json',
+      role: '',
     },
     {
       path: 'backend/manage.py',
@@ -1674,6 +1676,14 @@ window.PROJECT_STATE = {
     {
       path: 'project/mermaid.min.js',
       role: 'Mermaid 다이어그램 번들',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
     },
     {
       path: 'project/state.js',

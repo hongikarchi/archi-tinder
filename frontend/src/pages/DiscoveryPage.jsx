@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { fetchDiscoveryFeed, addLikedBuilding, VerifyRequiredError } from '../api/client.js'
 import { reportWriteError } from '../utils/reportWriteError.js'
 import SwipeCard, { CARD_WIDTH, CARD_HEIGHT } from '../components/SwipeCard.jsx'
-import SaveToBoardModal from '../components/SaveToBoardModal.jsx'
 import SurpriseBoardModal from '../components/SurpriseBoardModal.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
 
@@ -66,9 +65,6 @@ export default function DiscoveryPage({ showToast }) {
   const pendingActionRef = useRef(null)
   const cardRef = useRef(null)
   const keySwipingRef = useRef(false)
-  const longPressTimer = useRef(null)
-  const longPressFired = useRef(false)
-  const touchStartPos = useRef(null)
 
   const _cached = loadDeckCache()
   const [deck, setDeck] = useState(_cached ? _cached.deck : [])
@@ -77,7 +73,6 @@ export default function DiscoveryPage({ showToast }) {
   const [tasteState, setTasteState] = useState(_cached ? (_cached.tasteState || 'cold') : 'cold')
   const [loading, setLoading] = useState(false)  // page fetch in flight
   const [error, setError] = useState('')
-  const [saveModalCard, setSaveModalCard] = useState(null)  // long-press save target
   const [savesThisVisit, setSavesThisVisit] = useState(0)
   const [surpriseShown, setSurpriseShown] = useState(false)
   const [surpriseOpen, setSurpriseOpen] = useState(false)
@@ -95,7 +90,7 @@ export default function DiscoveryPage({ showToast }) {
     async function onKey(e) {
       const dir = SWIPE_KEYS[e.key]
       if (!dir || !cardRef.current || keySwipingRef.current) return
-      if (saveModalCard || surpriseOpen) return
+      if (surpriseOpen) return
       if (!deck.length) return
       keySwipingRef.current = true
       try {
@@ -106,7 +101,7 @@ export default function DiscoveryPage({ showToast }) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [deck.length, saveModalCard, surpriseOpen])
+  }, [deck.length, surpriseOpen])
 
   // Surprise trigger: fires once per visit after SURPRISE_THRESHOLD saves
   useEffect(() => {
@@ -191,7 +186,6 @@ export default function DiscoveryPage({ showToast }) {
   //   savesThisVisit increments to trigger the Surprise threshold.
   // Left (pass): card slides off; advance immediately.
   function onTinderSwipe(dir) {
-    if (longPressFired.current) return  // modal is open; suppress swipe
     pendingActionRef.current = dir === 'right' ? 'like' : 'pass'
   }
 
@@ -213,70 +207,6 @@ export default function DiscoveryPage({ showToast }) {
     } else {
       advance()
     }
-  }
-
-  // Long-press modal callbacks (SaveToBoardModal opened by 400ms long-press)
-  function handleSaved() {
-    longPressFired.current = false
-    setSaveModalCard(null)
-    setSavesThisVisit(s => s + 1)
-    advance()
-  }
-
-  function handleSaveCancel() {
-    longPressFired.current = false
-    setSaveModalCard(null)
-  }
-
-  // -- Long-press handlers (400ms) --
-  function handleTouchStart(e) {
-    touchStartPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
-    longPressFired.current = false
-    clearTimeout(longPressTimer.current)
-    longPressTimer.current = setTimeout(() => {
-      longPressFired.current = true
-      if (topCard) {
-        setSaveModalCard(topCard)
-      }
-    }, 400)
-  }
-
-  function handleTouchEnd() {
-    clearTimeout(longPressTimer.current)
-  }
-
-  function handleTouchMove(e) {
-    if (!touchStartPos.current) return
-    const dx = Math.abs(e.touches[0].clientX - touchStartPos.current.x)
-    const dy = Math.abs(e.touches[0].clientY - touchStartPos.current.y)
-    if (dx > 10 || dy > 10) clearTimeout(longPressTimer.current)
-  }
-
-  function handleMouseDown(e) {
-    touchStartPos.current = { x: e.clientX, y: e.clientY }
-    longPressFired.current = false
-    clearTimeout(longPressTimer.current)
-    longPressTimer.current = setTimeout(() => {
-      longPressFired.current = true
-      if (topCard) {
-        setSaveModalCard(topCard)
-      }
-    }, 400)
-  }
-
-  function handleMouseUp() {
-    clearTimeout(longPressTimer.current)
-  }
-
-  function handleMouseLeave() {
-    clearTimeout(longPressTimer.current)
-  }
-
-  function handleMouseMove(e) {
-    if (!touchStartPos.current) return
-    const dx = Math.abs(e.clientX - touchStartPos.current.x)
-    const dy = Math.abs(e.clientY - touchStartPos.current.y)
-    if (dx > 10 || dy > 10) clearTimeout(longPressTimer.current)
   }
 
   function handleRetry() {
@@ -317,13 +247,6 @@ export default function DiscoveryPage({ showToast }) {
       {/* Card stack */}
       <div
         style={{ width: CARD_WIDTH, height: CARD_HEIGHT, position: 'relative' }}
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
-        onTouchMove={handleTouchMove}
-        onMouseDown={handleMouseDown}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseLeave}
-        onMouseMove={handleMouseMove}
       >
         {error && deck.length === 0 ? (
           <div style={{
@@ -405,7 +328,6 @@ export default function DiscoveryPage({ showToast }) {
                   >
                     <SwipeCard
                       card={card}
-                      onGalleryOpen={() => {}}
                       onGalleryClose={() => {}}
                     />
                   </SwipeGestureFrame>
@@ -425,7 +347,6 @@ export default function DiscoveryPage({ showToast }) {
                 >
                   <SwipeCard
                     card={card}
-                    onGalleryOpen={() => {}}
                     onGalleryClose={() => {}}
                   />
                 </div>
@@ -454,14 +375,6 @@ export default function DiscoveryPage({ showToast }) {
           ← skip · tap card · save →&nbsp;&nbsp;·&nbsp;&nbsp;arrow keys supported
         </p>
       </div>
-
-      {saveModalCard && (
-        <SaveToBoardModal
-          card={saveModalCard}
-          onClose={handleSaveCancel}
-          onSaved={handleSaved}
-        />
-      )}
 
       {surpriseOpen && (
         <SurpriseBoardModal

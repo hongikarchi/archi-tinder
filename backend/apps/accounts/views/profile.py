@@ -312,6 +312,12 @@ class LikedBuildingsView(APIView):
             current = current[:_LIKED_BUILDINGS_CAP]
             profile.liked_building_ids = current
             profile.save(update_fields=['liked_building_ids'])
+            # BACK-RECOMMEND-4: evict taste + discovery-feed caches so the new like
+            # shapes the vector and is excluded from future feed pages immediately.
+            # Local import avoids accounts→recommendation circular dependency.
+            from apps.recommendation.caches import evict_taste, evict_discovery_feed
+            evict_taste(profile.id)
+            evict_discovery_feed(profile.id)
 
         return Response({'liked_count': len(profile.liked_building_ids)})
 
