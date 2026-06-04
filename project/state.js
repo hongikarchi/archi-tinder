@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-06-04 13:59 KST',
-    head: '4cb8a3c',
-    branch: 'feature/claude-ux-write-fail',
+    updatedAt: '2026-06-04 15:05 KST',
+    head: '75542fc',
+    branch: 'feature/claude-architect-unify-p0',
   },
   done: [
+    {
+      id: 'BACK-OFFICE-1',
+      title: '(ARCHITECT-UNIFY Phase 0) — SavedOffice orphan 제거',
+      completedAt: '2026-06-04',
+      note: '예원 #180의 미배선 SavedOffice(model+2뷰+2url) 삭제 + DROP 마이그 0005. ARCHITECT-UNIFY(Office↔Architect 통합) 스펙의 첫 안전 조각 — "스튜디오 저장"은 ArchitectFollow saved-studios(#179)가 이미 충족, SavedOffice는 프론트 콜러 0이라 무위험.',
+    },
     {
       id: 'UX-WRITE-FAIL',
       title: '쓰기 실패 무음 유실 표면화 (FRONT-UX-8 + FRONT-UX-7)',
@@ -73,13 +79,6 @@ window.PROJECT_STATE = {
       prs: [165],
       note: 'Top-K 추천 4-column 그리드 + 신규 "My Likes" 가로 스크롤 섹션 (result.liked_images 소비). Imagen placeholder/rank-10 divider 제거, Fragment import drop. frontend/src/pages/ResultsPage.jsx +118/-69. 모바일 4-col 9-10px 폰트 빽빽 (작성자 의도). sha 61c9ee1.',
     },
-    {
-      id: 'SNS-REPORT-CONNECT',
-      title: '페르소나 리포트 생성 연결 + 필드명 수정',
-      completedAt: '2026-05-31',
-      prs: [163],
-      note: 'Persona report 생성 경로 연결 + personaFields/dominant_styles 필드명 정합. #165 ResultsPage 변경과 무충돌 (별도 라인). sha fc9a5c6.',
-    },
   ],
   now: [
     {
@@ -113,9 +112,9 @@ window.PROJECT_STATE = {
     ],
     high: [
       {
-        id: 'BACK-OFFICE-1',
-        title: 'SavedOffice orphan 모델 제거 (office-interest 3중 중복 정리)',
-        note: 'office-interest 모델 3중 중복 (2026-06-04 audit 확인). 메모리 라벨 역전 정정: OfficeFollow가 LIVE(FirmProfilePage 팔로우 버튼이 `api/social.js` followOffice/unfollowOffice로 배선), 죽은 건 SavedOffice. 정리 타겟 = SavedOffice 제거 (OfficeFollow 아님 — 잘못 지우면 작동 기능 삭제).',
+        id: 'ARCHITECT-UNIFY-1',
+        title: 'Office↔Architect 엔티티 통합 (Phase 1-4, 조율-게이트)',
+        note: 'office-interest 3모델(OfficeFollow/ArchitectFollow/SavedOffice) + 프로필 2페이지(FirmProfilePage 도달불가 / ArchitectProfilePage LIVE)가 같은 스튜디오 엔티티를 세 갈래로 구현(건축가=회사=스튜디오=office=하나). 통합 = corpus `architect_id` canonical 수렴, Office UUID 통째복사 폐기, claim/projects/follow를 arch_id-overlay로 재키잉.…',
       },
       {
         id: 'BACK-PROFILE-1',
@@ -215,6 +214,20 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 187,
+      title: 'chore(make): add migrate-local for safe local DDL migrate',
+      mergedAt: '2026-06-04T05:04:00Z',
+      mergedAtKST: '2026-06-04 14:04 KST',
+      sha: '75542fc',
+    },
+    {
+      number: 186,
+      title: 'fix(ux): surface silent write failures (FRONT-UX-8 + FRONT-UX-7)',
+      mergedAt: '2026-06-04T05:03:18Z',
+      mergedAtKST: '2026-06-04 14:03 KST',
+      sha: '9b581fb',
+    },
+    {
       number: 185,
       title: 'chore(dashboard): remove state.local.js shadow mechanism',
       mergedAt: '2026-06-04T01:33:59Z',
@@ -255,20 +268,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-06-03T23:16:33Z',
       mergedAtKST: '2026-06-04 08:16 KST',
       sha: '2f9a9c2',
-    },
-    {
-      number: 178,
-      title: 'feat(SNS-ARCH): 보드 상세 — 추천 사무소 섹션 + ArchitectProfilePage',
-      mergedAt: '2026-06-03T15:34:02Z',
-      mergedAtKST: '2026-06-04 00:34 KST',
-      sha: '54fa460',
-    },
-    {
-      number: 177,
-      title: 'feat(FRONT-AUTH-2): login swipe onboarding 1차 — guest auth contract preserved',
-      mergedAt: '2026-06-01T13:08:56Z',
-      mergedAtKST: '2026-06-01 22:08 KST',
-      sha: '83f6310',
     },
   ],
   agents: [
@@ -657,6 +656,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/profiles/migrations/0004_alter_office_canonical_id.py',
       role: 'Office.canonical_id TextField unique 마이그레이션 (#180)',
+    },
+    {
+      path: 'backend/apps/profiles/migrations/0005_delete_savedoffice.py',
+      role: '',
     },
     {
       path: 'backend/apps/profiles/migrations/__init__.py',
@@ -1261,6 +1264,10 @@ window.PROJECT_STATE = {
     {
       path: 'docs/prd/archibe-business-model.html',
       role: 'archibe 비즈니스 모델 PRD (정적 HTML)',
+    },
+    {
+      path: 'docs/specs/architect-unification.md',
+      role: '',
     },
     {
       path: 'frontend/.env.example',
