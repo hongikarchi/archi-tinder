@@ -109,9 +109,17 @@ def test_discovery_feed_cold_path_excludes_liked_building_ids(auth_client, user_
 
     # Cold-path: get_diverse_random includes the already-liked building
     raw_cards = _make_cards(['bld_already_liked', 'bld_new_001', 'bld_new_002'])
+    # Force the cold branch (v_taste is None) WITHOUT the real taste computation,
+    # which would call get_pool_embeddings on liked_building_ids and hit the
+    # read-only 'buildings' DB (forbidden in tests). The exclude-set is built from
+    # profile.liked_building_ids independently of the taste vector, so this still
+    # exercises the cold-path exclude.
     with patch(
         'apps.recommendation.views.discovery.engine.get_diverse_random',
         return_value=raw_cards,
+    ), patch(
+        'apps.recommendation.views.discovery.get_or_build_taste',
+        return_value=None,
     ):
         resp = auth_client.get('/api/v1/discovery/', {'cursor': 0, 'limit': 12})
 
