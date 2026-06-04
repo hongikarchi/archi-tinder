@@ -1,7 +1,7 @@
 import { Fragment } from 'react'
 import DescriptionAboutFlipCard from '../../components/profile/DescriptionAboutFlipCard'
 
-export default function FirmProfileHero({ office, followerCount, isFollowing, onToggleFollow, onMessage }) {
+export default function FirmProfileHero({ office, followerCount, onMessage }) {
   return (
     /* HERO BLOCK — narrower nested column (max-width 480) — mirrors UserProfile */
     <div style={{ maxWidth: 480, margin: '0 auto 36px' }}>
@@ -152,32 +152,8 @@ export default function FirmProfileHero({ office, followerCount, isFollowing, on
           location={office.location}
         />
 
-        {/* §3.6 Profile Action Row — always shown for office profiles */}
+        {/* §3.6 Profile Action Row — message only (follow removed: office-follow endpoint deleted) */}
         <div style={{ display: 'flex', gap: 10, marginTop: 14, width: '100%' }}>
-          <button
-            onClick={onToggleFollow}
-            onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)' }}
-            onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)' }}
-            onMouseDown={(e) => { e.currentTarget.style.transform = 'scale(0.98)' }}
-            onMouseUp={(e) => { e.currentTarget.style.transform = 'translateY(-1px)' }}
-            style={{
-              flex: 1,
-              minHeight: 44, padding: '12px 18px',
-              borderRadius: 12,
-              background: isFollowing ? 'var(--color-surface-2)' : 'linear-gradient(135deg, #ec4899, #f43f5e)',
-              color: isFollowing ? 'var(--color-text-2)' : '#fff',
-              border: isFollowing ? '1px solid var(--color-border)' : 'none',
-              fontSize: 14, fontWeight: 700,
-              cursor: 'pointer', fontFamily: 'inherit',
-              boxShadow: isFollowing ? 'none' : '0 8px 22px rgba(236,72,153,0.32)',
-              transition: 'transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), background 0.2s, color 0.2s, box-shadow 0.2s',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-            }}
-          >
-            {isFollowing ? (
-              <>Following<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg></>
-            ) : 'Follow'}
-          </button>
           <button
             onClick={onMessage}
             aria-label="Message"

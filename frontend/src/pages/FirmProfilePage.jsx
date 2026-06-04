@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
-import { followOffice, getOffice, unfollowOffice } from '../api/client.js'
+import { getOffice } from '../api/client.js'
 import FirmProfileHeader from './firmProfile/FirmProfileHeader'
 import FirmProfileHero from './firmProfile/FirmProfileHero'
 import FirmProjectsSection from './firmProfile/FirmProjectsSection'
@@ -18,8 +18,6 @@ export default function FirmProfilePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  const [isFollowing, setIsFollowing] = useState(false)
-  const [isFollowingPending, setIsFollowingPending] = useState(false)
   const [followerCount, setFollowerCount] = useState(0)
 
   useEffect(() => {
@@ -36,9 +34,6 @@ export default function FirmProfilePage() {
         if (cancelled) return
         // articles[] absent (Phase 18 External territory) — default to []
         setOffice({ ...data, articles: data.articles || [] })
-        setIsFollowing(data.is_following ?? false)
-        // TODO(claude): backend should add follower_count to /api/v1/offices/${officeId}/ Firm/Office Profile contract
-        // TODO(claude): backend should add following_count to /api/v1/offices/${officeId}/ Firm/Office Profile contract
         setFollowerCount(data.follower_count ?? 0)
       })
       .catch(err => {
@@ -50,28 +45,6 @@ export default function FirmProfilePage() {
       })
     return () => { cancelled = true }
   }, [officeId])
-
-  async function handleToggleFollow() {
-    if (isFollowingPending) return
-    setIsFollowingPending(true)
-    const wasFollowing = isFollowing
-    setIsFollowing(!wasFollowing)
-    setFollowerCount(c => Math.max(0, c + (wasFollowing ? -1 : 1)))
-    try {
-      if (wasFollowing) {
-        await unfollowOffice(officeId)
-      } else {
-        const res = await followOffice(officeId)
-        if (res?.follower_count != null) setFollowerCount(res.follower_count)
-      }
-    } catch (err) {
-      setIsFollowing(wasFollowing)
-      setFollowerCount(c => Math.max(0, c + (wasFollowing ? 1 : -1)))
-      console.error('[office-follow]', err)
-    } finally {
-      setIsFollowingPending(false)
-    }
-  }
 
   function handleMessage() {
     // TODO(claude): wire DM endpoint — POST /api/v1/messages/ or similar
@@ -142,8 +115,6 @@ export default function FirmProfilePage() {
         <FirmProfileHero
           office={office}
           followerCount={followerCount}
-          isFollowing={isFollowing}
-          onToggleFollow={handleToggleFollow}
           onMessage={handleMessage}
         />
 

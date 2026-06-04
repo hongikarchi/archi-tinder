@@ -302,8 +302,6 @@ class GuestPromoteView(APIView):
                 # SwipeEvent is excluded because it has no direct user FK
                 # (it references AnalysisSession, which has user — re-pointing
                 # AnalysisSession.user handles SwipeEvent transitively).
-                # OfficeFollow lives in the 'social' app (not 'profiles') per
-                # social/models.py:50; FK field is 'follower' (not 'user').
                 from django.apps import apps as _apps
                 FK_TABLES = [
                     ('recommendation', 'Project',         'user'),
@@ -312,7 +310,6 @@ class GuestPromoteView(APIView):
                     ('recommendation', 'SessionEvent',    'user'),
                     ('social',         'Follow',          'follower'),
                     ('social',         'Follow',          'followee'),
-                    ('social',         'OfficeFollow',    'follower'),  # app=social, field=follower (not profiles/user)
                     ('social',         'Reaction',        'user'),
                 ]
                 for app_label, model_name, fk_field in FK_TABLES:

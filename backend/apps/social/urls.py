@@ -3,7 +3,6 @@ from .views import (
     FollowView,
     FollowersListView,
     FollowingListView,
-    OfficeFollowView,
     ProjectReactorsListView,
     ReactionView,
     UserSavedStudiosView,
@@ -14,8 +13,6 @@ urlpatterns = [
     path('users/<int:user_id>/followers/', FollowersListView.as_view(), name='user-followers'),
     path('users/<int:user_id>/following/', FollowingListView.as_view(), name='user-following'),
     path('users/<int:user_id>/saved_studios/', UserSavedStudiosView.as_view(), name='user-saved-studios'),
-    # SOC3 — Office follow
-    path('offices/<uuid:office_id>/follow/', OfficeFollowView.as_view(), name='office-follow'),
     # SOC2 — Project reaction
     path('projects/<uuid:project_id>/react/', ReactionView.as_view(), name='project-react'),
     path(

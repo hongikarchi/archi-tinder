@@ -158,10 +158,10 @@ Acceptance: holding the mouse over the Discovery gallery does not open the Save-
 
 ### HIGH
 
-#### ARCHITECT-UNIFY-1 — Office↔Architect 엔티티 통합 (Phase 1-4, 조율-게이트)
-office-interest 3모델(OfficeFollow/ArchitectFollow/SavedOffice) + 프로필 2페이지(FirmProfilePage 도달불가 / ArchitectProfilePage LIVE)가 같은 스튜디오 엔티티를 세 갈래로 구현(건축가=회사=스튜디오=office=하나). 통합 = corpus `architect_id` canonical 수렴, Office UUID 통째복사 폐기, claim/projects/follow를 arch_id-overlay로 재키잉. 전체 설계 = PROPOSAL `docs/specs/architect-unification.md`.
+#### ARCHITECT-UNIFY-1 — firm-side Office→Architect 전면 통합 (deferred, firm-UX 착수 시)
+office-interest **모델 중복은 해소됨**: Phase 0(SavedOffice #188) + C(OfficeFollow, ARCHITECT-UNIFY-C)로 두 미배선 중복 삭제 → follow 모델 1개(ArchitectFollow). 남은 통합 = Office 서브시스템(table/claim/OfficeProjectLink/sync_offices/FirmProfilePage)을 arch_id로 흡수 = firm-side 전면 재설계.
 
-상태: **Phase 0(SavedOffice 삭제) DONE**(아래 ## Done, BACK-OFFICE-1=Phase0). Phase 1-4(claim/projects 재키잉 → follow 통합 → 페이지 병합 → Office 테이블 정리)는 **예원 #180 / admin #182 / KMS Phase15 작업을 해체하므로 조율 필수 = 착수 전 합의 게이트**(ARCHITECT-UNIFY-1..4 분할 예정). Open: off-corpus firm 정책, sync_offices 운명(read-perf 캐시 측정, <1s 목표), PR 분할/배정.
+상태: **deferred** — Office 서브시스템은 계획 백로그(BACK-RECOMMEND-3 firm추천 / BACK-EXTERNAL-1 firm기사 / P1 firm-claim)의 **substrate라 park**(삭제 X). 전면 통합(FirmProfilePage→ArchitectProfilePage 흡수, claim/projects/recs/articles를 arch_id-overlay로)은 **firm-UX 우선순위 정해질 때** 별도 대형 작업. 옵션 A(재키잉)/B(전부삭제) 검토 후 탈락 — `docs/specs/architect-unification.md`(PROPOSAL).
 
 #### BACK-RECOMMEND-1 — Project 두번째 세션이 이전 taste를 모름
 Same Project can host multiple `AnalysisSession` rows (user comes back, "Resume" or new swipe round on the same Project — second session is created fresh while `Project.liked_ids` / `disliked_ids` / `saved_ids` carry forward as the persistent accumulator). Today the new session's algorithm-side state (`like_vectors`, `convergence_history`, `phase`) starts from scratch — exploring phase, empty pool of taste signal — even though the user just liked 12 buildings in Session #1.
@@ -465,6 +465,14 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 ---
 
 ## Done
+
+### ARCHITECT-UNIFY-C — OfficeFollow 중복 제거 (follow 모델 통합) — RESOLVED 2026-06-04 (`feature/claude-architect-unify-c` → develop)
+미배선 중복 `OfficeFollow`(firm-follow, ArchitectFollow와 중복) 제거 → office-interest follow 모델이 ArchitectFollow 1개로 통합(원 audit 중복 finding 종결). Office 서브시스템 나머지는 계획 기능 substrate라 park.
+- [x] 백엔드: `social/models.py` OfficeFollow + 시그널 2개 삭제, `social/views.py` OfficeFollowView, urls route, test_office_follow.py(파일), guest-merge FK_TABLES 항목, `OfficeDetailView.is_following`→False 상수. 신규 마이그 `social/0006_delete_officefollow`(로컬 적용 OK, 빈 테이블).
+- [x] 프론트: `api/social.js` followOffice/unfollowOffice + client.js 재export 삭제, FirmProfilePage/FirmProfileHero 팔로우 버튼 제거(FirmProfilePage는 parked view-only). build PASS, grep 0.
+- [x] KEEP(park): Office/OfficeProjectLink/claim/sync_offices/FirmProfilePage(view) — BACK-RECOMMEND-3/EXTERNAL-1/firm-claim substrate. ArchitectFollow/Follow 무손상.
+- 게이트: check PASS, makemigrations --check no-change, migrate --plan OK, flake8 clean, lint/build PASS, **code-review PASS**(6영역: guest-merge/dangling/is_following/signals/hero/migration 무결). app-test 스킵(swipe/recommendation 무관, FirmProfilePage 도달불가). A/B 탈락→C: `docs/specs/architect-unification.md` + deploy-gate 메모리 갱신.
+- 후속: firm-side 전면 arch_id 통합 = `ARCHITECT-UNIFY-1`(deferred, firm-UX 착수 시).
 
 ### BACK-PROFILE-1 — external_links 검증 강화 (handle/email/website + mailto 주입 차단) — RESOLVED 2026-06-04 (`feature/claude-back-profile-1` → develop)
 `validate_external_links`(accounts/serializers.py)에 키별 포맷 검증 추가 — 프론트가 검증 없이 `instagram.com/${handle}`·`mailto:${email}` 평문 조립하던 주입 nuisance를 서버에서 차단.

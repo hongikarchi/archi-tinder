@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-06-04 16:12 KST',
-    head: '6a12156',
-    branch: 'feature/claude-back-profile-1',
+    updatedAt: '2026-06-04 17:10 KST',
+    head: 'e60918d',
+    branch: 'feature/claude-architect-unify-c',
   },
   done: [
+    {
+      id: 'ARCHITECT-UNIFY-C',
+      title: 'OfficeFollow 중복 제거 (follow 모델 통합)',
+      completedAt: '2026-06-04',
+      note: '미배선 중복 `OfficeFollow`(firm-follow, ArchitectFollow와 중복) 제거 → office-interest follow 모델이 ArchitectFollow 1개로 통합(원 audit 중복 finding 종결). Office 서브시스템 나머지는 계획 기능 substrate라 park.',
+    },
     {
       id: 'BACK-PROFILE-1',
       title: 'external_links 검증 강화 (handle/email/website + mailto 주입 차단)',
@@ -72,12 +78,6 @@ window.PROJECT_STATE = {
       prs: [170, 171, 172],
       note: 'Behavior-preserving 4-slice 분해, lines relocated/zero behavior change. #170 6f54cc3: recommendation 백엔드(parse_query 906→656 +_prompts, sessions 622→80 +session_service, swipe 1205→497 +swipe_service; 서비스는 engine을 MODULE로 참조→patch-bite 유지). #171 7302ae6: accounts/views.py 939→views/ 패키지(auth+profile+facade); CI가 mock-patch 지뢰 잡음→테스트 patch 경로 9개 submodule repoint. #172 e1ff077: 프론트 5페이지→16 co-located 모듈(BoardDetail 1050→862, UserProfile 1022→715, BuildingDetail 711→499, FirmProfile 540→156, App.jsx 983→897); 페이지 named export 0→facade 불필요; Codex mocked browser smoke 4페이지 렌더 확인. engine.py(16e2a1a-pre-squash): 2446→1976, 순수 leaf 18fn→engine_{vecmath,convergence,filters,cards} 4 acyclic sibling(sibling은 engine import 안 함; engine이 re-import+re-export facade); patch target 전부 engine.py 유지→landmine 무력화; poison-mock으로 facade reach 확인. 잔여 ~1976 LOC patch-saturated(connection/RC/~20fn)→추가 분해 deferred. Excluded→Codex: Login/Swipe/Discovery+SwipeGestureFrame. engine PR# pending squash.',
     },
-    {
-      id: 'INFRA-MULTIAGENT-1',
-      title: 'one-clone-per-worker model + agent-config overhaul (supersedes PR #166 worktree)',
-      completedAt: '2026-06-01',
-      note: 'PR #166 worktree 격리 폐기 → one-clone-per-worker: 작업자(사람/AI)마다 자기 clone + 자기 .git + 자기 feature 브랜치 + 자기 PR. 공유 .git이 2026-05-31 HEAD 오염 경로였음(Codex checkout이 메인 clone HEAD를 develop 밖으로 이동). 실패모드 분리: HEAD 충돌(해결=별도 .git) + merge 충돌(해결=파일 스코프 분리). Claude=메인 clone make_web(터미널/백엔드 경향), Codex=make_web-codex(브라우저/프론트 경향) — 경향=기본값이지 벽 아님. 브랜치 prefix: 팀 feature/<role>-(algo/sns/admin) 유지, 로컬 에이전트 feature/claude-* / feature/codex-*. Task 보드 루트 통합(.claude+.codex → 루트 Task.md, 76 refs / 33 files). deprecated agent git-manager+reporter 삭제(git-commit+reporter-inline skill 대체). reporter-inline Model 1(publish 전, task-ID 키잉). 해결된 plan 4개 archive + stale ## PR Plan neuter(publish 게이트 오작동 방지). CONTRIBUTING canonical + CLAUDE/AGENTS/WORKFLOW×2 미러. Pure docs/config → app-test skip. PR# pending squash.',
-    },
   ],
   now: [
     {
@@ -112,7 +112,7 @@ window.PROJECT_STATE = {
     high: [
       {
         id: 'ARCHITECT-UNIFY-1',
-        title: 'Office↔Architect 엔티티 통합 (Phase 1-4, 조율-게이트)',
+        title: 'firm-side Office→Architect 전면 통합 (deferred, firm-UX 착수 시)',
         note: 'office-interest 3모델(OfficeFollow/ArchitectFollow/SavedOffice) + 프로필 2페이지(FirmProfilePage 도달불가 / ArchitectProfilePage LIVE)가 같은 스튜디오 엔티티를 세 갈래로 구현(건축가=회사=스튜디오=office=하나). 통합 = corpus `architect_id` canonical 수렴, Office UUID 통째복사 폐기, claim/projects/follow를 arch_id-overlay로 재키잉.…',
       },
       {
@@ -208,6 +208,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 189,
+      title: 'security(accounts): harden external_links validation (BACK-PROFILE-1)',
+      mergedAt: '2026-06-04T07:12:58Z',
+      mergedAtKST: '2026-06-04 16:12 KST',
+      sha: 'e60918d',
+    },
+    {
       number: 188,
       title: 'refactor(profiles): delete SavedOffice orphan (ARCHITECT-UNIFY Phase 0)',
       mergedAt: '2026-06-04T07:10:18Z',
@@ -255,13 +262,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-06-03T15:47:43Z',
       mergedAtKST: '2026-06-04 00:47 KST',
       sha: 'c7ee138',
-    },
-    {
-      number: 180,
-      title: 'feat(office-save): Office 싱크 및 사무소 저장 기능 추가',
-      mergedAt: '2026-06-03T15:33:47Z',
-      mergedAtKST: '2026-06-04 00:33 KST',
-      sha: '2abb831',
     },
   ],
   agents: [
@@ -502,14 +502,6 @@ window.PROJECT_STATE = {
     {
       path: 'README.md',
       role: '프로젝트 안내 문서',
-    },
-    {
-      path: 'Task.md',
-      role: '태스크 보드 문서',
-    },
-    {
-      path: 'Task.md',
-      role: '태스크 보드 문서',
     },
     {
       path: 'Task.md',
@@ -1682,14 +1674,6 @@ window.PROJECT_STATE = {
     {
       path: 'project/mermaid.min.js',
       role: 'Mermaid 다이어그램 번들',
-    },
-    {
-      path: 'project/state.js',
-      role: '대시보드 상태 데이터',
-    },
-    {
-      path: 'project/state.js',
-      role: '대시보드 상태 데이터',
     },
     {
       path: 'project/state.js',

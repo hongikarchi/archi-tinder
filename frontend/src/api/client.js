@@ -14,6 +14,6 @@ export { startSession, getSessionState, recordSwipe, parseQuery, getResult, subm
 export { listProjects, getProject, updateProject, deleteProject, getBuildings, getBoardBuildings, bookmarkBuilding, generateReport, generateReportImage, createProject, VerifyRequiredError } from './projects.js'
 export { fetchDiscoveryFeed, fetchBoardSurprise } from './discovery.js'
 export { getOffice, getUserProfile } from './profiles.js'
-export { followUser, unfollowUser, followOffice, unfollowOffice, getProjectReactors, reactToProject, unreactToProject } from './social.js'
+export { followUser, unfollowUser, getProjectReactors, reactToProject, unreactToProject } from './social.js'
 export { addLikedBuilding, getLikedBuildings } from './liked.js'
 export { getRecommendedArchitects, getArchitectProfile } from './architects.js'
