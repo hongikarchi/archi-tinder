@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('recommendation', '0020_question_card_fields'),
+        ('recommendation', '0021_tagaxisweight'),
     ]
 
     operations = [
