@@ -391,6 +391,13 @@ def build_discovery_chunk(profile, centroids, client_buffer_ids=None, chunk_size
             if isinstance(bid, str) and bid:
                 exclude_set.add(bid)
 
+    # BACK-RECOMMEND-4: also exclude buildings liked via the Profile
+    # "liked buildings" tab (UserProfile.liked_building_ids) so they
+    # don't reappear in the Discovery chunk.
+    for bid in list(profile.liked_building_ids or []):
+        if isinstance(bid, str) and bid:
+            exclude_set.add(bid)
+
     if client_buffer_ids:
         for bid in client_buffer_ids:
             if isinstance(bid, str) and bid:

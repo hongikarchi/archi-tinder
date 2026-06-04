@@ -504,9 +504,14 @@ class BoardSurpriseView(APIView):
                 if isinstance(e, dict) and e.get('id')
             )
 
+        # BACK-RECOMMEND-4: include buildings liked via UserProfile.liked_building_ids
+        profile_liked_bld_ids = [
+            bid for bid in list(profile.liked_building_ids or [])
+            if isinstance(bid, str)
+        ]
         exclude_ids = []
         seen = set()
-        for bid in liked_ids + disliked_ids + saved_ids:
+        for bid in liked_ids + disliked_ids + saved_ids + profile_liked_bld_ids:
             if isinstance(bid, str) and bid not in seen:
                 exclude_ids.append(bid)
                 seen.add(bid)

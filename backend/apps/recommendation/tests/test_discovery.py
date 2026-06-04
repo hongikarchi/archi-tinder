@@ -729,8 +729,14 @@ def test_promote_returns_400_when_no_draft_exists(auth_client):
 
 @pytest.mark.django_db
 def test_surprise_cold_start_returns_random(auth_client):
-    """Zero likes → cold start; title must contain 'Discover'."""
-    with patch('apps.recommendation.views.discovery.engine.get_diverse_random') as mocked:
+    """Zero likes → cold start; title must contain 'Discover'.
+
+    get_or_build_taste must be mocked to None to guarantee the cold branch
+    runs regardless of LocMemCache state from previous tests in the same
+    pytest session (LocMemCache does not reset between tests).
+    """
+    with patch('apps.recommendation.views.discovery.get_or_build_taste', return_value=None), \
+         patch('apps.recommendation.views.discovery.engine.get_diverse_random') as mocked:
         mocked.return_value = _make_cards([f'B{i:03d}' for i in range(10)])
         resp = auth_client.get('/api/v1/recommendations/board-surprise/')
         payload = resp.json()
