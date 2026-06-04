@@ -485,7 +485,7 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 - [x] **FRONT-UX-8** (App.jsx `handleQuestionAnswer`): `submitQuestionResponse` 실패 시 한글 토스트 + `setPendingQuestion(q)`로 질문 재노출(재시도 보존). 낙관적 클리어 유지.
 - [x] **FRONT-UX-7** (DiscoveryPage `onCardLeftScreen`): `addLikedBuilding().then(()=>setSavesThisVisit+1).catch(()=>reportWriteError)`. 카운터를 POST 성공 후로 이동 → 실패한 좋아요는 Surprise threshold 미반영. `<DiscoveryPage showToast={setGlobalToast}/>` prop 직결.
 - [x] code-review PASS(0 blocker). 카피 정직성 수정: UX-7은 카드 advance로 재시도 불가 → '좋아요 저장 실패'(재시도 함의 제거).
-- 게이트: lint/build PASS. app-test FEATURE-SCOPED는 로컬 DB 마이그 갭(#180/#182 미적용, 내 코드 무관)으로 B1c 차단 → 순수 frontend+code-review PASS로 3-gate 수용(유저 결정 2026-06-04). 브라우저 미실행.
+- 게이트: lint/build PASS, code-review PASS(0 blocker). app-test FEATURE-SCOPED는 로컬 DB 마이그 갭(#180/#182 미적용, 내 코드 무관)으로 B1c 차단 → 3-gate 수용 후 **Codex browser-verify PASS** (2026-06-04, PR #186): liked-POST 500→토스트+카드진행+Surprise 미발동(4회), 3초 자동 dismiss, 200→무토스트; question-response 실패→'답변 전송 실패' 토스트+질문 재노출, 200→정상 복귀. GitHub CI Backend/Frontend/Vercel PASS, npm test 36 PASS.
 - 후속: 로컬 DB migrate(profiles/0003·0004 + social/0005) 필요 — 향후 app-test/백엔드 페이지 테스트 복구용(operator DDL). theme/font 영속 무음 catch(ThemeContext:57,63)는 낮은-stakes 형제 → 후보 FRONT-UX-11.
 
 ### DASHBOARD-LOCALVIEW-REMOVE — state.local.js 그림자 메커니즘 제거 — RESOLVED 2026-06-04 (`feature/claude-dashboard-localview-remove` → develop)

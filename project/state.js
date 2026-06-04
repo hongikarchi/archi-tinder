@@ -23,7 +23,7 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-06-04 11:17 KST',
+    updatedAt: '2026-06-04 13:59 KST',
     head: '4cb8a3c',
     branch: 'feature/claude-ux-write-fail',
   },
@@ -1641,6 +1641,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/utils/loginFlow.test.mjs',
       role: 'loginFlow 테스트',
+    },
+    {
+      path: 'frontend/src/utils/reportWriteError.js',
+      role: '',
     },
     {
       path: 'frontend/src/utils/resolveProjectBackendId.js',
