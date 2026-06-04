@@ -265,6 +265,12 @@ _Note: the Profile-area slice shipped separately as FRONT-PROFILE-HARVEST-1 (#17
 
 ### MEDIUM
 
+#### FULL-DISCOVERY-2 — Discovery v3.1+v3.2 라이브 브라우저 검증 (prod 전)
+FULL-DISCOVERY-1(`fc72639`) 머지 후 app-test FULL 미실행(dev 서버 + app-test 에이전트 부재). prod 배포 전 실제 흐름 검증 필요: chunk 버퍼/prefetch≤3, swipe→feedback, 10장 트리거 카드 우=promote→Taste 첫 스와이프 정상·좌=계속, 진행률 바, 재등장 shake, 프로필에 discovery_ 임시보드 노출.
+
+#### FRONT-DISCOVERY-1 — 트리거 카드 빈 덱 동시각 한 박자 지연 (비차단)
+`DiscoveryPage.jsx` 트리거 주입 effect dep `[draftId, draftLikeCount]`. like 10번째가 덱이 빈 순간(prefetch in-flight)과 겹치고 이후 추가 like가 없으면 트리거가 한 카드 늦게 뜸. 크래시·상태손상 없음. dep에 deck refill 신호 추가로 보강 가능(ref 멱등 가드 이미 존재).
+
 #### FRONT-PROFILE-1 — 프로필 재설계 브라우저 픽셀 패스 (Codex)
 FRONT-PROFILE-HARVEST-1(#179) 머지 후 Codex 브라우저 수정 (별도 PR). FollowListModal 모바일 bottom-sheet(≤768px, DESIGN.md §8.10) + backdrop opacity 0.6→0.4 + inline onMouseEnter→CSS hover + 4테마 픽셀 검증(github-light 먼저). 원 하베스트 minor (2026-06-04 audit 재확인): EditProfileModal(`components/EditProfileModal.jsx:147-149`, 경로는 components/ 직하 — components/profile/ 아님) 에러박스 하드코딩 rgba→color-mix, ProfileHeader.jsx:126(Share 버튼은 ProfileHeader 소유, ProfileHero 아님) 타인 Share borderRadius:12→var(--radius-md), onMouseEnter→CSS hover, FollowListModal onClose useCallback churn. 드롭됨: "FollowListPage setError(null) 누락" minor → useFollowList 훅(`:23,43`)이 fetch마다 setError(null) 호출하므로 stale 배너 위험 없음(audit 반증).
 
@@ -465,6 +471,15 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 ---
 
 ## Done
+
+### FULL-DISCOVERY-1 — Discovery 탭 v3.1+v3.2 재설계 (10장 청크 + 3-Tier + Draft Board → Taste 퍼널) — RESOLVED 2026-06-04 (`fc72639-pre-squash`)
+레거시 global-centroid + 커서 무한스크롤 폐기 → 10장 chunk prefetch + 다중 centroid + 40:60 Local/Global FPS + Deferred Exclusion(dislike zone) + 3-Tier 라이프사이클(0/100·20/80·40/60) + 세션별 Draft Board → Taste 퍼널로 전면 교체. 신규 마이그레이션 0건(Project 재사용), `engine.py` 미수정(신규 `discovery_feed.py` 모듈로 compose, 알고리즘 소유권 준수).
+- [x] 백엔드 v3.1: `discovery_feed.py`(draft helper·tier·`build_discovery_chunk`·greedy FPS·interleave·dislike zone), `caches.py` App-Open centroid 캐시(6h TTL, like-evict 안함), `GET /discovery/`(chunk) 재작성, `POST /discovery/feedback/`, `settings.py` RECOMMENDATION에 discovery_* 14개 추가.
+- [x] 백엔드 v3.2: 세션별 `discovery_YYMMDD_HHMM` Draft Project(프로필 노출, tier project_count는 `discovery_` 접두 제외, centroid는 전체 like 누적), feedback `draft_id` 왕복, `POST /discovery/promote-to-taste/`(draft 10 likes로 AnalysisSession like_vectors 사전주입+풀 생성).
+- [x] 프론트: `DiscoveryPage` 10장 chunk 버퍼(client_buffer_ids stateless dedup) + swipe→feedback + 덱 내 Taste 트리거 카드(우=promote, 좌=계속) + 진행률 바(N/10→취향 탐색 중) + 재등장 shake; `DiscoveryTriggerCard.jsx`(신규); Surprise 모달 제거.
+- [x] 버그픽스: stale `draftLikeCount`(sessionStorage)로 트리거 조기 등장 → 로그인 시에도 draft 초기화 + draftId 게이트 + not_enough_likes 복구; promote 응답 `normalizeCard`로 Taste 첫 스와이프 400(`canonical_bld_id` undefined) 방지.
+- [x] code-review + security 2라운드 PASS(ImportError·백필·buffer DoS·JSON 무한증가·예약명·draft_id 500·트리거 ref race 수정). Django check 0 issues + Discovery 테스트 52개 green. ESLint/build green.
+- Deferred: app-test FULL 라이브 브라우저 검증 미실행(dev 서버 + app-test 에이전트 부재) — prod 전 실행 필요. Deferred: 트리거 카드 희귀 엣지(like 10번째가 빈 덱 동시각) 한 박자 지연, 비차단.
 
 ### ARCHITECT-UNIFY-C — OfficeFollow 중복 제거 (follow 모델 통합) — RESOLVED 2026-06-04 (`feature/claude-architect-unify-c` → develop)
 미배선 중복 `OfficeFollow`(firm-follow, ArchitectFollow와 중복) 제거 → office-interest follow 모델이 ArchitectFollow 1개로 통합(원 audit 중복 finding 종결). Office 서브시스템 나머지는 계획 기능 substrate라 park.

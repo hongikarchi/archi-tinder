@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-06-04 17:37 KST',
-    head: 'e60918d',
-    branch: 'feature/claude-architect-unify-c',
+    updatedAt: '2026-06-04 23:19 KST',
+    head: 'df8dcd8',
+    branch: 'feature/discovery-algorithm',
   },
   done: [
+    {
+      id: 'FULL-DISCOVERY-1',
+      title: 'Discovery 탭 v3.1+v3.2 재설계 (10장 청크 + 3-Tier + Draft Board → Taste 퍼널)',
+      completedAt: '2026-06-04',
+      note: '레거시 global-centroid + 커서 무한스크롤 폐기 → 10장 chunk prefetch + 다중 centroid + 40:60 Local/Global FPS + Deferred Exclusion(dislike zone) + 3-Tier 라이프사이클(0/100·20/80·40/60) + 세션별 Draft Board → Taste 퍼널로 전면 교체. 신규 마이그레이션 0건(Project 재사용), `engine.py` 미수정(신규 `discovery_feed.py` 모듈로 compos…',
+    },
     {
       id: 'ARCHITECT-UNIFY-C',
       title: 'OfficeFollow 중복 제거 (follow 모델 통합)',
@@ -70,13 +76,6 @@ window.PROJECT_STATE = {
       title: '대시보드 Files 탭 + state.js 자동생성',
       completedAt: '2026-06-01',
       note: '프로젝트 대시보드 2건: (1) 파일 구조 Files 탭 (collapsible 트리 + 파일별 role), (2) state.js를 reporter 수작업 재작성 대신 `tools/gen-state.js`로 자동생성.',
-    },
-    {
-      id: 'FULL-REFACTOR-1',
-      title: '큰 파일 분해 (engine.py 등) pure-move 분해',
-      completedAt: '2026-06-01',
-      prs: [170, 171, 172],
-      note: 'Behavior-preserving 4-slice 분해, lines relocated/zero behavior change. #170 6f54cc3: recommendation 백엔드(parse_query 906→656 +_prompts, sessions 622→80 +session_service, swipe 1205→497 +swipe_service; 서비스는 engine을 MODULE로 참조→patch-bite 유지). #171 7302ae6: accounts/views.py 939→views/ 패키지(auth+profile+facade); CI가 mock-patch 지뢰 잡음→테스트 patch 경로 9개 submodule repoint. #172 e1ff077: 프론트 5페이지→16 co-located 모듈(BoardDetail 1050→862, UserProfile 1022→715, BuildingDetail 711→499, FirmProfile 540→156, App.jsx 983→897); 페이지 named export 0→facade 불필요; Codex mocked browser smoke 4페이지 렌더 확인. engine.py(16e2a1a-pre-squash): 2446→1976, 순수 leaf 18fn→engine_{vecmath,convergence,filters,cards} 4 acyclic sibling(sibling은 engine import 안 함; engine이 re-import+re-export facade); patch target 전부 engine.py 유지→landmine 무력화; poison-mock으로 facade reach 확인. 잔여 ~1976 LOC patch-saturated(connection/RC/~20fn)→추가 분해 deferred. Excluded→Codex: Login/Swipe/Discovery+SwipeGestureFrame. engine PR# pending squash.',
     },
   ],
   now: [
@@ -137,6 +136,16 @@ window.PROJECT_STATE = {
       },
     ],
     medium: [
+      {
+        id: 'FULL-DISCOVERY-2',
+        title: 'Discovery v3.1+v3.2 라이브 브라우저 검증 (prod 전)',
+        note: 'FULL-DISCOVERY-1(`fc72639`) 머지 후 app-test FULL 미실행(dev 서버 + app-test 에이전트 부재). prod 배포 전 실제 흐름 검증 필요: chunk 버퍼/prefetch≤3, swipe→feedback, 10장 트리거 카드 우=promote→Taste 첫 스와이프 정상·좌=계속, 진행률 바, 재등장 shake, 프로필에 discovery_ 임시보드 노출.',
+      },
+      {
+        id: 'FRONT-DISCOVERY-1',
+        title: '트리거 카드 빈 덱 동시각 한 박자 지연 (비차단)',
+        note: '`DiscoveryPage.jsx` 트리거 주입 effect dep `[draftId, draftLikeCount]`. like 10번째가 덱이 빈 순간(prefetch in-flight)과 겹치고 이후 추가 like가 없으면 트리거가 한 카드 늦게 뜸. 크래시·상태손상 없음. dep에 deck refill 신호 추가로 보강 가능(ref 멱등 가드 이미 존재).',
+      },
       {
         id: 'FRONT-PROFILE-1',
         title: '프로필 재설계 브라우저 픽셀 패스 (Codex)',
@@ -702,6 +711,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/recommendation/caches.py',
       role: '추천 TTL 캐시 헬퍼',
+    },
+    {
+      path: 'backend/apps/recommendation/discovery_feed.py',
+      role: '',
     },
     {
       path: 'backend/apps/recommendation/engine.py',
@@ -1346,6 +1359,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/components/DebugOverlay.jsx',
       role: '세션·스와이프 디버그 오버레이',
+    },
+    {
+      path: 'frontend/src/components/DiscoveryTriggerCard.jsx',
+      role: '',
     },
     {
       path: 'frontend/src/components/EditProfileModal.jsx',
