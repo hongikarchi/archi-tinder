@@ -59,7 +59,14 @@ export function _fetchWithTimeout(url, options, timeoutMs = FETCH_TIMEOUT_MS) {
 
 // -- Token refresh (internal) ----------------------------------------------
 
-async function _tryRefresh() {
+// Single-flight refresh: concurrent 401s share one refresh call.
+// Backend rotates+blacklists refresh tokens, so only one in-flight refresh is safe.
+let _refreshPromise = null
+let _sessionExpiredDispatched = false
+
+async function _doRefresh() {
+  // Reset the once-guard at the start of each new refresh cycle
+  _sessionExpiredDispatched = false
   const refresh = localStorage.getItem('archithon_refresh')
   if (!refresh) return false
   try {
@@ -78,6 +85,14 @@ async function _tryRefresh() {
   } catch {
     return false
   }
+}
+
+// _tryRefresh is intentionally NOT async — no await before the assignment so
+// concurrent callers all grab the same Promise before it settles.
+function _tryRefresh() {
+  if (_refreshPromise) return _refreshPromise
+  _refreshPromise = _doRefresh().finally(() => { _refreshPromise = null })
+  return _refreshPromise
 }
 
 // -- Core fetch helper -----------------------------------------------------
@@ -133,8 +148,13 @@ export async function callApi(method, path, body, retry = true, timeoutMs = FETC
     const refreshed = await _tryRefresh()
     if (refreshed) return callApi(method, path, body, false, timeoutMs)
     clearTokens()
-    // Notify App to log out -- avoids circular imports
-    window.dispatchEvent(new CustomEvent('archithon:session-expired'))
+    // Notify App to log out -- avoids circular imports.
+    // Once-guard: all concurrent callers share the same _tryRefresh() result;
+    // dispatch session-expired exactly once per failed-refresh cycle.
+    if (!_sessionExpiredDispatched) {
+      _sessionExpiredDispatched = true
+      window.dispatchEvent(new CustomEvent('archithon:session-expired'))
+    }
     throw Object.assign(new Error('Session expired'), { status: 401 })
   }
 
