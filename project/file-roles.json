@@ -351,5 +351,20 @@
   "web-testing/runner/feedback.py": "구조화 피드백 생성기",
   "web-testing/runner/reporter.py": "테스트 리포트 생성기",
   "web-testing/runner/runner.py": "Playwright E2E 실행 오케스트레이션",
-  "docs/prd/archibe-business-model.html": "archibe 비즈니스 모델 PRD (정적 HTML)"
+  "docs/prd/archibe-business-model.html": "archibe 비즈니스 모델 PRD (정적 HTML)",
+  ".claude/plans/2026-06-01-office-recommendation-design.md": "사무소/architect 추천 설계 플랜 (#178)",
+  ".claude/plans/2026-06-02-office-save.md": "사무소 저장 기능 설계 플랜 (#180)",
+  ".claude/plans/profile-harvest-redesign.wf.js": "프로필 하베스트 재설계 워크플로 스크립트 (#179)",
+  "backend/apps/profiles/management/__init__.py": "profiles management 패키지 init",
+  "backend/apps/profiles/management/commands/__init__.py": "profiles management commands 패키지 init",
+  "backend/apps/profiles/management/commands/sync_offices.py": "canonical_v2_architects(is_recommendable) → Office 테이블 싱크 명령 (#180)",
+  "backend/apps/profiles/migrations/0003_office_is_recommendable_office_primary_city_and_more.py": "Office is_recommendable/primary_city + SavedOffice 마이그레이션 (#180)",
+  "backend/apps/profiles/migrations/0004_alter_office_canonical_id.py": "Office.canonical_id TextField unique 마이그레이션 (#180)",
+  "backend/apps/recommendation/views/office_recommendation.py": "architect 추천/상세/팔로우 뷰 (#178/#182)",
+  "backend/apps/social/migrations/0005_architectfollow.py": "ArchitectFollow 모델 마이그레이션 (#182)",
+  "frontend/src/api/architects.js": "architect 추천/프로필/팔로우/saved studios API 래퍼 (#178/#182)",
+  "frontend/src/pages/ArchitectProfilePage.jsx": "architect 프로필 페이지 (#182)",
+  "frontend/src/pages/ArchitectProfilePage.module.css": "architect 프로필 페이지 CSS 모듈 (#182)",
+  "frontend/src/pages/boardDetail/ArchitectSection.jsx": "보드 상세 architect 추천 섹션 (#178)",
+  "frontend/src/pages/boardDetail/ArchitectSection.module.css": "보드 상세 architect 섹션 CSS 모듈 (#178)"
 }
