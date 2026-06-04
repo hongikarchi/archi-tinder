@@ -25,11 +25,18 @@ export async function discoveryFeedback(canonicalBldId, action, draftId) {
 }
 
 export async function promoteToTaste(draftId) {
-  // Returns the raw session payload (same shape as POST /analysis/sessions/).
-  // App.jsx's applySessionResponse + custom event handler consume this directly.
+  // Returns the session payload with card fields normalized (image_id set),
+  // mirroring startSession in sessions.js so the first Taste swipe sends a
+  // valid canonical_bld_id instead of undefined.
   const body = {}
   if (draftId) body.draft_id = draftId
-  return callApi('POST', '/discovery/promote-to-taste/', body)
+  const result = await callApi('POST', '/discovery/promote-to-taste/', body)
+  return {
+    ...result,
+    next_image:       normalizeCard(result.next_image),
+    prefetch_image:   normalizeCard(result.prefetch_image),
+    prefetch_image_2: normalizeCard(result.prefetch_image_2),
+  }
 }
 
 export async function fetchBoardSurprise() {
