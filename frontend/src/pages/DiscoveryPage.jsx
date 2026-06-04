@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { fetchDiscoveryFeed, addLikedBuilding } from '../api/client.js'
+import { reportWriteError } from '../utils/reportWriteError.js'
 import SwipeCard, { CARD_WIDTH, CARD_HEIGHT } from '../components/SwipeCard.jsx'
 import SaveToBoardModal from '../components/SaveToBoardModal.jsx'
 import SurpriseBoardModal from '../components/SurpriseBoardModal.jsx'
@@ -56,7 +57,7 @@ function getCardId(card) {
   return card?.canonical_bld_id || card?.image_id || card?.building_id || null
 }
 
-export default function DiscoveryPage() {
+export default function DiscoveryPage({ showToast }) {
   const navigate = useNavigate()
   const isActiveRef = useRef(true)
   const requestIdRef = useRef(0)
@@ -203,10 +204,9 @@ export default function DiscoveryPage() {
       advance()
       const bldId = card?.canonical_bld_id || card?.image_id
       if (bldId && bldId !== '__action_card__') {
-        addLikedBuilding(bldId).catch(() => {
-          // Fire-and-forget; errors are silent (card is already advanced)
-        })
-        setSavesThisVisit(s => s + 1)
+        addLikedBuilding(bldId)
+          .then(() => setSavesThisVisit(s => s + 1))
+          .catch(() => reportWriteError(showToast, '좋아요 저장 실패'))
       }
     } else {
       advance()

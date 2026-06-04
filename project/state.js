@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-06-04 10:19 KST',
-    head: '80a2067',
-    branch: 'feature/claude-dashboard-localview-remove',
+    updatedAt: '2026-06-04 11:17 KST',
+    head: '4cb8a3c',
+    branch: 'feature/claude-ux-write-fail',
   },
   done: [
+    {
+      id: 'UX-WRITE-FAIL',
+      title: '쓰기 실패 무음 유실 표면화 (FRONT-UX-8 + FRONT-UX-7)',
+      completedAt: '2026-06-04',
+      note: '두 쓰기 POST 실패를 빈 `.catch(()=>{})`로 삼켜 취향신호(질문답변·좋아요)가 조용히 유실되던 것을 공유 토스트로 표면화. 기존 `globalToast` 재사용(새 이벤트 시스템 없음).',
+    },
     {
       id: 'DASHBOARD-LOCALVIEW-REMOVE',
       title: 'state.local.js 그림자 메커니즘 제거',
@@ -74,13 +80,6 @@ window.PROJECT_STATE = {
       prs: [163],
       note: 'Persona report 생성 경로 연결 + personaFields/dominant_styles 필드명 정합. #165 ResultsPage 변경과 무충돌 (별도 라인). sha fc9a5c6.',
     },
-    {
-      id: 'DOCS-SESSION-2026-05-31',
-      title: '세션 하우스키핑 — worktree 격리 + Codex 경고 + 리뷰 백로그',
-      completedAt: '2026-05-31',
-      prs: [164, 166, 167],
-      note: '동시-에이전트 working-dir 격리(git worktree) CONTRIBUTING + CLAUDE/AGENTS + WORKFLOW 미러 (#166 32a0f7d). Codex startup metadata 경고 수정 (#167 43de2b1). 2026-05-31 swipe/discovery 리뷰 → Task.md ### X-HIGH 버킷 + .claude/reviews/ 문서 (#164 6c5cd66).',
-    },
   ],
   now: [
     {
@@ -95,16 +94,6 @@ window.PROJECT_STATE = {
         id: 'BACK-RECOMMEND-4',
         title: 'Discovery 좋아요가 추천에 안 먹힘',
         note: '2026-05-31 swipe/discovery 리뷰 F1a/F1b. Discovery right-swipe like는 UserProfile.liked_building_ids에만 기록되고 추천 엔진이 읽지 않음 → Discovery-only 유저는 아무리 like해도 영구 cold/random feed (core promise 위반). engine.py:2352 compute_user_taste_vector는 Project.liked_ids만 읽음, discovery.py:55-73 exclude-set에 liked_building_ids 없음 → 이미 like한 빌딩 재등장. Fix: liked_building_ids를 taste vector + exclude-set에 투입 + LikedBuildingsView.post에서 evict_taste. engine.py collaborator-owned → 알고리즘 오너 협의.',
-      },
-      {
-        id: 'FRONT-UX-8',
-        title: '질문 답변 전송 실패 시 무음 유실  [BUNDLE UX-WRITE-FAIL]',
-        note: '2026-05-31 리뷰 F2. App.jsx:683-692 handleQuestionAnswer가 setPendingQuestion(null) 후 submitQuestionResponse().catch(() => {}) — 실패 시 답변 무음 유실, UI는 성공처럼 진행 → taste-axis 조정 미반영. Fix: optimistic clear 유지하되 .catch에서 toast + 재큐/텔레메트리. FRONT-UX-7과 동일 패턴 → 공유 reportWriteError 헬퍼.',
-      },
-      {
-        id: 'FRONT-UX-7',
-        title: 'Discovery 우측 스와이프 좋아요 무음 실패  [BUNDLE UX-WRITE-FAIL, promoted from MEDIUM 2026-06-04]',
-        note: 'PR #157 (`77ffd6e`, 2026-05-29) `DiscoveryPage.jsx` right-swipe handler calls `addLikedBuilding(card.image_id).catch(() => {})`. On API failure (network blip, 5xx, auth gone, rate limit) the user gets no feedback — the swipe animation completes and the like silently does not p…',
       },
       {
         id: 'FRONT-UX-6',
@@ -226,6 +215,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 185,
+      title: 'chore(dashboard): remove state.local.js shadow mechanism',
+      mergedAt: '2026-06-04T01:33:59Z',
+      mergedAtKST: '2026-06-04 10:33 KST',
+      sha: '4cb8a3c',
+    },
+    {
       number: 184,
       title: 'chore(dashboard): file-roles 15개 추가 (#178/#180/#182 파일)',
       mergedAt: '2026-06-04T00:41:03Z',
@@ -273,13 +269,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-06-01T13:08:56Z',
       mergedAtKST: '2026-06-01 22:08 KST',
       sha: '83f6310',
-    },
-    {
-      number: 176,
-      title: 'feat(sns): BoardDetailPage 페르소나 리포트 섹션 복구 + 리포트 보기 버튼',
-      mergedAt: '2026-06-01T13:18:31Z',
-      mergedAtKST: '2026-06-01 22:18 KST',
-      sha: 'b8c1c7c',
     },
   ],
   agents: [

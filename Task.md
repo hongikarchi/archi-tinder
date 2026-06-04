@@ -88,14 +88,13 @@ Redesign `/login` as conversational swipe onboarding while preserving the existi
 > quick-wins BACK-OFFICE-1 / BACK-PROFILE-1); deferred items keep their original ref + this convention.
 >
 > **권장 실행 순서 (Claude lane, 2026-06-04 결정 — quick-wins·defects before the heavy FRONT-DESIGN-1 sweep):**
-> 1. `FRONT-UX-8`+`FRONT-UX-7` (bundle **UX-WRITE-FAIL**) — 2. `BACK-OFFICE-1` (SavedOffice 삭제)
+> 1. ~~`FRONT-UX-8`+`FRONT-UX-7` (UX-WRITE-FAIL)~~ — DONE 2026-06-04 (`feature/claude-ux-write-fail`). **다음 → 2. `BACK-OFFICE-1`** (SavedOffice 삭제)
 > — 3. `BACK-PROFILE-1` (external_links 검증) — 4. `FRONT-UX-6`+`9`+`10` (bundle **UX-GALLERY**)
 > — 5. `BACK-RECOMMEND-4` (engine 협업자 조율). `FRONT-DESIGN-1` stays **paused** (multi-session sweep);
 > `FULL-LANGUAGE-1` / `BACK-LLM-2` / `FULL-LEGAL-1` deferred.
 >
 > **1-PR bundles** (group for a single PR; IDs kept distinct for traceability — N never reused):
-> - **UX-WRITE-FAIL** = `FRONT-UX-8` + `FRONT-UX-7` — same empty-`.catch(()=>{})` write-loss → one
->   shared `reportWriteError(toast)` helper over the existing `globalToast` mount.
+> - ~~**UX-WRITE-FAIL** = `FRONT-UX-8` + `FRONT-UX-7`~~ — DONE 2026-06-04 (shared `reportWriteError` toast over `globalToast`; see ## Done).
 > - **UX-GALLERY** = `FRONT-UX-6` + `FRONT-UX-9` + `FRONT-UX-10` — one structural fix (lift the gallery
 >   out of `react-tinder-card` into a sibling overlay) resolves all three gesture bugs.
 
@@ -104,7 +103,7 @@ Redesign `/login` as conversational swipe onboarding while preserving the existi
 > Critical — confirmed defect against the core taste-match promise or against data
 > correctness, surfaced by the 2026-05-31 swipe / discovery review
 > (`.claude/reviews/2026-05-31-swipe-discovery-review.md`) + the 2026-06-04 backlog audit. Pull before `### HIGH`.
-> **Two 1-PR bundles live here** (2026-06-04): **UX-WRITE-FAIL** = FRONT-UX-8 + FRONT-UX-7 (shared empty-catch write-loss → one `reportWriteError` toast helper); **UX-GALLERY** = FRONT-UX-6 + FRONT-UX-9 + FRONT-UX-10 (one gallery sibling-overlay lift fixes all three gesture bugs). FRONT-UX-7/6/10 promoted from MEDIUM (bundle inherits the X-HIGH anchor).
+> **One 1-PR bundle lives here** (UX-WRITE-FAIL shipped 2026-06-04 → ## Done): **UX-GALLERY** = FRONT-UX-6 + FRONT-UX-9 + FRONT-UX-10 (one gallery sibling-overlay lift fixes all three gesture bugs). FRONT-UX-6/10 promoted from MEDIUM (bundle inherits the X-HIGH anchor).
 
 #### BACK-RECOMMEND-4 — Discovery 좋아요가 추천에 안 먹힘
 Discovery right-swipe likes are write-only to the recommendation engine: they land in `UserProfile.liked_building_ids` but nothing reads that field back into Discovery's own ranking or exclusion. A Discovery-only user (never runs a Taste session) gets a permanently random, "cold" feed no matter how many buildings they like — directly violating the core promise ("the app already noticed my taste") on the Discovery surface itself.
@@ -121,28 +120,6 @@ Fix direction:
 - `engine.py` is collaborator-owned per CLAUDE.md `## Rules` — coordinate with the algorithm owner before touching `compute_user_taste_vector`.
 
 Acceptance: a fresh profile that likes N buildings in Discovery (no Taste session) flips `taste_state` cold→warm and stops re-showing already-liked buildings; pytest covering taste-vector inclusion + exclude-set membership; Discovery TTFC not regressed.
-
-#### FRONT-UX-8 — 질문 답변 전송 실패 시 무음 유실  [BUNDLE UX-WRITE-FAIL]
-In-session QuestionCard answers are fire-and-forget: a failed POST drops the answer with no retry and no user feedback, while the UI advances as if it succeeded — so the taste-axis adjustment from that question silently never lands on the backend.
-
-Code ref (`develop@2f9a9c2`):
-- `frontend/src/App.jsx:602-612` — `handleQuestionAnswer` (was line 683-692; that range now holds `handleLogout`) clears `setPendingQuestion(null)` first, then fires `submitQuestionResponse` with an empty catch that swallows network / 5xx errors after the card is already dismissed. NOTE: no `reportWriteError` helper exists yet, but the `globalToast` mount (state App.jsx:65, render :824-848) is the existing surface to reuse — there is NO `archithon:toast` event.
-
-Fix direction: keep the optimistic clear (UX needs the card to dismiss), but on `.catch` surface a toast and either re-queue the question or emit telemetry. Same anti-pattern as `FRONT-UX-7` (Discovery like silent failure) — consider one shared `reportWriteError(toast)` helper (or the existing `archithon:toast` custom-event path) for both call sites.
-
-Acceptance: a forced submit failure shows user feedback and does not silently lose the answer; no regression to the normal answer→next-card flow.
-
-#### FRONT-UX-7 — Discovery 우측 스와이프 좋아요 무음 실패  [BUNDLE UX-WRITE-FAIL, promoted from MEDIUM 2026-06-04]
-`DiscoveryPage.jsx` right-swipe handler fire-and-forgets the liked-building POST. On API failure (network blip, 5xx, auth gone, rate limit) the user gets no feedback — the swipe animation completes and the like silently does not persist. Same empty-catch class as FRONT-UX-8 → one shared `reportWriteError` toast helper fixes both (bundle UX-WRITE-FAIL).
-
-Code refs (`develop@2f9a9c2`, 2026-06-04 audit — premise corrected):
-- `frontend/src/pages/DiscoveryPage.jsx:204-208` — `onCardLeftScreen` (handler L197-214) likes via `addLikedBuilding` with an empty catch. The swallow is at the CALL SITE, not in the api module. The id arg is `canonical_bld_id`-first (then `image_id` fallback) per the repo rule, not `card.image_id`.
-- `frontend/src/api/liked.js:8-10` — `addLikedBuilding` cleanly returns the `callApi` promise with no try/catch; the resolved path is `/api/v1/liked-buildings/`, NOT `/auth/me/liked-buildings/`.
-- `frontend/src/App.jsx:824-848` — `globalToast` render with `setGlobalToast` (state :65, auto-dismiss :106-111). There is NO `archithon:toast` event; wire the shared helper to `setGlobalToast` directly.
-
-Implementation: minimal failure toast ("저장 실패 — 다시 시도해주세요") via the shared `reportWriteError` helper (DESIGN.md §8.11 glassmorphic, 3s auto-dismiss); no retry. Stretch (deferred): queue + retry-on-online.
-
-Acceptance: failed liked-building save no longer silent; user sees a toast; no regression to successful-swipe latency. Author yywon1 awaiting decision per PR #157 review comment.
 
 #### FRONT-UX-6 — SwipeCard gallery flip 부모 state 동기화 누락  [BUNDLE UX-GALLERY anchor, promoted from MEDIUM 2026-06-04]
 Post-PR #158, `openGallery()` is purely local — it no longer notifies the parent via `onGalleryOpen`. SwipePage's `galleryOpen` stays false. Two regressions: desktop mouse-drag on the gallery face triggers the underlying card swipe (the scroll wrapper stops touch propagation but not mouse), and the gallery cannot be gesture-isolated. The UX-GALLERY bundle fix (lift the gallery out of `react-tinder-card` into a sibling overlay) resolves this plus FRONT-UX-9 (touch-action) and FRONT-UX-10 (long-press) in one structural PR.
@@ -501,6 +478,15 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 ---
 
 ## Done
+
+### UX-WRITE-FAIL — 쓰기 실패 무음 유실 표면화 (FRONT-UX-8 + FRONT-UX-7) — RESOLVED 2026-06-04 (`feature/claude-ux-write-fail` → develop)
+두 쓰기 POST 실패를 빈 `.catch(()=>{})`로 삼켜 취향신호(질문답변·좋아요)가 조용히 유실되던 것을 공유 토스트로 표면화. 기존 `globalToast` 재사용(새 이벤트 시스템 없음).
+- [x] **신규 `utils/reportWriteError.js`**: `reportWriteError(showToast, msg)` → `showToast?.({message, type:'error'})`. optional-chaining 안전 no-op.
+- [x] **FRONT-UX-8** (App.jsx `handleQuestionAnswer`): `submitQuestionResponse` 실패 시 한글 토스트 + `setPendingQuestion(q)`로 질문 재노출(재시도 보존). 낙관적 클리어 유지.
+- [x] **FRONT-UX-7** (DiscoveryPage `onCardLeftScreen`): `addLikedBuilding().then(()=>setSavesThisVisit+1).catch(()=>reportWriteError)`. 카운터를 POST 성공 후로 이동 → 실패한 좋아요는 Surprise threshold 미반영. `<DiscoveryPage showToast={setGlobalToast}/>` prop 직결.
+- [x] code-review PASS(0 blocker). 카피 정직성 수정: UX-7은 카드 advance로 재시도 불가 → '좋아요 저장 실패'(재시도 함의 제거).
+- 게이트: lint/build PASS. app-test FEATURE-SCOPED는 로컬 DB 마이그 갭(#180/#182 미적용, 내 코드 무관)으로 B1c 차단 → 순수 frontend+code-review PASS로 3-gate 수용(유저 결정 2026-06-04). 브라우저 미실행.
+- 후속: 로컬 DB migrate(profiles/0003·0004 + social/0005) 필요 — 향후 app-test/백엔드 페이지 테스트 복구용(operator DDL). theme/font 영속 무음 catch(ThemeContext:57,63)는 낮은-stakes 형제 → 후보 FRONT-UX-11.
 
 ### DASHBOARD-LOCALVIEW-REMOVE — state.local.js 그림자 메커니즘 제거 — RESOLVED 2026-06-04 (`feature/claude-dashboard-localview-remove` → develop)
 `make dashboard`가 만드는 gitignored `project/state.local.js`가 신선도 가드 없이 committed `state.js`를 가리는 footgun 제거. 6/1 stale local이 6/4 audit 변경(BACK-OFFICE-1·BACK-PROFILE-1 등)을 영구히 가려 유저가 대시보드에서 못 봄. 대시보드 단일 소스 = committed `state.js`.
