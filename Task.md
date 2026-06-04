@@ -158,16 +158,10 @@ Acceptance: holding the mouse over the Discovery gallery does not open the Save-
 
 ### HIGH
 
-#### BACK-OFFICE-1 — SavedOffice orphan 모델 제거 (office-interest 3중 중복 정리)
-office-interest 모델 3중 중복 (2026-06-04 audit 확인). 메모리 라벨 역전 정정: OfficeFollow가 LIVE(FirmProfilePage 팔로우 버튼이 `api/social.js` followOffice/unfollowOffice로 배선), 죽은 건 SavedOffice. 정리 타겟 = SavedOffice 제거 (OfficeFollow 아님 — 잘못 지우면 작동 기능 삭제).
+#### ARCHITECT-UNIFY-1 — Office↔Architect 엔티티 통합 (Phase 1-4, 조율-게이트)
+office-interest 3모델(OfficeFollow/ArchitectFollow/SavedOffice) + 프로필 2페이지(FirmProfilePage 도달불가 / ArchitectProfilePage LIVE)가 같은 스튜디오 엔티티를 세 갈래로 구현(건축가=회사=스튜디오=office=하나). 통합 = corpus `architect_id` canonical 수렴, Office UUID 통째복사 폐기, claim/projects/follow를 arch_id-overlay로 재키잉. 전체 설계 = PROPOSAL `docs/specs/architect-unification.md`.
 
-Code refs (`develop@2f9a9c2`, 2026-06-04 audit):
-- `backend/apps/profiles/models.py:91` — `SavedOffice` (migration profiles 0003, #180): 프론트 호출자 0 (offices/CANON/save/ + offices/saved/ 엔드포인트 caller 없음), 테스트 0, serializer/admin 0 — view+url만 존재 = orphan.
-- `backend/apps/social/models.py` — `OfficeFollow` (LIVE, FirmProfilePage 팔로우) + `ArchitectFollow` (migration social 0005, saved_studios 카운트의 실제 소스). SavedOffice는 OfficeFollow가 이미 커버하는 office-bookmark 개념을 중복하고, "saved" 네이밍은 ArchitectFollow가 가져감.
-
-정리: SavedOffice 모델 + view + url + drop 마이그레이션 제거. 배포 시 profiles 마이그레이션 DDL 필요(operator neondb_owner swap, INFRA-DB-1). SavedOffice는 프론트 orphan이라 런타임 영향 없음. 퀵윈 #2.
-
-Acceptance: SavedOffice 모델/뷰/url 삭제 + drop 마이그레이션; OfficeFollow + ArchitectFollow 무손상; pytest green; 프론트 빌드 무영향(호출자 없음 확인).
+상태: **Phase 0(SavedOffice 삭제) DONE**(아래 ## Done, BACK-OFFICE-1=Phase0). Phase 1-4(claim/projects 재키잉 → follow 통합 → 페이지 병합 → Office 테이블 정리)는 **예원 #180 / admin #182 / KMS Phase15 작업을 해체하므로 조율 필수 = 착수 전 합의 게이트**(ARCHITECT-UNIFY-1..4 분할 예정). Open: off-corpus firm 정책, sync_offices 운명(read-perf 캐시 측정, <1s 목표), PR 분할/배정.
 
 #### BACK-RECOMMEND-1 — Project 두번째 세션이 이전 taste를 모름
 Same Project can host multiple `AnalysisSession` rows (user comes back, "Resume" or new swipe round on the same Project — second session is created fresh while `Project.liked_ids` / `disliked_ids` / `saved_ids` carry forward as the persistent accumulator). Today the new session's algorithm-side state (`like_vectors`, `convergence_history`, `phase`) starts from scratch — exploring phase, empty pool of taste signal — even though the user just liked 12 buildings in Session #1.
@@ -479,6 +473,14 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 - [x] website: URLValidator(http/https) — javascript:/data:/protocol-relative 차단. 전 키: 제어문자(CRLF) reject, unknown 키 forward-compat, empty=skip, normalized dict 반환.
 - 게이트: `manage.py check` PASS, flake8 clean(3 E221 pre-existing 무관), sanity 10+케이스(주입/우회 reject·정상 통과). security-manager FAIL→fix→재검증. test_phase13 instagram assert 갱신(strip). app-test SKIP(API 검증, UI 무변경).
 - 후속(별도, 낮은 위험): office/architect contact_email mailto 조립 2곳(FirmProfileHero:241, ArchitectProfilePage:166)은 동일 클래스이나 **corpus-curated 이메일**(user-PATCH 불가)이라 위험 낮음 — 범위 밖.
+
+### BACK-OFFICE-1 (ARCHITECT-UNIFY Phase 0) — SavedOffice orphan 제거 — RESOLVED 2026-06-04 (`feature/claude-architect-unify-p0` → develop)
+예원 #180의 미배선 SavedOffice(model+2뷰+2url) 삭제 + DROP 마이그 0005. ARCHITECT-UNIFY(Office↔Architect 통합) 스펙의 첫 안전 조각 — "스튜디오 저장"은 ArchitectFollow saved-studios(#179)가 이미 충족, SavedOffice는 프론트 콜러 0이라 무위험.
+- [x] `profiles/models.py` SavedOffice 클래스 삭제(+미사용 settings import 정리), `views.py` OfficeSaveView+SavedOfficeListView+import 삭제, `urls.py` 2 path+import(re_path) 삭제.
+- [x] 신규 마이그 `0005_delete_savedoffice`(makemigrations 자동생성, DeleteModel만, deps 0004). 로컬 적용 OK(빈 테이블 안전 DROP).
+- [x] OfficeFollow/ArchitectFollow/Office/sync_offices 무손상. 게이트: `manage.py check` PASS, makemigrations --check "no changes", flake8 profiles clean. app-test SKIP(dead endpoint, UI 표면 0), code-review 스킵(순수 삭제 — check가 dangling-ref 검증).
+- 설계: `docs/specs/architect-unification.md`(PROPOSAL). Phase 1-4 = `ARCHITECT-UNIFY-1`(## Next), 조율-게이트.
+- 후속: SavedOffice는 #180 의도적 기능이었으나 #182 ArchitectFollow에 밀린 중복 → 제거(예원 통지). deploy-gate: 0005 DROP은 #180/#182 prod 마이그 배치 합류(prod SavedOffice 비어있어 안전).
 
 ### UX-WRITE-FAIL — 쓰기 실패 무음 유실 표면화 (FRONT-UX-8 + FRONT-UX-7) — RESOLVED 2026-06-04 (`feature/claude-ux-write-fail` → develop)
 두 쓰기 POST 실패를 빈 `.catch(()=>{})`로 삼켜 취향신호(질문답변·좋아요)가 조용히 유실되던 것을 공유 토스트로 표면화. 기존 `globalToast` 재사용(새 이벤트 시스템 없음).
