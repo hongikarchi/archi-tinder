@@ -169,13 +169,6 @@ Code refs (`develop@2f9a9c2`, 2026-06-04 audit):
 
 Acceptance: SavedOffice 모델/뷰/url 삭제 + drop 마이그레이션; OfficeFollow + ArchitectFollow 무손상; pytest green; 프론트 빌드 무영향(호출자 없음 확인).
 
-#### BACK-PROFILE-1 — external_links 검증 없음 (mailto/handle 주입)
-`validate_external_links`에 instagram handle/email 포맷 검증 없음. ProfileHero가 instagram.com/HANDLE + mailto:EMAIL 평문 조립 → 스킴-락이라 javascript: 차단되나 path-traversal/주입 nuisance. 영숫자+밑줄만 허용하도록 백엔드 검증 추가. 퀵윈 #3.
-
-Code refs (`develop@2f9a9c2`, 2026-06-04 audit — 갭 확인):
-- `backend/apps/accounts/serializers.py` `validate_external_links` — dict + string keys/values + len<=500만 체크, handle/email 포맷 검증 없음.
-- 동류 mailto 조립 사이트 2곳 더: `FirmProfileHero.jsx:241`, `ArchitectProfilePage.jsx:166` — office/architect contact_email라 이 항목 범위 밖이나 같은 클래스(별도 후속 가능).
-
 #### BACK-RECOMMEND-1 — Project 두번째 세션이 이전 taste를 모름
 Same Project can host multiple `AnalysisSession` rows (user comes back, "Resume" or new swipe round on the same Project — second session is created fresh while `Project.liked_ids` / `disliked_ids` / `saved_ids` carry forward as the persistent accumulator). Today the new session's algorithm-side state (`like_vectors`, `convergence_history`, `phase`) starts from scratch — exploring phase, empty pool of taste signal — even though the user just liked 12 buildings in Session #1.
 
@@ -478,6 +471,14 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 ---
 
 ## Done
+
+### BACK-PROFILE-1 — external_links 검증 강화 (handle/email/website + mailto 주입 차단) — RESOLVED 2026-06-04 (`feature/claude-back-profile-1` → develop)
+`validate_external_links`(accounts/serializers.py)에 키별 포맷 검증 추가 — 프론트가 검증 없이 `instagram.com/${handle}`·`mailto:${email}` 평문 조립하던 주입 nuisance를 서버에서 차단.
+- [x] instagram: 선행 `@` 1개 strip + `^[A-Za-z0-9._]{1,30}$` fullmatch(경로 break-out 문자 전부 배제), normalized 저장.
+- [x] email: Django EmailValidator + **mailto 헤더 주입 차단**(`?`/`&` reject — RFC5321은 local-part 허용하나 RFC6068 mailto hfield 구분자라 `user?cc=evil@x.com` 차단). security-manager 발견 수정.
+- [x] website: URLValidator(http/https) — javascript:/data:/protocol-relative 차단. 전 키: 제어문자(CRLF) reject, unknown 키 forward-compat, empty=skip, normalized dict 반환.
+- 게이트: `manage.py check` PASS, flake8 clean(3 E221 pre-existing 무관), sanity 10+케이스(주입/우회 reject·정상 통과). security-manager FAIL→fix→재검증. test_phase13 instagram assert 갱신(strip). app-test SKIP(API 검증, UI 무변경).
+- 후속(별도, 낮은 위험): office/architect contact_email mailto 조립 2곳(FirmProfileHero:241, ArchitectProfilePage:166)은 동일 클래스이나 **corpus-curated 이메일**(user-PATCH 불가)이라 위험 낮음 — 범위 밖.
 
 ### UX-WRITE-FAIL — 쓰기 실패 무음 유실 표면화 (FRONT-UX-8 + FRONT-UX-7) — RESOLVED 2026-06-04 (`feature/claude-ux-write-fail` → develop)
 두 쓰기 POST 실패를 빈 `.catch(()=>{})`로 삼켜 취향신호(질문답변·좋아요)가 조용히 유실되던 것을 공유 토스트로 표면화. 기존 `globalToast` 재사용(새 이벤트 시스템 없음).

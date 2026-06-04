@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-06-04 13:59 KST',
-    head: '4cb8a3c',
-    branch: 'feature/claude-ux-write-fail',
+    updatedAt: '2026-06-04 15:34 KST',
+    head: '75542fc',
+    branch: 'feature/claude-back-profile-1',
   },
   done: [
+    {
+      id: 'BACK-PROFILE-1',
+      title: 'external_links 검증 강화 (handle/email/website + mailto 주입 차단)',
+      completedAt: '2026-06-04',
+      note: '`validate_external_links`(accounts/serializers.py)에 키별 포맷 검증 추가 — 프론트가 검증 없이 `instagram.com/${handle}`·`mailto:${email}` 평문 조립하던 주입 nuisance를 서버에서 차단.',
+    },
     {
       id: 'UX-WRITE-FAIL',
       title: '쓰기 실패 무음 유실 표면화 (FRONT-UX-8 + FRONT-UX-7)',
@@ -73,13 +79,6 @@ window.PROJECT_STATE = {
       prs: [165],
       note: 'Top-K 추천 4-column 그리드 + 신규 "My Likes" 가로 스크롤 섹션 (result.liked_images 소비). Imagen placeholder/rank-10 divider 제거, Fragment import drop. frontend/src/pages/ResultsPage.jsx +118/-69. 모바일 4-col 9-10px 폰트 빽빽 (작성자 의도). sha 61c9ee1.',
     },
-    {
-      id: 'SNS-REPORT-CONNECT',
-      title: '페르소나 리포트 생성 연결 + 필드명 수정',
-      completedAt: '2026-05-31',
-      prs: [163],
-      note: 'Persona report 생성 경로 연결 + personaFields/dominant_styles 필드명 정합. #165 ResultsPage 변경과 무충돌 (별도 라인). sha fc9a5c6.',
-    },
   ],
   now: [
     {
@@ -116,11 +115,6 @@ window.PROJECT_STATE = {
         id: 'BACK-OFFICE-1',
         title: 'SavedOffice orphan 모델 제거 (office-interest 3중 중복 정리)',
         note: 'office-interest 모델 3중 중복 (2026-06-04 audit 확인). 메모리 라벨 역전 정정: OfficeFollow가 LIVE(FirmProfilePage 팔로우 버튼이 `api/social.js` followOffice/unfollowOffice로 배선), 죽은 건 SavedOffice. 정리 타겟 = SavedOffice 제거 (OfficeFollow 아님 — 잘못 지우면 작동 기능 삭제).',
-      },
-      {
-        id: 'BACK-PROFILE-1',
-        title: 'external_links 검증 없음 (mailto/handle 주입)',
-        note: '`validate_external_links`에 instagram handle/email 포맷 검증 없음. ProfileHero가 instagram.com/HANDLE + mailto:EMAIL 평문 조립 → 스킴-락이라 javascript: 차단되나 path-traversal/주입 nuisance. 영숫자+밑줄만 허용하도록 백엔드 검증 추가. 퀵윈 #3.',
       },
       {
         id: 'BACK-RECOMMEND-1',
@@ -215,6 +209,20 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 187,
+      title: 'chore(make): add migrate-local for safe local DDL migrate',
+      mergedAt: '2026-06-04T05:04:00Z',
+      mergedAtKST: '2026-06-04 14:04 KST',
+      sha: '75542fc',
+    },
+    {
+      number: 186,
+      title: 'fix(ux): surface silent write failures (FRONT-UX-8 + FRONT-UX-7)',
+      mergedAt: '2026-06-04T05:03:18Z',
+      mergedAtKST: '2026-06-04 14:03 KST',
+      sha: '9b581fb',
+    },
+    {
       number: 185,
       title: 'chore(dashboard): remove state.local.js shadow mechanism',
       mergedAt: '2026-06-04T01:33:59Z',
@@ -255,20 +263,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-06-03T23:16:33Z',
       mergedAtKST: '2026-06-04 08:16 KST',
       sha: '2f9a9c2',
-    },
-    {
-      number: 178,
-      title: 'feat(SNS-ARCH): 보드 상세 — 추천 사무소 섹션 + ArchitectProfilePage',
-      mergedAt: '2026-06-03T15:34:02Z',
-      mergedAtKST: '2026-06-04 00:34 KST',
-      sha: '54fa460',
-    },
-    {
-      number: 177,
-      title: 'feat(FRONT-AUTH-2): login swipe onboarding 1차 — guest auth contract preserved',
-      mergedAt: '2026-06-01T13:08:56Z',
-      mergedAtKST: '2026-06-01 22:08 KST',
-      sha: '83f6310',
     },
   ],
   agents: [

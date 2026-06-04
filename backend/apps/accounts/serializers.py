@@ -1,4 +1,9 @@
+import re
+
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.validators import EmailValidator, URLValidator
 from rest_framework import serializers
+
 from .models import UserProfile
 
 
@@ -136,9 +141,33 @@ class UserProfileSelfUpdateSerializer(serializers.ModelSerializer):
         return value.upper() if value else value
 
     def validate_external_links(self, value):
-        """external_links must be a dict with string keys and string values."""
+        """Validate and normalise external_links.
+
+        Accepted keys: instagram, email, website (forward-compat: unknown keys
+        pass through with generic checks).
+
+        Per-key rules (empty string = "not set", skip format check):
+          instagram — strip a single leading '@', then require
+                      ^[A-Za-z0-9._]{1,30}$ (fullmatch, no trailing-newline
+                      bypass). Stored without the '@'.
+          email     — validated by Django's EmailValidator.
+          website   — validated by URLValidator(schemes=['http','https']);
+                      blocks javascript:, data:, ftp: etc.
+          unknown   — generic: string, ≤500 chars, no control characters.
+
+        Control characters (\\n, \\r, \\0) are rejected on ALL keys to block
+        CRLF / header-injection.
+        """
         if not isinstance(value, dict):
             raise serializers.ValidationError('external_links must be an object.')
+
+        _CONTROL_RE = re.compile(r'[\n\r\x00]')
+        _INSTAGRAM_RE = re.compile(r'^[A-Za-z0-9._]{1,30}$')
+        _email_validator = EmailValidator()
+        _url_validator = URLValidator(schemes=['http', 'https'])
+
+        normalized = {}
+
         for k, v in value.items():
             if not isinstance(k, str) or not isinstance(v, str):
                 raise serializers.ValidationError(
@@ -148,4 +177,56 @@ class UserProfileSelfUpdateSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     f'external_links["{k}"] exceeds 500 chars.'
                 )
-        return value
+
+            # Control-character check applies to ALL keys.
+            if _CONTROL_RE.search(v):
+                raise serializers.ValidationError(
+                    f'external_links["{k}"] contains invalid control characters.'
+                )
+
+            if v == '':
+                # Empty means "not set" — store as-is, skip format check.
+                normalized[k] = v
+                continue
+
+            if k == 'instagram':
+                # Strip exactly one leading '@' (not lstrip — that eats '@@foo').
+                handle = v[1:] if v.startswith('@') else v
+                if not _INSTAGRAM_RE.fullmatch(handle):
+                    raise serializers.ValidationError(
+                        'Instagram handle may only contain letters, numbers, '
+                        '"." and "_" (max 30).'
+                    )
+                normalized[k] = handle
+
+            elif k == 'email':
+                try:
+                    _email_validator(v)
+                except DjangoValidationError:
+                    raise serializers.ValidationError(
+                        'external_links["email"] is not a valid email address.'
+                    )
+                # EmailValidator (RFC 5321) permits ?,&,= in the local-part;
+                # those are RFC 6068 mailto: header-field delimiters, so a value
+                # like "user?cc=evil@x.com" would inject cc/subject into the
+                # frontend's mailto:${email} link. Reject them.
+                if '?' in v or '&' in v:
+                    raise serializers.ValidationError(
+                        'external_links["email"] may not contain "?" or "&".'
+                    )
+                normalized[k] = v
+
+            elif k == 'website':
+                try:
+                    _url_validator(v)
+                except DjangoValidationError:
+                    raise serializers.ValidationError(
+                        'external_links["website"] must be a valid http(s) URL.'
+                    )
+                normalized[k] = v
+
+            else:
+                # Unknown key — generic pass-through (forward-compat).
+                normalized[k] = v
+
+        return normalized

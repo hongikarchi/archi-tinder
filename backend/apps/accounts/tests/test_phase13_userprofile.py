@@ -183,12 +183,17 @@ class TestUserProfileSelfUpdateView:
 
     @pytest.mark.django_db
     def test_patch_self_updates_external_links(self, user_and_profile, auth_client_for):
-        """PATCH with external_links stores the dict correctly."""
+        """PATCH with external_links stores the dict correctly.
+
+        instagram: leading '@' is stripped on storage (normalised handle, no '@').
+        email: stored as-is after EmailValidator passes.
+        """
         payload = {'external_links': {'instagram': '@kimarch', 'email': 'kim@example.com'}}
         response = auth_client_for.patch('/api/v1/users/me/', payload, format='json')
         assert response.status_code == 200
         links = response.json()['external_links']
-        assert links['instagram'] == '@kimarch'
+        # Validator strips the leading '@'; stored as bare handle.
+        assert links['instagram'] == 'kimarch'
         assert links['email'] == 'kim@example.com'
 
     @pytest.mark.django_db
