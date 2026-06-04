@@ -435,6 +435,7 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 - [x] **방향잠금 + 갤러리 스크롤**: SwipeCard card root `touch-action:none→pan-y`(세로=브라우저 pan·카드 안흔들림, 가로=스와이프) + 갤러리 scroll div/이미지/img `pressable`(react-tinder-card preventDefault 스킵) + 갤러리 `touch-action:pan-y`. rotateY flip 유지.
 - [x] **Discovery long-press 제거**(FRONT-UX-10): 400ms 보드저장 제스처 -91줄 삭제 → 순수 스와이프. 우-스와이프 like + Surprise 모달 유지.
 - [x] **cleanup**(FRONT-UX-6 obsolete): SwipePage 죽은 galleryOpen/preventSwipe-ALL/ESC 제거(suppress 안 함 — 스와이프 유지 의도).
+- [x] **Codex #191 HIGH 수정 — native direction-lock**: `touch-action:pan-y`만으론 부족 — react-tinder-card가 카드 엘리먼트에 native touchmove(index.js:244, bubble) 바인딩, React synthetic `stopPropagation`은 native 리스너 못 막음 → 세로 드래그 wobble·touchcancel 미처리 카드 고착·대각선 스와이프 오발. SwipeCard 갤러리 scroll div에 native touchstart/touchmove 리스너(8px slop axis-lock, 세로 확정 시 `e.stopPropagation()`; passive·preventDefault 안 함 → 브라우저 pan-y 스크롤 그대로) 추가 + 쓸모없던 React synthetic stopPropagation 2개 제거. bubble 순서상 갤러리 리스너가 카드보다 먼저 발화 → 세로=카드 handleMove 차단, 가로=전파(스와이프 유지).
 - 게이트: lint/build PASS, code-review PASS(4영역 무결). session spike GO(3D 스크롤 viable + 레시피 라이브 검증). **native 모바일 터치(손가락 스크롤·방향잠금·sloppy boundary)는 Codex 실모바일 최종확인**(Playwright 데스크톱=native 터치 부정확).
 - 재정의: A(lift) 탈락(갤러리중 스와이프 유지와 충돌). premise=hypothesis([[feedback_taskmd_premise_verification]]), product 재검토로 교체.
 

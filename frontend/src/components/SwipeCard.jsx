@@ -51,6 +51,7 @@ export default function SwipeCard({ card, onGalleryClose }) {
   const dragStartTime = useRef(null)
   const imgRef = useRef(null)
   const timeoutRef = useRef(null)
+  const galleryScrollRef = useRef(null)
 
   const { onLoad: telemetryOnLoad, onError: telemetryOnError } = useImageTelemetry({
     buildingId: card.image_id,
@@ -156,6 +157,47 @@ export default function SwipeCard({ card, onGalleryClose }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [card?.image_id, card?.image_url])
+
+  // Native direction-lock for gallery vertical scroll.
+  // Bubble order: this gallery div listener fires BEFORE the react-tinder-card
+  // native touchmove on the ancestor card element. stopPropagation() in a passive
+  // listener is valid (passive only forbids preventDefault). We never call
+  // preventDefault so the browser still handles pan-y scroll natively.
+  // Horizontal intent propagates normally → card swipe still works.
+  useEffect(() => {
+    const el = galleryScrollRef.current
+    if (!el) return
+    let startX = 0
+    let startY = 0
+    let axis = null // null (undecided) | 'v' (vertical → block card) | 'h' (horizontal → allow swipe)
+    const SLOP = 8  // px before axis is committed
+    const onStart = (e) => {
+      if (!e.touches.length) return
+      const t = e.touches[0]
+      startX = t.clientX
+      startY = t.clientY
+      axis = null
+    }
+    const onMove = (e) => {
+      if (!e.touches.length) return
+      const t = e.touches[0]
+      const dx = Math.abs(t.clientX - startX)
+      const dy = Math.abs(t.clientY - startY)
+      if (axis === null && (dx > SLOP || dy > SLOP)) {
+        axis = dy > dx ? 'v' : 'h'
+      }
+      // Vertical intent: stop the event reaching react-tinder-card's native
+      // touchmove listener on the parent card (bubble phase). Card does NOT
+      // wobble. Horizontal intent propagates → card swipe preserved.
+      if (axis === 'v') e.stopPropagation()
+    }
+    el.addEventListener('touchstart', onStart, { passive: true })
+    el.addEventListener('touchmove', onMove, { passive: true })
+    return () => {
+      el.removeEventListener('touchstart', onStart)
+      el.removeEventListener('touchmove', onMove)
+    }
+  }, [hasBeenOpened])
 
   const typology   = card.metadata?.axis_typology
   const architects = card.metadata?.axis_architects
@@ -344,9 +386,8 @@ export default function SwipeCard({ card, onGalleryClose }) {
         }}>
           {/* Vertical scroll of full-width images */}
           <div
+            ref={galleryScrollRef}
             className="pressable"
-            onTouchStart={e => e.stopPropagation()}
-            onTouchMove={e => e.stopPropagation()}
             style={{
               position: 'absolute', inset: 0,
               overflowY: 'auto', overflowX: 'hidden',
