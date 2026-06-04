@@ -180,7 +180,7 @@ export default function SwipeCard({ card, onGalleryClose }) {
         position: 'absolute', top: 0, left: 0,
         width: CARD_WIDTH, height: CARD_HEIGHT,
         cursor: 'grab',
-        userSelect: 'none', WebkitUserSelect: 'none', touchAction: 'none',
+        userSelect: 'none', WebkitUserSelect: 'none', touchAction: 'pan-y',
         perspective: 1200,
       }}
       onPointerDown={handlePointerDown}
@@ -344,6 +344,7 @@ export default function SwipeCard({ card, onGalleryClose }) {
         }}>
           {/* Vertical scroll of full-width images */}
           <div
+            className="pressable"
             onTouchStart={e => e.stopPropagation()}
             onTouchMove={e => e.stopPropagation()}
             style={{
@@ -352,12 +353,13 @@ export default function SwipeCard({ card, onGalleryClose }) {
               scrollSnapType: 'y mandatory',
               overscrollBehaviorY: 'contain',
               scrollbarWidth: 'none',
+              touchAction: 'pan-y',
             }}
           >
             {gallery.map((url, i) => {
               const isDrawing = i >= drawingStart
               return (
-                <div key={i} style={{
+                <div key={i} className="pressable" style={{
                   width: '100%', height: CARD_HEIGHT,
                   flexShrink: 0,
                   scrollSnapAlign: 'start',
@@ -368,6 +370,7 @@ export default function SwipeCard({ card, onGalleryClose }) {
                   <img
                     src={url}
                     alt=""
+                    className="pressable"
                     loading={i === 0 ? 'eager' : 'lazy'}
                     decoding="async"
                     draggable={false}
