@@ -1,19 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { fetchDiscoveryFeed, addLikedBuilding } from '../api/client.js'
+import { fetchDiscoveryFeed, discoveryFeedback, promoteToTaste } from '../api/client.js'
 import { reportWriteError } from '../utils/reportWriteError.js'
 import SwipeCard, { CARD_WIDTH, CARD_HEIGHT } from '../components/SwipeCard.jsx'
 import SaveToBoardModal from '../components/SaveToBoardModal.jsx'
-import SurpriseBoardModal from '../components/SurpriseBoardModal.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
 
-const PAGE_LIMIT = 12
-const SURPRISE_THRESHOLD = 5
-const PREFETCH_AT_REMAINING = 3 // when deck size <= this, fetch next page
+const PREFETCH_AT_REMAINING = 3   // fetch more when deck.length <= this
+const TASTE_NUDGE_THRESHOLD = 10  // show Taste nudge when draftLikeCount reaches this
 const SWIPE_KEYS = { ArrowLeft: 'left', ArrowRight: 'right' }
 
-const DECK_CACHE_KEY = 'discovery_deck_v1'
+const DECK_CACHE_KEY = 'discovery_deck_v2'
 const DECK_CACHE_TTL_MS = 30 * 60 * 1000  // 30 min
+
+// tasteState → short Korean label
+const TASTE_STATE_LABEL = {
+  cold:   '탐색 중',
+  single: '취향 파악 중',
+  multi:  '취향 다양',
+}
 
 function loadDeckCache() {
   try {
@@ -28,7 +33,7 @@ function loadDeckCache() {
   }
 }
 
-/* ── preloadImage helper (mirrors App.jsx preloadImage pattern) ──────────── */
+/* ── preloadImage helper ─────────────────────────────────────────────────── */
 function makeImagePreloader() {
   const cache = new Set()
   return function preload(url) {
@@ -69,18 +74,20 @@ export default function DiscoveryPage({ showToast }) {
   const longPressTimer = useRef(null)
   const longPressFired = useRef(false)
   const touchStartPos = useRef(null)
+  // Tracks whether the Taste nudge was dismissed this visit so it doesn't re-arm
+  const nudgeDismissedRef = useRef(false)
+  const [promoteLoading, setPromoteLoading] = useState(false)
 
   const _cached = loadDeckCache()
   const [deck, setDeck] = useState(_cached ? _cached.deck : [])
-  const [cursor, setCursor] = useState(_cached ? _cached.cursor : 0)
-  const [hasMore, setHasMore] = useState(_cached ? _cached.hasMore : true)
   const [tasteState, setTasteState] = useState(_cached ? (_cached.tasteState || 'cold') : 'cold')
-  const [loading, setLoading] = useState(false)  // page fetch in flight
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [saveModalCard, setSaveModalCard] = useState(null)  // long-press save target
-  const [savesThisVisit, setSavesThisVisit] = useState(0)
-  const [surpriseShown, setSurpriseShown] = useState(false)
-  const [surpriseOpen, setSurpriseOpen] = useState(false)
+  const [saveModalCard, setSaveModalCard] = useState(null)
+  // Server-authoritative count updated after each feedback POST
+  const [draftLikeCount, setDraftLikeCount] = useState(0)
+  // Taste nudge visible: true when threshold hit and not dismissed
+  const [nudgeVisible, setNudgeVisible] = useState(false)
 
   const initialDeckLengthRef = useRef(deck.length)
 
@@ -89,13 +96,12 @@ export default function DiscoveryPage({ showToast }) {
     return () => { isActiveRef.current = false }
   }, [])
 
-  // Keyboard swipe: ← pass, → save. Blocked while either modal is open so
-  // the user can type in the modal's text field without triggering deck swipes.
+  // Keyboard swipe: ← pass, → like. Blocked while save modal or nudge is open.
   useEffect(() => {
     async function onKey(e) {
       const dir = SWIPE_KEYS[e.key]
       if (!dir || !cardRef.current || keySwipingRef.current) return
-      if (saveModalCard || surpriseOpen) return
+      if (saveModalCard || nudgeVisible) return
       if (!deck.length) return
       keySwipingRef.current = true
       try {
@@ -106,40 +112,44 @@ export default function DiscoveryPage({ showToast }) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [deck.length, saveModalCard, surpriseOpen])
+  }, [deck.length, saveModalCard, nudgeVisible])
 
-  // Surprise trigger: fires once per visit after SURPRISE_THRESHOLD saves
+  // Taste nudge: show when threshold reached and not already dismissed this visit
   useEffect(() => {
-    if (savesThisVisit >= SURPRISE_THRESHOLD && !surpriseShown) {
-      setSurpriseShown(true)
-      setSurpriseOpen(true)
+    if (
+      draftLikeCount >= TASTE_NUDGE_THRESHOLD &&
+      !nudgeDismissedRef.current &&
+      !nudgeVisible
+    ) {
+      setNudgeVisible(true)
     }
-  }, [savesThisVisit, surpriseShown])
+  }, [draftLikeCount, nudgeVisible])
 
-  // -- Fetch next page --
-  const fetchPage = useCallback(async (nextCursor, reset = false) => {
+  // -- Fetch next chunk --
+  // Passes current deck ids as buffer so the server won't re-serve them.
+  const fetchPage = useCallback(async (currentDeck, reset = false) => {
     if (fetchingRef.current) return
-    if (!reset && !hasMore) return
     fetchingRef.current = true
 
     const requestId = ++requestIdRef.current
-    const normalizedCursor = typeof nextCursor === 'number' ? nextCursor : 0
+    const bufferIds = (currentDeck || [])
+      .map(c => c?.canonical_bld_id || c?.image_id)
+      .filter(Boolean)
+
     setLoading(true)
     setError('')
 
     try {
-      const result = await fetchDiscoveryFeed(normalizedCursor, PAGE_LIMIT)
+      const result = await fetchDiscoveryFeed(bufferIds)
       if (!isActiveRef.current || requestId !== requestIdRef.current) return
 
-      // Preload images so subsequent cards render with image already cached.
+      // Preload the first few images so subsequent cards render with image cached
       const preload = preloadRef.current
       for (const c of result.cards.slice(0, 3)) {
         if (c?.image_url) preload(c.image_url)
       }
 
       setDeck(prev => (reset ? result.cards : [...prev, ...result.cards]))
-      setCursor(result.nextCursor ?? 0)
-      setHasMore(Boolean(result.hasMore))
       setTasteState(result.tasteState || 'cold')
     } catch (err) {
       if (!isActiveRef.current || requestId !== requestIdRef.current) return
@@ -150,35 +160,35 @@ export default function DiscoveryPage({ showToast }) {
       }
       fetchingRef.current = false
     }
-  }, [hasMore])
+  }, [])
 
   // Initial load — skip if deck was restored from sessionStorage cache
   useEffect(() => {
-    if (initialDeckLengthRef.current > 0) return  // restored from cache, skip fetch
-    fetchPage(0, true)
+    if (initialDeckLengthRef.current > 0) return
+    fetchPage([], true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Auto-prefetch next page when deck running low
+  // Auto-prefetch next chunk when deck is running low
   useEffect(() => {
-    if (!hasMore || fetchingRef.current) return
-    if (deck.length === 0) return // initial-load case handled above
+    if (fetchingRef.current) return
+    if (deck.length === 0) return  // initial-load case handled above
     if (deck.length <= PREFETCH_AT_REMAINING) {
-      fetchPage(cursor)
+      fetchPage(deck)
     }
-  }, [deck.length, hasMore, cursor, fetchPage])
+  }, [deck, fetchPage])
 
-  // Persist deck state to sessionStorage so back-navigation restores position
+  // Persist deck + tasteState to sessionStorage for back-navigation restoration
   useEffect(() => {
-    if (deck.length === 0) return  // don't persist empty state
+    if (deck.length === 0) return
     try {
       sessionStorage.setItem(DECK_CACHE_KEY, JSON.stringify({
-        deck, cursor, hasMore, tasteState, ts: Date.now(),
+        deck, tasteState, ts: Date.now(),
       }))
     } catch {
       // sessionStorage quota exceeded or unavailable — ignore
     }
-  }, [deck, cursor, hasMore, tasteState])
+  }, [deck, tasteState])
 
   const topCard = deck[0] || null
 
@@ -187,11 +197,10 @@ export default function DiscoveryPage({ showToast }) {
   }
 
   // -- Swipe handlers --
-  // Right (like): card slides off; call addLikedBuilding directly — no modal.
-  //   savesThisVisit increments to trigger the Surprise threshold.
-  // Left (pass): card slides off; advance immediately.
+  // Right (like): optimistic advance + POST feedback.
+  // Left (pass): optimistic advance + POST feedback (fire-and-forget, low-stakes).
   function onTinderSwipe(dir) {
-    if (longPressFired.current) return  // modal is open; suppress swipe
+    if (longPressFired.current) return
     pendingActionRef.current = dir === 'right' ? 'like' : 'pass'
   }
 
@@ -199,17 +208,22 @@ export default function DiscoveryPage({ showToast }) {
     const action = pendingActionRef.current
     pendingActionRef.current = null
     if (!action) return
+
+    const card = topCard
+    advance()
+
+    const bldId = card?.canonical_bld_id || card?.image_id
+    if (!bldId || bldId === '__action_card__') return
+
     if (action === 'like') {
-      const card = topCard
-      advance()
-      const bldId = card?.canonical_bld_id || card?.image_id
-      if (bldId && bldId !== '__action_card__') {
-        addLikedBuilding(bldId)
-          .then(() => setSavesThisVisit(s => s + 1))
-          .catch(() => reportWriteError(showToast, '좋아요 저장 실패'))
-      }
+      discoveryFeedback(bldId, 'like')
+        .then(res => setDraftLikeCount(res.draftLikeCount))
+        .catch(() => reportWriteError(showToast, '좋아요 저장 실패'))
     } else {
-      advance()
+      // Pass: server records it for dislike zone; failure is low-stakes but
+      // we still surface it consistently per FRONT-UX silent-failure policy.
+      discoveryFeedback(bldId, 'pass')
+        .catch(() => reportWriteError(showToast, '패스 기록 실패'))
     }
   }
 
@@ -217,7 +231,6 @@ export default function DiscoveryPage({ showToast }) {
   function handleSaved() {
     longPressFired.current = false
     setSaveModalCard(null)
-    setSavesThisVisit(s => s + 1)
     advance()
   }
 
@@ -233,9 +246,7 @@ export default function DiscoveryPage({ showToast }) {
     clearTimeout(longPressTimer.current)
     longPressTimer.current = setTimeout(() => {
       longPressFired.current = true
-      if (topCard) {
-        setSaveModalCard(topCard)
-      }
+      if (topCard) setSaveModalCard(topCard)
     }, 400)
   }
 
@@ -256,9 +267,7 @@ export default function DiscoveryPage({ showToast }) {
     clearTimeout(longPressTimer.current)
     longPressTimer.current = setTimeout(() => {
       longPressFired.current = true
-      if (topCard) {
-        setSaveModalCard(topCard)
-      }
+      if (topCard) setSaveModalCard(topCard)
     }, 400)
   }
 
@@ -280,10 +289,38 @@ export default function DiscoveryPage({ showToast }) {
   function handleRetry() {
     sessionStorage.removeItem(DECK_CACHE_KEY)
     setDeck([])
-    setCursor(0)
-    setHasMore(true)
-    fetchPage(0, true)
+    setError('')
+    fetchPage([], true)
   }
+
+  // -- Taste nudge handlers --
+  async function handlePromoteToTaste() {
+    if (promoteLoading) return
+    setPromoteLoading(true)
+    try {
+      const result = await promoteToTaste()
+      // Hand off the session payload to App.jsx via custom event.
+      // App.jsx's archithon:promote-to-taste handler creates a local project,
+      // calls applySessionResponse, and navigates to /swipe.
+      window.dispatchEvent(new CustomEvent('archithon:promote-to-taste', { detail: result }))
+    } catch (err) {
+      if (err?.status === 400 && err?.data?.detail === 'not_enough_likes') {
+        reportWriteError(showToast, '좋아요가 부족합니다 (최소 10개)')
+      } else {
+        reportWriteError(showToast, 'Taste 분석 시작 실패 — 다시 시도해주세요')
+      }
+    } finally {
+      setPromoteLoading(false)
+    }
+  }
+
+  function handleContinueDiscovery() {
+    nudgeDismissedRef.current = true
+    setNudgeVisible(false)
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────── //
+  const tasteLabel = TASTE_STATE_LABEL[tasteState] || tasteState
 
   return (
     <div style={{
@@ -308,7 +345,7 @@ export default function DiscoveryPage({ showToast }) {
           letterSpacing: '0.05em',
           textTransform: 'uppercase',
         }}>
-          {tasteState}
+          {tasteLabel}
         </div>
       </div>
 
@@ -386,8 +423,6 @@ export default function DiscoveryPage({ showToast }) {
             </button>
           </div>
         ) : (
-          // Render up to 3 stacked cards. The top-of-deck is the active
-          // TinderCard; lower cards are static previews for depth.
           <>
             {deck.slice(0, 3).reverse().map((card, idxFromBottom) => {
               const stackIndex = 2 - idxFromBottom // 0 = top
@@ -446,25 +481,95 @@ export default function DiscoveryPage({ showToast }) {
         )}
       </div>
 
-      {/* Hint */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-        <p style={{ color: 'var(--color-text-dimmest)', fontSize: 11, margin: 0 }}>
-          ← skip · tap card · save →&nbsp;&nbsp;·&nbsp;&nbsp;arrow keys supported
-        </p>
-      </div>
+      {/* Bottom area: Taste Nudge banner OR hint text */}
+      {nudgeVisible ? (
+        <div style={{
+          width: '100%',
+          maxWidth: CARD_WIDTH,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 8,
+          padding: '16px 0 4px',
+        }}>
+          {/* Main CTA — Primary button per DESIGN.md §8.1 */}
+          <button
+            type="button"
+            disabled={promoteLoading}
+            onClick={handlePromoteToTaste}
+            style={{
+              width: '100%',
+              minHeight: 44,
+              padding: '12px 16px',
+              borderRadius: 12,
+              border: 'none',
+              background: promoteLoading
+                ? 'var(--color-surface-2)'
+                : 'linear-gradient(135deg, var(--accent-1, #0969DA), var(--accent-2, #8250DF))',
+              color: promoteLoading ? 'var(--color-text-dim)' : '#fff',
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: promoteLoading ? 'not-allowed' : 'pointer',
+              fontFamily: 'inherit',
+              letterSpacing: '-0.01em',
+              transition: `transform var(--motion-normal, 220ms) var(--motion-ease, cubic-bezier(0.4,0,0.2,1)),
+                           box-shadow var(--motion-slow, 400ms) var(--motion-ease-out, cubic-bezier(0,0,0.2,1))`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+            }}
+          >
+            {promoteLoading ? (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{
+                  width: 16, height: 16, borderRadius: '50%',
+                  border: '2px solid var(--color-text-dim)',
+                  borderTopColor: 'transparent',
+                  animation: 'spin 0.8s linear infinite',
+                  display: 'inline-block',
+                }} />
+                분석 중…
+              </span>
+            ) : (
+              <span>✨ 취향이 10장 모였어요 — Taste에서 깊게 탐색하기</span>
+            )}
+          </button>
+
+          {/* Secondary text button — Ghost style per DESIGN.md §8.3 */}
+          <button
+            type="button"
+            onClick={handleContinueDiscovery}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--color-text-muted)',
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              padding: '6px 8px',
+              borderRadius: 8,
+              minHeight: 32,
+              letterSpacing: '-0.005em',
+            }}
+          >
+            계속 Discovery에서 탐색하기
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+          <p style={{ color: 'var(--color-text-dimmest)', fontSize: 11, margin: 0 }}>
+            ← skip · tap card · save →&nbsp;&nbsp;·&nbsp;&nbsp;arrow keys supported
+          </p>
+        </div>
+      )}
 
       {saveModalCard && (
         <SaveToBoardModal
           card={saveModalCard}
           onClose={handleSaveCancel}
           onSaved={handleSaved}
-        />
-      )}
-
-      {surpriseOpen && (
-        <SurpriseBoardModal
-          onClose={() => setSurpriseOpen(false)}
-          onSaved={() => setSurpriseOpen(false)}
         />
       )}
     </div>

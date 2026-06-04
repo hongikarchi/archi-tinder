@@ -88,6 +88,40 @@ export default function App() {
     return () => window.removeEventListener('archithon:verify-required', onVerifyRequired)
   }, [])
 
+  // Listen for promote-to-taste event dispatched by DiscoveryPage after a
+  // successful POST /discovery/promote-to-taste/. Creates a local project entry
+  // so activeProject is non-null, calls applySessionResponse, and navigates to /swipe.
+  useEffect(() => {
+    const onPromoteToTaste = (e) => {
+      const result = e?.detail
+      if (!result?.session_id) return
+      const projectId = `proj_promote_${result.session_id}`
+      const newProject = {
+        id: projectId,
+        backendId: result.project_id ? String(result.project_id) : null,
+        projectName: 'Taste Analysis',
+        filters: {},
+        likedBuildings: [],
+        swipedIds: [],
+        predictedLikes: [],
+        sessionId: result.session_id,
+        createdAt: new Date().toISOString(),
+        deckImages: null,
+        visibility: 'private',
+      }
+      setProjects(prev => {
+        // Avoid duplicating if re-triggered
+        if (prev.find(p => p.id === projectId)) return prev
+        return [...prev, newProject]
+      })
+      setActiveProjectId(projectId)
+      applySessionResponse(projectId, result)
+      navigate('/swipe')
+    }
+    window.addEventListener('archithon:promote-to-taste', onPromoteToTaste)
+    return () => window.removeEventListener('archithon:promote-to-taste', onPromoteToTaste)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Capture pending board-create payload from SaveToBoardModal (Fix 3 Option A)
   useEffect(() => {
     const onPendingCreate = (e) => {

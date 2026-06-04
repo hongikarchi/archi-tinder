@@ -45,7 +45,13 @@ def _build_boards_field(target_profile, is_owner, page=1, page_size=12):
     page_size = min(max(1, page_size), 50)
     page = max(1, page)
 
-    qs = Project.objects.filter(user=target_profile).order_by('-created_at')
+    # Exclude the Discovery draft board from profile board listings / counts.
+    # The draft is an internal implementation detail — users should never see it
+    # in their board list or have it counted toward their project total.
+    from apps.recommendation.discovery_feed import DISCOVERY_DRAFT_NAME
+    qs = Project.objects.filter(user=target_profile).exclude(
+        name=DISCOVERY_DRAFT_NAME,
+    ).order_by('-created_at')
     if not is_owner:
         qs = qs.filter(visibility='public')
 
