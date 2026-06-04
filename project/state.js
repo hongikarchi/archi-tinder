@@ -23,7 +23,7 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-06-04 17:10 KST',
+    updatedAt: '2026-06-04 17:31 KST',
     head: 'e60918d',
     branch: 'feature/claude-architect-unify-c',
   },
@@ -968,6 +968,10 @@ window.PROJECT_STATE = {
       role: 'ArchitectFollow 모델 마이그레이션 (#182)',
     },
     {
+      path: 'backend/apps/social/migrations/0006_delete_officefollow.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/social/migrations/__init__.py',
       role: '패키지 init',
     },
@@ -990,10 +994,6 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/social/tests/test_follow.py',
       role: '유저 팔로우 테스트',
-    },
-    {
-      path: 'backend/apps/social/tests/test_office_follow.py',
-      role: '오피스 팔로우 테스트',
     },
     {
       path: 'backend/apps/social/tests/test_reaction.py',

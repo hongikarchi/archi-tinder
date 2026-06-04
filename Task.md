@@ -406,7 +406,7 @@ Code audit 2026-05-27 (`develop@3894ffd`):
 - No route exists today in `backend/apps/recommendation/urls.py`, `backend/apps/profiles/urls.py`, or `backend/apps/social/urls.py` for `/recommendations/profile/`; the only recommendation-style public route is `recommendations/board-surprise/`.
 - Firm data model exists in `backend/apps/profiles/models.py`: `Office`, `OfficeProjectLink`, `Office.canonical_id`, follower counters. `OfficeDetailView` already hydrates office projects from `OfficeProjectLink` + `canonical_v2_buildings`.
 - User taste helper exists as `engine.compute_user_taste_vector(profile)`, but it aggregates the requester only. For recommending users, a batch scoring strategy is needed; do not loop all users and run per-user DB fetches in request path.
-- Social graph exists (`Follow`, `OfficeFollow`) and should be used to exclude already-followed users/offices unless Product decides otherwise.
+- Social graph exists (`Follow`, `ArchitectFollow`) and should be used to exclude already-followed users/studios unless Product decides otherwise. (`OfficeFollow` was removed in ARCHITECT-UNIFY-C — office-level follow is unavailable until firm-side unification; use `ArchitectFollow` for studio exclusion.)
 - Frontend profile stats buttons have TODOs for followers/following routes, but no recommendation trigger UI yet.
 
 Implementation map:
