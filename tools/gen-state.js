@@ -18,15 +18,13 @@
  *                                     by name from prior, else first description
  *                                     sentence)
  *   prs                               gh pr list (falls back to prior on failure)
- *   fileTree                          git ls-files (+ untracked when --local)
+ *   fileTree                          git ls-files
  *                                     joined with project/file-roles.json
  *   systemFlow/recommendationFlow/
  *   agentFlow/milestones              carried verbatim from prior state.js
  *
  * Usage:
  *   node tools/gen-state.js            -> writes project/state.js (committed)
- *   node tools/gen-state.js --local    -> writes project/state.local.js (gitignored,
- *                                         includes untracked files; for `make dashboard`)
  *
  * Exit non-zero on self-check failure. Drift (files without a role / orphan role
  * entries) is reported to stderr but is not fatal.
@@ -36,8 +34,6 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
-
-const LOCAL = process.argv.includes('--local');
 
 // ---------------------------------------------------------------------------
 // shell helpers
@@ -282,11 +278,7 @@ function buildPrs(prior) {
 // ---------------------------------------------------------------------------
 function buildFileTree() {
   const tracked = git(['ls-files']).split('\n').filter(Boolean);
-  let paths = tracked;
-  if (LOCAL) {
-    const untracked = git(['ls-files', '--others', '--exclude-standard']).split('\n').filter(Boolean);
-    paths = [...new Set([...tracked, ...untracked])];
-  }
+  const paths = tracked;
   paths.sort();
 
   let roles = {};
@@ -363,9 +355,7 @@ const HEADER = `/*
  *   systemFlow/recommendationFlow/agentFlow/milestones          [hand-curated, carried]
  *
  * Loaded via <script> by project/dashboard.html (file:// double-click — no fetch,
- * no server at LOAD time; generation is the build step). dashboard.html also loads
- * project/state.local.js (gitignored) after this file when present, so
- * \`make dashboard\` shows a fresher local view without dirtying this committed file.
+ * no server at LOAD time; generation is the build step).
  *
  * Time convention: human-facing timestamps are \`YYYY-MM-DD HH:mm KST\`; PRs also
  * carry raw ISO 8601 UTC (mergedAt).
@@ -442,12 +432,11 @@ function main() {
   const { source, prior } = build();
   const s = selfCheck(source);   // throws (non-zero exit) on malformed output
   verifyCarry(s, prior);         // throws if a carried key was corrupted in serialization
-  const outName = LOCAL ? 'state.local.js' : 'state.js';
+  const outName = 'state.js';
   fs.writeFileSync(p('project', outName), source);
   process.stderr.write(
     `[gen-state] wrote project/${outName} — done:${s.done.length} now:${s.now.length} ` +
-    `prs:${s.prs.length} agents:${s.agents.length} files:${s.fileTree.length}` +
-    (LOCAL ? ' (local, incl. untracked)' : '') + '\n'
+    `prs:${s.prs.length} agents:${s.agents.length} files:${s.fileTree.length}\n`
   );
 }
 
