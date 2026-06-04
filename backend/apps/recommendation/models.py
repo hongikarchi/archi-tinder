@@ -24,6 +24,14 @@ class Project(models.Model):
     created_at      = models.DateTimeField(auto_now_add=True)
     updated_at      = models.DateTimeField(auto_now=True)
 
+    # -- BACK-LLM-2: cross-device LLM chat persistence --
+    conversation_history = models.JSONField(
+        default=dict,
+        blank=True,
+        # Bounded to 64 KB by ProjectSelfUpdateSerializer.validate_conversation_history.
+        # Not exposed on list responses (deferred + excluded from ProjectListSerializer).
+    )
+
     # -- Phase 13 BOARD1 additions --
     visibility     = models.CharField(
         max_length=10,
