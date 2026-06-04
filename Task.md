@@ -134,6 +134,8 @@ Likely tests:
 
 Acceptance: behavior matches chosen option deterministically; session 2 TTFC not regressed beyond session 1 (warm-start should be ≤ or equal); A/B telemetry on session 2 satisfaction (saved_ids growth rate, completion rate) vs status quo.
 
+_(Deferred 2026-06-04 batch scope → 별도 focused 플랜. Premise CONFIRMED post-BACK-RECOMMEND-4: global taste vector는 고쳤으나 같은 Project 2nd 세션은 여전히 cold-start(`session_service.py`가 like_vectors=[] seed, prior taste 안 읽음). algorithm-owner 코어 + frontend progress-bar UX 결정 얽힘 → 단독 처리.)_
+
 #### FULL-LANGUAGE-1 — 한/영 언어 설정 토글 없음
 **Decision (user 2026-05-25)**: language is a user-controlled setting, NOT browser-locale auto-detected. Pattern mirrors the existing theme/font persistence shipped in PR #54 + PR #59. User toggles language in Settings (Korean / English); the choice drives both LLM chat answer language and UI label rendering across the app.
 
@@ -165,38 +167,6 @@ Acceptance:
 - ≥1 high-traffic UI surface (e.g., TabBar) rendered in both languages off the same string source.
 - No regression in theme/font persistence (same wiring shape).
 
-#### BACK-LLM-2 — 채팅 기록이 다른 기기에서 사라짐
-**Decision (user 2026-05-25)**: chat conversation history must persist to the backend DB, not just to browser `localStorage` as it does today. Cross-device + cross-browser + survives storage clears.
-
-Current state:
-- `LLMSearchPage.jsx:186–205` stores `conversationHistory` in `localStorage` keyed by `storageKey` (Project-scoped). Survives page navigation + browser refresh on the **same browser**, but lost on logout / second device / incognito / cache clear.
-- Resume + Exit UX already shipped: `SwipePage.jsx:122–123` `ExitConfirmPopup` (Exit to New Project / Home / Cancel); chat re-enters with the prior history populated from `localStorage`.
-- Backend has no conversation field today: `Project.raw_query` stores only the first user message; `AnalysisSession` has algorithm state only.
-
-Code audit 2026-05-27 (`develop@3894ffd`):
-- `frontend/src/pages/LLMSearchPage.jsx` stores `messages`, `conversationHistory`, `latestResults`, `latestFilters`, `latestFilterPriority`, `latestVisualDescription`, `latestImageFocus`, `latestRawQuery`, and `showStart` under `archithon_chat_${userId}_${mode}_${projectId || 'new'}`. That key is browser-local and userId/mode/project scoped, but not backend synced.
-- `backend/apps/recommendation/models.py` `Project` has `raw_query` but no `conversation_history`; `AnalysisSession` has no chat fields.
-- `backend/apps/recommendation/views/search.py` validates incoming `conversation_history` and sends it to Gemini, but does not persist it. It already caps history length/text length, so backend persistence should reuse these validation limits or centralize them.
-- `backend/apps/recommendation/views/projects.py` `ProjectDetailView` and `ProjectSerializer` are the natural read surface if history is stored on `Project`. For append/update, a dedicated endpoint is safer than overloading `PATCH /projects/{id}/`, because chat appends need idempotency and ownership checks.
-- `frontend/src/api/projects.js` has `getProject()` and `updateProject()` only; a new `appendConversationTurn(projectId, turn)` or `saveConversation(projectId, history, revision)` API helper is needed.
-
-Implementation outline:
-- Backend — add `Project.conversation_history` JSONField (default `list`) OR a new `ConversationTurn` row table — see open dimension. Migration. Serializer wiring. Endpoint: probably extend `ProjectSerializer` round-trip + a dedicated `POST /api/v1/projects/<id>/conversation/` for append (idempotent on turn-id).
-- Frontend — `LLMSearchPage.jsx` swaps `localStorage` reads for an API fetch on mount; appends to backend on each turn; keep `localStorage` as a write-through cache for offline resume + read-fallback when API is slow.
-
-Open dimensions:
-- **Storage shape** — `Project.conversation_history` JSONField (denormalised, simple, hydrates with project payload) vs `ConversationTurn` table (normalised, paginated, ordered by created_at)?
-- **Per-session vs per-project** — store on `Project` (history accumulates across sessions) or on `AnalysisSession` (each swipe round has its own chat)? `BACK-LLM-1` reverse-Q lives in `parse_query.py` which is called at session-create time, suggesting per-session — but the user-facing chat UI is project-level.
-- **`localStorage` retention** — keep as a write-through cache (offline-tolerant) / delete on first successful backend write (single source of truth) / remove entirely (cleaner)?
-- **Retention policy** — keep forever (audit trail for `BACK-LLM-1` chat refinement) / 30-day TTL / cascade delete with Project?
-- **Migration of existing `localStorage` data** — one-shot backfill on next login (frontend reads localStorage, POSTs to backend, deletes local) vs no backfill (existing in-flight chats stay local until next exit, then lose history)?
-
-Acceptance:
-- Logout + log back in (same or different browser) → conversation history fully re-rendered from backend, including order + structured turn payloads.
-- Probe-turn writes succeed under network slow / retry / partial failure (idempotent append).
-- No regression in current Resume / Exit UX.
-- localStorage cache (if kept) is purged on logout or Project delete to prevent stale cross-user contamination.
-
 #### FRONT-DESIGN-1 — 디자인 시스템 컴포넌트 리워크 (paused)
 Foundation shipped: PR #54 (`tokens.css` 4 themes + `ThemeContext` + `AppearanceSettings`) + PR #59 (theme/font server persistence). Remaining: per-component visual rework (≈ 7,700 LOC) — inline `style={{}}` → CSS Modules + `:hover/:focus`/`:active`, light-theme polish where dark-only assumptions still leak through, leaf→hub component order (small leaf components first, then containers).
 
@@ -212,26 +182,12 @@ Acceptance per slice: `npm run lint` + `npm run build` clean; light + all dark v
 _Note: the Profile-area slice shipped separately as FRONT-PROFILE-HARVEST-1 (#179, 2026-06-04) — net-new component harvest + Instagram-style redesign + first CSS-Module/hook foundation, NOT the named ~646 inline-debt paydown. SwipePage / BoardDetailPage / etc. inline→CSS-Module migration remains the core of THIS item._
 
 ### MEDIUM
+#### BACK-LLM-4 — search.py ParseQueryView byte-cap도 ensure_ascii 부풀림 의심
+BACK-LLM-2(#195) 리뷰 중 발견(미수정, pre-existing). `backend/apps/recommendation/views/search.py` `ParseQueryView.post`의 conversation_history 검증이 BACK-LLM-2 serializer가 고친 것과 동일하게 `json.dumps` 기본 `ensure_ascii=True`로 byte 측정 가능성 → 한글 대화가 한도를 6배 부풀려 거짓 거부. 확인 후 `ensure_ascii=False`+UTF-8 인코딩 측정으로 통일. (`serializers.py:8` 주석이 한도가 ParseQueryView서 'mirror'됐다고 명시.)
+
 
 #### FRONT-PROFILE-1 — 프로필 재설계 브라우저 픽셀 패스 (Codex)
 FRONT-PROFILE-HARVEST-1(#179) 머지 후 Codex 브라우저 수정 (별도 PR). FollowListModal 모바일 bottom-sheet(≤768px, DESIGN.md §8.10) + backdrop opacity 0.6→0.4 + inline onMouseEnter→CSS hover + 4테마 픽셀 검증(github-light 먼저). 원 하베스트 minor (2026-06-04 audit 재확인): EditProfileModal(`components/EditProfileModal.jsx:147-149`, 경로는 components/ 직하 — components/profile/ 아님) 에러박스 하드코딩 rgba→color-mix, ProfileHeader.jsx:126(Share 버튼은 ProfileHeader 소유, ProfileHero 아님) 타인 Share borderRadius:12→var(--radius-md), onMouseEnter→CSS hover, FollowListModal onClose useCallback churn. 드롭됨: "FollowListPage setError(null) 누락" minor → useFollowList 훅(`:23,43`)이 fetch마다 setError(null) 호출하므로 stale 배너 위험 없음(audit 반증).
-
-#### BACK-AUTH-3 — LikedBuildingsView guest 사용자 가드 정책 확인
-PR #157 (`77ffd6e`, 2026-05-29) added `LikedBuildingsView` with `permission_classes = [IsAuthenticated]` only. No `is_guest=False` check. Guest users (post-FULL-LOGIN-REDESIGN-1: `UserProfile.is_guest=True`, no email, no SocialAccount) can freely write to `UserProfile.liked_building_ids` without hitting the Board-4 verify gate, because the gate fires on `ProjectListCreateView.post()` — a different surface.
-
-Two product interpretations possible:
-- **(A) Free for guests (current behavior)** — likes are weightless interactions, no verification needed. Only board creation triggers Google OAuth. This keeps onboarding friction-free and lets guests build up taste signal before deciding to verify.
-- **(B) Gate guest likes** — match the board policy: after N liked buildings, force Google OAuth. Argument: liked_buildings is persistent storage tied to a long-lived user row; PIPA-style data collection should be gated.
-
-Code refs (`develop@6ce7260` post-PR #157):
-- `backend/apps/accounts/views.py` — `LikedBuildingsView` GET + POST; permission_classes line is the only auth gate.
-- `backend/apps/accounts/models.py` — `UserProfile.liked_building_ids` JSONField on the row itself (not a separate FK table).
-- `backend/apps/recommendation/views/projects.py` — `ProjectListCreateView` inline gate as reference precedent: `if request.user.profile.is_guest and Project.objects.filter(user=profile).count() >= 3: return Response({'detail':'verify_required',...}, 403)`.
-
-Decision needed:
-- Product call. If (A), document the intent in the view docstring + close this entry. If (B), add the same inline gate pattern as `ProjectListCreateView` with an appropriate threshold and a `reason='liked_limit_reached'` payload so the frontend `VerifyGateModal` can reuse its existing 403 catcher.
-
-Author yywon1 awaiting decision per PR #157 review comment (`#issuecomment-4583211223`).
 
 #### BACK-PERFORMANCE-5 — Swipe latency 0.7-1.5s 흔들림
 Codex retest 2026-05-26: browser swipe 1.82s/1.75s/1.12s/1.81s; server swipe 1.50s/1.38s/0.746s/1.36s. **PR4 async prefetch consume IS working** — 3rd swipe with cache hit drops to 156ms prefetch stage. But variability is high. Identify which stage causes the 0.7→1.5s spread (DB query latency? embedding cache miss? pgvector?). Aim for swipe p95 ≤1.0s and p50 ≤0.5s on Singapore prod.
@@ -247,42 +203,7 @@ Diagnostic plan:
 - Compare first session after worker boot vs warmed worker. If first swipes are slow and later cache-hit swipes are fast, embedding cache warmup is the likely source.
 - If `select_ms` dominates in analyzing phase, inspect `engine.compute_mmr_next()` vector math and pool size. If `embed_ms` dominates, inspect `get_pool_embeddings()` DB batch and cache-hit ratio.
 
-#### BACK-AUTH-2 — Cache JWT 통합 테스트 hardening
-`apps/accounts/authentication.py:74` cache-hit path skips parent `get_user()`. Current tests are unit-level (CachedJWTAuthentication.get_user direct call). Need integration coverage:
-- [ ] DRF `authenticate()` pipeline end-to-end (request → middleware → cache hit → user resolved → view executes)
-- [ ] `User.save()` post_save signal auto-invalidation (`auth_user` row mutation → cache.delete fires)
-- [ ] `is_active=False` user → cache hit on stale entry must NOT return 200; either auto-invalidate before hit or re-check `is_active` on cached user
-- [x] cross-instance: ALREADY covered by `test_cross_instance_cache_hit` (test #9) — 2026-06-04 audit. Remaining real gaps = the DRF-pipeline + is_active stale-cache tests above.
-
-Code audit 2026-05-27 (`develop@3894ffd`):
-- `backend/apps/accounts/authentication.py` cache-hit branch returns `cached_user` directly. It relies on token validation having already happened and on cache invalidation for user-state changes.
-- `backend/apps/accounts/signals.py` invalidates on `post_save` and `post_delete` for `User`. This covers admin `.save()` but not `User.objects.filter(...).update(...)`; the docstring calls this out.
-- `backend/tests/test_jwt_cache.py` patches cache methods and calls `CachedJWTAuthentication.get_user()` directly with mocked tokens/users. It does not prove the full DRF request pipeline, SimpleJWT token validation, or real cache serialization.
-- `backend/apps/social/models.py` intentionally uses queryset `.update()` for counter caches; that is not auth-relevant. A future auth-relevant bulk update would need explicit `invalidate_user_cache()`.
-
-Implementation map:
-- Add integration tests around a tiny authenticated endpoint such as `/api/v1/auth/me/` or a protected test view. Populate cache via first request, mutate `auth_user.is_active`, then assert the next request is rejected after signal invalidation.
-- Add a stale-cache negative test by manually `cache.set(_user_cache_key(user.id), user)` after setting `user.is_active=False`; decide whether code should re-check `cached_user.is_active` or rely strictly on invalidation. This clarifies the security posture.
-- Cross-instance can be simulated by two `CachedJWTAuthentication()` objects with the same Django cache backend; Redis-specific behavior belongs in cache backend tests if local Redis is available.
-
-Codex retest 2026-05-26 flagged as P3 hardening. Not a blocker — security-manager PASS'd PR #133 — but defense-in-depth for any future cache-key drift or signal-wiring regression.
-
-#### INFRA-DB-2 — test DB role permissions for CREATE DATABASE
-Codex retest 2026-05-26 — Full `test_imp8_async_prefetch.py` blocked at DB setup because `make_web_app` role has no CREATE DATABASE permission. `test_user_data` DB creation fails. Options:
-- (a) operator runs migrate / test-DB-provision with `DB_USER=neondb_owner` swap pre-pytest
-- (b) test conftest uses a dedicated `make_web_test` role with `CREATEDB` grant on Neon
-- (c) `pytest-django --reuse-db` against a pre-provisioned `test_user_data` DB
-
-Choose one + document in CONTRIBUTING.md / backend/.env.example. Currently the test-DB gap means some integration tests can only run with a manual role swap.
-
-Code audit 2026-05-27 (`develop@3894ffd`):
-- `backend/config/settings.py` defines PostgreSQL `default` and `buildings` from env vars at import time. Runtime role guidance in `backend/.env.example` says local/prod should use `make_web_app` for `user_data`; that role deliberately has `NOCREATEDB`.
-- `backend/conftest.py` tries to route pytest DB work to in-memory SQLite via `django_db_modify_db_settings()` and mirrors `buildings` to `default`. App-local conftests (`backend/apps/*/tests/conftest.py`) duplicate only part of that setup and may be invoked differently when running sub-suites.
-- The practical failure mode is pytest-django trying to create a test DB from the Neon `DB_NAME` using `make_web_app`, which fails before tests can run. This is infra/test-runner config, not app correctness.
-
-Decision needed:
-- Preferred path for local/Claude testability is either a dedicated `make_web_test CREATEDB` role on `local-dev-2`, or a documented `--reuse-db` workflow against a pre-provisioned `test_user_data`. Using `neondb_owner` for every pytest run works but weakens the role-separation habit.
-- Any chosen path should be encoded in `CONTRIBUTING.md`, `backend/.env.example`, and the Claude test instructions so future agents do not rediscover the same permission wall.
+_(Deferred 2026-06-04 batch scope → 계측 먼저. Variance CONFIRMED(per-worker in-process embedding 캐시 cold-miss 50-200ms + KMeans 재계산)나 ~tens-daily-users 규모서 cold-miss는 주로 배포직후 일시적; Redis-migration은 조회마다 RTT 추가 + premature 가능. prod hit-rate/지배 원인 계측 후 결정.)_
 
 #### FRONT-LAYOUT-1 — Desktop wide-screen 레이아웃 어색함
 Current viewport-lock layout is mobile-first. Detail pages on desktop work but unoptimised. Low priority — desktop is secondary.
@@ -324,10 +245,14 @@ Monitoring map:
 - Track Neon active connections during swipe bursts and Railway worker/thread counts. If peak >8-10 at current traffic, promote this from MEDIUM risk to HIGH infra work.
 - If slow swipes correlate with connection pressure, evaluate a bounded executor or queue instead of unbounded per-swipe `threading.Thread`.
 
+_(Re-scoped 2026-06-04 batch scope: premise OVERSTATED — 연결 누수 없음(prefetch thread 0 conn, telemetry thread finally서 close). 실위험 = 고동시성 peak(>12-15 conn)뿐, 현 규모 무관. Neon active_connections 모니터, 코드 변경 無.)_
+
 #### INFRA-DB-3 — Unverified guest row 누적 정리 (conditional)
 Guest 계정(FULL-LOGIN-REDESIGN-1 #154/#155)은 정리 로직 없음 (user Q5 결정). `/auth/guest/` throttle 3/min/IP이나 IP 로테이션 botnet은 row 증가 가능 → 조건부 모니터링 항목.
 
 Detail: Monitor Neon `auth_user WHERE email = '' AND is_active = True` row count weekly. If growth > 500 rows/week sustained, open this and implement a Django management command `delete unverified WHERE last_active < 30 days AND swipe_count == 0` + cron/Railway scheduled job.
+
+_(Deferred 2026-06-04 batch scope: premise FALSIFIED — cleanup 기준 필드 `last_active`/`swipe_count`가 UserProfile에 없음(created_at/updated_at만) → 작성된 정책 실행불가. 게다가 파괴적 DELETE + 급격 증가 미확인. 모니터링 + schema/JOIN-proxy 후 재검토.)_
 
 ### LOW
 
@@ -412,7 +337,21 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 
 ---
 
+_(Deferred 2026-06-04 batch scope: YAGNI — product-미소비 telemetry 1필드 위해 Celery+worker 도입은 과투자. 2번째 background job 생기면 단일 INFRA-JOBS 티켓으로 묶어 처리.)_
+
 ## Done
+### BACK-AUTH-3 — guest like-gate @50 + frontend verify 배선 — RESOLVED 2026-06-04 (`feature/claude-auth-batch` → develop, #193)
+`LikedBuildingsView.post`가 guest 무제한 like 허용하던 것 → 50개서 verify-gate(403 `verify_required`/`liked_limit_reached`, board-gate precedent mirror). frontend `addLikedBuilding`가 403 intercept → `archithon:verify-required` dispatch + `VerifyRequiredError` throw(`createProject` 패턴); DiscoveryPage catch가 VerifyRequiredError 시 generic 토스트 skip. Codex #193: 51st like 유실 → `archithon:pending-like`로 bldId 저장 후 promote(onPromoted)에서 addLikedBuilding retry(pendingBoardCreate 패턴). guest-scenario 테스트 4.
+
+### BACK-AUTH-2 — JWT user-row cache 통합 테스트 — RESOLVED 2026-06-04 (`feature/claude-auth-batch` → develop, #193)
+기존 unit-level만이던 JWT 캐시 테스트에 DRF 파이프라인 통합 테스트 5 추가(`test_jwt_cache_integration.py`): cache-hit, **is_active=False stale-cache 거부**(signal invalidation), post_save invalidation, logout, refresh-rotation invalidation. prod 코드 무변경. is_active bulk `.update()` 우회는 기존 문서화된 known limitation(코드에 그 경로 없음).
+
+### BACK-LLM-2 — 채팅기록 backend 영속화 (cross-device) — RESOLVED 2026-06-04 (`feature/claude-llm-chat-persist` → develop, #195)
+채팅기록이 localStorage-only라 기기간 유실 → `Project.conversation_history` JSONField(migration 0022, #194 0021_tagaxisweight 충돌로 renumber). 기존 PATCH 재사용(신규 endpoint 無). detail-read/PATCH-write 검증(dict, ≤64KB **UTF-8** ensure_ascii=False, messages≤60/history≤10/text≤2000), list서 제외+defer. frontend hydration(backend=source of truth)+debounced byte-bounded save+logout/delete purge. Codex 3 must-fix 수정: **비-owner 프라이버시 strip**(public 보드서 남 채팅 노출), UTF-8 byte-cap(한글), hydration-실패 stale-overwrite 방지. follow-up [[BACK-LLM-4]].
+
+### INFRA-DB-2 — make test-local (로컬 pytest unblock) — RESOLVED 2026-06-04 (`feature/claude-test-local` → develop, #197)
+runtime `make_web_app`가 CREATEDB 없어 로컬 pytest가 'permission denied to create database'로 차단(conftest SQLite override는 자체 docstring상 not-load-bearing). `make test-local` 추가 — `migrate-local` idiom(read -s neondb_owner pw, inline DB_USER override로 DB_HOST는 LOCAL 유지), CI-shape real-PG+pgvector 실행. Neon 콘솔 작업 불필요. CLAUDE.md 문서화.
+
 
 ### UX-GALLERY — 갤러리 제스처 3버그 (FRONT-UX-6/9/10) — RESOLVED 2026-06-04 (`feature/claude-ux-gallery` → develop)
 갤러리 3버그(부모-sync wobble·모바일 세로스크롤·Discovery long-press 오작동)를 **lift 없이** 해결. 원 premise(sibling-overlay lift)를 유저 product 재검토로 재정의 — 갤러리 보면서도 스와이프 유지 + 순수 Discovery. session 브라우저 spike로 "3D가 스크롤 안 깸"(원인은 touch-action·snap, 3D 아님) 확정 후 구현.
