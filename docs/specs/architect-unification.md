@@ -1,10 +1,19 @@
 # ARCHITECT-UNIFY — Studio entity unification (Architect-canonical)
 
-> **STATUS: PROPOSAL — not settled architecture.** This document dismantles work from
-> PR #180 (office-save, yywon1), PR #182 (architect follow/redesign, admin), and the
-> Phase 15 OfficeFollow (KMS). It is a proposal for discussion, **not a decision record**.
-> Only **Phase 0 (SavedOffice deletion)** is executed now; Phases 1–4 are coordination-gated.
-> Drafted 2026-06-04.
+> **STATUS: PARTIAL — duplicate-removal executed, full unification deferred (decision 2026-06-04).**
+> The office-interest *model duplication* (the original audit finding) is resolved by removing the two
+> unwired duplicate models — **Phase 0: `SavedOffice` deleted (#188)** and **`OfficeFollow` deleted
+> (ARCHITECT-UNIFY-C, this PR)** — leaving **one** follow model: `ArchitectFollow`. The rest of the Office
+> subsystem (`Office` / `OfficeProjectLink` / claim views / `sync_offices` / `FirmProfilePage` as a parked
+> view-only page) is **PARKED, not deleted** — it is the substrate for planned backlog features
+> (BACK-RECOMMEND-3 firm recommendations, BACK-EXTERNAL-1 firm articles, P1 firm-claim).
+>
+> Options weighed (2026-06-04): **A** (re-key/preserve to arch_id — rejected: rewrites a non-imminent feature,
+> ~0 live data to migrate), **B** (delete the whole subsystem — rejected: invalidates the 3 planned features'
+> current designs), **C** (remove only the `OfficeFollow` duplicate, park the substrate — **CHOSEN**, lowest
+> risk, no roadmap churn). The full Architect-canonical unification described below (collapse Office → arch_id
+> overlays, merge FirmProfilePage into ArchitectProfilePage, re-home claim/projects/recs/articles) remains a
+> **PROPOSAL** to execute when the P1 firm-side UX is prioritized.
 
 ## 한글 TL;DR
 건축 도메인에서 건축가=회사=스튜디오=office = **하나의 실체**. 코드가 셋으로 구현해 office-interest
