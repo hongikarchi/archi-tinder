@@ -169,3 +169,22 @@ class SessionEvent(models.Model):
 
     def __str__(self):
         return f'{self.event_type} ({self.session_id}, {self.created_at.isoformat()})'
+
+
+class TagAxisWeight(models.Model):
+    AXIS_CHOICES = [
+        ('form', 'form'),
+        ('materiality', 'materiality'),
+        ('scale', 'scale'),
+        ('energy', 'energy'),
+        ('tradition', 'tradition'),
+    ]
+    tag = models.CharField(max_length=100)
+    axis = models.CharField(max_length=20, choices=AXIS_CHOICES)
+    weight = models.FloatField()  # -1.0 ~ 1.0
+
+    class Meta:
+        unique_together = [('tag', 'axis')]
+
+    def __str__(self):
+        return f'{self.tag}:{self.axis}={self.weight}'
