@@ -19,6 +19,7 @@ import ArchitectProfilePage from './pages/ArchitectProfilePage.jsx'
 import * as api from './api/client.js'
 import { createProject } from './api/projects.js'
 import { normalizeFilters, classifySwipeError, isActionCard, extractLikedIds, extractSavedIds } from './utils/appHelpers.js'
+import { reportWriteError } from './utils/reportWriteError.js'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import LLMSearchUpdateWrapper from './components/LLMSearchUpdateWrapper.jsx'
 
@@ -608,7 +609,10 @@ export default function App() {
       question_type: q.type,
       axis: q.axis ?? null,
       selected_option: option,
-    }).catch(() => {})
+    }).catch(() => {
+      reportWriteError(setGlobalToast, '답변 전송 실패 — 다시 선택해주세요')
+      setPendingQuestion(q)
+    })
   }
 
   async function handleUpdateWithImages(id, preloadedImages, llmFilters = {}, filterPriority = [], visualDescription = null, imageFocus = null) {
@@ -764,7 +768,7 @@ export default function App() {
           </ProtectedRoute>
         }>
           <Route index element={<Navigate to="/discovery" replace />} />
-          <Route path="discovery" element={<DiscoveryPage />} />
+          <Route path="discovery" element={<DiscoveryPage showToast={setGlobalToast} />} />
           <Route path="new" element={
             <ProjectSetupPage
               onBack={() => navigate('/discovery')}
