@@ -116,6 +116,7 @@ export default function BoardReportPage() {
   const [axisScores, setAxisScores] = useState(locationState?.axisScores || null)
   const [reportImage, setReportImage] = useState(board?.report_image || null)
   const [imgGenLoading, setImgGenLoading] = useState(false)
+  const [imgError, setImgError] = useState(null)
   const [reportLoading, setReportLoading] = useState(false)
   const [reportError, setReportError] = useState(null)
 
@@ -128,11 +129,16 @@ export default function BoardReportPage() {
   async function handleGenerateImage() {
     if (imgGenLoading || !board?.board_id) return
     setImgGenLoading(true)
+    setImgError(null)
     try {
       const res = await generateReportImage(board.board_id)
-      if (res?.image_data) setReportImage(res.image_data)
-    } catch {
-      // silent
+      if (res?.image_data) {
+        setReportImage(res.image_data)
+      } else {
+        setImgError('이미지 생성에 실패했습니다. Imagen API가 활성화되지 않았을 수 있습니다.')
+      }
+    } catch (e) {
+      setImgError(e?.data?.detail || e?.message || '이미지 생성에 실패했습니다.')
     } finally {
       setImgGenLoading(false)
     }
@@ -433,6 +439,12 @@ export default function BoardReportPage() {
         >
           {imgGenLoading ? '생성 중…' : syncedImage ? '재생성' : '이미지 생성'}
         </button>
+
+        {imgError && (
+          <p style={{ color: 'var(--color-destructive, #ef4444)', fontSize: 12, marginBottom: 12, lineHeight: 1.5 }}>
+            {imgError}
+          </p>
+        )}
 
         {/* 리포트 재생성 버튼 */}
         <button
