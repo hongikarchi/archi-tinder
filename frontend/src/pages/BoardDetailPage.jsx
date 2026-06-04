@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useBoard } from '../hooks/useBoard.js'
-import { updateProject } from '../api/projects.js'
+import { updateProject, generateReportImage } from '../api/projects.js'
 import { reactToProject, unreactToProject } from '../api/social.js'
 import BuildingTile from './boardDetail/BuildingTile'
 import RecommendedTile from './boardDetail/RecommendedTile'
@@ -162,6 +162,8 @@ export default function BoardDetailPage() {
   const [nameSaving, setNameSaving] = useState(false)
   const [shareCopied, setShareCopied] = useState(false)
   const [showReport, setShowReport] = useState(false)
+  const [reportImage, setReportImage] = useState(null)
+  const [imgGenLoading, setImgGenLoading] = useState(false)
   const reportRef = useRef(null)
   const nameInputRef = useRef(null)
   const [isEditMode, setIsEditMode] = useState(false)
@@ -178,6 +180,7 @@ export default function BoardDetailPage() {
     setReactionError(null)
     setLocalName(board.name || '')
     setLocalBuildings(board.buildings || [])
+    setReportImage(board.report_image || null)
     // Seed from board data, then apply any pending bookmark signal
     const base = (board.saved_ids || []).map(item => item?.id || item).filter(Boolean)
     const signal = bookmarkSignalRef.current
@@ -224,6 +227,19 @@ export default function BoardDetailPage() {
       setReactionError(err.message || 'Failed to update reaction.')
     } finally {
       setIsReactionPending(false)
+    }
+  }
+
+  async function handleGenerateImage() {
+    if (imgGenLoading || !board?.board_id) return
+    setImgGenLoading(true)
+    try {
+      const res = await generateReportImage(board.board_id)
+      if (res?.image_data) setReportImage(res.image_data)
+    } catch {
+      /* silent — user can retry */
+    } finally {
+      setImgGenLoading(false)
     }
   }
 
@@ -845,13 +861,42 @@ export default function BoardDetailPage() {
                   ))}
                 </div>
               </div>
-              {board.report_image && (
-                <img
-                  src={`data:image/png;base64,${board.report_image}`}
-                  alt="Persona"
-                  style={{ width: 80, height: 80, borderRadius: 12, objectFit: 'cover', flexShrink: 0 }}
-                />
-              )}
+              <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                {reportImage ? (
+                  <img
+                    src={`data:image/png;base64,${reportImage}`}
+                    alt="Persona"
+                    style={{ width: 80, height: 80, borderRadius: 12, objectFit: 'cover' }}
+                  />
+                ) : (
+                  <div style={{
+                    width: 80, height: 80, borderRadius: 12,
+                    background: 'var(--color-surface-2)',
+                    border: '1px dashed var(--color-border-soft)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
+                      <polyline points="21 15 16 10 5 21"/>
+                    </svg>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={handleGenerateImage}
+                  disabled={imgGenLoading}
+                  style={{
+                    padding: '5px 10px', borderRadius: 8,
+                    background: imgGenLoading ? 'var(--color-surface-2)' : 'linear-gradient(135deg, #ec4899, #f43f5e)',
+                    color: imgGenLoading ? 'var(--color-text-muted)' : '#fff',
+                    border: 'none', fontSize: 11, fontWeight: 700,
+                    cursor: imgGenLoading ? 'default' : 'pointer',
+                    fontFamily: 'inherit', whiteSpace: 'nowrap',
+                  }}
+                >
+                  {imgGenLoading ? '생성 중…' : reportImage ? '재생성' : '이미지 생성'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
