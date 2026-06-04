@@ -32,6 +32,7 @@ from rest_framework.views import APIView
 
 from apps.social.models import ArchitectFollow
 
+from ..caches import evict_user_profile_detail
 from ..models import Project
 from ._shared import _get_profile, _liked_id_only
 
@@ -314,6 +315,7 @@ class ArchitectFollowView(APIView):
             architect_id=architect_id,
         )
         follower_count = ArchitectFollow.objects.filter(architect_id=architect_id).count()
+        evict_user_profile_detail(profile.user_id)
         return Response(
             {'following': True, 'follower_count': follower_count},
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
@@ -330,4 +332,5 @@ class ArchitectFollowView(APIView):
         if deleted_count == 0:
             return Response({'detail': 'Not following.'}, status=status.HTTP_404_NOT_FOUND)
         follower_count = ArchitectFollow.objects.filter(architect_id=architect_id).count()
+        evict_user_profile_detail(profile.user_id)
         return Response({'following': False, 'follower_count': follower_count}, status=status.HTTP_200_OK)
