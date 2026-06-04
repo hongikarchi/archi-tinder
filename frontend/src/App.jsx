@@ -716,6 +716,11 @@ export default function App() {
     const refresh = localStorage.getItem('archithon_refresh')
     api.logout(refresh)   // blacklists refresh token, clears JWT from localStorage
     sessionStorage.removeItem('archithon_user')
+    // Clear Discovery session so a re-login starts a brand-new collection
+    sessionStorage.removeItem('discovery_draft_id')
+    sessionStorage.removeItem('discovery_draft_likes')
+    sessionStorage.removeItem('discovery_deck_v2')
+    sessionStorage.removeItem('discovery_seen_ids')
     setUserId(null)
     setProjects([])
     setActiveProjectId(null)

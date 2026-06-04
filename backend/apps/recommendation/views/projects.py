@@ -22,7 +22,6 @@ from ..caches import (
     get_project_detail_cache_key,
     PROJECT_DETAIL_TTL,
 )
-from ..discovery_feed import DISCOVERY_DRAFT_NAME
 from ..perf_timing import endpoint, stage
 from ._shared import _get_profile
 
@@ -120,15 +119,6 @@ class ProjectListCreateView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # Guard reserved draft name: prevent collision with the discovery draft
-        # Project that is auto-managed by the system.
-        requested_name = request.data.get('name', '')
-        if requested_name == DISCOVERY_DRAFT_NAME:
-            return Response(
-                {'detail': 'reserved_name'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         serializer = ProjectSerializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         project = serializer.save(user=profile)
@@ -190,14 +180,6 @@ class ProjectDetailView(APIView):
                     {'detail': 'remove_building_ids must be a list of strings'},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-
-        # Guard reserved draft name on rename: reject attempts to rename any
-        # project (including an existing draft) to the system-reserved name.
-        if request.data.get('name') == DISCOVERY_DRAFT_NAME:
-            return Response(
-                {'detail': 'reserved_name'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
 
         # Strip non-schema keys before entering the atomic block.
         schema_data = {k: v for k, v in request.data.items() if k != 'remove_building_ids'}

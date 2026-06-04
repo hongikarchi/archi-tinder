@@ -1,12 +1,14 @@
 """
-discovery_feed.py — Discovery tab v3.1 chunk builder.
+discovery_feed.py — Discovery tab v3.2 chunk builder.
 
 Pure functions: no engine.py edits. Imports engine helpers read-only.
 
 Architecture:
-  - get_or_create_discovery_draft  — per-user draft Project (reserved name)
-  - compute_discovery_tier         — 3-Tier logic (cold / single / multi)
-  - build_discovery_chunk          — Exclusion Zone + FPS split + micro-interleave
+  - create_discovery_draft       — create a new per-session timestamped draft board
+  - get_discovery_draft          — look up a draft by id (ownership + prefix guard)
+  - is_discovery_draft_name      — predicate for draft-board name detection
+  - compute_discovery_tier       — 3-Tier logic (cold / single / multi)
+  - build_discovery_chunk        — Exclusion Zone + FPS split + micro-interleave
 
 Hard rules (also in CLAUDE.md):
   - All building SQL gates on is_publishable = true.
@@ -19,7 +21,9 @@ import logging
 
 import numpy as np
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import connections as _dj_connections
+from django.utils import timezone
 
 from .models import Project
 from . import engine
@@ -30,8 +34,9 @@ logger = logging.getLogger('apps.recommendation')
 
 RC = settings.RECOMMENDATION  # shorthand
 
-# Reserved project name — one per user, excluded from board counts / profile lists.
-DISCOVERY_DRAFT_NAME = '__discovery_draft__'
+# Per-session draft boards are named with this prefix (e.g. 'discovery_260604_1430').
+# These are normal visible boards — shown on the profile, not hidden.
+DISCOVERY_DRAFT_PREFIX = 'discovery_'
 
 
 # ── Local helper (avoids circular import through views._shared) ───────────────
@@ -45,23 +50,54 @@ def _liked_id_only(liked_ids):
     ]
 
 
-# ── Draft Project helper ──────────────────────────────────────────────────────
+# ── Draft name predicate ──────────────────────────────────────────────────────
 
-def get_or_create_discovery_draft(profile):
-    """Return (or create) the per-user Discovery draft Project.
+def is_discovery_draft_name(name):
+    """Return True iff `name` looks like a discovery draft board name."""
+    return bool(name) and name.startswith(DISCOVERY_DRAFT_PREFIX)
+
+
+# ── Draft Project helpers ─────────────────────────────────────────────────────
+
+def create_discovery_draft(profile):
+    """Create a brand-new per-session Discovery draft Project.
+
+    Name format: 'discovery_YYMMDD_HHMM' (e.g. 'discovery_260604_1430').
+    Every call creates a NEW board — NOT get_or_create.
 
     The draft holds:
-      liked_ids  = Discovery right-swipes [{id, intensity}]
+      liked_ids    = Discovery right-swipes [{id, intensity}]
       disliked_ids = Discovery passes (list[str], rolling history)
 
-    It is excluded from board counts and profile lists everywhere that filters
-    by name != DISCOVERY_DRAFT_NAME.
+    Draft boards are visible on the profile (normal boards with a
+    name-prefix convention, not a hidden reserved name).
     """
-    draft, _ = Project.objects.get_or_create(
+    name = DISCOVERY_DRAFT_PREFIX + timezone.now().strftime('%y%m%d_%H%M')
+    draft = Project.objects.create(
         user=profile,
-        name=DISCOVERY_DRAFT_NAME,
-        defaults={'visibility': 'private'},
+        name=name,
+        visibility='private',
     )
+    return draft
+
+
+def get_discovery_draft(profile, draft_id):
+    """Return a draft Project by UUID iff it exists, is owned by profile,
+    and its name starts with DISCOVERY_DRAFT_PREFIX.
+
+    Returns None if:
+      - project does not exist
+      - project belongs to a different user
+      - project name does not start with DISCOVERY_DRAFT_PREFIX
+    """
+    if not draft_id:
+        return None
+    try:
+        draft = Project.objects.get(project_id=draft_id, user=profile)
+    except (Project.DoesNotExist, ValueError, ValidationError):
+        return None
+    if not is_discovery_draft_name(draft.name):
+        return None
     return draft
 
 
@@ -75,6 +111,9 @@ def compute_discovery_tier(profile):
       Tier 3 (multi)  : project_count >= discovery_tier3_min_projects (2)
                         OR cumulative_likes >= discovery_tier3_min_likes (50)
       Tier 2 (single) : else (likes >= 10 AND projects <= 1)
+
+    project_count: EXCLUDES auto draft boards (name starts with 'discovery_').
+    cumulative_likes: includes ALL projects (drafts + real) — taste accumulates.
 
     n_local + n_global = discovery_chunk_size (10).
     """
@@ -94,7 +133,9 @@ def compute_discovery_tier(profile):
     for p in projects:
         liked = p.get('liked_ids') or []
         cumulative_likes += len(liked)
-        if p['name'] != DISCOVERY_DRAFT_NAME:
+        # Draft boards (name starts with DISCOVERY_DRAFT_PREFIX) are excluded
+        # from the tier project_count but their likes still accumulate.
+        if not is_discovery_draft_name(p['name']):
             project_count += 1
 
     # Determine tier
@@ -306,8 +347,9 @@ def build_discovery_chunk(profile, centroids, client_buffer_ids=None, chunk_size
     Steps:
       1. Build exclude set: all user project ids (liked + disliked + saved)
          PLUS client_buffer_ids.
-      2. Compute dislike centroid from draft's most-recent N passes (rolling
-         window). If no passes, no dislike zone.
+      2. Compute dislike centroid from the most-recent N passes gathered
+         across ALL the user's projects (rolling window, union of all disliked_ids).
+         If no passes, no dislike zone.
       3. Fetch candidates via 2-query pattern (IDs only → sample → full rows).
       4. Parse embeddings.
       5. Split into local (sim >= discovery_local_sim_radius to any centroid)
@@ -354,10 +396,20 @@ def build_discovery_chunk(profile, centroids, client_buffer_ids=None, chunk_size
             if isinstance(bid, str) and bid:
                 exclude_set.add(bid)
 
-    # ── Dislike centroid (rolling window) ─────────────────────────────────
+    # ── Dislike centroid (rolling window, all projects) ────────────────────
+    # Aggregate disliked_ids across ALL the user's projects (drafts + real).
+    # Take the most-recent `dislike_window` items from the union.
+    # NOTE: This does NOT depend on a specific draft_id — the feed GET does
+    # not receive one.  Ordering is preserved within each project's list but
+    # interleaving across projects is not strictly temporal (acceptable trade-off).
+    all_dislike_ids = []
+    for project in Project.objects.filter(user=profile).values('disliked_ids'):
+        disliked = project.get('disliked_ids') or []
+        if isinstance(disliked, list):
+            all_dislike_ids.extend(bid for bid in disliked if isinstance(bid, str))
+    recent_dislike_ids = all_dislike_ids[-dislike_window:]
+
     dislike_centroid = None
-    draft = get_or_create_discovery_draft(profile)
-    recent_dislike_ids = (draft.disliked_ids or [])[-dislike_window:]
     if recent_dislike_ids:
         emb_map = engine.get_pool_embeddings(recent_dislike_ids)
         vecs = [emb_map[bid] for bid in recent_dislike_ids if bid in emb_map]

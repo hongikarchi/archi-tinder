@@ -1,9 +1,15 @@
 """
-views/discovery.py — Discovery tab v3.1 endpoints.
+views/discovery.py — Discovery tab v3.2 endpoints.
 
 GET  /api/v1/discovery/                    — 10-card chunk (Tier-aware FPS + interleave)
-POST /api/v1/discovery/feedback/           — record like/pass into draft Project
+POST /api/v1/discovery/feedback/           — record like/pass into a draft Project
 POST /api/v1/discovery/promote-to-taste/  — promote draft likes into a pre-seeded Taste session
+
+v3.2 changes vs v3.1:
+  - Draft boards are per-session timestamped (name = 'discovery_YYMMDD_HHMM').
+  - feedback/ accepts optional draft_id; returns draft_id in response.
+  - promote-to-taste/ accepts optional draft_id; falls back to most-recent draft.
+  - Draft boards are visible on the user's profile (normal boards).
 
 BoardSurpriseView is preserved unchanged from v3.0 (endpoint stays, UX modal
 removal is a separate frontend task).
@@ -32,7 +38,9 @@ from ..caches import (
     evict_project_detail,
 )
 from ..discovery_feed import (
-    get_or_create_discovery_draft,
+    DISCOVERY_DRAFT_PREFIX,
+    create_discovery_draft,
+    get_discovery_draft,
     compute_discovery_tier,
     build_discovery_chunk,
     _liked_id_only as _draft_liked_id_only,
@@ -59,7 +67,7 @@ _DRAFT_DISLIKE_CAP = 200
 _TIER_TO_TASTE_STATE = {1: 'cold', 2: 'single', 3: 'multi'}
 
 
-# ── DiscoveryFeedView (v3.1) ──────────────────────────────────────────────────
+# ── DiscoveryFeedView (v3.2) ──────────────────────────────────────────────────
 
 class DiscoveryFeedView(APIView):
     """
@@ -68,7 +76,7 @@ class DiscoveryFeedView(APIView):
     Returns a fresh 10-card chunk built with:
       - 3-Tier ratio (cold 0/10 · single 2/8 · multi 4/6)
       - Greedy FPS diversity within each pool
-      - Dislike-zone exclusion (rolling recent-N pass centroid)
+      - Dislike-zone exclusion (rolling recent-N pass centroid, all projects)
       - Micro-interleave [G,L,G,G,L,G,L,G,G,L] pattern
 
     Query param `buffer`: comma-separated canonical_bld_ids the client already
@@ -128,23 +136,32 @@ class DiscoveryFeedView(APIView):
         })
 
 
-# ── DiscoveryFeedbackView (v3.1) ──────────────────────────────────────────────
+# ── DiscoveryFeedbackView (v3.2) ──────────────────────────────────────────────
 
 class DiscoveryFeedbackView(APIView):
     """
     POST /api/v1/discovery/feedback/
 
-    Record a Discovery swipe action into the user's draft Project.
+    Record a Discovery swipe action into a draft Project.
 
     Body:
-      { "canonical_bld_id": "bld_000123", "action": "like" | "pass" }
+      {
+        "canonical_bld_id": "bld_000123",
+        "action": "like" | "pass",
+        "draft_id": "<uuid>"   (optional)
+      }
+
+    Draft resolution:
+      - draft_id given + resolves to a valid discovery draft → use it.
+      - draft_id given but invalid / wrong owner / not a draft → create new draft.
+      - draft_id omitted → create new draft.
 
     "like" → append {id, intensity:1.0} to draft.liked_ids (deduped by id).
     "pass" → append id to draft.disliked_ids (deduped; preserves order; rolling
              dislike_history for centroid computation).
 
     Response:
-      { "draft_like_count": N, "draft_pass_count": N }
+      { "draft_id": "<uuid>", "draft_like_count": N, "draft_pass_count": N }
     """
     permission_classes = [IsAuthenticated]
 
@@ -158,6 +175,7 @@ class DiscoveryFeedbackView(APIView):
 
         bld_id = request.data.get('canonical_bld_id', '')
         action = request.data.get('action', '')
+        draft_id = request.data.get('draft_id', None)
 
         # Validate canonical_bld_id
         if not bld_id or not isinstance(bld_id, str):
@@ -202,7 +220,12 @@ class DiscoveryFeedbackView(APIView):
                     status=status.HTTP_404_NOT_FOUND,
                 )
 
-        draft = get_or_create_discovery_draft(profile)
+        # Resolve draft: use given draft_id if valid, otherwise create new board.
+        draft = None
+        if draft_id:
+            draft = get_discovery_draft(profile, draft_id)
+        if draft is None:
+            draft = create_discovery_draft(profile)
 
         if action == 'like':
             liked = list(draft.liked_ids or [])
@@ -224,23 +247,38 @@ class DiscoveryFeedbackView(APIView):
             draft.disliked_ids = disliked[-_DRAFT_DISLIKE_CAP:]
             draft.save(update_fields=['disliked_ids', 'updated_at'])
 
+        # Evict caches so the profile reflects the new/updated board in real-time.
+        evict_projects_list(profile.id)
+        evict_user_profile_detail(profile.user.id)
+        evict_project_detail(str(draft.project_id))
+
         return Response({
+            'draft_id': str(draft.project_id),
             'draft_like_count': len(draft.liked_ids or []),
             'draft_pass_count': len(draft.disliked_ids or []),
         })
 
 
-# ── DiscoveryPromoteView (Phase 4) ────────────────────────────────────────────
+# ── DiscoveryPromoteView (v3.2) ───────────────────────────────────────────────
 
 class DiscoveryPromoteView(APIView):
     """
     POST /api/v1/discovery/promote-to-taste/
 
-    Promote the user's Discovery draft likes into a pre-seeded Taste
+    Promote a Discovery draft board's likes into a pre-seeded Taste
     AnalysisSession so the K-Means/MMR engine starts already warm.
 
+    Body:
+      { "draft_id": "<uuid>"  (optional) }
+
+    Draft resolution:
+      - draft_id given + resolves to a valid discovery draft → use it.
+      - draft_id omitted or invalid → use the most-recent draft board
+        (name startswith 'discovery_', ordered by updated_at desc).
+      - No draft exists at all → 400 not_enough_likes.
+
     Takes the most-recent up to ``discovery_promote_threshold`` (10) liked
-    building ids from the draft Project, fetches their embeddings, and
+    building ids from the resolved draft, fetches their embeddings, and
     creates a new Project + AnalysisSession with:
       - like_vectors pre-seeded from the draft likes
       - preference_vector folded from each seed embedding
@@ -267,13 +305,27 @@ class DiscoveryPromoteView(APIView):
                 status=status.HTTP_401_UNAUTHORIZED,
             )
 
-        # ── 1. Extract draft likes ─────────────────────────────────────────
-        draft = get_or_create_discovery_draft(profile)
+        draft_id = request.data.get('draft_id', None)
+
+        # ── 1. Resolve the draft board ─────────────────────────────────────
+        draft = None
+        if draft_id:
+            draft = get_discovery_draft(profile, draft_id)
+
+        if draft is None:
+            # Fall back to the most-recently updated draft board for this user.
+            draft = (
+                Project.objects
+                .filter(user=profile, name__startswith=DISCOVERY_DRAFT_PREFIX)
+                .order_by('-updated_at')
+                .first()
+            )
+
         promote_threshold = RC.get('discovery_promote_threshold', 10)
         min_likes = RC.get('min_likes_for_clustering', 4)
 
         # Take the most-recent up to promote_threshold entries
-        all_liked = list(draft.liked_ids or [])
+        all_liked = list(draft.liked_ids or []) if draft else []
         seed_liked = all_liked[-promote_threshold:] if len(all_liked) > promote_threshold else all_liked
         seed_ids = _draft_liked_id_only(seed_liked)
 

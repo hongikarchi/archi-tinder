@@ -1,13 +1,17 @@
 """
-test_discovery.py — Discovery tab v3.1 endpoint coverage.
+test_discovery.py — Discovery tab v3.2 endpoint coverage.
 
 Tests cover:
   - DiscoveryFeedView GET (cold Tier-1, warm Tier-2/3, buffer param, 401)
-  - DiscoveryFeedbackView POST (like, pass, validation errors, 401)
+  - DiscoveryFeedbackView POST (like, pass, draft_id in/out, validation errors, 401)
+  - DiscoveryPromoteView POST (by draft_id, most-recent fallback, 400 no likes)
   - BoardSurpriseView GET (cold, warm, 401)
-  - compute_discovery_tier tier-boundary logic
-  - get_or_create_discovery_draft idempotency
+  - compute_discovery_tier tier-boundary logic (project_count excludes drafts)
+  - create_discovery_draft always creates a new board
+  - get_discovery_draft ownership + prefix guard
+  - is_discovery_draft_name predicate
   - _interleave_local_global pattern check
+  - Profile board list now includes discovery draft boards
 """
 import numpy as np
 import pytest
@@ -15,9 +19,11 @@ from unittest.mock import patch, MagicMock
 
 from apps.recommendation.models import Project
 from apps.recommendation.discovery_feed import (
-    DISCOVERY_DRAFT_NAME,
+    DISCOVERY_DRAFT_PREFIX,
     compute_discovery_tier,
-    get_or_create_discovery_draft,
+    create_discovery_draft,
+    get_discovery_draft,
+    is_discovery_draft_name,
     _interleave_local_global,
     _greedy_fps,
 )
@@ -31,6 +37,85 @@ def _card(building_id):
 
 def _make_cards(building_ids):
     return [_card(bid) for bid in building_ids]
+
+
+# ── is_discovery_draft_name predicate ─────────────────────────────────────────
+
+def test_is_discovery_draft_name_true():
+    assert is_discovery_draft_name('discovery_260604_1430') is True
+    assert is_discovery_draft_name('discovery_') is True
+
+
+def test_is_discovery_draft_name_false():
+    assert is_discovery_draft_name('') is False
+    assert is_discovery_draft_name(None) is False
+    assert is_discovery_draft_name('__discovery_draft__') is False
+    assert is_discovery_draft_name('My Board') is False
+    assert is_discovery_draft_name('disco') is False
+
+
+# ── create_discovery_draft ────────────────────────────────────────────────────
+
+@pytest.mark.django_db
+def test_create_discovery_draft_makes_new_board(user_profile):
+    """Each call to create_discovery_draft creates a new Project."""
+    d1 = create_discovery_draft(user_profile)
+    d2 = create_discovery_draft(user_profile)
+    assert d1.project_id != d2.project_id
+    assert d1.name.startswith(DISCOVERY_DRAFT_PREFIX)
+    assert d2.name.startswith(DISCOVERY_DRAFT_PREFIX)
+    assert d1.visibility == 'private'
+    assert d2.visibility == 'private'
+    # Both boards exist in DB
+    assert Project.objects.filter(
+        user=user_profile, name__startswith=DISCOVERY_DRAFT_PREFIX
+    ).count() == 2
+
+
+@pytest.mark.django_db
+def test_create_discovery_draft_name_format(user_profile):
+    """Draft name must match 'discovery_YYMMDD_HHMM' format."""
+    import re
+    draft = create_discovery_draft(user_profile)
+    assert re.match(r'^discovery_\d{6}_\d{4}$', draft.name), (
+        f"Name '{draft.name}' does not match expected format 'discovery_YYMMDD_HHMM'"
+    )
+
+
+# ── get_discovery_draft ───────────────────────────────────────────────────────
+
+@pytest.mark.django_db
+def test_get_discovery_draft_returns_owned_draft(user_profile):
+    """get_discovery_draft returns a valid draft when given its UUID."""
+    draft = create_discovery_draft(user_profile)
+    found = get_discovery_draft(user_profile, str(draft.project_id))
+    assert found is not None
+    assert found.project_id == draft.project_id
+
+
+@pytest.mark.django_db
+def test_get_discovery_draft_rejects_wrong_owner(user_profile, other_profile):
+    """get_discovery_draft returns None when draft belongs to a different user."""
+    draft = create_discovery_draft(other_profile)
+    result = get_discovery_draft(user_profile, str(draft.project_id))
+    assert result is None
+
+
+@pytest.mark.django_db
+def test_get_discovery_draft_rejects_non_draft_board(user_profile):
+    """get_discovery_draft returns None when the project name is not a draft prefix."""
+    board = Project.objects.create(
+        user=user_profile, name='My Board', visibility='private',
+    )
+    result = get_discovery_draft(user_profile, str(board.project_id))
+    assert result is None
+
+
+@pytest.mark.django_db
+def test_get_discovery_draft_none_id_returns_none(user_profile):
+    """get_discovery_draft returns None when draft_id is None or empty."""
+    assert get_discovery_draft(user_profile, None) is None
+    assert get_discovery_draft(user_profile, '') is None
 
 
 # ── compute_discovery_tier unit tests ─────────────────────────────────────────
@@ -94,7 +179,7 @@ def test_tier3_at_2_projects(user_profile):
 
 @pytest.mark.django_db
 def test_tier3_at_50_likes_single_project(user_profile):
-    """50 likes with 1 project → Tier 3 (≥50 cumulative likes)."""
+    """50 likes with 1 project → Tier 3 (>=50 cumulative likes)."""
     Project.objects.create(
         user=user_profile, name='Board A',
         liked_ids=[{'id': f'bld_{i:06d}', 'intensity': 1.0} for i in range(50)],
@@ -105,36 +190,44 @@ def test_tier3_at_50_likes_single_project(user_profile):
 
 
 @pytest.mark.django_db
-def test_draft_excluded_from_project_count(user_profile):
-    """Draft project must not count toward project_count for tier calculation."""
-    # Create draft + 1 real board (10 likes → normally Tier 2 with 1 project)
-    draft = get_or_create_discovery_draft(user_profile)
+def test_draft_excluded_from_project_count_but_likes_counted(user_profile):
+    """Draft project must NOT count toward project_count for tier calculation,
+    but draft likes DO contribute to cumulative_likes."""
+    # Create a draft board with 1 like
+    draft = create_discovery_draft(user_profile)
     draft.liked_ids = [{'id': 'bld_000001', 'intensity': 1.0}]
     draft.save(update_fields=['liked_ids'])
+    # Create a real board with 10 likes
     Project.objects.create(
         user=user_profile, name='Real Board',
         liked_ids=[{'id': f'bld_{i:06d}', 'intensity': 1.0} for i in range(10, 20)],
     )
     info = compute_discovery_tier(user_profile)
-    # project_count should be 1 (draft excluded), tier should be 2
+    # project_count should be 1 (draft excluded)
     assert info['project_count'] == 1
     assert info['tier'] == 2
     # But draft likes DO count toward cumulative (1 draft + 10 real = 11)
     assert info['cumulative_likes'] == 11
 
 
-# ── get_or_create_discovery_draft ─────────────────────────────────────────────
-
 @pytest.mark.django_db
-def test_get_or_create_discovery_draft_idempotent(user_profile):
-    """Calling twice returns the same Project instance."""
-    d1 = get_or_create_discovery_draft(user_profile)
-    d2 = get_or_create_discovery_draft(user_profile)
-    assert d1.project_id == d2.project_id
-    assert d1.name == DISCOVERY_DRAFT_NAME
-    assert d1.visibility == 'private'
-    # Only 1 draft should exist
-    assert Project.objects.filter(user=user_profile, name=DISCOVERY_DRAFT_NAME).count() == 1
+def test_two_drafts_still_excluded_from_project_count(user_profile):
+    """Two draft boards must not count toward project_count."""
+    draft1 = create_discovery_draft(user_profile)
+    draft1.liked_ids = [{'id': 'bld_000001', 'intensity': 1.0}]
+    draft1.save(update_fields=['liked_ids'])
+    draft2 = create_discovery_draft(user_profile)
+    draft2.liked_ids = [{'id': 'bld_000002', 'intensity': 1.0}]
+    draft2.save(update_fields=['liked_ids'])
+    # Only 1 real board
+    Project.objects.create(
+        user=user_profile, name='My Board',
+        liked_ids=[{'id': 'bld_000010', 'intensity': 1.0} for _ in range(10)],
+    )
+    info = compute_discovery_tier(user_profile)
+    assert info['project_count'] == 1
+    # cumulative = 10 (real) + 1 (draft1) + 1 (draft2) = 12
+    assert info['cumulative_likes'] == 12
 
 
 # ── _interleave_local_global unit tests ───────────────────────────────────────
@@ -306,7 +399,7 @@ def test_discovery_feed_cold_start(auth_client):
     assert 'taste_state' in payload
     assert payload['taste_state'] == 'cold'
     assert payload['tier'] == 1
-    # No cursor fields in v3.1 response
+    # No cursor fields in v3.1+ response
     assert 'next_cursor' not in payload
     assert 'has_more' not in payload
 
@@ -352,8 +445,8 @@ def test_discovery_feed_unauthenticated(api_client):
 # ── DiscoveryFeedbackView integration tests ───────────────────────────────────
 
 @pytest.mark.django_db
-def test_feedback_like_appends_to_draft(auth_client, user_profile):
-    """POST feedback like → draft.liked_ids gets the entry."""
+def test_feedback_without_draft_id_creates_new_draft(auth_client, user_profile):
+    """POST feedback without draft_id creates a new draft and returns draft_id."""
     with patch('apps.recommendation.views.discovery._dj_connections') as mock_conns:
         mock_cursor = MagicMock()
         mock_cursor.__enter__ = lambda s: s
@@ -369,12 +462,90 @@ def test_feedback_like_appends_to_draft(auth_client, user_profile):
 
     assert resp.status_code == 200
     payload = resp.json()
+    assert 'draft_id' in payload
     assert 'draft_like_count' in payload
     assert 'draft_pass_count' in payload
+    assert payload['draft_like_count'] == 1
+    assert payload['draft_pass_count'] == 0
 
-    draft = Project.objects.get(user=user_profile, name=DISCOVERY_DRAFT_NAME)
+    # A draft board must have been created
+    draft_id = payload['draft_id']
+    draft = Project.objects.get(project_id=draft_id, user=user_profile)
+    assert draft.name.startswith(DISCOVERY_DRAFT_PREFIX)
     liked_ids = [e['id'] if isinstance(e, dict) else e for e in draft.liked_ids]
     assert 'bld_000001' in liked_ids
+
+
+@pytest.mark.django_db
+def test_feedback_with_valid_draft_id_appends_to_same_draft(auth_client, user_profile):
+    """POST feedback with draft_id appends to the same board (count increments)."""
+    # Create a draft explicitly first
+    existing_draft = create_discovery_draft(user_profile)
+    draft_id_str = str(existing_draft.project_id)
+
+    def _mock_cursor():
+        mock_cursor = MagicMock()
+        mock_cursor.__enter__ = lambda s: s
+        mock_cursor.__exit__ = MagicMock(return_value=False)
+        mock_cursor.fetchone.return_value = (1,)
+        return mock_cursor
+
+    with patch('apps.recommendation.views.discovery._dj_connections') as mock_conns:
+        mock_conns.__getitem__.return_value.cursor.return_value = _mock_cursor()
+        resp1 = auth_client.post(
+            '/api/v1/discovery/feedback/',
+            {'canonical_bld_id': 'bld_000001', 'action': 'like', 'draft_id': draft_id_str},
+            format='json',
+        )
+
+    assert resp1.status_code == 200
+    assert resp1.json()['draft_id'] == draft_id_str
+    assert resp1.json()['draft_like_count'] == 1
+
+    with patch('apps.recommendation.views.discovery._dj_connections') as mock_conns:
+        mock_conns.__getitem__.return_value.cursor.return_value = _mock_cursor()
+        resp2 = auth_client.post(
+            '/api/v1/discovery/feedback/',
+            {'canonical_bld_id': 'bld_000002', 'action': 'like', 'draft_id': draft_id_str},
+            format='json',
+        )
+
+    assert resp2.status_code == 200
+    # Same draft_id returned, count is now 2
+    assert resp2.json()['draft_id'] == draft_id_str
+    assert resp2.json()['draft_like_count'] == 2
+
+    # Only 1 draft board was created (not 2)
+    assert Project.objects.filter(
+        user=user_profile, name__startswith=DISCOVERY_DRAFT_PREFIX
+    ).count() == 1
+
+
+@pytest.mark.django_db
+def test_feedback_invalid_draft_id_creates_new_draft(auth_client, user_profile):
+    """POST feedback with invalid/non-existent draft_id falls back to new draft."""
+    fake_uuid = '00000000-0000-0000-0000-000000000000'
+    with patch('apps.recommendation.views.discovery._dj_connections') as mock_conns:
+        mock_cursor = MagicMock()
+        mock_cursor.__enter__ = lambda s: s
+        mock_cursor.__exit__ = MagicMock(return_value=False)
+        mock_cursor.fetchone.return_value = (1,)
+        mock_conns.__getitem__.return_value.cursor.return_value = mock_cursor
+
+        resp = auth_client.post(
+            '/api/v1/discovery/feedback/',
+            {'canonical_bld_id': 'bld_000001', 'action': 'like', 'draft_id': fake_uuid},
+            format='json',
+        )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    # A new draft was created (different from the fake UUID)
+    assert payload['draft_id'] != fake_uuid
+    # One draft board exists
+    assert Project.objects.filter(
+        user=user_profile, name__startswith=DISCOVERY_DRAFT_PREFIX
+    ).count() == 1
 
 
 @pytest.mark.django_db
@@ -394,17 +565,21 @@ def test_feedback_pass_appends_to_draft(auth_client, user_profile):
         )
 
     assert resp.status_code == 200
-    draft = Project.objects.get(user=user_profile, name=DISCOVERY_DRAFT_NAME)
+    payload = resp.json()
+    assert payload['draft_pass_count'] == 1
+
+    draft = Project.objects.get(project_id=payload['draft_id'], user=user_profile)
     assert 'bld_000002' in draft.disliked_ids
 
 
 @pytest.mark.django_db
 def test_feedback_deduplication(auth_client, user_profile):
-    """Posting the same like twice does not duplicate the entry."""
+    """Posting the same like twice to the same draft does not duplicate the entry."""
     # Pre-create draft with the id already in liked_ids
-    draft = get_or_create_discovery_draft(user_profile)
-    draft.liked_ids = [{'id': 'bld_000001', 'intensity': 1.0}]
-    draft.save(update_fields=['liked_ids'])
+    existing_draft = create_discovery_draft(user_profile)
+    existing_draft.liked_ids = [{'id': 'bld_000001', 'intensity': 1.0}]
+    existing_draft.save(update_fields=['liked_ids'])
+    draft_id_str = str(existing_draft.project_id)
 
     with patch('apps.recommendation.views.discovery._dj_connections') as mock_conns:
         mock_cursor = MagicMock()
@@ -415,13 +590,13 @@ def test_feedback_deduplication(auth_client, user_profile):
 
         resp = auth_client.post(
             '/api/v1/discovery/feedback/',
-            {'canonical_bld_id': 'bld_000001', 'action': 'like'},
+            {'canonical_bld_id': 'bld_000001', 'action': 'like', 'draft_id': draft_id_str},
             format='json',
         )
 
     assert resp.status_code == 200
-    draft.refresh_from_db()
-    liked_ids = [e['id'] if isinstance(e, dict) else e for e in draft.liked_ids]
+    existing_draft.refresh_from_db()
+    liked_ids = [e['id'] if isinstance(e, dict) else e for e in existing_draft.liked_ids]
     assert liked_ids.count('bld_000001') == 1
 
 
@@ -453,6 +628,101 @@ def test_feedback_unauthenticated(api_client):
         format='json',
     )
     assert resp.status_code == 401
+
+
+# ── DiscoveryPromoteView integration tests ─────────────────────────────────────
+
+@pytest.mark.django_db
+def test_promote_with_draft_id_uses_that_draft(auth_client, user_profile):
+    """promote-to-taste with draft_id uses that draft's likes."""
+    draft = create_discovery_draft(user_profile)
+    draft.liked_ids = [{'id': f'bld_{i:06d}', 'intensity': 1.0} for i in range(5)]
+    draft.save(update_fields=['liked_ids'])
+    draft_id_str = str(draft.project_id)
+
+    mock_emb = np.array([0.1] * 384, dtype=np.float64)
+    emb_map = {f'bld_{i:06d}': mock_emb for i in range(5)}
+
+    with patch('apps.recommendation.views.discovery.engine.get_pool_embeddings', return_value=emb_map), \
+         patch('apps.recommendation.views.discovery.engine.update_preference_vector',
+               side_effect=lambda pv, emb, a: emb), \
+         patch('apps.recommendation.views.discovery.engine.create_pool_with_relaxation',
+               return_value=(['bld_000010', 'bld_000011'], {}, 1)), \
+         patch('apps.recommendation.views.discovery.engine.get_pool_embeddings',
+               return_value=emb_map), \
+         patch('apps.recommendation.views.discovery.engine.farthest_point_from_pool',
+               return_value=None), \
+         patch('apps.recommendation.views.discovery.engine.get_buildings_by_ids',
+               return_value=[_card('bld_000010')]):
+        resp = auth_client.post(
+            '/api/v1/discovery/promote-to-taste/',
+            {'draft_id': draft_id_str},
+            format='json',
+        )
+
+    assert resp.status_code == 201
+    payload = resp.json()
+    assert 'session_id' in payload
+    assert 'project_id' in payload
+
+
+@pytest.mark.django_db
+def test_promote_without_draft_id_uses_most_recent(auth_client, user_profile):
+    """promote-to-taste without draft_id falls back to the most-recent draft."""
+    # Create two drafts; second is more recent (relies on auto_now updated_at).
+    # draft1 exists but has no likes — draft2 has likes and is more recent.
+    create_discovery_draft(user_profile)
+    draft2 = create_discovery_draft(user_profile)
+    draft2.liked_ids = [{'id': f'bld_{i:06d}', 'intensity': 1.0} for i in range(5)]
+    draft2.save(update_fields=['liked_ids'])
+
+    mock_emb = np.array([0.1] * 384, dtype=np.float64)
+    emb_map = {f'bld_{i:06d}': mock_emb for i in range(5)}
+
+    with patch('apps.recommendation.views.discovery.engine.get_pool_embeddings', return_value=emb_map), \
+         patch('apps.recommendation.views.discovery.engine.update_preference_vector',
+               side_effect=lambda pv, emb, a: emb), \
+         patch('apps.recommendation.views.discovery.engine.create_pool_with_relaxation',
+               return_value=(['bld_000010'], {}, 1)), \
+         patch('apps.recommendation.views.discovery.engine.farthest_point_from_pool',
+               return_value=None), \
+         patch('apps.recommendation.views.discovery.engine.get_buildings_by_ids',
+               return_value=[_card('bld_000010')]):
+        resp = auth_client.post(
+            '/api/v1/discovery/promote-to-taste/',
+            {},
+            format='json',
+        )
+
+    # draft2 had likes → should succeed
+    assert resp.status_code == 201
+
+
+@pytest.mark.django_db
+def test_promote_returns_400_when_no_likes(auth_client, user_profile):
+    """promote-to-taste returns 400 not_enough_likes when draft has no likes."""
+    draft = create_discovery_draft(user_profile)
+    # draft has no liked_ids
+
+    resp = auth_client.post(
+        '/api/v1/discovery/promote-to-taste/',
+        {'draft_id': str(draft.project_id)},
+        format='json',
+    )
+    assert resp.status_code == 400
+    assert resp.json().get('detail') == 'not_enough_likes'
+
+
+@pytest.mark.django_db
+def test_promote_returns_400_when_no_draft_exists(auth_client):
+    """promote-to-taste returns 400 not_enough_likes when user has no drafts at all."""
+    resp = auth_client.post(
+        '/api/v1/discovery/promote-to-taste/',
+        {},
+        format='json',
+    )
+    assert resp.status_code == 400
+    assert resp.json().get('detail') == 'not_enough_likes'
 
 
 # ── BoardSurpriseView tests (preserved) ───────────────────────────────────────
@@ -528,15 +798,16 @@ def test_discovery_feed_buffer_invalid_ids_dropped(auth_client):
     assert 'INVALID' not in passed_buffer
 
 
-# ── FIX 4: draft cap tests ────────────────────────────────────────────────────
+# ── Draft cap tests ───────────────────────────────────────────────────────────
 
 @pytest.mark.django_db
 def test_feedback_liked_ids_capped_at_200(auth_client, user_profile):
     """draft.liked_ids is trimmed to at most 200 entries (rolling cap)."""
     # Pre-fill draft with 199 existing likes
-    draft = get_or_create_discovery_draft(user_profile)
-    draft.liked_ids = [{'id': f'bld_{i:06d}', 'intensity': 1.0} for i in range(199)]
-    draft.save(update_fields=['liked_ids'])
+    existing_draft = create_discovery_draft(user_profile)
+    existing_draft.liked_ids = [{'id': f'bld_{i:06d}', 'intensity': 1.0} for i in range(199)]
+    existing_draft.save(update_fields=['liked_ids'])
+    draft_id_str = str(existing_draft.project_id)
 
     with patch('apps.recommendation.views.discovery._dj_connections') as mock_conns:
         mock_cursor = MagicMock()
@@ -548,12 +819,12 @@ def test_feedback_liked_ids_capped_at_200(auth_client, user_profile):
         # This 200th like brings the list to exactly the cap
         resp = auth_client.post(
             '/api/v1/discovery/feedback/',
-            {'canonical_bld_id': 'bld_000999', 'action': 'like'},
+            {'canonical_bld_id': 'bld_000999', 'action': 'like', 'draft_id': draft_id_str},
             format='json',
         )
     assert resp.status_code == 200
-    draft.refresh_from_db()
-    assert len(draft.liked_ids) == 200
+    existing_draft.refresh_from_db()
+    assert len(existing_draft.liked_ids) == 200
 
     # One more like — should still be capped at 200 (oldest dropped)
     with patch('apps.recommendation.views.discovery._dj_connections') as mock_conns:
@@ -565,20 +836,21 @@ def test_feedback_liked_ids_capped_at_200(auth_client, user_profile):
 
         resp = auth_client.post(
             '/api/v1/discovery/feedback/',
-            {'canonical_bld_id': 'bld_001000', 'action': 'like'},
+            {'canonical_bld_id': 'bld_001000', 'action': 'like', 'draft_id': draft_id_str},
             format='json',
         )
     assert resp.status_code == 200
-    draft.refresh_from_db()
-    assert len(draft.liked_ids) <= 200
+    existing_draft.refresh_from_db()
+    assert len(existing_draft.liked_ids) <= 200
 
 
 @pytest.mark.django_db
 def test_feedback_disliked_ids_capped_at_200(auth_client, user_profile):
     """draft.disliked_ids is trimmed to at most 200 entries (rolling cap)."""
-    draft = get_or_create_discovery_draft(user_profile)
-    draft.disliked_ids = [f'bld_{i:06d}' for i in range(200)]
-    draft.save(update_fields=['disliked_ids'])
+    existing_draft = create_discovery_draft(user_profile)
+    existing_draft.disliked_ids = [f'bld_{i:06d}' for i in range(200)]
+    existing_draft.save(update_fields=['disliked_ids'])
+    draft_id_str = str(existing_draft.project_id)
 
     with patch('apps.recommendation.views.discovery._dj_connections') as mock_conns:
         mock_cursor = MagicMock()
@@ -589,40 +861,154 @@ def test_feedback_disliked_ids_capped_at_200(auth_client, user_profile):
 
         resp = auth_client.post(
             '/api/v1/discovery/feedback/',
-            {'canonical_bld_id': 'bld_001000', 'action': 'pass'},
+            {'canonical_bld_id': 'bld_001000', 'action': 'pass', 'draft_id': draft_id_str},
             format='json',
         )
     assert resp.status_code == 200
-    draft.refresh_from_db()
-    assert len(draft.disliked_ids) <= 200
+    existing_draft.refresh_from_db()
+    assert len(existing_draft.disliked_ids) <= 200
 
 
-# ── FIX 5: reserved name guard tests ─────────────────────────────────────────
+# ── Profile board list includes discovery drafts (v3.2) ───────────────────────
 
 @pytest.mark.django_db
-def test_project_create_rejects_reserved_name(auth_client):
-    """POST /api/v1/projects/ with name='__discovery_draft__' returns 400."""
+def test_profile_boards_includes_discovery_draft(auth_client, user_profile):
+    """v3.2: Discovery draft boards appear in the user's profile board list."""
+    from apps.accounts.views.profile import _build_boards_field
+
+    draft = create_discovery_draft(user_profile)
+    draft.liked_ids = [{'id': 'bld_000001', 'intensity': 1.0}]
+    draft.save(update_fields=['liked_ids'])
+
+    # Mock the buildings DB thumbnail fetch (not available in test environment).
+    # engine is imported locally inside _build_boards_field, so patch at the source.
+    with patch('apps.recommendation.engine.get_building_thumbnails', return_value=[]):
+        boards = _build_boards_field(user_profile, is_owner=True, page=1, page_size=50)
+
+    board_names = [b['name'] for b in boards['items']]
+    assert draft.name in board_names, (
+        f"Expected draft '{draft.name}' in board list, got: {board_names}"
+    )
+    assert boards['total_count'] >= 1
+
+
+@pytest.mark.django_db
+def test_profile_board_count_includes_discovery_draft(auth_client, user_profile):
+    """v3.2: total_count in boards includes discovery draft boards."""
+    from apps.accounts.views.profile import _build_boards_field
+
+    # One regular board + one draft
+    Project.objects.create(user=user_profile, name='Normal Board')
+    create_discovery_draft(user_profile)
+
+    boards = _build_boards_field(user_profile, is_owner=True, page=1, page_size=50)
+    assert boards['total_count'] == 2
+
+
+# ── No reserved-name guard in projects API (v3.2) ────────────────────────────
+
+@pytest.mark.django_db
+def test_project_create_does_not_reject_discovery_prefix(auth_client):
+    """POST /api/v1/projects/ with name starting 'discovery_' is now allowed (no reserved guard)."""
     resp = auth_client.post(
         '/api/v1/projects/',
-        {'name': '__discovery_draft__', 'visibility': 'private'},
+        {'name': 'discovery_260604_1430', 'visibility': 'private'},
         format='json',
     )
-    assert resp.status_code == 400
-    assert resp.json().get('detail') == 'reserved_name'
+    # Should succeed (201) — no reserved_name guard for this prefix
+    assert resp.status_code == 201
+
+
+# ── FIX 1: malformed draft_id regression tests ────────────────────────────────
+
+@pytest.mark.django_db
+def test_get_discovery_draft_malformed_uuid_returns_none(user_profile):
+    """FIX 1: get_discovery_draft with a non-UUID string must return None, not raise."""
+    result = get_discovery_draft(user_profile, 'not-a-uuid')
+    assert result is None
 
 
 @pytest.mark.django_db
-def test_project_rename_rejects_reserved_name(auth_client, user_profile):
-    """PATCH /api/v1/projects/{pk}/ with name='__discovery_draft__' returns 400."""
-    project = Project.objects.create(
-        user=user_profile,
-        name='Normal Board',
-        visibility='private',
+def test_get_discovery_draft_malformed_uuid_variants(user_profile):
+    """FIX 1: various malformed draft_id values all return None without exception."""
+    bad_ids = ['', 'abc', '123', 'not-a-uuid', 'x' * 100, '!!!', '0']
+    for bad_id in bad_ids:
+        result = get_discovery_draft(user_profile, bad_id)
+        assert result is None, f'Expected None for draft_id={bad_id!r}, got {result}'
+
+
+@pytest.mark.django_db
+def test_feedback_malformed_draft_id_creates_new_draft_not_500(auth_client, user_profile):
+    """FIX 1: POST /discovery/feedback/ with draft_id='not-a-uuid' must return 200
+    (creates a new draft) and not raise a 500.
+    """
+    with patch('apps.recommendation.views.discovery._dj_connections') as mock_conns:
+        mock_cursor = MagicMock()
+        mock_cursor.__enter__ = lambda s: s
+        mock_cursor.__exit__ = MagicMock(return_value=False)
+        mock_cursor.fetchone.return_value = (1,)
+        mock_conns.__getitem__.return_value.cursor.return_value = mock_cursor
+
+        resp = auth_client.post(
+            '/api/v1/discovery/feedback/',
+            {'canonical_bld_id': 'bld_000001', 'action': 'like', 'draft_id': 'not-a-uuid'},
+            format='json',
+        )
+
+    assert resp.status_code == 200, (
+        f'Expected 200, got {resp.status_code}; body: {resp.content}'
     )
-    resp = auth_client.patch(
-        f'/api/v1/projects/{project.project_id}/',
-        {'name': '__discovery_draft__'},
-        format='json',
+    payload = resp.json()
+    assert 'draft_id' in payload
+    # A new draft board was created (malformed id was ignored)
+    assert Project.objects.filter(
+        user=user_profile, name__startswith=DISCOVERY_DRAFT_PREFIX
+    ).count() == 1
+
+
+# ── FIX 2: promote next_image card shape regression test ─────────────────────
+
+@pytest.mark.django_db
+def test_promote_next_image_contains_image_url(auth_client, user_profile):
+    """FIX 2: promote-to-taste response next_image must contain 'image_url' key
+    (same card shape as SessionCreateView, built via engine.get_buildings_by_ids
+    which calls _row_to_card).
+    """
+    draft = create_discovery_draft(user_profile)
+    draft.liked_ids = [{'id': f'bld_{i:06d}', 'intensity': 1.0} for i in range(5)]
+    draft.save(update_fields=['liked_ids'])
+    draft_id_str = str(draft.project_id)
+
+    mock_emb = np.array([0.1] * 384, dtype=np.float64)
+    emb_map = {f'bld_{i:06d}': mock_emb for i in range(5)}
+
+    # Card dict that mirrors what engine.get_buildings_by_ids/_row_to_card returns.
+    normalized_card = {
+        'canonical_bld_id': 'bld_000010',
+        'image_url': 'https://example.com/cover.jpg',
+        'name': 'Test Building',
+        'metadata': {},
+    }
+
+    with patch('apps.recommendation.views.discovery.engine.get_pool_embeddings', return_value=emb_map), \
+         patch('apps.recommendation.views.discovery.engine.update_preference_vector',
+               side_effect=lambda pv, emb, a: emb), \
+         patch('apps.recommendation.views.discovery.engine.create_pool_with_relaxation',
+               return_value=(['bld_000010', 'bld_000011'], {}, 1)), \
+         patch('apps.recommendation.views.discovery.engine.farthest_point_from_pool',
+               return_value=None), \
+         patch('apps.recommendation.views.discovery.engine.get_buildings_by_ids',
+               return_value=[normalized_card]):
+        resp = auth_client.post(
+            '/api/v1/discovery/promote-to-taste/',
+            {'draft_id': draft_id_str},
+            format='json',
+        )
+
+    assert resp.status_code == 201
+    payload = resp.json()
+    next_image = payload.get('next_image')
+    assert next_image is not None, 'next_image must not be None'
+    assert 'image_url' in next_image, (
+        f'next_image must contain image_url key; got keys: {list(next_image.keys())}'
     )
-    assert resp.status_code == 400
-    assert resp.json().get('detail') == 'reserved_name'

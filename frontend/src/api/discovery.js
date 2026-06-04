@@ -13,18 +13,23 @@ export async function fetchDiscoveryFeed(bufferIds = []) {
   }
 }
 
-export async function discoveryFeedback(canonicalBldId, action) {
-  const data = await callApi('POST', '/discovery/feedback/', { canonical_bld_id: canonicalBldId, action })
+export async function discoveryFeedback(canonicalBldId, action, draftId) {
+  const body = { canonical_bld_id: canonicalBldId, action }
+  if (draftId) body.draft_id = draftId
+  const data = await callApi('POST', '/discovery/feedback/', body)
   return {
+    draftId: data.draft_id ?? null,
     draftLikeCount: data.draft_like_count ?? 0,
     draftPassCount: data.draft_pass_count ?? 0,
   }
 }
 
-export async function promoteToTaste() {
+export async function promoteToTaste(draftId) {
   // Returns the raw session payload (same shape as POST /analysis/sessions/).
   // App.jsx's applySessionResponse + custom event handler consume this directly.
-  return callApi('POST', '/discovery/promote-to-taste/', {})
+  const body = {}
+  if (draftId) body.draft_id = draftId
+  return callApi('POST', '/discovery/promote-to-taste/', body)
 }
 
 export async function fetchBoardSurprise() {
