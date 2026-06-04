@@ -105,22 +105,6 @@ Redesign `/login` as conversational swipe onboarding while preserving the existi
 > (`.claude/reviews/2026-05-31-swipe-discovery-review.md`) + the 2026-06-04 backlog audit. Pull before `### HIGH`.
 > **One 1-PR bundle lives here** (UX-WRITE-FAIL shipped 2026-06-04 → ## Done): **UX-GALLERY** = FRONT-UX-6 + FRONT-UX-9 + FRONT-UX-10 (one gallery sibling-overlay lift fixes all three gesture bugs). FRONT-UX-6/10 promoted from MEDIUM (bundle inherits the X-HIGH anchor).
 
-#### BACK-RECOMMEND-4 — Discovery 좋아요가 추천에 안 먹힘
-Discovery right-swipe likes are write-only to the recommendation engine: they land in `UserProfile.liked_building_ids` but nothing reads that field back into Discovery's own ranking or exclusion. A Discovery-only user (never runs a Taste session) gets a permanently random, "cold" feed no matter how many buildings they like — directly violating the core promise ("the app already noticed my taste") on the Discovery surface itself.
-
-Verified 2026-06-04 (`develop@2f9a9c2`; refs re-pinned after FULL-REFACTOR-1 #170-173 moved code — engine untouched, bug UNRESOLVED):
-- `backend/apps/recommendation/engine.py:1869` — `compute_user_taste_vector(profile)` (was line 2352; file now 1977 LOC) reads project liked_ids ONLY (read at L1882); zero `liked_building_ids` hits in engine.py.
-- `backend/apps/recommendation/views/discovery.py:54-73` — `build_exclude_set` reads project liked_ids/disliked_ids/saved_ids only (L55); `liked_building_ids` absent → a Discovery-liked building can REAPPEAR. Second identical copy at L130-149.
-- `backend/apps/accounts/views/profile.py:229-314` — `LikedBuildingsView` (was `accounts/views.py:916-922`, split by #171): `liked_building_ids` written only by `.post` (L290-296), read only by `.get` (L311); field at `models.py:81`, URL at `urls.py:28`.
-- Taste likes (`project.liked_ids`) DO warm Discovery already, so this bug is Discovery-native-likes-only, not a total break.
-
-Fix direction:
-- Feed `UserProfile.liked_building_ids` into BOTH `compute_user_taste_vector` (weighted comparably to project likes) AND the Discovery + board-surprise exclude-sets.
-- Fire `evict_taste(profile.id)` (`caches.py:42`) inside `LikedBuildingsView.post` once the taste vector depends on `liked_building_ids`, else the 5-min cached vector ignores fresh likes.
-- `engine.py` is collaborator-owned per CLAUDE.md `## Rules` — coordinate with the algorithm owner before touching `compute_user_taste_vector`.
-
-Acceptance: a fresh profile that likes N buildings in Discovery (no Taste session) flips `taste_state` cold→warm and stops re-showing already-liked buildings; pytest covering taste-vector inclusion + exclude-set membership; Discovery TTFC not regressed.
-
 #### FRONT-UX-6 — SwipeCard gallery flip 부모 state 동기화 누락  [BUNDLE UX-GALLERY anchor, promoted from MEDIUM 2026-06-04]
 Post-PR #158, `openGallery()` is purely local — it no longer notifies the parent via `onGalleryOpen`. SwipePage's `galleryOpen` stays false. Two regressions: desktop mouse-drag on the gallery face triggers the underlying card swipe (the scroll wrapper stops touch propagation but not mouse), and the gallery cannot be gesture-isolated. The UX-GALLERY bundle fix (lift the gallery out of `react-tinder-card` into a sibling overlay) resolves this plus FRONT-UX-9 (touch-action) and FRONT-UX-10 (long-press) in one structural PR.
 
@@ -465,6 +449,15 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 ---
 
 ## Done
+
+### BACK-RECOMMEND-4 — Discovery 좋아요가 추천에 반영 (taste vector + exclude + evict) — RESOLVED 2026-06-04 (`feature/claude-back-recommend-4` → develop)
+Discovery 우-스와이프 like(`UserProfile.liked_building_ids`)가 추천 엔진에 안 먹히던 것 해결 — Discovery-only 유저가 영구 cold/random feed였던 core-promise 위반 수정. 3곳 주입, 전부 기존 infra 재사용.
+- [x] **taste vector**(`engine.py compute_user_taste_vector`): Project.liked_ids 루프 뒤 `reversed(liked_building_ids)` append(intensity 1.0). recent-50 cap·dedupe·weighted-mean 무변경, 추가 쿼리 0(profile 인자). minimal·additive.
+- [x] **exclude-set**(`discovery.py` DiscoveryFeedView + BoardSurpriseView): `liked_building_ids`를 exclude 합집합에 추가 → 이미 like한 빌딩 재등장 안 함.
+- [x] **evict**(`accounts/views/profile.py LikedBuildingsView.post`): 실-write 시 `evict_taste`+`evict_discovery_feed`(caches.py:42/155) 로컬-import 호출(순환 회피).
+- [x] 테스트 7개(`test_back_recommend_4.py`): **zero-Project-likes fresh profile** cold→warm(discriminating), truly-cold None, DiscoveryFeed+BoardSurprise exclude(warm/cold), evict-on-write, evict-suppress-on-dup.
+- 게이트: `manage.py check` PASS, flake8 clean(2 pre-existing E221 무관), code-review PASS(5영역: dedupe·exclude·evict-placement·test-discriminating·TTFC 무회귀). 로컬 pytest INFRA-DB-1 차단 → **CI가 실게이트**. app-test 스킵(추천 로직, swipe-lifecycle 무변경, 단위테스트가 정밀 커버). algorithm.md annotate.
+- ⚠️ recency 회귀(오너 결정): Project 40+Discovery 60 유저 → `[-50:]`가 Discovery 50개만 → Taste 프로필 탈락. 이번 minimal-additive로 두고 PR에 명시 — 오너가 source별 recent-N 병합 채택 여부 결정.
 
 ### ARCHITECT-UNIFY-C — OfficeFollow 중복 제거 (follow 모델 통합) — RESOLVED 2026-06-04 (`feature/claude-architect-unify-c` → develop)
 미배선 중복 `OfficeFollow`(firm-follow, ArchitectFollow와 중복) 제거 → office-interest follow 모델이 ArchitectFollow 1개로 통합(원 audit 중복 finding 종결). Office 서브시스템 나머지는 계획 기능 substrate라 park.

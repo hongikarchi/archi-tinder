@@ -1897,6 +1897,15 @@ def compute_user_taste_vector(profile):
                 continue
             all_likes.append((bid, intensity))
 
+    # BACK-RECOMMEND-4: Discovery-mode likes (UserProfile.liked_building_ids) also
+    # shape taste. Stored newest-first; reversed → oldest→newest so they sit at the
+    # recent end of all_likes (matches the recent-50 cap semantics). Binary like → intensity 1.0.
+    # Recency caveat: a power-user with >50 Discovery likes will push Project likes out of
+    # the [-50:] window — flagged for algorithm owner; minimal-additive for now.
+    for bid in reversed(profile.liked_building_ids or []):
+        if isinstance(bid, str):
+            all_likes.append((bid, 1.0))
+
     if not all_likes:
         return None
 
