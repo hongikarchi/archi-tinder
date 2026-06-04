@@ -37,7 +37,7 @@ from ..engine import _dictfetchall  # noqa: F401
 # _gemini: low-level Gemini client + retry (no sibling deps)
 # ---------------------------------------------------------------------------
 from ._gemini import _get_client, _retry_gemini_call  # noqa: F401
-from ._gemini import generate_content_with_fallback  # noqa: F401
+from ._gemini import generate_content_with_fallback, _is_model_unavailable  # noqa: F401
 from ._gemini import _GEMINI_MAX_RETRIES, _GEMINI_RETRY_DELAY  # noqa: F401
 
 # ---------------------------------------------------------------------------

@@ -11,6 +11,7 @@ from threading import Thread as _Thread
 from django.conf import settings
 from google import genai
 from google.api_core import exceptions as gax_exceptions
+from google.genai import errors as genai_errors
 
 logger = logging.getLogger('apps.recommendation')
 
@@ -28,12 +29,42 @@ _GEMINI_RETRY_DELAY = 1.0  # seconds
 
 # Permanent errors — retry provides no benefit; fast-fail immediately.
 # 403/401/400/404 indicate a config or auth issue that won't resolve on retry.
+# NOTE: the live google-genai SDK (v1.x, api_key backend) raises
+# google.genai.errors.ClientError/ServerError with an HTTP .code — NOT the
+# google.api_core.exceptions.* family. The gax tuple below is kept only for
+# defensive/legacy compatibility; _is_fatal_gemini() handles BOTH families.
 _FATAL_GEMINI_EXC = (
     gax_exceptions.PermissionDenied,   # 403
     gax_exceptions.Unauthenticated,    # 401
     gax_exceptions.InvalidArgument,    # 400
     gax_exceptions.NotFound,           # 404
 )
+
+
+def _is_fatal_gemini(e):
+    """
+    True if e is a permanent Gemini error that must NOT be retried.
+
+    google-genai ClientError carries an HTTP .code: any 4xx is permanent
+    EXCEPT 429 (rate limit — transient, should retry). ServerError (5xx) is
+    transient. Falls back to the legacy gax tuple for non-google-genai paths.
+    """
+    if isinstance(e, genai_errors.ClientError):
+        code = getattr(e, 'code', None)
+        return code is not None and 400 <= code < 500 and code != 429
+    return isinstance(e, _FATAL_GEMINI_EXC)
+
+
+def _is_model_unavailable(e):
+    """
+    True if e signals the requested MODEL is unavailable/invalid (404 NotFound
+    or 400 InvalidArgument) — the case where retrying with a fallback model
+    helps. Excludes 401/403 (auth — a different model on the same key won't
+    help). Recognises both the google-genai ClientError family and legacy gax.
+    """
+    if isinstance(e, genai_errors.ClientError):
+        return getattr(e, 'code', None) in (400, 404)
+    return isinstance(e, (gax_exceptions.NotFound, gax_exceptions.InvalidArgument))
 
 
 def _get_client():
@@ -96,7 +127,7 @@ def _retry_gemini_call(func, *args, timeout=15.0, **kwargs):
 
         if kind == 'err':
             e = value
-            if isinstance(e, _FATAL_GEMINI_EXC):
+            if _is_fatal_gemini(e):
                 logger.warning(
                     'Gemini API permanent error (no retry): %s: %s',
                     type(e).__name__, str(e),
@@ -121,8 +152,9 @@ def generate_content_with_fallback(client, *, timeout=15.0, **kw):
 
     Uses settings.GEMINI_TEXT_MODEL as the primary model and
     settings.GEMINI_TEXT_MODEL_FALLBACK as the fallback.  Fallback fires when
-    the primary model returns NotFound or InvalidArgument (model not available
-    in the API key tier or region).
+    the primary model is unavailable/invalid (404 NotFound / 400 InvalidArgument
+    — model not available in the API key tier or region). Recognises both the
+    google-genai ClientError family and legacy gax errors via _is_model_unavailable.
 
     All keyword args (contents, config, etc.) are forwarded unchanged so the
     caller's timing block, config, and telemetry keep working as before.
@@ -138,11 +170,11 @@ def generate_content_with_fallback(client, *, timeout=15.0, **kw):
             timeout=timeout,
             **kw,
         )
-    except (gax_exceptions.NotFound, gax_exceptions.InvalidArgument):
-        if fb and fb != primary:
+    except Exception as e:
+        if _is_model_unavailable(e) and fb and fb != primary:
             logger.warning(
-                'text model %s rejected; fallback -> %s',
-                primary, fb,
+                'text model %s rejected (%s); fallback -> %s',
+                primary, type(e).__name__, fb,
             )
             return _retry_gemini_call(
                 client.models.generate_content,

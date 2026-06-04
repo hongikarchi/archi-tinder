@@ -14,7 +14,6 @@ import logging
 import time
 
 from django.conf import settings
-from google.api_core import exceptions as gax_exceptions
 from google.genai import types
 
 logger = logging.getLogger('apps.recommendation')
@@ -321,9 +320,11 @@ def _gen_native(client, prompt):
                 idata = getattr(part, 'inline_data', None)
                 if idata and getattr(idata, 'data', None):
                     return idata.data, idata.mime_type, model
-        except (gax_exceptions.NotFound, gax_exceptions.InvalidArgument):
-            logger.warning('image model %s rejected; trying next', model)
-            continue
+        except Exception as e:
+            if _svc._is_model_unavailable(e):
+                logger.warning('image model %s rejected (%s); trying next', model, type(e).__name__)
+                continue
+            raise
     return None, None, None
 
 

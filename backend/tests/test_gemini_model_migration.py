@@ -17,6 +17,7 @@ import zlib
 import pytest
 from unittest.mock import MagicMock, patch
 from google.api_core import exceptions as gax_exceptions
+from google.genai import errors as genai_errors
 
 from django.test import override_settings
 
@@ -201,6 +202,54 @@ class TestGenerateContentWithFallback:
         assert captured.get('contents') == 'test'
         assert captured.get('config') is cfg
 
+    def test_fallback_on_genai_client_error_404(self, monkeypatch):
+        """LIVE google-genai raises errors.ClientError(404) -- NOT gax.NotFound.
+        The wrapper must fall back on the REAL production error type (regression
+        guard: self-raising gax.NotFound in other tests would not catch a
+        wrong-exception-family bug)."""
+        from apps.recommendation.services._gemini import generate_content_with_fallback
+
+        call_models = []
+
+        def _fake_gc(**kwargs):
+            call_models.append(kwargs.get('model'))
+            if kwargs['model'] == 'gemini-test-primary':
+                raise genai_errors.ClientError(404, {'error': {'message': 'model not found'}})
+            return self._make_mock_response()
+
+        mock_client = MagicMock()
+        mock_client.models.generate_content.side_effect = _fake_gc
+        monkeypatch.setattr('apps.recommendation.services._gemini.time.sleep', lambda _: None)
+
+        with override_settings(
+            GEMINI_TEXT_MODEL='gemini-test-primary',
+            GEMINI_TEXT_MODEL_FALLBACK='gemini-test-fallback',
+        ):
+            result = generate_content_with_fallback(mock_client, contents='hello')
+
+        assert call_models[-1] == 'gemini-test-fallback'
+        assert result.text == '{"test": true}'
+
+    def test_client_error_429_does_not_trigger_model_fallback(self, monkeypatch):
+        """429 rate-limit is transient, not model-unavailable -> no model fallback,
+        re-raised after _retry_gemini_call's transient retry."""
+        from apps.recommendation.services._gemini import generate_content_with_fallback
+
+        mock_client = MagicMock()
+        mock_client.models.generate_content.side_effect = genai_errors.ClientError(
+            429, {'error': {'message': 'rate limited'}})
+        monkeypatch.setattr('apps.recommendation.services._gemini.time.sleep', lambda _: None)
+
+        with override_settings(
+            GEMINI_TEXT_MODEL='gemini-test-primary',
+            GEMINI_TEXT_MODEL_FALLBACK='gemini-test-fallback',
+        ):
+            with pytest.raises(genai_errors.ClientError):
+                generate_content_with_fallback(mock_client, contents='hello')
+
+        models = [c.kwargs.get('model') for c in mock_client.models.generate_content.call_args_list]
+        assert 'gemini-test-fallback' not in models  # 429 never falls back to another model
+
 
 # ---------------------------------------------------------------------------
 # 3. generate_persona_image
@@ -295,6 +344,35 @@ class TestGeneratePersonaImage:
 
         assert result is not None
         assert 'gemini-img-primary' in called_models
+        assert 'gemini-img-fallback' in called_models
+
+    def test_primary_genai_client_error_uses_fallback(self, monkeypatch):
+        """Image primary raising the LIVE errors.ClientError(404) -> fallback model used
+        (real production error type, not the self-raised gax.NotFound)."""
+        raw_png = _make_1x1_png()
+        fallback_resp = _make_image_response(raw_png, 'image/png')
+        called_models = []
+
+        def _fake_gc(**kwargs):
+            called_models.append(kwargs.get('model'))
+            if kwargs['model'] == 'gemini-img-primary':
+                raise genai_errors.ClientError(404, {'error': {'message': 'not found'}})
+            return fallback_resp
+
+        mock_client = MagicMock()
+        mock_client.models.generate_content.side_effect = _fake_gc
+        monkeypatch.setattr('apps.recommendation.services._get_client', lambda: mock_client)
+        monkeypatch.setattr('apps.recommendation.services._gemini.time.sleep', lambda _: None)
+
+        with override_settings(
+            GEMINI_IMAGE_MODEL='gemini-img-primary',
+            GEMINI_IMAGE_MODEL_FALLBACK='gemini-img-fallback',
+            GEMINI_IMAGE_FORMAT='webp',
+        ):
+            from apps.recommendation.services import generate_persona_image
+            result = generate_persona_image(self._SAMPLE_REPORT)
+
+        assert result is not None
         assert 'gemini-img-fallback' in called_models
 
     def test_no_image_part_returns_none(self, monkeypatch):
