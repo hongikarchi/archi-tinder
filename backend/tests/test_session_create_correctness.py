@@ -341,6 +341,9 @@ class TestCacheEvictionOnReportGenerate:
         with _patch(
             'apps.recommendation.views.reports.services.generate_persona_report',
             return_value='Fake persona report text',
+        ), _patch(
+            'apps.recommendation.views.reports.compute_axis_scores',
+            return_value={axis: 0.0 for axis in ('form', 'materiality', 'scale', 'energy', 'tradition')},
         ):
             resp = auth_client.post(
                 f'/api/v1/projects/{project.project_id}/report/generate/',

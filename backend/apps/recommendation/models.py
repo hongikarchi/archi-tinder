@@ -1,5 +1,6 @@
 import uuid
 from django.db import models
+from django.db.models import Q, CheckConstraint
 from apps.accounts.models import UserProfile
 
 
@@ -185,6 +186,12 @@ class TagAxisWeight(models.Model):
 
     class Meta:
         unique_together = [('tag', 'axis')]
+        constraints = [
+            CheckConstraint(
+                check=Q(weight__gte=-1.0) & Q(weight__lte=1.0),
+                name='tagaxisweight_weight_range',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.tag}:{self.axis}={self.weight}'
