@@ -17,6 +17,7 @@ export async function addLikedBuilding(canonicalBldId) {
     if (err?.status === 403 && err?.data?.detail === 'verify_required') {
       const reason = err?.data?.reason || 'liked_limit_reached'
       window.dispatchEvent(new CustomEvent('archithon:verify-required', { detail: { reason } }))
+      window.dispatchEvent(new CustomEvent('archithon:pending-like', { detail: { bldId: canonicalBldId } }))
       throw new VerifyRequiredError(reason)
     }
     throw err
