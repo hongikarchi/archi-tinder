@@ -64,9 +64,12 @@ class DiscoveryFeedView(APIView):
                             for e in (project.get('saved_ids') or [])
                             if isinstance(e, dict) and e.get('id')
                         )
+                    # BACK-RECOMMEND-4: include Discovery-mode likes so already-liked
+                    # buildings don't reappear in the feed.
+                    liked_building_ids = list(profile.liked_building_ids or [])
                     exclude_ids = []
                     seen = set()
-                    for bid in liked_ids + disliked_ids + saved_ids:
+                    for bid in liked_ids + disliked_ids + saved_ids + liked_building_ids:
                         if isinstance(bid, str) and bid not in seen:
                             exclude_ids.append(bid)
                             seen.add(bid)
@@ -139,10 +142,13 @@ class BoardSurpriseView(APIView):
                 for e in (project.get('saved_ids') or [])
                 if isinstance(e, dict) and e.get('id')
             )
+        # BACK-RECOMMEND-4: include Discovery-mode likes so already-liked
+        # buildings don't reappear in the Surprise board either.
+        liked_building_ids = list(profile.liked_building_ids or [])
 
         exclude_ids = []
         seen = set()
-        for bid in liked_ids + disliked_ids + saved_ids:
+        for bid in liked_ids + disliked_ids + saved_ids + liked_building_ids:
             if isinstance(bid, str) and bid not in seen:
                 exclude_ids.append(bid)
                 seen.add(bid)

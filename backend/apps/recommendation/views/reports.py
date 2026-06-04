@@ -9,6 +9,7 @@ from rest_framework.views import APIView
 from ..models import Project
 from .. import services
 from ..caches import evict_projects_list, evict_project_detail
+from ..services.axis_scores import compute_axis_scores
 from ._shared import _get_profile, _liked_id_only
 
 logger = logging.getLogger('apps.recommendation')
@@ -44,12 +45,14 @@ class ProjectReportGenerateView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        axis_scores = compute_axis_scores(liked_id_strings)
+
         project.final_report = report
         project.save(update_fields=['final_report'])
         evict_projects_list(profile.id)
         evict_project_detail(str(pk))
         logger.info('Persona report generated for project %s', pk)
-        return Response({'final_report': report})
+        return Response({'final_report': report, 'axis_scores': axis_scores})
 
 
 class ProjectReportImageView(APIView):
@@ -66,7 +69,10 @@ class ProjectReportImageView(APIView):
 
         result = services.generate_persona_image(project.final_report)
         if not result:
-            return Response({'detail': 'Image generation failed. The Imagen API may not be enabled for your API key.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response(
+                {'detail': 'Image generation failed. The Imagen API may not be enabled for your API key.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
         project.report_image = result['image_data']
         project.save(update_fields=['report_image'])
