@@ -25,47 +25,24 @@ import pytest  # noqa: E402
 
 @pytest.fixture(scope='session')
 def django_db_modify_db_settings():
-    """Override database to SQLite in-memory (mirrors root conftest.py).
+    """Override database to SQLite in-memory.
 
-    Mutates settings.DATABASES and resets cached connections so that
-    pytest-django's django_db_setup creates the SQLite test DB, not PG.
+    Only mutates settings.DATABASES -- does NOT call
+    connections.configure_settings() or discard cached DatabaseWrapper
+    objects via delattr.  Those operations corrupt per-connection SQLite
+    :memory: databases for any other test module that completed its DB
+    setup before the discard (e.g. test_sessions.py, test_swipe.py).
 
-    This override is needed because backend/.env loads real Neon credentials
-    via load_dotenv before test collection, making os.environ.setdefault a no-op.
+    buildings alias is intentionally NOT mirrored here.  All tests in
+    this app that touch the buildings DB mock the connection (patch on
+    _dj_connections / engine.*) so no live buildings alias is needed.
     """
     from django.conf import settings
-    from django.db import connections
-
-    # Build minimal overrides; let ensure_defaults fill the rest.
     settings.DATABASES['default'] = {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': ':memory:',
         'ATOMIC_REQUESTS': False,
     }
-    # Mirror 'buildings' to 'default' so only one SQLite DB is created.
-    settings.DATABASES['buildings'] = {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': ':memory:',
-        'ATOMIC_REQUESTS': False,
-        'TEST': {'MIRROR': 'default'},
-    }
-
-    # Call configure_settings to normalise both alias dicts (adds TIME_ZONE,
-    # OPTIONS, TEST subkeys etc.) so DatabaseWrapper.check_settings() passes.
-    connections.configure_settings(settings.DATABASES)
-
-    # Discard cached DatabaseWrapper objects (built from old PG settings_dict).
-    # delattr on the asgiref.local forces re-creation on next access.
-    _local = connections._connections
-    for alias in ('default', 'buildings'):
-        try:
-            connections[alias].close()
-        except Exception:
-            pass
-        try:
-            delattr(_local, alias)
-        except AttributeError:
-            pass
 
 
 @pytest.fixture
