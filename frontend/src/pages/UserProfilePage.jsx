@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { getUserProfile, followUser, unfollowUser } from '../api/client.js'
 import { updateProject, deleteProject } from '../api/projects.js'
+import { purgeChatCache } from '../utils/appHelpers.js'
 import { getUserSavedStudios } from '../api/architects.js'
 import AppearanceSettings from '../components/AppearanceSettings.jsx'
 import EditProfileModal from '../components/EditProfileModal.jsx'
@@ -251,6 +252,8 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
     if (!deletedBoard) return
     setBoards(bs => bs.filter(b => b.board_id !== boardId))
     setBoardsTotalCount(t => Math.max(0, t - 1))
+    // Purge this project's chat cache keys on delete.
+    purgeChatCache(String(boardId))
     try {
       await deleteProject(boardId)
     } catch (err) {
@@ -330,6 +333,8 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
     // Optimistic removal
     setBoards(bs => bs.filter(b => !selectedBoards.has(b.board_id)))
     setBoardsTotalCount(t => Math.max(0, t - ids.length))
+    // Purge chat cache for all deleted projects.
+    ids.forEach(id => purgeChatCache(String(id)))
     const results = await Promise.allSettled(ids.map(id => deleteProject(id)))
     const failedIds = results
       .map((r, i) => (r.status === 'rejected' ? ids[i] : null))

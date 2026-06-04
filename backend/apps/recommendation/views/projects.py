@@ -74,7 +74,8 @@ class ProjectListCreateView(APIView):
                         .filter(user=profile)
                         .select_related('user__user')
                         # PERF-1 change C: heavy LLM JSON not consumed by list view.
-                        .defer('analysis_report')
+                        # BACK-LLM-2: conversation_history can be up to 64 KB — defer it too.
+                        .defer('analysis_report', 'conversation_history')
                         .annotate(
                             _latest_session_id=_latest_sid_sq,
                             _latest_like_count=_latest_lc_sq,
@@ -158,6 +159,8 @@ class ProjectDetailView(APIView):
         if not is_owner and project.visibility != 'public':
             return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
         data = ProjectSerializer(project, context={'request': request}).data
+        if not is_owner:
+            data.pop('conversation_history', None)
         if request.user.is_authenticated and profile:
             from apps.social.models import Reaction
             data['is_reacted'] = Reaction.objects.filter(user=profile, project=project).exists()
@@ -273,7 +276,8 @@ class UserProjectsListView(APIView):
             .filter(user=target_profile)
             .select_related('user__user')
             # PERF-1 change C: heavy LLM JSON not consumed by list view.
-            .defer('analysis_report')
+            # BACK-LLM-2: conversation_history can be up to 64 KB — defer it too.
+            .defer('analysis_report', 'conversation_history')
             .annotate(
                 _latest_session_id=_latest_sid_sq,
                 _latest_like_count=_latest_lc_sq,

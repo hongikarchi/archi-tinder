@@ -23,11 +23,51 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-06-04 23:19 KST',
-    head: 'df8dcd8',
+    updatedAt: '2026-06-04 23:49 KST',
+    head: '9be8fd8',
     branch: 'feature/discovery-algorithm',
   },
   done: [
+    {
+      id: 'BACK-AUTH-3',
+      title: 'guest like-gate @50 + frontend verify 배선',
+      completedAt: '2026-06-04',
+      prs: [193],
+      note: '`LikedBuildingsView.post`가 guest 무제한 like 허용하던 것 → 50개서 verify-gate(403 `verify_required`/`liked_limit_reached`, board-gate precedent mirror). frontend `addLikedBuilding`가 403 intercept → `archithon:verify-required` dispatch + `VerifyRequiredError` throw(`createProject` 패턴); D…',
+    },
+    {
+      id: 'BACK-AUTH-2',
+      title: 'JWT user-row cache 통합 테스트',
+      completedAt: '2026-06-04',
+      prs: [193],
+      note: '기존 unit-level만이던 JWT 캐시 테스트에 DRF 파이프라인 통합 테스트 5 추가(`test_jwt_cache_integration.py`): cache-hit, is_active=False stale-cache 거부(signal invalidation), post_save invalidation, logout, refresh-rotation invalidation. prod 코드 무변경. is_active bulk `.update()` 우회는 기존 문서화된 known limitat…',
+    },
+    {
+      id: 'BACK-LLM-2',
+      title: '채팅기록 backend 영속화 (cross-device)',
+      completedAt: '2026-06-04',
+      prs: [195],
+      note: '채팅기록이 localStorage-only라 기기간 유실 → `Project.conversation_history` JSONField(migration 0022, #194 0021_tagaxisweight 충돌로 renumber). 기존 PATCH 재사용(신규 endpoint 無). detail-read/PATCH-write 검증(dict, ≤64KB UTF-8 ensure_ascii=False, messages≤60/history≤10/text≤2000), list서 제외+defer. fr…',
+    },
+    {
+      id: 'INFRA-DB-2',
+      title: 'make test-local (로컬 pytest unblock)',
+      completedAt: '2026-06-04',
+      prs: [197],
+      note: 'runtime `make_web_app`가 CREATEDB 없어 로컬 pytest가 \'permission denied to create database\'로 차단(conftest SQLite override는 자체 docstring상 not-load-bearing). `make test-local` 추가 — `migrate-local` idiom(read -s neondb_owner pw, inline DB_USER override로 DB_HOST는 LOCAL 유지), CI-shape real…',
+    },
+    {
+      id: 'UX-GALLERY',
+      title: '갤러리 제스처 3버그 (FRONT-UX-6/9/10)',
+      completedAt: '2026-06-04',
+      note: '갤러리 3버그(부모-sync wobble·모바일 세로스크롤·Discovery long-press 오작동)를 lift 없이 해결. 원 premise(sibling-overlay lift)를 유저 product 재검토로 재정의 — 갤러리 보면서도 스와이프 유지 + 순수 Discovery. session 브라우저 spike로 "3D가 스크롤 안 깸"(원인은 touch-action·snap, 3D 아님) 확정 후 구현.',
+    },
+    {
+      id: 'BACK-RECOMMEND-4',
+      title: 'Discovery 좋아요가 추천에 반영 (taste vector + exclude + evict)',
+      completedAt: '2026-06-04',
+      note: 'Discovery 우-스와이프 like(`UserProfile.liked_building_ids`)가 추천 엔진에 안 먹히던 것 해결 — Discovery-only 유저가 영구 cold/random feed였던 core-promise 위반 수정. 3곳 주입, 전부 기존 infra 재사용.',
+    },
     {
       id: 'FULL-DISCOVERY-1',
       title: 'Discovery 탭 v3.1+v3.2 재설계 (10장 청크 + 3-Tier + Draft Board → Taste 퍼널)',
@@ -40,43 +80,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-06-04',
       note: '미배선 중복 `OfficeFollow`(firm-follow, ArchitectFollow와 중복) 제거 → office-interest follow 모델이 ArchitectFollow 1개로 통합(원 audit 중복 finding 종결). Office 서브시스템 나머지는 계획 기능 substrate라 park.',
     },
-    {
-      id: 'BACK-PROFILE-1',
-      title: 'external_links 검증 강화 (handle/email/website + mailto 주입 차단)',
-      completedAt: '2026-06-04',
-      note: '`validate_external_links`(accounts/serializers.py)에 키별 포맷 검증 추가 — 프론트가 검증 없이 `instagram.com/${handle}`·`mailto:${email}` 평문 조립하던 주입 nuisance를 서버에서 차단.',
-    },
-    {
-      id: 'BACK-OFFICE-1',
-      title: '(ARCHITECT-UNIFY Phase 0) — SavedOffice orphan 제거',
-      completedAt: '2026-06-04',
-      note: '예원 #180의 미배선 SavedOffice(model+2뷰+2url) 삭제 + DROP 마이그 0005. ARCHITECT-UNIFY(Office↔Architect 통합) 스펙의 첫 안전 조각 — "스튜디오 저장"은 ArchitectFollow saved-studios(#179)가 이미 충족, SavedOffice는 프론트 콜러 0이라 무위험.',
-    },
-    {
-      id: 'UX-WRITE-FAIL',
-      title: '쓰기 실패 무음 유실 표면화 (FRONT-UX-8 + FRONT-UX-7)',
-      completedAt: '2026-06-04',
-      note: '두 쓰기 POST 실패를 빈 `.catch(()=>{})`로 삼켜 취향신호(질문답변·좋아요)가 조용히 유실되던 것을 공유 토스트로 표면화. 기존 `globalToast` 재사용(새 이벤트 시스템 없음).',
-    },
-    {
-      id: 'DASHBOARD-LOCALVIEW-REMOVE',
-      title: 'state.local.js 그림자 메커니즘 제거',
-      completedAt: '2026-06-04',
-      note: '`make dashboard`가 만드는 gitignored `project/state.local.js`가 신선도 가드 없이 committed `state.js`를 가리는 footgun 제거. 6/1 stale local이 6/4 audit 변경(BACK-OFFICE-1·BACK-PROFILE-1 등)을 영구히 가려 유저가 대시보드에서 못 봄. 대시보드 단일 소스 = committed `state.js`.',
-    },
-    {
-      id: 'FRONT-PROFILE-HARVEST-1',
-      title: '프로필 컴포넌트 하베스트 + 인스타식 재설계',
-      completedAt: '2026-06-04',
-      prs: [179],
-      note: 'archibe-profile에서 핵심 컴포넌트 채택 + 4테마 재토큰화 + 프로필 인스타식 재설계. Profile-area 컴포넌트 하베스트 + CSS-Module/hook 패턴 토대 — 명명된 ~646 인라인 부채(SwipePage/BoardDetailPage 등) 상환 아님(그 파일 안 건드림); FRONT-DESIGN-1 핵심 인라인 마이그레이션은 ## Next 잔존.',
-    },
-    {
-      id: 'DASHBOARD-AUTOGEN-1',
-      title: '대시보드 Files 탭 + state.js 자동생성',
-      completedAt: '2026-06-01',
-      note: '프로젝트 대시보드 2건: (1) 파일 구조 Files 탭 (collapsible 트리 + 파일별 role), (2) state.js를 reporter 수작업 재작성 대신 `tools/gen-state.js`로 자동생성.',
-    },
   ],
   now: [
     {
@@ -86,28 +89,7 @@ window.PROJECT_STATE = {
     },
   ],
   next: {
-    xhigh: [
-      {
-        id: 'BACK-RECOMMEND-4',
-        title: 'Discovery 좋아요가 추천에 안 먹힘',
-        note: '2026-05-31 swipe/discovery 리뷰 F1a/F1b. Discovery right-swipe like는 UserProfile.liked_building_ids에만 기록되고 추천 엔진이 읽지 않음 → Discovery-only 유저는 아무리 like해도 영구 cold/random feed (core promise 위반). engine.py:2352 compute_user_taste_vector는 Project.liked_ids만 읽음, discovery.py:55-73 exclude-set에 liked_building_ids 없음 → 이미 like한 빌딩 재등장. Fix: liked_building_ids를 taste vector + exclude-set에 투입 + LikedBuildingsView.post에서 evict_taste. engine.py collaborator-owned → 알고리즘 오너 협의.',
-      },
-      {
-        id: 'FRONT-UX-6',
-        title: 'SwipeCard gallery flip 부모 state 동기화 누락  [BUNDLE UX-GALLERY anchor, promoted from MEDIUM 2026-06-04]',
-        note: 'PR #158 (`0071c3f`, 2026-05-29) restored in-card gallery flip but made `openGallery()` purely local — it no longer notifies the parent page via `onGalleryOpen` callback. SwipePage\'s `galleryOpen` state never flips to `true`. Two visible regressions on the swipe surface:',
-      },
-      {
-        id: 'FRONT-UX-9',
-        title: '모바일 갤러리 세로 스크롤 깨짐 (검증 필요)  [BUNDLE UX-GALLERY, needs browser repro]',
-        note: '2026-05-31 리뷰 F4 (high-confidence, 브라우저 미확인). SwipeCard.jsx:183 root touchAction:none + react-tinder-card index.js:174-176 touchstart preventDefault (className에 pressable 없으면) → 카드 내 갤러리 세로 스크롤 native gesture 취소 추정. PR #158 flip 복원 회귀 가능. VERIFY FIRST: 390x844 뷰포트에서 갤러리 세로 드래그. 깨지면 fix=갤러리 스크롤 div에 touchAction:pan-y + pressable className. 재현 안 되면 downgrade/close.',
-      },
-      {
-        id: 'FRONT-UX-10',
-        title: 'Discovery 갤러리 위 long-press 오작동  [BUNDLE UX-GALLERY, promoted from MEDIUM 2026-06-04]',
-        note: 'On the Discovery page (desktop only), pressing-and-holding the mouse (>400ms) over an open card gallery opens the Save-to-Board modal over it, because the gallery\'s pointer-event `stopPropagation` does not stop the separate `mousedown` that DiscoveryPage\'s long-press listener…',
-      },
-    ],
+    xhigh: [],
     high: [
       {
         id: 'ARCHITECT-UNIFY-1',
@@ -125,17 +107,17 @@ window.PROJECT_STATE = {
         note: 'Code audit 2026-05-27: UserProfile preferences are theme/font only; UserSerializer and UserProfileSelfUpdateSerializer need language parity. ThemeContext + AppearanceSettings are the local persistence/UI pattern. ParseQueryView currently calls services.parse_query(conversation_history) with no user preference, so language must be passed from request.user.profile.language and prompt inference overridden.',
       },
       {
-        id: 'BACK-LLM-2',
-        title: '채팅 기록이 다른 기기에서 사라짐',
-        note: 'Code audit 2026-05-27: LLMSearchPage stores messages/conversationHistory/latest* under archithon_chat_${userId}_${mode}_${projectId||new}; backend Project only has raw_query and AnalysisSession has no chat field. ParseQueryView validates conversation_history but does not persist it. Likely edit: Project conversation_history or ConversationTurn + dedicated idempotent append endpoint + frontend write-through cache.',
-      },
-      {
         id: 'FRONT-DESIGN-1',
         title: '디자인 시스템 컴포넌트 리워크 (paused)',
         note: 'Code audit 2026-05-27: 581 inline style call sites. Largest FE files: BoardDetailPage 1049, UserProfilePage 992, App 838, BuildingDetailPage 711, SwipePage 683, FirmProfilePage 540. tokens.css exists; index.css is mostly utilities. Slice leaf components first (ArticleCard/ProjectCard/BoardCard), then SwipeCard/BuildingDetailPage; each slice lint+build+screenshot.',
       },
     ],
     medium: [
+      {
+        id: 'BACK-LLM-4',
+        title: 'search.py ParseQueryView byte-cap도 ensure_ascii 부풀림 의심',
+        note: 'BACK-LLM-2(#195) 리뷰 중 발견(미수정, pre-existing). `backend/apps/recommendation/views/search.py` `ParseQueryView.post`의 conversation_history 검증이 BACK-LLM-2 serializer가 고친 것과 동일하게 `json.dumps` 기본 `ensure_ascii=True`로 byte 측정 가능성 → 한글 대화가 한도를 6배 부풀려 거짓 거부. 확인 후 `ensure_ascii=False`+UT…',
+      },
       {
         id: 'FULL-DISCOVERY-2',
         title: 'Discovery v3.1+v3.2 라이브 브라우저 검증 (prod 전)',
@@ -152,24 +134,9 @@ window.PROJECT_STATE = {
         note: 'FRONT-PROFILE-HARVEST-1(#179) 머지 후 Codex 브라우저 수정 (별도 PR). FollowListModal 모바일 bottom-sheet(≤768px, DESIGN.md §8.10) + backdrop opacity 0.6→0.4 + inline onMouseEnter→CSS hover + 4테마 픽셀 검증(github-light 먼저). 원 하베스트 minor (2026-06-04 audit 재확인): EditProfileModal(`components/EditPr…',
       },
       {
-        id: 'BACK-AUTH-3',
-        title: 'LikedBuildingsView guest 사용자 가드 정책 확인',
-        note: 'PR #157 (`77ffd6e`, 2026-05-29) added `LikedBuildingsView` with `permission_classes = [IsAuthenticated]` only. No `is_guest=False` check. Guest users (post-FULL-LOGIN-REDESIGN-1: `UserProfile.is_guest=True`, no email, no SocialAccount) can freely write to `UserProfile.liked_bu…',
-      },
-      {
         id: 'BACK-PERFORMANCE-5',
         title: 'Swipe latency 0.7-1.5s 흔들림',
         note: 'Code audit 2026-05-27: SwipeView still does update/phase/refresh_pool/get_pool_embeddings/MMR-or-farthest selection in request transaction. Async prefetch only helps after next_bid is selected. Use existing [SWIPE TIMING] lock/embed/select/prefetch/total + embedding cache stats to bucket variance before code changes.',
-      },
-      {
-        id: 'BACK-AUTH-2',
-        title: 'Cache JWT 통합 테스트 hardening',
-        note: 'Code audit 2026-05-27: CachedJWTAuthentication cache-hit returns cached_user directly; signals invalidate User save/delete but not bulk update. test_jwt_cache is unit-level with patched cache and mocked tokens. Add DRF pipeline tests via /auth/me, signal invalidation test, stale inactive-user cache negative test, and cross-instance shared-cache check.',
-      },
-      {
-        id: 'INFRA-DB-2',
-        title: 'test DB role permissions for CREATE DATABASE',
-        note: 'Code audit 2026-05-27: settings.py imports PG default/buildings from env; .env.example correctly says runtime role make_web_app has NOCREATEDB. Root conftest tries SQLite/mirrored buildings, but app-local conftests differ and some invocations still hit pytest-django DB creation. Decide make_web_test CREATEDB vs --reuse-db preprovisioned test_user_data vs temporary owner swap; document in CONTRIBUTING + backend/.env.example.',
       },
       {
         id: 'FRONT-LAYOUT-1',
@@ -217,60 +184,60 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 197,
+      title: 'chore(infra): make test-local — local pytest via neondb_owner (INFRA-DB-2)',
+      mergedAt: '2026-06-04T13:53:01Z',
+      mergedAtKST: '2026-06-04 22:53 KST',
+      sha: '87023f3',
+    },
+    {
+      number: 195,
+      title: 'feat(llm): persist chat history on Project for cross-device (BACK-LLM-2)',
+      mergedAt: '2026-06-04T13:58:29Z',
+      mergedAtKST: '2026-06-04 22:58 KST',
+      sha: '1f76d4e',
+    },
+    {
+      number: 194,
+      title: 'feat(algo): TagAxisWeight 모델 + 5축 취향 axis_scores',
+      mergedAt: '2026-06-04T13:40:34Z',
+      mergedAtKST: '2026-06-04 22:40 KST',
+      sha: '73c872d',
+    },
+    {
+      number: 193,
+      title: 'feat(auth): guest like-gate @50 + JWT cache integration tests (BACK-AUTH-3, BACK-AUTH-2)',
+      mergedAt: '2026-06-04T14:00:23Z',
+      mergedAtKST: '2026-06-04 23:00 KST',
+      sha: 'f3dd115',
+    },
+    {
+      number: 192,
+      title: 'fix(recommend): Discovery likes feed taste vector + exclude + evict (BACK-RECOMMEND-4)',
+      mergedAt: '2026-06-04T13:53:32Z',
+      mergedAtKST: '2026-06-04 22:53 KST',
+      sha: '2cc5efe',
+    },
+    {
+      number: 191,
+      title: 'fix(swipe): direction-lock + gallery scroll + drop Discovery long-press (UX-GALLERY)',
+      mergedAt: '2026-06-04T13:56:59Z',
+      mergedAtKST: '2026-06-04 22:56 KST',
+      sha: '64b5482',
+    },
+    {
+      number: 190,
+      title: 'refactor(social): delete OfficeFollow duplicate (ARCHITECT-UNIFY-C)',
+      mergedAt: '2026-06-04T08:39:41Z',
+      mergedAtKST: '2026-06-04 17:39 KST',
+      sha: 'df8dcd8',
+    },
+    {
       number: 189,
       title: 'security(accounts): harden external_links validation (BACK-PROFILE-1)',
       mergedAt: '2026-06-04T07:12:58Z',
       mergedAtKST: '2026-06-04 16:12 KST',
       sha: 'e60918d',
-    },
-    {
-      number: 188,
-      title: 'refactor(profiles): delete SavedOffice orphan (ARCHITECT-UNIFY Phase 0)',
-      mergedAt: '2026-06-04T07:10:18Z',
-      mergedAtKST: '2026-06-04 16:10 KST',
-      sha: '6a12156',
-    },
-    {
-      number: 187,
-      title: 'chore(make): add migrate-local for safe local DDL migrate',
-      mergedAt: '2026-06-04T05:04:00Z',
-      mergedAtKST: '2026-06-04 14:04 KST',
-      sha: '75542fc',
-    },
-    {
-      number: 186,
-      title: 'fix(ux): surface silent write failures (FRONT-UX-8 + FRONT-UX-7)',
-      mergedAt: '2026-06-04T05:03:18Z',
-      mergedAtKST: '2026-06-04 14:03 KST',
-      sha: '9b581fb',
-    },
-    {
-      number: 185,
-      title: 'chore(dashboard): remove state.local.js shadow mechanism',
-      mergedAt: '2026-06-04T01:33:59Z',
-      mergedAtKST: '2026-06-04 10:33 KST',
-      sha: '4cb8a3c',
-    },
-    {
-      number: 184,
-      title: 'chore(dashboard): file-roles 15개 추가 (#178/#180/#182 파일)',
-      mergedAt: '2026-06-04T00:41:03Z',
-      mergedAtKST: '2026-06-04 09:41 KST',
-      sha: '80a2067',
-    },
-    {
-      number: 183,
-      title: 'docs(backlog): 2026-06-04 Next audit + ID 2축 rename + BM PRD',
-      mergedAt: '2026-06-04T00:28:13Z',
-      mergedAtKST: '2026-06-04 09:28 KST',
-      sha: 'bc8f2f2',
-    },
-    {
-      number: 182,
-      title: 'feat(SNS-OFFICE): architect profile redesign + follow + saved studios (rebased #181)',
-      mergedAt: '2026-06-03T15:47:43Z',
-      mergedAtKST: '2026-06-04 00:47 KST',
-      sha: 'c7ee138',
     },
   ],
   agents: [
@@ -589,6 +556,10 @@ window.PROJECT_STATE = {
       role: 'accounts 테스트 픽스처',
     },
     {
+      path: 'backend/apps/accounts/tests/test_jwt_cache_integration.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/accounts/tests/test_liked_buildings.py',
       role: '좋아요 건물 테스트',
     },
@@ -833,6 +804,14 @@ window.PROJECT_STATE = {
       role: 'DB 마이그레이션 0020 질문 카드 필드',
     },
     {
+      path: 'backend/apps/recommendation/migrations/0021_tagaxisweight.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/migrations/0022_project_conversation_history.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/recommendation/migrations/__init__.py',
       role: '마이그레이션 패키지 init',
     },
@@ -865,6 +844,10 @@ window.PROJECT_STATE = {
       role: '파싱 프롬프트·어휘 상수',
     },
     {
+      path: 'backend/apps/recommendation/services/axis_scores.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/recommendation/services/embeddings.py',
       role: 'HuggingFace 임베딩 호출',
     },
@@ -895,6 +878,14 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/recommendation/tests/conftest.py',
       role: 'recommendation 테스트 픽스처',
+    },
+    {
+      path: 'backend/apps/recommendation/tests/test_back_recommend_4.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/tests/test_conversation_history.py',
+      role: '',
     },
     {
       path: 'backend/apps/recommendation/tests/test_discovery.py',
@@ -1043,6 +1034,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/conftest.py',
       role: 'pytest 루트 픽스처 설정',
+    },
+    {
+      path: 'backend/fixtures/tag_axis_weights.json',
+      role: '',
     },
     {
       path: 'backend/manage.py',

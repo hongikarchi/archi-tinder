@@ -54,3 +54,23 @@ export function extractSavedIds(rawSavedIds) {
     .map(entry => (typeof entry === 'string' ? entry : entry?.id))
     .filter(Boolean)
 }
+
+/**
+ * Purge localStorage keys matching archithon_chat_* pattern.
+ * Called on logout (all keys) and project delete (that project's keys).
+ *
+ * @param {string|null} projectId - if provided, only purge keys containing
+ *   `_<projectId>__` (middle-segment match). Pass null/undefined to purge all.
+ */
+export function purgeChatCache(projectId) {
+  // Collect keys first — removing during index iteration shifts offsets.
+  const toRemove = []
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i)
+    if (!key || !key.startsWith('archithon_chat_')) continue
+    if (projectId == null || key.includes('_' + projectId + '__')) {
+      toRemove.push(key)
+    }
+  }
+  toRemove.forEach(k => localStorage.removeItem(k))
+}

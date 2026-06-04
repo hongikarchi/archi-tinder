@@ -3,7 +3,6 @@ import TutorialPopup from '../components/TutorialPopup.jsx'
 import SwipeCard, { CARD_WIDTH, CARD_HEIGHT } from '../components/SwipeCard.jsx'
 import QuestionCard from '../components/QuestionCard.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
-import { SWIPE_PREVENT_ALL } from '../components/swipeGestureConfig.js'
 
 /* ── LoadingCard ─────────────────────────────────────────────────────────── */
 function LoadingCard() {
@@ -311,7 +310,6 @@ export default function SwipePage({
   const hasShownDismissTutorial = useRef(!!localStorage.getItem('archithon_dismiss_tutorial_seen'))
   const pendingDismissDir = useRef(null)
   const [localResetTick, setLocalResetTick] = useState(0)
-  const [galleryOpen, setGalleryOpen] = useState(false)
   const [showTutorial, setShowTutorial] = useState(() => !localStorage.getItem('archithon_tutorial_dismissed'))
   const [showExitConfirm, setShowExitConfirm] = useState(false)
   const [showDismissConfirm, setShowDismissConfirm] = useState(false)
@@ -401,19 +399,17 @@ export default function SwipePage({
       if (swipedCardId.current === currentCard.image_id) return
 
       if (e.key === 'ArrowLeft') {
-        if (galleryOpen) setGalleryOpen(false)
         // Only pre-set swipedCardId guard if not going to intercept for dismiss tutorial
         if (hasShownDismissTutorial.current) swipedCardId.current = currentCard.image_id
         swipeManual('left')
       } else if (e.key === 'ArrowRight') {
         swipedCardId.current = currentCard.image_id
-        if (galleryOpen) setGalleryOpen(false)
         swipeManual('right')
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isLoading, currentCard, showTutorial, showExitConfirm, showDismissConfirm, galleryOpen, questionTrigger]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isLoading, currentCard, showTutorial, showExitConfirm, showDismissConfirm, questionTrigger]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (isCompleted) {
     const canContinue = !!progress?.can_continue
@@ -650,12 +646,10 @@ export default function SwipePage({
                   key={`${currentCard.image_id}_${cardResetToken}_${localResetTick}`}
                   onSwipe={onTinderSwipe}
                   onCardLeftScreen={onCardLeftScreen}
-                  preventSwipe={galleryOpen ? SWIPE_PREVENT_ALL : undefined}
                 >
                   <SwipeCard
                     card={currentCard}
-                    onGalleryOpen={() => setGalleryOpen(true)}
-                    onGalleryClose={() => setGalleryOpen(false)}
+                    onGalleryClose={() => {}}
                   />
                 </SwipeGestureFrame>
                 {isLoading && (

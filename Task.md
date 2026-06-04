@@ -89,72 +89,20 @@ Redesign `/login` as conversational swipe onboarding while preserving the existi
 >
 > **권장 실행 순서 (Claude lane, 2026-06-04 결정 — quick-wins·defects before the heavy FRONT-DESIGN-1 sweep):**
 > 1. ~~`FRONT-UX-8`+`FRONT-UX-7` (UX-WRITE-FAIL)~~ — DONE 2026-06-04 (`feature/claude-ux-write-fail`). **다음 → 2. `BACK-OFFICE-1`** (SavedOffice 삭제)
-> — 3. `BACK-PROFILE-1` (external_links 검증) — 4. `FRONT-UX-6`+`9`+`10` (bundle **UX-GALLERY**)
+> — 3. `BACK-PROFILE-1` (external_links 검증) — 4. ~~`FRONT-UX-6`+`9`+`10` UX-GALLERY~~ DONE 2026-06-04
 > — 5. `BACK-RECOMMEND-4` (engine 협업자 조율). `FRONT-DESIGN-1` stays **paused** (multi-session sweep);
 > `FULL-LANGUAGE-1` / `BACK-LLM-2` / `FULL-LEGAL-1` deferred.
 >
 > **1-PR bundles** (group for a single PR; IDs kept distinct for traceability — N never reused):
 > - ~~**UX-WRITE-FAIL** = `FRONT-UX-8` + `FRONT-UX-7`~~ — DONE 2026-06-04 (shared `reportWriteError` toast over `globalToast`; see ## Done).
-> - **UX-GALLERY** = `FRONT-UX-6` + `FRONT-UX-9` + `FRONT-UX-10` — one structural fix (lift the gallery
->   out of `react-tinder-card` into a sibling overlay) resolves all three gesture bugs.
+> - ~~**UX-GALLERY** = `FRONT-UX-6` + `FRONT-UX-9` + `FRONT-UX-10`~~ — DONE 2026-06-04 (재정의: lift 대신 방향잠금 + pan-y + Discovery long-press 제거; see ## Done).
 
 ### X-HIGH
 
 > Critical — confirmed defect against the core taste-match promise or against data
 > correctness, surfaced by the 2026-05-31 swipe / discovery review
 > (`.claude/reviews/2026-05-31-swipe-discovery-review.md`) + the 2026-06-04 backlog audit. Pull before `### HIGH`.
-> **One 1-PR bundle lives here** (UX-WRITE-FAIL shipped 2026-06-04 → ## Done): **UX-GALLERY** = FRONT-UX-6 + FRONT-UX-9 + FRONT-UX-10 (one gallery sibling-overlay lift fixes all three gesture bugs). FRONT-UX-6/10 promoted from MEDIUM (bundle inherits the X-HIGH anchor).
-
-#### BACK-RECOMMEND-4 — Discovery 좋아요가 추천에 안 먹힘
-Discovery right-swipe likes are write-only to the recommendation engine: they land in `UserProfile.liked_building_ids` but nothing reads that field back into Discovery's own ranking or exclusion. A Discovery-only user (never runs a Taste session) gets a permanently random, "cold" feed no matter how many buildings they like — directly violating the core promise ("the app already noticed my taste") on the Discovery surface itself.
-
-Verified 2026-06-04 (`develop@2f9a9c2`; refs re-pinned after FULL-REFACTOR-1 #170-173 moved code — engine untouched, bug UNRESOLVED):
-- `backend/apps/recommendation/engine.py:1869` — `compute_user_taste_vector(profile)` (was line 2352; file now 1977 LOC) reads project liked_ids ONLY (read at L1882); zero `liked_building_ids` hits in engine.py.
-- `backend/apps/recommendation/views/discovery.py:54-73` — `build_exclude_set` reads project liked_ids/disliked_ids/saved_ids only (L55); `liked_building_ids` absent → a Discovery-liked building can REAPPEAR. Second identical copy at L130-149.
-- `backend/apps/accounts/views/profile.py:229-314` — `LikedBuildingsView` (was `accounts/views.py:916-922`, split by #171): `liked_building_ids` written only by `.post` (L290-296), read only by `.get` (L311); field at `models.py:81`, URL at `urls.py:28`.
-- Taste likes (`project.liked_ids`) DO warm Discovery already, so this bug is Discovery-native-likes-only, not a total break.
-
-Fix direction:
-- Feed `UserProfile.liked_building_ids` into BOTH `compute_user_taste_vector` (weighted comparably to project likes) AND the Discovery + board-surprise exclude-sets.
-- Fire `evict_taste(profile.id)` (`caches.py:42`) inside `LikedBuildingsView.post` once the taste vector depends on `liked_building_ids`, else the 5-min cached vector ignores fresh likes.
-- `engine.py` is collaborator-owned per CLAUDE.md `## Rules` — coordinate with the algorithm owner before touching `compute_user_taste_vector`.
-
-Acceptance: a fresh profile that likes N buildings in Discovery (no Taste session) flips `taste_state` cold→warm and stops re-showing already-liked buildings; pytest covering taste-vector inclusion + exclude-set membership; Discovery TTFC not regressed.
-
-#### FRONT-UX-6 — SwipeCard gallery flip 부모 state 동기화 누락  [BUNDLE UX-GALLERY anchor, promoted from MEDIUM 2026-06-04]
-Post-PR #158, `openGallery()` is purely local — it no longer notifies the parent via `onGalleryOpen`. SwipePage's `galleryOpen` stays false. Two regressions: desktop mouse-drag on the gallery face triggers the underlying card swipe (the scroll wrapper stops touch propagation but not mouse), and the gallery cannot be gesture-isolated. The UX-GALLERY bundle fix (lift the gallery out of `react-tinder-card` into a sibling overlay) resolves this plus FRONT-UX-9 (touch-action) and FRONT-UX-10 (long-press) in one structural PR.
-
-Code refs (`develop@2f9a9c2`, 2026-06-04 audit):
-- `frontend/src/components/SwipeCard.jsx:60-63` — `openGallery()` sets only local state; no parent callback.
-- `frontend/src/pages/SwipePage.jsx:657` — passes `onGalleryOpen` that is never invoked.
-- `frontend/src/pages/SwipePage.jsx:653` — `preventSwipe` gates only when `galleryOpen` is true (now `SWIPE_PREVENT_ALL` from `swipeGestureConfig.js`), which never happens.
-- `frontend/src/pages/SwipePage.jsx:404,410` — `galleryOpen` is checked inside the ArrowLeft/ArrowRight keydown branches only; there is NO `Escape` branch (the earlier "ESC handler :399/405" was imprecise). DiscoveryPage reuses SwipeCard with a no-op `onGalleryOpen`.
-
-Root cause (2026-05-31 review F3): react-tinder-card binds NATIVE mousedown/touchstart on its own element (`index.js:183/192`); a React-synthetic `stopPropagation` from the gallery child fires AFTER, so a child cannot fully suppress the parent drag. The sibling-overlay lift is the real fix; the 3-line `onGalleryOpen` restore still leaves a drag-wobble.
-
-Acceptance: ESC closes the gallery on SwipePage; desktop mouse drag on the gallery face does not discard the card; DiscoveryPage unchanged.
-
-#### FRONT-UX-9 — 모바일 갤러리 세로 스크롤 깨짐 (검증 필요)  [BUNDLE UX-GALLERY, needs browser repro]
-Suspected (high-confidence, NOT yet browser-confirmed): the in-card gallery's vertical scroll is dead on mobile because the swipe machinery cancels the native touch scroll. Likely a PR #158 regression — the in-card flip was only just restored from the F5 navigation band-aid, so this surface is freshly re-exposed.
-
-Two converging code mechanisms (`develop@0a0e959`):
-- `frontend/src/components/SwipeCard.jsx:183` sets `touchAction: 'none'` on the card root; the gallery scroll div (`:346-355`) sets no `touch-action` of its own → an ancestor `none` disables pan on descendant scroll containers in WebKit/Blink.
-- `react-tinder-card/index.js:174-176` calls `ev.preventDefault()` on `touchstart` for any element whose `className` lacks `'pressable'`; the gallery scroll div has no such class → the library cancels the scroll gesture.
-
-2026-06-04 audit (`develop@2f9a9c2` — refs still accurate, SwipeCard untouched since #158): an existing partial mitigation already carries touch `stopPropagation` on the gallery scroll div (`SwipeCard.jsx:347-348`), but that React-synthetic stop fires AFTER react-tinder-card's NATIVE touchstart listener (`index.js:183`), so it is likely ineffective — browser repro still required. The real fix is subsumed by the UX-GALLERY sibling-overlay lift (FRONT-UX-6).
-
-VERIFY FIRST: drive a mobile viewport (e.g. 390×844), open a card gallery, attempt a vertical drag-scroll. If broken, fix = `touchAction: 'pan-y'` on the gallery scroll div and/or add the `'pressable'` className escape hatch to it. If NOT reproduced, downgrade or close this entry.
-
-Acceptance: mobile gallery scrolls vertically through all photos; front-face swipe gesture still works.
-
-#### FRONT-UX-10 — Discovery 갤러리 위 long-press 오작동  [BUNDLE UX-GALLERY, promoted from MEDIUM 2026-06-04]
-On the Discovery page (desktop only), press-and-hold (>400ms) over an open card gallery opens the Save-to-Board modal, because the gallery's pointer `stopPropagation` does not stop the separate `mousedown` DiscoveryPage's long-press listener uses. Subsumed by the UX-GALLERY sibling-overlay lift (FRONT-UX-6); interim = add mouse `stopPropagation` to the gallery wrapper and buttons.
-
-Code refs (`develop@2f9a9c2`, 2026-06-04 audit — refs verified accurate):
-- `frontend/src/pages/DiscoveryPage.jsx:316-325` — card-stack `onMouseDown` long-press (400ms) opens `SaveToBoardModal`.
-- `frontend/src/components/SwipeCard.jsx:313-314,390-391` — gallery buttons stop only pointer events; `:347-348` scroll stops only touch events; no mouse handler → desktop-only. Cross-ref 2026-05-31 review F5.
-
-Acceptance: holding the mouse over the Discovery gallery does not open the Save-to-Board modal; long-press still works on the card front face.
+> **Both 1-PR bundles shipped → ## Done** (UX-WRITE-FAIL + UX-GALLERY, 2026-06-04). No bundle remains in X-HIGH; X-HIGH = `BACK-RECOMMEND-4`.
 
 ### HIGH
 
@@ -185,6 +133,8 @@ Likely tests:
 - API smoke: session 2 first response latency should not exceed session 1 beyond one extra `get_pool_embeddings(prior_liked_ids)` batch.
 
 Acceptance: behavior matches chosen option deterministically; session 2 TTFC not regressed beyond session 1 (warm-start should be ≤ or equal); A/B telemetry on session 2 satisfaction (saved_ids growth rate, completion rate) vs status quo.
+
+_(Deferred 2026-06-04 batch scope → 별도 focused 플랜. Premise CONFIRMED post-BACK-RECOMMEND-4: global taste vector는 고쳤으나 같은 Project 2nd 세션은 여전히 cold-start(`session_service.py`가 like_vectors=[] seed, prior taste 안 읽음). algorithm-owner 코어 + frontend progress-bar UX 결정 얽힘 → 단독 처리.)_
 
 #### FULL-LANGUAGE-1 — 한/영 언어 설정 토글 없음
 **Decision (user 2026-05-25)**: language is a user-controlled setting, NOT browser-locale auto-detected. Pattern mirrors the existing theme/font persistence shipped in PR #54 + PR #59. User toggles language in Settings (Korean / English); the choice drives both LLM chat answer language and UI label rendering across the app.
@@ -217,38 +167,6 @@ Acceptance:
 - ≥1 high-traffic UI surface (e.g., TabBar) rendered in both languages off the same string source.
 - No regression in theme/font persistence (same wiring shape).
 
-#### BACK-LLM-2 — 채팅 기록이 다른 기기에서 사라짐
-**Decision (user 2026-05-25)**: chat conversation history must persist to the backend DB, not just to browser `localStorage` as it does today. Cross-device + cross-browser + survives storage clears.
-
-Current state:
-- `LLMSearchPage.jsx:186–205` stores `conversationHistory` in `localStorage` keyed by `storageKey` (Project-scoped). Survives page navigation + browser refresh on the **same browser**, but lost on logout / second device / incognito / cache clear.
-- Resume + Exit UX already shipped: `SwipePage.jsx:122–123` `ExitConfirmPopup` (Exit to New Project / Home / Cancel); chat re-enters with the prior history populated from `localStorage`.
-- Backend has no conversation field today: `Project.raw_query` stores only the first user message; `AnalysisSession` has algorithm state only.
-
-Code audit 2026-05-27 (`develop@3894ffd`):
-- `frontend/src/pages/LLMSearchPage.jsx` stores `messages`, `conversationHistory`, `latestResults`, `latestFilters`, `latestFilterPriority`, `latestVisualDescription`, `latestImageFocus`, `latestRawQuery`, and `showStart` under `archithon_chat_${userId}_${mode}_${projectId || 'new'}`. That key is browser-local and userId/mode/project scoped, but not backend synced.
-- `backend/apps/recommendation/models.py` `Project` has `raw_query` but no `conversation_history`; `AnalysisSession` has no chat fields.
-- `backend/apps/recommendation/views/search.py` validates incoming `conversation_history` and sends it to Gemini, but does not persist it. It already caps history length/text length, so backend persistence should reuse these validation limits or centralize them.
-- `backend/apps/recommendation/views/projects.py` `ProjectDetailView` and `ProjectSerializer` are the natural read surface if history is stored on `Project`. For append/update, a dedicated endpoint is safer than overloading `PATCH /projects/{id}/`, because chat appends need idempotency and ownership checks.
-- `frontend/src/api/projects.js` has `getProject()` and `updateProject()` only; a new `appendConversationTurn(projectId, turn)` or `saveConversation(projectId, history, revision)` API helper is needed.
-
-Implementation outline:
-- Backend — add `Project.conversation_history` JSONField (default `list`) OR a new `ConversationTurn` row table — see open dimension. Migration. Serializer wiring. Endpoint: probably extend `ProjectSerializer` round-trip + a dedicated `POST /api/v1/projects/<id>/conversation/` for append (idempotent on turn-id).
-- Frontend — `LLMSearchPage.jsx` swaps `localStorage` reads for an API fetch on mount; appends to backend on each turn; keep `localStorage` as a write-through cache for offline resume + read-fallback when API is slow.
-
-Open dimensions:
-- **Storage shape** — `Project.conversation_history` JSONField (denormalised, simple, hydrates with project payload) vs `ConversationTurn` table (normalised, paginated, ordered by created_at)?
-- **Per-session vs per-project** — store on `Project` (history accumulates across sessions) or on `AnalysisSession` (each swipe round has its own chat)? `BACK-LLM-1` reverse-Q lives in `parse_query.py` which is called at session-create time, suggesting per-session — but the user-facing chat UI is project-level.
-- **`localStorage` retention** — keep as a write-through cache (offline-tolerant) / delete on first successful backend write (single source of truth) / remove entirely (cleaner)?
-- **Retention policy** — keep forever (audit trail for `BACK-LLM-1` chat refinement) / 30-day TTL / cascade delete with Project?
-- **Migration of existing `localStorage` data** — one-shot backfill on next login (frontend reads localStorage, POSTs to backend, deletes local) vs no backfill (existing in-flight chats stay local until next exit, then lose history)?
-
-Acceptance:
-- Logout + log back in (same or different browser) → conversation history fully re-rendered from backend, including order + structured turn payloads.
-- Probe-turn writes succeed under network slow / retry / partial failure (idempotent append).
-- No regression in current Resume / Exit UX.
-- localStorage cache (if kept) is purged on logout or Project delete to prevent stale cross-user contamination.
-
 #### FRONT-DESIGN-1 — 디자인 시스템 컴포넌트 리워크 (paused)
 Foundation shipped: PR #54 (`tokens.css` 4 themes + `ThemeContext` + `AppearanceSettings`) + PR #59 (theme/font server persistence). Remaining: per-component visual rework (≈ 7,700 LOC) — inline `style={{}}` → CSS Modules + `:hover/:focus`/`:active`, light-theme polish where dark-only assumptions still leak through, leaf→hub component order (small leaf components first, then containers).
 
@@ -264,6 +182,9 @@ Acceptance per slice: `npm run lint` + `npm run build` clean; light + all dark v
 _Note: the Profile-area slice shipped separately as FRONT-PROFILE-HARVEST-1 (#179, 2026-06-04) — net-new component harvest + Instagram-style redesign + first CSS-Module/hook foundation, NOT the named ~646 inline-debt paydown. SwipePage / BoardDetailPage / etc. inline→CSS-Module migration remains the core of THIS item._
 
 ### MEDIUM
+#### BACK-LLM-4 — search.py ParseQueryView byte-cap도 ensure_ascii 부풀림 의심
+BACK-LLM-2(#195) 리뷰 중 발견(미수정, pre-existing). `backend/apps/recommendation/views/search.py` `ParseQueryView.post`의 conversation_history 검증이 BACK-LLM-2 serializer가 고친 것과 동일하게 `json.dumps` 기본 `ensure_ascii=True`로 byte 측정 가능성 → 한글 대화가 한도를 6배 부풀려 거짓 거부. 확인 후 `ensure_ascii=False`+UTF-8 인코딩 측정으로 통일. (`serializers.py:8` 주석이 한도가 ParseQueryView서 'mirror'됐다고 명시.)
+
 
 #### FULL-DISCOVERY-2 — Discovery v3.1+v3.2 라이브 브라우저 검증 (prod 전)
 FULL-DISCOVERY-1(`fc72639`) 머지 후 app-test FULL 미실행(dev 서버 + app-test 에이전트 부재). prod 배포 전 실제 흐름 검증 필요: chunk 버퍼/prefetch≤3, swipe→feedback, 10장 트리거 카드 우=promote→Taste 첫 스와이프 정상·좌=계속, 진행률 바, 재등장 shake, 프로필에 discovery_ 임시보드 노출.
@@ -273,23 +194,6 @@ FULL-DISCOVERY-1(`fc72639`) 머지 후 app-test FULL 미실행(dev 서버 + app-
 
 #### FRONT-PROFILE-1 — 프로필 재설계 브라우저 픽셀 패스 (Codex)
 FRONT-PROFILE-HARVEST-1(#179) 머지 후 Codex 브라우저 수정 (별도 PR). FollowListModal 모바일 bottom-sheet(≤768px, DESIGN.md §8.10) + backdrop opacity 0.6→0.4 + inline onMouseEnter→CSS hover + 4테마 픽셀 검증(github-light 먼저). 원 하베스트 minor (2026-06-04 audit 재확인): EditProfileModal(`components/EditProfileModal.jsx:147-149`, 경로는 components/ 직하 — components/profile/ 아님) 에러박스 하드코딩 rgba→color-mix, ProfileHeader.jsx:126(Share 버튼은 ProfileHeader 소유, ProfileHero 아님) 타인 Share borderRadius:12→var(--radius-md), onMouseEnter→CSS hover, FollowListModal onClose useCallback churn. 드롭됨: "FollowListPage setError(null) 누락" minor → useFollowList 훅(`:23,43`)이 fetch마다 setError(null) 호출하므로 stale 배너 위험 없음(audit 반증).
-
-#### BACK-AUTH-3 — LikedBuildingsView guest 사용자 가드 정책 확인
-PR #157 (`77ffd6e`, 2026-05-29) added `LikedBuildingsView` with `permission_classes = [IsAuthenticated]` only. No `is_guest=False` check. Guest users (post-FULL-LOGIN-REDESIGN-1: `UserProfile.is_guest=True`, no email, no SocialAccount) can freely write to `UserProfile.liked_building_ids` without hitting the Board-4 verify gate, because the gate fires on `ProjectListCreateView.post()` — a different surface.
-
-Two product interpretations possible:
-- **(A) Free for guests (current behavior)** — likes are weightless interactions, no verification needed. Only board creation triggers Google OAuth. This keeps onboarding friction-free and lets guests build up taste signal before deciding to verify.
-- **(B) Gate guest likes** — match the board policy: after N liked buildings, force Google OAuth. Argument: liked_buildings is persistent storage tied to a long-lived user row; PIPA-style data collection should be gated.
-
-Code refs (`develop@6ce7260` post-PR #157):
-- `backend/apps/accounts/views.py` — `LikedBuildingsView` GET + POST; permission_classes line is the only auth gate.
-- `backend/apps/accounts/models.py` — `UserProfile.liked_building_ids` JSONField on the row itself (not a separate FK table).
-- `backend/apps/recommendation/views/projects.py` — `ProjectListCreateView` inline gate as reference precedent: `if request.user.profile.is_guest and Project.objects.filter(user=profile).count() >= 3: return Response({'detail':'verify_required',...}, 403)`.
-
-Decision needed:
-- Product call. If (A), document the intent in the view docstring + close this entry. If (B), add the same inline gate pattern as `ProjectListCreateView` with an appropriate threshold and a `reason='liked_limit_reached'` payload so the frontend `VerifyGateModal` can reuse its existing 403 catcher.
-
-Author yywon1 awaiting decision per PR #157 review comment (`#issuecomment-4583211223`).
 
 #### BACK-PERFORMANCE-5 — Swipe latency 0.7-1.5s 흔들림
 Codex retest 2026-05-26: browser swipe 1.82s/1.75s/1.12s/1.81s; server swipe 1.50s/1.38s/0.746s/1.36s. **PR4 async prefetch consume IS working** — 3rd swipe with cache hit drops to 156ms prefetch stage. But variability is high. Identify which stage causes the 0.7→1.5s spread (DB query latency? embedding cache miss? pgvector?). Aim for swipe p95 ≤1.0s and p50 ≤0.5s on Singapore prod.
@@ -305,42 +209,7 @@ Diagnostic plan:
 - Compare first session after worker boot vs warmed worker. If first swipes are slow and later cache-hit swipes are fast, embedding cache warmup is the likely source.
 - If `select_ms` dominates in analyzing phase, inspect `engine.compute_mmr_next()` vector math and pool size. If `embed_ms` dominates, inspect `get_pool_embeddings()` DB batch and cache-hit ratio.
 
-#### BACK-AUTH-2 — Cache JWT 통합 테스트 hardening
-`apps/accounts/authentication.py:74` cache-hit path skips parent `get_user()`. Current tests are unit-level (CachedJWTAuthentication.get_user direct call). Need integration coverage:
-- [ ] DRF `authenticate()` pipeline end-to-end (request → middleware → cache hit → user resolved → view executes)
-- [ ] `User.save()` post_save signal auto-invalidation (`auth_user` row mutation → cache.delete fires)
-- [ ] `is_active=False` user → cache hit on stale entry must NOT return 200; either auto-invalidate before hit or re-check `is_active` on cached user
-- [x] cross-instance: ALREADY covered by `test_cross_instance_cache_hit` (test #9) — 2026-06-04 audit. Remaining real gaps = the DRF-pipeline + is_active stale-cache tests above.
-
-Code audit 2026-05-27 (`develop@3894ffd`):
-- `backend/apps/accounts/authentication.py` cache-hit branch returns `cached_user` directly. It relies on token validation having already happened and on cache invalidation for user-state changes.
-- `backend/apps/accounts/signals.py` invalidates on `post_save` and `post_delete` for `User`. This covers admin `.save()` but not `User.objects.filter(...).update(...)`; the docstring calls this out.
-- `backend/tests/test_jwt_cache.py` patches cache methods and calls `CachedJWTAuthentication.get_user()` directly with mocked tokens/users. It does not prove the full DRF request pipeline, SimpleJWT token validation, or real cache serialization.
-- `backend/apps/social/models.py` intentionally uses queryset `.update()` for counter caches; that is not auth-relevant. A future auth-relevant bulk update would need explicit `invalidate_user_cache()`.
-
-Implementation map:
-- Add integration tests around a tiny authenticated endpoint such as `/api/v1/auth/me/` or a protected test view. Populate cache via first request, mutate `auth_user.is_active`, then assert the next request is rejected after signal invalidation.
-- Add a stale-cache negative test by manually `cache.set(_user_cache_key(user.id), user)` after setting `user.is_active=False`; decide whether code should re-check `cached_user.is_active` or rely strictly on invalidation. This clarifies the security posture.
-- Cross-instance can be simulated by two `CachedJWTAuthentication()` objects with the same Django cache backend; Redis-specific behavior belongs in cache backend tests if local Redis is available.
-
-Codex retest 2026-05-26 flagged as P3 hardening. Not a blocker — security-manager PASS'd PR #133 — but defense-in-depth for any future cache-key drift or signal-wiring regression.
-
-#### INFRA-DB-2 — test DB role permissions for CREATE DATABASE
-Codex retest 2026-05-26 — Full `test_imp8_async_prefetch.py` blocked at DB setup because `make_web_app` role has no CREATE DATABASE permission. `test_user_data` DB creation fails. Options:
-- (a) operator runs migrate / test-DB-provision with `DB_USER=neondb_owner` swap pre-pytest
-- (b) test conftest uses a dedicated `make_web_test` role with `CREATEDB` grant on Neon
-- (c) `pytest-django --reuse-db` against a pre-provisioned `test_user_data` DB
-
-Choose one + document in CONTRIBUTING.md / backend/.env.example. Currently the test-DB gap means some integration tests can only run with a manual role swap.
-
-Code audit 2026-05-27 (`develop@3894ffd`):
-- `backend/config/settings.py` defines PostgreSQL `default` and `buildings` from env vars at import time. Runtime role guidance in `backend/.env.example` says local/prod should use `make_web_app` for `user_data`; that role deliberately has `NOCREATEDB`.
-- `backend/conftest.py` tries to route pytest DB work to in-memory SQLite via `django_db_modify_db_settings()` and mirrors `buildings` to `default`. App-local conftests (`backend/apps/*/tests/conftest.py`) duplicate only part of that setup and may be invoked differently when running sub-suites.
-- The practical failure mode is pytest-django trying to create a test DB from the Neon `DB_NAME` using `make_web_app`, which fails before tests can run. This is infra/test-runner config, not app correctness.
-
-Decision needed:
-- Preferred path for local/Claude testability is either a dedicated `make_web_test CREATEDB` role on `local-dev-2`, or a documented `--reuse-db` workflow against a pre-provisioned `test_user_data`. Using `neondb_owner` for every pytest run works but weakens the role-separation habit.
-- Any chosen path should be encoded in `CONTRIBUTING.md`, `backend/.env.example`, and the Claude test instructions so future agents do not rediscover the same permission wall.
+_(Deferred 2026-06-04 batch scope → 계측 먼저. Variance CONFIRMED(per-worker in-process embedding 캐시 cold-miss 50-200ms + KMeans 재계산)나 ~tens-daily-users 규모서 cold-miss는 주로 배포직후 일시적; Redis-migration은 조회마다 RTT 추가 + premature 가능. prod hit-rate/지배 원인 계측 후 결정.)_
 
 #### FRONT-LAYOUT-1 — Desktop wide-screen 레이아웃 어색함
 Current viewport-lock layout is mobile-first. Detail pages on desktop work but unoptimised. Low priority — desktop is secondary.
@@ -382,10 +251,14 @@ Monitoring map:
 - Track Neon active connections during swipe bursts and Railway worker/thread counts. If peak >8-10 at current traffic, promote this from MEDIUM risk to HIGH infra work.
 - If slow swipes correlate with connection pressure, evaluate a bounded executor or queue instead of unbounded per-swipe `threading.Thread`.
 
+_(Re-scoped 2026-06-04 batch scope: premise OVERSTATED — 연결 누수 없음(prefetch thread 0 conn, telemetry thread finally서 close). 실위험 = 고동시성 peak(>12-15 conn)뿐, 현 규모 무관. Neon active_connections 모니터, 코드 변경 無.)_
+
 #### INFRA-DB-3 — Unverified guest row 누적 정리 (conditional)
 Guest 계정(FULL-LOGIN-REDESIGN-1 #154/#155)은 정리 로직 없음 (user Q5 결정). `/auth/guest/` throttle 3/min/IP이나 IP 로테이션 botnet은 row 증가 가능 → 조건부 모니터링 항목.
 
 Detail: Monitor Neon `auth_user WHERE email = '' AND is_active = True` row count weekly. If growth > 500 rows/week sustained, open this and implement a Django management command `delete unverified WHERE last_active < 30 days AND swipe_count == 0` + cron/Railway scheduled job.
+
+_(Deferred 2026-06-04 batch scope: premise FALSIFIED — cleanup 기준 필드 `last_active`/`swipe_count`가 UserProfile에 없음(created_at/updated_at만) → 작성된 정책 실행불가. 게다가 파괴적 DELETE + 급격 증가 미확인. 모니터링 + schema/JOIN-proxy 후 재검토.)_
 
 ### LOW
 
@@ -470,7 +343,38 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 
 ---
 
+_(Deferred 2026-06-04 batch scope: YAGNI — product-미소비 telemetry 1필드 위해 Celery+worker 도입은 과투자. 2번째 background job 생기면 단일 INFRA-JOBS 티켓으로 묶어 처리.)_
+
 ## Done
+### BACK-AUTH-3 — guest like-gate @50 + frontend verify 배선 — RESOLVED 2026-06-04 (`feature/claude-auth-batch` → develop, #193)
+`LikedBuildingsView.post`가 guest 무제한 like 허용하던 것 → 50개서 verify-gate(403 `verify_required`/`liked_limit_reached`, board-gate precedent mirror). frontend `addLikedBuilding`가 403 intercept → `archithon:verify-required` dispatch + `VerifyRequiredError` throw(`createProject` 패턴); DiscoveryPage catch가 VerifyRequiredError 시 generic 토스트 skip. Codex #193: 51st like 유실 → `archithon:pending-like`로 bldId 저장 후 promote(onPromoted)에서 addLikedBuilding retry(pendingBoardCreate 패턴). guest-scenario 테스트 4.
+
+### BACK-AUTH-2 — JWT user-row cache 통합 테스트 — RESOLVED 2026-06-04 (`feature/claude-auth-batch` → develop, #193)
+기존 unit-level만이던 JWT 캐시 테스트에 DRF 파이프라인 통합 테스트 5 추가(`test_jwt_cache_integration.py`): cache-hit, **is_active=False stale-cache 거부**(signal invalidation), post_save invalidation, logout, refresh-rotation invalidation. prod 코드 무변경. is_active bulk `.update()` 우회는 기존 문서화된 known limitation(코드에 그 경로 없음).
+
+### BACK-LLM-2 — 채팅기록 backend 영속화 (cross-device) — RESOLVED 2026-06-04 (`feature/claude-llm-chat-persist` → develop, #195)
+채팅기록이 localStorage-only라 기기간 유실 → `Project.conversation_history` JSONField(migration 0022, #194 0021_tagaxisweight 충돌로 renumber). 기존 PATCH 재사용(신규 endpoint 無). detail-read/PATCH-write 검증(dict, ≤64KB **UTF-8** ensure_ascii=False, messages≤60/history≤10/text≤2000), list서 제외+defer. frontend hydration(backend=source of truth)+debounced byte-bounded save+logout/delete purge. Codex 3 must-fix 수정: **비-owner 프라이버시 strip**(public 보드서 남 채팅 노출), UTF-8 byte-cap(한글), hydration-실패 stale-overwrite 방지. follow-up [[BACK-LLM-4]].
+
+### INFRA-DB-2 — make test-local (로컬 pytest unblock) — RESOLVED 2026-06-04 (`feature/claude-test-local` → develop, #197)
+runtime `make_web_app`가 CREATEDB 없어 로컬 pytest가 'permission denied to create database'로 차단(conftest SQLite override는 자체 docstring상 not-load-bearing). `make test-local` 추가 — `migrate-local` idiom(read -s neondb_owner pw, inline DB_USER override로 DB_HOST는 LOCAL 유지), CI-shape real-PG+pgvector 실행. Neon 콘솔 작업 불필요. CLAUDE.md 문서화.
+
+
+### UX-GALLERY — 갤러리 제스처 3버그 (FRONT-UX-6/9/10) — RESOLVED 2026-06-04 (`feature/claude-ux-gallery` → develop)
+갤러리 3버그(부모-sync wobble·모바일 세로스크롤·Discovery long-press 오작동)를 **lift 없이** 해결. 원 premise(sibling-overlay lift)를 유저 product 재검토로 재정의 — 갤러리 보면서도 스와이프 유지 + 순수 Discovery. session 브라우저 spike로 "3D가 스크롤 안 깸"(원인은 touch-action·snap, 3D 아님) 확정 후 구현.
+- [x] **방향잠금 + 갤러리 스크롤**: SwipeCard card root `touch-action:none→pan-y`(세로=브라우저 pan·카드 안흔들림, 가로=스와이프) + 갤러리 scroll div/이미지/img `pressable`(react-tinder-card preventDefault 스킵) + 갤러리 `touch-action:pan-y`. rotateY flip 유지.
+- [x] **Discovery long-press 제거**(FRONT-UX-10): 400ms 보드저장 제스처 -91줄 삭제 → 순수 스와이프. 우-스와이프 like + Surprise 모달 유지.
+- [x] **cleanup**(FRONT-UX-6 obsolete): SwipePage 죽은 galleryOpen/preventSwipe-ALL/ESC 제거(suppress 안 함 — 스와이프 유지 의도).
+- [x] **Codex #191 HIGH 수정 — native direction-lock**: `touch-action:pan-y`만으론 부족 — react-tinder-card가 카드 엘리먼트에 native touchmove(index.js:244, bubble) 바인딩, React synthetic `stopPropagation`은 native 리스너 못 막음 → 세로 드래그 wobble·touchcancel 미처리 카드 고착·대각선 스와이프 오발. SwipeCard 갤러리 scroll div에 native touchstart/touchmove 리스너(8px slop axis-lock, 세로 확정 시 `e.stopPropagation()`; passive·preventDefault 안 함 → 브라우저 pan-y 스크롤 그대로) 추가 + 쓸모없던 React synthetic stopPropagation 2개 제거. bubble 순서상 갤러리 리스너가 카드보다 먼저 발화 → 세로=카드 handleMove 차단, 가로=전파(스와이프 유지).
+- 게이트: lint/build PASS, code-review PASS(4영역 무결). session spike GO(3D 스크롤 viable + 레시피 라이브 검증). **native 모바일 터치(손가락 스크롤·방향잠금·sloppy boundary)는 Codex 실모바일 최종확인**(Playwright 데스크톱=native 터치 부정확).
+- 재정의: A(lift) 탈락(갤러리중 스와이프 유지와 충돌). premise=hypothesis([[feedback_taskmd_premise_verification]]), product 재검토로 교체.
+### BACK-RECOMMEND-4 — Discovery 좋아요가 추천에 반영 (taste vector + exclude + evict) — RESOLVED 2026-06-04 (`feature/claude-back-recommend-4` → develop)
+Discovery 우-스와이프 like(`UserProfile.liked_building_ids`)가 추천 엔진에 안 먹히던 것 해결 — Discovery-only 유저가 영구 cold/random feed였던 core-promise 위반 수정. 3곳 주입, 전부 기존 infra 재사용.
+- [x] **taste vector**(`engine.py compute_user_taste_vector`): Project.liked_ids 루프 뒤 `reversed(liked_building_ids)` append(intensity 1.0). recent-50 cap·dedupe·weighted-mean 무변경, 추가 쿼리 0(profile 인자). minimal·additive.
+- [x] **exclude-set**(`discovery.py` DiscoveryFeedView + BoardSurpriseView): `liked_building_ids`를 exclude 합집합에 추가 → 이미 like한 빌딩 재등장 안 함.
+- [x] **evict**(`accounts/views/profile.py LikedBuildingsView.post`): 실-write 시 `evict_taste`+`evict_discovery_feed`(caches.py:42/155) 로컬-import 호출(순환 회피).
+- [x] 테스트 7개(`test_back_recommend_4.py`): **zero-Project-likes fresh profile** cold→warm(discriminating), truly-cold None, DiscoveryFeed+BoardSurprise exclude(warm/cold), evict-on-write, evict-suppress-on-dup.
+- 게이트: `manage.py check` PASS, flake8 clean(2 pre-existing E221 무관), code-review PASS(5영역: dedupe·exclude·evict-placement·test-discriminating·TTFC 무회귀). 로컬 pytest INFRA-DB-1 차단 → **CI가 실게이트**. app-test 스킵(추천 로직, swipe-lifecycle 무변경, 단위테스트가 정밀 커버). algorithm.md annotate.
+- ⚠️ recency 회귀(오너 결정): Project 40+Discovery 60 유저 → `[-50:]`가 Discovery 50개만 → Taste 프로필 탈락. 이번 minimal-additive로 두고 PR에 명시 — 오너가 source별 recent-N 병합 채택 여부 결정.
 
 ### FULL-DISCOVERY-1 — Discovery 탭 v3.1+v3.2 재설계 (10장 청크 + 3-Tier + Draft Board → Taste 퍼널) — RESOLVED 2026-06-04 (`fc72639-pre-squash`)
 레거시 global-centroid + 커서 무한스크롤 폐기 → 10장 chunk prefetch + 다중 centroid + 40:60 Local/Global FPS + Deferred Exclusion(dislike zone) + 3-Tier 라이프사이클(0/100·20/80·40/60) + 세션별 Draft Board → Taste 퍼널로 전면 교체. 신규 마이그레이션 0건(Project 재사용), `engine.py` 미수정(신규 `discovery_feed.py` 모듈로 compose, 알고리즘 소유권 준수).
