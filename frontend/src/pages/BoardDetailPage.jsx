@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useBoard } from '../hooks/useBoard.js'
-import { updateProject, generateReportImage } from '../api/projects.js'
+import { updateProject } from '../api/projects.js'
 import { reactToProject, unreactToProject } from '../api/social.js'
 import BuildingTile from './boardDetail/BuildingTile'
 import RecommendedTile from './boardDetail/RecommendedTile'
@@ -161,10 +161,6 @@ export default function BoardDetailPage() {
   const [editName, setEditName] = useState('')
   const [nameSaving, setNameSaving] = useState(false)
   const [shareCopied, setShareCopied] = useState(false)
-  const [showReport, setShowReport] = useState(false)
-  const [reportImage, setReportImage] = useState(null)
-  const [imgGenLoading, setImgGenLoading] = useState(false)
-  const reportRef = useRef(null)
   const nameInputRef = useRef(null)
   const [isEditMode, setIsEditMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState(new Set())
@@ -180,7 +176,6 @@ export default function BoardDetailPage() {
     setReactionError(null)
     setLocalName(board.name || '')
     setLocalBuildings(board.buildings || [])
-    setReportImage(board.report_image || null)
     // Seed from board data, then apply any pending bookmark signal
     const base = (board.saved_ids || []).map(item => item?.id || item).filter(Boolean)
     const signal = bookmarkSignalRef.current
@@ -227,19 +222,6 @@ export default function BoardDetailPage() {
       setReactionError(err.message || 'Failed to update reaction.')
     } finally {
       setIsReactionPending(false)
-    }
-  }
-
-  async function handleGenerateImage() {
-    if (imgGenLoading || !board?.board_id) return
-    setImgGenLoading(true)
-    try {
-      const res = await generateReportImage(board.board_id)
-      if (res?.image_data) setReportImage(res.image_data)
-    } catch {
-      /* silent — user can retry */
-    } finally {
-      setImgGenLoading(false)
     }
   }
 
@@ -736,10 +718,7 @@ export default function BoardDetailPage() {
         )}
         {board?.final_report && (
           <button
-            onClick={() => {
-              setShowReport(prev => !prev)
-              if (!showReport) setTimeout(() => reportRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
-            }}
+            onClick={() => navigate(`/board/${board.board_id}/report`)}
             style={{
               width: '100%',
               maxWidth: 320,
@@ -766,7 +745,7 @@ export default function BoardDetailPage() {
               <line x1="16" y1="17" x2="8" y2="17"/>
               <polyline points="10 9 9 9 8 9"/>
             </svg>
-            <span>{showReport ? '리포트 닫기' : '페르소나 리포트 보기'}</span>
+            <span>페르소나 리포트 보기</span>
           </button>
         )}
       </div>
@@ -779,126 +758,6 @@ export default function BoardDetailPage() {
           textAlign: 'center',
         }}>
           {reactionError}
-        </div>
-      )}
-
-      {/* Persona Report section — only when final_report exists and showReport toggled on */}
-      {board?.final_report && showReport && (
-        <div ref={reportRef} style={{ maxWidth: 1100, margin: '0 auto', padding: '0 20px 28px' }}>
-          <div style={{
-            borderRadius: 16,
-            border: '1px solid var(--color-border-soft)',
-            background: 'var(--color-surface)',
-            padding: '20px',
-            position: 'relative',
-            overflow: 'hidden',
-          }}>
-            <div style={{
-              position: 'absolute', inset: 0,
-              background: 'radial-gradient(circle at 0% 0%, rgba(236,72,153,0.07), transparent 60%)',
-              pointerEvents: 'none',
-            }} />
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{
-                  color: 'var(--color-text-muted)',
-                  fontSize: 11, fontWeight: 800,
-                  letterSpacing: '0.1em', textTransform: 'uppercase',
-                  margin: '0 0 6px',
-                }}>
-                  Persona Report
-                </p>
-                <h3 style={{
-                  color: 'var(--color-text)',
-                  fontSize: 20, fontWeight: 800,
-                  margin: '0 0 6px', lineHeight: 1.1,
-                }}>
-                  {board.final_report.persona_type}
-                </h3>
-                <p style={{
-                  color: '#ec4899',
-                  fontSize: 13, fontWeight: 600,
-                  margin: '0 0 10px', lineHeight: 1.45,
-                }}>
-                  {board.final_report.one_liner}
-                </p>
-                {board.final_report.description && (
-                  <p style={{
-                    color: 'var(--color-text-dim)',
-                    fontSize: 13, lineHeight: 1.6,
-                    margin: '0 0 14px',
-                  }}>
-                    {board.final_report.description}
-                  </p>
-                )}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {(board.final_report.dominant_programs || []).map(tag => (
-                    <span key={tag} style={{
-                      padding: '4px 10px', borderRadius: 999,
-                      background: 'rgba(236,72,153,0.1)',
-                      border: '1px solid rgba(236,72,153,0.22)',
-                      color: '#ec4899',
-                      fontSize: 11, fontWeight: 700,
-                    }}>{tag}</span>
-                  ))}
-                  {(board.final_report.dominant_styles || []).map(tag => (
-                    <span key={tag} style={{
-                      padding: '4px 10px', borderRadius: 999,
-                      background: 'rgba(99,102,241,0.1)',
-                      border: '1px solid rgba(99,102,241,0.22)',
-                      color: 'var(--color-text-dim)',
-                      fontSize: 11, fontWeight: 700,
-                    }}>{tag}</span>
-                  ))}
-                  {(board.final_report.dominant_materials || []).map(tag => (
-                    <span key={tag} style={{
-                      padding: '4px 10px', borderRadius: 999,
-                      background: 'rgba(255,255,255,0.06)',
-                      border: '1px solid var(--color-border-soft)',
-                      color: 'var(--color-text-dim)',
-                      fontSize: 11, fontWeight: 700,
-                    }}>{tag}</span>
-                  ))}
-                </div>
-              </div>
-              <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-                {reportImage ? (
-                  <img
-                    src={`data:image/png;base64,${reportImage}`}
-                    alt="Persona"
-                    style={{ width: 80, height: 80, borderRadius: 12, objectFit: 'cover' }}
-                  />
-                ) : (
-                  <div style={{
-                    width: 80, height: 80, borderRadius: 12,
-                    background: 'var(--color-surface-2)',
-                    border: '1px dashed var(--color-border-soft)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}>
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
-                      <polyline points="21 15 16 10 5 21"/>
-                    </svg>
-                  </div>
-                )}
-                <button
-                  type="button"
-                  onClick={handleGenerateImage}
-                  disabled={imgGenLoading}
-                  style={{
-                    padding: '5px 10px', borderRadius: 8,
-                    background: imgGenLoading ? 'var(--color-surface-2)' : 'linear-gradient(135deg, #ec4899, #f43f5e)',
-                    color: imgGenLoading ? 'var(--color-text-muted)' : '#fff',
-                    border: 'none', fontSize: 11, fontWeight: 700,
-                    cursor: imgGenLoading ? 'default' : 'pointer',
-                    fontFamily: 'inherit', whiteSpace: 'nowrap',
-                  }}
-                >
-                  {imgGenLoading ? '생성 중…' : reportImage ? '재생성' : '이미지 생성'}
-                </button>
-              </div>
-            </div>
-          </div>
         </div>
       )}
 
