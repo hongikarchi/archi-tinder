@@ -18,7 +18,7 @@ import FollowListPage from './pages/userProfile/FollowListPage.jsx'
 import ArchitectProfilePage from './pages/ArchitectProfilePage.jsx'
 import * as api from './api/client.js'
 import { createProject } from './api/projects.js'
-import { normalizeFilters, classifySwipeError, isActionCard, extractLikedIds, extractSavedIds } from './utils/appHelpers.js'
+import { normalizeFilters, classifySwipeError, isActionCard, extractLikedIds, extractSavedIds, purgeChatCache } from './utils/appHelpers.js'
 import { reportWriteError } from './utils/reportWriteError.js'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import LLMSearchUpdateWrapper from './components/LLMSearchUpdateWrapper.jsx'
@@ -681,6 +681,8 @@ export default function App() {
     loggingOut.current = true
     const refresh = localStorage.getItem('archithon_refresh')
     api.logout(refresh)   // blacklists refresh token, clears JWT from localStorage
+    // Purge ALL archithon_chat_* keys so stale chat doesn't surface on a shared device.
+    purgeChatCache()
     sessionStorage.removeItem('archithon_user')
     setUserId(null)
     setProjects([])
