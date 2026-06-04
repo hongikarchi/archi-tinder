@@ -350,5 +350,6 @@
   "web-testing/runner/collector.py": "테스트 실행 데이터 수집기",
   "web-testing/runner/feedback.py": "구조화 피드백 생성기",
   "web-testing/runner/reporter.py": "테스트 리포트 생성기",
-  "web-testing/runner/runner.py": "Playwright E2E 실행 오케스트레이션"
+  "web-testing/runner/runner.py": "Playwright E2E 실행 오케스트레이션",
+  "docs/prd/archibe-business-model.html": "archibe 비즈니스 모델 PRD (정적 HTML)"
 }
