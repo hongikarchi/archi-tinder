@@ -161,6 +161,7 @@ class ProjectSerializer(serializers.ModelSerializer):
             'raw_query',
             'analysis_report',
             'final_report',
+            'axis_scores',
             'report_image',
             'report_image_mime',
             'conversation_history',
@@ -177,6 +178,7 @@ class ProjectSerializer(serializers.ModelSerializer):
             'reaction_count',
             'analysis_report',
             'final_report',
+            'axis_scores',
             'report_image',
             'report_image_mime',
             'raw_query',
@@ -191,7 +193,7 @@ class ProjectSerializer(serializers.ModelSerializer):
         # `disliked_ids` intentionally excluded — never serialized to any caller
 
 
-_LIST_EXCLUDE_FIELDS = {'analysis_report', 'conversation_history'}
+_LIST_EXCLUDE_FIELDS = {'analysis_report', 'conversation_history', 'axis_scores'}
 
 
 class ProjectListSerializer(ProjectSerializer):

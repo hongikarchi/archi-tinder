@@ -48,7 +48,8 @@ class ProjectReportGenerateView(APIView):
         axis_scores = compute_axis_scores(liked_id_strings)
 
         project.final_report = report
-        project.save(update_fields=['final_report'])
+        project.axis_scores = axis_scores
+        project.save(update_fields=['final_report', 'axis_scores'])
         evict_projects_list(profile.id)
         evict_project_detail(str(pk))
         logger.info('Persona report generated for project %s', pk)

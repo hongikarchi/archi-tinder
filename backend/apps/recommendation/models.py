@@ -22,6 +22,7 @@ class Project(models.Model):
     final_report    = models.JSONField(null=True, blank=True)
     report_image      = models.TextField(null=True, blank=True)   # base64 image data
     report_image_mime = models.CharField(max_length=32, null=True, blank=True)
+    axis_scores       = models.JSONField(null=True, blank=True)   # 5-axis radar/spectrum scores
     created_at      = models.DateTimeField(auto_now_add=True)
     updated_at      = models.DateTimeField(auto_now=True)
 

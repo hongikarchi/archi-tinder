@@ -75,7 +75,7 @@ class ProjectListCreateView(APIView):
                         .select_related('user__user')
                         # PERF-1 change C: heavy LLM JSON not consumed by list view.
                         # BACK-LLM-2: conversation_history can be up to 64 KB — defer it too.
-                        .defer('analysis_report', 'conversation_history')
+                        .defer('analysis_report', 'conversation_history', 'axis_scores')
                         .annotate(
                             _latest_session_id=_latest_sid_sq,
                             _latest_like_count=_latest_lc_sq,
@@ -277,7 +277,7 @@ class UserProjectsListView(APIView):
             .select_related('user__user')
             # PERF-1 change C: heavy LLM JSON not consumed by list view.
             # BACK-LLM-2: conversation_history can be up to 64 KB — defer it too.
-            .defer('analysis_report', 'conversation_history')
+            .defer('analysis_report', 'conversation_history', 'axis_scores')
             .annotate(
                 _latest_session_id=_latest_sid_sq,
                 _latest_like_count=_latest_lc_sq,
