@@ -78,8 +78,10 @@ class TestRerankMetadataShape:
         )
         monkeypatch.setattr(services, '_get_client', lambda: fake_client)
 
-        # _retry_gemini_call must call func() so the client mock gets exercised
-        monkeypatch.setattr(services, '_retry_gemini_call', lambda func, *a, **kw: func())
+        # _retry_gemini_call must forward args so the client mock gets exercised
+        # with the real contents/config (mirrors the real wrapper, which calls
+        # func(*args, **kwargs) -- a bare func() drops the contents kwarg).
+        monkeypatch.setattr(services, '_retry_gemini_call', lambda func, *a, **kw: func(*a, **kw))
 
         services.rerank_candidates(candidates, 'some liked summary')
 

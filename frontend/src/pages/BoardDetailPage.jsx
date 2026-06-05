@@ -847,7 +847,7 @@ export default function BoardDetailPage() {
               </div>
               {board.report_image && (
                 <img
-                  src={`data:${board.report_image_mime || 'image/webp'};base64,${board.report_image}`}
+                  src={`data:${board.report_image_mime || 'image/png'};base64,${board.report_image}`}
                   alt="Persona"
                   style={{ width: 80, height: 80, borderRadius: 12, objectFit: 'cover', flexShrink: 0 }}
                 />

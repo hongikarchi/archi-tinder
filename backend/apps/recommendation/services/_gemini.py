@@ -160,11 +160,21 @@ def generate_content_with_fallback(client, *, timeout=15.0, **kw):
     caller's timing block, config, and telemetry keep working as before.
 
     Returns the raw response object (same as _retry_gemini_call).
+
+    NOTE: the retry is invoked through the services-package facade
+    (_svc._retry_gemini_call), NOT the local name, on purpose. Existing tests
+    patch 'apps.recommendation.services._retry_gemini_call' (the facade
+    re-export). The facade binding and this module's local binding are DIFFERENT
+    objects (FULL-REFACTOR-1 lesson: re-export preserves import, not mock.patch
+    of a function name). Routing through the facade keeps every existing
+    _retry_gemini_call mock seam live, exactly as the pre-wrapper direct call
+    sites did.
     """
+    from apps.recommendation import services as _svc
     primary = settings.GEMINI_TEXT_MODEL
     fb = settings.GEMINI_TEXT_MODEL_FALLBACK
     try:
-        return _retry_gemini_call(
+        return _svc._retry_gemini_call(
             client.models.generate_content,
             model=primary,
             timeout=timeout,
@@ -176,7 +186,7 @@ def generate_content_with_fallback(client, *, timeout=15.0, **kw):
                 'text model %s rejected (%s); fallback -> %s',
                 primary, type(e).__name__, fb,
             )
-            return _retry_gemini_call(
+            return _svc._retry_gemini_call(
                 client.models.generate_content,
                 model=fb,
                 timeout=timeout,
