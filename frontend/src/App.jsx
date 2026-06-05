@@ -9,6 +9,7 @@ import LoginPage from './pages/LoginPage.jsx'
 import UserProfilePage from './pages/UserProfilePage.jsx'
 import FirmProfilePage from './pages/FirmProfilePage.jsx'
 import BoardDetailPage from './pages/BoardDetailPage.jsx'
+import BoardReportPage from './pages/BoardReportPage.jsx'
 import ResultsPage from './pages/ResultsPage.jsx'
 import BuildingDetailPage from './pages/BuildingDetailPage.jsx'
 import DiscoveryPage from './pages/DiscoveryPage.jsx'
@@ -873,6 +874,7 @@ export default function App() {
           <Route path="result/:sessionId" element={<ResultsPage projects={projects} setProjects={setProjects} />} />
           <Route path="buildings/:buildingId" element={<BuildingDetailPage />} />
           <Route path="board/:boardId" element={<BoardDetailPage />} />
+          <Route path="board/:boardId/report" element={<BoardReportPage />} />
           <Route path="liked-projects" element={<LikedProjectsPage />} />
           <Route path="architects/:architectId" element={<ArchitectProfilePage />} />
         </Route>
