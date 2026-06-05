@@ -22,7 +22,7 @@ import logging
 import numpy as np
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connections, transaction
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
@@ -231,6 +231,19 @@ def handle_bookmark(request, profile, project_id):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    # --- Validate building exists and is publishable (save path only) ---
+    # unsave must always succeed so a later-unpublished building can be removed
+    # from saved_ids (gating it would trap the id forever).
+    if action == 'save':
+        with connections['buildings'].cursor() as cur:
+            cur.execute(
+                'SELECT 1 FROM canonical_v2_buildings'
+                ' WHERE canonical_bld_id = %s AND is_publishable = true',
+                [card_id],
+            )
+            if not cur.fetchone():
+                return Response({'detail': 'building not found'}, status=status.HTTP_404_NOT_FOUND)
+
     # --- Toggle saved_ids (atomic read-modify-write to prevent lost updates) ---
     with transaction.atomic():
         try:
@@ -420,6 +433,17 @@ def handle_swipe_normal(
 
     def _mark(step):
         _timing_marks[step] = round((_time.perf_counter() - _t_start) * 1000, 2)
+
+    # Validate building exists and is publishable before acquiring the row lock.
+    if canonical_bld_id:
+        with connections['buildings'].cursor() as cur:
+            cur.execute(
+                'SELECT 1 FROM canonical_v2_buildings'
+                ' WHERE canonical_bld_id = %s AND is_publishable = true',
+                [canonical_bld_id],
+            )
+            if not cur.fetchone():
+                return Response({'detail': 'building not found'}, status=status.HTTP_404_NOT_FOUND)
 
     with transaction.atomic():
         # Lock session row to prevent concurrent swipe corruption
