@@ -49,6 +49,7 @@ def _async_prefetch_thread(
     session_id, cache_round, phase,
     pool_ids_snap, exposed_ids_snap, pool_embeddings_snap,
     like_vectors_snap, initial_batch_snap, current_round_snap,
+    question_bias_vector_snap=None,
 ):
     """IMP-8 (Spec v1.6 §11.1): background thread to compute prefetch cards
     after primary swipe response returns. Result cached for the NEXT swipe's
@@ -104,7 +105,8 @@ def _async_prefetch_thread(
         elif phase == 'analyzing':
             pf_bid = engine.compute_mmr_next(
                 pool_ids_snap, exposed_ids_snap, pool_embeddings_snap,
-                like_vectors_snap, current_round_snap + 2
+                like_vectors_snap, current_round_snap + 2,
+                question_bias_vector=question_bias_vector_snap,
             )
 
         # Compute prefetch_card_2_id (T+1 swipe's prefetch_2 slot, i.e. round+3
@@ -127,7 +129,8 @@ def _async_prefetch_thread(
             elif phase == 'analyzing':
                 pf2_bid = engine.compute_mmr_next(
                     pool_ids_snap, temp_exposed, pool_embeddings_snap,
-                    like_vectors_snap, current_round_snap + 3
+                    like_vectors_snap, current_round_snap + 3,
+                    question_bias_vector=question_bias_vector_snap,
                 )
 
         result = {
@@ -307,6 +310,7 @@ class SwipeView(APIView):
         _pool_escalation_fired = result['_pool_escalation_fired']
         _timing_marks         = result['_timing_marks']
         question_trigger      = result['question_trigger']
+        saved_question_bias_vector = result.get('saved_question_bias_vector')
 
         import time as _time
         _t_start = result['_t_start']
@@ -396,6 +400,7 @@ class SwipeView(APIView):
                     saved_like_vectors,
                     saved_initial_batch,
                     saved_current_round,
+                    saved_question_bias_vector,
                 ),
                 daemon=True,
             )
@@ -407,6 +412,7 @@ class SwipeView(APIView):
             pf_bid, pf2_bid = compute_sync_prefetch(
                 saved_phase, saved_exposed_ids, saved_initial_batch, saved_current_round,
                 saved_pool_ids, saved_pool_embeddings, saved_like_vectors,
+                saved_question_bias_vector=saved_question_bias_vector,
             )
 
             # ── Phase 2: single batch DB call (1 RTT for next + pf + pf2) ────
@@ -477,15 +483,29 @@ class QuestionResponseView(APIView):
     POST /api/v1/analysis/sessions/<uuid:session_id>/question-responses/
 
     Record the user's answer to a question card (type: refine | refresh).
-    Resets cooldown and consecutive-dislike counter. Emits a tag_answer SessionEvent.
+    Applies soft-vector bias to future recommendations (ALGO-QCARD Phase 1).
+    Emits a tag_answer SessionEvent.
 
     Request body:
         question_type:   "refine" | "refresh"
         axis:            str | null   (axis name for refine; null for refresh)
+        keyword:         str | null   (dominant tag echoed from question_trigger)
         selected_option: "A" | "B" | "skip"
+            A = Yes (right swipe / agree)
+            B = No  (left swipe / disagree)
 
-    Response 200:
-        { "accepted": true }
+    Response 200 (skip):
+        { "accepted": true, "flush_prefetch": false }
+
+    Response 200 (A or B):
+        {
+          "accepted": true,
+          "flush_prefetch": true,
+          "next_image": <ImageCard | null>,
+          "prefetch_image": <ImageCard | null>,
+          "prefetch_image_2": <ImageCard | null>,
+          "progress": { ... }
+        }
     """
     permission_classes = [IsAuthenticated]
 

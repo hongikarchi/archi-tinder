@@ -147,7 +147,7 @@ def _base_engine_patches(pool_ids):
             [np.ones(384) / np.linalg.norm(np.ones(384))],
             np.ones(384) / np.linalg.norm(np.ones(384)),
         ),
-        f'{_ENGINE}.compute_mmr_next': lambda *a: pool_ids[1],
+        f'{_ENGINE}.compute_mmr_next': lambda *a, **kw: pool_ids[1],
         f'{_ENGINE}.compute_convergence': lambda *a: 0.05,
         f'{_ENGINE}.check_convergence': lambda *a: False,
         f'{_ENGINE}.get_dislike_fallback': lambda *a, **kw: pool_ids[2],

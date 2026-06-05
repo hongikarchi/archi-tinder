@@ -40,6 +40,17 @@ export default function QuestionCard({ trigger, onAnswer }) {
         지금 취향을 파악하고 있어요 ✦
       </p>
 
+      {/* Swipe hint — gesture-friendly per DESIGN.md §4 */}
+      <p style={{
+        fontSize: 12,
+        fontWeight: 500,
+        color: 'var(--color-text-muted)',
+        margin: 0,
+        letterSpacing: '0.03em',
+      }}>
+        ← 아니오 &nbsp;·&nbsp; 네 →
+      </p>
+
       {/* Question text */}
       <p style={{
         fontSize: 18,

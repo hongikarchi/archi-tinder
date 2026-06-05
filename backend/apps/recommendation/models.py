@@ -93,8 +93,11 @@ class AnalysisSession(models.Model):
     # Question card trigger state (ALGO-QCARD-1)
     tag_axis_counts = models.JSONField(default=dict)   # {"style": {"minimal": 3}, ...}
     recent_like_tag_sets = models.JSONField(default=list)   # last 3 liked-card tag lists
-    question_cooldown = models.IntegerField(default=0)   # swipe-down counter; set to 5 on trigger/answer
+    question_cooldown = models.IntegerField(default=0)   # swipe-down counter; set to cooldown_n on trigger/answer
     q_card_consecutive_dislikes = models.IntegerField(default=0)   # consecutive dislike counter for refresh trigger
+    # ALGO-QCARD Phase 1: soft-vector bias fields
+    question_count = models.IntegerField(default=0)   # questions triggered this session (cap)
+    question_bias_vector = models.JSONField(null=True, blank=True)   # accumulated 384-d soft bias from Yes/No answers; None = no bias
     created_at        = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

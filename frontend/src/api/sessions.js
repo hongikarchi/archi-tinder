@@ -114,11 +114,22 @@ export async function getResult({ session_id }) {
 /**
  * Submit a user's response to an in-session question card.
  * option: "A" | "B" | "skip"
+ * keyword: the keyword field from the question_trigger (or null)
+ *
+ * On flush_prefetch=true the response includes next_image / prefetch_image /
+ * prefetch_image_2 which are normalized so callers can update the deck directly.
  */
-export async function submitQuestionResponse({ session_id, question_type, axis, selected_option }) {
-  return await callApi('POST', `/analysis/sessions/${session_id}/question-responses/`, {
+export async function submitQuestionResponse({ session_id, question_type, axis, keyword, selected_option }) {
+  const result = await callApi('POST', `/analysis/sessions/${session_id}/question-responses/`, {
     question_type,
     axis,
+    keyword: keyword ?? null,
     selected_option,
   })
+  return {
+    ...result,
+    next_image:       normalizeCard(result.next_image),
+    prefetch_image:   normalizeCard(result.prefetch_image),
+    prefetch_image_2: normalizeCard(result.prefetch_image_2),
+  }
 }
