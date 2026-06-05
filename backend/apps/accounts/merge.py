@@ -20,6 +20,10 @@ from django.db import transaction
 
 logger = logging.getLogger('apps.accounts')
 
+# Maximum rows migrated per table in a single merge to prevent abusive guests
+# with huge row counts from blowing memory or hammering the DB.
+_MERGE_ROW_CAP = 1000
+
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -77,7 +81,14 @@ def merge_guest_into_target(guest_profile, target_profile):
         # IDs to delete: already followed by target OR would create self-follow
         followee_ids_to_delete = set()
         followee_ids_to_reassign = set()
-        for followee_id in guest_following_qs.values_list('followee_id', flat=True):
+        _guest_followee_ids = list(guest_following_qs.values_list('followee_id', flat=True))
+        _follow_total = len(_guest_followee_ids)
+        if _follow_total > _MERGE_ROW_CAP:
+            logger.warning(
+                'merge_guest_into_target: guest=%s Follow(follower) count=%d exceeds cap=%d; %d rows dropped',
+                guest_profile.pk, _follow_total, _MERGE_ROW_CAP, _follow_total - _MERGE_ROW_CAP,
+            )
+        for followee_id in _guest_followee_ids[:_MERGE_ROW_CAP]:
             if followee_id in target_followee_ids or followee_id == target_profile.pk:
                 followee_ids_to_delete.add(followee_id)
             else:
@@ -108,7 +119,14 @@ def merge_guest_into_target(guest_profile, target_profile):
 
         follower_ids_to_delete = set()
         follower_ids_to_reassign = set()
-        for follower_id in guest_followers_qs.values_list('follower_id', flat=True):
+        _guest_follower_ids = list(guest_followers_qs.values_list('follower_id', flat=True))
+        _followers_total = len(_guest_follower_ids)
+        if _followers_total > _MERGE_ROW_CAP:
+            logger.warning(
+                'merge_guest_into_target: guest=%s Follow(followee) count=%d exceeds cap=%d; %d rows dropped',
+                guest_profile.pk, _followers_total, _MERGE_ROW_CAP, _followers_total - _MERGE_ROW_CAP,
+            )
+        for follower_id in _guest_follower_ids[:_MERGE_ROW_CAP]:
             if follower_id in target_follower_ids or follower_id == target_profile.pk:
                 follower_ids_to_delete.add(follower_id)
             else:
@@ -147,7 +165,14 @@ def merge_guest_into_target(guest_profile, target_profile):
         guest_arch_qs = ArchitectFollow.objects.filter(follower=guest_profile)
         arch_ids_to_delete = set()
         arch_ids_to_reassign = set()
-        for arch_id in guest_arch_qs.values_list('architect_id', flat=True):
+        _guest_arch_ids = list(guest_arch_qs.values_list('architect_id', flat=True))
+        _arch_total = len(_guest_arch_ids)
+        if _arch_total > _MERGE_ROW_CAP:
+            logger.warning(
+                'merge_guest_into_target: guest=%s ArchitectFollow count=%d exceeds cap=%d; %d rows dropped',
+                guest_profile.pk, _arch_total, _MERGE_ROW_CAP, _arch_total - _MERGE_ROW_CAP,
+            )
+        for arch_id in _guest_arch_ids[:_MERGE_ROW_CAP]:
             if arch_id in target_arch_ids:
                 arch_ids_to_delete.add(arch_id)
             else:
@@ -176,7 +201,14 @@ def merge_guest_into_target(guest_profile, target_profile):
         guest_reaction_qs = Reaction.objects.filter(user=guest_profile)
         reaction_project_ids_to_delete = set()
         reaction_project_ids_to_reassign = set()
-        for project_id in guest_reaction_qs.values_list('project_id', flat=True):
+        _guest_reaction_ids = list(guest_reaction_qs.values_list('project_id', flat=True))
+        _reaction_total = len(_guest_reaction_ids)
+        if _reaction_total > _MERGE_ROW_CAP:
+            logger.warning(
+                'merge_guest_into_target: guest=%s Reaction count=%d exceeds cap=%d; %d rows dropped',
+                guest_profile.pk, _reaction_total, _MERGE_ROW_CAP, _reaction_total - _MERGE_ROW_CAP,
+            )
+        for project_id in _guest_reaction_ids[:_MERGE_ROW_CAP]:
             if project_id in target_reacted_project_ids:
                 reaction_project_ids_to_delete.add(project_id)
             else:
@@ -197,18 +229,45 @@ def merge_guest_into_target(guest_profile, target_profile):
         # ------------------------------------------------------------------
         # 6. Project — no per-user unique constraint; safe bulk update
         # ------------------------------------------------------------------
-        Project.objects.filter(user=guest_profile).update(user=target_profile)
+        _project_qs = Project.objects.filter(user=guest_profile)
+        _project_total = _project_qs.count()
+        if _project_total > _MERGE_ROW_CAP:
+            logger.warning(
+                'merge_guest_into_target: guest=%s Project count=%d exceeds cap=%d; %d rows dropped',
+                guest_profile.pk, _project_total, _MERGE_ROW_CAP, _project_total - _MERGE_ROW_CAP,
+            )
+        Project.objects.filter(
+            pk__in=list(_project_qs.values_list('pk', flat=True)[:_MERGE_ROW_CAP])
+        ).update(user=target_profile)
 
         # ------------------------------------------------------------------
         # 7. AnalysisSession — no per-user unique constraint; safe bulk update
         # ------------------------------------------------------------------
-        AnalysisSession.objects.filter(user=guest_profile).update(user=target_profile)
+        _session_qs = AnalysisSession.objects.filter(user=guest_profile)
+        _session_total = _session_qs.count()
+        if _session_total > _MERGE_ROW_CAP:
+            logger.warning(
+                'merge_guest_into_target: guest=%s AnalysisSession count=%d exceeds cap=%d; %d rows dropped',
+                guest_profile.pk, _session_total, _MERGE_ROW_CAP, _session_total - _MERGE_ROW_CAP,
+            )
+        AnalysisSession.objects.filter(
+            pk__in=list(_session_qs.values_list('pk', flat=True)[:_MERGE_ROW_CAP])
+        ).update(user=target_profile)
 
         # ------------------------------------------------------------------
         # 8. SessionEvent — user FK is nullable (SET_NULL on delete); reassign
         #    guest rows so they don't become orphaned when guest user is deleted.
         # ------------------------------------------------------------------
-        SessionEvent.objects.filter(user=guest_profile).update(user=target_profile)
+        _event_qs = SessionEvent.objects.filter(user=guest_profile)
+        _event_total = _event_qs.count()
+        if _event_total > _MERGE_ROW_CAP:
+            logger.warning(
+                'merge_guest_into_target: guest=%s SessionEvent count=%d exceeds cap=%d; %d rows dropped',
+                guest_profile.pk, _event_total, _MERGE_ROW_CAP, _event_total - _MERGE_ROW_CAP,
+            )
+        SessionEvent.objects.filter(
+            pk__in=list(_event_qs.values_list('pk', flat=True)[:_MERGE_ROW_CAP])
+        ).update(user=target_profile)
 
         # ------------------------------------------------------------------
         # 9. liked_building_ids — guest-first union, deduped, capped at 200

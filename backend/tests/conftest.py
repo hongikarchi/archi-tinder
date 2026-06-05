@@ -13,7 +13,7 @@ side_effect=my_mock)` block inside the test body; the inner patch wins for its
 duration and this autouse mock resumes when the inner patch exits.
 """
 import pytest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 from django.core.cache import cache
 
 
@@ -57,4 +57,24 @@ def _patch_get_buildings_by_ids():
         'apps.recommendation.engine.get_buildings_by_ids',
         side_effect=lambda ids, image_focus=None: [_fake_card(bid) for bid in ids if bid],
     ):
+        yield
+
+
+@pytest.fixture(autouse=True)
+def _patch_swipe_service_connections():
+    """Make the swipe/bookmark building-existence guard pass by default.
+
+    handle_swipe_normal + handle_bookmark validate canonical_bld_id against
+    canonical_v2_buildings (owned by Make DB, absent in the test DB) via
+    connections['buildings'] before any write.  Default the check to
+    'building exists'; tests asserting the 404 path override with their own
+    fetchone()->None patch on the same target.
+    """
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+    mock_cursor.__enter__ = lambda s: s
+    mock_cursor.__exit__ = MagicMock(return_value=False)
+    mock_cursor.fetchone.return_value = (1,)
+    mock_conn.__getitem__.return_value.cursor.return_value = mock_cursor
+    with patch('apps.recommendation.services.swipe_service.connections', mock_conn):
         yield

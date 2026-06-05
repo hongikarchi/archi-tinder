@@ -966,10 +966,186 @@ def test_feedback_malformed_draft_id_creates_new_draft_not_500(auth_client, user
     )
     payload = resp.json()
     assert 'draft_id' in payload
-    # A new draft board was created (malformed id was ignored)
+    # A new draft board was created (graceful fallback on malformed draft_id)
     assert Project.objects.filter(
         user=user_profile, name__startswith=DISCOVERY_DRAFT_PREFIX
     ).count() == 1
+
+
+# ── Security: guest board-limit gate (fix ⑤ guest-cap) ──────────────────────
+
+@pytest.mark.django_db
+def test_guest_feedback_blocked_at_board_limit(user_profile):
+    """Guest with 3 existing Projects → POST /discovery/feedback/ (no draft_id)
+    → 403 board_limit_reached (existence check passes; board cap fires).
+    """
+    from rest_framework.test import APIClient
+    from rest_framework_simplejwt.tokens import RefreshToken
+
+    user_profile.is_guest = True
+    user_profile.save(update_fields=['is_guest'])
+
+    for i in range(3):
+        Project.objects.create(user=user_profile, name=f'Board {i}')
+
+    client = APIClient()
+    refresh = RefreshToken.for_user(user_profile.user)
+    client.credentials(HTTP_AUTHORIZATION=f'Bearer {refresh.access_token}')
+
+    with patch('apps.recommendation.views.discovery._dj_connections') as mock_conns:
+        mock_cursor = MagicMock()
+        mock_cursor.__enter__ = lambda s: s
+        mock_cursor.__exit__ = MagicMock(return_value=False)
+        mock_cursor.fetchone.return_value = (1,)  # building exists
+        mock_conns.__getitem__.return_value.cursor.return_value = mock_cursor
+
+        resp = client.post(
+            '/api/v1/discovery/feedback/',
+            {'canonical_bld_id': 'bld_000001', 'action': 'like'},
+            format='json',
+        )
+
+    assert resp.status_code == 403
+    data = resp.json()
+    assert data.get('detail') == 'verify_required'
+    assert data.get('reason') == 'board_limit_reached'
+
+
+@pytest.mark.django_db
+def test_guest_promote_blocked_at_board_limit(user_profile):
+    """Guest with 3 existing Projects and a 10-like draft → promote-to-taste
+    → 403 board_limit_reached (checked after seed validation).
+    """
+    from rest_framework.test import APIClient
+    from rest_framework_simplejwt.tokens import RefreshToken
+
+    user_profile.is_guest = True
+    user_profile.save(update_fields=['is_guest'])
+
+    # 3 real boards to hit the cap
+    for i in range(3):
+        Project.objects.create(user=user_profile, name=f'Board {i}')
+
+    # A draft with exactly 10 likes (promote_threshold)
+    draft = create_discovery_draft(user_profile)
+    draft.liked_ids = [{'id': f'bld_{i:06d}', 'intensity': 1.0} for i in range(10)]
+    draft.save(update_fields=['liked_ids'])
+
+    client = APIClient()
+    refresh = RefreshToken.for_user(user_profile.user)
+    client.credentials(HTTP_AUTHORIZATION=f'Bearer {refresh.access_token}')
+
+    mock_emb = np.array([0.1] * 384, dtype=np.float64)
+    emb_map = {f'bld_{i:06d}': mock_emb for i in range(10)}
+
+    with patch('apps.recommendation.views.discovery.engine.get_pool_embeddings', return_value=emb_map), \
+         patch('apps.recommendation.views.discovery.engine.update_preference_vector',
+               side_effect=lambda pv, emb, a: emb):
+        resp = client.post(
+            '/api/v1/discovery/promote-to-taste/',
+            {'draft_id': str(draft.project_id)},
+            format='json',
+        )
+
+    assert resp.status_code == 403
+    data = resp.json()
+    assert data.get('detail') == 'verify_required'
+    assert data.get('reason') == 'board_limit_reached'
+
+
+# ── Security: swipe/bookmark non-existent building → 404 (fix ②) ────────────
+
+@pytest.mark.django_db
+def test_swipe_nonexistent_building_returns_404(auth_client, user_profile):
+    """Swipe with a canonical_bld_id that does not exist in buildings DB → 404."""
+    from apps.recommendation.models import Project, AnalysisSession
+
+    project = Project.objects.create(user=user_profile, name='SwipeProject')
+    session = AnalysisSession.objects.create(
+        user=user_profile,
+        project=project,
+        phase='exploring',
+        pool_ids=['bld_999999'],
+        pool_scores={'bld_999999': 1.0},
+        current_round=0,
+        preference_vector=[],
+        exposed_ids=[],
+        initial_batch=['bld_999999'],
+        like_vectors=[],
+        convergence_history=[],
+        previous_pref_vector=[],
+        original_filters={},
+        original_filter_priority=[],
+        original_seed_ids=[],
+        current_pool_tier=1,
+        v_initial=None,
+    )
+
+    with patch('apps.recommendation.services.swipe_service.connections') as mock_conns:
+        mock_cursor = MagicMock()
+        mock_cursor.__enter__ = lambda s: s
+        mock_cursor.__exit__ = MagicMock(return_value=False)
+        mock_cursor.fetchone.return_value = None  # building not found
+        mock_conns.__getitem__.return_value.cursor.return_value = mock_cursor
+
+        resp = auth_client.post(
+            f'/api/v1/analysis/sessions/{session.session_id}/swipes/',
+            {
+                'canonical_bld_id': 'bld_999999',
+                'action': 'like',
+                'idempotency_key': 'test-idem-1',
+            },
+            format='json',
+        )
+
+    assert resp.status_code == 404
+    assert resp.json().get('detail') == 'building not found'
+
+
+@pytest.mark.django_db
+def test_bookmark_nonexistent_building_returns_404(auth_client, user_profile):
+    """Bookmark with a card_id that does not exist in buildings DB → 404."""
+    from apps.recommendation.models import Project
+
+    project = Project.objects.create(user=user_profile, name='BookmarkProject')
+
+    with patch('apps.recommendation.services.swipe_service.connections') as mock_conns:
+        mock_cursor = MagicMock()
+        mock_cursor.__enter__ = lambda s: s
+        mock_cursor.__exit__ = MagicMock(return_value=False)
+        mock_cursor.fetchone.return_value = None  # building not found
+        mock_conns.__getitem__.return_value.cursor.return_value = mock_cursor
+
+        resp = auth_client.post(
+            f'/api/v1/projects/{project.project_id}/bookmark/',
+            {
+                'card_id': 'bld_999999',
+                'action': 'save',
+                'rank': 5,
+            },
+            format='json',
+        )
+
+    assert resp.status_code == 404
+    assert resp.json().get('detail') == 'building not found'
+
+
+# ── Security: architect follow non-existent architect → 404 (fix ③) ─────────
+
+@pytest.mark.django_db
+def test_architect_follow_nonexistent_returns_404(auth_client):
+    """POST follow on an architect that has no publishable buildings → 404."""
+    with patch('apps.recommendation.views.office_recommendation.connections') as mock_conns:
+        mock_cursor = MagicMock()
+        mock_cursor.__enter__ = lambda s: s
+        mock_cursor.__exit__ = MagicMock(return_value=False)
+        mock_cursor.fetchone.return_value = (0,)  # COUNT(*) = 0 → not found
+        mock_conns.__getitem__.return_value.cursor.return_value = mock_cursor
+
+        resp = auth_client.post('/api/v1/architects/arch_999999/follow/')
+
+    assert resp.status_code == 404
+    assert resp.json().get('detail') == 'Architect not found'
 
 
 # ── FIX 2: promote next_image card shape regression test ─────────────────────

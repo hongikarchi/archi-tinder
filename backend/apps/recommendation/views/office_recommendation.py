@@ -310,6 +310,15 @@ class ArchitectFollowView(APIView):
         if not profile:
             return Response({'detail': 'Authentication required.'}, status=status.HTTP_401_UNAUTHORIZED)
 
+        with connections['buildings'].cursor() as cur:
+            cur.execute(
+                'SELECT COUNT(*) FROM canonical_v2_buildings'
+                ' WHERE %s = ANY(architect_canonical_ids) AND is_publishable = true',
+                [architect_id],
+            )
+            if cur.fetchone()[0] == 0:
+                return Response({'detail': 'Architect not found'}, status=status.HTTP_404_NOT_FOUND)
+
         _, created = ArchitectFollow.objects.get_or_create(
             follower=profile,
             architect_id=architect_id,
@@ -326,6 +335,9 @@ class ArchitectFollowView(APIView):
         if not profile:
             return Response({'detail': 'Authentication required.'}, status=status.HTTP_401_UNAUTHORIZED)
 
+        # No existence check on unfollow: removing a follow has no pollution
+        # risk, and gating it would trap the row if the architect's buildings
+        # are later unpublished (404 forever, can't unfollow).
         deleted_count, _ = ArchitectFollow.objects.filter(
             follower=profile, architect_id=architect_id,
         ).delete()
