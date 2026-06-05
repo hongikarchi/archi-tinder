@@ -1,4 +1,5 @@
 import { useLocation, useNavigate } from 'react-router-dom'
+import { useTranslation } from '../i18n/index.js'
 
 const TAB_ICONS = {
   discovery: (
@@ -32,12 +33,13 @@ function getActiveTab(pathname) {
 export default function TabBar() {
   const location = useLocation()
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const activeTab = getActiveTab(location.pathname)
 
   const tabs = [
-    { id: 'discovery', label: 'Discovery', path: '/discovery' },
-    { id: 'swipe', label: 'Taste', path: '/swipe' },
-    { id: 'profile', label: 'Profile', path: '/user/me' },
+    { id: 'discovery', labelKey: 'tabbar.discovery', path: '/discovery' },
+    { id: 'swipe',     labelKey: 'tabbar.taste',     path: '/swipe' },
+    { id: 'profile',   labelKey: 'tabbar.profile',   path: '/user/me' },
   ]
 
   function handleSelect(tab) {
@@ -54,12 +56,12 @@ export default function TabBar() {
       backdropFilter: 'blur(20px)',
       borderTop: '1px solid var(--color-border)',
     }}>
-      {tabs.map(t => {
-        const active = activeTab === t.id
+      {tabs.map(tab => {
+        const active = activeTab === tab.id
         return (
           <button
-            key={t.id}
-            onClick={() => handleSelect(t)}
+            key={tab.id}
+            onClick={() => handleSelect(tab)}
             style={{
               flex: 1, border: 'none', background: 'none',
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4,
@@ -75,10 +77,10 @@ export default function TabBar() {
               background: active ? 'rgba(236,72,153,0.12)' : 'transparent',
               transition: 'background 0.18s',
             }}>
-              {TAB_ICONS[t.id]}
+              {TAB_ICONS[tab.id]}
             </div>
             <span style={{ fontSize: 10, fontWeight: active ? 600 : 400, letterSpacing: '0.02em' }}>
-              {t.label}
+              {t(tab.labelKey)}
             </span>
           </button>
         )

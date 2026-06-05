@@ -146,7 +146,11 @@ class ParseQueryView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        parsed = services.parse_query(conversation_history)
+        # FULL-LANGUAGE-1: pass user's language preference to parse_query so it can
+        # force reply/probe_question into the chosen language.
+        _profile = getattr(request.user, 'profile', None)
+        _lang = getattr(_profile, 'language', None)
+        parsed = services.parse_query(conversation_history, language=_lang)
         parsed_filters = _clean_filters(parsed.get('filters') or {})
         parsed_priority = _clean_filter_priority(parsed.get('filter_priority') or [], parsed_filters)
         raw_query = _first_user_text(conversation_history) or parsed.get('raw_query', '')
