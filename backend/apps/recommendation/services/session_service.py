@@ -76,14 +76,42 @@ def create_session(request, profile, recent_cutoff):
     raw_query = (request.data.get('raw_query') or request.data.get('query') or '').strip()[:2000]
 
     # Fix 2: resolve project_id early so dedupe can skip when client targets a specific project.
-    # If project_id is provided and matches an owned Project, the user intent is unambiguous
-    # ("new session on THIS project") -- dedupe is inappropriate in that case.
+    # If project_id is provided and matches an owned Project, the user is targeting THIS board:
+    # the Case #3 resume guard below resumes its live session by default (force_new opens a fresh
+    # one) -- either way dedupe (which guards project-less duplicate POSTs) is inappropriate here.
     project = None
     if project_id:
         try:
             project = Project.objects.filter(project_id=project_id, user=profile).first()
         except Exception:
             project = None
+
+    # ── Case #3 resume guard (server-side) ───────────────────────────────
+    # When the client targets an existing board (project_id resolved) and does
+    # NOT explicitly request a fresh session (force_new), resume the latest
+    # non-completed AnalysisSession for that project instead of opening a blank
+    # one. All algorithm state (like_vectors with original rounds,
+    # preference_vector, phase, convergence_history, pool_ids, exposed_ids)
+    # lives on the session row, so resuming == full restoration with zero
+    # reconstruction. get_session_state() serves the current card from the
+    # session's phase (exploring/analyzing/converged) + prefetch.
+    force_new = request.data.get('force_new') in (True, 'true', 'True', 1, '1')
+    if project is not None and not force_new:
+        resumable = (
+            AnalysisSession.objects
+            .filter(project=project, user=profile)
+            .exclude(status='completed')
+            .exclude(phase='completed')
+            .order_by('-created_at')
+            .first()
+        )
+        if resumable is not None:
+            logger.info(
+                'Session resume (Case #3): project=%s -> session=%s phase=%s likes=%d',
+                project.project_id, resumable.session_id, resumable.phase,
+                len(resumable.like_vectors or []),
+            )
+            return get_session_state(request, resumable)
 
     # Dedupe guard (2026-05-26 Codex retest INFRA-DEPLOY-3 follow-up):
     # If the same user has an active session created in the last 30s with the
