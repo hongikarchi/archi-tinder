@@ -87,6 +87,7 @@ GUEST_PAYLOAD = {
 _FAKE_GOOGLE_DATA = {
     'provider_id': 'google_promote_sub_001',
     'email': 'promote@example.com',
+    'email_verified': True,
     'display_name': 'Promote User',
     'avatar_url': '',
 }
