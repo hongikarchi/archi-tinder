@@ -1,10 +1,16 @@
 import os
+import sys
 from pathlib import Path
 from dotenv import load_dotenv
 from datetime import timedelta
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(BASE_DIR / '.env')
+# Guard: skip .env load under pytest — DB config comes from conftest setdefaults
+# (plain pytest / local), inline env vars (make test-local), or the CI job env.
+# Loading the real .env would overwrite those placeholders and connect to the
+# real Neon DB, leaking the password in connection-DSN tracebacks (488 errors).
+if 'pytest' not in sys.modules:
+    load_dotenv(BASE_DIR / '.env')
 
 SECRET_KEY = os.environ['DJANGO_SECRET_KEY']
 DEBUG = os.getenv('DJANGO_DEBUG', 'False') == 'True'

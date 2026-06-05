@@ -298,32 +298,11 @@ class GuestPromoteView(APIView):
 
             if target_profile:
                 # Branch 1 — cross-device collision: merge guest data into existing user.
-                # FK_TABLES: all relations that point at UserProfile.
-                # SwipeEvent is excluded because it has no direct user FK
-                # (it references AnalysisSession, which has user — re-pointing
-                # AnalysisSession.user handles SwipeEvent transitively).
-                from django.apps import apps as _apps
-                FK_TABLES = [
-                    ('recommendation', 'Project',         'user'),
-                    ('recommendation', 'AnalysisSession', 'user'),
-                    # SwipeEvent skipped: no direct user FK; follows AnalysisSession.user
-                    ('recommendation', 'SessionEvent',    'user'),
-                    ('social',         'Follow',          'follower'),
-                    ('social',         'Follow',          'followee'),
-                    ('social',         'Reaction',        'user'),
-                ]
-                for app_label, model_name, fk_field in FK_TABLES:
-                    try:
-                        Model = _apps.get_model(app_label, model_name)
-                    except LookupError:
-                        logger.warning(
-                            'GuestPromoteView: model %s.%s not found — skipping',
-                            app_label, model_name,
-                        )
-                        continue
-                    Model.objects.filter(**{fk_field: guest_profile}).update(
-                        **{fk_field: target_profile}
-                    )
+                # Handles Follow dedup, ArchitectFollow (was missing), Reaction dedup,
+                # liked_building_ids union, and counter-cache recompute — all inside
+                # a nested atomic savepoint inside the outer transaction.atomic().
+                from ..merge import merge_guest_into_target
+                merge_guest_into_target(guest_profile, target_profile)
 
                 # Ensure target has the Google SocialAccount — may be absent when
                 # target was found by email-match only (no prior Google sign-in).
