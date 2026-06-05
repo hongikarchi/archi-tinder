@@ -8,7 +8,7 @@ FRONTEND_DIR = frontend
 
 SHELL := /bin/bash
 
-.PHONY: setup dev backend frontend reset-db dashboard migrate-local
+.PHONY: setup dev backend frontend reset-db dashboard migrate-local test-local
 
 # ── Setup ────────────────────────────────────────────────────────────────────
 setup:
@@ -63,3 +63,25 @@ migrate-local:
 	if [ "$$ANS" != "yes" ]; then echo "aborted."; exit 1; fi; \
 	read -s -p "neondb_owner password: " PW; echo; \
 	DB_USER=neondb_owner DB_PASSWORD="$$PW" python3 manage.py migrate && { echo; echo "Done. Runtime .env unchanged (still make_web_app)."; }
+
+# -- Local pytest (CI-shape Postgres run; test DB via neondb_owner CREATEDB) ----
+# Local runtime user make_web_app has no CREATEDB (INFRA-DB-1), so pytest-django
+# cannot create its test database -> "permission denied to create database". This
+# runs pytest as neondb_owner (which HAS CREATEDB), keeping DB_HOST/NAME from
+# backend/.env so the throwaway test_<DB_NAME> lands on your LOCAL dev branch,
+# NEVER prod. Password is prompted (read -s), never written to disk. Runtime .env
+# is untouched. This is a CI-shape run against real Postgres+pgvector -- the
+# conftest SQLite override is NOT load-bearing (see backend/conftest.py docstring).
+# Pass pytest args via ARGS, e.g.  make test-local ARGS="-x -k liked_buildings"
+# See memory project_local_db_migrate + CLAUDE.md INFRA-DB-1/ENV-1.
+test-local:
+	@cd $(BACKEND_DIR); \
+	HOST=$$(grep -E '^DB_HOST=' .env | cut -d= -f2-); \
+	NAME=$$(grep -E '^DB_NAME=' .env | cut -d= -f2-); \
+	PORT=$$(grep -E '^DB_PORT=' .env | cut -d= -f2-); \
+	echo "LOCAL test DB target  ->  HOST=$$HOST  DB=test_$$NAME (created + dropped)  USER=neondb_owner"; \
+	echo "WARNING: creates a throwaway test DB as neondb_owner. Confirm HOST above is your LOCAL dev branch, NOT production."; \
+	read -p "Proceed? type 'yes': " ANS; \
+	if [ "$$ANS" != "yes" ]; then echo "aborted."; exit 1; fi; \
+	read -s -p "neondb_owner password: " PW; echo; \
+	DB_HOST="$$HOST" DB_NAME="$$NAME" DB_PORT="$$PORT" DB_USER=neondb_owner DB_PASSWORD="$$PW" python3 -m pytest $(ARGS)

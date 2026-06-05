@@ -19,7 +19,7 @@ import FollowListPage from './pages/userProfile/FollowListPage.jsx'
 import ArchitectProfilePage from './pages/ArchitectProfilePage.jsx'
 import * as api from './api/client.js'
 import { createProject } from './api/projects.js'
-import { normalizeFilters, classifySwipeError, isActionCard, extractLikedIds, extractSavedIds } from './utils/appHelpers.js'
+import { normalizeFilters, classifySwipeError, isActionCard, extractLikedIds, extractSavedIds, purgeChatCache } from './utils/appHelpers.js'
 import { reportWriteError } from './utils/reportWriteError.js'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import LLMSearchUpdateWrapper from './components/LLMSearchUpdateWrapper.jsx'
@@ -60,6 +60,9 @@ export default function App() {
   // Pending board-create payload from SaveToBoardModal (Fix 3 Option A).
   // Stored when VerifyRequiredError fires during board creation; retried on promote.
   const [pendingBoardCreate, setPendingBoardCreate] = useState(null)
+  // Pending like building id — stored when VerifyRequiredError fires during addLikedBuilding;
+  // retried on promote so the 51st like is not lost (Codex #193).
+  const [pendingLike, setPendingLike] = useState(null)
   // Tracks whether a SurpriseBoardModal board-create was interrupted by verify gate.
   // After promote we show a toast asking the user to re-open the modal (Fix 3 Option B).
   const [surprisePending, setSurprisePending] = useState(false)
@@ -96,6 +99,13 @@ export default function App() {
     }
     window.addEventListener('archithon:pending-board-create', onPendingCreate)
     return () => window.removeEventListener('archithon:pending-board-create', onPendingCreate)
+  }, [])
+
+  // Capture pending like bldId — retried on promote (Codex #193)
+  useEffect(() => {
+    const onPendingLike = (e) => setPendingLike(e.detail?.bldId || null)
+    window.addEventListener('archithon:pending-like', onPendingLike)
+    return () => window.removeEventListener('archithon:pending-like', onPendingLike)
   }, [])
 
   // Capture surprise-board pending flag (Fix 3 Option B)
@@ -448,6 +458,13 @@ export default function App() {
             predictedLikes: resultData.predicted_like_images || [],
             ...(reportData?.final_report ? { finalReport: reportData.final_report } : {}),
           } : p))
+          // Fire-and-forget: generate persona image without blocking the completion screen.
+          if (reportData?.final_report && backendId) {
+            api.generateReportImage(backendId)
+              .then(img => setProjects(prev => prev.map(p => p.id === activeProjectId
+                ? { ...p, reportImage: img.image_data, reportImageMime: img.mime_type } : p)))
+              .catch(() => null)  // image failure is non-fatal; report text already shown
+          }
         } catch {
           // ResultsPage will attempt a fresh GET /result/ on entry.
         } finally {
@@ -661,6 +678,7 @@ export default function App() {
           savedIds: extractSavedIds(p.saved_ids),
           finalReport: p.final_report || null,
           reportImage: p.report_image || null,
+          reportImageMime: p.report_image_mime || null,
           sessionId: p.latest_session_id || null,
           latestSessionMeta: p.latest_session_meta || null,
           createdAt: p.created_at,
@@ -682,6 +700,8 @@ export default function App() {
     loggingOut.current = true
     const refresh = localStorage.getItem('archithon_refresh')
     api.logout(refresh)   // blacklists refresh token, clears JWT from localStorage
+    // Purge ALL archithon_chat_* keys so stale chat doesn't surface on a shared device.
+    purgeChatCache()
     sessionStorage.removeItem('archithon_user')
     setUserId(null)
     setProjects([])
@@ -860,6 +880,7 @@ export default function App() {
           onClose={() => {
             setVerifyGateOpen(false)
             setPendingBoardCreate(null)
+            setPendingLike(null)
             setSurprisePending(false)
           }}
           onPromoted={async (user, merged) => {
@@ -871,6 +892,7 @@ export default function App() {
               if (user) await handleLogin(user)
               setGlobalToast({ message: 'Verified — your existing account is now loaded.', type: 'success' })
               setPendingBoardCreate(null)
+              setPendingLike(null)
               setSurprisePending(false)
               return
             }
@@ -899,6 +921,12 @@ export default function App() {
               setSurprisePending(false)
             } else {
               setGlobalToast({ message: 'Verified! You can now create boards.', type: 'success' })
+            }
+
+            // Retry pending like after promote — guest is now verified, gate no longer fires (Codex #193).
+            if (pendingLike) {
+              try { await api.addLikedBuilding(pendingLike) } catch { /* best-effort; user can re-like */ }
+              setPendingLike(null)
             }
           }}
         />

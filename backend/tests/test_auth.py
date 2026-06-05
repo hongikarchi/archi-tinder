@@ -4,7 +4,6 @@ test_auth.py -- Auth flow integration tests.
 Covers Google login (mocked HTTP), token refresh, logout/blacklist, and dev-login.
 """
 import importlib
-import os
 import pytest
 from unittest.mock import patch, MagicMock
 from rest_framework_simplejwt.tokens import RefreshToken

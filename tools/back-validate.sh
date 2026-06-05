@@ -4,7 +4,7 @@
 # Usage:    ./tools/back-validate.sh [app_label_for_pytest]
 #
 # Runs in order:
-#   1. flake8 on backend/ (max-line=120, ignore=E501,W503)
+#   1. flake8 on backend/ (config from backend/.flake8 — no CLI flag overrides)
 #   2. migrate (if there are pending migration files in working tree or staged)
 #   3. pytest <app> if app arg given, else pytest all
 #
@@ -21,10 +21,9 @@ APP="${1:-}"
 
 cd "${REPO_ROOT}/backend"
 
-# 1. flake8
+# 1. flake8 — config auto-discovered from backend/.flake8 (no CLI overrides)
 echo "─── 1/3: flake8 ─────"
-python3 -m flake8 . --max-line-length=120 --ignore=E501,W503 \
-    --exclude='__pycache__,.venv,venv,migrations' || {
+python3 -m flake8 . || {
     echo "✗ flake8 found issues"
     exit 1
 }

@@ -91,7 +91,7 @@ def _ensure_chat_cache(client):
     try:
         def _create_cache():
             return client.caches.create(
-                model='gemini-2.5-flash',
+                model=settings.GEMINI_TEXT_MODEL,
                 config=types.CreateCachedContentConfig(
                     display_name=_get_cache_name(),
                     system_instruction=_svc._CHAT_PHASE_SYSTEM_PROMPT,
