@@ -319,6 +319,7 @@ RECOMMENDATION = {
     'discovery_local_sim_radius': 0.55,          # cosine SIM to nearest centroid to count as local/취향
     'discovery_centroid_cache_ttl': 21600,       # 6h — app-session fixed
     'discovery_promote_threshold': 10,
+    'discovery_like_hard_cap': 50,  # Discovery draft hard stop: block likes beyond 50; client redirects to Taste
 }
 
 _check_async_prefetch_safety(

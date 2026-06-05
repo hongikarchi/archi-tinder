@@ -21,6 +21,7 @@ export async function discoveryFeedback(canonicalBldId, action, draftId) {
     draftId: data.draft_id ?? null,
     draftLikeCount: data.draft_like_count ?? 0,
     draftPassCount: data.draft_pass_count ?? 0,
+    likeCapReached: data.like_cap_reached ?? false,
   }
 }
 
