@@ -456,7 +456,7 @@ class TestAsyncThreadComputesPrefetch:
         cache_round = 3
         mmr_calls = []
 
-        def _counting_mmr(*args):
+        def _counting_mmr(*args, **kwargs):
             mmr_calls.append(args)
             return pool_ids[2]
 
