@@ -1,10 +1,16 @@
 import os
+import sys
 from pathlib import Path
 from dotenv import load_dotenv
 from datetime import timedelta
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(BASE_DIR / '.env')
+# Guard: skip .env load under pytest — DB config comes from conftest setdefaults
+# (plain pytest / local), inline env vars (make test-local), or the CI job env.
+# Loading the real .env would overwrite those placeholders and connect to the
+# real Neon DB, leaking the password in connection-DSN tracebacks (488 errors).
+if 'pytest' not in sys.modules:
+    load_dotenv(BASE_DIR / '.env')
 
 SECRET_KEY = os.environ['DJANGO_SECRET_KEY']
 DEBUG = os.getenv('DJANGO_DEBUG', 'False') == 'True'
@@ -325,7 +331,12 @@ _check_async_prefetch_safety(
 PERF_TIMING_ENABLED = os.environ.get('PERF_TIMING_ENABLED', 'False').lower() == 'true'
 
 # -- External API keys -----------------------------------------------------
-GEMINI_API_KEY    = os.getenv('GEMINI_API_KEY', '')
+GEMINI_API_KEY              = os.getenv('GEMINI_API_KEY', '')
+GEMINI_TEXT_MODEL           = os.getenv('GEMINI_TEXT_MODEL', 'gemini-3.1-flash-lite')
+GEMINI_TEXT_MODEL_FALLBACK  = os.getenv('GEMINI_TEXT_MODEL_FALLBACK', 'gemini-2.5-flash')
+GEMINI_IMAGE_MODEL          = os.getenv('GEMINI_IMAGE_MODEL', 'gemini-3.1-flash-image')
+GEMINI_IMAGE_MODEL_FALLBACK = os.getenv('GEMINI_IMAGE_MODEL_FALLBACK', 'gemini-2.5-flash-image')
+GEMINI_IMAGE_FORMAT         = os.getenv('GEMINI_IMAGE_FORMAT', 'webp')   # webp|native
 HF_TOKEN          = os.getenv('HF_TOKEN', '')
 IMAGE_BASE_URL    = os.getenv('IMAGE_BASE_URL', 'https://pub-5d2133d166fc4b65ad05295df352519f.r2.dev')
 GOOGLE_CLIENT_ID  = os.getenv('GOOGLE_CLIENT_ID', '')

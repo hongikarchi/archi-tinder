@@ -178,7 +178,8 @@ class TestEnsureChatCacheLazyInit:
         # model positional-or-keyword arg
         bound = create_kwargs
         model_arg = bound.kwargs.get('model') or (bound.args[0] if bound.args else None)
-        assert model_arg == 'gemini-2.5-flash'
+        from django.conf import settings
+        assert model_arg == settings.GEMINI_TEXT_MODEL
 
     def test_gemini_create_config_ttl_matches_setting(self):
         from apps.recommendation.services import _ensure_chat_cache

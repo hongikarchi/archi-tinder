@@ -78,9 +78,10 @@ test-local:
 	@cd $(BACKEND_DIR); \
 	HOST=$$(grep -E '^DB_HOST=' .env | cut -d= -f2-); \
 	NAME=$$(grep -E '^DB_NAME=' .env | cut -d= -f2-); \
+	PORT=$$(grep -E '^DB_PORT=' .env | cut -d= -f2-); \
 	echo "LOCAL test DB target  ->  HOST=$$HOST  DB=test_$$NAME (created + dropped)  USER=neondb_owner"; \
 	echo "WARNING: creates a throwaway test DB as neondb_owner. Confirm HOST above is your LOCAL dev branch, NOT production."; \
 	read -p "Proceed? type 'yes': " ANS; \
 	if [ "$$ANS" != "yes" ]; then echo "aborted."; exit 1; fi; \
 	read -s -p "neondb_owner password: " PW; echo; \
-	DB_USER=neondb_owner DB_PASSWORD="$$PW" python3 -m pytest $(ARGS)
+	DB_HOST="$$HOST" DB_NAME="$$NAME" DB_PORT="$$PORT" DB_USER=neondb_owner DB_PASSWORD="$$PW" python3 -m pytest $(ARGS)
