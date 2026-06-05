@@ -23,6 +23,28 @@ from ..throttling import GuestLoginThrottle, GuestPromoteThrottle
 
 logger = logging.getLogger('apps.accounts')
 
+# ---------------------------------------------------------------------------
+# SECURITY: OAuth email-verified policy (account-takeover mitigation)
+# ---------------------------------------------------------------------------
+# Every social provider can return an email address that may or may not belong
+# to the authenticating user.  Linking (or storing) an UNVERIFIED provider
+# email onto an existing account is an account-takeover vector:
+#
+#   Attacker creates a provider account with email=victim@example.com
+#   (unverified) → without this guard, our link-by-email branch would
+#   silently attach their social credential to the victim's profile.
+#
+# Policy enforced by _get_or_create_user(email_verified=...):
+#   - email-match linking: ONLY when email_verified=True
+#   - new account creation: email stored ONLY when email_verified=True
+#     (unverified address stored → reverse-takeover: a later verified login
+#      for that address matches the attacker's account)
+#
+# Per-provider status:
+#   Google → `email_verified` boolean in /oauth2/v3/userinfo (reliable)
+#   Kakao  → `kakao_account.is_email_verified` (may be absent → default False)
+#   Naver  → no verified field in /nid/me → always False (conservative)
+# ---------------------------------------------------------------------------
 
 # -- Guest helpers -------------------------------------------------------------
 
@@ -42,7 +64,13 @@ def _clean_guest_display_name(value):
 def _exchange_google_code(code):
     """Exchange Google auth code for user info dict.
 
-    Returns dict with keys: provider_id, email, display_name, avatar_url.
+    Returns dict with keys: provider_id, email, display_name, avatar_url,
+    email_verified.
+
+    SECURITY: email_verified is included so callers can gate account-linking
+    on provider-confirmed identity.  Never link/store an unverified email
+    onto an existing account — that is the account-takeover vector.
+
     Raises ValueError on any failure so callers can return 400/502.
 
     Defined as a module-level function so tests can monkeypatch it at its own
@@ -89,10 +117,12 @@ def _exchange_google_code(code):
         )
     info = userinfo_resp.json()
     return {
-        'provider_id': info['sub'],
-        'email': info.get('email', ''),
-        'display_name': info.get('name', ''),
-        'avatar_url': info.get('picture', ''),
+        'provider_id':    info['sub'],
+        'email':          info.get('email', ''),
+        'display_name':   info.get('name', ''),
+        'avatar_url':     info.get('picture', ''),
+        # SECURITY: must be True before linking/storing email on an account.
+        'email_verified': bool(info.get('email_verified', False)),
     }
 
 
@@ -100,8 +130,27 @@ class DevLoginThrottle(AnonRateThrottle):
     rate = '5/minute'
 
 
-def _get_or_create_user(provider, provider_id, email, display_name, avatar_url):
-    """Find or create a UserProfile, linking by email for account merging."""
+def _get_or_create_user(provider, provider_id, email, display_name, avatar_url,
+                        email_verified=False):
+    """Find or create a UserProfile, linking by email only when verified.
+
+    SECURITY (account-takeover mitigation):
+      email_verified must be True before we allow an email-address match to
+      link a new social credential into an existing account.  An attacker who
+      registers a provider account with an UNVERIFIED email equal to a victim's
+      address would otherwise gain full access to the victim's account.
+
+      When email_verified is False:
+        - The email-match/link branch is skipped entirely.
+        - A NEW account is created with email='' (not the unverified address).
+          Storing the unverified email would create the reverse vector: a later
+          VERIFIED login for that address would match the attacker's account.
+
+    Branch (i)  — existing SocialAccount: always safe, unchanged.
+    Branch (ii) — email match: runs ONLY when email AND email_verified=True.
+    Branch (iii)— create new: email stored only when email_verified=True.
+    """
+    # (i) pre-check: existing social credential → return immediately (safe)
     social = SocialAccount.objects.filter(provider=provider, provider_id=provider_id).first()
     if social:
         profile = social.user
@@ -116,14 +165,18 @@ def _get_or_create_user(provider, provider_id, email, display_name, avatar_url):
             profile.save(update_fields=update_fields)
         return profile
 
-    # Check if email matches an existing account (account linking)
+    # (ii) email-match account linking — ONLY when provider confirms email ownership
     profile = None
-    if email:
+    if email and email_verified:
         existing_user = User.objects.filter(email=email).first()
         if existing_user:
             profile = getattr(existing_user, 'profile', None)
 
     if profile is None:
+        # (iii) create new account
+        # SECURITY: store email only when verified — unverified email stored here
+        # would let a later verified login for that address collide with this account.
+        safe_email = email if email_verified else ''
         username = f'{provider}_{provider_id}'[:150]
         # Ensure unique username
         base = username
@@ -131,10 +184,10 @@ def _get_or_create_user(provider, provider_id, email, display_name, avatar_url):
         while User.objects.filter(username=username).exists():
             username = f'{base}_{n}'
             n += 1
-        django_user = User.objects.create_user(username=username, email=email or '')
+        django_user = User.objects.create_user(username=username, email=safe_email)
         profile = UserProfile.objects.create(
             user=django_user,
-            display_name=display_name or email or provider_id,
+            display_name=display_name or safe_email or provider_id,
             avatar_url=avatar_url,
         )
     else:
@@ -284,7 +337,10 @@ class GuestPromoteView(APIView):
             ).select_related('user__user').first()
 
             existing_by_email = None
-            if google_data['email']:
+            # SECURITY: only look up an existing account by email when Google
+            # confirms the email is verified.  An unverified email matching a
+            # victim's address must NOT trigger a merge.
+            if google_data['email'] and google_data.get('email_verified', False):
                 existing_by_email = (
                     UserProfile.objects.filter(user__email=google_data['email'])
                     .exclude(pk=guest_profile.pk)
@@ -329,12 +385,21 @@ class GuestPromoteView(APIView):
 
             else:
                 # Branch 2 — in-place transform (most common case, single device).
-                new_username = google_data['email']
-                if User.objects.filter(username=new_username).exclude(pk=guest_user.pk).exists():
-                    # Deterministic fallback — provider_id is collision-free
+                # SECURITY: only store/use the Google email when verified.
+                # Unverified email → username falls back to provider_id form,
+                # email stays empty — prevents reverse-takeover where a later
+                # verified login for that address matches this account.
+                if google_data.get('email_verified', False) and google_data['email']:
+                    new_username = google_data['email']
+                    if User.objects.filter(username=new_username).exclude(pk=guest_user.pk).exists():
+                        # Deterministic fallback — provider_id is collision-free
+                        new_username = f"google_{google_data['provider_id']}"
+                    safe_email = google_data['email']
+                else:
                     new_username = f"google_{google_data['provider_id']}"
+                    safe_email = ''
                 guest_user.username = new_username
-                guest_user.email = google_data['email']
+                guest_user.email = safe_email
                 guest_user.save(update_fields=['username', 'email'])
 
                 guest_profile.is_guest = False
@@ -448,12 +513,15 @@ class GoogleLoginView(APIView):
             return Response({'detail': detail}, status=status.HTTP_401_UNAUTHORIZED)
 
         info = resp.json()
+        # SECURITY: pass email_verified so _get_or_create_user only links by
+        # email when Google confirms the address belongs to this account.
         profile = _get_or_create_user(
             provider='google',
             provider_id=info['sub'],
             email=info.get('email'),
             display_name=info.get('name'),
             avatar_url=info.get('picture'),
+            email_verified=bool(info.get('email_verified', False)),
         )
         logger.info('Google login: user=%s', profile.pk)
         return Response(_make_token_response(profile))
@@ -483,12 +551,16 @@ class KakaoLoginView(APIView):
             return Response({'detail': 'Invalid Kakao response'}, status=status.HTTP_401_UNAUTHORIZED)
         kakao_id = str(info['id'])
         kakao_account = info.get('kakao_account', {})
+        # SECURITY: read Kakao's email-verified flag; default False so unverified
+        # addresses never link into existing accounts.
+        kakao_email_verified = bool(kakao_account.get('is_email_verified', False))
         profile = _get_or_create_user(
             provider='kakao',
             provider_id=kakao_id,
             email=kakao_account.get('email'),
             display_name=kakao_account.get('profile', {}).get('nickname'),
             avatar_url=kakao_account.get('profile', {}).get('profile_image_url'),
+            email_verified=kakao_email_verified,
         )
         logger.info('Kakao login: user=%s', profile.pk)
         return Response(_make_token_response(profile))
@@ -516,12 +588,17 @@ class NaverLoginView(APIView):
         info = resp.json().get('response', {})
         if not info.get('id'):
             return Response({'detail': 'Invalid Naver response'}, status=status.HTTP_401_UNAUTHORIZED)
+        # SECURITY: Naver's /nid/me API exposes no email-verified field.
+        # We conservatively treat ALL Naver emails as unverified (email_verified=False)
+        # so they never trigger account-linking.  The email is also not stored on
+        # the new account to prevent the reverse-takeover vector.
         profile = _get_or_create_user(
             provider='naver',
             provider_id=info['id'],
             email=info.get('email'),
             display_name=info.get('name') or info.get('nickname'),
             avatar_url=info.get('profile_image'),
+            email_verified=False,
         )
         logger.info('Naver login: user=%s', profile.pk)
         return Response(_make_token_response(profile))
