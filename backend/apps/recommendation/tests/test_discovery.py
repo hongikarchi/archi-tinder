@@ -636,12 +636,12 @@ def test_feedback_unauthenticated(api_client):
 def test_promote_with_draft_id_uses_that_draft(auth_client, user_profile):
     """promote-to-taste with draft_id uses that draft's likes."""
     draft = create_discovery_draft(user_profile)
-    draft.liked_ids = [{'id': f'bld_{i:06d}', 'intensity': 1.0} for i in range(5)]
+    draft.liked_ids = [{'id': f'bld_{i:06d}', 'intensity': 1.0} for i in range(10)]
     draft.save(update_fields=['liked_ids'])
     draft_id_str = str(draft.project_id)
 
     mock_emb = np.array([0.1] * 384, dtype=np.float64)
-    emb_map = {f'bld_{i:06d}': mock_emb for i in range(5)}
+    emb_map = {f'bld_{i:06d}': mock_emb for i in range(10)}
 
     with patch('apps.recommendation.views.discovery.engine.get_pool_embeddings', return_value=emb_map), \
          patch('apps.recommendation.views.discovery.engine.update_preference_vector',
@@ -673,11 +673,11 @@ def test_promote_without_draft_id_uses_most_recent(auth_client, user_profile):
     # draft1 exists but has no likes — draft2 has likes and is more recent.
     create_discovery_draft(user_profile)
     draft2 = create_discovery_draft(user_profile)
-    draft2.liked_ids = [{'id': f'bld_{i:06d}', 'intensity': 1.0} for i in range(5)]
+    draft2.liked_ids = [{'id': f'bld_{i:06d}', 'intensity': 1.0} for i in range(10)]
     draft2.save(update_fields=['liked_ids'])
 
     mock_emb = np.array([0.1] * 384, dtype=np.float64)
-    emb_map = {f'bld_{i:06d}': mock_emb for i in range(5)}
+    emb_map = {f'bld_{i:06d}': mock_emb for i in range(10)}
 
     with patch('apps.recommendation.views.discovery.engine.get_pool_embeddings', return_value=emb_map), \
          patch('apps.recommendation.views.discovery.engine.update_preference_vector',
@@ -981,12 +981,12 @@ def test_promote_next_image_contains_image_url(auth_client, user_profile):
     which calls _row_to_card).
     """
     draft = create_discovery_draft(user_profile)
-    draft.liked_ids = [{'id': f'bld_{i:06d}', 'intensity': 1.0} for i in range(5)]
+    draft.liked_ids = [{'id': f'bld_{i:06d}', 'intensity': 1.0} for i in range(10)]
     draft.save(update_fields=['liked_ids'])
     draft_id_str = str(draft.project_id)
 
     mock_emb = np.array([0.1] * 384, dtype=np.float64)
-    emb_map = {f'bld_{i:06d}': mock_emb for i in range(5)}
+    emb_map = {f'bld_{i:06d}': mock_emb for i in range(10)}
 
     # Card dict that mirrors what engine.get_buildings_by_ids/_row_to_card returns.
     normalized_card = {

@@ -225,6 +225,13 @@ class DiscoveryFeedbackView(APIView):
         if draft_id:
             draft = get_discovery_draft(profile, draft_id)
         if draft is None:
+            # missing OR invalid/malformed draft_id -> graceful new draft (author intent),
+            # but enforce the guest board-limit so guests can't bypass the 3-board cap.
+            if profile.is_guest and Project.objects.filter(user=profile).count() >= 3:
+                return Response(
+                    {'detail': 'verify_required', 'reason': 'board_limit_reached', 'limit': 3},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
             draft = create_discovery_draft(profile)
 
         if action == 'like':
@@ -275,7 +282,8 @@ class DiscoveryPromoteView(APIView):
       - draft_id given + resolves to a valid discovery draft → use it.
       - draft_id omitted or invalid → use the most-recent draft board
         (name startswith 'discovery_', ordered by updated_at desc).
-      - No draft exists at all → 400 not_enough_likes.
+      - No draft exists, or fewer than discovery_promote_threshold (10)
+        likes → 400 not_enough_likes.
 
     Takes the most-recent up to ``discovery_promote_threshold`` (10) liked
     building ids from the resolved draft, fetches their embeddings, and
@@ -293,7 +301,9 @@ class DiscoveryPromoteView(APIView):
         progress, filter_relaxed }
 
     Errors:
-      400 { detail: 'not_enough_likes' } — no draft likes at all
+      400 { detail: 'not_enough_likes' } — fewer than 10 draft likes
+      403 { detail: 'verify_required', reason: 'board_limit_reached' }
+          — guest at the 3-board cap
     """
     permission_classes = [IsAuthenticated]
 
@@ -329,10 +339,21 @@ class DiscoveryPromoteView(APIView):
         seed_liked = all_liked[-promote_threshold:] if len(all_liked) > promote_threshold else all_liked
         seed_ids = _draft_liked_id_only(seed_liked)
 
-        if not seed_ids:
+        if len(seed_ids) < promote_threshold:
             return Response(
                 {'detail': 'not_enough_likes'},
                 status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Guest board-limit gate: promote creates a NEW non-draft Project while
+        # the draft board persists → net +1 board.  Mirror the raw count used by
+        # POST /api/v1/projects/ and DiscoveryFeedbackView (drafts included in
+        # total — consistent with the resource cap policy, not the tier logic
+        # which excludes discovery_ prefix boards for algorithm purposes).
+        if profile.is_guest and Project.objects.filter(user=profile).count() >= 3:
+            return Response(
+                {'detail': 'verify_required', 'reason': 'board_limit_reached', 'limit': 3},
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         # ── 2. Fetch seed embeddings ───────────────────────────────────────

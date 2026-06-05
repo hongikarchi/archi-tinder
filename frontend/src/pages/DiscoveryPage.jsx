@@ -4,7 +4,6 @@ import { fetchDiscoveryFeed, discoveryFeedback, promoteToTaste } from '../api/cl
 import { reportWriteError } from '../utils/reportWriteError.js'
 import SwipeCard, { CARD_WIDTH, CARD_HEIGHT } from '../components/SwipeCard.jsx'
 import DiscoveryTriggerCard from '../components/DiscoveryTriggerCard.jsx'
-import SaveToBoardModal from '../components/SaveToBoardModal.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
 
 const PREFETCH_AT_REMAINING = 3   // fetch more when deck.length <= this
@@ -116,9 +115,6 @@ export default function DiscoveryPage({ showToast }) {
   const pendingActionRef = useRef(null)
   const cardRef = useRef(null)
   const keySwipingRef = useRef(false)
-  const longPressTimer = useRef(null)
-  const longPressFired = useRef(false)
-  const touchStartPos = useRef(null)
   // triggerShownRef: true once the trigger card has been injected this session
   const triggerShownRef = useRef(false)
   // seenIdsRef: tracks cards seen this session for shake animation on re-appearance
@@ -132,7 +128,6 @@ export default function DiscoveryPage({ showToast }) {
   const [tasteState, setTasteState] = useState(_cached ? (_cached.tasteState || 'cold') : 'cold')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [saveModalCard, setSaveModalCard] = useState(null)
 
   // Draft-id session state — persisted to sessionStorage
   const [draftId, setDraftId] = useState(() => sessionStorage.getItem(DRAFT_ID_KEY) || null)
@@ -168,12 +163,11 @@ export default function DiscoveryPage({ showToast }) {
     sessionStorage.setItem(DRAFT_LIKES_KEY, String(draftLikeCount))
   }, [draftLikeCount])
 
-  // Keyboard swipe: ← pass, → like. Blocked while save modal is open.
+  // Keyboard swipe: ← pass, → like.
   useEffect(() => {
     async function onKey(e) {
       const dir = SWIPE_KEYS[e.key]
       if (!dir || !cardRef.current || keySwipingRef.current) return
-      if (saveModalCard) return
       if (!deck.length) return
       keySwipingRef.current = true
       try {
@@ -184,7 +178,7 @@ export default function DiscoveryPage({ showToast }) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [deck.length, saveModalCard])
+  }, [deck.length])
 
   // Inject trigger card when draftLikeCount first reaches threshold.
   // triggerShownRef is set INSIDE the updater so it is only marked true when the
@@ -303,7 +297,6 @@ export default function DiscoveryPage({ showToast }) {
   // Right (like): optimistic advance + POST feedback.
   // Left (pass): optimistic advance + POST feedback (fire-and-forget, low-stakes).
   function onTinderSwipe(dir) {
-    if (longPressFired.current) return
     pendingActionRef.current = dir === 'right' ? 'like' : 'pass'
   }
 
@@ -378,65 +371,6 @@ export default function DiscoveryPage({ showToast }) {
     } finally {
       setPromoteLoading(false)
     }
-  }
-
-  // Long-press modal callbacks (SaveToBoardModal opened by 400ms long-press)
-  function handleSaved() {
-    longPressFired.current = false
-    setSaveModalCard(null)
-    advance()
-  }
-
-  function handleSaveCancel() {
-    longPressFired.current = false
-    setSaveModalCard(null)
-  }
-
-  // -- Long-press handlers (400ms) --
-  function handleTouchStart(e) {
-    touchStartPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
-    longPressFired.current = false
-    clearTimeout(longPressTimer.current)
-    longPressTimer.current = setTimeout(() => {
-      longPressFired.current = true
-      if (topCard && !isTriggerCard(topCard)) setSaveModalCard(topCard)
-    }, 400)
-  }
-
-  function handleTouchEnd() {
-    clearTimeout(longPressTimer.current)
-  }
-
-  function handleTouchMove(e) {
-    if (!touchStartPos.current) return
-    const dx = Math.abs(e.touches[0].clientX - touchStartPos.current.x)
-    const dy = Math.abs(e.touches[0].clientY - touchStartPos.current.y)
-    if (dx > 10 || dy > 10) clearTimeout(longPressTimer.current)
-  }
-
-  function handleMouseDown(e) {
-    touchStartPos.current = { x: e.clientX, y: e.clientY }
-    longPressFired.current = false
-    clearTimeout(longPressTimer.current)
-    longPressTimer.current = setTimeout(() => {
-      longPressFired.current = true
-      if (topCard && !isTriggerCard(topCard)) setSaveModalCard(topCard)
-    }, 400)
-  }
-
-  function handleMouseUp() {
-    clearTimeout(longPressTimer.current)
-  }
-
-  function handleMouseLeave() {
-    clearTimeout(longPressTimer.current)
-  }
-
-  function handleMouseMove(e) {
-    if (!touchStartPos.current) return
-    const dx = Math.abs(e.clientX - touchStartPos.current.x)
-    const dy = Math.abs(e.clientY - touchStartPos.current.y)
-    if (dx > 10 || dy > 10) clearTimeout(longPressTimer.current)
   }
 
   function handleRetry() {
@@ -519,13 +453,6 @@ export default function DiscoveryPage({ showToast }) {
       {/* Card stack */}
       <div
         style={{ width: CARD_WIDTH, height: CARD_HEIGHT, position: 'relative' }}
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
-        onTouchMove={handleTouchMove}
-        onMouseDown={handleMouseDown}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseLeave}
-        onMouseMove={handleMouseMove}
       >
         {error && deck.length === 0 ? (
           <div style={{
@@ -679,13 +606,6 @@ export default function DiscoveryPage({ showToast }) {
         )}
       </div>
 
-      {saveModalCard && (
-        <SaveToBoardModal
-          card={saveModalCard}
-          onClose={handleSaveCancel}
-          onSaved={handleSaved}
-        />
-      )}
     </div>
   )
 }
