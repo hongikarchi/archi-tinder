@@ -346,6 +346,26 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 _(Deferred 2026-06-04 batch scope: YAGNI — product-미소비 telemetry 1필드 위해 Celery+worker 도입은 과투자. 2번째 background job 생기면 단일 INFRA-JOBS 티켓으로 묶어 처리.)_
 
 ## Done
+### BACK-LLM-GEMINI-1 — Gemini 3.1 모델 마이그레이션 + 페르소나 이미지 플로우 배선 — RESOLVED 2026-06-05 (`dc1b068`, #204)
+하드코딩 모델 ID(텍스트 `gemini-2.5-flash` 9곳 + 이미지 Imagen 3 orphan) → settings/env 분리(`GEMINI_TEXT_MODEL`=3.1-flash-lite, `GEMINI_IMAGE_MODEL`=3.1-flash-image, 각 fallback). 텍스트 호출 `generate_content_with_fallback` 래퍼로 일원화(model+retry+timeout+4xx fallback). 이미지: Imagen `generate_images` → Gemini-native `generate_content(response_modalities=['TEXT','IMAGE'])` 재작성 + Pillow WebP 변환(`report_image_mime`, migration 0023). App.jsx 세션완료 후 fire-and-forget 이미지 생성 배선(전엔 orphan — 한 번도 호출 안 됨).
+- [x] **실키 스모크 검증**: 3.1-flash-lite(텍스트) + 3.1-flash-image(이미지 JPEG 880KB) 둘 다 200 OK — fallback 안 타고 3.1 primary 실작동 확인. `['TEXT','IMAGE']`로 이미지 part 정상 반환(Codex 🟡 text-only 우려 실측 미발생).
+- [x] **Codex 리뷰 수정**: 래퍼가 facade `_retry_gemini_call`(테스트 9곳 patch 대상) 우회 → 실HTTP/MagicMock 누출로 CI 8실패. late-bound `_svc._retry_gemini_call`로 seam 복원(FULL-REFACTOR-1 교훈). MIME fallback webp→png(레거시 PNG 행). 22 신규 테스트 green.
+- Deferred: prod 배포 시 실키 가용성/latency 재확인(fallback 안전망). [[BACK-LLM-4]]
+
+### SNS-REPORT-PAGE-1 — 페르소나 리포트 별도 페이지 + axis_scores 영속화 (yywon1, Claude fix-forward) — RESOLVED 2026-06-05 (`1917f5d`, #196)
+인라인 리포트 → 별도 `/board/:id/report` 페이지(BoardReportPage: 레이더/스펙트럼 차트 + 페르소나 이미지 생성 버튼 + 스크롤 수정). fix-forward(Claude): Codex blocker 2건 수정.
+- [x] **axis_scores 영속화**: `compute_axis_scores`가 생성 응답에만 실리고 저장 안 돼 reload/직접링크 시 차트 0(빈 레이더) → `Project.axis_scores` JSONField(migration 0024) + 생성 시 저장 + serializer 노출(detail; list서 defer) + BoardReportPage `board.axis_scores` 읽음. 계산 로직 무변경.
+- [x] **이미지 MIME 동적화**: BoardReportPage `data:image/png` 하드코딩 → `report_image_mime`(#204 WebP 대응) || png fallback. (#204↔#196 MIME 해저드 종결.)
+- [x] code-review + security PASS. CI green. 팀원(yywon1) PR 코멘트로 변경 통지.
+
+### CODEX-FUNC-3 — Codex 라운드3 기능 수정 4건 (auth/tokens/cache/testenv) — RESOLVED 2026-06-05 (#199/#201/#202/#203)
+Codex 기능 리뷰 배치 머지(SECURITY 항목은 배포-게이트 배치로 deferred).
+- [x] **#203 `3870bc4` (FIX-2)**: 게스트 promote 머지 conflict-aware — 500/데이터 유실 방지.
+- [x] **#202 `54a40e5` (FIX-3)**: 토큰 refresh single-flight — 동시 401 spurious logout 차단.
+- [x] **#201 `3c742c7` (FIX-7)**: architect follow/unfollow 시 프로필 캐시 evict.
+- [x] **#199 `230e29d` (FIX-1/8)**: pytest 하 `.env` 로드 가드 + `.flake8` 설정(repo-wide flake8 정상화).
+- Deferred(HARD): 배포 전 SECURITY 배치 — **OAuth `email_verified`(계정 탈취, develop→main 전 필수)** + swipe/bookmark/architect ID 검증 + merge.py DoS row-cap.
+
 ### BACK-AUTH-3 — guest like-gate @50 + frontend verify 배선 — RESOLVED 2026-06-04 (`feature/claude-auth-batch` → develop, #193)
 `LikedBuildingsView.post`가 guest 무제한 like 허용하던 것 → 50개서 verify-gate(403 `verify_required`/`liked_limit_reached`, board-gate precedent mirror). frontend `addLikedBuilding`가 403 intercept → `archithon:verify-required` dispatch + `VerifyRequiredError` throw(`createProject` 패턴); DiscoveryPage catch가 VerifyRequiredError 시 generic 토스트 skip. Codex #193: 51st like 유실 → `archithon:pending-like`로 bldId 저장 후 promote(onPromoted)에서 addLikedBuilding retry(pendingBoardCreate 패턴). guest-scenario 테스트 4.
 
@@ -376,13 +396,14 @@ Discovery 우-스와이프 like(`UserProfile.liked_building_ids`)가 추천 엔�
 - 게이트: `manage.py check` PASS, flake8 clean(2 pre-existing E221 무관), code-review PASS(5영역: dedupe·exclude·evict-placement·test-discriminating·TTFC 무회귀). 로컬 pytest INFRA-DB-1 차단 → **CI가 실게이트**. app-test 스킵(추천 로직, swipe-lifecycle 무변경, 단위테스트가 정밀 커버). algorithm.md annotate.
 - ⚠️ recency 회귀(오너 결정): Project 40+Discovery 60 유저 → `[-50:]`가 Discovery 50개만 → Taste 프로필 탈락. 이번 minimal-additive로 두고 PR에 명시 — 오너가 source별 recent-N 병합 채택 여부 결정.
 
-### FULL-DISCOVERY-1 — Discovery 탭 v3.1+v3.2 재설계 (10장 청크 + 3-Tier + Draft Board → Taste 퍼널) — RESOLVED 2026-06-04 (`fc72639-pre-squash`)
+### FULL-DISCOVERY-1 — Discovery 탭 v3.1+v3.2 재설계 (10장 청크 + 3-Tier + Draft Board → Taste 퍼널) — RESOLVED 2026-06-04 (`fc72639-pre-squash`, merged #200 `2238e5d` 2026-06-05)
 레거시 global-centroid + 커서 무한스크롤 폐기 → 10장 chunk prefetch + 다중 centroid + 40:60 Local/Global FPS + Deferred Exclusion(dislike zone) + 3-Tier 라이프사이클(0/100·20/80·40/60) + 세션별 Draft Board → Taste 퍼널로 전면 교체. 신규 마이그레이션 0건(Project 재사용), `engine.py` 미수정(신규 `discovery_feed.py` 모듈로 compose, 알고리즘 소유권 준수).
 - [x] 백엔드 v3.1: `discovery_feed.py`(draft helper·tier·`build_discovery_chunk`·greedy FPS·interleave·dislike zone), `caches.py` App-Open centroid 캐시(6h TTL, like-evict 안함), `GET /discovery/`(chunk) 재작성, `POST /discovery/feedback/`, `settings.py` RECOMMENDATION에 discovery_* 14개 추가.
 - [x] 백엔드 v3.2: 세션별 `discovery_YYMMDD_HHMM` Draft Project(프로필 노출, tier project_count는 `discovery_` 접두 제외, centroid는 전체 like 누적), feedback `draft_id` 왕복, `POST /discovery/promote-to-taste/`(draft 10 likes로 AnalysisSession like_vectors 사전주입+풀 생성).
 - [x] 프론트: `DiscoveryPage` 10장 chunk 버퍼(client_buffer_ids stateless dedup) + swipe→feedback + 덱 내 Taste 트리거 카드(우=promote, 좌=계속) + 진행률 바(N/10→취향 탐색 중) + 재등장 shake; `DiscoveryTriggerCard.jsx`(신규); Surprise 모달 제거.
 - [x] 버그픽스: stale `draftLikeCount`(sessionStorage)로 트리거 조기 등장 → 로그인 시에도 draft 초기화 + draftId 게이트 + not_enough_likes 복구; promote 응답 `normalizeCard`로 Taste 첫 스와이프 400(`canonical_bld_id` undefined) 방지.
 - [x] code-review + security 2라운드 PASS(ImportError·백필·buffer DoS·JSON 무한증가·예약명·draft_id 500·트리거 ref race 수정). Django check 0 issues + Discovery 테스트 52개 green. ESLint/build green.
+- [x] **fix-forward (Claude, #200 머지)**: Codex blocker 3건 — promote 임계값 `<10` 거부(전엔 1~9도 promote; 스펙=10장 전환), feedback+promote 게스트 보드 게이트(`is_guest & ≥3보드`→403 verify_required; 3보드 우회 차단, graceful draft 생성 설계는 보존), long-press→SaveToBoardModal 제거(UX-GALLERY/#191 순수-스와이프 제거가 머지 통째덮어쓰기로 부활한 잔재; 알고리즘 코어 무변경). promote 테스트 3건 10 likes로 갱신. code-review+security PASS. 팀원(ksangjo) PR 코멘트로 통지.
 - Deferred: app-test FULL 라이브 브라우저 검증 미실행(dev 서버 + app-test 에이전트 부재) — prod 전 실행 필요. Deferred: 트리거 카드 희귀 엣지(like 10번째가 빈 덱 동시각) 한 박자 지연, 비차단.
 
 ### ARCHITECT-UNIFY-C — OfficeFollow 중복 제거 (follow 모델 통합) — RESOLVED 2026-06-04 (`feature/claude-architect-unify-c` → develop)

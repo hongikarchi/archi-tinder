@@ -23,11 +23,32 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-06-04 23:49 KST',
-    head: '9be8fd8',
-    branch: 'feature/discovery-algorithm',
+    updatedAt: '2026-06-05 13:09 KST',
+    head: '2238e5d',
+    branch: 'feature/claude-batch-audit',
   },
   done: [
+    {
+      id: 'BACK-LLM-GEMINI-1',
+      title: 'Gemini 3.1 모델 마이그레이션 + 페르소나 이미지 플로우 배선',
+      completedAt: '2026-06-05',
+      prs: [204],
+      note: '하드코딩 모델 ID(텍스트 `gemini-2.5-flash` 9곳 + 이미지 Imagen 3 orphan) → settings/env 분리(`GEMINI_TEXT_MODEL`=3.1-flash-lite, `GEMINI_IMAGE_MODEL`=3.1-flash-image, 각 fallback). 텍스트 호출 `generate_content_with_fallback` 래퍼로 일원화(model+retry+timeout+4xx fallback). 이미지: Imagen `generate_images`…',
+    },
+    {
+      id: 'SNS-REPORT-PAGE-1',
+      title: '페르소나 리포트 별도 페이지 + axis_scores 영속화 (yywon1, Claude fix-forward)',
+      completedAt: '2026-06-05',
+      prs: [196],
+      note: '인라인 리포트 → 별도 `/board/:id/report` 페이지(BoardReportPage: 레이더/스펙트럼 차트 + 페르소나 이미지 생성 버튼 + 스크롤 수정). fix-forward(Claude): Codex blocker 2건 수정.',
+    },
+    {
+      id: 'CODEX-FUNC-3',
+      title: 'Codex 라운드3 기능 수정 4건 (auth/tokens/cache/testenv)',
+      completedAt: '2026-06-05',
+      prs: [199, 201, 202, 203],
+      note: 'Codex 기능 리뷰 배치 머지(SECURITY 항목은 배포-게이트 배치로 deferred).',
+    },
     {
       id: 'BACK-AUTH-3',
       title: 'guest like-gate @50 + frontend verify 배선',
@@ -61,24 +82,6 @@ window.PROJECT_STATE = {
       title: '갤러리 제스처 3버그 (FRONT-UX-6/9/10)',
       completedAt: '2026-06-04',
       note: '갤러리 3버그(부모-sync wobble·모바일 세로스크롤·Discovery long-press 오작동)를 lift 없이 해결. 원 premise(sibling-overlay lift)를 유저 product 재검토로 재정의 — 갤러리 보면서도 스와이프 유지 + 순수 Discovery. session 브라우저 spike로 "3D가 스크롤 안 깸"(원인은 touch-action·snap, 3D 아님) 확정 후 구현.',
-    },
-    {
-      id: 'BACK-RECOMMEND-4',
-      title: 'Discovery 좋아요가 추천에 반영 (taste vector + exclude + evict)',
-      completedAt: '2026-06-04',
-      note: 'Discovery 우-스와이프 like(`UserProfile.liked_building_ids`)가 추천 엔진에 안 먹히던 것 해결 — Discovery-only 유저가 영구 cold/random feed였던 core-promise 위반 수정. 3곳 주입, 전부 기존 infra 재사용.',
-    },
-    {
-      id: 'FULL-DISCOVERY-1',
-      title: 'Discovery 탭 v3.1+v3.2 재설계 (10장 청크 + 3-Tier + Draft Board → Taste 퍼널)',
-      completedAt: '2026-06-04',
-      note: '레거시 global-centroid + 커서 무한스크롤 폐기 → 10장 chunk prefetch + 다중 centroid + 40:60 Local/Global FPS + Deferred Exclusion(dislike zone) + 3-Tier 라이프사이클(0/100·20/80·40/60) + 세션별 Draft Board → Taste 퍼널로 전면 교체. 신규 마이그레이션 0건(Project 재사용), `engine.py` 미수정(신규 `discovery_feed.py` 모듈로 compos…',
-    },
-    {
-      id: 'ARCHITECT-UNIFY-C',
-      title: 'OfficeFollow 중복 제거 (follow 모델 통합)',
-      completedAt: '2026-06-04',
-      note: '미배선 중복 `OfficeFollow`(firm-follow, ArchitectFollow와 중복) 제거 → office-interest follow 모델이 ArchitectFollow 1개로 통합(원 audit 중복 finding 종결). Office 서브시스템 나머지는 계획 기능 substrate라 park.',
     },
   ],
   now: [
@@ -184,60 +187,60 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 204,
+      title: 'feat(gemini): 3.1 model migration + persona-image flow wiring',
+      mergedAt: '2026-06-05T01:44:29Z',
+      mergedAtKST: '2026-06-05 10:44 KST',
+      sha: 'dc1b068',
+    },
+    {
+      number: 203,
+      title: 'fix(auth): conflict-aware guest-promote merge — no 500, no data loss (FIX-2)',
+      mergedAt: '2026-06-05T00:58:04Z',
+      mergedAtKST: '2026-06-05 09:58 KST',
+      sha: '3870bc4',
+    },
+    {
+      number: 202,
+      title: 'fix(tokens): single-flight refresh — stop concurrent-401 spurious logout (FIX-3)',
+      mergedAt: '2026-06-05T00:58:00Z',
+      mergedAtKST: '2026-06-05 09:58 KST',
+      sha: '54a40e5',
+    },
+    {
+      number: 201,
+      title: 'fix(recommend): evict profile cache on architect follow/unfollow (FIX-7)',
+      mergedAt: '2026-06-05T00:57:57Z',
+      mergedAtKST: '2026-06-05 09:57 KST',
+      sha: '3c742c7',
+    },
+    {
+      number: 200,
+      title: 'feat(FULL-DISCOVERY-1): Discovery 10장 청크 + 3-Tier + Draft Board -> Taste 퍼널 재설계',
+      mergedAt: '2026-06-05T03:11:46Z',
+      mergedAtKST: '2026-06-05 12:11 KST',
+      sha: '2238e5d',
+    },
+    {
+      number: 199,
+      title: 'fix(testenv): guard .env under pytest + .flake8 config (FIX-1, FIX-8)',
+      mergedAt: '2026-06-05T00:57:53Z',
+      mergedAtKST: '2026-06-05 09:57 KST',
+      sha: '230e29d',
+    },
+    {
+      number: 198,
+      title: 'docs(task): batch audit — 4 done + 5 deferred annotations + BACK-LLM-4',
+      mergedAt: '2026-06-04T14:04:08Z',
+      mergedAtKST: '2026-06-04 23:04 KST',
+      sha: '9be8fd8',
+    },
+    {
       number: 197,
       title: 'chore(infra): make test-local — local pytest via neondb_owner (INFRA-DB-2)',
       mergedAt: '2026-06-04T13:53:01Z',
       mergedAtKST: '2026-06-04 22:53 KST',
       sha: '87023f3',
-    },
-    {
-      number: 195,
-      title: 'feat(llm): persist chat history on Project for cross-device (BACK-LLM-2)',
-      mergedAt: '2026-06-04T13:58:29Z',
-      mergedAtKST: '2026-06-04 22:58 KST',
-      sha: '1f76d4e',
-    },
-    {
-      number: 194,
-      title: 'feat(algo): TagAxisWeight 모델 + 5축 취향 axis_scores',
-      mergedAt: '2026-06-04T13:40:34Z',
-      mergedAtKST: '2026-06-04 22:40 KST',
-      sha: '73c872d',
-    },
-    {
-      number: 193,
-      title: 'feat(auth): guest like-gate @50 + JWT cache integration tests (BACK-AUTH-3, BACK-AUTH-2)',
-      mergedAt: '2026-06-04T14:00:23Z',
-      mergedAtKST: '2026-06-04 23:00 KST',
-      sha: 'f3dd115',
-    },
-    {
-      number: 192,
-      title: 'fix(recommend): Discovery likes feed taste vector + exclude + evict (BACK-RECOMMEND-4)',
-      mergedAt: '2026-06-04T13:53:32Z',
-      mergedAtKST: '2026-06-04 22:53 KST',
-      sha: '2cc5efe',
-    },
-    {
-      number: 191,
-      title: 'fix(swipe): direction-lock + gallery scroll + drop Discovery long-press (UX-GALLERY)',
-      mergedAt: '2026-06-04T13:56:59Z',
-      mergedAtKST: '2026-06-04 22:56 KST',
-      sha: '64b5482',
-    },
-    {
-      number: 190,
-      title: 'refactor(social): delete OfficeFollow duplicate (ARCHITECT-UNIFY-C)',
-      mergedAt: '2026-06-04T08:39:41Z',
-      mergedAtKST: '2026-06-04 17:39 KST',
-      sha: 'df8dcd8',
-    },
-    {
-      number: 189,
-      title: 'security(accounts): harden external_links validation (BACK-PROFILE-1)',
-      mergedAt: '2026-06-04T07:12:58Z',
-      mergedAtKST: '2026-06-04 16:12 KST',
-      sha: 'e60918d',
     },
   ],
   agents: [
@@ -488,6 +491,10 @@ window.PROJECT_STATE = {
       role: '백엔드 환경변수 예시',
     },
     {
+      path: 'backend/.flake8',
+      role: '',
+    },
+    {
       path: 'backend/apps/__init__.py',
       role: '패키지 init',
     },
@@ -506,6 +513,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/accounts/jwt_serializers.py',
       role: 'JWT 토큰 직렬화기',
+    },
+    {
+      path: 'backend/apps/accounts/merge.py',
+      role: '',
     },
     {
       path: 'backend/apps/accounts/migrations/0001_initial.py',
@@ -812,6 +823,14 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'backend/apps/recommendation/migrations/0023_project_report_image_mime.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/migrations/0024_project_axis_scores.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/recommendation/migrations/__init__.py',
       role: '마이그레이션 패키지 init',
     },
@@ -1114,6 +1133,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/tests/test_gemini_fail_fast.py',
       role: 'Gemini fail-fast 테스트',
+    },
+    {
+      path: 'backend/tests/test_gemini_model_migration.py',
+      role: '',
     },
     {
       path: 'backend/tests/test_gemini_timeout.py',
@@ -1534,6 +1557,14 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/pages/BoardDetailPage.jsx',
       role: '보드 상세 페이지',
+    },
+    {
+      path: 'frontend/src/pages/BoardReportPage.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/BoardReportPage.module.css',
+      role: '',
     },
     {
       path: 'frontend/src/pages/BuildingDetailPage.jsx',
