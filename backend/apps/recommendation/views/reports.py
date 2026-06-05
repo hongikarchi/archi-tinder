@@ -70,12 +70,13 @@ class ProjectReportImageView(APIView):
         result = services.generate_persona_image(project.final_report)
         if not result:
             return Response(
-                {'detail': 'Image generation failed. The Imagen API may not be enabled for your API key.'},
+                {'detail': 'Image generation failed.'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
         project.report_image = result['image_data']
-        project.save(update_fields=['report_image'])
+        project.report_image_mime = result['mime_type']
+        project.save(update_fields=['report_image', 'report_image_mime'])
         evict_projects_list(profile.id)
         evict_project_detail(str(pk))
         logger.info('Persona image generated for project %s', pk)

@@ -162,6 +162,7 @@ class ProjectSerializer(serializers.ModelSerializer):
             'analysis_report',
             'final_report',
             'report_image',
+            'report_image_mime',
             'conversation_history',
             'latest_session_id',
             'latest_session_meta',
@@ -177,6 +178,7 @@ class ProjectSerializer(serializers.ModelSerializer):
             'analysis_report',
             'final_report',
             'report_image',
+            'report_image_mime',
             'raw_query',
             # conversation_history is read-only on ProjectSerializer (create path).
             # It is writable only via ProjectSelfUpdateSerializer (PATCH path).

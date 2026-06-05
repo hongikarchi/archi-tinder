@@ -224,34 +224,28 @@ def parse_query(conversation_history):
 
         if cache_resource_name:
             # Cached path: supply cached_content= instead of system_instruction=
-            def _call():
-                return client.models.generate_content(
-                    model='gemini-2.5-flash',
-                    contents=contents,
-                    config=types.GenerateContentConfig(
-                        cached_content=cache_resource_name,
-                        response_mime_type='application/json',
-                        temperature=0.2,
-                        thinking_config=types.ThinkingConfig(thinking_budget=0),
-                    ),
-                )
+            _cached_config = types.GenerateContentConfig(
+                cached_content=cache_resource_name,
+                response_mime_type='application/json',
+                temperature=0.2,
+                thinking_config=types.ThinkingConfig(thinking_budget=0),
+            )
         else:
             # Uncached path: original behaviour, backward-compatible
-            def _call():  # noqa: F811
-                return client.models.generate_content(
-                    model='gemini-2.5-flash',
-                    contents=contents,
-                    config=types.GenerateContentConfig(
-                        system_instruction=_CHAT_PHASE_SYSTEM_PROMPT,
-                        response_mime_type='application/json',
-                        temperature=0.2,
-                        thinking_config=types.ThinkingConfig(thinking_budget=0),
-                    ),
-                )
+            _cached_config = types.GenerateContentConfig(
+                system_instruction=_CHAT_PHASE_SYSTEM_PROMPT,
+                response_mime_type='application/json',
+                temperature=0.2,
+                thinking_config=types.ThinkingConfig(thinking_budget=0),
+            )
 
         t_call_start = time.perf_counter()
         try:
-            response = _svc._retry_gemini_call(_call)
+            response = _svc.generate_content_with_fallback(
+                client,
+                contents=contents,
+                config=_cached_config,
+            )
         except Exception as _cache_exc:
             # IMP-5: if call failed with 404/NOT_FOUND it means the Gemini cache
             # has expired but the Django cache entry is still live (TTL skew).
@@ -264,19 +258,16 @@ def parse_query(conversation_history):
                 )
                 django_cache.delete(_svc._get_django_cache_key())
                 cache_resource_name = None
-
-                def _call_uncached():
-                    return client.models.generate_content(
-                        model='gemini-2.5-flash',
-                        contents=contents,
-                        config=types.GenerateContentConfig(
-                            system_instruction=_CHAT_PHASE_SYSTEM_PROMPT,
-                            response_mime_type='application/json',
-                            temperature=0.2,
-                            thinking_config=types.ThinkingConfig(thinking_budget=0),
-                        ),
-                    )
-                response = _svc._retry_gemini_call(_call_uncached)
+                response = _svc.generate_content_with_fallback(
+                    client,
+                    contents=contents,
+                    config=types.GenerateContentConfig(
+                        system_instruction=_CHAT_PHASE_SYSTEM_PROMPT,
+                        response_mime_type='application/json',
+                        temperature=0.2,
+                        thinking_config=types.ThinkingConfig(thinking_budget=0),
+                    ),
+                )
             else:
                 raise
         t_call_end = time.perf_counter()
@@ -486,36 +477,30 @@ def parse_query_stage1(conversation_history):
         if cache_resource_name:
             # Cached path: supply cached_content= instead of system_instruction=
             # response_schema excludes visual_description -> reduced output tokens
-            def _call():
-                return client.models.generate_content(
-                    model='gemini-2.5-flash',
-                    contents=contents,
-                    config=types.GenerateContentConfig(
-                        cached_content=cache_resource_name,
-                        response_mime_type='application/json',
-                        response_schema=_STAGE1_RESPONSE_SCHEMA,
-                        temperature=0.2,
-                        thinking_config=types.ThinkingConfig(thinking_budget=0),
-                    ),
-                )
+            _s1_config = types.GenerateContentConfig(
+                cached_content=cache_resource_name,
+                response_mime_type='application/json',
+                response_schema=_STAGE1_RESPONSE_SCHEMA,
+                temperature=0.2,
+                thinking_config=types.ThinkingConfig(thinking_budget=0),
+            )
         else:
             # Uncached path: original system_instruction + Stage 1 schema
-            def _call():  # noqa: F811
-                return client.models.generate_content(
-                    model='gemini-2.5-flash',
-                    contents=contents,
-                    config=types.GenerateContentConfig(
-                        system_instruction=_CHAT_PHASE_SYSTEM_PROMPT,
-                        response_mime_type='application/json',
-                        response_schema=_STAGE1_RESPONSE_SCHEMA,
-                        temperature=0.2,
-                        thinking_config=types.ThinkingConfig(thinking_budget=0),
-                    ),
-                )
+            _s1_config = types.GenerateContentConfig(
+                system_instruction=_CHAT_PHASE_SYSTEM_PROMPT,
+                response_mime_type='application/json',
+                response_schema=_STAGE1_RESPONSE_SCHEMA,
+                temperature=0.2,
+                thinking_config=types.ThinkingConfig(thinking_budget=0),
+            )
 
         t_call_start = time.perf_counter()
         try:
-            response = _svc._retry_gemini_call(_call)
+            response = _svc.generate_content_with_fallback(
+                client,
+                contents=contents,
+                config=_s1_config,
+            )
         except Exception as _cache_exc:
             # IMP-5: if call failed with 404/NOT_FOUND (Gemini cache expired but Django
             # cache still live), evict Django entry and retry uncached.
@@ -527,20 +512,17 @@ def parse_query_stage1(conversation_history):
                 )
                 django_cache.delete(_svc._get_django_cache_key())
                 cache_resource_name = None
-
-                def _call_uncached():
-                    return client.models.generate_content(
-                        model='gemini-2.5-flash',
-                        contents=contents,
-                        config=types.GenerateContentConfig(
-                            system_instruction=_CHAT_PHASE_SYSTEM_PROMPT,
-                            response_mime_type='application/json',
-                            response_schema=_STAGE1_RESPONSE_SCHEMA,
-                            temperature=0.2,
-                            thinking_config=types.ThinkingConfig(thinking_budget=0),
-                        ),
-                    )
-                response = _svc._retry_gemini_call(_call_uncached)
+                response = _svc.generate_content_with_fallback(
+                    client,
+                    contents=contents,
+                    config=types.GenerateContentConfig(
+                        system_instruction=_CHAT_PHASE_SYSTEM_PROMPT,
+                        response_mime_type='application/json',
+                        response_schema=_STAGE1_RESPONSE_SCHEMA,
+                        temperature=0.2,
+                        thinking_config=types.ThinkingConfig(thinking_budget=0),
+                    ),
+                )
             else:
                 raise
         t_call_end = time.perf_counter()
