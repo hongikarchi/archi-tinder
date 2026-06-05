@@ -40,20 +40,36 @@ service container — see PR #10 fix-loop for the load-bearing config).
 import os
 
 # Environment variables must be set BEFORE Django settings import.
-# pytest-django reads DJANGO_SETTINGS_MODULE from pytest.ini, which
-# triggers config.settings import, which reads these env vars.
+# DJANGO_SETTINGS_MODULE is NOT in pytest.ini (removed so pytest-django's
+# pytest_load_initial_conftests hook does not import settings before this conftest
+# module runs). Instead conftest sets it here, then calls django.setup() explicitly.
+# With load_dotenv guarded under pytest (settings.py), these setdefaults are the
+# sole source of required vars for plain `pytest` runs.
+# CI pre-sets DB_* in the job env (setdefaults = no-ops).
+# make test-local passes DB_HOST/NAME/PORT/USER/PASSWORD inline (also no-ops).
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 os.environ.setdefault('DJANGO_SECRET_KEY', 'test-secret-key-for-pytest-only-not-production-use')
+# App DB (default alias) — localhost placeholder; make test-local overrides inline.
 os.environ.setdefault('DB_HOST', 'localhost')
 os.environ.setdefault('DB_PORT', '5432')
 os.environ.setdefault('DB_NAME', 'testdb')
 os.environ.setdefault('DB_USER', 'testuser')
 os.environ.setdefault('DB_PASSWORD', 'testpass')
+# Buildings DB (read-only alias) — placeholder; django_db_modify_db_settings
+# mirrors it to SQLite so no real PG connection is needed in test runs.
+os.environ.setdefault('BUILDINGS_DB_HOST', 'localhost')
+os.environ.setdefault('BUILDINGS_DB_PORT', '5432')
+os.environ.setdefault('BUILDINGS_DB_NAME', 'buildings_testdb')
+os.environ.setdefault('BUILDINGS_DB_USER', 'testuser')
+os.environ.setdefault('BUILDINGS_DB_PASSWORD', 'testpass')
 os.environ.setdefault('DJANGO_DEBUG', 'True')
 os.environ.setdefault('DEV_LOGIN_SECRET', 'test_secret_123')
 os.environ.setdefault('GEMINI_API_KEY', 'test-gemini-key')
 
-import pytest
+import django  # noqa: E402
+import pytest  # noqa: E402 — must follow os.environ.setdefault block (env before Django import)
+
+django.setup()
 
 
 @pytest.fixture(scope='session')
