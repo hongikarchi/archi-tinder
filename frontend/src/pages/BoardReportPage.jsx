@@ -124,7 +124,7 @@ export default function BoardReportPage() {
   const syncedImage = reportImage ?? (board?.report_image || null)
 
   const report = board?.final_report
-  const scores = axisScores || DEFAULT_AXES
+  const scores = axisScores || board?.axis_scores || DEFAULT_AXES
 
   async function handleGenerateImage() {
     if (imgGenLoading || !board?.board_id) return
@@ -135,7 +135,7 @@ export default function BoardReportPage() {
       if (res?.image_data) {
         setReportImage(res.image_data)
       } else {
-        setImgError('이미지 생성에 실패했습니다. Imagen API가 활성화되지 않았을 수 있습니다.')
+        setImgError('이미지 생성에 실패했습니다.')
       }
     } catch (e) {
       setImgError(e?.data?.detail || e?.message || '이미지 생성에 실패했습니다.')
@@ -386,7 +386,7 @@ export default function BoardReportPage() {
 
         {syncedImage ? (
           <img
-            src={`data:image/png;base64,${syncedImage}`}
+            src={`data:${board?.report_image_mime || 'image/png'};base64,${syncedImage}`}
             alt="Persona"
             style={{
               width: '100%',
