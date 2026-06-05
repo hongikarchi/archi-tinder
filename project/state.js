@@ -23,9 +23,9 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-06-04 23:02 KST',
-    head: 'f3dd115',
-    branch: 'feature/claude-batch-audit',
+    updatedAt: '2026-06-04 23:49 KST',
+    head: '9be8fd8',
+    branch: 'feature/discovery-algorithm',
   },
   done: [
     {
@@ -69,16 +69,16 @@ window.PROJECT_STATE = {
       note: 'Discovery 우-스와이프 like(`UserProfile.liked_building_ids`)가 추천 엔진에 안 먹히던 것 해결 — Discovery-only 유저가 영구 cold/random feed였던 core-promise 위반 수정. 3곳 주입, 전부 기존 infra 재사용.',
     },
     {
+      id: 'FULL-DISCOVERY-1',
+      title: 'Discovery 탭 v3.1+v3.2 재설계 (10장 청크 + 3-Tier + Draft Board → Taste 퍼널)',
+      completedAt: '2026-06-04',
+      note: '레거시 global-centroid + 커서 무한스크롤 폐기 → 10장 chunk prefetch + 다중 centroid + 40:60 Local/Global FPS + Deferred Exclusion(dislike zone) + 3-Tier 라이프사이클(0/100·20/80·40/60) + 세션별 Draft Board → Taste 퍼널로 전면 교체. 신규 마이그레이션 0건(Project 재사용), `engine.py` 미수정(신규 `discovery_feed.py` 모듈로 compos…',
+    },
+    {
       id: 'ARCHITECT-UNIFY-C',
       title: 'OfficeFollow 중복 제거 (follow 모델 통합)',
       completedAt: '2026-06-04',
       note: '미배선 중복 `OfficeFollow`(firm-follow, ArchitectFollow와 중복) 제거 → office-interest follow 모델이 ArchitectFollow 1개로 통합(원 audit 중복 finding 종결). Office 서브시스템 나머지는 계획 기능 substrate라 park.',
-    },
-    {
-      id: 'BACK-PROFILE-1',
-      title: 'external_links 검증 강화 (handle/email/website + mailto 주입 차단)',
-      completedAt: '2026-06-04',
-      note: '`validate_external_links`(accounts/serializers.py)에 키별 포맷 검증 추가 — 프론트가 검증 없이 `instagram.com/${handle}`·`mailto:${email}` 평문 조립하던 주입 nuisance를 서버에서 차단.',
     },
   ],
   now: [
@@ -117,6 +117,16 @@ window.PROJECT_STATE = {
         id: 'BACK-LLM-4',
         title: 'search.py ParseQueryView byte-cap도 ensure_ascii 부풀림 의심',
         note: 'BACK-LLM-2(#195) 리뷰 중 발견(미수정, pre-existing). `backend/apps/recommendation/views/search.py` `ParseQueryView.post`의 conversation_history 검증이 BACK-LLM-2 serializer가 고친 것과 동일하게 `json.dumps` 기본 `ensure_ascii=True`로 byte 측정 가능성 → 한글 대화가 한도를 6배 부풀려 거짓 거부. 확인 후 `ensure_ascii=False`+UT…',
+      },
+      {
+        id: 'FULL-DISCOVERY-2',
+        title: 'Discovery v3.1+v3.2 라이브 브라우저 검증 (prod 전)',
+        note: 'FULL-DISCOVERY-1(`fc72639`) 머지 후 app-test FULL 미실행(dev 서버 + app-test 에이전트 부재). prod 배포 전 실제 흐름 검증 필요: chunk 버퍼/prefetch≤3, swipe→feedback, 10장 트리거 카드 우=promote→Taste 첫 스와이프 정상·좌=계속, 진행률 바, 재등장 shake, 프로필에 discovery_ 임시보드 노출.',
+      },
+      {
+        id: 'FRONT-DISCOVERY-1',
+        title: '트리거 카드 빈 덱 동시각 한 박자 지연 (비차단)',
+        note: '`DiscoveryPage.jsx` 트리거 주입 effect dep `[draftId, draftLikeCount]`. like 10번째가 덱이 빈 순간(prefetch in-flight)과 겹치고 이후 추가 like가 없으면 트리거가 한 카드 늦게 뜸. 크래시·상태손상 없음. dep에 deck refill 신호 추가로 보강 가능(ref 멱등 가드 이미 존재).',
       },
       {
         id: 'FRONT-PROFILE-1',
@@ -672,6 +682,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/recommendation/caches.py',
       role: '추천 TTL 캐시 헬퍼',
+    },
+    {
+      path: 'backend/apps/recommendation/discovery_feed.py',
+      role: '',
     },
     {
       path: 'backend/apps/recommendation/engine.py',
@@ -1340,6 +1354,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/components/DebugOverlay.jsx',
       role: '세션·스와이프 디버그 오버레이',
+    },
+    {
+      path: 'frontend/src/components/DiscoveryTriggerCard.jsx',
+      role: '',
     },
     {
       path: 'frontend/src/components/EditProfileModal.jsx',

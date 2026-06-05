@@ -305,6 +305,20 @@ RECOMMENDATION = {
     # rollback. Monitor parse_query_timing.stage='1' rate + stage2_timing.outcome
     # distribution + Brutalist sys_p50 trend post-flip.
     'stage_decouple_enabled': os.getenv('STAGE_DECOUPLE_ENABLED', 'false').lower() == 'true',  # default OFF; set STAGE_DECOUPLE_ENABLED=true in env to flip
+    # Discovery tab v3.1 hyperparameters (10-card chunk + 3-Tier + Draft Board)
+    'discovery_chunk_size': 10,
+    'discovery_tier2_min_likes': 10,
+    'discovery_tier3_min_projects': 2,
+    'discovery_tier3_min_likes': 50,
+    'discovery_tier2_local': 2,
+    'discovery_tier2_global': 8,
+    'discovery_tier3_local': 4,
+    'discovery_tier3_global': 6,
+    'discovery_dislike_history_window': 30,
+    'discovery_dislike_zone_threshold': 0.15,   # pgvector cosine DISTANCE; candidates farther than this from dislike centroid pass
+    'discovery_local_sim_radius': 0.55,          # cosine SIM to nearest centroid to count as local/취향
+    'discovery_centroid_cache_ttl': 21600,       # 6h — app-session fixed
+    'discovery_promote_threshold': 10,
 }
 
 _check_async_prefetch_safety(

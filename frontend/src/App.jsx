@@ -92,6 +92,40 @@ export default function App() {
     return () => window.removeEventListener('archithon:verify-required', onVerifyRequired)
   }, [])
 
+  // Listen for promote-to-taste event dispatched by DiscoveryPage after a
+  // successful POST /discovery/promote-to-taste/. Creates a local project entry
+  // so activeProject is non-null, calls applySessionResponse, and navigates to /swipe.
+  useEffect(() => {
+    const onPromoteToTaste = (e) => {
+      const result = e?.detail
+      if (!result?.session_id) return
+      const projectId = `proj_promote_${result.session_id}`
+      const newProject = {
+        id: projectId,
+        backendId: result.project_id ? String(result.project_id) : null,
+        projectName: 'Taste Analysis',
+        filters: {},
+        likedBuildings: [],
+        swipedIds: [],
+        predictedLikes: [],
+        sessionId: result.session_id,
+        createdAt: new Date().toISOString(),
+        deckImages: null,
+        visibility: 'private',
+      }
+      setProjects(prev => {
+        // Avoid duplicating if re-triggered
+        if (prev.find(p => p.id === projectId)) return prev
+        return [...prev, newProject]
+      })
+      setActiveProjectId(projectId)
+      applySessionResponse(projectId, result)
+      navigate('/swipe')
+    }
+    window.addEventListener('archithon:promote-to-taste', onPromoteToTaste)
+    return () => window.removeEventListener('archithon:promote-to-taste', onPromoteToTaste)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Capture pending board-create payload from SaveToBoardModal (Fix 3 Option A)
   useEffect(() => {
     const onPendingCreate = (e) => {
@@ -651,6 +685,13 @@ export default function App() {
       api.setTokens(user.access, user.refresh)
     }
     sessionStorage.setItem('archithon_user', id)
+    // Clear Discovery draft session so a re-login always starts a brand-new collection.
+    // Same four keys as handleLogout — prevents a stale draftLikeCount >= 10 from
+    // triggering a premature Taste card on the next Discovery visit.
+    sessionStorage.removeItem('discovery_draft_id')
+    sessionStorage.removeItem('discovery_draft_likes')
+    sessionStorage.removeItem('discovery_deck_v2')
+    sessionStorage.removeItem('discovery_seen_ids')
     setUserId(id)
     if (typeof user === 'object') hydrate(user.theme, user.font)
     setCurrentCard(null)
@@ -703,6 +744,11 @@ export default function App() {
     // Purge ALL archithon_chat_* keys so stale chat doesn't surface on a shared device.
     purgeChatCache()
     sessionStorage.removeItem('archithon_user')
+    // Clear Discovery session so a re-login starts a brand-new collection
+    sessionStorage.removeItem('discovery_draft_id')
+    sessionStorage.removeItem('discovery_draft_likes')
+    sessionStorage.removeItem('discovery_deck_v2')
+    sessionStorage.removeItem('discovery_seen_ids')
     setUserId(null)
     setProjects([])
     setActiveProjectId(null)

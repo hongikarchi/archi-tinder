@@ -2,11 +2,16 @@
 
 import numpy as np
 from django.core.cache import cache
+from django.conf import settings
 
 from . import engine
 
 TASTE_TTL = 300  # seconds — 5-minute freshness window
 PROJECTS_LIST_TTL = 60  # seconds — UX-acceptable staleness window
+
+# Discovery centroid cache TTL (6h — in-session fixed per spec §2.1).
+# Resolved lazily from settings so tests can override RECOMMENDATION.
+DISCOVERY_CENTROID_TTL = 21600  # default 6h; actual value read from RC at call time
 
 
 def _taste_key(profile_id):
@@ -200,3 +205,69 @@ def get_project_detail_cache_key(project_uuid, requester_id_for_cache):
     """
     ver = _project_detail_version(project_uuid)
     return f'project_detail:{project_uuid}:v{ver}:r{requester_id_for_cache}'
+
+
+# ── Discovery centroid cache (spec §2.1 — in-session fixed) ─────────────────
+
+def _discovery_centroids_key(profile_id):
+    return f'discovery_centroids:{profile_id}'
+
+
+def get_or_build_discovery_centroids(profile):
+    """Return cached K-Means centroids for the Discovery feed (list of float lists).
+
+    Cache key: discovery_centroids:{profile_id}
+    TTL: discovery_centroid_cache_ttl (default 6h) — in-session fixed.
+    Spec §2.1: DO NOT evict on like changes; centroid is fixed for the session.
+
+    On cache miss:
+      1. Gather like_vectors from ALL user projects (draft + real), capped at
+         recent 50 (mirrors compute_user_taste_vector's recent-50 approach).
+      2. Call engine.compute_taste_centroids(like_vectors, round_num=len(like_vectors)).
+      3. Store centroids as list[list[float]] in cache.
+
+    Returns list[list[float]] (may be empty for cold users).
+    """
+    from .models import Project
+    from .discovery_feed import _liked_id_only
+
+    RC = settings.RECOMMENDATION
+    ttl = RC.get('discovery_centroid_cache_ttl', DISCOVERY_CENTROID_TTL)
+    key = _discovery_centroids_key(profile.id)
+    cached = cache.get(key)
+    if cached is not None:
+        return cached  # list[list[float]]
+
+    # Gather liked building ids across all projects (draft + real)
+    projects = Project.objects.filter(user=profile).values('liked_ids')
+    all_liked_ids = []
+    for p in projects:
+        all_liked_ids.extend(_liked_id_only(p.get('liked_ids')))
+
+    # Recent-50 cap (mirrors compute_user_taste_vector approach)
+    recent_ids = all_liked_ids[-50:] if len(all_liked_ids) > 50 else all_liked_ids
+
+    if not recent_ids:
+        return []
+
+    # Fetch embeddings
+    emb_map = engine.get_pool_embeddings(recent_ids)
+    like_vectors = []
+    for i, bid in enumerate(recent_ids):
+        emb = emb_map.get(bid)
+        if emb is not None:
+            like_vectors.append({'embedding': emb.tolist(), 'round': i})
+
+    if not like_vectors:
+        return []
+
+    # compute_taste_centroids returns (centroids_list, global_centroid)
+    centroids, _ = engine.compute_taste_centroids(like_vectors, round_num=len(like_vectors))
+
+    # Serialise to plain list[list[float]] for cache storage (numpy not picklable cleanly)
+    result = [
+        c.tolist() if hasattr(c, 'tolist') else list(c)
+        for c in centroids
+    ]
+    cache.set(key, result, ttl)
+    return result

@@ -44,6 +44,8 @@ from .search import (
 )
 from .discovery import (
     DiscoveryFeedView,
+    DiscoveryFeedbackView,
+    DiscoveryPromoteView,
     BoardSurpriseView,
 )
 from .reports import (
@@ -81,6 +83,8 @@ __all__ = [
     'QuestionResponseView',
     'ParseQueryView',
     'DiscoveryFeedView',
+    'DiscoveryFeedbackView',
+    'DiscoveryPromoteView',
     'BoardSurpriseView',
     'ProjectReportGenerateView',
     'ProjectReportImageView',

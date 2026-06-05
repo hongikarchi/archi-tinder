@@ -25,7 +25,18 @@ import pytest  # noqa: E402
 
 @pytest.fixture(scope='session')
 def django_db_modify_db_settings():
-    """Override database to SQLite in-memory."""
+    """Override database to SQLite in-memory.
+
+    Only mutates settings.DATABASES -- does NOT call
+    connections.configure_settings() or discard cached DatabaseWrapper
+    objects via delattr.  Those operations corrupt per-connection SQLite
+    :memory: databases for any other test module that completed its DB
+    setup before the discard (e.g. test_sessions.py, test_swipe.py).
+
+    buildings alias is intentionally NOT mirrored here.  All tests in
+    this app that touch the buildings DB mock the connection (patch on
+    _dj_connections / engine.*) so no live buildings alias is needed.
+    """
     from django.conf import settings
     settings.DATABASES['default'] = {
         'ENGINE': 'django.db.backends.sqlite3',
