@@ -26,6 +26,7 @@ export async function startSession(params) {
     raw_query:       params.raw_query || '',
     ...(params.visual_description ? { visual_description: params.visual_description } : {}),
     ...(params.image_focus ? { image_focus: params.image_focus } : {}),
+    ...(params.force_new ? { force_new: true } : {}),
   }, true, SESSION_CREATE_TIMEOUT_MS)
   return {
     ...result,
