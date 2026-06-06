@@ -16,8 +16,8 @@ export default function ProfileHeader({
     /* Sticky Header — Back left, title center, controls right */
     <div style={{
       position: 'sticky', top: 0, zIndex: 10,
-      background: 'var(--color-header-bg, rgba(10, 10, 12, 0.65))',
-      backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+      background: 'color-mix(in srgb, var(--color-bg) 72%, transparent)',
+      backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
       padding: '12px 16px',
       display: 'flex', justifyContent: 'space-between', alignItems: 'center',
       borderBottom: '1px solid var(--color-border-soft)',

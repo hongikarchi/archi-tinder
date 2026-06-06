@@ -90,6 +90,23 @@ class UserProfile(models.Model):
         # Ordered newest-first (prepend on add). Deduped. Capped at 200 in view.
     )
 
+    # -- Settings harvest (SETTINGS-1) --
+    handle = models.CharField(
+        max_length=30,
+        unique=True,
+        null=True,
+        blank=True,
+        # Public @handle (e.g. 'dain_architect'). Separate from display_name ("Dain Kim").
+        # null until the user explicitly sets one. Postgres unique allows multiple NULLs.
+        # Regex enforced in serializer: ^[a-z0-9_]{3,30}$.
+    )
+    notifications = models.JSONField(
+        default=dict,
+        blank=True,
+        # {category: {push: bool, email: bool}} — per-category notification prefs.
+        # No DB-level schema; serializer validates dict shape (≤50 keys, values are dicts).
+    )
+
     def __str__(self):
         return self.display_name
 
