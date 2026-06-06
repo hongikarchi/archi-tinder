@@ -1,4 +1,6 @@
 import { useTheme } from '../hooks/useTheme.js'
+import { useLanguage } from '../hooks/useLanguage.js'
+import { useTranslation } from '../i18n/index.js'
 
 /*
  * Theme chip config — bg + accent-1 per theme (design.md §5.2)
@@ -31,8 +33,15 @@ const FONT_OPTIONS = [
   },
 ]
 
+const LANGUAGE_OPTIONS = [
+  { id: 'ko', label: '한국어' },
+  { id: 'en', label: 'English' },
+]
+
 export default function AppearanceSettings() {
   const { theme, font, setTheme, setFont } = useTheme()
+  const { language, setLanguage } = useLanguage()
+  const { t } = useTranslation()
 
   const currentFont = FONT_OPTIONS.find(f => f.id === font) || FONT_OPTIONS[0]
 
@@ -46,7 +55,7 @@ export default function AppearanceSettings() {
         textTransform: 'uppercase',
         margin: '0 0 16px',
       }}>
-        Appearance
+        {t('settings.appearance')}
       </h3>
 
       {/* Theme row */}
@@ -60,13 +69,13 @@ export default function AppearanceSettings() {
           Theme
         </p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {THEMES.map(t => {
-            const isActive = theme === t.id
+          {THEMES.map(thm => {
+            const isActive = theme === thm.id
             return (
               <button
-                key={t.id}
-                onClick={() => setTheme(t.id)}
-                title={t.label}
+                key={thm.id}
+                onClick={() => setTheme(thm.id)}
+                title={thm.label}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -95,7 +104,7 @@ export default function AppearanceSettings() {
                     position: 'absolute',
                     inset: 0,
                     borderRadius: '50%',
-                    background: t.bg,
+                    background: thm.bg,
                     border: '1px solid rgba(0,0,0,0.12)',
                   }} />
                   {/* accent dot — bottom-right overlap */}
@@ -104,13 +113,13 @@ export default function AppearanceSettings() {
                     width: 12,
                     height: 12,
                     borderRadius: '50%',
-                    background: t.accent,
+                    background: thm.accent,
                     bottom: -2,
                     right: -2,
                     border: '1.5px solid var(--color-bg)',
                   }} />
                 </span>
-                {t.label}
+                {thm.label}
               </button>
             )
           })}
@@ -153,6 +162,48 @@ export default function AppearanceSettings() {
         }}>
           {font === 'plex' ? 'IBM Plex Sans KR' : 'Noto Serif KR'} — click to switch
         </span>
+      </div>
+
+      {/* Language row */}
+      <div style={{ marginTop: 20 }}>
+        <p style={{
+          fontSize: 13,
+          fontWeight: 600,
+          color: 'var(--color-text-2)',
+          margin: '0 0 10px',
+        }}>
+          {t('settings.language')}
+        </p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {LANGUAGE_OPTIONS.map(opt => {
+            const isActive = language === opt.id
+            return (
+              <button
+                key={opt.id}
+                onClick={() => setLanguage(opt.id)}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: 999,
+                  border: isActive
+                    ? '2px solid var(--accent-1)'
+                    : '1.5px solid var(--color-border-soft)',
+                  background: isActive
+                    ? 'var(--color-surface-2)'
+                    : 'var(--color-surface)',
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  fontSize: 13,
+                  fontWeight: isActive ? 600 : 400,
+                  color: 'var(--color-text-2)',
+                  transition: 'border-color 0.18s, background 0.18s',
+                  outline: 'none',
+                }}
+              >
+                {opt.label}
+              </button>
+            )
+          })}
+        </div>
       </div>
     </section>
   )

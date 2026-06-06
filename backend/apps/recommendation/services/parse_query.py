@@ -38,6 +38,25 @@ from ._prompts import (  # noqa: F401
 
 logger = logging.getLogger('apps.recommendation')
 
+# FULL-LANGUAGE-1: per-user language override directive injected into system_instruction.
+# Scoped to `reply` and `probe_question` only.
+# Does NOT override rule 3 (visual_description ALWAYS English) or rule 4 (raw_query verbatim).
+# language=None (default) leaves current inference-from-message behaviour intact.
+_LANG_DIRECTIVE = {
+    'ko': (
+        '\n\n## Language override (user preference)\n'
+        'The user has set their language preference to Korean. '
+        'Write `reply` and `probe_question` in Korean regardless of the language of their message. '
+        '`visual_description` remains English (rule 3). `raw_query` is verbatim (rule 4).'
+    ),
+    'en': (
+        '\n\n## Language override (user preference)\n'
+        'The user has set their language preference to English. '
+        'Write `reply` and `probe_question` in English regardless of the language of their message. '
+        '`visual_description` remains English (rule 3). `raw_query` is verbatim (rule 4).'
+    ),
+}
+
 
 def _classify_query_complexity(text: str) -> str:
     """
@@ -113,7 +132,7 @@ def _repair_required_slate(filters: dict, raw_priority) -> tuple[dict, list]:
     return filters, _normalise_filter_priority(filters, raw_priority)
 
 
-def parse_query(conversation_history):
+def parse_query(conversation_history, language=None):
     """
     Chat phase Gemini call (Sprint 1 rewrite per Investigation 06).
 
@@ -124,6 +143,9 @@ def parse_query(conversation_history):
     Input:
         conversation_history: list of {role: 'user'|'model', text: str} dicts,
             representing the full chat so far. Oldest turn first.
+        language: optional 'ko' or 'en' (UserProfile.language). When set, forces
+            `reply` and `probe_question` to that language regardless of message language.
+            None (default) keeps the infer-from-message behaviour.
         Backward compat: if a bare string is passed (legacy caller), it is wrapped
             as [{'role': 'user', 'text': conversation_history}].
 
@@ -174,7 +196,7 @@ def parse_query(conversation_history):
     # Use _svc.parse_query_stage1 so mock.patch/patch.object on services.parse_query_stage1
     # is visible here at call time (late-bound via the module object).
     if settings.RECOMMENDATION.get('stage_decouple_enabled', False):
-        return _svc.parse_query_stage1(conversation_history)
+        return _svc.parse_query_stage1(conversation_history, language=language)
     # else: fall through to the original single-call path (default, backward compat)
     # Backward compat: accept bare string (legacy callers pass query_text directly)
     if isinstance(conversation_history, str):
@@ -203,6 +225,14 @@ def parse_query(conversation_history):
         'visual_description': None,
     }
 
+    # FULL-LANGUAGE-1: compute augmented system instruction once for all sites below.
+    # language=None -> no directive (infer from message, existing behaviour).
+    _system_instruction = (
+        _CHAT_PHASE_SYSTEM_PROMPT + _LANG_DIRECTIVE[language]
+        if language in _LANG_DIRECTIVE
+        else _CHAT_PHASE_SYSTEM_PROMPT
+    )
+
     try:
         client = _svc._get_client()
         rc = settings.RECOMMENDATION
@@ -224,6 +254,11 @@ def parse_query(conversation_history):
 
         if cache_resource_name:
             # Cached path: supply cached_content= instead of system_instruction=
+            # Note: cached_content and system_instruction are mutually exclusive.
+            # The language directive is per-user (dynamic), so it cannot be baked
+            # into the static cache. When caching is enabled and a language directive
+            # is set, the directive is lost on the cached path -- this is an accepted
+            # limitation since context_caching_enabled defaults to OFF.
             _cached_config = types.GenerateContentConfig(
                 cached_content=cache_resource_name,
                 response_mime_type='application/json',
@@ -231,9 +266,9 @@ def parse_query(conversation_history):
                 thinking_config=types.ThinkingConfig(thinking_budget=0),
             )
         else:
-            # Uncached path: original behaviour, backward-compatible
+            # Uncached path: inject language directive via augmented system_instruction.
             _cached_config = types.GenerateContentConfig(
-                system_instruction=_CHAT_PHASE_SYSTEM_PROMPT,
+                system_instruction=_system_instruction,
                 response_mime_type='application/json',
                 temperature=0.2,
                 thinking_config=types.ThinkingConfig(thinking_budget=0),
@@ -262,7 +297,7 @@ def parse_query(conversation_history):
                     client,
                     contents=contents,
                     config=types.GenerateContentConfig(
-                        system_instruction=_CHAT_PHASE_SYSTEM_PROMPT,
+                        system_instruction=_system_instruction,
                         response_mime_type='application/json',
                         temperature=0.2,
                         thinking_config=types.ThinkingConfig(thinking_budget=0),
@@ -405,7 +440,7 @@ def parse_query(conversation_history):
         return _fallback
 
 
-def parse_query_stage1(conversation_history):
+def parse_query_stage1(conversation_history, language=None):
     """IMP-6 Commit 2: Stage 1 Gemini call -- USER-BLOCKING portion of the split.
 
     Same as parse_query() but uses response_schema to exclude visual_description,
@@ -420,6 +455,9 @@ def parse_query_stage1(conversation_history):
 
     Args:
         conversation_history: list of {role, text} dicts or bare string (backward compat).
+        language: optional 'ko' or 'en' (UserProfile.language). When set, forces
+            `reply` and `probe_question` to that language regardless of message language.
+            None (default) keeps the infer-from-message behaviour.
 
     Returns:
         Same dict shape as parse_query(), with visual_description always None.
@@ -455,6 +493,14 @@ def parse_query_stage1(conversation_history):
         'visual_description': None,
     }
 
+    # FULL-LANGUAGE-1: compute augmented system instruction once for all sites below.
+    # language=None -> no directive (infer from message, existing behaviour).
+    _system_instruction = (
+        _CHAT_PHASE_SYSTEM_PROMPT + _LANG_DIRECTIVE[language]
+        if language in _LANG_DIRECTIVE
+        else _CHAT_PHASE_SYSTEM_PROMPT
+    )
+
     try:
         client = _svc._get_client()
         rc = settings.RECOMMENDATION
@@ -477,6 +523,8 @@ def parse_query_stage1(conversation_history):
         if cache_resource_name:
             # Cached path: supply cached_content= instead of system_instruction=
             # response_schema excludes visual_description -> reduced output tokens
+            # Note: language directive is per-user (dynamic) so it cannot live in the
+            # static cache; it is silently absent on the cached path (caching OFF by default).
             _s1_config = types.GenerateContentConfig(
                 cached_content=cache_resource_name,
                 response_mime_type='application/json',
@@ -485,9 +533,9 @@ def parse_query_stage1(conversation_history):
                 thinking_config=types.ThinkingConfig(thinking_budget=0),
             )
         else:
-            # Uncached path: original system_instruction + Stage 1 schema
+            # Uncached path: inject language directive via augmented system_instruction.
             _s1_config = types.GenerateContentConfig(
-                system_instruction=_CHAT_PHASE_SYSTEM_PROMPT,
+                system_instruction=_system_instruction,
                 response_mime_type='application/json',
                 response_schema=_STAGE1_RESPONSE_SCHEMA,
                 temperature=0.2,
@@ -516,7 +564,7 @@ def parse_query_stage1(conversation_history):
                     client,
                     contents=contents,
                     config=types.GenerateContentConfig(
-                        system_instruction=_CHAT_PHASE_SYSTEM_PROMPT,
+                        system_instruction=_system_instruction,
                         response_mime_type='application/json',
                         response_schema=_STAGE1_RESPONSE_SCHEMA,
                         temperature=0.2,
