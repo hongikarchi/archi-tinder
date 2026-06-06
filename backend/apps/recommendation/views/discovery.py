@@ -488,13 +488,17 @@ class DiscoveryPromoteView(APIView):
         evict_user_profile_detail(profile.user.id)  # keyed by User.pk (Django auth user)
         evict_project_detail(str(project.project_id))
 
-        # Seed prefetch cache for first swipe (mirrors session_service F4)
+        # Seed prefetch cache for first swipe (mirrors session_service F4).
+        # Promoted sessions start at current_round=seeded_count, so the first
+        # swipe's consumer reads prefetch:{sid}:{seeded_count + 1} (saved_current_round
+        # = current_round AFTER the first-swipe increment). Seed that exact key —
+        # not :1 — or the first Taste swipe always misses the seeded cache.
         _pf_seed = {
             'prefetch_card_id': initial_batch[1] if len(initial_batch) > 1 else None,
             'prefetch_card_2_id': initial_batch[2] if len(initial_batch) > 2 else None,
         }
         cache.set(
-            f'prefetch:{session.session_id}:1',
+            f'prefetch:{session.session_id}:{seeded_count + 1}',
             _pf_seed,
             timeout=RC.get('async_prefetch_cache_timeout_seconds', 60),
         )
