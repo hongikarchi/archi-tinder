@@ -13,12 +13,28 @@ Covers:
       - does NOT fire when cooldown > 0 / question_count >= max.
       - does NOT fire when tag_axis_counts is empty (no keyword available).
       - payload is a refine trigger with a non-null keyword.
+
+Threading note (TestLatencyCapture):
+  SwipeView spawns two background threads (_async_prefetch_thread and
+  _emit_telemetry_thread) both of which call connections.close_all() in
+  their finally blocks.  That closes the shared test DB connection and
+  causes InterfaceError on subsequent ORM calls (e.g. session.refresh_from_db).
+  Fix: patch 'apps.recommendation.views.threading.Thread' with _NoopThread
+  (imported from test_imp8_async_prefetch) so threads are constructed but
+  never executed.  The latency value is written inside handle_swipe_normal
+  (main request thread) so assertions on recent_latencies still exercise
+  the real production path.
 """
 import numpy as np
 import pytest
 from unittest.mock import patch, MagicMock
 
 from apps.recommendation.models import Project, AnalysisSession
+
+# _NoopThread: non-executing threading.Thread shim.  Prevents background
+# threads from calling connections.close_all() on the test DB connection.
+# Imported from the test that first introduced this pattern (IMP-8 prefetch).
+from tests.test_imp8_async_prefetch import _NoopThread  # noqa: F401
 
 
 # ---------------------------------------------------------------------------
@@ -37,6 +53,12 @@ for bid in _FAKE_EMBEDDINGS:
         _FAKE_EMBEDDINGS[bid] = _v / _norm
 
 _SERVICE_ENGINE = 'apps.recommendation.services.swipe_service.engine'
+_VIEW_ENGINE = 'apps.recommendation.views.engine'
+
+
+def _mock_buildings_by_ids(ids):
+    """Minimal get_buildings_by_ids mock: returns a bare card dict for each id."""
+    return [_make_card(bid) for bid in (ids or []) if bid is not None]
 
 
 def _make_normalized_vec(seed=55):
@@ -425,7 +447,11 @@ class TestLatencyCapture:
              patch(f'{_SERVICE_ENGINE}.get_last_embedding_call_stats',
                    return_value={'cache_misses': 0}), \
              patch('apps.recommendation.services.swipe_service.get_corpus_tag_df',
-                   return_value={'_total': 0}):
+                   return_value={'_total': 0}), \
+             patch(f'{_VIEW_ENGINE}.get_buildings_by_ids',
+                   side_effect=_mock_buildings_by_ids), \
+             patch('apps.recommendation.views.threading.Thread',
+                   side_effect=lambda *a, **kw: _NoopThread(*a, **kw)):
             resp = self._run_swipe(auth_client, session, latency_ms=900)
 
         assert resp.status_code == 200, (
@@ -461,7 +487,11 @@ class TestLatencyCapture:
              patch(f'{_SERVICE_ENGINE}.get_last_embedding_call_stats',
                    return_value={'cache_misses': 0}), \
              patch('apps.recommendation.services.swipe_service.get_corpus_tag_df',
-                   return_value={'_total': 0}):
+                   return_value={'_total': 0}), \
+             patch(f'{_VIEW_ENGINE}.get_buildings_by_ids',
+                   side_effect=_mock_buildings_by_ids), \
+             patch('apps.recommendation.views.threading.Thread',
+                   side_effect=lambda *a, **kw: _NoopThread(*a, **kw)):
             resp = self._run_swipe(auth_client, session, latency_ms=None)
 
         assert resp.status_code == 200
@@ -495,7 +525,11 @@ class TestLatencyCapture:
              patch(f'{_SERVICE_ENGINE}.get_last_embedding_call_stats',
                    return_value={'cache_misses': 0}), \
              patch('apps.recommendation.services.swipe_service.get_corpus_tag_df',
-                   return_value={'_total': 0}):
+                   return_value={'_total': 0}), \
+             patch(f'{_VIEW_ENGINE}.get_buildings_by_ids',
+                   side_effect=_mock_buildings_by_ids), \
+             patch('apps.recommendation.views.threading.Thread',
+                   side_effect=lambda *a, **kw: _NoopThread(*a, **kw)):
             resp = self._run_swipe(auth_client, session, latency_ms='not-a-number')
 
         assert resp.status_code == 200
@@ -529,7 +563,11 @@ class TestLatencyCapture:
              patch(f'{_SERVICE_ENGINE}.get_last_embedding_call_stats',
                    return_value={'cache_misses': 0}), \
              patch('apps.recommendation.services.swipe_service.get_corpus_tag_df',
-                   return_value={'_total': 0}):
+                   return_value={'_total': 0}), \
+             patch(f'{_VIEW_ENGINE}.get_buildings_by_ids',
+                   side_effect=_mock_buildings_by_ids), \
+             patch('apps.recommendation.views.threading.Thread',
+                   side_effect=lambda *a, **kw: _NoopThread(*a, **kw)):
             resp = self._run_swipe(auth_client, session, latency_ms=999999)
 
         assert resp.status_code == 200
@@ -563,7 +601,11 @@ class TestLatencyCapture:
              patch(f'{_SERVICE_ENGINE}.get_last_embedding_call_stats',
                    return_value={'cache_misses': 0}), \
              patch('apps.recommendation.services.swipe_service.get_corpus_tag_df',
-                   return_value={'_total': 0}):
+                   return_value={'_total': 0}), \
+             patch(f'{_VIEW_ENGINE}.get_buildings_by_ids',
+                   side_effect=_mock_buildings_by_ids), \
+             patch('apps.recommendation.views.threading.Thread',
+                   side_effect=lambda *a, **kw: _NoopThread(*a, **kw)):
             resp = self._run_swipe(auth_client, session, latency_ms=-100)
 
         assert resp.status_code == 200
@@ -601,7 +643,11 @@ class TestLatencyCapture:
              patch(f'{_SERVICE_ENGINE}.get_last_embedding_call_stats',
                    return_value={'cache_misses': 0}), \
              patch('apps.recommendation.services.swipe_service.get_corpus_tag_df',
-                   return_value={'_total': 0}):
+                   return_value={'_total': 0}), \
+             patch(f'{_VIEW_ENGINE}.get_buildings_by_ids',
+                   side_effect=_mock_buildings_by_ids), \
+             patch('apps.recommendation.views.threading.Thread',
+                   side_effect=lambda *a, **kw: _NoopThread(*a, **kw)):
             resp = self._run_swipe(auth_client, session, latency_ms=500)
 
         assert resp.status_code == 200
