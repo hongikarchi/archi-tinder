@@ -477,12 +477,14 @@ def get_session_result(session):
             session.exposed_ids,
             k=RC['top_k_results'],
             round_num=session.current_round,
+            question_bias_vector=session.question_bias_vector,
         )
     else:
         predicted_cards = engine.get_top_k_results(
             session.preference_vector,
             session.exposed_ids,
             k=RC['top_k_results'],
+            question_bias_vector=session.question_bias_vector,
         )
 
     # Topic 04(b) DPP: when flag ON, over-fetch candidates so DPP MAP can actually narrow.
@@ -497,6 +499,7 @@ def get_session_result(session):
             session.exposed_ids,
             k=RC['top_k_results'] * _overfetch_mult,
             round_num=session.current_round,
+            question_bias_vector=session.question_bias_vector,
         )
 
     # Capture initial cosine order BEFORE any reorder (needed for RRF composition)

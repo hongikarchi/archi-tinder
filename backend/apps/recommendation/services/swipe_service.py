@@ -46,6 +46,10 @@ RC = settings.RECOMMENDATION
 
 _AXIS_FIELDS = ('style', 'atmosphere', 'material_visual')
 
+# Allowlist for axis column names interpolated into raw SQL in _compute_kw_vec_refine.
+# Must be a fixed literal — never derived from request data.  (FIX: ALGO-QCARD axis injection)
+_VALID_AXES = frozenset({'style', 'atmosphere', 'material_visual'})
+
 _AXIS_QUESTIONS = {
     'atmosphere': {'q': '어떤 분위기에 더 끌리세요?', 'a': '따뜻하고 아늑한', 'b': '차갑고 절제된'},
     'material_visual': {'q': '재료감은 어느 쪽이 더 끌리세요?', 'a': '나무·돌 같은 자연재료', 'b': '콘크리트·유리 같은 인공재료'},
@@ -920,6 +924,8 @@ def _compute_kw_vec_refine(keyword, axis, session):
     Returns np.ndarray (384,) normalized, or None if no matching cards/embeddings.
     """
     if not keyword or not axis or not session.pool_ids:
+        return None
+    if axis not in _VALID_AXES:
         return None
 
     pool_ids = list(session.pool_ids)

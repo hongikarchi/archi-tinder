@@ -508,3 +508,51 @@ class TestQuestionResponseSoftVector:
             f'Expected question_cooldown=15 after answer, got {session.question_cooldown}'
         )
         assert session.q_card_consecutive_dislikes == 0
+
+
+# ---------------------------------------------------------------------------
+# Unit tests: FIX 1 — _compute_kw_vec_refine axis injection allowlist
+# ---------------------------------------------------------------------------
+
+class TestComputeKwVecRefineAxisAllowlist:
+    """_compute_kw_vec_refine rejects invalid axis values before touching the DB."""
+
+    def _make_stub(self):
+        """Minimal session stub — pool_ids must be non-empty to pass the first guard."""
+        stub = MagicMock()
+        stub.pool_ids = ['bld_000001']
+        return stub
+
+    def test_bogus_axis_returns_none_no_db_hit(self):
+        """Injection-style axis is rejected by allowlist; buildings DB never queried."""
+        from apps.recommendation.services import swipe_service as svc
+
+        stub = self._make_stub()
+        mock_conn = MagicMock()
+
+        with patch('apps.recommendation.services.swipe_service.connections', mock_conn):
+            result = svc._compute_kw_vec_refine('foo', 'bogus_axis OR 1=1', stub)
+
+        assert result is None
+        # The allowlist guard fires BEFORE the try-block that touches connections.
+        # If the guard is absent the except swallows the error but __getitem__ IS called.
+        mock_conn.__getitem__.assert_not_called()
+
+    def test_valid_axis_style_reaches_db(self):
+        """A valid axis ('style') is NOT rejected — it reaches the DB path."""
+        from apps.recommendation.services import swipe_service as svc
+
+        stub = self._make_stub()
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_cursor.__enter__ = lambda s: s
+        mock_cursor.__exit__ = MagicMock(return_value=False)
+        mock_cursor.fetchall.return_value = []
+        mock_conn.__getitem__.return_value.cursor.return_value = mock_cursor
+
+        with patch('apps.recommendation.services.swipe_service.connections', mock_conn):
+            result = svc._compute_kw_vec_refine('minimal', 'style', stub)
+
+        # Returns None because fetchall returns [] (no matching ids), but DB WAS hit.
+        assert result is None
+        mock_conn.__getitem__.assert_called_once_with('buildings')
