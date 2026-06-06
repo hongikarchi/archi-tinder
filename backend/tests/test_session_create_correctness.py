@@ -577,3 +577,236 @@ class TestPrefetchCacheSeeding:
             f'Expected async-thread strategy, got: {data.get("prefetch_strategy")!r}. '
             'First swipe should hit the prefetch cache seeded by session create.'
         )
+
+
+# ---------------------------------------------------------------------------
+# Case #3 resume guard: POST /sessions/ with project_id resumes active session
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestCaseThreeResumeGuard:
+    """
+    Case #3 server-side resume guard.
+
+    When the client POSTs to /analysis/sessions/ with a project_id that already
+    has a live (non-completed) AnalysisSession, the service must RESUME that
+    session instead of creating a blank new one.  All algorithm state
+    (like_vectors with original per-swipe round values, preference_vector,
+    phase, convergence_history, pool_ids, exposed_ids, current_round) lives
+    on the AnalysisSession row; resuming == loading that row via
+    get_session_state(), zero reconstruction.
+
+    force_new=true bypasses the guard and creates a fresh session.
+    Completed sessions (status='completed' OR phase='completed') are excluded
+    from the resume query so a completed board gets a fresh session.
+    """
+
+    def _make_active_session(self, user_profile, project):
+        """Seed an analyzing-phase session with non-trivial per-swipe round data."""
+        seed_emb_0 = _FAKE_EMBEDDINGS['B00001'].tolist()
+        seed_emb_1 = _FAKE_EMBEDDINGS['B00002'].tolist()
+        seed_emb_2 = _FAKE_EMBEDDINGS['B00003'].tolist()
+        return AnalysisSession.objects.create(
+            user=user_profile,
+            project=project,
+            phase='analyzing',
+            status='active',
+            pool_ids=list(_FAKE_POOL),
+            pool_scores=dict(_FAKE_SCORES),
+            exposed_ids=['B00001', 'B00002', 'B00003'],
+            initial_batch=list(_FAKE_POOL[:5]),
+            like_vectors=[
+                {'embedding': seed_emb_0, 'round': 0},
+                {'embedding': seed_emb_1, 'round': 1},
+                {'embedding': seed_emb_2, 'round': 2},
+            ],
+            convergence_history=[0.12, 0.08],
+            previous_pref_vector=seed_emb_0,
+            current_round=3,
+        )
+
+    # ------------------------------------------------------------------
+    # Test 1: POST with project_id, no force_new → resume existing session
+    # ------------------------------------------------------------------
+    def test_create_with_project_id_resumes_active_session(self, auth_client, user_profile):
+        """
+        POST /sessions/ targeting a project with a live session (no force_new)
+        must return the EXISTING session (not create a new one).
+
+        Verifies:
+        - response session_id == existing session's id
+        - AnalysisSession count for project did NOT increase
+        - like_vectors, phase, current_round, pool_ids, exposed_ids
+          all unchanged on the DB row (original per-swipe rounds preserved)
+        """
+        project = Project.objects.create(
+            user=user_profile, name='Resume Board', filters={},
+        )
+        existing = self._make_active_session(user_profile, project)
+        original_like_vectors = list(existing.like_vectors)
+        original_phase = existing.phase
+        original_round = existing.current_round
+        original_pool_ids = list(existing.pool_ids)
+        original_exposed_ids = list(existing.exposed_ids)
+
+        session_count_before = AnalysisSession.objects.filter(project=project).count()
+
+        patchers = _apply_patches()
+        try:
+            resp = auth_client.post(
+                '/api/v1/analysis/sessions/',
+                {'project_id': str(project.project_id), 'filters': {}},
+                format='json',
+            )
+        finally:
+            _stop_patches(patchers)
+
+        assert resp.status_code == 200, (
+            f'Expected 200 (resume), got {resp.status_code}: {resp.json()}'
+        )
+        data = resp.json()
+
+        # Must return the EXISTING session, not a new one
+        assert data['session_id'] == str(existing.session_id), (
+            f'Expected existing session {existing.session_id}, got {data["session_id"]}'
+        )
+
+        # No new AnalysisSession row created
+        session_count_after = AnalysisSession.objects.filter(project=project).count()
+        assert session_count_after == session_count_before, (
+            f'Session count must not increase on resume. '
+            f'Before={session_count_before}, after={session_count_after}'
+        )
+
+        # Re-fetch to confirm all algorithm state is preserved (untouched)
+        existing.refresh_from_db()
+        assert existing.phase == original_phase, (
+            f'phase must be unchanged on resume, got {existing.phase!r}'
+        )
+        assert existing.current_round == original_round, (
+            f'current_round must be unchanged on resume, got {existing.current_round}'
+        )
+        assert existing.pool_ids == original_pool_ids, (
+            'pool_ids must be unchanged on resume'
+        )
+        assert existing.exposed_ids == original_exposed_ids, (
+            'exposed_ids must be unchanged on resume'
+        )
+        # Verify original per-swipe round values on like_vectors are preserved
+        assert existing.like_vectors == original_like_vectors, (
+            'like_vectors (with original per-swipe round values) must be unchanged on resume'
+        )
+        rounds = [lv['round'] for lv in existing.like_vectors]
+        assert rounds == [0, 1, 2], (
+            f'Per-swipe round values must be preserved as [0, 1, 2], got {rounds}'
+        )
+
+    # ------------------------------------------------------------------
+    # Test 2: POST with force_new=true → bypass resume, create blank session
+    # ------------------------------------------------------------------
+    def test_create_with_force_new_opens_blank_session(self, auth_client, user_profile):
+        """
+        POST with force_new=true must bypass the resume guard and create a fresh
+        AnalysisSession (different session_id, phase='exploring', like_vectors=[]).
+        """
+        project = Project.objects.create(
+            user=user_profile, name='Force New Board', filters={},
+        )
+        existing = self._make_active_session(user_profile, project)
+        session_count_before = AnalysisSession.objects.filter(project=project).count()
+
+        patchers = _apply_patches()
+        try:
+            resp = auth_client.post(
+                '/api/v1/analysis/sessions/',
+                {'project_id': str(project.project_id), 'filters': {}, 'force_new': True},
+                format='json',
+            )
+        finally:
+            _stop_patches(patchers)
+
+        assert resp.status_code == 201, (
+            f'Expected 201 (new session), got {resp.status_code}: {resp.json()}'
+        )
+        data = resp.json()
+
+        # Must be a NEW session, not the existing one
+        assert data['session_id'] != str(existing.session_id), (
+            'force_new=true must create a new session, not return the existing one'
+        )
+
+        # Session count must have increased by exactly 1
+        session_count_after = AnalysisSession.objects.filter(project=project).count()
+        assert session_count_after == session_count_before + 1, (
+            f'force_new=true must create exactly one new session. '
+            f'Before={session_count_before}, after={session_count_after}'
+        )
+
+        # New session starts blank
+        new_session = AnalysisSession.objects.get(session_id=data['session_id'])
+        assert new_session.phase == 'exploring', (
+            f'New session from force_new must start as exploring, got {new_session.phase!r}'
+        )
+        assert new_session.like_vectors == [], (
+            f'New session from force_new must have empty like_vectors, got {new_session.like_vectors!r}'
+        )
+
+    # ------------------------------------------------------------------
+    # Test 3: only session is completed → resume guard skips it, new session created
+    # ------------------------------------------------------------------
+    def test_create_with_completed_session_does_not_resume(self, auth_client, user_profile):
+        """
+        When the project's only AnalysisSession is status='completed', the resume
+        guard must skip it and fall through to blank-session creation (201).
+        """
+        project = Project.objects.create(
+            user=user_profile, name='Completed Board', filters={},
+        )
+        # Seed a completed session on the project
+        AnalysisSession.objects.create(
+            user=user_profile,
+            project=project,
+            phase='completed',
+            status='completed',
+            pool_ids=list(_FAKE_POOL),
+            pool_scores=dict(_FAKE_SCORES),
+            exposed_ids=list(_FAKE_POOL),
+            initial_batch=list(_FAKE_POOL[:5]),
+            like_vectors=[
+                {'embedding': _FAKE_EMBEDDINGS['B00001'].tolist(), 'round': 0},
+            ],
+            convergence_history=[0.05, 0.04, 0.03],
+            previous_pref_vector=_FAKE_EMBEDDINGS['B00001'].tolist(),
+            current_round=12,
+        )
+        session_count_before = AnalysisSession.objects.filter(project=project).count()
+
+        patchers = _apply_patches()
+        try:
+            resp = auth_client.post(
+                '/api/v1/analysis/sessions/',
+                {'project_id': str(project.project_id), 'filters': {}},
+                format='json',
+            )
+        finally:
+            _stop_patches(patchers)
+
+        assert resp.status_code == 201, (
+            f'Expected 201 (new session past completed), got {resp.status_code}: {resp.json()}'
+        )
+
+        # A new session was created (resume guard skipped completed session)
+        session_count_after = AnalysisSession.objects.filter(project=project).count()
+        assert session_count_after == session_count_before + 1, (
+            f'Completed session must not be resumed; a new session must be created. '
+            f'Before={session_count_before}, after={session_count_after}'
+        )
+
+        data = resp.json()
+        new_session = AnalysisSession.objects.get(session_id=data['session_id'])
+        assert new_session.phase == 'exploring', (
+            f'New session must start as exploring, got {new_session.phase!r}'
+        )
+        assert new_session.like_vectors == [], (
+            f'New session must have empty like_vectors, got {new_session.like_vectors!r}'
+        )

@@ -290,7 +290,7 @@ export default function App() {
     }
   }
 
-  async function initSession(projectId, filters, filterPriority = [], seedIds = [], existingSessionId = null, currentHint = null, visualDescription = null, projectName = 'Untitled', rawQuery = '', imageFocus = null) {
+  async function initSession(projectId, filters, filterPriority = [], seedIds = [], existingSessionId = null, currentHint = null, visualDescription = null, projectName = 'Untitled', rawQuery = '', imageFocus = null, forceNew = false) {
     setPendingQuestion(null)
     setIsSwipeLoading(true)
     setIsSessionCompleted(false)
@@ -315,6 +315,7 @@ export default function App() {
         visual_description: visualDescription || undefined,
         raw_query: rawQuery || '',
         image_focus: imageFocus,
+        force_new: forceNew,
       })
       applySessionResponse(projectId, result)
       return result
@@ -702,7 +703,9 @@ export default function App() {
     setActiveProjectId(id)
     setProjects(prev => prev.map(p => p.id === id ? { ...p, deckImages: preloadedImages } : p))
     navigate('/swipe')
-    await initSession(id, llmFilters || project.filters, filterPriority, seedIds, null, null, visualDescription, project.projectName, '', imageFocus)
+    // Update-with-new-images intends a FRESH session reflecting the new seeds/filters,
+    // not a resume — force_new bypasses #212's server-side resume guard.
+    await initSession(id, llmFilters || project.filters, filterPriority, seedIds, null, null, visualDescription, project.projectName, '', imageFocus, true)
   }
 
   async function handleLogin(user) {
@@ -811,7 +814,7 @@ export default function App() {
     setProjects(prev => prev.map(p => p.id === id ? { ...p, sessionId: null, latestSessionMeta: null } : p))
     setActiveProjectId(id)
     navigate('/swipe')
-    await initSession(id, project.filters, [], [], null, null, null, project.projectName)
+    await initSession(id, project.filters, [], [], null, null, null, project.projectName, '', null, true)
   }
 
   const sharedLayoutProps = {
