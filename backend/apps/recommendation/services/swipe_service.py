@@ -18,6 +18,7 @@ Mock-patch discipline (CRITICAL):
 """
 import hashlib
 import logging
+import math
 
 import numpy as np
 from django.conf import settings
@@ -36,6 +37,7 @@ from ..caches import (
     evict_discovery_feed,
     evict_user_profile_detail,
     evict_project_detail,
+    get_corpus_tag_df,
 )
 from ..views._shared import _progress, _liked_id_only
 
@@ -144,6 +146,88 @@ def _build_refine_trigger(axis, keyword=None):
     }
 
 
+def _pick_discriminative_tag(session, axis):
+    """Return the most TF-IDF-discriminative tag for the given axis.
+
+    ALGO-QCARD Phase 2: replaces the raw-frequency pick used in Phase 1.
+
+    For each tag in session.tag_axis_counts[axis]:
+      - Skip tags in question_keyword_blacklist (case-insensitive).
+      - Skip tags where df/N > question_common_tag_ratio (too common, non-discriminative).
+      - score = tf * log(N / (df + 1)).
+    Returns the highest-scoring tag.
+
+    Falls back to frequency-based dominant tag if:
+      - No tags survive the filters.
+      - Corpus DF data is unavailable (get_corpus_tag_df()['_total'] == 0).
+    """
+    counts = session.tag_axis_counts or {}
+    axis_counts = counts.get(axis, {})
+    if not axis_counts:
+        return None
+
+    RC = settings.RECOMMENDATION
+    blacklist = {t.lower() for t in RC.get('question_keyword_blacklist', [])}
+    common_ratio = float(RC.get('question_common_tag_ratio', 0.4))
+
+    df_map = get_corpus_tag_df()
+    total_n = df_map.get('_total', 0) or 1  # guard div-by-zero
+    axis_df = df_map.get(axis, {})
+
+    # Corpus unavailable — fall back to frequency
+    if df_map.get('_total', 0) == 0:
+        return max(axis_counts, key=lambda t: axis_counts[t])
+
+    best_tag = None
+    best_score = -1.0
+    for tag, tf in axis_counts.items():
+        if tag.lower() in blacklist:
+            continue
+        df = axis_df.get(tag, 0)
+        if df / total_n > common_ratio:
+            continue
+        score = tf * math.log(total_n / (df + 1))
+        if score > best_score:
+            best_score, best_tag = score, tag
+
+    if best_tag is None:
+        # All tags were filtered — fall back to frequency-dominant tag
+        best_tag = max(axis_counts, key=lambda t: axis_counts[t])
+
+    return best_tag
+
+
+def _pick_pool_category(session):
+    """Return the dominant program category in the session's current pool.
+
+    ALGO-QCARD Phase 2 (Trigger B): queries the buildings DB for the most
+    common program value among the session's pool_ids.
+
+    Returns a program string (e.g. '주거') or None on failure / empty pool.
+    """
+    pool_ids = list(session.pool_ids or [])
+    if not pool_ids:
+        return None
+    try:
+        with connections['buildings'].cursor() as cur:
+            cur.execute(
+                'SELECT program, COUNT(*) cnt'
+                ' FROM canonical_v2_buildings'
+                ' WHERE is_publishable = true'
+                ' AND canonical_bld_id = ANY(%s)'
+                ' AND program IS NOT NULL'
+                ' GROUP BY program'
+                ' ORDER BY cnt DESC'
+                ' LIMIT 1',
+                [pool_ids],
+            )
+            row = cur.fetchone()
+        return row[0] if row else None
+    except Exception as exc:
+        logger.warning('_pick_pool_category buildings query failed: %s', exc)
+        return None
+
+
 def _check_question_trigger(session, action):
     """Return question_trigger dict if a trigger condition is met, else None.
 
@@ -163,15 +247,24 @@ def _check_question_trigger(session, action):
     if (session.question_count or 0) >= max_q:
         return None
 
-    # Refresh: consecutive dislikes >= 4
+    # Refresh: consecutive dislikes >= 4 (Trigger B)
     if action == 'dislike' and (session.q_card_consecutive_dislikes or 0) >= 4:
         session.question_cooldown = cooldown_n
         session.question_count = (session.question_count or 0) + 1
+        # ALGO-QCARD Phase 2: extract dominant pool category for a targeted question
+        category = _pick_pool_category(session)
+        if category:
+            question_text = (
+                f'원하는 느낌이 잘 안 나오나요? '
+                f'혹시 [{category}] 공간을 찾고 계신가요?'
+            )
+        else:
+            question_text = _REFRESH_QUESTION['q']
         return {
             'type': _REFRESH_QUESTION['type'],
-            'axis': _REFRESH_QUESTION['axis'],
-            'keyword': None,
-            'question': _REFRESH_QUESTION['q'],
+            'axis': 'program' if category else _REFRESH_QUESTION['axis'],
+            'keyword': category,
+            'question': question_text,
             'option_a': _REFRESH_QUESTION['a'],
             'option_b': _REFRESH_QUESTION['b'],
         }
@@ -189,14 +282,18 @@ def _check_question_trigger(session, action):
         if intersection:
             winning_axis = _dominant_axis(counts, intersection)
             if winning_axis:
-                # Pick the dominant tag in the intersection for the keyword
-                best_tag = None
-                best_tag_cnt = 0
-                axis_counts = counts.get(winning_axis, {})
-                for t in intersection:
-                    c = axis_counts.get(t, 0)
-                    if c > best_tag_cnt:
-                        best_tag_cnt, best_tag = c, t
+                # ALGO-QCARD Phase 2: use TF-IDF to pick the most discriminative
+                # tag within the intersection (falls back to frequency if needed)
+                best_tag = _pick_discriminative_tag(session, winning_axis)
+                # Constrain to intersection tags: if TF-IDF winner is not in the
+                # intersection, fall back to frequency pick within intersection
+                axis_counts_local = counts.get(winning_axis, {})
+                if best_tag not in intersection:
+                    best_tag = max(
+                        intersection,
+                        key=lambda t: axis_counts_local.get(t, 0),
+                        default=None,
+                    )
                 session.question_cooldown = cooldown_n
                 session.question_count = (session.question_count or 0) + 1
                 return _build_refine_trigger(winning_axis, keyword=best_tag)
@@ -206,9 +303,14 @@ def _check_question_trigger(session, action):
         for axis, axis_counts in counts.items():
             for tag, cnt in axis_counts.items():
                 if cnt / total_count >= 0.70:
+                    # ALGO-QCARD Phase 2: use TF-IDF-discriminative tag for the axis
+                    # (the 70% tag is used as the trigger condition; the question
+                    # keyword is the most discriminative tag on that axis, which
+                    # may differ from the 70% tag if a more specific term exists)
+                    best_tag = _pick_discriminative_tag(session, axis)
                     session.question_cooldown = cooldown_n
                     session.question_count = (session.question_count or 0) + 1
-                    return _build_refine_trigger(axis, keyword=tag)
+                    return _build_refine_trigger(axis, keyword=best_tag)
 
     return None
 
@@ -1010,6 +1112,52 @@ def _compute_kw_vec_refresh(session):
     return mean_vec / norm
 
 
+def _compute_kw_vec_category(program, session):
+    """Compute L2-normalized centroid embedding for a program category.
+
+    ALGO-QCARD Phase 2 (Part C3): used for refresh questions that carry a
+    specific program category keyword.  Queries the buildings DB for pool
+    cards belonging to the program, averages their pre-computed embeddings,
+    and returns the L2-normalized result.
+
+    Returns np.ndarray (384,) normalized, or None if no matching data.
+    """
+    if not program or not session.pool_ids:
+        return None
+
+    pool_ids = list(session.pool_ids)
+    try:
+        with connections['buildings'].cursor() as cur:
+            cur.execute(
+                'SELECT canonical_bld_id FROM canonical_v2_buildings'
+                ' WHERE is_publishable = true'
+                ' AND canonical_bld_id = ANY(%s)'
+                ' AND program = %s',
+                [pool_ids, program],
+            )
+            matching_ids = [row[0] for row in cur.fetchall()]
+    except Exception as exc:
+        logger.warning('_compute_kw_vec_category buildings query failed: %s', exc)
+        return None
+
+    if not matching_ids:
+        return None
+
+    pool_embeddings = engine.get_pool_embeddings(matching_ids)
+    if not pool_embeddings:
+        return None
+
+    vecs = [pool_embeddings[bid] for bid in matching_ids if bid in pool_embeddings]
+    if not vecs:
+        return None
+
+    mean_vec = np.mean(np.stack(vecs), axis=0)
+    norm = np.linalg.norm(mean_vec)
+    if norm < 1e-12:
+        return None
+    return mean_vec / norm
+
+
 def handle_question_response(request, profile, session_id):
     """Orchestrate QuestionResponseView.post body.
 
@@ -1079,7 +1227,13 @@ def handle_question_response(request, profile, session_id):
         if _kw and axis:
             kw_vec = _compute_kw_vec_refine(_kw, axis, session)
     else:  # refresh
-        kw_vec = _compute_kw_vec_refresh(session)
+        # ALGO-QCARD Phase 2: if a program category keyword was provided, use
+        # the program centroid vector instead of the dislike direction.
+        if keyword and axis == 'program':
+            kw_vec = _compute_kw_vec_category(keyword, session)
+        # Fall back to dislike-direction when no category available
+        if kw_vec is None:
+            kw_vec = _compute_kw_vec_refresh(session)
 
     # ── apply soft bias delta ─────────────────────────────────────────────
     delta = None
@@ -1090,9 +1244,22 @@ def handle_question_response(request, profile, session_id):
             else:                        # No (B)
                 delta = -penalty_w * kw_vec
         else:  # refresh
-            if selected_option == 'A':   # Yes, "show me different" → push away from dislike dir
-                delta = -penalty_w * kw_vec
-            # B (keep going) → delta = 0, no bias change
+            # ALGO-QCARD Phase 2: refresh with category keyword reverses sign semantics
+            # vs. the Phase 1 dislike-direction refresh:
+            #   A (Yes, "that category") → boost toward the category centroid
+            #   B (No) → penalize the category centroid (push away)
+            # When no category keyword is present the Phase 1 semantics apply:
+            #   A (Yes, "show me different") → push AWAY from dislike direction
+            if keyword and axis == 'program':
+                if selected_option == 'A':   # Yes, that category
+                    delta = boost_w * kw_vec
+                else:                        # No (B) — not that category
+                    delta = -penalty_w * kw_vec
+            else:
+                # Phase 1 dislike-direction refresh (no category)
+                if selected_option == 'A':   # Yes, "show me different" → push away
+                    delta = -penalty_w * kw_vec
+                # B (keep going) → delta = 0, no bias change
 
     # ── atomic state save ─────────────────────────────────────────────────
     with transaction.atomic():
