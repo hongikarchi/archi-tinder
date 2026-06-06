@@ -234,23 +234,23 @@ class DiscoveryFeedbackView(APIView):
                 )
             draft = create_discovery_draft(profile)
 
+        HARD_CAP = RC.get('discovery_like_hard_cap', 50)
         if action == 'like':
             liked = list(draft.liked_ids or [])
             existing_ids = {
                 (e if isinstance(e, str) else e.get('id', ''))
                 for e in liked
             }
-            if bld_id not in existing_ids:
+            # Hard cap: do not record a NEW like once the draft is at the cap.
+            # (Re-liking an already-liked id is a no-op and stays allowed.)
+            if bld_id not in existing_ids and len(liked) < HARD_CAP:
                 liked.append({'id': bld_id, 'intensity': 1.0})
-            # Trim to rolling cap (keep most-recent N) to bound JSON column growth.
             draft.liked_ids = liked[-_DRAFT_LIKE_CAP:]
             draft.save(update_fields=['liked_ids', 'updated_at'])
-        else:  # pass
+        else:  # pass  (UNCHANGED)
             disliked = list(draft.disliked_ids or [])
             if bld_id not in disliked:
                 disliked.append(bld_id)
-            # Trim to rolling cap (keep most-recent N) to bound JSON column growth.
-            # Cap >= discovery_dislike_history_window (30) so centroid window is intact.
             draft.disliked_ids = disliked[-_DRAFT_DISLIKE_CAP:]
             draft.save(update_fields=['disliked_ids', 'updated_at'])
 
@@ -259,10 +259,12 @@ class DiscoveryFeedbackView(APIView):
         evict_user_profile_detail(profile.user.id)
         evict_project_detail(str(draft.project_id))
 
+        like_cap_reached = len(draft.liked_ids or []) >= HARD_CAP
         return Response({
             'draft_id': str(draft.project_id),
             'draft_like_count': len(draft.liked_ids or []),
             'draft_pass_count': len(draft.disliked_ids or []),
+            'like_cap_reached': like_cap_reached,
         })
 
 
@@ -285,14 +287,17 @@ class DiscoveryPromoteView(APIView):
       - No draft exists, or fewer than discovery_promote_threshold (10)
         likes → 400 not_enough_likes.
 
-    Takes the most-recent up to ``discovery_promote_threshold`` (10) liked
-    building ids from the resolved draft, fetches their embeddings, and
-    creates a new Project + AnalysisSession with:
-      - like_vectors pre-seeded from the draft likes
+    Takes ALL liked building ids from the resolved draft (10 is now the
+    minimum required, not a cap), fetches their embeddings, and creates a new
+    Project + AnalysisSession with:
+      - like_vectors pre-seeded from ALL draft likes, each injected at round=0
+        (equal recency weight — no decay gradient across the Discovery batch)
       - preference_vector folded from each seed embedding
       - phase = 'analyzing' when seed count >= min_likes_for_clustering, else 'exploring'
+      - multimodal_floor = RC['k_clusters'] so K-Means multi-centroid runs immediately
       - pool built via create_pool_with_relaxation(seed_ids=liked_ids)
       - exposed_ids = seed liked ids (already seen in Discovery)
+      - first cards selected via centroid MMR (not farthest-point) when analyzing
 
     Response shape matches POST /api/v1/analysis/sessions/ so the frontend's
     existing applySessionResponse works unchanged:
@@ -333,11 +338,18 @@ class DiscoveryPromoteView(APIView):
 
         promote_threshold = RC.get('discovery_promote_threshold', 10)
         min_likes = RC.get('min_likes_for_clustering', 4)
+        multimodal_floor = RC.get('k_clusters', 2)   # need >= k points to form k centroids
 
-        # Take the most-recent up to promote_threshold entries
+        # Take ALL draft likes (promote_threshold is now a minimum gate, not a cap).
+        # Dedupe preserving order so identical building ids are not double-counted.
         all_liked = list(draft.liked_ids or []) if draft else []
-        seed_liked = all_liked[-promote_threshold:] if len(all_liked) > promote_threshold else all_liked
-        seed_ids = _draft_liked_id_only(seed_liked)
+        _seed_ids_raw = _draft_liked_id_only(all_liked)
+        seen_seed = set()
+        seed_ids = []
+        for _sid in _seed_ids_raw:
+            if _sid not in seen_seed:
+                seen_seed.add(_sid)
+                seed_ids.append(_sid)
 
         if len(seed_ids) < promote_threshold:
             return Response(
@@ -359,20 +371,24 @@ class DiscoveryPromoteView(APIView):
         # ── 2. Fetch seed embeddings ───────────────────────────────────────
         pool_embeddings_seed = engine.get_pool_embeddings(seed_ids)
 
-        # Build like_vectors and preference_vector from seed embeddings
+        # Build like_vectors and preference_vector from seed embeddings.
+        # All seeds use round=0 so they share identical recency weight — no decay
+        # gradient is introduced across the contemporaneous Discovery batch.
         like_vectors = []
         pref_vector = []
-        for i, bid in enumerate(seed_ids):
+        for bid in seed_ids:
             emb = pool_embeddings_seed.get(bid)
             if emb is None:
                 continue
             emb_list = emb.tolist() if hasattr(emb, 'tolist') else list(emb)
-            like_vectors.append({'embedding': emb_list, 'round': i})
+            like_vectors.append({'embedding': emb_list, 'round': 0})
             pref_vector = engine.update_preference_vector(pref_vector, emb_list, 'like')
 
-        # Determine phase based on how many seeds were successfully embedded
+        # Determine phase based on how many seeds were successfully embedded.
+        # session_floor activates multi-centroid K-Means immediately for analyzing sessions.
         seeded_count = len(like_vectors)
         phase = 'analyzing' if seeded_count >= min_likes else 'exploring'
+        session_floor = multimodal_floor if phase == 'analyzing' else None
 
         # ── 3. Build the pool (seed_ids steer the pool toward the user's taste) ──
         pool_ids, pool_scores, current_pool_tier = engine.create_pool_with_relaxation(
@@ -392,30 +408,44 @@ class DiscoveryPromoteView(APIView):
         # Seed likes count as already-exposed; exclude them from pool serving
         exposed_ids = [bid for bid in seed_ids if bid in set(pool_ids)]
 
-        # Build initial_batch (farthest-point, excluding exposed seeds)
-        tiers_map = defaultdict(list)
-        for bid in pool_ids:
-            tiers_map[pool_scores.get(bid, 0)].append(bid)
-
-        initial_batch = []
-        exposed_temp = list(exposed_ids)
-        for score in sorted(tiers_map.keys(), reverse=True):
-            tier_ids = list(tiers_map[score])
-            while len(initial_batch) < RC.get('initial_explore_rounds', 10) and tier_ids:
-                next_bid = engine.farthest_point_from_pool(tier_ids, exposed_temp, pool_embeddings)
-                if next_bid:
-                    initial_batch.append(next_bid)
-                    exposed_temp.append(next_bid)
-                    tier_ids.remove(next_bid)
-                else:
+        # Build served (first 3 cards): centroid MMR for analyzing, farthest-point fallback
+        current_round = seeded_count   # for MMR round_num / recency
+        served = []
+        if phase == 'analyzing' and like_vectors:
+            temp_exposed = list(exposed_ids)
+            for _ in range(3):   # next_image + 2 prefetch
+                bid = engine.compute_mmr_next(
+                    pool_ids, temp_exposed, pool_embeddings,
+                    like_vectors, current_round,
+                    multimodal_floor=session_floor,
+                )
+                if not bid:
                     break
-            if len(initial_batch) >= RC.get('initial_explore_rounds', 10):
-                break
-
-        if not initial_batch:
-            # Pool entirely consumed by exposed seeds — fall back to first non-exposed id
+                served.append(bid)
+                temp_exposed.append(bid)
+        if not served:
+            # exploring-edge fallback (rare: <min_likes embeddings resolved) — farthest-point
+            tiers_map = defaultdict(list)
+            for bid in pool_ids:
+                tiers_map[pool_scores.get(bid, 0)].append(bid)
+            exposed_temp = list(exposed_ids)
+            for score in sorted(tiers_map.keys(), reverse=True):
+                tier_ids = list(tiers_map[score])
+                while len(served) < 3 and tier_ids:
+                    nb = engine.farthest_point_from_pool(tier_ids, exposed_temp, pool_embeddings)
+                    if nb:
+                        served.append(nb)
+                        exposed_temp.append(nb)
+                        tier_ids.remove(nb)
+                    else:
+                        break
+                if len(served) >= 3:
+                    break
+        if not served:
             non_exposed = [bid for bid in pool_ids if bid not in set(exposed_ids)]
-            initial_batch = non_exposed[:1] if non_exposed else pool_ids[:1]
+            served = non_exposed[:1] if non_exposed else pool_ids[:1]
+
+        initial_batch = served   # analyzing won't consume it, but keep state consistent
 
         # ── 5. Fetch first 3 cards for next_image + prefetch ──────────────
         _initial_cards = engine.get_buildings_by_ids(initial_batch[:3])
@@ -450,6 +480,7 @@ class DiscoveryPromoteView(APIView):
                 current_pool_tier=current_pool_tier,
                 v_initial=pref_vector if pref_vector else None,
                 original_q_text=None,
+                multimodal_floor=session_floor,
             )
 
         # ── 7. Evict caches (mirrors session_service.create_session) ──────
@@ -457,13 +488,17 @@ class DiscoveryPromoteView(APIView):
         evict_user_profile_detail(profile.user.id)  # keyed by User.pk (Django auth user)
         evict_project_detail(str(project.project_id))
 
-        # Seed prefetch cache for first swipe (mirrors session_service F4)
+        # Seed prefetch cache for first swipe (mirrors session_service F4).
+        # Promoted sessions start at current_round=seeded_count, so the first
+        # swipe's consumer reads prefetch:{sid}:{seeded_count + 1} (saved_current_round
+        # = current_round AFTER the first-swipe increment). Seed that exact key —
+        # not :1 — or the first Taste swipe always misses the seeded cache.
         _pf_seed = {
             'prefetch_card_id': initial_batch[1] if len(initial_batch) > 1 else None,
             'prefetch_card_2_id': initial_batch[2] if len(initial_batch) > 2 else None,
         }
         cache.set(
-            f'prefetch:{session.session_id}:1',
+            f'prefetch:{session.session_id}:{seeded_count + 1}',
             _pf_seed,
             timeout=RC.get('async_prefetch_cache_timeout_seconds', 60),
         )

@@ -323,11 +323,19 @@ def update_preference_vector(pref_vector, embedding, action):
     return _normalize(updated)
 
 
-def get_top_k_results(pref_vector, exposed_ids, k=None, image_focus=None):
+def get_top_k_results(pref_vector, exposed_ids, k=None, image_focus=None, question_bias_vector=None):
     """
     Query top-k buildings by cosine similarity to preference vector.
     Excludes exposed_ids. Returns list of ImageCard dicts.
     image_focus: forwarded to _row_to_card for per-focus cover selection.
+
+    question_bias_vector: optional list (384-d) accumulated soft bias from
+    Yes/No question-card answers (ALGO-QCARD Phase 1). When provided and
+    pref_vector is also present, the bias is folded into the query vector by
+    L2-normalizing (pref_vector + question_bias_vector) before the pgvector
+    ORDER BY query. Cards are NEVER excluded — only re-ranked. When
+    pref_vector is absent (random-sample path) the bias is ignored because
+    the random path has no ranking vector to blend with.
     """
     if k is None:
         k = RC['top_k_results']
@@ -378,7 +386,18 @@ def get_top_k_results(pref_vector, exposed_ids, k=None, image_focus=None):
         else:
             rows = []
     else:
-        vec_str = _vec_to_pg(pref_vector)
+        # ALGO-QCARD Phase 1: fold bias into query vector before pgvector ORDER BY.
+        # Normalizing (pref + qbias) preserves the cosine-similarity semantics while
+        # steering results toward the Yes-biased / away from No-biased direction.
+        _query_vector = pref_vector
+        if (
+            question_bias_vector
+            and len(question_bias_vector) == 384
+            and len(pref_vector) == 384
+        ):
+            _blended = [p + q for p, q in zip(pref_vector, question_bias_vector)]
+            _query_vector = _normalize(_blended)
+        vec_str = _vec_to_pg(_query_vector)
         with connection.cursor() as cur:
             cur.execute(
                 f'SELECT {_cols} FROM canonical_v2_buildings {exclude_sql} '
@@ -1331,7 +1350,7 @@ def farthest_point_from_pool(pool_ids, exposed_ids, pool_embeddings):
     return candidate_ids[best_idx]
 
 
-def compute_taste_centroids(like_vectors, round_num):
+def compute_taste_centroids(like_vectors, round_num, multimodal_floor=None):
     """
     Compute taste cluster centroids with recency weighting.
     Returns (list_of_centroids, global_centroid) as numpy arrays.
@@ -1348,6 +1367,7 @@ def compute_taste_centroids(like_vectors, round_num):
             for lv in like_vectors
         ),
         round_num,
+        multimodal_floor,
     )
     if cache_key in _centroid_cache:
         result = _centroid_cache[cache_key]
@@ -1391,10 +1411,13 @@ def compute_taste_centroids(like_vectors, round_num):
     like_weights = np.array([w[1] for w in weighted_likes])
     global_centroid = _weighted_centroid(weighted_likes)
 
-    min_likes_for_multimodal = max(
-        2,
-        int(RC.get('min_likes_for_multimodal', RC.get('target_swipes', 10))),
-    )
+    if multimodal_floor is not None:
+        min_likes_for_multimodal = max(2, int(multimodal_floor))
+    else:
+        min_likes_for_multimodal = max(
+            2,
+            int(RC.get('min_likes_for_multimodal', RC.get('target_swipes', 10))),
+        )
     if len(weighted_likes) < min_likes_for_multimodal:
         centroids = [global_centroid]
         stats = {
@@ -1466,10 +1489,19 @@ def compute_taste_centroids(like_vectors, round_num):
     return centroids, global_centroid
 
 
-def compute_mmr_next(pool_ids, exposed_ids, pool_embeddings, like_vectors, round_num):
+def compute_mmr_next(
+    pool_ids, exposed_ids, pool_embeddings, like_vectors, round_num,
+    multimodal_floor=None, question_bias_vector=None,
+):
     """
     Select next building using MMR (Maximal Marginal Relevance).
     Returns canonical_bld_id string or None if no candidates.
+
+    question_bias_vector: optional list (384-d) accumulated soft bias from
+    Yes/No question-card answers (ALGO-QCARD Phase 1). When non-empty, a linear
+    term ``C @ qb`` is added to the relevance scores so that candidates aligned
+    with the bias direction rank higher. Cards are NEVER excluded from the pool —
+    only re-scored. When None or empty the behaviour is identical to today.
     """
     candidates = [bid for bid in pool_ids if bid not in set(exposed_ids)]
     if not candidates:
@@ -1478,7 +1510,7 @@ def compute_mmr_next(pool_ids, exposed_ids, pool_embeddings, like_vectors, round
     if not like_vectors:
         return random.choice(candidates)
 
-    centroids, _ = compute_taste_centroids(like_vectors, round_num)
+    centroids, _ = compute_taste_centroids(like_vectors, round_num, multimodal_floor=multimodal_floor)
 
     # Topic 04 (a): compute per-swipe λ once, outside the candidate loop
     mmr_lambda_base = RC.get('mmr_penalty', 0.3)
@@ -1506,6 +1538,13 @@ def compute_mmr_next(pool_ids, exposed_ids, pool_embeddings, like_vectors, round
         relevance = (sim_mat * weights).sum(axis=1)               # (N,)
     else:
         relevance = sim_mat.max(axis=1)  # (N,)
+
+    # ── ALGO-QCARD Phase 1: soft-bias term ───────────────────────────────
+    # Add C @ qb so aligned candidates score higher (no pool exclusion).
+    if question_bias_vector:
+        qb = np.asarray(question_bias_vector, dtype=float)  # (384,)
+        if qb.shape == (384,):
+            relevance = relevance + (C @ qb)  # (N,)
 
     # ── Redundancy (vectorized) ───────────────────────────────────────────
     exposed_valid = [e for e in exposed_ids if e in pool_embeddings]
@@ -1555,11 +1594,19 @@ def get_dislike_fallback(pool_ids, exposed_ids, pool_embeddings, dislike_vectors
     return best_candidate
 
 
-def get_top_k_mmr(like_vectors, exposed_ids, k=None, round_num=None, image_focus=None):
+def get_top_k_mmr(
+    like_vectors, exposed_ids, k=None, round_num=None, image_focus=None,
+    multimodal_floor=None, question_bias_vector=None,
+):
     """
     Get top-k results using MMR for final recommendations.
     Uses recency-weighted K-Means centroids when round_num is provided.
     Returns list of ImageCard dicts.
+
+    question_bias_vector: optional list (384-d) accumulated soft bias from
+    Yes/No question-card answers (ALGO-QCARD Phase 1). When non-empty, each
+    candidate's relevance score has a linear bias term added before the MMR
+    selection loop. Cards are NEVER excluded — only re-scored.
     """
     if k is None:
         k = RC['top_k_results']
@@ -1569,7 +1616,7 @@ def get_top_k_mmr(like_vectors, exposed_ids, k=None, round_num=None, image_focus
 
     # Use K-Means centroids with recency weighting when round_num available
     if round_num is not None:
-        centroids, centroid = compute_taste_centroids(like_vectors, round_num)
+        centroids, centroid = compute_taste_centroids(like_vectors, round_num, multimodal_floor=multimodal_floor)
         norm = np.linalg.norm(centroid)
         if norm > 0:
             centroid = centroid / norm
@@ -1578,6 +1625,11 @@ def get_top_k_mmr(like_vectors, exposed_ids, k=None, round_num=None, image_focus
         centroid = np.mean(like_embeddings, axis=0)
         centroid = centroid / np.linalg.norm(centroid)
         centroids = [centroid]
+
+    # ALGO-QCARD Phase 1: pre-compute qb once (used per-candidate below)
+    qb = None
+    if question_bias_vector and len(question_bias_vector) == 384:
+        qb = np.asarray(question_bias_vector, dtype=float)
 
     # Prepare exclusion clause
     params = []
@@ -1626,6 +1678,9 @@ def get_top_k_mmr(like_vectors, exposed_ids, k=None, round_num=None, image_focus
         best_relevance = -1
         for i, row in enumerate(remaining):
             relevance = max(np.dot(row['_vec'], c) for c in centroids)
+            # ALGO-QCARD Phase 1: add soft bias term
+            if qb is not None:
+                relevance = relevance + float(np.dot(row['_vec'], qb))
             if relevance > best_relevance:
                 best_relevance = relevance
                 best_idx = i
@@ -1641,6 +1696,9 @@ def get_top_k_mmr(like_vectors, exposed_ids, k=None, round_num=None, image_focus
 
             # Relevance: max cosine similarity to any centroid (multi-modal)
             relevance = max(np.dot(candidate_emb, c) for c in centroids)
+            # ALGO-QCARD Phase 1: add soft bias term
+            if qb is not None:
+                relevance = relevance + float(np.dot(candidate_emb, qb))
 
             # Redundancy: max similarity to already selected
             redundancy = 0

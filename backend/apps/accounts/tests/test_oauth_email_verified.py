@@ -128,7 +128,7 @@ def test_google_login_view_verified_email_links_existing():
     client = APIClient()
     with patch('apps.accounts.views.auth.requests.get', return_value=userinfo_response):
         resp = client.post(
-            '/api/v1/auth/google/',
+            '/api/v1/auth/social/google/',
             {'access_token': 'fake_access_token'},
             format='json',
         )
@@ -168,7 +168,7 @@ def test_google_login_view_unverified_email_creates_new_no_email():
     client = APIClient()
     with patch('apps.accounts.views.auth.requests.get', return_value=userinfo_response):
         resp = client.post(
-            '/api/v1/auth/google/',
+            '/api/v1/auth/social/google/',
             {'access_token': 'fake_access_token'},
             format='json',
         )

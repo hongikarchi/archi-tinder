@@ -8,6 +8,7 @@ import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
 
 const PREFETCH_AT_REMAINING = 3   // fetch more when deck.length <= this
 const TASTE_NUDGE_THRESHOLD = 10  // inject trigger card when draftLikeCount reaches this
+const DISCOVERY_LIKE_HARD_CAP = 50  // hard stop — block swiping, force Taste hand-off
 const SWIPE_KEYS = { ArrowLeft: 'left', ArrowRight: 'right' }
 
 const DECK_CACHE_KEY = 'discovery_deck_v2'
@@ -122,6 +123,7 @@ export default function DiscoveryPage({ showToast }) {
   // shakeCardId: the card id currently being shaken
   const [shakeCardId, setShakeCardId] = useState(null)
   const [promoteLoading, setPromoteLoading] = useState(false)
+  const [capReached, setCapReached] = useState(false)
 
   const _cached = loadDeckCache()
   const [deck, setDeck] = useState(_cached ? _cached.deck : [])
@@ -163,9 +165,15 @@ export default function DiscoveryPage({ showToast }) {
     sessionStorage.setItem(DRAFT_LIKES_KEY, String(draftLikeCount))
   }, [draftLikeCount])
 
+  // Hard cap: set capReached when like count hits the limit (covers sessionStorage restore case)
+  useEffect(() => {
+    if (draftLikeCount >= DISCOVERY_LIKE_HARD_CAP) setCapReached(true)
+  }, [draftLikeCount])
+
   // Keyboard swipe: ← pass, → like.
   useEffect(() => {
     async function onKey(e) {
+      if (capReached) return
       const dir = SWIPE_KEYS[e.key]
       if (!dir || !cardRef.current || keySwipingRef.current) return
       if (!deck.length) return
@@ -178,7 +186,7 @@ export default function DiscoveryPage({ showToast }) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [deck.length])
+  }, [deck.length, capReached])
 
   // Inject trigger card when draftLikeCount first reaches threshold.
   // triggerShownRef is set INSIDE the updater so it is only marked true when the
@@ -330,6 +338,7 @@ export default function DiscoveryPage({ showToast }) {
         .then(res => {
           if (res.draftId) setDraftId(res.draftId)
           setDraftLikeCount(res.draftLikeCount)
+          if (res.likeCapReached) setCapReached(true)
         })
         .catch(() => reportWriteError(showToast, '좋아요 저장 실패'))
     } else {
@@ -454,7 +463,66 @@ export default function DiscoveryPage({ showToast }) {
       <div
         style={{ width: CARD_WIDTH, height: CARD_HEIGHT, position: 'relative' }}
       >
-        {error && deck.length === 0 ? (
+        {capReached ? (
+          <div style={{
+            position: 'absolute', inset: 0,
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center',
+            gap: 20, textAlign: 'center',
+            padding: '0 24px',
+            background: 'var(--color-bg)',
+            borderRadius: 20,
+          }}>
+            <p style={{
+              margin: 0,
+              fontSize: 16,
+              fontWeight: 700,
+              color: 'var(--color-text)',
+              lineHeight: 1.6,
+            }}>
+              <span style={{ color: '#ec4899' }}>50장</span>
+              {' '}최대치에 도달했습니다.{' '}
+              이제 Taste로 가서 정밀 취향 탐색을 진행해주세요.
+            </p>
+            <button
+              type="button"
+              onClick={handlePromoteToTaste}
+              disabled={promoteLoading}
+              style={{
+                minHeight: 44,
+                padding: '0 24px',
+                borderRadius: 12,
+                border: 'none',
+                background: promoteLoading
+                  ? 'rgba(236,72,153,0.4)'
+                  : 'linear-gradient(135deg,#ec4899,#f43f5e)',
+                color: '#fff',
+                fontSize: 15,
+                fontWeight: 700,
+                cursor: promoteLoading ? 'not-allowed' : 'pointer',
+                fontFamily: 'inherit',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+              }}
+            >
+              {promoteLoading ? (
+                <>
+                  <div style={{
+                    width: 14, height: 14, borderRadius: '50%',
+                    border: '2px solid rgba(255,255,255,0.4)',
+                    borderTopColor: '#fff',
+                    animation: 'spin 0.8s linear infinite',
+                    flexShrink: 0,
+                  }} />
+                  Taste 분석 중…
+                </>
+              ) : (
+                'Taste 정밀 탐색 시작'
+              )}
+            </button>
+          </div>
+        ) : error && deck.length === 0 ? (
           <div style={{
             position: 'absolute', inset: 0,
             display: 'flex', flexDirection: 'column',

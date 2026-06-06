@@ -83,6 +83,11 @@ class AnalysisSession(models.Model):
     original_seed_ids        = models.JSONField(default=list)
     current_pool_tier        = models.IntegerField(default=1)  # 1=full filter, 2=drop geo/numeric, 3=random pool
     v_initial         = models.JSONField(null=True, blank=True)  # Topic 03 HyDE: 384-dim float list
+    multimodal_floor  = models.IntegerField(null=True, blank=True)
+    # Discovery-promote override: when set, replaces RC['min_likes_for_multimodal']
+    # in compute_taste_centroids so a warm-seeded session enters multi-centroid
+    # K-Means immediately. Null for normal-funnel sessions (RC default = single
+    # centroid through the first ~10 swipes).
     original_q_text   = models.TextField(null=True, blank=True)  # Topic 01 RRF: original raw_query for re-relaxation
     # IMP-10 sub-task A / Spec v1.7 §11.1: top-10 id lists for bookmark provenance
     # Populated by SessionResultView when each ranking channel runs.
@@ -93,8 +98,11 @@ class AnalysisSession(models.Model):
     # Question card trigger state (ALGO-QCARD-1)
     tag_axis_counts = models.JSONField(default=dict)   # {"style": {"minimal": 3}, ...}
     recent_like_tag_sets = models.JSONField(default=list)   # last 3 liked-card tag lists
-    question_cooldown = models.IntegerField(default=0)   # swipe-down counter; set to 5 on trigger/answer
+    question_cooldown = models.IntegerField(default=0)   # swipe-down counter; set to cooldown_n on trigger/answer
     q_card_consecutive_dislikes = models.IntegerField(default=0)   # consecutive dislike counter for refresh trigger
+    # ALGO-QCARD Phase 1: soft-vector bias fields
+    question_count = models.IntegerField(default=0)   # questions triggered this session (cap)
+    question_bias_vector = models.JSONField(null=True, blank=True)   # accumulated 384-d soft bias from Yes/No answers; None = no bias
     created_at        = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

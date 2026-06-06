@@ -25,7 +25,7 @@ class UserSerializer(serializers.ModelSerializer):
         model  = UserProfile
         fields = [
             'user_id', 'display_name', 'avatar_url', 'providers', 'theme', 'font',
-            'is_guest', 'onboarding_role', 'consent_accepted_at',
+            'language', 'is_guest', 'onboarding_role', 'consent_accepted_at',
         ]
 
     def get_providers(self, obj):
@@ -104,7 +104,7 @@ class UserProfileSelfUpdateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = UserProfile
-        fields = ['display_name', 'bio', 'mbti', 'external_links', 'theme', 'font', 'onboarding_role']
+        fields = ['display_name', 'bio', 'mbti', 'external_links', 'theme', 'font', 'language', 'onboarding_role']
 
     def validate_display_name(self, value):
         """display_name: 1-30 chars after .strip(); reject whitespace-only."""

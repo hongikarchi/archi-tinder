@@ -46,6 +46,10 @@ RC = settings.RECOMMENDATION
 
 _AXIS_FIELDS = ('style', 'atmosphere', 'material_visual')
 
+# Allowlist for axis column names interpolated into raw SQL in _compute_kw_vec_refine.
+# Must be a fixed literal — never derived from request data.  (FIX: ALGO-QCARD axis injection)
+_VALID_AXES = frozenset({'style', 'atmosphere', 'material_visual'})
+
 _AXIS_QUESTIONS = {
     'atmosphere': {'q': '어떤 분위기에 더 끌리세요?', 'a': '따뜻하고 아늑한', 'b': '차갑고 절제된'},
     'material_visual': {'q': '재료감은 어느 쪽이 더 끌리세요?', 'a': '나무·돌 같은 자연재료', 'b': '콘크리트·유리 같은 인공재료'},
@@ -122,25 +126,51 @@ def _dominant_axis(counts, intersection_tags):
     return best_axis
 
 
-def _build_refine_trigger(axis):
+def _build_refine_trigger(axis, keyword=None):
     q = _AXIS_QUESTIONS.get(axis)
     if not q:
         return None
-    return {'type': 'refine', 'axis': axis,
-            'question': q['q'], 'option_a': q['a'], 'option_b': q['b']}
+    if keyword:
+        question_text = f'지금까지 고르신 카드들에서 [{keyword}] 특징이 강하게 보입니다. 이게 핵심 테마인가요?'
+    else:
+        question_text = q['q']
+    return {
+        'type': 'refine',
+        'axis': axis,
+        'keyword': keyword,
+        'question': question_text,
+        'option_a': q['a'],
+        'option_b': q['b'],
+    }
 
 
 def _check_question_trigger(session, action):
-    """Return question_trigger dict if a trigger condition is met, else None."""
+    """Return question_trigger dict if a trigger condition is met, else None.
+
+    ALGO-QCARD Phase 1 additions:
+    - Caps at question_max_per_session (default 2): once session.question_count
+      reaches the cap, no further question cards are shown.
+    - Uses question_cooldown_swipes (default 15) for the cooldown window instead
+      of the hardcoded 5 swipes.
+    - Trigger payload now includes 'keyword' for refine triggers so the response
+      handler knows which embedding direction to boost/penalize.
+    """
+    cooldown_n = RC.get('question_cooldown_swipes', 15)
+    max_q = RC.get('question_max_per_session', 2)
+
     if (session.question_cooldown or 0) > 0:
+        return None
+    if (session.question_count or 0) >= max_q:
         return None
 
     # Refresh: consecutive dislikes >= 4
     if action == 'dislike' and (session.q_card_consecutive_dislikes or 0) >= 4:
-        session.question_cooldown = 5
+        session.question_cooldown = cooldown_n
+        session.question_count = (session.question_count or 0) + 1
         return {
             'type': _REFRESH_QUESTION['type'],
             'axis': _REFRESH_QUESTION['axis'],
+            'keyword': None,
             'question': _REFRESH_QUESTION['q'],
             'option_a': _REFRESH_QUESTION['a'],
             'option_b': _REFRESH_QUESTION['b'],
@@ -159,16 +189,26 @@ def _check_question_trigger(session, action):
         if intersection:
             winning_axis = _dominant_axis(counts, intersection)
             if winning_axis:
-                session.question_cooldown = 5
-                return _build_refine_trigger(winning_axis)
+                # Pick the dominant tag in the intersection for the keyword
+                best_tag = None
+                best_tag_cnt = 0
+                axis_counts = counts.get(winning_axis, {})
+                for t in intersection:
+                    c = axis_counts.get(t, 0)
+                    if c > best_tag_cnt:
+                        best_tag_cnt, best_tag = c, t
+                session.question_cooldown = cooldown_n
+                session.question_count = (session.question_count or 0) + 1
+                return _build_refine_trigger(winning_axis, keyword=best_tag)
 
     # Refine condition B: single tag >= 70% of total likes
     if total_count >= 3:
         for axis, axis_counts in counts.items():
             for tag, cnt in axis_counts.items():
                 if cnt / total_count >= 0.70:
-                    session.question_cooldown = 5
-                    return _build_refine_trigger(axis)
+                    session.question_cooldown = cooldown_n
+                    session.question_count = (session.question_count or 0) + 1
+                    return _build_refine_trigger(axis, keyword=tag)
 
     return None
 
@@ -374,7 +414,8 @@ def handle_swipe_extend(request, profile, session, session_id, client_buffer_ids
         # made compute_confidence always return None in the extended session.
         if session.like_vectors:
             _, global_centroid = engine.compute_taste_centroids(
-                session.like_vectors, session.current_round
+                session.like_vectors, session.current_round,
+                multimodal_floor=session.multimodal_floor,
             )
             session.previous_pref_vector = global_centroid.tolist()
         else:
@@ -389,6 +430,8 @@ def handle_swipe_extend(request, profile, session, session_id, client_buffer_ids
         next_card_id = engine.compute_mmr_next(
             session.pool_ids, session.exposed_ids, pool_embeddings,
             session.like_vectors, session.current_round,
+            multimodal_floor=session.multimodal_floor,
+            question_bias_vector=session.question_bias_vector,
         )
         next_card = engine.get_building_card(next_card_id) if next_card_id else None
         if next_card:
@@ -528,7 +571,8 @@ def handle_swipe_normal(
         # Tier A Topic 10 Option A; revisit with data if problematic.
         if session.phase == 'analyzing' and session.like_vectors:
             _, global_centroid = engine.compute_taste_centroids(
-                session.like_vectors, session.current_round
+                session.like_vectors, session.current_round,
+                multimodal_floor=session.multimodal_floor,
             )
             centroid_list = global_centroid.tolist()
             if session.previous_pref_vector:
@@ -656,7 +700,9 @@ def handle_swipe_normal(
         elif session.phase == 'analyzing':
             next_bid = engine.compute_mmr_next(
                 session.pool_ids, session.exposed_ids, pool_embeddings,
-                session.like_vectors, session.current_round
+                session.like_vectors, session.current_round,
+                question_bias_vector=session.question_bias_vector,
+                multimodal_floor=session.multimodal_floor,
             )
             if not next_bid:
                 # Pool exhausted during analyzing
@@ -683,6 +729,7 @@ def handle_swipe_normal(
             'pool_ids', 'pool_scores', 'current_pool_tier',
             'tag_axis_counts', 'recent_like_tag_sets',
             'question_cooldown', 'q_card_consecutive_dislikes',
+            'question_count', 'question_bias_vector',
         ])
 
         # Save copies for prefetch calculation outside transaction
@@ -692,9 +739,12 @@ def handle_swipe_normal(
         saved_initial_batch = list(session.initial_batch) if session.initial_batch else []
         saved_current_round = session.current_round
         saved_phase = session.phase
+        saved_multimodal_floor = session.multimodal_floor
         # Cache pool_embeddings -- same pool_ids, no need to re-fetch outside transaction
         saved_pool_embeddings = pool_embeddings
         saved_recent_actions = list(_recent_actions_window)
+        # ALGO-QCARD Phase 1: snapshot bias vector for async prefetch thread
+        saved_question_bias_vector = session.question_bias_vector
 
     # Return the data needed by the view for the post-transaction prefetch + response
     return {
@@ -707,8 +757,10 @@ def handle_swipe_normal(
         'saved_initial_batch': saved_initial_batch,
         'saved_current_round': saved_current_round,
         'saved_phase': saved_phase,
+        'saved_multimodal_floor': saved_multimodal_floor,
         'saved_pool_embeddings': saved_pool_embeddings,
         'saved_recent_actions': saved_recent_actions,
+        'saved_question_bias_vector': saved_question_bias_vector,
         'pool_embeddings': pool_embeddings,
         '_embedding_stats': _embedding_stats,
         '_pool_escalation_fired': _pool_escalation_fired,
@@ -805,10 +857,15 @@ def build_swipe_telemetry(
 def compute_sync_prefetch(
     saved_phase, saved_exposed_ids, saved_initial_batch, saved_current_round,
     saved_pool_ids, saved_pool_embeddings, saved_like_vectors,
+    saved_question_bias_vector=None,
+    saved_multimodal_floor=None,
 ):
     """Compute prefetch IDs on the sync path (CPU-only, no DB).
 
     Returns (pf_bid, pf2_bid).  Verbatim from the sync else-branch in SwipeView.post.
+
+    saved_question_bias_vector: optional accumulated soft-bias vector
+    (ALGO-QCARD Phase 1) passed through to compute_mmr_next on the analyzing path.
     """
     pf_bid = None
     pf2_bid = None
@@ -830,7 +887,9 @@ def compute_sync_prefetch(
         elif saved_phase == 'analyzing':
             pf_bid = engine.compute_mmr_next(
                 saved_pool_ids, saved_exposed_ids, saved_pool_embeddings,
-                saved_like_vectors, saved_current_round + 1
+                saved_like_vectors, saved_current_round + 1,
+                question_bias_vector=saved_question_bias_vector,
+                multimodal_floor=saved_multimodal_floor,
             )
     except Exception:
         pf_bid = None
@@ -856,7 +915,9 @@ def compute_sync_prefetch(
             elif saved_phase == 'analyzing':
                 pf2_bid = engine.compute_mmr_next(
                     saved_pool_ids, temp_exposed, saved_pool_embeddings,
-                    saved_like_vectors, saved_current_round + 2
+                    saved_like_vectors, saved_current_round + 2,
+                    question_bias_vector=saved_question_bias_vector,
+                    multimodal_floor=saved_multimodal_floor,
                 )
         except Exception:
             pf2_bid = None
@@ -864,10 +925,99 @@ def compute_sync_prefetch(
     return pf_bid, pf2_bid
 
 
+def _compute_kw_vec_refine(keyword, axis, session):
+    """Compute L2-normalized keyword embedding vector for a refine question response.
+
+    Queries the buildings DB for pool cards whose tag on `axis` matches `keyword`,
+    averages their embeddings, and returns the L2-normalized result.
+
+    Returns np.ndarray (384,) normalized, or None if no matching cards/embeddings.
+    """
+    if not keyword or not axis or not session.pool_ids:
+        return None
+    if axis not in _VALID_AXES:
+        return None
+
+    pool_ids = list(session.pool_ids)
+    try:
+        placeholders = ','.join(['%s'] * len(pool_ids))
+        if axis == 'material_visual':
+            query = (
+                f"SELECT canonical_bld_id FROM canonical_v2_buildings"
+                f" WHERE canonical_bld_id IN ({placeholders})"
+                f" AND is_publishable = true"
+                f" AND EXISTS (SELECT 1 FROM unnest(material_visual) m WHERE m ILIKE %s)"
+            )
+            params = pool_ids + [keyword]
+        else:
+            # style and atmosphere are plain TEXT columns
+            query = (
+                f"SELECT canonical_bld_id FROM canonical_v2_buildings"
+                f" WHERE canonical_bld_id IN ({placeholders})"
+                f" AND is_publishable = true"
+                f" AND {axis} ILIKE %s"
+            )
+            params = pool_ids + [keyword]
+
+        with connections['buildings'].cursor() as cur:
+            cur.execute(query, params)
+            matching_ids = [row[0] for row in cur.fetchall()]
+    except Exception as exc:
+        logger.warning('_compute_kw_vec_refine buildings query failed: %s', exc)
+        return None
+
+    if not matching_ids:
+        return None
+
+    pool_embeddings = engine.get_pool_embeddings(matching_ids)
+    if not pool_embeddings:
+        return None
+
+    vecs = [pool_embeddings[bid] for bid in matching_ids if bid in pool_embeddings]
+    if not vecs:
+        return None
+
+    mean_vec = np.mean(np.stack(vecs), axis=0)
+    norm = np.linalg.norm(mean_vec)
+    if norm < 1e-12:
+        return None
+    return mean_vec / norm
+
+
+def _compute_kw_vec_refresh(session):
+    """Compute L2-normalized embedding direction from recent dislikes for a refresh question.
+
+    Returns np.ndarray (384,) normalized, or None if insufficient data.
+    """
+    dislike_ids = list(
+        session.swipes
+        .filter(action='dislike')
+        .order_by('-created_at')
+        .values_list('canonical_bld_id', flat=True)[:10]
+    )
+    if not dislike_ids:
+        return None
+
+    pool_embeddings = engine.get_pool_embeddings(dislike_ids)
+    vecs = [pool_embeddings[bid] for bid in dislike_ids if bid in pool_embeddings]
+    if not vecs:
+        return None
+
+    mean_vec = np.mean(np.stack(vecs), axis=0)
+    norm = np.linalg.norm(mean_vec)
+    if norm < 1e-12:
+        return None
+    return mean_vec / norm
+
+
 def handle_question_response(request, profile, session_id):
     """Orchestrate QuestionResponseView.post body.
 
-    Verbatim from the original view: validate → emit event → atomic state update → response.
+    ALGO-QCARD Phase 1: the answer now mutates session.question_bias_vector
+    via soft-vector math and triggers a qbias-aware prefetch flush.
+
+    Request body: {question_type, axis, keyword, selected_option}
+    Response: {accepted, flush_prefetch, [next_image, prefetch_image, prefetch_image_2, progress]}
     """
     session = AnalysisSession.objects.filter(session_id=session_id, user=profile).first()
     if not session:
@@ -875,6 +1025,7 @@ def handle_question_response(request, profile, session_id):
 
     question_type = request.data.get('question_type', '')
     axis = request.data.get('axis')
+    keyword = request.data.get('keyword')
     selected_option = request.data.get('selected_option', '')
 
     if question_type not in ('refine', 'refresh'):
@@ -888,7 +1039,84 @@ def handle_question_response(request, profile, session_id):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # Emit tag_answer event (fire-and-forget; never raises)
+    cooldown_n = RC.get('question_cooldown_swipes', 15)
+    boost_w = float(RC.get('question_boost_weight', 2.0))
+    penalty_w = float(RC.get('question_penalty_weight', 1.0))
+
+    # ── skip: reset state only, no algo change ────────────────────────────
+    if selected_option == 'skip':
+        event_log.emit_event(
+            'tag_answer',
+            session=session,
+            user=profile,
+            question_type=question_type,
+            axis=axis,
+            selected_option=selected_option,
+        )
+        with transaction.atomic():
+            s = AnalysisSession.objects.select_for_update().get(
+                session_id=session_id, user=profile
+            )
+            s.question_cooldown = cooldown_n
+            s.q_card_consecutive_dislikes = 0
+            s.save(update_fields=['question_cooldown', 'q_card_consecutive_dislikes'])
+        return Response(
+            {'accepted': True, 'flush_prefetch': False},
+            status=status.HTTP_200_OK,
+        )
+
+    # ── compute keyword vector ────────────────────────────────────────────
+    kw_vec = None
+    if question_type == 'refine':
+        # Resolve keyword: prefer the one echoed from trigger; fall back to
+        # dominant tag from session counts on `axis`.
+        _kw = keyword
+        if not _kw and axis:
+            counts = session.tag_axis_counts or {}
+            axis_counts = counts.get(axis, {})
+            if axis_counts:
+                _kw = max(axis_counts, key=lambda t: axis_counts[t])
+        if _kw and axis:
+            kw_vec = _compute_kw_vec_refine(_kw, axis, session)
+    else:  # refresh
+        kw_vec = _compute_kw_vec_refresh(session)
+
+    # ── apply soft bias delta ─────────────────────────────────────────────
+    delta = None
+    if kw_vec is not None:
+        if question_type == 'refine':
+            if selected_option == 'A':   # Yes
+                delta = boost_w * kw_vec
+            else:                        # No (B)
+                delta = -penalty_w * kw_vec
+        else:  # refresh
+            if selected_option == 'A':   # Yes, "show me different" → push away from dislike dir
+                delta = -penalty_w * kw_vec
+            # B (keep going) → delta = 0, no bias change
+
+    # ── atomic state save ─────────────────────────────────────────────────
+    with transaction.atomic():
+        s = AnalysisSession.objects.select_for_update().get(
+            session_id=session_id, user=profile
+        )
+
+        if delta is not None:
+            existing = s.question_bias_vector
+            if existing and len(existing) == 384:
+                new_qbias = [existing[i] + float(delta[i]) for i in range(384)]
+            else:
+                new_qbias = [float(v) for v in delta]
+            s.question_bias_vector = new_qbias
+        # Reset streak + cooldown regardless of whether bias was updated
+        s.question_cooldown = cooldown_n
+        s.q_card_consecutive_dislikes = 0
+        s.save(update_fields=[
+            'question_bias_vector', 'question_cooldown', 'q_card_consecutive_dislikes',
+        ])
+        # Keep fresh reference for the prefetch recompute below
+        session = s
+
+    # Emit tag_answer event (after save so bias is persisted if event fails)
     event_log.emit_event(
         'tag_answer',
         session=session,
@@ -896,12 +1124,73 @@ def handle_question_response(request, profile, session_id):
         question_type=question_type,
         axis=axis,
         selected_option=selected_option,
+        keyword=keyword,
     )
 
-    with transaction.atomic():
-        s = AnalysisSession.objects.select_for_update().get(session_id=session_id, user=profile)
-        s.question_cooldown = 5
-        s.q_card_consecutive_dislikes = 0
-        s.save(update_fields=['question_cooldown', 'q_card_consecutive_dislikes'])
+    # ── recompute next + 2 prefetch with qbias-aware ranking ─────────────
+    next_card = None
+    prefetch_card = None
+    prefetch_card_2 = None
 
-    return Response({'accepted': True}, status=status.HTTP_200_OK)
+    try:
+        pool_embeddings = engine.get_pool_embeddings(session.pool_ids)
+        like_vectors = session.like_vectors or []
+        exposed_ids = list(session.exposed_ids or [])
+
+        card_ids = []
+        temp_exposed = list(exposed_ids)
+
+        for _ in range(3):
+            if like_vectors:
+                bid = engine.compute_mmr_next(
+                    session.pool_ids, temp_exposed, pool_embeddings,
+                    like_vectors, session.current_round,
+                    multimodal_floor=session.multimodal_floor,
+                    question_bias_vector=session.question_bias_vector,
+                )
+            else:
+                # Exploring phase — no like_vectors; use farthest-point
+                bid = engine.farthest_point_from_pool(
+                    session.pool_ids, temp_exposed, pool_embeddings
+                )
+            if bid:
+                card_ids.append(bid)
+                temp_exposed = temp_exposed + [bid]
+
+        if card_ids:
+            fetched = {
+                c['canonical_bld_id']: c
+                for c in engine.get_buildings_by_ids(card_ids)
+            }
+            if len(card_ids) > 0:
+                next_card = fetched.get(card_ids[0])
+            if len(card_ids) > 1:
+                prefetch_card = fetched.get(card_ids[1])
+            if len(card_ids) > 2:
+                prefetch_card_2 = fetched.get(card_ids[2])
+
+        # Mark first new card as exposed so subsequent swipes don't re-select it
+        if card_ids:
+            first_new = card_ids[0]
+            if first_new not in set(session.exposed_ids):
+                with transaction.atomic():
+                    s2 = AnalysisSession.objects.select_for_update().get(
+                        session_id=session_id, user=profile
+                    )
+                    if first_new not in set(s2.exposed_ids):
+                        s2.exposed_ids = s2.exposed_ids + [first_new]
+                        s2.save(update_fields=['exposed_ids'])
+    except Exception as exc:
+        logger.warning('handle_question_response flush recompute failed: %s', exc)
+
+    return Response(
+        {
+            'accepted': True,
+            'flush_prefetch': True,
+            'next_image': next_card,
+            'prefetch_image': prefetch_card,
+            'prefetch_image_2': prefetch_card_2,
+            'progress': _progress(session),
+        },
+        status=status.HTTP_200_OK,
+    )

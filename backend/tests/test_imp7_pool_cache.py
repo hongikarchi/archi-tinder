@@ -466,11 +466,11 @@ class TestSessionCreateViewWarmsCacheNaturally:
             f'{_ENGINE}.get_building_card': _mock_card,
             f'{_ENGINE}.get_building_embedding': lambda bid: _FAKE_EMBEDDINGS.get(bid, np.zeros(384)).tolist(),
             f'{_ENGINE}.update_preference_vector': lambda p, e, a: list(np.random.randn(384)),
-            f'{_ENGINE}.compute_taste_centroids': lambda lv, rn: (
+            f'{_ENGINE}.compute_taste_centroids': lambda lv, rn, multimodal_floor=None: (
                 [np.ones(384) / np.linalg.norm(np.ones(384))],
                 np.ones(384) / np.linalg.norm(np.ones(384)),
             ),
-            f'{_ENGINE}.compute_mmr_next': lambda *a: 'B00001',
+            f'{_ENGINE}.compute_mmr_next': lambda *a, **kw: 'B00001',
             f'{_ENGINE}.compute_convergence': lambda *a: 0.05,
             f'{_ENGINE}.check_convergence': lambda *a: False,
             f'{_ENGINE}.get_dislike_fallback': lambda *a, **kw: 'B00010',
@@ -574,11 +574,11 @@ class TestSwipeEventPayload:
             f'{_ENGINE}.get_building_card': _mock_card,
             f'{_ENGINE}.get_building_embedding': lambda bid: _FAKE_EMBEDDINGS_DICT.get(bid, np.zeros(384)).tolist(),
             f'{_ENGINE}.update_preference_vector': lambda p, e, a: list(np.random.randn(384)),
-            f'{_ENGINE}.compute_taste_centroids': lambda lv, rn: (
+            f'{_ENGINE}.compute_taste_centroids': lambda lv, rn, multimodal_floor=None: (
                 [np.ones(384) / np.linalg.norm(np.ones(384))],
                 np.ones(384) / np.linalg.norm(np.ones(384)),
             ),
-            f'{_ENGINE}.compute_mmr_next': lambda *a: pool_ids[1],
+            f'{_ENGINE}.compute_mmr_next': lambda *a, **kw: pool_ids[1],
             f'{_ENGINE}.compute_convergence': lambda *a: 0.05,
             f'{_ENGINE}.check_convergence': lambda *a: False,
             f'{_ENGINE}.get_dislike_fallback': lambda *a, **kw: pool_ids[2],
@@ -677,11 +677,11 @@ class TestSwipeEventPayload:
             f'{_ENGINE}.get_building_card': _mock_card,
             f'{_ENGINE}.get_building_embedding': lambda bid: list(np.ones(384) / np.linalg.norm(np.ones(384))),
             f'{_ENGINE}.update_preference_vector': lambda p, e, a: list(np.random.randn(384)),
-            f'{_ENGINE}.compute_taste_centroids': lambda lv, rn: (
+            f'{_ENGINE}.compute_taste_centroids': lambda lv, rn, multimodal_floor=None: (
                 [np.ones(384) / np.linalg.norm(np.ones(384))],
                 np.ones(384) / np.linalg.norm(np.ones(384)),
             ),
-            f'{_ENGINE}.compute_mmr_next': lambda *a: pool_ids[1],
+            f'{_ENGINE}.compute_mmr_next': lambda *a, **kw: pool_ids[1],
             f'{_ENGINE}.compute_convergence': lambda *a: 0.05,
             f'{_ENGINE}.check_convergence': lambda *a: False,
             f'{_ENGINE}.get_dislike_fallback': lambda *a, **kw: pool_ids[2],
@@ -765,11 +765,11 @@ class TestPoolEscalationFiredFlag:
             f'{_ENGINE}.get_building_card': _mock_card,
             f'{_ENGINE}.get_building_embedding': lambda bid: list(np.ones(384) / np.linalg.norm(np.ones(384))),
             f'{_ENGINE}.update_preference_vector': lambda p, e, a: list(np.random.randn(384)),
-            f'{_ENGINE}.compute_taste_centroids': lambda lv, rn: (
+            f'{_ENGINE}.compute_taste_centroids': lambda lv, rn, multimodal_floor=None: (
                 [np.ones(384) / np.linalg.norm(np.ones(384))],
                 np.ones(384) / np.linalg.norm(np.ones(384)),
             ),
-            f'{_ENGINE}.compute_mmr_next': lambda *a: pool_ids[1],
+            f'{_ENGINE}.compute_mmr_next': lambda *a, **kw: pool_ids[1],
             f'{_ENGINE}.compute_convergence': lambda *a: 0.05,
             f'{_ENGINE}.check_convergence': lambda *a: False,
             f'{_ENGINE}.get_dislike_fallback': lambda *a, **kw: pool_ids[2],
@@ -845,11 +845,11 @@ class TestPoolEscalationFiredFlag:
             f'{_ENGINE}.get_building_card': _mock_card,
             f'{_ENGINE}.get_building_embedding': lambda bid: list(np.ones(384) / np.linalg.norm(np.ones(384))),
             f'{_ENGINE}.update_preference_vector': lambda p, e, a: list(np.random.randn(384)),
-            f'{_ENGINE}.compute_taste_centroids': lambda lv, rn: (
+            f'{_ENGINE}.compute_taste_centroids': lambda lv, rn, multimodal_floor=None: (
                 [np.ones(384) / np.linalg.norm(np.ones(384))],
                 np.ones(384) / np.linalg.norm(np.ones(384)),
             ),
-            f'{_ENGINE}.compute_mmr_next': lambda *a: pool_ids[1],
+            f'{_ENGINE}.compute_mmr_next': lambda *a, **kw: pool_ids[1],
             f'{_ENGINE}.compute_convergence': lambda *a: 0.05,
             f'{_ENGINE}.check_convergence': lambda *a: False,
             f'{_ENGINE}.get_dislike_fallback': lambda *a, **kw: pool_ids[2],

@@ -13,6 +13,10 @@ class UserProfile(models.Model):
         ('plex', 'IBM Plex Sans KR'),
         ('noto-serif', 'Noto Serif KR'),
     ]
+    LANGUAGE_CHOICES = [
+        ('ko', 'Korean'),
+        ('en', 'English'),
+    ]
     ONBOARDING_ROLE_CHOICES = [
         ('student',    'Student'),
         ('architect',  'Architect'),
@@ -65,6 +69,7 @@ class UserProfile(models.Model):
     # -- App-preference fields (design-system PR2) --
     theme = models.CharField(max_length=20, choices=THEME_CHOICES, default='github-light')
     font = models.CharField(max_length=20, choices=FONT_CHOICES, default='plex')
+    language = models.CharField(max_length=5, choices=LANGUAGE_CHOICES, default='ko')
 
     # -- Guest-first auth / terminal onboarding (FULL-LOGIN-REDESIGN-1) --
     is_guest = models.BooleanField(default=False)

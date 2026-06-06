@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom'
 import './tokens.css'
 import './index.css'
 import { ThemeProvider } from './context/ThemeContext.jsx'
+import { LanguageProvider } from './context/LanguageContext.jsx'
 import App from './App.jsx'
 
 const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
@@ -16,7 +17,9 @@ const tree = (
   <StrictMode>
     <BrowserRouter>
       <ThemeProvider>
-        <App />
+        <LanguageProvider>
+          <App />
+        </LanguageProvider>
       </ThemeProvider>
     </BrowserRouter>
   </StrictMode>

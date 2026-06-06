@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { useTheme } from './hooks/useTheme.js'
+import { useLanguage } from './hooks/useLanguage.js'
 import MainLayout from './layouts/MainLayout.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import ProjectSetupPage from './pages/ProjectSetupPage.jsx'
@@ -29,6 +30,7 @@ export default function App() {
   const navigate = useNavigate()
   const location = useLocation()
   const { hydrate } = useTheme()
+  const { hydrate: hydrateLanguage } = useLanguage()
 
   const [userId, setUserId] = useState(() => sessionStorage.getItem('archithon_user') || null)
   const [wizardData, setWizardData] = useState(null)
@@ -656,15 +658,40 @@ export default function App() {
     const q = pendingQuestion
     setPendingQuestion(null)
     if (!activeProject?.sessionId) return
-    api.submitQuestionResponse({
-      session_id: activeProject.sessionId,
-      question_type: q.type,
-      axis: q.axis ?? null,
-      selected_option: option,
-    }).catch(() => {
+    try {
+      const resp = await api.submitQuestionResponse({
+        session_id: activeProject.sessionId,
+        question_type: q.type,
+        axis: q.axis ?? null,
+        keyword: q.keyword ?? null,
+        selected_option: option,
+      })
+      if (resp.flush_prefetch) {
+        // Flush the entire client-side prefetch queue so the user sees the
+        // server's qbias-reranked deck rather than the 2 stale prefetched cards.
+        // Also clear the preload image cache entries for the old prefetch URLs
+        // so no stale card can flash through instant-swap.
+        if (prefetchCard?.image_url) imagePreloadCache.current.delete(prefetchCard.image_url)
+        if (prefetchCard2?.image_url) imagePreloadCache.current.delete(prefetchCard2.image_url)
+        setPrefetchCard(null)
+        setPrefetchCard2(null)
+        if (resp.next_image) {
+          setCurrentCard(resp.next_image)
+          if (resp.next_image.image_url) preloadImage(resp.next_image.image_url)
+          setPrefetchCard(resp.prefetch_image ?? null)
+          setPrefetchCard2(resp.prefetch_image_2 ?? null)
+          if (resp.prefetch_image?.image_url) preloadImage(resp.prefetch_image.image_url)
+          if (resp.prefetch_image_2?.image_url) preloadImage(resp.prefetch_image_2.image_url)
+        } else {
+          // next_image null → end of stream; mirror the session-completed path
+          setIsSessionCompleted(true)
+          setCurrentCard(null)
+        }
+      }
+    } catch {
       reportWriteError(setGlobalToast, '답변 전송 실패 — 다시 선택해주세요')
       setPendingQuestion(q)
-    })
+    }
   }
 
   async function handleUpdateWithImages(id, preloadedImages, llmFilters = {}, filterPriority = [], visualDescription = null, imageFocus = null) {
@@ -693,7 +720,10 @@ export default function App() {
     sessionStorage.removeItem('discovery_deck_v2')
     sessionStorage.removeItem('discovery_seen_ids')
     setUserId(id)
-    if (typeof user === 'object') hydrate(user.theme, user.font)
+    if (typeof user === 'object') {
+      hydrate(user.theme, user.font)
+      hydrateLanguage(user.language)
+    }
     setCurrentCard(null)
     setSessionProgress(null)
     setIsSessionCompleted(false)
