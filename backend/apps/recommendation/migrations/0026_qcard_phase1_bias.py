@@ -4,7 +4,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('recommendation', '0024_project_axis_scores'),
+        ('recommendation', '0025_analysissession_multimodal_floor'),
     ]
 
     operations = [

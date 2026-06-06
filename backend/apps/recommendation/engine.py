@@ -1350,7 +1350,7 @@ def farthest_point_from_pool(pool_ids, exposed_ids, pool_embeddings):
     return candidate_ids[best_idx]
 
 
-def compute_taste_centroids(like_vectors, round_num):
+def compute_taste_centroids(like_vectors, round_num, multimodal_floor=None):
     """
     Compute taste cluster centroids with recency weighting.
     Returns (list_of_centroids, global_centroid) as numpy arrays.
@@ -1367,6 +1367,7 @@ def compute_taste_centroids(like_vectors, round_num):
             for lv in like_vectors
         ),
         round_num,
+        multimodal_floor,
     )
     if cache_key in _centroid_cache:
         result = _centroid_cache[cache_key]
@@ -1410,10 +1411,13 @@ def compute_taste_centroids(like_vectors, round_num):
     like_weights = np.array([w[1] for w in weighted_likes])
     global_centroid = _weighted_centroid(weighted_likes)
 
-    min_likes_for_multimodal = max(
-        2,
-        int(RC.get('min_likes_for_multimodal', RC.get('target_swipes', 10))),
-    )
+    if multimodal_floor is not None:
+        min_likes_for_multimodal = max(2, int(multimodal_floor))
+    else:
+        min_likes_for_multimodal = max(
+            2,
+            int(RC.get('min_likes_for_multimodal', RC.get('target_swipes', 10))),
+        )
     if len(weighted_likes) < min_likes_for_multimodal:
         centroids = [global_centroid]
         stats = {
@@ -1487,7 +1491,7 @@ def compute_taste_centroids(like_vectors, round_num):
 
 def compute_mmr_next(
     pool_ids, exposed_ids, pool_embeddings, like_vectors, round_num,
-    question_bias_vector=None,
+    multimodal_floor=None, question_bias_vector=None,
 ):
     """
     Select next building using MMR (Maximal Marginal Relevance).
@@ -1506,7 +1510,7 @@ def compute_mmr_next(
     if not like_vectors:
         return random.choice(candidates)
 
-    centroids, _ = compute_taste_centroids(like_vectors, round_num)
+    centroids, _ = compute_taste_centroids(like_vectors, round_num, multimodal_floor=multimodal_floor)
 
     # Topic 04 (a): compute per-swipe λ once, outside the candidate loop
     mmr_lambda_base = RC.get('mmr_penalty', 0.3)
@@ -1592,7 +1596,7 @@ def get_dislike_fallback(pool_ids, exposed_ids, pool_embeddings, dislike_vectors
 
 def get_top_k_mmr(
     like_vectors, exposed_ids, k=None, round_num=None, image_focus=None,
-    question_bias_vector=None,
+    multimodal_floor=None, question_bias_vector=None,
 ):
     """
     Get top-k results using MMR for final recommendations.
@@ -1612,7 +1616,7 @@ def get_top_k_mmr(
 
     # Use K-Means centroids with recency weighting when round_num available
     if round_num is not None:
-        centroids, centroid = compute_taste_centroids(like_vectors, round_num)
+        centroids, centroid = compute_taste_centroids(like_vectors, round_num, multimodal_floor=multimodal_floor)
         norm = np.linalg.norm(centroid)
         if norm > 0:
             centroid = centroid / norm

@@ -78,7 +78,7 @@ def _mock_update_pref(pref_vector, embedding, action):
     return list(np.random.RandomState(42).randn(384))
 
 
-def _mock_compute_centroids(like_vectors, round_num):
+def _mock_compute_centroids(like_vectors, round_num, multimodal_floor=None):
     """Return fake centroids."""
     c = np.random.RandomState(42).randn(384)
     c = c / np.linalg.norm(c)

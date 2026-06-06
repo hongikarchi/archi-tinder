@@ -417,7 +417,8 @@ def get_session_state(request, session):
         elif phase == 'analyzing':
             pf_id = engine.compute_mmr_next(
                 pool_ids, exposed_ids, pool_embeddings,
-                like_vectors, current_round + 1
+                like_vectors, current_round + 1,
+                multimodal_floor=session.multimodal_floor,
             )
             prefetch_card = engine.get_building_card(pf_id, image_focus=image_focus) if pf_id else None
     except Exception:
@@ -440,7 +441,8 @@ def get_session_state(request, session):
             elif phase == 'analyzing':
                 pf2_id = engine.compute_mmr_next(
                     pool_ids, temp_exposed, pool_embeddings,
-                    like_vectors, current_round + 2
+                    like_vectors, current_round + 2,
+                    multimodal_floor=session.multimodal_floor,
                 )
                 prefetch_card_2 = engine.get_building_card(pf2_id, image_focus=image_focus) if pf2_id else None
     except Exception:
@@ -477,6 +479,7 @@ def get_session_result(session):
             session.exposed_ids,
             k=RC['top_k_results'],
             round_num=session.current_round,
+            multimodal_floor=session.multimodal_floor,
             question_bias_vector=session.question_bias_vector,
         )
     else:
@@ -499,6 +502,7 @@ def get_session_result(session):
             session.exposed_ids,
             k=RC['top_k_results'] * _overfetch_mult,
             round_num=session.current_round,
+            multimodal_floor=session.multimodal_floor,
             question_bias_vector=session.question_bias_vector,
         )
 

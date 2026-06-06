@@ -324,6 +324,7 @@ RECOMMENDATION = {
     'question_cooldown_swipes': 15,     # min swipes between question cards
     'question_boost_weight': 2.0,       # Yes answer: + boost on keyword vector
     'question_penalty_weight': 1.0,     # No answer: - penalty on keyword vector
+    'discovery_like_hard_cap': 50,  # Discovery draft hard stop: block likes beyond 50; client redirects to Taste
 }
 
 _check_async_prefetch_safety(

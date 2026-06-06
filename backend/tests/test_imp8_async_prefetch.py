@@ -143,7 +143,7 @@ def _base_engine_patches(pool_ids):
         f'{_ENGINE}.get_building_card': _mock_card,
         f'{_ENGINE}.get_building_embedding': lambda bid: list(np.ones(384) / np.linalg.norm(np.ones(384))),
         f'{_ENGINE}.update_preference_vector': lambda p, e, a: list(np.random.randn(384)),
-        f'{_ENGINE}.compute_taste_centroids': lambda lv, rn: (
+        f'{_ENGINE}.compute_taste_centroids': lambda lv, rn, multimodal_floor=None: (
             [np.ones(384) / np.linalg.norm(np.ones(384))],
             np.ones(384) / np.linalg.norm(np.ones(384)),
         ),

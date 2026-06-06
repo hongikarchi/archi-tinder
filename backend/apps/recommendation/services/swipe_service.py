@@ -414,7 +414,8 @@ def handle_swipe_extend(request, profile, session, session_id, client_buffer_ids
         # made compute_confidence always return None in the extended session.
         if session.like_vectors:
             _, global_centroid = engine.compute_taste_centroids(
-                session.like_vectors, session.current_round
+                session.like_vectors, session.current_round,
+                multimodal_floor=session.multimodal_floor,
             )
             session.previous_pref_vector = global_centroid.tolist()
         else:
@@ -429,6 +430,7 @@ def handle_swipe_extend(request, profile, session, session_id, client_buffer_ids
         next_card_id = engine.compute_mmr_next(
             session.pool_ids, session.exposed_ids, pool_embeddings,
             session.like_vectors, session.current_round,
+            multimodal_floor=session.multimodal_floor,
         )
         next_card = engine.get_building_card(next_card_id) if next_card_id else None
         if next_card:
@@ -568,7 +570,8 @@ def handle_swipe_normal(
         # Tier A Topic 10 Option A; revisit with data if problematic.
         if session.phase == 'analyzing' and session.like_vectors:
             _, global_centroid = engine.compute_taste_centroids(
-                session.like_vectors, session.current_round
+                session.like_vectors, session.current_round,
+                multimodal_floor=session.multimodal_floor,
             )
             centroid_list = global_centroid.tolist()
             if session.previous_pref_vector:
@@ -698,6 +701,7 @@ def handle_swipe_normal(
                 session.pool_ids, session.exposed_ids, pool_embeddings,
                 session.like_vectors, session.current_round,
                 question_bias_vector=session.question_bias_vector,
+                multimodal_floor=session.multimodal_floor,
             )
             if not next_bid:
                 # Pool exhausted during analyzing
@@ -734,6 +738,7 @@ def handle_swipe_normal(
         saved_initial_batch = list(session.initial_batch) if session.initial_batch else []
         saved_current_round = session.current_round
         saved_phase = session.phase
+        saved_multimodal_floor = session.multimodal_floor
         # Cache pool_embeddings -- same pool_ids, no need to re-fetch outside transaction
         saved_pool_embeddings = pool_embeddings
         saved_recent_actions = list(_recent_actions_window)
@@ -751,6 +756,7 @@ def handle_swipe_normal(
         'saved_initial_batch': saved_initial_batch,
         'saved_current_round': saved_current_round,
         'saved_phase': saved_phase,
+        'saved_multimodal_floor': saved_multimodal_floor,
         'saved_pool_embeddings': saved_pool_embeddings,
         'saved_recent_actions': saved_recent_actions,
         'saved_question_bias_vector': saved_question_bias_vector,
@@ -851,6 +857,7 @@ def compute_sync_prefetch(
     saved_phase, saved_exposed_ids, saved_initial_batch, saved_current_round,
     saved_pool_ids, saved_pool_embeddings, saved_like_vectors,
     saved_question_bias_vector=None,
+    saved_multimodal_floor=None,
 ):
     """Compute prefetch IDs on the sync path (CPU-only, no DB).
 
@@ -881,6 +888,7 @@ def compute_sync_prefetch(
                 saved_pool_ids, saved_exposed_ids, saved_pool_embeddings,
                 saved_like_vectors, saved_current_round + 1,
                 question_bias_vector=saved_question_bias_vector,
+                multimodal_floor=saved_multimodal_floor,
             )
     except Exception:
         pf_bid = None
@@ -908,6 +916,7 @@ def compute_sync_prefetch(
                     saved_pool_ids, temp_exposed, saved_pool_embeddings,
                     saved_like_vectors, saved_current_round + 2,
                     question_bias_vector=saved_question_bias_vector,
+                    multimodal_floor=saved_multimodal_floor,
                 )
         except Exception:
             pf2_bid = None

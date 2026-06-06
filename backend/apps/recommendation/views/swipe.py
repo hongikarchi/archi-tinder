@@ -50,6 +50,7 @@ def _async_prefetch_thread(
     pool_ids_snap, exposed_ids_snap, pool_embeddings_snap,
     like_vectors_snap, initial_batch_snap, current_round_snap,
     question_bias_vector_snap=None,
+    multimodal_floor_snap=None,
 ):
     """IMP-8 (Spec v1.6 §11.1): background thread to compute prefetch cards
     after primary swipe response returns. Result cached for the NEXT swipe's
@@ -107,6 +108,7 @@ def _async_prefetch_thread(
                 pool_ids_snap, exposed_ids_snap, pool_embeddings_snap,
                 like_vectors_snap, current_round_snap + 2,
                 question_bias_vector=question_bias_vector_snap,
+                multimodal_floor=multimodal_floor_snap,
             )
 
         # Compute prefetch_card_2_id (T+1 swipe's prefetch_2 slot, i.e. round+3
@@ -131,6 +133,7 @@ def _async_prefetch_thread(
                     pool_ids_snap, temp_exposed, pool_embeddings_snap,
                     like_vectors_snap, current_round_snap + 3,
                     question_bias_vector=question_bias_vector_snap,
+                    multimodal_floor=multimodal_floor_snap,
                 )
 
         result = {
@@ -303,8 +306,9 @@ class SwipeView(APIView):
         saved_like_vectors = result['saved_like_vectors']
         saved_initial_batch = result['saved_initial_batch']
         saved_current_round = result['saved_current_round']
-        saved_phase         = result['saved_phase']
-        saved_pool_embeddings = result['saved_pool_embeddings']
+        saved_phase             = result['saved_phase']
+        saved_multimodal_floor  = result['saved_multimodal_floor']
+        saved_pool_embeddings   = result['saved_pool_embeddings']
         saved_recent_actions  = result['saved_recent_actions']
         _embedding_stats      = result['_embedding_stats']
         _pool_escalation_fired = result['_pool_escalation_fired']
@@ -400,8 +404,11 @@ class SwipeView(APIView):
                     saved_like_vectors,
                     saved_initial_batch,
                     saved_current_round,
-                    saved_question_bias_vector,
                 ),
+                kwargs={
+                    'question_bias_vector_snap': saved_question_bias_vector,
+                    'multimodal_floor_snap': saved_multimodal_floor,
+                },
                 daemon=True,
             )
             t.start()
@@ -413,6 +420,7 @@ class SwipeView(APIView):
                 saved_phase, saved_exposed_ids, saved_initial_batch, saved_current_round,
                 saved_pool_ids, saved_pool_embeddings, saved_like_vectors,
                 saved_question_bias_vector=saved_question_bias_vector,
+                saved_multimodal_floor=saved_multimodal_floor,
             )
 
             # ── Phase 2: single batch DB call (1 RTT for next + pf + pf2) ────
