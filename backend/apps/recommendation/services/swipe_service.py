@@ -1145,6 +1145,7 @@ def handle_question_response(request, profile, session_id):
                 bid = engine.compute_mmr_next(
                     session.pool_ids, temp_exposed, pool_embeddings,
                     like_vectors, session.current_round,
+                    multimodal_floor=session.multimodal_floor,
                     question_bias_vector=session.question_bias_vector,
                 )
             else:
