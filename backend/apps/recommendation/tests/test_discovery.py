@@ -807,47 +807,63 @@ def test_discovery_feed_buffer_invalid_ids_dropped(auth_client):
 # ── Draft cap tests ───────────────────────────────────────────────────────────
 
 @pytest.mark.django_db
-def test_feedback_liked_ids_capped_at_200(auth_client, user_profile):
-    """draft.liked_ids is trimmed to at most 200 entries (rolling cap)."""
-    # Pre-fill draft with 199 existing likes
+def test_feedback_liked_ids_hard_capped_at_50(auth_client, user_profile):
+    """draft.liked_ids is hard-capped at 50 entries (discovery_like_hard_cap).
+
+    New likes are blocked once the draft has reached the cap — the list never
+    grows past 50 distinct entries.  The 51st distinct like returns
+    like_cap_reached=True and does NOT grow the list.
+    """
+    from django.conf import settings
+    hard_cap = settings.RECOMMENDATION.get('discovery_like_hard_cap', 50)
+
+    # Pre-fill draft with exactly (hard_cap - 1) distinct likes
     existing_draft = create_discovery_draft(user_profile)
-    existing_draft.liked_ids = [{'id': f'bld_{i:06d}', 'intensity': 1.0} for i in range(199)]
+    existing_draft.liked_ids = [
+        {'id': f'bld_{i:06d}', 'intensity': 1.0} for i in range(hard_cap - 1)
+    ]
     existing_draft.save(update_fields=['liked_ids'])
     draft_id_str = str(existing_draft.project_id)
 
-    with patch('apps.recommendation.views.discovery._dj_connections') as mock_conns:
+    def _mock_cursor():
         mock_cursor = MagicMock()
         mock_cursor.__enter__ = lambda s: s
         mock_cursor.__exit__ = MagicMock(return_value=False)
         mock_cursor.fetchone.return_value = (1,)
-        mock_conns.__getitem__.return_value.cursor.return_value = mock_cursor
+        return mock_cursor
 
-        # This 200th like brings the list to exactly the cap
-        resp = auth_client.post(
-            '/api/v1/discovery/feedback/',
-            {'canonical_bld_id': 'bld_000999', 'action': 'like', 'draft_id': draft_id_str},
-            format='json',
-        )
-    assert resp.status_code == 200
-    existing_draft.refresh_from_db()
-    assert len(existing_draft.liked_ids) == 200
-
-    # One more like — should still be capped at 200 (oldest dropped)
+    # The hard_cap-th like fills the list to exactly the cap
     with patch('apps.recommendation.views.discovery._dj_connections') as mock_conns:
-        mock_cursor = MagicMock()
-        mock_cursor.__enter__ = lambda s: s
-        mock_cursor.__exit__ = MagicMock(return_value=False)
-        mock_cursor.fetchone.return_value = (1,)
-        mock_conns.__getitem__.return_value.cursor.return_value = mock_cursor
-
+        mock_conns.__getitem__.return_value.cursor.return_value = _mock_cursor()
         resp = auth_client.post(
             '/api/v1/discovery/feedback/',
-            {'canonical_bld_id': 'bld_001000', 'action': 'like', 'draft_id': draft_id_str},
+            {'canonical_bld_id': f'bld_{hard_cap - 1:06d}', 'action': 'like', 'draft_id': draft_id_str},
             format='json',
         )
     assert resp.status_code == 200
     existing_draft.refresh_from_db()
-    assert len(existing_draft.liked_ids) <= 200
+    assert len(existing_draft.liked_ids) == hard_cap
+
+    # The (hard_cap + 1)-th distinct like must NOT grow the list
+    with patch('apps.recommendation.views.discovery._dj_connections') as mock_conns:
+        mock_conns.__getitem__.return_value.cursor.return_value = _mock_cursor()
+        resp_over = auth_client.post(
+            '/api/v1/discovery/feedback/',
+            {'canonical_bld_id': f'bld_{hard_cap + 999:06d}', 'action': 'like', 'draft_id': draft_id_str},
+            format='json',
+        )
+    assert resp_over.status_code == 200
+    payload = resp_over.json()
+    # Hard cap: the list must not exceed hard_cap
+    existing_draft.refresh_from_db()
+    assert len(existing_draft.liked_ids) == hard_cap, (
+        f'liked_ids must stay at {hard_cap} after hard cap reached, '
+        f'got {len(existing_draft.liked_ids)}'
+    )
+    # like_cap_reached must be True when the draft is at or past the cap
+    assert payload.get('like_cap_reached') is True, (
+        f'Expected like_cap_reached=True once cap is reached, got {payload}'
+    )
 
 
 @pytest.mark.django_db
