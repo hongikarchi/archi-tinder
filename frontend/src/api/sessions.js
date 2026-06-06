@@ -62,14 +62,18 @@ export async function getSessionState(sessionId, currentHint = null) {
  * prefetched in its visible queue (not yet swiped). The backend merges these
  * into session.exposed_ids before card selection so the same card is never
  * shown twice.
+ * latency_ms (optional) is the number of milliseconds between the card
+ * becoming visible and the user swiping it. The backend uses this for
+ * hyper-positive / mindless-fast-swipe detection (Phase 3). Ignored if absent.
  */
-export async function recordSwipe({ session_id, image_id, action, client_buffer_ids = [], extend = false }) {
+export async function recordSwipe({ session_id, image_id, action, client_buffer_ids = [], extend = false, latency_ms }) {
   const result = await callApi('POST', `/analysis/sessions/${session_id}/swipes/`, {
     canonical_bld_id:  image_id,
     action,
     idempotency_key:   `swp_${session_id}_${image_id}`,
     client_buffer_ids: client_buffer_ids,
     ...(extend ? { extend: true } : {}),
+    ...(latency_ms != null ? { latency_ms } : {}),
   })
   return {
     ...result,

@@ -103,6 +103,8 @@ class AnalysisSession(models.Model):
     # ALGO-QCARD Phase 1: soft-vector bias fields
     question_count = models.IntegerField(default=0)   # questions triggered this session (cap)
     question_bias_vector = models.JSONField(null=True, blank=True)   # accumulated 384-d soft bias from Yes/No answers; None = no bias
+    # ALGO-QCARD Phase 3: inter-swipe latency rolling window for hyper-positive detection
+    recent_latencies = models.JSONField(default=list)   # rolling inter-swipe latencies (ms), newest last; cap RC['recent_latencies_cap']
     created_at        = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
