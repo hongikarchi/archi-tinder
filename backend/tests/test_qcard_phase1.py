@@ -158,10 +158,16 @@ class TestCheckQuestionTriggerCap:
         assert session.question_count == 1
 
     def test_refresh_trigger_includes_keyword_none(self, user_profile, monkeypatch):
-        """Refresh trigger (4+ consecutive dislikes) has keyword=None."""
+        """Refresh trigger with no pool category resolves to keyword=None.
+
+        Phase 2 attaches a program category to the refresh trigger when one is
+        found in the pool; when _pick_pool_category yields None the trigger
+        falls back to the Phase-1 generic refresh (keyword=None).
+        """
         from django.conf import settings
         from apps.recommendation.services import swipe_service as svc
         monkeypatch.setitem(settings.RECOMMENDATION, 'question_cooldown_swipes', 15)
+        monkeypatch.setattr(svc, '_pick_pool_category', lambda session: None)
         session = self._make_session(user_profile, question_count=0)
         session.q_card_consecutive_dislikes = 4
         result = svc._check_question_trigger(session, 'dislike')
