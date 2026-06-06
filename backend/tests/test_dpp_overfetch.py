@@ -92,7 +92,7 @@ class TestDppOverfetch:
 
         k_calls = []
 
-        def _fake_mmr(like_vectors, exposed_ids, k, round_num=None, multimodal_floor=None):
+        def _fake_mmr(like_vectors, exposed_ids, k, round_num=None, **kwargs):
             k_calls.append(k)
             return [_make_card(f'B{i:05d}') for i in range(k)]
 
@@ -123,7 +123,7 @@ class TestDppOverfetch:
 
         k_calls = []
 
-        def _fake_mmr(like_vectors, exposed_ids, k, round_num=None, multimodal_floor=None):
+        def _fake_mmr(like_vectors, exposed_ids, k, round_num=None, **kwargs):
             k_calls.append(k)
             return [_make_card(f'B{i:05d}') for i in range(k)]
 
@@ -159,7 +159,7 @@ class TestDppOverfetch:
         # Over-fetched set: 15 cards in original MMR order
         overfetch_ids = [f'B{i:05d}' for i in range(top_k * mult)]
 
-        def _fake_mmr(like_vectors, exposed_ids, k, round_num=None, multimodal_floor=None):
+        def _fake_mmr(like_vectors, exposed_ids, k, round_num=None, **kwargs):
             return [_make_card(oid) for oid in overfetch_ids[:k]]
 
         # DPP narrows to top_k in reversed order
@@ -204,7 +204,7 @@ class TestDppOverfetch:
 
         overfetch_ids = [f'B{i:05d}' for i in range(top_k * mult)]
 
-        def _fake_mmr(like_vectors, exposed_ids, k, round_num=None, multimodal_floor=None):
+        def _fake_mmr(like_vectors, exposed_ids, k, round_num=None, **kwargs):
             return [_make_card(oid) for oid in overfetch_ids[:k]]
 
         def _fake_dpp(cards, like_vectors, k, q_override=None):

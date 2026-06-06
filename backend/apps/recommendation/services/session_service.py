@@ -419,6 +419,7 @@ def get_session_state(request, session):
                 pool_ids, exposed_ids, pool_embeddings,
                 like_vectors, current_round + 1,
                 multimodal_floor=session.multimodal_floor,
+                question_bias_vector=session.question_bias_vector,
             )
             prefetch_card = engine.get_building_card(pf_id, image_focus=image_focus) if pf_id else None
     except Exception:
@@ -443,6 +444,7 @@ def get_session_state(request, session):
                     pool_ids, temp_exposed, pool_embeddings,
                     like_vectors, current_round + 2,
                     multimodal_floor=session.multimodal_floor,
+                    question_bias_vector=session.question_bias_vector,
                 )
                 prefetch_card_2 = engine.get_building_card(pf2_id, image_focus=image_focus) if pf2_id else None
     except Exception:
@@ -480,12 +482,14 @@ def get_session_result(session):
             k=RC['top_k_results'],
             round_num=session.current_round,
             multimodal_floor=session.multimodal_floor,
+            question_bias_vector=session.question_bias_vector,
         )
     else:
         predicted_cards = engine.get_top_k_results(
             session.preference_vector,
             session.exposed_ids,
             k=RC['top_k_results'],
+            question_bias_vector=session.question_bias_vector,
         )
 
     # Topic 04(b) DPP: when flag ON, over-fetch candidates so DPP MAP can actually narrow.
@@ -501,6 +505,7 @@ def get_session_result(session):
             k=RC['top_k_results'] * _overfetch_mult,
             round_num=session.current_round,
             multimodal_floor=session.multimodal_floor,
+            question_bias_vector=session.question_bias_vector,
         )
 
     # Capture initial cosine order BEFORE any reorder (needed for RRF composition)

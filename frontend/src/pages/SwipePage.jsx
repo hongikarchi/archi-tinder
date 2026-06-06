@@ -305,6 +305,7 @@ export default function SwipePage({
   onQuestionAnswer,
 }) {
   const cardRef = useRef(null)
+  const questionCardRef = useRef(null)
   const pendingAction = useRef(null)
   const swipedCardId = useRef(null)
   const hasShownDismissTutorial = useRef(!!localStorage.getItem('archithon_dismiss_tutorial_seen'))
@@ -635,10 +636,22 @@ export default function SwipePage({
         <div style={{ width: CARD_WIDTH, height: CARD_HEIGHT, position: 'relative' }}>
           {currentCard ? (
             questionTrigger ? (
-              <QuestionCard
-                trigger={questionTrigger}
-                onAnswer={onQuestionAnswer}
-              />
+              /* Wrap QuestionCard in SwipeGestureFrame so right swipe = 'A' (Yes)
+                 and left swipe = 'B' (No). Buttons remain as accessible fallback. */
+              <SwipeGestureFrame
+                ref={questionCardRef}
+                key={`question_${questionTrigger.axis ?? ''}_${questionTrigger.type}`}
+                onSwipe={(dir) => {
+                  if (dir === 'right') onQuestionAnswer('A')
+                  else if (dir === 'left') onQuestionAnswer('B')
+                }}
+                onCardLeftScreen={() => {}}
+              >
+                <QuestionCard
+                  trigger={questionTrigger}
+                  onAnswer={onQuestionAnswer}
+                />
+              </SwipeGestureFrame>
             ) : (
               <>
                 <SwipeGestureFrame

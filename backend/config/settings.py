@@ -319,6 +319,11 @@ RECOMMENDATION = {
     'discovery_local_sim_radius': 0.55,          # cosine SIM to nearest centroid to count as local/취향
     'discovery_centroid_cache_ttl': 21600,       # 6h — app-session fixed
     'discovery_promote_threshold': 10,
+    # ALGO-QCARD Phase 1: soft-vector bias hyperparameters
+    'question_max_per_session': 2,      # ALGO-QCARD soft-vector: max question cards per session
+    'question_cooldown_swipes': 15,     # min swipes between question cards
+    'question_boost_weight': 2.0,       # Yes answer: + boost on keyword vector
+    'question_penalty_weight': 1.0,     # No answer: - penalty on keyword vector
     'discovery_like_hard_cap': 50,  # Discovery draft hard stop: block likes beyond 50; client redirects to Taste
 }
 

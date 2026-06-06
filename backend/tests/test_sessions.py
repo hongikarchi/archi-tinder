@@ -85,7 +85,7 @@ def _mock_compute_centroids(like_vectors, round_num, multimodal_floor=None):
     return ([c], c)
 
 
-def _mock_mmr_next(pool_ids, exposed_ids, pool_embeddings, like_vectors, round_num, multimodal_floor=None):
+def _mock_mmr_next(pool_ids, exposed_ids, pool_embeddings, like_vectors, round_num, **kwargs):
     """Return first available building_id."""
     exposed_set = set(exposed_ids)
     for bid in pool_ids:
