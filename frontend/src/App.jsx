@@ -703,7 +703,9 @@ export default function App() {
     setActiveProjectId(id)
     setProjects(prev => prev.map(p => p.id === id ? { ...p, deckImages: preloadedImages } : p))
     navigate('/swipe')
-    await initSession(id, llmFilters || project.filters, filterPriority, seedIds, null, null, visualDescription, project.projectName, '', imageFocus)
+    // Update-with-new-images intends a FRESH session reflecting the new seeds/filters,
+    // not a resume — force_new bypasses #212's server-side resume guard.
+    await initSession(id, llmFilters || project.filters, filterPriority, seedIds, null, null, visualDescription, project.projectName, '', imageFocus, true)
   }
 
   async function handleLogin(user) {
