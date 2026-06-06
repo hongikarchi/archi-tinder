@@ -312,6 +312,40 @@ def _check_question_trigger(session, action):
                     session.question_count = (session.question_count or 0) + 1
                     return _build_refine_trigger(axis, keyword=best_tag)
 
+    # Refine condition C (ALGO-QCARD Phase 3): hyper-positive / fast-swipe detection.
+    # Fires when the user has rapidly liked almost everything in the recent window,
+    # suggesting mindless swiping that needs active taste disambiguation.
+    hp_window = RC.get('question_hyperpositive_window', 10)
+    hp_min_likes = RC.get('question_hyperpositive_min_likes', 8)
+    lats = list(session.recent_latencies or [])
+    avg_lat = (sum(lats) / len(lats)) if lats else None
+    fast_ms = RC.get('question_fast_swipe_ms', 1500)
+    lat_cap = RC.get('recent_latencies_cap', 10)
+    lat_min_samples = max(1, min(hp_window, lat_cap) // 2)
+    hp_recent = _recent_actions(session, hp_window)
+    hp_like_count = sum(1 for a in hp_recent if a == 'like')
+    if (
+        len(hp_recent) >= hp_window
+        and hp_like_count >= hp_min_likes
+        and avg_lat is not None
+        and len(lats) >= lat_min_samples
+        and avg_lat < fast_ms
+    ):
+        # Pick axis by highest total count (mirrors _dominant_axis without needing
+        # an intersection set — use all known tags as the candidate universe).
+        if counts:
+            hp_axis = max(
+                (ax for ax in counts if ax in _AXIS_QUESTIONS),
+                key=lambda ax: sum(counts[ax].values()) if counts.get(ax) else 0,
+                default=None,
+            )
+            if hp_axis and counts.get(hp_axis):
+                hp_keyword = _pick_discriminative_tag(session, hp_axis)
+                if hp_keyword:
+                    session.question_cooldown = cooldown_n
+                    session.question_count = (session.question_count or 0) + 1
+                    return _build_refine_trigger(hp_axis, keyword=hp_keyword)
+
     return None
 
 
@@ -820,6 +854,18 @@ def handle_swipe_normal(
         # Question card trigger state update (ALGO-QCARD-1).
         # Called inside the transaction so question state is consistent with swipe row.
         _update_question_state(session, action, canonical_bld_id)
+
+        # ALGO-QCARD Phase 3: capture inter-swipe latency BEFORE trigger evaluation
+        # so the new sample is included in avg_lat inside _check_question_trigger.
+        _lat_raw = request.data.get('latency_ms')
+        try:
+            _lat = float(_lat_raw) if _lat_raw is not None else None
+        except (TypeError, ValueError):
+            _lat = None
+        if _lat is not None and 0 < _lat <= 120000:
+            _lat_cap = RC.get('recent_latencies_cap', 10)
+            session.recent_latencies = (list(session.recent_latencies or []) + [_lat])[-_lat_cap:]
+
         question_trigger = _check_question_trigger(session, action)
 
         # Save session BEFORE prefetch so concurrent requests see updated exposed_ids.
@@ -832,6 +878,7 @@ def handle_swipe_normal(
             'tag_axis_counts', 'recent_like_tag_sets',
             'question_cooldown', 'q_card_consecutive_dislikes',
             'question_count', 'question_bias_vector',
+            'recent_latencies',
         ])
 
         # Save copies for prefetch calculation outside transaction

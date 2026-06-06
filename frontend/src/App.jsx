@@ -217,11 +217,20 @@ export default function App() {
   const swipeRetryCount = useRef(0)
   const currentCardRef = useRef(null)
   const activeProjectIdRef = useRef(null)
+  // Records the wall-clock time (ms) when the current card became visible.
+  // Reset every time currentCard changes so latency_ms captures exactly how
+  // long the user looked at the card before swiping it.
+  const cardShownAtRef = useRef(Date.now())
 
   // Keep currentCardRef in sync so setTimeout closures can read live card identity
   useEffect(() => { currentCardRef.current = currentCard }, [currentCard])
   // Keep activeProjectIdRef in sync so setTimeout closures detect project-switch / session-end
   useEffect(() => { activeProjectIdRef.current = activeProjectId }, [activeProjectId])
+  // Reset the card-shown timer whenever the displayed card changes (all paths:
+  // instant-swap, non-instant, question-flush, session resume/start).
+  useEffect(() => {
+    cardShownAtRef.current = Date.now()
+  }, [currentCard?.image_id])
   useEffect(() => {
     if (swipeRestored.current) return
     if (location.pathname === '/swipe' && activeProjectId && userId) {
@@ -434,11 +443,17 @@ export default function App() {
         .map(c => c.image_id)
 
       let result
+      // Compute how long the user looked at the card before swiping.
+      // Clamped to >= 0 to guard against clock skew. Large values are fine —
+      // the backend caps them. latency_ms is omitted on the extend path
+      // (handled separately in handleExtendSession) but always present here.
+      const latency_ms = Math.max(0, Date.now() - cardShownAtRef.current)
       const swipePayload = {
         session_id: project.sessionId,
         image_id: swipedCard.image_id,
         action,
         client_buffer_ids: clientBufferIds,
+        latency_ms,
       }
 
       const _apiT0 = Date.now()
