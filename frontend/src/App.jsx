@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { useTheme } from './hooks/useTheme.js'
+import { useLanguage } from './hooks/useLanguage.js'
 import MainLayout from './layouts/MainLayout.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import ProjectSetupPage from './pages/ProjectSetupPage.jsx'
@@ -29,6 +30,7 @@ export default function App() {
   const navigate = useNavigate()
   const location = useLocation()
   const { hydrate } = useTheme()
+  const { hydrate: hydrateLanguage } = useLanguage()
 
   const [userId, setUserId] = useState(() => sessionStorage.getItem('archithon_user') || null)
   const [wizardData, setWizardData] = useState(null)
@@ -718,7 +720,10 @@ export default function App() {
     sessionStorage.removeItem('discovery_deck_v2')
     sessionStorage.removeItem('discovery_seen_ids')
     setUserId(id)
-    if (typeof user === 'object') hydrate(user.theme, user.font)
+    if (typeof user === 'object') {
+      hydrate(user.theme, user.font)
+      hydrateLanguage(user.language)
+    }
     setCurrentCard(null)
     setSessionProgress(null)
     setIsSessionCompleted(false)
