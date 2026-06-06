@@ -26,7 +26,7 @@ const TAB_ICONS = {
 
 function getActiveTab(pathname) {
   if (pathname === '/swipe' || pathname === '/new' || pathname.startsWith('/search') || pathname.startsWith('/result')) return 'swipe'
-  if (pathname.startsWith('/user') || pathname.startsWith('/board')) return 'profile'
+  if (pathname.startsWith('/user') || pathname.startsWith('/board') || pathname.startsWith('/settings')) return 'profile'
   return 'discovery'
 }
 

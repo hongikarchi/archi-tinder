@@ -4,7 +4,6 @@ import { getUserProfile, followUser, unfollowUser } from '../api/client.js'
 import { updateProject, deleteProject } from '../api/projects.js'
 import { purgeChatCache } from '../utils/appHelpers.js'
 import { getUserSavedStudios } from '../api/architects.js'
-import AppearanceSettings from '../components/AppearanceSettings.jsx'
 import EditProfileModal from '../components/EditProfileModal.jsx'
 import ShareCardModal from '../components/ShareCardModal.jsx'
 import FollowListModal from '../components/profile/FollowListModal.jsx'
@@ -867,25 +866,6 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                 ))}
               </div>
             )}
-          </div>
-        )}
-
-        {/* Settings section — own profile only */}
-        {isMe && (
-          <div style={{
-            marginTop: 40,
-            paddingTop: 24,
-            borderTop: '1px solid var(--color-border)',
-          }}>
-            <h2 style={{
-              fontSize: 18,
-              fontWeight: 700,
-              color: 'var(--color-text)',
-              margin: '0 0 20px',
-            }}>
-              Settings
-            </h2>
-            <AppearanceSettings />
           </div>
         )}
 

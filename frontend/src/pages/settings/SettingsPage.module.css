@@ -1,0 +1,118 @@
+/*
+ * SettingsPage.module.css — Settings list rows + sub-screen layout.
+ * Hover / focus-visible states live here (per DESIGN.md §4 + §10.4 hybrid rule).
+ * Dynamic values (colors, spacing) use tokens.css variables.
+ */
+
+/* Scrollable wrapper — viewport-lock */
+.page {
+  height: calc(100vh - 64px);
+  overflow-y: auto;
+  background: var(--color-bg);
+}
+
+/* Glassmorphic sticky header (mirrors ProfileHeader) */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: color-mix(in srgb, var(--color-bg) 72%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--color-border-soft);
+  gap: 8px;
+}
+
+.headerTitle {
+  color: var(--color-text);
+  font-size: 17px;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+/* Back / icon buttons in header */
+.iconBtn {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--color-text);
+  cursor: pointer;
+  border-radius: 12px;
+  transition: background var(--motion-fast) var(--motion-ease);
+}
+
+.iconBtn:hover {
+  background: var(--color-surface-2);
+}
+
+.iconBtn:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+}
+
+/* Settings list container */
+.listCard {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+/* Each settings row */
+.row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 16px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 14px;
+  text-align: left;
+  color: var(--color-text);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background var(--motion-fast) var(--motion-ease);
+}
+
+.row:last-child {
+  border-bottom: 0;
+}
+
+.row:hover {
+  background: var(--color-surface-2);
+}
+
+.row:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: -2px;
+}
+
+.rowLabel {
+  flex: 1;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.rowHint {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.rowChevron {
+  color: var(--color-text-dim);
+  font-size: 18px;
+  line-height: 1;
+}
