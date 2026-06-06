@@ -1,10 +1,15 @@
 """TTL caches for recommendation engine."""
 
+import logging
+
 import numpy as np
 from django.core.cache import cache
 from django.conf import settings
+from django.db import connections
 
 from . import engine
+
+logger = logging.getLogger('apps.recommendation')
 
 TASTE_TTL = 300  # seconds — 5-minute freshness window
 PROJECTS_LIST_TTL = 60  # seconds — UX-acceptable staleness window
@@ -211,6 +216,71 @@ def get_project_detail_cache_key(project_uuid, requester_id_for_cache):
 
 def _discovery_centroids_key(profile_id):
     return f'discovery_centroids:{profile_id}'
+
+
+def get_corpus_tag_df():
+    """Return per-axis document-frequency (DF) dict for TF-IDF keyword scoring.
+
+    Structure:
+      {
+        'style':           {tag: df_count, ...},
+        'atmosphere':      {tag: df_count, ...},
+        'material_visual': {tag: df_count, ...},
+        'program':         {tag: df_count, ...},
+        '_total':          N,          # total publishable buildings
+      }
+
+    Queried once from the buildings DB (read-only), then cached under
+    'qcard:corpus_tag_df' for corpus_df_cache_ttl_seconds (default 86400 = 24h).
+    On DB failure returns {'_total': 0} so callers degrade to frequency ranking.
+
+    Keys are stored as-is from the DB (lowercase normalization is done by the
+    ILIKE comparisons already used elsewhere; tag_axis_counts stores raw DB values).
+    """
+    RC = settings.RECOMMENDATION
+    ttl = RC.get('corpus_df_cache_ttl_seconds', 86400)
+    cache_key = 'qcard:corpus_tag_df'
+
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    result = {'_total': 0}
+    try:
+        with connections['buildings'].cursor() as cur:
+            # Total publishable buildings
+            cur.execute(
+                'SELECT COUNT(*) FROM canonical_v2_buildings'
+                ' WHERE is_publishable = true'
+            )
+            row = cur.fetchone()
+            total = int(row[0]) if row else 0
+            result['_total'] = total
+
+            # Single-value TEXT axes: style, atmosphere, program
+            for axis in ('style', 'atmosphere', 'program'):
+                cur.execute(
+                    f'SELECT {axis}, COUNT(*) FROM canonical_v2_buildings'
+                    f' WHERE is_publishable = true AND {axis} IS NOT NULL'
+                    f' GROUP BY {axis}',
+                )
+                result[axis] = {r[0]: int(r[1]) for r in cur.fetchall()}
+
+            # Array axis: material_visual (TEXT[])
+            cur.execute(
+                'SELECT m, COUNT(*) FROM canonical_v2_buildings,'
+                ' unnest(material_visual) m'
+                ' WHERE is_publishable = true'
+                ' GROUP BY m',
+            )
+            result['material_visual'] = {r[0]: int(r[1]) for r in cur.fetchall()}
+
+    except Exception as exc:
+        logger.warning('get_corpus_tag_df: buildings DB query failed: %s', exc)
+        return {'_total': 0}
+
+    cache.set(cache_key, result, ttl)
+    return result
 
 
 def get_or_build_discovery_centroids(profile):

@@ -324,6 +324,12 @@ RECOMMENDATION = {
     'question_cooldown_swipes': 15,     # min swipes between question cards
     'question_boost_weight': 2.0,       # Yes answer: + boost on keyword vector
     'question_penalty_weight': 1.0,     # No answer: - penalty on keyword vector
+    # ALGO-QCARD Phase 2: TF-IDF discriminative keyword selection
+    'corpus_df_cache_ttl_seconds': 86400,   # TF-IDF corpus DF cache TTL (24h)
+    'question_common_tag_ratio': 0.4,        # tags with df/N above this are too common → skipped
+    # Explicit generic-tag blacklist (leave empty; df/N ratio is the primary discriminator).
+    # Ops can populate with domain-specific stop-tags if IDF alone is insufficient.
+    'question_keyword_blacklist': [],
     'discovery_like_hard_cap': 50,  # Discovery draft hard stop: block likes beyond 50; client redirects to Taste
 }
 
