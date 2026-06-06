@@ -419,6 +419,7 @@ def get_session_state(request, session):
                 pool_ids, exposed_ids, pool_embeddings,
                 like_vectors, current_round + 1,
                 multimodal_floor=session.multimodal_floor,
+                question_bias_vector=session.question_bias_vector,
             )
             prefetch_card = engine.get_building_card(pf_id, image_focus=image_focus) if pf_id else None
     except Exception:
@@ -443,6 +444,7 @@ def get_session_state(request, session):
                     pool_ids, temp_exposed, pool_embeddings,
                     like_vectors, current_round + 2,
                     multimodal_floor=session.multimodal_floor,
+                    question_bias_vector=session.question_bias_vector,
                 )
                 prefetch_card_2 = engine.get_building_card(pf2_id, image_focus=image_focus) if pf2_id else None
     except Exception:

@@ -431,6 +431,7 @@ def handle_swipe_extend(request, profile, session, session_id, client_buffer_ids
             session.pool_ids, session.exposed_ids, pool_embeddings,
             session.like_vectors, session.current_round,
             multimodal_floor=session.multimodal_floor,
+            question_bias_vector=session.question_bias_vector,
         )
         next_card = engine.get_building_card(next_card_id) if next_card_id else None
         if next_card:
