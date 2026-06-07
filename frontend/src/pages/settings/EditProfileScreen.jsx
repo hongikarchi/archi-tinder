@@ -2,7 +2,7 @@
  * EditProfileScreen — /settings/edit-profile
  *
  * Full-screen settings child layout (same pattern as AccountScreen).
- * Edits: display_name, role, affiliation, bio, mbti, external_links.
+ * Edits: display_name, role, affiliation, bio, external_links.
  * Saves via PATCH /api/v1/users/me/ (updateMyProfile).
  *
  * Uses EditCardForm for all fields.
@@ -58,7 +58,6 @@ export default function EditProfileScreen() {
         role: patch.role,
         affiliation: patch.affiliation,
         bio: patch.bio,
-        mbti: patch.mbti,
         external_links: patch.external_links,
       }
       await updateMyProfile(payload)

@@ -587,7 +587,7 @@ export default function SwipePage({
           <h1 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 14px', letterSpacing: '-0.01em' }}>
             {projectName
               ? <span style={{ color: 'var(--color-text)' }}>{projectName}</span>
-              : <><span style={{ color: 'var(--color-text)' }}>Archi</span><span style={{ color: '#ec4899' }}>Tinder</span></>}
+              : <span style={{ color: 'var(--color-text)', letterSpacing: '0.2em' }}>ARCHIBE</span>}
           </h1>
           <div style={{ maxWidth: CARD_WIDTH, margin: '0 auto' }}>
             <ConfidenceBar value={confidence} phase={phase} progress={progress} />

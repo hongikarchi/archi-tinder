@@ -144,7 +144,6 @@ export default function ProfileHero({
           <BioPersonaFlipCard
             bio={user.bio}
             persona={user.persona_summary}
-            mbti={user.mbti}
           />
         )}
 

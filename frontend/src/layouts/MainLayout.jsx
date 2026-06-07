@@ -81,10 +81,7 @@ export default function MainLayout({
           gap: 12, padding: 24,
         }}>
           <div style={{ fontSize: 48 }}>🃏</div>
-          <p style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>
-            <span style={{ color: 'var(--color-text)' }}>Archi</span>
-            <span style={{ color: '#ec4899' }}>Tinder</span>
-          </p>
+          <p style={{ fontSize: 16, fontWeight: 700, margin: 0, letterSpacing: '0.2em', color: 'var(--color-text)' }}>ARCHIBE</p>
           <p style={{ color: 'var(--color-text-dimmer)', fontSize: 13 }}>Start a taste analysis to begin swiping</p>
           <button
             onClick={() => navigate('/new')}

@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { IconBack, IconShare, IconEdit, IconSettings } from '../../components/icons'
+import { IconBack, IconShare, IconSettings } from '../../components/icons'
 
 export default function ProfileHeader({
   isMe,
@@ -90,25 +90,6 @@ export default function ProfileHeader({
             onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--color-text-dim)' }}
           >
             <IconShare width={18} height={18} />
-          </button>
-
-          {/* Edit — deep-links to /settings/edit-profile */}
-          <button
-            onClick={() => navigate('/settings/edit-profile')}
-            aria-label="프로필 편집"
-            title="프로필 편집"
-            style={{
-              width: 44, height: 44, minWidth: 44,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: 'transparent', border: 'none',
-              color: 'var(--color-text-dim)', cursor: 'pointer',
-              borderRadius: 12,
-              transition: 'color 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--color-text)' }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--color-text-dim)' }}
-          >
-            <IconEdit width={18} height={18} />
           </button>
 
           {/* Settings */}

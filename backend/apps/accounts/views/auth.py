@@ -61,6 +61,17 @@ def _clean_guest_display_name(value):
     return value[:30]
 
 
+def _clean_guest_optional_text(value, max_length):
+    """Trim and truncate an optional free-text field; fall back to '' when absent/invalid.
+
+    Used for role + affiliation at guest signup — truncates rather than rejects
+    so an over-long value never raises a DB error (DataError / 500).
+    """
+    if not isinstance(value, str):
+        return ''
+    return value.strip()[:max_length]
+
+
 def _exchange_google_code(code):
     """Exchange Google auth code for user info dict.
 
@@ -229,7 +240,9 @@ class GuestLoginView(APIView):
     terminal wizard onboarding flow.
 
     Body: {display_name, onboarding_role, consent_accepted: true,
-           consent_policy_version: '1.0'}
+           consent_policy_version: '1.0',
+           role (optional, free-text, max 50 chars — truncated if longer),
+           affiliation (optional, free-text, max 100 chars — truncated if longer)}
 
     Rejects if consent_accepted is missing or false (PIPA requirement).
     Returns {access, refresh, user} — access token carries is_guest=True claim.
@@ -262,6 +275,9 @@ class GuestLoginView(APIView):
         if not isinstance(policy_version, str) or len(policy_version) > 10:
             policy_version = '1.0'
 
+        role = _clean_guest_optional_text(request.data.get('role', ''), 50)
+        affiliation = _clean_guest_optional_text(request.data.get('affiliation', ''), 100)
+
         with transaction.atomic():
             django_user = User(
                 username=f'guest_{_uuid.uuid4().hex}',
@@ -276,6 +292,8 @@ class GuestLoginView(APIView):
                 onboarding_role=onboarding_role,
                 consent_accepted_at=timezone.now(),
                 consent_policy_version=policy_version,
+                role=role,
+                affiliation=affiliation,
             )
 
         logger.info('Guest account created: user=%s', profile.pk)
