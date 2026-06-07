@@ -106,9 +106,6 @@ Redesign `/login` as conversational swipe onboarding while preserving the existi
 
 ### HIGH
 
-#### AUTH-LOGIN-1 — handle+비번 로그인 + 이메일 인증(OAuth 연동)
-표준 로그인 추가(유저 요청 2026-06-07): 소셜(OAuth) 유지 + **handle(=계정 ID)+비밀번호** 로그인(signup/login/set-password, Django 해싱·`AUTH_PASSWORD_VALIDATORS` 재사용, 브루트포스/레이트리밋). 로그인 ID=handle(이메일 아님 → #206 무관). **이메일 인증 = OAuth 연동**: 신규 `LinkEmailView`(`IsAuthenticated`) — 로그인된 유저 + 구글 code → `_exchange_google_code` → verified 이메일 attach + SocialAccount(`GuestPromoteView` 로직 재사용, feasibility HIGH). **충돌=거부**(verified 이메일이 이미 다른 계정 → 400 "그 계정으로 로그인", 데이터 병합 안 함; 미검증 거부). `email_verified_at` 필드 고려. 계정 화면: `@핸들`→**"ID"** 라벨 + 중복 read-only "이름" 행 제거(이름=프로필 담당) + "비밀번호 설정/변경" + "이메일 인증" 버튼. 프로필 편집 "Display Name"→"이름" 라벨. 식별자 모델: handle=ID(계정)·display_name=이름(프로필)·User.username=내부키. **auth-critical → security-manager FULL, 자체 브랜치+PR.** FRONT-AUTH-1(Kakao/Naver 버튼)도 이 트랙 흡수 가능.
-
 #### ARCHITECT-UNIFY-1 — firm-side Office→Architect 전면 통합 (deferred, firm-UX 착수 시)
 office-interest **모델 중복은 해소됨**: Phase 0(SavedOffice #188) + C(OfficeFollow, ARCHITECT-UNIFY-C)로 두 미배선 중복 삭제 → follow 모델 1개(ArchitectFollow). 남은 통합 = Office 서브시스템(table/claim/OfficeProjectLink/sync_offices/FirmProfilePage)을 arch_id로 흡수 = firm-side 전면 재설계.
 
@@ -352,6 +349,14 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 _(Deferred 2026-06-04 batch scope: YAGNI — product-미소비 telemetry 1필드 위해 Celery+worker 도입은 과투자. 2번째 background job 생기면 단일 INFRA-JOBS 티켓으로 묶어 처리.)_
 
 ## Done
+### AUTH-LOGIN-1 — handle+비번 로그인 + 이메일 인증(OAuth 연동) — RESOLVED 2026-06-07 (`4c37545`-pre-squash)
+표준 로그인 추가(소셜 유지 + handle=ID+비밀번호). 식별자 확정: `handle`=ID(로그인·공개@), `display_name`=이름(프로필), `User.username`=내부키(`local_<uuid>`).
+- E1 백엔드: `POST /auth/register/`(handle+pw, validate_password, atomic) · `/auth/login/`(handle__iexact→check_password, **균일 에러+더미해시 타이밍**으로 enumeration 차단, throttle) · `/auth/set-password/`(first-set 무current / change 요current, throttle 5/min, **변경 시 전 refresh 토큰 blacklist + fresh 재발급**=현 세션 유지·타 세션 evict). 모두 `_make_token_response` 재사용.
+- E2 백엔드: `POST /auth/link-email/`(IsAuthenticated, `_exchange_google_code`+GuestPromote 로직 재사용 — verified만, **충돌=거부** 400 email_already_linked, SocialAccount+`email_verified_at`). 마이그 0009. `UserSerializer` self-only +email/email_verified_at/has_password(공개 serializer 미노출).
+- E3 프론트: LoginPage handle+pw 로그인(Returning)+가입(Register, 기존 guest/Google 무변경) · Account `@핸들`→"ID" 라벨+중복 "이름" 제거+이메일 행+비번 설정/변경(토큰 swap)+이메일 인증(GoogleVerifyButton 재사용→link-email) · EditCardForm "Display Name"→"이름". 토큰은 기존 setTokens 재사용.
+- 게이트: code-review PASS ×2, **security-manager FULL PASS**(경고 2개 수정: set-password throttle + 토큰 blacklist). flake8+lint+build clean. 라이브 curl: register/login/틀린pw(400 generic)/set-password/**구토큰 401(blacklist)**/새pw로그인 전부 통과. Account UI 검증(ID/이메일/비번/인증). DB-게이트 32 테스트 = CI.
+- Deferred: FRONT-AUTH-1(Kakao/Naver 버튼) 이 트랙 흡수 가능; 비번 재설정(이메일 발송)은 EMAIL_BACKEND 없어 보류.
+
 ### SETTINGS-PROFILE-IA-1 — archibe Settings harvest + Profile/Account IA + rebrand archibe — RESOLVED 2026-06-07 (`2bb2b64`-pre-squash)
 archibe-profile(외부 레퍼런스, #179 harvest와 동일 repo) 2차 harvest + 프로필/계정 정보구조 재설계 + 서비스명 archibe 리브랜드. 4 커밋(slices 1-2-3 + A/B/C + F).
 - 백엔드: `UserProfile.handle`(공개 @id, unique, `^[a-z0-9_]{3,30}$`, 예약어, self-only 검증) + `notifications` JSONField(self-only, ≤50키/≤64자/nested {push,email} bool) + `role`(50)/`affiliation`(100) 자유텍스트. 마이그 0007+0008. `UserSerializer`/공개`UserProfileSerializer`/self-update에 배선. `GuestLoginView` 가입 시 role/affiliation 수신(truncate). 이메일/username은 비편집 유지(#206 경계).
