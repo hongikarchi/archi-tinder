@@ -63,5 +63,6 @@ from .profile import (  # noqa: F401
     # view classes routed by urls.py
     UserProfileDetailView,
     UserProfileSelfUpdateView,
+    AvatarUploadView,
     LikedBuildingsView,
 )

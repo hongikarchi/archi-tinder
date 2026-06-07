@@ -136,6 +136,8 @@ REST_FRAMEWORK = {
         'link_email': '5/min',
         # AUTH-CRITICAL: set/change-password brute-force guard (current_password check).
         'set_password': '5/min',
+        # FRONT-AVATAR-1: avatar upload is expensive (Pillow + R2 PUT); tight rate.
+        'avatar_upload': '10/min',
         # Global fallback rates (applied to views that reference these scopes directly).
         'anon': '60/min',
         'user': '300/min',
@@ -243,6 +245,35 @@ STORAGES = {
     },
 }
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# -- Media (user uploads — avatars) ----------------------------------------
+# MEDIA_ROOT: local filesystem write target (dev + CI filesystem fallback).
+# In prod the R2 branch in apps/accounts/storage.py is active and Django never
+# serves from MEDIA_ROOT; the debug-only media-serve in config/urls.py is a no-op.
+MEDIA_URL  = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
+# -- Avatar upload settings ------------------------------------------------
+# FRONT-AVATAR-1: R2 env vars — all optional; when ALL four are set the upload
+# goes to Cloudflare R2. When any is missing, falls back to local filesystem.
+R2_ENDPOINT_URL      = os.getenv('R2_ENDPOINT_URL', '')
+R2_ACCESS_KEY_ID     = os.getenv('R2_ACCESS_KEY_ID', '')
+R2_SECRET_ACCESS_KEY = os.getenv('R2_SECRET_ACCESS_KEY', '')
+R2_AVATAR_BUCKET     = os.getenv('R2_AVATAR_BUCKET', '')
+AVATAR_PUBLIC_BASE_URL = os.getenv('AVATAR_PUBLIC_BASE_URL', '')
+
+# True only when all four R2 vars are set (non-empty).
+AVATAR_R2_ENABLED = all([
+    R2_ENDPOINT_URL,
+    R2_ACCESS_KEY_ID,
+    R2_SECRET_ACCESS_KEY,
+    R2_AVATAR_BUCKET,
+])
+
+# Hard limits — not magic numbers in the view.
+AVATAR_MAX_BYTES      = 5 * 1024 * 1024   # 5 MB
+AVATAR_MAX_PIXELS     = 25_000_000         # decompression-bomb dimension guard (5000x5000 — ample for any avatar source)
+AVATAR_OUTPUT_EDGE    = 512                 # square output side in pixels
 
 # -- Recommendation algorithm constants ------------------------------------
 RECOMMENDATION = {

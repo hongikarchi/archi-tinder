@@ -1,0 +1,102 @@
+/*
+ * ProfileHero.module.css
+ * Scoped styles for the avatar upload overlay.
+ * Per DESIGN.md §4 + §10.4: interactive components owning :hover/:focus-within
+ * get a co-located CSS Module; themeable values use tokens.css variables.
+ */
+
+/* ---- Avatar upload trigger ---- */
+
+.avatarTrigger {
+  position: relative;
+  display: inline-block;
+  cursor: pointer;
+  /* Remove default <label> browser styles */
+  margin-bottom: 18px;
+}
+
+/* Hidden file input — visually hidden but still focusable */
+.fileInput {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  /* clip so it doesn't capture clicks outside the circle */
+  border-radius: 50%;
+  z-index: 4;
+}
+
+/* Semi-transparent scrim overlay — revealed on hover or keyboard focus */
+.avatarOverlay {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  opacity: 0;
+  transition: opacity var(--motion-fast, 180ms) var(--motion-ease, cubic-bezier(0.4, 0, 0.2, 1));
+  pointer-events: none;
+  z-index: 3;
+  /* Clip the overlay to the circle (both image and placeholder branches) */
+  overflow: hidden;
+}
+
+/* Reveal on hover — CSS :hover per DESIGN.md §4 */
+.avatarTrigger:hover .avatarOverlay {
+  opacity: 1;
+}
+
+/* Reveal on keyboard focus-within */
+.avatarTrigger:focus-within .avatarOverlay {
+  opacity: 1;
+}
+
+/* Pink focus ring on keyboard focus — matches existing brand-pink idiom */
+.avatarTrigger:focus-within {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(236, 72, 153, 0.55);
+  border-radius: 50%;
+}
+
+/* ---- Upload spinner overlay ---- */
+
+.spinnerOverlay {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+}
+
+.spinner {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.25);
+  border-top-color: #ec4899;
+  /* animation is set inline in JSX to reference global @keyframes spin safely */
+}
+
+/* ---- Inline upload error ---- */
+
+.uploadError {
+  margin-top: 8px;
+  color: var(--color-destructive, #D73A49);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: center;
+  max-width: 200px;
+}
