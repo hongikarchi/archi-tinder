@@ -25,7 +25,8 @@ class UserSerializer(serializers.ModelSerializer):
         model  = UserProfile
         fields = [
             'user_id', 'display_name', 'avatar_url', 'providers', 'theme', 'font',
-            'language', 'is_guest', 'onboarding_role', 'consent_accepted_at',
+            'language', 'is_guest', 'onboarding_role', 'consent_accepted_at', 'handle',
+            'notifications', 'role', 'affiliation',
         ]
 
     def get_providers(self, obj):
@@ -71,6 +72,9 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'follower_count',
             'following_count',
             'saved_studios_count',
+            'handle',
+            'role',
+            'affiliation',
         ]
         read_only_fields = ['user_id', 'follower_count', 'following_count', 'persona_summary']
 
@@ -82,11 +86,27 @@ class UserProfileSerializer(serializers.ModelSerializer):
         return ArchitectFollow.objects.filter(follower=obj).count()
 
 
+_HANDLE_RESERVED = frozenset({
+    'me', 'admin', 'administrator', 'settings', 'api', 'root', 'support',
+    'help', 'null', 'undefined', 'profile', 'user', 'users', 'login',
+    'logout', 'auth',
+})
+
+_HANDLE_RE = re.compile(r'^[a-z0-9_]{3,30}$')
+
+
 class UserProfileSelfUpdateSerializer(serializers.ModelSerializer):
     """PATCH /api/v1/users/me/ — owner updates editable fields only.
 
     Excludes counter caches (auto-managed) and avatar_url (separate upload flow,
     future commit). persona_summary is Phase 17 LLM-derived — not user-editable.
+
+    SETTINGS-1: added handle + notifications.
+      handle     — public @handle; unique constraint enforced case-insensitively.
+                   DRF UniqueValidator suppressed via validators=[] so our
+                   validate_handle is the single authority.
+      notifications — {category: {push: bool, email: bool}};
+                      validated as dict, ≤50 keys, values must be dicts.
     """
     # Override DRF CharField defaults so our validate_<field> methods see the
     # raw user-supplied string (DRF would otherwise strip whitespace + reject
@@ -101,10 +121,27 @@ class UserProfileSelfUpdateSerializer(serializers.ModelSerializer):
         required=False,
         max_length=500,
     )
+    # Suppress DRF's auto UniqueValidator (case-sensitive, wrong message).
+    # validate_handle below handles uniqueness with case-insensitive iexact check.
+    handle = serializers.CharField(
+        required=False,
+        allow_null=True,
+        allow_blank=False,
+        max_length=30,
+        # trim_whitespace=False so validate_handle's fullmatch is the sole
+        # authority — a trailing/leading whitespace (e.g. "x\n") must fail the
+        # ^[a-z0-9_]{3,30}$ check, not get silently stripped then accepted.
+        trim_whitespace=False,
+        validators=[],
+    )
 
     class Meta:
         model = UserProfile
-        fields = ['display_name', 'bio', 'mbti', 'external_links', 'theme', 'font', 'language', 'onboarding_role']
+        fields = [
+            'display_name', 'bio', 'mbti', 'external_links',
+            'theme', 'font', 'language', 'onboarding_role',
+            'handle', 'notifications', 'role', 'affiliation',
+        ]
 
     def validate_display_name(self, value):
         """display_name: 1-30 chars after .strip(); reject whitespace-only."""
@@ -230,3 +267,94 @@ class UserProfileSelfUpdateSerializer(serializers.ModelSerializer):
                 normalized[k] = v
 
         return normalized
+
+    def validate_handle(self, value):
+        """handle: lowercase letters/digits/underscore, 3-30 chars, unique, not reserved.
+
+        Validation order:
+          1. null/empty → allow (clears the handle).
+          2. Reject non-lowercase (case violation → 400, not silent normalise).
+             Rationale: silent auto-lower would silently change what the user typed;
+             the frontend must supply lowercase explicitly.
+          3. Regex format check: ^[a-z0-9_]{3,30}$.
+          4. Reserved words.
+          5. Case-insensitive uniqueness, excluding the current user (self-save OK).
+        """
+        if value is None:
+            return value
+
+        # Case check first: reject if the value is not already lowercase.
+        if value != value.lower():
+            raise serializers.ValidationError(
+                'handle must be lowercase (only a-z, 0-9, _).'
+            )
+
+        # Format regex (also enforces length 3-30).
+        # fullmatch required: re.match with $ accepts a trailing newline, which
+        # would allow CRLF injection into URLs/cards (same guard as _INSTAGRAM_RE above).
+        if not _HANDLE_RE.fullmatch(value):
+            raise serializers.ValidationError(
+                'handle must be 3-30 characters: lowercase letters, digits, or underscore.'
+            )
+
+        # Reserved word check.
+        if value.lower() in _HANDLE_RESERVED:
+            raise serializers.ValidationError(
+                f'"{value}" is a reserved handle.'
+            )
+
+        # Case-insensitive uniqueness, excluding the current user so re-saving
+        # the same handle doesn't conflict against themselves.
+        qs = UserProfile.objects.filter(handle__iexact=value)
+        if self.instance is not None:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError('handle already taken.')
+
+        return value
+
+    def validate_notifications(self, value):
+        """notifications: {category: {push?: bool, email?: bool}}.
+
+        Constraints:
+          - Top level must be a dict, ≤50 keys.
+          - Each value must be a dict containing ONLY the keys 'push' and/or
+            'email'; unknown nested keys are rejected.
+          - Values under 'push'/'email' must be booleans (JSON true/false).
+            Integers are NOT accepted — isinstance(1, bool) is False for int
+            literals, but JSON 1/0 parse to int not bool, so int values are
+            correctly rejected by the isinstance(v, bool) guard.
+
+        Returns value unchanged (no normalisation) so reload equals the input.
+        """
+        _ALLOWED_NESTED = frozenset({'push', 'email'})
+
+        if not isinstance(value, dict):
+            raise serializers.ValidationError(
+                'notifications must be an object.'
+            )
+        if len(value) > 50:
+            raise serializers.ValidationError(
+                'notifications must have 50 keys or fewer.'
+            )
+        for k, v in value.items():
+            if not isinstance(k, str) or len(k) > 64:
+                raise serializers.ValidationError(
+                    'notifications keys must be strings of 64 chars or fewer.'
+                )
+            if not isinstance(v, dict):
+                raise serializers.ValidationError(
+                    f'notifications["{k}"] must be an object.'
+                )
+            unknown = set(v.keys()) - _ALLOWED_NESTED
+            if unknown:
+                raise serializers.ValidationError(
+                    f'notifications["{k}"] contains unknown keys: '
+                    f'{sorted(unknown)}. Allowed: push, email.'
+                )
+            for nested_key, nested_val in v.items():
+                if not isinstance(nested_val, bool):
+                    raise serializers.ValidationError(
+                        f'notifications["{k}"]["{nested_key}"] must be a boolean.'
+                    )
+        return value

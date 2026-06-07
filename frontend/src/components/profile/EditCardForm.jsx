@@ -1,16 +1,16 @@
 /**
  * EditCardForm.jsx
- * Profile-edit form — adapted from archibe EditCardForm pattern.
- * Edits our writable fields: display_name, bio, mbti, external_links.
+ * Profile-edit form.
+ * Edits our writable fields: display_name, role, affiliation, bio, external_links.
  *
  * external_links shape (from backend model + serializer):
  *   dict { instagram?: string, email?: string, website?: string }
- * Internally we work with a flat array of { id, key, value } rows (archibe pattern)
+ * Internally we work with a flat array of { id, key, value } rows
  * and reduce to { instagram, email, website } on output.
  *
  * Props:
- *   user     — UserProfile object (display_name, bio, mbti, external_links)
- *   onChange — called with { display_name, bio, mbti, external_links } on every change
+ *   user     — UserProfile object (display_name, role, affiliation, bio, external_links)
+ *   onChange — called with { display_name, role, affiliation, bio, external_links } on every change
  */
 
 import { useState } from 'react'
@@ -64,8 +64,9 @@ const sectionLabelStyle = {
 export default function EditCardForm({ user, onChange }) {
   const [draft, setDraft] = useState(() => ({
     display_name: user?.display_name || '',
+    role: user?.role || '',
+    affiliation: user?.affiliation || '',
     bio: user?.bio || '',
-    mbti: user?.mbti || '',
     linkRows: dictToRows(user?.external_links || {}),
   }))
   const [seq, setSeq] = useState(draft.linkRows.length)
@@ -74,8 +75,9 @@ export default function EditCardForm({ user, onChange }) {
     setDraft(next)
     onChange?.({
       display_name: next.display_name,
+      role: next.role,
+      affiliation: next.affiliation,
       bio: next.bio,
-      mbti: next.mbti,
       external_links: rowsToDict(next.linkRows),
     })
   }
@@ -121,6 +123,34 @@ export default function EditCardForm({ user, onChange }) {
         </div>
       </div>
 
+      {/* Role */}
+      <div>
+        <label htmlFor="edit-role" style={labelStyle}>직업 (Role)</label>
+        <input
+          id="edit-role"
+          type="text"
+          value={draft.role}
+          onChange={setText('role')}
+          maxLength={50}
+          placeholder="Architecture Student"
+          className={styles.field}
+        />
+      </div>
+
+      {/* Affiliation */}
+      <div>
+        <label htmlFor="edit-affiliation" style={labelStyle}>소속 (Affiliation)</label>
+        <input
+          id="edit-affiliation"
+          type="text"
+          value={draft.affiliation}
+          onChange={setText('affiliation')}
+          maxLength={100}
+          placeholder="Korea University"
+          className={styles.field}
+        />
+      </div>
+
       {/* Bio */}
       <div>
         <label htmlFor="edit-bio" style={labelStyle}>Bio</label>
@@ -135,24 +165,6 @@ export default function EditCardForm({ user, onChange }) {
         <div style={{ fontSize: 11, color: 'var(--color-text-dim)', marginTop: 4, textAlign: 'right' }}>
           {draft.bio.length}/500
         </div>
-      </div>
-
-      {/* MBTI */}
-      <div>
-        <label htmlFor="edit-mbti" style={labelStyle}>MBTI</label>
-        <input
-          id="edit-mbti"
-          type="text"
-          value={draft.mbti}
-          onChange={(e) => {
-            const val = e.target.value.replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, 4)
-            commit({ ...draft, mbti: val })
-          }}
-          maxLength={4}
-          placeholder="e.g. INTJ"
-          className={styles.field}
-          style={{ width: 120 }}
-        />
       </div>
 
       {/* External links section */}

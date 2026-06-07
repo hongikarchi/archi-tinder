@@ -77,3 +77,11 @@ export async function logout(refreshToken) {
   }
   clearTokens()
 }
+
+/**
+ * Fetch the authenticated user's own profile (includes notifications, handle, etc.).
+ * Returns the same UserSerializer shape as the login response.
+ */
+export async function getMe() {
+  return await callApi('GET', '/auth/me/')
+}

@@ -13,6 +13,11 @@ export default function ProfileHero({
   const igHandle = user?.external_links?.instagram?.replace(/^@/, '') || ''
   const igUrl = igHandle ? `https://instagram.com/${igHandle}` : null
   const emailUrl = user?.external_links?.email ? `mailto:${user.external_links.email}` : null
+  const websiteUrl = user?.external_links?.website || null
+
+  // Profile identity lines
+  const handleStr = user?.handle || ''
+  const roleAffiliation = [user?.role, user?.affiliation].filter(Boolean).join(' · ')
 
   const stats = [
     { count: boardsTotalCount, label: 'Boards', onClick: () => onSelectTab('boards') },
@@ -75,6 +80,34 @@ export default function ProfileHero({
           {user.display_name}
         </h1>
 
+        {/* @handle — monospace muted, only if present */}
+        {handleStr && (
+          <p style={{
+            margin: '0 0 4px',
+            color: 'var(--color-text-muted)',
+            fontSize: 13,
+            fontFamily: '"IBM Plex Mono", "Courier New", monospace',
+            fontWeight: 500,
+            letterSpacing: '0.01em',
+            lineHeight: 1.3,
+          }}>
+            @{handleStr}
+          </p>
+        )}
+
+        {/* Role · Affiliation — only if at least one present */}
+        {roleAffiliation && (
+          <p style={{
+            margin: '0 0 4px',
+            color: 'var(--color-text-muted)',
+            fontSize: 13,
+            fontWeight: 400,
+            lineHeight: 1.3,
+          }}>
+            {roleAffiliation}
+          </p>
+        )}
+
         {/* Compact stats row — 4 items: Boards · Studios · Followers · Following */}
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -111,12 +144,11 @@ export default function ProfileHero({
           <BioPersonaFlipCard
             bio={user.bio}
             persona={user.persona_summary}
-            mbti={user.mbti}
           />
         )}
 
-        {/* External links — Instagram + email pills */}
-        {(igUrl || emailUrl) && (
+        {/* External links — Instagram + email + website pills */}
+        {(igUrl || emailUrl || websiteUrl) && (
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
             {igUrl && (
               <a
@@ -181,6 +213,40 @@ export default function ProfileHero({
                   <polyline points="22,6 12,13 2,6"></polyline>
                 </svg>
                 {user.external_links.email}
+              </a>
+            )}
+            {websiteUrl && (
+              <a
+                href={websiteUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 7,
+                  padding: '10px 14px', borderRadius: 999,
+                  background: 'var(--color-surface-2, rgba(255,255,255,0.04))',
+                  border: '1px solid var(--color-border-soft)',
+                  color: 'var(--color-text-2)',
+                  textDecoration: 'none', fontSize: 13, fontWeight: 600,
+                  transition: 'transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.18s, color 0.18s',
+                  minHeight: 44,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)'
+                  e.currentTarget.style.borderColor = 'rgba(236,72,153,0.45)'
+                  e.currentTarget.style.color = '#ec4899'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)'
+                  e.currentTarget.style.borderColor = 'var(--color-border-soft)'
+                  e.currentTarget.style.color = 'var(--color-text-2)'
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="2" y1="12" x2="22" y2="12"></line>
+                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                </svg>
+                {websiteUrl.replace(/^https?:\/\//, '').replace(/\/$/, '')}
               </a>
             )}
           </div>

@@ -45,6 +45,8 @@ export default function LoginPage({ onLogin }) {
   const [step, setStep] = useState(FLOW_STEPS.choice)
   const [displayName, setDisplayName] = useState('')
   const [role, setRole] = useState('')
+  const [jobRole, setJobRole] = useState('')
+  const [affiliation, setAffiliation] = useState('')
   const [consentGiven, setConsentGiven] = useState(false)
   const [consentResetTick, setConsentResetTick] = useState(0)
   const [loading, setLoading] = useState(null) // 'guest' | 'google' | 'dev' | null
@@ -141,7 +143,7 @@ export default function LoginPage({ onLogin }) {
 
     setLoading('guest')
     try {
-      const user = await api.guestLogin(buildGuestLoginPayload({ displayName, role }))
+      const user = await api.guestLogin(buildGuestLoginPayload({ displayName, role, jobRole, affiliation }))
       onLogin(user)
     } catch (err) {
       const detail = err?.data?.detail || err?.message || 'Unknown error'
@@ -198,9 +200,8 @@ export default function LoginPage({ onLogin }) {
     <div style={pageStyle}>
       <main style={mainStyle}>
         <header style={headerStyle}>
-          <h1 style={wordmarkStyle}>
-            <span style={{ color: 'var(--color-text)' }}>Archi</span>
-            <span style={{ color: 'var(--accent-1, #0969DA)' }}>Tinder</span>
+          <h1 style={{ ...wordmarkStyle, letterSpacing: '0.2em', color: 'var(--color-text)' }}>
+            ARCHIBE
           </h1>
           <p style={taglineStyle}>Start with a swipe, then tune a taste profile.</p>
         </header>
@@ -233,6 +234,8 @@ export default function LoginPage({ onLogin }) {
               typedLine={typedLine}
               displayName={displayName}
               role={role}
+              jobRole={jobRole}
+              affiliation={affiliation}
               profileReady={profileReady}
               disabled={isBusy}
               onDisplayNameChange={(value) => {
@@ -243,6 +246,14 @@ export default function LoginPage({ onLogin }) {
               onRoleChange={(value) => {
                 setRole(value)
                 setError(null)
+                setConsentGiven(false)
+              }}
+              onJobRoleChange={(value) => {
+                setJobRole(value)
+                setConsentGiven(false)
+              }}
+              onAffiliationChange={(value) => {
+                setAffiliation(value)
                 setConsentGiven(false)
               }}
               onBack={() => moveToStep(FLOW_STEPS.choice)}
@@ -256,6 +267,8 @@ export default function LoginPage({ onLogin }) {
               typedLine={typedLine}
               displayName={displayName}
               role={role}
+              jobRole={jobRole}
+              affiliation={affiliation}
               profileReady={profileReady}
               disabled={isBusy}
               onSwipe={handleConsentSwipe}
@@ -375,10 +388,14 @@ function ProfileStep({
   typedLine,
   displayName,
   role,
+  jobRole,
+  affiliation,
   profileReady,
   disabled,
   onDisplayNameChange,
   onRoleChange,
+  onJobRoleChange,
+  onAffiliationChange,
   onBack,
   onSubmit,
 }) {
@@ -405,6 +422,34 @@ function ProfileStep({
           placeholder="Alex"
           maxLength={30}
           aria-invalid={displayName.length > 0 && !nameReady ? 'true' : 'false'}
+          style={inputStyle}
+        />
+
+        <label style={{ ...fieldLabelStyle, marginTop: 12 }} htmlFor="guest-job-role">
+          직업 (Role)
+        </label>
+        <input
+          id="guest-job-role"
+          type="text"
+          value={jobRole}
+          onChange={e => onJobRoleChange(e.target.value)}
+          disabled={disabled}
+          placeholder="Architecture Student"
+          maxLength={50}
+          style={inputStyle}
+        />
+
+        <label style={{ ...fieldLabelStyle, marginTop: 12 }} htmlFor="guest-affiliation">
+          소속 (Affiliation)
+        </label>
+        <input
+          id="guest-affiliation"
+          type="text"
+          value={affiliation}
+          onChange={e => onAffiliationChange(e.target.value)}
+          disabled={disabled}
+          placeholder="Korea University"
+          maxLength={100}
           style={inputStyle}
         />
 
@@ -445,6 +490,8 @@ function ConsentStep({
   typedLine,
   displayName,
   role,
+  jobRole,
+  affiliation,
   profileReady,
   disabled,
   onSwipe,
@@ -476,9 +523,21 @@ function ConsentStep({
                 <span style={summaryLabelStyle}>Objective</span>
                 <strong style={summaryValueStyle}>{selectedRole?.label || 'Not selected'}</strong>
               </div>
+              {jobRole.trim() && (
+                <div>
+                  <span style={summaryLabelStyle}>Role</span>
+                  <strong style={summaryValueStyle}>{jobRole.trim()}</strong>
+                </div>
+              )}
+              {affiliation.trim() && (
+                <div>
+                  <span style={summaryLabelStyle}>Affiliation</span>
+                  <strong style={summaryValueStyle}>{affiliation.trim()}</strong>
+                </div>
+              )}
             </div>
             <p style={bodyCopyStyle}>
-              By continuing, you agree that ArchiTinder can use this guest profile to provide the service and save your taste signals.
+              By continuing, you agree that archibe can use this guest profile to provide the service and save your taste signals.
             </p>
             <div style={directionGridStyle} aria-hidden="true">
               <DirectionHint tone="left" label="Back" sublabel="Left swipe" />

@@ -149,7 +149,7 @@ export default function ArchitectProfilePage() {
 
   const handleShare = () => {
     if (navigator.share) {
-      navigator.share({ title: profile?.name || 'ArchiTinder', url: window.location.href }).catch(() => {})
+      navigator.share({ title: profile?.name || 'archibe', url: window.location.href }).catch(() => {})
     }
   }
 

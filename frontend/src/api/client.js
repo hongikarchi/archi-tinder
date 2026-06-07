@@ -8,12 +8,12 @@
  */
 
 export { getToken, setTokens, clearTokens, getLastCall } from './core.js'
-export { socialLogin, guestLogin, promoteAccount, devLogin, logout } from './auth.js'
+export { socialLogin, guestLogin, promoteAccount, devLogin, logout, getMe } from './auth.js'
 export { normalizeCard, getImageSource, emitImageLoadEvent } from './images.js'
 export { startSession, getSessionState, recordSwipe, parseQuery, getResult, submitQuestionResponse } from './sessions.js'
 export { listProjects, getProject, updateProject, deleteProject, getBuildings, getBoardBuildings, bookmarkBuilding, generateReport, generateReportImage, createProject, VerifyRequiredError } from './projects.js'
 export { fetchDiscoveryFeed, discoveryFeedback, promoteToTaste, fetchBoardSurprise } from './discovery.js'
-export { getOffice, getUserProfile } from './profiles.js'
+export { getOffice, getUserProfile, updateMyProfile } from './profiles.js'
 export { followUser, unfollowUser, getProjectReactors, reactToProject, unreactToProject } from './social.js'
 export { addLikedBuilding, getLikedBuildings } from './liked.js'
 export { getRecommendedArchitects, getArchitectProfile } from './architects.js'

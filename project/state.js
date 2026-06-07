@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-06-05 13:09 KST',
-    head: '2238e5d',
-    branch: 'feature/claude-batch-audit',
+    updatedAt: '2026-06-07 14:12 KST',
+    head: 'b951611',
+    branch: 'feature/claude-settings-harvest',
   },
   done: [
+    {
+      id: 'SETTINGS-PROFILE-IA-1',
+      title: 'archibe Settings harvest + Profile/Account IA + rebrand archibe',
+      completedAt: '2026-06-07',
+      note: 'archibe-profile(외부 레퍼런스, #179 harvest와 동일 repo) 2차 harvest + 프로필/계정 정보구조 재설계 + 서비스명 archibe 리브랜드. 4 커밋(slices 1-2-3 + A/B/C + F).',
+    },
     {
       id: 'BACK-LLM-GEMINI-1',
       title: 'Gemini 3.1 모델 마이그레이션 + 페르소나 이미지 플로우 배선',
@@ -77,12 +83,6 @@ window.PROJECT_STATE = {
       prs: [197],
       note: 'runtime `make_web_app`가 CREATEDB 없어 로컬 pytest가 \'permission denied to create database\'로 차단(conftest SQLite override는 자체 docstring상 not-load-bearing). `make test-local` 추가 — `migrate-local` idiom(read -s neondb_owner pw, inline DB_USER override로 DB_HOST는 LOCAL 유지), CI-shape real…',
     },
-    {
-      id: 'UX-GALLERY',
-      title: '갤러리 제스처 3버그 (FRONT-UX-6/9/10)',
-      completedAt: '2026-06-04',
-      note: '갤러리 3버그(부모-sync wobble·모바일 세로스크롤·Discovery long-press 오작동)를 lift 없이 해결. 원 premise(sibling-overlay lift)를 유저 product 재검토로 재정의 — 갤러리 보면서도 스와이프 유지 + 순수 Discovery. session 브라우저 spike로 "3D가 스크롤 안 깸"(원인은 touch-action·snap, 3D 아님) 확정 후 구현.',
-    },
   ],
   now: [
     {
@@ -94,6 +94,11 @@ window.PROJECT_STATE = {
   next: {
     xhigh: [],
     high: [
+      {
+        id: 'AUTH-LOGIN-1',
+        title: 'handle+비번 로그인 + 이메일 인증(OAuth 연동)',
+        note: '표준 로그인 추가(유저 요청 2026-06-07): 소셜(OAuth) 유지 + handle(=계정 ID)+비밀번호 로그인(signup/login/set-password, Django 해싱·`AUTH_PASSWORD_VALIDATORS` 재사용, 브루트포스/레이트리밋). 로그인 ID=handle(이메일 아님 → #206 무관). 이메일 인증 = OAuth 연동: 신규 `LinkEmailView`(`IsAuthenticated`) — 로그인된 유저 + 구글 code → `_exchange_goo…',
+      },
       {
         id: 'ARCHITECT-UNIFY-1',
         title: 'firm-side Office→Architect 전면 통합 (deferred, firm-UX 착수 시)',
@@ -116,6 +121,11 @@ window.PROJECT_STATE = {
       },
     ],
     medium: [
+      {
+        id: 'FRONT-AVATAR-1',
+        title: '프로필 사진 업로드 (R2)',
+        note: '프로필 사진 변경 UI + 업로드 백엔드 부재. `avatar_url`은 plain URLField, 업로드 경로/스토리지 없음(R2 boto3/presigned 미배선, MEDIA_ROOT 없음). CF R2(prod 스택 존재)에 업로드 엔드포인트(presigned 또는 multipart→boto3) + content-type 화이트리스트(jpeg/png/webp)/크기 cap(≤5MB)/본인만/파일명 무작위 → `avatar_url`엔 R2 URL만. 프론트 히어로 아바타(isMe) 클…',
+      },
       {
         id: 'BACK-LLM-4',
         title: 'search.py ParseQueryView byte-cap도 ensure_ascii 부풀림 의심',
@@ -187,60 +197,60 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
-      number: 204,
-      title: 'feat(gemini): 3.1 model migration + persona-image flow wiring',
-      mergedAt: '2026-06-05T01:44:29Z',
-      mergedAtKST: '2026-06-05 10:44 KST',
-      sha: 'dc1b068',
+      number: 214,
+      title: 'feat(ALGO-QCARD): Phase 3 스와이프 latency + 하이퍼긍정 Trigger A',
+      mergedAt: '2026-06-06T15:19:35Z',
+      mergedAtKST: '2026-06-07 00:19 KST',
+      sha: 'b951611',
     },
     {
-      number: 203,
-      title: 'fix(auth): conflict-aware guest-promote merge — no 500, no data loss (FIX-2)',
-      mergedAt: '2026-06-05T00:58:04Z',
-      mergedAtKST: '2026-06-05 09:58 KST',
-      sha: '3870bc4',
+      number: 213,
+      title: 'feat(ALGO-QCARD): Phase 2 TF-IDF 변별 키워드 + Trigger B 카테고리',
+      mergedAt: '2026-06-06T15:14:27Z',
+      mergedAtKST: '2026-06-07 00:14 KST',
+      sha: '40827cb',
     },
     {
-      number: 202,
-      title: 'fix(tokens): single-flight refresh — stop concurrent-401 spurious logout (FIX-3)',
-      mergedAt: '2026-06-05T00:58:00Z',
-      mergedAtKST: '2026-06-05 09:58 KST',
-      sha: '54a40e5',
+      number: 212,
+      title: 'feat(session): Case #3 resume guard — 기존 보드 재진입 이어하기',
+      mergedAt: '2026-06-06T02:10:50Z',
+      mergedAtKST: '2026-06-06 11:10 KST',
+      sha: '4e58195',
     },
     {
-      number: 201,
-      title: 'fix(recommend): evict profile cache on architect follow/unfollow (FIX-7)',
-      mergedAt: '2026-06-05T00:57:57Z',
-      mergedAtKST: '2026-06-05 09:57 KST',
-      sha: '3c742c7',
+      number: 211,
+      title: 'feat(ALGO-QCARD): Phase 1 질문카드 Soft-Vector 분기 + 프리페치 flush',
+      mergedAt: '2026-06-06T01:53:39Z',
+      mergedAtKST: '2026-06-06 10:53 KST',
+      sha: '7bd658f',
     },
     {
-      number: 200,
-      title: 'feat(FULL-DISCOVERY-1): Discovery 10장 청크 + 3-Tier + Draft Board -> Taste 퍼널 재설계',
-      mergedAt: '2026-06-05T03:11:46Z',
-      mergedAtKST: '2026-06-05 12:11 KST',
-      sha: '2238e5d',
+      number: 210,
+      title: 'test(auth): fix google login test path -> auth/social/google/',
+      mergedAt: '2026-06-06T01:39:51Z',
+      mergedAtKST: '2026-06-06 10:39 KST',
+      sha: '4ff9d92',
     },
     {
-      number: 199,
-      title: 'fix(testenv): guard .env under pytest + .flake8 config (FIX-1, FIX-8)',
-      mergedAt: '2026-06-05T00:57:53Z',
-      mergedAtKST: '2026-06-05 09:57 KST',
-      sha: '230e29d',
+      number: 209,
+      title: 'feat(FULL-DISCOVERY-1): Discovery 승격 N장 동등주입 + 즉시 K-Means + 50 하드캡',
+      mergedAt: '2026-06-06T01:46:48Z',
+      mergedAtKST: '2026-06-06 10:46 KST',
+      sha: '13359a3',
     },
     {
-      number: 198,
-      title: 'docs(task): batch audit — 4 done + 5 deferred annotations + BACK-LLM-4',
-      mergedAt: '2026-06-04T14:04:08Z',
-      mergedAtKST: '2026-06-04 23:04 KST',
-      sha: '9be8fd8',
+      number: 208,
+      title: 'feat(i18n): language preference (ko/en) + t() foundation + TabBar (FULL-LANGUAGE-1 Slice 1)',
+      mergedAt: '2026-06-06T01:43:24Z',
+      mergedAtKST: '2026-06-06 10:43 KST',
+      sha: '119a435',
     },
     {
-      number: 197,
-      title: 'chore(infra): make test-local — local pytest via neondb_owner (INFRA-DB-2)',
-      mergedAt: '2026-06-04T13:53:01Z',
-      mergedAtKST: '2026-06-04 22:53 KST',
-      sha: '87023f3',
+      number: 207,
+      title: 'fix(security): validate swipe/bookmark/architect IDs + merge row-cap',
+      mergedAt: '2026-06-05T07:26:16Z',
+      mergedAtKST: '2026-06-05 16:26 KST',
+      sha: 'ddfbb57',
     },
   ],
   agents: [
@@ -539,6 +549,18 @@ window.PROJECT_STATE = {
       role: 'DB 마이그레이션 좋아요 건물',
     },
     {
+      path: 'backend/apps/accounts/migrations/0006_userprofile_language.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/accounts/migrations/0007_userprofile_handle_userprofile_notifications.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/accounts/migrations/0008_userprofile_affiliation_userprofile_role.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/accounts/migrations/__init__.py',
       role: '패키지 init',
     },
@@ -567,7 +589,15 @@ window.PROJECT_STATE = {
       role: 'accounts 테스트 픽스처',
     },
     {
+      path: 'backend/apps/accounts/tests/test_guest_role_affiliation.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/accounts/tests/test_jwt_cache_integration.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/accounts/tests/test_language.py',
       role: '',
     },
     {
@@ -575,8 +605,24 @@ window.PROJECT_STATE = {
       role: '좋아요 건물 테스트',
     },
     {
+      path: 'backend/apps/accounts/tests/test_merge_cap.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/accounts/tests/test_oauth_email_verified.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/accounts/tests/test_phase13_userprofile.py',
       role: 'UserProfile Phase13 테스트',
+    },
+    {
+      path: 'backend/apps/accounts/tests/test_profile_role_affiliation.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/accounts/tests/test_settings_harvest.py',
+      role: '',
     },
     {
       path: 'backend/apps/accounts/tests/test_theme_font.py',
@@ -828,6 +874,18 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/recommendation/migrations/0024_project_axis_scores.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/migrations/0025_analysissession_multimodal_floor.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/migrations/0026_qcard_phase1_bias.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/migrations/0027_session_recent_latencies.py',
       role: '',
     },
     {
@@ -1199,6 +1257,10 @@ window.PROJECT_STATE = {
       role: 'JWT 리프레시 블랙리스트 테스트',
     },
     {
+      path: 'backend/tests/test_language_directive.py',
+      role: '',
+    },
+    {
       path: 'backend/tests/test_m1_clarification_cap.py',
       role: 'M1 질문 카드 상한 테스트',
     },
@@ -1221,6 +1283,18 @@ window.PROJECT_STATE = {
     {
       path: 'backend/tests/test_projects_n_plus_one.py',
       role: '프로젝트 N+1 쿼리 테스트',
+    },
+    {
+      path: 'backend/tests/test_qcard_phase1.py',
+      role: '',
+    },
+    {
+      path: 'backend/tests/test_qcard_phase2.py',
+      role: '',
+    },
+    {
+      path: 'backend/tests/test_qcard_phase3.py',
+      role: '',
     },
     {
       path: 'backend/tests/test_rerank_shape.py',
@@ -1375,16 +1449,20 @@ window.PROJECT_STATE = {
       role: '테마·폰트 설정 UI',
     },
     {
+      path: 'frontend/src/components/AppearanceSettings.module.css',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/Button.module.css',
+      role: '',
+    },
+    {
       path: 'frontend/src/components/DebugOverlay.jsx',
       role: '세션·스와이프 디버그 오버레이',
     },
     {
       path: 'frontend/src/components/DiscoveryTriggerCard.jsx',
       role: '',
-    },
-    {
-      path: 'frontend/src/components/EditProfileModal.jsx',
-      role: '프로필 편집 모달',
     },
     {
       path: 'frontend/src/components/ErrorBoundary.jsx',
@@ -1433,6 +1511,14 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/components/TabBar.jsx',
       role: '하단 탭바 내비게이션',
+    },
+    {
+      path: 'frontend/src/components/Toggle.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/Toggle.module.css',
+      role: '',
     },
     {
       path: 'frontend/src/components/TutorialPopup.jsx',
@@ -1503,8 +1589,16 @@ window.PROJECT_STATE = {
       role: 'swipe 제스처 설정 상수',
     },
     {
+      path: 'frontend/src/context/LanguageContext.jsx',
+      role: '',
+    },
+    {
       path: 'frontend/src/context/ThemeContext.jsx',
       role: '테마·폰트 Provider',
+    },
+    {
+      path: 'frontend/src/context/_languageContext.js',
+      role: '',
     },
     {
       path: 'frontend/src/context/_themeContext.js',
@@ -1523,6 +1617,10 @@ window.PROJECT_STATE = {
       role: '이미지 로드 텔레메트리 훅',
     },
     {
+      path: 'frontend/src/hooks/useLanguage.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/hooks/useProjectReactors.js',
       role: '프로젝트 리액터 페이지네이션 훅',
     },
@@ -1533,6 +1631,14 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/hooks/useTheme.js',
       role: '테마 context 소비 훅',
+    },
+    {
+      path: 'frontend/src/i18n/index.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/i18n/locales.js',
+      role: '',
     },
     {
       path: 'frontend/src/index.css',
@@ -1653,6 +1759,42 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/pages/firmProfile/FirmProjectsSection.jsx',
       role: '사무소 프로젝트 섹션',
+    },
+    {
+      path: 'frontend/src/pages/settings/AccountScreen.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/settings/AccountScreen.module.css',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/settings/AppearanceScreen.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/settings/AppearanceScreen.module.css',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/settings/EditProfileScreen.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/settings/NotificationsScreen.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/settings/NotificationsScreen.module.css',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/settings/SettingsPage.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/settings/SettingsPage.module.css',
+      role: '',
     },
     {
       path: 'frontend/src/pages/userProfile/BoardGrid.jsx',

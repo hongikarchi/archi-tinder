@@ -503,7 +503,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
             background: 'linear-gradient(90deg, var(--color-text), #f9a8d4)',
             WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
           }}>
-            {mode === 'update' ? `Update "${initialName}"` : 'ArchiTinder AI'}
+            {mode === 'update' ? `Update "${initialName}"` : 'archibe AI'}
           </span>
         </div>
         <div style={{ width: 40 }} />

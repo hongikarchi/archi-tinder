@@ -1,0 +1,98 @@
+/*
+ * AccountScreen.module.css
+ * Interactive states for the account settings form.
+ * Per DESIGN.md §8.5: glassmorphic input focus pattern.
+ */
+
+.page {
+  height: calc(100vh - 64px);
+  overflow-y: auto;
+  background: var(--color-bg);
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: color-mix(in srgb, var(--color-bg) 72%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--color-border-soft);
+  gap: 8px;
+}
+
+.headerTitle {
+  color: var(--color-text);
+  font-size: 17px;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.iconBtn {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--color-text);
+  cursor: pointer;
+  border-radius: 12px;
+  transition: background var(--motion-fast) var(--motion-ease);
+}
+
+.iconBtn:hover {
+  background: var(--color-surface-2);
+}
+
+.iconBtn:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+}
+
+/* Glassmorphic input (DESIGN.md §8.5) */
+.inputWrapper {
+  background: color-mix(in srgb, var(--color-surface) 72%, transparent);
+  border: 1px solid var(--color-border);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: var(--radius-sm);   /* square-ish per §8.5 note */
+  padding: 12px 18px;
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: 16px;                   /* 16px prevents iOS zoom */
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color var(--motion-fast), box-shadow var(--motion-slow) var(--motion-ease-out);
+  outline: none;
+}
+
+.inputWrapper:focus {
+  border-color: var(--accent-1);
+}
+
+.inputWrapper:active {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-1) 28%, transparent);
+  transition: border-color var(--motion-fast), box-shadow 0s;
+}
+
+.inputWrapper:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.inputError {
+  border-color: var(--color-destructive) !important;
+}
+
+.inputError:focus {
+  border-color: var(--color-destructive);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-destructive) 18%, transparent);
+}

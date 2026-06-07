@@ -45,14 +45,19 @@ export function normalizeGuestName(value) {
  * Build the POST /auth/guest/ body.
  * Always includes consent_accepted: true (wizard flow structurally guarantees
  * the user has clicked "동의합니다" before this function is called).
+ * jobRole → backend field `role` (free-text, optional)
+ * affiliation → backend field `affiliation` (free-text, optional)
  */
-export function buildGuestLoginPayload({ displayName, role }) {
-  return {
+export function buildGuestLoginPayload({ displayName, role, jobRole, affiliation }) {
+  const payload = {
     display_name: normalizeGuestName(displayName),
     onboarding_role: role || '',
     consent_accepted: true,
     consent_policy_version: '1.0',
   }
+  if (jobRole && jobRole.trim()) payload.role = jobRole.trim().slice(0, 50)
+  if (affiliation && affiliation.trim()) payload.affiliation = affiliation.trim().slice(0, 100)
+  return payload
 }
 
 /**

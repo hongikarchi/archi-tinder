@@ -106,6 +106,9 @@ Redesign `/login` as conversational swipe onboarding while preserving the existi
 
 ### HIGH
 
+#### AUTH-LOGIN-1 — handle+비번 로그인 + 이메일 인증(OAuth 연동)
+표준 로그인 추가(유저 요청 2026-06-07): 소셜(OAuth) 유지 + **handle(=계정 ID)+비밀번호** 로그인(signup/login/set-password, Django 해싱·`AUTH_PASSWORD_VALIDATORS` 재사용, 브루트포스/레이트리밋). 로그인 ID=handle(이메일 아님 → #206 무관). **이메일 인증 = OAuth 연동**: 신규 `LinkEmailView`(`IsAuthenticated`) — 로그인된 유저 + 구글 code → `_exchange_google_code` → verified 이메일 attach + SocialAccount(`GuestPromoteView` 로직 재사용, feasibility HIGH). **충돌=거부**(verified 이메일이 이미 다른 계정 → 400 "그 계정으로 로그인", 데이터 병합 안 함; 미검증 거부). `email_verified_at` 필드 고려. 계정 화면: `@핸들`→**"ID"** 라벨 + 중복 read-only "이름" 행 제거(이름=프로필 담당) + "비밀번호 설정/변경" + "이메일 인증" 버튼. 프로필 편집 "Display Name"→"이름" 라벨. 식별자 모델: handle=ID(계정)·display_name=이름(프로필)·User.username=내부키. **auth-critical → security-manager FULL, 자체 브랜치+PR.** FRONT-AUTH-1(Kakao/Naver 버튼)도 이 트랙 흡수 가능.
+
 #### ARCHITECT-UNIFY-1 — firm-side Office→Architect 전면 통합 (deferred, firm-UX 착수 시)
 office-interest **모델 중복은 해소됨**: Phase 0(SavedOffice #188) + C(OfficeFollow, ARCHITECT-UNIFY-C)로 두 미배선 중복 삭제 → follow 모델 1개(ArchitectFollow). 남은 통합 = Office 서브시스템(table/claim/OfficeProjectLink/sync_offices/FirmProfilePage)을 arch_id로 흡수 = firm-side 전면 재설계.
 
@@ -182,6 +185,9 @@ Acceptance per slice: `npm run lint` + `npm run build` clean; light + all dark v
 _Note: the Profile-area slice shipped separately as FRONT-PROFILE-HARVEST-1 (#179, 2026-06-04) — net-new component harvest + Instagram-style redesign + first CSS-Module/hook foundation, NOT the named ~646 inline-debt paydown. SwipePage / BoardDetailPage / etc. inline→CSS-Module migration remains the core of THIS item._
 
 ### MEDIUM
+#### FRONT-AVATAR-1 — 프로필 사진 업로드 (R2)
+프로필 사진 변경 UI + 업로드 백엔드 부재. `avatar_url`은 plain URLField, 업로드 경로/스토리지 없음(R2 boto3/presigned 미배선, MEDIA_ROOT 없음). CF R2(prod 스택 존재)에 업로드 엔드포인트(presigned 또는 multipart→boto3) + content-type 화이트리스트(jpeg/png/webp)/크기 cap(≤5MB)/본인만/파일명 무작위 → `avatar_url`엔 R2 URL만. 프론트 히어로 아바타(isMe) 클릭 → 클라 정사각 리사이즈 → 업로드. **data-URL 방식 지양**(avatar_url이 FollowList·공개 프로필 serializer에 실려 40KB×N 응답 폭증, <1s 목표 역행). security-manager(업로드 SSRF/타입위조/DoS).
+
 #### BACK-LLM-4 — search.py ParseQueryView byte-cap도 ensure_ascii 부풀림 의심
 BACK-LLM-2(#195) 리뷰 중 발견(미수정, pre-existing). `backend/apps/recommendation/views/search.py` `ParseQueryView.post`의 conversation_history 검증이 BACK-LLM-2 serializer가 고친 것과 동일하게 `json.dumps` 기본 `ensure_ascii=True`로 byte 측정 가능성 → 한글 대화가 한도를 6배 부풀려 거짓 거부. 확인 후 `ensure_ascii=False`+UTF-8 인코딩 측정으로 통일. (`serializers.py:8` 주석이 한도가 ParseQueryView서 'mirror'됐다고 명시.)
 
@@ -346,6 +352,16 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 _(Deferred 2026-06-04 batch scope: YAGNI — product-미소비 telemetry 1필드 위해 Celery+worker 도입은 과투자. 2번째 background job 생기면 단일 INFRA-JOBS 티켓으로 묶어 처리.)_
 
 ## Done
+### SETTINGS-PROFILE-IA-1 — archibe Settings harvest + Profile/Account IA + rebrand archibe — RESOLVED 2026-06-07 (`2bb2b64`-pre-squash)
+archibe-profile(외부 레퍼런스, #179 harvest와 동일 repo) 2차 harvest + 프로필/계정 정보구조 재설계 + 서비스명 archibe 리브랜드. 4 커밋(slices 1-2-3 + A/B/C + F).
+- 백엔드: `UserProfile.handle`(공개 @id, unique, `^[a-z0-9_]{3,30}$`, 예약어, self-only 검증) + `notifications` JSONField(self-only, ≤50키/≤64자/nested {push,email} bool) + `role`(50)/`affiliation`(100) 자유텍스트. 마이그 0007+0008. `UserSerializer`/공개`UserProfileSerializer`/self-update에 배선. `GuestLoginView` 가입 시 role/affiliation 수신(truncate). 이메일/username은 비편집 유지(#206 경계).
+- archibe 재사용 조각: `Toggle`(role=switch, a11y) + `AppearanceSettings` 테마 시각 스와치(accent dots+글로우) + gradient CTA(`Button.module.css`) + `ProfileHeader` glassmorphic blur. `/settings` 라우트 + Account/Notifications/Appearance 화면(FollowListPage 레이아웃).
+- 프로필 IA: 히어로 = 이름 → @handle → "role · affiliation" + website pill; 헤더 = 본인 메인서 Back 제거 + "Profile"+@handle; Edit Profile → `/settings/edit-profile`(EditCardForm + role/affiliation, 단일화 — 헤더 Edit 버튼 제거). MBTI UI 제거. `EditProfileModal.jsx` 삭제.
+- BusinessCard archibe 재설계: ARCHIBE 워드마크(양면) + display_name/role/affiliation/handle 직접 + persona/mbti fallback 제거 + 흰 명함 하드코딩 유지.
+- 리브랜드 ArchiTinder→archibe(유저향): ARCHIBE 워드마크(LoginPage/SwipePage/MainLayout, 투톤 분할 제거) + archibe 소문자 본문(타이틀/동의문/"archibe AI"/share fallback). 내부(package/repo/docs)는 archi-tinder 유지.
+- 게이트: code-review PASS ×4, security PASS ×3, flake8+lint+build clean. 라이브 Playwright 스모크: handle 저장, notifications 토글+영속, role/affiliation 히어로, edit-profile, BusinessCard 재설계, 타이틀 archibe. DB-게이트 테스트(handle/notifications/role/affiliation/guest) = CI.
+- Deferred: 아바타 R2 업로드(FRONT-AVATAR-1); handle+비번 로그인 + 이메일인증 OAuth연동(AUTH-LOGIN-1). FRONT-PROFILE-1 상당부분 흡수(EditProfileModal 삭제로 그 minor들 moot; FollowListModal bottom-sheet/4테마 픽셀은 잔존).
+
 ### BACK-LLM-GEMINI-1 — Gemini 3.1 모델 마이그레이션 + 페르소나 이미지 플로우 배선 — RESOLVED 2026-06-05 (`dc1b068`, #204)
 하드코딩 모델 ID(텍스트 `gemini-2.5-flash` 9곳 + 이미지 Imagen 3 orphan) → settings/env 분리(`GEMINI_TEXT_MODEL`=3.1-flash-lite, `GEMINI_IMAGE_MODEL`=3.1-flash-image, 각 fallback). 텍스트 호출 `generate_content_with_fallback` 래퍼로 일원화(model+retry+timeout+4xx fallback). 이미지: Imagen `generate_images` → Gemini-native `generate_content(response_modalities=['TEXT','IMAGE'])` 재작성 + Pillow WebP 변환(`report_image_mime`, migration 0023). App.jsx 세션완료 후 fire-and-forget 이미지 생성 배선(전엔 orphan — 한 번도 호출 안 됨).
 - [x] **실키 스모크 검증**: 3.1-flash-lite(텍스트) + 3.1-flash-image(이미지 JPEG 880KB) 둘 다 200 OK — fallback 안 타고 3.1 primary 실작동 확인. `['TEXT','IMAGE']`로 이미지 part 정상 반환(Codex 🟡 text-only 우려 실측 미발생).
