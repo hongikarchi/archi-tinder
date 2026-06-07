@@ -4,11 +4,11 @@ React + Django web app for the archi-tinder project. Reads from a PostgreSQL DB
 built by a sibling repo (Make DB).
 
 For the full picture see:
-- `CLAUDE.md` — project conventions, agent rules, DB schema (auto-loaded by Claude Code)
+- `CLAUDE.md` — project conventions, agent rules, DB schema (auto-loaded by Claude Code; **Codex reads the mirror `AGENTS.md`**)
 - `CONTRIBUTING.md` — branch model, PR workflow, role / file ownership
 - `DESIGN.md` — visual design system (consult for any UI work)
 - `docs/algorithm.md` — recommendation algorithm theory
-- `.claude/Task.md` `## Next` — pending-feature backlog (absorbed the prior `docs/specs/` folder on 2026-05-24; items use the `<SURFACE>-<TOPIC>-<N>` ID convention described in `## Workflow Rules`)
+- `Task.md` `## Next` — pending-feature backlog (absorbed the prior `docs/specs/` folder on 2026-05-24; items use the `<SURFACE>-<TOPIC>-<N>` ID convention described in `## Workflow Rules`)
 
 ---
 
@@ -23,10 +23,11 @@ cd make_web
 ./tools/onboarding.sh           # interactive: hooks + CODEOWNERS handle registration
 ```
 
-The script asks for your role (A=Algorithm / B=SNS / C=Admin) and your GitHub
-handle, then replaces the matching `@TODO-role-*` placeholder in `.github/CODEOWNERS`.
-Commit the CODEOWNERS edit on your first feature branch — see "Common pitfalls"
-below.
+The script installs the hooks and asks for your role + GitHub handle.
+`.github/CODEOWNERS` is currently pre-filled with `@hongikarchi` (sole admin) —
+no `@TODO-role-*` placeholders remain, so onboarding just flags this. When a real
+Role A/B collaborator joins, replace the relevant `@hongikarchi` entries with
+their handle on the first feature branch.
 
 Then set up your environment:
 
@@ -58,6 +59,7 @@ will reject violations, but the AI may still try and waste time.
    - Role A (algorithm) → `feature/algo-<topic>`, e.g. `feature/algo-mmr-tuning`
    - Role B (SNS / profiles / boards) → `feature/sns-<topic>`
    - Role C (admin / everything else) → `feature/admin-<topic>`
+   - Local AI agents (Claude Code / Codex) → `feature/claude-<topic>` / `feature/codex-<topic>` (see `CONTRIBUTING.md` § Concurrent agents)
 2. **Always sync from `develop` before starting**:
    ```bash
    git checkout develop
@@ -108,7 +110,9 @@ git push -u origin feature/algo-mmr-tuning
 gh pr create --base develop
 
 # 7. Admin reviews the PR
-# 8. After CI green + admin approval → admin clicks "Squash and merge"
+# 8. After CI green + admin review → admin squash-merges
+#    (`gh pr merge --admin --squash`; Code Owner gate self-unsatisfiable for the
+#    sole admin, bypassed until collaborators join)
 
 # 9. Local cleanup
 git checkout develop && git pull origin develop
@@ -123,7 +127,7 @@ git branch -d feature/algo-mmr-tuning
 |--------|------|-----|
 | `git push` rejected with "protected branch" | Tried to push to `main` or `develop` | Create a feature branch: `git checkout -b feature/<role>-<topic>` and push that |
 | `pre-push` hook says "migration order conflict" | Someone else merged a migration with the same number | `git checkout develop && git pull && git checkout - && git rebase develop`, then `python manage.py makemigrations <app>` to renumber |
-| PR shows "1 file is unreviewed" forever | CODEOWNERS placeholder still has `@TODO-role-*` | Admin replaces placeholders with real GitHub handles |
+| PR shows "1 file is unreviewed" forever | CODEOWNERS is pre-filled with `@hongikarchi`; no `@TODO-role-*` placeholders remain | Add the real collaborator's handle to `.github/CODEOWNERS` and merge via PR |
 | CI fails on `makemigrations --check` | Model change without migration file | `cd backend && python manage.py makemigrations <app>` and commit the file |
 
 ---
@@ -133,4 +137,4 @@ git branch -d feature/algo-mmr-tuning
 `frontend/` (React 18 + Vite) ↔ `backend/` (Django 4.2 + DRF + pgvector + Gemini)
 ↔ Neon PostgreSQL (`canonical_v2_buildings` table owned by Make DB, read-only here).
 
-DB schema: `docs/database-schema.md`. Workflow + agents: `.claude/WORKFLOW.md`.
+DB schema: `docs/database-schema.md`. Workflow + agents: `.claude/WORKFLOW.md` (Claude) / `.codex/WORKFLOW.md` (Codex).

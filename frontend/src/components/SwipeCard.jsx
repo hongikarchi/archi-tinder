@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useImageTelemetry } from '../hooks/useImageTelemetry.js'
 
 /**
@@ -40,7 +39,6 @@ function InfoRow({ label, value }) {
 
 /* ── SwipeCard ───────────────────────────────────────────────────────────── */
 export default function SwipeCard({ card, onGalleryClose }) {
-  const navigate = useNavigate()
   const [isExpanded,     setIsExpanded]     = useState(false)
   const [showGallery,    setShowGallery]    = useState(false)
   const [hasBeenOpened,  setHasBeenOpened]  = useState(false)
@@ -53,14 +51,17 @@ export default function SwipeCard({ card, onGalleryClose }) {
   const dragStartTime = useRef(null)
   const imgRef = useRef(null)
   const timeoutRef = useRef(null)
+  const galleryScrollRef = useRef(null)
 
   const { onLoad: telemetryOnLoad, onError: telemetryOnError } = useImageTelemetry({
     buildingId: card.image_id,
     context: 'swipe_card',
   })
 
-  // openGallery() removed (FIX F5, Codex retest 2026-05-26): View Gallery button
-  // now navigates to BuildingDetailPage; the in-card flip path is no longer used.
+  function openGallery() {
+    setHasBeenOpened(true)
+    setShowGallery(true)
+  }
   function closeGallery() { setShowGallery(false); onGalleryClose && onGalleryClose() }
 
   function handlePointerDown(e) {
@@ -157,6 +158,47 @@ export default function SwipeCard({ card, onGalleryClose }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [card?.image_id, card?.image_url])
 
+  // Native direction-lock for gallery vertical scroll.
+  // Bubble order: this gallery div listener fires BEFORE the react-tinder-card
+  // native touchmove on the ancestor card element. stopPropagation() in a passive
+  // listener is valid (passive only forbids preventDefault). We never call
+  // preventDefault so the browser still handles pan-y scroll natively.
+  // Horizontal intent propagates normally → card swipe still works.
+  useEffect(() => {
+    const el = galleryScrollRef.current
+    if (!el) return
+    let startX = 0
+    let startY = 0
+    let axis = null // null (undecided) | 'v' (vertical → block card) | 'h' (horizontal → allow swipe)
+    const SLOP = 8  // px before axis is committed
+    const onStart = (e) => {
+      if (!e.touches.length) return
+      const t = e.touches[0]
+      startX = t.clientX
+      startY = t.clientY
+      axis = null
+    }
+    const onMove = (e) => {
+      if (!e.touches.length) return
+      const t = e.touches[0]
+      const dx = Math.abs(t.clientX - startX)
+      const dy = Math.abs(t.clientY - startY)
+      if (axis === null && (dx > SLOP || dy > SLOP)) {
+        axis = dy > dx ? 'v' : 'h'
+      }
+      // Vertical intent: stop the event reaching react-tinder-card's native
+      // touchmove listener on the parent card (bubble phase). Card does NOT
+      // wobble. Horizontal intent propagates → card swipe preserved.
+      if (axis === 'v') e.stopPropagation()
+    }
+    el.addEventListener('touchstart', onStart, { passive: true })
+    el.addEventListener('touchmove', onMove, { passive: true })
+    return () => {
+      el.removeEventListener('touchstart', onStart)
+      el.removeEventListener('touchmove', onMove)
+    }
+  }, [hasBeenOpened])
+
   const typology   = card.metadata?.axis_typology
   const architects = card.metadata?.axis_architects
   const country    = card.metadata?.axis_country
@@ -180,7 +222,7 @@ export default function SwipeCard({ card, onGalleryClose }) {
         position: 'absolute', top: 0, left: 0,
         width: CARD_WIDTH, height: CARD_HEIGHT,
         cursor: 'grab',
-        userSelect: 'none', WebkitUserSelect: 'none', touchAction: 'none',
+        userSelect: 'none', WebkitUserSelect: 'none', touchAction: 'pan-y',
         perspective: 1200,
       }}
       onPointerDown={handlePointerDown}
@@ -309,15 +351,10 @@ export default function SwipeCard({ card, onGalleryClose }) {
 
             </div>
             {gallery.length > 0 && (
-              // FIX F5 (Codex retest 2026-05-26): button now navigates to
-              // BuildingDetailPage (/buildings/:id) instead of calling the in-card
-              // openGallery() flip. DiscoveryPage passed an empty () => {} callback
-              // for onGalleryOpen, so the old path was a no-op. The /buildings/ route
-              // (plural) matches the existing site pattern used in BoardDetailPage.
               <button
                 onPointerDown={e => e.stopPropagation()}
                 onPointerUp={e => e.stopPropagation()}
-                onClick={e => { e.stopPropagation(); navigate(`/buildings/${card.image_id}`) }}
+                onClick={e => { e.stopPropagation(); openGallery() }}
                 style={{
                   marginTop: 12, width: '100%', padding: '10px 14px', borderRadius: 10,
                   background: 'rgba(255,255,255,0.09)', border: '1px solid rgba(255,255,255,0.18)',
@@ -349,20 +386,21 @@ export default function SwipeCard({ card, onGalleryClose }) {
         }}>
           {/* Vertical scroll of full-width images */}
           <div
-            onTouchStart={e => e.stopPropagation()}
-            onTouchMove={e => e.stopPropagation()}
+            ref={galleryScrollRef}
+            className="pressable"
             style={{
               position: 'absolute', inset: 0,
               overflowY: 'auto', overflowX: 'hidden',
               scrollSnapType: 'y mandatory',
               overscrollBehaviorY: 'contain',
               scrollbarWidth: 'none',
+              touchAction: 'pan-y',
             }}
           >
             {gallery.map((url, i) => {
               const isDrawing = i >= drawingStart
               return (
-                <div key={i} style={{
+                <div key={i} className="pressable" style={{
                   width: '100%', height: CARD_HEIGHT,
                   flexShrink: 0,
                   scrollSnapAlign: 'start',
@@ -373,6 +411,7 @@ export default function SwipeCard({ card, onGalleryClose }) {
                   <img
                     src={url}
                     alt=""
+                    className="pressable"
                     loading={i === 0 ? 'eager' : 'lazy'}
                     decoding="async"
                     draggable={false}
@@ -389,6 +428,22 @@ export default function SwipeCard({ card, onGalleryClose }) {
               )
             })}
           </div>
+
+          {/* Close button */}
+          <button
+            onPointerDown={e => e.stopPropagation()}
+            onPointerUp={e => e.stopPropagation()}
+            onClick={e => { e.stopPropagation(); closeGallery() }}
+            style={{
+              position: 'absolute', top: 14, right: 14,
+              width: 32, height: 32, borderRadius: '50%',
+              background: 'rgba(0,0,0,0.55)', border: '1px solid rgba(255,255,255,0.2)',
+              color: '#fff', fontSize: 16, lineHeight: 1,
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            ✕
+          </button>
 
           {/* Top arrow */}
           <div style={{ position: 'absolute', top: 14, left: 0, right: 0, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>

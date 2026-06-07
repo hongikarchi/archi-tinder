@@ -7,6 +7,9 @@
 #   3. Ask for your GitHub handle (e.g. yourname → no @ prefix)
 #   4. Replace the matching @TODO-role-* placeholder in .github/CODEOWNERS
 #      with your handle, in the working tree.
+#      NOTE: CODEOWNERS is currently pre-filled with @hongikarchi, so this
+#      step is a no-op until a real collaborator's @TODO-role-* placeholder
+#      is actually added.
 #   5. Print next steps (commit + push CODEOWNERS update via PR).
 #
 # This script does NOT commit or push — by design. You commit the
@@ -14,7 +17,9 @@
 # audit trail is honest ("user X added themselves as Role A on date Y").
 #
 # Idempotent: safe to re-run. If your handle already replaced your
-# placeholder, the script reports "no change" and exits 0.
+# placeholder (or CODEOWNERS is already pre-filled with @hongikarchi and
+# no placeholder for your role exists), the script reports "no change" and
+# exits 0.
 #
 # Re-running with a different handle: edit CODEOWNERS manually.
 

@@ -74,7 +74,8 @@ class ProjectListCreateView(APIView):
                         .filter(user=profile)
                         .select_related('user__user')
                         # PERF-1 change C: heavy LLM JSON not consumed by list view.
-                        .defer('analysis_report')
+                        # BACK-LLM-2: conversation_history can be up to 64 KB — defer it too.
+                        .defer('analysis_report', 'conversation_history', 'axis_scores')
                         .annotate(
                             _latest_session_id=_latest_sid_sq,
                             _latest_like_count=_latest_lc_sq,
@@ -108,6 +109,17 @@ class ProjectListCreateView(APIView):
         profile = _get_profile(request)
         if not profile:
             return Response({'detail': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        # FULL-LOGIN-REDESIGN-1: guest users may create up to 3 boards.
+        # The 4th attempt triggers the verify-gate — frontend catches this 403
+        # and opens VerifyGateModal to prompt Google OAuth promotion.
+        # Gate is on post() only; get() (list) is not restricted.
+        if profile.is_guest and Project.objects.filter(user=profile).count() >= 3:
+            return Response(
+                {'detail': 'verify_required', 'reason': 'board_limit_reached', 'limit': 3},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         serializer = ProjectSerializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         project = serializer.save(user=profile)
@@ -147,6 +159,8 @@ class ProjectDetailView(APIView):
         if not is_owner and project.visibility != 'public':
             return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
         data = ProjectSerializer(project, context={'request': request}).data
+        if not is_owner:
+            data.pop('conversation_history', None)
         if request.user.is_authenticated and profile:
             from apps.social.models import Reaction
             data['is_reacted'] = Reaction.objects.filter(user=profile, project=project).exists()
@@ -262,7 +276,8 @@ class UserProjectsListView(APIView):
             .filter(user=target_profile)
             .select_related('user__user')
             # PERF-1 change C: heavy LLM JSON not consumed by list view.
-            .defer('analysis_report')
+            # BACK-LLM-2: conversation_history can be up to 64 KB — defer it too.
+            .defer('analysis_report', 'conversation_history', 'axis_scores')
             .annotate(
                 _latest_session_id=_latest_sid_sq,
                 _latest_like_count=_latest_lc_sq,

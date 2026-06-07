@@ -1,0 +1,68 @@
+/*
+ * Button.module.css — Shared reusable button style classes.
+ * Import in any component that needs these styles:
+ *
+ *   import btnStyles from '../../components/Button.module.css'
+ *   ...
+ *   <button className={btnStyles.cta}>Save</button>
+ *
+ * All values reference tokens.css variables so theme changes apply automatically.
+ */
+
+/*
+ * .cta / .primaryGradient — Primary CTA button (design.md §8.1).
+ *
+ * NOTE: min-height is 48px per task spec. DESIGN.md §8.1 defines 44px.
+ * This deliberate deviation is documented here and in the PR description.
+ */
+.cta,
+.primaryGradient {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 48px;
+  padding: 14px 20px;
+  background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+  color: #fff;
+  border: 0;
+  border-radius: var(--radius-md);
+  font-family: inherit;
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  /* Transition: transform (normal) + box-shadow (slow, ease-out) per DESIGN.md §8.1 */
+  transition:
+    transform var(--motion-normal) var(--motion-ease),
+    box-shadow var(--motion-slow) var(--motion-ease-out);
+}
+
+.cta:hover,
+.primaryGradient:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--accent-1) 35%, transparent);
+}
+
+/* Click moment: glow appears instantly, fades out over slow duration */
+.cta:active,
+.primaryGradient:active {
+  transform: translateY(0);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent-1) 28%, transparent);
+  transition:
+    transform var(--motion-normal) var(--motion-ease),
+    box-shadow 0s;
+}
+
+.cta:focus-visible,
+.primaryGradient:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 3px;
+}
+
+.cta:disabled,
+.primaryGradient:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}

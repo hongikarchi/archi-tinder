@@ -9,6 +9,8 @@ export default function MainLayout({
   currentCard, cardResetToken, sessionProgress, isSessionCompleted, isSwipeLoading, isResultLoading, swipePending,
   onSwipe, onViewResults, onExtendSession,
   onExitToNewProject, onExitToHome,
+  questionTrigger = null,
+  onQuestionAnswer,
 }) {
   const location = useLocation()
   const navigate = useNavigate()
@@ -21,7 +23,7 @@ export default function MainLayout({
     <div style={{ height: '100vh', overflow: 'hidden' }}>
 
       {/* Header controls — hidden on pages that own their sticky header (profile/office/matched/board) */}
-      <div style={{ position: 'fixed', top: 14, right: 16, zIndex: 200, display: (isProfile || pathname.startsWith('/office') || pathname.startsWith('/matched') || pathname.startsWith('/board') || pathname.startsWith('/buildings')) ? 'none' : 'flex', gap: 6, alignItems: 'center' }}>
+      <div style={{ position: 'fixed', top: 14, right: 16, zIndex: 200, display: (isProfile || pathname.startsWith('/office') || pathname.startsWith('/matched') || pathname.startsWith('/board') || pathname.startsWith('/buildings') || pathname.startsWith('/settings')) ? 'none' : 'flex', gap: 6, alignItems: 'center' }}>
         <button
           onClick={onLogout}
           title="Log out"
@@ -66,6 +68,8 @@ export default function MainLayout({
           onExtendSession={onExtendSession}
           onExitToNewProject={onExitToNewProject}
           onExitToHome={onExitToHome}
+          questionTrigger={questionTrigger}
+          onQuestionAnswer={onQuestionAnswer}
         />
       </div>
 
@@ -77,10 +81,7 @@ export default function MainLayout({
           gap: 12, padding: 24,
         }}>
           <div style={{ fontSize: 48 }}>🃏</div>
-          <p style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>
-            <span style={{ color: 'var(--color-text)' }}>Archi</span>
-            <span style={{ color: '#ec4899' }}>Tinder</span>
-          </p>
+          <p style={{ fontSize: 16, fontWeight: 700, margin: 0, letterSpacing: '0.2em', color: 'var(--color-text)' }}>ARCHIBE</p>
           <p style={{ color: 'var(--color-text-dimmer)', fontSize: 13 }}>Start a taste analysis to begin swiping</p>
           <button
             onClick={() => navigate('/new')}

@@ -80,7 +80,7 @@ while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
         0)
             echo "[$NOW] +${ELAPSED}s  → ALL CHECKS GREEN"
             echo ""
-            echo "Append to .claude/Task.md § Handoffs:"
+            echo "Append to Task.md § Handoffs:"
             echo "  PR-CI-GREEN: #${PR} — passed in ${ELAPSED}s"
             exit 0
             ;;
@@ -98,7 +98,7 @@ while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
                 echo ""
                 FAILED_RUN=$(gh pr checks "$PR" --json name,state,link 2>/dev/null \
                     | grep -o '"link":"[^"]*"' | head -1 | sed 's/"link":"//;s/"$//' || echo "?")
-                echo "Append to .claude/Task.md § Handoffs:"
+                echo "Append to Task.md § Handoffs:"
                 echo "  PR-CI-FAIL: #${PR} — checks red after ${ELAPSED}s; logs at ${FAILED_RUN}"
                 exit 1
             fi
@@ -121,6 +121,6 @@ echo ""
 echo "TIMEOUT after ${TIMEOUT}s. Re-run later or check manually:"
 echo "  gh pr checks ${PR}"
 echo ""
-echo "Append to .claude/Task.md § Handoffs:"
+echo "Append to Task.md § Handoffs:"
 echo "  PR-CI-TIMEOUT: #${PR} — still pending after ${TIMEOUT}s"
 exit 2

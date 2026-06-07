@@ -11,7 +11,6 @@ Tests:
 (Fix 3 — swipe-time async taste-cache warm — rolled back 2026-05-27 due to
 pytest-django connection-pool race; investigation deferred.)
 """
-import pytest
 from unittest.mock import patch, MagicMock
 import numpy as np
 

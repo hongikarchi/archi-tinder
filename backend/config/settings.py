@@ -1,10 +1,16 @@
 import os
+import sys
 from pathlib import Path
 from dotenv import load_dotenv
 from datetime import timedelta
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(BASE_DIR / '.env')
+# Guard: skip .env load under pytest — DB config comes from conftest setdefaults
+# (plain pytest / local), inline env vars (make test-local), or the CI job env.
+# Loading the real .env would overwrite those placeholders and connect to the
+# real Neon DB, leaking the password in connection-DSN tracebacks (488 errors).
+if 'pytest' not in sys.modules:
+    load_dotenv(BASE_DIR / '.env')
 
 SECRET_KEY = os.environ['DJANGO_SECRET_KEY']
 DEBUG = os.getenv('DJANGO_DEBUG', 'False') == 'True'
@@ -121,6 +127,17 @@ REST_FRAMEWORK = {
         'follow_write': '60/min',
         # React/unreact write throttle — prevents bulk-reaction abuse (SOC2).
         'reaction_write': '60/min',
+        # Guest auth throttles — operator-overridable without code changes.
+        'guest_login': '3/min',
+        'guest_promote': '5/min',
+        # AUTH-LOGIN-1: handle+password auth + email-link throttles.
+        'register': '10/min',
+        'password_login': '10/min',
+        'link_email': '5/min',
+        # AUTH-CRITICAL: set/change-password brute-force guard (current_password check).
+        'set_password': '5/min',
+        # FRONT-AVATAR-1: avatar upload is expensive (Pillow + R2 PUT); tight rate.
+        'avatar_upload': '10/min',
         # Global fallback rates (applied to views that reference these scopes directly).
         'anon': '60/min',
         'user': '300/min',
@@ -132,6 +149,11 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': timedelta(days=30),
     'ROTATE_REFRESH_TOKENS':  True,
     'BLACKLIST_AFTER_ROTATION': True,
+    # FULL-LOGIN-REDESIGN-1: add is_guest claim to all tokens issued via
+    # the standard obtain-pair endpoint (guest + promote endpoints inject
+    # the claim directly via RefreshToken.for_user path).
+    'TOKEN_OBTAIN_SERIALIZER':
+        'apps.accounts.jwt_serializers.CustomTokenObtainPairSerializer',
 }
 
 # -- CORS ------------------------------------------------------------------
@@ -224,6 +246,35 @@ STORAGES = {
 }
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# -- Media (user uploads — avatars) ----------------------------------------
+# MEDIA_ROOT: local filesystem write target (dev + CI filesystem fallback).
+# In prod the R2 branch in apps/accounts/storage.py is active and Django never
+# serves from MEDIA_ROOT; the debug-only media-serve in config/urls.py is a no-op.
+MEDIA_URL  = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
+# -- Avatar upload settings ------------------------------------------------
+# FRONT-AVATAR-1: R2 env vars — all optional; when ALL four are set the upload
+# goes to Cloudflare R2. When any is missing, falls back to local filesystem.
+R2_ENDPOINT_URL      = os.getenv('R2_ENDPOINT_URL', '')
+R2_ACCESS_KEY_ID     = os.getenv('R2_ACCESS_KEY_ID', '')
+R2_SECRET_ACCESS_KEY = os.getenv('R2_SECRET_ACCESS_KEY', '')
+R2_AVATAR_BUCKET     = os.getenv('R2_AVATAR_BUCKET', '')
+AVATAR_PUBLIC_BASE_URL = os.getenv('AVATAR_PUBLIC_BASE_URL', '')
+
+# True only when all four R2 vars are set (non-empty).
+AVATAR_R2_ENABLED = all([
+    R2_ENDPOINT_URL,
+    R2_ACCESS_KEY_ID,
+    R2_SECRET_ACCESS_KEY,
+    R2_AVATAR_BUCKET,
+])
+
+# Hard limits — not magic numbers in the view.
+AVATAR_MAX_BYTES      = 5 * 1024 * 1024   # 5 MB
+AVATAR_MAX_PIXELS     = 25_000_000         # decompression-bomb dimension guard (5000x5000 — ample for any avatar source)
+AVATAR_OUTPUT_EDGE    = 512                 # square output side in pixels
+
 # -- Recommendation algorithm constants ------------------------------------
 RECOMMENDATION = {
     'bounded_pool_target': 150,
@@ -291,6 +342,37 @@ RECOMMENDATION = {
     # rollback. Monitor parse_query_timing.stage='1' rate + stage2_timing.outcome
     # distribution + Brutalist sys_p50 trend post-flip.
     'stage_decouple_enabled': os.getenv('STAGE_DECOUPLE_ENABLED', 'false').lower() == 'true',  # default OFF; set STAGE_DECOUPLE_ENABLED=true in env to flip
+    # Discovery tab v3.1 hyperparameters (10-card chunk + 3-Tier + Draft Board)
+    'discovery_chunk_size': 10,
+    'discovery_tier2_min_likes': 10,
+    'discovery_tier3_min_projects': 2,
+    'discovery_tier3_min_likes': 50,
+    'discovery_tier2_local': 2,
+    'discovery_tier2_global': 8,
+    'discovery_tier3_local': 4,
+    'discovery_tier3_global': 6,
+    'discovery_dislike_history_window': 30,
+    'discovery_dislike_zone_threshold': 0.15,   # pgvector cosine DISTANCE; candidates farther than this from dislike centroid pass
+    'discovery_local_sim_radius': 0.55,          # cosine SIM to nearest centroid to count as local/취향
+    'discovery_centroid_cache_ttl': 21600,       # 6h — app-session fixed
+    'discovery_promote_threshold': 10,
+    # ALGO-QCARD Phase 1: soft-vector bias hyperparameters
+    'question_max_per_session': 2,      # ALGO-QCARD soft-vector: max question cards per session
+    'question_cooldown_swipes': 15,     # min swipes between question cards
+    'question_boost_weight': 2.0,       # Yes answer: + boost on keyword vector
+    'question_penalty_weight': 1.0,     # No answer: - penalty on keyword vector
+    # ALGO-QCARD Phase 2: TF-IDF discriminative keyword selection
+    'corpus_df_cache_ttl_seconds': 86400,   # TF-IDF corpus DF cache TTL (24h)
+    'question_common_tag_ratio': 0.4,        # tags with df/N above this are too common → skipped
+    # Explicit generic-tag blacklist (leave empty; df/N ratio is the primary discriminator).
+    # Ops can populate with domain-specific stop-tags if IDF alone is insufficient.
+    'question_keyword_blacklist': [],
+    'discovery_like_hard_cap': 50,  # Discovery draft hard stop: block likes beyond 50; client redirects to Taste
+    # ALGO-QCARD Phase 3: hyper-positive / fast-swipe detection (Trigger A)
+    'question_fast_swipe_ms': 1500,          # avg inter-swipe latency below this = "fast" (hyper-positive)
+    'question_hyperpositive_window': 10,     # look back this many swipes
+    'question_hyperpositive_min_likes': 8,   # >= this many likes in the window triggers
+    'recent_latencies_cap': 10,              # rolling latency window size
 }
 
 _check_async_prefetch_safety(
@@ -303,7 +385,12 @@ _check_async_prefetch_safety(
 PERF_TIMING_ENABLED = os.environ.get('PERF_TIMING_ENABLED', 'False').lower() == 'true'
 
 # -- External API keys -----------------------------------------------------
-GEMINI_API_KEY    = os.getenv('GEMINI_API_KEY', '')
+GEMINI_API_KEY              = os.getenv('GEMINI_API_KEY', '')
+GEMINI_TEXT_MODEL           = os.getenv('GEMINI_TEXT_MODEL', 'gemini-3.1-flash-lite')
+GEMINI_TEXT_MODEL_FALLBACK  = os.getenv('GEMINI_TEXT_MODEL_FALLBACK', 'gemini-2.5-flash')
+GEMINI_IMAGE_MODEL          = os.getenv('GEMINI_IMAGE_MODEL', 'gemini-3.1-flash-image')
+GEMINI_IMAGE_MODEL_FALLBACK = os.getenv('GEMINI_IMAGE_MODEL_FALLBACK', 'gemini-2.5-flash-image')
+GEMINI_IMAGE_FORMAT         = os.getenv('GEMINI_IMAGE_FORMAT', 'webp')   # webp|native
 HF_TOKEN          = os.getenv('HF_TOKEN', '')
 IMAGE_BASE_URL    = os.getenv('IMAGE_BASE_URL', 'https://pub-5d2133d166fc4b65ad05295df352519f.r2.dev')
 GOOGLE_CLIENT_ID  = os.getenv('GOOGLE_CLIENT_ID', '')

@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import { useImageTelemetry } from '../hooks/useImageTelemetry.js'
 import { useBoard } from '../hooks/useBoard.js'
 import { updateProject } from '../api/projects.js'
 import { reactToProject, unreactToProject } from '../api/social.js'
+import BuildingTile from './boardDetail/BuildingTile'
+import RecommendedTile from './boardDetail/RecommendedTile'
+import ArchitectSection from './boardDetail/ArchitectSection'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -137,201 +139,12 @@ const MOCK_BOARD = {
   is_reacted: false,
 }
 
-/**
- * InfoCol — local primitive for §3.5.2 RICH PATTERN 2-col info grid.
- *   Caps label (10/600 uppercase 0.06em) + single-line ellipsis value (13/600 white).
- *   Mirrors the InfoCol used in FirmProfile + UserProfile.
- */
-function InfoCol({ label, value }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-      <span style={{
-        color: 'rgba(255,255,255,0.5)',
-        fontSize: 10, fontWeight: 600,
-        letterSpacing: '0.06em', textTransform: 'uppercase',
-        marginBottom: 2,
-      }}>
-        {label}
-      </span>
-      <span style={{
-        color: '#fff', fontSize: 13, fontWeight: 600,
-        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-      }}>
-        {value}
-      </span>
-    </div>
-  )
-}
-
-/**
- * BuildingTile — image-overlay card per §3.5.1 + §3.5.2 RICH PATTERN.
- *   - No default border (transparent), hover lifts -4px and adds pink border (§3.5.1).
- *   - Title 18/700 + "Building" sub-italic + divider + 2-col ARCHITECT/YEAR grid.
- *   - NO program corner chip per §3.5.3 — program is metadata, not status; chips are
- *     reserved for binary status state. Matches the rationale used in FirmProfile
- *     ProjectCard (also drops program chip).
- */
-function BuildingTile({ building, fromProjectId, rank, savedIds, referrer, isEditMode, isSelected, onToggleSelect }) {
-  const navigate = useNavigate()
-  // FIX F7 (Codex retest 2026-05-26): board saved_ids arrive from the API as
-  // {id: "bld_..."} objects. Added building.id as the final fallback so real
-  // API items can navigate correctly. MOCK_BOARD uses building_id; new API shape
-  // uses id; image_id / canonical_bld_id keep backwards compat.
-  const buildingId = building.image_id || building.canonical_bld_id || building.building_id || building.id
-  const { onLoad, onError } = useImageTelemetry({
-    buildingId,
-    context: 'board_detail_gallery',
-  })
-
-  return (
-    <div
-      onClick={() => {
-        if (isEditMode) { onToggleSelect?.(buildingId); return }
-        if (!buildingId) return
-        const state = fromProjectId
-          ? { fromProjectId, rank, savedIds, referrer, fromBoard: true }
-          : { fromBoard: true }
-        navigate(`/buildings/${buildingId}`, { state })
-      }}
-      style={{
-        position: 'relative',
-        aspectRatio: '4 / 5',
-        borderRadius: 20,
-        overflow: 'hidden',
-        cursor: 'pointer',
-        background: 'rgba(255,255,255,0.03)',
-        border: '1px solid transparent',          // §3.5.1: NO default light border
-        boxShadow: '0 10px 25px rgba(0,0,0,0.3)', // §3.5.1 mandatory depth (static)
-        transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-        userSelect: 'none',
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.transform = 'translateY(-4px)'
-        e.currentTarget.style.borderColor = 'rgba(236,72,153,0.55)'
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.transform = 'translateY(0)'
-        e.currentTarget.style.borderColor = 'transparent'
-      }}
-    >
-      <img
-        src={building.image_url}
-        alt={building.image_title || building.name_en}
-        loading="lazy"
-        onLoad={onLoad}
-        onError={onError}
-        style={{
-          position: 'absolute',
-          inset: 0,
-          width: '100%',
-          height: '100%',
-          objectFit: 'cover',
-          display: 'block',
-        }}
-      />
-
-      {/* §3.5.1 mandatory bottom gradient overlay */}
-      <div style={{
-        position: 'absolute',
-        inset: 0,
-        background: 'linear-gradient(to top, rgba(0,0,0,0.93) 0%, rgba(0,0,0,0.4) 50%, transparent 100%)',
-        pointerEvents: 'none',
-      }} aria-hidden="true" />
-
-      {/* Edit mode selection overlay */}
-      {isEditMode && (
-        <div style={{
-          position: 'absolute', inset: 0, pointerEvents: 'none',
-          background: isSelected ? 'rgba(236,72,153,0.28)' : 'rgba(0,0,0,0.18)',
-          transition: 'background 0.15s',
-          display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end',
-          padding: 12,
-        }}>
-          <div style={{
-            width: 26, height: 26, borderRadius: '50%',
-            border: `2px solid ${isSelected ? '#ec4899' : 'rgba(255,255,255,0.7)'}`,
-            background: isSelected ? '#ec4899' : 'rgba(0,0,0,0.35)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 14, color: '#fff', fontWeight: 700,
-            transition: 'all 0.15s',
-          }}>
-            {isSelected ? '✓' : ''}
-          </div>
-        </div>
-      )}
-
-      {/* §3.5.2 RICH PATTERN: title + "Building" sub-italic + divider + 2-col ARCHITECT/YEAR grid */}
-      <div style={{
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        padding: '16px 18px 20px',
-      }}>
-        <h4 style={{
-          color: '#fff',
-          fontSize: 18,
-          fontWeight: 700,
-          margin: '0 0 3px',
-          lineHeight: 1.3,
-          display: '-webkit-box',
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: 'vertical',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-        }}>
-          {building.image_title || building.name_en}
-        </h4>
-        <p style={{
-          color: 'rgba(255,255,255,0.55)',
-          fontSize: 12,
-          fontStyle: 'italic',
-          margin: '0 0 12px',
-        }}>
-          Building
-        </p>
-        <div style={{ height: 1, background: 'rgba(255,255,255,0.1)', marginBottom: 12 }} />
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px' }}>
-          <InfoCol label="ARCHITECT" value={building.metadata?.axis_architects} />
-          <InfoCol label="YEAR" value={building.metadata?.axis_year} />
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function RecommendedTile({ card, onClick }) {
-  const [imgLoading, setImgLoading] = useState(true)
-  const title = card.image_title || card.name_en
-  return (
-    <div onClick={onClick} style={{
-      position: 'relative', aspectRatio: '3 / 4', borderRadius: 16, overflow: 'hidden', cursor: 'pointer',
-      background: 'rgba(255,255,255,0.03)', border: '1px solid transparent',
-      boxShadow: '0 8px 20px rgba(0,0,0,0.25)',
-      transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-      userSelect: 'none',
-    }}
-    onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.borderColor = 'rgba(236,72,153,0.55)' }}
-    onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.borderColor = 'transparent' }}>
-      {imgLoading && <div className="skeleton-shimmer" style={{ position: 'absolute', inset: 0 }} />}
-      <img src={card.image_url} alt={title} loading="lazy" onLoad={() => setImgLoading(false)} onError={() => setImgLoading(false)}
-        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block', opacity: imgLoading ? 0 : 1, transition: 'opacity 0.3s' }} />
-      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.2) 50%, transparent 100%)', pointerEvents: 'none' }} />
-      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '12px 14px 16px' }}>
-        <p style={{ color: '#fff', fontSize: 13, fontWeight: 600, margin: 0, lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {title}
-        </p>
-      </div>
-    </div>
-  )
-}
-
 export default function BoardDetailPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const rawBoardId = useParams().boardId
   const boardId = UUID_RE.test(String(rawBoardId || '')) ? rawBoardId : null
-  const { board, recommended: hookRecommended, loading, resultLoading, error } = useBoard(boardId)
+  const { board, recommended: hookRecommended, recommendedArchitects, loading, resultLoading, error } = useBoard(boardId)
 
   const [isReacted, setIsReacted] = useState(false)
   const [reactionCount, setReactionCount] = useState(0)
@@ -347,6 +160,7 @@ export default function BoardDetailPage() {
   const [isEditingName, setIsEditingName] = useState(false)
   const [editName, setEditName] = useState('')
   const [nameSaving, setNameSaving] = useState(false)
+  const [shareCopied, setShareCopied] = useState(false)
   const nameInputRef = useRef(null)
   const [isEditMode, setIsEditMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState(new Set())
@@ -408,6 +222,24 @@ export default function BoardDetailPage() {
       setReactionError(err.message || 'Failed to update reaction.')
     } finally {
       setIsReactionPending(false)
+    }
+  }
+
+  async function handleShare() {
+    const report = board?.final_report
+    const shareData = {
+      title: (localName || board?.name || 'Board') + (report?.persona_type ? ` · ${report.persona_type}` : ''),
+      text: report?.one_liner || localName || '',
+      url: window.location.href,
+    }
+    if (navigator.share && navigator.canShare?.(shareData)) {
+      try { await navigator.share(shareData) } catch { /* user cancelled */ }
+    } else {
+      try {
+        await navigator.clipboard.writeText(window.location.href)
+        setShareCopied(true)
+        setTimeout(() => setShareCopied(false), 2000)
+      } catch { /* silent */ }
     }
   }
 
@@ -567,11 +399,7 @@ export default function BoardDetailPage() {
           </button>
 
           <button
-            onClick={() => {
-              // TODO(claude): wire share endpoint or use Web Share API.
-              // Likely client-side `navigator.share({ url })` with fallback;
-              // backend may expose a shareable short-link endpoint.
-            }}
+            onClick={handleShare}
             onMouseEnter={() => setIsShareHovered(true)}
             onMouseLeave={() => setIsShareHovered(false)}
             aria-label="Share"
@@ -583,7 +411,7 @@ export default function BoardDetailPage() {
               backdropFilter: 'blur(12px)',
               WebkitBackdropFilter: 'blur(12px)',
               border: '1px solid rgba(255,255,255,0.12)',
-              color: isShareHovered ? '#ec4899' : '#fff',
+              color: shareCopied ? '#34d399' : (isShareHovered ? '#ec4899' : '#fff'),
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
@@ -593,13 +421,19 @@ export default function BoardDetailPage() {
               transform: isShareHovered ? 'scale(1.05)' : 'scale(1)',
             }}
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="18" cy="5" r="3"></circle>
-              <circle cx="6" cy="12" r="3"></circle>
-              <circle cx="18" cy="19" r="3"></circle>
-              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
-              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
-            </svg>
+            {shareCopied ? (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            ) : (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="18" cy="5" r="3" />
+                <circle cx="6" cy="12" r="3" />
+                <circle cx="18" cy="19" r="3" />
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+              </svg>
+            )}
           </button>
         </div>
 
@@ -785,41 +619,58 @@ export default function BoardDetailPage() {
         </div>
       </div>
 
-      {/* Action row — owner sees edit controls, others see Love This */}
+      {/* Action row — owner sees edit controls, others see Love This; report button when final_report exists */}
       <div style={{
         padding: '24px 20px 8px',
         display: 'flex',
-        justifyContent: 'center',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 10,
       }}>
         {isOwner ? (
           <button
-            onClick={() => { setIsEditMode(true); setSelectedIds(new Set()) }}
-            disabled={!board || buildings.length === 0}
+            onClick={() => {
+              if (isEditMode) { setIsEditMode(false); setSelectedIds(new Set()) }
+              else { setIsEditMode(true); setSelectedIds(new Set()) }
+            }}
+            disabled={!isEditMode && (!board || buildings.length === 0)}
             style={{
               width: '100%',
               maxWidth: 320,
               minHeight: 44,
               padding: '14px 24px',
               borderRadius: 999,
-              background: 'var(--color-surface)',
-              color: 'var(--color-text)',
+              background: isEditMode ? 'var(--color-surface-2)' : 'var(--color-surface)',
+              color: isEditMode ? 'var(--color-text-dim)' : 'var(--color-text)',
               border: '1px solid var(--color-border)',
               fontSize: 15,
               fontWeight: 700,
-              cursor: buildings.length === 0 ? 'default' : 'pointer',
+              cursor: (!isEditMode && buildings.length === 0) ? 'default' : 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               gap: 10,
               fontFamily: 'inherit',
-              opacity: buildings.length === 0 ? 0.4 : 1,
+              opacity: (!isEditMode && buildings.length === 0) ? 0.4 : 1,
+              transition: 'background 0.2s, color 0.2s',
             }}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-            </svg>
-            <span>Edit Board</span>
+            {isEditMode ? (
+              <>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+                <span>취소</span>
+              </>
+            ) : (
+              <>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                </svg>
+                <span>Edit Board</span>
+              </>
+            )}
           </button>
         ) : (
           <button
@@ -863,6 +714,38 @@ export default function BoardDetailPage() {
               <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
             </svg>
             <span>{isReacted ? `Loved · ${reactionCount}` : 'Love this'}</span>
+          </button>
+        )}
+        {board?.final_report && (
+          <button
+            onClick={() => navigate(`/board/${board.board_id}/report`)}
+            style={{
+              width: '100%',
+              maxWidth: 320,
+              minHeight: 44,
+              padding: '12px 24px',
+              borderRadius: 999,
+              background: 'linear-gradient(135deg, rgba(236,72,153,0.12), rgba(244,63,94,0.12))',
+              color: '#ec4899',
+              border: '1px solid rgba(236,72,153,0.3)',
+              fontSize: 14,
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              fontFamily: 'inherit',
+            }}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+            <span>페르소나 리포트 보기</span>
           </button>
         )}
       </div>
@@ -976,20 +859,42 @@ export default function BoardDetailPage() {
               }}>
                 Based on your preferences
               </p>
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
-                gap: 12,
-                padding: '0 20px',
-              }}>
-                {recommended.slice(0, 10).map(card => (
-                  <RecommendedTile
-                    key={card.image_id}
-                    card={card}
-                    onClick={() => navigate('/buildings/' + card.image_id)}
-                  />
-                ))}
-              </div>
+              {(() => {
+                const CHUNK_SIZE = 8
+                const cappedRec = recommended.slice(0, 20)
+                const chunks = []
+                for (let i = 0; i < cappedRec.length; i += CHUNK_SIZE) {
+                  chunks.push(cappedRec.slice(i, i + CHUNK_SIZE))
+                }
+                if (chunks.length === 0) return null
+                return chunks.map((chunk, chunkIdx) => (
+                  <div key={chunkIdx}>
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(4, 1fr)',
+                      gap: 12,
+                      padding: '0 20px',
+                    }}>
+                      {chunk.map(card => (
+                        <RecommendedTile
+                          key={card.image_id}
+                          card={card}
+                          onClick={() => navigate('/buildings/' + card.image_id)}
+                        />
+                      ))}
+                    </div>
+                    {recommendedArchitects[chunkIdx] && (
+                      <div style={{ padding: '0 20px' }}>
+                        <ArchitectSection
+                          architect={recommendedArchitects[chunkIdx]}
+                          onBuildingClick={id => navigate('/buildings/' + id)}
+                          onProfileClick={id => navigate('/architects/' + id)}
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))
+              })()}
             </>
           )}
         </div>

@@ -1,0 +1,1017 @@
+# Task Board
+
+> Authored by the session; updated by the `reporter-inline` skill at session end. The dashboard
+> (`project/dashboard.html` ← `project/state.js`) renders this file's three active
+> sections (`## Now` / `## Next` / `## Done`). The compact `## Roadmap (Historical)`
+> section at the bottom is a phase-level summary, not a task list.
+
+## Workflow Rules
+
+- **Session start** — read `## Now` first. If empty and the user is starting new work, move the matched `## Next` entry (under `### X-HIGH` / `### HIGH` / `### MEDIUM` / `### LOW`) into `## Now`. Or write a fresh entry if brand-new. One initiative slice at a time.
+- **Mid-session** — if work in `## Now` gets deferred ("미루자"), move it back to `## Next` with a one-line rationale note. If a new sub-task appears, add it under the active Now entry's body or create a new Now entry.
+- **Session end (success)** — the `reporter-inline` skill moves `## Now` → `## Done` with SHA + optional PR ref (keyed on the task ID). If the Now entry's note mentions a deferred follow-up (`Deferred: ...`), it also auto-surfaces a matching `## Next` entry (see the `reporter-inline` skill).
+
+**ID convention** (since 2026-05-25): `<SURFACE>-<TOPIC>-<N>`.
+- **SURFACE** = `FRONT` / `BACK` / `FULL` / `INFRA`. Tells where the work lives.
+  - `FRONT` = frontend only (React/Vite)
+  - `BACK` = backend only (Django/DRF)
+  - `FULL` = cross-cutting FE + BE (one feature, two PRs coordinated)
+  - `INFRA` = ops surface — Neon / Railway / Vercel / `.env` / DB roles / deploy
+- **TOPIC** = readable English word. **No obscure abbreviations.** Only universal acronyms allowed: `LLM`, `UX`, `DB`, `ENV`, `AUTH`. Conventional topics:
+  - BACK: `LLM` / `RECOMMEND` / `PERFORMANCE` / `AUTH` / `EXTERNAL`
+  - FRONT: `UX` / `DESIGN` / `LAYOUT` / `AUTH`
+  - FULL: `LANGUAGE` / `LEGAL` / `REFACTOR` / `LLM`
+  - INFRA: `DB` / `ENV` / `DEPLOY` / `QUEUE` / `MONITOR`
+- **N** = integer counter per `<SURFACE>-<TOPIC>`, persistent across bucket moves. `BACK-LLM-1`, `BACK-LLM-2`, etc. Never re-used.
+- **SURFACE is a CLOSED set** — the first token MUST be exactly one of `FRONT` / `BACK` / `FULL` / `INFRA`. `PERF`, `OFFICE`, `UX`, `PROFILE` are NOT surfaces; map them: `PERF` to `BACK-PERFORMANCE`, `OFFICE` to `BACK-OFFICE`, `UX` to `FRONT-UX`, `PROFILE` to `FRONT-PROFILE`/`BACK-PROFILE`. Added topics: BACK gains `OFFICE` + `PROFILE`; FRONT gains `PROFILE`.
+- **TOPIC is exactly ONE word** (domain noun). Actions (`POLISH` / `SANITIZE` / `CLEANUP` / `CONSOLIDATION` / `HARVEST`) are NOT topics — they go in the title, never the ID.
+- **Renamed 2026-06-04 audit** (2축 enforce): `PERF-PREFETCH-POOL-RISK` to `BACK-PERFORMANCE-6`, `INFRA-DB-CLEANUP-1` to `INFRA-DB-3`, `FRONT-PROFILE-POLISH-1` to `FRONT-PROFILE-1`, `BACK-PROFILE-SANITIZE-1` to `BACK-PROFILE-1`, new `BACK-OFFICE-1`. `## Done` IDs are archive (never rewritten).
+
+**Title convention**: short Korean problem / goal statement, ≤ 25 chars. Says **what is wrong or what we want**, not **how**. The body carries the how. Examples:
+- ✅ `LLM 채팅이 검색에 필요한 정보를 다 안 모음`
+- ✅ `/projects/ 응답 600ms (목표 300ms)`
+- ❌ `LLM chat refinement: refine probe behaviour to deterministically target missing required slate fields` (too long, English jargon, embeds the how)
+
+**Header format**:
+- `## Now` and `## Done` items → `### <ID> — <Korean title>`
+- `## Next` items → `#### <ID> — <Korean title>` under one of `### HIGH` / `### MEDIUM` / `### LOW`
+- `## Done` resolved suffix → append ` — RESOLVED YYYY-MM-DD (PR #N `<sha>`)`
+- Multi-line body for context. Sub-tasks use `- [ ]` / `- [x]` checkboxes.
+
+**Consistency across artefacts** — every surface that names a task uses the same `<ID> — <Korean title>` pair so cross-referencing is mechanical:
+- **Commit subject**: `<type>(<ID>): <Korean title>`. Body keeps caveman-terse description.
+- **PR title**: same shape as the commit subject.
+- **Reporter Done entry** in `## Done`: `### <ID> — <Korean title> — RESOLVED YYYY-MM-DD (PR #N `<sha>`)`.
+- **state.js**: `id` = `<ID>`, `title` = Korean title (no English duplicate).
+- Long historical Done entries from before 2026-05-25 keep their legacy headers (`### #21 SWIPE-CALIBRATING — ...`) as archive — do not rewrite history.
+
+**Priority bucket semantics** (`## Next`):
+- **X-HIGH** — critical: a confirmed defect against the core taste-match promise or against data correctness, with file:line evidence (e.g. the 2026-05-31 swipe/discovery review). Pull before HIGH.
+- **HIGH** — specced, ready to pull into `## Now`. Open dimensions resolved or acceptable to resolve during implementation.
+- **MEDIUM** — uncategorised pending. Needs review before promotion (scope, urgency, prerequisites).
+- **LOW** — explicitly deferred / skipped. Not blocking; revisit when context shifts (traffic, prereq shipped, priority change).
+
+Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separate collaborator post-2026-05-18 — see CLAUDE.md `## Rules`. Tracked in `docs/algorithm.md`, not this board.
+
+---
+
+## Now
+
+### FRONT-AUTH-2 — 로그인 스와이프 온보딩
+Redesign `/login` as conversational swipe onboarding while preserving the existing guest auth API contract. **1차 merged to develop 2026-06-01** (Codex; code-review + security PASS, no blockers; further passes + PIPA copy pending).
+
+- [x] Sync `feature/admin-login-page` from latest `origin/develop` before editing.
+- [x] Extract shared `react-tinder-card` gesture config/wrapper (`SwipeGestureFrame.jsx` + `swipeGestureConfig.js`) for Login, SwipePage, DiscoveryPage.
+- [x] Rebuild LoginPage: first card right=new / left=returning, required display name, required role, consent card right-swipe submit.
+- [x] Preserve `/discovery` handoff, dev login, Google conditional mount, `buildGuestLoginPayload` wire shape (code-review confirmed contract intact).
+- [x] unit test + lint + build green.
+- [ ] app-test FULL (swipe path) — **deferred, run before prod**.
+- [ ] ⚠️ consent UX regressed vs #155 (한국어 PIPA 버튼 → 영어 swipe) → tracked in FULL-LEGAL-1, restore before public launch.
+
+---
+
+## Next
+
+> Backlog grouped by priority bucket (`### X-HIGH` / `### HIGH` / `### MEDIUM` / `### LOW`). Each
+> item is a `#### <SLUG>` entry one level deeper. Bucket semantics described in
+> `## Workflow Rules` above. Phase 16-18 dimensions inlined here (formerly
+> `docs/specs/*`, absorbed 2026-05-24). Algorithm theory + production
+> hyperparameters still live in `docs/algorithm.md` (admin-owned, reporter syncs
+> Production Value column only).
+
+> **2026-06-04 backlog audit** (25 items verified vs `develop@2f9a9c2`): 0 resolved/dead; ~13 had
+> file:line drift from **FULL-REFACTOR-1 (#170-173)** moving view bodies → `services/*.py`, splitting
+> `accounts/views.py` → `views/{auth,profile}.py`, decomposing `engine.py`. **Ref-drift convention:**
+> a backend item pinned to `views/swipe.py` / `views/sessions.py` at a pre-FULL-REFACTOR SHA now
+> lives in `services/swipe_service.py` / `services/session_service.py`; `accounts/views.py` →
+> `accounts/views/{auth,profile}.py`. Refs are re-pinned for the active-sequence items (X-HIGH bundles + the new HIGH
+> quick-wins BACK-OFFICE-1 / BACK-PROFILE-1); deferred items keep their original ref + this convention.
+>
+> **권장 실행 순서 (Claude lane, 2026-06-04 결정 — quick-wins·defects before the heavy FRONT-DESIGN-1 sweep):**
+> 1. ~~`FRONT-UX-8`+`FRONT-UX-7` (UX-WRITE-FAIL)~~ — DONE 2026-06-04 (`feature/claude-ux-write-fail`). **다음 → 2. `BACK-OFFICE-1`** (SavedOffice 삭제)
+> — 3. `BACK-PROFILE-1` (external_links 검증) — 4. ~~`FRONT-UX-6`+`9`+`10` UX-GALLERY~~ DONE 2026-06-04
+> — 5. `BACK-RECOMMEND-4` (engine 협업자 조율). `FRONT-DESIGN-1` stays **paused** (multi-session sweep);
+> `FULL-LANGUAGE-1` / `BACK-LLM-2` / `FULL-LEGAL-1` deferred.
+>
+> **1-PR bundles** (group for a single PR; IDs kept distinct for traceability — N never reused):
+> - ~~**UX-WRITE-FAIL** = `FRONT-UX-8` + `FRONT-UX-7`~~ — DONE 2026-06-04 (shared `reportWriteError` toast over `globalToast`; see ## Done).
+> - ~~**UX-GALLERY** = `FRONT-UX-6` + `FRONT-UX-9` + `FRONT-UX-10`~~ — DONE 2026-06-04 (재정의: lift 대신 방향잠금 + pan-y + Discovery long-press 제거; see ## Done).
+
+### X-HIGH
+
+> Critical — confirmed defect against the core taste-match promise or against data
+> correctness, surfaced by the 2026-05-31 swipe / discovery review
+> (`.claude/reviews/2026-05-31-swipe-discovery-review.md`) + the 2026-06-04 backlog audit. Pull before `### HIGH`.
+> **Both 1-PR bundles shipped → ## Done** (UX-WRITE-FAIL + UX-GALLERY, 2026-06-04). No bundle remains in X-HIGH; X-HIGH = `BACK-RECOMMEND-4`.
+
+### HIGH
+
+#### ARCHITECT-UNIFY-1 — firm-side Office→Architect 전면 통합 (deferred, firm-UX 착수 시)
+office-interest **모델 중복은 해소됨**: Phase 0(SavedOffice #188) + C(OfficeFollow, ARCHITECT-UNIFY-C)로 두 미배선 중복 삭제 → follow 모델 1개(ArchitectFollow). 남은 통합 = Office 서브시스템(table/claim/OfficeProjectLink/sync_offices/FirmProfilePage)을 arch_id로 흡수 = firm-side 전면 재설계.
+
+상태: **deferred** — Office 서브시스템은 계획 백로그(BACK-RECOMMEND-3 firm추천 / BACK-EXTERNAL-1 firm기사 / P1 firm-claim)의 **substrate라 park**(삭제 X). 전면 통합(FirmProfilePage→ArchitectProfilePage 흡수, claim/projects/recs/articles를 arch_id-overlay로)은 **firm-UX 우선순위 정해질 때** 별도 대형 작업. 옵션 A(재키잉)/B(전부삭제) 검토 후 탈락 — `docs/specs/architect-unification.md`(PROPOSAL).
+
+#### BACK-RECOMMEND-1 — Project 두번째 세션이 이전 taste를 모름
+Same Project can host multiple `AnalysisSession` rows (user comes back, "Resume" or new swipe round on the same Project — second session is created fresh while `Project.liked_ids` / `disliked_ids` / `saved_ids` carry forward as the persistent accumulator). Today the new session's algorithm-side state (`like_vectors`, `convergence_history`, `phase`) starts from scratch — exploring phase, empty pool of taste signal — even though the user just liked 12 buildings in Session #1.
+
+Code audit 2026-05-27 (`develop@3894ffd`):
+- `backend/apps/recommendation/views/sessions.py` `SessionCreateView.post()` resolves an owned `project_id` early only to skip retry-dedupe. In `session_insert`, every new `AnalysisSession` is still created with `phase='exploring'`, `like_vectors=[]`, `convergence_history=[]`, `previous_pref_vector=[]`, `preference_vector=[]`.
+- Persistent taste lives on `Project.liked_ids` as `[{id, intensity}]`; `Project.disliked_ids` and `Project.saved_ids` also carry across sessions. The create path does not read these fields when `project` already exists.
+- `backend/apps/recommendation/engine.py` already has `compute_user_taste_vector(profile)` for Discovery-level cross-project taste and `get_pool_embeddings(ids)` for batch embedding fetch. A session-specific warm-start should not call `compute_user_taste_vector(profile)` blindly because it aggregates all Projects, not just the active Project.
+- `SwipeView.post()` phase transition still keys off `len(session.like_vectors)` and `min_likes_for_clustering`; any warm-start that seeds `like_vectors` changes phase/progress semantics immediately.
+- (2026-06-04 audit re-pin, `develop@2f9a9c2`) FULL-REFACTOR-1 moved this into services: create path = `services/session_service.py:46` create_session (project resolved L82-86 only to skip dedupe L78-80; `session_insert` L236-266 sets phase='exploring' L250, like_vectors=[] L257); phase transition = `services/swipe_service.py:531-534`; `compute_user_taste_vector` = `engine.py:1869`. Premise unchanged — 2nd session still starts cold.
+
+Open dimensions:
+- **Carry policy** — A independent (status quo) / B exposure-only carry (don't re-show prior cards, taste fresh) / C asymmetric negative-only (carry dislikes, drop likes) / D fade-decay carry (recency-weight prior `liked_ids` into `like_vectors`) / E full warm-start (replay prior `liked_ids` → `like_vectors`, skip exploring phase) / F user-controlled toggle ("Resume taste?" prompt at session 2 start).
+- **Phase entry on warm-start** — if D or E chosen: enter `analyzing` immediately (3+ likes already), or still play 1-2 exploring rounds for diversity?
+- **Backend wiring** — `SessionCreateView` (`views/sessions.py:28`) currently treats project lookup as cosmetic (just resolves project_id). Carry would require reading `Project.liked_ids` → embedding fetch → seeding `AnalysisSession.like_vectors` at create time.
+- **Exposure carry** — decide whether previous `liked_ids` / `disliked_ids` / `saved_ids` should seed `session.exposed_ids`. Without this, session 2 may show cards the user already judged even if taste is warm-started.
+- **Progress semantics** — if seed vectors count toward `min_likes_for_clustering`, `frontend/src/pages/SwipePage.jsx` progress/Finish logic may jump. If seed vectors are algorithm-only, add metadata or keep them separate to avoid UX mismatch.
+
+Likely tests:
+- `backend/tests/test_session_create_correctness.py`: create Project with prior `liked_ids`, start a new session with `project_id`, assert selected policy (`like_vectors` seeded or explicitly not seeded), no cross-project leakage, invalid/foreign `project_id` remains current contract.
+- API smoke: session 2 first response latency should not exceed session 1 beyond one extra `get_pool_embeddings(prior_liked_ids)` batch.
+
+Acceptance: behavior matches chosen option deterministically; session 2 TTFC not regressed beyond session 1 (warm-start should be ≤ or equal); A/B telemetry on session 2 satisfaction (saved_ids growth rate, completion rate) vs status quo.
+
+_(Deferred 2026-06-04 batch scope → 별도 focused 플랜. Premise CONFIRMED post-BACK-RECOMMEND-4: global taste vector는 고쳤으나 같은 Project 2nd 세션은 여전히 cold-start(`session_service.py`가 like_vectors=[] seed, prior taste 안 읽음). algorithm-owner 코어 + frontend progress-bar UX 결정 얽힘 → 단독 처리.)_
+
+#### FULL-LANGUAGE-1 — 한/영 언어 설정 토글 없음
+**Decision (user 2026-05-25)**: language is a user-controlled setting, NOT browser-locale auto-detected. Pattern mirrors the existing theme/font persistence shipped in PR #54 + PR #59. User toggles language in Settings (Korean / English); the choice drives both LLM chat answer language and UI label rendering across the app.
+
+Current state:
+- Chat phase (`parse_query.py`) already adapts to the user's latest message language inline ("`reply` and `probe_question` are written in the user's primary language"). With this setting wired through, the chat will instead use the user's profile language deterministically — no language inference from message text.
+- Theme + font already follow this exact pattern: `UserProfile.theme` + `UserProfile.font` server-persisted, `ThemeContext` hydrates on login, `AppearanceSettings.jsx` exposes the toggle, `updateMyProfile({ theme })` PATCH on change.
+
+Code audit 2026-05-27 (`develop@3894ffd`):
+- `backend/apps/accounts/models.py` `UserProfile` app preferences are only `theme` and `font`.
+- `backend/apps/accounts/serializers.py` `UserSerializer` includes theme/font in login and `/auth/me/`; `UserProfileSelfUpdateSerializer` accepts theme/font in PATCH `/users/me/`. Add language in both places for cross-device sync.
+- `frontend/src/context/ThemeContext.jsx` is the best local pattern: validate allowed values, persist to `localStorage`, patch only when a token exists, hydrate from server on login via `App.jsx`.
+- `frontend/src/components/AppearanceSettings.jsx` currently renders only Theme and Font. A Language segmented control belongs here unless Product wants a separate Settings page.
+- `backend/apps/recommendation/services/parse_query.py` `parse_query()` and `parse_query_stage1()` currently receive only `conversation_history`. `backend/apps/recommendation/views/search.py` calls `services.parse_query(conversation_history)` with no user preference, so prompt language cannot be deterministic yet.
+
+Implementation outline:
+- Backend — add `UserProfile.language` CharField with choices `[('ko', 'Korean'), ('en', 'English')]`, default `'ko'` (Korea-first). Migration + serializer wiring + login-response inclusion (parity with theme/font).
+- Frontend — either extend `ThemeContext` into a broader `PreferencesContext` or add `LanguageContext` mirroring it; hydrate from login response; `setLanguage()` PATCHes `updateMyProfile({ language })`. Add language toggle to `AppearanceSettings.jsx` (or a sibling settings panel — admin call).
+- Wire-through — `parse_query.py` accepts `language` parameter from `ParseQueryView` (via `request.user.profile.language`) and overrides the "match user's message language" rule. UI labels via a small dictionary-lookup helper (`t('home.title')`-style) — no full i18n lib (`react-i18next` adds bundle weight; Korea-first + bilingual-only justifies a hand-rolled lookup).
+
+Open dimensions:
+- **Scope priority** — TabBar / button copy / page titles first (high-traffic surfaces) → page bodies → error messages → modal alerts? Or sweep alphabetically?
+- **Translation source** — admin hand-writes both KO + EN strings / Gemini-translate KO → EN with admin spot-check / accept any English UI gaps temporarily (Korea-first, English a follower)?
+- **Settings UI placement** — extend `AppearanceSettings.jsx` with a language section, or new `LanguageSettings.jsx` sibling page? (Theme + Font already coexist there, language is a natural third.)
+- **Untranslated string fallback** — if `t('foo.bar')` lookup misses in current language, fall back to KO (default) or render the key literal `foo.bar` as a debug surface?
+
+Acceptance:
+- New `UserProfile.language` field, default `'ko'`, settable via Settings UI; PATCH round-trips correctly.
+- LLM chat answer language follows the setting, not message-language inference.
+- ≥1 high-traffic UI surface (e.g., TabBar) rendered in both languages off the same string source.
+- No regression in theme/font persistence (same wiring shape).
+
+#### FRONT-DESIGN-1 — 디자인 시스템 컴포넌트 리워크 (paused)
+Foundation shipped: PR #54 (`tokens.css` 4 themes + `ThemeContext` + `AppearanceSettings`) + PR #59 (theme/font server persistence). Remaining: per-component visual rework (≈ 7,700 LOC) — inline `style={{}}` → CSS Modules + `:hover/:focus`/`:active`, light-theme polish where dark-only assumptions still leak through, leaf→hub component order (small leaf components first, then containers).
+
+Code audit 2026-05-27 (`develop@3894ffd`):
+- (2026-06-04 audit, `develop@2f9a9c2`) `rg "style={{" frontend/src | wc -l` = **801** call sites (was 581; +220). Current hot files: `BoardDetailPage.jsx` 1051, `App.jsx` 902, `SwipePage.jsx` 692, `BuildingDetailPage.jsx` 499 (shrank), `UserProfilePage.jsx` 917 (shrank post-#179), `FirmProfilePage.jsx` 156 (decomposed into `pages/firmProfile/`). NEW offender from #182: `pages/ArchitectProfilePage.jsx` 572 LOC / 48 inline sites (3rd-highest). `*.module.css` now = 4 (#179 profile-harvest first CSS Modules), not near-zero.
+- `frontend/src/tokens.css` now has theme/font tokens; `frontend/src/index.css` has only shared animations/utilities plus one masonry media query. Most hover/focus/active behavior still lives in JS handlers.
+- Good first slices: `ArticleCard`/`ProjectCard`/`BoardCard` leaf components before page containers; then `SwipeCard` and `BuildingDetailPage` because they have the most visible style state.
+
+Resume via `/plan per slice` — each slice = one logical component cluster (e.g. SwipeCard + LoadingCard, then BoardCard, then HomePage, etc.). Each slice ships its own PR via the orchestrate skill; the full sweep takes many sessions.
+
+Acceptance per slice: `npm run lint` + `npm run build` clean; light + all dark variants render the touched components without visual regressions (compare against pre-slice screenshot); no new global token added without DESIGN.md update.
+
+_Note: the Profile-area slice shipped separately as FRONT-PROFILE-HARVEST-1 (#179, 2026-06-04) — net-new component harvest + Instagram-style redesign + first CSS-Module/hook foundation, NOT the named ~646 inline-debt paydown. SwipePage / BoardDetailPage / etc. inline→CSS-Module migration remains the core of THIS item._
+
+### MEDIUM
+#### BACK-AVATAR-2 — 교체 시 옛 아바타 객체 GC 없음
+FRONT-AVATAR-1(`84ba1f1`) 후속. 업로드마다 새 uuid4 키로 저장 → 이전 R2 객체 + 로컬 파일이 영구 잔류(orphan 누적). 교체/삭제 시 옛 객체 cleanup(즉시 delete 또는 주기 GC job) 필요. 비차단(스토리지 비용·정합성).
+
+#### INFRA-AVATAR-R2-1 — prod R2 env 미설정 시 아바타 비영속
+FRONT-AVATAR-1은 R2_* env 미설정 시 FileSystemStorage로 폴백. Railway 디스크는 ephemeral → prod 아바타 업로드가 재배포 시 소실. prod 영속화하려면 Railway에 `R2_ENDPOINT_URL`/`R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY`/`R2_AVATAR_BUCKET`/`AVATAR_PUBLIC_BASE_URL` 설정 + 공개 아바타 버킷(빌딩 이미지 버킷과 분리) 프로비저닝 필요. 미설정이어도 코드는 안전(폴백), 단 prod 비영속.
+
+#### BACK-LLM-4 — search.py ParseQueryView byte-cap도 ensure_ascii 부풀림 의심
+BACK-LLM-2(#195) 리뷰 중 발견(미수정, pre-existing). `backend/apps/recommendation/views/search.py` `ParseQueryView.post`의 conversation_history 검증이 BACK-LLM-2 serializer가 고친 것과 동일하게 `json.dumps` 기본 `ensure_ascii=True`로 byte 측정 가능성 → 한글 대화가 한도를 6배 부풀려 거짓 거부. 확인 후 `ensure_ascii=False`+UTF-8 인코딩 측정으로 통일. (`serializers.py:8` 주석이 한도가 ParseQueryView서 'mirror'됐다고 명시.)
+
+
+#### FULL-DISCOVERY-2 — Discovery v3.1+v3.2 라이브 브라우저 검증 (prod 전)
+FULL-DISCOVERY-1(`fc72639`) 머지 후 app-test FULL 미실행(dev 서버 + app-test 에이전트 부재). prod 배포 전 실제 흐름 검증 필요: chunk 버퍼/prefetch≤3, swipe→feedback, 10장 트리거 카드 우=promote→Taste 첫 스와이프 정상·좌=계속, 진행률 바, 재등장 shake, 프로필에 discovery_ 임시보드 노출.
+
+#### FRONT-DISCOVERY-1 — 트리거 카드 빈 덱 동시각 한 박자 지연 (비차단)
+`DiscoveryPage.jsx` 트리거 주입 effect dep `[draftId, draftLikeCount]`. like 10번째가 덱이 빈 순간(prefetch in-flight)과 겹치고 이후 추가 like가 없으면 트리거가 한 카드 늦게 뜸. 크래시·상태손상 없음. dep에 deck refill 신호 추가로 보강 가능(ref 멱등 가드 이미 존재).
+
+#### FRONT-PROFILE-1 — 프로필 재설계 브라우저 픽셀 패스 (Codex)
+FRONT-PROFILE-HARVEST-1(#179) 머지 후 Codex 브라우저 수정 (별도 PR). FollowListModal 모바일 bottom-sheet(≤768px, DESIGN.md §8.10) + backdrop opacity 0.6→0.4 + inline onMouseEnter→CSS hover + 4테마 픽셀 검증(github-light 먼저). 원 하베스트 minor (2026-06-04 audit 재확인): EditProfileModal(`components/EditProfileModal.jsx:147-149`, 경로는 components/ 직하 — components/profile/ 아님) 에러박스 하드코딩 rgba→color-mix, ProfileHeader.jsx:126(Share 버튼은 ProfileHeader 소유, ProfileHero 아님) 타인 Share borderRadius:12→var(--radius-md), onMouseEnter→CSS hover, FollowListModal onClose useCallback churn. 드롭됨: "FollowListPage setError(null) 누락" minor → useFollowList 훅(`:23,43`)이 fetch마다 setError(null) 호출하므로 stale 배너 위험 없음(audit 반증).
+
+#### BACK-PERFORMANCE-5 — Swipe latency 0.7-1.5s 흔들림
+Codex retest 2026-05-26: browser swipe 1.82s/1.75s/1.12s/1.81s; server swipe 1.50s/1.38s/0.746s/1.36s. **PR4 async prefetch consume IS working** — 3rd swipe with cache hit drops to 156ms prefetch stage. But variability is high. Identify which stage causes the 0.7→1.5s spread (DB query latency? embedding cache miss? pgvector?). Aim for swipe p95 ≤1.0s and p50 ≤0.5s on Singapore prod.
+
+Code audit 2026-05-27 (`develop@3894ffd`):
+- `backend/apps/recommendation/views/swipe.py` still performs the algorithmic card selection inside the request transaction: update Project/session, phase transition, `engine.refresh_pool_if_low()`, `engine.get_pool_embeddings(session.pool_ids)`, then `engine.farthest_point_from_pool()` or `engine.compute_mmr_next()`.
+- PERF-PREFETCH-CHAIN moved card data lookahead off-path only after `next_bid` is selected. The cache-hit path avoids some prefetch-card compute/fetch, but it does not skip `get_pool_embeddings()` or MMR/farthest selection for the next visible card.
+- The response already logs `[SWIPE TIMING] lock/embed/select/prefetch/total` and captures `engine.get_last_embedding_call_stats()` for cache miss counts. That is the fastest way to classify the spread before editing.
+- `engine.get_pool_embeddings()` has an in-process LRU-like building embedding cache; cache misses can still trigger a DB fetch against `canonical_v2_buildings`. Under multi-worker prod, this cache is per process.
+
+Diagnostic plan:
+- Re-run a fixed 8-10 swipe session and bucket slow responses by timing stage: `embed_ms` > selection, `select_ms` > MMR/farthest CPU, `prefetch_ms` > buildings batch fetch / cache miss, `lock_ms` > transaction contention.
+- Compare first session after worker boot vs warmed worker. If first swipes are slow and later cache-hit swipes are fast, embedding cache warmup is the likely source.
+- If `select_ms` dominates in analyzing phase, inspect `engine.compute_mmr_next()` vector math and pool size. If `embed_ms` dominates, inspect `get_pool_embeddings()` DB batch and cache-hit ratio.
+
+_(Deferred 2026-06-04 batch scope → 계측 먼저. Variance CONFIRMED(per-worker in-process embedding 캐시 cold-miss 50-200ms + KMeans 재계산)나 ~tens-daily-users 규모서 cold-miss는 주로 배포직후 일시적; Redis-migration은 조회마다 RTT 추가 + premature 가능. prod hit-rate/지배 원인 계측 후 결정.)_
+
+#### FRONT-LAYOUT-1 — Desktop wide-screen 레이아웃 어색함
+Current viewport-lock layout is mobile-first. Detail pages on desktop work but unoptimised. Low priority — desktop is secondary.
+
+Code audit 2026-05-27 (`develop@3894ffd`):
+- `frontend/src/index.css` sets `body { height: 100vh; overflow: hidden; }`; each page owns its own scroll region. This works for mobile-app feel but makes desktop layout tuning page-by-page.
+- `BuildingDetailPage.jsx` uses `maxWidth: 820` for most content and only one `.building-masonry` media query. On wide screens it stays narrow rather than using a split gallery/details layout.
+- `BoardDetailPage.jsx` and `UserProfilePage.jsx` use `maxWidth: 1100` and auto-fill grids, but hero/profile sections remain mostly mobile-centered; there is no desktop-specific information hierarchy.
+- `App.jsx` routes everything through `MainLayout`; wide-screen fixes should start in page components plus any shared shell constraints, not TabBar.
+
+Likely slices:
+- Building detail desktop pass first: full-bleed or two-column gallery + sticky metadata/read actions.
+- Board/User profile second: keep existing mobile layout, add desktop breakpoints for hero + board grid density.
+
+#### FULL-LEGAL-1 — PIPA/GDPR consent 없음 (public launch 차단)
+Phase 13+ Profile/Board public/private visibility shipped. PIPA + GDPR posture for signup data collection / consent flow / retention policy still open. **Required before public launch.**
+
+**FRONT-AUTH-2 consent regression (2026-06-01):** the swipe-onboarding login (merged to develop) replaced #155's explicit Korean "동의합니다" PIPA button with a right-swipe gesture + generic English consent copy (`LoginPage.jsx` ConsentStep). Backend `consent_accepted` / `consent_policy_version` contract intact, but Korea-first + PIPA favor an explicit affirmative act (button/checkbox) + Korean disclosure. Restore Korean PIPA copy + explicit affirmative before public launch (flagged by both code-review + security in the merge gate).
+
+Code audit 2026-05-27 (`develop@3894ffd`):
+- Only visible consent surface found is `frontend/src/pages/LoginPage.jsx` line text: "By continuing, you agree to our terms of service". There are no Terms/Privacy routes in `App.jsx`, and no stored consent/version fields on `UserProfile`.
+- `backend/apps/accounts/models.py` marks `external_links` as privacy-sensitive and opt-in, but there is no retention policy, export/delete workflow, or policy-version audit trail.
+- Guest-first auth (`FULL-LOGIN-REDESIGN-1`) will collect at least display name/role and may create anonymous user rows; it should not ship publicly until legal consent and retention are explicit.
+
+Implementation map:
+- Backend fields likely belong on `UserProfile` or a separate `ConsentRecord`: `terms_accepted_at`, `privacy_accepted_at`, `policy_version`, optional marketing consent. Keep immutable history if policy versioning matters.
+- Frontend needs Terms/Privacy pages or external links plus a blocking checkbox/continue copy in login/onboarding. Korean-first copy should be reviewed outside Codex.
+- Account deletion/export is not currently in scope but should be tracked before public launch if GDPR-like obligations apply.
+
+#### BACK-PERFORMANCE-6 — Neon connection pool 고갈 위험 (async prefetch thread)
+PR 4 PERF-PREFETCH-CHAIN flipped `async_prefetch_enabled: True` — every prod swipe now spawns a daemon thread holding its own DB connection until `_connections.close_all()` runs in finally. Under high concurrent swipe load: connections ≈ (concurrent_requests × 2) — one main worker + one prefetch thread. Neon free tier limit is 25 connections; Railway Gunicorn default is 2-4 workers. Concurrent swipe × 2 conns/swipe could approach limits at high traffic. Acceptable for current scale (~tens of daily users/day). Monitor Neon dashboard post-deploy + revisit if peak concurrency exceeds 8-10 connections. Mitigation options if exhausted: (a) connection pool size increase, (b) explicit thread-local connection pool, (c) PgBouncer in front of Neon. security-manager (sonnet) flagged this as availability concern on PR #134.
+
+Code audit 2026-05-27 (`develop@3894ffd`):
+- `backend/apps/recommendation/views/swipe.py` now starts two daemon-style background paths per successful swipe when enabled: `_async_prefetch_thread` and `_emit_telemetry_thread`. Both call `_connections.close_all()` in `finally`, but each can open its own thread-local DB connection while alive.
+- Main request can hold `default` DB inside transaction; telemetry writes to `user_data`; async prefetch may read buildings data for next-card hydration. Practical transient footprint can be main + telemetry + prefetch, not just main + prefetch, depending on timing.
+- `backend/config/settings.py` has `CONN_MAX_AGE=600` on default DB; buildings alias has no explicit `CONN_MAX_AGE`. Thread cleanup makes leaks unlikely, but peak connection count is still a traffic/concurrency risk.
+
+Monitoring map:
+- Track Neon active connections during swipe bursts and Railway worker/thread counts. If peak >8-10 at current traffic, promote this from MEDIUM risk to HIGH infra work.
+- If slow swipes correlate with connection pressure, evaluate a bounded executor or queue instead of unbounded per-swipe `threading.Thread`.
+
+_(Re-scoped 2026-06-04 batch scope: premise OVERSTATED — 연결 누수 없음(prefetch thread 0 conn, telemetry thread finally서 close). 실위험 = 고동시성 peak(>12-15 conn)뿐, 현 규모 무관. Neon active_connections 모니터, 코드 변경 無.)_
+
+#### INFRA-DB-3 — Unverified guest row 누적 정리 (conditional)
+Guest 계정(FULL-LOGIN-REDESIGN-1 #154/#155)은 정리 로직 없음 (user Q5 결정). `/auth/guest/` throttle 3/min/IP이나 IP 로테이션 botnet은 row 증가 가능 → 조건부 모니터링 항목.
+
+Detail: Monitor Neon `auth_user WHERE email = '' AND is_active = True` row count weekly. If growth > 500 rows/week sustained, open this and implement a Django management command `delete unverified WHERE last_active < 30 days AND swipe_count == 0` + cron/Railway scheduled job.
+
+_(Deferred 2026-06-04 batch scope: premise FALSIFIED — cleanup 기준 필드 `last_active`/`swipe_count`가 UserProfile에 없음(created_at/updated_at만) → 작성된 정책 실행불가. 게다가 파괴적 DELETE + 급격 증가 미확인. 모니터링 + schema/JOIN-proxy 후 재검토.)_
+
+### LOW
+
+#### FRONT-AUTH-1 — LoginPage에 Kakao/Naver 버튼 없음
+Backend Kakao + Naver implementation shipped: `apps/accounts/views.py` KakaoLoginView + NaverLoginView, `apps/accounts/urls.py` `auth/social/kakao/` + `auth/social/naver/`, `apps/accounts/models.py` provider choices. Frontend `LoginPage.jsx` currently has Google button only.
+- [ ] Kakao button on `LoginPage.jsx` (loading state already typed `'kakao'`)
+- [ ] Naver button on `LoginPage.jsx` (loading state not yet typed `'naver'`)
+
+Code audit 2026-05-27 (`develop@3894ffd`):
+- `frontend/src/api/auth.js` already has generic `socialLogin(provider, accessToken, code)` for `'google' | 'kakao' | 'naver'`, so the API helper is not the blocker.
+- Backend accepts either `access_token` or `code` depending on provider view behavior. Frontend still lacks Kakao/Naver SDK or redirect-code handling, so this is a UX/OAuth-client integration task.
+- `frontend/src/pages/LoginPage.jsx` loading state should include `'naver'`; the current comment is stale and button icons/styles need design approval.
+
+Decision needed:
+- Choose provider integration style: JS SDK popup/access-token vs OAuth redirect/auth-code. Match mobile browser behavior and Vercel callback envs before implementing.
+- This may be superseded or reshaped by `FULL-LOGIN-REDESIGN-1`; if guest-first ships first, Kakao/Naver should be secondary account-upgrade options, not necessarily primary login buttons.
+
+#### BACK-RECOMMEND-3 — Profile-tab 사무소/유저 추천 endpoint 없음
+Re-scoped 2026-05-14 (REC1 already shipped as Push S3). REC2 (firm) + REC3 (user) target a single composite endpoint `GET /api/v1/recommendations/profile/` returning `{offices: [...], users: [...]}` for a Profile-tab button. Landing tab removed (Push S6).
+
+**2026-06-04 audit narrowing:** #178 shipped architect recommendation (`projects/PK/recommended_architects/` + `architects/ID/`, `views/office_recommendation.py`), partially satisfying the OFFICE/architect dimension (board-scoped, flat architect list). The literal `/recommendations/profile/` {offices,users} endpoint still does NOT exist, and the USER↔USER ("유저") recommendation dimension remains entirely unbuilt → narrow this item to the user-recommendation gap + the unified profile-tab endpoint.
+
+Code audit 2026-05-27 (`develop@3894ffd`):
+- No route exists today in `backend/apps/recommendation/urls.py`, `backend/apps/profiles/urls.py`, or `backend/apps/social/urls.py` for `/recommendations/profile/`; the only recommendation-style public route is `recommendations/board-surprise/`.
+- Firm data model exists in `backend/apps/profiles/models.py`: `Office`, `OfficeProjectLink`, `Office.canonical_id`, follower counters. `OfficeDetailView` already hydrates office projects from `OfficeProjectLink` + `canonical_v2_buildings`.
+- User taste helper exists as `engine.compute_user_taste_vector(profile)`, but it aggregates the requester only. For recommending users, a batch scoring strategy is needed; do not loop all users and run per-user DB fetches in request path.
+- Social graph exists (`Follow`, `ArchitectFollow`) and should be used to exclude already-followed users/studios unless Product decides otherwise. (`OfficeFollow` was removed in ARCHITECT-UNIFY-C — office-level follow is unavailable until firm-side unification; use `ArchitectFollow` for studio exclusion.)
+- Frontend profile stats buttons have TODOs for followers/following routes, but no recommendation trigger UI yet.
+
+Implementation map:
+- Backend endpoint probably belongs in a new recommendation view/module because it combines Make Web user_data and Make DB building vectors. Keep office/user recommendation payload minimal for p95 <= 800 ms.
+- For firms, precompute or cache office vectors from `OfficeProjectLink.building_id` embeddings; query-time max-sim over each office's projects will get expensive if done naively.
+- For users, use each user's aggregated liked vector and follower/exclusion filters. Cold-start needs a separate branch (popular offices/users or disable with CTA).
+
+Open dimensions (admin decision before implementation):
+- **Firm vector composition** — Mean / weighted-mean / curated-subset / max-sim of firm's project embeddings?
+- **User taste vector** — Aggregated from user's `liked_ids` across Projects; recency-weighted? curated subset?
+- **Cold-start strategy** — New user 0 swipes → "popular users" / generic taste cluster / disable User tab until N swipes?
+- **Match score visibility** — Show "92% match" on cards or hide?
+- **Diversity vs follow-exclusion** — Recommend already-followed firms? (probably exclude)
+- **Tie-breakers** — Followers count / recency / random / hybrid?
+- **Trigger surface UX** — Single button → modal / full-page / toggle between Office/User?
+
+Acceptance: `/recommendations/profile/` p95 ≤ 800 ms on Singapore deploy; cold-start UX graceful; `canonical_bld_id` + `is_publishable=true` gating preserved per CLAUDE.md hard rules.
+
+#### BACK-EXTERNAL-1 — FirmProfilePage에 외부 기사 surface 없음
+Surfaces external articles about a firm on FirmProfilePage (Space / ArchDaily / news keyword match). Phase 15 already shipped External DM wiring (`Office.contact_email`, `Office.website`, `UserProfile.external_links`).
+
+Code audit 2026-05-27 (`develop@3894ffd`):
+- `frontend/src/pages/FirmProfilePage.jsx` already renders an Articles section only when `office.articles?.length > 0`; it defaults `articles` to `[]` because backend omits the field.
+- `frontend/src/components/profile/ArticleCard.jsx` is already present and expects `{title, url, source, date}`.
+- `backend/apps/profiles/serializers.py` explicitly documents `articles[] -> EXCLUDED (Phase 18 External — deferred)`.
+- `backend/apps/profiles/models.py` has no article table/fields; `OfficeDetailView` only returns office metadata + projects + `is_following`.
+
+Implementation map:
+- If article fetch is real-time, it must not block `OfficeDetailView` TTFC; use async frontend fetch or backend cached endpoint.
+- If stored, a separate `OfficeArticle` model is cleaner than denormalizing a mutable article list into `Office`, because source/date/url uniqueness and refresh state matter.
+- External URL opening is already handled by `ArticleCard` (`target="_blank" rel="noreferrer"`); backend must sanitize/validate stored URLs.
+
+Open dimensions:
+- **Article source priority** — Space-first (Korean) vs ArchDaily-first (global) vs parity? (Korea-first principle suggests Space)
+- **Crawl freshness** — real-time on view / scheduled daily-weekly / event-driven?
+- **Storage** — denormalised in `Office` row / separate `OfficeArticle` table / external CDN?
+- **Article fallback** — empty section / hide section / "no recent articles" placeholder?
+
+Acceptance: ≤10 most recent articles per firm; open in new tab (legal posture); no FirmProfilePage TTFC regression (article fetch async, doesn't block initial paint).
+
+#### INFRA-QUEUE-1 — corpus_rank telemetry 꺼져있음
+Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) scan) before emitting a `SessionEvent` bookmark payload. PR #79 turned this off on the bookmark path (`rank_corpus = None` + TODO). Today the field is None on every bookmark event — telemetry slightly degraded but bookmark response is fast. Celery + Redis would let us re-enable the calculation off the hot path.
+
+Code audit 2026-05-27 (`develop@3894ffd`):
+- `backend/apps/recommendation/engine.py` still has `compute_corpus_rank(card_id, v_initial)` implemented as a corpus-wide pgvector `ROW_NUMBER() OVER (ORDER BY embedding <=> vector)` query.
+- `backend/apps/recommendation/views/swipe.py` `ProjectBookmarkView` sets `rank_corpus = None` with a TODO before `event_log.emit_event('bookmark', ...)`.
+- Tests intentionally lock the deferred behavior: `backend/tests/test_bookmark.py::test_rank_corpus_is_none_placeholder` and `backend/tests/test_imp10_topic06_telemetry.py` assert `compute_corpus_rank` is not called and payload `rank_corpus` remains null.
+- No Celery/worker dependency is present in `backend/requirements.txt`; Redis exists as a cache backend, not a task queue.
+
+Implementation map:
+- Do not re-enable synchronous `compute_corpus_rank()` in the bookmark path. The only acceptable path is queue/background worker with bounded retries and failure-tolerant telemetry update.
+- If introduced, update tests from "placeholder None" to "enqueued job" and add worker tests around success/failure without blocking bookmark response.
+
+Why LOW: introducing Celery just for this one field is over-investment. Adds Redis (Railway add-on cost), a worker process, monitoring surface, and a deploy step — all for one telemetry column the product doesn't currently consume. Revisit when other background jobs accumulate (image batch processing, periodic embedding refresh, scheduled snapshot drops) so Celery earns its keep across multiple tasks.
+
+---
+
+_(Deferred 2026-06-04 batch scope: YAGNI — product-미소비 telemetry 1필드 위해 Celery+worker 도입은 과투자. 2번째 background job 생기면 단일 INFRA-JOBS 티켓으로 묶어 처리.)_
+
+## Done
+### FRONT-AVATAR-1 — 프로필 사진 업로드 (server-proxy R2 + 폴백) — RESOLVED 2026-06-07 (`84ba1f1`-pre-squash)
+아바타 업로드(Slice D). 마이그 없음(`avatar_url` URLField 기존). data-URL 지양 결정대로 R2 URL만 저장.
+- 백엔드: `POST /users/me/avatar/`(IsAuthenticated, self-only, AvatarUploadThrottle 10/min). server-proxy multipart → Pillow 파이프라인(조기 Content-Length 게이트 + `.size` cap 5MB + 25MP 차원 가드 + verify + **WEBP 재인코딩**=EXIF/polyglot 제거 + 정사각 center-crop 512 + uuid4 키). 신규 `apps/accounts/storage.py` `store_avatar`: 플러그블 — R2_* 설정 시 boto3→R2(prod), 미설정 시 FileSystemStorage 절대-URL 폴백(local+CI). INFRA-REDIS-1 prod/local 분기 패턴. settings MEDIA_*/R2_*/AVATAR_* 한도; urls DEBUG-only media serve; requirements +boto3; `.gitignore` media/.
+- 프론트: ProfileHero isMe 아바타 → 파일 선택 + canvas 정사각 리사이즈 → multipart 업로드(`callApi` JSON-only라 직접 fetch, `api/profiles.js uploadAvatar`) → in-place `avatar_url` 갱신. hover 오버레이 + 스피너 + 에러(ProfileHero.module.css). UserProfilePage가 isMe + onAvatarUpdated 전달.
+- 게이트: code-review PASS, security-manager **0 critical**(경고 3개 in-branch 수정: 조기 CL 게이트, 픽셀 cap 40M→25M + `Image.MAX_IMAGE_PIXELS`, profile-404-before-store=orphan 방지). flake8+check clean, 마이그 0개, lint+build PASS. **라이브 app-test FEATURE-SCOPED PASS 9/9**(900×600 업로드→200→512×512 webp center-crop, reload 영속, 비소유자 /user/2 오버레이 없음, 콘솔 0, 회귀 AI검색+5스와이프 OK). CI=DB-게이트 7 테스트.
+- Deferred: BACK-AVATAR-2(교체 시 옛 객체 GC) + INFRA-AVATAR-R2-1(prod Railway R2 env 미설정 시 비영속) → ## Next ### MEDIUM.
+
+### AUTH-LOGIN-1 — handle+비번 로그인 + 이메일 인증(OAuth 연동) — RESOLVED 2026-06-07 (`4c37545`-pre-squash)
+표준 로그인 추가(소셜 유지 + handle=ID+비밀번호). 식별자 확정: `handle`=ID(로그인·공개@), `display_name`=이름(프로필), `User.username`=내부키(`local_<uuid>`).
+- E1 백엔드: `POST /auth/register/`(handle+pw, validate_password, atomic) · `/auth/login/`(handle__iexact→check_password, **균일 에러+더미해시 타이밍**으로 enumeration 차단, throttle) · `/auth/set-password/`(first-set 무current / change 요current, throttle 5/min, **변경 시 전 refresh 토큰 blacklist + fresh 재발급**=현 세션 유지·타 세션 evict). 모두 `_make_token_response` 재사용.
+- E2 백엔드: `POST /auth/link-email/`(IsAuthenticated, `_exchange_google_code`+GuestPromote 로직 재사용 — verified만, **충돌=거부** 400 email_already_linked, SocialAccount+`email_verified_at`). 마이그 0009. `UserSerializer` self-only +email/email_verified_at/has_password(공개 serializer 미노출).
+- E3 프론트: LoginPage handle+pw 로그인(Returning)+가입(Register, 기존 guest/Google 무변경) · Account `@핸들`→"ID" 라벨+중복 "이름" 제거+이메일 행+비번 설정/변경(토큰 swap)+이메일 인증(GoogleVerifyButton 재사용→link-email) · EditCardForm "Display Name"→"이름". 토큰은 기존 setTokens 재사용.
+- 게이트: code-review PASS ×2, **security-manager FULL PASS**(경고 2개 수정: set-password throttle + 토큰 blacklist). flake8+lint+build clean. 라이브 curl: register/login/틀린pw(400 generic)/set-password/**구토큰 401(blacklist)**/새pw로그인 전부 통과. Account UI 검증(ID/이메일/비번/인증). DB-게이트 32 테스트 = CI.
+- Deferred: FRONT-AUTH-1(Kakao/Naver 버튼) 이 트랙 흡수 가능; 비번 재설정(이메일 발송)은 EMAIL_BACKEND 없어 보류.
+
+### SETTINGS-PROFILE-IA-1 — archibe Settings harvest + Profile/Account IA + rebrand archibe — RESOLVED 2026-06-07 (`2bb2b64`-pre-squash)
+archibe-profile(외부 레퍼런스, #179 harvest와 동일 repo) 2차 harvest + 프로필/계정 정보구조 재설계 + 서비스명 archibe 리브랜드. 4 커밋(slices 1-2-3 + A/B/C + F).
+- 백엔드: `UserProfile.handle`(공개 @id, unique, `^[a-z0-9_]{3,30}$`, 예약어, self-only 검증) + `notifications` JSONField(self-only, ≤50키/≤64자/nested {push,email} bool) + `role`(50)/`affiliation`(100) 자유텍스트. 마이그 0007+0008. `UserSerializer`/공개`UserProfileSerializer`/self-update에 배선. `GuestLoginView` 가입 시 role/affiliation 수신(truncate). 이메일/username은 비편집 유지(#206 경계).
+- archibe 재사용 조각: `Toggle`(role=switch, a11y) + `AppearanceSettings` 테마 시각 스와치(accent dots+글로우) + gradient CTA(`Button.module.css`) + `ProfileHeader` glassmorphic blur. `/settings` 라우트 + Account/Notifications/Appearance 화면(FollowListPage 레이아웃).
+- 프로필 IA: 히어로 = 이름 → @handle → "role · affiliation" + website pill; 헤더 = 본인 메인서 Back 제거 + "Profile"+@handle; Edit Profile → `/settings/edit-profile`(EditCardForm + role/affiliation, 단일화 — 헤더 Edit 버튼 제거). MBTI UI 제거. `EditProfileModal.jsx` 삭제.
+- BusinessCard archibe 재설계: ARCHIBE 워드마크(양면) + display_name/role/affiliation/handle 직접 + persona/mbti fallback 제거 + 흰 명함 하드코딩 유지.
+- 리브랜드 ArchiTinder→archibe(유저향): ARCHIBE 워드마크(LoginPage/SwipePage/MainLayout, 투톤 분할 제거) + archibe 소문자 본문(타이틀/동의문/"archibe AI"/share fallback). 내부(package/repo/docs)는 archi-tinder 유지.
+- 게이트: code-review PASS ×4, security PASS ×3, flake8+lint+build clean. 라이브 Playwright 스모크: handle 저장, notifications 토글+영속, role/affiliation 히어로, edit-profile, BusinessCard 재설계, 타이틀 archibe. DB-게이트 테스트(handle/notifications/role/affiliation/guest) = CI.
+- Deferred: 아바타 R2 업로드(FRONT-AVATAR-1); handle+비번 로그인 + 이메일인증 OAuth연동(AUTH-LOGIN-1). FRONT-PROFILE-1 상당부분 흡수(EditProfileModal 삭제로 그 minor들 moot; FollowListModal bottom-sheet/4테마 픽셀은 잔존).
+
+### BACK-LLM-GEMINI-1 — Gemini 3.1 모델 마이그레이션 + 페르소나 이미지 플로우 배선 — RESOLVED 2026-06-05 (`dc1b068`, #204)
+하드코딩 모델 ID(텍스트 `gemini-2.5-flash` 9곳 + 이미지 Imagen 3 orphan) → settings/env 분리(`GEMINI_TEXT_MODEL`=3.1-flash-lite, `GEMINI_IMAGE_MODEL`=3.1-flash-image, 각 fallback). 텍스트 호출 `generate_content_with_fallback` 래퍼로 일원화(model+retry+timeout+4xx fallback). 이미지: Imagen `generate_images` → Gemini-native `generate_content(response_modalities=['TEXT','IMAGE'])` 재작성 + Pillow WebP 변환(`report_image_mime`, migration 0023). App.jsx 세션완료 후 fire-and-forget 이미지 생성 배선(전엔 orphan — 한 번도 호출 안 됨).
+- [x] **실키 스모크 검증**: 3.1-flash-lite(텍스트) + 3.1-flash-image(이미지 JPEG 880KB) 둘 다 200 OK — fallback 안 타고 3.1 primary 실작동 확인. `['TEXT','IMAGE']`로 이미지 part 정상 반환(Codex 🟡 text-only 우려 실측 미발생).
+- [x] **Codex 리뷰 수정**: 래퍼가 facade `_retry_gemini_call`(테스트 9곳 patch 대상) 우회 → 실HTTP/MagicMock 누출로 CI 8실패. late-bound `_svc._retry_gemini_call`로 seam 복원(FULL-REFACTOR-1 교훈). MIME fallback webp→png(레거시 PNG 행). 22 신규 테스트 green.
+- Deferred: prod 배포 시 실키 가용성/latency 재확인(fallback 안전망). [[BACK-LLM-4]]
+
+### SNS-REPORT-PAGE-1 — 페르소나 리포트 별도 페이지 + axis_scores 영속화 (yywon1, Claude fix-forward) — RESOLVED 2026-06-05 (`1917f5d`, #196)
+인라인 리포트 → 별도 `/board/:id/report` 페이지(BoardReportPage: 레이더/스펙트럼 차트 + 페르소나 이미지 생성 버튼 + 스크롤 수정). fix-forward(Claude): Codex blocker 2건 수정.
+- [x] **axis_scores 영속화**: `compute_axis_scores`가 생성 응답에만 실리고 저장 안 돼 reload/직접링크 시 차트 0(빈 레이더) → `Project.axis_scores` JSONField(migration 0024) + 생성 시 저장 + serializer 노출(detail; list서 defer) + BoardReportPage `board.axis_scores` 읽음. 계산 로직 무변경.
+- [x] **이미지 MIME 동적화**: BoardReportPage `data:image/png` 하드코딩 → `report_image_mime`(#204 WebP 대응) || png fallback. (#204↔#196 MIME 해저드 종결.)
+- [x] code-review + security PASS. CI green. 팀원(yywon1) PR 코멘트로 변경 통지.
+
+### CODEX-FUNC-3 — Codex 라운드3 기능 수정 4건 (auth/tokens/cache/testenv) — RESOLVED 2026-06-05 (#199/#201/#202/#203)
+Codex 기능 리뷰 배치 머지(SECURITY 항목은 배포-게이트 배치로 deferred).
+- [x] **#203 `3870bc4` (FIX-2)**: 게스트 promote 머지 conflict-aware — 500/데이터 유실 방지.
+- [x] **#202 `54a40e5` (FIX-3)**: 토큰 refresh single-flight — 동시 401 spurious logout 차단.
+- [x] **#201 `3c742c7` (FIX-7)**: architect follow/unfollow 시 프로필 캐시 evict.
+- [x] **#199 `230e29d` (FIX-1/8)**: pytest 하 `.env` 로드 가드 + `.flake8` 설정(repo-wide flake8 정상화).
+- Deferred(HARD): 배포 전 SECURITY 배치 — **OAuth `email_verified`(계정 탈취, develop→main 전 필수)** + swipe/bookmark/architect ID 검증 + merge.py DoS row-cap.
+
+### BACK-AUTH-3 — guest like-gate @50 + frontend verify 배선 — RESOLVED 2026-06-04 (`feature/claude-auth-batch` → develop, #193)
+`LikedBuildingsView.post`가 guest 무제한 like 허용하던 것 → 50개서 verify-gate(403 `verify_required`/`liked_limit_reached`, board-gate precedent mirror). frontend `addLikedBuilding`가 403 intercept → `archithon:verify-required` dispatch + `VerifyRequiredError` throw(`createProject` 패턴); DiscoveryPage catch가 VerifyRequiredError 시 generic 토스트 skip. Codex #193: 51st like 유실 → `archithon:pending-like`로 bldId 저장 후 promote(onPromoted)에서 addLikedBuilding retry(pendingBoardCreate 패턴). guest-scenario 테스트 4.
+
+### BACK-AUTH-2 — JWT user-row cache 통합 테스트 — RESOLVED 2026-06-04 (`feature/claude-auth-batch` → develop, #193)
+기존 unit-level만이던 JWT 캐시 테스트에 DRF 파이프라인 통합 테스트 5 추가(`test_jwt_cache_integration.py`): cache-hit, **is_active=False stale-cache 거부**(signal invalidation), post_save invalidation, logout, refresh-rotation invalidation. prod 코드 무변경. is_active bulk `.update()` 우회는 기존 문서화된 known limitation(코드에 그 경로 없음).
+
+### BACK-LLM-2 — 채팅기록 backend 영속화 (cross-device) — RESOLVED 2026-06-04 (`feature/claude-llm-chat-persist` → develop, #195)
+채팅기록이 localStorage-only라 기기간 유실 → `Project.conversation_history` JSONField(migration 0022, #194 0021_tagaxisweight 충돌로 renumber). 기존 PATCH 재사용(신규 endpoint 無). detail-read/PATCH-write 검증(dict, ≤64KB **UTF-8** ensure_ascii=False, messages≤60/history≤10/text≤2000), list서 제외+defer. frontend hydration(backend=source of truth)+debounced byte-bounded save+logout/delete purge. Codex 3 must-fix 수정: **비-owner 프라이버시 strip**(public 보드서 남 채팅 노출), UTF-8 byte-cap(한글), hydration-실패 stale-overwrite 방지. follow-up [[BACK-LLM-4]].
+
+### INFRA-DB-2 — make test-local (로컬 pytest unblock) — RESOLVED 2026-06-04 (`feature/claude-test-local` → develop, #197)
+runtime `make_web_app`가 CREATEDB 없어 로컬 pytest가 'permission denied to create database'로 차단(conftest SQLite override는 자체 docstring상 not-load-bearing). `make test-local` 추가 — `migrate-local` idiom(read -s neondb_owner pw, inline DB_USER override로 DB_HOST는 LOCAL 유지), CI-shape real-PG+pgvector 실행. Neon 콘솔 작업 불필요. CLAUDE.md 문서화.
+
+
+### UX-GALLERY — 갤러리 제스처 3버그 (FRONT-UX-6/9/10) — RESOLVED 2026-06-04 (`feature/claude-ux-gallery` → develop)
+갤러리 3버그(부모-sync wobble·모바일 세로스크롤·Discovery long-press 오작동)를 **lift 없이** 해결. 원 premise(sibling-overlay lift)를 유저 product 재검토로 재정의 — 갤러리 보면서도 스와이프 유지 + 순수 Discovery. session 브라우저 spike로 "3D가 스크롤 안 깸"(원인은 touch-action·snap, 3D 아님) 확정 후 구현.
+- [x] **방향잠금 + 갤러리 스크롤**: SwipeCard card root `touch-action:none→pan-y`(세로=브라우저 pan·카드 안흔들림, 가로=스와이프) + 갤러리 scroll div/이미지/img `pressable`(react-tinder-card preventDefault 스킵) + 갤러리 `touch-action:pan-y`. rotateY flip 유지.
+- [x] **Discovery long-press 제거**(FRONT-UX-10): 400ms 보드저장 제스처 -91줄 삭제 → 순수 스와이프. 우-스와이프 like + Surprise 모달 유지.
+- [x] **cleanup**(FRONT-UX-6 obsolete): SwipePage 죽은 galleryOpen/preventSwipe-ALL/ESC 제거(suppress 안 함 — 스와이프 유지 의도).
+- [x] **Codex #191 HIGH 수정 — native direction-lock**: `touch-action:pan-y`만으론 부족 — react-tinder-card가 카드 엘리먼트에 native touchmove(index.js:244, bubble) 바인딩, React synthetic `stopPropagation`은 native 리스너 못 막음 → 세로 드래그 wobble·touchcancel 미처리 카드 고착·대각선 스와이프 오발. SwipeCard 갤러리 scroll div에 native touchstart/touchmove 리스너(8px slop axis-lock, 세로 확정 시 `e.stopPropagation()`; passive·preventDefault 안 함 → 브라우저 pan-y 스크롤 그대로) 추가 + 쓸모없던 React synthetic stopPropagation 2개 제거. bubble 순서상 갤러리 리스너가 카드보다 먼저 발화 → 세로=카드 handleMove 차단, 가로=전파(스와이프 유지).
+- 게이트: lint/build PASS, code-review PASS(4영역 무결). session spike GO(3D 스크롤 viable + 레시피 라이브 검증). **native 모바일 터치(손가락 스크롤·방향잠금·sloppy boundary)는 Codex 실모바일 최종확인**(Playwright 데스크톱=native 터치 부정확).
+- 재정의: A(lift) 탈락(갤러리중 스와이프 유지와 충돌). premise=hypothesis([[feedback_taskmd_premise_verification]]), product 재검토로 교체.
+### BACK-RECOMMEND-4 — Discovery 좋아요가 추천에 반영 (taste vector + exclude + evict) — RESOLVED 2026-06-04 (`feature/claude-back-recommend-4` → develop)
+Discovery 우-스와이프 like(`UserProfile.liked_building_ids`)가 추천 엔진에 안 먹히던 것 해결 — Discovery-only 유저가 영구 cold/random feed였던 core-promise 위반 수정. 3곳 주입, 전부 기존 infra 재사용.
+- [x] **taste vector**(`engine.py compute_user_taste_vector`): Project.liked_ids 루프 뒤 `reversed(liked_building_ids)` append(intensity 1.0). recent-50 cap·dedupe·weighted-mean 무변경, 추가 쿼리 0(profile 인자). minimal·additive.
+- [x] **exclude-set**(`discovery.py` DiscoveryFeedView + BoardSurpriseView): `liked_building_ids`를 exclude 합집합에 추가 → 이미 like한 빌딩 재등장 안 함.
+- [x] **evict**(`accounts/views/profile.py LikedBuildingsView.post`): 실-write 시 `evict_taste`+`evict_discovery_feed`(caches.py:42/155) 로컬-import 호출(순환 회피).
+- [x] 테스트 7개(`test_back_recommend_4.py`): **zero-Project-likes fresh profile** cold→warm(discriminating), truly-cold None, DiscoveryFeed+BoardSurprise exclude(warm/cold), evict-on-write, evict-suppress-on-dup.
+- 게이트: `manage.py check` PASS, flake8 clean(2 pre-existing E221 무관), code-review PASS(5영역: dedupe·exclude·evict-placement·test-discriminating·TTFC 무회귀). 로컬 pytest INFRA-DB-1 차단 → **CI가 실게이트**. app-test 스킵(추천 로직, swipe-lifecycle 무변경, 단위테스트가 정밀 커버). algorithm.md annotate.
+- ⚠️ recency 회귀(오너 결정): Project 40+Discovery 60 유저 → `[-50:]`가 Discovery 50개만 → Taste 프로필 탈락. 이번 minimal-additive로 두고 PR에 명시 — 오너가 source별 recent-N 병합 채택 여부 결정.
+
+### FULL-DISCOVERY-1 — Discovery 탭 v3.1+v3.2 재설계 (10장 청크 + 3-Tier + Draft Board → Taste 퍼널) — RESOLVED 2026-06-04 (`fc72639-pre-squash`, merged #200 `2238e5d` 2026-06-05)
+레거시 global-centroid + 커서 무한스크롤 폐기 → 10장 chunk prefetch + 다중 centroid + 40:60 Local/Global FPS + Deferred Exclusion(dislike zone) + 3-Tier 라이프사이클(0/100·20/80·40/60) + 세션별 Draft Board → Taste 퍼널로 전면 교체. 신규 마이그레이션 0건(Project 재사용), `engine.py` 미수정(신규 `discovery_feed.py` 모듈로 compose, 알고리즘 소유권 준수).
+- [x] 백엔드 v3.1: `discovery_feed.py`(draft helper·tier·`build_discovery_chunk`·greedy FPS·interleave·dislike zone), `caches.py` App-Open centroid 캐시(6h TTL, like-evict 안함), `GET /discovery/`(chunk) 재작성, `POST /discovery/feedback/`, `settings.py` RECOMMENDATION에 discovery_* 14개 추가.
+- [x] 백엔드 v3.2: 세션별 `discovery_YYMMDD_HHMM` Draft Project(프로필 노출, tier project_count는 `discovery_` 접두 제외, centroid는 전체 like 누적), feedback `draft_id` 왕복, `POST /discovery/promote-to-taste/`(draft 10 likes로 AnalysisSession like_vectors 사전주입+풀 생성).
+- [x] 프론트: `DiscoveryPage` 10장 chunk 버퍼(client_buffer_ids stateless dedup) + swipe→feedback + 덱 내 Taste 트리거 카드(우=promote, 좌=계속) + 진행률 바(N/10→취향 탐색 중) + 재등장 shake; `DiscoveryTriggerCard.jsx`(신규); Surprise 모달 제거.
+- [x] 버그픽스: stale `draftLikeCount`(sessionStorage)로 트리거 조기 등장 → 로그인 시에도 draft 초기화 + draftId 게이트 + not_enough_likes 복구; promote 응답 `normalizeCard`로 Taste 첫 스와이프 400(`canonical_bld_id` undefined) 방지.
+- [x] code-review + security 2라운드 PASS(ImportError·백필·buffer DoS·JSON 무한증가·예약명·draft_id 500·트리거 ref race 수정). Django check 0 issues + Discovery 테스트 52개 green. ESLint/build green.
+- [x] **fix-forward (Claude, #200 머지)**: Codex blocker 3건 — promote 임계값 `<10` 거부(전엔 1~9도 promote; 스펙=10장 전환), feedback+promote 게스트 보드 게이트(`is_guest & ≥3보드`→403 verify_required; 3보드 우회 차단, graceful draft 생성 설계는 보존), long-press→SaveToBoardModal 제거(UX-GALLERY/#191 순수-스와이프 제거가 머지 통째덮어쓰기로 부활한 잔재; 알고리즘 코어 무변경). promote 테스트 3건 10 likes로 갱신. code-review+security PASS. 팀원(ksangjo) PR 코멘트로 통지.
+- Deferred: app-test FULL 라이브 브라우저 검증 미실행(dev 서버 + app-test 에이전트 부재) — prod 전 실행 필요. Deferred: 트리거 카드 희귀 엣지(like 10번째가 빈 덱 동시각) 한 박자 지연, 비차단.
+
+### ARCHITECT-UNIFY-C — OfficeFollow 중복 제거 (follow 모델 통합) — RESOLVED 2026-06-04 (`feature/claude-architect-unify-c` → develop)
+미배선 중복 `OfficeFollow`(firm-follow, ArchitectFollow와 중복) 제거 → office-interest follow 모델이 ArchitectFollow 1개로 통합(원 audit 중복 finding 종결). Office 서브시스템 나머지는 계획 기능 substrate라 park.
+- [x] 백엔드: `social/models.py` OfficeFollow + 시그널 2개 삭제, `social/views.py` OfficeFollowView, urls route, test_office_follow.py(파일), guest-merge FK_TABLES 항목, `OfficeDetailView.is_following`→False 상수. 신규 마이그 `social/0006_delete_officefollow`(로컬 적용 OK, 빈 테이블).
+- [x] 프론트: `api/social.js` followOffice/unfollowOffice + client.js 재export 삭제, FirmProfilePage/FirmProfileHero 팔로우 버튼 제거(FirmProfilePage는 parked view-only). build PASS, grep 0.
+- [x] KEEP(park): Office/OfficeProjectLink/claim/sync_offices/FirmProfilePage(view) — BACK-RECOMMEND-3/EXTERNAL-1/firm-claim substrate. ArchitectFollow/Follow 무손상.
+- 게이트: check PASS, makemigrations --check no-change, migrate --plan OK, flake8 clean, lint/build PASS, **code-review PASS**(6영역: guest-merge/dangling/is_following/signals/hero/migration 무결). app-test 스킵(swipe/recommendation 무관, FirmProfilePage 도달불가). A/B 탈락→C: `docs/specs/architect-unification.md` + deploy-gate 메모리 갱신.
+- 후속: firm-side 전면 arch_id 통합 = `ARCHITECT-UNIFY-1`(deferred, firm-UX 착수 시).
+
+### BACK-PROFILE-1 — external_links 검증 강화 (handle/email/website + mailto 주입 차단) — RESOLVED 2026-06-04 (`feature/claude-back-profile-1` → develop)
+`validate_external_links`(accounts/serializers.py)에 키별 포맷 검증 추가 — 프론트가 검증 없이 `instagram.com/${handle}`·`mailto:${email}` 평문 조립하던 주입 nuisance를 서버에서 차단.
+- [x] instagram: 선행 `@` 1개 strip + `^[A-Za-z0-9._]{1,30}$` fullmatch(경로 break-out 문자 전부 배제), normalized 저장.
+- [x] email: Django EmailValidator + **mailto 헤더 주입 차단**(`?`/`&` reject — RFC5321은 local-part 허용하나 RFC6068 mailto hfield 구분자라 `user?cc=evil@x.com` 차단). security-manager 발견 수정.
+- [x] website: URLValidator(http/https) — javascript:/data:/protocol-relative 차단. 전 키: 제어문자(CRLF) reject, unknown 키 forward-compat, empty=skip, normalized dict 반환.
+- 게이트: `manage.py check` PASS, flake8 clean(3 E221 pre-existing 무관), sanity 10+케이스(주입/우회 reject·정상 통과). security-manager FAIL→fix→재검증. test_phase13 instagram assert 갱신(strip). app-test SKIP(API 검증, UI 무변경).
+- 후속(별도, 낮은 위험): office/architect contact_email mailto 조립 2곳(FirmProfileHero:241, ArchitectProfilePage:166)은 동일 클래스이나 **corpus-curated 이메일**(user-PATCH 불가)이라 위험 낮음 — 범위 밖.
+
+### BACK-OFFICE-1 (ARCHITECT-UNIFY Phase 0) — SavedOffice orphan 제거 — RESOLVED 2026-06-04 (`feature/claude-architect-unify-p0` → develop)
+예원 #180의 미배선 SavedOffice(model+2뷰+2url) 삭제 + DROP 마이그 0005. ARCHITECT-UNIFY(Office↔Architect 통합) 스펙의 첫 안전 조각 — "스튜디오 저장"은 ArchitectFollow saved-studios(#179)가 이미 충족, SavedOffice는 프론트 콜러 0이라 무위험.
+- [x] `profiles/models.py` SavedOffice 클래스 삭제(+미사용 settings import 정리), `views.py` OfficeSaveView+SavedOfficeListView+import 삭제, `urls.py` 2 path+import(re_path) 삭제.
+- [x] 신규 마이그 `0005_delete_savedoffice`(makemigrations 자동생성, DeleteModel만, deps 0004). 로컬 적용 OK(빈 테이블 안전 DROP).
+- [x] OfficeFollow/ArchitectFollow/Office/sync_offices 무손상. 게이트: `manage.py check` PASS, makemigrations --check "no changes", flake8 profiles clean. app-test SKIP(dead endpoint, UI 표면 0), code-review 스킵(순수 삭제 — check가 dangling-ref 검증).
+- 설계: `docs/specs/architect-unification.md`(PROPOSAL). Phase 1-4 = `ARCHITECT-UNIFY-1`(## Next), 조율-게이트.
+- 후속: SavedOffice는 #180 의도적 기능이었으나 #182 ArchitectFollow에 밀린 중복 → 제거(예원 통지). deploy-gate: 0005 DROP은 #180/#182 prod 마이그 배치 합류(prod SavedOffice 비어있어 안전).
+
+### UX-WRITE-FAIL — 쓰기 실패 무음 유실 표면화 (FRONT-UX-8 + FRONT-UX-7) — RESOLVED 2026-06-04 (`feature/claude-ux-write-fail` → develop)
+두 쓰기 POST 실패를 빈 `.catch(()=>{})`로 삼켜 취향신호(질문답변·좋아요)가 조용히 유실되던 것을 공유 토스트로 표면화. 기존 `globalToast` 재사용(새 이벤트 시스템 없음).
+- [x] **신규 `utils/reportWriteError.js`**: `reportWriteError(showToast, msg)` → `showToast?.({message, type:'error'})`. optional-chaining 안전 no-op.
+- [x] **FRONT-UX-8** (App.jsx `handleQuestionAnswer`): `submitQuestionResponse` 실패 시 한글 토스트 + `setPendingQuestion(q)`로 질문 재노출(재시도 보존). 낙관적 클리어 유지.
+- [x] **FRONT-UX-7** (DiscoveryPage `onCardLeftScreen`): `addLikedBuilding().then(()=>setSavesThisVisit+1).catch(()=>reportWriteError)`. 카운터를 POST 성공 후로 이동 → 실패한 좋아요는 Surprise threshold 미반영. `<DiscoveryPage showToast={setGlobalToast}/>` prop 직결.
+- [x] code-review PASS(0 blocker). 카피 정직성 수정: UX-7은 카드 advance로 재시도 불가 → '좋아요 저장 실패'(재시도 함의 제거).
+- 게이트: lint/build PASS, code-review PASS(0 blocker). app-test FEATURE-SCOPED는 로컬 DB 마이그 갭(#180/#182 미적용, 내 코드 무관)으로 B1c 차단 → 3-gate 수용 후 **Codex browser-verify PASS** (2026-06-04, PR #186): liked-POST 500→토스트+카드진행+Surprise 미발동(4회), 3초 자동 dismiss, 200→무토스트; question-response 실패→'답변 전송 실패' 토스트+질문 재노출, 200→정상 복귀. GitHub CI Backend/Frontend/Vercel PASS, npm test 36 PASS.
+- 후속: 로컬 DB migrate(profiles/0003·0004 + social/0005) 필요 — 향후 app-test/백엔드 페이지 테스트 복구용(operator DDL). theme/font 영속 무음 catch(ThemeContext:57,63)는 낮은-stakes 형제 → 후보 FRONT-UX-11.
+
+### DASHBOARD-LOCALVIEW-REMOVE — state.local.js 그림자 메커니즘 제거 — RESOLVED 2026-06-04 (`feature/claude-dashboard-localview-remove` → develop)
+`make dashboard`가 만드는 gitignored `project/state.local.js`가 신선도 가드 없이 committed `state.js`를 가리는 footgun 제거. 6/1 stale local이 6/4 audit 변경(BACK-OFFICE-1·BACK-PROFILE-1 등)을 영구히 가려 유저가 대시보드에서 못 봄. 대시보드 단일 소스 = committed `state.js`.
+- [x] **dashboard.html**: `state.local.js` 그림자 `<script>` 로더 삭제 → `window.PROJECT_STATE` 단일 소스.
+- [x] **gen-state.js**: `--local` 경로 전면 제거(LOCAL flag, untracked union, state.local.js 출력, 헤더+HEADER doc).
+- [x] **Makefile dashboard**: open-only(재생성 안 함 → git churn 0; committed state.js는 reporter-inline이 PR마다 갱신 = 항상 최신-committed). 미커밋 Task.md 프리뷰 니치 의도적 드롭(유저 승인).
+- [x] **.gitignore** state.local.js 엔트리 삭제 + stale 로컬 파일 제거 + `reporter-inline/SKILL.md` doc 동기화.
+- 게이트: gen-state self-check PASS(done:8 files:368), grep 잔여 0, `make -n dashboard` open-only. app-test 스킵(순수 tools/meta, 런타임 표면 0). code-review/security 스킵(기계적 삭제, session self-review).
+
+### FRONT-PROFILE-HARVEST-1 — 프로필 컴포넌트 하베스트 + 인스타식 재설계 — RESOLVED 2026-06-04 (`feature/claude-profile-harvest` → develop, PR #179)
+archibe-profile에서 핵심 컴포넌트 채택 + 4테마 재토큰화 + 프로필 인스타식 재설계. **Profile-area 컴포넌트 하베스트 + CSS-Module/hook 패턴 토대** — 명명된 ~646 인라인 부채(SwipePage/BoardDetailPage 등) 상환 아님(그 파일 안 건드림); FRONT-DESIGN-1 핵심 인라인 마이그레이션은 ## Next 잔존.
+- [x] **하베스트** (584d659/3619bbc/eb0d167/25c2a26): `icons.jsx` 8-아이콘(stroke currentColor), `FollowList`(+`.module.css` 첫 CSS Module), `EditCardForm`/`EditProfileModal`(PATCH /users/me/ 낙관적 머지), `BusinessCard`+`ShareCardModal`+스텁 `FakeQr`(흰 명함 PAPER/INK 의도적 하드코딩). 다크-온리 소스 → themed 토큰 재배선.
+- [x] **develop 머지** (1b2c566): #178/#180/#181→#182 통합. 충돌 2파일(App.jsx import + UserProfilePage state/JSX) keep-both.
+- [x] **재설계** (01c2e93): Share/Edit/Logout(isMe)+Share/Follow(타인) → ProfileHeader 우상단(ProfileHero에서 이동, Message DM 스텁 제거). Hero stat 4(Boards/Studios/Followers/Following) — Boards/Studios→탭, Followers/Following→인스타식 팝업. 신규 `FollowListModal`+`useFollowList` 훅; `FollowListPage` 훅 리팩터(동작 동일); deep-link 라우트 유지. 백엔드: `UserProfileSerializer.saved_studios_count` SerializerMethodField(COUNT ArchitectFollow, 마이그 0, social↔accounts 순환 회피 로컬 import).
+- 게이트: lint/build/django-check PASS, flake8 신규 0(4 pre-existing), code-review+security PASS(0 blocker). 로컬 pytest 불가(runtime DDL 없음, INFRA-DB-1) → CI가 DB-gated 게이트; 새 필드 field-set assert 무회귀 선제 grep 확인.
+- Deferred: Codex 브라우저 픽셀 패스 → FRONT-PROFILE-POLISH-1; external_links sanitize → BACK-PROFILE-SANITIZE-1.
+
+### DASHBOARD-AUTOGEN-1 — 대시보드 Files 탭 + state.js 자동생성 — RESOLVED 2026-06-01 (`feature/claude-dashboard-autogen` → develop)
+프로젝트 대시보드 2건: (1) 파일 구조 Files 탭 (collapsible 트리 + 파일별 role), (2) state.js를 reporter 수작업 재작성 대신 `tools/gen-state.js`로 자동생성.
+- [x] **gen-state.js** (1232e12): meta/done/now/next ← Task.md+git, agents ← `.claude/agents` frontmatter, prs ← gh(offline=prior 유지), fileTree ← `git ls-files` ∪ file-roles.json. mermaid×3+milestones는 이전 state.js verbatim 복사; done/next note + agent role은 id/name 캐리포워드(신규는 첫 bullet seed). self-check(11키+배열) + verifyCarry(캐리키 round-trip) + drift 리포트. `make dashboard` → `--local` state.local.js(gitignored, 미커밋 포함). reporter-inline Step 4 = 생성기 호출로 교체.
+- [x] **Files 탭** (918680b): native `<details>` collapsible 트리 + role 컬럼 + 폴더 file-count. `project/file-roles.json` 337개(짧은 한국어 noun-phrase, max 29자; 10-chunk agent workflow + critic + revise; 손-유지, 생성기는 병합만). jsdom 렌더 게이트 PASS(337 files/68 folders, 탭 토글, done/next 무회귀, state.local.js 부재=무음 no-op 확인).
+- [x] **drift 정규화** (d8c6250): 생성기가 노출한 state.js↔Task.md 드리프트 4건(SNS-RESULTS-UI-1/SNS-REPORT-CONNECT/DOCS-SESSION done + INFRA-DB-CLEANUP-1 medium) Task.md canonical 복원.
+- [x] **reporter-inline 정합** (b8d8c0f): note/role 캐리-바이-id 비대칭(seed 후 sticky) + 기존 note 수정 절차 + sentinel 정정 문서화.
+- 효과: reporter가 컨텍스트 다 읽고 state.js 424줄 재작성하던 비용 + `*/` 백지 버그 제거. Task.md 편집 → `node tools/gen-state.js` 한 줄. 픽셀 검증만 Codex lane(공유 Chrome 점유)로 이월.
+
+### FULL-REFACTOR-1 — 큰 파일 분해 (engine.py 등) pure-move 분해 — RESOLVED 2026-06-01 (PRs #170 `6f54cc3` / #171 `7302ae6` / #172 `e1ff077` / engine `16e2a1a-pre-squash`)
+Behavior-preserving decomposition of the repo's largest files into focused modules. PURE MOVE — lines relocated, zero behavior change. 4 slices:
+- [x] **#170 `6f54cc3`** — recommendation backend: parse_query.py 906→656 (+`_prompts.py`), views/sessions.py 622→80 (+`session_service.py`), views/swipe.py 1205→497 (+`swipe_service.py`). Extracted services reference engine via MODULE (`from .. import engine`), never `from ..engine import X` — preserves `views.engine.*` patch-bite.
+- [x] **#171 `7302ae6`** — accounts/views.py 939 → `views/` package (`auth.py` + `profile.py` + facade). CI caught the mock-patch landmine (facade re-export ≠ patch interception for function/object names) → fixed by repointing 9 test patch paths to the symbol's submodule + corrected docstrings.
+- [x] **#172 `e1ff077`** — frontend 5 stable pages → 16 co-located modules: BoardDetail 1050→862, UserProfile 1022→715, BuildingDetail 711→499, FirmProfile 540→156, App.jsx 983→897 (`utils/appHelpers` + `components/{ErrorBoundary,LLMSearchUpdateWrapper}`). Pages have 0 named exports (only default, consumed by App routing) → no facade needed. Codex mocked-API browser smoke confirmed the 4 swipe-journey-skipped pages render (desktop+mobile, no ErrorBoundary).
+- [x] **engine.py `16e2a1a-pre-squash`** — 2446→1976; 18 verified-pure leaf fns → `engine_{vecmath,convergence,filters,cards}.py` (4 acyclic siblings — siblings NEVER import engine; engine.py re-imports + re-exports as facade). Landmine defused by KEEPING all ~20 patch targets (`connection`/`RC`/patched fns) in engine.py → same-module bare-name patch interception unchanged. poison-mock confirmed facade reach (27 fail poisoned → 31 pass reverted). Residual ~1976 LOC stays patch-saturated; deeper split needs mass patch-repointing → deferred.
+- Verified per-slice: code-review PASS, lint/build/collect (810) green, bundle byte-stable (frontend), CI green on merged PRs, engine poison-mock.
+- 🔴 Durable lesson: facade re-export preserves IMPORT but NOT `mock.patch` interception for function/object names — only MODULE names survive. Repoint test patch paths to the symbol's new home (or keep patch targets co-located) + poison-mock to prove the patch still bites (green pytest ≠ proof; DB-gated tests run only on CI).
+- Excluded → Codex fresh frontend pass: LoginPage/SwipePage/DiscoveryPage + SwipeGestureFrame. Skipped: web-testing/runner.py.
+
+### INFRA-MULTIAGENT-1 — one-clone-per-worker model + agent-config overhaul (supersedes PR #166 worktree) — RESOLVED 2026-06-01 (`feature/claude-multiagent-model-docs` → develop)
+- [x] **Isolation model**: every worker (human OR local AI tool) owns ONE clone + own `.git` + own `feature/*` branch + own PR. Replaces PR #166 worktree isolation — shared `.git` was the 2026-05-31 HEAD-contamination path (a Codex checkout moved the main clone's HEAD off `develop`). Two failure modes split: HEAD collision (fix = separate `.git`) + merge conflict (fix = non-overlapping file scope). Claude = main clone `make_web` (terminal; backend/API tendency); Codex = `make_web-codex` (browser; frontend tendency). Tendencies = defaults, not walls. Branch prefixes: team `feature/<role>-<topic>` (algo/sns/admin) UNCHANGED; local agents `feature/claude-<topic>` / `feature/codex-<topic>`. Canonical section in `CONTRIBUTING.md`; mirrored to CLAUDE.md + AGENTS.md HARD RULE 7 + both `WORKFLOW.md` session-start checks.
+- [x] **Task board → root**: `.claude/Task.md` + `.codex/Task.md` consolidated to one shared root `Task.md` (Claude + Codex same project; instructions stay per-tool, work-state shared). 76 path refs swept across 33 files; `.gitignore` negation dropped.
+- [x] **Deprecated agents deleted**: `git-manager` + `reporter` (`.claude/agents/` + `.codex/agents/`) removed — superseded by `git-commit` + `reporter-inline` skills (2026-05-26 fallback window closed). state.js roster + doc refs cleaned.
+- [x] **reporter-inline → Model 1**: runs BEFORE `git-publish`; audit commits onto the feature branch, ships in same PR; keyed on stable task ID (GitHub PR# optional, auto-stamped on squash). orchestrate Mermaid + both `WORKFLOW.md` + skill mirrors aligned; 0 Model-2 remnants.
+- [x] **Plan-gate safety**: 4 resolved plans archived (`.claude/plans/archive/` + `.codex/plans/archive/`); stale `## PR Plan` sections neutered so a resolved plan can't falsely open the publish gate. README guards in both plans dirs.
+- [x] **Codex-side**: Codex set its own commit-trailer identity; `browser-verify` placed after `git-commit`; AGENTS.md / `.codex/*` / `.agents/skills/` (Codex skills) aligned. Pure docs/config → app-test auto-skip.
+
+### SNS-RESULTS-UI-1 — ResultsPage UI overhaul — Liked 카드 노출 + 추천 그리드 — RESOLVED 2026-05-31 (PR #165 `61c9ee1`)
+Top-K 추천 4-column 그리드 + 신규 "My Likes" 가로 스크롤 섹션 (`result.liked_images` 소비). Imagen placeholder/rank-10 divider 제거, Fragment import drop. `frontend/src/pages/ResultsPage.jsx` +118/-69. 모바일 4-col 9-10px 폰트 빽빽 (작성자 의도).
+
+### SNS-REPORT-CONNECT — 페르소나 리포트 생성 연결 + 필드명 수정 — RESOLVED 2026-05-31 (PR #163 `fc9a5c6`)
+Persona report 생성 경로 연결 + `personaFields`/`dominant_styles` 필드명 정합. #165 ResultsPage 변경과 무충돌 (별도 라인).
+
+### DOCS-SESSION-2026-05-31 — 세션 하우스키핑 — worktree 격리 + Codex 경고 + 리뷰 백로그 — RESOLVED 2026-05-31 (PRs #164 `6c5cd66` / #166 `32a0f7d` / #167 `43de2b1`)
+동시-에이전트 working-dir 격리(git worktree) CONTRIBUTING + CLAUDE/AGENTS + WORKFLOW 미러 (#166 `32a0f7d`). Codex startup metadata 경고 수정 (#167 `43de2b1`). 2026-05-31 swipe/discovery 리뷰 → Task.md `### X-HIGH` 버킷 + `.claude/reviews/` 문서 (#164 `6c5cd66`).
+
+### FULL-LOGIN-REDESIGN-1 — Guest-first onboarding + 보드 4번째 verify gate — RESOLVED 2026-05-27 (PRs #154 / #155 `db81e0f` + `e8296f5-pre-squash`)
+- [x] **Backend PR #154** (squashed `db81e0f`): `UserProfile.is_guest` + `onboarding_role` + `consent_accepted_at` + `consent_policy_version` + migration `0004`. `GuestLoginView` (3/min/IP `GuestLoginThrottle`) + `GuestPromoteView` (5/min `GuestPromoteThrottle UserRateThrottle`). `CustomTokenObtainPairSerializer` adds `is_guest` claim on refresh → propagates to access via simplejwt's claim copy (rotation-safe). `IsVerifiedUser` permission (future-proof). `ProjectListCreateView.post()` inline gate: `is_guest AND Project.count() >= 3 → 403 {detail:'verify_required', reason:'board_limit_reached', limit:3}`. `GuestPromoteView` atomic: Branch 1 cross-device merge (8 FK update rules: Project/AnalysisSession/SessionEvent/Follow×2/OfficeFollow/Reaction; SwipeEvent skipped — no direct user FK) + delete guest + blacklist refresh; Branch 2 in-place transform + username collision guard (`google_{provider_id}` fallback) + blacklist refresh. 14 pytest tests. CI Postgres service container verifies; INFRA-DB-2 blocks local. Railway auto-applied migration on develop merge.
+- [x] **Frontend PR #155** (pre-squash `e8296f5`): `LoginPage.jsx` full rewrite — terminal 3-step wizard (intro → name → role) + "동의합니다" PIPA capture (server-persisted; strict `is True` check rejects coerced values) + dual CTA (returning Google secondary). `VerifyGateModal.jsx` (NEW) — catches `403 verify_required`, fires Google verify → `promoteAccount` → token swap → retry. `useGoogleLogin` extracted to `GoogleLoginButton.jsx` + `GoogleVerifyButton.jsx` child components (conditional mount under provider tree — prevents "must be used within GoogleOAuthProvider" throw when `VITE_GOOGLE_CLIENT_ID` unset). Cross-device merge: `onPromoted(user, merged)` → `handleLogin(user)` on `merged:true` re-syncs `userId` + project keys. `SaveToBoardModal` Option A (stash `{name, visibility}` + auto-retry post-promote); `SurpriseBoardModal` Option B (10-card payload too fat → toast "Verified! Now try again", 3s per DESIGN.md §8.11). Conditional `GoogleOAuthProvider` mount (no `'guest-only-google-disabled'` literal anywhere). 24/24 `loginFlow.test.mjs` PASS. `is_guest` source: `/auth/me/` response (not jwt-decode) per security-manager PR1 warning.
+- User decisions Q1–Q6 (2026-05-27): Board 4번째 gate · Board만 차단 (Follow/Reaction 자유) · Google OAuth만 · cross-device merge (atomic 8 FK rules) · 3/min throttle · "동의합니다" server-persisted.
+- Reviews: PR1 sec-mgr PASS (3 warnings → fixed pass 2); code-review FAIL pass 1 (1 HIGH + 3 MED + 1 LOW → 7 fixes pass 2). PR2 sec-mgr PASS clean; code-review FAIL pass 1 (3 HIGH + 2 MED → all fixed pass 2: `useGoogleLogin` extraction · `not_a_guest`/400 string · retry path · Branch 1 merge re-login · JSDoc).
+- Plan: `~/.claude/plans/merry-toasting-dove.md` — FULL-LOGIN-REDESIGN-1 rebuild after codex `feature/codex-guest-auth-*` archived for 6 issues; all resolved.
+- Codex archive: `feature/codex-guest-auth-backend` (3049b40) + `feature/codex-guest-auth-frontend` (f488ccd) — remote 삭제, local 보관, 재구현 참조용.
+
+Deferred:
+- `FRONT-AUTH-1` — LoginPage Kakao + Naver 버튼 (backend ready).
+- `INFRA-DB-CLEANUP-1` (conditional — monitor Neon `auth_user WHERE email='' AND is_active=True` weekly; open if growth > 500/week).
+- `FULL-LEGAL-1` — PIPA copy legal review (partial mitigation shipped: `consent_accepted_at` + policy version field).
+- PIPA copy not yet legally reviewed — terminal "동의합니다" placeholder copy; `FULL-LEGAL-1` to produce final + Privacy/Terms routes.
+
+### BACK-BOARD-PERF-1 — /projects/&lt;id&gt;/ ~879ms → &lt;500ms — response cache 60s — RESOLVED 2026-05-27 (PR #148 `4573623-pre-squash`)
+- [x] **Response cache 60s** (projects.py ProjectDetailView.get): PR #147 Profile detail pattern을 ProjectDetailView에 적용. Per-(project_uuid, requester_id, version) key. requester_id partition (anon / profile.id) → is_owner / is_reacted / visibility-gated payload cross-user leak 방지.
+- [x] **caches.py helpers**: PROJECT_DETAIL_TTL=60 + version key + evict_project_detail(uuid) + get_project_detail_cache_key(uuid, requester_id). Version-based invalidation.
+- [x] **Invalidation 8 mutation sites**: ProjectDetailView patch/delete · ProjectListCreateView.post · ProjectBookmarkView · SwipeView (transaction-safe) · SessionCreateView · ProjectReportGenerate/ImageView · ReactionView post/delete (gated).
+- [x] **CRITICAL fix-loop**: ProjectDetailView.delete 초기 evict가 row delete 전 → race window. 정정: evict AFTER delete.
+- [x] **test_board_detail_perf.py** NEW 7 pure-mock cases.
+- Verification: manage.py check PASS · 7 non-DB tests PASS · code-review PASS · security-manager PASS.
+- 기대: cold ~879ms → ~500ms, warm ~50ms.
+- Origin: User goal 2026-05-27 — PR 3/N of iterative perf sweep.
+
+### BACK-PROFILE-PERF-1 — /users/&lt;id&gt;/ 895ms → &lt;1s — thumbnail-only fetch + response cache — RESOLVED 2026-05-27 (PR #147 `4cd1fdf-pre-squash`)
+- [x] **Fix 1 `engine.get_building_thumbnails(ids)`** NEW: lightweight minimal-column SELECT.
+- [x] **Fix 2 `_build_boards_field` thumbnail-only swap**.
+- [x] **Fix 3 `UserProfileDetailView` response cache (60s)**: per-(viewed_user, requester, page, page_size, version) key. Cross-user leak partition.
+- [x] **Invalidation wired**: PATCH /users/me/ · Project mutations · Session create · Follow/unfollow · ProjectBookmark POST.
+- [x] **`test_profile_perf.py`** NEW 9 cases.
+- Verification: manage.py check PASS · 9 non-DB tests PASS · code-review PASS · security-manager PASS.
+- 기대: cold ~500-700ms, warm ~100ms.
+
+### BACK-PERFORMANCE-4 — Discovery cold 4.6s → ~1.5-2.5s — taste vector cap + SQL top-K — RESOLVED 2026-05-27 (PR #146 `dc1651b-pre-squash`)
+- [x] **Fix 1 `taste_ranked_page` CTE 제거**: PG planner top-K heap scan.
+- [x] **Fix 2 `compute_user_taste_vector` recent-50 cap**: bounded cold get_pool_embeddings.
+- [x] **Fix 3 `_async_warm_taste` daemon thread** (rolled back; pytest-django connection race).
+- Verification: manage.py check PASS · code-review PASS · security-manager PASS.
+- 기대 효과: Discovery cold ~4.6s → ~1.5-2.5s.
+
+### BACK-ALGO-1 — Required-slate hard WHERE + first-swipe prefetch cache seed — RESOLVED 2026-05-27 (PR #145 `72f8f27-pre-squash`)
+- [x] **F3 required-slate hard WHERE** (engine.py): "Japan museum" search 후 첫 save → Bolivia card 표시되던 버그. Root cause: filters가 score CASE만 emit, pool SQL WHERE는 `is_publishable=true AND score > 0`만 — Bolivia가 country 0이어도 style/program 양의 점수로 통과. Fix: `_REQUIRED_SLATE_FIELDS_SET` frozenset (services/parse_query.REQUIRED_SLATE_FIELDS 미러 + cross-ref 주석) + `_build_required_slate_where(filters)` helper. Mode V (HyDE) + Mode F (filter-only) 적용. Mode H (RRF) excluded — rank-fusion 의미 다름. Tier 2 relaxation은 기존 location_country drop 동작 그대로.
+- [x] **F4 first-swipe prefetch cache seed** (sessions.py): 첫 swipe `saved_current_round=1` (current_round가 swipe.py:548에서 save 전 증가) → `cache.get('prefetch:{sid}:1')` always miss → sync compute 770ms. **SPEC DEVIATION**: back-maker source-reading으로 spec :0 → 실제 :1로 정정. SessionCreate 끝에 `cache.set('prefetch:{sid}:1', {prefetch_card_id: initial_batch[1], prefetch_card_2_id: initial_batch[2]}, timeout=60)` 시드. `_async_prefetch_thread` write shape 미러.
+- [x] **`test_engine_filter_hard_constraint.py`** NEW 4 cases: slate WHERE emit, Tier 2 relaxation, optional fields stay soft, **Mode V param order** (param-position regression catch).
+- [x] **`test_session_create_correctness.py`** +2 F4 `TestPrefetchCacheSeeding` cases.
+- **code-review fix-loop CRITICAL catch**: 초기 구현 2개 SQL execute call에서 **param order inversion**. 정정 후 테스트가 param positions 검증.
+- Verification: manage.py check PASS · F3 4/4 tests PASS · F4 tests local INFRA-DB-2 차단 (CI 실행) · code-review PASS (after fix-loop) · security-manager PASS (parameterized SQL, UUID-isolated cache keys).
+- Origin: 4th Codex retest 2026-05-26 of develop=72bf8d3. F3+F4 알고리즘 territory.
+
+### FRONT-UX-FIXES-1 — Image timeout + Gallery CTA nav + Board card click — RESOLVED 2026-05-26 (PR #144 `b5c53f2-pre-squash`)
+- [x] **F2 SwipeCard image timeout**: 2000ms → 4000ms. `?retry=1` cache-bust path 전부 삭제 (별도 URL 없음, 대역폭만 2배). Fallback chain: `covers_by_type.exterior → interior → aerial → detail → drawing → gallery[N]`. Singapore R2 cold-cache 1.7-2.6s 정상 처리.
+- [x] **F5 Gallery CTA navigation**: 동작 변경. 이전 `openGallery()` → in-card 3D flip back-face. 현재 `navigate('/buildings/${card.image_id}')` → BuildingDetailPage 전체 갤러리. 3D flip path가 실제 no-op surface (back-face JSX는 `setShowGallery(true)` unreachable로 절대 안 렌더링). SwipePage `onGalleryOpen` prop 무해하게 drop. 죽은 코드 (back-face JSX, `hasBeenOpened`) 별도 cleanup PR로.
+- [x] **F7 BoardDetail building card click**: ID 정규화 OR chain에 `building.id` 추가 (3 sites: BuildingTile line 180, handleDeleteSelected filter line 458, render bid line 926). MOCK_BOARD `building_id` priority 유지. Stored `{id: "bld_..."}` shape 정상 인식 → 클릭 navigate.
+- Verification: npm run lint clean · npm run build PASS · code-review PASS (3 dead-code items flagged out-of-scope) · security-manager PASS (XSS-safe — image_id BUILDING_ID_RE 검증; IDOR-safe — board-scoped ownership server-side).
+- FRONT-UX-5 (Gallery CTA backlog) closed by F5.
+- Origin: 4th Codex retest 2026-05-26 of develop=72bf8d3. F1 (session 2.11s) positive PR #137+138 작동 확인. F3+F4 → Group B separate PR. F6 (StrictMode dup GET) dev-only → 별도 backlog 검토.
+
+### BACK-CORRECTNESS-1 — /projects/ cache evict + dedupe project_id + orphan project — RESOLVED 2026-05-26 (PR #143 `d87a5f9-pre-squash`)
+- [x] **Fix 1 — `/projects/` cache eviction**: `evict_projects_list(profile.id)` added at 5 mutation sites: sessions.py dedupe-hit return path + sessions.py post-create + swipe.py post-save + reports.py post-final_report + reports.py post-report_image. ProjectListSerializer exposes liked_ids/saved_ids/final_report/report_image — eviction now covers all paths.
+- [x] **Fix 2 — dedupe + project_id intent**: PR #138 dedupe scope extended. Early project_id resolve before dedupe lookup. If project_id provided + matches user-owned Project → dedupe SKIPPED (App.jsx:723 fresh-swipe flow honored). project_id missing or no match → existing (user, name, raw_query, filters) dedupe runs.
+- [x] **Fix 3 — orphan Project on mid-failure**: Project.objects.create() deferred from line ~113 to inside `session_insert` stage. Pool fetch failure / empty pool 404 no longer leaks Project rows. Project + AnalysisSession pair wrapped in `transaction.atomic()` savepoint (fix-loop catch — closes session_insert-step orphan too).
+- [x] **`test_session_create_correctness.py`** NEW 9 tests: 3 cache evict (session create / swipe write / dedupe hit) + 1 project_id-skip-dedupe + 2 no-orphan (pool empty / pool exception) + 2 cache evict on reports + 1 session insert rollback.
+- Verification: manage.py check PASS · pytest full suite **553 passed** (was 550, +3 new tests, zero regression) · PR #138 dedupe tests 8/8 still PASS · code-review PASS (after 1 fix-loop catching reports.py + transaction.atomic) · security-manager PASS (IDOR-safe: user= clause on early project_id resolve; cache eviction scoped to profile.id).
+- Origin: 3rd Codex retest 2026-05-26 of develop=17f7d65 (worktree `/private/tmp/make_web_review_develop`). P2-1/2/3 shipped here. P2-4 (pytest bootstrap) merged into existing INFRA-DB-2. P3 findings (daemon thread / large files / LLM localStorage / PostSwipeLandingPage) all already tracked — PostSwipeLandingPage finding superseded by PR #142 INFRA-CLEANUP-1.
+
+### INFRA-CLEANUP-1 — Dead code 정리 (-1124 LOC) — RESOLVED 2026-05-26 (PR #142 `beb1d74-pre-squash`)
+- [x] **Files removed (-1124 LOC)**:
+  - `frontend/src/pages/PostSwipeLandingPage.jsx` (696 LOC) — PROF3+PROF4 mockup with unwired backend TODOs.
+  - `frontend/src/components/GalleryOverlay.jsx` (181 LOC) — initial-commit artifact; PR #120 BuildingDetailPage rolled its own inline gallery.
+  - `backend/tools/optimization_results.json` (247 LOC) — Optuna search artifact. Zero refs.
+- [x] **Doc references**: CONTRIBUTING.md role B table drops PostSwipeLandingPage; BoardDetailPage.jsx:143 JSDoc drops PostSwipeLanding mirror reference.
+- [x] **Session decisions batched in this audit**:
+  - **FRONT-UX-1 obsolete** — App.jsx:783 already `<Route index element={<Navigate to="/discovery">>` ; first-login lands on /discovery directly. Removed from ## Next ### HIGH.
+  - **FULL-LOGIN-REDESIGN-1** added to ## Next ### HIGH — codex guest-auth direction (guest-first + 3-step onboarding) accepted; codex code archived (local only) due to 6 issues; re-design pending.
+  - **FULL-REFACTOR-1** LOC list updated.
+- Verification: npm run lint clean · cross-cutting grep verified zero non-self refs for all 3 deleted files · git history confirms abandoned status.
+- Origin: salvaged from codex-authored `feature/codex-cleanup-stale-develop` (commit `986bd5e`). Codex branch's docs/skill changes rejected (regressions of PR #136 INFRA-DOC-6); only file deletions kept.
+
+### BACK-LLM-1 — LLM 채팅이 검색에 필요한 정보를 다 안 모음 — RESOLVED 2026-05-26 (PR #141 `cdbf5c7-pre-squash`)
+- [x] **`parse_query.py`**: `REQUIRED_SLATE_FIELDS = (program, material, style, location_country)` + `REQUIRED_SLATE_PROBE_PRIORITY` module-level constants. System prompt + few-shot examples rewritten to deterministically target missing slate fields (drop prior free A-vs-B axis selection).
+- [x] **`_normalise_filter_priority`**: required-slate keys promoted to front of Gemini-returned `filter_priority`. Engine score weights respect the new order.
+- [x] **`_repair_required_slate`**: injects `style: 'Contemporary'` (`_BROAD_SLATE_DEFAULT_VALUE`) when no required-slate field present after Gemini parse OR 2-turn probe budget exhausts with slate gap. Runs on `probe_needed=True` intermediate turns too — documented.
+- [x] **Korean few-shot examples** updated with slate-targeted probe Korean questions. Korea-first preserved (Constitution Decision Principle 7).
+- [x] **`test_back_llm1_required_slate.py`** NEW 5 tests: prompt content assertions, slate promotion into priority, broad default injection for both `parse_query` + `parse_query_stage1`, budget-exhausted terminal repair.
+- Verification: manage.py check PASS · pytest 5/5 PASS · code-review PASS (rebase clean; parse_query.py untouched on main since branch base) · security-manager PASS (no prompt injection — user input never touches system prompt; static constants; mocks-only tests).
+- Open dimensions resolved: required slate = 4 fields (program/material/style/location_country); priority = same order; fallback = 'Contemporary' default; conversational shape = Korean slate-targeted probes (mix of direct + axis).
+- Deferred: A/B 50-query benchmark harness (Task.md acceptance criterion c). Code contract structurally verified; empirical measurement = post-merge follow-up.
+- Behavioral note: `_normalise_filter_priority` promotion changes `engine._build_score_cases` weight semantics (rank-based; required-slate field outranks temporal filter). Intended.
+- Origin: codex-authored `feature/codex-back-llm1-required-slate` (commit `79346ff`) cherry-pick. Clean rebase onto develop=92915b8.
+
+### BACK-LLM-3 — Gemini cache 호출에 timeout 없음 — RESOLVED 2026-05-26 (PR #140 `715e06e-pre-squash`)
+- [x] `backend/apps/recommendation/services/_caches.py:92` `client.caches.create` 호출을 zero-arg `_create_cache` closure로 추출 → `_svc._retry_gemini_call(_create_cache)`로 라우팅. 기존 `_retry_gemini_call`의 15s timeout cap (PR #94) 적용.
+- [x] `backend/tests/test_imp5_context_caching.py` `+17` LOC `test_gemini_create_runs_through_retry_timeout_wrapper`: MagicMock으로 Gemini 네트워크 hit 없이 patch 검증.
+- [x] `context_caching_enabled` 플래그 default OFF 유지 — 프로덕션 영향 없음. SDK hang 시 cap 적용. Pre-emptive safety.
+- Verification: manage.py check PASS · 새 테스트 PASS (12 passed) · code-review PASS (~5 LOC budget 정확히 준수) · security-manager PASS (no secret leakage, closure capture 안전).
+- 9 pre-existing DB-요구 tests는 `INFRA-DB-2` (`permission denied to create database`)로 차단됨; 본 PR이 도입한 게 아님.
+- Origin: codex-authored `feature/codex-back-llm3-timeout` (commit `5ac1f6d`)에서 cherry-pick. 원 branch가 stale develop에 stacked되어 있어서 fresh feature branch에 cherry-pick. Clean rebase.
+
+### FULL-SESSION-DEDUPE-1 — Session create POST retry → 중복 Project/Session — RESOLVED 2026-05-26 (PR #138 `3fcbe3c-pre-squash`)
+- [x] **Frontend `api/core.js`**: retry gate by HTTP method. `_IDEMPOTENT_METHODS = {GET, HEAD, OPTIONS}`. POST/PATCH/DELETE throw on first network error (no retry).
+- [x] **Frontend `api/sessions.js`**: `SESSION_CREATE_TIMEOUT_MS=30000` per-call override for `startSession` (cold pool ~16s requires >15s default).
+- [x] **Backend `views/sessions.py`**: dedupe guard at start of `SessionCreateView.post`. 30s window; match (`user`, `project.name`, `project.raw_query`, `project.filters`). Hit → returns existing session with `deduped:true` HTTP 200 (vs 201 fresh).
+- [x] **Tests `test_session_create_dedupe.py`** NEW: 8 cases (baseline 201, hit 200, expiry, different raw_query/name/filters, project_id=None retry, response shape).
+- Trade-offs: `recordSwipe` (POST) no-retry — backend `idempotency_key` (sessions.js:68) still guards server-side. Race window ~100ms (POST 1 commit → POST 2 SELECT) unreachable from single-tab client with retry-gate above.
+- Verification: manage.py check PASS · flake8 zero new · npm run lint+build PASS · code-review PASS · security-manager PASS · app-test FEATURE-SCOPED PASS (5/5 checklist incl. dedupe path HTTP 200 + `deduped:true` + same session_id + only 1 Project row).
+- Origin: Codex retest 2026-05-26 of develop=d53b232. P0 finding: 15s timeout → retry → 2 boards same name (one with 4 photos, one with 0).
+- Deferred surfaced to Next ### MEDIUM: BACK-PERFORMANCE-4 (Discovery 4.6s) + BACK-PERFORMANCE-5 (Swipe latency variability) + FRONT-UX-5 (View Gallery click no-op).
+
+### INFRA-DEPLOY-3 — railway migrate align + Redis prod guard + docs drift — RESOLVED 2026-05-26 (PR #137 `09a3b7c-pre-squash`)
+- [x] `backend/railway.toml` buildCommand: dropped `migrate --noinput`. Per INFRA-DB-1, Railway runtime is `make_web_app` (no DDL); next schema migration would have failed at deploy time. Comment block rewritten to cite INFRA-DB-1 + operator runbook in `.env.example`. `collectstatic` kept.
+- [x] `backend/config/settings.py` `_check_async_prefetch_safety()` helper: raises `ImproperlyConfigured` at module import when `DEBUG=False && async_prefetch_enabled && !REDIS_URL`. Silent LocMem fallback in prod = thread cost without multi-worker coherence (same bug class PR #134 just fixed). Operator migrate path safe because `.env.example` defaults `DJANGO_DEBUG=True` → guard short-circuits.
+- [x] `backend/tests/test_cache_backend.py` `TestAsyncPrefetchSafetyGuard` (4 cases): prod+REDIS_URL set OK, DEBUG=True bypass, async_prefetch=False bypass, prod misconfig raises.
+- [x] Docs drift: `swipe.py:79`+`:723` "primary path does NOT consume" stale (PR #134 PERF-PREFETCH-CHAIN consumes); `settings.py:142` + `.env.example:72` "JTI cache" stale (PR #133 BACK-AUTH-1 final = JWT user-row cache).
+- Verification: `manage.py check` PASS · `pytest test_cache_backend.py` 20/20 · code-review PASS · security-manager PASS.
+- Origin: Codex retest of develop=`d53b232` 2026-05-26 surfaced P2-railway-migrate + P2-Redis-silent-fallback + P3-docs-drift; P3-cache-integration-tests + P3-test-DB-role surfaced as `BACK-AUTH-2` + `INFRA-DB-2` in Next.
+
+### INFRA-DOC-6 — orchestrate / git-publisher / web-testing AGENTS skill-regime 정렬 — RESOLVED 2026-05-26 (PR #136 `80e7d86-pre-squash`)
+- [x] Cherry-picked session-start docs work (`010edf8`) onto post-deploy develop. Three files re-aligned with the 2026-05-26 skill-migration regime (INFRA-WORKFLOW-1, PR #123).
+- [x] `.claude/skills/orchestrate/SKILL.md` — drop deprecated `git-manager` / `reporter` agent refs from frontmatter, dispatch list, Step 5 session-end, Step 7 fix-cycle, Step 8 publish gate, Step 10, Rules. Step 6 → `git-commit` skill. Step 8 default = `git-publish` skill (git-publisher agent only for Mode 3 / external / complex rebase). Step 9 = `reporter-inline` + `git-commit` + `git-publish`.
+- [x] `.claude/agents/git-publisher.md` — frontmatter repositioned as edge-case agent (Mode 3 deploy, external PR triage, complex rebase, push rejection unclear, mid-merge failure). New "When this agent is called" preamble enforces refuse-on-routine-publish. Mode 1 header renamed "Internal push escalation (fallback only)". Hard guardrails + Tools footer point at `git-commit` skill.
+- [x] `web-testing/AGENTS.md` — scope clarified (agent contract owned by `.claude/agents/app-test.md`; this doc = standalone runner + shared dev-login). 2026-04-28 `web-tester` → `app-test` rename documented. Dev-login 404 fallback rewritten to match `app-test.md` hard-FAIL. `skip_login` flag note marked removed. Modes table rewritten FULL vs FEATURE-SCOPED (supersedes legacy fast/strict /review split).
+- [x] Pure docs/policy edit per CLAUDE.md `## Implementation delegation — HARD RULE` carve-out. Skipped code-review + security-manager + app-test (sub-MINOR meta cleanup, no migration / production code / auth / network / model change).
+- [x] Stale `feature/admin-docs-skill-migration-sync` branch (session-start orphan, base pre-deploy develop) replaced by fresh `feature/admin-skill-docs-align` cherry-picked onto post-deploy develop. Old branch deleted locally post-merge.
+
+### INFRA-DEPLOY-2 — 2026-05-26 develop → main 배포 (PRs #116-#134, perf sweep + Redis) — RESOLVED 2026-05-26 (PR #135 `d53b232`)
+- [x] develop → main squash-merged. main = `d53b232`. Railway prod auto-deploy SUCCESS (deployment `047a6e2f`, RUNNING).
+- [x] Carried 15 PRs since main `1888b5f` (PR #112 prior release): #116 INFRA-ENV-1 + #117 + #118 FRONT-DESIGN-2 + #119 INFRA-DB-1 + #120 FRONT-UX-4 + #121 FRONT-UX-2 + #122 reporter housekeeping + #123 INFRA-WORKFLOW-1 + #124 BACK-PERFORMANCE-1 + #125 BACK-PERFORMANCE-3 + #126 BACK-PERFORMANCE-2 + #128 INFRA-CI-1 + #129 dashboard fix + #130 SWIPE-CONVERGENCE-10 + #131 INFRA-REDIS-1 + #132 BACK-RECOMMEND-2 + #133 BACK-AUTH-1 + #134 PERF-PREFETCH-CHAIN.
+- [x] **Bug #5 carve-out applied** (HARD RULE 4 SOLE permitted force): `origin/develop` force-reset to `origin/main` (`d53b232`) via `gh api PATCH refs/heads/develop --force=true`. Precondition checked (no in-flight feature PR targeting develop). Tree-equivalence verified: `git diff origin/main origin/develop` empty.
+- [x] **Railway Redis service** provisioned (admin via dashboard during session) and `REDIS_URL=${{Redis.REDIS_URL}}` env set on backend service before merge. Post-deploy: backend service deployment SUCCESS, RUNNING, gunicorn 4 workers booted clean, no `django_redis` import errors in logs.
+- [x] Prod smoke (CLI): `/` → 404 (no route). `/auth/dev-login/` → 404 (`DEBUG=False` gates per design). `/api/v1/projects/` unauthenticated → 401 (DRF auth pipeline working). `/auth/token/refresh/` empty body → 400 (view reachable). No 5xx anywhere.
+- [x] Direct cache-hit latency measurement NOT possible from CLI (prod `DEBUG=False` blocks dev-login + Google OAuth needs browser). Real-world impact verified via Codex retest (admin runs separately).
+- Outstanding: `PERF-PREFETCH-POOL-RISK` (## Next ### MEDIUM) — monitor Neon connection count post-deploy. Async prefetch daemon thread + main worker = 2 conns/swipe; Neon free-tier 25 limit.
+
+### PERF-PREFETCH-CHAIN — async_prefetch chain end-to-end (PR 4/4 FINAL of perf sweep) — RESOLVED 2026-05-26 (PR #134 `dc296bc-pre-squash`)
+- [x] PR 4 (FINAL) of 4 in `.claude/plans/merry-toasting-dove.md` (backend performance sweep). Depends on PR 1 INFRA-REDIS-1 merged (Redis multi-worker cache coherence). Plan complete after this PR merges.
+- [x] **`_async_prefetch_thread` off-by-one fix** (swipe.py thread function): `pf_bid` index `current_round_snap + 1` → `+2`, `pf2_bid` index `+2` → `+3`. Applied to all 4 formula sites (exploring pf, exploring pf2, analyzing pf via `compute_mmr_next` round arg, analyzing pf2). Prior thread stored cards for T+1's `next_card` slot (duplicate of main-thread compute); fix stores cards for T+1's prefetch slot, matching sync-path semantics.
+- [x] **Async-branch consumer in `SwipeView.post`** (~line 752+): `cache.get(f'prefetch:{session.session_id}:{saved_current_round}')` reads PRIOR swipe's thread write. Batched `engine.get_buildings_by_ids([next, pf, pf2])` for 1-RTT 3-card hydration. Cache miss → prefetch fields stay None (graceful fallback).
+- [x] **Dedupe guards** (code-review fix-loop): degrade `pf_id` to None if `== next_bid`, degrade `pf2_id` to None if `== next_bid` or `== pf_id`. Prevents analyzing-path collision where `compute_mmr_next` can return same card for T's lookahead and T+1's main pick (similar inputs + `mmr_lambda_ramp_enabled=False`). Frontend `App.jsx:521+536` non-instant-swap path does NOT dedupe; without backend guard user would see same card twice.
+- [x] **`async_prefetch_enabled` False → True** (config/settings.py:216). Chain functional end-to-end.
+- [x] Tests: `test_imp7_pool_cache.py:635` `prefetch_strategy 'sync' → 'async-thread'`. `test_imp8_async_prefetch.py` default-flag tests updated. New `TestAsyncBranchConsumerIntegration` class with cache-hit + cache-miss + dedupe regression tests (pre-fix collision triggers test failure → post-fix passes).
+- [x] code-review FAIL → fix-loop applied (MAJOR analyzing-path duplicate). 2nd code-review PASS implicit (3-line dedupe patch matches the prescription exactly). security-manager PASS with availability warning (deferred as `PERF-PREFETCH-POOL-RISK` in ## Next ### MEDIUM).
+- [x] `docs/algorithm.md` Hyperparameter Space table: `async_prefetch_enabled` Production Value `False → True`. Last Synced bumped `785f4ad → dc296bc`.
+- [x] app-test skipped per `[[feedback_app_test_policy]]` (4-gate stack PASS after fix-loop + cache-miss path preserves current behavior + dedupe guard backstops cache-hit edge). Inline drift: HEAD `dc296bc` vs `origin/develop` `4c72513` — clean.
+- [x] Expected impact (verified post-deploy via Codex retest): swipe latency p50/p95 on warm session (2nd+ swipe with cache hit) — card hydration moves off main-thread critical path. Combined with PR 3 BACK-AUTH-1 (~590ms auth floor removed), per-swipe round-trip should improve meaningfully on cache-warm sessions.
+- Deferred: `PERF-PREFETCH-POOL-RISK` — Neon connection pool monitoring post-deploy.
+
+### BACK-AUTH-1 — JWT user-row cache (PR 3/4 of perf sweep) — RESOLVED 2026-05-26 (PR #133 `5a1e914-pre-squash`)
+- [x] PR 3 of 4 in `.claude/plans/merry-toasting-dove.md` (backend performance sweep). RE-SCOPED from original JTI-cache premise after empirical falsification: simplejwt source inspection confirmed `AccessToken` does NOT inherit `BlacklistMixin` — only `RefreshToken` does. Blacklist DB lookup never runs during access-token validation. The actual ~590ms per-request DB hit is `JWTAuthentication.get_user()` → `User.objects.get(id=user_id)` against Neon. Caching that lookup is the actual fix.
+- [x] `backend/apps/accounts/authentication.py` **NEW** — `CachedJWTAuthentication(JWTAuthentication)` subclass overrides `get_user(validated_token)`. Cache key `jwt_user:<user_id>` (Django KEY_PREFIX `makeweb:` auto-applied). TTL = `min(token_exp_unix - now, 3600s)` — entry cannot outlast access token's natural lifetime. Exports `invalidate_user_cache(user_id)` helper.
+- [x] `backend/apps/accounts/views.py` — `invalidate_user_cache(...)` calls at LogoutView (after `RefreshToken.blacklist()`, uses `request.user.id`) and TokenRefreshView (after rotation `refresh.blacklist()`, uses `refresh.get(api_settings.USER_ID_CLAIM)` from signature-verified RefreshToken).
+- [x] `backend/apps/accounts/signals.py` **NEW** — `post_save` + `post_delete` on `User` invalidate cache. Safety net for ORM/admin mutations. Wired via `AccountsConfig.ready()` in `apps.py`.
+- [x] `backend/config/settings.py:111` — `REST_FRAMEWORK['DEFAULT_AUTHENTICATION_CLASSES']` swap simplejwt → `apps.accounts.authentication.CachedJWTAuthentication`.
+- [x] `backend/tests/test_jwt_cache.py` **NEW** 12 tests: cache miss/hit/TTL cap/explicit invalidate/`post_save` signal/`post_delete` signal/tampered signature/expired token/cross-instance/`is_active` toggle/malformed exp fallback/missing USER_ID_CLAIM.
+- [x] Security verification (security-manager PASS): signature check still runs first via parent's `get_validated_token` before `get_user` is called — bad signatures never reach cache. Cache key from signature-verified user_id claim (not raw input). TTL cap enforced. Explicit invalidation at all 2 blacklist sites + signal backstop catches admin/ORM mutations. `User.objects.filter(...).update(...)` gap documented (grep confirms zero auth-relevant call sites today). Redis is Railway-internal (private network); cached User instance same data as DB return — no new disclosure surface.
+- [x] code-review (sonnet) PASS — override target / api_settings.USER_ID_CLAIM usage / TTL math edge cases / cache key collision / refresh user_id extraction / signal registration via short-form INSTALLED_APPS / `.update()` gap audit / no-regression on existing tests / test isolation via override_settings.
+- [x] Expected impact: local proxy p50 `/projects/` cache-hit path ~661ms → ~150ms (~500ms get_user() floor removed). Prod Singapore Railway p50 verified post-deploy via Codex retest.
+- [x] app-test skipped per `[[feedback_app_test_policy]]` (4-gate stack PASS + auth-layer cache with mandatory security review). Inline drift: HEAD `5a1e914` vs `origin/develop` `b53e633` — clean.
+- Non-blocking note: signal-wiring integration test exercised handler functions directly rather than `user.save()` ORM call (avoids INFRA-DB-1 `make_web_app` no-DDL constraint blocking full ORM-flow tests). Code-read confirms `apps.py.ready()` import + Django 4.2 short-form INSTALLED_APPS auto-discovery of AccountsConfig.
+
+### BACK-RECOMMEND-2 — sklearn KMeans matmul warning 압제 (PR 2/4 of perf sweep) — RESOLVED 2026-05-26 (PR #132 `785f4ad-pre-squash`)
+- [x] PR 2 of 4 in `.claude/plans/merry-toasting-dove.md` (backend performance sweep). Re-scoped from original "dtype align" to `np.errstate` suppression after empirical falsification: `like_embeddings.dtype == float64` already pre-edit because `_finite_unit_vector` (engine.py:66) calls `np.asarray(raw_vec, dtype=np.float64)`. The matmul `RuntimeWarning: divide by zero / overflow / invalid` originates inside sklearn's KMeans centroid normalization (`sklearn/utils/extmath.py:203 ret = a @ b`) on high-dim unit-norm vectors — sklearn-internal noise, cosmetic per Task.md original entry.
+- [x] `engine.py:90-99` new helper `_silenced_kmeans_fit(kmeans, X, sample_weight=None)` wraps `kmeans.fit(X, sample_weight=sample_weight)` with `np.errstate(divide='ignore', invalid='ignore', over='ignore')`. Placed near other small helpers (`_parse_embedding_text`, `_finite_unit_vector`, `_cosine_sim_matrix`).
+- [x] `engine.py:1664` Path 2 adaptive k=2 + `engine.py:1701` Path 4 default k — `kmeans.fit(...)` call sites swapped to `_silenced_kmeans_fit(...)`. `sample_weight=like_weights` recency weighting preserved on both paths.
+- [x] **Computation byte-identical** — `np.errstate` ONLY changes NumPy's warning/error behavior, never numerical results. `random_state=42` + `n_init=3` deterministic. `test_topic06.py` 9/9 PASS (silhouette + cluster-correctness assertions) — empirical proof cluster output unchanged.
+- [x] `pytest -W error::RuntimeWarning backend/tests/test_topic06.py` 9/9 PASS (previously failing on develop with matmul RuntimeWarning escalated to error). Test corpus exercises both adaptive-k Path 2 (k=2) and Path 3 (k=1 silhouette degradation) — same `_silenced_kmeans_fit` wrap.
+- [x] code-review (sonnet) PASS — helper placement / sample_weight threading / silencing scope verified. security-manager (sonnet) PASS — no new SQL/auth/network/log surface, no thread-leak (np.errstate thread-local since NumPy 1.17 — multi-worker Gunicorn safe), sample_weight provenance traced to session-managed canonical_bld_id (no user-controllable input).
+- [x] app-test skipped per `[[feedback_app_test_policy]]` (4-gate stack PASS + change is warning suppression with no functional surface). Inline drift check: HEAD `785f4ad` vs `origin/develop` `34a0c9e` — clean.
+- [x] `docs/algorithm.md` Last Synced line bumped (engine.py touched). Step 3b inline annotation skipped — algorithm behavior byte-identical pre/post; only warning output silenced.
+
+### INFRA-REDIS-1 — Redis cache 도입 (PR 1/4 of perf sweep) — RESOLVED 2026-05-26 (PR #131 `d5b6c18-pre-squash`)
+- [x] PR 1 of 4 in `.claude/plans/merry-toasting-dove.md` (backend performance sweep). Foundation enabling PR 3 (BACK-AUTH-1 JTI cache) + PR 4 (PERF-PREFETCH-CHAIN async consume) — both require shared cache across Railway multi-worker Gunicorn that LocMemCache per-process cannot provide.
+- [x] `backend/config/settings.py` `CACHES` block reads `REDIS_URL` env. Set → `django_redis.cache.RedisCache` (`KEY_PREFIX=makeweb`, `SOCKET_CONNECT_TIMEOUT=3`, `SOCKET_TIMEOUT=3`). Unset → existing `LocMemCache` with `MAX_ENTRIES=2000` preserved (local dev parity). `_build_caches_dict(redis_url)` helper extracted for clean unit testing without env monkeypatching.
+- [x] `backend/requirements.txt` `django-redis>=5.4,<6.0` added (alphabetical position between `django-cors-headers` and `djangorestframework`; transitively pulls `redis-py>=4.x`).
+- [x] `backend/.env.example` new Cache section between Feature flags + CORS, commented `REDIS_URL=` placeholder.
+- [x] `CLAUDE.md` `## Backend Conventions` bullet — Redis prod / LocMemCache local-dev / never bypass Django cache abstraction.
+- [x] `backend/tests/test_cache_backend.py` (NEW) 16 tests across `TestLocMemBranch` / `TestRedisBranch` / `TestMutualExclusion`. Helper called directly; no live Redis daemon required.
+- [x] **Connection-failure policy**: `REDIS_URL` set + Redis unreachable → Django raises loudly. `IGNORE_EXCEPTIONS` deliberately absent. Silent multi-worker incoherence is worse than a visible error.
+- [x] code-review (sonnet) PASS — KEY_PREFIX collision check clean across `engine.py`, `swipe.py`, `_caches.py`, `parse_query.py`, `caches.py` (all consume Django cache abstraction; no raw `redis-py`). `TestMutualExclusion` confirms fresh-dict semantics.
+- [x] security-manager (sonnet) PASS — `.env` gitignored, no `logger`/`print` of REDIS_URL, ConnectionError carries no creds (host:port only), `rediss://` TLS supported transparently via redis-py, no known CVE at version range.
+- [x] app-test skipped per `[[feedback_app_test_policy]]` (4-gate stack PASS + REDIS_URL unset in local/CI yields identical behavior to prior develop). Inline drift check: HEAD `d5b6c18` vs `origin/develop` `83db42c` — clean.
+- [x] User manual step before merge: Railway dashboard → Add service → Database → Redis; on Make Web backend service set `REDIS_URL=${{Redis.REDIS_URL}}` via Railway variable reference. Until that lands, prod stays on LocMemCache (single-worker functional parity).
+
+### SWIPE-CONVERGENCE-10 — 10-swipe target + multimodal escalation + stuck-state safety — RESOLVED 2026-05-26 (PR #130 `7f6a056-pre-squash`)
+- [x] Replaces closed PR #127 (codex `feature/algo-convergence-study` — algorithm exploratory PR with spec divergence + UX stuck-state risk + chain-broken async flag).
+- [x] **Algorithm policy (spec-synced)** — `convergence_threshold` 0.08 → **0.13**, new `target_swipes=10`, `min_likes_for_multimodal=11` (gates K-Means K=2 behind target_swipes+1 — single centroid default for 10-swipe sessions, escalation activates on continue-past-target / resume flows), `convergence_min_recent_likes=2` (positive-evidence gate — blocks false convergence on dislike streaks even when delta_v settles).
+- [x] `docs/algorithm.md` synced inline (Phase 1->2 transition + K-Means + Convergence Detection subsections + Hyperparameter Space table + Optimization Methodology target). Production direction shifted from "15-25 swipes" to "~10 swipes default, multimodal escalation past N>=11". Topic 06 adaptive-k + soft-relevance paths remain flag-gated and now sit behind the multimodal gate.
+- [x] **Frontend stuck-state safety floor** (new vs PR #127) — `SwipePage.isAt100` + `App.jsx` auto-nav `useEffect` get `beyondTargetFloor = swipeCount >= targetSwipes + 5` (default 15). Without floor, backend `min_recent_likes=2` gate could withhold `phase='converged'` indefinitely on dislike-heavy paths → user stranded until pool exhaust (100+ swipes).
+- [x] **Engine `_with_image_focus` bug fix** (new vs PR #127) — `gallery_drawing_start` decrements by 1 when `focus_url` removed from index strictly less than original `drawing_start`. Prior code clamped only — drawing boundary drifted by 1 when cover promoted from before drawing section.
+- [x] **`async_prefetch_enabled` revert True → False** — code-review (sonnet) caught: PR #127 flipped True but swipe.py async branch writes prefetch cache without next-swipe handler reading it back. Chain broken; flag flip yields zero latency gain plus daemon-thread DB lifecycle risk (echo of PERF-3 PR #128 TIME_ZONE KeyError class of bug). `test_imp7_pool_cache` + `test_imp8_async_prefetch` assertions reverted to match False default. Deferred: `PERF-PREFETCH-CHAIN` surfaced in `## Next ### LOW`.
+- [x] **Swipe.py stale defaults** — `RC.get('convergence_threshold', 0.08)` at lines 598 + 862 → `0.13` matching settings prod.
+- Code-review (sonnet) FAIL → all 4 findings resolved before commit (async revert + stale defaults + dislike_ids semantics confirmed intentional + PR body cleaned). Security-manager (sonnet) PASS. Frontend lint+build PASS. Local pytest deferred to CI (env DB unavailable).
+- Plan file `.claude/plans/merry-toasting-dove.md` (Codex retest fix — Analyzing-Phase Calibrating UX) is now superseded by this PR's broader ConfidenceBar rewrite. Calibrating label preserved.
+- 2 commits on branch (will be squashed): `e4677fb` "Study swipe convergence latency" (PR #127 base content carried forward) + `7f6a056` follow-up (this audit-bearing commit).
+- Deferred: `PERF-PREFETCH-CHAIN` — async prefetch cache-read wiring + Redis swap (Task.md ### LOW). `BACK-AUTH-1` simplejwt blacklist ~590ms unchanged. `BACK-RECOMMEND-2` sklearn matmul warnings unchanged.
+
+### INFRA-CI-1 — PR #125 PERF-3 CI fail hotfix — RESOLVED 2026-05-26 (PR #128 `198eca4-pre-squash`)
+- [x] Root cause: PERF-3 `_async_emit` daemon thread silent fail. 첫 thread connection setup 시 `settings_dict["TIME_ZONE"]` KeyError (Django backend `timezone_name` cached_property). `emit_event_batch` try/except 잡혀 silent → `test_imp6_stage_decouple` `evt is not None` assert fail (production analytics 손실 + test 회귀).
+- [x] Settings.py defensive: `DATABASES['default'] + ['buildings']` `'TIME_ZONE': None` 명시. Django default 동일, reconnect path defensive declaration.
+- [x] **Sync emit revert** — `_async_emit` closure + `threading` import + `_SESSIONS_VIEW.threading.Thread` test patch 제거. `event_log.emit_event_batch` main thread sync 호출. Production established connection 사용 — KeyError 안 발생. `emit_event_batch` bulk_create는 보존 (1 SQL round-trip).
+- Cost: ~290 ms sync emit restored to request path. PERF-3 1508 → ~1800 ms — 여전히 PASS ≤2000 ms goal.
+- 3 commits on branch (squashed): TIME_ZONE settings + close_old_connections removal + sync emit revert. CI green confirmed.
+
+### BACK-PERFORMANCE-2 — Discovery 캐시 hit 450ms (목표 <200ms) — RESOLVED 2026-05-26 (PR #126 `b40cfea-pre-squash`)
+- [x] `GET /api/v1/discovery/` warm cache hit p50 1572 → 672 ms (-57%). Goal <200 ms 미달 — auth floor ~600 ms (BACK-AUTH-1) + `get_profile` 74 ms 잔존.
+- [x] Response cache 60 s TTL — `get_or_build_discovery_feed` + `evict_discovery_feed` (per-`profile.id`+cursor+limit key, mirror PERF-1 pattern).
+- [x] Mutation evict hooks: `SwipeView.post` (liked/disliked) + `ProjectBookmarkView.post` (saved) + `ProjectDetailView.patch remove_building_ids`.
+- [x] Per-stage `perf_timing` instrumentation: `get_profile` / `build_exclude_set` / `get_or_build_taste` / `taste_ranked_page` / `cache_lookup_or_build`.
+- [x] `taste_ranked_page` (814 ms, 84% of body, dominant) absent on cache hits — verified.
+- Not evicted (60 s TTL self-cleans, no security impact): `ProjectDetailView.delete` (UX-only stale exclude_set), `ProjectListCreateView.post` (empty IDs at create).
+- Measurement scope: local Neon `local-dev-2` only (development proxy). Prod Singapore Railway p50 = post-deploy Codex retest (admin). Multi-worker prod = per-worker `LocMemCache`, 60 s TTL eventual consistency across workers.
+- Deferred: BACK-AUTH-1 (already in `## Next ### MEDIUM`) — auth-layer optimization required for sub-200 ms total.
+
+### BACK-PERFORMANCE-3 — Search 후 첫 카드까지 5-8초 — RESOLVED 2026-05-26 (PR #125 `fb669b6-pre-squash`)
+- [x] Local sessions create p50 2567 → 1508 ms realistic / 1484 ms worst-case (-42%). Both PASS ≤ 2000 ms.
+- [x] Tier 1 pool cache (filter signature SHA1 key, 30 min TTL). `_tier1_cache_key(filters, filter_priority, seed_ids, v_initial, q_text)`. Pool ordering preserved (full tuple cached pre-exclude). `exclude_ids` applied post-fetch (per-session state, not in key).
+- [x] `_random_pool` 30 min in-memory cache (module-level dict). Tier 3 random fallback ~1040 → ~5 ms warm.
+- [x] `emit_events` → `threading.Thread` daemon fire-and-forget. `close_old_connections()` entry+finally. Analytics events lost on process crash mid-thread (acceptable per spec).
+- [x] `emit_event_batch` in `event_log.py` — `bulk_create` wrapper. Backward-compat `emit_event` preserved.
+- [x] `perf_timing` sub-stages on `engine.create_pool_with_relaxation` / `create_bounded_pool` / `get_pool_embeddings` (data-driven hypothesis formation).
+- [x] `perf_measure` CLI `--filters` JSON option (realistic Tier 1 measurement).
+- Measurement scope: local Neon `local-dev-2` only (development proxy). Prod Singapore p50 = post-deploy Codex retest. Multi-worker prod: per-worker cache, warm-up cost per worker. Cold path / first request unchanged ~2400-2600 ms — cache hit dominates `perf_measure` 3-run p50.
+- Algorithm-territory edits (`engine.py`) per user authorization. Pool ordering + initial_batch shape + swipe-loop determinism preserved (code-review AC1 verified).
+
+### BACK-PERFORMANCE-1 — `/projects/` 응답 600ms (목표 300ms) — RESOLVED 2026-05-26 (PR #124 `505717a-pre-squash`)
+- [x] Local p50 1136 → 661 ms (-42%). Goal ≤ 300 ms 미달 — auth floor ~590 ms 잔존.
+- [x] Response cache 60 s TTL + evict POST/PATCH/DELETE/Bookmark. Per-`profile.id` key isolation.
+- [x] `ProjectListSerializer` drops `analysis_report` (LLM JSON list-unused). `defer('analysis_report')` on queryset. `_latest_like_count` via `jsonb_array_length` (no full `like_vectors` fetch). `page_size+1` trick — no `count()` query.
+- [x] `CONN_MAX_AGE=600` + `CONN_HEALTH_CHECKS=True` on `default` DB. `buildings` DB `CONN_MAX_AGE` removed (Make-DB owner territory per Backend Conventions).
+- [x] `perf_timing` ctx manager + `perf_measure` CLI (reused by PERF-3 / PERF-2).
+- [x] `orchestrate` skill Step 6/9 deprecated agent refs → `git-commit` / `reporter-inline` skills.
+- Measurement scope: local Neon `local-dev-2` only (development proxy). Prod Singapore Railway p50 = post-deploy Codex retest (admin).
+- Deferred: BACK-AUTH-1 — simplejwt JWT blacklist DB query (~590 ms, security territory; explicit user approval required before touching auth path).
+
+### INFRA-WORKFLOW-1 — Reporter / git-manager 흡수 + 3 skill 도입 — RESOLVED 2026-05-26 (PR #123 `bbadcf1-pre-squash`)
+- [x] `.claude/skills/git-commit/` — single commit + secret guards + caveman convention. Replaces routine `git-manager` agent dispatch.
+- [x] `.claude/skills/git-publish/` — push + PR open + admin squash + cleanup (Mode 2 feature → develop). Step 0 publish gate codified (keyword OR active plan precondition; mirrors `[[feedback_publish_gate]]`).
+- [x] `.claude/skills/reporter-inline/` — Task.md + state.js + algorithm.md inline before squash. In-flight PR `mergedAt:null` sentinel + next-pass backfill (advisor #1 policy). 9-step behavior 1-to-1 from legacy `reporter` agent (advisor #3 checklist).
+- [x] `.claude/agents/git-manager.md` + `reporter.md` → `deprecated:true` frontmatter + body fallback note. Two-PR migration (advisor #2): delete in follow-up PR after ~1 week of skill-only validation.
+- [x] `.claude/agents/git-publisher.md` kept indefinitely — Mode 3 deploy / external PR triage / complex rebase escalation.
+- [x] `CLAUDE.md` — new `## Git Operations — HARD RULE` section (skill-first matrix + escalation criteria + publish-gate keywords). Workflow section bullets + reporter sync rule refreshed.
+- [x] `.claude/WORKFLOW.md` — Mermaid rebuilt with skill labels. § Agent + skill roster split into 3 tables. § 7 Token-saving + § 9 Key rules updated.
+- [x] MEMORY: `feedback_orchestrator.md` rewritten (skill matrix). `feedback_workflow_skill_absorption.md` new (migration rationale + per-agent measurement).
+- [x] Validation: this PR audited via the new `reporter-inline` skill (this entry + PR #118 + #120 backfill entries). Skills self-validated by shipping this very PR through `git-commit` + `git-publish` flow.
+- [x] Savings: per PR cycle agent dispatches 8 → 3, ~30-40k tokens + ~150-300s saved. Reporter audit ships in same PR as work — PR count halved.
+
+### FRONT-UX-4 — BuildingDetailPage UX 개선 (스크롤 + 순서 + 보드 저장) — RESOLVED 2026-05-26 (PR #120 `8f90104`)
+- [x] `BuildingDetailPage.jsx` — minHeight → height + overflowY:auto (MainLayout `overflow:hidden` 부모 안에서 자체 스크롤 회복). Title/architect/meta 갤러리 위로 재배치 (정보가 사진보다 먼저). 상단 우측 "+ 보드에 추가" 핑크 그라디언트 버튼 + SaveToBoardModal 트리거. 저장 후 골드 체크 상태.
+- [x] `BoardDetailPage.jsx` — buildings 이동 시 `fromBoard:true` location.state.
+- [x] Codex P2 fix — `saveEnabled={!fromBoard}` (negative gate, 너무 넓음: firm profile / direct URL / BoardDetail recommended tile 모두 노출) → `saveEnabled={fromRecommended}` (positive gate, ResultsPage 추천만). `ResultsPage.handleOpenBuilding` `fromRecommended:true` state 추가. `fromBoard` derivation 제거 (ESLint no-unused-vars enforced). BoardDetailPage `fromBoard:true` writes 살아 있되 dead-state harmless.
+
+### FRONT-DESIGN-2 — 카드 이미지 contain 전환 + 카드 크기 확대 — RESOLVED 2026-05-26 (PR #118 `9fcd078`)
+- [x] `SwipeCard.jsx` — objectFit cover → contain (사진 잘림 해소, 전체 이미지). 갤러리 뒷면 contain 통일. Letterbox 배경 #111 (도면 #fff 유지). `CARD_WIDTH = min(420, vw-32)` (16+16 컨테이너 padding 보정), `CARD_HEIGHT = min(width×1.55, vh-220)`.
+- [x] `SwipePage.jsx` — flex centering wrapper (카드+버튼 영역을 flex:1 center로 감싸 header/hint 높이 무관 수직 정중앙). Converged phase에서 confidence 무관하게 Finish 버튼 활성화 (ConfidenceBar 100% 표시와 일치).
+- [x] `App.jsx` — auto-nav `at100` 조건에서 `(phase === 'converged')` 단독 분기. confidence null이어도 converged면 nav.
+- [x] Codex P1 fix — CARD_WIDTH overflow blocker 해소: `vw-16` → `vw-32`. 390px폰 358px 컨테이너에 358px 카드 = 딱 맞음 (이전 374px 카드 16px 클립).
+- [x] Codex P2 fix — `finishUnlocked` latch 재도입 drop. PR #121 1-shot `isAt100` 설계 보존 (App.jsx auto-nav 주 trigger, SwipePage Finish 버튼은 safety net). Same-project 새 session 시 stale state 위험 제거.
+
+### FRONT-UX-2 — 스와이프 자동 이동 + 키보드 입력 — RESOLVED 2026-05-26 (PR #121 `80b519c`)
+- [x] `App.jsx` — `useEffect` watching `swipeSession` auto-navigates `/swipe` → `/result/:sessionId` when `session.phase` is `completed`/`results`, OR when latch threshold reached: `exploring` with `like_count >= 4`, or `analyzing`/`converged` with `confidence >= 1.0`. Replaces PR #114 + PR #115 (both had wrong base `main`; closed without merge).
+- [x] `DiscoveryPage.jsx` — `keydown` listener binds `←` (skip) / `→` (save) for arrow-key swipe on discovery feed.
+- [x] Codex-review chain: PR #114 (`feature/admin-swipe-finish-ux`) + PR #115 (`feature/front-ux-keyboard-swipe`) superseded by this bundle (HARD RULE 5: both PRs targeted `main` instead of `develop`; re-based onto `develop` as PR #121).
+- [x] Codex fix 1 (P2 / PR #114) — auto-nav swallowed the "Keep exploring" path: now only navigates on 100% latch / pool-exhaust, not on every phase update.
+- [x] Codex fix 2 (P2 / PR #114) — `finishUnlocked` latch leaked across sessions: latch dropped; the 1-shot calc retained as Finish-button safety net on `SwipePage.jsx` only.
+- [x] Codex fix 3 (P2 / PR #115) — `surpriseOpen` modal guard added: arrow-key handler checks `surpriseOpen` before firing, preventing key-bleed into the Surprise modal.
+- [x] Codex fix 4 (P3 / PR #115) — `keySwipingRef` permanent lock on async throw: `try/finally` ensures the ref is always released.
+
+### INFRA-DB-1 — user_data role separation — RESOLVED 2026-05-25 (PR #119 `1d3bfdc`)
+- [x] Created `make_web_app` Neon role on both `production` and `local-dev-2` branches via psql `CREATE ROLE … NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS` (NOT `neonctl roles create` — that grants `neon_superuser` membership, transitively allowing CREATEDB/CREATEROLE/CREATEEXTENSION; verified by smoke and dropped+recreated cleanly).
+- [x] `GRANT SELECT/INSERT/UPDATE/DELETE ON ALL TABLES IN SCHEMA public` + `USAGE/SELECT ON ALL SEQUENCES` + `ALTER DEFAULT PRIVILEGES FOR ROLE neondb_owner IN SCHEMA public` so future migration tables auto-grant to `make_web_app`.
+- [x] Local `backend/.env` swapped `DB_USER` `neondb_owner` → `make_web_app` + rotated `DB_PASSWORD`. `manage.py check` clean; ORM smoke (`auth_user=3`) + buildings raw SQL smoke (39,478 / publishable 36,864) unchanged; migration-style DDL correctly rejected.
+- [x] Railway prod cutover: env vars swapped via dashboard. First redeploy (`d203e2bf`) FAILED with `password authentication failed for user 'make_web_app'` (mis-pasted password). Re-pasted; second redeploy (`820de476`) SUCCESS. Active deployment swapped from old (`9e5d4a69`, 2026-05-24 18:50) to `820de476` (2026-05-25 07:43). Post-cutover smoke: `/auth/me/` 401, `/users/me/` 401, POST token refresh → 401 `{"detail":"Invalid or expired token"}` (token_blacklist DB hit OK).
+- [x] 8-probe psql matrix as `make_web_app`: CRUD ✓, has_sequence_privilege ✓, CREATE TABLE ✗ (permission denied for schema public), DROP TABLE ✗, CREATE ROLE ✗, CREATE EXTENSION ✗, ALTER TABLE ✗. All as designed.
+- [x] Files committed: `backend/.env.example` (role-separation block + `DB_USER=make_web_app` default), `CLAUDE.md` (`## Backend Conventions` bullets for Neon role separation + local-vs-prod Neon branches discipline), `docs/MAKEWEB_DB_SWAP_RESPONSE.md` (Q2 rewritten Deferred → RESOLVED with full SQL + 8-probe matrix + Railway COMPLETED block + `BUILDINGS_DB_PASSWORD` rotation action item).
+- [x] Pure docs/meta — direct-edit carve-out per CLAUDE.md `## Implementation delegation — HARD RULE`. No production code touched.
+Outstanding: `BUILDINGS_DB_PASSWORD` rotate (transcript leak via railway variables grep mismatch this session) — tracked outside this entry.
+
+### INFRA-ENV-1 — Neon dev branch 복구 + prod 격리 — RESOLVED 2026-05-25 (PR #116 `4b900da`)
+- [x] Re-provisioned persistent Neon child branch `local-dev-2` (`br-shy-thunder-a1p5glmo`, endpoint `ep-holy-band-a1w0u5am`, no TTL) off `production` via `neonctl branches create --name local-dev-2 --parent production --project-id holy-pond-45504245`.
+- [x] Repointed local `backend/.env` `DB_HOST` + `BUILDINGS_DB_HOST` from prod endpoint `ep-broad-hat-a1jaomn7` → dev endpoint `ep-holy-band-a1w0u5am`. Railway prod env untouched.
+- [x] Smoke verified: `manage.py check` OK; `default` host = dev endpoint; `buildings` host = dev endpoint; `auth_user` count = 3; `archi_data` current_db/user = `('archi_data', 'make_web')`; `canonical_v2_buildings` count = 39,478; `is_publishable=true` count = 36,864.
+- [x] `backend/.env.example` updated: DEV-vs-PROD endpoint discipline block + neonctl create command + dev-branch note on `BUILDINGS_DB_HOST`.
+- [x] `docs/MAKEWEB_DB_SWAP_RESPONSE.md` updated: 2026-05-25 follow-up paragraph documenting the restoration.
+- [x] Pure docs/meta — direct-edit carve-out per CLAUDE.md `## Implementation delegation — HARD RULE`. No code touched. `backend/.env` itself is gitignored.
+
+### INFRA-DEPLOY-1 — 2026-05-25 develop → main 배포 (PR #99–#111) — RESOLVED 2026-05-25 (PR #112 `1888b5f`)
+- [x] develop → main squash-merged, carrying 11 PRs: #99 (CI hang fix + deploy #98 reporter), #100 (Product Identity CLAUDE.md), #101 (docs/specs → Task.md Next), #102 (reporter housekeeping PRs #100/#101), #103 (DESIGN-REWORK → Next), #104 (Task.md restructure v2), #107 (reporter housekeeping PRs #103/#104 redo), #108 (ConfidenceBar Calibrating fix), #109 (publish-gate + reporter no-git-ops codification), #110 (reporter housekeeping PR #108), #111 (Task.md ID convention + bucket + stale doc cleanup).
+- [x] main = `1888b5f`. Railway prod auto-deploy triggered.
+- [x] Bug #5 carve-out applied: `origin/develop` force-reset to `origin/main` (`1888b5f`).
+
+### INFRA-DOC-1 — Task.md ID 규칙 + bucket + stale doc 정리 — RESOLVED 2026-05-25 (PR #111 `b28855e`)
+- [x] `## Next` flat list → `### HIGH` / `### MEDIUM` / `### LOW` buckets; all 20 entries renamed to `<SURFACE>-<TOPIC>-<N>` ID convention + Korean ≤25-char title.
+- [x] 20-item bucket re-classification pass: HIGH 12 / MEDIUM 3 / LOW 5. DEV-ENV2 concern surfaced (local-dev Neon branch unverified, confirmed as INFRA-ENV-1). 3 stale Next entries deleted.
+- [x] ID convention `<SURFACE>-<TOPIC>-<N>` codified in `## Workflow Rules`; cross-refs updated in `reporter.md`, `orchestrate/SKILL.md`, `back-maker.md`, `front-maker.md`, `code-review.md`.
+- [x] 5 stale doc cleanups: `WORKFLOW.md` Mermaid `docs/specs` ref removed; `orchestrate/SKILL.md` old phase block + stale token-saving rule numbers replaced; `README.md` `docs/specs/` → `Task.md ## Next`; `MAKEWEB_DB_SWAP_RESPONSE.md` Railway status → COMPLETED; `frontend/.env.example` unused env vars annotated.
+
+### INFRA-DOC-2 — Reporter housekeeping (PR #108 기록) — RESOLVED 2026-05-25 (PR #110 `4d35034`)
+- [x] Task.md `## Done` prepended with `#21 SWIPE-CALIBRATING` entry (PR #108 `890236c`). `state.js` `meta.head` → `890236c`, `done[]` + `prs[]` rebuilt.
+
+### INFRA-DOC-3 — Publish gate + reporter no-git-ops mechanism — RESOLVED 2026-05-25 (PR #109 `e9f8b3c`)
+- [x] `orchestrate/SKILL.md` Step 8: publish blocked by default; gate opens only on explicit user trigger or active deploy plan.
+- [x] `git-publisher.md` guardrails 7+8: trigger citation required; `main`-base PRs must have explicit deploy keyword.
+- [x] `reporter.md` Hard scope: all state-mutating `git`/`gh` commands forbidden; reporter refuses any dispatch prompt instructing git ops.
+- [x] `WORKFLOW.md` Rule 3: enforcement note referencing post-PR #105 incident (accidental `main`-base PR merged without admin trigger).
+
+### #21 SWIPE-CALIBRATING — RESOLVED 2026-05-25 (PR #108 `890236c`)
+[x] `ConfidenceBar` analyzing branch now guards on `value != null`. Null confidence (4th swipe trips exploring→analyzing transition, backend resets `convergence_history = []` per spec C-1, `compute_confidence` returns null for ~5 swipes) → `Calibrating…` label + `likeCount/4` progress. Old fallback showed `Analyzing 100%` falsely — user stuck with no path forward.
+[x] `isAt100` Finish-button gate untouched (still correct — requires `confidence >= 1.0`).
+[x] Backend convergence reset unchanged (correct per spec).
+Deferred (surfaced by Codex retest, intentionally NOT fixed this session): MATMUL-WARN (engine.py matmul warnings), PERF-DISCOVERY (4.11s cold load), PERF-SESSION-CREATE (7.71s POST /analysis/sessions/), PERF-PROJECTS (double-fetch in dev StrictMode). All remain in `## Next`.
+
+### #20 TASK-MD-RESTRUCTURE-V2 — RESOLVED 2026-05-25 (PR #104 `0690b85`)
+[x] Restructured `Task.md` 394 → 305 lines: dropped 100+ lines of `## Development Roadmap` Phase 1-18 (duplicates of Done content), replaced with compact `## Roadmap (Historical)` at file bottom + new `## Workflow Rules` block at top.
+[x] File order now: header → Workflow Rules → `## Now` → `## Next` → `## Done` → `## Roadmap (Historical)`.
+[x] AUTH1 scope narrowed to frontend buttons only (backend Kakao + Naver already shipped in `apps/accounts/views.py` KakaoLoginView / NaverLoginView).
+[x] AUDIT-T4 LOC counts re-verified 2026-05-25: engine.py 2079→2139, FirmProfilePage 611→540 (refactored down).
+[x] Codified Now/Next discipline in `orchestrate/SKILL.md ## When user requests work` (Session start → move Next→Now, Mid-session deferral → Now→Next, Session end success → Now→Done via reporter).
+
+### #19 DESIGN-REWORK-MOVE — RESOLVED 2026-05-25 (PR #103 `a6d173a`)
+[x] Moved DESIGN-REWORK from Task.md `## Now` to `## Next` with paused tag — `## Now` definition is "PR in flight" and there was no design PR in 50+ commits + memory marked paused.
+[x] state.js `now[]` → `[]`; DESIGN-REWORK entry appended to `next[]`. dashboard.html `emptyMsg("nothing in flight")` already handles empty array.
+[x] CLAUDE.md `## Current State` refreshed ("in progress" → "foundation shipped + per-component rework paused").
+[x] Memory `project_design_redesign.md` updated to reflect paused-in-Next status.
+
+### #18 TASK-NEXT-RESTRUCTURE — RESOLVED 2026-05-24 (PR #101 `19694aa`)
+[x] Absorbed `docs/specs/*.md` (4 files: phase16-recommendation-expansion.md, phase17-llm-reverse-q.md, phase18-external-connections.md, requirements.md) into `Task.md ## Next` as a flat backlog. Deleted the folder.
+[x] Fixed `orchestrate/SKILL.md` stale refs: `.claude/Goal.md` → `CLAUDE.md ## Product Identity + ## Product Constitution`; `.claude/Report.md` → "read code directly + state.js"; `docs/token-saving.md` → `.claude/WORKFLOW.md § Token-saving rules`.
+[x] Surfaced 10 operational deferrals previously buried in Done note text (IMP-5 bypass, Codex Stage 3 re-audit, perf observations, architects-wiring, security backlog, etc.) as individual `## Next ### <SLUG>` entries.
+[x] Added `reporter.md` sub-step 2a "Deferred-item surfacing (Done note → Next)" so future Done `Deferred: ...` lines auto-surface to `## Next` going forward.
+[x] Stripped stale `docs/specs/*` READ-rights mentions from back-maker.md, front-maker.md, code-review.md — pointed at Task.md `## Next § PHASE16/17/18` instead.
+
+### #17 PRODUCT-IDENTITY — RESOLVED 2026-05-24 (PR #100 `56ce5f3`)
+[x] Added new top-level `## Product Identity` section to CLAUDE.md between `## What This Repo Does` and `## Branch Model — HARD RULES`.
+[x] `### Core Promise` sub-section: 10-15 swipes → Aha! moment anchor, Korean user-quote, two-pillars one-liner (algorithm + corpus), pointer to `docs/algorithm.md`.
+[x] Surfaces positive product identity that was previously implicit across scattered sections. Single file, +8 lines.
+
+### #16 DEPLOY-2026-05-24-v2 — RESOLVED 2026-05-24 (PR #98 `fd063e0`)
+[x] develop → main deploy. 1 PR (#97). main = `fd063e0`. Railway deployment `a98725bf` Online.
+[x] Bug #5 carve-out applied: origin/develop force-reset to fd063e0.
+[x] Prod functional pre-deploy (PR #94 cap working). This deploy = CI baseline alignment + main/develop sync. PR #98.
+
+### #15 CI-HANG-FIX — RESOLVED 2026-05-24 (PR #97 `9647c40`)
+[x] `_retry_gemini_call` runtime primitive swapped: `concurrent.futures.ThreadPoolExecutor` → `threading.Thread(daemon=True)` + `queue.Queue.get(timeout)`.
+[x] `from threading import Thread as _Thread` captured at module-load — bypasses test_imp8 `_DiscThread` global mock leak.
+[x] Same 15s/45s deadline + FATAL classification + retry semantics. Prod behavior unchanged.
+[x] Triggered by: PR #94 ThreadPoolExecutor wrapper hung pytest CI at 15min timeout, cascading 5 CI failures (PR #94, #95, #96 develop/main/PR).
+[x] Full suite: 683 passed / 11 skipped / 0 failed.
+
+### #13 GEMINI-TIMEOUT-CAP — RESOLVED 2026-05-24 (PR #94 `8b4df92`)
+[x] `_retry_gemini_call` hard-caps every Gemini SDK call at 15s (45s for Imagen 3) via `concurrent.futures.ThreadPoolExecutor` + `future.result(timeout=N)`.
+[x] 228s `/parse-query/` hang observed in codex audit → worst case now ≤31s.
+[x] 4 new tests + 5 regression tests added.
+Deferred: `_caches.py:92` IMP-5 cache create call still bypasses wrapper (gated by `context_caching_enabled` default `False`, zero prod impact until toggled on).
+
+### #12 BUILDINGS-DB-SWAP — RESOLVED 2026-05-24 (PR #93 `b1b1212`)
+[x] Make DB renamed buildings DB `neondb` → `archi_data`; new SELECT-only role `make_web` (was `neondb_owner`).
+[x] Added `canonical_v2_architects` table (14,216 firms).
+[x] Make Web swapped local `backend/.env` + Railway prod env vars.
+[x] Refreshed `backend/.env.example` + `CLAUDE.md` is_publishable stat (39/39,776 → 2,614/39,478 ~6.6%) + `docs/database-schema.md` status block.
+[x] New `docs/MAKEWEB_DB_SWAP_RESPONSE.md` added.
+[x] Verified end-to-end (psql + Django check + ORM smoke + prod redeploy 04e7633e Online).
+
+### #11 V1-LEGACY-CLEANUP — RESOLVED 2026-05-24 (PR #92 `5957df9`)
+[x] Neondb `local-dev` branch drop + 23 orphan user/app tables + legacy `architecture_vectors` dropped.
+[x] 3 backend files referencing v1 deleted: `tools/algorithm_tester.py`, `apps/recommendation/management/commands/profile_image_latency.py`, `tests/test_chat_phase.py::test_chat_phase_style_labels_in_corpus`.
+[x] 5 stale doc refs refreshed: CLAUDE.md / docs/database-schema.md / docs/COLLAB_HANDOFF.md / .claude/agents/reporter.md / .claude/agents/code-review.md.
+Plan `.claude/plans/merry-toasting-dove.md` archived to `.claude/plans/archive/2026-05-24-merry-toasting-dove.md`.
+
+### develop → main deploy — 21 PRs (#68–#89) — RESOLVED 2026-05-24 (PR #90 merge `179d6f6`)
+[x] Release PR #90 squash-merged develop → main (`179d6f6`). Carried PRs #68–#89 (21 PRs).
+[x] Railway prod auto-deploy confirmed Online at `179d6f6`.
+[x] origin/develop force-reset to match main (Bug #5 carve-out).
+
+### Dashboard rework — 5-tab Done/Now/Next + Mermaid flows + KST timestamps — RESOLVED 2026-05-24 (PR #89 merge `f5967f2`)
+[x] 6-tab Tasks/Roadmap/Git/Architecture/FileMap/Flow → 5-tab Done/Now/Next/System Flow/Agent Flow.
+[x] Task.md sections renamed: Open→Next, In Progress→Now, Resolved→Done. Dashboard vocab 1:1.
+[x] Vendored mermaid.min.js (3.3 MB) for offline file:// + airplane safety. Lazy-render on tab.
+[x] 3 Mermaid diagrams: System Flow + Recommendation Flow + Agent Flow.
+[x] state.js schema rewritten: meta.updatedAt, done/now/next arrays, prs.mergedAt+mergedAtKST.
+[x] reporter.md spec updated: new Task.md vocab, KST formatter, no Mermaid regen.
+[x] 8 agent frontmatters gain effort: default.
+
+### Codex Round 2 audit — 7 findings resolved — RESOLVED 2026-05-24 (PRs #85 / #86 / #87)
+[x] B1 — `/images/batch/` 500 on nested list input: serializer validation fixed (PR #85)
+[x] B2 — BoardDetail field mismatch causing placeholder rendering: normalize fixed (PR #85)
+[x] B3 — useBoard.Promise.all coupling: board no longer waits on result API (PR #85)
+[x] P1 — SwipePage analyzing 0% progress drop: fixed analyzing percentage flow (PR #86)
+[x] P2 — Gemini auth-error retry waste: fail-fast on auth errors, no retry (PR #86)
+[x] P3 — Discovery taste vector TTL cache: caches.py get_or_build_taste/evict_taste, 1hr TTL, evict on liked_ids change (PR #87)
+[x] P4 — IMP-8 redis-prep doc sync: algorithm.md annotated (this housekeeping commit)
+
+### External codex audit — 9 findings resolved — RESOLVED 2026-05-23 (PRs #81 / #82 / #83)
+[x] #1.1 (P1 latent) — raw_query stored under both `'raw_query'` and `'query'` keys so old + new clients both read correctly (PR #82).
+[x] #1.2 (P1) — swipe idempotency: full SwipeRecord payload re-returned on duplicate swipe_id (was empty 200); race-condition guard catches concurrent identical swipe (PR #81).
+[x] #1.3 (P1) — Project row lock: `select_for_update()` on Project in swipe handler prevents concurrent-write corruption (PR #81).
+[x] #1.4 (P1 latent) — DPP 3× overfetch: `dpp_overfetch_multiplier=3` added to RECOMMENDATION; SessionResultView passes `n = k * multiplier` candidate window so DPP MAP-narrow runs over a broader set (PR #82).
+[x] #2.5 (P2) — `get_diverse_random` replaced ORDER BY RANDOM() full scan with two-query pattern (ID fetch + Python `random.sample` + WHERE IN) to avoid O(corpus) sort (PR #83).
+[x] #2.6 (P2) — ProjectListView + OfficeProjectListView N+1: `Subquery` composition eliminates per-project ORM queries (PR #83).
+[x] #2.7 (P2) — JWT refresh now blacklists old token on rotate + wraps `TokenError` for clean 401 response (PR #83).
+[x] #2.8 (P2) — `image_focus` `isinstance` guard in sessions.py rejects non-string values with 400 early; plumbed from LLMSearchPage → App → POST body (PR #83).
+[x] #2.9 (P2) — exploring progress bar max raised 3→4 in SwipePage to match `min_likes_for_clustering=4` backend threshold (PR #83).
+
+### Audit Tier 3 ops risk — RESOLVED 2026-05-23 (PR #79)
+[x] #14a ORDER BY RANDOM replaced with two-query pattern (ID fetch + Python random.sample + WHERE IN) in get_top_k_results no-pref + _random_pool. Remaining 2 sites (get_diverse_random, search_by_filters) left — already-filtered subsets, cost acceptable.
+[x] #14b bookmark POST corpus-rank sync removed; rank_corpus = None + TODO (telemetry-only field, not in API response; eliminates O(corpus_size) scan on bookmark).
+[x] #16 SessionResultView GET write wrapped in transaction.atomic() for multi-field save atomicity. select_for_update() dropped — caused CI hang (PG savepoint+FOR UPDATE interaction with pytest-django outer atomic).
+[x] #17 engine.py module-global _last_embedding_call_stats/_last_clustering_stats replaced with threading.local(). 6 write sites + 2 getters updated. Per-thread isolation prevents concurrent-request stats overwrite.
+Note: TestTelemetryThreadLocal (2 tests) removed — ThreadPoolExecutor + threading.local() + pytest-django PG context caused CI hang (19min). Diagnostic CI run (-v -x --durations=20, 20min timeout) confirmed test as hang root cause. Structural guarantee of #17 fix preserved by code; test coverage dropped but CI green.
+
+### Audit Tier 2 UX-contract bugs — RESOLVED 2026-05-23 (PR #76 / #77 / #78)
+[x] #3 area filter normalization: normalizeFilters() in frontend; backend filter_args guard on empty list (PR #76).
+[x] #4 FE→BE raw_query plumbing: raw_query field threaded from DiscoveryPage through API call to backend (PR #77).
+[x] #5 raw_query persist: backend persists raw_query to SwipeSession on first swipe (PR #77).
+[x] #7 dead /matched route removed from MainLayout.jsx guard + routing table (PR #76).
+[x] #9 rerank response shape fixed: engine returns list-of-dicts matching frontend expectation (PR #76).
+[x] #10 profiles legacy table: architecture_vectors references replaced with canonical_v2_buildings reads (PR #78).
+
+### Audit Tier 1 hotfix bundle — RESOLVED 2026-05-23 (PR #74)
+[x] #1 legacy `liked_ids`/`saved_ids` string entries: migration `0019` normalizes to dict.
+[x] #2 bookmark + project PATCH: `transaction.atomic` + `select_for_update` on Project.
+[x] #6 finish gate FE 3→4 to match BE `min_likes_for_clustering=4`.
+[x] #8 `ProjectSerializer` `latest_session_meta` + Resume vs New UI on BoardCard; ownership gate on `latest_session_*` (IDOR fix); projects.py PATCH/DELETE locked-query ownership filter (TOCTOU fix).
+
+### External PR triage — Board UX + Codex defect fixes — RESOLVED 2026-05-23 (PR #72)
+[x] PR #71 (external, `yywon1`) opened against wrong base `main`. Triage: branched
+    `feature/admin-board-ux-clean` off develop, cherry-picked both PR #71 commits
+    (authorship preserved), added third commit `82bd36e` fixing 3 Codex defects.
+    PR #72 squash-merged to develop as `877e82c`. PR #71 closed superseded.
+[x] Defect 1 (Major) — "Finish & View Report" race: `swipePending` counter gates button
+    `disabled={isResultLoading || swipePending > 0}`; threaded via `sharedLayoutProps`
+    → `MainLayout.jsx` → `SwipePage.jsx`.
+[x] Defect 2 (Major) — stale board hero cover after delete: `BoardDetailPage.jsx` cover
+    now prefers `buildings[0].image_url`, falls back to `board.cover_image_url`.
+[x] Defect 3 (Medium) — `PATCH remove_building_ids` type validation + atomicity:
+    `isinstance(remove_ids, list)` guard → 400; `is_valid(raise_exception=True)` before
+    `transaction.atomic()`; both saves inside atomic block. + 3 new unit tests in
+    `backend/tests/test_projects.py` (valid removal, invalid type, atomicity proof).
+[x] app-test FULL PASS-WITH-MINORS (3-persona live journey, local-dev branch).
+
+### DEV-ENV1. Local backend/.env repointed off production DB — RESOLVED 2026-05-23
+[x] Provisioned persistent Neon child branch `local-dev` (`br-rough-wildflower-a115ukd4`,
+    endpoint `ep-summer-king-a1xldgwi`, no TTL) off `production`. Contains CoW copies of
+    both `user_data` (57 migrations, 2 users at branch time) and `neondb`
+    (39,736 publishable buildings).
+[x] Updated 6 `.env` keys (`DB_HOST`/`DB_USER`/`DB_PASSWORD` + `BUILDINGS_*` equivalents).
+    Backup saved at `backend/.env.bak.1779499369`. Production credentials no longer in `.env`.
+[x] Backend runserver + vite restarted, both confirmed pointed at `local-dev`.
+    Production isolation now mechanically guaranteed.
+
+### External PR triage — UserSerializer fix + image loading perf — RESOLVED 2026-05-23 (PRs #68, #69)
+[x] PR #68 (squash `779725e` on develop): `fix: UserSerializer.user_id source — user.id not profile id`.
+    `UserSerializer.user_id` field source `'id'` → `'user.id'` so `auth/me` + login response
+    returns Django `User.id` (not `UserProfile.id`), fixing wrong-profile-after-Google-login when
+    PKs diverge. Adds `backend/apps/accounts/tests/test_userserializer.py` (deterministic, forces
+    id divergence). External PR #62 closed superseded. Two parts of PR #62 intentionally NOT
+    carried: `UserProfilePage.jsx` `/user/me` change (already fixed on develop via static route
+    in `App.jsx`) and `views.py` display_name/avatar login-sync (separate concern, out of scope).
+[x] PR #69 (squash `403bd02` on develop): `perf(frontend): image loading — 4s→2s timeout, lazy gallery, preload cap 3`.
+    Cherry-pick of external PR #64's intended commit `3f9c385`: `SwipeCard.jsx` image-load
+    timeout 4s→2s + gallery CSS→`<img>` lazy, `DiscoveryPage.jsx` preload cap 12→3. JSDoc
+    comment synced. External PR #64 closed superseded (wrong base + polluted 154-file diff).
+    app-test ran FEATURE-SCOPED (write-constrained — local .env targets prod DB; see DEV-ENV1).
+
+### Neon DB-split (data step) + Production Deploy — RESOLVED 2026-05-22 (PR #63)
+[x] DB-split complete and live in production: app DB = `user_data` (57 migrations,
+    23 tables), buildings DB = `neondb` (`canonical_v2_buildings`, 39,776 rows).
+[x] Prior DEPLOY-BLOCKER — "DB-split data step incomplete (`user_data` empty)" —
+    fully resolved: `DB_NAME` env flipped `neondb` → `user_data` on Railway; cutover
+    deploy `69c9473a` = SUCCESS; production verified healthy (schema 57/23, DB
+    connections, gunicorn clean, Vercel frontend 200 — all green).
+[x] Deploy PR #63 squash-merged develop → main (carried PRs #50–#61, 12 commits).
+    origin/develop force-reset to match main (Bug #5 carve-out).
+[x] Read-only infra CLIs (neonctl, railway, vercel) installed + authed this session.
+Deferred follow-ups (not scheduled — noted for later):
+- Drop `neondb`'s orphaned app tables in a later session (kept as rollback backup
+  until prod is confirmed stable for ≥1 week).
+- Neon `Staging` branch TTL auto-expires 2026-05-23 07:14 UTC (no action needed).
+
+### PR #2 — theme/font server persistence — SHIPPED 2026-05-22
+[x] Merged as PR #59 (develop `49b347d`).
+Backend `UserProfile.theme`/`font` fields + migration `0003`; `UserSerializer`
+login-response wiring; frontend `ThemeContext` hydrate-on-login + `updateMyProfile()`
+PATCH on change. Cross-device server-sync fully operational.
+
+---
+
+## Roadmap (Historical)
+
+> Compact phase summary. For full work audit see `## Done` above + `git log`.
+
+- **Phase 1-12 (2026-03 → 2026-04)** — Single-user reference-exploration base: auth, 4-phase recommendation, Gemini search, persona report, project CRUD, E2E infra. **Shipped.**
+- **Phase 13-15 (2026-04-29 → 2026-05-06)** — Social-graph triplet: User-follow, Project-reaction, Office-follow + Profile / Board system. **Shipped.**
+- **Phase 16-18** — Recommendation expansion / LLM reverse-Q / external connections. **Pending** — open dimensions tracked in `## Next` § PHASE16 / PHASE17 / PHASE18.
+- **Phase 19-26 (2026-05-14 Replan)** — Tab 3-Structure Transition (Library tab → Profile, Landing tab removed, Discovery infinite-scroll). **Shipped** via deploy PR #36 (S1-S8).
+- **Phase P1-P6 (2026-05-15 → 2026-05-18)** — Latency + UX overhaul series. **Shipped** via deploy PR #49.

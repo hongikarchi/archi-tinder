@@ -25,7 +25,6 @@
 # ===== Role B — SNS / post-swipe =====
 /backend/apps/social/                                        @hongikarchi
 /backend/apps/profiles/                                      @hongikarchi
-/frontend/src/pages/PostSwipeLandingPage.jsx                 @hongikarchi
 /frontend/src/pages/UserProfilePage.jsx                      @hongikarchi
 /frontend/src/pages/FirmProfilePage.jsx                      @hongikarchi
 /frontend/src/pages/BoardDetailPage.jsx                      @hongikarchi

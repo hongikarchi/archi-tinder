@@ -11,15 +11,10 @@ SOC2 — 2 endpoints for project reaction (single-tier):
   POST   /api/v1/projects/{project_id}/react/  -- 201/200/403/404
   DELETE /api/v1/projects/{project_id}/react/  -- 204/403/404
 
-SOC3 — 2 endpoints for Office follow:
-  POST   /api/v1/offices/{office_id}/follow/   -- 201/200/404
-  DELETE /api/v1/offices/{office_id}/follow/   -- 204/404
-
 Counter caches (UserProfile.follower_count / following_count,
-Project.reaction_count, Office.follower_count) are managed exclusively by
-signal receivers in models.py (post_save / post_delete on Follow /
-Reaction / OfficeFollow). This covers both explicit view-level deletes and
-CASCADE deletes triggered by user/project/office
+Project.reaction_count) are managed exclusively by signal receivers in
+models.py (post_save / post_delete on Follow / Reaction). This covers both
+explicit view-level deletes and CASCADE deletes triggered by user/project
 account removal — no counter drift possible.
 """
 import logging
@@ -34,7 +29,7 @@ from rest_framework.views import APIView
 from apps.accounts.models import UserProfile
 from apps.accounts.serializers import UserMiniSerializer
 from apps.recommendation.caches import evict_user_profile_detail
-from apps.social.models import Follow, OfficeFollow, Reaction
+from apps.social.models import Follow, Reaction
 from apps.recommendation.caches import evict_project_detail
 
 logger = logging.getLogger('apps.social')
@@ -131,50 +126,6 @@ class FollowView(APIView):
         # Evict profile-detail cache for both parties.
         evict_user_profile_detail(followee.user_id)
         evict_user_profile_detail(requester.user_id)
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-class OfficeFollowView(APIView):
-    """POST + DELETE /api/v1/offices/{office_id}/follow/"""
-
-    permission_classes = [IsAuthenticated]
-    throttle_classes = [FollowWriteThrottle]
-
-    def post(self, request, office_id):
-        from apps.profiles.models import Office
-        office = get_object_or_404(Office, office_id=office_id)
-        requester = getattr(request.user, 'profile', None)
-        if requester is None:
-            return Response({'detail': 'Profile not found.'}, status=status.HTTP_403_FORBIDDEN)
-
-        _follow, created = OfficeFollow.objects.get_or_create(
-            follower=requester,
-            followee=office,
-        )
-        # Counter update is handled by _office_follow_post_save signal when created=True.
-
-        office.refresh_from_db(fields=['follower_count'])
-        response_status = status.HTTP_201_CREATED if created else status.HTTP_200_OK
-        return Response(
-            {'follower_count': office.follower_count, 'following': True},
-            status=response_status,
-        )
-
-    def delete(self, request, office_id):
-        from apps.profiles.models import Office
-        office = get_object_or_404(Office, office_id=office_id)
-        requester = getattr(request.user, 'profile', None)
-        if requester is None:
-            return Response({'detail': 'Profile not found.'}, status=status.HTTP_403_FORBIDDEN)
-
-        deleted_count, _ = OfficeFollow.objects.filter(
-            follower=requester, followee=office
-        ).delete()
-        # _office_follow_post_delete signal handles counter decrement per deleted instance.
-
-        if deleted_count == 0:
-            return Response({'detail': 'Not following.'}, status=status.HTTP_404_NOT_FOUND)
-        office.refresh_from_db(fields=['follower_count'])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -342,3 +293,54 @@ class ProjectReactorsListView(APIView):
             'results': UserMiniSerializer(items, many=True).data,
             **meta,
         })
+
+
+class UserSavedStudiosView(APIView):
+    """GET /api/v1/users/<int:user_id>/saved_studios/
+
+    Returns list of architects the user follows (ArchitectFollow records),
+    enriched with name + logo_url from canonical_v2_architects (buildings DB).
+    Public endpoint — any authenticated user can view any user's saved studios.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, user_id):
+        from apps.social.models import ArchitectFollow
+        from django.db import connections
+
+        follows = list(
+            ArchitectFollow.objects.filter(follower__user_id=user_id)
+            .order_by('-followed_at')
+            .values('architect_id', 'followed_at')
+        )
+        if not follows:
+            return Response([], status=status.HTTP_200_OK)
+
+        arch_ids = [f['architect_id'] for f in follows]
+
+        with connections['buildings'].cursor() as cur:
+            cur.execute(
+                """
+                SELECT canonical_arch_id, canonical_name, logo_url, primary_country
+                FROM canonical_v2_architects
+                WHERE canonical_arch_id = ANY(%s)
+                """,
+                [arch_ids],
+            )
+            rows = cur.fetchall()
+
+        meta_map = {row[0]: row for row in rows}
+
+        result = []
+        for f in follows:
+            arch_id = f['architect_id']
+            row = meta_map.get(arch_id)
+            result.append({
+                'architect_id': arch_id,
+                'name': row[1] if row else '',
+                'logo_url': row[2] if row and row[2] else '',
+                'primary_country': row[3] if row and row[3] else '',
+                'followed_at': f['followed_at'],
+            })
+
+        return Response(result, status=status.HTTP_200_OK)

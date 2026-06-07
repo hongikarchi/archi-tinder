@@ -1,12 +1,22 @@
 """TTL caches for recommendation engine."""
 
+import logging
+
 import numpy as np
 from django.core.cache import cache
+from django.conf import settings
+from django.db import connections
 
 from . import engine
 
+logger = logging.getLogger('apps.recommendation')
+
 TASTE_TTL = 300  # seconds — 5-minute freshness window
 PROJECTS_LIST_TTL = 60  # seconds — UX-acceptable staleness window
+
+# Discovery centroid cache TTL (6h — in-session fixed per spec §2.1).
+# Resolved lazily from settings so tests can override RECOMMENDATION.
+DISCOVERY_CENTROID_TTL = 21600  # default 6h; actual value read from RC at call time
 
 
 def _taste_key(profile_id):
@@ -200,3 +210,134 @@ def get_project_detail_cache_key(project_uuid, requester_id_for_cache):
     """
     ver = _project_detail_version(project_uuid)
     return f'project_detail:{project_uuid}:v{ver}:r{requester_id_for_cache}'
+
+
+# ── Discovery centroid cache (spec §2.1 — in-session fixed) ─────────────────
+
+def _discovery_centroids_key(profile_id):
+    return f'discovery_centroids:{profile_id}'
+
+
+def get_corpus_tag_df():
+    """Return per-axis document-frequency (DF) dict for TF-IDF keyword scoring.
+
+    Structure:
+      {
+        'style':           {tag: df_count, ...},
+        'atmosphere':      {tag: df_count, ...},
+        'material_visual': {tag: df_count, ...},
+        'program':         {tag: df_count, ...},
+        '_total':          N,          # total publishable buildings
+      }
+
+    Queried once from the buildings DB (read-only), then cached under
+    'qcard:corpus_tag_df' for corpus_df_cache_ttl_seconds (default 86400 = 24h).
+    On DB failure returns {'_total': 0} so callers degrade to frequency ranking.
+
+    Keys are stored as-is from the DB (lowercase normalization is done by the
+    ILIKE comparisons already used elsewhere; tag_axis_counts stores raw DB values).
+    """
+    RC = settings.RECOMMENDATION
+    ttl = RC.get('corpus_df_cache_ttl_seconds', 86400)
+    cache_key = 'qcard:corpus_tag_df'
+
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    result = {'_total': 0}
+    try:
+        with connections['buildings'].cursor() as cur:
+            # Total publishable buildings
+            cur.execute(
+                'SELECT COUNT(*) FROM canonical_v2_buildings'
+                ' WHERE is_publishable = true'
+            )
+            row = cur.fetchone()
+            total = int(row[0]) if row else 0
+            result['_total'] = total
+
+            # Single-value TEXT axes: style, atmosphere, program
+            for axis in ('style', 'atmosphere', 'program'):
+                cur.execute(
+                    f'SELECT {axis}, COUNT(*) FROM canonical_v2_buildings'
+                    f' WHERE is_publishable = true AND {axis} IS NOT NULL'
+                    f' GROUP BY {axis}',
+                )
+                result[axis] = {r[0]: int(r[1]) for r in cur.fetchall()}
+
+            # Array axis: material_visual (TEXT[])
+            cur.execute(
+                'SELECT m, COUNT(*) FROM canonical_v2_buildings,'
+                ' unnest(material_visual) m'
+                ' WHERE is_publishable = true'
+                ' GROUP BY m',
+            )
+            result['material_visual'] = {r[0]: int(r[1]) for r in cur.fetchall()}
+
+    except Exception as exc:
+        logger.warning('get_corpus_tag_df: buildings DB query failed: %s', exc)
+        return {'_total': 0}
+
+    cache.set(cache_key, result, ttl)
+    return result
+
+
+def get_or_build_discovery_centroids(profile):
+    """Return cached K-Means centroids for the Discovery feed (list of float lists).
+
+    Cache key: discovery_centroids:{profile_id}
+    TTL: discovery_centroid_cache_ttl (default 6h) — in-session fixed.
+    Spec §2.1: DO NOT evict on like changes; centroid is fixed for the session.
+
+    On cache miss:
+      1. Gather like_vectors from ALL user projects (draft + real), capped at
+         recent 50 (mirrors compute_user_taste_vector's recent-50 approach).
+      2. Call engine.compute_taste_centroids(like_vectors, round_num=len(like_vectors)).
+      3. Store centroids as list[list[float]] in cache.
+
+    Returns list[list[float]] (may be empty for cold users).
+    """
+    from .models import Project
+    from .discovery_feed import _liked_id_only
+
+    RC = settings.RECOMMENDATION
+    ttl = RC.get('discovery_centroid_cache_ttl', DISCOVERY_CENTROID_TTL)
+    key = _discovery_centroids_key(profile.id)
+    cached = cache.get(key)
+    if cached is not None:
+        return cached  # list[list[float]]
+
+    # Gather liked building ids across all projects (draft + real)
+    projects = Project.objects.filter(user=profile).values('liked_ids')
+    all_liked_ids = []
+    for p in projects:
+        all_liked_ids.extend(_liked_id_only(p.get('liked_ids')))
+
+    # Recent-50 cap (mirrors compute_user_taste_vector approach)
+    recent_ids = all_liked_ids[-50:] if len(all_liked_ids) > 50 else all_liked_ids
+
+    if not recent_ids:
+        return []
+
+    # Fetch embeddings
+    emb_map = engine.get_pool_embeddings(recent_ids)
+    like_vectors = []
+    for i, bid in enumerate(recent_ids):
+        emb = emb_map.get(bid)
+        if emb is not None:
+            like_vectors.append({'embedding': emb.tolist(), 'round': i})
+
+    if not like_vectors:
+        return []
+
+    # compute_taste_centroids returns (centroids_list, global_centroid)
+    centroids, _ = engine.compute_taste_centroids(like_vectors, round_num=len(like_vectors))
+
+    # Serialise to plain list[list[float]] for cache storage (numpy not picklable cleanly)
+    result = [
+        c.tolist() if hasattr(c, 'tolist') else list(c)
+        for c in centroids
+    ]
+    cache.set(key, result, ttl)
+    return result

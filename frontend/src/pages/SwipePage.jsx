@@ -1,7 +1,8 @@
 import { useRef, useState, useEffect } from 'react'
-import TinderCard from 'react-tinder-card'
 import TutorialPopup from '../components/TutorialPopup.jsx'
 import SwipeCard, { CARD_WIDTH, CARD_HEIGHT } from '../components/SwipeCard.jsx'
+import QuestionCard from '../components/QuestionCard.jsx'
+import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
 
 /* ── LoadingCard ─────────────────────────────────────────────────────────── */
 function LoadingCard() {
@@ -300,14 +301,16 @@ export default function SwipePage({
   currentCard, cardResetToken = 0, progress, isCompleted, isLoading, isResultLoading = false, swipePending = 0,
   projectName, onSwipe, onViewResults, onExtendSession,
   onExitToNewProject, onExitToHome,
+  questionTrigger = null,
+  onQuestionAnswer,
 }) {
   const cardRef = useRef(null)
+  const questionCardRef = useRef(null)
   const pendingAction = useRef(null)
   const swipedCardId = useRef(null)
   const hasShownDismissTutorial = useRef(!!localStorage.getItem('archithon_dismiss_tutorial_seen'))
   const pendingDismissDir = useRef(null)
   const [localResetTick, setLocalResetTick] = useState(0)
-  const [galleryOpen, setGalleryOpen] = useState(false)
   const [showTutorial, setShowTutorial] = useState(() => !localStorage.getItem('archithon_tutorial_dismissed'))
   const [showExitConfirm, setShowExitConfirm] = useState(false)
   const [showDismissConfirm, setShowDismissConfirm] = useState(false)
@@ -391,24 +394,23 @@ export default function SwipePage({
 
   useEffect(() => {
     function handleKeyDown(e) {
+      if (questionTrigger) return
       if (isLoading || !currentCard) return
       if (showTutorial || showExitConfirm || showDismissConfirm || pendingAction.current) return
       if (swipedCardId.current === currentCard.image_id) return
 
       if (e.key === 'ArrowLeft') {
-        if (galleryOpen) setGalleryOpen(false)
         // Only pre-set swipedCardId guard if not going to intercept for dismiss tutorial
         if (hasShownDismissTutorial.current) swipedCardId.current = currentCard.image_id
         swipeManual('left')
       } else if (e.key === 'ArrowRight') {
         swipedCardId.current = currentCard.image_id
-        if (galleryOpen) setGalleryOpen(false)
         swipeManual('right')
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isLoading, currentCard, showTutorial, showExitConfirm, showDismissConfirm, galleryOpen]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isLoading, currentCard, showTutorial, showExitConfirm, showDismissConfirm, questionTrigger]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (isCompleted) {
     const canContinue = !!progress?.can_continue
@@ -572,12 +574,11 @@ export default function SwipePage({
             zIndex: 10,
           }}
         >
-          {/* Left-arrow / exit icon */}
+          {/* Restart / new-session icon */}
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-            <polyline points="16 17 21 12 16 7" />
-            <line x1="21" y1="12" x2="9" y2="12" />
+            <polyline points="1 4 1 10 7 10" />
+            <path d="M3.51 15a9 9 0 1 0 .49-4.95" />
           </svg>
         </button>
 
@@ -586,7 +587,7 @@ export default function SwipePage({
           <h1 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 14px', letterSpacing: '-0.01em' }}>
             {projectName
               ? <span style={{ color: 'var(--color-text)' }}>{projectName}</span>
-              : <><span style={{ color: 'var(--color-text)' }}>Archi</span><span style={{ color: '#ec4899' }}>Tinder</span></>}
+              : <span style={{ color: 'var(--color-text)', letterSpacing: '0.2em' }}>ARCHIBE</span>}
           </h1>
           <div style={{ maxWidth: CARD_WIDTH, margin: '0 auto' }}>
             <ConfidenceBar value={confidence} phase={phase} progress={progress} />
@@ -634,37 +635,52 @@ export default function SwipePage({
         {/* Card */}
         <div style={{ width: CARD_WIDTH, height: CARD_HEIGHT, position: 'relative' }}>
           {currentCard ? (
-            <>
-              <TinderCard
-                ref={cardRef}
-                key={`${currentCard.image_id}_${cardResetToken}_${localResetTick}`}
-                onSwipe={onTinderSwipe}
-                onCardLeftScreen={onCardLeftScreen}
-                preventSwipe={galleryOpen ? ['left', 'right', 'up', 'down'] : ['up', 'down']}
-                swipeRequirementType='position'
-                swipeThreshold={120}
+            questionTrigger ? (
+              /* Wrap QuestionCard in SwipeGestureFrame so right swipe = 'A' (Yes)
+                 and left swipe = 'B' (No). Buttons remain as accessible fallback. */
+              <SwipeGestureFrame
+                ref={questionCardRef}
+                key={`question_${questionTrigger.axis ?? ''}_${questionTrigger.type}`}
+                onSwipe={(dir) => {
+                  if (dir === 'right') onQuestionAnswer('A')
+                  else if (dir === 'left') onQuestionAnswer('B')
+                }}
+                onCardLeftScreen={() => {}}
               >
-                <SwipeCard
-                  card={currentCard}
-                  onGalleryOpen={() => setGalleryOpen(true)}
-                  onGalleryClose={() => setGalleryOpen(false)}
+                <QuestionCard
+                  trigger={questionTrigger}
+                  onAnswer={onQuestionAnswer}
                 />
-              </TinderCard>
-              {isLoading && (
-                <div style={{
-                  position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  borderRadius: 20, background: 'rgba(0,0,0,0.15)', pointerEvents: 'none',
-                }}>
+              </SwipeGestureFrame>
+            ) : (
+              <>
+                <SwipeGestureFrame
+                  ref={cardRef}
+                  key={`${currentCard.image_id}_${cardResetToken}_${localResetTick}`}
+                  onSwipe={onTinderSwipe}
+                  onCardLeftScreen={onCardLeftScreen}
+                >
+                  <SwipeCard
+                    card={currentCard}
+                    onGalleryClose={() => {}}
+                  />
+                </SwipeGestureFrame>
+                {isLoading && (
                   <div style={{
-                    width: 32, height: 32, borderRadius: '50%',
-                    border: '3px solid rgba(255,255,255,0.2)',
-                    borderTopColor: '#fff',
-                    animation: 'spin 0.8s linear infinite',
-                  }} />
-                </div>
-              )}
-            </>
+                    position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    borderRadius: 20, background: 'rgba(0,0,0,0.15)', pointerEvents: 'none',
+                  }}>
+                    <div style={{
+                      width: 32, height: 32, borderRadius: '50%',
+                      border: '3px solid rgba(255,255,255,0.2)',
+                      borderTopColor: '#fff',
+                      animation: 'spin 0.8s linear infinite',
+                    }} />
+                  </div>
+                )}
+              </>
+            )
           ) : isLoading ? (
             <LoadingCard />
           ) : null}

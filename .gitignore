@@ -7,8 +7,8 @@
 !.claude/agents/
 !.claude/skills/
 !.claude/plans/
-!.claude/Task.md
 !.claude/WORKFLOW.md
+!.claude/reviews/
 
 # Python / Django (backend — future)
 __pycache__/
@@ -80,3 +80,4 @@ Desktop.ini
 *.orig
 .#*
 \#*\#
+

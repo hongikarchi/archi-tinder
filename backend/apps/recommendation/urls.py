@@ -1,10 +1,14 @@
-from django.urls import path
+from django.urls import path, re_path
 from .views import (
     ProjectListCreateView, ProjectDetailView, UserProjectsListView,
     SessionCreateView, SessionStateView, SwipeView, SessionResultView,
-    DiscoveryFeedView, DiverseRandomView, BuildingBatchView, ParseQueryView,
+    DiscoveryFeedView, DiscoveryFeedbackView, DiscoveryPromoteView,
+    DiverseRandomView, BuildingBatchView,
+    ParseQueryView,
     ProjectReportGenerateView, ProjectReportImageView,
     ProjectBookmarkView, ImageLoadTelemetryView, BoardSurpriseView,
+    QuestionResponseView,
+    RecommendedArchitectsView, ArchitectDetailView, ArchitectFollowView,
 )
 
 urlpatterns = [
@@ -22,8 +26,11 @@ urlpatterns = [
     path('analysis/sessions/<uuid:session_id>/state/',   SessionStateView.as_view()),
     path('analysis/sessions/<uuid:session_id>/swipes/',  SwipeView.as_view()),
     path('analysis/sessions/<uuid:session_id>/result/',  SessionResultView.as_view()),
+    path('analysis/sessions/<uuid:session_id>/question-responses/', QuestionResponseView.as_view()),
     # Images
     path('discovery/',                                   DiscoveryFeedView.as_view()),
+    path('discovery/feedback/',                          DiscoveryFeedbackView.as_view()),
+    path('discovery/promote-to-taste/',                  DiscoveryPromoteView.as_view()),
     path('images/diverse-random/',                       DiverseRandomView.as_view()),
     path('images/batch/',                                BuildingBatchView.as_view()),
     # Surprise board
@@ -32,4 +39,9 @@ urlpatterns = [
     path('parse-query/',                                 ParseQueryView.as_view()),
     # Telemetry
     path('telemetry/image-load/',                        ImageLoadTelemetryView.as_view(), name='telemetry_image_load'),
+    # Architect recommendation
+    path('projects/<uuid:pk>/recommended_architects/',   RecommendedArchitectsView.as_view()),
+    # Follow URL must come before the detail URL (more specific path first).
+    re_path(r'^architects/(?P<architect_id>arch_[0-9]{6})/follow/$', ArchitectFollowView.as_view()),
+    re_path(r'^architects/(?P<architect_id>arch_[0-9]{6})/$', ArchitectDetailView.as_view()),
 ]

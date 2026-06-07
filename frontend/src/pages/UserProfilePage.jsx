@@ -1,10 +1,14 @@
-import { useState, useEffect, useRef, useCallback, Fragment, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { getUserProfile, followUser, unfollowUser } from '../api/client.js'
 import { updateProject, deleteProject } from '../api/projects.js'
-import BoardCard from '../components/profile/BoardCard'
-import BioPersonaFlipCard from '../components/profile/BioPersonaFlipCard'
-import AppearanceSettings from '../components/AppearanceSettings.jsx'
+import { purgeChatCache } from '../utils/appHelpers.js'
+import { getUserSavedStudios } from '../api/architects.js'
+import ShareCardModal from '../components/ShareCardModal.jsx'
+import FollowListModal from '../components/profile/FollowListModal.jsx'
+import ProfileHeader from './userProfile/ProfileHeader'
+import ProfileHero from './userProfile/ProfileHero'
+import BoardGrid from './userProfile/BoardGrid'
 
 /**
  * formatBoardDate — converts ISO 8601 timestamp to "Month YYYY" display string.
@@ -49,6 +53,15 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
   const [boardsLoading, setBoardsLoading] = useState(false)
   const sentinelRef = useRef(null)
 
+  // Share card modal
+  const [shareOpen, setShareOpen] = useState(false)
+  // Follow list modal — null | 'followers' | 'following'
+  const [followModal, setFollowModal] = useState(null)
+  // Tab state — 'boards' | 'studios'
+  const [activeTab, setActiveTab] = useState('boards')
+  const [savedStudios, setSavedStudios] = useState(null)  // null = not loaded yet
+  const [studiosLoading, setStudiosLoading] = useState(false)
+
   // MINOR #1: inline error banner for failed board actions (optimistic revert feedback)
   const [boardActionError, setBoardActionError] = useState(null)
   // MINOR #3: per-board pending set — blocks rapid double-toggle
@@ -72,6 +85,20 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
     setConfirmingBulkDelete(false)
     clearTimeout(bulkConfirmTimerRef.current)
   }, [])
+
+  const handleStudiosTab = async () => {
+    setActiveTab('studios')
+    if (savedStudios !== null) return  // already loaded
+    setStudiosLoading(true)
+    try {
+      const data = await getUserSavedStudios(effectiveUserId)
+      setSavedStudios(data)
+    } catch {
+      setSavedStudios([])
+    } finally {
+      setStudiosLoading(false)
+    }
+  }
 
   // Adapter: map project_id -> board_id + format ISO date -> "Month YYYY"
   function adaptBoard(b) {
@@ -221,6 +248,8 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
     if (!deletedBoard) return
     setBoards(bs => bs.filter(b => b.board_id !== boardId))
     setBoardsTotalCount(t => Math.max(0, t - 1))
+    // Purge this project's chat cache keys on delete.
+    purgeChatCache(String(boardId))
     try {
       await deleteProject(boardId)
     } catch (err) {
@@ -300,6 +329,8 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
     // Optimistic removal
     setBoards(bs => bs.filter(b => !selectedBoards.has(b.board_id)))
     setBoardsTotalCount(t => Math.max(0, t - ids.length))
+    // Purge chat cache for all deleted projects.
+    ids.forEach(id => purgeChatCache(String(id)))
     const results = await Promise.allSettled(ids.map(id => deleteProject(id)))
     const failedIds = results
       .map((r, i) => (r.status === 'rejected' ? ids[i] : null))
@@ -350,11 +381,6 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
     e.currentTarget.style.color = 'var(--color-text-2)'
   }
 
-  // External-link helpers (pure derivations — no hooks)
-  const igHandle = user?.external_links?.instagram?.replace(/^@/, '') || ''
-  const igUrl = igHandle ? `https://instagram.com/${igHandle}` : null
-  const emailUrl = user?.external_links?.email ? `mailto:${user.external_links.email}` : null
-
   if (loading) {
     return (
       <div style={{
@@ -395,306 +421,80 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         pointerEvents: 'none', zIndex: 0,
       }} />
 
-      {/* Sticky Header — Back left, title center, controls right (when isMe) */}
-      <div style={{
-        position: 'sticky', top: 0, zIndex: 10,
-        background: 'var(--color-header-bg, rgba(10, 10, 12, 0.65))',
-        backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
-        padding: '12px 16px',
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        borderBottom: '1px solid var(--color-border-soft)',
-        gap: 8,
-      }}>
-        <button
-          onClick={() => navigate(-1)}
-          aria-label="Back"
-          style={{
-            width: 44, height: 44, minWidth: 44,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: 'transparent', border: 'none',
-            color: 'var(--color-text)', cursor: 'pointer',
-            borderRadius: 12,
-            transition: 'background 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-surface-2, rgba(255,255,255,0.05))' }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="19" y1="12" x2="5" y2="12"></line>
-            <polyline points="12 19 5 12 12 5"></polyline>
-          </svg>
-        </button>
-
-        <h2 style={{
-          color: 'var(--color-text)', fontSize: 17, fontWeight: 700,
-          margin: 0, letterSpacing: '-0.01em',
-        }}>
-          Profile
-        </h2>
-
-        {/* Right-side controls — only shown for own profile */}
-        {isMe ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <button
-              onClick={onLogout}
-              aria-label="Log out"
-              title="Log out"
-              style={{
-                width: 44, height: 44, minWidth: 44,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: 'transparent', border: 'none',
-                color: 'var(--color-text-dim)', cursor: 'pointer',
-                borderRadius: 12,
-                transition: 'color 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = '#ef4444' }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--color-text-dim)' }}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-                <polyline points="16 17 21 12 16 7"></polyline>
-                <line x1="21" y1="12" x2="9" y2="12"></line>
-              </svg>
-            </button>
-          </div>
-        ) : (
-          <div style={{ width: 44, height: 44 }} aria-hidden="true" />
-        )}
-      </div>
+      <ProfileHeader
+        isMe={isMe}
+        handle={user?.handle}
+        onLogout={onLogout}
+        onShare={() => setShareOpen(true)}
+        onFollow={handleToggleFollow}
+        isFollowing={isFollowing}
+        isFollowingPending={isFollowingPending}
+      />
 
       {/* Unified responsive container (max-width 1100) */}
       <div style={{ position: 'relative', zIndex: 1, maxWidth: 1100, margin: '0 auto', padding: '32px 20px 40px' }}>
 
-        {/* HERO BLOCK — narrower nested column (max-width 480) */}
-        <div style={{ maxWidth: 480, margin: '0 auto 36px' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+        <ProfileHero
+          user={user}
+          boardsTotalCount={boardsTotalCount}
+          followerCount={followerCount}
+          savedStudiosCount={user.saved_studios_count ?? 0}
+          onSelectTab={(t) => t === 'studios' ? handleStudiosTab() : setActiveTab('boards')}
+          onOpenFollowModal={(m) => setFollowModal(m)}
+          isMe={isMe}
+          onAvatarUpdated={(updatedUser) => setUser(prev => ({ ...prev, avatar_url: updatedUser.avatar_url }))}
+        />
 
-            {/* Avatar w/ on-brand pink-rose ambient halo */}
-            {user.avatar_url ? (
-              <div style={{ position: 'relative', marginBottom: 18 }}>
-                <div
-                  style={{
-                    position: 'absolute', inset: -6, borderRadius: '50%',
-                    background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
-                    opacity: 0.55, filter: 'blur(12px)',
-                  }}
-                  aria-hidden="true"
-                />
-                <img
-                  src={user.avatar_url}
-                  alt="avatar"
-                  style={{
-                    position: 'relative', zIndex: 2,
-                    width: 108, height: 108, borderRadius: '50%',
-                    border: '2px solid var(--color-border-soft)',
-                    objectFit: 'cover',
-                    background: 'var(--color-surface)',
-                    display: 'block',
-                  }}
-                />
-              </div>
-            ) : (
-              <div
-                style={{
-                  width: 108, height: 108, borderRadius: '50%',
-                  background: 'var(--color-surface)',
-                  border: '2px solid var(--color-border-soft)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  marginBottom: 18,
-                }}
-              >
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="8" r="4"></circle>
-                  <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"></path>
-                </svg>
-              </div>
-            )}
-
-            {/* Name */}
-            <h1 style={{
-              color: 'var(--color-text)', fontSize: 24, fontWeight: 700,
-              margin: '0 0 4px', lineHeight: 1.2, letterSpacing: '-0.01em',
-            }}>
-              {user.display_name}
-            </h1>
-
-            {/* §3.7 Compact stats row */}
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              gap: 0, marginTop: 14, marginBottom: 4,
-            }}>
-              {[
-                { count: boardsTotalCount, label: 'Boards' },
-                { count: followerCount, label: 'Followers' },
-                { count: user.following_count, label: 'Following' },
-              ].map((stat, i, arr) => (
-                <Fragment key={stat.label}>
-                  <button
-                    onClick={() => {
-                      if (stat.label === 'Boards') {
-                        // TODO(claude): navigate to user's boards list when route exists
-                      } else if (stat.label === 'Followers') {
-                        // TODO(claude): navigate to followers list — GET /api/v1/users/{id}/followers/
-                      } else {
-                        // TODO(claude): navigate to following list — GET /api/v1/users/{id}/following/
-                      }
-                    }}
-                    style={{
-                      flex: '0 0 auto',
-                      background: 'transparent', border: 'none', cursor: 'pointer',
-                      padding: '6px 18px', minHeight: 44,
-                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
-                      fontFamily: 'inherit', color: 'inherit',
-                    }}
-                  >
-                    <span style={{ color: 'var(--color-text)', fontSize: 18, fontWeight: 700, lineHeight: 1 }}>
-                      {stat.count}
-                    </span>
-                    <span style={{ color: 'var(--color-text-dim)', fontSize: 12, fontWeight: 500 }}>
-                      {stat.label}
-                    </span>
-                  </button>
-                  {i < arr.length - 1 && (
-                    <div style={{ width: 1, height: 28, background: 'var(--color-border)' }} />
-                  )}
-                </Fragment>
-              ))}
-            </div>
-
-            {/* §3.5.4 Hero Flip — BioPersonaFlipCard */}
-            {user.persona_summary && (
-              <BioPersonaFlipCard
-                bio={user.bio}
-                persona={user.persona_summary}
-                mbti={user.mbti}
-              />
-            )}
-
-            {/* External links — Instagram + email pills */}
-            {(igUrl || emailUrl) && (
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
-                {igUrl && (
-                  <a
-                    href={igUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 7,
-                      padding: '10px 14px', borderRadius: 999,
-                      background: 'var(--color-surface-2, rgba(255,255,255,0.04))',
-                      border: '1px solid var(--color-border-soft)',
-                      color: 'var(--color-text-2)',
-                      textDecoration: 'none', fontSize: 13, fontWeight: 600,
-                      transition: 'transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.18s, color 0.18s',
-                      minHeight: 44,
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = 'translateY(-1px)'
-                      e.currentTarget.style.borderColor = 'rgba(236,72,153,0.45)'
-                      e.currentTarget.style.color = '#ec4899'
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = 'translateY(0)'
-                      e.currentTarget.style.borderColor = 'var(--color-border-soft)'
-                      e.currentTarget.style.color = 'var(--color-text-2)'
-                    }}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
-                      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
-                      <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
-                    </svg>
-                    {user.external_links.instagram}
-                  </a>
-                )}
-                {emailUrl && (
-                  <a
-                    href={emailUrl}
-                    style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 7,
-                      padding: '10px 14px', borderRadius: 999,
-                      background: 'var(--color-surface-2, rgba(255,255,255,0.04))',
-                      border: '1px solid var(--color-border-soft)',
-                      color: 'var(--color-text-2)',
-                      textDecoration: 'none', fontSize: 13, fontWeight: 600,
-                      transition: 'transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.18s, color 0.18s',
-                      minHeight: 44,
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = 'translateY(-1px)'
-                      e.currentTarget.style.borderColor = 'rgba(236,72,153,0.45)'
-                      e.currentTarget.style.color = '#ec4899'
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = 'translateY(0)'
-                      e.currentTarget.style.borderColor = 'var(--color-border-soft)'
-                      e.currentTarget.style.color = 'var(--color-text-2)'
-                    }}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
-                      <polyline points="22,6 12,13 2,6"></polyline>
-                    </svg>
-                    {user.external_links.email}
-                  </a>
-                )}
-              </div>
-            )}
-
-            {/* §3.6 Profile Action Row — only for !isMe */}
-            {!isMe && (
-              <div style={{ display: 'flex', gap: 10, marginTop: 14, width: '100%' }}>
-                <button
-                  onClick={handleToggleFollow}
-                  disabled={isFollowingPending}
-                  onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)' }}
-                  onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)' }}
-                  onMouseDown={(e) => { e.currentTarget.style.transform = 'scale(0.98)' }}
-                  onMouseUp={(e) => { e.currentTarget.style.transform = 'translateY(-1px)' }}
-                  style={{
-                    flex: 1,
-                    minHeight: 44, padding: '12px 18px',
-                    borderRadius: 12,
-                    background: isFollowing ? 'var(--color-surface-2)' : 'linear-gradient(135deg, #ec4899, #f43f5e)',
-                    color: isFollowing ? 'var(--color-text-2)' : '#fff',
-                    border: isFollowing ? '1px solid var(--color-border)' : 'none',
-                    fontSize: 14, fontWeight: 700,
-                    cursor: isFollowingPending ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
-                    boxShadow: isFollowing ? 'none' : '0 8px 22px rgba(236,72,153,0.32)',
-                    transition: 'transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), background 0.2s, color 0.2s, box-shadow 0.2s',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                  }}
-                >
-                  {/* TODO(designer): wire spinner UI when main pipeline wires the call */}
-                  {isFollowing ? (
-                    <>Following<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg></>
-                  ) : 'Follow'}
-                </button>
-                <button
-                  onClick={() => {
-                    // TODO(claude): wire DM endpoint — POST /api/v1/messages/ or similar
-                  }}
-                  aria-label="Message"
-                  style={{
-                    width: 44, height: 44, minWidth: 44, flexShrink: 0,
-                    background: 'var(--color-surface)',
-                    border: '1px solid var(--color-border)',
-                    borderRadius: 12, cursor: 'pointer',
-                    color: 'var(--color-text-2)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    transition: 'border-color 0.18s, color 0.18s',
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(236,72,153,0.45)'; e.currentTarget.style.color = '#ec4899' }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-2)' }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                  </svg>
-                </button>
-              </div>
-            )}
-          </div>
+        {/* Tab bar — Boards | Studios */}
+        <div style={{
+          display: 'flex',
+          borderBottom: '1px solid var(--color-border-soft)',
+          marginBottom: 0,
+          marginTop: 8,
+        }}>
+          <button
+            type="button"
+            onClick={() => setActiveTab('boards')}
+            style={{
+              flex: 1,
+              padding: '12px 0',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: 14,
+              fontWeight: activeTab === 'boards' ? 700 : 500,
+              color: activeTab === 'boards' ? 'var(--color-text)' : 'var(--color-text-muted)',
+              borderBottom: activeTab === 'boards' ? '2px solid var(--color-text)' : '2px solid transparent',
+              marginBottom: -1,
+              fontFamily: 'inherit',
+              transition: 'color var(--motion-fast), border-color var(--motion-fast)',
+            }}
+          >
+            Boards
+          </button>
+          <button
+            type="button"
+            onClick={handleStudiosTab}
+            style={{
+              flex: 1,
+              padding: '12px 0',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: 14,
+              fontWeight: activeTab === 'studios' ? 700 : 500,
+              color: activeTab === 'studios' ? 'var(--color-text)' : 'var(--color-text-muted)',
+              borderBottom: activeTab === 'studios' ? '2px solid var(--color-text)' : '2px solid transparent',
+              marginBottom: -1,
+              fontFamily: 'inherit',
+              transition: 'color var(--motion-fast), border-color var(--motion-fast)',
+            }}
+          >
+            Studios
+          </button>
         </div>
+
+        {activeTab === 'boards' && (<>
 
         {/* MINOR #1: inline error banner for failed board actions */}
         {boardActionError && (
@@ -779,7 +579,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             marginBottom: 20, padding: '0 4px',
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <h3 style={{
                 color: 'var(--color-text)', fontSize: 20, fontWeight: 700,
                 margin: 0, letterSpacing: '-0.01em',
@@ -791,6 +591,36 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
               }}>
                 {boardsTotalCount}
               </span>
+              {isMe && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/liked-projects')}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    background: 'transparent',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 10, cursor: 'pointer',
+                    color: 'var(--color-text-2)', fontSize: 13, fontWeight: 600,
+                    padding: '0 12px', minHeight: 36,
+                    fontFamily: 'inherit',
+                    transition: 'border-color 0.18s cubic-bezier(0.4,0,0.2,1), color 0.18s cubic-bezier(0.4,0,0.2,1)',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = 'rgba(236,72,153,0.55)'
+                    e.currentTarget.style.color = '#ec4899'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = 'var(--color-border)'
+                    e.currentTarget.style.color = 'var(--color-text-2)'
+                  }}
+                >
+                  {/* Heart icon */}
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                  </svg>
+                  Liked Projects
+                </button>
+              )}
             </div>
             {/* P6: Edit button — owner-only, only when boards exist */}
             {isMe && boards.length > 0 && (
@@ -828,36 +658,19 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
           </div>
         )}
 
-        {/* Boards grid — same unified container, responsive auto-fill */}
-        {boards.length > 0 ? (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-            gap: 20,
-          }}>
-            {boards.map(board => (
-              <BoardCard
-                key={board.board_id}
-                board={board}
-                isOwner={isMe}
-                onVisibilityChange={(next) => handleVisibilityChange(board.board_id, next)}
-                onDelete={() => handleDelete(board.board_id)}
-                selectMode={selectMode}
-                isSelected={selectedBoards.has(board.board_id)}
-                onSelectToggle={handleSelectToggle}
-                directNavigate={!board.latest_session_meta}
-                onResume={onResumeProject ? () => onResumeProject(board.board_id) : undefined}
-                onStartNew={onNewProjectSession ? () => onNewProjectSession(board.board_id) : undefined}
-              />
-            ))}
-          </div>
-        ) : (!boardsHasMore && !boardsLoading && (
-          <div style={{
-            color: 'var(--color-text-dim)', fontSize: 14, textAlign: 'center', padding: '40px 0',
-          }}>
-            No boards yet.
-          </div>
-        ))}
+        <BoardGrid
+          boards={boards}
+          isMe={isMe}
+          selectMode={selectMode}
+          selectedBoards={selectedBoards}
+          onVisibilityChange={handleVisibilityChange}
+          onDelete={handleDelete}
+          onSelectToggle={handleSelectToggle}
+          boardsHasMore={boardsHasMore}
+          boardsLoading={boardsLoading}
+          onResumeProject={onResumeProject}
+          onNewProjectSession={onNewProjectSession}
+        />
 
         {/* P6: sticky bulk action bar — visible when selectMode && selection > 0 */}
         {selectMode && selectedBoards.size > 0 && (
@@ -967,26 +780,109 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
           </div>
         )}
 
-        {/* Settings section — own profile only */}
-        {isMe && (
-          <div style={{
-            marginTop: 40,
-            paddingTop: 24,
-            borderTop: '1px solid var(--color-border)',
-          }}>
-            <h2 style={{
-              fontSize: 18,
-              fontWeight: 700,
-              color: 'var(--color-text)',
-              margin: '0 0 20px',
-            }}>
-              Settings
-            </h2>
-            <AppearanceSettings />
+        </>)}
+
+        {/* Studios tab content */}
+        {activeTab === 'studios' && (
+          <div style={{ padding: '16px 0' }}>
+            {studiosLoading && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} style={{
+                    height: 100, borderRadius: 12,
+                    background: 'var(--color-surface-2)',
+                  }} />
+                ))}
+              </div>
+            )}
+            {!studiosLoading && savedStudios && savedStudios.length === 0 && (
+              <p style={{
+                textAlign: 'center', color: 'var(--color-text-muted)',
+                fontSize: 14, padding: '40px 0', margin: 0,
+              }}>
+                저장된 스튜디오가 없어요.
+              </p>
+            )}
+            {!studiosLoading && savedStudios && savedStudios.length > 0 && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+                {savedStudios.map(studio => (
+                  <button
+                    key={studio.architect_id}
+                    type="button"
+                    onClick={() => navigate('/architects/' + studio.architect_id)}
+                    style={{
+                      background: 'var(--color-surface)',
+                      border: '1px solid var(--color-border-soft)',
+                      borderRadius: 12,
+                      padding: '12px 8px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: 8,
+                      fontFamily: 'inherit',
+                      textAlign: 'center',
+                    }}
+                  >
+                    {studio.logo_url ? (
+                      <img
+                        src={studio.logo_url}
+                        alt={studio.name}
+                        style={{
+                          width: 48, height: 48, borderRadius: '50%',
+                          objectFit: 'cover',
+                          border: '1px solid var(--color-border-soft)',
+                          background: 'var(--color-surface-2)',
+                        }}
+                      />
+                    ) : (
+                      <div style={{
+                        width: 48, height: 48, borderRadius: '50%',
+                        background: 'var(--color-surface-2)',
+                        border: '1px solid var(--color-border-soft)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5">
+                          <rect x="3" y="3" width="18" height="18" rx="2"/>
+                          <path d="M9 9h6M9 12h6M9 15h6"/>
+                        </svg>
+                      </div>
+                    )}
+                    <p style={{
+                      margin: 0,
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: 'var(--color-text)',
+                      lineHeight: 1.3,
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                    }}>
+                      {studio.name}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
       </div>
+
+      {/* Share card modal */}
+      {shareOpen && user && (
+        <ShareCardModal user={user} onClose={() => setShareOpen(false)} />
+      )}
+
+      {/* Follow list modal — followers / following */}
+      {followModal && user && (
+        <FollowListModal
+          userId={user.user_id}
+          mode={followModal}
+          onClose={() => setFollowModal(null)}
+        />
+      )}
     </div>
   )
 }

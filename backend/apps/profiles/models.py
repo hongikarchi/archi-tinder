@@ -26,9 +26,12 @@ class Office(models.Model):
     founded_year = models.IntegerField(null=True, blank=True)  # matches MOCK_OFFICE.founded_year
 
     # Make DB integration — primary join key per B1 refinement (Inv 19 §3 + infra/03 §6)
-    canonical_id = models.IntegerField(null=True, blank=True, db_index=True)
+    canonical_id = models.TextField(null=True, blank=True, unique=True)
     # mirrors canonical_v2_buildings.architect_canonical_ids[] when matched.
-    # Sparse today (Divisare-only); populated by Make DB cleanup.
+    # Sparse today (Divisare-only); populated by Make DB cleanup / sync_offices command.
+    primary_city = models.TextField(blank=True)
+    primary_country = models.TextField(blank=True)
+    is_recommendable = models.BooleanField(default=False)
 
     # Phase 15 SOC1 placeholders (counter caches; Follow events will update)
     follower_count = models.IntegerField(default=0)
@@ -65,7 +68,8 @@ class OfficeProjectLink(models.Model):
 
     link_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     office = models.ForeignKey(Office, on_delete=models.CASCADE, related_name='project_links')
-    building_id = models.TextField(db_index=True)   # -> canonical_v2_buildings.canonical_bld_id (TEXT, 'bld_000344' format)
+    # -> canonical_v2_buildings.canonical_bld_id (TEXT, 'bld_000344' format)
+    building_id = models.TextField(db_index=True)
     confidence = models.FloatField(
         validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
     )                                               # 1.0 for manual/canonical_fk/admin; 0-0.99 for string_match

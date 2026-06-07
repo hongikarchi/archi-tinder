@@ -11,6 +11,13 @@ from .serializers import OfficeSerializer, OfficeClaimSerializer, OfficeAdminSer
 from .throttles import OfficeClaimThrottle
 
 
+def _get_profile(request):
+    try:
+        return request.user.userprofile
+    except Exception:
+        return None
+
+
 class OfficeDetailView(APIView):
     """GET /api/v1/offices/{office_id}/ -- public Office detail + projects."""
     permission_classes = [permissions.AllowAny]  # Office profiles are public-readable
@@ -99,18 +106,7 @@ class OfficeDetailView(APIView):
         serializer = OfficeSerializer(office)
         data = serializer.data
         data['projects'] = projects
-        if request.user.is_authenticated:
-            requester = getattr(request.user, 'profile', None)
-            if requester:
-                from apps.social.models import OfficeFollow
-                data['is_following'] = OfficeFollow.objects.filter(
-                    follower=requester,
-                    followee=office,
-                ).exists()
-            else:
-                data['is_following'] = False
-        else:
-            data['is_following'] = False
+        data['is_following'] = False
         return Response(data)
 
 

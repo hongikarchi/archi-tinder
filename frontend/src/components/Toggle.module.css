@@ -1,0 +1,37 @@
+/*
+ * Toggle.module.css — Styles for the reusable Toggle (role="switch") component.
+ * Transition values live in inline styles (dynamic/runtime).
+ * This file owns only: :hover, :focus-visible, :active surface states.
+ */
+
+.track {
+  /* base defined via inline style in JSX */
+}
+
+.track:hover:not(:disabled) {
+  filter: brightness(0.92);
+}
+
+.track:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+}
+
+.track:active:not(:disabled) {
+  filter: brightness(0.85);
+}
+
+/* Label wrapper */
+.wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.label {
+  font-size: var(--fs-caption);
+  color: var(--color-text-2);
+  font-family: var(--font-family);
+  cursor: pointer;
+  user-select: none;
+}

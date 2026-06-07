@@ -1,5 +1,6 @@
 import uuid
 from django.db import models
+from django.db.models import Q, CheckConstraint
 from apps.accounts.models import UserProfile
 
 
@@ -19,9 +20,19 @@ class Project(models.Model):
     raw_query       = models.TextField(null=True, blank=True)  # original user search text, shown on public Board
     analysis_report = models.JSONField(null=True, blank=True)
     final_report    = models.JSONField(null=True, blank=True)
-    report_image    = models.TextField(null=True, blank=True)  # base64 image data
+    report_image      = models.TextField(null=True, blank=True)   # base64 image data
+    report_image_mime = models.CharField(max_length=32, null=True, blank=True)
+    axis_scores       = models.JSONField(null=True, blank=True)   # 5-axis radar/spectrum scores
     created_at      = models.DateTimeField(auto_now_add=True)
     updated_at      = models.DateTimeField(auto_now=True)
+
+    # -- BACK-LLM-2: cross-device LLM chat persistence --
+    conversation_history = models.JSONField(
+        default=dict,
+        blank=True,
+        # Bounded to 64 KB by ProjectSelfUpdateSerializer.validate_conversation_history.
+        # Not exposed on list responses (deferred + excluded from ProjectListSerializer).
+    )
 
     # -- Phase 13 BOARD1 additions --
     visibility     = models.CharField(
@@ -72,6 +83,11 @@ class AnalysisSession(models.Model):
     original_seed_ids        = models.JSONField(default=list)
     current_pool_tier        = models.IntegerField(default=1)  # 1=full filter, 2=drop geo/numeric, 3=random pool
     v_initial         = models.JSONField(null=True, blank=True)  # Topic 03 HyDE: 384-dim float list
+    multimodal_floor  = models.IntegerField(null=True, blank=True)
+    # Discovery-promote override: when set, replaces RC['min_likes_for_multimodal']
+    # in compute_taste_centroids so a warm-seeded session enters multi-centroid
+    # K-Means immediately. Null for normal-funnel sessions (RC default = single
+    # centroid through the first ~10 swipes).
     original_q_text   = models.TextField(null=True, blank=True)  # Topic 01 RRF: original raw_query for re-relaxation
     # IMP-10 sub-task A / Spec v1.7 §11.1: top-10 id lists for bookmark provenance
     # Populated by SessionResultView when each ranking channel runs.
@@ -79,6 +95,16 @@ class AnalysisSession(models.Model):
     cosine_top10_ids  = models.JSONField(null=True, blank=True)  # first 10 cosine-ordered ids at result time
     gemini_top10_ids  = models.JSONField(null=True, blank=True)  # first 10 Gemini-rerank ids (None when flag off)
     dpp_top10_ids     = models.JSONField(null=True, blank=True)  # first 10 DPP-ordered ids (None when flag off)
+    # Question card trigger state (ALGO-QCARD-1)
+    tag_axis_counts = models.JSONField(default=dict)   # {"style": {"minimal": 3}, ...}
+    recent_like_tag_sets = models.JSONField(default=list)   # last 3 liked-card tag lists
+    question_cooldown = models.IntegerField(default=0)   # swipe-down counter; set to cooldown_n on trigger/answer
+    q_card_consecutive_dislikes = models.IntegerField(default=0)   # consecutive dislike counter for refresh trigger
+    # ALGO-QCARD Phase 1: soft-vector bias fields
+    question_count = models.IntegerField(default=0)   # questions triggered this session (cap)
+    question_bias_vector = models.JSONField(null=True, blank=True)   # accumulated 384-d soft bias from Yes/No answers; None = no bias
+    # ALGO-QCARD Phase 3: inter-swipe latency rolling window for hyper-positive detection
+    recent_latencies = models.JSONField(default=list)   # rolling inter-swipe latencies (ms), newest last; cap RC['recent_latencies_cap']
     created_at        = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -139,8 +165,9 @@ class SessionEvent(models.Model):
         ('parse_query_timing',  'Parse Query Timing'),
         ('hyde_call_timing',    'HyDE Call Timing'),
         ('hybrid_pool_timing',  'Hybrid Pool Timing'),
-        ('stage2_timing',       'Stage 2 Timing'),
-        ('image_load',          'Image Load'),
+        ('stage2_timing',           'Stage 2 Timing'),
+        ('image_load',              'Image Load'),
+        ('persona_image_timing',    'Persona Image Timing'),
     ]
 
     user        = models.ForeignKey(
@@ -164,3 +191,28 @@ class SessionEvent(models.Model):
 
     def __str__(self):
         return f'{self.event_type} ({self.session_id}, {self.created_at.isoformat()})'
+
+
+class TagAxisWeight(models.Model):
+    AXIS_CHOICES = [
+        ('form', 'form'),
+        ('materiality', 'materiality'),
+        ('scale', 'scale'),
+        ('energy', 'energy'),
+        ('tradition', 'tradition'),
+    ]
+    tag = models.CharField(max_length=100)
+    axis = models.CharField(max_length=20, choices=AXIS_CHOICES)
+    weight = models.FloatField()  # -1.0 ~ 1.0
+
+    class Meta:
+        unique_together = [('tag', 'axis')]
+        constraints = [
+            CheckConstraint(
+                check=Q(weight__gte=-1.0) & Q(weight__lte=1.0),
+                name='tagaxisweight_weight_range',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.tag}:{self.axis}={self.weight}'

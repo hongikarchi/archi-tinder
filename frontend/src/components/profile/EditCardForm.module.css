@@ -1,0 +1,99 @@
+/*
+ * EditCardForm.module.css
+ * Co-located styles for interactive input states (DESIGN.md §4 + §8.5).
+ * Layout and one-off values stay in inline styles.
+ * Token naming follows tokens.css — all var() references must exist there.
+ */
+
+/* Shared base for all text inputs + textarea in the form */
+.field {
+  width: 100%;
+  padding: 12px 14px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-size: 14px;
+  font-family: inherit;
+  box-sizing: border-box;
+  outline: none;
+  /* DESIGN.md §8.5 — motion tokens for transitions */
+  transition: border-color var(--motion-fast) var(--motion-ease),
+              box-shadow var(--motion-normal) var(--motion-ease-out);
+}
+
+/* §8.5: 3-state focus — gray → accent-1 on focus */
+.field:focus {
+  border-color: var(--accent-1);
+}
+
+/* §8.5: click moment — glow appears instantly, fades out */
+.field:active {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-1) 28%, transparent);
+  transition: border-color var(--motion-fast) var(--motion-ease), box-shadow 0s;
+}
+
+/* Textarea specific: allow vertical resize only */
+.textarea {
+  composes: field;
+  resize: vertical;
+  min-height: 90px;
+  line-height: 1.5;
+}
+
+/* Add-item type button (dashed, ghost) */
+.addBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 12px;
+  background: transparent;
+  border: 1.5px dashed var(--color-border-soft);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  min-height: 44px;
+  transition: border-color var(--motion-fast) var(--motion-ease),
+              color var(--motion-fast) var(--motion-ease);
+}
+
+.addBtn:hover {
+  border-color: var(--accent-1);
+  color: var(--accent-1);
+}
+
+/* Link item row — outer container */
+.itemRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* × remove button */
+.removeBtn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  background: transparent;
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: 16px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color var(--motion-fast) var(--motion-ease),
+              color var(--motion-fast) var(--motion-ease);
+  line-height: 1;
+}
+
+.removeBtn:hover {
+  border-color: var(--color-destructive);
+  color: var(--color-destructive);
+}

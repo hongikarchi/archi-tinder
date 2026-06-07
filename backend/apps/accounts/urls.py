@@ -3,10 +3,23 @@ from django.conf import settings
 from .views import (
     GoogleLoginView, KakaoLoginView, NaverLoginView,
     TokenRefreshView, MeView, LogoutView, DevLoginView,
-    UserProfileDetailView, UserProfileSelfUpdateView,
+    UserProfileDetailView, UserProfileSelfUpdateView, AvatarUploadView,
+    GuestLoginView, GuestPromoteView,
+    LikedBuildingsView,
+    # AUTH-LOGIN-1: handle+password + email-link
+    RegisterView, PasswordLoginView, SetPasswordView, LinkEmailView,
 )
 
 urlpatterns = [
+    # -- Guest-first onboarding (FULL-LOGIN-REDESIGN-1) --
+    path('auth/guest/',              GuestLoginView.as_view()),
+    path('auth/promote/',            GuestPromoteView.as_view()),
+    # -- Handle + Password Auth (AUTH-LOGIN-1) --
+    path('auth/register/',           RegisterView.as_view(),      name='auth-register'),
+    path('auth/login/',              PasswordLoginView.as_view(), name='auth-login'),
+    path('auth/set-password/',       SetPasswordView.as_view(),   name='auth-set-password'),
+    path('auth/link-email/',         LinkEmailView.as_view(),     name='auth-link-email'),
+    # -- Social OAuth --
     path('auth/social/google/',      GoogleLoginView.as_view()),
     path('auth/social/kakao/',       KakaoLoginView.as_view()),
     path('auth/social/naver/',       NaverLoginView.as_view()),
@@ -17,7 +30,10 @@ urlpatterns = [
     # users/me/ (string) must come before users/<int:user_id>/ for clarity,
     # though Django's int converter auto-disambiguates them.
     path('users/me/', UserProfileSelfUpdateView.as_view(), name='user-profile-self-update'),
+    path('users/me/avatar/', AvatarUploadView.as_view(), name='user-avatar-upload'),
     path('users/<int:user_id>/', UserProfileDetailView.as_view(), name='user-profile-detail'),
+    # SNS-LIKED-PROJECTS — Discovery right-swipe liked buildings
+    path('liked-buildings/', LikedBuildingsView.as_view(), name='liked-buildings'),
 ]
 
 if settings.DEBUG:

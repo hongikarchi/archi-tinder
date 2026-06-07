@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useResults } from '../hooks/useResults.js'
 import { resolveProjectBackendId } from '../utils/resolveProjectBackendId.js'
@@ -12,8 +12,8 @@ function personaFields(result, project) {
   return {
     type: report.persona_type || report.title || 'Your Architecture Persona',
     line: report.one_liner || report.summary || 'A compact read of the forms, programs, and atmospheres you kept choosing.',
-    styles: report.styles || report.style_tags || [],
-    programs: report.programs || report.program_tags || [],
+    styles: report.dominant_styles || report.styles || report.style_tags || [],
+    programs: report.dominant_programs || report.programs || report.program_tags || [],
   }
 }
 
@@ -28,15 +28,13 @@ function ResultCard({ card, rank, saved, pending, onOpen, onToggle }) {
       onClick={() => onOpen(card, rank)}
       style={{
       position: 'relative',
-      flex: '0 0 min(82vw, 320px)',
-      height: 'min(58vh, 520px)',
-      minHeight: 420,
-      borderRadius: 20,
+      width: '100%',
+      aspectRatio: '2 / 3',
+      borderRadius: 12,
       overflow: 'hidden',
       background: 'var(--color-surface)',
       border: '1px solid var(--color-border-soft)',
       boxShadow: '0 18px 42px rgba(0,0,0,0.35)',
-      scrollSnapAlign: 'start',
       cursor: 'pointer',
     }}>
       <div className="skeleton-shimmer" style={{ position: 'absolute', inset: 0 }} />
@@ -63,12 +61,12 @@ function ResultCard({ card, rank, saved, pending, onOpen, onToggle }) {
         position: 'absolute',
         top: 14,
         left: 14,
-        padding: '7px 10px',
+        padding: '3px 5px',
         borderRadius: 999,
         background: 'rgba(0,0,0,0.48)',
         border: '1px solid rgba(255,255,255,0.12)',
         color: '#fff',
-        fontSize: 12,
+        fontSize: 9,
         fontWeight: 800,
       }}>
         #{rank}
@@ -85,13 +83,13 @@ function ResultCard({ card, rank, saved, pending, onOpen, onToggle }) {
           position: 'absolute',
           top: 10,
           right: 10,
-          width: 44,
-          height: 44,
+          width: 32,
+          height: 32,
           borderRadius: '50%',
           border: saved ? '1px solid rgba(251,191,36,0.65)' : '1px solid rgba(255,255,255,0.16)',
           background: saved ? 'rgba(251,191,36,0.18)' : 'rgba(0,0,0,0.45)',
           color: saved ? '#fbbf24' : '#fff',
-          fontSize: 20,
+          fontSize: 14,
           cursor: pending ? 'default' : 'pointer',
           opacity: pending ? 0.65 : 1,
           backdropFilter: 'blur(12px)',
@@ -105,23 +103,23 @@ function ResultCard({ card, rank, saved, pending, onOpen, onToggle }) {
         left: 0,
         right: 0,
         bottom: 0,
-        padding: '22px 18px 20px',
+        padding: '6px 8px 8px',
       }}>
         <h2 style={{
           color: '#fff',
-          fontSize: 21,
-          fontWeight: 800,
+          fontSize: 10,
+          fontWeight: 700,
           lineHeight: 1.2,
-          margin: '0 0 8px',
+          margin: '0 0 2px',
           display: '-webkit-box',
-          WebkitLineClamp: 2,
+          WebkitLineClamp: 1,
           WebkitBoxOrient: 'vertical',
           overflow: 'hidden',
         }}>
           {title}
         </h2>
         {architects && (
-          <p style={{ color: 'rgba(255,255,255,0.68)', fontSize: 13, fontStyle: 'italic', margin: '0 0 14px' }}>
+          <p style={{ color: 'rgba(255,255,255,0.68)', fontSize: 9, fontStyle: 'italic', margin: '0 0 6px' }}>
             {architects}
           </p>
         )}
@@ -129,9 +127,9 @@ function ResultCard({ card, rank, saved, pending, onOpen, onToggle }) {
           {[country, year].filter(Boolean).map(value => (
             <span key={value} style={{
               color: 'rgba(255,255,255,0.72)',
-              fontSize: 11,
+              fontSize: 9,
               fontWeight: 700,
-              padding: '5px 8px',
+              padding: '2px 4px',
               borderRadius: 999,
               background: 'rgba(255,255,255,0.08)',
               border: '1px solid rgba(255,255,255,0.10)',
@@ -287,7 +285,7 @@ export default function ResultsPage({ projects, setProjects }) {
             </button>
           </div>
           <p style={{
-            color: 'var(--color-text-dim)',
+            color: 'var(--color-text)',
             fontSize: 14,
             lineHeight: 1.5,
             margin: 0,
@@ -296,13 +294,81 @@ export default function ResultsPage({ projects, setProjects }) {
             {persona.line}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <div className="skeleton-shimmer" style={{ width: 72, height: 44, borderRadius: 12 }} />
-          <div style={{ color: 'var(--color-text-dimmer)', fontSize: 12, fontWeight: 600 }}>
-            Imagen persona preview queued for Phase 2
-          </div>
-        </div>
       </section>
+
+      {/* Liked buildings — 가로 스크롤, 큰 카드 */}
+      {result?.liked_images?.length > 0 && (
+        <section style={{ padding: '18px 0 24px', borderBottom: '1px solid var(--color-border-soft)' }}>
+          <div style={{ padding: '0 18px 14px' }}>
+            <p style={{ color: 'var(--color-text-muted)', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', margin: '0 0 5px' }}>
+              My Likes
+            </p>
+            <h2 style={{ color: 'var(--color-text)', fontSize: 20, fontWeight: 700, margin: 0 }}>
+              {result.liked_images.length} buildings you liked
+            </h2>
+          </div>
+          <div className="hide-scrollbar" style={{
+            display: 'flex',
+            gap: 14,
+            overflowX: 'auto',
+            scrollSnapType: 'x mandatory',
+            padding: '0 18px 18px',
+          }}>
+            {result.liked_images.map((card, index) => {
+              const id = cardId(card)
+              const title = card.image_title || card.name_en || `Building ${index + 1}`
+              return (
+                <article
+                  key={id || index}
+                  onClick={() => {
+                    if (!id) return
+                    navigate(`/buildings/${id}`, {
+                      state: { fromSessionId: sessionId, referrer: location.pathname },
+                    })
+                  }}
+                  style={{
+                    position: 'relative',
+                    flex: '0 0 min(82vw, 320px)',
+                    height: 'min(58vh, 480px)',
+                    minHeight: 380,
+                    borderRadius: 20,
+                    overflow: 'hidden',
+                    background: 'var(--color-surface)',
+                    border: '1px solid var(--color-border-soft)',
+                    boxShadow: '0 18px 42px rgba(0,0,0,0.35)',
+                    scrollSnapAlign: 'start',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <div className="skeleton-shimmer" style={{ position: 'absolute', inset: 0 }} />
+                  {card.image_url && (
+                    <img
+                      src={card.image_url}
+                      alt={title}
+                      loading={index < 3 ? 'eager' : 'lazy'}
+                      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                  )}
+                  <div style={{
+                    position: 'absolute', inset: 0,
+                    background: 'linear-gradient(to top, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.0) 55%)',
+                  }} />
+                  <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '18px 16px 16px' }}>
+                    <h3 style={{
+                      color: '#fff', fontSize: 16, fontWeight: 700, lineHeight: 1.2,
+                      margin: 0,
+                      display: '-webkit-box', WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                    }}>
+                      {title}
+                    </h3>
+                  </div>
+                </article>
+              )
+            })}
+          </div>
+        </section>
+      )}
 
       <section style={{
         minHeight: '60vh',
@@ -310,10 +376,10 @@ export default function ResultsPage({ projects, setProjects }) {
       }}>
         <div style={{ padding: '0 18px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
           <div>
-            <p style={{ color: 'var(--color-text-muted)', fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', margin: '0 0 5px' }}>
+            <p style={{ color: 'var(--color-text-muted)', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', margin: '0 0 5px' }}>
               Top-K recommendations
             </p>
-            <h2 style={{ color: 'var(--color-text)', fontSize: 20, fontWeight: 800, margin: 0 }}>
+            <h2 style={{ color: 'var(--color-text)', fontSize: 20, fontWeight: 700, margin: 0 }}>
               Rank 1-{Math.max(visibleCount, 10)}
             </h2>
           </div>
@@ -323,13 +389,16 @@ export default function ResultsPage({ projects, setProjects }) {
         </div>
 
         {loading && topCards.length === 0 ? (
-          <div style={{ display: 'flex', gap: 14, overflow: 'hidden', padding: '0 18px' }}>
-            {[0, 1].map(i => (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(4, 1fr)',
+            gap: 8,
+            padding: '0 18px',
+          }}>
+            {[0, 1, 2, 3].map(i => (
               <div key={i} className="skeleton-shimmer" style={{
-                flex: '0 0 min(82vw, 320px)',
-                height: 'min(58vh, 520px)',
-                minHeight: 420,
-                borderRadius: 20,
+                aspectRatio: '2 / 3',
+                borderRadius: 16,
               }} />
             ))}
           </div>
@@ -339,48 +408,28 @@ export default function ResultsPage({ projects, setProjects }) {
           </p>
         ) : (
           <>
-            <div className="hide-scrollbar" style={{
-              display: 'flex',
-              gap: 14,
-              overflowX: 'auto',
-              scrollSnapType: 'x mandatory',
-              padding: '0 18px 18px',
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(4, 1fr)',
+              gap: 8,
+              padding: '0 12px 18px',
             }}>
               {topCards.map((card, index) => {
                 const id = cardId(card)
                 return (
-                  <Fragment key={id || index}>
-                    {index === 10 && (
-                      <div style={{
-                        flex: '0 0 120px',
-                        minHeight: 420,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: 'var(--color-text-dim)',
-                        fontSize: 12,
-                        fontWeight: 700,
-                        textAlign: 'center',
-                        borderLeft: '1px solid var(--color-border-soft)',
-                        borderRight: '1px solid var(--color-border-soft)',
-                        margin: '24px 10px',
-                      }}>
-                        더 많은 추천
-                      </div>
-                    )}
-                    <ResultCard
-                      card={card}
-                      rank={index + 1}
-                      saved={savedIds.includes(id)}
-                      pending={pendingIds.has(id)}
-                      onOpen={handleOpenBuilding}
-                      onToggle={toggleBookmark}
-                    />
-                  </Fragment>
+                  <ResultCard
+                    key={id || index}
+                    card={card}
+                    rank={index + 1}
+                    saved={savedIds.includes(id)}
+                    pending={pendingIds.has(id)}
+                    onOpen={handleOpenBuilding}
+                    onToggle={toggleBookmark}
+                  />
                 )
               })}
               {loadedRank < cappedTotal && (
-                <div ref={observerRef} style={{ flex: '0 0 1px', minHeight: 420 }} />
+                <div ref={observerRef} style={{ height: 1 }} />
               )}
             </div>
             {loadedRank >= cards.length && cards.length > 0 && cards.length < 50 && (

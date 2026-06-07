@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, memo } from 'react'
 import * as api from '../api/client.js'
+import { getProject, updateProject } from '../api/projects.js'
 
 const PRESETS = [
   { label: 'Japanese modern museum',  query: 'Modern museum in Japan' },
@@ -192,12 +193,16 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
     return []
   })
   const messagesEndRef = useRef(null)
+  // Tracks whether backend hydration has finished (prevents save loop on mount).
+  const hydrationDoneRef = useRef(false)
+  // Tracks the last blob JSON sent to the backend (skip save if unchanged).
+  const lastSentBlobRef = useRef(null)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, isLoading])
 
-  // Persist chat state to localStorage so the conversation survives navigation
+  // Persist chat state to localStorage (write-through cache — always active).
   useEffect(() => {
     localStorage.setItem(`${storageKey}__messages`, JSON.stringify(messages))
   }, [storageKey, messages])
@@ -225,6 +230,147 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
   useEffect(() => {
     localStorage.setItem(`${storageKey}__showStart`, JSON.stringify(showStart))
   }, [storageKey, showStart])
+
+  // ── Backend hydration (existing project only) ────────────────────────────
+  // When there IS a real projectId (not the 'new' pre-project case), try to
+  // load conversation_history from the backend so the chat is cross-device.
+  // Falls back to the existing localStorage values (already seeded above) if
+  // the backend returns nothing.
+  // NOTE: 'new' mode (no projectId) stays localStorage-only — there is no
+  // Project to persist to yet. Migrating a 'new' chat into a freshly-created
+  // project is out of scope.
+  useEffect(() => {
+    if (!projectId) {
+      hydrationDoneRef.current = true
+      return
+    }
+    let cancelled = false
+    getProject(projectId).then(project => {
+      if (cancelled) return
+      // null means the load failed (getProject swallows errors and returns null).
+      // Keeping saves disabled (hydrationDoneRef stays false) prevents the local/
+      // default state from overwriting a good backend blob on a cross-device load.
+      // localStorage write-through is still active; a later successful mount
+      // will re-hydrate and resume saves.
+      if (project === null) return
+      const ch = project?.conversation_history
+      if (ch && typeof ch === 'object' && Object.keys(ch).length > 0) {
+        // Backend is source of truth — overwrite state from stored blob.
+        if (Array.isArray(ch.messages) && ch.messages.length > 0) {
+          setMessages(ch.messages)
+        }
+        if (Array.isArray(ch.history)) {
+          setConversationHistory(ch.history)
+        }
+        if (ch.latestResults != null)            setLatestResults(ch.latestResults)
+        if (ch.latestFilters != null)            setLatestFilters(ch.latestFilters)
+        if (ch.latestFilterPriority != null)     setLatestFilterPriority(ch.latestFilterPriority)
+        if (ch.latestVisualDescription !== undefined) setLatestVisualDescription(ch.latestVisualDescription)
+        if (ch.latestImageFocus !== undefined)   setLatestImageFocus(ch.latestImageFocus)
+        if (ch.latestRawQuery != null)           setLatestRawQuery(ch.latestRawQuery)
+        if (ch.showStart != null)                setShowStart(ch.showStart)
+        // Seed lastSentBlobRef so the first post-hydrate save is skipped when
+        // nothing has changed.
+        lastSentBlobRef.current = JSON.stringify(ch)
+      }
+      // Non-null project = conclusive load (even empty conversation_history: {}
+      // is a real "no prior chat"). Enable saves now.
+      hydrationDoneRef.current = true
+    }).catch(() => {
+      /* load failed — keep saves disabled (hydrationDoneRef stays false) */
+    })
+    return () => { cancelled = true }
+  }, [projectId])
+
+  // ── Debounced backend save (existing project only) ───────────────────────
+  // When messages or conversationHistory change after hydration, persist a
+  // bounded blob to the backend (800ms debounce). localStorage is always the
+  // write-through layer; this save is best-effort (errors are swallowed).
+  //
+  // Blob shape (bounded, no large base64 payloads):
+  //   messages         — UI turns with role/text/filters (results/isFallback stripped)
+  //   history          — LLM multi-turn probe history (conversationHistory)
+  //   latestResults    — image_id-only lightweight array (no card metadata)
+  //   latestFilters    — small structured filters dict
+  //   latestFilterPriority — small array of filter key names
+  //   latestVisualDescription — string or null
+  //   latestImageFocus — string or null
+  //   latestRawQuery   — string
+  //   showStart        — boolean
+  useEffect(() => {
+    if (!projectId) return
+    if (!hydrationDoneRef.current) return
+
+    // Strip heavy fields from messages before persisting.
+    // result-card objects in msg.results can contain URLs+metadata and exceed 64KB.
+    const safeMessages = messages.slice(-60).map(m => {
+      const { results: _r, isFallback: _f, ...rest } = m
+      return {
+        ...rest,
+        text: typeof rest.text === 'string' ? rest.text.slice(0, 2000) : rest.text,
+      }
+    })
+
+    // Store latestResults as image_id-only lightweight objects.
+    const safeLatestResults = (latestResults || []).map(r => ({ image_id: r.image_id }))
+
+    const blob = {
+      messages: safeMessages,
+      history: conversationHistory.slice(-10).map(t => ({
+        ...t,
+        text: typeof t.text === 'string' ? t.text.slice(0, 2000) : t.text,
+      })),
+      latestResults: safeLatestResults,
+      latestFilters: latestFilters || {},
+      latestFilterPriority: latestFilterPriority || [],
+      latestVisualDescription: latestVisualDescription ?? null,
+      latestImageFocus: latestImageFocus ?? null,
+      latestRawQuery: typeof latestRawQuery === 'string' ? latestRawQuery.slice(0, 2000) : '',
+      showStart: showStart || false,
+    }
+
+    // Progressively trim blob to fit within the backend's 64KB limit.
+    // JSON.stringify uses UTF-16 internally but the wire payload is UTF-8;
+    // Korean/CJK text is 3 bytes per char in UTF-8, so a naive char-count
+    // budget would underestimate. Use `new Blob([str]).size` for the real
+    // byte count (Web API, always available in browser). Budget = 60000 bytes
+    // (headroom under the 65536 backend hard limit).
+    let blobJson = JSON.stringify(blob)
+    const BYTE_BUDGET = 60000
+    while (new Blob([blobJson]).size > BYTE_BUDGET && blob.messages.length > 1) {
+      blob.messages.shift()
+      blobJson = JSON.stringify(blob)
+    }
+    while (new Blob([blobJson]).size > BYTE_BUDGET && blob.history.length > 1) {
+      blob.history.shift()
+      blobJson = JSON.stringify(blob)
+    }
+
+    // Skip if nothing changed since last send (e.g. right after hydration).
+    if (blobJson === lastSentBlobRef.current) return
+
+    const timer = setTimeout(() => {
+      updateProject(projectId, { conversation_history: blob }).then(() => {
+        lastSentBlobRef.current = blobJson
+      }).catch(err => {
+        // Swallow silently — localStorage still holds the state.
+        console.warn('[LLMSearchPage] backend chat save failed (non-blocking):', err?.message ?? err)
+      })
+    }, 800)
+
+    return () => clearTimeout(timer)
+  }, [
+    projectId,
+    messages,
+    conversationHistory,
+    latestResults,
+    latestFilters,
+    latestFilterPriority,
+    latestVisualDescription,
+    latestImageFocus,
+    latestRawQuery,
+    showStart,
+  ])
 
   function clearChatStorage() {
     [
@@ -317,6 +463,11 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
   function handleStartSwiping() {
     const name = initialName || 'Untitled Project'
     clearChatStorage()
+    // Clear backend blob so a consumed chat does not resurrect next time this
+    // project is opened in update mode (backend was source of truth, now reset).
+    if (projectId) {
+      updateProject(projectId, { conversation_history: {} }).catch(() => {})
+    }
     if (mode === 'update') {
       onUpdate(projectId, latestResults, latestFilters, latestFilterPriority, latestVisualDescription, latestImageFocus)
     } else {
@@ -352,7 +503,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
             background: 'linear-gradient(90deg, var(--color-text), #f9a8d4)',
             WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
           }}>
-            {mode === 'update' ? `Update "${initialName}"` : 'ArchiTinder AI'}
+            {mode === 'update' ? `Update "${initialName}"` : 'archibe AI'}
           </span>
         </div>
         <div style={{ width: 40 }} />
@@ -361,84 +512,93 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
       {/* Messages */}
       <div style={{
         flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '24px 16px',
-        display: 'flex', flexDirection: 'column', gap: 20,
+        display: 'flex', flexDirection: 'column',
         paddingBottom: bottomOffset,
       }}>
-        {messages.map((msg, i) => (
-          <div key={i} style={{
-            display: 'flex', flexDirection: 'column',
-            alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start',
-            alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-            maxWidth: '100%',
-          }}>
-            <div style={{
-              padding: '12px 16px', borderRadius: 16, fontSize: 14, lineHeight: 1.6,
-              whiteSpace: 'pre-wrap', maxWidth: '100%', overflowX: 'hidden',
-              ...(msg.role === 'user' ? {
-                background: 'var(--color-user-bubble)',
-                color: 'var(--color-user-bubble-text)',
-                borderBottomRightRadius: 4,
-              } : {
-                background: 'var(--color-ai-bubble)',
-                border: '1px solid var(--color-ai-bubble-border)',
-                color: 'var(--color-text-2)', borderBottomLeftRadius: 4,
-              })
+        <div style={{
+          width: '100%',
+          maxWidth: 680,
+          margin: '0 auto',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 20,
+        }}>
+          {messages.map((msg, i) => (
+            <div key={i} style={{
+              display: 'flex', flexDirection: 'column',
+              alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start',
+              alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+              maxWidth: '100%',
             }}>
-              {msg.text}
-              {msg.role === 'ai' && <FilterChips filters={msg.filters} />}
-              {msg.role === 'ai' && <ResultStrip results={msg.results} isFallback={msg.isFallback} />}
+              <div style={{
+                padding: '12px 16px', borderRadius: 16, fontSize: 14, lineHeight: 1.6,
+                whiteSpace: 'pre-wrap', maxWidth: '100%', overflowX: 'hidden',
+                ...(msg.role === 'user' ? {
+                  background: 'var(--color-user-bubble)',
+                  color: 'var(--color-user-bubble-text)',
+                  borderBottomRightRadius: 4,
+                } : {
+                  background: 'var(--color-ai-bubble)',
+                  border: '1px solid var(--color-ai-bubble-border)',
+                  color: 'var(--color-text-2)', borderBottomLeftRadius: 4,
+                })
+              }}>
+                {msg.text}
+                {msg.role === 'ai' && <FilterChips filters={msg.filters} />}
+                {msg.role === 'ai' && <ResultStrip results={msg.results} isFallback={msg.isFallback} />}
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
 
-        {/* Preset chips -- shown only before first user message */}
-        {messages.length === 1 && !isLoading && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, paddingLeft: 2 }}>
-            {PRESETS.map(p => (
-              <button
-                key={p.label}
-                onClick={() => handlePreset(p.query)}
-                style={{
-                  padding: '8px 14px', borderRadius: 999, fontSize: 12, fontWeight: 500,
-                  background: 'rgba(236,72,153,0.12)',
-                  border: '1px solid rgba(236,72,153,0.35)',
-                  color: '#f9a8d4', cursor: 'pointer', fontFamily: 'inherit',
-                  transition: 'background 0.15s, border-color 0.15s',
-                  whiteSpace: 'nowrap',
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = 'rgba(236,72,153,0.25)'
-                  e.currentTarget.style.borderColor = 'rgba(236,72,153,0.6)'
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = 'rgba(236,72,153,0.12)'
-                  e.currentTarget.style.borderColor = 'rgba(236,72,153,0.35)'
-                }}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {isLoading && (
-          <div style={{ alignSelf: 'flex-start' }}>
-            <div style={{
-              padding: '12px 18px', background: 'var(--color-ai-bubble)',
-              border: '1px solid var(--color-ai-bubble-border)',
-              borderRadius: 16, borderBottomLeftRadius: 4,
-              display: 'flex', gap: 5, alignItems: 'center',
-            }}>
-              {[0, 0.16, 0.32].map(d => (
-                <div key={d} style={{
-                  width: 6, height: 6, borderRadius: '50%', background: '#6b7280',
-                  animation: `bounce 1.4s ${d}s infinite ease-in-out both`,
-                }} />
+          {/* Preset chips -- shown only before first user message */}
+          {messages.length === 1 && !isLoading && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, paddingLeft: 2 }}>
+              {PRESETS.map(p => (
+                <button
+                  key={p.label}
+                  onClick={() => handlePreset(p.query)}
+                  style={{
+                    padding: '8px 14px', borderRadius: 999, fontSize: 12, fontWeight: 500,
+                    background: 'rgba(236,72,153,0.12)',
+                    border: '1px solid rgba(236,72,153,0.35)',
+                    color: '#f9a8d4', cursor: 'pointer', fontFamily: 'inherit',
+                    transition: 'background 0.15s, border-color 0.15s',
+                    whiteSpace: 'nowrap',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = 'rgba(236,72,153,0.25)'
+                    e.currentTarget.style.borderColor = 'rgba(236,72,153,0.6)'
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'rgba(236,72,153,0.12)'
+                    e.currentTarget.style.borderColor = 'rgba(236,72,153,0.35)'
+                  }}
+                >
+                  {p.label}
+                </button>
               ))}
             </div>
-          </div>
-        )}
-        <div ref={messagesEndRef} />
+          )}
+
+          {isLoading && (
+            <div style={{ alignSelf: 'flex-start' }}>
+              <div style={{
+                padding: '12px 18px', background: 'var(--color-ai-bubble)',
+                border: '1px solid var(--color-ai-bubble-border)',
+                borderRadius: 16, borderBottomLeftRadius: 4,
+                display: 'flex', gap: 5, alignItems: 'center',
+              }}>
+                {[0, 0.16, 0.32].map(d => (
+                  <div key={d} style={{
+                    width: 6, height: 6, borderRadius: '50%', background: '#6b7280',
+                    animation: `bounce 1.4s ${d}s infinite ease-in-out both`,
+                  }} />
+                ))}
+              </div>
+            </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
       </div>
 
       {/* Start swiping panel */}

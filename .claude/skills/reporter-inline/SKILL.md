@@ -5,17 +5,16 @@ description: Update Task.md + state.js + conditional algorithm.md to record a ju
 
 # reporter-inline — audit recorded in same PR as work
 
-Use this skill after `git-commit` skill creates the code commit on a feature branch, and AFTER `git-publish` opens the PR (so the PR number is known), but BEFORE `git-publish` admin-squash-merges. The audit lands as an additional commit on the same feature branch, gets squashed together with the code, and ends up as a single PR.
+Use this skill after `git-commit` creates the code commit on a feature branch, and BEFORE `git-publish` ships the PR. The audit is keyed on the stable **TASK ID** (e.g. `SNS-RESULTS-UI-1`) — the GitHub PR# is NOT needed at write-time: `gh pr merge` auto-stamps `(#N)` onto the squash commit, recoverable from `git log`, so cite the PR# only as an optional backfill. The audit lands as an additional commit on the same feature branch, squashed together with the code into a single PR.
 
 **Pipeline position**:
 ```
-front-maker/back-maker → code commit (git-commit) → push + PR open (git-publish Steps 1-3)
-   → [REPORTER-INLINE HERE] → audit commit (git-commit) → push → admin squash (git-publish Step 4)
+front-maker/back-maker → code commit (git-commit) → [REPORTER-INLINE HERE] → audit commit (git-commit) → git-publish (push + PR open + admin squash)
 ```
 
 Result: 1 PR carrying both code + audit. No separate reporter PR cycle.
 
-**Do NOT dispatch `reporter` agent for routine housekeeping** — that agent is deprecated as of 2026-05-26.
+**(The `reporter` agent was removed 2026-05-31 — this skill replaces it.)**
 
 ---
 
@@ -26,7 +25,7 @@ Read git state for context. NEVER run state-mutating git/gh commands in this ski
 - ❌ `gh pr create`, `gh pr edit`, `gh pr merge`, `gh pr close`
 
 You write only:
-- `.claude/Task.md`
+- `Task.md`
 - `project/state.js`
 - Conditionally: `docs/algorithm.md` (per Step 3 narrow scope)
 
@@ -39,10 +38,10 @@ After file writes, STOP. The main session's next step is `git-commit` skill for 
 Verify all are true:
 - Current branch is `feature/*` (not main/develop). Abort otherwise.
 - A code commit already exists on this branch ahead of `origin/develop`.
-- A PR has been opened (`gh pr view <PR_NUMBER>` returns success). Capture the PR number.
+- No PR is needed yet — this skill runs BEFORE `git-publish`. The audit is keyed on the TASK ID; the GitHub PR# is optional (backfilled once known).
 - The change you're auditing is "audit-worthy" — anything more than a typo / trivial whitespace fix. For genuinely trivial changes (single-character typo, comment fix), **skip this skill** entirely.
 
-If the change closes a `## Now` entry in `.claude/Task.md`, capture the entry's ID + title for the Done section.
+If the change closes a `## Now` entry in `Task.md`, capture the entry's ID + title for the Done section.
 
 ---
 
@@ -57,11 +56,11 @@ git rev-parse --abbrev-ref HEAD           # branch name
 git fetch origin develop && git rev-parse --short origin/develop  # develop HEAD (used for meta.head)
 ```
 
-Read `.claude/Task.md` once before editing.
+Read `Task.md` once before editing.
 
 ---
 
-## Step 2 — Update `.claude/Task.md`
+## Step 2 — Update `Task.md`
 
 Use `Edit` tool (NOT `Write`) so the rest of the file stays intact.
 
@@ -70,15 +69,15 @@ Use `Edit` tool (NOT `Write`) so the rest of the file stays intact.
 If the change closes a `## Now` entry: cut the entry from `## Now`, paste at the TOP of `## Done` under a new header:
 
 ```
-### <TASK_ID> — <Korean title> — RESOLVED YYYY-MM-DD (PR #<N> `<sha-pre-squash>`)
+### <TASK_ID> — <Korean title> — RESOLVED YYYY-MM-DD (`<sha-pre-squash>`)
 - <bullet 1 — what shipped>
 - <bullet 2>
 - ...
 ```
 
+- `<TASK_ID>` = the stable task identifier — the PRIMARY key for the entry.
 - `YYYY-MM-DD` = today's date in KST.
-- `<N>` = PR number (captured in Step 0).
-- `<sha-pre-squash>` = feature branch tip SHA from Step 1. Annotated as "pre-squash" because post-merge the canonical SHA will be the squash commit on `develop`, which we don't know yet. Next reporter-inline run can backfill.
+- `<sha-pre-squash>` = feature branch tip SHA from Step 1. "pre-squash" because post-merge the canonical SHA is the squash commit on `develop`, not yet known. A later reporter-inline pass can backfill the post-squash SHA and the GitHub PR# `(#N)` if desired — neither is required at write-time (the TASK ID is the key).
 
 Sub-task checkboxes that were completed by this commit get `[x]` before moving.
 
@@ -108,7 +107,7 @@ If `Deferred:` already has a matching Next entry (pre-surfaced during this same 
 
 ### 2c. Section vocabulary
 
-`.claude/Task.md` uses:
+`Task.md` uses:
 - `## Next` — backlog, bucketed `### HIGH` / `### MEDIUM` / `### LOW`. Each item = `#### <SLUG>` one level deeper.
 - `## Now` — current initiative slice.
 - `## Done` — resolved log, append-only at top, one dated group per shipped batch.
@@ -170,163 +169,53 @@ If your edit would cross any of these, STOP and surface the constraint to the us
 
 ---
 
-## Step 4 — Refresh `project/state.js`
+## Step 4 — Refresh `project/state.js` (run the generator)
 
-Read `project/state.js` first. State shape is FIXED:
-
-```js
-window.PROJECT_STATE = {
-  meta: { name, updatedAt, head, branch },
-  done: [{ id, title, completedAt, prs?, note }],
-  now:  [{ id, title, startedAt?, note }],
-  next: { high: [...], medium: [...], low: [...] },
-  prs:  [{ number, title, mergedAt, mergedAtKST, sha? }],
-  agents: [{ name, role, model, effort }],
-  systemFlow: { title, mermaid },
-  recommendationFlow: { title, mermaid },
-  agentFlow: { title, mermaid },
-  milestones: [{ phase, focus, status }],
-};
-```
-
-Do NOT rename keys or change top-level structure. Dashboard reads positionally.
-
-### 4a. `meta`
-
-- `updatedAt` ← KST timestamp from Step 1.
-- `head` ← `origin/develop` short SHA from Step 1. NOTE: this is the PRE-squash develop HEAD. Post-merge it will be stale by one PR until the next reporter-inline pass picks up the new develop HEAD. Documented stale window.
-- `branch` ← current feature branch from Step 1.
-- `name` ← preserve from prior state.js.
-
-### 4b. `done`
-
-Read `.claude/Task.md` `## Done` after your Step 2 edits. Take the most recent 5–8 dated groups (one per shipped batch). For each:
-- `id` — stable slug from group title (or carry from prior state.js).
-- `title` — human-readable line minus the "— RESOLVED …" suffix.
-- `completedAt` — YYYY-MM-DD from group header.
-- `prs` — array of PR numbers parsed from `(PRs #X / #Y)` / `(PR #N)` parenthetical.
-- `note` — one-line summary; concatenate `[x]` sub-task headlines if present.
-
-Older entries beyond the most-recent N stay in Task.md as durable ledger but NOT in state.js (sliding window).
-
-### 4c. `now`
-
-Read Task.md `## Now` after edits. For each `### <title>`:
-- `id` — slug from title.
-- `title` — sub-header text.
-- `startedAt` — if body mentions start date, capture; otherwise omit.
-- `note` — body collapsed to one line.
-
-### 4d. `next`
-
-Read Task.md `## Next` after edits. Emit:
-```js
-next: {
-  high:   [items from ### HIGH],
-  medium: [items from ### MEDIUM],
-  low:    [items from ### LOW],
-},
-```
-
-Each item: `{ id, title, note }` (no `startedAt`). Always emit all three keys even if a bucket is empty (`[]`).
-
-### 4e. `prs` — MODIFIED for reporter-inline (advisor #1 policy)
-
-Query merged PRs:
-```bash
-gh pr list --base develop --state merged --limit 8 --json number,title,mergedAt
-```
-
-Build 8 entries from this list. Then **prepend the in-flight PR** (the one this skill is auditing):
-
-```js
-{
-  number: <PR_NUMBER>,
-  title: <PR_TITLE>,
-  mergedAt: null,           // sentinel: merge pending
-  mergedAtKST: null,
-  sha: null                 // sentinel: pre-squash SHA unknown until merge
-}
-```
-
-Result: 9 entries total → drop the OLDEST to maintain the 8-entry window → final 8 entries with the in-flight PR at index 0.
-
-**Backfill policy**: the NEXT reporter-inline invocation, on its Step 4e, reads `prs[]`, finds entries with `mergedAt: null`, runs `gh pr view <number> --json mergedAt,mergeCommit` to fill in the real merge timestamp + squash SHA, then proceeds with its own in-flight prepend. Steady-state backfill is automatic; no manual cleanup needed.
-
-For non-null entries from `gh pr list`:
-- `mergedAt` — raw ISO 8601 UTC from `gh` (e.g. `2026-05-23T16:32:04Z`). DO NOT transform.
-- `mergedAtKST` — same timestamp formatted `YYYY-MM-DD HH:mm KST`:
-  ```bash
-  TZ=Asia/Seoul date -j -f '%Y-%m-%dT%H:%M:%SZ' '<mergedAt>' '+%Y-%m-%d %H:%M KST'
-  # Linux: TZ=Asia/Seoul date -d '<mergedAt>' '+%Y-%m-%d %H:%M KST'
-  ```
-
-Do NOT swap `mergedAt` and `mergedAtKST`. Consumers parse `mergedAt`; humans read `mergedAtKST`.
-
-### 4f. `agents`
-
-Scan `.claude/agents/*.md` frontmatter. For each agent file, emit:
-- `name` — from frontmatter `name:`.
-- `role` — one-line role string from first sentence of `description:` (or first sentence of body if more concise).
-- `model` — from frontmatter `model:`.
-- `effort` — from frontmatter `effort:`. If missing, emit `"default"`.
-
-If a frontmatter has `deprecated: true`, append `" (deprecated)"` suffix to the role string. Don't omit the entry — keep it visible so the dashboard surfaces the migration status.
-
-### 4g. `systemFlow` / `recommendationFlow` / `agentFlow`
-
-**Preserve verbatim from prior state.js.** Reporter never regenerates Mermaid bodies — these are hand-curated diagrams maintained by admin / session, not derived from code.
-
-If the commit touched any of:
-- `backend/apps/recommendation/{views,engine,services}/**`
-- `frontend/src/api/**`
-- `frontend/src/pages/{LLMSearchPage,SwipePage,ResultsPage}.jsx`
-- `.claude/agents/**`
-- `.claude/skills/**` (added 2026-05-26)
-
-then append (or replace) a single stale-flag comment near the top of `state.js`, after the existing header block:
-
-```js
-// Reporter: Mermaid sources may be stale — commit <short_sha> touched <one example path>. Next session should refresh the affected diagram by hand.
-```
-
-Replace any prior stale-flag with the newer one. If the commit did not touch any of the above, ensure no stale-flag is present (remove).
-
-### 4h. `milestones`
-
-**Preserve verbatim from prior state.js.** Phase archive. Only update when an entire phase status flips (rare, session-explicit).
-
-### 4i. Write the file
-
-Use `Write` — small structured JS file. Keep `window.PROJECT_STATE = { ... };` shape + header comment block intact (including stale-flag if applicable).
-
-**CRITICAL — block comment `*/` early-termination pitfall (2026-05-26 incident)**:
-The opening `/* … */` header block contains backtick-wrapped path examples
-(e.g., `` `.claude/skills/<slug>/SKILL.md` ``). Any backtick path that includes
-`*/` as a literal substring (e.g., `` `.claude/skills/*/SKILL.md` ``) closes
-the block comment prematurely — the JS parser sees `*/`, ends the comment,
-treats everything after as code, errors out on the next identifier → 
-`window.PROJECT_STATE` is never assigned → `dashboard.html` renders blank
-(panels all empty).
-
-Forbidden inside the opening block comment:
-- ``...`.../*` `... ` — backtick path that contains `*/` substring.
-- Any literal `*/` that you did not intend to close the comment.
-
-Safe substitutions: use `<slug>`, `<name>`, `<*>` placeholders instead of
-glob-style `*/`. The skill body uses `` `.claude/skills/<slug>/SKILL.md` ``
-(safe) instead of `` `.claude/skills/*/SKILL.md` `` (bug).
-
-**Always verify** state.js parses after write:
+`project/state.js` is **auto-generated** — do NOT hand-author it. After the Step 2
+`Task.md` edits are in place, run:
 
 ```bash
-node -e "global.window={}; eval(require('fs').readFileSync('project/state.js','utf8')); console.log('OK keys:', Object.keys(window.PROJECT_STATE).length, 'done:', window.PROJECT_STATE.done.length, 'prs:', window.PROJECT_STATE.prs.length)"
+node tools/gen-state.js
 ```
 
-Must print `OK keys: 9 done: N prs: M` (or similar). If it errors, scan the
-opening block comment line-by-line for `*/` substrings inside backticks.
+The generator (`tools/gen-state.js`, DASHBOARD-AUTOGEN-1) derives every key from the
+canonical sources and writes `project/state.js`:
 
----
+- `meta` ← git (`origin/develop` short SHA + current branch) + KST clock; `meta.name` preserved.
+- `done` / `now` / `next` ← `Task.md` parse (top-8 Done; Next buckets X-HIGH/HIGH/MEDIUM/LOW).
+  Structural fields (id/title/date/prs) are mechanical; each entry's **`note` is carried by
+  id from the prior `state.js`**, and a NEW entry's note **seeds from its first body line**
+  in `Task.md` — so write each Done/Next entry's first bullet as a standalone summary.
+- `agents` ← `.claude/agents/*.md` frontmatter (role carried by name, else first sentence).
+- `prs` ← `gh pr list --base develop --state merged --limit 8` (falls back to prior on offline).
+- `fileTree` ← `git ls-files` ∪ `project/file-roles.json`.
+- `systemFlow` / `recommendationFlow` / `agentFlow` / `milestones` ← **carried verbatim** from
+  the prior `state.js`. To change a diagram, hand-edit it in `project/state.js`, then re-run the
+  generator (it preserves your edit). The generator never regenerates Mermaid.
+
+**Editing an existing note / agent role:** `note` (done/now/next) and agent `role` are
+**carried by id/name** from the prior `state.js`, so editing them in `Task.md` does NOT
+change them once the id already exists (the carry wins — this is why a Task.md note edit
+may "not take"). To rewrite an existing note/role, edit the string **directly in
+`project/state.js`** (it is the carried source for that field) and re-run — the generator
+preserves it; or delete the id's prior entry so the next run re-seeds from Task.md's first
+body line. Asymmetry to remember: `id` / `title` / `completedAt` / `prs` re-derive from
+`Task.md` every run, but `note` / `role` are **sticky after the first seed**.
+
+The generator self-checks (re-evals output, asserts the 11 keys + array shapes), exits
+non-zero on malformed output, and prints a one-line summary + a drift report to stderr
+(files lacking a `file-roles.json` role; role entries for deleted files).
+
+**Your only Step-4 obligation:** make the Step 2 `Task.md` edits, then run the generator.
+No manual JSON, no `*/`-comment pitfall, no timestamp/SHA bookkeeping. Commit the regenerated
+`project/state.js` together with the `Task.md` change in the same audit commit.
+
+> The previous hand-authoring procedure (4a–4i) is superseded by the generator. The fixed
+> state shape and the carry-forward rules are now enforced by `tools/gen-state.js`. Note:
+> `prs` lists `--state merged` only — the old in-flight-PR `mergedAt: null` sentinel is
+> dropped (the just-merged PR appears on the next generator run after the squash). To open
+> the dashboard, run `make dashboard`, which opens the committed `project/state.js`
+> view (no regeneration; reporter-inline refreshes `project/state.js` at PR time).
 
 ## Step 5 — Report
 
@@ -334,10 +223,9 @@ After file writes complete, report:
 
 ```
 REPORTER-INLINE: WRITTEN
-Files: .claude/Task.md, project/state.js[, docs/algorithm.md]
+Files: Task.md[, docs/algorithm.md] + project/state.js (regenerated via tools/gen-state.js)
 Task.md ## Done: <new entry header>
-state.js prs[]: prepended in-flight PR #<N> (mergedAt: null)
-state.js meta.head: <pre-squash develop SHA — stale by 1 PR until next pass>
+gen-state.js: done:<N> prs:<M> files:<K>  (generator summary line)
 algorithm.md sync: <SKIPPED|3a-only|3a+3b+3c>
 ```
 
@@ -347,43 +235,37 @@ Then STOP. Next step is `git-commit` skill (audit commit on the same feature bra
 
 ## Discriminating test (post-implementation verification)
 
-`reporter-inline` is correct if its state.js diff differs from what the legacy `reporter` agent would produce POST-MERGE ONLY in:
-- (a) `meta.head` — one PR stale (vs. agent's squash SHA).
-- (b) `prs[]` — in-flight entry has `mergedAt: null, mergedAtKST: null, sha: null` (vs. agent's filled real values).
+`reporter-inline` is correct when, after the Step 2 `Task.md` edits and `node tools/gen-state.js`:
+- (a) the new `## Done` / `## Next` entry appears in the regenerated `state.js` (id/title/date/prs from the header; `note` seeded from the entry's first body line since it is new this pass).
+- (b) the carried keys (`systemFlow` / `recommendationFlow` / `agentFlow` / `milestones`) are byte-identical to the prior `state.js` — the generator copies them verbatim, so any diff there is a BUG.
+- (c) `prs[]` reflects `gh pr list` (the just-merged PRs) and `meta.head` / `meta.updatedAt` advanced.
 
-Any other delta (Mermaid changes, milestones changes, Task.md formatting deviation) is a BUG. Catch it before commit.
-
-Test fixture: PR #121's `reporter` agent pass (commit `e36648b`) shows the canonical post-merge state. Compare reporter-inline output mentally against that.
+The generator's self-check asserts the 11 keys + array shapes; a non-zero exit means malformed output — fix the cause (Task.md format / file-roles.json), do not hand-patch state.js.
 
 ---
 
-## Rules (mirror reporter agent's Rules section)
+## Rules
 
 - NEVER delete existing content in Task.md.
 - Use `Edit` (NOT `Write`) for Task.md so the rest stays untouched.
-- Writes are: `.claude/Task.md`, `project/state.js`, narrow `docs/algorithm.md`. All other `docs/*` files are admin-owned (PR-edited).
+- Writes are: `Task.md`, `project/state.js`, narrow `docs/algorithm.md`. All other `docs/*` files are admin-owned (PR-edited).
 - Time convention: every human-facing timestamp is `YYYY-MM-DD HH:mm KST`. PR records also carry raw ISO 8601 UTC (`mergedAt`).
 - 2026-05-24 vocabulary: `## Done` / `## Now` / `## Next` (NOT `Resolved` / `In Progress` / `Open`).
 - 2026-05-26 (this skill): runs INLINE before squash merge. Separate reporter PR is deprecated.
 
 ---
 
-## When to escalate to reporter agent
+## If this skill fails
 
-The reporter agent (deprecated marker) remains available for fallback during the 2026-05-26 migration window. Escalate if:
-
-- The change touched an unfamiliar `state.js` field structure not covered by Step 4.
-- A multi-PR batch must be audited at once (deploy mode) — escalate to keep audit consistent.
-- This skill produces a state.js that fails JSON-like parse (Mermaid escaping issue, etc.) and quick fix is unclear.
-
-Dispatch:
-```
-Agent({
-  description: "reporter fallback — <reason>",
-  subagent_type: "reporter",
-  prompt: "<precise problem + current state>"
-})
-```
+`node tools/gen-state.js` self-checks and exits non-zero on malformed output. On
+failure, read its stderr and fix the ROOT CAUSE — almost always a `Task.md`
+formatting deviation (a `### `/`#### ` header the parser cannot split, a missing
+`— RESOLVED <date>` anchor) or a `project/file-roles.json` JSON error — then re-run.
+Do NOT hand-patch the auto-derived sections of `project/state.js`; they are generated and
+your edit is overwritten on the next run. Hand-edits belong only in carried fields — the
+Mermaid / milestones blocks and the string values of carried `note` / `role` (see Step 4). The
+deprecated `reporter` agent fallback was removed 2026-05-31 — there is no agent to
+dispatch.
 
 ---
 

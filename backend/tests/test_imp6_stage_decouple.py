@@ -479,7 +479,7 @@ class TestStage2ThreadSpawn:
 
     def test_thread_not_spawned_on_clarification_turn(self):
         """ParseQueryView should NOT spawn Stage 2 when probe_needed=True."""
-        from rest_framework.test import APIRequestFactory, force_authenticate
+        from rest_framework.test import APIRequestFactory
         from apps.recommendation.views import ParseQueryView
 
         factory = APIRequestFactory()
@@ -502,7 +502,7 @@ class TestStage2ThreadSpawn:
 
     def test_thread_not_spawned_when_flag_off(self):
         """stage_decouple_enabled=False -> _spawn_stage2 never called even on terminal turn."""
-        from rest_framework.test import APIRequestFactory, force_authenticate
+        from rest_framework.test import APIRequestFactory
         from apps.recommendation.views import ParseQueryView
 
         factory = APIRequestFactory()

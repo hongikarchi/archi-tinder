@@ -1,5 +1,10 @@
 from django.urls import path
-from .views import OfficeDetailView, OfficeClaimView, OfficeAdminQueueView, OfficeAdminVerifyView
+from .views import (
+    OfficeDetailView,
+    OfficeClaimView,
+    OfficeAdminQueueView,
+    OfficeAdminVerifyView,
+)
 
 app_name = 'profiles'
 urlpatterns = [

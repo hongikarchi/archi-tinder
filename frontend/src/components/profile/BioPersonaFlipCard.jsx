@@ -3,10 +3,10 @@ import { useState } from 'react'
 /**
  * BioPersonaFlipCard — §3.5.4 Hero Flip variant (text-on-surface, profile pages)
  *   Front: italic bio + "tap to reveal persona" caption
- *   Back: persona_type gradient text + one_liner + Styles/Programs chip rows + MBTI bottom-right
+ *   Back: persona_type gradient text + one_liner + Styles/Programs chip rows
  *   Internal radial-gradient pink glow. Lift YES, border YES (text-on-surface needs containment).
  */
-export default function BioPersonaFlipCard({ bio, persona, mbti }) {
+export default function BioPersonaFlipCard({ bio, persona }) {
   const [isFlipped, setIsFlipped] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
 
@@ -73,7 +73,7 @@ export default function BioPersonaFlipCard({ bio, persona, mbti }) {
           </span>
         </div>
 
-        {/* BACK — persona_type gradient + one_liner + chips + MBTI */}
+        {/* BACK — persona_type gradient + one_liner + chips */}
         <div style={{
           position: 'absolute', inset: 0,
           backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden',
@@ -163,16 +163,6 @@ export default function BioPersonaFlipCard({ bio, persona, mbti }) {
                 ))}
               </div>
             </div>
-          )}
-          {/* MBTI subtle bottom-right */}
-          {mbti && (
-            <span style={{
-              position: 'absolute', bottom: 12, right: 14, zIndex: 1,
-              color: 'var(--color-text-dimmer)', fontSize: 10, fontWeight: 600,
-              letterSpacing: '0.08em',
-            }}>
-              {mbti}
-            </span>
           )}
         </div>
       </div>

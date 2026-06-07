@@ -1,0 +1,64 @@
+/*
+ * AppearanceSettings.module.css — Interactive states for theme swatch tiles
+ * and font/language chip buttons.
+ * Token map: --color-accent-1 → --accent-1, --ease → --motion-ease.
+ */
+
+/* ── Theme swatch tile ─────────────────────────────────────────────────── */
+
+.swatchButton {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  /* Focus ring on the outer button wrapper */
+}
+
+.swatchButton:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 3px;
+  border-radius: var(--radius-md);
+}
+
+.swatchTile {
+  position: relative;
+  height: 72px;
+  border-radius: var(--radius-md);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: box-shadow var(--motion-fast) var(--motion-ease),
+              border-color var(--motion-fast) var(--motion-ease),
+              transform var(--motion-fast) var(--motion-ease);
+}
+
+.swatchButton:hover .swatchTile {
+  transform: translateY(-2px);
+}
+
+/* ── Font / Language chip ──────────────────────────────────────────────── */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  transition: border-color var(--motion-fast) var(--motion-ease),
+              background var(--motion-fast) var(--motion-ease);
+  outline: none;
+}
+
+.chip:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+}
+
+.chip:hover {
+  border-color: var(--accent-1) !important;
+}

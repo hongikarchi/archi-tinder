@@ -32,6 +32,7 @@ from .swipe import (
     ProjectBookmarkView,
     BuildingBatchView,
     DiverseRandomView,
+    QuestionResponseView,
     # Private helpers accessed by tests
     _merge_buffer_into_exposed,
     _async_prefetch_thread,
@@ -43,6 +44,8 @@ from .search import (
 )
 from .discovery import (
     DiscoveryFeedView,
+    DiscoveryFeedbackView,
+    DiscoveryPromoteView,
     BoardSurpriseView,
 )
 from .reports import (
@@ -52,6 +55,11 @@ from .reports import (
 from .telemetry import (
     ImageLoadTelemetryView,
     ImageLoadTelemetryThrottle,
+)
+from .office_recommendation import (
+    RecommendedArchitectsView,
+    ArchitectDetailView,
+    ArchitectFollowView,
 )
 from ._shared import (
     # Private helpers accessed by tests
@@ -72,13 +80,19 @@ __all__ = [
     'ProjectBookmarkView',
     'BuildingBatchView',
     'DiverseRandomView',
+    'QuestionResponseView',
     'ParseQueryView',
     'DiscoveryFeedView',
+    'DiscoveryFeedbackView',
+    'DiscoveryPromoteView',
     'BoardSurpriseView',
     'ProjectReportGenerateView',
     'ProjectReportImageView',
     'ImageLoadTelemetryView',
     'ImageLoadTelemetryThrottle',
+    'RecommendedArchitectsView',
+    'ArchitectDetailView',
+    'ArchitectFollowView',
     # Private helpers (re-exported for backward compat with test imports)
     '_liked_id_only',
     '_get_profile',

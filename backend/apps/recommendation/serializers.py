@@ -1,8 +1,16 @@
+import json
 from types import SimpleNamespace
 
 from rest_framework import serializers
 from apps.accounts.serializers import UserMiniSerializer
 from .models import Project
+
+# ── Conversation-history validation limits (mirrors search.py ParseQueryView) ──
+# Mirrored here (not imported) because they are local vars inside ParseQueryView.post.
+_MAX_CHAT_MESSAGES = 60   # max items in conversation_history['messages'] list
+_MAX_HISTORY_LEN = 10     # max items in conversation_history['history'] list
+_MAX_TEXT_LEN = 2000      # max chars per text string in either sub-list
+_MAX_BLOB_BYTES = 65536   # 64 KB total JSON size cap
 
 
 class ProjectSerializer(serializers.ModelSerializer):
@@ -153,7 +161,10 @@ class ProjectSerializer(serializers.ModelSerializer):
             'raw_query',
             'analysis_report',
             'final_report',
+            'axis_scores',
             'report_image',
+            'report_image_mime',
+            'conversation_history',
             'latest_session_id',
             'latest_session_meta',
             'created_at',
@@ -167,8 +178,13 @@ class ProjectSerializer(serializers.ModelSerializer):
             'reaction_count',
             'analysis_report',
             'final_report',
+            'axis_scores',
             'report_image',
+            'report_image_mime',
             'raw_query',
+            # conversation_history is read-only on ProjectSerializer (create path).
+            # It is writable only via ProjectSelfUpdateSerializer (PATCH path).
+            'conversation_history',
             'latest_session_id',
             'latest_session_meta',
             'created_at',
@@ -177,30 +193,102 @@ class ProjectSerializer(serializers.ModelSerializer):
         # `disliked_ids` intentionally excluded — never serialized to any caller
 
 
+_LIST_EXCLUDE_FIELDS = {'analysis_report', 'conversation_history', 'axis_scores'}
+
+
 class ProjectListSerializer(ProjectSerializer):
     """List-view variant of ProjectSerializer.
 
-    Excludes ``analysis_report`` — the heavy LLM JSON field is deferred by
-    `.defer('analysis_report')` on the list queryset (PERF-1 change C).
-    If DRF read it from Meta.fields it would trigger a lazy DB round-trip per
-    row (N+1).  Dropping it here keeps the output consistent with the deferred
-    query and preserves the detail-view contract where ``analysis_report`` is
-    still returned (ProjectDetailView uses ProjectSerializer, not this class).
+    Excludes ``analysis_report`` and ``conversation_history`` — both are heavy
+    JSON fields deferred via `.defer(...)` on the list queryset (PERF-1 change C
+    + BACK-LLM-2).  If DRF read them from Meta.fields they would trigger lazy
+    DB round-trips per row (N+1).  Dropping them here keeps list output lean and
+    consistent with the deferred queryset.
+
+    detail-view contract: both fields are still returned by ProjectDetailView
+    (which uses ProjectSerializer, not this class).
     """
 
     class Meta(ProjectSerializer.Meta):
-        fields = [f for f in ProjectSerializer.Meta.fields if f != 'analysis_report']
+        fields = [f for f in ProjectSerializer.Meta.fields if f not in _LIST_EXCLUDE_FIELDS]
         read_only_fields = [
-            f for f in ProjectSerializer.Meta.read_only_fields if f != 'analysis_report'
+            f for f in ProjectSerializer.Meta.read_only_fields
+            if f not in _LIST_EXCLUDE_FIELDS
         ]
 
 
 class ProjectSelfUpdateSerializer(serializers.ModelSerializer):
-    """PATCH /api/v1/projects/{project_id}/ — owner updates name + visibility only.
+    """PATCH /api/v1/projects/{project_id}/ — owner updates name, visibility, conversation_history.
 
     All other fields (liked_ids, saved_ids, filters, reaction_count, etc.)
     are managed by swipe flow or system — silently ignored on PATCH.
+
+    conversation_history validation:
+    - must be a dict
+    - total JSON size ≤ 64 KB (_MAX_BLOB_BYTES)
+    - if 'messages' key present: must be a list ≤ _MAX_CHAT_MESSAGES items;
+      each item's 'text' value ≤ _MAX_TEXT_LEN chars
+    - if 'history' key present: must be a list ≤ _MAX_HISTORY_LEN items;
+      each item's 'text' value ≤ _MAX_TEXT_LEN chars
+    - extra keys are tolerated (frontend owns the blob shape)
     """
+
+    def validate_conversation_history(self, value):
+        if not isinstance(value, dict):
+            raise serializers.ValidationError('conversation_history must be a dict.')
+
+        # Total size gate — measure actual UTF-8 bytes (Korean chars = 3 bytes
+        # each; ensure_ascii=True would inflate them to 6-byte \uXXXX escapes,
+        # making the 64 KB cap ~3x tighter than the DB actually needs).
+        try:
+            blob_size = len(json.dumps(value, ensure_ascii=False).encode('utf-8'))
+        except (TypeError, ValueError):
+            raise serializers.ValidationError('conversation_history is not JSON-serializable.')
+        if blob_size > _MAX_BLOB_BYTES:
+            raise serializers.ValidationError(
+                f'conversation_history too large (max {_MAX_BLOB_BYTES} bytes, got {blob_size}).'
+            )
+
+        # messages sub-list gate
+        if 'messages' in value:
+            messages = value['messages']
+            if not isinstance(messages, list):
+                raise serializers.ValidationError("conversation_history['messages'] must be a list.")
+            if len(messages) > _MAX_CHAT_MESSAGES:
+                raise serializers.ValidationError(
+                    f"conversation_history['messages'] too long "
+                    f"(max {_MAX_CHAT_MESSAGES} items, got {len(messages)})."
+                )
+            for i, item in enumerate(messages):
+                if isinstance(item, dict):
+                    text = item.get('text', '') or item.get('content', '') or ''
+                    if isinstance(text, str) and len(text) > _MAX_TEXT_LEN:
+                        raise serializers.ValidationError(
+                            f"conversation_history['messages'][{i}].text too long "
+                            f"(max {_MAX_TEXT_LEN} chars)."
+                        )
+
+        # history sub-list gate
+        if 'history' in value:
+            history = value['history']
+            if not isinstance(history, list):
+                raise serializers.ValidationError("conversation_history['history'] must be a list.")
+            if len(history) > _MAX_HISTORY_LEN:
+                raise serializers.ValidationError(
+                    f"conversation_history['history'] too long "
+                    f"(max {_MAX_HISTORY_LEN} items, got {len(history)})."
+                )
+            for i, item in enumerate(history):
+                if isinstance(item, dict):
+                    text = item.get('text', '')
+                    if isinstance(text, str) and len(text) > _MAX_TEXT_LEN:
+                        raise serializers.ValidationError(
+                            f"conversation_history['history'][{i}].text too long "
+                            f"(max {_MAX_TEXT_LEN} chars)."
+                        )
+
+        return value
+
     class Meta:
         model  = Project
-        fields = ['name', 'visibility']
+        fields = ['name', 'visibility', 'conversation_history']
