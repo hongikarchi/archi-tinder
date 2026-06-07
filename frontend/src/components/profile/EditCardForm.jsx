@@ -64,6 +64,8 @@ const sectionLabelStyle = {
 export default function EditCardForm({ user, onChange }) {
   const [draft, setDraft] = useState(() => ({
     display_name: user?.display_name || '',
+    role: user?.role || '',
+    affiliation: user?.affiliation || '',
     bio: user?.bio || '',
     mbti: user?.mbti || '',
     linkRows: dictToRows(user?.external_links || {}),
@@ -74,6 +76,8 @@ export default function EditCardForm({ user, onChange }) {
     setDraft(next)
     onChange?.({
       display_name: next.display_name,
+      role: next.role,
+      affiliation: next.affiliation,
       bio: next.bio,
       mbti: next.mbti,
       external_links: rowsToDict(next.linkRows),
@@ -119,6 +123,34 @@ export default function EditCardForm({ user, onChange }) {
         <div style={{ fontSize: 11, color: 'var(--color-text-dim)', marginTop: 4, textAlign: 'right' }}>
           {draft.display_name.length}/30
         </div>
+      </div>
+
+      {/* Role */}
+      <div>
+        <label htmlFor="edit-role" style={labelStyle}>직업 (Role)</label>
+        <input
+          id="edit-role"
+          type="text"
+          value={draft.role}
+          onChange={setText('role')}
+          maxLength={50}
+          placeholder="Architecture Student"
+          className={styles.field}
+        />
+      </div>
+
+      {/* Affiliation */}
+      <div>
+        <label htmlFor="edit-affiliation" style={labelStyle}>소속 (Affiliation)</label>
+        <input
+          id="edit-affiliation"
+          type="text"
+          value={draft.affiliation}
+          onChange={setText('affiliation')}
+          maxLength={100}
+          placeholder="Korea University"
+          className={styles.field}
+        />
       </div>
 
       {/* Bio */}

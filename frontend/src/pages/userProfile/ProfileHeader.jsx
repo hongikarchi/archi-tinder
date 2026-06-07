@@ -3,9 +3,9 @@ import { IconBack, IconShare, IconEdit, IconSettings } from '../../components/ic
 
 export default function ProfileHeader({
   isMe,
+  handle,
   onLogout,
   onShare,
-  onEdit,
   onFollow,
   isFollowing,
   isFollowingPending,
@@ -13,7 +13,7 @@ export default function ProfileHeader({
   const navigate = useNavigate()
 
   return (
-    /* Sticky Header — Back left, title center, controls right */
+    /* Sticky Header — isMe: title+handle left, controls right | others: back left, title center, controls right */
     <div style={{
       position: 'sticky', top: 0, zIndex: 10,
       background: 'color-mix(in srgb, var(--color-bg) 72%, transparent)',
@@ -23,29 +23,52 @@ export default function ProfileHeader({
       borderBottom: '1px solid var(--color-border-soft)',
       gap: 8,
     }}>
-      <button
-        onClick={() => navigate(-1)}
-        aria-label="Back"
-        style={{
-          width: 44, height: 44, minWidth: 44,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'transparent', border: 'none',
-          color: 'var(--color-text)', cursor: 'pointer',
-          borderRadius: 12,
-          transition: 'background 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
-        }}
-        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-surface-2, rgba(255,255,255,0.05))' }}
-        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
-      >
-        <IconBack width={20} height={20} />
-      </button>
+      {isMe ? (
+        /* Own profile: title block on the left (no back button) */
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
+          <h2 style={{
+            color: 'var(--color-text)', fontSize: 17, fontWeight: 700,
+            margin: 0, letterSpacing: '-0.01em', lineHeight: 1.2,
+          }}>
+            Profile
+          </h2>
+          {handle && (
+            <span style={{
+              color: 'var(--color-text-muted)', fontSize: 12, fontWeight: 500,
+              letterSpacing: '0.01em', lineHeight: 1,
+            }}>
+              @{handle}
+            </span>
+          )}
+        </div>
+      ) : (
+        /* Other user: back button on left */
+        <button
+          onClick={() => navigate(-1)}
+          aria-label="Back"
+          style={{
+            width: 44, height: 44, minWidth: 44,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'transparent', border: 'none',
+            color: 'var(--color-text)', cursor: 'pointer',
+            borderRadius: 12,
+            transition: 'background 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-surface-2, rgba(255,255,255,0.05))' }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+        >
+          <IconBack width={20} height={20} />
+        </button>
+      )}
 
-      <h2 style={{
-        color: 'var(--color-text)', fontSize: 17, fontWeight: 700,
-        margin: 0, letterSpacing: '-0.01em',
-      }}>
-        Profile
-      </h2>
+      {!isMe && (
+        <h2 style={{
+          color: 'var(--color-text)', fontSize: 17, fontWeight: 700,
+          margin: 0, letterSpacing: '-0.01em',
+        }}>
+          Profile
+        </h2>
+      )}
 
       {/* Right-side controls */}
       {isMe ? (
@@ -69,9 +92,9 @@ export default function ProfileHeader({
             <IconShare width={18} height={18} />
           </button>
 
-          {/* Edit */}
+          {/* Edit — deep-links to /settings/edit-profile */}
           <button
-            onClick={onEdit}
+            onClick={() => navigate('/settings/edit-profile')}
             aria-label="프로필 편집"
             title="프로필 편집"
             style={{

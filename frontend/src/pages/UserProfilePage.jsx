@@ -4,7 +4,6 @@ import { getUserProfile, followUser, unfollowUser } from '../api/client.js'
 import { updateProject, deleteProject } from '../api/projects.js'
 import { purgeChatCache } from '../utils/appHelpers.js'
 import { getUserSavedStudios } from '../api/architects.js'
-import EditProfileModal from '../components/EditProfileModal.jsx'
 import ShareCardModal from '../components/ShareCardModal.jsx'
 import FollowListModal from '../components/profile/FollowListModal.jsx'
 import ProfileHeader from './userProfile/ProfileHeader'
@@ -54,8 +53,6 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
   const [boardsLoading, setBoardsLoading] = useState(false)
   const sentinelRef = useRef(null)
 
-  // Edit profile modal
-  const [showEditProfile, setShowEditProfile] = useState(false)
   // Share card modal
   const [shareOpen, setShareOpen] = useState(false)
   // Follow list modal — null | 'followers' | 'following'
@@ -426,9 +423,9 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
 
       <ProfileHeader
         isMe={isMe}
+        handle={user?.handle}
         onLogout={onLogout}
         onShare={() => setShareOpen(true)}
-        onEdit={() => setShowEditProfile(true)}
         onFollow={handleToggleFollow}
         isFollowing={isFollowing}
         isFollowingPending={isFollowingPending}
@@ -870,19 +867,6 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         )}
 
       </div>
-
-      {/* Edit Profile modal — portal-like, outside scrollable container */}
-      {showEditProfile && user && (
-        <EditProfileModal
-          user={user}
-          onClose={() => setShowEditProfile(false)}
-          onSaved={(updated) => {
-            // Merge server-normalized fields back into profile state.
-            // Modal calls onClose() after this, so we don't close here.
-            setUser(prev => ({ ...prev, ...updated }))
-          }}
-        />
-      )}
 
       {/* Share card modal */}
       {shareOpen && user && (

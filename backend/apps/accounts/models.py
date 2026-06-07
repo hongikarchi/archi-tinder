@@ -90,6 +90,22 @@ class UserProfile(models.Model):
         # Ordered newest-first (prepend on add). Deduped. Capped at 200 in view.
     )
 
+    # -- Profile IA redesign (SETTINGS-2) --
+    role = models.CharField(
+        max_length=50,
+        blank=True,
+        default='',
+        # Free-text job role / title (e.g. "Architecture Student").
+        # NOT the onboarding_role enum. Never auto-populated; user sets explicitly.
+    )
+    affiliation = models.CharField(
+        max_length=100,
+        blank=True,
+        default='',
+        # Free-text affiliation / institution (e.g. "Korea University").
+        # Displayed as the secondary line in the profile hero.
+    )
+
     # -- Settings harvest (SETTINGS-1) --
     handle = models.CharField(
         max_length=30,

@@ -9,9 +9,10 @@ import { IconBack } from '../../components/icons.jsx'
 import styles from './SettingsPage.module.css'
 
 const ROWS = [
-  { key: 'account',       label: '계정',      hint: '핸들 · 로그인 정보',  path: '/settings/account' },
-  { key: 'notifications', label: '알림',      hint: '푸시 · 이메일',       path: '/settings/notifications' },
-  { key: 'appearance',    label: '화면 설정', hint: '테마 · 폰트 · 언어',  path: '/settings/appearance' },
+  { key: 'edit-profile',  label: '프로필 편집', hint: '이름 · 직업 · 소속 · 소개', path: '/settings/edit-profile' },
+  { key: 'account',       label: '계정',        hint: '핸들 · 로그인 정보',         path: '/settings/account' },
+  { key: 'notifications', label: '알림',        hint: '푸시 · 이메일',               path: '/settings/notifications' },
+  { key: 'appearance',    label: '화면 설정',   hint: '테마 · 폰트 · 언어',          path: '/settings/appearance' },
 ]
 
 export default function SettingsPage() {

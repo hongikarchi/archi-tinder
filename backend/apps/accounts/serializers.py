@@ -26,7 +26,7 @@ class UserSerializer(serializers.ModelSerializer):
         fields = [
             'user_id', 'display_name', 'avatar_url', 'providers', 'theme', 'font',
             'language', 'is_guest', 'onboarding_role', 'consent_accepted_at', 'handle',
-            'notifications',
+            'notifications', 'role', 'affiliation',
         ]
 
     def get_providers(self, obj):
@@ -73,6 +73,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'following_count',
             'saved_studios_count',
             'handle',
+            'role',
+            'affiliation',
         ]
         read_only_fields = ['user_id', 'follower_count', 'following_count', 'persona_summary']
 
@@ -134,7 +136,7 @@ class UserProfileSelfUpdateSerializer(serializers.ModelSerializer):
         fields = [
             'display_name', 'bio', 'mbti', 'external_links',
             'theme', 'font', 'language', 'onboarding_role',
-            'handle', 'notifications',
+            'handle', 'notifications', 'role', 'affiliation',
         ]
 
     def validate_display_name(self, value):
