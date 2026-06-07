@@ -10,9 +10,20 @@ Covers:
     - non-string values (int) → coerced to '' (not 500)
 """
 import pytest
+from django.core.cache import cache
 from rest_framework.test import APIClient
 
 from apps.accounts.models import UserProfile
+
+
+# GuestLoginThrottle (3/min) counts via the Django cache. The root conftest
+# _clear_cache autouse fixture does NOT reach apps/accounts/tests/, so without
+# this each /auth/guest/ POST accumulates and later tests 429. Reset per test.
+@pytest.fixture(autouse=True)
+def _clear_throttle_cache():
+    cache.clear()
+    yield
+    cache.clear()
 
 
 # ---------------------------------------------------------------------------

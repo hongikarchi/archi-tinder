@@ -128,6 +128,10 @@ class UserProfileSelfUpdateSerializer(serializers.ModelSerializer):
         allow_null=True,
         allow_blank=False,
         max_length=30,
+        # trim_whitespace=False so validate_handle's fullmatch is the sole
+        # authority — a trailing/leading whitespace (e.g. "x\n") must fail the
+        # ^[a-z0-9_]{3,30}$ check, not get silently stripped then accepted.
+        trim_whitespace=False,
         validators=[],
     )
 
