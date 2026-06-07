@@ -3,7 +3,7 @@ from django.conf import settings
 from .views import (
     GoogleLoginView, KakaoLoginView, NaverLoginView,
     TokenRefreshView, MeView, LogoutView, DevLoginView,
-    UserProfileDetailView, UserProfileSelfUpdateView,
+    UserProfileDetailView, UserProfileSelfUpdateView, AvatarUploadView,
     GuestLoginView, GuestPromoteView,
     LikedBuildingsView,
     # AUTH-LOGIN-1: handle+password + email-link
@@ -30,6 +30,7 @@ urlpatterns = [
     # users/me/ (string) must come before users/<int:user_id>/ for clarity,
     # though Django's int converter auto-disambiguates them.
     path('users/me/', UserProfileSelfUpdateView.as_view(), name='user-profile-self-update'),
+    path('users/me/avatar/', AvatarUploadView.as_view(), name='user-avatar-upload'),
     path('users/<int:user_id>/', UserProfileDetailView.as_view(), name='user-profile-detail'),
     # SNS-LIKED-PROJECTS — Discovery right-swipe liked buildings
     path('liked-buildings/', LikedBuildingsView.as_view(), name='liked-buildings'),

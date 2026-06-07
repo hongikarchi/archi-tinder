@@ -441,6 +441,8 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
           savedStudiosCount={user.saved_studios_count ?? 0}
           onSelectTab={(t) => t === 'studios' ? handleStudiosTab() : setActiveTab('boards')}
           onOpenFollowModal={(m) => setFollowModal(m)}
+          isMe={isMe}
+          onAvatarUpdated={(updatedUser) => setUser(prev => ({ ...prev, avatar_url: updatedUser.avatar_url }))}
         />
 
         {/* Tab bar — Boards | Studios */}

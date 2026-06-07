@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-06-07 19:19 KST',
-    head: 'adcc605',
-    branch: 'feature/claude-auth-login',
+    updatedAt: '2026-06-07 22:04 KST',
+    head: '74edec8',
+    branch: 'feature/claude-avatar',
   },
   done: [
+    {
+      id: 'FRONT-AVATAR-1',
+      title: '프로필 사진 업로드 (server-proxy R2 + 폴백)',
+      completedAt: '2026-06-07',
+      note: '아바타 업로드(Slice D). 마이그 없음(`avatar_url` URLField 기존). data-URL 지양 결정대로 R2 URL만 저장.',
+    },
     {
       id: 'AUTH-LOGIN-1',
       title: 'handle+비번 로그인 + 이메일 인증(OAuth 연동)',
@@ -75,13 +81,6 @@ window.PROJECT_STATE = {
       prs: [193],
       note: '기존 unit-level만이던 JWT 캐시 테스트에 DRF 파이프라인 통합 테스트 5 추가(`test_jwt_cache_integration.py`): cache-hit, is_active=False stale-cache 거부(signal invalidation), post_save invalidation, logout, refresh-rotation invalidation. prod 코드 무변경. is_active bulk `.update()` 우회는 기존 문서화된 known limitat…',
     },
-    {
-      id: 'BACK-LLM-2',
-      title: '채팅기록 backend 영속화 (cross-device)',
-      completedAt: '2026-06-04',
-      prs: [195],
-      note: '채팅기록이 localStorage-only라 기기간 유실 → `Project.conversation_history` JSONField(migration 0022, #194 0021_tagaxisweight 충돌로 renumber). 기존 PATCH 재사용(신규 endpoint 無). detail-read/PATCH-write 검증(dict, ≤64KB UTF-8 ensure_ascii=False, messages≤60/history≤10/text≤2000), list서 제외+defer. fr…',
-    },
   ],
   now: [
     {
@@ -116,9 +115,14 @@ window.PROJECT_STATE = {
     ],
     medium: [
       {
-        id: 'FRONT-AVATAR-1',
-        title: '프로필 사진 업로드 (R2)',
-        note: '프로필 사진 변경 UI + 업로드 백엔드 부재. `avatar_url`은 plain URLField, 업로드 경로/스토리지 없음(R2 boto3/presigned 미배선, MEDIA_ROOT 없음). CF R2(prod 스택 존재)에 업로드 엔드포인트(presigned 또는 multipart→boto3) + content-type 화이트리스트(jpeg/png/webp)/크기 cap(≤5MB)/본인만/파일명 무작위 → `avatar_url`엔 R2 URL만. 프론트 히어로 아바타(isMe) 클…',
+        id: 'BACK-AVATAR-2',
+        title: '교체 시 옛 아바타 객체 GC 없음',
+        note: 'FRONT-AVATAR-1(`84ba1f1`) 후속. 업로드마다 새 uuid4 키로 저장 → 이전 R2 객체 + 로컬 파일이 영구 잔류(orphan 누적). 교체/삭제 시 옛 객체 cleanup(즉시 delete 또는 주기 GC job) 필요. 비차단(스토리지 비용·정합성).',
+      },
+      {
+        id: 'INFRA-AVATAR-R2-1',
+        title: 'prod R2 env 미설정 시 아바타 비영속',
+        note: 'FRONT-AVATAR-1은 R2_* env 미설정 시 FileSystemStorage로 폴백. Railway 디스크는 ephemeral → prod 아바타 업로드가 재배포 시 소실. prod 영속화하려면 Railway에 `R2_ENDPOINT_URL`/`R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY`/`R2_AVATAR_BUCKET`/`AVATAR_PUBLIC_BASE_URL` 설정 + 공개 아바타 버킷(빌딩 이미지 버킷과 분리) 프로비저닝 필요. 미설정이어도 코드…',
       },
       {
         id: 'BACK-LLM-4',
@@ -191,6 +195,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 216,
+      title: 'feat(auth): handle+password login + email-verify via OAuth linking (AUTH-LOGIN-1)',
+      mergedAt: '2026-06-07T10:23:35Z',
+      mergedAtKST: '2026-06-07 19:23 KST',
+      sha: '74edec8',
+    },
+    {
       number: 215,
       title: 'feat(profile): archibe Settings harvest + Profile/Account IA + rebrand archibe',
       mergedAt: '2026-06-07T05:22:51Z',
@@ -238,13 +249,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-06-06T01:46:48Z',
       mergedAtKST: '2026-06-06 10:46 KST',
       sha: '13359a3',
-    },
-    {
-      number: 208,
-      title: 'feat(i18n): language preference (ko/en) + t() foundation + TabBar (FULL-LANGUAGE-1 Slice 1)',
-      mergedAt: '2026-06-06T01:43:24Z',
-      mergedAtKST: '2026-06-06 10:43 KST',
-      sha: '119a435',
     },
   ],
   agents: [
@@ -499,6 +503,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'backend/.gitignore',
+      role: '',
+    },
+    {
       path: 'backend/apps/__init__.py',
       role: '패키지 init',
     },
@@ -579,6 +587,10 @@ window.PROJECT_STATE = {
       role: '유저 캐시 무효화 시그널',
     },
     {
+      path: 'backend/apps/accounts/storage.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/accounts/tests/__init__.py',
       role: '패키지 init',
     },
@@ -588,6 +600,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/accounts/tests/test_auth_login.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/accounts/tests/test_avatar_upload.py',
       role: '',
     },
     {
@@ -1813,6 +1829,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/pages/userProfile/ProfileHero.jsx',
       role: '유저 프로필 히어로',
+    },
+    {
+      path: 'frontend/src/pages/userProfile/ProfileHero.module.css',
+      role: '',
     },
     {
       path: 'frontend/src/tokens.css',

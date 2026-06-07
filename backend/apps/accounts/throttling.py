@@ -74,3 +74,13 @@ class SetPasswordThrottle(UserRateThrottle):
     """
     scope = 'set_password'
     rate = '5/min'
+
+
+class AvatarUploadThrottle(UserRateThrottle):
+    """10 avatar uploads per minute per authenticated user.
+
+    IsAuthenticated endpoint — UserRateThrottle keys on authenticated user.
+    Tight rate because each call invokes Pillow decode + R2/disk write.
+    """
+    scope = 'avatar_upload'
+    rate = '10/min'

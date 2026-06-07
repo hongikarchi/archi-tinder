@@ -1,5 +1,51 @@
-import { Fragment } from 'react'
+import { Fragment, useState, useCallback } from 'react'
 import BioPersonaFlipCard from '../../components/profile/BioPersonaFlipCard'
+import { uploadAvatar } from '../../api/profiles.js'
+import styles from './ProfileHero.module.css'
+
+// Canvas-based center-crop + downscale to ≤512px, exported as webp (jpeg fallback).
+// UX/bandwidth optimisation only — server re-encodes authoritatively.
+function cropAndScale(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      const size = Math.min(img.naturalWidth, img.naturalHeight, 512)
+      const canvas = document.createElement('canvas')
+      canvas.width = size
+      canvas.height = size
+      const ctx = canvas.getContext('2d')
+      // Center-crop: draw the largest center square of the source image
+      const srcX = (img.naturalWidth - Math.min(img.naturalWidth, img.naturalHeight)) / 2
+      const srcY = (img.naturalHeight - Math.min(img.naturalWidth, img.naturalHeight)) / 2
+      const srcSize = Math.min(img.naturalWidth, img.naturalHeight)
+      ctx.drawImage(img, srcX, srcY, srcSize, srcSize, 0, 0, size, size)
+      // Prefer webp; fall back to jpeg if webp toBlob is unsupported (returns null)
+      canvas.toBlob(
+        (blob) => {
+          if (blob) { resolve(blob); return }
+          // webp unsupported — retry with jpeg
+          canvas.toBlob(
+            (jpegBlob) => {
+              if (jpegBlob) resolve(jpegBlob)
+              else reject(new Error('Image encoding failed'))
+            },
+            'image/jpeg',
+            0.9,
+          )
+        },
+        'image/webp',
+        0.9,
+      )
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error('Failed to load image'))
+    }
+    img.src = url
+  })
+}
 
 export default function ProfileHero({
   user,
@@ -8,7 +54,13 @@ export default function ProfileHero({
   savedStudiosCount,
   onSelectTab,
   onOpenFollowModal,
+  // Avatar upload props (owner-only)
+  isMe,
+  onAvatarUpdated,
 }) {
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState(null)
+
   // External-link helpers (pure derivations — no hooks)
   const igHandle = user?.external_links?.instagram?.replace(/^@/, '') || ''
   const igUrl = igHandle ? `https://instagram.com/${igHandle}` : null
@@ -26,50 +78,126 @@ export default function ProfileHero({
     { count: user.following_count, label: 'Following', onClick: () => onOpenFollowModal('following') },
   ]
 
+  const handleFileChange = useCallback(async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    // Reset input so re-selecting the same file re-fires onChange
+    e.target.value = ''
+
+    setUploadError(null)
+    setUploading(true)
+    try {
+      const blob = await cropAndScale(file)
+      const updatedUser = await uploadAvatar(blob)
+      onAvatarUpdated?.(updatedUser)
+    } catch (err) {
+      setUploadError(err.message || 'Upload failed. Please try again.')
+    } finally {
+      setUploading(false)
+    }
+  }, [onAvatarUpdated])
+
+  // Avatar circle — renders the image+halo or the placeholder.
+  // When isMe: wrapped in an upload <label> trigger with hover overlay.
+  function AvatarCircle() {
+    if (user.avatar_url) {
+      return (
+        <div style={{ position: 'relative' }}>
+          <div
+            style={{
+              position: 'absolute', inset: -6, borderRadius: '50%',
+              background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
+              opacity: 0.55, filter: 'blur(12px)',
+            }}
+            aria-hidden="true"
+          />
+          <img
+            src={user.avatar_url}
+            alt="avatar"
+            style={{
+              position: 'relative', zIndex: 2,
+              width: 108, height: 108, borderRadius: '50%',
+              border: '2px solid var(--color-border-soft)',
+              objectFit: 'cover',
+              background: 'var(--color-surface)',
+              display: 'block',
+            }}
+          />
+        </div>
+      )
+    }
+    return (
+      <div
+        style={{
+          width: 108, height: 108, borderRadius: '50%',
+          background: 'var(--color-surface)',
+          border: '2px solid var(--color-border-soft)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}
+      >
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="8" r="4"></circle>
+          <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"></path>
+        </svg>
+      </div>
+    )
+  }
+
+  // Overlay content: camera icon + label
+  const overlayContent = (
+    <div className={styles.avatarOverlay} aria-hidden="true">
+      {/* Camera icon */}
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+        <circle cx="12" cy="13" r="4"></circle>
+      </svg>
+      <span>Change photo</span>
+    </div>
+  )
+
+  // Uploading spinner overlay
+  const spinnerOverlay = uploading && (
+    <div className={styles.spinnerOverlay} aria-label="Uploading..." aria-live="polite">
+      {/* animation inline to safely reference global @keyframes spin — same pattern as UserProfilePage spinner */}
+      <div className={styles.spinner} style={{ animation: 'spin 0.8s linear infinite' }} />
+    </div>
+  )
+
   return (
     /* HERO BLOCK — narrower nested column (max-width 480) */
     <div style={{ maxWidth: 480, margin: '0 auto 36px' }}>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
 
-        {/* Avatar w/ on-brand pink-rose ambient halo */}
-        {user.avatar_url ? (
-          <div style={{ position: 'relative', marginBottom: 18 }}>
-            <div
-              style={{
-                position: 'absolute', inset: -6, borderRadius: '50%',
-                background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
-                opacity: 0.55, filter: 'blur(12px)',
-              }}
-              aria-hidden="true"
-            />
-            <img
-              src={user.avatar_url}
-              alt="avatar"
-              style={{
-                position: 'relative', zIndex: 2,
-                width: 108, height: 108, borderRadius: '50%',
-                border: '2px solid var(--color-border-soft)',
-                objectFit: 'cover',
-                background: 'var(--color-surface)',
-                display: 'block',
-              }}
-            />
-          </div>
-        ) : (
-          <div
-            style={{
-              width: 108, height: 108, borderRadius: '50%',
-              background: 'var(--color-surface)',
-              border: '2px solid var(--color-border-soft)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              marginBottom: 18,
-            }}
+        {/* Avatar — upload trigger when isMe, static when not */}
+        {isMe ? (
+          <label
+            className={styles.avatarTrigger}
+            aria-label="Change profile photo"
+            title="Change profile photo"
           >
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="8" r="4"></circle>
-              <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"></path>
-            </svg>
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className={styles.fileInput}
+              onChange={handleFileChange}
+              disabled={uploading}
+              aria-label="Upload profile photo"
+            />
+            <AvatarCircle />
+            {overlayContent}
+            {spinnerOverlay}
+          </label>
+        ) : (
+          <div style={{ marginBottom: 18 }}>
+            <AvatarCircle />
           </div>
+        )}
+
+        {/* Inline upload error */}
+        {isMe && uploadError && (
+          <p className={styles.uploadError} role="alert">
+            {uploadError}
+          </p>
         )}
 
         {/* Name */}

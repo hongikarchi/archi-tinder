@@ -1,8 +1,13 @@
+import io
 import logging
 import re
+from uuid import uuid4
+
+from django.conf import settings
 from django.db import connections as _dj_connections
 from django.shortcuts import get_object_or_404
 from rest_framework import status
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -10,7 +15,8 @@ from rest_framework.views import APIView
 from django.core.cache import cache
 
 from ..models import UserProfile
-from ..serializers import UserProfileSerializer, UserProfileSelfUpdateSerializer
+from ..serializers import UserSerializer, UserProfileSerializer, UserProfileSelfUpdateSerializer
+from ..throttling import AvatarUploadThrottle
 
 logger = logging.getLogger('apps.accounts')
 
@@ -219,6 +225,194 @@ class UserProfileSelfUpdateView(APIView):
         evict_user_profile_detail(profile.user.id)
         # Return full UserProfileSerializer shape (consistent with GET)
         return Response(UserProfileSerializer(profile).data)
+
+
+# -- Avatar Upload (FRONT-AVATAR-1) ----------------------------------------
+
+class AvatarUploadView(APIView):
+    """POST /api/v1/users/me/avatar/ — upload and replace the user's avatar.
+
+    Request : multipart/form-data, field name 'avatar' (also 'file' as alias).
+    Response: 200 with the same UserSerializer shape as /auth/me/ so the
+              frontend can update the auth-user state in one round trip.
+
+    Security pipeline (security-manager reviewed):
+      1. Size cap: early Content-Length hint rejects obvious oversized requests before
+         MultiPartParser buffers the body; the authoritative cap is file_obj.size
+         (post-buffer) which STAYS as the real gate.
+         # NOTE: enforce a hard body cap at the reverse proxy (Railway/nginx
+         # client_max_body_size ~6m) — app-layer .size fires post-buffer.
+      2. Magic-byte sniff: Pillow is the content-type authority (never headers).
+      3. Decompression-bomb guard: explicit dimension check after lazy open.
+      4. Pillow verify() + re-open + re-encode to WEBP strips EXIF/GPS.
+      5. Center-crop to square + resize to 512px edge.
+      6. Randomised object key (uuid4) — user-supplied filename never used.
+      7. All Pillow/IO errors → 400 "Invalid image." (never 500).
+    """
+    permission_classes = [IsAuthenticated]
+    throttle_classes   = [AvatarUploadThrottle]
+    parser_classes     = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        # ---- 0. Early Content-Length gate (advisory / defense-in-depth) -----
+        # Fires BEFORE MultiPartParser buffers the body, so obvious oversized
+        # requests are rejected before disk-spill. CONTENT_LENGTH may be absent
+        # or non-numeric (spoofable) — fall through silently; the authoritative
+        # cap is file_obj.size (post-buffer) below.
+        _cl = request.META.get('CONTENT_LENGTH')
+        if _cl is not None:
+            try:
+                if int(_cl) > settings.AVATAR_MAX_BYTES:
+                    return Response(
+                        {'detail': f'File too large. Maximum size is {settings.AVATAR_MAX_BYTES // (1024 * 1024)} MB.'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+            except (ValueError, TypeError):
+                pass  # non-numeric — skip early gate, fall through to .size check
+
+        # ---- 1. Extract the uploaded file -----------------------------------
+        file_obj = request.FILES.get('avatar') or request.FILES.get('file')
+        if file_obj is None:
+            return Response(
+                {'detail': 'No file provided. Use form field "avatar".'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ---- 2. Authoritative size cap (post-buffer) ------------------------
+        if file_obj.size > settings.AVATAR_MAX_BYTES:
+            return Response(
+                {'detail': f'File too large. Maximum size is {settings.AVATAR_MAX_BYTES // (1024 * 1024)} MB.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Read into memory now (size is within the cap).
+        raw_bytes = file_obj.read()
+
+        # ---- 3. Process via Pillow -----------------------------------------
+        try:
+            from PIL import Image
+
+            # Align Pillow's built-in bomb guard with our explicit dimension cap
+            # (defense-in-depth — the explicit w*h check below is the primary gate).
+            Image.MAX_IMAGE_PIXELS = settings.AVATAR_MAX_PIXELS
+
+            bio = io.BytesIO(raw_bytes)
+
+            # Step A: lazy open to check dimensions WITHOUT full decode.
+            # Image.open() is lazy — it reads the header only (bomb-safe).
+            try:
+                img_header = Image.open(bio)
+            except Exception:
+                return Response(
+                    {'detail': 'Invalid image.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Step B: explicit dimension guard BEFORE verify/decode.
+            # Pillow's DecompressionBombError only raises above 2x MAX_IMAGE_PIXELS;
+            # images between 1x and 2x only warn. Explicit check catches both zones.
+            w, h = img_header.size
+            if w * h > settings.AVATAR_MAX_PIXELS:
+                return Response(
+                    {'detail': 'Image dimensions too large.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Step C: verify() reads/checks the full file for corruption.
+            # verify() CLOSES the internal stream — must re-open afterward.
+            try:
+                img_header.verify()
+            except Exception:
+                return Response(
+                    {'detail': 'Invalid image.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Step D: re-open for actual pixel decode (verify consumed stream).
+            bio.seek(0)
+            try:
+                img = Image.open(bio)
+                img.load()  # force full decode now
+            except Image.DecompressionBombError:
+                return Response(
+                    {'detail': 'Image dimensions too large.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            except Exception:
+                return Response(
+                    {'detail': 'Invalid image.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Step E: mode normalisation — composite RGBA/P/LA onto white, then RGB.
+            if img.mode in ('RGBA', 'LA', 'P'):
+                background = Image.new('RGB', img.size, (255, 255, 255))
+                if img.mode == 'P':
+                    img = img.convert('RGBA')
+                if img.mode in ('RGBA', 'LA'):
+                    background.paste(img, mask=img.split()[-1])
+                else:
+                    background.paste(img)
+                img = background
+            elif img.mode != 'RGB':
+                img = img.convert('RGB')
+
+            # Step F: center-crop to square from the shorter side.
+            width, height = img.size
+            edge = min(width, height)
+            left   = (width  - edge) // 2
+            top    = (height - edge) // 2
+            img    = img.crop((left, top, left + edge, top + edge))
+
+            # Step G: resize to the fixed output edge.
+            output_edge = settings.AVATAR_OUTPUT_EDGE
+            img = img.resize((output_edge, output_edge), Image.LANCZOS)
+
+            # Step H: encode to WEBP (strips EXIF/GPS/metadata).
+            out_buf = io.BytesIO()
+            img.save(out_buf, format='WEBP', quality=85)
+            webp_bytes = out_buf.getvalue()
+
+        except Exception:
+            # Catch-all: any unexpected Pillow/IO failure must be 400, never 500.
+            logger.exception('Unexpected error during avatar image processing')
+            return Response(
+                {'detail': 'Invalid image.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ---- 4. Store and update profile ------------------------------------
+        # Resolve the profile FIRST — a missing profile returns 404 with nothing
+        # written, preventing orphaned objects in R2/disk storage.
+        try:
+            profile = request.user.profile
+        except UserProfile.DoesNotExist:
+            return Response(
+                {'detail': 'UserProfile not found for current user.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        key = f'avatars/{uuid4().hex}.webp'
+        from ..storage import store_avatar
+        try:
+            avatar_url = store_avatar(webp_bytes, key, request)
+        except Exception:
+            logger.exception('Avatar storage error (key=%s)', key)
+            return Response(
+                {'detail': 'Upload failed. Please try again.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        profile.avatar_url = avatar_url
+        profile.save(update_fields=['avatar_url', 'updated_at'])
+
+        # Invalidate profile-detail cache so GET /users/{id}/ reflects the new avatar.
+        from apps.recommendation.caches import evict_user_profile_detail
+        evict_user_profile_detail(profile.user.id)
+
+        # Return the same UserSerializer shape as /auth/me/ so the frontend
+        # can update its auth-user state in one round-trip.
+        return Response(UserSerializer(profile).data)
 
 
 # -- Liked Buildings (SNS-LIKED-PROJECTS) ----------------------------------
