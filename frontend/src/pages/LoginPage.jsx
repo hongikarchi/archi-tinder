@@ -5,6 +5,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import * as api from '../api/client.js'
+import { login as apiLogin, register as apiRegister } from '../api/auth.js'
 import GoogleLoginButton from '../components/GoogleLoginButton.jsx'
 import { CARD_HEIGHT, CARD_WIDTH } from '../components/SwipeCard.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
@@ -23,6 +24,7 @@ import {
 const FLOW_STEPS = {
   choice: 'choice',
   returning: 'returning',
+  register: 'register',
   profile: 'profile',
   consent: 'consent',
 }
@@ -30,6 +32,7 @@ const FLOW_STEPS = {
 const STEP_PROMPTS = {
   choice: 'Tell me how to welcome you.',
   returning: 'I can restore your verified profile.',
+  register: 'Create your account with a handle and password.',
   profile: 'A name and objective shape your first deck.',
   consent: 'One right swipe creates the guest profile.',
 }
@@ -49,7 +52,7 @@ export default function LoginPage({ onLogin }) {
   const [affiliation, setAffiliation] = useState('')
   const [consentGiven, setConsentGiven] = useState(false)
   const [consentResetTick, setConsentResetTick] = useState(0)
-  const [loading, setLoading] = useState(null) // 'guest' | 'google' | 'dev' | null
+  const [loading, setLoading] = useState(null) // 'guest' | 'google' | 'dev' | 'login' | 'register' | null
   const [error, setError] = useState(null)
 
   const typedLine = useTypedLine(STEP_PROMPTS[step] || STEP_PROMPTS.choice)
@@ -181,6 +184,42 @@ export default function LoginPage({ onLogin }) {
     handleGuestSubmit({ consentConfirmed: true })
   }
 
+  async function handleLoginSubmit(handle, password) {
+    if (isBusy) return
+    setError(null)
+    setLoading('login')
+    try {
+      const user = await apiLogin(handle, password)
+      onLogin(user)
+    } catch (err) {
+      setError(err.message || '로그인에 실패했습니다.')
+    } finally {
+      setLoading(null)
+    }
+  }
+
+  async function handleRegisterSubmit(handle, password, displayName) {
+    if (isBusy) return
+    setError(null)
+    setLoading('register')
+    try {
+      const user = await apiRegister(handle, password, displayName)
+      onLogin(user)
+    } catch (err) {
+      // Field-level errors: { handle: [...], password: [...] }
+      const data = err?.data
+      if (data?.handle) {
+        setError(Array.isArray(data.handle) ? data.handle[0] : data.handle)
+      } else if (data?.password) {
+        setError(Array.isArray(data.password) ? data.password[0] : data.password)
+      } else {
+        setError(err.message || '가입에 실패했습니다.')
+      }
+    } finally {
+      setLoading(null)
+    }
+  }
+
   async function handleDevClick() {
     setError(null)
     setLoading('dev')
@@ -222,10 +261,22 @@ export default function LoginPage({ onLogin }) {
               showGoogle={googleConfigured}
               disabled={isBusy}
               googleLoading={loading === 'google'}
+              loginLoading={loading === 'login'}
               onBack={() => moveToStep(FLOW_STEPS.choice)}
               onGoogleSuccess={handleGoogleSuccess}
               onGoogleError={handleGoogleError}
               onGoogleNonOAuthError={handleGoogleNonOAuthError}
+              onLoginSubmit={handleLoginSubmit}
+            />
+          )}
+
+          {step === FLOW_STEPS.register && (
+            <RegisterStep
+              typedLine={typedLine}
+              disabled={isBusy}
+              registerLoading={loading === 'register'}
+              onBack={() => moveToStep(FLOW_STEPS.choice)}
+              onRegisterSubmit={handleRegisterSubmit}
             />
           )}
 
@@ -276,6 +327,17 @@ export default function LoginPage({ onLogin }) {
             />
           )}
         </div>
+
+        {(step === FLOW_STEPS.choice) && (
+          <button
+            type="button"
+            onClick={() => moveToStep(FLOW_STEPS.register)}
+            disabled={isBusy}
+            style={ghostButtonStyle(isBusy)}
+          >
+            아이디 · 비밀번호로 가입
+          </button>
+        )}
 
         {import.meta.env.DEV && (
           <button
@@ -348,11 +410,22 @@ function ReturningStep({
   showGoogle,
   disabled,
   googleLoading,
+  loginLoading,
   onBack,
   onGoogleSuccess,
   onGoogleError,
   onGoogleNonOAuthError,
+  onLoginSubmit,
 }) {
+  const [handle, setHandle] = useState('')
+  const [password, setPassword] = useState('')
+
+  function handleSubmit(e) {
+    e.preventDefault()
+    if (!handle.trim() || !password) return
+    onLoginSubmit(handle.trim(), password)
+  }
+
   return (
     <AuthCard ariaLabel="Returning user login">
       <CardHeader
@@ -360,9 +433,6 @@ function ReturningStep({
         title="Continue with your saved profile."
         typedLine={typedLine}
       />
-      <p style={bodyCopyStyle}>
-        Verified profiles use Google sign-in. Starting Google stays on this button only.
-      </p>
       {showGoogle ? (
         <GoogleLoginButton
           onSuccess={onGoogleSuccess}
@@ -377,6 +447,44 @@ function ReturningStep({
           Google login is unavailable in this environment. Set VITE_GOOGLE_CLIENT_ID to enable returning accounts.
         </div>
       )}
+
+      <div style={dividerRowStyle}>
+        <span style={dividerLineStyle} />
+        <span style={dividerTextStyle}>또는</span>
+        <span style={dividerLineStyle} />
+      </div>
+
+      <form onSubmit={handleSubmit} style={formStyle}>
+        <input
+          type="text"
+          value={handle}
+          onChange={e => setHandle(e.target.value)}
+          disabled={disabled}
+          placeholder="아이디 (handle)"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          aria-label="아이디"
+          style={inputStyle}
+        />
+        <input
+          type="password"
+          value={password}
+          onChange={e => setPassword(e.target.value)}
+          disabled={disabled}
+          placeholder="비밀번호"
+          aria-label="비밀번호"
+          style={inputStyle}
+        />
+        <button
+          type="submit"
+          disabled={disabled || !handle.trim() || !password}
+          style={primaryButtonStyle(disabled || !handle.trim() || !password)}
+        >
+          {loginLoading ? <Spinner /> : '아이디 · 비밀번호로 로그인'}
+        </button>
+      </form>
+
       <button type="button" onClick={onBack} disabled={disabled} style={ghostButtonStyle(disabled)}>
         Back
       </button>
@@ -547,6 +655,97 @@ function ConsentStep({
         </SwipeGestureFrame>
       </div>
     </div>
+  )
+}
+
+function RegisterStep({
+  typedLine,
+  disabled,
+  registerLoading,
+  onBack,
+  onRegisterSubmit,
+}) {
+  const [handle, setHandle] = useState('')
+  const [password, setPassword] = useState('')
+  const [displayName, setDisplayName] = useState('')
+
+  function handleSubmit(e) {
+    e.preventDefault()
+    if (!handle.trim() || !password) return
+    onRegisterSubmit(handle.trim(), password, displayName)
+  }
+
+  const canSubmit = handle.trim().length >= 3 && password.length >= 8
+
+  return (
+    <AuthCard ariaLabel="Register with handle and password">
+      <CardHeader
+        eyebrow="새 계정"
+        title="아이디로 가입합니다."
+        typedLine={typedLine}
+      />
+      <form onSubmit={handleSubmit} style={formStyle}>
+        <label style={fieldLabelStyle} htmlFor="reg-display-name">
+          이름 (선택)
+        </label>
+        <input
+          id="reg-display-name"
+          type="text"
+          value={displayName}
+          onChange={e => setDisplayName(e.target.value)}
+          disabled={disabled}
+          placeholder="홍길동"
+          maxLength={30}
+          style={inputStyle}
+        />
+
+        <label style={{ ...fieldLabelStyle, marginTop: 4 }} htmlFor="reg-handle">
+          아이디 *
+        </label>
+        <input
+          id="reg-handle"
+          type="text"
+          value={handle}
+          onChange={e => setHandle(e.target.value)}
+          disabled={disabled}
+          placeholder="예: dain_architect"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          maxLength={30}
+          aria-required="true"
+          style={inputStyle}
+        />
+
+        <label style={{ ...fieldLabelStyle, marginTop: 4 }} htmlFor="reg-password">
+          비밀번호 * (8자 이상)
+        </label>
+        <input
+          id="reg-password"
+          type="password"
+          value={password}
+          onChange={e => setPassword(e.target.value)}
+          disabled={disabled}
+          placeholder="••••••••"
+          maxLength={128}
+          aria-required="true"
+          style={inputStyle}
+        />
+
+        <div style={buttonGridStyle}>
+          <button type="button" onClick={onBack} disabled={disabled} style={secondaryButtonStyle(disabled)}>
+            Back
+          </button>
+          <button
+            type="submit"
+            disabled={disabled || !canSubmit}
+            style={primaryButtonStyle(disabled || !canSubmit)}
+          >
+            {registerLoading ? <Spinner /> : '가입하기'}
+          </button>
+        </div>
+      </form>
+    </AuthCard>
   )
 }
 
@@ -928,4 +1127,23 @@ const errorStyle = {
   margin: 0,
   textAlign: 'center',
   lineHeight: 1.45,
+}
+
+const dividerRowStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 10,
+}
+
+const dividerLineStyle = {
+  flex: 1,
+  height: 1,
+  background: 'var(--color-border)',
+}
+
+const dividerTextStyle = {
+  fontSize: 12,
+  color: 'var(--color-text-dim)',
+  fontWeight: 600,
+  whiteSpace: 'nowrap',
 }

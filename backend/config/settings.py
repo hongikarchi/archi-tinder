@@ -130,6 +130,12 @@ REST_FRAMEWORK = {
         # Guest auth throttles — operator-overridable without code changes.
         'guest_login': '3/min',
         'guest_promote': '5/min',
+        # AUTH-LOGIN-1: handle+password auth + email-link throttles.
+        'register': '10/min',
+        'password_login': '10/min',
+        'link_email': '5/min',
+        # AUTH-CRITICAL: set/change-password brute-force guard (current_password check).
+        'set_password': '5/min',
         # Global fallback rates (applied to views that reference these scopes directly).
         'anon': '60/min',
         'user': '300/min',

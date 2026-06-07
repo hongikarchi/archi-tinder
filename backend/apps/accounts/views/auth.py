@@ -16,10 +16,17 @@ from django.conf import settings
 
 from rest_framework_simplejwt.settings import api_settings
 
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
+
 from ..authentication import invalidate_user_cache
 from ..models import UserProfile, SocialAccount
-from ..serializers import UserSerializer
-from ..throttling import GuestLoginThrottle, GuestPromoteThrottle
+from ..serializers import UserSerializer, validate_handle_value
+from ..throttling import (
+    GuestLoginThrottle, GuestPromoteThrottle,
+    RegisterThrottle, PasswordLoginThrottle, LinkEmailThrottle,
+    SetPasswordThrottle,
+)
 
 logger = logging.getLogger('apps.accounts')
 
@@ -644,6 +651,318 @@ class DevLoginView(APIView):
             user=user, defaults={'display_name': 'Test User'},
         )
         return Response(_make_token_response(profile), status=status.HTTP_200_OK)
+
+
+# -- Handle + Password Auth (AUTH-LOGIN-1) ---------------------------------
+
+class RegisterView(APIView):
+    """POST /api/v1/auth/register/
+
+    Create a new handle+password account.
+
+    Body: {handle, password, display_name? (default: handle)}
+    Returns {access, refresh, user} on success.
+
+    Security:
+    - handle validated by shared validate_handle_value (same rules as /users/me/ PATCH).
+    - password validated by Django AUTH_PASSWORD_VALIDATORS.
+    - User.username = stable internal key f'local_{uuid4().hex}' (NOT the handle,
+      since handle is editable and must not be coupled to the auth key).
+    - Wrapped in transaction.atomic() — handle uniqueness race condition is
+      prevented by DB unique constraint on UserProfile.handle.
+    """
+    permission_classes    = [AllowAny]
+    authentication_classes = []
+    throttle_classes       = [RegisterThrottle]
+
+    def post(self, request):
+        handle       = request.data.get('handle', '')
+        password     = request.data.get('password', '')
+        display_name = request.data.get('display_name', '')
+
+        # -- Validate handle --
+        if not handle:
+            return Response({'handle': ['This field is required.']},
+                            status=status.HTTP_400_BAD_REQUEST)
+        from rest_framework import serializers as _drf_serializers
+        try:
+            handle = validate_handle_value(handle)
+        except _drf_serializers.ValidationError as exc:
+            return Response({'handle': exc.detail},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # -- Validate password --
+        if not password:
+            return Response({'password': ['This field is required.']},
+                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            validate_password(password)
+        except DjangoValidationError as exc:
+            return Response({'password': list(exc.messages)},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # -- Create user + profile (atomic, DB unique on handle protects races) --
+        clean_display_name = (display_name.strip() or handle)[:30]
+        try:
+            with transaction.atomic():
+                django_user = User(
+                    username=f'local_{_uuid.uuid4().hex}',
+                    email='',
+                )
+                django_user.set_password(password)
+                django_user.save()
+                profile = UserProfile.objects.create(
+                    user=django_user,
+                    handle=handle,
+                    display_name=clean_display_name,
+                    is_guest=False,
+                )
+        except Exception:
+            # Handle uniqueness race: another request won the unique constraint.
+            if UserProfile.objects.filter(handle__iexact=handle).exists():
+                return Response({'handle': ['handle already taken.']},
+                                status=status.HTTP_400_BAD_REQUEST)
+            raise
+
+        logger.info('RegisterView: new user created profile=%s', profile.pk)
+        return Response(_make_token_response(profile), status=status.HTTP_201_CREATED)
+
+
+class PasswordLoginView(APIView):
+    """POST /api/v1/auth/login/
+
+    Authenticate with handle + password.
+
+    Body: {handle, password}
+    Returns {access, refresh, user} on success.
+
+    Security:
+    - Generic 400 for ALL failure modes (no user enumeration via message).
+    - Dummy-hash run when user not found / no usable password to equalise timing.
+    - Throttled by PasswordLoginThrottle (10/min per IP, brute-force guard).
+    """
+    permission_classes    = [AllowAny]
+    authentication_classes = []
+    throttle_classes       = [PasswordLoginThrottle]
+
+    _GENERIC_ERROR = 'Invalid handle or password.'
+
+    def post(self, request):
+        handle   = request.data.get('handle', '')
+        password = request.data.get('password', '')
+
+        profile  = None
+        django_user = None
+
+        if handle:
+            # Use .filter().first() not .get() to avoid MultipleObjectsReturned
+            # from legacy case-variant handles (new handles are unique by DB
+            # constraint; this is a defensive guard for any existing stale rows).
+            p = (
+                UserProfile.objects
+                .select_related('user')
+                .filter(handle__iexact=handle)
+                .first()
+            )
+            if p is not None:
+                profile = p
+                django_user = p.user
+
+        # Timing equalisation: always run one password hash regardless of
+        # lookup outcome.  This prevents timing-based user enumeration where
+        # a missing-handle response is measurably faster than a wrong-password
+        # response.
+        if django_user is not None and django_user.has_usable_password():
+            ok = django_user.check_password(password)
+        else:
+            # No user found, or user has no usable password (OAuth-only / guest).
+            # Run a dummy hash so timing is indistinguishable from a real check.
+            User().set_password(password)
+            ok = False
+
+        if not ok:
+            return Response({'detail': self._GENERIC_ERROR},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        logger.info('PasswordLoginView: login profile=%s', profile.pk)
+        return Response(_make_token_response(profile), status=status.HTTP_200_OK)
+
+
+class SetPasswordView(APIView):
+    """POST /api/v1/auth/set-password/
+
+    Set or change the handle+password credential for the authenticated user.
+
+    Body: {password, current_password? (required only when changing an existing password)}
+
+    Rules:
+    - If user ALREADY has a usable password → require correct current_password (change).
+    - If user has NO usable password yet (OAuth/guest, first-set) → allow without
+      current_password.
+    - Validates new password with Django AUTH_PASSWORD_VALIDATORS.
+    - After updating, ALL outstanding refresh tokens for the user are blacklisted
+      (evicting other sessions), then a fresh token pair is issued to the acting
+      client — so the password-changer stays logged in but all other devices are
+      logged out.  Response shape: {access, refresh, user} (same as _make_token_response).
+    """
+    permission_classes  = [IsAuthenticated]
+    throttle_classes    = [SetPasswordThrottle]
+
+    def post(self, request):
+        user     = request.user
+        password = request.data.get('password', '')
+
+        if not password:
+            return Response({'password': ['This field is required.']},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # Determine change vs first-set.
+        if user.has_usable_password():
+            # CHANGE — must verify current_password.
+            current_password = request.data.get('current_password', '')
+            if not current_password:
+                return Response(
+                    {'current_password': ['current_password is required to change an existing password.']},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if not user.check_password(current_password):
+                return Response(
+                    {'current_password': ['Incorrect password.']},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        # FIRST-SET — no current_password required.
+
+        # Validate new password strength.
+        try:
+            validate_password(password, user=user)
+        except DjangoValidationError as exc:
+            return Response({'password': list(exc.messages)},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        user.set_password(password)
+        user.save(update_fields=['password'])
+
+        # SECURITY (AUTH-CRITICAL): blacklist ALL outstanding refresh tokens so
+        # other sessions (holding the old password's tokens) are immediately
+        # invalidated.  Do this BEFORE issuing a fresh pair so the new token is
+        # not swept up by the filter.  Option (b): return a fresh pair in the
+        # response so the acting device stays logged in without interruption.
+        try:
+            from rest_framework_simplejwt.token_blacklist.models import (
+                OutstandingToken, BlacklistedToken,
+            )
+            for outstanding in OutstandingToken.objects.filter(user=user):
+                BlacklistedToken.objects.get_or_create(token=outstanding)
+        except ImportError:
+            pass  # token_blacklist not installed — skip silently
+
+        # Evict user cache so the next /auth/me/ returns has_password=True
+        # without waiting for TTL expiry (matches link-email pattern).
+        invalidate_user_cache(user.id)
+        logger.info('SetPasswordView: password updated user=%s', user.pk)
+
+        # Issue a fresh token pair for the acting client (all other sessions are
+        # now blacklisted above).  This keeps the password-changer logged in
+        # while evicting every other device.
+        return Response(_make_token_response(user.profile), status=status.HTTP_200_OK)
+
+
+class LinkEmailView(APIView):
+    """POST /api/v1/auth/link-email/
+
+    Link a verified OAuth provider email to the authenticated user's account.
+
+    Body: {provider: 'google', code}
+
+    On success: sets User.email, creates SocialAccount(google), sets
+    UserProfile.email_verified_at.  Returns updated UserSerializer data.
+
+    Collision policy (REJECT, not merge):
+    - SocialAccount(google, provider_id) on a DIFFERENT user → 400 email_already_linked.
+    - DIFFERENT UserProfile with user.email__iexact == email → 400 email_already_linked.
+    - Re-linking own already-linked Google account is idempotent (self-excluded).
+    - email_verified=False from provider → 400 unverified_email.
+
+    Only Google is supported for now.
+    """
+    permission_classes = [IsAuthenticated]
+    throttle_classes   = [LinkEmailThrottle]
+
+    def post(self, request):
+        provider = request.data.get('provider', 'google')
+        if provider != 'google':
+            return Response(
+                {'detail': 'unsupported_provider', 'supported': ['google']},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        code = request.data.get('code')
+        if not code:
+            return Response({'detail': 'code required'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            google_data = _exchange_google_code(code)
+        except ValueError as exc:
+            logger.warning('LinkEmailView google exchange failed: %s', exc)
+            return Response({'detail': str(exc)},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        if not google_data.get('email_verified', False):
+            return Response({'detail': 'unverified_email'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        email       = google_data['email']
+        provider_id = google_data['provider_id']
+
+        # guard: verified but empty email (should not happen with Google, but be safe)
+        if not email:
+            return Response({'detail': 'unverified_email'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            profile = request.user.profile
+        except UserProfile.DoesNotExist:
+            return Response({'detail': 'profile_not_found'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            # Collision check 1: provider_id already on a DIFFERENT user.
+            existing_social = SocialAccount.objects.filter(
+                provider='google',
+                provider_id=provider_id,
+            ).exclude(user=profile).first()
+            if existing_social:
+                return Response({'detail': 'email_already_linked'},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+            # Collision check 2: email already on a DIFFERENT user row.
+            existing_email = (
+                UserProfile.objects.filter(user__email__iexact=email)
+                .exclude(pk=profile.pk)
+                .exists()
+            )
+            if existing_email:
+                return Response({'detail': 'email_already_linked'},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+            # All clear — link the account.
+            user = request.user
+            user.email = email
+            user.save(update_fields=['email'])
+
+            SocialAccount.objects.get_or_create(
+                provider='google',
+                provider_id=provider_id,
+                defaults={'user': profile},
+            )
+
+            profile.email_verified_at = timezone.now()
+            profile.save(update_fields=['email_verified_at'])
+
+        invalidate_user_cache(user.id)
+        logger.info('LinkEmailView: email linked profile=%s email=%s', profile.pk, email)
+        return Response(UserSerializer(profile).data, status=status.HTTP_200_OK)
 
 
 # -- Token refresh ---------------------------------------------------------

@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-06-07 14:12 KST',
-    head: 'b951611',
-    branch: 'feature/claude-settings-harvest',
+    updatedAt: '2026-06-07 19:19 KST',
+    head: 'adcc605',
+    branch: 'feature/claude-auth-login',
   },
   done: [
+    {
+      id: 'AUTH-LOGIN-1',
+      title: 'handle+비번 로그인 + 이메일 인증(OAuth 연동)',
+      completedAt: '2026-06-07',
+      note: '표준 로그인 추가(소셜 유지 + handle=ID+비밀번호). 식별자 확정: `handle`=ID(로그인·공개@), `display_name`=이름(프로필), `User.username`=내부키(`local_<uuid>`).',
+    },
     {
       id: 'SETTINGS-PROFILE-IA-1',
       title: 'archibe Settings harvest + Profile/Account IA + rebrand archibe',
@@ -76,13 +82,6 @@ window.PROJECT_STATE = {
       prs: [195],
       note: '채팅기록이 localStorage-only라 기기간 유실 → `Project.conversation_history` JSONField(migration 0022, #194 0021_tagaxisweight 충돌로 renumber). 기존 PATCH 재사용(신규 endpoint 無). detail-read/PATCH-write 검증(dict, ≤64KB UTF-8 ensure_ascii=False, messages≤60/history≤10/text≤2000), list서 제외+defer. fr…',
     },
-    {
-      id: 'INFRA-DB-2',
-      title: 'make test-local (로컬 pytest unblock)',
-      completedAt: '2026-06-04',
-      prs: [197],
-      note: 'runtime `make_web_app`가 CREATEDB 없어 로컬 pytest가 \'permission denied to create database\'로 차단(conftest SQLite override는 자체 docstring상 not-load-bearing). `make test-local` 추가 — `migrate-local` idiom(read -s neondb_owner pw, inline DB_USER override로 DB_HOST는 LOCAL 유지), CI-shape real…',
-    },
   ],
   now: [
     {
@@ -94,11 +93,6 @@ window.PROJECT_STATE = {
   next: {
     xhigh: [],
     high: [
-      {
-        id: 'AUTH-LOGIN-1',
-        title: 'handle+비번 로그인 + 이메일 인증(OAuth 연동)',
-        note: '표준 로그인 추가(유저 요청 2026-06-07): 소셜(OAuth) 유지 + handle(=계정 ID)+비밀번호 로그인(signup/login/set-password, Django 해싱·`AUTH_PASSWORD_VALIDATORS` 재사용, 브루트포스/레이트리밋). 로그인 ID=handle(이메일 아님 → #206 무관). 이메일 인증 = OAuth 연동: 신규 `LinkEmailView`(`IsAuthenticated`) — 로그인된 유저 + 구글 code → `_exchange_goo…',
-      },
       {
         id: 'ARCHITECT-UNIFY-1',
         title: 'firm-side Office→Architect 전면 통합 (deferred, firm-UX 착수 시)',
@@ -197,6 +191,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 215,
+      title: 'feat(profile): archibe Settings harvest + Profile/Account IA + rebrand archibe',
+      mergedAt: '2026-06-07T05:22:51Z',
+      mergedAtKST: '2026-06-07 14:22 KST',
+      sha: 'adcc605',
+    },
+    {
       number: 214,
       title: 'feat(ALGO-QCARD): Phase 3 스와이프 latency + 하이퍼긍정 Trigger A',
       mergedAt: '2026-06-06T15:19:35Z',
@@ -244,13 +245,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-06-06T01:43:24Z',
       mergedAtKST: '2026-06-06 10:43 KST',
       sha: '119a435',
-    },
-    {
-      number: 207,
-      title: 'fix(security): validate swipe/bookmark/architect IDs + merge row-cap',
-      mergedAt: '2026-06-05T07:26:16Z',
-      mergedAtKST: '2026-06-05 16:26 KST',
-      sha: 'ddfbb57',
     },
   ],
   agents: [
@@ -561,6 +555,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'backend/apps/accounts/migrations/0009_email_verified_at.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/accounts/migrations/__init__.py',
       role: '패키지 init',
     },
@@ -587,6 +585,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/accounts/tests/conftest.py',
       role: 'accounts 테스트 픽스처',
+    },
+    {
+      path: 'backend/apps/accounts/tests/test_auth_login.py',
+      role: '',
     },
     {
       path: 'backend/apps/accounts/tests/test_guest_role_affiliation.py',

@@ -106,6 +106,14 @@ class UserProfile(models.Model):
         # Displayed as the secondary line in the profile hero.
     )
 
+    # -- AUTH-LOGIN-1: handle+password auth + email verify via OAuth linking --
+    email_verified_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        # Set when the user successfully completes link-email (E2) with a
+        # verified OAuth provider email.  Null = email not yet verified.
+    )
+
     # -- Settings harvest (SETTINGS-1) --
     handle = models.CharField(
         max_length=30,

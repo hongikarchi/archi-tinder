@@ -1,18 +1,16 @@
 /**
  * AccountScreen — /settings/account
  *
- * Editable: @handle (PATCH /api/v1/users/me/)
- * Read-only display: display_name, is_guest (verified status), providers (login method).
- *
- * Deliberately OMITTED (not in UserSerializer / auth/me response):
- *   - email (not exposed by serializer — field absent from response)
- *   - join_date / created_at (not in UserSerializer)
- *   - password change (not applicable — OAuth-only accounts; no backend endpoint)
+ * Editable: ID/handle (PATCH /api/v1/users/me/), password (POST /auth/set-password/).
+ * Read-only display: email + verified status, is_guest (verified status), providers.
+ * Email verify: Google auth-code flow → POST /auth/link-email/.
  */
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getMe, updateMyProfile } from '../../api/client.js'
+import { getMe, updateMyProfile, setPassword as apiSetPassword, linkEmail as apiLinkEmail } from '../../api/client.js'
 import { IconBack } from '../../components/icons.jsx'
+import GoogleVerifyButton from '../../components/GoogleVerifyButton.jsx'
+import { hasGoogleLogin } from '../../utils/loginFlow.js'
 import btnStyles from '../../components/Button.module.css'
 import styles from './AccountScreen.module.css'
 
@@ -53,6 +51,20 @@ export default function AccountScreen() {
   const [handleError, setHandleError] = useState(null)
   const [saving, setSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
+
+  // Password section state
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [passwordError, setPasswordError] = useState(null)
+  const [passwordCurrentError, setPasswordCurrentError] = useState(null)
+  const [savingPassword, setSavingPassword] = useState(false)
+  const [passwordSuccess, setPasswordSuccess] = useState(false)
+
+  // Email verify state
+  const googleConfigured = hasGoogleLogin(import.meta.env.VITE_GOOGLE_CLIENT_ID)
+  const [verifyLoading, setVerifyLoading] = useState(false)
+  const [verifyError, setVerifyError] = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -110,6 +122,94 @@ export default function AccountScreen() {
     if (e.key === 'Enter') handleSave()
   }
 
+  async function handlePasswordSave(e) {
+    e.preventDefault()
+    if (savingPassword) return
+    setPasswordError(null)
+    setPasswordCurrentError(null)
+    setPasswordSuccess(false)
+
+    if (newPassword.length < 8) {
+      setPasswordError('비밀번호는 8자 이상이어야 합니다.')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError('비밀번호가 일치하지 않습니다.')
+      return
+    }
+    if (me?.has_password && !currentPassword) {
+      setPasswordCurrentError('현재 비밀번호를 입력해 주세요.')
+      return
+    }
+
+    setSavingPassword(true)
+    try {
+      const updatedUser = await apiSetPassword(
+        newPassword,
+        me?.has_password ? currentPassword : undefined,
+      )
+      // Token swap is done inside apiSetPassword — tokens already updated in localStorage.
+      // Update local me so the form switches 설정↔변경.
+      setMe(prev => ({ ...prev, has_password: true, ...updatedUser }))
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+      setPasswordSuccess(true)
+      setTimeout(() => setPasswordSuccess(false), 3000)
+    } catch (err) {
+      const data = err?.data
+      if (data?.current_password) {
+        setPasswordCurrentError(Array.isArray(data.current_password) ? data.current_password[0] : data.current_password)
+      } else if (data?.password) {
+        setPasswordError(Array.isArray(data.password) ? data.password[0] : data.password)
+      } else {
+        setPasswordError(err.message || '저장에 실패했습니다.')
+      }
+    } finally {
+      setSavingPassword(false)
+    }
+  }
+
+  async function handleVerifySuccess(codeResponse) {
+    setVerifyLoading(true)
+    setVerifyError(null)
+    try {
+      await apiLinkEmail(codeResponse.code)
+      // Re-fetch me to get fresh email + email_verified_at (link-email returns UserSerializer
+      // which may omit self-only fields; re-fetch guarantees accurate state).
+      const fresh = await getMe()
+      setMe(fresh)
+    } catch (err) {
+      const detail = err?.data?.detail || err?.message || 'error'
+      if (detail === 'unverified_email') {
+        setVerifyError('이메일 미인증: Google 계정의 이메일이 인증되지 않았습니다.')
+      } else if (detail === 'email_already_linked') {
+        setVerifyError('이미 다른 계정에 연결된 이메일입니다. 그 계정으로 로그인하세요.')
+      } else {
+        setVerifyError(`인증 실패: ${detail}`)
+      }
+    } finally {
+      setVerifyLoading(false)
+    }
+  }
+
+  function handleVerifyError(errorResponse) {
+    const detail = errorResponse?.error_description || errorResponse?.error || 'cancelled or failed'
+    setVerifyError(`Google 오류: ${detail}`)
+    setVerifyLoading(false)
+  }
+
+  function handleVerifyNonOAuthError(err) {
+    if (err?.type === 'popup_closed') {
+      setVerifyError(null)
+    } else if (err?.type === 'popup_failed_to_open') {
+      setVerifyError('팝업이 차단되었습니다. 사이트의 팝업을 허용해 주세요.')
+    } else {
+      setVerifyError('인증을 시작할 수 없습니다. 브라우저 설정을 확인해 주세요.')
+    }
+    setVerifyLoading(false)
+  }
+
   if (loading) {
     return (
       <div className={styles.page}>
@@ -156,9 +256,6 @@ export default function AccountScreen() {
             borderRadius: 'var(--radius-lg)',
             overflow: 'hidden',
           }}>
-            {/* Display name (read-only) */}
-            <InfoRow label="이름" value={me?.display_name || '—'} />
-
             {/* Verified status */}
             <InfoRow
               label="계정 상태"
@@ -170,24 +267,41 @@ export default function AccountScreen() {
             <InfoRow
               label="로그인 방식"
               value={formatProviders(me?.providers)}
+            />
+
+            {/* Email */}
+            <InfoRow
+              label="이메일"
+              value={
+                me?.email
+                  ? `${me.email}${me.email_verified_at ? ' · 인증됨' : ' · 미인증'}`
+                  : '—'
+              }
+              valueStyle={
+                me?.email && me?.email_verified_at
+                  ? { color: 'var(--accent-1)', fontWeight: 500 }
+                  : me?.email
+                  ? { color: 'var(--accent-3)', fontWeight: 500 }
+                  : {}
+              }
               last
             />
           </div>
         </section>
 
-        {/* Handle edit section */}
-        <section>
+        {/* ID (handle) edit section */}
+        <section style={{ marginBottom: 32 }}>
           <p style={{
             fontSize: 11, fontWeight: 600, letterSpacing: '0.06em',
             color: 'var(--color-text-muted)', textTransform: 'uppercase',
             margin: '0 0 16px',
           }}>
-            핸들 설정
+            ID 설정
           </p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <label>
-              <span style={LABEL_STYLE}>@핸들 (Handle)</span>
+              <span style={LABEL_STYLE}>ID</span>
               <input
                 type="text"
                 value={handle}
@@ -209,7 +323,7 @@ export default function AccountScreen() {
                 </span>
               ) : (
                 <span style={HINT_STYLE}>
-                  영소문자, 숫자, _ 만 사용 · 3-30자 · 다른 사용자가 나를 찾을 때 씁니다.
+                  로그인 ID이자 공개 @아이디입니다. 영소문자·숫자·_ 만 사용, 3-30자.
                 </span>
               )}
             </label>
@@ -224,7 +338,7 @@ export default function AccountScreen() {
                 color: 'var(--accent-1)',
                 fontWeight: 500,
               }}>
-                핸들이 저장되었습니다.
+                ID가 저장되었습니다.
               </div>
             )}
 
@@ -239,6 +353,149 @@ export default function AccountScreen() {
             </button>
           </div>
         </section>
+
+        {/* Password section */}
+        <section style={{ marginBottom: 32 }}>
+          <p style={{
+            fontSize: 11, fontWeight: 600, letterSpacing: '0.06em',
+            color: 'var(--color-text-muted)', textTransform: 'uppercase',
+            margin: '0 0 16px',
+          }}>
+            {me?.has_password ? '비밀번호 변경' : '비밀번호 설정'}
+          </p>
+
+          <form onSubmit={handlePasswordSave} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {me?.has_password && (
+              <label>
+                <span style={LABEL_STYLE}>현재 비밀번호</span>
+                <input
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => {
+                    setCurrentPassword(e.target.value)
+                    setPasswordCurrentError(null)
+                  }}
+                  placeholder="현재 비밀번호"
+                  autoComplete="current-password"
+                  className={`${styles.inputWrapper} ${passwordCurrentError ? styles.inputError : ''}`}
+                />
+                {passwordCurrentError && (
+                  <span style={{ ...HINT_STYLE, color: 'var(--color-destructive)' }}>
+                    {passwordCurrentError}
+                  </span>
+                )}
+              </label>
+            )}
+
+            <label>
+              <span style={LABEL_STYLE}>새 비밀번호 (8자 이상)</span>
+              <input
+                type="password"
+                value={newPassword}
+                onChange={(e) => {
+                  setNewPassword(e.target.value)
+                  setPasswordError(null)
+                }}
+                placeholder="새 비밀번호"
+                autoComplete="new-password"
+                className={`${styles.inputWrapper} ${passwordError ? styles.inputError : ''}`}
+              />
+            </label>
+
+            <label>
+              <span style={LABEL_STYLE}>비밀번호 확인</span>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => {
+                  setConfirmPassword(e.target.value)
+                  setPasswordError(null)
+                }}
+                placeholder="비밀번호 재입력"
+                autoComplete="new-password"
+                className={`${styles.inputWrapper} ${passwordError && confirmPassword !== newPassword ? styles.inputError : ''}`}
+              />
+              {passwordError && (
+                <span style={{ ...HINT_STYLE, color: 'var(--color-destructive)' }}>
+                  {passwordError}
+                </span>
+              )}
+            </label>
+
+            {passwordSuccess && (
+              <div style={{
+                padding: '10px 14px',
+                background: 'color-mix(in srgb, var(--accent-1) 10%, transparent)',
+                border: '1px solid var(--accent-1)',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: 13,
+                color: 'var(--accent-1)',
+                fontWeight: 500,
+              }}>
+                {me?.has_password ? '비밀번호가 변경되었습니다.' : '비밀번호가 설정되었습니다.'}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={savingPassword || !newPassword}
+              className={btnStyles.cta}
+              style={{ alignSelf: 'flex-start', minWidth: 160 }}
+            >
+              {savingPassword ? '저장 중…' : (me?.has_password ? '비밀번호 변경' : '비밀번호 설정')}
+            </button>
+          </form>
+        </section>
+
+        {/* Email verify section */}
+        {!me?.email_verified_at && (
+          <section style={{ marginBottom: 32 }}>
+            <p style={{
+              fontSize: 11, fontWeight: 600, letterSpacing: '0.06em',
+              color: 'var(--color-text-muted)', textTransform: 'uppercase',
+              margin: '0 0 16px',
+            }}>
+              이메일 인증
+            </p>
+
+            {verifyError && (
+              <div style={{
+                padding: '10px 14px',
+                background: 'color-mix(in srgb, var(--color-destructive) 8%, transparent)',
+                border: '1px solid var(--color-destructive)',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: 13,
+                color: 'var(--color-destructive)',
+                fontWeight: 500,
+                marginBottom: 12,
+              }}>
+                {verifyError}
+              </div>
+            )}
+
+            {googleConfigured ? (
+              <GoogleVerifyButton
+                onSuccess={handleVerifySuccess}
+                onError={handleVerifyError}
+                onNonOAuthError={handleVerifyNonOAuthError}
+                disabled={verifyLoading}
+                loading={verifyLoading}
+                label="구글로 이메일 인증"
+              />
+            ) : (
+              <div role="status" style={{
+                padding: '12px 16px',
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: 13,
+                color: 'var(--color-text-dim)',
+              }}>
+                Google 인증을 사용할 수 없는 환경입니다.
+              </div>
+            )}
+          </section>
+        )}
 
       </div>
       <div style={{ height: 24 }} />
