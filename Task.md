@@ -136,7 +136,11 @@ Acceptance: behavior matches chosen option deterministically; session 2 TTFC not
 
 _(Deferred 2026-06-04 batch scope → 별도 focused 플랜. Premise CONFIRMED post-BACK-RECOMMEND-4: global taste vector는 고쳤으나 같은 Project 2nd 세션은 여전히 cold-start(`session_service.py`가 like_vectors=[] seed, prior taste 안 읽음). algorithm-owner 코어 + frontend progress-bar UX 결정 얽힘 → 단독 처리.)_
 
-#### FULL-LANGUAGE-1 — 한/영 언어 설정 토글 없음
+_(2026-06-08 범위 축소: #212(`4e58195`) Case #3 resume guard가 **진행중(active, phase≠completed) 세션 resume**을 해결 — 보드 재진입 시 새 빈 세션 대신 live 세션의 like_vectors(원본 round)/preference_vector/phase/convergence/pool_ids/exposed_ids 전체 복원. **잔여 범위 = 완료된 세션 뒤 새 라운드가 `Project.liked_ids` 워밍 없이 cold-start**(`session_service.py:285` 새 세션 like_vectors=[], `:104` resume은 `.exclude(phase='completed')`). warm-start carry policy(D fade-decay / E full warm-start) + progress-bar UX 결정은 여전히 단독 처리 대상.)_
+
+#### FULL-LANGUAGE-1 — 한/영 언어 설정 토글 없음 (Slice 1 shipped)
+_Status (2026-06-08): **Slice 1 출하 (#208 `119a435`)** — `UserProfile.language`(ko/en) 필드 + serializer 배선 + `t()` 헬퍼 foundation + TabBar 라벨. 잔여 슬라이스(페이지 본문/에러/모달 라벨 스윕 + LLM chat 언어 결정성 wire-through `parse_query`) 미출하 → 이 항목 유지._
+
 **Decision (user 2026-05-25)**: language is a user-controlled setting, NOT browser-locale auto-detected. Pattern mirrors the existing theme/font persistence shipped in PR #54 + PR #59. User toggles language in Settings (Korean / English); the choice drives both LLM chat answer language and UI label rendering across the app.
 
 Current state:
@@ -185,15 +189,9 @@ _Note: the Profile-area slice shipped separately as FRONT-PROFILE-HARVEST-1 (#17
 #### BACK-AVATAR-2 — 교체 시 옛 아바타 객체 GC 없음
 FRONT-AVATAR-1(`84ba1f1`) 후속. 업로드마다 새 uuid4 키로 저장 → 이전 R2 객체 + 로컬 파일이 영구 잔류(orphan 누적). 교체/삭제 시 옛 객체 cleanup(즉시 delete 또는 주기 GC job) 필요. 비차단(스토리지 비용·정합성).
 
-#### INFRA-AVATAR-R2-1 — prod R2 env 미설정 시 아바타 비영속
-FRONT-AVATAR-1은 R2_* env 미설정 시 FileSystemStorage로 폴백. Railway 디스크는 ephemeral → prod 아바타 업로드가 재배포 시 소실. prod 영속화하려면 Railway에 `R2_ENDPOINT_URL`/`R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY`/`R2_AVATAR_BUCKET`/`AVATAR_PUBLIC_BASE_URL` 설정 + 공개 아바타 버킷(빌딩 이미지 버킷과 분리) 프로비저닝 필요. 미설정이어도 코드는 안전(폴백), 단 prod 비영속.
-
 #### BACK-LLM-4 — search.py ParseQueryView byte-cap도 ensure_ascii 부풀림 의심
 BACK-LLM-2(#195) 리뷰 중 발견(미수정, pre-existing). `backend/apps/recommendation/views/search.py` `ParseQueryView.post`의 conversation_history 검증이 BACK-LLM-2 serializer가 고친 것과 동일하게 `json.dumps` 기본 `ensure_ascii=True`로 byte 측정 가능성 → 한글 대화가 한도를 6배 부풀려 거짓 거부. 확인 후 `ensure_ascii=False`+UTF-8 인코딩 측정으로 통일. (`serializers.py:8` 주석이 한도가 ParseQueryView서 'mirror'됐다고 명시.)
 
-
-#### FULL-DISCOVERY-2 — Discovery v3.1+v3.2 라이브 브라우저 검증 (prod 전)
-FULL-DISCOVERY-1(`fc72639`) 머지 후 app-test FULL 미실행(dev 서버 + app-test 에이전트 부재). prod 배포 전 실제 흐름 검증 필요: chunk 버퍼/prefetch≤3, swipe→feedback, 10장 트리거 카드 우=promote→Taste 첫 스와이프 정상·좌=계속, 진행률 바, 재등장 shake, 프로필에 discovery_ 임시보드 노출.
 
 #### FRONT-DISCOVERY-1 — 트리거 카드 빈 덱 동시각 한 박자 지연 (비차단)
 `DiscoveryPage.jsx` 트리거 주입 effect dep `[draftId, draftLikeCount]`. like 10번째가 덱이 빈 순간(prefetch in-flight)과 겹치고 이후 추가 like가 없으면 트리거가 한 카드 늦게 뜸. 크래시·상태손상 없음. dep에 deck refill 신호 추가로 보강 가능(ref 멱등 가드 이미 존재).
@@ -352,7 +350,16 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 _(Deferred 2026-06-04 batch scope: YAGNI — product-미소비 telemetry 1필드 위해 Celery+worker 도입은 과투자. 2번째 background job 생기면 단일 INFRA-JOBS 티켓으로 묶어 처리.)_
 
 ## Done
-### FRONT-AVATAR-1 — 프로필 사진 업로드 (server-proxy R2 + 폴백) — RESOLVED 2026-06-07 (`84ba1f1`-pre-squash)
+### INFRA-AVATAR-R2-1 — prod R2 아바타 영속화 설정 + 검증 — RESOLVED 2026-06-08 (ops, no code)
+prod Railway에 R2 5개 env 설정 + 공개 아바타 버킷 프로비저닝 완료 → 아바타 영속화. FRONT-AVATAR-1 폴백 경로 졸업.
+- Cloudflare: `archibe-avatars` 버킷 + Public r2.dev URL(`pub-cb679a6c…`) + Object R&W API 토큰(S3 Access Key ID + Secret) 발급.
+- Railway prod env: `R2_ENDPOINT_URL`(account `04342c5d…`) / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_AVATAR_BUCKET=archibe-avatars` / `AVATAR_PUBLIC_BASE_URL`. (디버깅: 변수명 오타 `R2_AVARAT_BUCKET` + Access Key ID에 account id 오입력 + cfat_ 토큰 혼동 순차 해결.)
+- 검증: prod guest-login→업로드→`avatar_url`이 `pub-cb679a6c….r2.dev/avatars/<uuid>.webp`(폴백 `/media/` 아님), GET 200 image/webp, 서버 880×540→512×512 center-crop+WEBP 재인코딩 확인. BACK-AVATAR-2(옛 객체 GC)만 잔여.
+
+### FULL-DISCOVERY-2 — Discovery v3.1+v3.2 라이브 브라우저 검증 — RESOLVED 2026-06-08 (app-test FULL pre-deploy)
+FULL-DISCOVERY-1(#200/#209) prod 배포(#218) 직전 app-test FULL로 라이브 검증 완료. chunk 시스템·10장 트리거 카드·우=promote→Taste(`/discovery/promote-to-taste/ 201`, 11 likes 이월)·진행바·phase 전이 정상, 콘솔 0, 회귀(AI검색+스와이프) OK. 배포 후 prod probe로 라우트 라이브 확인.
+
+### FRONT-AVATAR-1 — 프로필 사진 업로드 (server-proxy R2 + 폴백) — RESOLVED 2026-06-07 (`84ba1f1`-pre-squash, #217 → main #218)
 아바타 업로드(Slice D). 마이그 없음(`avatar_url` URLField 기존). data-URL 지양 결정대로 R2 URL만 저장.
 - 백엔드: `POST /users/me/avatar/`(IsAuthenticated, self-only, AvatarUploadThrottle 10/min). server-proxy multipart → Pillow 파이프라인(조기 Content-Length 게이트 + `.size` cap 5MB + 25MP 차원 가드 + verify + **WEBP 재인코딩**=EXIF/polyglot 제거 + 정사각 center-crop 512 + uuid4 키). 신규 `apps/accounts/storage.py` `store_avatar`: 플러그블 — R2_* 설정 시 boto3→R2(prod), 미설정 시 FileSystemStorage 절대-URL 폴백(local+CI). INFRA-REDIS-1 prod/local 분기 패턴. settings MEDIA_*/R2_*/AVATAR_* 한도; urls DEBUG-only media serve; requirements +boto3; `.gitignore` media/.
 - 프론트: ProfileHero isMe 아바타 → 파일 선택 + canvas 정사각 리사이즈 → multipart 업로드(`callApi` JSON-only라 직접 fetch, `api/profiles.js uploadAvatar`) → in-place `avatar_url` 갱신. hover 오버레이 + 스피너 + 에러(ProfileHero.module.css). UserProfilePage가 isMe + onAvatarUpdated 전달.
