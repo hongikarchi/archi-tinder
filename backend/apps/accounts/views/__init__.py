@@ -40,6 +40,11 @@ from .auth import (  # noqa: F401
     TokenRefreshView,
     MeView,
     LogoutView,
+    # AUTH-LOGIN-1: handle+password + email-link
+    RegisterView,
+    PasswordLoginView,
+    SetPasswordView,
+    LinkEmailView,
 )
 
 # -- profile sub-module names ----------------------------------------------

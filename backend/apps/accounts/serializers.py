@@ -17,9 +17,19 @@ class UserSerializer(serializers.ModelSerializer):
 
     FULL-LOGIN-REDESIGN-1: added is_guest, onboarding_role, consent_accepted_at
     so the frontend can gate the verify-gate modal without a separate /auth/me/ call.
+
+    AUTH-LOGIN-1: added email (self-only), email_verified_at (self-only),
+    has_password (self-only, derived bool) so Account screen can show email +
+    verified status + "set"/"change" password UI.
+
+    SELF-ONLY RULE: email, email_verified_at, has_password are private — this
+    serializer is only used in _make_token_response() (own login) and MeView (GET
+    /auth/me/).  Do NOT use this serializer on public-facing profile endpoints.
     """
-    user_id   = serializers.IntegerField(source='user.id', read_only=True)
-    providers = serializers.SerializerMethodField()
+    user_id      = serializers.IntegerField(source='user.id', read_only=True)
+    providers    = serializers.SerializerMethodField()
+    email        = serializers.SerializerMethodField()
+    has_password = serializers.SerializerMethodField()
 
     class Meta:
         model  = UserProfile
@@ -27,10 +37,24 @@ class UserSerializer(serializers.ModelSerializer):
             'user_id', 'display_name', 'avatar_url', 'providers', 'theme', 'font',
             'language', 'is_guest', 'onboarding_role', 'consent_accepted_at', 'handle',
             'notifications', 'role', 'affiliation',
+            # AUTH-LOGIN-1 self-only fields
+            'email', 'email_verified_at', 'has_password',
         ]
 
     def get_providers(self, obj):
         return list(obj.social_accounts.values_list('provider', flat=True))
+
+    def get_email(self, obj):
+        """Return the authenticated user's email from the underlying User row."""
+        return obj.user.email
+
+    def get_has_password(self, obj):
+        """Return True if the user has a usable (hashed) password set.
+
+        False for OAuth-only and guest accounts (set_unusable_password was called).
+        Frontend uses this to show "Set Password" vs "Change Password" UI.
+        """
+        return obj.user.has_usable_password()
 
 
 class UserMiniSerializer(serializers.ModelSerializer):
@@ -93,6 +117,52 @@ _HANDLE_RESERVED = frozenset({
 })
 
 _HANDLE_RE = re.compile(r'^[a-z0-9_]{3,30}$')
+
+
+def validate_handle_value(value, instance=None):
+    """Shared handle validation logic (reused by register + serializer).
+
+    Validates a non-null, non-empty handle string:
+      1. Reject non-lowercase characters.
+      2. Regex format check (^[a-z0-9_]{3,30}$).
+      3. Reserved word check.
+      4. Case-insensitive uniqueness (exclude `instance` if supplied).
+
+    Raises serializers.ValidationError on any violation.
+    Returns the validated value on success.
+
+    NOTE: does NOT handle the null/empty case — callers decide whether null
+    or empty is acceptable (register: required, serializer: nullable/clearable).
+    """
+    # Case check first: reject if the value is not already lowercase.
+    if value != value.lower():
+        raise serializers.ValidationError(
+            'handle must be lowercase (only a-z, 0-9, _).'
+        )
+
+    # Format regex (also enforces length 3-30).
+    # fullmatch required: re.match with $ accepts a trailing newline, which
+    # would allow CRLF injection into URLs/cards.
+    if not _HANDLE_RE.fullmatch(value):
+        raise serializers.ValidationError(
+            'handle must be 3-30 characters: lowercase letters, digits, or underscore.'
+        )
+
+    # Reserved word check.
+    if value.lower() in _HANDLE_RESERVED:
+        raise serializers.ValidationError(
+            f'"{value}" is a reserved handle.'
+        )
+
+    # Case-insensitive uniqueness, excluding the current user so re-saving
+    # the same handle doesn't conflict against themselves.
+    qs = UserProfile.objects.filter(handle__iexact=value)
+    if instance is not None:
+        qs = qs.exclude(pk=instance.pk)
+    if qs.exists():
+        raise serializers.ValidationError('handle already taken.')
+
+    return value
 
 
 class UserProfileSelfUpdateSerializer(serializers.ModelSerializer):
@@ -273,45 +343,16 @@ class UserProfileSelfUpdateSerializer(serializers.ModelSerializer):
 
         Validation order:
           1. null/empty → allow (clears the handle).
-          2. Reject non-lowercase (case violation → 400, not silent normalise).
-             Rationale: silent auto-lower would silently change what the user typed;
-             the frontend must supply lowercase explicitly.
-          3. Regex format check: ^[a-z0-9_]{3,30}$.
-          4. Reserved words.
-          5. Case-insensitive uniqueness, excluding the current user (self-save OK).
+          2-5. Delegated to validate_handle_value() (shared with register endpoint).
+             2. Reject non-lowercase.
+             3. Regex format check: ^[a-z0-9_]{3,30}$.
+             4. Reserved words.
+             5. Case-insensitive uniqueness, excluding the current user (self-save OK).
         """
         if value is None:
             return value
 
-        # Case check first: reject if the value is not already lowercase.
-        if value != value.lower():
-            raise serializers.ValidationError(
-                'handle must be lowercase (only a-z, 0-9, _).'
-            )
-
-        # Format regex (also enforces length 3-30).
-        # fullmatch required: re.match with $ accepts a trailing newline, which
-        # would allow CRLF injection into URLs/cards (same guard as _INSTAGRAM_RE above).
-        if not _HANDLE_RE.fullmatch(value):
-            raise serializers.ValidationError(
-                'handle must be 3-30 characters: lowercase letters, digits, or underscore.'
-            )
-
-        # Reserved word check.
-        if value.lower() in _HANDLE_RESERVED:
-            raise serializers.ValidationError(
-                f'"{value}" is a reserved handle.'
-            )
-
-        # Case-insensitive uniqueness, excluding the current user so re-saving
-        # the same handle doesn't conflict against themselves.
-        qs = UserProfile.objects.filter(handle__iexact=value)
-        if self.instance is not None:
-            qs = qs.exclude(pk=self.instance.pk)
-        if qs.exists():
-            raise serializers.ValidationError('handle already taken.')
-
-        return value
+        return validate_handle_value(value, instance=self.instance)
 
     def validate_notifications(self, value):
         """notifications: {category: {push?: bool, email?: bool}}.

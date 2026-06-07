@@ -6,12 +6,19 @@ from .views import (
     UserProfileDetailView, UserProfileSelfUpdateView,
     GuestLoginView, GuestPromoteView,
     LikedBuildingsView,
+    # AUTH-LOGIN-1: handle+password + email-link
+    RegisterView, PasswordLoginView, SetPasswordView, LinkEmailView,
 )
 
 urlpatterns = [
     # -- Guest-first onboarding (FULL-LOGIN-REDESIGN-1) --
     path('auth/guest/',              GuestLoginView.as_view()),
     path('auth/promote/',            GuestPromoteView.as_view()),
+    # -- Handle + Password Auth (AUTH-LOGIN-1) --
+    path('auth/register/',           RegisterView.as_view(),      name='auth-register'),
+    path('auth/login/',              PasswordLoginView.as_view(), name='auth-login'),
+    path('auth/set-password/',       SetPasswordView.as_view(),   name='auth-set-password'),
+    path('auth/link-email/',         LinkEmailView.as_view(),     name='auth-link-email'),
     # -- Social OAuth --
     path('auth/social/google/',      GoogleLoginView.as_view()),
     path('auth/social/kakao/',       KakaoLoginView.as_view()),

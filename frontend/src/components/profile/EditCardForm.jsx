@@ -108,7 +108,7 @@ export default function EditCardForm({ user, onChange }) {
 
       {/* Display name */}
       <div>
-        <label htmlFor="edit-display-name" style={labelStyle}>Display Name</label>
+        <label htmlFor="edit-display-name" style={labelStyle}>이름</label>
         <input
           id="edit-display-name"
           type="text"

@@ -85,3 +85,53 @@ export async function logout(refreshToken) {
 export async function getMe() {
   return await callApi('GET', '/auth/me/')
 }
+
+/**
+ * Log in with handle + password.
+ * Returns: user object (same shape as socialLogin).
+ */
+export async function login(handle, password) {
+  clearTokens()
+  const data = await callApi('POST', '/auth/login/', { handle, password }, false)
+  setTokens(data.access, data.refresh)
+  return data.user
+}
+
+/**
+ * Register a new account with handle + password (+ optional display_name).
+ * Returns: user object.
+ */
+export async function register(handle, password, displayName) {
+  clearTokens()
+  const body = { handle, password }
+  if (displayName && displayName.trim()) body.display_name = displayName.trim()
+  const data = await callApi('POST', '/auth/register/', body, false)
+  setTokens(data.access, data.refresh)
+  return data.user
+}
+
+/**
+ * Set or change password (authenticated).
+ * On success, the backend issues a NEW token pair (old sessions blacklisted).
+ * ⚠️ MUST replace stored tokens from this response, else next refresh = silent logout.
+ * Returns: user object.
+ */
+export async function setPassword(password, currentPassword) {
+  const body = { password }
+  if (currentPassword !== undefined && currentPassword !== null) {
+    body.current_password = currentPassword
+  }
+  const data = await callApi('POST', '/auth/set-password/', body)
+  // Token swap is mandatory — backend blacklists old refresh tokens.
+  setTokens(data.access, data.refresh)
+  return data.user
+}
+
+/**
+ * Link a Google account to the current user (email verification).
+ * provider: 'google', code: authorization code from auth-code flow.
+ * Returns: UserSerializer object (no token pair — user stays logged in).
+ */
+export async function linkEmail(code) {
+  return await callApi('POST', '/auth/link-email/', { provider: 'google', code })
+}
