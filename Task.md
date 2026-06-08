@@ -186,8 +186,8 @@ Acceptance per slice: `npm run lint` + `npm run build` clean; light + all dark v
 _Note: the Profile-area slice shipped separately as FRONT-PROFILE-HARVEST-1 (#179, 2026-06-04) — net-new component harvest + Instagram-style redesign + first CSS-Module/hook foundation, NOT the named ~646 inline-debt paydown. SwipePage / BoardDetailPage / etc. inline→CSS-Module migration remains the core of THIS item._
 
 ### MEDIUM
-#### BACK-AVATAR-2 — 교체 시 옛 아바타 객체 GC 없음
-FRONT-AVATAR-1(`84ba1f1`) 후속. 업로드마다 새 uuid4 키로 저장 → 이전 R2 객체 + 로컬 파일이 영구 잔류(orphan 누적). 교체/삭제 시 옛 객체 cleanup(즉시 delete 또는 주기 GC job) 필요. 비차단(스토리지 비용·정합성).
+#### BACK-AVATAR-3 — 기존 누적 orphan 아바타 일괄 청소 (sweep 명령)
+BACK-AVATAR-2(`5e1f934`)가 교체/삭제 시점 GC를 붙였으나 그 이전에 쌓인 orphan(R2/디스크)은 남음. management command(dry-run + `--confirm`, `purge_legacy_projects` 패턴) — R2 `list_objects`로 `avatars/` 나열 → 어떤 `UserProfile.avatar_url`도 참조 않는 키 삭제. 비차단·비긴급(현 prod 아바타 ≈0, 기능 갓 출시).
 
 #### BACK-LLM-4 — search.py ParseQueryView byte-cap도 ensure_ascii 부풀림 의심
 BACK-LLM-2(#195) 리뷰 중 발견(미수정, pre-existing). `backend/apps/recommendation/views/search.py` `ParseQueryView.post`의 conversation_history 검증이 BACK-LLM-2 serializer가 고친 것과 동일하게 `json.dumps` 기본 `ensure_ascii=True`로 byte 측정 가능성 → 한글 대화가 한도를 6배 부풀려 거짓 거부. 확인 후 `ensure_ascii=False`+UTF-8 인코딩 측정으로 통일. (`serializers.py:8` 주석이 한도가 ParseQueryView서 'mirror'됐다고 명시.)
@@ -350,6 +350,16 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 _(Deferred 2026-06-04 batch scope: YAGNI — product-미소비 telemetry 1필드 위해 Celery+worker 도입은 과투자. 2번째 background job 생기면 단일 INFRA-JOBS 티켓으로 묶어 처리.)_
 
 ## Done
+### BACK-AVATAR-2 — 교체/계정삭제 시 옛 아바타 객체 GC — RESOLVED 2026-06-08 (`5e1f934`-pre-squash)
+FRONT-AVATAR-1(`84ba1f1`) orphan 누적 닫음. 업로드마다 새 uuid4 키 저장 + 옛 객체 영구 잔류하던 갭 — 교체 시 + 계정삭제 시 옛 객체를 안전 GC.
+- `storage.delete_avatar(url)`: best-effort GC. 정규식 `^avatars/[0-9a-f]{32}\.webp$`가 **주 인가 게이트**(경로탈출 + 외부 OAuth URL 차단). 프리픽스는 백엔드 *선택*만 — `if base and url.startswith(base+'/')`로 empty-base `startswith('')` 함정 가드. dispatch by URL **shape**(현 `AVATAR_R2_ENABLED` 아님 → env flip 시 잘못된 백엔드 삭제 방지). 절대 raise 안 함.
+- `AvatarUploadView`: 옛 url을 overwrite 전 캡처 → `profile.save()` **이후** 삭제(새 아바타 먼저 영속 → 실패해도 무손실 orphan).
+- signal: `post_delete(sender=UserProfile)`(User 아님 — cascade가 `instance.avatar_url` 메모리 보유한 채 발화)로 계정삭제 시 GC.
+- 외부 OAuth URL(구글 `lh3.googleusercontent`/카카오/네이버)은 정규식 미통과 → **절대 삭제 안 됨**.
+- 10 테스트: 교체-옛파일삭제, 외부URL-skip(empty+nonempty base), 정규식 traversal/short-key 게이트, R2 dispatch(boto3 mock Bucket+Key), 계정삭제 GC, upload-survives-GC-failure, FileSystemStorage traversal 백스톱. 마이그레이션 없음(`avatar_url` 기존 필드).
+- Gates: code-review PASS, security FULL PASS-WITH-WARNINGS(0 critical; W2 prod-path 외부URL-skip 테스트 fold-in), flake8+check clean, app-test FEATURE-SCOPED PASS(라이브 filesystem GC 검증 — 업로드 A→B 후 A 파일 디스크에서 삭제 확인, 0 console err).
+- Deferred: BACK-AVATAR-3(기존 누적 orphan sweep 명령) → ## Next ### MEDIUM.
+
 ### INFRA-AVATAR-R2-1 — prod R2 아바타 영속화 설정 + 검증 — RESOLVED 2026-06-08 (ops, no code)
 prod Railway에 R2 5개 env 설정 + 공개 아바타 버킷 프로비저닝 완료 → 아바타 영속화. FRONT-AVATAR-1 폴백 경로 졸업.
 - Cloudflare: `archibe-avatars` 버킷 + Public r2.dev URL(`pub-cb679a6c…`) + Object R&W API 토큰(S3 Access Key ID + Secret) 발급.
