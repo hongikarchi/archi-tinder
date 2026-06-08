@@ -20,6 +20,8 @@ Public API:
 """
 
 import logging
+import re
+from urllib.parse import urlparse
 
 from django.conf import settings
 
@@ -113,3 +115,68 @@ def _store_filesystem(image_bytes: bytes, key: str, request) -> str:
     # are correct in all contexts (http in tests, https in prod with proxy).
     relative_url = settings.MEDIA_URL + saved_name.lstrip('/')
     return request.build_absolute_uri(relative_url)
+
+
+# ---------------------------------------------------------------------------
+# GC — delete a previously-stored avatar (BACK-AVATAR-2)
+# ---------------------------------------------------------------------------
+
+# Strict key validator: the PRIMARY authorizing gate for all delete paths.
+# Only OUR-stored objects match: avatars/<32-hex-chars>.webp
+# Blocks path traversal (no '..', no slashes in the UUID segment) and external
+# OAuth provider URLs (google/kakao/naver) whose keys never match this pattern.
+_AVATAR_KEY_RE = re.compile(r'^avatars/[0-9a-f]{32}\.webp$')
+
+
+def delete_avatar(url: str) -> None:
+    """Best-effort GC of a previously-stored avatar object.
+
+    Only deletes OUR-stored objects (R2 bucket / local MEDIA). External OAuth
+    provider URLs and any key failing the strict regex are skipped (no-op).
+    NEVER raises — callers treat avatar GC as fire-and-forget.
+
+    The regex (_AVATAR_KEY_RE) is the PRIMARY authorizing gate (blocks path
+    traversal + external URLs). The URL prefix only SELECTS the backend.
+    Dispatch is by URL *shape*, NOT settings.AVATAR_R2_ENABLED, so a config
+    flip between R2/filesystem never deletes from the wrong backend.
+    """
+    if not url:
+        return
+    try:
+        base = (settings.AVATAR_PUBLIC_BASE_URL or '').rstrip('/')
+        # R2 shape. Guard `if base` — AVATAR_PUBLIC_BASE_URL defaults to '' and
+        # url.startswith('') is ALWAYS True (would route external URLs here).
+        if base and url.startswith(base + '/'):
+            key = url[len(base) + 1:]
+            if _AVATAR_KEY_RE.match(key) and settings.AVATAR_R2_ENABLED:
+                _delete_r2(key)
+            return
+        # Filesystem shape.
+        path = urlparse(url).path                      # /media/avatars/<uuid>.webp
+        media = settings.MEDIA_URL                      # /media/
+        if media and path.startswith(media):
+            key = path[len(media):]                     # avatars/<uuid>.webp
+            if _AVATAR_KEY_RE.match(key):
+                _delete_filesystem(key)
+            return
+        # else external (OAuth) — skip silently.
+    except Exception:
+        logger.warning('Avatar GC failed for url=%s', url, exc_info=True)
+
+
+def _delete_r2(key: str) -> None:
+    import boto3  # noqa: PLC0415 -- lazy import (mirror _store_r2)
+    s3 = boto3.client(
+        's3',
+        endpoint_url=settings.R2_ENDPOINT_URL,
+        aws_access_key_id=settings.R2_ACCESS_KEY_ID,
+        aws_secret_access_key=settings.R2_SECRET_ACCESS_KEY,
+        region_name='auto',
+    )
+    s3.delete_object(Bucket=settings.R2_AVATAR_BUCKET, Key=key)
+
+
+def _delete_filesystem(key: str) -> None:
+    from django.core.files.storage import FileSystemStorage
+    fs = FileSystemStorage(location=settings.MEDIA_ROOT, base_url=settings.MEDIA_URL)
+    fs.delete(key)

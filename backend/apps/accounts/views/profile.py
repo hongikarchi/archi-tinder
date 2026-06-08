@@ -392,8 +392,11 @@ class AvatarUploadView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        # Capture old URL before overwrite so we can GC it after save (BACK-AVATAR-2).
+        old_avatar_url = profile.avatar_url
+
         key = f'avatars/{uuid4().hex}.webp'
-        from ..storage import store_avatar
+        from ..storage import store_avatar, delete_avatar
         try:
             avatar_url = store_avatar(webp_bytes, key, request)
         except Exception:
@@ -405,6 +408,11 @@ class AvatarUploadView(APIView):
 
         profile.avatar_url = avatar_url
         profile.save(update_fields=['avatar_url', 'updated_at'])
+
+        # GC the old avatar object now that the new one is safely persisted.
+        # Best-effort: delete_avatar swallows all exceptions internally.
+        if old_avatar_url and old_avatar_url != avatar_url:
+            delete_avatar(old_avatar_url)
 
         # Invalidate profile-detail cache so GET /users/{id}/ reflects the new avatar.
         from apps.recommendation.caches import evict_user_profile_detail
