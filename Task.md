@@ -356,8 +356,9 @@ FRONT-AVATAR-1(`84ba1f1`) orphan 누적 닫음. 업로드마다 새 uuid4 키 �
 - `AvatarUploadView`: 옛 url을 overwrite 전 캡처 → `profile.save()` **이후** 삭제(새 아바타 먼저 영속 → 실패해도 무손실 orphan).
 - signal: `post_delete(sender=UserProfile)`(User 아님 — cascade가 `instance.avatar_url` 메모리 보유한 채 발화)로 계정삭제 시 GC.
 - 외부 OAuth URL(구글 `lh3.googleusercontent`/카카오/네이버)은 정규식 미통과 → **절대 삭제 안 됨**.
-- 10 테스트: 교체-옛파일삭제, 외부URL-skip(empty+nonempty base), 정규식 traversal/short-key 게이트, R2 dispatch(boto3 mock Bucket+Key), 계정삭제 GC, upload-survives-GC-failure, FileSystemStorage traversal 백스톱. 마이그레이션 없음(`avatar_url` 기존 필드).
-- Gates: code-review PASS, security FULL PASS-WITH-WARNINGS(0 critical; W2 prod-path 외부URL-skip 테스트 fold-in), flake8+check clean, app-test FEATURE-SCOPED PASS(라이브 filesystem GC 검증 — 업로드 A→B 후 A 파일 디스크에서 삭제 확인, 0 console err).
+- Codex PR #220 리뷰 fix: (1) **동시 업로드 orphan** — 두 업로드가 같은 old=A 읽고 req1=B/req2=C 저장 시 B orphan → `avatar_url` **compare-and-swap**(`filter(pk, avatar_url=old).update(new)`)로 교정, CAS 패자는 자기 새 객체를 삭제(무손실, 무orphan). (2) R2-shape URL + `AVATAR_R2_ENABLED=False` 스킵을 명시 + `logger.debug`(creds 없어 삭제 불가 — sweep 대상).
+- 12 테스트: 교체-옛파일삭제, 외부URL-skip(empty+nonempty base), 정규식 traversal/short-key 게이트, R2 dispatch(boto3 mock Bucket+Key), 계정삭제 GC, upload-survives-GC-failure, FileSystemStorage traversal 백스톱, **동시업로드-CAS-패자-자가삭제**, R2-shape-disabled-skip. 마이그레이션 없음(`avatar_url` 기존 필드).
+- Gates: code-review PASS(초기+fix 재리뷰), security FULL PASS-WITH-WARNINGS(0 critical; W2 prod-path 외부URL-skip 테스트 fold-in), flake8+check clean, app-test FEATURE-SCOPED PASS(라이브 filesystem GC 검증 — 업로드 A→B 후 A 파일 디스크에서 삭제 확인, 0 console err).
 - Deferred: BACK-AVATAR-3(기존 누적 orphan sweep 명령) → ## Next ### MEDIUM.
 
 ### INFRA-AVATAR-R2-1 — prod R2 아바타 영속화 설정 + 검증 — RESOLVED 2026-06-08 (ops, no code)

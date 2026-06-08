@@ -6,6 +6,7 @@ from uuid import uuid4
 from django.conf import settings
 from django.db import connections as _dj_connections
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -406,13 +407,26 @@ class AvatarUploadView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        profile.avatar_url = avatar_url
-        profile.save(update_fields=['avatar_url', 'updated_at'])
+        # Atomic compare-and-swap on avatar_url to prevent concurrent-upload orphans.
+        # Two simultaneous uploads both read old=A; without the CAS the later save
+        # leaves the earlier-stored object unreferenced (orphan). Only the request
+        # whose read still matches the row may claim it; the loser deletes the object
+        # it just stored (otherwise unreferenced) so no orphan is created either way.
+        # .update() bypasses auto_now, so updated_at is set explicitly.
+        swapped = UserProfile.objects.filter(
+            pk=profile.pk, avatar_url=old_avatar_url,
+        ).update(avatar_url=avatar_url, updated_at=timezone.now())
 
-        # GC the old avatar object now that the new one is safely persisted.
-        # Best-effort: delete_avatar swallows all exceptions internally.
-        if old_avatar_url and old_avatar_url != avatar_url:
-            delete_avatar(old_avatar_url)
+        if swapped:
+            # We won the swap — GC the previous object (skip if first upload / unchanged).
+            if old_avatar_url and old_avatar_url != avatar_url:
+                delete_avatar(old_avatar_url)
+        else:
+            # Lost the race — a concurrent upload already replaced avatar_url. Our
+            # freshly stored object is unreferenced; delete it so it does not orphan.
+            delete_avatar(avatar_url)
+
+        profile.refresh_from_db()
 
         # Invalidate profile-detail cache so GET /users/{id}/ reflects the new avatar.
         from apps.recommendation.caches import evict_user_profile_detail

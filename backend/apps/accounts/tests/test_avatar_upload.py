@@ -481,3 +481,107 @@ class TestAvatarGC:
         fs = FileSystemStorage(location=str(tmp_path))
         with pytest.raises(SuspiciousFileOperation):
             fs.delete('avatars/../../escape.txt')
+
+    # -----------------------------------------------------------------------
+    # CAS + explicit R2-disabled skip (BACK-AVATAR-2 concurrent-upload fixes)
+    # -----------------------------------------------------------------------
+
+    @pytest.mark.django_db
+    def test_concurrent_upload_loser_deletes_own_object(
+        self, auth_client, user_and_profile, tmp_path,
+    ):
+        """Simulate a concurrent-upload race: CAS loser must delete its own object.
+
+        Strategy:
+          1. Upload A normally (no patch) — profile.avatar_url = A.
+          2. Patch store_avatar so that when the SECOND upload calls it:
+             a. the real filesystem write happens (so a file exists on disk),
+             b. THEN the DB row is mutated to a sentinel value (simulating the
+                concurrent winner completing its .update() before ours),
+             c. the new URL is captured in a closure variable.
+          3. POST a second upload through the real view.
+          4. Because our CAS fires AFTER store_avatar returns, the row's
+             avatar_url is now the sentinel, not old=A → filter matches 0 rows
+             → swapped is falsy → view calls delete_avatar(our_new_url) → file
+             is removed from disk.
+        Assertions:
+          - Response is 200 (upload itself succeeds; GC is transparent to caller).
+          - The newly-stored file (captured via closure) is GONE from disk.
+          - DB row still holds the sentinel (concurrent winner preserved, not overwritten).
+        """
+        from apps.accounts import storage as _storage
+
+        SENTINEL = 'http://testserver/media/avatars/abcdef1234567890abcdef1234567890.webp'
+        _user, profile = user_and_profile
+        captured = {}
+
+        with override_settings(MEDIA_ROOT=tmp_path, AVATAR_R2_ENABLED=False):
+            # --- Step 1: upload A (real, no patch) ---
+            upload_a = _png_uploaded_file(60, 60)
+            resp_a = auth_client.post(
+                '/api/v1/users/me/avatar/',
+                {'avatar': upload_a},
+                format='multipart',
+            )
+            assert resp_a.status_code == 200
+
+            # --- Step 2: prepare the side-effect store_avatar ---
+            def _store_with_concurrent_win(image_bytes, key, request):
+                # (a) Perform the real filesystem write so the file exists.
+                url = _storage._store_filesystem(image_bytes, key, request)
+                # (b) Capture the URL so we can check disk presence later.
+                captured['url'] = url
+                # (c) Simulate the concurrent winner updating the row first.
+                UserProfile.objects.filter(pk=profile.pk).update(avatar_url=SENTINEL)
+                return url
+
+            # --- Step 3: upload B with the patched store_avatar ---
+            with patch(
+                'apps.accounts.storage.store_avatar',
+                side_effect=_store_with_concurrent_win,
+            ):
+                upload_b = _png_uploaded_file(70, 70)
+                resp_b = auth_client.post(
+                    '/api/v1/users/me/avatar/',
+                    {'avatar': upload_b},
+                    format='multipart',
+                )
+
+        # --- Step 4: assert ---
+        assert resp_b.status_code == 200, f'Expected 200, got {resp_b.status_code}'
+
+        # The loser's newly-stored file must have been deleted (no orphan).
+        assert 'url' in captured, 'store_avatar side-effect was not called'
+        new_path_rel = urlparse(captured['url']).path[len('/media/'):]
+        new_path = tmp_path / new_path_rel
+        assert not new_path.exists(), (
+            f'Loser object should have been deleted by CAS loser branch: {new_path}'
+        )
+
+        # The DB row must reflect the concurrent winner's sentinel, not our upload.
+        profile.refresh_from_db()
+        assert profile.avatar_url == SENTINEL, (
+            f'Expected sentinel in DB, got {profile.avatar_url}'
+        )
+
+    def test_delete_avatar_r2_shape_skipped_when_disabled(self):
+        """R2-shaped URL with AVATAR_R2_ENABLED=False logs + skips (explicit, not silent).
+
+        Ensures neither _delete_r2 nor _delete_filesystem is called and no exception
+        is raised — the 'R2 disabled' branch is an intentional skip, not a mis-dispatch.
+        """
+        from apps.accounts import storage
+
+        hex32 = 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6'
+        r2_url = f'https://cdn.example.com/avatars/{hex32}.webp'
+
+        with override_settings(
+            AVATAR_PUBLIC_BASE_URL='https://cdn.example.com',
+            AVATAR_R2_ENABLED=False,
+        ):
+            with patch('apps.accounts.storage._delete_r2') as mock_r2, \
+                 patch('apps.accounts.storage._delete_filesystem') as mock_fs:
+                storage.delete_avatar(r2_url)
+
+        mock_r2.assert_not_called()
+        mock_fs.assert_not_called()

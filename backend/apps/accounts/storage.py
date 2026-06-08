@@ -148,8 +148,15 @@ def delete_avatar(url: str) -> None:
         # url.startswith('') is ALWAYS True (would route external URLs here).
         if base and url.startswith(base + '/'):
             key = url[len(base) + 1:]
-            if _AVATAR_KEY_RE.match(key) and settings.AVATAR_R2_ENABLED:
-                _delete_r2(key)
+            if _AVATAR_KEY_RE.match(key):
+                if settings.AVATAR_R2_ENABLED:
+                    _delete_r2(key)
+                else:
+                    # R2-shaped key but R2 creds absent — cannot issue the delete (no
+                    # endpoint/keys). Intentional skip, NOT a wrong-backend dispatch.
+                    # Only reachable if the env flipped R2->filesystem after objects were
+                    # stored in R2; the object is left as a (rare) orphan for the sweep job.
+                    logger.debug('Avatar GC skipped (R2 disabled), key=%s', key)
             return
         # Filesystem shape.
         path = urlparse(url).path                      # /media/avatars/<uuid>.webp
