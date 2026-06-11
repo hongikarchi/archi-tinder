@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { getArchitectProfile, followArchitect, unfollowArchitect } from '../api/architects.js'
+import SaveToBoardModal from '../components/SaveToBoardModal.jsx'
 import styles from './ArchitectProfilePage.module.css'
 
-function BuildingCard({ building, onClick }) {
+function BuildingCard({ building, onClick, onSave }) {
   const [imgLoaded, setImgLoaded] = useState(false)
   const title = building.name_en || building.name || ''
 
@@ -47,6 +48,35 @@ function BuildingCard({ building, onClick }) {
         background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 55%)',
         pointerEvents: 'none',
       }} />
+      {onSave && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onSave(building) }}
+          aria-label="Save to board"
+          style={{
+            position: 'absolute',
+            top: 8,
+            right: 8,
+            width: 34,
+            height: 34,
+            borderRadius: '50%',
+            background: 'rgba(0,0,0,0.55)',
+            backdropFilter: 'blur(6px)',
+            WebkitBackdropFilter: 'blur(6px)',
+            border: '1px solid rgba(255,255,255,0.15)',
+            color: '#fff',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            zIndex: 3,
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+          </svg>
+        </button>
+      )}
       <p style={{
         position: 'absolute',
         bottom: 0,
@@ -111,6 +141,7 @@ export default function ArchitectProfilePage() {
   const [isFollowing, setIsFollowing] = useState(false)
   const [followerCount, setFollowerCount] = useState(0)
   const [followPending, setFollowPending] = useState(false)
+  const [saveCard, setSaveCard] = useState(null)
   useEffect(() => {
     if (!architectId) {
       setProfile(null)
@@ -548,6 +579,7 @@ export default function ArchitectProfilePage() {
                     key={building.canonical_bld_id}
                     building={building}
                     onClick={id => navigate('/buildings/' + id)}
+                    onSave={(b) => setSaveCard(b)}
                   />
                 ))}
               </div>
@@ -566,6 +598,14 @@ export default function ArchitectProfilePage() {
             </p>
           )}
         </>
+      )}
+
+      {saveCard && (
+        <SaveToBoardModal
+          card={saveCard}
+          onClose={() => setSaveCard(null)}
+          onSaved={() => setSaveCard(null)}
+        />
       )}
     </div>
   )

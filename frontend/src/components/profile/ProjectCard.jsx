@@ -9,7 +9,7 @@ import InfoCol from './InfoCol'
  *   - NO corner chip per §3.5.3 — program is metadata, not status; chips are reserved for
  *     binary status state. CITY+YEAR in the info grid carry the relevant metadata.
  */
-export default function ProjectCard({ project }) {
+export default function ProjectCard({ project, onSave = null }) {
   const navigate = useNavigate()
   const buildingId = project.canonical_bld_id || project.building_id
   const { onLoad, onError } = useImageTelemetry({
@@ -67,6 +67,36 @@ export default function ProjectCard({ project }) {
         }}
         aria-hidden="true"
       />
+
+      {onSave && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onSave(project) }}
+          aria-label="Save to board"
+          style={{
+            position: 'absolute',
+            top: 8,
+            right: 8,
+            width: 34,
+            height: 34,
+            borderRadius: '50%',
+            background: 'rgba(0,0,0,0.55)',
+            backdropFilter: 'blur(6px)',
+            WebkitBackdropFilter: 'blur(6px)',
+            border: '1px solid rgba(255,255,255,0.15)',
+            color: '#fff',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            zIndex: 3,
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+          </svg>
+        </button>
+      )}
 
       {/* §3.5.2 RICH PATTERN: title + "Project" sub-italic + divider + 2-col CITY/YEAR grid */}
       <div

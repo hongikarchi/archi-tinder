@@ -5,6 +5,7 @@ import FirmProfileHeader from './firmProfile/FirmProfileHeader'
 import FirmProfileHero from './firmProfile/FirmProfileHero'
 import FirmProjectsSection from './firmProfile/FirmProjectsSection'
 import FirmArticlesSection from './firmProfile/FirmArticlesSection'
+import SaveToBoardModal from '../components/SaveToBoardModal.jsx'
 
 
 export default function FirmProfilePage() {
@@ -19,6 +20,7 @@ export default function FirmProfilePage() {
   const [error, setError] = useState(null)
 
   const [followerCount, setFollowerCount] = useState(0)
+  const [saveCard, setSaveCard] = useState(null)
 
   useEffect(() => {
     if (!officeId) {
@@ -118,10 +120,18 @@ export default function FirmProfilePage() {
           onMessage={handleMessage}
         />
 
-        <FirmProjectsSection projects={office.projects} />
+        <FirmProjectsSection projects={office.projects} onSave={(building) => setSaveCard(building)} />
 
         <FirmArticlesSection articles={office.articles} />
       </div>
+
+      {saveCard && (
+        <SaveToBoardModal
+          card={saveCard}
+          onClose={() => setSaveCard(null)}
+          onSaved={() => setSaveCard(null)}
+        />
+      )}
     </div>
   )
 }

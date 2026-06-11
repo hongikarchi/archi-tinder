@@ -1,6 +1,6 @@
 import ProjectCard from '../../components/profile/ProjectCard'
 
-export default function FirmProjectsSection({ projects }) {
+export default function FirmProjectsSection({ projects, onSave }) {
   return (
     <>
       {/* Projects section header — same style as UserProfile "Curated Boards · N" */}
@@ -31,7 +31,7 @@ export default function FirmProjectsSection({ projects }) {
         }}
       >
         {(projects || []).map((project) => (
-          <ProjectCard key={project.canonical_bld_id || project.building_id} project={project} />
+          <ProjectCard key={project.canonical_bld_id || project.building_id} project={project} onSave={onSave ? () => onSave(project) : null} />
         ))}
       </div>
     </>
