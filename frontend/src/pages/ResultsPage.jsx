@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useResults } from '../hooks/useResults.js'
 import { resolveProjectBackendId } from '../utils/resolveProjectBackendId.js'
+import PersonaReport from '../components/PersonaReport.jsx'
 
 function cardId(card) {
   return card?.image_id || card?.canonical_bld_id || card?.building_id || ''
@@ -214,21 +215,11 @@ export default function ResultsPage({ projects, setProjects }) {
       background: 'var(--color-bg)',
       paddingBottom: 'calc(88px + env(safe-area-inset-bottom, 0px))',
     }}>
-      <section style={{
-        minHeight: '34vh',
-        maxHeight: '40vh',
-        padding: '18px 18px 16px',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'space-between',
-        borderBottom: '1px solid var(--color-border-soft)',
-        background: 'radial-gradient(circle at 20% 0%, rgba(236,72,153,0.14), transparent 45%), var(--color-bg)',
-      }}>
+      <section style={{ padding: '18px 18px 0' }}>
         <button
           type="button"
           onClick={() => navigate('/')}
           style={{
-            alignSelf: 'flex-start',
             minHeight: 44,
             border: 'none',
             background: 'transparent',
@@ -237,64 +228,32 @@ export default function ResultsPage({ projects, setProjects }) {
             fontWeight: 700,
             cursor: 'pointer',
             fontFamily: 'inherit',
+            display: 'block',
+            padding: '0 0 4px',
           }}
         >
           ← Home
         </button>
-        <div>
-          <p style={{
-            color: 'var(--color-text-muted)',
-            fontSize: 11,
-            fontWeight: 800,
-            letterSpacing: '0.1em',
-            textTransform: 'uppercase',
-            margin: '0 0 10px',
-          }}>
-            Persona report
+      </section>
+
+      {project?.finalReport && project?.backendId ? (
+        <PersonaReport
+          boardId={project.backendId}
+          finalReport={project.finalReport}
+          axisScores={project.axisScores || null}
+          reportImage={project.reportImage || null}
+          reportImageMime={project.reportImageMime || null}
+        />
+      ) : (
+        <section style={{ padding: '18px', borderBottom: '1px solid var(--color-border-soft)' }}>
+          <p style={{ color: 'var(--color-text-muted)', fontSize: 14, fontWeight: 600, margin: 0 }}>
+            {persona.type}
           </p>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, margin: '0 0 10px' }}>
-            <h1 style={{
-              color: 'var(--color-text)',
-              fontSize: 'clamp(26px, 8vw, 38px)',
-              fontWeight: 800,
-              lineHeight: 1.05,
-              margin: 0,
-              flex: 1,
-            }}>
-              {persona.type}
-            </h1>
-            <button
-              type="button"
-              onClick={() => navigate('/user/me')}
-              style={{
-                flexShrink: 0,
-                marginTop: 4,
-                padding: '8px 16px',
-                borderRadius: 12,
-                background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
-                color: '#fff',
-                fontSize: 13,
-                fontWeight: 700,
-                border: 'none',
-                cursor: 'pointer',
-                fontFamily: 'inherit',
-                boxShadow: '0 3px 12px rgba(236,72,153,0.35)',
-              }}
-            >
-              Save →
-            </button>
-          </div>
-          <p style={{
-            color: 'var(--color-text)',
-            fontSize: 14,
-            lineHeight: 1.5,
-            margin: 0,
-            maxWidth: 620,
-          }}>
+          <p style={{ color: 'var(--color-text)', fontSize: 14, margin: '6px 0 0' }}>
             {persona.line}
           </p>
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* Liked buildings — 가로 스크롤, 큰 카드 */}
       {result?.liked_images?.length > 0 && (
