@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { getArchitectProfile, followArchitect, unfollowArchitect } from '../api/architects.js'
+import { listProjects } from '../api/client.js'
 import SaveToBoardModal from '../components/SaveToBoardModal.jsx'
 import styles from './ArchitectProfilePage.module.css'
 
-function BuildingCard({ building, onClick, onSave }) {
+function BuildingCard({ building, onClick, onSave, isSaved = false }) {
   const [imgLoaded, setImgLoaded] = useState(false)
   const title = building.name_en || building.name || ''
 
@@ -60,11 +61,11 @@ function BuildingCard({ building, onClick, onSave }) {
             width: 34,
             height: 34,
             borderRadius: '50%',
-            background: 'rgba(0,0,0,0.55)',
+            background: isSaved ? 'rgba(236,72,153,0.35)' : 'rgba(0,0,0,0.55)',
             backdropFilter: 'blur(6px)',
             WebkitBackdropFilter: 'blur(6px)',
-            border: '1px solid rgba(255,255,255,0.15)',
-            color: '#fff',
+            border: isSaved ? '1px solid rgba(236,72,153,0.5)' : '1px solid rgba(255,255,255,0.15)',
+            color: isSaved ? '#ec4899' : '#fff',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -72,7 +73,7 @@ function BuildingCard({ building, onClick, onSave }) {
             zIndex: 3,
           }}
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill={isSaved ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
           </svg>
         </button>
@@ -142,6 +143,19 @@ export default function ArchitectProfilePage() {
   const [followerCount, setFollowerCount] = useState(0)
   const [followPending, setFollowPending] = useState(false)
   const [saveCard, setSaveCard] = useState(null)
+  const [savedIds, setSavedIds] = useState(new Set())
+
+  useEffect(() => {
+    listProjects().then(resp => {
+      const ids = new Set()
+      for (const p of (resp?.results || [])) {
+        for (const id of (p.liked_ids || [])) ids.add(id)
+        for (const id of (p.saved_ids || [])) ids.add(id)
+      }
+      setSavedIds(ids)
+    }).catch(() => {})
+  }, [])
+
   useEffect(() => {
     if (!architectId) {
       setProfile(null)
@@ -580,6 +594,7 @@ export default function ArchitectProfilePage() {
                     building={building}
                     onClick={id => navigate('/buildings/' + id)}
                     onSave={(b) => setSaveCard(b)}
+                    isSaved={savedIds.has(building.canonical_bld_id)}
                   />
                 ))}
               </div>
@@ -604,7 +619,12 @@ export default function ArchitectProfilePage() {
         <SaveToBoardModal
           card={saveCard}
           onClose={() => setSaveCard(null)}
-          onSaved={() => setSaveCard(null)}
+          onSaved={() => {
+            if (saveCard?.canonical_bld_id) {
+              setSavedIds(prev => { const s = new Set(prev); s.add(saveCard.canonical_bld_id); return s })
+            }
+            setSaveCard(null)
+          }}
         />
       )}
     </div>
