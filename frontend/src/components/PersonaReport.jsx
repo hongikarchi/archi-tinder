@@ -319,18 +319,49 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
       </h2>
 
       {localImage ? (
-        <img
-          src={`data:${reportImageMime || 'image/png'};base64,${localImage}`}
-          alt="Persona"
-          style={{
-            width: '100%',
-            minHeight: 200,
-            objectFit: 'cover',
-            borderRadius: 12,
-            marginBottom: 14,
-            display: 'block',
-          }}
-        />
+        <div style={{ position: 'relative', marginBottom: 14 }}>
+          <img
+            src={`data:${reportImageMime || 'image/png'};base64,${localImage}`}
+            alt="Persona"
+            style={{
+              width: '100%',
+              minHeight: 200,
+              objectFit: 'cover',
+              borderRadius: 12,
+              display: 'block',
+            }}
+          />
+          <a
+            href={`data:${reportImageMime || 'image/png'};base64,${localImage}`}
+            download={`persona-${boardId || 'report'}.png`}
+            style={{
+              position: 'absolute',
+              bottom: 10,
+              right: 10,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5,
+              padding: '7px 14px',
+              borderRadius: 999,
+              background: 'rgba(0,0,0,0.55)',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+              color: '#fff',
+              fontSize: 12,
+              fontWeight: 700,
+              textDecoration: 'none',
+              fontFamily: 'inherit',
+              border: '1px solid rgba(255,255,255,0.18)',
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            저장
+          </a>
+        </div>
       ) : (
         <div style={{
           width: '100%',
