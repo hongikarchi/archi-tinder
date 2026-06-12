@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-06-08 01:54 KST',
-    head: '5b57320',
-    branch: 'feature/claude-cleanup',
+    updatedAt: '2026-06-08 13:47 KST',
+    head: 'e21ddf7',
+    branch: 'feature/claude-avatar-gc',
   },
   done: [
+    {
+      id: 'BACK-AVATAR-2',
+      title: '교체/계정삭제 시 옛 아바타 객체 GC',
+      completedAt: '2026-06-08',
+      note: 'FRONT-AVATAR-1(`84ba1f1`) orphan 누적 닫음. 업로드마다 새 uuid4 키 저장 + 옛 객체 영구 잔류하던 갭 — 교체 시 + 계정삭제 시 옛 객체를 안전 GC.',
+    },
     {
       id: 'INFRA-AVATAR-R2-1',
       title: 'prod R2 아바타 영속화 설정 + 검증',
@@ -73,13 +79,6 @@ window.PROJECT_STATE = {
       prs: [196],
       note: '인라인 리포트 → 별도 `/board/:id/report` 페이지(BoardReportPage: 레이더/스펙트럼 차트 + 페르소나 이미지 생성 버튼 + 스크롤 수정). fix-forward(Claude): Codex blocker 2건 수정.',
     },
-    {
-      id: 'CODEX-FUNC-3',
-      title: 'Codex 라운드3 기능 수정 4건 (auth/tokens/cache/testenv)',
-      completedAt: '2026-06-05',
-      prs: [199, 201, 202, 203],
-      note: 'Codex 기능 리뷰 배치 머지(SECURITY 항목은 배포-게이트 배치로 deferred).',
-    },
   ],
   now: [
     {
@@ -114,9 +113,9 @@ window.PROJECT_STATE = {
     ],
     medium: [
       {
-        id: 'BACK-AVATAR-2',
-        title: '교체 시 옛 아바타 객체 GC 없음',
-        note: 'FRONT-AVATAR-1(`84ba1f1`) 후속. 업로드마다 새 uuid4 키로 저장 → 이전 R2 객체 + 로컬 파일이 영구 잔류(orphan 누적). 교체/삭제 시 옛 객체 cleanup(즉시 delete 또는 주기 GC job) 필요. 비차단(스토리지 비용·정합성).',
+        id: 'BACK-AVATAR-3',
+        title: '기존 누적 orphan 아바타 일괄 청소 (sweep 명령)',
+        note: 'BACK-AVATAR-2(`5e1f934`)가 교체/삭제 시점 GC를 붙였으나 그 이전에 쌓인 orphan(R2/디스크)은 남음. management command(dry-run + `--confirm`, `purge_legacy_projects` 패턴) — R2 `list_objects`로 `avatars/` 나열 → 어떤 `UserProfile.avatar_url`도 참조 않는 키 삭제. 비차단·비긴급(현 prod 아바타 ≈0, 기능 갓 출시).',
       },
       {
         id: 'BACK-LLM-4',
@@ -184,6 +183,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 219,
+      title: 'docs(cleanup): backlog reconcile + file-roles 60 fill + 2 stale drop',
+      mergedAt: '2026-06-07T17:19:24Z',
+      mergedAtKST: '2026-06-08 02:19 KST',
+      sha: 'e21ddf7',
+    },
+    {
       number: 217,
       title: 'feat(profile): avatar upload — server-proxy R2 + filesystem fallback (FRONT-AVATAR-1)',
       mergedAt: '2026-06-07T13:11:48Z',
@@ -231,13 +237,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-06-06T01:53:39Z',
       mergedAtKST: '2026-06-06 10:53 KST',
       sha: '7bd658f',
-    },
-    {
-      number: 210,
-      title: 'test(auth): fix google login test path -> auth/social/google/',
-      mergedAt: '2026-06-06T01:39:51Z',
-      mergedAtKST: '2026-06-06 10:39 KST',
-      sha: '4ff9d92',
     },
   ],
   agents: [

@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
-import { getOffice } from '../api/client.js'
+import { getOffice, listProjects } from '../api/client.js'
 import FirmProfileHeader from './firmProfile/FirmProfileHeader'
 import FirmProfileHero from './firmProfile/FirmProfileHero'
 import FirmProjectsSection from './firmProfile/FirmProjectsSection'
 import FirmArticlesSection from './firmProfile/FirmArticlesSection'
+import SaveToBoardModal from '../components/SaveToBoardModal.jsx'
 
 
 export default function FirmProfilePage() {
@@ -19,6 +20,19 @@ export default function FirmProfilePage() {
   const [error, setError] = useState(null)
 
   const [followerCount, setFollowerCount] = useState(0)
+  const [saveCard, setSaveCard] = useState(null)
+  const [savedIds, setSavedIds] = useState(new Set())
+
+  useEffect(() => {
+    listProjects().then(resp => {
+      const ids = new Set()
+      for (const p of (resp?.results || [])) {
+        for (const id of (p.liked_ids || [])) ids.add(id)
+        for (const id of (p.saved_ids || [])) ids.add(id)
+      }
+      setSavedIds(ids)
+    }).catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (!officeId) {
@@ -118,10 +132,23 @@ export default function FirmProfilePage() {
           onMessage={handleMessage}
         />
 
-        <FirmProjectsSection projects={office.projects} />
+        <FirmProjectsSection projects={office.projects} onSave={(building) => setSaveCard(building)} savedIds={savedIds} />
 
         <FirmArticlesSection articles={office.articles} />
       </div>
+
+      {saveCard && (
+        <SaveToBoardModal
+          card={saveCard}
+          onClose={() => setSaveCard(null)}
+          onSaved={() => {
+            if (saveCard?.canonical_bld_id) {
+              setSavedIds(prev => { const s = new Set(prev); s.add(saveCard.canonical_bld_id); return s })
+            }
+            setSaveCard(null)
+          }}
+        />
+      )}
     </div>
   )
 }

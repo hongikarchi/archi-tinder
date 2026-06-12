@@ -8,7 +8,7 @@ function getCardId(card) {
 
 function ProjectRow({ project, disabled, onClick }) {
   const projectId = project?.project_id || project?.id
-  const count = project?.building_count || 0
+  const count = (project?.liked_ids?.length || 0) + (project?.saved_ids?.length || 0)
 
   return (
     <button
@@ -152,6 +152,7 @@ export default function SaveToBoardModal({ card, onClose, onSaved }) {
           border: '1px solid var(--color-border-soft)',
           color: 'var(--color-text)',
           padding: 16,
+          overflow: 'hidden',
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
@@ -193,7 +194,7 @@ export default function SaveToBoardModal({ card, onClose, onSaved }) {
               padding: '0 12px',
               borderRadius: 10,
               border: '1px solid var(--color-border-soft)',
-              background: 'rgba(236,72,153,0.14)',
+              background: 'linear-gradient(135deg,#ec4899,#f43f5e)',
               color: '#fff',
               fontSize: 13,
               fontWeight: 700,
@@ -264,7 +265,7 @@ export default function SaveToBoardModal({ card, onClose, onSaved }) {
         {loading ? (
           <div className="skeleton-shimmer" style={{ height: 90, borderRadius: 12 }} />
         ) : (
-          <div style={{ display: 'grid', gap: 8, maxHeight: '40vh', overflowY: 'auto' }}>
+          <div style={{ display: 'grid', gap: 8, maxHeight: '40vh', overflowY: 'auto', marginRight: -16, paddingRight: 16 }}>
             {boards.length === 0 ? (
               <p style={{ margin: 0, color: 'var(--color-text-dimmer)', fontSize: 13 }}>
                 No boards yet
