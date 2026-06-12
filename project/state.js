@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-06-08 13:47 KST',
-    head: 'e21ddf7',
-    branch: 'feature/claude-avatar-gc',
+    updatedAt: '2026-06-12 19:55 KST',
+    head: '38ac272',
+    branch: 'feature/claude-login-port',
   },
   done: [
+    {
+      id: 'FRONT-AUTH-3',
+      title: '로그인 테마 통일 + 한영 토글',
+      completedAt: '2026-06-12',
+      note: '협업자 dain `archibe-login`(`c4954ea`) 리디자인 이식 — 제스처 인트로 팝업 + 카드 상단 한/영 토글 + 로그인 전체 i18n + 디자인 테마 통일. 5단계 플로우/consent 스와이프/반응형 카드/API 계약 무변경.',
+    },
     {
       id: 'BACK-AVATAR-2',
       title: '교체/계정삭제 시 옛 아바타 객체 GC',
@@ -71,13 +77,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-06-05',
       prs: [204],
       note: '하드코딩 모델 ID(텍스트 `gemini-2.5-flash` 9곳 + 이미지 Imagen 3 orphan) → settings/env 분리(`GEMINI_TEXT_MODEL`=3.1-flash-lite, `GEMINI_IMAGE_MODEL`=3.1-flash-image, 각 fallback). 텍스트 호출 `generate_content_with_fallback` 래퍼로 일원화(model+retry+timeout+4xx fallback). 이미지: Imagen `generate_images`…',
-    },
-    {
-      id: 'SNS-REPORT-PAGE-1',
-      title: '페르소나 리포트 별도 페이지 + axis_scores 영속화 (yywon1, Claude fix-forward)',
-      completedAt: '2026-06-05',
-      prs: [196],
-      note: '인라인 리포트 → 별도 `/board/:id/report` 페이지(BoardReportPage: 레이더/스펙트럼 차트 + 페르소나 이미지 생성 버튼 + 스크롤 수정). fix-forward(Claude): Codex blocker 2건 수정.',
     },
   ],
   now: [
@@ -183,6 +182,34 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 223,
+      title: 'feat(SNS-SAVE): save button + saved indicator on profile building cards',
+      mergedAt: '2026-06-12T02:27:42Z',
+      mergedAtKST: '2026-06-12 11:27 KST',
+      sha: 'abfba4d',
+    },
+    {
+      number: 222,
+      title: 'feat(SNS-REPORT): 페르소나 이미지 다운로드 버튼',
+      mergedAt: '2026-06-12T02:38:50Z',
+      mergedAtKST: '2026-06-12 11:38 KST',
+      sha: '6e0deb5',
+    },
+    {
+      number: 221,
+      title: 'feat(SNS-REPORT): PersonaReport 컴포넌트 추출 + ResultsPage 임베드',
+      mergedAt: '2026-06-12T02:27:59Z',
+      mergedAtKST: '2026-06-12 11:27 KST',
+      sha: '0f46194',
+    },
+    {
+      number: 220,
+      title: 'feat(profile): GC old avatar object on replace + account delete (BACK-AVATAR-2)',
+      mergedAt: '2026-06-12T02:27:31Z',
+      mergedAtKST: '2026-06-12 11:27 KST',
+      sha: '43253ad',
+    },
+    {
       number: 219,
       title: 'docs(cleanup): backlog reconcile + file-roles 60 fill + 2 stale drop',
       mergedAt: '2026-06-07T17:19:24Z',
@@ -209,34 +236,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-06-07T05:22:51Z',
       mergedAtKST: '2026-06-07 14:22 KST',
       sha: 'adcc605',
-    },
-    {
-      number: 214,
-      title: 'feat(ALGO-QCARD): Phase 3 스와이프 latency + 하이퍼긍정 Trigger A',
-      mergedAt: '2026-06-06T15:19:35Z',
-      mergedAtKST: '2026-06-07 00:19 KST',
-      sha: 'b951611',
-    },
-    {
-      number: 213,
-      title: 'feat(ALGO-QCARD): Phase 2 TF-IDF 변별 키워드 + Trigger B 카테고리',
-      mergedAt: '2026-06-06T15:14:27Z',
-      mergedAtKST: '2026-06-07 00:14 KST',
-      sha: '40827cb',
-    },
-    {
-      number: 212,
-      title: 'feat(session): Case #3 resume guard — 기존 보드 재진입 이어하기',
-      mergedAt: '2026-06-06T02:10:50Z',
-      mergedAtKST: '2026-06-06 11:10 KST',
-      sha: '4e58195',
-    },
-    {
-      number: 211,
-      title: 'feat(ALGO-QCARD): Phase 1 질문카드 Soft-Vector 분기 + 프리페치 flush',
-      mergedAt: '2026-06-06T01:53:39Z',
-      mergedAtKST: '2026-06-06 10:53 KST',
-      sha: '7bd658f',
     },
   ],
   agents: [
@@ -1485,6 +1484,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/components/LLMSearchUpdateWrapper.jsx',
       role: 'LLM 검색 업데이트 모드 래퍼',
+    },
+    {
+      path: 'frontend/src/components/PersonaReport.jsx',
+      role: '페르소나 리포트 공용 컴포넌트 (Board/Results 공유, 이미지 저장 버튼)',
     },
     {
       path: 'frontend/src/components/ProtectedRoute.jsx',

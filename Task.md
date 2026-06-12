@@ -350,6 +350,15 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 _(Deferred 2026-06-04 batch scope: YAGNI — product-미소비 telemetry 1필드 위해 Celery+worker 도입은 과투자. 2번째 background job 생기면 단일 INFRA-JOBS 티켓으로 묶어 처리.)_
 
 ## Done
+### FRONT-AUTH-3 — 로그인 테마 통일 + 한영 토글 — RESOLVED 2026-06-12 (`c57de5a`-pre-squash)
+협업자 dain `archibe-login`(`c4954ea`) 리디자인 이식 — 제스처 인트로 팝업 + 카드 상단 한/영 토글 + 로그인 전체 i18n + 디자인 테마 통일. 5단계 플로우/consent 스와이프/반응형 카드/API 계약 무변경.
+- [x] IntroOverlay: 미니카드 스와이프 데모 애니메이션(lpSwipeDemo 3.4s + 화살표 동기 점등), 매 마운트 표시(D1, `INTRO_SHOW_ONCE=false` — localStorage 1회 경로 보존).
+- [x] LangToggle pill(한국어/ENGLISH): 5개 카드 + 인트로 상단. react-tinder-card native touchstart `preventDefault` 우회 = 버튼 `className="pressable"`(터치 필수) + wrapper stopPropagation(마우스 방어선). LanguageContext 재사용(로그인 전 localStorage만, 로그인 후 서버 PATCH).
+- [x] i18n: locales.js `login` 트리 ko/en 53키 + `t(key, params)` `{detail}` 치환(하위호환). 에러 state `{key,params}|{text}` — 토글 시 재번역. 가입 직후 언어 push(D2: guest/register 성공 후 `setLanguage`)로 신규계정 기본 ko 스냅백 차단.
+- [x] 테마 통일: per-step entrance(lp-card-in), 그라디언트 CTA(accent-1→2) + hover lift, glass input(color-mix 72%), GestureHint 텍스트+화살표(양쪽 accent-1, D3) + 드래그 intent 실시간 점등, faux 깊이 카드 2장, 카드 아래 캡션.
+- [x] 드래그 콜백 identity 안정성: 덱 4콜백 전부 useCallback + preventSwipe 모듈상수 삼항 + `setConsentGiven` fly-off 이후로 이동 + latest-ref(`guestSubmitRef`) — 드래그 중 재바인딩 사망 차단(app-test 왕복 wiggle 생존 확인).
+- Gates: code-review PASS(9/9 기준 + 53키 ko/en 교차검증), security PASS(XSS sink 0, consent 게이트 유지, dev login DEV-gated), lint+build PASS, app-test FEATURE-SCOPED PASS 9/9(인트로/토글/드래그 생존/게스트 e2e/회귀 smoke, 0 console err).
+
 ### BACK-AVATAR-2 — 교체/계정삭제 시 옛 아바타 객체 GC — RESOLVED 2026-06-08 (`5e1f934`-pre-squash)
 FRONT-AVATAR-1(`84ba1f1`) orphan 누적 닫음. 업로드마다 새 uuid4 키 저장 + 옛 객체 영구 잔류하던 갭 — 교체 시 + 계정삭제 시 옛 객체를 안전 GC.
 - `storage.delete_avatar(url)`: best-effort GC. 정규식 `^avatars/[0-9a-f]{32}\.webp$`가 **주 인가 게이트**(경로탈출 + 외부 OAuth URL 차단). 프리픽스는 백엔드 *선택*만 — `if base and url.startswith(base+'/')`로 empty-base `startswith('')` 함정 가드. dispatch by URL **shape**(현 `AVATAR_R2_ENABLED` 아님 → env flip 시 잘못된 백엔드 삭제 방지). 절대 raise 안 함.

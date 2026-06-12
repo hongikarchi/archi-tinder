@@ -40,8 +40,10 @@ function GoogleIcon() {
  *   disabled   bool
  *   loading    bool                    — shows spinner when true
  *   style      object                  — merged into button style
+ *   label      string                  — button label text (default 'Continue with Google')
+ *   className  string                  — extra class(es) applied to button element
  */
-export default function GoogleLoginButton({ onSuccess, onError, onNonOAuthError, disabled, loading, style }) {
+export default function GoogleLoginButton({ onSuccess, onError, onNonOAuthError, disabled, loading, style, label = 'Continue with Google', className }) {
   const googleLogin = useGoogleLogin({
     flow: 'auth-code',
     onSuccess,
@@ -69,13 +71,14 @@ export default function GoogleLoginButton({ onSuccess, onError, onNonOAuthError,
   return (
     <button
       type="button"
+      className={className}
       onClick={() => googleLogin()}
       disabled={disabled}
       aria-label="Continue with Google for existing accounts"
       style={{ ...baseStyle, ...style }}
     >
       {loading ? <Spinner /> : <GoogleIcon />}
-      Continue with Google
+      {label}
     </button>
   )
 }

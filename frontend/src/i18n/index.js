@@ -24,12 +24,16 @@ function resolvePath(key, dict) {
 export function useTranslation() {
   const { language } = useLanguage()
 
-  function t(key) {
-    const primary = resolvePath(key, locales[language])
-    if (primary !== undefined) return primary
-    const fallback = resolvePath(key, locales.ko)
-    if (fallback !== undefined) return fallback
-    return key
+  function t(key, params) {
+    let str = resolvePath(key, locales[language])
+    if (str === undefined) str = resolvePath(key, locales.ko)
+    if (str === undefined) return key
+    if (params && typeof str === 'string') {
+      Object.entries(params).forEach(([k, v]) => {
+        str = str.split(`{${k}}`).join(String(v))
+      })
+    }
+    return str
   }
 
   return { t, language }
