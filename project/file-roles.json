@@ -249,6 +249,7 @@
   "frontend/src/components/GoogleLoginButton.jsx": "구글 로그인 버튼",
   "frontend/src/components/GoogleVerifyButton.jsx": "구글 계정 인증 버튼",
   "frontend/src/components/LLMSearchUpdateWrapper.jsx": "LLM 검색 업데이트 모드 래퍼",
+  "frontend/src/components/PersonaReport.jsx": "페르소나 리포트 공용 컴포넌트 (Board/Results 공유, 이미지 저장 버튼)",
   "frontend/src/components/ProtectedRoute.jsx": "인증 보호 라우트 가드",
   "frontend/src/components/QuestionCard.jsx": "취향 보정 질문 카드",
   "frontend/src/components/SaveToBoardModal.jsx": "보드 저장 모달",
