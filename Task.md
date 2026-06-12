@@ -68,6 +68,15 @@ Redesign `/login` as conversational swipe onboarding while preserving the existi
 - [ ] app-test FULL (swipe path) — **deferred, run before prod**.
 - [ ] ⚠️ consent UX regressed vs #155 (한국어 PIPA 버튼 → 영어 swipe) → tracked in FULL-LEGAL-1, restore before public launch.
 
+### FRONT-AUTH-3 — 로그인 테마 통일 + 한영 토글
+협업자 dain의 `archibe-login` repo(`c4954ea`) 리디자인을 우리 LoginPage에 이식. 플랜: `.claude/plans/merry-toasting-dove.md` (승인 2026-06-12, 결정 D1 인트로 매 마운트 / D2 가입 직후 언어 push / D3 힌트 양쪽 accent-1).
+
+- [ ] 제스처 인트로 팝업 (IntroOverlay, 미니카드 스와이프 데모 애니메이션)
+- [ ] 카드 상단 한/영 토글 (LangToggle pill, `pressable` 터치 fix, LanguageContext 재사용)
+- [ ] 로그인 페이지 전체 i18n (locales.js `login` 트리 ko/en + `t(key, params)` 치환)
+- [ ] 디자인 테마 통일 (entrance 애니메이션, 그라디언트 CTA, glass input, 텍스트+화살표 제스처 힌트, faux 깊이 카드, 캡션)
+- [ ] 5단계 플로우/consent 스와이프/반응형 카드 크기 무변경 (드래그 콜백 identity 안정성 회귀 가드)
+
 ---
 
 ## Next
