@@ -514,6 +514,7 @@ export default function App() {
             ...p,
             predictedLikes: resultData.predicted_like_images || [],
             ...(reportData?.final_report ? { finalReport: reportData.final_report } : {}),
+            ...(reportData?.axis_scores ? { axisScores: reportData.axis_scores } : {}),
           } : p))
           // Fire-and-forget: generate persona image without blocking the completion screen.
           if (reportData?.final_report && backendId) {
@@ -773,6 +774,7 @@ export default function App() {
           finalReport: p.final_report || null,
           reportImage: p.report_image || null,
           reportImageMime: p.report_image_mime || null,
+          axisScores: p.axis_scores || null,
           sessionId: p.latest_session_id || null,
           latestSessionMeta: p.latest_session_meta || null,
           createdAt: p.created_at,
