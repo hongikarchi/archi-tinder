@@ -23,6 +23,7 @@ from django.dispatch import receiver
 from django.contrib.auth import get_user_model
 
 from .authentication import invalidate_user_cache
+from .models import UserProfile
 
 User = get_user_model()
 
@@ -35,3 +36,22 @@ def _invalidate_user_cache_on_save(sender, instance, **kwargs):
 @receiver(post_delete, sender=User)
 def _invalidate_user_cache_on_delete(sender, instance, **kwargs):
     invalidate_user_cache(instance.id)
+
+
+@receiver(post_delete, sender=UserProfile)
+def _gc_avatar_on_profile_delete(sender, instance, **kwargs):
+    """GC the stored avatar when a UserProfile is deleted (BACK-AVATAR-2).
+
+    Fires on UserProfile's own post_delete — which is triggered both by direct
+    profile deletion AND by User.delete() cascading (Django's collector fires
+    post_delete for each cascade-deleted row with instance still in memory,
+    so instance.avatar_url is accessible).
+
+    We hook UserProfile (NOT User) because at User post_delete time the profile
+    row is already gone from the DB; Django fires UserProfile post_delete
+    *before* the parent User row is removed, so the instance is still available.
+
+    Best-effort: delete_avatar swallows all exceptions internally.
+    """
+    from .storage import delete_avatar
+    delete_avatar(instance.avatar_url or '')

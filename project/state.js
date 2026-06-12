@@ -23,15 +23,34 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-06-07 22:04 KST',
-    head: '74edec8',
-    branch: 'feature/claude-avatar',
+    updatedAt: '2026-06-08 13:47 KST',
+    head: 'e21ddf7',
+    branch: 'feature/claude-avatar-gc',
   },
   done: [
+    {
+      id: 'BACK-AVATAR-2',
+      title: '교체/계정삭제 시 옛 아바타 객체 GC',
+      completedAt: '2026-06-08',
+      note: 'FRONT-AVATAR-1(`84ba1f1`) orphan 누적 닫음. 업로드마다 새 uuid4 키 저장 + 옛 객체 영구 잔류하던 갭 — 교체 시 + 계정삭제 시 옛 객체를 안전 GC.',
+    },
+    {
+      id: 'INFRA-AVATAR-R2-1',
+      title: 'prod R2 아바타 영속화 설정 + 검증',
+      completedAt: '2026-06-08',
+      note: 'prod Railway에 R2 5개 env 설정 + 공개 아바타 버킷 프로비저닝 완료 → 아바타 영속화. FRONT-AVATAR-1 폴백 경로 졸업.',
+    },
+    {
+      id: 'FULL-DISCOVERY-2',
+      title: 'Discovery v3.1+v3.2 라이브 브라우저 검증',
+      completedAt: '2026-06-08',
+      note: 'FULL-DISCOVERY-1(#200/#209) prod 배포(#218) 직전 app-test FULL로 라이브 검증 완료. chunk 시스템·10장 트리거 카드·우=promote→Taste(`/discovery/promote-to-taste/ 201`, 11 likes 이월)·진행바·phase 전이 정상, 콘솔 0, 회귀(AI검색+스와이프) OK. 배포 후 prod probe로 라우트 라이브 확인.',
+    },
     {
       id: 'FRONT-AVATAR-1',
       title: '프로필 사진 업로드 (server-proxy R2 + 폴백)',
       completedAt: '2026-06-07',
+      prs: [217, 218],
       note: '아바타 업로드(Slice D). 마이그 없음(`avatar_url` URLField 기존). data-URL 지양 결정대로 R2 URL만 저장.',
     },
     {
@@ -60,27 +79,6 @@ window.PROJECT_STATE = {
       prs: [196],
       note: '인라인 리포트 → 별도 `/board/:id/report` 페이지(BoardReportPage: 레이더/스펙트럼 차트 + 페르소나 이미지 생성 버튼 + 스크롤 수정). fix-forward(Claude): Codex blocker 2건 수정.',
     },
-    {
-      id: 'CODEX-FUNC-3',
-      title: 'Codex 라운드3 기능 수정 4건 (auth/tokens/cache/testenv)',
-      completedAt: '2026-06-05',
-      prs: [199, 201, 202, 203],
-      note: 'Codex 기능 리뷰 배치 머지(SECURITY 항목은 배포-게이트 배치로 deferred).',
-    },
-    {
-      id: 'BACK-AUTH-3',
-      title: 'guest like-gate @50 + frontend verify 배선',
-      completedAt: '2026-06-04',
-      prs: [193],
-      note: '`LikedBuildingsView.post`가 guest 무제한 like 허용하던 것 → 50개서 verify-gate(403 `verify_required`/`liked_limit_reached`, board-gate precedent mirror). frontend `addLikedBuilding`가 403 intercept → `archithon:verify-required` dispatch + `VerifyRequiredError` throw(`createProject` 패턴); D…',
-    },
-    {
-      id: 'BACK-AUTH-2',
-      title: 'JWT user-row cache 통합 테스트',
-      completedAt: '2026-06-04',
-      prs: [193],
-      note: '기존 unit-level만이던 JWT 캐시 테스트에 DRF 파이프라인 통합 테스트 5 추가(`test_jwt_cache_integration.py`): cache-hit, is_active=False stale-cache 거부(signal invalidation), post_save invalidation, logout, refresh-rotation invalidation. prod 코드 무변경. is_active bulk `.update()` 우회는 기존 문서화된 known limitat…',
-    },
   ],
   now: [
     {
@@ -104,7 +102,7 @@ window.PROJECT_STATE = {
       },
       {
         id: 'FULL-LANGUAGE-1',
-        title: '한/영 언어 설정 토글 없음',
+        title: '한/영 언어 설정 토글 없음 (Slice 1 shipped)',
         note: 'Code audit 2026-05-27: UserProfile preferences are theme/font only; UserSerializer and UserProfileSelfUpdateSerializer need language parity. ThemeContext + AppearanceSettings are the local persistence/UI pattern. ParseQueryView currently calls services.parse_query(conversation_history) with no user preference, so language must be passed from request.user.profile.language and prompt inference overridden.',
       },
       {
@@ -115,24 +113,14 @@ window.PROJECT_STATE = {
     ],
     medium: [
       {
-        id: 'BACK-AVATAR-2',
-        title: '교체 시 옛 아바타 객체 GC 없음',
-        note: 'FRONT-AVATAR-1(`84ba1f1`) 후속. 업로드마다 새 uuid4 키로 저장 → 이전 R2 객체 + 로컬 파일이 영구 잔류(orphan 누적). 교체/삭제 시 옛 객체 cleanup(즉시 delete 또는 주기 GC job) 필요. 비차단(스토리지 비용·정합성).',
-      },
-      {
-        id: 'INFRA-AVATAR-R2-1',
-        title: 'prod R2 env 미설정 시 아바타 비영속',
-        note: 'FRONT-AVATAR-1은 R2_* env 미설정 시 FileSystemStorage로 폴백. Railway 디스크는 ephemeral → prod 아바타 업로드가 재배포 시 소실. prod 영속화하려면 Railway에 `R2_ENDPOINT_URL`/`R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY`/`R2_AVATAR_BUCKET`/`AVATAR_PUBLIC_BASE_URL` 설정 + 공개 아바타 버킷(빌딩 이미지 버킷과 분리) 프로비저닝 필요. 미설정이어도 코드…',
+        id: 'BACK-AVATAR-3',
+        title: '기존 누적 orphan 아바타 일괄 청소 (sweep 명령)',
+        note: 'BACK-AVATAR-2(`5e1f934`)가 교체/삭제 시점 GC를 붙였으나 그 이전에 쌓인 orphan(R2/디스크)은 남음. management command(dry-run + `--confirm`, `purge_legacy_projects` 패턴) — R2 `list_objects`로 `avatars/` 나열 → 어떤 `UserProfile.avatar_url`도 참조 않는 키 삭제. 비차단·비긴급(현 prod 아바타 ≈0, 기능 갓 출시).',
       },
       {
         id: 'BACK-LLM-4',
         title: 'search.py ParseQueryView byte-cap도 ensure_ascii 부풀림 의심',
         note: 'BACK-LLM-2(#195) 리뷰 중 발견(미수정, pre-existing). `backend/apps/recommendation/views/search.py` `ParseQueryView.post`의 conversation_history 검증이 BACK-LLM-2 serializer가 고친 것과 동일하게 `json.dumps` 기본 `ensure_ascii=True`로 byte 측정 가능성 → 한글 대화가 한도를 6배 부풀려 거짓 거부. 확인 후 `ensure_ascii=False`+UT…',
-      },
-      {
-        id: 'FULL-DISCOVERY-2',
-        title: 'Discovery v3.1+v3.2 라이브 브라우저 검증 (prod 전)',
-        note: 'FULL-DISCOVERY-1(`fc72639`) 머지 후 app-test FULL 미실행(dev 서버 + app-test 에이전트 부재). prod 배포 전 실제 흐름 검증 필요: chunk 버퍼/prefetch≤3, swipe→feedback, 10장 트리거 카드 우=promote→Taste 첫 스와이프 정상·좌=계속, 진행률 바, 재등장 shake, 프로필에 discovery_ 임시보드 노출.',
       },
       {
         id: 'FRONT-DISCOVERY-1',
@@ -195,6 +183,20 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 219,
+      title: 'docs(cleanup): backlog reconcile + file-roles 60 fill + 2 stale drop',
+      mergedAt: '2026-06-07T17:19:24Z',
+      mergedAtKST: '2026-06-08 02:19 KST',
+      sha: 'e21ddf7',
+    },
+    {
+      number: 217,
+      title: 'feat(profile): avatar upload — server-proxy R2 + filesystem fallback (FRONT-AVATAR-1)',
+      mergedAt: '2026-06-07T13:11:48Z',
+      mergedAtKST: '2026-06-07 22:11 KST',
+      sha: 'ea74103',
+    },
+    {
       number: 216,
       title: 'feat(auth): handle+password login + email-verify via OAuth linking (AUTH-LOGIN-1)',
       mergedAt: '2026-06-07T10:23:35Z',
@@ -235,20 +237,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-06-06T01:53:39Z',
       mergedAtKST: '2026-06-06 10:53 KST',
       sha: '7bd658f',
-    },
-    {
-      number: 210,
-      title: 'test(auth): fix google login test path -> auth/social/google/',
-      mergedAt: '2026-06-06T01:39:51Z',
-      mergedAtKST: '2026-06-06 10:39 KST',
-      sha: '4ff9d92',
-    },
-    {
-      number: 209,
-      title: 'feat(FULL-DISCOVERY-1): Discovery 승격 N장 동등주입 + 즉시 K-Means + 50 하드캡',
-      mergedAt: '2026-06-06T01:46:48Z',
-      mergedAtKST: '2026-06-06 10:46 KST',
-      sha: '13359a3',
     },
   ],
   agents: [
@@ -500,11 +488,11 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/.flake8',
-      role: '',
+      role: 'Python 스타일 검사 설정',
     },
     {
       path: 'backend/.gitignore',
-      role: '',
+      role: 'Git 무시 규칙 (미디어 파일)',
     },
     {
       path: 'backend/apps/__init__.py',
@@ -528,7 +516,7 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/accounts/merge.py',
-      role: '',
+      role: '게스트→검증 계정 병합 헬퍼',
     },
     {
       path: 'backend/apps/accounts/migrations/0001_initial.py',
@@ -552,19 +540,19 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/accounts/migrations/0006_userprofile_language.py',
-      role: '',
+      role: '마이그 0006: language 필드',
     },
     {
       path: 'backend/apps/accounts/migrations/0007_userprofile_handle_userprofile_notifications.py',
-      role: '',
+      role: '마이그 0007: handle, notifications 필드',
     },
     {
       path: 'backend/apps/accounts/migrations/0008_userprofile_affiliation_userprofile_role.py',
-      role: '',
+      role: '마이그 0008: affiliation, role 필드',
     },
     {
       path: 'backend/apps/accounts/migrations/0009_email_verified_at.py',
-      role: '',
+      role: '마이그 0009: email_verified_at 필드',
     },
     {
       path: 'backend/apps/accounts/migrations/__init__.py',
@@ -588,7 +576,7 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/accounts/storage.py',
-      role: '',
+      role: '아바타 업로드 스토리지 (R2/폴백)',
     },
     {
       path: 'backend/apps/accounts/tests/__init__.py',
@@ -600,23 +588,23 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/accounts/tests/test_auth_login.py',
-      role: '',
+      role: '인증·로그인·이메일 테스트',
     },
     {
       path: 'backend/apps/accounts/tests/test_avatar_upload.py',
-      role: '',
+      role: '아바타 업로드 테스트',
     },
     {
       path: 'backend/apps/accounts/tests/test_guest_role_affiliation.py',
-      role: '',
+      role: '게스트 역할/소속 테스트',
     },
     {
       path: 'backend/apps/accounts/tests/test_jwt_cache_integration.py',
-      role: '',
+      role: 'JWT 캐시 통합 테스트',
     },
     {
       path: 'backend/apps/accounts/tests/test_language.py',
-      role: '',
+      role: '언어 설정 필드 테스트',
     },
     {
       path: 'backend/apps/accounts/tests/test_liked_buildings.py',
@@ -624,11 +612,11 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/accounts/tests/test_merge_cap.py',
-      role: '',
+      role: '병합 행 상한 테스트',
     },
     {
       path: 'backend/apps/accounts/tests/test_oauth_email_verified.py',
-      role: '',
+      role: 'OAuth 이메일 인증 보안 테스트',
     },
     {
       path: 'backend/apps/accounts/tests/test_phase13_userprofile.py',
@@ -636,11 +624,11 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/accounts/tests/test_profile_role_affiliation.py',
-      role: '',
+      role: '프로필 역할/소속 필드 테스트',
     },
     {
       path: 'backend/apps/accounts/tests/test_settings_harvest.py',
-      role: '',
+      role: '핸들 & 알림 설정 테스트',
     },
     {
       path: 'backend/apps/accounts/tests/test_theme_font.py',
@@ -708,7 +696,7 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/profiles/migrations/0005_delete_savedoffice.py',
-      role: '',
+      role: '마이그 0005: SavedOffice 삭제',
     },
     {
       path: 'backend/apps/profiles/migrations/__init__.py',
@@ -760,7 +748,7 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/recommendation/discovery_feed.py',
-      role: '',
+      role: '발견 피드 청크 빌더 (3단계)',
     },
     {
       path: 'backend/apps/recommendation/engine.py',
@@ -880,31 +868,31 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/recommendation/migrations/0021_tagaxisweight.py',
-      role: '',
+      role: '마이그 0021: TagAxisWeight 모델 & 시드',
     },
     {
       path: 'backend/apps/recommendation/migrations/0022_project_conversation_history.py',
-      role: '',
+      role: '마이그 0022: conversation_history 필드',
     },
     {
       path: 'backend/apps/recommendation/migrations/0023_project_report_image_mime.py',
-      role: '',
+      role: '마이그 0023: report_image_mime + SessionEvent 유형',
     },
     {
       path: 'backend/apps/recommendation/migrations/0024_project_axis_scores.py',
-      role: '',
+      role: '마이그 0024: axis_scores 필드',
     },
     {
       path: 'backend/apps/recommendation/migrations/0025_analysissession_multimodal_floor.py',
-      role: '',
+      role: '마이그 0025: multimodal_floor 필드',
     },
     {
       path: 'backend/apps/recommendation/migrations/0026_qcard_phase1_bias.py',
-      role: '',
+      role: '마이그 0026: 질문 편향 벡터 필드',
     },
     {
       path: 'backend/apps/recommendation/migrations/0027_session_recent_latencies.py',
-      role: '',
+      role: '마이그 0027: recent_latencies 필드',
     },
     {
       path: 'backend/apps/recommendation/migrations/__init__.py',
@@ -940,7 +928,7 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/recommendation/services/axis_scores.py',
-      role: '',
+      role: '5축 점수 계산 서비스 (스타일/분위기/재질)',
     },
     {
       path: 'backend/apps/recommendation/services/embeddings.py',
@@ -976,11 +964,11 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/recommendation/tests/test_back_recommend_4.py',
-      role: '',
+      role: 'Discovery 좋아요 테스트 (맛 벡터, 캐시)',
     },
     {
       path: 'backend/apps/recommendation/tests/test_conversation_history.py',
-      role: '',
+      role: '대화 이력 지속성 테스트',
     },
     {
       path: 'backend/apps/recommendation/tests/test_discovery.py',
@@ -1068,7 +1056,7 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/social/migrations/0006_delete_officefollow.py',
-      role: '',
+      role: '마이그 0006: OfficeFollow 삭제 + 카운트 초기화',
     },
     {
       path: 'backend/apps/social/migrations/__init__.py',
@@ -1132,7 +1120,7 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/fixtures/tag_axis_weights.json',
-      role: '',
+      role: '태그-축 가중치 픽스처',
     },
     {
       path: 'backend/manage.py',
@@ -1212,7 +1200,7 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/tests/test_gemini_model_migration.py',
-      role: '',
+      role: 'Gemini 3.1 마이그레이션 테스트',
     },
     {
       path: 'backend/tests/test_gemini_timeout.py',
@@ -1276,7 +1264,7 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/tests/test_language_directive.py',
-      role: '',
+      role: 'parse_query 언어 지시자 테스트',
     },
     {
       path: 'backend/tests/test_m1_clarification_cap.py',
@@ -1304,15 +1292,15 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/tests/test_qcard_phase1.py',
-      role: '',
+      role: '질문카드 Phase 1: 벡터 편향 테스트',
     },
     {
       path: 'backend/tests/test_qcard_phase2.py',
-      role: '',
+      role: '질문카드 Phase 2: TF-IDF 선택 테스트',
     },
     {
       path: 'backend/tests/test_qcard_phase3.py',
-      role: '',
+      role: '질문카드 Phase 3: 레이턴시 캡처 테스트',
     },
     {
       path: 'backend/tests/test_rerank_shape.py',
@@ -1384,7 +1372,7 @@ window.PROJECT_STATE = {
     },
     {
       path: 'docs/specs/architect-unification.md',
-      role: '',
+      role: '스튜디오 통합 아키텍처 스펙',
     },
     {
       path: 'frontend/.env.example',
@@ -1468,11 +1456,11 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/components/AppearanceSettings.module.css',
-      role: '',
+      role: '외관설정 스타일(CSS Module)',
     },
     {
       path: 'frontend/src/components/Button.module.css',
-      role: '',
+      role: '버튼 스타일(CSS Module)',
     },
     {
       path: 'frontend/src/components/DebugOverlay.jsx',
@@ -1480,7 +1468,7 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/components/DiscoveryTriggerCard.jsx',
-      role: '',
+      role: 'Discovery-Taste 전환 카드',
     },
     {
       path: 'frontend/src/components/ErrorBoundary.jsx',
@@ -1532,11 +1520,11 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/components/Toggle.jsx',
-      role: '',
+      role: '스위치 토글 컴포넌트',
     },
     {
       path: 'frontend/src/components/Toggle.module.css',
-      role: '',
+      role: '토글 스타일 (CSS Module)',
     },
     {
       path: 'frontend/src/components/TutorialPopup.jsx',
@@ -1608,7 +1596,7 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/context/LanguageContext.jsx',
-      role: '',
+      role: '언어 선택 제공자',
     },
     {
       path: 'frontend/src/context/ThemeContext.jsx',
@@ -1616,7 +1604,7 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/context/_languageContext.js',
-      role: '',
+      role: '언어 컨텍스트 (원본)',
     },
     {
       path: 'frontend/src/context/_themeContext.js',
@@ -1636,7 +1624,7 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/hooks/useLanguage.js',
-      role: '',
+      role: '언어 선택 훅',
     },
     {
       path: 'frontend/src/hooks/useProjectReactors.js',
@@ -1652,11 +1640,11 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/i18n/index.js',
-      role: '',
+      role: '번역 훅 (경로 해석)',
     },
     {
       path: 'frontend/src/i18n/locales.js',
-      role: '',
+      role: '번역 사전 (한영)',
     },
     {
       path: 'frontend/src/index.css',
@@ -1684,11 +1672,11 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/pages/BoardReportPage.jsx',
-      role: '',
+      role: '페르소나 리포트 페이지',
     },
     {
       path: 'frontend/src/pages/BoardReportPage.module.css',
-      role: '',
+      role: '리포트 페이지 스타일 (CSS Module)',
     },
     {
       path: 'frontend/src/pages/BuildingDetailPage.jsx',
@@ -1780,39 +1768,39 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/pages/settings/AccountScreen.jsx',
-      role: '',
+      role: '계정 관리 설정 화면',
     },
     {
       path: 'frontend/src/pages/settings/AccountScreen.module.css',
-      role: '',
+      role: '계정 설정 폼 스타일(CSS Module)',
     },
     {
       path: 'frontend/src/pages/settings/AppearanceScreen.jsx',
-      role: '',
+      role: '화면 설정 페이지 (테마·폰트·언어)',
     },
     {
       path: 'frontend/src/pages/settings/AppearanceScreen.module.css',
-      role: '',
+      role: '화면 설정 화면 스타일(CSS Module)',
     },
     {
       path: 'frontend/src/pages/settings/EditProfileScreen.jsx',
-      role: '',
+      role: '프로필 편집 페이지 (이름·직업·소개)',
     },
     {
       path: 'frontend/src/pages/settings/NotificationsScreen.jsx',
-      role: '',
+      role: '알림 설정 페이지 (푸시·이메일)',
     },
     {
       path: 'frontend/src/pages/settings/NotificationsScreen.module.css',
-      role: '',
+      role: '알림 설정 화면 스타일(CSS Module)',
     },
     {
       path: 'frontend/src/pages/settings/SettingsPage.jsx',
-      role: '',
+      role: '설정 메인 네비게이션',
     },
     {
       path: 'frontend/src/pages/settings/SettingsPage.module.css',
-      role: '',
+      role: '설정 목록 레이아웃 스타일(CSS Module)',
     },
     {
       path: 'frontend/src/pages/userProfile/BoardGrid.jsx',
@@ -1832,7 +1820,7 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/pages/userProfile/ProfileHero.module.css',
-      role: '',
+      role: '아바타 업로드 오버레이 스타일',
     },
     {
       path: 'frontend/src/tokens.css',
@@ -1852,7 +1840,7 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/utils/reportWriteError.js',
-      role: '',
+      role: '저장 실패 토스트 유틸리티',
     },
     {
       path: 'frontend/src/utils/resolveProjectBackendId.js',
