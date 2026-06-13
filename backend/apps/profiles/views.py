@@ -47,7 +47,8 @@ class OfficeDetailView(APIView):
                            display_cover_url,
                            cover_image_url_default,
                            covers_by_type,
-                           all_images
+                           all_images,
+                           year_kind
                     FROM canonical_v2_buildings
                     WHERE canonical_bld_id = ANY(%s)
                       AND is_publishable = true
@@ -63,7 +64,7 @@ class OfficeDetailView(APIView):
                     (
                         canonical_bld_id, name, project_year, program,
                         location_city, display_cover_url, cover_image_url_default,
-                        covers_by_type_raw, all_images_raw,
+                        covers_by_type_raw, all_images_raw, year_kind,
                     ) = row_map[cid]
 
                     # Image resolution: source-CDN URLs stored in the row (no R2 composition).
@@ -101,6 +102,7 @@ class OfficeDetailView(APIView):
                         'year': project_year,
                         'program': program,
                         'city': location_city,
+                        'year_kind': year_kind or 'unknown',
                     })
 
         serializer = OfficeSerializer(office)
