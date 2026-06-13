@@ -120,28 +120,28 @@ For any feature or bug fix, the session runs the `orchestrate` skill, which laun
 
 ```mermaid
 flowchart TD
-    Start([User request]) --> Dec[Session: decompose<br/>backend/frontend spec + acceptance]
+    Start(["User request"]) --> Dec["Session: decompose<br/>backend/frontend spec + acceptance"]
     Dec --> WF[["Workflow: feature.js"]]
     subgraph WF_INNER["feature workflow (autonomous, no git)"]
-      BM[back-maker — Sonnet] --> FM[front-maker — Sonnet]
-      FM --> Par{parallel}
-      Par --> RV[code-review — Sonnet]
-      Par --> SC[security-manager — Sonnet]
-      RV --> VF[adversarial-verify — Opus]
+      BM["back-maker — Sonnet"] --> FM["front-maker — Sonnet"]
+      FM --> Par{"parallel"}
+      Par --> RV["code-review — Sonnet"]
+      Par --> SC["security-manager — Sonnet"]
+      RV --> VF["adversarial-verify — Opus"]
       SC --> VF
-      VF --> Dv{commitReady?}
-      Dv -->|NO, budget left| BM
+      VF --> Dv{"commitReady?"}
+      Dv -->|"NO, budget left"| BM
     end
-    WF --> Res{result.commitReady?}
-    Res -->|FAIL / blocked| Stop1[STOP — report findings to user]
-    Res -->|PASS| GC["git-commit skill — code commit"]
-    GC --> AT[app-test — browser + drift gate]
-    AT --> ATv{PASS?}
-    ATv -->|FAIL — re-launch workflow w/ fixOrders, cyclesUsed+1| WF
-    ATv -->|PASS| RIn["reporter-inline skill — audit on same branch"]
-    RIn --> PGate{publish gate open?<br/>explicit trigger / plan}
-    PGate -->|NO| Stop2[STOP — commit ready, wait for trigger]
-    PGate -->|YES| PG["git-publish skill — push + PR + admin squash + cleanup"]
+    WF --> Res{"result.commitReady?"}
+    Res -->|"FAIL / blocked"| Stop1["STOP — report findings to user"]
+    Res -->|"PASS"| GC["git-commit skill — code commit"]
+    GC --> AT["app-test — browser + drift gate"]
+    AT --> ATv{"PASS?"}
+    ATv -->|"FAIL — re-launch workflow w/ fixOrders, cyclesUsed+1"| WF
+    ATv -->|"PASS"| RIn["reporter-inline skill — audit on same branch"]
+    RIn --> PGate{"publish gate open?<br/>explicit trigger / plan"}
+    PGate -->|"NO"| Stop2["STOP — commit ready, wait for trigger"]
+    PGate -->|"YES"| PG["git-publish skill — push + PR + admin squash + cleanup"]
 
     style Start fill:#3b82f6,color:#fff
     style WF fill:#a855f7,color:#fff
