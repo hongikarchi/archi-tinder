@@ -100,7 +100,14 @@ const VERIFY_SCHEMA = {
   },
 }
 
-const spec = args || {}
+// args arrives as a JSON STRING across the background-task boundary (verified by
+// dry-run 2026-06-13: `typeof args === 'string'`), so parse it. Without this the
+// orchestrate skill's Workflow({ args: {...} }) launch no-ops on the !backend guard
+// below — the string has no `.backend`/`.frontend` property.
+let spec = args || {}
+if (typeof spec === 'string') {
+  try { spec = JSON.parse(spec) } catch (e) { spec = {} }
+}
 const taskId = spec.taskId || 'feature'
 const acceptance = (spec.acceptance || []).map((a) => `- ${a}`).join('\n') || '- (none supplied)'
 

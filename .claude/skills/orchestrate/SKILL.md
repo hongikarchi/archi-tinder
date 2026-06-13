@@ -45,9 +45,18 @@ Workflow({
 
 Pass `backend: null` for a frontend-only task (and vice-versa). The workflow pins every
 worker's model explicitly (Sonnet workers, Opus verify) — you do not manage models here.
+(The harness delivers `args` as a JSON string across the background-task boundary;
+`feature.js` parses it — do not pre-stringify it yourself, pass a real object.)
 
 It returns: `{ commitReady, cyclesUsed, built, apiContract, confirmedFindings,
 reviewVerdict, securityVerdict, rationale, blocked? }`.
+
+**Self-heal — stale snapshot:** if the result is `blocked: "no backend or frontend spec
+supplied"` *despite* a real `backend`/`frontend` spec, the `name:'feature'` form ran a
+within-session snapshot of an older `feature.js` (the harness snapshots by name and does
+not re-read mid-session edits). Re-launch via the absolute path instead:
+`Workflow({ scriptPath: '<repo-root>/.claude/workflows/feature.js', args: {...} })`
+(`<repo-root>` = `git rev-parse --show-toplevel`). Verified equivalent 2026-06-13.
 
 **Do NOT write source code yourself, and do NOT re-implement the build/review loop with
 raw `Agent` calls — launch the workflow.** If `Workflow` is unavailable, STOP and report

@@ -238,6 +238,8 @@ the heavy lane is opt-in via the workflow, with cost controlled by model tiering
 | Local `pytest` gives a false-pass signal — `backend/conftest.py`'s SQLite override is not load-bearing for direct-DB tests | MEDIUM | CI is the validation gate — green CI, not local pytest |
 | `reporter-inline`'s `meta.head` in `state.js` is the pre-squash develop SHA, lags one PR | LOW (by design) | Self-correcting next pass |
 | Workflow `agent()` model defaults to inherit (Opus) — an unpinned worker silently runs Opus | MEDIUM | Pin `model` on every `agent()` call in `.claude/workflows/*.js` (§ 1.1) |
+| Workflow `args` arrives as a JSON **string** across the background-task boundary, not a parsed object | MEDIUM | The script parses it (`feature.js` top); any new workflow reading `args` as an object must `JSON.parse` if `typeof args === 'string'`. Verified by dry-run 2026-06-13 |
+| `Workflow({name:'X'})` snapshots the script by name and does not re-read mid-session edits | LOW | After editing a workflow in-session, relaunch via `Workflow({scriptPath:'<abs>/.claude/workflows/X.js'})`. Fresh sessions load the committed file |
 
 ## 9. Key rules
 
