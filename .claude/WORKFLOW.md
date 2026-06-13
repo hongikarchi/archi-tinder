@@ -84,6 +84,7 @@ pins Sonnet on workers and Opus on the verify pass.
 | Workflow | Role | Touches |
 |----------|------|---------|
 | **feature** | Build+review CORE: decompose → back/front-maker → code-review + security-manager → Opus adversarial-verify → 2-cycle fix loop. Returns `commitReady`; runs no git | spawns agents only |
+| **review** | Heavy multi-dimensional adversarial review of the branch diff (correctness / security / performance / simplicity, Sonnet) → per-finding Opus verify via `pipeline()`. Read-only. Launch: `Workflow({name:'review', args:{range:'origin/develop...HEAD'}})` | read-only (spawns agents) |
 
 ### Skills (`.claude/skills/`) — main session runs these itself
 

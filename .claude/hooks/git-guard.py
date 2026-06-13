@@ -57,6 +57,9 @@ def main():
             targets_protected = False
             for t in refspecs:
                 dst = t.split(":")[-1]                 # dst side of a refspec
+                if t.startswith("+") or dst.startswith("+"):
+                    forced = True                      # `+ref` is git's force shorthand
+                dst = dst.lstrip("+")
                 leaf = dst.rsplit("/", 1)[-1]          # final path component
                 if dst in PROTECTED or leaf in PROTECTED:
                     targets_protected = True
@@ -77,15 +80,19 @@ def main():
                 deny("force-push to a protected branch (develop/main) is the "
                      "post-deploy carve-out only — git-publisher Mode 3 "
                      "(CLAUDE.md HARD RULE 4).")
-            if targets_protected:
+            elif targets_protected:
                 deny("direct push to a protected branch (develop/main). Push "
                      "from feature/* and merge via PR; the git-publish skill "
                      "handles feature->develop (CLAUDE.md HARD RULE 1/3).")
 
         elif p.startswith("gh pr create"):
-            if re.search(r"--base[=\s]+main\b", p):
-                deny("PR base=main is Mode 3 deploy territory — git-publisher "
-                     "agent + explicit deploy keyword. Default base is develop.")
+            # base=main is Mode 3 deploy territory. The ONLY sanctioned base=main
+            # PR is the deploy PR `--base main --head develop` (git-publisher.md) —
+            # carve it out so the guard does not break the deploy workflow.
+            if re.search(r"--base[=\s]+main\b", p) and not re.search(r"--head[=\s]+develop\b", p):
+                deny("PR base=main from a non-develop head is Mode 3 deploy "
+                     "territory — git-publisher agent + explicit deploy keyword. "
+                     "(base=main + head=develop, the sanctioned deploy PR, is allowed.)")
 
     sys.exit(0)
 
