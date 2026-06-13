@@ -255,7 +255,7 @@ class TestOfficeDetailView:
         )
         # Mock cursor returning canonical_v2_buildings row shape:
         # (canonical_bld_id, name, project_year, program, location_city,
-        #  display_cover_url, cover_image_url_default, covers_by_type, all_images)
+        #  display_cover_url, cover_image_url_default, covers_by_type, all_images, year_kind)
         mock_cur = MagicMock()
         mock_cur.fetchall.return_value = [
             (
@@ -268,6 +268,7 @@ class TestOfficeDetailView:
                 None,   # cover_image_url_default
                 None,   # covers_by_type
                 None,   # all_images
+                'completed',   # year_kind
             ),
         ]
         mock_connections.__getitem__.return_value.cursor.return_value.__enter__.return_value = mock_cur
@@ -284,6 +285,7 @@ class TestOfficeDetailView:
         assert proj['year'] == 2004
         assert proj['program'] == 'Public'
         assert proj['city'] == 'Seattle'
+        assert proj['year_kind'] == 'completed'
         assert proj['image_url'] == 'https://cdn.divisare.com/images/bld_000344/cover.jpg'
         # Must NOT use R2 composition (IMAGE_BASE_URL + key) — image is a full CDN URL
         assert proj['image_url'].startswith('https://')
