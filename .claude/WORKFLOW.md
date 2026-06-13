@@ -84,6 +84,7 @@ pins Sonnet on workers and Opus on the verify pass.
 | Workflow | Role | Touches |
 |----------|------|---------|
 | **feature** | Build+review CORE: decompose → back/front-maker → code-review + security-manager → Opus adversarial-verify → 2-cycle fix loop. Returns `commitReady`; runs no git | spawns agents only |
+| **review** | Heavy multi-dimensional adversarial review of the branch diff (correctness / security / performance / simplicity, Sonnet) → per-finding Opus verify via `pipeline()`. Read-only. Launch: `Workflow({name:'review', args:{range:'origin/develop...HEAD'}})` | read-only (spawns agents) |
 
 ### Skills (`.claude/skills/`) — main session runs these itself
 
@@ -229,6 +230,7 @@ the heavy lane is opt-in via the workflow, with cost controlled by model tiering
 4. **Skill-first for git ops** — `git-commit`, `git-publish` run in-context; dispatch `git-publisher` agent only on the escalation matrix. Each agent dispatch costs 14-46k tokens + round-trip latency.
 5. **Bundle trivial commits; push only on push-worthy** — push-worthy = milestone / production code / migration / risky-zone (auth, token, external API, ≥4-file refactor) / explicit "지금 push" / session end. Each push runs app-test's drift check over the whole range, so bundling loses no protection.
    **Publish gate enforcement (post-PR #105 / #116 / #117)**: `git-publish` Step 0 + `orchestrate` Step 7 + `git-publisher` guardrails 7-8 — after commit, default STOP. Push/PR/merge requires explicit keyword (`push`, `올려`, `PR`, `배포`, `merge`, `deploy`, `ship`) OR an active `.claude/plans/<slug>.md`.
+   **Deterministic harness guard (Phase 2)**: `.claude/hooks/git-guard.py` — a `PreToolUse(Bash)` hook wired in project `.claude/settings.json` — blocks at the tool layer: direct/force push to `develop`/`main`, `git push --no-verify`, and `gh pr create --base main`. ALLOWS `feature/*` pushes + `gh pr merge --admin`. FAIL-OPEN (parse/exec error → allow; GitHub branch protection is the server-side backstop). Converts the CLAUDE.md git HARD RULEs from prose-the-model-must-remember into harness enforcement. Activates at session start; edit + re-test via `.claude/hooks/git-guard.py` standalone (stdin JSON `{"tool_input":{"command":"..."}}`, exit 2 = block).
 
 ## 8. Known issues
 

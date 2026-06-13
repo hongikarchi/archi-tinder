@@ -86,6 +86,7 @@
     - `gh pr create --base main` outside Mode 3 deploy. Default base is `develop`.
     - `--force` / `--force-with-lease` on a shared branch (single carve-out = post-deploy develop force-reset, agent Mode 3 only).
     - `--no-verify`, `--amend` on a pushed commit, `git rebase -i`, `git reset --hard` on shared branches.
+  - **Deterministic enforcement** — `.claude/hooks/git-guard.py` (`PreToolUse(Bash)`, wired in project `.claude/settings.json`) blocks the Forbidden push/PR commands at the tool layer (direct/force push to develop/main, `git push --no-verify`, `gh pr create --base main` except the `--head develop` deploy PR). Fail-open; GitHub branch protection is the server-side backstop. Edit + re-test the guard standalone (stdin JSON, exit 2 = block).
   - **Publish gate** (mirror `[[feedback_publish_gate]]`): the `git-publish` skill Step 0 enforces. After commit, default action is STOP. Push / PR / merge requires explicit publish keyword (Korean: `올려`, `푸시`, `배포`, `merge`, `PR 만들어`, `배포해`, `deploy`, `ship`; English: `push`, `open PR`, `merge`, `deploy`, `ship`) OR an active `.claude/plans/<slug>.md` authorizing the action.
 
   ## Rules

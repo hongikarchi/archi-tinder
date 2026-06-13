@@ -8,6 +8,8 @@
 !.claude/skills/
 !.claude/plans/
 !.claude/workflows/
+!.claude/hooks/
+!.claude/settings.json
 !.claude/WORKFLOW.md
 !.claude/reviews/
 
