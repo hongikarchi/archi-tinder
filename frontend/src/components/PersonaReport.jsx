@@ -114,6 +114,7 @@ const SPECTRUM_AXES = [
  */
 export default function PersonaReport({ boardId, finalReport, axisScores, reportImage, reportImageMime }) {
   const [localImage, setLocalImage] = useState(reportImage || null)
+  const [localMime, setLocalMime] = useState(reportImageMime || null)
   const [localAxisScores, setLocalAxisScores] = useState(axisScores || DEFAULT_AXES)
   const [imgGenLoading, setImgGenLoading] = useState(false)
   const [imgError, setImgError] = useState(null)
@@ -123,6 +124,7 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
   // Sync when props change (e.g. image loads asynchronously after initial render)
   useEffect(() => { if (axisScores) setLocalAxisScores(axisScores) }, [axisScores])
   useEffect(() => { if (reportImage) setLocalImage(reportImage) }, [reportImage])
+  useEffect(() => { if (reportImageMime) setLocalMime(reportImageMime) }, [reportImageMime])
 
   const report = finalReport || {}
   const scores = localAxisScores
@@ -135,6 +137,7 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
       const res = await generateReportImage(boardId)
       if (res?.image_data) {
         setLocalImage(res.image_data)
+        if (res.mime_type) setLocalMime(res.mime_type)
       } else {
         setImgError('이미지 생성에 실패했습니다.')
       }
@@ -321,7 +324,7 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
       {localImage ? (
         <div style={{ position: 'relative', marginBottom: 14 }}>
           <img
-            src={`data:${reportImageMime || 'image/png'};base64,${localImage}`}
+            src={`data:${localMime || 'image/png'};base64,${localImage}`}
             alt="Persona"
             style={{
               width: '100%',
@@ -332,8 +335,8 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
             }}
           />
           <a
-            href={`data:${reportImageMime || 'image/png'};base64,${localImage}`}
-            download={`persona-${boardId || 'report'}.${(reportImageMime || 'image/png').split('/')[1] || 'png'}`}
+            href={`data:${localMime || 'image/png'};base64,${localImage}`}
+            download={`persona-${boardId || 'report'}.${(localMime || 'image/png').split('/')[1] || 'png'}`}
             style={{
               position: 'absolute',
               bottom: 10,
