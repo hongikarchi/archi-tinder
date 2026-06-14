@@ -50,10 +50,8 @@ function cropAndScale(file) {
 export default function ProfileHero({
   user,
   boardsTotalCount,
-  followerCount,
   savedStudiosCount,
   onSelectTab,
-  onOpenFollowModal,
   // Avatar upload props (owner-only)
   isMe,
   onAvatarUpdated,
@@ -74,8 +72,6 @@ export default function ProfileHero({
   const stats = [
     { count: boardsTotalCount, label: 'Boards', onClick: () => onSelectTab('boards') },
     { count: savedStudiosCount ?? 0, label: 'Studios', onClick: () => onSelectTab('studios') },
-    { count: followerCount, label: 'Followers', onClick: () => onOpenFollowModal('followers') },
-    { count: user.following_count, label: 'Following', onClick: () => onOpenFollowModal('following') },
   ]
 
   const handleFileChange = useCallback(async (e) => {
@@ -236,7 +232,7 @@ export default function ProfileHero({
           </p>
         )}
 
-        {/* Compact stats row — 4 items: Boards · Studios · Followers · Following */}
+        {/* Compact stats row — 2 items: Boards · Studios */}
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           gap: 0, marginTop: 14, marginBottom: 4,

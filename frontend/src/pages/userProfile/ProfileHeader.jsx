@@ -6,9 +6,6 @@ export default function ProfileHeader({
   handle,
   onLogout,
   onShare,
-  onFollow,
-  isFollowing,
-  isFollowingPending,
 }) {
   const navigate = useNavigate()
 
@@ -153,35 +150,6 @@ export default function ProfileHeader({
             onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--color-text-dim)' }}
           >
             <IconShare width={18} height={18} />
-          </button>
-
-          {/* Follow button */}
-          <button
-            onClick={onFollow}
-            disabled={isFollowingPending}
-            style={{
-              minHeight: 38, padding: '0 16px',
-              borderRadius: 'var(--radius-md)',
-              background: isFollowing ? 'var(--color-surface-2)' : 'linear-gradient(135deg,#ec4899,#f43f5e)',
-              color: isFollowing ? 'var(--color-text-2)' : '#fff',
-              border: isFollowing ? '1px solid var(--color-border)' : 'none',
-              fontSize: 14, fontWeight: 700,
-              cursor: isFollowingPending ? 'not-allowed' : 'pointer',
-              fontFamily: 'inherit',
-              display: 'flex', alignItems: 'center', gap: 5,
-              transition: 'background 0.2s, color 0.2s',
-              whiteSpace: 'nowrap',
-              opacity: isFollowingPending ? 0.7 : 1,
-            }}
-          >
-            {isFollowing ? (
-              <>
-                Following
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="6 9 12 15 18 9" />
-                </svg>
-              </>
-            ) : 'Follow'}
           </button>
         </div>
       )}
