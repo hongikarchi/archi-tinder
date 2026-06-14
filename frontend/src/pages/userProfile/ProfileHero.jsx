@@ -1,5 +1,4 @@
 import { Fragment, useState, useCallback } from 'react'
-import BioPersonaFlipCard from '../../components/profile/BioPersonaFlipCard'
 import { uploadAvatar } from '../../api/profiles.js'
 import styles from './ProfileHero.module.css'
 
@@ -263,13 +262,6 @@ export default function ProfileHero({
           ))}
         </div>
 
-        {/* Hero Flip — BioPersonaFlipCard */}
-        {user.persona_summary && (
-          <BioPersonaFlipCard
-            bio={user.bio}
-            persona={user.persona_summary}
-          />
-        )}
 
         {/* External links — Instagram + email + website pills */}
         {(igUrl || emailUrl || websiteUrl) && (
