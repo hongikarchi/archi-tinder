@@ -123,8 +123,6 @@ REST_FRAMEWORK = {
         # Scoped throttle for the anonymous image-load telemetry beacon.
         # Budget: ~1-2 images/card × 30 swipes/min = 60-90 events/min; 120/min is a safe cap.
         'image_load_telemetry': '120/min',
-        # Follow/unfollow write throttle — prevents mass-follow bots.
-        'follow_write': '60/min',
         # React/unreact write throttle — prevents bulk-reaction abuse (SOC2).
         'reaction_write': '60/min',
         # Guest auth throttles — operator-overridable without code changes.

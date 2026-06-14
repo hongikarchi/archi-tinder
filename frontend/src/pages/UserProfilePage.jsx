@@ -1,11 +1,10 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getUserProfile, followUser, unfollowUser } from '../api/client.js'
+import { getUserProfile } from '../api/client.js'
 import { updateProject, deleteProject } from '../api/projects.js'
 import { purgeChatCache } from '../utils/appHelpers.js'
 import { getUserSavedStudios } from '../api/architects.js'
 import ShareCardModal from '../components/ShareCardModal.jsx'
-import FollowListModal from '../components/profile/FollowListModal.jsx'
 import ProfileHeader from './userProfile/ProfileHeader'
 import ProfileHero from './userProfile/ProfileHero'
 import BoardGrid from './userProfile/BoardGrid'
@@ -41,10 +40,6 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  const [isFollowing, setIsFollowing] = useState(false)
-  const [isFollowingPending, setIsFollowingPending] = useState(false)
-  const [followerCount, setFollowerCount] = useState(0)
-
   // Boards pagination state — separate from user profile so we can append incrementally
   const [boards, setBoards] = useState([])
   const [boardsTotalCount, setBoardsTotalCount] = useState(0)
@@ -55,8 +50,6 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
 
   // Share card modal
   const [shareOpen, setShareOpen] = useState(false)
-  // Follow list modal — null | 'followers' | 'following'
-  const [followModal, setFollowModal] = useState(null)
   // Tab state — 'boards' | 'studios'
   const [activeTab, setActiveTab] = useState('boards')
   const [savedStudios, setSavedStudios] = useState(null)  // null = not loaded yet
@@ -129,8 +122,6 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         setBoardsPage(boardsPayload.page ?? 1)
         // Store profile without boards — boards are in separate state
         setUser({ ...data, boards: undefined })
-        setIsFollowing(data.is_following ?? false)
-        setFollowerCount(data.follower_count ?? 0)
       })
       .catch(err => {
         if (cancelled) return
@@ -194,31 +185,6 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
     document.addEventListener('mousedown', handleOutside)
     return () => document.removeEventListener('mousedown', handleOutside)
   }, [confirmingBulkDelete])
-
-  async function handleToggleFollow() {
-    if (isMe || isFollowingPending) return
-    setIsFollowingPending(true)
-    const wasFollowing = isFollowing
-    // Optimistic update
-    setIsFollowing(!wasFollowing)
-    setFollowerCount(c => Math.max(0, c + (wasFollowing ? -1 : 1)))
-    try {
-      if (wasFollowing) {
-        await unfollowUser(effectiveUserId)
-      } else {
-        const res = await followUser(effectiveUserId)
-        // Server-authoritative count if returned
-        if (res?.follower_count != null) setFollowerCount(res.follower_count)
-      }
-    } catch (err) {
-      // Rollback on failure
-      setIsFollowing(wasFollowing)
-      setFollowerCount(c => Math.max(0, c + (wasFollowing ? 1 : -1)))
-      console.error('[follow]', err)
-    } finally {
-      setIsFollowingPending(false)
-    }
-  }
 
   // Optimistic visibility toggle — reverts on API failure.
   // MINOR #3: per-board pending guard blocks rapid double-toggle stale-prev race.
@@ -426,9 +392,6 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         handle={user?.handle}
         onLogout={onLogout}
         onShare={() => setShareOpen(true)}
-        onFollow={handleToggleFollow}
-        isFollowing={isFollowing}
-        isFollowingPending={isFollowingPending}
       />
 
       {/* Unified responsive container (max-width 1100) */}
@@ -437,10 +400,8 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         <ProfileHero
           user={user}
           boardsTotalCount={boardsTotalCount}
-          followerCount={followerCount}
           savedStudiosCount={user.saved_studios_count ?? 0}
           onSelectTab={(t) => t === 'studios' ? handleStudiosTab() : setActiveTab('boards')}
-          onOpenFollowModal={(m) => setFollowModal(m)}
           isMe={isMe}
           onAvatarUpdated={(updatedUser) => setUser(prev => ({ ...prev, avatar_url: updatedUser.avatar_url }))}
         />
@@ -873,15 +834,6 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
       {/* Share card modal */}
       {shareOpen && user && (
         <ShareCardModal user={user} onClose={() => setShareOpen(false)} />
-      )}
-
-      {/* Follow list modal — followers / following */}
-      {followModal && user && (
-        <FollowListModal
-          userId={user.user_id}
-          mode={followModal}
-          onClose={() => setFollowModal(null)}
-        />
       )}
     </div>
   )
