@@ -333,7 +333,7 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
           />
           <a
             href={`data:${reportImageMime || 'image/png'};base64,${localImage}`}
-            download={`persona-${boardId || 'report'}.png`}
+            download={`persona-${boardId || 'report'}.${(reportImageMime || 'image/png').split('/')[1] || 'png'}`}
             style={{
               position: 'absolute',
               bottom: 10,
