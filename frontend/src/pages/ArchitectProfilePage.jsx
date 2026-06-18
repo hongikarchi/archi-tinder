@@ -651,7 +651,7 @@ export default function ArchitectProfilePage() {
                       <BuildingCard
                         key={building.canonical_bld_id}
                         building={building}
-                        onClick={id => navigate('/buildings/' + id)}
+                        onClick={id => navigate('/buildings/' + id, { state: { fromRecommended: true } })}
                         onSave={(b) => setSaveCard(b)}
                         isSaved={savedIds.has(building.canonical_bld_id)}
                       />

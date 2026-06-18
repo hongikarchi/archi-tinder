@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { bookmarkBuilding, listProjects } from '../api/client.js'
 import { createProject, VerifyRequiredError } from '../api/projects.js'
+import { useLanguage } from '../hooks/useLanguage.js'
 
 function getCardId(card) {
   return card?.canonical_bld_id || card?.image_id || card?.building_id || null
@@ -42,6 +43,8 @@ function ProjectRow({ project, disabled, onClick }) {
 }
 
 export default function SaveToBoardModal({ card, onClose, onSaved }) {
+  const { language } = useLanguage()
+  const isKo = language === 'ko'
   const [boards, setBoards] = useState([])
   const [loading, setLoading] = useState(false)
   const [busyProjectId, setBusyProjectId] = useState('')
@@ -156,7 +159,7 @@ export default function SaveToBoardModal({ card, onClose, onSaved }) {
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h3 style={{ fontSize: 17, margin: 0, fontWeight: 800 }}>Save to board</h3>
+          <h3 style={{ fontSize: 17, margin: 0, fontWeight: 800 }}>{isKo ? '보드에 저장' : 'Save to board'}</h3>
           <button
             type="button"
             onClick={onClose}
@@ -265,10 +268,19 @@ export default function SaveToBoardModal({ card, onClose, onSaved }) {
         {loading ? (
           <div className="skeleton-shimmer" style={{ height: 90, borderRadius: 12 }} />
         ) : (
+          <>
+            <p style={{
+              margin: '0 0 8px',
+              fontSize: 11, fontWeight: 800,
+              letterSpacing: '0.08em', textTransform: 'uppercase',
+              color: 'var(--color-text-muted)',
+            }}>
+              Liked Projects
+            </p>
           <div style={{ display: 'grid', gap: 8, maxHeight: '40vh', overflowY: 'auto', marginRight: -16, paddingRight: 16 }}>
             {boards.length === 0 ? (
               <p style={{ margin: 0, color: 'var(--color-text-dimmer)', fontSize: 13 }}>
-                No boards yet
+                {isKo ? '보드가 없어요' : 'No boards yet'}
               </p>
             ) : boards.map((project) => {
               const projectId = project?.project_id || project?.id
@@ -283,6 +295,7 @@ export default function SaveToBoardModal({ card, onClose, onSaved }) {
               )
             })}
           </div>
+          </>
         )}
       </div>
     </div>
