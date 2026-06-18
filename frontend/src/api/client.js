@@ -16,4 +16,4 @@ export { fetchDiscoveryFeed, discoveryFeedback, promoteToTaste, fetchBoardSurpri
 export { getOffice, getUserProfile, updateMyProfile } from './profiles.js'
 export { getProjectReactors, reactToProject, unreactToProject } from './social.js'
 export { addLikedBuilding, getLikedBuildings } from './liked.js'
-export { getRecommendedArchitects, getArchitectProfile } from './architects.js'
+export { getRecommendedArchitects, getArchitectProfile, getUserSavedStudios } from './architects.js'

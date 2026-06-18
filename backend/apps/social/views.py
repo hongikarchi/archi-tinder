@@ -215,6 +215,23 @@ class UserSavedStudiosView(APIView):
 
         meta_map = {row[0]: row for row in rows}
 
+        with connections['buildings'].cursor() as cur:
+            cur.execute(
+                """
+                SELECT DISTINCT ON (unnested_id) unnested_id AS architect_id,
+                       cover_image_url_default
+                FROM canonical_v2_buildings,
+                     unnest(architect_canonical_ids) AS unnested_id
+                WHERE unnested_id = ANY(%s)
+                  AND is_publishable = true
+                ORDER BY unnested_id, project_year DESC NULLS LAST
+                """,
+                [arch_ids],
+            )
+            cover_rows = cur.fetchall()
+
+        cover_map = {row[0]: row[1] for row in cover_rows}
+
         result = []
         for f in follows:
             arch_id = f['architect_id']
@@ -225,6 +242,7 @@ class UserSavedStudiosView(APIView):
                 'logo_url': row[2] if row and row[2] else '',
                 'primary_country': row[3] if row and row[3] else '',
                 'followed_at': f['followed_at'],
+                'cover_image_url': cover_map.get(arch_id, ''),
             })
 
         return Response(result, status=status.HTTP_200_OK)
