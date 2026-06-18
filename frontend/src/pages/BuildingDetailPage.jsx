@@ -89,18 +89,17 @@ export default function BuildingDetailPage() {
   const drawings = useMemo(() => galleryMeta.filter(g => g.kind === 'drawing'), [galleryMeta])
   const [galleryFilter, setGalleryFilter] = useState('all')  // 'all' | 'photos' | 'drawings'
 
+  const title = building?.image_title || buildingId || 'Building'
+
   // Flat image list for lightbox, ordered to match what's visible under current filter
   const lightboxImages = useMemo(() => {
     if (galleryMeta.length > 0) {
-      const visiblePhotos  = galleryFilter !== 'drawings' ? photos  : []
-      const visibleDrawings = galleryFilter !== 'photos'  ? drawings : []
+      const visiblePhotos   = galleryFilter !== 'drawings' ? photos   : []
+      const visibleDrawings = galleryFilter !== 'photos'   ? drawings : []
       return [...visiblePhotos, ...visibleDrawings].map(g => ({ url: g.url, alt: kindLabel(g.kind) }))
     }
-    // Fallback: plain gallery URLs
     return gallery.map(url => ({ url, alt: title }))
   }, [galleryMeta, galleryFilter, photos, drawings, gallery, title])
-
-  const title = building?.image_title || buildingId || 'Building'
   const architect = building?.metadata?.axis_architects
   const detailDescription = building?.metadata?.visual_description || building?.metadata?.description || null
   const description = building?.metadata?.axis_atmosphere || 'No atmosphere description is available yet.'
