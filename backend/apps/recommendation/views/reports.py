@@ -31,8 +31,11 @@ class ProjectReportGenerateView(APIView):
         if not liked_id_strings:
             return Response({'detail': 'No liked buildings yet'}, status=status.HTTP_400_BAD_REQUEST)
 
+        axis_scores = compute_axis_scores(liked_id_strings)
+        language = getattr(profile, 'language', 'ko') or 'ko'
+
         try:
-            report = services.generate_persona_report(liked_id_strings)
+            report = services.generate_persona_report(liked_id_strings, axis_scores=axis_scores, language=language)
         except (ValueError, RuntimeError) as e:
             return Response(
                 {'detail': str(e), 'error_type': type(e).__name__},
@@ -44,8 +47,6 @@ class ProjectReportGenerateView(APIView):
                 {'detail': 'No building data found for report generation'},
                 status=status.HTTP_404_NOT_FOUND,
             )
-
-        axis_scores = compute_axis_scores(liked_id_strings)
 
         project.final_report = report
         project.axis_scores = axis_scores

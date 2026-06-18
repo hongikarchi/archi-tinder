@@ -18,17 +18,42 @@ from google.genai import types
 
 logger = logging.getLogger('apps.recommendation')
 
-_PERSONA_PROMPT = """You are an architectural taste analyst. Based on the buildings a user has liked, generate a short persona archetype that describes their architectural aesthetic.
+_PERSONA_PROMPT_BASE = """You are an architectural taste analyst. Based on the buildings a user has liked and their 5-axis taste scores, generate a persona archetype.
 
+The 5 axes range from -1.0 to +1.0:
+- form: -1.0 = geometric/rectilinear, +1.0 = organic/curved
+- materiality: -1.0 = industrial materials (concrete, steel, glass), +1.0 = natural materials (wood, stone, earth)
+- scale: -1.0 = monumental/civic, +1.0 = intimate/human-scaled
+- energy: -1.0 = dynamic/expressive, +1.0 = static/calm
+- tradition: -1.0 = experimental/avant-garde, +1.0 = traditional/contextual
+
+Rules for description:
+- Write exactly 2-3 sentences, no more.
+- Any axis with absolute value >= 0.7 MUST be reflected with specific architectural language.
+- Use concrete terms: materials, spatial quality, structural expression, scale references, atmosphere.
+- Avoid marketing language: no "unique journey", "tell a story", "pushes boundaries", "cutting-edge".
+- Ground the description in what the buildings actually look and feel like.
+{lang_instruction}
 Return ONLY valid JSON with this exact structure:
-{
-  "persona_type": "A short poetic name like 'The Minimalist' or 'The Pragmatist'",
-  "one_liner": "A single evocative sentence about their taste",
-  "description": "2-3 sentences elaborating on their architectural sensibility",
+{{
+  "persona_type": "A short precise name like 'The Brutalist' or 'The Regionalist'",
+  "one_liner": "A single concrete sentence about their taste in architectural terms",
+  "description": "2-3 sentences grounded in material, scale, and spatial qualities — reflecting high-magnitude axis scores",
   "dominant_programs": ["list of program types from: Housing, Office, Museum, Education, Religion, Sports, Transport, Hospitality, Healthcare, Public, Mixed Use, Landscape, Infrastructure, Other"],
   "dominant_styles": ["2-3 architectural style words"],
   "dominant_materials": ["2-3 material words"]
-}"""
+}}"""
+
+_LANG_INSTRUCTION_KO = (
+    "- Write persona_type, one_liner, and description in Korean. "
+    "dominant_programs, dominant_styles, dominant_materials stay in English.\n"
+)
+_LANG_INSTRUCTION_EN = ""
+
+
+def _build_persona_prompt(language='ko'):
+    lang_instr = _LANG_INSTRUCTION_KO if language == 'ko' else _LANG_INSTRUCTION_EN
+    return _PERSONA_PROMPT_BASE.format(lang_instruction=lang_instr)
 
 
 def generate_visual_description(filters, raw_query, user_id):
@@ -199,9 +224,11 @@ def generate_visual_description(filters, raw_query, user_id):
         )
 
 
-def generate_persona_report(liked_building_ids):
+def generate_persona_report(liked_building_ids, axis_scores=None, language='ko'):
     """
     Generate an architect persona report from a list of liked canonical_bld_ids.
+    axis_scores: optional dict {form, materiality, scale, energy, tradition} (-1.0~1.0).
+    language: 'ko' (default) or 'en' — controls output language of text fields.
     Returns a dict with persona fields on success.
     Raises an exception with a descriptive message on failure (caller handles response).
     Returns None only if no building data is found.
@@ -248,6 +275,29 @@ def generate_persona_report(liked_building_ids):
         f"Countries: {', '.join(countries)}"
     )
 
+    if axis_scores:
+        _AXIS_LABELS = {
+            'form':        ('geometric', 'organic'),
+            'materiality': ('industrial materials', 'natural materials'),
+            'scale':       ('monumental', 'intimate'),
+            'energy':      ('dynamic', 'static/calm'),
+            'tradition':   ('experimental', 'traditional'),
+        }
+        axis_lines = []
+        strong_axes = []
+        for axis, (neg_label, pos_label) in _AXIS_LABELS.items():
+            score = axis_scores.get(axis, 0.0)
+            direction = pos_label if score > 0 else neg_label
+            axis_lines.append(f"  {axis}: {score:+.2f} (leans {direction})")
+            if abs(score) >= 0.7:
+                strong_axes.append(f"{axis} ({direction}, {score:+.2f})")
+        summary += "\n\nTaste axis scores (−1.0 to +1.0):\n" + '\n'.join(axis_lines)
+        if strong_axes:
+            summary += (
+                "\n\nStrong signals (|score| >= 0.7) — MUST appear in description: "
+                + ', '.join(strong_axes)
+            )
+
     try:
         client = _svc._get_client()
 
@@ -255,7 +305,7 @@ def generate_persona_report(liked_building_ids):
             client,
             contents=summary,
             config=types.GenerateContentConfig(
-                system_instruction=_PERSONA_PROMPT,
+                system_instruction=_build_persona_prompt(language),
                 response_mime_type='application/json',
                 temperature=0.7,
                 thinking_config=types.ThinkingConfig(thinking_budget=0),
