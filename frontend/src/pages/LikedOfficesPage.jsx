@@ -4,7 +4,7 @@ import { getUserSavedStudios, getArchitectProfile } from '../api/client.js'
 
 /* ── Placeholder SVG icons ──────────────────────────────────────────────── */
 
-function BuildingPlaceholderSmall() {
+export function BuildingPlaceholderSmall() {
   return (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-text-muted)', opacity: 0.5 }}>
       <rect x="3" y="9" width="13" height="13" rx="1" />
@@ -15,7 +15,7 @@ function BuildingPlaceholderSmall() {
   )
 }
 
-function BuildingPlaceholderLarge() {
+export function BuildingPlaceholderLarge() {
   return (
     <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-text-muted)', opacity: 0.4 }}>
       <rect x="3" y="9" width="13" height="13" rx="1" />
@@ -28,7 +28,7 @@ function BuildingPlaceholderLarge() {
   )
 }
 
-function BuildingIconEmpty() {
+export function BuildingIconEmpty() {
   return (
     <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-text-muted)', opacity: 0.45 }}>
       <rect x="2" y="7" width="14" height="15" rx="1" />
@@ -45,7 +45,7 @@ function BuildingIconEmpty() {
 
 /* ── BuildingCarousel ───────────────────────────────────────────────────── */
 
-function BuildingCarousel({ buildings, fallbackUrl, altText, onNavigate }) {
+export function BuildingCarousel({ buildings, fallbackUrl, altText, onNavigate }) {
   // null → still loading (show existing cover image as fallback)
   // []   → loaded but no buildings (show placeholder)
   // [..] → show carousel
@@ -131,7 +131,7 @@ function BuildingCarousel({ buildings, fallbackUrl, altText, onNavigate }) {
 
 /* ── OfficeCard ─────────────────────────────────────────────────────────── */
 
-function OfficeCard({ office, buildings, onClick }) {
+export function OfficeCard({ office, buildings, onClick }) {
   return (
     <div
       onClick={onClick}
@@ -191,7 +191,7 @@ function OfficeCard({ office, buildings, onClick }) {
 
 /* ── Skeleton card ──────────────────────────────────────────────────────── */
 
-function SkeletonCard() {
+export function SkeletonCard() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>

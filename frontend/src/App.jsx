@@ -929,7 +929,7 @@ export default function App() {
           <Route path="board/:boardId" element={<BoardDetailPage />} />
           <Route path="board/:boardId/report" element={<BoardReportPage />} />
           <Route path="liked-projects" element={<LikedProjectsPage />} />
-          <Route path="my/liked-offices" element={<LikedOfficesPage />} />
+          <Route path="my/liked-offices" element={<Navigate to="/my/profile" replace />} />
           <Route path="architects/:architectId" element={<ArchitectProfilePage />} />
           <Route path="settings" element={<SettingsPage />}>
             <Route path="edit-profile" element={<EditProfileScreen />} />
