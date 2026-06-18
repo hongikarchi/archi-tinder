@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getUserSavedStudios } from '../api/client.js'
+import { getUserSavedStudios, getArchitectProfile } from '../api/client.js'
 
 /* ── Placeholder SVG icons ──────────────────────────────────────────────── */
 
@@ -43,9 +43,95 @@ function BuildingIconEmpty() {
   )
 }
 
+/* ── BuildingCarousel ───────────────────────────────────────────────────── */
+
+function BuildingCarousel({ buildings, fallbackUrl, altText, onNavigate }) {
+  // null → still loading (show existing cover image as fallback)
+  // []   → loaded but no buildings (show placeholder)
+  // [..] → show carousel
+
+  if (buildings === null || buildings === undefined) {
+    return (
+      <div
+        onClick={e => { e.stopPropagation(); onNavigate?.() }}
+        style={{
+          width: '100%', aspectRatio: '16 / 10', borderRadius: 12,
+          overflow: 'hidden', background: 'var(--color-surface-2)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}
+      >
+        {fallbackUrl ? (
+          <img
+            src={fallbackUrl}
+            alt={altText}
+            loading="lazy"
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          />
+        ) : (
+          <BuildingPlaceholderLarge />
+        )}
+      </div>
+    )
+  }
+
+  if (buildings.length === 0) {
+    return (
+      <div style={{
+        width: '100%', aspectRatio: '16 / 10', borderRadius: 12,
+        background: 'var(--color-surface-2)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <BuildingPlaceholderLarge />
+      </div>
+    )
+  }
+
+  return (
+    <div
+      className="building-carousel"
+      onClick={e => e.stopPropagation()}
+      style={{
+        display: 'flex',
+        overflowX: 'auto',
+        scrollSnapType: 'x mandatory',
+        gap: 8,
+        borderRadius: 12,
+      }}
+    >
+      {buildings.map((bld, i) => (
+        <div
+          key={bld.canonical_bld_id || i}
+          onClick={e => { e.stopPropagation(); onNavigate?.() }}
+          style={{
+            flex: '0 0 80%',
+            flexShrink: 0,
+            scrollSnapAlign: 'start',
+            borderRadius: 12,
+            overflow: 'hidden',
+            aspectRatio: '16 / 10',
+            background: 'var(--color-surface-2)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          {bld.image_url ? (
+            <img
+              src={bld.image_url}
+              alt={bld.name_en || altText}
+              loading="lazy"
+              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+            />
+          ) : (
+            <BuildingPlaceholderLarge />
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 /* ── OfficeCard ─────────────────────────────────────────────────────────── */
 
-function OfficeCard({ office, onClick }) {
+function OfficeCard({ office, buildings, onClick }) {
   return (
     <div
       onClick={onClick}
@@ -92,32 +178,13 @@ function OfficeCard({ office, onClick }) {
         </div>
       </div>
 
-      {/* Cover image */}
-      <div style={{
-        width: '100%',
-        aspectRatio: '16 / 10',
-        borderRadius: 12,
-        overflow: 'hidden',
-        background: 'var(--color-surface-2)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}
-        className="office-card-img-wrap"
-      >
-        {office.cover_image_url ? (
-          <img
-            src={office.cover_image_url}
-            alt={office.name}
-            loading="lazy"
-            style={{
-              width: '100%', height: '100%', objectFit: 'cover', display: 'block',
-              transition: 'transform 220ms cubic-bezier(0.4,0,0.2,1)',
-            }}
-            className="office-card-img"
-          />
-        ) : (
-          <BuildingPlaceholderLarge />
-        )}
-      </div>
+      {/* Building carousel */}
+      <BuildingCarousel
+        buildings={buildings}
+        fallbackUrl={office.cover_image_url}
+        altText={office.name}
+        onNavigate={onClick}
+      />
     </div>
   )
 }
@@ -151,6 +218,8 @@ export default function LikedOfficesPage() {
   const [studios, setStudios] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  // architect_id → buildings[] (null = not yet fetched)
+  const [buildingsMap, setBuildingsMap] = useState({})
 
   function fetchStudios() {
     const rawUser = sessionStorage.getItem('archithon_user')
@@ -183,25 +252,41 @@ export default function LikedOfficesPage() {
     return cleanup
   }, [])
 
+  // Fetch architect profiles in parallel to get building lists for carousels
+  useEffect(() => {
+    if (!studios.length) return
+    studios.forEach(office => {
+      getArchitectProfile(office.architect_id)
+        .then(profile => {
+          setBuildingsMap(prev => ({
+            ...prev,
+            [office.architect_id]: profile?.buildings || [],
+          }))
+        })
+        .catch(() => {
+          setBuildingsMap(prev => ({ ...prev, [office.architect_id]: [] }))
+        })
+    })
+  }, [studios])
+
   return (
     <>
-      {/* CSS for card hover — CSS :hover pseudo-class per DESIGN.md §4 */}
+      {/* CSS for carousel scrollbar hiding */}
       <style>{`
-        .office-card-img-wrap:hover .office-card-img {
-          transform: scale(1.02);
-        }
+        .building-carousel::-webkit-scrollbar { display: none; }
+        .building-carousel { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
 
       <div style={{
         height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
         overflowY: 'auto',
-        background: '#0a0a0a',
+        background: 'var(--color-bg)',
         paddingBottom: 'calc(80px + env(safe-area-inset-bottom, 0px))',
       }}>
         {/* Sticky header */}
         <div style={{
           position: 'sticky', top: 0, zIndex: 10,
-          background: 'rgba(10,10,10,0.85)',
+          background: 'color-mix(in srgb, var(--color-bg) 72%, transparent)',
           backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
           padding: '12px 16px',
           display: 'flex', alignItems: 'center', gap: 8,
@@ -235,12 +320,12 @@ export default function LikedOfficesPage() {
         {/* Content area */}
         <div style={{ maxWidth: 480, margin: '0 auto', padding: '24px 20px' }}>
           {loading ? (
-            /* Skeleton (§8.8) */
+            /* Skeleton */
             <div style={{ display: 'flex', flexDirection: 'column', gap: 40 }}>
               {[0, 1, 2].map(i => <SkeletonCard key={i} />)}
             </div>
           ) : error ? (
-            /* Inline error (§8.9 tier 2) */
+            /* Inline error */
             <div style={{
               display: 'flex', flexDirection: 'column',
               alignItems: 'center', justifyContent: 'center',
@@ -266,7 +351,7 @@ export default function LikedOfficesPage() {
               </button>
             </div>
           ) : studios.length === 0 ? (
-            /* Empty state (§8.9 tier 1) */
+            /* Empty state */
             <div style={{
               display: 'flex', flexDirection: 'column',
               alignItems: 'center', justifyContent: 'center',
@@ -296,12 +381,13 @@ export default function LikedOfficesPage() {
               </button>
             </div>
           ) : (
-            /* Feed list — gap 40px between cards per spec */
+            /* Feed list */
             <div style={{ display: 'flex', flexDirection: 'column', gap: 40 }}>
               {studios.map((office, i) => (
                 <OfficeCard
                   key={office.architect_id || i}
                   office={office}
+                  buildings={buildingsMap[office.architect_id] ?? null}
                   onClick={() => navigate('/architects/' + office.architect_id)}
                 />
               ))}
