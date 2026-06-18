@@ -80,6 +80,10 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
   }, [])
 
   const handleStudiosTab = async () => {
+    if (isMe) {
+      navigate('/my/liked-offices')
+      return
+    }
     setActiveTab('studios')
     if (savedStudios !== null) return  // already loaded
     setStudiosLoading(true)
