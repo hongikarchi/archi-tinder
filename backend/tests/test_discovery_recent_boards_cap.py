@@ -83,26 +83,46 @@ class TestTierFromProjectRows:
         rows = [{'name': 'real_board', 'liked_ids': [{'id': f'bld_{i:06d}', 'intensity': 1.0} for i in range(15)]}]
         result = _tier_from_project_rows(rows)
         # 1 non-draft board, 15 likes >= tier2_min(10), < tier3_min_likes(50)
-        # project_count=1 < tier3_min_projects(2) → Tier 2
+        # project_count=1 < tier3_min_projects(4) → Tier 2
         assert result['tier'] == 2
         assert result['cumulative_likes'] == 15
         assert result['project_count'] == 1
 
-    def test_two_real_boards_tier3_by_project_count(self):
+    def test_two_real_boards_tier2_below_project_threshold(self):
+        """2 boards is below tier3_min_projects(4), so still Tier 2.
+
+        DISCOVERY-PERF-3: threshold raised from 2 → 4.
+        2 boards, 20 likes >= 10 (tier2), project_count=2 < 4 → Tier 2.
+        """
         from apps.recommendation.discovery_feed import _tier_from_project_rows
         rows = [
             {'name': 'board_a', 'liked_ids': [{'id': f'bld_{i:06d}', 'intensity': 1.0} for i in range(10)]},
             {'name': 'board_b', 'liked_ids': [{'id': f'bld_{i:06d}', 'intensity': 1.0} for i in range(10, 20)]},
         ]
         result = _tier_from_project_rows(rows)
-        assert result['tier'] == 3
+        assert result['tier'] == 2
         assert result['project_count'] == 2
+
+    def test_four_real_boards_tier3_by_project_count(self):
+        """4 boards meets tier3_min_projects(4) → Tier 3.
+
+        DISCOVERY-PERF-3: the new threshold. project_count=4 >= 4 → Tier 3.
+        """
+        from apps.recommendation.discovery_feed import _tier_from_project_rows
+        rows = [
+            {'name': f'board_{i}', 'liked_ids': [{'id': f'bld_{i * 10 + j:06d}', 'intensity': 1.0} for j in range(5)]}
+            for i in range(4)
+        ]
+        result = _tier_from_project_rows(rows)
+        # 4 boards, 20 likes >= 10 (tier2), project_count=4 >= 4 (tier3) → Tier 3
+        assert result['tier'] == 3
+        assert result['project_count'] == 4
 
     def test_draft_boards_included_in_project_count(self):
         """DISCOVERY-PERF-2 spec: draft boards ARE counted in project_count.
 
-        2 draft boards → project_count=2; 20 likes >= tier2 min;
-        project_count=2 >= tier3_min_projects(2) → Tier 3.
+        DISCOVERY-PERF-3: threshold raised to 4. 2 draft boards → project_count=2;
+        20 likes >= tier2 min; project_count=2 < tier3_min_projects(4) → Tier 2.
         """
         from apps.recommendation.discovery_feed import _tier_from_project_rows
         rows = [
@@ -110,10 +130,23 @@ class TestTierFromProjectRows:
             {'name': 'discovery_260601_0001', 'liked_ids': [{'id': f'bld_{i:06d}', 'intensity': 1.0} for i in range(10, 20)]},
         ]
         result = _tier_from_project_rows(rows)
-        # Both draft boards now count toward project_count
+        # Both draft boards count toward project_count (PERF-2 spec preserved)
         assert result['project_count'] == 2
-        # 20 likes >= 10 (tier2 min), project_count=2 >= 2 (tier3 min) → Tier 3
+        # 20 likes >= 10 (tier2 min), project_count=2 < 4 (tier3 min) → Tier 2
+        assert result['tier'] == 2
+
+    def test_high_likes_fallback_tier3_below_project_threshold(self):
+        """likes>=50 promotes to Tier 3 even when project_count < tier3_min_projects(4).
+
+        DISCOVERY-PERF-3: fallback path. 1 board, 50 likes → Tier 3 via likes path.
+        """
+        from apps.recommendation.discovery_feed import _tier_from_project_rows
+        rows = [{'name': 'board_a', 'liked_ids': [{'id': f'bld_{i:06d}', 'intensity': 1.0} for i in range(50)]}]
+        result = _tier_from_project_rows(rows)
+        # project_count=1 < 4 (tier3_min_projects), but likes=50 >= 50 (tier3_min_likes) → Tier 3
         assert result['tier'] == 3
+        assert result['project_count'] == 1
+        assert result['cumulative_likes'] == 50
 
     def test_empty_rows_cold(self):
         from apps.recommendation.discovery_feed import _tier_from_project_rows

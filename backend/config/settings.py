@@ -343,7 +343,7 @@ RECOMMENDATION = {
     # Discovery tab v3.1 hyperparameters (10-card chunk + 3-Tier + Draft Board)
     'discovery_chunk_size': 10,
     'discovery_tier2_min_likes': 10,
-    'discovery_tier3_min_projects': 2,
+    'discovery_tier3_min_projects': 4,
     'discovery_tier3_min_likes': 50,
     'discovery_tier2_local': 2,
     'discovery_tier2_global': 8,

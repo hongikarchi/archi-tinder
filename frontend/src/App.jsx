@@ -101,6 +101,8 @@ export default function App() {
   // Listen for promote-to-taste event dispatched by DiscoveryPage after a
   // successful POST /discovery/promote-to-taste/. Creates a local project entry
   // so activeProject is non-null, calls applySessionResponse, and navigates to /swipe.
+  // If detail.skipNav is true (leave-warning modal auto-promote path), the project
+  // is persisted but navigate('/swipe') is skipped — the caller does its own navigation.
   useEffect(() => {
     const onPromoteToTaste = (e) => {
       const result = e?.detail
@@ -126,7 +128,11 @@ export default function App() {
       })
       setActiveProjectId(projectId)
       applySessionResponse(projectId, result)
-      navigate('/swipe')
+      // skipNav:true = leave-warning modal path — caller calls proceed() for navigation.
+      // Normal path (trigger card / Feature B button) = navigate to /swipe as before.
+      if (!result.skipNav) {
+        navigate('/swipe')
+      }
     }
     window.addEventListener('archithon:promote-to-taste', onPromoteToTaste)
     return () => window.removeEventListener('archithon:promote-to-taste', onPromoteToTaste)

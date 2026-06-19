@@ -111,9 +111,9 @@ def _tier_from_project_rows(rows):
 
     Tier thresholds (from RECOMMENDATION dict):
       Tier 1 (cold)   : cumulative_likes < discovery_tier2_min_likes (10)
-      Tier 3 (multi)  : project_count >= discovery_tier3_min_projects (2)
+      Tier 3 (multi)  : project_count >= discovery_tier3_min_projects (4)
                         OR cumulative_likes >= discovery_tier3_min_likes (50)
-      Tier 2 (single) : else (likes >= 10 AND projects <= 1)
+      Tier 2 (single) : else (likes >= 10 AND projects <= 3)
 
     project_count: counts ALL boards including discovery draft boards.
     cumulative_likes: includes ALL provided rows (drafts + real).
@@ -121,7 +121,7 @@ def _tier_from_project_rows(rows):
     n_local + n_global = discovery_chunk_size (10).
     """
     tier2_min_likes = RC.get('discovery_tier2_min_likes', 10)
-    tier3_min_projects = RC.get('discovery_tier3_min_projects', 2)
+    tier3_min_projects = RC.get('discovery_tier3_min_projects', 4)
     tier3_min_likes = RC.get('discovery_tier3_min_likes', 50)
     chunk_size = RC.get('discovery_chunk_size', 10)
     t2_local = RC.get('discovery_tier2_local', 2)
