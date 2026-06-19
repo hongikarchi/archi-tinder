@@ -160,8 +160,23 @@ def test_tier2_at_10_likes_single_project(user_profile):
 
 
 @pytest.mark.django_db
-def test_tier3_at_2_projects(user_profile):
-    """2 real projects → Tier 3 (multi) regardless of like count."""
+def test_tier3_at_4_projects(user_profile):
+    """4 real projects → Tier 3 (multi). DISCOVERY-PERF-3: threshold raised 2→4."""
+    for b in range(4):
+        Project.objects.create(
+            user=user_profile, name=f'Board {b}',
+            liked_ids=[{'id': f'bld_{b}{i:05d}', 'intensity': 1.0} for i in range(5)],
+        )
+    info = compute_discovery_tier(user_profile)
+    assert info['tier'] == 3
+    assert info['n_local'] == 4
+    assert info['n_global'] == 6
+    assert info['project_count'] == 4
+
+
+@pytest.mark.django_db
+def test_tier2_at_2_projects(user_profile):
+    """2 projects (<4) with >=10 likes → Tier 2. DISCOVERY-PERF-3: 2<tier3_min(4)."""
     Project.objects.create(
         user=user_profile, name='Board A',
         liked_ids=[{'id': f'bld_{i:06d}', 'intensity': 1.0} for i in range(10)],
@@ -171,9 +186,7 @@ def test_tier3_at_2_projects(user_profile):
         liked_ids=[{'id': f'bld_{i:06d}', 'intensity': 1.0} for i in range(100, 110)],
     )
     info = compute_discovery_tier(user_profile)
-    assert info['tier'] == 3
-    assert info['n_local'] == 4
-    assert info['n_global'] == 6
+    assert info['tier'] == 2
     assert info['project_count'] == 2
 
 
@@ -190,9 +203,9 @@ def test_tier3_at_50_likes_single_project(user_profile):
 
 
 @pytest.mark.django_db
-def test_draft_excluded_from_project_count_but_likes_counted(user_profile):
-    """Draft project must NOT count toward project_count for tier calculation,
-    but draft likes DO contribute to cumulative_likes."""
+def test_draft_included_in_project_count_and_likes(user_profile):
+    """DISCOVERY-PERF-2: draft boards ARE counted in project_count, and draft
+    likes also contribute to cumulative_likes."""
     # Create a draft board with 1 like
     draft = create_discovery_draft(user_profile)
     draft.liked_ids = [{'id': 'bld_000001', 'intensity': 1.0}]
@@ -203,16 +216,17 @@ def test_draft_excluded_from_project_count_but_likes_counted(user_profile):
         liked_ids=[{'id': f'bld_{i:06d}', 'intensity': 1.0} for i in range(10, 20)],
     )
     info = compute_discovery_tier(user_profile)
-    # project_count should be 1 (draft excluded)
-    assert info['project_count'] == 1
+    # project_count = 2 (draft + real, both counted)
+    assert info['project_count'] == 2
+    # 2 projects < tier3_min(4), 11 likes >= 10 → Tier 2
     assert info['tier'] == 2
-    # But draft likes DO count toward cumulative (1 draft + 10 real = 11)
+    # draft likes DO count toward cumulative (1 draft + 10 real = 11)
     assert info['cumulative_likes'] == 11
 
 
 @pytest.mark.django_db
-def test_two_drafts_still_excluded_from_project_count(user_profile):
-    """Two draft boards must not count toward project_count."""
+def test_two_drafts_included_in_project_count(user_profile):
+    """DISCOVERY-PERF-2: draft boards count toward project_count."""
     draft1 = create_discovery_draft(user_profile)
     draft1.liked_ids = [{'id': 'bld_000001', 'intensity': 1.0}]
     draft1.save(update_fields=['liked_ids'])
@@ -225,7 +239,8 @@ def test_two_drafts_still_excluded_from_project_count(user_profile):
         liked_ids=[{'id': 'bld_000010', 'intensity': 1.0} for _ in range(10)],
     )
     info = compute_discovery_tier(user_profile)
-    assert info['project_count'] == 1
+    # 2 drafts + 1 real, all counted
+    assert info['project_count'] == 3
     # cumulative = 10 (real) + 1 (draft1) + 1 (draft2) = 12
     assert info['cumulative_likes'] == 12
 
