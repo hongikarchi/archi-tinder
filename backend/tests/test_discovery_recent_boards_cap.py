@@ -1,5 +1,5 @@
 """
-test_discovery_recent_boards_cap.py — DISCOVERY-PERF-1 unit tests.
+test_discovery_recent_boards_cap.py — DISCOVERY-PERF-1 and DISCOVERY-PERF-2 unit tests.
 
 Verifies:
 1. _tier_from_project_rows is a pure function (no DB access).
@@ -7,13 +7,17 @@ Verifies:
 3. build_discovery_chunk uses _project_rows when provided and skips re-querying.
 4. build_discovery_chunk fetches capped rows internally when _project_rows=None.
 5. get_or_build_discovery_centroids scans only cap boards.
-6. DiscoveryFeedView.get() issues exactly 1 Project queryset (single-fetch pattern).
+6. DiscoveryFeedView.get() issues exactly 1 Project queryset on the default DB (DISCOVERY-PERF-2 Finding 2).
 7. Tier/exclude/dislike derived from the same capped rows — no full-project scan.
+8. Draft boards ARE counted in project_count (DISCOVERY-PERF-2 spec).
 """
 from unittest.mock import patch, MagicMock
 import numpy as np
+import pytest
 
 from django.core.cache import cache
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 
 
 # ---------------------------------------------------------------------------
@@ -94,17 +98,22 @@ class TestTierFromProjectRows:
         assert result['tier'] == 3
         assert result['project_count'] == 2
 
-    def test_draft_boards_excluded_from_project_count(self):
+    def test_draft_boards_included_in_project_count(self):
+        """DISCOVERY-PERF-2 spec: draft boards ARE counted in project_count.
+
+        2 draft boards → project_count=2; 20 likes >= tier2 min;
+        project_count=2 >= tier3_min_projects(2) → Tier 3.
+        """
         from apps.recommendation.discovery_feed import _tier_from_project_rows
-        # 2 draft boards → project_count=0; 20 likes → tier2
         rows = [
             {'name': 'discovery_260601_0000', 'liked_ids': [{'id': f'bld_{i:06d}', 'intensity': 1.0} for i in range(10)]},
             {'name': 'discovery_260601_0001', 'liked_ids': [{'id': f'bld_{i:06d}', 'intensity': 1.0} for i in range(10, 20)]},
         ]
         result = _tier_from_project_rows(rows)
-        assert result['project_count'] == 0
-        # 20 likes >= 10 (tier2 min), project_count=0 < 2 (tier3 min) → Tier 2
-        assert result['tier'] == 2
+        # Both draft boards now count toward project_count
+        assert result['project_count'] == 2
+        # 20 likes >= 10 (tier2 min), project_count=2 >= 2 (tier3 min) → Tier 3
+        assert result['tier'] == 3
 
     def test_empty_rows_cold(self):
         from apps.recommendation.discovery_feed import _tier_from_project_rows
@@ -498,3 +507,112 @@ class TestOlderBoardsNotScanned:
         )
         assert 'bld_000001' in exclude_set
         assert 'bld_000002' in exclude_set
+
+
+# ---------------------------------------------------------------------------
+# 8. DiscoveryFeedView.get() — single Project query on default DB
+#    DISCOVERY-PERF-2 Finding 2
+# ---------------------------------------------------------------------------
+
+
+class TestDiscoveryFeedViewSingleFetch:
+    """DiscoveryFeedView.get() must issue exactly 1 Project queryset call.
+
+    DISCOVERY-PERF-2 Finding 2: the single-fetch pattern (DISCOVERY-PERF-1)
+    consolidates tier computation, exclude-set building, and dislike aggregation
+    into one Project.objects.filter() call.  This class has two tests:
+
+    (a) Mock-based: asserts exactly 1 Project.objects.filter() call, no live DB.
+        Consistent with all other tests in this file.
+
+    (b) SQL-level (CaptureQueriesContext): marked @pytest.mark.django_db, runs in
+        CI where PostgreSQL is available; skipped locally when the DB is unavailable
+        (pre-existing env limitation; see MEMORY "No make/gh on this box").
+
+    Both tests prime the centroid cache to eliminate the second Project query that
+    get_or_build_discovery_centroids would otherwise issue on cache miss.
+    """
+
+    def test_single_project_query_mock(self):
+        """Mock-based: DiscoveryFeedView.get() calls Project.objects.filter() exactly once.
+
+        Asserts the single-fetch pattern holds without requiring a live DB.
+        Centroid cache is primed before the call so get_or_build_discovery_centroids
+        returns immediately.
+        """
+        import apps.recommendation.views.discovery as _disc_view_mod
+        from apps.recommendation.views.discovery import DiscoveryFeedView
+        from apps.recommendation.caches import _discovery_centroids_key
+
+        profile = _make_profile(pk=99)
+
+        # Prime centroid cache so get_or_build_discovery_centroids hits cache
+        centroid_key = _discovery_centroids_key(profile.id)
+        cache.set(centroid_key, [], timeout=300)
+
+        # Mock queryset chain: .filter().order_by()[:cap].values() -> []
+        mock_qs_sliced = MagicMock()
+        mock_qs_sliced.values.return_value = []
+        mock_qs_ordered = MagicMock()
+        mock_qs_ordered.__getitem__ = MagicMock(return_value=mock_qs_sliced)
+        mock_filter_qs = MagicMock()
+        mock_filter_qs.order_by.return_value = mock_qs_ordered
+        mock_project_cls = MagicMock()
+        mock_project_cls.objects.filter.return_value = mock_filter_qs
+
+        # Minimal mock request
+        mock_request = MagicMock()
+        mock_request.user.is_authenticated = True
+        mock_request.query_params = {'buffer': ''}
+
+        with patch.object(_disc_view_mod, 'Project', mock_project_cls):
+            with patch(
+                'apps.recommendation.views.discovery._get_profile',
+                return_value=profile,
+            ):
+                with patch(
+                    'apps.recommendation.views.discovery.build_discovery_chunk',
+                    return_value=[],
+                ):
+                    view = DiscoveryFeedView()
+                    view.get(mock_request)
+
+        filter_call_count = mock_project_cls.objects.filter.call_count
+        assert filter_call_count == 1, (
+            f'Expected exactly 1 Project.objects.filter() call in DiscoveryFeedView.get(), '
+            f'got {filter_call_count}.  The single-fetch pattern (DISCOVERY-PERF-1) is broken.'
+        )
+
+    @pytest.mark.django_db
+    def test_single_project_sql_query(self, auth_client, user_profile):
+        """SQL-level: exactly 1 SQL query touches recommendation_project per request.
+
+        Uses CaptureQueriesContext on the default DB connection.
+        Centroid cache is primed; build_discovery_chunk is stubbed to avoid
+        the buildings DB.  Requires a live PostgreSQL — CI only.
+        """
+        from apps.recommendation.caches import _discovery_centroids_key
+
+        # Prime centroid cache
+        centroid_key = _discovery_centroids_key(user_profile.id)
+        cache.set(centroid_key, [], timeout=300)
+
+        with patch(
+            'apps.recommendation.views.discovery.build_discovery_chunk',
+            return_value=[],
+        ):
+            with CaptureQueriesContext(connection) as ctx:
+                resp = auth_client.get('/api/v1/discovery/')
+
+        assert resp.status_code == 200
+
+        project_queries = [
+            q for q in ctx.captured_queries
+            if 'recommendation_project' in q['sql']
+        ]
+        assert len(project_queries) == 1, (
+            f'Expected exactly 1 Project SQL query on default DB, got {len(project_queries)}.\n'
+            f'Project queries: {[q["sql"] for q in project_queries]}\n'
+            f'All captured queries ({len(ctx.captured_queries)}): '
+            f'{[q["sql"] for q in ctx.captured_queries]}'
+        )

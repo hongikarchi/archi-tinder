@@ -115,7 +115,7 @@ def _tier_from_project_rows(rows):
                         OR cumulative_likes >= discovery_tier3_min_likes (50)
       Tier 2 (single) : else (likes >= 10 AND projects <= 1)
 
-    project_count: EXCLUDES auto draft boards (name starts with 'discovery_').
+    project_count: counts ALL boards including discovery draft boards.
     cumulative_likes: includes ALL provided rows (drafts + real).
 
     n_local + n_global = discovery_chunk_size (10).
@@ -134,10 +134,10 @@ def _tier_from_project_rows(rows):
     for p in rows:
         liked = p.get('liked_ids') or []
         cumulative_likes += len(liked)
-        # Draft boards (name starts with DISCOVERY_DRAFT_PREFIX) are excluded
-        # from the tier project_count but their likes still accumulate.
-        if not is_discovery_draft_name(p['name']):
-            project_count += 1
+        # All boards — including discovery draft boards — count toward
+        # project_count.  Drafts are a multi-taste signal (DISCOVERY-PERF-2
+        # spec: "드래프트도 다중취향 신호로 간주").
+        project_count += 1
 
     # Determine tier
     if cumulative_likes < tier2_min_likes:
@@ -174,7 +174,7 @@ def compute_discovery_tier(profile):
     boards and delegates to _tier_from_project_rows().  Kept for backwards
     compatibility with callers that do not pre-fetch rows themselves.
 
-    project_count: EXCLUDES auto draft boards (name starts with 'discovery_').
+    project_count: counts ALL boards including discovery draft boards.
     cumulative_likes: from the capped board window only.
 
     n_local + n_global = discovery_chunk_size (10).

@@ -6,6 +6,11 @@ import SwipeCard, { CARD_WIDTH, CARD_HEIGHT } from '../components/SwipeCard.jsx'
 import DiscoveryTriggerCard from '../components/DiscoveryTriggerCard.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
 
+// Module-level flag: false on full page reload (module not yet loaded), true after
+// the first mount within the same SPA session. Used to detect tab re-entry vs first
+// load so we can start a fresh draft on re-entry while still restoring on refresh.
+let _discoveryMountedOnce = false
+
 const PREFETCH_AT_REMAINING = 3   // fetch more when deck.length <= this
 const TASTE_NUDGE_THRESHOLD = 10  // inject trigger card when draftLikeCount reaches this
 const DISCOVERY_LIKE_HARD_CAP = 50  // hard stop — block swiping, force Taste hand-off
@@ -127,6 +132,16 @@ function isTriggerCard(card) {
   return card?.canonical_bld_id === TRIGGER_CARD_ID || card?.__trigger === true
 }
 
+// Helper: wipe all Discovery draft sessionStorage keys and return cleared defaults.
+// Called on tab re-entry (SPA remount) to force a fresh draft start.
+function _clearDraftSessionStorage() {
+  sessionStorage.removeItem(DRAFT_ID_KEY)
+  sessionStorage.removeItem(DRAFT_LIKES_KEY)
+  sessionStorage.removeItem(DECK_CACHE_KEY)
+  sessionStorage.removeItem(SEEN_IDS_KEY)
+  sessionStorage.removeItem(CONTINUE_AFTER_TRIGGER_KEY)
+}
+
 export default function DiscoveryPage({ showToast }) {
   const navigate = useNavigate()
   const isActiveRef = useRef(true)
@@ -144,20 +159,45 @@ export default function DiscoveryPage({ showToast }) {
   const [shakeCardId, setShakeCardId] = useState(null)
   const [promoteLoading, setPromoteLoading] = useState(false)
   const [capReached, setCapReached] = useState(false)
+
+  // Detect tab re-entry: _discoveryMountedOnce is false only on full page load
+  // (module not yet executed). On SPA tab navigation it stays true, so a second
+  // mount (user went to another tab and came back) is a re-entry → fresh draft.
+  // Capture the flag value once at mount into a ref so subsequent re-renders do
+  // not re-read the (now-always-true) module variable.
+  const isReentryMountRef = useRef(null)
+  if (isReentryMountRef.current === null) {
+    // First render of this mount: capture the module flag, then set it.
+    isReentryMountRef.current = _discoveryMountedOnce  // true = re-entry
+    if (!_discoveryMountedOnce) {
+      _discoveryMountedOnce = true
+    }
+    // If re-entry: wipe sessionStorage immediately (before useState initialisers
+    // further down read from it) so they all start with clean slate.
+    if (isReentryMountRef.current) {
+      _clearDraftSessionStorage()
+    }
+  }
+  const isReentryMount = isReentryMountRef.current
+
   // Feature B: set when user left-swipes the trigger card ("Discovery 계속")
   const [continueAfterTrigger, setContinueAfterTrigger] = useState(
-    () => sessionStorage.getItem(CONTINUE_AFTER_TRIGGER_KEY) === '1'
+    () => isReentryMount ? false : sessionStorage.getItem(CONTINUE_AFTER_TRIGGER_KEY) === '1'
   )
 
-  const _cached = loadDeckCache()
+  const _cached = isReentryMount ? null : loadDeckCache()
   const [deck, setDeck] = useState(_cached ? _cached.deck : [])
   const [tasteState, setTasteState] = useState(_cached ? (_cached.tasteState || 'cold') : 'cold')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   // Draft-id session state — persisted to sessionStorage
-  const [draftId, setDraftId] = useState(() => sessionStorage.getItem(DRAFT_ID_KEY) || null)
+  const [draftId, setDraftId] = useState(() => {
+    if (isReentryMount) return null
+    return sessionStorage.getItem(DRAFT_ID_KEY) || null
+  })
   const [draftLikeCount, setDraftLikeCount] = useState(() => {
+    if (isReentryMount) return 0
     const hasDraft = sessionStorage.getItem(DRAFT_ID_KEY)
     if (!hasDraft) {
       sessionStorage.removeItem(DRAFT_LIKES_KEY)   // stale count with no board — discard
@@ -172,8 +212,14 @@ export default function DiscoveryPage({ showToast }) {
   useEffect(() => {
     isActiveRef.current = true
     ensureShakeStyle()
+    // On tab re-entry: reset refs that carry over between renders but won't be
+    // re-initialized by useState (since they start with useRef()).
+    if (isReentryMount) {
+      triggerShownRef.current = false
+      seenIdsRef.current = new Set()
+    }
     return () => { isActiveRef.current = false }
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Persist draftId to sessionStorage whenever it changes
   useEffect(() => {
@@ -218,6 +264,10 @@ export default function DiscoveryPage({ showToast }) {
   // absent: if the deck is temporarily empty (fetch in flight) the updater
   // returns prev unchanged and triggerShownRef stays false, so the effect
   // re-fires correctly once the deck is refilled (draftLikeCount still ≥10).
+  //
+  // Fix #4: splice at index 0 (not 1) so the trigger card becomes the NEXT card
+  // immediately — splice(1,0) would put it after the card-currently-leaving,
+  // which means it only appears two swipes later.
   useEffect(() => {
     if (draftId && draftLikeCount >= TASTE_NUDGE_THRESHOLD && !triggerShownRef.current) {
       const triggerCard = { canonical_bld_id: TRIGGER_CARD_ID, __trigger: true }
@@ -228,9 +278,9 @@ export default function DiscoveryPage({ showToast }) {
         if (prev.some(c => isTriggerCard(c))) return prev
         // Mark only when actually injecting
         triggerShownRef.current = true
-        // Splice at index 1 (after the current top card) so it appears next
+        // Splice at index 0: trigger card becomes the new top card immediately
         const next = [...prev]
-        next.splice(1, 0, triggerCard)
+        next.splice(0, 0, triggerCard)
         return next
       })
     }
@@ -369,9 +419,16 @@ export default function DiscoveryPage({ showToast }) {
     saveSeenIds(seenIdsRef.current)
 
     if (action === 'like') {
+      // Fix #4: optimistically increment draftLikeCount before the API call so
+      // the threshold check (draftLikeCount >= TASTE_NUDGE_THRESHOLD) fires
+      // synchronously this render cycle. The backend response reconciles with
+      // the authoritative count (handles dedup / edge cases).
+      setDraftLikeCount(prev => prev + 1)
       discoveryFeedback(bldId, 'like', draftId)
         .then(res => {
           if (res.draftId) setDraftId(res.draftId)
+          // Reconcile: backend is authoritative. Only update if the value
+          // differs (dedup / cap logic may adjust the count).
           setDraftLikeCount(res.draftLikeCount)
           if (res.likeCapReached) setCapReached(true)
         })
@@ -717,7 +774,7 @@ export default function DiscoveryPage({ showToast }) {
                 style={{
                   minHeight: 44,
                   padding: '0 20px',
-                  borderRadius: 'calc(var(--radius-md, 12) * 1px)',
+                  borderRadius: 'var(--radius-md, 12px)',
                   border: 'none',
                   background: 'linear-gradient(135deg, var(--accent-1, #0969DA), var(--accent-2, #8250DF))',
                   color: '#fff',
