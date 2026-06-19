@@ -213,6 +213,7 @@ def parse_query(conversation_history, language=None):
         'location_country': None, 'location_city': None,
         'program': None, 'material': None, 'style': None,
         'year_min': None, 'year_max': None,
+        'atmosphere': None, 'color_tone': None, 'typology_primary': None,
     }
     _fallback = {
         'probe_needed': False,
@@ -481,6 +482,7 @@ def parse_query_stage1(conversation_history, language=None):
         'location_country': None, 'location_city': None,
         'program': None, 'material': None, 'style': None,
         'year_min': None, 'year_max': None,
+        'atmosphere': None, 'color_tone': None, 'typology_primary': None,
     }
     _fallback = {
         'probe_needed': False,

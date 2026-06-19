@@ -374,6 +374,25 @@ RECOMMENDATION = {
     'question_hyperpositive_window': 10,     # look back this many swipes
     'question_hyperpositive_min_likes': 8,   # >= this many likes in the window triggers
     'recent_latencies_cap': 10,              # rolling latency window size
+    # LLM-SEARCH-RANK-1: A+BM25 soft-score ranking hyperparameters for ParseQueryView.
+    # Replaces ORDER BY RANDOM() + 3-tier relaxation ladder with a single ranked CTE.
+    # All axes are soft (no hard gate except is_publishable=true).
+    'llm_search_topk': 200,               # K: tag-score candidate set before BM25 rerank
+    'llm_search_w_bm25': 8.0,             # w_bm25: BM25 contribution weight in final score
+    'llm_search_priority_boost': 0.25,    # boost factor for filter_priority ordering
+    'llm_search_idf_ceiling': 3.0,        # IDF ceiling clamp (rare tags capped at 3x)
+    'llm_search_base_weights': {          # per-axis base scoring weights (soft, no hard gate)
+        'program': 10.0,          # highest: program type is the strongest signal
+        'typology_primary': 6.0,  # building typology (single TEXT, ILIKE)
+        'location_country': 5.0,  # country-level geography
+        'location_city': 5.0,     # city-level geography
+        'material': 4.0,          # material (unnest array ILIKE)
+        'style': 4.0,             # architectural style (ILIKE)
+        'atmosphere': 3.0,        # mood/atmosphere (new soft axis, ILIKE)
+        'color_tone': 2.0,        # color palette (new soft axis, ILIKE)
+        'year_min': 1.0,          # year range (soft bonus, not exclusion)
+        'year_max': 1.0,
+    },
 }
 
 _check_async_prefetch_safety(
