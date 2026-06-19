@@ -366,6 +366,9 @@ RECOMMENDATION = {
     # Ops can populate with domain-specific stop-tags if IDF alone is insufficient.
     'question_keyword_blacklist': [],
     'discovery_like_hard_cap': 50,  # Discovery draft hard stop: block likes beyond 50; client redirects to Taste
+    # DISCOVERY-PERF-1: scope tier/exclude/dislike/centroid to most-recent N boards (tunable).
+    # Older boards' liked/disliked/saved buildings may re-appear in Discovery — intended behaviour.
+    'discovery_recent_boards_cap': 10,
     # ALGO-QCARD Phase 3: hyper-positive / fast-swipe detection (Trigger A)
     'question_fast_swipe_ms': 1500,          # avg inter-swipe latency below this = "fast" (hyper-positive)
     'question_hyperpositive_window': 10,     # look back this many swipes

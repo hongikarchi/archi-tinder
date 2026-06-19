@@ -312,8 +312,9 @@ def get_or_build_discovery_centroids(profile):
     Spec §2.1: DO NOT evict on like changes; centroid is fixed for the session.
 
     On cache miss:
-      1. Gather like_vectors from ALL user projects (draft + real), capped at
-         recent 50 (mirrors compute_user_taste_vector's recent-50 approach).
+      1. Gather like_vectors from the most-recent discovery_recent_boards_cap (10)
+         projects (DISCOVERY-PERF-1), capped further at 50 most-recent liked IDs
+         (mirrors compute_user_taste_vector's recent-50 approach).
       2. Call engine.compute_taste_centroids(like_vectors, round_num=len(like_vectors)).
       3. Store centroids as list[list[float]] in cache.
 
@@ -329,8 +330,14 @@ def get_or_build_discovery_centroids(profile):
     if cached is not None:
         return cached  # list[list[float]]
 
-    # Gather liked building ids across all projects (draft + real)
-    projects = Project.objects.filter(user=profile).values('liked_ids')
+    # DISCOVERY-PERF-1: limit scan to the most-recent discovery_recent_boards_cap
+    # boards — mirrors the cap applied to tier/exclude_set/dislike in the feed.
+    cap = RC.get('discovery_recent_boards_cap', 10)
+    projects = (
+        Project.objects.filter(user=profile)
+        .order_by('-created_at')[:cap]
+        .values('liked_ids')
+    )
     all_liked_ids = []
     for p in projects:
         all_liked_ids.extend(_liked_id_only(p.get('liked_ids')))

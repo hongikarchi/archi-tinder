@@ -41,7 +41,7 @@ from ..discovery_feed import (
     DISCOVERY_DRAFT_PREFIX,
     create_discovery_draft,
     get_discovery_draft,
-    compute_discovery_tier,
+    _tier_from_project_rows,
     build_discovery_chunk,
     _liked_id_only as _draft_liked_id_only,
 )
@@ -117,16 +117,28 @@ class DiscoveryFeedView(APIView):
         # App-open centroid (lazy cache; in-session fixed — not evicted on likes)
         centroids = get_or_build_discovery_centroids(profile)
 
-        # Tier
-        tier_info = compute_discovery_tier(profile)
+        # DISCOVERY-PERF-1: single fetch of recent-cap boards; derive tier +
+        # exclude_set (board part) + dislike list from this one queryset result.
+        cap = RC.get('discovery_recent_boards_cap', 10)
+        project_rows = list(
+            Project.objects.filter(user=profile)
+            .order_by('-created_at')[:cap]
+            .values('name', 'liked_ids', 'disliked_ids', 'saved_ids')
+        )
+
+        # Tier — computed from the same rows, no extra query.
+        tier_info = _tier_from_project_rows(project_rows)
         tier = tier_info['tier']
         taste_state = _TIER_TO_TASTE_STATE.get(tier, 'cold')
 
-        # Build chunk
+        # Build chunk — pass pre-fetched rows so build_discovery_chunk skips
+        # its own project query and the duplicate compute_discovery_tier call.
         cards = build_discovery_chunk(
             profile, centroids,
             client_buffer_ids=client_buffer_ids,
             chunk_size=chunk_size,
+            _project_rows=project_rows,
+            _tier_info=tier_info,
         )
 
         return Response({

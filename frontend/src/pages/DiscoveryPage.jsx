@@ -16,6 +16,8 @@ const DECK_CACHE_TTL_MS = 30 * 60 * 1000  // 30 min
 const DRAFT_ID_KEY = 'discovery_draft_id'
 const DRAFT_LIKES_KEY = 'discovery_draft_likes'
 const SEEN_IDS_KEY = 'discovery_seen_ids'
+// Feature B: persists across page refresh within same session
+const CONTINUE_AFTER_TRIGGER_KEY = 'discovery_continue_after_trigger'
 
 const TRIGGER_CARD_ID = '__taste_trigger__'
 
@@ -74,6 +76,24 @@ function saveSeenIds(set) {
   } catch { /* quota exceeded — ignore */ }
 }
 
+/* ── Feature A: inject a high-priority <link rel="preload"> for the first
+     card image. This fires before React renders the <img> tag, letting the
+     browser start the network request while the deck is being populated.
+     Cache: one injected link per URL (idempotent). ────────────────────────── */
+const _preloadLinkCache = new Set()
+function injectFirstCardPreload(url) {
+  if (!url || _preloadLinkCache.has(url)) return
+  _preloadLinkCache.add(url)
+  try {
+    const link = document.createElement('link')
+    link.rel = 'preload'
+    link.as = 'image'
+    link.href = url
+    link.fetchPriority = 'high'
+    document.head.appendChild(link)
+  } catch { /* ignore — best-effort */ }
+}
+
 /* ── preloadImage helper ─────────────────────────────────────────────────── */
 function makeImagePreloader() {
   const cache = new Set()
@@ -124,6 +144,10 @@ export default function DiscoveryPage({ showToast }) {
   const [shakeCardId, setShakeCardId] = useState(null)
   const [promoteLoading, setPromoteLoading] = useState(false)
   const [capReached, setCapReached] = useState(false)
+  // Feature B: set when user left-swipes the trigger card ("Discovery 계속")
+  const [continueAfterTrigger, setContinueAfterTrigger] = useState(
+    () => sessionStorage.getItem(CONTINUE_AFTER_TRIGGER_KEY) === '1'
+  )
 
   const _cached = loadDeckCache()
   const [deck, setDeck] = useState(_cached ? _cached.deck : [])
@@ -243,6 +267,13 @@ export default function DiscoveryPage({ showToast }) {
       const result = await fetchDiscoveryFeed(bufferIds)
       if (!isActiveRef.current || requestId !== requestIdRef.current) return
 
+      // Feature A: immediately inject a high-priority <link rel="preload"> for
+      // the first card's image_url so the browser starts fetching before React
+      // renders the <img> tag. This fires concurrently with the deck state update.
+      if (reset && result.cards[0]?.image_url) {
+        injectFirstCardPreload(result.cards[0].image_url)
+      }
+
       // Preload the first few images so subsequent cards render with image cached
       const preload = preloadRef.current
       for (const c of result.cards.slice(0, 3)) {
@@ -319,10 +350,14 @@ export default function DiscoveryPage({ showToast }) {
     // -- Trigger card handling --
     if (isTriggerCard(card)) {
       if (action === 'like') {
-        // RIGHT swipe → promote to Taste
+        // RIGHT swipe → promote to Taste (기존 동작 유지)
         handlePromoteToTaste()
+      } else {
+        // LEFT swipe → Discovery 계속; set Feature B flag so the persistent
+        // "Taste로 저장·이동" button appears on all subsequent cards.
+        setContinueAfterTrigger(true)
+        try { sessionStorage.setItem(CONTINUE_AFTER_TRIGGER_KEY, '1') } catch { /* ignore */ }
       }
-      // LEFT swipe → just advance (already done). Do NOT re-inject this session.
       return
     }
 
@@ -361,9 +396,11 @@ export default function DiscoveryPage({ showToast }) {
       // Clear draft session state — a future Discovery visit starts fresh
       setDraftId(null)
       setDraftLikeCount(0)
+      setContinueAfterTrigger(false)
       triggerShownRef.current = false
       sessionStorage.removeItem(DRAFT_ID_KEY)
       sessionStorage.removeItem(DRAFT_LIKES_KEY)
+      sessionStorage.removeItem(CONTINUE_AFTER_TRIGGER_KEY)
       // Hand off the session payload to App.jsx via custom event.
       window.dispatchEvent(new CustomEvent('archithon:promote-to-taste', { detail: result }))
       navigate('/swipe')
@@ -653,8 +690,8 @@ export default function DiscoveryPage({ showToast }) {
         )}
       </div>
 
-      {/* Bottom area: swipe hint */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+      {/* Bottom area: swipe hint + Feature B persistent CTA */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
         {promoteLoading ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{
@@ -668,9 +705,40 @@ export default function DiscoveryPage({ showToast }) {
             </span>
           </div>
         ) : (
-          <p style={{ color: 'var(--color-text-dimmest)', fontSize: 11, margin: 0 }}>
-            ← skip · tap card · save →&nbsp;&nbsp;·&nbsp;&nbsp;arrow keys supported
-          </p>
+          <>
+            {continueAfterTrigger && (
+              /* Feature B: persistent "Taste로 저장·이동" button rendered after
+                 user left-swiped the trigger card (Discovery 계속 선택).
+                 Primary CTA gradient per DESIGN.md §8.1. min-height 44px per §3.2. */
+              <button
+                type="button"
+                onClick={handlePromoteToTaste}
+                disabled={promoteLoading}
+                style={{
+                  minHeight: 44,
+                  padding: '0 20px',
+                  borderRadius: 'calc(var(--radius-md, 12) * 1px)',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, var(--accent-1, #0969DA), var(--accent-2, #8250DF))',
+                  color: '#fff',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  letterSpacing: '-0.01em',
+                  transition: `transform var(--motion-normal, 220ms) var(--motion-ease, cubic-bezier(0.4,0,0.2,1))`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
+                지금까지 취향 저장하고 Taste로 이동
+              </button>
+            )}
+            <p style={{ color: 'var(--color-text-dimmest)', fontSize: 11, margin: 0 }}>
+              ← skip · tap card · save →&nbsp;&nbsp;·&nbsp;&nbsp;arrow keys supported
+            </p>
+          </>
         )}
       </div>
 
