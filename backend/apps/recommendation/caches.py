@@ -223,11 +223,14 @@ def get_corpus_tag_df():
 
     Structure:
       {
-        'style':           {tag: df_count, ...},
-        'atmosphere':      {tag: df_count, ...},
-        'material_visual': {tag: df_count, ...},
-        'program':         {tag: df_count, ...},
-        '_total':          N,          # total publishable buildings
+        'style':                 {tag: df_count, ...},
+        'atmosphere':            {tag: df_count, ...},
+        'material_visual':       {tag: df_count, ...},
+        'program':               {tag: df_count, ...},
+        'typology_primary':      {tag: df_count, ...},
+        'typology_tags':         {tag: df_count, ...},
+        'architectural_elements': {tag: df_count, ...},
+        '_total':                N,          # total publishable buildings
       }
 
     Queried once from the buildings DB (read-only), then cached under
@@ -257,8 +260,8 @@ def get_corpus_tag_df():
             total = int(row[0]) if row else 0
             result['_total'] = total
 
-            # Single-value TEXT axes: style, atmosphere, program
-            for axis in ('style', 'atmosphere', 'program'):
+            # Single-value TEXT axes: style, atmosphere, program, typology_primary
+            for axis in ('style', 'atmosphere', 'program', 'typology_primary'):
                 cur.execute(
                     f'SELECT {axis}, COUNT(*) FROM canonical_v2_buildings'
                     f' WHERE is_publishable = true AND {axis} IS NOT NULL'
@@ -274,6 +277,24 @@ def get_corpus_tag_df():
                 ' GROUP BY m',
             )
             result['material_visual'] = {r[0]: int(r[1]) for r in cur.fetchall()}
+
+            # Array axis: typology_tags (TEXT[])
+            cur.execute(
+                'SELECT t, COUNT(*) FROM canonical_v2_buildings,'
+                ' unnest(typology_tags) t'
+                ' WHERE is_publishable = true'
+                ' GROUP BY t',
+            )
+            result['typology_tags'] = {r[0]: int(r[1]) for r in cur.fetchall()}
+
+            # Array axis: architectural_elements (TEXT[])
+            cur.execute(
+                'SELECT e, COUNT(*) FROM canonical_v2_buildings,'
+                ' unnest(architectural_elements) e'
+                ' WHERE is_publishable = true'
+                ' GROUP BY e',
+            )
+            result['architectural_elements'] = {r[0]: int(r[1]) for r in cur.fetchall()}
 
     except Exception as exc:
         logger.warning('get_corpus_tag_df: buildings DB query failed: %s', exc)

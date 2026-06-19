@@ -143,6 +143,9 @@ def _row_to_card(row, image_focus=None):
             'axis_atmosphere':     row.get('atmosphere'),
             'axis_color_tone':     row.get('color_tone'),
             'axis_material_visual': list(row.get('material_visual') or []),
+            'axis_typology_primary':       row.get('typology_primary'),
+            'axis_typology_tags':          list(row.get('typology_tags') or []),
+            'axis_architectural_elements': list(row.get('architectural_elements') or []),
             'visual_description':  row.get('visual_description') or '',
         },
     }

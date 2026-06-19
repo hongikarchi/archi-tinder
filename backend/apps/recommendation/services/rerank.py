@@ -225,8 +225,13 @@ def rerank_candidates(candidates, liked_summary):
         mat_visual = md.get('axis_material_visual') or []
         material = ', '.join(mat_visual[:3]) if mat_visual else '<none>'
         atmosphere = md.get('axis_atmosphere') or ''
+        typo_primary = md.get('axis_typology_primary') or ''
+        arch_elems = md.get('axis_architectural_elements') or []
+        arch_elem_str = ', '.join(arch_elems[:3]) if arch_elems else ''
         candidate_lines.append(
             f'[{i}] {bid} {name} — {architect}, {style}, {program}, {material}, {atmosphere}'
+            + (f', {typo_primary}' if typo_primary else '')
+            + (f', [{arch_elem_str}]' if arch_elem_str else '')
         )
 
     user_prompt = (
