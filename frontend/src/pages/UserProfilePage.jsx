@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getUserProfile } from '../api/client.js'
+import { getUserProfile, getLikedBuildings, getArchitectProfile } from '../api/client.js'
 import { updateProject, deleteProject } from '../api/projects.js'
 import { purgeChatCache } from '../utils/appHelpers.js'
 import { getUserSavedStudios } from '../api/architects.js'
@@ -8,6 +8,7 @@ import ShareCardModal from '../components/ShareCardModal.jsx'
 import ProfileHeader from './userProfile/ProfileHeader'
 import ProfileHero from './userProfile/ProfileHero'
 import BoardGrid from './userProfile/BoardGrid'
+import { OfficeCard, SkeletonCard, BuildingIconEmpty } from './LikedOfficesPage.jsx'
 
 /**
  * formatBoardDate — converts ISO 8601 timestamp to "Month YYYY" display string.
@@ -50,10 +51,14 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
 
   // Share card modal
   const [shareOpen, setShareOpen] = useState(false)
-  // Tab state — 'boards' | 'studios'
+  // Tab state — 'boards' | 'studios' | 'liked'
   const [activeTab, setActiveTab] = useState('boards')
   const [savedStudios, setSavedStudios] = useState(null)  // null = not loaded yet
   const [studiosLoading, setStudiosLoading] = useState(false)
+  const [buildingsMap, setBuildingsMap] = useState({}) // architect_id → buildings[]
+  const [likedBuildings, setLikedBuildings] = useState(null) // null = not yet fetched
+  const [likedLoading, setLikedLoading] = useState(false)
+  const [likedCount, setLikedCount] = useState(0)
 
   // MINOR #1: inline error banner for failed board actions (optimistic revert feedback)
   const [boardActionError, setBoardActionError] = useState(null)
@@ -68,6 +73,47 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
   const bulkDeleteBtnRef = useRef(null)
   const bulkConfirmTimerRef = useRef(null)
 
+  // Fetch likedCount on mount (isMe only) for ProfileHero stat display
+  useEffect(() => {
+    if (!isMe) return
+    getLikedBuildings()
+      .then(data => setLikedCount(data?.total ?? 0))
+      .catch(() => {})
+  }, [isMe])
+
+  // Fetch architect profiles for buildingsMap whenever savedStudios changes
+  useEffect(() => {
+    if (!savedStudios?.length) return
+    savedStudios.forEach(office => {
+      if (buildingsMap[office.architect_id] !== undefined) return
+      getArchitectProfile(office.architect_id)
+        .then(profile => {
+          setBuildingsMap(prev => ({
+            ...prev,
+            [office.architect_id]: profile?.buildings || [],
+          }))
+        })
+        .catch(() => {
+          setBuildingsMap(prev => ({ ...prev, [office.architect_id]: [] }))
+        })
+    })
+  }, [savedStudios]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleLikedTab() {
+    setActiveTab('liked')
+    if (likedBuildings !== null) return
+    setLikedLoading(true)
+    try {
+      const data = await getLikedBuildings()
+      setLikedBuildings(data?.buildings || [])
+      setLikedCount(data?.total ?? 0)
+    } catch {
+      setLikedBuildings([])
+    } finally {
+      setLikedLoading(false)
+    }
+  }
+
   // Helper: exit select mode and reset all selection state.
   // NOTE: does NOT clear bulkPending — bulk handlers clear it themselves after
   // Promise.allSettled resolves, so Cancel during a pending op cannot fire a
@@ -80,10 +126,6 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
   }, [])
 
   const handleStudiosTab = async () => {
-    if (isMe) {
-      navigate('/my/liked-offices')
-      return
-    }
     setActiveTab('studios')
     if (savedStudios !== null) return  // already loaded
     setStudiosLoading(true)
@@ -405,12 +447,17 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
           user={user}
           boardsTotalCount={boardsTotalCount}
           savedStudiosCount={user.saved_studios_count ?? 0}
-          onSelectTab={(t) => t === 'studios' ? handleStudiosTab() : setActiveTab('boards')}
+          likedCount={likedCount}
+          onSelectTab={(t) => {
+            if (t === 'studios') handleStudiosTab()
+            else if (t === 'liked') handleLikedTab()
+            else setActiveTab('boards')
+          }}
           isMe={isMe}
           onAvatarUpdated={(updatedUser) => setUser(prev => ({ ...prev, avatar_url: updatedUser.avatar_url }))}
         />
 
-        {/* Tab bar — Boards | Studios */}
+        {/* Tab bar — Boards | Studios | Liked (isMe only) */}
         <div style={{
           display: 'flex',
           borderBottom: '1px solid var(--color-border-soft)',
@@ -457,6 +504,28 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
           >
             Studios
           </button>
+          {isMe && (
+            <button
+              type="button"
+              onClick={handleLikedTab}
+              style={{
+                flex: 1,
+                padding: '12px 0',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: 14,
+                fontWeight: activeTab === 'liked' ? 700 : 500,
+                color: activeTab === 'liked' ? 'var(--color-text)' : 'var(--color-text-muted)',
+                borderBottom: activeTab === 'liked' ? '2px solid var(--color-text)' : '2px solid transparent',
+                marginBottom: -1,
+                fontFamily: 'inherit',
+                transition: 'color var(--motion-fast), border-color var(--motion-fast)',
+              }}
+            >
+              Liked
+            </button>
+          )}
         </div>
 
         {activeTab === 'boards' && (<>
@@ -556,36 +625,6 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
               }}>
                 {boardsTotalCount}
               </span>
-              {isMe && (
-                <button
-                  type="button"
-                  onClick={() => navigate('/liked-projects')}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 6,
-                    background: 'transparent',
-                    border: '1px solid var(--color-border)',
-                    borderRadius: 10, cursor: 'pointer',
-                    color: 'var(--color-text-2)', fontSize: 13, fontWeight: 600,
-                    padding: '0 12px', minHeight: 36,
-                    fontFamily: 'inherit',
-                    transition: 'border-color 0.18s cubic-bezier(0.4,0,0.2,1), color 0.18s cubic-bezier(0.4,0,0.2,1)',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = 'rgba(236,72,153,0.55)'
-                    e.currentTarget.style.color = '#ec4899'
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = 'var(--color-border)'
-                    e.currentTarget.style.color = 'var(--color-text-2)'
-                  }}
-                >
-                  {/* Heart icon */}
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-                  </svg>
-                  Liked Projects
-                </button>
-              )}
             </div>
             {/* P6: Edit button — owner-only, only when boards exist */}
             {isMe && boards.length > 0 && (
@@ -750,83 +789,119 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         {/* Studios tab content */}
         {activeTab === 'studios' && (
           <div style={{ padding: '16px 0' }}>
-            {studiosLoading && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} style={{
-                    height: 100, borderRadius: 12,
-                    background: 'var(--color-surface-2)',
-                  }} />
+            <style>{`
+              .building-carousel::-webkit-scrollbar { display: none; }
+              .building-carousel { -ms-overflow-style: none; scrollbar-width: none; }
+            `}</style>
+            {studiosLoading ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 40 }}>
+                {[0, 1, 2].map(i => <SkeletonCard key={i} />)}
+              </div>
+            ) : !savedStudios || savedStudios.length === 0 ? (
+              <div style={{
+                display: 'flex', flexDirection: 'column',
+                alignItems: 'center', justifyContent: 'center',
+                padding: '80px 20px', gap: 16, textAlign: 'center',
+              }}>
+                <BuildingIconEmpty />
+                <p style={{ color: 'var(--color-text)', fontSize: 16, fontWeight: 600, margin: 0 }}>
+                  저장한 오피스가 없어요
+                </p>
+                <p style={{ color: 'var(--color-text-muted)', fontSize: 13, margin: 0 }}>
+                  건축가 프로필에서 팔로우하면 여기에 표시돼요
+                </p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 40 }}>
+                {savedStudios.map((office, i) => (
+                  <OfficeCard
+                    key={office.architect_id || i}
+                    office={office}
+                    buildings={buildingsMap[office.architect_id] ?? null}
+                    onClick={() => navigate('/architects/' + office.architect_id)}
+                  />
                 ))}
               </div>
             )}
-            {!studiosLoading && savedStudios && savedStudios.length === 0 && (
-              <p style={{
-                textAlign: 'center', color: 'var(--color-text-muted)',
-                fontSize: 14, padding: '40px 0', margin: 0,
+          </div>
+        )}
+
+        {/* Liked tab content */}
+        {activeTab === 'liked' && (
+          <div style={{ padding: '16px 0' }}>
+            <h3 style={{
+              color: 'var(--color-text)', fontSize: 20, fontWeight: 700,
+              margin: '0 0 20px', letterSpacing: '-0.01em',
+            }}>
+              Liked Projects
+            </h3>
+            {likedLoading ? (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+                gap: 20,
               }}>
-                저장된 스튜디오가 없어요.
-              </p>
-            )}
-            {!studiosLoading && savedStudios && savedStudios.length > 0 && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-                {savedStudios.map(studio => (
-                  <button
-                    key={studio.architect_id}
-                    type="button"
-                    onClick={() => navigate('/architects/' + studio.architect_id)}
-                    style={{
-                      background: 'var(--color-surface)',
-                      border: '1px solid var(--color-border-soft)',
-                      borderRadius: 12,
-                      padding: '12px 8px',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: 8,
-                      fontFamily: 'inherit',
-                      textAlign: 'center',
-                    }}
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} style={{ aspectRatio: '4 / 5', borderRadius: 16, background: 'var(--color-surface-2)' }} />
+                ))}
+              </div>
+            ) : !likedBuildings || likedBuildings.length === 0 ? (
+              <div style={{
+                display: 'flex', flexDirection: 'column',
+                alignItems: 'center', justifyContent: 'center',
+                padding: '80px 20px', gap: 16, textAlign: 'center',
+              }}>
+                <p style={{ color: 'var(--color-text)', fontSize: 16, fontWeight: 600, margin: 0 }}>
+                  아직 좋아요한 프로젝트가 없어요
+                </p>
+                <p style={{ color: 'var(--color-text-muted)', fontSize: 13, margin: 0 }}>
+                  Discovery에서 마음에 드는 건물을 오른쪽으로 스와이프해보세요
+                </p>
+              </div>
+            ) : (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+                gap: 20,
+              }}>
+                {likedBuildings.map((bld, i) => (
+                  <div
+                    key={bld.canonical_bld_id || i}
+                    onClick={() => navigate('/buildings/' + bld.canonical_bld_id)}
+                    style={{ cursor: 'pointer', borderRadius: 16, overflow: 'hidden', background: 'var(--color-surface-2)' }}
                   >
-                    {studio.logo_url ? (
+                    {(bld.image_url || bld.display_cover_url) ? (
                       <img
-                        src={studio.logo_url}
-                        alt={studio.name}
-                        style={{
-                          width: 48, height: 48, borderRadius: '50%',
-                          objectFit: 'cover',
-                          border: '1px solid var(--color-border-soft)',
-                          background: 'var(--color-surface-2)',
-                        }}
+                        src={bld.image_url || bld.display_cover_url}
+                        alt={bld.name || ''}
+                        loading="lazy"
+                        style={{ width: '100%', aspectRatio: '4 / 5', objectFit: 'cover', display: 'block' }}
                       />
                     ) : (
-                      <div style={{
-                        width: 48, height: 48, borderRadius: '50%',
-                        background: 'var(--color-surface-2)',
-                        border: '1px solid var(--color-border-soft)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      }}>
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5">
-                          <rect x="3" y="3" width="18" height="18" rx="2"/>
-                          <path d="M9 9h6M9 12h6M9 15h6"/>
-                        </svg>
+                      <div style={{ width: '100%', aspectRatio: '4 / 5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <BuildingIconEmpty />
                       </div>
                     )}
-                    <p style={{
-                      margin: 0,
-                      fontSize: 11,
-                      fontWeight: 600,
-                      color: 'var(--color-text)',
-                      lineHeight: 1.3,
-                      display: '-webkit-box',
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: 'vertical',
-                      overflow: 'hidden',
-                    }}>
-                      {studio.name}
-                    </p>
-                  </button>
+                    <div style={{ padding: '10px 12px 12px' }}>
+                      <p style={{
+                        margin: 0, fontSize: 14, fontWeight: 700,
+                        color: 'var(--color-text)', lineHeight: 1.3,
+                        display: '-webkit-box', WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                      }}>
+                        {bld.name || bld.canonical_bld_id}
+                      </p>
+                      {bld.architect_names?.length > 0 && (
+                        <p style={{
+                          margin: '4px 0 0', fontSize: 12, color: 'var(--color-text-muted)',
+                          fontWeight: 500, lineHeight: 1.4,
+                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                        }}>
+                          {bld.architect_names.join(', ')}
+                        </p>
+                      )}
+                    </div>
+                  </div>
                 ))}
               </div>
             )}

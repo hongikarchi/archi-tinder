@@ -50,6 +50,7 @@ export default function ProfileHero({
   user,
   boardsTotalCount,
   savedStudiosCount,
+  likedCount,
   onSelectTab,
   // Avatar upload props (owner-only)
   isMe,
@@ -71,6 +72,7 @@ export default function ProfileHero({
   const stats = [
     { count: boardsTotalCount, label: 'Boards', onClick: () => onSelectTab('boards') },
     { count: savedStudiosCount ?? 0, label: 'Studios', onClick: () => onSelectTab('studios') },
+    ...(isMe ? [{ count: likedCount ?? 0, label: 'Liked', onClick: () => onSelectTab('liked') }] : []),
   ]
 
   const handleFileChange = useCallback(async (e) => {
@@ -249,8 +251,8 @@ export default function ProfileHero({
                 }}
               >
                 <span style={{ color: 'var(--color-text)', fontSize: 18, fontWeight: 700, lineHeight: 1 }}>
-                  {stat.count}
-                </span>
+                    {stat.count}
+                  </span>
                 <span style={{ color: 'var(--color-text-dim)', fontSize: 12, fontWeight: 500 }}>
                   {stat.label}
                 </span>
