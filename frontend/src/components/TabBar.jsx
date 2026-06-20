@@ -1,5 +1,6 @@
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from '../i18n/index.js'
+import { discoveryNavigationGuard } from '../utils/discoveryGuard.js'
 
 const TAB_ICONS = {
   discovery: (
@@ -43,7 +44,18 @@ export default function TabBar() {
   ]
 
   function handleSelect(tab) {
-    navigate(tab.path)
+    // Already on this tab — tapping the active tab is a no-op; do not invoke
+    // the guard or navigate (prevents false-alarm modal when the user taps the
+    // active Discovery tab while a draft is in progress).
+    if (tab.path === location.pathname) return
+
+    // If the guard is active (Discovery mounted with draft likes >= 1), show the
+    // leave-warning modal and defer navigation to the user's choice.
+    if (discoveryNavigationGuard.check) {
+      discoveryNavigationGuard.check(tab.path, () => navigate(tab.path))
+    } else {
+      navigate(tab.path)
+    }
   }
 
   return (

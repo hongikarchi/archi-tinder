@@ -103,22 +103,25 @@ def get_discovery_draft(profile, draft_id):
 
 # ── Tier computation ──────────────────────────────────────────────────────────
 
-def compute_discovery_tier(profile):
-    """Return tier dict: tier (1|2|3), n_local, n_global, cumulative_likes, project_count.
+def _tier_from_project_rows(rows):
+    """Pure-function tier computation from pre-fetched project rows.
+
+    rows: iterable of dicts with at least {'name': str, 'liked_ids': list|None}.
+    Scoped to the rows provided — callers are responsible for applying any cap.
 
     Tier thresholds (from RECOMMENDATION dict):
       Tier 1 (cold)   : cumulative_likes < discovery_tier2_min_likes (10)
-      Tier 3 (multi)  : project_count >= discovery_tier3_min_projects (2)
+      Tier 3 (multi)  : project_count >= discovery_tier3_min_projects (4)
                         OR cumulative_likes >= discovery_tier3_min_likes (50)
-      Tier 2 (single) : else (likes >= 10 AND projects <= 1)
+      Tier 2 (single) : else (likes >= 10 AND projects <= 3)
 
-    project_count: EXCLUDES auto draft boards (name starts with 'discovery_').
-    cumulative_likes: includes ALL projects (drafts + real) — taste accumulates.
+    project_count: counts ALL boards including discovery draft boards.
+    cumulative_likes: includes ALL provided rows (drafts + real).
 
     n_local + n_global = discovery_chunk_size (10).
     """
     tier2_min_likes = RC.get('discovery_tier2_min_likes', 10)
-    tier3_min_projects = RC.get('discovery_tier3_min_projects', 2)
+    tier3_min_projects = RC.get('discovery_tier3_min_projects', 4)
     tier3_min_likes = RC.get('discovery_tier3_min_likes', 50)
     chunk_size = RC.get('discovery_chunk_size', 10)
     t2_local = RC.get('discovery_tier2_local', 2)
@@ -126,17 +129,15 @@ def compute_discovery_tier(profile):
     t3_local = RC.get('discovery_tier3_local', 4)
     t3_global = RC.get('discovery_tier3_global', 6)
 
-    # Count likes across ALL projects (draft + real).
-    projects = Project.objects.filter(user=profile).values('name', 'liked_ids')
     cumulative_likes = 0
     project_count = 0
-    for p in projects:
+    for p in rows:
         liked = p.get('liked_ids') or []
         cumulative_likes += len(liked)
-        # Draft boards (name starts with DISCOVERY_DRAFT_PREFIX) are excluded
-        # from the tier project_count but their likes still accumulate.
-        if not is_discovery_draft_name(p['name']):
-            project_count += 1
+        # All boards — including discovery draft boards — count toward
+        # project_count.  Drafts are a multi-taste signal (DISCOVERY-PERF-2
+        # spec: "드래프트도 다중취향 신호로 간주").
+        project_count += 1
 
     # Determine tier
     if cumulative_likes < tier2_min_likes:
@@ -164,6 +165,27 @@ def compute_discovery_tier(profile):
         'cumulative_likes': cumulative_likes,
         'project_count': project_count,
     }
+
+
+def compute_discovery_tier(profile):
+    """Return tier dict: tier (1|2|3), n_local, n_global, cumulative_likes, project_count.
+
+    Thin wrapper: fetches the most-recent discovery_recent_boards_cap (default 10)
+    boards and delegates to _tier_from_project_rows().  Kept for backwards
+    compatibility with callers that do not pre-fetch rows themselves.
+
+    project_count: counts ALL boards including discovery draft boards.
+    cumulative_likes: from the capped board window only.
+
+    n_local + n_global = discovery_chunk_size (10).
+    """
+    cap = RC.get('discovery_recent_boards_cap', 10)
+    rows = list(
+        Project.objects.filter(user=profile)
+        .order_by('-created_at')[:cap]
+        .values('name', 'liked_ids')
+    )
+    return _tier_from_project_rows(rows)
 
 
 # ── Greedy FPS (mirrors engine.py lines 222-235) ──────────────────────────────
@@ -342,14 +364,27 @@ def _fetch_candidates(exclude_ids, dislike_centroid, chunk_size):
 
 # ── Main chunk builder ────────────────────────────────────────────────────────
 
-def build_discovery_chunk(profile, centroids, client_buffer_ids=None, chunk_size=None):
+def build_discovery_chunk(
+    profile,
+    centroids,
+    client_buffer_ids=None,
+    chunk_size=None,
+    # DISCOVERY-PERF-1: pre-fetched project rows (recent-cap boards only).
+    # When provided, these rows are used for exclude_set (board part) and
+    # dislike aggregation — no additional DB query is issued.
+    # When None, a fresh capped fetch is performed internally (backwards-compat).
+    _project_rows=None,
+    # Pre-computed tier_info dict (from _tier_from_project_rows / compute_discovery_tier).
+    # When None, computed from _project_rows (or fetched internally).
+    _tier_info=None,
+):
     """Build a 10-card Discovery chunk for the given profile.
 
     Steps:
-      1. Build exclude set: all user project ids (liked + disliked + saved)
-         PLUS client_buffer_ids.
-      2. Compute dislike centroid from the most-recent N passes gathered
-         across ALL the user's projects (rolling window, union of all disliked_ids).
+      1. Use pre-fetched _project_rows (most-recent cap boards) — or fetch them.
+         Build exclude set from those rows (liked + disliked + saved).
+         PLUS profile.liked_building_ids and client_buffer_ids (no cap on these).
+      2. Aggregate disliked_ids from _project_rows for the dislike centroid.
          If no passes, no dislike zone.
       3. Fetch candidates via 2-query pattern (IDs only → sample → full rows).
       4. Parse embeddings.
@@ -362,6 +397,9 @@ def build_discovery_chunk(profile, centroids, client_buffer_ids=None, chunk_size
     centroids: list of np.ndarray or list of list[float] (may be empty for cold).
     client_buffer_ids: optional iterable of building id strings already shown
         to the client but not yet acted on.
+    _project_rows: pre-fetched list of dicts (name/liked_ids/disliked_ids/saved_ids).
+        Scoped to recent-cap boards. Pass from the view to avoid re-querying.
+    _tier_info: pre-computed tier dict. If None, derived from _project_rows.
     """
     if chunk_size is None:
         chunk_size = RC.get('discovery_chunk_size', 10)
@@ -369,15 +407,26 @@ def build_discovery_chunk(profile, centroids, client_buffer_ids=None, chunk_size
     dislike_window = RC.get('discovery_dislike_history_window', 30)
     local_sim_radius = RC.get('discovery_local_sim_radius', 0.55)
 
-    # ── Compute tier split ─────────────────────────────────────────────────
-    tier_info = compute_discovery_tier(profile)
-    n_local = tier_info['n_local']
-    n_global = tier_info['n_global']
+    # ── Resolve project rows (1 fetch if not pre-supplied) ─────────────────
+    if _project_rows is None:
+        cap = RC.get('discovery_recent_boards_cap', 10)
+        _project_rows = list(
+            Project.objects.filter(user=profile)
+            .order_by('-created_at')[:cap]
+            .values('name', 'liked_ids', 'disliked_ids', 'saved_ids')
+        )
 
-    # ── Build exclude set ──────────────────────────────────────────────────
+    # ── Compute tier split (from pre-fetched rows) ─────────────────────────
+    if _tier_info is None:
+        _tier_info = _tier_from_project_rows(_project_rows)
+    n_local = _tier_info['n_local']
+    n_global = _tier_info['n_global']
+
+    # ── Build exclude set (board part: from recent-cap rows only) ──────────
+    # DISCOVERY-PERF-1: exclude_set boards are scoped to the recent-cap window.
+    # Older boards' buildings may re-appear — this is the intended product spec.
     exclude_set = set()
-    projects = Project.objects.filter(user=profile).values('liked_ids', 'disliked_ids', 'saved_ids')
-    for project in projects:
+    for project in _project_rows:
         for bid in _liked_id_only(project.get('liked_ids')):
             if isinstance(bid, str):
                 exclude_set.add(bid)
@@ -394,7 +443,7 @@ def build_discovery_chunk(profile, centroids, client_buffer_ids=None, chunk_size
 
     # BACK-RECOMMEND-4: also exclude buildings liked via the Profile
     # "liked buildings" tab (UserProfile.liked_building_ids) so they
-    # don't reappear in the Discovery chunk.
+    # don't reappear in the Discovery chunk. No cap — cost is O(0) DB hits.
     for bid in list(profile.liked_building_ids or []):
         if isinstance(bid, str) and bid:
             exclude_set.add(bid)
@@ -404,14 +453,12 @@ def build_discovery_chunk(profile, centroids, client_buffer_ids=None, chunk_size
             if isinstance(bid, str) and bid:
                 exclude_set.add(bid)
 
-    # ── Dislike centroid (rolling window, all projects) ────────────────────
-    # Aggregate disliked_ids across ALL the user's projects (drafts + real).
-    # Take the most-recent `dislike_window` items from the union.
-    # NOTE: This does NOT depend on a specific draft_id — the feed GET does
-    # not receive one.  Ordering is preserved within each project's list but
-    # interleaving across projects is not strictly temporal (acceptable trade-off).
+    # ── Dislike centroid (rolling window, from recent-cap rows) ───────────
+    # Aggregate disliked_ids from the capped project rows.
+    # Ordering is preserved within each project's list; interleaving across
+    # projects is not strictly temporal (acceptable trade-off).
     all_dislike_ids = []
-    for project in Project.objects.filter(user=profile).values('disliked_ids'):
+    for project in _project_rows:
         disliked = project.get('disliked_ids') or []
         if isinstance(disliked, list):
             all_dislike_ids.extend(bid for bid in disliked if isinstance(bid, str))

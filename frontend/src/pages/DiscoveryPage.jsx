@@ -5,6 +5,12 @@ import { reportWriteError } from '../utils/reportWriteError.js'
 import SwipeCard, { CARD_WIDTH, CARD_HEIGHT } from '../components/SwipeCard.jsx'
 import DiscoveryTriggerCard from '../components/DiscoveryTriggerCard.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
+import { discoveryNavigationGuard } from '../utils/discoveryGuard.js'
+
+// Module-level flag: false on full page reload (module not yet loaded), true after
+// the first mount within the same SPA session. Used to detect tab re-entry vs first
+// load so we can start a fresh draft on re-entry while still restoring on refresh.
+let _discoveryMountedOnce = false
 
 const PREFETCH_AT_REMAINING = 3   // fetch more when deck.length <= this
 const TASTE_NUDGE_THRESHOLD = 10  // inject trigger card when draftLikeCount reaches this
@@ -16,6 +22,8 @@ const DECK_CACHE_TTL_MS = 30 * 60 * 1000  // 30 min
 const DRAFT_ID_KEY = 'discovery_draft_id'
 const DRAFT_LIKES_KEY = 'discovery_draft_likes'
 const SEEN_IDS_KEY = 'discovery_seen_ids'
+// Feature B: persists across page refresh within same session
+const CONTINUE_AFTER_TRIGGER_KEY = 'discovery_continue_after_trigger'
 
 const TRIGGER_CARD_ID = '__taste_trigger__'
 
@@ -74,6 +82,24 @@ function saveSeenIds(set) {
   } catch { /* quota exceeded — ignore */ }
 }
 
+/* ── Feature A: inject a high-priority <link rel="preload"> for the first
+     card image. This fires before React renders the <img> tag, letting the
+     browser start the network request while the deck is being populated.
+     Cache: one injected link per URL (idempotent). ────────────────────────── */
+const _preloadLinkCache = new Set()
+function injectFirstCardPreload(url) {
+  if (!url || _preloadLinkCache.has(url)) return
+  _preloadLinkCache.add(url)
+  try {
+    const link = document.createElement('link')
+    link.rel = 'preload'
+    link.as = 'image'
+    link.href = url
+    link.fetchPriority = 'high'
+    document.head.appendChild(link)
+  } catch { /* ignore — best-effort */ }
+}
+
 /* ── preloadImage helper ─────────────────────────────────────────────────── */
 function makeImagePreloader() {
   const cache = new Set()
@@ -107,6 +133,16 @@ function isTriggerCard(card) {
   return card?.canonical_bld_id === TRIGGER_CARD_ID || card?.__trigger === true
 }
 
+// Helper: wipe all Discovery draft sessionStorage keys and return cleared defaults.
+// Called on tab re-entry (SPA remount) to force a fresh draft start.
+function _clearDraftSessionStorage() {
+  sessionStorage.removeItem(DRAFT_ID_KEY)
+  sessionStorage.removeItem(DRAFT_LIKES_KEY)
+  sessionStorage.removeItem(DECK_CACHE_KEY)
+  sessionStorage.removeItem(SEEN_IDS_KEY)
+  sessionStorage.removeItem(CONTINUE_AFTER_TRIGGER_KEY)
+}
+
 export default function DiscoveryPage({ showToast }) {
   const navigate = useNavigate()
   const isActiveRef = useRef(true)
@@ -124,16 +160,52 @@ export default function DiscoveryPage({ showToast }) {
   const [shakeCardId, setShakeCardId] = useState(null)
   const [promoteLoading, setPromoteLoading] = useState(false)
   const [capReached, setCapReached] = useState(false)
+  // Leave-warning modal state (DISCOVERY-PERF-3)
+  const [leaveModal, setLeaveModal] = useState(null)  // null | { proceed: fn }
+  // True while the modal's auto-promote call is in-flight (>=10 path)
+  const [leaveModalPromoting, setLeaveModalPromoting] = useState(false)
+  // Stable ref to draftLikeCount for the guard closure (avoids stale closure issues).
+  // Seeded with 0; the effect at lines 249-251 keeps it in sync after every render.
+  const draftLikeCountRef = useRef(0)
 
-  const _cached = loadDeckCache()
+  // Detect tab re-entry: _discoveryMountedOnce is false only on full page load
+  // (module not yet executed). On SPA tab navigation it stays true, so a second
+  // mount (user went to another tab and came back) is a re-entry → fresh draft.
+  // Capture the flag value once at mount into a ref so subsequent re-renders do
+  // not re-read the (now-always-true) module variable.
+  const isReentryMountRef = useRef(null)
+  if (isReentryMountRef.current === null) {
+    // First render of this mount: capture the module flag, then set it.
+    isReentryMountRef.current = _discoveryMountedOnce  // true = re-entry
+    if (!_discoveryMountedOnce) {
+      _discoveryMountedOnce = true
+    }
+    // If re-entry: wipe sessionStorage immediately (before useState initialisers
+    // further down read from it) so they all start with clean slate.
+    if (isReentryMountRef.current) {
+      _clearDraftSessionStorage()
+    }
+  }
+  const isReentryMount = isReentryMountRef.current
+
+  // Feature B: set when user left-swipes the trigger card ("Discovery 계속")
+  const [continueAfterTrigger, setContinueAfterTrigger] = useState(
+    () => isReentryMount ? false : sessionStorage.getItem(CONTINUE_AFTER_TRIGGER_KEY) === '1'
+  )
+
+  const _cached = isReentryMount ? null : loadDeckCache()
   const [deck, setDeck] = useState(_cached ? _cached.deck : [])
   const [tasteState, setTasteState] = useState(_cached ? (_cached.tasteState || 'cold') : 'cold')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   // Draft-id session state — persisted to sessionStorage
-  const [draftId, setDraftId] = useState(() => sessionStorage.getItem(DRAFT_ID_KEY) || null)
+  const [draftId, setDraftId] = useState(() => {
+    if (isReentryMount) return null
+    return sessionStorage.getItem(DRAFT_ID_KEY) || null
+  })
   const [draftLikeCount, setDraftLikeCount] = useState(() => {
+    if (isReentryMount) return 0
     const hasDraft = sessionStorage.getItem(DRAFT_ID_KEY)
     if (!hasDraft) {
       sessionStorage.removeItem(DRAFT_LIKES_KEY)   // stale count with no board — discard
@@ -148,8 +220,14 @@ export default function DiscoveryPage({ showToast }) {
   useEffect(() => {
     isActiveRef.current = true
     ensureShakeStyle()
+    // On tab re-entry: reset refs that carry over between renders but won't be
+    // re-initialized by useState (since they start with useRef()).
+    if (isReentryMount) {
+      triggerShownRef.current = false
+      seenIdsRef.current = new Set()
+    }
     return () => { isActiveRef.current = false }
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Persist draftId to sessionStorage whenever it changes
   useEffect(() => {
@@ -169,6 +247,28 @@ export default function DiscoveryPage({ showToast }) {
   useEffect(() => {
     if (draftLikeCount >= DISCOVERY_LIKE_HARD_CAP) setCapReached(true)
   }, [draftLikeCount])
+
+  // Keep draftLikeCountRef in sync for guard closure reads
+  useEffect(() => {
+    draftLikeCountRef.current = draftLikeCount
+  }, [draftLikeCount])
+
+  // Register / update the module-level navigation guard (DISCOVERY-PERF-3).
+  // The guard is set whenever DiscoveryPage is mounted; it checks draftLikeCountRef
+  // at call time (not at registration time) so it always reflects the current count.
+  // Cleared on unmount so callers outside /discovery fall through immediately.
+  useEffect(() => {
+    discoveryNavigationGuard.check = (action, proceed) => {
+      if (draftLikeCountRef.current < 1) {
+        proceed()
+        return
+      }
+      setLeaveModal({ proceed })
+    }
+    return () => {
+      discoveryNavigationGuard.check = null
+    }
+  }, [])
 
   // Keyboard swipe: ← pass, → like.
   useEffect(() => {
@@ -194,6 +294,10 @@ export default function DiscoveryPage({ showToast }) {
   // absent: if the deck is temporarily empty (fetch in flight) the updater
   // returns prev unchanged and triggerShownRef stays false, so the effect
   // re-fires correctly once the deck is refilled (draftLikeCount still ≥10).
+  //
+  // Fix #4: splice at index 0 (not 1) so the trigger card becomes the NEXT card
+  // immediately — splice(1,0) would put it after the card-currently-leaving,
+  // which means it only appears two swipes later.
   useEffect(() => {
     if (draftId && draftLikeCount >= TASTE_NUDGE_THRESHOLD && !triggerShownRef.current) {
       const triggerCard = { canonical_bld_id: TRIGGER_CARD_ID, __trigger: true }
@@ -204,9 +308,9 @@ export default function DiscoveryPage({ showToast }) {
         if (prev.some(c => isTriggerCard(c))) return prev
         // Mark only when actually injecting
         triggerShownRef.current = true
-        // Splice at index 1 (after the current top card) so it appears next
+        // Splice at index 0: trigger card becomes the new top card immediately
         const next = [...prev]
-        next.splice(1, 0, triggerCard)
+        next.splice(0, 0, triggerCard)
         return next
       })
     }
@@ -242,6 +346,13 @@ export default function DiscoveryPage({ showToast }) {
     try {
       const result = await fetchDiscoveryFeed(bufferIds)
       if (!isActiveRef.current || requestId !== requestIdRef.current) return
+
+      // Feature A: immediately inject a high-priority <link rel="preload"> for
+      // the first card's image_url so the browser starts fetching before React
+      // renders the <img> tag. This fires concurrently with the deck state update.
+      if (reset && result.cards[0]?.image_url) {
+        injectFirstCardPreload(result.cards[0].image_url)
+      }
 
       // Preload the first few images so subsequent cards render with image cached
       const preload = preloadRef.current
@@ -319,10 +430,14 @@ export default function DiscoveryPage({ showToast }) {
     // -- Trigger card handling --
     if (isTriggerCard(card)) {
       if (action === 'like') {
-        // RIGHT swipe → promote to Taste
+        // RIGHT swipe → promote to Taste (기존 동작 유지)
         handlePromoteToTaste()
+      } else {
+        // LEFT swipe → Discovery 계속; set Feature B flag so the persistent
+        // "Taste로 저장·이동" button appears on all subsequent cards.
+        setContinueAfterTrigger(true)
+        try { sessionStorage.setItem(CONTINUE_AFTER_TRIGGER_KEY, '1') } catch { /* ignore */ }
       }
-      // LEFT swipe → just advance (already done). Do NOT re-inject this session.
       return
     }
 
@@ -334,9 +449,15 @@ export default function DiscoveryPage({ showToast }) {
     saveSeenIds(seenIdsRef.current)
 
     if (action === 'like') {
+      // Fix #4: optimistically increment draftLikeCount before the API call so
+      // the threshold check (draftLikeCount >= TASTE_NUDGE_THRESHOLD) fires
+      // synchronously this render cycle. The backend response reconciles with
+      // the authoritative count (handles dedup / edge cases).
+      setDraftLikeCount(prev => prev + 1)
       discoveryFeedback(bldId, 'like', draftId)
         .then(res => {
           if (res.draftId) setDraftId(res.draftId)
+          // Reconcile with authoritative backend count (dedup/cap may adjust).
           setDraftLikeCount(res.draftLikeCount)
           if (res.likeCapReached) setCapReached(true)
         })
@@ -361,9 +482,11 @@ export default function DiscoveryPage({ showToast }) {
       // Clear draft session state — a future Discovery visit starts fresh
       setDraftId(null)
       setDraftLikeCount(0)
+      setContinueAfterTrigger(false)
       triggerShownRef.current = false
       sessionStorage.removeItem(DRAFT_ID_KEY)
       sessionStorage.removeItem(DRAFT_LIKES_KEY)
+      sessionStorage.removeItem(CONTINUE_AFTER_TRIGGER_KEY)
       // Hand off the session payload to App.jsx via custom event.
       window.dispatchEvent(new CustomEvent('archithon:promote-to-taste', { detail: result }))
       navigate('/swipe')
@@ -653,8 +776,8 @@ export default function DiscoveryPage({ showToast }) {
         )}
       </div>
 
-      {/* Bottom area: swipe hint */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+      {/* Bottom area: swipe hint + Feature B persistent CTA */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
         {promoteLoading ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{
@@ -668,11 +791,204 @@ export default function DiscoveryPage({ showToast }) {
             </span>
           </div>
         ) : (
-          <p style={{ color: 'var(--color-text-dimmest)', fontSize: 11, margin: 0 }}>
-            ← skip · tap card · save →&nbsp;&nbsp;·&nbsp;&nbsp;arrow keys supported
-          </p>
+          <>
+            {continueAfterTrigger && (
+              /* Feature B: persistent "Taste로 저장·이동" button rendered after
+                 user left-swiped the trigger card (Discovery 계속 선택).
+                 Primary CTA gradient per DESIGN.md §8.1. min-height 44px per §3.2. */
+              <button
+                type="button"
+                onClick={handlePromoteToTaste}
+                disabled={promoteLoading}
+                style={{
+                  minHeight: 44,
+                  padding: '0 20px',
+                  borderRadius: 'var(--radius-md, 12px)',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, var(--accent-1, #0969DA), var(--accent-2, #8250DF))',
+                  color: '#fff',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  letterSpacing: '-0.01em',
+                  transition: `transform var(--motion-normal, 220ms) var(--motion-ease, cubic-bezier(0.4,0,0.2,1))`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
+                지금까지 취향 저장하고 Taste로 이동
+              </button>
+            )}
+            <p style={{ color: 'var(--color-text-dimmest)', fontSize: 11, margin: 0 }}>
+              ← skip · tap card · save →&nbsp;&nbsp;·&nbsp;&nbsp;arrow keys supported
+            </p>
+          </>
         )}
       </div>
+
+      {/* Leave-warning modal (DISCOVERY-PERF-3) — shown when user tries to navigate
+          away or log out while draftLikeCount >= 1. DESIGN.md §8.10: mobile = bottom
+          sheet style (radius-xl top corners), desktop = centered modal (max-width 480px).
+          Backdrop: rgba(0,0,0,0.4) per §8.10 sheet-backdrop. Buttons min-height 44px per §3.2. */}
+      {leaveModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setLeaveModal(null)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(0,0,0,0.4)',
+            display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: '100%', maxWidth: 480,
+              background: 'var(--color-surface, #F6F8FA)',
+              borderRadius: '24px 24px 0 0',
+              padding: 24,
+              paddingBottom: 'calc(24px + env(safe-area-inset-bottom, 0px))',
+              boxShadow: '0 -4px 32px rgba(0,0,0,0.18)',
+            }}
+          >
+            {/* Handle bar */}
+            <div style={{
+              width: 36, height: 4, borderRadius: 999,
+              background: 'var(--color-surface-3, #E1E4E8)',
+              margin: '0 auto 20px',
+            }} />
+
+            <p style={{
+              margin: '0 0 20px',
+              fontSize: 14,
+              fontWeight: 400,
+              color: 'var(--color-text, #1F2328)',
+              lineHeight: 1.6,
+            }}>
+              {draftLikeCount >= TASTE_NUDGE_THRESHOLD
+                ? '이 페이지를 나가면 Discovery 탐색이 종료됩니다. 지금까지 모은 취향은 Taste에서 이어서 탐색할 수 있습니다.'
+                : '이 페이지를 나가면 현재까지 모은 좋아요(드래프트)가 사라집니다.'}
+            </p>
+
+            {/* Primary action: stay */}
+            <button
+              type="button"
+              onClick={() => setLeaveModal(null)}
+              disabled={leaveModalPromoting}
+              style={{
+                display: 'block', width: '100%',
+                minHeight: 44,
+                padding: '0 16px',
+                borderRadius: 12,
+                border: 'none',
+                background: 'linear-gradient(135deg, var(--accent-1, #0969DA), var(--accent-2, #8250DF))',
+                color: '#fff',
+                fontSize: 15,
+                fontWeight: 600,
+                cursor: leaveModalPromoting ? 'not-allowed' : 'pointer',
+                fontFamily: 'inherit',
+                marginBottom: 10,
+                opacity: leaveModalPromoting ? 0.6 : 1,
+              }}
+            >
+              Discovery에서 계속 탐색하기
+            </button>
+
+            {/* Secondary action: leave
+                >=10 likes: auto-promote then navigate to the intended destination.
+                  Dispatches the custom event with skipNav:true so App.jsx persists
+                  the session without forcing navigate('/swipe').
+                1-9 likes: discard draft and proceed immediately. */}
+            <button
+              type="button"
+              disabled={leaveModalPromoting}
+              onClick={async () => {
+                if (draftLikeCount >= TASTE_NUDGE_THRESHOLD) {
+                  // Auto-promote path: persist the Taste session, then go where the
+                  // user was originally headed (not forced to /swipe).
+                  const proceed = leaveModal.proceed
+                  setLeaveModalPromoting(true)
+                  try {
+                    const result = await promoteToTaste(draftId)
+                    // Clear draft sessionStorage — same cleanup as handlePromoteToTaste
+                    setDraftId(null)
+                    setDraftLikeCount(0)
+                    setContinueAfterTrigger(false)
+                    triggerShownRef.current = false
+                    sessionStorage.removeItem(DRAFT_ID_KEY)
+                    sessionStorage.removeItem(DRAFT_LIKES_KEY)
+                    sessionStorage.removeItem(CONTINUE_AFTER_TRIGGER_KEY)
+                    // Persist the session via App.jsx listener with skipNav:true so
+                    // App stores the project / calls applySessionResponse but does NOT
+                    // force-navigate to /swipe — proceed() will do the real navigation.
+                    window.dispatchEvent(new CustomEvent('archithon:promote-to-taste', {
+                      detail: { ...result, skipNav: true },
+                    }))
+                  } catch (err) {
+                    console.error('[LeaveModal] auto-promote failed:', err)
+                    // Surface a brief error toast but do NOT trap the user — still let
+                    // them proceed to their intended destination.
+                    if (showToast) showToast('Taste 세션 저장 실패 — 그냥 이동합니다', 'warning')
+                  } finally {
+                    setLeaveModalPromoting(false)
+                  }
+                  setLeaveModal(null)
+                  proceed()
+                } else {
+                  // 1-9 likes: discard draft, leave immediately
+                  const proceed = leaveModal.proceed
+                  setLeaveModal(null)
+                  proceed()
+                }
+              }}
+              style={{
+                display: 'block', width: '100%',
+                minHeight: 44,
+                padding: '0 16px',
+                borderRadius: 12,
+                border: '1px solid var(--color-border-soft, rgba(0,0,0,0.12))',
+                background: 'var(--color-surface, #F6F8FA)',
+                color: 'var(--color-text-muted, #656D76)',
+                fontSize: 14,
+                fontWeight: 500,
+                cursor: leaveModalPromoting ? 'not-allowed' : 'pointer',
+                fontFamily: 'inherit',
+                opacity: leaveModalPromoting ? 0.6 : 1,
+              }}
+            >
+              {leaveModalPromoting ? (
+                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                  <span style={{
+                    display: 'inline-block', width: 13, height: 13, borderRadius: '50%',
+                    border: '2px solid var(--color-text-dim, #8C959F)',
+                    borderTopColor: 'var(--accent-1, #0969DA)',
+                    animation: 'spin 0.8s linear infinite',
+                  }} />
+                  Taste 저장 중…
+                </span>
+              ) : (
+                <>
+                  그냥 나가기
+                  <span style={{
+                    display: 'block',
+                    fontSize: 11,
+                    fontWeight: 400,
+                    color: 'var(--color-text-dim, #8C959F)',
+                    marginTop: 2,
+                  }}>
+                    {draftLikeCount >= TASTE_NUDGE_THRESHOLD
+                      ? 'Taste에서 이어갈 수 있습니다'
+                      : '좋아요한 정보가 저장되지 않습니다'}
+                  </span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
 
     </div>
   )
