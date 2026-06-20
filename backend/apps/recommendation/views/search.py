@@ -184,37 +184,40 @@ class ParseQueryView(APIView):
                 user_id=request.user.id,
             )
 
-        # Terminal path (probe_needed=False): run search engine.
+        # Terminal path (probe_needed=False): run scored search engine.
+        # LLM-SEARCH-RANK-1: pure-soft IDF+BM25 scoring replaces the 3-tier relaxation
+        # ladder. is_publishable=true is the only hard gate; all filter axes are soft
+        # (weighted CASE WHEN). The 3-stage relaxation (Tiers 1-3) is removed.
         filters = dict(parsed_filters)
         # image_focus lives outside the WHERE-clause filter dict but riders along
         # so cards get the user-requested cover variant.
         image_focus = parsed.get('image_focus')
         if image_focus:
             filters['image_focus'] = image_focus
-        results = (
-            engine.search_by_filters(filters, limit=20, image_focus=image_focus)
-            if filters else []
-        )
 
         is_fallback = False
         fallback_note = ''
 
-        if not results:
-            # Relax: drop geographic + numeric constraints, keep program/mood/material
-            relaxed = {k: v for k, v in filters.items()
-                       if k not in ('location_country', 'location_city',
-                                    'year_min', 'year_max')}
-            if relaxed and relaxed != filters:
-                results = engine.search_by_filters(relaxed, limit=20, image_focus=image_focus)
-                if results:
-                    is_fallback = True
-                    fallback_note = "No exact matches for those criteria — here are similar buildings you might like."
+        # Score-ranked path: fires when any filter axis is set OR raw_query is non-empty.
+        # Both conditions allow search_by_filters_scored to produce a ranked result set.
+        has_signal = bool(parsed_filters) or bool(raw_query and raw_query.strip())
+        if has_signal:
+            results = engine.search_by_filters_scored(
+                filters,
+                raw_query=raw_query,
+                filter_priority=parsed_priority,
+                limit=20,
+                image_focus=image_focus,
+            )
+        else:
+            results = []
 
+        # Fallback: only when both filter-signal AND raw_query are absent (true empty).
+        # Preserves the get_diverse_random path for zero-signal queries.
         if not results:
-            # Final fallback: diverse random
             results = engine.get_diverse_random(n=20, image_focus=image_focus)
             is_fallback = True
-            fallback_note = "Couldn’t find an exact match — here are some buildings you might enjoy instead."
+            fallback_note = "Couldn't find an exact match — here are some buildings you might enjoy instead."
 
         return Response({
             'probe_needed': False,
