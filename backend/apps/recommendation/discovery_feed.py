@@ -284,6 +284,7 @@ def _fetch_candidates(exclude_ids, dislike_centroid, chunk_size):
         'canonical_bld_id', 'name', 'architect_names', 'architects_text',
         'location_country', 'location_city', 'project_year',
         'program', 'style', 'atmosphere', 'color_tone', 'material_visual',
+        'typology_primary', 'typology_tags', 'architectural_elements',
         'visual_description',
         'covers_by_type', 'all_images', 'display_cover_url',
         'cover_image_url_default', 'source_urls',
