@@ -23,11 +23,25 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-06-12 19:55 KST',
-    head: '38ac272',
-    branch: 'feature/claude-login-port',
+    updatedAt: '2026-06-22 00:44 KST',
+    head: '0715bd3',
+    branch: 'feature/claude-image-resize',
   },
   done: [
+    {
+      id: 'FRONT-IMAGE-RESIZE-1',
+      title: 'swipe 커버 right-sizing (PR1)',
+      completedAt: '2026-06-22',
+      prs: [241],
+      note: '이미지 레이턴시 리서치(#240) 지배 lever 구현. swipe 카드가 중앙값 4.6배(p90 21.9배) 과대-페치 → 커버 `image_url`을 표시크기(840px=DPR2)로 우-사이징. 프론트 only — 백엔드/Redis 캐시/API 계약 무변경(user 결정: 같은 URL 변환이라 효과 동일, SPA라 프론트가 유일 소비자). 리사이즈만(포맷/srcset/decode/LQIP = PR2, 측정 후).',
+    },
+    {
+      id: 'PERF-IMAGE-RESEARCH-1',
+      title: '이미지 레이턴시 리서치 (measure-first)',
+      completedAt: '2026-06-22',
+      prs: [240],
+      note: '프론트/웹 이미지-렌더 레이턴시 리서치(코드 아님). 측정-우선: Phase 0(실 swipe 카드 50장) → 이슈별 1차출처 리서치 → adversarial 검증. 백엔드 알고리즘 out of scope.',
+    },
     {
       id: 'FRONT-AUTH-3',
       title: '로그인 테마 통일 + 한영 토글',
@@ -65,19 +79,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-06-07',
       note: '표준 로그인 추가(소셜 유지 + handle=ID+비밀번호). 식별자 확정: `handle`=ID(로그인·공개@), `display_name`=이름(프로필), `User.username`=내부키(`local_<uuid>`).',
     },
-    {
-      id: 'SETTINGS-PROFILE-IA-1',
-      title: 'archibe Settings harvest + Profile/Account IA + rebrand archibe',
-      completedAt: '2026-06-07',
-      note: 'archibe-profile(외부 레퍼런스, #179 harvest와 동일 repo) 2차 harvest + 프로필/계정 정보구조 재설계 + 서비스명 archibe 리브랜드. 4 커밋(slices 1-2-3 + A/B/C + F).',
-    },
-    {
-      id: 'BACK-LLM-GEMINI-1',
-      title: 'Gemini 3.1 모델 마이그레이션 + 페르소나 이미지 플로우 배선',
-      completedAt: '2026-06-05',
-      prs: [204],
-      note: '하드코딩 모델 ID(텍스트 `gemini-2.5-flash` 9곳 + 이미지 Imagen 3 orphan) → settings/env 분리(`GEMINI_TEXT_MODEL`=3.1-flash-lite, `GEMINI_IMAGE_MODEL`=3.1-flash-image, 각 fallback). 텍스트 호출 `generate_content_with_fallback` 래퍼로 일원화(model+retry+timeout+4xx fallback). 이미지: Imagen `generate_images`…',
-    },
   ],
   now: [
     {
@@ -89,6 +90,11 @@ window.PROJECT_STATE = {
   next: {
     xhigh: [],
     high: [
+      {
+        id: 'FRONT-IMAGE-RESIZE-2',
+        title: '이미지 Tier A 나머지 (PR2, PR1 측정 후)',
+        note: 'FRONT-IMAGE-RESIZE-1(#241) 리사이즈 배포 → `useImageTelemetry` `load_ms` 전/후 측정 확인 후 착수(measure-first, user 결정). 리서치 docs/research/image-latency 권고: imgix `fm=avif`(A3, webp 폴백 + C3 decode A/B), srcset+per-DPR `q=80/40/20`(A4), `img.decode()` in `App.jsx preloadImage()`(A6), LQIP/do…',
+      },
       {
         id: 'ARCHITECT-UNIFY-1',
         title: 'firm-side Office→Architect 전면 통합 (deferred, firm-UX 착수 시)',
@@ -182,60 +188,60 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
-      number: 223,
-      title: 'feat(SNS-SAVE): save button + saved indicator on profile building cards',
-      mergedAt: '2026-06-12T02:27:42Z',
-      mergedAtKST: '2026-06-12 11:27 KST',
-      sha: 'abfba4d',
+      number: 240,
+      title: 'docs(perf): image-latency research — measure-first report + findings',
+      mergedAt: '2026-06-21T15:41:24Z',
+      mergedAtKST: '2026-06-22 00:41 KST',
+      sha: '0715bd3',
     },
     {
-      number: 222,
-      title: 'feat(SNS-REPORT): 페르소나 이미지 다운로드 버튼',
-      mergedAt: '2026-06-12T02:38:50Z',
-      mergedAtKST: '2026-06-12 11:38 KST',
-      sha: '6e0deb5',
+      number: 239,
+      title: 'feat(LLM-SEARCH): IDF+BM25 점수 랭킹 + atmosphere/color_tone/typology 파싱 (무작위 절벽 제거)',
+      mergedAt: '2026-06-20T20:14:51Z',
+      mergedAtKST: '2026-06-21 05:14 KST',
+      sha: '463508e',
     },
     {
-      number: 221,
-      title: 'feat(SNS-REPORT): PersonaReport 컴포넌트 추출 + ResultsPage 임베드',
-      mergedAt: '2026-06-12T02:27:59Z',
-      mergedAtKST: '2026-06-12 11:27 KST',
-      sha: '0f46194',
+      number: 238,
+      title: 'perf(DISCOVERY): 최근10보드 캡+1회페치, 드래프트 tier포함, 트리거 즉시화, 재진입 새드래프트, tier3=4, 이탈경고 모달',
+      mergedAt: '2026-06-20T19:12:56Z',
+      mergedAtKST: '2026-06-21 04:12 KST',
+      sha: '641d6fc',
     },
     {
-      number: 220,
-      title: 'feat(profile): GC old avatar object on replace + account delete (BACK-AVATAR-2)',
-      mergedAt: '2026-06-12T02:27:31Z',
-      mergedAtKST: '2026-06-12 11:27 KST',
-      sha: '43253ad',
+      number: 237,
+      title: 'feat(ALGO-AXIS): typology_primary/typology_tags/architectural_elements 취향 축 추가',
+      mergedAt: '2026-06-20T18:13:15Z',
+      mergedAtKST: '2026-06-21 03:13 KST',
+      sha: '4ee373b',
     },
     {
-      number: 219,
-      title: 'docs(cleanup): backlog reconcile + file-roles 60 fill + 2 stale drop',
-      mergedAt: '2026-06-07T17:19:24Z',
-      mergedAtKST: '2026-06-08 02:19 KST',
-      sha: 'e21ddf7',
+      number: 236,
+      title: 'feat(SNS-PROFILE): inline Boards/Studios/Liked 3-tab profile',
+      mergedAt: '2026-06-20T19:53:00Z',
+      mergedAtKST: '2026-06-21 04:53 KST',
+      sha: '052898f',
     },
     {
-      number: 217,
-      title: 'feat(profile): avatar upload — server-proxy R2 + filesystem fallback (FRONT-AVATAR-1)',
-      mergedAt: '2026-06-07T13:11:48Z',
-      mergedAtKST: '2026-06-07 22:11 KST',
-      sha: 'ea74103',
+      number: 235,
+      title: 'feat(SNS): 빌딩 디테일 사진 라이트박스 + 이미지 다운로드',
+      mergedAt: '2026-06-18T16:25:18Z',
+      mergedAtKST: '2026-06-19 01:25 KST',
+      sha: '0245b82',
     },
     {
-      number: 216,
-      title: 'feat(auth): handle+password login + email-verify via OAuth linking (AUTH-LOGIN-1)',
-      mergedAt: '2026-06-07T10:23:35Z',
-      mergedAtKST: '2026-06-07 19:23 KST',
-      sha: '74edec8',
+      number: 234,
+      title: 'feat(SNS): 빌딩 디테일 저장 버튼 — 오피스 프로필 연결 + 언어 대응',
+      mergedAt: '2026-06-18T16:24:37Z',
+      mergedAtKST: '2026-06-19 01:24 KST',
+      sha: '0ee8613',
     },
     {
-      number: 215,
-      title: 'feat(profile): archibe Settings harvest + Profile/Account IA + rebrand archibe',
-      mergedAt: '2026-06-07T05:22:51Z',
-      mergedAtKST: '2026-06-07 14:22 KST',
-      sha: 'adcc605',
+      number: 233,
+      title: 'feat(SNS-LIKED-OFFICES): Liked Offices 페이지 + 오피스 건물 캐러셀',
+      mergedAt: '2026-06-18T14:03:52Z',
+      mergedAtKST: '2026-06-18 23:03 KST',
+      sha: '29fcffe',
     },
   ],
   agents: [
@@ -326,6 +332,10 @@ window.PROJECT_STATE = {
       role: 'security-manager 에이전트 정의',
     },
     {
+      path: '.claude/hooks/git-guard.py',
+      role: '',
+    },
+    {
       path: '.claude/plans/2026-06-01-office-recommendation-design.md',
       role: '사무소/architect 추천 설계 플랜 (#178)',
     },
@@ -370,6 +380,10 @@ window.PROJECT_STATE = {
       role: '스와이프 디스커버리 리뷰 기록',
     },
     {
+      path: '.claude/settings.json',
+      role: '',
+    },
+    {
       path: '.claude/skills/git-commit/SKILL.md',
       role: 'git 커밋 스킬 정의',
     },
@@ -384,6 +398,14 @@ window.PROJECT_STATE = {
     {
       path: '.claude/skills/reporter-inline/SKILL.md',
       role: '감사 기록 스킬 정의',
+    },
+    {
+      path: '.claude/workflows/feature.js',
+      role: '',
+    },
+    {
+      path: '.claude/workflows/review.js',
+      role: '',
     },
     {
       path: '.codex/WORKFLOW.md',
@@ -552,6 +574,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/accounts/migrations/0009_email_verified_at.py',
       role: '마이그 0009: email_verified_at 필드',
+    },
+    {
+      path: 'backend/apps/accounts/migrations/0010_remove_user_follow.py',
+      role: '',
     },
     {
       path: 'backend/apps/accounts/migrations/__init__.py',
@@ -1058,6 +1084,10 @@ window.PROJECT_STATE = {
       role: '마이그 0006: OfficeFollow 삭제 + 카운트 초기화',
     },
     {
+      path: 'backend/apps/social/migrations/0007_remove_user_follow.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/social/migrations/__init__.py',
       role: '패키지 init',
     },
@@ -1076,10 +1106,6 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/social/tests/conftest.py',
       role: 'social 테스트 픽스처',
-    },
-    {
-      path: 'backend/apps/social/tests/test_follow.py',
-      role: '유저 팔로우 테스트',
     },
     {
       path: 'backend/apps/social/tests/test_reaction.py',
@@ -1182,6 +1208,10 @@ window.PROJECT_STATE = {
       role: '디스커버리 성능 테스트',
     },
     {
+      path: 'backend/tests/test_discovery_recent_boards_cap.py',
+      role: '',
+    },
+    {
       path: 'backend/tests/test_discovery_taste_cache.py',
       role: '디스커버리 취향 캐시 테스트',
     },
@@ -1264,6 +1294,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/tests/test_language_directive.py',
       role: 'parse_query 언어 지시자 테스트',
+    },
+    {
+      path: 'backend/tests/test_llm_search_rank1.py',
+      role: '',
     },
     {
       path: 'backend/tests/test_m1_clarification_cap.py',
@@ -1442,6 +1476,14 @@ window.PROJECT_STATE = {
       role: '프로젝트·보드 CRUD API 클라이언트',
     },
     {
+      path: 'frontend/src/api/rightSizeImageUrl.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/api/rightSizeImageUrl.test.mjs',
+      role: '',
+    },
+    {
       path: 'frontend/src/api/sessions.js',
       role: '분석 세션·스와이프 API 클라이언트',
     },
@@ -1574,18 +1616,6 @@ window.PROJECT_STATE = {
       role: '공유 명함 스텁 QR',
     },
     {
-      path: 'frontend/src/components/profile/FollowList.jsx',
-      role: '팔로워·팔로잉 리스트',
-    },
-    {
-      path: 'frontend/src/components/profile/FollowList.module.css',
-      role: '팔로우 리스트 스타일',
-    },
-    {
-      path: 'frontend/src/components/profile/FollowListModal.jsx',
-      role: '팔로워·팔로잉 인스타식 팝업',
-    },
-    {
       path: 'frontend/src/components/profile/InfoCol.jsx',
       role: '카드 정보 컬럼 프리미티브',
     },
@@ -1616,10 +1646,6 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/hooks/useBoard.js',
       role: '보드 상세 로딩 훅',
-    },
-    {
-      path: 'frontend/src/hooks/useFollowList.js',
-      role: '팔로워·팔로잉 페이지네이션 훅',
     },
     {
       path: 'frontend/src/hooks/useImageTelemetry.js',
@@ -1698,6 +1724,10 @@ window.PROJECT_STATE = {
       role: 'LLM 검색 페이지',
     },
     {
+      path: 'frontend/src/pages/LikedOfficesPage.jsx',
+      role: '',
+    },
+    {
       path: 'frontend/src/pages/LikedProjectsPage.jsx',
       role: '좋아요 건물 그리드 페이지',
     },
@@ -1748,6 +1778,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/pages/buildingDetail/LoadingState.jsx',
       role: '건물 상세 로딩 상태',
+    },
+    {
+      path: 'frontend/src/pages/buildingDetail/PhotoLightbox.jsx',
+      role: '',
     },
     {
       path: 'frontend/src/pages/buildingDetail/helpers.js',
@@ -1810,10 +1844,6 @@ window.PROJECT_STATE = {
       role: '프로필 보드 그리드',
     },
     {
-      path: 'frontend/src/pages/userProfile/FollowListPage.jsx',
-      role: '팔로워·팔로잉 deep-link 페이지',
-    },
-    {
       path: 'frontend/src/pages/userProfile/ProfileHeader.jsx',
       role: '유저 프로필 헤더 바',
     },
@@ -1832,6 +1862,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/utils/appHelpers.js',
       role: '앱 필터·에러 헬퍼',
+    },
+    {
+      path: 'frontend/src/utils/discoveryGuard.js',
+      role: '',
     },
     {
       path: 'frontend/src/utils/loginFlow.js',

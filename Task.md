@@ -106,6 +106,11 @@ Redesign `/login` as conversational swipe onboarding while preserving the existi
 
 ### HIGH
 
+#### FRONT-IMAGE-RESIZE-2 — 이미지 Tier A 나머지 (PR2, PR1 측정 후)
+FRONT-IMAGE-RESIZE-1(#241) 리사이즈 배포 → `useImageTelemetry` `load_ms` 전/후 측정 확인 **후** 착수(measure-first, user 결정). 리서치 docs/research/image-latency 권고: imgix `fm=avif`(A3, webp 폴백 + C3 decode A/B), srcset+per-DPR `q=80/40/20`(A4), `img.decode()` in `App.jsx preloadImage()`(A6), LQIP/dominant-color placeholder(A7), `getImageSource` imgix 호스트 갭 수정. 전부 프론트.
+- 서브: **풀해상도 passthrough** — `normalizeCard`에 `cover_full_url`(미-리사이즈) 추가 + `BuildingDetailPage` 빈-갤러리 폴백서 우선 사용 → FRONT-IMAGE-RESIZE-1 known-limitation(빈-갤러리 #235 다운로드 840px) 해소.
+- Tier B(Divisare 포맷 프록시)는 별개 — R2 폐기 이유(Q1, 외부 spec)+핫링크/ToS 정책(Q2)=user 결정 gated. `findings-r2-retirement.md`.
+
 #### ARCHITECT-UNIFY-1 — firm-side Office→Architect 전면 통합 (deferred, firm-UX 착수 시)
 office-interest **모델 중복은 해소됨**: Phase 0(SavedOffice #188) + C(OfficeFollow, ARCHITECT-UNIFY-C)로 두 미배선 중복 삭제 → follow 모델 1개(ArchitectFollow). 남은 통합 = Office 서브시스템(table/claim/OfficeProjectLink/sync_offices/FirmProfilePage)을 arch_id로 흡수 = firm-side 전면 재설계.
 
@@ -350,6 +355,20 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 _(Deferred 2026-06-04 batch scope: YAGNI — product-미소비 telemetry 1필드 위해 Celery+worker 도입은 과투자. 2번째 background job 생기면 단일 INFRA-JOBS 티켓으로 묶어 처리.)_
 
 ## Done
+### FRONT-IMAGE-RESIZE-1 — swipe 커버 right-sizing (PR1) — RESOLVED 2026-06-22 (`b3e5d3f`-pre-squash, #241)
+이미지 레이턴시 리서치(#240) 지배 lever 구현. swipe 카드가 중앙값 4.6배(p90 21.9배) 과대-페치 → 커버 `image_url`을 표시크기(840px=DPR2)로 우-사이징. **프론트 only** — 백엔드/Redis 캐시/API 계약 무변경(user 결정: 같은 URL 변환이라 효과 동일, SPA라 프론트가 유일 소비자). **리사이즈만**(포맷/srcset/decode/LQIP = PR2, 측정 후).
+- 새 순수 모듈 `frontend/src/api/rightSizeImageUrl.js`: Divisare(Cloudinary FETCH) `w_auto`→`w_840,c_limit`(f_auto,q_auto + `//images` 더블슬래시 유지, 측정 90.7% 절감); imgix(`architizer-prod.imgix.net`) `w=840&fit=max`(q/cs/auto 보존, 콤마 리터럴 — `%2C` 아님, CDN 정규 캐시키). 그 외/malformed/relative/empty → 무변경, 멱등.
+- 자체 URL 파싱(`getImageSource`가 imgix 호스트 미인식) + 의존성 없음(`images.js`→`core.js` `import.meta.env`가 `node --test` 크래시 → 독립 모듈 필수). 와이어링: `normalizeCard` 커버 1줄, gallery/gallery_meta/covers_by_type 풀해상도 유지(#235 라이트박스+다운로드).
+- Known-limitation(PR1 수용, 플랜): gallery+gallery_meta 둘 다 빈 건물은 `BuildingDetailPage` 폴백이 840px 커버 → #235 다운로드 비-풀해상도(narrow 엣지, 이미지 유효). 풀해상도 passthrough = ## Next 추적.
+- Gates: 17 node --test(양 CDN+malformed/relative/empty/null/non-CDN/멱등) PASS, lint+build PASS, code-review 2 fix(imgix %2C + 그걸 잡는 테스트), security PASS(host allowlist 선행/path-only replace/regex 선형 — injection·ReDoS·XSS 0). app-test: 4-gate green + Phase 0 실측 CDN 검증(리라이트 URL이 90.7% 측정의 실제 fetch 대상) → develop 머지; 라이브 FULL app-test = develop→main 배포 전 권장.
+- 측정: 기존 `useImageTelemetry`(`load_ms`, 5% success, context `swipe_card`)로 배포 전/후 비교. Divisare(84%) 클린 주신호.
+
+### PERF-IMAGE-RESEARCH-1 — 이미지 레이턴시 리서치 (measure-first) — RESOLVED 2026-06-22 (`0715bd3`, #240)
+프론트/웹 이미지-렌더 레이턴시 리서치(코드 아님). 측정-우선: Phase 0(실 swipe 카드 50장) → 이슈별 1차출처 리서치 → adversarial 검증. 백엔드 알고리즘 out of scope.
+- 결론: 지배 lever=리사이즈(과대페치 중앙값 4.6배, Divisare `w_auto`→`w_840` 측정 90.7%). 포맷=부차+Divisare 프록시-gated(Cloudflare zone JPEG 고정, Vary:Accept 무시). 디코드=픽셀 비례 → 리사이즈가 디코드도 ~4.6배 절감.
+- 검증 Q7(Cloudinary f_auto 840px=WebP까지)·Q8(imgix per-DPR q 80/40/20)·Q9(AVIF 50-60% 과장, arch 사진 현실 ~25-50%).
+- 권고 Tier A(프론트 URL, 무인프라, 선행) / B(프록시, 정책) / C(do-not). Open: R2폐기 이유(외부 spec)·프록시/핫링크 정책(user) + 게이트 prod 텔레메트리(기존 `image_load` RUM이 geo지연·CDN점유 답). docs/research/image-latency/ (research-report 59 cites + phase0 + findings×6).
+
 ### FRONT-AUTH-3 — 로그인 테마 통일 + 한영 토글 — RESOLVED 2026-06-12 (`c57de5a`-pre-squash)
 협업자 dain `archibe-login`(`c4954ea`) 리디자인 이식 — 제스처 인트로 팝업 + 카드 상단 한/영 토글 + 로그인 전체 i18n + 디자인 테마 통일. 5단계 플로우/consent 스와이프/반응형 카드/API 계약 무변경.
 - [x] IntroOverlay: 미니카드 스와이프 데모 애니메이션(lpSwipeDemo 3.4s + 화살표 동기 점등), 매 마운트 표시(D1, `INTRO_SHOW_ONCE=false` — localStorage 1회 경로 보존).
