@@ -259,15 +259,19 @@ export default function App() {
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  function preloadImage(url) {
+  function preloadImage(card) {
+    const url = card?.image_url
     if (!url || imagePreloadCache.current.has(url)) return Promise.resolve()
     return new Promise(resolve => {
       const img = new Image()
-      img.onload = img.onerror = () => {
-        imagePreloadCache.current.add(url)
-        resolve()
-      }
+      const done = () => { imagePreloadCache.current.add(url); resolve() }
+      if (card.image_srcset) img.srcset = card.image_srcset  // select the SAME DPR variant the <img> renders
       img.src = url
+      if (typeof img.decode === 'function') {
+        img.decode().then(done, done)   // resolves paint-ready; reject->still resolve so decode error never blocks swipe
+      } else {
+        img.onload = img.onerror = done
+      }
     })
   }
 
@@ -285,16 +289,16 @@ export default function App() {
     } else {
       setIsSessionCompleted(false)
     }
-    if (result.next_image?.image_url) preloadImage(result.next_image.image_url)
+    if (result.next_image?.image_url) preloadImage(result.next_image)
     if (result.prefetch_image) {
       setPrefetchCard(result.prefetch_image)
-      preloadImage(result.prefetch_image.image_url)
+      preloadImage(result.prefetch_image)
     } else {
       setPrefetchCard(null)
     }
     if (result.prefetch_image_2) {
       setPrefetchCard2(result.prefetch_image_2)
-      preloadImage(result.prefetch_image_2.image_url)
+      preloadImage(result.prefetch_image_2)
     } else {
       setPrefetchCard2(null)
     }
@@ -555,7 +559,7 @@ export default function App() {
           _dbg.pf2 = result.prefetch_image_2?.image_id?.slice(-8) ?? null
           if (result.next_image && !_nextBlocked) {
             setPrefetchCard2(result.next_image)
-            if (result.next_image.image_url) preloadImage(result.next_image.image_url)
+            if (result.next_image.image_url) preloadImage(result.next_image)
           } else {
             setPrefetchCard2(null)
           }
@@ -568,7 +572,7 @@ export default function App() {
             // Wait for the image to download before showing the card so the
             // transition from LoadingCard lands with the image already visible.
             const _plT0 = Date.now()
-            await preloadImage(result.next_image.image_url)
+            await preloadImage(result.next_image)
             _dbg.preloadMs = Date.now() - _plT0
             setCurrentCard(result.next_image)
           } else if (!result.is_analysis_completed) {
@@ -587,8 +591,8 @@ export default function App() {
           }
           setPrefetchCard(result.prefetch_image || null)
           setPrefetchCard2(result.prefetch_image_2 || null)
-          preloadImage(result.prefetch_image?.image_url)
-          preloadImage(result.prefetch_image_2?.image_url)
+          preloadImage(result.prefetch_image)
+          preloadImage(result.prefetch_image_2)
         }
       }
     } catch (e) {
@@ -663,9 +667,9 @@ export default function App() {
         confidence: result.confidence ?? null,
         can_continue: result.can_continue ?? false,
       })
-      if (result.next_image?.image_url) preloadImage(result.next_image.image_url)
-      if (result.prefetch_image?.image_url) preloadImage(result.prefetch_image.image_url)
-      if (result.prefetch_image_2?.image_url) preloadImage(result.prefetch_image_2.image_url)
+      if (result.next_image?.image_url) preloadImage(result.next_image)
+      if (result.prefetch_image?.image_url) preloadImage(result.prefetch_image)
+      if (result.prefetch_image_2?.image_url) preloadImage(result.prefetch_image_2)
     } catch (e) {
       const { kind, message } = classifySwipeError(e)
       if (kind === 'auth') {
@@ -705,11 +709,11 @@ export default function App() {
         setPrefetchCard2(null)
         if (resp.next_image) {
           setCurrentCard(resp.next_image)
-          if (resp.next_image.image_url) preloadImage(resp.next_image.image_url)
+          if (resp.next_image.image_url) preloadImage(resp.next_image)
           setPrefetchCard(resp.prefetch_image ?? null)
           setPrefetchCard2(resp.prefetch_image_2 ?? null)
-          if (resp.prefetch_image?.image_url) preloadImage(resp.prefetch_image.image_url)
-          if (resp.prefetch_image_2?.image_url) preloadImage(resp.prefetch_image_2.image_url)
+          if (resp.prefetch_image?.image_url) preloadImage(resp.prefetch_image)
+          if (resp.prefetch_image_2?.image_url) preloadImage(resp.prefetch_image_2)
         } else {
           // next_image null → end of stream; mirror the session-completed path
           setIsSessionCompleted(true)

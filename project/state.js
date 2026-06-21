@@ -23,11 +23,18 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-06-22 00:44 KST',
-    head: '0715bd3',
-    branch: 'feature/claude-image-resize',
+    updatedAt: '2026-06-22 02:07 KST',
+    head: 'bce04d6',
+    branch: 'feature/claude-image-tier-a-2',
   },
   done: [
+    {
+      id: 'FRONT-IMAGE-RESIZE-2',
+      title: '이미지 Tier A: srcset + decode-preload + classifier (PR2)',
+      completedAt: '2026-06-22',
+      prs: [242],
+      note: 'PR1(#241) 리사이즈 로컬 A/B 검증(shipped 함수, 실 50카드: 91.5% 바이트, 0 broken) 후 착수(measure-first 충족). 프론트 only.',
+    },
     {
       id: 'FRONT-IMAGE-RESIZE-1',
       title: 'swipe 커버 right-sizing (PR1)',
@@ -73,12 +80,6 @@ window.PROJECT_STATE = {
       prs: [217, 218],
       note: '아바타 업로드(Slice D). 마이그 없음(`avatar_url` URLField 기존). data-URL 지양 결정대로 R2 URL만 저장.',
     },
-    {
-      id: 'AUTH-LOGIN-1',
-      title: 'handle+비번 로그인 + 이메일 인증(OAuth 연동)',
-      completedAt: '2026-06-07',
-      note: '표준 로그인 추가(소셜 유지 + handle=ID+비밀번호). 식별자 확정: `handle`=ID(로그인·공개@), `display_name`=이름(프로필), `User.username`=내부키(`local_<uuid>`).',
-    },
   ],
   now: [
     {
@@ -91,9 +92,9 @@ window.PROJECT_STATE = {
     xhigh: [],
     high: [
       {
-        id: 'FRONT-IMAGE-RESIZE-2',
-        title: '이미지 Tier A 나머지 (PR2, PR1 측정 후)',
-        note: 'FRONT-IMAGE-RESIZE-1(#241) 리사이즈 배포 → `useImageTelemetry` `load_ms` 전/후 측정 확인 후 착수(measure-first, user 결정). 리서치 docs/research/image-latency 권고: imgix `fm=avif`(A3, webp 폴백 + C3 decode A/B), srcset+per-DPR `q=80/40/20`(A4), `img.decode()` in `App.jsx preloadImage()`(A6), LQIP/do…',
+        id: 'FRONT-IMAGE-RESIZE-3',
+        title: '이미지 LQIP + 풀해상도 passthrough (PR3)',
+        note: 'PR2(#242)가 srcset/decode/classifier 출하 → 남은 Tier A polish. 전부 프론트.',
       },
       {
         id: 'ARCHITECT-UNIFY-1',
@@ -188,6 +189,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 241,
+      title: 'perf(image): right-size swipe cover URLs at normalizeCard (PR1, frontend-only)',
+      mergedAt: '2026-06-21T15:49:25Z',
+      mergedAtKST: '2026-06-22 00:49 KST',
+      sha: 'bce04d6',
+    },
+    {
       number: 240,
       title: 'docs(perf): image-latency research — measure-first report + findings',
       mergedAt: '2026-06-21T15:41:24Z',
@@ -235,13 +243,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-06-18T16:24:37Z',
       mergedAtKST: '2026-06-19 01:24 KST',
       sha: '0ee8613',
-    },
-    {
-      number: 233,
-      title: 'feat(SNS-LIKED-OFFICES): Liked Offices 페이지 + 오피스 건물 캐러셀',
-      mergedAt: '2026-06-18T14:03:52Z',
-      mergedAtKST: '2026-06-18 23:03 KST',
-      sha: '29fcffe',
     },
   ],
   agents: [
@@ -1402,6 +1403,42 @@ window.PROJECT_STATE = {
     {
       path: 'docs/prd/archibe-business-model.html',
       role: 'archibe 비즈니스 모델 PRD (정적 HTML)',
+    },
+    {
+      path: 'docs/research/image-latency/findings-decode-render-loading.json',
+      role: '',
+    },
+    {
+      path: 'docs/research/image-latency/findings-delivery-cdn-proxy.json',
+      role: '',
+    },
+    {
+      path: 'docs/research/image-latency/findings-q7-cloudinary-avif-threshold.md',
+      role: '',
+    },
+    {
+      path: 'docs/research/image-latency/findings-q8-imgix-variable-quality.md',
+      role: '',
+    },
+    {
+      path: 'docs/research/image-latency/findings-q9-avif-architectural-photography.md',
+      role: '',
+    },
+    {
+      path: 'docs/research/image-latency/findings-r2-retirement.md',
+      role: '',
+    },
+    {
+      path: 'docs/research/image-latency/phase0-measurements.json',
+      role: '',
+    },
+    {
+      path: 'docs/research/image-latency/phase0-measurements.md',
+      role: '',
+    },
+    {
+      path: 'docs/research/image-latency/research-report.md',
+      role: '',
     },
     {
       path: 'docs/specs/architect-unification.md',
