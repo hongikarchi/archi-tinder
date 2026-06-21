@@ -1,0 +1,340 @@
+{
+  "dimension": "browser-decode-render-loading",
+  "description": "Browser-side image DECODE / RENDER / LOADING attributes, APIs, and perceived-latency patterns. Research conducted 2026-06-15 against primary sources: MDN, web.dev, developer.chrome.com.",
+  "situationContext": {
+    "cardSizeCssPx": "420x650",
+    "cardSizeDevicePx": "840x1300 (DPR 2)",
+    "sourceImageMedianMp": 5,
+    "overFetchRatioMedian": 4.6,
+    "format": "JPEG",
+    "currentAttributes": ["fetchpriority=high", "decoding=async", "explicit width+height"],
+    "preloadStrategy": "await new Image() before card swap; 3 parallel preloads at session start",
+    "measuredLoadDivisare": "1941ms median",
+    "measuredLoadImgix": "398ms median"
+  },
+  "claims": [
+    {
+      "id": "C1",
+      "topic": "image-decode-cost-vs-pixels",
+      "claim": "Decoded bitmaps occupy width × height × bytes-per-pixel in RAM, independent of compressed file size; a 5 MP JPEG expands to ~15–20 MB in memory when decoded to RGBA.",
+      "detail": "The browser must convert the compressed JPEG into a raw bitmap before the GPU can render it. The MDN multimedia performance article states images 'must be stored in memory' after download, and singles out mobile RAM as the key constraint. The uncompressed pixel buffer is the cost; compression ratio does not reduce memory footprint post-decode. At DPR 2 a card display of 420×650 CSS px = 840×1300 = ~1.09 MP device pixels. Serving a 5 MP source means the browser decodes 4.6× more pixels than it needs to paint, consuming 4.6× more memory and proportionally more CPU decode time.",
+      "sources": [
+        {
+          "title": "Multimedia: Images — MDN Learn Performance",
+          "url": "https://developer.mozilla.org/en-US/docs/Learn/Performance/Multimedia"
+        },
+        {
+          "title": "Key performance issues — web.dev Learn Images",
+          "url": "https://web.dev/learn/images/performance-issues"
+        },
+        {
+          "title": "Image performance — web.dev Learn Performance",
+          "url": "https://web.dev/learn/performance/image-performance"
+        }
+      ],
+      "confidence": "high — primary sources directly state memory cost of decoded images and pixel-count relationship",
+      "implicationForApp": "Swapping cards every 1–2 s means the browser repeatedly allocates and frees large bitmaps. At median 5 MP source, each card decode is ~4.6× more expensive than necessary. Right-sizing to ~840×1300 device pixels via CDN transform would cut per-card decode memory and CPU by ~78%. This is the single largest decode lever not yet applied."
+    },
+    {
+      "id": "C2",
+      "topic": "decode-thread-architecture",
+      "claim": "Chrome offloads image decoding to compositor/raster threads, but the decode result must still be committed to the GPU; decoding very large bitmaps still lengthens the pipeline step and can increase frame latency.",
+      "detail": "Chrome's RenderingNG architecture moves decoding and rasterization off the main thread. The 'Inside Browser Part 3' article confirms raster threads convert content to bitmaps stored in GPU memory, and the compositor thread 'coordinates image decodes'. However, decoding a 5 MP image still takes more real time than decoding a 1 MP image, even off-main-thread, and the commit/upload to GPU memory scales with pixel count. The main thread is not the primary bottleneck, but total latency scales with pixels.",
+      "sources": [
+        {
+          "title": "Inside look at modern web browser (part 3) — Chrome for Developers",
+          "url": "https://developer.chrome.com/blog/inside-browser-part3"
+        },
+        {
+          "title": "RenderingNG architecture — Chrome for Developers",
+          "url": "https://developer.chrome.com/articles/renderingng-architecture/"
+        }
+      ],
+      "confidence": "medium — primary sources confirm thread separation but do not give pixel-count vs decode-time regression numbers",
+      "implicationForApp": "Even with async decode off the main thread, reducing source pixel count by 4.6× will reduce the time between preload-resolves and card-ready-to-paint, improving the responsiveness of card swaps."
+    },
+    {
+      "id": "C3",
+      "topic": "decoding-attribute",
+      "claim": "`decoding=\"async\"` means the browser does NOT wait for image decode before the next paint; `sync` blocks the next paint until decode completes; `auto` lets the browser decide. For dynamic image insertion, `async` can cause a 'flash of empty image'; `img.decode()` is the preferred fix.",
+      "detail": "MDN HTMLImageElement.decoding states: 'async — Decode the image asynchronously, after rendering and presenting the other DOM content. In practice, async means that the next paint does not wait for the image to decode.' And: 'For images that are inserted into the DOM inside the viewport, async can result in flashes of unstyled content, while sync can result in small amounts of jank. Using HTMLImageElement.decode() is usually a better way.' For static images the attribute has minimal perceptible effect; for JS-driven DOM insertion (like swapping a card image), it matters. The app currently uses decoding=\"async\" which, in a dynamic-swap context, could show an empty/partial frame before decode completes.",
+      "sources": [
+        {
+          "title": "HTMLImageElement: decoding property — MDN",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/API/HTMLImageElement/decoding"
+        },
+        {
+          "title": "HTMLImageElement: decode() method — MDN",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/API/HTMLImageElement/decode"
+        }
+      ],
+      "confidence": "high — MDN directly states the async flash-of-empty problem and recommends img.decode() for dynamic insertion",
+      "implicationForApp": "The current `decoding=\"async\"` on the card <img> could produce a brief empty-image frame when a new card src is set, even if the image is already downloaded — because async defers the decode step. This is distinct from preloading. See C4 (img.decode) for the fix."
+    },
+    {
+      "id": "C4",
+      "topic": "img-decode-promise",
+      "claim": "`img.decode()` returns a Promise that resolves after the image is BOTH downloaded AND decoded (i.e., ready to paint), not just after download. Awaiting it before DOM insertion eliminates jank caused by decode at paint time.",
+      "detail": "MDN HTMLImageElement.decode(): 'The decode() method… returns a Promise that resolves once the image is decoded and is safe to be appended to the DOM.' And: 'This prevents the rendering of the next frame after adding the image to the DOM from causing a delay while the image loads.' This is the critical distinction from `new Image()` whose onload/Promise resolves on download complete (bytes received) but NOT decode complete. The pattern `img.src = url; await img.decode(); domElement.src = url;` guarantees the image is paint-ready before the card becomes visible — zero decode jank at swap time. Browser support: Baseline Widely Available since January 2020.",
+      "sources": [
+        {
+          "title": "HTMLImageElement: decode() method — MDN",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/API/HTMLImageElement/decode"
+        },
+        {
+          "title": "HTMLImageElement: decoding property — MDN",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/API/HTMLImageElement/decoding"
+        }
+      ],
+      "confidence": "high — MDN primary source directly states the Promise resolves after decode is complete and safe to append",
+      "implicationForApp": "The current `preloadImage(url)` uses `new Image()` with an onload listener that resolves on download complete, NOT decode complete. This means the card could still show a brief decode stutter when the img src is swapped, even on the 'instant path'. Upgrading preloadImage() to `await img.decode()` would guarantee jank-free swaps. This is a lever the app does NOT currently use."
+    },
+    {
+      "id": "C5",
+      "topic": "fetchpriority",
+      "claim": "`fetchpriority=\"high\"` on the LCP image reliably shortens LCP by ensuring the browser fetches it before lower-priority resources. Default image priority is Low (raised to High only after layout for in-viewport images); preloaded images are also Low by default unless explicitly set high.",
+      "detail": "web.dev Fetch Priority article: 'Non-viewport images start at Low priority; in-viewport images are boosted to High priority after layout completes.' The app already uses fetchpriority=\"high\" on the card <img>. Key additional finding: `<link rel=\"preload\" as=\"image\">` images are also Low priority unless `fetchpriority=\"high\"` is added to the preload link — so any declarative preload link added for the session-start preload needs fetchpriority. Google Flights example: LCP 2.6s → 1.9s (0.7s gain). The fetchpriority is a hint not a directive; browsers may override under high contention.",
+      "sources": [
+        {
+          "title": "Optimize resource loading with the Fetch Priority API — web.dev",
+          "url": "https://web.dev/articles/fetch-priority"
+        },
+        {
+          "title": "Optimize Largest Contentful Paint — web.dev",
+          "url": "https://web.dev/articles/optimize-lcp"
+        }
+      ],
+      "confidence": "high — web.dev primary source states default priority and measured LCP improvement",
+      "implicationForApp": "Current card <img> fetchpriority=\"high\" is correctly set. If the app adds <link rel=\"preload\"> for the LCP card, that preload tag also needs fetchpriority=\"high\" — otherwise the preload is deprioritized. Low priority is the default for preloads."
+    },
+    {
+      "id": "C6",
+      "topic": "loading-lazy-eager",
+      "claim": "`loading=\"lazy\"` on above-the-fold / LCP images causes a median 624ms LCP regression (21% worse). The app should never use lazy on the visible card; lazy is safe and beneficial only for below-fold off-deck cards.",
+      "detail": "web.dev lcp-lazy-loading article provides measured data: 'Pages without lazy loading: median p75 LCP 2922ms; pages with lazy loading: median p75 LCP 3546ms — 624ms slower.' Lab test on WordPress desktop 13% worse, mobile 15% worse. Fix: 'Never specify loading=\"lazy\" on an above the fold image.' The current app does not appear to use lazy on the card image (not mentioned in the situation), which is correct. If the app ever adds loading=lazy to off-deck preloaded cards in the DOM, those should not be in the viewport.",
+      "sources": [
+        {
+          "title": "The performance effects of too much lazy loading — web.dev",
+          "url": "https://web.dev/articles/lcp-lazy-loading"
+        },
+        {
+          "title": "Browser-level image lazy loading for the web — web.dev",
+          "url": "https://web.dev/articles/browser-level-image-lazy-loading"
+        }
+      ],
+      "confidence": "high — primary source provides quantitative field and lab data",
+      "implicationForApp": "The visible card must remain loading=\"eager\" (default). Any off-deck cards rendered in the DOM but not visible are safe candidates for loading=\"lazy\"; however since the app uses JS preloading (not extra DOM img elements), this attribute is not currently a factor."
+    },
+    {
+      "id": "C7",
+      "topic": "link-rel-preload-vs-new-image",
+      "claim": "`<link rel=\"preload\" as=\"image\">` integrates with the browser's preload scanner (fires before JS executes) and populates the HTTP cache; JS `new Image()` preload fires after JS execution and does NOT share the same cache entry as the preload scanner in all browsers. For responsive images, `imagesrcset`/`imagesizes` must mirror the `<img>` srcset/sizes.",
+      "detail": "web.dev preload-responsive-images: 'Preloading responsive images improved Last Painted Hero by 1.2 seconds.' The key advantage of declarative preload over JS `new Image()` is timing: the preload scanner runs in parallel with HTML parsing, before any JS. For a swipe app where the first card image is critical, a declarative `<link rel=\"preload\" fetchpriority=\"high\" as=\"image\">` in the HTML head would start loading the first card image immediately at parse time. However, JS `new Image()` preload is simpler for the 2nd/3rd/Nth card in the dynamic sequence, and is widely used. The critical nuance: `new Image().onload` resolves on download; `img.decode()` resolves on decode-complete — these are two different things.",
+      "sources": [
+        {
+          "title": "Preload responsive images — web.dev",
+          "url": "https://web.dev/articles/preload-responsive-images"
+        },
+        {
+          "title": "rel=preload — MDN",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/rel/preload"
+        },
+        {
+          "title": "Assist the browser with resource hints — web.dev",
+          "url": "https://web.dev/learn/performance/resource-hints"
+        }
+      ],
+      "confidence": "high for preload scanner timing advantage; medium for cross-browser cache sharing between preload and new Image()",
+      "implicationForApp": "The first card image URL is known at React render time (or shortly after session-start API call). Adding `<link rel=\"preload\" fetchpriority=\"high\" as=\"image\">` injected into the document head for card[0] would start loading before React hydration finishes. Cards 1–2 are fine to stay as JS preloads. imagesrcset/imagesizes are only needed if srcset is used on the card img; at current fixed 420×650 px layout a single URL preload suffices."
+    },
+    {
+      "id": "C8",
+      "topic": "content-visibility-off-screen",
+      "claim": "`content-visibility: auto` on off-screen elements skips layout, style, and paint — reducing initial render time up to 7x in measured examples. It requires `contain-intrinsic-size` to prevent CLS from zero-height collapsed elements. It does NOT address image decode; the browser may still decode images in off-screen regions.",
+      "detail": "web.dev content-visibility article: 'Applying content-visibility: auto to chunked content areas gives a 7x rendering performance boost on initial load.' (232ms → 30ms in travel blog example.) MDN notes: 'contain-intrinsic-size: auto 500px — tells browser to use 500px as placeholder size for offscreen elements.' The property skips rendering work (layout/paint) for elements outside the viewport but is designed for long-form content with many sections, not for a card-swap UI with 1 visible card. No primary source found for content-visibility's effect on image decode specifically.",
+      "sources": [
+        {
+          "title": "content-visibility: the new CSS property that boosts your rendering performance — web.dev",
+          "url": "https://web.dev/articles/content-visibility"
+        },
+        {
+          "title": "contain-intrinsic-size — MDN",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/contain-intrinsic-size"
+        }
+      ],
+      "confidence": "high for layout/paint skip; low for image decode skip (no primary source confirms this)",
+      "implicationForApp": "The swipe card stack (typically 1–3 DOM nodes) is too small for content-visibility gains to be meaningful. The existing explicit width+height on <img> already prevents CLS. content-visibility is not a relevant lever for this UI pattern."
+    },
+    {
+      "id": "C9",
+      "topic": "perceived-latency-placeholder",
+      "claim": "LQIP / blur-up / dominant-color placeholders reduce perceived wait time by giving users instant visual feedback, even when actual image load time is unchanged. Progressive JPEG similarly provides full-frame (blurry) content immediately. These are perceived-performance levers, not actual-download-time levers.",
+      "detail": "MDN Perceived Performance: 'It is usually better to provide a quick response and regular status updates than make the user wait until an operation fully completes.' web.dev JPEG article: 'PJPEG can feel faster than a baseline JPEG to the end user' by showing a full blurry frame vs blank space; 'encoding as PJPEG almost always means a smaller file size compared to baseline JPEG — not by much, but every byte helps.' The only minor cost: 'a little more strain on the browser during rendering' (described as 'very minor, unlikely to be noticeable except for with severely underpowered devices'). Next.js image component uses LQIP (blurred placeholder) for this effect. Chrome/web.dev image component article: Leboncoin's LCP improvement (2.4s → 1.7s) came from full image pipeline (not placeholder alone). No source isolates LQIP's quantitative contribution to measured LCP.",
+      "sources": [
+        {
+          "title": "Image formats: JPEG — web.dev Learn Images",
+          "url": "https://web.dev/learn/images/jpeg"
+        },
+        {
+          "title": "Building an effective Image Component — Chrome for Developers",
+          "url": "https://developer.chrome.com/blog/image-component"
+        },
+        {
+          "title": "Perceived performance — MDN",
+          "url": "https://developer.mozilla.org/en-US/docs/Learn_web_development/Extensions/Performance/Perceived_performance"
+        }
+      ],
+      "confidence": "high for perceived-performance principle; low for isolated LQIP quantitative LCP improvement (no primary source gives a number)",
+      "implicationForApp": "The current 'await full preload before swap' pattern eliminates perceived wait on the instant-swap path (preload already done). On the non-instant path (awaiting preloadImage), a dominant-color or blurred placeholder would make the delay feel shorter without changing actual load time. This is worth adding to the non-instant path. Progressive JPEG is a CDN-side encoding choice; web.dev recommends it as a sensible default."
+    },
+    {
+      "id": "C10",
+      "topic": "lcp-breakdown",
+      "claim": "For pages with poor LCP, the LCP image download itself is only ~10% of the total LCP time at p75; the dominant cost is resource load DELAY (1.29 s median) — the gap between TTFB and when the browser starts fetching the image. Fixing image size/decode has small impact on LCP vs. fixing discovery and delay.",
+      "detail": "web.dev common-misconceptions-lcp: 'The majority of origins with poor LCP spend less than 10% of their p75 LCP time downloading the LCP image.' And: 'The median site with poor LCP spends almost four times as long waiting to start downloading the LCP image as it does actually downloading it — 1.3 seconds of wasted time.' The four LCP subparts are: TTFB (600–2270ms at p75 depending on tier), Resource Load Delay (350–1290ms), Resource Load Duration (160–350ms), Element Render Delay (230–360ms). LCP image download (Load Duration) is consistently the shortest subpart. LCP is measured to when the element RENDERS, not when it's downloaded — so a decode delay after download lands in Element Render Delay.",
+      "sources": [
+        {
+          "title": "Common misconceptions about how to optimize LCP — web.dev",
+          "url": "https://web.dev/blog/common-misconceptions-lcp"
+        },
+        {
+          "title": "Optimize Largest Contentful Paint — web.dev",
+          "url": "https://web.dev/articles/optimize-lcp"
+        },
+        {
+          "title": "Largest Contentful Paint (LCP) — web.dev",
+          "url": "https://web.dev/articles/lcp"
+        }
+      ],
+      "confidence": "high — primary source cites real Chrome field data (CrUX)",
+      "implicationForApp": "The Divisare 1941ms vs imgix 398ms gap is transfer-bound (CDN origin latency), NOT decode-bound. Decode optimizations will reduce jank and frame latency at swap time, but will NOT close the Divisare gap. That gap needs CDN/origin network work (separate research dimension). Decode/render work improves the swap UX quality for ALL sources, especially when oversized images are being decoded."
+    }
+  ],
+  "recommendations": [
+    {
+      "id": "R1",
+      "priority": "high",
+      "action": "Right-size images at CDN to ~840×1300px (DPR 2 device pixels) before delivery",
+      "rationale": "Current median 5 MP source forces the browser to decode 4.6× more pixels than needed for the 420×650 CSS px card. Right-sizing eliminates ~78% of decode memory and CPU cost per card swap. This is the highest-leverage decode/render lever not yet used.",
+      "appliesTo": "CDN transform URL params (imgix: w=840,h=1300,fit=crop; Divisare: depends on their CDN API)",
+      "tradeoffs": "Must account for DPR 1 vs 2 vs 3 devices. For a Korea mobile-heavy audience, DPR 2 is the safe target. DPR 3 exists but primary sources suggest the human eye cannot perceive the benefit beyond DPR 2 (web.dev image-performance). Could serve srcset with 1× and 2× variants.",
+      "leversUsed": ["CDN transform"],
+      "doesNotRequireCodeChange": false
+    },
+    {
+      "id": "R2",
+      "priority": "high",
+      "action": "Upgrade preloadImage() to use img.decode() instead of new Image() onload",
+      "rationale": "new Image().onload resolves on download complete, NOT decode complete. img.decode() resolves on decode complete and safe-to-render. The current instant-swap path may still produce a 1-frame decode stutter when the card img src is updated. Awaiting img.decode() before resolving preloadImage() guarantees jank-free swaps.",
+      "appliesTo": "frontend/src/utils/preloadImage.js (or wherever preloadImage is defined)",
+      "tradeoffs": "img.decode() is Baseline Widely Available since Jan 2020 — no compatibility concern. It adds a small extra time beyond download (the actual decode), making preloadImage() resolve slightly later — but the benefit is that by the time it resolves, the image is TRULY ready to paint. For oversized images (current 5 MP), this decode time is non-trivial. After CDN right-sizing (R1), decode time drops and the Promise resolves faster.",
+      "leversUsed": ["img.decode()"],
+      "doesNotRequireCodeChange": false
+    },
+    {
+      "id": "R3",
+      "priority": "medium",
+      "action": "Add dominant-color or blur-hash placeholder for the non-instant swap path",
+      "rationale": "When preloadImage() is still pending (non-instant path), the card shows an empty/loading state. A dominant color or LQIP (blur-hash thumbnail) fills the visual space immediately, making the delay feel shorter. This is a perceived-latency win with no impact on actual load time.",
+      "appliesTo": "frontend card component — show placeholder until preloadImage() resolves",
+      "tradeoffs": "Dominant color requires backend metadata (pre-computed per image). LQIP requires a low-resolution thumbnail URL from CDN (imgix supports ?w=20&blur=20 for free). Blur-hash requires a JS library (blurhash) and pre-computed hash per image. Skeleton (CSS animation) is simplest with zero backend changes. For the Divisare source (1941ms median), this placeholder will be visible for ~1.5–2s — worth investing in.",
+      "leversUsed": ["LQIP", "dominant-color", "skeleton"],
+      "doesNotRequireCodeChange": false
+    },
+    {
+      "id": "R4",
+      "priority": "medium",
+      "action": "Inject `<link rel=\"preload\" fetchpriority=\"high\" as=\"image\">` for card[0] image before React render",
+      "rationale": "A declarative preload in the HTML head starts loading the first card image during HTML parsing — before React JS executes. This is earlier than the current JS preload at session start. Gains are most valuable for initial page load / session LCP.",
+      "appliesTo": "HTML template or server-rendered head; requires knowing card[0] image URL at SSR/HTML time",
+      "tradeoffs": "Requires the first card image URL to be available server-side or embedded in the initial HTML. If the image URL is fetched asynchronously after React mounts (API call), this preload cannot fire until the URL is known — in which case a JS approach is comparable. Safari 17.2+ required for imagesrcset support on <link>.",
+      "leversUsed": ["link rel=preload", "fetchpriority"],
+      "doesNotRequireCodeChange": false
+    },
+    {
+      "id": "R5",
+      "priority": "low",
+      "action": "Encode source JPEGs as Progressive JPEG at CDN",
+      "rationale": "Progressive JPEG delivers a full-size blurry frame immediately (before full download), improving perceived performance, and typically results in slightly smaller file size. web.dev calls it 'a sensible default approach.' The decode overhead is 'very minor' per primary source.",
+      "appliesTo": "CDN encoding config (imgix: fm=pjpg; Divisare: depends on their config). No frontend code change needed.",
+      "tradeoffs": "Minor extra decode complexity on the browser side (described as 'very minor' by web.dev). Divisare CDN may not expose progressive JPEG encoding control. imgix supports fm=pjpg. Best combined with R1 (right-sizing) since the progressive scan benefit is most visible on larger files.",
+      "leversUsed": ["progressive JPEG"],
+      "doesNotRequireCodeChange": true
+    },
+    {
+      "id": "R6",
+      "priority": "low",
+      "action": "Do NOT add loading=\"lazy\" to the visible card <img>; safe to add to off-deck DOM images if any are rendered off-screen",
+      "rationale": "web.dev field data shows loading=\"lazy\" on above-fold LCP images causes 624ms LCP regression (21% worse). The current app does not use lazy on the card, which is correct. No change needed for the current architecture.",
+      "appliesTo": "Affirm existing behavior — no change",
+      "tradeoffs": "None — this is a confirmation recommendation.",
+      "leversUsed": ["loading=eager"],
+      "doesNotRequireCodeChange": true
+    },
+    {
+      "id": "R7",
+      "priority": "low",
+      "action": "Do NOT apply content-visibility:auto to the card component",
+      "rationale": "content-visibility is designed for long-form content with many off-screen sections. The card stack (1–3 visible DOM nodes) is too small for meaningful benefit, and the existing explicit width+height already handles CLS. This is not a relevant lever for the swipe card UI.",
+      "appliesTo": "N/A — confirm exclusion",
+      "tradeoffs": "None — exclusion confirmed by pattern analysis.",
+      "leversUsed": [],
+      "doesNotRequireCodeChange": true
+    }
+  ],
+  "verdictOnBlockingSwapPattern": {
+    "currentPattern": "await preloadImage(nextUrl) — uses new Image() onload to resolve on download complete; swaps card src only after Promise resolves",
+    "assessment": "The blocking-swap pattern (waiting before showing the card) is sound in principle — it prevents showing a blank card. However it has two gaps: (1) new Image() onload resolves on download, NOT decode-complete; a brief decode stutter can still occur at swap. (2) The non-instant path gives no visual feedback during the wait — a placeholder would close this UX gap. Upgrade to img.decode() closes gap 1. Adding a placeholder closes gap 2. Right-sizing (R1) reduces the time both paths wait by cutting decode work ~78%.",
+    "topActionableChanges": ["R1: Right-size CDN images to ~840×1300px — eliminates 4.6x over-decode", "R2: preloadImage() → img.decode() — guarantees jank-free swap not just download-complete", "R3: Add placeholder for non-instant path — perceived latency win for Divisare's 1.9s wait"]
+  },
+  "openQuestions": [
+    {
+      "id": "OQ1",
+      "question": "Does img.decode() in Chrome skip the decode step if the image is already in the decoded image cache (i.e., does it resolve near-instantly for a cached image)?",
+      "whyMatters": "If so, calling img.decode() as the preloadImage() signal is even better — it is a no-op for already-decoded images and only adds real time when decode is actually needed.",
+      "suggestedVerification": "Check Chromium source or run a DevTools Performance trace: create Image, await decode, measure time; then set same src again on a second Image, await decode again, compare."
+    },
+    {
+      "id": "OQ2",
+      "question": "What is the actual per-card decode latency on mid-range Android (e.g., Samsung Galaxy A series) for a 5 MP JPEG vs a right-sized ~1 MP JPEG?",
+      "whyMatters": "Primary sources confirm decode cost scales with pixel count but do not provide ms-per-megapixel numbers. A DevTools Performance trace on target hardware would give the actual gain.",
+      "suggestedVerification": "Record Performance trace on Android Chrome while swiping; look for Decode Image tasks in the timeline and measure duration per card."
+    },
+    {
+      "id": "OQ3",
+      "question": "Does decoding=\"async\" on the card <img> (currently set) interact with img.decode() — specifically, if the app adds img.decode() to preloadImage(), should decoding=\"async\" be removed or changed?",
+      "whyMatters": "If img.decode() guarantees the image is decode-complete before the src is swapped, the decoding attribute on the visible <img> becomes less relevant. But decoding=\"sync\" might cause a brief main-thread stall if not all images go through img.decode() first.",
+      "suggestedVerification": "MDN states img.decode() is 'a better solution' than the decoding attribute for dynamic insertion — it likely supersedes the attribute for the swap case. Keeping decoding=\"async\" is a safe default for static cases."
+    },
+    {
+      "id": "OQ4",
+      "question": "Does the Divisare CDN support progressive JPEG encoding or WebP/AVIF format conversion via URL params?",
+      "whyMatters": "imgix supports fm=pjpg, fm=webp, fm=avif. Divisare uses their own image hosting; without CDN transform params, format and encoding changes require a different delivery strategy.",
+      "suggestedVerification": "Inspect actual Divisare image URLs from Phase 0 measurements; try appending format params and check response headers."
+    }
+  ],
+  "sourcesIndex": [
+    {"title": "HTMLImageElement: decoding property — MDN", "url": "https://developer.mozilla.org/en-US/docs/Web/API/HTMLImageElement/decoding"},
+    {"title": "HTMLImageElement: decode() method — MDN", "url": "https://developer.mozilla.org/en-US/docs/Web/API/HTMLImageElement/decode"},
+    {"title": "Optimize resource loading with the Fetch Priority API — web.dev", "url": "https://web.dev/articles/fetch-priority"},
+    {"title": "The performance effects of too much lazy loading — web.dev", "url": "https://web.dev/articles/lcp-lazy-loading"},
+    {"title": "Browser-level image lazy loading for the web — web.dev", "url": "https://web.dev/articles/browser-level-image-lazy-loading"},
+    {"title": "Preload responsive images — web.dev", "url": "https://web.dev/articles/preload-responsive-images"},
+    {"title": "rel=preload — MDN", "url": "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/rel/preload"},
+    {"title": "content-visibility: the new CSS property — web.dev", "url": "https://web.dev/articles/content-visibility"},
+    {"title": "contain-intrinsic-size — MDN", "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/contain-intrinsic-size"},
+    {"title": "Image formats: JPEG — web.dev", "url": "https://web.dev/learn/images/jpeg"},
+    {"title": "Building an effective Image Component — Chrome for Developers", "url": "https://developer.chrome.com/blog/image-component"},
+    {"title": "Perceived performance — MDN", "url": "https://developer.mozilla.org/en-US/docs/Learn_web_development/Extensions/Performance/Perceived_performance"},
+    {"title": "Optimize Largest Contentful Paint — web.dev", "url": "https://web.dev/articles/optimize-lcp"},
+    {"title": "Largest Contentful Paint (LCP) — web.dev", "url": "https://web.dev/articles/lcp"},
+    {"title": "Common misconceptions about how to optimize LCP — web.dev", "url": "https://web.dev/blog/common-misconceptions-lcp"},
+    {"title": "Key performance issues — web.dev", "url": "https://web.dev/learn/images/performance-issues"},
+    {"title": "Image performance — web.dev", "url": "https://web.dev/learn/performance/image-performance"},
+    {"title": "Multimedia: Images — MDN", "url": "https://developer.mozilla.org/en-US/docs/Learn/Performance/Multimedia"},
+    {"title": "RenderingNG architecture — Chrome for Developers", "url": "https://developer.chrome.com/articles/renderingng-architecture/"},
+    {"title": "Inside look at modern web browser (part 3) — Chrome for Developers", "url": "https://developer.chrome.com/blog/inside-browser-part3"},
+    {"title": "Image delivery insights — Chrome for Developers", "url": "https://developer.chrome.com/docs/performance/insights/image-delivery"},
+    {"title": "Fix your website's LCP by optimizing image loading — MDN Blog", "url": "https://developer.mozilla.org/en-US/blog/fix-image-lcp/"}
+  ]
+}
