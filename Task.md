@@ -106,9 +106,12 @@ Redesign `/login` as conversational swipe onboarding while preserving the existi
 
 ### HIGH
 
-#### FRONT-IMAGE-RESIZE-2 — 이미지 Tier A 나머지 (PR2, PR1 측정 후)
-FRONT-IMAGE-RESIZE-1(#241) 리사이즈 배포 → `useImageTelemetry` `load_ms` 전/후 측정 확인 **후** 착수(measure-first, user 결정). 리서치 docs/research/image-latency 권고: imgix `fm=avif`(A3, webp 폴백 + C3 decode A/B), srcset+per-DPR `q=80/40/20`(A4), `img.decode()` in `App.jsx preloadImage()`(A6), LQIP/dominant-color placeholder(A7), `getImageSource` imgix 호스트 갭 수정. 전부 프론트.
-- 서브: **풀해상도 passthrough** — `normalizeCard`에 `cover_full_url`(미-리사이즈) 추가 + `BuildingDetailPage` 빈-갤러리 폴백서 우선 사용 → FRONT-IMAGE-RESIZE-1 known-limitation(빈-갤러리 #235 다운로드 840px) 해소.
+#### FRONT-IMAGE-RESIZE-3 — 이미지 LQIP + 풀해상도 passthrough (PR3)
+PR2(#242)가 srcset/decode/classifier 출하 → 남은 Tier A polish. 전부 프론트.
+- **A7 LQIP**: 카드당 ~20px 블러 썸네일(`buildLqipUrl=rightSizeImageUrl(url,20)`, 양 CDN) + CSS `filter:blur`, skeleton-shimmer 위 레이어. ⚠️ object-fit:contain letterbox라 `scale(1.1)` edge-bleed 핵 금지(letterbox 노출). PR2서 의도적 분리(유일 render-lifecycle 침습, polish지 core 아님). 완전 스펙은 PR2 Plan-agent 설계에 turnkey.
+- **풀해상도 passthrough**: `normalizeCard`에 `cover_full_url`(미-리사이즈) + `BuildingDetailPage` 빈-갤러리 폴백서 우선 → FRONT-IMAGE-RESIZE-1 known-limitation(빈-갤러리 #235 다운로드 840px) 해소.
+- (선택) `useImageTelemetry`가 `currentSrc`(렌더된 variant) 읽도록 — 현재 `.src`(840 폴백) → per-variant load_ms 정확도.
+- Tier B(Divisare 포맷 프록시)는 별개 — R2 폐기 이유(Q1, 외부 spec)+핫링크/ToS 정책(Q2)=user 결정 gated. `findings-r2-retirement.md`.
 - Tier B(Divisare 포맷 프록시)는 별개 — R2 폐기 이유(Q1, 외부 spec)+핫링크/ToS 정책(Q2)=user 결정 gated. `findings-r2-retirement.md`.
 
 #### ARCHITECT-UNIFY-1 — firm-side Office→Architect 전면 통합 (deferred, firm-UX 착수 시)
@@ -355,6 +358,17 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 _(Deferred 2026-06-04 batch scope: YAGNI — product-미소비 telemetry 1필드 위해 Celery+worker 도입은 과투자. 2번째 background job 생기면 단일 INFRA-JOBS 티켓으로 묶어 처리.)_
 
 ## Done
+### FRONT-IMAGE-RESIZE-2 — 이미지 Tier A: srcset + decode-preload + classifier (PR2) — RESOLVED 2026-06-22 (`feature/claude-image-tier-a-2`-pre-squash, #242)
+PR1(#241) 리사이즈 로컬 A/B 검증(shipped 함수, 실 50카드: 91.5% 바이트, 0 broken) **후** 착수(measure-first 충족). 프론트 only.
+- **A4 srcset + per-DPR q**: `buildCardSrcSet(raw url)` 신규 순수 헬퍼 — Divisare `w_420 1x, w_840 2x`(q_auto, 무 q), imgix `w=420&q=80 1x, w=840&q=40 2x`(Q8). `normalizeCard`에 `image_srcset` 추가(raw에서 — Divisare regex가 w_auto만 매칭, 이미-840엔 no-op이라 raw 필수). `<img srcSet>`(x-descriptor라 `sizes` 생략, 2x=DPR3 perceptual cap). `rightSizeImageUrl`에 optional `quality` 파라미터(imgix만).
+- **A6 `img.decode()` preload(srcset-aware)**: `App.jsx preloadImage(card)`로 시그니처 변경 — `img.srcset` 세팅(DPR2서 `<img>`와 동일 variant 선택 → preload 적중) + `await img.decode()`(paint-ready, reject→resolve로 swipe 무차단). 13 호출부 `preloadImage(X.image_url)`→`preloadImage(X)`.
+- **A3 포맷 = PR1이 이미 충족**: imgix는 PR1이 `auto=format` 보존 → 이미 WebP/AVIF auto-negotiate. Divisare 포맷은 프록시-gated(Tier B). C3 decode A/B 주의로 fm=avif 강제 안 함.
+- **getImageSource imgix 갭**: `architizer-prod.imgix.net`→`'imgix'`(이전 'external' 오분류 수정, telemetry 버킷팅). dormant(소비자 없음, 라이브 telemetry 무변경) — forward-looking.
+- **2 blocking 상호작용 수정**(Plan-agent): A4↔fallback(`advanceFallback`서 `target.srcset=''` 후 src — 1x srcset이 imperative src 무시하는 레이스 차단), A4↔A6(preloader srcset-aware로 DPR2 preload 적중).
+- **CRITICAL 보안 수정**(security): Divisare srcset 공백-주입 — 리터럴 공백이 srcset URL 토큰 종료 → 뒤 attacker URL이 candidate로 fetch(allowlist 우회). `buildCardSrcSet` 상단 whitespace 가드(→null, 안전한 src degrade). imgix는 `new URL().toString()` %20 인코딩이라 무관. 실증 재현+fix 확인.
+- Gates: 27 node --test PASS(+9 A4/quality, +injection 가드; getImageSource는 node import.meta.env 제약 graceful skip), lint+build PASS, code-review PASS(6/6, 2 blocking 검증), security PASS(injection fix 후). **app-test FEATURE-SCOPED PASS 5/5** — srcset 라이브(currentSrc=w_840 DPR2), fallback **라이브 실증**(imgix 카드 4s 타임아웃→srcset 클리어→gallery 승격, 안 빔), decode 무-stutter, imgix `q80/q40` 라이브, 회귀 smoke 0 err.
+- A7 LQIP = PR3 descope(유일 render-lifecycle 침습 + object-fit:contain letterbox 충돌; 기존 skeleton-shimmer가 blank-gap 커버). 풀해상도 passthrough도 PR3.
+
 ### FRONT-IMAGE-RESIZE-1 — swipe 커버 right-sizing (PR1) — RESOLVED 2026-06-22 (`b3e5d3f`-pre-squash, #241)
 이미지 레이턴시 리서치(#240) 지배 lever 구현. swipe 카드가 중앙값 4.6배(p90 21.9배) 과대-페치 → 커버 `image_url`을 표시크기(840px=DPR2)로 우-사이징. **프론트 only** — 백엔드/Redis 캐시/API 계약 무변경(user 결정: 같은 URL 변환이라 효과 동일, SPA라 프론트가 유일 소비자). **리사이즈만**(포맷/srcset/decode/LQIP = PR2, 측정 후).
 - 새 순수 모듈 `frontend/src/api/rightSizeImageUrl.js`: Divisare(Cloudinary FETCH) `w_auto`→`w_840,c_limit`(f_auto,q_auto + `//images` 더블슬래시 유지, 측정 90.7% 절감); imgix(`architizer-prod.imgix.net`) `w=840&fit=max`(q/cs/auto 보존, 콤마 리터럴 — `%2C` 아님, CDN 정규 캐시키). 그 외/malformed/relative/empty → 무변경, 멱등.

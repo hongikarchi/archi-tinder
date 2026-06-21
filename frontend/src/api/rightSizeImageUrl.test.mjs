@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { rightSizeImageUrl } from './rightSizeImageUrl.js'
+import { rightSizeImageUrl, buildCardSrcSet } from './rightSizeImageUrl.js'
 
 // -- Divisare ------------------------------------------------------------------
 
@@ -109,4 +109,94 @@ test('idempotency: Divisare — double-call equals single-call', () => {
 test('idempotency: imgix — double-call equals single-call', () => {
   const u = 'https://architizer-prod.imgix.net/media/foo/x.jpg?w=1680&q=60'
   assert.equal(rightSizeImageUrl(rightSizeImageUrl(u)), rightSizeImageUrl(u))
+})
+
+// -- F1: optional quality param ------------------------------------------------
+
+test('F1 imgix + quality=40 — result has q=40', () => {
+  const input  = 'https://architizer-prod.imgix.net/media/foo/x.jpg?auto=format,compress'
+  const result = rightSizeImageUrl(input, 840, 40)
+  const u      = new URL(result)
+  assert.equal(u.searchParams.get('q'), '40')
+  assert.equal(u.searchParams.get('w'), '840')
+  assert.equal(u.searchParams.get('fit'), 'max')
+  assert.ok(!result.includes('%2C'), 'commas must stay literal, not %2C')
+})
+
+test('F1 Divisare + quality arg — NO q= added (q_auto handles it, quality intentionally ignored)', () => {
+  const input  = 'https://images.divisare.com//images/f_auto,q_auto,w_auto/v1/abc/x.jpg'
+  const result = rightSizeImageUrl(input, 840, 40)
+  assert.ok(!result.includes('q='), 'Divisare must NOT have a q= param')
+  assert.ok(result.includes('q_auto'), 'Divisare must retain q_auto')
+})
+
+// -- F2: buildCardSrcSet -------------------------------------------------------
+
+test('F2 Divisare w_auto — returns correct 1x/2x srcset, no q in either descriptor', () => {
+  const raw    = 'https://images.divisare.com//images/f_auto,q_auto,w_auto/v1/abc/x.jpg'
+  const srcset = buildCardSrcSet(raw)
+  assert.ok(srcset !== null, 'should return a srcset string')
+  // Must contain both descriptors
+  assert.ok(srcset.includes(' 1x,'), 'must have 1x descriptor')
+  assert.ok(srcset.includes(' 2x'), 'must have 2x descriptor')
+  // 1x and 2x should use w_420 and w_840 respectively
+  assert.ok(srcset.includes('w_420,c_limit'), '1x URL must have w_420,c_limit')
+  assert.ok(srcset.includes('w_840,c_limit'), '2x URL must have w_840,c_limit')
+  // No q= param (Divisare uses q_auto, not q=N)
+  assert.ok(!srcset.includes('q='), 'Divisare srcset must NOT include q=')
+  // q_auto preserved
+  assert.ok(srcset.includes('q_auto'), 'Divisare srcset must retain q_auto')
+})
+
+test('F2 Divisare gallery-sibling/already-sized (no w_auto) — returns null', () => {
+  const raw = 'https://images.divisare.com//image/upload/c_fit,f_jpg,q_80,w_1200/v1/project_images/2276517/2.jpg'
+  assert.equal(buildCardSrcSet(raw), null)
+})
+
+test('F2 imgix — 1x has w=420 q=80, 2x has w=840 q=40, fit=max, no %2C', () => {
+  const raw    = 'https://architizer-prod.imgix.net/media/foo/x.jpg?auto=format,compress&cs=strip'
+  const srcset = buildCardSrcSet(raw)
+  assert.ok(srcset !== null, 'should return a srcset string')
+  // Split on descriptor boundary without splitting on commas inside URL
+  const [part1x, part2x] = srcset.split(' 1x, ')
+  const u1 = new URL(part1x.trim())
+  const u2 = new URL(part2x.replace(' 2x', '').trim())
+  // 1x checks
+  assert.equal(u1.searchParams.get('w'),   '420')
+  assert.equal(u1.searchParams.get('q'),   '80')
+  assert.equal(u1.searchParams.get('fit'), 'max')
+  // 2x checks
+  assert.equal(u2.searchParams.get('w'),   '840')
+  assert.equal(u2.searchParams.get('q'),   '40')
+  assert.equal(u2.searchParams.get('fit'), 'max')
+  // No percent-encoded commas in either descriptor
+  assert.ok(!srcset.includes('%2C'), 'commas must stay literal, not %2C')
+  // auto=format,compress preserved verbatim in both
+  assert.ok(srcset.includes('auto=format,compress'), 'auto=format,compress preserved verbatim')
+})
+
+test('F2 non-CDN URL — returns null', () => {
+  assert.equal(buildCardSrcSet('https://archello.s3.eu-central-1.amazonaws.com/x.jpg'), null)
+})
+
+test('F2 malformed/relative URL — returns null', () => {
+  assert.equal(buildCardSrcSet('not a url'), null)
+  assert.equal(buildCardSrcSet('/local/x.jpg'), null)
+})
+
+test('F2 SECURITY: whitespace in URL — returns null (no srcset injection)', () => {
+  // A literal space would terminate the srcset URL token and let a trailing
+  // ", http://evil.example/p.jpg 1x" parse as an extra candidate (allowlist bypass).
+  const evil = 'https://images.divisare.com//images/f_auto,q_auto,w_auto/v1/x a, http://evil.example/p.jpg'
+  assert.equal(buildCardSrcSet(evil), null)
+  // also tab / newline
+  assert.equal(buildCardSrcSet('https://images.divisare.com//images/f_auto,q_auto,w_auto/v1/x\ty.jpg'), null)
+})
+
+test('F2 empty string — returns null', () => {
+  assert.equal(buildCardSrcSet(''), null)
+})
+
+test('F2 null — returns null', () => {
+  assert.equal(buildCardSrcSet(null), null)
 })
