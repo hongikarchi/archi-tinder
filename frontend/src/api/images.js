@@ -4,6 +4,7 @@
  */
 
 import { BASE } from './core.js'
+import { rightSizeImageUrl } from './rightSizeImageUrl.js'
 
 // -- Image telemetry helpers -----------------------------------------------
 
@@ -91,7 +92,7 @@ export function normalizeCard(card) {
     card_type:   'building',
     // canonical_v2 collapses name_en + project_name into a single `name`.
     image_title: card.name || card.name_en || card.project_name || '',
-    image_url:   card.image_url,
+    image_url:   rightSizeImageUrl(card.image_url),
     source_url:  card.url || null,
     gallery:     card.gallery || [],
     gallery_meta: card.gallery_meta || [],

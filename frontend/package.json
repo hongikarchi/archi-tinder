@@ -8,7 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "node --test src/utils/loginFlow.test.mjs"
+    "test": "node --test src/utils/loginFlow.test.mjs src/api/rightSizeImageUrl.test.mjs"
   },
   "dependencies": {
     "@react-oauth/google": "^0.13.4",
