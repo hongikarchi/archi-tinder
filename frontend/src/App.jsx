@@ -4,8 +4,8 @@ import { useTheme } from './hooks/useTheme.js'
 import { useLanguage } from './hooks/useLanguage.js'
 import MainLayout from './layouts/MainLayout.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
-import ProjectSetupPage from './pages/ProjectSetupPage.jsx'
 import LLMSearchPage from './pages/LLMSearchPage.jsx'
+import SaveBoardModal from './components/SaveBoardModal.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import UserProfilePage from './pages/UserProfilePage.jsx'
 import FirmProfilePage from './pages/FirmProfilePage.jsx'
@@ -38,7 +38,11 @@ export default function App() {
   const { hydrate: hydrateLanguage } = useLanguage()
 
   const [userId, setUserId] = useState(() => sessionStorage.getItem('archithon_user') || null)
-  const [wizardData, setWizardData] = useState(null)
+  // SaveBoardModal — shown when report completes for a temp project
+  const [showSaveModal, setShowSaveModal] = useState(false)
+  const [saveModalProject, setSaveModalProject] = useState(null) // { backendId, finalReport, localId }
+  // Re-entry banner — temp project with completed report awaiting save action
+  const [tempCompletedProject, setTempCompletedProject] = useState(null) // { backendId, finalReport, localId }
 
   const [currentCard, setCurrentCard] = useState(null)
   const [cardResetToken, setCardResetToken] = useState(0)
@@ -186,6 +190,30 @@ export default function App() {
     const timer = setTimeout(() => setSwipeError(null), 3000)
     return () => clearTimeout(timer)
   }, [swipeError])
+
+  // Re-entry check (Decision B): on each visit to /search, scan temp projects:
+  //   - is_temp + no finalReport  → auto-delete (stale incomplete session)
+  //   - is_temp + has finalReport → surface banner so user can save or discard
+  // projects is read from the closure at navigation time (intentional snapshot).
+  useEffect(() => {
+    if (location.pathname !== '/search') return
+    if (!userId) return
+
+    const tempWithReport = projects.find(p => p.isTemp && p.finalReport && p.backendId)
+    const tempWithoutReport = projects.filter(p => p.isTemp && !p.finalReport && p.backendId)
+
+    if (tempWithoutReport.length > 0) {
+      const toDeleteIds = new Set(tempWithoutReport.map(p => p.id))
+      tempWithoutReport.forEach(p => api.deleteProject(p.backendId).catch(() => {}))
+      setProjects(prev => prev.filter(p => !toDeleteIds.has(p.id)))
+    }
+
+    setTempCompletedProject(
+      tempWithReport
+        ? { backendId: tempWithReport.backendId, finalReport: tempWithReport.finalReport, localId: tempWithReport.id }
+        : null
+    )
+  }, [location.pathname]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-navigate when the backend declares a terminal state OR the user has
   // swiped meaningfully past the target window. The post-target floor mirrors
@@ -363,8 +391,8 @@ export default function App() {
       sessionId: null, createdAt: new Date().toISOString(),
       deckImages: preloadedImages || null,
       visibility,
+      isTemp: true, // backend creates project with is_temp=True; saved on board save
     }
-    setWizardData(null)
     setProjects(prev => [...prev, newProject])
     setActiveProjectId(projectId)
     navigate('/swipe')
@@ -532,6 +560,16 @@ export default function App() {
               .then(img => setProjects(prev => prev.map(p => p.id === activeProjectId
                 ? { ...p, reportImage: img.image_data, reportImageMime: img.mime_type } : p)))
               .catch(() => null)  // image failure is non-fatal; report text already shown
+          }
+          // Show SaveBoardModal when report completes and the project is temp.
+          // project.isTemp was set in handleStart — check the snapshot captured above.
+          if (reportData?.final_report && backendId && project?.isTemp) {
+            setSaveModalProject({
+              backendId,
+              finalReport: reportData.final_report,
+              localId: activeProjectId,
+            })
+            setShowSaveModal(true)
           }
         } catch {
           // ResultsPage will attempt a fresh GET /result/ on entry.
@@ -730,7 +768,6 @@ export default function App() {
     const project = projects.find(p => p.id === id)
     if (!project) return
     const seedIds = (preloadedImages || []).map(c => c.image_id).filter(Boolean)
-    setWizardData(null)
     setActiveProjectId(id)
     setProjects(prev => prev.map(p => p.id === id ? { ...p, deckImages: preloadedImages } : p))
     navigate('/swipe')
@@ -761,7 +798,6 @@ export default function App() {
     setCurrentCard(null)
     setSessionProgress(null)
     setIsSessionCompleted(false)
-    setWizardData(null)
     navigate('/')
 
     // Sync projects from backend (if JWT available)
@@ -776,6 +812,7 @@ export default function App() {
           backendId: String(p.project_id),
           projectName: p.name,
           visibility: p.visibility || 'private',
+          isTemp: p.is_temp ?? false,
           filters: p.filters || {},
           likedBuildings: extractLikedIds(p.liked_ids).map(bid => cardMap[bid]).filter(Boolean),
           swipedIds: [...extractLikedIds(p.liked_ids), ...(p.disliked_ids || [])],
@@ -820,7 +857,6 @@ export default function App() {
     setCurrentCard(null)
     setSessionProgress(null)
     setIsSessionCompleted(false)
-    setWizardData(null)
     loggingOut.current = false
     navigate('/login')
   }
@@ -849,6 +885,38 @@ export default function App() {
     await initSession(id, project.filters, [], [], null, null, null, project.projectName, '', null, true)
   }
 
+  // ── SaveBoardModal callbacks ────────────────────────────────────────────────
+  function handleBoardSaved({ name, visibility }) {
+    if (saveModalProject?.localId) {
+      setProjects(prev => prev.map(p =>
+        p.id === saveModalProject.localId
+          ? { ...p, isTemp: false, projectName: name, visibility }
+          : p
+      ))
+    }
+    setShowSaveModal(false)
+    setSaveModalProject(null)
+    setTempCompletedProject(null)
+    setGlobalToast({ message: '보드가 저장되었어요', type: 'success' })
+  }
+
+  function handleBoardSaveClose() {
+    setShowSaveModal(false)
+    setSaveModalProject(null)
+  }
+
+  async function handleTempDelete() {
+    if (!tempCompletedProject?.backendId) return
+    try {
+      await api.deleteProject(tempCompletedProject.backendId)
+      if (tempCompletedProject.localId) {
+        setProjects(prev => prev.filter(p => p.id !== tempCompletedProject.localId))
+      }
+    } catch { /* best-effort */ }
+    setTempCompletedProject(null)
+  }
+  // ────────────────────────────────────────────────────────────────────────────
+
   const sharedLayoutProps = {
     userId,
     onLogout: handleLogout,
@@ -872,7 +940,7 @@ export default function App() {
       const backendId = activeProject?.backendId
       if (!hasLikes && backendId) api.deleteProject(backendId).catch(() => {})
       setActiveProjectId(null)
-      navigate('/new')
+      navigate('/search')
     },
     onExitToHome: () => {
       const hasLikes = (activeProject?.likedBuildings?.length ?? 0) > 0
@@ -901,28 +969,16 @@ export default function App() {
         }>
           <Route index element={<Navigate to="/discovery" replace />} />
           <Route path="discovery" element={<DiscoveryPage showToast={setGlobalToast} />} />
-          <Route path="new" element={
-            <ProjectSetupPage
-              onBack={() => navigate('/discovery')}
-              onNext={({ projectName, minArea, maxArea, visibility }) => {
-                setWizardData({ projectName, minArea, maxArea, visibility })
-                navigate('/search')
-              }}
-            />
-          } />
           <Route path="search" element={
             <LLMSearchPage
               mode="new"
-              projectName={wizardData?.projectName}
-              visibility={wizardData?.visibility}
-              onBack={() => navigate('/new')}
+              onBack={() => navigate('/discovery')}
               onStart={handleStart}
               onUpdate={handleUpdateWithImages}
             />
           } />
           <Route path="search/:projectId" element={
             <LLMSearchUpdateWrapper
-              wizardData={wizardData}
               onBack={() => navigate('/')}
               onStart={handleStart}
               onUpdate={handleUpdateWithImages}
@@ -989,6 +1045,95 @@ export default function App() {
         }}>
           {globalToast.message}
         </div>
+      )}
+
+      {/* Re-entry banner — shown on /search when a temp project has a completed report */}
+      {location.pathname === '/search' && tempCompletedProject && (
+        <div style={{
+          position: 'fixed',
+          top: 76,
+          left: 0,
+          right: 0,
+          zIndex: 50,
+          padding: '0 16px',
+        }}>
+          <div style={{
+            maxWidth: 480,
+            margin: '0 auto',
+            background: 'color-mix(in srgb, var(--color-surface) 88%, transparent)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+            border: '1px solid var(--color-border-soft)',
+            borderRadius: 12,
+            padding: '12px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+          }}>
+            <p style={{
+              margin: 0,
+              fontSize: 13,
+              fontWeight: 600,
+              color: 'var(--color-text)',
+              flex: 1,
+              lineHeight: 1.4,
+            }}>
+              이전에 완성된 리포트가 있어요
+            </p>
+            <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+              <button
+                onClick={() => {
+                  setSaveModalProject(tempCompletedProject)
+                  setShowSaveModal(true)
+                }}
+                style={{
+                  padding: '7px 14px',
+                  borderRadius: 8,
+                  border: 'none',
+                  background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
+                  color: '#fff',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  minHeight: 32,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                저장
+              </button>
+              <button
+                onClick={handleTempDelete}
+                style={{
+                  padding: '7px 14px',
+                  borderRadius: 8,
+                  border: '1px solid var(--color-destructive)',
+                  background: 'transparent',
+                  color: 'var(--color-destructive)',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  minHeight: 32,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                삭제
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SaveBoardModal — shown after report completion for temp projects, or from banner */}
+      {showSaveModal && saveModalProject && (
+        <SaveBoardModal
+          projectId={saveModalProject.backendId}
+          finalReport={saveModalProject.finalReport}
+          onSaved={handleBoardSaved}
+          onClose={handleBoardSaveClose}
+        />
       )}
 
       {verifyGateOpen && (

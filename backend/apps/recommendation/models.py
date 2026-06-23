@@ -47,6 +47,13 @@ class Project(models.Model):
         # Phase 15 SOC2 placeholder — denormalized counter updated by future Reaction events.
     )
 
+    # FEAT-TASTE-FLOW-1: temporary project lifecycle support.
+    # True when the project was auto-created by create_session (before the user
+    # confirms save). The frontend uses this to decide whether to show a
+    # save/delete banner on re-entry. Set to False via PATCH {is_temp: false}
+    # when the user confirms the board name + visibility ("save confirm" action).
+    is_temp = models.BooleanField(default=False)
+
     def __str__(self):
         return f'{self.name} ({self.user})'
 

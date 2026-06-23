@@ -26,7 +26,7 @@ const TAB_ICONS = {
 }
 
 function getActiveTab(pathname) {
-  if (pathname === '/swipe' || pathname === '/new' || pathname.startsWith('/search') || pathname.startsWith('/result')) return 'swipe'
+  if (pathname === '/swipe' || pathname.startsWith('/search') || pathname.startsWith('/result')) return 'swipe'
   if (pathname.startsWith('/user') || pathname.startsWith('/board') || pathname.startsWith('/settings')) return 'profile'
   return 'discovery'
 }
@@ -39,7 +39,7 @@ export default function TabBar() {
 
   const tabs = [
     { id: 'discovery', labelKey: 'tabbar.discovery', path: '/discovery' },
-    { id: 'swipe',     labelKey: 'tabbar.taste',     path: '/swipe' },
+    { id: 'swipe',     labelKey: 'tabbar.taste',     path: '/search' },
     { id: 'profile',   labelKey: 'tabbar.profile',   path: '/user/me' },
   ]
 

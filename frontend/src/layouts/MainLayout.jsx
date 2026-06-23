@@ -84,7 +84,7 @@ export default function MainLayout({
           <p style={{ fontSize: 16, fontWeight: 700, margin: 0, letterSpacing: '0.2em', color: 'var(--color-text)' }}>ARCHIBE</p>
           <p style={{ color: 'var(--color-text-dimmer)', fontSize: 13 }}>Start a taste analysis to begin swiping</p>
           <button
-            onClick={() => navigate('/new')}
+            onClick={() => navigate('/search')}
             style={{
               marginTop: 8, padding: '12px 28px', borderRadius: 12,
               background: 'linear-gradient(135deg,#ec4899,#f43f5e)',
