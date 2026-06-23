@@ -689,7 +689,7 @@ export default function DiscoveryPage({ showToast }) {
             </p>
             <button
               type="button"
-              onClick={() => navigate('/new')}
+              onClick={() => navigate('/search')}
               style={{
                 marginTop: 12,
                 minHeight: 44,

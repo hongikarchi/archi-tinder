@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-06-22 02:07 KST',
-    head: 'bce04d6',
-    branch: 'feature/claude-image-tier-a-2',
+    updatedAt: '2026-06-23 23:08 KST',
+    head: '6555f15',
+    branch: 'feature/claude-taste-flow-redesign',
   },
   done: [
+    {
+      id: 'FULL-ONBOARDING-1',
+      title: 'Taste 탭 설정단계 제거 + 임시저장 flow',
+      completedAt: '2026-06-23',
+      note: '신규 flow: Taste 탭 → AI 대화(`/search`) 즉시 진입 → 스와이프 → 리포트 생성 → "저장할까요?" 모달(보드명 자동=persona_type, public/private 토글) → 저장확정(보드 생성).',
+    },
     {
       id: 'FRONT-IMAGE-RESIZE-2',
       title: '이미지 Tier A: srcset + decode-preload + classifier (PR2)',
@@ -72,13 +78,6 @@ window.PROJECT_STATE = {
       title: 'Discovery v3.1+v3.2 라이브 브라우저 검증',
       completedAt: '2026-06-08',
       note: 'FULL-DISCOVERY-1(#200/#209) prod 배포(#218) 직전 app-test FULL로 라이브 검증 완료. chunk 시스템·10장 트리거 카드·우=promote→Taste(`/discovery/promote-to-taste/ 201`, 11 likes 이월)·진행바·phase 전이 정상, 콘솔 0, 회귀(AI검색+스와이프) OK. 배포 후 prod probe로 라우트 라이브 확인.',
-    },
-    {
-      id: 'FRONT-AVATAR-1',
-      title: '프로필 사진 업로드 (server-proxy R2 + 폴백)',
-      completedAt: '2026-06-07',
-      prs: [217, 218],
-      note: '아바타 업로드(Slice D). 마이그 없음(`avatar_url` URLField 기존). data-URL 지양 결정대로 R2 URL만 저장.',
     },
   ],
   now: [
@@ -166,6 +165,11 @@ window.PROJECT_STATE = {
     ],
     low: [
       {
+        id: 'FRONT-UX-6',
+        title: 'temp 삭제 실패 무음 + activeProjectId 미정리',
+        note: 'App.jsx `handleTempDelete`가 DELETE 실패 시에도 배너를 닫음(다음 `/search` 재진입 때 배너 재등장하여 self-correct). 성공 후에만 닫거나 에러 토스트. 또 temp 삭제 경로(재진입 cleanup + handleTempDelete)가 `setActiveProjectId(null)`을 안 불러 exit 핸들러와 불일치(파생값 `projects.find()||null`로 무해). FEAT FULL-ONBOARDING-1 follow-up.',
+      },
+      {
         id: 'FRONT-AUTH-1',
         title: 'LoginPage에 Kakao/Naver 버튼 없음',
         note: 'Code audit 2026-05-27: api/auth.js already supports generic socialLogin(provider). Backend has Kakao/Naver endpoints; LoginPage rewrite (FULL-LOGIN-REDESIGN-1 PR #155) now uses terminal-style wizard but Kakao/Naver still missing. After FULL-LOGIN-REDESIGN-1 ships, Kakao/Naver should be secondary upgrade options on returning-user CTA + Settings → linked-providers section.',
@@ -188,6 +192,13 @@ window.PROJECT_STATE = {
     ],
   },
   prs: [
+    {
+      number: 242,
+      title: 'perf(image): srcset + per-DPR quality + decode-preload + imgix classifier (PR2, frontend-only)',
+      mergedAt: '2026-06-21T17:12:48Z',
+      mergedAtKST: '2026-06-22 02:12 KST',
+      sha: '6555f15',
+    },
     {
       number: 241,
       title: 'perf(image): right-size swipe cover URLs at normalizeCard (PR1, frontend-only)',
@@ -236,13 +247,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-06-18T16:25:18Z',
       mergedAtKST: '2026-06-19 01:25 KST',
       sha: '0245b82',
-    },
-    {
-      number: 234,
-      title: 'feat(SNS): 빌딩 디테일 저장 버튼 — 오피스 프로필 연결 + 언어 대응',
-      mergedAt: '2026-06-18T16:24:37Z',
-      mergedAtKST: '2026-06-19 01:24 KST',
-      sha: '0ee8613',
     },
   ],
   agents: [
@@ -921,6 +925,10 @@ window.PROJECT_STATE = {
       role: '마이그 0027: recent_latencies 필드',
     },
     {
+      path: 'backend/apps/recommendation/migrations/0028_project_is_temp.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/recommendation/migrations/__init__.py',
       role: '마이그레이션 패키지 init',
     },
@@ -1501,6 +1509,10 @@ window.PROJECT_STATE = {
       role: '이미지 카드 정규화·텔레메트리 헬퍼',
     },
     {
+      path: 'frontend/src/api/images.test.mjs',
+      role: '',
+    },
+    {
       path: 'frontend/src/api/liked.js',
       role: '좋아요 건물 API 클라이언트',
     },
@@ -1575,6 +1587,14 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/components/QuestionCard.jsx',
       role: '취향 보정 질문 카드',
+    },
+    {
+      path: 'frontend/src/components/SaveBoardModal.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/SaveBoardModal.module.css',
+      role: '',
     },
     {
       path: 'frontend/src/components/SaveToBoardModal.jsx',
@@ -1771,10 +1791,6 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/pages/LoginPage.jsx',
       role: '게스트 온보딩 로그인 페이지',
-    },
-    {
-      path: 'frontend/src/pages/ProjectSetupPage.jsx',
-      role: '프로젝트 생성 설정 페이지',
     },
     {
       path: 'frontend/src/pages/ResultsPage.jsx',
