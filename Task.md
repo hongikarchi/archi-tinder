@@ -274,6 +274,9 @@ _(Deferred 2026-06-04 batch scope: premise FALSIFIED — cleanup 기준 필드 `
 
 ### LOW
 
+#### FRONT-UX-6 — temp 삭제 실패 무음 + activeProjectId 미정리
+App.jsx `handleTempDelete`가 DELETE 실패 시에도 배너를 닫음(다음 `/search` 재진입 때 배너 재등장하여 self-correct). 성공 후에만 닫거나 에러 토스트. 또 temp 삭제 경로(재진입 cleanup + handleTempDelete)가 `setActiveProjectId(null)`을 안 불러 exit 핸들러와 불일치(파생값 `projects.find()||null`로 무해). FEAT FULL-ONBOARDING-1 follow-up.
+
 #### FRONT-AUTH-1 — LoginPage에 Kakao/Naver 버튼 없음
 Backend Kakao + Naver implementation shipped: `apps/accounts/views.py` KakaoLoginView + NaverLoginView, `apps/accounts/urls.py` `auth/social/kakao/` + `auth/social/naver/`, `apps/accounts/models.py` provider choices. Frontend `LoginPage.jsx` currently has Google button only.
 - [ ] Kakao button on `LoginPage.jsx` (loading state already typed `'kakao'`)
@@ -358,6 +361,16 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 _(Deferred 2026-06-04 batch scope: YAGNI — product-미소비 telemetry 1필드 위해 Celery+worker 도입은 과투자. 2번째 background job 생기면 단일 INFRA-JOBS 티켓으로 묶어 처리.)_
 
 ## Done
+### FULL-ONBOARDING-1 — Taste 탭 설정단계 제거 + 임시저장 flow — RESOLVED 2026-06-23 (`a58a9f6`-pre-squash)
+신규 flow: Taste 탭 → AI 대화(`/search`) 즉시 진입 → 스와이프 → 리포트 생성 → "저장할까요?" 모달(보드명 자동=persona_type, public/private 토글) → 저장확정(보드 생성).
+- [x] `ProjectSetupPage.jsx` 삭제 + `/new` 라우트 삭제 + Taste 탭 진입 라우팅 `/search`로 변경 (TabBar/MainLayout/DiscoveryPage), `wizardData`의 minArea/maxArea 죽은코드 제거
+- [x] `Project.is_temp` BooleanField(default=False) + migration 0028 (depends 0027), `create_session`에서 신규 프로젝트만 `is_temp=True` 생성 (재사용 프로젝트 미변경)
+- [x] 저장확정 = 기존 PATCH `/api/v1/projects/{id}/` 확장 (`ProjectSelfUpdateSerializer`가 `is_temp`+`name`+`visibility` 동시 처리, validate_visibility) — 신규 엔드포인트 없음. `SaveBoardModal` 신규 (보드명 persona_type 자동·수정가능)
+- [x] 재진입 처리: `is_temp && !final_report` 자동삭제 / `is_temp && final_report` 배너("이전에 완성된 리포트가 있어요") → 저장/삭제
+- [x] code-review PASS · security PASS · Opus adversarial-verify (LOW 2건, benign/self-correcting)
+- [ ] app-test FULL — **SKIP (사용자 요청, 라이브 검증 미실행)**; migration 0028 로컬 미적용(파일만, prod는 배포 시 적용)
+- Deferred: App.jsx handleTempDelete DELETE 실패 시 배너 무음 닫힘(다음 /search 재진입 self-correct) + temp 삭제 경로 setActiveProjectId(null) 누락(파생값으로 무해) → LOW follow-up.
+
 ### FRONT-IMAGE-RESIZE-2 — 이미지 Tier A: srcset + decode-preload + classifier (PR2) — RESOLVED 2026-06-22 (`feature/claude-image-tier-a-2`-pre-squash, #242)
 PR1(#241) 리사이즈 로컬 A/B 검증(shipped 함수, 실 50카드: 91.5% 바이트, 0 broken) **후** 착수(measure-first 충족). 프론트 only.
 - **A4 srcset + per-DPR q**: `buildCardSrcSet(raw url)` 신규 순수 헬퍼 — Divisare `w_420 1x, w_840 2x`(q_auto, 무 q), imgix `w=420&q=80 1x, w=840&q=40 2x`(Q8). `normalizeCard`에 `image_srcset` 추가(raw에서 — Divisare regex가 w_auto만 매칭, 이미-840엔 no-op이라 raw 필수). `<img srcSet>`(x-descriptor라 `sizes` 생략, 2x=DPR3 perceptual cap). `rightSizeImageUrl`에 optional `quality` 파라미터(imgix만).
