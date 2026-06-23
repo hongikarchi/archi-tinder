@@ -23,9 +23,9 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-06-23 23:08 KST',
-    head: '6555f15',
-    branch: 'feature/claude-taste-flow-redesign',
+    updatedAt: '2026-06-24 08:58 KST',
+    head: '6f7a4a8',
+    branch: 'feature/claude-onboarding-followup-track',
   },
   done: [
     {
@@ -90,6 +90,11 @@ window.PROJECT_STATE = {
   next: {
     xhigh: [],
     high: [
+      {
+        id: 'FULL-ONBOARDING-2',
+        title: 'is_temp 라이프사이클 마감 (#243 fast-follows)',
+        note: '#243(`6f7a4a8`, FULL-ONBOARDING-1 Taste-flow + Project.is_temp) merge 시 verified-review로 게시한 후속(Codex RC + 워크플로우 adversarial-verify + Opus judge). 귀속: #243 diff는 models/serializers/session_service/migration/frontend만 — projects.py·discovery.py·engine.py 미수정 → 아래 1만 PR-신규, 나머지…',
+      },
       {
         id: 'FRONT-IMAGE-RESIZE-3',
         title: '이미지 LQIP + 풀해상도 passthrough (PR3)',
@@ -193,6 +198,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 243,
+      title: 'feat(TASTE-FLOW): Taste 탭 flow 개편 + Project.is_temp 라이프사이클 (FULL-ONBOARDING-1)',
+      mergedAt: '2026-06-23T23:45:02Z',
+      mergedAtKST: '2026-06-24 08:45 KST',
+      sha: '6f7a4a8',
+    },
+    {
       number: 242,
       title: 'perf(image): srcset + per-DPR quality + decode-preload + imgix classifier (PR2, frontend-only)',
       mergedAt: '2026-06-21T17:12:48Z',
@@ -240,13 +252,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-06-20T19:53:00Z',
       mergedAtKST: '2026-06-21 04:53 KST',
       sha: '052898f',
-    },
-    {
-      number: 235,
-      title: 'feat(SNS): 빌딩 디테일 사진 라이트박스 + 이미지 다운로드',
-      mergedAt: '2026-06-18T16:25:18Z',
-      mergedAtKST: '2026-06-19 01:25 KST',
-      sha: '0245b82',
     },
   ],
   agents: [

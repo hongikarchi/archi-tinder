@@ -106,6 +106,21 @@ Redesign `/login` as conversational swipe onboarding while preserving the existi
 
 ### HIGH
 
+#### FULL-ONBOARDING-2 — is_temp 라이프사이클 마감 (#243 fast-follows)
+#243(`6f7a4a8`, FULL-ONBOARDING-1 Taste-flow + Project.is_temp) merge 시 verified-review로 게시한 후속(Codex RC + 워크플로우 adversarial-verify + Opus judge). 귀속: **#243 diff는 models/serializers/session_service/migration/frontend만 — projects.py·discovery.py·engine.py 미수정** → 아래 1만 PR-신규, 나머지 pre-existing(develop 동일).
+- **(PR-신규, 데이터-무결성, 먼저) `validate_is_temp`** — `ProjectSelfUpdateSerializer`(serializers.py:308, fields에 is_temp 있음)에 `True` 거부 추가. finalize는 one-way(temp→permanent). 현재 PATCH `{is_temp:true}`가 owner 자기 영구보드를 temp로 되돌림 → 다음 /search 재진입 시 report-없는 temp 자동삭제로 사일런트 유실 가능(owner-gated/UI경로 없음 = self-inflict, but wart).
+  ```python
+  def validate_is_temp(self, value):
+      if value:
+          raise serializers.ValidationError("is_temp can only be set to false (finalize is one-way).")
+      return value
+  ```
+- **(기능 완성, pre-existing 구조) board-list 필터** — `ProjectListCreateView.get()`(projects.py:72) + `UserProjectsListView.get()`(projects.py:275)에 `.filter(is_temp=False)` → temp 보드가 프로필 리스트에 안 뜨게(is_temp 기능의 핵심). projects.py가 #243 밖이라 별도 변경. visibility 기본 private라 타유저 노출은 0.
+- **(놓친 버그) guest-count over-count** — `discovery.py:242/377` `Project.objects.filter(user=profile).count() >= 3`가 temp까지 셈 → guest가 temp 1 + 저장 2면 false 403. `.filter(is_temp=False)` + save-confirm PATCH(promote 시점)에 limit enforce.
+- (비차단) temp 보드가 `compute_user_taste_vector`(engine.py:2087)·discovery feed 행(discovery.py:124)에 섞임 — pre-existing, is_temp로 newly relevant. 편할 때 `.filter(is_temp=False)`.
+- (비차단) orphan temp 누적 — 브라우저 닫기/로그아웃 시 서버 GC/TTL 없음(frontend cleanup은 /search 재진입만). TTL 필드 or 정리 job 별도 추적.
+- 게이트: #243 CI green, migration 0028 SAFE(BooleanField default=False, metadata-only DDL). 모든 fast-follow는 backend(projects.py/serializers.py/discovery.py) — Role 경계는 SNS/board(yywon1) or admin.
+
 #### FRONT-IMAGE-RESIZE-3 — 이미지 LQIP + 풀해상도 passthrough (PR3)
 PR2(#242)가 srcset/decode/classifier 출하 → 남은 Tier A polish. 전부 프론트.
 - **A7 LQIP**: 카드당 ~20px 블러 썸네일(`buildLqipUrl=rightSizeImageUrl(url,20)`, 양 CDN) + CSS `filter:blur`, skeleton-shimmer 위 레이어. ⚠️ object-fit:contain letterbox라 `scale(1.1)` edge-bleed 핵 금지(letterbox 노출). PR2서 의도적 분리(유일 render-lifecycle 침습, polish지 core 아님). 완전 스펙은 PR2 Plan-agent 설계에 turnkey.
