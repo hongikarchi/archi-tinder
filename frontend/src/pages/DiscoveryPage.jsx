@@ -27,13 +27,6 @@ const CONTINUE_AFTER_TRIGGER_KEY = 'discovery_continue_after_trigger'
 
 const TRIGGER_CARD_ID = '__taste_trigger__'
 
-// tasteState → short Korean label
-const TASTE_STATE_LABEL = {
-  cold:   '탐색 중',
-  single: '취향 파악 중',
-  multi:  '취향 다양',
-}
-
 // Shake keyframes injected once per page mount
 const SHAKE_STYLE_ID = 'discovery-shake-style'
 function ensureShakeStyle() {
@@ -195,7 +188,6 @@ export default function DiscoveryPage({ showToast }) {
 
   const _cached = isReentryMount ? null : loadDeckCache()
   const [deck, setDeck] = useState(_cached ? _cached.deck : [])
-  const [tasteState, setTasteState] = useState(_cached ? (_cached.tasteState || 'cold') : 'cold')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -361,7 +353,6 @@ export default function DiscoveryPage({ showToast }) {
       }
 
       setDeck(prev => (reset ? result.cards : [...prev, ...result.cards]))
-      setTasteState(result.tasteState || 'cold')
     } catch (err) {
       if (!isActiveRef.current || requestId !== requestIdRef.current) return
       setError(err?.message || "Couldn't load Discovery. Tap to retry.")
@@ -390,7 +381,7 @@ export default function DiscoveryPage({ showToast }) {
     }
   }, [deck, fetchPage])
 
-  // Persist deck + tasteState to sessionStorage for back-navigation restoration
+  // Persist deck to sessionStorage for back-navigation restoration
   useEffect(() => {
     if (deck.length === 0) return
     // Don't persist the trigger card into the deck cache
@@ -398,12 +389,12 @@ export default function DiscoveryPage({ showToast }) {
     if (cacheable.length === 0) return
     try {
       sessionStorage.setItem(DECK_CACHE_KEY, JSON.stringify({
-        deck: cacheable, tasteState, ts: Date.now(),
+        deck: cacheable, ts: Date.now(),
       }))
     } catch {
       // sessionStorage quota exceeded or unavailable — ignore
     }
-  }, [deck, tasteState])
+  }, [deck])
 
   const topCard = deck[0] || null
   const topCardId = getCardId(topCard)
@@ -513,7 +504,6 @@ export default function DiscoveryPage({ showToast }) {
   }
 
   // ── Render ─────────────────────────────────────────────────────────────── //
-  const tasteLabel = TASTE_STATE_LABEL[tasteState] || tasteState
   // Progress bar: 0–10 likes fills the bar
   const progressPct = Math.min(draftLikeCount / TASTE_NUDGE_THRESHOLD, 1)
   const progressComplete = draftLikeCount >= TASTE_NUDGE_THRESHOLD
@@ -534,16 +524,6 @@ export default function DiscoveryPage({ showToast }) {
           <span style={{ color: 'var(--color-text)' }}>Disc</span>
           <span style={{ color: '#ec4899' }}>overy</span>
         </h1>
-        <div style={{
-          color: 'var(--color-text-dim)',
-          fontSize: 11,
-          fontWeight: 700,
-          letterSpacing: '0.05em',
-          textTransform: 'uppercase',
-          marginBottom: 10,
-        }}>
-          {tasteLabel}
-        </div>
 
         {/* Progress bar — fills draftLikeCount/10; shows '취향 탐색 중' at >=10 */}
         <div style={{ width: '100%', maxWidth: CARD_WIDTH, margin: '0 auto' }}>
@@ -580,6 +560,65 @@ export default function DiscoveryPage({ showToast }) {
             }} />
           </div>
         </div>
+
+        {/* Feature B: persistent "Taste로 저장·이동" CTA — shown after user left-swiped
+            the trigger card (Discovery 계속 선택). Rendered in the header (normal document
+            flow, before the absolute card stack) so it is always above the cards and
+            fully clickable. Primary CTA gradient per DESIGN.md §8.1, min-height 44px §3.2,
+            radius var(--radius-md) §3.1. position:relative + zIndex:10 + pointerEvents:auto
+            ensure it stays on top of the absolute-positioned card stack beneath it. */}
+        {continueAfterTrigger && (
+          <div style={{
+            width: '100%',
+            maxWidth: CARD_WIDTH,
+            margin: '10px auto 0',
+            position: 'relative',
+            zIndex: 10,
+            pointerEvents: 'auto',
+          }}>
+            <button
+              type="button"
+              onClick={handlePromoteToTaste}
+              disabled={promoteLoading}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                width: '100%',
+                minHeight: 44,
+                padding: '0 20px',
+                borderRadius: 'var(--radius-md, 12px)',
+                border: 'none',
+                background: promoteLoading
+                  ? 'rgba(9,105,218,0.4)'
+                  : 'linear-gradient(135deg, var(--accent-1, #0969DA), var(--accent-2, #8250DF))',
+                color: '#fff',
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: promoteLoading ? 'not-allowed' : 'pointer',
+                fontFamily: 'inherit',
+                letterSpacing: '-0.01em',
+                transition: `transform var(--motion-normal, 220ms) var(--motion-ease, cubic-bezier(0.4,0,0.2,1))`,
+              }}
+            >
+              {promoteLoading ? (
+                <>
+                  <div style={{
+                    width: 14, height: 14, borderRadius: '50%',
+                    border: '2px solid rgba(255,255,255,0.4)',
+                    borderTopColor: '#fff',
+                    animation: 'spin 0.8s linear infinite',
+                    flexShrink: 0,
+                  }} />
+                  Taste 분석 중…
+                </>
+              ) : (
+                '지금까지 취향 저장하고 Taste로 이동'
+              )}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Card stack */}
@@ -776,56 +815,11 @@ export default function DiscoveryPage({ showToast }) {
         )}
       </div>
 
-      {/* Bottom area: swipe hint + Feature B persistent CTA */}
+      {/* Bottom area: swipe hint */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-        {promoteLoading ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{
-              width: 14, height: 14, borderRadius: '50%',
-              border: '2px solid var(--color-text-dim)',
-              borderTopColor: '#ec4899',
-              animation: 'spin 0.8s linear infinite',
-            }} />
-            <span style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>
-              Taste 분석 중…
-            </span>
-          </div>
-        ) : (
-          <>
-            {continueAfterTrigger && (
-              /* Feature B: persistent "Taste로 저장·이동" button rendered after
-                 user left-swiped the trigger card (Discovery 계속 선택).
-                 Primary CTA gradient per DESIGN.md §8.1. min-height 44px per §3.2. */
-              <button
-                type="button"
-                onClick={handlePromoteToTaste}
-                disabled={promoteLoading}
-                style={{
-                  minHeight: 44,
-                  padding: '0 20px',
-                  borderRadius: 'var(--radius-md, 12px)',
-                  border: 'none',
-                  background: 'linear-gradient(135deg, var(--accent-1, #0969DA), var(--accent-2, #8250DF))',
-                  color: '#fff',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  fontFamily: 'inherit',
-                  letterSpacing: '-0.01em',
-                  transition: `transform var(--motion-normal, 220ms) var(--motion-ease, cubic-bezier(0.4,0,0.2,1))`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                }}
-              >
-                지금까지 취향 저장하고 Taste로 이동
-              </button>
-            )}
-            <p style={{ color: 'var(--color-text-dimmest)', fontSize: 11, margin: 0 }}>
-              ← skip · tap card · save →&nbsp;&nbsp;·&nbsp;&nbsp;arrow keys supported
-            </p>
-          </>
-        )}
+        <p style={{ color: 'var(--color-text-dimmest)', fontSize: 11, margin: 0 }}>
+          ← skip · tap card · save →&nbsp;&nbsp;·&nbsp;&nbsp;arrow keys supported
+        </p>
       </div>
 
       {/* Leave-warning modal (DISCOVERY-PERF-3) — shown when user tries to navigate
