@@ -178,6 +178,42 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
     } catch { /* ignore */ }
     return ''
   })
+  // Calibration fields from the last parse-query response (forwarded to startSession)
+  const [latestConfidenceScore, setLatestConfidenceScore] = useState(() => {
+    try {
+      const stored = localStorage.getItem(`${storageKey}__latestConfidenceScore`)
+      if (stored) return JSON.parse(stored)
+    } catch { /* ignore */ }
+    return null
+  })
+  const [latestSystemAction, setLatestSystemAction] = useState(() => {
+    try {
+      const stored = localStorage.getItem(`${storageKey}__latestSystemAction`)
+      if (stored) return JSON.parse(stored)
+    } catch { /* ignore */ }
+    return null
+  })
+  const [latestLlmMessage, setLatestLlmMessage] = useState(() => {
+    try {
+      const stored = localStorage.getItem(`${storageKey}__latestLlmMessage`)
+      if (stored) return JSON.parse(stored)
+    } catch { /* ignore */ }
+    return null
+  })
+  const [latestQuickReplies, setLatestQuickReplies] = useState(() => {
+    try {
+      const stored = localStorage.getItem(`${storageKey}__latestQuickReplies`)
+      if (stored) return JSON.parse(stored)
+    } catch { /* ignore */ }
+    return []
+  })
+  const [latestPriorityOrdered, setLatestPriorityOrdered] = useState(() => {
+    try {
+      const stored = localStorage.getItem(`${storageKey}__latestPriorityOrdered`)
+      if (stored) return JSON.parse(stored)
+    } catch { /* ignore */ }
+    return []
+  })
   const [showStart, setShowStart] = useState(() => {
     try {
       const stored = localStorage.getItem(`${storageKey}__showStart`)
@@ -230,6 +266,21 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
   useEffect(() => {
     localStorage.setItem(`${storageKey}__showStart`, JSON.stringify(showStart))
   }, [storageKey, showStart])
+  useEffect(() => {
+    localStorage.setItem(`${storageKey}__latestConfidenceScore`, JSON.stringify(latestConfidenceScore))
+  }, [storageKey, latestConfidenceScore])
+  useEffect(() => {
+    localStorage.setItem(`${storageKey}__latestSystemAction`, JSON.stringify(latestSystemAction))
+  }, [storageKey, latestSystemAction])
+  useEffect(() => {
+    localStorage.setItem(`${storageKey}__latestLlmMessage`, JSON.stringify(latestLlmMessage))
+  }, [storageKey, latestLlmMessage])
+  useEffect(() => {
+    localStorage.setItem(`${storageKey}__latestQuickReplies`, JSON.stringify(latestQuickReplies))
+  }, [storageKey, latestQuickReplies])
+  useEffect(() => {
+    localStorage.setItem(`${storageKey}__latestPriorityOrdered`, JSON.stringify(latestPriorityOrdered))
+  }, [storageKey, latestPriorityOrdered])
 
   // ── Backend hydration (existing project only) ────────────────────────────
   // When there IS a real projectId (not the 'new' pre-project case), try to
@@ -377,6 +428,8 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
       '__messages', '__conversationHistory', '__latestResults',
       '__latestFilters', '__latestFilterPriority', '__latestVisualDescription',
       '__latestImageFocus', '__latestRawQuery', '__showStart',
+      '__latestConfidenceScore', '__latestSystemAction', '__latestLlmMessage',
+      '__latestQuickReplies', '__latestPriorityOrdered',
     ].forEach(suffix => localStorage.removeItem(`${storageKey}${suffix}`))
   }
 
@@ -450,6 +503,12 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
           setLatestVisualDescription(parsed.visual_description ?? null)
           setLatestImageFocus(parsed.image_focus || null)
           setLatestRawQuery(rawQueryForSession || parsed.raw_query || text || '')
+          // Capture calibration fields so startSession can branch into chat_initializing
+          setLatestConfidenceScore(parsed.confidence_score ?? null)
+          setLatestSystemAction(parsed.system_action ?? null)
+          setLatestLlmMessage(parsed.llm_response_message ?? null)
+          setLatestQuickReplies(parsed.suggested_quick_replies ?? [])
+          setLatestPriorityOrdered(parsed.priority_ordered ?? [])
           setShowStart(true)
         }
       }
@@ -471,7 +530,25 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
     if (mode === 'update') {
       onUpdate(projectId, latestResults, latestFilters, latestFilterPriority, latestVisualDescription, latestImageFocus)
     } else {
-      onStart(name, latestResults, latestFilters, latestFilterPriority, latestVisualDescription, visibility, latestRawQuery || '', latestImageFocus)
+      // Pass calibration fields so App.handleStart → initSession → startSession
+      // can forward them to the backend, enabling the chat_initializing branch.
+      onStart(
+        name,
+        latestResults,
+        latestFilters,
+        latestFilterPriority,
+        latestVisualDescription,
+        visibility,
+        latestRawQuery || '',
+        latestImageFocus,
+        {
+          confidence_score:       latestConfidenceScore,
+          system_action:          latestSystemAction,
+          llm_response_message:   latestLlmMessage,
+          suggested_quick_replies: latestQuickReplies,
+          priority_ordered:       latestPriorityOrdered,
+        },
+      )
     }
   }
 

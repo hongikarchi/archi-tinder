@@ -14,7 +14,10 @@ from unittest.mock import MagicMock
 from django.conf import settings
 
 from apps.recommendation import services
-from apps.recommendation.services._prompts import _CHAT_PHASE_SYSTEM_PROMPT
+from apps.recommendation.services._prompts import (
+    _CHAT_PHASE_SYSTEM_PROMPT,
+    _CALIBRATION_PROMPT_EXTENSION,
+)
 from apps.recommendation.services.parse_query import _LANG_DIRECTIVE
 
 
@@ -124,8 +127,11 @@ class TestParseQueryLanguageDirective:
 
         assert len(captured_configs) == 1
         sys_instr = captured_configs[0].system_instruction
-        # No directive appended -- exactly the base prompt
-        assert sys_instr == _CHAT_PHASE_SYSTEM_PROMPT
+        # TASTE-CALIBRATION-1: calibration extension is always appended; no language directive.
+        assert sys_instr.startswith(_CHAT_PHASE_SYSTEM_PROMPT)
+        assert _CALIBRATION_PROMPT_EXTENSION in sys_instr
+        assert _LANG_DIRECTIVE['ko'] not in sys_instr
+        assert _LANG_DIRECTIVE['en'] not in sys_instr
 
     def test_language_invalid_no_directive(self, monkeypatch):
         """parse_query with unrecognised language value falls back to base prompt (no crash)."""
@@ -150,4 +156,8 @@ class TestParseQueryLanguageDirective:
 
         assert len(captured_configs) == 1
         sys_instr = captured_configs[0].system_instruction
-        assert sys_instr == _CHAT_PHASE_SYSTEM_PROMPT
+        # TASTE-CALIBRATION-1: calibration extension is always appended; unknown language -> no directive.
+        assert sys_instr.startswith(_CHAT_PHASE_SYSTEM_PROMPT)
+        assert _CALIBRATION_PROMPT_EXTENSION in sys_instr
+        assert _LANG_DIRECTIVE['ko'] not in sys_instr
+        assert _LANG_DIRECTIVE['en'] not in sys_instr

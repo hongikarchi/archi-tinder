@@ -2,6 +2,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import TabBar from '../components/TabBar.jsx'
 import DebugOverlay from '../components/DebugOverlay.jsx'
 import SwipePage from '../pages/SwipePage.jsx'
+import { discoveryNavigationGuard } from '../utils/discoveryGuard.js'
 
 export default function MainLayout({
   userId, onLogout,
@@ -11,6 +12,13 @@ export default function MainLayout({
   onExitToNewProject, onExitToHome,
   questionTrigger = null,
   onQuestionAnswer,
+  // Calibration props (chat_initializing phase)
+  calibrationPhase = null,
+  calibrationMessage = null,
+  quickReplies = [],
+  extractedMetadata = null,
+  onCalibrate = null,
+  isCalibrating = false,
 }) {
   const location = useLocation()
   const navigate = useNavigate()
@@ -25,7 +33,13 @@ export default function MainLayout({
       {/* Header controls — hidden on pages that own their sticky header (profile/office/matched/board) */}
       <div style={{ position: 'fixed', top: 14, right: 16, zIndex: 200, display: (isProfile || pathname.startsWith('/office') || pathname.startsWith('/matched') || pathname.startsWith('/board') || pathname.startsWith('/buildings') || pathname.startsWith('/settings')) ? 'none' : 'flex', gap: 6, alignItems: 'center' }}>
         <button
-          onClick={onLogout}
+          onClick={() => {
+            if (discoveryNavigationGuard.check) {
+              discoveryNavigationGuard.check('logout', onLogout)
+            } else {
+              onLogout()
+            }
+          }}
           title="Log out"
           style={{
             width: 34, height: 34, borderRadius: '50%',
@@ -70,6 +84,12 @@ export default function MainLayout({
           onExitToHome={onExitToHome}
           questionTrigger={questionTrigger}
           onQuestionAnswer={onQuestionAnswer}
+          calibrationPhase={calibrationPhase}
+          calibrationMessage={calibrationMessage}
+          quickReplies={quickReplies}
+          extractedMetadata={extractedMetadata}
+          onCalibrate={onCalibrate}
+          isCalibrating={isCalibrating}
         />
       </div>
 

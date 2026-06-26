@@ -2,6 +2,7 @@ from django.urls import path, re_path
 from .views import (
     ProjectListCreateView, ProjectDetailView, UserProjectsListView,
     SessionCreateView, SessionStateView, SwipeView, SessionResultView,
+    CalibrateView,
     DiscoveryFeedView, DiscoveryFeedbackView, DiscoveryPromoteView,
     DiverseRandomView, BuildingBatchView,
     ParseQueryView,
@@ -26,6 +27,7 @@ urlpatterns = [
     path('analysis/sessions/<uuid:session_id>/state/',   SessionStateView.as_view()),
     path('analysis/sessions/<uuid:session_id>/swipes/',  SwipeView.as_view()),
     path('analysis/sessions/<uuid:session_id>/result/',  SessionResultView.as_view()),
+    path('analysis/sessions/<uuid:session_id>/calibrate/', CalibrateView.as_view()),
     path('analysis/sessions/<uuid:session_id>/question-responses/', QuestionResponseView.as_view()),
     # Images
     path('discovery/',                                   DiscoveryFeedView.as_view()),

@@ -247,6 +247,7 @@ _ALL_SPECIFICITY_TOKENS = _STYLE_TOKENS | _PROGRAM_TOKENS | _MATERIAL_TOKENS | _
 
 # ---------------------------------------------------------------------------
 # IMP-6 Commit 2: Stage 1 response schema (excludes visual_description)
+# TASTE-CALIBRATION-1: extended with confidence/calibration fields
 # ---------------------------------------------------------------------------
 _STAGE1_RESPONSE_SCHEMA = {
     'type': 'object',
@@ -282,6 +283,101 @@ _STAGE1_RESPONSE_SCHEMA = {
             ),
         },
         'raw_query': {'type': 'string'},
+        # TASTE-CALIBRATION-1: confidence / calibration structured output
+        'confidence_score': {
+            'type': 'number',
+            'description': (
+                'A number from 0.0 to 1.0 representing how clearly the user has '
+                'expressed their architectural taste requirements. '
+                '1.0 = fully specified (program + multiple axes clear); '
+                '0.0 = completely vague ("좋은 거 보여줘"). '
+                'Score >= 0.60 means proceed directly to pool creation. '
+                'Score < 0.60 means ask a priority-narrowing clarification question.'
+            ),
+        },
+        'system_action': {
+            'type': 'string',
+            'enum': ['REQUEST_PRIORITY', 'CONFIRM_SELECTION', 'NONE'],
+            'description': (
+                'What the system should do next. '
+                'REQUEST_PRIORITY: confidence < 0.60, ask a clarifying question. '
+                'CONFIRM_SELECTION: confidence >= 0.60, briefly confirm and build pool. '
+                'NONE: terminal, build pool immediately without extra confirmation.'
+            ),
+        },
+        'suggested_quick_replies': {
+            'type': 'array',
+            'items': {'type': 'string'},
+            'description': (
+                'Short tap-able reply chips for the user, 2-3 items max. '
+                'The last chip should always be an "skip / show cards now" option '
+                'like "상관없으니 카드 보여주세요" or "Just show me cards". '
+                'Only populate when system_action=REQUEST_PRIORITY.'
+            ),
+        },
+        'priority_ordered': {
+            'type': 'array',
+            'items': {'type': 'string'},
+            'description': (
+                'Axis keys ordered from most-important to least-important '
+                'based on what the user has expressed so far. '
+                'Examples: ["space_experience", "program", "material"]. '
+                'Use filter keys (program, material, style, atmosphere, etc.) '
+                'plus "space_experience" for spatial quality axes.'
+            ),
+        },
+        'llm_response_message': {
+            'type': 'string',
+            'description': (
+                'The calibration / clarification message to show the user in the chat UI. '
+                'When system_action=REQUEST_PRIORITY: a natural conversational question '
+                'that narrows the highest-priority ambiguous axis, written in the user\'s language. '
+                'When system_action=CONFIRM_SELECTION or NONE: a short confirmation of what was understood, '
+                'in the user\'s language. Always a complete sentence or paragraph, never just a label.'
+            ),
+        },
     },
     'required': ['probe_needed', 'reply'],
 }
+
+
+# ---------------------------------------------------------------------------
+# TASTE-CALIBRATION-1: calibration rules appended to the chat system prompt.
+# Injected into the Gemini call so the model knows to output confidence fields.
+# ---------------------------------------------------------------------------
+_CALIBRATION_PROMPT_EXTENSION = """
+
+## Calibration output (TASTE-CALIBRATION-1 — always include these fields)
+
+For every response, also output the following fields alongside the standard schema fields:
+
+**confidence_score** (number, 0.0–1.0): How clearly has the user expressed their architectural taste?
+- 1.0 = fully determined (program + at least 2 secondary axes clearly stated)
+- 0.75 = mostly determined (program + 1 secondary axis, specific direction implied)
+- 0.60 = threshold — above this, proceed to card pool
+- 0.40 = partially determined (1 required-slate field only, or very vague direction)
+- 0.10 = essentially undetermined ("좋은 거 보여줘", "just show me something")
+
+**system_action** (enum):
+- `REQUEST_PRIORITY` when confidence_score < 0.60 AND probe_needed=true
+- `CONFIRM_SELECTION` when confidence_score >= 0.60 AND the system is confirming what it heard
+- `NONE` when proceeding directly to pool (fully determined or 3-turn cap reached)
+
+**suggested_quick_replies** (array[string], 2–3 items): Short Korean or English tap chips.
+- Include only when system_action=REQUEST_PRIORITY.
+- Each chip is a complete short answer (not a question), e.g. "목재·따뜻한 재료감", "콘크리트·차가운 기하성".
+- The LAST chip MUST always be an immediate-proceed option: "상관없으니 카드 보여주세요" (Korean) or "Just show me cards" (English).
+- Never include more than 3 chips total.
+
+**priority_ordered** (array[string]): The axes ordered from most user-important to least, based on what has been expressed.
+- Use the filter key names (program, material, style, atmosphere, location_country) plus "space_experience" for spatial quality.
+- Reflect the user's apparent priorities, not the default probe-priority order.
+- Always include at least 1 entry if any axis was mentioned.
+
+**llm_response_message** (string): The actual chat message to show the user.
+- When system_action=REQUEST_PRIORITY: a warm, architect-vocabulary question that narrows the SINGLE highest-priority ambiguous axis. One question only (A vs B or open). End with "?" or "요?".
+- When system_action=CONFIRM_SELECTION or NONE: same as `reply` or a slight expansion of it. Must be a complete natural sentence.
+- Always in the user's primary language (Korean or English, matching their input).
+
+**Rule**: when confidence_score < 0.60, `system_action` MUST be `REQUEST_PRIORITY` and `suggested_quick_replies` MUST have 2–3 items (including the skip chip). When confidence_score >= 0.60, `system_action` is `CONFIRM_SELECTION` or `NONE` and `suggested_quick_replies` is empty or omitted.
+"""

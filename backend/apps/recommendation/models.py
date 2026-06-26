@@ -64,6 +64,7 @@ class AnalysisSession(models.Model):
         ('completed', 'Completed'),
     ]
     PHASE_CHOICES = [
+        ('chat_initializing', 'Chat Initializing'),
         ('exploring', 'Exploring'),
         ('analyzing', 'Analyzing'),
         ('converged', 'Converged'),
@@ -112,6 +113,10 @@ class AnalysisSession(models.Model):
     question_bias_vector = models.JSONField(null=True, blank=True)   # accumulated 384-d soft bias from Yes/No answers; None = no bias
     # ALGO-QCARD Phase 3: inter-swipe latency rolling window for hyper-positive detection
     recent_latencies = models.JSONField(default=list)   # rolling inter-swipe latencies (ms), newest last; cap RC['recent_latencies_cap']
+    # TASTE-CALIBRATION-1: interactive calibration state machine
+    confidence_score     = models.FloatField(null=True, blank=True)   # 0-1 LLM-reported clarity score
+    extracted_metadata   = models.JSONField(default=dict, blank=True)  # parsed filter axes from conversation
+    priority_ordered     = models.JSONField(default=list, blank=True)  # LLM-ordered axis keys, e.g. ['space_experience','program']
     created_at        = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

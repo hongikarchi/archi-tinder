@@ -28,6 +28,7 @@ from ._prompts import (  # noqa: F401
     _BROAD_SLATE_DEFAULT_FIELD,
     _BROAD_SLATE_DEFAULT_VALUE,
     _CHAT_PHASE_SYSTEM_PROMPT,
+    _CALIBRATION_PROMPT_EXTENSION,
     _STYLE_TOKENS,
     _PROGRAM_TOKENS,
     _MATERIAL_TOKENS,
@@ -132,6 +133,86 @@ def _repair_required_slate(filters: dict, raw_priority) -> tuple[dict, list]:
     return filters, _normalise_filter_priority(filters, raw_priority)
 
 
+def _compute_confidence_fallback(filters: dict, probe_needed: bool) -> float:
+    """TASTE-CALIBRATION-1: compute confidence_score when LLM did not return one.
+
+    Uses required-slate field coverage as a proxy:
+    - probe_needed=True and 0 slate fields: 0.20
+    - probe_needed=True and >=1 slate field: 0.45
+    - probe_needed=False and 0 slate fields: 0.55  (broad fallback)
+    - probe_needed=False and 1 slate field: 0.65
+    - probe_needed=False and 2+ slate fields: 0.80
+
+    These thresholds are calibrated so that probe_needed=True reliably maps
+    below the 0.60 threshold and probe_needed=False maps above it.
+    """
+    slate_count = sum(
+        1 for key in REQUIRED_SLATE_FIELDS if filters.get(key) is not None
+    )
+    if probe_needed:
+        return 0.20 if slate_count == 0 else 0.45
+    else:
+        if slate_count == 0:
+            return 0.55
+        elif slate_count == 1:
+            return 0.65
+        else:
+            return 0.80
+
+
+def _extract_calibration_fields(data: dict, filters: dict, probe_needed: bool) -> dict:
+    """TASTE-CALIBRATION-1: extract + validate all calibration output fields from LLM data.
+
+    Returns a dict with keys: confidence_score, system_action, suggested_quick_replies,
+    priority_ordered, llm_response_message.  Falls back gracefully when any field is absent.
+    """
+    # confidence_score: float 0-1, fall back to heuristic
+    raw_confidence = data.get('confidence_score')
+    if isinstance(raw_confidence, (int, float)) and 0.0 <= raw_confidence <= 1.0:
+        confidence_score = float(raw_confidence)
+    else:
+        confidence_score = _compute_confidence_fallback(filters, probe_needed)
+
+    # system_action: validate against allowed enum values
+    _valid_actions = ('REQUEST_PRIORITY', 'CONFIRM_SELECTION', 'NONE')
+    raw_action = data.get('system_action')
+    if raw_action in _valid_actions:
+        system_action = raw_action
+    elif confidence_score < 0.60:
+        system_action = 'REQUEST_PRIORITY'
+    else:
+        system_action = 'NONE'
+
+    # suggested_quick_replies: list[str], max 3
+    raw_replies = data.get('suggested_quick_replies') or []
+    if isinstance(raw_replies, list):
+        suggested_quick_replies = [r for r in raw_replies if isinstance(r, str)][:3]
+    else:
+        suggested_quick_replies = []
+
+    # priority_ordered: list[str]
+    raw_priority_ordered = data.get('priority_ordered') or []
+    if isinstance(raw_priority_ordered, list):
+        priority_ordered = [k for k in raw_priority_ordered if isinstance(k, str)]
+    else:
+        priority_ordered = []
+
+    # llm_response_message: string (fall back to reply or probe_question)
+    raw_msg = data.get('llm_response_message')
+    if isinstance(raw_msg, str) and raw_msg.strip():
+        llm_response_message = raw_msg.strip()
+    else:
+        llm_response_message = data.get('probe_question') or data.get('reply') or ''
+
+    return {
+        'confidence_score': confidence_score,
+        'system_action': system_action,
+        'suggested_quick_replies': suggested_quick_replies,
+        'priority_ordered': priority_ordered,
+        'llm_response_message': llm_response_message,
+    }
+
+
 def parse_query(conversation_history, language=None):
     """
     Chat phase Gemini call (Sprint 1 rewrite per Investigation 06).
@@ -224,14 +305,21 @@ def parse_query(conversation_history, language=None):
         'image_focus': None,
         'raw_query': first_user_text,
         'visual_description': None,
+        # TASTE-CALIBRATION-1 fallback defaults
+        'confidence_score': 0.55,
+        'system_action': 'NONE',
+        'suggested_quick_replies': [],
+        'priority_ordered': [],
+        'llm_response_message': '이해를 잘 못 했어요. 일단 이 쪽으로 찾아볼게요.',
     }
 
     # FULL-LANGUAGE-1: compute augmented system instruction once for all sites below.
     # language=None -> no directive (infer from message, existing behaviour).
+    # TASTE-CALIBRATION-1: always append calibration extension to inject confidence fields.
     _system_instruction = (
-        _CHAT_PHASE_SYSTEM_PROMPT + _LANG_DIRECTIVE[language]
+        _CHAT_PHASE_SYSTEM_PROMPT + _CALIBRATION_PROMPT_EXTENSION + _LANG_DIRECTIVE[language]
         if language in _LANG_DIRECTIVE
-        else _CHAT_PHASE_SYSTEM_PROMPT
+        else _CHAT_PHASE_SYSTEM_PROMPT + _CALIBRATION_PROMPT_EXTENSION
     )
 
     try:
@@ -403,6 +491,9 @@ def parse_query(conversation_history, language=None):
         if image_focus not in ('exterior', 'interior', 'drawing', 'aerial', 'detail'):
             image_focus = None
 
+        # TASTE-CALIBRATION-1: extract calibration fields
+        calibration = _extract_calibration_fields(data, filters, probe_needed)
+
         result = {
             'probe_needed': probe_needed,
             'probe_question': data.get('probe_question') if probe_needed else None,
@@ -412,6 +503,12 @@ def parse_query(conversation_history, language=None):
             'image_focus': image_focus,
             'raw_query': raw_query,
             'visual_description': data.get('visual_description'),
+            # TASTE-CALIBRATION-1 fields
+            'confidence_score': calibration['confidence_score'],
+            'system_action': calibration['system_action'],
+            'suggested_quick_replies': calibration['suggested_quick_replies'],
+            'priority_ordered': calibration['priority_ordered'],
+            'llm_response_message': calibration['llm_response_message'],
         }
         return result
 
@@ -493,14 +590,21 @@ def parse_query_stage1(conversation_history, language=None):
         'image_focus': None,
         'raw_query': first_user_text,
         'visual_description': None,
+        # TASTE-CALIBRATION-1 fallback defaults
+        'confidence_score': 0.55,
+        'system_action': 'NONE',
+        'suggested_quick_replies': [],
+        'priority_ordered': [],
+        'llm_response_message': '이해를 잘 못 했어요. 일단 이 쪽으로 찾아볼게요.',
     }
 
     # FULL-LANGUAGE-1: compute augmented system instruction once for all sites below.
     # language=None -> no directive (infer from message, existing behaviour).
+    # TASTE-CALIBRATION-1: always append calibration extension to inject confidence fields.
     _system_instruction = (
-        _CHAT_PHASE_SYSTEM_PROMPT + _LANG_DIRECTIVE[language]
+        _CHAT_PHASE_SYSTEM_PROMPT + _CALIBRATION_PROMPT_EXTENSION + _LANG_DIRECTIVE[language]
         if language in _LANG_DIRECTIVE
-        else _CHAT_PHASE_SYSTEM_PROMPT
+        else _CHAT_PHASE_SYSTEM_PROMPT + _CALIBRATION_PROMPT_EXTENSION
     )
 
     try:
@@ -651,6 +755,9 @@ def parse_query_stage1(conversation_history, language=None):
         if image_focus not in ('exterior', 'interior', 'drawing', 'aerial', 'detail'):
             image_focus = None
 
+        # TASTE-CALIBRATION-1: extract calibration fields
+        calibration = _extract_calibration_fields(data, filters, probe_needed)
+
         return {
             'probe_needed': probe_needed,
             'probe_question': data.get('probe_question') if probe_needed else None,
@@ -660,6 +767,12 @@ def parse_query_stage1(conversation_history, language=None):
             'image_focus': image_focus,
             'raw_query': raw_query,
             'visual_description': None,  # Stage 2 generates this asynchronously
+            # TASTE-CALIBRATION-1 fields
+            'confidence_score': calibration['confidence_score'],
+            'system_action': calibration['system_action'],
+            'suggested_quick_replies': calibration['suggested_quick_replies'],
+            'priority_ordered': calibration['priority_ordered'],
+            'llm_response_message': calibration['llm_response_message'],
         }
 
     except json.JSONDecodeError as e:

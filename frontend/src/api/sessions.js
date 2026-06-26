@@ -10,6 +10,22 @@ const PARSE_QUERY_TIMEOUT_MS = 60000    // Gemini LLM generation can take 10-30s
 const SESSION_CREATE_TIMEOUT_MS = 30000 // Cold pool path: execute_pool_sql ~14.7s, total backend time can exceed 15s default
 
 /**
+ * Normalize the calibration fields from a session API response.
+ * These fields are optional (older responses may not include them).
+ */
+function normalizeCalibrationFields(result) {
+  return {
+    phase:                result.phase ?? null,
+    needs_more_info:      result.needs_more_info ?? false,
+    confidence_score:     result.confidence_score ?? null,
+    system_action:        result.system_action ?? null,
+    extracted_metadata:   result.extracted_metadata ?? null,
+    llm_response_message: result.llm_response_message ?? null,
+    suggested_quick_replies: result.suggested_quick_replies ?? [],
+  }
+}
+
+/**
  * Start an analysis session.
  * params.filter_priority and params.seed_ids are forwarded to the backend
  * for weighted scoring pool creation.
@@ -27,9 +43,17 @@ export async function startSession(params) {
     ...(params.visual_description ? { visual_description: params.visual_description } : {}),
     ...(params.image_focus ? { image_focus: params.image_focus } : {}),
     ...(params.force_new ? { force_new: true } : {}),
+    // Calibration fields from the preceding parse-query call.
+    // When confidence_score < 0.60 the backend branches into chat_initializing.
+    ...(params.confidence_score != null ? { confidence_score: params.confidence_score } : {}),
+    ...(params.system_action ? { system_action: params.system_action } : {}),
+    ...(params.llm_response_message ? { llm_response_message: params.llm_response_message } : {}),
+    ...(params.suggested_quick_replies?.length ? { suggested_quick_replies: params.suggested_quick_replies } : {}),
+    ...(params.priority_ordered?.length ? { priority_ordered: params.priority_ordered } : {}),
   }, true, SESSION_CREATE_TIMEOUT_MS)
   return {
     ...result,
+    ...normalizeCalibrationFields(result),
     next_image:      normalizeCard(result.next_image),
     prefetch_image:  normalizeCard(result.prefetch_image),
     prefetch_image_2: normalizeCard(result.prefetch_image_2),
@@ -77,10 +101,31 @@ export async function recordSwipe({ session_id, image_id, action, client_buffer_
   })
   return {
     ...result,
+    ...normalizeCalibrationFields(result),
     next_image:       normalizeCard(result.next_image),
     prefetch_image:   normalizeCard(result.prefetch_image),
     prefetch_image_2: normalizeCard(result.prefetch_image_2),
     question_trigger: result.question_trigger ?? null,
+  }
+}
+
+/**
+ * Submit a calibration message during the chat_initializing phase.
+ * POST /api/v1/analysis/sessions/<session_id>/calibrate/
+ * Request: { message: string }
+ * Response: full session state including phase, llm_response_message, suggested_quick_replies,
+ *   extracted_metadata, confidence_score — plus cards/next_image when transitioning to 'exploring'.
+ */
+export async function calibrate(sessionId, message) {
+  const result = await callApi('POST', `/analysis/sessions/${sessionId}/calibrate/`, {
+    message,
+  }, true, PARSE_QUERY_TIMEOUT_MS)
+  return {
+    ...result,
+    ...normalizeCalibrationFields(result),
+    next_image:       normalizeCard(result.next_image),
+    prefetch_image:   normalizeCard(result.prefetch_image),
+    prefetch_image_2: normalizeCard(result.prefetch_image_2),
   }
 }
 
