@@ -16,6 +16,7 @@ removal is a separate frontend task).
 """
 import logging
 import re
+import time
 
 from collections import defaultdict
 
@@ -114,17 +115,24 @@ class DiscoveryFeedView(APIView):
         else:
             client_buffer_ids = []
 
+        # ── DISCOVERY-TIMING instrument (temporary diagnostic) ────────────────
+        _t_req = time.perf_counter()
+
         # App-open centroid (lazy cache; in-session fixed — not evicted on likes)
+        _t = time.perf_counter()
         centroids = get_or_build_discovery_centroids(profile)
+        _ms_centroids = (time.perf_counter() - _t) * 1000
 
         # DISCOVERY-PERF-1: single fetch of recent-cap boards; derive tier +
         # exclude_set (board part) + dislike list from this one queryset result.
         cap = RC.get('discovery_recent_boards_cap', 10)
+        _t = time.perf_counter()
         project_rows = list(
             Project.objects.filter(user=profile)
             .order_by('-created_at')[:cap]
             .values('name', 'liked_ids', 'disliked_ids', 'saved_ids')
         )
+        _ms_projects = (time.perf_counter() - _t) * 1000
 
         # Tier — computed from the same rows, no extra query.
         tier_info = _tier_from_project_rows(project_rows)
@@ -133,12 +141,22 @@ class DiscoveryFeedView(APIView):
 
         # Build chunk — pass pre-fetched rows so build_discovery_chunk skips
         # its own project query and the duplicate compute_discovery_tier call.
+        _t = time.perf_counter()
         cards = build_discovery_chunk(
             profile, centroids,
             client_buffer_ids=client_buffer_ids,
             chunk_size=chunk_size,
             _project_rows=project_rows,
             _tier_info=tier_info,
+        )
+        _ms_chunk = (time.perf_counter() - _t) * 1000
+
+        logger.debug(
+            'DISCOVERY-TIMING profile=%s tier=%s boards=%s | centroids=%.0fms '
+            'projects=%.0fms build_chunk=%.0fms | total=%.0fms',
+            profile.id, tier, len(project_rows),
+            _ms_centroids, _ms_projects, _ms_chunk,
+            (time.perf_counter() - _t_req) * 1000,
         )
 
         return Response({
