@@ -369,6 +369,10 @@ RECOMMENDATION = {
     # DISCOVERY-PERF-1: scope tier/exclude/dislike/centroid to most-recent N boards (tunable).
     # Older boards' liked/disliked/saved buildings may re-appear in Discovery — intended behaviour.
     'discovery_recent_boards_cap': 10,
+    # DISCOVERY candidate fetch: TABLESAMPLE SYSTEM percentage — block-level random
+    # sample that avoids a full seq scan of the large canonical_v2_buildings table
+    # (VECTOR(384) + JSONB rows). ~2% of ~39k ≈ 780 sampled, ample for the 120-cap FPS.
+    'discovery_tablesample_pct': 2.0,
     # ALGO-QCARD Phase 3: hyper-positive / fast-swipe detection (Trigger A)
     'question_fast_swipe_ms': 1500,          # avg inter-swipe latency below this = "fast" (hyper-positive)
     'question_hyperpositive_window': 10,     # look back this many swipes

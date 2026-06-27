@@ -16,8 +16,8 @@ Hard rules (also in CLAUDE.md):
   - No ORM/migrate on canonical_v2_buildings.
   - engine.py is read-only (import, never modify).
 """
-import random
 import logging
+import time
 
 import numpy as np
 from django.conf import settings
@@ -28,7 +28,6 @@ from django.utils import timezone
 from .models import Project
 from . import engine
 from .engine_vecmath import _normalize
-from .engine_cards import _row_to_card
 
 logger = logging.getLogger('apps.recommendation')
 
@@ -285,13 +284,18 @@ def _fetch_candidates(exclude_ids, dislike_centroid, chunk_size):
     """Fetch a bounded set of candidate buildings from canonical_v2_buildings.
 
     Uses the same 2-query pattern as engine.get_diverse_random:
-      1) Fetch IDs only (fast, no heavy columns) with exclusion + dislike-zone filter.
-      2) Python random.sample to bound the set.
-      3) Fetch full rows + embeddings for the sample.
+      1) Bounded random sample of IDs (ORDER BY random() LIMIT sample_cap) with
+         exclusion filter only.  No pgvector distance scan in Query 1 — that
+         operator cannot use the HNSW index in a WHERE clause and would force a
+         full-corpus distance computation (~37 k rows).
+      2) Fetch full rows + embeddings for the sampled IDs.
+      3) Python post-filter: when dislike_centroid is set, drop any row whose
+         cosine distance to the centroid is <= discovery_dislike_zone_threshold
+         (i.e. keep only candidates far enough from the disliked cluster).
+         Rows with no/empty embedding are kept.
 
-    dislike_centroid: list[float] or None. When set, adds a pgvector cosine
-    DISTANCE filter so candidates must be farther than
-    discovery_dislike_zone_threshold from the centroid.
+    Oversampling (sample_cap = min(chunk_size*8, 120)) means dropping a few
+    dislike-zone rows still leaves ample candidates for FPS.
 
     Returns list of row dicts (each row has 'embedding' text field for parsing).
     """
@@ -299,23 +303,22 @@ def _fetch_candidates(exclude_ids, dislike_centroid, chunk_size):
     # Oversample: chunk_size * 8 capped at 120 — enough for FPS to work on
     sample_cap = min(chunk_size * 8, 120)
 
-    # Build required columns (mirrors get_diverse_random)
-    # _build_select_columns lives in engine.py, not engine_cards.py
-    from .engine import _build_select_columns as _bsc
-    _required_cols = [
-        'canonical_bld_id', 'name', 'architect_names', 'architects_text',
-        'location_country', 'location_city', 'project_year',
-        'program', 'style', 'atmosphere', 'color_tone', 'material_visual',
-        'typology_primary', 'typology_tags', 'architectural_elements',
-        'visual_description',
-        'covers_by_type', 'all_images', 'display_cover_url',
-        'cover_image_url_default', 'source_urls',
-    ]
-    _cols = _bsc(_required_cols, ())
-
     conn = _dj_connections['buildings']
 
-    # ── Query 1: ID-only fetch with exclusion + optional dislike zone ──────
+    # ── Query 1: bounded random ID sample with exclusion only ─────────────
+    # dislike_centroid filtering is deferred to Python after Query 2 (the
+    # pgvector <=> operator in a WHERE clause bypasses HNSW and scans the
+    # full corpus).
+    #
+    # PERF: canonical_v2_buildings rows are large (VECTOR(384) + JSONB), so a
+    # full seq scan (ORDER BY random() / unbounded id fetch) reads the whole
+    # multi-GB table (~20s+). TABLESAMPLE SYSTEM(p) reads only ~p% of pages,
+    # giving a fast block-level random sample. exclude_set is already capped to
+    # the recent boards (DISCOVERY-PERF-1), so the <> ALL(...) list is small.
+    # sample_pct is a controlled float from settings (not user input) — safe to
+    # inline. Trade-off: SYSTEM sampling is block-clustered; FPS + local/global
+    # split downstream restore diversity.
+    sample_pct = float(RC.get('discovery_tablesample_pct', 2.0))
     params_1 = []
     where_parts = ['is_publishable = true']
 
@@ -323,43 +326,69 @@ def _fetch_candidates(exclude_ids, dislike_centroid, chunk_size):
         where_parts.append('canonical_bld_id <> ALL(%s)')
         params_1.append(list(exclude_ids))
 
-    if dislike_centroid is not None:
-        # pgvector cosine distance operator <=>; candidates must be FARTHER than threshold
-        from .engine_vecmath import _vec_to_pg
-        centroid_str = _vec_to_pg(dislike_centroid)
-        where_parts.append('embedding <=> %s::vector > %s')
-        params_1.extend([centroid_str, dislike_zone_threshold])
-
     where_sql = 'WHERE ' + ' AND '.join(where_parts)
+    params_1.append(sample_cap)
 
     with conn.cursor() as cur:
         cur.execute(
-            f'SELECT canonical_bld_id FROM canonical_v2_buildings {where_sql}',
+            f'SELECT canonical_bld_id FROM canonical_v2_buildings'
+            f' TABLESAMPLE SYSTEM ({sample_pct}) {where_sql} LIMIT %s',
             params_1,
         )
-        all_ids = [row[0] for row in cur.fetchall()]
+        sampled_ids = [row[0] for row in cur.fetchall()]
 
-    if not all_ids:
+    if not sampled_ids:
         return []
 
-    # ── Python sample (no ORDER BY RANDOM() full-corpus sort) ─────────────
-    sampled_ids = random.sample(all_ids, min(sample_cap, len(all_ids)))
-
-    # ── Query 2: full rows + embedding for sample ──────────────────────────
-    # Must re-gate on is_publishable = true (rows could theoretically change
-    # between query 1 and query 2; CLAUDE.md requires it on every query).
+    # ── Query 2: embedding-only for the sample ─────────────────────────────
+    # Heavy card columns (JSONB images etc.) are NOT fetched here — only the
+    # embedding needed for the local/global split + FPS. Full card columns are
+    # fetched later via engine.get_buildings_by_ids for ONLY the final selected
+    # cards, so we never transfer large JSONB for all ~120 candidates.
+    # Re-gate on is_publishable = true (CLAUDE.md requires it on every query).
     with conn.cursor() as cur:
         cur.execute(
-            f'SELECT {_cols}, embedding::text FROM canonical_v2_buildings'
-            f' WHERE canonical_bld_id = ANY(%s) AND is_publishable = true',
+            'SELECT canonical_bld_id, embedding::text FROM canonical_v2_buildings'
+            ' WHERE canonical_bld_id = ANY(%s) AND is_publishable = true',
             [sampled_ids],
         )
-        cols = [c[0] for c in cur.description]
-        rows = [dict(zip(cols, row)) for row in cur.fetchall()]
+        rows = [
+            {'canonical_bld_id': r[0], 'embedding': r[1]}
+            for r in cur.fetchall()
+        ]
 
     # Restore sample order (Postgres ANY returns PK order)
     rows_by_id = {r['canonical_bld_id']: r for r in rows}
-    return [rows_by_id[bid] for bid in sampled_ids if bid in rows_by_id]
+    ordered_rows = [rows_by_id[bid] for bid in sampled_ids if bid in rows_by_id]
+
+    # ── Python dislike post-filter ─────────────────────────────────────────
+    # Drop candidates that fall inside the dislike zone (cosine distance to
+    # dislike_centroid <= threshold).  Rows with missing/empty embeddings are
+    # kept — we do not exclude rows we cannot evaluate.
+    if dislike_centroid is not None:
+        centroid_arr = np.array(dislike_centroid, dtype=np.float32)
+        centroid_norm = np.linalg.norm(centroid_arr)
+        filtered = []
+        for row in ordered_rows:
+            raw = row.get('embedding')
+            if not raw:
+                filtered.append(row)
+                continue
+            vec = np.array(
+                [float(x) for x in raw.strip('[]').split(',')],
+                dtype=np.float32,
+            )
+            vec_norm = np.linalg.norm(vec)
+            if centroid_norm == 0.0 or vec_norm == 0.0:
+                filtered.append(row)
+                continue
+            cosine_sim = float(np.dot(centroid_arr, vec) / (centroid_norm * vec_norm))
+            distance = 1.0 - cosine_sim
+            if distance > dislike_zone_threshold:
+                filtered.append(row)
+        return filtered
+
+    return ordered_rows
 
 
 # ── Main chunk builder ────────────────────────────────────────────────────────
@@ -464,6 +493,7 @@ def build_discovery_chunk(
             all_dislike_ids.extend(bid for bid in disliked if isinstance(bid, str))
     recent_dislike_ids = all_dislike_ids[-dislike_window:]
 
+    _t = time.perf_counter()
     dislike_centroid = None
     if recent_dislike_ids:
         emb_map = engine.get_pool_embeddings(recent_dislike_ids)
@@ -472,11 +502,15 @@ def build_discovery_chunk(
             mean_vec = np.mean(np.stack(vecs), axis=0)
             normed = _normalize(mean_vec.tolist())
             dislike_centroid = normed if normed else None
+    _ms_dislike = (time.perf_counter() - _t) * 1000
 
     # ── Fetch candidates ───────────────────────────────────────────────────
+    _t = time.perf_counter()
     rows = _fetch_candidates(exclude_set, dislike_centroid, chunk_size)
+    _ms_fetch = (time.perf_counter() - _t) * 1000
     if not rows:
         return []
+    _t_rest = time.perf_counter()  # parse + split + FPS + row_to_card
 
     # ── Parse embeddings ───────────────────────────────────────────────────
     parsed_rows = []
@@ -555,4 +589,14 @@ def build_discovery_chunk(
     # ── Micro-interleave ──────────────────────────────────────────────────
     interleaved = _interleave_local_global(local_selected, global_selected)
 
-    return [_row_to_card(r) for r in interleaved]
+    # Heavy card columns (JSONB) fetched ONLY for the final selected cards —
+    # engine.get_buildings_by_ids is cache-aware + preserves input order.
+    # Candidates above carried only {canonical_bld_id, embedding}.
+    final_ids = [r['canonical_bld_id'] for r in interleaved]
+    _cards = engine.get_buildings_by_ids(final_ids)
+    logger.debug(
+        'DISCOVERY-TIMING build_chunk_sub | dislike_emb=%.0fms fetch_candidates=%.0fms '
+        'rest(parse+split+fps+cards)=%.0fms | n_cand=%s',
+        _ms_dislike, _ms_fetch, (time.perf_counter() - _t_rest) * 1000, len(rows),
+    )
+    return _cards
