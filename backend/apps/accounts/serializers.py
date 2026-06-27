@@ -1,4 +1,5 @@
 import re
+import unicodedata
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import EmailValidator, URLValidator
@@ -114,42 +115,57 @@ _HANDLE_RESERVED = frozenset({
     'logout', 'auth',
 })
 
-_HANDLE_RE = re.compile(r'^[a-z0-9_]{3,30}$')
+# Unified ID regex: Hangul syllables (AC00-D7A3) + Hangul Jamo (1100-11FF, A960-A97F, D7B0-D7FF)
+# + ASCII letters (A-Za-z) + digits (0-9) + underscore. No spaces/whitespace.
+# Length 2-20 enforced in the body (after NFC normalization).
+_HANDLE_RE = re.compile(
+    r'^[가-힣ᄀ-ᇿꥠ-꥿ힰ-퟿a-zA-Z0-9_]+$'
+)
 
 
 def validate_handle_value(value, instance=None):
-    """Shared handle validation logic (reused by register + serializer).
+    """Shared handle/unified-ID validation (reused by register + serializer).
 
-    Validates a non-null, non-empty handle string:
-      1. Reject non-lowercase characters.
-      2. Regex format check (^[a-z0-9_]{3,30}$).
-      3. Reserved word check.
-      4. Case-insensitive uniqueness (exclude `instance` if supplied).
+    Validates a non-null, non-empty ID string:
+      1. NFC-normalize (prevents visually-identical Hangul duplicates).
+      2. Regex format check (Hangul + ASCII letters + digits + underscore; NO whitespace).
+      3. Length check: 2-20 characters (measured AFTER NFC normalization).
+      4. Reserved word check (case-insensitive).
+      5. Case-insensitive uniqueness via handle__iexact (exclude `instance` if supplied).
 
     Raises serializers.ValidationError on any violation.
-    Returns the validated value on success.
+    Returns the NFC-normalized value on success so callers store the canonical form.
 
     NOTE: does NOT handle the null/empty case — callers decide whether null
     or empty is acceptable (register: required, serializer: nullable/clearable).
-    """
-    # Case check first: reject if the value is not already lowercase.
-    if value != value.lower():
-        raise serializers.ValidationError(
-            'handle must be lowercase (only a-z, 0-9, _).'
-        )
 
-    # Format regex (also enforces length 3-30).
+    LOGIN-ONBOARD-1: extended from ASCII-only (^[a-z0-9_]{3,30}$) to
+    Hangul + ASCII, length 2-20, NFC-normalized.
+    """
+    # NFC normalization first — prevents two visually-identical Hangul strings
+    # from being treated as different IDs (e.g. composed vs. decomposed Jamo).
+    value = unicodedata.normalize('NFC', value)
+
+    # Format regex — no whitespace, only allowed character classes.
     # fullmatch required: re.match with $ accepts a trailing newline, which
     # would allow CRLF injection into URLs/cards.
     if not _HANDLE_RE.fullmatch(value):
         raise serializers.ValidationError(
-            'handle must be 3-30 characters: lowercase letters, digits, or underscore.'
+            'ID may only contain Korean characters, letters, digits, or underscore. '
+            'Spaces are not allowed.'
         )
 
-    # Reserved word check.
+    # Length check after NFC normalization.
+    if len(value) < 2 or len(value) > 20:
+        raise serializers.ValidationError(
+            'ID must be 2-20 characters.'
+        )
+
+    # Reserved word check (case-insensitive; Hangul has no case, but ASCII reserved
+    # words should still be blocked regardless of case).
     if value.lower() in _HANDLE_RESERVED:
         raise serializers.ValidationError(
-            f'"{value}" is a reserved handle.'
+            f'"{value}" is a reserved ID.'
         )
 
     # Case-insensitive uniqueness, excluding the current user so re-saving
@@ -158,7 +174,7 @@ def validate_handle_value(value, instance=None):
     if instance is not None:
         qs = qs.exclude(pk=instance.pk)
     if qs.exists():
-        raise serializers.ValidationError('handle already taken.')
+        raise serializers.ValidationError('ID already taken.')
 
     return value
 
@@ -175,6 +191,11 @@ class UserProfileSelfUpdateSerializer(serializers.ModelSerializer):
                    validate_handle is the single authority.
       notifications — {category: {push: bool, email: bool}};
                       validated as dict, ≤50 keys, values must be dicts.
+
+    LOGIN-ONBOARD-1: handle and display_name are unified — writing one writes both
+      to the same NFC-normalized validated value. The validate_handle path runs the
+      new validator (Hangul + ASCII, 2-20 chars); display_name PATCH still accepted
+      as a separate field for backward compat, but routes through the same validator.
     """
     # Override DRF CharField defaults so our validate_<field> methods see the
     # raw user-supplied string (DRF would otherwise strip whitespace + reject
@@ -198,7 +219,7 @@ class UserProfileSelfUpdateSerializer(serializers.ModelSerializer):
         max_length=30,
         # trim_whitespace=False so validate_handle's fullmatch is the sole
         # authority — a trailing/leading whitespace (e.g. "x\n") must fail the
-        # ^[a-z0-9_]{3,30}$ check, not get silently stripped then accepted.
+        # regex check, not get silently stripped then accepted.
         trim_whitespace=False,
         validators=[],
     )
@@ -212,7 +233,12 @@ class UserProfileSelfUpdateSerializer(serializers.ModelSerializer):
         ]
 
     def validate_display_name(self, value):
-        """display_name: 1-30 chars after .strip(); reject whitespace-only."""
+        """display_name: run through unified-ID validator when non-empty.
+
+        LOGIN-ONBOARD-1: display_name == handle (unified ID). When
+        display_name is updated, it is validated as an ID and will sync to
+        handle in update(). Whitespace-only / empty still rejected.
+        """
         if value is None:
             return value
         stripped = value.strip()
@@ -220,11 +246,8 @@ class UserProfileSelfUpdateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 'display_name cannot be whitespace-only.'
             )
-        if len(stripped) > 30:
-            raise serializers.ValidationError(
-                'display_name must be 30 characters or fewer.'
-            )
-        return stripped
+        # Delegate to unified validator (NFC + format + length + reserved + unique).
+        return validate_handle_value(stripped, instance=self.instance)
 
     def validate_bio(self, value):
         """bio: max 500 chars; whitespace-only -> empty string (cleared)."""
@@ -337,20 +360,53 @@ class UserProfileSelfUpdateSerializer(serializers.ModelSerializer):
         return normalized
 
     def validate_handle(self, value):
-        """handle: lowercase letters/digits/underscore, 3-30 chars, unique, not reserved.
+        """handle: Hangul/ASCII/digits/underscore, 2-20 chars, unique, not reserved.
 
         Validation order:
           1. null/empty → allow (clears the handle).
           2-5. Delegated to validate_handle_value() (shared with register endpoint).
-             2. Reject non-lowercase.
-             3. Regex format check: ^[a-z0-9_]{3,30}$.
-             4. Reserved words.
-             5. Case-insensitive uniqueness, excluding the current user (self-save OK).
+             2. NFC normalize.
+             3. Regex format check (no whitespace, Hangul + ASCII + digits + _).
+             4. Length check: 2-20 chars.
+             5. Reserved words.
+             6. Case-insensitive uniqueness, excluding the current user (self-save OK).
         """
         if value is None:
             return value
 
         return validate_handle_value(value, instance=self.instance)
+
+    def update(self, instance, validated_data):
+        """Sync handle == display_name on every write (LOGIN-ONBOARD-1).
+
+        Whichever of handle/display_name was supplied, write both columns to
+        the same NFC-normalized validated value. If both are supplied and
+        disagree (after normalization), raise ValidationError — callers should
+        send a single unified ID field.
+        """
+        handle = validated_data.get('handle')
+        display_name = validated_data.get('display_name')
+
+        # Determine the unified ID value to use.
+        if handle is not None and display_name is not None:
+            if handle != display_name:
+                # Both supplied and differ — reject rather than silently pick one.
+                raise serializers.ValidationError(
+                    {'handle': 'handle and display_name must be equal (unified ID).'}
+                )
+            unified = handle
+        elif handle is not None:
+            unified = handle
+        elif display_name is not None:
+            unified = display_name
+        else:
+            unified = None
+
+        if unified is not None:
+            validated_data['handle'] = unified
+            validated_data['display_name'] = unified
+
+        return super().update(instance, validated_data)
 
     def validate_notifications(self, value):
         """notifications: {category: {push?: bool, email?: bool}}.

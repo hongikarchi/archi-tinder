@@ -138,22 +138,44 @@ class TestHandlePatch:
         assert response.json()['handle'] == 'my_handle'
 
     @pytest.mark.django_db
-    def test_handle_uppercase_rejected(self, user_and_profile, auth_client):
-        """PATCH with uppercase handle returns 400 (format violation)."""
+    def test_handle_uppercase_accepted(self, user_and_profile, auth_client):
+        """PATCH with mixed-case ASCII handle returns 200 (LOGIN-ONBOARD-1: uppercase allowed).
+
+        The unified ID format allows A-Za-z (not just a-z).
+        Uniqueness is still case-insensitive via iexact.
+        """
         response = auth_client.patch(
             '/api/v1/users/me/', {'handle': 'DainArchitect'}, format='json',
+        )
+        assert response.status_code == 200
+        assert response.json()['handle'] == 'DainArchitect'
+
+    @pytest.mark.django_db
+    def test_handle_one_char_rejected(self, user_and_profile, auth_client):
+        """PATCH with a 1-char handle returns 400 (min length is 2)."""
+        response = auth_client.patch(
+            '/api/v1/users/me/', {'handle': 'a'}, format='json',
         )
         assert response.status_code == 400
         assert 'handle' in response.json()
 
     @pytest.mark.django_db
-    def test_handle_too_short_rejected(self, user_and_profile, auth_client):
-        """PATCH with a 2-char handle returns 400 (min length is 3)."""
+    def test_handle_two_char_accepted(self, user_and_profile, auth_client):
+        """PATCH with a 2-char handle returns 200 (LOGIN-ONBOARD-1: min length is 2)."""
         response = auth_client.patch(
             '/api/v1/users/me/', {'handle': 'ab'}, format='json',
         )
-        assert response.status_code == 400
-        assert 'handle' in response.json()
+        assert response.status_code == 200
+        assert response.json()['handle'] == 'ab'
+
+    @pytest.mark.django_db
+    def test_handle_hangul_accepted(self, user_and_profile, auth_client):
+        """PATCH with a Hangul handle returns 200 (LOGIN-ONBOARD-1: Hangul allowed)."""
+        response = auth_client.patch(
+            '/api/v1/users/me/', {'handle': '건축가'}, format='json',
+        )
+        assert response.status_code == 200
+        assert response.json()['handle'] == '건축가'
 
     @pytest.mark.django_db
     def test_handle_illegal_char_rejected(self, user_and_profile, auth_client):

@@ -16,6 +16,7 @@ import {
   hasGoogleLogin,
   getLoginSwipeAction,
   isDisplayNameReady,
+  isIdFormatValid,
   isRoleReady,
   isGuestProfileReady,
 } from './loginFlow.js'
@@ -105,16 +106,70 @@ describe('isRoleReady', () => {
   })
 })
 
+// ---------------------------------------------------------------------------
+// isIdFormatValid
+// ---------------------------------------------------------------------------
+describe('isIdFormatValid', () => {
+  test('accepts ASCII letters + digits + underscore', () => {
+    assert.equal(isIdFormatValid('dain_kim'), true)
+    assert.equal(isIdFormatValid('ab'), true)
+    assert.equal(isIdFormatValid('a1b2c3_def'), true)
+  })
+
+  test('accepts Hangul syllables', () => {
+    assert.equal(isIdFormatValid('건축가김'), true)
+    assert.equal(isIdFormatValid('아이디'), true)
+  })
+
+  test('rejects IDs with spaces', () => {
+    assert.equal(isIdFormatValid('dain kim'), false)
+    assert.equal(isIdFormatValid('건축 가'), false)
+  })
+
+  test('rejects too short (< 2 NFC chars)', () => {
+    assert.equal(isIdFormatValid('a'), false)
+    assert.equal(isIdFormatValid(''), false)
+  })
+
+  test('rejects too long (> 20 NFC chars)', () => {
+    assert.equal(isIdFormatValid('a'.repeat(21)), false)
+    assert.equal(isIdFormatValid('a'.repeat(20)), true)
+  })
+
+  test('rejects special characters', () => {
+    assert.equal(isIdFormatValid('dain-kim'), false)
+    assert.equal(isIdFormatValid('dain.kim'), false)
+    assert.equal(isIdFormatValid('@dain'), false)
+  })
+
+  test('rejects non-string input', () => {
+    assert.equal(isIdFormatValid(null), false)
+    assert.equal(isIdFormatValid(undefined), false)
+    assert.equal(isIdFormatValid(42), false)
+  })
+})
+
 describe('isGuestProfileReady', () => {
-  test('requires display name and role readiness', () => {
+  test('accepts new shape: {id, role} — id format-valid + role valid', () => {
+    assert.equal(isGuestProfileReady({ id: 'dain_kim', role: 'student' }), true)
+    assert.equal(isGuestProfileReady({ id: '건축가김', role: 'architect' }), true)
+  })
+
+  test('accepts legacy shape: {displayName, role} for backward compat', () => {
     assert.equal(isGuestProfileReady({ displayName: 'Alice', role: 'student' }), true)
   })
 
-  test('rejects blank display name with valid role', () => {
+  test('rejects blank display name with valid role (legacy)', () => {
     assert.equal(isGuestProfileReady({ displayName: '   ', role: 'student' }), false)
   })
 
-  test('rejects valid display name with invalid role', () => {
+  test('rejects invalid id format with valid role', () => {
+    assert.equal(isGuestProfileReady({ id: 'x', role: 'student' }), false)  // too short
+    assert.equal(isGuestProfileReady({ id: 'has space', role: 'student' }), false)
+  })
+
+  test('rejects valid id with invalid role', () => {
+    assert.equal(isGuestProfileReady({ id: 'dain_kim', role: 'unknown' }), false)
     assert.equal(isGuestProfileReady({ displayName: 'Alice', role: 'unknown' }), false)
   })
 
