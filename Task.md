@@ -143,8 +143,8 @@ _(Deferred 2026-06-04 batch scope → 별도 focused 플랜. Premise CONFIRMED p
 
 _(2026-06-08 범위 축소: #212(`4e58195`) Case #3 resume guard가 **진행중(active, phase≠completed) 세션 resume**을 해결 — 보드 재진입 시 새 빈 세션 대신 live 세션의 like_vectors(원본 round)/preference_vector/phase/convergence/pool_ids/exposed_ids 전체 복원. **잔여 범위 = 완료된 세션 뒤 새 라운드가 `Project.liked_ids` 워밍 없이 cold-start**(`session_service.py:285` 새 세션 like_vectors=[], `:104` resume은 `.exclude(phase='completed')`). warm-start carry policy(D fade-decay / E full warm-start) + progress-bar UX 결정은 여전히 단독 처리 대상.)_
 
-#### FULL-LANGUAGE-1 — 한/영 언어 설정 토글 없음 (Slice 1 shipped)
-_Status (2026-06-08): **Slice 1 출하 (#208 `119a435`)** — `UserProfile.language`(ko/en) 필드 + serializer 배선 + `t()` 헬퍼 foundation + TabBar 라벨. 잔여 슬라이스(페이지 본문/에러/모달 라벨 스윕 + LLM chat 언어 결정성 wire-through `parse_query`) 미출하 → 이 항목 유지._
+#### FULL-LANGUAGE-1 — 한/영 UI 라벨 번역 sweep (토글·필드·LLM 배선 완료; 잔여=라벨)
+_Status (2026-06-28 재확인, grep): **토글·인프라·LLM 배선 모두 출하됨** — `UserProfile.language`(models.py:63 ko/en) + serializer + `LanguageContext.jsx`/`useLanguage.js`/`i18n/index.js`/`locales.js` + `AppearanceSettings` 언어 토글 + LLM 언어 결정성 wire-through(`search.py:153` → `parse_query.py:41-55` language override directive) **DONE**. **잔여 = UI 라벨 sweep만** — `useTranslation()` 쓰는 파일 6개(TabBar/DiscoveryPage/LoginPage/AppearanceSettings 등)뿐, 대다수 페이지 본문/에러/모달 라벨 미번역. 이 sweep이 유일 잔여 → 항목 유지(축소). (이전 title "토글 없음"은 stale — Slice 1 #208 `119a435`에서 토글 출하됨.)_
 
 **Decision (user 2026-05-25)**: language is a user-controlled setting, NOT browser-locale auto-detected. Pattern mirrors the existing theme/font persistence shipped in PR #54 + PR #59. User toggles language in Settings (Korean / English); the choice drives both LLM chat answer language and UI label rendering across the app.
 
@@ -198,9 +198,6 @@ BACK-AVATAR-2(`5e1f934`)가 교체/삭제 시점 GC를 붙였으나 그 이전�
 BACK-LLM-2(#195) 리뷰 중 발견(미수정, pre-existing). `backend/apps/recommendation/views/search.py` `ParseQueryView.post`의 conversation_history 검증이 BACK-LLM-2 serializer가 고친 것과 동일하게 `json.dumps` 기본 `ensure_ascii=True`로 byte 측정 가능성 → 한글 대화가 한도를 6배 부풀려 거짓 거부. 확인 후 `ensure_ascii=False`+UTF-8 인코딩 측정으로 통일. (`serializers.py:8` 주석이 한도가 ParseQueryView서 'mirror'됐다고 명시.)
 
 
-#### FRONT-PROFILE-1 — 프로필 재설계 브라우저 픽셀 패스 (Codex)
-FRONT-PROFILE-HARVEST-1(#179) 머지 후 Codex 브라우저 수정 (별도 PR). FollowListModal 모바일 bottom-sheet(≤768px, DESIGN.md §8.10) + backdrop opacity 0.6→0.4 + inline onMouseEnter→CSS hover + 4테마 픽셀 검증(github-light 먼저). 원 하베스트 minor (2026-06-04 audit 재확인): EditProfileModal(`components/EditProfileModal.jsx:147-149`, 경로는 components/ 직하 — components/profile/ 아님) 에러박스 하드코딩 rgba→color-mix, ProfileHeader.jsx:126(Share 버튼은 ProfileHeader 소유, ProfileHero 아님) 타인 Share borderRadius:12→var(--radius-md), onMouseEnter→CSS hover, FollowListModal onClose useCallback churn. 드롭됨: "FollowListPage setError(null) 누락" minor → useFollowList 훅(`:23,43`)이 fetch마다 setError(null) 호출하므로 stale 배너 위험 없음(audit 반증).
-
 #### BACK-PERFORMANCE-5 — Swipe latency 0.7-1.5s 흔들림
 Codex retest 2026-05-26: browser swipe 1.82s/1.75s/1.12s/1.81s; server swipe 1.50s/1.38s/0.746s/1.36s. **PR4 async prefetch consume IS working** — 3rd swipe with cache hit drops to 156ms prefetch stage. But variability is high. Identify which stage causes the 0.7→1.5s spread (DB query latency? embedding cache miss? pgvector?). Aim for swipe p95 ≤1.0s and p50 ≤0.5s on Singapore prod.
 
@@ -230,7 +227,8 @@ Likely slices:
 - Building detail desktop pass first: full-bleed or two-column gallery + sticky metadata/read actions.
 - Board/User profile second: keep existing mobile layout, add desktop breakpoints for hero + board grid density.
 
-#### FULL-LEGAL-1 — PIPA/GDPR consent 없음 (public launch 차단)
+#### FULL-LEGAL-1 — PIPA/GDPR consent: Terms/Privacy 페이지 + 한국어 affirmative copy (잔여)
+_Status (2026-06-28 grep): **백엔드 consent 인프라 + 가입 흐름 consent gate DONE** — `UserProfile.consent_accepted_at`/`consent_policy_version`(models.py:73-74), RegisterView+GuestLoginView consent_accepted 강제, LoginPage consent step. **잔여 = (1) `/terms`·`/privacy` 라우트/페이지 없음(App.jsx), (2) 한국어 PIPA affirmative copy(현재 영어 swipe copy만), (3) retention/export/delete 정책.** Required before public launch._
 Phase 13+ Profile/Board public/private visibility shipped. PIPA + GDPR posture for signup data collection / consent flow / retention policy still open. **Required before public launch.**
 
 **FRONT-AUTH-2 consent regression (2026-06-01):** the swipe-onboarding login (merged to develop) replaced #155's explicit Korean "동의합니다" PIPA button with a right-swipe gesture + generic English consent copy (`LoginPage.jsx` ConsentStep). Backend `consent_accepted` / `consent_policy_version` contract intact, but Korea-first + PIPA favor an explicit affirmative act (button/checkbox) + Korean disclosure. Restore Korean PIPA copy + explicit affirmative before public launch (flagged by both code-review + security in the merge gate).
@@ -260,6 +258,7 @@ Monitoring map:
 _(Re-scoped 2026-06-04 batch scope: premise OVERSTATED — 연결 누수 없음(prefetch thread 0 conn, telemetry thread finally서 close). 실위험 = 고동시성 peak(>12-15 conn)뿐, 현 규모 무관. Neon active_connections 모니터, 코드 변경 無.)_
 
 #### INFRA-DB-3 — Unverified guest row 누적 정리 (conditional)
+_2026-06-28 참고: LOGIN-ONBOARD-1 후에도 `GuestLoginView`(auth.py:227) + `/auth/guest/` 라우트(urls.py:17) + `guestLogin()`(api/auth.js:30) **여전히 존재** — LoginPage 신규-프로필 흐름만 호출 중단, 엔드포인트는 미제거. 또한 is_guest 의미가 LOGIN-ONBOARD-1에서 "미인증"으로 재정의됨(id+password 계정도 is_guest=True). 정리 대상/기준 재정의 필요._
 Guest 계정(FULL-LOGIN-REDESIGN-1 #154/#155)은 정리 로직 없음 (user Q5 결정). `/auth/guest/` throttle 3/min/IP이나 IP 로테이션 botnet은 row 증가 가능 → 조건부 모니터링 항목.
 
 Detail: Monitor Neon `auth_user WHERE email = '' AND is_active = True` row count weekly. If growth > 500 rows/week sustained, open this and implement a Django management command `delete unverified WHERE last_active < 30 days AND swipe_count == 0` + cron/Railway scheduled job.
@@ -359,7 +358,8 @@ _(Deferred 2026-06-04 batch scope: YAGNI — product-미소비 telemetry 1필드
 배포 후 정리 batch: develop→main deploy + prod migration + 백로그 audit.
 - [x] Deploy PR #250 (develop→main squash, main `c3a7ac2`; develop force-reset to match, HARD RULE 4 carve-out). Railway 자동배포. Migration 0011 prod 적용+검증 (12 profiles: handle==display_name 0 mismatch, is_guest True=8/False=4). [[project_login_onboard_1_shipped]]
 - [x] PR #232 (yywon1 sns-persona-description-axis, conflicting/CI-red post force-reset) CLOSED — 브랜치 보존 + rebase 경로 코멘트.
-- [x] Next 백로그 audit (코드 대조): **FRONT-DISCOVERY-1**(트리거 한박자 지연) #238 Fix #4(splice index 0 = 즉시) + mid-fetch 가드 + 멱등 ref로 RESOLVED → Next에서 제거. 잔여 Next 항목은 미해결 확인 후 유지 (FULL-ONBOARDING-2 fast-follows 미적용: validate_is_temp/projects.py is_temp filter/discovery guest-count fix 전부 absent).
+- [x] Next 백로그 audit (코드 대조): **FRONT-DISCOVERY-1**(트리거 한박자 지연) #238 Fix #4(splice index 0 = 즉시) + mid-fetch 가드 + 멱등 ref로 RESOLVED → Next에서 제거. (FULL-ONBOARDING-2 fast-follows 미적용: validate_is_temp/projects.py is_temp filter/discovery guest-count fix 전부 absent → 유지.)
+- [x] 백로그 전수 재검증 (user 지적 후, grep + Explore agent): **FRONT-PROFILE-1 제거**(타겟 EditProfileModal.jsx + FollowListModal.jsx 둘 다 삭제됨 → obsolete). **FULL-LANGUAGE-1 축소**(토글·필드·LLM 배선 DONE, UI 라벨 sweep만 잔여 — title "토글 없음"은 stale였음). **FULL-LEGAL-1 축소**(consent gate DONE, Terms/Privacy 페이지+한국어 copy만 잔여). **INFRA-DB-3 주석**(GuestLoginView 미제거 — 여전히 존재). 나머지 9항목(ARCHITECT-UNIFY-1/BACK-RECOMMEND-1·3/BACK-PERFORMANCE-5·6/FRONT-LAYOUT-1/BACK-EXTERNAL-1/INFRA-QUEUE-1/BACK-AVATAR-3/FRONT-DESIGN-1) 전부 코드상 PENDING 확인 → 유지.
 
 ### LOGIN-ONBOARD-1 — 로그인/온보딩 통합 + 인증 모델 단순화 — RESOLVED 2026-06-27 (`1d58a6f`-pre-squash)
 신규계정 경로 2개(게스트 스와이프 + 별도 아이디/비번 가입)를 단일 흐름으로 병합 + display_name·handle 통합 ID + Google 인증전용 모델.
