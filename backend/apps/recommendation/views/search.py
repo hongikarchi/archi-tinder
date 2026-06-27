@@ -158,46 +158,13 @@ class ParseQueryView(APIView):
         )
         raw_query = _first_user_text(conversation_history) or parsed.get('raw_query', '')
 
-        # When probe_needed=True: return probe payload immediately without
-        # touching the search engine. Frontend renders the probe question.
-        if parsed.get('probe_needed'):
-            return Response({
-                'probe_needed': True,
-                'probe_question': parsed.get('probe_question'),
-                'reply': parsed.get('reply', ''),
-                'raw_query': raw_query,
-                'structured_filters': parsed_filters,
-                'filter_priority': parsed_priority,
-                'visual_description': parsed.get('visual_description'),
-                'suggestions': [],
-                'results': [],
-                'is_fallback': False,
-                'fallback_note': '',
-                'confidence_score': parsed.get('confidence_score'),
-                'system_action': parsed.get('system_action'),
-                'suggested_quick_replies': parsed.get('suggested_quick_replies', []),
-                'priority_ordered': parsed.get('priority_ordered', []),
-                'llm_response_message': parsed.get('llm_response_message', ''),
-            })
-
-        # IMP-6 Commit 2: spawn Stage 2 thread on terminal turn (probe_needed=False)
-        # Stage 2 generates visual_description -> V_initial -> caches for SessionCreate.
-        # Only fires when stage_decouple_enabled=True (default OFF).
-        # Clarification turns (probe_needed=True) are excluded above so we never reach
-        # this point with an unstable filter set.
-        if RC.get('stage_decouple_enabled', False):
-            _spawn_stage2(
-                filters=parsed_filters,
-                raw_query=raw_query,
-                user_id=request.user.id,
-            )
-
-        # Terminal path (probe_needed=False): run scored search engine.
-        # LLM-SEARCH-RANK-1: pure-soft IDF+BM25 scoring replaces the 3-tier relaxation
-        # ladder. is_publishable=true is the only hard gate; all filter axes are soft
-        # (weighted CASE WHEN). The 3-stage relaxation (Tiers 1-3) is removed.
+        # Compute results for EVERY turn (probe and terminal alike).
+        # Product rule: every parse-query response shows ~20 references; the
+        # probe question/chips are a supplementary overlay, never a replacement.
+        # LLM-SEARCH-RANK-1: pure-soft IDF+BM25 scoring. is_publishable=true is
+        # the only hard gate; all filter axes are soft (weighted CASE WHEN).
         filters = dict(parsed_filters)
-        # image_focus lives outside the WHERE-clause filter dict but riders along
+        # image_focus lives outside the WHERE-clause filter dict but rides along
         # so cards get the user-requested cover variant.
         image_focus = parsed.get('image_focus')
         if image_focus:
@@ -208,6 +175,8 @@ class ParseQueryView(APIView):
 
         # Score-ranked path: fires when any filter axis is set OR raw_query is non-empty.
         # Both conditions allow search_by_filters_scored to produce a ranked result set.
+        # On probe turns, partial filters are tolerated — soft scoring works fine with
+        # whatever partial signal the LLM extracted; get_diverse_random covers zero-signal.
         has_signal = bool(parsed_filters) or bool(raw_query and raw_query.strip())
         if has_signal:
             results = engine.search_by_filters_scored(
@@ -227,6 +196,40 @@ class ParseQueryView(APIView):
             is_fallback = True
             fallback_note = "Couldn't find an exact match — here are some buildings you might enjoy instead."
 
+        # Probe turn: return probe payload with real results already computed above.
+        # Stage 2 is NOT spawned on probe turns — the filter set is still unstable.
+        if parsed.get('probe_needed'):
+            return Response({
+                'probe_needed': True,
+                'probe_question': parsed.get('probe_question'),
+                'reply': parsed.get('reply', ''),
+                'raw_query': raw_query,
+                'structured_filters': parsed_filters,
+                'filter_priority': parsed_priority,
+                'visual_description': parsed.get('visual_description'),
+                'suggestions': [],
+                'results': results,
+                'is_fallback': is_fallback,
+                'fallback_note': fallback_note,
+                'confidence_score': parsed.get('confidence_score'),
+                'system_action': parsed.get('system_action'),
+                'suggested_quick_replies': parsed.get('suggested_quick_replies', []),
+                'priority_ordered': parsed.get('priority_ordered', []),
+                'llm_response_message': parsed.get('llm_response_message', ''),
+            })
+
+        # IMP-6 Commit 2: spawn Stage 2 thread on terminal turn (probe_needed=False)
+        # Stage 2 generates visual_description -> V_initial -> caches for SessionCreate.
+        # Only fires when stage_decouple_enabled=True (default OFF).
+        # Probe turns are excluded above (unstable filter set — do not spawn Stage 2).
+        if RC.get('stage_decouple_enabled', False):
+            _spawn_stage2(
+                filters=parsed_filters,
+                raw_query=raw_query,
+                user_id=request.user.id,
+            )
+
+        # Terminal path (probe_needed=False): results already computed above.
         return Response({
             'probe_needed': False,
             'probe_question': None,

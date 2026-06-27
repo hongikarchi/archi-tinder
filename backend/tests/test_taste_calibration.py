@@ -403,17 +403,50 @@ class TestParseQueryViewCalibrationKeys:
             'atmosphere': None, 'color_tone': None, 'typology_primary': None,
         }
         with patch('apps.recommendation.views.services.parse_query', return_value=probe_result):
-            resp = auth_client.post(
-                '/api/v1/parse-query/',
-                {'conversation_history': [{'role': 'user', 'text': '주택'}]},
-                format='json',
-            )
+            with patch('apps.recommendation.views.engine.search_by_filters_scored',
+                       return_value=[{'canonical_bld_id': 'bld_000001'}]):
+                resp = auth_client.post(
+                    '/api/v1/parse-query/',
+                    {'conversation_history': [{'role': 'user', 'text': '주택'}]},
+                    format='json',
+                )
 
         assert resp.status_code == 200
         data = resp.json()
         assert data.get('probe_needed') is True
         for key in self._5_keys():
             assert key in data, f"Probe response missing calibration key: {key}"
+
+    def test_probe_response_includes_non_empty_results(self, auth_client):
+        """Probe path always returns ~20 results (never empty list).
+
+        Product rule: every parse-query response shows references; the probe
+        question/chips are a supplementary overlay, not a replacement.
+        """
+        probe_result = dict(_PROBE_PAYLOAD)
+        probe_result['filters'] = {
+            'location_country': None, 'location_city': None, 'program': 'Housing',
+            'material': None, 'style': None, 'year_min': None, 'year_max': None,
+            'atmosphere': None, 'color_tone': None, 'typology_primary': None,
+        }
+        fake_results = [{'canonical_bld_id': f'bld_{i:06d}'} for i in range(1, 21)]
+        with patch('apps.recommendation.views.services.parse_query', return_value=probe_result):
+            with patch('apps.recommendation.views.engine.search_by_filters_scored',
+                       return_value=fake_results):
+                resp = auth_client.post(
+                    '/api/v1/parse-query/',
+                    {'conversation_history': [{'role': 'user', 'text': '주택'}]},
+                    format='json',
+                )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data.get('probe_needed') is True, "Expected probe_needed=True"
+        assert isinstance(data.get('results'), list), "results must be a list"
+        assert len(data['results']) > 0, (
+            "Probe response must include results (non-empty); got empty list"
+        )
+        assert data.get('probe_question') is not None, "probe_question must be present"
 
     def test_terminal_response_has_5_calibration_keys(self, auth_client):
         """Terminal path (probe_needed=False) response includes all 5 calibration keys."""
@@ -447,11 +480,13 @@ class TestParseQueryViewCalibrationKeys:
             'atmosphere': None, 'color_tone': None, 'typology_primary': None,
         }
         with patch('apps.recommendation.views.services.parse_query', return_value=probe_result):
-            resp = auth_client.post(
-                '/api/v1/parse-query/',
-                {'conversation_history': [{'role': 'user', 'text': '주택'}]},
-                format='json',
-            )
+            with patch('apps.recommendation.views.engine.search_by_filters_scored',
+                       return_value=[{'canonical_bld_id': 'bld_000001'}]):
+                resp = auth_client.post(
+                    '/api/v1/parse-query/',
+                    {'conversation_history': [{'role': 'user', 'text': '주택'}]},
+                    format='json',
+                )
 
         data = resp.json()
         assert data['confidence_score'] == pytest.approx(0.40)
