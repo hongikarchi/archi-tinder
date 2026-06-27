@@ -123,6 +123,7 @@ function ResultStrip({ results, isFallback }) {
   )
 }
 
+// eslint-disable-next-line no-unused-vars
 export default function LLMSearchPage({ mode, projectId, projectName: initialName, visibility = 'private', onBack, onStart, onUpdate }) {
   // Derive storage key once per render cycle (props/sessionStorage are stable for the lifecycle of this route mount)
   const userId = sessionStorage.getItem('archithon_user') || 'anon'
@@ -553,6 +554,37 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
     }
   }
 
+  const INITIAL_MESSAGE = { role: 'ai', text: "Hello! Describe the kind of architecture you're looking for -- country, program, architect, style, year, and so on." }
+
+  function handleNewConversation() {
+    if (messages.length > 1) {
+      const confirmed = window.confirm('현재 대화를 지우고 새로 시작할까요?')
+      if (!confirmed) return
+    }
+    // Reset all state to initial values
+    setMessages([INITIAL_MESSAGE])
+    setConversationHistory([])
+    setLatestResults([])
+    setLatestFilters({})
+    setLatestFilterPriority([])
+    setLatestVisualDescription(null)
+    setLatestImageFocus(null)
+    setLatestRawQuery('')
+    setLatestConfidenceScore(null)
+    setLatestSystemAction(null)
+    setLatestLlmMessage(null)
+    setLatestQuickReplies([])
+    setLatestPriorityOrdered([])
+    setShowStart(false)
+    setInput('')
+    clearChatStorage()
+    // Clear backend conversation blob for existing projects (mirrors handleStartSwiping)
+    if (projectId) {
+      updateProject(projectId, { conversation_history: {} }).catch(() => {})
+      lastSentBlobRef.current = null
+    }
+  }
+
   const bottomOffset = showStart ? 64 + 140 : 64 + 20
 
   return (
@@ -571,10 +603,17 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
         display: 'flex', alignItems: 'center', gap: 12,
         position: 'sticky', top: 0, zIndex: 10,
       }}>
-        <button onClick={onBack} style={{
-          background: 'none', border: 'none', color: 'var(--color-text-dim)',
-          fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', padding: '4px 0', minHeight: 44,
-        }}>Back</button>
+        <button
+          onClick={handleNewConversation}
+          className={s.newConvBtn}
+          aria-label="새 대화"
+          title="새 대화"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="1 4 1 10 7 10" />
+            <path d="M3.51 15a9 9 0 1 0 .49-4.5" />
+          </svg>
+        </button>
         <div style={{ flex: 1, textAlign: 'center' }}>
           <span style={{
             fontSize: 16, fontWeight: 700,
