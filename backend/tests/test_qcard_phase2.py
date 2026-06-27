@@ -69,6 +69,9 @@ def _make_card(bid):
             'axis_atmosphere': 'calm',
             'axis_color_tone': 'Light',
             'axis_material_visual': [],
+            'axis_typology_primary': None,
+            'axis_typology_tags': [],
+            'axis_architectural_elements': [],
             'visual_description': '',
         },
     }
@@ -123,17 +126,23 @@ class TestGetCorpusTagDf:
         mock_cursor.__exit__ = MagicMock(return_value=False)
 
         # Sequence of fetchone/fetchall results per execute() call:
-        # 1. COUNT(*) total  → fetchone → (100,)
-        # 2. style GROUP BY  → fetchall → [('minimal', 30), ('organic', 10)]
-        # 3. atmosphere      → fetchall → [('warm', 40)]
-        # 4. program         → fetchall → [('주거', 25), ('문화', 15)]
-        # 5. material_visual → fetchall → [('concrete', 50), ('wood', 20)]
+        # 1. COUNT(*) total         → fetchone → (100,)
+        # 2. style GROUP BY         → fetchall → [('minimal', 30), ('organic', 10)]
+        # 3. atmosphere             → fetchall → [('warm', 40)]
+        # 4. program                → fetchall → [('주거', 25), ('문화', 15)]
+        # 5. typology_primary       → fetchall → [('House', 20), ('Office', 10)]
+        # 6. material_visual        → fetchall → [('concrete', 50), ('wood', 20)]
+        # 7. typology_tags          → fetchall → [('Mixed Use', 15), ('Theatre', 5)]
+        # 8. architectural_elements → fetchall → [('Facade', 60), ('Stair', 30)]
         fetchone_seq = [(100,)]
         fetchall_seq = [
             [('minimal', 30), ('organic', 10)],
             [('warm', 40)],
             [('주거', 25), ('문화', 15)],
+            [('House', 20), ('Office', 10)],
             [('concrete', 50), ('wood', 20)],
+            [('Mixed Use', 15), ('Theatre', 5)],
+            [('Facade', 60), ('Stair', 30)],
         ]
         fetchone_iter = iter(fetchone_seq)
         fetchall_iter = iter(fetchall_seq)
@@ -163,7 +172,10 @@ class TestGetCorpusTagDf:
         assert result['style'] == {'minimal': 30, 'organic': 10}
         assert result['atmosphere'] == {'warm': 40}
         assert result['program'] == {'주거': 25, '문화': 15}
+        assert result['typology_primary'] == {'House': 20, 'Office': 10}
         assert result['material_visual'] == {'concrete': 50, 'wood': 20}
+        assert result['typology_tags'] == {'Mixed Use': 15, 'Theatre': 5}
+        assert result['architectural_elements'] == {'Facade': 60, 'Stair': 30}
         # cache.set must have been called
         mock_cache.set.assert_called_once()
         args = mock_cache.set.call_args[0]
@@ -776,3 +788,394 @@ class TestQuestionResponseRefreshCategory:
         # dislikes exist in session; new session has none, so kw_vec=None → delta=None)
         # The important thing is the endpoint succeeded and returned flush_prefetch=True
         assert data['flush_prefetch'] is True
+
+
+# ---------------------------------------------------------------------------
+# ALGO-AXIS-1 Phase 3 — New axes regression tests
+# ---------------------------------------------------------------------------
+
+class TestGetCorpusTagDfNewAxes:
+    """get_corpus_tag_df returns the 3 new axes with correct unnest counts
+    and NULL-safe typology_primary filtering."""
+
+    _CACHES_MODULE = 'apps.recommendation.caches'
+
+    def _make_cursor_mock_new_axes(self):
+        """Cursor returning the full 8-query sequence (including 3 new axes)."""
+        mock_cursor = MagicMock()
+        mock_cursor.__enter__ = lambda s: s
+        mock_cursor.__exit__ = MagicMock(return_value=False)
+
+        # Query order:
+        # 1. COUNT(*)         → fetchone → (200,)
+        # 2. style            → fetchall (TEXT)
+        # 3. atmosphere       → fetchall (TEXT)
+        # 4. program          → fetchall (TEXT)
+        # 5. typology_primary → fetchall (TEXT, IS NOT NULL applied)
+        # 6. material_visual  → fetchall (unnest)
+        # 7. typology_tags    → fetchall (unnest)
+        # 8. architectural_elements → fetchall (unnest)
+        fetchone_seq = [(200,)]
+        fetchall_seq = [
+            [('minimal', 40)],           # style
+            [('calm', 30)],              # atmosphere
+            [('주거', 50)],               # program
+            [('House', 80), ('Office', 40)],  # typology_primary (NULL rows excluded by SQL)
+            [('concrete', 100)],         # material_visual
+            [('Mixed Use', 25), ('Commercial', 10)],  # typology_tags
+            [('Facade', 150), ('Stair', 70)],          # architectural_elements
+        ]
+        fetchone_iter = iter(fetchone_seq)
+        fetchall_iter = iter(fetchall_seq)
+        mock_cursor.fetchone.side_effect = lambda: next(fetchone_iter)
+        mock_cursor.fetchall.side_effect = lambda: next(fetchall_iter)
+        return mock_cursor
+
+    def test_new_axes_keys_present(self, monkeypatch):
+        """get_corpus_tag_df result includes typology_primary, typology_tags,
+        and architectural_elements with correct counts."""
+        from apps.recommendation import caches as c_mod
+        from django.core.cache import cache
+        cache.delete('qcard:corpus_tag_df')
+
+        mock_cursor = self._make_cursor_mock_new_axes()
+        mock_conn = MagicMock()
+        mock_conn.__getitem__.return_value.cursor.return_value = mock_cursor
+
+        with patch(f'{self._CACHES_MODULE}.connections', mock_conn), \
+             patch(f'{self._CACHES_MODULE}.cache') as mock_cache:
+            mock_cache.get.return_value = None
+            result = c_mod.get_corpus_tag_df()
+
+        # Core check — 3 new keys present
+        assert 'typology_primary' in result
+        assert 'typology_tags' in result
+        assert 'architectural_elements' in result
+
+        # Verify counts
+        assert result['typology_primary'] == {'House': 80, 'Office': 40}
+        assert result['typology_tags'] == {'Mixed Use': 25, 'Commercial': 10}
+        assert result['architectural_elements'] == {'Facade': 150, 'Stair': 70}
+
+        # _total unchanged
+        assert result['_total'] == 200
+
+    def test_typology_primary_null_exclusion(self, monkeypatch):
+        """typology_primary uses IS NOT NULL in query — NULL rows are excluded.
+
+        We verify this by checking the SQL string that gets executed.
+        """
+        from apps.recommendation import caches as c_mod
+        from django.core.cache import cache
+        cache.delete('qcard:corpus_tag_df')
+
+        executed_sqls = []
+
+        mock_cursor = MagicMock()
+        mock_cursor.__enter__ = lambda s: s
+        mock_cursor.__exit__ = MagicMock(return_value=False)
+        # Capture executed SQL
+        mock_cursor.execute.side_effect = lambda sql, *args, **kw: executed_sqls.append(sql)
+        # All fetchone/fetchall return empty/zero so function completes
+        mock_cursor.fetchone.return_value = (0,)
+        mock_cursor.fetchall.return_value = []
+
+        mock_conn = MagicMock()
+        mock_conn.__getitem__.return_value.cursor.return_value = mock_cursor
+
+        with patch(f'{self._CACHES_MODULE}.connections', mock_conn), \
+             patch(f'{self._CACHES_MODULE}.cache') as mock_cache:
+            mock_cache.get.return_value = None
+            c_mod.get_corpus_tag_df()
+
+        # Find the typology_primary query
+        typo_queries = [s for s in executed_sqls if 'typology_primary' in s]
+        assert typo_queries, 'Expected a query referencing typology_primary'
+        # Must include IS NOT NULL guard
+        assert any('IS NOT NULL' in q for q in typo_queries), (
+            'typology_primary query must include IS NOT NULL filter'
+        )
+
+    def test_array_axes_use_unnest(self, monkeypatch):
+        """typology_tags and architectural_elements queries use unnest."""
+        from apps.recommendation import caches as c_mod
+        from django.core.cache import cache
+        cache.delete('qcard:corpus_tag_df')
+
+        executed_sqls = []
+
+        mock_cursor = MagicMock()
+        mock_cursor.__enter__ = lambda s: s
+        mock_cursor.__exit__ = MagicMock(return_value=False)
+        mock_cursor.execute.side_effect = lambda sql, *args, **kw: executed_sqls.append(sql)
+        mock_cursor.fetchone.return_value = (0,)
+        mock_cursor.fetchall.return_value = []
+
+        mock_conn = MagicMock()
+        mock_conn.__getitem__.return_value.cursor.return_value = mock_cursor
+
+        with patch(f'{self._CACHES_MODULE}.connections', mock_conn), \
+             patch(f'{self._CACHES_MODULE}.cache') as mock_cache:
+            mock_cache.get.return_value = None
+            c_mod.get_corpus_tag_df()
+
+        tags_queries = [s for s in executed_sqls if 'typology_tags' in s]
+        arch_queries = [s for s in executed_sqls if 'architectural_elements' in s]
+
+        assert tags_queries, 'Expected query for typology_tags'
+        assert arch_queries, 'Expected query for architectural_elements'
+        assert any('unnest' in q for q in tags_queries), (
+            'typology_tags query must use unnest'
+        )
+        assert any('unnest' in q for q in arch_queries), (
+            'architectural_elements query must use unnest'
+        )
+
+
+class TestUpdateQuestionStateNewAxes:
+    """_update_question_state NULL-safe extraction for new axes."""
+
+    def _make_session_stub(self):
+        stub = MagicMock()
+        stub.question_cooldown = 0
+        stub.tag_axis_counts = {}
+        stub.recent_like_tag_sets = []
+        stub.q_card_consecutive_dislikes = 0
+        return stub
+
+    def test_null_typology_primary_not_inserted_into_counts(self):
+        """When typology_primary is NULL (row[3]=None), no None key enters tag_axis_counts."""
+        from apps.recommendation.services import swipe_service as svc
+
+        session = self._make_session_stub()
+
+        # Row: style='minimal', atmosphere='warm', material_visual=['concrete'],
+        #       typology_primary=None (NULL), typology_tags=['Mixed Use'], arch_elems=['Facade']
+        mock_row = ('minimal', 'warm', ['concrete'], None, ['Mixed Use'], ['Facade'])
+
+        mock_cursor = MagicMock()
+        mock_cursor.__enter__ = lambda s: s
+        mock_cursor.__exit__ = MagicMock(return_value=False)
+        mock_cursor.fetchone.return_value = mock_row
+        mock_conn = MagicMock()
+        mock_conn.__getitem__.return_value.cursor.return_value = mock_cursor
+
+        with patch('apps.recommendation.services.swipe_service.connections', mock_conn):
+            svc._update_question_state(session, 'like', 'bld_000001')
+
+        counts = session.tag_axis_counts
+        # typology_primary axis must have empty dict (no None inserted)
+        tp_counts = counts.get('typology_primary', {})
+        assert None not in tp_counts, (
+            f'None should not be a key in typology_primary counts; got: {tp_counts}'
+        )
+        assert '' not in tp_counts
+
+    def test_valid_typology_primary_increments_counts(self):
+        """Non-NULL typology_primary value is counted correctly."""
+        from apps.recommendation.services import swipe_service as svc
+
+        session = self._make_session_stub()
+
+        mock_row = ('minimal', 'warm', None, 'House', ['Mixed Use'], ['Facade'])
+
+        mock_cursor = MagicMock()
+        mock_cursor.__enter__ = lambda s: s
+        mock_cursor.__exit__ = MagicMock(return_value=False)
+        mock_cursor.fetchone.return_value = mock_row
+        mock_conn = MagicMock()
+        mock_conn.__getitem__.return_value.cursor.return_value = mock_cursor
+
+        with patch('apps.recommendation.services.swipe_service.connections', mock_conn):
+            svc._update_question_state(session, 'like', 'bld_000001')
+
+        counts = session.tag_axis_counts
+        assert counts.get('typology_primary', {}).get('House') == 1
+        assert counts.get('typology_tags', {}).get('Mixed Use') == 1
+        assert counts.get('architectural_elements', {}).get('Facade') == 1
+
+    def test_all_null_safe_row_survives(self):
+        """A row with NULL typology_primary and empty arrays is handled without error."""
+        from apps.recommendation.services import swipe_service as svc
+
+        session = self._make_session_stub()
+
+        mock_row = ('minimal', None, None, None, [], [])
+
+        mock_cursor = MagicMock()
+        mock_cursor.__enter__ = lambda s: s
+        mock_cursor.__exit__ = MagicMock(return_value=False)
+        mock_cursor.fetchone.return_value = mock_row
+        mock_conn = MagicMock()
+        mock_conn.__getitem__.return_value.cursor.return_value = mock_cursor
+
+        with patch('apps.recommendation.services.swipe_service.connections', mock_conn):
+            # Must not raise
+            svc._update_question_state(session, 'like', 'bld_000001')
+
+        # all_tags should only contain 'minimal'
+        assert session.recent_like_tag_sets == [['minimal']]
+
+
+class TestComputeKwVecRefineNewAxes:
+    """_compute_kw_vec_refine routes new array axes via unnest, text axis via ILIKE."""
+
+    def _make_stub(self, pool_ids=None):
+        stub = MagicMock()
+        stub.pool_ids = pool_ids or ['bld_000001', 'bld_000002']
+        return stub
+
+    def test_typology_tags_uses_unnest_branch(self):
+        """typology_tags axis → EXISTS(unnest) SQL executed, not text ILIKE."""
+        from apps.recommendation.services import swipe_service as svc
+
+        stub = self._make_stub()
+        executed_sqls = []
+
+        mock_cursor = MagicMock()
+        mock_cursor.__enter__ = lambda s: s
+        mock_cursor.__exit__ = MagicMock(return_value=False)
+        mock_cursor.execute.side_effect = lambda sql, params: executed_sqls.append(sql)
+        mock_cursor.fetchall.return_value = []
+        mock_conn = MagicMock()
+        mock_conn.__getitem__.return_value.cursor.return_value = mock_cursor
+
+        with patch('apps.recommendation.services.swipe_service.connections', mock_conn):
+            result = svc._compute_kw_vec_refine('Mixed Use', 'typology_tags', stub)
+
+        assert result is None  # no matching IDs → None
+        assert executed_sqls, 'Expected a SQL query to be executed'
+        assert any('unnest' in sql for sql in executed_sqls), (
+            'typology_tags branch must use unnest'
+        )
+
+    def test_architectural_elements_uses_unnest_branch(self):
+        """architectural_elements axis → EXISTS(unnest) SQL."""
+        from apps.recommendation.services import swipe_service as svc
+
+        stub = self._make_stub()
+        executed_sqls = []
+
+        mock_cursor = MagicMock()
+        mock_cursor.__enter__ = lambda s: s
+        mock_cursor.__exit__ = MagicMock(return_value=False)
+        mock_cursor.execute.side_effect = lambda sql, params: executed_sqls.append(sql)
+        mock_cursor.fetchall.return_value = []
+        mock_conn = MagicMock()
+        mock_conn.__getitem__.return_value.cursor.return_value = mock_cursor
+
+        with patch('apps.recommendation.services.swipe_service.connections', mock_conn):
+            result = svc._compute_kw_vec_refine('Facade', 'architectural_elements', stub)
+
+        assert result is None
+        assert any('unnest' in sql for sql in executed_sqls), (
+            'architectural_elements branch must use unnest'
+        )
+
+    def test_typology_primary_uses_text_ilike_branch(self):
+        """typology_primary axis → plain TEXT ILIKE SQL (not unnest)."""
+        from apps.recommendation.services import swipe_service as svc
+
+        stub = self._make_stub()
+        executed_sqls = []
+
+        mock_cursor = MagicMock()
+        mock_cursor.__enter__ = lambda s: s
+        mock_cursor.__exit__ = MagicMock(return_value=False)
+        mock_cursor.execute.side_effect = lambda sql, params: executed_sqls.append(sql)
+        mock_cursor.fetchall.return_value = []
+        mock_conn = MagicMock()
+        mock_conn.__getitem__.return_value.cursor.return_value = mock_cursor
+
+        with patch('apps.recommendation.services.swipe_service.connections', mock_conn):
+            result = svc._compute_kw_vec_refine('House', 'typology_primary', stub)
+
+        assert result is None
+        assert executed_sqls, 'Expected SQL to be executed'
+        # TEXT path: contains ILIKE but NOT unnest
+        assert any('ILIKE' in sql for sql in executed_sqls), (
+            'typology_primary must use ILIKE'
+        )
+        assert not any('unnest' in sql for sql in executed_sqls), (
+            'typology_primary must NOT use unnest (it is a TEXT column)'
+        )
+
+    def test_invalid_axis_rejected_by_allowlist(self):
+        """An axis not in _VALID_AXES returns None without hitting the DB."""
+        from apps.recommendation.services import swipe_service as svc
+
+        stub = self._make_stub()
+        mock_conn = MagicMock()
+
+        with patch('apps.recommendation.services.swipe_service.connections', mock_conn):
+            result = svc._compute_kw_vec_refine('House', 'typology_bad_injection', stub)
+
+        assert result is None
+        mock_conn.__getitem__.assert_not_called()
+
+
+class TestBuildRefineTriggerNewAxes:
+    """_build_refine_trigger returns correct option_a/option_b for new axes."""
+
+    def _session_stub(self, axis, tag, axis_counts=None):
+        stub = MagicMock()
+        stub.pool_ids = ['bld_000001']
+        stub.tag_axis_counts = axis_counts or {axis: {tag: 5}}
+        stub.recent_like_tag_sets = []
+        stub.question_cooldown = 0
+        stub.q_card_consecutive_dislikes = 0
+        stub.question_count = 0
+        return stub
+
+    def test_typology_primary_axis_questions(self, monkeypatch):
+        """Refine trigger for typology_primary carries the correct Korean a/b options."""
+        from apps.recommendation.services import swipe_service as svc
+        from django.conf import settings
+        monkeypatch.setitem(settings.RECOMMENDATION, 'question_common_tag_ratio', 0.4)
+        monkeypatch.setitem(settings.RECOMMENDATION, 'question_keyword_blacklist', [])
+        monkeypatch.setitem(settings.RECOMMENDATION, 'question_min_dominant_axis_ratio', 0.7)
+        monkeypatch.setitem(settings.RECOMMENDATION, 'question_min_intersection_size', 1)
+        monkeypatch.setitem(settings.RECOMMENDATION, 'question_cooldown_swipes', 15)
+        monkeypatch.setitem(settings.RECOMMENDATION, 'question_max_per_session', 5)
+        monkeypatch.setitem(settings.RECOMMENDATION, 'question_min_likes', 3)
+
+        # Build trigger payload directly via _AXIS_QUESTIONS lookup
+        axis = 'typology_primary'
+        aq = svc._AXIS_QUESTIONS[axis]
+        assert aq['q'] == '어떤 용도의 공간에 더 끌리세요?'
+        assert aq['a'] == '네, 이 유형이 좋아요'
+        assert aq['b'] == '아니요, 다른 유형도 볼래요'
+
+    def test_typology_tags_axis_questions(self):
+        """_AXIS_QUESTIONS entry for typology_tags has correct Korean copy."""
+        from apps.recommendation.services import swipe_service as svc
+
+        aq = svc._AXIS_QUESTIONS['typology_tags']
+        assert aq['q'] == '이런 성격의 공간이 끌리세요?'
+        assert aq['a'] == '네, 이런 공간이 좋아요'
+        assert aq['b'] == '아니요, 다른 성격도 볼래요'
+
+    def test_architectural_elements_axis_questions(self):
+        """_AXIS_QUESTIONS entry for architectural_elements has correct Korean copy."""
+        from apps.recommendation.services import swipe_service as svc
+
+        aq = svc._AXIS_QUESTIONS['architectural_elements']
+        assert aq['q'] == '이런 건축 요소에 끌리세요?'
+        assert aq['a'] == '네, 이 요소가 좋아요'
+        assert aq['b'] == '아니요, 다른 요소도 볼래요'
+
+    def test_new_axes_in_valid_axes_allowlist(self):
+        """All 3 new axes are in _VALID_AXES (SQL injection guard)."""
+        from apps.recommendation.services import swipe_service as svc
+
+        assert 'typology_primary' in svc._VALID_AXES
+        assert 'typology_tags' in svc._VALID_AXES
+        assert 'architectural_elements' in svc._VALID_AXES
+
+    def test_new_axes_in_axis_fields(self):
+        """All 3 new axes are in _AXIS_FIELDS."""
+        from apps.recommendation.services import swipe_service as svc
+
+        assert 'typology_primary' in svc._AXIS_FIELDS
+        assert 'typology_tags' in svc._AXIS_FIELDS
+        assert 'architectural_elements' in svc._AXIS_FIELDS

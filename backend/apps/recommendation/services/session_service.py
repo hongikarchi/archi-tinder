@@ -271,6 +271,7 @@ def create_session(request, profile, recent_cutoff):
             if project is None:
                 project = Project.objects.create(
                     user=profile, name=project_name, filters=filters, raw_query=raw_query,
+                    is_temp=True,
                 )
             session = AnalysisSession.objects.create(
                 user                     = profile,

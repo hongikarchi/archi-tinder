@@ -102,6 +102,7 @@ export default function SwipeCard({ card, onGalleryClose }) {
     for (const url of fallbackChain) {
       if (!imgRetried.current.has(url)) {
         imgRetried.current.add(url)
+        target.srcset = ''   // a 1x-containing srcset wins over src; clear so the fallback URL loads
         target.src = url
         return true
       }
@@ -266,6 +267,7 @@ export default function SwipeCard({ card, onGalleryClose }) {
               <img
                 ref={imgRef}
                 src={card.image_url}
+                srcSet={card.image_srcset || undefined}
                 alt={card.image_title}
                 width={CARD_WIDTH}
                 height={CARD_HEIGHT}

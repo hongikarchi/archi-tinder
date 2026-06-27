@@ -5,9 +5,6 @@ All FK reassignments happen inside a single atomic block; the caller's
 transaction.atomic() in GuestPromoteView provides the outer savepoint.
 
 Relationships handled:
-  - Follow (follower role): guest outgoing follows → target, dedup + self-follow guard
-  - Follow (followee role): incoming follows on guest → target, dedup + self-follow guard
-  - Follow counters: recomputed from DB after bulk ops (signals not fired by .update())
   - ArchitectFollow: guest studio follows → target, dedup
   - Reaction: guest project reactions → target, dedup
   - Project / AnalysisSession / SessionEvent: no per-user unique constraint, safe bulk update
@@ -63,99 +60,12 @@ def merge_guest_into_target(guest_profile, target_profile):
     After this call the guest_profile has no remaining FK relations; the caller
     must delete guest_profile and its User row.
     """
-    from apps.social.models import Follow, ArchitectFollow, Reaction
+    from apps.social.models import ArchitectFollow, Reaction
     from apps.recommendation.models import Project, AnalysisSession, SessionEvent
 
     with transaction.atomic():
         # ------------------------------------------------------------------
-        # 1. Follow — follower role (guest's outgoing follows)
-        #    Snapshot target's followee set BEFORE any mutation.
-        # ------------------------------------------------------------------
-        target_followee_ids = set(
-            Follow.objects.filter(follower=target_profile)
-            .values_list('followee_id', flat=True)
-        )
-
-        guest_following_qs = Follow.objects.filter(follower=guest_profile)
-
-        # IDs to delete: already followed by target OR would create self-follow
-        followee_ids_to_delete = set()
-        followee_ids_to_reassign = set()
-        _guest_followee_ids = list(guest_following_qs.values_list('followee_id', flat=True))
-        _follow_total = len(_guest_followee_ids)
-        if _follow_total > _MERGE_ROW_CAP:
-            logger.warning(
-                'merge_guest_into_target: guest=%s Follow(follower) count=%d exceeds cap=%d; %d rows dropped',
-                guest_profile.pk, _follow_total, _MERGE_ROW_CAP, _follow_total - _MERGE_ROW_CAP,
-            )
-        for followee_id in _guest_followee_ids[:_MERGE_ROW_CAP]:
-            if followee_id in target_followee_ids or followee_id == target_profile.pk:
-                followee_ids_to_delete.add(followee_id)
-            else:
-                followee_ids_to_reassign.add(followee_id)
-
-        if followee_ids_to_delete:
-            Follow.objects.filter(
-                follower=guest_profile,
-                followee_id__in=followee_ids_to_delete,
-            ).delete()
-
-        if followee_ids_to_reassign:
-            Follow.objects.filter(
-                follower=guest_profile,
-                followee_id__in=followee_ids_to_reassign,
-            ).update(follower=target_profile)
-
-        # ------------------------------------------------------------------
-        # 2. Follow — followee role (others following the guest)
-        #    Snapshot target's follower set BEFORE mutation.
-        # ------------------------------------------------------------------
-        target_follower_ids = set(
-            Follow.objects.filter(followee=target_profile)
-            .values_list('follower_id', flat=True)
-        )
-
-        guest_followers_qs = Follow.objects.filter(followee=guest_profile)
-
-        follower_ids_to_delete = set()
-        follower_ids_to_reassign = set()
-        _guest_follower_ids = list(guest_followers_qs.values_list('follower_id', flat=True))
-        _followers_total = len(_guest_follower_ids)
-        if _followers_total > _MERGE_ROW_CAP:
-            logger.warning(
-                'merge_guest_into_target: guest=%s Follow(followee) count=%d exceeds cap=%d; %d rows dropped',
-                guest_profile.pk, _followers_total, _MERGE_ROW_CAP, _followers_total - _MERGE_ROW_CAP,
-            )
-        for follower_id in _guest_follower_ids[:_MERGE_ROW_CAP]:
-            if follower_id in target_follower_ids or follower_id == target_profile.pk:
-                follower_ids_to_delete.add(follower_id)
-            else:
-                follower_ids_to_reassign.add(follower_id)
-
-        if follower_ids_to_delete:
-            Follow.objects.filter(
-                followee=guest_profile,
-                follower_id__in=follower_ids_to_delete,
-            ).delete()
-
-        if follower_ids_to_reassign:
-            Follow.objects.filter(
-                followee=guest_profile,
-                follower_id__in=follower_ids_to_reassign,
-            ).update(followee=target_profile)
-
-        # ------------------------------------------------------------------
-        # 3. Follow counter-cache recompute
-        #    .update() does not fire post_save signals, so the target's
-        #    follower_count / following_count would be stale. Recompute from
-        #    ground truth now that all Follow rows are settled.
-        # ------------------------------------------------------------------
-        target_profile.follower_count = Follow.objects.filter(followee=target_profile).count()
-        target_profile.following_count = Follow.objects.filter(follower=target_profile).count()
-        # Save is deferred — combined with liked_building_ids save below.
-
-        # ------------------------------------------------------------------
-        # 4. ArchitectFollow (was entirely missing from the original merge)
+        # 1. ArchitectFollow
         # ------------------------------------------------------------------
         target_arch_ids = set(
             ArchitectFollow.objects.filter(follower=target_profile)
@@ -277,10 +187,8 @@ def merge_guest_into_target(guest_profile, target_profile):
             target_profile.liked_building_ids,
         )
 
-        # Single save for counter-cache recompute + liked_building_ids
+        # Single save for liked_building_ids
         target_profile.save(update_fields=[
-            'follower_count',
-            'following_count',
             'liked_building_ids',
         ])
 

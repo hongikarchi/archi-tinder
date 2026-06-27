@@ -38,7 +38,7 @@ from .engine_convergence import (  # noqa: F401
 )
 from .engine_filters import (  # noqa: F401
     _build_filter_sql, _build_required_slate_where, _build_score_cases,
-    _REQUIRED_SLATE_FIELDS_SET,
+    _build_idf_score_cases, _REQUIRED_SLATE_FIELDS_SET,
 )
 from .engine_cards import (  # noqa: F401
     _row_to_card, _card_cache_key, _with_image_focus,
@@ -168,6 +168,7 @@ def get_diverse_random(n=10, filters=None, image_focus=None):
         'canonical_bld_id', 'name', 'architect_names', 'architects_text',
         'location_country', 'location_city', 'project_year',
         'program', 'style', 'atmosphere', 'color_tone', 'material_visual',
+        'typology_primary', 'typology_tags', 'architectural_elements',
         'visual_description',
         'covers_by_type', 'all_images', 'display_cover_url',
         'cover_image_url_default', 'source_urls',
@@ -287,6 +288,7 @@ def get_building_card(canonical_bld_id, image_focus=None):
         'canonical_bld_id', 'name', 'architect_names', 'architects_text',
         'location_country', 'location_city', 'project_year',
         'program', 'style', 'atmosphere', 'color_tone', 'material_visual',
+        'typology_primary', 'typology_tags', 'architectural_elements',
         'visual_description',
         'covers_by_type', 'all_images', 'display_cover_url',
         'cover_image_url_default', 'source_urls',
@@ -352,6 +354,7 @@ def get_top_k_results(pref_vector, exposed_ids, k=None, image_focus=None, questi
         'canonical_bld_id', 'name', 'architect_names', 'architects_text',
         'location_country', 'location_city', 'project_year',
         'program', 'style', 'atmosphere', 'color_tone', 'material_visual',
+        'typology_primary', 'typology_tags', 'architectural_elements',
         'visual_description',
         'covers_by_type', 'all_images', 'display_cover_url',
         'cover_image_url_default', 'source_urls',
@@ -436,6 +439,7 @@ def get_buildings_by_ids(canonical_bld_ids, image_focus=None):
             'canonical_bld_id', 'name', 'architect_names', 'architects_text',
             'location_country', 'location_city', 'project_year',
             'program', 'style', 'atmosphere', 'color_tone', 'material_visual',
+            'typology_primary', 'typology_tags', 'architectural_elements',
             'visual_description',
             'covers_by_type', 'all_images', 'display_cover_url',
             'cover_image_url_default', 'source_urls',
@@ -531,6 +535,7 @@ def search_by_filters(filters, limit=20, image_focus=None):
         'canonical_bld_id', 'name', 'architect_names', 'architects_text',
         'location_country', 'location_city', 'project_year',
         'program', 'style', 'atmosphere', 'color_tone', 'material_visual',
+        'typology_primary', 'typology_tags', 'architectural_elements',
         'visual_description',
         'covers_by_type', 'all_images', 'display_cover_url',
         'cover_image_url_default', 'source_urls',
@@ -547,6 +552,147 @@ def search_by_filters(filters, limit=20, image_focus=None):
             params + [limit],
         )
         rows = _dictfetchall(cur)
+    return [_row_to_card(r, image_focus=image_focus) for r in rows]
+
+
+def search_by_filters_scored(
+    filters, raw_query, filter_priority=None, limit=20,
+    image_focus=None, topk=None,
+):
+    """LLM-SEARCH-RANK-1: 2-stage bounded CTE ranking (tag-score topK + BM25 rerank).
+
+    Replaces the 3-tier relaxation ladder in ParseQueryView with a single pure-soft
+    ranked query:
+      1. scored CTE: is_publishable=true gate + IDF-weighted tag-score per row.
+      2. topk CTE:   ORDER BY tag_score DESC LIMIT K  (arithmetic sort, fast).
+      3. reranked CTE: BM25 ts_rank_cd on topK rows only (tsvector over ~200 rows).
+      4. Final SELECT: ORDER BY (tag_score + w_bm25*bm25_score) DESC LIMIT limit.
+
+    is_publishable=true is the ONLY hard gate (D3 decision: pure soft scoring).
+    No hard filter on program, location, material, style etc.
+
+    Performance: tsvector is computed only on K rows (not 37k) because scored CTE
+    narrows the candidate set first via arithmetic tag-score, which uses no index
+    but is O(N) scan — same cost as a count query and ~10-50ms on 2.6k publishable rows.
+
+    raw_query safety: empty or whitespace-only raw_query produces plainto_tsquery
+    with zero lexemes → bm25_score = 0 for all rows → graceful no-op.
+
+    Args:
+        filters:         dict from parse_query (may include atmosphere/color_tone/typology_primary).
+        raw_query:       first user text verbatim (used for BM25).
+        filter_priority: ordered list of axis names (highest priority first).
+        limit:           number of cards to return (default 20).
+        image_focus:     forwarded to _row_to_card.
+        topk:            K for tag-score narrowing before BM25 (default from RC).
+
+    Returns:
+        list of ImageCard dicts (may be shorter than limit if corpus is small).
+    """
+    from .caches import get_corpus_tag_df  # local import avoids circular at module load
+
+    if image_focus is None and filters:
+        image_focus = filters.get('image_focus')
+
+    # Read tuneable hyperparams from RC (with safe defaults)
+    _topk = topk if topk is not None else RC.get('llm_search_topk', 200)
+    w_bm25 = float(RC.get('llm_search_w_bm25', 8.0))
+    priority_boost = float(RC.get('llm_search_priority_boost', 0.25))
+    idf_ceiling = float(RC.get('llm_search_idf_ceiling', 3.0))
+    _base_weights = dict(RC.get('llm_search_base_weights', {
+        'program': 10.0, 'typology_primary': 6.0,
+        'location_country': 5.0, 'location_city': 5.0,
+        'material': 4.0, 'style': 4.0,
+        'atmosphere': 3.0, 'color_tone': 2.0,
+        'year_min': 1.0, 'year_max': 1.0,
+    }))
+    # Pass IDF ceiling + priority boost as sentinel keys (won't appear in allowlist checks)
+    _base_weights['_idf_ceiling'] = idf_ceiling
+    _base_weights['_priority_boost'] = priority_boost
+
+    bm25_dict = RC.get('hybrid_bm25_dict', 'simple')
+
+    # Get IDF map for the corpus (cached 24h)
+    idf_map = get_corpus_tag_df()
+
+    # Build IDF-weighted tag-score CASE WHEN expressions
+    cases, score_params, _total_w = _build_idf_score_cases(
+        filters or {}, _base_weights, idf_map, filter_priority or [],
+    )
+
+    # SELECT columns (same set as search_by_filters)
+    _required_cols = [
+        'canonical_bld_id', 'name', 'architect_names', 'architects_text',
+        'location_country', 'location_city', 'project_year',
+        'program', 'style', 'atmosphere', 'color_tone', 'material_visual',
+        'typology_primary', 'typology_tags', 'architectural_elements',
+        'visual_description',
+        'covers_by_type', 'all_images', 'display_cover_url',
+        'cover_image_url_default', 'source_urls',
+    ]
+    # Build tag_score expression; fall back to constant 0 when no cases
+    if cases:
+        tag_score_expr = '(' + ' + '.join(cases) + ')::float'
+    else:
+        tag_score_expr = '0::float'
+
+    # Sanitize raw_query: plainto_tsquery is safe but empty string → zero lexemes → bm25 0
+    _raw_query = (raw_query or '').strip()
+
+    # CTE SQL construction
+    # scored: full publishable corpus, tag_score computed per row
+    # topk: narrow to K best by tag_score (arithmetic sort, fast, no tsvector)
+    # reranked: BM25 on topK rows only
+    # final: combine scores, order, limit
+    sql = (
+        'WITH scored AS ('
+        '  SELECT {cols},'
+        '         ({tag_score_expr}) AS tag_score'
+        '  FROM canonical_v2_buildings'
+        '  WHERE is_publishable = true'
+        '),'
+        'topk AS ('
+        '  SELECT * FROM scored'
+        '  ORDER BY tag_score DESC'
+        '  LIMIT {topk}'
+        '),'
+        'reranked AS ('
+        '  SELECT *,'
+        '    ts_rank_cd('
+        '      to_tsvector(%s, COALESCE(visual_description, \'\') || \' \' ||'
+        '                  COALESCE(array_to_string(material_visual, \' \'), \'\')'
+        '      ),'
+        '      plainto_tsquery(%s, %s)'
+        '    ) AS bm25_score'
+        '  FROM topk'
+        ')'
+        'SELECT {cols_final},'
+        '       tag_score,'
+        '       bm25_score,'
+        '       (tag_score + {w_bm25}::float * bm25_score) AS final_score'
+        ' FROM reranked'
+        ' ORDER BY final_score DESC'
+        ' LIMIT %s'
+    ).format(
+        cols=', '.join(_required_cols),
+        tag_score_expr=tag_score_expr,
+        topk=int(_topk),
+        cols_final=', '.join(_required_cols),
+        w_bm25=float(w_bm25),
+    )
+
+    params = score_params + [bm25_dict, bm25_dict, _raw_query, int(limit)]
+
+    try:
+        with connection.cursor() as cur:
+            cur.execute(sql, params)
+            rows = _dictfetchall(cur)
+    except Exception as exc:
+        logger.warning(
+            'search_by_filters_scored: CTE query failed (%s); returning empty', exc,
+        )
+        return []
+
     return [_row_to_card(r, image_focus=image_focus) for r in rows]
 
 
@@ -1646,6 +1792,7 @@ def get_top_k_mmr(
         'canonical_bld_id', 'name', 'architect_names', 'architects_text',
         'location_country', 'location_city', 'project_year',
         'program', 'style', 'atmosphere', 'color_tone', 'material_visual',
+        'typology_primary', 'typology_tags', 'architectural_elements',
         'visual_description',
         'covers_by_type', 'all_images', 'display_cover_url',
         'cover_image_url_default', 'source_urls',
@@ -2015,6 +2162,7 @@ def taste_ranked_page(v_taste, exclude_ids, limit, offset, image_focus=None):
         'canonical_bld_id', 'name', 'architect_names', 'architects_text',
         'location_country', 'location_city', 'project_year',
         'program', 'style', 'atmosphere', 'color_tone', 'material_visual',
+        'typology_primary', 'typology_tags', 'architectural_elements',
         'visual_description',
         'covers_by_type', 'all_images', 'display_cover_url',
         'cover_image_url_default', 'source_urls',

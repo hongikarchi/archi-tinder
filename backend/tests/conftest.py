@@ -74,7 +74,10 @@ def _patch_swipe_service_connections():
     mock_cursor = MagicMock()
     mock_cursor.__enter__ = lambda s: s
     mock_cursor.__exit__ = MagicMock(return_value=False)
-    mock_cursor.fetchone.return_value = (1,)
+    # 6-tuple: truthy for the existence-guard (SELECT 1) AND correctly shaped for
+    # _update_question_state's 6-column SELECT. All tag values None/empty so the
+    # default stub counts no tags (tests needing specific tags override this patch).
+    mock_cursor.fetchone.return_value = (None, None, [], None, [], [])
     mock_conn.__getitem__.return_value.cursor.return_value = mock_cursor
     with patch('apps.recommendation.services.swipe_service.connections', mock_conn):
         yield

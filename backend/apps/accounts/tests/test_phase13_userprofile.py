@@ -57,8 +57,6 @@ class TestUserProfileExtensionModel:
         assert profile.mbti == ''
         assert profile.external_links == {}
         assert profile.persona_summary == {}
-        assert profile.follower_count == 0
-        assert profile.following_count == 0
 
     @pytest.mark.django_db
     def test_userprofile_str_repr_unchanged(self, user_and_profile):
@@ -91,9 +89,9 @@ class TestUserProfileDetailView:
         response = client.get(f'/api/v1/users/{user.id}/')
         assert response.status_code == 200
         data = response.json()
-        # Required MOCK_USER keys (boards + is_following deferred)
+        # Required MOCK_USER keys (boards injected by view)
         for key in ['user_id', 'display_name', 'avatar_url', 'bio', 'mbti',
-                    'external_links', 'persona_summary', 'follower_count', 'following_count']:
+                    'external_links', 'persona_summary']:
             assert key in data, f'Expected key "{key}" in response'
         assert data['user_id'] == user.id
         assert data['display_name'] == 'Prof User'
@@ -104,16 +102,6 @@ class TestUserProfileDetailView:
         client = APIClient()
         response = client.get('/api/v1/users/99999/')
         assert response.status_code == 404
-
-    @pytest.mark.django_db
-    def test_get_userprofile_includes_is_following(self, user_and_profile):
-        """Response includes is_following (SOC1 shipped: always present, false for unauthenticated)."""
-        user, _ = user_and_profile
-        client = APIClient()
-        response = client.get(f'/api/v1/users/{user.id}/')
-        data = response.json()
-        assert 'is_following' in data
-        assert data['is_following'] is False  # unauthenticated => always false
 
     @pytest.mark.django_db
     def test_get_userprofile_includes_boards(self, user_and_profile):
@@ -162,7 +150,6 @@ class TestUserProfileSelfUpdateView:
         assert data['bio'] == 'Architecture student at SNU.'
         # Unchanged fields
         assert data['display_name'] == 'Prof User'
-        assert data['follower_count'] == 0
 
     @pytest.mark.django_db
     def test_patch_self_updates_mbti_uppercased(self, user_and_profile, auth_client_for):
@@ -203,16 +190,6 @@ class TestUserProfileSelfUpdateView:
             '/api/v1/users/me/', {'external_links': 'not-a-dict'}, format='json',
         )
         assert response.status_code == 400
-
-    @pytest.mark.django_db
-    def test_patch_self_does_not_update_follower_count(self, user_and_profile, auth_client_for):
-        """PATCH with follower_count=999 is ignored (read-only counter cache)."""
-        response = auth_client_for.patch(
-            '/api/v1/users/me/', {'follower_count': 999}, format='json',
-        )
-        assert response.status_code == 200
-        # follower_count must remain 0 — not in UserProfileSelfUpdateSerializer fields
-        assert response.json()['follower_count'] == 0
 
     @pytest.mark.django_db
     def test_patch_self_does_not_update_persona_summary(self, user_and_profile, auth_client_for):

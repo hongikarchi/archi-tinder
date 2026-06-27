@@ -516,7 +516,7 @@ class TestStage2ThreadSpawn:
 
         terminal_result = self._make_stage1_result(probe_needed=False)
         with patch('apps.recommendation.views.services.parse_query', return_value=terminal_result):
-            with patch('apps.recommendation.views.engine.search_by_filters', return_value=[]):
+            with patch('apps.recommendation.views.engine.search_by_filters_scored', return_value=[]):
                 with patch('apps.recommendation.views.engine.get_diverse_random', return_value=[]):
                     with patch('apps.recommendation.views._spawn_stage2') as mock_spawn:
                         with patch.dict(settings.RECOMMENDATION, {'stage_decouple_enabled': False}):
@@ -564,7 +564,7 @@ class TestStage2ThreadSpawn:
             'image_focus': 'interior',
         }
         with patch('apps.recommendation.views.services.parse_query', return_value=terminal_result):
-            with patch('apps.recommendation.views.engine.search_by_filters', return_value=[{'canonical_bld_id': 'b1'}]):
+            with patch('apps.recommendation.views.engine.search_by_filters_scored', return_value=[{'canonical_bld_id': 'b1'}]):
                 with patch('apps.recommendation.views.search._spawn_stage2') as mock_spawn:
                     with patch.dict(settings.RECOMMENDATION, {'stage_decouple_enabled': True}):
                         response = ParseQueryView.as_view()(request)

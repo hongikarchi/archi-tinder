@@ -1,0 +1,300 @@
+{
+  "dimension": "image-delivery-cdn-proxy",
+  "generatedAt": "2026-06-15",
+  "researchedBy": "claude-sonnet-4-6 (primary-source web fetch, no SEO blogs)",
+  "claims": [
+    {
+      "id": "CF-TRANSFORM-1",
+      "topic": "Cloudflare Images / Transform — unified product",
+      "claim": "Cloudflare merged Images and Image Resizing into one product billed at $0.50 per 1,000 unique monthly transformations, with 5,000/month free.",
+      "detail": "A 'unique transformation' is a specific (source-image × parameters) pair per calendar month. If 10,000 uncached requests are served for the same resize, only 1 unique transformation is billed. Serving AVIF to one browser and WebP to another from the same source counts as 1 transformation (the format parameter is treated as a single unit). The merged product supports a 'zero-storage plan' where images stay in an external origin (e.g., Cloudinary, S3) and CF only transforms — no CF storage cost.",
+      "sources": [
+        {"title": "Image optimization made simpler: merging Cloudflare Images and Image Resizing", "url": "https://blog.cloudflare.com/merging-images-and-image-resizing/"},
+        {"title": "Pricing · Cloudflare Images docs", "url": "https://developers.cloudflare.com/images/pricing/"}
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "CF-TRANSFORM-2",
+      "topic": "Cloudflare Transform — format conversion and external origin support",
+      "claim": "CF Workers Image Transformations can fetch images from any external origin (including third-party domains like images.divisare.com) and transcode them to AVIF or WebP via the cf.image.format parameter inside a fetch() Worker subrequest.",
+      "detail": "The Worker intercepts the image request, validates the source URL against a domain allowlist, then calls fetch(externalUrl, { cf: { image: { format: 'avif', width: N, quality: 85 } } }). CF fetches the original, transforms, caches the result at edge keyed by (source-URL × params), and returns the optimized image. This is the only feasible way to add WebP/AVIF to Divisare images without re-hosting, given that the Divisare Cloudinary zone freezes cached JPEGs and ignores Vary:Accept.",
+      "sources": [
+        {"title": "Transform via Workers · Cloudflare Images docs", "url": "https://developers.cloudflare.com/images/transform-images/transform-via-workers/"},
+        {"title": "Overview · Cloudflare Images docs", "url": "https://developers.cloudflare.com/images/"}
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "CF-TRANSFORM-3",
+      "topic": "Cloudflare Transform — caching behavior",
+      "claim": "CF caches each unique (source-URL × transform-parameters) combination independently at edge; subsequent requests within the calendar month are served from cache and are not billed again.",
+      "detail": "On a cache miss, CF fetches the original from origin, applies transformations, and stores the result. The original is also cached to speed future transformations. The edge TTL is controlled by the origin's Cache-Control max-age (or CF Edge Cache TTL override). Minimum Edge Cache TTL on Free plan is 2 hours; Business/Enterprise can set 1 second.",
+      "sources": [
+        {"title": "Transform via fetch · Cloudflare Images docs", "url": "https://developers.cloudflare.com/images/transform-images/"},
+        {"title": "Edge Browser Cache TTL · Cloudflare Cache docs", "url": "https://developers.cloudflare.com/cache/how-to/edge-browser-cache-ttl/"}
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "CF-SIGNED-1",
+      "topic": "Cloudflare Images — signed URLs for private images",
+      "claim": "CF Images supports signed URLs for private image access using HMAC-SHA256 with an expiry timestamp; signing must be done server-side to protect the key.",
+      "detail": "A Unix-timestamp expiry is appended as the `exp` query param; the URL path + params are signed with HMAC-SHA256 producing a hex `sig` param. Default expiry is 86,400 seconds (1 day). The docs do not describe how signed URLs interact with edge caching — signed tokens with short expiries create per-user cache-miss risk unless the cache key strips the signature. This is architecturally different from imgproxy's approach where URL signature is explicitly excluded from the cache key.",
+      "sources": [
+        {"title": "Serve private images · Cloudflare Images docs", "url": "https://developers.cloudflare.com/images/manage-images/serve-images/serve-private-images/"}
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "VERCEL-IMG-1",
+      "topic": "Vercel Image Optimization — features and external domain support",
+      "claim": "Vercel Image Optimization resizes and converts to WebP/AVIF for any whitelisted external domain (remotePatterns config), with results cached up to 31 days on the Vercel CDN.",
+      "detail": "Works via the `/_next/image?url=<src>&w=<width>&q=<quality>` endpoint (or `/_vercel/image` for non-Next.js). The cache key for remote images = (projectId × w × q × normalised-Accept × absolute-source-URL). Remote image TTL = max(upstream Cache-Control max-age, minimumCacheTTL config, default 3600s). On cache MISS or STALE, Vercel fetches the original, transforms, writes to the global CDN cache, and serves. The STALE state triggers background revalidation — this is the operational equivalent of stale-while-revalidate.",
+      "sources": [
+        {"title": "Image Optimization with Vercel", "url": "https://vercel.com/docs/image-optimization"},
+        {"title": "Limits and Pricing for Image Optimization", "url": "https://vercel.com/docs/image-optimization/limits-and-pricing"}
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "VERCEL-IMG-2",
+      "topic": "Vercel Image Optimization — pricing",
+      "claim": "Vercel Image Optimization costs $0.05–$0.0812 per 1K image transformations (regional), plus $0.40–$0.64 per 1M cache reads and $4.00–$6.40 per 1M cache writes; Hobby plan includes 5K transformations, 300K cache reads, 100K cache writes free per month.",
+      "detail": "Transformations are billed on cache MISS and STALE. Cache reads are billed when image is retrieved from the shared global cache (not on in-region hits). Cache writes are billed on every MISS and STALE. Each delivery also incurs Fast Data Transfer + Edge Request charges. Hobby exceeding limits returns HTTP 402 (images fail, alt text shown). Pro teams can set Spend Management alerts/webhooks. Max transformed image size is 10 MB; max source dimensions 8192×8192px.",
+      "sources": [
+        {"title": "Limits and Pricing for Image Optimization", "url": "https://vercel.com/docs/image-optimization/limits-and-pricing"},
+        {"title": "Faster transformations and reduced pricing for Image Optimization - Vercel", "url": "https://vercel.com/changelog/faster-transformations-and-reduced-pricing-for-image-optimization"}
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "IMGPROXY-1",
+      "topic": "imgproxy — capabilities and pricing",
+      "claim": "imgproxy is an open-core self-hosted image proxy that converts to WebP/AVIF, signs URLs with HMAC, and integrates with any CDN for edge caching; the open-source tier is free, Pro starts at $49/mo.",
+      "detail": "imgproxy processes images on-the-fly from any origin URL, supporting resize, crop, format conversion (JPEG, PNG, WebP, AVIF), quality, and watermarking. URL signing uses HMAC with a key+salt pair to prevent DoS via arbitrary transforms. Critically, the URL signature is NOT part of the cache key — key rotation and multiple key pairs do not cause CDN cache misses. imgproxy v4 adds an internal disk/S3/GCS cache; the recommended production architecture is still CDN-in-front-of-imgproxy (CDN is primary cache; internal cache is persistent overflow for cold-CDN edge eviction). Self-hosted via Docker/Linux packages; no managed SaaS offering (AWS Marketplace for marketplace deploys).",
+      "sources": [
+        {"title": "imgproxy: fast and secure on-the-fly image processing", "url": "https://imgproxy.net/"},
+        {"title": "imgproxy v4: Internal Cache and changes to conditional request behavior", "url": "https://imgproxy.net/blog/v4-caching/"}
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "IMGPROXY-2",
+      "topic": "imgproxy — signed URL cache-key design",
+      "claim": "imgproxy deliberately excludes the URL signature from the CDN cache key so that key rotation and multiple signing key pairs do not cause cache misses.",
+      "detail": "The HMAC signature is validated before processing but stripped from the cache key. This means two requests with different signature tokens but identical source-URL + transform params will be a cache hit on the CDN. This is the correct design for a transform-proxy behind a CDN where signing is a security gate, not a cache discriminator. Contrast with Cloudflare Images signed URLs, where the CDN-interaction behavior is unspecified.",
+      "sources": [
+        {"title": "imgproxy v4: Internal Cache and changes to conditional request behavior", "url": "https://imgproxy.net/blog/v4-caching/"},
+        {"title": "imgproxy FAQ", "url": "https://imgproxy.net/faq/"}
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "THUMBOR-1",
+      "topic": "Thumbor — capabilities, ops, and format support",
+      "claim": "Thumbor is an open-source self-hosted image server supporting on-demand resize, crop, and format conversion (WebP via AUTO_WEBP, AVIF via AUTO_AVIF), with HMAC-based signed URLs (SECURITY_KEY config) and pluggable result storage (file, Redis, mixed).",
+      "detail": "Result storage (RESULT_STORAGE) caches processed images to avoid reprocessing; configurable via RESULT_STORAGE_EXPIRATION_SECONDS (default 0 = no expiry). Browser cache TTL is MAX_AGE (default 86,400s). AUTO_WEBP/AUTO_AVIF enables content-negotiation format conversion. SECURITY_KEY signs request URLs to prevent tampering/DoS. Pure open-source (no paid tier); ops burden is entirely on the operator (deploy, scale, storage backend management). No managed offering.",
+      "sources": [
+        {"title": "Thumbor documentation", "url": "https://thumbor.readthedocs.io/en/latest/"},
+        {"title": "Thumbor configuration reference", "url": "https://thumbor.readthedocs.io/en/latest/configuration.html"}
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "RFC9111-1",
+      "topic": "RFC 9111 — max-age directive",
+      "claim": "RFC 9111 §5.2.2.1 defines max-age as the number of seconds after generation on the origin server during which the response is considered fresh; intermediate caches subtract their accumulated age (Age header) from this freshness lifetime.",
+      "detail": "Syntax: `Cache-Control: max-age=<delta-seconds>`. A shared cache receiving `Cache-Control: max-age=604800` with `Age: 100` treats it as fresh for 604700 more seconds. Negative or non-integer values are treated as 0. max-age in a response directive overrides the Expires header.",
+      "sources": [
+        {"title": "RFC 9111 — HTTP Caching", "url": "https://httpwg.org/specs/rfc9111.html"},
+        {"title": "Cache-Control — MDN Web Docs", "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control"}
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "RFC9111-2",
+      "topic": "immutable Cache-Control directive",
+      "claim": "The `immutable` response directive (not in RFC 9111 core; widely implemented extension) tells browsers to skip conditional revalidation requests (If-None-Match, If-Modified-Since) during the max-age window, eliminating unnecessary round-trips for versioned/fingerprinted assets.",
+      "detail": "Without `immutable`, browsers may send revalidation requests on page reload even when the resource is still within its max-age freshness window. With `immutable`, the browser skips these requests entirely until the resource becomes stale. Best practice: combine with a long max-age (e.g., 1 year) and a cache-busting URL pattern (content hash in filename). MDN marks it as 'Widely available since July 2015' across modern browsers. RFC 9111 does not define it (it is an extension directive per §5.2.3); Firefox and Chrome both support it.",
+      "sources": [
+        {"title": "Cache-Control — MDN Web Docs", "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control"},
+        {"title": "RFC 9111 — HTTP Caching", "url": "https://httpwg.org/specs/rfc9111.html"}
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "RFC9111-3",
+      "topic": "stale-while-revalidate Cache-Control directive",
+      "claim": "`stale-while-revalidate=<seconds>` allows a cache to serve a stale response to the user immediately while revalidating it in the background, hiding revalidation latency from the user experience.",
+      "detail": "Example: `Cache-Control: max-age=604800, stale-while-revalidate=86400` — resource is fresh for 7 days; after expiry, it can still be served stale for up to 1 additional day while a background revalidation request is issued to origin. If the background revalidation completes before the stale window closes, the cache is updated; users see zero revalidation latency. Defined in RFC 5861 (extension to RFC 7234/9111). Widely supported in modern browsers and CDNs.",
+      "sources": [
+        {"title": "Cache-Control — MDN Web Docs", "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control"}
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "TAO-1",
+      "topic": "Timing-Allow-Origin (TAO) header — effect on RUM",
+      "claim": "When `Timing-Allow-Origin` is absent or does not match the requesting origin, the browser zeros out all detailed Resource Timing attributes for that cross-origin resource, making it impossible to measure real transfer size, compression effectiveness, or network timing via RUM.",
+      "detail": "Zeroed attributes include: redirectStart/End, workerStart, domainLookupStart/End, connectStart/End, secureConnectionStart, requestStart, firstInterimResponseStart, finalResponseHeadersStart, responseStart, encodedBodySize, decodedBodySize, and contentType (returns empty string). The `transferSize` attribute is masked to 0 (it would otherwise reveal if the response came from cache, as cache hits return transferSize=0, network returns actual bytes). Without TAO, RUM tools cannot distinguish cache hits from misses or measure cross-origin image latency accurately.",
+      "sources": [
+        {"title": "Timing-Allow-Origin — MDN Web Docs", "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Timing-Allow-Origin"},
+        {"title": "W3C Resource Timing — sec-timing-allow-origin", "url": "https://www.w3.org/TR/resource-timing/#sec-timing-allow-origin"}
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "TAO-2",
+      "topic": "Timing-Allow-Origin — vendor support",
+      "claim": "The `Timing-Allow-Origin` header must be set by the image-serving origin; neither Cloudinary (Divisare's CDN) nor Archello's S3 are confirmed to set it for hotlinked assets, making cross-origin image RUM opaque without proxying through our own domain.",
+      "detail": "If images are proxied through a Vercel Image Optimization endpoint or CF Worker, our backend controls the response headers and CAN set `Timing-Allow-Origin: *`, restoring full RUM visibility for all image requests. imgproxy and Thumbor can also be configured to set this header. This is a secondary benefit of the proxy approach beyond format conversion.",
+      "sources": [
+        {"title": "Timing-Allow-Origin — MDN Web Docs", "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Timing-Allow-Origin"}
+      ],
+      "confidence": "medium"
+    },
+    {
+      "id": "CDN-CACHE-1",
+      "topic": "Cloudflare CDN-Cache-Control header hierarchy",
+      "claim": "The `Cloudflare-CDN-Cache-Control` header (CF-specific, not forwarded downstream) takes highest priority for CF edge TTL decisions, overriding both `CDN-Cache-Control` and standard `Cache-Control` when all three are present.",
+      "detail": "Priority order: (1) Cache Response Rules, (2) Cloudflare-CDN-Cache-Control > CDN-Cache-Control, (3) standard Cache-Control, (4) CF defaults. This means an origin can set separate TTLs for CF edge vs browsers vs downstream CDNs. For the proxy use case, setting `Cache-Control: public, max-age=31536000, immutable` on processed image responses and `Cloudflare-CDN-Cache-Control: public, max-age=2592000` gives browsers a 1-year immutable hint while CF edge stores for 30 days (manageable purge window).",
+      "sources": [
+        {"title": "CDN-Cache-Control · Cloudflare Cache docs", "url": "https://developers.cloudflare.com/cache/concepts/cdn-cache-control/"}
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "CDN-CACHE-2",
+      "topic": "Cloudflare Edge Cache TTL — Korea-to-EU origin latency reduction",
+      "claim": "CF edge caches content at the PoP nearest to the user; a Korean user hitting CF edge in Seoul gets a cache hit without a round-trip to the EU origin, eliminating the ~250ms Seoul↔Frankfurt RTT on every repeat image request.",
+      "detail": "Without CF edge caching, every image request from Seoul must reach Divisare's Cloudinary zone (likely EU-based), adding ~250ms RTT per image. With CF edge TTL set to hours/days, cached images are served from Seoul PoP — latency drops to single-digit ms for cache hits. The Edge Cache TTL default is 4 hours (same across plans); this can be extended to days via Cache Response Rules or origin headers. For images with versioned URLs (content-hash in path), setting Edge Cache TTL to 30+ days with `immutable` is safe and maximizes hit rate.",
+      "sources": [
+        {"title": "Edge Browser Cache TTL · Cloudflare Cache docs", "url": "https://developers.cloudflare.com/cache/how-to/edge-browser-cache-ttl/"}
+      ],
+      "confidence": "medium"
+    },
+    {
+      "id": "IMGIX-1",
+      "topic": "imgix — format conversion and auto-format",
+      "claim": "imgix supports explicit format conversion via the `fm` URL parameter (fm=avif, fm=webp, fm=jpg, etc.) and automatic browser-negotiated format selection via `auto=format`; no proxy is needed since params are appended to the imgix URL.",
+      "detail": "AVIF: up to 50% smaller than JPEG, up to 30% smaller than WebP. WebP: 25–34% smaller than JPEG (lossy), 26% smaller than PNG (lossless). Using `fm=avif` with a fallback (`fm=webp` for unsupported browsers) can be implemented client-side via `<picture>` srcset or by passing `auto=format` which lets imgix serve the best format for the browser's Accept header. Since we already hotlink from architizer-prod.imgix.net, this requires only a URL rewrite in the frontend — no proxy infrastructure needed.",
+      "sources": [
+        {"title": "fm — imgix URL API", "url": "https://docs.imgix.com/apis/url/format/fm"}
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "IMGIX-2",
+      "topic": "imgix — CDN architecture and Asia PoPs",
+      "claim": "imgix uses a 3-layer cache architecture (Origin → Shield → Edge) and maintains dedicated edge PoPs in Seoul, Tokyo (×2), Osaka, Singapore, and other Asian cities, meaning cache hits for Korean users are served from Seoul edge at ~10–50ms.",
+      "detail": "imgix's Edge Cache layer is globally distributed, with PoPs confirmed at: Seoul (South Korea), Tokyo (Japan, 2 locations), Osaka (Japan), Singapore, Kuala Lumpur, Manila, Hong Kong, Bangkok, Mumbai, and others. The Shield Cache layer is in us-east-1 and eu-central-1 — a cache miss at Seoul edge goes to the Shield, not the EU origin, saving ~100ms RTT. A healthy cache hit ratio is above 80–95%. imgix strongly advises against running a second CDN in front of imgix as it reduces hit ratios and disables content negotiation features.",
+      "sources": [
+        {"title": "CDN Guidelines · imgix docs", "url": "https://docs.imgix.com/en-US/getting-started/best-practices/cdn-guidelines"},
+        {"title": "CDN delivery and caching — imgix Help Center", "url": "https://support.imgix.com/hc/en-us/articles/204281605-CDN-delivery-and-caching"}
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "IMGIX-3",
+      "topic": "imgix — cache key and TTL guidance",
+      "claim": "imgix recommends a 60-day TTL with 'Enforce Minimum' enabled for most use cases; render requests (cache misses) are 1–15% of total traffic when the cache is warm.",
+      "detail": "imgix uses LRU eviction at the edge, so frequently accessed images persist regardless of TTL. 'Enforce Minimum' prevents upstream Cache-Control: no-cache or short-TTL headers on source images from forcing repeated origin fetches. At an 80–95% hit rate, only 5–20% of requests incur processing latency (the render path through Shield cache). For our use case (swipe cards repeated across users), hit ratio should be high once the warm-up period passes.",
+      "sources": [
+        {"title": "CDN Guidelines · imgix docs", "url": "https://docs.imgix.com/en-US/getting-started/best-practices/cdn-guidelines"}
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "HOTLINK-1",
+      "topic": "Hotlinking fragility — URL drift, TAO, rate limits, referer protection",
+      "claim": "Hotlinking third-party image CDNs introduces four operational risks: URL drift (source deletes/moves image), missing TAO (blind to transfer metrics), CDN rate-limiting on our referer, and referer/hotlink protection being enforced by the host.",
+      "detail": "1. URL drift: images.divisare.com or architizer-prod.imgix.net can rename, expire, or 404 any URL at any time; we have no invalidation hook. 2. TAO: both Cloudinary (Divisare) and imgix (Architizer) serve images from their own domains; without TAO header, our RUM sees zeroed timing. 3. Rate-limits: Cloudinary can throttle based on Referer or IP; our app becomes a high-volume hotlinker and may trigger bandwidth policies. 4. Referer protection: Cloudinary's hotlink whitelist requires a Premium Cloudinary plan on Divisare's account — we have no control over that; architizer-prod.imgix.net does not set any known hotlink restriction currently but could at any time.",
+      "sources": [
+        {"title": "Hotlinking — Cloudinary Support", "url": "https://support.cloudinary.com/hc/en-us/community/posts/200788352-Hotlinking"},
+        {"title": "Hotlink Protection · Cloudflare WAF docs", "url": "https://developers.cloudflare.com/waf/tools/scrape-shield/hotlink-protection/"}
+      ],
+      "confidence": "medium"
+    },
+    {
+      "id": "SIGNED-CACHE-1",
+      "topic": "Signed URL + cache-key design for transform proxies",
+      "claim": "A correct cache-key design for any transform proxy must key on (source URL + transform params) and exclude the security token/signature, so that all users requesting the same logical image variant share one cached result.",
+      "detail": "If the security token is part of the cache key, every unique token (e.g., per-user, per-session, time-limited) generates a separate cache entry, resulting in a 0% cache hit rate and N×origin-fetch cost. imgproxy v4 explicitly excludes URL signature from the cache key (documented behavior). Cloudflare Images' signed URL interaction with edge caching is not documented — caution required. Vercel Image Optimization's cache key does NOT include auth tokens (it keys on projectId + w + q + Accept + source URL), but it has no built-in per-user signing layer. Recommended design: sign at the proxy/Worker ingress, strip the signature before passing to the CDN cache layer, and cache the result under (source-URL + transform-params) only.",
+      "sources": [
+        {"title": "imgproxy v4: Internal Cache", "url": "https://imgproxy.net/blog/v4-caching/"},
+        {"title": "Image Optimization with Vercel — remote images cache key", "url": "https://vercel.com/docs/image-optimization"}
+      ],
+      "confidence": "high"
+    }
+  ],
+  "recommendations": [
+    {
+      "action": "imgix-url-rewrite-format-and-resolution",
+      "rationale": "imgix (16% of images, architizer-prod.imgix.net) supports fm=avif, fm=webp, w=, h=, fit= via URL params with no proxy needed. Rewriting the URL in the frontend (or backend image-card API) is the zero-infra path to AVIF/WebP + correct resolution for this source. imgix already has a Seoul PoP so Korea latency is minimized on cache hits.",
+      "appliesTo": "imgix (architizer-prod.imgix.net)",
+      "tradeoffs": "No cost increase (already paying imgix); zero ops burden; requires one-time URL rewrite in frontend image rendering logic. Risk: imgix ToS allows URL manipulation by the referring site (standard use case). Do NOT add a second CDN in front — imgix docs warn this reduces hit ratio and breaks content negotiation."
+    },
+    {
+      "action": "divisare-resolution-url-rewrite",
+      "rationale": "Divisare Cloudinary URLs accept Cloudinary transform params (w_, h_, c_fill, q_auto) in the path. Resolution can be fixed by rewriting the URL to request the appropriate width — no proxy needed. This is independent of format; format stays JPEG since the Cloudinary zone is frozen.",
+      "appliesTo": "Divisare (images.divisare.com)",
+      "tradeoffs": "No cost; zero ops; removes oversized image downloads. Risk: URL pattern may change if Divisare migrates CDN. Must verify Cloudinary URL rewrite pattern on actual Divisare URLs before deploying."
+    },
+    {
+      "action": "cf-worker-proxy-divisare-format",
+      "rationale": "The ONLY way to serve WebP/AVIF for Divisare images (84% of corpus) is to route requests through a proxy that fetches the Cloudinary JPEG and re-encodes. A CF Worker using cf.image.format is the managed-infra option: $0.50/1K unique transformations, billed only once per calendar month per (source-URL × params) pair. For a corpus of ~2,600 publishable buildings × ~3 cards = ~7,800 unique images × 2 format variants = ~15,600 unique transformations/month → ~$7.80/month after the 5K free tier.",
+      "appliesTo": "Divisare (images.divisare.com)",
+      "tradeoffs": "Cost: ~$8/month est.; ops burden: low (managed CF, no servers); requires CF zone on our domain (already implied by Vercel+CF setup); adds ~10–50ms CF Worker processing latency on first-time transforms (subsequent hits served from CF edge cache). Risk: Divisare could block our Worker's origin fetch via Referer/IP policy."
+    },
+    {
+      "action": "vercel-image-optimization-proxy",
+      "rationale": "Vercel Image Optimization can proxy external images (remotePatterns allowlist includes images.divisare.com and architizer-prod.imgix.net), convert to WebP/AVIF, resize, and cache on the Vercel CDN (Singapore PoP close to Korean users). Already integrated if using Next.js Image component; no new infrastructure. Cost for Hobby: free up to 5K transforms/month (likely exceeded at 15K unique variants). Pro: $0.05–$0.0812 per 1K transforms.",
+      "appliesTo": "Divisare and imgix (both sources)",
+      "tradeoffs": "Cost: ~$0.75–$1.30/month for transforms beyond free tier (15K × $0.05–$0.0812 / 1K); plus cache write costs (~$0.06–$0.10/month at 15K). Total ~$1–$2/month. Ops burden: minimal (configure remotePatterns, use next/image). Risk: adds Vercel CDN as intermediary — cache miss path is Singapore→EU which is still faster than Korea→EU direct. Does NOT currently use Next.js Image component for swipe cards (our frontend uses plain img elements or custom components — must verify)."
+    },
+    {
+      "action": "self-hosted-imgproxy-behind-cf",
+      "rationale": "imgproxy on Railway/Fly.io in Singapore region proxies all image sources, converts to AVIF/WebP, signs URLs (HMAC), and sits behind CF CDN. Full control over headers (including Timing-Allow-Origin: *), cache keys, format policy, and signed URL TTL. OSS tier is free; Pro at $49/month adds advanced compression.",
+      "appliesTo": "All sources (Divisare, imgix, Archello)",
+      "tradeoffs": "Cost: compute (Railway ~$5–20/month for a small container) + Pro license if wanted ($49/month); ops burden: medium (deploy + monitor container, config HMAC keys, handle upstream 4xx/5xx); provides best flexibility and full RUM visibility via TAO header. Signed URLs should use long shared tokens (not per-user) to maintain CDN cache hit ratio. Risk: cold-start latency on Railway if container scales to zero; single-AZ failure risk without redundancy."
+    },
+    {
+      "action": "set-immutable-on-transform-cache-responses",
+      "rationale": "For processed images served via any proxy (CF Worker, Vercel, imgproxy), set `Cache-Control: public, max-age=31536000, immutable` when the URL contains a content-hash or version parameter. This eliminates browser revalidation requests (If-None-Match round-trips) for the entire 1-year max-age window.",
+      "appliesTo": "All proxied image sources",
+      "tradeoffs": "No cost; zero ops burden; eliminates up to 1 network RTT per image per browser session. Prerequisite: URL must be versioned/fingerprinted so that content changes result in new URLs, not stale immutable responses. If URLs are not versioned (e.g., hotlinked URLs may change content), use `stale-while-revalidate` instead."
+    },
+    {
+      "action": "add-timing-allow-origin-on-proxy-responses",
+      "rationale": "Any proxy layer we control should set `Timing-Allow-Origin: *` on image responses. This restores full Resource Timing visibility (transferSize, encodedBodySize, connectStart, etc.) for our RUM, enabling accurate measurement of cache-hit rates and image latency from Korean users' browsers.",
+      "appliesTo": "All proxied image sources",
+      "tradeoffs": "No cost; trivial to add in CF Worker response or imgproxy config; one-line nginx config for Thumbor. Currently opaque for hotlinked Divisare and imgix images."
+    }
+  ],
+  "proxyJustificationVerdict": {
+    "question": "Given that 84% Divisare resolution is already URL-fixable and only FORMAT is proxy-gated — is a proxy justified?",
+    "framing": "Resolution fix (URL rewrite) is confirmed doable without proxy. Format conversion (WebP/AVIF) for Divisare requires a proxy because Divisare's Cloudinary zone freezes cached JPEGs and ignores Vary:Accept. The question is whether the format savings justify proxy cost + complexity.",
+    "quantifiedBenefit": "AVIF is up to 50% smaller than JPEG; WebP is 25–34% smaller. For a swipe card showing 3–5 images at ~400×300px, a typical JPEG card image is 80–120KB; AVIF equivalent ~40–60KB. At 15–25 swipes per session, format conversion saves ~600KB–1.5MB per session. For Korean users on LTE (~20 Mbps), this translates to ~240–600ms saved per session in raw transfer time — significant for the 'cards load before next swipe' UX goal.",
+    "quantifiedCost": {
+      "cfWorker": "~$7.80/month (est. 15,600 unique transforms × $0.50/1K, minus 5K free)",
+      "vercelImageOpt": "~$1–2/month for transforms + cache writes at 15K unique variants",
+      "imgproxyRailway": "$5–20/month compute + optional $49/month Pro license"
+    },
+    "verdict": "Proxy is JUSTIFIED for format conversion if the product goal is <1s card load time. The cheapest path is Vercel Image Optimization (~$1–2/month, zero ops) if we switch swipe card img elements to use Vercel's proxy endpoint. CF Worker (~$8/month) is the correct choice if we need to keep existing frontend hotlink URLs and only change the backend URL construction. imgproxy is overkill at this scale unless we need full RUM visibility AND maximum format/quality control simultaneously. The proxy is NOT justified purely for resolution — URL rewrite handles that for free.",
+    "optionRanking": [
+      "1. Vercel Image Optimization: lowest cost, lowest ops, already on our stack — best if frontend can use next/image or equivalent",
+      "2. CF Worker proxy: $8/month, managed, zero servers — best if frontend cannot change img element usage pattern",
+      "3. imgproxy (self-hosted): most control, highest ops burden — best at scale (>50K MAU) where compute cost < Vercel/CF per-transform pricing"
+    ]
+  },
+  "openQuestions": [
+    "USER DECISION: ToS — Does Divisare's terms of service permit third-party applications to hotlink images.divisare.com for commercial use? Hotlinking consumes Divisare's CDN bandwidth without attribution benefit to them. This is an ethical and legal policy question, not an engineering one.",
+    "USER DECISION: ToS — Does Architizer's terms of service (architizer-prod.imgix.net) permit programmatic image hotlinking by third-party services? Architizer uses imgix with no known current referer restriction, but their ToS may prohibit this use.",
+    "USER DECISION: Copyright — Architecture photography served via Divisare and Architizer is copyrighted by the photographers. Re-hosting (caching) these images through our own CDN/proxy constitutes making a server-side copy. Is the project willing to seek licensing agreements or migrate to photographer-authorized image sources before deploying a caching proxy?",
+    "USER DECISION: Archello S3 (eu-central-1) — Gallery images from Archello S3 Frankfurt have no transform API. Serving these to Korean users adds ~250ms Frankfurt RTT. Options: (a) accept the latency, (b) proxy through our CF Worker or imgproxy (requires ToS clearance with Archello), (c) exclude Archello-sourced images from the swipe corpus. Which option is acceptable?",
+    "ENGINEERING: Does our current frontend use plain <img> elements or a framework Image component for swipe card images? If plain <img>, Vercel Image Optimization requires frontend changes (use next/image or /_vercel/image endpoint explicitly). Needs a quick code read before committing to the Vercel path.",
+    "ENGINEERING: What is the actual distribution of Divisare Cloudinary URL patterns? Confirming that the w_ / c_fill Cloudinary transform path pattern applies to images.divisare.com specifically (not all Cloudinary accounts expose transform params on FETCH-mode cached images). Needs empirical verification with 5 sample URLs.",
+    "ENGINEERING: What is the 30-day unique image count in practice? The 2,614 publishable buildings figure is the corpus; each building may have 1–10 images. Actual unique image URLs determine whether the transform count estimate (15,600) is accurate or off by 2–5x."
+  ]
+}

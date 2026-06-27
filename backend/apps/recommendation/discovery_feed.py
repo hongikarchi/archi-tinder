@@ -16,8 +16,8 @@ Hard rules (also in CLAUDE.md):
   - No ORM/migrate on canonical_v2_buildings.
   - engine.py is read-only (import, never modify).
 """
-import random
 import logging
+import time
 
 import numpy as np
 from django.conf import settings
@@ -28,7 +28,6 @@ from django.utils import timezone
 from .models import Project
 from . import engine
 from .engine_vecmath import _normalize
-from .engine_cards import _row_to_card
 
 logger = logging.getLogger('apps.recommendation')
 
@@ -103,22 +102,25 @@ def get_discovery_draft(profile, draft_id):
 
 # ── Tier computation ──────────────────────────────────────────────────────────
 
-def compute_discovery_tier(profile):
-    """Return tier dict: tier (1|2|3), n_local, n_global, cumulative_likes, project_count.
+def _tier_from_project_rows(rows):
+    """Pure-function tier computation from pre-fetched project rows.
+
+    rows: iterable of dicts with at least {'name': str, 'liked_ids': list|None}.
+    Scoped to the rows provided — callers are responsible for applying any cap.
 
     Tier thresholds (from RECOMMENDATION dict):
       Tier 1 (cold)   : cumulative_likes < discovery_tier2_min_likes (10)
-      Tier 3 (multi)  : project_count >= discovery_tier3_min_projects (2)
+      Tier 3 (multi)  : project_count >= discovery_tier3_min_projects (4)
                         OR cumulative_likes >= discovery_tier3_min_likes (50)
-      Tier 2 (single) : else (likes >= 10 AND projects <= 1)
+      Tier 2 (single) : else (likes >= 10 AND projects <= 3)
 
-    project_count: EXCLUDES auto draft boards (name starts with 'discovery_').
-    cumulative_likes: includes ALL projects (drafts + real) — taste accumulates.
+    project_count: counts ALL boards including discovery draft boards.
+    cumulative_likes: includes ALL provided rows (drafts + real).
 
     n_local + n_global = discovery_chunk_size (10).
     """
     tier2_min_likes = RC.get('discovery_tier2_min_likes', 10)
-    tier3_min_projects = RC.get('discovery_tier3_min_projects', 2)
+    tier3_min_projects = RC.get('discovery_tier3_min_projects', 4)
     tier3_min_likes = RC.get('discovery_tier3_min_likes', 50)
     chunk_size = RC.get('discovery_chunk_size', 10)
     t2_local = RC.get('discovery_tier2_local', 2)
@@ -126,17 +128,15 @@ def compute_discovery_tier(profile):
     t3_local = RC.get('discovery_tier3_local', 4)
     t3_global = RC.get('discovery_tier3_global', 6)
 
-    # Count likes across ALL projects (draft + real).
-    projects = Project.objects.filter(user=profile).values('name', 'liked_ids')
     cumulative_likes = 0
     project_count = 0
-    for p in projects:
+    for p in rows:
         liked = p.get('liked_ids') or []
         cumulative_likes += len(liked)
-        # Draft boards (name starts with DISCOVERY_DRAFT_PREFIX) are excluded
-        # from the tier project_count but their likes still accumulate.
-        if not is_discovery_draft_name(p['name']):
-            project_count += 1
+        # All boards — including discovery draft boards — count toward
+        # project_count.  Drafts are a multi-taste signal (DISCOVERY-PERF-2
+        # spec: "드래프트도 다중취향 신호로 간주").
+        project_count += 1
 
     # Determine tier
     if cumulative_likes < tier2_min_likes:
@@ -164,6 +164,27 @@ def compute_discovery_tier(profile):
         'cumulative_likes': cumulative_likes,
         'project_count': project_count,
     }
+
+
+def compute_discovery_tier(profile):
+    """Return tier dict: tier (1|2|3), n_local, n_global, cumulative_likes, project_count.
+
+    Thin wrapper: fetches the most-recent discovery_recent_boards_cap (default 10)
+    boards and delegates to _tier_from_project_rows().  Kept for backwards
+    compatibility with callers that do not pre-fetch rows themselves.
+
+    project_count: counts ALL boards including discovery draft boards.
+    cumulative_likes: from the capped board window only.
+
+    n_local + n_global = discovery_chunk_size (10).
+    """
+    cap = RC.get('discovery_recent_boards_cap', 10)
+    rows = list(
+        Project.objects.filter(user=profile)
+        .order_by('-created_at')[:cap]
+        .values('name', 'liked_ids')
+    )
+    return _tier_from_project_rows(rows)
 
 
 # ── Greedy FPS (mirrors engine.py lines 222-235) ──────────────────────────────
@@ -263,13 +284,18 @@ def _fetch_candidates(exclude_ids, dislike_centroid, chunk_size):
     """Fetch a bounded set of candidate buildings from canonical_v2_buildings.
 
     Uses the same 2-query pattern as engine.get_diverse_random:
-      1) Fetch IDs only (fast, no heavy columns) with exclusion + dislike-zone filter.
-      2) Python random.sample to bound the set.
-      3) Fetch full rows + embeddings for the sample.
+      1) Bounded random sample of IDs (ORDER BY random() LIMIT sample_cap) with
+         exclusion filter only.  No pgvector distance scan in Query 1 — that
+         operator cannot use the HNSW index in a WHERE clause and would force a
+         full-corpus distance computation (~37 k rows).
+      2) Fetch full rows + embeddings for the sampled IDs.
+      3) Python post-filter: when dislike_centroid is set, drop any row whose
+         cosine distance to the centroid is <= discovery_dislike_zone_threshold
+         (i.e. keep only candidates far enough from the disliked cluster).
+         Rows with no/empty embedding are kept.
 
-    dislike_centroid: list[float] or None. When set, adds a pgvector cosine
-    DISTANCE filter so candidates must be farther than
-    discovery_dislike_zone_threshold from the centroid.
+    Oversampling (sample_cap = min(chunk_size*8, 120)) means dropping a few
+    dislike-zone rows still leaves ample candidates for FPS.
 
     Returns list of row dicts (each row has 'embedding' text field for parsing).
     """
@@ -277,22 +303,22 @@ def _fetch_candidates(exclude_ids, dislike_centroid, chunk_size):
     # Oversample: chunk_size * 8 capped at 120 — enough for FPS to work on
     sample_cap = min(chunk_size * 8, 120)
 
-    # Build required columns (mirrors get_diverse_random)
-    # _build_select_columns lives in engine.py, not engine_cards.py
-    from .engine import _build_select_columns as _bsc
-    _required_cols = [
-        'canonical_bld_id', 'name', 'architect_names', 'architects_text',
-        'location_country', 'location_city', 'project_year',
-        'program', 'style', 'atmosphere', 'color_tone', 'material_visual',
-        'visual_description',
-        'covers_by_type', 'all_images', 'display_cover_url',
-        'cover_image_url_default', 'source_urls',
-    ]
-    _cols = _bsc(_required_cols, ())
-
     conn = _dj_connections['buildings']
 
-    # ── Query 1: ID-only fetch with exclusion + optional dislike zone ──────
+    # ── Query 1: bounded random ID sample with exclusion only ─────────────
+    # dislike_centroid filtering is deferred to Python after Query 2 (the
+    # pgvector <=> operator in a WHERE clause bypasses HNSW and scans the
+    # full corpus).
+    #
+    # PERF: canonical_v2_buildings rows are large (VECTOR(384) + JSONB), so a
+    # full seq scan (ORDER BY random() / unbounded id fetch) reads the whole
+    # multi-GB table (~20s+). TABLESAMPLE SYSTEM(p) reads only ~p% of pages,
+    # giving a fast block-level random sample. exclude_set is already capped to
+    # the recent boards (DISCOVERY-PERF-1), so the <> ALL(...) list is small.
+    # sample_pct is a controlled float from settings (not user input) — safe to
+    # inline. Trade-off: SYSTEM sampling is block-clustered; FPS + local/global
+    # split downstream restore diversity.
+    sample_pct = float(RC.get('discovery_tablesample_pct', 2.0))
     params_1 = []
     where_parts = ['is_publishable = true']
 
@@ -300,55 +326,94 @@ def _fetch_candidates(exclude_ids, dislike_centroid, chunk_size):
         where_parts.append('canonical_bld_id <> ALL(%s)')
         params_1.append(list(exclude_ids))
 
-    if dislike_centroid is not None:
-        # pgvector cosine distance operator <=>; candidates must be FARTHER than threshold
-        from .engine_vecmath import _vec_to_pg
-        centroid_str = _vec_to_pg(dislike_centroid)
-        where_parts.append('embedding <=> %s::vector > %s')
-        params_1.extend([centroid_str, dislike_zone_threshold])
-
     where_sql = 'WHERE ' + ' AND '.join(where_parts)
+    params_1.append(sample_cap)
 
     with conn.cursor() as cur:
         cur.execute(
-            f'SELECT canonical_bld_id FROM canonical_v2_buildings {where_sql}',
+            f'SELECT canonical_bld_id FROM canonical_v2_buildings'
+            f' TABLESAMPLE SYSTEM ({sample_pct}) {where_sql} LIMIT %s',
             params_1,
         )
-        all_ids = [row[0] for row in cur.fetchall()]
+        sampled_ids = [row[0] for row in cur.fetchall()]
 
-    if not all_ids:
+    if not sampled_ids:
         return []
 
-    # ── Python sample (no ORDER BY RANDOM() full-corpus sort) ─────────────
-    sampled_ids = random.sample(all_ids, min(sample_cap, len(all_ids)))
-
-    # ── Query 2: full rows + embedding for sample ──────────────────────────
-    # Must re-gate on is_publishable = true (rows could theoretically change
-    # between query 1 and query 2; CLAUDE.md requires it on every query).
+    # ── Query 2: embedding-only for the sample ─────────────────────────────
+    # Heavy card columns (JSONB images etc.) are NOT fetched here — only the
+    # embedding needed for the local/global split + FPS. Full card columns are
+    # fetched later via engine.get_buildings_by_ids for ONLY the final selected
+    # cards, so we never transfer large JSONB for all ~120 candidates.
+    # Re-gate on is_publishable = true (CLAUDE.md requires it on every query).
     with conn.cursor() as cur:
         cur.execute(
-            f'SELECT {_cols}, embedding::text FROM canonical_v2_buildings'
-            f' WHERE canonical_bld_id = ANY(%s) AND is_publishable = true',
+            'SELECT canonical_bld_id, embedding::text FROM canonical_v2_buildings'
+            ' WHERE canonical_bld_id = ANY(%s) AND is_publishable = true',
             [sampled_ids],
         )
-        cols = [c[0] for c in cur.description]
-        rows = [dict(zip(cols, row)) for row in cur.fetchall()]
+        rows = [
+            {'canonical_bld_id': r[0], 'embedding': r[1]}
+            for r in cur.fetchall()
+        ]
 
     # Restore sample order (Postgres ANY returns PK order)
     rows_by_id = {r['canonical_bld_id']: r for r in rows}
-    return [rows_by_id[bid] for bid in sampled_ids if bid in rows_by_id]
+    ordered_rows = [rows_by_id[bid] for bid in sampled_ids if bid in rows_by_id]
+
+    # ── Python dislike post-filter ─────────────────────────────────────────
+    # Drop candidates that fall inside the dislike zone (cosine distance to
+    # dislike_centroid <= threshold).  Rows with missing/empty embeddings are
+    # kept — we do not exclude rows we cannot evaluate.
+    if dislike_centroid is not None:
+        centroid_arr = np.array(dislike_centroid, dtype=np.float32)
+        centroid_norm = np.linalg.norm(centroid_arr)
+        filtered = []
+        for row in ordered_rows:
+            raw = row.get('embedding')
+            if not raw:
+                filtered.append(row)
+                continue
+            vec = np.array(
+                [float(x) for x in raw.strip('[]').split(',')],
+                dtype=np.float32,
+            )
+            vec_norm = np.linalg.norm(vec)
+            if centroid_norm == 0.0 or vec_norm == 0.0:
+                filtered.append(row)
+                continue
+            cosine_sim = float(np.dot(centroid_arr, vec) / (centroid_norm * vec_norm))
+            distance = 1.0 - cosine_sim
+            if distance > dislike_zone_threshold:
+                filtered.append(row)
+        return filtered
+
+    return ordered_rows
 
 
 # ── Main chunk builder ────────────────────────────────────────────────────────
 
-def build_discovery_chunk(profile, centroids, client_buffer_ids=None, chunk_size=None):
+def build_discovery_chunk(
+    profile,
+    centroids,
+    client_buffer_ids=None,
+    chunk_size=None,
+    # DISCOVERY-PERF-1: pre-fetched project rows (recent-cap boards only).
+    # When provided, these rows are used for exclude_set (board part) and
+    # dislike aggregation — no additional DB query is issued.
+    # When None, a fresh capped fetch is performed internally (backwards-compat).
+    _project_rows=None,
+    # Pre-computed tier_info dict (from _tier_from_project_rows / compute_discovery_tier).
+    # When None, computed from _project_rows (or fetched internally).
+    _tier_info=None,
+):
     """Build a 10-card Discovery chunk for the given profile.
 
     Steps:
-      1. Build exclude set: all user project ids (liked + disliked + saved)
-         PLUS client_buffer_ids.
-      2. Compute dislike centroid from the most-recent N passes gathered
-         across ALL the user's projects (rolling window, union of all disliked_ids).
+      1. Use pre-fetched _project_rows (most-recent cap boards) — or fetch them.
+         Build exclude set from those rows (liked + disliked + saved).
+         PLUS profile.liked_building_ids and client_buffer_ids (no cap on these).
+      2. Aggregate disliked_ids from _project_rows for the dislike centroid.
          If no passes, no dislike zone.
       3. Fetch candidates via 2-query pattern (IDs only → sample → full rows).
       4. Parse embeddings.
@@ -361,6 +426,9 @@ def build_discovery_chunk(profile, centroids, client_buffer_ids=None, chunk_size
     centroids: list of np.ndarray or list of list[float] (may be empty for cold).
     client_buffer_ids: optional iterable of building id strings already shown
         to the client but not yet acted on.
+    _project_rows: pre-fetched list of dicts (name/liked_ids/disliked_ids/saved_ids).
+        Scoped to recent-cap boards. Pass from the view to avoid re-querying.
+    _tier_info: pre-computed tier dict. If None, derived from _project_rows.
     """
     if chunk_size is None:
         chunk_size = RC.get('discovery_chunk_size', 10)
@@ -368,15 +436,26 @@ def build_discovery_chunk(profile, centroids, client_buffer_ids=None, chunk_size
     dislike_window = RC.get('discovery_dislike_history_window', 30)
     local_sim_radius = RC.get('discovery_local_sim_radius', 0.55)
 
-    # ── Compute tier split ─────────────────────────────────────────────────
-    tier_info = compute_discovery_tier(profile)
-    n_local = tier_info['n_local']
-    n_global = tier_info['n_global']
+    # ── Resolve project rows (1 fetch if not pre-supplied) ─────────────────
+    if _project_rows is None:
+        cap = RC.get('discovery_recent_boards_cap', 10)
+        _project_rows = list(
+            Project.objects.filter(user=profile)
+            .order_by('-created_at')[:cap]
+            .values('name', 'liked_ids', 'disliked_ids', 'saved_ids')
+        )
 
-    # ── Build exclude set ──────────────────────────────────────────────────
+    # ── Compute tier split (from pre-fetched rows) ─────────────────────────
+    if _tier_info is None:
+        _tier_info = _tier_from_project_rows(_project_rows)
+    n_local = _tier_info['n_local']
+    n_global = _tier_info['n_global']
+
+    # ── Build exclude set (board part: from recent-cap rows only) ──────────
+    # DISCOVERY-PERF-1: exclude_set boards are scoped to the recent-cap window.
+    # Older boards' buildings may re-appear — this is the intended product spec.
     exclude_set = set()
-    projects = Project.objects.filter(user=profile).values('liked_ids', 'disliked_ids', 'saved_ids')
-    for project in projects:
+    for project in _project_rows:
         for bid in _liked_id_only(project.get('liked_ids')):
             if isinstance(bid, str):
                 exclude_set.add(bid)
@@ -393,7 +472,7 @@ def build_discovery_chunk(profile, centroids, client_buffer_ids=None, chunk_size
 
     # BACK-RECOMMEND-4: also exclude buildings liked via the Profile
     # "liked buildings" tab (UserProfile.liked_building_ids) so they
-    # don't reappear in the Discovery chunk.
+    # don't reappear in the Discovery chunk. No cap — cost is O(0) DB hits.
     for bid in list(profile.liked_building_ids or []):
         if isinstance(bid, str) and bid:
             exclude_set.add(bid)
@@ -403,19 +482,18 @@ def build_discovery_chunk(profile, centroids, client_buffer_ids=None, chunk_size
             if isinstance(bid, str) and bid:
                 exclude_set.add(bid)
 
-    # ── Dislike centroid (rolling window, all projects) ────────────────────
-    # Aggregate disliked_ids across ALL the user's projects (drafts + real).
-    # Take the most-recent `dislike_window` items from the union.
-    # NOTE: This does NOT depend on a specific draft_id — the feed GET does
-    # not receive one.  Ordering is preserved within each project's list but
-    # interleaving across projects is not strictly temporal (acceptable trade-off).
+    # ── Dislike centroid (rolling window, from recent-cap rows) ───────────
+    # Aggregate disliked_ids from the capped project rows.
+    # Ordering is preserved within each project's list; interleaving across
+    # projects is not strictly temporal (acceptable trade-off).
     all_dislike_ids = []
-    for project in Project.objects.filter(user=profile).values('disliked_ids'):
+    for project in _project_rows:
         disliked = project.get('disliked_ids') or []
         if isinstance(disliked, list):
             all_dislike_ids.extend(bid for bid in disliked if isinstance(bid, str))
     recent_dislike_ids = all_dislike_ids[-dislike_window:]
 
+    _t = time.perf_counter()
     dislike_centroid = None
     if recent_dislike_ids:
         emb_map = engine.get_pool_embeddings(recent_dislike_ids)
@@ -424,11 +502,15 @@ def build_discovery_chunk(profile, centroids, client_buffer_ids=None, chunk_size
             mean_vec = np.mean(np.stack(vecs), axis=0)
             normed = _normalize(mean_vec.tolist())
             dislike_centroid = normed if normed else None
+    _ms_dislike = (time.perf_counter() - _t) * 1000
 
     # ── Fetch candidates ───────────────────────────────────────────────────
+    _t = time.perf_counter()
     rows = _fetch_candidates(exclude_set, dislike_centroid, chunk_size)
+    _ms_fetch = (time.perf_counter() - _t) * 1000
     if not rows:
         return []
+    _t_rest = time.perf_counter()  # parse + split + FPS + row_to_card
 
     # ── Parse embeddings ───────────────────────────────────────────────────
     parsed_rows = []
@@ -507,4 +589,14 @@ def build_discovery_chunk(profile, centroids, client_buffer_ids=None, chunk_size
     # ── Micro-interleave ──────────────────────────────────────────────────
     interleaved = _interleave_local_global(local_selected, global_selected)
 
-    return [_row_to_card(r) for r in interleaved]
+    # Heavy card columns (JSONB) fetched ONLY for the final selected cards —
+    # engine.get_buildings_by_ids is cache-aware + preserves input order.
+    # Candidates above carried only {canonical_bld_id, embedding}.
+    final_ids = [r['canonical_bld_id'] for r in interleaved]
+    _cards = engine.get_buildings_by_ids(final_ids)
+    logger.debug(
+        'DISCOVERY-TIMING build_chunk_sub | dislike_emb=%.0fms fetch_candidates=%.0fms '
+        'rest(parse+split+fps+cards)=%.0fms | n_cand=%s',
+        _ms_dislike, _ms_fetch, (time.perf_counter() - _t_rest) * 1000, len(rows),
+    )
+    return _cards

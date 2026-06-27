@@ -1,5 +1,4 @@
 import { Fragment, useState, useCallback } from 'react'
-import BioPersonaFlipCard from '../../components/profile/BioPersonaFlipCard'
 import { uploadAvatar } from '../../api/profiles.js'
 import styles from './ProfileHero.module.css'
 
@@ -50,10 +49,9 @@ function cropAndScale(file) {
 export default function ProfileHero({
   user,
   boardsTotalCount,
-  followerCount,
   savedStudiosCount,
+  likedCount,
   onSelectTab,
-  onOpenFollowModal,
   // Avatar upload props (owner-only)
   isMe,
   onAvatarUpdated,
@@ -74,8 +72,7 @@ export default function ProfileHero({
   const stats = [
     { count: boardsTotalCount, label: 'Boards', onClick: () => onSelectTab('boards') },
     { count: savedStudiosCount ?? 0, label: 'Studios', onClick: () => onSelectTab('studios') },
-    { count: followerCount, label: 'Followers', onClick: () => onOpenFollowModal('followers') },
-    { count: user.following_count, label: 'Following', onClick: () => onOpenFollowModal('following') },
+    ...(isMe ? [{ count: likedCount ?? 0, label: 'Liked', onClick: () => onSelectTab('liked') }] : []),
   ]
 
   const handleFileChange = useCallback(async (e) => {
@@ -236,7 +233,7 @@ export default function ProfileHero({
           </p>
         )}
 
-        {/* Compact stats row — 4 items: Boards · Studios · Followers · Following */}
+        {/* Compact stats row — 2 items: Boards · Studios */}
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           gap: 0, marginTop: 14, marginBottom: 4,
@@ -254,8 +251,8 @@ export default function ProfileHero({
                 }}
               >
                 <span style={{ color: 'var(--color-text)', fontSize: 18, fontWeight: 700, lineHeight: 1 }}>
-                  {stat.count}
-                </span>
+                    {stat.count}
+                  </span>
                 <span style={{ color: 'var(--color-text-dim)', fontSize: 12, fontWeight: 500 }}>
                   {stat.label}
                 </span>
@@ -267,13 +264,6 @@ export default function ProfileHero({
           ))}
         </div>
 
-        {/* Hero Flip — BioPersonaFlipCard */}
-        {user.persona_summary && (
-          <BioPersonaFlipCard
-            bio={user.bio}
-            persona={user.persona_summary}
-          />
-        )}
 
         {/* External links — Instagram + email + website pills */}
         {(igUrl || emailUrl || websiteUrl) && (

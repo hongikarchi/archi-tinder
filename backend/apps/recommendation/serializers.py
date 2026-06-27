@@ -165,6 +165,7 @@ class ProjectSerializer(serializers.ModelSerializer):
             'report_image',
             'report_image_mime',
             'conversation_history',
+            'is_temp',
             'latest_session_id',
             'latest_session_meta',
             'created_at',
@@ -185,6 +186,9 @@ class ProjectSerializer(serializers.ModelSerializer):
             # conversation_history is read-only on ProjectSerializer (create path).
             # It is writable only via ProjectSelfUpdateSerializer (PATCH path).
             'conversation_history',
+            # is_temp is read-only on ProjectSerializer (create path).
+            # It is writable only via ProjectSelfUpdateSerializer (PATCH save-confirm).
+            'is_temp',
             'latest_session_id',
             'latest_session_meta',
             'created_at',
@@ -218,10 +222,13 @@ class ProjectListSerializer(ProjectSerializer):
 
 
 class ProjectSelfUpdateSerializer(serializers.ModelSerializer):
-    """PATCH /api/v1/projects/{project_id}/ — owner updates name, visibility, conversation_history.
+    """PATCH /api/v1/projects/{project_id}/ — owner updates name, visibility, conversation_history, is_temp.
 
     All other fields (liked_ids, saved_ids, filters, reaction_count, etc.)
     are managed by swipe flow or system — silently ignored on PATCH.
+
+    FEAT-TASTE-FLOW-1 save-confirm action: PATCH {is_temp: false, name, visibility}
+    atomically confirms a temporary project as a permanent board.
 
     conversation_history validation:
     - must be a dict
@@ -231,7 +238,17 @@ class ProjectSelfUpdateSerializer(serializers.ModelSerializer):
     - if 'history' key present: must be a list ≤ _MAX_HISTORY_LEN items;
       each item's 'text' value ≤ _MAX_TEXT_LEN chars
     - extra keys are tolerated (frontend owns the blob shape)
+
+    visibility validation: must be one of Project.VISIBILITY_CHOICES values.
     """
+
+    def validate_visibility(self, value):
+        valid_values = [choice[0] for choice in Project.VISIBILITY_CHOICES]
+        if value not in valid_values:
+            raise serializers.ValidationError(
+                f'visibility must be one of: {", ".join(valid_values)}.'
+            )
+        return value
 
     def validate_conversation_history(self, value):
         if not isinstance(value, dict):
@@ -291,4 +308,4 @@ class ProjectSelfUpdateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model  = Project
-        fields = ['name', 'visibility', 'conversation_history']
+        fields = ['name', 'visibility', 'is_temp', 'conversation_history']

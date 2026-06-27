@@ -57,15 +57,6 @@ class UserProfile(models.Model):
         # {persona_type, one_liner, styles[], programs[]} — Phase 17 LLM-derived (future).
         # Empty dict at PROF2 v0; populated by Phase 17 reverse-Q classifier later.
     )
-    follower_count = models.IntegerField(
-        default=0,
-        # Counter cache; Phase 15 SOC1 Follow events will increment/decrement.
-    )
-    following_count = models.IntegerField(
-        default=0,
-        # Counter cache; mirror of follower_count (opposite direction).
-    )
-
     # -- App-preference fields (design-system PR2) --
     theme = models.CharField(max_length=20, choices=THEME_CHOICES, default='github-light')
     font = models.CharField(max_length=20, choices=FONT_CHOICES, default='plex')

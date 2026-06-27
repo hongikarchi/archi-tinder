@@ -6,6 +6,7 @@ import ErrorState from './buildingDetail/ErrorState.jsx'
 import Header from './buildingDetail/Header.jsx'
 import LoadingState from './buildingDetail/LoadingState.jsx'
 import { isValidRank, kindLabel, metadataItems } from './buildingDetail/helpers.js'
+import PhotoLightbox from './buildingDetail/PhotoLightbox.jsx'
 
 const BUILDING_ID_RE = /^[A-Za-z0-9_-]{1,32}$/
 
@@ -33,6 +34,7 @@ export default function BuildingDetailPage() {
   const [bookmarkPending, setBookmarkPending] = useState(false)
   const [saveModalOpen, setSaveModalOpen] = useState(false)
   const [isSaved, setIsSaved] = useState(false)
+  const [lightboxIndex, setLightboxIndex] = useState(null) // null = closed
 
   useEffect(() => {
     const next = !!buildingId && savedIds.includes(buildingId)
@@ -88,6 +90,16 @@ export default function BuildingDetailPage() {
   const [galleryFilter, setGalleryFilter] = useState('all')  // 'all' | 'photos' | 'drawings'
 
   const title = building?.image_title || buildingId || 'Building'
+
+  // Flat image list for lightbox, ordered to match what's visible under current filter
+  const lightboxImages = useMemo(() => {
+    if (galleryMeta.length > 0) {
+      const visiblePhotos   = galleryFilter !== 'drawings' ? photos   : []
+      const visibleDrawings = galleryFilter !== 'photos'   ? drawings : []
+      return [...visiblePhotos, ...visibleDrawings].map(g => ({ url: g.url, alt: kindLabel(g.kind) }))
+    }
+    return gallery.map(url => ({ url, alt: title }))
+  }, [galleryMeta, galleryFilter, photos, drawings, gallery, title])
   const architect = building?.metadata?.axis_architects
   const detailDescription = building?.metadata?.visual_description || building?.metadata?.description || null
   const description = building?.metadata?.axis_atmosphere || 'No atmosphere description is available yet.'
@@ -159,6 +171,15 @@ export default function BuildingDetailPage() {
           card={{ ...building, canonical_bld_id: buildingId }}
           onClose={() => setSaveModalOpen(false)}
           onSaved={() => { setSaveModalOpen(false); setIsSaved(true) }}
+        />
+      )}
+
+      {lightboxIndex !== null && lightboxImages.length > 0 && (
+        <PhotoLightbox
+          images={lightboxImages}
+          activeIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+          onNavigate={setLightboxIndex}
         />
       )}
 
@@ -319,14 +340,19 @@ export default function BuildingDetailPage() {
                 </h2>
                 <div style={{ columnCount: 2, columnGap: 8 }} className="building-masonry">
                   {photos.map((item, idx) => (
-                    <div key={`${item.url}-${idx}`} style={{
-                      breakInside: 'avoid',
-                      marginBottom: 8,
-                      position: 'relative',
-                      borderRadius: 8,
-                      overflow: 'hidden',
-                      background: 'var(--color-surface)',
-                    }}>
+                    <div
+                      key={`${item.url}-${idx}`}
+                      onClick={() => setLightboxIndex(idx)}
+                      style={{
+                        breakInside: 'avoid',
+                        marginBottom: 8,
+                        position: 'relative',
+                        borderRadius: 8,
+                        overflow: 'hidden',
+                        background: 'var(--color-surface)',
+                        cursor: 'zoom-in',
+                      }}
+                    >
                       <img
                         src={item.url}
                         alt={`${title} ${kindLabel(item.kind)} ${idx + 1}`}
@@ -370,14 +396,19 @@ export default function BuildingDetailPage() {
                 </h2>
                 <div style={{ columnCount: 2, columnGap: 8 }} className="building-masonry">
                   {drawings.map((item, idx) => (
-                    <div key={`${item.url}-${idx}`} style={{
-                      breakInside: 'avoid',
-                      marginBottom: 8,
-                      position: 'relative',
-                      borderRadius: 8,
-                      overflow: 'hidden',
-                      background: '#fff',
-                    }}>
+                    <div
+                      key={`${item.url}-${idx}`}
+                      onClick={() => setLightboxIndex(galleryFilter === 'drawings' ? idx : photos.length + idx)}
+                      style={{
+                        breakInside: 'avoid',
+                        marginBottom: 8,
+                        position: 'relative',
+                        borderRadius: 8,
+                        overflow: 'hidden',
+                        background: '#fff',
+                        cursor: 'zoom-in',
+                      }}
+                    >
                       <img
                         src={item.url}
                         alt={`${title} Drawing ${idx + 1}`}
@@ -420,13 +451,18 @@ export default function BuildingDetailPage() {
           background: 'var(--color-surface)',
         }}>
           {gallery.map((url, index) => (
-            <div key={`${url}-${index}`} style={{
-              position: 'relative',
-              minWidth: '100%',
-              height: '100%',
-              scrollSnapAlign: 'start',
-              background: '#050505',
-            }}>
+            <div
+              key={`${url}-${index}`}
+              onClick={() => setLightboxIndex(index)}
+              style={{
+                position: 'relative',
+                minWidth: '100%',
+                height: '100%',
+                scrollSnapAlign: 'start',
+                background: '#050505',
+                cursor: 'zoom-in',
+              }}
+            >
               <div className="skeleton-shimmer" style={{ position: 'absolute', inset: 0 }} />
               <img
                 src={url}

@@ -77,7 +77,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
     """Public UserProfile — matches designer's MOCK_USER shape (Phase 13 PROF2 scope).
 
     Excludes:
-        - is_following: Phase 15 SOC1 — computed by SOC1 view via Follow table
+        - is_following: removed with user-to-user follow (SNS-FOLLOW-REMOVE)
         - boards[]:     BOARD1 territory — view-injected when wired with Project visibility
     """
     user_id = serializers.IntegerField(source='user.id', read_only=True)
@@ -93,14 +93,12 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'mbti',
             'external_links',
             'persona_summary',
-            'follower_count',
-            'following_count',
             'saved_studios_count',
             'handle',
             'role',
             'affiliation',
         ]
-        read_only_fields = ['user_id', 'follower_count', 'following_count', 'persona_summary']
+        read_only_fields = ['user_id', 'persona_summary']
 
     def get_saved_studios_count(self, obj):
         # Local import avoids circular dependency:

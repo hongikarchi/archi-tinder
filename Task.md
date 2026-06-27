@@ -106,6 +106,29 @@ Redesign `/login` as conversational swipe onboarding while preserving the existi
 
 ### HIGH
 
+#### FULL-ONBOARDING-2 — is_temp 라이프사이클 마감 (#243 fast-follows)
+#243(`6f7a4a8`, FULL-ONBOARDING-1 Taste-flow + Project.is_temp) merge 시 verified-review로 게시한 후속(Codex RC + 워크플로우 adversarial-verify + Opus judge). 귀속: **#243 diff는 models/serializers/session_service/migration/frontend만 — projects.py·discovery.py·engine.py 미수정** → 아래 1만 PR-신규, 나머지 pre-existing(develop 동일).
+- **(PR-신규, 데이터-무결성, 먼저) `validate_is_temp`** — `ProjectSelfUpdateSerializer`(serializers.py:308, fields에 is_temp 있음)에 `True` 거부 추가. finalize는 one-way(temp→permanent). 현재 PATCH `{is_temp:true}`가 owner 자기 영구보드를 temp로 되돌림 → 다음 /search 재진입 시 report-없는 temp 자동삭제로 사일런트 유실 가능(owner-gated/UI경로 없음 = self-inflict, but wart).
+  ```python
+  def validate_is_temp(self, value):
+      if value:
+          raise serializers.ValidationError("is_temp can only be set to false (finalize is one-way).")
+      return value
+  ```
+- **(기능 완성, pre-existing 구조) board-list 필터** — `ProjectListCreateView.get()`(projects.py:72) + `UserProjectsListView.get()`(projects.py:275)에 `.filter(is_temp=False)` → temp 보드가 프로필 리스트에 안 뜨게(is_temp 기능의 핵심). projects.py가 #243 밖이라 별도 변경. visibility 기본 private라 타유저 노출은 0.
+- **(놓친 버그) guest-count over-count** — `discovery.py:242/377` `Project.objects.filter(user=profile).count() >= 3`가 temp까지 셈 → guest가 temp 1 + 저장 2면 false 403. `.filter(is_temp=False)` + save-confirm PATCH(promote 시점)에 limit enforce.
+- (비차단) temp 보드가 `compute_user_taste_vector`(engine.py:2087)·discovery feed 행(discovery.py:124)에 섞임 — pre-existing, is_temp로 newly relevant. 편할 때 `.filter(is_temp=False)`.
+- (비차단) orphan temp 누적 — 브라우저 닫기/로그아웃 시 서버 GC/TTL 없음(frontend cleanup은 /search 재진입만). TTL 필드 or 정리 job 별도 추적.
+- 게이트: #243 CI green, migration 0028 SAFE(BooleanField default=False, metadata-only DDL). 모든 fast-follow는 backend(projects.py/serializers.py/discovery.py) — Role 경계는 SNS/board(yywon1) or admin.
+
+#### FRONT-IMAGE-RESIZE-3 — 이미지 LQIP + 풀해상도 passthrough (PR3)
+PR2(#242)가 srcset/decode/classifier 출하 → 남은 Tier A polish. 전부 프론트.
+- **A7 LQIP**: 카드당 ~20px 블러 썸네일(`buildLqipUrl=rightSizeImageUrl(url,20)`, 양 CDN) + CSS `filter:blur`, skeleton-shimmer 위 레이어. ⚠️ object-fit:contain letterbox라 `scale(1.1)` edge-bleed 핵 금지(letterbox 노출). PR2서 의도적 분리(유일 render-lifecycle 침습, polish지 core 아님). 완전 스펙은 PR2 Plan-agent 설계에 turnkey.
+- **풀해상도 passthrough**: `normalizeCard`에 `cover_full_url`(미-리사이즈) + `BuildingDetailPage` 빈-갤러리 폴백서 우선 → FRONT-IMAGE-RESIZE-1 known-limitation(빈-갤러리 #235 다운로드 840px) 해소.
+- (선택) `useImageTelemetry`가 `currentSrc`(렌더된 variant) 읽도록 — 현재 `.src`(840 폴백) → per-variant load_ms 정확도.
+- Tier B(Divisare 포맷 프록시)는 별개 — R2 폐기 이유(Q1, 외부 spec)+핫링크/ToS 정책(Q2)=user 결정 gated. `findings-r2-retirement.md`.
+- Tier B(Divisare 포맷 프록시)는 별개 — R2 폐기 이유(Q1, 외부 spec)+핫링크/ToS 정책(Q2)=user 결정 gated. `findings-r2-retirement.md`.
+
 #### ARCHITECT-UNIFY-1 — firm-side Office→Architect 전면 통합 (deferred, firm-UX 착수 시)
 office-interest **모델 중복은 해소됨**: Phase 0(SavedOffice #188) + C(OfficeFollow, ARCHITECT-UNIFY-C)로 두 미배선 중복 삭제 → follow 모델 1개(ArchitectFollow). 남은 통합 = Office 서브시스템(table/claim/OfficeProjectLink/sync_offices/FirmProfilePage)을 arch_id로 흡수 = firm-side 전면 재설계.
 
@@ -266,6 +289,9 @@ _(Deferred 2026-06-04 batch scope: premise FALSIFIED — cleanup 기준 필드 `
 
 ### LOW
 
+#### FRONT-UX-6 — temp 삭제 실패 무음 + activeProjectId 미정리
+App.jsx `handleTempDelete`가 DELETE 실패 시에도 배너를 닫음(다음 `/search` 재진입 때 배너 재등장하여 self-correct). 성공 후에만 닫거나 에러 토스트. 또 temp 삭제 경로(재진입 cleanup + handleTempDelete)가 `setActiveProjectId(null)`을 안 불러 exit 핸들러와 불일치(파생값 `projects.find()||null`로 무해). FEAT FULL-ONBOARDING-1 follow-up.
+
 #### FRONT-AUTH-1 — LoginPage에 Kakao/Naver 버튼 없음
 Backend Kakao + Naver implementation shipped: `apps/accounts/views.py` KakaoLoginView + NaverLoginView, `apps/accounts/urls.py` `auth/social/kakao/` + `auth/social/naver/`, `apps/accounts/models.py` provider choices. Frontend `LoginPage.jsx` currently has Google button only.
 - [ ] Kakao button on `LoginPage.jsx` (loading state already typed `'kakao'`)
@@ -350,6 +376,50 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 _(Deferred 2026-06-04 batch scope: YAGNI — product-미소비 telemetry 1필드 위해 Celery+worker 도입은 과투자. 2번째 background job 생기면 단일 INFRA-JOBS 티켓으로 묶어 처리.)_
 
 ## Done
+### FULL-ONBOARDING-1 — Taste 탭 설정단계 제거 + 임시저장 flow — RESOLVED 2026-06-23 (`a58a9f6`-pre-squash)
+신규 flow: Taste 탭 → AI 대화(`/search`) 즉시 진입 → 스와이프 → 리포트 생성 → "저장할까요?" 모달(보드명 자동=persona_type, public/private 토글) → 저장확정(보드 생성).
+- [x] `ProjectSetupPage.jsx` 삭제 + `/new` 라우트 삭제 + Taste 탭 진입 라우팅 `/search`로 변경 (TabBar/MainLayout/DiscoveryPage), `wizardData`의 minArea/maxArea 죽은코드 제거
+- [x] `Project.is_temp` BooleanField(default=False) + migration 0028 (depends 0027), `create_session`에서 신규 프로젝트만 `is_temp=True` 생성 (재사용 프로젝트 미변경)
+- [x] 저장확정 = 기존 PATCH `/api/v1/projects/{id}/` 확장 (`ProjectSelfUpdateSerializer`가 `is_temp`+`name`+`visibility` 동시 처리, validate_visibility) — 신규 엔드포인트 없음. `SaveBoardModal` 신규 (보드명 persona_type 자동·수정가능)
+- [x] 재진입 처리: `is_temp && !final_report` 자동삭제 / `is_temp && final_report` 배너("이전에 완성된 리포트가 있어요") → 저장/삭제
+- [x] code-review PASS · security PASS · Opus adversarial-verify (LOW 2건, benign/self-correcting)
+- [ ] app-test FULL — **SKIP (사용자 요청, 라이브 검증 미실행)**; migration 0028 로컬 미적용(파일만, prod는 배포 시 적용)
+- Deferred: App.jsx handleTempDelete DELETE 실패 시 배너 무음 닫힘(다음 /search 재진입 self-correct) + temp 삭제 경로 setActiveProjectId(null) 누락(파생값으로 무해) → LOW follow-up.
+
+### FRONT-IMAGE-RESIZE-2 — 이미지 Tier A: srcset + decode-preload + classifier (PR2) — RESOLVED 2026-06-22 (`feature/claude-image-tier-a-2`-pre-squash, #242)
+PR1(#241) 리사이즈 로컬 A/B 검증(shipped 함수, 실 50카드: 91.5% 바이트, 0 broken) **후** 착수(measure-first 충족). 프론트 only.
+- **A4 srcset + per-DPR q**: `buildCardSrcSet(raw url)` 신규 순수 헬퍼 — Divisare `w_420 1x, w_840 2x`(q_auto, 무 q), imgix `w=420&q=80 1x, w=840&q=40 2x`(Q8). `normalizeCard`에 `image_srcset` 추가(raw에서 — Divisare regex가 w_auto만 매칭, 이미-840엔 no-op이라 raw 필수). `<img srcSet>`(x-descriptor라 `sizes` 생략, 2x=DPR3 perceptual cap). `rightSizeImageUrl`에 optional `quality` 파라미터(imgix만).
+- **A6 `img.decode()` preload(srcset-aware)**: `App.jsx preloadImage(card)`로 시그니처 변경 — `img.srcset` 세팅(DPR2서 `<img>`와 동일 variant 선택 → preload 적중) + `await img.decode()`(paint-ready, reject→resolve로 swipe 무차단). 13 호출부 `preloadImage(X.image_url)`→`preloadImage(X)`.
+- **A3 포맷 = PR1이 이미 충족**: imgix는 PR1이 `auto=format` 보존 → 이미 WebP/AVIF auto-negotiate. Divisare 포맷은 프록시-gated(Tier B). C3 decode A/B 주의로 fm=avif 강제 안 함.
+- **getImageSource imgix 갭**: `architizer-prod.imgix.net`→`'imgix'`(이전 'external' 오분류 수정, telemetry 버킷팅). dormant(소비자 없음, 라이브 telemetry 무변경) — forward-looking.
+- **2 blocking 상호작용 수정**(Plan-agent): A4↔fallback(`advanceFallback`서 `target.srcset=''` 후 src — 1x srcset이 imperative src 무시하는 레이스 차단), A4↔A6(preloader srcset-aware로 DPR2 preload 적중).
+- **CRITICAL 보안 수정**(security): Divisare srcset 공백-주입 — 리터럴 공백이 srcset URL 토큰 종료 → 뒤 attacker URL이 candidate로 fetch(allowlist 우회). `buildCardSrcSet` 상단 whitespace 가드(→null, 안전한 src degrade). imgix는 `new URL().toString()` %20 인코딩이라 무관. 실증 재현+fix 확인.
+- Gates: 27 node --test PASS(+9 A4/quality, +injection 가드; getImageSource는 node import.meta.env 제약 graceful skip), lint+build PASS, code-review PASS(6/6, 2 blocking 검증), security PASS(injection fix 후). **app-test FEATURE-SCOPED PASS 5/5** — srcset 라이브(currentSrc=w_840 DPR2), fallback **라이브 실증**(imgix 카드 4s 타임아웃→srcset 클리어→gallery 승격, 안 빔), decode 무-stutter, imgix `q80/q40` 라이브, 회귀 smoke 0 err.
+- A7 LQIP = PR3 descope(유일 render-lifecycle 침습 + object-fit:contain letterbox 충돌; 기존 skeleton-shimmer가 blank-gap 커버). 풀해상도 passthrough도 PR3.
+
+### FRONT-IMAGE-RESIZE-1 — swipe 커버 right-sizing (PR1) — RESOLVED 2026-06-22 (`b3e5d3f`-pre-squash, #241)
+이미지 레이턴시 리서치(#240) 지배 lever 구현. swipe 카드가 중앙값 4.6배(p90 21.9배) 과대-페치 → 커버 `image_url`을 표시크기(840px=DPR2)로 우-사이징. **프론트 only** — 백엔드/Redis 캐시/API 계약 무변경(user 결정: 같은 URL 변환이라 효과 동일, SPA라 프론트가 유일 소비자). **리사이즈만**(포맷/srcset/decode/LQIP = PR2, 측정 후).
+- 새 순수 모듈 `frontend/src/api/rightSizeImageUrl.js`: Divisare(Cloudinary FETCH) `w_auto`→`w_840,c_limit`(f_auto,q_auto + `//images` 더블슬래시 유지, 측정 90.7% 절감); imgix(`architizer-prod.imgix.net`) `w=840&fit=max`(q/cs/auto 보존, 콤마 리터럴 — `%2C` 아님, CDN 정규 캐시키). 그 외/malformed/relative/empty → 무변경, 멱등.
+- 자체 URL 파싱(`getImageSource`가 imgix 호스트 미인식) + 의존성 없음(`images.js`→`core.js` `import.meta.env`가 `node --test` 크래시 → 독립 모듈 필수). 와이어링: `normalizeCard` 커버 1줄, gallery/gallery_meta/covers_by_type 풀해상도 유지(#235 라이트박스+다운로드).
+- Known-limitation(PR1 수용, 플랜): gallery+gallery_meta 둘 다 빈 건물은 `BuildingDetailPage` 폴백이 840px 커버 → #235 다운로드 비-풀해상도(narrow 엣지, 이미지 유효). 풀해상도 passthrough = ## Next 추적.
+- Gates: 17 node --test(양 CDN+malformed/relative/empty/null/non-CDN/멱등) PASS, lint+build PASS, code-review 2 fix(imgix %2C + 그걸 잡는 테스트), security PASS(host allowlist 선행/path-only replace/regex 선형 — injection·ReDoS·XSS 0). app-test: 4-gate green + Phase 0 실측 CDN 검증(리라이트 URL이 90.7% 측정의 실제 fetch 대상) → develop 머지; 라이브 FULL app-test = develop→main 배포 전 권장.
+- 측정: 기존 `useImageTelemetry`(`load_ms`, 5% success, context `swipe_card`)로 배포 전/후 비교. Divisare(84%) 클린 주신호.
+
+### PERF-IMAGE-RESEARCH-1 — 이미지 레이턴시 리서치 (measure-first) — RESOLVED 2026-06-22 (`0715bd3`, #240)
+프론트/웹 이미지-렌더 레이턴시 리서치(코드 아님). 측정-우선: Phase 0(실 swipe 카드 50장) → 이슈별 1차출처 리서치 → adversarial 검증. 백엔드 알고리즘 out of scope.
+- 결론: 지배 lever=리사이즈(과대페치 중앙값 4.6배, Divisare `w_auto`→`w_840` 측정 90.7%). 포맷=부차+Divisare 프록시-gated(Cloudflare zone JPEG 고정, Vary:Accept 무시). 디코드=픽셀 비례 → 리사이즈가 디코드도 ~4.6배 절감.
+- 검증 Q7(Cloudinary f_auto 840px=WebP까지)·Q8(imgix per-DPR q 80/40/20)·Q9(AVIF 50-60% 과장, arch 사진 현실 ~25-50%).
+- 권고 Tier A(프론트 URL, 무인프라, 선행) / B(프록시, 정책) / C(do-not). Open: R2폐기 이유(외부 spec)·프록시/핫링크 정책(user) + 게이트 prod 텔레메트리(기존 `image_load` RUM이 geo지연·CDN점유 답). docs/research/image-latency/ (research-report 59 cites + phase0 + findings×6).
+
+### FRONT-AUTH-3 — 로그인 테마 통일 + 한영 토글 — RESOLVED 2026-06-12 (`c57de5a`-pre-squash)
+협업자 dain `archibe-login`(`c4954ea`) 리디자인 이식 — 제스처 인트로 팝업 + 카드 상단 한/영 토글 + 로그인 전체 i18n + 디자인 테마 통일. 5단계 플로우/consent 스와이프/반응형 카드/API 계약 무변경.
+- [x] IntroOverlay: 미니카드 스와이프 데모 애니메이션(lpSwipeDemo 3.4s + 화살표 동기 점등), 매 마운트 표시(D1, `INTRO_SHOW_ONCE=false` — localStorage 1회 경로 보존).
+- [x] LangToggle pill(한국어/ENGLISH): 5개 카드 + 인트로 상단. react-tinder-card native touchstart `preventDefault` 우회 = 버튼 `className="pressable"`(터치 필수) + wrapper stopPropagation(마우스 방어선). LanguageContext 재사용(로그인 전 localStorage만, 로그인 후 서버 PATCH).
+- [x] i18n: locales.js `login` 트리 ko/en 53키 + `t(key, params)` `{detail}` 치환(하위호환). 에러 state `{key,params}|{text}` — 토글 시 재번역. 가입 직후 언어 push(D2: guest/register 성공 후 `setLanguage`)로 신규계정 기본 ko 스냅백 차단.
+- [x] 테마 통일: per-step entrance(lp-card-in), 그라디언트 CTA(accent-1→2) + hover lift, glass input(color-mix 72%), GestureHint 텍스트+화살표(양쪽 accent-1, D3) + 드래그 intent 실시간 점등, faux 깊이 카드 2장, 카드 아래 캡션.
+- [x] 드래그 콜백 identity 안정성: 덱 4콜백 전부 useCallback + preventSwipe 모듈상수 삼항 + `setConsentGiven` fly-off 이후로 이동 + latest-ref(`guestSubmitRef`) — 드래그 중 재바인딩 사망 차단(app-test 왕복 wiggle 생존 확인).
+- Gates: code-review PASS(9/9 기준 + 53키 ko/en 교차검증), security PASS(XSS sink 0, consent 게이트 유지, dev login DEV-gated), lint+build PASS, app-test FEATURE-SCOPED PASS 9/9(인트로/토글/드래그 생존/게스트 e2e/회귀 smoke, 0 console err).
+
 ### BACK-AVATAR-2 — 교체/계정삭제 시 옛 아바타 객체 GC — RESOLVED 2026-06-08 (`5e1f934`-pre-squash)
 FRONT-AVATAR-1(`84ba1f1`) orphan 누적 닫음. 업로드마다 새 uuid4 키 저장 + 옛 객체 영구 잔류하던 갭 — 교체 시 + 계정삭제 시 옛 객체를 안전 GC.
 - `storage.delete_avatar(url)`: best-effort GC. 정규식 `^avatars/[0-9a-f]{32}\.webp$`가 **주 인가 게이트**(경로탈출 + 외부 OAuth URL 차단). 프리픽스는 백엔드 *선택*만 — `if base and url.startswith(base+'/')`로 empty-base `startswith('')` 함정 가드. dispatch by URL **shape**(현 `AVATAR_R2_ENABLED` 아님 → env flip 시 잘못된 백엔드 삭제 방지). 절대 raise 안 함.

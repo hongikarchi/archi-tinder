@@ -123,8 +123,6 @@ REST_FRAMEWORK = {
         # Scoped throttle for the anonymous image-load telemetry beacon.
         # Budget: ~1-2 images/card × 30 swipes/min = 60-90 events/min; 120/min is a safe cap.
         'image_load_telemetry': '120/min',
-        # Follow/unfollow write throttle — prevents mass-follow bots.
-        'follow_write': '60/min',
         # React/unreact write throttle — prevents bulk-reaction abuse (SOC2).
         'reaction_write': '60/min',
         # Guest auth throttles — operator-overridable without code changes.
@@ -345,7 +343,7 @@ RECOMMENDATION = {
     # Discovery tab v3.1 hyperparameters (10-card chunk + 3-Tier + Draft Board)
     'discovery_chunk_size': 10,
     'discovery_tier2_min_likes': 10,
-    'discovery_tier3_min_projects': 2,
+    'discovery_tier3_min_projects': 4,
     'discovery_tier3_min_likes': 50,
     'discovery_tier2_local': 2,
     'discovery_tier2_global': 8,
@@ -368,11 +366,37 @@ RECOMMENDATION = {
     # Ops can populate with domain-specific stop-tags if IDF alone is insufficient.
     'question_keyword_blacklist': [],
     'discovery_like_hard_cap': 50,  # Discovery draft hard stop: block likes beyond 50; client redirects to Taste
+    # DISCOVERY-PERF-1: scope tier/exclude/dislike/centroid to most-recent N boards (tunable).
+    # Older boards' liked/disliked/saved buildings may re-appear in Discovery — intended behaviour.
+    'discovery_recent_boards_cap': 10,
+    # DISCOVERY candidate fetch: TABLESAMPLE SYSTEM percentage — block-level random
+    # sample that avoids a full seq scan of the large canonical_v2_buildings table
+    # (VECTOR(384) + JSONB rows). ~2% of ~39k ≈ 780 sampled, ample for the 120-cap FPS.
+    'discovery_tablesample_pct': 2.0,
     # ALGO-QCARD Phase 3: hyper-positive / fast-swipe detection (Trigger A)
     'question_fast_swipe_ms': 1500,          # avg inter-swipe latency below this = "fast" (hyper-positive)
     'question_hyperpositive_window': 10,     # look back this many swipes
     'question_hyperpositive_min_likes': 8,   # >= this many likes in the window triggers
     'recent_latencies_cap': 10,              # rolling latency window size
+    # LLM-SEARCH-RANK-1: A+BM25 soft-score ranking hyperparameters for ParseQueryView.
+    # Replaces ORDER BY RANDOM() + 3-tier relaxation ladder with a single ranked CTE.
+    # All axes are soft (no hard gate except is_publishable=true).
+    'llm_search_topk': 200,               # K: tag-score candidate set before BM25 rerank
+    'llm_search_w_bm25': 8.0,             # w_bm25: BM25 contribution weight in final score
+    'llm_search_priority_boost': 0.25,    # boost factor for filter_priority ordering
+    'llm_search_idf_ceiling': 3.0,        # IDF ceiling clamp (rare tags capped at 3x)
+    'llm_search_base_weights': {          # per-axis base scoring weights (soft, no hard gate)
+        'program': 10.0,          # highest: program type is the strongest signal
+        'typology_primary': 6.0,  # building typology (single TEXT, ILIKE)
+        'location_country': 5.0,  # country-level geography
+        'location_city': 5.0,     # city-level geography
+        'material': 4.0,          # material (unnest array ILIKE)
+        'style': 4.0,             # architectural style (ILIKE)
+        'atmosphere': 3.0,        # mood/atmosphere (new soft axis, ILIKE)
+        'color_tone': 2.0,        # color palette (new soft axis, ILIKE)
+        'year_min': 1.0,          # year range (soft bonus, not exclusion)
+        'year_max': 1.0,
+    },
 }
 
 _check_async_prefetch_safety(

@@ -144,6 +144,7 @@ export default function ArchitectProfilePage() {
   const [followPending, setFollowPending] = useState(false)
   const [saveCard, setSaveCard] = useState(null)
   const [savedIds, setSavedIds] = useState(new Set())
+  const [activeTab, setActiveTab] = useState('built')
 
   useEffect(() => {
     listProjects().then(resp => {
@@ -560,46 +561,106 @@ export default function ArchitectProfilePage() {
           )}
 
           {/* Buildings section */}
-          {Array.isArray(profile.buildings) && profile.buildings.length > 0 && (
-            <>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '0 16px 12px',
-              }}>
-                <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-text)' }}>
-                  Buildings
-                </span>
-                <span style={{
-                  padding: '2px 10px',
-                  borderRadius: 999,
-                  background: 'var(--color-surface-2)',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  color: 'var(--color-text-muted)',
+          {Array.isArray(profile.buildings) && profile.buildings.length > 0 && (() => {
+            const builtBuildings = profile.buildings.filter(b => b.year_kind === 'completed')
+            const unbuiltBuildings = profile.buildings.filter(b => b.year_kind !== 'completed')
+            const displayedBuildings = activeTab === 'built' ? builtBuildings : unbuiltBuildings
+            return (
+              <>
+                {/* Section header */}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '0 16px 12px',
                 }}>
-                  {profile.building_count != null ? profile.building_count.toLocaleString() : profile.buildings.length}
-                </span>
-              </div>
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(3, 1fr)',
-                gap: 8,
-                padding: '0 12px',
-              }}>
-                {profile.buildings.map(building => (
-                  <BuildingCard
-                    key={building.canonical_bld_id}
-                    building={building}
-                    onClick={id => navigate('/buildings/' + id)}
-                    onSave={(b) => setSaveCard(b)}
-                    isSaved={savedIds.has(building.canonical_bld_id)}
-                  />
-                ))}
-              </div>
-            </>
-          )}
+                  <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-text)' }}>
+                    Buildings
+                  </span>
+                  <span style={{
+                    padding: '2px 10px',
+                    borderRadius: 999,
+                    background: 'var(--color-surface-2)',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: 'var(--color-text-muted)',
+                  }}>
+                    {profile.building_count != null ? profile.building_count.toLocaleString() : profile.buildings.length}
+                  </span>
+                </div>
+
+                {/* Built / Unbuilt pill tabs */}
+                <div style={{ display: 'flex', gap: 6, padding: '0 16px 16px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('built')}
+                    style={{
+                      padding: '6px 16px',
+                      borderRadius: 999,
+                      border: activeTab === 'built' ? 'none' : '1px solid var(--color-border-soft)',
+                      background: activeTab === 'built' ? 'var(--color-text)' : 'transparent',
+                      color: activeTab === 'built' ? 'var(--color-bg)' : 'var(--color-text-muted)',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                      minHeight: 32,
+                    }}
+                  >
+                    Built · {builtBuildings.length}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('unbuilt')}
+                    style={{
+                      padding: '6px 16px',
+                      borderRadius: 999,
+                      border: activeTab === 'unbuilt' ? 'none' : '1px solid var(--color-border-soft)',
+                      background: activeTab === 'unbuilt' ? 'var(--color-text)' : 'transparent',
+                      color: activeTab === 'unbuilt' ? 'var(--color-bg)' : 'var(--color-text-muted)',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                      minHeight: 32,
+                    }}
+                  >
+                    Unbuilt · {unbuiltBuildings.length}
+                  </button>
+                </div>
+
+                {/* Grid or per-tab empty state */}
+                {displayedBuildings.length === 0 ? (
+                  <p style={{
+                    color: 'var(--color-text-dim)',
+                    fontSize: 14,
+                    textAlign: 'center',
+                    padding: '40px 0',
+                    margin: 0,
+                  }}>
+                    No projects yet
+                  </p>
+                ) : (
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(3, 1fr)',
+                    gap: 8,
+                    padding: '0 12px',
+                  }}>
+                    {displayedBuildings.map(building => (
+                      <BuildingCard
+                        key={building.canonical_bld_id}
+                        building={building}
+                        onClick={id => navigate('/buildings/' + id, { state: { fromRecommended: true } })}
+                        onSave={(b) => setSaveCard(b)}
+                        isSaved={savedIds.has(building.canonical_bld_id)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </>
+            )
+          })()}
 
           {(!Array.isArray(profile.buildings) || profile.buildings.length === 0) && (
             <p style={{

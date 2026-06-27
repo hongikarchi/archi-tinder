@@ -48,24 +48,27 @@
 
   Full details (workflow scripts, common pitfalls, file ownership table): see `CONTRIBUTING.md` at the repo root.
 
-  ## Workflow — one session + sub-agents + skills
+  ## Workflow — ultracode-main (Opus 4.8): one session + feature workflow + agents + skills
 
-  ArchiTinder Make Web's Claude side runs as **one Claude Code orchestrator session** (concurrent with Codex in its own clone — HARD RULE 7). It owns architecture, schema, auth, product + release decisions, and review — it does not write feature code itself; it dispatches sub-agents and runs skills.
+  ArchiTinder Make Web's Claude side runs as **one Claude Code orchestrator session on Opus 4.8** (concurrent with Codex in its own clone — HARD RULE 7). It owns architecture, schema, auth, product + release decisions, and review — it does not write feature code itself. The primary workflow is **ultracode = the Workflow tool**: the build+review CORE runs as a deterministic multi-agent Workflow script, and the session gates around it. Trivial mechanical edits stay solo (no workflow).
 
+  - **Workflow** (`.claude/workflows/`) — deterministic multi-agent fan-out the session launches via the Workflow tool:
+    - `feature` (`feature.js`) — build+review CORE: decompose → back-maker/front-maker (Sonnet) → code-review + security-manager (Sonnet, parallel) → **Opus adversarial-verify** of findings → 2-cycle fix loop. Returns `{ commitReady, ... }` and **performs NO git operations** — the publish gate lives in the session, outside the autonomous workflow (HARD RULE 1).
+  - **Model tier map** (cost control = tiering inside the workflow, not avoiding fan-out): **Opus 4.8** = orchestrator + adversarial-verify/judge; **Sonnet 4.6** = back/front-maker, code-review, security-manager, app-test; **Haiku 4.5** = exploration/search. Every workflow `agent()` call MUST pin `model` explicitly — `agentType` does not carry the frontmatter tier; the default is inherit-Opus, which silently runs every worker on Opus.
   - **Skills** (`.claude/skills/`) — procedures the main session runs itself:
-    - `orchestrate` — feature-implementation playbook (back-maker/front-maker → review → security → git-commit → reporter-inline → git-publish).
-    - `reporter-inline` — session-end audit (Task.md + state.js + algorithm.md). Runs inline before squash merge so audit ships in the SAME PR as the work. **Replaces the `reporter` agent for routine housekeeping** (2026-05-26).
-    - `git-commit` — single-commit creator with branch + secret guards. **Replaces the `git-manager` agent for routine commits** (2026-05-26).
-    - `git-publish` — feature → develop push + PR open + admin squash + cleanup (Mode 2). **Replaces the `git-publisher` agent's Mode 2** (2026-05-26); the agent stays for Mode 3 deploy / external PR triage / complex rebase.
-  - **6 sub-agents** (`.claude/agents/`) — still dispatched for isolated work that returns a result:
+    - `orchestrate` — feature playbook: decompose → launch the `feature` workflow → git-commit → app-test → reporter-inline → publish gate.
+    - `reporter-inline` — session-end audit (Task.md + state.js + algorithm.md). Runs inline before squash so audit ships in the SAME PR. **Replaces the `reporter` agent** (2026-05-26).
+    - `git-commit` — single-commit creator with branch + secret guards. **Replaces the `git-manager` agent** (2026-05-26).
+    - `git-publish` — feature → develop push + PR open + admin squash + cleanup (Mode 2). **Replaces the `git-publisher` agent's Mode 2** (2026-05-26).
+  - **6 sub-agents** (`.claude/agents/`) — the workflow's `agentType` building blocks AND directly dispatchable by the session:
     - `back-maker` · `front-maker` — implementation (isolated context, sonnet).
-    - `code-review` · `security-manager` — inner-loop review (parallel pre-commit gate).
-    - `app-test` — pre-push browser + drift gate.
-    - `git-publisher` — push/PR/merge/deploy (Mode 2 default goes through `git-publish` skill; agent only fires for Mode 3 + edge cases).
-  - **Removed agents** (deleted 2026-05-31): `git-manager` · `reporter` — fully replaced by the `git-commit` / `reporter-inline` skills (the 2026-05-26 fallback window closed after stable skill-only usage). Recoverable from git history.
-  - **agent vs skill**: isolated work that returns a result → agent. A procedure the main session runs itself (including ones that dispatch agents) → skill. There are no slash commands.
+    - `code-review` · `security-manager` — review (run inside the `feature` workflow).
+    - `app-test` — pre-push browser + drift gate (dispatched by the session, post-commit, OUTSIDE the workflow).
+    - `git-publisher` — push/PR/merge/deploy (Mode 2 via `git-publish` skill; agent only for Mode 3 + edge cases).
+  - **Removed agents** (deleted 2026-05-31): `git-manager` · `reporter` — replaced by the `git-commit` / `reporter-inline` skills. Recoverable from git history.
+  - **agent vs skill vs workflow**: isolated work returning a result → agent. A procedure the main session runs itself → skill. A deterministic multi-agent fan-out (loops, parallel, verify) → workflow. There are no slash commands.
 
-  Full pipeline, session model, planning protocol, token-saving rules: **`.claude/WORKFLOW.md`**.
+  Full pipeline, session model, model tier map, planning protocol, token-saving rules: **`.claude/WORKFLOW.md`**.
 
   ## Git Operations — HARD RULE (2026-05-26)
 
@@ -83,6 +86,7 @@
     - `gh pr create --base main` outside Mode 3 deploy. Default base is `develop`.
     - `--force` / `--force-with-lease` on a shared branch (single carve-out = post-deploy develop force-reset, agent Mode 3 only).
     - `--no-verify`, `--amend` on a pushed commit, `git rebase -i`, `git reset --hard` on shared branches.
+  - **Deterministic enforcement** — `.claude/hooks/git-guard.py` (`PreToolUse(Bash)`, wired in project `.claude/settings.json`) blocks the Forbidden push/PR commands at the tool layer (direct/force push to develop/main, `git push --no-verify`, `gh pr create --base main` except the `--head develop` deploy PR). Fail-open; GitHub branch protection is the server-side backstop. Edit + re-test the guard standalone (stdin JSON, exit 2 = block).
   - **Publish gate** (mirror `[[feedback_publish_gate]]`): the `git-publish` skill Step 0 enforces. After commit, default action is STOP. Push / PR / merge requires explicit publish keyword (Korean: `올려`, `푸시`, `배포`, `merge`, `PR 만들어`, `배포해`, `deploy`, `ship`; English: `push`, `open PR`, `merge`, `deploy`, `ship`) OR an active `.claude/plans/<slug>.md` authorizing the action.
 
   ## Rules

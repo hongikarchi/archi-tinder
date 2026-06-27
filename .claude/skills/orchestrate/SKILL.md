@@ -1,278 +1,155 @@
 ---
 name: orchestrate
-description: Use this skill to implement any feature or fix end-to-end. It reads the project context, breaks the task into backend/frontend specs, dispatches back-maker and front-maker sub-agents, runs code-review and security-manager in parallel, manages the fix loop (max 2 cycles), then runs the git-commit skill (commit), dispatches app-test (pre-push browser + drift gate), runs the reporter-inline skill (audit), and runs the git-publish skill (push/PR/merge). The git-publisher agent is reserved for Mode 3 deploy, external PR triage, and complex rebase recovery.
+description: Use this skill to implement any feature or fix end-to-end. It reads project context, decomposes the task into backend/frontend specs, launches the `feature` Workflow (build -> review -> security -> Opus adversarial-verify -> 2-cycle fix loop) which STOPS at commit-ready, then the main session runs the git-commit skill, dispatches app-test (pre-push browser + drift gate), runs the reporter-inline skill, and stops at the publish gate (git-publish only on explicit trigger). The git-publisher agent is reserved for Mode 3 deploy, external PR triage, and complex rebase recovery.
 ---
 
-# Orchestrate — feature-implementation playbook
+# Orchestrate — feature-implementation playbook (Workflow-tool era)
 
-This skill runs in the **main session's context**, so it can dispatch sub-agents.
-(An agent runs in an isolated sub-context and cannot dispatch other agents — which
-is why the feature-pipeline supervisor is a skill, not an agent.) When this skill
-is invoked, the main session itself executes the playbook below, dispatching the
-work to sub-agents at each step.
+This skill runs in the **main session's context**. As of the Opus 4.8 + ultracode
+refactor, the build+review CORE is a **Workflow script** (`.claude/workflows/feature.js`),
+not an inline sequence of `Agent` dispatches. The skill's job is now:
 
-## Dispatching sub-agents (tool reference)
+1. **Decompose** the task into a backend/frontend spec (the session owns this).
+2. **Launch** the `feature` workflow — it builds (back-maker/front-maker on Sonnet),
+   reviews (code-review + security-manager on Sonnet), adversarially verifies findings
+   (Opus), runs a 2-cycle fix loop, and **returns a structured result. It performs NO
+   git operations.**
+3. **Own the gate** — the main session runs `git-commit` -> `app-test` -> `reporter-inline`
+   around the workflow, and **STOPS at the publish gate**. Push/PR/merge happens only on
+   an explicit trigger, via the `git-publish` skill.
 
-Every "Dispatch `<agent>`" instruction in this file means: **call the `Agent` tool
-with `subagent_type: "<agent>"`**.
+> **Why the split:** a Workflow runs autonomously to completion in the background. The
+> team's safety model is the opposite — STOP after commit, explicit human keyword before
+> any push (publish gate, incident-driven: PR #105, Codex HEAD-move). So the autonomous
+> workflow stays strictly inside Build+Review; the human gate stays in the session,
+> outside the workflow. Never add a `git push`/`gh pr`/`merge` to `feature.js`.
 
-Naming pitfalls — do not fall back to doing work yourself if you cannot locate the
-spawner; these are NOT the subagent spawner:
-- `Task` — obsolete name from older Claude Code; no longer exists. Use `Agent`.
-- `TaskCreate` / `TaskUpdate` / `TaskList` / `TaskGet` — todo-list management tools
-  (different purpose, they do not spawn subagents).
+## Launching the workflow (tool reference)
 
-Minimal valid dispatch shape:
+Call the **`Workflow` tool** with `name: 'feature'` (resolves `.claude/workflows/feature.js`
+by its `meta.name`) and an `args` object:
+
 ```
-Agent({
-  description: "<one-line summary>",
-  subagent_type: "back-maker",  // or front-maker, code-review, security-manager, app-test, git-publisher (Mode 3 only)
-  prompt: "<full self-contained brief for the subagent>"
+Workflow({
+  name: 'feature',
+  args: {
+    taskId: 'BACK-LLM-1',
+    backend:  { spec: '<precise backend spec>', files: ['backend/apps/...'], contract: null } /* or null */,
+    frontend: { spec: '<precise frontend spec>', files: ['frontend/src/...'] }              /* or null */,
+    acceptance: ['<criterion 1>', '<criterion 2>'],
+    cyclesUsed: 0,        // raise on an app-test FAIL re-launch (see Step 5)
+    fixOrders: null       // confirmed findings to fix on a re-launch
+  }
 })
 ```
 
-The `git-manager` and `reporter` agents were **removed 2026-05-31** — use the
-`git-commit` and `reporter-inline` skills (Step 6 and Step 9 below). The
-`git-publisher` agent stays for Mode 3 deploy / external PR triage / complex
-rebase only; the `git-publish` skill is the default for feature → develop
-publishes (Step 9).
+Pass `backend: null` for a frontend-only task (and vice-versa). The workflow pins every
+worker's model explicitly (Sonnet workers, Opus verify) — you do not manage models here.
+(The harness delivers `args` as a JSON string across the background-task boundary;
+`feature.js` parses it — do not pre-stringify it yourself, pass a real object.)
 
-For parallel dispatches (Step 4: code-review + security-manager), emit both `Agent`
-calls in a single assistant message so they run concurrently.
+It returns: `{ commitReady, cyclesUsed, built, apiContract, confirmedFindings,
+reviewVerdict, securityVerdict, rationale, blocked? }`.
 
-If `Agent` returns an error, report the error to the user and stop — do NOT bypass
-delegation by writing source code yourself. The no-direct-code rule in §Rules below
-is absolute.
+**Self-heal — stale snapshot:** if the result is `blocked: "no backend or frontend spec
+supplied"` *despite* a real `backend`/`frontend` spec, the `name:'feature'` form ran a
+within-session snapshot of an older `feature.js` (the harness snapshots by name and does
+not re-read mid-session edits). Re-launch via the absolute path instead:
+`Workflow({ scriptPath: '<repo-root>/.claude/workflows/feature.js', args: {...} })`
+(`<repo-root>` = `git rev-parse --show-toplevel`). Verified equivalent 2026-06-13.
+
+**Do NOT write source code yourself, and do NOT re-implement the build/review loop with
+raw `Agent` calls — launch the workflow.** If `Workflow` is unavailable, STOP and report
+the blockage; do not work around it by editing `backend/`/`frontend/` directly. (Meta/infra
++ docs are the carve-out — see Rules.)
 
 ## Before every task
-1. Read `CLAUDE.md` — conventions, rules, DB schema, coding standards, and `## Product Identity` + `## Product Constitution` (the vision + acceptance + decision principles anchor)
-2. Read `Task.md` — current problem board (`## Now` / `## Next` / `## Done`); Phase 16-18 dimensions live in `## Next` directly (the prior `docs/specs/*.md` folder was absorbed 2026-05-24)
-3. Read code directly — the running code is the source of truth for architecture and API surface (per CLAUDE.md `## What This Repo Does`). No standalone Report.md.
-4. If algorithm task: read `docs/algorithm.md` for theory + production hyperparameters
-5. If task references a Phase or open question: read the matching `#### <SLUG>` entry under one of the `### HIGH` / `### MEDIUM` / `### LOW` buckets in `Task.md` `## Next`
+1. Read `CLAUDE.md` — conventions, rules, DB schema, `## Product Identity` + `## Product Constitution`.
+2. Read `Task.md` — `## Now` / `## Next` / `## Done` board.
+3. Read code directly — the running code is the source of truth for architecture + API surface.
+4. If algorithm task: read `docs/algorithm.md` for theory + production hyperparameters (but see "Algorithm work — externally owned" below).
+5. If the task references a Phase / open question: read the matching `#### <SLUG>` entry under `### HIGH`/`### MEDIUM`/`### LOW` in `Task.md` `## Next`.
 
-## When user requests work
-1. **Session start (Now/Next discipline)** — open `Task.md`. Read `## Now` first.
-   - If `## Now` is non-empty and matches the user's request: continue that entry.
-   - If empty: look in `## Next` for a matching `#### <SLUG>` entry under one of the `### HIGH` / `### MEDIUM` / `### LOW` buckets. Promote it into `## Now` as `### <SLUG> — <one-line title>` (cut from the bucket in Next, paste into Now, raise heading level one). One initiative slice at a time. Prefer `### HIGH` first when picking.
-   - If the user's request is brand-new: write a fresh `### <ID> — <Korean title>` directly into `## Now` using the ID convention from `Task.md ## Workflow Rules` (e.g. `BACK-LLM-1`, `FRONT-UX-1`, `INFRA-DB-1`).
-2. Read `CLAUDE.md` `## Product Identity` + `## Product Constitution` + scan relevant code.
-3. Execute (back-maker / front-maker / etc.).
-4. **Mid-session deferral** — if the user says "미루자" / "later" / "defer", move the Now entry **back to `## Next`** with a one-line rationale note (demote one heading level to `#### <SLUG>` and place under the bucket that matches its new status — usually `### MEDIUM` for normal deferrals, `### LOW` for explicit skip). Do not silently leave it in Now.
-5. **Session end (success)** — the `reporter-inline` skill (run inline by the main session, NOT the deprecated `reporter` agent) moves the Now entry to `## Done` under `### <title> — RESOLVED YYYY-MM-DD (PR #N)` with PR ref + SHA. Any `Deferred: ...` text in the Done note auto-surfaces as a new `#### <SLUG>` under `### MEDIUM` in `## Next` (reporter-inline Step 2b; HIGH / LOW only when the Done note explicitly tags it).
-6. **Failure after 2 cycles** — leave the entry in `## Now`, add failure notes inline, report to user. Do not move to Done.
+## Now / Next discipline
+1. **Session start** — open `Task.md`, read `## Now` first.
+   - `## Now` non-empty + matches request: continue that entry.
+   - Empty: promote a matching `#### <SLUG>` from `## Next` into `## Now` (cut from bucket, paste into Now, raise heading one level). One slice at a time; prefer `### HIGH`.
+   - Brand-new request: write a fresh `### <ID> — <Korean title>` into `## Now` (ID convention from `Task.md ## Workflow Rules`, e.g. `BACK-LLM-1`).
+2. **Mid-session deferral** ("미루자" / "later" / "defer") — move the Now entry back to `## Next` (demote to `#### <SLUG>` under the matching bucket) with a one-line rationale. Never silently leave it in Now.
+3. **Session end (success)** — the `reporter-inline` skill moves the Now entry to `## Done` (Step 6).
+4. **Failure after 2 cycles** — leave the entry in `## Now`, add failure notes inline, report to user. Do not move to Done.
 
-## When user says "오늘 개발 진행해" or "continue development"
-Follow the `## Now` / `## Next` discipline at the top of `Task.md`:
-1. Read `## Now` first. If non-empty, continue that entry.
-2. If empty, pull the highest-priority item from `## Next ### HIGH` and promote it to `## Now` (cut from Next, paste into Now, raise heading level one — see `Task.md ## Workflow Rules`).
-3. Execute that one initiative slice through the full pipeline (plan → makers → review → security → commit → app-test → publish → reporter at session end).
-4. After the PR merges, ask the user before pulling the next HIGH item — do not auto-chain across initiatives.
+## "오늘 개발 진행해" / "continue development"
+Read `## Now` first; if empty, promote the highest-priority `## Next ### HIGH` item. Execute one slice through the full pipeline below. After the PR merges, ask before pulling the next HIGH item — do not auto-chain.
 
 ## Workflow
 
-### Step 1 — Plan
-Break the task into discrete changes. List:
-- What back-maker must change (files, endpoints, logic)
-- What front-maker must change (files, components, API calls)
-- Acceptance criteria for code-review
+### Step 1 — Decompose (session)
+Break the task into a precise spec for the workflow `args`:
+- **backend**: files, what to add/change/remove, expected API contract (endpoint, method, request/response).
+- **frontend**: files, components, which API to call.
+- **acceptance**: the criteria code-review will check.
+Set `backend`/`frontend` to `null` for one-sided tasks.
 
-### Step 2 — Back Maker
-Dispatch `back-maker` with a precise spec:
-- Which files to touch
-- What to add / change / remove
-- Expected API contract (endpoint, method, request, response shape)
+### Step 2 — Launch the `feature` workflow
+Call `Workflow({ name: 'feature', args: {...} })` with the decomposition. Watch progress via `/workflows` if needed. The workflow handles build -> review -> security -> verify -> fix loop internally (max 2 fix cycles).
 
-Wait for back-maker to finish.
+### Step 3 — Read the structured result
+- `result.blocked` set → a maker hit a hard blocker. Surface it to the user; do not commit. Treat as a failure (leave Task.md Now entry, report).
+- `result.commitReady === false` (fix budget exhausted) → STOP. Report `confirmedFindings` to the user, ask for guidance. Do not commit.
+- `result.commitReady === true` → architectural-fit check yourself: does it match `CLAUDE.md` `## Product Identity` + `## Product Constitution`? If NO, re-launch the workflow with `fixOrders` describing the misfit and `cyclesUsed: result.cyclesUsed` (counts against the shared budget). If YES → Step 4.
 
-### Step 2.5 — Migration sanity check (defensive backstop)
-
-After back-maker returns, inspect its changed-files list (or `git status --short`). If
-ANY file under `backend/apps/*/migrations/` was created or modified, verify the
-migration was actually applied to the local dev DB:
-
+### Step 3.5 — Migration backstop (defensive)
+If the workflow's `built` list shows any `backend/apps/*/migrations/` file, confirm it was applied:
 ```bash
 cd backend && python3 manage.py showmigrations 2>&1 | grep -E '\[ \]'
 ```
+No output → proceed. Any `[ ]` → `cd backend && python3 manage.py migrate` (back-maker should have, but this is belt-and-suspenders; postmortem `190c830`).
 
-(No app filter — Step 2.5's trigger condition fires for migrations in ANY app under
-`backend/apps/*/migrations/`, so the check must also be app-agnostic.)
+### Step 4 — Commit (local only)
+Run the **`git-commit` skill** in the main session. Stages with secret exclusions, builds a caveman conventional-commit message, commits on the feature branch. Never pushes.
 
-- **No output** (all migrations applied): proceed to Step 3.
-- **Any `[ ]` entry** (unapplied migration in working tree): back-maker should have run
-  `manage.py migrate` per its own Rules (see back-maker.md "After writing > 2. Apply
-  migrations"). If they didn't, run it now yourself:
-  ```bash
-  cd backend && python3 manage.py migrate
-  ```
-  If `migrate` fails, treat it as a back-maker failure: enter the Fix Loop (Step 5b)
-  with the migrate stderr as the spec — the migration file itself needs fixing, not
-  the surrounding code.
+### Step 5 — Pre-push browser test + drift gate
+Dispatch the **`app-test` agent** (it runs *outside* the workflow — it is post-commit, pre-push). It runs the live-browser user-journey + the HEAD/`origin/develop` drift check; returns one verdict.
 
-This is belt-and-suspenders to back-maker's own rule. Postmortem reference: commit
-`190c830` shipped a migration without applying it, and the pre-push browser gate
-failed with a 500 ("column saved_ids does not exist"). Applying the migration is
-non-negotiable before any browser test runs.
+- **PASS** → Step 6.
+- **FAIL (browser)** — re-launch the `feature` workflow with `fixOrders` = the app-test failure spec and `cyclesUsed` raised by 1 (the app-test FAIL consumes one of the shared 2 cycles, since the workflow already returned and cannot re-enter its own loop). After it returns commit-ready, re-run `git-commit` (new commit, same branch) → re-dispatch `app-test`. If the shared budget is exhausted, STOP and report.
+- **FAIL (drift — `origin/develop` moved)** — no code fix. Inform the user, `git pull --rebase origin develop` (resolve conflicts via a fix re-launch if needed), re-dispatch `app-test`. Drift does NOT count toward the 2-cycle budget.
+- **Dev server not running** — app-test reports it; note it and proceed to Step 6 (drift check still applied).
 
-### Step 3 — Front Maker
-Dispatch `front-maker` with a precise spec:
-- Which files to touch
-- What to add / change / remove
-- The API contract back-maker implemented (from Step 2 result)
+### Step 6 — Audit (reporter-inline skill)
+Run the **`reporter-inline` skill** in the main session BEFORE publishing. It updates `Task.md` `## Done`, regenerates `project/state.js`, and conditionally syncs `docs/algorithm.md`, then commits the audit on the SAME feature branch (via `git-commit`) so it squashes together with the work — no separate reporter PR.
 
-Wait for front-maker to finish.
+### Step 7 — Publish gate (BLOCKING by default)
+**Default: STOP after the audit commit. Do NOT run `git-publish`, do NOT dispatch `git-publisher`.**
 
-### Step 4 — Review + Security (run both, wait for both)
-Dispatch `code-review` with: changed files list + original spec + acceptance criteria.
-Dispatch `security-manager` with: changed files list.
-Emit both `Agent` calls in a single assistant message so they run in parallel.
-Wait for both to complete.
+The gate opens only when one is explicitly true:
+- **(a) Explicit trigger this turn** — user typed `"PR 올려"` / `"push"` / `"publish"` / `"merge"` / `"PR 열어"` / `"deploy"` / `"배포"` / `"release"`. Cite the literal phrase.
+- **(b) Active plan with `## PR Plan`** — `.claude/plans/<name>.md` listing N slices authorizes those N PRs.
+- **(c) In-flight fix-loop continuation** — a tiny follow-up commit from a fix loop continues the original (a)/(b) authorization.
 
-### Step 5 — Decision
-**If both PASS:**
-→ Check architectural fit yourself: does this match `CLAUDE.md` `## Product Identity`
-  (Core Promise + Two Pillars) and `## Product Constitution` (out-of-scope +
-  decision principles)?
-→ If YES: go to Step 6 (commit)
-→ If NO: go to the Fix Loop (Step 5b)
+If none true: STOP. Report `commit <SHA> ready on <branch>. Say "PR 올려" when ready to publish.` and wait.
 
-**If code-review or security-manager FAIL:**
-→ Go to the Fix Loop (Step 5b)
+Once open: run the **`git-publish` skill** (base=`develop` only). Escalate to the `git-publisher` agent only for the CLAUDE.md `## Git Operations` edge cases (Mode 3 develop→main deploy, external PR triage, complex rebase, push rejection unclear cause, mid-merge failure).
 
-### Step 5b — Fix Loop (max 2 cycles total across all iterations)
-1. Send all issues (code-review + security-manager + your own concerns) to `code-review`
-2. code-review translates them into specific fix orders for back-maker and/or front-maker
-3. Dispatch the relevant maker(s) with those fix orders
-4. Re-run Step 4
-5. If still failing after cycle 2: STOP. Report to user with the exact issues. Ask for guidance.
+**Hard rule — base=main is a separate gate.** Base=main needs `"deploy"`/`"release"`/`"배포"` specifically; plain `"PR 올려"` authorizes only base=develop. base=main is always Mode 3 via the `git-publisher` agent. (Codified post-PR #105.)
 
-The fix-cycle count is **shared across all loops** — Step 4 failures, Step 7
-app-test failures, and architectural-fit rejections all draw from the same budget
-of 2. Track it explicitly.
-
-### Step 6 — Commit (local only)
-Run the `git-commit` skill directly in the main session. **(The `git-manager`
-agent was removed 2026-05-31 — use this skill.)** The skill stages with
-secret exclusions, builds a caveman conventional-commit message, and commits on
-the feature branch. It never pushes — pushing happens in Step 9 via the
-`git-publish` skill.
-
-### Step 7 — Pre-push browser test + drift gate
-Dispatch `app-test`. It does two things:
-1. Runs the live-browser user-journey test (dev-login → page load → AI search →
-   swipe lifecycle → results → error recovery) against the local dev server.
-2. Checks for drift between local HEAD and `origin/develop`.
-
-It returns a single PASS/FAIL verdict.
-
-- **app-test PASS:** → Step 8
-- **app-test FAIL (browser test failed):** treat as a code-review FAIL — go to the
-  Fix Loop (Step 5b). app-test failures count toward the shared 2-cycle limit. The
-  fix cycle re-runs back-maker / front-maker → code-review + security-manager →
-  `git-commit` skill (a new commit on the same feature branch) → app-test.
-- **app-test FAIL (drift detected — `origin/develop` moved):** no code fix is
-  needed. Inform the user, run `git pull --rebase origin develop` (resolving any
-  conflicts via the Fix Loop if they arise), then re-dispatch `app-test`. Drift does
-  NOT count toward the 2-cycle limit (no findings to fix).
-- **Local dev server not running:** app-test reports this; note it in your report
-  and proceed to Step 8 (the browser test could not run, but the drift check still
-  applies).
-
-### Step 8 — Publish gate (BLOCKING by default)
-
-**Default behavior: STOP after commit (Step 6). Do NOT run the `git-publish` skill, do NOT dispatch the `git-publisher` agent.**
-
-Check the publish gate before publishing. The gate opens only when one of the following is explicitly true:
-
-- **(a) User explicit trigger in current turn** — the user typed one of: `"PR 올려"`, `"push"`, `"publish"`, `"merge"`, `"PR 열어"`, `"deploy"`, `"배포"`, `"release"`. Cite the user's literal phrase when invoking the gate.
-- **(b) Active plan with `## PR Plan` section** — if a plan file `.claude/plans/<name>.md` is active for this work and contains an explicit `## PR Plan` section listing N slices, the plan acts as authorization for those N PRs. Each slice's commit may proceed to publish automatically. After the last planned slice, the gate closes (returns to default).
-- **(c) In-flight fix-loop** — if `app-test` or `code-review` already gated this work in the current dispatch and a tiny follow-up commit is the result of the fix-loop, that continues the original (a) or (b) authorization. No fresh trigger needed.
-
-If neither (a), (b), nor (c) is true:
-1. STOP. Do NOT run `git-publish` skill, do NOT dispatch `git-publisher` agent.
-2. Report to user: `commit <SHA> ready on <branch>. Say "PR 올려" when ready to publish, or accumulate more commits first.`
-3. Wait for explicit signal.
-
-Once the gate opens, proceed to Step 9 (audit-then-publish). The default publish path is the `git-publish` skill. Escalate to the `git-publisher` agent only for the edge cases listed in CLAUDE.md `## Git Operations — HARD RULE`: Mode 3 develop→main deploy, external collaborator PR triage, complex rebase conflicts, push rejection with unclear cause, mid-merge failure.
-
-**Hard rule — base=main is a separate gate.** Base=main PRs require the trigger keyword to be `"deploy"` / `"release"` / `"배포"` specifically. Plain `"PR 올려"` authorizes only base=develop. Codified post-PR #105 main-merge incident (2026-05-25). The `git-publish` skill targets base=develop only; base=main is always Mode 3 via the `git-publisher` agent.
-
-### Step 9 — Audit-then-publish (reporter-inline + git-publish)
-
-Run the `reporter-inline` skill directly in the main session BEFORE the publish
-step. **(The `reporter` agent was removed 2026-05-31 — use this skill.)** The
-skill updates `Task.md` (`## Done`; the PR# may be a placeholder if the
-PR is not yet open — backfilled on the next pass), `project/state.js`, and
-conditionally `docs/algorithm.md`, then calls the `git-commit` skill to commit
-the audit on the SAME feature branch as the work commit. The audit + work
-squash together into a single commit on `develop`. The legacy 2-PR pattern
-(feature PR + separate reporter PR) is dropped.
-
-`reporter-inline` outputs:
-1. Move completed tasks from `Task.md` `## Now` / `## Next` into
-   `## Done` under a dated `### <title> — RESOLVED YYYY-MM-DD (PR #N)` header
-   (PR # may be a placeholder if PR not yet opened — backfill on next pass).
-2. Regenerate `project/state.js` (meta + done[] + now[] + next[] + prs[] +
-   agents[]) so `project/dashboard.html` reflects current state. `meta.head`
-   captures pre-squash `origin/develop` SHA — 1-PR stale window is intentional.
-3. Conditionally sync `docs/algorithm.md` (Production Value column + section
-   annotations + Last Synced line) when the commit touched algorithm-relevant
-   code.
-
-After `reporter-inline` + audit commit, run the `git-publish` skill (Step 0
-publish gate first, then push + PR open base=`develop` + admin squash + delete
-branch). **Do NOT dispatch the `git-publisher` agent for Mode 2 / feature →
-develop merges — that agent is reserved for Mode 3 deploy, external PR triage,
-or complex rebase conflicts.**
-
-### Step 10 — Stop and report to user
-After `reporter-inline` + `git-publish` finish, STOP. Summarize for the user
-what was implemented, the commit/PR, the app-test verdict, and any open
-follow-ups.
+### Step 8 — Stop and report
+Summarize: what was implemented, the commit/PR, the app-test verdict, the workflow's `confirmedFindings` (if any shipped as medium/low), open follow-ups. STOP.
 
 ## Algorithm work — externally owned
+Per `CLAUDE.md` `## Rules`, algorithm-side work (`engine.py`, `services/embeddings.py`, `services/rerank.py`, `services/_caches.py`, Topic 01-12 in `docs/algorithm.md`, IMP-1/7/8, A2 hyperparameter optimization) is owned by a separate collaborator — this skill does NOT decompose algorithm tuning into the workflow. Surface the ownership boundary and decline.
 
-Per `CLAUDE.md` `## Rules` (`docs/algorithm.md` narrow write permission, codified
-post-2026-05-18), algorithm-side work (`engine.py`, `services/embeddings.py`,
-`services/rerank.py`, `services/_caches.py`, Topic 01-12 in `docs/algorithm.md`,
-IMP-1/7/8, A2 hyperparameter optimization) is owned by a separate collaborator —
-this skill does NOT dispatch algorithm tuning work. If the user asks for
-algorithm tuning, surface the ownership boundary and decline.
-
-LLM-chat-module work (`services/parse_query.py`, `services/generation.py`,
-`services/_gemini.py`, chat-phase Gemini latency IMP-4/5/6, Phase 17 reverse-Q +
-persona) remains in scope — dispatch as a normal feature through back-maker.
+LLM-chat-module work (`services/parse_query.py`, `services/generation.py`, `services/_gemini.py`, chat-phase Gemini latency IMP-4/5/6, Phase 17 reverse-Q + persona) stays in scope — decompose as a normal feature.
 
 ## Rules
-- Never write source code yourself. Always delegate to back-maker or front-maker via
-  the `Agent` tool. If `Agent` appears unavailable, STOP and report the blockage to
-  the user — do not work around it by editing files directly.
-- Never commit ad-hoc. Default: run the `git-commit` skill directly in the main
-  session. Escalate to the `git-publisher` agent only for diagnosis failure /
-  multi-commit reorganization. (The `git-manager` agent was removed 2026-05-31.)
-- Never push ad-hoc. Default: run the `git-publish` skill directly for
-  feature → develop (base=develop only). Escalate to the `git-publisher` agent only
-  for Mode 3 develop→main deploy, external PR triage, complex rebase, push
-  rejection unclear cause, mid-merge failure. With `main` + `develop` branch
-  protection, even admin pushes go via PR — see `CONTRIBUTING.md`.
-- If a task is ambiguous, ask the user ONE clarifying question before planning.
-- The fix-cycle count is shared across all loops. Track it.
-- If you notice a `CLAUDE.md` convention that needs updating, propose the change in
-  your final output — do not write it yourself.
+- **Never write source code yourself.** Launch the `feature` workflow. If `Workflow` appears unavailable, STOP and report — do not edit `backend/`/`frontend/` directly.
+- **Never commit ad-hoc.** Default: `git-commit` skill. Escalate to `git-publisher` agent only for multi-commit reorganization / diagnosis failure.
+- **Never push ad-hoc.** Default: `git-publish` skill for feature → develop (base=develop only). Escalate to `git-publisher` agent only for Mode 3 deploy / external PR / complex rebase / push rejection / mid-merge failure.
+- **Fix-cycle budget = 2, shared** across the workflow's internal loop AND session-side app-test FAIL re-launches. Track it via `args.cyclesUsed` / `result.cyclesUsed`.
+- If a task is ambiguous, ask ONE clarifying question before decomposing.
+- If you notice a `CLAUDE.md` convention that needs updating, propose it in your final output — do not write it yourself.
 - Write new learnings (architectural decisions, patterns, gotchas) to memory immediately.
-- **Feature work** must go through this pipeline — new features, bug fixes, refactors
-  that touch production code (`backend/apps/*`, `frontend/src/`).
-- **Direct work is acceptable** for meta/infra/tooling (`tools/*.sh`, `hooks/*`,
-  `.github/*`, `.gitignore` whitelist), cleanup/housekeeping (single-line fixes,
-  sub-MINOR follow-ups, docs/policy edits to `CLAUDE.md` / `CONTRIBUTING.md` /
-  `.claude/agents/*.md` / `.claude/skills/*` / `docs/*`), one-line trivial fixes, and
-  pure docs commits (Task.md / state.js updates). The pipeline's invocation cost
-  outweighs its value for these meta-tasks. **Risky meta-infra override**: if the
-  change touches auth / token-handling / schema / a cross-cutting refactor of ≥4
-  unrelated files, still run code-review + security-manager before commit.
-- **Token-saving rules** — see `.claude/WORKFLOW.md` § Token-saving rules:
-  Rule 1 (defer reporter to session end), Rule 2 (skip code-review +
-  security-manager on trivial commits — `<50 LOC` OR pure docs/policy + no
-  migration + no production code + no auth/network/model change), Rule 3 (bundle
-  trivial commits, push only on push-worthy).
-  User overrides: "지금 reporter 돌려" / "리뷰 돌려" / "지금 push".
+- **Feature work** (touching `backend/apps/*`, `frontend/src/`) must go through this pipeline.
+- **Direct work is acceptable** for meta/infra (`tools/*.sh`, `hooks/*`, `.github/*`, `.claude/workflows/*`), cleanup/housekeeping (single-line fixes, sub-MINOR follow-ups), and docs (`CLAUDE.md`, `CONTRIBUTING.md`, `.claude/agents/*.md`, `.claude/skills/*`, `docs/*`, Task.md / state.js) — direct edit + `git-commit` skill. **Risky meta-infra override**: changes touching auth / token-handling / schema / a ≥4-file cross-cutting refactor still go through the `feature` workflow (or at least code-review + security-manager) before commit.
+- **Token-saving rules** — see `.claude/WORKFLOW.md` § Token-saving rules. Overrides: "지금 reporter 돌려" / "리뷰 돌려" / "지금 push".

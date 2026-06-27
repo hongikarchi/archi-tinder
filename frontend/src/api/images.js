@@ -4,14 +4,18 @@
  */
 
 import { BASE } from './core.js'
+import { rightSizeImageUrl, buildCardSrcSet } from './rightSizeImageUrl.js'
 
 // -- Image telemetry helpers -----------------------------------------------
 
 /**
  * getImageSource — classify image URL by CDN/host origin.
  * Uses URL(url, origin) to handle both absolute and relative URLs.
- * Returns: 'divisare' | 'metalocus' | 'archello' | 'architizer' | 'archdaily'
- *        | 'dezeen' | 'external' | 'unknown'
+ * Returns: 'divisare' | 'metalocus' | 'archello' | 'imgix' | 'architizer'
+ *        | 'archdaily' | 'dezeen' | 'external' | 'unknown'
+ *
+ * 'imgix' covers *.imgix.net (e.g. architizer-prod.imgix.net).
+ * 'architizer' covers architizer.com (non-imgix direct URLs).
  *
  * Canonical v2 schema serves full source-CDN URLs (R2 composition retired).
  * Buckets listed above are the dominant hosts in canonical_v2_buildings.source_refs.
@@ -25,6 +29,7 @@ export function getImageSource(url) {
     if (isHost('divisare.com')) return 'divisare'
     if (isHost('metalocus.es')) return 'metalocus'
     if (isHost('archello.com')) return 'archello'
+    if (isHost('imgix.net'))      return 'imgix'
     if (isHost('architizer.com')) return 'architizer'
     if (isHost('archdaily.com') || isHost('archdaily.net')) return 'archdaily'
     if (isHost('dezeen.com')) return 'dezeen'
@@ -91,7 +96,8 @@ export function normalizeCard(card) {
     card_type:   'building',
     // canonical_v2 collapses name_en + project_name into a single `name`.
     image_title: card.name || card.name_en || card.project_name || '',
-    image_url:   card.image_url,
+    image_url:   rightSizeImageUrl(card.image_url),
+    image_srcset: buildCardSrcSet(card.image_url),
     source_url:  card.url || null,
     gallery:     card.gallery || [],
     gallery_meta: card.gallery_meta || [],

@@ -459,12 +459,6 @@ def test_promote_rejects_non_guest(db):
 # ---------------------------------------------------------------------------
 # These tests call the helper directly — no Google mock / token-blacklist noise.
 
-def _make_follow(follower, followee):
-    """Create a Follow row directly (bypasses signals for counter manipulation)."""
-    from apps.social.models import Follow
-    return Follow.objects.create(follower=follower, followee=followee)
-
-
 def _make_architect_follow(follower, architect_id='arch_000001'):
     from apps.social.models import ArchitectFollow
     return ArchitectFollow.objects.create(follower=follower, architect_id=architect_id)
@@ -478,59 +472,6 @@ def _make_reaction(user, project):
 def _make_project(user, name='Test Board'):
     from apps.recommendation.models import Project
     return Project.objects.create(user=user, name=name)
-
-
-# (a) Follow follower-role dedup: guest + target both follow user X → no dup, no 500
-@pytest.mark.django_db
-def test_merge_follow_follower_dedup(db):
-    """Guest and target both follow user X → after merge target follows X once."""
-    from apps.accounts.merge import merge_guest_into_target
-    from apps.social.models import Follow
-
-    guest = _make_guest(display_name='GuestA')
-    target = _make_verified(email='target_a@example.com')
-    third = _make_verified(email='third_a@example.com')
-
-    _make_follow(guest, third)    # guest→third
-    _make_follow(target, third)   # target→third (collision)
-
-    merge_guest_into_target(guest, target)
-
-    # Exactly one Follow row: target→third
-    rows = Follow.objects.filter(follower=target, followee=third)
-    assert rows.count() == 1
-
-    # No guest rows remain
-    assert Follow.objects.filter(follower=guest).count() == 0
-
-    # Counter-cache correct
-    target.refresh_from_db()
-    assert target.following_count == Follow.objects.filter(follower=target).count()
-
-
-# (b) Follow followee-role dedup: someone follows both guest + target → no dup
-@pytest.mark.django_db
-def test_merge_follow_followee_dedup(db):
-    """User Y follows both guest and target → after merge only one follower row."""
-    from apps.accounts.merge import merge_guest_into_target
-    from apps.social.models import Follow
-
-    guest = _make_guest(display_name='GuestB')
-    target = _make_verified(email='target_b@example.com')
-    fan = _make_verified(email='fan_b@example.com')
-
-    _make_follow(fan, guest)     # fan→guest
-    _make_follow(fan, target)    # fan→target (collision)
-
-    merge_guest_into_target(guest, target)
-
-    rows = Follow.objects.filter(follower=fan, followee=target)
-    assert rows.count() == 1
-
-    assert Follow.objects.filter(followee=guest).count() == 0
-
-    target.refresh_from_db()
-    assert target.follower_count == Follow.objects.filter(followee=target).count()
 
 
 # (c) Reaction dedup: guest + target both reacted to same project → no dup, no 500
@@ -622,33 +563,15 @@ def test_merge_liked_building_ids_cap(db):
     assert len(target.liked_building_ids) <= 200
 
 
-# (f) Self-follow guard: guest follows target → after merge no self-follow
-@pytest.mark.django_db
-def test_merge_self_follow_guard(db):
-    """Guest follows target → that row is deleted, not reassigned (no self-follow)."""
-    from apps.accounts.merge import merge_guest_into_target
-    from apps.social.models import Follow
-
-    guest = _make_guest(display_name='GuestF')
-    target = _make_verified(email='target_f@example.com')
-
-    _make_follow(guest, target)  # guest→target: would become target→target
-
-    merge_guest_into_target(guest, target)
-
-    # No self-follow row
-    assert Follow.objects.filter(follower=target, followee=target).count() == 0
-
-
 # (g) Existing no-collision path still works end-to-end via promote endpoint
 @pytest.mark.django_db
 def test_merge_no_collision_via_promote_endpoint(db):
-    """Guest with boards + unique follows → merge into target with no shared data.
+    """Guest with boards + unique architect follows → merge into target with no shared data.
 
     Verifies the full promote endpoint still works after the merge.py refactor.
     """
     from apps.recommendation.models import Project
-    from apps.social.models import Follow, ArchitectFollow
+    from apps.social.models import ArchitectFollow
 
     target_profile = _make_verified(email=_FAKE_GOOGLE_DATA['email'])
     target_social = target_profile.social_accounts.first()
@@ -661,8 +584,6 @@ def test_merge_no_collision_via_promote_endpoint(db):
 
     # Unique data on guest (no collisions)
     Project.objects.create(user=guest_profile, name='Guest Board A')
-    third_user = _make_verified(email='third_nc@example.com')
-    _make_follow(guest_profile, third_user)
     _make_architect_follow(guest_profile, 'arch_999001')
 
     with patch('apps.accounts.views.auth._exchange_google_code', return_value=_FAKE_GOOGLE_DATA):
@@ -683,9 +604,6 @@ def test_merge_no_collision_via_promote_endpoint(db):
 
     # Project migrated
     assert Project.objects.filter(user=target_profile, name='Guest Board A').exists()
-
-    # Follow migrated
-    assert Follow.objects.filter(follower=target_profile, followee=third_user).exists()
 
     # ArchitectFollow migrated
     assert ArchitectFollow.objects.filter(

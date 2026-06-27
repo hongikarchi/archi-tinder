@@ -3,7 +3,7 @@
  * Conversational swipe onboarding for returning Google users and new guests.
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import * as api from '../api/client.js'
 import { login as apiLogin, register as apiRegister } from '../api/auth.js'
 import GoogleLoginButton from '../components/GoogleLoginButton.jsx'
@@ -20,69 +20,78 @@ import {
   isGuestProfileReady,
   isRoleReady,
 } from '../utils/loginFlow.js'
+import { useTranslation } from '../i18n/index.js'
+import { useLanguage } from '../hooks/useLanguage.js'
 
 const FLOW_STEPS = {
-  choice: 'choice',
+  choice:    'choice',
   returning: 'returning',
-  register: 'register',
-  profile: 'profile',
-  consent: 'consent',
+  register:  'register',
+  profile:   'profile',
+  consent:   'consent',
 }
 
-const STEP_PROMPTS = {
-  choice: 'Tell me how to welcome you.',
-  returning: 'I can restore your verified profile.',
-  register: 'Create your account with a handle and password.',
-  profile: 'A name and objective shape your first deck.',
-  consent: 'One right swipe creates the guest profile.',
-}
+const INTRO_DISMISS_KEY = 'archithon_login_intro_dismissed'
+const INTRO_SHOW_ONCE   = false
 
 const AUTH_STAGE_WIDTH = `${CARD_WIDTH}px`
 const AUTH_CARD_HEIGHT = `${CARD_HEIGHT}px`
 
 export default function LoginPage({ onLogin }) {
-  const googleConfigured = hasGoogleLogin(import.meta.env.VITE_GOOGLE_CLIENT_ID)
-  const pendingChoiceAction = useRef(null)
-  const pendingConsentAction = useRef(null)
+  const { t, language }  = useTranslation()
+  const { setLanguage }  = useLanguage()
 
-  const [step, setStep] = useState(FLOW_STEPS.choice)
-  const [displayName, setDisplayName] = useState('')
-  const [role, setRole] = useState('')
-  const [jobRole, setJobRole] = useState('')
-  const [affiliation, setAffiliation] = useState('')
-  const [consentGiven, setConsentGiven] = useState(false)
+  const [step, setStep]                       = useState(FLOW_STEPS.choice)
+  const [displayName, setDisplayName]         = useState('')
+  const [role, setRole]                       = useState('')
+  const [jobRole, setJobRole]                 = useState('')
+  const [affiliation, setAffiliation]         = useState('')
+  const [consentGiven, setConsentGiven]       = useState(false)
   const [consentResetTick, setConsentResetTick] = useState(0)
-  const [loading, setLoading] = useState(null) // 'guest' | 'google' | 'dev' | 'login' | 'register' | null
-  const [error, setError] = useState(null)
+  const [loading, setLoading]                 = useState(null)
+  const [error, setError]                     = useState(null)
+  const [showIntro, setShowIntro]             = useState(
+    () => INTRO_SHOW_ONCE ? !localStorage.getItem(INTRO_DISMISS_KEY) : true,
+  )
 
-  const typedLine = useTypedLine(STEP_PROMPTS[step] || STEP_PROMPTS.choice)
-  const isBusy = loading !== null
-  const profileReady = isGuestProfileReady({ displayName, role })
+  const typedLine = useTypedLine(t('login.prompt.' + step))
+
+  // Latest-ref: stable identity for handleConsentAction while capturing fresh
+  // handleGuestSubmit closure every render.
+  const guestSubmitRef = useRef(() => {})
+  guestSubmitRef.current = () => handleGuestSubmit({ consentConfirmed: true })
+
+  // Stable callbacks — setState setters are stable, module constants are stable.
+  const handleChoiceAction = useCallback((action) => {
+    setError(null)
+    setConsentGiven(false)
+    setStep(action === LOGIN_SWIPE_ACTIONS.left ? FLOW_STEPS.returning : FLOW_STEPS.profile)
+  }, [])
+
+  const handleConsentAction = useCallback((action) => {
+    if (action === 'back') {
+      setConsentGiven(false)
+      setError(null)
+      setStep(FLOW_STEPS.profile)
+    } else {
+      setConsentGiven(true)
+      guestSubmitRef.current()
+    }
+  }, [])
+
+  const googleConfigured = hasGoogleLogin(import.meta.env.VITE_GOOGLE_CLIENT_ID)
+  const isBusy           = loading !== null
+  const profileReady     = isGuestProfileReady({ displayName, role })
+  const errorText        = error && (error.key ? t(error.key, error.params) : error.text)
+
+  function dismissIntro() {
+    if (INTRO_SHOW_ONCE) localStorage.setItem(INTRO_DISMISS_KEY, 'true')
+    setShowIntro(false)
+  }
 
   function moveToStep(nextStep) {
     setError(null)
     setStep(nextStep)
-  }
-
-  function handleChoiceAction(action) {
-    pendingChoiceAction.current = null
-    setConsentGiven(false)
-    if (action === LOGIN_SWIPE_ACTIONS.left) {
-      moveToStep(FLOW_STEPS.returning)
-    } else if (action === LOGIN_SWIPE_ACTIONS.right) {
-      moveToStep(FLOW_STEPS.profile)
-    }
-  }
-
-  function handleChoiceSwipe(direction) {
-    const action = getLoginSwipeAction(direction)
-    if (action) pendingChoiceAction.current = action
-  }
-
-  function handleChoiceLeftScreen() {
-    if (pendingChoiceAction.current) {
-      handleChoiceAction(pendingChoiceAction.current)
-    }
   }
 
   async function handleGoogleSuccess(codeResponse) {
@@ -93,7 +102,7 @@ export default function LoginPage({ onLogin }) {
       onLogin(user)
     } catch (err) {
       const detail = err.message || 'Unknown error'
-      setError(`Google login failed: ${detail}`)
+      setError({ key: 'login.error.googleFailed', params: { detail } })
     } finally {
       setLoading(null)
     }
@@ -101,7 +110,7 @@ export default function LoginPage({ onLogin }) {
 
   function handleGoogleError(errorResponse) {
     const detail = errorResponse?.error_description || errorResponse?.error || 'cancelled or failed'
-    setError(`Google login error: ${detail}`)
+    setError({ key: 'login.error.googleError', params: { detail } })
     setLoading(null)
   }
 
@@ -109,9 +118,9 @@ export default function LoginPage({ onLogin }) {
     if (err?.type === 'popup_closed') {
       setError(null)
     } else if (err?.type === 'popup_failed_to_open') {
-      setError('Popup was blocked by the browser. Please allow popups for this site.')
+      setError({ key: 'login.error.popupBlocked' })
     } else {
-      setError('Login could not start. Please check your browser settings.')
+      setError({ key: 'login.error.loginStart' })
     }
     setLoading(null)
   }
@@ -120,11 +129,11 @@ export default function LoginPage({ onLogin }) {
     event.preventDefault()
     setError(null)
     if (!isDisplayNameReady(displayName)) {
-      setError('Enter a display name to continue.')
+      setError({ key: 'login.error.displayNameRequired' })
       return
     }
     if (!isRoleReady(role)) {
-      setError('Choose an objective to continue.')
+      setError({ key: 'login.error.objectiveRequired' })
       return
     }
     setConsentGiven(false)
@@ -135,53 +144,32 @@ export default function LoginPage({ onLogin }) {
     if (isBusy) return
     setError(null)
     if (!isGuestProfileReady({ displayName, role })) {
-      setError('Add a display name and objective before consent.')
+      setError({ key: 'login.error.profileIncomplete' })
       setStep(FLOW_STEPS.profile)
       return
     }
     if (!consentConfirmed) {
-      setError('Consent is required before creating a guest profile.')
+      setError({ key: 'login.error.consentRequired' })
       return
     }
 
     setLoading('guest')
     try {
       const user = await api.guestLogin(buildGuestLoginPayload({ displayName, role, jobRole, affiliation }))
-      onLogin(user)
+      await onLogin(user)
+      setLanguage(language)
     } catch (err) {
       const detail = err?.data?.detail || err?.message || 'Unknown error'
       if (detail === 'consent_required') {
-        setError('Consent is required to continue. Please try the consent step again.')
+        setError({ key: 'login.error.consentRetry' })
         setConsentGiven(false)
       } else {
-        setError(`Sign in failed: ${detail}`)
+        setError({ key: 'login.error.signInFailed', params: { detail } })
       }
-      setConsentResetTick(t => t + 1)
+      setConsentResetTick(prev => prev + 1)
     } finally {
       setLoading(null)
     }
-  }
-
-  function handleConsentSwipe(direction) {
-    if (isBusy) return
-    if (direction === 'left') {
-      pendingConsentAction.current = 'back'
-    } else if (direction === 'right') {
-      pendingConsentAction.current = 'submit'
-      setConsentGiven(true)
-    }
-  }
-
-  function handleConsentLeftScreen() {
-    const action = pendingConsentAction.current
-    if (!action) return
-    pendingConsentAction.current = null
-    if (action === 'back') {
-      setConsentGiven(false)
-      moveToStep(FLOW_STEPS.profile)
-      return
-    }
-    handleGuestSubmit({ consentConfirmed: true })
   }
 
   async function handleLoginSubmit(handle, password) {
@@ -192,28 +180,30 @@ export default function LoginPage({ onLogin }) {
       const user = await apiLogin(handle, password)
       onLogin(user)
     } catch (err) {
-      setError(err.message || '로그인에 실패했습니다.')
+      setError(err.message ? { text: err.message } : { key: 'login.error.loginFailed' })
     } finally {
       setLoading(null)
     }
   }
 
-  async function handleRegisterSubmit(handle, password, displayName) {
+  async function handleRegisterSubmit(handle, password, name) {
     if (isBusy) return
     setError(null)
     setLoading('register')
     try {
-      const user = await apiRegister(handle, password, displayName)
-      onLogin(user)
+      const user = await apiRegister(handle, password, name)
+      await onLogin(user)
+      setLanguage(language)
     } catch (err) {
-      // Field-level errors: { handle: [...], password: [...] }
       const data = err?.data
       if (data?.handle) {
-        setError(Array.isArray(data.handle) ? data.handle[0] : data.handle)
+        const msg = Array.isArray(data.handle) ? data.handle[0] : data.handle
+        setError({ text: msg })
       } else if (data?.password) {
-        setError(Array.isArray(data.password) ? data.password[0] : data.password)
+        const msg = Array.isArray(data.password) ? data.password[0] : data.password
+        setError({ text: msg })
       } else {
-        setError(err.message || '가입에 실패했습니다.')
+        setError(err.message ? { text: err.message } : { key: 'login.error.registerFailed' })
       }
     } finally {
       setLoading(null)
@@ -229,7 +219,7 @@ export default function LoginPage({ onLogin }) {
       const user = await api.devLogin(secret)
       onLogin(user)
     } catch (err) {
-      setError(`Dev login failed: ${err.message}`)
+      setError({ key: 'login.error.devFailed', params: { detail: err.message } })
     } finally {
       setLoading(null)
     }
@@ -242,21 +232,22 @@ export default function LoginPage({ onLogin }) {
           <h1 style={{ ...wordmarkStyle, letterSpacing: '0.2em', color: 'var(--color-text)' }}>
             ARCHIBE
           </h1>
-          <p style={taglineStyle}>Start with a swipe, then tune a taste profile.</p>
+          <p style={taglineStyle}>{t('login.tagline')}</p>
         </header>
 
-        <div style={stageStyle}>
+        <div key={step} className="lp-card-in" style={stageStyle}>
           {step === FLOW_STEPS.choice && (
-            <ChoiceStep
+            <ChoiceDeck
+              t={t}
               typedLine={typedLine}
               disabled={isBusy}
-              onSwipe={handleChoiceSwipe}
-              onCardLeftScreen={handleChoiceLeftScreen}
+              onAction={handleChoiceAction}
             />
           )}
 
           {step === FLOW_STEPS.returning && (
             <ReturningStep
+              t={t}
               typedLine={typedLine}
               showGoogle={googleConfigured}
               disabled={isBusy}
@@ -272,6 +263,7 @@ export default function LoginPage({ onLogin }) {
 
           {step === FLOW_STEPS.register && (
             <RegisterStep
+              t={t}
               typedLine={typedLine}
               disabled={isBusy}
               registerLoading={loading === 'register'}
@@ -282,6 +274,7 @@ export default function LoginPage({ onLogin }) {
 
           {step === FLOW_STEPS.profile && (
             <ProfileStep
+              t={t}
               typedLine={typedLine}
               displayName={displayName}
               role={role}
@@ -313,8 +306,9 @@ export default function LoginPage({ onLogin }) {
           )}
 
           {step === FLOW_STEPS.consent && (
-            <ConsentStep
-              key={`consent-step-${consentResetTick}`}
+            <ConsentDeck
+              key={`consent-${consentResetTick}`}
+              t={t}
               typedLine={typedLine}
               displayName={displayName}
               role={role}
@@ -322,43 +316,50 @@ export default function LoginPage({ onLogin }) {
               affiliation={affiliation}
               profileReady={profileReady}
               disabled={isBusy}
-              onSwipe={handleConsentSwipe}
-              onCardLeftScreen={handleConsentLeftScreen}
+              onAction={handleConsentAction}
             />
           )}
         </div>
 
-        {(step === FLOW_STEPS.choice) && (
+        <p style={captionTextStyle}>{t('login.caption.' + step)}</p>
+
+        {step === FLOW_STEPS.choice && (
           <button
             type="button"
+            className="lp-btn"
             onClick={() => moveToStep(FLOW_STEPS.register)}
             disabled={isBusy}
             style={ghostButtonStyle(isBusy)}
           >
-            아이디 · 비밀번호로 가입
+            {t('login.choice.registerLink')}
           </button>
         )}
 
         {import.meta.env.DEV && (
           <button
             type="button"
+            className="lp-btn"
             onClick={handleDevClick}
             disabled={isBusy}
             style={secondaryButtonStyle(isBusy)}
           >
-            {loading === 'dev' ? <Spinner /> : 'Dev login'}
+            {loading === 'dev' ? <Spinner /> : t('login.dev.button')}
           </button>
         )}
 
-        {error && (
+        {errorText && (
           <p role="alert" style={errorStyle}>
-            {error}
+            {errorText}
           </p>
         )}
       </main>
+
+      {showIntro && <IntroOverlay t={t} onDone={dismissIntro} />}
     </div>
   )
 }
+
+// ── Utility hook ─────────────────────────────────────────────────────────────
 
 function useTypedLine(line) {
   const [typedLine, setTypedLine] = useState('')
@@ -377,35 +378,273 @@ function useTypedLine(line) {
   return typedLine
 }
 
-function ChoiceStep({ typedLine, disabled, onSwipe, onCardLeftScreen }) {
+// ── Internal components ───────────────────────────────────────────────────────
+
+function LangToggle() {
+  const { language, setLanguage } = useLanguage()
+  const stop = (e) => e.stopPropagation()
+  const langs = [{ id: 'ko', label: '한국어' }, { id: 'en', label: 'ENGLISH' }]
+
   return (
-    <div style={swipeStepStyle}>
-      <div style={swipeDeckStyle}>
-        <SwipeGestureFrame
-          onSwipe={onSwipe}
-          onCardLeftScreen={onCardLeftScreen}
-          preventSwipe={disabled ? SWIPE_PREVENT_ALL : undefined}
-        >
-          <AuthCard absolute ariaLabel="Choose login path">
-            <CardHeader
-              eyebrow="First card"
-              title="Are you new here?"
-              typedLine={typedLine}
+    <div
+      onPointerDown={stop}
+      onMouseDown={stop}
+      onTouchStart={stop}
+      style={{
+        display: 'inline-flex',
+        gap: 2,
+        padding: 3,
+        background: 'var(--color-surface)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 'var(--radius-pill)',
+        flexShrink: 0,
+      }}
+    >
+      {langs.map((l) => {
+        const sel = language === l.id
+        return (
+          <button
+            key={l.id}
+            type="button"
+            className="pressable"
+            onClick={() => setLanguage(l.id)}
+            style={{
+              padding: '3px 9px',
+              borderRadius: 'var(--radius-pill)',
+              border: 0,
+              background: sel ? 'var(--color-bg)' : 'transparent',
+              color: sel ? 'var(--color-text)' : 'var(--color-text-muted)',
+              fontSize: 11,
+              fontWeight: 600,
+              letterSpacing: l.id === 'en' ? '0.1em' : '0.02em',
+              cursor: 'pointer',
+              boxShadow: sel ? '0 1px 3px rgba(0,0,0,0.12)' : 'none',
+              fontFamily: 'inherit',
+              transition: `background var(--motion-fast), color var(--motion-fast)`,
+            }}
+          >
+            {l.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function GestureHint({ side, active, label, sub }) {
+  const isLeft = side === 'left'
+  return (
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: isLeft ? 'flex-start' : 'flex-end',
+      gap: 3,
+    }}>
+      <span style={{
+        fontSize: 16,
+        fontWeight: 700,
+        color: active ? 'var(--accent-1)' : 'var(--color-text-2)',
+        transition: `color var(--motion-fast) var(--motion-ease)`,
+      }}>
+        {isLeft ? `← ${label}` : `${label} →`}
+      </span>
+      <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-dim)' }}>
+        {sub}
+      </span>
+    </div>
+  )
+}
+
+function ChoiceDeck({ t, typedLine, disabled, onAction }) {
+  const pending = useRef(null)
+  const [intent, setIntent] = useState(null)
+
+  const handleSwipe = useCallback((dir) => {
+    const a = getLoginSwipeAction(dir)
+    if (a) pending.current = a
+  }, [])
+
+  const handleLeftScreen = useCallback(() => {
+    const a = pending.current
+    pending.current = null
+    if (a) onAction(a)
+  }, [onAction])
+
+  const handleFulfilled = useCallback((dir) => {
+    if (dir === 'left' || dir === 'right') setIntent(dir)
+  }, [])
+
+  const handleUnfulfilled = useCallback(() => setIntent(null), [])
+
+  const preventSwipe = disabled ? SWIPE_PREVENT_ALL : SWIPE_PREVENT_VERTICAL
+
+  return (
+    <div style={{ position: 'relative', width: '100%', height: AUTH_CARD_HEIGHT }}>
+      {/* faux depth cards — decorative stack behind the live card */}
+      <div
+        aria-hidden="true"
+        style={{
+          ...authCardStyle,
+          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+          pointerEvents: 'none',
+          transform: 'translateY(14px) scale(0.94)',
+          opacity: 0.4,
+        }}
+      />
+      <div
+        aria-hidden="true"
+        style={{
+          ...authCardStyle,
+          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+          pointerEvents: 'none',
+          transform: 'translateY(7px) scale(0.97)',
+          opacity: 0.7,
+        }}
+      />
+      <SwipeGestureFrame
+        className="lp-tinder"
+        onSwipe={handleSwipe}
+        onCardLeftScreen={handleLeftScreen}
+        onSwipeRequirementFulfilled={handleFulfilled}
+        onSwipeRequirementUnfulfilled={handleUnfulfilled}
+        preventSwipe={preventSwipe}
+      >
+        <AuthCard absolute ariaLabel={t('login.choice.eyebrow')}>
+          <CardHeader
+            eyebrow={t('login.choice.eyebrow')}
+            title={t('login.choice.title')}
+            typedLine={typedLine}
+            trailing={<LangToggle />}
+          />
+          <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12 }}>
+            <GestureHint
+              side="left"
+              active={intent === 'left'}
+              label={t('login.choice.left.label')}
+              sub={t('login.choice.left.sub')}
             />
-            <div style={choiceBodyStyle}>
-              <div style={directionGridStyle} aria-hidden="true">
-                <DirectionHint tone="left" label="Returning" sublabel="Left" />
-                <DirectionHint tone="right" label="New profile" sublabel="Right" />
-              </div>
+            <GestureHint
+              side="right"
+              active={intent === 'right'}
+              label={t('login.choice.right.label')}
+              sub={t('login.choice.right.sub')}
+            />
+          </div>
+        </AuthCard>
+      </SwipeGestureFrame>
+    </div>
+  )
+}
+
+function ConsentDeck({
+  t, typedLine, displayName, role, jobRole, affiliation, profileReady, disabled, onAction,
+}) {
+  const pending = useRef(null)
+  const [intent, setIntent] = useState(null)
+
+  const handleSwipe = useCallback((dir) => {
+    if (dir === 'left')       pending.current = 'back'
+    else if (dir === 'right') pending.current = 'submit'
+  }, [])
+
+  const handleLeftScreen = useCallback(() => {
+    const a = pending.current
+    pending.current = null
+    if (a) onAction(a)
+  }, [onAction])
+
+  const handleFulfilled = useCallback((dir) => {
+    if (dir === 'left' || dir === 'right') setIntent(dir)
+  }, [])
+
+  const handleUnfulfilled = useCallback(() => setIntent(null), [])
+
+  const preventSwipe = (disabled || !profileReady) ? SWIPE_PREVENT_ALL : SWIPE_PREVENT_VERTICAL
+
+  return (
+    <div style={{ position: 'relative', width: '100%', height: AUTH_CARD_HEIGHT }}>
+      <div
+        aria-hidden="true"
+        style={{
+          ...authCardStyle,
+          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+          pointerEvents: 'none',
+          transform: 'translateY(14px) scale(0.94)',
+          opacity: 0.4,
+        }}
+      />
+      <div
+        aria-hidden="true"
+        style={{
+          ...authCardStyle,
+          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+          pointerEvents: 'none',
+          transform: 'translateY(7px) scale(0.97)',
+          opacity: 0.7,
+        }}
+      />
+      <SwipeGestureFrame
+        className="lp-tinder"
+        onSwipe={handleSwipe}
+        onCardLeftScreen={handleLeftScreen}
+        onSwipeRequirementFulfilled={handleFulfilled}
+        onSwipeRequirementUnfulfilled={handleUnfulfilled}
+        preventSwipe={preventSwipe}
+      >
+        <AuthCard absolute ariaLabel={t('login.consent.eyebrow')}>
+          <CardHeader
+            eyebrow={t('login.consent.eyebrow')}
+            title={t('login.consent.title')}
+            typedLine={typedLine}
+            trailing={<LangToggle />}
+          />
+          <div style={summaryBoxStyle}>
+            <div>
+              <span style={summaryLabelStyle}>{t('login.consent.summary.name')}</span>
+              <strong style={summaryValueStyle}>{displayName.trim()}</strong>
             </div>
-          </AuthCard>
-        </SwipeGestureFrame>
-      </div>
+            <div>
+              <span style={summaryLabelStyle}>{t('login.consent.summary.objective')}</span>
+              <strong style={summaryValueStyle}>
+                {role ? t('login.profile.objective.' + role) : t('login.consent.summary.notSelected')}
+              </strong>
+            </div>
+            {jobRole.trim() && (
+              <div>
+                <span style={summaryLabelStyle}>{t('login.consent.summary.role')}</span>
+                <strong style={summaryValueStyle}>{jobRole.trim()}</strong>
+              </div>
+            )}
+            {affiliation.trim() && (
+              <div>
+                <span style={summaryLabelStyle}>{t('login.consent.summary.affiliation')}</span>
+                <strong style={summaryValueStyle}>{affiliation.trim()}</strong>
+              </div>
+            )}
+          </div>
+          <p style={bodyCopyStyle}>{t('login.consent.body')}</p>
+          <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12 }}>
+            <GestureHint
+              side="left"
+              active={intent === 'left'}
+              label={t('login.consent.left.label')}
+              sub={t('login.consent.left.sub')}
+            />
+            <GestureHint
+              side="right"
+              active={intent === 'right'}
+              label={t('login.consent.right.label')}
+              sub={t('login.consent.right.sub')}
+            />
+          </div>
+        </AuthCard>
+      </SwipeGestureFrame>
     </div>
   )
 }
 
 function ReturningStep({
+  t,
   typedLine,
   showGoogle,
   disabled,
@@ -417,7 +656,7 @@ function ReturningStep({
   onGoogleNonOAuthError,
   onLoginSubmit,
 }) {
-  const [handle, setHandle] = useState('')
+  const [handle, setHandle]     = useState('')
   const [password, setPassword] = useState('')
 
   function handleSubmit(e) {
@@ -427,11 +666,12 @@ function ReturningStep({
   }
 
   return (
-    <AuthCard ariaLabel="Returning user login">
+    <AuthCard ariaLabel={t('login.returning.eyebrow')}>
       <CardHeader
-        eyebrow="Returning"
-        title="Continue with your saved profile."
+        eyebrow={t('login.returning.eyebrow')}
+        title={t('login.returning.title')}
         typedLine={typedLine}
+        trailing={<LangToggle />}
       />
       {showGoogle ? (
         <GoogleLoginButton
@@ -440,17 +680,19 @@ function ReturningStep({
           onNonOAuthError={onGoogleNonOAuthError}
           disabled={disabled}
           loading={googleLoading}
+          label={t('login.returning.google')}
+          className="lp-btn"
           style={{ width: '100%', minHeight: 48, borderRadius: 12 }}
         />
       ) : (
         <div role="status" style={noticeStyle}>
-          Google login is unavailable in this environment. Set VITE_GOOGLE_CLIENT_ID to enable returning accounts.
+          {t('login.returning.googleUnavailable')}
         </div>
       )}
 
       <div style={dividerRowStyle}>
         <span style={dividerLineStyle} />
-        <span style={dividerTextStyle}>또는</span>
+        <span style={dividerTextStyle}>{t('login.returning.divider')}</span>
         <span style={dividerLineStyle} />
       </div>
 
@@ -460,11 +702,12 @@ function ReturningStep({
           value={handle}
           onChange={e => setHandle(e.target.value)}
           disabled={disabled}
-          placeholder="아이디 (handle)"
+          placeholder={t('login.returning.handle.placeholder')}
           autoCapitalize="off"
           autoCorrect="off"
           spellCheck={false}
-          aria-label="아이디"
+          aria-label={t('login.returning.handle.aria')}
+          className="lp-input"
           style={inputStyle}
         />
         <input
@@ -472,27 +715,36 @@ function ReturningStep({
           value={password}
           onChange={e => setPassword(e.target.value)}
           disabled={disabled}
-          placeholder="비밀번호"
-          aria-label="비밀번호"
+          placeholder={t('login.returning.password.placeholder')}
+          aria-label={t('login.returning.password.aria')}
+          className="lp-input"
           style={inputStyle}
         />
         <button
           type="submit"
+          className="lp-cta"
           disabled={disabled || !handle.trim() || !password}
           style={primaryButtonStyle(disabled || !handle.trim() || !password)}
         >
-          {loginLoading ? <Spinner /> : '아이디 · 비밀번호로 로그인'}
+          {loginLoading ? <Spinner /> : t('login.returning.submit')}
         </button>
       </form>
 
-      <button type="button" onClick={onBack} disabled={disabled} style={ghostButtonStyle(disabled)}>
-        Back
+      <button
+        type="button"
+        className="lp-btn"
+        onClick={onBack}
+        disabled={disabled}
+        style={ghostButtonStyle(disabled)}
+      >
+        {t('login.common.back')}
       </button>
     </AuthCard>
   )
 }
 
 function ProfileStep({
+  t,
   typedLine,
   displayName,
   role,
@@ -510,15 +762,16 @@ function ProfileStep({
   const nameReady = isDisplayNameReady(displayName)
 
   return (
-    <AuthCard ariaLabel="New guest profile">
+    <AuthCard ariaLabel={t('login.profile.eyebrow')}>
       <CardHeader
-        eyebrow="New guest"
-        title="Tell me who is swiping."
+        eyebrow={t('login.profile.eyebrow')}
+        title={t('login.profile.title')}
         typedLine={typedLine}
+        trailing={<LangToggle />}
       />
       <form onSubmit={onSubmit} style={formStyle}>
         <label style={fieldLabelStyle} htmlFor="guest-display-name">
-          Display name
+          {t('login.profile.displayName.label')}
         </label>
         <input
           id="guest-display-name"
@@ -527,14 +780,15 @@ function ProfileStep({
           value={displayName}
           onChange={e => onDisplayNameChange(e.target.value)}
           disabled={disabled}
-          placeholder="Alex"
+          placeholder={t('login.profile.displayName.placeholder')}
           maxLength={30}
           aria-invalid={displayName.length > 0 && !nameReady ? 'true' : 'false'}
+          className="lp-input"
           style={inputStyle}
         />
 
         <label style={{ ...fieldLabelStyle, marginTop: 12 }} htmlFor="guest-job-role">
-          직업 (Role)
+          {t('login.profile.jobRole.label')}
         </label>
         <input
           id="guest-job-role"
@@ -542,13 +796,14 @@ function ProfileStep({
           value={jobRole}
           onChange={e => onJobRoleChange(e.target.value)}
           disabled={disabled}
-          placeholder="Architecture Student"
+          placeholder={t('login.profile.jobRole.placeholder')}
           maxLength={50}
+          className="lp-input"
           style={inputStyle}
         />
 
         <label style={{ ...fieldLabelStyle, marginTop: 12 }} htmlFor="guest-affiliation">
-          소속 (Affiliation)
+          {t('login.profile.affiliation.label')}
         </label>
         <input
           id="guest-affiliation"
@@ -556,16 +811,26 @@ function ProfileStep({
           value={affiliation}
           onChange={e => onAffiliationChange(e.target.value)}
           disabled={disabled}
-          placeholder="Korea University"
+          placeholder={t('login.profile.affiliation.placeholder')}
           maxLength={100}
+          className="lp-input"
           style={inputStyle}
         />
 
         <div style={roleHeaderStyle}>
-          <span style={fieldLabelStyle}>Objective</span>
-          <span style={captionStyle}>{isRoleReady(role) ? 'Selected' : 'Required'}</span>
+          <span style={fieldLabelStyle}>{t('login.profile.objective.label')}</span>
+          <span style={captionStyle}>
+            {isRoleReady(role)
+              ? t('login.profile.objective.selected')
+              : t('login.profile.objective.required')}
+          </span>
         </div>
-        <div role="radiogroup" aria-label="Select your objective" aria-required="true" style={roleGridStyle}>
+        <div
+          role="radiogroup"
+          aria-label={t('login.profile.objective.aria')}
+          aria-required="true"
+          style={roleGridStyle}
+        >
           {ONBOARDING_ROLES.map(roleOption => (
             <button
               key={roleOption.value}
@@ -574,19 +839,31 @@ function ProfileStep({
               aria-checked={role === roleOption.value}
               onClick={() => onRoleChange(roleOption.value)}
               disabled={disabled}
+              className="lp-btn"
               style={roleButtonStyle(disabled, role === roleOption.value)}
             >
-              {roleOption.label}
+              {t('login.profile.objective.' + roleOption.value)}
             </button>
           ))}
         </div>
 
         <div style={buttonGridStyle}>
-          <button type="button" onClick={onBack} disabled={disabled} style={secondaryButtonStyle(disabled)}>
-            Back
+          <button
+            type="button"
+            className="lp-btn"
+            onClick={onBack}
+            disabled={disabled}
+            style={secondaryButtonStyle(disabled)}
+          >
+            {t('login.common.back')}
           </button>
-          <button type="submit" disabled={disabled || !profileReady} style={primaryButtonStyle(disabled || !profileReady)}>
-            Continue
+          <button
+            type="submit"
+            className="lp-cta"
+            disabled={disabled || !profileReady}
+            style={primaryButtonStyle(disabled || !profileReady)}
+          >
+            {t('login.profile.continueBtn')}
           </button>
         </div>
       </form>
@@ -594,79 +871,16 @@ function ProfileStep({
   )
 }
 
-function ConsentStep({
-  typedLine,
-  displayName,
-  role,
-  jobRole,
-  affiliation,
-  profileReady,
-  disabled,
-  onSwipe,
-  onCardLeftScreen,
-}) {
-  const selectedRole = ONBOARDING_ROLES.find(roleOption => roleOption.value === role)
-  const lockSwipe = disabled || !profileReady
-
-  return (
-    <div style={swipeStepStyle}>
-      <div style={swipeDeckStyle}>
-        <SwipeGestureFrame
-          onSwipe={onSwipe}
-          onCardLeftScreen={onCardLeftScreen}
-          preventSwipe={lockSwipe ? SWIPE_PREVENT_ALL : SWIPE_PREVENT_VERTICAL}
-        >
-          <AuthCard absolute ariaLabel="Guest consent">
-            <CardHeader
-              eyebrow="Consent"
-              title="Create the guest account."
-              typedLine={typedLine}
-            />
-            <div style={summaryBoxStyle}>
-              <div>
-                <span style={summaryLabelStyle}>Name</span>
-                <strong style={summaryValueStyle}>{displayName.trim()}</strong>
-              </div>
-              <div>
-                <span style={summaryLabelStyle}>Objective</span>
-                <strong style={summaryValueStyle}>{selectedRole?.label || 'Not selected'}</strong>
-              </div>
-              {jobRole.trim() && (
-                <div>
-                  <span style={summaryLabelStyle}>Role</span>
-                  <strong style={summaryValueStyle}>{jobRole.trim()}</strong>
-                </div>
-              )}
-              {affiliation.trim() && (
-                <div>
-                  <span style={summaryLabelStyle}>Affiliation</span>
-                  <strong style={summaryValueStyle}>{affiliation.trim()}</strong>
-                </div>
-              )}
-            </div>
-            <p style={bodyCopyStyle}>
-              By continuing, you agree that archibe can use this guest profile to provide the service and save your taste signals.
-            </p>
-            <div style={directionGridStyle} aria-hidden="true">
-              <DirectionHint tone="left" label="Back" sublabel="Left swipe" />
-              <DirectionHint tone="right" label="Consent and enter" sublabel="Right swipe" />
-            </div>
-          </AuthCard>
-        </SwipeGestureFrame>
-      </div>
-    </div>
-  )
-}
-
 function RegisterStep({
+  t,
   typedLine,
   disabled,
   registerLoading,
   onBack,
   onRegisterSubmit,
 }) {
-  const [handle, setHandle] = useState('')
-  const [password, setPassword] = useState('')
+  const [handle, setHandle]           = useState('')
+  const [password, setPassword]       = useState('')
   const [displayName, setDisplayName] = useState('')
 
   function handleSubmit(e) {
@@ -678,15 +892,16 @@ function RegisterStep({
   const canSubmit = handle.trim().length >= 3 && password.length >= 8
 
   return (
-    <AuthCard ariaLabel="Register with handle and password">
+    <AuthCard ariaLabel={t('login.register.eyebrow')}>
       <CardHeader
-        eyebrow="새 계정"
-        title="아이디로 가입합니다."
+        eyebrow={t('login.register.eyebrow')}
+        title={t('login.register.title')}
         typedLine={typedLine}
+        trailing={<LangToggle />}
       />
       <form onSubmit={handleSubmit} style={formStyle}>
         <label style={fieldLabelStyle} htmlFor="reg-display-name">
-          이름 (선택)
+          {t('login.register.name.label')}
         </label>
         <input
           id="reg-display-name"
@@ -694,13 +909,14 @@ function RegisterStep({
           value={displayName}
           onChange={e => setDisplayName(e.target.value)}
           disabled={disabled}
-          placeholder="홍길동"
+          placeholder={t('login.register.name.placeholder')}
           maxLength={30}
+          className="lp-input"
           style={inputStyle}
         />
 
         <label style={{ ...fieldLabelStyle, marginTop: 4 }} htmlFor="reg-handle">
-          아이디 *
+          {t('login.register.handle.label')}
         </label>
         <input
           id="reg-handle"
@@ -708,17 +924,18 @@ function RegisterStep({
           value={handle}
           onChange={e => setHandle(e.target.value)}
           disabled={disabled}
-          placeholder="예: dain_architect"
+          placeholder={t('login.register.handle.placeholder')}
           autoCapitalize="off"
           autoCorrect="off"
           spellCheck={false}
           maxLength={30}
           aria-required="true"
+          className="lp-input"
           style={inputStyle}
         />
 
         <label style={{ ...fieldLabelStyle, marginTop: 4 }} htmlFor="reg-password">
-          비밀번호 * (8자 이상)
+          {t('login.register.password.label')}
         </label>
         <input
           id="reg-password"
@@ -726,22 +943,30 @@ function RegisterStep({
           value={password}
           onChange={e => setPassword(e.target.value)}
           disabled={disabled}
-          placeholder="••••••••"
+          placeholder={t('login.register.password.placeholder')}
           maxLength={128}
           aria-required="true"
+          className="lp-input"
           style={inputStyle}
         />
 
         <div style={buttonGridStyle}>
-          <button type="button" onClick={onBack} disabled={disabled} style={secondaryButtonStyle(disabled)}>
-            Back
+          <button
+            type="button"
+            className="lp-btn"
+            onClick={onBack}
+            disabled={disabled}
+            style={secondaryButtonStyle(disabled)}
+          >
+            {t('login.common.back')}
           </button>
           <button
             type="submit"
+            className="lp-cta"
             disabled={disabled || !canSubmit}
             style={primaryButtonStyle(disabled || !canSubmit)}
           >
-            {registerLoading ? <Spinner /> : '가입하기'}
+            {registerLoading ? <Spinner /> : t('login.register.submit')}
           </button>
         </div>
       </form>
@@ -749,10 +974,13 @@ function RegisterStep({
   )
 }
 
-function CardHeader({ eyebrow, title, typedLine }) {
+function CardHeader({ eyebrow, title, typedLine, trailing }) {
   return (
     <div style={cardHeaderStyle}>
-      <p style={eyebrowStyle}>{eyebrow}</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+        <p style={eyebrowStyle}>{eyebrow}</p>
+        {trailing}
+      </div>
       <h2 style={titleStyle}>{title}</h2>
       <p style={typedLineStyle}>
         {typedLine}
@@ -776,16 +1004,97 @@ function AuthCard({ children, absolute = false, ariaLabel }) {
   )
 }
 
-function DirectionHint({ tone, label, sublabel }) {
-  const isLeft = tone === 'left'
+function IntroOverlay({ t, onDone }) {
   return (
-    <div style={{
-      ...directionHintStyle,
-      borderColor: isLeft ? 'var(--color-destructive, #D73A49)' : 'var(--accent-1, #0969DA)',
-      color: isLeft ? 'var(--color-destructive, #D73A49)' : 'var(--accent-1, #0969DA)',
-    }}>
-      <span style={directionLabelStyle}>{label}</span>
-      <span style={directionSublabelStyle}>{sublabel}</span>
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={t('login.intro.title')}
+      style={{
+        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+        zIndex: 1000,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 20,
+        background: 'rgba(0,0,0,0.55)',
+        backdropFilter: 'blur(6px)',
+        WebkitBackdropFilter: 'blur(6px)',
+      }}
+    >
+      <div
+        className="lp-card-in"
+        style={{
+          width: AUTH_STAGE_WIDTH,
+          height: AUTH_CARD_HEIGHT,
+          boxSizing: 'border-box',
+          display: 'flex', flexDirection: 'column', alignItems: 'stretch',
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-border-soft)',
+          borderRadius: 20,
+          boxShadow: '0 24px 64px rgba(0,0,0,0.45)',
+          padding: 24,
+          overflowY: 'auto',
+        }}
+      >
+        {/* eyebrow + LangToggle row */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+          <p style={eyebrowStyle}>{t('login.intro.eyebrow')}</p>
+          <LangToggle />
+        </div>
+
+        <h2 style={{ ...titleStyle, marginTop: 10 }}>{t('login.intro.title')}</h2>
+
+        <div style={{ flex: 1 }} />
+
+        {/* swipe demo: synchronized arrows flanking mini card */}
+        <div style={{ height: 168, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 20 }}>
+          <span
+            className="lp-arrow-left"
+            aria-hidden="true"
+            style={{ fontSize: 26, fontWeight: 700, color: 'var(--color-text-dim)', flexShrink: 0 }}
+          >
+            &#8592;
+          </span>
+          <div
+            className="lp-swipe-demo"
+            style={{
+              width: 112, height: 148,
+              borderRadius: 12,
+              background: 'var(--color-surface-2)',
+              border: '1px solid var(--color-border-soft)',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.22)',
+              display: 'flex', alignItems: 'flex-start',
+              padding: 12,
+              flexShrink: 0,
+            }}
+          >
+            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.3em', color: 'var(--color-text-muted)' }}>
+              ARCHIBE
+            </span>
+          </div>
+          <span
+            className="lp-arrow-right"
+            aria-hidden="true"
+            style={{ fontSize: 26, fontWeight: 700, color: 'var(--color-text-dim)', flexShrink: 0 }}
+          >
+            &#8594;
+          </span>
+        </div>
+
+        <p style={{ ...bodyCopyStyle, textAlign: 'center', whiteSpace: 'pre-line', marginTop: 12 }}>
+          {t('login.intro.body')}
+        </p>
+
+        <div style={{ flex: 1 }} />
+
+        <button
+          type="button"
+          className="lp-cta"
+          onClick={onDone}
+          style={{ ...primaryButtonStyle(false), width: '100%', marginTop: 12 }}
+        >
+          {t('login.intro.cta')}
+        </button>
+      </div>
     </div>
   )
 }
@@ -804,15 +1113,21 @@ function Spinner() {
   )
 }
 
+// ── Style helpers ─────────────────────────────────────────────────────────────
+
 function primaryButtonStyle(disabled) {
   return {
-    minHeight: 46,
-    borderRadius: 12,
-    border: '1px solid var(--accent-1, #0969DA)',
-    background: 'var(--accent-1, #0969DA)',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
+    padding: '14px 16px',
+    border: 0,
+    borderRadius: 'var(--radius-md)',
+    background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
     color: '#fff',
     fontSize: 14,
-    fontWeight: 700,
+    fontWeight: 600,
     fontFamily: 'inherit',
     cursor: disabled ? 'default' : 'pointer',
     opacity: disabled ? 0.55 : 1,
@@ -866,6 +1181,8 @@ function roleButtonStyle(disabled, active) {
   }
 }
 
+// ── Style constants ───────────────────────────────────────────────────────────
+
 const pageStyle = {
   minHeight: '100vh',
   background: 'var(--color-bg)',
@@ -910,17 +1227,13 @@ const stageStyle = {
   width: AUTH_STAGE_WIDTH,
 }
 
-const swipeStepStyle = {
+const captionTextStyle = {
+  fontSize: 13,
+  color: 'var(--color-text-muted)',
+  textAlign: 'center',
+  margin: 0,
+  lineHeight: 1.5,
   width: '100%',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 12,
-}
-
-const swipeDeckStyle = {
-  width: '100%',
-  height: AUTH_CARD_HEIGHT,
-  position: 'relative',
 }
 
 const authCardStyle = {
@@ -993,45 +1306,6 @@ const bodyCopyStyle = {
   lineHeight: 1.55,
 }
 
-const choiceBodyStyle = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 18,
-  marginTop: 'auto',
-}
-
-const directionGridStyle = {
-  display: 'grid',
-  gridTemplateColumns: '1fr 1fr',
-  gap: 10,
-}
-
-const directionHintStyle = {
-  minHeight: 74,
-  borderRadius: 16,
-  border: '1px solid',
-  background: 'var(--color-bg)',
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  justifyContent: 'center',
-  gap: 4,
-}
-
-const directionLabelStyle = {
-  fontSize: 14,
-  fontWeight: 700,
-  lineHeight: 1.2,
-  textAlign: 'center',
-}
-
-const directionSublabelStyle = {
-  fontSize: 12,
-  fontWeight: 600,
-  color: 'var(--color-text-dim)',
-  lineHeight: 1.2,
-}
-
 const buttonGridStyle = {
   display: 'grid',
   gridTemplateColumns: '1fr 1fr',
@@ -1065,7 +1339,7 @@ const inputStyle = {
   minHeight: 46,
   borderRadius: 12,
   border: '1px solid var(--color-border)',
-  background: 'var(--color-bg)',
+  background: 'color-mix(in srgb, var(--color-surface) 72%, transparent)',
   color: 'var(--color-text)',
   padding: '0 13px',
   fontSize: 15,

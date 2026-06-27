@@ -46,16 +46,25 @@ RC = settings.RECOMMENDATION
 
 # ── Question card constants (ALGO-QCARD-1) ────────────────────────────────────
 
-_AXIS_FIELDS = ('style', 'atmosphere', 'material_visual')
+_AXIS_FIELDS = (
+    'style', 'atmosphere', 'material_visual',
+    'typology_primary', 'typology_tags', 'architectural_elements',
+)
 
 # Allowlist for axis column names interpolated into raw SQL in _compute_kw_vec_refine.
 # Must be a fixed literal — never derived from request data.  (FIX: ALGO-QCARD axis injection)
-_VALID_AXES = frozenset({'style', 'atmosphere', 'material_visual'})
+_VALID_AXES = frozenset({
+    'style', 'atmosphere', 'material_visual',
+    'typology_primary', 'typology_tags', 'architectural_elements',
+})
 
 _AXIS_QUESTIONS = {
     'atmosphere': {'q': '어떤 분위기에 더 끌리세요?', 'a': '따뜻하고 아늑한', 'b': '차갑고 절제된'},
     'material_visual': {'q': '재료감은 어느 쪽이 더 끌리세요?', 'a': '나무·돌 같은 자연재료', 'b': '콘크리트·유리 같은 인공재료'},
     'style': {'q': '디자인 방향은 어느 쪽이 더 끌리세요?', 'a': '간결하고 미니멀한', 'b': '풍부하고 디테일한'},
+    'typology_primary': {'q': '어떤 용도의 공간에 더 끌리세요?', 'a': '네, 이 유형이 좋아요', 'b': '아니요, 다른 유형도 볼래요'},
+    'typology_tags': {'q': '이런 성격의 공간이 끌리세요?', 'a': '네, 이런 공간이 좋아요', 'b': '아니요, 다른 성격도 볼래요'},
+    'architectural_elements': {'q': '이런 건축 요소에 끌리세요?', 'a': '네, 이 요소가 좋아요', 'b': '아니요, 다른 요소도 볼래요'},
 }
 
 _REFRESH_QUESTION = {
@@ -71,11 +80,11 @@ def _update_question_state(session, action, canonical_bld_id):
     session.question_cooldown = max(0, (session.question_cooldown or 0) - 1)
 
     if action == 'like':
-        from django.db import connections
         try:
             with connections['buildings'].cursor() as cur:
                 cur.execute(
-                    "SELECT style, atmosphere, material_visual"
+                    "SELECT style, atmosphere, material_visual,"
+                    " typology_primary, typology_tags, architectural_elements"
                     " FROM canonical_v2_buildings"
                     " WHERE canonical_bld_id = %s AND is_publishable = true",
                     [canonical_bld_id],
@@ -86,14 +95,21 @@ def _update_question_state(session, action, canonical_bld_id):
             row = None
 
         if row:
-            # style/atmosphere are TEXT (single string), material_visual is TEXT[]
+            # style/atmosphere/typology_primary are TEXT (single string, NULL-safe)
+            # material_visual/typology_tags/architectural_elements are TEXT[]
             style_tags = [row[0]] if row[0] else []
             atm_tags = [row[1]] if row[1] else []
             mat_tags = list(row[2]) if row[2] else []
+            typo_primary_tags = [row[3]] if row[3] else []
+            typo_tags_tags = list(row[4]) if row[4] else []
+            arch_elem_tags = list(row[5]) if row[5] else []
             axis_tags = {
                 'style': style_tags,
                 'atmosphere': atm_tags,
                 'material_visual': mat_tags,
+                'typology_primary': typo_primary_tags,
+                'typology_tags': typo_tags_tags,
+                'architectural_elements': arch_elem_tags,
             }
             counts = dict(session.tag_axis_counts or {})
             for axis, tags in axis_tags.items():
@@ -103,7 +119,10 @@ def _update_question_state(session, action, canonical_bld_id):
                 counts[axis] = axis_counts
             session.tag_axis_counts = counts
 
-            all_tags = style_tags + atm_tags + mat_tags
+            all_tags = (
+                style_tags + atm_tags + mat_tags
+                + typo_primary_tags + typo_tags_tags + arch_elem_tags
+            )
             recent = list(session.recent_like_tag_sets or [])
             recent.append(all_tags)
             if len(recent) > 3:
@@ -1090,16 +1109,18 @@ def _compute_kw_vec_refine(keyword, axis, session):
     pool_ids = list(session.pool_ids)
     try:
         placeholders = ','.join(['%s'] * len(pool_ids))
-        if axis == 'material_visual':
+        # Array axes use EXISTS(unnest) matching; TEXT axes use direct ILIKE.
+        # {axis} is interpolated ONLY because _VALID_AXES guards it above — safe.
+        if axis in ('material_visual', 'typology_tags', 'architectural_elements'):
             query = (
                 f"SELECT canonical_bld_id FROM canonical_v2_buildings"
                 f" WHERE canonical_bld_id IN ({placeholders})"
                 f" AND is_publishable = true"
-                f" AND EXISTS (SELECT 1 FROM unnest(material_visual) m WHERE m ILIKE %s)"
+                f" AND EXISTS (SELECT 1 FROM unnest({axis}) v WHERE v ILIKE %s)"
             )
             params = pool_ids + [keyword]
         else:
-            # style and atmosphere are plain TEXT columns
+            # style, atmosphere, typology_primary are plain TEXT columns
             query = (
                 f"SELECT canonical_bld_id FROM canonical_v2_buildings"
                 f" WHERE canonical_bld_id IN ({placeholders})"

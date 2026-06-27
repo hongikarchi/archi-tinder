@@ -74,6 +74,7 @@ def _serialize_building_card(row, include_extra=False):
             canonical_bld_id, name, cover_image_url_default,
             architect_names, architect_canonical_ids,
             location_country, location_city, project_year, program,
+            year_kind,
         ) = row
     else:
         (
@@ -92,6 +93,7 @@ def _serialize_building_card(row, include_extra=False):
     if include_extra:
         card['location_city'] = location_city or ''
         card['program'] = program or ''
+        card['year_kind'] = year_kind or 'unknown'
     return card, architect_names, architect_canonical_ids
 
 
@@ -238,7 +240,8 @@ class ArchitectDetailView(APIView):
                 """
                 SELECT canonical_bld_id, name, cover_image_url_default,
                        architect_names, architect_canonical_ids,
-                       location_country, location_city, project_year, program
+                       location_country, location_city, project_year, program,
+                       year_kind
                 FROM canonical_v2_buildings
                 WHERE %s = ANY(architect_canonical_ids)
                   AND is_publishable = true
