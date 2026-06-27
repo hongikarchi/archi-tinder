@@ -8,7 +8,8 @@ Tests:
 - TestMultiAxisPriorityProbe:         D1 multi-axis trigger + suppression; chip objects shape
 - TestParseQueryViewCalibrationKeys:  ParseQueryView echoes 5 keys in probe + terminal Response
 - TestTopPriorityMultiplierRanking:   D2 rank-0 axis effective weight dominates
-- TestDeterministicReRank:            Branch A — priority_axis chip click skips LLM, keeps all filters
+- TestDeterministicReRank:            Branch A — priority_axis chip click skips LLM, keeps all
+                                       filters; regression: no/empty conversation_history -> 200
 - TestFreeTextFilterMerge:            Branch B — prior_filters merged into parsed_filters
 """
 import json
@@ -662,7 +663,11 @@ class TestTopPriorityMultiplierRanking:
 @pytest.mark.django_db
 class TestDeterministicReRank:
     """Branch A: POST with priority_axis skips LLM, preserves ALL prior filters,
-    returns results, and emits the structured chip list with chosen axis first."""
+    returns results, and emits the structured chip list with chosen axis first.
+
+    Regression: Branch A must work even when conversation_history is absent or
+    empty — the chip-click frontend path does not send it.
+    """
 
     @pytest.fixture
     def auth_client(self):
@@ -679,10 +684,48 @@ class TestDeterministicReRank:
         client.credentials(HTTP_AUTHORIZATION=f'Bearer {str(token.access_token)}')
         return client
 
-    def test_deterministic_rerank_keeps_all_prior_filters(self, auth_client):
-        """priority_axis + prior_filters -> response structured_filters keeps ALL three axes."""
+    # ── REGRESSION: conversation_history absent/empty must NOT 400 on Branch A ──
+
+    def test_branch_a_no_conversation_history_returns_200(self, auth_client):
+        """REGRESSION: priority_axis with NO conversation_history -> 200, NOT 400.
+
+        This is the exact live bug: chip-click resets conversation_history on the
+        frontend, so the next POST omits it.  Branch A must not require it.
+        """
         prior = {'program': 'Housing', 'location_country': 'South Korea', 'material': 'brick'}
-        fake_results = [{'canonical_bld_id': f'bld_{i:06d}'} for i in range(1, 5)]
+        fake_results = [{'canonical_bld_id': f'bld_{i:06d}'} for i in range(1, 21)]
+
+        with patch('apps.recommendation.views.services.parse_query') as mock_pq, \
+             patch('apps.recommendation.views.engine.search_by_filters_scored',
+                   return_value=fake_results):
+            resp = auth_client.post(
+                '/api/v1/parse-query/',
+                # No conversation_history key at all
+                {
+                    'prior_filters': prior,
+                    'priority_axis': 'material',
+                    'raw_query': '벽돌 주택',
+                },
+                format='json',
+            )
+
+        assert resp.status_code == 200, (
+            f"Expected 200 for Branch A with no conversation_history; "
+            f"got {resp.status_code}: {resp.json()}"
+        )
+        mock_pq.assert_not_called()
+        data = resp.json()
+        assert data['structured_filters'].get('program') == 'Housing'
+        assert data['structured_filters'].get('material') == 'brick'
+
+    def test_branch_a_empty_conversation_history_returns_200(self, auth_client):
+        """REGRESSION: priority_axis with empty conversation_history [] -> 200, NOT 400.
+
+        Frontend may send an empty list instead of omitting the key.
+        Branch A must succeed regardless.
+        """
+        prior = {'program': 'Housing', 'material': 'brick'}
+        fake_results = [{'canonical_bld_id': f'bld_{i:06d}'} for i in range(1, 21)]
 
         with patch('apps.recommendation.views.services.parse_query') as mock_pq, \
              patch('apps.recommendation.views.engine.search_by_filters_scored',
@@ -690,7 +733,32 @@ class TestDeterministicReRank:
             resp = auth_client.post(
                 '/api/v1/parse-query/',
                 {
-                    'conversation_history': [{'role': 'user', 'text': '벽돌 주택'}],
+                    'conversation_history': [],   # empty list — must NOT 400
+                    'prior_filters': prior,
+                    'priority_axis': 'material',
+                },
+                format='json',
+            )
+
+        assert resp.status_code == 200, (
+            f"Expected 200 for Branch A with empty conversation_history; "
+            f"got {resp.status_code}: {resp.json()}"
+        )
+        mock_pq.assert_not_called()
+
+    # ── Core Branch A correctness tests ─────────────────────────────────────────
+
+    def test_deterministic_rerank_keeps_all_prior_filters(self, auth_client):
+        """priority_axis + prior_filters -> response structured_filters keeps ALL three axes."""
+        prior = {'program': 'Housing', 'location_country': 'South Korea', 'material': 'brick'}
+        fake_results = [{'canonical_bld_id': f'bld_{i:06d}'} for i in range(1, 21)]
+
+        with patch('apps.recommendation.views.services.parse_query') as mock_pq, \
+             patch('apps.recommendation.views.engine.search_by_filters_scored',
+                   return_value=fake_results):
+            resp = auth_client.post(
+                '/api/v1/parse-query/',
+                {
                     'prior_filters': prior,
                     'priority_axis': 'material',
                     'raw_query': '벽돌 주택',
@@ -713,7 +781,7 @@ class TestDeterministicReRank:
     def test_deterministic_rerank_priority_axis_first_in_filter_priority(self, auth_client):
         """priority_axis='material' -> filter_priority[0] == 'material'."""
         prior = {'program': 'Housing', 'location_country': 'South Korea', 'material': 'brick'}
-        fake_results = [{'canonical_bld_id': 'bld_000001'}]
+        fake_results = [{'canonical_bld_id': f'bld_{i:06d}'} for i in range(1, 21)]
 
         with patch('apps.recommendation.views.services.parse_query'), \
              patch('apps.recommendation.views.engine.search_by_filters_scored',
@@ -721,7 +789,6 @@ class TestDeterministicReRank:
             resp = auth_client.post(
                 '/api/v1/parse-query/',
                 {
-                    'conversation_history': [{'role': 'user', 'text': '벽돌'}],
                     'prior_filters': prior,
                     'priority_axis': 'material',
                 },
@@ -736,7 +803,7 @@ class TestDeterministicReRank:
     def test_deterministic_rerank_returns_results(self, auth_client):
         """Branch A always returns a non-empty results list (mocked engine)."""
         prior = {'program': 'Housing', 'location_country': 'South Korea', 'material': 'brick'}
-        fake_results = [{'canonical_bld_id': f'bld_{i:06d}'} for i in range(1, 6)]
+        fake_results = [{'canonical_bld_id': f'bld_{i:06d}'} for i in range(1, 21)]
 
         with patch('apps.recommendation.views.services.parse_query'), \
              patch('apps.recommendation.views.engine.search_by_filters_scored',
@@ -744,7 +811,6 @@ class TestDeterministicReRank:
             resp = auth_client.post(
                 '/api/v1/parse-query/',
                 {
-                    'conversation_history': [{'role': 'user', 'text': '벽돌 주택'}],
                     'prior_filters': prior,
                     'priority_axis': 'material',
                 },
@@ -760,7 +826,7 @@ class TestDeterministicReRank:
     def test_deterministic_rerank_chips_chosen_axis_first(self, auth_client):
         """Branch A response chips list has chosen axis as first chip."""
         prior = {'program': 'Housing', 'location_country': 'South Korea', 'material': 'brick'}
-        fake_results = [{'canonical_bld_id': 'bld_000001'}]
+        fake_results = [{'canonical_bld_id': f'bld_{i:06d}'} for i in range(1, 21)]
 
         with patch('apps.recommendation.views.services.parse_query'), \
              patch('apps.recommendation.views.engine.search_by_filters_scored',
@@ -768,7 +834,6 @@ class TestDeterministicReRank:
             resp = auth_client.post(
                 '/api/v1/parse-query/',
                 {
-                    'conversation_history': [{'role': 'user', 'text': '벽돌'}],
                     'prior_filters': prior,
                     'priority_axis': 'material',
                 },
@@ -794,7 +859,6 @@ class TestDeterministicReRank:
         resp = auth_client.post(
             '/api/v1/parse-query/',
             {
-                'conversation_history': [{'role': 'user', 'text': '주택'}],
                 'prior_filters': prior,
                 'priority_axis': 'invalid_axis_xyz',
             },
@@ -805,7 +869,7 @@ class TestDeterministicReRank:
     def test_deterministic_rerank_parse_query_not_called(self, auth_client):
         """parse_query service must NOT be called when priority_axis is provided."""
         prior = {'program': 'Housing', 'material': 'concrete'}
-        fake_results = [{'canonical_bld_id': 'bld_000001'}]
+        fake_results = [{'canonical_bld_id': f'bld_{i:06d}'} for i in range(1, 21)]
 
         with patch('apps.recommendation.views.services.parse_query') as mock_pq, \
              patch('apps.recommendation.views.engine.search_by_filters_scored',
@@ -813,7 +877,6 @@ class TestDeterministicReRank:
             auth_client.post(
                 '/api/v1/parse-query/',
                 {
-                    'conversation_history': [{'role': 'user', 'text': '콘크리트'}],
                     'prior_filters': prior,
                     'priority_axis': 'material',
                 },

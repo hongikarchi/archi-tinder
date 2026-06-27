@@ -15,6 +15,10 @@ RC = settings.RECOMMENDATION
 
 _NULLISH_FILTER_STRINGS = {'', 'null', 'none', 'n/a', 'na', 'undefined'}
 
+_FALLBACK_NOTE = (
+    "Couldn't find an exact match — here are some buildings you might enjoy instead."
+)
+
 
 def _first_user_text(conversation_history):
     for entry in conversation_history:
@@ -96,9 +100,119 @@ class ParseQueryView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        # ── Branch A: DETERMINISTIC RE-RANK (chip click, priority_axis provided) ─
+        # Evaluated BEFORE conversation_history validation — chip-click calls omit
+        # conversation_history (frontend resets it after the terminal response) so
+        # validating it here would 400 every chip click.  Branch A uses prior_filters
+        # + raw_query from request.data; conversation_history is not read or required.
+        prior_filters_raw = request.data.get('prior_filters') or {}
+        priority_axis = request.data.get('priority_axis')
+
+        # Validate prior_filters: must be a dict (or absent)
+        prior_filters = (
+            _clean_filters(prior_filters_raw)
+            if isinstance(prior_filters_raw, dict)
+            else {}
+        )
+
+        # Validate priority_axis against known axis allowlist (400 on bad value)
+        if priority_axis is not None and priority_axis not in _STRONG_AXES:
+            return Response(
+                {'detail': f'priority_axis must be one of {sorted(_STRONG_AXES)}'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if priority_axis is not None:
+            # Branch A: deterministic re-rank.
+            # Skip Gemini. Use prior_filters unchanged; boost chosen axis to rank 0.
+            # search_by_filters_scored scores the FULL publishable corpus (soft CASE WHEN
+            # on every axis + BM25) → returns exactly 20 ranked results.  No filter loss.
+            # conversation_history is NOT required on this path.
+            filters = dict(prior_filters)
+            # image_focus may have been accumulated in prior filters; extract separately
+            image_focus = filters.pop('image_focus', None)
+
+            # Build filter_priority: chosen axis first, then remaining axes from prior.
+            # Caller may send back the previous filter_priority list for ordering hints.
+            prior_priority_raw = request.data.get('filter_priority') or []
+            prior_other = [
+                k for k in (
+                    prior_priority_raw
+                    if isinstance(prior_priority_raw, list)
+                    else []
+                )
+                if k != priority_axis and k in filters
+            ]
+            # Include any filter keys not already in the explicit priority list
+            remaining = [
+                k for k in filters
+                if k != priority_axis and k not in prior_other
+            ]
+            filter_priority = [priority_axis] + prior_other + remaining
+
+            # raw_query from request.data (BM25 channel); fall back to empty string.
+            raw_query = request.data.get('raw_query', '') or ''
+
+            # Score-ranked search: all prior axes present, chosen axis at rank 0.
+            # search_by_filters_scored soft-scores the full corpus → 20 results ranked
+            # by all clues (chosen-axis-heavy → partial → others).
+            is_fallback = False
+            fallback_note = ''
+            has_signal = bool(filters) or bool(raw_query and raw_query.strip())
+            if has_signal:
+                search_filters = dict(filters)
+                if image_focus:
+                    search_filters['image_focus'] = image_focus
+                results = engine.search_by_filters_scored(
+                    search_filters,
+                    raw_query=raw_query,
+                    filter_priority=filter_priority,
+                    limit=20,
+                    image_focus=image_focus,
+                )
+            else:
+                results = []
+
+            # Last-resort fallback: fires only when the scored search itself is empty
+            # (SQL error or genuine zero-signal). Minimise random — only when necessary.
+            if not results:
+                results = engine.get_diverse_random(n=20, image_focus=image_focus)
+                is_fallback = True
+                fallback_note = _FALLBACK_NOTE
+
+            # Re-emit the multi-axis chips so user can pick another axis.
+            # Chosen axis sorts first for frontend affordance.
+            all_chips = _build_axis_chips(filters)
+            chips = sorted(
+                all_chips,
+                key=lambda c: (0 if c['axis'] == priority_axis else 1),
+            )
+
+            return Response({
+                'probe_needed': False,
+                'probe_question': None,
+                'reply': '',
+                'raw_query': raw_query,
+                'visual_description': None,
+                'structured_filters': filters,
+                'filter_priority': filter_priority,
+                'image_focus': image_focus,
+                'suggestions': [],
+                'results': results,
+                'is_fallback': is_fallback,
+                'fallback_note': fallback_note,
+                # Calibration fields — deterministic values for chip-click path
+                'confidence_score': 0.90,
+                'system_action': 'REQUEST_PRIORITY',
+                'suggested_quick_replies': chips,
+                'priority_ordered': filter_priority,
+                'llm_response_message': '추천에 더 중요하게 생각할 기준이 있나요?',
+                'chosen_axis': priority_axis,
+            })
+
+        # ── Branch B: NORMAL / FREE-TEXT TURN (no priority_axis) ─────────────────
+        # conversation_history is required here — LLM call needs it.
         # Accept BOTH legacy `query` string AND new `conversation_history` list.
-        # If conversation_history provided: pass directly to parse_query.
-        # If only query: wrap as single-turn history for parse_query.
         conversation_history = request.data.get('conversation_history')
         query_str = request.data.get('query', '')
         if isinstance(query_str, str):
@@ -135,7 +249,9 @@ class ParseQueryView(APIView):
                 text = entry.get('text', '')
                 if not isinstance(text, str) or len(text) > _MAX_TEXT_LEN:
                     return Response(
-                        {'detail': f'conversation_history.text too long (max {_MAX_TEXT_LEN} chars)'},
+                        {'detail': (
+                            f'conversation_history.text too long (max {_MAX_TEXT_LEN} chars)'
+                        )},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
         elif query_str:
@@ -147,96 +263,6 @@ class ParseQueryView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # ── New params: prior_filters + priority_axis (chip-click path) ──────────
-        # prior_filters: accumulated filter dict from prior turns (frontend sends back).
-        # priority_axis: canonical axis key the user chose via chip click.
-        prior_filters_raw = request.data.get('prior_filters') or {}
-        priority_axis = request.data.get('priority_axis')
-
-        # Validate and clean prior_filters
-        prior_filters = _clean_filters(prior_filters_raw) if isinstance(prior_filters_raw, dict) else {}
-
-        # Validate priority_axis against known axis allowlist
-        if priority_axis is not None and priority_axis not in _STRONG_AXES:
-            return Response(
-                {'detail': f'priority_axis must be one of {sorted(_STRONG_AXES)}'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # ── Branch A: DETERMINISTIC RE-RANK (chip click, priority_axis provided) ─
-        # Skip Gemini entirely. Use prior_filters unchanged; boost chosen axis to [0].
-        # Zero LLM cost + zero filter loss.
-        if priority_axis is not None:
-            filters = dict(prior_filters)
-            # image_focus may have been accumulated in prior filters; extract separately
-            image_focus = filters.pop('image_focus', None)
-
-            # Build filter_priority: chosen axis first, then remaining axes from prior
-            prior_priority_raw = request.data.get('filter_priority') or []
-            prior_other = [
-                k for k in (prior_priority_raw if isinstance(prior_priority_raw, list) else [])
-                if k != priority_axis and k in filters
-            ]
-            # Also include any filter keys not in the explicit priority list
-            remaining = [k for k in filters if k != priority_axis and k not in prior_other]
-            filter_priority = [priority_axis] + prior_other + remaining
-
-            raw_query = request.data.get('raw_query', '') or _first_user_text(conversation_history)
-
-            is_fallback = False
-            fallback_note = ''
-            has_signal = bool(filters) or bool(raw_query and raw_query.strip())
-            if has_signal:
-                search_filters = dict(filters)
-                if image_focus:
-                    search_filters['image_focus'] = image_focus
-                results = engine.search_by_filters_scored(
-                    search_filters,
-                    raw_query=raw_query,
-                    filter_priority=filter_priority,
-                    limit=20,
-                    image_focus=image_focus,
-                )
-            else:
-                results = []
-
-            if not results:
-                results = engine.get_diverse_random(n=20, image_focus=image_focus)
-                is_fallback = True
-                fallback_note = "Couldn't find an exact match — here are some buildings you might enjoy instead."
-
-            # Re-emit the multi-axis chips so user can pick another axis.
-            # Mark chosen axis first in the chip list for frontend affordance.
-            all_chips = _build_axis_chips(filters)
-            # Sort: chosen axis first
-            chips = sorted(
-                all_chips,
-                key=lambda c: (0 if c['axis'] == priority_axis else 1),
-            )
-
-            return Response({
-                'probe_needed': False,
-                'probe_question': None,
-                'reply': '',
-                'raw_query': raw_query,
-                'visual_description': None,
-                'structured_filters': filters,
-                'filter_priority': filter_priority,
-                'image_focus': image_focus,
-                'suggestions': [],
-                'results': results,
-                'is_fallback': is_fallback,
-                'fallback_note': fallback_note,
-                # Calibration fields — deterministic values for chip-click path
-                'confidence_score': 0.90,
-                'system_action': 'REQUEST_PRIORITY',
-                'suggested_quick_replies': chips,
-                'priority_ordered': filter_priority,
-                'llm_response_message': '추천에 더 중요하게 생각할 기준이 있나요?',
-                'chosen_axis': priority_axis,
-            })
-
-        # ── Branch B: NORMAL / FREE-TEXT TURN (no priority_axis) ─────────────────
         # FULL-LANGUAGE-1: pass user's language preference to parse_query so it can
         # force reply/probe_question into the chosen language.
         _profile = getattr(request.user, 'profile', None)
@@ -289,12 +315,14 @@ class ParseQueryView(APIView):
         else:
             results = []
 
-        # Fallback: only when both filter-signal AND raw_query are absent (true empty).
-        # Preserves the get_diverse_random path for zero-signal queries.
+        # Last-resort fallback: fires only when both filter-signal AND raw_query are
+        # absent (true zero-signal) or the search returned empty (SQL error).
+        # Preserves the get_diverse_random path for zero-signal queries; minimises
+        # random — search_by_filters_scored already returns 20 for any non-empty signal.
         if not results:
             results = engine.get_diverse_random(n=20, image_focus=image_focus)
             is_fallback = True
-            fallback_note = "Couldn't find an exact match — here are some buildings you might enjoy instead."
+            fallback_note = _FALLBACK_NOTE
 
         # Probe turn: return probe payload with real results already computed above.
         # Stage 2 is NOT spawned on probe turns — the filter set is still unstable.
