@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-06-27 19:31 KST',
-    head: 'e966617',
-    branch: 'feature/claude-login-onboarding',
+    updatedAt: '2026-06-28 02:13 KST',
+    head: 'c3a7ac2',
+    branch: 'feature/claude-task-cleanup',
   },
   done: [
+    {
+      id: 'CLEANUP-DEPLOY-2026-06-28',
+      title: '배포 #250 + 백로그 정리',
+      completedAt: '2026-06-28',
+      note: '배포 후 정리 batch: develop→main deploy + prod migration + 백로그 audit.',
+    },
     {
       id: 'LOGIN-ONBOARD-1',
       title: '로그인/온보딩 통합 + 인증 모델 단순화',
@@ -72,12 +78,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-06-22',
       prs: [240],
       note: '프론트/웹 이미지-렌더 레이턴시 리서치(코드 아님). 측정-우선: Phase 0(실 swipe 카드 50장) → 이슈별 1차출처 리서치 → adversarial 검증. 백엔드 알고리즘 out of scope.',
-    },
-    {
-      id: 'FRONT-AUTH-3',
-      title: '로그인 테마 통일 + 한영 토글',
-      completedAt: '2026-06-12',
-      note: '협업자 dain `archibe-login`(`c4954ea`) 리디자인 이식 — 제스처 인트로 팝업 + 카드 상단 한/영 토글 + 로그인 전체 i18n + 디자인 테마 통일. 5단계 플로우/consent 스와이프/반응형 카드/API 계약 무변경.',
     },
   ],
   now: [],
@@ -125,11 +125,6 @@ window.PROJECT_STATE = {
         id: 'BACK-LLM-4',
         title: 'search.py ParseQueryView byte-cap도 ensure_ascii 부풀림 의심',
         note: 'BACK-LLM-2(#195) 리뷰 중 발견(미수정, pre-existing). `backend/apps/recommendation/views/search.py` `ParseQueryView.post`의 conversation_history 검증이 BACK-LLM-2 serializer가 고친 것과 동일하게 `json.dumps` 기본 `ensure_ascii=True`로 byte 측정 가능성 → 한글 대화가 한도를 6배 부풀려 거짓 거부. 확인 후 `ensure_ascii=False`+UT…',
-      },
-      {
-        id: 'FRONT-DISCOVERY-1',
-        title: '트리거 카드 빈 덱 동시각 한 박자 지연 (비차단)',
-        note: '`DiscoveryPage.jsx` 트리거 주입 effect dep `[draftId, draftLikeCount]`. like 10번째가 덱이 빈 순간(prefetch in-flight)과 겹치고 이후 추가 like가 없으면 트리거가 한 카드 늦게 뜸. 크래시·상태손상 없음. dep에 deck refill 신호 추가로 보강 가능(ref 멱등 가드 이미 존재).',
       },
       {
         id: 'FRONT-PROFILE-1',
@@ -192,6 +187,20 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 249,
+      title: 'feat(discovery): cute loading skeleton — mascot + 취향 탐색 중 (DISCOVERY-SKELETON)',
+      mergedAt: '2026-06-27T10:34:50Z',
+      mergedAtKST: '2026-06-27 19:34 KST',
+      sha: '126c8ab',
+    },
+    {
+      number: 248,
+      title: 'feat(auth): unify login/onboarding — single id+password flow, Hangul ID, Google verify-only (LOGIN-ONBOARD-1)',
+      mergedAt: '2026-06-27T10:33:38Z',
+      mergedAtKST: '2026-06-27 19:33 KST',
+      sha: '674ba41',
+    },
+    {
       number: 246,
       title: 'fix(DISCOVERY-UI): 상단 클릭가능 Taste 저장·이동 버튼 + 취향다양 라벨 제거',
       mergedAt: '2026-06-27T01:48:23Z',
@@ -232,20 +241,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-06-21T15:49:25Z',
       mergedAtKST: '2026-06-22 00:49 KST',
       sha: 'bce04d6',
-    },
-    {
-      number: 240,
-      title: 'docs(perf): image-latency research — measure-first report + findings',
-      mergedAt: '2026-06-21T15:41:24Z',
-      mergedAtKST: '2026-06-22 00:41 KST',
-      sha: '0715bd3',
-    },
-    {
-      number: 239,
-      title: 'feat(LLM-SEARCH): IDF+BM25 점수 랭킹 + atmosphere/color_tone/typology 파싱 (무작위 절벽 제거)',
-      mergedAt: '2026-06-20T20:14:51Z',
-      mergedAtKST: '2026-06-21 05:14 KST',
-      sha: '463508e',
     },
   ],
   agents: [

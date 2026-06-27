@@ -78,22 +78,14 @@ _(none — LOGIN-ONBOARD-1 + DISCOVERY-SKELETON shipped 2026-06-27, awaiting nex
 > `accounts/views/{auth,profile}.py`. Refs are re-pinned for the active-sequence items (X-HIGH bundles + the new HIGH
 > quick-wins BACK-OFFICE-1 / BACK-PROFILE-1); deferred items keep their original ref + this convention.
 >
-> **권장 실행 순서 (Claude lane, 2026-06-04 결정 — quick-wins·defects before the heavy FRONT-DESIGN-1 sweep):**
-> 1. ~~`FRONT-UX-8`+`FRONT-UX-7` (UX-WRITE-FAIL)~~ — DONE 2026-06-04 (`feature/claude-ux-write-fail`). **다음 → 2. `BACK-OFFICE-1`** (SavedOffice 삭제)
-> — 3. `BACK-PROFILE-1` (external_links 검증) — 4. ~~`FRONT-UX-6`+`9`+`10` UX-GALLERY~~ DONE 2026-06-04
-> — 5. `BACK-RECOMMEND-4` (engine 협업자 조율). `FRONT-DESIGN-1` stays **paused** (multi-session sweep);
-> `FULL-LANGUAGE-1` / `BACK-LLM-2` / `FULL-LEGAL-1` deferred.
->
-> **1-PR bundles** (group for a single PR; IDs kept distinct for traceability — N never reused):
-> - ~~**UX-WRITE-FAIL** = `FRONT-UX-8` + `FRONT-UX-7`~~ — DONE 2026-06-04 (shared `reportWriteError` toast over `globalToast`; see ## Done).
-> - ~~**UX-GALLERY** = `FRONT-UX-6` + `FRONT-UX-9` + `FRONT-UX-10`~~ — DONE 2026-06-04 (재정의: lift 대신 방향잠금 + pan-y + Discovery long-press 제거; see ## Done).
+> **2026-06-04 quick-win batch + both 1-PR bundles (UX-WRITE-FAIL, UX-GALLERY) shipped → ## Done.** `FRONT-DESIGN-1` stays **paused** (multi-session sweep); `FULL-LANGUAGE-1` / `FULL-LEGAL-1` deferred.
 
 ### X-HIGH
 
 > Critical — confirmed defect against the core taste-match promise or against data
 > correctness, surfaced by the 2026-05-31 swipe / discovery review
 > (`.claude/reviews/2026-05-31-swipe-discovery-review.md`) + the 2026-06-04 backlog audit. Pull before `### HIGH`.
-> **Both 1-PR bundles shipped → ## Done** (UX-WRITE-FAIL + UX-GALLERY, 2026-06-04). No bundle remains in X-HIGH; X-HIGH = `BACK-RECOMMEND-4`.
+> **X-HIGH is now EMPTY** — all X-HIGH items shipped (UX-WRITE-FAIL + UX-GALLERY 2026-06-04; BACK-RECOMMEND-4 2026-06-04 — see ## Done).
 
 ### HIGH
 
@@ -117,7 +109,6 @@ PR2(#242)가 srcset/decode/classifier 출하 → 남은 Tier A polish. 전부 �
 - **A7 LQIP**: 카드당 ~20px 블러 썸네일(`buildLqipUrl=rightSizeImageUrl(url,20)`, 양 CDN) + CSS `filter:blur`, skeleton-shimmer 위 레이어. ⚠️ object-fit:contain letterbox라 `scale(1.1)` edge-bleed 핵 금지(letterbox 노출). PR2서 의도적 분리(유일 render-lifecycle 침습, polish지 core 아님). 완전 스펙은 PR2 Plan-agent 설계에 turnkey.
 - **풀해상도 passthrough**: `normalizeCard`에 `cover_full_url`(미-리사이즈) + `BuildingDetailPage` 빈-갤러리 폴백서 우선 → FRONT-IMAGE-RESIZE-1 known-limitation(빈-갤러리 #235 다운로드 840px) 해소.
 - (선택) `useImageTelemetry`가 `currentSrc`(렌더된 variant) 읽도록 — 현재 `.src`(840 폴백) → per-variant load_ms 정확도.
-- Tier B(Divisare 포맷 프록시)는 별개 — R2 폐기 이유(Q1, 외부 spec)+핫링크/ToS 정책(Q2)=user 결정 gated. `findings-r2-retirement.md`.
 - Tier B(Divisare 포맷 프록시)는 별개 — R2 폐기 이유(Q1, 외부 spec)+핫링크/ToS 정책(Q2)=user 결정 gated. `findings-r2-retirement.md`.
 
 #### ARCHITECT-UNIFY-1 — firm-side Office→Architect 전면 통합 (deferred, firm-UX 착수 시)
@@ -206,9 +197,6 @@ BACK-AVATAR-2(`5e1f934`)가 교체/삭제 시점 GC를 붙였으나 그 이전�
 #### BACK-LLM-4 — search.py ParseQueryView byte-cap도 ensure_ascii 부풀림 의심
 BACK-LLM-2(#195) 리뷰 중 발견(미수정, pre-existing). `backend/apps/recommendation/views/search.py` `ParseQueryView.post`의 conversation_history 검증이 BACK-LLM-2 serializer가 고친 것과 동일하게 `json.dumps` 기본 `ensure_ascii=True`로 byte 측정 가능성 → 한글 대화가 한도를 6배 부풀려 거짓 거부. 확인 후 `ensure_ascii=False`+UTF-8 인코딩 측정으로 통일. (`serializers.py:8` 주석이 한도가 ParseQueryView서 'mirror'됐다고 명시.)
 
-
-#### FRONT-DISCOVERY-1 — 트리거 카드 빈 덱 동시각 한 박자 지연 (비차단)
-`DiscoveryPage.jsx` 트리거 주입 effect dep `[draftId, draftLikeCount]`. like 10번째가 덱이 빈 순간(prefetch in-flight)과 겹치고 이후 추가 like가 없으면 트리거가 한 카드 늦게 뜸. 크래시·상태손상 없음. dep에 deck refill 신호 추가로 보강 가능(ref 멱등 가드 이미 존재).
 
 #### FRONT-PROFILE-1 — 프로필 재설계 브라우저 픽셀 패스 (Codex)
 FRONT-PROFILE-HARVEST-1(#179) 머지 후 Codex 브라우저 수정 (별도 PR). FollowListModal 모바일 bottom-sheet(≤768px, DESIGN.md §8.10) + backdrop opacity 0.6→0.4 + inline onMouseEnter→CSS hover + 4테마 픽셀 검증(github-light 먼저). 원 하베스트 minor (2026-06-04 audit 재확인): EditProfileModal(`components/EditProfileModal.jsx:147-149`, 경로는 components/ 직하 — components/profile/ 아님) 에러박스 하드코딩 rgba→color-mix, ProfileHeader.jsx:126(Share 버튼은 ProfileHeader 소유, ProfileHero 아님) 타인 Share borderRadius:12→var(--radius-md), onMouseEnter→CSS hover, FollowListModal onClose useCallback churn. 드롭됨: "FollowListPage setError(null) 누락" minor → useFollowList 훅(`:23,43`)이 fetch마다 setError(null) 호출하므로 stale 배너 위험 없음(audit 반증).
@@ -367,6 +355,12 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 _(Deferred 2026-06-04 batch scope: YAGNI — product-미소비 telemetry 1필드 위해 Celery+worker 도입은 과투자. 2번째 background job 생기면 단일 INFRA-JOBS 티켓으로 묶어 처리.)_
 
 ## Done
+### CLEANUP-DEPLOY-2026-06-28 — 배포 #250 + 백로그 정리 — RESOLVED 2026-06-28
+배포 후 정리 batch: develop→main deploy + prod migration + 백로그 audit.
+- [x] Deploy PR #250 (develop→main squash, main `c3a7ac2`; develop force-reset to match, HARD RULE 4 carve-out). Railway 자동배포. Migration 0011 prod 적용+검증 (12 profiles: handle==display_name 0 mismatch, is_guest True=8/False=4). [[project_login_onboard_1_shipped]]
+- [x] PR #232 (yywon1 sns-persona-description-axis, conflicting/CI-red post force-reset) CLOSED — 브랜치 보존 + rebase 경로 코멘트.
+- [x] Next 백로그 audit (코드 대조): **FRONT-DISCOVERY-1**(트리거 한박자 지연) #238 Fix #4(splice index 0 = 즉시) + mid-fetch 가드 + 멱등 ref로 RESOLVED → Next에서 제거. 잔여 Next 항목은 미해결 확인 후 유지 (FULL-ONBOARDING-2 fast-follows 미적용: validate_is_temp/projects.py is_temp filter/discovery guest-count fix 전부 absent).
+
 ### LOGIN-ONBOARD-1 — 로그인/온보딩 통합 + 인증 모델 단순화 — RESOLVED 2026-06-27 (`1d58a6f`-pre-squash)
 신규계정 경로 2개(게스트 스와이프 + 별도 아이디/비번 가입)를 단일 흐름으로 병합 + display_name·handle 통합 ID + Google 인증전용 모델.
 - [x] 통합 ID: `display_name == handle` (한글 허용·공백없음·2-20·NFC 정규화·대소문자 무관 유일). write-layer 동기화(물리 컬럼 병합 안 함). 중복확인 버튼 + 신규 `GET /auth/check-handle/` (`CheckHandleThrottle` 20/min/IP).
