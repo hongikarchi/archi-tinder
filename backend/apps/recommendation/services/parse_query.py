@@ -213,6 +213,81 @@ def _extract_calibration_fields(data: dict, filters: dict, probe_needed: bool) -
     }
 
 
+_STRONG_AXES = frozenset({
+    'program', 'location_country', 'location_city',
+    'style', 'material', 'atmosphere', 'typology_primary',
+})
+
+# D1: localised axis label map for priority-question chip generation
+_AXIS_LABEL_KO = {
+    'program': '프로그램',
+    'location_country': '위치',
+    'location_city': '위치',
+    'style': '스타일',
+    'material': '재료',
+    'atmosphere': '분위기',
+    'typology_primary': '유형',
+}
+
+
+def _maybe_multi_axis_probe(filters, filter_priority, user_turn_count, parsed_result):
+    """D1: inject a 'priority' probe when turn==1 and >=2 strong axes are present.
+
+    Mutates and returns a copy of parsed_result with probe_needed=True,
+    system_action='REQUEST_PRIORITY', probe_question/llm_response_message set to
+    a Korean priority question, and suggested_quick_replies = one chip per present
+    strong axis (localised with its value) + a trailing skip chip.
+
+    Fires ONLY when: user_turn_count == 1 AND n_strong >= 2.
+    When user_turn_count >= 2 OR n_strong < 2: returns parsed_result unchanged.
+    Respects the existing 1-probe-per-session rule (idempotent if re-called).
+    """
+    if user_turn_count != 1:
+        return parsed_result
+
+    present_strong = [
+        ax for ax in _STRONG_AXES
+        if filters.get(ax) is not None and str(filters[ax]).strip()
+    ]
+    if len(present_strong) < 2:
+        return parsed_result
+
+    # Prefer an existing usable llm_response_message from calibration fields
+    existing_msg = parsed_result.get('llm_response_message', '')
+    if isinstance(existing_msg, str) and existing_msg.strip():
+        probe_q = existing_msg.strip()
+    else:
+        # Synthesise from present strong axes + their values
+        axis_labels = []
+        for ax in present_strong:
+            label = _AXIS_LABEL_KO.get(ax, ax)
+            val = filters[ax]
+            axis_labels.append(f'{label}({val})')
+        axes_str = '·'.join(axis_labels)
+        probe_q = (
+            f'지금 {axes_str} 조건이 함께 있어요. '
+            '어떤 걸 가장 우선해서 찾아드릴까요?'
+        )
+
+    # Build one chip per present strong axis (localised with value) + skip chip
+    chips = []
+    for ax in present_strong:
+        label = _AXIS_LABEL_KO.get(ax, ax)
+        val = filters[ax]
+        chips.append(f'{label}({val})')
+    skip_chip = '상관없어요, 다 보여주세요'
+    chips.append(skip_chip)
+
+    result = dict(parsed_result)
+    result['probe_needed'] = True
+    result['probe_question'] = probe_q
+    result['llm_response_message'] = probe_q
+    result['system_action'] = 'REQUEST_PRIORITY'
+    result['suggested_quick_replies'] = chips
+    # priority_ordered: existing value stays (filter_priority ordering from LLM)
+    return result
+
+
 def parse_query(conversation_history, language=None):
     """
     Chat phase Gemini call (Sprint 1 rewrite per Investigation 06).
@@ -510,6 +585,8 @@ def parse_query(conversation_history, language=None):
             'priority_ordered': calibration['priority_ordered'],
             'llm_response_message': calibration['llm_response_message'],
         }
+        # D1: multi-axis priority probe — fires on turn 1 with >=2 strong axes
+        result = _maybe_multi_axis_probe(filters, filter_priority, _user_turn_count, result)
         return result
 
     except json.JSONDecodeError as e:
@@ -758,7 +835,7 @@ def parse_query_stage1(conversation_history, language=None):
         # TASTE-CALIBRATION-1: extract calibration fields
         calibration = _extract_calibration_fields(data, filters, probe_needed)
 
-        return {
+        result = {
             'probe_needed': probe_needed,
             'probe_question': data.get('probe_question') if probe_needed else None,
             'reply': data.get('reply', ''),
@@ -774,6 +851,9 @@ def parse_query_stage1(conversation_history, language=None):
             'priority_ordered': calibration['priority_ordered'],
             'llm_response_message': calibration['llm_response_message'],
         }
+        # D1: multi-axis priority probe — fires on turn 1 with >=2 strong axes
+        result = _maybe_multi_axis_probe(filters, filter_priority, _user_turn_count, result)
+        return result
 
     except json.JSONDecodeError as e:
         logger.error('parse_query_stage1 JSON decode error: %s', e)

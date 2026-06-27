@@ -12,13 +12,6 @@ export default function MainLayout({
   onExitToNewProject, onExitToHome,
   questionTrigger = null,
   onQuestionAnswer,
-  // Calibration props (chat_initializing phase)
-  calibrationPhase = null,
-  calibrationMessage = null,
-  quickReplies = [],
-  extractedMetadata = null,
-  onCalibrate = null,
-  isCalibrating = false,
 }) {
   const location = useLocation()
   const navigate = useNavigate()
@@ -84,12 +77,6 @@ export default function MainLayout({
           onExitToHome={onExitToHome}
           questionTrigger={questionTrigger}
           onQuestionAnswer={onQuestionAnswer}
-          calibrationPhase={calibrationPhase}
-          calibrationMessage={calibrationMessage}
-          quickReplies={quickReplies}
-          extractedMetadata={extractedMetadata}
-          onCalibrate={onCalibrate}
-          isCalibrating={isCalibrating}
         />
       </div>
 

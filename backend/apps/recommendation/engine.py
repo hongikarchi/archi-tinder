@@ -606,9 +606,13 @@ def search_by_filters_scored(
         'atmosphere': 3.0, 'color_tone': 2.0,
         'year_min': 1.0, 'year_max': 1.0,
     }))
-    # Pass IDF ceiling + priority boost as sentinel keys (won't appear in allowlist checks)
+    # Pass IDF ceiling + priority boost + top-priority multiplier as sentinel keys
+    # (won't appear in allowlist checks -- no axis name collision)
     _base_weights['_idf_ceiling'] = idf_ceiling
     _base_weights['_priority_boost'] = priority_boost
+    _base_weights['_top_priority_multiplier'] = float(
+        RC.get('llm_search_top_priority_multiplier', 4.0)
+    )
 
     bm25_dict = RC.get('hybrid_bm25_dict', 'simple')
 

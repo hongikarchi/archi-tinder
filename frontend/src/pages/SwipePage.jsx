@@ -3,7 +3,6 @@ import TutorialPopup from '../components/TutorialPopup.jsx'
 import SwipeCard, { CARD_WIDTH, CARD_HEIGHT } from '../components/SwipeCard.jsx'
 import QuestionCard from '../components/QuestionCard.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
-import CalibrationChat from '../components/CalibrationChat.jsx'
 
 /* ── LoadingCard ─────────────────────────────────────────────────────────── */
 function LoadingCard() {
@@ -304,13 +303,6 @@ export default function SwipePage({
   onExitToNewProject, onExitToHome,
   questionTrigger = null,
   onQuestionAnswer,
-  // Calibration props (chat_initializing phase)
-  calibrationPhase = null,       // 'chat_initializing' | 'exploring' | null
-  calibrationMessage = null,     // llm_response_message from backend
-  quickReplies = [],             // suggested_quick_replies from backend
-  extractedMetadata = null,      // extracted_metadata from backend
-  onCalibrate = null,            // (message: string) => void
-  isCalibrating = false,         // true while calibrate() call is in-flight
 }) {
   const cardRef = useRef(null)
   const questionCardRef = useRef(null)
@@ -524,75 +516,6 @@ export default function SwipePage({
           )}
         </div>
       </div>
-    )
-  }
-
-  // chat_initializing phase: show calibration chat instead of swipe deck
-  if (calibrationPhase === 'chat_initializing') {
-    return (
-      <>
-        {showExitConfirm && (
-          <ExitConfirmPopup
-            onNewProject={() => { setShowExitConfirm(false); onExitToNewProject?.() }}
-            onHome={() => { setShowExitConfirm(false); onExitToHome?.() }}
-            onCancel={() => setShowExitConfirm(false)}
-          />
-        )}
-
-        <div style={{
-          display: 'flex', flexDirection: 'column', alignItems: 'center',
-          justifyContent: 'flex-start',
-          height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
-          overflow: 'hidden',
-          background: 'var(--color-bg)', padding: '20px 16px',
-          position: 'relative',
-        }}>
-
-          {/* Exit button */}
-          <button
-            onClick={() => setShowExitConfirm(true)}
-            aria-label="Exit session"
-            style={{
-              position: 'absolute', top: 12, left: 16,
-              width: 32, height: 32, borderRadius: '50%',
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-border)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'var(--color-text-dim)', cursor: 'pointer',
-              zIndex: 10,
-            }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                 stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="1 4 1 10 7 10" />
-              <path d="M3.51 15a9 9 0 1 0 .49-4.95" />
-            </svg>
-          </button>
-
-          {/* Header */}
-          <div style={{ textAlign: 'center', width: '100%', marginBottom: 16 }}>
-            <h1 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 4px', letterSpacing: '-0.01em' }}>
-              {projectName
-                ? <span style={{ color: 'var(--color-text)' }}>{projectName}</span>
-                : <span style={{ color: 'var(--color-text)', letterSpacing: '0.2em' }}>ARCHIBE</span>}
-            </h1>
-            <p style={{ margin: 0, fontSize: 12, color: 'var(--color-text-dim)', fontWeight: 500 }}>
-              취향 캘리브레이션
-            </p>
-          </div>
-
-          {/* Calibration chat — fills remaining space */}
-          <div style={{ flex: 1, width: '100%', maxWidth: CARD_WIDTH, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-            <CalibrationChat
-              llmMessage={calibrationMessage}
-              quickReplies={quickReplies}
-              extractedMetadata={extractedMetadata}
-              onCalibrate={onCalibrate}
-              isLoading={isCalibrating || isLoading}
-            />
-          </div>
-        </div>
-      </>
     )
   }
 

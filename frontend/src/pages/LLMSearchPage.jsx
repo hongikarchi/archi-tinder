@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, memo } from 'react'
 import * as api from '../api/client.js'
 import { getProject, updateProject } from '../api/projects.js'
+import s from '../components/CalibrationChat.module.css'
 
 const PRESETS = [
   { label: 'Japanese modern museum',  query: 'Modern museum in Japan' },
@@ -463,7 +464,13 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
         const probeText = parsed.probe_question || parsed.reply || ''
         const modelTurn = { role: 'model', text: probeText }
         setConversationHistory([...nextHistory, modelTurn])
-        setMessages(prev => [...prev, { role: 'ai', text: probeText }])
+        setMessages(prev => [...prev, {
+          role: 'ai',
+          text: probeText,
+          quickReplies: parsed.suggested_quick_replies || [],
+          priorityOrdered: parsed.priority_ordered || [],
+          systemAction: parsed.system_action || null,
+        }])
         // Do not enable swipe yet -- waiting for user reply to the probe
         setShowStart(false)
       } else {
@@ -530,8 +537,6 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
     if (mode === 'update') {
       onUpdate(projectId, latestResults, latestFilters, latestFilterPriority, latestVisualDescription, latestImageFocus)
     } else {
-      // Pass calibration fields so App.handleStart → initSession → startSession
-      // can forward them to the backend, enabling the chat_initializing branch.
       onStart(
         name,
         latestResults,
@@ -541,13 +546,6 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
         visibility,
         latestRawQuery || '',
         latestImageFocus,
-        {
-          confidence_score:       latestConfidenceScore,
-          system_action:          latestSystemAction,
-          llm_response_message:   latestLlmMessage,
-          suggested_quick_replies: latestQuickReplies,
-          priority_ordered:       latestPriorityOrdered,
-        },
       )
     }
   }
@@ -624,6 +622,29 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
                 {msg.role === 'ai' && <FilterChips filters={msg.filters} />}
                 {msg.role === 'ai' && <ResultStrip results={msg.results} isFallback={msg.isFallback} />}
               </div>
+              {msg.role === 'ai' && msg.priorityOrdered && msg.priorityOrdered.length > 0 && (
+                <div className={s.badgesRow} role="list" aria-label="Extracted taste priorities" style={{ marginTop: 6 }}>
+                  {msg.priorityOrdered.slice(0, 4).map((label, i) => (
+                    <span key={`${label}_${i}`} className={s.priorityBadge} role="listitem">
+                      {i === 0 ? '★ ' : ''}{label}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {msg.role === 'ai' && msg.quickReplies && msg.quickReplies.length > 0 && (
+                <div className={s.quickRepliesWrapper} role="group" aria-label="Quick reply options" style={{ marginTop: 8 }}>
+                  {msg.quickReplies.map((reply, i) => (
+                    <button
+                      key={`${reply}_${i}`}
+                      className={s.chip}
+                      onClick={() => submitQuery(reply)}
+                      aria-label={`Quick reply: ${reply}`}
+                    >
+                      {reply}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
 

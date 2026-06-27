@@ -152,7 +152,10 @@ class ParseQueryView(APIView):
         _lang = getattr(_profile, 'language', None)
         parsed = services.parse_query(conversation_history, language=_lang)
         parsed_filters = _clean_filters(parsed.get('filters') or {})
-        parsed_priority = _clean_filter_priority(parsed.get('filter_priority') or [], parsed_filters)
+        parsed_priority = _clean_filter_priority(
+            parsed.get('filter_priority') or parsed.get('priority_ordered'),
+            parsed_filters,
+        )
         raw_query = _first_user_text(conversation_history) or parsed.get('raw_query', '')
 
         # When probe_needed=True: return probe payload immediately without
@@ -170,6 +173,11 @@ class ParseQueryView(APIView):
                 'results': [],
                 'is_fallback': False,
                 'fallback_note': '',
+                'confidence_score': parsed.get('confidence_score'),
+                'system_action': parsed.get('system_action'),
+                'suggested_quick_replies': parsed.get('suggested_quick_replies', []),
+                'priority_ordered': parsed.get('priority_ordered', []),
+                'llm_response_message': parsed.get('llm_response_message', ''),
             })
 
         # IMP-6 Commit 2: spawn Stage 2 thread on terminal turn (probe_needed=False)
@@ -232,4 +240,9 @@ class ParseQueryView(APIView):
             'results': results,
             'is_fallback': is_fallback,
             'fallback_note': fallback_note,
+            'confidence_score': parsed.get('confidence_score'),
+            'system_action': parsed.get('system_action'),
+            'suggested_quick_replies': parsed.get('suggested_quick_replies', []),
+            'priority_ordered': parsed.get('priority_ordered', []),
+            'llm_response_message': parsed.get('llm_response_message', ''),
         })

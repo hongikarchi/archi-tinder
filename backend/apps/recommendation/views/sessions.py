@@ -78,26 +78,3 @@ class SessionResultView(APIView):
             return Response({'detail': 'Session not found'}, status=status.HTTP_404_NOT_FOUND)
 
         return session_service.get_session_result(session)
-
-
-class CalibrateView(APIView):
-    """POST /api/v1/analysis/sessions/<session_id>/calibrate/
-
-    Accepts a user message (free text or quick-reply chip) for the interactive
-    calibration loop (TASTE-CALIBRATION-1). Accumulates conversation, re-calls
-    parse_query, re-scores confidence, and either:
-      - stays in chat_initializing (returns next question + quick_replies)
-      - transitions to exploring (builds pool + returns first cards)
-
-    Body: {message: str}
-    """
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request, session_id):
-        profile = _get_profile(request)
-        if not profile:
-            return Response({'detail': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
-        session = AnalysisSession.objects.filter(session_id=session_id, user=profile).first()
-        if not session:
-            return Response({'detail': 'Session not found'}, status=status.HTTP_404_NOT_FOUND)
-        return session_service.calibrate_session(request, session)

@@ -26,7 +26,6 @@ from .sessions import (
     SessionCreateView,
     SessionStateView,
     SessionResultView,
-    CalibrateView,
 )
 from .swipe import (
     SwipeView,
@@ -77,7 +76,6 @@ __all__ = [
     'SessionCreateView',
     'SessionStateView',
     'SessionResultView',
-    'CalibrateView',
     'SwipeView',
     'ProjectBookmarkView',
     'BuildingBatchView',

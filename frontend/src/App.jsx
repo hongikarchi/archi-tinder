@@ -25,7 +25,6 @@ import AppearanceScreen from './pages/settings/AppearanceScreen.jsx'
 import EditProfileScreen from './pages/settings/EditProfileScreen.jsx'
 import * as api from './api/client.js'
 import { createProject } from './api/projects.js'
-import { calibrate as apiCalibrate } from './api/sessions.js'
 import { normalizeFilters, classifySwipeError, isActionCard, extractLikedIds, extractSavedIds, purgeChatCache } from './utils/appHelpers.js'
 import { reportWriteError } from './utils/reportWriteError.js'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
@@ -82,12 +81,6 @@ export default function App() {
   const [globalToast, setGlobalToast] = useState(null) // {message, type}
   // Pending in-session question triggered by the backend after a swipe
   const [pendingQuestion, setPendingQuestion] = useState(null)
-  // Calibration state — active during the chat_initializing phase
-  const [calibrationPhase, setCalibrationPhase] = useState(null)     // 'chat_initializing' | 'exploring' | null
-  const [calibrationMessage, setCalibrationMessage] = useState(null) // llm_response_message
-  const [calibrationReplies, setCalibrationReplies] = useState([])   // suggested_quick_replies
-  const [calibrationMeta, setCalibrationMeta] = useState(null)       // extracted_metadata
-  const [isCalibrating, setIsCalibrating] = useState(false)
 
   // If session has a user but no access token, clear immediately
   useEffect(() => {
@@ -312,58 +305,30 @@ export default function App() {
 
   // Populate frontend card state from a session state or start response.
   function applySessionResponse(projectId, result) {
-    // Calibration phase branching: chat_initializing vs exploring
-    const phase = result.phase ?? null
-    setCalibrationPhase(phase)
-    if (phase === 'chat_initializing') {
-      // In calibration mode: update chat state, don't touch the card deck
-      setCalibrationMessage(result.llm_response_message ?? null)
-      setCalibrationReplies(result.suggested_quick_replies ?? [])
-      setCalibrationMeta(result.extracted_metadata ?? null)
-      // Keep sessionProgress updated for the header (project name, etc.)
-      setSessionProgress(prev => ({
-        ...(prev || {}),
-        ...(result.progress || {}),
-        filter_relaxed: result.filter_relaxed || false,
-        confidence: result.confidence_score ?? result.confidence ?? null,
-        can_continue: false,
-        phase: 'chat_initializing',
-      }))
-      // Ensure no stale cards are showing
-      setCurrentCard(null)
-      setPrefetchCard(null)
-      setPrefetchCard2(null)
-      setIsSessionCompleted(false)
+    setCurrentCard(result.next_image)
+    setSessionProgress({
+      ...result.progress,
+      filter_relaxed: result.filter_relaxed || false,
+      confidence: result.confidence ?? null,
+      can_continue: result.can_continue ?? false, // S3: pass through from backend
+    })
+    if (result.is_analysis_completed || !result.next_image) {
+      setIsSessionCompleted(!!result.is_analysis_completed || !result.next_image)
     } else {
-      // exploring (or any other non-calibration phase): clear calibration state
-      setCalibrationMessage(null)
-      setCalibrationReplies([])
-      setCalibrationMeta(result.extracted_metadata ?? null)
-      setCurrentCard(result.next_image)
-      setSessionProgress({
-        ...result.progress,
-        filter_relaxed: result.filter_relaxed || false,
-        confidence: result.confidence ?? result.confidence_score ?? null,
-        can_continue: result.can_continue ?? false, // S3: pass through from backend
-      })
-      if (result.is_analysis_completed || !result.next_image) {
-        setIsSessionCompleted(!!result.is_analysis_completed || !result.next_image)
-      } else {
-        setIsSessionCompleted(false)
-      }
-      if (result.next_image?.image_url) preloadImage(result.next_image)
-      if (result.prefetch_image) {
-        setPrefetchCard(result.prefetch_image)
-        preloadImage(result.prefetch_image)
-      } else {
-        setPrefetchCard(null)
-      }
-      if (result.prefetch_image_2) {
-        setPrefetchCard2(result.prefetch_image_2)
-        preloadImage(result.prefetch_image_2)
-      } else {
-        setPrefetchCard2(null)
-      }
+      setIsSessionCompleted(false)
+    }
+    if (result.next_image?.image_url) preloadImage(result.next_image)
+    if (result.prefetch_image) {
+      setPrefetchCard(result.prefetch_image)
+      preloadImage(result.prefetch_image)
+    } else {
+      setPrefetchCard(null)
+    }
+    if (result.prefetch_image_2) {
+      setPrefetchCard2(result.prefetch_image_2)
+      preloadImage(result.prefetch_image_2)
+    } else {
+      setPrefetchCard2(null)
     }
     if (result.session_id) {
       setProjects(prev => prev.map(p => {
@@ -377,16 +342,10 @@ export default function App() {
     }
   }
 
-  async function initSession(projectId, filters, filterPriority = [], seedIds = [], existingSessionId = null, currentHint = null, visualDescription = null, projectName = 'Untitled', rawQuery = '', imageFocus = null, forceNew = false, calibrationParams = null) {
+  async function initSession(projectId, filters, filterPriority = [], seedIds = [], existingSessionId = null, currentHint = null, visualDescription = null, projectName = 'Untitled', rawQuery = '', imageFocus = null, forceNew = false) {
     setPendingQuestion(null)
     setIsSwipeLoading(true)
     setIsSessionCompleted(false)
-    // Reset calibration state on new session start
-    setCalibrationPhase(null)
-    setCalibrationMessage(null)
-    setCalibrationReplies([])
-    setCalibrationMeta(null)
-    setIsCalibrating(false)
     try {
       // Try to resume an existing session first (preserves progress across refresh)
       if (existingSessionId) {
@@ -409,9 +368,6 @@ export default function App() {
         raw_query: rawQuery || '',
         image_focus: imageFocus,
         force_new: forceNew,
-        // Calibration fields forwarded from the preceding parse-query call.
-        // When confidence_score < 0.60, the backend branches into chat_initializing.
-        ...(calibrationParams || {}),
       })
       applySessionResponse(projectId, result)
       return result
@@ -425,7 +381,7 @@ export default function App() {
     }
   }
 
-  async function handleStart(projectName, preloadedImages, llmFilters = {}, filterPriority = [], visualDescription = null, visibility = 'private', rawQuery = '', imageFocus = null, calibrationParams = null) {
+  async function handleStart(projectName, preloadedImages, llmFilters = {}, filterPriority = [], visualDescription = null, visibility = 'private', rawQuery = '', imageFocus = null) {
     const projectId = `proj_${Date.now()}`
     const seedIds = (preloadedImages || []).map(c => c.image_id).filter(Boolean)
     const newProject = {
@@ -440,7 +396,7 @@ export default function App() {
     setProjects(prev => [...prev, newProject])
     setActiveProjectId(projectId)
     navigate('/swipe')
-    const result = await initSession(projectId, llmFilters || {}, filterPriority, seedIds, null, null, visualDescription, projectName, rawQuery || '', imageFocus, false, calibrationParams)
+    const result = await initSession(projectId, llmFilters || {}, filterPriority, seedIds, null, null, visualDescription, projectName, rawQuery || '', imageFocus)
     if (visibility !== 'private' && result?.project_id) {
       api.updateProject(result.project_id, { visibility }).catch(err =>
         console.error('[App] updateProject visibility sync failed:', err)
@@ -808,28 +764,6 @@ export default function App() {
     }
   }
 
-  /**
-   * Send a calibration message during the chat_initializing phase.
-   * Calls POST /analysis/sessions/<id>/calibrate/ and applies the response.
-   * When the backend transitions to 'exploring', applySessionResponse
-   * clears calibration state and populates the card deck.
-   */
-  async function handleCalibrate(message) {
-    const project = projects.find(p => p.id === activeProjectId)
-    if (!project?.sessionId || !message.trim()) return
-    setIsCalibrating(true)
-    try {
-      const result = await apiCalibrate(project.sessionId, message)
-      applySessionResponse(activeProjectId, result)
-      // If backend transitioned to exploring, navigate stays on /swipe (deck will show)
-    } catch (err) {
-      // Non-fatal: show the error as a global toast so user can retry
-      setGlobalToast({ message: err.message || '전송 실패 — 다시 시도해주세요', type: 'error' })
-    } finally {
-      setIsCalibrating(false)
-    }
-  }
-
   async function handleUpdateWithImages(id, preloadedImages, llmFilters = {}, filterPriority = [], visualDescription = null, imageFocus = null) {
     const project = projects.find(p => p.id === id)
     if (!project) return
@@ -1019,13 +953,6 @@ export default function App() {
     onNewProjectSession: handleNewProjectSession,
     questionTrigger: pendingQuestion,
     onQuestionAnswer: handleQuestionAnswer,
-    // Calibration (chat_initializing phase)
-    calibrationPhase,
-    calibrationMessage,
-    quickReplies:      calibrationReplies,
-    extractedMetadata: calibrationMeta,
-    onCalibrate:       handleCalibrate,
-    isCalibrating,
   }
 
   return (

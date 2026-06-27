@@ -384,6 +384,7 @@ RECOMMENDATION = {
     'llm_search_topk': 200,               # K: tag-score candidate set before BM25 rerank
     'llm_search_w_bm25': 8.0,             # w_bm25: BM25 contribution weight in final score
     'llm_search_priority_boost': 0.25,    # boost factor for filter_priority ordering
+    'llm_search_top_priority_multiplier': 4.0,  # D2: rank-0 axis extra dominance multiplier
     'llm_search_idf_ceiling': 3.0,        # IDF ceiling clamp (rare tags capped at 3x)
     'llm_search_base_weights': {          # per-axis base scoring weights (soft, no hard gate)
         'program': 10.0,          # highest: program type is the strongest signal
