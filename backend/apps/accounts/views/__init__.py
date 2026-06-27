@@ -45,6 +45,8 @@ from .auth import (  # noqa: F401
     PasswordLoginView,
     SetPasswordView,
     LinkEmailView,
+    # LOGIN-ONBOARD-1: unified ID availability check
+    CheckHandleView,
 )
 
 # -- profile sub-module names ----------------------------------------------

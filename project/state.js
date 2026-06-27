@@ -23,11 +23,29 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-06-24 08:58 KST',
-    head: '6f7a4a8',
-    branch: 'feature/claude-onboarding-followup-track',
+    updatedAt: '2026-06-27 19:31 KST',
+    head: 'e966617',
+    branch: 'feature/claude-login-onboarding',
   },
   done: [
+    {
+      id: 'LOGIN-ONBOARD-1',
+      title: '로그인/온보딩 통합 + 인증 모델 단순화',
+      completedAt: '2026-06-27',
+      note: '신규계정 경로 2개(게스트 스와이프 + 별도 아이디/비번 가입)를 단일 흐름으로 병합 + display_name·handle 통합 ID + Google 인증전용 모델.',
+    },
+    {
+      id: 'DISCOVERY-SKELETON',
+      title: 'Discovery 로딩 스켈레톤 (마스코트 + "취향 탐색 중…")',
+      completedAt: '2026-06-27',
+      note: 'Discovery 첫 로딩(GET /discovery/ 추천연산 대기) 동안 카드 자리에 귀여운 스켈레톤 표출.',
+    },
+    {
+      id: 'FRONT-AUTH-2',
+      title: '로그인 스와이프 온보딩',
+      completedAt: '2026-06-27',
+      note: '1차 스와이프 온보딩(Codex, merged 2026-06-01). 흐름은 LOGIN-ONBOARD-1에서 통합·재설계됨.',
+    },
     {
       id: 'FULL-ONBOARDING-1',
       title: 'Taste 탭 설정단계 제거 + 임시저장 flow',
@@ -61,32 +79,8 @@ window.PROJECT_STATE = {
       completedAt: '2026-06-12',
       note: '협업자 dain `archibe-login`(`c4954ea`) 리디자인 이식 — 제스처 인트로 팝업 + 카드 상단 한/영 토글 + 로그인 전체 i18n + 디자인 테마 통일. 5단계 플로우/consent 스와이프/반응형 카드/API 계약 무변경.',
     },
-    {
-      id: 'BACK-AVATAR-2',
-      title: '교체/계정삭제 시 옛 아바타 객체 GC',
-      completedAt: '2026-06-08',
-      note: 'FRONT-AVATAR-1(`84ba1f1`) orphan 누적 닫음. 업로드마다 새 uuid4 키 저장 + 옛 객체 영구 잔류하던 갭 — 교체 시 + 계정삭제 시 옛 객체를 안전 GC.',
-    },
-    {
-      id: 'INFRA-AVATAR-R2-1',
-      title: 'prod R2 아바타 영속화 설정 + 검증',
-      completedAt: '2026-06-08',
-      note: 'prod Railway에 R2 5개 env 설정 + 공개 아바타 버킷 프로비저닝 완료 → 아바타 영속화. FRONT-AVATAR-1 폴백 경로 졸업.',
-    },
-    {
-      id: 'FULL-DISCOVERY-2',
-      title: 'Discovery v3.1+v3.2 라이브 브라우저 검증',
-      completedAt: '2026-06-08',
-      note: 'FULL-DISCOVERY-1(#200/#209) prod 배포(#218) 직전 app-test FULL로 라이브 검증 완료. chunk 시스템·10장 트리거 카드·우=promote→Taste(`/discovery/promote-to-taste/ 201`, 11 likes 이월)·진행바·phase 전이 정상, 콘솔 0, 회귀(AI검색+스와이프) OK. 배포 후 prod probe로 라우트 라이브 확인.',
-    },
   ],
-  now: [
-    {
-      id: 'FRONT-AUTH-2',
-      title: '로그인 스와이프 온보딩',
-      note: 'Redesign `/login` as conversational swipe onboarding while preserving the existing guest auth API contract. 1차 merged to develop 2026-06-01 (Codex; code-review + security PASS, no blockers; further passes + PIPA copy pending).',
-    },
-  ],
+  now: [],
   next: {
     xhigh: [],
     high: [
@@ -198,6 +192,27 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 246,
+      title: 'fix(DISCOVERY-UI): 상단 클릭가능 Taste 저장·이동 버튼 + 취향다양 라벨 제거',
+      mergedAt: '2026-06-27T01:48:23Z',
+      mergedAtKST: '2026-06-27 10:48 KST',
+      sha: '9ae12e8',
+    },
+    {
+      number: 245,
+      title: 'perf(DISCOVERY): 첫 로딩 113s→~6s — candidate fetch 수정(HNSW우회 스캔 제거·TABLESAMPLE·카드 분리)',
+      mergedAt: '2026-06-27T01:48:19Z',
+      mergedAtKST: '2026-06-27 10:48 KST',
+      sha: '6fd85ca',
+    },
+    {
+      number: 244,
+      title: 'docs(task): track #243 is_temp fast-follows (FULL-ONBOARDING-2)',
+      mergedAt: '2026-06-23T23:59:29Z',
+      mergedAtKST: '2026-06-24 08:59 KST',
+      sha: 'f725427',
+    },
+    {
       number: 243,
       title: 'feat(TASTE-FLOW): Taste 탭 flow 개편 + Project.is_temp 라이프사이클 (FULL-ONBOARDING-1)',
       mergedAt: '2026-06-23T23:45:02Z',
@@ -231,27 +246,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-06-20T20:14:51Z',
       mergedAtKST: '2026-06-21 05:14 KST',
       sha: '463508e',
-    },
-    {
-      number: 238,
-      title: 'perf(DISCOVERY): 최근10보드 캡+1회페치, 드래프트 tier포함, 트리거 즉시화, 재진입 새드래프트, tier3=4, 이탈경고 모달',
-      mergedAt: '2026-06-20T19:12:56Z',
-      mergedAtKST: '2026-06-21 04:12 KST',
-      sha: '641d6fc',
-    },
-    {
-      number: 237,
-      title: 'feat(ALGO-AXIS): typology_primary/typology_tags/architectural_elements 취향 축 추가',
-      mergedAt: '2026-06-20T18:13:15Z',
-      mergedAtKST: '2026-06-21 03:13 KST',
-      sha: '4ee373b',
-    },
-    {
-      number: 236,
-      title: 'feat(SNS-PROFILE): inline Boards/Studios/Liked 3-tab profile',
-      mergedAt: '2026-06-20T19:53:00Z',
-      mergedAtKST: '2026-06-21 04:53 KST',
-      sha: '052898f',
     },
   ],
   agents: [
@@ -587,6 +581,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/accounts/migrations/0010_remove_user_follow.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/accounts/migrations/0011_login_onboard_1_unified_id_and_is_guest.py',
       role: '',
     },
     {

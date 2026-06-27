@@ -57,16 +57,7 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-### FRONT-AUTH-2 — 로그인 스와이프 온보딩
-Redesign `/login` as conversational swipe onboarding while preserving the existing guest auth API contract. **1차 merged to develop 2026-06-01** (Codex; code-review + security PASS, no blockers; further passes + PIPA copy pending).
-
-- [x] Sync `feature/admin-login-page` from latest `origin/develop` before editing.
-- [x] Extract shared `react-tinder-card` gesture config/wrapper (`SwipeGestureFrame.jsx` + `swipeGestureConfig.js`) for Login, SwipePage, DiscoveryPage.
-- [x] Rebuild LoginPage: first card right=new / left=returning, required display name, required role, consent card right-swipe submit.
-- [x] Preserve `/discovery` handoff, dev login, Google conditional mount, `buildGuestLoginPayload` wire shape (code-review confirmed contract intact).
-- [x] unit test + lint + build green.
-- [ ] app-test FULL (swipe path) — **deferred, run before prod**.
-- [ ] ⚠️ consent UX regressed vs #155 (한국어 PIPA 버튼 → 영어 swipe) → tracked in FULL-LEGAL-1, restore before public launch.
+_(none — LOGIN-ONBOARD-1 + DISCOVERY-SKELETON shipped 2026-06-27, awaiting next slice.)_
 
 ---
 
@@ -376,6 +367,26 @@ Why LOW: introducing Celery just for this one field is over-investment. Adds Red
 _(Deferred 2026-06-04 batch scope: YAGNI — product-미소비 telemetry 1필드 위해 Celery+worker 도입은 과투자. 2번째 background job 생기면 단일 INFRA-JOBS 티켓으로 묶어 처리.)_
 
 ## Done
+### LOGIN-ONBOARD-1 — 로그인/온보딩 통합 + 인증 모델 단순화 — RESOLVED 2026-06-27 (`1d58a6f`-pre-squash)
+신규계정 경로 2개(게스트 스와이프 + 별도 아이디/비번 가입)를 단일 흐름으로 병합 + display_name·handle 통합 ID + Google 인증전용 모델.
+- [x] 통합 ID: `display_name == handle` (한글 허용·공백없음·2-20·NFC 정규화·대소문자 무관 유일). write-layer 동기화(물리 컬럼 병합 안 함). 중복확인 버튼 + 신규 `GET /auth/check-handle/` (`CheckHandleThrottle` 20/min/IP).
+- [x] 인증 모델: id+password 가입 = 미인증(`is_guest=True` 의미 재정의 = "Google 이메일 미인증"); Google = 인증 전용 — `_get_or_create_user` branch(iii) create-new 제거, 매칭 없으면 404 `signup_required`; social 재로그인이 `display_name` 안 덮어씀; `link-email`이 `email_verified_at` + `is_guest=False` flip.
+- [x] `RegisterView` 단일 가입 경로: body `{id,password,affiliation?,onboarding_role,consent_accepted}`, PIPA consent gate, `is_guest=True`, `consent_accepted_at`.
+- [x] Migration 0011 (depends 0010): `handle==display_name` backfill (NFC·dedup·≤20) + `is_guest` backfill(미인증 True/인증 False). default DB only, no-op reverse.
+- [x] Frontend: 별도 register step+버튼 삭제 → 단일 3-step(ID+비번 → 소속+목표 → consent), `jobRole` 입력 삭제, choice 단계 중복 caption 제거, `checkHandle()` 배선, `register(payload)` 객체화, `loginFlow` id 정규식 백엔드 미러.
+- [x] Verified: flake8 0 · eslint 0 · pytest 169/169 (accounts, fresh test DB incl 0011) · loginFlow 45/45 · workflow review+security+Opus-verify PASS.
+- FRONT-AUTH-2 스와이프 온보딩 흐름을 재설계/대체. app-test FULL은 CI/prod로 이연. 기존 Google 표시이름 공백제거(통합ID 규칙)·기존 id+password 유저 미인증 전환은 의도된 동작.
+- Deferred: PIPA 한국어 consent 프론트 copy 복원 → FULL-LEGAL-1. 통합 ID 물리 컬럼 collapse(display_name/handle 단일화)는 후속 cleanup.
+
+### DISCOVERY-SKELETON — Discovery 로딩 스켈레톤 (마스코트 + "취향 탐색 중…") — RESOLVED 2026-06-27 (`3292231`-pre-squash)
+Discovery 첫 로딩(GET /discovery/ 추천연산 대기) 동안 카드 자리에 귀여운 스켈레톤 표출.
+- [x] `LoadingCard` 확장: 인라인 SVG 건물 마스코트 + i18n "취향 탐색 중…" + thinking dots를 기존 `.skeleton-shimmer` 위 오버레이 (`role=status`/`aria-busy`/`aria-live`), `mascot-bob`+`dot-blink` keyframes, 토큰 테마.
+- [x] Frontend-only (DiscoveryPage.jsx + index.css + locales.js). eslint 0 · build PASS · node 45/45.
+
+### FRONT-AUTH-2 — 로그인 스와이프 온보딩 — RESOLVED 2026-06-27 (superseded by LOGIN-ONBOARD-1)
+1차 스와이프 온보딩(Codex, merged 2026-06-01). 흐름은 LOGIN-ONBOARD-1에서 통합·재설계됨.
+- 잔존: app-test FULL (swipe path) — prod 전 실행 이연; PIPA 한국어 consent 프론트 copy 복원 → FULL-LEGAL-1.
+
 ### FULL-ONBOARDING-1 — Taste 탭 설정단계 제거 + 임시저장 flow — RESOLVED 2026-06-23 (`a58a9f6`-pre-squash)
 신규 flow: Taste 탭 → AI 대화(`/search`) 즉시 진입 → 스와이프 → 리포트 생성 → "저장할까요?" 모달(보드명 자동=persona_type, public/private 토글) → 저장확정(보드 생성).
 - [x] `ProjectSetupPage.jsx` 삭제 + `/new` 라우트 삭제 + Taste 탭 진입 라우팅 `/search`로 변경 (TabBar/MainLayout/DiscoveryPage), `wizardData`의 minArea/maxArea 죽은코드 제거

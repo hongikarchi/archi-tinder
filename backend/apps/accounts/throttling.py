@@ -84,3 +84,19 @@ class AvatarUploadThrottle(UserRateThrottle):
     """
     scope = 'avatar_upload'
     rate = '10/min'
+
+
+class CheckHandleThrottle(AnonRateThrottle):
+    """20 check-handle lookups per minute per IP.
+
+    LOGIN-ONBOARD-1: GET /auth/check-handle/ exposes username enumeration
+    (caller can probe arbitrary IDs and learn which are taken). Tight
+    anonymous throttle limits the enumeration surface without blocking
+    legitimate real-time duplicate checks during signup.
+
+    AnonRateThrottle keys on IP — correct here since the endpoint is
+    AllowAny (unauthenticated callers probe during signup before they have
+    a JWT).
+    """
+    scope = 'check_handle'
+    rate = '20/min'

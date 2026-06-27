@@ -6,6 +6,7 @@ import SwipeCard, { CARD_WIDTH, CARD_HEIGHT } from '../components/SwipeCard.jsx'
 import DiscoveryTriggerCard from '../components/DiscoveryTriggerCard.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
 import { discoveryNavigationGuard } from '../utils/discoveryGuard.js'
+import { useTranslation } from '../i18n/index.js'
 
 // Module-level flag: false on full page reload (module not yet loaded), true after
 // the first mount within the same SPA session. Used to detect tab re-entry vs first
@@ -104,16 +105,86 @@ function makeImagePreloader() {
   }
 }
 
-/* ── LoadingCard (matches SwipePage LoadingCard footprint) ───────────────── */
+/* ── LoadingCard — shimmer background + centered mascot + i18n text ─────── */
 function LoadingCard() {
+  const { t } = useTranslation()
   return (
-    <div style={{
-      position: 'absolute', top: 0, left: 0, width: CARD_WIDTH, height: CARD_HEIGHT,
-      borderRadius: 20, overflow: 'hidden',
-      background: 'var(--color-surface)',
-      boxShadow: '0 25px 50px rgba(0,0,0,0.4)',
-    }}>
+    <div
+      role="status"
+      aria-busy="true"
+      aria-live="polite"
+      style={{
+        position: 'absolute', top: 0, left: 0, width: CARD_WIDTH, height: CARD_HEIGHT,
+        borderRadius: 20, overflow: 'hidden',
+        background: 'var(--color-surface)',
+        boxShadow: '0 25px 50px rgba(0,0,0,0.4)',
+      }}
+    >
+      {/* Shimmer fill — kept from original; note: DESIGN.md §8.8 discourages shimmer
+          but the existing codebase ships it and task spec says reuse it */}
       <div className="skeleton-shimmer" style={{ width: '100%', height: '100%' }} />
+
+      {/* Centered mascot overlay */}
+      <div style={{
+        position: 'absolute', inset: 0,
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        gap: 16,
+        pointerEvents: 'none',
+      }}>
+        {/* House/building mascot — inline SVG, on-brand, pure CSS animation */}
+        <svg
+          aria-hidden="true"
+          width="72" height="72" viewBox="0 0 72 72"
+          fill="none" xmlns="http://www.w3.org/2000/svg"
+          style={{ animation: 'mascot-bob 1.8s var(--motion-ease, cubic-bezier(0.4,0,0.2,1)) infinite' }}
+        >
+          {/* Building body */}
+          <rect x="14" y="34" width="44" height="30" rx="4" fill="var(--color-surface-2)" />
+          {/* Roof triangle */}
+          <path d="M8 36 L36 10 L64 36 Z" fill="var(--accent-1)" opacity="0.85" />
+          {/* Roof chimney */}
+          <rect x="46" y="16" width="7" height="12" rx="2" fill="var(--accent-2)" opacity="0.7" />
+          {/* Door */}
+          <rect x="29" y="46" width="14" height="18" rx="3" fill="var(--accent-1)" opacity="0.3" />
+          {/* Left window */}
+          <rect x="18" y="42" width="9" height="9" rx="2" fill="var(--accent-1)" opacity="0.5" />
+          {/* Right window */}
+          <rect x="45" y="42" width="9" height="9" rx="2" fill="var(--accent-1)" opacity="0.5" />
+          {/* Thinking dots above roof (3 small circles rising) */}
+          <circle cx="58" cy="14" r="2.5" fill="var(--accent-2)" opacity="0.9" />
+          <circle cx="64" cy="9"  r="2"   fill="var(--accent-2)" opacity="0.6" />
+          <circle cx="69" cy="5"  r="1.5" fill="var(--accent-2)" opacity="0.35" />
+        </svg>
+
+        {/* Loading text */}
+        <span style={{
+          fontSize: 13,
+          fontWeight: 600,
+          color: 'var(--color-text-muted)',
+          letterSpacing: '0.02em',
+          fontFamily: 'inherit',
+        }}>
+          {t('discovery.loading')}
+        </span>
+
+        {/* Animated dots row */}
+        <div style={{ display: 'flex', gap: 6 }}>
+          {[0, 1, 2].map(i => (
+            <span
+              key={i}
+              style={{
+                display: 'inline-block',
+                width: 7, height: 7,
+                borderRadius: '50%',
+                background: 'var(--accent-1)',
+                opacity: 0.2,
+                animation: `dot-blink 1.4s var(--motion-ease, cubic-bezier(0.4,0,0.2,1)) ${i * 0.18}s infinite`,
+              }}
+            />
+          ))}
+        </div>
+      </div>
     </div>
   )
 }

@@ -111,9 +111,10 @@ class UserProfile(models.Model):
         unique=True,
         null=True,
         blank=True,
-        # Public @handle (e.g. 'dain_architect'). Separate from display_name ("Dain Kim").
-        # null until the user explicitly sets one. Postgres unique allows multiple NULLs.
-        # Regex enforced in serializer: ^[a-z0-9_]{3,30}$.
+        # Public @handle (e.g. 'dain_architect'). LOGIN-ONBOARD-1: unified with display_name
+        # (handle == display_name, written together at every write path).
+        # null until the user sets one. Postgres unique allows multiple NULLs.
+        # Validated by validate_handle_value(): NFC-normalized, Hangul+ASCII letters/digits/underscore, 2-20 chars.
     )
     notifications = models.JSONField(
         default=dict,

@@ -1,33 +1,41 @@
 """
-test_auth_login.py -- AUTH-LOGIN-1 backend tests.
+test_auth_login.py -- AUTH-LOGIN-1 + LOGIN-ONBOARD-1 backend tests.
 
 E1: handle+password auth (register / login / set-password)
 E2: email verify via OAuth linking (link-email)
 
 Coverage matrix
-  TestRegister            (5 tests) -- success, duplicate handle, weak password,
-                                       reserved handle, handle format validation
-  TestPasswordLogin       (5 tests) -- correct creds, wrong password (generic),
-                                       nonexistent handle (same generic message),
-                                       OAuth user no password (generic),
-                                       response shape + JWT works
-  TestSetPassword         (7 tests) -- first-set on guest (no current needed),
-                                       guest first-set then login works,
-                                       change requires correct current,
-                                       wrong current → 400,
-                                       weak new password → 400,
-                                       old refresh blacklisted + fresh pair returned (AUTH-CRITICAL),
-                                       throttle → 429 after 5 calls/min (AUTH-CRITICAL)
-  TestLinkEmail           (6 tests) -- verified new email → set + SocialAccount
-                                       + email_verified_at populated,
-                                       unverified → 400 unverified_email,
-                                       email already on another user → 400 reject,
-                                       provider_id already on another user → 400,
-                                       re-link own account is idempotent,
-                                       unauthenticated → 401
-  TestUserSerializerFields (3 tests) -- email/has_password/email_verified_at
-                                        present in UserSerializer output (self-only);
-                                        not present in public UserProfileSerializer
+  TestRegister            -- success (is_guest=True, handle==display_name),
+                             consent_accepted required,
+                             duplicate id rejected (iexact),
+                             weak password rejected,
+                             reserved id rejected,
+                             Hangul id accepted,
+                             whitespace in id rejected,
+                             short id (1 char) rejected, 2 chars accepted
+  TestPasswordLogin       -- correct creds, wrong password (generic),
+                             nonexistent handle (same generic message),
+                             OAuth user no password (generic),
+                             response shape + JWT works,
+                             NFC-normalized Hangul login matches stored NFC form
+  TestSetPassword         -- first-set on guest (no current needed),
+                             guest first-set then login works,
+                             change requires correct current,
+                             wrong current → 400,
+                             weak new password → 400,
+                             old refresh blacklisted + fresh pair returned (AUTH-CRITICAL),
+                             throttle → 429 after 5 calls/min (AUTH-CRITICAL)
+  TestLinkEmail           -- verified new email → set + SocialAccount
+                             + email_verified_at populated + is_guest flipped False,
+                             unverified → 400 unverified_email,
+                             email already on another user → 400 reject,
+                             provider_id already on another user → 400,
+                             re-link own account is idempotent,
+                             unauthenticated → 401
+  TestCheckHandle         -- available id, taken id, invalid format, throttle
+  TestUserSerializerFields -- email/has_password/email_verified_at
+                              present in UserSerializer output (self-only);
+                              not present in public UserProfileSerializer
 """
 
 import pytest
@@ -77,87 +85,148 @@ def _auth_client(profile):
 
 
 # ---------------------------------------------------------------------------
-# E1: Register
+# E1: Register  (LOGIN-ONBOARD-1 updated)
 # ---------------------------------------------------------------------------
 
 class TestRegister:
 
     ENDPOINT = '/api/v1/auth/register/'
 
-    @pytest.mark.django_db
-    def test_register_success(self):
+    def _post(self, payload, **kwargs):
         client = APIClient()
-        resp = client.post(self.ENDPOINT, {
-            'handle': 'newuser1',
+        return client.post(self.ENDPOINT, payload, format='json', **kwargs)
+
+    def _base_payload(self, **overrides):
+        base = {
+            'id': 'newuser1',
             'password': 'Secur3P@ssw0rd!',
-            'display_name': 'New User',
-        }, format='json')
+            'consent_accepted': True,
+        }
+        base.update(overrides)
+        return base
+
+    @pytest.mark.django_db
+    def test_register_success_is_guest_true(self):
+        """Successful register: is_guest=True, handle==display_name==id, consent_accepted_at set."""
+        resp = self._post(self._base_payload())
         assert resp.status_code == 201
         data = resp.json()
         assert 'access' in data
         assert 'refresh' in data
         assert data['user']['handle'] == 'newuser1'
-        # Verify profile was created with is_guest=False
+        # LOGIN-ONBOARD-1: is_guest=True (unverified account)
         profile = UserProfile.objects.get(handle='newuser1')
-        assert profile.is_guest is False
+        assert profile.is_guest is True
+        assert profile.display_name == 'newuser1'  # handle == display_name
+        assert profile.consent_accepted_at is not None
         assert profile.user.has_usable_password() is True
-        # User.username must NOT equal the handle (internal stable key)
+        # User.username must NOT equal the id (internal stable key)
         assert profile.user.username != 'newuser1'
         assert profile.user.username.startswith('local_')
 
     @pytest.mark.django_db
-    def test_register_duplicate_handle(self, db):
-        _make_profile(username='existing', handle='takenhandle')
-        client = APIClient()
-        resp = client.post(self.ENDPOINT, {
-            'handle': 'takenhandle',
-            'password': 'Secur3P@ssw0rd!',
-        }, format='json')
+    def test_register_consent_required(self):
+        """Missing or false consent_accepted → 400 consent_required."""
+        # Missing
+        resp = self._post({'id': 'testid1', 'password': 'Secur3P@ssw0rd!'})
         assert resp.status_code == 400
-        data = resp.json()
-        assert 'handle' in data
+        assert resp.json()['detail'] == 'consent_required'
+
+        # Explicitly false
+        resp = self._post({'id': 'testid2', 'password': 'Secur3P@ssw0rd!', 'consent_accepted': False})
+        assert resp.status_code == 400
 
     @pytest.mark.django_db
-    def test_register_duplicate_handle_case_insensitive(self, db):
-        """handle uniqueness check is case-insensitive."""
-        _make_profile(username='existing', handle='takenhandle')
-        client = APIClient()
-        # Try registering with uppercase variant (which also fails the format check)
-        resp = client.post(self.ENDPOINT, {
-            'handle': 'TakenHandle',
-            'password': 'Secur3P@ssw0rd!',
-        }, format='json')
+    def test_register_hangul_id_accepted(self):
+        """Hangul ID is accepted and stored NFC-normalized."""
+        resp = self._post(self._base_payload(id='건축가김'))
+        assert resp.status_code == 201
+        data = resp.json()
+        assert data['user']['handle'] == '건축가김'
+        profile = UserProfile.objects.get(handle='건축가김')
+        assert profile.display_name == '건축가김'
+        assert profile.is_guest is True
+
+    @pytest.mark.django_db
+    def test_register_mixed_hangul_ascii_id_accepted(self):
+        """Mixed Hangul+ASCII ID accepted."""
+        resp = self._post(self._base_payload(id='dain_김'))
+        assert resp.status_code == 201
+        assert resp.json()['user']['handle'] == 'dain_김'
+
+    @pytest.mark.django_db
+    def test_register_space_in_id_rejected(self):
+        """Space in ID → 400 (whitespace not allowed)."""
+        resp = self._post(self._base_payload(id='my id'))
+        assert resp.status_code == 400
+        assert 'id' in resp.json()
+
+    @pytest.mark.django_db
+    def test_register_one_char_id_rejected(self):
+        """1-char ID → 400 (min length is 2)."""
+        resp = self._post(self._base_payload(id='a'))
+        assert resp.status_code == 400
+        assert 'id' in resp.json()
+
+    @pytest.mark.django_db
+    def test_register_two_char_id_accepted(self):
+        """2-char ID → accepted (LOGIN-ONBOARD-1 min length is 2, was 3)."""
+        resp = self._post(self._base_payload(id='ab'))
+        assert resp.status_code == 201
+
+    @pytest.mark.django_db
+    def test_register_duplicate_id(self, db):
+        """Duplicate ID (case-insensitive) → 400."""
+        _make_profile(username='existing', handle='takenid')
+        resp = self._post(self._base_payload(id='takenid'))
+        assert resp.status_code == 400
+        assert 'id' in resp.json()
+
+    @pytest.mark.django_db
+    def test_register_duplicate_id_case_insensitive(self, db):
+        """Duplicate ID check is case-insensitive after NFC normalization."""
+        _make_profile(username='existing', handle='takenid')
+        # Same string different case — both rejected (uniqueness via iexact)
+        resp = self._post(self._base_payload(id='TAKENID'))
         assert resp.status_code == 400
 
     @pytest.mark.django_db
     def test_register_weak_password(self):
-        client = APIClient()
-        resp = client.post(self.ENDPOINT, {
-            'handle': 'weakpwuser',
-            'password': '123',
-        }, format='json')
+        """Weak password → 400."""
+        resp = self._post(self._base_payload(id='weakpwuser', password='123'))
         assert resp.status_code == 400
         assert 'password' in resp.json()
 
     @pytest.mark.django_db
-    def test_register_reserved_handle(self):
-        client = APIClient()
-        resp = client.post(self.ENDPOINT, {
-            'handle': 'admin',
-            'password': 'Secur3P@ssw0rd!',
-        }, format='json')
+    def test_register_reserved_id(self):
+        """Reserved ID 'admin' → 400."""
+        resp = self._post(self._base_payload(id='admin'))
         assert resp.status_code == 400
-        assert 'handle' in resp.json()
+        assert 'id' in resp.json()
 
     @pytest.mark.django_db
-    def test_register_invalid_handle_format(self):
+    def test_register_with_affiliation_and_role(self):
+        """Optional affiliation + onboarding_role stored on profile."""
+        resp = self._post(self._base_payload(
+            id='archi_user1',
+            affiliation='Korea University',
+            onboarding_role='student',
+        ))
+        assert resp.status_code == 201
+        profile = UserProfile.objects.get(handle='archi_user1')
+        assert profile.affiliation == 'Korea University'
+        assert profile.onboarding_role == 'student'
+
+    @pytest.mark.django_db
+    def test_register_legacy_handle_field_still_accepted(self):
+        """Legacy 'handle' field (instead of 'id') still works for backward compat."""
         client = APIClient()
         resp = client.post(self.ENDPOINT, {
-            'handle': 'ab',  # too short (< 3 chars)
+            'handle': 'legacyhandle',
             'password': 'Secur3P@ssw0rd!',
+            'consent_accepted': True,
         }, format='json')
-        assert resp.status_code == 400
-        assert 'handle' in resp.json()
+        assert resp.status_code == 201
 
 
 # ---------------------------------------------------------------------------
@@ -182,6 +251,32 @@ class TestPasswordLogin:
         assert 'access' in data
         assert 'refresh' in data
         assert data['user']['handle'] == 'loginhandle'
+
+    @pytest.mark.django_db
+    def test_login_with_id_field(self, db):
+        """Login also accepts 'id' instead of 'handle' (LOGIN-ONBOARD-1)."""
+        _make_profile(username='idloginuser', handle='idloginhandle',
+                      password='G00dP@ssword!', display_name='ID Login User')
+        client = APIClient()
+        resp = client.post(self.ENDPOINT, {
+            'id': 'idloginhandle',
+            'password': 'G00dP@ssword!',
+        }, format='json')
+        assert resp.status_code == 200
+
+    @pytest.mark.django_db
+    def test_login_nfc_normalized_hangul(self, db):
+        """Hangul ID login works when client sends NFC-normalized form."""
+        import unicodedata
+        hangul_id = unicodedata.normalize('NFC', '건축가김')
+        _make_profile(username='hangul_user', handle=hangul_id,
+                      password='G00dP@ssword!', display_name=hangul_id)
+        client = APIClient()
+        resp = client.post(self.ENDPOINT, {
+            'handle': hangul_id,
+            'password': 'G00dP@ssword!',
+        }, format='json')
+        assert resp.status_code == 200
 
     @pytest.mark.django_db
     def test_login_wrong_password_generic_error(self, db):
@@ -209,9 +304,8 @@ class TestPasswordLogin:
     @pytest.mark.django_db
     def test_login_oauth_user_no_password_generic_error(self, db):
         """OAuth-only user (no usable password) → same generic error."""
-        # No password set (OAuth-only)
         _make_profile(username='oauthonly', handle='oauthhandle',
-                      password=None)  # set_unusable_password in helper
+                      password=None)
         client = APIClient()
         resp = client.post(self.ENDPOINT, {
             'handle': 'oauthhandle',
@@ -262,13 +356,11 @@ class TestSetPassword:
         profile = _make_profile(username='guest2', handle='guesthandle2',
                                 is_guest=True, password=None)
         client = _auth_client(profile)
-        # Set password
         resp = client.post(self.ENDPOINT, {
             'password': 'N3wSecur3P@ss!',
         }, format='json')
         assert resp.status_code == 200
 
-        # Now login should work
         login_client = APIClient()
         login_resp = login_client.post('/api/v1/auth/login/', {
             'handle': 'guesthandle2',
@@ -321,7 +413,6 @@ class TestSetPassword:
         )
         profile = _make_profile(username='bltest1', handle='bltesthandle1',
                                 is_guest=True, password=None)
-        # Obtain a refresh token BEFORE changing the password.
         old_refresh = RefreshToken.for_user(profile.user)
         client = APIClient()
         client.credentials(HTTP_AUTHORIZATION=f'Bearer {old_refresh.access_token}')
@@ -331,13 +422,11 @@ class TestSetPassword:
         }, format='json')
         assert resp.status_code == 200
 
-        # Response must carry a fresh token pair (option b).
         data = resp.json()
         assert 'access' in data
         assert 'refresh' in data
         assert 'user' in data
 
-        # Old refresh token must now be blacklisted.
         outstanding_qs = OutstandingToken.objects.filter(
             user=profile.user,
             jti=str(old_refresh['jti']),
@@ -346,24 +435,20 @@ class TestSetPassword:
         assert BlacklistedToken.objects.filter(token=outstanding_qs.first()).exists(), \
             'Old refresh token must be blacklisted after set-password'
 
-        # Old refresh token must be rejected by /auth/token/refresh/.
         refresh_client = APIClient()
         refresh_resp = refresh_client.post(
             '/api/v1/auth/token/refresh/',
             {'refresh': str(old_refresh)},
             format='json',
         )
-        assert refresh_resp.status_code == 401, \
-            'Blacklisted refresh token must be rejected (expected 401)'
+        assert refresh_resp.status_code == 401
 
-        # Newly returned refresh token must still work.
         new_refresh_resp = refresh_client.post(
             '/api/v1/auth/token/refresh/',
             {'refresh': data['refresh']},
             format='json',
         )
-        assert new_refresh_resp.status_code == 200, \
-            'Fresh refresh token returned in response must still be valid'
+        assert new_refresh_resp.status_code == 200
 
     @pytest.mark.django_db
     def test_set_password_throttle_429_after_five_calls(self, db):
@@ -372,14 +457,12 @@ class TestSetPassword:
                                 password='OldSecur3P@ss!')
         client = _auth_client(profile)
 
-        # Fire 5 calls with wrong current_password (still counts toward throttle).
         for _ in range(5):
             client.post(self.ENDPOINT, {
                 'current_password': 'wrong',
                 'password': 'Str0ngNewP@ss!',
             }, format='json')
 
-        # 6th call must be throttled.
         resp = client.post(self.ENDPOINT, {
             'current_password': 'wrong',
             'password': 'Str0ngNewP@ss!',
@@ -389,7 +472,7 @@ class TestSetPassword:
 
 
 # ---------------------------------------------------------------------------
-# E2: Link Email
+# E2: Link Email  (LOGIN-ONBOARD-1: also flips is_guest=False)
 # ---------------------------------------------------------------------------
 
 _GOOD_GOOGLE_DATA = {
@@ -411,9 +494,11 @@ class TestLinkEmail:
     ENDPOINT = '/api/v1/auth/link-email/'
 
     @pytest.mark.django_db
-    def test_link_email_success(self, db):
-        """Verified email → set User.email, SocialAccount, email_verified_at."""
-        profile = _make_profile(username='linker1', handle='linkerhandle1')
+    def test_link_email_success_flips_is_guest_false(self, db):
+        """Verified email → set User.email, SocialAccount, email_verified_at, is_guest=False."""
+        # Start as is_guest=True (id+password unverified account)
+        profile = _make_profile(username='linker1', handle='linkerhandle1',
+                                is_guest=True)
         client = _auth_client(profile)
 
         with patch(
@@ -439,6 +524,8 @@ class TestLinkEmail:
         ).exists()
         profile.refresh_from_db()
         assert profile.email_verified_at is not None
+        # LOGIN-ONBOARD-1: linking verified Google email flips is_guest=False
+        assert profile.is_guest is False
 
     @pytest.mark.django_db
     def test_link_email_unverified_rejected(self, db):
@@ -461,7 +548,6 @@ class TestLinkEmail:
     @pytest.mark.django_db
     def test_link_email_already_on_another_user_rejected(self, db):
         """Email already on a different user → 400 email_already_linked."""
-        # Another user already has this email
         other_user = User.objects.create_user(
             username='other', email='verified@example.com',
         )
@@ -485,7 +571,6 @@ class TestLinkEmail:
     @pytest.mark.django_db
     def test_link_email_provider_id_on_another_user_rejected(self, db):
         """SocialAccount(google, provider_id) already on a different user → 400."""
-        # Another user already has this Google provider_id
         other_user = User.objects.create_user(username='other2', email='other2@example.com')
         other_profile = UserProfile.objects.create(user=other_user, display_name='Other2')
         SocialAccount.objects.create(
@@ -511,7 +596,6 @@ class TestLinkEmail:
     def test_link_email_relink_own_account_idempotent(self, db):
         """Re-linking the user's own already-linked Google account → 200 (idempotent)."""
         profile = _make_profile(username='linker5', handle='linkerhandle5')
-        # Pre-link
         profile.user.email = 'verified@example.com'
         profile.user.save(update_fields=['email'])
         SocialAccount.objects.create(
@@ -539,6 +623,72 @@ class TestLinkEmail:
             'code': 'code',
         }, format='json')
         assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Check Handle (LOGIN-ONBOARD-1)
+# ---------------------------------------------------------------------------
+
+class TestCheckHandle:
+
+    ENDPOINT = '/api/v1/auth/check-handle/'
+
+    @pytest.mark.django_db
+    def test_available_id(self):
+        """Unused valid ID → available=True."""
+        client = APIClient()
+        resp = client.get(self.ENDPOINT, {'id': 'freehandle1'})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data['available'] is True
+        assert data['reason'] is None
+
+    @pytest.mark.django_db
+    def test_taken_id(self, db):
+        """Taken ID → available=False."""
+        _make_profile(username='taken_user', handle='takenid123')
+        client = APIClient()
+        resp = client.get(self.ENDPOINT, {'id': 'takenid123'})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data['available'] is False
+        assert data['reason'] is not None
+
+    @pytest.mark.django_db
+    def test_invalid_format_space(self):
+        """ID with space → available=False with reason."""
+        client = APIClient()
+        resp = client.get(self.ENDPOINT, {'id': 'my id'})
+        assert resp.status_code == 200
+        assert resp.json()['available'] is False
+        assert resp.json()['reason'] is not None
+
+    @pytest.mark.django_db
+    def test_hangul_available_id(self):
+        """Hangul ID → available=True."""
+        client = APIClient()
+        resp = client.get(self.ENDPOINT, {'id': '건축가김'})
+        assert resp.status_code == 200
+        assert resp.json()['available'] is True
+
+    @pytest.mark.django_db
+    def test_reserved_id(self):
+        """Reserved ID 'admin' → available=False."""
+        client = APIClient()
+        resp = client.get(self.ENDPOINT, {'id': 'admin'})
+        assert resp.status_code == 200
+        assert resp.json()['available'] is False
+
+    @pytest.mark.django_db
+    def test_check_handle_throttle(self):
+        """Exceeding 20 requests/min → 429."""
+        client = APIClient()
+        for _ in range(20):
+            client.get(self.ENDPOINT, {'id': 'somehandle'})
+        resp = client.get(self.ENDPOINT, {'id': 'somehandle'})
+        assert resp.status_code == 429, (
+            f'Expected 429 after 20 requests, got {resp.status_code}'
+        )
 
 
 # ---------------------------------------------------------------------------
