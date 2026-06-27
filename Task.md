@@ -82,12 +82,9 @@ _(none — LOGIN-ONBOARD-1 + DISCOVERY-SKELETON shipped 2026-06-27, awaiting nex
 
 ### X-HIGH
 
-> Critical — confirmed defect against the core taste-match promise or against data
-> correctness, surfaced by the 2026-05-31 swipe / discovery review
-> (`.claude/reviews/2026-05-31-swipe-discovery-review.md`) + the 2026-06-04 backlog audit. Pull before `### HIGH`.
-> **X-HIGH is now EMPTY** — all X-HIGH items shipped (UX-WRITE-FAIL + UX-GALLERY 2026-06-04; BACK-RECOMMEND-4 2026-06-04 — see ## Done).
-
-### HIGH
+> Critical — confirmed defect against core taste-match / data correctness, OR a hard
+> public-launch blocker. Pull before `### HIGH`. **재분류 2026-06-28 (공개런칭 수주 내 임박):**
+> X-HIGH = (1) FULL-ONBOARDING-2 라이브 데이터-무결성 결함, (2) FULL-LEGAL-1 런칭 법적 차단.
 
 #### FULL-ONBOARDING-2 — is_temp 라이프사이클 마감 (#243 fast-follows)
 #243(`6f7a4a8`, FULL-ONBOARDING-1 Taste-flow + Project.is_temp) merge 시 verified-review로 게시한 후속(Codex RC + 워크플로우 adversarial-verify + Opus judge). 귀속: **#243 diff는 models/serializers/session_service/migration/frontend만 — projects.py·discovery.py·engine.py 미수정** → 아래 1만 PR-신규, 나머지 pre-existing(develop 동일).
@@ -104,17 +101,23 @@ _(none — LOGIN-ONBOARD-1 + DISCOVERY-SKELETON shipped 2026-06-27, awaiting nex
 - (비차단) orphan temp 누적 — 브라우저 닫기/로그아웃 시 서버 GC/TTL 없음(frontend cleanup은 /search 재진입만). TTL 필드 or 정리 job 별도 추적.
 - 게이트: #243 CI green, migration 0028 SAFE(BooleanField default=False, metadata-only DDL). 모든 fast-follow는 backend(projects.py/serializers.py/discovery.py) — Role 경계는 SNS/board(yywon1) or admin.
 
-#### FRONT-IMAGE-RESIZE-3 — 이미지 LQIP + 풀해상도 passthrough (PR3)
-PR2(#242)가 srcset/decode/classifier 출하 → 남은 Tier A polish. 전부 프론트.
-- **A7 LQIP**: 카드당 ~20px 블러 썸네일(`buildLqipUrl=rightSizeImageUrl(url,20)`, 양 CDN) + CSS `filter:blur`, skeleton-shimmer 위 레이어. ⚠️ object-fit:contain letterbox라 `scale(1.1)` edge-bleed 핵 금지(letterbox 노출). PR2서 의도적 분리(유일 render-lifecycle 침습, polish지 core 아님). 완전 스펙은 PR2 Plan-agent 설계에 turnkey.
-- **풀해상도 passthrough**: `normalizeCard`에 `cover_full_url`(미-리사이즈) + `BuildingDetailPage` 빈-갤러리 폴백서 우선 → FRONT-IMAGE-RESIZE-1 known-limitation(빈-갤러리 #235 다운로드 840px) 해소.
-- (선택) `useImageTelemetry`가 `currentSrc`(렌더된 variant) 읽도록 — 현재 `.src`(840 폴백) → per-variant load_ms 정확도.
-- Tier B(Divisare 포맷 프록시)는 별개 — R2 폐기 이유(Q1, 외부 spec)+핫링크/ToS 정책(Q2)=user 결정 gated. `findings-r2-retirement.md`.
+#### FULL-LEGAL-1 — PIPA/GDPR consent: Terms/Privacy 페이지 + 한국어 affirmative copy (잔여)
+_Status (2026-06-28 grep): **백엔드 consent 인프라 + 가입 흐름 consent gate DONE** — `UserProfile.consent_accepted_at`/`consent_policy_version`(models.py:73-74), RegisterView+GuestLoginView consent_accepted 강제, LoginPage consent step. **잔여 = (1) `/terms`·`/privacy` 라우트/페이지 없음(App.jsx), (2) 한국어 PIPA affirmative copy(현재 영어 swipe copy만), (3) retention/export/delete 정책.** **공개런칭 차단 → X-HIGH (런칭 수주 내).**_
+Phase 13+ Profile/Board public/private visibility shipped. PIPA + GDPR posture for signup data collection / consent flow / retention policy still open. **Required before public launch.**
 
-#### ARCHITECT-UNIFY-1 — firm-side Office→Architect 전면 통합 (deferred, firm-UX 착수 시)
-office-interest **모델 중복은 해소됨**: Phase 0(SavedOffice #188) + C(OfficeFollow, ARCHITECT-UNIFY-C)로 두 미배선 중복 삭제 → follow 모델 1개(ArchitectFollow). 남은 통합 = Office 서브시스템(table/claim/OfficeProjectLink/sync_offices/FirmProfilePage)을 arch_id로 흡수 = firm-side 전면 재설계.
+**FRONT-AUTH-2 consent regression (2026-06-01):** the swipe-onboarding login (merged to develop) replaced #155's explicit Korean "동의합니다" PIPA button with a right-swipe gesture + generic English consent copy (`LoginPage.jsx` ConsentStep). Backend `consent_accepted` / `consent_policy_version` contract intact, but Korea-first + PIPA favor an explicit affirmative act (button/checkbox) + Korean disclosure. Restore Korean PIPA copy + explicit affirmative before public launch (flagged by both code-review + security in the merge gate).
 
-상태: **deferred** — Office 서브시스템은 계획 백로그(BACK-RECOMMEND-3 firm추천 / BACK-EXTERNAL-1 firm기사 / P1 firm-claim)의 **substrate라 park**(삭제 X). 전면 통합(FirmProfilePage→ArchitectProfilePage 흡수, claim/projects/recs/articles를 arch_id-overlay로)은 **firm-UX 우선순위 정해질 때** 별도 대형 작업. 옵션 A(재키잉)/B(전부삭제) 검토 후 탈락 — `docs/specs/architect-unification.md`(PROPOSAL).
+Code audit 2026-05-27 (`develop@3894ffd`):
+- Only visible consent surface found is `frontend/src/pages/LoginPage.jsx` line text: "By continuing, you agree to our terms of service". There are no Terms/Privacy routes in `App.jsx`, and no stored consent/version fields on `UserProfile`.
+- `backend/apps/accounts/models.py` marks `external_links` as privacy-sensitive and opt-in, but there is no retention policy, export/delete workflow, or policy-version audit trail.
+- Guest-first auth (`FULL-LOGIN-REDESIGN-1`) will collect at least display name/role and may create anonymous user rows; it should not ship publicly until legal consent and retention are explicit.
+
+Implementation map:
+- Backend fields likely belong on `UserProfile` or a separate `ConsentRecord`: `terms_accepted_at`, `privacy_accepted_at`, `policy_version`, optional marketing consent. Keep immutable history if policy versioning matters.
+- Frontend needs Terms/Privacy pages or external links plus a blocking checkbox/continue copy in login/onboarding. Korean-first copy should be reviewed outside Codex.
+- Account deletion/export is not currently in scope but should be tracked before public launch if GDPR-like obligations apply.
+
+### HIGH
 
 #### BACK-RECOMMEND-1 — Project 두번째 세션이 이전 taste를 모름
 Same Project can host multiple `AnalysisSession` rows (user comes back, "Resume" or new swipe round on the same Project — second session is created fresh while `Project.liked_ids` / `disliked_ids` / `saved_ids` carry forward as the persistent accumulator). Today the new session's algorithm-side state (`like_vectors`, `convergence_history`, `phase`) starts from scratch — exploring phase, empty pool of taste signal — even though the user just liked 12 buildings in Session #1.
@@ -143,63 +146,8 @@ _(Deferred 2026-06-04 batch scope → 별도 focused 플랜. Premise CONFIRMED p
 
 _(2026-06-08 범위 축소: #212(`4e58195`) Case #3 resume guard가 **진행중(active, phase≠completed) 세션 resume**을 해결 — 보드 재진입 시 새 빈 세션 대신 live 세션의 like_vectors(원본 round)/preference_vector/phase/convergence/pool_ids/exposed_ids 전체 복원. **잔여 범위 = 완료된 세션 뒤 새 라운드가 `Project.liked_ids` 워밍 없이 cold-start**(`session_service.py:285` 새 세션 like_vectors=[], `:104` resume은 `.exclude(phase='completed')`). warm-start carry policy(D fade-decay / E full warm-start) + progress-bar UX 결정은 여전히 단독 처리 대상.)_
 
-#### FULL-LANGUAGE-1 — 한/영 UI 라벨 번역 sweep (토글·필드·LLM 배선 완료; 잔여=라벨)
-_Status (2026-06-28 재확인, grep): **토글·인프라·LLM 배선 모두 출하됨** — `UserProfile.language`(models.py:63 ko/en) + serializer + `LanguageContext.jsx`/`useLanguage.js`/`i18n/index.js`/`locales.js` + `AppearanceSettings` 언어 토글 + LLM 언어 결정성 wire-through(`search.py:153` → `parse_query.py:41-55` language override directive) **DONE**. **잔여 = UI 라벨 sweep만** — `useTranslation()` 쓰는 파일 6개(TabBar/DiscoveryPage/LoginPage/AppearanceSettings 등)뿐, 대다수 페이지 본문/에러/모달 라벨 미번역. 이 sweep이 유일 잔여 → 항목 유지(축소). (이전 title "토글 없음"은 stale — Slice 1 #208 `119a435`에서 토글 출하됨.)_
-
-**Decision (user 2026-05-25)**: language is a user-controlled setting, NOT browser-locale auto-detected. Pattern mirrors the existing theme/font persistence shipped in PR #54 + PR #59. User toggles language in Settings (Korean / English); the choice drives both LLM chat answer language and UI label rendering across the app.
-
-Current state:
-- Chat phase (`parse_query.py`) already adapts to the user's latest message language inline ("`reply` and `probe_question` are written in the user's primary language"). With this setting wired through, the chat will instead use the user's profile language deterministically — no language inference from message text.
-- Theme + font already follow this exact pattern: `UserProfile.theme` + `UserProfile.font` server-persisted, `ThemeContext` hydrates on login, `AppearanceSettings.jsx` exposes the toggle, `updateMyProfile({ theme })` PATCH on change.
-
-Code audit 2026-05-27 (`develop@3894ffd`):
-- `backend/apps/accounts/models.py` `UserProfile` app preferences are only `theme` and `font`.
-- `backend/apps/accounts/serializers.py` `UserSerializer` includes theme/font in login and `/auth/me/`; `UserProfileSelfUpdateSerializer` accepts theme/font in PATCH `/users/me/`. Add language in both places for cross-device sync.
-- `frontend/src/context/ThemeContext.jsx` is the best local pattern: validate allowed values, persist to `localStorage`, patch only when a token exists, hydrate from server on login via `App.jsx`.
-- `frontend/src/components/AppearanceSettings.jsx` currently renders only Theme and Font. A Language segmented control belongs here unless Product wants a separate Settings page.
-- `backend/apps/recommendation/services/parse_query.py` `parse_query()` and `parse_query_stage1()` currently receive only `conversation_history`. `backend/apps/recommendation/views/search.py` calls `services.parse_query(conversation_history)` with no user preference, so prompt language cannot be deterministic yet.
-
-Implementation outline:
-- Backend — add `UserProfile.language` CharField with choices `[('ko', 'Korean'), ('en', 'English')]`, default `'ko'` (Korea-first). Migration + serializer wiring + login-response inclusion (parity with theme/font).
-- Frontend — either extend `ThemeContext` into a broader `PreferencesContext` or add `LanguageContext` mirroring it; hydrate from login response; `setLanguage()` PATCHes `updateMyProfile({ language })`. Add language toggle to `AppearanceSettings.jsx` (or a sibling settings panel — admin call).
-- Wire-through — `parse_query.py` accepts `language` parameter from `ParseQueryView` (via `request.user.profile.language`) and overrides the "match user's message language" rule. UI labels via a small dictionary-lookup helper (`t('home.title')`-style) — no full i18n lib (`react-i18next` adds bundle weight; Korea-first + bilingual-only justifies a hand-rolled lookup).
-
-Open dimensions:
-- **Scope priority** — TabBar / button copy / page titles first (high-traffic surfaces) → page bodies → error messages → modal alerts? Or sweep alphabetically?
-- **Translation source** — admin hand-writes both KO + EN strings / Gemini-translate KO → EN with admin spot-check / accept any English UI gaps temporarily (Korea-first, English a follower)?
-- **Settings UI placement** — extend `AppearanceSettings.jsx` with a language section, or new `LanguageSettings.jsx` sibling page? (Theme + Font already coexist there, language is a natural third.)
-- **Untranslated string fallback** — if `t('foo.bar')` lookup misses in current language, fall back to KO (default) or render the key literal `foo.bar` as a debug surface?
-
-Acceptance:
-- New `UserProfile.language` field, default `'ko'`, settable via Settings UI; PATCH round-trips correctly.
-- LLM chat answer language follows the setting, not message-language inference.
-- ≥1 high-traffic UI surface (e.g., TabBar) rendered in both languages off the same string source.
-- No regression in theme/font persistence (same wiring shape).
-
-#### FRONT-DESIGN-1 — 디자인 시스템 컴포넌트 리워크 (paused)
-Foundation shipped: PR #54 (`tokens.css` 4 themes + `ThemeContext` + `AppearanceSettings`) + PR #59 (theme/font server persistence). Remaining: per-component visual rework (≈ 7,700 LOC) — inline `style={{}}` → CSS Modules + `:hover/:focus`/`:active`, light-theme polish where dark-only assumptions still leak through, leaf→hub component order (small leaf components first, then containers).
-
-Code audit 2026-05-27 (`develop@3894ffd`):
-- (2026-06-04 audit, `develop@2f9a9c2`) `rg "style={{" frontend/src | wc -l` = **801** call sites (was 581; +220). Current hot files: `BoardDetailPage.jsx` 1051, `App.jsx` 902, `SwipePage.jsx` 692, `BuildingDetailPage.jsx` 499 (shrank), `UserProfilePage.jsx` 917 (shrank post-#179), `FirmProfilePage.jsx` 156 (decomposed into `pages/firmProfile/`). NEW offender from #182: `pages/ArchitectProfilePage.jsx` 572 LOC / 48 inline sites (3rd-highest). `*.module.css` now = 4 (#179 profile-harvest first CSS Modules), not near-zero.
-- `frontend/src/tokens.css` now has theme/font tokens; `frontend/src/index.css` has only shared animations/utilities plus one masonry media query. Most hover/focus/active behavior still lives in JS handlers.
-- Good first slices: `ArticleCard`/`ProjectCard`/`BoardCard` leaf components before page containers; then `SwipeCard` and `BuildingDetailPage` because they have the most visible style state.
-
-Resume via `/plan per slice` — each slice = one logical component cluster (e.g. SwipeCard + LoadingCard, then BoardCard, then HomePage, etc.). Each slice ships its own PR via the orchestrate skill; the full sweep takes many sessions.
-
-Acceptance per slice: `npm run lint` + `npm run build` clean; light + all dark variants render the touched components without visual regressions (compare against pre-slice screenshot); no new global token added without DESIGN.md update.
-
-_Note: the Profile-area slice shipped separately as FRONT-PROFILE-HARVEST-1 (#179, 2026-06-04) — net-new component harvest + Instagram-style redesign + first CSS-Module/hook foundation, NOT the named ~646 inline-debt paydown. SwipePage / BoardDetailPage / etc. inline→CSS-Module migration remains the core of THIS item._
-
-### MEDIUM
-#### BACK-AVATAR-3 — 기존 누적 orphan 아바타 일괄 청소 (sweep 명령)
-BACK-AVATAR-2(`5e1f934`)가 교체/삭제 시점 GC를 붙였으나 그 이전에 쌓인 orphan(R2/디스크)은 남음. management command(dry-run + `--confirm`, `purge_legacy_projects` 패턴) — R2 `list_objects`로 `avatars/` 나열 → 어떤 `UserProfile.avatar_url`도 참조 않는 키 삭제. 비차단·비긴급(현 prod 아바타 ≈0, 기능 갓 출시).
-
-#### BACK-LLM-4 — search.py ParseQueryView byte-cap도 ensure_ascii 부풀림 의심
-BACK-LLM-2(#195) 리뷰 중 발견(미수정, pre-existing). `backend/apps/recommendation/views/search.py` `ParseQueryView.post`의 conversation_history 검증이 BACK-LLM-2 serializer가 고친 것과 동일하게 `json.dumps` 기본 `ensure_ascii=True`로 byte 측정 가능성 → 한글 대화가 한도를 6배 부풀려 거짓 거부. 확인 후 `ensure_ascii=False`+UTF-8 인코딩 측정으로 통일. (`serializers.py:8` 주석이 한도가 ParseQueryView서 'mirror'됐다고 명시.)
-
-
 #### BACK-PERFORMANCE-5 — Swipe latency 0.7-1.5s 흔들림
-Codex retest 2026-05-26: browser swipe 1.82s/1.75s/1.12s/1.81s; server swipe 1.50s/1.38s/0.746s/1.36s. **PR4 async prefetch consume IS working** — 3rd swipe with cache hit drops to 156ms prefetch stage. But variability is high. Identify which stage causes the 0.7→1.5s spread (DB query latency? embedding cache miss? pgvector?). Aim for swipe p95 ≤1.0s and p50 ≤0.5s on Singapore prod.
+Codex retest 2026-05-26: browser swipe 1.82s/1.75s/1.12s/1.81s; server swipe 1.50s/1.38s/0.746s/1.36s. **PR4 async prefetch consume IS working** — 3rd swipe with cache hit drops to 156ms prefetch stage. But variability is high. Identify which stage causes the 0.7→1.5s spread (DB query latency? embedding cache miss? pgvector?). Aim for swipe p95 ≤1.0s and p50 ≤0.5s on Singapore prod. **(2026-06-28 HIGH로 승격 — 코어 스와이프 루프 + <1s 페이지로드 목표 + 런칭 임박.)**
 
 Code audit 2026-05-27 (`develop@3894ffd`):
 - `backend/apps/recommendation/views/swipe.py` still performs the algorithmic card selection inside the request transaction: update Project/session, phase transition, `engine.refresh_pool_if_low()`, `engine.get_pool_embeddings(session.pool_ids)`, then `engine.farthest_point_from_pool()` or `engine.compute_mmr_next()`.
@@ -214,144 +162,101 @@ Diagnostic plan:
 
 _(Deferred 2026-06-04 batch scope → 계측 먼저. Variance CONFIRMED(per-worker in-process embedding 캐시 cold-miss 50-200ms + KMeans 재계산)나 ~tens-daily-users 규모서 cold-miss는 주로 배포직후 일시적; Redis-migration은 조회마다 RTT 추가 + premature 가능. prod hit-rate/지배 원인 계측 후 결정.)_
 
+### MEDIUM
+#### FRONT-IMAGE-RESIZE-3 — 이미지 LQIP + 풀해상도 passthrough (PR3)
+PR2(#242)가 srcset/decode/classifier 출하 → 남은 Tier A polish. 전부 프론트.
+- **A7 LQIP**: 카드당 ~20px 블러 썸네일(`buildLqipUrl=rightSizeImageUrl(url,20)`, 양 CDN) + CSS `filter:blur`, skeleton-shimmer 위 레이어. ⚠️ object-fit:contain letterbox라 `scale(1.1)` edge-bleed 핵 금지(letterbox 노출). PR2서 의도적 분리(유일 render-lifecycle 침습, polish지 core 아님). 완전 스펙은 PR2 Plan-agent 설계에 turnkey.
+- **풀해상도 passthrough**: `normalizeCard`에 `cover_full_url`(미-리사이즈) + `BuildingDetailPage` 빈-갤러리 폴백서 우선 → FRONT-IMAGE-RESIZE-1 known-limitation(빈-갤러리 #235 다운로드 840px) 해소.
+- (선택) `useImageTelemetry`가 `currentSrc`(렌더된 variant) 읽도록 — 현재 `.src`(840 폴백) → per-variant load_ms 정확도.
+- Tier B(Divisare 포맷 프록시)는 별개 — R2 폐기 이유(Q1, 외부 spec)+핫링크/ToS 정책(Q2)=user 결정 gated. `findings-r2-retirement.md`.
+
+#### BACK-LLM-4 — search.py ParseQueryView byte-cap도 ensure_ascii 부풀림 의심
+BACK-LLM-2(#195) 리뷰 중 발견(미수정, pre-existing). `backend/apps/recommendation/views/search.py` `ParseQueryView.post`의 conversation_history 검증이 BACK-LLM-2 serializer가 고친 것과 동일하게 `json.dumps` 기본 `ensure_ascii=True`로 byte 측정 가능성 → 한글 대화가 한도를 6배 부풀려 거짓 거부. 확인 후 `ensure_ascii=False`+UTF-8 인코딩 측정으로 통일. (`serializers.py:8` 주석이 한도가 ParseQueryView서 'mirror'됐다고 명시.) ⚠️ Korea-first 런칭 리스크 — 런칭 전 grep 확인 권장(실재 시 false-reject가 한글 유저 차단).
+
+#### FULL-LANGUAGE-1 — 한/영 UI 라벨 번역 sweep (토글·필드·LLM 배선 완료; 잔여=라벨)
+_Status (2026-06-28 재확인, grep): **토글·인프라·LLM 배선 모두 출하됨** — `UserProfile.language`(models.py:63 ko/en) + serializer + `LanguageContext.jsx`/`useLanguage.js`/`i18n/index.js`/`locales.js` + `AppearanceSettings` 언어 토글 + LLM 언어 결정성 wire-through(`search.py:153` → `parse_query.py:41-55` language override directive) **DONE**. **잔여 = UI 라벨 sweep만** — `useTranslation()` 쓰는 파일 6개(TabBar/DiscoveryPage/LoginPage/AppearanceSettings 등)뿐, 대다수 페이지 본문/에러/모달 라벨 미번역. 이 sweep이 유일 잔여 → 항목 유지(축소). 영어=follower(Korea-first)라 MEDIUM. (이전 title "토글 없음"은 stale — Slice 1 #208 `119a435`에서 토글 출하됨.)_
+
+Open dimensions:
+- **Scope priority** — TabBar / button copy / page titles first (high-traffic surfaces) → page bodies → error messages → modal alerts? Or sweep alphabetically?
+- **Translation source** — admin hand-writes both KO + EN strings / Gemini-translate KO → EN with admin spot-check / accept any English UI gaps temporarily (Korea-first, English a follower)?
+- **Untranslated string fallback** — if `t('foo.bar')` lookup misses in current language, fall back to KO (default) or render the key literal `foo.bar` as a debug surface?
+
+Acceptance: 모든 고트래픽 surface(TabBar/페이지타이틀/버튼/에러/모달)가 동일 string source로 ko/en 양쪽 렌더; 미번역 키는 KO 폴백; theme/font 배선 회귀 없음.
+
+#### FRONT-DESIGN-1 — 디자인 시스템 컴포넌트 리워크 (paused)
+Foundation shipped: PR #54 (`tokens.css` 4 themes + `ThemeContext` + `AppearanceSettings`) + PR #59 (theme/font server persistence). Remaining: per-component visual rework — inline `style={{}}` → CSS Modules + `:hover/:focus`/`:active`, light-theme polish where dark-only assumptions still leak through, leaf→hub component order (small leaf components first, then containers).
+
+Code audit 2026-06-28 (grep): inline `style={{` = **958** call sites (was 801 @2026-06-04 — debt grew); `*.module.css` = **13** (was 4 — 일부 컴포넌트 마이그레이션됨: Toggle/Button/AppearanceSettings/SaveBoardModal/ArchitectProfilePage/BoardReportPage/EditCardForm/settings/* 등). Foundation(tokens.css + ThemeContext)만 출하, per-component sweep은 대부분 미완.
+
+Resume via `/plan per slice` — each slice = one logical component cluster (e.g. SwipeCard + LoadingCard, then BoardCard, then HomePage, etc.). Each slice ships its own PR via the orchestrate skill; the full sweep takes many sessions. **Paused, 멀티세션 대공사 → MEDIUM(비긴급).**
+
+Acceptance per slice: `npm run lint` + `npm run build` clean; light + all dark variants render the touched components without visual regressions; no new global token added without DESIGN.md update.
+
 #### FRONT-LAYOUT-1 — Desktop wide-screen 레이아웃 어색함
-Current viewport-lock layout is mobile-first. Detail pages on desktop work but unoptimised. Low priority — desktop is secondary.
+Current viewport-lock layout is mobile-first. Detail pages on desktop work but unoptimised. 데스크탑은 2차 플랫폼 → MEDIUM.
 
 Code audit 2026-05-27 (`develop@3894ffd`):
 - `frontend/src/index.css` sets `body { height: 100vh; overflow: hidden; }`; each page owns its own scroll region. This works for mobile-app feel but makes desktop layout tuning page-by-page.
 - `BuildingDetailPage.jsx` uses `maxWidth: 820` for most content and only one `.building-masonry` media query. On wide screens it stays narrow rather than using a split gallery/details layout.
 - `BoardDetailPage.jsx` and `UserProfilePage.jsx` use `maxWidth: 1100` and auto-fill grids, but hero/profile sections remain mostly mobile-centered; there is no desktop-specific information hierarchy.
-- `App.jsx` routes everything through `MainLayout`; wide-screen fixes should start in page components plus any shared shell constraints, not TabBar.
 
 Likely slices:
 - Building detail desktop pass first: full-bleed or two-column gallery + sticky metadata/read actions.
 - Board/User profile second: keep existing mobile layout, add desktop breakpoints for hero + board grid density.
 
-#### FULL-LEGAL-1 — PIPA/GDPR consent: Terms/Privacy 페이지 + 한국어 affirmative copy (잔여)
-_Status (2026-06-28 grep): **백엔드 consent 인프라 + 가입 흐름 consent gate DONE** — `UserProfile.consent_accepted_at`/`consent_policy_version`(models.py:73-74), RegisterView+GuestLoginView consent_accepted 강제, LoginPage consent step. **잔여 = (1) `/terms`·`/privacy` 라우트/페이지 없음(App.jsx), (2) 한국어 PIPA affirmative copy(현재 영어 swipe copy만), (3) retention/export/delete 정책.** Required before public launch._
-Phase 13+ Profile/Board public/private visibility shipped. PIPA + GDPR posture for signup data collection / consent flow / retention policy still open. **Required before public launch.**
-
-**FRONT-AUTH-2 consent regression (2026-06-01):** the swipe-onboarding login (merged to develop) replaced #155's explicit Korean "동의합니다" PIPA button with a right-swipe gesture + generic English consent copy (`LoginPage.jsx` ConsentStep). Backend `consent_accepted` / `consent_policy_version` contract intact, but Korea-first + PIPA favor an explicit affirmative act (button/checkbox) + Korean disclosure. Restore Korean PIPA copy + explicit affirmative before public launch (flagged by both code-review + security in the merge gate).
-
-Code audit 2026-05-27 (`develop@3894ffd`):
-- Only visible consent surface found is `frontend/src/pages/LoginPage.jsx` line text: "By continuing, you agree to our terms of service". There are no Terms/Privacy routes in `App.jsx`, and no stored consent/version fields on `UserProfile`.
-- `backend/apps/accounts/models.py` marks `external_links` as privacy-sensitive and opt-in, but there is no retention policy, export/delete workflow, or policy-version audit trail.
-- Guest-first auth (`FULL-LOGIN-REDESIGN-1`) will collect at least display name/role and may create anonymous user rows; it should not ship publicly until legal consent and retention are explicit.
-
-Implementation map:
-- Backend fields likely belong on `UserProfile` or a separate `ConsentRecord`: `terms_accepted_at`, `privacy_accepted_at`, `policy_version`, optional marketing consent. Keep immutable history if policy versioning matters.
-- Frontend needs Terms/Privacy pages or external links plus a blocking checkbox/continue copy in login/onboarding. Korean-first copy should be reviewed outside Codex.
-- Account deletion/export is not currently in scope but should be tracked before public launch if GDPR-like obligations apply.
-
-#### BACK-PERFORMANCE-6 — Neon connection pool 고갈 위험 (async prefetch thread)
-PR 4 PERF-PREFETCH-CHAIN flipped `async_prefetch_enabled: True` — every prod swipe now spawns a daemon thread holding its own DB connection until `_connections.close_all()` runs in finally. Under high concurrent swipe load: connections ≈ (concurrent_requests × 2) — one main worker + one prefetch thread. Neon free tier limit is 25 connections; Railway Gunicorn default is 2-4 workers. Concurrent swipe × 2 conns/swipe could approach limits at high traffic. Acceptable for current scale (~tens of daily users/day). Monitor Neon dashboard post-deploy + revisit if peak concurrency exceeds 8-10 connections. Mitigation options if exhausted: (a) connection pool size increase, (b) explicit thread-local connection pool, (c) PgBouncer in front of Neon. security-manager (sonnet) flagged this as availability concern on PR #134.
-
-Code audit 2026-05-27 (`develop@3894ffd`):
-- `backend/apps/recommendation/views/swipe.py` now starts two daemon-style background paths per successful swipe when enabled: `_async_prefetch_thread` and `_emit_telemetry_thread`. Both call `_connections.close_all()` in `finally`, but each can open its own thread-local DB connection while alive.
-- Main request can hold `default` DB inside transaction; telemetry writes to `user_data`; async prefetch may read buildings data for next-card hydration. Practical transient footprint can be main + telemetry + prefetch, not just main + prefetch, depending on timing.
-- `backend/config/settings.py` has `CONN_MAX_AGE=600` on default DB; buildings alias has no explicit `CONN_MAX_AGE`. Thread cleanup makes leaks unlikely, but peak connection count is still a traffic/concurrency risk.
-
-Monitoring map:
-- Track Neon active connections during swipe bursts and Railway worker/thread counts. If peak >8-10 at current traffic, promote this from MEDIUM risk to HIGH infra work.
-- If slow swipes correlate with connection pressure, evaluate a bounded executor or queue instead of unbounded per-swipe `threading.Thread`.
-
-_(Re-scoped 2026-06-04 batch scope: premise OVERSTATED — 연결 누수 없음(prefetch thread 0 conn, telemetry thread finally서 close). 실위험 = 고동시성 peak(>12-15 conn)뿐, 현 규모 무관. Neon active_connections 모니터, 코드 변경 無.)_
-
-#### INFRA-DB-3 — Unverified guest row 누적 정리 (conditional)
-_2026-06-28 참고: LOGIN-ONBOARD-1 후에도 `GuestLoginView`(auth.py:227) + `/auth/guest/` 라우트(urls.py:17) + `guestLogin()`(api/auth.js:30) **여전히 존재** — LoginPage 신규-프로필 흐름만 호출 중단, 엔드포인트는 미제거. 또한 is_guest 의미가 LOGIN-ONBOARD-1에서 "미인증"으로 재정의됨(id+password 계정도 is_guest=True). 정리 대상/기준 재정의 필요._
-Guest 계정(FULL-LOGIN-REDESIGN-1 #154/#155)은 정리 로직 없음 (user Q5 결정). `/auth/guest/` throttle 3/min/IP이나 IP 로테이션 botnet은 row 증가 가능 → 조건부 모니터링 항목.
-
-Detail: Monitor Neon `auth_user WHERE email = '' AND is_active = True` row count weekly. If growth > 500 rows/week sustained, open this and implement a Django management command `delete unverified WHERE last_active < 30 days AND swipe_count == 0` + cron/Railway scheduled job.
-
-_(Deferred 2026-06-04 batch scope: premise FALSIFIED — cleanup 기준 필드 `last_active`/`swipe_count`가 UserProfile에 없음(created_at/updated_at만) → 작성된 정책 실행불가. 게다가 파괴적 DELETE + 급격 증가 미확인. 모니터링 + schema/JOIN-proxy 후 재검토.)_
-
 ### LOW
 
+#### ARCHITECT-UNIFY-1 — firm-side Office→Architect 전면 통합 (deferred, firm-UX 착수 시)
+office-interest **모델 중복은 해소됨**: Phase 0(SavedOffice #188) + C(OfficeFollow, ARCHITECT-UNIFY-C)로 두 미배선 중복 삭제 → follow 모델 1개(ArchitectFollow). 남은 통합 = Office 서브시스템(table/claim/OfficeProjectLink/sync_offices/FirmProfilePage)을 arch_id로 흡수 = firm-side 전면 재설계.
+
+상태: **deferred → LOW (firm-UX 우선순위 미정, park).** Office 서브시스템은 계획 백로그(BACK-RECOMMEND-3 firm추천 / BACK-EXTERNAL-1 firm기사 / P1 firm-claim)의 **substrate라 park**(삭제 X). 전면 통합(FirmProfilePage→ArchitectProfilePage 흡수, claim/projects/recs/articles를 arch_id-overlay로)은 firm-UX 우선순위 정해질 때 별도 대형 작업. 옵션 A(재키잉)/B(전부삭제) 검토 후 탈락 — `docs/specs/architect-unification.md`(PROPOSAL).
+
+#### BACK-AVATAR-3 — 기존 누적 orphan 아바타 일괄 청소 (sweep 명령)
+BACK-AVATAR-2(`5e1f934`)가 교체/삭제 시점 GC를 붙였으나 그 이전에 쌓인 orphan(R2/디스크)은 남음. management command(dry-run + `--confirm`, `purge_legacy_projects` 패턴) — R2 `list_objects`로 `avatars/` 나열 → 어떤 `UserProfile.avatar_url`도 참조 않는 키 삭제. 비차단·비긴급(현 prod 아바타 ≈0, 기능 갓 출시) → LOW.
+
+#### BACK-PERFORMANCE-6 — Neon connection pool 고갈 위험 (async prefetch thread)
+PR 4 PERF-PREFETCH-CHAIN flipped `async_prefetch_enabled: True` — every prod swipe now spawns a daemon thread holding its own DB connection until `_connections.close_all()` runs in finally. Under high concurrent swipe load: connections ≈ (concurrent_requests × 2). Neon limit ~25 conns; Railway Gunicorn default 2-4 workers. Acceptable for current scale (~tens of daily users/day). Monitor Neon dashboard + revisit if peak concurrency exceeds 8-10 connections. Mitigation if exhausted: (a) pool size increase, (b) thread-local pool, (c) PgBouncer. security-manager flagged availability concern on PR #134.
+
+_(Re-scoped 2026-06-04: premise OVERSTATED — 연결 누수 없음(prefetch thread 0 conn, telemetry thread finally서 close). 실위험 = 고동시성 peak(>12-15 conn)뿐, 현 규모 무관 → LOW(모니터링). Neon active_connections 모니터, 코드 변경 無.)_
+
+#### INFRA-DB-3 — Unverified guest row 누적 정리 (conditional)
+_2026-06-28 참고: LOGIN-ONBOARD-1 후에도 `GuestLoginView`(auth.py:227) + `/auth/guest/` 라우트(urls.py:17) + `guestLogin()`(api/auth.js:30) **여전히 존재** — LoginPage 신규-프로필 흐름만 호출 중단, 엔드포인트는 미제거. is_guest 의미가 "미인증"으로 재정의됨(id+password 계정도 is_guest=True). 정리 대상/기준 재정의 필요._
+Guest 계정 정리 로직 없음. 조건부 모니터링: Neon `auth_user WHERE email='' AND is_active=True` row 주간 모니터, > 500 rows/week 지속 시 management command(`delete unverified`) + cron. _(2026-06-04 premise FALSIFIED — cleanup 기준 필드 `last_active`/`swipe_count` 부재(created_at/updated_at만) → 정책 재작성 필요. 모니터링 → LOW.)_
+
 #### FRONT-UX-6 — temp 삭제 실패 무음 + activeProjectId 미정리
-App.jsx `handleTempDelete`가 DELETE 실패 시에도 배너를 닫음(다음 `/search` 재진입 때 배너 재등장하여 self-correct). 성공 후에만 닫거나 에러 토스트. 또 temp 삭제 경로(재진입 cleanup + handleTempDelete)가 `setActiveProjectId(null)`을 안 불러 exit 핸들러와 불일치(파생값 `projects.find()||null`로 무해). FEAT FULL-ONBOARDING-1 follow-up.
+App.jsx temp-delete cleanup(`:207 deleteProject().catch(()=>{})`)가 DELETE 실패 시에도 무음(다음 `/search` 재진입 때 self-correct). 성공 후에만 닫거나 에러 토스트. 또 temp 삭제 경로가 `setActiveProjectId(null)`을 안 불러 exit 핸들러와 불일치(파생값 `projects.find()||null`로 무해). FULL-ONBOARDING-1 follow-up. (FULL-ONBOARDING-2 X-HIGH 작업에 흡수 가능 — item 5 orphan/cleanup.)
 
 #### FRONT-AUTH-1 — LoginPage에 Kakao/Naver 버튼 없음
-Backend Kakao + Naver implementation shipped: `apps/accounts/views.py` KakaoLoginView + NaverLoginView, `apps/accounts/urls.py` `auth/social/kakao/` + `auth/social/naver/`, `apps/accounts/models.py` provider choices. Frontend `LoginPage.jsx` currently has Google button only.
-- [ ] Kakao button on `LoginPage.jsx` (loading state already typed `'kakao'`)
-- [ ] Naver button on `LoginPage.jsx` (loading state not yet typed `'naver'`)
+Backend Kakao + Naver implementation shipped: `apps/accounts/views/auth.py` KakaoLoginView + NaverLoginView, `apps/accounts/urls.py` `auth/social/kakao/` + `auth/social/naver/`, provider choices. Frontend `LoginPage.jsx` currently has Google button only (2026-06-28 grep: kakao/naver 없음 확인).
+- [ ] Kakao button on `LoginPage.jsx`
+- [ ] Naver button on `LoginPage.jsx`
 
-Code audit 2026-05-27 (`develop@3894ffd`):
-- `frontend/src/api/auth.js` already has generic `socialLogin(provider, accessToken, code)` for `'google' | 'kakao' | 'naver'`, so the API helper is not the blocker.
-- Backend accepts either `access_token` or `code` depending on provider view behavior. Frontend still lacks Kakao/Naver SDK or redirect-code handling, so this is a UX/OAuth-client integration task.
-- `frontend/src/pages/LoginPage.jsx` loading state should include `'naver'`; the current comment is stale and button icons/styles need design approval.
-
-Decision needed:
-- Choose provider integration style: JS SDK popup/access-token vs OAuth redirect/auth-code. Match mobile browser behavior and Vercel callback envs before implementing.
-- This may be superseded or reshaped by `FULL-LOGIN-REDESIGN-1`; if guest-first ships first, Kakao/Naver should be secondary account-upgrade options, not necessarily primary login buttons.
+⚠️ **LOGIN-ONBOARD-1로 reshape됨**: social = **인증 전용(verify-only)** 모델 — Kakao/Naver를 1차 로그인 버튼이 아니라 "기존 계정 인증" 옵션으로 둘지 product 결정 필요. (Google조차 신규가입 차단 404 signup_required.) 통합 ID + verify-only와 정합 맞춰 재설계 후 착수.
 
 #### BACK-RECOMMEND-3 — Profile-tab 사무소/유저 추천 endpoint 없음
-Re-scoped 2026-05-14 (REC1 already shipped as Push S3). REC2 (firm) + REC3 (user) target a single composite endpoint `GET /api/v1/recommendations/profile/` returning `{offices: [...], users: [...]}` for a Profile-tab button. Landing tab removed (Push S6).
+Re-scoped 2026-05-14 (REC1 already shipped as Push S3). REC2 (firm) + REC3 (user) target a single composite endpoint `GET /api/v1/recommendations/profile/` returning `{offices: [...], users: [...]}` for a Profile-tab button.
 
 **2026-06-04 audit narrowing:** #178 shipped architect recommendation (`projects/PK/recommended_architects/` + `architects/ID/`, `views/office_recommendation.py`), partially satisfying the OFFICE/architect dimension (board-scoped, flat architect list). The literal `/recommendations/profile/` {offices,users} endpoint still does NOT exist, and the USER↔USER ("유저") recommendation dimension remains entirely unbuilt → narrow this item to the user-recommendation gap + the unified profile-tab endpoint.
 
-Code audit 2026-05-27 (`develop@3894ffd`):
-- No route exists today in `backend/apps/recommendation/urls.py`, `backend/apps/profiles/urls.py`, or `backend/apps/social/urls.py` for `/recommendations/profile/`; the only recommendation-style public route is `recommendations/board-surprise/`.
-- Firm data model exists in `backend/apps/profiles/models.py`: `Office`, `OfficeProjectLink`, `Office.canonical_id`, follower counters. `OfficeDetailView` already hydrates office projects from `OfficeProjectLink` + `canonical_v2_buildings`.
-- User taste helper exists as `engine.compute_user_taste_vector(profile)`, but it aggregates the requester only. For recommending users, a batch scoring strategy is needed; do not loop all users and run per-user DB fetches in request path.
-- Social graph exists (`Follow`, `ArchitectFollow`) and should be used to exclude already-followed users/studios unless Product decides otherwise. (`OfficeFollow` was removed in ARCHITECT-UNIFY-C — office-level follow is unavailable until firm-side unification; use `ArchitectFollow` for studio exclusion.)
-- Frontend profile stats buttons have TODOs for followers/following routes, but no recommendation trigger UI yet.
-
-Implementation map:
-- Backend endpoint probably belongs in a new recommendation view/module because it combines Make Web user_data and Make DB building vectors. Keep office/user recommendation payload minimal for p95 <= 800 ms.
-- For firms, precompute or cache office vectors from `OfficeProjectLink.building_id` embeddings; query-time max-sim over each office's projects will get expensive if done naively.
-- For users, use each user's aggregated liked vector and follower/exclusion filters. Cold-start needs a separate branch (popular offices/users or disable with CTA).
-
 Open dimensions (admin decision before implementation):
 - **Firm vector composition** — Mean / weighted-mean / curated-subset / max-sim of firm's project embeddings?
-- **User taste vector** — Aggregated from user's `liked_ids` across Projects; recency-weighted? curated subset?
+- **User taste vector** — Aggregated from user's `liked_ids` across Projects; recency-weighted?
 - **Cold-start strategy** — New user 0 swipes → "popular users" / generic taste cluster / disable User tab until N swipes?
 - **Match score visibility** — Show "92% match" on cards or hide?
-- **Diversity vs follow-exclusion** — Recommend already-followed firms? (probably exclude)
-- **Tie-breakers** — Followers count / recency / random / hybrid?
 - **Trigger surface UX** — Single button → modal / full-page / toggle between Office/User?
 
 Acceptance: `/recommendations/profile/` p95 ≤ 800 ms on Singapore deploy; cold-start UX graceful; `canonical_bld_id` + `is_publishable=true` gating preserved per CLAUDE.md hard rules.
 
 #### BACK-EXTERNAL-1 — FirmProfilePage에 외부 기사 surface 없음
-Surfaces external articles about a firm on FirmProfilePage (Space / ArchDaily / news keyword match). Phase 15 already shipped External DM wiring (`Office.contact_email`, `Office.website`, `UserProfile.external_links`).
+Surfaces external articles about a firm on FirmProfilePage (Space / ArchDaily / news keyword match). Phase 18 deferred. `frontend/src/pages/FirmProfilePage.jsx` already renders an Articles section only when `office.articles?.length > 0` (defaults `[]`); `ArticleCard.jsx` exists expecting `{title,url,source,date}`; backend `OfficeDetailView` omits the field (no OfficeArticle model — 2026-06-28 confirmed).
 
-Code audit 2026-05-27 (`develop@3894ffd`):
-- `frontend/src/pages/FirmProfilePage.jsx` already renders an Articles section only when `office.articles?.length > 0`; it defaults `articles` to `[]` because backend omits the field.
-- `frontend/src/components/profile/ArticleCard.jsx` is already present and expects `{title, url, source, date}`.
-- `backend/apps/profiles/serializers.py` explicitly documents `articles[] -> EXCLUDED (Phase 18 External — deferred)`.
-- `backend/apps/profiles/models.py` has no article table/fields; `OfficeDetailView` only returns office metadata + projects + `is_following`.
-
-Implementation map:
-- If article fetch is real-time, it must not block `OfficeDetailView` TTFC; use async frontend fetch or backend cached endpoint.
-- If stored, a separate `OfficeArticle` model is cleaner than denormalizing a mutable article list into `Office`, because source/date/url uniqueness and refresh state matter.
-- External URL opening is already handled by `ArticleCard` (`target="_blank" rel="noreferrer"`); backend must sanitize/validate stored URLs.
-
-Open dimensions:
-- **Article source priority** — Space-first (Korean) vs ArchDaily-first (global) vs parity? (Korea-first principle suggests Space)
-- **Crawl freshness** — real-time on view / scheduled daily-weekly / event-driven?
-- **Storage** — denormalised in `Office` row / separate `OfficeArticle` table / external CDN?
-- **Article fallback** — empty section / hide section / "no recent articles" placeholder?
-
-Acceptance: ≤10 most recent articles per firm; open in new tab (legal posture); no FirmProfilePage TTFC regression (article fetch async, doesn't block initial paint).
+Open dimensions: source priority (Space-first Korean vs ArchDaily) / crawl freshness (real-time vs scheduled) / storage (OfficeArticle table vs denormalized) / fallback (empty vs hide).
+Acceptance: ≤10 most recent articles per firm; open in new tab; no FirmProfilePage TTFC regression (article fetch async).
 
 #### INFRA-QUEUE-1 — corpus_rank telemetry 꺼져있음
-Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) scan) before emitting a `SessionEvent` bookmark payload. PR #79 turned this off on the bookmark path (`rank_corpus = None` + TODO). Today the field is None on every bookmark event — telemetry slightly degraded but bookmark response is fast. Celery + Redis would let us re-enable the calculation off the hot path.
+Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) scan). PR #79 turned it off (`rank_corpus = None` + TODO in `swipe.py ProjectBookmarkView`). `engine.compute_corpus_rank()` still implemented (pgvector ROW_NUMBER); tests lock the None placeholder. No Celery in requirements (2026-06-28 confirmed).
 
-Code audit 2026-05-27 (`develop@3894ffd`):
-- `backend/apps/recommendation/engine.py` still has `compute_corpus_rank(card_id, v_initial)` implemented as a corpus-wide pgvector `ROW_NUMBER() OVER (ORDER BY embedding <=> vector)` query.
-- `backend/apps/recommendation/views/swipe.py` `ProjectBookmarkView` sets `rank_corpus = None` with a TODO before `event_log.emit_event('bookmark', ...)`.
-- Tests intentionally lock the deferred behavior: `backend/tests/test_bookmark.py::test_rank_corpus_is_none_placeholder` and `backend/tests/test_imp10_topic06_telemetry.py` assert `compute_corpus_rank` is not called and payload `rank_corpus` remains null.
-- No Celery/worker dependency is present in `backend/requirements.txt`; Redis exists as a cache backend, not a task queue.
-
-Implementation map:
-- Do not re-enable synchronous `compute_corpus_rank()` in the bookmark path. The only acceptable path is queue/background worker with bounded retries and failure-tolerant telemetry update.
-- If introduced, update tests from "placeholder None" to "enqueued job" and add worker tests around success/failure without blocking bookmark response.
-
-Why LOW: introducing Celery just for this one field is over-investment. Adds Redis (Railway add-on cost), a worker process, monitoring surface, and a deploy step — all for one telemetry column the product doesn't currently consume. Revisit when other background jobs accumulate (image batch processing, periodic embedding refresh, scheduled snapshot drops) so Celery earns its keep across multiple tasks.
-
----
-
-_(Deferred 2026-06-04 batch scope: YAGNI — product-미소비 telemetry 1필드 위해 Celery+worker 도입은 과투자. 2번째 background job 생기면 단일 INFRA-JOBS 티켓으로 묶어 처리.)_
+Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
 ### CLEANUP-DEPLOY-2026-06-28 — 배포 #250 + 백로그 정리 — RESOLVED 2026-06-28
