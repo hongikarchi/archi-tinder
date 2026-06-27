@@ -23,9 +23,9 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-06-28 02:13 KST',
-    head: 'c3a7ac2',
-    branch: 'feature/claude-task-cleanup',
+    updatedAt: '2026-06-28 02:25 KST',
+    head: '575da9b',
+    branch: 'feature/claude-backlog-audit',
   },
   done: [
     {
@@ -106,7 +106,7 @@ window.PROJECT_STATE = {
       },
       {
         id: 'FULL-LANGUAGE-1',
-        title: '한/영 언어 설정 토글 없음 (Slice 1 shipped)',
+        title: '한/영 UI 라벨 번역 sweep (토글·필드·LLM 배선 완료; 잔여=라벨)',
         note: 'Code audit 2026-05-27: UserProfile preferences are theme/font only; UserSerializer and UserProfileSelfUpdateSerializer need language parity. ThemeContext + AppearanceSettings are the local persistence/UI pattern. ParseQueryView currently calls services.parse_query(conversation_history) with no user preference, so language must be passed from request.user.profile.language and prompt inference overridden.',
       },
       {
@@ -127,11 +127,6 @@ window.PROJECT_STATE = {
         note: 'BACK-LLM-2(#195) 리뷰 중 발견(미수정, pre-existing). `backend/apps/recommendation/views/search.py` `ParseQueryView.post`의 conversation_history 검증이 BACK-LLM-2 serializer가 고친 것과 동일하게 `json.dumps` 기본 `ensure_ascii=True`로 byte 측정 가능성 → 한글 대화가 한도를 6배 부풀려 거짓 거부. 확인 후 `ensure_ascii=False`+UT…',
       },
       {
-        id: 'FRONT-PROFILE-1',
-        title: '프로필 재설계 브라우저 픽셀 패스 (Codex)',
-        note: 'FRONT-PROFILE-HARVEST-1(#179) 머지 후 Codex 브라우저 수정 (별도 PR). FollowListModal 모바일 bottom-sheet(≤768px, DESIGN.md §8.10) + backdrop opacity 0.6→0.4 + inline onMouseEnter→CSS hover + 4테마 픽셀 검증(github-light 먼저). 원 하베스트 minor (2026-06-04 audit 재확인): EditProfileModal(`components/EditPr…',
-      },
-      {
         id: 'BACK-PERFORMANCE-5',
         title: 'Swipe latency 0.7-1.5s 흔들림',
         note: 'Code audit 2026-05-27: SwipeView still does update/phase/refresh_pool/get_pool_embeddings/MMR-or-farthest selection in request transaction. Async prefetch only helps after next_bid is selected. Use existing [SWIPE TIMING] lock/embed/select/prefetch/total + embedding cache stats to bucket variance before code changes.',
@@ -143,7 +138,7 @@ window.PROJECT_STATE = {
       },
       {
         id: 'FULL-LEGAL-1',
-        title: 'PIPA/GDPR consent 없음 (public launch 차단)',
+        title: 'PIPA/GDPR consent: Terms/Privacy 페이지 + 한국어 affirmative copy (잔여)',
         note: 'Partial mitigation shipped via FULL-LOGIN-REDESIGN-1: UserProfile.consent_accepted_at + consent_policy_version fields + terminal-style "동의합니다" capture on guest wizard. Still pending: legally-reviewed copy, Privacy/Terms routes, retention/export/delete flow. PIPA-compliant copy + UI/UX legal review required before public launch.',
       },
       {
@@ -186,6 +181,13 @@ window.PROJECT_STATE = {
     ],
   },
   prs: [
+    {
+      number: 251,
+      title: 'docs(task): post-deploy cleanup + dashboard refresh',
+      mergedAt: '2026-06-27T17:14:16Z',
+      mergedAtKST: '2026-06-28 02:14 KST',
+      sha: '575da9b',
+    },
     {
       number: 249,
       title: 'feat(discovery): cute loading skeleton — mascot + 취향 탐색 중 (DISCOVERY-SKELETON)',
@@ -234,13 +236,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-06-21T17:12:48Z',
       mergedAtKST: '2026-06-22 02:12 KST',
       sha: '6555f15',
-    },
-    {
-      number: 241,
-      title: 'perf(image): right-size swipe cover URLs at normalizeCard (PR1, frontend-only)',
-      mergedAt: '2026-06-21T15:49:25Z',
-      mergedAtKST: '2026-06-22 00:49 KST',
-      sha: 'bce04d6',
     },
   ],
   agents: [
