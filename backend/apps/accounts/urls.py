@@ -8,6 +8,8 @@ from .views import (
     LikedBuildingsView,
     # AUTH-LOGIN-1: handle+password + email-link
     RegisterView, PasswordLoginView, SetPasswordView, LinkEmailView,
+    # LOGIN-ONBOARD-1: unified ID check
+    CheckHandleView,
 )
 
 urlpatterns = [
@@ -19,6 +21,8 @@ urlpatterns = [
     path('auth/login/',              PasswordLoginView.as_view(), name='auth-login'),
     path('auth/set-password/',       SetPasswordView.as_view(),   name='auth-set-password'),
     path('auth/link-email/',         LinkEmailView.as_view(),     name='auth-link-email'),
+    # LOGIN-ONBOARD-1: unified ID availability check
+    path('auth/check-handle/',       CheckHandleView.as_view(),   name='auth-check-handle'),
     # -- Social OAuth --
     path('auth/social/google/',      GoogleLoginView.as_view()),
     path('auth/social/kakao/',       KakaoLoginView.as_view()),

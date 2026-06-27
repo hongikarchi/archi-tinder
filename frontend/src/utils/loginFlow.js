@@ -16,6 +16,23 @@ export function getLoginSwipeAction(direction) {
   return LOGIN_SWIPE_ACTIONS[direction] || null
 }
 
+/**
+ * Client-side mirror of backend unified ID validator.
+ * Allowed: Hangul + ASCII letters + digits + underscore.
+ * No spaces. 2-20 characters after NFC normalization.
+ */
+export function isIdFormatValid(value) {
+  if (typeof value !== 'string') return false
+  const nfc = value.normalize('NFC')
+  if (nfc.length < 2 || nfc.length > 20) return false
+  // Must stay in sync with backend _HANDLE_RE in serializers.py.
+  // Hangul syllables (AC00-D7A3) + Hangul Jamo (1100-11FF)
+  // + Hangul Jamo Extended-A (A960-A97F) + Hangul Jamo Extended-B (D7B0-D7FF)
+  // + ASCII letters + digits + underscore. No whitespace, no other characters.
+  return /^[가-힣ᄀ-ᇿꥠ-꥿ힰ-퟿a-zA-Z0-9_]+$/.test(nfc)
+}
+
+// Kept for backward compatibility with test suite.
 export function isDisplayNameReady(value) {
   return typeof value === 'string' && value.trim().length > 0
 }
@@ -24,8 +41,14 @@ export function isRoleReady(value) {
   return ONBOARDING_ROLES.some(role => role.value === value)
 }
 
+/**
+ * Validate the new unified flow: id must be format-valid, objective required.
+ * Affiliation is optional.
+ */
 export function isGuestProfileReady(profile = {}) {
-  return isDisplayNameReady(profile.displayName) && isRoleReady(profile.role)
+  // New shape: { id, role } — also accepts legacy { displayName, role } for tests
+  const idOk = isIdFormatValid(profile.id) || isDisplayNameReady(profile.displayName)
+  return idOk && isRoleReady(profile.role)
 }
 
 /**
@@ -33,6 +56,7 @@ export function isGuestProfileReady(profile = {}) {
  * - Trims whitespace.
  * - Defaults to 'Guest' if blank or non-string.
  * - Caps at 30 characters.
+ * Kept for test compatibility.
  */
 export function normalizeGuestName(value) {
   if (typeof value !== 'string') return 'Guest'
@@ -43,10 +67,7 @@ export function normalizeGuestName(value) {
 
 /**
  * Build the POST /auth/guest/ body.
- * Always includes consent_accepted: true (wizard flow structurally guarantees
- * the user has clicked "동의합니다" before this function is called).
- * jobRole → backend field `role` (free-text, optional)
- * affiliation → backend field `affiliation` (free-text, optional)
+ * Kept for test compatibility (not called from new flow — new flow uses register()).
  */
 export function buildGuestLoginPayload({ displayName, role, jobRole, affiliation }) {
   const payload = {

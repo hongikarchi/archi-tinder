@@ -1,5 +1,6 @@
 import logging
 import os
+import unicodedata
 import uuid as _uuid
 import requests
 from django.contrib.auth.models import User
@@ -25,7 +26,7 @@ from ..serializers import UserSerializer, validate_handle_value
 from ..throttling import (
     GuestLoginThrottle, GuestPromoteThrottle,
     RegisterThrottle, PasswordLoginThrottle, LinkEmailThrottle,
-    SetPasswordThrottle,
+    SetPasswordThrottle, CheckHandleThrottle,
 )
 
 logger = logging.getLogger('apps.accounts')
@@ -150,7 +151,11 @@ class DevLoginThrottle(AnonRateThrottle):
 
 def _get_or_create_user(provider, provider_id, email, display_name, avatar_url,
                         email_verified=False):
-    """Find or create a UserProfile, linking by email only when verified.
+    """Find an existing UserProfile for a social login; return None if not found.
+
+    LOGIN-ONBOARD-1: Branch (iii) create-new has been REMOVED. Social login
+    no longer creates new accounts. The frontend must guide users to register
+    first via id+password, then link their Google account.
 
     SECURITY (account-takeover mitigation):
       email_verified must be True before we allow an email-address match to
@@ -158,24 +163,19 @@ def _get_or_create_user(provider, provider_id, email, display_name, avatar_url,
       registers a provider account with an UNVERIFIED email equal to a victim's
       address would otherwise gain full access to the victim's account.
 
-      When email_verified is False:
-        - The email-match/link branch is skipped entirely.
-        - A NEW account is created with email='' (not the unverified address).
-          Storing the unverified email would create the reverse vector: a later
-          VERIFIED login for that address would match the attacker's account.
-
     Branch (i)  — existing SocialAccount: always safe, unchanged.
     Branch (ii) — email match: runs ONLY when email AND email_verified=True.
-    Branch (iii)— create new: email stored only when email_verified=True.
+    Branch (iii)— [REMOVED] create new: callers handle None return with 404/400.
     """
     # (i) pre-check: existing social credential → return immediately (safe)
     social = SocialAccount.objects.filter(provider=provider, provider_id=provider_id).first()
     if social:
         profile = social.user
+        # LOGIN-ONBOARD-1: display_name is now the user-owned unified ID (== handle).
+        # Do NOT overwrite it from the provider's free-form name on every re-login —
+        # that would silently clobber the user's chosen unified ID with e.g. 'John Smith'.
+        # avatar_url is provider-managed and safe to sync.
         update_fields = []
-        if display_name:
-            profile.display_name = display_name
-            update_fields.append('display_name')
         if avatar_url:
             profile.avatar_url = avatar_url
             update_fields.append('avatar_url')
@@ -190,42 +190,26 @@ def _get_or_create_user(provider, provider_id, email, display_name, avatar_url,
         if existing_user:
             profile = getattr(existing_user, 'profile', None)
 
-    if profile is None:
-        # (iii) create new account
-        # SECURITY: store email only when verified — unverified email stored here
-        # would let a later verified login for that address collide with this account.
-        safe_email = email if email_verified else ''
-        username = f'{provider}_{provider_id}'[:150]
-        # Ensure unique username
-        base = username
-        n = 1
-        while User.objects.filter(username=username).exists():
-            username = f'{base}_{n}'
-            n += 1
-        django_user = User.objects.create_user(username=username, email=safe_email)
-        profile = UserProfile.objects.create(
-            user=django_user,
-            display_name=display_name or safe_email or provider_id,
-            avatar_url=avatar_url,
-        )
-    else:
-        # Always sync display_name + avatar_url from the provider on every login
+    if profile is not None:
+        # LOGIN-ONBOARD-1: display_name is now the user-owned unified ID (== handle).
+        # Do NOT overwrite it from the provider's free-form name — see branch (i) comment.
+        # avatar_url is provider-managed and safe to sync.
         update_fields = []
-        if display_name:
-            profile.display_name = display_name
-            update_fields.append('display_name')
         if avatar_url:
             profile.avatar_url = avatar_url
             update_fields.append('avatar_url')
         if update_fields:
             profile.save(update_fields=update_fields)
 
-    SocialAccount.objects.get_or_create(
-        provider=provider,
-        provider_id=provider_id,
-        defaults={'user': profile},
-    )
-    return profile
+        SocialAccount.objects.get_or_create(
+            provider=provider,
+            provider_id=provider_id,
+            defaults={'user': profile},
+        )
+        return profile
+
+    # No existing account found — return None; caller returns signup_required.
+    return None
 
 
 def _make_token_response(profile):
@@ -548,6 +532,13 @@ class GoogleLoginView(APIView):
             avatar_url=info.get('picture'),
             email_verified=bool(info.get('email_verified', False)),
         )
+        # LOGIN-ONBOARD-1: social login no longer creates accounts.
+        # Brand-new Google login (no matching account) → require id+password signup first.
+        if profile is None:
+            return Response(
+                {'detail': 'signup_required', 'reason': 'no_account'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
         logger.info('Google login: user=%s', profile.pk)
         return Response(_make_token_response(profile))
 
@@ -587,6 +578,12 @@ class KakaoLoginView(APIView):
             avatar_url=kakao_account.get('profile', {}).get('profile_image_url'),
             email_verified=kakao_email_verified,
         )
+        # LOGIN-ONBOARD-1: social login no longer creates accounts.
+        if profile is None:
+            return Response(
+                {'detail': 'signup_required', 'reason': 'no_account'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
         logger.info('Kakao login: user=%s', profile.pk)
         return Response(_make_token_response(profile))
 
@@ -625,6 +622,12 @@ class NaverLoginView(APIView):
             avatar_url=info.get('profile_image'),
             email_verified=False,
         )
+        # LOGIN-ONBOARD-1: social login no longer creates accounts.
+        if profile is None:
+            return Response(
+                {'detail': 'signup_required', 'reason': 'no_account'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
         logger.info('Naver login: user=%s', profile.pk)
         return Response(_make_token_response(profile))
 
@@ -658,15 +661,21 @@ class DevLoginView(APIView):
 class RegisterView(APIView):
     """POST /api/v1/auth/register/
 
-    Create a new handle+password account.
+    Create a new id+password account (the primary signup path).
 
-    Body: {handle, password, display_name? (default: handle)}
+    LOGIN-ONBOARD-1: unified ID strategy. The `id` field is the single
+    user-facing ID (= display name = login id = @handle). Both UserProfile.handle
+    and UserProfile.display_name are set to the NFC-normalized validated id.
+    is_guest=True on creation (unverified account; flips to False on Google link).
+
+    Body: {id, password, affiliation? (optional), onboarding_role, consent_accepted: true}
     Returns {access, refresh, user} on success.
 
     Security:
-    - handle validated by shared validate_handle_value (same rules as /users/me/ PATCH).
+    - id validated by shared validate_handle_value (Hangul + ASCII, 2-20 chars).
     - password validated by Django AUTH_PASSWORD_VALIDATORS.
-    - User.username = stable internal key f'local_{uuid4().hex}' (NOT the handle,
+    - consent_accepted must be boolean true (PIPA requirement).
+    - User.username = stable internal key f'local_{uuid4().hex}' (NOT the id,
       since handle is editable and must not be coupled to the auth key).
     - Wrapped in transaction.atomic() — handle uniqueness race condition is
       prevented by DB unique constraint on UserProfile.handle.
@@ -676,19 +685,31 @@ class RegisterView(APIView):
     throttle_classes       = [RegisterThrottle]
 
     def post(self, request):
-        handle       = request.data.get('handle', '')
-        password     = request.data.get('password', '')
-        display_name = request.data.get('display_name', '')
+        # -- PIPA consent gate --
+        if request.data.get('consent_accepted') is not True:
+            return Response(
+                {'detail': 'consent_required',
+                 'reason': 'PIPA consent must be explicitly accepted'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        # -- Validate handle --
-        if not handle:
-            return Response({'handle': ['This field is required.']},
+        # Accept both 'id' (new) and 'handle' (legacy) as the ID field.
+        # Strip leading/trailing whitespace so check-handle and register agree
+        # on whitespace handling (CheckHandleView also strips before validation).
+        id_value = (request.data.get('id') or request.data.get('handle', '')).strip()
+        password = request.data.get('password', '')
+        affiliation = request.data.get('affiliation', '')
+        onboarding_role = request.data.get('onboarding_role', '')
+
+        # -- Validate id --
+        if not id_value:
+            return Response({'id': ['This field is required.']},
                             status=status.HTTP_400_BAD_REQUEST)
         from rest_framework import serializers as _drf_serializers
         try:
-            handle = validate_handle_value(handle)
+            validated_id = validate_handle_value(id_value)
         except _drf_serializers.ValidationError as exc:
-            return Response({'handle': exc.detail},
+            return Response({'id': exc.detail},
                             status=status.HTTP_400_BAD_REQUEST)
 
         # -- Validate password --
@@ -701,8 +722,23 @@ class RegisterView(APIView):
             return Response({'password': list(exc.messages)},
                             status=status.HTTP_400_BAD_REQUEST)
 
+        # -- Validate onboarding_role --
+        if onboarding_role and onboarding_role not in VALID_ONBOARDING_ROLES:
+            return Response(
+                {'onboarding_role': ['Invalid onboarding role.']},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # -- Sanitize optional free-text fields --
+        clean_affiliation = _clean_guest_optional_text(affiliation, 100)
+
+        policy_version = request.data.get('consent_policy_version', '1.0')
+        if not isinstance(policy_version, str) or len(policy_version) > 10:
+            policy_version = '1.0'
+
         # -- Create user + profile (atomic, DB unique on handle protects races) --
-        clean_display_name = (display_name.strip() or handle)[:30]
+        # LOGIN-ONBOARD-1: handle == display_name == NFC-normalized validated id.
+        # is_guest=True (unverified; flips to False when Google email is linked).
         try:
             with transaction.atomic():
                 django_user = User(
@@ -713,14 +749,18 @@ class RegisterView(APIView):
                 django_user.save()
                 profile = UserProfile.objects.create(
                     user=django_user,
-                    handle=handle,
-                    display_name=clean_display_name,
-                    is_guest=False,
+                    handle=validated_id,
+                    display_name=validated_id,
+                    is_guest=True,
+                    affiliation=clean_affiliation,
+                    onboarding_role=onboarding_role or '',
+                    consent_accepted_at=timezone.now(),
+                    consent_policy_version=policy_version,
                 )
         except Exception:
             # Handle uniqueness race: another request won the unique constraint.
-            if UserProfile.objects.filter(handle__iexact=handle).exists():
-                return Response({'handle': ['handle already taken.']},
+            if UserProfile.objects.filter(handle__iexact=validated_id).exists():
+                return Response({'id': ['ID already taken.']},
                                 status=status.HTTP_400_BAD_REQUEST)
             raise
 
@@ -748,8 +788,13 @@ class PasswordLoginView(APIView):
     _GENERIC_ERROR = 'Invalid handle or password.'
 
     def post(self, request):
-        handle   = request.data.get('handle', '')
+        handle   = request.data.get('handle', '') or request.data.get('id', '')
         password = request.data.get('password', '')
+
+        # LOGIN-ONBOARD-1: NFC-normalize incoming handle so Hangul IDs match
+        # the stored NFC form regardless of how the client decomposed the string.
+        if handle:
+            handle = unicodedata.normalize('NFC', handle)
 
         profile  = None
         django_user = None
@@ -958,11 +1003,63 @@ class LinkEmailView(APIView):
             )
 
             profile.email_verified_at = timezone.now()
-            profile.save(update_fields=['email_verified_at'])
+            # LOGIN-ONBOARD-1: linking a verified Google email = verification.
+            # Flip is_guest=False so the account is no longer subject to guest
+            # limits (3-board cap, 50-like cap). Consistent with GuestPromoteView.
+            profile.is_guest = False
+            profile.save(update_fields=['email_verified_at', 'is_guest'])
 
         invalidate_user_cache(user.id)
         logger.info('LinkEmailView: email linked profile=%s email=%s', profile.pk, email)
         return Response(UserSerializer(profile).data, status=status.HTTP_200_OK)
+
+
+# -- Check Handle (LOGIN-ONBOARD-1) ----------------------------------------
+
+class CheckHandleView(APIView):
+    """GET /api/v1/auth/check-handle/?id=<value>
+
+    LOGIN-ONBOARD-1: real-time duplicate-check for the unified ID during signup.
+    Runs the same validate_handle_value() as RegisterView so the result agrees
+    with the actual register validation.
+
+    Returns 200 always (error shape uses available=False + reason):
+      {available: true, reason: null}
+      {available: false, reason: "<human-readable reason>"}
+
+    SECURITY: exposes username enumeration — rate-limited via CheckHandleThrottle
+    (20/min per IP) to limit the enumeration surface.
+    """
+    permission_classes    = [AllowAny]
+    authentication_classes = []
+    throttle_classes       = [CheckHandleThrottle]
+
+    def get(self, request):
+        from rest_framework import serializers as _drf_serializers
+
+        id_value = request.query_params.get('id', '').strip()
+
+        if not id_value:
+            return Response(
+                {'available': False, 'reason': 'ID is required.'},
+                status=status.HTTP_200_OK,
+            )
+
+        try:
+            validate_handle_value(id_value)
+        except _drf_serializers.ValidationError as exc:
+            # Flatten DRF's detail (may be list or string).
+            detail = exc.detail
+            if isinstance(detail, list):
+                reason = str(detail[0]) if detail else 'Invalid ID.'
+            else:
+                reason = str(detail)
+            return Response(
+                {'available': False, 'reason': reason},
+                status=status.HTTP_200_OK,
+            )
+
+        return Response({'available': True, 'reason': None}, status=status.HTTP_200_OK)
 
 
 # -- Token refresh ---------------------------------------------------------

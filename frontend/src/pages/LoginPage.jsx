@@ -1,11 +1,16 @@
 /**
  * pages/LoginPage.jsx
- * Conversational swipe onboarding for returning Google users and new guests.
+ * Conversational swipe onboarding — unified ID+password signup.
+ *
+ * New 3-step new-profile flow:
+ *   choice → credentials (ID+password) → profile (affiliation+objective) → consent
+ *
+ * Google = verification only, not a signup path.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { login as apiLogin, register as apiRegister, checkHandle } from '../api/auth.js'
 import * as api from '../api/client.js'
-import { login as apiLogin, register as apiRegister } from '../api/auth.js'
 import GoogleLoginButton from '../components/GoogleLoginButton.jsx'
 import { CARD_HEIGHT, CARD_WIDTH } from '../components/SwipeCard.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
@@ -13,22 +18,20 @@ import { SWIPE_PREVENT_ALL, SWIPE_PREVENT_VERTICAL } from '../components/swipeGe
 import {
   LOGIN_SWIPE_ACTIONS,
   ONBOARDING_ROLES,
-  buildGuestLoginPayload,
   getLoginSwipeAction,
   hasGoogleLogin,
-  isDisplayNameReady,
-  isGuestProfileReady,
+  isIdFormatValid,
   isRoleReady,
 } from '../utils/loginFlow.js'
 import { useTranslation } from '../i18n/index.js'
 import { useLanguage } from '../hooks/useLanguage.js'
 
 const FLOW_STEPS = {
-  choice:    'choice',
-  returning: 'returning',
-  register:  'register',
-  profile:   'profile',
-  consent:   'consent',
+  choice:      'choice',
+  returning:   'returning',
+  credentials: 'credentials',
+  profile:     'profile',
+  consent:     'consent',
 }
 
 const INTRO_DISMISS_KEY = 'archithon_login_intro_dismissed'
@@ -38,34 +41,37 @@ const AUTH_STAGE_WIDTH = `${CARD_WIDTH}px`
 const AUTH_CARD_HEIGHT = `${CARD_HEIGHT}px`
 
 export default function LoginPage({ onLogin }) {
-  const { t, language }  = useTranslation()
-  const { setLanguage }  = useLanguage()
+  const { t, language } = useTranslation()
+  const { setLanguage } = useLanguage()
 
-  const [step, setStep]                       = useState(FLOW_STEPS.choice)
-  const [displayName, setDisplayName]         = useState('')
-  const [role, setRole]                       = useState('')
-  const [jobRole, setJobRole]                 = useState('')
-  const [affiliation, setAffiliation]         = useState('')
-  const [consentGiven, setConsentGiven]       = useState(false)
+  const [step, setStep]                         = useState(FLOW_STEPS.choice)
+
+  // New-profile state: lifted to parent so consent step can access all fields.
+  const [id, setId]                             = useState('')
+  const [password, setPassword]                 = useState('')
+  const [affiliation, setAffiliation]           = useState('')
+  const [role, setRole]                         = useState('')
+
+  const [consentGiven, setConsentGiven]         = useState(false)
   const [consentResetTick, setConsentResetTick] = useState(0)
-  const [loading, setLoading]                 = useState(null)
-  const [error, setError]                     = useState(null)
-  const [showIntro, setShowIntro]             = useState(
+  const [loading, setLoading]                   = useState(null)
+  const [error, setError]                       = useState(null)
+  const [showIntro, setShowIntro]               = useState(
     () => INTRO_SHOW_ONCE ? !localStorage.getItem(INTRO_DISMISS_KEY) : true,
   )
 
   const typedLine = useTypedLine(t('login.prompt.' + step))
 
   // Latest-ref: stable identity for handleConsentAction while capturing fresh
-  // handleGuestSubmit closure every render.
-  const guestSubmitRef = useRef(() => {})
-  guestSubmitRef.current = () => handleGuestSubmit({ consentConfirmed: true })
+  // handleRegisterSubmit closure every render.
+  const registerSubmitRef = useRef(() => {})
+  registerSubmitRef.current = () => handleRegisterSubmit({ consentConfirmed: true })
 
   // Stable callbacks — setState setters are stable, module constants are stable.
   const handleChoiceAction = useCallback((action) => {
     setError(null)
     setConsentGiven(false)
-    setStep(action === LOGIN_SWIPE_ACTIONS.left ? FLOW_STEPS.returning : FLOW_STEPS.profile)
+    setStep(action === LOGIN_SWIPE_ACTIONS.left ? FLOW_STEPS.returning : FLOW_STEPS.credentials)
   }, [])
 
   const handleConsentAction = useCallback((action) => {
@@ -75,13 +81,12 @@ export default function LoginPage({ onLogin }) {
       setStep(FLOW_STEPS.profile)
     } else {
       setConsentGiven(true)
-      guestSubmitRef.current()
+      registerSubmitRef.current()
     }
   }, [])
 
   const googleConfigured = hasGoogleLogin(import.meta.env.VITE_GOOGLE_CLIENT_ID)
   const isBusy           = loading !== null
-  const profileReady     = isGuestProfileReady({ displayName, role })
   const errorText        = error && (error.key ? t(error.key, error.params) : error.text)
 
   function dismissIntro() {
@@ -94,6 +99,7 @@ export default function LoginPage({ onLogin }) {
     setStep(nextStep)
   }
 
+  // -- Google login (returning / verify only) --------------------------------
   async function handleGoogleSuccess(codeResponse) {
     setLoading('google')
     setError(null)
@@ -101,8 +107,13 @@ export default function LoginPage({ onLogin }) {
       const user = await api.socialLogin('google', null, codeResponse.code)
       onLogin(user)
     } catch (err) {
-      const detail = err.message || 'Unknown error'
-      setError({ key: 'login.error.googleFailed', params: { detail } })
+      // Backend returns 404/400 { detail: 'signup_required' } for new Google users.
+      const detail = err?.data?.detail || err?.message || 'Unknown error'
+      if (detail === 'signup_required') {
+        setError({ key: 'login.error.googleSignupRequired' })
+      } else {
+        setError({ key: 'login.error.googleFailed', params: { detail } })
+      }
     } finally {
       setLoading(null)
     }
@@ -125,13 +136,33 @@ export default function LoginPage({ onLogin }) {
     setLoading(null)
   }
 
+  // -- ID+password login (returning) ----------------------------------------
+  async function handleLoginSubmit(handle, pass) {
+    if (isBusy) return
+    setError(null)
+    setLoading('login')
+    try {
+      const user = await apiLogin(handle, pass)
+      onLogin(user)
+    } catch (err) {
+      setError(err.message ? { text: err.message } : { key: 'login.error.loginFailed' })
+    } finally {
+      setLoading(null)
+    }
+  }
+
+  // -- Credentials step → advance to profile step ---------------------------
+  function handleCredentialsContinue(credId, credPassword) {
+    setId(credId)
+    setPassword(credPassword)
+    setError(null)
+    moveToStep(FLOW_STEPS.profile)
+  }
+
+  // -- Profile step → advance to consent ------------------------------------
   function handleProfileContinue(event) {
     event.preventDefault()
     setError(null)
-    if (!isDisplayNameReady(displayName)) {
-      setError({ key: 'login.error.displayNameRequired' })
-      return
-    }
     if (!isRoleReady(role)) {
       setError({ key: 'login.error.objectiveRequired' })
       return
@@ -140,10 +171,21 @@ export default function LoginPage({ onLogin }) {
     moveToStep(FLOW_STEPS.consent)
   }
 
-  async function handleGuestSubmit({ consentConfirmed = consentGiven } = {}) {
+  // -- Final submit: register() called once on consent ----------------------
+  async function handleRegisterSubmit({ consentConfirmed = consentGiven } = {}) {
     if (isBusy) return
     setError(null)
-    if (!isGuestProfileReady({ displayName, role })) {
+
+    if (!isIdFormatValid(id)) {
+      setError({ key: 'login.error.idInvalid' })
+      setStep(FLOW_STEPS.credentials)
+      return
+    }
+    if (!password || password.length < 8) {
+      setStep(FLOW_STEPS.credentials)
+      return
+    }
+    if (!isRoleReady(role)) {
       setError({ key: 'login.error.profileIncomplete' })
       setStep(FLOW_STEPS.profile)
       return
@@ -153,18 +195,36 @@ export default function LoginPage({ onLogin }) {
       return
     }
 
-    setLoading('guest')
+    setLoading('register')
     try {
-      const user = await api.guestLogin(buildGuestLoginPayload({ displayName, role, jobRole, affiliation }))
+      const payload = {
+        id: id.normalize('NFC'),
+        password,
+        onboarding_role: role,
+        consent_accepted: true,
+        consent_policy_version: '1.0',
+      }
+      if (affiliation && affiliation.trim()) payload.affiliation = affiliation.trim().slice(0, 100)
+      const user = await apiRegister(payload)
       await onLogin(user)
       setLanguage(language)
     } catch (err) {
-      const detail = err?.data?.detail || err?.message || 'Unknown error'
-      if (detail === 'consent_required') {
+      const data = err?.data
+      if (data?.id) {
+        const msg = Array.isArray(data.id) ? data.id[0] : data.id
+        setError({ text: msg })
+      } else if (data?.handle) {
+        // Legacy field name fallback
+        const msg = Array.isArray(data.handle) ? data.handle[0] : data.handle
+        setError({ text: msg })
+      } else if (data?.password) {
+        const msg = Array.isArray(data.password) ? data.password[0] : data.password
+        setError({ text: msg })
+      } else if (data?.detail === 'consent_required') {
         setError({ key: 'login.error.consentRetry' })
         setConsentGiven(false)
       } else {
-        setError({ key: 'login.error.signInFailed', params: { detail } })
+        setError(err.message ? { text: err.message } : { key: 'login.error.registerFailed' })
       }
       setConsentResetTick(prev => prev + 1)
     } finally {
@@ -172,44 +232,7 @@ export default function LoginPage({ onLogin }) {
     }
   }
 
-  async function handleLoginSubmit(handle, password) {
-    if (isBusy) return
-    setError(null)
-    setLoading('login')
-    try {
-      const user = await apiLogin(handle, password)
-      onLogin(user)
-    } catch (err) {
-      setError(err.message ? { text: err.message } : { key: 'login.error.loginFailed' })
-    } finally {
-      setLoading(null)
-    }
-  }
-
-  async function handleRegisterSubmit(handle, password, name) {
-    if (isBusy) return
-    setError(null)
-    setLoading('register')
-    try {
-      const user = await apiRegister(handle, password, name)
-      await onLogin(user)
-      setLanguage(language)
-    } catch (err) {
-      const data = err?.data
-      if (data?.handle) {
-        const msg = Array.isArray(data.handle) ? data.handle[0] : data.handle
-        setError({ text: msg })
-      } else if (data?.password) {
-        const msg = Array.isArray(data.password) ? data.password[0] : data.password
-        setError({ text: msg })
-      } else {
-        setError(err.message ? { text: err.message } : { key: 'login.error.registerFailed' })
-      }
-    } finally {
-      setLoading(null)
-    }
-  }
-
+  // -- Dev login ------------------------------------------------------------
   async function handleDevClick() {
     setError(null)
     setLoading('dev')
@@ -261,14 +284,13 @@ export default function LoginPage({ onLogin }) {
             />
           )}
 
-          {step === FLOW_STEPS.register && (
-            <RegisterStep
+          {step === FLOW_STEPS.credentials && (
+            <CredentialsStep
               t={t}
               typedLine={typedLine}
               disabled={isBusy}
-              registerLoading={loading === 'register'}
               onBack={() => moveToStep(FLOW_STEPS.choice)}
-              onRegisterSubmit={handleRegisterSubmit}
+              onContinue={handleCredentialsContinue}
             />
           )}
 
@@ -276,31 +298,19 @@ export default function LoginPage({ onLogin }) {
             <ProfileStep
               t={t}
               typedLine={typedLine}
-              displayName={displayName}
               role={role}
-              jobRole={jobRole}
               affiliation={affiliation}
-              profileReady={profileReady}
               disabled={isBusy}
-              onDisplayNameChange={(value) => {
-                setDisplayName(value)
-                setError(null)
-                setConsentGiven(false)
-              }}
               onRoleChange={(value) => {
                 setRole(value)
                 setError(null)
-                setConsentGiven(false)
-              }}
-              onJobRoleChange={(value) => {
-                setJobRole(value)
                 setConsentGiven(false)
               }}
               onAffiliationChange={(value) => {
                 setAffiliation(value)
                 setConsentGiven(false)
               }}
-              onBack={() => moveToStep(FLOW_STEPS.choice)}
+              onBack={() => moveToStep(FLOW_STEPS.credentials)}
               onSubmit={handleProfileContinue}
             />
           )}
@@ -310,29 +320,19 @@ export default function LoginPage({ onLogin }) {
               key={`consent-${consentResetTick}`}
               t={t}
               typedLine={typedLine}
-              displayName={displayName}
+              id={id}
               role={role}
-              jobRole={jobRole}
               affiliation={affiliation}
-              profileReady={profileReady}
+              profileReady={isIdFormatValid(id) && isRoleReady(role)}
               disabled={isBusy}
               onAction={handleConsentAction}
             />
           )}
         </div>
 
-        <p style={captionTextStyle}>{t('login.caption.' + step)}</p>
-
-        {step === FLOW_STEPS.choice && (
-          <button
-            type="button"
-            className="lp-btn"
-            onClick={() => moveToStep(FLOW_STEPS.register)}
-            disabled={isBusy}
-            style={ghostButtonStyle(isBusy)}
-          >
-            {t('login.choice.registerLink')}
-          </button>
+        {/* Caption: suppress for choice step (in-card labels already say it) */}
+        {step !== FLOW_STEPS.choice && (
+          <p style={captionTextStyle}>{t('login.caption.' + step)}</p>
         )}
 
         {import.meta.env.DEV && (
@@ -536,8 +536,167 @@ function ChoiceDeck({ t, typedLine, disabled, onAction }) {
   )
 }
 
+// Handle-check state machine
+const CHECK_IDLE      = 'idle'
+const CHECK_CHECKING  = 'checking'
+const CHECK_AVAILABLE = 'available'
+const CHECK_TAKEN     = 'taken'
+
+function CredentialsStep({ t, typedLine, disabled, onBack, onContinue }) {
+  const [localId, setLocalId]           = useState('')
+  const [localPassword, setLocalPassword] = useState('')
+  const [checkState, setCheckState]     = useState(CHECK_IDLE)
+  const [confirmedId, setConfirmedId]   = useState('')  // the id that was confirmed available
+  const [checkError, setCheckError]     = useState(null)
+
+  const idNfc         = localId.normalize('NFC')
+  const idFormatValid = isIdFormatValid(localId)
+  const passwordValid = localPassword.length >= 8
+
+  // Reset availability when id changes after confirmation
+  function handleIdChange(value) {
+    setLocalId(value)
+    setCheckError(null)
+    if (checkState !== CHECK_IDLE) {
+      setCheckState(CHECK_IDLE)
+      setConfirmedId('')
+    }
+  }
+
+  async function handleCheckAvailability() {
+    if (!idFormatValid) {
+      setCheckError(t('login.error.idInvalid'))
+      return
+    }
+    setCheckState(CHECK_CHECKING)
+    setCheckError(null)
+    try {
+      const result = await checkHandle(localId)
+      if (result.available) {
+        setCheckState(CHECK_AVAILABLE)
+        setConfirmedId(idNfc)
+      } else {
+        setCheckState(CHECK_TAKEN)
+        setConfirmedId('')
+        setCheckError(result.reason || t('login.credentials.id.taken'))
+      }
+    } catch {
+      setCheckState(CHECK_IDLE)
+      setCheckError(t('login.error.idInvalid'))
+    }
+  }
+
+  // Continue enabled when: format valid, check result is available (for current id), password >= 8
+  const idConfirmed = checkState === CHECK_AVAILABLE && confirmedId === idNfc
+  const canContinue = idConfirmed && passwordValid && !disabled
+
+  function handleSubmit(e) {
+    e.preventDefault()
+    if (!canContinue) return
+    onContinue(idNfc, localPassword)
+  }
+
+  // Inline check-state hint color
+  const checkHintColor =
+    checkState === CHECK_AVAILABLE ? 'var(--accent-1)' :
+    checkState === CHECK_TAKEN     ? 'var(--color-destructive)' :
+    'var(--color-text-dim)'
+
+  const checkHintText =
+    checkState === CHECK_CHECKING  ? t('login.credentials.id.checking') :
+    checkState === CHECK_AVAILABLE ? t('login.credentials.id.available') :
+    checkState === CHECK_TAKEN     ? (checkError || t('login.credentials.id.taken')) :
+    checkError || ''
+
+  return (
+    <AuthCard ariaLabel={t('login.credentials.eyebrow')}>
+      <CardHeader
+        eyebrow={t('login.credentials.eyebrow')}
+        title={t('login.credentials.title')}
+        typedLine={typedLine}
+        trailing={<LangToggle />}
+      />
+      <form onSubmit={handleSubmit} style={formStyle}>
+        <label style={fieldLabelStyle} htmlFor="cred-id">
+          {t('login.credentials.id.label')}
+        </label>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            id="cred-id"
+            autoFocus
+            type="text"
+            value={localId}
+            onChange={e => handleIdChange(e.target.value)}
+            disabled={disabled}
+            placeholder={t('login.credentials.id.placeholder')}
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            maxLength={20}
+            aria-label={t('login.credentials.id.aria')}
+            aria-invalid={localId.length > 0 && !idFormatValid ? 'true' : 'false'}
+            className="lp-input"
+            style={{ ...inputStyle, flex: 1 }}
+          />
+          <button
+            type="button"
+            className="lp-btn"
+            onClick={handleCheckAvailability}
+            disabled={disabled || !idFormatValid || checkState === CHECK_CHECKING}
+            style={secondaryButtonStyle(disabled || !idFormatValid || checkState === CHECK_CHECKING)}
+          >
+            {checkState === CHECK_CHECKING ? <Spinner /> : t('login.credentials.checkBtn')}
+          </button>
+        </div>
+        {checkHintText && (
+          <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: checkHintColor, lineHeight: 1.4 }}>
+            {checkHintText}
+          </p>
+        )}
+
+        <label style={{ ...fieldLabelStyle, marginTop: 4 }} htmlFor="cred-password">
+          {t('login.credentials.password.label')}
+        </label>
+        <input
+          id="cred-password"
+          type="password"
+          value={localPassword}
+          onChange={e => setLocalPassword(e.target.value)}
+          disabled={disabled}
+          placeholder={t('login.credentials.password.placeholder')}
+          aria-label={t('login.credentials.password.aria')}
+          maxLength={128}
+          aria-required="true"
+          className="lp-input"
+          style={inputStyle}
+        />
+
+        <div style={buttonGridStyle}>
+          <button
+            type="button"
+            className="lp-btn"
+            onClick={onBack}
+            disabled={disabled}
+            style={secondaryButtonStyle(disabled)}
+          >
+            {t('login.common.back')}
+          </button>
+          <button
+            type="submit"
+            className="lp-cta"
+            disabled={!canContinue}
+            style={primaryButtonStyle(!canContinue)}
+          >
+            {t('login.credentials.continueBtn')}
+          </button>
+        </div>
+      </form>
+    </AuthCard>
+  )
+}
+
 function ConsentDeck({
-  t, typedLine, displayName, role, jobRole, affiliation, profileReady, disabled, onAction,
+  t, typedLine, id, role, affiliation, profileReady, disabled, onAction,
 }) {
   const pending = useRef(null)
   const [intent, setIntent] = useState(null)
@@ -600,8 +759,8 @@ function ConsentDeck({
           />
           <div style={summaryBoxStyle}>
             <div>
-              <span style={summaryLabelStyle}>{t('login.consent.summary.name')}</span>
-              <strong style={summaryValueStyle}>{displayName.trim()}</strong>
+              <span style={summaryLabelStyle}>{t('login.consent.summary.id')}</span>
+              <strong style={summaryValueStyle}>{id}</strong>
             </div>
             <div>
               <span style={summaryLabelStyle}>{t('login.consent.summary.objective')}</span>
@@ -609,13 +768,7 @@ function ConsentDeck({
                 {role ? t('login.profile.objective.' + role) : t('login.consent.summary.notSelected')}
               </strong>
             </div>
-            {jobRole.trim() && (
-              <div>
-                <span style={summaryLabelStyle}>{t('login.consent.summary.role')}</span>
-                <strong style={summaryValueStyle}>{jobRole.trim()}</strong>
-              </div>
-            )}
-            {affiliation.trim() && (
+            {affiliation && affiliation.trim() && (
               <div>
                 <span style={summaryLabelStyle}>{t('login.consent.summary.affiliation')}</span>
                 <strong style={summaryValueStyle}>{affiliation.trim()}</strong>
@@ -702,11 +855,11 @@ function ReturningStep({
           value={handle}
           onChange={e => setHandle(e.target.value)}
           disabled={disabled}
-          placeholder={t('login.returning.handle.placeholder')}
+          placeholder={t('login.returning.id.placeholder')}
           autoCapitalize="off"
           autoCorrect="off"
           spellCheck={false}
-          aria-label={t('login.returning.handle.aria')}
+          aria-label={t('login.returning.id.aria')}
           className="lp-input"
           style={inputStyle}
         />
@@ -746,20 +899,15 @@ function ReturningStep({
 function ProfileStep({
   t,
   typedLine,
-  displayName,
   role,
-  jobRole,
   affiliation,
-  profileReady,
   disabled,
-  onDisplayNameChange,
   onRoleChange,
-  onJobRoleChange,
   onAffiliationChange,
   onBack,
   onSubmit,
 }) {
-  const nameReady = isDisplayNameReady(displayName)
+  const profileReady = isRoleReady(role)
 
   return (
     <AuthCard ariaLabel={t('login.profile.eyebrow')}>
@@ -770,43 +918,12 @@ function ProfileStep({
         trailing={<LangToggle />}
       />
       <form onSubmit={onSubmit} style={formStyle}>
-        <label style={fieldLabelStyle} htmlFor="guest-display-name">
-          {t('login.profile.displayName.label')}
-        </label>
-        <input
-          id="guest-display-name"
-          autoFocus
-          required
-          value={displayName}
-          onChange={e => onDisplayNameChange(e.target.value)}
-          disabled={disabled}
-          placeholder={t('login.profile.displayName.placeholder')}
-          maxLength={30}
-          aria-invalid={displayName.length > 0 && !nameReady ? 'true' : 'false'}
-          className="lp-input"
-          style={inputStyle}
-        />
-
-        <label style={{ ...fieldLabelStyle, marginTop: 12 }} htmlFor="guest-job-role">
-          {t('login.profile.jobRole.label')}
-        </label>
-        <input
-          id="guest-job-role"
-          type="text"
-          value={jobRole}
-          onChange={e => onJobRoleChange(e.target.value)}
-          disabled={disabled}
-          placeholder={t('login.profile.jobRole.placeholder')}
-          maxLength={50}
-          className="lp-input"
-          style={inputStyle}
-        />
-
-        <label style={{ ...fieldLabelStyle, marginTop: 12 }} htmlFor="guest-affiliation">
+        <label style={fieldLabelStyle} htmlFor="guest-affiliation">
           {t('login.profile.affiliation.label')}
         </label>
         <input
           id="guest-affiliation"
+          autoFocus
           type="text"
           value={affiliation}
           onChange={e => onAffiliationChange(e.target.value)}
@@ -864,109 +981,6 @@ function ProfileStep({
             style={primaryButtonStyle(disabled || !profileReady)}
           >
             {t('login.profile.continueBtn')}
-          </button>
-        </div>
-      </form>
-    </AuthCard>
-  )
-}
-
-function RegisterStep({
-  t,
-  typedLine,
-  disabled,
-  registerLoading,
-  onBack,
-  onRegisterSubmit,
-}) {
-  const [handle, setHandle]           = useState('')
-  const [password, setPassword]       = useState('')
-  const [displayName, setDisplayName] = useState('')
-
-  function handleSubmit(e) {
-    e.preventDefault()
-    if (!handle.trim() || !password) return
-    onRegisterSubmit(handle.trim(), password, displayName)
-  }
-
-  const canSubmit = handle.trim().length >= 3 && password.length >= 8
-
-  return (
-    <AuthCard ariaLabel={t('login.register.eyebrow')}>
-      <CardHeader
-        eyebrow={t('login.register.eyebrow')}
-        title={t('login.register.title')}
-        typedLine={typedLine}
-        trailing={<LangToggle />}
-      />
-      <form onSubmit={handleSubmit} style={formStyle}>
-        <label style={fieldLabelStyle} htmlFor="reg-display-name">
-          {t('login.register.name.label')}
-        </label>
-        <input
-          id="reg-display-name"
-          type="text"
-          value={displayName}
-          onChange={e => setDisplayName(e.target.value)}
-          disabled={disabled}
-          placeholder={t('login.register.name.placeholder')}
-          maxLength={30}
-          className="lp-input"
-          style={inputStyle}
-        />
-
-        <label style={{ ...fieldLabelStyle, marginTop: 4 }} htmlFor="reg-handle">
-          {t('login.register.handle.label')}
-        </label>
-        <input
-          id="reg-handle"
-          type="text"
-          value={handle}
-          onChange={e => setHandle(e.target.value)}
-          disabled={disabled}
-          placeholder={t('login.register.handle.placeholder')}
-          autoCapitalize="off"
-          autoCorrect="off"
-          spellCheck={false}
-          maxLength={30}
-          aria-required="true"
-          className="lp-input"
-          style={inputStyle}
-        />
-
-        <label style={{ ...fieldLabelStyle, marginTop: 4 }} htmlFor="reg-password">
-          {t('login.register.password.label')}
-        </label>
-        <input
-          id="reg-password"
-          type="password"
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          disabled={disabled}
-          placeholder={t('login.register.password.placeholder')}
-          maxLength={128}
-          aria-required="true"
-          className="lp-input"
-          style={inputStyle}
-        />
-
-        <div style={buttonGridStyle}>
-          <button
-            type="button"
-            className="lp-btn"
-            onClick={onBack}
-            disabled={disabled}
-            style={secondaryButtonStyle(disabled)}
-          >
-            {t('login.common.back')}
-          </button>
-          <button
-            type="submit"
-            className="lp-cta"
-            disabled={disabled || !canSubmit}
-            style={primaryButtonStyle(disabled || !canSubmit)}
-          >
-            {registerLoading ? <Spinner /> : t('login.register.submit')}
           </button>
         </div>
       </form>

@@ -98,16 +98,33 @@ export async function login(handle, password) {
 }
 
 /**
- * Register a new account with handle + password (+ optional display_name).
- * Returns: user object.
+ * Register a new account with unified ID + password.
+ * payload: {
+ *   id: string,                  -- unified ID (= handle = display_name)
+ *   password: string,
+ *   affiliation?: string,
+ *   onboarding_role?: string,
+ *   consent_accepted: true,
+ *   consent_policy_version: string,
+ * }
+ * Returns: user object. Created account has is_guest=True (unverified).
  */
-export async function register(handle, password, displayName) {
+export async function register(payload) {
   clearTokens()
-  const body = { handle, password }
-  if (displayName && displayName.trim()) body.display_name = displayName.trim()
-  const data = await callApi('POST', '/auth/register/', body, false)
+  const data = await callApi('POST', '/auth/register/', payload, false)
   setTokens(data.access, data.refresh)
   return data.user
+}
+
+/**
+ * Check availability of a unified ID (handle).
+ * GET /auth/check-handle/?id=<value>
+ * Returns: { available: bool, reason: string|null }
+ * Rate-limited 20/min. No auth required.
+ */
+export async function checkHandle(value) {
+  const encoded = encodeURIComponent(value.normalize('NFC'))
+  return await callApi('GET', `/auth/check-handle/?id=${encoded}`, null, false)
 }
 
 /**
