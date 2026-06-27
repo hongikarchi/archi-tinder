@@ -457,8 +457,14 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
     setIsLoading(true)
 
     try {
-      // Call parse_query with the full history (not just the new turn)
-      const parsed = await api.parseQuery(nextHistory)
+      // Call parse_query with the full history (not just the new turn).
+      // Pass prior_filters when we have accumulated filters so the backend can
+      // merge/accumulate context instead of dropping it on free-text follow-ups.
+      const queryOptions = {}
+      if (latestFilters && Object.keys(latestFilters).length > 0) {
+        queryOptions.prior_filters = latestFilters
+      }
+      const parsed = await api.parseQuery(nextHistory, queryOptions)
 
       // Shared result fields — present in both probe and terminal responses
       const results    = parsed.results || []
@@ -539,6 +545,73 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
         // Reset history for the next fresh query
         setConversationHistory([])
       }
+    } catch (err) {
+      setMessages(prev => [...prev, { role: 'ai', text: `Something went wrong: ${err.message}. Please try again.` }])
+    }
+
+    setIsLoading(false)
+  }
+
+  /**
+   * Handle a priority chip pick: re-rank the current result set by the chosen
+   * axis WITHOUT going through the LLM. The prior_filters are kept intact so
+   * no filter context is lost. A short user bubble is shown for chat continuity
+   * but the turn is NOT appended to conversationHistory (the re-rank skips the
+   * LLM so there is no model turn to pair it with, and polluting future LLM
+   * parses would corrupt the multi-turn context).
+   */
+  async function handleChipPick(chip) {
+    if (isLoading) return
+    const label = chip.label || String(chip)
+
+    // Show a brief user bubble for continuity — not added to conversationHistory.
+    setMessages(prev => [...prev, { role: 'user', text: `「${label}」 우선` }])
+    setIsLoading(true)
+
+    try {
+      const parsed = await api.parseQuery(conversationHistory, {
+        prior_filters:  latestFilters,
+        priority_axis:  chip.axis,
+        raw_query:      latestRawQuery,
+      })
+
+      const results      = parsed.results || []
+      const isFallback   = parsed.is_fallback || false
+      const filters      = parsed.structured_filters || latestFilters || {}
+      const filterPriority = parsed.filter_priority || latestFilterPriority || []
+
+      // Update latest* from the re-rank response so subsequent picks build on
+      // the freshest accumulated set.
+      setLatestResults(results)
+      setLatestFilters(filters)
+      setLatestFilterPriority(filterPriority)
+      if (parsed.visual_description !== undefined) setLatestVisualDescription(parsed.visual_description ?? null)
+      if (parsed.image_focus !== undefined) setLatestImageFocus(parsed.image_focus || null)
+      // raw_query stays as-is (re-rank keeps the same query)
+      setLatestQuickReplies(parsed.suggested_quick_replies ?? [])
+      setLatestPriorityOrdered(parsed.priority_ordered ?? [])
+      setShowStart(true)
+
+      // Build the AI reply text (mirrors the terminal path).
+      let replyText
+      if (results.length > 0 && !isFallback) {
+        replyText = `「${label}」 기준으로 재정렬했어요.\n\nFound ${results.length} building${results.length !== 1 ? 's' : ''} matching your criteria.`
+      } else if (results.length > 0 && isFallback) {
+        replyText = `「${label}」 기준으로 재정렬했어요.\n\n${parsed.fallback_note || 'No exact matches -- here are some similar buildings you might like.'}`
+      } else {
+        replyText = `「${label}」 기준으로 재정렬했지만 결과가 없습니다. 다른 옵션을 시도해 보세요.`
+      }
+
+      setMessages(prev => [...prev, {
+        role: 'ai',
+        text: replyText,
+        results,
+        isFallback,
+        filters,
+        quickReplies: parsed.suggested_quick_replies || [],
+        priorityOrdered: parsed.priority_ordered || [],
+        calibrationPrompt: parsed.llm_response_message || '',
+      }])
     } catch (err) {
       setMessages(prev => [...prev, { role: 'ai', text: `Something went wrong: ${err.message}. Please try again.` }])
     }
@@ -702,16 +775,22 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
               )}
               {msg.role === 'ai' && msg.quickReplies && msg.quickReplies.length > 0 && (
                 <div className={s.quickRepliesWrapper} role="group" aria-label="Quick reply options" style={{ marginTop: 8 }}>
-                  {msg.quickReplies.map((reply, i) => (
-                    <button
-                      key={`${reply}_${i}`}
-                      className={s.chip}
-                      onClick={() => submitQuery(reply)}
-                      aria-label={`Quick reply: ${reply}`}
-                    >
-                      {reply}
-                    </button>
-                  ))}
+                  {msg.quickReplies.map((chip, i) => {
+                    // chips are objects { label, axis, value } — fall back to
+                    // plain string for any legacy responses still in localStorage
+                    const chipLabel = (chip && typeof chip === 'object') ? (chip.label || String(chip)) : String(chip)
+                    const chipObj   = (chip && typeof chip === 'object') ? chip : { label: chipLabel, axis: chipLabel, value: chipLabel }
+                    return (
+                      <button
+                        key={`${chipObj.axis || chipLabel}_${i}`}
+                        className={s.chip}
+                        onClick={() => handleChipPick(chipObj)}
+                        aria-label={`Priority: ${chipLabel}`}
+                      >
+                        {chipLabel}
+                      </button>
+                    )
+                  })}
                 </div>
               )}
             </div>

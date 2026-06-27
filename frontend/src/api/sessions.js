@@ -90,13 +90,31 @@ export async function recordSwipe({ session_id, image_id, action, client_buffer_
  *   parseQuery('hello')                     -> POST { query: 'hello' }               (legacy single-turn)
  *   parseQuery([{role:'user', text:'..'}])  -> POST { conversation_history: [...] }  (multi-turn)
  *
+ * Optional second argument (options object):
+ *   prior_filters   {object}  — merged into the current parse so context is not lost
+ *   priority_axis   {string}  — when present, triggers a deterministic re-rank (no LLM)
+ *                               that boosts the given axis to rank 0 while keeping prior_filters
+ *   raw_query       {string}  — original user query string forwarded to the re-rank path
+ *
  * Response (probe_needed=true):  { probe_needed: true, probe_question, reply, results: [] }
  * Response (probe_needed=false): { reply, structured_filters, filter_priority, suggestions, results: [ImageCard] }
+ * Response (priority_axis set):  deterministic re-rank — { results, structured_filters, suggested_quick_replies, ... }
  */
-export async function parseQuery(input) {
+export async function parseQuery(input, { prior_filters, priority_axis, raw_query } = {}) {
   const body = typeof input === 'string'
     ? { query: input }
     : { conversation_history: input }
+
+  if (prior_filters && Object.keys(prior_filters).length > 0) {
+    body.prior_filters = prior_filters
+  }
+  if (priority_axis) {
+    body.priority_axis = priority_axis
+  }
+  if (raw_query) {
+    body.raw_query = raw_query
+  }
+
   const result = await callApi('POST', '/parse-query/', body, true, PARSE_QUERY_TIMEOUT_MS)
   return {
     ...result,

@@ -5,9 +5,11 @@ Tests:
 - TestCalibrationFallbackConfidence:  _compute_confidence_fallback heuristic correctness
 - TestExtractCalibrationFields:       _extract_calibration_fields validates + falls back
 - TestParseQueryCalibrationKeys:      parse_query returns all 5 calibration keys
-- TestMultiAxisPriorityProbe:         D1 multi-axis trigger + suppression
+- TestMultiAxisPriorityProbe:         D1 multi-axis trigger + suppression; chip objects shape
 - TestParseQueryViewCalibrationKeys:  ParseQueryView echoes 5 keys in probe + terminal Response
 - TestTopPriorityMultiplierRanking:   D2 rank-0 axis effective weight dominates
+- TestDeterministicReRank:            Branch A — priority_axis chip click skips LLM, keeps all filters
+- TestFreeTextFilterMerge:            Branch B — prior_filters merged into parsed_filters
 """
 import json
 import pytest
@@ -276,8 +278,8 @@ class TestMultiAxisPriorityProbe:
 
     def test_two_strong_axes_non_blocking_with_chips(self, monkeypatch):
         """>=2 strong axes on terminal response -> probe_needed=False (results shown),
-        system_action=REQUEST_PRIORITY, >=2 chips, non-empty llm_response_message,
-        and NO skip chip."""
+        system_action=REQUEST_PRIORITY, >=2 chip objects with label/axis/value,
+        non-empty llm_response_message, and NO skip chip."""
         history = [{'role': 'user', 'text': '일본 미술관'}]
         result = self._run_parse(monkeypatch, _MULTI_AXIS_PAYLOAD, history)
 
@@ -288,13 +290,23 @@ class TestMultiAxisPriorityProbe:
         )
         # Optional refinement metadata is populated
         assert result['system_action'] == 'REQUEST_PRIORITY'
-        assert len(result['suggested_quick_replies']) >= 2
+        chips = result['suggested_quick_replies']
+        assert len(chips) >= 2, f"Expected >=2 chips, got: {chips}"
+        # Each chip must be a dict with label, axis, value keys
+        for chip in chips:
+            assert isinstance(chip, dict), f"Chip must be a dict, got: {type(chip)}"
+            assert 'label' in chip, f"Chip missing 'label': {chip}"
+            assert 'axis' in chip, f"Chip missing 'axis': {chip}"
+            assert 'value' in chip, f"Chip missing 'value': {chip}"
+            assert isinstance(chip['label'], str), f"chip.label must be str: {chip}"
+            assert isinstance(chip['axis'], str), f"chip.axis must be str: {chip}"
         assert isinstance(result['llm_response_message'], str)
         assert result['llm_response_message'].strip() != ''
         # Skip chip must NOT be present — results are always shown
-        skip_chip = '상관없어요, 다 보여주세요'
-        assert skip_chip not in result['suggested_quick_replies'], (
-            f"Skip chip must not appear in non-blocking mode; chips: {result['suggested_quick_replies']}"
+        skip_label = '상관없어요, 다 보여주세요'
+        chip_labels = [c['label'] for c in chips]
+        assert skip_label not in chip_labels, (
+            f"Skip chip must not appear in non-blocking mode; labels: {chip_labels}"
         )
 
     def test_single_strong_axis_no_prompt(self, monkeypatch):
@@ -307,7 +319,11 @@ class TestMultiAxisPriorityProbe:
         # _PROBE_PAYLOAD has probe_needed=True from LLM (genuine slate probe) —
         # _maybe_multi_axis_probe must return it unchanged when probe_needed=True.
         chips = result.get('suggested_quick_replies', [])
-        d1_pattern_chips = [c for c in chips if c.startswith('프로그램(') or c.startswith('위치(')]
+        # Chips are now objects {label, axis, value}; check no D1-injected chip objects
+        d1_pattern_chips = [
+            c for c in chips
+            if isinstance(c, dict) and c.get('axis') in ('program', 'location_country')
+        ]
         assert len(d1_pattern_chips) == 0, (
             f"D1 must not fire with 1 strong axis; got D1-shaped chips: {chips}"
         )
@@ -317,6 +333,7 @@ class TestMultiAxisPriorityProbe:
 
         After the user picks a chip and sends a follow-up, the next terminal
         response still shows the optional priority question if >=2 axes remain.
+        Chips are structured objects {label, axis, value}.
         """
         history = [
             {'role': 'user', 'text': '일본 미술관'},
@@ -328,7 +345,13 @@ class TestMultiAxisPriorityProbe:
         # probe_needed=False (terminal), D1 should still fire with >=2 axes
         assert result['probe_needed'] is False
         assert result['system_action'] == 'REQUEST_PRIORITY'
-        assert len(result['suggested_quick_replies']) >= 2
+        chips = result['suggested_quick_replies']
+        assert len(chips) >= 2, f"Expected >=2 chips from D1, got: {chips}"
+        # Each chip must be a structured object
+        for chip in chips:
+            assert isinstance(chip, dict) and 'axis' in chip and 'value' in chip, (
+                f"Chip must be {{label, axis, value}} dict; got: {chip}"
+            )
 
     def test_single_axis_query_no_d1_on_any_turn(self, monkeypatch):
         """Single-axis query on any turn -> D1 does NOT inject chips."""
@@ -361,7 +384,11 @@ class TestMultiAxisPriorityProbe:
 
         # Only 1 strong axis -> D1 must not inject axis-labelled chips
         chips = result.get('suggested_quick_replies', [])
-        d1_pattern_chips = [c for c in chips if c.startswith('프로그램(')]
+        # Chips are now objects {label, axis, value}; check no D1-injected chip objects
+        d1_pattern_chips = [
+            c for c in chips
+            if isinstance(c, dict) and c.get('axis') == 'program'
+        ]
         assert len(d1_pattern_chips) == 0, (
             f"D1 must not fire with 1 strong axis on turn-2+; got: {chips}"
         )
@@ -626,3 +653,348 @@ class TestTopPriorityMultiplierRanking:
             f"Without top_mult, location_country rank-0 ({rank0_w}) should be less than "
             f"program rank-1 ({rank1_w}) given program has double the base weight"
         )
+
+
+# ---------------------------------------------------------------------------
+# (f) Deterministic re-rank path — Branch A (priority_axis chip click)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestDeterministicReRank:
+    """Branch A: POST with priority_axis skips LLM, preserves ALL prior filters,
+    returns results, and emits the structured chip list with chosen axis first."""
+
+    @pytest.fixture
+    def auth_client(self):
+        from django.contrib.auth import get_user_model
+        from rest_framework.test import APIClient
+        from rest_framework_simplejwt.tokens import RefreshToken
+        from apps.accounts.models import UserProfile
+
+        User = get_user_model()
+        user = User.objects.create_user(username='testdeterministic', password='pass')
+        UserProfile.objects.create(user=user, display_name='Deterministic')
+        token = RefreshToken.for_user(user)
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f'Bearer {str(token.access_token)}')
+        return client
+
+    def test_deterministic_rerank_keeps_all_prior_filters(self, auth_client):
+        """priority_axis + prior_filters -> response structured_filters keeps ALL three axes."""
+        prior = {'program': 'Housing', 'location_country': 'South Korea', 'material': 'brick'}
+        fake_results = [{'canonical_bld_id': f'bld_{i:06d}'} for i in range(1, 5)]
+
+        with patch('apps.recommendation.views.services.parse_query') as mock_pq, \
+             patch('apps.recommendation.views.engine.search_by_filters_scored',
+                   return_value=fake_results):
+            resp = auth_client.post(
+                '/api/v1/parse-query/',
+                {
+                    'conversation_history': [{'role': 'user', 'text': '벽돌 주택'}],
+                    'prior_filters': prior,
+                    'priority_axis': 'material',
+                    'raw_query': '벽돌 주택',
+                },
+                format='json',
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+
+        # LLM must NOT be called on the deterministic path
+        mock_pq.assert_not_called()
+
+        # All three filters preserved in structured_filters
+        sf = data['structured_filters']
+        assert sf.get('program') == 'Housing', f"program lost; structured_filters={sf}"
+        assert sf.get('location_country') == 'South Korea', f"location_country lost; sf={sf}"
+        assert sf.get('material') == 'brick', f"material lost; sf={sf}"
+
+    def test_deterministic_rerank_priority_axis_first_in_filter_priority(self, auth_client):
+        """priority_axis='material' -> filter_priority[0] == 'material'."""
+        prior = {'program': 'Housing', 'location_country': 'South Korea', 'material': 'brick'}
+        fake_results = [{'canonical_bld_id': 'bld_000001'}]
+
+        with patch('apps.recommendation.views.services.parse_query'), \
+             patch('apps.recommendation.views.engine.search_by_filters_scored',
+                   return_value=fake_results):
+            resp = auth_client.post(
+                '/api/v1/parse-query/',
+                {
+                    'conversation_history': [{'role': 'user', 'text': '벽돌'}],
+                    'prior_filters': prior,
+                    'priority_axis': 'material',
+                },
+                format='json',
+            )
+
+        assert resp.status_code == 200
+        fp = resp.json()['filter_priority']
+        assert len(fp) > 0, "filter_priority must not be empty"
+        assert fp[0] == 'material', f"Expected material first in filter_priority; got: {fp}"
+
+    def test_deterministic_rerank_returns_results(self, auth_client):
+        """Branch A always returns a non-empty results list (mocked engine)."""
+        prior = {'program': 'Housing', 'location_country': 'South Korea', 'material': 'brick'}
+        fake_results = [{'canonical_bld_id': f'bld_{i:06d}'} for i in range(1, 6)]
+
+        with patch('apps.recommendation.views.services.parse_query'), \
+             patch('apps.recommendation.views.engine.search_by_filters_scored',
+                   return_value=fake_results):
+            resp = auth_client.post(
+                '/api/v1/parse-query/',
+                {
+                    'conversation_history': [{'role': 'user', 'text': '벽돌 주택'}],
+                    'prior_filters': prior,
+                    'priority_axis': 'material',
+                },
+                format='json',
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data['probe_needed'] is False
+        assert isinstance(data['results'], list)
+        assert len(data['results']) > 0, "Branch A must return results"
+
+    def test_deterministic_rerank_chips_chosen_axis_first(self, auth_client):
+        """Branch A response chips list has chosen axis as first chip."""
+        prior = {'program': 'Housing', 'location_country': 'South Korea', 'material': 'brick'}
+        fake_results = [{'canonical_bld_id': 'bld_000001'}]
+
+        with patch('apps.recommendation.views.services.parse_query'), \
+             patch('apps.recommendation.views.engine.search_by_filters_scored',
+                   return_value=fake_results):
+            resp = auth_client.post(
+                '/api/v1/parse-query/',
+                {
+                    'conversation_history': [{'role': 'user', 'text': '벽돌'}],
+                    'prior_filters': prior,
+                    'priority_axis': 'material',
+                },
+                format='json',
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        chips = data['suggested_quick_replies']
+        assert isinstance(chips, list) and len(chips) > 0
+        # Each chip is a structured object
+        for chip in chips:
+            assert isinstance(chip, dict)
+            assert 'label' in chip and 'axis' in chip and 'value' in chip
+        # Chosen axis must appear first
+        assert chips[0]['axis'] == 'material', (
+            f"Expected chosen axis 'material' first in chips; got: {chips[0]}"
+        )
+
+    def test_deterministic_rerank_invalid_priority_axis_rejected(self, auth_client):
+        """priority_axis not in allowed set -> 400."""
+        prior = {'program': 'Housing'}
+        resp = auth_client.post(
+            '/api/v1/parse-query/',
+            {
+                'conversation_history': [{'role': 'user', 'text': '주택'}],
+                'prior_filters': prior,
+                'priority_axis': 'invalid_axis_xyz',
+            },
+            format='json',
+        )
+        assert resp.status_code == 400
+
+    def test_deterministic_rerank_parse_query_not_called(self, auth_client):
+        """parse_query service must NOT be called when priority_axis is provided."""
+        prior = {'program': 'Housing', 'material': 'concrete'}
+        fake_results = [{'canonical_bld_id': 'bld_000001'}]
+
+        with patch('apps.recommendation.views.services.parse_query') as mock_pq, \
+             patch('apps.recommendation.views.engine.search_by_filters_scored',
+                   return_value=fake_results):
+            auth_client.post(
+                '/api/v1/parse-query/',
+                {
+                    'conversation_history': [{'role': 'user', 'text': '콘크리트'}],
+                    'prior_filters': prior,
+                    'priority_axis': 'material',
+                },
+                format='json',
+            )
+
+        mock_pq.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# (g) Free-text filter merge — Branch B (prior_filters + LLM)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestFreeTextFilterMerge:
+    """Branch B: prior_filters merged with LLM-parsed filters so prior axes survive."""
+
+    @pytest.fixture
+    def auth_client(self):
+        from django.contrib.auth import get_user_model
+        from rest_framework.test import APIClient
+        from rest_framework_simplejwt.tokens import RefreshToken
+        from apps.accounts.models import UserProfile
+
+        User = get_user_model()
+        user = User.objects.create_user(username='testmerge', password='pass')
+        UserProfile.objects.create(user=user, display_name='Merge')
+        token = RefreshToken.for_user(user)
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f'Bearer {str(token.access_token)}')
+        return client
+
+    def test_prior_filters_merged_with_llm_filters(self, auth_client):
+        """LLM returns {material:brick}; prior has {program:Housing, location_country:'South Korea'}.
+        Merged structured_filters must contain all three axes."""
+        llm_result = {
+            'probe_needed': False,
+            'probe_question': None,
+            'reply': '벽돌 건물을 찾아드릴게요.',
+            'filters': {
+                'location_country': None,
+                'location_city': None,
+                'program': None,
+                'material': 'brick',
+                'style': None,
+                'year_min': None,
+                'year_max': None,
+                'atmosphere': None,
+                'color_tone': None,
+                'typology_primary': None,
+            },
+            'filter_priority': ['material'],
+            'raw_query': '벽돌',
+            'visual_description': 'A brick building.',
+            'confidence_score': 0.75,
+            'system_action': 'NONE',
+            'suggested_quick_replies': [],
+            'priority_ordered': ['material'],
+            'llm_response_message': '벽돌 건물을 찾아드릴게요.',
+            'image_focus': None,
+        }
+        prior = {'program': 'Housing', 'location_country': 'South Korea'}
+        fake_results = [{'canonical_bld_id': 'bld_000001'}]
+
+        with patch('apps.recommendation.views.services.parse_query', return_value=llm_result), \
+             patch('apps.recommendation.views.engine.search_by_filters_scored',
+                   return_value=fake_results):
+            resp = auth_client.post(
+                '/api/v1/parse-query/',
+                {
+                    'conversation_history': [{'role': 'user', 'text': '벽돌'}],
+                    'prior_filters': prior,
+                },
+                format='json',
+            )
+
+        assert resp.status_code == 200
+        sf = resp.json()['structured_filters']
+
+        # All three axes must be present after merge
+        assert sf.get('program') == 'Housing', f"program dropped; sf={sf}"
+        assert sf.get('location_country') == 'South Korea', f"location_country dropped; sf={sf}"
+        assert sf.get('material') == 'brick', f"material missing; sf={sf}"
+
+    def test_current_turn_axis_overrides_prior(self, auth_client):
+        """If LLM returns a value for an axis already in prior_filters, LLM value wins."""
+        llm_result = {
+            'probe_needed': False,
+            'probe_question': None,
+            'reply': '일본 건물.',
+            'filters': {
+                'location_country': 'Japan',
+                'location_city': None,
+                'program': None,
+                'material': None,
+                'style': None,
+                'year_min': None,
+                'year_max': None,
+                'atmosphere': None,
+                'color_tone': None,
+                'typology_primary': None,
+            },
+            'filter_priority': ['location_country'],
+            'raw_query': '일본',
+            'visual_description': 'A Japanese building.',
+            'confidence_score': 0.70,
+            'system_action': 'NONE',
+            'suggested_quick_replies': [],
+            'priority_ordered': ['location_country'],
+            'llm_response_message': '일본 건물.',
+            'image_focus': None,
+        }
+        # Prior has location_country='South Korea'; LLM says 'Japan' — Japan must win
+        prior = {'location_country': 'South Korea', 'program': 'Housing'}
+        fake_results = [{'canonical_bld_id': 'bld_000001'}]
+
+        with patch('apps.recommendation.views.services.parse_query', return_value=llm_result), \
+             patch('apps.recommendation.views.engine.search_by_filters_scored',
+                   return_value=fake_results):
+            resp = auth_client.post(
+                '/api/v1/parse-query/',
+                {
+                    'conversation_history': [{'role': 'user', 'text': '일본'}],
+                    'prior_filters': prior,
+                },
+                format='json',
+            )
+
+        assert resp.status_code == 200
+        sf = resp.json()['structured_filters']
+        # LLM override wins for location_country
+        assert sf.get('location_country') == 'Japan', (
+            f"Expected LLM 'Japan' to override prior 'South Korea'; sf={sf}"
+        )
+        # Prior program axis preserved (LLM returned None for it)
+        assert sf.get('program') == 'Housing', f"program dropped; sf={sf}"
+
+    def test_empty_prior_filters_uses_llm_only(self, auth_client):
+        """No prior_filters -> behaviour unchanged (only LLM filters used)."""
+        llm_result = {
+            'probe_needed': False,
+            'probe_question': None,
+            'reply': '알겠어요.',
+            'filters': {
+                'location_country': None,
+                'location_city': None,
+                'program': 'Housing',
+                'material': None,
+                'style': None,
+                'year_min': None,
+                'year_max': None,
+                'atmosphere': None,
+                'color_tone': None,
+                'typology_primary': None,
+            },
+            'filter_priority': ['program'],
+            'raw_query': '주택',
+            'visual_description': 'A housing project.',
+            'confidence_score': 0.70,
+            'system_action': 'NONE',
+            'suggested_quick_replies': [],
+            'priority_ordered': ['program'],
+            'llm_response_message': '알겠어요.',
+            'image_focus': None,
+        }
+        fake_results = [{'canonical_bld_id': 'bld_000001'}]
+
+        with patch('apps.recommendation.views.services.parse_query', return_value=llm_result), \
+             patch('apps.recommendation.views.engine.search_by_filters_scored',
+                   return_value=fake_results):
+            resp = auth_client.post(
+                '/api/v1/parse-query/',
+                {
+                    'conversation_history': [{'role': 'user', 'text': '주택'}],
+                    # no prior_filters
+                },
+                format='json',
+            )
+
+        assert resp.status_code == 200
+        sf = resp.json()['structured_filters']
+        assert sf.get('program') == 'Housing'
+        # No extra axes injected from nowhere
+        assert sf.get('location_country') is None or 'location_country' not in sf

@@ -230,6 +230,28 @@ _AXIS_LABEL_KO = {
 }
 
 
+def _build_axis_chips(filters):
+    """Build structured chip objects for all present strong axes.
+
+    Returns a list of dicts: {label, axis, value}.  One chip per present
+    strong axis.  The ``axis`` field is the canonical filter key so the
+    frontend can send it back as ``priority_axis`` without any string parsing.
+    The ``label`` field is the Korean-localised display string with the value
+    appended, e.g. ``재료(brick)``.
+    """
+    chips = []
+    for ax in _STRONG_AXES:
+        if filters.get(ax) is not None and str(filters[ax]).strip():
+            label_text = _AXIS_LABEL_KO.get(ax, ax)
+            val = filters[ax]
+            chips.append({
+                'label': f'{label_text}({val})',
+                'axis': ax,
+                'value': val,
+            })
+    return chips
+
+
 def _maybe_multi_axis_probe(filters, filter_priority, user_turn_count, parsed_result):
     """D1: inject an optional priority prompt when >=2 strong axes are present (NON-BLOCKING).
 
@@ -237,7 +259,7 @@ def _maybe_multi_axis_probe(filters, filter_priority, user_turn_count, parsed_re
     on a terminal response, this function augments the result with:
       - system_action = 'REQUEST_PRIORITY'
       - llm_response_message = short Korean criteria-priority question
-      - suggested_quick_replies = one chip per present strong axis (localised with value)
+      - suggested_quick_replies = list of chip objects {label, axis, value}, one per axis
 
     No skip chip is added — results are already shown so no "skip" action is needed.
 
@@ -258,12 +280,8 @@ def _maybe_multi_axis_probe(filters, filter_priority, user_turn_count, parsed_re
     # Build the secondary question (shown below results, not as a blocking screen)
     priority_q = '추천에 더 중요하게 생각할 기준이 있나요?'
 
-    # Build one chip per present strong axis (localised with value) — no skip chip
-    chips = []
-    for ax in present_strong:
-        label = _AXIS_LABEL_KO.get(ax, ax)
-        val = filters[ax]
-        chips.append(f'{label}({val})')
+    # Build one structured chip object per present strong axis — no skip chip
+    chips = _build_axis_chips(filters)
 
     result = dict(parsed_result)
     # probe_needed stays False — results are returned immediately

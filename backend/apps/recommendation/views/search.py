@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .. import engine, services
+from ..services.parse_query import _build_axis_chips, _STRONG_AXES
 
 logger = logging.getLogger('apps.recommendation')
 RC = settings.RECOMMENDATION
@@ -146,12 +147,111 @@ class ParseQueryView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # ── New params: prior_filters + priority_axis (chip-click path) ──────────
+        # prior_filters: accumulated filter dict from prior turns (frontend sends back).
+        # priority_axis: canonical axis key the user chose via chip click.
+        prior_filters_raw = request.data.get('prior_filters') or {}
+        priority_axis = request.data.get('priority_axis')
+
+        # Validate and clean prior_filters
+        prior_filters = _clean_filters(prior_filters_raw) if isinstance(prior_filters_raw, dict) else {}
+
+        # Validate priority_axis against known axis allowlist
+        if priority_axis is not None and priority_axis not in _STRONG_AXES:
+            return Response(
+                {'detail': f'priority_axis must be one of {sorted(_STRONG_AXES)}'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ── Branch A: DETERMINISTIC RE-RANK (chip click, priority_axis provided) ─
+        # Skip Gemini entirely. Use prior_filters unchanged; boost chosen axis to [0].
+        # Zero LLM cost + zero filter loss.
+        if priority_axis is not None:
+            filters = dict(prior_filters)
+            # image_focus may have been accumulated in prior filters; extract separately
+            image_focus = filters.pop('image_focus', None)
+
+            # Build filter_priority: chosen axis first, then remaining axes from prior
+            prior_priority_raw = request.data.get('filter_priority') or []
+            prior_other = [
+                k for k in (prior_priority_raw if isinstance(prior_priority_raw, list) else [])
+                if k != priority_axis and k in filters
+            ]
+            # Also include any filter keys not in the explicit priority list
+            remaining = [k for k in filters if k != priority_axis and k not in prior_other]
+            filter_priority = [priority_axis] + prior_other + remaining
+
+            raw_query = request.data.get('raw_query', '') or _first_user_text(conversation_history)
+
+            is_fallback = False
+            fallback_note = ''
+            has_signal = bool(filters) or bool(raw_query and raw_query.strip())
+            if has_signal:
+                search_filters = dict(filters)
+                if image_focus:
+                    search_filters['image_focus'] = image_focus
+                results = engine.search_by_filters_scored(
+                    search_filters,
+                    raw_query=raw_query,
+                    filter_priority=filter_priority,
+                    limit=20,
+                    image_focus=image_focus,
+                )
+            else:
+                results = []
+
+            if not results:
+                results = engine.get_diverse_random(n=20, image_focus=image_focus)
+                is_fallback = True
+                fallback_note = "Couldn't find an exact match — here are some buildings you might enjoy instead."
+
+            # Re-emit the multi-axis chips so user can pick another axis.
+            # Mark chosen axis first in the chip list for frontend affordance.
+            all_chips = _build_axis_chips(filters)
+            # Sort: chosen axis first
+            chips = sorted(
+                all_chips,
+                key=lambda c: (0 if c['axis'] == priority_axis else 1),
+            )
+
+            return Response({
+                'probe_needed': False,
+                'probe_question': None,
+                'reply': '',
+                'raw_query': raw_query,
+                'visual_description': None,
+                'structured_filters': filters,
+                'filter_priority': filter_priority,
+                'image_focus': image_focus,
+                'suggestions': [],
+                'results': results,
+                'is_fallback': is_fallback,
+                'fallback_note': fallback_note,
+                # Calibration fields — deterministic values for chip-click path
+                'confidence_score': 0.90,
+                'system_action': 'REQUEST_PRIORITY',
+                'suggested_quick_replies': chips,
+                'priority_ordered': filter_priority,
+                'llm_response_message': '추천에 더 중요하게 생각할 기준이 있나요?',
+                'chosen_axis': priority_axis,
+            })
+
+        # ── Branch B: NORMAL / FREE-TEXT TURN (no priority_axis) ─────────────────
         # FULL-LANGUAGE-1: pass user's language preference to parse_query so it can
         # force reply/probe_question into the chosen language.
         _profile = getattr(request.user, 'profile', None)
         _lang = getattr(_profile, 'language', None)
         parsed = services.parse_query(conversation_history, language=_lang)
         parsed_filters = _clean_filters(parsed.get('filters') or {})
+
+        # FILTER MERGE: preserve accumulated context from prior turns.
+        # Current-turn axes (from LLM) override prior per-axis; prior axes not
+        # contradicted by the current turn are preserved.
+        # This fixes chip follow-ups AND free-text follow-ups both dropping prior filters.
+        if prior_filters:
+            merged = {**prior_filters, **parsed_filters}
+            parsed_filters = {k: v for k, v in merged.items() if v is not None and v != ''}
+
         parsed_priority = _clean_filter_priority(
             parsed.get('filter_priority') or parsed.get('priority_ordered'),
             parsed_filters,
