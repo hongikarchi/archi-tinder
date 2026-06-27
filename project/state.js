@@ -23,9 +23,9 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-06-28 02:25 KST',
-    head: '575da9b',
-    branch: 'feature/claude-backlog-audit',
+    updatedAt: '2026-06-28 02:44 KST',
+    head: 'c71a75a',
+    branch: 'feature/claude-backlog-reprioritize',
   },
   done: [
     {
@@ -82,27 +82,40 @@ window.PROJECT_STATE = {
   ],
   now: [],
   next: {
-    xhigh: [],
-    high: [
+    xhigh: [
       {
         id: 'FULL-ONBOARDING-2',
         title: 'is_temp 라이프사이클 마감 (#243 fast-follows)',
         note: '#243(`6f7a4a8`, FULL-ONBOARDING-1 Taste-flow + Project.is_temp) merge 시 verified-review로 게시한 후속(Codex RC + 워크플로우 adversarial-verify + Opus judge). 귀속: #243 diff는 models/serializers/session_service/migration/frontend만 — projects.py·discovery.py·engine.py 미수정 → 아래 1만 PR-신규, 나머지…',
       },
       {
+        id: 'FULL-LEGAL-1',
+        title: 'PIPA/GDPR consent: Terms/Privacy 페이지 + 한국어 affirmative copy (잔여)',
+        note: 'Partial mitigation shipped via FULL-LOGIN-REDESIGN-1: UserProfile.consent_accepted_at + consent_policy_version fields + terminal-style "동의합니다" capture on guest wizard. Still pending: legally-reviewed copy, Privacy/Terms routes, retention/export/delete flow. PIPA-compliant copy + UI/UX legal review required before public launch.',
+      },
+    ],
+    high: [
+      {
+        id: 'BACK-RECOMMEND-1',
+        title: 'Project 두번째 세션이 이전 taste를 모름',
+        note: 'Code audit 2026-05-27: SessionCreateView resolves project_id only to skip dedupe; session_insert still creates phase=exploring with empty like_vectors/convergence/preference state. Project.liked_ids/disliked_ids/saved_ids persist but are not read. Primary edit: views/sessions.py warm-start policy + engine.get_pool_embeddings(project liked_ids) scoped to active project; tests in test_session_create_correctness.py for no cross-project leakage and progress semantics.',
+      },
+      {
+        id: 'BACK-PERFORMANCE-5',
+        title: 'Swipe latency 0.7-1.5s 흔들림',
+        note: 'Code audit 2026-05-27: SwipeView still does update/phase/refresh_pool/get_pool_embeddings/MMR-or-farthest selection in request transaction. Async prefetch only helps after next_bid is selected. Use existing [SWIPE TIMING] lock/embed/select/prefetch/total + embedding cache stats to bucket variance before code changes.',
+      },
+    ],
+    medium: [
+      {
         id: 'FRONT-IMAGE-RESIZE-3',
         title: '이미지 LQIP + 풀해상도 passthrough (PR3)',
         note: 'PR2(#242)가 srcset/decode/classifier 출하 → 남은 Tier A polish. 전부 프론트.',
       },
       {
-        id: 'ARCHITECT-UNIFY-1',
-        title: 'firm-side Office→Architect 전면 통합 (deferred, firm-UX 착수 시)',
-        note: 'office-interest 모델 중복 해소됨: Phase 0(SavedOffice #188) + C(OfficeFollow, ARCHITECT-UNIFY-C)로 두 미배선 중복 삭제 → follow 모델 1개(ArchitectFollow). 남은 통합 = Office 서브시스템(table/claim/sync_offices/FirmProfilePage) arch_id 흡수 = firm-side 전면 재설계, deferred(firm-UX 착수 시). Office는 계획 기능 substrate(BACK-RECOMMEND-3/EXTERNAL-1/firm-claim)라 park.',
-      },
-      {
-        id: 'BACK-RECOMMEND-1',
-        title: 'Project 두번째 세션이 이전 taste를 모름',
-        note: 'Code audit 2026-05-27: SessionCreateView resolves project_id only to skip dedupe; session_insert still creates phase=exploring with empty like_vectors/convergence/preference state. Project.liked_ids/disliked_ids/saved_ids persist but are not read. Primary edit: views/sessions.py warm-start policy + engine.get_pool_embeddings(project liked_ids) scoped to active project; tests in test_session_create_correctness.py for no cross-project leakage and progress semantics.',
+        id: 'BACK-LLM-4',
+        title: 'search.py ParseQueryView byte-cap도 ensure_ascii 부풀림 의심',
+        note: 'BACK-LLM-2(#195) 리뷰 중 발견(미수정, pre-existing). `backend/apps/recommendation/views/search.py` `ParseQueryView.post`의 conversation_history 검증이 BACK-LLM-2 serializer가 고친 것과 동일하게 `json.dumps` 기본 `ensure_ascii=True`로 byte 측정 가능성 → 한글 대화가 한도를 6배 부풀려 거짓 거부. 확인 후 `ensure_ascii=False`+UT…',
       },
       {
         id: 'FULL-LANGUAGE-1',
@@ -114,32 +127,22 @@ window.PROJECT_STATE = {
         title: '디자인 시스템 컴포넌트 리워크 (paused)',
         note: 'Code audit 2026-05-27: 581 inline style call sites. Largest FE files: BoardDetailPage 1049, UserProfilePage 992, App 838, BuildingDetailPage 711, SwipePage 683, FirmProfilePage 540. tokens.css exists; index.css is mostly utilities. Slice leaf components first (ArticleCard/ProjectCard/BoardCard), then SwipeCard/BuildingDetailPage; each slice lint+build+screenshot.',
       },
-    ],
-    medium: [
-      {
-        id: 'BACK-AVATAR-3',
-        title: '기존 누적 orphan 아바타 일괄 청소 (sweep 명령)',
-        note: 'BACK-AVATAR-2(`5e1f934`)가 교체/삭제 시점 GC를 붙였으나 그 이전에 쌓인 orphan(R2/디스크)은 남음. management command(dry-run + `--confirm`, `purge_legacy_projects` 패턴) — R2 `list_objects`로 `avatars/` 나열 → 어떤 `UserProfile.avatar_url`도 참조 않는 키 삭제. 비차단·비긴급(현 prod 아바타 ≈0, 기능 갓 출시).',
-      },
-      {
-        id: 'BACK-LLM-4',
-        title: 'search.py ParseQueryView byte-cap도 ensure_ascii 부풀림 의심',
-        note: 'BACK-LLM-2(#195) 리뷰 중 발견(미수정, pre-existing). `backend/apps/recommendation/views/search.py` `ParseQueryView.post`의 conversation_history 검증이 BACK-LLM-2 serializer가 고친 것과 동일하게 `json.dumps` 기본 `ensure_ascii=True`로 byte 측정 가능성 → 한글 대화가 한도를 6배 부풀려 거짓 거부. 확인 후 `ensure_ascii=False`+UT…',
-      },
-      {
-        id: 'BACK-PERFORMANCE-5',
-        title: 'Swipe latency 0.7-1.5s 흔들림',
-        note: 'Code audit 2026-05-27: SwipeView still does update/phase/refresh_pool/get_pool_embeddings/MMR-or-farthest selection in request transaction. Async prefetch only helps after next_bid is selected. Use existing [SWIPE TIMING] lock/embed/select/prefetch/total + embedding cache stats to bucket variance before code changes.',
-      },
       {
         id: 'FRONT-LAYOUT-1',
         title: 'Desktop wide-screen 레이아웃 어색함',
         note: 'Code audit 2026-05-27: body is 100vh/overflow hidden and each page owns scroll. BuildingDetail stays maxWidth 820 with only masonry media query; BoardDetail/UserProfile maxWidth 1100 but hero/profile remain mobile-centered. Start with BuildingDetail desktop split, then Board/User grids.',
       },
+    ],
+    low: [
       {
-        id: 'FULL-LEGAL-1',
-        title: 'PIPA/GDPR consent: Terms/Privacy 페이지 + 한국어 affirmative copy (잔여)',
-        note: 'Partial mitigation shipped via FULL-LOGIN-REDESIGN-1: UserProfile.consent_accepted_at + consent_policy_version fields + terminal-style "동의합니다" capture on guest wizard. Still pending: legally-reviewed copy, Privacy/Terms routes, retention/export/delete flow. PIPA-compliant copy + UI/UX legal review required before public launch.',
+        id: 'ARCHITECT-UNIFY-1',
+        title: 'firm-side Office→Architect 전면 통합 (deferred, firm-UX 착수 시)',
+        note: 'office-interest 모델 중복 해소됨: Phase 0(SavedOffice #188) + C(OfficeFollow, ARCHITECT-UNIFY-C)로 두 미배선 중복 삭제 → follow 모델 1개(ArchitectFollow). 남은 통합 = Office 서브시스템(table/claim/sync_offices/FirmProfilePage) arch_id 흡수 = firm-side 전면 재설계, deferred(firm-UX 착수 시). Office는 계획 기능 substrate(BACK-RECOMMEND-3/EXTERNAL-1/firm-claim)라 park.',
+      },
+      {
+        id: 'BACK-AVATAR-3',
+        title: '기존 누적 orphan 아바타 일괄 청소 (sweep 명령)',
+        note: 'BACK-AVATAR-2(`5e1f934`)가 교체/삭제 시점 GC를 붙였으나 그 이전에 쌓인 orphan(R2/디스크)은 남음. management command(dry-run + `--confirm`, `purge_legacy_projects` 패턴) — R2 `list_objects`로 `avatars/` 나열 → 어떤 `UserProfile.avatar_url`도 참조 않는 키 삭제. 비차단·비긴급(현 prod 아바타 ≈0, 기능 갓 출시).',
       },
       {
         id: 'BACK-PERFORMANCE-6',
@@ -151,8 +154,6 @@ window.PROJECT_STATE = {
         title: 'Unverified guest row 누적 정리 (conditional)',
         note: 'Guest 계정(FULL-LOGIN-REDESIGN-1 #154/#155)은 정리 로직 없음 (user Q5 결정). `/auth/guest/` throttle 3/min/IP이나 IP 로테이션 botnet은 row 증가 가능 → 조건부 모니터링 항목.',
       },
-    ],
-    low: [
       {
         id: 'FRONT-UX-6',
         title: 'temp 삭제 실패 무음 + activeProjectId 미정리',
@@ -181,6 +182,13 @@ window.PROJECT_STATE = {
     ],
   },
   prs: [
+    {
+      number: 252,
+      title: 'docs(task): backlog re-audit — grep-verify kept items, drop obsolete FRONT-PROFILE-1',
+      mergedAt: '2026-06-27T17:26:40Z',
+      mergedAtKST: '2026-06-28 02:26 KST',
+      sha: 'c71a75a',
+    },
     {
       number: 251,
       title: 'docs(task): post-deploy cleanup + dashboard refresh',
@@ -229,13 +237,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-06-23T23:45:02Z',
       mergedAtKST: '2026-06-24 08:45 KST',
       sha: '6f7a4a8',
-    },
-    {
-      number: 242,
-      title: 'perf(image): srcset + per-DPR quality + decode-preload + imgix classifier (PR2, frontend-only)',
-      mergedAt: '2026-06-21T17:12:48Z',
-      mergedAtKST: '2026-06-22 02:12 KST',
-      sha: '6555f15',
     },
   ],
   agents: [
