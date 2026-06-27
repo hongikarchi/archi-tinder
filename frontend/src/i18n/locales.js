@@ -10,6 +10,9 @@ export const locales = {
       taste:     '취향',
       profile:   '프로필',
     },
+    discovery: {
+      loading: '취향 탐색 중…',
+    },
     settings: {
       appearance: '화면 설정',
       language:   '언어',
@@ -140,6 +143,9 @@ export const locales = {
       discovery: 'Discovery',
       taste:     'Taste',
       profile:   'Profile',
+    },
+    discovery: {
+      loading: 'Exploring your taste…',
     },
     settings: {
       appearance: 'Appearance',
