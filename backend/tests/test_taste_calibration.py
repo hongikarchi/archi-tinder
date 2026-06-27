@@ -255,7 +255,11 @@ class TestParseQueryCalibrationKeys:
 # ---------------------------------------------------------------------------
 
 class TestMultiAxisPriorityProbe:
-    """D1: multi-axis priority probe fires on turn-1 >=2 strong axes; suppressed on turn-2."""
+    """D1: multi-axis optional prompt fires on any terminal turn with >=2 strong axes (NON-BLOCKING).
+
+    Results are always returned immediately (probe_needed stays False).
+    The priority question + chips appear as an optional refinement alongside results.
+    """
 
     def _run_parse(self, monkeypatch, gemini_payload, history):
         from apps.recommendation import services
@@ -270,52 +274,96 @@ class TestMultiAxisPriorityProbe:
         monkeypatch.setattr(services, '_get_client', lambda: MagicMock())
         return services.parse_query(history)
 
-    def test_turn1_two_strong_axes_fires_probe(self, monkeypatch):
-        """Turn-1 query with >=2 strong axes -> probe_needed=True, REQUEST_PRIORITY."""
+    def test_two_strong_axes_non_blocking_with_chips(self, monkeypatch):
+        """>=2 strong axes on terminal response -> probe_needed=False (results shown),
+        system_action=REQUEST_PRIORITY, >=2 chips, non-empty llm_response_message,
+        and NO skip chip."""
         history = [{'role': 'user', 'text': '일본 미술관'}]
         result = self._run_parse(monkeypatch, _MULTI_AXIS_PAYLOAD, history)
 
-        assert result['probe_needed'] is True, (
-            f"Expected probe_needed=True on turn-1 with 2 strong axes, got {result['probe_needed']}"
+        # Results are returned immediately — probe_needed must stay False
+        assert result['probe_needed'] is False, (
+            f"Expected probe_needed=False (non-blocking) with 2 strong axes, "
+            f"got {result['probe_needed']}"
         )
+        # Optional refinement metadata is populated
         assert result['system_action'] == 'REQUEST_PRIORITY'
         assert len(result['suggested_quick_replies']) >= 2
-        # Last chip must be the skip chip
-        assert result['suggested_quick_replies'][-1] == '상관없어요, 다 보여주세요'
+        assert isinstance(result['llm_response_message'], str)
+        assert result['llm_response_message'].strip() != ''
+        # Skip chip must NOT be present — results are always shown
+        skip_chip = '상관없어요, 다 보여주세요'
+        assert skip_chip not in result['suggested_quick_replies'], (
+            f"Skip chip must not appear in non-blocking mode; chips: {result['suggested_quick_replies']}"
+        )
 
-    def test_turn1_single_strong_axis_no_probe(self, monkeypatch):
-        """Turn-1 with only 1 strong axis -> D1 does NOT fire."""
+    def test_single_strong_axis_no_prompt(self, monkeypatch):
+        """Only 1 strong axis -> D1 does NOT fire (no axis-labelled chips injected)."""
         single_axis_payload = dict(_PROBE_PAYLOAD)  # only program set
         history = [{'role': 'user', 'text': '주택'}]
         result = self._run_parse(monkeypatch, single_axis_payload, history)
 
         # D1 must NOT fire (only 1 strong axis in filters)
-        # result may still have probe_needed=True from LLM, but system_action
-        # must NOT be forced to REQUEST_PRIORITY by D1 if LLM said something else
-        # Here: _PROBE_PAYLOAD already has probe_needed=True + REQUEST_PRIORITY from LLM
-        # D1 check: suggested_quick_replies was NOT extended by D1 (no country/style/etc)
-        # The LLM provided 3 chips already; D1 should not have replaced them with
-        # axis-labelled chips (since only 1 strong axis).
-        # Verify the chips are from LLM (contain '따뜻한' or '차가운'), not D1 axis labels
+        # _PROBE_PAYLOAD has probe_needed=True from LLM (genuine slate probe) —
+        # _maybe_multi_axis_probe must return it unchanged when probe_needed=True.
         chips = result.get('suggested_quick_replies', [])
         d1_pattern_chips = [c for c in chips if c.startswith('프로그램(') or c.startswith('위치(')]
         assert len(d1_pattern_chips) == 0, (
             f"D1 must not fire with 1 strong axis; got D1-shaped chips: {chips}"
         )
 
-    def test_turn2_suppresses_probe(self, monkeypatch):
-        """2 user turns with same multi-axis filters -> D1 does NOT fire."""
+    def test_turn_agnostic_fires_again_on_subsequent_terminal(self, monkeypatch):
+        """Multi-axis query on turn-2 terminal also fires D1 (turn-agnostic).
+
+        After the user picks a chip and sends a follow-up, the next terminal
+        response still shows the optional priority question if >=2 axes remain.
+        """
         history = [
             {'role': 'user', 'text': '일본 미술관'},
-            {'role': 'model', 'text': '어떤 걸 우선시 하세요?'},
-            {'role': 'user', 'text': '위치가 중요해요'},
+            {'role': 'model', 'text': '추천에 더 중요하게 생각할 기준이 있나요?'},
+            {'role': 'user', 'text': '프로그램(Museum)'},
         ]
         result = self._run_parse(monkeypatch, _MULTI_AXIS_PAYLOAD, history)
 
-        # user_turn_count == 2 -> D1 must not fire
-        # The LLM returned probe_needed=False so result should be terminal
-        assert result['probe_needed'] is False, (
-            f"D1 must not fire on turn-2 (suppression); probe_needed={result['probe_needed']}"
+        # probe_needed=False (terminal), D1 should still fire with >=2 axes
+        assert result['probe_needed'] is False
+        assert result['system_action'] == 'REQUEST_PRIORITY'
+        assert len(result['suggested_quick_replies']) >= 2
+
+    def test_single_axis_query_no_d1_on_any_turn(self, monkeypatch):
+        """Single-axis query on any turn -> D1 does NOT inject chips."""
+        # Use a terminal payload with only one strong axis
+        single_axis_terminal = {
+            'probe_needed': False,
+            'probe_question': None,
+            'reply': '이해했어요: 주택.',
+            'filters': {
+                'location_country': None, 'location_city': None,
+                'program': 'Housing',
+                'material': None, 'style': None, 'year_min': None, 'year_max': None,
+                'atmosphere': None, 'color_tone': None, 'typology_primary': None,
+            },
+            'filter_priority': ['program'],
+            'raw_query': '주택',
+            'visual_description': 'A housing project.',
+            'confidence_score': 0.80,
+            'system_action': 'NONE',
+            'suggested_quick_replies': [],
+            'priority_ordered': ['program'],
+            'llm_response_message': '이해했어요: 주택.',
+        }
+        history = [
+            {'role': 'user', 'text': '주택'},
+            {'role': 'model', 'text': '이해했어요.'},
+            {'role': 'user', 'text': '더 보여줘'},
+        ]
+        result = self._run_parse(monkeypatch, single_axis_terminal, history)
+
+        # Only 1 strong axis -> D1 must not inject axis-labelled chips
+        chips = result.get('suggested_quick_replies', [])
+        d1_pattern_chips = [c for c in chips if c.startswith('프로그램(')]
+        assert len(d1_pattern_chips) == 0, (
+            f"D1 must not fire with 1 strong axis on turn-2+; got: {chips}"
         )
 
 

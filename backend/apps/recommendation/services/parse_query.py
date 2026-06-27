@@ -231,18 +231,21 @@ _AXIS_LABEL_KO = {
 
 
 def _maybe_multi_axis_probe(filters, filter_priority, user_turn_count, parsed_result):
-    """D1: inject a 'priority' probe when turn==1 and >=2 strong axes are present.
+    """D1: inject an optional priority prompt when >=2 strong axes are present (NON-BLOCKING).
 
-    Mutates and returns a copy of parsed_result with probe_needed=True,
-    system_action='REQUEST_PRIORITY', probe_question/llm_response_message set to
-    a Korean priority question, and suggested_quick_replies = one chip per present
-    strong axis (localised with its value) + a trailing skip chip.
+    Results are always shown immediately (probe_needed stays False). When n_strong >= 2
+    on a terminal response, this function augments the result with:
+      - system_action = 'REQUEST_PRIORITY'
+      - llm_response_message = short Korean criteria-priority question
+      - suggested_quick_replies = one chip per present strong axis (localised with value)
 
-    Fires ONLY when: user_turn_count == 1 AND n_strong >= 2.
-    When user_turn_count >= 2 OR n_strong < 2: returns parsed_result unchanged.
-    Respects the existing 1-probe-per-session rule (idempotent if re-called).
+    No skip chip is added — results are already shown so no "skip" action is needed.
+
+    Fires on ANY terminal turn (turn-agnostic) when n_strong >= 2.
+    When probe_needed=True (genuine slate probe) or n_strong < 2: returns unchanged.
     """
-    if user_turn_count != 1:
+    # Only augment terminal responses — never touch genuine probes
+    if parsed_result.get('probe_needed'):
         return parsed_result
 
     present_strong = [
@@ -252,36 +255,19 @@ def _maybe_multi_axis_probe(filters, filter_priority, user_turn_count, parsed_re
     if len(present_strong) < 2:
         return parsed_result
 
-    # Prefer an existing usable llm_response_message from calibration fields
-    existing_msg = parsed_result.get('llm_response_message', '')
-    if isinstance(existing_msg, str) and existing_msg.strip():
-        probe_q = existing_msg.strip()
-    else:
-        # Synthesise from present strong axes + their values
-        axis_labels = []
-        for ax in present_strong:
-            label = _AXIS_LABEL_KO.get(ax, ax)
-            val = filters[ax]
-            axis_labels.append(f'{label}({val})')
-        axes_str = '·'.join(axis_labels)
-        probe_q = (
-            f'지금 {axes_str} 조건이 함께 있어요. '
-            '어떤 걸 가장 우선해서 찾아드릴까요?'
-        )
+    # Build the secondary question (shown below results, not as a blocking screen)
+    priority_q = '추천에 더 중요하게 생각할 기준이 있나요?'
 
-    # Build one chip per present strong axis (localised with value) + skip chip
+    # Build one chip per present strong axis (localised with value) — no skip chip
     chips = []
     for ax in present_strong:
         label = _AXIS_LABEL_KO.get(ax, ax)
         val = filters[ax]
         chips.append(f'{label}({val})')
-    skip_chip = '상관없어요, 다 보여주세요'
-    chips.append(skip_chip)
 
     result = dict(parsed_result)
-    result['probe_needed'] = True
-    result['probe_question'] = probe_q
-    result['llm_response_message'] = probe_q
+    # probe_needed stays False — results are returned immediately
+    result['llm_response_message'] = priority_q
     result['system_action'] = 'REQUEST_PRIORITY'
     result['suggested_quick_replies'] = chips
     # priority_ordered: existing value stays (filter_priority ordering from LLM)
@@ -585,7 +571,7 @@ def parse_query(conversation_history, language=None):
             'priority_ordered': calibration['priority_ordered'],
             'llm_response_message': calibration['llm_response_message'],
         }
-        # D1: multi-axis priority probe — fires on turn 1 with >=2 strong axes
+        # D1: multi-axis optional prompt — fires on any terminal turn with >=2 strong axes
         result = _maybe_multi_axis_probe(filters, filter_priority, _user_turn_count, result)
         return result
 
@@ -851,7 +837,7 @@ def parse_query_stage1(conversation_history, language=None):
             'priority_ordered': calibration['priority_ordered'],
             'llm_response_message': calibration['llm_response_message'],
         }
-        # D1: multi-axis priority probe — fires on turn 1 with >=2 strong axes
+        # D1: multi-axis optional prompt — fires on any terminal turn with >=2 strong axes
         result = _maybe_multi_axis_probe(filters, filter_priority, _user_turn_count, result)
         return result
 

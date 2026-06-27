@@ -498,6 +498,9 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
           role: 'ai', text: replyText,
           results, isFallback,
           filters,
+          quickReplies: parsed.suggested_quick_replies || [],
+          priorityOrdered: parsed.priority_ordered || [],
+          calibrationPrompt: parsed.llm_response_message || '',
         }])
 
         // Reset history for the next fresh query
@@ -622,6 +625,17 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
                 {msg.role === 'ai' && <FilterChips filters={msg.filters} />}
                 {msg.role === 'ai' && <ResultStrip results={msg.results} isFallback={msg.isFallback} />}
               </div>
+              {msg.role === 'ai' && msg.calibrationPrompt && msg.results && msg.results.length > 0 && (
+                <div style={{
+                  marginTop: 8,
+                  fontSize: 12,
+                  color: 'var(--color-text-dim)',
+                  fontWeight: 500,
+                  paddingLeft: 2,
+                }}>
+                  {msg.calibrationPrompt}
+                </div>
+              )}
               {msg.role === 'ai' && msg.priorityOrdered && msg.priorityOrdered.length > 0 && (
                 <div className={s.badgesRow} role="list" aria-label="Extracted taste priorities" style={{ marginTop: 6 }}>
                   {msg.priorityOrdered.slice(0, 4).map((label, i) => (
