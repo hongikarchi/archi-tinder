@@ -487,9 +487,13 @@ class TestBackwardCompat:
 
         # S2 canonical_v2 schema migration added top-level image_focus to the
         # parse_query response (rider on filters for per-cover-variant selection).
+        # TASTE-CALIBRATION-1 added 5 calibration keys to the result dict.
         expected_keys = {
             'probe_needed', 'probe_question', 'reply', 'filters',
             'filter_priority', 'image_focus', 'raw_query', 'visual_description',
+            # TASTE-CALIBRATION-1 fields:
+            'confidence_score', 'system_action', 'suggested_quick_replies',
+            'priority_ordered', 'llm_response_message',
         }
         assert set(result.keys()) == expected_keys
 

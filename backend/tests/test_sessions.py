@@ -1178,8 +1178,14 @@ class TestExtendSessionFlow:
             extended_rounds=0,
         )
 
-    def test_converged_returns_can_continue_with_null_card(self, auth_client, user_profile):
-        """A swipe on a converged session (no extend flag) returns next_image=null + is_analysis_completed=true + can_continue=true."""
+    def test_converged_returns_can_continue_with_action_card(self, auth_client, user_profile):
+        """A swipe on a converged session (no extend flag) returns the action card + is_analysis_completed=false + can_continue=true.
+
+        TASTE-FLOW change: convergence no longer force-ends the session.
+        Instead the backend emits the synthetic action card so the frontend can
+        offer '결과 보러 가기' without auto-navigating.  is_analysis_completed
+        stays False until the user right-swipes the action card.
+        """
         session = self._create_converged_session(user_profile)
 
         patchers = _apply_patches()
@@ -1194,8 +1200,11 @@ class TestExtendSessionFlow:
 
         assert resp.status_code == 200
         data = resp.json()
-        assert data['next_image'] is None
-        assert data['is_analysis_completed'] is True
+        # Action card served — session is NOT force-completed.
+        assert data['next_image'] is not None
+        assert data['next_image']['canonical_bld_id'] == '__action_card__'
+        assert data['next_image']['card_type'] == 'action'
+        assert data['is_analysis_completed'] is False
         assert data['can_continue'] is True
 
     def test_extend_flag_serves_next_card(self, auth_client, user_profile):
