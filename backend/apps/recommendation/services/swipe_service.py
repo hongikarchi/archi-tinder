@@ -74,6 +74,28 @@ _REFRESH_QUESTION = {
     'b': '지금 타입으로 계속',
 }
 
+# ── Action-card sentinel (TASTE-FLOW action card) ─────────────────────────────
+_ACTION_CARD_ID = '__action_card__'
+
+
+def _build_action_card():
+    """Return the synthetic action-card next_image payload.
+
+    The frontend normalises next_image via api/images.js.  It already
+    recognises card_type='action' / canonical_bld_id='__action_card__'.
+    This sentinel is never a real building and must never reach the
+    buildings DB, like_vectors, or exposed_ids.
+    """
+    return {
+        'canonical_bld_id': _ACTION_CARD_ID,
+        'card_type': 'action',
+        'action_card_message': '취향이 충분히 모였어요!',
+        'action_card_subtitle': (
+            '오른쪽으로 스와이프하면 취향 리포트를 볼 수 있어요 '
+            '· 왼쪽으로 넘기면 계속 탐색해요'
+        ),
+    }
+
 
 def _update_question_state(session, action, canonical_bld_id):
     """Update tag counts and consecutive-dislike counter for question card triggering."""
@@ -633,7 +655,9 @@ def handle_swipe_normal(
         _timing_marks[step] = round((_time.perf_counter() - _t_start) * 1000, 2)
 
     # Validate building exists and is publishable before acquiring the row lock.
-    if canonical_bld_id:
+    # '__action_card__' is a synthetic sentinel — never hits the buildings DB.
+    _is_action_card = canonical_bld_id == _ACTION_CARD_ID
+    if canonical_bld_id and not _is_action_card:
         with connections['buildings'].cursor() as cur:
             cur.execute(
                 'SELECT 1 FROM canonical_v2_buildings'
@@ -654,7 +678,10 @@ def handle_swipe_normal(
         project = Project.objects.select_for_update().get(pk=session.project_id)
 
         # 1. Get embedding and update preference vector
-        embedding = engine.get_building_embedding(canonical_bld_id)
+        # Action-card swipe: no building involved — skip embedding entirely.
+        embedding = None
+        if not _is_action_card:
+            embedding = engine.get_building_embedding(canonical_bld_id)
         _mark('embed_done')
         if embedding:
             session.preference_vector = engine.update_preference_vector(
@@ -665,57 +692,63 @@ def handle_swipe_normal(
         # Two concurrent requests with the same idempotency_key can both pass the
         # pre-check at line ~424 before either has committed. The savepoint ensures
         # the outer atomic block stays healthy when the constraint fires on the second.
-        try:
-            with transaction.atomic():  # savepoint
-                SwipeEvent.objects.create(
-                    session=session, canonical_bld_id=canonical_bld_id,
-                    action=action, idempotency_key=idempotency_key,
-                )
-        except IntegrityError:
-            # Concurrent duplicate raced past the pre-check. Bail out — the other
-            # request already committed the row. Re-read session for latest state.
-            logger.info('Concurrent duplicate swipe caught at create: %s', idempotency_key)
-            session.refresh_from_db()
-            return Response({
-                'accepted': True,
-                'session_status': session.status,
-                'progress': _progress(session),
-                'next_image': None,
-                'prefetch_image': None,
-                'prefetch_image_2': None,
-                'is_analysis_completed': session.status == 'completed',
-                'can_continue': False,
-                'confidence': None,
-                'detail': 'duplicate',
-            })
+        # Action-card swipes are not real buildings — do NOT create a SwipeEvent row
+        # (avoids FK/unique constraint failures and keeps taste data clean).
+        if not _is_action_card:
+            try:
+                with transaction.atomic():  # savepoint
+                    SwipeEvent.objects.create(
+                        session=session, canonical_bld_id=canonical_bld_id,
+                        action=action, idempotency_key=idempotency_key,
+                    )
+            except IntegrityError:
+                # Concurrent duplicate raced past the pre-check. Bail out — the other
+                # request already committed the row. Re-read session for latest state.
+                logger.info('Concurrent duplicate swipe caught at create: %s', idempotency_key)
+                session.refresh_from_db()
+                return Response({
+                    'accepted': True,
+                    'session_status': session.status,
+                    'progress': _progress(session),
+                    'next_image': None,
+                    'prefetch_image': None,
+                    'prefetch_image_2': None,
+                    'is_analysis_completed': session.status == 'completed',
+                    'can_continue': False,
+                    'confidence': None,
+                    'detail': 'duplicate',
+                })
 
         # 3. Update project liked/disliked lists and in-session like vectors.
-        if action == 'like':
-            existing_ids = _liked_id_only(project.liked_ids)
-            if canonical_bld_id not in existing_ids:
-                try:
-                    raw_intensity = request.data.get('intensity', 1.0)
-                    intensity = float(raw_intensity) if raw_intensity is not None else 1.0
-                except (TypeError, ValueError):
-                    intensity = 1.0
-                intensity = max(0.0, min(2.0, intensity))
-                project.liked_ids = project.liked_ids + [
-                    {'id': canonical_bld_id, 'intensity': intensity}
-                ]
-            if embedding:
-                session.like_vectors = session.like_vectors + [{'embedding': embedding, 'round': session.current_round}]
-        else:
-            if canonical_bld_id not in project.disliked_ids:
-                project.disliked_ids = project.disliked_ids + [canonical_bld_id]
-        project.save(update_fields=['liked_ids', 'disliked_ids'])
-        evict_taste(profile.id)
-        evict_discovery_feed(profile.id)
-        # Fix 1: evict /projects/ cache — liked_ids/disliked_ids counts changed.
-        evict_projects_list(profile.id)
-        evict_project_detail(str(project.project_id))
+        # Action-card swipe must never pollute liked_ids / disliked_ids / like_vectors.
+        if not _is_action_card:
+            if action == 'like':
+                existing_ids = _liked_id_only(project.liked_ids)
+                if canonical_bld_id not in existing_ids:
+                    try:
+                        raw_intensity = request.data.get('intensity', 1.0)
+                        intensity = float(raw_intensity) if raw_intensity is not None else 1.0
+                    except (TypeError, ValueError):
+                        intensity = 1.0
+                    intensity = max(0.0, min(2.0, intensity))
+                    project.liked_ids = project.liked_ids + [
+                        {'id': canonical_bld_id, 'intensity': intensity}
+                    ]
+                if embedding:
+                    session.like_vectors = session.like_vectors + [{'embedding': embedding, 'round': session.current_round}]
+            else:
+                if canonical_bld_id not in project.disliked_ids:
+                    project.disliked_ids = project.disliked_ids + [canonical_bld_id]
+            project.save(update_fields=['liked_ids', 'disliked_ids'])
+            evict_taste(profile.id)
+            evict_discovery_feed(profile.id)
+            # Fix 1: evict /projects/ cache — liked_ids/disliked_ids counts changed.
+            evict_projects_list(profile.id)
+            evict_project_detail(str(project.project_id))
 
-        # 4. Increment round
-        session.current_round += 1
+        # 4. Increment round (action-card swipe does NOT count as a real round)
+        if not _is_action_card:
+            session.current_round += 1
 
         # 5. Convergence -- use K-Means global centroid during analyzing, pref_vector during exploring.
         # Note: Delta-V is appended on EVERY analyzing swipe (not gated by action == 'like'),
@@ -724,25 +757,27 @@ def handle_swipe_normal(
         # Known bias: dislike Delta-V < like Delta-V may pull the moving average down on
         # dislike-heavy sequences. Acceptable per research/spec/requirements.md Section 11
         # Tier A Topic 10 Option A; revisit with data if problematic.
-        if session.phase == 'analyzing' and session.like_vectors:
-            _, global_centroid = engine.compute_taste_centroids(
-                session.like_vectors, session.current_round,
-                multimodal_floor=session.multimodal_floor,
-            )
-            centroid_list = global_centroid.tolist()
-            if session.previous_pref_vector:
-                delta_v = engine.compute_convergence(centroid_list, session.previous_pref_vector)
-                if delta_v is not None:
-                    session.convergence_history = session.convergence_history + [delta_v]
-            session.previous_pref_vector = centroid_list
-        elif session.phase == 'exploring':
-            if session.preference_vector and session.previous_pref_vector:
-                delta_v = engine.compute_convergence(
-                    session.preference_vector, session.previous_pref_vector
+        # Action-card swipe: skip convergence tracking (no taste data recorded).
+        if not _is_action_card:
+            if session.phase == 'analyzing' and session.like_vectors:
+                _, global_centroid = engine.compute_taste_centroids(
+                    session.like_vectors, session.current_round,
+                    multimodal_floor=session.multimodal_floor,
                 )
-                if delta_v is not None:
-                    session.convergence_history = session.convergence_history + [delta_v]
-            session.previous_pref_vector = list(session.preference_vector) if session.preference_vector else []
+                centroid_list = global_centroid.tolist()
+                if session.previous_pref_vector:
+                    delta_v = engine.compute_convergence(centroid_list, session.previous_pref_vector)
+                    if delta_v is not None:
+                        session.convergence_history = session.convergence_history + [delta_v]
+                session.previous_pref_vector = centroid_list
+            elif session.phase == 'exploring':
+                if session.preference_vector and session.previous_pref_vector:
+                    delta_v = engine.compute_convergence(
+                        session.preference_vector, session.previous_pref_vector
+                    )
+                    if delta_v is not None:
+                        session.convergence_history = session.convergence_history + [delta_v]
+                session.previous_pref_vector = list(session.preference_vector) if session.preference_vector else []
 
         # 5a. Merge client buffer into exposed_ids BEFORE card selection.
         # This prevents the backend from re-selecting any card the frontend
@@ -750,20 +785,22 @@ def handle_swipe_normal(
         if client_buffer_ids:
             session.exposed_ids = _merge_buffer_into_exposed(session.exposed_ids, client_buffer_ids)
 
-        # 6. Phase transitions
-        like_count = len(session.like_vectors)
+        # 6. Phase transitions (skip for action-card swipe — phase is already 'converged'
+        # and no new taste evidence was recorded, so transitions would be spurious).
+        if not _is_action_card:
+            like_count = len(session.like_vectors)
 
-        if session.phase == 'exploring' and like_count >= RC.get('min_likes_for_clustering', 3):
-            session.phase = 'analyzing'
-            # Reset convergence state: the analyzing phase tracks Delta-V between K-Means
-            # centroids, but `previous_pref_vector` currently holds the exploring-phase
-            # preference_vector (a different physical quantity). Clearing both prevents
-            # the first analyzing Delta-V from being a cross-metric centroid-vs-pref_vector
-            # distance. Matches the reset pattern in the "Reset and keep going" action-card
-            # path above. See research/spec/requirements.md Section 11 Tier A Topic 10.
-            session.convergence_history = []
-            session.previous_pref_vector = []
-            logger.info('Session %s: exploring -> analyzing (likes=%d)', session.session_id, like_count)
+            if session.phase == 'exploring' and like_count >= RC.get('min_likes_for_clustering', 3):
+                session.phase = 'analyzing'
+                # Reset convergence state: the analyzing phase tracks Delta-V between K-Means
+                # centroids, but `previous_pref_vector` currently holds the exploring-phase
+                # preference_vector (a different physical quantity). Clearing both prevents
+                # the first analyzing Delta-V from being a cross-metric centroid-vs-pref_vector
+                # distance. Matches the reset pattern in the "Reset and keep going" action-card
+                # path above. See research/spec/requirements.md Section 11 Tier A Topic 10.
+                session.convergence_history = []
+                session.previous_pref_vector = []
+                logger.info('Session %s: exploring -> analyzing (likes=%d)', session.session_id, like_count)
 
         _convergence_window = RC.get('convergence_window', 3)
         _recent_action_window = max(
@@ -772,7 +809,7 @@ def handle_swipe_normal(
         )
         _recent_actions_window = _recent_actions(session, _recent_action_window)
         _recent_convergence_actions = _recent_actions_window[-_convergence_window:]
-        if session.phase == 'analyzing' and engine.check_convergence(
+        if not _is_action_card and session.phase == 'analyzing' and engine.check_convergence(
             session.convergence_history,
             RC.get('convergence_threshold', 0.13),
             _convergence_window,
@@ -806,9 +843,44 @@ def handle_swipe_normal(
         _embedding_stats = engine.get_last_embedding_call_stats() or {}
 
         # ID selection only — DB fetch deferred to post-transaction batch call.
-        if session.phase == 'converged':
-            next_bid = None  # S3: no end-of-session card in stream; frontend handles end-screen
+        #
+        # TASTE-FLOW: When converged, do NOT force-end the session.
+        # Emit the action-card sentinel so the frontend offers "결과 보러 가기"
+        # without auto-navigating.  The sentinel is never added to exposed_ids or
+        # fetched from the buildings DB.
+        #
+        # Action-card 'pass' (LEFT = keep exploring): select the next real card
+        # from the pool, as if convergence hadn't happened.  If pool is empty,
+        # re-offer the action card so the user can still opt in later.
+        #
+        # Action-card 'like' (RIGHT = go to report): the view returns
+        # is_analysis_completed=True so the frontend navigates to the report.
+        # We fall through to next_bid=None here; the view special-cases this.
+        if _is_action_card and action == 'like':
+            # User chose the report: signal completion to the view.
+            next_bid = None
+            _action_card_accepted = True
+        elif _is_action_card and action == 'dislike':
+            # User wants to keep exploring (LEFT swipe = pass / dislike on action card):
+            # pick the next real card.
+            next_bid = engine.compute_mmr_next(
+                session.pool_ids, session.exposed_ids, pool_embeddings,
+                session.like_vectors, session.current_round,
+                question_bias_vector=session.question_bias_vector,
+                multimodal_floor=session.multimodal_floor,
+            ) if session.like_vectors else engine.farthest_point_from_pool(
+                session.pool_ids, session.exposed_ids, pool_embeddings
+            )
+            if not next_bid:
+                # Pool exhausted — re-offer the action card (idempotent)
+                next_bid = _ACTION_CARD_ID
+            _action_card_accepted = False
+        elif session.phase == 'converged':
+            # Taste is converged: offer the action card instead of force-ending.
+            next_bid = _ACTION_CARD_ID
+            _action_card_accepted = False
         elif session.phase == 'exploring':
+            _action_card_accepted = False
             exposed_set = set(session.exposed_ids)
             next_bid = None
             if session.current_round < len(session.initial_batch):
@@ -853,6 +925,7 @@ def handle_swipe_normal(
                         session.pool_ids, session.exposed_ids, pool_embeddings
                     )
         elif session.phase == 'analyzing':
+            _action_card_accepted = False
             next_bid = engine.compute_mmr_next(
                 session.pool_ids, session.exposed_ids, pool_embeddings,
                 session.like_vectors, session.current_round,
@@ -863,29 +936,35 @@ def handle_swipe_normal(
                 # Pool exhausted during analyzing
                 session.phase = 'converged'
         else:
+            _action_card_accepted = False
             next_bid = None
 
-        if next_bid and next_bid not in session.exposed_ids:
+        # Add real cards to exposed_ids; the action-card sentinel is NEVER added.
+        if next_bid and next_bid != _ACTION_CARD_ID and next_bid not in session.exposed_ids:
             session.exposed_ids = session.exposed_ids + [next_bid]
 
         _mark('select_done')
 
         # Question card trigger state update (ALGO-QCARD-1).
         # Called inside the transaction so question state is consistent with swipe row.
-        _update_question_state(session, action, canonical_bld_id)
+        # Skip for action-card swipes (no real building touched).
+        if not _is_action_card:
+            _update_question_state(session, action, canonical_bld_id)
 
         # ALGO-QCARD Phase 3: capture inter-swipe latency BEFORE trigger evaluation
         # so the new sample is included in avg_lat inside _check_question_trigger.
-        _lat_raw = request.data.get('latency_ms')
-        try:
-            _lat = float(_lat_raw) if _lat_raw is not None else None
-        except (TypeError, ValueError):
-            _lat = None
-        if _lat is not None and 0 < _lat <= 120000:
-            _lat_cap = RC.get('recent_latencies_cap', 10)
-            session.recent_latencies = (list(session.recent_latencies or []) + [_lat])[-_lat_cap:]
+        # Skip for action-card swipes (no taste data, no latency telemetry).
+        if not _is_action_card:
+            _lat_raw = request.data.get('latency_ms')
+            try:
+                _lat = float(_lat_raw) if _lat_raw is not None else None
+            except (TypeError, ValueError):
+                _lat = None
+            if _lat is not None and 0 < _lat <= 120000:
+                _lat_cap = RC.get('recent_latencies_cap', 10)
+                session.recent_latencies = (list(session.recent_latencies or []) + [_lat])[-_lat_cap:]
 
-        question_trigger = _check_question_trigger(session, action)
+        question_trigger = _check_question_trigger(session, action) if not _is_action_card else None
 
         # Save session BEFORE prefetch so concurrent requests see updated exposed_ids.
         # pool_ids/pool_scores/current_pool_tier included unconditionally to persist
@@ -935,6 +1014,8 @@ def handle_swipe_normal(
         '_timing_marks': _timing_marks,
         'question_trigger': question_trigger,
         '_t_start': _t_start,
+        # True when user RIGHT-swiped the action card (chose the report)
+        '_action_card_accepted': _action_card_accepted,
     }
 
 

@@ -13,6 +13,8 @@ from .. import engine, event_log
 from ._shared import _get_profile, _progress
 from ..services.swipe_service import _merge_buffer_into_exposed  # noqa: F401 — re-exported via views/__init__.py
 from ..services.swipe_service import (
+    _ACTION_CARD_ID,
+    _build_action_card,
     handle_bookmark,
     handle_swipe_extend,
     handle_swipe_normal,
@@ -315,6 +317,7 @@ class SwipeView(APIView):
         _timing_marks         = result['_timing_marks']
         question_trigger      = result['question_trigger']
         saved_question_bias_vector = result.get('saved_question_bias_vector')
+        _action_card_accepted = result.get('_action_card_accepted', False)
 
         import time as _time
         _t_start = result['_t_start']
@@ -340,8 +343,14 @@ class SwipeView(APIView):
         prefetch_card = None
         prefetch_card_2 = None
 
-        if next_bid is None:
-            # converged / pool-exhausted — no DB fetch needed; next_card stays None
+        if next_bid == _ACTION_CARD_ID:
+            # Converged: serve the synthetic action card — no DB fetch needed.
+            # is_analysis_completed stays False; the user is NOT forced to the report.
+            next_card = _build_action_card()
+
+        elif next_bid is None:
+            # User accepted the action card (RIGHT swipe) or pool truly exhausted — no
+            # DB fetch needed; next_card stays None.
             pass
 
         elif settings.RECOMMENDATION.get('async_prefetch_enabled', False):
@@ -462,6 +471,16 @@ class SwipeView(APIView):
             daemon=True,
         ).start()
 
+        # is_analysis_completed semantics (TASTE-FLOW):
+        # - False when next_card is the action card (convergence detected, user NOT forced).
+        # - True ONLY when the user explicitly RIGHT-swiped the action card (_action_card_accepted)
+        #   OR when pool is genuinely exhausted with no action-card alternative.
+        # - Old behaviour (phase=='converged' → completed) is now gated by _action_card_accepted.
+        _is_completed = _action_card_accepted or (
+            next_card is None
+            and session.phase in ('converged', 'completed')
+            and next_bid != _ACTION_CARD_ID
+        )
         return Response({
             'accepted': True,
             'session_status': session.status,
@@ -469,7 +488,7 @@ class SwipeView(APIView):
             'next_image': next_card,
             'prefetch_image': prefetch_card,
             'prefetch_image_2': prefetch_card_2,
-            'is_analysis_completed': next_card is None and session.phase in ('converged', 'completed'),
+            'is_analysis_completed': _is_completed,
             'can_continue': (
                 len([pid for pid in session.pool_ids if pid not in set(session.exposed_ids)]) >= 1
                 and session.extended_rounds < 5

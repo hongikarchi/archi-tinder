@@ -3,6 +3,7 @@ import TutorialPopup from '../components/TutorialPopup.jsx'
 import SwipeCard, { CARD_WIDTH, CARD_HEIGHT } from '../components/SwipeCard.jsx'
 import QuestionCard from '../components/QuestionCard.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
+import { isActionCard } from '../utils/appHelpers.js'
 
 /* ── LoadingCard ─────────────────────────────────────────────────────────── */
 function LoadingCard() {
@@ -26,13 +27,66 @@ function LoadingCard() {
   )
 }
 
-/* ── ConfidenceBar (unified progress for all phases) ─────────────────────── */
+/* ── ActionCard ──────────────────────────────────────────────────────────── */
+// Rendered when card_type === 'action' (backend-emitted when session converges).
+// The user opts in to the report by right-swiping (like), or keeps exploring
+// by left-swiping (pass). The hint text at the bottom makes this explicit.
+function ActionCard({ card }) {
+  const message  = card.action_card_message  || '취향이 충분히 모였어요!'
+  const subtitle = card.action_card_subtitle || '지금 결과를 확인하거나 계속 탐색할 수 있어요'
+  return (
+    <div style={{
+      position: 'absolute', top: 0, left: 0,
+      width: CARD_WIDTH, height: CARD_HEIGHT,
+      borderRadius: 20, overflow: 'hidden',
+      background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 45%, #4c1d95 100%)',
+      boxShadow: '0 25px 50px rgba(0,0,0,0.6)',
+      display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      gap: 16, padding: '32px 28px',
+      userSelect: 'none',
+    }}>
+      {/* Decorative sparkle */}
+      <div style={{ fontSize: 56, lineHeight: 1 }}>✨</div>
+
+      {/* Main message */}
+      <h2 style={{
+        color: '#fff', fontSize: 22, fontWeight: 700,
+        textAlign: 'center', margin: 0, lineHeight: 1.35,
+      }}>
+        {message}
+      </h2>
+
+      {/* Subtitle */}
+      {subtitle && (
+        <p style={{
+          color: 'rgba(255,255,255,0.7)', fontSize: 14, fontWeight: 400,
+          textAlign: 'center', margin: 0, lineHeight: 1.5,
+        }}>
+          {subtitle}
+        </p>
+      )}
+
+      {/* Swipe hint — bottom of card */}
+      <div style={{
+        position: 'absolute', bottom: 28, left: 0, right: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+        color: 'rgba(255,255,255,0.45)', fontSize: 12, letterSpacing: '0.03em',
+      }}>
+        <span>← 계속 탐색</span>
+        <span style={{ color: 'rgba(255,255,255,0.25)' }}>·</span>
+        <span>결과 보기 →</span>
+      </div>
+    </div>
+  )
+}
+
+/* ── ConfidenceBar (persona-report readiness / response consistency) ─────── */
 function ConfidenceBar({ value, phase, progress }) {
-  // value: confidence in [0, 1] (analyzing+ phases) or null (exploring / pre-reset)
-  // progress: full progress object for swipe count
-  const swipeCount = progress?.swipe_count ?? progress?.current_round ?? 0
-  const targetSwipes = Math.max(1, progress?.target_swipes ?? 10)
-  const swipePct = Math.min(95, Math.round((Math.min(swipeCount, targetSwipes) / targetSwipes) * 100))
+  // value: confidence [0,1] = 1 - avg(recent ΔV)/threshold — rises on consistency,
+  //        falls on inconsistency (persona-report readiness metric).
+  //        null = early exploring, not enough data yet.
+  // progress: full progress object for swipe count display.
   let pct = 0
   let stageLabel = 'Loading…'
 
@@ -41,26 +95,37 @@ function ConfidenceBar({ value, phase, progress }) {
     stageLabel = 'Taste found'
   } else if (phase === 'analyzing') {
     if (value != null) {
-      pct = Math.max(swipePct, Math.round(value * 100))
+      // Bar driven purely by confidence (can rise or fall).
+      pct = Math.round(value * 100)
       stageLabel = 'Tuning taste'
     } else {
-      pct = swipePct
+      // Confidence not yet established — show faint baseline so bar isn't empty.
+      pct = 4
       stageLabel = 'Calibrating…'
     }
   } else if (phase === 'exploring') {
-    pct = swipePct
+    if (value != null) {
+      pct = Math.round(value * 100)
+    } else {
+      pct = 4
+    }
     stageLabel = 'Exploring'
   } else if (value != null) {
-    pct = Math.max(swipePct, Math.round(value * 100))
+    // Unknown/other phase but confidence is available.
+    pct = Math.round(value * 100)
     stageLabel = 'Tuning taste'
+  } else {
+    // No phase and no confidence — show minimal baseline.
+    pct = 4
+    stageLabel = 'Calibrating…'
   }
 
-  // Swipe count: prefer swipe_count, fallback to like+dislike sum, fallback to likes only
+  // Swipe count label: plain count, no /target denominator.
   let swipeCountLabel = ''
   if (progress?.swipe_count != null) {
-    swipeCountLabel = `${progress.swipe_count}/${targetSwipes} swipes`
+    swipeCountLabel = `${progress.swipe_count} swipes`
   } else if (progress?.like_count != null && progress?.dislike_count != null) {
-    swipeCountLabel = `${progress.like_count + progress.dislike_count}/${targetSwipes} swipes`
+    swipeCountLabel = `${progress.like_count + progress.dislike_count} swipes`
   } else if (progress?.like_count != null) {
     swipeCountLabel = `${progress.like_count} ♥`
   }
@@ -330,8 +395,10 @@ export default function SwipePage({
   const isAt100 = !isCompleted && (phase === 'converged' || beyondTargetFloor)
 
   function onTinderSwipe(dir) {
-    // F4: intercept first-ever left swipe to show dismiss tutorial
-    if (dir === 'left' && !hasShownDismissTutorial.current) {
+    // F4: intercept first-ever left swipe to show dismiss tutorial.
+    // Skip for action cards — left-swipe on an action card means "keep exploring",
+    // not "skip this building", so the dismiss tutorial is not applicable.
+    if (dir === 'left' && !hasShownDismissTutorial.current && !isActionCard(currentCard)) {
       // Restore card to center BEFORE showing popup so cancel path has no flicker
       cardRef.current?.restoreCard()
       pendingDismissDir.current = dir
@@ -353,8 +420,9 @@ export default function SwipePage({
 
   async function swipeManual(dir) {
     if (!cardRef.current || isLoading) return
-    // F4: intercept first-ever left swipe from keyboard
-    if (dir === 'left' && !hasShownDismissTutorial.current) {
+    // F4: intercept first-ever left swipe from keyboard.
+    // Skip for action cards (see onTinderSwipe comment above).
+    if (dir === 'left' && !hasShownDismissTutorial.current && !isActionCard(currentCard)) {
       pendingDismissDir.current = dir
       setShowDismissConfirm(true)
       return
@@ -660,10 +728,14 @@ export default function SwipePage({
                   onSwipe={onTinderSwipe}
                   onCardLeftScreen={onCardLeftScreen}
                 >
-                  <SwipeCard
-                    card={currentCard}
-                    onGalleryClose={() => {}}
-                  />
+                  {isActionCard(currentCard) ? (
+                    <ActionCard card={currentCard} />
+                  ) : (
+                    <SwipeCard
+                      card={currentCard}
+                      onGalleryClose={() => {}}
+                    />
+                  )}
                 </SwipeGestureFrame>
                 {isLoading && (
                   <div style={{

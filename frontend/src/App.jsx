@@ -215,22 +215,12 @@ export default function App() {
     )
   }, [location.pathname]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-navigate when the backend declares a terminal state OR the user has
-  // swiped meaningfully past the target window. The post-target floor mirrors
-  // SwipePage's beyondTargetFloor so users on dislike-heavy paths don't get
-  // stranded (backend convergence can be withheld by the recent-likes gate).
-  useEffect(() => {
-    if (location.pathname !== '/swipe') return
-    const phase = sessionProgress?.phase
-    const swipeCount = sessionProgress?.swipe_count ?? sessionProgress?.current_round ?? 0
-    const targetSwipes = Math.max(1, sessionProgress?.target_swipes ?? 10)
-    const beyondTargetFloor = swipeCount >= targetSwipes + 5
-    const backendDone = isSessionCompleted || phase === 'converged' || beyondTargetFloor
-    if (!backendDone) return
-    const sessionId = projects.find(p => p.id === activeProjectId)?.sessionId
-    if (!sessionId) return
-    navigate('/result/' + sessionId)
-  }, [isSessionCompleted, sessionProgress?.phase, sessionProgress?.swipe_count, sessionProgress?.current_round]) // eslint-disable-line react-hooks/exhaustive-deps
+  // NOTE: Auto-navigate to /result on convergence is intentionally removed.
+  // Navigation to the persona report is now opt-in via the backend-emitted
+  // action card (card_type 'action'). The user right-swipes the action card
+  // to go to the report, or left-swipes to keep exploring.
+  // The handleSwipeCard function intercepts action-card swipes before any API
+  // call and routes them accordingly.
 
   // Persist current card id to localStorage per active project so refresh can
   // restore the exact card the user was looking at (not just the backend's last
@@ -417,6 +407,64 @@ export default function App() {
       swipeLock.current = false
       return
     }
+
+    // ── Action card intercept ──────────────────────────────────────────────
+    // The backend emits an action card (card_type 'action') when the session
+    // converges. The user opts in to the report by right-swiping, or keeps
+    // exploring by left-swiping. Neither swipe is recorded as a building like.
+    if (isActionCard(currentCard)) {
+      swipeLock.current = false
+      if (action === 'like') {
+        // RIGHT-swipe → navigate to persona report (opt-in).
+        const project = projects.find(p => p.id === activeProjectId)
+        const sessionId = project?.sessionId
+        if (sessionId) {
+          const backendId = project?.backendId
+          // Prefetch result + report in background so ResultsPage loads faster.
+          // Navigate immediately so the user isn't waiting on the spinner.
+          navigate('/result/' + sessionId)
+          setIsResultLoading(true)
+          try {
+            const [resultData, reportData] = await Promise.all([
+              api.getResult({ session_id: sessionId }),
+              backendId ? api.generateReport(backendId).catch(() => null) : Promise.resolve(null),
+            ])
+            setProjects(prev => prev.map(p => p.id === activeProjectId ? {
+              ...p,
+              predictedLikes: resultData.predicted_like_images || [],
+              ...(reportData?.final_report ? { finalReport: reportData.final_report } : {}),
+              ...(reportData?.axis_scores ? { axisScores: reportData.axis_scores } : {}),
+            } : p))
+            if (reportData?.final_report && backendId && project?.isTemp) {
+              setSaveModalProject({ backendId, finalReport: reportData.final_report, localId: activeProjectId })
+              setShowSaveModal(true)
+            }
+          } catch { /* ResultsPage fetches on entry */ }
+          finally { setIsResultLoading(false) }
+        }
+      } else if (action === 'dislike') {
+        // LEFT-swipe → keep exploring: advance the queue without recording a swipe.
+        if (prefetchCard) {
+          setCurrentCard(prefetchCard)
+          setPrefetchCard(prefetchCard2)
+          setPrefetchCard2(null)
+        } else {
+          // No prefetch buffered — ask the backend for the next card.
+          const project = projects.find(p => p.id === activeProjectId)
+          if (project?.sessionId) {
+            setIsSwipeLoading(true)
+            try {
+              const fresh = await api.getSessionState(project.sessionId)
+              applySessionResponse(activeProjectId, fresh)
+            } catch { /* leave currentCard as-is, user can retry */ }
+            finally { setIsSwipeLoading(false) }
+          }
+        }
+      }
+      return
+    }
+    // ── End action card intercept ──────────────────────────────────────────
+
     const project = projects.find(p => p.id === activeProjectId)
     if (!project?.sessionId) {
       swipeLock.current = false
