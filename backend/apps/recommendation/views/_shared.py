@@ -44,5 +44,5 @@ def _progress(session):
         'phase':         session.phase,
         'pool_size': len(session.pool_ids) if session.pool_ids else 0,
         'pool_remaining': len(set(session.pool_ids or []) - set(session.exposed_ids or [])),
-        'action_card_shown': bool(session.action_card_shown),
+        'action_card_shown': bool(getattr(session, 'action_card_shown', False)),
     }
