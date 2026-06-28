@@ -12,6 +12,8 @@ Tests cover:
   - is_discovery_draft_name predicate
   - _interleave_local_global pattern check
   - Profile board list now includes discovery draft boards
+  - ISSUE 1: promote-to-taste reuses the draft Project (single board)
+  - ISSUE 2: create_discovery_draft with tz_offset_minutes uses local time
 """
 import numpy as np
 import pytest
@@ -1224,4 +1226,185 @@ def test_promote_next_image_contains_image_url(auth_client, user_profile):
     assert next_image is not None, 'next_image must not be None'
     assert 'image_url' in next_image, (
         f'next_image must contain image_url key; got keys: {list(next_image.keys())}'
+    )
+
+
+# ── ISSUE 1: promote-to-taste reuses the existing draft Project ───────────────
+
+@pytest.mark.django_db
+def test_promote_reuses_draft_project_not_new(auth_client, user_profile):
+    """ISSUE 1: promote-to-taste must reuse the draft Project, not create a second
+    board.  The returned project_id must equal the draft's project_id, and only
+    one Project should exist after the call (not two).
+    """
+    draft = create_discovery_draft(user_profile)
+    draft.liked_ids = [{'id': f'bld_{i:06d}', 'intensity': 1.0} for i in range(10)]
+    draft.save(update_fields=['liked_ids'])
+    draft_id_str = str(draft.project_id)
+
+    board_count_before = Project.objects.filter(user=user_profile).count()
+
+    mock_emb = np.array([0.1] * 384, dtype=np.float64)
+    emb_map = {f'bld_{i:06d}': mock_emb for i in range(10)}
+
+    with patch('apps.recommendation.views.discovery.engine.get_pool_embeddings', return_value=emb_map), \
+         patch('apps.recommendation.views.discovery.engine.update_preference_vector',
+               side_effect=lambda pv, emb, a: emb), \
+         patch('apps.recommendation.views.discovery.engine.create_pool_with_relaxation',
+               return_value=(['bld_000010', 'bld_000011'], {}, 1)), \
+         patch('apps.recommendation.views.discovery.engine.farthest_point_from_pool',
+               return_value=None), \
+         patch('apps.recommendation.views.discovery.engine.get_buildings_by_ids',
+               return_value=[_card('bld_000010')]):
+        resp = auth_client.post(
+            '/api/v1/discovery/promote-to-taste/',
+            {'draft_id': draft_id_str},
+            format='json',
+        )
+
+    assert resp.status_code == 201
+    payload = resp.json()
+
+    # The returned project_id must be the draft's project_id (reuse, not new)
+    assert payload['project_id'] == draft_id_str, (
+        f"Expected project_id={draft_id_str!r} (draft reuse), got {payload['project_id']!r}"
+    )
+
+    # Board count must NOT increase — still one board
+    board_count_after = Project.objects.filter(user=user_profile).count()
+    assert board_count_after == board_count_before, (
+        f'Expected {board_count_before} board(s) after promote (draft reuse), '
+        f'got {board_count_after}'
+    )
+
+
+@pytest.mark.django_db
+def test_promote_fallback_most_recent_also_reuses_draft(auth_client, user_profile):
+    """ISSUE 1: promote-to-taste without draft_id (most-recent fallback) must also
+    reuse the draft Project, not create a second board.
+    """
+    draft = create_discovery_draft(user_profile)
+    draft.liked_ids = [{'id': f'bld_{i:06d}', 'intensity': 1.0} for i in range(10)]
+    draft.save(update_fields=['liked_ids'])
+    draft_id_str = str(draft.project_id)
+
+    board_count_before = Project.objects.filter(user=user_profile).count()
+
+    mock_emb = np.array([0.1] * 384, dtype=np.float64)
+    emb_map = {f'bld_{i:06d}': mock_emb for i in range(10)}
+
+    with patch('apps.recommendation.views.discovery.engine.get_pool_embeddings', return_value=emb_map), \
+         patch('apps.recommendation.views.discovery.engine.update_preference_vector',
+               side_effect=lambda pv, emb, a: emb), \
+         patch('apps.recommendation.views.discovery.engine.create_pool_with_relaxation',
+               return_value=(['bld_000010'], {}, 1)), \
+         patch('apps.recommendation.views.discovery.engine.farthest_point_from_pool',
+               return_value=None), \
+         patch('apps.recommendation.views.discovery.engine.get_buildings_by_ids',
+               return_value=[_card('bld_000010')]):
+        resp = auth_client.post(
+            '/api/v1/discovery/promote-to-taste/',
+            {},
+            format='json',
+        )
+
+    assert resp.status_code == 201
+    payload = resp.json()
+
+    # project_id must equal the draft's id
+    assert payload['project_id'] == draft_id_str, (
+        f"Expected project_id={draft_id_str!r} (fallback draft reuse), "
+        f"got {payload['project_id']!r}"
+    )
+
+    # No extra board was created
+    board_count_after = Project.objects.filter(user=user_profile).count()
+    assert board_count_after == board_count_before, (
+        f'Board count grew from {board_count_before} to {board_count_after}; '
+        f'promote should reuse the draft, not create a new Project'
+    )
+
+
+# ── ISSUE 2: create_discovery_draft uses user-local time ─────────────────────
+
+@pytest.mark.django_db
+def test_create_discovery_draft_kst_offset(user_profile):
+    """ISSUE 2: tz_offset_minutes=-540 (KST, browser getTimezoneOffset()) must
+    produce a board name whose HHMM equals UTC+9 local time — i.e. different
+    from the UTC-based name when the two times cross a minute boundary.
+
+    Strategy: freeze 'now' to a known UTC time (e.g. 2026-06-28 03:30 UTC)
+    and assert the draft name uses 12:30 (UTC+9) rather than 03:30 (UTC).
+    """
+    from unittest.mock import patch as _patch
+    from django.utils import timezone as dj_tz
+    import datetime
+
+    # A fixed UTC moment: 2026-06-28 03:30:00 UTC → KST = 2026-06-28 12:30
+    fixed_utc = datetime.datetime(2026, 6, 28, 3, 30, 0, tzinfo=datetime.timezone.utc)
+
+    with _patch.object(dj_tz, 'now', return_value=fixed_utc):
+        draft_utc = create_discovery_draft(user_profile, tz_offset_minutes=0)
+        draft_kst = create_discovery_draft(user_profile, tz_offset_minutes=-540)
+
+    # UTC draft: suffix _260628_0330
+    assert draft_utc.name == 'discovery_260628_0330', (
+        f'UTC draft name mismatch: {draft_utc.name!r}'
+    )
+    # KST draft: UTC+9 → 03:30 + 9h = 12:30 → suffix _260628_1230
+    assert draft_kst.name == 'discovery_260628_1230', (
+        f'KST draft name mismatch: {draft_kst.name!r}'
+    )
+
+
+@pytest.mark.django_db
+def test_create_discovery_draft_invalid_tz_clamps_to_utc(user_profile):
+    """ISSUE 2: out-of-range or non-integer tz_offset_minutes silently falls back
+    to UTC (no exception, valid board name).
+    """
+    import re
+    for bad_tz in [999, -999, 'bogus', None, 9999.9]:
+        draft = create_discovery_draft(user_profile, tz_offset_minutes=bad_tz)
+        assert re.match(r'^discovery_\d{6}_\d{4}$', draft.name), (
+            f'Invalid tz {bad_tz!r} produced bad name: {draft.name!r}'
+        )
+
+
+@pytest.mark.django_db
+def test_feedback_timezone_offset_minutes_accepted(auth_client, user_profile):
+    """ISSUE 2: POST /discovery/feedback/ with timezone_offset_minutes=-540 (KST)
+    succeeds and the draft name reflects UTC+9.
+
+    We freeze timezone.now() to a known UTC time so we can assert the exact name.
+    """
+    from unittest.mock import patch as _patch
+    from django.utils import timezone as dj_tz
+    import datetime
+
+    fixed_utc = datetime.datetime(2026, 6, 28, 3, 30, 0, tzinfo=datetime.timezone.utc)
+
+    with _patch.object(dj_tz, 'now', return_value=fixed_utc), \
+         _patch('apps.recommendation.views.discovery._dj_connections') as mock_conns:
+        mock_cursor = MagicMock()
+        mock_cursor.__enter__ = lambda s: s
+        mock_cursor.__exit__ = MagicMock(return_value=False)
+        mock_cursor.fetchone.return_value = (1,)
+        mock_conns.__getitem__.return_value.cursor.return_value = mock_cursor
+
+        resp = auth_client.post(
+            '/api/v1/discovery/feedback/',
+            {
+                'canonical_bld_id': 'bld_000001',
+                'action': 'like',
+                'timezone_offset_minutes': -540,
+            },
+            format='json',
+        )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    draft = Project.objects.get(project_id=payload['draft_id'], user=user_profile)
+    # KST (UTC+9): 03:30 UTC → 12:30 local → 'discovery_260628_1230'
+    assert draft.name == 'discovery_260628_1230', (
+        f'Expected KST-based name discovery_260628_1230, got {draft.name!r}'
     )

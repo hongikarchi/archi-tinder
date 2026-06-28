@@ -14,7 +14,11 @@ export async function fetchDiscoveryFeed(bufferIds = []) {
 }
 
 export async function discoveryFeedback(canonicalBldId, action, draftId) {
-  const body = { canonical_bld_id: canonicalBldId, action }
+  const body = {
+    canonical_bld_id: canonicalBldId,
+    action,
+    timezone_offset_minutes: new Date().getTimezoneOffset(),
+  }
   if (draftId) body.draft_id = draftId
   const data = await callApi('POST', '/discovery/feedback/', body)
   return {

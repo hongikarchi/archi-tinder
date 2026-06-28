@@ -206,6 +206,13 @@ class DiscoveryFeedbackView(APIView):
         bld_id = request.data.get('canonical_bld_id', '')
         action = request.data.get('action', '')
         draft_id = request.data.get('draft_id', None)
+        tz_offset_minutes = request.data.get('timezone_offset_minutes', 0)
+        try:
+            tz_offset_minutes = int(tz_offset_minutes)
+        except (TypeError, ValueError):
+            tz_offset_minutes = 0
+        if not (-840 <= tz_offset_minutes <= 840):
+            tz_offset_minutes = 0
 
         # Validate canonical_bld_id
         if not bld_id or not isinstance(bld_id, str):
@@ -262,7 +269,7 @@ class DiscoveryFeedbackView(APIView):
                     {'detail': 'verify_required', 'reason': 'board_limit_reached', 'limit': 3},
                     status=status.HTTP_403_FORBIDDEN,
                 )
-            draft = create_discovery_draft(profile)
+            draft = create_discovery_draft(profile, tz_offset_minutes=tz_offset_minutes)
 
         HARD_CAP = RC.get('discovery_like_hard_cap', 50)
         if action == 'like':
@@ -387,11 +394,13 @@ class DiscoveryPromoteView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Guest board-limit gate: promote creates a NEW non-draft Project while
-        # the draft board persists → net +1 board.  Mirror the raw count used by
-        # POST /api/v1/projects/ and DiscoveryFeedbackView (drafts included in
-        # total — consistent with the resource cap policy, not the tier logic
-        # which excludes discovery_ prefix boards for algorithm purposes).
+        # Guest board-limit gate: promote REUSES the existing draft Project
+        # (no net +1 board) — but still check the cap because a guest could
+        # reach promote with exactly 3 boards already (the draft being one of
+        # them) and we must not allow creation of a new AnalysisSession on a
+        # board that would cause confusion.  The draft counts toward the total,
+        # which keeps the policy consistent with POST /api/v1/projects/ and
+        # DiscoveryFeedbackView.
         if profile.is_guest and Project.objects.filter(user=profile).count() >= 3:
             return Response(
                 {'detail': 'verify_required', 'reason': 'board_limit_reached', 'limit': 3},
@@ -483,14 +492,23 @@ class DiscoveryPromoteView(APIView):
         prefetch_card = _initial_cards[1] if len(_initial_cards) > 1 else None
         prefetch_card_2 = _initial_cards[2] if len(_initial_cards) > 2 else None
 
-        # ── 6. Persist Project + AnalysisSession ──────────────────────────
+        # ── 6. Persist AnalysisSession (reuse the draft Project) ─────────
+        # Reuse the existing draft board so the user ends up with ONE board
+        # (their discovery_YYMMDD_HHMM board) containing both Discovery likes
+        # (already in liked_ids) and the new Taste session, rather than a
+        # second 'Discovery 취향 탐색' board.  If for some reason draft is None
+        # at this point (shouldn't happen — the not_enough_likes guard above
+        # ensures draft was resolved), create a new project as fallback.
         with transaction.atomic():
-            project = Project.objects.create(
-                user=profile,
-                name='Discovery 취향 탐색',
-                filters={},
-                raw_query=None,
-            )
+            if draft is not None:
+                project = draft
+            else:
+                project = Project.objects.create(
+                    user=profile,
+                    name='Discovery 취향 탐색',
+                    filters={},
+                    raw_query=None,
+                )
             session = AnalysisSession.objects.create(
                 user=profile,
                 project=project,
