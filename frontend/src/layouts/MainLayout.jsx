@@ -8,6 +8,7 @@ export default function MainLayout({
   userId, onLogout,
   activeProject, activeProjectId,
   currentCard, cardResetToken, sessionProgress, isSessionCompleted, isSwipeLoading, isResultLoading, swipePending,
+  keepExploringChosen,
   onSwipe, onViewResults, onExtendSession,
   onExitToNewProject, onExitToHome,
   questionTrigger = null,
@@ -69,6 +70,7 @@ export default function MainLayout({
           isLoading={isSwipeLoading}
           isResultLoading={isResultLoading}
           swipePending={swipePending}
+          keepExploringChosen={keepExploringChosen}
           projectName={activeProject?.projectName}
           onSwipe={onSwipe}
           onViewResults={onViewResults}

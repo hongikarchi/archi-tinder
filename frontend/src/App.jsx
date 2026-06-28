@@ -57,6 +57,10 @@ export default function App() {
   // Tracks in-flight recordSwipe() calls. Button gates on this so the
   // "Finish & View Report" button can't fire before the backend save settles.
   const [swipePending, setSwipePending] = useState(0)
+  // keepExploringChosen: true once the user LEFT-swipes the action card.
+  // Gates the top "Finish & View Report" button so it only appears AFTER the
+  // action card is passed, not the moment action_card_shown arrives from the backend.
+  const [keepExploringChosen, setKeepExploringChosen] = useState(false)
   const [activeProjectId, setActiveProjectId] = useState(() => {
     const id = sessionStorage.getItem('archithon_user')
     return localStorage.getItem(`archithon_activeId_${id}`) || null
@@ -294,7 +298,13 @@ export default function App() {
   }
 
   // Populate frontend card state from a session state or start response.
+  // RESUME path only: restore keepExploringChosen from backend progress so a
+  // page reload after passing the action card keeps the top button visible.
+  // Do NOT call setKeepExploringChosen here on the per-swipe path (handleSwipeCard
+  // calls setSessionProgress directly) — that would flip the button on the
+  // converging swipe BEFORE the user actually passes the action card.
   function applySessionResponse(projectId, result) {
+    setKeepExploringChosen(!!result.progress?.action_card_shown)
     setCurrentCard(result.next_image)
     setSessionProgress({
       ...result.progress,
@@ -336,6 +346,7 @@ export default function App() {
     setPendingQuestion(null)
     setIsSwipeLoading(true)
     setIsSessionCompleted(false)
+    setKeepExploringChosen(false)
     try {
       // Try to resume an existing session first (preserves progress across refresh)
       if (existingSessionId) {
@@ -443,7 +454,10 @@ export default function App() {
           finally { setIsResultLoading(false) }
         }
       } else if (action === 'dislike') {
-        // LEFT-swipe → keep exploring: advance the queue without recording a swipe.
+        // LEFT-swipe → keep exploring: mark that the user passed the action card
+        // so the top "Finish & View Report" button becomes visible.
+        setKeepExploringChosen(true)
+        // Advance the queue without recording a swipe.
         if (prefetchCard) {
           setCurrentCard(prefetchCard)
           setPrefetchCard(prefetchCard2)
@@ -638,14 +652,15 @@ export default function App() {
           // Using them would overwrite the frontend's authoritative queue and
           // cause drift (the root cause of "cards stop loading" and "same card
           // twice" bugs before this fix).
-          const _nextBlocked = !!(result.next_image && isActionCard(result.next_image))
           _dbg.nextId = result.next_image?.image_id?.slice(-8) ?? null
-          _dbg.nextBlocked = _nextBlocked
           _dbg.pf = result.prefetch_image?.image_id?.slice(-8) ?? null
           _dbg.pf2 = result.prefetch_image_2?.image_id?.slice(-8) ?? null
-          if (result.next_image && !_nextBlocked) {
+          if (result.next_image) {
             setPrefetchCard2(result.next_image)
-            if (result.next_image.image_url) preloadImage(result.next_image)
+            // Action cards have no image to preload; skip preloadImage for them.
+            if (result.next_image.image_url && !isActionCard(result.next_image)) {
+              preloadImage(result.next_image)
+            }
           } else {
             setPrefetchCard2(null)
           }
@@ -657,9 +672,12 @@ export default function App() {
           if (result.next_image) {
             // Wait for the image to download before showing the card so the
             // transition from LoadingCard lands with the image already visible.
-            const _plT0 = Date.now()
-            await preloadImage(result.next_image)
-            _dbg.preloadMs = Date.now() - _plT0
+            // Action cards have no image — skip preload but still surface the card.
+            if (!isActionCard(result.next_image)) {
+              const _plT0 = Date.now()
+              await preloadImage(result.next_image)
+              _dbg.preloadMs = Date.now() - _plT0
+            }
             setCurrentCard(result.next_image)
           } else if (!result.is_analysis_completed) {
             // Pool temporarily exhausted — fall back to getSessionState (same as page refresh).
@@ -976,6 +994,7 @@ export default function App() {
     isSwipeLoading,
     isResultLoading,
     swipePending,
+    keepExploringChosen,
     onSwipe: handleSwipeCard,
     onExtendSession: handleExtendSession,
     onViewResults: () => {

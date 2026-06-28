@@ -364,6 +364,7 @@ function DismissConfirmPopup({ onConfirm, onCancel }) {
 /* ── SwipePage ───────────────────────────────────────────────────────────── */
 export default function SwipePage({
   currentCard, cardResetToken = 0, progress, isCompleted, isLoading, isResultLoading = false, swipePending = 0,
+  keepExploringChosen = false,
   projectName, onSwipe, onViewResults, onExtendSession, // eslint-disable-line no-unused-vars
   onExitToNewProject, onExitToHome,
   questionTrigger = null,
@@ -383,15 +384,13 @@ export default function SwipePage({
   const phase            = progress?.phase
   const filter_relaxed   = progress?.filter_relaxed || false
   const confidence       = progress?.confidence ?? null
-  // isAt100: show the top Finish button only after the action card has been
-  // offered (progress.action_card_shown becomes true at first convergence) AND
-  // the action card is no longer the current card (user left-swiped it to keep
-  // exploring). While the action card IS current the button stays hidden so the
-  // two don't appear simultaneously. After the left-swipe, action_card_shown
-  // stays true and currentCard is a real reference card → button persists.
-  // isActionCard(null) === false, so pool-exhaustion (currentCard=null) is also
-  // handled correctly by the || isCompleted escape hatch.
-  const isAt100 = (!!progress?.action_card_shown && !isActionCard(currentCard)) || isCompleted
+  // isAt100: show the top "Finish & View Report" button only after the user has
+  // explicitly LEFT-swiped the action card (keepExploringChosen) or on pool
+  // exhaustion / analysis completion (isCompleted). The button must NOT appear
+  // while the action card itself is the currentCard — it would compete visually.
+  // keepExploringChosen is set in App.jsx's action-card dislike branch and
+  // restored from backend progress on page reload (applySessionResponse).
+  const isAt100 = keepExploringChosen || isCompleted
 
   function onTinderSwipe(dir) {
     // F4: intercept first-ever left swipe to show dismiss tutorial.
