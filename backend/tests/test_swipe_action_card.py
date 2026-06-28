@@ -1,17 +1,20 @@
 """
-test_swipe_action_card.py -- TASTE-FLOW: action-card behaviour on convergence.
+test_swipe_action_card.py -- TASTE-FLOW: action-card emit-once behaviour.
 
 Tests:
   (1) Converged session returns next_image as action card (card_type='action',
       canonical_bld_id='__action_card__') and is_analysis_completed is NOT True.
+      Sets action_card_shown=True on the session.
   (2) '__action_card__' pass-swipe (LEFT = dislike) returns the next real card
       without recording a building like/dislike.
   (3) Guard: '__action_card__' swipe does NOT hit buildings-DB existence check.
   (4) Guard: '__action_card__' pass-swipe does NOT append to like_vectors.
   (5) '__action_card__' like-swipe (RIGHT = go to report) returns
       is_analysis_completed=True without erroring.
-  (6) Re-offer: after a pass-swipe and one more real swipe, when the session
-      is still converged, the action card is offered again.
+  (6) EMIT-ONCE: after a pass-swipe and one more real swipe, when the session
+      is still converged and action_card_shown=True, a REAL card is served —
+      NOT the action card again.  (FLIPPED from old re-offer test.)
+  (7) action_card_shown flag is set to True after first convergence swipe.
 
 Root-cause note: check_convergence is gated on session.phase == 'analyzing'.
 Sessions start in 'exploring'; transition requires >=4 likes
@@ -431,19 +434,20 @@ def test_action_card_like_swipe_returns_completed(auth_client, user_profile):
 
 
 # ---------------------------------------------------------------------------
-# (6) Re-offer: action card is served again after pass + re-convergence
+# (6) EMIT-ONCE: action card is NOT re-offered after pass + subsequent swipe
 # ---------------------------------------------------------------------------
 
 @pytest.mark.django_db
-def test_action_card_is_reoffered_after_pass_if_still_converged(
+def test_action_card_is_NOT_reoffered_after_pass_if_still_converged(
     auth_client, user_profile,
 ):
-    """After a pass-swipe and one more real swipe, if the session is still
-    converged (phase stays 'converged'), the action card must be offered again.
+    """EMIT-ONCE: after a pass-swipe and one more real swipe, if the session is still
+    converged (phase stays 'converged') and action_card_shown is True, a REAL card
+    must be served — the action card must NOT reappear.
 
-    Because the action-card pass-swipe does NOT reset session.phase back to
-    'analyzing', the card-selection at phase=='converged' re-emits the action card
-    on the very next real swipe without needing check_convergence to re-fire.
+    Old behaviour (action card re-offered on every converged swipe) is explicitly
+    reversed: subsequent converged swipes go through the converged-continue path
+    (compute_mmr_next / farthest-point) once action_card_shown=True.
     """
     project, session_id = _create_session(auth_client, user_profile)
 
@@ -458,7 +462,7 @@ def test_action_card_is_reoffered_after_pass_if_still_converged(
             )
         assert resp1.status_code == 200, resp1.json()
         assert resp1.json()['next_image']['canonical_bld_id'] == _ACTION_CARD_ID, (
-            f"Expected action card from convergence, got: {resp1.json()['next_image']}"
+            f"Expected action card on first convergence, got: {resp1.json()['next_image']}"
         )
 
         # Pass the action card → should get a real card back
@@ -469,21 +473,110 @@ def test_action_card_is_reoffered_after_pass_if_still_converged(
         real_bid = real_card['canonical_bld_id']
         assert real_bid != _ACTION_CARD_ID, 'Pass-swipe must not re-offer action card immediately'
 
-        # Swipe that real card — phase is still 'converged' (pass-swipe did not
-        # reset it), so card-selection must emit the action card again without
-        # needing check_convergence to re-fire.
+        # Swipe that real card — phase is still 'converged' and action_card_shown=True.
+        # The card-selection must serve ANOTHER real card, NOT the action card.
         resp2 = _swipe(auth_client, session_id, real_bid, 'dislike')
     finally:
         _stop_patches(patchers)
 
     assert resp2.status_code == 200, resp2.json()
     data2 = resp2.json()
-    assert data2['is_analysis_completed'] is False, (
-        'Session must remain interactive after pass-swipe + real swipe'
-    )
     next_img2 = data2['next_image']
-    assert next_img2 is not None, 'Must return next_image after real swipe in converged state'
-    assert next_img2.get('canonical_bld_id') == _ACTION_CARD_ID, (
-        'Action card must be re-offered when phase is still converged after pass-swipe. '
-        f'Got: {next_img2.get("canonical_bld_id")!r}'
+    # The action card must NOT reappear — a real building card or None (pool exhausted).
+    if next_img2 is not None:
+        assert next_img2.get('canonical_bld_id') != _ACTION_CARD_ID, (
+            'Action card must NOT be re-offered after action_card_shown=True. '
+            f'Got: {next_img2.get("canonical_bld_id")!r}'
+        )
+
+
+# ---------------------------------------------------------------------------
+# (7) action_card_shown flag is set to True after first convergence swipe
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+def test_action_card_shown_flag_set_after_first_convergence(
+    auth_client, user_profile,
+):
+    """action_card_shown must be False before convergence and True after the
+    first converged swipe emits the action card.
+    """
+    from apps.recommendation.models import AnalysisSession
+
+    project, session_id = _create_session(auth_client, user_profile)
+
+    patchers = _apply_patches()
+    try:
+        # Reach 'analyzing'
+        _reach_analyzing(auth_client, session_id, start_idx=1)
+
+        # Flag must be False before convergence
+        session_before = AnalysisSession.objects.get(session_id=session_id)
+        assert session_before.action_card_shown is False, (
+            'action_card_shown must be False before convergence'
+        )
+
+        # Trigger convergence — action card emitted, flag set True
+        with patch(f'{_ENGINE}.check_convergence', return_value=True):
+            resp = _swipe(
+                auth_client, session_id, 'B00005', 'like',
+                idempotency_key='converge_trigger_7',
+            )
+        assert resp.status_code == 200, resp.json()
+        assert resp.json()['next_image']['canonical_bld_id'] == _ACTION_CARD_ID
+    finally:
+        _stop_patches(patchers)
+
+    session_after = AnalysisSession.objects.get(session_id=session_id)
+    assert session_after.action_card_shown is True, (
+        'action_card_shown must be True after the first converged swipe emits the action card'
+    )
+
+
+# ---------------------------------------------------------------------------
+# (8) progress['action_card_shown'] reflects the session flag
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+def test_progress_action_card_shown_flag_in_response(
+    auth_client, user_profile,
+):
+    """progress['action_card_shown'] must be False before convergence and True
+    after the first converged swipe emits the action card.
+
+    Both the swipe response and the session-state response build progress via
+    _progress(), so this asserts the flag flows through to the API payload.
+    """
+    project, session_id = _create_session(auth_client, user_profile)
+
+    patchers = _apply_patches()
+    try:
+        # Reach 'analyzing' (4 likes)
+        _reach_analyzing(auth_client, session_id, start_idx=1)
+
+        # Before convergence: action_card_shown must be False in progress
+        resp_before = _swipe(
+            auth_client, session_id, 'B00005', 'dislike',
+            idempotency_key='pre_converge_8',
+        )
+        assert resp_before.status_code == 200, resp_before.json()
+        assert resp_before.json()['progress']['action_card_shown'] is False, (
+            "progress['action_card_shown'] must be False before convergence"
+        )
+
+        # Trigger convergence — action card emitted, flag set True
+        with patch(f'{_ENGINE}.check_convergence', return_value=True):
+            resp_converge = _swipe(
+                auth_client, session_id, 'B00006', 'like',
+                idempotency_key='converge_trigger_8',
+            )
+        assert resp_converge.status_code == 200, resp_converge.json()
+        assert resp_converge.json()['next_image']['canonical_bld_id'] == _ACTION_CARD_ID
+    finally:
+        _stop_patches(patchers)
+
+    # After convergence: flag must be True in progress
+    assert resp_converge.json()['progress']['action_card_shown'] is True, (
+        "progress['action_card_shown'] must be True after the first converged swipe "
+        "emits the action card"
     )

@@ -112,6 +112,10 @@ class AnalysisSession(models.Model):
     question_bias_vector = models.JSONField(null=True, blank=True)   # accumulated 384-d soft bias from Yes/No answers; None = no bias
     # ALGO-QCARD Phase 3: inter-swipe latency rolling window for hyper-positive detection
     recent_latencies = models.JSONField(default=list)   # rolling inter-swipe latencies (ms), newest last; cap RC['recent_latencies_cap']
+    # TASTE-FLOW: action card is emitted exactly once per session (first convergence).
+    # After the first emission (shown=True) subsequent converged swipes serve real cards.
+    # Never reset on 'keep exploring' (extend path) — prompt was already shown.
+    action_card_shown = models.BooleanField(default=False)
     created_at        = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

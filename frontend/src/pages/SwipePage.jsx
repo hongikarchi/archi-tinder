@@ -364,7 +364,7 @@ function DismissConfirmPopup({ onConfirm, onCancel }) {
 /* ── SwipePage ───────────────────────────────────────────────────────────── */
 export default function SwipePage({
   currentCard, cardResetToken = 0, progress, isCompleted, isLoading, isResultLoading = false, swipePending = 0,
-  projectName, onSwipe, onViewResults, onExtendSession,
+  projectName, onSwipe, onViewResults, onExtendSession, // eslint-disable-line no-unused-vars
   onExitToNewProject, onExitToHome,
   questionTrigger = null,
   onQuestionAnswer,
@@ -380,19 +380,18 @@ export default function SwipePage({
   const [showExitConfirm, setShowExitConfirm] = useState(false)
   const [showDismissConfirm, setShowDismissConfirm] = useState(false)
 
-  const like_count       = progress?.like_count    ?? 0
   const phase            = progress?.phase
   const filter_relaxed   = progress?.filter_relaxed || false
   const confidence       = progress?.confidence ?? null
-  const swipeCount       = progress?.swipe_count ?? progress?.current_round ?? 0
-  const targetSwipes     = Math.max(1, progress?.target_swipes ?? 10)
-  // Safety floor: once the user has swiped 5 beyond the product target window,
-  // expose the Finish button regardless of backend convergence state. Backend
-  // can withhold `phase='converged'` indefinitely when the recent-likes gate
-  // blocks it (e.g. dislike streak post-target) — without this floor the user
-  // is stranded until pool exhaustion.
-  const beyondTargetFloor = swipeCount >= targetSwipes + 5
-  const isAt100 = !isCompleted && (phase === 'converged' || beyondTargetFloor)
+  // isAt100: show the top Finish button only after the action card has been
+  // offered (progress.action_card_shown becomes true at first convergence) AND
+  // the action card is no longer the current card (user left-swiped it to keep
+  // exploring). While the action card IS current the button stays hidden so the
+  // two don't appear simultaneously. After the left-swipe, action_card_shown
+  // stays true and currentCard is a real reference card → button persists.
+  // isActionCard(null) === false, so pool-exhaustion (currentCard=null) is also
+  // handled correctly by the || isCompleted escape hatch.
+  const isAt100 = (!!progress?.action_card_shown && !isActionCard(currentCard)) || isCompleted
 
   function onTinderSwipe(dir) {
     // F4: intercept first-ever left swipe to show dismiss tutorial.
@@ -480,8 +479,10 @@ export default function SwipePage({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isLoading, currentCard, showTutorial, showExitConfirm, showDismissConfirm, questionTrigger]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (isCompleted) {
-    const canContinue = !!progress?.can_continue
+  if (!isLoading && !currentCard) {
+    // Pool exhausted (or is_analysis_completed with no next card).
+    // Top "Finish & View Report" button (isAt100) is always visible here.
+    // Show a brief inline prompt; no full-screen takeover.
     return (
       <div style={{
         height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
@@ -490,114 +491,90 @@ export default function SwipePage({
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        justifyContent: 'center',
-        padding: 24,
-        gap: 16,
+        padding: '20px 16px',
+        position: 'relative',
       }}>
-        <div style={{
-          width: CARD_WIDTH,
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 20,
-          padding: '32px 24px',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 12,
-          boxShadow: '0 25px 50px rgba(0,0,0,0.4)',
-        }}>
-          <div style={{ fontSize: 56 }}>✨</div>
-          <h2 style={{
-            color: 'var(--color-text)',
-            fontSize: 22,
-            fontWeight: 700,
-            margin: 0,
-            textAlign: 'center',
-          }}>
-            Your taste is found
-          </h2>
-          <p style={{
-            color: 'var(--color-text-2)',
-            fontSize: 14,
-            textAlign: 'center',
-            margin: 0,
-            lineHeight: 1.5,
-          }}>
-            {projectName ? `"${projectName}"` : 'Project'} swiping complete · ♥ {like_count} saved
-          </p>
-          <p style={{
-            color: 'var(--color-text-muted)',
-            fontSize: 12,
-            textAlign: 'center',
-            margin: '4px 0 0',
-            lineHeight: 1.5,
-          }}>
-            {canContinue
-              ? 'View your persona report, or keep exploring more buildings.'
-              : 'Your persona report is ready.'}
-          </p>
+        {/* Exit button */}
+        <button
+          onClick={() => setShowExitConfirm(true)}
+          aria-label="Exit session"
+          style={{
+            position: 'absolute', top: 12, left: 16,
+            width: 32, height: 32, borderRadius: '50%',
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: 'var(--color-text-dim)', cursor: 'pointer',
+            zIndex: 10,
+          }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="1 4 1 10 7 10" />
+            <path d="M3.51 15a9 9 0 1 0 .49-4.95" />
+          </svg>
+        </button>
+
+        {/* Header / confidence bar */}
+        <div style={{ textAlign: 'center', width: '100%' }}>
+          <h1 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 14px', letterSpacing: '-0.01em' }}>
+            {projectName
+              ? <span style={{ color: 'var(--color-text)' }}>{projectName}</span>
+              : <span style={{ color: 'var(--color-text)', letterSpacing: '0.2em' }}>ARCHIBE</span>}
+          </h1>
+          <div style={{ maxWidth: CARD_WIDTH, margin: '0 auto' }}>
+            <ConfidenceBar value={confidence} phase={phase} progress={progress} />
+          </div>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: CARD_WIDTH }}>
-          <button
-            onClick={onViewResults}
-            disabled={isResultLoading}
-            style={{
-              padding: '14px 24px',
-              borderRadius: 14,
-              background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
-              color: '#fff',
-              fontSize: 15,
-              fontWeight: 700,
-              border: 'none',
-              cursor: isResultLoading ? 'default' : 'pointer',
-              fontFamily: 'inherit',
-              boxShadow: '0 4px 20px rgba(236,72,153,0.35)',
-              opacity: isResultLoading ? 0.6 : 1,
-              transition: 'opacity 0.2s',
-              minHeight: 44,
-            }}
-          >
-            {isResultLoading ? 'Preparing report...' : 'View persona report →'}
-          </button>
-          {canContinue && (
+        {/* Finish button + empty-deck notice */}
+        <div style={{
+          flex: 1,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          gap: 16, width: '100%',
+        }}>
+          <div style={{ width: CARD_WIDTH, display: 'flex', flexDirection: 'column', gap: 12 }}>
             <button
-              onClick={onExtendSession}
-              disabled={isLoading || isResultLoading}
+              onClick={onViewResults}
+              disabled={isResultLoading || swipePending > 0}
               style={{
-                padding: '12px 24px',
+                width: '100%',
+                padding: '13px 20px',
                 borderRadius: 14,
-                background: 'var(--color-surface-2)',
-                color: 'var(--color-text)',
+                background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
+                color: '#fff',
                 fontSize: 14,
-                fontWeight: 600,
-                border: '1px solid var(--color-border)',
-                cursor: (isLoading || isResultLoading) ? 'default' : 'pointer',
+                fontWeight: 700,
+                border: 'none',
+                cursor: (isResultLoading || swipePending > 0) ? 'default' : 'pointer',
                 fontFamily: 'inherit',
-                opacity: (isLoading || isResultLoading) ? 0.6 : 1,
-                transition: 'opacity 0.2s, background 0.15s',
+                boxShadow: '0 4px 16px rgba(236,72,153,0.35)',
+                opacity: (isResultLoading || swipePending > 0) ? 0.6 : 1,
+                transition: 'opacity 0.2s',
                 minHeight: 44,
               }}
             >
-              Keep exploring
+              {isResultLoading ? 'Preparing report...' : 'Finish & View Report →'}
             </button>
-          )}
+            <p style={{
+              color: 'var(--color-text-dim)',
+              fontSize: 13,
+              textAlign: 'center',
+              margin: 0,
+              lineHeight: 1.5,
+            }}>
+              더 볼 카드가 없어요 · 위에서 결과를 확인하세요
+            </p>
+          </div>
         </div>
-      </div>
-    )
-  }
 
-  if (!isLoading && !currentCard) {
-    return (
-      <div style={{
-        height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))', overflow: 'hidden', background: 'var(--color-bg)', display: 'flex',
-        flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        padding: 24, gap: 12,
-      }}>
-        <div style={{ fontSize: 48 }}>🏛️</div>
-        <p style={{ color: 'var(--color-text-dim)', fontSize: 14, textAlign: 'center' }}>
-          No more buildings available.<br />Try starting a new session with different filters.
-        </p>
+        {showExitConfirm && (
+          <ExitConfirmPopup
+            onNewProject={() => { setShowExitConfirm(false); onExitToNewProject?.() }}
+            onHome={() => { setShowExitConfirm(false); onExitToHome?.() }}
+            onCancel={() => setShowExitConfirm(false)}
+          />
+        )}
       </div>
     )
   }

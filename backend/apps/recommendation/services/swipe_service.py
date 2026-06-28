@@ -862,7 +862,8 @@ def handle_swipe_normal(
             _action_card_accepted = True
         elif _is_action_card and action == 'dislike':
             # User wants to keep exploring (LEFT swipe = pass / dislike on action card):
-            # pick the next real card.
+            # pick the next real card.  action_card_shown is already True (was set when
+            # the action card was first emitted), so we never re-offer the prompt.
             next_bid = engine.compute_mmr_next(
                 session.pool_ids, session.exposed_ids, pool_embeddings,
                 session.like_vectors, session.current_round,
@@ -871,14 +872,29 @@ def handle_swipe_normal(
             ) if session.like_vectors else engine.farthest_point_from_pool(
                 session.pool_ids, session.exposed_ids, pool_embeddings
             )
-            if not next_bid:
-                # Pool exhausted — re-offer the action card (idempotent)
-                next_bid = _ACTION_CARD_ID
+            # Pool exhausted — leave next_bid as None; view will set is_analysis_completed.
+            # Do NOT re-offer the action card: the user already dismissed it once.
             _action_card_accepted = False
         elif session.phase == 'converged':
-            # Taste is converged: offer the action card instead of force-ending.
-            next_bid = _ACTION_CARD_ID
-            _action_card_accepted = False
+            # TASTE-FLOW emit-once: show the action card only the FIRST time
+            # convergence is reached.  Once action_card_shown is True (whether the
+            # user passed or accepted it) serve real cards via the normal converged-
+            # continue path so the prompt never re-appears.
+            if not session.action_card_shown:
+                next_bid = _ACTION_CARD_ID
+                session.action_card_shown = True
+                _action_card_accepted = False
+            else:
+                # Already shown once — select the next real card.
+                _action_card_accepted = False
+                next_bid = engine.compute_mmr_next(
+                    session.pool_ids, session.exposed_ids, pool_embeddings,
+                    session.like_vectors, session.current_round,
+                    question_bias_vector=session.question_bias_vector,
+                    multimodal_floor=session.multimodal_floor,
+                ) if session.like_vectors else engine.farthest_point_from_pool(
+                    session.pool_ids, session.exposed_ids, pool_embeddings
+                )
         elif session.phase == 'exploring':
             _action_card_accepted = False
             exposed_set = set(session.exposed_ids)
@@ -977,6 +993,7 @@ def handle_swipe_normal(
             'question_cooldown', 'q_card_consecutive_dislikes',
             'question_count', 'question_bias_vector',
             'recent_latencies',
+            'action_card_shown',
         ])
 
         # Save copies for prefetch calculation outside transaction
