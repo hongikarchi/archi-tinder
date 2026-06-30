@@ -337,6 +337,7 @@ export default function App() {
           ...p,
           sessionId: result.session_id,
           backendId: result.project_id || p.backendId || null,
+          projectName: result.name || p.projectName,
         }
       }))
     }

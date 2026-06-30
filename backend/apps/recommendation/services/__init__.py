@@ -88,9 +88,15 @@ from .embeddings import embed_visual_description  # noqa: F401
 # ---------------------------------------------------------------------------
 from .generation import (  # noqa: F401
     _PERSONA_PROMPT,
+    _NAME_FILTER_PRIORITY,
+    _sanitise_board_name,
+    _deterministic_board_name,
+    _dedup_board_name,
+    _gemini_board_name_raw,
     generate_visual_description,
     generate_persona_report,
     generate_persona_image,
+    generate_taste_board_name,
 )
 
 # ---------------------------------------------------------------------------
@@ -143,5 +149,6 @@ __all__ = [
     'generate_visual_description',
     'generate_persona_report',
     'generate_persona_image',
+    'generate_taste_board_name',
     'rerank_candidates',
 ]

@@ -13,6 +13,7 @@ Mock-patch discipline (CRITICAL):
 """
 import logging
 from collections import defaultdict
+from threading import Thread
 
 from django.conf import settings
 from django.core.cache import cache
@@ -56,7 +57,11 @@ def create_session(request, profile, recent_cutoff):
     lives here verbatim from the original view body.
     """
     project_id      = request.data.get('project_id')
-    project_name    = (request.data.get('name') or '').strip()[:100] or 'Untitled'
+    _raw_name       = (request.data.get('name') or '').strip()[:100]
+    # Detect placeholder names that should be replaced with an auto-generated name.
+    _PLACEHOLDER_NAMES = {'', 'untitled', 'untitled project'}
+    _is_placeholder_name = _raw_name.lower() in _PLACEHOLDER_NAMES
+    project_name    = _raw_name or 'Untitled'
     filters         = request.data.get('filters') or {}
 
     # Validate and sanitize filter_priority: must be a list of known filter key strings, max 10
@@ -153,6 +158,7 @@ def create_session(request, profile, recent_cutoff):
                 return Response({
                     'session_id': str(existing_session.session_id),
                     'project_id': str(existing_session.project.project_id),
+                    'name': existing_session.project.name,
                     'session_status': existing_session.status,
                     'next_image': first_card,
                     'prefetch_image': None,
@@ -212,6 +218,30 @@ def create_session(request, profile, recent_cutoff):
     elif active_filters.get('image_focus') not in _VALID_IMAGE_FOCUS:
         active_filters.pop('image_focus', None)
 
+    # TASTE-BOARD-NAME: spawn concurrent name-generation thread when the client
+    # sent a placeholder name (empty / 'Untitled' / 'Untitled Project').
+    # The thread does ONLY the Gemini network call (pure CPU + network, no ORM).
+    # All DB work (deterministic fallback, dedup) runs on the MAIN thread after
+    # join, where the transactional DB connection is valid.
+    # Only runs when project is None (new project; resumes already have a name).
+    _gemini_name_result = ['']  # mutable cell — '' means Gemini failed/skipped
+    _name_thread = None
+    if _is_placeholder_name and project is None:
+        _filters_for_name = dict(active_filters)
+        _filters_for_name.pop('image_focus', None)
+        _rq_for_name = raw_query
+
+        def _name_worker():
+            try:
+                _gemini_name_result[0] = services._gemini_board_name_raw(
+                    _filters_for_name, _rq_for_name,
+                )
+            except Exception:
+                logger.exception('Board auto-name Gemini thread failed; will use fallback')
+
+        _name_thread = Thread(target=_name_worker, daemon=True)
+        _name_thread.start()
+
     with stage('create_pool', filter_keys=','.join(sorted(active_filters.keys()))):
         pool_ids, pool_scores, current_pool_tier = engine.create_pool_with_relaxation(
             active_filters, filter_priority, seed_ids,
@@ -267,6 +297,22 @@ def create_session(request, profile, recent_cutoff):
         # when create_pool_with_relaxation fails or returns empty (404 branch above).
         # Fix 2: wrap both creates in a savepoint so a session-insert failure
         # rolls back the project create, leaving no orphan row.
+
+        # TASTE-BOARD-NAME: join the Gemini thread (max 12 s wait), then run
+        # deterministic fallback + dedup on the MAIN thread (valid DB connection).
+        # By the time we reach here, pool build + initial_batch are done
+        # (~200-500 ms), so in the common case the 8 s Gemini call is already done.
+        if _name_thread is not None:
+            _name_thread.join(timeout=12)
+            # Main thread: pick Gemini result or deterministic fallback, then dedup.
+            from apps.recommendation.services.generation import (  # noqa: PLC0415
+                _deterministic_board_name, _dedup_board_name,
+            )
+            _filters_no_focus = dict(active_filters)
+            _filters_no_focus.pop('image_focus', None)
+            _base = _gemini_name_result[0] or _deterministic_board_name(_filters_no_focus)
+            project_name = _dedup_board_name(_base, profile)
+
         with transaction.atomic():
             if project is None:
                 project = Project.objects.create(
@@ -348,6 +394,7 @@ def create_session(request, profile, recent_cutoff):
     return Response({
         'session_id':      str(session.session_id),
         'project_id':      str(project.project_id),
+        'name':            project.name,
         'session_status':  session.status,
         'next_image':      first_card,
         'prefetch_image':  prefetch_card,
