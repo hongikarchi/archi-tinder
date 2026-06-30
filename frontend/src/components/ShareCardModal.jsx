@@ -8,16 +8,41 @@
  * app themes. The card inside is always white PAPER (#FFFFFF) + dark INK —
  * that is intentional (printed-card metaphor, NOT a bug).
  *
- * QR sharing is NOT functional. The QR shown is a visual stub only.
- * See FakeQr.jsx.
+ * The QR on the BusinessCard is real and scannable — it encodes
+ * `${window.location.origin}/user/${user.user_id}`. See ProfileQr.jsx.
  *
  * Usage:
  *   <ShareCardModal user={user} onClose={() => setOpen(false)} />
  */
 
+import { useState } from 'react'
 import BusinessCard from './profile/BusinessCard.jsx'
 
 export default function ShareCardModal({ user, onClose }) {
+  const [copied, setCopied] = useState(false)
+
+  const profileUrl = user?.user_id
+    ? `${window.location.origin}/user/${user.user_id}`
+    : window.location.href
+
+  const canNativeShare = typeof navigator !== 'undefined' && !!navigator.share
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(profileUrl)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch { /* silent — clipboard blocked */ }
+  }
+
+  async function handleNativeShare() {
+    const shareData = {
+      title: user?.display_name ? `${user.display_name} — archibe 프로필` : 'archibe 프로필',
+      url: profileUrl,
+    }
+    try { await navigator.share(shareData) } catch { /* user cancelled */ }
+  }
+
   return (
     <div
       role="dialog"
@@ -105,7 +130,7 @@ export default function ShareCardModal({ user, onClose }) {
           <BusinessCard user={user} />
         </div>
 
-        {/* Instructional footer — themed text */}
+        {/* Instructional footer — themed text + share actions */}
         <div style={{
           padding: '4px 20px 20px',
           textAlign: 'center',
@@ -120,14 +145,61 @@ export default function ShareCardModal({ user, onClose }) {
             명함을 탭하면 뒤집힙니다
           </p>
           <p style={{
-            margin: 0,
+            margin: '0 0 14px',
             fontSize: 11,
             color: 'var(--color-text-dim)',
             lineHeight: 1.4,
           }}>
-            {/* 공유 준비 중 / not yet scannable */}
-            QR 공유는 준비 중입니다
+            QR을 스캔해 프로필을 공유하세요
           </p>
+
+          {/* Share action buttons */}
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+            {/* Copy link — always present */}
+            <button
+              type="button"
+              onClick={handleCopy}
+              style={{
+                flex: 1,
+                maxWidth: 160,
+                height: 40,
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--color-border-soft)',
+                background: copied ? 'var(--accent-1)' : 'transparent',
+                color: copied ? '#fff' : 'var(--color-text)',
+                fontSize: 13,
+                fontWeight: 600,
+                fontFamily: 'inherit',
+                cursor: 'pointer',
+                transition: 'background var(--motion-normal) var(--motion-ease), color var(--motion-normal) var(--motion-ease)',
+              }}
+            >
+              {copied ? '복사됨' : '링크 복사'}
+            </button>
+
+            {/* Native share — progressive enhancement (mobile only) */}
+            {canNativeShare && (
+              <button
+                type="button"
+                onClick={handleNativeShare}
+                style={{
+                  flex: 1,
+                  maxWidth: 160,
+                  height: 40,
+                  borderRadius: 'var(--radius-md)',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
+                  color: '#fff',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  fontFamily: 'inherit',
+                  cursor: 'pointer',
+                }}
+              >
+                공유
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
