@@ -292,7 +292,7 @@ def _maybe_multi_axis_probe(filters, filter_priority, user_turn_count, parsed_re
     return result
 
 
-def parse_query(conversation_history, language=None):
+def parse_query(conversation_history, language=None, prior_filters=None):
     """
     Chat phase Gemini call (Sprint 1 rewrite per Investigation 06).
 
@@ -306,6 +306,12 @@ def parse_query(conversation_history, language=None):
         language: optional 'ko' or 'en' (UserProfile.language). When set, forces
             `reply` and `probe_question` to that language regardless of message language.
             None (default) keeps the infer-from-message behaviour.
+        prior_filters: optional dict of accumulated filters from previous turns.
+            When provided, injected into the Gemini request as context so the LLM
+            can return a filter_delta (set/remove) instead of a full filters dict.
+            The final filters are computed deterministically:
+            final = prior_filters + delta.set - delta.remove.
+            None (default) = first turn, no prior context.
         Backward compat: if a bare string is passed (legacy caller), it is wrapped
             as [{'role': 'user', 'text': conversation_history}].
 
@@ -356,7 +362,9 @@ def parse_query(conversation_history, language=None):
     # Use _svc.parse_query_stage1 so mock.patch/patch.object on services.parse_query_stage1
     # is visible here at call time (late-bound via the module object).
     if settings.RECOMMENDATION.get('stage_decouple_enabled', False):
-        return _svc.parse_query_stage1(conversation_history, language=language)
+        return _svc.parse_query_stage1(
+            conversation_history, language=language, prior_filters=prior_filters,
+        )
     # else: fall through to the original single-call path (default, backward compat)
     # Backward compat: accept bare string (legacy callers pass query_text directly)
     if isinstance(conversation_history, str):
@@ -380,6 +388,7 @@ def parse_query(conversation_history, language=None):
         'probe_question': None,
         'reply': '이해를 잘 못 했어요. 일단 이 쪽으로 찾아볼게요.',
         'filters': dict(_empty_filters),
+        'filter_delta': {'set': {}, 'remove': []},
         'filter_priority': [],
         'image_focus': None,
         'raw_query': first_user_text,
@@ -412,6 +421,21 @@ def parse_query(conversation_history, language=None):
             text = turn.get('text', '')
             contents.append(
                 types.Content(role=role, parts=[types.Part.from_text(text=text)])
+            )
+
+        # FILTER-DELTA: inject prior_filters as a system-side context line so the
+        # LLM knows the accumulated filter state and can return only the delta.
+        # Appended as a trailing 'user' turn so it rides after the conversation
+        # history but before the model responds. The model's instructions tell it
+        # to output filter_delta (set/remove) when this context line is present.
+        if prior_filters:
+            import json as _json
+            _prior_ctx = (
+                f'현재까지 확정된 필터(JSON): {_json.dumps(prior_filters, ensure_ascii=False)}'
+                f' — 사용자의 새 메시지는 이걸 다듬는 변경(델타)이다.'
+            )
+            contents.append(
+                types.Content(role='user', parts=[types.Part.from_text(text=_prior_ctx)])
             )
 
         # IMP-5: explicit context caching branch (flag-gated, default OFF)
@@ -549,8 +573,36 @@ def parse_query(conversation_history, language=None):
             )
             probe_needed = False
 
+        # FILTER-DELTA: deterministic apply of prior_filters + delta.
+        # Priority:
+        #   1. If filter_delta present: final = prior + delta.set - delta.remove
+        #   2. Else if filters present: final = {**(prior or {}), **llm_filters}
+        #      (backward-compat for first turns or models that skip filter_delta)
+        # After merging, run existing _repair_required_slate so result has a slate.
+        _filter_delta = data.get('filter_delta') or {}
+        _delta_set = _filter_delta.get('set') or {}
+        _delta_remove = _filter_delta.get('remove') or []
+        # Allowlist: only the 10 known axes survive into delta
+        _VALID_AXES = frozenset({
+            'location_country', 'location_city', 'program', 'material', 'style',
+            'year_min', 'year_max', 'atmosphere', 'color_tone', 'typology_primary',
+        })
+        _delta_set = {k: v for k, v in _delta_set.items() if k in _VALID_AXES and v is not None}
+        _delta_remove = [a for a in _delta_remove if isinstance(a, str) and a in _VALID_AXES]
+
+        if _filter_delta:
+            # Follow-up turn: apply delta to prior
+            filters = dict(prior_filters or {})
+            filters.update(_delta_set)
+            for _axis in _delta_remove:
+                filters.pop(_axis, None)
+        else:
+            # First turn or LLM skipped filter_delta: merge prior + full LLM filters
+            _llm_filters = data.get('filters') or dict(_empty_filters)
+            filters = dict(prior_filters or {})
+            filters.update({k: v for k, v in _llm_filters.items() if v is not None})
+
         # Sanitize program value (case-insensitive -> canonical form)
-        filters = data.get('filters') or dict(_empty_filters)
         if filters.get('program'):
             program = filters['program']
             if program not in PROGRAM_VALUES:
@@ -562,6 +614,8 @@ def parse_query(conversation_history, language=None):
         # slate field. Diffuse prompts get a broad Contemporary default.
         raw_priority = data.get('filter_priority') or []
         filters, filter_priority = _repair_required_slate(filters, raw_priority)
+        # Expose validated delta for transparency (callers may log/inspect it)
+        filter_delta = {'set': _delta_set, 'remove': _delta_remove}
 
         # raw_query: spec §3 says always verbatim first user message
         raw_query = data.get('raw_query') or first_user_text
@@ -578,6 +632,7 @@ def parse_query(conversation_history, language=None):
             'probe_question': data.get('probe_question') if probe_needed else None,
             'reply': data.get('reply', ''),
             'filters': filters,
+            'filter_delta': filter_delta,
             'filter_priority': filter_priority,
             'image_focus': image_focus,
             'raw_query': raw_query,
@@ -619,7 +674,7 @@ def parse_query(conversation_history, language=None):
         return _fallback
 
 
-def parse_query_stage1(conversation_history, language=None):
+def parse_query_stage1(conversation_history, language=None, prior_filters=None):
     """IMP-6 Commit 2: Stage 1 Gemini call -- USER-BLOCKING portion of the split.
 
     Same as parse_query() but uses response_schema to exclude visual_description,
@@ -637,6 +692,12 @@ def parse_query_stage1(conversation_history, language=None):
         language: optional 'ko' or 'en' (UserProfile.language). When set, forces
             `reply` and `probe_question` to that language regardless of message language.
             None (default) keeps the infer-from-message behaviour.
+        prior_filters: optional dict of accumulated filters from previous turns.
+            When provided, injected into the Gemini request as context so the LLM
+            can return a filter_delta (set/remove) instead of a full filters dict.
+            The final filters are computed deterministically:
+            final = prior_filters + delta.set - delta.remove.
+            None (default) = first turn, no prior context.
 
     Returns:
         Same dict shape as parse_query(), with visual_description always None.
@@ -667,6 +728,7 @@ def parse_query_stage1(conversation_history, language=None):
         'probe_question': None,
         'reply': '이해를 잘 못 했어요. 일단 이 쪽으로 찾아볼게요.',
         'filters': dict(_empty_filters),
+        'filter_delta': {'set': {}, 'remove': []},
         'filter_priority': [],
         'image_focus': None,
         'raw_query': first_user_text,
@@ -699,6 +761,21 @@ def parse_query_stage1(conversation_history, language=None):
             text = turn.get('text', '')
             contents.append(
                 types.Content(role=role, parts=[types.Part.from_text(text=text)])
+            )
+
+        # FILTER-DELTA: inject prior_filters as a system-side context line so the
+        # LLM knows the accumulated filter state and can return only the delta.
+        # Appended as a trailing 'user' turn so it rides after the conversation
+        # history but before the model responds. The model's instructions tell it
+        # to output filter_delta (set/remove) when this context line is present.
+        if prior_filters:
+            import json as _json
+            _prior_ctx = (
+                f'현재까지 확정된 필터(JSON): {_json.dumps(prior_filters, ensure_ascii=False)}'
+                f' — 사용자의 새 메시지는 이걸 다듬는 변경(델타)이다.'
+            )
+            contents.append(
+                types.Content(role='user', parts=[types.Part.from_text(text=_prior_ctx)])
             )
 
         # IMP-5: explicit context caching branch (flag-gated, default OFF)
@@ -815,8 +892,36 @@ def parse_query_stage1(conversation_history, language=None):
             )
             probe_needed = False
 
+        # FILTER-DELTA: deterministic apply of prior_filters + delta.
+        # Priority:
+        #   1. If filter_delta present: final = prior + delta.set - delta.remove
+        #   2. Else if filters present: final = {**(prior or {}), **llm_filters}
+        #      (backward-compat for first turns or models that skip filter_delta)
+        # After merging, run existing _repair_required_slate so result has a slate.
+        _filter_delta = data.get('filter_delta') or {}
+        _delta_set = _filter_delta.get('set') or {}
+        _delta_remove = _filter_delta.get('remove') or []
+        # Allowlist: only the 10 known axes survive into delta
+        _VALID_AXES = frozenset({
+            'location_country', 'location_city', 'program', 'material', 'style',
+            'year_min', 'year_max', 'atmosphere', 'color_tone', 'typology_primary',
+        })
+        _delta_set = {k: v for k, v in _delta_set.items() if k in _VALID_AXES and v is not None}
+        _delta_remove = [a for a in _delta_remove if isinstance(a, str) and a in _VALID_AXES]
+
+        if _filter_delta:
+            # Follow-up turn: apply delta to prior
+            filters = dict(prior_filters or {})
+            filters.update(_delta_set)
+            for _axis in _delta_remove:
+                filters.pop(_axis, None)
+        else:
+            # First turn or LLM skipped filter_delta: merge prior + full LLM filters
+            _llm_filters = data.get('filters') or dict(_empty_filters)
+            filters = dict(prior_filters or {})
+            filters.update({k: v for k, v in _llm_filters.items() if v is not None})
+
         # Sanitize program value
-        filters = data.get('filters') or dict(_empty_filters)
         if filters.get('program'):
             program = filters['program']
             if program not in PROGRAM_VALUES:
@@ -828,6 +933,8 @@ def parse_query_stage1(conversation_history, language=None):
         # slate field. Diffuse prompts get a broad Contemporary default.
         raw_priority = data.get('filter_priority') or []
         filters, filter_priority = _repair_required_slate(filters, raw_priority)
+        # Expose validated delta for transparency (callers may log/inspect it)
+        filter_delta = {'set': _delta_set, 'remove': _delta_remove}
 
         # raw_query: spec §3 says always verbatim first user message
         raw_query = data.get('raw_query') or first_user_text
@@ -844,6 +951,7 @@ def parse_query_stage1(conversation_history, language=None):
             'probe_question': data.get('probe_question') if probe_needed else None,
             'reply': data.get('reply', ''),
             'filters': filters,
+            'filter_delta': filter_delta,
             'filter_priority': filter_priority,
             'image_focus': image_focus,
             'raw_query': raw_query,

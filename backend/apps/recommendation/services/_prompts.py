@@ -95,6 +95,26 @@ Correlated axis clusters you should never probe across poles of in one question:
 
 If the user rejects your axis ("that's not my concern, I care about X"), absorb X as a new filter or axis in turn 2, or paraphrase-and-confirm if you now have enough signal.
 
+## Filter delta — follow-up turns (IMPORTANT)
+
+When the system provides a "현재까지 확정된 필터" (prior filters) context line, you are in a **follow-up turn**. The user is REFINING their existing search, not starting fresh.
+
+**In a follow-up turn:**
+- Output ONLY `filter_delta` (not the full `filters` dict).
+- `filter_delta.set` = axes the user wants to ADD or CHANGE (only those axes, as a dict).
+- `filter_delta.remove` = axes the user no longer wants (list of axis-name strings). REMOVE = neutralize (drop the axis entirely). Do NOT invent a new filter to replace it.
+- Unmentioned axes are preserved automatically — omit them from `filter_delta`.
+- Examples:
+  - "꼭 벽돌 아니어도 돼" → `filter_delta: {"set": {}, "remove": ["material"]}`
+  - "모더니즘 말고 브루탈리즘" → `filter_delta: {"set": {"style": "Brutalism"}, "remove": []}`
+  - "한국 말고 일본" → `filter_delta: {"set": {"location_country": "Japan"}, "remove": []}`
+  - "주거는 빼줘" → `filter_delta: {"set": {}, "remove": ["program"]}` (neutralize — do NOT invent a substitute program)
+  - "콘크리트로 바꿔줘" → `filter_delta: {"set": {"material": "concrete"}, "remove": []}`
+- Still output `probe_needed`, `reply`, `filter_priority`, `raw_query`, and all calibration fields.
+- You may output `filters` in addition (the system ignores it on follow-up turns), but it is not required.
+
+**On the FIRST turn (no prior filters):** output the full `filters` dict as before, and you may omit `filter_delta` or set it to `{"set": {}, "remove": []}`.
+
 ## Your output schema (return ONLY this JSON)
 
 {
@@ -112,6 +132,21 @@ If the user rejects your axis ("that's not my concern, I care about X"), absorb 
     "atmosphere": <string or null>,
     "color_tone": <string or null>,
     "typology_primary": <string or null>
+  },
+  "filter_delta": {
+    "set": {
+      "location_country": <string or null>,
+      "location_city": <string or null>,
+      "program": <string or null>,
+      "material": <string or null>,
+      "style": <string or null>,
+      "year_min": <integer or null>,
+      "year_max": <integer or null>,
+      "atmosphere": <string or null>,
+      "color_tone": <string or null>,
+      "typology_primary": <string or null>
+    },
+    "remove": [<axis-name string>, ...]
   },
   "filter_priority": [<string>, ...],
   "image_focus": <"exterior" | "interior" | "drawing" | "aerial" | "detail" | null>,
@@ -157,35 +192,29 @@ USER: parametric 건축물인데 research pavilion이나 학교에 붙은 건 �
 ASSISTANT: {"probe_needed": false, "probe_question": null, "reply": "이해했어요: 파라메트릭 디자인 언어의 단일 오브제적, 실제 구축된 프로젝트들 — 리서치 파빌리온이나 학교 부속 시설은 제외. 이 방향으로 찾을게요. 맞을까요?", "filters": {"location_country": null, "program": null, "material": null, "style": "Parametric", "year_min": 2000, "year_max": null, "atmosphere": null, "color_tone": null, "typology_primary": null}, "filter_priority": ["style"], "raw_query": "parametric 건축물인데 research pavilion이나 학교에 붙은 건 싫고. 실제로 지어진 거만.", "visual_description": "A singular, free-form parametric building with continuous curvature and non-orthogonal geometry realised as an actual constructed work — not a research pavilion or speculative installation. The envelope flows as a sweeping surface; the interior space is fluid and expressive, with complex fabricated panels, tension-rich structural systems, and an avant-garde expressive language. The building reads as a standalone authored object, autonomous from its immediate context."}
 
 USER: 새로 올릴 주택 프로젝트 참고용 찾아요.
-ASSISTANT: {"probe_needed": true, "probe_question": "참고 방향성부터 좁혀볼게요: 목재·벽돌처럼 따뜻한 재료감 쪽이 끌리세요, 아니면 콘크리트·유리 같은 차가운 기하성 쪽이 끌리세요?", "reply": "주택 프로젝트 레퍼런스 찾는 거 확인했어요.", "filters": {"location_country": null, "program": "Housing", "material": null, "style": null, "year_min": null, "year_max": null, "atmosphere": null, "color_tone": null, "typology_primary": null}, "filter_priority": ["program"], "raw_query": "새로 올릴 주택 프로젝트 참고용 찾아요.", "visual_description": null}
+ASSISTANT: {"probe_needed": true, "probe_question": "참고 방향성부터 좁혀볼게요: 목재·벽돌처럼 따뜻한 재료감 쪽이 끌리세요, 아니면 콘크리트·유리 같은 차가운 기하성 쪽이 끌리세요?", "reply": "주택 프로젝트 레퍼런스 찾는 거 확인했어요.", "filters": {"location_country": null, "program": "Housing", "material": null, "style": null, "year_min": null, "year_max": null, "atmosphere": null, "color_tone": null, "typology_primary": null}, "filter_delta": {"set": {}, "remove": []}, "filter_priority": ["program"], "raw_query": "새로 올릴 주택 프로젝트 참고용 찾아요.", "visual_description": null}
 
-USER: 새로 올릴 주택 프로젝트 참고용 찾아요.
-ASSISTANT: {"probe_needed": true, "probe_question": "참고 방향성부터 좁혀볼게요: 목재·벽돌처럼 따뜻한 재료감 쪽이 끌리세요, 아니면 콘크리트·유리 같은 차가운 기하성 쪽이 끌리세요?", "reply": "주택 프로젝트 레퍼런스 찾는 거 확인했어요.", "filters": {"location_country": null, "program": "Housing", "material": null, "style": null, "year_min": null, "year_max": null, "atmosphere": null, "color_tone": null, "typology_primary": null}, "filter_priority": ["program"], "raw_query": "새로 올릴 주택 프로젝트 참고용 찾아요.", "visual_description": null}
+[SYSTEM: 현재까지 확정된 필터(JSON): {"program": "Housing"} — 사용자의 새 메시지는 이걸 다듬는 변경(델타)이다.]
 USER: 따뜻한 재료 쪽이요. 목재 많이 쓴 거.
-ASSISTANT: {"probe_needed": false, "probe_question": null, "reply": "이해했어요: 목재가 중심이 되는 따뜻한 물성의 주택 — 나무 질감이 실내외로 풍부하게 드러나고, 햇살과 조응하는 촉각적이고 정서적인 분위기. 이 방향으로 찾을게요.", "filters": {"location_country": null, "program": "Housing", "material": "timber", "style": null, "year_min": null, "year_max": null}, "filter_priority": ["program", "material"], "raw_query": "새로 올릴 주택 프로젝트 참고용 찾아요.", "visual_description": "A residential house led by warm natural materiality, with heavy use of exposed timber as the dominant architectural surface — structural beams, cladding, interior floors, and panelling in warm wood tones. The palette skews earthy, with brick, stone, or textured plaster as secondary materials; cool elements like metal and glass are minimal and used mainly as accents. Atmospheres are haptic, intimate, and domestic, with daylight filtered warmly across textured surfaces."}
+ASSISTANT: {"probe_needed": false, "probe_question": null, "reply": "이해했어요: 목재가 중심이 되는 따뜻한 물성의 주택 — 나무 질감이 실내외로 풍부하게 드러나고, 햇살과 조응하는 촉각적이고 정서적인 분위기. 이 방향으로 찾을게요.", "filter_delta": {"set": {"material": "timber"}, "remove": []}, "filter_priority": ["program", "material"], "raw_query": "새로 올릴 주택 프로젝트 참고용 찾아요.", "visual_description": "A residential house led by warm natural materiality, with heavy use of exposed timber as the dominant architectural surface — structural beams, cladding, interior floors, and panelling in warm wood tones. The palette skews earthy, with brick, stone, or textured plaster as secondary materials; cool elements like metal and glass are minimal and used mainly as accents. Atmospheres are haptic, intimate, and domestic, with daylight filtered warmly across textured surfaces."}
 
 USER: 서울 도심 오피스빌딩 찾아요.
-ASSISTANT: {"probe_needed": true, "probe_question": "외피 쪽 방향 좁혀볼게요: 유리·금속 파사드의 차가운 기하성이 끌리세요, 아니면 벽돌·돌 같은 따뜻한 물성의 도심 오피스 쪽이 끌리세요?", "reply": "서울 도심 오피스빌딩, 확인했어요.", "filters": {"location_country": "South Korea", "program": "Office", "material": null, "style": null, "year_min": null, "year_max": null}, "filter_priority": ["program", "location_country"], "raw_query": "서울 도심 오피스빌딩 찾아요.", "visual_description": null}
+ASSISTANT: {"probe_needed": true, "probe_question": "외피 쪽 방향 좁혀볼게요: 유리·금속 파사드의 차가운 기하성이 끌리세요, 아니면 벽돌·돌 같은 따뜻한 물성의 도심 오피스 쪽이 끌리세요?", "reply": "서울 도심 오피스빌딩, 확인했어요.", "filters": {"location_country": "South Korea", "program": "Office", "material": null, "style": null, "year_min": null, "year_max": null}, "filter_delta": {"set": {}, "remove": []}, "filter_priority": ["program", "location_country"], "raw_query": "서울 도심 오피스빌딩 찾아요.", "visual_description": null}
 
-USER: 서울 도심 오피스빌딩 찾아요.
-ASSISTANT: {"probe_needed": true, "probe_question": "외피 쪽 방향 좁혀볼게요: 유리·금속 파사드의 차가운 기하성이 끌리세요, 아니면 벽돌·돌 같은 따뜻한 물성의 도심 오피스 쪽이 끌리세요?", "reply": "서울 도심 오피스빌딩, 확인했어요.", "filters": {"location_country": "South Korea", "program": "Office", "material": null, "style": null, "year_min": null, "year_max": null}, "filter_priority": ["program", "location_country"], "raw_query": "서울 도심 오피스빌딩 찾아요.", "visual_description": null}
+[SYSTEM: 현재까지 확정된 필터(JSON): {"location_country": "South Korea", "program": "Office"} — 사용자의 새 메시지는 이걸 다듬는 변경(델타)이다.]
 USER: 물성은 상관없고 규모가 커야 돼요. 최소 20층 이상.
-ASSISTANT: {"probe_needed": false, "probe_question": null, "reply": "이해했어요: 서울 도심의 대규모 오피스 타워 — 최소 20층 이상의 기념비적 스케일, 물성보다는 도시 존재감이 중심. 재료감이나 스타일은 폭넓게 탐색하는 방향으로 찾을게요.", "filters": {"location_country": "South Korea", "program": "Office", "material": null, "style": null, "year_min": null, "year_max": null}, "filter_priority": ["program", "location_country"], "raw_query": "서울 도심 오피스빌딩 찾아요.", "visual_description": "A large-scale downtown office tower in Seoul's urban core, rising at least 20 stories as a monumental civic presence. The tower defines a street-wall and block figure in the dense metropolitan fabric; materiality spans a broad range from glass curtain wall and metal cladding to stone or concrete envelopes. The massing is vertical and commanding, with a significant floor-plate footprint and a strong silhouette in the skyline."}
+ASSISTANT: {"probe_needed": false, "probe_question": null, "reply": "이해했어요: 서울 도심의 대규모 오피스 타워 — 최소 20층 이상의 기념비적 스케일, 물성보다는 도시 존재감이 중심. 재료감이나 스타일은 폭넓게 탐색하는 방향으로 찾을게요.", "filter_delta": {"set": {}, "remove": ["material"]}, "filter_priority": ["program", "location_country"], "raw_query": "서울 도심 오피스빌딩 찾아요.", "visual_description": "A large-scale downtown office tower in Seoul's urban core, rising at least 20 stories as a monumental civic presence. The tower defines a street-wall and block figure in the dense metropolitan fabric; materiality spans a broad range from glass curtain wall and metal cladding to stone or concrete envelopes. The massing is vertical and commanding, with a significant floor-plate footprint and a strong silhouette in the skyline."}
 
 USER: 좋은 레퍼런스 있으면 보여주세요.
-ASSISTANT: {"probe_needed": true, "probe_question": "먼저 용도를 좁혀볼게요: 주택·오피스 같은 생활/업무 공간이 필요하세요, 아니면 미술관·공공시설 같은 문화/공공 공간이 필요하세요?", "reply": "좋은 레퍼런스를 폭넓게 보되, 시작점은 현대 건축 쪽으로 잡아둘게요.", "filters": {"location_country": null, "program": null, "material": null, "style": "Contemporary", "year_min": null, "year_max": null}, "filter_priority": ["style"], "raw_query": "좋은 레퍼런스 있으면 보여주세요.", "visual_description": null}
+ASSISTANT: {"probe_needed": true, "probe_question": "먼저 용도를 좁혀볼게요: 주택·오피스 같은 생활/업무 공간이 필요하세요, 아니면 미술관·공공시설 같은 문화/공공 공간이 필요하세요?", "reply": "좋은 레퍼런스를 폭넓게 보되, 시작점은 현대 건축 쪽으로 잡아둘게요.", "filters": {"location_country": null, "program": null, "material": null, "style": "Contemporary", "year_min": null, "year_max": null}, "filter_delta": {"set": {}, "remove": []}, "filter_priority": ["style"], "raw_query": "좋은 레퍼런스 있으면 보여주세요.", "visual_description": null}
 
-USER: 좋은 레퍼런스 있으면 보여주세요.
-ASSISTANT: {"probe_needed": true, "probe_question": "먼저 용도를 좁혀볼게요: 주택·오피스 같은 생활/업무 공간이 필요하세요, 아니면 미술관·공공시설 같은 문화/공공 공간이 필요하세요?", "reply": "좋은 레퍼런스를 폭넓게 보되, 시작점은 현대 건축 쪽으로 잡아둘게요.", "filters": {"location_country": null, "program": null, "material": null, "style": "Contemporary", "year_min": null, "year_max": null}, "filter_priority": ["style"], "raw_query": "좋은 레퍼런스 있으면 보여주세요.", "visual_description": null}
+[SYSTEM: 현재까지 확정된 필터(JSON): {"style": "Contemporary"} — 사용자의 새 메시지는 이걸 다듬는 변경(델타)이다.]
 USER: 개방감 있는 쪽.
-ASSISTANT: {"probe_needed": true, "probe_question": "한 번만 더 여쭤볼게요: 직교적·격자형 공간이 끌리세요, 곡선적·흐르는 형태가 끌리세요?", "reply": "용도는 넓게 두고, 개방감 있는 현대 건축으로 잡았어요.", "filters": {"location_country": null, "program": null, "material": null, "style": "Contemporary", "year_min": null, "year_max": null}, "filter_priority": ["style"], "raw_query": "좋은 레퍼런스 있으면 보여주세요.", "visual_description": null}
+ASSISTANT: {"probe_needed": true, "probe_question": "한 번만 더 여쭤볼게요: 직교적·격자형 공간이 끌리세요, 곡선적·흐르는 형태가 끌리세요?", "reply": "용도는 넓게 두고, 개방감 있는 현대 건축으로 잡았어요.", "filter_delta": {"set": {"atmosphere": "open"}, "remove": []}, "filter_priority": ["style", "atmosphere"], "raw_query": "좋은 레퍼런스 있으면 보여주세요.", "visual_description": null}
 
-USER: 좋은 레퍼런스 있으면 보여주세요.
-ASSISTANT: {"probe_needed": true, "probe_question": "먼저 용도를 좁혀볼게요: 주택·오피스 같은 생활/업무 공간이 필요하세요, 아니면 미술관·공공시설 같은 문화/공공 공간이 필요하세요?", "reply": "좋은 레퍼런스를 폭넓게 보되, 시작점은 현대 건축 쪽으로 잡아둘게요.", "filters": {"location_country": null, "program": null, "material": null, "style": "Contemporary", "year_min": null, "year_max": null}, "filter_priority": ["style"], "raw_query": "좋은 레퍼런스 있으면 보여주세요.", "visual_description": null}
-USER: 개방감 있는 쪽.
-ASSISTANT: {"probe_needed": true, "probe_question": "한 번만 더 여쭤볼게요: 직교적·격자형 공간이 끌리세요, 곡선적·흐르는 형태가 끌리세요?", "reply": "용도는 넓게 두고, 개방감 있는 현대 건축으로 잡았어요.", "filters": {"location_country": null, "program": null, "material": null, "style": "Contemporary", "year_min": null, "year_max": null}, "filter_priority": ["style"], "raw_query": "좋은 레퍼런스 있으면 보여주세요.", "visual_description": null}
+[SYSTEM: 현재까지 확정된 필터(JSON): {"style": "Contemporary", "atmosphere": "open"} — 사용자의 새 메시지는 이걸 다듬는 변경(델타)이다.]
 USER: 직교적인 거.
-ASSISTANT: {"probe_needed": false, "probe_question": null, "reply": "이해했어요: 개방감 있으면서도 직교적 격자에 충실한, 미스적·SANAA 계열의 투명한 단순성을 가진 건축들 — 경량감과 보편 공간의 감각이 중심. 이 방향으로 탐색해볼게요.", "filters": {"location_country": null, "program": null, "material": null, "style": "Modernist", "year_min": null, "year_max": null}, "filter_priority": ["style"], "raw_query": "좋은 레퍼런스 있으면 보여주세요.", "visual_description": "An expansive, open-plan architectural work with strict orthogonal geometry and a Miesian universal-space quality — thin columns, large glazed apertures, a flat planar roof, and minimal interior subdivision. Floors extend uninterrupted; the envelope is transparent, emphasising continuity between inside and outside. The material palette skews cool and precise (glass, polished concrete, thin steel, white surfaces), with refined reduction rather than rich warmth. Spaces feel weightless, airy, and phenomenologically transparent in the Rowe-Slutzky sense."}
+ASSISTANT: {"probe_needed": false, "probe_question": null, "reply": "이해했어요: 개방감 있으면서도 직교적 격자에 충실한, 미스적·SANAA 계열의 투명한 단순성을 가진 건축들 — 경량감과 보편 공간의 감각이 중심. 이 방향으로 탐색해볼게요.", "filter_delta": {"set": {"style": "Modernist"}, "remove": []}, "filter_priority": ["style", "atmosphere"], "raw_query": "좋은 레퍼런스 있으면 보여주세요.", "visual_description": "An expansive, open-plan architectural work with strict orthogonal geometry and a Miesian universal-space quality — thin columns, large glazed apertures, a flat planar roof, and minimal interior subdivision. Floors extend uninterrupted; the envelope is transparent, emphasising continuity between inside and outside. The material palette skews cool and precise (glass, polished concrete, thin steel, white surfaces), with refined reduction rather than rich warmth. Spaces feel weightless, airy, and phenomenologically transparent in the Rowe-Slutzky sense."}
 
 USER: 그냥 멋진 거 보여줘.
 ASSISTANT: {"probe_needed": true, "probe_question": "먼저 용도를 하나만 골라볼게요: 주거·오피스 같은 실무 레퍼런스가 필요하세요, 아니면 문화·공공 건축처럼 인상적인 사례가 필요하세요?", "reply": "멋진 레퍼런스를 폭넓게 보되, 시작점은 현대 건축으로 잡아둘게요.", "filters": {"location_country": null, "program": null, "material": null, "style": "Contemporary", "year_min": null, "year_max": null}, "filter_priority": ["style"], "raw_query": "그냥 멋진 거 보여줘.", "visual_description": null}
@@ -270,6 +299,50 @@ _STAGE1_RESPONSE_SCHEMA = {
                 'color_tone': {'type': 'string'},
                 'typology_primary': {'type': 'string'},
             },
+        },
+        # FILTER-DELTA: incremental follow-up semantics.
+        # On a follow-up turn (prior filters provided), output ONLY the axes that changed.
+        # set = axes to ADD or CHANGE (dict); remove = axes to DROP (list of axis names).
+        # On first turn: omit or set to {"set": {}, "remove": []}.
+        'filter_delta': {
+            'type': 'object',
+            'properties': {
+                'set': {
+                    'type': 'object',
+                    'properties': {
+                        'location_country': {'type': 'string'},
+                        'location_city': {'type': 'string'},
+                        'program': {'type': 'string'},
+                        'material': {'type': 'string'},
+                        'style': {'type': 'string'},
+                        'year_min': {'type': 'integer'},
+                        'year_max': {'type': 'integer'},
+                        'atmosphere': {'type': 'string'},
+                        'color_tone': {'type': 'string'},
+                        'typology_primary': {'type': 'string'},
+                    },
+                    'description': (
+                        'Axes to ADD or CHANGE from prior filters. '
+                        'Only include axes that the user explicitly modified. '
+                        'Unmentioned axes are preserved by the backend automatically.'
+                    ),
+                },
+                'remove': {
+                    'type': 'array',
+                    'items': {'type': 'string'},
+                    'description': (
+                        'Axis names to DROP entirely (neutralize). '
+                        'Use when the user says they no longer care about an axis '
+                        '(e.g. "벽돌 아니어도 돼" -> remove material). '
+                        'Do NOT invent a replacement value — just remove the axis.'
+                    ),
+                },
+            },
+            'description': (
+                'Filter delta for follow-up turns. '
+                'On first turn: omit or use {"set": {}, "remove": []}. '
+                'On follow-up turns: only the changes from the prior accumulated filters.'
+            ),
         },
         'filter_priority': {'type': 'array', 'items': {'type': 'string'}},
         'image_focus': {

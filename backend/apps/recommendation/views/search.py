@@ -265,18 +265,16 @@ class ParseQueryView(APIView):
 
         # FULL-LANGUAGE-1: pass user's language preference to parse_query so it can
         # force reply/probe_question into the chosen language.
+        # FILTER-DELTA: pass prior_filters so parse_query can inject them as context
+        # for the LLM and apply the returned filter_delta deterministically.
+        # parse_query now returns filters = the fully merged+repaired accumulated set.
+        # The blind merge block that previously lived here has been DELETED.
         _profile = getattr(request.user, 'profile', None)
         _lang = getattr(_profile, 'language', None)
-        parsed = services.parse_query(conversation_history, language=_lang)
+        parsed = services.parse_query(
+            conversation_history, language=_lang, prior_filters=prior_filters or None,
+        )
         parsed_filters = _clean_filters(parsed.get('filters') or {})
-
-        # FILTER MERGE: preserve accumulated context from prior turns.
-        # Current-turn axes (from LLM) override prior per-axis; prior axes not
-        # contradicted by the current turn are preserved.
-        # This fixes chip follow-ups AND free-text follow-ups both dropping prior filters.
-        if prior_filters:
-            merged = {**prior_filters, **parsed_filters}
-            parsed_filters = {k: v for k, v in merged.items() if v is not None and v != ''}
 
         parsed_priority = _clean_filter_priority(
             parsed.get('filter_priority') or parsed.get('priority_ordered'),

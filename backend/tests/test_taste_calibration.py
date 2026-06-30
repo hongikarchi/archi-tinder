@@ -10,7 +10,8 @@ Tests:
 - TestTopPriorityMultiplierRanking:   D2 rank-0 axis effective weight dominates
 - TestDeterministicReRank:            Branch A — priority_axis chip click skips LLM, keeps all
                                        filters; regression: no/empty conversation_history -> 200
-- TestFreeTextFilterMerge:            Branch B — prior_filters merged into parsed_filters
+- TestFreeTextFilterMerge:            Branch B — delta semantics: prior + filter_delta applied
+                                       deterministically inside parse_query; view has NO merge block
 """
 import json
 import pytest
@@ -887,12 +888,159 @@ class TestDeterministicReRank:
 
 
 # ---------------------------------------------------------------------------
-# (g) Free-text filter merge — Branch B (prior_filters + LLM)
+# (g) Free-text filter merge — Branch B (delta semantics in parse_query)
 # ---------------------------------------------------------------------------
+# The view no longer has a blind merge block. All accumulation logic lives
+# inside parse_query (and parse_query_stage1), which receives prior_filters
+# and applies the LLM's filter_delta deterministically:
+#   final = dict(prior_filters); final.update(delta.set); remove delta.remove
+#
+# These tests verify the delta-apply logic inside parse_query directly,
+# then verify the view passes through the already-merged filters unchanged.
+# ---------------------------------------------------------------------------
+
+class TestFilterDeltaApply:
+    """Unit tests for the delta-apply logic inside parse_query (no DB, no view)."""
+
+    def _run_parse(self, monkeypatch, gemini_payload, prior_filters=None):
+        """Run parse_query with a mocked Gemini response and optional prior_filters."""
+        from apps.recommendation import services
+        monkeypatch.setitem(
+            __import__('django.conf', fromlist=['settings']).settings.RECOMMENDATION,
+            'stage_decouple_enabled', False,
+        )
+        monkeypatch.setattr(
+            services, 'generate_content_with_fallback',
+            lambda client, contents, config: _make_gemini_resp(gemini_payload),
+        )
+        monkeypatch.setattr(services, '_get_client', lambda: MagicMock())
+        return services.parse_query(
+            [{'role': 'user', 'text': '테스트'}],
+            prior_filters=prior_filters,
+        )
+
+    def test_delta_set_replaces_prior_axis(self, monkeypatch):
+        """prior {program:Housing, material:brick} + delta set {material:timber}
+        -> final {program:Housing, material:timber}."""
+        prior = {'program': 'Housing', 'material': 'brick', 'style': 'Contemporary'}
+        payload = {
+            'probe_needed': False, 'probe_question': None,
+            'reply': '목재로 바꿀게요.',
+            'filters': {},
+            'filter_delta': {'set': {'material': 'timber'}, 'remove': []},
+            'filter_priority': ['program', 'material'],
+            'raw_query': '목재로 바꿔줘',
+            'visual_description': 'A timber building.',
+            'confidence_score': 0.80, 'system_action': 'NONE',
+            'suggested_quick_replies': [], 'priority_ordered': ['material'],
+            'llm_response_message': '목재로 바꿀게요.',
+        }
+        result = self._run_parse(monkeypatch, payload, prior_filters=prior)
+        filters = result['filters']
+        assert filters.get('program') == 'Housing', f"program must be preserved; got {filters}"
+        assert filters.get('material') == 'timber', f"material must be set to timber; got {filters}"
+        assert filters.get('style') == 'Contemporary', f"style must be preserved; got {filters}"
+
+    def test_delta_remove_neutralizes_axis(self, monkeypatch):
+        """prior {program:Housing, material:brick} + delta remove [material]
+        -> final {program:Housing} (material gone, no replacement)."""
+        prior = {'program': 'Housing', 'material': 'brick'}
+        payload = {
+            'probe_needed': False, 'probe_question': None,
+            'reply': '재료 조건 제거할게요.',
+            'filters': {},
+            'filter_delta': {'set': {}, 'remove': ['material']},
+            'filter_priority': ['program'],
+            'raw_query': '재료 상관없어',
+            'visual_description': 'A housing project.',
+            'confidence_score': 0.75, 'system_action': 'NONE',
+            'suggested_quick_replies': [], 'priority_ordered': ['program'],
+            'llm_response_message': '재료 조건 제거할게요.',
+        }
+        result = self._run_parse(monkeypatch, payload, prior_filters=prior)
+        filters = result['filters']
+        assert filters.get('program') == 'Housing', f"program must be preserved; got {filters}"
+        assert 'material' not in filters, (
+            f"material must be removed (neutralized), not left as value; got {filters}"
+        )
+
+    def test_unmentioned_axes_preserved(self, monkeypatch):
+        """prior has 3 axes; delta only mentions style. Other 2 axes preserved."""
+        prior = {'program': 'Museum', 'location_country': 'Japan', 'style': 'Contemporary'}
+        payload = {
+            'probe_needed': False, 'probe_question': None,
+            'reply': '스타일 바꿀게요.',
+            'filters': {},
+            'filter_delta': {'set': {'style': 'Brutalism'}, 'remove': []},
+            'filter_priority': ['program', 'location_country', 'style'],
+            'raw_query': '브루탈리즘으로',
+            'visual_description': 'A brutalist museum.',
+            'confidence_score': 0.85, 'system_action': 'NONE',
+            'suggested_quick_replies': [], 'priority_ordered': ['style'],
+            'llm_response_message': '스타일 바꿀게요.',
+        }
+        result = self._run_parse(monkeypatch, payload, prior_filters=prior)
+        filters = result['filters']
+        assert filters.get('program') == 'Museum', f"program must be preserved; got {filters}"
+        assert filters.get('location_country') == 'Japan', (
+            f"location_country must be preserved; got {filters}"
+        )
+        assert filters.get('style') == 'Brutalism', f"style must be updated; got {filters}"
+
+    def test_first_turn_no_prior_uses_llm_filters(self, monkeypatch):
+        """Turn 1 with no prior_filters: LLM full filters dict used directly."""
+        payload = {
+            'probe_needed': False, 'probe_question': None,
+            'reply': '알겠어요.',
+            'filters': {
+                'program': 'Housing', 'material': None, 'style': None,
+                'location_country': None, 'location_city': None,
+                'year_min': None, 'year_max': None,
+                'atmosphere': None, 'color_tone': None, 'typology_primary': None,
+            },
+            'filter_priority': ['program'],
+            'raw_query': '주택',
+            'visual_description': 'A housing project.',
+            'confidence_score': 0.70, 'system_action': 'NONE',
+            'suggested_quick_replies': [], 'priority_ordered': ['program'],
+            'llm_response_message': '알겠어요.',
+        }
+        result = self._run_parse(monkeypatch, payload, prior_filters=None)
+        filters = result['filters']
+        assert filters.get('program') == 'Housing', f"program must come from LLM; got {filters}"
+        # No spurious axes from nowhere
+        assert filters.get('location_country') is None or 'location_country' not in filters
+
+    def test_filter_delta_returned_in_result(self, monkeypatch):
+        """parse_query result must include filter_delta key with set and remove."""
+        prior = {'program': 'Housing'}
+        payload = {
+            'probe_needed': False, 'probe_question': None,
+            'reply': '재료 바꿀게요.',
+            'filters': {},
+            'filter_delta': {'set': {'material': 'concrete'}, 'remove': []},
+            'filter_priority': ['program', 'material'],
+            'raw_query': '콘크리트',
+            'visual_description': 'A concrete building.',
+            'confidence_score': 0.80, 'system_action': 'NONE',
+            'suggested_quick_replies': [], 'priority_ordered': ['material'],
+            'llm_response_message': '재료 바꿀게요.',
+        }
+        result = self._run_parse(monkeypatch, payload, prior_filters=prior)
+        assert 'filter_delta' in result, "parse_query must return filter_delta key"
+        delta = result['filter_delta']
+        assert isinstance(delta.get('set'), dict), "filter_delta.set must be a dict"
+        assert isinstance(delta.get('remove'), list), "filter_delta.remove must be a list"
+
 
 @pytest.mark.django_db
 class TestFreeTextFilterMerge:
-    """Branch B: prior_filters merged with LLM-parsed filters so prior axes survive."""
+    """Branch B: parse_query applies delta inside; view passes through the merged result.
+
+    The view no longer has a blind merge block — confirmed deleted. The delta-apply
+    logic is tested in TestFilterDeltaApply above. Here we verify the end-to-end
+    view behavior: structured_filters in the response equals what parse_query returned.
+    """
 
     @pytest.fixture
     def auth_client(self):
@@ -909,142 +1057,89 @@ class TestFreeTextFilterMerge:
         client.credentials(HTTP_AUTHORIZATION=f'Bearer {str(token.access_token)}')
         return client
 
-    def test_prior_filters_merged_with_llm_filters(self, auth_client):
-        """LLM returns {material:brick}; prior has {program:Housing, location_country:'South Korea'}.
-        Merged structured_filters must contain all three axes."""
-        llm_result = {
-            'probe_needed': False,
-            'probe_question': None,
-            'reply': '벽돌 건물을 찾아드릴게요.',
-            'filters': {
-                'location_country': None,
-                'location_city': None,
-                'program': None,
-                'material': 'brick',
-                'style': None,
-                'year_min': None,
-                'year_max': None,
-                'atmosphere': None,
-                'color_tone': None,
-                'typology_primary': None,
-            },
-            'filter_priority': ['material'],
-            'raw_query': '벽돌',
-            'visual_description': 'A brick building.',
-            'confidence_score': 0.75,
-            'system_action': 'NONE',
-            'suggested_quick_replies': [],
-            'priority_ordered': ['material'],
-            'llm_response_message': '벽돌 건물을 찾아드릴게요.',
-            'image_focus': None,
-        }
-        prior = {'program': 'Housing', 'location_country': 'South Korea'}
-        fake_results = [{'canonical_bld_id': 'bld_000001'}]
-
-        with patch('apps.recommendation.views.services.parse_query', return_value=llm_result), \
-             patch('apps.recommendation.views.engine.search_by_filters_scored',
-                   return_value=fake_results):
-            resp = auth_client.post(
-                '/api/v1/parse-query/',
-                {
-                    'conversation_history': [{'role': 'user', 'text': '벽돌'}],
-                    'prior_filters': prior,
-                },
-                format='json',
-            )
-
-        assert resp.status_code == 200
-        sf = resp.json()['structured_filters']
-
-        # All three axes must be present after merge
-        assert sf.get('program') == 'Housing', f"program dropped; sf={sf}"
-        assert sf.get('location_country') == 'South Korea', f"location_country dropped; sf={sf}"
-        assert sf.get('material') == 'brick', f"material missing; sf={sf}"
-
-    def test_current_turn_axis_overrides_prior(self, auth_client):
-        """If LLM returns a value for an axis already in prior_filters, LLM value wins."""
-        llm_result = {
-            'probe_needed': False,
-            'probe_question': None,
-            'reply': '일본 건물.',
-            'filters': {
-                'location_country': 'Japan',
-                'location_city': None,
-                'program': None,
-                'material': None,
-                'style': None,
-                'year_min': None,
-                'year_max': None,
-                'atmosphere': None,
-                'color_tone': None,
-                'typology_primary': None,
-            },
-            'filter_priority': ['location_country'],
-            'raw_query': '일본',
-            'visual_description': 'A Japanese building.',
-            'confidence_score': 0.70,
-            'system_action': 'NONE',
-            'suggested_quick_replies': [],
-            'priority_ordered': ['location_country'],
-            'llm_response_message': '일본 건물.',
-            'image_focus': None,
-        }
-        # Prior has location_country='South Korea'; LLM says 'Japan' — Japan must win
-        prior = {'location_country': 'South Korea', 'program': 'Housing'}
-        fake_results = [{'canonical_bld_id': 'bld_000001'}]
-
-        with patch('apps.recommendation.views.services.parse_query', return_value=llm_result), \
-             patch('apps.recommendation.views.engine.search_by_filters_scored',
-                   return_value=fake_results):
-            resp = auth_client.post(
-                '/api/v1/parse-query/',
-                {
-                    'conversation_history': [{'role': 'user', 'text': '일본'}],
-                    'prior_filters': prior,
-                },
-                format='json',
-            )
-
-        assert resp.status_code == 200
-        sf = resp.json()['structured_filters']
-        # LLM override wins for location_country
-        assert sf.get('location_country') == 'Japan', (
-            f"Expected LLM 'Japan' to override prior 'South Korea'; sf={sf}"
-        )
-        # Prior program axis preserved (LLM returned None for it)
-        assert sf.get('program') == 'Housing', f"program dropped; sf={sf}"
-
-    def test_empty_prior_filters_uses_llm_only(self, auth_client):
-        """No prior_filters -> behaviour unchanged (only LLM filters used)."""
-        llm_result = {
+    def _make_parse_result(self, filters, filter_delta=None):
+        """Build a minimal parse_query return value with given filters."""
+        return {
             'probe_needed': False,
             'probe_question': None,
             'reply': '알겠어요.',
-            'filters': {
-                'location_country': None,
-                'location_city': None,
-                'program': 'Housing',
-                'material': None,
-                'style': None,
-                'year_min': None,
-                'year_max': None,
-                'atmosphere': None,
-                'color_tone': None,
-                'typology_primary': None,
-            },
-            'filter_priority': ['program'],
-            'raw_query': '주택',
-            'visual_description': 'A housing project.',
-            'confidence_score': 0.70,
+            'filters': filters,
+            'filter_delta': filter_delta or {'set': {}, 'remove': []},
+            'filter_priority': [k for k, v in filters.items() if v is not None],
+            'raw_query': '테스트',
+            'visual_description': 'A building.',
+            'confidence_score': 0.80,
             'system_action': 'NONE',
             'suggested_quick_replies': [],
-            'priority_ordered': ['program'],
+            'priority_ordered': [],
             'llm_response_message': '알겠어요.',
             'image_focus': None,
         }
+
+    def test_set_replaces_axis_view_end_to_end(self, auth_client):
+        """View passes through parse_query result unchanged.
+        parse_query already merged prior + delta.set: final {program:Housing, material:timber}.
+        structured_filters in response must equal that."""
+        merged_filters = {'program': 'Housing', 'material': 'timber'}
+        parse_result = self._make_parse_result(
+            merged_filters,
+            filter_delta={'set': {'material': 'timber'}, 'remove': []},
+        )
         fake_results = [{'canonical_bld_id': 'bld_000001'}]
 
-        with patch('apps.recommendation.views.services.parse_query', return_value=llm_result), \
+        with patch('apps.recommendation.views.services.parse_query', return_value=parse_result), \
+             patch('apps.recommendation.views.engine.search_by_filters_scored',
+                   return_value=fake_results):
+            resp = auth_client.post(
+                '/api/v1/parse-query/',
+                {
+                    'conversation_history': [{'role': 'user', 'text': '목재로 바꿔줘'}],
+                    'prior_filters': {'program': 'Housing', 'material': 'brick'},
+                },
+                format='json',
+            )
+
+        assert resp.status_code == 200
+        sf = resp.json()['structured_filters']
+        assert sf.get('program') == 'Housing', f"program must be present; sf={sf}"
+        assert sf.get('material') == 'timber', f"material must be timber; sf={sf}"
+        assert sf.get('brick') is None, "old material value must not appear"
+
+    def test_remove_neutralizes_axis_view_end_to_end(self, auth_client):
+        """View passes through parse_query result.
+        parse_query already applied delta.remove: final {program:Housing} (no material)."""
+        merged_filters = {'program': 'Housing'}
+        parse_result = self._make_parse_result(
+            merged_filters,
+            filter_delta={'set': {}, 'remove': ['material']},
+        )
+        fake_results = [{'canonical_bld_id': 'bld_000001'}]
+
+        with patch('apps.recommendation.views.services.parse_query', return_value=parse_result), \
+             patch('apps.recommendation.views.engine.search_by_filters_scored',
+                   return_value=fake_results):
+            resp = auth_client.post(
+                '/api/v1/parse-query/',
+                {
+                    'conversation_history': [{'role': 'user', 'text': '재료 상관없어'}],
+                    'prior_filters': {'program': 'Housing', 'material': 'brick'},
+                },
+                format='json',
+            )
+
+        assert resp.status_code == 200
+        sf = resp.json()['structured_filters']
+        assert sf.get('program') == 'Housing', f"program must be preserved; sf={sf}"
+        assert 'material' not in sf, (
+            f"material must be absent (neutralized by remove); sf={sf}"
+        )
+
+    def test_empty_prior_filters_uses_llm_only(self, auth_client):
+        """No prior_filters -> behaviour unchanged (only LLM filters used)."""
+        parse_result = self._make_parse_result({'program': 'Housing'})
+        fake_results = [{'canonical_bld_id': 'bld_000001'}]
+
+        with patch('apps.recommendation.views.services.parse_query', return_value=parse_result), \
              patch('apps.recommendation.views.engine.search_by_filters_scored',
                    return_value=fake_results):
             resp = auth_client.post(
