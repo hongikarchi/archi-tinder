@@ -494,6 +494,8 @@ class TestBackwardCompat:
             # TASTE-CALIBRATION-1 fields:
             'confidence_score', 'system_action', 'suggested_quick_replies',
             'priority_ordered', 'llm_response_message',
+            # LLM-SEARCH delta model:
+            'filter_delta',
         }
         assert set(result.keys()) == expected_keys
 
