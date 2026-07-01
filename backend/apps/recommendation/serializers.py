@@ -306,6 +306,16 @@ class ProjectSelfUpdateSerializer(serializers.ModelSerializer):
 
         return value
 
+    def update(self, instance, validated_data):
+        # Edit Board / save-confirm must NOT bump updated_at (board ordering is by
+        # -updated_at; only like/dislike swipes should move a board to the top).
+        # Saving with explicit update_fields omits the auto_now updated_at column.
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        if validated_data:
+            instance.save(update_fields=list(validated_data.keys()))
+        return instance
+
     class Meta:
         model  = Project
         fields = ['name', 'visibility', 'is_temp', 'conversation_history']
