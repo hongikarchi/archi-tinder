@@ -24,7 +24,7 @@ import NotificationsScreen from './pages/settings/NotificationsScreen.jsx'
 import AppearanceScreen from './pages/settings/AppearanceScreen.jsx'
 import EditProfileScreen from './pages/settings/EditProfileScreen.jsx'
 import * as api from './api/client.js'
-import { createProject } from './api/projects.js'
+import { createProject, VerifyRequiredError } from './api/projects.js'
 import { normalizeFilters, classifySwipeError, isActionCard, extractLikedIds, extractSavedIds, purgeChatCache } from './utils/appHelpers.js'
 import { reportWriteError } from './utils/reportWriteError.js'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
@@ -377,7 +377,12 @@ export default function App() {
       setCurrentCard(null)
       setPrefetchCard(null)
       setPrefetchCard2(null)
-      setSwipeError(err.message || 'Failed to start session')
+      // VerifyRequiredError: the global VerifyGateModal already shows via the
+      // 'archithon:verify-required' event dispatched in api/sessions.js.
+      // Don't also show the generic red toast — let the modal be the only UI.
+      if (!(err instanceof VerifyRequiredError)) {
+        setSwipeError(err.message || 'Failed to start session')
+      }
     } finally {
       setIsSwipeLoading(false)
     }

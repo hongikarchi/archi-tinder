@@ -7,10 +7,11 @@
  */
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getMe, updateMyProfile, setPassword as apiSetPassword, linkEmail as apiLinkEmail } from '../../api/client.js'
+import { getMe, updateMyProfile, setPassword as apiSetPassword } from '../../api/client.js'
 import { IconBack } from '../../components/icons.jsx'
 import GoogleVerifyButton from '../../components/GoogleVerifyButton.jsx'
 import { hasGoogleLogin } from '../../utils/loginFlow.js'
+import { useGoogleEmailVerify } from '../../hooks/useGoogleEmailVerify.js'
 import btnStyles from '../../components/Button.module.css'
 import styles from './AccountScreen.module.css'
 
@@ -61,10 +62,17 @@ export default function AccountScreen() {
   const [savingPassword, setSavingPassword] = useState(false)
   const [passwordSuccess, setPasswordSuccess] = useState(false)
 
-  // Email verify state
+  // Email verify — shared hook (must stay identical to VerifyGateModal; see useGoogleEmailVerify.js)
   const googleConfigured = hasGoogleLogin(import.meta.env.VITE_GOOGLE_CLIENT_ID)
-  const [verifyLoading, setVerifyLoading] = useState(false)
-  const [verifyError, setVerifyError] = useState(null)
+  const {
+    loading: verifyLoading,
+    error: verifyError,
+    onSuccess: handleVerifySuccess,
+    onError: handleVerifyError,
+    onNonOAuthError: handleVerifyNonOAuthError,
+  } = useGoogleEmailVerify({
+    onVerified: (fresh) => setMe(fresh),
+  })
 
   useEffect(() => {
     let cancelled = false
@@ -168,46 +176,6 @@ export default function AccountScreen() {
     } finally {
       setSavingPassword(false)
     }
-  }
-
-  async function handleVerifySuccess(codeResponse) {
-    setVerifyLoading(true)
-    setVerifyError(null)
-    try {
-      await apiLinkEmail(codeResponse.code)
-      // Re-fetch me to get fresh email + email_verified_at (link-email returns UserSerializer
-      // which may omit self-only fields; re-fetch guarantees accurate state).
-      const fresh = await getMe()
-      setMe(fresh)
-    } catch (err) {
-      const detail = err?.data?.detail || err?.message || 'error'
-      if (detail === 'unverified_email') {
-        setVerifyError('이메일 미인증: Google 계정의 이메일이 인증되지 않았습니다.')
-      } else if (detail === 'email_already_linked') {
-        setVerifyError('이미 다른 계정에 연결된 이메일입니다. 그 계정으로 로그인하세요.')
-      } else {
-        setVerifyError(`인증 실패: ${detail}`)
-      }
-    } finally {
-      setVerifyLoading(false)
-    }
-  }
-
-  function handleVerifyError(errorResponse) {
-    const detail = errorResponse?.error_description || errorResponse?.error || 'cancelled or failed'
-    setVerifyError(`Google 오류: ${detail}`)
-    setVerifyLoading(false)
-  }
-
-  function handleVerifyNonOAuthError(err) {
-    if (err?.type === 'popup_closed') {
-      setVerifyError(null)
-    } else if (err?.type === 'popup_failed_to_open') {
-      setVerifyError('팝업이 차단되었습니다. 사이트의 팝업을 허용해 주세요.')
-    } else {
-      setVerifyError('인증을 시작할 수 없습니다. 브라우저 설정을 확인해 주세요.')
-    }
-    setVerifyLoading(false)
   }
 
   if (loading) {

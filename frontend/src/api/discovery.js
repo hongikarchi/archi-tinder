@@ -1,5 +1,6 @@
 import { callApi } from './core.js'
 import { normalizeCard } from './images.js'
+import { VerifyRequiredError } from './projects.js'
 
 const DISCOVERY_TIMEOUT_MS = 30000      // discovery feed can be slow on cold backend (~8s+)
 
@@ -20,12 +21,21 @@ export async function discoveryFeedback(canonicalBldId, action, draftId) {
     timezone_offset_minutes: new Date().getTimezoneOffset(),
   }
   if (draftId) body.draft_id = draftId
-  const data = await callApi('POST', '/discovery/feedback/', body)
-  return {
-    draftId: data.draft_id ?? null,
-    draftLikeCount: data.draft_like_count ?? 0,
-    draftPassCount: data.draft_pass_count ?? 0,
-    likeCapReached: data.like_cap_reached ?? false,
+  try {
+    const data = await callApi('POST', '/discovery/feedback/', body)
+    return {
+      draftId: data.draft_id ?? null,
+      draftLikeCount: data.draft_like_count ?? 0,
+      draftPassCount: data.draft_pass_count ?? 0,
+      likeCapReached: data.like_cap_reached ?? false,
+    }
+  } catch (err) {
+    if (err?.status === 403 && err?.data?.detail === 'verify_required') {
+      const reason = err?.data?.reason || 'board_limit_reached'
+      window.dispatchEvent(new CustomEvent('archithon:verify-required', { detail: { reason } }))
+      throw new VerifyRequiredError(reason)
+    }
+    throw err
   }
 }
 

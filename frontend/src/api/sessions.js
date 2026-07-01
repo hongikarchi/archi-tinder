@@ -5,6 +5,7 @@
 
 import { callApi } from './core.js'
 import { normalizeCard } from './images.js'
+import { VerifyRequiredError } from './projects.js'
 
 const PARSE_QUERY_TIMEOUT_MS = 60000    // Gemini LLM generation can take 10-30s
 const SESSION_CREATE_TIMEOUT_MS = 30000 // Cold pool path: execute_pool_sql ~14.7s, total backend time can exceed 15s default
@@ -17,22 +18,31 @@ const SESSION_CREATE_TIMEOUT_MS = 30000 // Cold pool path: execute_pool_sql ~14.
  *   ignored by backend when hyde_vinitial_enabled flag is OFF.
  */
 export async function startSession(params) {
-  const result = await callApi('POST', '/analysis/sessions/', {
-    project_id:      params.project_id,
-    name:            params.name || 'Untitled',
-    filters:         params.filters || {},
-    filter_priority: params.filter_priority || [],
-    seed_ids:        params.seed_ids || [],
-    raw_query:       params.raw_query || '',
-    ...(params.visual_description ? { visual_description: params.visual_description } : {}),
-    ...(params.image_focus ? { image_focus: params.image_focus } : {}),
-    ...(params.force_new ? { force_new: true } : {}),
-  }, true, SESSION_CREATE_TIMEOUT_MS)
-  return {
-    ...result,
-    next_image:      normalizeCard(result.next_image),
-    prefetch_image:  normalizeCard(result.prefetch_image),
-    prefetch_image_2: normalizeCard(result.prefetch_image_2),
+  try {
+    const result = await callApi('POST', '/analysis/sessions/', {
+      project_id:      params.project_id,
+      name:            params.name || 'Untitled',
+      filters:         params.filters || {},
+      filter_priority: params.filter_priority || [],
+      seed_ids:        params.seed_ids || [],
+      raw_query:       params.raw_query || '',
+      ...(params.visual_description ? { visual_description: params.visual_description } : {}),
+      ...(params.image_focus ? { image_focus: params.image_focus } : {}),
+      ...(params.force_new ? { force_new: true } : {}),
+    }, true, SESSION_CREATE_TIMEOUT_MS)
+    return {
+      ...result,
+      next_image:      normalizeCard(result.next_image),
+      prefetch_image:  normalizeCard(result.prefetch_image),
+      prefetch_image_2: normalizeCard(result.prefetch_image_2),
+    }
+  } catch (err) {
+    if (err?.status === 403 && err?.data?.detail === 'verify_required') {
+      const reason = err?.data?.reason || 'board_limit_reached'
+      window.dispatchEvent(new CustomEvent('archithon:verify-required', { detail: { reason } }))
+      throw new VerifyRequiredError(reason)
+    }
+    throw err
   }
 }
 

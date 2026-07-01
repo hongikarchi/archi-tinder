@@ -170,6 +170,16 @@ def create_session(request, profile, recent_cutoff):
                     'deduped': True,
                 }, status=status.HTTP_200_OK)
 
+    # Guest board-limit gate: mirrors Discovery views/discovery.py ~line 268-271.
+    # Only blocks genuinely NEW board creation (project is None and no dedupe/resume
+    # shortcut returned above).  Resuming an existing board (project_id resolved, or
+    # Case #3 resume returned at line 121) is never affected.
+    if project is None and profile.is_guest and Project.objects.filter(user=profile).count() >= 3:
+        return Response(
+            {'detail': 'verify_required', 'reason': 'board_limit_reached', 'limit': 3},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
     # Fix 3: project creation deferred to after pool fetch to avoid orphan rows.
     # (was: Project.objects.create here when project is None)
 
