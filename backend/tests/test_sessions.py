@@ -1175,7 +1175,6 @@ class TestExtendSessionFlow:
             convergence_history=[0.05, 0.05, 0.05],
             previous_pref_vector=_FAKE_EMBEDDINGS['B00001'].tolist(),
             current_round=10,
-            extended_rounds=0,
         )
 
     def test_converged_returns_can_continue_with_action_card(self, auth_client, user_profile):
@@ -1208,7 +1207,7 @@ class TestExtendSessionFlow:
         assert data['can_continue'] is True
 
     def test_extend_flag_serves_next_card(self, auth_client, user_profile):
-        """extend=true on converged session returns next_image (non-null), increments extended_rounds, resets phase to analyzing."""
+        """extend=true on converged session returns next_image (non-null), resets phase to analyzing."""
         session = self._create_converged_session(user_profile)
 
         patchers = _apply_patches()
@@ -1232,7 +1231,6 @@ class TestExtendSessionFlow:
         assert data['is_analysis_completed'] is False
 
         session.refresh_from_db()
-        assert session.extended_rounds == 1
         assert session.phase == 'analyzing'
         assert session.convergence_history == []
         # previous_pref_vector is seeded from the current centroid on extend
@@ -1271,39 +1269,8 @@ class TestExtendSessionFlow:
         assert data['next_image'] is not None
         assert data['is_analysis_completed'] is False
         session.refresh_from_db()
-        assert session.extended_rounds == 1
         assert session.phase == 'analyzing'
         assert SwipeEvent.objects.filter(session=session).count() == 1
-
-    def test_extend_cap_5_returns_completion(self, auth_client, user_profile):
-        """After 5 extensions, extend=true is ignored — returns next_image=null + can_continue=false."""
-        session = self._create_converged_session(user_profile)
-        session.extended_rounds = 5
-        session.save(update_fields=['extended_rounds'])
-
-        patchers = _apply_patches()
-        try:
-            resp = auth_client.post(
-                f'/api/v1/analysis/sessions/{session.session_id}/swipes/',
-                {
-                    'building_id': 'B00002',
-                    'action': 'like',
-                    'idempotency_key': 'conv_extend_capped',
-                    'extend': True,
-                },
-                format='json',
-            )
-        finally:
-            _stop_patches(patchers)
-
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data['next_image'] is None
-        assert data['is_analysis_completed'] is True
-        assert data['can_continue'] is False
-
-        session.refresh_from_db()
-        assert session.extended_rounds == 5
 
     def test_state_endpoint_converged_returns_can_continue(self, auth_client, user_profile):
         """GET /sessions/<id>/state/ on converged session returns can_continue + null next_image (no action card)."""

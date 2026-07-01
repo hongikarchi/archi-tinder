@@ -384,12 +384,12 @@ export default function SwipePage({
   const phase            = progress?.phase
   const filter_relaxed   = progress?.filter_relaxed || false
   const confidence       = progress?.confidence ?? null
-  // isAt100: show the top "Finish & View Report" button only after the user has
-  // explicitly LEFT-swiped the action card (keepExploringChosen) or on pool
-  // exhaustion / analysis completion (isCompleted). The button must NOT appear
-  // while the action card itself is the currentCard — it would compete visually.
-  // keepExploringChosen is set in App.jsx's action-card dislike branch and
-  // restored from backend progress on page reload (applySessionResponse).
+  // isAt100: show the top "Finish & View Report" button once the user has
+  // PASSED the action card (keepExploringChosen) or the pool is exhausted
+  // (isCompleted). Order on a fresh session: converge → action card →
+  // left-swipe sets keepExploringChosen → button appears. On resume,
+  // keepExploringChosen is restored from backend action_card_shown
+  // (App.jsx applySessionResponse) so the button shows immediately.
   const isAt100 = keepExploringChosen || isCompleted
 
   function onTinderSwipe(dir) {

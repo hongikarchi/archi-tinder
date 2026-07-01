@@ -438,7 +438,7 @@ def get_session_state(request, session):
 
     if phase == 'converged':
         residual = len([pid for pid in pool_ids if pid not in set(exposed_ids)]) if pool_ids else 0
-        can_continue = (residual >= 1) and (session.extended_rounds < 5)
+        can_continue = (residual >= 1)
         prefetch_card = None
         prefetch_card_2 = None
         return Response({

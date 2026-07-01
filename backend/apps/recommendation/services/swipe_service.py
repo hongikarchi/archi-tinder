@@ -566,12 +566,12 @@ def handle_swipe_extend(request, profile, session, session_id, client_buffer_ids
         session = AnalysisSession.objects.select_for_update().get(
             session_id=session_id, user=profile
         )
-        if session.phase not in ('converged', 'completed') or session.extended_rounds >= 5:
+        if session.phase not in ('converged', 'completed'):
             residual_noop = len([
                 pid for pid in session.pool_ids
                 if pid not in set(session.exposed_ids)
             ]) if session.pool_ids else 0
-            can_continue_noop = (residual_noop >= 1) and (session.extended_rounds < 5)
+            can_continue_noop = (residual_noop >= 1)
             return Response({
                 'accepted': True,
                 'session_status': session.status,
@@ -584,7 +584,6 @@ def handle_swipe_extend(request, profile, session, session_id, client_buffer_ids
                 'confidence': None,
             })
 
-        session.extended_rounds += 1
         session.phase = 'analyzing'
         session.convergence_history = []
         # Seed previous_pref_vector from the current centroid so delta_v tracking
@@ -618,7 +617,7 @@ def handle_swipe_extend(request, profile, session, session_id, client_buffer_ids
             session.exposed_ids = session.exposed_ids + [next_card['canonical_bld_id']]
 
         session.save(update_fields=[
-            'extended_rounds', 'phase', 'convergence_history', 'previous_pref_vector',
+            'phase', 'convergence_history', 'previous_pref_vector',
             'exposed_ids', 'pool_ids', 'pool_scores', 'current_pool_tier',
         ])
 
@@ -633,7 +632,7 @@ def handle_swipe_extend(request, profile, session, session_id, client_buffer_ids
         'prefetch_image': None,
         'prefetch_image_2': None,
         'is_analysis_completed': next_card is None,
-        'can_continue': (residual_after >= 1) and (session.extended_rounds < 5),
+        'can_continue': (residual_after >= 1),
         'confidence': None,
     })
 

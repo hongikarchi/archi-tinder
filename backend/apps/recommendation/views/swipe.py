@@ -491,7 +491,6 @@ class SwipeView(APIView):
             'is_analysis_completed': _is_completed,
             'can_continue': (
                 len([pid for pid in session.pool_ids if pid not in set(session.exposed_ids)]) >= 1
-                and session.extended_rounds < 5
             ),
             'confidence': confidence,  # float [0,1] or null per spec C-1
             # 'sync' | 'async-thread' (matches telemetry payload). Exposes which
