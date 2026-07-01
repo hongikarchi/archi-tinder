@@ -747,7 +747,7 @@ def handle_swipe_normal(
             else:
                 if canonical_bld_id not in project.disliked_ids:
                     project.disliked_ids = project.disliked_ids + [canonical_bld_id]
-            project.save(update_fields=['liked_ids', 'disliked_ids'])
+            project.save(update_fields=['liked_ids', 'disliked_ids', 'updated_at'])
             evict_taste(profile.id)
             evict_discovery_feed(profile.id)
             # Fix 1: evict /projects/ cache — liked_ids/disliked_ids counts changed.

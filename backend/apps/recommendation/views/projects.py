@@ -206,7 +206,7 @@ class ProjectDetailView(APIView):
                 remove_set = set(remove_ids)
                 project.liked_ids = [item for item in project.liked_ids if item.get('id') not in remove_set]
                 project.saved_ids = [item for item in project.saved_ids if item.get('id') not in remove_set]
-                project.save(update_fields=['liked_ids', 'saved_ids'])
+                project.save(update_fields=['liked_ids', 'saved_ids', 'updated_at'])
                 evict_taste(profile.id)
                 evict_discovery_feed(profile.id)
             if serializer is not None:
