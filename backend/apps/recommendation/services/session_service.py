@@ -28,6 +28,7 @@ from ..models import Project, AnalysisSession
 from ..caches import evict_projects_list, evict_user_profile_detail, evict_project_detail
 from ..perf_timing import stage
 from ..views._shared import _progress
+from .hydration import hydrate_like_vectors
 
 logger = logging.getLogger('apps.recommendation')
 RC = settings.RECOMMENDATION
@@ -430,7 +431,7 @@ def get_session_state(request, session):
     exposed_ids = list(session.exposed_ids or [])
     pool_ids = list(session.pool_ids or [])
     initial_batch = list(session.initial_batch or [])
-    like_vectors = list(session.like_vectors or [])
+    like_vectors = hydrate_like_vectors(session) if session.like_vectors else []
     current_round = session.current_round
     phase = session.phase
     image_focus = (session.original_filters or {}).get('image_focus')
@@ -550,10 +551,13 @@ def get_session_result(session):
     liked_cards = engine.get_buildings_by_ids(liked_ids)
     liked_cards = [c for c in liked_cards if c]
 
+    # Hydrate like_vectors once; reused by all MMR / DPP calls below.
+    _hydrated_lv_result = hydrate_like_vectors(session) if session.like_vectors else []
+
     # Use MMR-diversified results when like_vectors available
-    if session.like_vectors:
+    if _hydrated_lv_result:
         predicted_cards = engine.get_top_k_mmr(
-            session.like_vectors,
+            _hydrated_lv_result,
             session.exposed_ids,
             k=RC['top_k_results'],
             round_num=session.current_round,
@@ -573,10 +577,10 @@ def get_session_result(session):
     # Cosine/Gemini top-10 provenance fields slice the first top_k_results entries
     # of the over-fetched set so their semantics match pre-fix.
     _overfetch_mult = RC.get('dpp_overfetch_multiplier', 3) if RC.get('dpp_topk_enabled', False) else 1
-    if _overfetch_mult > 1 and session.like_vectors:
+    if _overfetch_mult > 1 and _hydrated_lv_result:
         # Re-fetch with larger k via the MMR branch (already used when like_vectors exist)
         predicted_cards = engine.get_top_k_mmr(
-            session.like_vectors,
+            _hydrated_lv_result,
             session.exposed_ids,
             k=RC['top_k_results'] * _overfetch_mult,
             round_num=session.current_round,
@@ -627,7 +631,7 @@ def get_session_result(session):
     # Topic 04 (b): DPP greedy MAP at session-final top-K (with Option α composition)
     if (RC.get('dpp_topk_enabled', False)
             and len(predicted_cards) >= 2
-            and session.like_vectors):
+            and _hydrated_lv_result):
         candidate_ids = [c['canonical_bld_id'] for c in predicted_cards]
         k = min(RC.get('top_k_results', 20), len(candidate_ids))
         card_by_id = {c['canonical_bld_id']: c for c in predicted_cards}
@@ -655,11 +659,11 @@ def get_session_result(session):
             else:
                 q_values = {}
             dpp_order = engine.compute_dpp_topk(
-                predicted_cards, session.like_vectors, k=k, q_override=q_values or None
+                predicted_cards, _hydrated_lv_result, k=k, q_override=q_values or None
             )
         else:
             # Standalone Topic 04: q derived from max centroid cosine inside compute_dpp_topk
-            dpp_order = engine.compute_dpp_topk(predicted_cards, session.like_vectors, k=k)
+            dpp_order = engine.compute_dpp_topk(predicted_cards, _hydrated_lv_result, k=k)
 
         _dpp_top10 = dpp_order[:10]  # IMP-10: store DPP top-10 for provenance
         predicted_cards = [card_by_id[bid] for bid in dpp_order if bid in card_by_id]

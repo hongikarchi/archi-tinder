@@ -40,6 +40,7 @@ from ..caches import (
     get_corpus_tag_df,
 )
 from ..views._shared import _progress, _liked_id_only
+from .hydration import hydrate_like_vectors, cache_embedding
 
 logger = logging.getLogger('apps.recommendation')
 RC = settings.RECOMMENDATION
@@ -590,12 +591,14 @@ def handle_swipe_extend(request, profile, session, session_id, client_buffer_ids
         # resumes on the first post-extend swipe. Clearing to [] (old behaviour)
         # made compute_confidence always return None in the extended session.
         if session.like_vectors:
+            _hydrated_lv_extend = hydrate_like_vectors(session)
             _, global_centroid = engine.compute_taste_centroids(
-                session.like_vectors, session.current_round,
+                _hydrated_lv_extend, session.current_round,
                 multimodal_floor=session.multimodal_floor,
             )
             session.previous_pref_vector = global_centroid.tolist()
         else:
+            _hydrated_lv_extend = []
             session.previous_pref_vector = []
 
         if client_buffer_ids:
@@ -606,7 +609,7 @@ def handle_swipe_extend(request, profile, session, session_id, client_buffer_ids
         pool_embeddings = engine.get_pool_embeddings(session.pool_ids)
         next_card_id = engine.compute_mmr_next(
             session.pool_ids, session.exposed_ids, pool_embeddings,
-            session.like_vectors, session.current_round,
+            _hydrated_lv_extend, session.current_round,
             multimodal_floor=session.multimodal_floor,
             question_bias_vector=session.question_bias_vector,
         )
@@ -735,7 +738,13 @@ def handle_swipe_normal(
                         {'id': canonical_bld_id, 'intensity': intensity}
                     ]
                 if embedding:
-                    session.like_vectors = session.like_vectors + [{'embedding': embedding, 'round': session.current_round}]
+                    # New shape: store only {id, round} — no 384-float payload in the
+                    # session row.  Populate the embedding cache immediately while we
+                    # still have `embedding` in hand so same-process hydration always hits.
+                    cache_embedding(canonical_bld_id, embedding)
+                    session.like_vectors = session.like_vectors + [
+                        {'id': canonical_bld_id, 'round': session.current_round}
+                    ]
             else:
                 if canonical_bld_id not in project.disliked_ids:
                     project.disliked_ids = project.disliked_ids + [canonical_bld_id]
@@ -758,10 +767,19 @@ def handle_swipe_normal(
         # dislike-heavy sequences. Acceptable per research/spec/requirements.md Section 11
         # Tier A Topic 10 Option A; revisit with data if problematic.
         # Action-card swipe: skip convergence tracking (no taste data recorded).
+        #
+        # Hydrate like_vectors once here; reused by all convergence + MMR calls below.
+        # Hydration is cheap when embeddings are already in Django cache (like-time set).
+        _hydrated_lv = hydrate_like_vectors(session) if session.like_vectors else []
+        if session.like_vectors and len(_hydrated_lv) < len(session.like_vectors):
+            logger.warning(
+                'Session %s: %d like_vectors stored but %d hydrated — dropped likes with missing embeddings',
+                session.session_id, len(session.like_vectors), len(_hydrated_lv),
+            )
         if not _is_action_card:
-            if session.phase == 'analyzing' and session.like_vectors:
+            if session.phase == 'analyzing' and _hydrated_lv:
                 _, global_centroid = engine.compute_taste_centroids(
-                    session.like_vectors, session.current_round,
+                    _hydrated_lv, session.current_round,
                     multimodal_floor=session.multimodal_floor,
                 )
                 centroid_list = global_centroid.tolist()
@@ -788,7 +806,7 @@ def handle_swipe_normal(
         # 6. Phase transitions (skip for action-card swipe — phase is already 'converged'
         # and no new taste evidence was recorded, so transitions would be spurious).
         if not _is_action_card:
-            like_count = len(session.like_vectors)
+            like_count = len(_hydrated_lv) if _hydrated_lv is not None else len(session.like_vectors)
 
             if session.phase == 'exploring' and like_count >= RC.get('min_likes_for_clustering', 3):
                 session.phase = 'analyzing'
@@ -866,10 +884,10 @@ def handle_swipe_normal(
             # the action card was first emitted), so we never re-offer the prompt.
             next_bid = engine.compute_mmr_next(
                 session.pool_ids, session.exposed_ids, pool_embeddings,
-                session.like_vectors, session.current_round,
+                _hydrated_lv, session.current_round,
                 question_bias_vector=session.question_bias_vector,
                 multimodal_floor=session.multimodal_floor,
-            ) if session.like_vectors else engine.farthest_point_from_pool(
+            ) if _hydrated_lv else engine.farthest_point_from_pool(
                 session.pool_ids, session.exposed_ids, pool_embeddings
             )
             # Pool exhausted — leave next_bid as None; view will set is_analysis_completed.
@@ -889,10 +907,10 @@ def handle_swipe_normal(
                 _action_card_accepted = False
                 next_bid = engine.compute_mmr_next(
                     session.pool_ids, session.exposed_ids, pool_embeddings,
-                    session.like_vectors, session.current_round,
+                    _hydrated_lv, session.current_round,
                     question_bias_vector=session.question_bias_vector,
                     multimodal_floor=session.multimodal_floor,
-                ) if session.like_vectors else engine.farthest_point_from_pool(
+                ) if _hydrated_lv else engine.farthest_point_from_pool(
                     session.pool_ids, session.exposed_ids, pool_embeddings
                 )
         elif session.phase == 'exploring':
@@ -944,7 +962,7 @@ def handle_swipe_normal(
             _action_card_accepted = False
             next_bid = engine.compute_mmr_next(
                 session.pool_ids, session.exposed_ids, pool_embeddings,
-                session.like_vectors, session.current_round,
+                _hydrated_lv, session.current_round,
                 question_bias_vector=session.question_bias_vector,
                 multimodal_floor=session.multimodal_floor,
             )
@@ -996,10 +1014,12 @@ def handle_swipe_normal(
             'action_card_shown',
         ])
 
-        # Save copies for prefetch calculation outside transaction
+        # Save copies for prefetch calculation outside transaction.
+        # saved_like_vectors is already hydrated (via _hydrated_lv computed above)
+        # so compute_sync_prefetch can pass it directly to engine functions.
         saved_pool_ids = list(session.pool_ids)
         saved_exposed_ids = list(session.exposed_ids)
-        saved_like_vectors = list(session.like_vectors) if session.like_vectors else []
+        saved_like_vectors = list(_hydrated_lv)
         saved_initial_batch = list(session.initial_batch) if session.initial_batch else []
         saved_current_round = session.current_round
         saved_phase = session.phase
@@ -1467,7 +1487,7 @@ def handle_question_response(request, profile, session_id):
 
     try:
         pool_embeddings = engine.get_pool_embeddings(session.pool_ids)
-        like_vectors = session.like_vectors or []
+        like_vectors = hydrate_like_vectors(session) if session.like_vectors else []
         exposed_ids = list(session.exposed_ids or [])
 
         card_ids = []

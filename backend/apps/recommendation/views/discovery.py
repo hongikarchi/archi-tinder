@@ -38,6 +38,7 @@ from ..caches import (
     evict_user_profile_detail,
     evict_project_detail,
 )
+from ..services.hydration import cache_embedding
 from ..discovery_feed import (
     DISCOVERY_DRAFT_PREFIX,
     create_discovery_draft,
@@ -413,7 +414,13 @@ class DiscoveryPromoteView(APIView):
         # Build like_vectors and preference_vector from seed embeddings.
         # All seeds use round=0 so they share identical recency weight — no decay
         # gradient is introduced across the contemporaneous Discovery batch.
+        #
+        # Two parallel lists:
+        #   like_vectors       — old shape {embedding, round} for local MMR computation below.
+        #   session_like_vectors — new shape {id, round} written to the session row.
+        # Embeddings are cached at build time so hydration on first swipe always hits.
         like_vectors = []
+        session_like_vectors = []
         pref_vector = []
         for bid in seed_ids:
             emb = pool_embeddings_seed.get(bid)
@@ -421,6 +428,8 @@ class DiscoveryPromoteView(APIView):
                 continue
             emb_list = emb.tolist() if hasattr(emb, 'tolist') else list(emb)
             like_vectors.append({'embedding': emb_list, 'round': 0})
+            session_like_vectors.append({'id': bid, 'round': 0})
+            cache_embedding(bid, emb_list)   # populate Django cache immediately
             pref_vector = engine.update_preference_vector(pref_vector, emb_list, 'like')
 
         # Determine phase based on how many seeds were successfully embedded.
@@ -519,7 +528,7 @@ class DiscoveryPromoteView(APIView):
                 preference_vector=pref_vector if pref_vector else [],
                 exposed_ids=exposed_ids + ([initial_batch[0]] if initial_batch else []),
                 initial_batch=initial_batch,
-                like_vectors=like_vectors,
+                like_vectors=session_like_vectors,
                 convergence_history=[],
                 previous_pref_vector=[],
                 original_filters={},
