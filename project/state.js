@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-06-28 02:44 KST',
-    head: 'c71a75a',
-    branch: 'feature/claude-backlog-reprioritize',
+    updatedAt: '2026-07-01 19:30 KST',
+    head: '3c59f9e',
+    branch: 'feature/claude-profile-qr',
   },
   done: [
+    {
+      id: 'PROFILE-QR-1',
+      title: '프로필 공유 진짜 QR (FakeQr 스텁 교체)',
+      completedAt: '2026-07-01',
+      note: '프로필 공유 모달 QR이 가짜(FakeQr.jsx, 스캔불가 SVG 격자)였음 → 실제 스캔되는 QR로 교체.',
+    },
     {
       id: 'CLEANUP-DEPLOY-2026-06-28',
       title: '배포 #250 + 백로그 정리',
@@ -71,13 +77,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-06-22',
       prs: [241],
       note: '이미지 레이턴시 리서치(#240) 지배 lever 구현. swipe 카드가 중앙값 4.6배(p90 21.9배) 과대-페치 → 커버 `image_url`을 표시크기(840px=DPR2)로 우-사이징. 프론트 only — 백엔드/Redis 캐시/API 계약 무변경(user 결정: 같은 URL 변환이라 효과 동일, SPA라 프론트가 유일 소비자). 리사이즈만(포맷/srcset/decode/LQIP = PR2, 측정 후).',
-    },
-    {
-      id: 'PERF-IMAGE-RESEARCH-1',
-      title: '이미지 레이턴시 리서치 (measure-first)',
-      completedAt: '2026-06-22',
-      prs: [240],
-      note: '프론트/웹 이미지-렌더 레이턴시 리서치(코드 아님). 측정-우선: Phase 0(실 swipe 카드 50장) → 이슈별 1차출처 리서치 → adversarial 검증. 백엔드 알고리즘 out of scope.',
     },
   ],
   now: [],
@@ -183,6 +182,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 253,
+      title: 'docs(task): re-prioritize backlog (launch-imminent) + dashboard',
+      mergedAt: '2026-06-27T17:45:26Z',
+      mergedAtKST: '2026-06-28 02:45 KST',
+      sha: '3c59f9e',
+    },
+    {
       number: 252,
       title: 'docs(task): backlog re-audit — grep-verify kept items, drop obsolete FRONT-PROFILE-1',
       mergedAt: '2026-06-27T17:26:40Z',
@@ -230,13 +236,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-06-23T23:59:29Z',
       mergedAtKST: '2026-06-24 08:59 KST',
       sha: 'f725427',
-    },
-    {
-      number: 243,
-      title: 'feat(TASTE-FLOW): Taste 탭 flow 개편 + Project.is_temp 라이프사이클 (FULL-ONBOARDING-1)',
-      mergedAt: '2026-06-23T23:45:02Z',
-      mergedAtKST: '2026-06-24 08:45 KST',
-      sha: '6f7a4a8',
     },
   ],
   agents: [
@@ -1663,12 +1662,12 @@ window.PROJECT_STATE = {
       role: '프로필 편집 폼 스타일',
     },
     {
-      path: 'frontend/src/components/profile/FakeQr.jsx',
-      role: '공유 명함 스텁 QR',
-    },
-    {
       path: 'frontend/src/components/profile/InfoCol.jsx',
       role: '카드 정보 컬럼 프리미티브',
+    },
+    {
+      path: 'frontend/src/components/profile/ProfileQr.jsx',
+      role: '',
     },
     {
       path: 'frontend/src/components/profile/ProjectCard.jsx',
