@@ -406,6 +406,41 @@ export default function App() {
     }
   }
 
+  // ── Shared results navigation ─────────────────────────────────────────────
+  // Called from BOTH the action-card right-swipe AND the top "결과 보러 가기" button.
+  // Navigates to the result page, fires getResult + generateReport in parallel,
+  // updates the project with persona report + axis scores, and (for temp projects
+  // whose report just landed) surfaces the SaveBoardModal for board naming.
+  async function goToResults(project) {
+    if (!project?.sessionId) {
+      navigate('/user/me')
+      return
+    }
+    const sessionId = project.sessionId
+    const backendId = project.backendId
+    const localId = project.id
+    navigate('/result/' + sessionId)
+    setIsResultLoading(true)
+    try {
+      const [resultData, reportData] = await Promise.all([
+        api.getResult({ session_id: sessionId }),
+        backendId ? api.generateReport(backendId).catch(() => null) : Promise.resolve(null),
+      ])
+      setProjects(prev => prev.map(p => p.id === localId ? {
+        ...p,
+        predictedLikes: resultData.predicted_like_images || [],
+        ...(reportData?.final_report ? { finalReport: reportData.final_report } : {}),
+        ...(reportData?.axis_scores ? { axisScores: reportData.axis_scores } : {}),
+      } : p))
+      if (reportData?.final_report && backendId && project?.isTemp) {
+        setSaveModalProject({ backendId, finalReport: reportData.final_report, localId })
+        setShowSaveModal(true)
+      }
+    } catch { /* ResultsPage fetches on entry */ }
+    finally { setIsResultLoading(false) }
+  }
+  // ── End shared results navigation ─────────────────────────────────────────
+
   async function handleSwipeCard(action) {
     if (swipeLock.current) {
       // Card may have flown off-screen during the lock window.
@@ -428,32 +463,9 @@ export default function App() {
       swipeLock.current = false
       if (action === 'like') {
         // RIGHT-swipe → navigate to persona report (opt-in).
+        // Delegate to goToResults so the top button and this path share identical logic.
         const project = projects.find(p => p.id === activeProjectId)
-        const sessionId = project?.sessionId
-        if (sessionId) {
-          const backendId = project?.backendId
-          // Prefetch result + report in background so ResultsPage loads faster.
-          // Navigate immediately so the user isn't waiting on the spinner.
-          navigate('/result/' + sessionId)
-          setIsResultLoading(true)
-          try {
-            const [resultData, reportData] = await Promise.all([
-              api.getResult({ session_id: sessionId }),
-              backendId ? api.generateReport(backendId).catch(() => null) : Promise.resolve(null),
-            ])
-            setProjects(prev => prev.map(p => p.id === activeProjectId ? {
-              ...p,
-              predictedLikes: resultData.predicted_like_images || [],
-              ...(reportData?.final_report ? { finalReport: reportData.final_report } : {}),
-              ...(reportData?.axis_scores ? { axisScores: reportData.axis_scores } : {}),
-            } : p))
-            if (reportData?.final_report && backendId && project?.isTemp) {
-              setSaveModalProject({ backendId, finalReport: reportData.final_report, localId: activeProjectId })
-              setShowSaveModal(true)
-            }
-          } catch { /* ResultsPage fetches on entry */ }
-          finally { setIsResultLoading(false) }
-        }
+        await goToResults(project)
       } else if (action === 'dislike') {
         // LEFT-swipe → keep exploring: mark that the user passed the action card
         // so the top "Finish & View Report" button becomes visible.
@@ -931,10 +943,36 @@ export default function App() {
   // Resume an interrupted swipe session from a board card.
   // boardId == project_id (String). Looks up the local project entry to get
   // its filters + stored sessionId, then navigates to /swipe.
+  // BUG #2 fix: if the board is NOT in local `projects` (e.g. invoked from
+  // BoardDetailPage which fetches its own board list), fetch the project from
+  // the API, build a synthetic local entry, upsert it into `projects`, then
+  // initSession with project_id so the backend resumes by project (Case #3).
   async function handleResumeProject(boardId) {
     const id = String(boardId)
-    const project = projects.find(p => p.id === id)
-    if (!project) return
+    let project = projects.find(p => p.id === id)
+    if (!project) {
+      // Board not in local state — fetch from API and build a minimal entry.
+      let fetched = null
+      try {
+        fetched = await api.getProject(id)
+      } catch { /* fall through — initSession will handle the failure */ }
+      const syntheticProject = {
+        id,
+        backendId: fetched?.project_id || id,
+        projectName: fetched?.name || 'Untitled',
+        filters: fetched?.filters || {},
+        likedBuildings: [],
+        swipedIds: [],
+        predictedLikes: [],
+        sessionId: fetched?.latest_session_id || null,
+        createdAt: fetched?.created_at || new Date().toISOString(),
+        deckImages: null,
+        visibility: fetched?.visibility || 'private',
+        isTemp: fetched?.is_temp ?? false,
+      }
+      setProjects(prev => prev.find(p => p.id === id) ? prev : [...prev, syntheticProject])
+      project = syntheticProject
+    }
     setActiveProjectId(id)
     navigate('/swipe')
     await initSession(id, project.filters, [], [], project.sessionId || null, null, null, project.projectName)
@@ -998,10 +1036,7 @@ export default function App() {
     keepExploringChosen,
     onSwipe: handleSwipeCard,
     onExtendSession: handleExtendSession,
-    onViewResults: () => {
-      if (activeProject?.sessionId) navigate('/result/' + activeProject.sessionId)
-      else navigate('/user/me')
-    },
+    onViewResults: () => { goToResults(activeProject) },
     cardResetToken,
     onExitToNewProject: () => {
       const hasLikes = (activeProject?.likedBuildings?.length ?? 0) > 0
@@ -1060,7 +1095,7 @@ export default function App() {
           <Route path="office/:officeId" element={<FirmProfilePage {...sharedLayoutProps} />} />
           <Route path="result/:sessionId" element={<ResultsPage projects={projects} setProjects={setProjects} />} />
           <Route path="buildings/:buildingId" element={<BuildingDetailPage />} />
-          <Route path="board/:boardId" element={<BoardDetailPage />} />
+          <Route path="board/:boardId" element={<BoardDetailPage onResume={handleResumeProject} />} />
           <Route path="board/:boardId/report" element={<BoardReportPage />} />
           <Route path="liked-projects" element={<LikedProjectsPage />} />
           <Route path="my/liked-offices" element={<Navigate to="/my/profile" replace />} />

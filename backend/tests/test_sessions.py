@@ -1273,8 +1273,11 @@ class TestExtendSessionFlow:
         assert SwipeEvent.objects.filter(session=session).count() == 1
 
     def test_state_endpoint_converged_returns_can_continue(self, auth_client, user_profile):
-        """GET /sessions/<id>/state/ on converged session returns can_continue + null next_image (no action card)."""
-        session = self._create_converged_session(user_profile)
+        """GET /sessions/<id>/state/ on a converged session WITH residual cards serves the
+        action card (not a terminal null) + can_continue — mirroring the swipe endpoint — so a
+        resumed converged board can continue exploring. TASTE-FLOW: converged state no longer
+        returns next_image=None when cards remain (residual==0 still returns the terminal null)."""
+        session = self._create_converged_session(user_profile)  # residual >> 1, action_card_shown=False
 
         patchers = _apply_patches()
         try:
@@ -1284,8 +1287,10 @@ class TestExtendSessionFlow:
 
         assert resp.status_code == 200
         data = resp.json()
-        assert data['next_image'] is None
-        assert data['is_analysis_completed'] is True
+        # action_card_shown was False -> converged state emits the synthetic action card once.
+        assert data['next_image'] is not None
+        assert data['next_image'].get('card_type') == 'action'
+        assert data['is_analysis_completed'] is False
         assert data['can_continue'] is True
 
 

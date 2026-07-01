@@ -29,6 +29,7 @@ from ..caches import evict_projects_list, evict_user_profile_detail, evict_proje
 from ..perf_timing import stage
 from ..views._shared import _progress
 from .hydration import hydrate_like_vectors
+from .swipe_service import _build_action_card
 
 logger = logging.getLogger('apps.recommendation')
 RC = settings.RECOMMENDATION
@@ -439,18 +440,82 @@ def get_session_state(request, session):
     if phase == 'converged':
         residual = len([pid for pid in pool_ids if pid not in set(exposed_ids)]) if pool_ids else 0
         can_continue = (residual >= 1)
+
+        if residual == 0:
+            # Truly exhausted — terminal state.
+            return Response({
+                'session_id':      str(session.session_id),
+                'project_id':      str(session.project.project_id),
+                'session_status':  session.status,
+                'next_image':      None,
+                'prefetch_image':  None,
+                'prefetch_image_2': None,
+                'progress':        _progress(session),
+                'filter_relaxed':  False,
+                'is_analysis_completed': True,
+                'can_continue':    False,
+            })
+
+        # residual >= 1: mirror the swipe path's converged card-serving logic
+        # (swipe_service.py lines 895-913) so resume == live behaviour.
+        # Do NOT call refresh_pool_if_low — the live path skips it for converged.
+        pool_embeddings = engine.get_pool_embeddings(pool_ids) if pool_ids else {}
         prefetch_card = None
         prefetch_card_2 = None
+
+        if not session.action_card_shown:
+            # Emit the action card exactly once (emit-once sentinel).
+            next_card = _build_action_card()
+            session.action_card_shown = True
+            session.save(update_fields=['action_card_shown'])
+        else:
+            # Action card already shown — select the next real card via MMR
+            # (mirrors swipe_service lines 904-913).
+            _hydrated_lv = like_vectors  # already hydrated above
+            if _hydrated_lv:
+                next_bid = engine.compute_mmr_next(
+                    pool_ids, exposed_ids, pool_embeddings,
+                    _hydrated_lv, current_round,
+                    question_bias_vector=session.question_bias_vector,
+                    multimodal_floor=session.multimodal_floor,
+                )
+            else:
+                next_bid = engine.farthest_point_from_pool(
+                    pool_ids, exposed_ids, pool_embeddings
+                )
+            next_card = engine.get_building_card(next_bid, image_focus=image_focus) if next_bid else None
+
+            # Add served card to exposed_ids (sentinel is never added).
+            if next_bid and next_bid not in set(exposed_ids):
+                exposed_ids = exposed_ids + [next_bid]
+                session.exposed_ids = exposed_ids
+                session.save(update_fields=['exposed_ids'])
+
+            # Prefetch: one lookahead card for converged-continue
+            # (mirrors the non-converged analyzing path's single-step lookahead).
+            try:
+                if next_bid and _hydrated_lv:
+                    pf_exposed = exposed_ids  # already includes next_bid
+                    pf_id = engine.compute_mmr_next(
+                        pool_ids, pf_exposed, pool_embeddings,
+                        _hydrated_lv, current_round + 1,
+                        question_bias_vector=session.question_bias_vector,
+                        multimodal_floor=session.multimodal_floor,
+                    )
+                    prefetch_card = engine.get_building_card(pf_id, image_focus=image_focus) if pf_id else None
+            except Exception:
+                prefetch_card = None
+
         return Response({
             'session_id':      str(session.session_id),
             'project_id':      str(session.project.project_id),
             'session_status':  session.status,
-            'next_image':      None,
+            'next_image':      next_card,
             'prefetch_image':  prefetch_card,
             'prefetch_image_2': prefetch_card_2,
             'progress':        _progress(session),
             'filter_relaxed':  False,
-            'is_analysis_completed': True,
+            'is_analysis_completed': False,
             'can_continue':    can_continue,
         })
 

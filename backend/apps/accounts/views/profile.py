@@ -54,7 +54,7 @@ def _build_boards_field(target_profile, is_owner, page=1, page_size=12):
 
     # v3.2: discovery draft boards (name prefix 'discovery_') are now visible on
     # the profile — they are normal boards and must appear in the board list.
-    qs = Project.objects.filter(user=target_profile).order_by('-created_at')
+    qs = Project.objects.filter(user=target_profile).order_by('-updated_at')
     if not is_owner:
         qs = qs.filter(visibility='public')
 

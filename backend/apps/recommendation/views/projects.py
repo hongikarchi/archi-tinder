@@ -81,7 +81,7 @@ class ProjectListCreateView(APIView):
                             _latest_like_count=_latest_lc_sq,
                             _latest_session_created_at=_latest_ca_sq,
                         )
-                        .order_by('-created_at')
+                        .order_by('-updated_at')
                     )
                 start = (page - 1) * page_size
                 with stage('fetch_chunk_plus_one'):
@@ -283,7 +283,7 @@ class UserProjectsListView(APIView):
                 _latest_like_count=_latest_lc_sq,
                 _latest_session_created_at=_latest_ca_sq,
             )
-            .order_by('-created_at')
+            .order_by('-updated_at')
         )
         if not is_owner:
             qs = qs.filter(visibility='public')
