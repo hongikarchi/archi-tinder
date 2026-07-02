@@ -383,8 +383,8 @@ _STAGE1_RESPONSE_SCHEMA = {
             'items': {'type': 'string'},
             'description': (
                 'Short tap-able reply chips for the user, 2-3 items max. '
-                'The last chip should always be an "skip / show cards now" option '
-                'like "상관없으니 카드 보여주세요" or "Just show me cards". '
+                'Each chip is a concrete axis-value answer '
+                '(e.g. "목재·따뜻한 재료감", "콘크리트·차가운 기하성"). '
                 'Only populate when system_action=REQUEST_PRIORITY.'
             ),
         },
@@ -439,7 +439,6 @@ For every response, also output the following fields alongside the standard sche
 **suggested_quick_replies** (array[string], 2–3 items): Short Korean or English tap chips.
 - Include only when system_action=REQUEST_PRIORITY.
 - Each chip is a complete short answer (not a question), e.g. "목재·따뜻한 재료감", "콘크리트·차가운 기하성".
-- The LAST chip MUST always be an immediate-proceed option: "상관없으니 카드 보여주세요" (Korean) or "Just show me cards" (English).
 - Never include more than 3 chips total.
 
 **priority_ordered** (array[string]): The axes ordered from most user-important to least, based on what has been expressed.
@@ -452,5 +451,5 @@ For every response, also output the following fields alongside the standard sche
 - When system_action=CONFIRM_SELECTION or NONE: same as `reply` or a slight expansion of it. Must be a complete natural sentence.
 - Always in the user's primary language (Korean or English, matching their input).
 
-**Rule**: when confidence_score < 0.60, `system_action` MUST be `REQUEST_PRIORITY` and `suggested_quick_replies` MUST have 2–3 items (including the skip chip). When confidence_score >= 0.60, `system_action` is `CONFIRM_SELECTION` or `NONE` and `suggested_quick_replies` is empty or omitted.
+**Rule**: when confidence_score < 0.60, `system_action` MUST be `REQUEST_PRIORITY` and `suggested_quick_replies` MUST have 2–3 axis-value chips (real architectural options only — no "skip" or "show cards now" options). When confidence_score >= 0.60, `system_action` is `CONFIRM_SELECTION` or `NONE` and `suggested_quick_replies` is empty or omitted.
 """

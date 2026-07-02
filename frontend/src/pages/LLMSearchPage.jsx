@@ -517,8 +517,6 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
           isFallback,
           filters,
           quickReplies: parsed.suggested_quick_replies || [],
-          priorityOrdered: parsed.priority_ordered || [],
-          calibrationPrompt: parsed.llm_response_message || '',
           systemAction: parsed.system_action || null,
         }])
       } else {
@@ -538,8 +536,6 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
           results, isFallback,
           filters,
           quickReplies: parsed.suggested_quick_replies || [],
-          priorityOrdered: parsed.priority_ordered || [],
-          calibrationPrompt: parsed.llm_response_message || '',
         }])
 
         // Reset history for the next fresh query
@@ -609,8 +605,6 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
         isFallback,
         filters,
         quickReplies: parsed.suggested_quick_replies || [],
-        priorityOrdered: parsed.priority_ordered || [],
-        calibrationPrompt: parsed.llm_response_message || '',
       }])
     } catch (err) {
       setMessages(prev => [...prev, { role: 'ai', text: `Something went wrong: ${err.message}. Please try again.` }])
@@ -753,26 +747,6 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
                 {msg.role === 'ai' && <FilterChips filters={msg.filters} />}
                 {msg.role === 'ai' && <ResultStrip results={msg.results} isFallback={msg.isFallback} />}
               </div>
-              {msg.role === 'ai' && msg.calibrationPrompt && msg.results && msg.results.length > 0 && (
-                <div style={{
-                  marginTop: 8,
-                  fontSize: 12,
-                  color: 'var(--color-text-dim)',
-                  fontWeight: 500,
-                  paddingLeft: 2,
-                }}>
-                  {msg.calibrationPrompt}
-                </div>
-              )}
-              {msg.role === 'ai' && msg.priorityOrdered && msg.priorityOrdered.length > 0 && (
-                <div className={s.badgesRow} role="list" aria-label="Extracted taste priorities" style={{ marginTop: 6 }}>
-                  {msg.priorityOrdered.slice(0, 4).map((label, i) => (
-                    <span key={`${label}_${i}`} className={s.priorityBadge} role="listitem">
-                      {i === 0 ? '★ ' : ''}{label}
-                    </span>
-                  ))}
-                </div>
-              )}
               {msg.role === 'ai' && msg.quickReplies && msg.quickReplies.length > 0 && (
                 <div className={s.quickRepliesWrapper} role="group" aria-label="Quick reply options" style={{ marginTop: 8 }}>
                   {msg.quickReplies.map((chip, i) => {

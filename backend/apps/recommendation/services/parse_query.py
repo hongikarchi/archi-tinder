@@ -183,10 +183,19 @@ def _extract_calibration_fields(data: dict, filters: dict, probe_needed: bool) -
     else:
         system_action = 'NONE'
 
-    # suggested_quick_replies: list[str], max 3
+    # suggested_quick_replies: list of structured chips {label, axis, value} or plain
+    # strings.  Drop any chip whose axis is not a valid priority axis — this removes
+    # the defunct skip chip ("상관없으니 카드 보여주세요" / "Just show me cards") and
+    # prevents the "priority_axis must be one of [...]" 400 if an invalid-axis chip is
+    # ever clicked.  Plain strings (no axis) are also dropped since they cannot be sent
+    # back as a priority_axis.  The deterministic _build_axis_chips path (D1) always
+    # produces valid-axis dicts and is unaffected — it overwrites this list downstream.
     raw_replies = data.get('suggested_quick_replies') or []
     if isinstance(raw_replies, list):
-        suggested_quick_replies = [r for r in raw_replies if isinstance(r, str)][:3]
+        suggested_quick_replies = [
+            r for r in raw_replies
+            if isinstance(r, dict) and r.get('axis') in _STRONG_AXES
+        ][:3]
     else:
         suggested_quick_replies = []
 

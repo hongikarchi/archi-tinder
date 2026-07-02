@@ -111,7 +111,7 @@ _PROBE_PAYLOAD = {
     'visual_description': None,
     'confidence_score': 0.40,
     'system_action': 'REQUEST_PRIORITY',
-    'suggested_quick_replies': ['따뜻한 재료', '차가운 기하성', '상관없어요, 다 보여주세요'],
+    'suggested_quick_replies': ['따뜻한 재료', '차가운 기하성'],
     'priority_ordered': ['program'],
     'llm_response_message': '어떤 방향을 원하세요?',
 }
