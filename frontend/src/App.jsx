@@ -429,7 +429,7 @@ export default function App() {
     try {
       const [resultData, reportData] = await Promise.all([
         api.getResult({ session_id: sessionId }),
-        backendId ? api.generateReport(backendId).catch(() => null) : Promise.resolve(null),
+        backendId ? api.generateReport(backendId).catch((err) => { console.error('report generation failed:', err); return null; }) : Promise.resolve(null),
       ])
       setProjects(prev => prev.map(p => p.id === localId ? {
         ...p,
@@ -626,7 +626,7 @@ export default function App() {
           const backendId = project?.backendId
           const [resultData, reportData] = await Promise.all([
             api.getResult({ session_id: project.sessionId }),
-            backendId ? api.generateReport(backendId).catch(() => null) : Promise.resolve(null),
+            backendId ? api.generateReport(backendId).catch((err) => { console.error('report generation failed:', err); return null; }) : Promise.resolve(null),
           ])
           setProjects(prev => prev.map(p => p.id === activeProjectId ? {
             ...p,

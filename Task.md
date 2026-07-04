@@ -259,6 +259,14 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### PROFILE-QR-1 — 프로필 공유 진짜 QR (FakeQr 스텁 교체) — RESOLVED 2026-07-01 (`e872bf7`-pre-squash)
+프로필 공유 모달 QR이 가짜(FakeQr.jsx, 스캔불가 SVG 격자)였음 → 실제 스캔되는 QR로 교체.
+- [x] `qrcode.react@4.2.0` 추가 + 신규 `ProfileQr.jsx`(QRCodeSVG, `{window.location.origin}/user/{user_id}` 인코딩, level M, marginSize=2 quiet-zone, dark-on-white 테마독립, `role=img`, userId 없으면 skip).
+- [x] `BusinessCard.jsx`: FakeQr→ProfileQr (앞 72px/뒤 160px, `user.user_id` 전달 — 본인+타인 프로필 공유 둘 다).
+- [x] `ShareCardModal.jsx`: "QR 공유 준비 중" → 스캔 안내 + **링크 복사** 버튼(clipboard, BoardDetailPage 패턴) + `navigator.share`(모바일 점진적 향상).
+- [x] `FakeQr.jsx` 삭제(타 importer 없음). frontend-only, 백엔드 0(기존 `/user/:userId` + `GET /users/{id}/` AllowAny 재사용).
+- [x] eslint 0 · build PASS · inline review clean. lockfile: 미사용 lightningcss optional transitive prune(vite=esbuild, benign). ⚠️ app-test 라이브 스모크는 agent hang(소켓)으로 미실행 → localhost:5174 수동확인/CI로 이연.
+
 ### CLEANUP-DEPLOY-2026-06-28 — 배포 #250 + 백로그 정리 — RESOLVED 2026-06-28
 배포 후 정리 batch: develop→main deploy + prod migration + 백로그 audit.
 - [x] Deploy PR #250 (develop→main squash, main `c3a7ac2`; develop force-reset to match, HARD RULE 4 carve-out). Railway 자동배포. Migration 0011 prod 적용+검증 (12 profiles: handle==display_name 0 mismatch, is_guest True=8/False=4). [[project_login_onboard_1_shipped]]

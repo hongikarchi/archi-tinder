@@ -508,6 +508,13 @@ class DiscoveryPromoteView(APIView):
         # second 'Discovery 취향 탐색' board.  If for some reason draft is None
         # at this point (shouldn't happen — the not_enough_likes guard above
         # ensures draft was resolved), create a new project as fallback.
+        # Defense (from #257): seed liked_ids on the fallback create as well,
+        # so report generation (which reads project.liked_ids) never returns
+        # 400 "No liked buildings yet" even if the not_enough_likes guard is
+        # ever loosened.  Shape matches swipe_service.py's canonical write:
+        # {id: str, intensity: float}.
+        seed_liked_ids = [{'id': sid, 'intensity': 1.0} for sid in seed_ids]
+
         with transaction.atomic():
             if draft is not None:
                 project = draft
@@ -517,6 +524,7 @@ class DiscoveryPromoteView(APIView):
                     name='Discovery 취향 탐색',
                     filters={},
                     raw_query=None,
+                    liked_ids=seed_liked_ids,
                 )
             session = AnalysisSession.objects.create(
                 user=profile,
