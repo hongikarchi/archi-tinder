@@ -203,6 +203,9 @@ def _build_idf_score_cases(filters, base_weights, idf_map, filter_priority):
     n_axes = max(len(filter_priority), 1)
     priority_rank = {axis: i for i, axis in enumerate(filter_priority)}
 
+    # D2: top-priority multiplier — rank-0 axis gets an extra dominance factor
+    top_mult = float(base_weights.get('_top_priority_multiplier', 1.0))
+
     def _effective_weight(axis, value):
         """Compute effective weight for a single axis+value."""
         base = float(base_weights.get(axis, 0.0))
@@ -213,6 +216,10 @@ def _build_idf_score_cases(filters, base_weights, idf_map, filter_priority):
         rank = priority_rank.get(axis, n_axes)  # unranked -> no boost
         rank_frac = float(n_axes - rank) / float(n_axes)
         boost_factor = 1.0 + priority_boost * rank_frac
+
+        # D2: rank-0 (highest-priority axis) gets additional top_mult boost
+        if rank == 0:
+            boost_factor *= top_mult
 
         # IDF factor
         if use_idf:

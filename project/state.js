@@ -23,11 +23,23 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-06-27 19:31 KST',
-    head: 'e966617',
-    branch: 'feature/claude-login-onboarding',
+    updatedAt: '2026-07-01 19:30 KST',
+    head: '3c59f9e',
+    branch: 'feature/claude-profile-qr',
   },
   done: [
+    {
+      id: 'PROFILE-QR-1',
+      title: '프로필 공유 진짜 QR (FakeQr 스텁 교체)',
+      completedAt: '2026-07-01',
+      note: '프로필 공유 모달 QR이 가짜(FakeQr.jsx, 스캔불가 SVG 격자)였음 → 실제 스캔되는 QR로 교체.',
+    },
+    {
+      id: 'CLEANUP-DEPLOY-2026-06-28',
+      title: '배포 #250 + 백로그 정리',
+      completedAt: '2026-06-28',
+      note: '배포 후 정리 batch: develop→main deploy + prod migration + 백로그 audit.',
+    },
     {
       id: 'LOGIN-ONBOARD-1',
       title: '로그인/온보딩 통합 + 인증 모델 단순화',
@@ -66,60 +78,38 @@ window.PROJECT_STATE = {
       prs: [241],
       note: '이미지 레이턴시 리서치(#240) 지배 lever 구현. swipe 카드가 중앙값 4.6배(p90 21.9배) 과대-페치 → 커버 `image_url`을 표시크기(840px=DPR2)로 우-사이징. 프론트 only — 백엔드/Redis 캐시/API 계약 무변경(user 결정: 같은 URL 변환이라 효과 동일, SPA라 프론트가 유일 소비자). 리사이즈만(포맷/srcset/decode/LQIP = PR2, 측정 후).',
     },
-    {
-      id: 'PERF-IMAGE-RESEARCH-1',
-      title: '이미지 레이턴시 리서치 (measure-first)',
-      completedAt: '2026-06-22',
-      prs: [240],
-      note: '프론트/웹 이미지-렌더 레이턴시 리서치(코드 아님). 측정-우선: Phase 0(실 swipe 카드 50장) → 이슈별 1차출처 리서치 → adversarial 검증. 백엔드 알고리즘 out of scope.',
-    },
-    {
-      id: 'FRONT-AUTH-3',
-      title: '로그인 테마 통일 + 한영 토글',
-      completedAt: '2026-06-12',
-      note: '협업자 dain `archibe-login`(`c4954ea`) 리디자인 이식 — 제스처 인트로 팝업 + 카드 상단 한/영 토글 + 로그인 전체 i18n + 디자인 테마 통일. 5단계 플로우/consent 스와이프/반응형 카드/API 계약 무변경.',
-    },
   ],
   now: [],
   next: {
-    xhigh: [],
-    high: [
+    xhigh: [
       {
         id: 'FULL-ONBOARDING-2',
         title: 'is_temp 라이프사이클 마감 (#243 fast-follows)',
         note: '#243(`6f7a4a8`, FULL-ONBOARDING-1 Taste-flow + Project.is_temp) merge 시 verified-review로 게시한 후속(Codex RC + 워크플로우 adversarial-verify + Opus judge). 귀속: #243 diff는 models/serializers/session_service/migration/frontend만 — projects.py·discovery.py·engine.py 미수정 → 아래 1만 PR-신규, 나머지…',
       },
       {
-        id: 'FRONT-IMAGE-RESIZE-3',
-        title: '이미지 LQIP + 풀해상도 passthrough (PR3)',
-        note: 'PR2(#242)가 srcset/decode/classifier 출하 → 남은 Tier A polish. 전부 프론트.',
+        id: 'FULL-LEGAL-1',
+        title: 'PIPA/GDPR consent: Terms/Privacy 페이지 + 한국어 affirmative copy (잔여)',
+        note: 'Partial mitigation shipped via FULL-LOGIN-REDESIGN-1: UserProfile.consent_accepted_at + consent_policy_version fields + terminal-style "동의합니다" capture on guest wizard. Still pending: legally-reviewed copy, Privacy/Terms routes, retention/export/delete flow. PIPA-compliant copy + UI/UX legal review required before public launch.',
       },
-      {
-        id: 'ARCHITECT-UNIFY-1',
-        title: 'firm-side Office→Architect 전면 통합 (deferred, firm-UX 착수 시)',
-        note: 'office-interest 모델 중복 해소됨: Phase 0(SavedOffice #188) + C(OfficeFollow, ARCHITECT-UNIFY-C)로 두 미배선 중복 삭제 → follow 모델 1개(ArchitectFollow). 남은 통합 = Office 서브시스템(table/claim/sync_offices/FirmProfilePage) arch_id 흡수 = firm-side 전면 재설계, deferred(firm-UX 착수 시). Office는 계획 기능 substrate(BACK-RECOMMEND-3/EXTERNAL-1/firm-claim)라 park.',
-      },
+    ],
+    high: [
       {
         id: 'BACK-RECOMMEND-1',
         title: 'Project 두번째 세션이 이전 taste를 모름',
         note: 'Code audit 2026-05-27: SessionCreateView resolves project_id only to skip dedupe; session_insert still creates phase=exploring with empty like_vectors/convergence/preference state. Project.liked_ids/disliked_ids/saved_ids persist but are not read. Primary edit: views/sessions.py warm-start policy + engine.get_pool_embeddings(project liked_ids) scoped to active project; tests in test_session_create_correctness.py for no cross-project leakage and progress semantics.',
       },
       {
-        id: 'FULL-LANGUAGE-1',
-        title: '한/영 언어 설정 토글 없음 (Slice 1 shipped)',
-        note: 'Code audit 2026-05-27: UserProfile preferences are theme/font only; UserSerializer and UserProfileSelfUpdateSerializer need language parity. ThemeContext + AppearanceSettings are the local persistence/UI pattern. ParseQueryView currently calls services.parse_query(conversation_history) with no user preference, so language must be passed from request.user.profile.language and prompt inference overridden.',
-      },
-      {
-        id: 'FRONT-DESIGN-1',
-        title: '디자인 시스템 컴포넌트 리워크 (paused)',
-        note: 'Code audit 2026-05-27: 581 inline style call sites. Largest FE files: BoardDetailPage 1049, UserProfilePage 992, App 838, BuildingDetailPage 711, SwipePage 683, FirmProfilePage 540. tokens.css exists; index.css is mostly utilities. Slice leaf components first (ArticleCard/ProjectCard/BoardCard), then SwipeCard/BuildingDetailPage; each slice lint+build+screenshot.',
+        id: 'BACK-PERFORMANCE-5',
+        title: 'Swipe latency 0.7-1.5s 흔들림',
+        note: 'Code audit 2026-05-27: SwipeView still does update/phase/refresh_pool/get_pool_embeddings/MMR-or-farthest selection in request transaction. Async prefetch only helps after next_bid is selected. Use existing [SWIPE TIMING] lock/embed/select/prefetch/total + embedding cache stats to bucket variance before code changes.',
       },
     ],
     medium: [
       {
-        id: 'BACK-AVATAR-3',
-        title: '기존 누적 orphan 아바타 일괄 청소 (sweep 명령)',
-        note: 'BACK-AVATAR-2(`5e1f934`)가 교체/삭제 시점 GC를 붙였으나 그 이전에 쌓인 orphan(R2/디스크)은 남음. management command(dry-run + `--confirm`, `purge_legacy_projects` 패턴) — R2 `list_objects`로 `avatars/` 나열 → 어떤 `UserProfile.avatar_url`도 참조 않는 키 삭제. 비차단·비긴급(현 prod 아바타 ≈0, 기능 갓 출시).',
+        id: 'FRONT-IMAGE-RESIZE-3',
+        title: '이미지 LQIP + 풀해상도 passthrough (PR3)',
+        note: 'PR2(#242)가 srcset/decode/classifier 출하 → 남은 Tier A polish. 전부 프론트.',
       },
       {
         id: 'BACK-LLM-4',
@@ -127,29 +117,31 @@ window.PROJECT_STATE = {
         note: 'BACK-LLM-2(#195) 리뷰 중 발견(미수정, pre-existing). `backend/apps/recommendation/views/search.py` `ParseQueryView.post`의 conversation_history 검증이 BACK-LLM-2 serializer가 고친 것과 동일하게 `json.dumps` 기본 `ensure_ascii=True`로 byte 측정 가능성 → 한글 대화가 한도를 6배 부풀려 거짓 거부. 확인 후 `ensure_ascii=False`+UT…',
       },
       {
-        id: 'FRONT-DISCOVERY-1',
-        title: '트리거 카드 빈 덱 동시각 한 박자 지연 (비차단)',
-        note: '`DiscoveryPage.jsx` 트리거 주입 effect dep `[draftId, draftLikeCount]`. like 10번째가 덱이 빈 순간(prefetch in-flight)과 겹치고 이후 추가 like가 없으면 트리거가 한 카드 늦게 뜸. 크래시·상태손상 없음. dep에 deck refill 신호 추가로 보강 가능(ref 멱등 가드 이미 존재).',
+        id: 'FULL-LANGUAGE-1',
+        title: '한/영 UI 라벨 번역 sweep (토글·필드·LLM 배선 완료; 잔여=라벨)',
+        note: 'Code audit 2026-05-27: UserProfile preferences are theme/font only; UserSerializer and UserProfileSelfUpdateSerializer need language parity. ThemeContext + AppearanceSettings are the local persistence/UI pattern. ParseQueryView currently calls services.parse_query(conversation_history) with no user preference, so language must be passed from request.user.profile.language and prompt inference overridden.',
       },
       {
-        id: 'FRONT-PROFILE-1',
-        title: '프로필 재설계 브라우저 픽셀 패스 (Codex)',
-        note: 'FRONT-PROFILE-HARVEST-1(#179) 머지 후 Codex 브라우저 수정 (별도 PR). FollowListModal 모바일 bottom-sheet(≤768px, DESIGN.md §8.10) + backdrop opacity 0.6→0.4 + inline onMouseEnter→CSS hover + 4테마 픽셀 검증(github-light 먼저). 원 하베스트 minor (2026-06-04 audit 재확인): EditProfileModal(`components/EditPr…',
-      },
-      {
-        id: 'BACK-PERFORMANCE-5',
-        title: 'Swipe latency 0.7-1.5s 흔들림',
-        note: 'Code audit 2026-05-27: SwipeView still does update/phase/refresh_pool/get_pool_embeddings/MMR-or-farthest selection in request transaction. Async prefetch only helps after next_bid is selected. Use existing [SWIPE TIMING] lock/embed/select/prefetch/total + embedding cache stats to bucket variance before code changes.',
+        id: 'FRONT-DESIGN-1',
+        title: '디자인 시스템 컴포넌트 리워크 (paused)',
+        note: 'Code audit 2026-05-27: 581 inline style call sites. Largest FE files: BoardDetailPage 1049, UserProfilePage 992, App 838, BuildingDetailPage 711, SwipePage 683, FirmProfilePage 540. tokens.css exists; index.css is mostly utilities. Slice leaf components first (ArticleCard/ProjectCard/BoardCard), then SwipeCard/BuildingDetailPage; each slice lint+build+screenshot.',
       },
       {
         id: 'FRONT-LAYOUT-1',
         title: 'Desktop wide-screen 레이아웃 어색함',
         note: 'Code audit 2026-05-27: body is 100vh/overflow hidden and each page owns scroll. BuildingDetail stays maxWidth 820 with only masonry media query; BoardDetail/UserProfile maxWidth 1100 but hero/profile remain mobile-centered. Start with BuildingDetail desktop split, then Board/User grids.',
       },
+    ],
+    low: [
       {
-        id: 'FULL-LEGAL-1',
-        title: 'PIPA/GDPR consent 없음 (public launch 차단)',
-        note: 'Partial mitigation shipped via FULL-LOGIN-REDESIGN-1: UserProfile.consent_accepted_at + consent_policy_version fields + terminal-style "동의합니다" capture on guest wizard. Still pending: legally-reviewed copy, Privacy/Terms routes, retention/export/delete flow. PIPA-compliant copy + UI/UX legal review required before public launch.',
+        id: 'ARCHITECT-UNIFY-1',
+        title: 'firm-side Office→Architect 전면 통합 (deferred, firm-UX 착수 시)',
+        note: 'office-interest 모델 중복 해소됨: Phase 0(SavedOffice #188) + C(OfficeFollow, ARCHITECT-UNIFY-C)로 두 미배선 중복 삭제 → follow 모델 1개(ArchitectFollow). 남은 통합 = Office 서브시스템(table/claim/sync_offices/FirmProfilePage) arch_id 흡수 = firm-side 전면 재설계, deferred(firm-UX 착수 시). Office는 계획 기능 substrate(BACK-RECOMMEND-3/EXTERNAL-1/firm-claim)라 park.',
+      },
+      {
+        id: 'BACK-AVATAR-3',
+        title: '기존 누적 orphan 아바타 일괄 청소 (sweep 명령)',
+        note: 'BACK-AVATAR-2(`5e1f934`)가 교체/삭제 시점 GC를 붙였으나 그 이전에 쌓인 orphan(R2/디스크)은 남음. management command(dry-run + `--confirm`, `purge_legacy_projects` 패턴) — R2 `list_objects`로 `avatars/` 나열 → 어떤 `UserProfile.avatar_url`도 참조 않는 키 삭제. 비차단·비긴급(현 prod 아바타 ≈0, 기능 갓 출시).',
       },
       {
         id: 'BACK-PERFORMANCE-6',
@@ -161,8 +153,6 @@ window.PROJECT_STATE = {
         title: 'Unverified guest row 누적 정리 (conditional)',
         note: 'Guest 계정(FULL-LOGIN-REDESIGN-1 #154/#155)은 정리 로직 없음 (user Q5 결정). `/auth/guest/` throttle 3/min/IP이나 IP 로테이션 botnet은 row 증가 가능 → 조건부 모니터링 항목.',
       },
-    ],
-    low: [
       {
         id: 'FRONT-UX-6',
         title: 'temp 삭제 실패 무음 + activeProjectId 미정리',
@@ -192,6 +182,41 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 253,
+      title: 'docs(task): re-prioritize backlog (launch-imminent) + dashboard',
+      mergedAt: '2026-06-27T17:45:26Z',
+      mergedAtKST: '2026-06-28 02:45 KST',
+      sha: '3c59f9e',
+    },
+    {
+      number: 252,
+      title: 'docs(task): backlog re-audit — grep-verify kept items, drop obsolete FRONT-PROFILE-1',
+      mergedAt: '2026-06-27T17:26:40Z',
+      mergedAtKST: '2026-06-28 02:26 KST',
+      sha: 'c71a75a',
+    },
+    {
+      number: 251,
+      title: 'docs(task): post-deploy cleanup + dashboard refresh',
+      mergedAt: '2026-06-27T17:14:16Z',
+      mergedAtKST: '2026-06-28 02:14 KST',
+      sha: '575da9b',
+    },
+    {
+      number: 249,
+      title: 'feat(discovery): cute loading skeleton — mascot + 취향 탐색 중 (DISCOVERY-SKELETON)',
+      mergedAt: '2026-06-27T10:34:50Z',
+      mergedAtKST: '2026-06-27 19:34 KST',
+      sha: '126c8ab',
+    },
+    {
+      number: 248,
+      title: 'feat(auth): unify login/onboarding — single id+password flow, Hangul ID, Google verify-only (LOGIN-ONBOARD-1)',
+      mergedAt: '2026-06-27T10:33:38Z',
+      mergedAtKST: '2026-06-27 19:33 KST',
+      sha: '674ba41',
+    },
+    {
       number: 246,
       title: 'fix(DISCOVERY-UI): 상단 클릭가능 Taste 저장·이동 버튼 + 취향다양 라벨 제거',
       mergedAt: '2026-06-27T01:48:23Z',
@@ -211,41 +236,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-06-23T23:59:29Z',
       mergedAtKST: '2026-06-24 08:59 KST',
       sha: 'f725427',
-    },
-    {
-      number: 243,
-      title: 'feat(TASTE-FLOW): Taste 탭 flow 개편 + Project.is_temp 라이프사이클 (FULL-ONBOARDING-1)',
-      mergedAt: '2026-06-23T23:45:02Z',
-      mergedAtKST: '2026-06-24 08:45 KST',
-      sha: '6f7a4a8',
-    },
-    {
-      number: 242,
-      title: 'perf(image): srcset + per-DPR quality + decode-preload + imgix classifier (PR2, frontend-only)',
-      mergedAt: '2026-06-21T17:12:48Z',
-      mergedAtKST: '2026-06-22 02:12 KST',
-      sha: '6555f15',
-    },
-    {
-      number: 241,
-      title: 'perf(image): right-size swipe cover URLs at normalizeCard (PR1, frontend-only)',
-      mergedAt: '2026-06-21T15:49:25Z',
-      mergedAtKST: '2026-06-22 00:49 KST',
-      sha: 'bce04d6',
-    },
-    {
-      number: 240,
-      title: 'docs(perf): image-latency research — measure-first report + findings',
-      mergedAt: '2026-06-21T15:41:24Z',
-      mergedAtKST: '2026-06-22 00:41 KST',
-      sha: '0715bd3',
-    },
-    {
-      number: 239,
-      title: 'feat(LLM-SEARCH): IDF+BM25 점수 랭킹 + atmosphere/color_tone/typology 파싱 (무작위 절벽 제거)',
-      mergedAt: '2026-06-20T20:14:51Z',
-      mergedAtKST: '2026-06-21 05:14 KST',
-      sha: '463508e',
     },
   ],
   agents: [
@@ -1672,12 +1662,12 @@ window.PROJECT_STATE = {
       role: '프로필 편집 폼 스타일',
     },
     {
-      path: 'frontend/src/components/profile/FakeQr.jsx',
-      role: '공유 명함 스텁 QR',
-    },
-    {
       path: 'frontend/src/components/profile/InfoCol.jsx',
       role: '카드 정보 컬럼 프리미티브',
+    },
+    {
+      path: 'frontend/src/components/profile/ProfileQr.jsx',
+      role: '',
     },
     {
       path: 'frontend/src/components/profile/ProjectCard.jsx',

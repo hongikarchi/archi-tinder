@@ -28,6 +28,7 @@ from ._prompts import (  # noqa: F401
     _BROAD_SLATE_DEFAULT_FIELD,
     _BROAD_SLATE_DEFAULT_VALUE,
     _CHAT_PHASE_SYSTEM_PROMPT,
+    _CALIBRATION_PROMPT_EXTENSION,
     _STYLE_TOKENS,
     _PROGRAM_TOKENS,
     _MATERIAL_TOKENS,
@@ -132,7 +133,175 @@ def _repair_required_slate(filters: dict, raw_priority) -> tuple[dict, list]:
     return filters, _normalise_filter_priority(filters, raw_priority)
 
 
-def parse_query(conversation_history, language=None):
+def _compute_confidence_fallback(filters: dict, probe_needed: bool) -> float:
+    """TASTE-CALIBRATION-1: compute confidence_score when LLM did not return one.
+
+    Uses required-slate field coverage as a proxy:
+    - probe_needed=True and 0 slate fields: 0.20
+    - probe_needed=True and >=1 slate field: 0.45
+    - probe_needed=False and 0 slate fields: 0.55  (broad fallback)
+    - probe_needed=False and 1 slate field: 0.65
+    - probe_needed=False and 2+ slate fields: 0.80
+
+    These thresholds are calibrated so that probe_needed=True reliably maps
+    below the 0.60 threshold and probe_needed=False maps above it.
+    """
+    slate_count = sum(
+        1 for key in REQUIRED_SLATE_FIELDS if filters.get(key) is not None
+    )
+    if probe_needed:
+        return 0.20 if slate_count == 0 else 0.45
+    else:
+        if slate_count == 0:
+            return 0.55
+        elif slate_count == 1:
+            return 0.65
+        else:
+            return 0.80
+
+
+def _extract_calibration_fields(data: dict, filters: dict, probe_needed: bool) -> dict:
+    """TASTE-CALIBRATION-1: extract + validate all calibration output fields from LLM data.
+
+    Returns a dict with keys: confidence_score, system_action, suggested_quick_replies,
+    priority_ordered, llm_response_message.  Falls back gracefully when any field is absent.
+    """
+    # confidence_score: float 0-1, fall back to heuristic
+    raw_confidence = data.get('confidence_score')
+    if isinstance(raw_confidence, (int, float)) and 0.0 <= raw_confidence <= 1.0:
+        confidence_score = float(raw_confidence)
+    else:
+        confidence_score = _compute_confidence_fallback(filters, probe_needed)
+
+    # system_action: validate against allowed enum values
+    _valid_actions = ('REQUEST_PRIORITY', 'CONFIRM_SELECTION', 'NONE')
+    raw_action = data.get('system_action')
+    if raw_action in _valid_actions:
+        system_action = raw_action
+    elif confidence_score < 0.60:
+        system_action = 'REQUEST_PRIORITY'
+    else:
+        system_action = 'NONE'
+
+    # suggested_quick_replies: list of structured chips {label, axis, value} or plain
+    # strings.  Drop any chip whose axis is not a valid priority axis — this removes
+    # the defunct skip chip ("상관없으니 카드 보여주세요" / "Just show me cards") and
+    # prevents the "priority_axis must be one of [...]" 400 if an invalid-axis chip is
+    # ever clicked.  Plain strings (no axis) are also dropped since they cannot be sent
+    # back as a priority_axis.  The deterministic _build_axis_chips path (D1) always
+    # produces valid-axis dicts and is unaffected — it overwrites this list downstream.
+    raw_replies = data.get('suggested_quick_replies') or []
+    if isinstance(raw_replies, list):
+        suggested_quick_replies = [
+            r for r in raw_replies
+            if isinstance(r, dict) and r.get('axis') in _STRONG_AXES
+        ][:3]
+    else:
+        suggested_quick_replies = []
+
+    # priority_ordered: list[str]
+    raw_priority_ordered = data.get('priority_ordered') or []
+    if isinstance(raw_priority_ordered, list):
+        priority_ordered = [k for k in raw_priority_ordered if isinstance(k, str)]
+    else:
+        priority_ordered = []
+
+    # llm_response_message: string (fall back to reply or probe_question)
+    raw_msg = data.get('llm_response_message')
+    if isinstance(raw_msg, str) and raw_msg.strip():
+        llm_response_message = raw_msg.strip()
+    else:
+        llm_response_message = data.get('probe_question') or data.get('reply') or ''
+
+    return {
+        'confidence_score': confidence_score,
+        'system_action': system_action,
+        'suggested_quick_replies': suggested_quick_replies,
+        'priority_ordered': priority_ordered,
+        'llm_response_message': llm_response_message,
+    }
+
+
+_STRONG_AXES = frozenset({
+    'program', 'location_country', 'location_city',
+    'style', 'material', 'atmosphere', 'typology_primary',
+})
+
+# D1: localised axis label map for priority-question chip generation
+_AXIS_LABEL_KO = {
+    'program': '프로그램',
+    'location_country': '위치',
+    'location_city': '위치',
+    'style': '스타일',
+    'material': '재료',
+    'atmosphere': '분위기',
+    'typology_primary': '유형',
+}
+
+
+def _build_axis_chips(filters):
+    """Build structured chip objects for all present strong axes.
+
+    Returns a list of dicts: {label, axis, value}.  One chip per present
+    strong axis.  The ``axis`` field is the canonical filter key so the
+    frontend can send it back as ``priority_axis`` without any string parsing.
+    The ``label`` field is the Korean-localised display string with the value
+    appended, e.g. ``재료(brick)``.
+    """
+    chips = []
+    for ax in _STRONG_AXES:
+        if filters.get(ax) is not None and str(filters[ax]).strip():
+            label_text = _AXIS_LABEL_KO.get(ax, ax)
+            val = filters[ax]
+            chips.append({
+                'label': f'{label_text}({val})',
+                'axis': ax,
+                'value': val,
+            })
+    return chips
+
+
+def _maybe_multi_axis_probe(filters, filter_priority, user_turn_count, parsed_result):
+    """D1: inject an optional priority prompt when >=2 strong axes are present (NON-BLOCKING).
+
+    Results are always shown immediately (probe_needed stays False). When n_strong >= 2
+    on a terminal response, this function augments the result with:
+      - system_action = 'REQUEST_PRIORITY'
+      - llm_response_message = short Korean criteria-priority question
+      - suggested_quick_replies = list of chip objects {label, axis, value}, one per axis
+
+    No skip chip is added — results are already shown so no "skip" action is needed.
+
+    Fires on ANY terminal turn (turn-agnostic) when n_strong >= 2.
+    When probe_needed=True (genuine slate probe) or n_strong < 2: returns unchanged.
+    """
+    # Only augment terminal responses — never touch genuine probes
+    if parsed_result.get('probe_needed'):
+        return parsed_result
+
+    present_strong = [
+        ax for ax in _STRONG_AXES
+        if filters.get(ax) is not None and str(filters[ax]).strip()
+    ]
+    if len(present_strong) < 2:
+        return parsed_result
+
+    # Build the secondary question (shown below results, not as a blocking screen)
+    priority_q = '추천에 더 중요하게 생각할 기준이 있나요?'
+
+    # Build one structured chip object per present strong axis — no skip chip
+    chips = _build_axis_chips(filters)
+
+    result = dict(parsed_result)
+    # probe_needed stays False — results are returned immediately
+    result['llm_response_message'] = priority_q
+    result['system_action'] = 'REQUEST_PRIORITY'
+    result['suggested_quick_replies'] = chips
+    # priority_ordered: existing value stays (filter_priority ordering from LLM)
+    return result
+
+
+def parse_query(conversation_history, language=None, prior_filters=None):
     """
     Chat phase Gemini call (Sprint 1 rewrite per Investigation 06).
 
@@ -146,6 +315,12 @@ def parse_query(conversation_history, language=None):
         language: optional 'ko' or 'en' (UserProfile.language). When set, forces
             `reply` and `probe_question` to that language regardless of message language.
             None (default) keeps the infer-from-message behaviour.
+        prior_filters: optional dict of accumulated filters from previous turns.
+            When provided, injected into the Gemini request as context so the LLM
+            can return a filter_delta (set/remove) instead of a full filters dict.
+            The final filters are computed deterministically:
+            final = prior_filters + delta.set - delta.remove.
+            None (default) = first turn, no prior context.
         Backward compat: if a bare string is passed (legacy caller), it is wrapped
             as [{'role': 'user', 'text': conversation_history}].
 
@@ -196,7 +371,9 @@ def parse_query(conversation_history, language=None):
     # Use _svc.parse_query_stage1 so mock.patch/patch.object on services.parse_query_stage1
     # is visible here at call time (late-bound via the module object).
     if settings.RECOMMENDATION.get('stage_decouple_enabled', False):
-        return _svc.parse_query_stage1(conversation_history, language=language)
+        return _svc.parse_query_stage1(
+            conversation_history, language=language, prior_filters=prior_filters,
+        )
     # else: fall through to the original single-call path (default, backward compat)
     # Backward compat: accept bare string (legacy callers pass query_text directly)
     if isinstance(conversation_history, str):
@@ -220,18 +397,26 @@ def parse_query(conversation_history, language=None):
         'probe_question': None,
         'reply': '이해를 잘 못 했어요. 일단 이 쪽으로 찾아볼게요.',
         'filters': dict(_empty_filters),
+        'filter_delta': {'set': {}, 'remove': []},
         'filter_priority': [],
         'image_focus': None,
         'raw_query': first_user_text,
         'visual_description': None,
+        # TASTE-CALIBRATION-1 fallback defaults
+        'confidence_score': 0.55,
+        'system_action': 'NONE',
+        'suggested_quick_replies': [],
+        'priority_ordered': [],
+        'llm_response_message': '이해를 잘 못 했어요. 일단 이 쪽으로 찾아볼게요.',
     }
 
     # FULL-LANGUAGE-1: compute augmented system instruction once for all sites below.
     # language=None -> no directive (infer from message, existing behaviour).
+    # TASTE-CALIBRATION-1: always append calibration extension to inject confidence fields.
     _system_instruction = (
-        _CHAT_PHASE_SYSTEM_PROMPT + _LANG_DIRECTIVE[language]
+        _CHAT_PHASE_SYSTEM_PROMPT + _CALIBRATION_PROMPT_EXTENSION + _LANG_DIRECTIVE[language]
         if language in _LANG_DIRECTIVE
-        else _CHAT_PHASE_SYSTEM_PROMPT
+        else _CHAT_PHASE_SYSTEM_PROMPT + _CALIBRATION_PROMPT_EXTENSION
     )
 
     try:
@@ -245,6 +430,21 @@ def parse_query(conversation_history, language=None):
             text = turn.get('text', '')
             contents.append(
                 types.Content(role=role, parts=[types.Part.from_text(text=text)])
+            )
+
+        # FILTER-DELTA: inject prior_filters as a system-side context line so the
+        # LLM knows the accumulated filter state and can return only the delta.
+        # Appended as a trailing 'user' turn so it rides after the conversation
+        # history but before the model responds. The model's instructions tell it
+        # to output filter_delta (set/remove) when this context line is present.
+        if prior_filters:
+            import json as _json
+            _prior_ctx = (
+                f'현재까지 확정된 필터(JSON): {_json.dumps(prior_filters, ensure_ascii=False)}'
+                f' — 사용자의 새 메시지는 이걸 다듬는 변경(델타)이다.'
+            )
+            contents.append(
+                types.Content(role='user', parts=[types.Part.from_text(text=_prior_ctx)])
             )
 
         # IMP-5: explicit context caching branch (flag-gated, default OFF)
@@ -382,8 +582,36 @@ def parse_query(conversation_history, language=None):
             )
             probe_needed = False
 
+        # FILTER-DELTA: deterministic apply of prior_filters + delta.
+        # Priority:
+        #   1. If filter_delta present: final = prior + delta.set - delta.remove
+        #   2. Else if filters present: final = {**(prior or {}), **llm_filters}
+        #      (backward-compat for first turns or models that skip filter_delta)
+        # After merging, run existing _repair_required_slate so result has a slate.
+        _filter_delta = data.get('filter_delta') or {}
+        _delta_set = _filter_delta.get('set') or {}
+        _delta_remove = _filter_delta.get('remove') or []
+        # Allowlist: only the 10 known axes survive into delta
+        _VALID_AXES = frozenset({
+            'location_country', 'location_city', 'program', 'material', 'style',
+            'year_min', 'year_max', 'atmosphere', 'color_tone', 'typology_primary',
+        })
+        _delta_set = {k: v for k, v in _delta_set.items() if k in _VALID_AXES and v is not None}
+        _delta_remove = [a for a in _delta_remove if isinstance(a, str) and a in _VALID_AXES]
+
+        if _filter_delta:
+            # Follow-up turn: apply delta to prior
+            filters = dict(prior_filters or {})
+            filters.update(_delta_set)
+            for _axis in _delta_remove:
+                filters.pop(_axis, None)
+        else:
+            # First turn or LLM skipped filter_delta: merge prior + full LLM filters
+            _llm_filters = data.get('filters') or dict(_empty_filters)
+            filters = dict(prior_filters or {})
+            filters.update({k: v for k, v in _llm_filters.items() if v is not None})
+
         # Sanitize program value (case-insensitive -> canonical form)
-        filters = data.get('filters') or dict(_empty_filters)
         if filters.get('program'):
             program = filters['program']
             if program not in PROGRAM_VALUES:
@@ -395,6 +623,8 @@ def parse_query(conversation_history, language=None):
         # slate field. Diffuse prompts get a broad Contemporary default.
         raw_priority = data.get('filter_priority') or []
         filters, filter_priority = _repair_required_slate(filters, raw_priority)
+        # Expose validated delta for transparency (callers may log/inspect it)
+        filter_delta = {'set': _delta_set, 'remove': _delta_remove}
 
         # raw_query: spec §3 says always verbatim first user message
         raw_query = data.get('raw_query') or first_user_text
@@ -403,16 +633,28 @@ def parse_query(conversation_history, language=None):
         if image_focus not in ('exterior', 'interior', 'drawing', 'aerial', 'detail'):
             image_focus = None
 
+        # TASTE-CALIBRATION-1: extract calibration fields
+        calibration = _extract_calibration_fields(data, filters, probe_needed)
+
         result = {
             'probe_needed': probe_needed,
             'probe_question': data.get('probe_question') if probe_needed else None,
             'reply': data.get('reply', ''),
             'filters': filters,
+            'filter_delta': filter_delta,
             'filter_priority': filter_priority,
             'image_focus': image_focus,
             'raw_query': raw_query,
             'visual_description': data.get('visual_description'),
+            # TASTE-CALIBRATION-1 fields
+            'confidence_score': calibration['confidence_score'],
+            'system_action': calibration['system_action'],
+            'suggested_quick_replies': calibration['suggested_quick_replies'],
+            'priority_ordered': calibration['priority_ordered'],
+            'llm_response_message': calibration['llm_response_message'],
         }
+        # D1: multi-axis optional prompt — fires on any terminal turn with >=2 strong axes
+        result = _maybe_multi_axis_probe(filters, filter_priority, _user_turn_count, result)
         return result
 
     except json.JSONDecodeError as e:
@@ -441,7 +683,7 @@ def parse_query(conversation_history, language=None):
         return _fallback
 
 
-def parse_query_stage1(conversation_history, language=None):
+def parse_query_stage1(conversation_history, language=None, prior_filters=None):
     """IMP-6 Commit 2: Stage 1 Gemini call -- USER-BLOCKING portion of the split.
 
     Same as parse_query() but uses response_schema to exclude visual_description,
@@ -459,6 +701,12 @@ def parse_query_stage1(conversation_history, language=None):
         language: optional 'ko' or 'en' (UserProfile.language). When set, forces
             `reply` and `probe_question` to that language regardless of message language.
             None (default) keeps the infer-from-message behaviour.
+        prior_filters: optional dict of accumulated filters from previous turns.
+            When provided, injected into the Gemini request as context so the LLM
+            can return a filter_delta (set/remove) instead of a full filters dict.
+            The final filters are computed deterministically:
+            final = prior_filters + delta.set - delta.remove.
+            None (default) = first turn, no prior context.
 
     Returns:
         Same dict shape as parse_query(), with visual_description always None.
@@ -489,18 +737,26 @@ def parse_query_stage1(conversation_history, language=None):
         'probe_question': None,
         'reply': '이해를 잘 못 했어요. 일단 이 쪽으로 찾아볼게요.',
         'filters': dict(_empty_filters),
+        'filter_delta': {'set': {}, 'remove': []},
         'filter_priority': [],
         'image_focus': None,
         'raw_query': first_user_text,
         'visual_description': None,
+        # TASTE-CALIBRATION-1 fallback defaults
+        'confidence_score': 0.55,
+        'system_action': 'NONE',
+        'suggested_quick_replies': [],
+        'priority_ordered': [],
+        'llm_response_message': '이해를 잘 못 했어요. 일단 이 쪽으로 찾아볼게요.',
     }
 
     # FULL-LANGUAGE-1: compute augmented system instruction once for all sites below.
     # language=None -> no directive (infer from message, existing behaviour).
+    # TASTE-CALIBRATION-1: always append calibration extension to inject confidence fields.
     _system_instruction = (
-        _CHAT_PHASE_SYSTEM_PROMPT + _LANG_DIRECTIVE[language]
+        _CHAT_PHASE_SYSTEM_PROMPT + _CALIBRATION_PROMPT_EXTENSION + _LANG_DIRECTIVE[language]
         if language in _LANG_DIRECTIVE
-        else _CHAT_PHASE_SYSTEM_PROMPT
+        else _CHAT_PHASE_SYSTEM_PROMPT + _CALIBRATION_PROMPT_EXTENSION
     )
 
     try:
@@ -514,6 +770,21 @@ def parse_query_stage1(conversation_history, language=None):
             text = turn.get('text', '')
             contents.append(
                 types.Content(role=role, parts=[types.Part.from_text(text=text)])
+            )
+
+        # FILTER-DELTA: inject prior_filters as a system-side context line so the
+        # LLM knows the accumulated filter state and can return only the delta.
+        # Appended as a trailing 'user' turn so it rides after the conversation
+        # history but before the model responds. The model's instructions tell it
+        # to output filter_delta (set/remove) when this context line is present.
+        if prior_filters:
+            import json as _json
+            _prior_ctx = (
+                f'현재까지 확정된 필터(JSON): {_json.dumps(prior_filters, ensure_ascii=False)}'
+                f' — 사용자의 새 메시지는 이걸 다듬는 변경(델타)이다.'
+            )
+            contents.append(
+                types.Content(role='user', parts=[types.Part.from_text(text=_prior_ctx)])
             )
 
         # IMP-5: explicit context caching branch (flag-gated, default OFF)
@@ -630,8 +901,36 @@ def parse_query_stage1(conversation_history, language=None):
             )
             probe_needed = False
 
+        # FILTER-DELTA: deterministic apply of prior_filters + delta.
+        # Priority:
+        #   1. If filter_delta present: final = prior + delta.set - delta.remove
+        #   2. Else if filters present: final = {**(prior or {}), **llm_filters}
+        #      (backward-compat for first turns or models that skip filter_delta)
+        # After merging, run existing _repair_required_slate so result has a slate.
+        _filter_delta = data.get('filter_delta') or {}
+        _delta_set = _filter_delta.get('set') or {}
+        _delta_remove = _filter_delta.get('remove') or []
+        # Allowlist: only the 10 known axes survive into delta
+        _VALID_AXES = frozenset({
+            'location_country', 'location_city', 'program', 'material', 'style',
+            'year_min', 'year_max', 'atmosphere', 'color_tone', 'typology_primary',
+        })
+        _delta_set = {k: v for k, v in _delta_set.items() if k in _VALID_AXES and v is not None}
+        _delta_remove = [a for a in _delta_remove if isinstance(a, str) and a in _VALID_AXES]
+
+        if _filter_delta:
+            # Follow-up turn: apply delta to prior
+            filters = dict(prior_filters or {})
+            filters.update(_delta_set)
+            for _axis in _delta_remove:
+                filters.pop(_axis, None)
+        else:
+            # First turn or LLM skipped filter_delta: merge prior + full LLM filters
+            _llm_filters = data.get('filters') or dict(_empty_filters)
+            filters = dict(prior_filters or {})
+            filters.update({k: v for k, v in _llm_filters.items() if v is not None})
+
         # Sanitize program value
-        filters = data.get('filters') or dict(_empty_filters)
         if filters.get('program'):
             program = filters['program']
             if program not in PROGRAM_VALUES:
@@ -643,6 +942,8 @@ def parse_query_stage1(conversation_history, language=None):
         # slate field. Diffuse prompts get a broad Contemporary default.
         raw_priority = data.get('filter_priority') or []
         filters, filter_priority = _repair_required_slate(filters, raw_priority)
+        # Expose validated delta for transparency (callers may log/inspect it)
+        filter_delta = {'set': _delta_set, 'remove': _delta_remove}
 
         # raw_query: spec §3 says always verbatim first user message
         raw_query = data.get('raw_query') or first_user_text
@@ -651,16 +952,29 @@ def parse_query_stage1(conversation_history, language=None):
         if image_focus not in ('exterior', 'interior', 'drawing', 'aerial', 'detail'):
             image_focus = None
 
-        return {
+        # TASTE-CALIBRATION-1: extract calibration fields
+        calibration = _extract_calibration_fields(data, filters, probe_needed)
+
+        result = {
             'probe_needed': probe_needed,
             'probe_question': data.get('probe_question') if probe_needed else None,
             'reply': data.get('reply', ''),
             'filters': filters,
+            'filter_delta': filter_delta,
             'filter_priority': filter_priority,
             'image_focus': image_focus,
             'raw_query': raw_query,
             'visual_description': None,  # Stage 2 generates this asynchronously
+            # TASTE-CALIBRATION-1 fields
+            'confidence_score': calibration['confidence_score'],
+            'system_action': calibration['system_action'],
+            'suggested_quick_replies': calibration['suggested_quick_replies'],
+            'priority_ordered': calibration['priority_ordered'],
+            'llm_response_message': calibration['llm_response_message'],
         }
+        # D1: multi-axis optional prompt — fires on any terminal turn with >=2 strong axes
+        result = _maybe_multi_axis_probe(filters, filter_priority, _user_turn_count, result)
+        return result
 
     except json.JSONDecodeError as e:
         logger.error('parse_query_stage1 JSON decode error: %s', e)

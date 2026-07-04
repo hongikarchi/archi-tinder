@@ -13,6 +13,7 @@ Mock-patch discipline (CRITICAL):
 """
 import logging
 from collections import defaultdict
+from threading import Thread
 
 from django.conf import settings
 from django.core.cache import cache
@@ -27,6 +28,8 @@ from ..models import Project, AnalysisSession
 from ..caches import evict_projects_list, evict_user_profile_detail, evict_project_detail
 from ..perf_timing import stage
 from ..views._shared import _progress
+from .hydration import hydrate_like_vectors
+from .swipe_service import _build_action_card
 
 logger = logging.getLogger('apps.recommendation')
 RC = settings.RECOMMENDATION
@@ -56,7 +59,11 @@ def create_session(request, profile, recent_cutoff):
     lives here verbatim from the original view body.
     """
     project_id      = request.data.get('project_id')
-    project_name    = (request.data.get('name') or '').strip()[:100] or 'Untitled'
+    _raw_name       = (request.data.get('name') or '').strip()[:100]
+    # Detect placeholder names that should be replaced with an auto-generated name.
+    _PLACEHOLDER_NAMES = {'', 'untitled', 'untitled project'}
+    _is_placeholder_name = _raw_name.lower() in _PLACEHOLDER_NAMES
+    project_name    = _raw_name or 'Untitled'
     filters         = request.data.get('filters') or {}
 
     # Validate and sanitize filter_priority: must be a list of known filter key strings, max 10
@@ -153,6 +160,7 @@ def create_session(request, profile, recent_cutoff):
                 return Response({
                     'session_id': str(existing_session.session_id),
                     'project_id': str(existing_session.project.project_id),
+                    'name': existing_session.project.name,
                     'session_status': existing_session.status,
                     'next_image': first_card,
                     'prefetch_image': None,
@@ -161,6 +169,16 @@ def create_session(request, profile, recent_cutoff):
                     'filter_relaxed': False,
                     'deduped': True,
                 }, status=status.HTTP_200_OK)
+
+    # Guest board-limit gate: mirrors Discovery views/discovery.py ~line 268-271.
+    # Only blocks genuinely NEW board creation (project is None and no dedupe/resume
+    # shortcut returned above).  Resuming an existing board (project_id resolved, or
+    # Case #3 resume returned at line 121) is never affected.
+    if project is None and profile.is_guest and Project.objects.filter(user=profile).count() >= 3:
+        return Response(
+            {'detail': 'verify_required', 'reason': 'board_limit_reached', 'limit': 3},
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
     # Fix 3: project creation deferred to after pool fetch to avoid orphan rows.
     # (was: Project.objects.create here when project is None)
@@ -211,6 +229,30 @@ def create_session(request, profile, recent_cutoff):
         active_filters['image_focus'] = req_focus
     elif active_filters.get('image_focus') not in _VALID_IMAGE_FOCUS:
         active_filters.pop('image_focus', None)
+
+    # TASTE-BOARD-NAME: spawn concurrent name-generation thread when the client
+    # sent a placeholder name (empty / 'Untitled' / 'Untitled Project').
+    # The thread does ONLY the Gemini network call (pure CPU + network, no ORM).
+    # All DB work (deterministic fallback, dedup) runs on the MAIN thread after
+    # join, where the transactional DB connection is valid.
+    # Only runs when project is None (new project; resumes already have a name).
+    _gemini_name_result = ['']  # mutable cell — '' means Gemini failed/skipped
+    _name_thread = None
+    if _is_placeholder_name and project is None:
+        _filters_for_name = dict(active_filters)
+        _filters_for_name.pop('image_focus', None)
+        _rq_for_name = raw_query
+
+        def _name_worker():
+            try:
+                _gemini_name_result[0] = services._gemini_board_name_raw(
+                    _filters_for_name, _rq_for_name,
+                )
+            except Exception:
+                logger.exception('Board auto-name Gemini thread failed; will use fallback')
+
+        _name_thread = Thread(target=_name_worker, daemon=True)
+        _name_thread.start()
 
     with stage('create_pool', filter_keys=','.join(sorted(active_filters.keys()))):
         pool_ids, pool_scores, current_pool_tier = engine.create_pool_with_relaxation(
@@ -267,6 +309,22 @@ def create_session(request, profile, recent_cutoff):
         # when create_pool_with_relaxation fails or returns empty (404 branch above).
         # Fix 2: wrap both creates in a savepoint so a session-insert failure
         # rolls back the project create, leaving no orphan row.
+
+        # TASTE-BOARD-NAME: join the Gemini thread (max 12 s wait), then run
+        # deterministic fallback + dedup on the MAIN thread (valid DB connection).
+        # By the time we reach here, pool build + initial_batch are done
+        # (~200-500 ms), so in the common case the 8 s Gemini call is already done.
+        if _name_thread is not None:
+            _name_thread.join(timeout=12)
+            # Main thread: pick Gemini result or deterministic fallback, then dedup.
+            from apps.recommendation.services.generation import (  # noqa: PLC0415
+                _deterministic_board_name, _dedup_board_name,
+            )
+            _filters_no_focus = dict(active_filters)
+            _filters_no_focus.pop('image_focus', None)
+            _base = _gemini_name_result[0] or _deterministic_board_name(_filters_no_focus)
+            project_name = _dedup_board_name(_base, profile)
+
         with transaction.atomic():
             if project is None:
                 project = Project.objects.create(
@@ -348,6 +406,7 @@ def create_session(request, profile, recent_cutoff):
     return Response({
         'session_id':      str(session.session_id),
         'project_id':      str(project.project_id),
+        'name':            project.name,
         'session_status':  session.status,
         'next_image':      first_card,
         'prefetch_image':  prefetch_card,
@@ -383,26 +442,90 @@ def get_session_state(request, session):
     exposed_ids = list(session.exposed_ids or [])
     pool_ids = list(session.pool_ids or [])
     initial_batch = list(session.initial_batch or [])
-    like_vectors = list(session.like_vectors or [])
+    like_vectors = hydrate_like_vectors(session) if session.like_vectors else []
     current_round = session.current_round
     phase = session.phase
     image_focus = (session.original_filters or {}).get('image_focus')
 
     if phase == 'converged':
         residual = len([pid for pid in pool_ids if pid not in set(exposed_ids)]) if pool_ids else 0
-        can_continue = (residual >= 1) and (session.extended_rounds < 5)
+        can_continue = (residual >= 1)
+
+        if residual == 0:
+            # Truly exhausted — terminal state.
+            return Response({
+                'session_id':      str(session.session_id),
+                'project_id':      str(session.project.project_id),
+                'session_status':  session.status,
+                'next_image':      None,
+                'prefetch_image':  None,
+                'prefetch_image_2': None,
+                'progress':        _progress(session),
+                'filter_relaxed':  False,
+                'is_analysis_completed': True,
+                'can_continue':    False,
+            })
+
+        # residual >= 1: mirror the swipe path's converged card-serving logic
+        # (swipe_service.py lines 895-913) so resume == live behaviour.
+        # Do NOT call refresh_pool_if_low — the live path skips it for converged.
+        pool_embeddings = engine.get_pool_embeddings(pool_ids) if pool_ids else {}
         prefetch_card = None
         prefetch_card_2 = None
+
+        if not session.action_card_shown:
+            # Emit the action card exactly once (emit-once sentinel).
+            next_card = _build_action_card()
+            session.action_card_shown = True
+            session.save(update_fields=['action_card_shown'])
+        else:
+            # Action card already shown — select the next real card via MMR
+            # (mirrors swipe_service lines 904-913).
+            _hydrated_lv = like_vectors  # already hydrated above
+            if _hydrated_lv:
+                next_bid = engine.compute_mmr_next(
+                    pool_ids, exposed_ids, pool_embeddings,
+                    _hydrated_lv, current_round,
+                    question_bias_vector=session.question_bias_vector,
+                    multimodal_floor=session.multimodal_floor,
+                )
+            else:
+                next_bid = engine.farthest_point_from_pool(
+                    pool_ids, exposed_ids, pool_embeddings
+                )
+            next_card = engine.get_building_card(next_bid, image_focus=image_focus) if next_bid else None
+
+            # Add served card to exposed_ids (sentinel is never added).
+            if next_bid and next_bid not in set(exposed_ids):
+                exposed_ids = exposed_ids + [next_bid]
+                session.exposed_ids = exposed_ids
+                session.save(update_fields=['exposed_ids'])
+
+            # Prefetch: one lookahead card for converged-continue
+            # (mirrors the non-converged analyzing path's single-step lookahead).
+            try:
+                if next_bid and _hydrated_lv:
+                    pf_exposed = exposed_ids  # already includes next_bid
+                    pf_id = engine.compute_mmr_next(
+                        pool_ids, pf_exposed, pool_embeddings,
+                        _hydrated_lv, current_round + 1,
+                        question_bias_vector=session.question_bias_vector,
+                        multimodal_floor=session.multimodal_floor,
+                    )
+                    prefetch_card = engine.get_building_card(pf_id, image_focus=image_focus) if pf_id else None
+            except Exception:
+                prefetch_card = None
+
         return Response({
             'session_id':      str(session.session_id),
             'project_id':      str(session.project.project_id),
             'session_status':  session.status,
-            'next_image':      None,
+            'next_image':      next_card,
             'prefetch_image':  prefetch_card,
             'prefetch_image_2': prefetch_card_2,
             'progress':        _progress(session),
             'filter_relaxed':  False,
-            'is_analysis_completed': True,
+            'is_analysis_completed': False,
             'can_continue':    can_continue,
         })
 
@@ -503,10 +626,13 @@ def get_session_result(session):
     liked_cards = engine.get_buildings_by_ids(liked_ids)
     liked_cards = [c for c in liked_cards if c]
 
+    # Hydrate like_vectors once; reused by all MMR / DPP calls below.
+    _hydrated_lv_result = hydrate_like_vectors(session) if session.like_vectors else []
+
     # Use MMR-diversified results when like_vectors available
-    if session.like_vectors:
+    if _hydrated_lv_result:
         predicted_cards = engine.get_top_k_mmr(
-            session.like_vectors,
+            _hydrated_lv_result,
             session.exposed_ids,
             k=RC['top_k_results'],
             round_num=session.current_round,
@@ -526,10 +652,10 @@ def get_session_result(session):
     # Cosine/Gemini top-10 provenance fields slice the first top_k_results entries
     # of the over-fetched set so their semantics match pre-fix.
     _overfetch_mult = RC.get('dpp_overfetch_multiplier', 3) if RC.get('dpp_topk_enabled', False) else 1
-    if _overfetch_mult > 1 and session.like_vectors:
+    if _overfetch_mult > 1 and _hydrated_lv_result:
         # Re-fetch with larger k via the MMR branch (already used when like_vectors exist)
         predicted_cards = engine.get_top_k_mmr(
-            session.like_vectors,
+            _hydrated_lv_result,
             session.exposed_ids,
             k=RC['top_k_results'] * _overfetch_mult,
             round_num=session.current_round,
@@ -580,7 +706,7 @@ def get_session_result(session):
     # Topic 04 (b): DPP greedy MAP at session-final top-K (with Option α composition)
     if (RC.get('dpp_topk_enabled', False)
             and len(predicted_cards) >= 2
-            and session.like_vectors):
+            and _hydrated_lv_result):
         candidate_ids = [c['canonical_bld_id'] for c in predicted_cards]
         k = min(RC.get('top_k_results', 20), len(candidate_ids))
         card_by_id = {c['canonical_bld_id']: c for c in predicted_cards}
@@ -608,11 +734,11 @@ def get_session_result(session):
             else:
                 q_values = {}
             dpp_order = engine.compute_dpp_topk(
-                predicted_cards, session.like_vectors, k=k, q_override=q_values or None
+                predicted_cards, _hydrated_lv_result, k=k, q_override=q_values or None
             )
         else:
             # Standalone Topic 04: q derived from max centroid cosine inside compute_dpp_topk
-            dpp_order = engine.compute_dpp_topk(predicted_cards, session.like_vectors, k=k)
+            dpp_order = engine.compute_dpp_topk(predicted_cards, _hydrated_lv_result, k=k)
 
         _dpp_top10 = dpp_order[:10]  # IMP-10: store DPP top-10 for provenance
         predicted_cards = [card_by_id[bid] for bid in dpp_order if bid in card_by_id]

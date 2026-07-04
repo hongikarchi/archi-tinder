@@ -13,8 +13,23 @@ from rest_framework.test import APIClient
 # -- Google Login --------------------------------------------------------------
 
 @pytest.mark.django_db
-def test_google_login_with_auth_code(api_client):
-    """Auth-code flow: exchanges code for access_token, fetches userinfo, returns JWT."""
+def test_google_login_existing_user(api_client):
+    """Auth-code flow: existing user with linked SocialAccount logs in and gets JWT.
+
+    LOGIN-ONBOARD-1 (PR #248): social login no longer creates new accounts.
+    An existing SocialAccount match returns 200 + {access, refresh, user}.
+    """
+    from django.contrib.auth.models import User
+    from apps.accounts.models import UserProfile, SocialAccount
+
+    # Pre-create a registered user with a linked Google SocialAccount.
+    django_user = User.objects.create_user(
+        username='google_12345',
+        email='test@gmail.com',
+    )
+    profile = UserProfile.objects.create(user=django_user, display_name='Test User')
+    SocialAccount.objects.create(provider='google', provider_id='12345', user=profile)
+
     mock_token_resp = MagicMock()
     mock_token_resp.status_code = 200
     mock_token_resp.json.return_value = {'access_token': 'mock_at'}
@@ -26,6 +41,7 @@ def test_google_login_with_auth_code(api_client):
         'email': 'test@gmail.com',
         'name': 'Test',
         'picture': None,
+        'email_verified': True,
     }
 
     with patch('apps.accounts.views.requests.post', return_value=mock_token_resp), \
@@ -41,6 +57,41 @@ def test_google_login_with_auth_code(api_client):
     assert 'access' in data
     assert 'refresh' in data
     assert 'user' in data
+
+
+@pytest.mark.django_db
+def test_google_login_no_account_returns_signup_required(api_client):
+    """Unregistered Google identity returns 404 signup_required.
+
+    LOGIN-ONBOARD-1 (PR #248): social login no longer creates new accounts.
+    A Google sub with no matching SocialAccount or email record returns 404.
+    """
+    mock_token_resp = MagicMock()
+    mock_token_resp.status_code = 200
+    mock_token_resp.json.return_value = {'access_token': 'mock_at'}
+
+    mock_userinfo_resp = MagicMock()
+    mock_userinfo_resp.status_code = 200
+    mock_userinfo_resp.json.return_value = {
+        'sub': 'nonexistent_sub_999',
+        'email': 'newuser@gmail.com',
+        'name': 'New User',
+        'picture': None,
+        'email_verified': True,
+    }
+
+    with patch('apps.accounts.views.requests.post', return_value=mock_token_resp), \
+         patch('apps.accounts.views.requests.get', return_value=mock_userinfo_resp):
+        response = api_client.post(
+            '/api/v1/auth/social/google/',
+            {'code': 'mock_code'},
+            format='json',
+        )
+
+    assert response.status_code == 404
+    data = response.json()
+    assert data['detail'] == 'signup_required'
+    assert data['reason'] == 'no_account'
 
 
 @pytest.mark.django_db

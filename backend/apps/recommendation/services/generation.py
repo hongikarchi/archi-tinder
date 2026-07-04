@@ -4,6 +4,7 @@ generation.py -- Gemini-backed generation functions.
 IMP-6 Commit 2: generate_visual_description (Stage 2 background worker).
 Sprint 4 §8: generate_persona_report.
 Gemini-native image generation: generate_persona_image (replaces Imagen 3).
+TASTE-BOARD-NAME: generate_taste_board_name (auto-name Taste session boards).
 
 Cross-module symbol access uses the late-bound package reference (_svc) so that
 mock.patch('apps.recommendation.services.X') continues to work in tests.
@@ -11,6 +12,7 @@ mock.patch('apps.recommendation.services.X') continues to work in tests.
 import base64
 import json
 import logging
+import re
 import time
 
 from django.conf import settings
@@ -286,6 +288,139 @@ def generate_persona_report(liked_building_ids):
             error_message=str(e)[:200],
         )
         raise RuntimeError(f'Persona report generation failed: {type(e).__name__}. Please try again later.')
+
+
+# ---------------------------------------------------------------------------
+# TASTE-BOARD-NAME: auto-name helper
+# ---------------------------------------------------------------------------
+
+# Priority order for deterministic fallback name construction.
+_NAME_FILTER_PRIORITY = ['style', 'program', 'typology_primary', 'material', 'location_country']
+
+# Characters to keep when sanitising Gemini output (alnum + spaces).
+_NAME_KEEP_RE = re.compile(r'[^A-Za-z0-9 ]')
+
+
+def _sanitise_board_name(raw):
+    """Strip, collapse whitespace, keep alnum+spaces, Title Case, clamp ≤2 words ≤40 chars."""
+    if not raw or not isinstance(raw, str):
+        return ''
+    cleaned = _NAME_KEEP_RE.sub('', raw).strip()
+    # Collapse runs of whitespace
+    cleaned = re.sub(r'\s+', ' ', cleaned)
+    words = cleaned.split()[:2]
+    name = ' '.join(w.capitalize() for w in words)
+    return name[:40]
+
+
+def _deterministic_board_name(filters):
+    """Build a name from the most salient filter values (≤2 words, Title Case).
+
+    Priority: style > program > typology_primary > material > location_country.
+    Returns 'Untitled' when no usable filter exists.
+    """
+    parts = []
+    for key in _NAME_FILTER_PRIORITY:
+        val = filters.get(key)
+        if val and isinstance(val, str) and val.strip():
+            parts.append(val.strip().capitalize())
+        if len(parts) == 2:
+            break
+    if parts:
+        return ' '.join(parts)[:40]
+    return 'Untitled'
+
+
+def _dedup_board_name(base_name, profile):
+    """Return base_name or base_name (N) such that it is unique for this user's Projects."""
+    from apps.recommendation.models import Project  # local import to avoid circular
+    existing = set(
+        Project.objects.filter(user=profile).values_list('name', flat=True)
+    )
+    if base_name not in existing:
+        return base_name
+    n = 1
+    while True:
+        candidate = f'{base_name} ({n})'
+        if candidate not in existing:
+            return candidate
+        n += 1
+
+
+def _gemini_board_name_raw(filters, raw_query):
+    """Call Gemini and return the sanitised name string (or '' on any failure).
+
+    THREAD-SAFE: pure Gemini + CPU work only — NO ORM / DB access.
+    Intended to run in a background thread inside create_session so the
+    8 s timeout overlaps with pool construction.  All DB work (fallback
+    from filters, dedup) MUST happen on the calling (main) thread after
+    this returns.
+
+    Args:
+        filters:   dict — active_filters with image_focus already removed.
+        raw_query: str  — verbatim user search text.
+
+    Returns:
+        str — sanitised ≤2-word Title Case name, or '' if Gemini failed.
+    """
+    from apps.recommendation import services as _svc  # noqa: PLC0415
+
+    filters = filters or {}
+    raw_query = (raw_query or '').strip()
+    try:
+        client = _svc._get_client()
+        filter_json = json.dumps(
+            {k: v for k, v in filters.items() if v},
+            ensure_ascii=False,
+        )
+        prompt = (
+            'Return ONLY a 2-word-or-less English architectural theme name in Title Case'
+            ' — no punctuation, no quotes, no preamble — summarizing this architecture'
+            f' search. filters={filter_json}, query={raw_query!r}.'
+            ' Examples: Brick House, Japanese Modern, Brutalist Civic, Coastal Pavilion.'
+        )
+        response = _svc.generate_content_with_fallback(
+            client,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                temperature=0.3,
+                thinking_config=types.ThinkingConfig(thinking_budget=0),
+            ),
+            timeout=8.0,
+        )
+        return _sanitise_board_name(response.text or '')
+    except Exception as exc:
+        logger.info(
+            '_gemini_board_name_raw failed (%s: %s); caller will use deterministic fallback',
+            type(exc).__name__, str(exc)[:120],
+        )
+        return ''
+
+
+def generate_taste_board_name(profile, filters, raw_query, visual_description=None):
+    """Return a ≤2-word English Title-Case board name derived from the search context.
+
+    Synchronous convenience wrapper (Gemini + fallback + dedup in one call).
+    For the session-creation hot-path use _gemini_board_name_raw in a thread
+    and call _deterministic_board_name + _dedup_board_name on the main thread.
+
+    1. Try a Gemini call (8 s hard timeout).
+    2. On Gemini failure / empty / bad output: deterministic fallback from filters.
+    3. Dedup with ' (N)' suffix against existing Project names for this user.
+
+    Args:
+        profile:            UserProfile instance (used for dedup query).
+        filters:            dict of active_filters from the session request.
+        raw_query:          str, the verbatim user search text (may be empty).
+        visual_description: str or None (reserved for future use).
+
+    Returns:
+        str — unique board name for this user, never empty.
+    """
+    filters = filters or {}
+    gemini_name = _gemini_board_name_raw(filters, raw_query)
+    base_name = gemini_name if gemini_name else _deterministic_board_name(filters)
+    return _dedup_board_name(base_name, profile)
 
 
 def _gen_native(client, prompt):

@@ -402,7 +402,7 @@ class TestSessionResultDppIntegration:
             user=user_profile,
             project=project,
             status='completed',
-            like_vectors=[fake_cards[0]['embedding']],
+            like_vectors=[{'embedding': fake_cards[0]['embedding'], 'round': 1}],
             preference_vector=[0.1] * 4,
             exposed_ids=ids,
         )
@@ -446,7 +446,7 @@ class TestSessionResultDppIntegration:
             user=user_profile,
             project=project,
             status='completed',
-            like_vectors=[fake_cards[0]['embedding']],
+            like_vectors=[{'embedding': fake_cards[0]['embedding'], 'round': 1}],
             preference_vector=[0.1] * 4,
             exposed_ids=ids,
         )

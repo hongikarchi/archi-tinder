@@ -18,6 +18,7 @@ Hard rules (also in CLAUDE.md):
 """
 import logging
 import time
+from datetime import timezone as dt_timezone, timedelta
 
 import numpy as np
 from django.conf import settings
@@ -58,11 +59,17 @@ def is_discovery_draft_name(name):
 
 # ── Draft Project helpers ─────────────────────────────────────────────────────
 
-def create_discovery_draft(profile):
+def create_discovery_draft(profile, tz_offset_minutes=0):
     """Create a brand-new per-session Discovery draft Project.
 
     Name format: 'discovery_YYMMDD_HHMM' (e.g. 'discovery_260604_1430').
     Every call creates a NEW board — NOT get_or_create.
+
+    tz_offset_minutes: the browser's getTimezoneOffset() value (minutes,
+      positive = west of UTC).  KST returns -540.  Negated here to build
+      the correct UTC offset so the board name shows in the user's local
+      time.  Out-of-range values (outside [-840, 840]) are silently clamped
+      to 0 (UTC fallback).
 
     The draft holds:
       liked_ids    = Discovery right-swipes [{id, intensity}]
@@ -71,7 +78,23 @@ def create_discovery_draft(profile):
     Draft boards are visible on the profile (normal boards with a
     name-prefix convention, not a hidden reserved name).
     """
-    name = DISCOVERY_DRAFT_PREFIX + timezone.now().strftime('%y%m%d_%H%M')
+    try:
+        tz_offset_minutes = int(tz_offset_minutes)
+    except (TypeError, ValueError):
+        tz_offset_minutes = 0
+    if not (-840 <= tz_offset_minutes <= 840):
+        tz_offset_minutes = 0
+
+    if tz_offset_minutes:
+        # Browser getTimezoneOffset() is positive-west (opposite of UTC offset).
+        # Negate it: KST = -540 → offset = +540 minutes = UTC+9.
+        local_dt = timezone.now().astimezone(
+            dt_timezone(timedelta(minutes=-tz_offset_minutes))
+        )
+    else:
+        local_dt = timezone.now()  # UTC fallback
+
+    name = DISCOVERY_DRAFT_PREFIX + local_dt.strftime('%y%m%d_%H%M')
     draft = Project.objects.create(
         user=profile,
         name=name,

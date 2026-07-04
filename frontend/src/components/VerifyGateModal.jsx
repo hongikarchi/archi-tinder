@@ -2,65 +2,43 @@
  * components/VerifyGateModal.jsx
  * Shown when a guest user tries to create a 4th board (board_limit_reached).
  * Terminal-aesthetic copy matches the LoginPage wizard.
- * On Google verify success → promotes account → swaps JWTs → closes modal.
+ * On Google verify success → links email (POST /auth/link-email/) → flips
+ * is_guest=False → re-fetches /auth/me/ → calls onPromoted(freshUser, false)
+ * → closes modal.
  *
  * Mounted globally in App.jsx. Listens for 'archithon:verify-required' event.
+ *
+ * Verify flow: uses useGoogleEmailVerify (same as AccountScreen "구글로 이메일 인증").
+ * To change the verify logic, edit src/hooks/useGoogleEmailVerify.js — NOT this file.
  */
 
-import { useState } from 'react'
-import { promoteAccount } from '../api/auth.js'
 import { hasGoogleLogin } from '../utils/loginFlow.js'
+import { useGoogleEmailVerify } from '../hooks/useGoogleEmailVerify.js'
 import GoogleVerifyButton from './GoogleVerifyButton.jsx'
 
 export default function VerifyGateModal({ onClose, onPromoted }) {
   const googleConfigured = hasGoogleLogin(import.meta.env.VITE_GOOGLE_CLIENT_ID)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
 
   // useGoogleLogin is NOT called here — it lives inside GoogleVerifyButton,
   // which is only rendered when googleConfigured === true (inside GoogleOAuthProvider).
 
-  async function handleVerifySuccess(codeResponse) {
-    setLoading(true)
-    setError(null)
-    try {
-      const data = await promoteAccount(codeResponse.code)
-      // promoteAccount swaps JWTs in localStorage automatically.
-      // Pass user + merged flag so App.jsx can re-sync state correctly.
-      onPromoted(data.user, data.merged)
+  // Shared verify hook — identical flow to AccountScreen "구글로 이메일 인증".
+  // onVerified: guest is now verified (is_guest=false). Pass freshUser to
+  // onPromoted so App.jsx can re-sync state, then close the modal.
+  const {
+    loading,
+    error,
+    onSuccess: handleVerifySuccess,
+    onError: handleVerifyError,
+    onNonOAuthError: handleVerifyNonOAuthError,
+  } = useGoogleEmailVerify({
+    onVerified: (freshUser) => {
+      // link-email does NOT merge accounts (no token swap, no merged flag).
+      // Treat as in-place promote: merged=false, pass the fresh user object.
+      onPromoted(freshUser, false)
       onClose()
-    } catch (err) {
-      const detail = err?.data?.detail || err?.message || 'Verification failed'
-      // Fix 2: backend returns 400 + detail:'not_a_guest' when the guest was
-      // already promoted (e.g. another tab completed the flow).
-      if (err?.status === 400 && detail === 'not_a_guest') {
-        // Treat as success — the account is already verified.
-        onPromoted(null, false)
-        onClose()
-      } else {
-        setError(`Google verify failed: ${detail}`)
-      }
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  function handleVerifyError(errorResponse) {
-    const detail = errorResponse?.error_description || errorResponse?.error || 'cancelled or failed'
-    setError(`Google error: ${detail}`)
-    setLoading(false)
-  }
-
-  function handleVerifyNonOAuthError(err) {
-    if (err?.type === 'popup_closed') {
-      setError(null)
-    } else if (err?.type === 'popup_failed_to_open') {
-      setError('Popup was blocked. Please allow popups for this site.')
-    } else {
-      setError('Verification could not start. Check browser settings.')
-    }
-    setLoading(false)
-  }
+    },
+  })
 
   return (
     <div
@@ -91,35 +69,13 @@ export default function VerifyGateModal({ onClose, onPromoted }) {
           boxShadow: '0 18px 40px rgba(0,0,0,0.28)',
         }}
       >
-        {/* Terminal header block */}
-        <div style={{
-          background: '#111827',
-          border: '0',
-          borderBottom: '1px solid rgba(255,255,255,0.10)',
-          padding: '16px 18px 14px',
-          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-          fontSize: 13,
-          lineHeight: 1.7,
-          color: '#e5e7eb',
-        }}>
-          <div style={{ color: '#94a3b8' }}>$ board.create --count 4</div>
-          <div>
-            <span style={{ color: '#ef4444' }}>&gt; </span>
-            <span>trial limit reached (3/3 boards used)</span>
-          </div>
-          <div>
-            <span style={{ color: '#94a3b8' }}># </span>
-            <span style={{ color: '#fbbf24' }}>verify with Google to continue</span>
-          </div>
-        </div>
-
         {/* Body */}
         <div style={{ padding: '20px 20px 8px' }}>
           <h2
             id="verify-gate-title"
             style={{ fontSize: 17, fontWeight: 700, margin: '0 0 8px', color: 'var(--color-text)' }}
           >
-            3 boards = trial limit
+            guest 계정은 보드를 3개까지만 생성할 수 있습니다.
           </h2>
           <p style={{
             fontSize: 14,
@@ -127,7 +83,7 @@ export default function VerifyGateModal({ onClose, onPromoted }) {
             margin: '0 0 20px',
             lineHeight: 1.55,
           }}>
-            Verify with Google to unlock unlimited boards and keep all your data.
+            이메일 인증 후 무제한으로 보드를 만들고, 지금까지의 데이터를 유지할 수 있습니다.
           </p>
 
           {error && (
@@ -150,6 +106,7 @@ export default function VerifyGateModal({ onClose, onPromoted }) {
                 onNonOAuthError={handleVerifyNonOAuthError}
                 disabled={loading}
                 loading={loading}
+                label="이메일 인증하러 가기"
               />
             ) : (
               <p style={{
@@ -158,7 +115,7 @@ export default function VerifyGateModal({ onClose, onPromoted }) {
                 margin: 0,
                 textAlign: 'center',
               }}>
-                Google verification is not available in this environment.
+                Google 인증을 사용할 수 없는 환경입니다.
               </p>
             )}
 
@@ -166,7 +123,7 @@ export default function VerifyGateModal({ onClose, onPromoted }) {
               type="button"
               onClick={onClose}
               disabled={loading}
-              aria-label="Cancel verification"
+              aria-label="인증 취소"
               style={{
                 minHeight: 46,
                 borderRadius: 8,
@@ -180,7 +137,7 @@ export default function VerifyGateModal({ onClose, onPromoted }) {
                 opacity: loading ? 0.5 : 1,
               }}
             >
-              Not now
+              나중에
             </button>
           </div>
         </div>
@@ -193,8 +150,8 @@ export default function VerifyGateModal({ onClose, onPromoted }) {
           lineHeight: 1.45,
           textAlign: 'center',
         }}>
-          Verification links your existing boards and swipe history to your Google account.
-          No data is lost.
+          인증 시 기존 보드와 스와이프 기록이 Google 계정에 연결됩니다.
+          데이터는 사라지지 않습니다.
         </p>
       </div>
     </div>

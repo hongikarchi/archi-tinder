@@ -61,6 +61,7 @@ from .parse_query import (  # noqa: F401
     REQUIRED_SLATE_FIELDS,
     REQUIRED_SLATE_PROBE_PRIORITY,
     _CHAT_PHASE_SYSTEM_PROMPT,
+    _CALIBRATION_PROMPT_EXTENSION,
     _STAGE1_RESPONSE_SCHEMA,
     _STYLE_TOKENS,
     _PROGRAM_TOKENS,
@@ -71,6 +72,8 @@ from .parse_query import (  # noqa: F401
     _has_required_slate,
     _normalise_filter_priority,
     _repair_required_slate,
+    _compute_confidence_fallback,
+    _extract_calibration_fields,
     parse_query,
     parse_query_stage1,
 )
@@ -85,9 +88,15 @@ from .embeddings import embed_visual_description  # noqa: F401
 # ---------------------------------------------------------------------------
 from .generation import (  # noqa: F401
     _PERSONA_PROMPT,
+    _NAME_FILTER_PRIORITY,
+    _sanitise_board_name,
+    _deterministic_board_name,
+    _dedup_board_name,
+    _gemini_board_name_raw,
     generate_visual_description,
     generate_persona_report,
     generate_persona_image,
+    generate_taste_board_name,
 )
 
 # ---------------------------------------------------------------------------
@@ -140,5 +149,6 @@ __all__ = [
     'generate_visual_description',
     'generate_persona_report',
     'generate_persona_image',
+    'generate_taste_board_name',
     'rerank_candidates',
 ]

@@ -15,13 +15,13 @@
  *   affiliation    → affiliation line (user.affiliation directly, 13px/400/INK3, plain)
  *   handle         → @handle monospace row (12px/600/INK2; omitted if absent)
  *   external_links → items[] rows (instagram / email / website — filter empties)
- *   user_id        → QR seed
+ *   user_id        → QR userId (encodes public profile URL)
  *
- * NOT scannable QR: see FakeQr.jsx stub note.
+ * QR: see ProfileQr.jsx — real scannable QR encoding the public profile URL.
  */
 
 import { useState } from 'react'
-import FakeQr from './FakeQr.jsx'
+import ProfileQr from './ProfileQr.jsx'
 
 // ─── Printed-card constants (intentionally hardcoded — never tokenize) ───────
 // These are theme-independent printed-card colors — white paper + dark ink.
@@ -85,8 +85,6 @@ export default function BusinessCard({ user }) {
     .filter(([, v]) => (v || '').trim())
     .map(([k, v]) => ({ label: LINK_LABELS[k] || k.toUpperCase(), value: v }))
 
-  // QR seed (user_id as string for determinism)
-  const qrSeed = String(user?.user_id || 'archivibe')
   // ─────────────────────────────────────────────────────────────────────────
 
   return (
@@ -185,9 +183,9 @@ export default function BusinessCard({ user }) {
               ))}
             </div>
 
-            {/* Right: QR stub (72px) — NOT scannable */}
+            {/* Right: real scannable QR (72px) */}
             <div style={{ flexShrink: 0, width: 72, height: 72 }}>
-              <FakeQr seed={qrSeed} size={72} color={INK1} />
+              <ProfileQr userId={user?.user_id} size={72} />
             </div>
           </footer>
         </div>
@@ -197,10 +195,10 @@ export default function BusinessCard({ user }) {
           {/* Wordmark top-left */}
           <div style={{ ...wordmarkStyle, alignSelf: 'flex-start' }}>ARCHIBE</div>
 
-          {/* Centered large QR stub + name/affiliation — NOT scannable */}
+          {/* Centered large QR (160px) — scan to open profile */}
           <section style={{ margin: 'auto 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18 }}>
             <div style={{ padding: 10, background: PAPER, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <FakeQr seed={qrSeed} size={160} color={INK1} />
+              <ProfileQr userId={user?.user_id} size={160} />
             </div>
             <div style={{ textAlign: 'center' }}>
               <div style={{

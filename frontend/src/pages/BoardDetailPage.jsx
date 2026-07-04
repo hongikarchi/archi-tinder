@@ -139,7 +139,7 @@ const MOCK_BOARD = {
   is_reacted: false,
 }
 
-export default function BoardDetailPage() {
+export default function BoardDetailPage({ onResume }) {
   const navigate = useNavigate()
   const location = useLocation()
   const rawBoardId = useParams().boardId
@@ -628,50 +628,83 @@ export default function BoardDetailPage() {
         gap: 10,
       }}>
         {isOwner ? (
-          <button
-            onClick={() => {
-              if (isEditMode) { setIsEditMode(false); setSelectedIds(new Set()) }
-              else { setIsEditMode(true); setSelectedIds(new Set()) }
-            }}
-            disabled={!isEditMode && (!board || buildings.length === 0)}
-            style={{
-              width: '100%',
-              maxWidth: 320,
-              minHeight: 44,
-              padding: '14px 24px',
-              borderRadius: 999,
-              background: isEditMode ? 'var(--color-surface-2)' : 'var(--color-surface)',
-              color: isEditMode ? 'var(--color-text-dim)' : 'var(--color-text)',
-              border: '1px solid var(--color-border)',
-              fontSize: 15,
-              fontWeight: 700,
-              cursor: (!isEditMode && buildings.length === 0) ? 'default' : 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 10,
-              fontFamily: 'inherit',
-              opacity: (!isEditMode && buildings.length === 0) ? 0.4 : 1,
-              transition: 'background 0.2s, color 0.2s',
-            }}
-          >
-            {isEditMode ? (
-              <>
+          <>
+            <button
+              onClick={() => {
+                if (isEditMode) { setIsEditMode(false); setSelectedIds(new Set()) }
+                else { setIsEditMode(true); setSelectedIds(new Set()) }
+              }}
+              disabled={!isEditMode && (!board || buildings.length === 0)}
+              style={{
+                width: '100%',
+                maxWidth: 320,
+                minHeight: 44,
+                padding: '14px 24px',
+                borderRadius: 999,
+                background: isEditMode ? 'var(--color-surface-2)' : 'var(--color-surface)',
+                color: isEditMode ? 'var(--color-text-dim)' : 'var(--color-text)',
+                border: '1px solid var(--color-border)',
+                fontSize: 15,
+                fontWeight: 700,
+                cursor: (!isEditMode && buildings.length === 0) ? 'default' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 10,
+                fontFamily: 'inherit',
+                opacity: (!isEditMode && buildings.length === 0) ? 0.4 : 1,
+                transition: 'background 0.2s, color 0.2s',
+              }}
+            >
+              {isEditMode ? (
+                <>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                  <span>취소</span>
+                </>
+              ) : (
+                <>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                  <span>Edit Board</span>
+                </>
+              )}
+            </button>
+            {onResume && (
+              <button
+                onClick={() => onResume(board?.board_id)}
+                disabled={!board}
+                style={{
+                  width: '100%',
+                  maxWidth: 320,
+                  minHeight: 44,
+                  padding: '14px 24px',
+                  borderRadius: 999,
+                  background: 'var(--color-surface)',
+                  color: 'var(--color-text)',
+                  border: '1px solid var(--color-border)',
+                  fontSize: 15,
+                  fontWeight: 700,
+                  cursor: !board ? 'default' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 10,
+                  fontFamily: 'inherit',
+                  opacity: !board ? 0.4 : 1,
+                  transition: 'background 0.2s, color 0.2s',
+                }}
+              >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                  <polygon points="5 3 19 12 5 21 5 3"/>
                 </svg>
-                <span>취소</span>
-              </>
-            ) : (
-              <>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                </svg>
-                <span>Edit Board</span>
-              </>
+                <span>이어서 탐색하기</span>
+              </button>
             )}
-          </button>
+          </>
         ) : (
           <button
             onClick={handleToggleReaction}

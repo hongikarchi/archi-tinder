@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, memo } from 'react'
 import * as api from '../api/client.js'
 import { getProject, updateProject } from '../api/projects.js'
+import s from '../components/CalibrationChat.module.css'
 
 const PRESETS = [
   { label: 'Japanese modern museum',  query: 'Modern museum in Japan' },
@@ -122,6 +123,7 @@ function ResultStrip({ results, isFallback }) {
   )
 }
 
+// eslint-disable-next-line no-unused-vars
 export default function LLMSearchPage({ mode, projectId, projectName: initialName, visibility = 'private', onBack, onStart, onUpdate }) {
   // Derive storage key once per render cycle (props/sessionStorage are stable for the lifecycle of this route mount)
   const userId = sessionStorage.getItem('archithon_user') || 'anon'
@@ -178,6 +180,42 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
     } catch { /* ignore */ }
     return ''
   })
+  // Calibration fields from the last parse-query response (forwarded to startSession)
+  const [latestConfidenceScore, setLatestConfidenceScore] = useState(() => {
+    try {
+      const stored = localStorage.getItem(`${storageKey}__latestConfidenceScore`)
+      if (stored) return JSON.parse(stored)
+    } catch { /* ignore */ }
+    return null
+  })
+  const [latestSystemAction, setLatestSystemAction] = useState(() => {
+    try {
+      const stored = localStorage.getItem(`${storageKey}__latestSystemAction`)
+      if (stored) return JSON.parse(stored)
+    } catch { /* ignore */ }
+    return null
+  })
+  const [latestLlmMessage, setLatestLlmMessage] = useState(() => {
+    try {
+      const stored = localStorage.getItem(`${storageKey}__latestLlmMessage`)
+      if (stored) return JSON.parse(stored)
+    } catch { /* ignore */ }
+    return null
+  })
+  const [latestQuickReplies, setLatestQuickReplies] = useState(() => {
+    try {
+      const stored = localStorage.getItem(`${storageKey}__latestQuickReplies`)
+      if (stored) return JSON.parse(stored)
+    } catch { /* ignore */ }
+    return []
+  })
+  const [latestPriorityOrdered, setLatestPriorityOrdered] = useState(() => {
+    try {
+      const stored = localStorage.getItem(`${storageKey}__latestPriorityOrdered`)
+      if (stored) return JSON.parse(stored)
+    } catch { /* ignore */ }
+    return []
+  })
   const [showStart, setShowStart] = useState(() => {
     try {
       const stored = localStorage.getItem(`${storageKey}__showStart`)
@@ -230,6 +268,21 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
   useEffect(() => {
     localStorage.setItem(`${storageKey}__showStart`, JSON.stringify(showStart))
   }, [storageKey, showStart])
+  useEffect(() => {
+    localStorage.setItem(`${storageKey}__latestConfidenceScore`, JSON.stringify(latestConfidenceScore))
+  }, [storageKey, latestConfidenceScore])
+  useEffect(() => {
+    localStorage.setItem(`${storageKey}__latestSystemAction`, JSON.stringify(latestSystemAction))
+  }, [storageKey, latestSystemAction])
+  useEffect(() => {
+    localStorage.setItem(`${storageKey}__latestLlmMessage`, JSON.stringify(latestLlmMessage))
+  }, [storageKey, latestLlmMessage])
+  useEffect(() => {
+    localStorage.setItem(`${storageKey}__latestQuickReplies`, JSON.stringify(latestQuickReplies))
+  }, [storageKey, latestQuickReplies])
+  useEffect(() => {
+    localStorage.setItem(`${storageKey}__latestPriorityOrdered`, JSON.stringify(latestPriorityOrdered))
+  }, [storageKey, latestPriorityOrdered])
 
   // ── Backend hydration (existing project only) ────────────────────────────
   // When there IS a real projectId (not the 'new' pre-project case), try to
@@ -377,6 +430,8 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
       '__messages', '__conversationHistory', '__latestResults',
       '__latestFilters', '__latestFilterPriority', '__latestVisualDescription',
       '__latestImageFocus', '__latestRawQuery', '__showStart',
+      '__latestConfidenceScore', '__latestSystemAction', '__latestLlmMessage',
+      '__latestQuickReplies', '__latestPriorityOrdered',
     ].forEach(suffix => localStorage.removeItem(`${storageKey}${suffix}`))
   }
 
@@ -402,29 +457,71 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
     setIsLoading(true)
 
     try {
-      // Call parse_query with the full history (not just the new turn)
-      const parsed = await api.parseQuery(nextHistory)
+      // Call parse_query with the full history (not just the new turn).
+      // Pass prior_filters when we have accumulated filters so the backend can
+      // merge/accumulate context instead of dropping it on free-text follow-ups.
+      const queryOptions = {}
+      if (latestFilters && Object.keys(latestFilters).length > 0) {
+        queryOptions.prior_filters = latestFilters
+      }
+      const parsed = await api.parseQuery(nextHistory, queryOptions)
+
+      // Shared result fields — present in both probe and terminal responses
+      const results    = parsed.results || []
+      const isFallback = parsed.is_fallback || false
+      const filters    = parsed.structured_filters || {}
+      const filterPriority = parsed.filter_priority || []
+      const rawQueryForSession = nextHistory
+        .filter(turn => turn.role === 'user')
+        .map(turn => turn.text)
+        .join(' ')
+        .trim()
+
+      // Update latest* state whenever the backend sends results (probe or terminal)
+      if (results.length > 0) {
+        setLatestResults(results)
+        setLatestFilters(filters)
+        setLatestFilterPriority(filterPriority)
+        setLatestVisualDescription(parsed.visual_description ?? null)
+        setLatestImageFocus(parsed.image_focus || null)
+        setLatestRawQuery(rawQueryForSession || parsed.raw_query || text || '')
+        setLatestConfidenceScore(parsed.confidence_score ?? null)
+        setLatestSystemAction(parsed.system_action ?? null)
+        setLatestLlmMessage(parsed.llm_response_message ?? null)
+        setLatestQuickReplies(parsed.suggested_quick_replies ?? [])
+        setLatestPriorityOrdered(parsed.priority_ordered ?? [])
+        setShowStart(true)
+      }
 
       if (parsed.probe_needed) {
-        // Probe path: show probe_question as AI message, accumulate history
+        // Probe path: show probe_question as AI message, accumulate history.
+        // Results (if any) are shown alongside the question so the user can
+        // start swiping immediately or answer the chip to refine further.
         const probeText = parsed.probe_question || parsed.reply || ''
         const modelTurn = { role: 'model', text: probeText }
         setConversationHistory([...nextHistory, modelTurn])
-        setMessages(prev => [...prev, { role: 'ai', text: probeText }])
-        // Do not enable swipe yet -- waiting for user reply to the probe
-        setShowStart(false)
-      } else {
-        // Terminal path: existing flow preserved verbatim
-        const results    = parsed.results || []
-        const isFallback = parsed.is_fallback || false
-        const filters    = parsed.structured_filters || {}
-        const filterPriority = parsed.filter_priority || []
-        const rawQueryForSession = nextHistory
-          .filter(turn => turn.role === 'user')
-          .map(turn => turn.text)
-          .join(' ')
-          .trim()
 
+        let replyText
+        if (results.length > 0 && !isFallback) {
+          replyText = `${probeText}\n\nFound ${results.length} building${results.length !== 1 ? 's' : ''} matching your criteria.`
+        } else if (results.length > 0 && isFallback) {
+          replyText = `${probeText}\n\n${parsed.fallback_note || 'No exact matches -- here are some similar buildings you might like.'}`
+        } else {
+          replyText = probeText
+        }
+
+        setMessages(prev => [...prev, {
+          role: 'ai',
+          text: replyText,
+          results,
+          isFallback,
+          filters,
+          quickReplies: parsed.suggested_quick_replies || [],
+          systemAction: parsed.system_action || null,
+        }])
+      } else {
+        // Terminal path: reply text summarises results, then reset history for
+        // the next fresh query.
         let replyText
         if (results.length > 0 && !isFallback) {
           replyText = `${parsed.reply}\n\nFound ${results.length} building${results.length !== 1 ? 's' : ''} matching your criteria.`
@@ -438,21 +535,77 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
           role: 'ai', text: replyText,
           results, isFallback,
           filters,
+          quickReplies: parsed.suggested_quick_replies || [],
         }])
 
         // Reset history for the next fresh query
         setConversationHistory([])
-
-        if (results.length > 0) {
-          setLatestResults(results)
-          setLatestFilters(filters)
-          setLatestFilterPriority(filterPriority)
-          setLatestVisualDescription(parsed.visual_description ?? null)
-          setLatestImageFocus(parsed.image_focus || null)
-          setLatestRawQuery(rawQueryForSession || parsed.raw_query || text || '')
-          setShowStart(true)
-        }
       }
+    } catch (err) {
+      setMessages(prev => [...prev, { role: 'ai', text: `Something went wrong: ${err.message}. Please try again.` }])
+    }
+
+    setIsLoading(false)
+  }
+
+  /**
+   * Handle a priority chip pick: re-rank the current result set by the chosen
+   * axis WITHOUT going through the LLM. The prior_filters are kept intact so
+   * no filter context is lost. A short user bubble is shown for chat continuity
+   * but the turn is NOT appended to conversationHistory (the re-rank skips the
+   * LLM so there is no model turn to pair it with, and polluting future LLM
+   * parses would corrupt the multi-turn context).
+   */
+  async function handleChipPick(chip) {
+    if (isLoading) return
+    const label = chip.label || String(chip)
+
+    // Show a brief user bubble for continuity — not added to conversationHistory.
+    setMessages(prev => [...prev, { role: 'user', text: `「${label}」 우선` }])
+    setIsLoading(true)
+
+    try {
+      const parsed = await api.parseQuery(conversationHistory, {
+        prior_filters:  latestFilters,
+        priority_axis:  chip.axis,
+        raw_query:      latestRawQuery,
+      })
+
+      const results      = parsed.results || []
+      const isFallback   = parsed.is_fallback || false
+      const filters      = parsed.structured_filters || latestFilters || {}
+      const filterPriority = parsed.filter_priority || latestFilterPriority || []
+
+      // Update latest* from the re-rank response so subsequent picks build on
+      // the freshest accumulated set.
+      setLatestResults(results)
+      setLatestFilters(filters)
+      setLatestFilterPriority(filterPriority)
+      if (parsed.visual_description !== undefined) setLatestVisualDescription(parsed.visual_description ?? null)
+      if (parsed.image_focus !== undefined) setLatestImageFocus(parsed.image_focus || null)
+      // raw_query stays as-is (re-rank keeps the same query)
+      setLatestQuickReplies(parsed.suggested_quick_replies ?? [])
+      setLatestPriorityOrdered(parsed.priority_ordered ?? [])
+      setShowStart(true)
+
+      // Build the AI reply text (mirrors the terminal path).
+      let replyText
+      if (results.length > 0 && !isFallback) {
+        replyText = `「${label}」 기준으로 재정렬했어요.\n\nFound ${results.length} building${results.length !== 1 ? 's' : ''} matching your criteria.`
+      } else if (results.length > 0 && isFallback) {
+        replyText = `「${label}」 기준으로 재정렬했어요.\n\n${parsed.fallback_note || 'No exact matches -- here are some similar buildings you might like.'}`
+      } else {
+        replyText = `「${label}」 기준으로 재정렬했지만 결과가 없습니다. 다른 옵션을 시도해 보세요.`
+      }
+
+      setMessages(prev => [...prev, {
+        role: 'ai',
+        text: replyText,
+        results,
+        isFallback,
+        filters,
+        quickReplies: parsed.suggested_quick_replies || [],
+      }])
     } catch (err) {
       setMessages(prev => [...prev, { role: 'ai', text: `Something went wrong: ${err.message}. Please try again.` }])
     }
@@ -471,7 +624,47 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
     if (mode === 'update') {
       onUpdate(projectId, latestResults, latestFilters, latestFilterPriority, latestVisualDescription, latestImageFocus)
     } else {
-      onStart(name, latestResults, latestFilters, latestFilterPriority, latestVisualDescription, visibility, latestRawQuery || '', latestImageFocus)
+      onStart(
+        name,
+        latestResults,
+        latestFilters,
+        latestFilterPriority,
+        latestVisualDescription,
+        visibility,
+        latestRawQuery || '',
+        latestImageFocus,
+      )
+    }
+  }
+
+  const INITIAL_MESSAGE = { role: 'ai', text: "Hello! Describe the kind of architecture you're looking for -- country, program, architect, style, year, and so on." }
+
+  function handleNewConversation() {
+    if (messages.length > 1) {
+      const confirmed = window.confirm('현재 대화를 지우고 새로 시작할까요?')
+      if (!confirmed) return
+    }
+    // Reset all state to initial values
+    setMessages([INITIAL_MESSAGE])
+    setConversationHistory([])
+    setLatestResults([])
+    setLatestFilters({})
+    setLatestFilterPriority([])
+    setLatestVisualDescription(null)
+    setLatestImageFocus(null)
+    setLatestRawQuery('')
+    setLatestConfidenceScore(null)
+    setLatestSystemAction(null)
+    setLatestLlmMessage(null)
+    setLatestQuickReplies([])
+    setLatestPriorityOrdered([])
+    setShowStart(false)
+    setInput('')
+    clearChatStorage()
+    // Clear backend conversation blob for existing projects (mirrors handleStartSwiping)
+    if (projectId) {
+      updateProject(projectId, { conversation_history: {} }).catch(() => {})
+      lastSentBlobRef.current = null
     }
   }
 
@@ -493,10 +686,17 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
         display: 'flex', alignItems: 'center', gap: 12,
         position: 'sticky', top: 0, zIndex: 10,
       }}>
-        <button onClick={onBack} style={{
-          background: 'none', border: 'none', color: 'var(--color-text-dim)',
-          fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', padding: '4px 0', minHeight: 44,
-        }}>Back</button>
+        <button
+          onClick={handleNewConversation}
+          className={s.newConvBtn}
+          aria-label="새 대화"
+          title="새 대화"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="1 4 1 10 7 10" />
+            <path d="M3.51 15a9 9 0 1 0 .49-4.5" />
+          </svg>
+        </button>
         <div style={{ flex: 1, textAlign: 'center' }}>
           <span style={{
             fontSize: 16, fontWeight: 700,
@@ -547,6 +747,26 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
                 {msg.role === 'ai' && <FilterChips filters={msg.filters} />}
                 {msg.role === 'ai' && <ResultStrip results={msg.results} isFallback={msg.isFallback} />}
               </div>
+              {msg.role === 'ai' && msg.quickReplies && msg.quickReplies.length > 0 && (
+                <div className={s.quickRepliesWrapper} role="group" aria-label="Quick reply options" style={{ marginTop: 8 }}>
+                  {msg.quickReplies.map((chip, i) => {
+                    // chips are objects { label, axis, value } — fall back to
+                    // plain string for any legacy responses still in localStorage
+                    const chipLabel = (chip && typeof chip === 'object') ? (chip.label || String(chip)) : String(chip)
+                    const chipObj   = (chip && typeof chip === 'object') ? chip : { label: chipLabel, axis: chipLabel, value: chipLabel }
+                    return (
+                      <button
+                        key={`${chipObj.axis || chipLabel}_${i}`}
+                        className={s.chip}
+                        onClick={() => handleChipPick(chipObj)}
+                        aria-label={`Priority: ${chipLabel}`}
+                      >
+                        {chipLabel}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           ))}
 
