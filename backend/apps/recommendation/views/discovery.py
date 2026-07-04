@@ -484,12 +484,19 @@ class DiscoveryPromoteView(APIView):
         prefetch_card_2 = _initial_cards[2] if len(_initial_cards) > 2 else None
 
         # ── 6. Persist Project + AnalysisSession ──────────────────────────
+        # Seed liked_ids from Discovery draft so report generation (which reads
+        # project.liked_ids) finds the likes and does not return 400 "No liked
+        # buildings yet" for promoted boards.  Shape matches swipe_service.py's
+        # canonical write: {id: str, intensity: float}.
+        seed_liked_ids = [{'id': sid, 'intensity': 1.0} for sid in seed_ids]
+
         with transaction.atomic():
             project = Project.objects.create(
                 user=profile,
                 name='Discovery 취향 탐색',
                 filters={},
                 raw_query=None,
+                liked_ids=seed_liked_ids,
             )
             session = AnalysisSession.objects.create(
                 user=profile,
