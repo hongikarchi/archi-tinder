@@ -33,15 +33,21 @@ def django_db_modify_db_settings():
     :memory: databases for any other test module that completed its DB
     setup before the discard (e.g. test_sessions.py, test_swipe.py).
 
-    buildings alias is intentionally NOT mirrored here.  All tests in
-    this app that touch the buildings DB mock the connection (patch on
-    _dj_connections / engine.*) so no live buildings alias is needed.
+    buildings alias is mirrored to default so no live PG connection is
+    needed for tests that mock the buildings DB (patch on
+    _dj_connections / engine.*).
     """
     from django.conf import settings
     settings.DATABASES['default'] = {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': ':memory:',
         'ATOMIC_REQUESTS': False,
+    }
+    settings.DATABASES['buildings'] = {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': ':memory:',
+        'ATOMIC_REQUESTS': False,
+        'TEST': {'MIRROR': 'default'},
     }
 
 

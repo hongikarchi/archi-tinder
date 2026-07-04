@@ -83,7 +83,6 @@ class AnalysisSession(models.Model):
     like_vectors        = models.JSONField(default=list)   # list of {embedding: [...], round: int}
     convergence_history = models.JSONField(default=list)   # list of delta-V floats
     previous_pref_vector = models.JSONField(default=list)
-    extended_rounds     = models.IntegerField(default=0)
     # Sprint 0 A4: pool exhaustion guard state (§5.6 + §6 Implementation Requirements item 1)
     original_filters         = models.JSONField(default=dict)  # filters used at session creation (for re-relaxation if pool exhausts)
     original_filter_priority = models.JSONField(default=list)
@@ -112,6 +111,10 @@ class AnalysisSession(models.Model):
     question_bias_vector = models.JSONField(null=True, blank=True)   # accumulated 384-d soft bias from Yes/No answers; None = no bias
     # ALGO-QCARD Phase 3: inter-swipe latency rolling window for hyper-positive detection
     recent_latencies = models.JSONField(default=list)   # rolling inter-swipe latencies (ms), newest last; cap RC['recent_latencies_cap']
+    # TASTE-FLOW: action card is emitted exactly once per session (first convergence).
+    # After the first emission (shown=True) subsequent converged swipes serve real cards.
+    # Never reset on 'keep exploring' (extend path) — prompt was already shown.
+    action_card_shown = models.BooleanField(default=False)
     created_at        = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

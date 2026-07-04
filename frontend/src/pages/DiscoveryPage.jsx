@@ -523,10 +523,7 @@ export default function DiscoveryPage({ showToast }) {
           setDraftLikeCount(res.draftLikeCount)
           if (res.likeCapReached) setCapReached(true)
         })
-        .catch((err) => {
-          if (err instanceof VerifyRequiredError) return
-          reportWriteError(showToast, '좋아요 저장 실패')
-        })
+        .catch((err) => { if (!(err instanceof VerifyRequiredError)) reportWriteError(showToast, '좋아요 저장 실패') })
     } else {
       // Pass: server records it for dislike zone; failure is low-stakes but
       // we still surface it consistently per FRONT-UX silent-failure policy.
@@ -534,10 +531,7 @@ export default function DiscoveryPage({ showToast }) {
         .then(res => {
           if (res.draftId) setDraftId(res.draftId)
         })
-        .catch((err) => {
-          if (err instanceof VerifyRequiredError) return
-          reportWriteError(showToast, '패스 기록 실패')
-        })
+        .catch((err) => { if (!(err instanceof VerifyRequiredError)) reportWriteError(showToast, '패스 기록 실패') })
     }
   }
 

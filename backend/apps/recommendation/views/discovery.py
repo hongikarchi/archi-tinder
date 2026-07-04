@@ -38,6 +38,7 @@ from ..caches import (
     evict_user_profile_detail,
     evict_project_detail,
 )
+from ..services.hydration import cache_embedding
 from ..discovery_feed import (
     DISCOVERY_DRAFT_PREFIX,
     create_discovery_draft,
@@ -206,6 +207,13 @@ class DiscoveryFeedbackView(APIView):
         bld_id = request.data.get('canonical_bld_id', '')
         action = request.data.get('action', '')
         draft_id = request.data.get('draft_id', None)
+        tz_offset_minutes = request.data.get('timezone_offset_minutes', 0)
+        try:
+            tz_offset_minutes = int(tz_offset_minutes)
+        except (TypeError, ValueError):
+            tz_offset_minutes = 0
+        if not (-840 <= tz_offset_minutes <= 840):
+            tz_offset_minutes = 0
 
         # Validate canonical_bld_id
         if not bld_id or not isinstance(bld_id, str):
@@ -262,7 +270,7 @@ class DiscoveryFeedbackView(APIView):
                     {'detail': 'verify_required', 'reason': 'board_limit_reached', 'limit': 3},
                     status=status.HTTP_403_FORBIDDEN,
                 )
-            draft = create_discovery_draft(profile)
+            draft = create_discovery_draft(profile, tz_offset_minutes=tz_offset_minutes)
 
         HARD_CAP = RC.get('discovery_like_hard_cap', 50)
         if action == 'like':
@@ -387,11 +395,13 @@ class DiscoveryPromoteView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Guest board-limit gate: promote creates a NEW non-draft Project while
-        # the draft board persists → net +1 board.  Mirror the raw count used by
-        # POST /api/v1/projects/ and DiscoveryFeedbackView (drafts included in
-        # total — consistent with the resource cap policy, not the tier logic
-        # which excludes discovery_ prefix boards for algorithm purposes).
+        # Guest board-limit gate: promote REUSES the existing draft Project
+        # (no net +1 board) — but still check the cap because a guest could
+        # reach promote with exactly 3 boards already (the draft being one of
+        # them) and we must not allow creation of a new AnalysisSession on a
+        # board that would cause confusion.  The draft counts toward the total,
+        # which keeps the policy consistent with POST /api/v1/projects/ and
+        # DiscoveryFeedbackView.
         if profile.is_guest and Project.objects.filter(user=profile).count() >= 3:
             return Response(
                 {'detail': 'verify_required', 'reason': 'board_limit_reached', 'limit': 3},
@@ -404,7 +414,13 @@ class DiscoveryPromoteView(APIView):
         # Build like_vectors and preference_vector from seed embeddings.
         # All seeds use round=0 so they share identical recency weight — no decay
         # gradient is introduced across the contemporaneous Discovery batch.
+        #
+        # Two parallel lists:
+        #   like_vectors       — old shape {embedding, round} for local MMR computation below.
+        #   session_like_vectors — new shape {id, round} written to the session row.
+        # Embeddings are cached at build time so hydration on first swipe always hits.
         like_vectors = []
+        session_like_vectors = []
         pref_vector = []
         for bid in seed_ids:
             emb = pool_embeddings_seed.get(bid)
@@ -412,6 +428,8 @@ class DiscoveryPromoteView(APIView):
                 continue
             emb_list = emb.tolist() if hasattr(emb, 'tolist') else list(emb)
             like_vectors.append({'embedding': emb_list, 'round': 0})
+            session_like_vectors.append({'id': bid, 'round': 0})
+            cache_embedding(bid, emb_list)   # populate Django cache immediately
             pref_vector = engine.update_preference_vector(pref_vector, emb_list, 'like')
 
         # Determine phase based on how many seeds were successfully embedded.
@@ -483,21 +501,31 @@ class DiscoveryPromoteView(APIView):
         prefetch_card = _initial_cards[1] if len(_initial_cards) > 1 else None
         prefetch_card_2 = _initial_cards[2] if len(_initial_cards) > 2 else None
 
-        # ── 6. Persist Project + AnalysisSession ──────────────────────────
-        # Seed liked_ids from Discovery draft so report generation (which reads
-        # project.liked_ids) finds the likes and does not return 400 "No liked
-        # buildings yet" for promoted boards.  Shape matches swipe_service.py's
-        # canonical write: {id: str, intensity: float}.
+        # ── 6. Persist AnalysisSession (reuse the draft Project) ─────────
+        # Reuse the existing draft board so the user ends up with ONE board
+        # (their discovery_YYMMDD_HHMM board) containing both Discovery likes
+        # (already in liked_ids) and the new Taste session, rather than a
+        # second 'Discovery 취향 탐색' board.  If for some reason draft is None
+        # at this point (shouldn't happen — the not_enough_likes guard above
+        # ensures draft was resolved), create a new project as fallback.
+        # Defense (from #257): seed liked_ids on the fallback create as well,
+        # so report generation (which reads project.liked_ids) never returns
+        # 400 "No liked buildings yet" even if the not_enough_likes guard is
+        # ever loosened.  Shape matches swipe_service.py's canonical write:
+        # {id: str, intensity: float}.
         seed_liked_ids = [{'id': sid, 'intensity': 1.0} for sid in seed_ids]
 
         with transaction.atomic():
-            project = Project.objects.create(
-                user=profile,
-                name='Discovery 취향 탐색',
-                filters={},
-                raw_query=None,
-                liked_ids=seed_liked_ids,
-            )
+            if draft is not None:
+                project = draft
+            else:
+                project = Project.objects.create(
+                    user=profile,
+                    name='Discovery 취향 탐색',
+                    filters={},
+                    raw_query=None,
+                    liked_ids=seed_liked_ids,
+                )
             session = AnalysisSession.objects.create(
                 user=profile,
                 project=project,
@@ -508,7 +536,7 @@ class DiscoveryPromoteView(APIView):
                 preference_vector=pref_vector if pref_vector else [],
                 exposed_ids=exposed_ids + ([initial_batch[0]] if initial_batch else []),
                 initial_batch=initial_batch,
-                like_vectors=like_vectors,
+                like_vectors=session_like_vectors,
                 convergence_history=[],
                 previous_pref_vector=[],
                 original_filters={},

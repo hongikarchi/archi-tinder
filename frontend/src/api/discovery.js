@@ -15,7 +15,11 @@ export async function fetchDiscoveryFeed(bufferIds = []) {
 }
 
 export async function discoveryFeedback(canonicalBldId, action, draftId) {
-  const body = { canonical_bld_id: canonicalBldId, action }
+  const body = {
+    canonical_bld_id: canonicalBldId,
+    action,
+    timezone_offset_minutes: new Date().getTimezoneOffset(),
+  }
   if (draftId) body.draft_id = draftId
   try {
     const data = await callApi('POST', '/discovery/feedback/', body)
@@ -28,9 +32,7 @@ export async function discoveryFeedback(canonicalBldId, action, draftId) {
   } catch (err) {
     if (err?.status === 403 && err?.data?.detail === 'verify_required') {
       const reason = err?.data?.reason || 'board_limit_reached'
-      window.dispatchEvent(new CustomEvent('archithon:verify-required', {
-        detail: { reason },
-      }))
+      window.dispatchEvent(new CustomEvent('archithon:verify-required', { detail: { reason } }))
       throw new VerifyRequiredError(reason)
     }
     throw err

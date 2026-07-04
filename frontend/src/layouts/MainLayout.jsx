@@ -2,11 +2,13 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import TabBar from '../components/TabBar.jsx'
 import DebugOverlay from '../components/DebugOverlay.jsx'
 import SwipePage from '../pages/SwipePage.jsx'
+import { discoveryNavigationGuard } from '../utils/discoveryGuard.js'
 
 export default function MainLayout({
   userId, onLogout,
   activeProject, activeProjectId,
   currentCard, cardResetToken, sessionProgress, isSessionCompleted, isSwipeLoading, isResultLoading, swipePending,
+  keepExploringChosen,
   onSwipe, onViewResults, onExtendSession,
   onExitToNewProject, onExitToHome,
   questionTrigger = null,
@@ -25,7 +27,13 @@ export default function MainLayout({
       {/* Header controls — hidden on pages that own their sticky header (profile/office/matched/board) */}
       <div style={{ position: 'fixed', top: 14, right: 16, zIndex: 200, display: (isProfile || pathname.startsWith('/office') || pathname.startsWith('/matched') || pathname.startsWith('/board') || pathname.startsWith('/buildings') || pathname.startsWith('/settings')) ? 'none' : 'flex', gap: 6, alignItems: 'center' }}>
         <button
-          onClick={onLogout}
+          onClick={() => {
+            if (discoveryNavigationGuard.check) {
+              discoveryNavigationGuard.check('logout', onLogout)
+            } else {
+              onLogout()
+            }
+          }}
           title="Log out"
           style={{
             width: 34, height: 34, borderRadius: '50%',
@@ -62,6 +70,7 @@ export default function MainLayout({
           isLoading={isSwipeLoading}
           isResultLoading={isResultLoading}
           swipePending={swipePending}
+          keepExploringChosen={keepExploringChosen}
           projectName={activeProject?.projectName}
           onSwipe={onSwipe}
           onViewResults={onViewResults}

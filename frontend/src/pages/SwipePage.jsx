@@ -3,6 +3,7 @@ import TutorialPopup from '../components/TutorialPopup.jsx'
 import SwipeCard, { CARD_WIDTH, CARD_HEIGHT } from '../components/SwipeCard.jsx'
 import QuestionCard from '../components/QuestionCard.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
+import { isActionCard } from '../utils/appHelpers.js'
 
 /* ── LoadingCard ─────────────────────────────────────────────────────────── */
 function LoadingCard() {
@@ -26,13 +27,66 @@ function LoadingCard() {
   )
 }
 
-/* ── ConfidenceBar (unified progress for all phases) ─────────────────────── */
+/* ── ActionCard ──────────────────────────────────────────────────────────── */
+// Rendered when card_type === 'action' (backend-emitted when session converges).
+// The user opts in to the report by right-swiping (like), or keeps exploring
+// by left-swiping (pass). The hint text at the bottom makes this explicit.
+function ActionCard({ card }) {
+  const message  = card.action_card_message  || '취향이 충분히 모였어요!'
+  const subtitle = card.action_card_subtitle || '지금 결과를 확인하거나 계속 탐색할 수 있어요'
+  return (
+    <div style={{
+      position: 'absolute', top: 0, left: 0,
+      width: CARD_WIDTH, height: CARD_HEIGHT,
+      borderRadius: 20, overflow: 'hidden',
+      background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 45%, #4c1d95 100%)',
+      boxShadow: '0 25px 50px rgba(0,0,0,0.6)',
+      display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      gap: 16, padding: '32px 28px',
+      userSelect: 'none',
+    }}>
+      {/* Decorative sparkle */}
+      <div style={{ fontSize: 56, lineHeight: 1 }}>✨</div>
+
+      {/* Main message */}
+      <h2 style={{
+        color: '#fff', fontSize: 22, fontWeight: 700,
+        textAlign: 'center', margin: 0, lineHeight: 1.35,
+      }}>
+        {message}
+      </h2>
+
+      {/* Subtitle */}
+      {subtitle && (
+        <p style={{
+          color: 'rgba(255,255,255,0.7)', fontSize: 14, fontWeight: 400,
+          textAlign: 'center', margin: 0, lineHeight: 1.5,
+        }}>
+          {subtitle}
+        </p>
+      )}
+
+      {/* Swipe hint — bottom of card */}
+      <div style={{
+        position: 'absolute', bottom: 28, left: 0, right: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+        color: 'rgba(255,255,255,0.45)', fontSize: 12, letterSpacing: '0.03em',
+      }}>
+        <span>← 계속 탐색</span>
+        <span style={{ color: 'rgba(255,255,255,0.25)' }}>·</span>
+        <span>결과 보기 →</span>
+      </div>
+    </div>
+  )
+}
+
+/* ── ConfidenceBar (persona-report readiness / response consistency) ─────── */
 function ConfidenceBar({ value, phase, progress }) {
-  // value: confidence in [0, 1] (analyzing+ phases) or null (exploring / pre-reset)
-  // progress: full progress object for swipe count
-  const swipeCount = progress?.swipe_count ?? progress?.current_round ?? 0
-  const targetSwipes = Math.max(1, progress?.target_swipes ?? 10)
-  const swipePct = Math.min(95, Math.round((Math.min(swipeCount, targetSwipes) / targetSwipes) * 100))
+  // value: confidence [0,1] = 1 - avg(recent ΔV)/threshold — rises on consistency,
+  //        falls on inconsistency (persona-report readiness metric).
+  //        null = early exploring, not enough data yet.
+  // progress: full progress object for swipe count display.
   let pct = 0
   let stageLabel = 'Loading…'
 
@@ -41,26 +95,37 @@ function ConfidenceBar({ value, phase, progress }) {
     stageLabel = 'Taste found'
   } else if (phase === 'analyzing') {
     if (value != null) {
-      pct = Math.max(swipePct, Math.round(value * 100))
+      // Bar driven purely by confidence (can rise or fall).
+      pct = Math.round(value * 100)
       stageLabel = 'Tuning taste'
     } else {
-      pct = swipePct
+      // Confidence not yet established — show faint baseline so bar isn't empty.
+      pct = 4
       stageLabel = 'Calibrating…'
     }
   } else if (phase === 'exploring') {
-    pct = swipePct
+    if (value != null) {
+      pct = Math.round(value * 100)
+    } else {
+      pct = 4
+    }
     stageLabel = 'Exploring'
   } else if (value != null) {
-    pct = Math.max(swipePct, Math.round(value * 100))
+    // Unknown/other phase but confidence is available.
+    pct = Math.round(value * 100)
     stageLabel = 'Tuning taste'
+  } else {
+    // No phase and no confidence — show minimal baseline.
+    pct = 4
+    stageLabel = 'Calibrating…'
   }
 
-  // Swipe count: prefer swipe_count, fallback to like+dislike sum, fallback to likes only
+  // Swipe count label: plain count, no /target denominator.
   let swipeCountLabel = ''
   if (progress?.swipe_count != null) {
-    swipeCountLabel = `${progress.swipe_count}/${targetSwipes} swipes`
+    swipeCountLabel = `${progress.swipe_count} swipes`
   } else if (progress?.like_count != null && progress?.dislike_count != null) {
-    swipeCountLabel = `${progress.like_count + progress.dislike_count}/${targetSwipes} swipes`
+    swipeCountLabel = `${progress.like_count + progress.dislike_count} swipes`
   } else if (progress?.like_count != null) {
     swipeCountLabel = `${progress.like_count} ♥`
   }
@@ -299,7 +364,8 @@ function DismissConfirmPopup({ onConfirm, onCancel }) {
 /* ── SwipePage ───────────────────────────────────────────────────────────── */
 export default function SwipePage({
   currentCard, cardResetToken = 0, progress, isCompleted, isLoading, isResultLoading = false, swipePending = 0,
-  projectName, onSwipe, onViewResults, onExtendSession,
+  keepExploringChosen = false,
+  projectName, onSwipe, onViewResults, onExtendSession, // eslint-disable-line no-unused-vars
   onExitToNewProject, onExitToHome,
   questionTrigger = null,
   onQuestionAnswer,
@@ -315,23 +381,22 @@ export default function SwipePage({
   const [showExitConfirm, setShowExitConfirm] = useState(false)
   const [showDismissConfirm, setShowDismissConfirm] = useState(false)
 
-  const like_count       = progress?.like_count    ?? 0
   const phase            = progress?.phase
   const filter_relaxed   = progress?.filter_relaxed || false
   const confidence       = progress?.confidence ?? null
-  const swipeCount       = progress?.swipe_count ?? progress?.current_round ?? 0
-  const targetSwipes     = Math.max(1, progress?.target_swipes ?? 10)
-  // Safety floor: once the user has swiped 5 beyond the product target window,
-  // expose the Finish button regardless of backend convergence state. Backend
-  // can withhold `phase='converged'` indefinitely when the recent-likes gate
-  // blocks it (e.g. dislike streak post-target) — without this floor the user
-  // is stranded until pool exhaustion.
-  const beyondTargetFloor = swipeCount >= targetSwipes + 5
-  const isAt100 = !isCompleted && (phase === 'converged' || beyondTargetFloor)
+  // isAt100: show the top "Finish & View Report" button once the user has
+  // PASSED the action card (keepExploringChosen) or the pool is exhausted
+  // (isCompleted). Order on a fresh session: converge → action card →
+  // left-swipe sets keepExploringChosen → button appears. On resume,
+  // keepExploringChosen is restored from backend action_card_shown
+  // (App.jsx applySessionResponse) so the button shows immediately.
+  const isAt100 = keepExploringChosen || isCompleted
 
   function onTinderSwipe(dir) {
-    // F4: intercept first-ever left swipe to show dismiss tutorial
-    if (dir === 'left' && !hasShownDismissTutorial.current) {
+    // F4: intercept first-ever left swipe to show dismiss tutorial.
+    // Skip for action cards — left-swipe on an action card means "keep exploring",
+    // not "skip this building", so the dismiss tutorial is not applicable.
+    if (dir === 'left' && !hasShownDismissTutorial.current && !isActionCard(currentCard)) {
       // Restore card to center BEFORE showing popup so cancel path has no flicker
       cardRef.current?.restoreCard()
       pendingDismissDir.current = dir
@@ -353,8 +418,9 @@ export default function SwipePage({
 
   async function swipeManual(dir) {
     if (!cardRef.current || isLoading) return
-    // F4: intercept first-ever left swipe from keyboard
-    if (dir === 'left' && !hasShownDismissTutorial.current) {
+    // F4: intercept first-ever left swipe from keyboard.
+    // Skip for action cards (see onTinderSwipe comment above).
+    if (dir === 'left' && !hasShownDismissTutorial.current && !isActionCard(currentCard)) {
       pendingDismissDir.current = dir
       setShowDismissConfirm(true)
       return
@@ -412,8 +478,10 @@ export default function SwipePage({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isLoading, currentCard, showTutorial, showExitConfirm, showDismissConfirm, questionTrigger]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (isCompleted) {
-    const canContinue = !!progress?.can_continue
+  if (!isLoading && !currentCard) {
+    // Pool exhausted (or is_analysis_completed with no next card).
+    // Top "Finish & View Report" button (isAt100) is always visible here.
+    // Show a brief inline prompt; no full-screen takeover.
     return (
       <div style={{
         height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
@@ -422,114 +490,90 @@ export default function SwipePage({
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        justifyContent: 'center',
-        padding: 24,
-        gap: 16,
+        padding: '20px 16px',
+        position: 'relative',
       }}>
-        <div style={{
-          width: CARD_WIDTH,
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 20,
-          padding: '32px 24px',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 12,
-          boxShadow: '0 25px 50px rgba(0,0,0,0.4)',
-        }}>
-          <div style={{ fontSize: 56 }}>✨</div>
-          <h2 style={{
-            color: 'var(--color-text)',
-            fontSize: 22,
-            fontWeight: 700,
-            margin: 0,
-            textAlign: 'center',
-          }}>
-            Your taste is found
-          </h2>
-          <p style={{
-            color: 'var(--color-text-2)',
-            fontSize: 14,
-            textAlign: 'center',
-            margin: 0,
-            lineHeight: 1.5,
-          }}>
-            {projectName ? `"${projectName}"` : 'Project'} swiping complete · ♥ {like_count} saved
-          </p>
-          <p style={{
-            color: 'var(--color-text-muted)',
-            fontSize: 12,
-            textAlign: 'center',
-            margin: '4px 0 0',
-            lineHeight: 1.5,
-          }}>
-            {canContinue
-              ? 'View your persona report, or keep exploring more buildings.'
-              : 'Your persona report is ready.'}
-          </p>
+        {/* Exit button */}
+        <button
+          onClick={() => setShowExitConfirm(true)}
+          aria-label="Exit session"
+          style={{
+            position: 'absolute', top: 12, left: 16,
+            width: 32, height: 32, borderRadius: '50%',
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: 'var(--color-text-dim)', cursor: 'pointer',
+            zIndex: 10,
+          }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="1 4 1 10 7 10" />
+            <path d="M3.51 15a9 9 0 1 0 .49-4.95" />
+          </svg>
+        </button>
+
+        {/* Header / confidence bar */}
+        <div style={{ textAlign: 'center', width: '100%' }}>
+          <h1 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 14px', letterSpacing: '-0.01em' }}>
+            {projectName
+              ? <span style={{ color: 'var(--color-text)' }}>{projectName}</span>
+              : <span style={{ color: 'var(--color-text)', letterSpacing: '0.2em' }}>ARCHIBE</span>}
+          </h1>
+          <div style={{ maxWidth: CARD_WIDTH, margin: '0 auto' }}>
+            <ConfidenceBar value={confidence} phase={phase} progress={progress} />
+          </div>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: CARD_WIDTH }}>
-          <button
-            onClick={onViewResults}
-            disabled={isResultLoading}
-            style={{
-              padding: '14px 24px',
-              borderRadius: 14,
-              background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
-              color: '#fff',
-              fontSize: 15,
-              fontWeight: 700,
-              border: 'none',
-              cursor: isResultLoading ? 'default' : 'pointer',
-              fontFamily: 'inherit',
-              boxShadow: '0 4px 20px rgba(236,72,153,0.35)',
-              opacity: isResultLoading ? 0.6 : 1,
-              transition: 'opacity 0.2s',
-              minHeight: 44,
-            }}
-          >
-            {isResultLoading ? 'Preparing report...' : 'View persona report →'}
-          </button>
-          {canContinue && (
+        {/* Finish button + empty-deck notice */}
+        <div style={{
+          flex: 1,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          gap: 16, width: '100%',
+        }}>
+          <div style={{ width: CARD_WIDTH, display: 'flex', flexDirection: 'column', gap: 12 }}>
             <button
-              onClick={onExtendSession}
-              disabled={isLoading || isResultLoading}
+              onClick={onViewResults}
+              disabled={isResultLoading || swipePending > 0}
               style={{
-                padding: '12px 24px',
+                width: '100%',
+                padding: '13px 20px',
                 borderRadius: 14,
-                background: 'var(--color-surface-2)',
-                color: 'var(--color-text)',
+                background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
+                color: '#fff',
                 fontSize: 14,
-                fontWeight: 600,
-                border: '1px solid var(--color-border)',
-                cursor: (isLoading || isResultLoading) ? 'default' : 'pointer',
+                fontWeight: 700,
+                border: 'none',
+                cursor: (isResultLoading || swipePending > 0) ? 'default' : 'pointer',
                 fontFamily: 'inherit',
-                opacity: (isLoading || isResultLoading) ? 0.6 : 1,
-                transition: 'opacity 0.2s, background 0.15s',
+                boxShadow: '0 4px 16px rgba(236,72,153,0.35)',
+                opacity: (isResultLoading || swipePending > 0) ? 0.6 : 1,
+                transition: 'opacity 0.2s',
                 minHeight: 44,
               }}
             >
-              Keep exploring
+              {isResultLoading ? 'Preparing report...' : 'Finish & View Report →'}
             </button>
-          )}
+            <p style={{
+              color: 'var(--color-text-dim)',
+              fontSize: 13,
+              textAlign: 'center',
+              margin: 0,
+              lineHeight: 1.5,
+            }}>
+              더 볼 카드가 없어요 · 위에서 결과를 확인하세요
+            </p>
+          </div>
         </div>
-      </div>
-    )
-  }
 
-  if (!isLoading && !currentCard) {
-    return (
-      <div style={{
-        height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))', overflow: 'hidden', background: 'var(--color-bg)', display: 'flex',
-        flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        padding: 24, gap: 12,
-      }}>
-        <div style={{ fontSize: 48 }}>🏛️</div>
-        <p style={{ color: 'var(--color-text-dim)', fontSize: 14, textAlign: 'center' }}>
-          No more buildings available.<br />Try starting a new session with different filters.
-        </p>
+        {showExitConfirm && (
+          <ExitConfirmPopup
+            onNewProject={() => { setShowExitConfirm(false); onExitToNewProject?.() }}
+            onHome={() => { setShowExitConfirm(false); onExitToHome?.() }}
+            onCancel={() => setShowExitConfirm(false)}
+          />
+        )}
       </div>
     )
   }
@@ -660,10 +704,14 @@ export default function SwipePage({
                   onSwipe={onTinderSwipe}
                   onCardLeftScreen={onCardLeftScreen}
                 >
-                  <SwipeCard
-                    card={currentCard}
-                    onGalleryClose={() => {}}
-                  />
+                  {isActionCard(currentCard) ? (
+                    <ActionCard card={currentCard} />
+                  ) : (
+                    <SwipeCard
+                      card={currentCard}
+                      onGalleryClose={() => {}}
+                    />
+                  )}
                 </SwipeGestureFrame>
                 {isLoading && (
                   <div style={{

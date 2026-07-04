@@ -81,7 +81,7 @@ class ProjectListCreateView(APIView):
                             _latest_like_count=_latest_lc_sq,
                             _latest_session_created_at=_latest_ca_sq,
                         )
-                        .order_by('-created_at')
+                        .order_by('-updated_at')
                     )
                 start = (page - 1) * page_size
                 with stage('fetch_chunk_plus_one'):
@@ -206,7 +206,7 @@ class ProjectDetailView(APIView):
                 remove_set = set(remove_ids)
                 project.liked_ids = [item for item in project.liked_ids if item.get('id') not in remove_set]
                 project.saved_ids = [item for item in project.saved_ids if item.get('id') not in remove_set]
-                project.save(update_fields=['liked_ids', 'saved_ids'])
+                project.save(update_fields=['liked_ids', 'saved_ids', 'updated_at'])
                 evict_taste(profile.id)
                 evict_discovery_feed(profile.id)
             if serializer is not None:
@@ -283,7 +283,7 @@ class UserProjectsListView(APIView):
                 _latest_like_count=_latest_lc_sq,
                 _latest_session_created_at=_latest_ca_sq,
             )
-            .order_by('-created_at')
+            .order_by('-updated_at')
         )
         if not is_owner:
             qs = qs.filter(visibility='public')

@@ -24,7 +24,7 @@ import NotificationsScreen from './pages/settings/NotificationsScreen.jsx'
 import AppearanceScreen from './pages/settings/AppearanceScreen.jsx'
 import EditProfileScreen from './pages/settings/EditProfileScreen.jsx'
 import * as api from './api/client.js'
-import { createProject } from './api/projects.js'
+import { createProject, VerifyRequiredError } from './api/projects.js'
 import { normalizeFilters, classifySwipeError, isActionCard, extractLikedIds, extractSavedIds, purgeChatCache } from './utils/appHelpers.js'
 import { reportWriteError } from './utils/reportWriteError.js'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
@@ -57,6 +57,10 @@ export default function App() {
   // Tracks in-flight recordSwipe() calls. Button gates on this so the
   // "Finish & View Report" button can't fire before the backend save settles.
   const [swipePending, setSwipePending] = useState(0)
+  // keepExploringChosen: true once the user LEFT-swipes the action card.
+  // Gates the top "Finish & View Report" button so it only appears AFTER the
+  // action card is passed, not the moment action_card_shown arrives from the backend.
+  const [keepExploringChosen, setKeepExploringChosen] = useState(false)
   const [activeProjectId, setActiveProjectId] = useState(() => {
     const id = sessionStorage.getItem('archithon_user')
     return localStorage.getItem(`archithon_activeId_${id}`) || null
@@ -215,22 +219,12 @@ export default function App() {
     )
   }, [location.pathname]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-navigate when the backend declares a terminal state OR the user has
-  // swiped meaningfully past the target window. The post-target floor mirrors
-  // SwipePage's beyondTargetFloor so users on dislike-heavy paths don't get
-  // stranded (backend convergence can be withheld by the recent-likes gate).
-  useEffect(() => {
-    if (location.pathname !== '/swipe') return
-    const phase = sessionProgress?.phase
-    const swipeCount = sessionProgress?.swipe_count ?? sessionProgress?.current_round ?? 0
-    const targetSwipes = Math.max(1, sessionProgress?.target_swipes ?? 10)
-    const beyondTargetFloor = swipeCount >= targetSwipes + 5
-    const backendDone = isSessionCompleted || phase === 'converged' || beyondTargetFloor
-    if (!backendDone) return
-    const sessionId = projects.find(p => p.id === activeProjectId)?.sessionId
-    if (!sessionId) return
-    navigate('/result/' + sessionId)
-  }, [isSessionCompleted, sessionProgress?.phase, sessionProgress?.swipe_count, sessionProgress?.current_round]) // eslint-disable-line react-hooks/exhaustive-deps
+  // NOTE: Auto-navigate to /result on convergence is intentionally removed.
+  // Navigation to the persona report is now opt-in via the backend-emitted
+  // action card (card_type 'action'). The user right-swipes the action card
+  // to go to the report, or left-swipes to keep exploring.
+  // The handleSwipeCard function intercepts action-card swipes before any API
+  // call and routes them accordingly.
 
   // Persist current card id to localStorage per active project so refresh can
   // restore the exact card the user was looking at (not just the backend's last
@@ -304,7 +298,13 @@ export default function App() {
   }
 
   // Populate frontend card state from a session state or start response.
+  // RESUME path only: restore keepExploringChosen from backend progress so a
+  // page reload after passing the action card keeps the top button visible.
+  // Do NOT call setKeepExploringChosen here on the per-swipe path (handleSwipeCard
+  // calls setSessionProgress directly) — that would flip the button on the
+  // converging swipe BEFORE the user actually passes the action card.
   function applySessionResponse(projectId, result) {
+    setKeepExploringChosen(!!result.progress?.action_card_shown)
     setCurrentCard(result.next_image)
     setSessionProgress({
       ...result.progress,
@@ -337,6 +337,7 @@ export default function App() {
           ...p,
           sessionId: result.session_id,
           backendId: result.project_id || p.backendId || null,
+          projectName: result.name || p.projectName,
         }
       }))
     }
@@ -346,6 +347,7 @@ export default function App() {
     setPendingQuestion(null)
     setIsSwipeLoading(true)
     setIsSessionCompleted(false)
+    setKeepExploringChosen(false)
     try {
       // Try to resume an existing session first (preserves progress across refresh)
       if (existingSessionId) {
@@ -375,7 +377,12 @@ export default function App() {
       setCurrentCard(null)
       setPrefetchCard(null)
       setPrefetchCard2(null)
-      setSwipeError(err.message || 'Failed to start session')
+      // VerifyRequiredError: the global VerifyGateModal already shows via the
+      // 'archithon:verify-required' event dispatched in api/sessions.js.
+      // Don't also show the generic red toast — let the modal be the only UI.
+      if (!(err instanceof VerifyRequiredError)) {
+        setSwipeError(err.message || 'Failed to start session')
+      }
     } finally {
       setIsSwipeLoading(false)
     }
@@ -404,6 +411,41 @@ export default function App() {
     }
   }
 
+  // ── Shared results navigation ─────────────────────────────────────────────
+  // Called from BOTH the action-card right-swipe AND the top "결과 보러 가기" button.
+  // Navigates to the result page, fires getResult + generateReport in parallel,
+  // updates the project with persona report + axis scores, and (for temp projects
+  // whose report just landed) surfaces the SaveBoardModal for board naming.
+  async function goToResults(project) {
+    if (!project?.sessionId) {
+      navigate('/user/me')
+      return
+    }
+    const sessionId = project.sessionId
+    const backendId = project.backendId
+    const localId = project.id
+    navigate('/result/' + sessionId)
+    setIsResultLoading(true)
+    try {
+      const [resultData, reportData] = await Promise.all([
+        api.getResult({ session_id: sessionId }),
+        backendId ? api.generateReport(backendId).catch((err) => { console.error('report generation failed:', err); return null; }) : Promise.resolve(null),
+      ])
+      setProjects(prev => prev.map(p => p.id === localId ? {
+        ...p,
+        predictedLikes: resultData.predicted_like_images || [],
+        ...(reportData?.final_report ? { finalReport: reportData.final_report } : {}),
+        ...(reportData?.axis_scores ? { axisScores: reportData.axis_scores } : {}),
+      } : p))
+      if (reportData?.final_report && backendId && project?.isTemp) {
+        setSaveModalProject({ backendId, finalReport: reportData.final_report, localId })
+        setShowSaveModal(true)
+      }
+    } catch { /* ResultsPage fetches on entry */ }
+    finally { setIsResultLoading(false) }
+  }
+  // ── End shared results navigation ─────────────────────────────────────────
+
   async function handleSwipeCard(action) {
     if (swipeLock.current) {
       // Card may have flown off-screen during the lock window.
@@ -417,6 +459,44 @@ export default function App() {
       swipeLock.current = false
       return
     }
+
+    // ── Action card intercept ──────────────────────────────────────────────
+    // The backend emits an action card (card_type 'action') when the session
+    // converges. The user opts in to the report by right-swiping, or keeps
+    // exploring by left-swiping. Neither swipe is recorded as a building like.
+    if (isActionCard(currentCard)) {
+      swipeLock.current = false
+      if (action === 'like') {
+        // RIGHT-swipe → navigate to persona report (opt-in).
+        // Delegate to goToResults so the top button and this path share identical logic.
+        const project = projects.find(p => p.id === activeProjectId)
+        await goToResults(project)
+      } else if (action === 'dislike') {
+        // LEFT-swipe → keep exploring: mark that the user passed the action card
+        // so the top "Finish & View Report" button becomes visible.
+        setKeepExploringChosen(true)
+        // Advance the queue without recording a swipe.
+        if (prefetchCard) {
+          setCurrentCard(prefetchCard)
+          setPrefetchCard(prefetchCard2)
+          setPrefetchCard2(null)
+        } else {
+          // No prefetch buffered — ask the backend for the next card.
+          const project = projects.find(p => p.id === activeProjectId)
+          if (project?.sessionId) {
+            setIsSwipeLoading(true)
+            try {
+              const fresh = await api.getSessionState(project.sessionId)
+              applySessionResponse(activeProjectId, fresh)
+            } catch { /* leave currentCard as-is, user can retry */ }
+            finally { setIsSwipeLoading(false) }
+          }
+        }
+      }
+      return
+    }
+    // ── End action card intercept ──────────────────────────────────────────
+
     const project = projects.find(p => p.id === activeProjectId)
     if (!project?.sessionId) {
       swipeLock.current = false
@@ -590,14 +670,15 @@ export default function App() {
           // Using them would overwrite the frontend's authoritative queue and
           // cause drift (the root cause of "cards stop loading" and "same card
           // twice" bugs before this fix).
-          const _nextBlocked = !!(result.next_image && isActionCard(result.next_image))
           _dbg.nextId = result.next_image?.image_id?.slice(-8) ?? null
-          _dbg.nextBlocked = _nextBlocked
           _dbg.pf = result.prefetch_image?.image_id?.slice(-8) ?? null
           _dbg.pf2 = result.prefetch_image_2?.image_id?.slice(-8) ?? null
-          if (result.next_image && !_nextBlocked) {
+          if (result.next_image) {
             setPrefetchCard2(result.next_image)
-            if (result.next_image.image_url) preloadImage(result.next_image)
+            // Action cards have no image to preload; skip preloadImage for them.
+            if (result.next_image.image_url && !isActionCard(result.next_image)) {
+              preloadImage(result.next_image)
+            }
           } else {
             setPrefetchCard2(null)
           }
@@ -609,9 +690,12 @@ export default function App() {
           if (result.next_image) {
             // Wait for the image to download before showing the card so the
             // transition from LoadingCard lands with the image already visible.
-            const _plT0 = Date.now()
-            await preloadImage(result.next_image)
-            _dbg.preloadMs = Date.now() - _plT0
+            // Action cards have no image — skip preload but still surface the card.
+            if (!isActionCard(result.next_image)) {
+              const _plT0 = Date.now()
+              await preloadImage(result.next_image)
+              _dbg.preloadMs = Date.now() - _plT0
+            }
             setCurrentCard(result.next_image)
           } else if (!result.is_analysis_completed) {
             // Pool temporarily exhausted — fall back to getSessionState (same as page refresh).
@@ -864,10 +948,36 @@ export default function App() {
   // Resume an interrupted swipe session from a board card.
   // boardId == project_id (String). Looks up the local project entry to get
   // its filters + stored sessionId, then navigates to /swipe.
+  // BUG #2 fix: if the board is NOT in local `projects` (e.g. invoked from
+  // BoardDetailPage which fetches its own board list), fetch the project from
+  // the API, build a synthetic local entry, upsert it into `projects`, then
+  // initSession with project_id so the backend resumes by project (Case #3).
   async function handleResumeProject(boardId) {
     const id = String(boardId)
-    const project = projects.find(p => p.id === id)
-    if (!project) return
+    let project = projects.find(p => p.id === id)
+    if (!project) {
+      // Board not in local state — fetch from API and build a minimal entry.
+      let fetched = null
+      try {
+        fetched = await api.getProject(id)
+      } catch { /* fall through — initSession will handle the failure */ }
+      const syntheticProject = {
+        id,
+        backendId: fetched?.project_id || id,
+        projectName: fetched?.name || 'Untitled',
+        filters: fetched?.filters || {},
+        likedBuildings: [],
+        swipedIds: [],
+        predictedLikes: [],
+        sessionId: fetched?.latest_session_id || null,
+        createdAt: fetched?.created_at || new Date().toISOString(),
+        deckImages: null,
+        visibility: fetched?.visibility || 'private',
+        isTemp: fetched?.is_temp ?? false,
+      }
+      setProjects(prev => prev.find(p => p.id === id) ? prev : [...prev, syntheticProject])
+      project = syntheticProject
+    }
     setActiveProjectId(id)
     navigate('/swipe')
     await initSession(id, project.filters, [], [], project.sessionId || null, null, null, project.projectName)
@@ -928,12 +1038,10 @@ export default function App() {
     isSwipeLoading,
     isResultLoading,
     swipePending,
+    keepExploringChosen,
     onSwipe: handleSwipeCard,
     onExtendSession: handleExtendSession,
-    onViewResults: () => {
-      if (activeProject?.sessionId) navigate('/result/' + activeProject.sessionId)
-      else navigate('/user/me')
-    },
+    onViewResults: () => { goToResults(activeProject) },
     cardResetToken,
     onExitToNewProject: () => {
       const hasLikes = (activeProject?.likedBuildings?.length ?? 0) > 0
@@ -992,7 +1100,7 @@ export default function App() {
           <Route path="office/:officeId" element={<FirmProfilePage {...sharedLayoutProps} />} />
           <Route path="result/:sessionId" element={<ResultsPage projects={projects} setProjects={setProjects} />} />
           <Route path="buildings/:buildingId" element={<BuildingDetailPage />} />
-          <Route path="board/:boardId" element={<BoardDetailPage />} />
+          <Route path="board/:boardId" element={<BoardDetailPage onResume={handleResumeProject} />} />
           <Route path="board/:boardId/report" element={<BoardReportPage />} />
           <Route path="liked-projects" element={<LikedProjectsPage />} />
           <Route path="my/liked-offices" element={<Navigate to="/my/profile" replace />} />
