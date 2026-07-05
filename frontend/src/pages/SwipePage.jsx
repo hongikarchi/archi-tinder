@@ -3,29 +3,8 @@ import TutorialPopup from '../components/TutorialPopup.jsx'
 import SwipeCard, { CARD_WIDTH, CARD_HEIGHT } from '../components/SwipeCard.jsx'
 import QuestionCard from '../components/QuestionCard.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
+import CardSkeleton from '../components/CardSkeleton.jsx'
 import { isActionCard } from '../utils/appHelpers.js'
-
-/* ── LoadingCard ─────────────────────────────────────────────────────────── */
-function LoadingCard() {
-  return (
-    <div style={{
-      position: 'absolute', top: 0, left: 0, width: CARD_WIDTH, height: CARD_HEIGHT,
-      borderRadius: 20, overflow: 'hidden',
-      background: 'var(--color-surface)',
-      boxShadow: '0 25px 50px rgba(0,0,0,0.4)',
-    }}>
-      <div className="skeleton-shimmer" style={{ width: '100%', height: '100%' }} />
-      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '0 18px 22px' }}>
-        <div className="skeleton-shimmer" style={{ height: 17, width: '65%', borderRadius: 6, marginBottom: 12 }} />
-        <div style={{ display: 'flex', gap: 6 }}>
-          {[72, 88, 60].map((w, i) => (
-            <div key={i} className="skeleton-shimmer" style={{ height: 24, width: w, borderRadius: 999 }} />
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
 
 /* ── ActionCard ──────────────────────────────────────────────────────────── */
 // Rendered when card_type === 'action' (backend-emitted when session converges).
@@ -730,7 +709,7 @@ export default function SwipePage({
               </>
             )
           ) : isLoading ? (
-            <LoadingCard />
+            <CardSkeleton />
           ) : null}
         </div>
 

@@ -83,15 +83,16 @@ body {
   animation: shimmer 1.6s ease-in-out infinite;
 }
 
-/* -- Discovery loading mascot animations ---------------------------------- */
-@keyframes mascot-bob {
-  0%, 100% { transform: translateY(0); }
-  50%      { transform: translateY(-8px); }
+/* -- Card-language skeleton pulse (business-card style loading blocks) ---- */
+@keyframes lpSkelPulse {
+  0%, 100% { opacity: 0.45; }
+  50%      { opacity: 1; }
 }
 
-@keyframes dot-blink {
-  0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); }
-  40%           { opacity: 1;   transform: scale(1); }
+.lp-skel {
+  background: var(--color-surface-3);
+  border-radius: var(--radius-sm);
+  animation: lpSkelPulse 1.6s var(--motion-ease) infinite;
 }
 
 /* -- Hide scrollbar utility (used by swipe-style card-back galleries per DESIGN.md §3.5.5) -- */
@@ -124,16 +125,16 @@ body {
 }
 .lp-swipe-demo { animation: lpSwipeDemo 3.4s var(--motion-ease) infinite; }
 
-/* Intro arrows — dim by default, light up accent-1 in sync with the card swipe
-   (lpSwipeDemo: left ≈24%, right ≈66%). */
+/* Intro arrows — dim by default, brighten to ink (--color-text) in sync with the
+   card swipe (lpSwipeDemo: left ≈24%, right ≈66%). */
 @keyframes lpArrowLeft {
   0%, 15%   { color: var(--color-text-dim); }
-  22%, 26%  { color: var(--accent-1); }
+  22%, 26%  { color: var(--color-text); }
   34%, 100% { color: var(--color-text-dim); }
 }
 @keyframes lpArrowRight {
   0%, 57%   { color: var(--color-text-dim); }
-  64%, 68%  { color: var(--accent-1); }
+  64%, 68%  { color: var(--color-text); }
   76%, 100% { color: var(--color-text-dim); }
 }
 .lp-arrow-left  { animation: lpArrowLeft  3.4s var(--motion-ease) infinite; }
@@ -154,19 +155,17 @@ body {
 
 /* Primary CTA click-moment glow — appears instantly, fades over motion-slow. */
 .lp-cta:active:not(:disabled) {
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-1) 28%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-text) 22%, transparent);
   transition: transform var(--motion-normal) var(--motion-ease), box-shadow 0s;
 }
 
-/* Glassmorphic input — base glass + 3-state focus ring. */
+/* Paper-flat input — base flat surface + 3-state focus ring. */
 .lp-input {
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
   transition: border-color var(--motion-fast),
               box-shadow var(--motion-slow) var(--motion-ease-out);
 }
-.lp-input:focus { outline: none; border-color: var(--accent-1); }
+.lp-input:focus { outline: none; border-color: var(--color-text); }
 .lp-input:active {
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-1) 28%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-text) 22%, transparent);
   transition: border-color var(--motion-fast), box-shadow 0s;
 }
