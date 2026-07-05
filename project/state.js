@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-07-06 01:46 KST',
+    updatedAt: '2026-07-06 02:37 KST',
     head: '73b627c',
-    branch: 'feature/claude-settings-polish',
+    branch: 'feature/claude-login-card-redesign',
   },
   done: [
+    {
+      id: 'LOGIN-CARD-REDESIGN',
+      title: '로그인/가입 명함 UI 재설계 (명함 언어 + CardSkeleton)',
+      completedAt: '2026-07-06',
+      note: '로그인/가입 5단계 카드를 테마 적응형 명함 언어로 재설계 (신규 `cardLanguage.js` 공유 모듈: paper face + ink 타이포 + mono 라벨 + ink 버튼 + paper-flat 인풋; 기존 토큰만, BusinessCard.jsx 불변).',
+    },
     {
       id: 'SETTINGS-POLISH-1',
       title: '설정 페이지 개선 1/2 (직업 dropdown 통합 + Bio auto-grow + 폰트 칩 + 테마 preview)',
@@ -70,24 +76,12 @@ window.PROJECT_STATE = {
       completedAt: '2026-06-23',
       note: '신규 flow: Taste 탭 → AI 대화(`/search`) 즉시 진입 → 스와이프 → 리포트 생성 → "저장할까요?" 모달(보드명 자동=persona_type, public/private 토글) → 저장확정(보드 생성).',
     },
-    {
-      id: 'FRONT-IMAGE-RESIZE-2',
-      title: '이미지 Tier A: srcset + decode-preload + classifier (PR2)',
-      completedAt: '2026-06-22',
-      prs: [242],
-      note: 'PR1(#241) 리사이즈 로컬 A/B 검증(shipped 함수, 실 50카드: 91.5% 바이트, 0 broken) 후 착수(measure-first 충족). 프론트 only.',
-    },
   ],
   now: [
     {
       id: 'NOTIF-INAPP-1',
       title: '앱 내 알림 v1 (❤️ 받음 + 보안 이벤트)',
       note: 'Plan: `.claude/plans/settings-encapsulated-sedgewick.md` (PR2). User-confirmed 2026-07-06: in-app',
-    },
-    {
-      id: 'LOGIN-CARD-REDESIGN',
-      title: '로그인/가입 명함 UI 재설계 (front-only)',
-      note: 'Plan: `.claude/plans/validated-honking-owl.md`. User decisions 2026-07-06: theme-adaptive',
     },
   ],
   next: {
@@ -1604,6 +1598,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'frontend/src/components/CardSkeleton.jsx',
+      role: '',
+    },
+    {
       path: 'frontend/src/components/DebugOverlay.jsx',
       role: '세션·스와이프 디버그 오버레이',
     },
@@ -1690,6 +1688,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/components/VerifyGateModal.jsx',
       role: '보드 한도 인증 게이트 모달',
+    },
+    {
+      path: 'frontend/src/components/cardLanguage.js',
+      role: '',
     },
     {
       path: 'frontend/src/components/icons.jsx',

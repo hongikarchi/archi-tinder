@@ -66,15 +66,6 @@ only (SMTP/FCM 없음 — external-dependency restraint); events = ❤️ reacti
 inbox UI, NotificationsScreen rework to per-category `in_app` toggle (validator extends channel
 keys to push/email/in_app).
 
-### LOGIN-CARD-REDESIGN — 로그인/가입 명함 UI 재설계 (front-only)
-
-Plan: `.claude/plans/validated-honking-owl.md`. User decisions 2026-07-06: theme-adaptive
-paper/ink via existing tokens (BusinessCard.jsx stays hardcoded/untouched); typewriter prompt
-kept + captions/tagline deleted (text diet); consent step = filled business-card preview
-(monogram stamp, one fine-print consent sentence, right-swipe = 발급); Discovery + SwipePage
-LoadingCard → shared CardSkeleton (mascot dropped, shimmer→pulse per DESIGN.md §8.8). Card
-geometry/gesture/Discovery photo card untouched (onboarding→Discovery continuity).
-
 ---
 
 ## Next
@@ -275,6 +266,15 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### LOGIN-CARD-REDESIGN — 로그인/가입 명함 UI 재설계 (명함 언어 + CardSkeleton) — RESOLVED 2026-07-06 (`e9b3638`-pre-squash)
+- 로그인/가입 5단계 카드를 테마 적응형 명함 언어로 재설계 (신규 `cardLanguage.js` 공유 모듈: paper face + ink 타이포 + mono 라벨 + ink 버튼 + paper-flat 인풋; 기존 토큰만, BusinessCard.jsx 불변).
+- 텍스트 다이어트: 페이지 헤더 + 카드 아래 캡션 삭제, 타자기 프롬프트가 유일 안내(제목 중복 제거), 규칙은 placeholder/검증 에러로 이동.
+- 동의 단계 = 입력값으로 채워진 명함 미리보기 (모노그램 스탬프 + fine-print 동의 한 줄 + 우스와이프 = 발급); register payload 불변.
+- Discovery + SwipePage 공용 LoadingCard → 신규 `CardSkeleton` (마스코트/shimmer 제거, lp-skel pulse — DESIGN.md §8.8 준수 전환). 카드 크기/제스처/사진 SwipeCard 불변 (온보딩→Discovery 연속성).
+- DESIGN.md 의도적 이탈 (로그인 flow 한정, PR 설명 명기): §8.1 CTA = ink 버튼(accent gradient 대신), §8.5 인풋 = paper-flat(glass 대신).
+- 부수: git-guard hook `python3`→`python` (`47f87d6`, Windows Store 스텁 이슈). locales.js/Task.md hunk는 동시 세션 PR1 `4180535`에 선탑승. 브랜치는 `feature/claude-settings-polish` 위 스택 — PR1 머지 후 retarget 필요 (parent merge 전 child retarget, `--delete-branch` 주의).
+- Plan: `.claude/plans/validated-honking-owl.md`. Workflow: review PASS + security PASS, cyclesUsed 0. app-test 스킵 (pure-UI + 4게이트 PASS 정책); 사용자 육안 확인 :5174 권장.
+
 ### SETTINGS-POLISH-1 — 설정 페이지 개선 1/2 (직업 dropdown 통합 + Bio auto-grow + 폰트 칩 + 테마 preview) — RESOLVED 2026-07-06 (`4180535`-pre-squash)
 직업(Role) enum 단일화 + Bio auto-grow + 폰트 2-칩 + 테마 라이브 preview — 설정/프로필 편집 4개 개선 1커밋.
 - [x] Role 단일 소스: `UserProfile.ONBOARDING_ROLE_CHOICES` + 신규 `ONBOARDING_ROLE_LABELS_KO` → 신규 `GET /api/v1/meta/roles/` (AllowAny, {value,label_en,label_ko}×5); choices 항목 추가만으로 회원가입+프로필편집 동시 전파.

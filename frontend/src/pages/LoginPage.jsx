@@ -6,11 +6,16 @@
  *   choice → credentials (ID+password) → profile (affiliation+objective) → consent
  *
  * Google = verification only, not a signup path.
+ *
+ * Visual language: business-card ("paper card") — see components/cardLanguage.js.
+ * Theme-adaptive (paper = --color-surface, ink = --color-text family), unlike
+ * BusinessCard.jsx's intentionally hardcoded white-paper-always printed artifact.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { login as apiLogin, register as apiRegister, checkHandle } from '../api/auth.js'
 import * as api from '../api/client.js'
+import { getRoles } from '../api/meta.js'
 import GoogleLoginButton from '../components/GoogleLoginButton.jsx'
 import { CARD_HEIGHT, CARD_WIDTH } from '../components/SwipeCard.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
@@ -25,6 +30,22 @@ import {
 } from '../utils/loginFlow.js'
 import { useTranslation } from '../i18n/index.js'
 import { useLanguage } from '../hooks/useLanguage.js'
+import {
+  MONO,
+  INK,
+  paperFaceStyle,
+  wordmarkStyle as cardWordmarkStyle,
+  monoLabelStyle,
+  monoRowStyle,
+  finePrintStyle,
+  cardNameStyle,
+  cardRoleStyle,
+  cardMetaStyle,
+  inkPrimaryStyle,
+  inkSecondaryStyle,
+  inkGhostStyle,
+  paperInputStyle,
+} from '../components/cardLanguage.js'
 
 const FLOW_STEPS = {
   choice:      'choice',
@@ -59,6 +80,16 @@ export default function LoginPage({ onLogin }) {
   const [showIntro, setShowIntro]               = useState(
     () => INTRO_SHOW_ONCE ? !localStorage.getItem(INTRO_DISMISS_KEY) : true,
   )
+
+  // SETTINGS-POLISH-1: role list — bundled fallback first paint, then the
+  // live backend list once getRoles() resolves (adds new roles with no
+  // frontend redeploy).
+  const [roles, setRoles] = useState(ONBOARDING_ROLES)
+  useEffect(() => {
+    let cancelled = false
+    getRoles().then(list => { if (!cancelled) setRoles(list) })
+    return () => { cancelled = true }
+  }, [])
 
   const typedLine = useTypedLine(t('login.prompt.' + step))
 
@@ -251,13 +282,6 @@ export default function LoginPage({ onLogin }) {
   return (
     <div style={pageStyle}>
       <main style={mainStyle}>
-        <header style={headerStyle}>
-          <h1 style={{ ...wordmarkStyle, letterSpacing: '0.2em', color: 'var(--color-text)' }}>
-            ARCHIBE
-          </h1>
-          <p style={taglineStyle}>{t('login.tagline')}</p>
-        </header>
-
         <div key={step} className="lp-card-in" style={stageStyle}>
           {step === FLOW_STEPS.choice && (
             <ChoiceDeck
@@ -299,6 +323,8 @@ export default function LoginPage({ onLogin }) {
               t={t}
               typedLine={typedLine}
               role={role}
+              roles={roles}
+              language={language}
               affiliation={affiliation}
               disabled={isBusy}
               onRoleChange={(value) => {
@@ -322,6 +348,8 @@ export default function LoginPage({ onLogin }) {
               typedLine={typedLine}
               id={id}
               role={role}
+              roles={roles}
+              language={language}
               affiliation={affiliation}
               profileReady={isIdFormatValid(id) && isRoleReady(role)}
               disabled={isBusy}
@@ -330,18 +358,13 @@ export default function LoginPage({ onLogin }) {
           )}
         </div>
 
-        {/* Caption: suppress for choice step (in-card labels already say it) */}
-        {step !== FLOW_STEPS.choice && (
-          <p style={captionTextStyle}>{t('login.caption.' + step)}</p>
-        )}
-
         {import.meta.env.DEV && (
           <button
             type="button"
             className="lp-btn"
             onClick={handleDevClick}
             disabled={isBusy}
-            style={secondaryButtonStyle(isBusy)}
+            style={inkSecondaryStyle(isBusy)}
           >
             {loading === 'dev' ? <Spinner /> : t('login.dev.button')}
           </button>
@@ -443,12 +466,12 @@ function GestureHint({ side, active, label, sub }) {
       <span style={{
         fontSize: 16,
         fontWeight: 700,
-        color: active ? 'var(--accent-1)' : 'var(--color-text-2)',
+        color: active ? INK.strong : INK.dim,
         transition: `color var(--motion-fast) var(--motion-ease)`,
       }}>
         {isLeft ? `← ${label}` : `${label} →`}
       </span>
-      <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-dim)' }}>
+      <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 500, color: INK.dim }}>
         {sub}
       </span>
     </div>
@@ -516,6 +539,12 @@ function ChoiceDeck({ t, typedLine, disabled, onAction }) {
             typedLine={typedLine}
             trailing={<LangToggle />}
           />
+          {/* Static faint placeholder rows — seeds the skeleton language */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div className="lp-skel" style={{ opacity: 0.35, animation: 'none', height: 22, width: '60%' }} />
+            <div className="lp-skel" style={{ opacity: 0.35, animation: 'none', height: 12, width: '40%' }} />
+            <div className="lp-skel" style={{ opacity: 0.35, animation: 'none', height: 12, width: '50%' }} />
+          </div>
           <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12 }}>
             <GestureHint
               side="left"
@@ -617,7 +646,7 @@ function CredentialsStep({ t, typedLine, disabled, onBack, onContinue }) {
         trailing={<LangToggle />}
       />
       <form onSubmit={handleSubmit} style={formStyle}>
-        <label style={fieldLabelStyle} htmlFor="cred-id">
+        <label style={monoLabelStyle} htmlFor="cred-id">
           {t('login.credentials.id.label')}
         </label>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -636,14 +665,14 @@ function CredentialsStep({ t, typedLine, disabled, onBack, onContinue }) {
             aria-label={t('login.credentials.id.aria')}
             aria-invalid={localId.length > 0 && !idFormatValid ? 'true' : 'false'}
             className="lp-input"
-            style={{ ...inputStyle, flex: 1 }}
+            style={{ ...paperInputStyle, flex: 1 }}
           />
           <button
             type="button"
             className="lp-btn"
             onClick={handleCheckAvailability}
             disabled={disabled || !idFormatValid || checkState === CHECK_CHECKING}
-            style={secondaryButtonStyle(disabled || !idFormatValid || checkState === CHECK_CHECKING)}
+            style={inkSecondaryStyle(disabled || !idFormatValid || checkState === CHECK_CHECKING)}
           >
             {checkState === CHECK_CHECKING ? <Spinner /> : t('login.credentials.checkBtn')}
           </button>
@@ -654,7 +683,7 @@ function CredentialsStep({ t, typedLine, disabled, onBack, onContinue }) {
           </p>
         )}
 
-        <label style={{ ...fieldLabelStyle, marginTop: 4 }} htmlFor="cred-password">
+        <label style={{ ...monoLabelStyle, marginTop: 4 }} htmlFor="cred-password">
           {t('login.credentials.password.label')}
         </label>
         <input
@@ -668,7 +697,7 @@ function CredentialsStep({ t, typedLine, disabled, onBack, onContinue }) {
           maxLength={128}
           aria-required="true"
           className="lp-input"
-          style={inputStyle}
+          style={paperInputStyle}
         />
 
         <div style={buttonGridStyle}>
@@ -677,7 +706,7 @@ function CredentialsStep({ t, typedLine, disabled, onBack, onContinue }) {
             className="lp-btn"
             onClick={onBack}
             disabled={disabled}
-            style={secondaryButtonStyle(disabled)}
+            style={inkSecondaryStyle(disabled)}
           >
             {t('login.common.back')}
           </button>
@@ -685,7 +714,7 @@ function CredentialsStep({ t, typedLine, disabled, onBack, onContinue }) {
             type="submit"
             className="lp-cta"
             disabled={!canContinue}
-            style={primaryButtonStyle(!canContinue)}
+            style={inkPrimaryStyle(!canContinue)}
           >
             {t('login.credentials.continueBtn')}
           </button>
@@ -696,7 +725,7 @@ function CredentialsStep({ t, typedLine, disabled, onBack, onContinue }) {
 }
 
 function ConsentDeck({
-  t, typedLine, id, role, affiliation, profileReady, disabled, onAction,
+  t, typedLine, id, role, roles, language, affiliation, profileReady, disabled, onAction,
 }) {
   const pending = useRef(null)
   const [intent, setIntent] = useState(null)
@@ -719,6 +748,9 @@ function ConsentDeck({
   const handleUnfulfilled = useCallback(() => setIntent(null), [])
 
   const preventSwipe = (disabled || !profileReady) ? SWIPE_PREVENT_ALL : SWIPE_PREVENT_VERTICAL
+
+  const monogram = id ? Array.from(id)[0].toUpperCase() : ''
+  const affiliationTrimmed = affiliation && affiliation.trim() ? affiliation.trim() : ''
 
   return (
     <div style={{ position: 'relative', width: '100%', height: AUTH_CARD_HEIGHT }}>
@@ -753,29 +785,55 @@ function ConsentDeck({
         <AuthCard absolute ariaLabel={t('login.consent.eyebrow')}>
           <CardHeader
             eyebrow={t('login.consent.eyebrow')}
-            title={t('login.consent.title')}
             typedLine={typedLine}
             trailing={<LangToggle />}
           />
-          <div style={summaryBoxStyle}>
-            <div>
-              <span style={summaryLabelStyle}>{t('login.consent.summary.id')}</span>
-              <strong style={summaryValueStyle}>{id}</strong>
-            </div>
-            <div>
-              <span style={summaryLabelStyle}>{t('login.consent.summary.objective')}</span>
-              <strong style={summaryValueStyle}>
-                {role ? t('login.profile.objective.' + role) : t('login.consent.summary.notSelected')}
-              </strong>
-            </div>
-            {affiliation && affiliation.trim() && (
-              <div>
-                <span style={summaryLabelStyle}>{t('login.consent.summary.affiliation')}</span>
-                <strong style={summaryValueStyle}>{affiliation.trim()}</strong>
+
+          {/* Middle: filled card preview — id / objective / affiliation */}
+          <section style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={cardNameStyle}>{id}</div>
+            {role && (
+              <div style={cardRoleStyle}>
+                {roleLabel(
+                  (roles && roles.length ? roles : ONBOARDING_ROLES).find(r => r.value === role) || { value: role, label_en: role, label_ko: role },
+                  language,
+                )}
               </div>
             )}
-          </div>
-          <p style={bodyCopyStyle}>{t('login.consent.body')}</p>
+            {affiliationTrimmed && (
+              <div style={cardMetaStyle}>{affiliationTrimmed}</div>
+            )}
+          </section>
+
+          {/* Footer: @id + JOINED year left, monogram stamp right */}
+          <footer style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 14 }}>
+            <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={monoRowStyle}>@{id}</div>
+              <div style={monoLabelStyle}>JOINED {new Date().getFullYear()}</div>
+            </div>
+            <div style={{
+              flexShrink: 0,
+              width: 72,
+              height: 72,
+              border: '1px solid var(--color-border-soft)',
+              borderRadius: 4,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 4,
+            }}>
+              <span style={{ fontSize: 28, fontWeight: 700, color: 'var(--color-text)', lineHeight: 1 }}>
+                {monogram}
+              </span>
+              <span style={{ fontFamily: MONO, fontSize: 7, fontWeight: 500, color: INK.dim, letterSpacing: '0.1em' }}>
+                ARCHIBE
+              </span>
+            </div>
+          </footer>
+
+          <p style={finePrintStyle}>{t('login.consent.finePrint')}</p>
+
           <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12 }}>
             <GestureHint
               side="left"
@@ -861,7 +919,7 @@ function ReturningStep({
           spellCheck={false}
           aria-label={t('login.returning.id.aria')}
           className="lp-input"
-          style={inputStyle}
+          style={paperInputStyle}
         />
         <input
           type="password"
@@ -871,13 +929,13 @@ function ReturningStep({
           placeholder={t('login.returning.password.placeholder')}
           aria-label={t('login.returning.password.aria')}
           className="lp-input"
-          style={inputStyle}
+          style={paperInputStyle}
         />
         <button
           type="submit"
           className="lp-cta"
           disabled={disabled || !handle.trim() || !password}
-          style={primaryButtonStyle(disabled || !handle.trim() || !password)}
+          style={inkPrimaryStyle(disabled || !handle.trim() || !password)}
         >
           {loginLoading ? <Spinner /> : t('login.returning.submit')}
         </button>
@@ -888,7 +946,7 @@ function ReturningStep({
         className="lp-btn"
         onClick={onBack}
         disabled={disabled}
-        style={ghostButtonStyle(disabled)}
+        style={inkGhostStyle(disabled)}
       >
         {t('login.common.back')}
       </button>
@@ -900,6 +958,8 @@ function ProfileStep({
   t,
   typedLine,
   role,
+  roles,
+  language,
   affiliation,
   disabled,
   onRoleChange,
@@ -908,6 +968,7 @@ function ProfileStep({
   onSubmit,
 }) {
   const profileReady = isRoleReady(role)
+  const roleList = roles && roles.length ? roles : ONBOARDING_ROLES
 
   return (
     <AuthCard ariaLabel={t('login.profile.eyebrow')}>
@@ -918,7 +979,7 @@ function ProfileStep({
         trailing={<LangToggle />}
       />
       <form onSubmit={onSubmit} style={formStyle}>
-        <label style={fieldLabelStyle} htmlFor="guest-affiliation">
+        <label style={monoLabelStyle} htmlFor="guest-affiliation">
           {t('login.profile.affiliation.label')}
         </label>
         <input
@@ -931,11 +992,11 @@ function ProfileStep({
           placeholder={t('login.profile.affiliation.placeholder')}
           maxLength={100}
           className="lp-input"
-          style={inputStyle}
+          style={paperInputStyle}
         />
 
         <div style={roleHeaderStyle}>
-          <span style={fieldLabelStyle}>{t('login.profile.objective.label')}</span>
+          <span style={monoLabelStyle}>{t('login.profile.objective.label')}</span>
           <span style={captionStyle}>
             {isRoleReady(role)
               ? t('login.profile.objective.selected')
@@ -948,7 +1009,7 @@ function ProfileStep({
           aria-required="true"
           style={roleGridStyle}
         >
-          {ONBOARDING_ROLES.map(roleOption => (
+          {roleList.map(roleOption => (
             <button
               key={roleOption.value}
               type="button"
@@ -959,7 +1020,7 @@ function ProfileStep({
               className="lp-btn"
               style={roleButtonStyle(disabled, role === roleOption.value)}
             >
-              {t('login.profile.objective.' + roleOption.value)}
+              {roleLabel(roleOption, language)}
             </button>
           ))}
         </div>
@@ -970,7 +1031,7 @@ function ProfileStep({
             className="lp-btn"
             onClick={onBack}
             disabled={disabled}
-            style={secondaryButtonStyle(disabled)}
+            style={inkSecondaryStyle(disabled)}
           >
             {t('login.common.back')}
           </button>
@@ -978,7 +1039,7 @@ function ProfileStep({
             type="submit"
             className="lp-cta"
             disabled={disabled || !profileReady}
-            style={primaryButtonStyle(disabled || !profileReady)}
+            style={inkPrimaryStyle(disabled || !profileReady)}
           >
             {t('login.profile.continueBtn')}
           </button>
@@ -992,10 +1053,11 @@ function CardHeader({ eyebrow, title, typedLine, trailing }) {
   return (
     <div style={cardHeaderStyle}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-        <p style={eyebrowStyle}>{eyebrow}</p>
+        <span style={cardWordmarkStyle}>ARCHIBE</span>
         {trailing}
       </div>
-      <h2 style={titleStyle}>{title}</h2>
+      <p style={monoLabelStyle}>{eyebrow}</p>
+      {title && <h2 style={titleStyle}>{title}</h2>}
       <p style={typedLineStyle}>
         {typedLine}
         <span aria-hidden="true" style={{ opacity: typedLine ? 1 : 0 }}>_</span>
@@ -1037,23 +1099,19 @@ function IntroOverlay({ t, onDone }) {
       <div
         className="lp-card-in"
         style={{
+          ...paperFaceStyle({ radius: 20 }),
           width: AUTH_STAGE_WIDTH,
           height: AUTH_CARD_HEIGHT,
-          boxSizing: 'border-box',
-          display: 'flex', flexDirection: 'column', alignItems: 'stretch',
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-border-soft)',
-          borderRadius: 20,
-          boxShadow: '0 24px 64px rgba(0,0,0,0.45)',
-          padding: 24,
+          alignItems: 'stretch',
           overflowY: 'auto',
         }}
       >
-        {/* eyebrow + LangToggle row */}
+        {/* wordmark + eyebrow + LangToggle row */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-          <p style={eyebrowStyle}>{t('login.intro.eyebrow')}</p>
+          <span style={cardWordmarkStyle}>ARCHIBE</span>
           <LangToggle />
         </div>
+        <p style={{ ...monoLabelStyle, marginTop: 10 }}>{t('login.intro.eyebrow')}</p>
 
         <h2 style={{ ...titleStyle, marginTop: 10 }}>{t('login.intro.title')}</h2>
 
@@ -1104,7 +1162,7 @@ function IntroOverlay({ t, onDone }) {
           type="button"
           className="lp-cta"
           onClick={onDone}
-          style={{ ...primaryButtonStyle(false), width: '100%', marginTop: 12 }}
+          style={{ ...inkPrimaryStyle(false), width: '100%', marginTop: 12 }}
         >
           {t('login.intro.cta')}
         </button>
@@ -1129,62 +1187,23 @@ function Spinner() {
 
 // ── Style helpers ─────────────────────────────────────────────────────────────
 
-function primaryButtonStyle(disabled) {
-  return {
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 48,
-    padding: '14px 16px',
-    border: 0,
-    borderRadius: 'var(--radius-md)',
-    background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: 600,
-    fontFamily: 'inherit',
-    cursor: disabled ? 'default' : 'pointer',
-    opacity: disabled ? 0.55 : 1,
-  }
-}
-
-function secondaryButtonStyle(disabled) {
-  return {
-    minHeight: 46,
-    borderRadius: 12,
-    border: '1px solid var(--color-border)',
-    background: 'var(--color-surface)',
-    color: 'var(--color-text)',
-    fontSize: 14,
-    fontWeight: 600,
-    fontFamily: 'inherit',
-    cursor: disabled ? 'default' : 'pointer',
-    opacity: disabled ? 0.65 : 1,
-  }
-}
-
-function ghostButtonStyle(disabled) {
-  return {
-    minHeight: 42,
-    borderRadius: 12,
-    border: '1px solid transparent',
-    background: 'transparent',
-    color: 'var(--color-text-dim)',
-    fontSize: 13,
-    fontWeight: 600,
-    fontFamily: 'inherit',
-    cursor: disabled ? 'default' : 'pointer',
-    opacity: disabled ? 0.65 : 1,
-  }
+// SETTINGS-POLISH-1: label picked by current language — ko → label_ko, else
+// label_en. Roles come from getRoles() (api/meta.js), shape {value,
+// label_en, label_ko}.
+function roleLabel(roleOption, language) {
+  if (!roleOption) return ''
+  return language === 'ko'
+    ? (roleOption.label_ko || roleOption.label_en || roleOption.value)
+    : (roleOption.label_en || roleOption.label_ko || roleOption.value)
 }
 
 function roleButtonStyle(disabled, active) {
   return {
     minHeight: 42,
     borderRadius: 12,
-    border: active ? '1px solid var(--accent-1, #0969DA)' : '1px solid var(--color-border)',
-    background: active ? 'rgba(9,105,218,0.10)' : 'var(--color-bg)',
-    color: active ? 'var(--accent-1, #0969DA)' : 'var(--color-text)',
+    border: active ? '1px solid var(--color-text)' : '1px solid var(--color-border)',
+    background: active ? 'color-mix(in srgb, var(--color-text) 8%, transparent)' : 'var(--color-bg)',
+    color: 'var(--color-text)',
     textAlign: 'left',
     padding: '0 13px',
     fontSize: 14,
@@ -1215,52 +1234,13 @@ const mainStyle = {
   gap: 16,
 }
 
-const headerStyle = {
-  width: '100%',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 4,
-}
-
-const wordmarkStyle = {
-  fontSize: 30,
-  fontWeight: 700,
-  margin: 0,
-  letterSpacing: 0,
-  lineHeight: 1.1,
-}
-
-const taglineStyle = {
-  color: 'var(--color-text-dim)',
-  fontSize: 14,
-  margin: 0,
-  lineHeight: 1.45,
-}
-
 const stageStyle = {
   width: AUTH_STAGE_WIDTH,
 }
 
-const captionTextStyle = {
-  fontSize: 13,
-  color: 'var(--color-text-muted)',
-  textAlign: 'center',
-  margin: 0,
-  lineHeight: 1.5,
-  width: '100%',
-}
-
 const authCardStyle = {
-  borderRadius: 20,
-  border: '1px solid var(--color-border-soft)',
-  background: 'var(--color-surface)',
-  color: 'var(--color-text)',
-  boxShadow: '0 24px 52px rgba(0,0,0,0.18)',
-  padding: 22,
-  boxSizing: 'border-box',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 18,
+  ...paperFaceStyle({ radius: 20 }),
+  gap: 16,
   overflowY: 'auto',
 }
 
@@ -1287,29 +1267,21 @@ const cardHeaderStyle = {
   gap: 8,
 }
 
-const eyebrowStyle = {
-  margin: 0,
-  color: 'var(--accent-1, #0969DA)',
-  fontSize: 12,
-  fontWeight: 700,
-  textTransform: 'uppercase',
-  letterSpacing: 0,
-}
-
 const titleStyle = {
   margin: 0,
   color: 'var(--color-text)',
   fontSize: 26,
   fontWeight: 700,
   lineHeight: 1.16,
-  letterSpacing: 0,
+  letterSpacing: '-0.01em',
 }
 
 const typedLineStyle = {
   minHeight: 44,
   margin: 0,
-  color: 'var(--color-text-2)',
-  fontSize: 16,
+  fontFamily: MONO,
+  color: INK.muted,
+  fontSize: 13,
   lineHeight: 1.45,
 }
 
@@ -1328,8 +1300,8 @@ const buttonGridStyle = {
 
 const noticeStyle = {
   borderRadius: 12,
-  border: '1px solid var(--color-border)',
-  background: 'var(--color-bg)',
+  border: '1px solid var(--color-border-soft)',
+  background: 'transparent',
   color: 'var(--color-text-dim)',
   padding: '14px 16px',
   fontSize: 13,
@@ -1340,27 +1312,6 @@ const formStyle = {
   display: 'flex',
   flexDirection: 'column',
   gap: 12,
-}
-
-const fieldLabelStyle = {
-  color: 'var(--color-text)',
-  fontSize: 13,
-  fontWeight: 700,
-  lineHeight: 1.2,
-}
-
-const inputStyle = {
-  minHeight: 46,
-  borderRadius: 12,
-  border: '1px solid var(--color-border)',
-  background: 'color-mix(in srgb, var(--color-surface) 72%, transparent)',
-  color: 'var(--color-text)',
-  padding: '0 13px',
-  fontSize: 15,
-  fontFamily: 'inherit',
-  outline: 'none',
-  width: '100%',
-  boxSizing: 'border-box',
 }
 
 const roleHeaderStyle = {
@@ -1382,36 +1333,10 @@ const roleGridStyle = {
   gap: 8,
 }
 
-const summaryBoxStyle = {
-  borderRadius: 16,
-  border: '1px solid var(--color-border)',
-  background: 'var(--color-bg)',
-  padding: 14,
-  display: 'grid',
-  gap: 12,
-}
-
-const summaryLabelStyle = {
-  display: 'block',
-  color: 'var(--color-text-dim)',
-  fontSize: 11,
-  fontWeight: 700,
-  textTransform: 'uppercase',
-  letterSpacing: 0,
-  marginBottom: 4,
-}
-
-const summaryValueStyle = {
-  display: 'block',
-  color: 'var(--color-text)',
-  fontSize: 15,
-  fontWeight: 700,
-  lineHeight: 1.3,
-}
-
 const errorStyle = {
   color: 'var(--color-destructive, #D73A49)',
-  fontSize: 13,
+  fontSize: 12,
+  fontFamily: MONO,
   margin: 0,
   textAlign: 'center',
   lineHeight: 1.45,
