@@ -57,7 +57,23 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(none — LOGIN-ONBOARD-1 + DISCOVERY-SKELETON shipped 2026-06-27, awaiting next slice.)_
+### NOTIF-INAPP-1 — 앱 내 알림 v1 (❤️ 받음 + 보안 이벤트)
+
+Plan: `.claude/plans/settings-encapsulated-sedgewick.md` (PR2). User-confirmed 2026-07-06: in-app
+only (SMTP/FCM 없음 — external-dependency restraint); events = ❤️ reaction received + security
+(password change, new-device login via ua_hash KnownDevice). New `apps/notifications` app
+(Notification + KnownDevice, additive migration), list/unread-count/mark-read endpoints, bell +
+inbox UI, NotificationsScreen rework to per-category `in_app` toggle (validator extends channel
+keys to push/email/in_app).
+
+### LOGIN-CARD-REDESIGN — 로그인/가입 명함 UI 재설계 (front-only)
+
+Plan: `.claude/plans/validated-honking-owl.md`. User decisions 2026-07-06: theme-adaptive
+paper/ink via existing tokens (BusinessCard.jsx stays hardcoded/untouched); typewriter prompt
+kept + captions/tagline deleted (text diet); consent step = filled business-card preview
+(monogram stamp, one fine-print consent sentence, right-swipe = 발급); Discovery + SwipePage
+LoadingCard → shared CardSkeleton (mascot dropped, shimmer→pulse per DESIGN.md §8.8). Card
+geometry/gesture/Discovery photo card untouched (onboarding→Discovery continuity).
 
 ---
 
@@ -259,6 +275,17 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### SETTINGS-POLISH-1 — 설정 페이지 개선 1/2 (직업 dropdown 통합 + Bio auto-grow + 폰트 칩 + 테마 preview) — RESOLVED 2026-07-06 (`4180535`-pre-squash)
+직업(Role) enum 단일화 + Bio auto-grow + 폰트 2-칩 + 테마 라이브 preview — 설정/프로필 편집 4개 개선 1커밋.
+- [x] Role 단일 소스: `UserProfile.ONBOARDING_ROLE_CHOICES` + 신규 `ONBOARDING_ROLE_LABELS_KO` → 신규 `GET /api/v1/meta/roles/` (AllowAny, {value,label_en,label_ko}×5); choices 항목 추가만으로 회원가입+프로필편집 동시 전파.
+- [x] 프로필 편집 직업 = dropdown(`onboarding_role` 바인딩, getRoles() + 번들 fallback constants/roles.js). SAVE RULE: 선택 시 `{onboarding_role, role:''}`(legacy 자유텍스트 정리), 미선택 시 두 키 생략(legacy 보존 — clobber 방지). legacy hint 표시.
+- [x] 공개 `UserProfileSerializer`에 `onboarding_role` 노출; ProfileHero 표시규칙 legacy text > enum label('other' 억제) > 없음.
+- [x] 회원가입 5종 노출(구 3종 불일치 해소) — objective i18n designer/enthusiast 키 추가(develop LoginPage용; 신 LoginPage는 동시 세션 LOGIN-CARD-REDESIGN PR).
+- [x] Bio textarea auto-grow 90→240px(JS cap, 초과 시 내부 스크롤), 수동 resize 제거, 500자 카운터 유지.
+- [x] 폰트 = 2-칩(IBM Plex Sans KR / Noto Serif KR, 각자 폰트로 렌더) — 언어 스위처 패턴.
+- [x] 테마 preview 미니목업(`ThemePreviewCard`, scoped `data-theme` wrapper, 전 색상 var(--...) 토큰) + tokens.css `:root,[data-theme="github-light"]` 셀렉터 수정(다크 활성 중에도 라이트 preview 정상).
+- [x] 게이트: code-review PASS · security PASS · Opus verify PASS (cyclesUsed 0); low 1건 shipped(구 objective 키 dead — LOGIN-CARD-REDESIGN 랜딩 후 정리). app-test skip(4-gate 정책, swipe 경로 아님) · drift clean.
+
 ### PROFILE-QR-1 — 프로필 공유 진짜 QR (FakeQr 스텁 교체) — RESOLVED 2026-07-01 (`e872bf7`-pre-squash)
 프로필 공유 모달 QR이 가짜(FakeQr.jsx, 스캔불가 SVG 격자)였음 → 실제 스캔되는 QR로 교체.
 - [x] `qrcode.react@4.2.0` 추가 + 신규 `ProfileQr.jsx`(QRCodeSVG, `{window.location.origin}/user/{user_id}` 인코딩, level M, marginSize=2 quiet-zone, dark-on-white 테마독립, `role=img`, userId 없으면 skip).

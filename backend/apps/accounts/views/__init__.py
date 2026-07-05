@@ -68,3 +68,6 @@ from .profile import (  # noqa: F401
     AvatarUploadView,
     LikedBuildingsView,
 )
+
+# -- meta sub-module names --------------------------------------------------
+from .meta import RolesView  # noqa: F401

@@ -24,6 +24,17 @@ class UserProfile(models.Model):
         ('enthusiast', 'Architecture Enthusiast'),
         ('other',      'Other'),
     ]
+    # SETTINGS-POLISH-1: single source of truth for the role list's Korean
+    # labels. Keys MUST mirror ONBOARDING_ROLE_CHOICES keys — adding a new
+    # role + its ko label here is the ONLY edit needed to propagate a new
+    # role everywhere (GET /api/v1/meta/roles/ derives from both).
+    ONBOARDING_ROLE_LABELS_KO = {
+        'student': '학생',
+        'architect': '건축가',
+        'designer': '디자이너',
+        'enthusiast': '건축 애호가',
+        'other': '기타',
+    }
 
     # -- Existing fields (PROF1 baseline) --
     user         = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')

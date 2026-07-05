@@ -4,11 +4,15 @@
  * No literal fallback client-id strings anywhere in this file.
  */
 
-export const ONBOARDING_ROLES = [
-  { value: 'student',     label: 'Student' },
-  { value: 'architect',   label: 'Architect' },
-  { value: 'other',       label: 'Just exploring' },
-]
+import { ROLES } from '../constants/roles.js'
+
+// SETTINGS-POLISH-1: re-exported from constants/roles.js (bundled fallback,
+// mirrors backend ONBOARDING_ROLE_CHOICES — 5 entries). Export name kept for
+// backward compatibility with existing imports (isRoleReady, tests, etc).
+// Live callers should prefer api/meta.js getRoles() to pick up backend-added
+// roles without a frontend redeploy; this constant is the fallback + the
+// value used for validation (isRoleReady), which only needs the `value` set.
+export const ONBOARDING_ROLES = ROLES
 
 export const LOGIN_SWIPE_ACTIONS = { left: 'returning', right: 'new' }
 

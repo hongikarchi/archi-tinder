@@ -53,13 +53,20 @@ export default function EditProfileScreen() {
     setSaveError(null)
     setSaveSuccess(false)
     try {
+      // SETTINGS-POLISH-1 §A.4 SAVE RULE: EditCardForm.onChange only includes
+      // onboarding_role/role in the patch when a dropdown selection was made
+      // (clearing legacy role text). An empty selection omits both keys so
+      // the legacy free-text role is preserved untouched server-side — do
+      // NOT hardcode `role: patch.role` here, that would always send an
+      // (often blank) role and defeat the preservation rule.
       const payload = {
         display_name: patch.display_name,
-        role: patch.role,
         affiliation: patch.affiliation,
         bio: patch.bio,
         external_links: patch.external_links,
       }
+      if ('onboarding_role' in patch) payload.onboarding_role = patch.onboarding_role
+      if ('role' in patch) payload.role = patch.role
       await updateMyProfile(payload)
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 3000)

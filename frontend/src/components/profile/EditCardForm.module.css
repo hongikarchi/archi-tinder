@@ -33,12 +33,23 @@
   transition: border-color var(--motion-fast) var(--motion-ease), box-shadow 0s;
 }
 
-/* Textarea specific: allow vertical resize only */
+/* Role dropdown — composes .field for matching height/border/colors, native
+ * <select> is fine per SETTINGS-POLISH-1 §A.4 spec. */
+.select {
+  composes: field;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+/* Textarea specific: auto-grow via JS (EditCardForm bioRef effect), no manual
+ * resize handle. min-height sets the initial/floor size; JS caps growth at
+ * 240px and switches overflow-y to auto past that (SETTINGS-POLISH-1 §B). */
 .textarea {
   composes: field;
-  resize: vertical;
+  resize: none;
   min-height: 90px;
   line-height: 1.5;
+  overflow-y: hidden;
 }
 
 /* Add-item type button (dashed, ghost) */
