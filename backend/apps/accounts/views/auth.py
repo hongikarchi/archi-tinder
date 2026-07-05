@@ -28,6 +28,7 @@ from ..throttling import (
     RegisterThrottle, PasswordLoginThrottle, LinkEmailThrottle,
     SetPasswordThrottle, CheckHandleThrottle,
 )
+from apps.notifications.services import notify_security, record_device_and_maybe_notify
 
 logger = logging.getLogger('apps.accounts')
 
@@ -540,6 +541,13 @@ class GoogleLoginView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
         logger.info('Google login: user=%s', profile.pk)
+
+        # NOTIF-INAPP-1: new-device login detection (mirrors PasswordLoginView).
+        try:
+            record_device_and_maybe_notify(profile, request.META.get('HTTP_USER_AGENT', ''))
+        except Exception:
+            logger.exception('record_device_and_maybe_notify failed profile=%s', profile.pk)
+
         return Response(_make_token_response(profile))
 
 
@@ -830,6 +838,15 @@ class PasswordLoginView(APIView):
                             status=status.HTTP_400_BAD_REQUEST)
 
         logger.info('PasswordLoginView: login profile=%s', profile.pk)
+
+        # NOTIF-INAPP-1: new-device login detection. First-ever device is
+        # recorded silently; subsequent new ua_hash notifies. Must never
+        # break login on failure (wrapped inside the helper itself too).
+        try:
+            record_device_and_maybe_notify(profile, request.META.get('HTTP_USER_AGENT', ''))
+        except Exception:
+            logger.exception('record_device_and_maybe_notify failed profile=%s', profile.pk)
+
         return Response(_make_token_response(profile), status=status.HTTP_200_OK)
 
 
@@ -905,6 +922,13 @@ class SetPasswordView(APIView):
         # without waiting for TTL expiry (matches link-email pattern).
         invalidate_user_cache(user.id)
         logger.info('SetPasswordView: password updated user=%s', user.pk)
+
+        # NOTIF-INAPP-1: password_changed always notifies — security category,
+        # prefs are locked always-on. Must never break this request.
+        try:
+            notify_security(user.profile, 'password_changed')
+        except Exception:
+            logger.exception('notify_security(password_changed) failed user=%s', user.pk)
 
         # Issue a fresh token pair for the acting client (all other sessions are
         # now blacklisted above).  This keeps the password-changer logged in
