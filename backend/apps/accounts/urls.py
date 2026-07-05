@@ -10,6 +10,8 @@ from .views import (
     RegisterView, PasswordLoginView, SetPasswordView, LinkEmailView,
     # LOGIN-ONBOARD-1: unified ID check
     CheckHandleView,
+    # SETTINGS-POLISH-1: public role-list metadata
+    RolesView,
 )
 
 urlpatterns = [
@@ -38,6 +40,8 @@ urlpatterns = [
     path('users/<int:user_id>/', UserProfileDetailView.as_view(), name='user-profile-detail'),
     # SNS-LIKED-PROJECTS — Discovery right-swipe liked buildings
     path('liked-buildings/', LikedBuildingsView.as_view(), name='liked-buildings'),
+    # SETTINGS-POLISH-1: public metadata (AllowAny — login page needs it pre-auth)
+    path('meta/roles/', RolesView.as_view(), name='meta-roles'),
 ]
 
 if settings.DEBUG:

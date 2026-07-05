@@ -57,7 +57,23 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(none — LOGIN-ONBOARD-1 + DISCOVERY-SKELETON shipped 2026-06-27, awaiting next slice.)_
+### SETTINGS-POLISH-1 — 설정 페이지 개선 1/2 (직업 dropdown 통합 + Bio auto-grow + 폰트 칩 + 테마 preview)
+
+Plan: `.claude/plans/settings-encapsulated-sedgewick.md` (PR1). User-confirmed decisions 2026-07-06:
+role = **enum 단일화** (profile-edit dropdown edits `onboarding_role`; list single-source = backend
+choices + `GET /api/v1/meta/roles/`; legacy free-text `role` cleared on save, shown as fallback);
+bio auto-grow textarea; font = 2-chip selector (language-switcher pattern); theme preview =
+app-screen mini-mockup via scoped `data-theme` wrapper (SwipeCard confirmed theme-independent).
+Follow-up slice: NOTIF-INAPP-1 (PR2 — in-app notifications: ❤️ received + security events).
+
+### LOGIN-CARD-REDESIGN — 로그인/가입 명함 UI 재설계 (front-only)
+
+Plan: `.claude/plans/validated-honking-owl.md`. User decisions 2026-07-06: theme-adaptive
+paper/ink via existing tokens (BusinessCard.jsx stays hardcoded/untouched); typewriter prompt
+kept + captions/tagline deleted (text diet); consent step = filled business-card preview
+(monogram stamp, one fine-print consent sentence, right-swipe = 발급); Discovery + SwipePage
+LoadingCard → shared CardSkeleton (mascot dropped, shimmer→pulse per DESIGN.md §8.8). Card
+geometry/gesture/Discovery photo card untouched (onboarding→Discovery continuity).
 
 ---
 

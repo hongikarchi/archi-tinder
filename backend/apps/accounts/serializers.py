@@ -98,6 +98,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'handle',
             'role',
             'affiliation',
+            'onboarding_role',
         ]
         read_only_fields = ['user_id', 'persona_summary']
 

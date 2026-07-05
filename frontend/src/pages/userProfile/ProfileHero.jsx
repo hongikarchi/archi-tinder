@@ -1,5 +1,7 @@
-import { Fragment, useState, useCallback } from 'react'
+import { Fragment, useState, useCallback, useEffect } from 'react'
 import { uploadAvatar } from '../../api/profiles.js'
+import { getRoles } from '../../api/meta.js'
+import { useLanguage } from '../../hooks/useLanguage.js'
 import styles from './ProfileHero.module.css'
 
 // Canvas-based center-crop + downscale to ≤512px, exported as webp (jpeg fallback).
@@ -58,6 +60,16 @@ export default function ProfileHero({
 }) {
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState(null)
+  const [roleOptions, setRoleOptions] = useState([])
+  const { language } = useLanguage()
+
+  // Role list only needed to localize onboarding_role (legacy free-text
+  // user.role never needs it) — fetch once, memoized at module scope.
+  useEffect(() => {
+    let cancelled = false
+    getRoles().then(list => { if (!cancelled) setRoleOptions(list) })
+    return () => { cancelled = true }
+  }, [])
 
   // External-link helpers (pure derivations — no hooks)
   const igHandle = user?.external_links?.instagram?.replace(/^@/, '') || ''
@@ -67,7 +79,19 @@ export default function ProfileHero({
 
   // Profile identity lines
   const handleStr = user?.handle || ''
-  const roleAffiliation = [user?.role, user?.affiliation].filter(Boolean).join(' · ')
+
+  // Role display rule (SETTINGS-POLISH-1 §A.5): legacy free-text user.role if
+  // present; else localized onboarding_role label EXCEPT 'other' (suppressed
+  // — meaningless publicly); else nothing. Joined with affiliation via ' · '.
+  function resolveRoleText() {
+    if (user?.role) return user.role
+    const code = user?.onboarding_role
+    if (!code || code === 'other') return ''
+    const opt = roleOptions.find(r => r.value === code)
+    if (!opt) return ''
+    return language === 'ko' ? (opt.label_ko || opt.label_en) : (opt.label_en || opt.label_ko)
+  }
+  const roleAffiliation = [resolveRoleText(), user?.affiliation].filter(Boolean).join(' · ')
 
   const stats = [
     { count: boardsTotalCount, label: 'Boards', onClick: () => onSelectTab('boards') },

@@ -1,6 +1,7 @@
 import { useTheme } from '../hooks/useTheme.js'
 import { useLanguage } from '../hooks/useLanguage.js'
 import { useTranslation } from '../i18n/index.js'
+import ThemePreviewCard from './ThemePreviewCard.jsx'
 import styles from './AppearanceSettings.module.css'
 
 /*
@@ -42,20 +43,21 @@ const THEMES = [
 ]
 
 /*
- * Font toggle config (design.md §6)
- * The button label always reads "Font" but is rendered in the font it will
- * switch TO — so clicking shows what the app will look like after the switch.
+ * Font chip config (SETTINGS-POLISH-1 §C — replaces the single always-says-
+ * "Font" toggle button with two chips, one per candidate). Each chip is
+ * rendered in its OWN font so the user can see the difference at a glance.
+ * fontFamily stacks mirror tokens.css --font-family / [data-font="noto-serif"].
  */
 const FONT_OPTIONS = [
   {
     id: 'plex',
-    nextFontFamily: '"Noto Serif KR", "본명조", Georgia, serif',
-    nextLabel: 'noto-serif',
+    label: 'IBM Plex Sans KR',
+    fontFamily: '"IBM Plex Sans KR", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "맑은 고딕", system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
   },
   {
     id: 'noto-serif',
-    nextFontFamily: '"IBM Plex Sans KR", "Noto Sans KR", system-ui, sans-serif',
-    nextLabel: 'plex',
+    label: 'Noto Serif KR',
+    fontFamily: '"Noto Serif KR", "본명조", "Nanum Myeongjo", "나눔명조", "AppleMyungjo", "Batang", "바탕", Georgia, serif',
   },
 ]
 
@@ -126,8 +128,6 @@ export default function AppearanceSettings() {
   const { language, setLanguage } = useLanguage()
   const { t } = useTranslation()
 
-  const currentFont = FONT_OPTIONS.find(f => f.id === font) || FONT_OPTIONS[0]
-
   return (
     <section style={{ padding: '0 0 24px' }}>
       <h3 style={{
@@ -149,7 +149,7 @@ export default function AppearanceSettings() {
           color: 'var(--color-text-2)',
           margin: '0 0 10px',
         }}>
-          Theme
+          {t('settings.theme')}
         </p>
         <div style={{
           display: 'grid',
@@ -165,9 +165,24 @@ export default function AppearanceSettings() {
             />
           ))}
         </div>
+
+        {/* Mini app-screen mockup previewing the selected theme (SETTINGS-POLISH-1 §D) */}
+        <div style={{ marginTop: 14 }}>
+          <p style={{
+            fontSize: 11,
+            fontWeight: 600,
+            color: 'var(--color-text-muted)',
+            letterSpacing: '0.04em',
+            textTransform: 'uppercase',
+            margin: '0 0 8px',
+          }}>
+            {t('settings.preview')}
+          </p>
+          <ThemePreviewCard theme={theme} />
+        </div>
       </div>
 
-      {/* Font row — unchanged wiring, chip class for hover/focus */}
+      {/* Font row — two chips, each rendered in its own font (SETTINGS-POLISH-1 §C) */}
       <div>
         <p style={{
           fontSize: 13,
@@ -175,29 +190,35 @@ export default function AppearanceSettings() {
           color: 'var(--color-text-2)',
           margin: '0 0 10px',
         }}>
-          Font
+          {t('settings.font')}
         </p>
-        <button
-          onClick={() => setFont(currentFont.nextLabel)}
-          className={styles.chip}
-          style={{
-            border: '1.5px solid var(--color-border-soft)',
-            background: 'var(--color-surface)',
-            fontWeight: 500,
-            color: 'var(--color-text-2)',
-            fontFamily: currentFont.nextFontFamily,
-          }}
-        >
-          Font
-        </button>
-        <span style={{
-          marginLeft: 10,
-          fontSize: 12,
-          color: 'var(--color-text-muted)',
-          fontStyle: 'italic',
-        }}>
-          {font === 'plex' ? 'IBM Plex Sans KR' : 'Noto Serif KR'} — click to switch
-        </span>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {FONT_OPTIONS.map(opt => {
+            const isActive = font === opt.id
+            return (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => setFont(opt.id)}
+                aria-pressed={isActive}
+                className={styles.chip}
+                style={{
+                  border: isActive
+                    ? '2px solid var(--accent-1)'
+                    : '1.5px solid var(--color-border-soft)',
+                  background: isActive
+                    ? 'var(--color-surface-2)'
+                    : 'var(--color-surface)',
+                  fontWeight: isActive ? 600 : 400,
+                  color: 'var(--color-text-2)',
+                  fontFamily: opt.fontFamily,
+                }}
+              >
+                {opt.label}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       {/* Language row — unchanged wiring, chip class for hover/focus */}
