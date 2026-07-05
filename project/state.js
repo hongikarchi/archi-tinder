@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-07-01 19:30 KST',
-    head: '3c59f9e',
-    branch: 'feature/claude-profile-qr',
+    updatedAt: '2026-07-06 01:46 KST',
+    head: '73b627c',
+    branch: 'feature/claude-settings-polish',
   },
   done: [
+    {
+      id: 'SETTINGS-POLISH-1',
+      title: '설정 페이지 개선 1/2 (직업 dropdown 통합 + Bio auto-grow + 폰트 칩 + 테마 preview)',
+      completedAt: '2026-07-06',
+      note: '직업(Role) enum 단일화 + Bio auto-grow + 폰트 2-칩 + 테마 라이브 preview — 설정/프로필 편집 4개 개선 1커밋.',
+    },
     {
       id: 'PROFILE-QR-1',
       title: '프로필 공유 진짜 QR (FakeQr 스텁 교체)',
@@ -71,15 +77,19 @@ window.PROJECT_STATE = {
       prs: [242],
       note: 'PR1(#241) 리사이즈 로컬 A/B 검증(shipped 함수, 실 50카드: 91.5% 바이트, 0 broken) 후 착수(measure-first 충족). 프론트 only.',
     },
+  ],
+  now: [
     {
-      id: 'FRONT-IMAGE-RESIZE-1',
-      title: 'swipe 커버 right-sizing (PR1)',
-      completedAt: '2026-06-22',
-      prs: [241],
-      note: '이미지 레이턴시 리서치(#240) 지배 lever 구현. swipe 카드가 중앙값 4.6배(p90 21.9배) 과대-페치 → 커버 `image_url`을 표시크기(840px=DPR2)로 우-사이징. 프론트 only — 백엔드/Redis 캐시/API 계약 무변경(user 결정: 같은 URL 변환이라 효과 동일, SPA라 프론트가 유일 소비자). 리사이즈만(포맷/srcset/decode/LQIP = PR2, 측정 후).',
+      id: 'NOTIF-INAPP-1',
+      title: '앱 내 알림 v1 (❤️ 받음 + 보안 이벤트)',
+      note: 'Plan: `.claude/plans/settings-encapsulated-sedgewick.md` (PR2). User-confirmed 2026-07-06: in-app',
+    },
+    {
+      id: 'LOGIN-CARD-REDESIGN',
+      title: '로그인/가입 명함 UI 재설계 (front-only)',
+      note: 'Plan: `.claude/plans/validated-honking-owl.md`. User decisions 2026-07-06: theme-adaptive',
     },
   ],
-  now: [],
   next: {
     xhigh: [
       {
@@ -182,6 +192,41 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 258,
+      title: 'test(auth): google 로그인 테스트를 verify-only 플로우에 맞게 수정',
+      mergedAt: '2026-07-04T07:49:12Z',
+      mergedAtKST: '2026-07-04 16:49 KST',
+      sha: '75df665',
+    },
+    {
+      number: 257,
+      title: 'fix(discovery): promote-to-taste persona report 미생성 버그 수정',
+      mergedAt: '2026-07-04T07:49:32Z',
+      mergedAtKST: '2026-07-04 16:49 KST',
+      sha: '8f6322c',
+    },
+    {
+      number: 256,
+      title: 'fix(discovery): 좋아요/패스 403 verify_required를 VerifyGateModal로 연결',
+      mergedAt: '2026-07-04T07:49:41Z',
+      mergedAtKST: '2026-07-04 16:49 KST',
+      sha: '670bfb0',
+    },
+    {
+      number: 255,
+      title: 'feat(profile): real scannable profile-share QR (replace FakeQr stub)',
+      mergedAt: '2026-07-01T10:30:46Z',
+      mergedAtKST: '2026-07-01 19:30 KST',
+      sha: '64ff32a',
+    },
+    {
+      number: 254,
+      title: 'feat(TASTE-LLM): 캘리브레이션 미리보기-챗 재배치 + LLM 검색 랭킹/칩 + Taste UX + Discovery 보드 병합',
+      mergedAt: '2026-07-04T08:03:04Z',
+      mergedAtKST: '2026-07-04 17:03 KST',
+      sha: '81b927a',
+    },
+    {
       number: 253,
       title: 'docs(task): re-prioritize backlog (launch-imminent) + dashboard',
       mergedAt: '2026-06-27T17:45:26Z',
@@ -201,41 +246,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-06-27T17:14:16Z',
       mergedAtKST: '2026-06-28 02:14 KST',
       sha: '575da9b',
-    },
-    {
-      number: 249,
-      title: 'feat(discovery): cute loading skeleton — mascot + 취향 탐색 중 (DISCOVERY-SKELETON)',
-      mergedAt: '2026-06-27T10:34:50Z',
-      mergedAtKST: '2026-06-27 19:34 KST',
-      sha: '126c8ab',
-    },
-    {
-      number: 248,
-      title: 'feat(auth): unify login/onboarding — single id+password flow, Hangul ID, Google verify-only (LOGIN-ONBOARD-1)',
-      mergedAt: '2026-06-27T10:33:38Z',
-      mergedAtKST: '2026-06-27 19:33 KST',
-      sha: '674ba41',
-    },
-    {
-      number: 246,
-      title: 'fix(DISCOVERY-UI): 상단 클릭가능 Taste 저장·이동 버튼 + 취향다양 라벨 제거',
-      mergedAt: '2026-06-27T01:48:23Z',
-      mergedAtKST: '2026-06-27 10:48 KST',
-      sha: '9ae12e8',
-    },
-    {
-      number: 245,
-      title: 'perf(DISCOVERY): 첫 로딩 113s→~6s — candidate fetch 수정(HNSW우회 스캔 제거·TABLESAMPLE·카드 분리)',
-      mergedAt: '2026-06-27T01:48:19Z',
-      mergedAtKST: '2026-06-27 10:48 KST',
-      sha: '6fd85ca',
-    },
-    {
-      number: 244,
-      title: 'docs(task): track #243 is_temp fast-follows (FULL-ONBOARDING-2)',
-      mergedAt: '2026-06-23T23:59:29Z',
-      mergedAtKST: '2026-06-24 08:59 KST',
-      sha: 'f725427',
     },
   ],
   agents: [
@@ -364,6 +374,10 @@ window.PROJECT_STATE = {
     {
       path: '.claude/plans/dashboard-autogen-1.md',
       role: '대시보드 자동생성 플랜',
+    },
+    {
+      path: '.claude/plans/like-vectors-id-round-refactor.md',
+      role: '',
     },
     {
       path: '.claude/plans/profile-harvest-redesign.wf.js',
@@ -638,6 +652,10 @@ window.PROJECT_STATE = {
       role: '병합 행 상한 테스트',
     },
     {
+      path: 'backend/apps/accounts/tests/test_meta_roles.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/accounts/tests/test_oauth_email_verified.py',
       role: 'OAuth 이메일 인증 보안 테스트',
     },
@@ -676,6 +694,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/accounts/views/auth.py',
       role: '소셜·게스트 로그인 인증 뷰',
+    },
+    {
+      path: 'backend/apps/accounts/views/meta.py',
+      role: '',
     },
     {
       path: 'backend/apps/accounts/views/profile.py',
@@ -922,6 +944,14 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'backend/apps/recommendation/migrations/0029_action_card_shown.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/migrations/0030_remove_extended_rounds.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/recommendation/migrations/__init__.py',
       role: '마이그레이션 패키지 init',
     },
@@ -966,6 +996,10 @@ window.PROJECT_STATE = {
       role: 'Gemini 페르소나·비주얼 생성',
     },
     {
+      path: 'backend/apps/recommendation/services/hydration.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/recommendation/services/parse_query.py',
       role: 'Gemini 쿼리 파싱 서비스',
     },
@@ -1002,12 +1036,20 @@ window.PROJECT_STATE = {
       role: 'Discovery 피드 테스트',
     },
     {
+      path: 'backend/apps/recommendation/tests/test_like_vectors_hydration.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/recommendation/tests/test_phase13_board.py',
       role: 'Phase13 보드 테스트',
     },
     {
       path: 'backend/apps/recommendation/tests/test_row_to_card.py',
       role: 'row_to_card 변환 테스트',
+    },
+    {
+      path: 'backend/apps/recommendation/tests/test_taste_board_name.py',
+      role: '',
     },
     {
       path: 'backend/apps/recommendation/urls.py',
@@ -1362,8 +1404,16 @@ window.PROJECT_STATE = {
       role: '스와이프 처리 테스트',
     },
     {
+      path: 'backend/tests/test_swipe_action_card.py',
+      role: '',
+    },
+    {
       path: 'backend/tests/test_swipe_goal.py',
       role: '스와이프 목표 달성 테스트',
+    },
+    {
+      path: 'backend/tests/test_taste_calibration.py',
+      role: '',
     },
     {
       path: 'backend/tests/test_topic02.py',
@@ -1510,6 +1560,10 @@ window.PROJECT_STATE = {
       role: '좋아요 건물 API 클라이언트',
     },
     {
+      path: 'frontend/src/api/meta.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/api/profiles.js',
       role: '사무소·유저 프로필 API 클라이언트',
     },
@@ -1544,6 +1598,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/components/Button.module.css',
       role: '버튼 스타일(CSS Module)',
+    },
+    {
+      path: 'frontend/src/components/CalibrationChat.module.css',
+      role: '',
     },
     {
       path: 'frontend/src/components/DebugOverlay.jsx',
@@ -1614,6 +1672,10 @@ window.PROJECT_STATE = {
       role: '하단 탭바 내비게이션',
     },
     {
+      path: 'frontend/src/components/ThemePreviewCard.jsx',
+      role: '',
+    },
+    {
       path: 'frontend/src/components/Toggle.jsx',
       role: '스위치 토글 컴포넌트',
     },
@@ -1678,6 +1740,10 @@ window.PROJECT_STATE = {
       role: 'swipe 제스처 설정 상수',
     },
     {
+      path: 'frontend/src/constants/roles.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/context/LanguageContext.jsx',
       role: '언어 선택 제공자',
     },
@@ -1696,6 +1762,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/hooks/useBoard.js',
       role: '보드 상세 로딩 훅',
+    },
+    {
+      path: 'frontend/src/hooks/useGoogleEmailVerify.js',
+      role: '',
     },
     {
       path: 'frontend/src/hooks/useImageTelemetry.js',
