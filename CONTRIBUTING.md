@@ -254,6 +254,11 @@ MAIN_SHA=$(git rev-parse origin/main)
 gh api -X PATCH repos/hongikarchi/archi-tinder/git/refs/heads/develop \
   --field "sha=$MAIN_SHA" --field "force=true"
 git checkout develop && git fetch origin develop && git reset --hard origin/develop
+
+# 5. Prod DB migrate — required whenever the deploy range contains new
+#    migration files. Railway can NOT auto-migrate (the runtime user
+#    make_web_app has no DDL — INFRA-DB-1), so this is a manual operator step:
+make migrate-prod
 ```
 
 **This is the only permitted force on a shared branch.** It is codified as a
@@ -261,6 +266,30 @@ carve-out in `CLAUDE.md` / `AGENTS.md` § HARD RULE 4 and in `.claude/agents/git
 § Mode 3 step 5. Precondition: every commit on `origin/develop` must be
 content-equal to `origin/main` (no in-flight feature PR targets `develop`).
 The `git-publisher` agent runs this automatically after a deploy merge.
+
+### Prod migrate runbook (`make migrate-prod`)
+
+Railway deploys code only; schema changes ship separately because the prod
+runtime role has no DDL. `make migrate-prod` is the one-command wrapper:
+
+- Reads credentials from **`backend/.env.prod.owner`** (gitignored, `chmod 600`;
+  holds `DB_HOST` = the production Neon endpoint + `DB_USER=neondb_owner` +
+  password). If the file is missing the target prints the template to create it.
+  The runtime `backend/.env` (local branch, `make_web_app`) is never touched.
+- Shows the pending migration list on prod, **flags destructive/data operations**
+  (`RemoveField` / `DeleteModel` / `RenameField` / `RunSQL` / `RunPython`), and
+  requires typing `deploy-prod` to proceed.
+- **Ordering rule (code-first):** run it only AFTER the Railway deploy for the
+  release is live.
+  - Column **drops** (e.g. `RemoveField`) crash the OLD code if applied while it
+    is still running (old ORM still writes the column).
+  - Column **adds** crash the NEW code until applied (Django SELECTs every model
+    field, so reads 500 too — keep the merge→migrate gap short).
+  - If a release carries BOTH an add and a drop and zero-downtime matters,
+    split: apply the add before/during the Railway build
+    (`python3 manage.py migrate <app> <add_migration>` with the same env
+    mechanism), then the drop after the new code is live. For pre-launch /
+    low-traffic, one `make migrate-prod` right after the deploy is fine.
 
 ## Commit message convention
 

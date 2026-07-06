@@ -327,7 +327,20 @@ Trigger: the orchestrator dispatches you to open a deploy PR — typically when 
 
    Safety check before reset: verify `origin/develop` only has commits whose tree content is already on `origin/main` (i.e. no unmerged feature work). If any in-flight feature PR targets `develop`, defer the reset and notify the admin.
 
-6. **Report:** deploy PR `#<N>` merged — main = `<sha-short>`; Railway deploy in progress.
+6. **Prod-migrate reminder (report it — do NOT run it):** check whether the
+   deploy range contains new migration files:
+   ```bash
+   git diff <pre-deploy-main-sha> origin/main --name-only -- 'backend/**/migrations/*.py'
+   ```
+   If non-empty, your report MUST end with a reminder that the operator runs
+   `make migrate-prod` AFTER the Railway deploy is live (Railway cannot
+   auto-migrate — runtime user has no DDL, INFRA-DB-1; runbook in
+   CONTRIBUTING.md § Deploy flow). Flag any destructive ops (RemoveField /
+   DeleteModel / RunSQL) you see in those files. You never run prod migrations
+   yourself — no prod DB access, and prod DDL requires explicit user action.
+
+7. **Report:** deploy PR `#<N>` merged — main = `<sha-short>`; Railway deploy in progress;
+   migrate reminder from step 6 if applicable.
    If you needed to recover origin/develop in step 5, note it in your report
    `(origin/develop restored via gh api git/refs after --delete-branch flag regression)`.
 
