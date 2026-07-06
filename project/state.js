@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-07-06 02:37 KST',
-    head: '73b627c',
-    branch: 'feature/claude-login-card-redesign',
+    updatedAt: '2026-07-06 18:04 KST',
+    head: 'de4b8c2',
+    branch: 'HEAD',
   },
   done: [
+    {
+      id: 'NOTIF-INAPP-1',
+      title: '앱 내 알림 v1 (❤️ 받음 + 보안 이벤트)',
+      completedAt: '2026-07-06',
+      note: '앱 내 알림 v1 — 신규 `apps/notifications` (인박스+종+발생훅), 설정 알림 화면 실동작 전환 (설정 페이지 개선 2/2).',
+    },
     {
       id: 'LOGIN-CARD-REDESIGN',
       title: '로그인/가입 명함 UI 재설계 (명함 언어 + CardSkeleton)',
@@ -70,20 +76,8 @@ window.PROJECT_STATE = {
       completedAt: '2026-06-27',
       note: '1차 스와이프 온보딩(Codex, merged 2026-06-01). 흐름은 LOGIN-ONBOARD-1에서 통합·재설계됨.',
     },
-    {
-      id: 'FULL-ONBOARDING-1',
-      title: 'Taste 탭 설정단계 제거 + 임시저장 flow',
-      completedAt: '2026-06-23',
-      note: '신규 flow: Taste 탭 → AI 대화(`/search`) 즉시 진입 → 스와이프 → 리포트 생성 → "저장할까요?" 모달(보드명 자동=persona_type, public/private 토글) → 저장확정(보드 생성).',
-    },
   ],
-  now: [
-    {
-      id: 'NOTIF-INAPP-1',
-      title: '앱 내 알림 v1 (❤️ 받음 + 보안 이벤트)',
-      note: 'Plan: `.claude/plans/settings-encapsulated-sedgewick.md` (PR2). User-confirmed 2026-07-06: in-app',
-    },
-  ],
+  now: [],
   next: {
     xhigh: [
       {
@@ -110,6 +104,16 @@ window.PROJECT_STATE = {
       },
     ],
     medium: [
+      {
+        id: 'NOTIF-CHANNELS-1',
+        title: '이메일·푸시 알림 채널 발송',
+        note: 'NOTIF-INAPP-1(0bac717)은 앱 내 채널만. 이메일(SMTP — Resend/Gmail 등) + 웹푸시(FCM)는 새 외부 의존성 → Product Constitution 상 사용자 승인 필요. prefs JSON은 push/email 키 이미 보존·검증됨(validator {push,email,in_app}) — 발송 파이프라인만 추가하면 됨. 보안 카테고리 이메일이 최우선 후보.',
+      },
+      {
+        id: 'BACK-IDS-1',
+        title: 'user_id 정수 PK 노출 비열거화',
+        note: '`UserMiniSerializer.user_id`(source=user.id, serializers.py:70-74)가 순차 정수 Django PK 노출 — Project serializer·reactors 목록·notifications actor 전반 동일(시스템적, NOTIF-INAPP-1 net-new 0). 고치려면 handle/UUID로 전면 일괄 교체(부분 교체는 불일치만 초래). Opus verify low, 2026-07-06.',
+      },
       {
         id: 'FRONT-IMAGE-RESIZE-3',
         title: '이미지 LQIP + 풀해상도 passthrough (PR3)',
@@ -186,6 +190,20 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 261,
+      title: 'feat(login): business-card UI — paper/ink login flow + shared CardSkeleton',
+      mergedAt: '2026-07-05T17:42:59Z',
+      mergedAtKST: '2026-07-06 02:42 KST',
+      sha: 'de4b8c2',
+    },
+    {
+      number: 260,
+      title: 'feat(settings): role enum + bio grow + font chips + theme preview',
+      mergedAt: '2026-07-05T17:41:30Z',
+      mergedAtKST: '2026-07-06 02:41 KST',
+      sha: 'e2c3c8e',
+    },
+    {
       number: 258,
       title: 'test(auth): google 로그인 테스트를 verify-only 플로우에 맞게 수정',
       mergedAt: '2026-07-04T07:49:12Z',
@@ -226,20 +244,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-06-27T17:45:26Z',
       mergedAtKST: '2026-06-28 02:45 KST',
       sha: '3c59f9e',
-    },
-    {
-      number: 252,
-      title: 'docs(task): backlog re-audit — grep-verify kept items, drop obsolete FRONT-PROFILE-1',
-      mergedAt: '2026-06-27T17:26:40Z',
-      mergedAtKST: '2026-06-28 02:26 KST',
-      sha: 'c71a75a',
-    },
-    {
-      number: 251,
-      title: 'docs(task): post-deploy cleanup + dashboard refresh',
-      mergedAt: '2026-06-27T17:14:16Z',
-      mergedAtKST: '2026-06-28 02:14 KST',
-      sha: '575da9b',
     },
   ],
   agents: [
@@ -506,6 +510,14 @@ window.PROJECT_STATE = {
       role: '태스크 보드 문서',
     },
     {
+      path: 'Task.md',
+      role: '태스크 보드 문서',
+    },
+    {
+      path: 'Task.md',
+      role: '태스크 보드 문서',
+    },
+    {
       path: 'backend/.env.example',
       role: '백엔드 환경변수 예시',
     },
@@ -696,6 +708,54 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/accounts/views/profile.py',
       role: '유저 프로필·좋아요 건물 뷰',
+    },
+    {
+      path: 'backend/apps/notifications/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/notifications/apps.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/notifications/migrations/0001_initial.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/notifications/migrations/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/notifications/models.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/notifications/serializers.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/notifications/services.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/notifications/tests/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/notifications/tests/conftest.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/notifications/tests/test_notifications.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/notifications/urls.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/notifications/views.py',
+      role: '',
     },
     {
       path: 'backend/apps/profiles/__init__.py',
@@ -1558,6 +1618,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'frontend/src/api/notifications.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/api/profiles.js',
       role: '사무소·유저 프로필 API 클라이언트',
     },
@@ -1588,6 +1652,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/components/AppearanceSettings.module.css',
       role: '외관설정 스타일(CSS Module)',
+    },
+    {
+      path: 'frontend/src/components/Avatar.jsx',
+      role: '',
     },
     {
       path: 'frontend/src/components/Button.module.css',
@@ -1790,6 +1858,10 @@ window.PROJECT_STATE = {
       role: '테마 context 소비 훅',
     },
     {
+      path: 'frontend/src/hooks/useUnreadNotifications.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/i18n/index.js',
       role: '번역 훅 (경로 해석)',
     },
@@ -1942,6 +2014,14 @@ window.PROJECT_STATE = {
       role: '프로필 편집 페이지 (이름·직업·소개)',
     },
     {
+      path: 'frontend/src/pages/settings/NotificationInboxScreen.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/settings/NotificationInboxScreen.module.css',
+      role: '',
+    },
+    {
       path: 'frontend/src/pages/settings/NotificationsScreen.jsx',
       role: '알림 설정 페이지 (푸시·이메일)',
     },
@@ -2002,6 +2082,10 @@ window.PROJECT_STATE = {
       role: '프로젝트 백엔드 ID 해석 유틸',
     },
     {
+      path: 'frontend/src/utils/timeAgo.js',
+      role: '',
+    },
+    {
       path: 'frontend/vercel.json',
       role: 'Vercel 배포 설정',
     },
@@ -2024,6 +2108,14 @@ window.PROJECT_STATE = {
     {
       path: 'project/mermaid.min.js',
       role: 'Mermaid 다이어그램 번들',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
     },
     {
       path: 'project/state.js',

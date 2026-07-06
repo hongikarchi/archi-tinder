@@ -410,20 +410,20 @@ class UserProfileSelfUpdateSerializer(serializers.ModelSerializer):
         return super().update(instance, validated_data)
 
     def validate_notifications(self, value):
-        """notifications: {category: {push?: bool, email?: bool}}.
+        """notifications: {category: {push?: bool, email?: bool, in_app?: bool}}.
 
         Constraints:
           - Top level must be a dict, ≤50 keys.
-          - Each value must be a dict containing ONLY the keys 'push' and/or
-            'email'; unknown nested keys are rejected.
-          - Values under 'push'/'email' must be booleans (JSON true/false).
-            Integers are NOT accepted — isinstance(1, bool) is False for int
-            literals, but JSON 1/0 parse to int not bool, so int values are
-            correctly rejected by the isinstance(v, bool) guard.
+          - Each value must be a dict containing ONLY the keys 'push', 'email'
+            and/or 'in_app' (NOTIF-INAPP-1); unknown nested keys are rejected.
+          - Values under 'push'/'email'/'in_app' must be booleans (JSON
+            true/false). Integers are NOT accepted — isinstance(1, bool) is
+            False for int literals, but JSON 1/0 parse to int not bool, so
+            int values are correctly rejected by the isinstance(v, bool) guard.
 
         Returns value unchanged (no normalisation) so reload equals the input.
         """
-        _ALLOWED_NESTED = frozenset({'push', 'email'})
+        _ALLOWED_NESTED = frozenset({'push', 'email', 'in_app'})
 
         if not isinstance(value, dict):
             raise serializers.ValidationError(
@@ -446,7 +446,7 @@ class UserProfileSelfUpdateSerializer(serializers.ModelSerializer):
             if unknown:
                 raise serializers.ValidationError(
                     f'notifications["{k}"] contains unknown keys: '
-                    f'{sorted(unknown)}. Allowed: push, email.'
+                    f'{sorted(unknown)}. Allowed: push, email, in_app.'
                 )
             for nested_key, nested_val in v.items():
                 if not isinstance(nested_val, bool):

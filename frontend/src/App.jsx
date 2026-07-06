@@ -21,6 +21,7 @@ import ArchitectProfilePage from './pages/ArchitectProfilePage.jsx'
 import SettingsPage from './pages/settings/SettingsPage.jsx'
 import AccountScreen from './pages/settings/AccountScreen.jsx'
 import NotificationsScreen from './pages/settings/NotificationsScreen.jsx'
+import NotificationInboxScreen from './pages/settings/NotificationInboxScreen.jsx'
 import AppearanceScreen from './pages/settings/AppearanceScreen.jsx'
 import EditProfileScreen from './pages/settings/EditProfileScreen.jsx'
 import * as api from './api/client.js'
@@ -1105,6 +1106,7 @@ export default function App() {
           <Route path="liked-projects" element={<LikedProjectsPage />} />
           <Route path="my/liked-offices" element={<Navigate to="/my/profile" replace />} />
           <Route path="architects/:architectId" element={<ArchitectProfilePage />} />
+          <Route path="notifications" element={<NotificationInboxScreen />} />
           <Route path="settings" element={<SettingsPage />}>
             <Route path="edit-profile" element={<EditProfileScreen />} />
             <Route path="account" element={<AccountScreen />} />

@@ -20,6 +20,50 @@ export const locales = {
       font:       '글꼴',
       preview:    '미리보기',
     },
+    notifications: {
+      title: '알림',
+      loading: '불러오는 중...',
+      fetchError: '알림을 불러올 수 없습니다.',
+      empty: '알림이 없습니다',
+      loadMore: '더 보기',
+      unreadAriaSuffix: '읽지 않음',
+      bellAria: '알림',
+      sentence: {
+        reaction: '{name}님이 회원님의 프로젝트를 좋아합니다',
+        passwordChanged: '비밀번호가 변경되었습니다',
+        newLogin: '새 기기에서 로그인되었습니다',
+      },
+      settings: {
+        disclaimer: '이메일·푸시 알림은 추후 지원됩니다',
+        categories: {
+          social: {
+            label: '소셜 활동',
+            hint: '팔로우 · 좋아요 · 댓글 · 멘션',
+          },
+          content: {
+            label: '내 보드 · 프로젝트',
+            hint: '저장 · 공유 · 추천 노출',
+          },
+          security: {
+            label: '계정 보안',
+            hint: '새 기기 로그인 · 비밀번호 변경',
+            lockedHint: '보안 알림은 계정 보호를 위해 항상 켜집니다.',
+          },
+          recommend: {
+            label: '추천 · 트렌드',
+            hint: '개인화 추천 · 주간 다이제스트',
+          },
+          marketing: {
+            label: '마케팅 · 이벤트',
+            hint: '프로모션 안내',
+          },
+        },
+        inAppToggle: '앱 내 알림',
+        loading: '불러오는 중...',
+        fetchError: '알림 설정을 불러올 수 없습니다.',
+        saveError: '저장에 실패했습니다. 다시 시도해주세요.',
+      },
+    },
     profileEdit: {
       role: {
         label:      '직업 (Role)',
@@ -150,6 +194,50 @@ export const locales = {
       theme:      'Theme',
       font:       'Font',
       preview:    'Preview',
+    },
+    notifications: {
+      title: 'Notifications',
+      loading: 'Loading...',
+      fetchError: 'Could not load notifications.',
+      empty: 'No notifications yet',
+      loadMore: 'Load more',
+      unreadAriaSuffix: 'unread',
+      bellAria: 'Notifications',
+      sentence: {
+        reaction: '{name} liked your project',
+        passwordChanged: 'Your password was changed',
+        newLogin: 'New sign-in from a new device',
+      },
+      settings: {
+        disclaimer: 'Email and push notifications are coming later',
+        categories: {
+          social: {
+            label: 'Social activity',
+            hint: 'Follows · likes · comments · mentions',
+          },
+          content: {
+            label: 'My boards · projects',
+            hint: 'Saves · shares · recommendation exposure',
+          },
+          security: {
+            label: 'Account security',
+            hint: 'New device login · password changes',
+            lockedHint: 'Security notifications are always on to protect your account.',
+          },
+          recommend: {
+            label: 'Recommendations · trends',
+            hint: 'Personalized recommendations · weekly digest',
+          },
+          marketing: {
+            label: 'Marketing · events',
+            hint: 'Promotional updates',
+          },
+        },
+        inAppToggle: 'In-app notifications',
+        loading: 'Loading...',
+        fetchError: 'Could not load notification settings.',
+        saveError: 'Save failed. Please try again.',
+      },
     },
     profileEdit: {
       role: {

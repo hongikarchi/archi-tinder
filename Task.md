@@ -57,14 +57,7 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-### NOTIF-INAPP-1 — 앱 내 알림 v1 (❤️ 받음 + 보안 이벤트)
-
-Plan: `.claude/plans/settings-encapsulated-sedgewick.md` (PR2). User-confirmed 2026-07-06: in-app
-only (SMTP/FCM 없음 — external-dependency restraint); events = ❤️ reaction received + security
-(password change, new-device login via ua_hash KnownDevice). New `apps/notifications` app
-(Notification + KnownDevice, additive migration), list/unread-count/mark-read endpoints, bell +
-inbox UI, NotificationsScreen rework to per-category `in_app` toggle (validator extends channel
-keys to push/email/in_app).
+_(none — SETTINGS-POLISH-1 + LOGIN-CARD-REDESIGN + NOTIF-INAPP-1 shipped 2026-07-06, awaiting next slice.)_
 
 ---
 
@@ -170,6 +163,12 @@ Diagnostic plan:
 _(Deferred 2026-06-04 batch scope → 계측 먼저. Variance CONFIRMED(per-worker in-process embedding 캐시 cold-miss 50-200ms + KMeans 재계산)나 ~tens-daily-users 규모서 cold-miss는 주로 배포직후 일시적; Redis-migration은 조회마다 RTT 추가 + premature 가능. prod hit-rate/지배 원인 계측 후 결정.)_
 
 ### MEDIUM
+#### NOTIF-CHANNELS-1 — 이메일·푸시 알림 채널 발송
+NOTIF-INAPP-1(0bac717)은 앱 내 채널만. 이메일(SMTP — Resend/Gmail 등) + 웹푸시(FCM)는 새 외부 의존성 → Product Constitution 상 사용자 승인 필요. prefs JSON은 push/email 키 이미 보존·검증됨(validator {push,email,in_app}) — 발송 파이프라인만 추가하면 됨. 보안 카테고리 이메일이 최우선 후보.
+
+#### BACK-IDS-1 — user_id 정수 PK 노출 비열거화
+`UserMiniSerializer.user_id`(source=user.id, serializers.py:70-74)가 순차 정수 Django PK 노출 — Project serializer·reactors 목록·notifications actor 전반 동일(시스템적, NOTIF-INAPP-1 net-new 0). 고치려면 handle/UUID로 전면 일괄 교체(부분 교체는 불일치만 초래). Opus verify low, 2026-07-06.
+
 #### FRONT-IMAGE-RESIZE-3 — 이미지 LQIP + 풀해상도 passthrough (PR3)
 PR2(#242)가 srcset/decode/classifier 출하 → 남은 Tier A polish. 전부 프론트.
 - **A7 LQIP**: 카드당 ~20px 블러 썸네일(`buildLqipUrl=rightSizeImageUrl(url,20)`, 양 CDN) + CSS `filter:blur`, skeleton-shimmer 위 레이어. ⚠️ object-fit:contain letterbox라 `scale(1.1)` edge-bleed 핵 금지(letterbox 노출). PR2서 의도적 분리(유일 render-lifecycle 침습, polish지 core 아님). 완전 스펙은 PR2 Plan-agent 설계에 turnkey.
@@ -266,6 +265,16 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### NOTIF-INAPP-1 — 앱 내 알림 v1 (❤️ 받음 + 보안 이벤트) — RESOLVED 2026-07-06 (`0bac717`-pre-squash)
+앱 내 알림 v1 — 신규 `apps/notifications` (인박스+종+발생훅), 설정 알림 화면 실동작 전환 (설정 페이지 개선 2/2).
+- [x] 신규 앱 `apps/notifications`: `Notification`(recipient/actor/type[reaction·password_changed·new_login]/category[social·security]/payload/read_at, 인덱스 2종) + `KnownDevice`(user+ua_hash unique) — additive migration 0001 (accounts.0011 의존).
+- [x] 발생 훅: ❤️ Reaction 생성 시 프로젝트 소유자 알림(본인 스킵 · `social.in_app` opt-out 기본 ON · 미읽음 dedupe) — social react view; 비번 변경 + 새 기기 로그인(ua_hash 신규 & 기존 기기 ≥1, 최초 기기 무음) — auth views. 훅 실패해도 호스트 요청 안 깨짐(wrap+log).
+- [x] API: `GET /api/v1/notifications/`(self-only, 20/50 cap 페이지네이션) · `unread-count/` · `POST mark-read/`(ids≤500|all, 멱등). prefs validator `in_app` 채널 키 허용.
+- [x] 프론트: `/notifications` 인박스(문장 ko/en, time-ago, 진입 시 전체 읽음, 더 보기, empty state) + 프로필 헤더 종 아이콘/9+ 뱃지(mount+visibilitychange만, 폴링 없음, `useUnreadNotifications` 훅) + 설정 알림 화면 카테고리별 `in_app` 단일 토글(보안 LOCKED, merge-PATCH push/email 키 보존) + Avatar/timeAgo 유틸 신규.
+- [x] 게이트: code-review PASS · security PASS · Opus verify PASS (cyclesUsed 1 — 인박스/설정 `[t]` useEffect 의존성 무한 refetch 결함 수정). low 1건 shipped: `UserMiniSerializer.user_id` 정수 PK 노출 — 기존 시스템 전반(Project/reactors)과 동일, net-new 0 (전면 교체는 별도 과제).
+- [x] app-test skip(4-gate 정책) · drift clean. ⚠️ migration 0001 로컬/프로드 미적용 — `make migrate-local`(로컬), 배포 시 `make migrate-prod` CODE-FIRST (additive라 안전).
+- Deferred: 이메일/푸시 채널 발송(SMTP/FCM 외부 의존성 — 사용자 승인 필요), user_id 정수 PK 전면 비열거화.
+
 ### LOGIN-CARD-REDESIGN — 로그인/가입 명함 UI 재설계 (명함 언어 + CardSkeleton) — RESOLVED 2026-07-06 (`e9b3638`-pre-squash)
 - 로그인/가입 5단계 카드를 테마 적응형 명함 언어로 재설계 (신규 `cardLanguage.js` 공유 모듈: paper face + ink 타이포 + mono 라벨 + ink 버튼 + paper-flat 인풋; 기존 토큰만, BusinessCard.jsx 불변).
 - 텍스트 다이어트: 페이지 헤더 + 카드 아래 캡션 삭제, 타자기 프롬프트가 유일 안내(제목 중복 제거), 규칙은 placeholder/검증 에러로 이동.
