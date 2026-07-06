@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { rightSizeImageUrl, buildCardSrcSet } from './rightSizeImageUrl.js'
+import { rightSizeImageUrl, buildCardSrcSet, buildLqipUrl } from './rightSizeImageUrl.js'
 
 // -- Divisare ------------------------------------------------------------------
 
@@ -199,4 +199,47 @@ test('F2 empty string — returns null', () => {
 
 test('F2 null — returns null', () => {
   assert.equal(buildCardSrcSet(null), null)
+})
+
+// -- B1: buildLqipUrl -----------------------------------------------------
+
+test('LQIP Divisare w_auto — returns w_20,c_limit URL', () => {
+  const input    = 'https://images.divisare.com//images/f_auto,q_auto,w_auto/v1531306470/abc/x.jpg'
+  const expected = 'https://images.divisare.com//images/f_auto,q_auto,w_20,c_limit/v1531306470/abc/x.jpg'
+  assert.equal(buildLqipUrl(input), expected)
+})
+
+test('LQIP Divisare without w_auto — returns null (would equal full-size URL)', () => {
+  const input = 'https://images.divisare.com/images/f_auto,q_auto,w_840,c_limit/v1/abc/x.jpg'
+  assert.equal(buildLqipUrl(input), null)
+})
+
+test('LQIP Divisare gallery sibling (no w_auto) — returns null', () => {
+  const input = 'https://images.divisare.com//image/upload/c_fit,f_jpg,q_80,w_1200/v1/project_images/2276517/2.jpg'
+  assert.equal(buildLqipUrl(input), null)
+})
+
+test('LQIP imgix — sets w=20, fit=max', () => {
+  const input  = 'https://architizer-prod.imgix.net/media/foo/x.jpg?w=1680&q=60'
+  const result = buildLqipUrl(input)
+  assert.ok(result !== null, 'should return a URL')
+  const u = new URL(result)
+  assert.equal(u.searchParams.get('w'),   '20')
+  assert.equal(u.searchParams.get('fit'), 'max')
+})
+
+test('LQIP non-CDN host — returns null', () => {
+  assert.equal(buildLqipUrl('https://architizer.com/foo.jpg'), null)
+  assert.equal(buildLqipUrl('https://archello.s3.eu-central-1.amazonaws.com/x.jpg'), null)
+})
+
+test('LQIP malformed/relative URL — returns null', () => {
+  assert.equal(buildLqipUrl('not a url'), null)
+  assert.equal(buildLqipUrl('/local/x.jpg'), null)
+})
+
+test('LQIP empty/null/undefined — returns null', () => {
+  assert.equal(buildLqipUrl(''), null)
+  assert.equal(buildLqipUrl(null), null)
+  assert.equal(buildLqipUrl(undefined), null)
 })
