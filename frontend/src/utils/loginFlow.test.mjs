@@ -25,22 +25,24 @@ import {
 // ONBOARDING_ROLES shape
 // ---------------------------------------------------------------------------
 describe('ONBOARDING_ROLES', () => {
-  test('has exactly 3 entries', () => {
-    assert.equal(ONBOARDING_ROLES.length, 3)
+  test('has exactly 5 entries (SETTINGS-POLISH-1: mirrors backend ONBOARDING_ROLE_CHOICES)', () => {
+    assert.equal(ONBOARDING_ROLES.length, 5)
   })
 
-  test('each entry has {value, label} string properties', () => {
+  test('each entry has {value, label_en, label_ko} string properties', () => {
     for (const role of ONBOARDING_ROLES) {
       assert.equal(typeof role.value, 'string', `${role.value}.value must be string`)
-      assert.equal(typeof role.label, 'string', `${role.value}.label must be string`)
+      assert.equal(typeof role.label_en, 'string', `${role.value}.label_en must be string`)
+      assert.equal(typeof role.label_ko, 'string', `${role.value}.label_ko must be string`)
       assert.ok(role.value.length > 0, 'value must be non-empty')
-      assert.ok(role.label.length > 0, 'label must be non-empty')
+      assert.ok(role.label_en.length > 0, 'label_en must be non-empty')
+      assert.ok(role.label_ko.length > 0, 'label_ko must be non-empty')
     }
   })
 
-  test('contains the required 3 values', () => {
+  test('contains the required 5 values', () => {
     const values = ONBOARDING_ROLES.map(r => r.value)
-    const required = ['student', 'architect', 'other']
+    const required = ['student', 'architect', 'designer', 'enthusiast', 'other']
     for (const v of required) {
       assert.ok(values.includes(v), `missing role value: ${v}`)
     }

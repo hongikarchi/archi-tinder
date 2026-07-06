@@ -27,7 +27,12 @@
  */
 
 /* ── Invariant tokens + GitHub Light default ────────────────────────────── */
-:root {
+/* SETTINGS-POLISH-1 §D: also match [data-theme="github-light"] so a scoped
+ * wrapper (ThemePreviewCard) can force github-light tokens on its subtree
+ * even while the app root runs a different theme. The 3 other
+ * [data-theme="..."] blocks below already override on top of this one via
+ * normal CSS cascade/specificity, so this addition is additive-only. */
+:root, [data-theme="github-light"] {
   /* -- Border radius -------------------------------------------------------- */
   --radius-sm:   8px;
   --radius-md:   12px;

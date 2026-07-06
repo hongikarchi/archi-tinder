@@ -23,6 +23,7 @@ from apps.accounts.models import UserProfile
 from apps.accounts.serializers import UserMiniSerializer
 from apps.social.models import Reaction
 from apps.recommendation.caches import evict_project_detail
+from apps.notifications.services import notify_reaction
 
 logger = logging.getLogger('apps.social')
 
@@ -103,6 +104,13 @@ class ReactionView(APIView):
         if created:
             # reaction_count changed — evict project detail cache (BACK-BOARD-PERF-1)
             evict_project_detail(str(project_id))
+            # NOTIF-INAPP-1: emit an in-app notification to the project owner.
+            # notify_reaction wraps its own body in try/except — a notification
+            # failure must never break this request.
+            try:
+                notify_reaction(_reaction)
+            except Exception:
+                logger.exception('notify_reaction raised unexpectedly (reaction pk=%s)', _reaction.pk)
         response_status = status.HTTP_201_CREATED if created else status.HTTP_200_OK
         return Response(
             {'reaction_count': project.reaction_count, 'reacted': True},
