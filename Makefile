@@ -8,7 +8,7 @@ FRONTEND_DIR = frontend
 
 SHELL := /bin/bash
 
-.PHONY: setup dev backend frontend reset-db dashboard migrate-local test-local
+.PHONY: setup dev backend frontend reset-db dashboard migrate-local test-local migrate-prod
 
 # ── Setup ────────────────────────────────────────────────────────────────────
 setup:
@@ -63,6 +63,51 @@ migrate-local:
 	if [ "$$ANS" != "yes" ]; then echo "aborted."; exit 1; fi; \
 	read -s -p "neondb_owner password: " PW; echo; \
 	DB_USER=neondb_owner DB_PASSWORD="$$PW" python3 manage.py migrate && { echo; echo "Done. Runtime .env unchanged (still make_web_app)."; }
+
+# -- Prod DB migrate (post-deploy step; DDL via neondb_owner) -------------------
+# Prod runtime user make_web_app has no DDL (INFRA-DB-1), so Railway can NOT
+# auto-migrate on deploy -- pending migrations are applied manually AFTER Railway
+# finishes deploying the new code (code-first ordering; see CONTRIBUTING.md
+# "Deploy runbook"). Credentials come from backend/.env.prod.owner (gitignored,
+# chmod 600; DB_HOST = the PRODUCTION Neon endpoint, DB_USER = neondb_owner).
+# Runtime .env is untouched -- DB_* are injected inline for this command only
+# (settings.py load_dotenv override=False, so inline env wins). Pending
+# migrations containing destructive/data ops are flagged before the confirm.
+migrate-prod:
+	@cd $(BACKEND_DIR); \
+	if [ ! -f .env.prod.owner ]; then \
+		echo "ERROR: backend/.env.prod.owner missing."; \
+		echo "Create it (gitignored, chmod 600) with the PROD endpoint + neondb_owner:"; \
+		echo "  DB_HOST=<prod neon endpoint>"; \
+		echo "  DB_PORT=5432"; \
+		echo "  DB_NAME=user_data"; \
+		echo "  DB_USER=neondb_owner"; \
+		echo "  DB_PASSWORD=<neondb_owner password>"; \
+		exit 1; fi; \
+	HOST=$$(grep -E '^DB_HOST=' .env.prod.owner | cut -d= -f2-); \
+	PORT=$$(grep -E '^DB_PORT=' .env.prod.owner | cut -d= -f2-); \
+	NAME=$$(grep -E '^DB_NAME=' .env.prod.owner | cut -d= -f2-); \
+	DBUSER=$$(grep -E '^DB_USER=' .env.prod.owner | cut -d= -f2-); \
+	PW=$$(grep -E '^DB_PASSWORD=' .env.prod.owner | cut -d= -f2-); \
+	echo; echo "PROD migrate target  ->  HOST=$$HOST  NAME=$$NAME  USER=$$DBUSER"; \
+	echo; echo "Pending migrations on PROD:"; \
+	PENDING=$$(DB_HOST="$$HOST" DB_PORT="$$PORT" DB_NAME="$$NAME" DB_USER="$$DBUSER" DB_PASSWORD="$$PW" python3 manage.py showmigrations 2>/dev/null | grep '\[ \]' || true); \
+	if [ -z "$$PENDING" ]; then echo "  (none -- prod already current)"; exit 0; fi; \
+	echo "$$PENDING"; \
+	DESTR=""; \
+	for MIG in $$(echo "$$PENDING" | sed 's/.*\[ \] //'); do \
+		F=$$(find . -path "*/migrations/$$MIG.py" 2>/dev/null | head -1); \
+		if [ -n "$$F" ] && grep -qE 'RemoveField|DeleteModel|RenameField|RenameModel|RunSQL|RunPython' "$$F"; then DESTR="$$DESTR $$MIG"; fi; \
+	done; \
+	if [ -n "$$DESTR" ]; then \
+		echo; echo "!! DESTRUCTIVE/data ops detected in:$$DESTR"; \
+		echo "!! Column/table drops crash OLD code still running. Confirm Railway finished"; \
+		echo "!! deploying the NEW code before applying (code-first ordering)."; \
+	fi; \
+	echo; echo "ORDER CHECK: run this only AFTER the Railway deploy for this release is live."; \
+	read -p "Apply to PRODUCTION? type 'deploy-prod': " ANS; \
+	if [ "$$ANS" != "deploy-prod" ]; then echo "aborted."; exit 1; fi; \
+	DB_HOST="$$HOST" DB_PORT="$$PORT" DB_NAME="$$NAME" DB_USER="$$DBUSER" DB_PASSWORD="$$PW" python3 manage.py migrate && { echo; echo "Done. Prod schema current. Runtime .env unchanged (still make_web_app)."; }
 
 # -- Local pytest (CI-shape Postgres run; test DB via neondb_owner CREATEDB) ----
 # Local runtime user make_web_app has no CREATEDB (INFRA-DB-1), so pytest-django

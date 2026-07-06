@@ -23,11 +23,29 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-07-01 19:30 KST',
-    head: '3c59f9e',
-    branch: 'feature/claude-profile-qr',
+    updatedAt: '2026-07-06 18:04 KST',
+    head: 'de4b8c2',
+    branch: 'HEAD',
   },
   done: [
+    {
+      id: 'NOTIF-INAPP-1',
+      title: '앱 내 알림 v1 (❤️ 받음 + 보안 이벤트)',
+      completedAt: '2026-07-06',
+      note: '앱 내 알림 v1 — 신규 `apps/notifications` (인박스+종+발생훅), 설정 알림 화면 실동작 전환 (설정 페이지 개선 2/2).',
+    },
+    {
+      id: 'LOGIN-CARD-REDESIGN',
+      title: '로그인/가입 명함 UI 재설계 (명함 언어 + CardSkeleton)',
+      completedAt: '2026-07-06',
+      note: '로그인/가입 5단계 카드를 테마 적응형 명함 언어로 재설계 (신규 `cardLanguage.js` 공유 모듈: paper face + ink 타이포 + mono 라벨 + ink 버튼 + paper-flat 인풋; 기존 토큰만, BusinessCard.jsx 불변).',
+    },
+    {
+      id: 'SETTINGS-POLISH-1',
+      title: '설정 페이지 개선 1/2 (직업 dropdown 통합 + Bio auto-grow + 폰트 칩 + 테마 preview)',
+      completedAt: '2026-07-06',
+      note: '직업(Role) enum 단일화 + Bio auto-grow + 폰트 2-칩 + 테마 라이브 preview — 설정/프로필 편집 4개 개선 1커밋.',
+    },
     {
       id: 'PROFILE-QR-1',
       title: '프로필 공유 진짜 QR (FakeQr 스텁 교체)',
@@ -58,26 +76,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-06-27',
       note: '1차 스와이프 온보딩(Codex, merged 2026-06-01). 흐름은 LOGIN-ONBOARD-1에서 통합·재설계됨.',
     },
-    {
-      id: 'FULL-ONBOARDING-1',
-      title: 'Taste 탭 설정단계 제거 + 임시저장 flow',
-      completedAt: '2026-06-23',
-      note: '신규 flow: Taste 탭 → AI 대화(`/search`) 즉시 진입 → 스와이프 → 리포트 생성 → "저장할까요?" 모달(보드명 자동=persona_type, public/private 토글) → 저장확정(보드 생성).',
-    },
-    {
-      id: 'FRONT-IMAGE-RESIZE-2',
-      title: '이미지 Tier A: srcset + decode-preload + classifier (PR2)',
-      completedAt: '2026-06-22',
-      prs: [242],
-      note: 'PR1(#241) 리사이즈 로컬 A/B 검증(shipped 함수, 실 50카드: 91.5% 바이트, 0 broken) 후 착수(measure-first 충족). 프론트 only.',
-    },
-    {
-      id: 'FRONT-IMAGE-RESIZE-1',
-      title: 'swipe 커버 right-sizing (PR1)',
-      completedAt: '2026-06-22',
-      prs: [241],
-      note: '이미지 레이턴시 리서치(#240) 지배 lever 구현. swipe 카드가 중앙값 4.6배(p90 21.9배) 과대-페치 → 커버 `image_url`을 표시크기(840px=DPR2)로 우-사이징. 프론트 only — 백엔드/Redis 캐시/API 계약 무변경(user 결정: 같은 URL 변환이라 효과 동일, SPA라 프론트가 유일 소비자). 리사이즈만(포맷/srcset/decode/LQIP = PR2, 측정 후).',
-    },
   ],
   now: [],
   next: {
@@ -106,6 +104,16 @@ window.PROJECT_STATE = {
       },
     ],
     medium: [
+      {
+        id: 'NOTIF-CHANNELS-1',
+        title: '이메일·푸시 알림 채널 발송',
+        note: 'NOTIF-INAPP-1(0bac717)은 앱 내 채널만. 이메일(SMTP — Resend/Gmail 등) + 웹푸시(FCM)는 새 외부 의존성 → Product Constitution 상 사용자 승인 필요. prefs JSON은 push/email 키 이미 보존·검증됨(validator {push,email,in_app}) — 발송 파이프라인만 추가하면 됨. 보안 카테고리 이메일이 최우선 후보.',
+      },
+      {
+        id: 'BACK-IDS-1',
+        title: 'user_id 정수 PK 노출 비열거화',
+        note: '`UserMiniSerializer.user_id`(source=user.id, serializers.py:70-74)가 순차 정수 Django PK 노출 — Project serializer·reactors 목록·notifications actor 전반 동일(시스템적, NOTIF-INAPP-1 net-new 0). 고치려면 handle/UUID로 전면 일괄 교체(부분 교체는 불일치만 초래). Opus verify low, 2026-07-06.',
+      },
       {
         id: 'FRONT-IMAGE-RESIZE-3',
         title: '이미지 LQIP + 풀해상도 passthrough (PR3)',
@@ -182,60 +190,60 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 261,
+      title: 'feat(login): business-card UI — paper/ink login flow + shared CardSkeleton',
+      mergedAt: '2026-07-05T17:42:59Z',
+      mergedAtKST: '2026-07-06 02:42 KST',
+      sha: 'de4b8c2',
+    },
+    {
+      number: 260,
+      title: 'feat(settings): role enum + bio grow + font chips + theme preview',
+      mergedAt: '2026-07-05T17:41:30Z',
+      mergedAtKST: '2026-07-06 02:41 KST',
+      sha: 'e2c3c8e',
+    },
+    {
+      number: 258,
+      title: 'test(auth): google 로그인 테스트를 verify-only 플로우에 맞게 수정',
+      mergedAt: '2026-07-04T07:49:12Z',
+      mergedAtKST: '2026-07-04 16:49 KST',
+      sha: '75df665',
+    },
+    {
+      number: 257,
+      title: 'fix(discovery): promote-to-taste persona report 미생성 버그 수정',
+      mergedAt: '2026-07-04T07:49:32Z',
+      mergedAtKST: '2026-07-04 16:49 KST',
+      sha: '8f6322c',
+    },
+    {
+      number: 256,
+      title: 'fix(discovery): 좋아요/패스 403 verify_required를 VerifyGateModal로 연결',
+      mergedAt: '2026-07-04T07:49:41Z',
+      mergedAtKST: '2026-07-04 16:49 KST',
+      sha: '670bfb0',
+    },
+    {
+      number: 255,
+      title: 'feat(profile): real scannable profile-share QR (replace FakeQr stub)',
+      mergedAt: '2026-07-01T10:30:46Z',
+      mergedAtKST: '2026-07-01 19:30 KST',
+      sha: '64ff32a',
+    },
+    {
+      number: 254,
+      title: 'feat(TASTE-LLM): 캘리브레이션 미리보기-챗 재배치 + LLM 검색 랭킹/칩 + Taste UX + Discovery 보드 병합',
+      mergedAt: '2026-07-04T08:03:04Z',
+      mergedAtKST: '2026-07-04 17:03 KST',
+      sha: '81b927a',
+    },
+    {
       number: 253,
       title: 'docs(task): re-prioritize backlog (launch-imminent) + dashboard',
       mergedAt: '2026-06-27T17:45:26Z',
       mergedAtKST: '2026-06-28 02:45 KST',
       sha: '3c59f9e',
-    },
-    {
-      number: 252,
-      title: 'docs(task): backlog re-audit — grep-verify kept items, drop obsolete FRONT-PROFILE-1',
-      mergedAt: '2026-06-27T17:26:40Z',
-      mergedAtKST: '2026-06-28 02:26 KST',
-      sha: 'c71a75a',
-    },
-    {
-      number: 251,
-      title: 'docs(task): post-deploy cleanup + dashboard refresh',
-      mergedAt: '2026-06-27T17:14:16Z',
-      mergedAtKST: '2026-06-28 02:14 KST',
-      sha: '575da9b',
-    },
-    {
-      number: 249,
-      title: 'feat(discovery): cute loading skeleton — mascot + 취향 탐색 중 (DISCOVERY-SKELETON)',
-      mergedAt: '2026-06-27T10:34:50Z',
-      mergedAtKST: '2026-06-27 19:34 KST',
-      sha: '126c8ab',
-    },
-    {
-      number: 248,
-      title: 'feat(auth): unify login/onboarding — single id+password flow, Hangul ID, Google verify-only (LOGIN-ONBOARD-1)',
-      mergedAt: '2026-06-27T10:33:38Z',
-      mergedAtKST: '2026-06-27 19:33 KST',
-      sha: '674ba41',
-    },
-    {
-      number: 246,
-      title: 'fix(DISCOVERY-UI): 상단 클릭가능 Taste 저장·이동 버튼 + 취향다양 라벨 제거',
-      mergedAt: '2026-06-27T01:48:23Z',
-      mergedAtKST: '2026-06-27 10:48 KST',
-      sha: '9ae12e8',
-    },
-    {
-      number: 245,
-      title: 'perf(DISCOVERY): 첫 로딩 113s→~6s — candidate fetch 수정(HNSW우회 스캔 제거·TABLESAMPLE·카드 분리)',
-      mergedAt: '2026-06-27T01:48:19Z',
-      mergedAtKST: '2026-06-27 10:48 KST',
-      sha: '6fd85ca',
-    },
-    {
-      number: 244,
-      title: 'docs(task): track #243 is_temp fast-follows (FULL-ONBOARDING-2)',
-      mergedAt: '2026-06-23T23:59:29Z',
-      mergedAtKST: '2026-06-24 08:59 KST',
-      sha: 'f725427',
     },
   ],
   agents: [
@@ -366,6 +374,10 @@ window.PROJECT_STATE = {
       role: '대시보드 자동생성 플랜',
     },
     {
+      path: '.claude/plans/like-vectors-id-round-refactor.md',
+      role: '',
+    },
+    {
       path: '.claude/plans/profile-harvest-redesign.wf.js',
       role: '프로필 하베스트 재설계 워크플로 스크립트 (#179)',
     },
@@ -492,6 +504,14 @@ window.PROJECT_STATE = {
     {
       path: 'README.md',
       role: '프로젝트 안내 문서',
+    },
+    {
+      path: 'Task.md',
+      role: '태스크 보드 문서',
+    },
+    {
+      path: 'Task.md',
+      role: '태스크 보드 문서',
     },
     {
       path: 'Task.md',
@@ -638,6 +658,10 @@ window.PROJECT_STATE = {
       role: '병합 행 상한 테스트',
     },
     {
+      path: 'backend/apps/accounts/tests/test_meta_roles.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/accounts/tests/test_oauth_email_verified.py',
       role: 'OAuth 이메일 인증 보안 테스트',
     },
@@ -678,8 +702,60 @@ window.PROJECT_STATE = {
       role: '소셜·게스트 로그인 인증 뷰',
     },
     {
+      path: 'backend/apps/accounts/views/meta.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/accounts/views/profile.py',
       role: '유저 프로필·좋아요 건물 뷰',
+    },
+    {
+      path: 'backend/apps/notifications/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/notifications/apps.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/notifications/migrations/0001_initial.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/notifications/migrations/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/notifications/models.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/notifications/serializers.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/notifications/services.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/notifications/tests/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/notifications/tests/conftest.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/notifications/tests/test_notifications.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/notifications/urls.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/notifications/views.py',
+      role: '',
     },
     {
       path: 'backend/apps/profiles/__init__.py',
@@ -922,6 +998,14 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'backend/apps/recommendation/migrations/0029_action_card_shown.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/migrations/0030_remove_extended_rounds.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/recommendation/migrations/__init__.py',
       role: '마이그레이션 패키지 init',
     },
@@ -966,6 +1050,10 @@ window.PROJECT_STATE = {
       role: 'Gemini 페르소나·비주얼 생성',
     },
     {
+      path: 'backend/apps/recommendation/services/hydration.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/recommendation/services/parse_query.py',
       role: 'Gemini 쿼리 파싱 서비스',
     },
@@ -1002,12 +1090,20 @@ window.PROJECT_STATE = {
       role: 'Discovery 피드 테스트',
     },
     {
+      path: 'backend/apps/recommendation/tests/test_like_vectors_hydration.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/recommendation/tests/test_phase13_board.py',
       role: 'Phase13 보드 테스트',
     },
     {
       path: 'backend/apps/recommendation/tests/test_row_to_card.py',
       role: 'row_to_card 변환 테스트',
+    },
+    {
+      path: 'backend/apps/recommendation/tests/test_taste_board_name.py',
+      role: '',
     },
     {
       path: 'backend/apps/recommendation/urls.py',
@@ -1362,8 +1458,16 @@ window.PROJECT_STATE = {
       role: '스와이프 처리 테스트',
     },
     {
+      path: 'backend/tests/test_swipe_action_card.py',
+      role: '',
+    },
+    {
       path: 'backend/tests/test_swipe_goal.py',
       role: '스와이프 목표 달성 테스트',
+    },
+    {
+      path: 'backend/tests/test_taste_calibration.py',
+      role: '',
     },
     {
       path: 'backend/tests/test_topic02.py',
@@ -1510,6 +1614,14 @@ window.PROJECT_STATE = {
       role: '좋아요 건물 API 클라이언트',
     },
     {
+      path: 'frontend/src/api/meta.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/api/notifications.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/api/profiles.js',
       role: '사무소·유저 프로필 API 클라이언트',
     },
@@ -1542,8 +1654,20 @@ window.PROJECT_STATE = {
       role: '외관설정 스타일(CSS Module)',
     },
     {
+      path: 'frontend/src/components/Avatar.jsx',
+      role: '',
+    },
+    {
       path: 'frontend/src/components/Button.module.css',
       role: '버튼 스타일(CSS Module)',
+    },
+    {
+      path: 'frontend/src/components/CalibrationChat.module.css',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/CardSkeleton.jsx',
+      role: '',
     },
     {
       path: 'frontend/src/components/DebugOverlay.jsx',
@@ -1614,6 +1738,10 @@ window.PROJECT_STATE = {
       role: '하단 탭바 내비게이션',
     },
     {
+      path: 'frontend/src/components/ThemePreviewCard.jsx',
+      role: '',
+    },
+    {
       path: 'frontend/src/components/Toggle.jsx',
       role: '스위치 토글 컴포넌트',
     },
@@ -1628,6 +1756,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/components/VerifyGateModal.jsx',
       role: '보드 한도 인증 게이트 모달',
+    },
+    {
+      path: 'frontend/src/components/cardLanguage.js',
+      role: '',
     },
     {
       path: 'frontend/src/components/icons.jsx',
@@ -1678,6 +1810,10 @@ window.PROJECT_STATE = {
       role: 'swipe 제스처 설정 상수',
     },
     {
+      path: 'frontend/src/constants/roles.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/context/LanguageContext.jsx',
       role: '언어 선택 제공자',
     },
@@ -1698,6 +1834,10 @@ window.PROJECT_STATE = {
       role: '보드 상세 로딩 훅',
     },
     {
+      path: 'frontend/src/hooks/useGoogleEmailVerify.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/hooks/useImageTelemetry.js',
       role: '이미지 로드 텔레메트리 훅',
     },
@@ -1716,6 +1856,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/hooks/useTheme.js',
       role: '테마 context 소비 훅',
+    },
+    {
+      path: 'frontend/src/hooks/useUnreadNotifications.js',
+      role: '',
     },
     {
       path: 'frontend/src/i18n/index.js',
@@ -1870,6 +2014,14 @@ window.PROJECT_STATE = {
       role: '프로필 편집 페이지 (이름·직업·소개)',
     },
     {
+      path: 'frontend/src/pages/settings/NotificationInboxScreen.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/settings/NotificationInboxScreen.module.css',
+      role: '',
+    },
+    {
       path: 'frontend/src/pages/settings/NotificationsScreen.jsx',
       role: '알림 설정 페이지 (푸시·이메일)',
     },
@@ -1930,6 +2082,10 @@ window.PROJECT_STATE = {
       role: '프로젝트 백엔드 ID 해석 유틸',
     },
     {
+      path: 'frontend/src/utils/timeAgo.js',
+      role: '',
+    },
+    {
       path: 'frontend/vercel.json',
       role: 'Vercel 배포 설정',
     },
@@ -1952,6 +2108,14 @@ window.PROJECT_STATE = {
     {
       path: 'project/mermaid.min.js',
       role: 'Mermaid 다이어그램 번들',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
     },
     {
       path: 'project/state.js',

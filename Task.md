@@ -57,7 +57,7 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(none — LOGIN-ONBOARD-1 + DISCOVERY-SKELETON shipped 2026-06-27, awaiting next slice.)_
+_(none — SETTINGS-POLISH-1 + LOGIN-CARD-REDESIGN + NOTIF-INAPP-1 shipped 2026-07-06, awaiting next slice.)_
 
 ---
 
@@ -163,6 +163,12 @@ Diagnostic plan:
 _(Deferred 2026-06-04 batch scope → 계측 먼저. Variance CONFIRMED(per-worker in-process embedding 캐시 cold-miss 50-200ms + KMeans 재계산)나 ~tens-daily-users 규모서 cold-miss는 주로 배포직후 일시적; Redis-migration은 조회마다 RTT 추가 + premature 가능. prod hit-rate/지배 원인 계측 후 결정.)_
 
 ### MEDIUM
+#### NOTIF-CHANNELS-1 — 이메일·푸시 알림 채널 발송
+NOTIF-INAPP-1(0bac717)은 앱 내 채널만. 이메일(SMTP — Resend/Gmail 등) + 웹푸시(FCM)는 새 외부 의존성 → Product Constitution 상 사용자 승인 필요. prefs JSON은 push/email 키 이미 보존·검증됨(validator {push,email,in_app}) — 발송 파이프라인만 추가하면 됨. 보안 카테고리 이메일이 최우선 후보.
+
+#### BACK-IDS-1 — user_id 정수 PK 노출 비열거화
+`UserMiniSerializer.user_id`(source=user.id, serializers.py:70-74)가 순차 정수 Django PK 노출 — Project serializer·reactors 목록·notifications actor 전반 동일(시스템적, NOTIF-INAPP-1 net-new 0). 고치려면 handle/UUID로 전면 일괄 교체(부분 교체는 불일치만 초래). Opus verify low, 2026-07-06.
+
 #### FRONT-IMAGE-RESIZE-3 — 이미지 LQIP + 풀해상도 passthrough (PR3)
 PR2(#242)가 srcset/decode/classifier 출하 → 남은 Tier A polish. 전부 프론트.
 - **A7 LQIP**: 카드당 ~20px 블러 썸네일(`buildLqipUrl=rightSizeImageUrl(url,20)`, 양 CDN) + CSS `filter:blur`, skeleton-shimmer 위 레이어. ⚠️ object-fit:contain letterbox라 `scale(1.1)` edge-bleed 핵 금지(letterbox 노출). PR2서 의도적 분리(유일 render-lifecycle 침습, polish지 core 아님). 완전 스펙은 PR2 Plan-agent 설계에 turnkey.
@@ -259,6 +265,36 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### NOTIF-INAPP-1 — 앱 내 알림 v1 (❤️ 받음 + 보안 이벤트) — RESOLVED 2026-07-06 (`0bac717`-pre-squash)
+앱 내 알림 v1 — 신규 `apps/notifications` (인박스+종+발생훅), 설정 알림 화면 실동작 전환 (설정 페이지 개선 2/2).
+- [x] 신규 앱 `apps/notifications`: `Notification`(recipient/actor/type[reaction·password_changed·new_login]/category[social·security]/payload/read_at, 인덱스 2종) + `KnownDevice`(user+ua_hash unique) — additive migration 0001 (accounts.0011 의존).
+- [x] 발생 훅: ❤️ Reaction 생성 시 프로젝트 소유자 알림(본인 스킵 · `social.in_app` opt-out 기본 ON · 미읽음 dedupe) — social react view; 비번 변경 + 새 기기 로그인(ua_hash 신규 & 기존 기기 ≥1, 최초 기기 무음) — auth views. 훅 실패해도 호스트 요청 안 깨짐(wrap+log).
+- [x] API: `GET /api/v1/notifications/`(self-only, 20/50 cap 페이지네이션) · `unread-count/` · `POST mark-read/`(ids≤500|all, 멱등). prefs validator `in_app` 채널 키 허용.
+- [x] 프론트: `/notifications` 인박스(문장 ko/en, time-ago, 진입 시 전체 읽음, 더 보기, empty state) + 프로필 헤더 종 아이콘/9+ 뱃지(mount+visibilitychange만, 폴링 없음, `useUnreadNotifications` 훅) + 설정 알림 화면 카테고리별 `in_app` 단일 토글(보안 LOCKED, merge-PATCH push/email 키 보존) + Avatar/timeAgo 유틸 신규.
+- [x] 게이트: code-review PASS · security PASS · Opus verify PASS (cyclesUsed 1 — 인박스/설정 `[t]` useEffect 의존성 무한 refetch 결함 수정). low 1건 shipped: `UserMiniSerializer.user_id` 정수 PK 노출 — 기존 시스템 전반(Project/reactors)과 동일, net-new 0 (전면 교체는 별도 과제).
+- [x] app-test skip(4-gate 정책) · drift clean. ⚠️ migration 0001 로컬/프로드 미적용 — `make migrate-local`(로컬), 배포 시 `make migrate-prod` CODE-FIRST (additive라 안전).
+- Deferred: 이메일/푸시 채널 발송(SMTP/FCM 외부 의존성 — 사용자 승인 필요), user_id 정수 PK 전면 비열거화.
+
+### LOGIN-CARD-REDESIGN — 로그인/가입 명함 UI 재설계 (명함 언어 + CardSkeleton) — RESOLVED 2026-07-06 (`e9b3638`-pre-squash)
+- 로그인/가입 5단계 카드를 테마 적응형 명함 언어로 재설계 (신규 `cardLanguage.js` 공유 모듈: paper face + ink 타이포 + mono 라벨 + ink 버튼 + paper-flat 인풋; 기존 토큰만, BusinessCard.jsx 불변).
+- 텍스트 다이어트: 페이지 헤더 + 카드 아래 캡션 삭제, 타자기 프롬프트가 유일 안내(제목 중복 제거), 규칙은 placeholder/검증 에러로 이동.
+- 동의 단계 = 입력값으로 채워진 명함 미리보기 (모노그램 스탬프 + fine-print 동의 한 줄 + 우스와이프 = 발급); register payload 불변.
+- Discovery + SwipePage 공용 LoadingCard → 신규 `CardSkeleton` (마스코트/shimmer 제거, lp-skel pulse — DESIGN.md §8.8 준수 전환). 카드 크기/제스처/사진 SwipeCard 불변 (온보딩→Discovery 연속성).
+- DESIGN.md 의도적 이탈 (로그인 flow 한정, PR 설명 명기): §8.1 CTA = ink 버튼(accent gradient 대신), §8.5 인풋 = paper-flat(glass 대신).
+- 부수: git-guard hook `python3`→`python` (`47f87d6`, Windows Store 스텁 이슈). locales.js/Task.md hunk는 동시 세션 PR1 `4180535`에 선탑승. 브랜치는 `feature/claude-settings-polish` 위 스택 — PR1 머지 후 retarget 필요 (parent merge 전 child retarget, `--delete-branch` 주의).
+- Plan: `.claude/plans/validated-honking-owl.md`. Workflow: review PASS + security PASS, cyclesUsed 0. app-test 스킵 (pure-UI + 4게이트 PASS 정책); 사용자 육안 확인 :5174 권장.
+
+### SETTINGS-POLISH-1 — 설정 페이지 개선 1/2 (직업 dropdown 통합 + Bio auto-grow + 폰트 칩 + 테마 preview) — RESOLVED 2026-07-06 (`4180535`-pre-squash)
+직업(Role) enum 단일화 + Bio auto-grow + 폰트 2-칩 + 테마 라이브 preview — 설정/프로필 편집 4개 개선 1커밋.
+- [x] Role 단일 소스: `UserProfile.ONBOARDING_ROLE_CHOICES` + 신규 `ONBOARDING_ROLE_LABELS_KO` → 신규 `GET /api/v1/meta/roles/` (AllowAny, {value,label_en,label_ko}×5); choices 항목 추가만으로 회원가입+프로필편집 동시 전파.
+- [x] 프로필 편집 직업 = dropdown(`onboarding_role` 바인딩, getRoles() + 번들 fallback constants/roles.js). SAVE RULE: 선택 시 `{onboarding_role, role:''}`(legacy 자유텍스트 정리), 미선택 시 두 키 생략(legacy 보존 — clobber 방지). legacy hint 표시.
+- [x] 공개 `UserProfileSerializer`에 `onboarding_role` 노출; ProfileHero 표시규칙 legacy text > enum label('other' 억제) > 없음.
+- [x] 회원가입 5종 노출(구 3종 불일치 해소) — objective i18n designer/enthusiast 키 추가(develop LoginPage용; 신 LoginPage는 동시 세션 LOGIN-CARD-REDESIGN PR).
+- [x] Bio textarea auto-grow 90→240px(JS cap, 초과 시 내부 스크롤), 수동 resize 제거, 500자 카운터 유지.
+- [x] 폰트 = 2-칩(IBM Plex Sans KR / Noto Serif KR, 각자 폰트로 렌더) — 언어 스위처 패턴.
+- [x] 테마 preview 미니목업(`ThemePreviewCard`, scoped `data-theme` wrapper, 전 색상 var(--...) 토큰) + tokens.css `:root,[data-theme="github-light"]` 셀렉터 수정(다크 활성 중에도 라이트 preview 정상).
+- [x] 게이트: code-review PASS · security PASS · Opus verify PASS (cyclesUsed 0); low 1건 shipped(구 objective 키 dead — LOGIN-CARD-REDESIGN 랜딩 후 정리). app-test skip(4-gate 정책, swipe 경로 아님) · drift clean.
+
 ### PROFILE-QR-1 — 프로필 공유 진짜 QR (FakeQr 스텁 교체) — RESOLVED 2026-07-01 (`e872bf7`-pre-squash)
 프로필 공유 모달 QR이 가짜(FakeQr.jsx, 스캔불가 SVG 격자)였음 → 실제 스캔되는 QR로 교체.
 - [x] `qrcode.react@4.2.0` 추가 + 신규 `ProfileQr.jsx`(QRCodeSVG, `{window.location.origin}/user/{user_id}` 인코딩, level M, marginSize=2 quiet-zone, dark-on-white 테마독립, `role=img`, userId 없으면 skip).

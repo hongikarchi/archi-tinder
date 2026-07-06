@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
-import { IconBack, IconShare, IconSettings } from '../../components/icons'
+import { IconBack, IconShare, IconSettings, IconBell } from '../../components/icons'
+import { useUnreadNotifications } from '../../hooks/useUnreadNotifications.js'
 
 export default function ProfileHeader({
   isMe,
@@ -8,6 +9,11 @@ export default function ProfileHeader({
   onShare,
 }) {
   const navigate = useNavigate()
+  // Own-profile only — bell + unread badge (NOTIF-INAPP-1). Count fetch is
+  // mount + visibilitychange only (no polling) per the hook's own contract.
+  // enabled=isMe so viewing someone else's profile never fires the request.
+  const { count: unreadCount } = useUnreadNotifications(isMe)
+  const badgeLabel = unreadCount > 9 ? '9+' : String(unreadCount)
 
   return (
     /* Sticky Header — isMe: title+handle left, controls right | others: back left, title center, controls right */
@@ -70,6 +76,49 @@ export default function ProfileHeader({
       {/* Right-side controls */}
       {isMe ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {/* Notifications bell + unread badge (NOTIF-INAPP-1) */}
+          <button
+            onClick={() => navigate('/notifications')}
+            aria-label="알림"
+            title="알림"
+            style={{
+              position: 'relative',
+              width: 44, height: 44, minWidth: 44,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'transparent', border: 'none',
+              color: 'var(--color-text-dim)', cursor: 'pointer',
+              borderRadius: 12,
+              transition: 'color 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--color-text)' }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--color-text-dim)' }}
+          >
+            <IconBell width={18} height={18} />
+            {unreadCount > 0 && (
+              <span
+                aria-hidden="true"
+                style={{
+                  position: 'absolute',
+                  top: 4,
+                  right: 4,
+                  minWidth: 16,
+                  height: 16,
+                  padding: '0 4px',
+                  borderRadius: 999,
+                  background: 'var(--accent-1)',
+                  color: '#fff',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  lineHeight: '16px',
+                  textAlign: 'center',
+                  boxSizing: 'border-box',
+                }}
+              >
+                {badgeLabel}
+              </span>
+            )}
+          </button>
+
           {/* Share */}
           <button
             onClick={onShare}

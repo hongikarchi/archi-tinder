@@ -1,7 +1,10 @@
 /**
  * EditCardForm.jsx
  * Profile-edit form.
- * Edits our writable fields: display_name, role, affiliation, bio, external_links.
+ * Edits our writable fields: display_name, onboarding_role (dropdown, replaces
+ * the old free-text role input — SETTINGS-POLISH-1 §A), affiliation, bio,
+ * external_links. Legacy free-text `role` is preserved (not editable here) —
+ * see the commit() SAVE RULE below for the exact clear/preserve semantics.
  *
  * external_links shape (from backend model + serializer):
  *   dict { instagram?: string, email?: string, website?: string }
@@ -9,12 +12,21 @@
  * and reduce to { instagram, email, website } on output.
  *
  * Props:
- *   user     — UserProfile object (display_name, role, affiliation, bio, external_links)
- *   onChange — called with { display_name, role, affiliation, bio, external_links } on every change
+ *   user     — UserProfile object (display_name, role, onboarding_role, affiliation, bio, external_links)
+ *   onChange — called with { display_name, [onboarding_role, role], affiliation, bio, external_links } on
+ *              every change. onboarding_role/role are only present together (a
+ *              selection clears legacy role) — see commit() for details.
  */
 
-import { useState } from 'react'
+import { useState, useRef, useEffect, useLayoutEffect } from 'react'
+import { getRoles } from '../../api/meta.js'
+import { useLanguage } from '../../hooks/useLanguage.js'
+import { useTranslation } from '../../i18n/index.js'
 import styles from './EditCardForm.module.css'
+
+// Bio textarea auto-grow cap (SETTINGS-POLISH-1 §B). Floor (90px) comes from
+// the .textarea min-height in EditCardForm.module.css.
+const BIO_MAX_HEIGHT = 240
 
 // Supported link keys — must match backend external_links dict keys.
 // website is stored but not yet rendered in ProfileHero (noted in PR description).
@@ -62,20 +74,40 @@ const sectionLabelStyle = {
 }
 
 export default function EditCardForm({ user, onChange }) {
+  const { language } = useLanguage()
+  const { t } = useTranslation()
+
   const [draft, setDraft] = useState(() => ({
     display_name: user?.display_name || '',
+    // Legacy free-text role — kept in state for the hint + preservation rule
+    // (SETTINGS-POLISH-1 §A.4). Never rendered as an editable input anymore.
     role: user?.role || '',
+    onboarding_role: user?.onboarding_role || '',
     affiliation: user?.affiliation || '',
     bio: user?.bio || '',
     linkRows: dictToRows(user?.external_links || {}),
   }))
   const [seq, setSeq] = useState(draft.linkRows.length)
+  const [roleOptions, setRoleOptions] = useState([])
+
+  // Fetch the role list once (memoized at module scope in api/meta.js).
+  useEffect(() => {
+    let cancelled = false
+    getRoles().then(list => { if (!cancelled) setRoleOptions(list) })
+    return () => { cancelled = true }
+  }, [])
 
   function commit(next) {
     setDraft(next)
+    // SAVE RULE (SETTINGS-POLISH-1 §A.4): a chosen onboarding_role clears the
+    // legacy free-text role (data migration on save). An empty selection
+    // omits BOTH fields entirely so the legacy text is preserved untouched.
+    const rolePatch = next.onboarding_role
+      ? { onboarding_role: next.onboarding_role, role: '' }
+      : {}
     onChange?.({
       display_name: next.display_name,
-      role: next.role,
+      ...rolePatch,
       affiliation: next.affiliation,
       bio: next.bio,
       external_links: rowsToDict(next.linkRows),
@@ -103,6 +135,20 @@ export default function EditCardForm({ user, onChange }) {
   // Keys already added (prevents duplicates)
   const addedKeys = new Set(draft.linkRows.map(r => r.key))
 
+  // Bio auto-grow (SETTINGS-POLISH-1 §B) — resize to content on every value
+  // change, including the pre-filled value on mount.
+  const bioRef = useRef(null)
+  useLayoutEffect(() => {
+    const el = bioRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    const next = Math.min(el.scrollHeight, BIO_MAX_HEIGHT)
+    el.style.height = `${next}px`
+    el.style.overflowY = el.scrollHeight > BIO_MAX_HEIGHT ? 'auto' : 'hidden'
+  }, [draft.bio])
+
+  const showLegacyRoleHint = !draft.onboarding_role && draft.role
+
   return (
     <div style={{ display: 'grid', gap: 16 }}>
 
@@ -123,18 +169,27 @@ export default function EditCardForm({ user, onChange }) {
         </div>
       </div>
 
-      {/* Role */}
+      {/* Role — dropdown bound to onboarding_role (SETTINGS-POLISH-1 §A.4) */}
       <div>
-        <label htmlFor="edit-role" style={labelStyle}>직업 (Role)</label>
-        <input
+        <label htmlFor="edit-role" style={labelStyle}>{t('profileEdit.role.label')}</label>
+        <select
           id="edit-role"
-          type="text"
-          value={draft.role}
-          onChange={setText('role')}
-          maxLength={50}
-          placeholder="Architecture Student"
-          className={styles.field}
-        />
+          value={draft.onboarding_role}
+          onChange={(e) => commit({ ...draft, onboarding_role: e.target.value })}
+          className={styles.select}
+        >
+          <option value="">{t('profileEdit.role.blankOption')}</option>
+          {roleOptions.map(opt => (
+            <option key={opt.value} value={opt.value}>
+              {language === 'ko' ? (opt.label_ko || opt.label_en) : (opt.label_en || opt.label_ko)}
+            </option>
+          ))}
+        </select>
+        {showLegacyRoleHint && (
+          <div style={{ fontSize: 11, color: 'var(--color-text-dim)', marginTop: 4 }}>
+            {t('profileEdit.role.legacyHint', { role: draft.role })}
+          </div>
+        )}
       </div>
 
       {/* Affiliation */}
@@ -151,11 +206,12 @@ export default function EditCardForm({ user, onChange }) {
         />
       </div>
 
-      {/* Bio */}
+      {/* Bio — auto-grows to content, 90px→240px cap (SETTINGS-POLISH-1 §B) */}
       <div>
         <label htmlFor="edit-bio" style={labelStyle}>Bio</label>
         <textarea
           id="edit-bio"
+          ref={bioRef}
           value={draft.bio}
           onChange={setText('bio')}
           maxLength={500}

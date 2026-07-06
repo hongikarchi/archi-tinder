@@ -104,7 +104,7 @@ pins Sonnet on workers and Opus on the verify pass.
 | **code-review** | Static review — API contracts, logic bugs, error handling, integration | sonnet | read-only |
 | **security-manager** | Security scan — SQL injection, auth bypass, XSS, secret/token leakage | sonnet | read-only |
 | **app-test** | Pre-push gate — live browser user-journey + HEAD/origin drift; FULL / FEATURE-SCOPED | sonnet | read-only |
-| **git-publisher** | Edge-case escalation: Mode 3 deploy, external PR triage, complex rebase | sonnet | `git push`, `gh pr *` |
+| **git-publisher** | Edge-case escalation: Mode 3 deploy (incl. post-deploy `make migrate-prod` reminder when the range has migrations — agent never runs prod DDL itself), external PR triage, complex rebase | sonnet | `git push`, `gh pr *` |
 
 These six are the workflow's `agentType` building blocks AND directly dispatchable by the
 session (app-test, git-publisher). Frontmatter `model: sonnet` governs direct `Agent`-tool

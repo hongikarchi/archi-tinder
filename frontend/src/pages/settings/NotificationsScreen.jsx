@@ -2,8 +2,9 @@
  * NotificationsScreen — /settings/notifications
  *
  * Loads notification prefs from GET /auth/me/ (notifications JSONField, self-only).
- * On toggle: PATCH /api/v1/users/me/ with merged dict.
- * PATCH response does NOT echo notifications → local state is authoritative after save.
+ * On toggle: PATCH /api/v1/users/me/ with merged dict — one `in_app` toggle per
+ * category (NOTIF-INAPP-1). Absent `in_app` defaults to ON. push/email keys
+ * (if already stored from a legacy save) are preserved verbatim via merge-PATCH.
  *
  * Toggle `locked` is used for the 'security' category (always on, cannot change).
  */
@@ -12,47 +13,27 @@ import { useNavigate } from 'react-router-dom'
 import { getMe, updateMyProfile } from '../../api/client.js'
 import Toggle from '../../components/Toggle.jsx'
 import { IconBack } from '../../components/icons.jsx'
+import { useTranslation } from '../../i18n/index.js'
 import styles from './NotificationsScreen.module.css'
 
-const CATEGORIES = [
-  {
-    key: 'social',
-    label: '소셜 활동',
-    hint: '팔로우 · 좋아요 · 댓글 · 멘션',
-  },
-  {
-    key: 'content',
-    label: '내 보드 · 프로젝트',
-    hint: '저장 · 공유 · 추천 노출',
-  },
-  {
-    key: 'security',
-    label: '계정 보안',
-    hint: '새 기기 로그인 · 비밀번호 변경',
-    locked: true,
-  },
-  {
-    key: 'recommend',
-    label: '추천 · 트렌드',
-    hint: '개인화 추천 · 주간 다이제스트',
-  },
-  {
-    key: 'marketing',
-    label: '마케팅 · 이벤트',
-    hint: '프로모션 안내',
-  },
-]
-
-const DEFAULT_CHANNEL = { push: false, email: false }
+const CATEGORY_KEYS = ['social', 'content', 'security', 'recommend', 'marketing']
 
 export default function NotificationsScreen() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [prefs, setPrefs] = useState(null)   // null = not loaded yet
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState(null)
-  // Per-channel save status for subtle feedback (key = 'catKey.push' | 'catKey.email')
+  // Per-category save status for subtle feedback (key = catKey)
   const [pendingSave, setPendingSave] = useState(new Set())
   const [saveError, setSaveError] = useState(null)
+
+  const categories = CATEGORY_KEYS.map(key => ({
+    key,
+    label: t(`notifications.settings.categories.${key}.label`),
+    hint: t(`notifications.settings.categories.${key}.hint`),
+    locked: key === 'security',
+  }))
 
   useEffect(() => {
     let cancelled = false
@@ -65,23 +46,32 @@ export default function NotificationsScreen() {
       })
       .catch(err => {
         if (cancelled) return
-        setFetchError(err.message || '알림 설정을 불러올 수 없습니다.')
+        setFetchError(err.message || t('notifications.settings.fetchError'))
       })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
+    // Mount-only fetch. `t` is intentionally excluded: useTranslation()
+    // returns a brand-new `t` function reference on every render (it is a
+    // plain inner function, not memoized), so including it would re-run
+    // this effect on every render and fire an unbounded stream of
+    // GET /auth/me/ requests (one per render triggered by the previous
+    // fetch's setState). `t` is only used inside the catch handler for a
+    // fallback error string.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  async function handleToggle(catKey, channel, next) {
-    const saveKey = `${catKey}.${channel}`
-    if (pendingSave.has(saveKey)) return
+  async function handleToggle(catKey, next) {
+    if (pendingSave.has(catKey)) return
 
-    // Optimistic local update
+    // Optimistic local update — preserve any existing push/email keys via
+    // merge-PATCH (spec: {[cat]: {...existing, in_app: bool}}).
+    const existing = prefs?.[catKey] || {}
     const nextPrefs = {
       ...prefs,
-      [catKey]: { ...(prefs?.[catKey] || DEFAULT_CHANNEL), [channel]: next },
+      [catKey]: { ...existing, in_app: next },
     }
     setPrefs(nextPrefs)
-    setPendingSave(prev => { const s = new Set(prev); s.add(saveKey); return s })
+    setPendingSave(prev => { const s = new Set(prev); s.add(catKey); return s })
     setSaveError(null)
 
     try {
@@ -90,12 +80,12 @@ export default function NotificationsScreen() {
       // Revert on failure
       const reverted = {
         ...nextPrefs,
-        [catKey]: { ...(nextPrefs[catKey] || DEFAULT_CHANNEL), [channel]: !next },
+        [catKey]: { ...existing, in_app: !next },
       }
       setPrefs(reverted)
-      setSaveError(err.message || '저장에 실패했습니다. 다시 시도해주세요.')
+      setSaveError(err.message || t('notifications.settings.saveError'))
     } finally {
-      setPendingSave(prev => { const s = new Set(prev); s.delete(saveKey); return s })
+      setPendingSave(prev => { const s = new Set(prev); s.delete(catKey); return s })
     }
   }
 
@@ -111,13 +101,13 @@ export default function NotificationsScreen() {
         >
           <IconBack width={20} height={20} />
         </button>
-        <h2 className={styles.headerTitle}>알림</h2>
+        <h2 className={styles.headerTitle}>{t('notifications.title')}</h2>
         <div style={{ width: 44 }} />
       </div>
 
       <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px' }}>
 
-        {/* Honest hint: delivery not yet implemented */}
+        {/* Honest hint: email/push delivery not yet implemented */}
         <div style={{
           padding: '10px 14px',
           marginBottom: 20,
@@ -128,7 +118,7 @@ export default function NotificationsScreen() {
           color: 'var(--color-text-muted)',
           lineHeight: 1.6,
         }}>
-          설정은 저장됩니다 · 알림 발송은 준비 중입니다
+          {t('notifications.settings.disclaimer')}
         </div>
 
         {saveError && (
@@ -148,7 +138,7 @@ export default function NotificationsScreen() {
 
         {loading && (
           <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--color-text-dim)', fontSize: 14 }}>
-            불러오는 중...
+            {t('notifications.settings.loading')}
           </div>
         )}
 
@@ -158,10 +148,10 @@ export default function NotificationsScreen() {
           </div>
         )}
 
-        {!loading && !fetchError && prefs !== null && CATEGORIES.map(cat => {
-          const catPrefs = prefs[cat.key] || DEFAULT_CHANNEL
-          const pushKey = `${cat.key}.push`
-          const emailKey = `${cat.key}.email`
+        {!loading && !fetchError && prefs !== null && categories.map(cat => {
+          // ABSENT in_app defaults to true (ON) per spec.
+          const catPrefs = prefs[cat.key] || {}
+          const inAppOn = cat.locked ? true : (catPrefs.in_app !== false)
 
           return (
             <div key={cat.key} className={styles.categoryBlock}>
@@ -186,39 +176,26 @@ export default function NotificationsScreen() {
                 {cat.hint}
               </p>
 
-              {/* Push toggle row */}
+              {/* In-app toggle row */}
               <div style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 padding: '6px 0',
               }}>
-                <span style={{ fontSize: 13, color: 'var(--color-text-2)' }}>푸시</span>
+                <span style={{ fontSize: 13, color: 'var(--color-text-2)' }}>
+                  {t('notifications.settings.inAppToggle')}
+                </span>
                 <Toggle
-                  checked={cat.locked ? true : !!catPrefs.push}
-                  onChange={(next) => handleToggle(cat.key, 'push', next)}
+                  checked={inAppOn}
+                  onChange={(next) => handleToggle(cat.key, next)}
                   locked={cat.locked}
-                  disabled={pendingSave.has(pushKey)}
-                  aria-label={`${cat.label} 푸시 알림`}
-                />
-              </div>
-
-              {/* Email toggle row */}
-              <div style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '6px 0',
-              }}>
-                <span style={{ fontSize: 13, color: 'var(--color-text-2)' }}>이메일</span>
-                <Toggle
-                  checked={cat.locked ? true : !!catPrefs.email}
-                  onChange={(next) => handleToggle(cat.key, 'email', next)}
-                  locked={cat.locked}
-                  disabled={pendingSave.has(emailKey)}
-                  aria-label={`${cat.label} 이메일 알림`}
+                  disabled={pendingSave.has(cat.key)}
+                  aria-label={`${cat.label} ${t('notifications.settings.inAppToggle')}`}
                 />
               </div>
 
               {cat.locked && (
                 <p style={{ marginTop: 10, fontSize: 11, color: 'var(--color-text-dim)', lineHeight: 1.5 }}>
-                  보안 알림은 계정 보호를 위해 항상 켜집니다.
+                  {t('notifications.settings.categories.security.lockedHint')}
                 </p>
               )}
             </div>
