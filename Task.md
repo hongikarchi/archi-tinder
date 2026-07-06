@@ -57,7 +57,14 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(none — LOGIN-REWORK-1 shipped 2026-07-06, awaiting next slice.)_
+### OVERNIGHT-PERF-1 — 야간 자율 4-PR 묶음 (핫패스·카드비주얼·집계·ops문서)
+
+Plan: `.claude/plans/settings-encapsulated-sedgewick.md` (approved 2026-07-07, PR-open까지 승인 / merge 아침 리뷰).
+Slices: **PR-A** back-hotpath-1 (보드명 async UPDATE + 태그조회 캐시 대체) → **PR-B** front-card-visual-1
+(LQIP blur-up + 비율적응형 cover, 도면 contain·흰배경, 크롭손실 ≤25%만 cover) → **PR-C** analytics-1
+(`session_metrics_report` command — bookmark provenance top-10율·image_load p50/p95·수렴분포; session_end
+미발행 주의) → **PR-D** ops-docs-1 (인덱스 핸드오프 문서 + buildings pooler 문서/로컬 측정).
+검증: 4-gate + PR-A만 app-test FEATURE-SCOPED 25분 데드라인 (hang → TaskStop 후 진행).
 
 ---
 
