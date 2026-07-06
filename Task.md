@@ -57,7 +57,7 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(none — SETTINGS-POLISH-1 + LOGIN-CARD-REDESIGN + NOTIF-INAPP-1 shipped 2026-07-06, awaiting next slice.)_
+_(none — LOGIN-REWORK-1 shipped 2026-07-06, awaiting next slice.)_
 
 ---
 
@@ -163,6 +163,9 @@ Diagnostic plan:
 _(Deferred 2026-06-04 batch scope → 계측 먼저. Variance CONFIRMED(per-worker in-process embedding 캐시 cold-miss 50-200ms + KMeans 재계산)나 ~tens-daily-users 규모서 cold-miss는 주로 배포직후 일시적; Redis-migration은 조회마다 RTT 추가 + premature 가능. prod hit-rate/지배 원인 계측 후 결정.)_
 
 ### MEDIUM
+#### FRONT-UX-7 — 로그인 뒤로가기 시 입력 draft 소실
+LOGIN-REWORK-1(`a390f9f`) pre-existing 잔존. CredentialsStep이 localId/localPassword를 컴포넌트 로컬 useState로 들고, 앞 카드가 `step`으로 key돼 profile→back→credentials 시 remount → 입력 draft 초기화. 부모 id/password는 마지막 confirmed 값 유지하나 local state를 props로 seed 안 함 → 입력창 빈 채로 보임. deck 리워크가 뒤로가기를 쉽게 만들어 노출 빈도↑. 수정: 마운트 시 부모 props로 local state seed, 또는 id/password를 부모로 완전 lift해 controlled 전환. Non-blocking UX papercut.
+
 #### NOTIF-CHANNELS-1 — 이메일·푸시 알림 채널 발송
 NOTIF-INAPP-1(0bac717)은 앱 내 채널만. 이메일(SMTP — Resend/Gmail 등) + 웹푸시(FCM)는 새 외부 의존성 → Product Constitution 상 사용자 승인 필요. prefs JSON은 push/email 키 이미 보존·검증됨(validator {push,email,in_app}) — 발송 파이프라인만 추가하면 됨. 보안 카테고리 이메일이 최우선 후보.
 
@@ -265,6 +268,18 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### LOGIN-REWORK-1 — 로그인 페이지 컨셉 재작업 — RESOLVED 2026-07-06 (`a390f9f`-pre-squash)
+로그인 페이지 전면 재작업 — 스와이프-취향발견 컨셉 + 명함 UI에 충실, 사용자 포커싱. Frontend-only, 백엔드 무변경. Plan: `.claude/plans/login-page-concept-rework.md`.
+- [x] (6) 실제 카드 덱: 다음 카드를 앞 카드 뒤에 프리렌더 (새로 렌더가 아니라 '뒤에서 대기하던 카드가 올라옴' 느낌) + step-history 스택 뒤로가기(pop). 기존 장식용 faux-depth 카드 대체.
+- [x] (2) IntroOverlay 모달 제거 → 첫 choice 카드에 통합, 카드 자체가 스와이프 튜토리얼(타이핑 질문 + 좌우 제스처 힌트).
+- [x] (3) ARCHIBE 워드마크 로고급 확대(24px/700/0.14em) via 로그인 전용 `loginWordmarkStyle` — 공유 `wordmarkStyle`은 원복해 CardSkeleton(Discovery/Swipe 로딩 스켈레톤) 무영향. 질문/라벨/finePrint 텍스트 MONO→기본 폰트(IBM Plex Sans KR) 전환 (DESIGN.md §2.5a single-font). MONO는 @id·JOINED 명함 메타 액센트로만 잔존.
+- [x] (1) ID 중복확인: 수동 `중복확인` 버튼 제거 → 타이핑 시 ~450ms 디바운스 자동 확인, 인라인 checking/available/taken 상태. 한글 IME compositionstart/end 가드(조합 중 API 미발사, 조합 끝나면 재확인) + stale in-flight 응답 무시. NFC 정규화 유지.
+- [x] (4) 타이핑 애니메이션 복원 (모달 제거로 다시 보임, step 전환 시 재실행).
+- [x] (5) 노이즈 카피 제거 (ko+en 양쪽) — '명함에 새길 이름이에요' 등 행동 지시 없는 문구 정리.
+- 진단: 백엔드 check-handle + dev-login은 라이브 테스트로 정상 확인(200) — 이슈 1은 프론트 UX, 이슈 7은 최초 backend가 global python으로 떠 죽었던 오탐(venv `.venv/Scripts/python.exe`로 해결). Review PASS, security PASS.
+- Finding(medium/fixed): 공유 wordmarkStyle 스코프 누수 → `loginWordmarkStyle` 격리로 해결.
+- Deferred: CredentialsStep 뒤로가기 remount 시 입력 draft 소실(pre-existing, non-blocking) — 후속.
+
 ### NOTIF-INAPP-1 — 앱 내 알림 v1 (❤️ 받음 + 보안 이벤트) — RESOLVED 2026-07-06 (`0bac717`-pre-squash)
 앱 내 알림 v1 — 신규 `apps/notifications` (인박스+종+발생훅), 설정 알림 화면 실동작 전환 (설정 페이지 개선 2/2).
 - [x] 신규 앱 `apps/notifications`: `Notification`(recipient/actor/type[reaction·password_changed·new_login]/category[social·security]/payload/read_at, 인덱스 2종) + `KnownDevice`(user+ua_hash unique) — additive migration 0001 (accounts.0011 의존).

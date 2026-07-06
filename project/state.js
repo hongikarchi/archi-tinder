@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-07-06 18:04 KST',
-    head: 'de4b8c2',
-    branch: 'HEAD',
+    updatedAt: '2026-07-07 01:36 KST',
+    head: 'a48ec73',
+    branch: 'feature/claude-login-rework',
   },
   done: [
+    {
+      id: 'LOGIN-REWORK-1',
+      title: '로그인 페이지 컨셉 재작업',
+      completedAt: '2026-07-06',
+      note: '로그인 페이지 전면 재작업 — 스와이프-취향발견 컨셉 + 명함 UI에 충실, 사용자 포커싱. Frontend-only, 백엔드 무변경. Plan: `.claude/plans/login-page-concept-rework.md`.',
+    },
     {
       id: 'NOTIF-INAPP-1',
       title: '앱 내 알림 v1 (❤️ 받음 + 보안 이벤트)',
@@ -70,12 +76,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-06-27',
       note: 'Discovery 첫 로딩(GET /discovery/ 추천연산 대기) 동안 카드 자리에 귀여운 스켈레톤 표출.',
     },
-    {
-      id: 'FRONT-AUTH-2',
-      title: '로그인 스와이프 온보딩',
-      completedAt: '2026-06-27',
-      note: '1차 스와이프 온보딩(Codex, merged 2026-06-01). 흐름은 LOGIN-ONBOARD-1에서 통합·재설계됨.',
-    },
   ],
   now: [],
   next: {
@@ -104,6 +104,11 @@ window.PROJECT_STATE = {
       },
     ],
     medium: [
+      {
+        id: 'FRONT-UX-7',
+        title: '로그인 뒤로가기 시 입력 draft 소실',
+        note: 'LOGIN-REWORK-1(`a390f9f`) pre-existing 잔존. CredentialsStep이 localId/localPassword를 컴포넌트 로컬 useState로 들고, 앞 카드가 `step`으로 key돼 profile→back→credentials 시 remount → 입력 draft 초기화. 부모 id/password는 마지막 confirmed 값 유지하나 local state를 props로 seed 안 함 → 입력창 빈 채로 보임. deck 리워크가 뒤로가기를 쉽게 만…',
+      },
       {
         id: 'NOTIF-CHANNELS-1',
         title: '이메일·푸시 알림 채널 발송',
@@ -190,6 +195,20 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 263,
+      title: 'chore(INFRA-DEPLOY-1): make migrate-prod + deploy runbook + lockfile win32 sync',
+      mergedAt: '2026-07-06T11:00:24Z',
+      mergedAtKST: '2026-07-06 20:00 KST',
+      sha: 'bbd5031',
+    },
+    {
+      number: 262,
+      title: 'feat(notifications): in-app notification v1 — inbox + bell + emission',
+      mergedAt: '2026-07-06T09:10:48Z',
+      mergedAtKST: '2026-07-06 18:10 KST',
+      sha: 'a40edf9',
+    },
+    {
       number: 261,
       title: 'feat(login): business-card UI — paper/ink login flow + shared CardSkeleton',
       mergedAt: '2026-07-05T17:42:59Z',
@@ -230,20 +249,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-07-01T10:30:46Z',
       mergedAtKST: '2026-07-01 19:30 KST',
       sha: '64ff32a',
-    },
-    {
-      number: 254,
-      title: 'feat(TASTE-LLM): 캘리브레이션 미리보기-챗 재배치 + LLM 검색 랭킹/칩 + Taste UX + Discovery 보드 병합',
-      mergedAt: '2026-07-04T08:03:04Z',
-      mergedAtKST: '2026-07-04 17:03 KST',
-      sha: '81b927a',
-    },
-    {
-      number: 253,
-      title: 'docs(task): re-prioritize backlog (launch-imminent) + dashboard',
-      mergedAt: '2026-06-27T17:45:26Z',
-      mergedAtKST: '2026-06-28 02:45 KST',
-      sha: '3c59f9e',
     },
   ],
   agents: [
@@ -378,6 +383,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: '.claude/plans/login-page-concept-rework.md',
+      role: '',
+    },
+    {
       path: '.claude/plans/profile-harvest-redesign.wf.js',
       role: '프로필 하베스트 재설계 워크플로 스크립트 (#179)',
     },
@@ -504,14 +513,6 @@ window.PROJECT_STATE = {
     {
       path: 'README.md',
       role: '프로젝트 안내 문서',
-    },
-    {
-      path: 'Task.md',
-      role: '태스크 보드 문서',
-    },
-    {
-      path: 'Task.md',
-      role: '태스크 보드 문서',
     },
     {
       path: 'Task.md',
@@ -2108,14 +2109,6 @@ window.PROJECT_STATE = {
     {
       path: 'project/mermaid.min.js',
       role: 'Mermaid 다이어그램 번들',
-    },
-    {
-      path: 'project/state.js',
-      role: '대시보드 상태 데이터',
-    },
-    {
-      path: 'project/state.js',
-      role: '대시보드 상태 데이터',
     },
     {
       path: 'project/state.js',

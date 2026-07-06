@@ -108,14 +108,20 @@ body {
 
 /* ── Login page ───────────────────────────────────────────────────────────── */
 
-/* Card entrance — next card eases in (fade + lift) after a swipe or step change. */
+/* LOGIN-REWORK-1: real card deck — the front card's entrance transform
+   matches the pre-rendered back card's resting transform (see
+   `backCardWrapStyle` in LoginPage.jsx: translateY(10px) scale(0.96)) so
+   advancing reads as "the waiting card surfaces to the top", not a fresh
+   mount from nowhere. */
 @keyframes lpCardIn {
-  from { opacity: 0; transform: translateY(12px) scale(0.96); }
+  from { opacity: 0; transform: translateY(10px) scale(0.96); }
   to   { opacity: 1; transform: none; }
 }
 .lp-card-in { animation: lpCardIn var(--motion-normal) var(--motion-ease-out); }
 
-/* Intro popup — mini card demonstrates the left/right swipe gesture, looping. */
+/* Choice/consent gesture tutorial — mini card demonstrates the left/right
+   swipe gesture, looping (folded into ChoiceDeck's SwipeTutorial, no longer
+   a separate intro modal). */
 @keyframes lpSwipeDemo {
   0%, 8%    { transform: translateX(0) rotate(0deg); }
   24%       { transform: translateX(-48px) rotate(-13deg); }
@@ -125,8 +131,8 @@ body {
 }
 .lp-swipe-demo { animation: lpSwipeDemo 3.4s var(--motion-ease) infinite; }
 
-/* Intro arrows — dim by default, brighten to ink (--color-text) in sync with the
-   card swipe (lpSwipeDemo: left ≈24%, right ≈66%). */
+/* Tutorial arrows — dim by default, brighten to ink (--color-text) in sync with
+   the card swipe (lpSwipeDemo: left ≈24%, right ≈66%). */
 @keyframes lpArrowLeft {
   0%, 15%   { color: var(--color-text-dim); }
   22%, 26%  { color: var(--color-text); }
