@@ -10,6 +10,11 @@
  * Visual language: business-card ("paper card") — see components/cardLanguage.js.
  * Theme-adaptive (paper = --color-surface, ink = --color-text family), unlike
  * BusinessCard.jsx's intentionally hardcoded white-paper-always printed artifact.
+ *
+ * LOGIN-REWORK-1 (2026-07-07): real card deck (next card pre-rendered behind
+ * the front one) + step-history stack for back-nav; no more IntroOverlay
+ * modal — the first `choice` card teaches the swipe itself. See
+ * .claude/plans/login-page-concept-rework.md for the full diagnosis.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -34,7 +39,8 @@ import {
   MONO,
   INK,
   paperFaceStyle,
-  wordmarkStyle as cardWordmarkStyle,
+  loginWordmarkStyle as cardWordmarkStyle,
+  baseLabelStyle,
   monoLabelStyle,
   monoRowStyle,
   finePrintStyle,
@@ -55,8 +61,19 @@ const FLOW_STEPS = {
   consent:     'consent',
 }
 
-const INTRO_DISMISS_KEY = 'archithon_login_intro_dismissed'
-const INTRO_SHOW_ONCE   = false
+// LOGIN-REWORK-1: deterministic "what card is waiting behind" map for the
+// linear (non-branching) form steps. `choice` and `consent` branch by swipe
+// direction, so their back-card is resolved dynamically from drag intent
+// (see ChoiceDeck / ConsentDeck `intent` state) instead of this table.
+const LINEAR_NEXT_STEP = {
+  [FLOW_STEPS.credentials]: FLOW_STEPS.profile,
+  [FLOW_STEPS.profile]:     FLOW_STEPS.consent,
+}
+
+// Steps that resolve their own back-card internally from live drag intent
+// (branching steps) — the parent deck must not also wrap them in a second
+// pre-rendered back layer (see ChoiceDeck / ConsentDeck `renderBackStep`).
+const SELF_BACKED_STEPS = new Set([FLOW_STEPS.choice, FLOW_STEPS.consent])
 
 const AUTH_STAGE_WIDTH = `${CARD_WIDTH}px`
 const AUTH_CARD_HEIGHT = `${CARD_HEIGHT}px`
@@ -66,6 +83,11 @@ export default function LoginPage({ onLogin }) {
   const { setLanguage } = useLanguage()
 
   const [step, setStep]                         = useState(FLOW_STEPS.choice)
+  // LOGIN-REWORK-1: step-history stack — advancing pushes the step being LEFT
+  // onto history; 'back' pops it so the previous card returns to the deck top.
+  // A ref (not state) is correct here: the stack itself is never rendered —
+  // only `step` (derived via setStep) drives the UI.
+  const historyRef = useRef([])
 
   // New-profile state: lifted to parent so consent step can access all fields.
   const [id, setId]                             = useState('')
@@ -77,9 +99,6 @@ export default function LoginPage({ onLogin }) {
   const [consentResetTick, setConsentResetTick] = useState(0)
   const [loading, setLoading]                   = useState(null)
   const [error, setError]                       = useState(null)
-  const [showIntro, setShowIntro]               = useState(
-    () => INTRO_SHOW_ONCE ? !localStorage.getItem(INTRO_DISMISS_KEY) : true,
-  )
 
   // SETTINGS-POLISH-1: role list — bundled fallback first paint, then the
   // live backend list once getRoles() resolves (adds new roles with no
@@ -98,36 +117,46 @@ export default function LoginPage({ onLogin }) {
   const registerSubmitRef = useRef(() => {})
   registerSubmitRef.current = () => handleRegisterSubmit({ consentConfirmed: true })
 
+  // Push the current step onto history, then advance to `nextStep`.
+  const advanceStep = useCallback((nextStep) => {
+    historyRef.current = [...historyRef.current, step]
+    setStep(nextStep)
+  }, [step])
+
+  // Pop history — previous card returns to the top of the deck. No-op if
+  // history is empty (shouldn't happen since `choice` never pushes a back).
+  const goBack = useCallback(() => {
+    const prev = historyRef.current
+    if (prev.length === 0) return
+    historyRef.current = prev.slice(0, -1)
+    setStep(prev[prev.length - 1])
+  }, [])
+
   // Stable callbacks — setState setters are stable, module constants are stable.
   const handleChoiceAction = useCallback((action) => {
     setError(null)
     setConsentGiven(false)
-    setStep(action === LOGIN_SWIPE_ACTIONS.left ? FLOW_STEPS.returning : FLOW_STEPS.credentials)
-  }, [])
+    advanceStep(action === LOGIN_SWIPE_ACTIONS.left ? FLOW_STEPS.returning : FLOW_STEPS.credentials)
+  }, [advanceStep])
 
   const handleConsentAction = useCallback((action) => {
     if (action === 'back') {
       setConsentGiven(false)
       setError(null)
-      setStep(FLOW_STEPS.profile)
+      goBack()
     } else {
       setConsentGiven(true)
       registerSubmitRef.current()
     }
-  }, [])
+  }, [goBack])
 
   const googleConfigured = hasGoogleLogin(import.meta.env.VITE_GOOGLE_CLIENT_ID)
   const isBusy           = loading !== null
   const errorText        = error && (error.key ? t(error.key, error.params) : error.text)
 
-  function dismissIntro() {
-    if (INTRO_SHOW_ONCE) localStorage.setItem(INTRO_DISMISS_KEY, 'true')
-    setShowIntro(false)
-  }
-
   function moveToStep(nextStep) {
     setError(null)
-    setStep(nextStep)
+    advanceStep(nextStep)
   }
 
   // -- Google login (returning / verify only) --------------------------------
@@ -279,83 +308,133 @@ export default function LoginPage({ onLogin }) {
     }
   }
 
+  // LOGIN-REWORK-1: renders any step's card body by key. Used both for the
+  // interactive FRONT card (isActive=true) and for pre-rendering the inert
+  // BACK card (isActive=false — no autoFocus, no typed line, no interaction)
+  // so the deck's "next card" already exists in the tree before it surfaces.
+  function renderStep(stepKey, { isActive = true, key } = {}) {
+    const line = isActive ? typedLine : ''
+    switch (stepKey) {
+      case FLOW_STEPS.choice:
+        return (
+          <ChoiceDeck
+            key={key}
+            t={t}
+            typedLine={line}
+            disabled={isBusy || !isActive}
+            onAction={handleChoiceAction}
+            renderBackStep={isActive ? (backKey) => renderStep(backKey, { isActive: false, key: `back-${backKey}` }) : undefined}
+          />
+        )
+      case FLOW_STEPS.returning:
+        return (
+          <ReturningStep
+            key={key}
+            t={t}
+            typedLine={line}
+            isActive={isActive}
+            showGoogle={googleConfigured}
+            disabled={isBusy || !isActive}
+            googleLoading={loading === 'google'}
+            loginLoading={loading === 'login'}
+            onBack={goBack}
+            onGoogleSuccess={handleGoogleSuccess}
+            onGoogleError={handleGoogleError}
+            onGoogleNonOAuthError={handleGoogleNonOAuthError}
+            onLoginSubmit={handleLoginSubmit}
+          />
+        )
+      case FLOW_STEPS.credentials:
+        return (
+          <CredentialsStep
+            key={key}
+            t={t}
+            typedLine={line}
+            isActive={isActive}
+            disabled={isBusy || !isActive}
+            onBack={goBack}
+            onContinue={handleCredentialsContinue}
+          />
+        )
+      case FLOW_STEPS.profile:
+        return (
+          <ProfileStep
+            key={key}
+            t={t}
+            typedLine={line}
+            isActive={isActive}
+            role={role}
+            roles={roles}
+            language={language}
+            affiliation={affiliation}
+            disabled={isBusy || !isActive}
+            onRoleChange={(value) => {
+              setRole(value)
+              setError(null)
+              setConsentGiven(false)
+            }}
+            onAffiliationChange={(value) => {
+              setAffiliation(value)
+              setConsentGiven(false)
+            }}
+            onBack={goBack}
+            onSubmit={handleProfileContinue}
+          />
+        )
+      case FLOW_STEPS.consent:
+        return (
+          <ConsentDeck
+            key={key ?? `consent-${consentResetTick}`}
+            t={t}
+            typedLine={line}
+            id={id}
+            role={role}
+            roles={roles}
+            language={language}
+            affiliation={affiliation}
+            profileReady={isIdFormatValid(id) && isRoleReady(role)}
+            disabled={isBusy || !isActive}
+            onAction={handleConsentAction}
+            renderBackStep={isActive ? () => renderStep(FLOW_STEPS.profile, { isActive: false, key: 'back-profile' }) : undefined}
+          />
+        )
+      default:
+        return null
+    }
+  }
+
+  // The step a bare (non-branching) advance would land on next — pre-rendered
+  // behind the front card so the deck feels like it was already waiting.
+  const linearNextStep = SELF_BACKED_STEPS.has(step) ? null : (LINEAR_NEXT_STEP[step] || null)
+
+  // FIX (LOGIN-REWORK-1 review finding, high): the front-card key must force a
+  // fresh mount on a failed register() from the consent card. react-tinder-card
+  // has no restore-after-completed-swipe path in handleSwipeReleased (only
+  // restoreCard()/remount reset the spring) — so after a swiped-away consent
+  // card whose register() call fails server-side (duplicate id / weak password
+  // / consent_required retry), the card stays flown off-screen forever unless
+  // remounted. `step` alone never changes on that failure path (only
+  // consentResetTick increments — see handleRegisterSubmit catch), so folding
+  // the tick into the key here (not the dead `key ?? ...` fallback at the
+  // consent case in renderStep, which never fires since callers always pass a
+  // truthy key) is what actually forces the remount. The back-card pre-render
+  // (`key: 'back-consent'`) is intentionally unaffected — it never swipes.
+  const frontCardKey = step === FLOW_STEPS.consent ? `consent-${consentResetTick}` : step
+
   return (
     <div style={pageStyle}>
       <main style={mainStyle}>
-        <div key={step} className="lp-card-in" style={stageStyle}>
-          {step === FLOW_STEPS.choice && (
-            <ChoiceDeck
-              t={t}
-              typedLine={typedLine}
-              disabled={isBusy}
-              onAction={handleChoiceAction}
-            />
-          )}
-
-          {step === FLOW_STEPS.returning && (
-            <ReturningStep
-              t={t}
-              typedLine={typedLine}
-              showGoogle={googleConfigured}
-              disabled={isBusy}
-              googleLoading={loading === 'google'}
-              loginLoading={loading === 'login'}
-              onBack={() => moveToStep(FLOW_STEPS.choice)}
-              onGoogleSuccess={handleGoogleSuccess}
-              onGoogleError={handleGoogleError}
-              onGoogleNonOAuthError={handleGoogleNonOAuthError}
-              onLoginSubmit={handleLoginSubmit}
-            />
-          )}
-
-          {step === FLOW_STEPS.credentials && (
-            <CredentialsStep
-              t={t}
-              typedLine={typedLine}
-              disabled={isBusy}
-              onBack={() => moveToStep(FLOW_STEPS.choice)}
-              onContinue={handleCredentialsContinue}
-            />
-          )}
-
-          {step === FLOW_STEPS.profile && (
-            <ProfileStep
-              t={t}
-              typedLine={typedLine}
-              role={role}
-              roles={roles}
-              language={language}
-              affiliation={affiliation}
-              disabled={isBusy}
-              onRoleChange={(value) => {
-                setRole(value)
-                setError(null)
-                setConsentGiven(false)
-              }}
-              onAffiliationChange={(value) => {
-                setAffiliation(value)
-                setConsentGiven(false)
-              }}
-              onBack={() => moveToStep(FLOW_STEPS.credentials)}
-              onSubmit={handleProfileContinue}
-            />
-          )}
-
-          {step === FLOW_STEPS.consent && (
-            <ConsentDeck
-              key={`consent-${consentResetTick}`}
-              t={t}
-              typedLine={typedLine}
-              id={id}
-              role={role}
-              roles={roles}
-              language={language}
-              affiliation={affiliation}
-              profileReady={isIdFormatValid(id) && isRoleReady(role)}
-              disabled={isBusy}
-              onAction={handleConsentAction}
-            />
-          )}
+        <div style={stageStyle}>
+          <div style={deckStackStyle}>
+            {linearNextStep && (
+              <div aria-hidden="true" style={backCardWrapStyle}>
+                {renderStep(linearNextStep, { isActive: false, key: `back-${linearNextStep}` })}
+              </div>
+            )}
+            <div key={frontCardKey} className="lp-card-in" style={frontCardWrapStyle}>
+              {renderStep(step, { key: frontCardKey })}
+            </div>
+          </div>
         </div>
 
         {import.meta.env.DEV && (
@@ -376,8 +455,6 @@ export default function LoginPage({ onLogin }) {
           </p>
         )}
       </main>
-
-      {showIntro && <IntroOverlay t={t} onDone={dismissIntro} />}
     </div>
   )
 }
@@ -471,14 +548,19 @@ function GestureHint({ side, active, label, sub }) {
       }}>
         {isLeft ? `← ${label}` : `${label} →`}
       </span>
-      <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 500, color: INK.dim }}>
+      <span style={{ fontFamily: 'var(--font-family)', fontSize: 11, fontWeight: 500, color: INK.dim }}>
         {sub}
       </span>
     </div>
   )
 }
 
-function ChoiceDeck({ t, typedLine, disabled, onAction }) {
+// LOGIN-REWORK-1: choice is the FIRST card — it teaches the swipe itself
+// (typed question + animated L/R gesture hints), no separate intro modal.
+// The card waiting behind it is resolved live from drag `intent`: dragging
+// left surfaces "returning" behind, dragging right surfaces "credentials"
+// behind; idle defaults to "credentials" (the primary new-profile path).
+function ChoiceDeck({ t, typedLine, disabled, onAction, renderBackStep }) {
   const pending = useRef(null)
   const [intent, setIntent] = useState(null)
 
@@ -500,30 +582,15 @@ function ChoiceDeck({ t, typedLine, disabled, onAction }) {
   const handleUnfulfilled = useCallback(() => setIntent(null), [])
 
   const preventSwipe = disabled ? SWIPE_PREVENT_ALL : SWIPE_PREVENT_VERTICAL
+  const backStepKey = intent === 'left' ? FLOW_STEPS.returning : FLOW_STEPS.credentials
 
   return (
     <div style={{ position: 'relative', width: '100%', height: AUTH_CARD_HEIGHT }}>
-      {/* faux depth cards — decorative stack behind the live card */}
-      <div
-        aria-hidden="true"
-        style={{
-          ...authCardStyle,
-          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-          pointerEvents: 'none',
-          transform: 'translateY(14px) scale(0.94)',
-          opacity: 0.4,
-        }}
-      />
-      <div
-        aria-hidden="true"
-        style={{
-          ...authCardStyle,
-          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-          pointerEvents: 'none',
-          transform: 'translateY(7px) scale(0.97)',
-          opacity: 0.7,
-        }}
-      />
+      {renderBackStep && (
+        <div aria-hidden="true" style={backCardWrapStyle}>
+          {renderBackStep(backStepKey)}
+        </div>
+      )}
       <SwipeGestureFrame
         className="lp-tinder"
         onSwipe={handleSwipe}
@@ -534,17 +601,12 @@ function ChoiceDeck({ t, typedLine, disabled, onAction }) {
       >
         <AuthCard absolute ariaLabel={t('login.choice.eyebrow')}>
           <CardHeader
-            eyebrow={t('login.choice.eyebrow')}
             title={t('login.choice.title')}
             typedLine={typedLine}
             trailing={<LangToggle />}
           />
-          {/* Static faint placeholder rows — seeds the skeleton language */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div className="lp-skel" style={{ opacity: 0.35, animation: 'none', height: 22, width: '60%' }} />
-            <div className="lp-skel" style={{ opacity: 0.35, animation: 'none', height: 12, width: '40%' }} />
-            <div className="lp-skel" style={{ opacity: 0.35, animation: 'none', height: 12, width: '50%' }} />
-          </div>
+          <SwipeTutorial intent={intent} />
+          <p style={bodyCopyStyle}>{t('login.choice.body')}</p>
           <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12 }}>
             <GestureHint
               side="left"
@@ -571,49 +633,90 @@ const CHECK_CHECKING  = 'checking'
 const CHECK_AVAILABLE = 'available'
 const CHECK_TAKEN     = 'taken'
 
-function CredentialsStep({ t, typedLine, disabled, onBack, onContinue }) {
-  const [localId, setLocalId]           = useState('')
+// LOGIN-REWORK-1: debounce delay before auto-checking ID availability.
+const ID_CHECK_DEBOUNCE_MS = 450
+
+function CredentialsStep({ t, typedLine, isActive = true, disabled, onBack, onContinue }) {
+  const [localId, setLocalId]             = useState('')
   const [localPassword, setLocalPassword] = useState('')
-  const [checkState, setCheckState]     = useState(CHECK_IDLE)
-  const [confirmedId, setConfirmedId]   = useState('')  // the id that was confirmed available
-  const [checkError, setCheckError]     = useState(null)
+  const [checkState, setCheckState]       = useState(CHECK_IDLE)
+  const [confirmedId, setConfirmedId]     = useState('')  // the id that was confirmed available
+  const [checkError, setCheckError]       = useState(null)
+
+  // IME composition guard — Korean (and other IME) input fires onChange per
+  // jamo/keystroke while composing; checkHandle must only fire on committed text.
+  const isComposingRef = useRef(false)
+  // Debounce timer + a request token so a stale in-flight response for an
+  // older id value can never overwrite a newer id's state.
+  const debounceRef = useRef(null)
+  const requestTokenRef = useRef(0)
 
   const idNfc         = localId.normalize('NFC')
   const idFormatValid = isIdFormatValid(localId)
   const passwordValid = localPassword.length >= 8
 
-  // Reset availability when id changes after confirmation
+  const runCheck = useCallback((value) => {
+    const nfc = value.normalize('NFC')
+    if (!isIdFormatValid(value)) {
+      setCheckState(CHECK_IDLE)
+      setCheckError(null)
+      return
+    }
+    const token = ++requestTokenRef.current
+    setCheckState(CHECK_CHECKING)
+    setCheckError(null)
+    checkHandle(value)
+      .then((result) => {
+        if (requestTokenRef.current !== token) return  // stale response, ignore
+        if (result.available) {
+          setCheckState(CHECK_AVAILABLE)
+          setConfirmedId(nfc)
+          setCheckError(null)
+        } else {
+          setCheckState(CHECK_TAKEN)
+          setConfirmedId('')
+          setCheckError(result.reason || t('login.credentials.id.taken'))
+        }
+      })
+      .catch(() => {
+        if (requestTokenRef.current !== token) return
+        setCheckState(CHECK_IDLE)
+        setCheckError(t('login.error.idInvalid'))
+      })
+  }, [t])
+
+  // Debounced auto-check on typing. Skips entirely while an IME composition
+  // is in progress (isComposingRef) — compositionend re-triggers explicitly.
   function handleIdChange(value) {
     setLocalId(value)
     setCheckError(null)
-    if (checkState !== CHECK_IDLE) {
-      setCheckState(CHECK_IDLE)
-      setConfirmedId('')
-    }
+    setCheckState(CHECK_IDLE)
+    setConfirmedId('')
+    // Invalidate any in-flight/pending check for the previous value.
+    requestTokenRef.current += 1
+    if (debounceRef.current) window.clearTimeout(debounceRef.current)
+    if (isComposingRef.current) return
+    debounceRef.current = window.setTimeout(() => runCheck(value), ID_CHECK_DEBOUNCE_MS)
   }
 
-  async function handleCheckAvailability() {
-    if (!idFormatValid) {
-      setCheckError(t('login.error.idInvalid'))
-      return
-    }
-    setCheckState(CHECK_CHECKING)
-    setCheckError(null)
-    try {
-      const result = await checkHandle(localId)
-      if (result.available) {
-        setCheckState(CHECK_AVAILABLE)
-        setConfirmedId(idNfc)
-      } else {
-        setCheckState(CHECK_TAKEN)
-        setConfirmedId('')
-        setCheckError(result.reason || t('login.credentials.id.taken'))
-      }
-    } catch {
-      setCheckState(CHECK_IDLE)
-      setCheckError(t('login.error.idInvalid'))
-    }
+  function handleCompositionStart() {
+    isComposingRef.current = true
+    if (debounceRef.current) window.clearTimeout(debounceRef.current)
   }
+
+  function handleCompositionEnd(e) {
+    isComposingRef.current = false
+    const value = e.target.value
+    setLocalId(value)
+    requestTokenRef.current += 1
+    if (debounceRef.current) window.clearTimeout(debounceRef.current)
+    debounceRef.current = window.setTimeout(() => runCheck(value), ID_CHECK_DEBOUNCE_MS)
+  }
+
+  // Cleanup pending debounce on unmount.
+  useEffect(() => () => {
+    if (debounceRef.current) window.clearTimeout(debounceRef.current)
+  }, [])
 
   // Continue enabled when: format valid, check result is available (for current id), password >= 8
   const idConfirmed = checkState === CHECK_AVAILABLE && confirmedId === idNfc
@@ -640,50 +743,39 @@ function CredentialsStep({ t, typedLine, disabled, onBack, onContinue }) {
   return (
     <AuthCard ariaLabel={t('login.credentials.eyebrow')}>
       <CardHeader
-        eyebrow={t('login.credentials.eyebrow')}
         title={t('login.credentials.title')}
         typedLine={typedLine}
         trailing={<LangToggle />}
       />
       <form onSubmit={handleSubmit} style={formStyle}>
-        <label style={monoLabelStyle} htmlFor="cred-id">
+        <label style={baseLabelStyle} htmlFor="cred-id">
           {t('login.credentials.id.label')}
         </label>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input
-            id="cred-id"
-            autoFocus
-            type="text"
-            value={localId}
-            onChange={e => handleIdChange(e.target.value)}
-            disabled={disabled}
-            placeholder={t('login.credentials.id.placeholder')}
-            autoCapitalize="off"
-            autoCorrect="off"
-            spellCheck={false}
-            maxLength={20}
-            aria-label={t('login.credentials.id.aria')}
-            aria-invalid={localId.length > 0 && !idFormatValid ? 'true' : 'false'}
-            className="lp-input"
-            style={{ ...paperInputStyle, flex: 1 }}
-          />
-          <button
-            type="button"
-            className="lp-btn"
-            onClick={handleCheckAvailability}
-            disabled={disabled || !idFormatValid || checkState === CHECK_CHECKING}
-            style={inkSecondaryStyle(disabled || !idFormatValid || checkState === CHECK_CHECKING)}
-          >
-            {checkState === CHECK_CHECKING ? <Spinner /> : t('login.credentials.checkBtn')}
-          </button>
-        </div>
-        {checkHintText && (
-          <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: checkHintColor, lineHeight: 1.4 }}>
-            {checkHintText}
-          </p>
-        )}
+        <input
+          id="cred-id"
+          autoFocus={isActive}
+          type="text"
+          value={localId}
+          onChange={e => handleIdChange(e.target.value)}
+          onCompositionStart={handleCompositionStart}
+          onCompositionEnd={handleCompositionEnd}
+          disabled={disabled}
+          placeholder={t('login.credentials.id.placeholder')}
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          maxLength={20}
+          aria-label={t('login.credentials.id.aria')}
+          aria-invalid={localId.length > 0 && !idFormatValid ? 'true' : 'false'}
+          className="lp-input"
+          style={paperInputStyle}
+        />
+        <p aria-live="polite" style={{ margin: 0, minHeight: 16, fontSize: 12, fontWeight: 600, color: checkHintColor, lineHeight: 1.4, display: 'flex', alignItems: 'center', gap: 6 }}>
+          {checkState === CHECK_CHECKING && <Spinner small />}
+          {checkHintText}
+        </p>
 
-        <label style={{ ...monoLabelStyle, marginTop: 4 }} htmlFor="cred-password">
+        <label style={{ ...baseLabelStyle, marginTop: 4 }} htmlFor="cred-password">
           {t('login.credentials.password.label')}
         </label>
         <input
@@ -725,7 +817,7 @@ function CredentialsStep({ t, typedLine, disabled, onBack, onContinue }) {
 }
 
 function ConsentDeck({
-  t, typedLine, id, role, roles, language, affiliation, profileReady, disabled, onAction,
+  t, typedLine, id, role, roles, language, affiliation, profileReady, disabled, onAction, renderBackStep,
 }) {
   const pending = useRef(null)
   const [intent, setIntent] = useState(null)
@@ -754,26 +846,11 @@ function ConsentDeck({
 
   return (
     <div style={{ position: 'relative', width: '100%', height: AUTH_CARD_HEIGHT }}>
-      <div
-        aria-hidden="true"
-        style={{
-          ...authCardStyle,
-          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-          pointerEvents: 'none',
-          transform: 'translateY(14px) scale(0.94)',
-          opacity: 0.4,
-        }}
-      />
-      <div
-        aria-hidden="true"
-        style={{
-          ...authCardStyle,
-          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-          pointerEvents: 'none',
-          transform: 'translateY(7px) scale(0.97)',
-          opacity: 0.7,
-        }}
-      />
+      {renderBackStep && (
+        <div aria-hidden="true" style={backCardWrapStyle}>
+          {renderBackStep()}
+        </div>
+      )}
       <SwipeGestureFrame
         className="lp-tinder"
         onSwipe={handleSwipe}
@@ -857,6 +934,7 @@ function ConsentDeck({
 function ReturningStep({
   t,
   typedLine,
+  isActive = true,
   showGoogle,
   disabled,
   googleLoading,
@@ -879,7 +957,6 @@ function ReturningStep({
   return (
     <AuthCard ariaLabel={t('login.returning.eyebrow')}>
       <CardHeader
-        eyebrow={t('login.returning.eyebrow')}
         title={t('login.returning.title')}
         typedLine={typedLine}
         trailing={<LangToggle />}
@@ -910,6 +987,7 @@ function ReturningStep({
       <form onSubmit={handleSubmit} style={formStyle}>
         <input
           type="text"
+          autoFocus={isActive && !showGoogle}
           value={handle}
           onChange={e => setHandle(e.target.value)}
           disabled={disabled}
@@ -957,6 +1035,7 @@ function ReturningStep({
 function ProfileStep({
   t,
   typedLine,
+  isActive = true,
   role,
   roles,
   language,
@@ -973,18 +1052,17 @@ function ProfileStep({
   return (
     <AuthCard ariaLabel={t('login.profile.eyebrow')}>
       <CardHeader
-        eyebrow={t('login.profile.eyebrow')}
         title={t('login.profile.title')}
         typedLine={typedLine}
         trailing={<LangToggle />}
       />
       <form onSubmit={onSubmit} style={formStyle}>
-        <label style={monoLabelStyle} htmlFor="guest-affiliation">
+        <label style={baseLabelStyle} htmlFor="guest-affiliation">
           {t('login.profile.affiliation.label')}
         </label>
         <input
           id="guest-affiliation"
-          autoFocus
+          autoFocus={isActive}
           type="text"
           value={affiliation}
           onChange={e => onAffiliationChange(e.target.value)}
@@ -996,7 +1074,7 @@ function ProfileStep({
         />
 
         <div style={roleHeaderStyle}>
-          <span style={monoLabelStyle}>{t('login.profile.objective.label')}</span>
+          <span style={baseLabelStyle}>{t('login.profile.objective.label')}</span>
           <span style={captionStyle}>
             {isRoleReady(role)
               ? t('login.profile.objective.selected')
@@ -1056,7 +1134,9 @@ function CardHeader({ eyebrow, title, typedLine, trailing }) {
         <span style={cardWordmarkStyle}>ARCHIBE</span>
         {trailing}
       </div>
-      <p style={monoLabelStyle}>{eyebrow}</p>
+      {/* LOGIN-REWORK-1: eyebrow only renders when it adds orientation the
+          typed question doesn't already give (issue 5 — remove noise copy). */}
+      {eyebrow && <p style={baseLabelStyle}>{eyebrow}</p>}
       {title && <h2 style={titleStyle}>{title}</h2>}
       <p style={typedLineStyle}>
         {typedLine}
@@ -1080,106 +1160,65 @@ function AuthCard({ children, absolute = false, ariaLabel }) {
   )
 }
 
-function IntroOverlay({ t, onDone }) {
+// LOGIN-REWORK-1: the animated mini-card + arrows tutorial, formerly inside
+// the (now-removed) IntroOverlay modal. Lives directly in ChoiceDeck's card
+// body — the first card teaches the swipe itself, no separate modal.
+function SwipeTutorial({ intent }) {
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={t('login.intro.title')}
-      style={{
-        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-        zIndex: 1000,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: 20,
-        background: 'rgba(0,0,0,0.55)',
-        backdropFilter: 'blur(6px)',
-        WebkitBackdropFilter: 'blur(6px)',
-      }}
-    >
-      <div
-        className="lp-card-in"
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+      <span
+        className="lp-arrow-left"
+        aria-hidden="true"
         style={{
-          ...paperFaceStyle({ radius: 20 }),
-          width: AUTH_STAGE_WIDTH,
-          height: AUTH_CARD_HEIGHT,
-          alignItems: 'stretch',
-          overflowY: 'auto',
+          fontSize: 22, fontWeight: 700, flexShrink: 0,
+          color: intent === 'left' ? 'var(--color-text)' : 'var(--color-text-dim)',
         }}
       >
-        {/* wordmark + eyebrow + LangToggle row */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-          <span style={cardWordmarkStyle}>ARCHIBE</span>
-          <LangToggle />
-        </div>
-        <p style={{ ...monoLabelStyle, marginTop: 10 }}>{t('login.intro.eyebrow')}</p>
-
-        <h2 style={{ ...titleStyle, marginTop: 10 }}>{t('login.intro.title')}</h2>
-
-        <div style={{ flex: 1 }} />
-
-        {/* swipe demo: synchronized arrows flanking mini card */}
-        <div style={{ height: 168, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 20 }}>
-          <span
-            className="lp-arrow-left"
-            aria-hidden="true"
-            style={{ fontSize: 26, fontWeight: 700, color: 'var(--color-text-dim)', flexShrink: 0 }}
-          >
-            &#8592;
-          </span>
-          <div
-            className="lp-swipe-demo"
-            style={{
-              width: 112, height: 148,
-              borderRadius: 12,
-              background: 'var(--color-surface-2)',
-              border: '1px solid var(--color-border-soft)',
-              boxShadow: '0 8px 24px rgba(0,0,0,0.22)',
-              display: 'flex', alignItems: 'flex-start',
-              padding: 12,
-              flexShrink: 0,
-            }}
-          >
-            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.3em', color: 'var(--color-text-muted)' }}>
-              ARCHIBE
-            </span>
-          </div>
-          <span
-            className="lp-arrow-right"
-            aria-hidden="true"
-            style={{ fontSize: 26, fontWeight: 700, color: 'var(--color-text-dim)', flexShrink: 0 }}
-          >
-            &#8594;
-          </span>
-        </div>
-
-        <p style={{ ...bodyCopyStyle, textAlign: 'center', whiteSpace: 'pre-line', marginTop: 12 }}>
-          {t('login.intro.body')}
-        </p>
-
-        <div style={{ flex: 1 }} />
-
-        <button
-          type="button"
-          className="lp-cta"
-          onClick={onDone}
-          style={{ ...inkPrimaryStyle(false), width: '100%', marginTop: 12 }}
-        >
-          {t('login.intro.cta')}
-        </button>
+        &#8592;
+      </span>
+      <div
+        className="lp-swipe-demo"
+        aria-hidden="true"
+        style={{
+          width: 84, height: 112,
+          borderRadius: 10,
+          background: 'var(--color-surface-2)',
+          border: '1px solid var(--color-border-soft)',
+          boxShadow: '0 6px 18px rgba(0,0,0,0.18)',
+          display: 'flex', alignItems: 'flex-start',
+          padding: 10,
+          flexShrink: 0,
+        }}
+      >
+        <span style={{ fontSize: 7, fontWeight: 700, letterSpacing: '0.28em', color: 'var(--color-text-muted)' }}>
+          ARCHIBE
+        </span>
       </div>
+      <span
+        className="lp-arrow-right"
+        aria-hidden="true"
+        style={{
+          fontSize: 22, fontWeight: 700, flexShrink: 0,
+          color: intent === 'right' ? 'var(--color-text)' : 'var(--color-text-dim)',
+        }}
+      >
+        &#8594;
+      </span>
     </div>
   )
 }
 
-function Spinner() {
+function Spinner({ small = false } = {}) {
+  const size = small ? 12 : 18
   return (
     <span aria-hidden="true" style={{
-      width: 18,
-      height: 18,
+      width: size,
+      height: size,
       border: '2px solid currentColor',
       borderTopColor: 'transparent',
       borderRadius: '50%',
       display: 'inline-block',
+      flexShrink: 0,
       animation: 'spin 0.7s linear infinite',
     }} />
   )
@@ -1238,6 +1277,35 @@ const stageStyle = {
   width: AUTH_STAGE_WIDTH,
 }
 
+// LOGIN-REWORK-1: deck stack — the back card (pre-rendered, inert) sits
+// absolutely behind the front card so advancing surfaces a card that was
+// already waiting rather than mounting fresh. `position:relative` container
+// sized to the card so both layers align.
+const deckStackStyle = {
+  position: 'relative',
+  width: AUTH_STAGE_WIDTH,
+  height: AUTH_CARD_HEIGHT,
+}
+
+const backCardWrapStyle = {
+  position: 'absolute',
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  pointerEvents: 'none',
+  userSelect: 'none',
+  transform: 'translateY(10px) scale(0.96)',
+  opacity: 0.55,
+  transition: `transform var(--motion-normal) var(--motion-ease), opacity var(--motion-normal) var(--motion-ease)`,
+}
+
+const frontCardWrapStyle = {
+  position: 'relative',
+  width: '100%',
+  height: '100%',
+}
+
 const authCardStyle = {
   ...paperFaceStyle({ radius: 20 }),
   gap: 16,
@@ -1276,12 +1344,15 @@ const titleStyle = {
   letterSpacing: '-0.01em',
 }
 
+// LOGIN-REWORK-1: the typed question is what tells the user what to do —
+// base font family per DESIGN.md §2.5a (MONO reserved for @id / JOINED meta).
 const typedLineStyle = {
   minHeight: 44,
   margin: 0,
-  fontFamily: MONO,
-  color: INK.muted,
-  fontSize: 13,
+  fontFamily: 'var(--font-family)',
+  color: INK.mid,
+  fontSize: 15,
+  fontWeight: 500,
   lineHeight: 1.45,
 }
 
@@ -1333,10 +1404,13 @@ const roleGridStyle = {
   gap: 8,
 }
 
+// LOGIN-REWORK-1: error text is instructional (tells the user what went
+// wrong / what to fix) — base font, not MONO, per DESIGN.md §2.5a.
 const errorStyle = {
   color: 'var(--color-destructive, #D73A49)',
   fontSize: 12,
-  fontFamily: MONO,
+  fontWeight: 500,
+  fontFamily: 'var(--font-family)',
   margin: 0,
   textAlign: 'center',
   lineHeight: 1.45,

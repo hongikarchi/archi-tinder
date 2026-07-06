@@ -73,21 +73,16 @@ export const locales = {
     },
     login: {
       prompt: {
-        choice:      '당신의 명함을 준비할게요.',
+        choice:      '왼쪽 또는 오른쪽으로 스와이프해보세요.',
         returning:   '다시 만나서 반가워요.',
-        credentials: '명함에 새길 이름이에요.',
+        credentials: '로그인에 사용할 ID와 비밀번호예요.',
         profile:     '첫 추천 덱이 여기서 정해져요.',
         consent:     '이 명함으로 시작할까요?',
-      },
-      intro: {
-        eyebrow: '시작하기 전에',
-        title:   '스와이프로 취향을 발견하세요',
-        body:    '카드를 왼쪽·오른쪽으로 스와이프해\n건축 스타일에 반응하세요.\n10~15장이면 취향 프로필이 완성됩니다.',
-        cta:     '시작하기',
       },
       choice: {
         eyebrow: '첫 카드',
         title:   '처음 방문하셨나요?',
+        body:    '건축 카드를 스와이프해 취향에 반응하세요 · 10~15장이면 취향 프로필이 완성돼요.',
         left:    { label: '기존 계정', sub: '왼쪽 스와이프' },
         right:   { label: '새 프로필', sub: '오른쪽 스와이프' },
       },
@@ -119,7 +114,6 @@ export const locales = {
           available:   '사용 가능',
           taken:       '이미 사용 중',
         },
-        checkBtn: '중복확인',
         password: {
           label:       '비밀번호 *',
           placeholder: '8자 이상',
@@ -167,7 +161,7 @@ export const locales = {
         loginStart:            '로그인을 시작할 수 없어요. 브라우저 설정을 확인해주세요.',
         idRequired:            'ID를 입력해야 계속할 수 있어요.',
         idInvalid:             'ID는 2-20자, 한글·영문·숫자·밑줄만 허용, 공백 불가예요.',
-        idNotConfirmed:        '먼저 중복확인을 해주세요.',
+        idNotConfirmed:        '사용 가능한 ID인지 확인 중이에요. 잠시만 기다려주세요.',
         objectiveRequired:     '목표를 선택해야 계속할 수 있어요.',
         profileIncomplete:     '동의 전에 ID, 비밀번호, 목표를 입력해주세요.',
         consentRequired:       '계정을 만들기 전에 동의가 필요해요.',
@@ -248,21 +242,16 @@ export const locales = {
     },
     login: {
       prompt: {
-        choice:      'Let me prepare your card.',
+        choice:      'Swipe left or right to try it.',
         returning:   'Good to see you again.',
-        credentials: 'The name printed on your card.',
+        credentials: 'The ID and password you’ll sign in with.',
         profile:     'This shapes your first deck.',
         consent:     'Shall we issue this card?',
-      },
-      intro: {
-        eyebrow: 'Before you begin',
-        title:   'Discover your taste through swipes',
-        body:    'Swipe cards left or right to react\nto architectural styles.\n10–15 swipes builds your taste profile.',
-        cta:     'Get started',
       },
       choice: {
         eyebrow: 'First card',
         title:   'Are you new here?',
+        body:    'Swipe architecture cards to react to your taste · 10–15 swipes builds your taste profile.',
         left:    { label: 'Returning', sub: 'Left swipe' },
         right:   { label: 'New profile', sub: 'Right swipe' },
       },
@@ -294,7 +283,6 @@ export const locales = {
           available:   'Available',
           taken:       'Already taken',
         },
-        checkBtn: 'Check',
         password: {
           label:       'Password *',
           placeholder: '8+ characters',
@@ -342,7 +330,7 @@ export const locales = {
         loginStart:            'Login could not start. Please check your browser settings.',
         idRequired:            'Enter an ID to continue.',
         idInvalid:             'ID must be 2–20 characters, Hangul or letters/digits/underscore, no spaces.',
-        idNotConfirmed:        'Please confirm ID availability first.',
+        idNotConfirmed:        'Checking whether this ID is available — one moment.',
         objectiveRequired:     'Choose an objective to continue.',
         profileIncomplete:     'Complete ID, password, and objective before consent.',
         consentRequired:       'Consent is required before creating an account.',

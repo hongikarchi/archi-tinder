@@ -57,7 +57,9 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(none — SETTINGS-POLISH-1 + LOGIN-CARD-REDESIGN + NOTIF-INAPP-1 shipped 2026-07-06, awaiting next slice.)_
+### LOGIN-REWORK-1 — 로그인 페이지 컨셉 재작업
+
+Frontend-only rework of `LoginPage.jsx` for concept-fidelity + focus. Plan: `.claude/plans/login-page-concept-rework.md`. 7 user-reported issues; diagnosis: backend check-handle + dev-login verified WORKING (issues 1+7 are frontend-UX / false-alarm). Confirmed decisions: (6) real card deck pre-render + step-history pop back-nav; (2) fold IntroOverlay into first card, remove separate modal; (3) enlarge ARCHIBE wordmark + trim MONO font toward base IBM Plex Sans KR (DESIGN.md §2.5a). Also: (1) auto-debounced ID dup-check w/ IME handling (no manual button), (4) restore typing feel, (5) remove noise copy (ko+en).
 
 ---
 
