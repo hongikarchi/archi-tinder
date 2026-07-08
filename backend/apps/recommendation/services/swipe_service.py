@@ -98,42 +98,97 @@ def _build_action_card():
     }
 
 
+def _axis_tags_from_sql_row(row):
+    """Build the axis_tags dict from a raw canonical_v2_buildings SQL row.
+
+    Column order: style, atmosphere, material_visual, typology_primary,
+    typology_tags, architectural_elements.
+    style/atmosphere/typology_primary are TEXT (single string, NULL-safe);
+    material_visual/typology_tags/architectural_elements are TEXT[].
+    """
+    return {
+        'style': [row[0]] if row[0] else [],
+        'atmosphere': [row[1]] if row[1] else [],
+        'material_visual': list(row[2]) if row[2] else [],
+        'typology_primary': [row[3]] if row[3] else [],
+        'typology_tags': list(row[4]) if row[4] else [],
+        'architectural_elements': list(row[5]) if row[5] else [],
+    }
+
+
+def _axis_tags_from_sql_fallback(canonical_bld_id):
+    """Raw SQL fallback: SELECT the axis columns directly (1 buildings-DB round-trip).
+
+    Used when the bcard cache (engine.get_building_card) is unavailable or
+    its metadata is missing. Gates on is_publishable = true, matching the
+    cache-aware path's gating (via engine's own SQL) so behaviour for
+    non-publishable buildings is unchanged (returns None -> no tags counted).
+    """
+    try:
+        with connections['buildings'].cursor() as cur:
+            cur.execute(
+                "SELECT style, atmosphere, material_visual,"
+                " typology_primary, typology_tags, architectural_elements"
+                " FROM canonical_v2_buildings"
+                " WHERE canonical_bld_id = %s AND is_publishable = true",
+                [canonical_bld_id],
+            )
+            row = cur.fetchone()
+    except Exception as exc:
+        logger.warning('_update_question_state buildings fetch failed: %s', exc)
+        row = None
+
+    if not row:
+        return None
+    return _axis_tags_from_sql_row(row)
+
+
+def _axis_tags_for_building(canonical_bld_id):
+    """Resolve axis_tags for a building, preferring the cache-aware bcard.
+
+    Tries engine.get_building_card first (cache-aware: reads the same cache
+    warmed by the swipe/session hot path, DB fallback built in) to avoid a
+    second buildings-DB round-trip that duplicates data already cached.
+    Falls back to a direct raw-SQL SELECT when the card or its metadata is
+    unavailable (cache miss with a since-unpublished building, transient
+    engine error, etc.) — same is_publishable gating either way.
+    """
+    try:
+        card = engine.get_building_card(canonical_bld_id)
+    except Exception as exc:
+        logger.warning('_update_question_state get_building_card failed: %s', exc)
+        card = None
+
+    metadata = (card or {}).get('metadata') if card else None
+    if metadata:
+        return {
+            'style': [metadata['axis_style']] if metadata.get('axis_style') else [],
+            'atmosphere': [metadata['axis_atmosphere']] if metadata.get('axis_atmosphere') else [],
+            'material_visual': list(metadata.get('axis_material_visual') or []),
+            'typology_primary': (
+                [metadata['axis_typology_primary']] if metadata.get('axis_typology_primary') else []
+            ),
+            'typology_tags': list(metadata.get('axis_typology_tags') or []),
+            'architectural_elements': list(metadata.get('axis_architectural_elements') or []),
+        }
+
+    return _axis_tags_from_sql_fallback(canonical_bld_id)
+
+
 def _update_question_state(session, action, canonical_bld_id):
     """Update tag counts and consecutive-dislike counter for question card triggering."""
     session.question_cooldown = max(0, (session.question_cooldown or 0) - 1)
 
     if action == 'like':
-        try:
-            with connections['buildings'].cursor() as cur:
-                cur.execute(
-                    "SELECT style, atmosphere, material_visual,"
-                    " typology_primary, typology_tags, architectural_elements"
-                    " FROM canonical_v2_buildings"
-                    " WHERE canonical_bld_id = %s AND is_publishable = true",
-                    [canonical_bld_id],
-                )
-                row = cur.fetchone()
-        except Exception as exc:
-            logger.warning('_update_question_state buildings fetch failed: %s', exc)
-            row = None
+        axis_tags = _axis_tags_for_building(canonical_bld_id)
 
-        if row:
-            # style/atmosphere/typology_primary are TEXT (single string, NULL-safe)
-            # material_visual/typology_tags/architectural_elements are TEXT[]
-            style_tags = [row[0]] if row[0] else []
-            atm_tags = [row[1]] if row[1] else []
-            mat_tags = list(row[2]) if row[2] else []
-            typo_primary_tags = [row[3]] if row[3] else []
-            typo_tags_tags = list(row[4]) if row[4] else []
-            arch_elem_tags = list(row[5]) if row[5] else []
-            axis_tags = {
-                'style': style_tags,
-                'atmosphere': atm_tags,
-                'material_visual': mat_tags,
-                'typology_primary': typo_primary_tags,
-                'typology_tags': typo_tags_tags,
-                'architectural_elements': arch_elem_tags,
-            }
+        if axis_tags:
+            style_tags = axis_tags['style']
+            atm_tags = axis_tags['atmosphere']
+            mat_tags = axis_tags['material_visual']
+            typo_primary_tags = axis_tags['typology_primary']
+            typo_tags_tags = axis_tags['typology_tags']
+            arch_elem_tags = axis_tags['architectural_elements']
             counts = dict(session.tag_axis_counts or {})
             for axis, tags in axis_tags.items():
                 axis_counts = dict(counts.get(axis, {}))

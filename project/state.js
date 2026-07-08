@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-07-07 01:36 KST',
-    head: 'a48ec73',
-    branch: 'feature/claude-login-rework',
+    updatedAt: '2026-07-07 02:05 KST',
+    head: 'adb457e',
+    branch: 'feature/claude-back-hotpath-1',
   },
   done: [
+    {
+      id: 'PERF-HOTPATH-1',
+      title: '세션생성 보드명 비동기화 + like 태그조회 캐시 대체',
+      completedAt: '2026-07-07',
+      note: '세션 생성 최악 ~12s Gemini 대기 제거 + like 스와이프당 buildings DB 왕복 1회 절감 (OVERNIGHT-PERF-1 PR-A).',
+    },
     {
       id: 'LOGIN-REWORK-1',
       title: '로그인 페이지 컨셉 재작업',
@@ -70,14 +76,14 @@ window.PROJECT_STATE = {
       completedAt: '2026-06-27',
       note: '신규계정 경로 2개(게스트 스와이프 + 별도 아이디/비번 가입)를 단일 흐름으로 병합 + display_name·handle 통합 ID + Google 인증전용 모델.',
     },
+  ],
+  now: [
     {
-      id: 'DISCOVERY-SKELETON',
-      title: 'Discovery 로딩 스켈레톤 (마스코트 + "취향 탐색 중…")',
-      completedAt: '2026-06-27',
-      note: 'Discovery 첫 로딩(GET /discovery/ 추천연산 대기) 동안 카드 자리에 귀여운 스켈레톤 표출.',
+      id: 'OVERNIGHT-PERF-1',
+      title: '야간 자율 4-PR 묶음 (핫패스·카드비주얼·집계·ops문서)',
+      note: 'Plan: `.claude/plans/settings-encapsulated-sedgewick.md` (approved 2026-07-07, PR-open까지 승인 / merge 아침 리뷰).',
     },
   ],
-  now: [],
   next: {
     xhigh: [
       {
@@ -195,6 +201,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 265,
+      title: 'feat(LOGIN-REWORK-1): login page concept rework — card deck + typing + dedup UX',
+      mergedAt: '2026-07-06T16:38:26Z',
+      mergedAtKST: '2026-07-07 01:38 KST',
+      sha: 'adb457e',
+    },
+    {
       number: 263,
       title: 'chore(INFRA-DEPLOY-1): make migrate-prod + deploy runbook + lockfile win32 sync',
       mergedAt: '2026-07-06T11:00:24Z',
@@ -242,13 +255,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-07-04T07:49:41Z',
       mergedAtKST: '2026-07-04 16:49 KST',
       sha: '670bfb0',
-    },
-    {
-      number: 255,
-      title: 'feat(profile): real scannable profile-share QR (replace FakeQr stub)',
-      mergedAt: '2026-07-01T10:30:46Z',
-      mergedAtKST: '2026-07-01 19:30 KST',
-      sha: '64ff32a',
     },
   ],
   agents: [
@@ -1097,6 +1103,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/recommendation/tests/test_phase13_board.py',
       role: 'Phase13 보드 테스트',
+    },
+    {
+      path: 'backend/apps/recommendation/tests/test_question_state.py',
+      role: '',
     },
     {
       path: 'backend/apps/recommendation/tests/test_row_to_card.py',

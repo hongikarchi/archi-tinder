@@ -57,7 +57,14 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(none — LOGIN-REWORK-1 shipped 2026-07-06, awaiting next slice.)_
+### OVERNIGHT-PERF-1 — 야간 자율 4-PR 묶음 (핫패스·카드비주얼·집계·ops문서)
+
+Plan: `.claude/plans/settings-encapsulated-sedgewick.md` (approved 2026-07-07, PR-open까지 승인 / merge 아침 리뷰).
+Slices: **PR-A** back-hotpath-1 (보드명 async UPDATE + 태그조회 캐시 대체) → **PR-B** front-card-visual-1
+(LQIP blur-up + 비율적응형 cover, 도면 contain·흰배경, 크롭손실 ≤25%만 cover) → **PR-C** analytics-1
+(`session_metrics_report` command — bookmark provenance top-10율·image_load p50/p95·수렴분포; session_end
+미발행 주의) → **PR-D** ops-docs-1 (인덱스 핸드오프 문서 + buildings pooler 문서/로컬 측정).
+검증: 4-gate + PR-A만 app-test FEATURE-SCOPED 25분 데드라인 (hang → TaskStop 후 진행).
 
 ---
 
@@ -268,6 +275,14 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### PERF-HOTPATH-1 — 세션생성 보드명 비동기화 + like 태그조회 캐시 대체 — RESOLVED 2026-07-07 (`37a3340`-pre-squash)
+세션 생성 최악 ~12s Gemini 대기 제거 + like 스와이프당 buildings DB 왕복 1회 절감 (OVERNIGHT-PERF-1 PR-A).
+- [x] `session_service.py`: `.join(timeout=12)` 삭제 — deterministic fallback 이름(`_deterministic_board_name`+`_dedup_board_name`)으로 즉시 INSERT·응답; Gemini 이름은 `transaction.on_commit` 등록 데몬 스레드 `_async_board_name_update`(PK 전달, `connections.close_all()` entry+finally = 텔레메트리 스레드 패턴)가 **조건부 원자 UPDATE** `filter(pk, name=fallback).update(...)` — 유저 수동 rename 절대 안 덮음. API shape 무변경.
+- [x] `swipe_service.py` `_update_question_state`: raw SQL 대신 `engine.get_building_card` bcard 캐시 우선(+scalar wrap/list 리맵), 카드/metadata 부재 시 기존 SQL fallback 유지. 다운스트림 fold 불변.
+- [x] 테스트: `test_taste_board_name.py` 재작성(즉답·가드·예외·비-placeholder 무스레드) + 신규 `test_question_state.py`(캐시/SQL 동형·fallback·결측키). 리뷰 PASS · 보안 PASS · Opus verify 0건 (cyclesUsed 0).
+- [x] **라이브 검증 (FEATURE-SCOPED, API 직접 — 브라우저 app-test 대체, hang 리스크 0)**: dev-login → placeholder 세션생성 **201 + "Untitled (1)" 즉답** → like 스와이프 200 → 수 초 후 프로젝트 이름 **"Warm Timber"로 비동기 승격 확인**. 로컬 세션생성 500(orphan column) 이슈 재현 안 됨.
+- 참고: 콜드 세션생성 6.0s는 풀 생성 쿼리 비용(인덱스 핸드오프 = PR-D 항목) — 본 PR 범위 밖.
+
 ### LOGIN-REWORK-1 — 로그인 페이지 컨셉 재작업 — RESOLVED 2026-07-06 (`a390f9f`-pre-squash)
 로그인 페이지 전면 재작업 — 스와이프-취향발견 컨셉 + 명함 UI에 충실, 사용자 포커싱. Frontend-only, 백엔드 무변경. Plan: `.claude/plans/login-page-concept-rework.md`.
 - [x] (6) 실제 카드 덱: 다음 카드를 앞 카드 뒤에 프리렌더 (새로 렌더가 아니라 '뒤에서 대기하던 카드가 올라옴' 느낌) + step-history 스택 뒤로가기(pop). 기존 장식용 faux-depth 카드 대체.
