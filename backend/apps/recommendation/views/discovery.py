@@ -129,7 +129,7 @@ class DiscoveryFeedView(APIView):
         cap = RC.get('discovery_recent_boards_cap', 10)
         _t = time.perf_counter()
         project_rows = list(
-            Project.objects.filter(user=profile)
+            Project.objects.filter(user=profile, is_temp=False)
             .order_by('-created_at')[:cap]
             .values('name', 'liked_ids', 'disliked_ids', 'saved_ids')
         )
@@ -265,7 +265,9 @@ class DiscoveryFeedbackView(APIView):
         if draft is None:
             # missing OR invalid/malformed draft_id -> graceful new draft (author intent),
             # but enforce the guest board-limit so guests can't bypass the 3-board cap.
-            if profile.is_guest and Project.objects.filter(user=profile).count() >= 3:
+            # Count only permanent (is_temp=False) boards — temp boards are in-progress
+            # taste sessions, not finalized boards, and must not trigger the gate early.
+            if profile.is_guest and Project.objects.filter(user=profile, is_temp=False).count() >= 3:
                 return Response(
                     {'detail': 'verify_required', 'reason': 'board_limit_reached', 'limit': 3},
                     status=status.HTTP_403_FORBIDDEN,
@@ -399,10 +401,10 @@ class DiscoveryPromoteView(APIView):
         # (no net +1 board) — but still check the cap because a guest could
         # reach promote with exactly 3 boards already (the draft being one of
         # them) and we must not allow creation of a new AnalysisSession on a
-        # board that would cause confusion.  The draft counts toward the total,
-        # which keeps the policy consistent with POST /api/v1/projects/ and
-        # DiscoveryFeedbackView.
-        if profile.is_guest and Project.objects.filter(user=profile).count() >= 3:
+        # board that would cause confusion.  Count only permanent boards
+        # (is_temp=False) — temp boards are in-progress taste sessions that have
+        # not yet been finalized; they should not trigger the gate here.
+        if profile.is_guest and Project.objects.filter(user=profile, is_temp=False).count() >= 3:
             return Response(
                 {'detail': 'verify_required', 'reason': 'board_limit_reached', 'limit': 3},
                 status=status.HTTP_403_FORBIDDEN,

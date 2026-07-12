@@ -3,7 +3,7 @@
 > Phase logic, mathematical formulas, and hyperparameter theory.
 > Research agent updates this file. Orchestrator references it for algorithm tasks.
 
-**Last Synced (Reporter):** 2026-05-26 dc296bc
+**Last Synced (Reporter):** 2026-07-13 92237d8
 
 ---
 
@@ -56,6 +56,8 @@ _(Updated 2026-04-26 1491c5d: IMP-8 async prefetch background thread — flag-ga
 _(Updated 2026-05-24 0e9217b: Half A async prefetch implemented; flag gated on Redis swap. Discovery taste vector TTL cache shipped via caches.py — bridges single-worker dev now; multi-worker prod still gated on Redis swap.)_
 
 _(Updated 2026-06-04 BACK-RECOMMEND-4: `compute_user_taste_vector` now also ingests `UserProfile.liked_building_ids` (Discovery-mode right-swipe likes), so a Discovery-only user warms the taste vector instead of staying cold; Discovery exclude-set + BoardSurprise also drop already-liked buildings. Recency caveat: >50 Discovery likes can push Project likes out of the recent-50 cap — flagged for algorithm-owner tuning.)_
+
+_(Updated 2026-07-13 92237d8: `compute_user_taste_vector` Project queryset now filters `is_temp=False` (FULL-ONBOARDING-2) — unsaved temp boards no longer contribute liked_ids to the cross-project taste vector; discovery feed row fetches apply the same exclusion. Data-scope filter only, no formula/weight change.)_
 
 _(Updated 2026-04-25 a9305e4: `farthest_point_from_pool()` (engine.py:421-455) corrected from inverted max-max accumulator to true Gonzalez max-min sampling per Spec v1.1 §11.1 IMP-1. Pre-fix code silently picked near-duplicates of exposed items. Bundled with NumPy batch matmul vectorization (~22ms → ~1ms per call, 20-50× speedup). Topic 11's 2-approximation bound and Section 4 C-3 Better layer 3's "first 3-5 diverse seeds" now actually deliver diverse selection.)_
 

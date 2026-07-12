@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-07-12 16:15 KST',
-    head: 'e536784',
-    branch: 'feature/claude-backlog-audit',
+    updatedAt: '2026-07-13 00:39 KST',
+    head: '3969fc9',
+    branch: 'feature/claude-onboarding2-is-temp',
   },
   done: [
+    {
+      id: 'FULL-ONBOARDING-2',
+      title: 'is_temp 라이프사이클 마감 (#243 fast-follows)',
+      completedAt: '2026-07-13',
+      note: 'temp 보드 누수 5개 사이트 일괄 마감: one-way finalize 강제 + 리스트/카운트/취향벡터/피드 전부 `is_temp=False` 필터 — 사일런트 보드 유실 경로 차단.',
+    },
     {
       id: 'BACK-LLM-4',
       title: 'search.py ParseQueryView byte-cap ensure_ascii 부풀림 의심 — CLOSED 2026-07-12 (premise falsified, no PR)',
@@ -71,21 +77,10 @@ window.PROJECT_STATE = {
       completedAt: '2026-07-06',
       note: '직업(Role) enum 단일화 + Bio auto-grow + 폰트 2-칩 + 테마 라이브 preview — 설정/프로필 편집 4개 개선 1커밋.',
     },
-    {
-      id: 'PROFILE-QR-1',
-      title: '프로필 공유 진짜 QR (FakeQr 스텁 교체)',
-      completedAt: '2026-07-01',
-      note: '프로필 공유 모달 QR이 가짜(FakeQr.jsx, 스캔불가 SVG 격자)였음 → 실제 스캔되는 QR로 교체.',
-    },
   ],
   now: [],
   next: {
     xhigh: [
-      {
-        id: 'FULL-ONBOARDING-2',
-        title: 'is_temp 라이프사이클 마감 (#243 fast-follows)',
-        note: '#243(`6f7a4a8`, FULL-ONBOARDING-1 Taste-flow + Project.is_temp) merge 시 verified-review로 게시한 후속(Codex RC + 워크플로우 adversarial-verify + Opus judge). 귀속: #243 diff는 models/serializers/session_service/migration/frontend만 — projects.py·discovery.py·engine.py 미수정 → 아래 1만 PR-신규, 나머지…',
-      },
       {
         id: 'FULL-LEGAL-1',
         title: 'PIPA/GDPR consent: Terms/Privacy 페이지 + 한국어 affirmative copy (잔여)',
@@ -105,6 +100,16 @@ window.PROJECT_STATE = {
       },
     ],
     medium: [
+      {
+        id: 'FRONT-VERIFY-1',
+        title: '보드저장 PATCH 경로 verify_required 모달 미배선',
+        note: 'FULL-ONBOARDING-2(`92237d8`)가 guest promote-limit을 `403 {\'detail\':\'verify_required\',\'reason\':\'board_limit_reached\',\'limit\':3}`로 표준화했으나, 프론트 `updateProject`(projects.js:64-71)는 verify_required를 VerifyRequiredError로 변환 안 함(createProject:26-40만 처리) → SaveBoardModal에서 guest가 4번째 보…',
+      },
+      {
+        id: 'INFRA-TEMP-GC-1',
+        title: 'orphan temp 보드 서버측 GC/TTL 없음',
+        note: 'FULL-ONBOARDING-2에서 분리(2026-07-12). 브라우저 닫기/로그아웃 시 `is_temp=True` 보드가 서버에 영구 잔류(frontend cleanup은 /search 재진입 경로만). TTL 필드 or 정리 job(cron/management command) 필요 — 설계 결정(TTL 기간, report-있는 temp 처리) 선행. 비차단.',
+      },
       {
         id: 'FRONT-UX-7',
         title: '로그인 뒤로가기 시 입력 draft 소실',
@@ -191,6 +196,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 271,
+      title: 'docs(task): backlog full audit 2026-07-12 — 21/21 grep-verify + Opus adversarial',
+      mergedAt: '2026-07-12T08:14:58Z',
+      mergedAtKST: '2026-07-12 17:14 KST',
+      sha: '3969fc9',
+    },
+    {
       number: 270,
       title: 'refactor(swipe): useSwipeOrchestration + useKeyboardSwipe 훅 분리 — SwipePage·DiscoveryPage 중복 제거',
       mergedAt: '2026-07-12T05:44:49Z',
@@ -238,13 +250,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-07-06T11:00:24Z',
       mergedAtKST: '2026-07-06 20:00 KST',
       sha: 'bbd5031',
-    },
-    {
-      number: 262,
-      title: 'feat(notifications): in-app notification v1 — inbox + bell + emission',
-      mergedAt: '2026-07-06T09:10:48Z',
-      mergedAtKST: '2026-07-06 18:10 KST',
-      sha: 'a40edf9',
     },
   ],
   agents: [
@@ -1091,6 +1096,10 @@ window.PROJECT_STATE = {
       role: 'Discovery 피드 테스트',
     },
     {
+      path: 'backend/apps/recommendation/tests/test_is_temp_data_filters.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/recommendation/tests/test_like_vectors_hydration.py',
       role: '',
     },
@@ -1389,6 +1398,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/tests/test_imp8_async_prefetch.py',
       role: 'IMP8 비동기 프리페치 테스트',
+    },
+    {
+      path: 'backend/tests/test_is_temp_lifecycle.py',
+      role: '',
     },
     {
       path: 'backend/tests/test_jwt_cache.py',

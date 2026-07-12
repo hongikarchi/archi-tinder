@@ -71,7 +71,7 @@ class ProjectListCreateView(APIView):
                 with stage('build_qs'):
                     qs = (
                         Project.objects
-                        .filter(user=profile)
+                        .filter(user=profile, is_temp=False)
                         .select_related('user__user')
                         # PERF-1 change C: heavy LLM JSON not consumed by list view.
                         # BACK-LLM-2: conversation_history can be up to 64 KB — defer it too.
@@ -201,6 +201,24 @@ class ProjectDetailView(APIView):
             if schema_data:
                 serializer = ProjectSelfUpdateSerializer(project, data=schema_data, partial=True)
                 serializer.is_valid(raise_exception=True)
+                # Guest promote-limit: a temp→permanent transition must not let a
+                # guest bypass the 3-board cap by hoarding temp boards.
+                promoting = (
+                    serializer.validated_data.get('is_temp') is False
+                    and project.is_temp
+                )
+                if promoting and profile.is_guest:
+                    permanent_count = Project.objects.filter(
+                        user=profile, is_temp=False,
+                    ).count()
+                    if permanent_count >= 3:
+                        return Response(
+                            {'detail': 'verify_required', 'reason': 'board_limit_reached', 'limit': 3},
+                            status=status.HTTP_403_FORBIDDEN,
+                        )
+                if promoting:
+                    evict_taste(profile.id)
+                    evict_discovery_feed(profile.id)
 
             if remove_ids is not None:
                 remove_set = set(remove_ids)
@@ -273,7 +291,7 @@ class UserProjectsListView(APIView):
         )
         qs = (
             Project.objects
-            .filter(user=target_profile)
+            .filter(user=target_profile, is_temp=False)
             .select_related('user__user')
             # PERF-1 change C: heavy LLM JSON not consumed by list view.
             # BACK-LLM-2: conversation_history can be up to 64 KB — defer it too.
