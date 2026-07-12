@@ -239,20 +239,160 @@ def _build_confidence_update_stats(since):
     }
 
 
+_TIMING_KEYS = ('lock_ms', 'embed_ms', 'select_ms', 'prefetch_ms', 'total_ms')
+
+
+def _extract_timing(payload):
+    """Extract a valid timing_breakdown dict from a swipe payload.
+
+    Returns a dict of {stage: float} for all 5 keys when the breakdown is
+    well-formed, or None when any key is absent or non-numeric.  Booleans
+    (isinstance bool) are rejected per the project's established pattern.
+    All-or-nothing: a single malformed field invalidates the whole sample.
+    """
+    if not isinstance(payload, dict):
+        return None
+    breakdown = payload.get('timing_breakdown')
+    if not isinstance(breakdown, dict):
+        return None
+    result = {}
+    for key in _TIMING_KEYS:
+        val = breakdown.get(key)
+        if not isinstance(val, (int, float)) or isinstance(val, bool):
+            return None
+        result[key] = float(val)
+    return result
+
+
+def _stage_percentiles(valid_timings):
+    """Aggregate per-stage p50/p95/max/count from a list of timing dicts.
+
+    ``valid_timings`` is a list of dicts, each with keys matching _TIMING_KEYS
+    (already validated by _extract_timing).  Returns a dict keyed by stage name,
+    each value being {p50, p95, max, count} (all None when list is empty).
+    """
+    stage_values = {key: [] for key in _TIMING_KEYS}
+    for td in valid_timings:
+        for key in _TIMING_KEYS:
+            stage_values[key].append(td[key])
+
+    result = {}
+    for key in _TIMING_KEYS:
+        vals = sorted(stage_values[key])
+        if vals:
+            result[key] = {
+                'p50': _percentile(vals, 50),
+                'p95': _percentile(vals, 95),
+                'max': max(vals),
+                'count': len(vals),
+            }
+        else:
+            result[key] = {'p50': None, 'p95': None, 'max': None, 'count': 0}
+    return result
+
+
+def _cache_split_percentiles(timing_rows):
+    """Split valid timing rows by cache_hit and compute per-stage p50/p95.
+
+    ``timing_rows`` is a list of (timing_dict, cache_hit_bool_or_None) tuples.
+    Returns {'hit': {stage: {p50, p95}}, 'miss': {stage: {p50, p95}}}.
+    Rows with cache_hit=None are excluded from both buckets.
+    """
+    hit_timings = [td for td, ch in timing_rows if ch is True]
+    miss_timings = [td for td, ch in timing_rows if ch is False]
+
+    def _per_stage_p50_p95(timings):
+        stage_values = {key: [] for key in _TIMING_KEYS}
+        for td in timings:
+            for key in _TIMING_KEYS:
+                stage_values[key].append(td[key])
+        out = {}
+        for key in _TIMING_KEYS:
+            vals = sorted(stage_values[key])
+            out[key] = {
+                'p50': _percentile(vals, 50),
+                'p95': _percentile(vals, 95),
+                'count': len(vals),
+            }
+        return out
+
+    return {
+        'hit': _per_stage_p50_p95(hit_timings),
+        'miss': _per_stage_p50_p95(miss_timings),
+    }
+
+
+def _position_buckets(session_timing_rows):
+    """Compute warmup vs warmed total_ms and embed_ms p50/p95.
+
+    ``session_timing_rows`` is a list of (session_id, created_at, timing_dict)
+    tuples for all valid-timing swipe rows (session_id must not be None).
+
+    Per session, rows are sorted by created_at and assigned 1-based positions.
+    Positions 1-2 → 'warmup'; 3+ → 'warmed'.
+
+    Returns:
+        {
+            'warmup':  {'total_ms': {p50, p95, count}, 'embed_ms': {p50, p95, count}},
+            'warmed':  {'total_ms': {p50, p95, count}, 'embed_ms': {p50, p95, count}},
+        }
+    """
+    by_session = {}
+    for session_id, created_at, timing in session_timing_rows:
+        by_session.setdefault(session_id, []).append((created_at, timing))
+
+    warmup_total = []
+    warmup_embed = []
+    warmed_total = []
+    warmed_embed = []
+
+    for events in by_session.values():
+        events_sorted = sorted(events, key=lambda x: x[0])
+        for pos_0based, (_, timing) in enumerate(events_sorted):
+            pos = pos_0based + 1  # 1-based
+            if pos <= 2:
+                warmup_total.append(timing['total_ms'])
+                warmup_embed.append(timing['embed_ms'])
+            else:
+                warmed_total.append(timing['total_ms'])
+                warmed_embed.append(timing['embed_ms'])
+
+    def _p50_p95(vals):
+        s = sorted(vals)
+        return {'p50': _percentile(s, 50), 'p95': _percentile(s, 95), 'count': len(s)}
+
+    return {
+        'warmup': {
+            'total_ms': _p50_p95(warmup_total),
+            'embed_ms': _p50_p95(warmup_embed),
+        },
+        'warmed': {
+            'total_ms': _p50_p95(warmed_total),
+            'embed_ms': _p50_p95(warmed_embed),
+        },
+    }
+
+
 def _build_swipe_stats(since):
     rows = SessionEvent.objects.filter(
         event_type='swipe', created_at__gte=since,
-    ).values_list('payload', 'session_id')
+    ).values_list('payload', 'session_id', 'created_at')
 
     total = 0
     malformed = 0
+    timing_malformed = 0
     per_session_counts = {}
     direction_counts = {}
     cache_hit_true = 0
     cache_hit_total = 0
     db_call_counts = []
 
-    for payload, session_id in rows:
+    # Timing aggregation accumulators
+    valid_timings = []                  # list of timing dicts
+    timing_cache_rows = []              # list of (timing_dict, cache_hit)
+    timing_position_rows = []           # list of (session_id, created_at, timing_dict)
+
+    for payload, session_id, created_at in rows:
         total += 1
         if not isinstance(payload, dict):
             malformed += 1
@@ -274,6 +414,16 @@ def _build_swipe_stats(since):
         if isinstance(db_call_count, (int, float)) and not isinstance(db_call_count, bool):
             db_call_counts.append(db_call_count)
 
+        # Timing breakdown — all-or-nothing validation
+        timing = _extract_timing(payload)
+        if timing is None:
+            timing_malformed += 1
+        else:
+            valid_timings.append(timing)
+            timing_cache_rows.append((timing, cache_hit))
+            if session_id is not None:
+                timing_position_rows.append((session_id, created_at, timing))
+
     session_counts = list(per_session_counts.values())
     sorted_session_counts = sorted(session_counts)
 
@@ -294,6 +444,10 @@ def _build_swipe_stats(since):
             'median': _median(db_call_counts),
             'max': max(db_call_counts) if db_call_counts else None,
         },
+        'timing_malformed': timing_malformed,
+        'timing_breakdown': _stage_percentiles(valid_timings),
+        'timing_breakdown_by_cache': _cache_split_percentiles(timing_cache_rows),
+        'timing_breakdown_by_position': _position_buckets(timing_position_rows),
     }
 
 
@@ -440,3 +594,42 @@ class Command(BaseCommand):
                 "cache_hit_rate: %s" % ("n/a" if cache_rate is None else "%.4f" % cache_rate)
             )
             self.stdout.write("db_call_count: %s" % sw['db_call_count'])
+
+            # ── timing_breakdown aggregates (additive) ───────────────────────
+            self.stdout.write(
+                "timing_malformed: %d" % sw['timing_malformed']
+            )
+            self.stdout.write("timing_breakdown (per-stage p50/p95/max):")
+            for stage, stats in sw['timing_breakdown'].items():
+                self.stdout.write(
+                    "  %s: p50=%s p95=%s max=%s count=%d"
+                    % (stage,
+                       "n/a" if stats['p50'] is None else "%.1f" % stats['p50'],
+                       "n/a" if stats['p95'] is None else "%.1f" % stats['p95'],
+                       "n/a" if stats['max'] is None else "%.1f" % stats['max'],
+                       stats['count'])
+                )
+
+            self.stdout.write("timing_breakdown by cache_hit split:")
+            for bucket_label, bucket_stats in sw['timing_breakdown_by_cache'].items():
+                self.stdout.write("  cache_%s:" % bucket_label)
+                for stage, stats in bucket_stats.items():
+                    self.stdout.write(
+                        "    %s: p50=%s p95=%s count=%d"
+                        % (stage,
+                           "n/a" if stats['p50'] is None else "%.1f" % stats['p50'],
+                           "n/a" if stats['p95'] is None else "%.1f" % stats['p95'],
+                           stats['count'])
+                    )
+
+            self.stdout.write("timing_breakdown by session position (warmup=1-2, warmed=3+):")
+            for bucket_label, bucket_stats in sw['timing_breakdown_by_position'].items():
+                self.stdout.write("  %s:" % bucket_label)
+                for stage_label, stats in bucket_stats.items():
+                    self.stdout.write(
+                        "    %s: p50=%s p95=%s count=%d"
+                        % (stage_label,
+                           "n/a" if stats['p50'] is None else "%.1f" % stats['p50'],
+                           "n/a" if stats['p95'] is None else "%.1f" % stats['p95'],
+                           stats['count'])
+                    )

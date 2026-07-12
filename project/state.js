@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-07-13 00:39 KST',
-    head: '3969fc9',
-    branch: 'feature/claude-onboarding2-is-temp',
+    updatedAt: '2026-07-13 02:14 KST',
+    head: '8fba3d5',
+    branch: 'feature/claude-perf5-timing-report',
   },
   done: [
+    {
+      id: 'BACK-PERFORMANCE-5a',
+      title: 'swipe timing_breakdown 계측 리더',
+      completedAt: '2026-07-13',
+      note: '`session_metrics_report`가 SessionEvent `timing_breakdown`을 이제 집계 — stage별 p50/p95/max + cache_hit 분리 + 세션내 위치 warmup bucket으로 swipe 0.7-1.5s 변동의 지배 원인을 prod 데이터로 특정 가능.',
+    },
     {
       id: 'FULL-ONBOARDING-2',
       title: 'is_temp 라이프사이클 마감 (#243 fast-follows)',
@@ -70,12 +76,6 @@ window.PROJECT_STATE = {
       title: '로그인/가입 명함 UI 재설계 (명함 언어 + CardSkeleton)',
       completedAt: '2026-07-06',
       note: '로그인/가입 5단계 카드를 테마 적응형 명함 언어로 재설계 (신규 `cardLanguage.js` 공유 모듈: paper face + ink 타이포 + mono 라벨 + ink 버튼 + paper-flat 인풋; 기존 토큰만, BusinessCard.jsx 불변).',
-    },
-    {
-      id: 'SETTINGS-POLISH-1',
-      title: '설정 페이지 개선 1/2 (직업 dropdown 통합 + Bio auto-grow + 폰트 칩 + 테마 preview)',
-      completedAt: '2026-07-06',
-      note: '직업(Role) enum 단일화 + Bio auto-grow + 폰트 2-칩 + 테마 라이브 preview — 설정/프로필 편집 4개 개선 1커밋.',
     },
   ],
   now: [],
@@ -148,6 +148,11 @@ window.PROJECT_STATE = {
     ],
     low: [
       {
+        id: 'BACK-ANALYTICS-1',
+        title: 'session_metrics_report 콘솔 ESC-byte 주입 (pre-existing #268)',
+        note: '`session_metrics_report.py` 텍스트 모드가 SessionEvent payload의 `domain`/`context` 값을 raw로 stdout 출력(~:548-559, #268 소산) — prod payload에 ESC 바이트 섞이면 터미널 이스케이프 주입 가능. BACK-PERFORMANCE-5a(`afc0b88`) Opus 검증서 실증됐으나 해당 PR 미접촉 영역이라 분리. 수정 = 출력 전 non-printable strip/repr(). 운영자-실행 read-on…',
+      },
+      {
         id: 'ARCHITECT-UNIFY-1',
         title: 'firm-side Office→Architect 전면 통합 (deferred, firm-UX 착수 시)',
         note: 'office-interest 모델 중복 해소됨: Phase 0(SavedOffice #188) + C(OfficeFollow, ARCHITECT-UNIFY-C)로 두 미배선 중복 삭제 → follow 모델 1개(ArchitectFollow). 남은 통합 = Office 서브시스템(table/claim/sync_offices/FirmProfilePage) arch_id 흡수 = firm-side 전면 재설계, deferred(firm-UX 착수 시). Office는 계획 기능 substrate(BACK-RECOMMEND-3/EXTERNAL-1/firm-claim)라 park.',
@@ -196,6 +201,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 272,
+      title: 'fix(board): is_temp lifecycle closure — one-way finalize + temp exclusion (FULL-ONBOARDING-2)',
+      mergedAt: '2026-07-12T16:51:23Z',
+      mergedAtKST: '2026-07-13 01:51 KST',
+      sha: '8fba3d5',
+    },
+    {
       number: 271,
       title: 'docs(task): backlog full audit 2026-07-12 — 21/21 grep-verify + Opus adversarial',
       mergedAt: '2026-07-12T08:14:58Z',
@@ -243,13 +255,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-07-06T16:38:26Z',
       mergedAtKST: '2026-07-07 01:38 KST',
       sha: 'adb457e',
-    },
-    {
-      number: 263,
-      title: 'chore(INFRA-DEPLOY-1): make migrate-prod + deploy runbook + lockfile win32 sync',
-      mergedAt: '2026-07-06T11:00:24Z',
-      mergedAtKST: '2026-07-06 20:00 KST',
-      sha: 'bbd5031',
     },
   ],
   agents: [
