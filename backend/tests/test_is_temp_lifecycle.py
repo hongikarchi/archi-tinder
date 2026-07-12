@@ -171,7 +171,10 @@ def test_guest_with_temp_board_not_blocked_by_discovery_guest_limit(db):
     mock_cursor_ctx.__exit__ = MagicMock(return_value=False)
     mock_cursor_ctx.fetchone = MagicMock(return_value=(1,))
 
-    fake_draft = Project.objects.create(user=guest, name='new_draft', is_temp=False)
+    # Draft must be created lazily (side_effect), AFTER the guest-count check —
+    # a pre-created row would itself raise the permanent-board count to 3.
+    def _lazy_draft(*args, **kwargs):
+        return Project.objects.create(user=guest, name='new_draft', is_temp=False)
 
     with patch(
         'apps.recommendation.views.discovery._dj_connections',
@@ -180,7 +183,7 @@ def test_guest_with_temp_board_not_blocked_by_discovery_guest_limit(db):
         mock_conns.__getitem__.return_value.cursor.return_value = mock_cursor_ctx
         with patch(
             'apps.recommendation.views.discovery.create_discovery_draft',
-            return_value=fake_draft,
+            side_effect=_lazy_draft,
         ):
             # No draft_id → draft is None → guest-count branch executes
             resp = client.post(
