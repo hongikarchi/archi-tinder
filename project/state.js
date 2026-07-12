@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-07-13 02:54 KST',
-    head: 'a299af6',
-    branch: 'feature/claude-i18n-core',
+    updatedAt: '2026-07-13 03:34 KST',
+    head: '73b9c94',
+    branch: 'feature/claude-i18n-settings',
   },
   done: [
+    {
+      id: 'FULL-LANGUAGE-1b',
+      title: 'i18n 슬라이스 b: 설정·계정 + 인증에러',
+      completedAt: '2026-07-13',
+      note: '설정/계정 표면 9파일 + 인증 에러 훅 국지화 — Settings 트리 전체가 ko/en 동일 string source 렌더.',
+    },
     {
       id: 'FULL-LANGUAGE-1a',
       title: 'i18n 슬라이스 a: 코어 스와이프 루프',
@@ -70,12 +76,6 @@ window.PROJECT_STATE = {
       title: '세션생성 보드명 비동기화 + like 태그조회 캐시 대체',
       completedAt: '2026-07-07',
       note: '세션 생성 최악 ~12s Gemini 대기 제거 + like 스와이프당 buildings DB 왕복 1회 절감 (OVERNIGHT-PERF-1 PR-A).',
-    },
-    {
-      id: 'LOGIN-REWORK-1',
-      title: '로그인 페이지 컨셉 재작업',
-      completedAt: '2026-07-06',
-      note: '로그인 페이지 전면 재작업 — 스와이프-취향발견 컨셉 + 명함 UI에 충실, 사용자 포커싱. Frontend-only, 백엔드 무변경. Plan: `.claude/plans/login-page-concept-rework.md`.',
     },
   ],
   now: [],
@@ -196,6 +196,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 275,
+      title: 'feat(i18n): core swipe loop label sweep — slice a of 3 (FULL-LANGUAGE-1a)',
+      mergedAt: '2026-07-12T17:59:59Z',
+      mergedAtKST: '2026-07-13 02:59 KST',
+      sha: '73b9c94',
+    },
+    {
       number: 274,
       title: 'fix(image): cover_full_url raw passthrough + telemetry currentSrc (FRONT-IMAGE-RESIZE-3)',
       mergedAt: '2026-07-12T17:28:52Z',
@@ -243,13 +250,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-07-08T03:58:49Z',
       mergedAtKST: '2026-07-08 12:58 KST',
       sha: '628cdd0',
-    },
-    {
-      number: 267,
-      title: 'feat(card): LQIP blur-up + adaptive object-fit for swipe cards',
-      mergedAt: '2026-07-08T03:59:00Z',
-      mergedAtKST: '2026-07-08 12:59 KST',
-      sha: '438be46',
     },
   ],
   agents: [

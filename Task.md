@@ -57,10 +57,7 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-### FULL-LANGUAGE-1b — i18n 슬라이스 b: 설정·계정 + 인증에러
-배치 플랜 `reactive-soaring-hearth` PR5 (2026-07-13 착수). 슬라이스 a(#275) 후속 — 설정/계정 표면 + 인증 에러 훅 ~62줄.
-- 대상: AccountScreen(33줄) · EditProfileScreen(6) · SettingsPage(5) · AppearanceSettings(3, partial-adopter 정리) · AppearanceScreen(1) · useGoogleEmailVerify(8 에러) · buildingDetail Header(2)/ErrorState(1) · LoginPage(1).
-- EN 에이전트 작성 + PR diff 스팟체크. locales.js additive.
+_(비어있음 — FULL-LANGUAGE-1b RESOLVED 2026-07-13. 배치 플랜 `reactive-soaring-hearth` 잔여: PR6 i18n 슬라이스 c(프로필·보드+모달, 최종). PERF-5 prod 계측 실행은 user-gated 대기)_
 
 ---
 
@@ -273,6 +270,14 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FULL-LANGUAGE-1b — i18n 슬라이스 b: 설정·계정 + 인증에러 — RESOLVED 2026-07-13 (`b433892`-pre-squash)
+설정/계정 표면 9파일 + 인증 에러 훅 국지화 — Settings 트리 전체가 ko/en 동일 string source 렌더.
+- [x] AccountScreen(33 리터럴, {email} 보간) · EditProfileScreen(6) · SettingsPage(ROWS {labelKey,hintKey} 전환) · AppearanceSettings partial-adopter 마감(LANGUAGE_OPTIONS labelKey) · AppearanceScreen · buildingDetail Header(useLanguage 삼항→t()) /ErrorState · LoginPage 마지막 리터럴.
+- [x] `useGoogleEmailVerify` 에러 8종: raw 한글 → `{key, params}` 객체(FRONT-AUTH-3 LoginPage 에러 선례) — 훅에 useTranslation 미주입(hooks rules), 소비자(VerifyGateModal·AccountScreen) 렌더층 `t(error.key, error.params)`.
+- [x] locales.js additive: account(33키)+auth(6)+buildingDetail(4)+settings.rows+title+profileEdit(7)+login.common 확장, ko/en parity 비대칭 0 (Opus 검증).
+- [x] 리뷰 follow-up 2건 in-PR 반영: `settings.title`('설정'/'Settings') + `buildingDetail.retry`('다시 시도'/'Retry') — 국지화 카피 옆 pre-existing 영어 하드코딩 비일관 해소.
+- 검증: eslint 0 · node --test 79/0 · build PASS · code-review PASS · security PASS · Opus 적대검증 confirmed LOW 2(위 follow-up으로 수정)·false positive(HIGH 주장 1 포함) 기각. VerifyGateModal 잔여 한글은 슬라이스 c 스코프.
+
 ### FULL-LANGUAGE-1a — i18n 슬라이스 a: 코어 스와이프 루프 — RESOLVED 2026-07-13 (`ff6210b`-pre-squash)
 고트래픽 코어 루프 5파일의 하드코딩 한글 전량(주석 제외)을 t() 키로 — Discovery/Swipe/Results가 ko/en 동일 string source에서 렌더.
 - [x] DiscoveryPage(17 리터럴: 토스트·진행 라벨·CTA·cap 메시지·이탈 모달) · SwipePage(14: ActionCard/ExitConfirm/DismissConfirm/본문) · ResultsPage(1) · DiscoveryTriggerCard(4블록, `<br/>` 분할은 sibling t() 콜) · QuestionCard(3).
