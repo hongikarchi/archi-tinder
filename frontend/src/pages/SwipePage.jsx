@@ -5,6 +5,8 @@ import QuestionCard from '../components/QuestionCard.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
 import CardSkeleton from '../components/CardSkeleton.jsx'
 import { isActionCard } from '../utils/appHelpers.js'
+import { useSwipeOrchestration } from '../hooks/useSwipeOrchestration.js'
+import { useKeyboardSwipe } from '../hooks/useKeyboardSwipe.js'
 
 /* ── ActionCard ──────────────────────────────────────────────────────────── */
 // Rendered when card_type === 'action' (backend-emitted when session converges).
@@ -351,7 +353,6 @@ export default function SwipePage({
 }) {
   const cardRef = useRef(null)
   const questionCardRef = useRef(null)
-  const pendingAction = useRef(null)
   const swipedCardId = useRef(null)
   const hasShownDismissTutorial = useRef(!!localStorage.getItem('archithon_dismiss_tutorial_seen'))
   const pendingDismissDir = useRef(null)
@@ -371,42 +372,43 @@ export default function SwipePage({
   // (App.jsx applySessionResponse) so the button shows immediately.
   const isAt100 = keepExploringChosen || isCompleted
 
-  function onTinderSwipe(dir) {
-    // F4: intercept first-ever left swipe to show dismiss tutorial.
-    // Skip for action cards — left-swipe on an action card means "keep exploring",
-    // not "skip this building", so the dismiss tutorial is not applicable.
-    if (dir === 'left' && !hasShownDismissTutorial.current && !isActionCard(currentCard)) {
-      // Restore card to center BEFORE showing popup so cancel path has no flicker
-      cardRef.current?.restoreCard()
-      pendingDismissDir.current = dir
-      pendingAction.current = null
-      swipedCardId.current = null
-      setShowDismissConfirm(true)
-      return
-    }
-    swipedCardId.current = currentCard?.image_id
-    pendingAction.current = dir === 'right' ? 'like' : 'dislike'
-  }
+  const { pendingActionRef: pendingAction, onTinderSwipe, onCardLeftScreen } = useSwipeOrchestration({
+    likeAction: 'like',
+    dismissAction: 'dislike',
+    onBeforeSwipe: (dir) => {
+      // F4: intercept first-ever left swipe to show dismiss tutorial.
+      // Skip for action cards — left-swipe on an action card means "keep exploring",
+      // not "skip this building", so the dismiss tutorial is not applicable.
+      if (dir === 'left' && !hasShownDismissTutorial.current && !isActionCard(currentCard)) {
+        // Restore card to center BEFORE showing popup so cancel path has no flicker
+        cardRef.current?.restoreCard()
+        pendingDismissDir.current = dir
+        swipedCardId.current = null
+        setShowDismissConfirm(true)
+        return true  // intercepted
+      }
+      swipedCardId.current = currentCard?.image_id
+      return false
+    },
+    onCommit: (action) => onSwipe(action),
+  })
 
-  function onCardLeftScreen() {
-    if (pendingAction.current) {
-      onSwipe(pendingAction.current)
-      pendingAction.current = null
-    }
-  }
-
-  async function swipeManual(dir) {
-    if (!cardRef.current || isLoading) return
-    // F4: intercept first-ever left swipe from keyboard.
-    // Skip for action cards (see onTinderSwipe comment above).
-    if (dir === 'left' && !hasShownDismissTutorial.current && !isActionCard(currentCard)) {
-      pendingDismissDir.current = dir
-      setShowDismissConfirm(true)
-      return
-    }
-    pendingAction.current = dir === 'right' ? 'like' : 'dislike'
-    await cardRef.current.swipe(dir)
-  }
+  useKeyboardSwipe({
+    onSwipe: (dir) => {
+      if (!cardRef.current) return
+      if (dir === 'left' && !hasShownDismissTutorial.current && !isActionCard(currentCard)) {
+        pendingDismissDir.current = dir
+        setShowDismissConfirm(true)
+        return
+      }
+      swipedCardId.current = currentCard?.image_id
+      pendingAction.current = dir === 'right' ? 'like' : 'dislike'
+      cardRef.current.swipe(dir)
+    },
+    guardCondition: () =>
+      !!(questionTrigger || isLoading || !cardRef.current || !currentCard || showTutorial || showExitConfirm ||
+         showDismissConfirm || pendingAction.current || swipedCardId.current === currentCard?.image_id),
+  })
 
   function handleDismissConfirm() {
     hasShownDismissTutorial.current = true
@@ -435,27 +437,7 @@ export default function SwipePage({
   useEffect(() => {
     swipedCardId.current = null
     pendingAction.current = null
-  }, [cardResetToken])
-
-  useEffect(() => {
-    function handleKeyDown(e) {
-      if (questionTrigger) return
-      if (isLoading || !currentCard) return
-      if (showTutorial || showExitConfirm || showDismissConfirm || pendingAction.current) return
-      if (swipedCardId.current === currentCard.image_id) return
-
-      if (e.key === 'ArrowLeft') {
-        // Only pre-set swipedCardId guard if not going to intercept for dismiss tutorial
-        if (hasShownDismissTutorial.current) swipedCardId.current = currentCard.image_id
-        swipeManual('left')
-      } else if (e.key === 'ArrowRight') {
-        swipedCardId.current = currentCard.image_id
-        swipeManual('right')
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isLoading, currentCard, showTutorial, showExitConfirm, showDismissConfirm, questionTrigger]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [cardResetToken]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!isLoading && !currentCard) {
     // Pool exhausted (or is_analysis_completed with no next card).
