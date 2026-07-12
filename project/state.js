@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-07-13 03:34 KST',
-    head: '73b9c94',
-    branch: 'feature/claude-i18n-settings',
+    updatedAt: '2026-07-13 04:33 KST',
+    head: 'b51c385',
+    branch: 'feature/claude-i18n-profile',
   },
   done: [
+    {
+      id: 'FULL-LANGUAGE-1c',
+      title: 'i18n 슬라이스 c: 프로필·보드 + 모달',
+      completedAt: '2026-07-13',
+      note: '최종 슬라이스 17파일 ~115 리터럴 — 3슬라이스(a #275 / b #276 / c) 합산 32파일 176줄 sweep 완료, 전 고트래픽 surface가 ko/en 동일 string source 렌더. FULL-LANGUAGE-1 백로그 항목 종결.',
+    },
     {
       id: 'FULL-LANGUAGE-1b',
       title: 'i18n 슬라이스 b: 설정·계정 + 인증에러',
@@ -70,12 +76,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-07-08',
       prs: [266, 269],
       note: 'Plan `.claude/plans/settings-encapsulated-sedgewick.md` 4슬라이스 전부 머지: PR-A #266 back-hotpath (보드명 async + like 태그조회 캐시, 개별 Done 항목 PERF-HOTPATH-1) · PR-B #267 LQIP blur-up + 비율적응형 object-fit · PR-C #268 `session_metrics_report` 첫 SessionEvent 리더 · PR-D #269 인덱스 핸드오프 + Neon pool…',
-    },
-    {
-      id: 'PERF-HOTPATH-1',
-      title: '세션생성 보드명 비동기화 + like 태그조회 캐시 대체',
-      completedAt: '2026-07-07',
-      note: '세션 생성 최악 ~12s Gemini 대기 제거 + like 스와이프당 buildings DB 왕복 1회 절감 (OVERNIGHT-PERF-1 PR-A).',
     },
   ],
   now: [],
@@ -124,11 +124,6 @@ window.PROJECT_STATE = {
         id: 'BACK-IDS-1',
         title: 'user_id 정수 PK 노출 비열거화',
         note: '`UserMiniSerializer.user_id`(source=user.id, serializers.py:70-74)가 순차 정수 Django PK 노출 — Project serializer·reactors 목록·notifications actor 전반 동일(시스템적, NOTIF-INAPP-1 net-new 0). 고치려면 handle/UUID로 전면 일괄 교체(부분 교체는 불일치만 초래). Opus verify low, 2026-07-06.',
-      },
-      {
-        id: 'FULL-LANGUAGE-1',
-        title: '한/영 UI 라벨 번역 sweep (토글·필드·LLM 배선 완료; 잔여=라벨)',
-        note: 'Code audit 2026-05-27: UserProfile preferences are theme/font only; UserSerializer and UserProfileSelfUpdateSerializer need language parity. ThemeContext + AppearanceSettings are the local persistence/UI pattern. ParseQueryView currently calls services.parse_query(conversation_history) with no user preference, so language must be passed from request.user.profile.language and prompt inference overridden.',
       },
       {
         id: 'FRONT-DESIGN-1',
@@ -196,6 +191,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 276,
+      title: 'feat(i18n): settings/account + auth errors sweep — slice b of 3 (FULL-LANGUAGE-1b)',
+      mergedAt: '2026-07-12T18:39:48Z',
+      mergedAtKST: '2026-07-13 03:39 KST',
+      sha: 'b51c385',
+    },
+    {
       number: 275,
       title: 'feat(i18n): core swipe loop label sweep — slice a of 3 (FULL-LANGUAGE-1a)',
       mergedAt: '2026-07-12T17:59:59Z',
@@ -243,13 +245,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-07-08T03:58:18Z',
       mergedAtKST: '2026-07-08 12:58 KST',
       sha: '3f75887',
-    },
-    {
-      number: 268,
-      title: 'feat(analytics): session_metrics_report — first SessionEvent reader',
-      mergedAt: '2026-07-08T03:58:49Z',
-      mergedAtKST: '2026-07-08 12:58 KST',
-      sha: '628cdd0',
     },
   ],
   agents: [

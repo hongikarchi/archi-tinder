@@ -17,6 +17,7 @@
  */
 
 import { QRCodeSVG } from 'qrcode.react'
+import { useTranslation } from '../../i18n/index.js'
 
 export default function ProfileQr({
   userId,
@@ -24,6 +25,7 @@ export default function ProfileQr({
   fgColor = '#0A0A0A',
   bgColor = '#FFFFFF',
 }) {
+  const { t } = useTranslation()
   if (!userId) return null
 
   const url = `${window.location.origin}/user/${userId}`
@@ -37,7 +39,7 @@ export default function ProfileQr({
       fgColor={fgColor}
       bgColor={bgColor}
       role="img"
-      aria-label="프로필 QR 코드"
+      aria-label={t('profile.qrAria')}
       style={{ display: 'block', flexShrink: 0 }}
     />
   )

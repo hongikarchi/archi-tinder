@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getLikedBuildings } from '../api/client.js'
+import { useTranslation } from '../i18n/index.js'
 
 /**
  * LikedProjectsPage — grid of buildings the user right-swiped in Discovery.
@@ -95,6 +96,7 @@ function LikedBuildingCard({ building }) {
 
 export default function LikedProjectsPage() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [buildings, setBuildings] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -110,13 +112,13 @@ export default function LikedProjectsPage() {
       })
       .catch(err => {
         if (cancelled) return
-        setError(err?.message || '데이터를 불러오지 못했어요.')
+        setError(err?.message || t('profile.loadError'))
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
       })
     return () => { cancelled = true }
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div style={{
@@ -205,7 +207,7 @@ export default function LikedProjectsPage() {
                 cursor: 'pointer', fontFamily: 'inherit',
               }}
             >
-              다시 시도
+              {t('profile.retry')}
             </button>
           </div>
         ) : buildings.length === 0 ? (
@@ -221,12 +223,12 @@ export default function LikedProjectsPage() {
             <p style={{
               color: 'var(--color-text)', fontSize: 16, fontWeight: 600, margin: 0,
             }}>
-              아직 좋아요한 건물이 없어요
+              {t('profile.noLikedBuildings')}
             </p>
             <p style={{
               color: 'var(--color-text-dim)', fontSize: 13, fontWeight: 400, margin: 0,
             }}>
-              Discovery에서 오른쪽으로 스와이프하면 여기에 저장돼요
+              {t('profile.swipeToSave')}
             </p>
             <button
               type="button"
@@ -242,7 +244,7 @@ export default function LikedProjectsPage() {
                 boxShadow: '0 8px 22px rgba(236,72,153,0.32)',
               }}
             >
-              Discovery 가기
+              {t('profile.goToDiscovery')}
             </button>
           </div>
         ) : (

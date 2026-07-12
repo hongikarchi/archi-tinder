@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getUserSavedStudios, getArchitectProfile } from '../api/client.js'
+import { useTranslation } from '../i18n/index.js'
 
 /* ── Placeholder SVG icons ──────────────────────────────────────────────── */
 
@@ -215,6 +216,7 @@ export function SkeletonCard() {
 
 export default function LikedOfficesPage() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [studios, setStudios] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -225,7 +227,7 @@ export default function LikedOfficesPage() {
     const rawUser = sessionStorage.getItem('archithon_user')
     const userId = rawUser ? rawUser.trim() : null
     if (!userId) {
-      setError('로그인이 필요해요.')
+      setError(t('profile.loginRequired'))
       setLoading(false)
       return
     }
@@ -239,7 +241,7 @@ export default function LikedOfficesPage() {
       })
       .catch(err => {
         if (cancelled) return
-        setError(err?.message || '데이터를 불러오지 못했어요.')
+        setError(err?.message || t('profile.loadError'))
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -250,7 +252,7 @@ export default function LikedOfficesPage() {
   useEffect(() => {
     const cleanup = fetchStudios()
     return cleanup
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps -- mount-only fetch; t identity churn must not refetch
 
   // Fetch architect profiles in parallel to get building lists for carousels
   useEffect(() => {
@@ -347,7 +349,7 @@ export default function LikedOfficesPage() {
                   cursor: 'pointer', fontFamily: 'inherit',
                 }}
               >
-                다시 시도
+                {t('profile.retry')}
               </button>
             </div>
           ) : studios.length === 0 ? (
@@ -359,10 +361,10 @@ export default function LikedOfficesPage() {
             }}>
               <BuildingIconEmpty />
               <p style={{ color: 'var(--color-text)', fontSize: 16, fontWeight: 600, margin: 0 }}>
-                저장한 오피스가 없어요
+                {t('profile.noSavedOffices')}
               </p>
               <p style={{ color: 'var(--color-text-muted)', fontSize: 13, fontWeight: 400, margin: 0 }}>
-                건축가 프로필에서 팔로우하면 여기에 표시돼요
+                {t('profile.followToShowOffices')}
               </p>
               <button
                 type="button"
@@ -377,7 +379,7 @@ export default function LikedOfficesPage() {
                   cursor: 'pointer', fontFamily: 'inherit',
                 }}
               >
-                건축가 탐색하기
+                {t('profile.exploreArchitects')}
               </button>
             </div>
           ) : (

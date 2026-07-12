@@ -4,6 +4,7 @@ import { getArchitectProfile, followArchitect, unfollowArchitect } from '../api/
 import { listProjects } from '../api/client.js'
 import SaveToBoardModal from '../components/SaveToBoardModal.jsx'
 import styles from './ArchitectProfilePage.module.css'
+import { useTranslation } from '../i18n/index.js'
 
 function BuildingCard({ building, onClick, onSave, isSaved = false }) {
   const [imgLoaded, setImgLoaded] = useState(false)
@@ -135,6 +136,7 @@ function SkeletonHeader() {
 export default function ArchitectProfilePage() {
   const { architectId } = useParams()
   const navigate = useNavigate()
+  const { t } = useTranslation()
   // undefined = loading, null = not found, object = loaded
   const [profile, setProfile] = useState(undefined)
   const [error, setError] = useState(null)
@@ -253,7 +255,7 @@ export default function ArchitectProfilePage() {
           className={styles.backBtn}
           onClick={() => navigate(-1)}
           type="button"
-          aria-label="뒤로 가기"
+          aria-label={t('architect.back')}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <line x1="19" y1="12" x2="5" y2="12" />
@@ -269,7 +271,7 @@ export default function ArchitectProfilePage() {
           className={styles.iconBtn}
           onClick={handleShare}
           type="button"
-          aria-label="공유"
+          aria-label={t('architect.share')}
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <circle cx="18" cy="5" r="3" />
@@ -322,7 +324,7 @@ export default function ArchitectProfilePage() {
             fontWeight: 600,
             margin: 0,
           }}>
-            불러오는 데 실패했어요.
+            {t('architect.loadError')}
           </p>
           <button
             onClick={() => { setError(null); setProfile(undefined); setRetryKey(k => k + 1) }}
@@ -339,7 +341,7 @@ export default function ArchitectProfilePage() {
             }}
             type="button"
           >
-            다시 시도
+            {t('architect.retry')}
           </button>
         </div>
       )}
@@ -365,7 +367,7 @@ export default function ArchitectProfilePage() {
             fontWeight: 600,
             margin: 0,
           }}>
-            사무소 정보를 찾을 수 없어요.
+            {t('architect.notFound')}
           </p>
         </div>
       )}
@@ -499,7 +501,7 @@ export default function ArchitectProfilePage() {
               }}
               onClick={handleFollow}
               disabled={followPending}
-              aria-label={isFollowing ? '언팔로우' : '팔로우'}
+              aria-label={isFollowing ? t('architect.unfollow') : t('architect.follow')}
             >
               {isFollowing ? 'Following' : 'Follow'}
             </button>
@@ -511,7 +513,7 @@ export default function ArchitectProfilePage() {
                 className={styles.actionBtn}
                 style={btnBase}
                 onClick={handleWebsite}
-                aria-label="웹사이트 열기"
+                aria-label={t('architect.website')}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <circle cx="12" cy="12" r="10" />
@@ -529,7 +531,7 @@ export default function ArchitectProfilePage() {
                 className={styles.actionBtn}
                 style={btnBase}
                 onClick={handleContact}
-                aria-label="이메일 보내기"
+                aria-label={t('architect.email')}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
@@ -670,7 +672,7 @@ export default function ArchitectProfilePage() {
               textAlign: 'center',
               margin: 0,
             }}>
-              등록된 건물이 없어요.
+              {t('architect.noBuildings')}
             </p>
           )}
         </>

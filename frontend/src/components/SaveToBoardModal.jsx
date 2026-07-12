@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { bookmarkBuilding, listProjects } from '../api/client.js'
 import { createProject, VerifyRequiredError } from '../api/projects.js'
-import { useLanguage } from '../hooks/useLanguage.js'
+import { useTranslation } from '../i18n/index.js'
 
 function getCardId(card) {
   return card?.canonical_bld_id || card?.image_id || card?.building_id || null
@@ -43,8 +43,7 @@ function ProjectRow({ project, disabled, onClick }) {
 }
 
 export default function SaveToBoardModal({ card, onClose, onSaved }) {
-  const { language } = useLanguage()
-  const isKo = language === 'ko'
+  const { t } = useTranslation()
   const [boards, setBoards] = useState([])
   const [loading, setLoading] = useState(false)
   const [busyProjectId, setBusyProjectId] = useState('')
@@ -159,7 +158,7 @@ export default function SaveToBoardModal({ card, onClose, onSaved }) {
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h3 style={{ fontSize: 17, margin: 0, fontWeight: 800 }}>{isKo ? '보드에 저장' : 'Save to board'}</h3>
+          <h3 style={{ fontSize: 17, margin: 0, fontWeight: 800 }}>{t('board.saveToBoard')}</h3>
           <button
             type="button"
             onClick={onClose}
@@ -280,7 +279,7 @@ export default function SaveToBoardModal({ card, onClose, onSaved }) {
           <div style={{ display: 'grid', gap: 8, maxHeight: '40vh', overflowY: 'auto', marginRight: -16, paddingRight: 16 }}>
             {boards.length === 0 ? (
               <p style={{ margin: 0, color: 'var(--color-text-dimmer)', fontSize: 13 }}>
-                {isKo ? '보드가 없어요' : 'No boards yet'}
+                {t('board.noBoards')}
               </p>
             ) : boards.map((project) => {
               const projectId = project?.project_id || project?.id

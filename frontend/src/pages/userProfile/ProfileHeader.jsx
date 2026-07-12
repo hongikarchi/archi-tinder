@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { IconBack, IconShare, IconSettings, IconBell } from '../../components/icons'
 import { useUnreadNotifications } from '../../hooks/useUnreadNotifications.js'
+import { useTranslation } from '../../i18n/index.js'
 
 export default function ProfileHeader({
   isMe,
@@ -9,6 +10,7 @@ export default function ProfileHeader({
   onShare,
 }) {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   // Own-profile only — bell + unread badge (NOTIF-INAPP-1). Count fetch is
   // mount + visibilitychange only (no polling) per the hook's own contract.
   // enabled=isMe so viewing someone else's profile never fires the request.
@@ -79,8 +81,8 @@ export default function ProfileHeader({
           {/* Notifications bell + unread badge (NOTIF-INAPP-1) */}
           <button
             onClick={() => navigate('/notifications')}
-            aria-label="알림"
-            title="알림"
+            aria-label={t('profile.notifications')}
+            title={t('profile.notifications')}
             style={{
               position: 'relative',
               width: 44, height: 44, minWidth: 44,
@@ -122,8 +124,8 @@ export default function ProfileHeader({
           {/* Share */}
           <button
             onClick={onShare}
-            aria-label="프로필 카드 공유"
-            title="프로필 카드 공유"
+            aria-label={t('profile.shareCard')}
+            title={t('profile.shareCard')}
             style={{
               width: 44, height: 44, minWidth: 44,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -141,8 +143,8 @@ export default function ProfileHeader({
           {/* Settings */}
           <button
             onClick={() => navigate('/settings')}
-            aria-label="설정"
-            title="설정"
+            aria-label={t('profile.settings')}
+            title={t('profile.settings')}
             style={{
               width: 44, height: 44, minWidth: 44,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -185,8 +187,8 @@ export default function ProfileHeader({
           {/* Share */}
           <button
             onClick={onShare}
-            aria-label="프로필 카드 공유"
-            title="프로필 카드 공유"
+            aria-label={t('profile.shareCard')}
+            title={t('profile.shareCard')}
             style={{
               width: 44, height: 44, minWidth: 44,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
