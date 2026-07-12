@@ -18,8 +18,9 @@ const SWIPE_KEYS = { ArrowLeft: 'left', ArrowRight: 'right' }
  * Returns nothing — side-effect only hook.
  *
  * Note: both onSwipe and guardCondition are read from refs internally so that
- * callers do NOT need to wrap them in useCallback. The effect still re-registers
- * the listener when either value changes to keep closure semantics clean.
+ * callers do NOT need to wrap them in useCallback. The keydown listener is
+ * registered exactly once (effect deps: []); onSwipe/guardCondition changes
+ * only update the refs, they never cause the listener to re-register.
  */
 export function useKeyboardSwipe({ onSwipe, guardCondition }) {
   const keySwipingRef = useRef(false)

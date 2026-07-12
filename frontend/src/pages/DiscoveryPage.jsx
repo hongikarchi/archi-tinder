@@ -376,17 +376,14 @@ export default function DiscoveryPage({ showToast }) {
   // Right (like): optimistic advance + POST feedback.
   // Left (pass): optimistic advance + POST feedback (fire-and-forget, low-stakes).
   //
-  // topCardRef keeps a stable ref to the current topCard so onCommit (called
-  // after the card leaves the screen) always sees the card that was on top when
-  // the swipe began, not the next card that React may have already rendered.
-  const topCardRef = useRef(topCard)
-  topCardRef.current = topCard
-
+  // onCommit reads topCard via render closure: react-tinder-card captures the
+  // onCardLeftScreen handler at drag-release, so `topCard` here is frozen to the
+  // card that was on top when the swipe began (same mechanism as pre-refactor).
   const { onTinderSwipe, onCardLeftScreen } = useSwipeOrchestration({
     likeAction: 'like',
     dismissAction: 'pass',
     onCommit: (action) => {
-      const card = topCardRef.current
+      const card = topCard
       advance()
 
       // -- Trigger card handling --

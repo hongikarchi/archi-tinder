@@ -395,6 +395,7 @@ export default function SwipePage({
 
   useKeyboardSwipe({
     onSwipe: (dir) => {
+      if (!cardRef.current) return
       if (dir === 'left' && !hasShownDismissTutorial.current && !isActionCard(currentCard)) {
         pendingDismissDir.current = dir
         setShowDismissConfirm(true)
@@ -402,10 +403,10 @@ export default function SwipePage({
       }
       swipedCardId.current = currentCard?.image_id
       pendingAction.current = dir === 'right' ? 'like' : 'dislike'
-      cardRef.current?.swipe(dir)
+      cardRef.current.swipe(dir)
     },
     guardCondition: () =>
-      !!(questionTrigger || isLoading || !currentCard || showTutorial || showExitConfirm ||
+      !!(questionTrigger || isLoading || !cardRef.current || !currentCard || showTutorial || showExitConfirm ||
          showDismissConfirm || pendingAction.current || swipedCardId.current === currentCard?.image_id),
   })
 
