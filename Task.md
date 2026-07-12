@@ -57,10 +57,7 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-### FULL-LANGUAGE-1c — i18n 슬라이스 c: 프로필·보드 + 모달 (최종)
-배치 플랜 `reactive-soaring-hearth` PR6 (2026-07-13 착수). FULL-LANGUAGE-1 마지막 슬라이스 — 17파일 ~115줄.
-- 대상: PersonaReport(33줄) · SaveBoardModal(12) · VerifyGateModal(10) · ArchitectProfilePage(9) · ShareCardModal(8) · ProfileHeader(8) · LLMSearchPage(7) · LikedOffices(6) · LikedProjects(5) · UserProfilePage(4) · BoardReportPage(4) · BoardDetail(3) · ArchitectSection(3) · BoardCard(2) · SaveToBoardModal(2) · EditCardForm(2) · ProfileQr(1).
-- 완료 시 FULL-LANGUAGE-1 항목 전체 CLOSE. EN 에이전트 작성 + PR diff 스팟체크.
+_(비어있음 — 배치 플랜 `reactive-soaring-hearth` 6/6 PR 완료 2026-07-13. 잔여 액션: PERF-5 prod 계측 실행(user-gated) + i18n EN 카피 스팟체크(locales.js diff, #275/#276/슬라이스c PR))_
 
 ---
 
@@ -178,17 +175,7 @@ NOTIF-INAPP-1(0bac717)은 앱 내 채널만. 이메일(SMTP — Resend/Gmail 등
 
 _(FRONT-IMAGE-RESIZE-3 → RESOLVED 2026-07-13, `## Done` 참조. Tier B(Divisare 포맷 프록시)는 user-결정 gated 유지 — `findings-r2-retirement.md`.)_
 
-#### FULL-LANGUAGE-1 — 한/영 UI 라벨 번역 sweep (토글·필드·LLM 배선 완료; 잔여=라벨)
-_Status (2026-06-28 재확인, grep): **토글·인프라·LLM 배선 모두 출하됨** — `UserProfile.language`(models.py:63 ko/en) + serializer + `LanguageContext.jsx`/`useLanguage.js`/`i18n/index.js`/`locales.js` + `AppearanceSettings` 언어 토글 + LLM 언어 결정성 wire-through(`search.py:153` → `parse_query.py:41-55` language override directive) **DONE**. **잔여 = UI 라벨 sweep만** — `useTranslation()` 쓰는 파일 6개(TabBar/DiscoveryPage/LoginPage/AppearanceSettings 등)뿐, 대다수 페이지 본문/에러/모달 라벨 미번역. 이 sweep이 유일 잔여 → 항목 유지(축소). 영어=follower(Korea-first)라 MEDIUM. (이전 title "토글 없음"은 stale — Slice 1 #208 `119a435`에서 토글 출하됨.)_
-
-_(2026-07-12 감사 re-pin: adopter 7개 파일(TabBar/AppearanceSettings/CardSkeleton/EditCardForm/LoginPage/NotificationInboxScreen/NotificationsScreen — #261/#262/#265로 증가), locales.js 345줄로 확장. **잔여 30개 pages/components 미번역** — 고트래픽 DiscoveryPage(하드코딩 한글 27줄)·SwipePage(14줄)·ResultsPage·SettingsPage·UserProfilePage·BuildingDetailPage 등 전부 useTranslation 0. Open dimension 셋 중 **미번역 키 폴백은 이미 해결**(i18n/index.js: 현재언어→ko→literal key 순) — 남은 결정 = scope 우선순위 + 번역 소스 2개. models.py:74로 라인 이동.)_
-
-Open dimensions:
-- **Scope priority** — TabBar / button copy / page titles first (high-traffic surfaces) → page bodies → error messages → modal alerts? Or sweep alphabetically?
-- **Translation source** — admin hand-writes both KO + EN strings / Gemini-translate KO → EN with admin spot-check / accept any English UI gaps temporarily (Korea-first, English a follower)?
-- **Untranslated string fallback** — if `t('foo.bar')` lookup misses in current language, fall back to KO (default) or render the key literal `foo.bar` as a debug surface?
-
-Acceptance: 모든 고트래픽 surface(TabBar/페이지타이틀/버튼/에러/모달)가 동일 string source로 ko/en 양쪽 렌더; 미번역 키는 KO 폴백; theme/font 배선 회귀 없음.
+_(FULL-LANGUAGE-1 → **전체 RESOLVED 2026-07-13**, `## Done` 슬라이스 a(#275)/b(#276)/c 참조 — 3 PR로 32파일 176 리터럴 sweep 완료. Open dimension 결정: scope=고트래픽 3슬라이스(플랜 Q2), 번역 소스=에이전트 EN+diff 스팟체크(Q3), 폴백=ko(기구현). 신규 문자열은 이제 t()+locales.js가 기본 컨벤션.)_
 
 #### FRONT-DESIGN-1 — 디자인 시스템 컴포넌트 리워크 (paused)
 Foundation shipped: PR #54 (`tokens.css` 4 themes + `ThemeContext` + `AppearanceSettings`) + PR #59 (theme/font server persistence). Remaining: per-component visual rework — inline `style={{}}` → CSS Modules + `:hover/:focus`/`:active`, light-theme polish where dark-only assumptions still leak through, leaf→hub component order (small leaf components first, then containers).
@@ -273,6 +260,14 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FULL-LANGUAGE-1c — i18n 슬라이스 c: 프로필·보드 + 모달 — RESOLVED 2026-07-13 (`f54d998`-pre-squash) → **FULL-LANGUAGE-1 전체 CLOSE**
+최종 슬라이스 17파일 ~115 리터럴 — 3슬라이스(a #275 / b #276 / c) 합산 32파일 176줄 sweep 완료, 전 고트래픽 surface가 ko/en 동일 string source 렌더. FULL-LANGUAGE-1 백로그 항목 종결.
+- [x] PersonaReport(SPECTRUM_AXES 모듈상수 → leftKey/rightKey 렌더 해석) · SaveBoardModal(visibility labelKey) · VerifyGateModal 자체 리터럴 7 · ShareCardModal({name} 보간) · ArchitectProfilePage · ProfileHeader · LLMSearchPage · LikedOffices/Projects · BoardReport/Detail · ArchitectSection · BoardCard({count} 보간) · SaveToBoardModal(useLanguage 삼항 패턴 제거) · EditCardForm/ProfileQr partial 마감 · UserProfilePage.
+- [x] locales.js 신규 네임스페이스 6(persona/board/architect/share/profile/search) + profileEdit 확장, ko/en 양쪽 additive.
+- [x] 잔여 한글 17파일 전수 grep = 주석만(세션 재검증 — built 목록에 UserProfilePage 누락은 리포팅 미비였고 실변경 확인).
+- 검증: eslint 0(신규 exhaustive-deps 워닝 1 → mount-only disable 주석, LikedProjectsPage 선례) · node --test 79/0 · build PASS · code-review PASS · security PASS · Opus 적대검증 confirmed 0.
+- 잔여 액션: EN 카피 스팟체크(사용자, locales.js diff) — ko 폴백이 있어 오역시에도 비파괴.
+
 ### FULL-LANGUAGE-1b — i18n 슬라이스 b: 설정·계정 + 인증에러 — RESOLVED 2026-07-13 (`b433892`-pre-squash)
 설정/계정 표면 9파일 + 인증 에러 훅 국지화 — Settings 트리 전체가 ko/en 동일 string source 렌더.
 - [x] AccountScreen(33 리터럴, {email} 보간) · EditProfileScreen(6) · SettingsPage(ROWS {labelKey,hintKey} 전환) · AppearanceSettings partial-adopter 마감(LANGUAGE_OPTIONS labelKey) · AppearanceScreen · buildingDetail Header(useLanguage 삼항→t()) /ErrorState · LoginPage 마지막 리터럴.
