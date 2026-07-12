@@ -57,7 +57,10 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(비어있음 — FULL-ONBOARDING-2 RESOLVED 2026-07-13. 배치 플랜 `reactive-soaring-hearth` 잔여: PR2 PERF-5 계측 → PR3 IMAGE-RESIZE-3 → PR4-6 i18n 3슬라이스)_
+### BACK-PERFORMANCE-5a — swipe timing_breakdown 계측 리더 (진단 슬라이스)
+배치 플랜 `reactive-soaring-hearth` PR2 (2026-07-13 착수). BACK-PERFORMANCE-5(### HIGH 유지)의 계측-선행 결정(플랜 Q1: 진단만, fix 별도)에 따른 진단 슬라이스.
+- `session_metrics_report`가 SessionEvent.payload `timing_breakdown`(lock/embed/select/prefetch/total_ms — swipe_service.py:1113-1129가 이미 기록 중)을 집계 안 함 → stage별 p50/p95 + cache_hit 분리 + 세션내 swipe 위치 bucket(warmup 탐지) 추가.
+- 이후 prod read-only 실행(user-gated) → 지배 stage 확정 → fix를 데이터 기반 별도 스코핑.
 
 ---
 
