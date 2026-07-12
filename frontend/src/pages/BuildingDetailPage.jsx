@@ -76,7 +76,7 @@ export default function BuildingDetailPage() {
   const gallery = useMemo(() => {
     if (!building) return []
     const merged = building.gallery?.length ? building.gallery : []
-    return merged.length ? merged : [building.image_url].filter(Boolean)
+    return merged.length ? merged : [building.cover_full_url || building.image_url].filter(Boolean)
   }, [building])
 
   const galleryMeta = useMemo(() => {

@@ -57,7 +57,11 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(비어있음 — BACK-PERFORMANCE-5a RESOLVED 2026-07-13. 배치 플랜 `reactive-soaring-hearth` 잔여: PR3 IMAGE-RESIZE-3 → PR4-6 i18n 3슬라이스. PERF-5 prod 계측 실행은 user-gated 대기)_
+### FRONT-IMAGE-RESIZE-3 — 이미지 풀해상도 passthrough + telemetry currentSrc (PR3 잔여)
+배치 플랜 `reactive-soaring-hearth` PR3 (2026-07-13 착수). `## Next ### MEDIUM`에서 승격.
+- `normalizeCard`(images.js:99)가 raw URL을 `rightSizeImageUrl`로 덮어써 원본 소실 → `cover_full_url`(미-리사이즈 passthrough) 추가.
+- `BuildingDetailPage.jsx:76-80` 빈-갤러리 폴백이 840px `image_url` 사용 → 라이트박스/다운로드가 리사이즈본 수신. `cover_full_url` 우선으로 변경.
+- `useImageTelemetry.js:30,45` `event.target.src`(840 폴백) → `currentSrc || src`로 per-variant load_ms 정확화.
 
 ---
 
