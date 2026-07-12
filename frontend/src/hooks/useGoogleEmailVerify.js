@@ -21,6 +21,12 @@
  *   Callers are responsible for clearing any local error state passed in via
  *   an external setter if needed, but this hook manages its own `error` state
  *   for display purposes.
+ *
+ * error shape: { key: string, params?: object } — consumers must call
+ *   t(error.key, error.params) to render the message.
+ *   This matches the FRONT-AUTH-3 {key,params} precedent from LoginPage.
+ *   useTranslation is NOT called here (hooks rules — this is a plain hook,
+ *   not a component; consumers handle the render layer).
  */
 
 import { useState } from 'react'
@@ -53,11 +59,11 @@ export function useGoogleEmailVerify({ onVerified }) {
     } catch (err) {
       const detail = err?.data?.detail || err?.message || 'error'
       if (detail === 'unverified_email') {
-        setError('이메일 미인증: Google 계정의 이메일이 인증되지 않았습니다.')
+        setError({ key: 'auth.verifyUnverifiedEmail' })
       } else if (detail === 'email_already_linked') {
-        setError('이미 존재하는 계정입니다. 다른 구글 계정으로 인증해 주세요.')
+        setError({ key: 'auth.verifyAlreadyLinked' })
       } else {
-        setError(`인증 실패: ${detail}`)
+        setError({ key: 'auth.verifyFailed', params: { detail } })
       }
     } finally {
       setLoading(false)
@@ -68,7 +74,7 @@ export function useGoogleEmailVerify({ onVerified }) {
   function onError(errorResponse) {
     const detail =
       errorResponse?.error_description || errorResponse?.error || 'cancelled or failed'
-    setError(`Google 오류: ${detail}`)
+    setError({ key: 'auth.verifyGoogleError', params: { detail } })
     setLoading(false)
   }
 
@@ -77,9 +83,9 @@ export function useGoogleEmailVerify({ onVerified }) {
     if (err?.type === 'popup_closed') {
       setError(null)
     } else if (err?.type === 'popup_failed_to_open') {
-      setError('팝업이 차단되었습니다. 사이트의 팝업을 허용해 주세요.')
+      setError({ key: 'auth.verifyPopupBlocked' })
     } else {
-      setError('인증을 시작할 수 없습니다. 브라우저 설정을 확인해 주세요.')
+      setError({ key: 'auth.verifyCannotStart' })
     }
     setLoading(false)
   }

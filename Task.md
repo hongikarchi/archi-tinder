@@ -57,7 +57,10 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(비어있음 — FULL-LANGUAGE-1a RESOLVED 2026-07-13. 배치 플랜 `reactive-soaring-hearth` 잔여: PR5 i18n 슬라이스 b(설정+인증에러) → PR6 슬라이스 c(프로필·보드+모달). PERF-5 prod 계측 실행은 user-gated 대기)_
+### FULL-LANGUAGE-1b — i18n 슬라이스 b: 설정·계정 + 인증에러
+배치 플랜 `reactive-soaring-hearth` PR5 (2026-07-13 착수). 슬라이스 a(#275) 후속 — 설정/계정 표면 + 인증 에러 훅 ~62줄.
+- 대상: AccountScreen(33줄) · EditProfileScreen(6) · SettingsPage(5) · AppearanceSettings(3, partial-adopter 정리) · AppearanceScreen(1) · useGoogleEmailVerify(8 에러) · buildingDetail Header(2)/ErrorState(1) · LoginPage(1).
+- EN 에이전트 작성 + PR diff 스팟체크. locales.js additive.
 
 ---
 
