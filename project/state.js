@@ -23,11 +23,24 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-07-07 02:05 KST',
-    head: 'adb457e',
-    branch: 'feature/claude-back-hotpath-1',
+    updatedAt: '2026-07-12 16:15 KST',
+    head: 'e536784',
+    branch: 'feature/claude-backlog-audit',
   },
   done: [
+    {
+      id: 'BACK-LLM-4',
+      title: 'search.py ParseQueryView byte-cap ensure_ascii 부풀림 의심 — CLOSED 2026-07-12 (premise falsified, no PR)',
+      completedAt: '',
+      note: '2026-07-12 백로그 전수 감사에서 무혐의 판명: `ParseQueryView.post`는 conversation_history 검증을 serializer로 위임하며, 해당 serializer는 BACK-LLM-2(#195)가 이미 UTF-8 byte 측정으로 고침 — ParseQueryView 자체에 `ensure_ascii=True` byte-cap 경로가 애초에 없음(Sonnet 검증 + Opus 적대검증 동의). 의심 항목이었고 실재하지 않아 폐기.',
+    },
+    {
+      id: 'OVERNIGHT-PERF-1',
+      title: '야간 자율 4-PR 묶음 (핫패스·카드비주얼·집계·ops문서)',
+      completedAt: '2026-07-08',
+      prs: [266, 269],
+      note: 'Plan `.claude/plans/settings-encapsulated-sedgewick.md` 4슬라이스 전부 머지: PR-A #266 back-hotpath (보드명 async + like 태그조회 캐시, 개별 Done 항목 PERF-HOTPATH-1) · PR-B #267 LQIP blur-up + 비율적응형 object-fit · PR-C #268 `session_metrics_report` 첫 SessionEvent 리더 · PR-D #269 인덱스 핸드오프 + Neon pool…',
+    },
     {
       id: 'PERF-HOTPATH-1',
       title: '세션생성 보드명 비동기화 + like 태그조회 캐시 대체',
@@ -64,26 +77,8 @@ window.PROJECT_STATE = {
       completedAt: '2026-07-01',
       note: '프로필 공유 모달 QR이 가짜(FakeQr.jsx, 스캔불가 SVG 격자)였음 → 실제 스캔되는 QR로 교체.',
     },
-    {
-      id: 'CLEANUP-DEPLOY-2026-06-28',
-      title: '배포 #250 + 백로그 정리',
-      completedAt: '2026-06-28',
-      note: '배포 후 정리 batch: develop→main deploy + prod migration + 백로그 audit.',
-    },
-    {
-      id: 'LOGIN-ONBOARD-1',
-      title: '로그인/온보딩 통합 + 인증 모델 단순화',
-      completedAt: '2026-06-27',
-      note: '신규계정 경로 2개(게스트 스와이프 + 별도 아이디/비번 가입)를 단일 흐름으로 병합 + display_name·handle 통합 ID + Google 인증전용 모델.',
-    },
   ],
-  now: [
-    {
-      id: 'OVERNIGHT-PERF-1',
-      title: '야간 자율 4-PR 묶음 (핫패스·카드비주얼·집계·ops문서)',
-      note: 'Plan: `.claude/plans/settings-encapsulated-sedgewick.md` (approved 2026-07-07, PR-open까지 승인 / merge 아침 리뷰).',
-    },
-  ],
+  now: [],
   next: {
     xhigh: [
       {
@@ -127,13 +122,8 @@ window.PROJECT_STATE = {
       },
       {
         id: 'FRONT-IMAGE-RESIZE-3',
-        title: '이미지 LQIP + 풀해상도 passthrough (PR3)',
+        title: '이미지 풀해상도 passthrough + telemetry currentSrc (PR3 잔여)',
         note: 'PR2(#242)가 srcset/decode/classifier 출하 → 남은 Tier A polish. 전부 프론트.',
-      },
-      {
-        id: 'BACK-LLM-4',
-        title: 'search.py ParseQueryView byte-cap도 ensure_ascii 부풀림 의심',
-        note: 'BACK-LLM-2(#195) 리뷰 중 발견(미수정, pre-existing). `backend/apps/recommendation/views/search.py` `ParseQueryView.post`의 conversation_history 검증이 BACK-LLM-2 serializer가 고친 것과 동일하게 `json.dumps` 기본 `ensure_ascii=True`로 byte 측정 가능성 → 한글 대화가 한도를 6배 부풀려 거짓 거부. 확인 후 `ensure_ascii=False`+UT…',
       },
       {
         id: 'FULL-LANGUAGE-1',
@@ -169,7 +159,7 @@ window.PROJECT_STATE = {
       },
       {
         id: 'INFRA-DB-3',
-        title: 'Unverified guest row 누적 정리 (conditional)',
+        title: 'Unverified guest row 누적 정리 + 죽은 guest 엔드포인트 제거 (conditional)',
         note: 'Guest 계정(FULL-LOGIN-REDESIGN-1 #154/#155)은 정리 로직 없음 (user Q5 결정). `/auth/guest/` throttle 3/min/IP이나 IP 로테이션 botnet은 row 증가 가능 → 조건부 모니터링 항목.',
       },
       {
@@ -201,6 +191,41 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 270,
+      title: 'refactor(swipe): useSwipeOrchestration + useKeyboardSwipe 훅 분리 — SwipePage·DiscoveryPage 중복 제거',
+      mergedAt: '2026-07-12T05:44:49Z',
+      mergedAtKST: '2026-07-12 14:44 KST',
+      sha: 'e536784',
+    },
+    {
+      number: 269,
+      title: 'docs(ops): buildings-DB index handoff + Neon pooler procedure',
+      mergedAt: '2026-07-08T03:58:18Z',
+      mergedAtKST: '2026-07-08 12:58 KST',
+      sha: '3f75887',
+    },
+    {
+      number: 268,
+      title: 'feat(analytics): session_metrics_report — first SessionEvent reader',
+      mergedAt: '2026-07-08T03:58:49Z',
+      mergedAtKST: '2026-07-08 12:58 KST',
+      sha: '628cdd0',
+    },
+    {
+      number: 267,
+      title: 'feat(card): LQIP blur-up + adaptive object-fit for swipe cards',
+      mergedAt: '2026-07-08T03:59:00Z',
+      mergedAtKST: '2026-07-08 12:59 KST',
+      sha: '438be46',
+    },
+    {
+      number: 266,
+      title: 'perf(session): board-name async + like-swipe tag fetch via card cache',
+      mergedAt: '2026-07-08T03:59:10Z',
+      mergedAtKST: '2026-07-08 12:59 KST',
+      sha: 'be27b3d',
+    },
+    {
       number: 265,
       title: 'feat(LOGIN-REWORK-1): login page concept rework — card deck + typing + dedup UX',
       mergedAt: '2026-07-06T16:38:26Z',
@@ -220,41 +245,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-07-06T09:10:48Z',
       mergedAtKST: '2026-07-06 18:10 KST',
       sha: 'a40edf9',
-    },
-    {
-      number: 261,
-      title: 'feat(login): business-card UI — paper/ink login flow + shared CardSkeleton',
-      mergedAt: '2026-07-05T17:42:59Z',
-      mergedAtKST: '2026-07-06 02:42 KST',
-      sha: 'de4b8c2',
-    },
-    {
-      number: 260,
-      title: 'feat(settings): role enum + bio grow + font chips + theme preview',
-      mergedAt: '2026-07-05T17:41:30Z',
-      mergedAtKST: '2026-07-06 02:41 KST',
-      sha: 'e2c3c8e',
-    },
-    {
-      number: 258,
-      title: 'test(auth): google 로그인 테스트를 verify-only 플로우에 맞게 수정',
-      mergedAt: '2026-07-04T07:49:12Z',
-      mergedAtKST: '2026-07-04 16:49 KST',
-      sha: '75df665',
-    },
-    {
-      number: 257,
-      title: 'fix(discovery): promote-to-taste persona report 미생성 버그 수정',
-      mergedAt: '2026-07-04T07:49:32Z',
-      mergedAtKST: '2026-07-04 16:49 KST',
-      sha: '8f6322c',
-    },
-    {
-      number: 256,
-      title: 'fix(discovery): 좋아요/패스 403 verify_required를 VerifyGateModal로 연결',
-      mergedAt: '2026-07-04T07:49:41Z',
-      mergedAtKST: '2026-07-04 16:49 KST',
-      sha: '670bfb0',
     },
   ],
   agents: [
@@ -893,6 +883,10 @@ window.PROJECT_STATE = {
       role: '레거시 프로젝트 정리 커맨드',
     },
     {
+      path: 'backend/apps/recommendation/management/commands/session_metrics_report.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/recommendation/migrations/0001_initial.py',
       role: 'DB 마이그레이션 (추천 초기)',
     },
@@ -1111,6 +1105,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/recommendation/tests/test_row_to_card.py',
       role: 'row_to_card 변환 테스트',
+    },
+    {
+      path: 'backend/apps/recommendation/tests/test_session_metrics_report.py',
+      role: '',
     },
     {
       path: 'backend/apps/recommendation/tests/test_taste_board_name.py',
@@ -1517,6 +1515,10 @@ window.PROJECT_STATE = {
       role: 'DB 스키마 문서',
     },
     {
+      path: 'docs/db-index-handoff.md',
+      role: '',
+    },
+    {
       path: 'docs/prd/archibe-business-model.html',
       role: 'archibe 비즈니스 모델 PRD (정적 HTML)',
     },
@@ -1853,6 +1855,10 @@ window.PROJECT_STATE = {
       role: '이미지 로드 텔레메트리 훅',
     },
     {
+      path: 'frontend/src/hooks/useKeyboardSwipe.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/hooks/useLanguage.js',
       role: '언어 선택 훅',
     },
@@ -1863,6 +1869,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/hooks/useResults.js',
       role: '세션 결과·북마크 훅',
+    },
+    {
+      path: 'frontend/src/hooks/useSwipeOrchestration.js',
+      role: '',
     },
     {
       path: 'frontend/src/hooks/useTheme.js',
