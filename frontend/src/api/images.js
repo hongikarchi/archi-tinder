@@ -99,6 +99,9 @@ export function normalizeCard(card) {
     image_url:   rightSizeImageUrl(card.image_url),
     image_srcset: buildCardSrcSet(card.image_url),
     lqip_url:    buildLqipUrl(card.image_url),
+    // cover_full_url: raw un-resized URL passthrough (no transformation).
+    // Consumers that need full resolution (lightbox, download) use this field.
+    cover_full_url: card.image_url || null,
     // image_focus / image_kind: passthrough so SwipeCard's isDrawingKind check
     // (drawing-vs-photo background/fit) actually has data to read.
     image_focus: card.image_focus ?? null,

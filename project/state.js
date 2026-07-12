@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-07-13 02:14 KST',
-    head: '8fba3d5',
-    branch: 'feature/claude-perf5-timing-report',
+    updatedAt: '2026-07-13 02:24 KST',
+    head: 'e66287b',
+    branch: 'feature/claude-image-full-passthrough',
   },
   done: [
+    {
+      id: 'FRONT-IMAGE-RESIZE-3',
+      title: '이미지 풀해상도 passthrough + telemetry currentSrc',
+      completedAt: '2026-07-13',
+      note: '이미지 리사이즈 시리즈(PR1 #241 / PR2 #242 / LQIP #267) 마지막 잔여 마감 — 빈-갤러리 건물의 라이트박스/다운로드가 원본을 받고, telemetry가 실제 렌더 variant를 기록.',
+    },
     {
       id: 'BACK-PERFORMANCE-5a',
       title: 'swipe timing_breakdown 계측 리더',
@@ -70,12 +76,6 @@ window.PROJECT_STATE = {
       title: '앱 내 알림 v1 (❤️ 받음 + 보안 이벤트)',
       completedAt: '2026-07-06',
       note: '앱 내 알림 v1 — 신규 `apps/notifications` (인박스+종+발생훅), 설정 알림 화면 실동작 전환 (설정 페이지 개선 2/2).',
-    },
-    {
-      id: 'LOGIN-CARD-REDESIGN',
-      title: '로그인/가입 명함 UI 재설계 (명함 언어 + CardSkeleton)',
-      completedAt: '2026-07-06',
-      note: '로그인/가입 5단계 카드를 테마 적응형 명함 언어로 재설계 (신규 `cardLanguage.js` 공유 모듈: paper face + ink 타이포 + mono 라벨 + ink 버튼 + paper-flat 인풋; 기존 토큰만, BusinessCard.jsx 불변).',
     },
   ],
   now: [],
@@ -124,11 +124,6 @@ window.PROJECT_STATE = {
         id: 'BACK-IDS-1',
         title: 'user_id 정수 PK 노출 비열거화',
         note: '`UserMiniSerializer.user_id`(source=user.id, serializers.py:70-74)가 순차 정수 Django PK 노출 — Project serializer·reactors 목록·notifications actor 전반 동일(시스템적, NOTIF-INAPP-1 net-new 0). 고치려면 handle/UUID로 전면 일괄 교체(부분 교체는 불일치만 초래). Opus verify low, 2026-07-06.',
-      },
-      {
-        id: 'FRONT-IMAGE-RESIZE-3',
-        title: '이미지 풀해상도 passthrough + telemetry currentSrc (PR3 잔여)',
-        note: 'PR2(#242)가 srcset/decode/classifier 출하 → 남은 Tier A polish. 전부 프론트.',
       },
       {
         id: 'FULL-LANGUAGE-1',
@@ -201,6 +196,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 273,
+      title: 'perf(analytics): swipe timing_breakdown aggregation in session_metrics_report (BACK-PERFORMANCE-5a)',
+      mergedAt: '2026-07-12T17:18:54Z',
+      mergedAtKST: '2026-07-13 02:18 KST',
+      sha: 'e66287b',
+    },
+    {
       number: 272,
       title: 'fix(board): is_temp lifecycle closure — one-way finalize + temp exclusion (FULL-ONBOARDING-2)',
       mergedAt: '2026-07-12T16:51:23Z',
@@ -248,13 +250,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-07-08T03:59:10Z',
       mergedAtKST: '2026-07-08 12:59 KST',
       sha: 'be27b3d',
-    },
-    {
-      number: 265,
-      title: 'feat(LOGIN-REWORK-1): login page concept rework — card deck + typing + dedup UX',
-      mergedAt: '2026-07-06T16:38:26Z',
-      mergedAtKST: '2026-07-07 01:38 KST',
-      sha: 'adb457e',
     },
   ],
   agents: [
