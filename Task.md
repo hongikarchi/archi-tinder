@@ -57,7 +57,21 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(비어있음 — 2026-07-12 백로그 전수 감사 완료(21/21 grep-verify + Opus 적대검증), 다음 작업 선정 대기)_
+### FULL-ONBOARDING-2 — is_temp 라이프사이클 마감 (#243 fast-follows)
+_(2026-07-12 ## Next X-HIGH에서 승격 — 배치 플랜 `reactive-soaring-hearth` PR1. orphan temp GC/TTL은 스코프 제외, 별도 추적.)_
+#243(`6f7a4a8`, FULL-ONBOARDING-1 Taste-flow + Project.is_temp) merge 시 verified-review로 게시한 후속(Codex RC + 워크플로우 adversarial-verify + Opus judge). 귀속: **#243 diff는 models/serializers/session_service/migration/frontend만 — projects.py·discovery.py·engine.py 미수정** → 아래 1만 PR-신규, 나머지 pre-existing(develop 동일).
+- **(PR-신규, 데이터-무결성, 먼저) `validate_is_temp`** — `ProjectSelfUpdateSerializer`(serializers.py:308, fields에 is_temp 있음)에 `True` 거부 추가. finalize는 one-way(temp→permanent). 현재 PATCH `{is_temp:true}`가 owner 자기 영구보드를 temp로 되돌림 → 다음 /search 재진입 시 report-없는 temp 자동삭제로 사일런트 유실 가능(owner-gated/UI경로 없음 = self-inflict, but wart).
+  ```python
+  def validate_is_temp(self, value):
+      if value:
+          raise serializers.ValidationError("is_temp can only be set to false (finalize is one-way).")
+      return value
+  ```
+- **(기능 완성, pre-existing 구조) board-list 필터** — `ProjectListCreateView.get()`(projects.py:72) + `UserProjectsListView.get()`(projects.py:275)에 `.filter(is_temp=False)` → temp 보드가 프로필 리스트에 안 뜨게(is_temp 기능의 핵심). projects.py가 #243 밖이라 별도 변경. visibility 기본 private라 타유저 노출은 0.
+- **(놓친 버그) guest-count over-count** — `discovery.py:242/377` `Project.objects.filter(user=profile).count() >= 3`가 temp까지 셈 → guest가 temp 1 + 저장 2면 false 403. `.filter(is_temp=False)` + save-confirm PATCH(promote 시점)에 limit enforce.
+- (비차단) temp 보드가 `compute_user_taste_vector`(engine.py:2087)·discovery feed 행(discovery.py:124)에 섞임 — pre-existing, is_temp로 newly relevant. 편할 때 `.filter(is_temp=False)`.
+- 게이트: #243 CI green, migration 0028 SAFE(BooleanField default=False, metadata-only DDL). 모든 fast-follow는 backend(projects.py/serializers.py/discovery.py) — Role 경계는 SNS/board(yywon1) or admin.
+- _(2026-07-12 감사 re-pin, develop@e536784: 5개 서브아이템 **전부 미수정** 확인 — validate_is_temp 부재(serializers.py:224-321), board-list 필터 무(projects.py:72, 274), guest-count over-count(discovery.py:**268, 405**로 라인 이동), taste vector 혼입(engine.py:**2091**), discovery feed 혼입(discovery_feed.py:466 + discovery.py:132). #260-#270 어느 것도 미접촉.)_
 
 ---
 
@@ -86,21 +100,7 @@ _(비어있음 — 2026-07-12 백로그 전수 감사 완료(21/21 grep-verify +
 > public-launch blocker. Pull before `### HIGH`. **재분류 2026-06-28 (공개런칭 수주 내 임박):**
 > X-HIGH = (1) FULL-ONBOARDING-2 라이브 데이터-무결성 결함, (2) FULL-LEGAL-1 런칭 법적 차단.
 
-#### FULL-ONBOARDING-2 — is_temp 라이프사이클 마감 (#243 fast-follows)
-#243(`6f7a4a8`, FULL-ONBOARDING-1 Taste-flow + Project.is_temp) merge 시 verified-review로 게시한 후속(Codex RC + 워크플로우 adversarial-verify + Opus judge). 귀속: **#243 diff는 models/serializers/session_service/migration/frontend만 — projects.py·discovery.py·engine.py 미수정** → 아래 1만 PR-신규, 나머지 pre-existing(develop 동일).
-- **(PR-신규, 데이터-무결성, 먼저) `validate_is_temp`** — `ProjectSelfUpdateSerializer`(serializers.py:308, fields에 is_temp 있음)에 `True` 거부 추가. finalize는 one-way(temp→permanent). 현재 PATCH `{is_temp:true}`가 owner 자기 영구보드를 temp로 되돌림 → 다음 /search 재진입 시 report-없는 temp 자동삭제로 사일런트 유실 가능(owner-gated/UI경로 없음 = self-inflict, but wart).
-  ```python
-  def validate_is_temp(self, value):
-      if value:
-          raise serializers.ValidationError("is_temp can only be set to false (finalize is one-way).")
-      return value
-  ```
-- **(기능 완성, pre-existing 구조) board-list 필터** — `ProjectListCreateView.get()`(projects.py:72) + `UserProjectsListView.get()`(projects.py:275)에 `.filter(is_temp=False)` → temp 보드가 프로필 리스트에 안 뜨게(is_temp 기능의 핵심). projects.py가 #243 밖이라 별도 변경. visibility 기본 private라 타유저 노출은 0.
-- **(놓친 버그) guest-count over-count** — `discovery.py:242/377` `Project.objects.filter(user=profile).count() >= 3`가 temp까지 셈 → guest가 temp 1 + 저장 2면 false 403. `.filter(is_temp=False)` + save-confirm PATCH(promote 시점)에 limit enforce.
-- (비차단) temp 보드가 `compute_user_taste_vector`(engine.py:2087)·discovery feed 행(discovery.py:124)에 섞임 — pre-existing, is_temp로 newly relevant. 편할 때 `.filter(is_temp=False)`.
-- (비차단) orphan temp 누적 — 브라우저 닫기/로그아웃 시 서버 GC/TTL 없음(frontend cleanup은 /search 재진입만). TTL 필드 or 정리 job 별도 추적.
-- 게이트: #243 CI green, migration 0028 SAFE(BooleanField default=False, metadata-only DDL). 모든 fast-follow는 backend(projects.py/serializers.py/discovery.py) — Role 경계는 SNS/board(yywon1) or admin.
-- _(2026-07-12 감사 re-pin, develop@e536784: 5개 서브아이템 **전부 미수정** 확인 — validate_is_temp 부재(serializers.py:224-321), board-list 필터 무(projects.py:72, 274), guest-count over-count(discovery.py:**268, 405**로 라인 이동), taste vector 혼입(engine.py:**2091**), discovery feed 혼입(discovery_feed.py:466 + discovery.py:132). #260-#270 어느 것도 미접촉.)_
+_(FULL-ONBOARDING-2 → `## Now` 승격 2026-07-12, 배치 플랜 PR1. orphan temp GC 서브아이템만 `### MEDIUM` `INFRA-TEMP-GC-1`로 분리.)_
 
 #### FULL-LEGAL-1 — PIPA/GDPR consent: Terms/Privacy 페이지 + 한국어 affirmative copy (잔여)
 _Status (2026-06-28 grep): **백엔드 consent 인프라 + 가입 흐름 consent gate DONE** — `UserProfile.consent_accepted_at`/`consent_policy_version`(models.py:73-74), RegisterView+GuestLoginView consent_accepted 강제, LoginPage consent step. **잔여 = (1) `/terms`·`/privacy` 라우트/페이지 없음(App.jsx), (2) 한국어 PIPA affirmative copy(현재 영어 swipe copy만), (3) retention/export/delete 정책.** **공개런칭 차단 → X-HIGH (런칭 수주 내).**_
@@ -170,6 +170,9 @@ _(Deferred 2026-06-04 batch scope → 계측 먼저. Variance CONFIRMED(per-work
 _(2026-07-12 감사 re-pin: 전제 유효 — 알고리즘 코어(refresh_pool_if_low/get_pool_embeddings/compute_mmr_next/farthest_point)가 여전히 `transaction.atomic()` + `select_for_update()` 안(FULL-REFACTOR-1로 `swipe_service.py:727-1087` 이동, off-path 이동은 아님). `[SWIPE TIMING]` 로그 잔존(swipe.py:457-466). **#268 `session_metrics_report`가 timing_breakdown 리더 제공** — item의 진단 플랜(8-10 스와이프 stage별 bucket)을 이제 prod 데이터로 즉시 실행 가능, 계측 선행조건 충족.)_
 
 ### MEDIUM
+#### INFRA-TEMP-GC-1 — orphan temp 보드 서버측 GC/TTL 없음
+FULL-ONBOARDING-2에서 분리(2026-07-12). 브라우저 닫기/로그아웃 시 `is_temp=True` 보드가 서버에 영구 잔류(frontend cleanup은 /search 재진입 경로만). TTL 필드 or 정리 job(cron/management command) 필요 — 설계 결정(TTL 기간, report-있는 temp 처리) 선행. 비차단.
+
 #### FRONT-UX-7 — 로그인 뒤로가기 시 입력 draft 소실
 LOGIN-REWORK-1(`a390f9f`) pre-existing 잔존. CredentialsStep이 localId/localPassword를 컴포넌트 로컬 useState로 들고, 앞 카드가 `step`으로 key돼 profile→back→credentials 시 remount → 입력 draft 초기화. 부모 id/password는 마지막 confirmed 값 유지하나 local state를 props로 seed 안 함 → 입력창 빈 채로 보임. deck 리워크가 뒤로가기를 쉽게 만들어 노출 빈도↑. 수정: 마운트 시 부모 props로 local state seed, 또는 id/password를 부모로 완전 lift해 controlled 전환. Non-blocking UX papercut.
 

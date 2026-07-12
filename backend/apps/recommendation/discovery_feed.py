@@ -463,7 +463,7 @@ def build_discovery_chunk(
     if _project_rows is None:
         cap = RC.get('discovery_recent_boards_cap', 10)
         _project_rows = list(
-            Project.objects.filter(user=profile)
+            Project.objects.filter(user=profile, is_temp=False)
             .order_by('-created_at')[:cap]
             .values('name', 'liked_ids', 'disliked_ids', 'saved_ids')
         )
