@@ -154,7 +154,7 @@ export default function EditCardForm({ user, onChange }) {
 
       {/* Display name */}
       <div>
-        <label htmlFor="edit-display-name" style={labelStyle}>이름</label>
+        <label htmlFor="edit-display-name" style={labelStyle}>{t('profileEdit.displayNameLabel')}</label>
         <input
           id="edit-display-name"
           type="text"
@@ -194,7 +194,7 @@ export default function EditCardForm({ user, onChange }) {
 
       {/* Affiliation */}
       <div>
-        <label htmlFor="edit-affiliation" style={labelStyle}>소속 (Affiliation)</label>
+        <label htmlFor="edit-affiliation" style={labelStyle}>{t('profileEdit.affiliationLabel')}</label>
         <input
           id="edit-affiliation"
           type="text"

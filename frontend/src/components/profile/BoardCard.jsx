@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useImageTelemetry } from '../../hooks/useImageTelemetry.js'
 import InfoCol from './InfoCol'
+import { useTranslation } from '../../i18n/index.js'
 
 /**
  * BoardCard — flip card per DESIGN.md §3.5.4
@@ -41,6 +42,7 @@ export default function BoardCard({
   onResume,
   onStartNew,
 }) {
+  const { t } = useTranslation()
   const [isFlipped, setIsFlipped] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
@@ -444,7 +446,7 @@ export default function BoardCard({
                   onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)' }}
                   onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)' }}
                 >
-                  이어보기 (♥ {board.latest_session_meta.like_count})
+                  {t('board.resume', { count: board.latest_session_meta.like_count })}
                 </button>
                 {/* Secondary — new session per DESIGN.md §8.2 */}
                 <button
@@ -463,7 +465,7 @@ export default function BoardCard({
                   onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.18)' }}
                   onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.10)' }}
                 >
-                  새로 시작
+                  {t('board.startNew')}
                 </button>
               </div>
             )}

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { updateProject } from '../api/projects.js'
 import styles from './SaveBoardModal.module.css'
+import { useTranslation } from '../i18n/index.js'
 
 /**
  * SaveBoardModal — shown after report completion (or from re-entry banner).
@@ -15,7 +16,8 @@ import styles from './SaveBoardModal.module.css'
  * DESIGN.md §8.10 — Bottom Sheet (mobile ≤768px) / Centered Modal (desktop ≥769px)
  */
 export default function SaveBoardModal({ projectId, finalReport, onSaved, onClose }) {
-  const defaultName = finalReport?.persona_type || '내 건축 취향 보드'
+  const { t } = useTranslation()
+  const defaultName = finalReport?.persona_type || t('board.defaultName')
 
   const [name, setName] = useState(defaultName)
   const [visibility, setVisibility] = useState('private')
@@ -31,7 +33,7 @@ export default function SaveBoardModal({ projectId, finalReport, onSaved, onClos
       await updateProject(projectId, { is_temp: false, name: trimmed, visibility })
       onSaved({ name: trimmed, visibility })
     } catch (err) {
-      setError(err?.message || '저장에 실패했어요. 다시 시도해주세요.')
+      setError(err?.message || t('board.saveError'))
       setSaving(false)
     }
   }
@@ -43,18 +45,18 @@ export default function SaveBoardModal({ projectId, finalReport, onSaved, onClos
 
   return (
     <div className={styles.backdrop} onClick={handleBackdropClick}>
-      <div className={styles.sheet} role="dialog" aria-modal="true" aria-label="보드 저장하기">
+      <div className={styles.sheet} role="dialog" aria-modal="true" aria-label={t('board.saveTitle')}>
         {/* Swipe handle — mobile only */}
         <div className={styles.handle} />
 
-        <h2 className={styles.title}>보드 저장하기</h2>
+        <h2 className={styles.title}>{t('board.saveTitle')}</h2>
         <p className={styles.subtitle}>
-          이 취향 분석 결과를 보드로 저장해두세요
+          {t('board.saveSubtitle')}
         </p>
 
         {/* Board name input */}
         <label className={styles.label} htmlFor="save-board-name">
-          보드 이름
+          {t('board.nameLabel')}
         </label>
         <input
           id="save-board-name"
@@ -63,16 +65,16 @@ export default function SaveBoardModal({ projectId, finalReport, onSaved, onClos
           value={name}
           onChange={e => setName(e.target.value)}
           maxLength={200}
-          placeholder="보드 이름을 입력하세요"
+          placeholder={t('board.namePlaceholder')}
           autoFocus
         />
 
         {/* Visibility toggle */}
-        <span className={styles.label}>공개 설정</span>
+        <span className={styles.label}>{t('board.visibilityLabel')}</span>
         <div className={styles.toggleRow}>
           {[
-            { value: 'private', label: '비공개' },
-            { value: 'public',  label: '공개' },
+            { value: 'private', labelKey: 'board.private' },
+            { value: 'public',  labelKey: 'board.public' },
           ].map(opt => (
             <button
               key={opt.value}
@@ -83,7 +85,7 @@ export default function SaveBoardModal({ projectId, finalReport, onSaved, onClos
               ].join(' ')}
               onClick={() => setVisibility(opt.value)}
             >
-              {opt.label}
+              {t(opt.labelKey)}
             </button>
           ))}
         </div>
@@ -96,10 +98,10 @@ export default function SaveBoardModal({ projectId, finalReport, onSaved, onClos
             onClick={handleSave}
             disabled={saving || !name.trim()}
           >
-            {saving ? '저장 중...' : '저장하기'}
+            {saving ? t('board.saving') : t('board.save')}
           </button>
           <button className={styles.skipBtn} onClick={onClose}>
-            나중에
+            {t('board.later')}
           </button>
         </div>
       </div>

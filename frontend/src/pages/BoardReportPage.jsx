@@ -2,12 +2,14 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useBoard } from '../hooks/useBoard.js'
 import PersonaReport from '../components/PersonaReport.jsx'
 import styles from './BoardReportPage.module.css'
+import { useTranslation } from '../i18n/index.js'
 
 /* ── BoardReportPage ────────────────────────────────────────────────────── */
 export default function BoardReportPage() {
   const navigate = useNavigate()
   const { boardId } = useParams()
   const locationState = useLocation().state
+  const { t } = useTranslation()
 
   const { board, loading } = useBoard(boardId)
 
@@ -33,7 +35,7 @@ export default function BoardReportPage() {
     return (
       <div className={styles.page} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: '40px 20px' }}>
         <p style={{ color: 'var(--color-text-muted)', fontSize: 16, fontWeight: 600, margin: 0 }}>
-          {!board ? '보드를 찾을 수 없습니다.' : '아직 페르소나 리포트가 없습니다.'}
+          {!board ? t('board.notFound') : t('board.noReport')}
         </p>
         <button
           onClick={() => navigate(-1)}
@@ -49,7 +51,7 @@ export default function BoardReportPage() {
             fontFamily: 'inherit',
           }}
         >
-          뒤로가기
+          {t('board.back')}
         </button>
       </div>
     )
@@ -79,7 +81,7 @@ export default function BoardReportPage() {
             <line x1="19" y1="12" x2="5" y2="12" />
             <polyline points="12 19 5 12 12 5" />
           </svg>
-          보드 상세로
+          {t('board.backToDetail')}
         </button>
 
         <PersonaReport

@@ -57,7 +57,10 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(비어있음 — FULL-LANGUAGE-1b RESOLVED 2026-07-13. 배치 플랜 `reactive-soaring-hearth` 잔여: PR6 i18n 슬라이스 c(프로필·보드+모달, 최종). PERF-5 prod 계측 실행은 user-gated 대기)_
+### FULL-LANGUAGE-1c — i18n 슬라이스 c: 프로필·보드 + 모달 (최종)
+배치 플랜 `reactive-soaring-hearth` PR6 (2026-07-13 착수). FULL-LANGUAGE-1 마지막 슬라이스 — 17파일 ~115줄.
+- 대상: PersonaReport(33줄) · SaveBoardModal(12) · VerifyGateModal(10) · ArchitectProfilePage(9) · ShareCardModal(8) · ProfileHeader(8) · LLMSearchPage(7) · LikedOffices(6) · LikedProjects(5) · UserProfilePage(4) · BoardReportPage(4) · BoardDetail(3) · ArchitectSection(3) · BoardCard(2) · SaveToBoardModal(2) · EditCardForm(2) · ProfileQr(1).
+- 완료 시 FULL-LANGUAGE-1 항목 전체 CLOSE. EN 에이전트 작성 + PR diff 스팟체크.
 
 ---
 

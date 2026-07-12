@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, memo } from 'react'
 import * as api from '../api/client.js'
 import { getProject, updateProject } from '../api/projects.js'
 import s from '../components/CalibrationChat.module.css'
+import { useTranslation } from '../i18n/index.js'
 
 const PRESETS = [
   { label: 'Japanese modern museum',  query: 'Modern museum in Japan' },
@@ -125,6 +126,7 @@ function ResultStrip({ results, isFallback }) {
 
 // eslint-disable-next-line no-unused-vars
 export default function LLMSearchPage({ mode, projectId, projectName: initialName, visibility = 'private', onBack, onStart, onUpdate }) {
+  const { t } = useTranslation()
   // Derive storage key once per render cycle (props/sessionStorage are stable for the lifecycle of this route mount)
   const userId = sessionStorage.getItem('archithon_user') || 'anon'
   const storageKey = `archithon_chat_${userId}_${mode}_${projectId || 'new'}`
@@ -561,7 +563,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
     const label = chip.label || String(chip)
 
     // Show a brief user bubble for continuity — not added to conversationHistory.
-    setMessages(prev => [...prev, { role: 'user', text: `「${label}」 우선` }])
+    setMessages(prev => [...prev, { role: 'user', text: t('search.chipPriorityUser', { label }) }])
     setIsLoading(true)
 
     try {
@@ -591,11 +593,11 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
       // Build the AI reply text (mirrors the terminal path).
       let replyText
       if (results.length > 0 && !isFallback) {
-        replyText = `「${label}」 기준으로 재정렬했어요.\n\nFound ${results.length} building${results.length !== 1 ? 's' : ''} matching your criteria.`
+        replyText = `${t('search.chipRerankDone', { label })}\n\nFound ${results.length} building${results.length !== 1 ? 's' : ''} matching your criteria.`
       } else if (results.length > 0 && isFallback) {
-        replyText = `「${label}」 기준으로 재정렬했어요.\n\n${parsed.fallback_note || 'No exact matches -- here are some similar buildings you might like.'}`
+        replyText = `${t('search.chipRerankDone', { label })}\n\n${parsed.fallback_note || 'No exact matches -- here are some similar buildings you might like.'}`
       } else {
-        replyText = `「${label}」 기준으로 재정렬했지만 결과가 없습니다. 다른 옵션을 시도해 보세요.`
+        replyText = t('search.chipRerankEmpty', { label })
       }
 
       setMessages(prev => [...prev, {
@@ -641,7 +643,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
 
   function handleNewConversation() {
     if (messages.length > 1) {
-      const confirmed = window.confirm('현재 대화를 지우고 새로 시작할까요?')
+      const confirmed = window.confirm(t('search.newConversationConfirm'))
       if (!confirmed) return
     }
     // Reset all state to initial values
@@ -689,8 +691,8 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
         <button
           onClick={handleNewConversation}
           className={s.newConvBtn}
-          aria-label="새 대화"
-          title="새 대화"
+          aria-label={t('search.newConversation')}
+          title={t('search.newConversation')}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="1 4 1 10 7 10" />

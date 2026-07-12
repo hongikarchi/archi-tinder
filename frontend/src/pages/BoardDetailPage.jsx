@@ -6,6 +6,7 @@ import { reactToProject, unreactToProject } from '../api/social.js'
 import BuildingTile from './boardDetail/BuildingTile'
 import RecommendedTile from './boardDetail/RecommendedTile'
 import ArchitectSection from './boardDetail/ArchitectSection'
+import { useTranslation } from '../i18n/index.js'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -142,6 +143,7 @@ const MOCK_BOARD = {
 export default function BoardDetailPage({ onResume }) {
   const navigate = useNavigate()
   const location = useLocation()
+  const { t } = useTranslation()
   const rawBoardId = useParams().boardId
   const boardId = UUID_RE.test(String(rawBoardId || '')) ? rawBoardId : null
   const { board, recommended: hookRecommended, recommendedArchitects, loading, resultLoading, error } = useBoard(boardId)
@@ -661,7 +663,7 @@ export default function BoardDetailPage({ onResume }) {
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
                   </svg>
-                  <span>취소</span>
+                  <span>{t('board.cancel')}</span>
                 </>
               ) : (
                 <>
@@ -701,7 +703,7 @@ export default function BoardDetailPage({ onResume }) {
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <polygon points="5 3 19 12 5 21 5 3"/>
                 </svg>
-                <span>이어서 탐색하기</span>
+                <span>{t('board.continueExploring')}</span>
               </button>
             )}
           </>
@@ -778,7 +780,7 @@ export default function BoardDetailPage({ onResume }) {
               <line x1="16" y1="17" x2="8" y2="17"/>
               <polyline points="10 9 9 9 8 9"/>
             </svg>
-            <span>페르소나 리포트 보기</span>
+            <span>{t('board.viewReport')}</span>
           </button>
         )}
       </div>
