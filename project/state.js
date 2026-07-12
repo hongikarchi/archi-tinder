@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-07-13 02:24 KST',
-    head: 'e66287b',
-    branch: 'feature/claude-image-full-passthrough',
+    updatedAt: '2026-07-13 02:54 KST',
+    head: 'a299af6',
+    branch: 'feature/claude-i18n-core',
   },
   done: [
+    {
+      id: 'FULL-LANGUAGE-1a',
+      title: 'i18n 슬라이스 a: 코어 스와이프 루프',
+      completedAt: '2026-07-13',
+      note: '고트래픽 코어 루프 5파일의 하드코딩 한글 전량(주석 제외)을 t() 키로 — Discovery/Swipe/Results가 ko/en 동일 string source에서 렌더.',
+    },
     {
       id: 'FRONT-IMAGE-RESIZE-3',
       title: '이미지 풀해상도 passthrough + telemetry currentSrc',
@@ -70,12 +76,6 @@ window.PROJECT_STATE = {
       title: '로그인 페이지 컨셉 재작업',
       completedAt: '2026-07-06',
       note: '로그인 페이지 전면 재작업 — 스와이프-취향발견 컨셉 + 명함 UI에 충실, 사용자 포커싱. Frontend-only, 백엔드 무변경. Plan: `.claude/plans/login-page-concept-rework.md`.',
-    },
-    {
-      id: 'NOTIF-INAPP-1',
-      title: '앱 내 알림 v1 (❤️ 받음 + 보안 이벤트)',
-      completedAt: '2026-07-06',
-      note: '앱 내 알림 v1 — 신규 `apps/notifications` (인박스+종+발생훅), 설정 알림 화면 실동작 전환 (설정 페이지 개선 2/2).',
     },
   ],
   now: [],
@@ -196,6 +196,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 274,
+      title: 'fix(image): cover_full_url raw passthrough + telemetry currentSrc (FRONT-IMAGE-RESIZE-3)',
+      mergedAt: '2026-07-12T17:28:52Z',
+      mergedAtKST: '2026-07-13 02:28 KST',
+      sha: 'a299af6',
+    },
+    {
       number: 273,
       title: 'perf(analytics): swipe timing_breakdown aggregation in session_metrics_report (BACK-PERFORMANCE-5a)',
       mergedAt: '2026-07-12T17:18:54Z',
@@ -243,13 +250,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-07-08T03:59:00Z',
       mergedAtKST: '2026-07-08 12:59 KST',
       sha: '438be46',
-    },
-    {
-      number: 266,
-      title: 'perf(session): board-name async + like-swipe tag fetch via card cache',
-      mergedAt: '2026-07-08T03:59:10Z',
-      mergedAtKST: '2026-07-08 12:59 KST',
-      sha: 'be27b3d',
     },
   ],
   agents: [
