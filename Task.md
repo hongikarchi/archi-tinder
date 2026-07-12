@@ -57,11 +57,7 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-### FRONT-IMAGE-RESIZE-3 — 이미지 풀해상도 passthrough + telemetry currentSrc (PR3 잔여)
-배치 플랜 `reactive-soaring-hearth` PR3 (2026-07-13 착수). `## Next ### MEDIUM`에서 승격.
-- `normalizeCard`(images.js:99)가 raw URL을 `rightSizeImageUrl`로 덮어써 원본 소실 → `cover_full_url`(미-리사이즈 passthrough) 추가.
-- `BuildingDetailPage.jsx:76-80` 빈-갤러리 폴백이 840px `image_url` 사용 → 라이트박스/다운로드가 리사이즈본 수신. `cover_full_url` 우선으로 변경.
-- `useImageTelemetry.js:30,45` `event.target.src`(840 폴백) → `currentSrc || src`로 per-variant load_ms 정확화.
+_(비어있음 — FRONT-IMAGE-RESIZE-3 RESOLVED 2026-07-13. 배치 플랜 `reactive-soaring-hearth` 잔여: PR4-6 i18n 3슬라이스. PERF-5 prod 계측 실행은 user-gated 대기)_
 
 ---
 
@@ -177,11 +173,7 @@ NOTIF-INAPP-1(0bac717)은 앱 내 채널만. 이메일(SMTP — Resend/Gmail 등
 #### BACK-IDS-1 — user_id 정수 PK 노출 비열거화
 `UserMiniSerializer.user_id`(source=user.id, serializers.py:70-74)가 순차 정수 Django PK 노출 — Project serializer·reactors 목록·notifications actor 전반 동일(시스템적, NOTIF-INAPP-1 net-new 0). 고치려면 handle/UUID로 전면 일괄 교체(부분 교체는 불일치만 초래). Opus verify low, 2026-07-06.
 
-#### FRONT-IMAGE-RESIZE-3 — 이미지 풀해상도 passthrough + telemetry currentSrc (PR3 잔여)
-_(2026-07-12 감사 재스코프: 원래 3개 중 **A7 LQIP는 #267이 출하** — `buildLqipUrl`(rightSizeImageUrl.js:83-86) + `normalizeCard.lqip_url`(images.js:101) + SwipeCard blur(16px) 레이어 확인. 잔여 2개만 유지.)_
-- **풀해상도 passthrough**: `normalizeCard`에 `cover_full_url`(미-리사이즈) 필드 없음 + `BuildingDetailPage` 빈-갤러리 폴백(:79)이 여전히 840px `image_url` 사용 → FRONT-IMAGE-RESIZE-1 known-limitation(빈-갤러리 #235 다운로드 840px) 미해소.
-- (선택) `useImageTelemetry`가 `currentSrc`(렌더된 variant) 읽도록 — 현재 `useImageTelemetry.js:30,45` 둘 다 `event?.target?.src`(840 폴백) → per-variant load_ms 부정확.
-- Tier B(Divisare 포맷 프록시)는 별개 — R2 폐기 이유(Q1, 외부 spec)+핫링크/ToS 정책(Q2)=user 결정 gated. `findings-r2-retirement.md`.
+_(FRONT-IMAGE-RESIZE-3 → RESOLVED 2026-07-13, `## Done` 참조. Tier B(Divisare 포맷 프록시)는 user-결정 gated 유지 — `findings-r2-retirement.md`.)_
 
 #### FULL-LANGUAGE-1 — 한/영 UI 라벨 번역 sweep (토글·필드·LLM 배선 완료; 잔여=라벨)
 _Status (2026-06-28 재확인, grep): **토글·인프라·LLM 배선 모두 출하됨** — `UserProfile.language`(models.py:63 ko/en) + serializer + `LanguageContext.jsx`/`useLanguage.js`/`i18n/index.js`/`locales.js` + `AppearanceSettings` 언어 토글 + LLM 언어 결정성 wire-through(`search.py:153` → `parse_query.py:41-55` language override directive) **DONE**. **잔여 = UI 라벨 sweep만** — `useTranslation()` 쓰는 파일 6개(TabBar/DiscoveryPage/LoginPage/AppearanceSettings 등)뿐, 대다수 페이지 본문/에러/모달 라벨 미번역. 이 sweep이 유일 잔여 → 항목 유지(축소). 영어=follower(Korea-first)라 MEDIUM. (이전 title "토글 없음"은 stale — Slice 1 #208 `119a435`에서 토글 출하됨.)_
@@ -278,6 +270,14 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FRONT-IMAGE-RESIZE-3 — 이미지 풀해상도 passthrough + telemetry currentSrc — RESOLVED 2026-07-13 (`05858b4`-pre-squash)
+이미지 리사이즈 시리즈(PR1 #241 / PR2 #242 / LQIP #267) 마지막 잔여 마감 — 빈-갤러리 건물의 라이트박스/다운로드가 원본을 받고, telemetry가 실제 렌더 variant를 기록.
+- [x] `normalizeCard`에 `cover_full_url`(raw 미변환 passthrough) 추가 — 840px 리라이트로 소실되던 원본 URL 보존. additive, 소비자 무영향.
+- [x] `BuildingDetailPage` 빈-갤러리 폴백 `cover_full_url || image_url` — #235 다운로드 840px known-limitation(FRONT-IMAGE-RESIZE-1) 해소.
+- [x] `useImageTelemetry` onLoad/onError `currentSrc || src` — srcset variant별 load_ms 정확화.
+- [x] images.test.mjs에 cover_full_url 가드 테스트(node --test 환경서 graceful skip — 기존 getImageSource와 동일 제약).
+- 검증: eslint PASS · npm test 79 pass/2 skip · build PASS · 세션 diff 리뷰(bounded 3파일, 스펙 일치). Tier B(Divisare 포맷 프록시)는 별개 user-결정 gated 유지(findings-r2-retirement.md).
+
 ### BACK-PERFORMANCE-5a — swipe timing_breakdown 계측 리더 — RESOLVED 2026-07-13 (`afc0b88`-pre-squash)
 `session_metrics_report`가 SessionEvent `timing_breakdown`을 이제 집계 — stage별 p50/p95/max + cache_hit 분리 + 세션내 위치 warmup bucket으로 swipe 0.7-1.5s 변동의 지배 원인을 prod 데이터로 특정 가능.
 - [x] 순수 헬퍼 5종(`_extract_timing`/`_stage_percentiles`/`_cache_split_percentiles`/`_position_buckets`/percentile) — DB 없이 unit 테스트 가능 구조.
