@@ -57,10 +57,7 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-### BACK-PERFORMANCE-5a — swipe timing_breakdown 계측 리더 (진단 슬라이스)
-배치 플랜 `reactive-soaring-hearth` PR2 (2026-07-13 착수). BACK-PERFORMANCE-5(### HIGH 유지)의 계측-선행 결정(플랜 Q1: 진단만, fix 별도)에 따른 진단 슬라이스.
-- `session_metrics_report`가 SessionEvent.payload `timing_breakdown`(lock/embed/select/prefetch/total_ms — swipe_service.py:1113-1129가 이미 기록 중)을 집계 안 함 → stage별 p50/p95 + cache_hit 분리 + 세션내 swipe 위치 bucket(warmup 탐지) 추가.
-- 이후 prod read-only 실행(user-gated) → 지배 stage 확정 → fix를 데이터 기반 별도 스코핑.
+_(비어있음 — BACK-PERFORMANCE-5a RESOLVED 2026-07-13. 배치 플랜 `reactive-soaring-hearth` 잔여: PR3 IMAGE-RESIZE-3 → PR4-6 i18n 3슬라이스. PERF-5 prod 계측 실행은 user-gated 대기)_
 
 ---
 
@@ -158,6 +155,8 @@ _(Deferred 2026-06-04 batch scope → 계측 먼저. Variance CONFIRMED(per-work
 
 _(2026-07-12 감사 re-pin: 전제 유효 — 알고리즘 코어(refresh_pool_if_low/get_pool_embeddings/compute_mmr_next/farthest_point)가 여전히 `transaction.atomic()` + `select_for_update()` 안(FULL-REFACTOR-1로 `swipe_service.py:727-1087` 이동, off-path 이동은 아님). `[SWIPE TIMING]` 로그 잔존(swipe.py:457-466). **#268 `session_metrics_report`가 timing_breakdown 리더 제공** — item의 진단 플랜(8-10 스와이프 stage별 bucket)을 이제 prod 데이터로 즉시 실행 가능, 계측 선행조건 충족.)_
 
+_(2026-07-13 BACK-PERFORMANCE-5a 출하(`afc0b88`): 리더에 stage별 p50/p95 + cache_hit 분리 + warmup 위치 bucket 집계 탑재 완료. 잔여 = ① prod read-only 실행 `python3 manage.py session_metrics_report --days 30 --json` (user-gated — 사용자 `!` 실행 or 명시 승인) ② 지배 stage 확정 ③ fix 슬라이스 스코핑. 배치 플랜 Q1 결정: 진단만 이번 배치, fix 별도.)_
+
 ### MEDIUM
 #### FRONT-VERIFY-1 — 보드저장 PATCH 경로 verify_required 모달 미배선
 FULL-ONBOARDING-2(`92237d8`)가 guest promote-limit을 `403 {'detail':'verify_required','reason':'board_limit_reached','limit':3}`로 표준화했으나, 프론트 `updateProject`(projects.js:64-71)는 verify_required를 VerifyRequiredError로 변환 안 함(createProject:26-40만 처리) → SaveBoardModal에서 guest가 4번째 보드 저장확정 시 VerifyGateModal 대신 generic 에러 문자열. `updateProject`에 createProject와 동일한 403 verify_required 감지 + VerifyGateModal 배선. Non-blocking(백엔드 enforcement는 정상).
@@ -217,6 +216,9 @@ Likely slices:
 
 ### LOW
 
+#### BACK-ANALYTICS-1 — session_metrics_report 콘솔 ESC-byte 주입 (pre-existing #268)
+`session_metrics_report.py` 텍스트 모드가 SessionEvent payload의 `domain`/`context` 값을 raw로 stdout 출력(~:548-559, #268 소산) — prod payload에 ESC 바이트 섞이면 터미널 이스케이프 주입 가능. BACK-PERFORMANCE-5a(`afc0b88`) Opus 검증서 실증됐으나 해당 PR 미접촉 영역이라 분리. 수정 = 출력 전 non-printable strip/repr(). 운영자-실행 read-only 커맨드라 LOW.
+
 #### ARCHITECT-UNIFY-1 — firm-side Office→Architect 전면 통합 (deferred, firm-UX 착수 시)
 office-interest **모델 중복은 해소됨**: Phase 0(SavedOffice #188) + C(OfficeFollow, ARCHITECT-UNIFY-C)로 두 미배선 중복 삭제 → follow 모델 1개(ArchitectFollow). 남은 통합 = Office 서브시스템(table/claim/OfficeProjectLink/sync_offices/FirmProfilePage)을 arch_id로 흡수 = firm-side 전면 재설계.
 
@@ -272,6 +274,15 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### BACK-PERFORMANCE-5a — swipe timing_breakdown 계측 리더 — RESOLVED 2026-07-13 (`afc0b88`-pre-squash)
+`session_metrics_report`가 SessionEvent `timing_breakdown`을 이제 집계 — stage별 p50/p95/max + cache_hit 분리 + 세션내 위치 warmup bucket으로 swipe 0.7-1.5s 변동의 지배 원인을 prod 데이터로 특정 가능.
+- [x] 순수 헬퍼 5종(`_extract_timing`/`_stage_percentiles`/`_cache_split_percentiles`/`_position_buckets`/percentile) — DB 없이 unit 테스트 가능 구조.
+- [x] swipe 섹션 신규 키 4: `timing_breakdown`(stage별 p50/p95/max/count), `timing_breakdown_by_cache`(hit/miss), `timing_breakdown_by_position`(warmup 1-2 vs warmed 3+, total+embed), `timing_malformed`(불량 payload 카운트+제외). 텍스트+`--json` 양쪽, 기존 키/섹션 무변경(additive).
+- [x] 테스트 +30: pure-unit 23(percentile 홀짝/단일, 추출 all-or-nothing, cache 분리, 위치 bucket 교차세션) + django_db 통합 7(CI). 기존 테스트 원문 유지.
+- 검증: pure-unit 23/23 로컬 PASS · flake8 clean · 로컬 dev DB 스모크(신규 키 4 출력, malformed 0; 로컬 4-swipe select_ms p50 1834ms — 참고 신호일 뿐) · code-review PASS · security PASS · Opus 적대검증 confirmed 0(스코프밖 pre-existing 1건은 LOW 백로그로 분리).
+- 다음 스텝: **prod read-only 실행(user-gated)** → 지배 stage 확정 → BACK-PERFORMANCE-5 fix를 데이터 기반 스코핑(배치 플랜 Q1 결정).
+- Deferred: #268 기존 코드의 payload 값 콘솔 raw 출력(ESC-byte 터미널 주입 가능, 이 PR 미접촉 영역) → BACK-ANALYTICS-1.
+
 ### FULL-ONBOARDING-2 — is_temp 라이프사이클 마감 (#243 fast-follows) — RESOLVED 2026-07-13 (`92237d8`-pre-squash)
 temp 보드 누수 5개 사이트 일괄 마감: one-way finalize 강제 + 리스트/카운트/취향벡터/피드 전부 `is_temp=False` 필터 — 사일런트 보드 유실 경로 차단.
 - [x] **`validate_is_temp`** (serializers.py ProjectSelfUpdateSerializer): PATCH `{is_temp:true}` → 400 "is_temp can only be set to false (finalize is one-way)." — 영구보드 temp 되돌림 → /search 재진입 자동삭제 사일런트 유실 경로 차단.
