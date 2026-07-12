@@ -57,7 +57,7 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(비어있음 — FRONT-IMAGE-RESIZE-3 RESOLVED 2026-07-13. 배치 플랜 `reactive-soaring-hearth` 잔여: PR4-6 i18n 3슬라이스. PERF-5 prod 계측 실행은 user-gated 대기)_
+_(비어있음 — FULL-LANGUAGE-1a RESOLVED 2026-07-13. 배치 플랜 `reactive-soaring-hearth` 잔여: PR5 i18n 슬라이스 b(설정+인증에러) → PR6 슬라이스 c(프로필·보드+모달). PERF-5 prod 계측 실행은 user-gated 대기)_
 
 ---
 
@@ -270,6 +270,14 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FULL-LANGUAGE-1a — i18n 슬라이스 a: 코어 스와이프 루프 — RESOLVED 2026-07-13 (`ff6210b`-pre-squash)
+고트래픽 코어 루프 5파일의 하드코딩 한글 전량(주석 제외)을 t() 키로 — Discovery/Swipe/Results가 ko/en 동일 string source에서 렌더.
+- [x] DiscoveryPage(17 리터럴: 토스트·진행 라벨·CTA·cap 메시지·이탈 모달) · SwipePage(14: ActionCard/ExitConfirm/DismissConfirm/본문) · ResultsPage(1) · DiscoveryTriggerCard(4블록, `<br/>` 분할은 sibling t() 콜) · QuestionCard(3).
+- [x] locales.js additive: discovery 확장(+triggerCard) + swipe/results 신규 네임스페이스, ko/en 양쪽. **43키 전부 양 트리 resolve** (Opus 검증 스크립트 확인 — 미해결 키 회귀 0).
+- [x] 동적 문자열 {placeholder} 보간, adopter 패턴(useTranslation) 준수, 잔여 한글 grep = 주석만.
+- 검증: eslint 0 · node --test 79 pass/0 fail · build PASS · code-review PASS · security PASS · Opus 적대검증 confirmed LOW 1(`t` 섀도잉 — `n => n + 1` 리네임으로 in-PR 수정), false positive 5 기각(전부 스코프밖 pre-existing).
+- EN 번역 에이전트 작성 — locales.js diff 스팟체크 요망(플랜 Q3). 슬라이스 b(설정+인증에러)·c(프로필·보드+모달) 잔여.
+
 ### FRONT-IMAGE-RESIZE-3 — 이미지 풀해상도 passthrough + telemetry currentSrc — RESOLVED 2026-07-13 (`05858b4`-pre-squash)
 이미지 리사이즈 시리즈(PR1 #241 / PR2 #242 / LQIP #267) 마지막 잔여 마감 — 빈-갤러리 건물의 라이트박스/다운로드가 원본을 받고, telemetry가 실제 렌더 variant를 기록.
 - [x] `normalizeCard`에 `cover_full_url`(raw 미변환 passthrough) 추가 — 840px 리라이트로 소실되던 원본 URL 보존. additive, 소비자 무영향.

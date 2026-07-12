@@ -10,8 +10,10 @@
  * tokens + §3.5 motion tokens.
  */
 import { CARD_WIDTH, CARD_HEIGHT } from './SwipeCard.jsx'
+import { useTranslation } from '../i18n/index.js'
 
 export default function DiscoveryTriggerCard() {
+  const { t } = useTranslation()
   return (
     <div
       style={{
@@ -49,7 +51,7 @@ export default function DiscoveryTriggerCard() {
           letterSpacing: '-0.02em',
           lineHeight: 1.3,
         }}>
-          취향이 10장 모였어요
+          {t('discovery.triggerCard.title')}
         </h2>
         <p style={{
           fontSize: 14,
@@ -58,7 +60,7 @@ export default function DiscoveryTriggerCard() {
           margin: 0,
           lineHeight: 1.5,
         }}>
-          지금까지 좋아요한 건축들로<br />Taste를 분석할 수 있어요
+          {t('discovery.triggerCard.bodyLine1')}<br />{t('discovery.triggerCard.bodyLine2')}
         </p>
       </div>
 
@@ -90,7 +92,7 @@ export default function DiscoveryTriggerCard() {
             color: 'rgba(255,255,255,0.9)',
             lineHeight: 1.4,
           }}>
-            계속 Discovery에서<br />탐색하기
+            {t('discovery.triggerCard.continueLeft1')}<br />{t('discovery.triggerCard.continueLeft2')}
           </div>
         </div>
 
@@ -116,7 +118,7 @@ export default function DiscoveryTriggerCard() {
             color: '#fff',
             lineHeight: 1.4,
           }}>
-            Taste에서 깊게<br />탐색하기
+            {t('discovery.triggerCard.continueRight1')}<br />{t('discovery.triggerCard.continueRight2')}
           </div>
         </div>
       </div>

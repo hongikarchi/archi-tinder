@@ -1,4 +1,5 @@
 import { CARD_WIDTH, CARD_HEIGHT } from './SwipeCard.jsx'
+import { useTranslation } from '../i18n/index.js'
 
 /**
  * QuestionCard — displayed in place of TinderCard when the backend triggers
@@ -9,6 +10,7 @@ import { CARD_WIDTH, CARD_HEIGHT } from './SwipeCard.jsx'
  *   onAnswer  (option: "A" | "B" | "skip") => void
  */
 export default function QuestionCard({ trigger, onAnswer }) {
+  const { t } = useTranslation()
   if (!trigger) return null
 
   return (
@@ -37,7 +39,7 @@ export default function QuestionCard({ trigger, onAnswer }) {
         margin: 0,
         letterSpacing: '0.04em',
       }}>
-        지금 취향을 파악하고 있어요 ✦
+        {t('swipe.questionCard.calibrating')}
       </p>
 
       {/* Swipe hint — gesture-friendly per DESIGN.md §4 */}
@@ -48,7 +50,7 @@ export default function QuestionCard({ trigger, onAnswer }) {
         margin: 0,
         letterSpacing: '0.03em',
       }}>
-        ← 아니오 &nbsp;·&nbsp; 네 →
+        {t('swipe.questionCard.swipeHint')}
       </p>
 
       {/* Question text */}
@@ -125,7 +127,7 @@ export default function QuestionCard({ trigger, onAnswer }) {
           fontFamily: 'inherit',
         }}
       >
-        건너뛰기
+        {t('swipe.questionCard.skip')}
       </button>
 
     </div>
