@@ -57,7 +57,10 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(비어있음 — FRONT-IMAGE-RESIZE-3 RESOLVED 2026-07-13. 배치 플랜 `reactive-soaring-hearth` 잔여: PR4-6 i18n 3슬라이스. PERF-5 prod 계측 실행은 user-gated 대기)_
+### FULL-LANGUAGE-1a — i18n 슬라이스 a: 코어 스와이프 루프
+배치 플랜 `reactive-soaring-hearth` PR4 (2026-07-13 착수). FULL-LANGUAGE-1(### MEDIUM 유지, 슬라이스 b·c 잔여)의 첫 슬라이스 — 고트래픽 코어 루프 5파일 하드코딩 한글 ~50줄을 `t()` 키 + locales.js ko/en으로.
+- 대상: DiscoveryPage(27줄) · SwipePage(14) · ResultsPage(2) · DiscoveryTriggerCard(4) · QuestionCard(3).
+- EN은 에이전트 작성 + PR diff 사용자 스팟체크(플랜 Q3 결정). 미번역 키는 ko 폴백(기존 i18n/index.js 체인).
 
 ---
 
