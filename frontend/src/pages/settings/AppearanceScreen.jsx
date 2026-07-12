@@ -7,10 +7,12 @@
 import { useNavigate } from 'react-router-dom'
 import AppearanceSettings from '../../components/AppearanceSettings.jsx'
 import { IconBack } from '../../components/icons.jsx'
+import { useTranslation } from '../../i18n/index.js'
 import styles from './AppearanceScreen.module.css'
 
 export default function AppearanceScreen() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
 
   return (
     <div className={styles.page}>
@@ -24,7 +26,7 @@ export default function AppearanceScreen() {
         >
           <IconBack width={20} height={20} />
         </button>
-        <h2 className={styles.headerTitle}>화면 설정</h2>
+        <h2 className={styles.headerTitle}>{t('settings.appearance')}</h2>
         <div style={{ width: 44 }} />
       </div>
 

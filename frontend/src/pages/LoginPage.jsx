@@ -482,8 +482,9 @@ function useTypedLine(line) {
 
 function LangToggle() {
   const { language, setLanguage } = useLanguage()
+  const { t } = useTranslation()
   const stop = (e) => e.stopPropagation()
-  const langs = [{ id: 'ko', label: '한국어' }, { id: 'en', label: 'ENGLISH' }]
+  const langs = [{ id: 'ko', labelKey: 'login.common.langKo' }, { id: 'en', labelKey: 'login.common.langEn' }]
 
   return (
     <div
@@ -523,7 +524,7 @@ function LangToggle() {
               transition: `background var(--motion-fast), color var(--motion-fast)`,
             }}
           >
-            {l.label}
+            {t(l.labelKey)}
           </button>
         )
       })}

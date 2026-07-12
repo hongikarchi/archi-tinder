@@ -13,11 +13,13 @@ import { getMe } from '../../api/client.js'
 import { updateMyProfile } from '../../api/profiles.js'
 import { IconBack } from '../../components/icons.jsx'
 import EditCardForm from '../../components/profile/EditCardForm.jsx'
+import { useTranslation } from '../../i18n/index.js'
 import btnStyles from '../../components/Button.module.css'
 import styles from './AccountScreen.module.css'
 
 export default function EditProfileScreen() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
 
   const [me, setMe] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -41,11 +43,11 @@ export default function EditProfileScreen() {
       })
       .catch(err => {
         if (cancelled) return
-        setFetchError(err.message || '프로필을 불러올 수 없습니다.')
+        setFetchError(err.message || t('profileEdit.profileLoadError'))
       })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleSave() {
     if (!hasPatch || saving) return
@@ -73,7 +75,7 @@ export default function EditProfileScreen() {
       // Optionally navigate back to profile after save
       // navigate(-1)
     } catch (err) {
-      setSaveError(err?.message || '저장에 실패했습니다. 다시 시도해주세요.')
+      setSaveError(err?.message || t('profileEdit.saveFailed'))
     } finally {
       setSaving(false)
     }
@@ -82,12 +84,12 @@ export default function EditProfileScreen() {
   if (loading) {
     return (
       <div className={styles.page}>
-        <ScreenHeader navigate={navigate} />
+        <ScreenHeader navigate={navigate} t={t} />
         <div style={{
           display: 'flex', justifyContent: 'center',
           padding: 48, color: 'var(--color-text-dim)', fontSize: 14,
         }}>
-          불러오는 중...
+          {t('profileEdit.loading')}
         </div>
       </div>
     )
@@ -96,7 +98,7 @@ export default function EditProfileScreen() {
   if (fetchError) {
     return (
       <div className={styles.page}>
-        <ScreenHeader navigate={navigate} />
+        <ScreenHeader navigate={navigate} t={t} />
         <div style={{
           display: 'flex', justifyContent: 'center',
           padding: 48, color: 'var(--color-destructive)', fontSize: 14,
@@ -109,7 +111,7 @@ export default function EditProfileScreen() {
 
   return (
     <div className={styles.page}>
-      <ScreenHeader navigate={navigate} />
+      <ScreenHeader navigate={navigate} t={t} />
 
       <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px' }}>
 
@@ -146,7 +148,7 @@ export default function EditProfileScreen() {
             color: 'var(--accent-1)',
             fontWeight: 500,
           }}>
-            프로필이 저장되었습니다.
+            {t('profileEdit.saved')}
           </div>
         )}
 
@@ -159,7 +161,7 @@ export default function EditProfileScreen() {
             className={btnStyles.cta}
             style={{ width: '100%' }}
           >
-            {saving ? '저장 중…' : '저장'}
+            {saving ? t('profileEdit.saving') : t('profileEdit.save')}
           </button>
         </div>
 
@@ -171,7 +173,7 @@ export default function EditProfileScreen() {
 
 /* ── Internal helpers ────────────────────────────────────────────────── */
 
-function ScreenHeader({ navigate }) {
+function ScreenHeader({ navigate, t }) {
   return (
     <div className={styles.header}>
       <button
@@ -182,7 +184,7 @@ function ScreenHeader({ navigate }) {
       >
         <IconBack width={20} height={20} />
       </button>
-      <h2 className={styles.headerTitle}>프로필 편집</h2>
+      <h2 className={styles.headerTitle}>{t('profileEdit.title')}</h2>
       <div style={{ width: 44 }} />
     </div>
   )

@@ -14,10 +14,12 @@
 
 import { hasGoogleLogin } from '../utils/loginFlow.js'
 import { useGoogleEmailVerify } from '../hooks/useGoogleEmailVerify.js'
+import { useTranslation } from '../i18n/index.js'
 import GoogleVerifyButton from './GoogleVerifyButton.jsx'
 
 export default function VerifyGateModal({ onClose, onPromoted }) {
   const googleConfigured = hasGoogleLogin(import.meta.env.VITE_GOOGLE_CLIENT_ID)
+  const { t } = useTranslation()
 
   // useGoogleLogin is NOT called here — it lives inside GoogleVerifyButton,
   // which is only rendered when googleConfigured === true (inside GoogleOAuthProvider).
@@ -93,7 +95,7 @@ export default function VerifyGateModal({ onClose, onPromoted }) {
               margin: '0 0 14px',
               lineHeight: 1.4,
             }}>
-              {error}
+              {t(error.key, error.params)}
             </p>
           )}
 
