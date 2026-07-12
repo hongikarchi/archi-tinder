@@ -57,14 +57,7 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-### OVERNIGHT-PERF-1 — 야간 자율 4-PR 묶음 (핫패스·카드비주얼·집계·ops문서)
-
-Plan: `.claude/plans/settings-encapsulated-sedgewick.md` (approved 2026-07-07, PR-open까지 승인 / merge 아침 리뷰).
-Slices: **PR-A** back-hotpath-1 (보드명 async UPDATE + 태그조회 캐시 대체) → **PR-B** front-card-visual-1
-(LQIP blur-up + 비율적응형 cover, 도면 contain·흰배경, 크롭손실 ≤25%만 cover) → **PR-C** analytics-1
-(`session_metrics_report` command — bookmark provenance top-10율·image_load p50/p95·수렴분포; session_end
-미발행 주의) → **PR-D** ops-docs-1 (인덱스 핸드오프 문서 + buildings pooler 문서/로컬 측정).
-검증: 4-gate + PR-A만 app-test FEATURE-SCOPED 25분 데드라인 (hang → TaskStop 후 진행).
+_(비어있음 — 2026-07-12 백로그 전수 감사 완료(21/21 grep-verify + Opus 적대검증), 다음 작업 선정 대기)_
 
 ---
 
@@ -107,9 +100,12 @@ Slices: **PR-A** back-hotpath-1 (보드명 async UPDATE + 태그조회 캐시 �
 - (비차단) temp 보드가 `compute_user_taste_vector`(engine.py:2087)·discovery feed 행(discovery.py:124)에 섞임 — pre-existing, is_temp로 newly relevant. 편할 때 `.filter(is_temp=False)`.
 - (비차단) orphan temp 누적 — 브라우저 닫기/로그아웃 시 서버 GC/TTL 없음(frontend cleanup은 /search 재진입만). TTL 필드 or 정리 job 별도 추적.
 - 게이트: #243 CI green, migration 0028 SAFE(BooleanField default=False, metadata-only DDL). 모든 fast-follow는 backend(projects.py/serializers.py/discovery.py) — Role 경계는 SNS/board(yywon1) or admin.
+- _(2026-07-12 감사 re-pin, develop@e536784: 5개 서브아이템 **전부 미수정** 확인 — validate_is_temp 부재(serializers.py:224-321), board-list 필터 무(projects.py:72, 274), guest-count over-count(discovery.py:**268, 405**로 라인 이동), taste vector 혼입(engine.py:**2091**), discovery feed 혼입(discovery_feed.py:466 + discovery.py:132). #260-#270 어느 것도 미접촉.)_
 
 #### FULL-LEGAL-1 — PIPA/GDPR consent: Terms/Privacy 페이지 + 한국어 affirmative copy (잔여)
 _Status (2026-06-28 grep): **백엔드 consent 인프라 + 가입 흐름 consent gate DONE** — `UserProfile.consent_accepted_at`/`consent_policy_version`(models.py:73-74), RegisterView+GuestLoginView consent_accepted 강제, LoginPage consent step. **잔여 = (1) `/terms`·`/privacy` 라우트/페이지 없음(App.jsx), (2) 한국어 PIPA affirmative copy(현재 영어 swipe copy만), (3) retention/export/delete 정책.** **공개런칭 차단 → X-HIGH (런칭 수주 내).**_
+
+_Status (2026-07-12 감사 re-pin, develop@e536784): 잔여 3개 **전부 미착수** — (1) `/terms`·`/privacy` 라우트 부재 확인(App.jsx:1069-1119, TermsPage/PrivacyPage 파일 없음); (2) 한국어 consent copy는 존재하나(locales.js:144-149) **여전히 right-swipe 제스처 방식**(LoginPage.jsx:855-929) — 요구사항은 명시적 버튼/체크박스 affirmative act, 미해소; (3) retention/export/계정삭제 정책·UI 없음(AccountScreen 무, backend 유저-발의 삭제 view 무 — auth.py:393 `guest_user.delete()`는 Google-merge 흐름 전용). **추가 발견(Opus)**: `consent_policy_version`이 단일 mutable CharField(models.py:84-85, 라인 이동됨)라 재동의 시 덮어씀 — item이 요구한 immutable 동의 이력(ConsentRecord) 부재. 백엔드 gate는 그대로 유효(auth.py:248 GuestLoginView, :697 RegisterView)._
 Phase 13+ Profile/Board public/private visibility shipped. PIPA + GDPR posture for signup data collection / consent flow / retention policy still open. **Required before public launch.**
 
 **FRONT-AUTH-2 consent regression (2026-06-01):** the swipe-onboarding login (merged to develop) replaced #155's explicit Korean "동의합니다" PIPA button with a right-swipe gesture + generic English consent copy (`LoginPage.jsx` ConsentStep). Backend `consent_accepted` / `consent_policy_version` contract intact, but Korea-first + PIPA favor an explicit affirmative act (button/checkbox) + Korean disclosure. Restore Korean PIPA copy + explicit affirmative before public launch (flagged by both code-review + security in the merge gate).
@@ -153,6 +149,8 @@ _(Deferred 2026-06-04 batch scope → 별도 focused 플랜. Premise CONFIRMED p
 
 _(2026-06-08 범위 축소: #212(`4e58195`) Case #3 resume guard가 **진행중(active, phase≠completed) 세션 resume**을 해결 — 보드 재진입 시 새 빈 세션 대신 live 세션의 like_vectors(원본 round)/preference_vector/phase/convergence/pool_ids/exposed_ids 전체 복원. **잔여 범위 = 완료된 세션 뒤 새 라운드가 `Project.liked_ids` 워밍 없이 cold-start**(`session_service.py:285` 새 세션 like_vectors=[], `:104` resume은 `.exclude(phase='completed')`). warm-start carry policy(D fade-decay / E full warm-start) + progress-bar UX 결정은 여전히 단독 처리 대상.)_
 
+_(2026-07-12 감사 re-pin: 전제 유효, 라인 이동 — resume guard `session_service.py:167-182`(completed 제외), 신규 세션 cold-create `:397-416`(phase='exploring', like_vectors=[] 등 전부 빈 값), `liked_ids`는 완료-세션 리포트에만 사용(`:688-689`), warm-start seed 경로 여전히 부재.)_
+
 #### BACK-PERFORMANCE-5 — Swipe latency 0.7-1.5s 흔들림
 Codex retest 2026-05-26: browser swipe 1.82s/1.75s/1.12s/1.81s; server swipe 1.50s/1.38s/0.746s/1.36s. **PR4 async prefetch consume IS working** — 3rd swipe with cache hit drops to 156ms prefetch stage. But variability is high. Identify which stage causes the 0.7→1.5s spread (DB query latency? embedding cache miss? pgvector?). Aim for swipe p95 ≤1.0s and p50 ≤0.5s on Singapore prod. **(2026-06-28 HIGH로 승격 — 코어 스와이프 루프 + <1s 페이지로드 목표 + 런칭 임박.)**
 
@@ -169,6 +167,8 @@ Diagnostic plan:
 
 _(Deferred 2026-06-04 batch scope → 계측 먼저. Variance CONFIRMED(per-worker in-process embedding 캐시 cold-miss 50-200ms + KMeans 재계산)나 ~tens-daily-users 규모서 cold-miss는 주로 배포직후 일시적; Redis-migration은 조회마다 RTT 추가 + premature 가능. prod hit-rate/지배 원인 계측 후 결정.)_
 
+_(2026-07-12 감사 re-pin: 전제 유효 — 알고리즘 코어(refresh_pool_if_low/get_pool_embeddings/compute_mmr_next/farthest_point)가 여전히 `transaction.atomic()` + `select_for_update()` 안(FULL-REFACTOR-1로 `swipe_service.py:727-1087` 이동, off-path 이동은 아님). `[SWIPE TIMING]` 로그 잔존(swipe.py:457-466). **#268 `session_metrics_report`가 timing_breakdown 리더 제공** — item의 진단 플랜(8-10 스와이프 stage별 bucket)을 이제 prod 데이터로 즉시 실행 가능, 계측 선행조건 충족.)_
+
 ### MEDIUM
 #### FRONT-UX-7 — 로그인 뒤로가기 시 입력 draft 소실
 LOGIN-REWORK-1(`a390f9f`) pre-existing 잔존. CredentialsStep이 localId/localPassword를 컴포넌트 로컬 useState로 들고, 앞 카드가 `step`으로 key돼 profile→back→credentials 시 remount → 입력 draft 초기화. 부모 id/password는 마지막 confirmed 값 유지하나 local state를 props로 seed 안 함 → 입력창 빈 채로 보임. deck 리워크가 뒤로가기를 쉽게 만들어 노출 빈도↑. 수정: 마운트 시 부모 props로 local state seed, 또는 id/password를 부모로 완전 lift해 controlled 전환. Non-blocking UX papercut.
@@ -179,18 +179,16 @@ NOTIF-INAPP-1(0bac717)은 앱 내 채널만. 이메일(SMTP — Resend/Gmail 등
 #### BACK-IDS-1 — user_id 정수 PK 노출 비열거화
 `UserMiniSerializer.user_id`(source=user.id, serializers.py:70-74)가 순차 정수 Django PK 노출 — Project serializer·reactors 목록·notifications actor 전반 동일(시스템적, NOTIF-INAPP-1 net-new 0). 고치려면 handle/UUID로 전면 일괄 교체(부분 교체는 불일치만 초래). Opus verify low, 2026-07-06.
 
-#### FRONT-IMAGE-RESIZE-3 — 이미지 LQIP + 풀해상도 passthrough (PR3)
-PR2(#242)가 srcset/decode/classifier 출하 → 남은 Tier A polish. 전부 프론트.
-- **A7 LQIP**: 카드당 ~20px 블러 썸네일(`buildLqipUrl=rightSizeImageUrl(url,20)`, 양 CDN) + CSS `filter:blur`, skeleton-shimmer 위 레이어. ⚠️ object-fit:contain letterbox라 `scale(1.1)` edge-bleed 핵 금지(letterbox 노출). PR2서 의도적 분리(유일 render-lifecycle 침습, polish지 core 아님). 완전 스펙은 PR2 Plan-agent 설계에 turnkey.
-- **풀해상도 passthrough**: `normalizeCard`에 `cover_full_url`(미-리사이즈) + `BuildingDetailPage` 빈-갤러리 폴백서 우선 → FRONT-IMAGE-RESIZE-1 known-limitation(빈-갤러리 #235 다운로드 840px) 해소.
-- (선택) `useImageTelemetry`가 `currentSrc`(렌더된 variant) 읽도록 — 현재 `.src`(840 폴백) → per-variant load_ms 정확도.
+#### FRONT-IMAGE-RESIZE-3 — 이미지 풀해상도 passthrough + telemetry currentSrc (PR3 잔여)
+_(2026-07-12 감사 재스코프: 원래 3개 중 **A7 LQIP는 #267이 출하** — `buildLqipUrl`(rightSizeImageUrl.js:83-86) + `normalizeCard.lqip_url`(images.js:101) + SwipeCard blur(16px) 레이어 확인. 잔여 2개만 유지.)_
+- **풀해상도 passthrough**: `normalizeCard`에 `cover_full_url`(미-리사이즈) 필드 없음 + `BuildingDetailPage` 빈-갤러리 폴백(:79)이 여전히 840px `image_url` 사용 → FRONT-IMAGE-RESIZE-1 known-limitation(빈-갤러리 #235 다운로드 840px) 미해소.
+- (선택) `useImageTelemetry`가 `currentSrc`(렌더된 variant) 읽도록 — 현재 `useImageTelemetry.js:30,45` 둘 다 `event?.target?.src`(840 폴백) → per-variant load_ms 부정확.
 - Tier B(Divisare 포맷 프록시)는 별개 — R2 폐기 이유(Q1, 외부 spec)+핫링크/ToS 정책(Q2)=user 결정 gated. `findings-r2-retirement.md`.
-
-#### BACK-LLM-4 — search.py ParseQueryView byte-cap도 ensure_ascii 부풀림 의심
-BACK-LLM-2(#195) 리뷰 중 발견(미수정, pre-existing). `backend/apps/recommendation/views/search.py` `ParseQueryView.post`의 conversation_history 검증이 BACK-LLM-2 serializer가 고친 것과 동일하게 `json.dumps` 기본 `ensure_ascii=True`로 byte 측정 가능성 → 한글 대화가 한도를 6배 부풀려 거짓 거부. 확인 후 `ensure_ascii=False`+UTF-8 인코딩 측정으로 통일. (`serializers.py:8` 주석이 한도가 ParseQueryView서 'mirror'됐다고 명시.) ⚠️ Korea-first 런칭 리스크 — 런칭 전 grep 확인 권장(실재 시 false-reject가 한글 유저 차단).
 
 #### FULL-LANGUAGE-1 — 한/영 UI 라벨 번역 sweep (토글·필드·LLM 배선 완료; 잔여=라벨)
 _Status (2026-06-28 재확인, grep): **토글·인프라·LLM 배선 모두 출하됨** — `UserProfile.language`(models.py:63 ko/en) + serializer + `LanguageContext.jsx`/`useLanguage.js`/`i18n/index.js`/`locales.js` + `AppearanceSettings` 언어 토글 + LLM 언어 결정성 wire-through(`search.py:153` → `parse_query.py:41-55` language override directive) **DONE**. **잔여 = UI 라벨 sweep만** — `useTranslation()` 쓰는 파일 6개(TabBar/DiscoveryPage/LoginPage/AppearanceSettings 등)뿐, 대다수 페이지 본문/에러/모달 라벨 미번역. 이 sweep이 유일 잔여 → 항목 유지(축소). 영어=follower(Korea-first)라 MEDIUM. (이전 title "토글 없음"은 stale — Slice 1 #208 `119a435`에서 토글 출하됨.)_
+
+_(2026-07-12 감사 re-pin: adopter 7개 파일(TabBar/AppearanceSettings/CardSkeleton/EditCardForm/LoginPage/NotificationInboxScreen/NotificationsScreen — #261/#262/#265로 증가), locales.js 345줄로 확장. **잔여 30개 pages/components 미번역** — 고트래픽 DiscoveryPage(하드코딩 한글 27줄)·SwipePage(14줄)·ResultsPage·SettingsPage·UserProfilePage·BuildingDetailPage 등 전부 useTranslation 0. Open dimension 셋 중 **미번역 키 폴백은 이미 해결**(i18n/index.js: 현재언어→ko→literal key 순) — 남은 결정 = scope 우선순위 + 번역 소스 2개. models.py:74로 라인 이동.)_
 
 Open dimensions:
 - **Scope priority** — TabBar / button copy / page titles first (high-traffic surfaces) → page bodies → error messages → modal alerts? Or sweep alphabetically?
@@ -203,6 +201,8 @@ Acceptance: 모든 고트래픽 surface(TabBar/페이지타이틀/버튼/에러/
 Foundation shipped: PR #54 (`tokens.css` 4 themes + `ThemeContext` + `AppearanceSettings`) + PR #59 (theme/font server persistence). Remaining: per-component visual rework — inline `style={{}}` → CSS Modules + `:hover/:focus`/`:active`, light-theme polish where dark-only assumptions still leak through, leaf→hub component order (small leaf components first, then containers).
 
 Code audit 2026-06-28 (grep): inline `style={{` = **958** call sites (was 801 @2026-06-04 — debt grew); `*.module.css` = **13** (was 4 — 일부 컴포넌트 마이그레이션됨: Toggle/Button/AppearanceSettings/SaveBoardModal/ArchitectProfilePage/BoardReportPage/EditCardForm/settings/* 등). Foundation(tokens.css + ThemeContext)만 출하, per-component sweep은 대부분 미완.
+
+Code audit 2026-07-12 (grep): inline `style={{` = **990** call sites / 64 files (958 → 990, 신규 기능 PR로 부채 계속 증가); `*.module.css` = **15** (+CalibrationChat #254, +NotificationInboxScreen #262 — 부수적 증가, 체계적 sweep은 여전히 미착수).
 
 Resume via `/plan per slice` — each slice = one logical component cluster (e.g. SwipeCard + LoadingCard, then BoardCard, then HomePage, etc.). Each slice ships its own PR via the orchestrate skill; the full sweep takes many sessions. **Paused, 멀티세션 대공사 → MEDIUM(비긴급).**
 
@@ -235,9 +235,11 @@ PR 4 PERF-PREFETCH-CHAIN flipped `async_prefetch_enabled: True` — every prod s
 
 _(Re-scoped 2026-06-04: premise OVERSTATED — 연결 누수 없음(prefetch thread 0 conn, telemetry thread finally서 close). 실위험 = 고동시성 peak(>12-15 conn)뿐, 현 규모 무관 → LOW(모니터링). Neon active_connections 모니터, 코드 변경 無.)_
 
-#### INFRA-DB-3 — Unverified guest row 누적 정리 (conditional)
-_2026-06-28 참고: LOGIN-ONBOARD-1 후에도 `GuestLoginView`(auth.py:227) + `/auth/guest/` 라우트(urls.py:17) + `guestLogin()`(api/auth.js:30) **여전히 존재** — LoginPage 신규-프로필 흐름만 호출 중단, 엔드포인트는 미제거. is_guest 의미가 "미인증"으로 재정의됨(id+password 계정도 is_guest=True). 정리 대상/기준 재정의 필요._
-Guest 계정 정리 로직 없음. 조건부 모니터링: Neon `auth_user WHERE email='' AND is_active=True` row 주간 모니터, > 500 rows/week 지속 시 management command(`delete unverified`) + cron. _(2026-06-04 premise FALSIFIED — cleanup 기준 필드 `last_active`/`swipe_count` 부재(created_at/updated_at만) → 정책 재작성 필요. 모니터링 → LOW.)_
+_(2026-07-12 감사: 스레드 인벤토리 증가 — #266이 세션생성당 데몬 스레드 1개 추가(`_async_board_name_update`, session_service.py:387-394; close_all entry+finally 동일 안전 패턴). 현 프로드 데몬 스레드 4종: per-swipe 2(`_async_prefetch` swipe.py:80/155 — DB 무접속, `_emit_telemetry` swipe.py:37/45) + per-session-create 1(board-name) + per-ParseQuery 1(`_spawn_stage2` search.py:90). "concurrent_requests × 2" 산식은 이제 과소 — 결론(현 규모 무관, 모니터링만) 불변.)_
+
+#### INFRA-DB-3 — Unverified guest row 누적 정리 + 죽은 guest 엔드포인트 제거 (conditional)
+_2026-07-12 감사 재스코프: 문제가 **확대**됨 — #265 LOGIN-REWORK-1 이후 축적 경로가 2개. (1) `GuestLoginView`(auth.py:228) + `/auth/guest/`(urls.py:19) + `guestLogin()`(api/auth.js:30, client.js:11 재수출)은 **어떤 UI 경로도 호출 안 하는 죽은 코드** — LoginPage(#265)는 `login`/`register`/`checkHandle`만 import. (2) RegisterView(auth.py:762)도 `email=''` + `is_guest=True` row 생성(id+password 계정, Google 연동 전까지 미인증). 모니터링 쿼리 `email='' AND is_active=True`는 두 경로 다 포착._
+재스코프된 작업: (a) 죽은 `GuestLoginView`/라우트/`guestLogin` export 제거, (b) 정리 정책 정의 — `last_active`/`swipe_count` 필드 부재라 `is_guest=True AND created_at < now()-interval AND (스와이프 무)` 형태로 가용 필드 기반 재작성, (c) management command(dry-run + `--confirm`). 조건부: > 500 rows/week 지속 시 착수. LOW 유지.
 
 #### FRONT-UX-6 — temp 삭제 실패 무음 + activeProjectId 미정리
 App.jsx temp-delete cleanup(`:207 deleteProject().catch(()=>{})`)가 DELETE 실패 시에도 무음(다음 `/search` 재진입 때 self-correct). 성공 후에만 닫거나 에러 토스트. 또 temp 삭제 경로가 `setActiveProjectId(null)`을 안 불러 exit 핸들러와 불일치(파생값 `projects.find()||null`로 무해). FULL-ONBOARDING-1 follow-up. (FULL-ONBOARDING-2 X-HIGH 작업에 흡수 가능 — item 5 orphan/cleanup.)
@@ -275,6 +277,12 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### BACK-LLM-4 — search.py ParseQueryView byte-cap ensure_ascii 부풀림 의심 — CLOSED 2026-07-12 (premise falsified, no PR)
+2026-07-12 백로그 전수 감사에서 무혐의 판명: `ParseQueryView.post`는 conversation_history 검증을 serializer로 위임하며, 해당 serializer는 BACK-LLM-2(#195)가 이미 UTF-8 byte 측정으로 고침 — ParseQueryView 자체에 `ensure_ascii=True` byte-cap 경로가 애초에 없음(Sonnet 검증 + Opus 적대검증 동의). 의심 항목이었고 실재하지 않아 폐기.
+
+### OVERNIGHT-PERF-1 — 야간 자율 4-PR 묶음 (핫패스·카드비주얼·집계·ops문서) — RESOLVED 2026-07-08 (#266-#269)
+Plan `.claude/plans/settings-encapsulated-sedgewick.md` 4슬라이스 전부 머지: **PR-A** #266 back-hotpath (보드명 async + like 태그조회 캐시, 개별 Done 항목 PERF-HOTPATH-1) · **PR-B** #267 LQIP blur-up + 비율적응형 object-fit · **PR-C** #268 `session_metrics_report` 첫 SessionEvent 리더 · **PR-D** #269 인덱스 핸드오프 + Neon pooler 문서. (우산 항목 Done 이동 2026-07-12 감사 시 — 데스크탑 reporter 미처리분.)
+
 ### PERF-HOTPATH-1 — 세션생성 보드명 비동기화 + like 태그조회 캐시 대체 — RESOLVED 2026-07-07 (`37a3340`-pre-squash)
 세션 생성 최악 ~12s Gemini 대기 제거 + like 스와이프당 buildings DB 왕복 1회 절감 (OVERNIGHT-PERF-1 PR-A).
 - [x] `session_service.py`: `.join(timeout=12)` 삭제 — deterministic fallback 이름(`_deterministic_board_name`+`_dedup_board_name`)으로 즉시 INSERT·응답; Gemini 이름은 `transaction.on_commit` 등록 데몬 스레드 `_async_board_name_update`(PK 전달, `connections.close_all()` entry+finally = 텔레메트리 스레드 패턴)가 **조건부 원자 UPDATE** `filter(pk, name=fallback).update(...)` — 유저 수동 rename 절대 안 덮음. API shape 무변경.
