@@ -23,9 +23,9 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-07-13 04:33 KST',
-    head: 'b51c385',
-    branch: 'feature/claude-i18n-profile',
+    updatedAt: '2026-07-13 17:11 KST',
+    head: '227d23b',
+    branch: 'feature/claude-perf5-findings',
   },
   done: [
     {
@@ -191,6 +191,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 277,
+      title: 'feat(i18n): profile/board + modals sweep — slice c of 3, FULL-LANGUAGE-1 closed',
+      mergedAt: '2026-07-12T19:38:06Z',
+      mergedAtKST: '2026-07-13 04:38 KST',
+      sha: '227d23b',
+    },
+    {
       number: 276,
       title: 'feat(i18n): settings/account + auth errors sweep — slice b of 3 (FULL-LANGUAGE-1b)',
       mergedAt: '2026-07-12T18:39:48Z',
@@ -238,13 +245,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-07-12T05:44:49Z',
       mergedAtKST: '2026-07-12 14:44 KST',
       sha: 'e536784',
-    },
-    {
-      number: 269,
-      title: 'docs(ops): buildings-DB index handoff + Neon pooler procedure',
-      mergedAt: '2026-07-08T03:58:18Z',
-      mergedAtKST: '2026-07-08 12:58 KST',
-      sha: '3f75887',
     },
   ],
   agents: [

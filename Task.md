@@ -155,7 +155,22 @@ _(Deferred 2026-06-04 batch scope → 계측 먼저. Variance CONFIRMED(per-work
 
 _(2026-07-12 감사 re-pin: 전제 유효 — 알고리즘 코어(refresh_pool_if_low/get_pool_embeddings/compute_mmr_next/farthest_point)가 여전히 `transaction.atomic()` + `select_for_update()` 안(FULL-REFACTOR-1로 `swipe_service.py:727-1087` 이동, off-path 이동은 아님). `[SWIPE TIMING]` 로그 잔존(swipe.py:457-466). **#268 `session_metrics_report`가 timing_breakdown 리더 제공** — item의 진단 플랜(8-10 스와이프 stage별 bucket)을 이제 prod 데이터로 즉시 실행 가능, 계측 선행조건 충족.)_
 
-_(2026-07-13 BACK-PERFORMANCE-5a 출하(`afc0b88`): 리더에 stage별 p50/p95 + cache_hit 분리 + warmup 위치 bucket 집계 탑재 완료. 잔여 = ① prod read-only 실행 `python3 manage.py session_metrics_report --days 30 --json` (user-gated — 사용자 `!` 실행 or 명시 승인) ② 지배 stage 확정 ③ fix 슬라이스 스코핑. 배치 플랜 Q1 결정: 진단만 이번 배치, fix 별도.)_
+_(2026-07-13 BACK-PERFORMANCE-5a 출하(`afc0b88`): 리더에 stage별 p50/p95 + cache_hit 분리 + warmup 위치 bucket 집계 탑재 완료. 배치 플랜 Q1 결정: 진단만 이번 배치, fix 별도.)_
+
+**🔬 PROD 계측 결과 (2026-07-13, user-승인 read-only, 90일 창 = 전체 timing 데이터, n=247 swipes / 35 sessions / cache_hit 95.5% / malformed 0):**
+| stage | p50 | p95 | max |
+|---|---|---|---|
+| prefetch_ms | **888** | 1213 | 2907 |
+| select_ms | 416 | **1389** | 82282 (outlier 1건) |
+| lock_ms | 171 | 530 | 1650 |
+| embed_ms | 75 | 151 | 561 |
+| **total_ms** | **1638** | **2826** | 83737 |
+- **지배 stage = prefetch (p50의 54%)** — cache HIT에서도 prefetch p50 902ms. 코드 대조로 정체 확정: prefetch 구간(select_done→prefetch_done) = **동기 `engine.get_buildings_by_ids([next, pf, pf2])` 배치 fetch** (swipe.py:396-403). IMP-8 async 스레드는 **이미 켜져 있고 정상** (`async_prefetch_enabled: True`, settings.py:319, PERF-PREFETCH-CHAIN 후 재활성) — 스레드는 의도적으로 ID만 캐시(스레드 ~50ms 유지, swipe.py:85-91 주석), 카드 hydration은 요청 경로에 남는 설계. "IMP-8 꺼짐" 1차 추정은 **기각**.
+- **근본 원인 후보**: `DATABASES['buildings']`에 `CONN_MAX_AGE` 무 → 매 요청 Neon 신규 TLS 커넥션. 단 이는 **문서화된 소유권 결정**(Make-DB 소유 프로젝트에 앱 영구 커넥션 금지, CONTRIBUTING.md § Buildings-DB connection pooling) — 직접 CONN_MAX_AGE 추가는 소유권 위반. **승인된 해법 = Neon 서버측 pooler**: `BUILDINGS_DB_HOST`를 `ep-<id>-pooler.<region>...`로 (Railway env + 로컬 .env, user-applied, 코드 0줄). 2026-07-07 실측: connect tail max 2059→517ms 평탄화.
+- **p95 드라이버 = select (1389ms)** — cache miss 시 select p50 2.5배(1032 vs 412; miss 시 `get_pool_embeddings`가 buildings DB fetch = 같은 커넥션 비용). max 82s outlier 1건 = Neon autosuspend cold-start 추정 — pooler로는 안 잡힘, 별도(autosuspend 설정 or keepalive).
+- **가설 기각 2건**: ① embed cold-miss 지배 가설(2026-06-04 deferred 노트) — embed p50 75ms, 총량의 5%뿐. ② warmup 가설 — 세션내 1-2번째 swipe(p50 1577ms)가 3+번째(1650ms)보다 오히려 빠름.
+- **다음 액션**: ① user가 Railway `BUILDINGS_DB_HOST` pooler 플립(+로컬 .env) → ② 트래픽 쌓인 뒤 `session_metrics_report --days 7` 재실측(before/after) → ③ 잔여 병목이면 후보: 스레드측 bcard warm-hydration(fast-swiper 트레이드오프 있음, swipe.py:85 주석), prefetch 구간 sub-split 계측(connect vs query vs cache), in-region 커넥션 비용 실측.
+- 주의: 247건은 4-7월 코드 세대 혼합(Redis 5/26 도입·PERF-PREFETCH-CHAIN 6월 배포 전 데이터 포함) — stage 지배 구도는 유효하나 절대값은 pooler 플립 후 재실측이 기준. 30일 창 n=4(저트래픽)라 90일 창 채택. 원데이터 `/tmp/perf5-prod-90.json`(로컬 휘발).
 
 ### MEDIUM
 #### FRONT-VERIFY-1 — 보드저장 PATCH 경로 verify_required 모달 미배선
