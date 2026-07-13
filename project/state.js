@@ -23,9 +23,9 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-07-13 17:11 KST',
-    head: '227d23b',
-    branch: 'feature/claude-perf5-findings',
+    updatedAt: '2026-07-14 07:36 KST',
+    head: '68dafaa',
+    branch: 'feature/claude-perf5-pooler-applied',
   },
   done: [
     {
@@ -191,6 +191,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 278,
+      title: 'docs(perf): BACK-PERFORMANCE-5 prod timing diagnosis — prefetch stage dominates; Neon pooler flip prescribed',
+      mergedAt: '2026-07-13T08:16:20Z',
+      mergedAtKST: '2026-07-13 17:16 KST',
+      sha: '68dafaa',
+    },
+    {
       number: 277,
       title: 'feat(i18n): profile/board + modals sweep — slice c of 3, FULL-LANGUAGE-1 closed',
       mergedAt: '2026-07-12T19:38:06Z',
@@ -238,13 +245,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-07-12T08:14:58Z',
       mergedAtKST: '2026-07-12 17:14 KST',
       sha: '3969fc9',
-    },
-    {
-      number: 270,
-      title: 'refactor(swipe): useSwipeOrchestration + useKeyboardSwipe 훅 분리 — SwipePage·DiscoveryPage 중복 제거',
-      mergedAt: '2026-07-12T05:44:49Z',
-      mergedAtKST: '2026-07-12 14:44 KST',
-      sha: 'e536784',
     },
   ],
   agents: [
