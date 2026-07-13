@@ -155,7 +155,22 @@ _(Deferred 2026-06-04 batch scope → 계측 먼저. Variance CONFIRMED(per-work
 
 _(2026-07-12 감사 re-pin: 전제 유효 — 알고리즘 코어(refresh_pool_if_low/get_pool_embeddings/compute_mmr_next/farthest_point)가 여전히 `transaction.atomic()` + `select_for_update()` 안(FULL-REFACTOR-1로 `swipe_service.py:727-1087` 이동, off-path 이동은 아님). `[SWIPE TIMING]` 로그 잔존(swipe.py:457-466). **#268 `session_metrics_report`가 timing_breakdown 리더 제공** — item의 진단 플랜(8-10 스와이프 stage별 bucket)을 이제 prod 데이터로 즉시 실행 가능, 계측 선행조건 충족.)_
 
-_(2026-07-13 BACK-PERFORMANCE-5a 출하(`afc0b88`): 리더에 stage별 p50/p95 + cache_hit 분리 + warmup 위치 bucket 집계 탑재 완료. 잔여 = ① prod read-only 실행 `python3 manage.py session_metrics_report --days 30 --json` (user-gated — 사용자 `!` 실행 or 명시 승인) ② 지배 stage 확정 ③ fix 슬라이스 스코핑. 배치 플랜 Q1 결정: 진단만 이번 배치, fix 별도.)_
+_(2026-07-13 BACK-PERFORMANCE-5a 출하(`afc0b88`): 리더에 stage별 p50/p95 + cache_hit 분리 + warmup 위치 bucket 집계 탑재 완료. 배치 플랜 Q1 결정: 진단만 이번 배치, fix 별도.)_
+
+**🔬 PROD 계측 결과 (2026-07-13, user-승인 read-only, 90일 창 = 전체 timing 데이터, n=247 swipes / 35 sessions / cache_hit 95.5% / malformed 0):**
+| stage | p50 | p95 | max |
+|---|---|---|---|
+| prefetch_ms | **888** | 1213 | 2907 |
+| select_ms | 416 | **1389** | 82282 (outlier 1건) |
+| lock_ms | 171 | 530 | 1650 |
+| embed_ms | 75 | 151 | 561 |
+| **total_ms** | **1638** | **2826** | 83737 |
+- **지배 stage = prefetch (p50의 54%)** — cache HIT에서도 prefetch p50 902ms (async-consume 156ms 기대와 불일치) → prefetch 연산이 여전히 요청 경로 안. IMP-8 async prefetch는 Redis-gate로 default OFF였고 Redis는 INFRA-REDIS-1(2026-05-26)로 도입 완료 → **fix 1순위: IMP-8 플래그 프로덕션 활성(또는 prefetch off-path 이동) 검증**.
+- **p95 드라이버 = select (1389ms)** — cache miss 시 select p50 2.5배(1032 vs 412). max 82s outlier 1건(배포 직후 cold 추정). fix 2순위.
+- **lock p50 171 / p95 530** — `select_for_update()` 컨텐션, 3순위.
+- **가설 기각 2건**: ① embed cold-miss 지배 가설(2026-06-04 deferred 노트) — embed p50 75ms, 총량의 5%뿐. ② warmup 가설 — 세션내 1-2번째 swipe(p50 1577ms)가 3+번째(1650ms)보다 오히려 빠름, cold-start 페널티 관측 안 됨.
+- 현재 총량 p50 1638 / p95 2826 vs 목표 p50≤500 / p95≤1000 — prefetch off-path만으로 p50 ~750ms 기대(−54%).
+- 30일 창은 n=4(저트래픽)라 90일 창 채택. 원데이터 `/tmp/perf5-prod-90.json`(로컬 휘발).
 
 ### MEDIUM
 #### FRONT-VERIFY-1 — 보드저장 PATCH 경로 verify_required 모달 미배선
