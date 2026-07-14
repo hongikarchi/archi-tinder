@@ -57,17 +57,7 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-### FULL-WORKS-1 — 건축 작품 업로드 Phase 1
-
-사용자가 본인의 건축 작품 이미지를 올려 포트폴리오로 아카이브하고, 다른 유저 피드 알고리즘에 노출되는 기능의 Phase 1 구현.
-
-아키텍처: presigned direct upload to Cloudflare R2 (아바타 패턴 참고) + 별도 `R2_WORKS_BUCKET` + `WORKS_R2_ENABLED` 플래그. Gemini 품질 게이트 + HuggingFace 임베딩은 백그라운드 스레드.
-
-- [ ] `backend/apps/works/` 신설 (Work 모델 + presign + finalize API + 테스트 9개)
-- [ ] `backend/config/settings.py` — `R2_WORKS_BUCKET` / `WORKS_PUBLIC_BASE_URL` / `WORKS_R2_ENABLED`
-- [ ] `frontend/src/pages/UploadWorkPage.jsx` + `UploadWorkPage.module.css`
-- [ ] `frontend/src/api/works.js`
-- [ ] `frontend/src/App.jsx` — `/upload` 라우트 추가
+_(비어있음)_
 
 ---
 
@@ -184,6 +174,9 @@ _(2026-07-13 BACK-PERFORMANCE-5a 출하(`afc0b88`): 리더에 stage별 p50/p95 +
 - 주의: 247건은 4-7월 코드 세대 혼합(Redis 5/26 도입·PERF-PREFETCH-CHAIN 6월 배포 전 데이터 포함) — stage 지배 구도는 유효하나 절대값은 pooler 플립 후 재실측이 기준. 30일 창 n=4(저트래픽)라 90일 창 채택. 원데이터 `/tmp/perf5-prod-90.json`(로컬 휘발).
 
 ### MEDIUM
+#### FULL-WORKS-2 — works Phase 2: srcset/LQIP + 알고리즘 통합
+FULL-WORKS-1 배포 후. (1) `rightSizeImageUrl.js`에 R2 works URL srcset/LQIP 처리 추가 (Cloudflare Image Transforms 필요 — ops 설정 선행). (2) `engine.py` Python-layer에 `user_uploaded_works` 풀 병합 — 별도 협업자(algorithm 소유) 작업, 설계 sync 필요.
+
 #### FRONT-VERIFY-1 — 보드저장 PATCH 경로 verify_required 모달 미배선
 FULL-ONBOARDING-2(`92237d8`)가 guest promote-limit을 `403 {'detail':'verify_required','reason':'board_limit_reached','limit':3}`로 표준화했으나, 프론트 `updateProject`(projects.js:64-71)는 verify_required를 VerifyRequiredError로 변환 안 함(createProject:26-40만 처리) → SaveBoardModal에서 guest가 4번째 보드 저장확정 시 VerifyGateModal 대신 generic 에러 문자열. `updateProject`에 createProject와 동일한 403 verify_required 감지 + VerifyGateModal 배선. Non-blocking(백엔드 enforcement는 정상).
 
@@ -227,6 +220,9 @@ Likely slices:
 - Board/User profile second: keep existing mobile layout, add desktop breakpoints for hero + board grid density.
 
 ### LOW
+
+#### INFRA-WORKS-1 — R2_WORKS_BUCKET CORS 정책 ops 설정
+FULL-WORKS-1 배포 후 ops task. R2 버킷에 CORS 정책 설정 필요 (AllowedMethods: POST, AllowedOrigins: 도메인, AllowedHeaders: *). 설정 전 브라우저에서 presigned POST XHR이 CORS 에러로 차단됨. 코드 변경 없음, R2 대시보드 또는 wrangler cli.
 
 #### BACK-ANALYTICS-1 — session_metrics_report 콘솔 ESC-byte 주입 (pre-existing #268)
 `session_metrics_report.py` 텍스트 모드가 SessionEvent payload의 `domain`/`context` 값을 raw로 stdout 출력(~:548-559, #268 소산) — prod payload에 ESC 바이트 섞이면 터미널 이스케이프 주입 가능. BACK-PERFORMANCE-5a(`afc0b88`) Opus 검증서 실증됐으나 해당 PR 미접촉 영역이라 분리. 수정 = 출력 전 non-printable strip/repr(). 운영자-실행 read-only 커맨드라 LOW.
@@ -286,6 +282,20 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FULL-WORKS-1 — 건축 작품 업로드 Phase 1 — RESOLVED 2026-07-15 (`6089487`)
+presigned direct upload to Cloudflare R2: Django `apps/works/` 신설 + `/api/v1/works/presign/`·`/api/v1/works/` API + UploadWorkPage.
+- [x] Work 모델 (upload_id `usr_XXXXXX`, 14개 program enum, r2_keys JSONField, is_publishable=False, report_count) + migration 0001_initial
+- [x] presign 뷰: 10MB content-length-range 정책 + image/* 강제 + 10분 만료, key `works/{profile_id}/{uuid8}_{slot}.webp`
+- [x] finalize 뷰: 저작권 확인 → namespace 검증(403) → R2 존재 확인 → Work 저장 → 백그라운드 스레드(Gemini 품질 게이트 + atmosphere enum 12개 강제 + HuggingFace 384차원 임베딩) → 201 `{upload_id, status:'processing'}` 즉시 반환
+- [x] storage.py: `_make_s3_client()` 공유 + `generate_presigned_post()` + `verify_key_exists()` (boto3 lazy, accounts/storage.py 패턴 미러)
+- [x] WORKS_R2_ENABLED 플래그, INSTALLED_APPS 등록, `/api/v1/works/` URL
+- [x] 테스트 9개 (presign 503/400x2, finalize 400/403/400/201/401) — all PASS
+- [x] UploadWorkPage: canvas.toBlob WebP 변환(max 2400px) + XHR progress + processing/error 상태 UI + /upload 라우트
+- [x] r2_keys isinstance + empty 가드 패치 (2 LOW 소견)
+- 검증: workflow 2 cycles commitReady=true · app-test FEATURE-SCOPED 5/5 PASS · drift clean
+- Deferred-MEDIUM: FULL-WORKS-2 (Phase 2 works srcset/LQIP + algorithm 통합 — Phase 1 배포 후)
+- Deferred-LOW: INFRA-WORKS-1 (R2_WORKS_BUCKET CORS 정책 ops 설정)
+
 ### FULL-LANGUAGE-1c — i18n 슬라이스 c: 프로필·보드 + 모달 — RESOLVED 2026-07-13 (`f54d998`-pre-squash) → **FULL-LANGUAGE-1 전체 CLOSE**
 최종 슬라이스 17파일 ~115 리터럴 — 3슬라이스(a #275 / b #276 / c) 합산 32파일 176줄 sweep 완료, 전 고트래픽 surface가 ko/en 동일 string source 렌더. FULL-LANGUAGE-1 백로그 항목 종결.
 - [x] PersonaReport(SPECTRUM_AXES 모듈상수 → leftKey/rightKey 렌더 해석) · SaveBoardModal(visibility labelKey) · VerifyGateModal 자체 리터럴 7 · ShareCardModal({name} 보간) · ArchitectProfilePage · ProfileHeader · LLMSearchPage · LikedOffices/Projects · BoardReport/Detail · ArchitectSection · BoardCard({count} 보간) · SaveToBoardModal(useLanguage 삼항 패턴 제거) · EditCardForm/ProfileQr partial 마감 · UserProfilePage.
