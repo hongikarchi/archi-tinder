@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { generateReport, generateReportImage } from '../api/projects.js'
 import styles from '../pages/BoardReportPage.module.css'
+import { useTranslation } from '../i18n/index.js'
 
 /* ── RadarChart ─────────────────────────────────────────────────────────── */
 function RadarChart({ scores }) {
@@ -96,11 +97,11 @@ function RadarChart({ scores }) {
 const DEFAULT_AXES = { form: 0, materiality: 0, scale: 0, energy: 0, tradition: 0 }
 
 const SPECTRUM_AXES = [
-  { key: 'form',        left: '기하학적', right: '유기적' },
-  { key: 'materiality', left: '산업재료', right: '자연재료' },
-  { key: 'scale',       left: '기념비적', right: '친밀한' },
-  { key: 'energy',      left: '동적',    right: '정적' },
-  { key: 'tradition',   left: '실험적',  right: '전통적' },
+  { key: 'form',        leftKey: 'persona.spectrum.form.left',        rightKey: 'persona.spectrum.form.right' },
+  { key: 'materiality', leftKey: 'persona.spectrum.materiality.left', rightKey: 'persona.spectrum.materiality.right' },
+  { key: 'scale',       leftKey: 'persona.spectrum.scale.left',       rightKey: 'persona.spectrum.scale.right' },
+  { key: 'energy',      leftKey: 'persona.spectrum.energy.left',      rightKey: 'persona.spectrum.energy.right' },
+  { key: 'tradition',   leftKey: 'persona.spectrum.tradition.left',   rightKey: 'persona.spectrum.tradition.right' },
 ]
 
 /* ── PersonaReport ──────────────────────────────────────────────────────── */
@@ -113,6 +114,7 @@ const SPECTRUM_AXES = [
  *   reportImageMime string  - 예: 'image/png'
  */
 export default function PersonaReport({ boardId, finalReport, axisScores, reportImage, reportImageMime }) {
+  const { t } = useTranslation()
   const [localImage, setLocalImage] = useState(reportImage || null)
   const [localMime, setLocalMime] = useState(reportImageMime || null)
   const [localAxisScores, setLocalAxisScores] = useState(axisScores || DEFAULT_AXES)
@@ -139,10 +141,10 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
         setLocalImage(res.image_data)
         if (res.mime_type) setLocalMime(res.mime_type)
       } else {
-        setImgError('이미지 생성에 실패했습니다.')
+        setImgError(t('persona.imgError'))
       }
     } catch (e) {
-      setImgError(e?.data?.detail || e?.message || '이미지 생성에 실패했습니다.')
+      setImgError(e?.data?.detail || e?.message || t('persona.imgError'))
     } finally {
       setImgGenLoading(false)
     }
@@ -156,7 +158,7 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
       const res = await generateReport(boardId)
       if (res?.axis_scores) setLocalAxisScores(res.axis_scores)
     } catch {
-      setReportError('리포트 재생성에 실패했습니다.')
+      setReportError(t('persona.reportError'))
     } finally {
       setReportLoading(false)
     }
@@ -264,7 +266,7 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
         margin: '0 0 20px',
         letterSpacing: '-0.01em',
       }}>
-        취향 분석
+        {t('persona.tasteSection')}
       </h2>
 
       {/* 레이더 차트 */}
@@ -290,7 +292,7 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
               </p>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ color: 'var(--color-text-muted)', fontSize: 10, fontWeight: 600, minWidth: 48, textAlign: 'right' }}>
-                  {ax.left}
+                  {t(ax.leftKey)}
                 </span>
                 <div className={styles.spectrumBar} style={{ flex: 1 }}>
                   <div
@@ -299,7 +301,7 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
                   />
                 </div>
                 <span style={{ color: 'var(--color-text-muted)', fontSize: 10, fontWeight: 600, minWidth: 48 }}>
-                  {ax.right}
+                  {t(ax.rightKey)}
                 </span>
               </div>
             </div>
@@ -318,7 +320,7 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
         margin: '0 0 16px',
         letterSpacing: '-0.01em',
       }}>
-        페르소나 이미지
+        {t('persona.imageSection')}
       </h2>
 
       {localImage ? (
@@ -362,7 +364,7 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
               <polyline points="7 10 12 15 17 10" />
               <line x1="12" y1="15" x2="12" y2="3" />
             </svg>
-            저장
+            {t('persona.imageSave')}
           </a>
         </div>
       ) : (
@@ -406,7 +408,7 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
           marginBottom: 16,
         }}
       >
-        {imgGenLoading ? '생성 중…' : localImage ? '재생성' : '이미지 생성'}
+        {imgGenLoading ? t('persona.imgGenerating') : localImage ? t('persona.imgRegenerate') : t('persona.imgGenerate')}
       </button>
 
       {imgError && (
@@ -434,7 +436,7 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
           fontFamily: 'inherit',
         }}
       >
-        {reportLoading ? '재생성 중…' : '리포트 재생성'}
+        {reportLoading ? t('persona.reportRegenerating') : t('persona.reportRegenerate')}
       </button>
 
       {reportError && (

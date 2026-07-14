@@ -66,6 +66,26 @@ export function rightSizeImageUrl(url, targetWidth = 840, quality) {
 }
 
 /**
+ * buildLqipUrl — build a tiny (20px-wide) LQIP (Low-Quality Image Placeholder)
+ * URL for a card cover image, used as a blurred hint layer while the full
+ * image loads.
+ *
+ * Delegates to rightSizeImageUrl(url, 20) but returns null whenever
+ * right-sizing is a no-op for this URL (non-CDN host, malformed/relative
+ * URL, or a Divisare URL without a `w_auto` token). A LQIP that resolves to
+ * the SAME URL as the full-size image would just download the full image
+ * twice — worse than no placeholder at all.
+ *
+ * @param {string|null|undefined} url  - Raw source URL (before right-sizing).
+ * @returns {string|null}              - 20px-wide variant, or null if a
+ *                                        distinct right-sized URL cannot be produced.
+ */
+export function buildLqipUrl(url) {
+  const u = rightSizeImageUrl(url, 20)
+  return u && u !== url ? u : null
+}
+
+/**
  * buildCardSrcSet — produce a `1x, 2x` srcset string for a card cover image.
  *
  * MUST be called with the RAW source URL (before rightSizeImageUrl), because

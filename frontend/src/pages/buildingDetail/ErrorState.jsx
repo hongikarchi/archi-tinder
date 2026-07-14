@@ -1,6 +1,8 @@
+import { useTranslation } from '../../i18n/index.js'
 import Header from './Header.jsx'
 
 export default function ErrorState({ message, onBack, onRetry }) {
+  const { t } = useTranslation()
   return (
     <div style={{
       height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
@@ -22,7 +24,7 @@ export default function ErrorState({ message, onBack, onRetry }) {
         textAlign: 'center',
       }}>
         <p style={{ color: 'var(--color-text)', fontSize: 17, fontWeight: 700, margin: 0 }}>
-          건물 정보를 찾을 수 없어요
+          {t('buildingDetail.notFound')}
         </p>
         <p style={{ color: 'var(--color-text-dim)', fontSize: 13, lineHeight: 1.5, margin: 0 }}>
           {message}
@@ -43,7 +45,7 @@ export default function ErrorState({ message, onBack, onRetry }) {
             fontFamily: 'inherit',
           }}
         >
-          Retry
+          {t('buildingDetail.retry')}
         </button>
       </div>
     </div>

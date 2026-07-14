@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import styles from './ArchitectSection.module.css'
+import { useTranslation } from '../../i18n/index.js'
 
 function BuildingCard({ building, onClick }) {
   const [imgLoaded, setImgLoaded] = useState(false)
@@ -70,6 +71,7 @@ function BuildingCard({ building, onClick }) {
 }
 
 export default function ArchitectSection({ architect, onBuildingClick, onProfileClick }) {
+  const { t } = useTranslation()
   const buildings = architect?.buildings || []
 
   return (
@@ -85,7 +87,7 @@ export default function ArchitectSection({ architect, onBuildingClick, onProfile
           textTransform: 'uppercase',
           marginBottom: 6,
         }}>
-          추천 사무소
+          {t('board.recommendedOffice')}
         </span>
         <div style={{
           display: 'flex',
@@ -108,7 +110,7 @@ export default function ArchitectSection({ architect, onBuildingClick, onProfile
             onClick={() => onProfileClick(architect?.architect_id)}
             type="button"
           >
-            프로필
+            {t('board.profile')}
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <polyline points="9 18 15 12 9 6" />
             </svg>
@@ -148,7 +150,7 @@ export default function ArchitectSection({ architect, onBuildingClick, onProfile
           margin: 0,
           padding: '8px 0',
         }}>
-          건물 정보가 없어요.
+          {t('board.noBuildingInfo')}
         </p>
       )}
     </div>

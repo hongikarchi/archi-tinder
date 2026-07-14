@@ -4,7 +4,7 @@
  */
 
 import { BASE } from './core.js'
-import { rightSizeImageUrl, buildCardSrcSet } from './rightSizeImageUrl.js'
+import { rightSizeImageUrl, buildCardSrcSet, buildLqipUrl } from './rightSizeImageUrl.js'
 
 // -- Image telemetry helpers -----------------------------------------------
 
@@ -98,6 +98,14 @@ export function normalizeCard(card) {
     image_title: card.name || card.name_en || card.project_name || '',
     image_url:   rightSizeImageUrl(card.image_url),
     image_srcset: buildCardSrcSet(card.image_url),
+    lqip_url:    buildLqipUrl(card.image_url),
+    // cover_full_url: raw un-resized URL passthrough (no transformation).
+    // Consumers that need full resolution (lightbox, download) use this field.
+    cover_full_url: card.image_url || null,
+    // image_focus / image_kind: passthrough so SwipeCard's isDrawingKind check
+    // (drawing-vs-photo background/fit) actually has data to read.
+    image_focus: card.image_focus ?? null,
+    image_kind:  card.image_kind ?? null,
     source_url:  card.url || null,
     gallery:     card.gallery || [],
     gallery_meta: card.gallery_meta || [],

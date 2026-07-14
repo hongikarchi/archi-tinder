@@ -14,10 +14,12 @@
 
 import { hasGoogleLogin } from '../utils/loginFlow.js'
 import { useGoogleEmailVerify } from '../hooks/useGoogleEmailVerify.js'
+import { useTranslation } from '../i18n/index.js'
 import GoogleVerifyButton from './GoogleVerifyButton.jsx'
 
 export default function VerifyGateModal({ onClose, onPromoted }) {
   const googleConfigured = hasGoogleLogin(import.meta.env.VITE_GOOGLE_CLIENT_ID)
+  const { t } = useTranslation()
 
   // useGoogleLogin is NOT called here — it lives inside GoogleVerifyButton,
   // which is only rendered when googleConfigured === true (inside GoogleOAuthProvider).
@@ -75,7 +77,7 @@ export default function VerifyGateModal({ onClose, onPromoted }) {
             id="verify-gate-title"
             style={{ fontSize: 17, fontWeight: 700, margin: '0 0 8px', color: 'var(--color-text)' }}
           >
-            guest 계정은 보드를 3개까지만 생성할 수 있습니다.
+            {t('auth.gateTitle')}
           </h2>
           <p style={{
             fontSize: 14,
@@ -83,7 +85,7 @@ export default function VerifyGateModal({ onClose, onPromoted }) {
             margin: '0 0 20px',
             lineHeight: 1.55,
           }}>
-            이메일 인증 후 무제한으로 보드를 만들고, 지금까지의 데이터를 유지할 수 있습니다.
+            {t('auth.gateBody')}
           </p>
 
           {error && (
@@ -93,7 +95,7 @@ export default function VerifyGateModal({ onClose, onPromoted }) {
               margin: '0 0 14px',
               lineHeight: 1.4,
             }}>
-              {error}
+              {t(error.key, error.params)}
             </p>
           )}
 
@@ -106,7 +108,7 @@ export default function VerifyGateModal({ onClose, onPromoted }) {
                 onNonOAuthError={handleVerifyNonOAuthError}
                 disabled={loading}
                 loading={loading}
-                label="이메일 인증하러 가기"
+                label={t('auth.gateVerifyBtn')}
               />
             ) : (
               <p style={{
@@ -115,7 +117,7 @@ export default function VerifyGateModal({ onClose, onPromoted }) {
                 margin: 0,
                 textAlign: 'center',
               }}>
-                Google 인증을 사용할 수 없는 환경입니다.
+                {t('auth.gateGoogleUnavailable')}
               </p>
             )}
 
@@ -123,7 +125,7 @@ export default function VerifyGateModal({ onClose, onPromoted }) {
               type="button"
               onClick={onClose}
               disabled={loading}
-              aria-label="인증 취소"
+              aria-label={t('auth.gateCancelAria')}
               style={{
                 minHeight: 46,
                 borderRadius: 8,
@@ -137,7 +139,7 @@ export default function VerifyGateModal({ onClose, onPromoted }) {
                 opacity: loading ? 0.5 : 1,
               }}
             >
-              나중에
+              {t('auth.gateLater')}
             </button>
           </div>
         </div>
@@ -150,8 +152,7 @@ export default function VerifyGateModal({ onClose, onPromoted }) {
           lineHeight: 1.45,
           textAlign: 'center',
         }}>
-          인증 시 기존 보드와 스와이프 기록이 Google 계정에 연결됩니다.
-          데이터는 사라지지 않습니다.
+          {t('auth.gateFooter')}
         </p>
       </div>
     </div>

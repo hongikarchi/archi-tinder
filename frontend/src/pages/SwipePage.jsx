@@ -5,14 +5,18 @@ import QuestionCard from '../components/QuestionCard.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
 import CardSkeleton from '../components/CardSkeleton.jsx'
 import { isActionCard } from '../utils/appHelpers.js'
+import { useSwipeOrchestration } from '../hooks/useSwipeOrchestration.js'
+import { useKeyboardSwipe } from '../hooks/useKeyboardSwipe.js'
+import { useTranslation } from '../i18n/index.js'
 
 /* ── ActionCard ──────────────────────────────────────────────────────────── */
 // Rendered when card_type === 'action' (backend-emitted when session converges).
 // The user opts in to the report by right-swiping (like), or keeps exploring
 // by left-swiping (pass). The hint text at the bottom makes this explicit.
 function ActionCard({ card }) {
-  const message  = card.action_card_message  || '취향이 충분히 모였어요!'
-  const subtitle = card.action_card_subtitle || '지금 결과를 확인하거나 계속 탐색할 수 있어요'
+  const { t } = useTranslation()
+  const message  = card.action_card_message  || t('swipe.actionCard.message')
+  const subtitle = card.action_card_subtitle || t('swipe.actionCard.subtitle')
   return (
     <div style={{
       position: 'absolute', top: 0, left: 0,
@@ -52,9 +56,9 @@ function ActionCard({ card }) {
         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
         color: 'rgba(255,255,255,0.45)', fontSize: 12, letterSpacing: '0.03em',
       }}>
-        <span>← 계속 탐색</span>
+        <span>{t('swipe.actionCard.continueHint')}</span>
         <span style={{ color: 'rgba(255,255,255,0.25)' }}>·</span>
-        <span>결과 보기 →</span>
+        <span>{t('swipe.actionCard.viewResultsHint')}</span>
       </div>
     </div>
   )
@@ -162,6 +166,7 @@ function ConfidenceBar({ value, phase, progress }) {
 /* ── ExitConfirmPopup ────────────────────────────────────────────────────── */
 function ExitConfirmPopup({ onNewProject, onHome, onCancel }) {
   const primaryBtnRef = useRef(null)
+  const { t } = useTranslation()
 
   // Auto-focus primary button on mount
   useEffect(() => { primaryBtnRef.current?.focus() }, [])
@@ -207,13 +212,13 @@ function ExitConfirmPopup({ onNewProject, onHome, onCancel }) {
           color: 'var(--color-text)', fontSize: 17, fontWeight: 700,
           margin: '0 0 4px', textAlign: 'center',
         }}>
-          현재 세션을 종료할까요?
+          {t('swipe.exitConfirm.title')}
         </h2>
         <p style={{
           color: 'var(--color-text-dim)', fontSize: 13, fontWeight: 500,
           textAlign: 'center', margin: '0 0 12px', lineHeight: 1.5,
         }}>
-          지금까지의 좋아요는 저장돼요. 새 프로젝트를 시작하거나 홈으로 돌아갈 수 있어요.
+          {t('swipe.exitConfirm.body')}
         </p>
         <button
           ref={primaryBtnRef}
@@ -225,7 +230,7 @@ function ExitConfirmPopup({ onNewProject, onHome, onCancel }) {
             cursor: 'pointer', fontFamily: 'inherit', minHeight: 44,
           }}
         >
-          새 프로젝트 시작
+          {t('swipe.exitConfirm.newProject')}
         </button>
         <button
           onClick={onHome}
@@ -237,7 +242,7 @@ function ExitConfirmPopup({ onNewProject, onHome, onCancel }) {
             cursor: 'pointer', fontFamily: 'inherit', minHeight: 44,
           }}
         >
-          홈으로
+          {t('swipe.exitConfirm.home')}
         </button>
         <button
           onClick={onCancel}
@@ -248,7 +253,7 @@ function ExitConfirmPopup({ onNewProject, onHome, onCancel }) {
             cursor: 'pointer', fontFamily: 'inherit', minHeight: 40,
           }}
         >
-          취소
+          {t('swipe.exitConfirm.cancel')}
         </button>
       </div>
     </div>
@@ -258,6 +263,7 @@ function ExitConfirmPopup({ onNewProject, onHome, onCancel }) {
 /* ── DismissConfirmPopup ─────────────────────────────────────────────────── */
 function DismissConfirmPopup({ onConfirm, onCancel }) {
   const primaryBtnRef = useRef(null)
+  const { t } = useTranslation()
 
   // Auto-focus primary button on mount
   useEffect(() => { primaryBtnRef.current?.focus() }, [])
@@ -303,13 +309,13 @@ function DismissConfirmPopup({ onConfirm, onCancel }) {
           color: 'var(--color-text)', fontSize: 17, fontWeight: 700,
           margin: '0 0 4px', textAlign: 'center',
         }}>
-          이 건물을 보지 않을까요?
+          {t('swipe.dismissConfirm.title')}
         </h2>
         <p style={{
           color: 'var(--color-text-dim)', fontSize: 13, fontWeight: 500,
           textAlign: 'center', margin: '0 0 12px', lineHeight: 1.5,
         }}>
-          왼쪽 스와이프 = 다시 추천 안 됨. 한 번 더 확인할게요.
+          {t('swipe.dismissConfirm.body')}
         </p>
         <button
           ref={primaryBtnRef}
@@ -322,7 +328,7 @@ function DismissConfirmPopup({ onConfirm, onCancel }) {
             cursor: 'pointer', fontFamily: 'inherit', minHeight: 44,
           }}
         >
-          건너뛰기
+          {t('swipe.dismissConfirm.skip')}
         </button>
         <button
           onClick={onCancel}
@@ -333,7 +339,7 @@ function DismissConfirmPopup({ onConfirm, onCancel }) {
             cursor: 'pointer', fontFamily: 'inherit', minHeight: 40,
           }}
         >
-          취소
+          {t('swipe.dismissConfirm.cancel')}
         </button>
       </div>
     </div>
@@ -349,9 +355,9 @@ export default function SwipePage({
   questionTrigger = null,
   onQuestionAnswer,
 }) {
+  const { t } = useTranslation()
   const cardRef = useRef(null)
   const questionCardRef = useRef(null)
-  const pendingAction = useRef(null)
   const swipedCardId = useRef(null)
   const hasShownDismissTutorial = useRef(!!localStorage.getItem('archithon_dismiss_tutorial_seen'))
   const pendingDismissDir = useRef(null)
@@ -371,42 +377,43 @@ export default function SwipePage({
   // (App.jsx applySessionResponse) so the button shows immediately.
   const isAt100 = keepExploringChosen || isCompleted
 
-  function onTinderSwipe(dir) {
-    // F4: intercept first-ever left swipe to show dismiss tutorial.
-    // Skip for action cards — left-swipe on an action card means "keep exploring",
-    // not "skip this building", so the dismiss tutorial is not applicable.
-    if (dir === 'left' && !hasShownDismissTutorial.current && !isActionCard(currentCard)) {
-      // Restore card to center BEFORE showing popup so cancel path has no flicker
-      cardRef.current?.restoreCard()
-      pendingDismissDir.current = dir
-      pendingAction.current = null
-      swipedCardId.current = null
-      setShowDismissConfirm(true)
-      return
-    }
-    swipedCardId.current = currentCard?.image_id
-    pendingAction.current = dir === 'right' ? 'like' : 'dislike'
-  }
+  const { pendingActionRef: pendingAction, onTinderSwipe, onCardLeftScreen } = useSwipeOrchestration({
+    likeAction: 'like',
+    dismissAction: 'dislike',
+    onBeforeSwipe: (dir) => {
+      // F4: intercept first-ever left swipe to show dismiss tutorial.
+      // Skip for action cards — left-swipe on an action card means "keep exploring",
+      // not "skip this building", so the dismiss tutorial is not applicable.
+      if (dir === 'left' && !hasShownDismissTutorial.current && !isActionCard(currentCard)) {
+        // Restore card to center BEFORE showing popup so cancel path has no flicker
+        cardRef.current?.restoreCard()
+        pendingDismissDir.current = dir
+        swipedCardId.current = null
+        setShowDismissConfirm(true)
+        return true  // intercepted
+      }
+      swipedCardId.current = currentCard?.image_id
+      return false
+    },
+    onCommit: (action) => onSwipe(action),
+  })
 
-  function onCardLeftScreen() {
-    if (pendingAction.current) {
-      onSwipe(pendingAction.current)
-      pendingAction.current = null
-    }
-  }
-
-  async function swipeManual(dir) {
-    if (!cardRef.current || isLoading) return
-    // F4: intercept first-ever left swipe from keyboard.
-    // Skip for action cards (see onTinderSwipe comment above).
-    if (dir === 'left' && !hasShownDismissTutorial.current && !isActionCard(currentCard)) {
-      pendingDismissDir.current = dir
-      setShowDismissConfirm(true)
-      return
-    }
-    pendingAction.current = dir === 'right' ? 'like' : 'dislike'
-    await cardRef.current.swipe(dir)
-  }
+  useKeyboardSwipe({
+    onSwipe: (dir) => {
+      if (!cardRef.current) return
+      if (dir === 'left' && !hasShownDismissTutorial.current && !isActionCard(currentCard)) {
+        pendingDismissDir.current = dir
+        setShowDismissConfirm(true)
+        return
+      }
+      swipedCardId.current = currentCard?.image_id
+      pendingAction.current = dir === 'right' ? 'like' : 'dislike'
+      cardRef.current.swipe(dir)
+    },
+    guardCondition: () =>
+      !!(questionTrigger || isLoading || !cardRef.current || !currentCard || showTutorial || showExitConfirm ||
+         showDismissConfirm || pendingAction.current || swipedCardId.current === currentCard?.image_id),
+  })
 
   function handleDismissConfirm() {
     hasShownDismissTutorial.current = true
@@ -427,7 +434,7 @@ export default function SwipePage({
     swipedCardId.current = null
     setShowDismissConfirm(false)
     // Force TinderCard remount to restore card to center
-    setLocalResetTick(t => t + 1)
+    setLocalResetTick(n => n + 1)
   }
 
   // When cardResetToken changes the TinderCard was force-remounted after a
@@ -435,27 +442,7 @@ export default function SwipePage({
   useEffect(() => {
     swipedCardId.current = null
     pendingAction.current = null
-  }, [cardResetToken])
-
-  useEffect(() => {
-    function handleKeyDown(e) {
-      if (questionTrigger) return
-      if (isLoading || !currentCard) return
-      if (showTutorial || showExitConfirm || showDismissConfirm || pendingAction.current) return
-      if (swipedCardId.current === currentCard.image_id) return
-
-      if (e.key === 'ArrowLeft') {
-        // Only pre-set swipedCardId guard if not going to intercept for dismiss tutorial
-        if (hasShownDismissTutorial.current) swipedCardId.current = currentCard.image_id
-        swipeManual('left')
-      } else if (e.key === 'ArrowRight') {
-        swipedCardId.current = currentCard.image_id
-        swipeManual('right')
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isLoading, currentCard, showTutorial, showExitConfirm, showDismissConfirm, questionTrigger]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [cardResetToken]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!isLoading && !currentCard) {
     // Pool exhausted (or is_analysis_completed with no next card).
@@ -541,7 +528,7 @@ export default function SwipePage({
               margin: 0,
               lineHeight: 1.5,
             }}>
-              더 볼 카드가 없어요 · 위에서 결과를 확인하세요
+              {t('swipe.emptyDeck')}
             </p>
           </div>
         </div>

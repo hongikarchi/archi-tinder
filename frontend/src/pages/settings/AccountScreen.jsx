@@ -12,6 +12,7 @@ import { IconBack } from '../../components/icons.jsx'
 import GoogleVerifyButton from '../../components/GoogleVerifyButton.jsx'
 import { hasGoogleLogin } from '../../utils/loginFlow.js'
 import { useGoogleEmailVerify } from '../../hooks/useGoogleEmailVerify.js'
+import { useTranslation } from '../../i18n/index.js'
 import btnStyles from '../../components/Button.module.css'
 import styles from './AccountScreen.module.css'
 
@@ -42,6 +43,7 @@ const READONLY_VALUE_STYLE = {
 
 export default function AccountScreen() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
 
   const [me, setMe] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -86,11 +88,11 @@ export default function AccountScreen() {
       })
       .catch(err => {
         if (cancelled) return
-        setFetchError(err.message || '프로필을 불러올 수 없습니다.')
+        setFetchError(err.message || t('account.profileLoadError'))
       })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleSave() {
     if (saving) return
@@ -100,7 +102,7 @@ export default function AccountScreen() {
     // Client-side format check (backend also validates; this is UX-only)
     const trimmed = handle.trim()
     if (trimmed && !/^[a-z0-9_]{3,30}$/.test(trimmed)) {
-      setHandleError('핸들은 영소문자·숫자·_만, 3-30자.')
+      setHandleError(t('account.idHandleFormatError'))
       return
     }
 
@@ -119,7 +121,7 @@ export default function AccountScreen() {
       if (data?.handle) {
         setHandleError(Array.isArray(data.handle) ? data.handle[0] : data.handle)
       } else {
-        setHandleError(err.message || '저장에 실패했습니다.')
+        setHandleError(err.message || t('account.saveFailed'))
       }
     } finally {
       setSaving(false)
@@ -138,15 +140,15 @@ export default function AccountScreen() {
     setPasswordSuccess(false)
 
     if (newPassword.length < 8) {
-      setPasswordError('비밀번호는 8자 이상이어야 합니다.')
+      setPasswordError(t('account.passwordMin8'))
       return
     }
     if (newPassword !== confirmPassword) {
-      setPasswordError('비밀번호가 일치하지 않습니다.')
+      setPasswordError(t('account.passwordMismatch'))
       return
     }
     if (me?.has_password && !currentPassword) {
-      setPasswordCurrentError('현재 비밀번호를 입력해 주세요.')
+      setPasswordCurrentError(t('account.currentPasswordRequired'))
       return
     }
 
@@ -171,7 +173,7 @@ export default function AccountScreen() {
       } else if (data?.password) {
         setPasswordError(Array.isArray(data.password) ? data.password[0] : data.password)
       } else {
-        setPasswordError(err.message || '저장에 실패했습니다.')
+        setPasswordError(err.message || t('account.saveFailed'))
       }
     } finally {
       setSavingPassword(false)
@@ -181,9 +183,9 @@ export default function AccountScreen() {
   if (loading) {
     return (
       <div className={styles.page}>
-        <ScreenHeader navigate={navigate} />
+        <ScreenHeader navigate={navigate} t={t} />
         <div style={{ display: 'flex', justifyContent: 'center', padding: 48, color: 'var(--color-text-dim)', fontSize: 14 }}>
-          불러오는 중...
+          {t('account.loading')}
         </div>
       </div>
     )
@@ -192,7 +194,7 @@ export default function AccountScreen() {
   if (fetchError) {
     return (
       <div className={styles.page}>
-        <ScreenHeader navigate={navigate} />
+        <ScreenHeader navigate={navigate} t={t} />
         <div style={{ display: 'flex', justifyContent: 'center', padding: 48, color: 'var(--color-destructive)', fontSize: 14 }}>
           {fetchError}
         </div>
@@ -204,7 +206,7 @@ export default function AccountScreen() {
 
   return (
     <div className={styles.page}>
-      <ScreenHeader navigate={navigate} />
+      <ScreenHeader navigate={navigate} t={t} />
 
       <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px' }}>
 
@@ -215,7 +217,7 @@ export default function AccountScreen() {
             color: 'var(--color-text-muted)', textTransform: 'uppercase',
             margin: '0 0 16px',
           }}>
-            계정 정보
+            {t('account.infoSection')}
           </p>
 
           <div style={{
@@ -226,23 +228,25 @@ export default function AccountScreen() {
           }}>
             {/* Verified status */}
             <InfoRow
-              label="계정 상태"
-              value={me?.is_guest ? '미인증 (게스트)' : '인증된 계정'}
+              label={t('account.status')}
+              value={me?.is_guest ? t('account.statusGuest') : t('account.statusVerified')}
               valueStyle={{ color: me?.is_guest ? 'var(--accent-3)' : 'var(--accent-1)', fontWeight: 600 }}
             />
 
             {/* Login method (providers) */}
             <InfoRow
-              label="로그인 방식"
+              label={t('account.loginMethod')}
               value={formatProviders(me?.providers)}
             />
 
             {/* Email */}
             <InfoRow
-              label="이메일"
+              label={t('account.email')}
               value={
                 me?.email
-                  ? `${me.email}${me.email_verified_at ? ' · 인증됨' : ' · 미인증'}`
+                  ? me.email_verified_at
+                    ? t('account.emailVerified', { email: me.email })
+                    : t('account.emailUnverified', { email: me.email })
                   : '—'
               }
               valueStyle={
@@ -264,7 +268,7 @@ export default function AccountScreen() {
             color: 'var(--color-text-muted)', textTransform: 'uppercase',
             margin: '0 0 16px',
           }}>
-            ID 설정
+            {t('account.idSection')}
           </p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -279,7 +283,7 @@ export default function AccountScreen() {
                   setSaveSuccess(false)
                 }}
                 onKeyDown={handleKeyDown}
-                placeholder="예: dain_architect"
+                placeholder={t('account.idPlaceholder')}
                 autoCapitalize="off"
                 autoCorrect="off"
                 spellCheck={false}
@@ -291,7 +295,7 @@ export default function AccountScreen() {
                 </span>
               ) : (
                 <span style={HINT_STYLE}>
-                  로그인 ID이자 공개 @아이디입니다. 영소문자·숫자·_ 만 사용, 3-30자.
+                  {t('account.idHint')}
                 </span>
               )}
             </label>
@@ -306,7 +310,7 @@ export default function AccountScreen() {
                 color: 'var(--accent-1)',
                 fontWeight: 500,
               }}>
-                ID가 저장되었습니다.
+                {t('account.idSaved')}
               </div>
             )}
 
@@ -317,7 +321,7 @@ export default function AccountScreen() {
               className={btnStyles.cta}
               style={{ alignSelf: 'flex-start', minWidth: 120 }}
             >
-              {saving ? '저장 중…' : '저장'}
+              {saving ? t('account.saving') : t('account.save')}
             </button>
           </div>
         </section>
@@ -329,13 +333,13 @@ export default function AccountScreen() {
             color: 'var(--color-text-muted)', textTransform: 'uppercase',
             margin: '0 0 16px',
           }}>
-            {me?.has_password ? '비밀번호 변경' : '비밀번호 설정'}
+            {me?.has_password ? t('account.passwordChange') : t('account.passwordSet')}
           </p>
 
           <form onSubmit={handlePasswordSave} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {me?.has_password && (
               <label>
-                <span style={LABEL_STYLE}>현재 비밀번호</span>
+                <span style={LABEL_STYLE}>{t('account.currentPassword')}</span>
                 <input
                   type="password"
                   value={currentPassword}
@@ -343,7 +347,7 @@ export default function AccountScreen() {
                     setCurrentPassword(e.target.value)
                     setPasswordCurrentError(null)
                   }}
-                  placeholder="현재 비밀번호"
+                  placeholder={t('account.currentPassword')}
                   autoComplete="current-password"
                   className={`${styles.inputWrapper} ${passwordCurrentError ? styles.inputError : ''}`}
                 />
@@ -356,7 +360,7 @@ export default function AccountScreen() {
             )}
 
             <label>
-              <span style={LABEL_STYLE}>새 비밀번호 (8자 이상)</span>
+              <span style={LABEL_STYLE}>{t('account.newPassword')}</span>
               <input
                 type="password"
                 value={newPassword}
@@ -364,14 +368,14 @@ export default function AccountScreen() {
                   setNewPassword(e.target.value)
                   setPasswordError(null)
                 }}
-                placeholder="새 비밀번호"
+                placeholder={t('account.newPassword')}
                 autoComplete="new-password"
                 className={`${styles.inputWrapper} ${passwordError ? styles.inputError : ''}`}
               />
             </label>
 
             <label>
-              <span style={LABEL_STYLE}>비밀번호 확인</span>
+              <span style={LABEL_STYLE}>{t('account.confirmPassword')}</span>
               <input
                 type="password"
                 value={confirmPassword}
@@ -379,7 +383,7 @@ export default function AccountScreen() {
                   setConfirmPassword(e.target.value)
                   setPasswordError(null)
                 }}
-                placeholder="비밀번호 재입력"
+                placeholder={t('account.confirmPassword')}
                 autoComplete="new-password"
                 className={`${styles.inputWrapper} ${passwordError && confirmPassword !== newPassword ? styles.inputError : ''}`}
               />
@@ -400,7 +404,7 @@ export default function AccountScreen() {
                 color: 'var(--accent-1)',
                 fontWeight: 500,
               }}>
-                {me?.has_password ? '비밀번호가 변경되었습니다.' : '비밀번호가 설정되었습니다.'}
+                {me?.has_password ? t('account.passwordChanged') : t('account.passwordSetSuccess')}
               </div>
             )}
 
@@ -410,7 +414,7 @@ export default function AccountScreen() {
               className={btnStyles.cta}
               style={{ alignSelf: 'flex-start', minWidth: 160 }}
             >
-              {savingPassword ? '저장 중…' : (me?.has_password ? '비밀번호 변경' : '비밀번호 설정')}
+              {savingPassword ? t('account.saving') : (me?.has_password ? t('account.passwordChange') : t('account.passwordSet'))}
             </button>
           </form>
         </section>
@@ -423,7 +427,7 @@ export default function AccountScreen() {
               color: 'var(--color-text-muted)', textTransform: 'uppercase',
               margin: '0 0 16px',
             }}>
-              이메일 인증
+              {t('account.emailVerifySection')}
             </p>
 
             {verifyError && (
@@ -437,7 +441,7 @@ export default function AccountScreen() {
                 fontWeight: 500,
                 marginBottom: 12,
               }}>
-                {verifyError}
+                {t(verifyError.key, verifyError.params)}
               </div>
             )}
 
@@ -448,7 +452,7 @@ export default function AccountScreen() {
                 onNonOAuthError={handleVerifyNonOAuthError}
                 disabled={verifyLoading}
                 loading={verifyLoading}
-                label="구글로 이메일 인증"
+                label={t('account.verifyWithGoogle')}
               />
             ) : (
               <div role="status" style={{
@@ -459,7 +463,7 @@ export default function AccountScreen() {
                 fontSize: 13,
                 color: 'var(--color-text-dim)',
               }}>
-                Google 인증을 사용할 수 없는 환경입니다.
+                {t('account.googleUnavailable')}
               </div>
             )}
           </section>
@@ -473,7 +477,7 @@ export default function AccountScreen() {
 
 /* ── Internal helpers ────────────────────────────────────────────────── */
 
-function ScreenHeader({ navigate }) {
+function ScreenHeader({ navigate, t }) {
   return (
     <div className={styles.header}>
       <button
@@ -484,7 +488,7 @@ function ScreenHeader({ navigate }) {
       >
         <IconBack width={20} height={20} />
       </button>
-      <h2 className={styles.headerTitle}>계정</h2>
+      <h2 className={styles.headerTitle}>{t('account.title')}</h2>
       <div style={{ width: 44 }} />
     </div>
   )

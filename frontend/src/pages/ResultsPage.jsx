@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useResults } from '../hooks/useResults.js'
 import { resolveProjectBackendId } from '../utils/resolveProjectBackendId.js'
 import PersonaReport from '../components/PersonaReport.jsx'
+import { useTranslation } from '../i18n/index.js'
 
 function cardId(card) {
   return card?.image_id || card?.canonical_bld_id || card?.building_id || ''
@@ -148,6 +149,7 @@ export default function ResultsPage({ projects, setProjects }) {
   const navigate = useNavigate()
   const location = useLocation()
   const { sessionId } = useParams()
+  const { t } = useTranslation()
   const { cards, error, loading, pendingIds, project, result, toggleBookmark } = useResults(sessionId, projects, setProjects)
   const [loadedRank, setLoadedRank] = useState(10)
   const observerRef = useRef(null)
@@ -401,7 +403,7 @@ export default function ResultsPage({ projects, setProjects }) {
                 fontWeight: 700,
                 textAlign: 'center',
               }}>
-                더 볼 게 없어요
+                {t('results.allLoaded')}
               </div>
             )}
           </>

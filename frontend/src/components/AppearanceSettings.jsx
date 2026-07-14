@@ -62,8 +62,8 @@ const FONT_OPTIONS = [
 ]
 
 const LANGUAGE_OPTIONS = [
-  { id: 'ko', label: '한국어' },
-  { id: 'en', label: 'English' },
+  { id: 'ko', labelKey: 'login.common.langKo' },
+  { id: 'en', labelKey: 'login.common.langEn' },
 ]
 
 /*
@@ -250,7 +250,7 @@ export default function AppearanceSettings() {
                   color: 'var(--color-text-2)',
                 }}
               >
-                {opt.label}
+                {t(opt.labelKey)}
               </button>
             )
           })}

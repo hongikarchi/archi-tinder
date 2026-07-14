@@ -2088,7 +2088,7 @@ def compute_user_taste_vector(profile):
     # 2026-05-27 perf: recent-50 cap to bound get_pool_embeddings cold cost.
     # Order projects oldest→newest; append per-list entries in order; take last 50
     # so the slice contains the most-recently-liked buildings across all projects.
-    liked_records = Project.objects.filter(user=profile).order_by('updated_at').values_list('liked_ids', flat=True)
+    liked_records = Project.objects.filter(user=profile, is_temp=False).order_by('updated_at').values_list('liked_ids', flat=True)
     all_likes = []  # (bid, intensity) oldest→newest across projects
     for liked_ids in liked_records:
         for entry in (liked_ids or []):

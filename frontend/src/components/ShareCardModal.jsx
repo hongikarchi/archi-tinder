@@ -17,8 +17,10 @@
 
 import { useState } from 'react'
 import BusinessCard from './profile/BusinessCard.jsx'
+import { useTranslation } from '../i18n/index.js'
 
 export default function ShareCardModal({ user, onClose }) {
+  const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
 
   const profileUrl = user?.user_id
@@ -37,7 +39,7 @@ export default function ShareCardModal({ user, onClose }) {
 
   async function handleNativeShare() {
     const shareData = {
-      title: user?.display_name ? `${user.display_name} — archibe 프로필` : 'archibe 프로필',
+      title: user?.display_name ? t('share.nativeTitle', { name: user.display_name }) : t('share.nativeTitleFallback'),
       url: profileUrl,
     }
     try { await navigator.share(shareData) } catch { /* user cancelled */ }
@@ -47,7 +49,7 @@ export default function ShareCardModal({ user, onClose }) {
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="프로필 공유 카드"
+      aria-label={t('share.cardAria')}
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
       style={{
         position: 'fixed',
@@ -93,12 +95,12 @@ export default function ShareCardModal({ user, onClose }) {
             color: 'var(--color-text)',
             letterSpacing: '-0.01em',
           }}>
-            프로필 공유
+            {t('share.title')}
           </h3>
           <button
             type="button"
             onClick={onClose}
-            aria-label="닫기"
+            aria-label={t('share.close')}
             style={{
               width: 36,
               height: 36,
@@ -142,7 +144,7 @@ export default function ShareCardModal({ user, onClose }) {
             color: 'var(--color-text-muted)',
             lineHeight: 1.5,
           }}>
-            명함을 탭하면 뒤집힙니다
+            {t('share.tapToFlip')}
           </p>
           <p style={{
             margin: '0 0 14px',
@@ -150,7 +152,7 @@ export default function ShareCardModal({ user, onClose }) {
             color: 'var(--color-text-dim)',
             lineHeight: 1.4,
           }}>
-            QR을 스캔해 프로필을 공유하세요
+            {t('share.scanQr')}
           </p>
 
           {/* Share action buttons */}
@@ -174,7 +176,7 @@ export default function ShareCardModal({ user, onClose }) {
                 transition: 'background var(--motion-normal) var(--motion-ease), color var(--motion-normal) var(--motion-ease)',
               }}
             >
-              {copied ? '복사됨' : '링크 복사'}
+              {copied ? t('share.copied') : t('share.copyLink')}
             </button>
 
             {/* Native share — progressive enhancement (mobile only) */}
@@ -196,7 +198,7 @@ export default function ShareCardModal({ user, onClose }) {
                   cursor: 'pointer',
                 }}
               >
-                공유
+                {t('share.share')}
               </button>
             )}
           </div>

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useTranslation } from '../i18n/index.js'
 import { getUserProfile, getLikedBuildings, getArchitectProfile } from '../api/client.js'
 import { updateProject, deleteProject } from '../api/projects.js'
 import { purgeChatCache } from '../utils/appHelpers.js'
@@ -28,6 +29,7 @@ function formatBoardDate(iso) {
 export default function UserProfilePage({ onLogout, onResumeProject, onNewProjectSession }) {
   const { userId: routeUserId } = useParams()
   const navigate = useNavigate()
+  const { t } = useTranslation()
 
   const sessionUserId = sessionStorage.getItem('archithon_user')
   const rawUserId = routeUserId || sessionUserId
@@ -805,10 +807,10 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
               }}>
                 <BuildingIconEmpty />
                 <p style={{ color: 'var(--color-text)', fontSize: 16, fontWeight: 600, margin: 0 }}>
-                  저장한 오피스가 없어요
+                  {t('profile.noSavedOfficesInline')}
                 </p>
                 <p style={{ color: 'var(--color-text-muted)', fontSize: 13, margin: 0 }}>
-                  건축가 프로필에서 팔로우하면 여기에 표시돼요
+                  {t('profile.followToShowInline')}
                 </p>
               </div>
             ) : (
@@ -852,10 +854,10 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                 padding: '80px 20px', gap: 16, textAlign: 'center',
               }}>
                 <p style={{ color: 'var(--color-text)', fontSize: 16, fontWeight: 600, margin: 0 }}>
-                  아직 좋아요한 프로젝트가 없어요
+                  {t('profile.noLikedProjectsInline')}
                 </p>
                 <p style={{ color: 'var(--color-text-muted)', fontSize: 13, margin: 0 }}>
-                  Discovery에서 마음에 드는 건물을 오른쪽으로 스와이프해보세요
+                  {t('profile.swipeToSaveInline')}
                 </p>
               </div>
             ) : (

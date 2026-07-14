@@ -21,14 +21,19 @@ if (typeof globalThis.window === 'undefined') {
 }
 
 let getImageSource
+let normalizeCard
 
 try {
   const mod = await import('./images.js')
   getImageSource = mod.getImageSource
+  normalizeCard = mod.normalizeCard
 } catch {
   // images.js imports core.js which calls import.meta.env at module eval —
   // that is a Vite construct unavailable under node --test. Skip all tests.
   test('getImageSource (images.js) — SKIPPED: module not importable under node --test (import.meta.env)', (t) => {
+    t.skip('images.js cannot be imported under node --test (import.meta.env)')
+  })
+  test('normalizeCard (images.js) — SKIPPED: module not importable under node --test (import.meta.env)', (t) => {
     t.skip('images.js cannot be imported under node --test (import.meta.env)')
   })
 }
@@ -56,5 +61,32 @@ if (getImageSource) {
 
   test('Lever4 getImageSource: empty string → unknown', () => {
     assert.equal(getImageSource(''), 'unknown')
+  })
+}
+
+if (normalizeCard) {
+  // Raw Divisare w_auto URL: cover_full_url must be the exact raw URL,
+  // image_url must be the rightSized (w_840,c_limit) transform.
+  const RAW_DIVISARE = 'https://images.divisare.com/images/f_auto,q_auto,w_auto/v1/abc/x.jpg'
+  const SIZED_DIVISARE = 'https://images.divisare.com/images/f_auto,q_auto,w_840,c_limit/v1/abc/x.jpg'
+
+  test('normalizeCard: cover_full_url preserves raw URL exactly', () => {
+    const card = { canonical_bld_id: 'bld_000001', image_url: RAW_DIVISARE }
+    const result = normalizeCard(card)
+    assert.equal(result.cover_full_url, RAW_DIVISARE,
+      'cover_full_url must be the unmodified raw URL')
+  })
+
+  test('normalizeCard: image_url is rightSized (w_840,c_limit)', () => {
+    const card = { canonical_bld_id: 'bld_000001', image_url: RAW_DIVISARE }
+    const result = normalizeCard(card)
+    assert.equal(result.image_url, SIZED_DIVISARE,
+      'image_url must be the resized URL')
+  })
+
+  test('normalizeCard: cover_full_url is null when image_url absent', () => {
+    const card = { canonical_bld_id: 'bld_000001' }
+    const result = normalizeCard(card)
+    assert.equal(result.cover_full_url, null)
   })
 }

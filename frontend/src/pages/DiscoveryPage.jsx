@@ -7,6 +7,9 @@ import DiscoveryTriggerCard from '../components/DiscoveryTriggerCard.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
 import CardSkeleton from '../components/CardSkeleton.jsx'
 import { discoveryNavigationGuard } from '../utils/discoveryGuard.js'
+import { useSwipeOrchestration } from '../hooks/useSwipeOrchestration.js'
+import { useKeyboardSwipe } from '../hooks/useKeyboardSwipe.js'
+import { useTranslation } from '../i18n/index.js'
 
 // Module-level flag: false on full page reload (module not yet loaded), true after
 // the first mount within the same SPA session. Used to detect tab re-entry vs first
@@ -16,8 +19,6 @@ let _discoveryMountedOnce = false
 const PREFETCH_AT_REMAINING = 3   // fetch more when deck.length <= this
 const TASTE_NUDGE_THRESHOLD = 10  // inject trigger card when draftLikeCount reaches this
 const DISCOVERY_LIKE_HARD_CAP = 50  // hard stop — block swiping, force Taste hand-off
-const SWIPE_KEYS = { ArrowLeft: 'left', ArrowRight: 'right' }
-
 const DECK_CACHE_KEY = 'discovery_deck_v2'
 const DECK_CACHE_TTL_MS = 30 * 60 * 1000  // 30 min
 const DRAFT_ID_KEY = 'discovery_draft_id'
@@ -125,13 +126,12 @@ function _clearDraftSessionStorage() {
 
 export default function DiscoveryPage({ showToast }) {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const isActiveRef = useRef(true)
   const requestIdRef = useRef(0)
   const fetchingRef = useRef(false)
   const preloadRef = useRef(makeImagePreloader())
-  const pendingActionRef = useRef(null)
   const cardRef = useRef(null)
-  const keySwipingRef = useRef(false)
   // triggerShownRef: true once the trigger card has been injected this session
   const triggerShownRef = useRef(false)
   // seenIdsRef: tracks cards seen this session for shake animation on re-appearance
@@ -250,22 +250,6 @@ export default function DiscoveryPage({ showToast }) {
   }, [])
 
   // Keyboard swipe: ← pass, → like.
-  useEffect(() => {
-    async function onKey(e) {
-      if (capReached) return
-      const dir = SWIPE_KEYS[e.key]
-      if (!dir || !cardRef.current || keySwipingRef.current) return
-      if (!deck.length) return
-      keySwipingRef.current = true
-      try {
-        await cardRef.current.swipe(dir)
-      } finally {
-        keySwipingRef.current = false
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [deck.length, capReached])
 
   // Inject trigger card when draftLikeCount first reaches threshold.
   // triggerShownRef is set INSIDE the updater so it is only marked true when the
@@ -393,63 +377,68 @@ export default function DiscoveryPage({ showToast }) {
   // -- Swipe handlers --
   // Right (like): optimistic advance + POST feedback.
   // Left (pass): optimistic advance + POST feedback (fire-and-forget, low-stakes).
-  function onTinderSwipe(dir) {
-    pendingActionRef.current = dir === 'right' ? 'like' : 'pass'
-  }
+  //
+  // onCommit reads topCard via render closure: react-tinder-card captures the
+  // onCardLeftScreen handler at drag-release, so `topCard` here is frozen to the
+  // card that was on top when the swipe began (same mechanism as pre-refactor).
+  const { onTinderSwipe, onCardLeftScreen } = useSwipeOrchestration({
+    likeAction: 'like',
+    dismissAction: 'pass',
+    onCommit: (action) => {
+      const card = topCard
+      advance()
 
-  function onCardLeftScreen() {
-    const action = pendingActionRef.current
-    pendingActionRef.current = null
-    if (!action) return
-
-    const card = topCard
-    advance()
-
-    // -- Trigger card handling --
-    if (isTriggerCard(card)) {
-      if (action === 'like') {
-        // RIGHT swipe → promote to Taste (기존 동작 유지)
-        handlePromoteToTaste()
-      } else {
-        // LEFT swipe → Discovery 계속; set Feature B flag so the persistent
-        // "Taste로 저장·이동" button appears on all subsequent cards.
-        setContinueAfterTrigger(true)
-        try { sessionStorage.setItem(CONTINUE_AFTER_TRIGGER_KEY, '1') } catch { /* ignore */ }
+      // -- Trigger card handling --
+      if (isTriggerCard(card)) {
+        if (action === 'like') {
+          // RIGHT swipe → promote to Taste (기존 동작 유지)
+          handlePromoteToTaste()
+        } else {
+          // LEFT swipe → Discovery 계속; set Feature B flag so the persistent
+          // "Taste로 저장·이동" button appears on all subsequent cards.
+          setContinueAfterTrigger(true)
+          try { sessionStorage.setItem(CONTINUE_AFTER_TRIGGER_KEY, '1') } catch { /* ignore */ }
+        }
+        return
       }
-      return
-    }
 
-    const bldId = card?.canonical_bld_id || card?.image_id
-    if (!bldId) return
+      const bldId = card?.canonical_bld_id || card?.image_id
+      if (!bldId) return
 
-    // Track seen id for shake dedup
-    seenIdsRef.current.add(bldId)
-    saveSeenIds(seenIdsRef.current)
+      // Track seen id for shake dedup
+      seenIdsRef.current.add(bldId)
+      saveSeenIds(seenIdsRef.current)
 
-    if (action === 'like') {
-      // Fix #4: optimistically increment draftLikeCount before the API call so
-      // the threshold check (draftLikeCount >= TASTE_NUDGE_THRESHOLD) fires
-      // synchronously this render cycle. The backend response reconciles with
-      // the authoritative count (handles dedup / edge cases).
-      setDraftLikeCount(prev => prev + 1)
-      discoveryFeedback(bldId, 'like', draftId)
-        .then(res => {
-          if (res.draftId) setDraftId(res.draftId)
-          // Reconcile with authoritative backend count (dedup/cap may adjust).
-          setDraftLikeCount(res.draftLikeCount)
-          if (res.likeCapReached) setCapReached(true)
-        })
-        .catch((err) => { if (!(err instanceof VerifyRequiredError)) reportWriteError(showToast, '좋아요 저장 실패') })
-    } else {
-      // Pass: server records it for dislike zone; failure is low-stakes but
-      // we still surface it consistently per FRONT-UX silent-failure policy.
-      discoveryFeedback(bldId, 'pass', draftId)
-        .then(res => {
-          if (res.draftId) setDraftId(res.draftId)
-        })
-        .catch((err) => { if (!(err instanceof VerifyRequiredError)) reportWriteError(showToast, '패스 기록 실패') })
-    }
-  }
+      if (action === 'like') {
+        // Fix #4: optimistically increment draftLikeCount before the API call so
+        // the threshold check (draftLikeCount >= TASTE_NUDGE_THRESHOLD) fires
+        // synchronously this render cycle. The backend response reconciles with
+        // the authoritative count (handles dedup / edge cases).
+        setDraftLikeCount(prev => prev + 1)
+        discoveryFeedback(bldId, 'like', draftId)
+          .then(res => {
+            if (res.draftId) setDraftId(res.draftId)
+            // Reconcile with authoritative backend count (dedup/cap may adjust).
+            setDraftLikeCount(res.draftLikeCount)
+            if (res.likeCapReached) setCapReached(true)
+          })
+          .catch((err) => { if (!(err instanceof VerifyRequiredError)) reportWriteError(showToast, t('discovery.toastLikeFailed')) })
+      } else {
+        // Pass: server records it for dislike zone; failure is low-stakes but
+        // we still surface it consistently per FRONT-UX silent-failure policy.
+        discoveryFeedback(bldId, 'pass', draftId)
+          .then(res => {
+            if (res.draftId) setDraftId(res.draftId)
+          })
+          .catch((err) => { if (!(err instanceof VerifyRequiredError)) reportWriteError(showToast, t('discovery.toastPassFailed')) })
+      }
+    },
+  })
+
+  useKeyboardSwipe({
+    onSwipe: async (dir) => { await cardRef.current?.swipe(dir) },
+    guardCondition: () => !!(capReached || !cardRef.current || !deck.length),
+  })
 
   // -- Promote to Taste (triggered by right-swipe on trigger card) --
   async function handlePromoteToTaste() {
@@ -474,9 +463,9 @@ export default function DiscoveryPage({ showToast }) {
         setDeck(prev => prev.filter(c => !isTriggerCard(c)))
         triggerShownRef.current = false
         setDraftLikeCount(0)
-        reportWriteError(showToast, '좋아요가 부족합니다 (최소 10개)')
+        reportWriteError(showToast, t('discovery.toastNotEnoughLikes'))
       } else {
-        reportWriteError(showToast, 'Taste 분석 시작 실패 — 다시 시도해주세요')
+        reportWriteError(showToast, t('discovery.toastAnalysisFailed'))
       }
     } finally {
       setPromoteLoading(false)
@@ -526,7 +515,7 @@ export default function DiscoveryPage({ showToast }) {
               color: progressComplete ? '#ec4899' : 'var(--color-text-muted)',
               letterSpacing: '0.02em',
             }}>
-              {progressComplete ? '취향 탐색 중' : `${draftLikeCount}/10`}
+              {progressComplete ? t('discovery.progressComplete') : `${draftLikeCount}/10`}
             </span>
           </div>
           <div style={{
@@ -598,10 +587,10 @@ export default function DiscoveryPage({ showToast }) {
                     animation: 'spin 0.8s linear infinite',
                     flexShrink: 0,
                   }} />
-                  Taste 분석 중…
+                  {t('discovery.tasteAnalyzing')}
                 </>
               ) : (
-                '지금까지 취향 저장하고 Taste로 이동'
+                t('discovery.saveTasteAndMove')
               )}
             </button>
           </div>
@@ -629,9 +618,8 @@ export default function DiscoveryPage({ showToast }) {
               color: 'var(--color-text)',
               lineHeight: 1.6,
             }}>
-              <span style={{ color: '#ec4899' }}>50장</span>
-              {' '}최대치에 도달했습니다.{' '}
-              이제 Taste로 가서 정밀 취향 탐색을 진행해주세요.
+              <span style={{ color: '#ec4899' }}>{t('discovery.capReachedCount', { n: 50 })}</span>
+              {' '}{t('discovery.capReachedBody')}
             </p>
             <button
               type="button"
@@ -664,10 +652,10 @@ export default function DiscoveryPage({ showToast }) {
                     animation: 'spin 0.8s linear infinite',
                     flexShrink: 0,
                   }} />
-                  Taste 분석 중…
+                  {t('discovery.tasteAnalyzing')}
                 </>
               ) : (
-                'Taste 정밀 탐색 시작'
+                t('discovery.startTasteDeep')
               )}
             </button>
           </div>
@@ -850,8 +838,8 @@ export default function DiscoveryPage({ showToast }) {
               lineHeight: 1.6,
             }}>
               {draftLikeCount >= TASTE_NUDGE_THRESHOLD
-                ? '이 페이지를 나가면 Discovery 탐색이 종료됩니다. 지금까지 모은 취향은 Taste에서 이어서 탐색할 수 있습니다.'
-                : '이 페이지를 나가면 현재까지 모은 좋아요(드래프트)가 사라집니다.'}
+                ? t('discovery.leaveModalBodyConverged')
+                : t('discovery.leaveModalBodyDraft')}
             </p>
 
             {/* Primary action: stay */}
@@ -875,7 +863,7 @@ export default function DiscoveryPage({ showToast }) {
                 opacity: leaveModalPromoting ? 0.6 : 1,
               }}
             >
-              Discovery에서 계속 탐색하기
+              {t('discovery.leaveModalStay')}
             </button>
 
             {/* Secondary action: leave
@@ -912,7 +900,7 @@ export default function DiscoveryPage({ showToast }) {
                     console.error('[LeaveModal] auto-promote failed:', err)
                     // Surface a brief error toast but do NOT trap the user — still let
                     // them proceed to their intended destination.
-                    if (showToast) showToast('Taste 세션 저장 실패 — 그냥 이동합니다', 'warning')
+                    if (showToast) showToast(t('discovery.toastSaveFailedLeave'), 'warning')
                   } finally {
                     setLeaveModalPromoting(false)
                   }
@@ -948,11 +936,11 @@ export default function DiscoveryPage({ showToast }) {
                     borderTopColor: 'var(--accent-1, #0969DA)',
                     animation: 'spin 0.8s linear infinite',
                   }} />
-                  Taste 저장 중…
+                  {t('discovery.tasteSaving')}
                 </span>
               ) : (
                 <>
-                  그냥 나가기
+                  {t('discovery.leaveModalLeave')}
                   <span style={{
                     display: 'block',
                     fontSize: 11,
@@ -961,8 +949,8 @@ export default function DiscoveryPage({ showToast }) {
                     marginTop: 2,
                   }}>
                     {draftLikeCount >= TASTE_NUDGE_THRESHOLD
-                      ? 'Taste에서 이어갈 수 있습니다'
-                      : '좋아요한 정보가 저장되지 않습니다'}
+                      ? t('discovery.leaveModalSubConverged')
+                      : t('discovery.leaveModalSubDraft')}
                   </span>
                 </>
               )}

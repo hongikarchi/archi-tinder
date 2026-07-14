@@ -54,6 +54,10 @@ export function paperFaceStyle({ radius = 20, padding = '26px 24px' } = {}) {
 }
 
 // ── Type-role style objects ─────────────────────────────────────────────────
+// Shared wordmark style — consumed by CardSkeleton.jsx (Discovery/Swipe
+// loading skeletons). Hierarchy vs. other card text is expressed via
+// size/weight/letter-spacing only (DESIGN.md §2.5a single-font policy) — this
+// stays on the base font family, never MONO.
 export const wordmarkStyle = {
   fontFamily: 'var(--font-family)',
   fontSize: 12,
@@ -62,6 +66,30 @@ export const wordmarkStyle = {
   color: INK.strong,
   lineHeight: 1,
   textTransform: 'uppercase',
+}
+
+// LOGIN-REWORK-1: login page renders the wordmark as the brand/logo — bigger
+// + bolder than the shared skeleton wordmark. Login-scoped so CardSkeleton
+// (Discovery/Swipe loading) keeps the original 12px/500 wordmark.
+export const loginWordmarkStyle = {
+  ...wordmarkStyle,
+  fontSize: 24,
+  fontWeight: 700,
+  letterSpacing: '0.14em',
+}
+
+// LOGIN-REWORK-1: base-font label style — for eyebrow/question/instructional
+// text that must NOT sit on MONO (DESIGN.md §2.5a). MONO is reserved for
+// intentional business-card meta accents (@id row, JOINED/stamp) only.
+export const baseLabelStyle = {
+  fontFamily: 'var(--font-family)',
+  fontSize: 11,
+  fontWeight: 600,
+  textTransform: 'uppercase',
+  letterSpacing: LS_CAPS,
+  color: INK.muted,
+  lineHeight: 1.3,
+  margin: 0,
 }
 
 export const cardNameStyle = {
@@ -112,9 +140,12 @@ export const monoLabelStyle = {
   margin: 0,
 }
 
+// LOGIN-REWORK-1: fine print is informational (consent/policy text the user
+// reads to understand what they're agreeing to) — base font per DESIGN.md
+// §2.5a, not MONO. Hierarchy vs. body text comes from size/color only.
 export const finePrintStyle = {
-  fontFamily: MONO,
-  fontSize: 10.5,
+  fontFamily: 'var(--font-family)',
+  fontSize: 11,
   fontWeight: 400,
   color: INK.dim,
   lineHeight: 1.55,

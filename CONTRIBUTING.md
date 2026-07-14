@@ -291,6 +291,35 @@ runtime role has no DDL. `make migrate-prod` is the one-command wrapper:
     mechanism), then the drop after the new code is live. For pre-launch /
     low-traffic, one `make migrate-prod` right after the deploy is fine.
 
+### Buildings-DB connection pooling (Neon pooler) — recommended, user-applied
+
+Context: `DATABASES['buildings']` deliberately carries **no `CONN_MAX_AGE`**
+(ownership decision, Task.md 2026-06: don't hold persistent app-level
+connections on the Make-DB-owned project). Django therefore opens a fresh
+TLS connection to Neon on every request that touches the buildings DB —
+the swipe/session hot path pays that handshake 1-4x per request. The <1s
+page-load mandate postdates that decision.
+
+**Ownership-safe alternative — Neon's server-side pooler** (PgBouncer,
+transaction mode): the app still "connects per request", but the handshake
+terminates at Neon's pooler which reuses real DB connections. No app-level
+persistent connection, no connection-slot squatting on the Make-DB project.
+
+- **How:** change the `BUILDINGS_DB_HOST` env value from
+  `ep-<endpoint>.<region>.aws.neon.tech` to
+  `ep-<endpoint>-pooler.<region>.aws.neon.tech` (insert `-pooler` after the
+  endpoint ID). Railway: edit the service env var; local: `backend/.env`.
+- **Compatibility:** transaction-mode pooling forbids session state
+  (LISTEN/NOTIFY, advisory locks, temp tables, session-level prepared
+  statements). Make Web's buildings usage is stateless read-only SELECTs —
+  compatible. The app-DB alias (`default`) keeps `CONN_MAX_AGE=600` and is
+  NOT part of this change.
+- **Measured 2026-07-07 (local dev box in KR → Neon SG, 10 fresh
+  connect+query cycles each):** connect p50 450ms (direct) ≈ 457ms (pooler),
+  but tail max **2059ms → 517ms** — the pooler flattens the handshake tail.
+  Same-region prod (Railway SG → Neon SG) has far smaller absolute connect
+  cost; re-measure there before/after flipping the Railway var.
+
 ## Commit message convention
 
 Follow Conventional Commits style:

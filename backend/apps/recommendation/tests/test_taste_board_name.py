@@ -206,6 +206,12 @@ class TestGenerateTasteBoardName:
 
 # ---------------------------------------------------------------------------
 # Integration: session_service.create_session placeholder detection
+# PERF-HOTPATH-1: create_session NEVER calls Gemini synchronously any more —
+# it always inserts the deterministic (filters-only) fallback name at create
+# time, and (only for placeholder names) registers a post-commit thread that
+# may later upgrade the name via Gemini. These tests verify the synchronous
+# fallback wiring + immediate return; the async upgrade itself is covered by
+# TestAsyncBoardNameUpdate below.
 # ---------------------------------------------------------------------------
 
 @pytest.mark.django_db
@@ -242,7 +248,13 @@ class TestCreateSessionAutoName:
         return SimpleNamespace(data=data, user=user_profile.user)
 
     def _run_create(self, user_profile, name='', filters=None, raw_query='',
-                    gemini_name='Brick House'):
+                    gemini_name='Brick House', gemini_side_effect=None):
+        """Run create_session with the pool/card machinery stubbed.
+
+        gemini_name / gemini_side_effect control the Gemini mock so tests can
+        assert it is NEVER consulted synchronously (the response must reflect
+        the deterministic fallback regardless of what Gemini would return).
+        """
         from apps.recommendation.services.session_service import create_session
         from django.utils import timezone
         from datetime import timedelta
@@ -257,8 +269,13 @@ class TestCreateSessionAutoName:
         # which the loop treats as None (the 'else: break' branch).
         fpp_side_effect = iter(self._STUB_POOL)
 
+        gemini_kwargs = (
+            {'side_effect': gemini_side_effect} if gemini_side_effect is not None
+            else {'return_value': MagicMock(text=gemini_name)}
+        )
+
         with patch('apps.recommendation.services.generate_content_with_fallback',
-                   return_value=MagicMock(text=gemini_name)):
+                   **gemini_kwargs) as mock_gemini:
             with patch('apps.recommendation.services._get_client', return_value=MagicMock()):
                 with patch('apps.recommendation.engine.create_pool_with_relaxation',
                            return_value=(self._STUB_POOL, self._STUB_SCORES, 1)):
@@ -271,79 +288,185 @@ class TestCreateSessionAutoName:
                                 with patch('apps.recommendation.engine.get_building_card',
                                            return_value=mock_card):
                                     with patch('apps.recommendation.event_log.emit_event_batch'):
-                                        return create_session(request, user_profile, recent_cutoff)
+                                        resp = create_session(request, user_profile, recent_cutoff)
+        return resp, mock_gemini
 
-    def test_placeholder_empty_gets_auto_name(self, user_profile):
-        """Empty name → auto-name 'Brick House' applied."""
+    def test_placeholder_empty_gets_deterministic_fallback_no_gemini_call(self, user_profile):
+        """Empty name -> deterministic-from-filters fallback; Gemini never called synchronously."""
         from apps.recommendation.models import Project
-        resp = self._run_create(user_profile, name='', gemini_name='Brick House')
-        assert resp.status_code == 201
-        pid = resp.data['project_id']
-        project = Project.objects.get(project_id=pid)
-        assert project.name == 'Brick House'
-
-    def test_placeholder_untitled_gets_auto_name(self, user_profile):
-        """Name='Untitled' → auto-name applied."""
-        from apps.recommendation.models import Project
-        resp = self._run_create(user_profile, name='Untitled', gemini_name='Coastal House')
-        assert resp.status_code == 201
-        pid = resp.data['project_id']
-        project = Project.objects.get(project_id=pid)
-        assert project.name == 'Coastal House'
-
-    def test_placeholder_untitled_project_gets_auto_name(self, user_profile):
-        """Name='Untitled Project' → auto-name applied."""
-        from apps.recommendation.models import Project
-        resp = self._run_create(
-            user_profile, name='Untitled Project', gemini_name='Japanese Modern',
+        resp, mock_gemini = self._run_create(
+            user_profile, name='', filters={'style': 'brick'}, gemini_name='Brick House',
         )
         assert resp.status_code == 201
+        mock_gemini.assert_not_called()
         pid = resp.data['project_id']
         project = Project.objects.get(project_id=pid)
-        assert project.name == 'Japanese Modern'
+        assert project.name == 'Brick'
+        assert resp.data['name'] == 'Brick'
+
+    def test_placeholder_untitled_gets_deterministic_fallback(self, user_profile):
+        """Name='Untitled' -> deterministic fallback applied, no Gemini wait."""
+        from apps.recommendation.models import Project
+        resp, mock_gemini = self._run_create(
+            user_profile, name='Untitled', filters={'style': 'coastal'}, gemini_name='Coastal House',
+        )
+        assert resp.status_code == 201
+        mock_gemini.assert_not_called()
+        pid = resp.data['project_id']
+        project = Project.objects.get(project_id=pid)
+        assert project.name == 'Coastal'
+
+    def test_placeholder_untitled_project_gets_deterministic_fallback(self, user_profile):
+        """Name='Untitled Project' -> deterministic fallback applied."""
+        from apps.recommendation.models import Project
+        resp, mock_gemini = self._run_create(
+            user_profile, name='Untitled Project', filters={'style': 'japanese'},
+            gemini_name='Japanese Modern',
+        )
+        assert resp.status_code == 201
+        mock_gemini.assert_not_called()
+        pid = resp.data['project_id']
+        project = Project.objects.get(project_id=pid)
+        assert project.name == 'Japanese'
+
+    def test_placeholder_all_empty_filters_falls_back_to_untitled(self, user_profile):
+        """No usable filters -> 'Untitled' (deterministic fallback's own default)."""
+        from apps.recommendation.models import Project
+        resp, mock_gemini = self._run_create(user_profile, name='', filters={})
+        assert resp.status_code == 201
+        mock_gemini.assert_not_called()
+        pid = resp.data['project_id']
+        project = Project.objects.get(project_id=pid)
+        assert project.name == 'Untitled'
 
     def test_real_name_not_overridden(self, user_profile):
         """User-provided real name 'My Gallery' is kept unchanged."""
         from apps.recommendation.models import Project
-        resp = self._run_create(user_profile, name='My Gallery', gemini_name='Brick House')
+        resp, mock_gemini = self._run_create(user_profile, name='My Gallery', gemini_name='Brick House')
         assert resp.status_code == 201
+        mock_gemini.assert_not_called()
         pid = resp.data['project_id']
         project = Project.objects.get(project_id=pid)
         assert project.name == 'My Gallery'
 
-    def test_gemini_failure_fallback_wired_into_create(self, user_profile):
-        """Gemini raises in the name thread → deterministic fallback from filters."""
+    def test_create_session_returns_immediately_even_if_gemini_would_hang(self, user_profile):
+        """Placeholder name + a Gemini mock that would block forever -> response still
+        returns promptly with the deterministic fallback name (no .join(timeout=12)
+        anywhere on the request path any more).
+        """
+        import time
         from apps.recommendation.models import Project
-        from apps.recommendation.services.session_service import create_session
-        from django.utils import timezone
-        from datetime import timedelta
-        recent_cutoff = timezone.now() - timedelta(seconds=30)
-        request = self._make_request(
-            user_profile,
-            name='', filters={'style': 'brutalist', 'program': 'museum'}, raw_query='',
-        )
-        mock_card = self._STUB_CARD
 
-        with patch('apps.recommendation.services.generate_content_with_fallback',
-                   side_effect=TimeoutError('Gemini 8s timeout')):
-            with patch('apps.recommendation.services._get_client', return_value=MagicMock()):
-                with patch('apps.recommendation.engine.create_pool_with_relaxation',
-                           return_value=(self._STUB_POOL, self._STUB_SCORES, 1)):
-                    with patch('apps.recommendation.engine.get_pool_embeddings',
-                               return_value={bid: [0.1] * 384 for bid in self._STUB_POOL}):
-                        with patch('apps.recommendation.engine.farthest_point_from_pool',
-                                   side_effect=iter(self._STUB_POOL)):
-                            with patch('apps.recommendation.engine.get_buildings_by_ids',
-                                       return_value=[mock_card, mock_card, mock_card]):
-                                with patch('apps.recommendation.engine.get_building_card',
-                                           return_value=mock_card):
-                                    with patch('apps.recommendation.event_log.emit_event_batch'):
-                                        resp = create_session(
-                                            request, user_profile, recent_cutoff,
-                                        )
+        def _hanging_gemini(*args, **kwargs):
+            # If create_session ever synchronously waited on this, the test
+            # would hang/timeout. It must never be called at all.
+            raise AssertionError('Gemini must not be called on the create_session hot path')
+
+        start = time.monotonic()
+        resp, mock_gemini = self._run_create(
+            user_profile, name='', filters={'style': 'brutalist', 'program': 'museum'},
+            gemini_side_effect=_hanging_gemini,
+        )
+        elapsed = time.monotonic() - start
 
         assert resp.status_code == 201
+        mock_gemini.assert_not_called()
+        assert elapsed < 2.0  # well under the old 12s join budget
         pid = resp.data['project_id']
         project = Project.objects.get(project_id=pid)
-        # Fallback: style='brutalist' + program='museum' → 'Brutalist Museum'
         assert project.name == 'Brutalist Museum'
+
+    def test_placeholder_registers_post_commit_thread(self, user_profile):
+        """Placeholder name + new project -> a callback is registered via
+        transaction.on_commit (the async Gemini-upgrade thread spawn)."""
+        with patch('apps.recommendation.services.session_service.transaction.on_commit') as mock_on_commit:
+            resp, _ = self._run_create(user_profile, name='', filters={'style': 'brick'})
+        assert resp.status_code == 201
+        mock_on_commit.assert_called_once()
+
+    def test_real_name_does_not_register_post_commit_thread(self, user_profile):
+        """Non-placeholder client-provided name -> no on_commit registration
+        (no async Gemini upgrade needed; the user's name is final)."""
+        with patch('apps.recommendation.services.session_service.transaction.on_commit') as mock_on_commit:
+            resp, _ = self._run_create(user_profile, name='My Gallery')
+        assert resp.status_code == 201
+        mock_on_commit.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# _async_board_name_update: post-commit Gemini name-upgrade thread body
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestAsyncBoardNameUpdate:
+    """Call the thread function directly (synchronously) — no real threading
+    needed to exercise its logic. connections.close_all() is mocked out so
+    the test's own SQLite/PG connection survives the call.
+    """
+
+    def _run(self, *args, **kwargs):
+        from apps.recommendation.services.session_service import _async_board_name_update
+        # _async_board_name_update does a LOCAL `from django.db import connections as
+        # _connections` (telemetry-thread pattern) -- patch the real django.db.connections
+        # object so both the entry and finally close_all() calls are captured.
+        with patch('django.db.connections') as mock_conn:
+            _async_board_name_update(*args, **kwargs)
+        return mock_conn
+
+    def test_applies_gemini_name_when_row_still_matches_fallback(self, user_profile):
+        """Gemini succeeds and the row name still equals the fallback -> row updated."""
+        from apps.recommendation.models import Project
+        project = Project.objects.create(user=user_profile, name='Brick', filters={}, raw_query='')
+
+        with patch('apps.recommendation.services.session_service.services._gemini_board_name_raw',
+                   return_value='Brick House'):
+            mock_conn = self._run(
+                project.pk, 'Brick', {'style': 'brick'}, 'brick buildings', user_profile.pk,
+            )
+
+        project.refresh_from_db()
+        assert project.name == 'Brick House'
+        # close_all called on entry AND in finally (telemetry-thread pattern)
+        assert mock_conn.close_all.call_count == 2
+
+    def test_manual_rename_guard_leaves_renamed_row_untouched(self, user_profile):
+        """User already renamed the board (name no longer equals fallback) ->
+        the async updater must NOT clobber the manual rename."""
+        from apps.recommendation.models import Project
+        project = Project.objects.create(user=user_profile, name='Brick', filters={}, raw_query='')
+        # Simulate a concurrent manual rename via ProjectDetailView.patch.
+        Project.objects.filter(pk=project.pk).update(name='My Custom Name')
+
+        with patch('apps.recommendation.services.session_service.services._gemini_board_name_raw',
+                   return_value='Brick House'):
+            self._run(project.pk, 'Brick', {'style': 'brick'}, 'brick buildings', user_profile.pk)
+
+        project.refresh_from_db()
+        assert project.name == 'My Custom Name'
+
+    def test_empty_gemini_result_keeps_fallback(self, user_profile):
+        """Gemini returns '' -> fallback name stays, no exception."""
+        from apps.recommendation.models import Project
+        project = Project.objects.create(user=user_profile, name='Brick', filters={}, raw_query='')
+
+        with patch('apps.recommendation.services.session_service.services._gemini_board_name_raw',
+                   return_value=''):
+            self._run(project.pk, 'Brick', {'style': 'brick'}, 'brick buildings', user_profile.pk)
+
+        project.refresh_from_db()
+        assert project.name == 'Brick'
+
+    def test_gemini_exception_keeps_fallback_and_never_raises(self, user_profile):
+        """Gemini raises -> fallback name stays; the thread function itself
+        never propagates the exception (would kill a daemon thread silently
+        anyway, but the contract is explicit try/except -> log)."""
+        from apps.recommendation.models import Project
+        project = Project.objects.create(user=user_profile, name='Brick', filters={}, raw_query='')
+
+        with patch('apps.recommendation.services.session_service.services._gemini_board_name_raw',
+                   side_effect=RuntimeError('Gemini timeout')):
+            # Must not raise.
+            self._run(project.pk, 'Brick', {'style': 'brick'}, 'brick buildings', user_profile.pk)
+
+        project.refresh_from_db()
+        assert project.name == 'Brick'

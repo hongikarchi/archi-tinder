@@ -27,7 +27,7 @@ export function useImageTelemetry({ buildingId, context, sessionId } = {}) {
 
   const onLoad = useCallback((event) => {
     if (Math.random() > SUCCESS_SAMPLE_RATE) return
-    const url = event?.target?.src || ''
+    const url = event?.target?.currentSrc || event?.target?.src || ''
     const load_ms = startTimeRef.current != null
       ? Math.round(performance.now() - startTimeRef.current)
       : null
@@ -42,7 +42,7 @@ export function useImageTelemetry({ buildingId, context, sessionId } = {}) {
   }, [buildingId, context, sessionId])
 
   const onError = useCallback((event) => {
-    const url = event?.target?.src || ''
+    const url = event?.target?.currentSrc || event?.target?.src || ''
     const load_ms = startTimeRef.current != null
       ? Math.round(performance.now() - startTimeRef.current)
       : null

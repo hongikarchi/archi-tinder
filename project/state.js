@@ -23,68 +23,64 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-07-06 18:04 KST',
-    head: 'de4b8c2',
-    branch: 'HEAD',
+    updatedAt: '2026-07-14 07:36 KST',
+    head: '68dafaa',
+    branch: 'feature/claude-perf5-pooler-applied',
   },
   done: [
     {
-      id: 'NOTIF-INAPP-1',
-      title: '앱 내 알림 v1 (❤️ 받음 + 보안 이벤트)',
-      completedAt: '2026-07-06',
-      note: '앱 내 알림 v1 — 신규 `apps/notifications` (인박스+종+발생훅), 설정 알림 화면 실동작 전환 (설정 페이지 개선 2/2).',
+      id: 'FULL-LANGUAGE-1c',
+      title: 'i18n 슬라이스 c: 프로필·보드 + 모달',
+      completedAt: '2026-07-13',
+      note: '최종 슬라이스 17파일 ~115 리터럴 — 3슬라이스(a #275 / b #276 / c) 합산 32파일 176줄 sweep 완료, 전 고트래픽 surface가 ko/en 동일 string source 렌더. FULL-LANGUAGE-1 백로그 항목 종결.',
     },
     {
-      id: 'LOGIN-CARD-REDESIGN',
-      title: '로그인/가입 명함 UI 재설계 (명함 언어 + CardSkeleton)',
-      completedAt: '2026-07-06',
-      note: '로그인/가입 5단계 카드를 테마 적응형 명함 언어로 재설계 (신규 `cardLanguage.js` 공유 모듈: paper face + ink 타이포 + mono 라벨 + ink 버튼 + paper-flat 인풋; 기존 토큰만, BusinessCard.jsx 불변).',
+      id: 'FULL-LANGUAGE-1b',
+      title: 'i18n 슬라이스 b: 설정·계정 + 인증에러',
+      completedAt: '2026-07-13',
+      note: '설정/계정 표면 9파일 + 인증 에러 훅 국지화 — Settings 트리 전체가 ko/en 동일 string source 렌더.',
     },
     {
-      id: 'SETTINGS-POLISH-1',
-      title: '설정 페이지 개선 1/2 (직업 dropdown 통합 + Bio auto-grow + 폰트 칩 + 테마 preview)',
-      completedAt: '2026-07-06',
-      note: '직업(Role) enum 단일화 + Bio auto-grow + 폰트 2-칩 + 테마 라이브 preview — 설정/프로필 편집 4개 개선 1커밋.',
+      id: 'FULL-LANGUAGE-1a',
+      title: 'i18n 슬라이스 a: 코어 스와이프 루프',
+      completedAt: '2026-07-13',
+      note: '고트래픽 코어 루프 5파일의 하드코딩 한글 전량(주석 제외)을 t() 키로 — Discovery/Swipe/Results가 ko/en 동일 string source에서 렌더.',
     },
     {
-      id: 'PROFILE-QR-1',
-      title: '프로필 공유 진짜 QR (FakeQr 스텁 교체)',
-      completedAt: '2026-07-01',
-      note: '프로필 공유 모달 QR이 가짜(FakeQr.jsx, 스캔불가 SVG 격자)였음 → 실제 스캔되는 QR로 교체.',
+      id: 'FRONT-IMAGE-RESIZE-3',
+      title: '이미지 풀해상도 passthrough + telemetry currentSrc',
+      completedAt: '2026-07-13',
+      note: '이미지 리사이즈 시리즈(PR1 #241 / PR2 #242 / LQIP #267) 마지막 잔여 마감 — 빈-갤러리 건물의 라이트박스/다운로드가 원본을 받고, telemetry가 실제 렌더 variant를 기록.',
     },
     {
-      id: 'CLEANUP-DEPLOY-2026-06-28',
-      title: '배포 #250 + 백로그 정리',
-      completedAt: '2026-06-28',
-      note: '배포 후 정리 batch: develop→main deploy + prod migration + 백로그 audit.',
+      id: 'BACK-PERFORMANCE-5a',
+      title: 'swipe timing_breakdown 계측 리더',
+      completedAt: '2026-07-13',
+      note: '`session_metrics_report`가 SessionEvent `timing_breakdown`을 이제 집계 — stage별 p50/p95/max + cache_hit 분리 + 세션내 위치 warmup bucket으로 swipe 0.7-1.5s 변동의 지배 원인을 prod 데이터로 특정 가능.',
     },
     {
-      id: 'LOGIN-ONBOARD-1',
-      title: '로그인/온보딩 통합 + 인증 모델 단순화',
-      completedAt: '2026-06-27',
-      note: '신규계정 경로 2개(게스트 스와이프 + 별도 아이디/비번 가입)를 단일 흐름으로 병합 + display_name·handle 통합 ID + Google 인증전용 모델.',
+      id: 'FULL-ONBOARDING-2',
+      title: 'is_temp 라이프사이클 마감 (#243 fast-follows)',
+      completedAt: '2026-07-13',
+      note: 'temp 보드 누수 5개 사이트 일괄 마감: one-way finalize 강제 + 리스트/카운트/취향벡터/피드 전부 `is_temp=False` 필터 — 사일런트 보드 유실 경로 차단.',
     },
     {
-      id: 'DISCOVERY-SKELETON',
-      title: 'Discovery 로딩 스켈레톤 (마스코트 + "취향 탐색 중…")',
-      completedAt: '2026-06-27',
-      note: 'Discovery 첫 로딩(GET /discovery/ 추천연산 대기) 동안 카드 자리에 귀여운 스켈레톤 표출.',
+      id: 'BACK-LLM-4',
+      title: 'search.py ParseQueryView byte-cap ensure_ascii 부풀림 의심 — CLOSED 2026-07-12 (premise falsified, no PR)',
+      completedAt: '',
+      note: '2026-07-12 백로그 전수 감사에서 무혐의 판명: `ParseQueryView.post`는 conversation_history 검증을 serializer로 위임하며, 해당 serializer는 BACK-LLM-2(#195)가 이미 UTF-8 byte 측정으로 고침 — ParseQueryView 자체에 `ensure_ascii=True` byte-cap 경로가 애초에 없음(Sonnet 검증 + Opus 적대검증 동의). 의심 항목이었고 실재하지 않아 폐기.',
     },
     {
-      id: 'FRONT-AUTH-2',
-      title: '로그인 스와이프 온보딩',
-      completedAt: '2026-06-27',
-      note: '1차 스와이프 온보딩(Codex, merged 2026-06-01). 흐름은 LOGIN-ONBOARD-1에서 통합·재설계됨.',
+      id: 'OVERNIGHT-PERF-1',
+      title: '야간 자율 4-PR 묶음 (핫패스·카드비주얼·집계·ops문서)',
+      completedAt: '2026-07-08',
+      prs: [266, 269],
+      note: 'Plan `.claude/plans/settings-encapsulated-sedgewick.md` 4슬라이스 전부 머지: PR-A #266 back-hotpath (보드명 async + like 태그조회 캐시, 개별 Done 항목 PERF-HOTPATH-1) · PR-B #267 LQIP blur-up + 비율적응형 object-fit · PR-C #268 `session_metrics_report` 첫 SessionEvent 리더 · PR-D #269 인덱스 핸드오프 + Neon pool…',
     },
   ],
   now: [],
   next: {
     xhigh: [
-      {
-        id: 'FULL-ONBOARDING-2',
-        title: 'is_temp 라이프사이클 마감 (#243 fast-follows)',
-        note: '#243(`6f7a4a8`, FULL-ONBOARDING-1 Taste-flow + Project.is_temp) merge 시 verified-review로 게시한 후속(Codex RC + 워크플로우 adversarial-verify + Opus judge). 귀속: #243 diff는 models/serializers/session_service/migration/frontend만 — projects.py·discovery.py·engine.py 미수정 → 아래 1만 PR-신규, 나머지…',
-      },
       {
         id: 'FULL-LEGAL-1',
         title: 'PIPA/GDPR consent: Terms/Privacy 페이지 + 한국어 affirmative copy (잔여)',
@@ -105,6 +101,21 @@ window.PROJECT_STATE = {
     ],
     medium: [
       {
+        id: 'FRONT-VERIFY-1',
+        title: '보드저장 PATCH 경로 verify_required 모달 미배선',
+        note: 'FULL-ONBOARDING-2(`92237d8`)가 guest promote-limit을 `403 {\'detail\':\'verify_required\',\'reason\':\'board_limit_reached\',\'limit\':3}`로 표준화했으나, 프론트 `updateProject`(projects.js:64-71)는 verify_required를 VerifyRequiredError로 변환 안 함(createProject:26-40만 처리) → SaveBoardModal에서 guest가 4번째 보…',
+      },
+      {
+        id: 'INFRA-TEMP-GC-1',
+        title: 'orphan temp 보드 서버측 GC/TTL 없음',
+        note: 'FULL-ONBOARDING-2에서 분리(2026-07-12). 브라우저 닫기/로그아웃 시 `is_temp=True` 보드가 서버에 영구 잔류(frontend cleanup은 /search 재진입 경로만). TTL 필드 or 정리 job(cron/management command) 필요 — 설계 결정(TTL 기간, report-있는 temp 처리) 선행. 비차단.',
+      },
+      {
+        id: 'FRONT-UX-7',
+        title: '로그인 뒤로가기 시 입력 draft 소실',
+        note: 'LOGIN-REWORK-1(`a390f9f`) pre-existing 잔존. CredentialsStep이 localId/localPassword를 컴포넌트 로컬 useState로 들고, 앞 카드가 `step`으로 key돼 profile→back→credentials 시 remount → 입력 draft 초기화. 부모 id/password는 마지막 confirmed 값 유지하나 local state를 props로 seed 안 함 → 입력창 빈 채로 보임. deck 리워크가 뒤로가기를 쉽게 만…',
+      },
+      {
         id: 'NOTIF-CHANNELS-1',
         title: '이메일·푸시 알림 채널 발송',
         note: 'NOTIF-INAPP-1(0bac717)은 앱 내 채널만. 이메일(SMTP — Resend/Gmail 등) + 웹푸시(FCM)는 새 외부 의존성 → Product Constitution 상 사용자 승인 필요. prefs JSON은 push/email 키 이미 보존·검증됨(validator {push,email,in_app}) — 발송 파이프라인만 추가하면 됨. 보안 카테고리 이메일이 최우선 후보.',
@@ -113,21 +124,6 @@ window.PROJECT_STATE = {
         id: 'BACK-IDS-1',
         title: 'user_id 정수 PK 노출 비열거화',
         note: '`UserMiniSerializer.user_id`(source=user.id, serializers.py:70-74)가 순차 정수 Django PK 노출 — Project serializer·reactors 목록·notifications actor 전반 동일(시스템적, NOTIF-INAPP-1 net-new 0). 고치려면 handle/UUID로 전면 일괄 교체(부분 교체는 불일치만 초래). Opus verify low, 2026-07-06.',
-      },
-      {
-        id: 'FRONT-IMAGE-RESIZE-3',
-        title: '이미지 LQIP + 풀해상도 passthrough (PR3)',
-        note: 'PR2(#242)가 srcset/decode/classifier 출하 → 남은 Tier A polish. 전부 프론트.',
-      },
-      {
-        id: 'BACK-LLM-4',
-        title: 'search.py ParseQueryView byte-cap도 ensure_ascii 부풀림 의심',
-        note: 'BACK-LLM-2(#195) 리뷰 중 발견(미수정, pre-existing). `backend/apps/recommendation/views/search.py` `ParseQueryView.post`의 conversation_history 검증이 BACK-LLM-2 serializer가 고친 것과 동일하게 `json.dumps` 기본 `ensure_ascii=True`로 byte 측정 가능성 → 한글 대화가 한도를 6배 부풀려 거짓 거부. 확인 후 `ensure_ascii=False`+UT…',
-      },
-      {
-        id: 'FULL-LANGUAGE-1',
-        title: '한/영 UI 라벨 번역 sweep (토글·필드·LLM 배선 완료; 잔여=라벨)',
-        note: 'Code audit 2026-05-27: UserProfile preferences are theme/font only; UserSerializer and UserProfileSelfUpdateSerializer need language parity. ThemeContext + AppearanceSettings are the local persistence/UI pattern. ParseQueryView currently calls services.parse_query(conversation_history) with no user preference, so language must be passed from request.user.profile.language and prompt inference overridden.',
       },
       {
         id: 'FRONT-DESIGN-1',
@@ -141,6 +137,11 @@ window.PROJECT_STATE = {
       },
     ],
     low: [
+      {
+        id: 'BACK-ANALYTICS-1',
+        title: 'session_metrics_report 콘솔 ESC-byte 주입 (pre-existing #268)',
+        note: '`session_metrics_report.py` 텍스트 모드가 SessionEvent payload의 `domain`/`context` 값을 raw로 stdout 출력(~:548-559, #268 소산) — prod payload에 ESC 바이트 섞이면 터미널 이스케이프 주입 가능. BACK-PERFORMANCE-5a(`afc0b88`) Opus 검증서 실증됐으나 해당 PR 미접촉 영역이라 분리. 수정 = 출력 전 non-printable strip/repr(). 운영자-실행 read-on…',
+      },
       {
         id: 'ARCHITECT-UNIFY-1',
         title: 'firm-side Office→Architect 전면 통합 (deferred, firm-UX 착수 시)',
@@ -158,7 +159,7 @@ window.PROJECT_STATE = {
       },
       {
         id: 'INFRA-DB-3',
-        title: 'Unverified guest row 누적 정리 (conditional)',
+        title: 'Unverified guest row 누적 정리 + 죽은 guest 엔드포인트 제거 (conditional)',
         note: 'Guest 계정(FULL-LOGIN-REDESIGN-1 #154/#155)은 정리 로직 없음 (user Q5 결정). `/auth/guest/` throttle 3/min/IP이나 IP 로테이션 botnet은 row 증가 가능 → 조건부 모니터링 항목.',
       },
       {
@@ -190,60 +191,60 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
-      number: 261,
-      title: 'feat(login): business-card UI — paper/ink login flow + shared CardSkeleton',
-      mergedAt: '2026-07-05T17:42:59Z',
-      mergedAtKST: '2026-07-06 02:42 KST',
-      sha: 'de4b8c2',
+      number: 278,
+      title: 'docs(perf): BACK-PERFORMANCE-5 prod timing diagnosis — prefetch stage dominates; Neon pooler flip prescribed',
+      mergedAt: '2026-07-13T08:16:20Z',
+      mergedAtKST: '2026-07-13 17:16 KST',
+      sha: '68dafaa',
     },
     {
-      number: 260,
-      title: 'feat(settings): role enum + bio grow + font chips + theme preview',
-      mergedAt: '2026-07-05T17:41:30Z',
-      mergedAtKST: '2026-07-06 02:41 KST',
-      sha: 'e2c3c8e',
+      number: 277,
+      title: 'feat(i18n): profile/board + modals sweep — slice c of 3, FULL-LANGUAGE-1 closed',
+      mergedAt: '2026-07-12T19:38:06Z',
+      mergedAtKST: '2026-07-13 04:38 KST',
+      sha: '227d23b',
     },
     {
-      number: 258,
-      title: 'test(auth): google 로그인 테스트를 verify-only 플로우에 맞게 수정',
-      mergedAt: '2026-07-04T07:49:12Z',
-      mergedAtKST: '2026-07-04 16:49 KST',
-      sha: '75df665',
+      number: 276,
+      title: 'feat(i18n): settings/account + auth errors sweep — slice b of 3 (FULL-LANGUAGE-1b)',
+      mergedAt: '2026-07-12T18:39:48Z',
+      mergedAtKST: '2026-07-13 03:39 KST',
+      sha: 'b51c385',
     },
     {
-      number: 257,
-      title: 'fix(discovery): promote-to-taste persona report 미생성 버그 수정',
-      mergedAt: '2026-07-04T07:49:32Z',
-      mergedAtKST: '2026-07-04 16:49 KST',
-      sha: '8f6322c',
+      number: 275,
+      title: 'feat(i18n): core swipe loop label sweep — slice a of 3 (FULL-LANGUAGE-1a)',
+      mergedAt: '2026-07-12T17:59:59Z',
+      mergedAtKST: '2026-07-13 02:59 KST',
+      sha: '73b9c94',
     },
     {
-      number: 256,
-      title: 'fix(discovery): 좋아요/패스 403 verify_required를 VerifyGateModal로 연결',
-      mergedAt: '2026-07-04T07:49:41Z',
-      mergedAtKST: '2026-07-04 16:49 KST',
-      sha: '670bfb0',
+      number: 274,
+      title: 'fix(image): cover_full_url raw passthrough + telemetry currentSrc (FRONT-IMAGE-RESIZE-3)',
+      mergedAt: '2026-07-12T17:28:52Z',
+      mergedAtKST: '2026-07-13 02:28 KST',
+      sha: 'a299af6',
     },
     {
-      number: 255,
-      title: 'feat(profile): real scannable profile-share QR (replace FakeQr stub)',
-      mergedAt: '2026-07-01T10:30:46Z',
-      mergedAtKST: '2026-07-01 19:30 KST',
-      sha: '64ff32a',
+      number: 273,
+      title: 'perf(analytics): swipe timing_breakdown aggregation in session_metrics_report (BACK-PERFORMANCE-5a)',
+      mergedAt: '2026-07-12T17:18:54Z',
+      mergedAtKST: '2026-07-13 02:18 KST',
+      sha: 'e66287b',
     },
     {
-      number: 254,
-      title: 'feat(TASTE-LLM): 캘리브레이션 미리보기-챗 재배치 + LLM 검색 랭킹/칩 + Taste UX + Discovery 보드 병합',
-      mergedAt: '2026-07-04T08:03:04Z',
-      mergedAtKST: '2026-07-04 17:03 KST',
-      sha: '81b927a',
+      number: 272,
+      title: 'fix(board): is_temp lifecycle closure — one-way finalize + temp exclusion (FULL-ONBOARDING-2)',
+      mergedAt: '2026-07-12T16:51:23Z',
+      mergedAtKST: '2026-07-13 01:51 KST',
+      sha: '8fba3d5',
     },
     {
-      number: 253,
-      title: 'docs(task): re-prioritize backlog (launch-imminent) + dashboard',
-      mergedAt: '2026-06-27T17:45:26Z',
-      mergedAtKST: '2026-06-28 02:45 KST',
-      sha: '3c59f9e',
+      number: 271,
+      title: 'docs(task): backlog full audit 2026-07-12 — 21/21 grep-verify + Opus adversarial',
+      mergedAt: '2026-07-12T08:14:58Z',
+      mergedAtKST: '2026-07-12 17:14 KST',
+      sha: '3969fc9',
     },
   ],
   agents: [
@@ -378,6 +379,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: '.claude/plans/login-page-concept-rework.md',
+      role: '',
+    },
+    {
       path: '.claude/plans/profile-harvest-redesign.wf.js',
       role: '프로필 하베스트 재설계 워크플로 스크립트 (#179)',
     },
@@ -504,14 +509,6 @@ window.PROJECT_STATE = {
     {
       path: 'README.md',
       role: '프로젝트 안내 문서',
-    },
-    {
-      path: 'Task.md',
-      role: '태스크 보드 문서',
-    },
-    {
-      path: 'Task.md',
-      role: '태스크 보드 문서',
     },
     {
       path: 'Task.md',
@@ -886,6 +883,10 @@ window.PROJECT_STATE = {
       role: '레거시 프로젝트 정리 커맨드',
     },
     {
+      path: 'backend/apps/recommendation/management/commands/session_metrics_report.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/recommendation/migrations/0001_initial.py',
       role: 'DB 마이그레이션 (추천 초기)',
     },
@@ -1090,6 +1091,10 @@ window.PROJECT_STATE = {
       role: 'Discovery 피드 테스트',
     },
     {
+      path: 'backend/apps/recommendation/tests/test_is_temp_data_filters.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/recommendation/tests/test_like_vectors_hydration.py',
       role: '',
     },
@@ -1098,8 +1103,16 @@ window.PROJECT_STATE = {
       role: 'Phase13 보드 테스트',
     },
     {
+      path: 'backend/apps/recommendation/tests/test_question_state.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/recommendation/tests/test_row_to_card.py',
       role: 'row_to_card 변환 테스트',
+    },
+    {
+      path: 'backend/apps/recommendation/tests/test_session_metrics_report.py',
+      role: '',
     },
     {
       path: 'backend/apps/recommendation/tests/test_taste_board_name.py',
@@ -1382,6 +1395,10 @@ window.PROJECT_STATE = {
       role: 'IMP8 비동기 프리페치 테스트',
     },
     {
+      path: 'backend/tests/test_is_temp_lifecycle.py',
+      role: '',
+    },
+    {
       path: 'backend/tests/test_jwt_cache.py',
       role: 'JWT 캐시 테스트',
     },
@@ -1504,6 +1521,10 @@ window.PROJECT_STATE = {
     {
       path: 'docs/database-schema.md',
       role: 'DB 스키마 문서',
+    },
+    {
+      path: 'docs/db-index-handoff.md',
+      role: '',
     },
     {
       path: 'docs/prd/archibe-business-model.html',
@@ -1842,6 +1863,10 @@ window.PROJECT_STATE = {
       role: '이미지 로드 텔레메트리 훅',
     },
     {
+      path: 'frontend/src/hooks/useKeyboardSwipe.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/hooks/useLanguage.js',
       role: '언어 선택 훅',
     },
@@ -1852,6 +1877,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/hooks/useResults.js',
       role: '세션 결과·북마크 훅',
+    },
+    {
+      path: 'frontend/src/hooks/useSwipeOrchestration.js',
+      role: '',
     },
     {
       path: 'frontend/src/hooks/useTheme.js',
@@ -2108,14 +2137,6 @@ window.PROJECT_STATE = {
     {
       path: 'project/mermaid.min.js',
       role: 'Mermaid 다이어그램 번들',
-    },
-    {
-      path: 'project/state.js',
-      role: '대시보드 상태 데이터',
-    },
-    {
-      path: 'project/state.js',
-      role: '대시보드 상태 데이터',
     },
     {
       path: 'project/state.js',

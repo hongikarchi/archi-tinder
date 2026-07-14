@@ -242,6 +242,13 @@ class ProjectSelfUpdateSerializer(serializers.ModelSerializer):
     visibility validation: must be one of Project.VISIBILITY_CHOICES values.
     """
 
+    def validate_is_temp(self, value):
+        if value:
+            raise serializers.ValidationError(
+                "is_temp can only be set to false (finalize is one-way)."
+            )
+        return value
+
     def validate_visibility(self, value):
         valid_values = [choice[0] for choice in Project.VISIBILITY_CHOICES]
         if value not in valid_values:

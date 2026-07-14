@@ -24,6 +24,28 @@ export const CARD_WIDTH  = Math.min(420, _vw - 32)
 export const CARD_HEIGHT = Math.min(Math.round(CARD_WIDTH * 1.55), _vh - 220)
 export const TAP_THRESHOLD = 8
 
+// B2 — adaptive object-fit: cover ONLY when crop loss (fraction of image area
+// lost cropping to the card's aspect ratio) stays within this budget. Above
+// it (e.g. a square image against the ~0.65 portrait card ratio, ~35% loss)
+// we keep 'contain' — letterboxing beats visible cropping.
+const COVER_CROP_MAX = 0.25
+
+/**
+ * computeFit — pure helper (unit-testable inline): decide 'cover' vs 'contain'
+ * for a card image given its natural aspect ratio.
+ *   - Unknown ratio (image not yet loaded) -> 'contain' (current behavior,
+ *     no letterbox jump).
+ *   - Drawings always stay 'contain' regardless of crop loss.
+ *   - Otherwise cover only if cropping to the card ratio loses <= COVER_CROP_MAX
+ *     of the image area.
+ */
+function computeFit(imgRatio, isDrawing) {
+  if (!imgRatio || isDrawing) return 'contain'
+  const rCard = CARD_WIDTH / CARD_HEIGHT
+  const cropLoss = 1 - Math.min(imgRatio, rCard) / Math.max(imgRatio, rCard)
+  return cropLoss <= COVER_CROP_MAX ? 'cover' : 'contain'
+}
+
 /* ── InfoRow ─────────────────────────────────────────────────────────────── */
 function InfoRow({ label, value }) {
   if (!value) return null
@@ -44,6 +66,13 @@ export default function SwipeCard({ card, onGalleryClose }) {
   const [hasBeenOpened,  setHasBeenOpened]  = useState(false)
   const [imgLoaded,      setImgLoaded]      = useState(false)
   const [imgFailed,      setImgFailed]      = useState(false)
+  // B2 — natural aspect ratio (naturalWidth/naturalHeight), first known from
+  // whichever of {LQIP, main img} fires onLoad first. null = not yet known.
+  const [imgRatio,       setImgRatio]       = useState(null)
+  // B2 — did the fallback chain (advanceFallback) land the main <img> on the
+  // covers_by_type.drawing URL? Drives contain+white background same as
+  // isDrawingKind, for cards whose original photo cover failed to load.
+  const [landedOnDrawing, setLandedOnDrawing] = useState(false)
   // Set of URLs already attempted as src (cache-bust retry + covers_by_type
   // fallback chain). Initialized lazily inside handleImgError on first failure.
   const imgRetried = useRef(null)
@@ -52,6 +81,8 @@ export default function SwipeCard({ card, onGalleryClose }) {
   const imgRef = useRef(null)
   const timeoutRef = useRef(null)
   const galleryScrollRef = useRef(null)
+  // first-writer-wins guard for imgRatio (LQIP onLoad vs main img onLoad)
+  const ratioSetRef = useRef(false)
 
   const { onLoad: telemetryOnLoad, onError: telemetryOnError } = useImageTelemetry({
     buildingId: card.image_id,
@@ -103,7 +134,16 @@ export default function SwipeCard({ card, onGalleryClose }) {
       if (!imgRetried.current.has(url)) {
         imgRetried.current.add(url)
         target.srcset = ''   // a 1x-containing srcset wins over src; clear so the fallback URL loads
+        // B2 — the fallback is a different photo with its own aspect ratio:
+        // re-arm the ratio guard so the fallback's onLoad re-measures fit
+        // (contain until it paints — safe no-letterbox-jump default).
+        ratioSetRef.current = false
+        setImgRatio(null)
         target.src = url
+        // B2 — track whether the chain landed on the drawing cover so the
+        // main img keeps contain+white background even when isDrawingKind
+        // (from image_focus/image_kind) is false for this card.
+        if (cbt.drawing && url === cbt.drawing) setLandedOnDrawing(true)
         return true
       }
     }
@@ -127,8 +167,25 @@ export default function SwipeCard({ card, onGalleryClose }) {
       clearTimeout(timeoutRef.current)
       timeoutRef.current = null
     }
+    captureImgRatio(e.target)
     setImgLoaded(true)
     telemetryOnLoad(e)
+  }
+
+  // B2 — capture natural aspect ratio from whichever <img> (LQIP or main)
+  // fires onLoad first. First writer wins — later calls are no-ops.
+  function captureImgRatio(node) {
+    if (ratioSetRef.current) return
+    if (!node || !node.naturalWidth || !node.naturalHeight) return
+    ratioSetRef.current = true
+    setImgRatio(node.naturalWidth / node.naturalHeight)
+  }
+
+  function handleLqipLoad(e) {
+    // Once the fallback chain has engaged (imgRetried initialized), the main
+    // img no longer shows the LQIP's source image — its ratio is stale.
+    if (imgRetried.current) return
+    captureImgRatio(e.target)
   }
 
   // FIX F2 (Codex retest 2026-05-26): bumped timeout 2000ms → 4000ms.
@@ -140,6 +197,9 @@ export default function SwipeCard({ card, onGalleryClose }) {
     setImgFailed(false)
     setHasBeenOpened(false)
     setShowGallery(false)
+    setImgRatio(null)
+    setLandedOnDrawing(false)
+    ratioSetRef.current = false
     imgRetried.current = null
     if (timeoutRef.current) clearTimeout(timeoutRef.current)
     timeoutRef.current = setTimeout(() => {
@@ -215,7 +275,13 @@ export default function SwipeCard({ card, onGalleryClose }) {
   const material     = materialList.length ? materialList.join(', ') : null
   const gallery         = card.gallery || []
   const drawingStart    = card.gallery_drawing_start ?? gallery.length
-  const isDrawingKind = card.image_focus === 'drawing' || card.image_kind === 'drawing'
+  // B1-2 fix: image_focus/image_kind now actually passed through by
+  // normalizeCard. B2-4: OR in landedOnDrawing — the fallback chain may have
+  // moved the main <img> onto covers_by_type.drawing even when the card's own
+  // focus/kind fields say otherwise.
+  const isDrawingKind = card.image_focus === 'drawing' || card.image_kind === 'drawing' || landedOnDrawing
+  // B2-3: adaptive object-fit — cover only when crop loss is small and it's not a drawing.
+  const imgFit = computeFit(imgRatio, isDrawingKind)
 
   return (
     <div
@@ -264,6 +330,29 @@ export default function SwipeCard({ card, onGalleryClose }) {
           ) : (
             <>
               <div className="skeleton-shimmer" style={{ position: 'absolute', inset: 0, background: isDrawingKind ? '#fff' : '#111' }} />
+              {/* B1 — LQIP blur-up placeholder: paints fast (20px thumb), also
+                  supplies the natural aspect ratio (B2) before the main image
+                  loads. Hidden once the main image finishes loading. No
+                  scale(1.1) edge-bleed hack — cover crops the blur naturally,
+                  contain letterboxes as-is. */}
+              {card.lqip_url && (
+                <img
+                  src={card.lqip_url}
+                  aria-hidden="true"
+                  alt=""
+                  draggable={false}
+                  onLoad={handleLqipLoad}
+                  style={{
+                    position: 'absolute', inset: 0,
+                    width: '100%', height: '100%',
+                    objectFit: imgFit, objectPosition: 'center',
+                    filter: 'blur(16px)',
+                    opacity: imgLoaded ? 0 : 1,
+                    transition: 'opacity 0.2s ease',
+                    pointerEvents: 'none',
+                  }}
+                />
+              )}
               <img
                 ref={imgRef}
                 src={card.image_url}
@@ -279,7 +368,7 @@ export default function SwipeCard({ card, onGalleryClose }) {
                 style={{
                   position: 'absolute', inset: 0,
                   width: '100%', height: '100%',
-                  objectFit: 'contain', objectPosition: 'center',
+                  objectFit: imgFit, objectPosition: 'center',
                   background: isDrawingKind ? '#fff' : '#111',
                   opacity: imgLoaded ? 1 : 0,
                   transition: 'opacity 0.2s ease',
@@ -421,7 +510,9 @@ export default function SwipeCard({ card, onGalleryClose }) {
                     style={{
                       width: '100%',
                       height: '100%',
-                      objectFit: 'contain',
+                      // B2-5: gallery photos cover (fill-bleed), drawings keep
+                      // contain (full-view, matches the white background split above).
+                      objectFit: isDrawing ? 'contain' : 'cover',
                       objectPosition: 'center',
                       display: 'block',
                     }}
