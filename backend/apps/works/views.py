@@ -72,9 +72,38 @@ class PresignView(APIView):
 
 
 class FinalizeView(APIView):
-    """POST /api/v1/works/ — create a Work row and start background processing."""
+    """GET /api/v1/works/  — list authenticated user's own works.
+    POST /api/v1/works/ — create a Work row and start background processing.
+    """
 
     permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """Return the authenticated user's uploaded works, newest first."""
+        from .models import Work
+
+        profile = request.user.profile
+        works_qs = Work.objects.filter(owner=profile).order_by('-created_at')
+
+        public_base = getattr(settings, 'WORKS_PUBLIC_BASE_URL', '').rstrip('/')
+
+        results = []
+        for w in works_qs:
+            cover_url = None
+            if w.r2_keys and public_base:
+                cover_url = f'{public_base}/{w.r2_keys[0]}'
+            results.append({
+                'upload_id': w.upload_id,
+                'title': w.title,
+                'program': w.program,
+                'r2_keys': w.r2_keys,
+                'cover_url': cover_url,
+                'is_publishable': w.is_publishable,
+                'gate_reason': w.gate_reason,
+                'created_at': w.created_at.isoformat(),
+            })
+
+        return Response({'works': results, 'total': len(results)})
 
     def post(self, request):
         from .models import Work

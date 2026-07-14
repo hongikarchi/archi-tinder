@@ -61,3 +61,12 @@ export async function finalizeWork(payload) {
   const res = await callApi('POST', '/works/', payload)
   return res
 }
+
+/**
+ * Fetch the current user's uploaded works.
+ * @returns {Promise<{works: Array<{upload_id: string, title: string, program: string, cover_url: string|null, is_publishable: boolean, gate_reason: string|null, created_at: string}>, total: number}>}
+ */
+export async function getMyWorks() {
+  const res = await callApi('GET', '/works/')
+  return res
+}
