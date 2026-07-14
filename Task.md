@@ -57,7 +57,17 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(비어있음 — 배치 플랜 `reactive-soaring-hearth` 6/6 PR 완료 2026-07-13. 잔여 액션: PERF-5 prod 계측 실행(user-gated) + i18n EN 카피 스팟체크(locales.js diff, #275/#276/슬라이스c PR))_
+### FULL-WORKS-1 — 건축 작품 업로드 Phase 1
+
+사용자가 본인의 건축 작품 이미지를 올려 포트폴리오로 아카이브하고, 다른 유저 피드 알고리즘에 노출되는 기능의 Phase 1 구현.
+
+아키텍처: presigned direct upload to Cloudflare R2 (아바타 패턴 참고) + 별도 `R2_WORKS_BUCKET` + `WORKS_R2_ENABLED` 플래그. Gemini 품질 게이트 + HuggingFace 임베딩은 백그라운드 스레드.
+
+- [ ] `backend/apps/works/` 신설 (Work 모델 + presign + finalize API + 테스트 9개)
+- [ ] `backend/config/settings.py` — `R2_WORKS_BUCKET` / `WORKS_PUBLIC_BASE_URL` / `WORKS_R2_ENABLED`
+- [ ] `frontend/src/pages/UploadWorkPage.jsx` + `UploadWorkPage.module.css`
+- [ ] `frontend/src/api/works.js`
+- [ ] `frontend/src/App.jsx` — `/upload` 라우트 추가
 
 ---
 
