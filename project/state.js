@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-07-14 07:36 KST',
-    head: '68dafaa',
-    branch: 'feature/claude-perf5-pooler-applied',
+    updatedAt: '2026-07-16 00:30 KST',
+    head: 'fa36cd5',
+    branch: 'feature/claude-perf5-redis-region',
   },
   done: [
+    {
+      id: 'BACK-PERFORMANCE-5',
+      title: 'Swipe latency 0.7-1.5s 흔들림',
+      completedAt: '2026-07-16',
+      note: 'Codex retest 2026-05-26: browser swipe 1.82s/1.75s/1.12s/1.81s; server swipe 1.50s/1.38s/0.746s/1.36s. PR4 async prefetch consume IS working — 3rd swipe with cache hit drops to 156ms prefetch stage. But variability is high. Identify which stage causes the 0.7→1.5s spread (DB q…',
+    },
     {
       id: 'FULL-LANGUAGE-1c',
       title: 'i18n 슬라이스 c: 프로필·보드 + 모달',
@@ -70,13 +76,6 @@ window.PROJECT_STATE = {
       completedAt: '',
       note: '2026-07-12 백로그 전수 감사에서 무혐의 판명: `ParseQueryView.post`는 conversation_history 검증을 serializer로 위임하며, 해당 serializer는 BACK-LLM-2(#195)가 이미 UTF-8 byte 측정으로 고침 — ParseQueryView 자체에 `ensure_ascii=True` byte-cap 경로가 애초에 없음(Sonnet 검증 + Opus 적대검증 동의). 의심 항목이었고 실재하지 않아 폐기.',
     },
-    {
-      id: 'OVERNIGHT-PERF-1',
-      title: '야간 자율 4-PR 묶음 (핫패스·카드비주얼·집계·ops문서)',
-      completedAt: '2026-07-08',
-      prs: [266, 269],
-      note: 'Plan `.claude/plans/settings-encapsulated-sedgewick.md` 4슬라이스 전부 머지: PR-A #266 back-hotpath (보드명 async + like 태그조회 캐시, 개별 Done 항목 PERF-HOTPATH-1) · PR-B #267 LQIP blur-up + 비율적응형 object-fit · PR-C #268 `session_metrics_report` 첫 SessionEvent 리더 · PR-D #269 인덱스 핸드오프 + Neon pool…',
-    },
   ],
   now: [],
   next: {
@@ -92,11 +91,6 @@ window.PROJECT_STATE = {
         id: 'BACK-RECOMMEND-1',
         title: 'Project 두번째 세션이 이전 taste를 모름',
         note: 'Code audit 2026-05-27: SessionCreateView resolves project_id only to skip dedupe; session_insert still creates phase=exploring with empty like_vectors/convergence/preference state. Project.liked_ids/disliked_ids/saved_ids persist but are not read. Primary edit: views/sessions.py warm-start policy + engine.get_pool_embeddings(project liked_ids) scoped to active project; tests in test_session_create_correctness.py for no cross-project leakage and progress semantics.',
-      },
-      {
-        id: 'BACK-PERFORMANCE-5',
-        title: 'Swipe latency 0.7-1.5s 흔들림',
-        note: 'Code audit 2026-05-27: SwipeView still does update/phase/refresh_pool/get_pool_embeddings/MMR-or-farthest selection in request transaction. Async prefetch only helps after next_bid is selected. Use existing [SWIPE TIMING] lock/embed/select/prefetch/total + embedding cache stats to bucket variance before code changes.',
       },
     ],
     medium: [
@@ -191,6 +185,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 279,
+      title: 'docs(perf): BACK-PERFORMANCE-5 Neon pooler flip applied to prod + local (verified)',
+      mergedAt: '2026-07-13T22:41:15Z',
+      mergedAtKST: '2026-07-14 07:41 KST',
+      sha: '06826ed',
+    },
+    {
       number: 278,
       title: 'docs(perf): BACK-PERFORMANCE-5 prod timing diagnosis — prefetch stage dominates; Neon pooler flip prescribed',
       mergedAt: '2026-07-13T08:16:20Z',
@@ -238,13 +239,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-07-12T16:51:23Z',
       mergedAtKST: '2026-07-13 01:51 KST',
       sha: '8fba3d5',
-    },
-    {
-      number: 271,
-      title: 'docs(task): backlog full audit 2026-07-12 — 21/21 grep-verify + Opus adversarial',
-      mergedAt: '2026-07-12T08:14:58Z',
-      mergedAtKST: '2026-07-12 17:14 KST',
-      sha: '3969fc9',
     },
   ],
   agents: [
