@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-07-16 00:30 KST',
-    head: 'fa36cd5',
-    branch: 'feature/claude-perf5-redis-region',
+    updatedAt: '2026-07-17 21:13 KST',
+    head: 'db68d08',
+    branch: 'feature/claude-works-upload',
   },
   done: [
+    {
+      id: 'FULL-WORKS-1',
+      title: '건축 작품 업로드 Phase 1',
+      completedAt: '2026-07-15',
+      note: 'presigned direct upload to Cloudflare R2: Django `apps/works/` 신설 + `/api/v1/works/presign/`·`/api/v1/works/` API + UploadWorkPage.',
+    },
     {
       id: 'BACK-PERFORMANCE-5',
       title: 'Swipe latency 0.7-1.5s 흔들림',
@@ -70,12 +76,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-07-13',
       note: 'temp 보드 누수 5개 사이트 일괄 마감: one-way finalize 강제 + 리스트/카운트/취향벡터/피드 전부 `is_temp=False` 필터 — 사일런트 보드 유실 경로 차단.',
     },
-    {
-      id: 'BACK-LLM-4',
-      title: 'search.py ParseQueryView byte-cap ensure_ascii 부풀림 의심 — CLOSED 2026-07-12 (premise falsified, no PR)',
-      completedAt: '',
-      note: '2026-07-12 백로그 전수 감사에서 무혐의 판명: `ParseQueryView.post`는 conversation_history 검증을 serializer로 위임하며, 해당 serializer는 BACK-LLM-2(#195)가 이미 UTF-8 byte 측정으로 고침 — ParseQueryView 자체에 `ensure_ascii=True` byte-cap 경로가 애초에 없음(Sonnet 검증 + Opus 적대검증 동의). 의심 항목이었고 실재하지 않아 폐기.',
-    },
   ],
   now: [],
   next: {
@@ -94,6 +94,11 @@ window.PROJECT_STATE = {
       },
     ],
     medium: [
+      {
+        id: 'FULL-WORKS-2',
+        title: 'works Phase 2: srcset/LQIP + 알고리즘 통합',
+        note: 'FULL-WORKS-1 배포 후. (1) `rightSizeImageUrl.js`에 R2 works URL srcset/LQIP 처리 추가 (Cloudflare Image Transforms 필요 — ops 설정 선행). (2) `engine.py` Python-layer에 `user_uploaded_works` 풀 병합 — 별도 협업자(algorithm 소유) 작업, 설계 sync 필요.',
+      },
       {
         id: 'FRONT-VERIFY-1',
         title: '보드저장 PATCH 경로 verify_required 모달 미배선',
@@ -131,6 +136,26 @@ window.PROJECT_STATE = {
       },
     ],
     low: [
+      {
+        id: 'INFRA-WORKS-1',
+        title: 'R2 works 버킷 프로비저닝 (dev/prod 버킷 + 환경별 토큰 + CORS + public access)',
+        note: 'FULL-WORKS-1 배포 후 ops task. R2 버킷에 CORS 정책 설정 필요 (AllowedMethods: POST, AllowedOrigins: 도메인, AllowedHeaders: *). 설정 전 브라우저에서 presigned POST XHR이 CORS 에러로 차단됨. 코드 변경 없음, R2 대시보드 또는 wrangler cli.',
+      },
+      {
+        id: 'BACK-WORKS-1',
+        title: 'works 목록 페이지네이션 + 응답 슬리밍',
+        note: '`FinalizeView.get`(views.py)이 무페이지네이션 전량 직렬화 — 피어 목록 엔드포인트는 전부 50 cap(notifications/_build_boards_field 패턴). + 목록 응답의 `r2_keys` 전체 배열은 프론트 미소비(cover_url만 렌더) → 제외. 2026-07-16 ultracode 리뷰 low(Opus 확정, 현 규모 실해 없음 — 관례 일치성 이슈).',
+      },
+      {
+        id: 'BACK-WORKS-2',
+        title: 'finalize R2 HEAD 순차 왕복 개선',
+        note: 'finalize가 r2_keys당 동기 `head_object`를 순차 실행(요청 사이클 내, 이미지 N장 = N왕복). 개선: 소형 ThreadPoolExecutor 병렬화 or 커버 외 키는 HEAD 생략(prefix 소유권 검증은 이미 상류에서 수행, 누락 이미지는 `_process_work` fail-closed가 커버). 2026-07-16 ultracode 리뷰 low.',
+      },
+      {
+        id: 'FRONT-SWIPE-CLEANUP-1',
+        title: '#281 진행바 리뷰 low 3건 정리',
+        note: '`SwipePage.jsx`: ① 죽은 `value` prop×2 + orphan `confidence` 로컬(353/473/585 — 시그니처에서 제거된 prop을 호출부가 계속 전달, 주석이 dead code를 문서화) ② pct 공식 3분기 verbatim 중복(87/90/94 — 분기 밖 1회 계산 + converged만 100 override) ③ 도달불가 `like+dislike` fallback(76-78 — 백엔드 `_progress()`가 세 필드 항상 동시 방출) → `pr…',
+      },
       {
         id: 'BACK-ANALYTICS-1',
         title: 'session_metrics_report 콘솔 ESC-byte 주입 (pre-existing #268)',
@@ -185,6 +210,20 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 283,
+      title: 'docs(BACK-PERFORMANCE-5): resolved — Redis US-region root cause, swipe p50 1638→124ms',
+      mergedAt: '2026-07-16T17:57:16Z',
+      mergedAtKST: '2026-07-17 02:57 KST',
+      sha: '8ddee5b',
+    },
+    {
+      number: 281,
+      title: 'feat(swipe): count-based progress bar — linear fill on every swipe',
+      mergedAt: '2026-07-17T01:48:21Z',
+      mergedAtKST: '2026-07-17 10:48 KST',
+      sha: 'db68d08',
+    },
+    {
       number: 279,
       title: 'docs(perf): BACK-PERFORMANCE-5 Neon pooler flip applied to prod + local (verified)',
       mergedAt: '2026-07-13T22:41:15Z',
@@ -225,20 +264,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-07-12T17:28:52Z',
       mergedAtKST: '2026-07-13 02:28 KST',
       sha: 'a299af6',
-    },
-    {
-      number: 273,
-      title: 'perf(analytics): swipe timing_breakdown aggregation in session_metrics_report (BACK-PERFORMANCE-5a)',
-      mergedAt: '2026-07-12T17:18:54Z',
-      mergedAtKST: '2026-07-13 02:18 KST',
-      sha: 'e66287b',
-    },
-    {
-      number: 272,
-      title: 'fix(board): is_temp lifecycle closure — one-way finalize + temp exclusion (FULL-ONBOARDING-2)',
-      mergedAt: '2026-07-12T16:51:23Z',
-      mergedAtKST: '2026-07-13 01:51 KST',
-      sha: '8fba3d5',
     },
   ],
   agents: [
@@ -351,6 +376,10 @@ window.PROJECT_STATE = {
     {
       path: '.claude/plans/archive/building-detail-page.md',
       role: '건물 상세 페이지 플랜',
+    },
+    {
+      path: '.claude/plans/archive/perf-image-latency-research.md',
+      role: '',
     },
     {
       path: '.claude/plans/archive/perf-trio-optimization.md',
@@ -1225,6 +1254,58 @@ window.PROJECT_STATE = {
       role: '팔로우/리액션 뷰',
     },
     {
+      path: 'backend/apps/works/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/works/apps.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/works/migrations/0001_initial.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/works/migrations/0002_rename_works_work_owner_i_idx_works_work_owner_i_cdca6c_idx.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/works/migrations/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/works/models.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/works/services.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/works/storage.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/works/tests/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/works/tests/conftest.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/works/tests/test_works_upload.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/works/urls.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/works/views.py',
+      role: '',
+    },
+    {
       path: 'backend/config/__init__.py',
       role: '패키지 init',
     },
@@ -1661,6 +1742,10 @@ window.PROJECT_STATE = {
       role: '팔로우·리액션 소셜 API 클라이언트',
     },
     {
+      path: 'frontend/src/api/works.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/components/AppearanceSettings.jsx',
       role: '테마·폰트 설정 UI',
     },
@@ -1961,6 +2046,14 @@ window.PROJECT_STATE = {
       role: '취향 분석 스와이프 페이지',
     },
     {
+      path: 'frontend/src/pages/UploadWorkPage.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/UploadWorkPage.module.css',
+      role: '',
+    },
+    {
       path: 'frontend/src/pages/UserProfilePage.jsx',
       role: '유저 프로필 페이지',
     },
@@ -2203,6 +2296,10 @@ window.PROJECT_STATE = {
     {
       path: 'web-testing/dashboard/style.css',
       role: '테스트 대시보드 스타일',
+    },
+    {
+      path: 'web-testing/main-service-test-plan.md',
+      role: '',
     },
     {
       path: 'web-testing/requirements.txt',

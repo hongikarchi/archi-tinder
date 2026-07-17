@@ -34,6 +34,7 @@ INSTALLED_APPS = [
     'apps.profiles',
     'apps.social',
     'apps.notifications',
+    'apps.works',
 ]
 
 MIDDLEWARE = [
@@ -260,6 +261,9 @@ R2_ACCESS_KEY_ID     = os.getenv('R2_ACCESS_KEY_ID', '')
 R2_SECRET_ACCESS_KEY = os.getenv('R2_SECRET_ACCESS_KEY', '')
 R2_AVATAR_BUCKET     = os.getenv('R2_AVATAR_BUCKET', '')
 AVATAR_PUBLIC_BASE_URL = os.getenv('AVATAR_PUBLIC_BASE_URL', '')
+R2_WORKS_BUCKET      = os.getenv('R2_WORKS_BUCKET', '')
+WORKS_PUBLIC_BASE_URL = os.getenv('WORKS_PUBLIC_BASE_URL', '')
+WORKS_R2_ENABLED = all([R2_ENDPOINT_URL, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_WORKS_BUCKET])
 
 # True only when all four R2 vars are set (non-empty).
 AVATAR_R2_ENABLED = all([

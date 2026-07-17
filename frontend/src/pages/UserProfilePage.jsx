@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useTranslation } from '../i18n/index.js'
 import { getUserProfile, getLikedBuildings, getArchitectProfile } from '../api/client.js'
 import { updateProject, deleteProject } from '../api/projects.js'
+import { getMyWorks } from '../api/works.js'
 import { purgeChatCache } from '../utils/appHelpers.js'
 import { getUserSavedStudios } from '../api/architects.js'
 import ShareCardModal from '../components/ShareCardModal.jsx'
@@ -61,6 +62,8 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
   const [likedBuildings, setLikedBuildings] = useState(null) // null = not yet fetched
   const [likedLoading, setLikedLoading] = useState(false)
   const [likedCount, setLikedCount] = useState(0)
+  const [works, setWorks] = useState(null)  // null = not loaded yet
+  const [worksLoading, setWorksLoading] = useState(false)
 
   // MINOR #1: inline error banner for failed board actions (optimistic revert feedback)
   const [boardActionError, setBoardActionError] = useState(null)
@@ -138,6 +141,20 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
       setSavedStudios([])
     } finally {
       setStudiosLoading(false)
+    }
+  }
+
+  const handleCreatedTab = async () => {
+    setActiveTab('created')
+    if (works !== null) return  // already loaded
+    setWorksLoading(true)
+    try {
+      const data = await getMyWorks()
+      setWorks(data?.works || [])
+    } catch {
+      setWorks([])
+    } finally {
+      setWorksLoading(false)
     }
   }
 
@@ -453,6 +470,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
           onSelectTab={(t) => {
             if (t === 'studios') handleStudiosTab()
             else if (t === 'liked') handleLikedTab()
+            else if (t === 'created') handleCreatedTab()
             else setActiveTab('boards')
           }}
           isMe={isMe}
@@ -526,6 +544,28 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
               }}
             >
               Liked
+            </button>
+          )}
+          {isMe && (
+            <button
+              type="button"
+              onClick={handleCreatedTab}
+              style={{
+                flex: 1,
+                padding: '12px 0',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: 14,
+                fontWeight: activeTab === 'created' ? 700 : 500,
+                color: activeTab === 'created' ? 'var(--color-text)' : 'var(--color-text-muted)',
+                borderBottom: activeTab === 'created' ? '2px solid var(--color-text)' : '2px solid transparent',
+                marginBottom: -1,
+                fontFamily: 'inherit',
+                transition: 'color var(--motion-fast), border-color var(--motion-fast)',
+              }}
+            >
+              Created
             </button>
           )}
         </div>
@@ -901,6 +941,112 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                         }}>
                           {bld.architect_names.join(', ')}
                         </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Created tab content */}
+        {activeTab === 'created' && isMe && (
+          <div style={{ padding: '16px 0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <h3 style={{ color: 'var(--color-text)', fontSize: 20, fontWeight: 700, margin: 0, letterSpacing: '-0.01em' }}>
+                My Works
+              </h3>
+              <button
+                type="button"
+                onClick={() => navigate('/upload')}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  padding: '8px 16px', borderRadius: 20,
+                  background: 'var(--color-text)', color: 'var(--color-bg)',
+                  border: 'none', cursor: 'pointer',
+                  fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
+                }}
+              >
+                + 업로드
+              </button>
+            </div>
+            {worksLoading ? (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                gap: 16,
+              }}>
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} style={{ aspectRatio: '3/4', borderRadius: 12, background: 'var(--color-surface-2)' }} />
+                ))}
+              </div>
+            ) : !works || works.length === 0 ? (
+              <div style={{
+                display: 'flex', flexDirection: 'column',
+                alignItems: 'center', justifyContent: 'center',
+                padding: '80px 20px', gap: 16, textAlign: 'center',
+              }}>
+                <p style={{ color: 'var(--color-text)', fontSize: 16, fontWeight: 600, margin: 0 }}>
+                  아직 업로드한 작품이 없어요
+                </p>
+                <p style={{ color: 'var(--color-text-muted)', fontSize: 13, margin: 0 }}>
+                  본인의 건축 작품을 올려보세요
+                </p>
+                <button
+                  type="button"
+                  onClick={() => navigate('/upload')}
+                  style={{
+                    marginTop: 8, padding: '10px 24px', borderRadius: 20,
+                    background: 'var(--color-text)', color: 'var(--color-bg)',
+                    border: 'none', cursor: 'pointer',
+                    fontSize: 14, fontWeight: 600, fontFamily: 'inherit',
+                  }}
+                >
+                  작품 업로드
+                </button>
+              </div>
+            ) : (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                gap: 16,
+              }}>
+                {works.map(work => (
+                  <div key={work.upload_id} style={{
+                    borderRadius: 12, overflow: 'hidden',
+                    background: 'var(--color-surface-2)',
+                    display: 'flex', flexDirection: 'column',
+                  }}>
+                    {work.cover_url ? (
+                      <div style={{ aspectRatio: '3/4', overflow: 'hidden' }}>
+                        <img
+                          src={work.cover_url}
+                          alt={work.title}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                        />
+                      </div>
+                    ) : (
+                      <div style={{ aspectRatio: '3/4', background: 'var(--color-surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <span style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>처리 중</span>
+                      </div>
+                    )}
+                    <div style={{ padding: '10px 12px 12px' }}>
+                      <p style={{ margin: 0, fontWeight: 600, fontSize: 13, color: 'var(--color-text)', lineHeight: 1.3 }}>
+                        {work.title}
+                      </p>
+                      <p style={{ margin: '4px 0 0', fontSize: 11, color: 'var(--color-text-muted)' }}>
+                        {work.program}
+                      </p>
+                      {!work.is_publishable && (
+                        <span style={{
+                          display: 'inline-block', marginTop: 6,
+                          padding: '2px 8px', borderRadius: 10,
+                          background: 'rgba(239,68,68,0.12)', color: '#ef4444',
+                          fontSize: 10, fontWeight: 600,
+                        }}>
+                          {work.gate_reason ? '검토 거절' : '검토 중'}
+                        </span>
                       )}
                     </div>
                   </div>

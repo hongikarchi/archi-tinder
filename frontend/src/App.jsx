@@ -16,6 +16,7 @@ import BuildingDetailPage from './pages/BuildingDetailPage.jsx'
 import DiscoveryPage from './pages/DiscoveryPage.jsx'
 import VerifyGateModal from './components/VerifyGateModal.jsx'
 import LikedProjectsPage from './pages/LikedProjectsPage.jsx'
+import UploadWorkPage from './pages/UploadWorkPage.jsx'
 import LikedOfficesPage from './pages/LikedOfficesPage.jsx'
 import ArchitectProfilePage from './pages/ArchitectProfilePage.jsx'
 import SettingsPage from './pages/settings/SettingsPage.jsx'
@@ -1111,6 +1112,7 @@ export default function App() {
           <Route path="board/:boardId" element={<BoardDetailPage onResume={handleResumeProject} />} />
           <Route path="board/:boardId/report" element={<BoardReportPage />} />
           <Route path="liked-projects" element={<LikedProjectsPage />} />
+          <Route path="upload" element={<UploadWorkPage />} />
           <Route path="my/liked-offices" element={<Navigate to="/my/profile" replace />} />
           <Route path="architects/:architectId" element={<ArchitectProfilePage />} />
           <Route path="notifications" element={<NotificationInboxScreen />} />
