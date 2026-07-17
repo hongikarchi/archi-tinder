@@ -1,10 +1,17 @@
-"""apps.works.storage — presigned POST + key-existence helpers for Works R2 bucket.
+"""apps.works.storage — presigned PUT + key-existence helpers for Works R2 bucket.
 
 FULL-WORKS-1: mirrors the accounts/storage.py lazy-import boto3 pattern.
 
+R2-verified (2026-07-17): Cloudflare R2's S3 API does NOT implement presigned
+POST — a correctly-signed POST policy upload against the real dev bucket
+(archibe-works-dev) returns `501 NotImplemented` ("Presigned post requests are
+not yet implemented"). Cloudflare's documented pattern for client-side direct
+uploads is presigned PUT (developers.cloudflare.com/r2/objects/upload-objects/),
+so this module generates presigned PUT URLs instead of POST policies.
+
 Public API:
-  generate_presigned_post(key, content_type, max_bytes=10MB) -> {url, fields}
-  verify_key_exists(key) -> bool
+  generate_presigned_put(key, content_type) -> {url, key}
+  verify_key_exists(key) -> (exists: bool, size: int|None)
 """
 import logging
 
@@ -17,23 +24,30 @@ class WorksR2DisabledError(Exception):
     """Raised when WORKS_R2_ENABLED is False and an R2 operation is attempted."""
 
 
-def generate_presigned_post(key: str, content_type: str, max_bytes: int = 10 * 1024 * 1024) -> dict:
-    """Generate a presigned POST URL for direct browser-to-R2 upload.
+def generate_presigned_put(key: str, content_type: str) -> dict:
+    """Generate a presigned PUT URL for direct browser-to-R2 upload.
 
     Parameters
     ----------
     key : str
         R2 object key, e.g. 'works/<profile_id>/<hex>_cover.webp'.
     content_type : str
-        Declared content type (e.g. 'image/webp').
-    max_bytes : int
-        Maximum allowed Content-Length (default 10 MB).
+        Declared content type (e.g. 'image/webp'). This is baked into the
+        SigV4 signature (Params={'ContentType': ...}) — the client MUST send
+        an identical Content-Type header on the PUT, or R2 rejects the
+        upload with 403. This enforces an EXACT match, which is stronger
+        than the old POST-policy 'starts-with' condition.
+
+        Note: a presigned PUT cannot express a size cap (the POST policy's
+        'content-length-range' condition has no PUT equivalent) — size
+        enforcement moves server-side to finalize (see verify_key_exists).
 
     Returns
     -------
     dict
-        {'url': str, 'fields': dict} — identical shape to what boto3 returns,
-        passed through to the caller without modification.
+        {'url': str, 'key': str} — no 'fields' dict (PUT uploads send the
+        body directly with a Content-Type header, unlike POST's multipart
+        form fields).
 
     Raises
     ------
@@ -44,17 +58,12 @@ def generate_presigned_post(key: str, content_type: str, max_bytes: int = 10 * 1
         raise WorksR2DisabledError('WORKS_R2_ENABLED is False — no R2 credentials configured.')
 
     s3 = _make_s3_client()
-    result = s3.generate_presigned_post(
-        Bucket=settings.R2_WORKS_BUCKET,
-        Key=key,
-        Fields={'Content-Type': content_type},
-        Conditions=[
-            ['content-length-range', 1, max_bytes],
-            ['starts-with', '$Content-Type', 'image/'],
-        ],
+    url = s3.generate_presigned_url(
+        'put_object',
+        Params={'Bucket': settings.R2_WORKS_BUCKET, 'Key': key, 'ContentType': content_type},
         ExpiresIn=600,
     )
-    return result
+    return {'url': url, 'key': key}
 
 
 def _make_s3_client():
@@ -76,8 +85,12 @@ def _make_s3_client():
     )
 
 
-def verify_key_exists(key: str, s3_client=None) -> bool:
-    """Check whether an object key exists in the Works R2 bucket.
+def verify_key_exists(key: str, s3_client=None) -> tuple:
+    """Check whether an object key exists in the Works R2 bucket, and its size.
+
+    A presigned PUT cannot express a server-side size cap the way a POST
+    policy's 'content-length-range' condition could, so finalize enforces
+    the 10 MB cap itself using the size returned here (see FinalizeView).
 
     Parameters
     ----------
@@ -90,8 +103,9 @@ def verify_key_exists(key: str, s3_client=None) -> bool:
 
     Returns
     -------
-    bool
-        True if the object exists, False if it returns a 404 / NoSuchKey error.
+    tuple
+        (exists: bool, size: int | None) — size is the object's
+        ContentLength in bytes when exists is True, otherwise None.
 
     Raises
     ------
@@ -102,10 +116,10 @@ def verify_key_exists(key: str, s3_client=None) -> bool:
 
     s3 = s3_client if s3_client is not None else _make_s3_client()
     try:
-        s3.head_object(Bucket=settings.R2_WORKS_BUCKET, Key=key)
-        return True
+        head = s3.head_object(Bucket=settings.R2_WORKS_BUCKET, Key=key)
+        return True, head.get('ContentLength')
     except ClientError as e:
         error_code = e.response['Error']['Code']
         if error_code in ('404', 'NoSuchKey'):
-            return False
+            return False, None
         raise

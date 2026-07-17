@@ -1,11 +1,11 @@
 """test_works_upload.py — FULL-WORKS-1 upload endpoint tests.
 
-14 tests covering:
+15 tests covering:
   1. test_presign_disabled_503
   2. test_presign_file_too_large
   3. test_presign_invalid_content_type
   4. test_presign_success
-  5. test_presign_content_type_field_in_boto3_call (code-review regression test)
+  5. test_presign_content_type_in_params_boto3_call (regression test — presigned PUT)
   6. test_presign_too_many_files
   7. test_finalize_no_copyright
   8. test_finalize_foreign_key_prefix
@@ -15,6 +15,11 @@
   12. test_finalize_too_many_r2_keys
   13. test_finalize_invalid_project_year
   14. test_finalize_non_str_r2_key
+  15. test_finalize_size_exceeds_cap
+
+R2-verified (2026-07-17): Cloudflare R2 does not implement presigned POST
+(501 NotImplemented) — the presign flow migrated to presigned PUT
+(s3.generate_presigned_url('put_object', ...)). See apps/works/storage.py.
 
 Fixtures mirror accounts/tests/test_avatar_upload.py.
 """
@@ -106,10 +111,7 @@ class TestPresign:
         """Valid request with boto3 mocked -> 200 with presign_results."""
         _user, profile = user_and_profile
         mock_s3 = MagicMock()
-        mock_s3.generate_presigned_post.return_value = {
-            'url': 'https://r2.example.com/upload',
-            'fields': {'key': 'works/test_key', 'Policy': 'abc', 'X-Amz-Signature': 'sig'},
-        }
+        mock_s3.generate_presigned_url.return_value = 'https://r2.example.com/upload?sig=abc'
 
         with override_settings(
             WORKS_R2_ENABLED=True,
@@ -118,7 +120,7 @@ class TestPresign:
             R2_ACCESS_KEY_ID='key-id',
             R2_SECRET_ACCESS_KEY='secret',
         ):
-            # boto3 is lazily imported inside generate_presigned_post;
+            # boto3 is lazily imported inside generate_presigned_put;
             # patch at the module level so the lazy import picks up the mock.
             with patch('boto3.client', return_value=mock_s3):
                 resp = auth_client.post(
@@ -137,21 +139,19 @@ class TestPresign:
         assert len(results) == 2
         assert results[0]['key'].endswith('_cover.webp')
         assert results[1]['key'].endswith('_gallery_1.webp')
-        assert results[0]['url'] == 'https://r2.example.com/upload'
-        assert 'fields' in results[0]
+        assert results[0]['url'] == 'https://r2.example.com/upload?sig=abc'
+        assert 'fields' not in results[0]
 
     @pytest.mark.django_db
-    def test_presign_content_type_field_in_boto3_call(self, auth_client, user_and_profile):
-        """Regression test for the CRITICAL fix: generate_presigned_post must
-        pass Fields={'Content-Type': content_type} to boto3, or R2 rejects
-        every real browser upload against the POST policy (Content-Type
-        Condition present but never declared as a Field)."""
+    def test_presign_content_type_in_params_boto3_call(self, auth_client, user_and_profile):
+        """Regression test: generate_presigned_put must call boto3's
+        generate_presigned_url('put_object', ...) with Params containing
+        ContentType == the requested content type, and the response items
+        must contain 'url' + 'key' and NO 'fields' (R2 does not implement
+        presigned POST — verified 2026-07-17, 501 NotImplemented)."""
         _user, profile = user_and_profile
         mock_s3 = MagicMock()
-        mock_s3.generate_presigned_post.return_value = {
-            'url': 'https://r2.example.com/upload',
-            'fields': {'key': 'works/test_key', 'Content-Type': 'image/webp'},
-        }
+        mock_s3.generate_presigned_url.return_value = 'https://r2.example.com/upload?sig=abc'
 
         with override_settings(
             WORKS_R2_ENABLED=True,
@@ -168,9 +168,18 @@ class TestPresign:
                 )
 
         assert resp.status_code == 200
-        assert mock_s3.generate_presigned_post.called
-        call_kwargs = mock_s3.generate_presigned_post.call_args.kwargs
-        assert call_kwargs.get('Fields') == {'Content-Type': 'image/webp'}
+        assert mock_s3.generate_presigned_url.called
+        call_args = mock_s3.generate_presigned_url.call_args
+        method = call_args.args[0] if call_args.args else call_args.kwargs.get('ClientMethod')
+        assert method == 'put_object'
+        params = call_args.kwargs.get('Params', {})
+        assert params.get('ContentType') == 'image/webp'
+        assert params.get('Bucket') == 'works-bucket'
+
+        data = resp.json()
+        results = data['presign_results']
+        assert set(results[0].keys()) == {'key', 'url'}
+        assert 'fields' not in results[0]
 
     @pytest.mark.django_db
     def test_presign_too_many_files(self, auth_client):
@@ -263,6 +272,41 @@ class TestFinalize:
 
         assert resp.status_code == 400
         assert 'Upload not found in storage' in resp.json()['detail']
+
+    @pytest.mark.django_db
+    def test_finalize_size_exceeds_cap(self, auth_client, user_and_profile):
+        """WORKS_R2_ENABLED=True, head_object reports ContentLength > 10MB -> 400.
+
+        A presigned PUT cannot enforce a size cap client-side (unlike the old
+        POST policy's content-length-range condition), so finalize must reject
+        oversized objects server-side using the head_object ContentLength."""
+        _user, profile = user_and_profile
+        key = f'works/{profile.id}/abc_cover.webp'
+
+        mock_s3 = MagicMock()
+        mock_s3.head_object.return_value = {'ContentLength': 11 * 1024 * 1024}
+
+        with override_settings(
+            WORKS_R2_ENABLED=True,
+            R2_WORKS_BUCKET='works-bucket',
+            R2_ENDPOINT_URL='https://r2.example.com',
+            R2_ACCESS_KEY_ID='key-id',
+            R2_SECRET_ACCESS_KEY='secret',
+        ):
+            with patch('boto3.client', return_value=mock_s3):
+                resp = auth_client.post(
+                    '/api/v1/works/',
+                    {
+                        'title': 'My Building',
+                        'program': 'residential',
+                        'r2_keys': [key],
+                        'is_copyright_confirmed': True,
+                    },
+                    format='json',
+                )
+
+        assert resp.status_code == 400
+        assert 'exceeds 10MB' in resp.json()['detail']
 
     @pytest.mark.django_db
     def test_finalize_success(self, auth_client, user_and_profile):

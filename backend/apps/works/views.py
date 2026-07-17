@@ -1,7 +1,7 @@
-"""apps.works.views — presigned POST + finalize endpoints for Work uploads.
+"""apps.works.views — presigned PUT + finalize endpoints for Work uploads.
 
 FULL-WORKS-1:
-  POST /api/v1/works/presign/   — generate presigned POST URLs for R2 direct upload.
+  POST /api/v1/works/presign/   — generate presigned PUT URLs for R2 direct upload.
   POST /api/v1/works/           — finalize work after client confirms upload.
 """
 import logging
@@ -14,16 +14,20 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .services import _process_work
-from .storage import WorksR2DisabledError, _make_s3_client, generate_presigned_post, verify_key_exists
+from .storage import WorksR2DisabledError, _make_s3_client, generate_presigned_put, verify_key_exists
 
 logger = logging.getLogger('apps.works')
 
 # Upper bound on images per upload request (presign) / per work (finalize).
 MAX_WORK_IMAGES = 10
 
+# Server-side size cap enforced at finalize (a presigned PUT cannot express
+# a size condition the way a POST policy's content-length-range could).
+MAX_WORK_IMAGE_BYTES = 10 * 1024 * 1024
+
 
 class PresignView(APIView):
-    """POST /api/v1/works/presign/ — generate presigned POST URLs."""
+    """POST /api/v1/works/presign/ — generate presigned PUT URLs."""
 
     permission_classes = [IsAuthenticated]
 
@@ -43,11 +47,9 @@ class PresignView(APIView):
                 status=400,
             )
 
-        _MAX_BYTES = 10 * 1024 * 1024
-
         for f in files:
             file_size = f.get('file_size', 0)
-            if file_size > _MAX_BYTES:
+            if file_size > MAX_WORK_IMAGE_BYTES:
                 return Response({'detail': 'File too large'}, status=400)
             content_type = f.get('content_type', '')
             if not content_type.startswith('image/'):
@@ -62,7 +64,7 @@ class PresignView(APIView):
             key = f'works/{profile.id}/{uuid4().hex[:8]}_{slot}.webp'
 
             try:
-                result = generate_presigned_post(key, content_type)
+                result = generate_presigned_put(key, content_type)
             except WorksR2DisabledError:
                 # Should not reach here (guard above), but belt-and-suspenders.
                 return Response(
@@ -73,7 +75,6 @@ class PresignView(APIView):
             presign_results.append({
                 'key': key,
                 'url': result['url'],
-                'fields': result['fields'],
             })
 
         return Response({'presign_results': presign_results})
@@ -175,14 +176,17 @@ class FinalizeView(APIView):
                     status=403,
                 )
 
-        # 3. Storage existence check (only when R2 is enabled).
+        # 3. Storage existence + size check (only when R2 is enabled).
         # Build one S3 client and reuse it for all keys to avoid per-key
         # client construction overhead (FULL-WORKS-1 low finding).
+        # A presigned PUT cannot express a size cap the way the old POST
+        # policy's content-length-range condition could, so the 10 MB cap
+        # is enforced here, server-side, using the head_object ContentLength.
         if settings.WORKS_R2_ENABLED:
             s3_client = _make_s3_client()
             for key in r2_keys:
                 try:
-                    exists = verify_key_exists(key, s3_client=s3_client)
+                    exists, size = verify_key_exists(key, s3_client=s3_client)
                 except Exception as exc:
                     logger.warning('verify_key_exists failed for key=%s: %s', key, exc)
                     return Response(
@@ -192,6 +196,11 @@ class FinalizeView(APIView):
                 if not exists:
                     return Response(
                         {'detail': f'Upload not found in storage: {key}'},
+                        status=400,
+                    )
+                if size is not None and size > MAX_WORK_IMAGE_BYTES:
+                    return Response(
+                        {'detail': f'Image exceeds 10MB: {key}'},
                         status=400,
                     )
 

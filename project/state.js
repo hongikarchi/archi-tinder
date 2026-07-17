@@ -23,7 +23,7 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-07-17 11:02 KST',
+    updatedAt: '2026-07-17 21:13 KST',
     head: 'db68d08',
     branch: 'feature/claude-works-upload',
   },

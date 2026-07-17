@@ -6,9 +6,9 @@
 import { callApi } from './core.js'
 
 /**
- * Request presigned S3/R2 POST URLs for the given files.
+ * Request presigned R2 PUT URLs for the given files.
  * @param {Array<{filename: string, content_type: string, file_size: number}>} files
- * @returns {Promise<Array<{key: string, url: string, fields: object}>>}
+ * @returns {Promise<Array<{key: string, url: string}>>}
  */
 export async function presignFiles(files) {
   const res = await callApi('POST', '/works/presign/', { files })
@@ -16,19 +16,22 @@ export async function presignFiles(files) {
 }
 
 /**
- * Upload a single Blob directly to R2 via a presigned POST.
+ * Upload a single Blob directly to R2 via a presigned PUT URL.
  * Uses XMLHttpRequest so upload progress can be reported.
- * @param {{key: string, url: string, fields: object}} presignResult
+ *
+ * R2 does not support presigned POST (returns 501 NotImplemented) — the
+ * backend signs a PUT URL with Content-Type baked into the signature, so the
+ * Content-Type header set here MUST exactly match what was sent as
+ * `content_type` in the presignFiles() request for this file, or R2 rejects
+ * the PUT with a signature mismatch. A successful PUT returns 200 (not 204).
+ * @param {{key: string, url: string}} presignResult
  * @param {Blob} blob
+ * @param {string} contentType - must match the content_type declared to presignFiles() for this file
  * @param {(percent: number) => void} onProgress
  * @returns {Promise<void>}
  */
-export function uploadToR2(presignResult, blob, onProgress) {
+export function uploadToR2(presignResult, blob, contentType, onProgress) {
   return new Promise((resolve, reject) => {
-    const formData = new FormData()
-    Object.entries(presignResult.fields).forEach(([k, v]) => formData.append(k, v))
-    formData.append('file', blob)  // 'file' field must be last per S3 spec
-
     const xhr = new XMLHttpRequest()
 
     xhr.upload.onprogress = (e) => {
@@ -47,8 +50,9 @@ export function uploadToR2(presignResult, blob, onProgress) {
 
     xhr.onerror = () => reject(new Error('Network error'))
 
-    xhr.open('POST', presignResult.url)
-    xhr.send(formData)
+    xhr.open('PUT', presignResult.url)
+    xhr.setRequestHeader('Content-Type', contentType)
+    xhr.send(blob)
   })
 }
 

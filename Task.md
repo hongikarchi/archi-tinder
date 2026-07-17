@@ -187,7 +187,7 @@ Likely slices:
 ### LOW
 
 #### INFRA-WORKS-1 — R2 works 버킷 프로비저닝 (dev/prod 버킷 + 환경별 토큰 + CORS + public access)
-_(2026-07-17 플랜 `streamed-bubbling-lagoon` 으로 구체화·진행중)_ 토큰 모델 확정 = **환경별 2개**: dev 토큰(works-dev 버킷만 스코프, 협업자 전달용) / prod 토큰(archibe-avatars+works-prod 멀티버킷, Railway 전용) — 코드 무수정(공유 `R2_*` env 유지). ops 체크리스트: ① `archibe-works-dev` 생성 + Object R/W 토큰 + CORS(`http://localhost:5174` — vite.config.js 고정 포트, 5173 아님!) + public access(r2.dev)=`WORKS_PUBLIC_BASE_URL` → 협업자 전달 (지금). ② `archibe-works-prod` + prod 토큰 재발급 + prod 도메인 CORS(Vercel 도메인 레포에 없음, 대시보드 확인) + Railway env 4종 — 배포 직전 (Workstream C). 설정 전 브라우저 presigned POST XHR이 CORS로 차단됨.
+_(2026-07-17 플랜 `streamed-bubbling-lagoon`; **dev 버킷 완료**, prod 남음)_ 토큰 모델 확정 = **환경별 2개**: dev 토큰(works-dev 버킷만 스코프, 협업자 전달용) / prod 토큰(archibe-avatars+works-prod 멀티버킷, Railway 전용) — 코드 무수정(공유 `R2_*` env 유지). ✅ ① DONE 2026-07-17 (Cloudflare MCP API): `archibe-works-dev`(APAC) 생성 + CORS(`http://localhost:5174`+`5173`, **PUT**+content-type — presigned PUT 전환 반영) + public access `pub-b071ab81….r2.dev` + Object R/W dev 토큰(대시보드) + 로컬 `.env` 세팅 + 실업로드 E2E 검증. 남음 ② `archibe-works-prod` + prod 토큰 재발급(avatars+works-prod 멀티버킷) + prod 도메인 CORS(**PUT**; Vercel 도메인 대시보드 확인) + Railway env 4종 — 배포 직전 (Workstream C).
 
 #### BACK-WORKS-1 — works 목록 페이지네이션 + 응답 슬리밍
 `FinalizeView.get`(views.py)이 무페이지네이션 전량 직렬화 — 피어 목록 엔드포인트는 전부 50 cap(notifications/_build_boards_field 패턴). + 목록 응답의 `r2_keys` 전체 배열은 프론트 미소비(cover_url만 렌더) → 제외. 2026-07-16 ultracode 리뷰 low(Opus 확정, 현 규모 실해 없음 — 관례 일치성 이슈).
@@ -259,14 +259,16 @@ Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over
 ### FULL-WORKS-1 — 건축 작품 업로드 Phase 1 — RESOLVED 2026-07-15 (`6089487`)
 presigned direct upload to Cloudflare R2: Django `apps/works/` 신설 + `/api/v1/works/presign/`·`/api/v1/works/` API + UploadWorkPage.
 - [x] Work 모델 (upload_id `usr_XXXXXX`, 14개 program enum, r2_keys JSONField, is_publishable=False, report_count) + migration 0001_initial
-- [x] presign 뷰: 10MB content-length-range 정책 + image/* 강제 + 10분 만료, key `works/{profile_id}/{uuid8}_{slot}.webp`
+- [x] presign 뷰: **presigned PUT** (서명에 ContentType 포함 → 정확일치 강제) + image/* 검증 + 10분 만료, key `works/{profile_id}/{uuid8}_{slot}.webp`; 10MB 상한은 finalize `head_object` ContentLength 서버검증
 - [x] finalize 뷰: 저작권 확인 → namespace 검증(403) → R2 존재 확인 → Work 저장 → 백그라운드 스레드(Gemini 품질 게이트 + atmosphere enum 12개 강제; HF 384차원 임베딩은 07-17 fix에서 삭제 — 저장 필드 부재 dead call) → 201 `{upload_id, status:'processing'}` 즉시 반환
 - [x] storage.py: `_make_s3_client()` 공유 + `generate_presigned_post()` + `verify_key_exists()` (boto3 lazy, accounts/storage.py 패턴 미러)
 - [x] WORKS_R2_ENABLED 플래그, INSTALLED_APPS 등록, `/api/v1/works/` URL
-- [x] 테스트 14개 (기존 9: presign 503/400x2, finalize 400/403/400/201/401 + fix 배치 5: Content-Type Fields 회귀 / presign·finalize 11장 cap / project_year 비정수 / 비str r2_key) — all PASS
+- [x] 테스트 15개 (기존 9: presign 503/400x2, finalize 400/403/400/201/401 + fix 배치 5: PUT presign ContentType 회귀 / presign·finalize 11장 cap / project_year 비정수 / 비str r2_key + 크기상한 1: finalize 11MB→400) — CI Postgres 기준 그린
 - [x] UploadWorkPage: canvas.toBlob WebP 변환(max 2400px) + XHR progress + processing/error 상태 UI + /upload 라우트
 - [x] r2_keys isinstance + empty 가드 패치 (2 LOW 소견)
-- [x] **리뷰 fix 배치 2026-07-17** (ultracode 4-lens + Opus verify 10건 확정 → critical+medium+저비용 low 적용): presign `Fields={'Content-Type': ...}` 누락 수정(**critical** — boto3는 Condition에서 field 자동 생성 안 함 → 실 R2 업로드 전면 거부되던 결함) · Gemini 호출 `_retry_gemini_call` 15s 데드라인 경유 · HF embed dead call 삭제 + `_GEMINI_RESPONSE_SCHEMA` 소비 필드로 트림 · project_year/r2_keys 원소 입력검증(500→400) · `MAX_WORK_IMAGES=10` 3-tier(presign+finalize+프론트 keep-what-fits, 신규 문자열 t() i18n) · DRY 3건(`_finish` 헬퍼, `_make_s3_client` 재사용, 잔여 ternary). 유보 → BACK-WORKS-1(페이지네이션)/BACK-WORKS-2(HEAD 병렬화)
+- [x] **리뷰 fix 배치 2026-07-17** (ultracode 4-lens + Opus verify 10건 확정 → critical+medium+저비용 low 적용): presign `Fields={'Content-Type': ...}` 누락 수정(**critical**) · Gemini 호출 `_retry_gemini_call` 15s 데드라인 경유 · HF embed dead call 삭제 + `_GEMINI_RESPONSE_SCHEMA` 소비 필드로 트림 · project_year/r2_keys 원소 입력검증(500→400) · `MAX_WORK_IMAGES=10` 3-tier(presign+finalize+프론트 keep-what-fits, 신규 문자열 t() i18n) · DRY 3건(`_finish` 헬퍼, `_make_s3_client` 재사용, 잔여 ternary) · works conftest 커넥션-리셋 핵 제거(CI full-suite `no such table` 원인 — PR open 이래 CI red였음). 유보 → BACK-WORKS-1(페이지네이션)/BACK-WORKS-2(HEAD 병렬화)
+- [x] **presigned POST→PUT 전환 2026-07-17** (실인프라 검증發 재설계): dev 버킷 실업로드에서 **R2가 presigned POST 자체를 미구현**(`501 NotImplemented`) 확인 — 위 critical fix로도 구조적 동작 불가, mock 테스트로는 검출 불가능. Cloudflare 공식 패턴 **presigned PUT** 전환: `generate_presigned_put()`(ContentType 서명 → 헤더 정확일치 강제, 기존 starts-with policy보다 강함) + 응답 `{key,url}`(fields 제거) + 프론트 `works.js` XHR PUT + `UPLOAD_CONTENT_TYPE` 상수 미러링 + finalize 10MB `head_object` 검증 + 버킷 CORS PUT/content-type 재설정. 테스트 15개
+- [x] **실환경 풀플로우 E2E PASS 2026-07-17** (`archibe-works-dev` 실버킷 + 실Gemini): dev-login→presign→R2 PUT 200→finalize 201→**Gemini 게이트 실사진 PUBLISH**(is_publishable=True)→공개 cover URL 200 image/webp→11장 cap 400. CORS preflight 5174 허용/타origin 차단, 오타입 PUT 403(서명 거부) 검증 포함
 - 검증: workflow 2 cycles commitReady=true · app-test FEATURE-SCOPED 5/5 PASS · drift clean
 - Deferred-MEDIUM: FULL-WORKS-2 (Phase 2 works srcset/LQIP + algorithm 통합 + works 임베딩 저장 필드·HF 호출 재도입 — Phase 1 배포 후; 임베딩 dead call은 2026-07-17 fix에서 삭제됨)
 - Deferred-LOW: INFRA-WORKS-1 (R2 works 버킷 프로비저닝 — `## Next` § LOW로 구체화, 2026-07-17 진행중)

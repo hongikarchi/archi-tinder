@@ -17,6 +17,13 @@ import s from './UploadWorkPage.module.css'
 // Matches backend MAX_WORK_IMAGES — presign/finalize reject >10 images with a 400.
 const MAX_WORK_IMAGES = 10
 
+// convertToWebP() always emits image/webp — this single constant is sent as
+// content_type in the presign request AND set as the Content-Type header on
+// the R2 PUT. Both MUST match exactly (R2 signs Content-Type into the URL and
+// rejects a mismatched PUT), so it's declared once here rather than
+// hardcoded in two places.
+const UPLOAD_CONTENT_TYPE = 'image/webp'
+
 // Each entry maps the backend PROGRAM_CHOICES key (value sent to API) to a
 // human-readable label shown in the UI.  Ordered to match canonical_v2_buildings
 // vocabulary; 'Other' is omitted — no backend key exists for it.
@@ -189,7 +196,7 @@ export default function UploadWorkPage() {
       const presignResults = await presignFiles(
         files.map(f => ({
           filename: f.file.name,
-          content_type: 'image/webp',
+          content_type: UPLOAD_CONTENT_TYPE,
           file_size: f.blob.size,
         }))
       )
@@ -199,6 +206,7 @@ export default function UploadWorkPage() {
         await uploadToR2(
           presignResults[i],
           files[i].blob,
+          UPLOAD_CONTENT_TYPE,
           (p) => setProgress(Math.round((i * 100 + p) / files.length))
         )
       }
