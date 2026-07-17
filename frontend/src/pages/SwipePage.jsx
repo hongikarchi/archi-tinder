@@ -64,42 +64,34 @@ function ActionCard({ card }) {
   )
 }
 
-/* ── ConfidenceBar (persona-report readiness / response consistency) ─────── */
-function ConfidenceBar({ value, phase, progress }) {
-  // value: confidence [0,1] = 1 - avg(recent ΔV)/threshold — rises on consistency,
-  //        falls on inconsistency (persona-report readiness metric).
-  //        null = early exploring, not enough data yet.
+/* ── ConfidenceBar (swipe progress toward Aha! moment) ──────────────────── */
+const TARGET_SWIPES = 15 // Product promise: 10-15 swipes → Aha!
+
+function ConfidenceBar({ phase, progress }) {
+  // `value` (confidence [0,1]) is intentionally omitted from destructuring —
+  // the bar is now driven purely by swipe count, not confidence.
+  // The prop remains valid on the call site; callers need no changes.
   // progress: full progress object for swipe count display.
-  let pct = 0
-  let stageLabel = 'Loading…'
+
+  const swipeCount =
+    progress?.swipe_count ??
+    ((progress?.like_count ?? 0) + (progress?.dislike_count ?? 0))
+
+  let pct
+  let stageLabel
 
   if (phase === 'converged' || phase === 'completed') {
     pct = 100
     stageLabel = 'Taste found'
   } else if (phase === 'analyzing') {
-    if (value != null) {
-      // Bar driven purely by confidence (can rise or fall).
-      pct = Math.round(value * 100)
-      stageLabel = 'Tuning taste'
-    } else {
-      // Confidence not yet established — show faint baseline so bar isn't empty.
-      pct = 4
-      stageLabel = 'Calibrating…'
-    }
-  } else if (phase === 'exploring') {
-    if (value != null) {
-      pct = Math.round(value * 100)
-    } else {
-      pct = 4
-    }
-    stageLabel = 'Exploring'
-  } else if (value != null) {
-    // Unknown/other phase but confidence is available.
-    pct = Math.round(value * 100)
+    pct = Math.min(Math.round((swipeCount / TARGET_SWIPES) * 100), 95)
     stageLabel = 'Tuning taste'
+  } else if (phase === 'exploring') {
+    pct = Math.min(Math.round((swipeCount / TARGET_SWIPES) * 100), 95)
+    stageLabel = 'Exploring'
   } else {
-    // No phase and no confidence — show minimal baseline.
-    pct = 4
+    // Unknown / loading phase — fall back to swipe-count progress.
+    pct = Math.min(Math.round((swipeCount / TARGET_SWIPES) * 100), 95)
     stageLabel = 'Calibrating…'
   }
 
@@ -148,16 +140,6 @@ function ConfidenceBar({ value, phase, progress }) {
           borderRadius: 999,
           transition: 'width 300ms ease',
         }} />
-      </div>
-
-      {/* Percent below bar, right-aligned */}
-      <div style={{
-        fontSize: 11,
-        color: 'var(--color-text-dim)',
-        textAlign: 'right',
-        marginTop: 4,
-      }}>
-        {pct}%
       </div>
     </div>
   )
