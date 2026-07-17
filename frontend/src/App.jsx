@@ -545,11 +545,18 @@ export default function App() {
       setCurrentCard(savedPrefetch)
       setPrefetchCard(prefetchCard2)  // shift queue
       setPrefetchCard2(null)
-      // Optimistic like_count bump so the unified progress bar advances in lockstep
-      // with the visible card. Server response at line ~387 replaces with authoritative state.
-      if (action === 'like') {
-        setSessionProgress(p => p ? { ...p, like_count: (p.like_count ?? 0) + 1 } : p)
-      }
+      // Optimistic swipe-count bump so the progress bar advances in lockstep
+      // with the visible card. Server response replaces with authoritative state.
+      setSessionProgress(p => {
+        if (!p) return p
+        const next = {
+          ...p,
+          swipe_count: (p.swipe_count ?? 0) + 1,
+        }
+        if (action === 'like') next.like_count = (p.like_count ?? 0) + 1
+        else next.dislike_count = (p.dislike_count ?? 0) + 1
+        return next
+      })
     } else {
       // Keep the current card visible with a loading overlay instead of
       // replacing it with null. Setting currentCard to null was the root cause

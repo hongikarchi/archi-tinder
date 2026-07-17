@@ -23,8 +23,8 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-07-15 01:14 KST',
-    head: 'fa36cd5',
+    updatedAt: '2026-07-17 10:50 KST',
+    head: 'db68d08',
     branch: 'feature/claude-works-upload',
   },
   done: [
@@ -33,6 +33,12 @@ window.PROJECT_STATE = {
       title: '건축 작품 업로드 Phase 1',
       completedAt: '2026-07-15',
       note: 'presigned direct upload to Cloudflare R2: Django `apps/works/` 신설 + `/api/v1/works/presign/`·`/api/v1/works/` API + UploadWorkPage.',
+    },
+    {
+      id: 'BACK-PERFORMANCE-5',
+      title: 'Swipe latency 0.7-1.5s 흔들림',
+      completedAt: '2026-07-16',
+      note: 'Codex retest 2026-05-26: browser swipe 1.82s/1.75s/1.12s/1.81s; server swipe 1.50s/1.38s/0.746s/1.36s. PR4 async prefetch consume IS working — 3rd swipe with cache hit drops to 156ms prefetch stage. But variability is high. Identify which stage causes the 0.7→1.5s spread (DB q…',
     },
     {
       id: 'FULL-LANGUAGE-1c',
@@ -70,12 +76,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-07-13',
       note: 'temp 보드 누수 5개 사이트 일괄 마감: one-way finalize 강제 + 리스트/카운트/취향벡터/피드 전부 `is_temp=False` 필터 — 사일런트 보드 유실 경로 차단.',
     },
-    {
-      id: 'BACK-LLM-4',
-      title: 'search.py ParseQueryView byte-cap ensure_ascii 부풀림 의심 — CLOSED 2026-07-12 (premise falsified, no PR)',
-      completedAt: '',
-      note: '2026-07-12 백로그 전수 감사에서 무혐의 판명: `ParseQueryView.post`는 conversation_history 검증을 serializer로 위임하며, 해당 serializer는 BACK-LLM-2(#195)가 이미 UTF-8 byte 측정으로 고침 — ParseQueryView 자체에 `ensure_ascii=True` byte-cap 경로가 애초에 없음(Sonnet 검증 + Opus 적대검증 동의). 의심 항목이었고 실재하지 않아 폐기.',
-    },
   ],
   now: [],
   next: {
@@ -91,11 +91,6 @@ window.PROJECT_STATE = {
         id: 'BACK-RECOMMEND-1',
         title: 'Project 두번째 세션이 이전 taste를 모름',
         note: 'Code audit 2026-05-27: SessionCreateView resolves project_id only to skip dedupe; session_insert still creates phase=exploring with empty like_vectors/convergence/preference state. Project.liked_ids/disliked_ids/saved_ids persist but are not read. Primary edit: views/sessions.py warm-start policy + engine.get_pool_embeddings(project liked_ids) scoped to active project; tests in test_session_create_correctness.py for no cross-project leakage and progress semantics.',
-      },
-      {
-        id: 'BACK-PERFORMANCE-5',
-        title: 'Swipe latency 0.7-1.5s 흔들림',
-        note: 'Code audit 2026-05-27: SwipeView still does update/phase/refresh_pool/get_pool_embeddings/MMR-or-farthest selection in request transaction. Async prefetch only helps after next_bid is selected. Use existing [SWIPE TIMING] lock/embed/select/prefetch/total + embedding cache stats to bucket variance before code changes.',
       },
     ],
     medium: [
@@ -200,6 +195,20 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 283,
+      title: 'docs(BACK-PERFORMANCE-5): resolved — Redis US-region root cause, swipe p50 1638→124ms',
+      mergedAt: '2026-07-16T17:57:16Z',
+      mergedAtKST: '2026-07-17 02:57 KST',
+      sha: '8ddee5b',
+    },
+    {
+      number: 281,
+      title: 'feat(swipe): count-based progress bar — linear fill on every swipe',
+      mergedAt: '2026-07-17T01:48:21Z',
+      mergedAtKST: '2026-07-17 10:48 KST',
+      sha: 'db68d08',
+    },
+    {
       number: 279,
       title: 'docs(perf): BACK-PERFORMANCE-5 Neon pooler flip applied to prod + local (verified)',
       mergedAt: '2026-07-13T22:41:15Z',
@@ -240,20 +249,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-07-12T17:28:52Z',
       mergedAtKST: '2026-07-13 02:28 KST',
       sha: 'a299af6',
-    },
-    {
-      number: 273,
-      title: 'perf(analytics): swipe timing_breakdown aggregation in session_metrics_report (BACK-PERFORMANCE-5a)',
-      mergedAt: '2026-07-12T17:18:54Z',
-      mergedAtKST: '2026-07-13 02:18 KST',
-      sha: 'e66287b',
-    },
-    {
-      number: 272,
-      title: 'fix(board): is_temp lifecycle closure — one-way finalize + temp exclusion (FULL-ONBOARDING-2)',
-      mergedAt: '2026-07-12T16:51:23Z',
-      mergedAtKST: '2026-07-13 01:51 KST',
-      sha: '8fba3d5',
     },
   ],
   agents: [
@@ -366,6 +361,10 @@ window.PROJECT_STATE = {
     {
       path: '.claude/plans/archive/building-detail-page.md',
       role: '건물 상세 페이지 플랜',
+    },
+    {
+      path: '.claude/plans/archive/perf-image-latency-research.md',
+      role: '',
     },
     {
       path: '.claude/plans/archive/perf-trio-optimization.md',
@@ -518,6 +517,14 @@ window.PROJECT_STATE = {
     {
       path: 'README.md',
       role: '프로젝트 안내 문서',
+    },
+    {
+      path: 'Task.md',
+      role: '태스크 보드 문서',
+    },
+    {
+      path: 'Task.md',
+      role: '태스크 보드 문서',
     },
     {
       path: 'Task.md',
@@ -1249,6 +1256,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/works/migrations/0001_initial.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/works/migrations/0002_rename_works_work_owner_i_idx_works_work_owner_i_cdca6c_idx.py',
       role: '',
     },
     {
@@ -2212,6 +2223,14 @@ window.PROJECT_STATE = {
       role: '대시보드 상태 데이터',
     },
     {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
+    },
+    {
       path: 'tools/.smoke.sh',
       role: 'git 스크립트 환경 스모크 검사',
     },
@@ -2278,6 +2297,10 @@ window.PROJECT_STATE = {
     {
       path: 'web-testing/dashboard/style.css',
       role: '테스트 대시보드 스타일',
+    },
+    {
+      path: 'web-testing/main-service-test-plan.md',
+      role: '',
     },
     {
       path: 'web-testing/requirements.txt',

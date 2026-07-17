@@ -57,7 +57,7 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(비어있음)_
+_(비어있음 — 배치 플랜 `reactive-soaring-hearth` 6/6 PR 완료 2026-07-13. 잔여 액션 완료 2026-07-15/16: i18n EN 카피 스팟체크 PASS(한글 누출 0, ko 의도 일치) + PERF-5 재계측→root-cause→fix 종결(## Done § BACK-PERFORMANCE-5 — Redis US리전이 범인, swipe p50 1638→124ms))_
 
 ---
 
@@ -137,41 +137,6 @@ _(2026-06-08 범위 축소: #212(`4e58195`) Case #3 resume guard가 **진행중(
 
 _(2026-07-12 감사 re-pin: 전제 유효, 라인 이동 — resume guard `session_service.py:167-182`(completed 제외), 신규 세션 cold-create `:397-416`(phase='exploring', like_vectors=[] 등 전부 빈 값), `liked_ids`는 완료-세션 리포트에만 사용(`:688-689`), warm-start seed 경로 여전히 부재.)_
 
-#### BACK-PERFORMANCE-5 — Swipe latency 0.7-1.5s 흔들림
-Codex retest 2026-05-26: browser swipe 1.82s/1.75s/1.12s/1.81s; server swipe 1.50s/1.38s/0.746s/1.36s. **PR4 async prefetch consume IS working** — 3rd swipe with cache hit drops to 156ms prefetch stage. But variability is high. Identify which stage causes the 0.7→1.5s spread (DB query latency? embedding cache miss? pgvector?). Aim for swipe p95 ≤1.0s and p50 ≤0.5s on Singapore prod. **(2026-06-28 HIGH로 승격 — 코어 스와이프 루프 + <1s 페이지로드 목표 + 런칭 임박.)**
-
-Code audit 2026-05-27 (`develop@3894ffd`):
-- `backend/apps/recommendation/views/swipe.py` still performs the algorithmic card selection inside the request transaction: update Project/session, phase transition, `engine.refresh_pool_if_low()`, `engine.get_pool_embeddings(session.pool_ids)`, then `engine.farthest_point_from_pool()` or `engine.compute_mmr_next()`.
-- PERF-PREFETCH-CHAIN moved card data lookahead off-path only after `next_bid` is selected. The cache-hit path avoids some prefetch-card compute/fetch, but it does not skip `get_pool_embeddings()` or MMR/farthest selection for the next visible card.
-- The response already logs `[SWIPE TIMING] lock/embed/select/prefetch/total` and captures `engine.get_last_embedding_call_stats()` for cache miss counts. That is the fastest way to classify the spread before editing.
-- `engine.get_pool_embeddings()` has an in-process LRU-like building embedding cache; cache misses can still trigger a DB fetch against `canonical_v2_buildings`. Under multi-worker prod, this cache is per process.
-
-Diagnostic plan:
-- Re-run a fixed 8-10 swipe session and bucket slow responses by timing stage: `embed_ms` > selection, `select_ms` > MMR/farthest CPU, `prefetch_ms` > buildings batch fetch / cache miss, `lock_ms` > transaction contention.
-- Compare first session after worker boot vs warmed worker. If first swipes are slow and later cache-hit swipes are fast, embedding cache warmup is the likely source.
-- If `select_ms` dominates in analyzing phase, inspect `engine.compute_mmr_next()` vector math and pool size. If `embed_ms` dominates, inspect `get_pool_embeddings()` DB batch and cache-hit ratio.
-
-_(Deferred 2026-06-04 batch scope → 계측 먼저. Variance CONFIRMED(per-worker in-process embedding 캐시 cold-miss 50-200ms + KMeans 재계산)나 ~tens-daily-users 규모서 cold-miss는 주로 배포직후 일시적; Redis-migration은 조회마다 RTT 추가 + premature 가능. prod hit-rate/지배 원인 계측 후 결정.)_
-
-_(2026-07-12 감사 re-pin: 전제 유효 — 알고리즘 코어(refresh_pool_if_low/get_pool_embeddings/compute_mmr_next/farthest_point)가 여전히 `transaction.atomic()` + `select_for_update()` 안(FULL-REFACTOR-1로 `swipe_service.py:727-1087` 이동, off-path 이동은 아님). `[SWIPE TIMING]` 로그 잔존(swipe.py:457-466). **#268 `session_metrics_report`가 timing_breakdown 리더 제공** — item의 진단 플랜(8-10 스와이프 stage별 bucket)을 이제 prod 데이터로 즉시 실행 가능, 계측 선행조건 충족.)_
-
-_(2026-07-13 BACK-PERFORMANCE-5a 출하(`afc0b88`): 리더에 stage별 p50/p95 + cache_hit 분리 + warmup 위치 bucket 집계 탑재 완료. 배치 플랜 Q1 결정: 진단만 이번 배치, fix 별도.)_
-
-**🔬 PROD 계측 결과 (2026-07-13, user-승인 read-only, 90일 창 = 전체 timing 데이터, n=247 swipes / 35 sessions / cache_hit 95.5% / malformed 0):**
-| stage | p50 | p95 | max |
-|---|---|---|---|
-| prefetch_ms | **888** | 1213 | 2907 |
-| select_ms | 416 | **1389** | 82282 (outlier 1건) |
-| lock_ms | 171 | 530 | 1650 |
-| embed_ms | 75 | 151 | 561 |
-| **total_ms** | **1638** | **2826** | 83737 |
-- **지배 stage = prefetch (p50의 54%)** — cache HIT에서도 prefetch p50 902ms. 코드 대조로 정체 확정: prefetch 구간(select_done→prefetch_done) = **동기 `engine.get_buildings_by_ids([next, pf, pf2])` 배치 fetch** (swipe.py:396-403). IMP-8 async 스레드는 **이미 켜져 있고 정상** (`async_prefetch_enabled: True`, settings.py:319, PERF-PREFETCH-CHAIN 후 재활성) — 스레드는 의도적으로 ID만 캐시(스레드 ~50ms 유지, swipe.py:85-91 주석), 카드 hydration은 요청 경로에 남는 설계. "IMP-8 꺼짐" 1차 추정은 **기각**.
-- **근본 원인 후보**: `DATABASES['buildings']`에 `CONN_MAX_AGE` 무 → 매 요청 Neon 신규 TLS 커넥션. 단 이는 **문서화된 소유권 결정**(Make-DB 소유 프로젝트에 앱 영구 커넥션 금지, CONTRIBUTING.md § Buildings-DB connection pooling) — 직접 CONN_MAX_AGE 추가는 소유권 위반. **승인된 해법 = Neon 서버측 pooler**: `BUILDINGS_DB_HOST`를 `ep-<id>-pooler.<region>...`로 (Railway env + 로컬 .env, user-applied, 코드 0줄). 2026-07-07 실측: connect tail max 2059→517ms 평탄화.
-- **p95 드라이버 = select (1389ms)** — cache miss 시 select p50 2.5배(1032 vs 412; miss 시 `get_pool_embeddings`가 buildings DB fetch = 같은 커넥션 비용). max 82s outlier 1건 = Neon autosuspend cold-start 추정 — pooler로는 안 잡힘, 별도(autosuspend 설정 or keepalive).
-- **가설 기각 2건**: ① embed cold-miss 지배 가설(2026-06-04 deferred 노트) — embed p50 75ms, 총량의 5%뿐. ② warmup 가설 — 세션내 1-2번째 swipe(p50 1577ms)가 3+번째(1650ms)보다 오히려 빠름.
-- **✅ pooler 적용 완료 (2026-07-13, user 전권 승인)**: Railway `archi-tinder` 서비스(production) `BUILDINGS_DB_HOST` → `ep-broad-hat-a1jaomn7-pooler.ap-southeast-1.aws.neon.tech` 플립 + 로컬 `backend/.env` 동일 플립(gitignored). 배포 `049e3b8a` SUCCESS, gunicorn 워커 3 클린 부팅(DB/커넥션 에러 0). 검증: prod buildings 역할(`make_web`)로 pooler 호스트 직접 SELECT → 36,673 publishable buildings 정상. 참고: prod app DB(`DB_HOST`=동일 엔드포인트 ep-broad-hat, DB=user_data)와 buildings(DB=archi_data)가 같은 Neon 엔드포인트 공유 — `default` alias는 CONN_MAX_AGE=600 유지, buildings만 pooler로(CONTRIBUTING.md 명시대로).
-- **잔여 액션**: ① 트래픽 쌓인 뒤(수일) `session_metrics_report --days 7` 재실측(before/after — prefetch p50 888ms 개선 확인) → ② 잔여 병목이면 후보: 스레드측 bcard warm-hydration(fast-swiper 트레이드오프 있음, swipe.py:85 주석), prefetch 구간 sub-split 계측(connect vs query vs cache), in-region 커넥션 비용 실측. ③ 82s outlier = Neon autosuspend cold-start 별도(설정 or keepalive).
-- 주의: 247건은 4-7월 코드 세대 혼합(Redis 5/26 도입·PERF-PREFETCH-CHAIN 6월 배포 전 데이터 포함) — stage 지배 구도는 유효하나 절대값은 pooler 플립 후 재실측이 기준. 30일 창 n=4(저트래픽)라 90일 창 채택. 원데이터 `/tmp/perf5-prod-90.json`(로컬 휘발).
 
 ### MEDIUM
 #### FULL-WORKS-2 — works Phase 2: srcset/LQIP + 알고리즘 통합
@@ -295,6 +260,49 @@ presigned direct upload to Cloudflare R2: Django `apps/works/` 신설 + `/api/v1
 - 검증: workflow 2 cycles commitReady=true · app-test FEATURE-SCOPED 5/5 PASS · drift clean
 - Deferred-MEDIUM: FULL-WORKS-2 (Phase 2 works srcset/LQIP + algorithm 통합 — Phase 1 배포 후)
 - Deferred-LOW: INFRA-WORKS-1 (R2_WORKS_BUCKET CORS 정책 ops 설정)
+
+### BACK-PERFORMANCE-5 — Swipe latency 0.7-1.5s 흔들림 — RESOLVED 2026-07-16 (ops-only, 코드 0줄)
+Codex retest 2026-05-26: browser swipe 1.82s/1.75s/1.12s/1.81s; server swipe 1.50s/1.38s/0.746s/1.36s. **PR4 async prefetch consume IS working** — 3rd swipe with cache hit drops to 156ms prefetch stage. But variability is high. Identify which stage causes the 0.7→1.5s spread (DB query latency? embedding cache miss? pgvector?). Aim for swipe p95 ≤1.0s and p50 ≤0.5s on Singapore prod. **(2026-06-28 HIGH로 승격 — 코어 스와이프 루프 + <1s 페이지로드 목표 + 런칭 임박.)**
+
+Code audit 2026-05-27 (`develop@3894ffd`):
+- `backend/apps/recommendation/views/swipe.py` still performs the algorithmic card selection inside the request transaction: update Project/session, phase transition, `engine.refresh_pool_if_low()`, `engine.get_pool_embeddings(session.pool_ids)`, then `engine.farthest_point_from_pool()` or `engine.compute_mmr_next()`.
+- PERF-PREFETCH-CHAIN moved card data lookahead off-path only after `next_bid` is selected. The cache-hit path avoids some prefetch-card compute/fetch, but it does not skip `get_pool_embeddings()` or MMR/farthest selection for the next visible card.
+- The response already logs `[SWIPE TIMING] lock/embed/select/prefetch/total` and captures `engine.get_last_embedding_call_stats()` for cache miss counts. That is the fastest way to classify the spread before editing.
+- `engine.get_pool_embeddings()` has an in-process LRU-like building embedding cache; cache misses can still trigger a DB fetch against `canonical_v2_buildings`. Under multi-worker prod, this cache is per process.
+
+Diagnostic plan:
+- Re-run a fixed 8-10 swipe session and bucket slow responses by timing stage: `embed_ms` > selection, `select_ms` > MMR/farthest CPU, `prefetch_ms` > buildings batch fetch / cache miss, `lock_ms` > transaction contention.
+- Compare first session after worker boot vs warmed worker. If first swipes are slow and later cache-hit swipes are fast, embedding cache warmup is the likely source.
+- If `select_ms` dominates in analyzing phase, inspect `engine.compute_mmr_next()` vector math and pool size. If `embed_ms` dominates, inspect `get_pool_embeddings()` DB batch and cache-hit ratio.
+
+_(Deferred 2026-06-04 batch scope → 계측 먼저. Variance CONFIRMED(per-worker in-process embedding 캐시 cold-miss 50-200ms + KMeans 재계산)나 ~tens-daily-users 규모서 cold-miss는 주로 배포직후 일시적; Redis-migration은 조회마다 RTT 추가 + premature 가능. prod hit-rate/지배 원인 계측 후 결정.)_
+
+_(2026-07-12 감사 re-pin: 전제 유효 — 알고리즘 코어(refresh_pool_if_low/get_pool_embeddings/compute_mmr_next/farthest_point)가 여전히 `transaction.atomic()` + `select_for_update()` 안(FULL-REFACTOR-1로 `swipe_service.py:727-1087` 이동, off-path 이동은 아님). `[SWIPE TIMING]` 로그 잔존(swipe.py:457-466). **#268 `session_metrics_report`가 timing_breakdown 리더 제공** — item의 진단 플랜(8-10 스와이프 stage별 bucket)을 이제 prod 데이터로 즉시 실행 가능, 계측 선행조건 충족.)_
+
+_(2026-07-13 BACK-PERFORMANCE-5a 출하(`afc0b88`): 리더에 stage별 p50/p95 + cache_hit 분리 + warmup 위치 bucket 집계 탑재 완료. 배치 플랜 Q1 결정: 진단만 이번 배치, fix 별도.)_
+
+**🔬 PROD 계측 결과 (2026-07-13, user-승인 read-only, 90일 창 = 전체 timing 데이터, n=247 swipes / 35 sessions / cache_hit 95.5% / malformed 0):**
+| stage | p50 | p95 | max |
+|---|---|---|---|
+| prefetch_ms | **888** | 1213 | 2907 |
+| select_ms | 416 | **1389** | 82282 (outlier 1건) |
+| lock_ms | 171 | 530 | 1650 |
+| embed_ms | 75 | 151 | 561 |
+| **total_ms** | **1638** | **2826** | 83737 |
+- **지배 stage = prefetch (p50의 54%)** — cache HIT에서도 prefetch p50 902ms. 코드 대조로 정체 확정: prefetch 구간(select_done→prefetch_done) = **동기 `engine.get_buildings_by_ids([next, pf, pf2])` 배치 fetch** (swipe.py:396-403). IMP-8 async 스레드는 **이미 켜져 있고 정상** (`async_prefetch_enabled: True`, settings.py:319, PERF-PREFETCH-CHAIN 후 재활성) — 스레드는 의도적으로 ID만 캐시(스레드 ~50ms 유지, swipe.py:85-91 주석), 카드 hydration은 요청 경로에 남는 설계. "IMP-8 꺼짐" 1차 추정은 **기각**.
+- **근본 원인 후보**: `DATABASES['buildings']`에 `CONN_MAX_AGE` 무 → 매 요청 Neon 신규 TLS 커넥션. 단 이는 **문서화된 소유권 결정**(Make-DB 소유 프로젝트에 앱 영구 커넥션 금지, CONTRIBUTING.md § Buildings-DB connection pooling) — 직접 CONN_MAX_AGE 추가는 소유권 위반. **승인된 해법 = Neon 서버측 pooler**: `BUILDINGS_DB_HOST`를 `ep-<id>-pooler.<region>...`로 (Railway env + 로컬 .env, user-applied, 코드 0줄). 2026-07-07 실측: connect tail max 2059→517ms 평탄화.
+- **p95 드라이버 = select (1389ms)** — cache miss 시 select p50 2.5배(1032 vs 412; miss 시 `get_pool_embeddings`가 buildings DB fetch = 같은 커넥션 비용). max 82s outlier 1건 = Neon autosuspend cold-start 추정 — pooler로는 안 잡힘, 별도(autosuspend 설정 or keepalive).
+- **가설 기각 2건**: ① embed cold-miss 지배 가설(2026-06-04 deferred 노트) — embed p50 75ms, 총량의 5%뿐. ② warmup 가설 — 세션내 1-2번째 swipe(p50 1577ms)가 3+번째(1650ms)보다 오히려 빠름.
+- **✅ pooler 적용 완료 (2026-07-13, user 전권 승인)**: Railway `archi-tinder` 서비스(production) `BUILDINGS_DB_HOST` → `ep-broad-hat-a1jaomn7-pooler.ap-southeast-1.aws.neon.tech` 플립 + 로컬 `backend/.env` 동일 플립(gitignored). 배포 `049e3b8a` SUCCESS, gunicorn 워커 3 클린 부팅(DB/커넥션 에러 0). 검증: prod buildings 역할(`make_web`)로 pooler 호스트 직접 SELECT → 36,673 publishable buildings 정상. 참고: prod app DB(`DB_HOST`=동일 엔드포인트 ep-broad-hat, DB=user_data)와 buildings(DB=archi_data)가 같은 Neon 엔드포인트 공유 — `default` alias는 CONN_MAX_AGE=600 유지, buildings만 pooler로(CONTRIBUTING.md 명시대로).
+- **잔여 액션**: ① 트래픽 쌓인 뒤(수일) `session_metrics_report --days 7` 재실측(before/after — prefetch p50 888ms 개선 확인) → ② 잔여 병목이면 후보: 스레드측 bcard warm-hydration(fast-swiper 트레이드오프 있음, swipe.py:85 주석), prefetch 구간 sub-split 계측(connect vs query vs cache), in-region 커넥션 비용 실측. ③ 82s outlier = Neon autosuspend cold-start 별도(설정 or keepalive).
+- 주의: 247건은 4-7월 코드 세대 혼합(Redis 5/26 도입·PERF-PREFETCH-CHAIN 6월 배포 전 데이터 포함) — stage 지배 구도는 유효하나 절대값은 pooler 플립 후 재실측이 기준. 30일 창 n=4(저트래픽)라 90일 창 채택. 원데이터 `/tmp/perf5-prod-90.json`(로컬 휘발).
+
+**✅ ROOT CAUSE + FIX (2026-07-16)**: Railway `Redis` 서비스가 **US 리전**에 배포돼 있었음(INFRA-REDIS-1 2026-05-26 생성 시 기본 리전 방치; `REDIS_URL`은 `redis.railway.internal`이라 겉보기 정상 — 내부 DNS가 리전 간 resolve, 지리 RTT ~172ms/op는 그대로. 시그니처: p50 171.6-172.6ms 분산 ~1ms = 순수 네트워크). swipe 경로 Redis 4-6회(prefetch-key get + `get_buildings_by_ids` per-card 순차 `cache.get` + select 스테이지) → prefetch 888ms(54%) + 0.7-1.5s jitter 전부 이것. **fix = Redis 서비스 리전 Southeast Asia 이동(user, Railway 대시보드, 캐시라 데이터 무손실)** → Redis get p50 172→1.56ms, `get_buildings_by_ids` warm 518→7ms. **합성 11-swipe 동일방법론 before/after: swipe total p50 3360→124ms(max 184), 전 stage <60ms — 목표(p50≤0.5s, p95≤1.0s) 달성.**
+- **진단법**: `railway ssh`로 prod 컨테이너 안 in-region 마이크로벤치(read-only `SELECT 1` connect 루프 + Redis RTT + 실 카드 SQL + `engine.get_buildings_by_ids` cold/warm 분해). 로컬 `railway run` delta 벤치는 클라이언트 RTT(~700ms)에 잠식돼 무용.
+- **가설 기각 2건**: ① #278 "per-request TLS connect" 가설 — in-region fresh connect 37ms뿐(888의 4%). ② **pooler flip(2026-07-13) 이득 ~3ms**(direct p50 37 vs pooler 34), tail 악화(max 728 vs 50) → **pooler REVERT 결정(2026-07-16)**: prod `BUILDINGS_DB_HOST` direct 복귀 + 로컬 `.env` 동일(user-applied).
+- cache_hit(902ms) > cache_miss(578ms) 역전 해명: hit=카드 3장=Redis 3회 순차, miss=1장=1회 — op당 172ms 시대 산물, 버그 아님.
+- 합성 오염 ledger(향후 텔레메트리 분석 시 제외): prod session `e1103b42-7dba…`(07-15 pre-fix) + `0e0cd2f7-0a63…`(07-16 post-fix) 각 11 swipes.
+- 잔여(비차단): select_ms max 82s outlier = pre-fix 시대 n=1 — 재발 시에만 추적(Neon autosuspend). 상세 메모리: `project_perf5_redis_region_fix`.
 
 ### FULL-LANGUAGE-1c — i18n 슬라이스 c: 프로필·보드 + 모달 — RESOLVED 2026-07-13 (`f54d998`-pre-squash) → **FULL-LANGUAGE-1 전체 CLOSE**
 최종 슬라이스 17파일 ~115 리터럴 — 3슬라이스(a #275 / b #276 / c) 합산 32파일 176줄 sweep 완료, 전 고트래픽 surface가 ko/en 동일 string source 렌더. FULL-LANGUAGE-1 백로그 항목 종결.
