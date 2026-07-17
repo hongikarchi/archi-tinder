@@ -6,6 +6,7 @@ FULL-WORKS-1:
 """
 import logging
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 
 from django.conf import settings
@@ -24,6 +25,12 @@ MAX_WORK_IMAGES = 10
 # Server-side size cap enforced at finalize (a presigned PUT cannot express
 # a size condition the way a POST policy's content-length-range could).
 MAX_WORK_IMAGE_BYTES = 10 * 1024 * 1024
+
+# GET /api/v1/works/ pagination (BACK-WORKS-1). Default equals the cap so the
+# existing frontend (getMyWorks() sends no params, no load-more UI) keeps
+# seeing up to 50 works with zero frontend change.
+_WORKS_PAGE_SIZE_DEFAULT = 50
+_WORKS_PAGE_SIZE_MAX = 50
 
 
 class PresignView(APIView):
@@ -88,16 +95,46 @@ class FinalizeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        """Return the authenticated user's uploaded works, newest first."""
+        """Return the authenticated user's uploaded works, newest first.
+
+        Query params (BACK-WORKS-1): page (1-indexed, default 1),
+        page_size (default + cap 50 — the default equals the cap so the
+        current fetch-all frontend, which sends no params, keeps seeing up
+        to 50 works with zero frontend change).
+
+        Response 200:
+          {works: [{upload_id, title, program, cover_url, is_publishable,
+                    gate_reason, created_at}...], total, page, page_size}
+
+        'total' is the total row count before pagination (not len(works)).
+        r2_keys is intentionally omitted from each item — the frontend
+        Created tab only consumes the fields above; cover_url is derived
+        server-side from r2_keys[0].
+        """
         from .models import Work
+
+        try:
+            page = max(1, int(request.query_params.get('page', 1)))
+        except (ValueError, TypeError):
+            page = 1
+        try:
+            page_size = min(
+                _WORKS_PAGE_SIZE_MAX,
+                max(1, int(request.query_params.get('page_size', _WORKS_PAGE_SIZE_DEFAULT))),
+            )
+        except (ValueError, TypeError):
+            page_size = _WORKS_PAGE_SIZE_DEFAULT
 
         profile = request.user.profile
         works_qs = Work.objects.filter(owner=profile).order_by('-created_at')
+        total = works_qs.count()
+        offset = (page - 1) * page_size
+        page_works = works_qs[offset: offset + page_size]
 
         public_base = getattr(settings, 'WORKS_PUBLIC_BASE_URL', '').rstrip('/')
 
         results = []
-        for w in works_qs:
+        for w in page_works:
             cover_url = None
             if w.r2_keys and public_base:
                 cover_url = f'{public_base}/{w.r2_keys[0]}'
@@ -105,14 +142,13 @@ class FinalizeView(APIView):
                 'upload_id': w.upload_id,
                 'title': w.title,
                 'program': w.program,
-                'r2_keys': w.r2_keys,
                 'cover_url': cover_url,
                 'is_publishable': w.is_publishable,
                 'gate_reason': w.gate_reason,
                 'created_at': w.created_at.isoformat(),
             })
 
-        return Response({'works': results, 'total': len(results)})
+        return Response({'works': results, 'total': total, 'page': page, 'page_size': page_size})
 
     def post(self, request):
         from .models import Work
@@ -182,23 +218,47 @@ class FinalizeView(APIView):
         # A presigned PUT cannot express a size cap the way the old POST
         # policy's content-length-range condition could, so the 10 MB cap
         # is enforced here, server-side, using the head_object ContentLength.
+        #
+        # BACK-WORKS-2: the per-key head_object round trips are parallelized
+        # (each is a blocking network call; N images = N serial RTTs
+        # otherwise). botocore clients are documented thread-safe, so the
+        # single shared s3_client is reused across worker threads. Results
+        # are gathered fully before any failure is reported, then walked in
+        # the ORIGINAL r2_keys order so the reported failing key is
+        # deterministic regardless of which thread finishes first.
         if settings.WORKS_R2_ENABLED:
             s3_client = _make_s3_client()
-            for key in r2_keys:
+
+            def _check_key(key):
                 try:
                     exists, size = verify_key_exists(key, s3_client=s3_client)
                 except Exception as exc:
                     logger.warning('verify_key_exists failed for key=%s: %s', key, exc)
+                    return 'error'
+                if not exists:
+                    return 'missing'
+                if size is not None and size > MAX_WORK_IMAGE_BYTES:
+                    return 'oversized'
+                return 'ok'
+
+            max_workers = min(len(r2_keys), MAX_WORK_IMAGES)
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # executor.map preserves input order in its results, matching
+                # r2_keys 1:1 regardless of completion order.
+                outcomes = list(executor.map(_check_key, r2_keys))
+
+            for key, outcome in zip(r2_keys, outcomes):
+                if outcome == 'error':
                     return Response(
                         {'detail': f'Storage check failed for key: {key}'},
                         status=500,
                     )
-                if not exists:
+                if outcome == 'missing':
                     return Response(
                         {'detail': f'Upload not found in storage: {key}'},
                         status=400,
                     )
-                if size is not None and size > MAX_WORK_IMAGE_BYTES:
+                if outcome == 'oversized':
                     return Response(
                         {'detail': f'Image exceeds 10MB: {key}'},
                         status=400,
