@@ -399,6 +399,11 @@ export const locales = {
         devFailed:             'Dev 로그인 실패: {detail}',
       },
     },
+    uploadWork: {
+      error: {
+        maxImages: '이미지는 최대 {max}장까지 업로드할 수 있습니다.',
+      },
+    },
   },
   en: {
     tabbar: {
@@ -793,6 +798,11 @@ export const locales = {
         loginFailed:           'Login failed. Please try again.',
         registerFailed:        'Registration failed. Please try again.',
         devFailed:             'Dev login failed: {detail}',
+      },
+    },
+    uploadWork: {
+      error: {
+        maxImages: 'You can upload up to {max} images.',
       },
     },
   },

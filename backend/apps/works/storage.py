@@ -43,18 +43,11 @@ def generate_presigned_post(key: str, content_type: str, max_bytes: int = 10 * 1
     if not settings.WORKS_R2_ENABLED:
         raise WorksR2DisabledError('WORKS_R2_ENABLED is False — no R2 credentials configured.')
 
-    import boto3  # noqa: PLC0415 -- lazy import intentional (see module docstring)
-
-    s3 = boto3.client(
-        's3',
-        endpoint_url=settings.R2_ENDPOINT_URL,
-        aws_access_key_id=settings.R2_ACCESS_KEY_ID,
-        aws_secret_access_key=settings.R2_SECRET_ACCESS_KEY,
-        region_name='auto',
-    )
+    s3 = _make_s3_client()
     result = s3.generate_presigned_post(
         Bucket=settings.R2_WORKS_BUCKET,
         Key=key,
+        Fields={'Content-Type': content_type},
         Conditions=[
             ['content-length-range', 1, max_bytes],
             ['starts-with', '$Content-Type', 'image/'],

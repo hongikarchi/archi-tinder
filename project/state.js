@@ -23,7 +23,7 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-07-17 10:50 KST',
+    updatedAt: '2026-07-17 11:02 KST',
     head: 'db68d08',
     branch: 'feature/claude-works-upload',
   },
@@ -138,8 +138,23 @@ window.PROJECT_STATE = {
     low: [
       {
         id: 'INFRA-WORKS-1',
-        title: 'R2_WORKS_BUCKET CORS 정책 ops 설정',
+        title: 'R2 works 버킷 프로비저닝 (dev/prod 버킷 + 환경별 토큰 + CORS + public access)',
         note: 'FULL-WORKS-1 배포 후 ops task. R2 버킷에 CORS 정책 설정 필요 (AllowedMethods: POST, AllowedOrigins: 도메인, AllowedHeaders: *). 설정 전 브라우저에서 presigned POST XHR이 CORS 에러로 차단됨. 코드 변경 없음, R2 대시보드 또는 wrangler cli.',
+      },
+      {
+        id: 'BACK-WORKS-1',
+        title: 'works 목록 페이지네이션 + 응답 슬리밍',
+        note: '`FinalizeView.get`(views.py)이 무페이지네이션 전량 직렬화 — 피어 목록 엔드포인트는 전부 50 cap(notifications/_build_boards_field 패턴). + 목록 응답의 `r2_keys` 전체 배열은 프론트 미소비(cover_url만 렌더) → 제외. 2026-07-16 ultracode 리뷰 low(Opus 확정, 현 규모 실해 없음 — 관례 일치성 이슈).',
+      },
+      {
+        id: 'BACK-WORKS-2',
+        title: 'finalize R2 HEAD 순차 왕복 개선',
+        note: 'finalize가 r2_keys당 동기 `head_object`를 순차 실행(요청 사이클 내, 이미지 N장 = N왕복). 개선: 소형 ThreadPoolExecutor 병렬화 or 커버 외 키는 HEAD 생략(prefix 소유권 검증은 이미 상류에서 수행, 누락 이미지는 `_process_work` fail-closed가 커버). 2026-07-16 ultracode 리뷰 low.',
+      },
+      {
+        id: 'FRONT-SWIPE-CLEANUP-1',
+        title: '#281 진행바 리뷰 low 3건 정리',
+        note: '`SwipePage.jsx`: ① 죽은 `value` prop×2 + orphan `confidence` 로컬(353/473/585 — 시그니처에서 제거된 prop을 호출부가 계속 전달, 주석이 dead code를 문서화) ② pct 공식 3분기 verbatim 중복(87/90/94 — 분기 밖 1회 계산 + converged만 100 override) ③ 도달불가 `like+dislike` fallback(76-78 — 백엔드 `_progress()`가 세 필드 항상 동시 방출) → `pr…',
       },
       {
         id: 'BACK-ANALYTICS-1',
@@ -517,14 +532,6 @@ window.PROJECT_STATE = {
     {
       path: 'README.md',
       role: '프로젝트 안내 문서',
-    },
-    {
-      path: 'Task.md',
-      role: '태스크 보드 문서',
-    },
-    {
-      path: 'Task.md',
-      role: '태스크 보드 문서',
     },
     {
       path: 'Task.md',
@@ -2217,14 +2224,6 @@ window.PROJECT_STATE = {
     {
       path: 'project/mermaid.min.js',
       role: 'Mermaid 다이어그램 번들',
-    },
-    {
-      path: 'project/state.js',
-      role: '대시보드 상태 데이터',
-    },
-    {
-      path: 'project/state.js',
-      role: '대시보드 상태 데이터',
     },
     {
       path: 'project/state.js',

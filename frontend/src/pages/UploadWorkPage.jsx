@@ -11,7 +11,11 @@
 import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { presignFiles, uploadToR2, finalizeWork } from '../api/works.js'
+import { useTranslation } from '../i18n/index.js'
 import s from './UploadWorkPage.module.css'
+
+// Matches backend MAX_WORK_IMAGES — presign/finalize reject >10 images with a 400.
+const MAX_WORK_IMAGES = 10
 
 // Each entry maps the backend PROGRAM_CHOICES key (value sent to API) to a
 // human-readable label shown in the UI.  Ordered to match canonical_v2_buildings
@@ -70,6 +74,7 @@ async function convertToWebP(file) {
 export default function UploadWorkPage() {
   const navigate = useNavigate()
   const fileInputRef = useRef(null)
+  const { t } = useTranslation()
 
   const [files, setFiles] = useState([])
   const [formData, setFormData] = useState({
@@ -86,8 +91,10 @@ export default function UploadWorkPage() {
 
   /* ── File selection / drop ────────────────────────────────────────────── */
 
+  // Returns true on success, false on conversion failure (caller uses this to
+  // avoid clobbering a conversion error with the max-images error below).
   async function processFile(file) {
-    if (!file.type.startsWith('image/')) return
+    if (!file.type.startsWith('image/')) return true
     setUploadState('converting')
     try {
       const blob = await convertToWebP(file)
@@ -96,25 +103,41 @@ export default function UploadWorkPage() {
     } catch (err) {
       setErrorMsg('이미지 변환 중 오류가 발생했습니다: ' + err.message)
       setUploadState('error')
-      return
+      return false
     }
     setUploadState('idle')
+    return true
+  }
+
+  // Enforce MAX_WORK_IMAGES (existing selected + new) — keep what fits, reject the excess.
+  async function addFiles(selected) {
+    setErrorMsg('')
+    const imageFiles = selected.filter(f => f.type.startsWith('image/'))
+    const room = MAX_WORK_IMAGES - files.length
+    const toAdd = room > 0 ? imageFiles.slice(0, room) : []
+    const rejectedCount = imageFiles.length - toAdd.length
+
+    let conversionFailed = false
+    for (const f of toAdd) {
+      const ok = await processFile(f)
+      if (!ok) conversionFailed = true
+    }
+
+    if (rejectedCount > 0 && !conversionFailed) {
+      setErrorMsg(t('uploadWork.error.maxImages', { max: MAX_WORK_IMAGES }))
+    }
   }
 
   async function handleFileInput(e) {
     const selected = Array.from(e.target.files || [])
     e.target.value = ''
-    for (const f of selected) {
-      await processFile(f)
-    }
+    await addFiles(selected)
   }
 
   async function handleDrop(e) {
     e.preventDefault()
     const dropped = Array.from(e.dataTransfer.files || [])
-    for (const f of dropped) {
-      await processFile(f)
-    }
+    await addFiles(dropped)
   }
 
   function handleDragOver(e) {
@@ -244,36 +267,38 @@ export default function UploadWorkPage() {
 
         {uploadState !== 'processing' && (
           <form onSubmit={handleSubmit} noValidate>
-            {/* ── Drop zone ─────────────────────────────────────────────── */}
-            <div
-              className={s.dropzone}
-              onClick={() => fileInputRef.current?.click()}
-              onDrop={handleDrop}
-              onDragOver={handleDragOver}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') fileInputRef.current?.click()
-              }}
-              aria-label="이미지를 여기에 드래그하거나 클릭해 선택하세요"
-            >
-              {files.length === 0
-                ? (
-                  <>
-                    <div style={{ fontSize: 32, marginBottom: 8 }}>+</div>
-                    <div>이미지를 드래그하거나 클릭해 선택하세요</div>
-                    <div style={{ fontSize: 12, marginTop: 4, color: 'var(--color-text-dim)' }}>
-                      JPG, PNG, WebP — 최대 2400px로 자동 변환됩니다
+            {/* ── Drop zone (hidden once MAX_WORK_IMAGES is reached — nothing more to add) ── */}
+            {files.length < MAX_WORK_IMAGES && (
+              <div
+                className={s.dropzone}
+                onClick={() => fileInputRef.current?.click()}
+                onDrop={handleDrop}
+                onDragOver={handleDragOver}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') fileInputRef.current?.click()
+                }}
+                aria-label="이미지를 여기에 드래그하거나 클릭해 선택하세요"
+              >
+                {files.length === 0
+                  ? (
+                    <>
+                      <div style={{ fontSize: 32, marginBottom: 8 }}>+</div>
+                      <div>이미지를 드래그하거나 클릭해 선택하세요</div>
+                      <div style={{ fontSize: 12, marginTop: 4, color: 'var(--color-text-dim)' }}>
+                        JPG, PNG, WebP — 최대 2400px로 자동 변환됩니다
+                      </div>
+                    </>
+                  )
+                  : (
+                    <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
+                      + 이미지 추가
                     </div>
-                  </>
-                )
-                : (
-                  <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
-                    + 이미지 추가
-                  </div>
-                )
-              }
-            </div>
+                  )
+                }
+              </div>
+            )}
 
             <input
               ref={fileInputRef}

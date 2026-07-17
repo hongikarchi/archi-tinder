@@ -18,6 +18,9 @@ from .storage import WorksR2DisabledError, _make_s3_client, generate_presigned_p
 
 logger = logging.getLogger('apps.works')
 
+# Upper bound on images per upload request (presign) / per work (finalize).
+MAX_WORK_IMAGES = 10
+
 
 class PresignView(APIView):
     """POST /api/v1/works/presign/ — generate presigned POST URLs."""
@@ -34,6 +37,11 @@ class PresignView(APIView):
         files = request.data.get('files', [])
         if not isinstance(files, list):
             return Response({'detail': 'files must be a list.'}, status=400)
+        if len(files) > MAX_WORK_IMAGES:
+            return Response(
+                {'detail': f'Too many files: max {MAX_WORK_IMAGES} images per work.'},
+                status=400,
+            )
 
         _MAX_BYTES = 10 * 1024 * 1024
 
@@ -114,7 +122,7 @@ class FinalizeView(APIView):
         program = data.get('program', '')
         location_city = data.get('location_city', '')
         location_country = data.get('location_country', '')
-        project_year = data.get('project_year')
+        project_year_raw = data.get('project_year')
         r2_keys = data.get('r2_keys', [])
         is_copyright_confirmed = data.get('is_copyright_confirmed', False)
 
@@ -134,11 +142,30 @@ class FinalizeView(APIView):
                 status=400,
             )
 
+        # 1c. project_year, when provided, must be an integer (raw INSERT would
+        # otherwise raise ValueError/TypeError -> unhandled 500).
+        project_year = None
+        if project_year_raw is not None:
+            try:
+                project_year = int(project_year_raw)
+            except (TypeError, ValueError):
+                return Response(
+                    {'detail': f'project_year must be an integer, got {project_year_raw!r}.'},
+                    status=400,
+                )
+
         # 2. Ownership check — each key must belong to the authenticated user.
         if not isinstance(r2_keys, list):
             return Response({'detail': 'r2_keys must be a list.'}, status=400)
         if not r2_keys:
             return Response({'detail': 'At least one image is required.'}, status=400)
+        if len(r2_keys) > MAX_WORK_IMAGES:
+            return Response(
+                {'detail': f'Too many images: max {MAX_WORK_IMAGES} per work.'},
+                status=400,
+            )
+        if not all(isinstance(key, str) for key in r2_keys):
+            return Response({'detail': 'r2_keys must be a list of strings.'}, status=400)
         profile = request.user.profile
         expected_prefix = f'works/{profile.id}/'
         for key in r2_keys:
@@ -178,7 +205,7 @@ class FinalizeView(APIView):
             location_city=location_city,
             location_country=location_country,
             project_year=project_year,
-            r2_keys=r2_keys if isinstance(r2_keys, list) else [],
+            r2_keys=r2_keys,
             is_copyright_confirmed=True,
             is_publishable=False,
         )

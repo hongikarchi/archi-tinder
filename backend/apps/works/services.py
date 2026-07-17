@@ -4,9 +4,10 @@ FULL-WORKS-1: _process_work runs in a daemon thread after Work creation.
 It calls Gemini to validate the architectural content, then updates
 is_publishable + gate_reason on the Work row.
 
-If the Work model does not have gemini result fields, the summary is stored
-in gate_reason (cleared to '' when publishable=True) and is_publishable is
-set to True.
+gate_reason holds a short human-readable explanation of why a work failed
+the gate (or '' when publishable); it does not store the Gemini visual
+summary. Any failure (misconfiguration, Gemini unavailable/timeout, or
+is_architectural=False) fails closed — is_publishable stays False.
 """
 import logging
 
@@ -29,26 +30,23 @@ _ATMOSPHERE_ENUM = [
     'Ecological',
 ]
 
+# Trimmed to the fields the gate logic actually consumes: is_architectural
+# gates publishing, atmosphere is logged. The Work model has no columns to
+# persist style / color_tone / material_visual / visual_description, so
+# those were dropped from the schema (previously requested only to feed the
+# now-deleted HF embedding call).
 _GEMINI_RESPONSE_SCHEMA = {
     'type': 'object',
     'properties': {
         'is_architectural': {'type': 'boolean'},
-        'style': {'type': 'string'},
-        'color_tone': {'type': 'string'},
         'atmosphere': {
             'type': 'string',
             'enum': _ATMOSPHERE_ENUM,
         },
-        'material_visual': {'type': 'string'},
-        'visual_description': {'type': 'string'},
     },
     'required': [
         'is_architectural',
-        'style',
-        'color_tone',
         'atmosphere',
-        'material_visual',
-        'visual_description',
     ],
 }
 
@@ -72,6 +70,13 @@ def _process_work(work_id: int) -> None:
         _connections.close_all()
 
 
+def _finish(work, publishable: bool, reason: str) -> None:
+    """Set is_publishable + gate_reason and save. Shared tail of every gate branch."""
+    work.is_publishable = publishable
+    work.gate_reason = reason
+    work.save(update_fields=['is_publishable', 'gate_reason', 'updated_at'])
+
+
 def _do_process_work(work_id: int) -> None:
     """Core processing logic — separated for easier testing."""
     from apps.works.models import Work
@@ -83,9 +88,7 @@ def _do_process_work(work_id: int) -> None:
         return
 
     if not work.r2_keys:
-        work.is_publishable = False
-        work.gate_reason = 'No images uploaded.'
-        work.save(update_fields=['is_publishable', 'gate_reason', 'updated_at'])
+        _finish(work, False, 'No images uploaded.')
         return
 
     public_base = settings.WORKS_PUBLIC_BASE_URL.rstrip('/')
@@ -97,9 +100,7 @@ def _do_process_work(work_id: int) -> None:
             '_process_work: WORKS_PUBLIC_BASE_URL is not configured for work_id=%s; '
             'failing closed (is_publishable stays False).', work_id,
         )
-        work.is_publishable = False
-        work.gate_reason = 'Validation skipped: WORKS_PUBLIC_BASE_URL not configured.'
-        work.save(update_fields=['is_publishable', 'gate_reason', 'updated_at'])
+        _finish(work, False, 'Validation skipped: WORKS_PUBLIC_BASE_URL not configured.')
         return
 
     cover_url = f'{public_base}/{work.r2_keys[0]}'
@@ -113,29 +114,15 @@ def _do_process_work(work_id: int) -> None:
             'Gemini validation unavailable for work_id=%s (key unset or transient error); '
             'failing closed (is_publishable stays False).', work_id,
         )
-        work.is_publishable = False
-        work.gate_reason = 'Validation unavailable: Gemini not configured or transient error.'
-        work.save(update_fields=['is_publishable', 'gate_reason', 'updated_at'])
+        _finish(work, False, 'Validation unavailable: Gemini not configured or transient error.')
         return
 
     if not gemini_result.get('is_architectural', False):
-        work.is_publishable = False
-        work.gate_reason = 'Not recognized as architectural work'
-        work.save(update_fields=['is_publishable', 'gate_reason', 'updated_at'])
+        _finish(work, False, 'Not recognized as architectural work')
         return
 
-    # --- HuggingFace embedding (best-effort; failure does not block publish) ---
-    visual_description = gemini_result.get('visual_description', '')
-    if visual_description:
-        try:
-            _call_hf_embed(visual_description)
-        except Exception as exc:
-            logger.warning('HF embedding failed for work_id=%s: %s', work_id, exc)
-
     # Publish the work.
-    work.is_publishable = True
-    work.gate_reason = ''
-    work.save(update_fields=['is_publishable', 'gate_reason', 'updated_at'])
+    _finish(work, True, '')
     logger.info('work_id=%s published (atmosphere=%s)', work_id, gemini_result.get('atmosphere'))
 
 
@@ -153,6 +140,8 @@ def _call_gemini_image(image_url: str):
         from google import genai
         from google.genai import types as genai_types
 
+        from apps.recommendation.services._gemini import _retry_gemini_call
+
         client = genai.Client(api_key=api_key)
         model = settings.GEMINI_IMAGE_MODEL or settings.GEMINI_TEXT_MODEL
 
@@ -163,7 +152,12 @@ def _call_gemini_image(image_url: str):
             'or architectural structure.'
         )
 
-        response = client.models.generate_content(
+        # Routed through _retry_gemini_call (15s deadline) rather than a raw
+        # client.models.generate_content call — the raw SDK can hang 30-40s
+        # with no timeout, and every other Gemini call site in the repo goes
+        # through this guard (see apps.recommendation.services._gemini).
+        response = _retry_gemini_call(
+            client.models.generate_content,
             model=model,
             contents=[
                 genai_types.Part.from_uri(file_uri=image_url, mime_type='image/webp'),
@@ -174,6 +168,7 @@ def _call_gemini_image(image_url: str):
                 response_schema=_GEMINI_RESPONSE_SCHEMA,
                 temperature=0.0,
             ),
+            timeout=15.0,
         )
         import json
         text = response.text
@@ -181,29 +176,3 @@ def _call_gemini_image(image_url: str):
     except Exception as exc:
         logger.warning('Gemini image call failed: %s', exc)
         return None
-
-
-def _call_hf_embed(text: str):
-    """Request a 384-dim embedding from HuggingFace Inference API.
-
-    Returns the embedding list on success, or raises on failure.
-    The caller catches exceptions so failure does not block publishing.
-    """
-    import requests
-
-    hf_token = settings.HF_TOKEN
-    if not hf_token:
-        return None
-
-    url = (
-        'https://api-inference.huggingface.co/pipeline/feature-extraction/'
-        'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2'
-    )
-    headers = {'Authorization': f'Bearer {hf_token}'}
-    resp = requests.post(url, headers=headers, json={'inputs': [text]}, timeout=10)
-    resp.raise_for_status()
-    data = resp.json()
-    # HF returns [[...384 floats...]] for a single-item inputs list.
-    if isinstance(data, list) and len(data) > 0:
-        return data[0]
-    return data

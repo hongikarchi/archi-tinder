@@ -186,8 +186,17 @@ Likely slices:
 
 ### LOW
 
-#### INFRA-WORKS-1 — R2_WORKS_BUCKET CORS 정책 ops 설정
-FULL-WORKS-1 배포 후 ops task. R2 버킷에 CORS 정책 설정 필요 (AllowedMethods: POST, AllowedOrigins: 도메인, AllowedHeaders: *). 설정 전 브라우저에서 presigned POST XHR이 CORS 에러로 차단됨. 코드 변경 없음, R2 대시보드 또는 wrangler cli.
+#### INFRA-WORKS-1 — R2 works 버킷 프로비저닝 (dev/prod 버킷 + 환경별 토큰 + CORS + public access)
+_(2026-07-17 플랜 `streamed-bubbling-lagoon` 으로 구체화·진행중)_ 토큰 모델 확정 = **환경별 2개**: dev 토큰(works-dev 버킷만 스코프, 협업자 전달용) / prod 토큰(archibe-avatars+works-prod 멀티버킷, Railway 전용) — 코드 무수정(공유 `R2_*` env 유지). ops 체크리스트: ① `archibe-works-dev` 생성 + Object R/W 토큰 + CORS(`http://localhost:5174` — vite.config.js 고정 포트, 5173 아님!) + public access(r2.dev)=`WORKS_PUBLIC_BASE_URL` → 협업자 전달 (지금). ② `archibe-works-prod` + prod 토큰 재발급 + prod 도메인 CORS(Vercel 도메인 레포에 없음, 대시보드 확인) + Railway env 4종 — 배포 직전 (Workstream C). 설정 전 브라우저 presigned POST XHR이 CORS로 차단됨.
+
+#### BACK-WORKS-1 — works 목록 페이지네이션 + 응답 슬리밍
+`FinalizeView.get`(views.py)이 무페이지네이션 전량 직렬화 — 피어 목록 엔드포인트는 전부 50 cap(notifications/_build_boards_field 패턴). + 목록 응답의 `r2_keys` 전체 배열은 프론트 미소비(cover_url만 렌더) → 제외. 2026-07-16 ultracode 리뷰 low(Opus 확정, 현 규모 실해 없음 — 관례 일치성 이슈).
+
+#### BACK-WORKS-2 — finalize R2 HEAD 순차 왕복 개선
+finalize가 r2_keys당 동기 `head_object`를 순차 실행(요청 사이클 내, 이미지 N장 = N왕복). 개선: 소형 ThreadPoolExecutor 병렬화 or 커버 외 키는 HEAD 생략(prefix 소유권 검증은 이미 상류에서 수행, 누락 이미지는 `_process_work` fail-closed가 커버). 2026-07-16 ultracode 리뷰 low.
+
+#### FRONT-SWIPE-CLEANUP-1 — #281 진행바 리뷰 low 3건 정리
+`SwipePage.jsx`: ① 죽은 `value` prop×2 + orphan `confidence` 로컬(353/473/585 — 시그니처에서 제거된 prop을 호출부가 계속 전달, 주석이 dead code를 문서화) ② pct 공식 3분기 verbatim 중복(87/90/94 — 분기 밖 1회 계산 + converged만 100 override) ③ 도달불가 `like+dislike` fallback(76-78 — 백엔드 `_progress()`가 세 필드 항상 동시 방출) → `progress?.swipe_count ?? 0`. 2026-07-16 ultracode 리뷰 low 3건(Opus 확정), 기능 영향 0.
 
 #### BACK-ANALYTICS-1 — session_metrics_report 콘솔 ESC-byte 주입 (pre-existing #268)
 `session_metrics_report.py` 텍스트 모드가 SessionEvent payload의 `domain`/`context` 값을 raw로 stdout 출력(~:548-559, #268 소산) — prod payload에 ESC 바이트 섞이면 터미널 이스케이프 주입 가능. BACK-PERFORMANCE-5a(`afc0b88`) Opus 검증서 실증됐으나 해당 PR 미접촉 영역이라 분리. 수정 = 출력 전 non-printable strip/repr(). 운영자-실행 read-only 커맨드라 LOW.
@@ -251,15 +260,16 @@ Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over
 presigned direct upload to Cloudflare R2: Django `apps/works/` 신설 + `/api/v1/works/presign/`·`/api/v1/works/` API + UploadWorkPage.
 - [x] Work 모델 (upload_id `usr_XXXXXX`, 14개 program enum, r2_keys JSONField, is_publishable=False, report_count) + migration 0001_initial
 - [x] presign 뷰: 10MB content-length-range 정책 + image/* 강제 + 10분 만료, key `works/{profile_id}/{uuid8}_{slot}.webp`
-- [x] finalize 뷰: 저작권 확인 → namespace 검증(403) → R2 존재 확인 → Work 저장 → 백그라운드 스레드(Gemini 품질 게이트 + atmosphere enum 12개 강제 + HuggingFace 384차원 임베딩) → 201 `{upload_id, status:'processing'}` 즉시 반환
+- [x] finalize 뷰: 저작권 확인 → namespace 검증(403) → R2 존재 확인 → Work 저장 → 백그라운드 스레드(Gemini 품질 게이트 + atmosphere enum 12개 강제; HF 384차원 임베딩은 07-17 fix에서 삭제 — 저장 필드 부재 dead call) → 201 `{upload_id, status:'processing'}` 즉시 반환
 - [x] storage.py: `_make_s3_client()` 공유 + `generate_presigned_post()` + `verify_key_exists()` (boto3 lazy, accounts/storage.py 패턴 미러)
 - [x] WORKS_R2_ENABLED 플래그, INSTALLED_APPS 등록, `/api/v1/works/` URL
-- [x] 테스트 9개 (presign 503/400x2, finalize 400/403/400/201/401) — all PASS
+- [x] 테스트 14개 (기존 9: presign 503/400x2, finalize 400/403/400/201/401 + fix 배치 5: Content-Type Fields 회귀 / presign·finalize 11장 cap / project_year 비정수 / 비str r2_key) — all PASS
 - [x] UploadWorkPage: canvas.toBlob WebP 변환(max 2400px) + XHR progress + processing/error 상태 UI + /upload 라우트
 - [x] r2_keys isinstance + empty 가드 패치 (2 LOW 소견)
+- [x] **리뷰 fix 배치 2026-07-17** (ultracode 4-lens + Opus verify 10건 확정 → critical+medium+저비용 low 적용): presign `Fields={'Content-Type': ...}` 누락 수정(**critical** — boto3는 Condition에서 field 자동 생성 안 함 → 실 R2 업로드 전면 거부되던 결함) · Gemini 호출 `_retry_gemini_call` 15s 데드라인 경유 · HF embed dead call 삭제 + `_GEMINI_RESPONSE_SCHEMA` 소비 필드로 트림 · project_year/r2_keys 원소 입력검증(500→400) · `MAX_WORK_IMAGES=10` 3-tier(presign+finalize+프론트 keep-what-fits, 신규 문자열 t() i18n) · DRY 3건(`_finish` 헬퍼, `_make_s3_client` 재사용, 잔여 ternary). 유보 → BACK-WORKS-1(페이지네이션)/BACK-WORKS-2(HEAD 병렬화)
 - 검증: workflow 2 cycles commitReady=true · app-test FEATURE-SCOPED 5/5 PASS · drift clean
-- Deferred-MEDIUM: FULL-WORKS-2 (Phase 2 works srcset/LQIP + algorithm 통합 — Phase 1 배포 후)
-- Deferred-LOW: INFRA-WORKS-1 (R2_WORKS_BUCKET CORS 정책 ops 설정)
+- Deferred-MEDIUM: FULL-WORKS-2 (Phase 2 works srcset/LQIP + algorithm 통합 + works 임베딩 저장 필드·HF 호출 재도입 — Phase 1 배포 후; 임베딩 dead call은 2026-07-17 fix에서 삭제됨)
+- Deferred-LOW: INFRA-WORKS-1 (R2 works 버킷 프로비저닝 — `## Next` § LOW로 구체화, 2026-07-17 진행중)
 
 ### BACK-PERFORMANCE-5 — Swipe latency 0.7-1.5s 흔들림 — RESOLVED 2026-07-16 (ops-only, 코드 0줄)
 Codex retest 2026-05-26: browser swipe 1.82s/1.75s/1.12s/1.81s; server swipe 1.50s/1.38s/0.746s/1.36s. **PR4 async prefetch consume IS working** — 3rd swipe with cache hit drops to 156ms prefetch stage. But variability is high. Identify which stage causes the 0.7→1.5s spread (DB query latency? embedding cache miss? pgvector?). Aim for swipe p95 ≤1.0s and p50 ≤0.5s on Singapore prod. **(2026-06-28 HIGH로 승격 — 코어 스와이프 루프 + <1s 페이지로드 목표 + 런칭 임박.)**
