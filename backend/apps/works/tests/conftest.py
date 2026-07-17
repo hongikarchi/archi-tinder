@@ -3,9 +3,12 @@
 Mirrors the accounts/tests/conftest.py pattern: sets env vars before Django
 settings import and overrides DATABASES to in-memory SQLite.
 
-The django_db_modify_db_settings fixture also resets Django's ConnectionHandler
-cached_property and thread-local connections so the SQLite override takes effect
-even after django.setup() has been called by the root conftest.
+Must NOT touch django.db.connections: in a full-suite run another package's
+test has already driven django_db_setup, so the live in-memory SQLite DB
+(migrated) hangs off the existing connection wrapper — deleting/resetting
+connections here discards that DB and every later works test dies with
+"no such table: auth_user" (exactly what broke CI while isolated
+`pytest apps/works/tests/` runs stayed green).
 """
 import os
 
@@ -30,41 +33,20 @@ import pytest  # noqa: E402
 
 @pytest.fixture(scope='session')
 def django_db_modify_db_settings():
-    """Override DATABASES to in-memory SQLite before pytest-django creates the test DB.
+    """Override both databases to SQLite in-memory for isolated test runs.
 
-    Also resets Django's ConnectionHandler cached_property and thread-local
-    connection objects so the new SQLite backend is used even when the root
-    conftest has already called django.setup().
+    Mirrors 'buildings' to 'default' so no real PostgreSQL is needed.
+    Matches the root backend/conftest.py pattern.
     """
     from django.conf import settings
-    from django.db import connections
-
-    sqlite_default = {
+    settings.DATABASES['default'] = {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': ':memory:',
         'ATOMIC_REQUESTS': False,
     }
-    sqlite_buildings = {
+    settings.DATABASES['buildings'] = {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': ':memory:',
         'ATOMIC_REQUESTS': False,
         'TEST': {'MIRROR': 'default'},
     }
-
-    settings.DATABASES['default'] = sqlite_default
-    settings.DATABASES['buildings'] = sqlite_buildings
-
-    # Reset the ConnectionHandler's cached 'settings' property so it re-reads
-    # the updated settings.DATABASES on next access.
-    try:
-        del connections.__dict__['settings']
-    except KeyError:
-        pass  # not yet cached — nothing to do
-
-    # Delete any already-instantiated DatabaseWrapper objects so create_connection
-    # is called fresh with the new SQLite backend.
-    for alias in ('default', 'buildings'):
-        try:
-            del connections[alias]
-        except Exception:
-            pass
