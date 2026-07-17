@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-07-17 21:13 KST',
-    head: 'db68d08',
-    branch: 'feature/claude-works-upload',
+    updatedAt: '2026-07-17 21:41 KST',
+    head: '7e974a2',
+    branch: 'feature/claude-works-followup',
   },
   done: [
+    {
+      id: 'FULL-WORKS-1a',
+      title: '업로드 후속 fix 3건 (pagination + parallel HEAD + i18n)',
+      completedAt: '2026-07-17',
+      note: '#282 머지 시 유보한 리뷰 low 2건 + i18n 사각 1건, `feature/claude-works-followup` 단일 PR.',
+    },
     {
       id: 'FULL-WORKS-1',
       title: '건축 작품 업로드 Phase 1',
@@ -69,12 +75,6 @@ window.PROJECT_STATE = {
       title: 'swipe timing_breakdown 계측 리더',
       completedAt: '2026-07-13',
       note: '`session_metrics_report`가 SessionEvent `timing_breakdown`을 이제 집계 — stage별 p50/p95/max + cache_hit 분리 + 세션내 위치 warmup bucket으로 swipe 0.7-1.5s 변동의 지배 원인을 prod 데이터로 특정 가능.',
-    },
-    {
-      id: 'FULL-ONBOARDING-2',
-      title: 'is_temp 라이프사이클 마감 (#243 fast-follows)',
-      completedAt: '2026-07-13',
-      note: 'temp 보드 누수 5개 사이트 일괄 마감: one-way finalize 강제 + 리스트/카운트/취향벡터/피드 전부 `is_temp=False` 필터 — 사일런트 보드 유실 경로 차단.',
     },
   ],
   now: [],
@@ -142,16 +142,6 @@ window.PROJECT_STATE = {
         note: 'FULL-WORKS-1 배포 후 ops task. R2 버킷에 CORS 정책 설정 필요 (AllowedMethods: POST, AllowedOrigins: 도메인, AllowedHeaders: *). 설정 전 브라우저에서 presigned POST XHR이 CORS 에러로 차단됨. 코드 변경 없음, R2 대시보드 또는 wrangler cli.',
       },
       {
-        id: 'BACK-WORKS-1',
-        title: 'works 목록 페이지네이션 + 응답 슬리밍',
-        note: '`FinalizeView.get`(views.py)이 무페이지네이션 전량 직렬화 — 피어 목록 엔드포인트는 전부 50 cap(notifications/_build_boards_field 패턴). + 목록 응답의 `r2_keys` 전체 배열은 프론트 미소비(cover_url만 렌더) → 제외. 2026-07-16 ultracode 리뷰 low(Opus 확정, 현 규모 실해 없음 — 관례 일치성 이슈).',
-      },
-      {
-        id: 'BACK-WORKS-2',
-        title: 'finalize R2 HEAD 순차 왕복 개선',
-        note: 'finalize가 r2_keys당 동기 `head_object`를 순차 실행(요청 사이클 내, 이미지 N장 = N왕복). 개선: 소형 ThreadPoolExecutor 병렬화 or 커버 외 키는 HEAD 생략(prefix 소유권 검증은 이미 상류에서 수행, 누락 이미지는 `_process_work` fail-closed가 커버). 2026-07-16 ultracode 리뷰 low.',
-      },
-      {
         id: 'FRONT-SWIPE-CLEANUP-1',
         title: '#281 진행바 리뷰 low 3건 정리',
         note: '`SwipePage.jsx`: ① 죽은 `value` prop×2 + orphan `confidence` 로컬(353/473/585 — 시그니처에서 제거된 prop을 호출부가 계속 전달, 주석이 dead code를 문서화) ② pct 공식 3분기 verbatim 중복(87/90/94 — 분기 밖 1회 계산 + converged만 100 override) ③ 도달불가 `like+dislike` fallback(76-78 — 백엔드 `_progress()`가 세 필드 항상 동시 방출) → `pr…',
@@ -217,6 +207,13 @@ window.PROJECT_STATE = {
       sha: '8ddee5b',
     },
     {
+      number: 282,
+      title: 'feat(FULL-WORKS-1): 건축 작품 업로드 Phase 1 — works 앱 + presigned POST + Created 탭',
+      mergedAt: '2026-07-17T12:19:02Z',
+      mergedAtKST: '2026-07-17 21:19 KST',
+      sha: '7e974a2',
+    },
+    {
       number: 281,
       title: 'feat(swipe): count-based progress bar — linear fill on every swipe',
       mergedAt: '2026-07-17T01:48:21Z',
@@ -257,13 +254,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-07-12T17:59:59Z',
       mergedAtKST: '2026-07-13 02:59 KST',
       sha: '73b9c94',
-    },
-    {
-      number: 274,
-      title: 'fix(image): cover_full_url raw passthrough + telemetry currentSrc (FRONT-IMAGE-RESIZE-3)',
-      mergedAt: '2026-07-12T17:28:52Z',
-      mergedAtKST: '2026-07-13 02:28 KST',
-      sha: 'a299af6',
     },
   ],
   agents: [

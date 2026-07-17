@@ -137,7 +137,6 @@ _(2026-06-08 범위 축소: #212(`4e58195`) Case #3 resume guard가 **진행중(
 
 _(2026-07-12 감사 re-pin: 전제 유효, 라인 이동 — resume guard `session_service.py:167-182`(completed 제외), 신규 세션 cold-create `:397-416`(phase='exploring', like_vectors=[] 등 전부 빈 값), `liked_ids`는 완료-세션 리포트에만 사용(`:688-689`), warm-start seed 경로 여전히 부재.)_
 
-
 ### MEDIUM
 #### FULL-WORKS-2 — works Phase 2: srcset/LQIP + 알고리즘 통합
 FULL-WORKS-1 배포 후. (1) `rightSizeImageUrl.js`에 R2 works URL srcset/LQIP 처리 추가 (Cloudflare Image Transforms 필요 — ops 설정 선행). (2) `engine.py` Python-layer에 `user_uploaded_works` 풀 병합 — 별도 협업자(algorithm 소유) 작업, 설계 sync 필요.
@@ -188,12 +187,6 @@ Likely slices:
 
 #### INFRA-WORKS-1 — R2 works 버킷 프로비저닝 (dev/prod 버킷 + 환경별 토큰 + CORS + public access)
 _(2026-07-17 플랜 `streamed-bubbling-lagoon`; **dev 버킷 완료**, prod 남음)_ 토큰 모델 확정 = **환경별 2개**: dev 토큰(works-dev 버킷만 스코프, 협업자 전달용) / prod 토큰(archibe-avatars+works-prod 멀티버킷, Railway 전용) — 코드 무수정(공유 `R2_*` env 유지). ✅ ① DONE 2026-07-17 (Cloudflare MCP API): `archibe-works-dev`(APAC) 생성 + CORS(`http://localhost:5174`+`5173`, **PUT**+content-type — presigned PUT 전환 반영) + public access `pub-b071ab81….r2.dev` + Object R/W dev 토큰(대시보드) + 로컬 `.env` 세팅 + 실업로드 E2E 검증. 남음 ② `archibe-works-prod` + prod 토큰 재발급(avatars+works-prod 멀티버킷) + prod 도메인 CORS(**PUT**; Vercel 도메인 대시보드 확인) + Railway env 4종 — 배포 직전 (Workstream C).
-
-#### BACK-WORKS-1 — works 목록 페이지네이션 + 응답 슬리밍
-`FinalizeView.get`(views.py)이 무페이지네이션 전량 직렬화 — 피어 목록 엔드포인트는 전부 50 cap(notifications/_build_boards_field 패턴). + 목록 응답의 `r2_keys` 전체 배열은 프론트 미소비(cover_url만 렌더) → 제외. 2026-07-16 ultracode 리뷰 low(Opus 확정, 현 규모 실해 없음 — 관례 일치성 이슈).
-
-#### BACK-WORKS-2 — finalize R2 HEAD 순차 왕복 개선
-finalize가 r2_keys당 동기 `head_object`를 순차 실행(요청 사이클 내, 이미지 N장 = N왕복). 개선: 소형 ThreadPoolExecutor 병렬화 or 커버 외 키는 HEAD 생략(prefix 소유권 검증은 이미 상류에서 수행, 누락 이미지는 `_process_work` fail-closed가 커버). 2026-07-16 ultracode 리뷰 low.
 
 #### FRONT-SWIPE-CLEANUP-1 — #281 진행바 리뷰 low 3건 정리
 `SwipePage.jsx`: ① 죽은 `value` prop×2 + orphan `confidence` 로컬(353/473/585 — 시그니처에서 제거된 prop을 호출부가 계속 전달, 주석이 dead code를 문서화) ② pct 공식 3분기 verbatim 중복(87/90/94 — 분기 밖 1회 계산 + converged만 100 override) ③ 도달불가 `like+dislike` fallback(76-78 — 백엔드 `_progress()`가 세 필드 항상 동시 방출) → `progress?.swipe_count ?? 0`. 2026-07-16 ultracode 리뷰 low 3건(Opus 확정), 기능 영향 0.
@@ -256,6 +249,13 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FULL-WORKS-1a — 업로드 후속 fix 3건 (pagination + parallel HEAD + i18n) — RESOLVED 2026-07-17
+#282 머지 시 유보한 리뷰 low 2건 + i18n 사각 1건, `feature/claude-works-followup` 단일 PR.
+- [x] BACK-WORKS-1: `GET /works/` 페이지네이션(default=cap 50, notifications 패턴, envelope `{works,total,page,page_size}`) + 응답 슬리밍(`r2_keys` 제거 — 프론트 무수정 호환)
+- [x] BACK-WORKS-2: finalize R2 HEAD `ThreadPoolExecutor` 병렬화(요청 내 왕복 sum(N)→max(N)) — 10MB 검증이 HEAD 의존이라 생략 불가·병렬화 채택; 실패 시 원본 `r2_keys` 순서 결정적 리포트(`executor.map` 순서 보장)
+- [x] UploadWorkPage i18n 전면 이관: t() 콜사이트 35개 / locales.js 92 엔트리(ko+en) — 프로그램 라벨 14종은 기존 KO UI에서도 영어였어서 한국어 신규 작성(네이티브 감수 1회 권장, `시설` 접미 일관성)
+- 검증: 실환경 스모크 ALL PASS(2장 병렬 HEAD finalize 1.16s + Gemini 게이트 PUBLISH + envelope/page_size 클램프/missing-key 400) · works 테스트 21개(CI 게이트) · flake8/eslint/build 그린
+
 ### FULL-WORKS-1 — 건축 작품 업로드 Phase 1 — RESOLVED 2026-07-15 (`6089487`)
 presigned direct upload to Cloudflare R2: Django `apps/works/` 신설 + `/api/v1/works/presign/`·`/api/v1/works/` API + UploadWorkPage.
 - [x] Work 모델 (upload_id `usr_XXXXXX`, 14개 program enum, r2_keys JSONField, is_publishable=False, report_count) + migration 0001_initial
@@ -578,7 +578,6 @@ Codex 기능 리뷰 배치 머지(SECURITY 항목은 배포-게이트 배치로 
 
 ### INFRA-DB-2 — make test-local (로컬 pytest unblock) — RESOLVED 2026-06-04 (`feature/claude-test-local` → develop, #197)
 runtime `make_web_app`가 CREATEDB 없어 로컬 pytest가 'permission denied to create database'로 차단(conftest SQLite override는 자체 docstring상 not-load-bearing). `make test-local` 추가 — `migrate-local` idiom(read -s neondb_owner pw, inline DB_USER override로 DB_HOST는 LOCAL 유지), CI-shape real-PG+pgvector 실행. Neon 콘솔 작업 불필요. CLAUDE.md 문서화.
-
 
 ### UX-GALLERY — 갤러리 제스처 3버그 (FRONT-UX-6/9/10) — RESOLVED 2026-06-04 (`feature/claude-ux-gallery` → develop)
 갤러리 3버그(부모-sync wobble·모바일 세로스크롤·Discovery long-press 오작동)를 **lift 없이** 해결. 원 premise(sibling-overlay lift)를 유저 product 재검토로 재정의 — 갤러리 보면서도 스와이프 유지 + 순수 Discovery. session 브라우저 spike로 "3D가 스크롤 안 깸"(원인은 touch-action·snap, 3D 아님) 확정 후 구현.

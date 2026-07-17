@@ -24,36 +24,37 @@ const MAX_WORK_IMAGES = 10
 // hardcoded in two places.
 const UPLOAD_CONTENT_TYPE = 'image/webp'
 
-// Each entry maps the backend PROGRAM_CHOICES key (value sent to API) to a
-// human-readable label shown in the UI.  Ordered to match canonical_v2_buildings
-// vocabulary; 'Other' is omitted — no backend key exists for it.
-const PROGRAMS = [
-  { value: 'residential',    label: 'Housing' },
-  { value: 'office',         label: 'Office' },
-  { value: 'cultural',       label: 'Museum / Cultural' },
-  { value: 'educational',    label: 'Education' },
-  { value: 'religious',      label: 'Religion' },
-  { value: 'sports',         label: 'Sports' },
-  { value: 'hospitality',    label: 'Hospitality' },
-  { value: 'healthcare',     label: 'Healthcare' },
-  { value: 'public',         label: 'Public' },
-  { value: 'mixed_use',      label: 'Mixed Use' },
-  { value: 'landscape',      label: 'Landscape' },
-  { value: 'infrastructure', label: 'Infrastructure' },
-  { value: 'commercial',     label: 'Commercial' },
-  { value: 'industrial',     label: 'Industrial' },
+// Backend PROGRAM_CHOICES keys (value sent to API) — display labels are
+// resolved via t(`uploadWork.programs.${value}`), see locales.js. Ordered to
+// match canonical_v2_buildings vocabulary; 'Other' is omitted — no backend
+// key exists for it.
+const PROGRAM_VALUES = [
+  'residential',
+  'office',
+  'cultural',
+  'educational',
+  'religious',
+  'sports',
+  'hospitality',
+  'healthcare',
+  'public',
+  'mixed_use',
+  'landscape',
+  'infrastructure',
+  'commercial',
+  'industrial',
 ]
 
 /* ── WebP converter ─────────────────────────────────────────────────────── */
 
-async function convertToWebP(file) {
+async function convertToWebP(file, t) {
   const img = new Image()
   const srcUrl = URL.createObjectURL(file)
   img.src = srcUrl
   try {
     await new Promise((resolve, reject) => {
       img.onload = resolve
-      img.onerror = () => reject(new Error('이미지를 불러올 수 없습니다'))
+      img.onerror = () => reject(new Error(t('uploadWork.error.imageLoadFailed')))
     })
 
     const MAX = 2400
@@ -104,11 +105,11 @@ export default function UploadWorkPage() {
     if (!file.type.startsWith('image/')) return true
     setUploadState('converting')
     try {
-      const blob = await convertToWebP(file)
+      const blob = await convertToWebP(file, t)
       const preview = URL.createObjectURL(blob)
       setFiles(prev => [...prev, { file, preview, blob }])
     } catch (err) {
-      setErrorMsg('이미지 변환 중 오류가 발생했습니다: ' + err.message)
+      setErrorMsg(t('uploadWork.error.conversionFailed', { detail: err.message }))
       setUploadState('error')
       return false
     }
@@ -172,19 +173,19 @@ export default function UploadWorkPage() {
     setErrorMsg('')
 
     if (files.length === 0) {
-      setErrorMsg('최소 1개의 이미지를 선택해주세요.')
+      setErrorMsg(t('uploadWork.error.selectImage'))
       return
     }
     if (!formData.title.trim()) {
-      setErrorMsg('작품 제목을 입력해주세요.')
+      setErrorMsg(t('uploadWork.error.titleRequired'))
       return
     }
     if (!formData.program) {
-      setErrorMsg('프로그램 유형을 선택해주세요.')
+      setErrorMsg(t('uploadWork.error.programRequired'))
       return
     }
     if (!copyrightChecked) {
-      setErrorMsg('저작권 확인에 동의해주세요.')
+      setErrorMsg(t('uploadWork.error.copyrightRequired'))
       return
     }
 
@@ -226,7 +227,7 @@ export default function UploadWorkPage() {
       setUploadState('processing')
     } catch (err) {
       setUploadState('error')
-      setErrorMsg(err.message || '업로드 중 오류가 발생했습니다.')
+      setErrorMsg(err.message || t('uploadWork.error.uploadFailed'))
     }
   }
 
@@ -234,10 +235,10 @@ export default function UploadWorkPage() {
 
   function submitLabel() {
     switch (uploadState) {
-      case 'converting': return '변환 중...'
-      case 'uploading':  return `업로드 중 ${progress}%`
-      case 'processing': return '검토 중...'
-      default:           return '업로드'
+      case 'converting': return t('uploadWork.submit.converting')
+      case 'uploading':  return t('uploadWork.submit.uploading', { progress })
+      case 'processing': return t('uploadWork.submit.processing')
+      default:           return t('uploadWork.submit.default')
     }
   }
 
@@ -253,11 +254,11 @@ export default function UploadWorkPage() {
           type="button"
           className={s.backBtn}
           onClick={() => navigate(-1)}
-          aria-label="뒤로가기"
+          aria-label={t('uploadWork.header.backAria')}
         >
           ←
         </button>
-        <h1 className={s.headerTitle}>작품 업로드</h1>
+        <h1 className={s.headerTitle}>{t('uploadWork.header.title')}</h1>
         {/* spacer to balance the back button */}
         <div style={{ width: 44 }} />
       </div>
@@ -266,9 +267,9 @@ export default function UploadWorkPage() {
         {/* ── Processing success state ─────────────────────────────────── */}
         {uploadState === 'processing' && (
           <div className={s.processingMsg}>
-            <p style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 700 }}>업로드 완료</p>
+            <p style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 700 }}>{t('uploadWork.success.title')}</p>
             <p style={{ margin: 0 }}>
-              검토 중입니다. 잠시 후 프로필 Created 탭에서 확인하세요.
+              {t('uploadWork.success.body')}
             </p>
           </div>
         )}
@@ -287,21 +288,21 @@ export default function UploadWorkPage() {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') fileInputRef.current?.click()
                 }}
-                aria-label="이미지를 여기에 드래그하거나 클릭해 선택하세요"
+                aria-label={t('uploadWork.dropzone.aria')}
               >
                 {files.length === 0
                   ? (
                     <>
                       <div style={{ fontSize: 32, marginBottom: 8 }}>+</div>
-                      <div>이미지를 드래그하거나 클릭해 선택하세요</div>
+                      <div>{t('uploadWork.dropzone.prompt')}</div>
                       <div style={{ fontSize: 12, marginTop: 4, color: 'var(--color-text-dim)' }}>
-                        JPG, PNG, WebP — 최대 2400px로 자동 변환됩니다
+                        {t('uploadWork.dropzone.hint')}
                       </div>
                     </>
                   )
                   : (
                     <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
-                      + 이미지 추가
+                      {t('uploadWork.dropzone.addMore')}
                     </div>
                   )
                 }
@@ -322,12 +323,12 @@ export default function UploadWorkPage() {
               <div className={s.previewGrid}>
                 {files.map((f, i) => (
                   <div key={f.preview} className={s.previewThumb}>
-                    <img src={f.preview} alt={`미리보기 ${i + 1}`} />
+                    <img src={f.preview} alt={t('uploadWork.preview.alt', { n: i + 1 })} />
                     <button
                       type="button"
                       className={s.removeThumb}
                       onClick={() => removeFile(i)}
-                      aria-label={`이미지 ${i + 1} 삭제`}
+                      aria-label={t('uploadWork.preview.removeAria', { n: i + 1 })}
                     >
                       ×
                     </button>
@@ -347,7 +348,7 @@ export default function UploadWorkPage() {
             <div className={s.form} style={{ marginTop: 24 }}>
               {/* Title */}
               <div className={s.formGroup}>
-                <label className={s.label} htmlFor="title">제목 *</label>
+                <label className={s.label} htmlFor="title">{t('uploadWork.form.titleLabel')}</label>
                 <input
                   id="title"
                   name="title"
@@ -355,14 +356,14 @@ export default function UploadWorkPage() {
                   className={s.input}
                   value={formData.title}
                   onChange={handleFieldChange}
-                  placeholder="작품 제목을 입력하세요"
+                  placeholder={t('uploadWork.form.titlePlaceholder')}
                   disabled={isBusy}
                 />
               </div>
 
               {/* Program */}
               <div className={s.formGroup}>
-                <label className={s.label} htmlFor="program">프로그램 *</label>
+                <label className={s.label} htmlFor="program">{t('uploadWork.form.programLabel')}</label>
                 <select
                   id="program"
                   name="program"
@@ -371,16 +372,16 @@ export default function UploadWorkPage() {
                   onChange={handleFieldChange}
                   disabled={isBusy}
                 >
-                  <option value="">선택하세요</option>
-                  {PROGRAMS.map(p => (
-                    <option key={p.value} value={p.value}>{p.label}</option>
+                  <option value="">{t('uploadWork.form.programPlaceholder')}</option>
+                  {PROGRAM_VALUES.map(value => (
+                    <option key={value} value={value}>{t(`uploadWork.programs.${value}`)}</option>
                   ))}
                 </select>
               </div>
 
               {/* Location city */}
               <div className={s.formGroup}>
-                <label className={s.label} htmlFor="location_city">도시</label>
+                <label className={s.label} htmlFor="location_city">{t('uploadWork.form.cityLabel')}</label>
                 <input
                   id="location_city"
                   name="location_city"
@@ -388,14 +389,14 @@ export default function UploadWorkPage() {
                   className={s.input}
                   value={formData.location_city}
                   onChange={handleFieldChange}
-                  placeholder="예: Seoul"
+                  placeholder={t('uploadWork.form.cityPlaceholder')}
                   disabled={isBusy}
                 />
               </div>
 
               {/* Location country */}
               <div className={s.formGroup}>
-                <label className={s.label} htmlFor="location_country">국가</label>
+                <label className={s.label} htmlFor="location_country">{t('uploadWork.form.countryLabel')}</label>
                 <input
                   id="location_country"
                   name="location_country"
@@ -403,14 +404,14 @@ export default function UploadWorkPage() {
                   className={s.input}
                   value={formData.location_country}
                   onChange={handleFieldChange}
-                  placeholder="예: South Korea"
+                  placeholder={t('uploadWork.form.countryPlaceholder')}
                   disabled={isBusy}
                 />
               </div>
 
               {/* Project year */}
               <div className={s.formGroup}>
-                <label className={s.label} htmlFor="project_year">완공 연도</label>
+                <label className={s.label} htmlFor="project_year">{t('uploadWork.form.yearLabel')}</label>
                 <input
                   id="project_year"
                   name="project_year"
@@ -418,7 +419,7 @@ export default function UploadWorkPage() {
                   className={s.input}
                   value={formData.project_year}
                   onChange={handleFieldChange}
-                  placeholder="예: 2023"
+                  placeholder={t('uploadWork.form.yearPlaceholder')}
                   min="1800"
                   max="2100"
                   disabled={isBusy}
@@ -436,7 +437,7 @@ export default function UploadWorkPage() {
                   disabled={isBusy}
                 />
                 <label htmlFor="copyright" className={s.copyrightLabel}>
-                  이 작품은 본인의 저작물임을 확인합니다
+                  {t('uploadWork.form.copyrightLabel')}
                 </label>
               </div>
 
