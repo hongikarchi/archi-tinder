@@ -24,7 +24,17 @@ setup:
 	@echo "==> Setup complete."
 
 # ── Dev (both servers) ───────────────────────────────────────────────────────
+# Port guard: if 8001/5174 are already bound, a stale server keeps serving OLD
+# code while `make dev` half-fails silently (runserver dies on "port in use",
+# vite drifts to 5175 which bucket CORS rejects) — fail loudly instead.
 dev:
+	@for p in 8001 5174; do \
+		if lsof -ti tcp:$$p >/dev/null 2>&1; then \
+			echo "ERROR: port $$p already in use — a stale dev server would serve OLD code."; \
+			echo "  free it:  lsof -ti tcp:$$p | xargs kill"; \
+			exit 1; \
+		fi; \
+	done
 	@trap 'kill 0' INT TERM; \
 	(cd $(BACKEND_DIR) && python3 manage.py runserver 8001) & \
 	(cd $(FRONTEND_DIR) && npm run dev) & \
