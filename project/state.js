@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-07-17 21:41 KST',
-    head: '7e974a2',
-    branch: 'feature/claude-works-followup',
+    updatedAt: '2026-07-27 20:05 KST',
+    head: '6054235',
+    branch: 'feature/claude-db-check',
   },
   done: [
+    {
+      id: 'ADMIN-DBCHECK-1',
+      title: 'DB 품질 검사 페이지 (dev 전용)',
+      completedAt: '2026-07-27',
+      note: 'dev 빌드 전용 `/db-check` 내부 QA 페이지 — 전체 공개 건물 무한스크롤 그리드 + 자연어 검색(서비스 parse_query+scored search 재사용) + 타일 클릭 시 풀컬럼 DB 모달.',
+    },
     {
       id: 'FULL-WORKS-1a',
       title: '업로드 후속 fix 3건 (pagination + parallel HEAD + i18n)',
@@ -69,12 +75,6 @@ window.PROJECT_STATE = {
       title: '이미지 풀해상도 passthrough + telemetry currentSrc',
       completedAt: '2026-07-13',
       note: '이미지 리사이즈 시리즈(PR1 #241 / PR2 #242 / LQIP #267) 마지막 잔여 마감 — 빈-갤러리 건물의 라이트박스/다운로드가 원본을 받고, telemetry가 실제 렌더 variant를 기록.',
-    },
-    {
-      id: 'BACK-PERFORMANCE-5a',
-      title: 'swipe timing_breakdown 계측 리더',
-      completedAt: '2026-07-13',
-      note: '`session_metrics_report`가 SessionEvent `timing_breakdown`을 이제 집계 — stage별 p50/p95/max + cache_hit 분리 + 세션내 위치 warmup bucket으로 swipe 0.7-1.5s 변동의 지배 원인을 prod 데이터로 특정 가능.',
     },
   ],
   now: [],
@@ -200,6 +200,27 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 287,
+      title: 'docs: full codebase audit 2026-07-17 — 68 findings report',
+      mergedAt: '2026-07-27T09:54:54Z',
+      mergedAtKST: '2026-07-27 18:54 KST',
+      sha: '6054235',
+    },
+    {
+      number: 286,
+      title: 'chore(infra): make dev port guard — fail loud on stale 8001/5174',
+      mergedAt: '2026-07-19T02:40:21Z',
+      mergedAtKST: '2026-07-19 11:40 KST',
+      sha: '36cbb2a',
+    },
+    {
+      number: 285,
+      title: 'feat(FULL-WORKS-1a): works followup — list pagination + parallel HEAD + page i18n',
+      mergedAt: '2026-07-17T12:46:31Z',
+      mergedAtKST: '2026-07-17 21:46 KST',
+      sha: '9c11907',
+    },
+    {
       number: 283,
       title: 'docs(BACK-PERFORMANCE-5): resolved — Redis US-region root cause, swipe p50 1638→124ms',
       mergedAt: '2026-07-16T17:57:16Z',
@@ -233,27 +254,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-07-13T08:16:20Z',
       mergedAtKST: '2026-07-13 17:16 KST',
       sha: '68dafaa',
-    },
-    {
-      number: 277,
-      title: 'feat(i18n): profile/board + modals sweep — slice c of 3, FULL-LANGUAGE-1 closed',
-      mergedAt: '2026-07-12T19:38:06Z',
-      mergedAtKST: '2026-07-13 04:38 KST',
-      sha: '227d23b',
-    },
-    {
-      number: 276,
-      title: 'feat(i18n): settings/account + auth errors sweep — slice b of 3 (FULL-LANGUAGE-1b)',
-      mergedAt: '2026-07-12T18:39:48Z',
-      mergedAtKST: '2026-07-13 03:39 KST',
-      sha: 'b51c385',
-    },
-    {
-      number: 275,
-      title: 'feat(i18n): core swipe loop label sweep — slice a of 3 (FULL-LANGUAGE-1a)',
-      mergedAt: '2026-07-12T17:59:59Z',
-      mergedAtKST: '2026-07-13 02:59 KST',
-      sha: '73b9c94',
     },
   ],
   agents: [
@@ -1104,6 +1104,10 @@ window.PROJECT_STATE = {
       role: 'Discovery 피드 테스트',
     },
     {
+      path: 'backend/apps/recommendation/tests/test_inspect.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/recommendation/tests/test_is_temp_data_filters.py',
       role: '',
     },
@@ -1146,6 +1150,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/recommendation/views/discovery.py',
       role: 'Discovery 피드 뷰',
+    },
+    {
+      path: 'backend/apps/recommendation/views/inspect.py',
+      role: '',
     },
     {
       path: 'backend/apps/recommendation/views/office_recommendation.py',
@@ -1596,6 +1604,10 @@ window.PROJECT_STATE = {
       role: 'archibe 비즈니스 모델 PRD (정적 HTML)',
     },
     {
+      path: 'docs/research/full-codebase-audit-2026-07-17.md',
+      role: '',
+    },
+    {
       path: 'docs/research/image-latency/findings-decode-render-loading.json',
       role: '',
     },
@@ -1693,6 +1705,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/api/images.test.mjs',
+      role: '',
+    },
+    {
+      path: 'frontend/src/api/inspect.js',
       role: '',
     },
     {
@@ -2082,6 +2098,22 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/pages/buildingDetail/helpers.js',
       role: '건물 상세 메타 헬퍼',
+    },
+    {
+      path: 'frontend/src/pages/dbCheck/DbCheck.module.css',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/dbCheck/DbCheckDetailModal.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/dbCheck/DbCheckPage.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/dbCheck/DbCheckTile.jsx',
+      role: '',
     },
     {
       path: 'frontend/src/pages/firmProfile/FirmArticlesSection.jsx',

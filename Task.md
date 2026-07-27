@@ -57,12 +57,7 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-### ADMIN-DBCHECK-1 — DB 품질 검사 페이지 (dev 전용)
-
-- **What**: dev 빌드 전용 `/db-check` 내부 페이지 — 전체 공개 건물 그리드(무한스크롤) + 자연어 검색(서비스 parse_query+scored search 재사용, limit≈100) + 타일 클릭 시 해당 행 전체 DB 컬럼 모달. 사진은 카드처럼 LQIP blur-up.
-- **Why**: canonical_v2_buildings 데이터 품질을 시각적으로 검증 ("벽돌 재질" 검색 → brick material 행들이 실제로 나오는지, 행별 저장 필드 육안 검사).
-- **Decisions (2026-07-27)**: is_publishable=true 게이트 유지(공개 행만) · 검색은 서비스 경로 재사용(ParseQueryView 계약 불변, 별도 thin view) · 프론트 라우트는 `import.meta.env.DEV` 게이트(프로덕션 번들 제외).
-- **Backend**: keyset 페이지네이션 목록 API + 단일 건물 풀컬럼 디테일 API(embedding 벡터 제외) + 내부 검색 view. 전부 IsAuthenticated, `connections['buildings']` raw SQL 읽기 전용.
+_(비어있음 — ADMIN-DBCHECK-1 완료 2026-07-27, ## Done 참조)_
 
 ---
 
@@ -254,6 +249,12 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### ADMIN-DBCHECK-1 — DB 품질 검사 페이지 (dev 전용) — RESOLVED 2026-07-27 (`f8b9ab6`)
+dev 빌드 전용 `/db-check` 내부 QA 페이지 — 전체 공개 건물 무한스크롤 그리드 + 자연어 검색(서비스 parse_query+scored search 재사용) + 타일 클릭 시 풀컬럼 DB 모달.
+- [x] Backend 3 read-only 엔드포인트: `inspect/buildings/` keyset 목록(engine 카드 하이드레이션, total 1h 캐시) + `inspect/buildings/<id>/` 풀컬럼 디테일(embedding 벡터 제외·presence/dim만, non-publishable 404) + `inspect/search/` (parse_query 단일턴 + search_by_filters_scored limit 100, 빈결과 diverse_random 폴백). 전부 IsAuthenticated·is_publishable=true 게이트·buildings raw SQL 읽기 전용. 테스트 19개(services/engine mock).
+- [x] Frontend: `import.meta.env.DEV` 게이트 라우트(프로덕션 번들 제외, URL 직접 진입만) + LQIP blur-up 타일(깨진 이미지 placeholder 노출 = QA 목적) + 구조화 필터 칩·is_fallback 배지 + 그룹핑 디테일 모달(빈값 '—' 표시, covers_by_type 5슬롯, raw JSON 접이식).
+- 게이트: Opus verify PASS · security PASS · low 1건(CSS calc(px*px)) 커밋 전 수정 · app-test 스킵(비 swipe-경로 정책) · pytest는 CI 게이트.
+
 ### FULL-WORKS-1a — 업로드 후속 fix 3건 (pagination + parallel HEAD + i18n) — RESOLVED 2026-07-17
 #282 머지 시 유보한 리뷰 low 2건 + i18n 사각 1건, `feature/claude-works-followup` 단일 PR.
 - [x] BACK-WORKS-1: `GET /works/` 페이지네이션(default=cap 50, notifications 패턴, envelope `{works,total,page,page_size}`) + 응답 슬리밍(`r2_keys` 제거 — 프론트 무수정 호환)
