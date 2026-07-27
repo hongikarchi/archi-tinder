@@ -57,7 +57,12 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(비어있음 — 배치 플랜 `reactive-soaring-hearth` 6/6 PR 완료 2026-07-13. 잔여 액션 완료 2026-07-15/16: i18n EN 카피 스팟체크 PASS(한글 누출 0, ko 의도 일치) + PERF-5 재계측→root-cause→fix 종결(## Done § BACK-PERFORMANCE-5 — Redis US리전이 범인, swipe p50 1638→124ms))_
+### ADMIN-DBCHECK-1 — DB 품질 검사 페이지 (dev 전용)
+
+- **What**: dev 빌드 전용 `/db-check` 내부 페이지 — 전체 공개 건물 그리드(무한스크롤) + 자연어 검색(서비스 parse_query+scored search 재사용, limit≈100) + 타일 클릭 시 해당 행 전체 DB 컬럼 모달. 사진은 카드처럼 LQIP blur-up.
+- **Why**: canonical_v2_buildings 데이터 품질을 시각적으로 검증 ("벽돌 재질" 검색 → brick material 행들이 실제로 나오는지, 행별 저장 필드 육안 검사).
+- **Decisions (2026-07-27)**: is_publishable=true 게이트 유지(공개 행만) · 검색은 서비스 경로 재사용(ParseQueryView 계약 불변, 별도 thin view) · 프론트 라우트는 `import.meta.env.DEV` 게이트(프로덕션 번들 제외).
+- **Backend**: keyset 페이지네이션 목록 API + 단일 건물 풀컬럼 디테일 API(embedding 벡터 제외) + 내부 검색 view. 전부 IsAuthenticated, `connections['buildings']` raw SQL 읽기 전용.
 
 ---
 
