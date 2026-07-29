@@ -9,6 +9,7 @@ from rest_framework.views import APIView
 
 from .. import engine, services
 from ..services.parse_query import _build_axis_chips, _STRONG_AXES
+from ..throttles import LLMSearchThrottle
 
 logger = logging.getLogger('apps.recommendation')
 RC = settings.RECOMMENDATION
@@ -98,6 +99,7 @@ def _spawn_stage2(filters, raw_query, user_id):
 
 class ParseQueryView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_classes   = [LLMSearchThrottle]
 
     def post(self, request):
         # ── Branch A: DETERMINISTIC RE-RANK (chip click, priority_axis provided) ─
