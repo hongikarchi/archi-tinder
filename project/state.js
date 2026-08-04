@@ -23,7 +23,7 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-08-05 00:25 KST',
+    updatedAt: '2026-08-05 00:26 KST',
     head: '20ed84d',
     branch: 'feature/claude-llm-provider-adapter',
   },
@@ -32,7 +32,7 @@ window.PROJECT_STATE = {
       id: 'BACK-LLM-PROVIDER-1',
       title: 'LLM 프로바이더 어댑터 + 공정 A/B 8런',
       completedAt: '2026-08-04',
-      note: '1차 'GPT 붕괴(11~14%)'는 파서의 빈 filter_delta 버그로 판명(13c4238 수정) — 픽스 후 품질 동급: gemini 95% / gpt-5.4-mini 95% / luna 94% / terra 92%. 차별점은 운영 특성: p50 gemini 2.0s 최속 vs GPT 타임아웃 꼬리 0(null폴백 0%). 판정 옵션: (A) gemini 유지+8s 완화 (B) gpt-5.4-mini. 결정 보류.',
+      note: '1차 "GPT 붕괴(11~14%)"는 파서의 빈 filter_delta 버그로 판명(13c4238 수정) — 픽스 후 품질 동급: gemini 95% / gpt-5.4-mini 95% / luna 94% / terra 92%. 차별점은 운영 특성: p50 gemini 2.0s 최속 vs GPT 타임아웃 꼬리 0(null폴백 0%). 판정 옵션: (A) gemini 유지+8s 완화 (B) gpt-5.4-mini. 결정 보류.',
     },
     {
       id: 'BACK-PARSER-VOCAB-1',
