@@ -57,7 +57,14 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(비어있음 — BACK-PARSER-VOCAB-1 완료 2026-08-04, ## Done 참조)_
+### BACK-LLM-PROVIDER-1 — LLM 프로바이더 어댑터 (Gemini/GPT A/B 테스트)
+
+파서 텍스트 경로에 `LLM_PROVIDER=gemini|openai` 스위치 추가 — 기존 함수명 시임 유지
+(`_get_client`/`generate_content_with_fallback`), `_dispatch_generate` 정규화 래퍼로
+parse_query 무수정, 에러 분류 확장, non-strict json_object(스키마 strict 비호환).
+목적: db_qc 배터리로 gemini-3.1-flash-lite/2.5-flash/2.5-flash-lite vs gpt-5.6-luna
+실측 비교(P4 꼬리·tag_match·비용). 이미지/works 경로 스코프 외.
+브랜치 `feature/claude-llm-provider-adapter`. 블로커: OPENAI_API_KEY(유저).
 
 ---
 

@@ -432,8 +432,20 @@ def _gen_native(client, prompt):
     success, or (None, None, None) if no image part is found or both models fail.
 
     raw_bytes is the raw image bytes from the SDK inline_data (not base64).
+
+    BACK-LLM-PROVIDER-1: this function always calls client.models.generate_content
+    (the genai SDK shape) -- an OpenAI client has no such attribute. When
+    settings.LLM_PROVIDER='openai', the caller-supplied `client` (from the
+    provider-switched _get_client()) is IGNORED in favour of
+    _svc._get_gemini_client() (always genai, separate singleton). When
+    LLM_PROVIDER='gemini' (default), the passed-in `client` is used unchanged --
+    identical behaviour to before this change, and identical to what existing
+    tests patch via `_get_client`.
     """
     from apps.recommendation import services as _svc  # noqa: PLC0415
+
+    if settings.LLM_PROVIDER != 'gemini':
+        client = _svc._get_gemini_client()
 
     for model in (settings.GEMINI_IMAGE_MODEL, settings.GEMINI_IMAGE_MODEL_FALLBACK):
         try:

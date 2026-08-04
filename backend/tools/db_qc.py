@@ -42,6 +42,7 @@ import django  # noqa: E402
 
 django.setup()
 
+from django.conf import settings  # noqa: E402
 from django.db import connections  # noqa: E402
 
 from apps.recommendation import engine, services  # noqa: E402
@@ -553,8 +554,12 @@ def main() -> int:
             print(f'no queries match --only {args.only}', file=sys.stderr)
             return 2
 
+    # BACK-LLM-PROVIDER-1: stamp provider/model so A/B matrix runs are self-describing.
+    _is_openai = settings.LLM_PROVIDER == 'openai'
     run: dict = {'ts': _now_stamp(), 'n_queries': len(queries),
-                 'parser_runs': 0 if args.skip_parser else args.parser_runs}
+                 'parser_runs': 0 if args.skip_parser else args.parser_runs,
+                 'llm_provider': settings.LLM_PROVIDER,
+                 'llm_model': settings.OPENAI_TEXT_MODEL if _is_openai else settings.GEMINI_TEXT_MODEL}
     t0 = time.time()
 
     print('[A] vocab dump...', flush=True)

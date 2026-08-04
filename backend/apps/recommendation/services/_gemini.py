@@ -1,6 +1,11 @@
 """
 _gemini.py -- Low-level Gemini API client wrapper and retry logic.
 
+BACK-LLM-PROVIDER-1: provider dispatch (gemini | openai) behind settings.LLM_PROVIDER,
+for A/B testing the text-parse path via tools/db_qc.py. Image generation
+(generation.py _gen_native) is pinned to Gemini regardless of LLM_PROVIDER via
+_get_gemini_client() -- see that function's docstring.
+
 Self-contained: no imports from sibling sub-modules.
 """
 import logging
@@ -24,6 +29,10 @@ logger = logging.getLogger('apps.recommendation')
 
 _client = None
 
+# BACK-LLM-PROVIDER-1: separate singleton for the always-Gemini client used by
+# the image path (generation.py _gen_native), independent of LLM_PROVIDER/_client.
+_gemini_client = None
+
 _GEMINI_MAX_RETRIES = 1
 _GEMINI_RETRY_DELAY = 1.0  # seconds
 
@@ -41,16 +50,37 @@ _FATAL_GEMINI_EXC = (
 )
 
 
+def _is_openai_status_error(e):
+    """Lazy-import openai and return True iff e is an openai.APIStatusError.
+
+    Lazy import keeps import-time cost at zero when LLM_PROVIDER=gemini (the
+    default) and openai is merely installed, not used. Returns False (not an
+    exception) when openai is not importable at all.
+    """
+    try:
+        import openai
+    except ImportError:
+        return False
+    return isinstance(e, openai.APIStatusError)
+
+
 def _is_fatal_gemini(e):
     """
-    True if e is a permanent Gemini error that must NOT be retried.
+    True if e is a permanent Gemini/OpenAI error that must NOT be retried.
 
     google-genai ClientError carries an HTTP .code: any 4xx is permanent
     EXCEPT 429 (rate limit — transient, should retry). ServerError (5xx) is
     transient. Falls back to the legacy gax tuple for non-google-genai paths.
+
+    BACK-LLM-PROVIDER-1: openai.APIStatusError carries .status_code with the
+    SAME semantics (4xx fatal except 429) -- same function, same name, so
+    _retry_gemini_call's fast-fail branch works unmodified for both providers.
     """
     if isinstance(e, genai_errors.ClientError):
         code = getattr(e, 'code', None)
+        return code is not None and 400 <= code < 500 and code != 429
+    if _is_openai_status_error(e):
+        code = getattr(e, 'status_code', None)
         return code is not None and 400 <= code < 500 and code != 429
     return isinstance(e, _FATAL_GEMINI_EXC)
 
@@ -60,18 +90,54 @@ def _is_model_unavailable(e):
     True if e signals the requested MODEL is unavailable/invalid (404 NotFound
     or 400 InvalidArgument) — the case where retrying with a fallback model
     helps. Excludes 401/403 (auth — a different model on the same key won't
-    help). Recognises both the google-genai ClientError family and legacy gax.
+    help). Recognises the google-genai ClientError family, legacy gax, and
+    (BACK-LLM-PROVIDER-1) openai.APIStatusError via the same 400/404 codes.
     """
     if isinstance(e, genai_errors.ClientError):
         return getattr(e, 'code', None) in (400, 404)
+    if _is_openai_status_error(e):
+        return getattr(e, 'status_code', None) in (400, 404)
     return isinstance(e, (gax_exceptions.NotFound, gax_exceptions.InvalidArgument))
 
 
 def _get_client():
+    """Provider-switched client seam.
+
+    LLM_PROVIDER='openai' -> lazy-import openai, build/return a module-level
+    OpenAI singleton. Default ('gemini') -> existing genai.Client path,
+    UNCHANGED (byte-for-byte identical behaviour to pre-BACK-LLM-PROVIDER-1).
+
+    KEEP THIS NAME: ~45 existing tests patch
+    'apps.recommendation.services._get_client' — this is the provider-dispatch
+    boundary per the BACK-LLM-PROVIDER-1 design; no parallel provider-prefixed
+    public function is introduced.
+    """
     global _client
+    if settings.LLM_PROVIDER == 'openai':
+        if _client is None:
+            import openai  # noqa: PLC0415 -- lazy: zero import cost on the gemini path
+            _client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
+        return _client
     if _client is None:
         _client = genai.Client(api_key=settings.GEMINI_API_KEY)
     return _client
+
+
+def _get_gemini_client():
+    """Always-Gemini client, independent of settings.LLM_PROVIDER.
+
+    BACK-LLM-PROVIDER-1: the image-generation path (generation.py _gen_native)
+    calls client.models.generate_content directly -- an OpenAI client has no
+    such attribute, so that path must never receive the provider-switched
+    client from _get_client() when LLM_PROVIDER='openai'. This function is the
+    dedicated escape hatch: a SEPARATE module-level singleton
+    (_gemini_client), always genai.Client, regardless of LLM_PROVIDER.
+    _get_client() remains the sole provider-switched public seam.
+    """
+    global _gemini_client
+    if _gemini_client is None:
+        _gemini_client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    return _gemini_client
 
 
 def _retry_gemini_call(func, *args, timeout=15.0, **kwargs):
@@ -146,9 +212,147 @@ def _retry_gemini_call(func, *args, timeout=15.0, **kwargs):
         return value
 
 
+class _NormalizedResponse:
+    """BACK-LLM-PROVIDER-1: wraps an OpenAI ChatCompletion to match the small
+    surface of a google-genai GenerateContentResponse that callers actually
+    read (grepped against every usage_metadata/.text access in parse_query.py
+    and generation.py):
+
+      .text                                -> choices[0].message.content
+      .usage_metadata.prompt_token_count       -> usage.prompt_tokens
+      .usage_metadata.candidates_token_count   -> usage.completion_tokens
+      .usage_metadata.cached_content_token_count
+          -> usage.prompt_tokens_details.cached_tokens (None if absent)
+      .usage_metadata.thoughts_token_count -> None (OpenAI has no equivalent
+          field surfaced here; callers already do getattr(..., None)-safe reads)
+      .model_version                       -> the model string used
+
+    Never used on the Gemini path -- genai responses pass through _dispatch_generate
+    untouched.
+    """
+
+    class _UsageMetadata:
+        def __init__(self, prompt_token_count, candidates_token_count, cached_content_token_count):
+            self.prompt_token_count = prompt_token_count
+            self.candidates_token_count = candidates_token_count
+            self.cached_content_token_count = cached_content_token_count
+            self.thoughts_token_count = None
+
+    def __init__(self, chat_completion, model):
+        choice = (chat_completion.choices or [None])[0]
+        message = getattr(choice, 'message', None) if choice else None
+        self.text = getattr(message, 'content', None) if message else None
+        usage = getattr(chat_completion, 'usage', None)
+        prompt_tokens = getattr(usage, 'prompt_tokens', None) if usage else None
+        completion_tokens = getattr(usage, 'completion_tokens', None) if usage else None
+        details = getattr(usage, 'prompt_tokens_details', None) if usage else None
+        cached_tokens = getattr(details, 'cached_tokens', None) if details else None
+        self.usage_metadata = self._UsageMetadata(prompt_tokens, completion_tokens, cached_tokens)
+        self.model_version = model
+
+
+def _translate_contents_to_messages(contents, config):
+    """BACK-LLM-PROVIDER-1: translate genai `contents` (+ config.system_instruction)
+    into an OpenAI chat `messages` list.
+
+    Accepts:
+      - a plain string (single user turn -- the shape generation.py/rerank.py pass)
+      - a list of google.genai types.Content (the shape parse_query.py builds),
+        each with .role ('user'|'model') and .parts[*].text
+
+    genai role 'model' maps to OpenAI 'assistant'; 'user' passes through.
+    config.system_instruction (a plain str in this codebase) is prepended as a
+    'system' message when present. When json mode is requested
+    (config.response_mime_type == 'application/json'), a one-line instruction
+    is appended to the system message ('Return ONLY a single JSON object.')
+    since config.response_schema is NOT translated on the openai path (schema
+    stays json_object-only, non-strict -- see _dispatch_generate docstring).
+    """
+    messages = []
+
+    system_instruction = getattr(config, 'system_instruction', None) if config else None
+    json_mode = bool(config and getattr(config, 'response_mime_type', None) == 'application/json')
+    system_text = system_instruction if isinstance(system_instruction, str) else None
+    if json_mode:
+        json_note = 'Return ONLY a single JSON object.'
+        system_text = f'{system_text}\n\n{json_note}' if system_text else json_note
+    if system_text:
+        messages.append({'role': 'system', 'content': system_text})
+
+    if isinstance(contents, str):
+        messages.append({'role': 'user', 'content': contents})
+        return messages
+
+    for turn in contents or []:
+        role = getattr(turn, 'role', 'user') or 'user'
+        role = 'assistant' if role == 'model' else 'user'
+        parts = getattr(turn, 'parts', None) or []
+        text = ''.join(getattr(p, 'text', '') or '' for p in parts)
+        messages.append({'role': role, 'content': text})
+
+    return messages
+
+
+def _dispatch_generate(client, *, model, contents, config=None, timeout):
+    """BACK-LLM-PROVIDER-1: provider-agnostic single-call dispatch.
+
+    Gemini path: unchanged -- calls _retry_gemini_call(client.models.generate_content, ...)
+    exactly as before this change existed.
+
+    OpenAI path: translates (contents, config) into OpenAI chat kwargs, then
+    calls the SAME _retry_gemini_call thread-timeout wrapper around
+    client.chat.completions.create, with the SAME timeout value (fairness for
+    A/B testing -- no provider gets a longer deadline). Returns a
+    _NormalizedResponse so callers' response.text / response.usage_metadata.*
+    reads keep working unmodified.
+
+    Routed through the services-package facade (_svc._retry_gemini_call), NOT
+    the local name -- see generate_content_with_fallback's docstring for why
+    (FULL-REFACTOR-1 mock.patch lesson).
+    """
+    from apps.recommendation import services as _svc
+
+    if settings.LLM_PROVIDER != 'openai':
+        return _svc._retry_gemini_call(
+            client.models.generate_content,
+            model=model,
+            contents=contents,
+            config=config,
+            timeout=timeout,
+        )
+
+    messages = _translate_contents_to_messages(contents, config)
+    kwargs = {
+        'model': model,
+        'messages': messages,
+    }
+    temperature = getattr(config, 'temperature', None) if config else None
+    if temperature is not None:
+        kwargs['temperature'] = temperature
+    json_mode = bool(config and getattr(config, 'response_mime_type', None) == 'application/json')
+    if json_mode:
+        kwargs['response_format'] = {'type': 'json_object'}
+    # config.response_schema and config.thinking_config are intentionally IGNORED
+    # on the openai path -- see this function's docstring + module design notes.
+
+    # Validated at settings load (allowlist); empty string means "do not send".
+    reasoning_effort = getattr(settings, 'OPENAI_REASONING_EFFORT', '')
+    if reasoning_effort:
+        kwargs['reasoning_effort'] = reasoning_effort
+
+    response = _svc._retry_gemini_call(
+        client.chat.completions.create,
+        timeout=timeout,
+        **kwargs,
+    )
+
+    return _NormalizedResponse(response, model)
+
+
 def generate_content_with_fallback(client, *, timeout=15.0, **kw):
     """
-    Call client.models.generate_content with automatic model fallback.
+    Call client.models.generate_content (gemini) or client.chat.completions.create
+    (openai, BACK-LLM-PROVIDER-1) with automatic model fallback -- gemini only.
 
     Uses settings.GEMINI_TEXT_MODEL as the primary model and
     settings.GEMINI_TEXT_MODEL_FALLBACK as the fallback.  Fallback fires when
@@ -156,10 +360,16 @@ def generate_content_with_fallback(client, *, timeout=15.0, **kw):
     — model not available in the API key tier or region). Recognises both the
     google-genai ClientError family and legacy gax errors via _is_model_unavailable.
 
+    BACK-LLM-PROVIDER-1: on the openai path there is a single model
+    (settings.OPENAI_TEXT_MODEL) and NO fallback swap -- a model-unavailable
+    error is simply re-raised. Gemini's dual-model fallback behaviour is
+    unaffected and stays byte-for-byte identical to before this change.
+
     All keyword args (contents, config, etc.) are forwarded unchanged so the
     caller's timing block, config, and telemetry keep working as before.
 
-    Returns the raw response object (same as _retry_gemini_call).
+    Returns the raw response object (gemini) or a _NormalizedResponse (openai) --
+    see _dispatch_generate / _NormalizedResponse docstrings.
 
     NOTE: the retry is invoked through the services-package facade
     (_svc._retry_gemini_call), NOT the local name, on purpose. Existing tests
@@ -170,26 +380,19 @@ def generate_content_with_fallback(client, *, timeout=15.0, **kw):
     _retry_gemini_call mock seam live, exactly as the pre-wrapper direct call
     sites did.
     """
-    from apps.recommendation import services as _svc
+    if settings.LLM_PROVIDER == 'openai':
+        model = settings.OPENAI_TEXT_MODEL
+        return _dispatch_generate(client, model=model, timeout=timeout, **kw)
+
     primary = settings.GEMINI_TEXT_MODEL
     fb = settings.GEMINI_TEXT_MODEL_FALLBACK
     try:
-        return _svc._retry_gemini_call(
-            client.models.generate_content,
-            model=primary,
-            timeout=timeout,
-            **kw,
-        )
+        return _dispatch_generate(client, model=primary, timeout=timeout, **kw)
     except Exception as e:
         if _is_model_unavailable(e) and fb and fb != primary:
             logger.warning(
                 'text model %s rejected (%s); fallback -> %s',
                 primary, type(e).__name__, fb,
             )
-            return _svc._retry_gemini_call(
-                client.models.generate_content,
-                model=fb,
-                timeout=timeout,
-                **kw,
-            )
+            return _dispatch_generate(client, model=fb, timeout=timeout, **kw)
         raise

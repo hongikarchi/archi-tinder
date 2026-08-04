@@ -540,7 +540,12 @@ def parse_query(conversation_history, language=None, prior_filters=None):
             )
 
         # IMP-5: explicit context caching branch (flag-gated, default OFF)
-        caching_enabled = rc.get('context_caching_enabled', False)
+        # BACK-LLM-PROVIDER-1: Gemini explicit context caching (_ensure_chat_cache)
+        # is a genai-only API surface (client.caches.create) -- gate it off on the
+        # openai path so an openai.OpenAI client is never handed to it. The flag is
+        # OFF by default regardless, so this guard only matters if a deployment
+        # ever flips context_caching_enabled=True while LLM_PROVIDER=openai.
+        caching_enabled = rc.get('context_caching_enabled', False) and settings.LLM_PROVIDER == 'gemini'
         cache_resource_name = None
         if caching_enabled:
             cache_resource_name = _svc._ensure_chat_cache(client)
@@ -899,7 +904,12 @@ def parse_query_stage1(conversation_history, language=None, prior_filters=None):
             )
 
         # IMP-5: explicit context caching branch (flag-gated, default OFF)
-        caching_enabled = rc.get('context_caching_enabled', False)
+        # BACK-LLM-PROVIDER-1: Gemini explicit context caching (_ensure_chat_cache)
+        # is a genai-only API surface (client.caches.create) -- gate it off on the
+        # openai path so an openai.OpenAI client is never handed to it. The flag is
+        # OFF by default regardless, so this guard only matters if a deployment
+        # ever flips context_caching_enabled=True while LLM_PROVIDER=openai.
+        caching_enabled = rc.get('context_caching_enabled', False) and settings.LLM_PROVIDER == 'gemini'
         cache_resource_name = None
         if caching_enabled:
             cache_resource_name = _svc._ensure_chat_cache(client)

@@ -424,6 +424,18 @@ GEMINI_TEXT_MODEL_FALLBACK  = os.getenv('GEMINI_TEXT_MODEL_FALLBACK', 'gemini-2.
 GEMINI_IMAGE_MODEL          = os.getenv('GEMINI_IMAGE_MODEL', 'gemini-3.1-flash-image')
 GEMINI_IMAGE_MODEL_FALLBACK = os.getenv('GEMINI_IMAGE_MODEL_FALLBACK', 'gemini-2.5-flash-image')
 GEMINI_IMAGE_FORMAT         = os.getenv('GEMINI_IMAGE_FORMAT', 'webp')   # webp|native
+# BACK-LLM-PROVIDER-1: A/B provider switch for the TEXT-PARSE path only
+# (apps.recommendation.services._gemini). Image generation always uses Gemini
+# regardless of this flag (see _get_gemini_client() in _gemini.py).
+LLM_PROVIDER      = os.getenv('LLM_PROVIDER', 'gemini')  # gemini|openai
+OPENAI_API_KEY    = os.getenv('OPENAI_API_KEY', '')
+OPENAI_TEXT_MODEL = os.getenv('OPENAI_TEXT_MODEL', 'gpt-5.6-luna')
+# Optional reasoning-effort knob; allowlist-validated here so a typo'd env var
+# degrades to "not sent" instead of a per-request 400 on the parse path.
+_OPENAI_EFFORT_ALLOWED = ('', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max')
+OPENAI_REASONING_EFFORT = os.getenv('OPENAI_REASONING_EFFORT', '')
+if OPENAI_REASONING_EFFORT not in _OPENAI_EFFORT_ALLOWED:
+    OPENAI_REASONING_EFFORT = ''
 HF_TOKEN          = os.getenv('HF_TOKEN', '')
 IMAGE_BASE_URL    = os.getenv('IMAGE_BASE_URL', 'https://pub-5d2133d166fc4b65ad05295df352519f.r2.dev')
 GOOGLE_CLIENT_ID  = os.getenv('GOOGLE_CLIENT_ID', '')
