@@ -57,16 +57,8 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-### BACK-LLM-PROVIDER-1 — LLM 프로바이더 어댑터 (Gemini/GPT A/B 테스트)
+_(비어있음 — BACK-LLM-PROVIDER-1 완료 2026-08-04, ## Done 참조)_
 
-파서 텍스트 경로에 `LLM_PROVIDER=gemini|openai` 스위치 추가 — 기존 함수명 시임 유지
-(`_get_client`/`generate_content_with_fallback`), `_dispatch_generate` 정규화 래퍼로
-parse_query 무수정, 에러 분류 확장, non-strict json_object(스키마 strict 비호환).
-목적: db_qc 배터리로 gemini-3.1-flash-lite/2.5-flash/2.5-flash-lite vs gpt-5.6-luna
-실측 비교(P4 꼬리·tag_match·비용). 이미지/works 경로 스코프 외.
-브랜치 `feature/claude-llm-provider-adapter`. 블로커: OPENAI_API_KEY(유저).
-
----
 
 ## Next
 
@@ -259,6 +251,13 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### BACK-LLM-PROVIDER-1 — LLM 프로바이더 어댑터 + Gemini/GPT 4모델 실측 A/B — RESOLVED 2026-08-04 (`b96a2ed`-pre-squash)
+파서 `LLM_PROVIDER=gemini|openai` 스위치 구현 후 db_qc 4모델 실측 — 결론: **gemini-3.1-flash-lite 유지** (tag_match@10 86~94% vs 2.5-flash 14% / 2.5-flash-lite 14% / gpt-5.6-luna 11%; 타 모델은 어휘 그라운딩 준수 붕괴, luna는 전 쿼리 broad-fallback화). P4 타임아웃 꼬리(9~10/60)는 3.1-flash-lite 고유(타 모델 slow 0) — 완화는 타임아웃 15→8s 별도 건.
+- [x] 어댑터: 시임명 유지, `_dispatch_generate` 번역 + `_NormalizedResponse` 정규화, openai 에러 분류, 이미지 경로 `_get_gemini_client()` 고정, 15s 동일 타임아웃(공정성), mock 45곳 무변경, 신규 테스트 27개.
+- [x] 실측 4런 (`qc_20260804T130045Z`~`133749Z`): 재기준선/2.5-flash/2.5-flash-lite/luna.
+- [x] 현장 수정: reasoning 모델 temperature 400 → 미전송; OPENAI_REASONING_EFFORT settings 승격+allowlist; db_qc buildings 커넥션 유휴사망 → search 배터리 전 리프레시.
+- 비고: 프롬프트가 Gemini 방언 최적화 상태의 비교 — GPT는 strict json_schema 포팅 시 개선 여지 있으나 기저 격차 큼(luna p50 4.6s로 2.2배 느림 + temp=1 강제).
+
 ### BACK-PARSER-VOCAB-1 — 파서 어휘 그라운딩 (db_qc P1/P2/P3 수정) — RESOLVED 2026-08-04 (`9c88b54`-pre-squash)
 파서가 DB에 없는 필터 값을 창작하던 문제(P1)·architectural_elements 축 부재(P2)·구체 유형 뭉개기(P3)를 어휘 그라운딩으로 수정 — db_qc 실측 unmatchable 8→0 쿼리, hard_empty 1→0, tag_match@10 courtyard/atrium/terrace 0→100%, library +90pt, facade +80pt, 회귀 0.
 - [x] `services/vocab.py` 신설: `get_axis_vocab()` 런타임 페치(buildings raw SQL, is_publishable 게이트, 24h Django 캐시, 축별 `_VOCAB_SNAPSHOT` fallback, never-raise) — 프롬프트와 정규화가 같은 소스 공유.

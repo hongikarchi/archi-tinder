@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-08-04 17:14 KST',
-    head: '749091e',
-    branch: 'feature/claude-parser-vocab-grounding',
+    updatedAt: '2026-08-04 22:45 KST',
+    head: '20ed84d',
+    branch: 'feature/claude-llm-provider-adapter',
   },
   done: [
+    {
+      id: 'BACK-LLM-PROVIDER-1',
+      title: 'LLM 프로바이더 어댑터 + Gemini/GPT 4모델 실측 A/B',
+      completedAt: '2026-08-04',
+      note: '파서 `LLM_PROVIDER=gemini|openai` 스위치 구현 후 db_qc 4모델 실측 — 결론: gemini-3.1-flash-lite 유지 (tag_match@10 86~94% vs 2.5-flash 14% / 2.5-flash-lite 14% / gpt-5.6-luna 11%; 타 모델은 어휘 그라운딩 준수 붕괴, luna는 전 쿼리 broad-fallback화). P4 타임아웃 꼬리(9~10/60)는 3.1-flash-lite 고유(타 모델 slow 0) — 완화는 타임아웃…',
+    },
     {
       id: 'BACK-PARSER-VOCAB-1',
       title: '파서 어휘 그라운딩 (db_qc P1/P2/P3 수정)',
@@ -69,12 +75,6 @@ window.PROJECT_STATE = {
       title: 'i18n 슬라이스 c: 프로필·보드 + 모달',
       completedAt: '2026-07-13',
       note: '최종 슬라이스 17파일 ~115 리터럴 — 3슬라이스(a #275 / b #276 / c) 합산 32파일 176줄 sweep 완료, 전 고트래픽 surface가 ko/en 동일 string source 렌더. FULL-LANGUAGE-1 백로그 항목 종결.',
-    },
-    {
-      id: 'FULL-LANGUAGE-1b',
-      title: 'i18n 슬라이스 b: 설정·계정 + 인증에러',
-      completedAt: '2026-07-13',
-      note: '설정/계정 표면 9파일 + 인증 에러 훅 국지화 — Settings 트리 전체가 ko/en 동일 string source 렌더.',
     },
   ],
   now: [],
@@ -205,6 +205,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 289,
+      title: 'feat(BACK-PARSER-VOCAB-1): ground parser in live DB vocab + architectural_elements axis',
+      mergedAt: '2026-08-04T08:58:14Z',
+      mergedAtKST: '2026-08-04 17:58 KST',
+      sha: '20ed84d',
+    },
+    {
       number: 288,
       title: 'feat(ADMIN-DBCHECK): /db-check inspect page + db_qc regression harness',
       mergedAt: '2026-08-04T05:43:41Z',
@@ -252,13 +259,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-07-17T01:48:21Z',
       mergedAtKST: '2026-07-17 10:48 KST',
       sha: 'db68d08',
-    },
-    {
-      number: 279,
-      title: 'docs(perf): BACK-PERFORMANCE-5 Neon pooler flip applied to prod + local (verified)',
-      mergedAt: '2026-07-13T22:41:15Z',
-      mergedAtKST: '2026-07-14 07:41 KST',
-      sha: '06826ed',
     },
   ],
   agents: [
@@ -1122,6 +1122,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/recommendation/tests/test_like_vectors_hydration.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/tests/test_llm_provider.py',
       role: '',
     },
     {
