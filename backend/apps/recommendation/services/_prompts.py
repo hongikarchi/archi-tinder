@@ -478,9 +478,13 @@ _AXIS_EXTRA_RULES = {
     'typology_primary': (
         '\nWhen the user names a specific building type (도서관/교회/학교/미술관/파빌리온...), '
         'set `typology_primary` to the matching allowed value AND ALSO fill `program` with '
-        'its parent bucket -- the specific type never replaces `program`, both are filled '
-        '(도서관->typology_primary "Library" + program "Education" or "Public"; '
-        '교회->"Religious Building" + "Religion").\n'
+        'its parent bucket -- the specific type never replaces `program`, both are filled. '
+        'Program bucket rule: if the allowed `program` list contains a DIRECT match for the '
+        'type, use it (미술관->program "Museum"; 오피스->"Office"; 주택->"Housing"); use a '
+        'broad bucket ONLY when no direct one exists, with these fixed picks: 도서관/학교/'
+        '유치원/대학->"Education", 교회/사찰->"Religion", 시청/파빌리온/기념관->"Public". '
+        'Never choose "Public" when a more specific bucket applies -- `program` is a hard '
+        'filter and a broad bucket excludes the right buildings.\n'
     ),
 }
 
