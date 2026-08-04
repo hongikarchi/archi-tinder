@@ -173,7 +173,7 @@ async function pass(fixOrders) {
   } else {
     verify = await agent(
       `Adversarially verify these review/security findings for task ${taskId}. For EACH, decide if it is a REAL defect in the changed code or a false positive — read the actual code, do not trust the finding. Drop false positives. finalVerdict = FAIL if any confirmed finding is critical/high, else PASS (medium/low may ship with a note).\n\nChanged files: ${filesLine}\n\nFindings:\n${rawFindings.map((f) => `- [${f.severity}] ${f.file}${f.line ? ':' + f.line : ''}: ${f.problem}`).join('\n')}`,
-      { model: 'opus', phase: 'Verify', label: `verify:${taskId}`, schema: VERIFY_SCHEMA },
+      { model: 'opus', effort: 'high', phase: 'Verify', label: `verify:${taskId}`, schema: VERIFY_SCHEMA },
     )
   }
 

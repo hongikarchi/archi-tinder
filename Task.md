@@ -57,7 +57,15 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(비어있음 — ADMIN-DBCHECK-1 완료 2026-07-27, ## Done 참조)_
+### BACK-PARSER-VOCAB-1 — 파서 어휘 그라운딩 (db_qc P1/P2/P3 수정)
+
+db_qc 베이스라인(`qc_20260804T035813Z.json`)이 입증한 파서 어휘 창작 문제 수정.
+프롬프트에 DB 실제 vocab(style 12 / atmosphere 12 / color_tone 8 / typology 35 /
+elements 13) 주입 + few-shot 죽은 값 교체, `architectural_elements` 축 신설(파서
+스키마 + `_VALID_AXES` + engine 소프트 IDF 축), 파이썬 snap-to-vocab 정규화 확장,
+런타임 vocab 페치(24h 캐시, 하드코딩 스냅샷 fallback), db_qc 드리프트 가드 2종.
+검증: db_qc 재실행 baseline diff — unmatchable 0 / courtyard·atrium·terrace
+tag_match@10 > 0 / concept-drop < 100%. 브랜치 `feature/claude-parser-vocab-grounding`.
 
 ---
 

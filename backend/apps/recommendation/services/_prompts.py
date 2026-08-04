@@ -106,7 +106,7 @@ When the system provides a "현재까지 확정된 필터" (prior filters) conte
 - Unmentioned axes are preserved automatically — omit them from `filter_delta`.
 - Examples:
   - "꼭 벽돌 아니어도 돼" → `filter_delta: {"set": {}, "remove": ["material"]}`
-  - "모더니즘 말고 브루탈리즘" → `filter_delta: {"set": {"style": "Brutalism"}, "remove": []}`
+  - "모더니즘 말고 브루탈리즘" → `filter_delta: {"set": {"style": "Brutalist"}, "remove": []}`
   - "한국 말고 일본" → `filter_delta: {"set": {"location_country": "Japan"}, "remove": []}`
   - "주거는 빼줘" → `filter_delta: {"set": {}, "remove": ["program"]}` (neutralize — do NOT invent a substitute program)
   - "콘크리트로 바꿔줘" → `filter_delta: {"set": {"material": "concrete"}, "remove": []}`
@@ -131,7 +131,8 @@ When the system provides a "현재까지 확정된 필터" (prior filters) conte
     "year_max": <integer or null>,
     "atmosphere": <string or null>,
     "color_tone": <string or null>,
-    "typology_primary": <string or null>
+    "typology_primary": <string or null>,
+    "architectural_elements": <string or null>
   },
   "filter_delta": {
     "set": {
@@ -144,7 +145,8 @@ When the system provides a "현재까지 확정된 필터" (prior filters) conte
       "year_max": <integer or null>,
       "atmosphere": <string or null>,
       "color_tone": <string or null>,
-      "typology_primary": <string or null>
+      "typology_primary": <string or null>,
+      "architectural_elements": <string or null>
     },
     "remove": [<axis-name string>, ...]
   },
@@ -180,10 +182,10 @@ When the user's intent is ambiguous, prefer `null` (the system will use the buil
 ## Examples
 
 USER: 제주도에 돌로 지은 명상 센터 찾고 있어요. 지역 재료 최대한 살려서.
-ASSISTANT: {"probe_needed": false, "probe_question": null, "reply": "이해했어요: 제주 현지 돌과 재료를 충실히 사용한, 고요하고 장소 결합적인 명상 공간 — 제주 풍토에 뿌리박힌 비판적 지역주의 성향으로 읽어도 괜찮을까요?", "filters": {"location_country": "South Korea", "program": "Religion", "material": "stone", "style": "Vernacular", "year_min": null, "year_max": null, "atmosphere": "contemplative", "color_tone": null, "typology_primary": null}, "filter_priority": ["program", "material", "location_country", "style", "atmosphere"], "raw_query": "제주도에 돌로 지은 명상 센터 찾고 있어요. 지역 재료 최대한 살려서.", "visual_description": "A contemplative meditation pavilion set into the volcanic landscape of Jeju Island, constructed from rough local basalt and dark volcanic stone laid in thick load-bearing walls. Compressed stereotomic masses with small punctured openings frame framed views of the sea and sky; the interior is shadowed, acoustically still, and intimately scaled. Exposed stone is the dominant material, with timber as a warm secondary note, in dialogue with Korean traditional hanok spatial ethics."}
+ASSISTANT: {"probe_needed": false, "probe_question": null, "reply": "이해했어요: 제주 현지 돌과 재료를 충실히 사용한, 고요하고 장소 결합적인 명상 공간 — 제주 풍토에 뿌리박힌 비판적 지역주의 성향으로 읽어도 괜찮을까요?", "filters": {"location_country": "South Korea", "program": "Religion", "material": "stone", "style": "Vernacular", "year_min": null, "year_max": null, "atmosphere": "Contemplative", "color_tone": null, "typology_primary": null, "architectural_elements": null}, "filter_priority": ["program", "material", "location_country", "style", "atmosphere"], "raw_query": "제주도에 돌로 지은 명상 센터 찾고 있어요. 지역 재료 최대한 살려서.", "visual_description": "A contemplative meditation pavilion set into the volcanic landscape of Jeju Island, constructed from rough local basalt and dark volcanic stone laid in thick load-bearing walls. Compressed stereotomic masses with small punctured openings frame framed views of the sea and sky; the interior is shadowed, acoustically still, and intimately scaled. Exposed stone is the dominant material, with timber as a warm secondary note, in dialogue with Korean traditional hanok spatial ethics."}
 
 USER: modern house in Japan, warm atmosphere, warm wood timber
-ASSISTANT: {"probe_needed": false, "probe_question": null, "reply": "Got it: a contemporary Japanese house with a warm, inviting atmosphere — dominated by exposed timber and warm wood tones, intimate human scale. Sound right?", "filters": {"location_country": "Japan", "program": "Housing", "material": "timber", "style": "Contemporary", "year_min": null, "year_max": null, "atmosphere": "warm", "color_tone": "warm", "typology_primary": null}, "filter_priority": ["program", "location_country", "material", "atmosphere", "color_tone", "style"], "raw_query": "modern house in Japan, warm atmosphere, warm wood timber", "visual_description": "A contemporary Japanese house with an intimate and warm domestic atmosphere. The primary envelope is exposed timber — cedar or cypress boards — producing a tactile, warm-toned surface inside and out. Interior spaces are human-scaled, organised around a garden view, with diffused natural light and a palette of warm wood, rice-paper white, and dark stone. The building sits quietly in its residential neighbourhood, expressing restraint and material honesty."}
+ASSISTANT: {"probe_needed": false, "probe_question": null, "reply": "Got it: a contemporary Japanese house with a warm, inviting atmosphere — dominated by exposed timber and warm wood tones, intimate human scale. Sound right?", "filters": {"location_country": "Japan", "program": "Housing", "material": "timber", "style": "Contemporary", "year_min": null, "year_max": null, "atmosphere": "Warm", "color_tone": "Warm", "typology_primary": null, "architectural_elements": null}, "filter_priority": ["program", "location_country", "material", "atmosphere", "color_tone", "style"], "raw_query": "modern house in Japan, warm atmosphere, warm wood timber", "visual_description": "A contemporary Japanese house with an intimate and warm domestic atmosphere. The primary envelope is exposed timber — cedar or cypress boards — producing a tactile, warm-toned surface inside and out. Interior spaces are human-scaled, organised around a garden view, with diffused natural light and a palette of warm wood, rice-paper white, and dark stone. The building sits quietly in its residential neighbourhood, expressing restraint and material honesty."}
 
 USER: Warehouse-to-museum adaptive reuse in Rotterdam, keeping the existing brick shell with contemporary steel interventions.
 ASSISTANT: {"probe_needed": false, "probe_question": null, "reply": "Got it: a museum project that preserves an existing warehouse's brick shell as the primary envelope, inserted with contemporary steel structural and circulation elements — an adaptive-reuse reading with revealed construction. Does that track?", "filters": {"location_country": "Netherlands", "program": "Museum", "material": "brick", "style": "Contemporary", "year_min": 1990, "year_max": null, "atmosphere": null, "color_tone": null, "typology_primary": null}, "filter_priority": ["program", "style", "location_country", "material"], "raw_query": "Warehouse-to-museum adaptive reuse in Rotterdam, keeping the existing brick shell with contemporary steel interventions.", "visual_description": "An adaptive-reuse museum in Rotterdam anchored by a retained industrial warehouse brick envelope, its exterior preserved with visible aged masonry and original window rhythms. Inside, contemporary steel mezzanines, bolted trusses, and exposed services cut through the original volume, producing a sharp juxtaposition between heavy masonry mass and tectonic steel frame. Concrete floors and white-painted brick host the gallery program; service systems are openly revealed as part of the architecture."}
@@ -210,9 +212,9 @@ ASSISTANT: {"probe_needed": true, "probe_question": "먼저 용도를 좁혀볼�
 
 [SYSTEM: 현재까지 확정된 필터(JSON): {"style": "Contemporary"} — 사용자의 새 메시지는 이걸 다듬는 변경(델타)이다.]
 USER: 개방감 있는 쪽.
-ASSISTANT: {"probe_needed": true, "probe_question": "한 번만 더 여쭤볼게요: 직교적·격자형 공간이 끌리세요, 곡선적·흐르는 형태가 끌리세요?", "reply": "용도는 넓게 두고, 개방감 있는 현대 건축으로 잡았어요.", "filter_delta": {"set": {"atmosphere": "open"}, "remove": []}, "filter_priority": ["style", "atmosphere"], "raw_query": "좋은 레퍼런스 있으면 보여주세요.", "visual_description": null}
+ASSISTANT: {"probe_needed": true, "probe_question": "한 번만 더 여쭤볼게요: 직교적·격자형 공간이 끌리세요, 곡선적·흐르는 형태가 끌리세요?", "reply": "용도는 넓게 두고, 개방감 있는 현대 건축으로 잡았어요.", "filter_delta": {"set": {"atmosphere": "Dynamic"}, "remove": []}, "filter_priority": ["style", "atmosphere"], "raw_query": "좋은 레퍼런스 있으면 보여주세요.", "visual_description": null}
 
-[SYSTEM: 현재까지 확정된 필터(JSON): {"style": "Contemporary", "atmosphere": "open"} — 사용자의 새 메시지는 이걸 다듬는 변경(델타)이다.]
+[SYSTEM: 현재까지 확정된 필터(JSON): {"style": "Contemporary", "atmosphere": "Dynamic"} — 사용자의 새 메시지는 이걸 다듬는 변경(델타)이다.]
 USER: 직교적인 거.
 ASSISTANT: {"probe_needed": false, "probe_question": null, "reply": "이해했어요: 개방감 있으면서도 직교적 격자에 충실한, 미스적·SANAA 계열의 투명한 단순성을 가진 건축들 — 경량감과 보편 공간의 감각이 중심. 이 방향으로 탐색해볼게요.", "filter_delta": {"set": {"style": "Modernist"}, "remove": []}, "filter_priority": ["style", "atmosphere"], "raw_query": "좋은 레퍼런스 있으면 보여주세요.", "visual_description": "An expansive, open-plan architectural work with strict orthogonal geometry and a Miesian universal-space quality — thin columns, large glazed apertures, a flat planar roof, and minimal interior subdivision. Floors extend uninterrupted; the envelope is transparent, emphasising continuity between inside and outside. The material palette skews cool and precise (glass, polished concrete, thin steel, white surfaces), with refined reduction rather than rich warmth. Spaces feel weightless, airy, and phenomenologically transparent in the Rowe-Slutzky sense."}
 
@@ -228,7 +230,10 @@ USER: Mixed-use 단지. 공공 공간이 1층에 넓게 있고 위는 주거랑 
 ASSISTANT: {"probe_needed": false, "probe_question": null, "reply": "이해했어요: 지상 공공 공간 위로 주거와 업무가 섞인 복합 단지 — 프로그램적 하이브리드가 명시적 의도인 도시형 개발 유형. 맞을까요?", "filters": {"location_country": null, "program": "Mixed Use", "material": null, "style": null, "year_min": null, "year_max": null}, "filter_priority": ["program"], "raw_query": "Mixed-use 단지. 공공 공간이 1층에 넓게 있고 위는 주거랑 오피스 섞여 있는 거.", "visual_description": "A multi-building mixed-use urban complex with an expansive, programmatically porous public ground plane that spans retail, lobby, and civic space. Above the ground level, residential and office functions stack and interleave — towers, slabs, or podium-plus-tower typologies hosting hybrid programs. The building defines new street fronts and plazas at ground level and maintains a legible urban-block presence at the top; the architecture embraces programmatic hybridity and civic porosity as explicit intent."}
 
 USER: Koolhaas 스타일로 도서관 하나. OMA 초기 작업 느낌.
-ASSISTANT: {"probe_needed": false, "probe_question": null, "reply": "이해했어요: 쿨하스·초기 OMA 계열의 도서관 — 프로그램 하이브리드가 강하고 자율적 오브제로 읽히는, 다방향 순환과 실험적 형태 언어의 공공 시설. 이 방향으로 찾아볼게요.", "filters": {"location_country": null, "program": "Public", "material": null, "style": "Avant-Garde", "year_min": 1990, "year_max": null}, "filter_priority": ["program", "style"], "raw_query": "Koolhaas 스타일로 도서관 하나. OMA 초기 작업 느낌.", "visual_description": "A library in the OMA/Rem Koolhaas-early-period tradition — a singular, autonomous architectural object whose form expresses programmatic hybridity and experimental spatial strategies. The building reads as a stacked, faceted, or wedge-shaped volume with sharp geometries, hovering masses, or a distinctively authored silhouette that reads as conceptual rather than contextual. Interior circulation favours omnidirectional spatial flat-plans over linear sequences; programmes like reading rooms, event spaces, and public lobbies are layered rather than zoned. Materiality tends toward cool industrial (metal mesh, glass, concrete) with unexpected colour accents."}
+ASSISTANT: {"probe_needed": false, "probe_question": null, "reply": "이해했어요: 쿨하스·초기 OMA 계열의 도서관 — 프로그램 하이브리드가 강하고 자율적 오브제로 읽히는, 다방향 순환과 실험적 형태 언어의 공공 시설. 이 방향으로 찾아볼게요.", "filters": {"location_country": null, "program": "Public", "material": null, "style": "Deconstructivist", "year_min": 1990, "year_max": null}, "filter_priority": ["program", "style"], "raw_query": "Koolhaas 스타일로 도서관 하나. OMA 초기 작업 느낌.", "visual_description": "A library in the OMA/Rem Koolhaas-early-period tradition — a singular, autonomous architectural object whose form expresses programmatic hybridity and experimental spatial strategies. The building reads as a stacked, faceted, or wedge-shaped volume with sharp geometries, hovering masses, or a distinctively authored silhouette that reads as conceptual rather than contextual. Interior circulation favours omnidirectional spatial flat-plans over linear sequences; programmes like reading rooms, event spaces, and public lobbies are layered rather than zoned. Materiality tends toward cool industrial (metal mesh, glass, concrete) with unexpected colour accents."}
+
+USER: 중정이 있는 단층 주택 보고 싶어요.
+ASSISTANT: {"probe_needed": false, "probe_question": null, "reply": "이해했어요: 중정을 중심으로 구성된 단층 주택 — 외부에서 시선이 차단되면서도 내부적으로는 마당을 향해 열려 있는, 조용하고 사적인 생활 공간. 이 방향으로 찾아볼게요.", "filters": {"location_country": null, "program": "Housing", "material": null, "style": null, "year_min": null, "year_max": null, "atmosphere": null, "color_tone": null, "typology_primary": "House", "architectural_elements": "Courtyard"}, "filter_priority": ["program", "architectural_elements"], "raw_query": "중정이 있는 단층 주택 보고 싶어요.", "visual_description": "A single-storey courtyard house organised around a central open-air courtyard that anchors the entire plan. The perimeter is largely closed to the street for privacy, while interior rooms open inward through glazed walls and covered walkways facing the courtyard garden. Daylight and cross-ventilation are mediated through this internal void; the massing stays low and horizontal, with a quiet, introspective domestic atmosphere centred on the courtyard as the primary living space."}
 """
 
 # ---------------------------------------------------------------------------
@@ -298,6 +303,8 @@ _STAGE1_RESPONSE_SCHEMA = {
                 'atmosphere': {'type': 'string'},
                 'color_tone': {'type': 'string'},
                 'typology_primary': {'type': 'string'},
+                # BACK-PARSER-VOCAB-1: 4th soft axis (array column, single-value string here)
+                'architectural_elements': {'type': 'string'},
             },
         },
         # FILTER-DELTA: incremental follow-up semantics.
@@ -320,6 +327,7 @@ _STAGE1_RESPONSE_SCHEMA = {
                         'atmosphere': {'type': 'string'},
                         'color_tone': {'type': 'string'},
                         'typology_primary': {'type': 'string'},
+                        'architectural_elements': {'type': 'string'},
                     },
                     'description': (
                         'Axes to ADD or CHANGE from prior filters. '
@@ -453,3 +461,70 @@ For every response, also output the following fields alongside the standard sche
 
 **Rule**: when confidence_score < 0.60, `system_action` MUST be `REQUEST_PRIORITY` and `suggested_quick_replies` MUST have 2–3 axis-value chips (real architectural options only — no "skip" or "show cards now" options). When confidence_score >= 0.60, `system_action` is `CONFIRM_SELECTION` or `NONE` and `suggested_quick_replies` is empty or omitted.
 """
+
+# ---------------------------------------------------------------------------
+# BACK-PARSER-VOCAB-1: grounds the 5 axes (style, atmosphere, color_tone,
+# typology_primary, architectural_elements) in ACTUAL DB vocabulary at call
+# time. Pure function -- no DB access here; the caller (parse_query.py) fetches
+# the vocab dict via _svc.get_axis_vocab() and passes it in.
+# ---------------------------------------------------------------------------
+_AXIS_EXTRA_RULES = {
+    'color_tone': (
+        '\nUsers say color WORDS; map to tone families, never emit the color word itself: '
+        '흰색/white/밝은->Light or Neutral, 검정/black/어두운->Dark, '
+        '붉은/red/orange/terracotta->Warm or Earth, 회색/gray/콘크리트색->Neutral or Cool, '
+        '원색/화려한->Vibrant, 흑백->Monochrome.\n'
+    ),
+    'typology_primary': (
+        '\nWhen the user names a specific building type (도서관/교회/학교/미술관/파빌리온...), '
+        'set `typology_primary` to the matching allowed value AND ALSO fill `program` with '
+        'its parent bucket -- the specific type never replaces `program`, both are filled '
+        '(도서관->typology_primary "Library" + program "Education" or "Public"; '
+        '교회->"Religious Building" + "Religion").\n'
+    ),
+}
+
+
+def build_vocab_prompt_block(vocab: dict) -> str:
+    """Render the 'Allowed <axis> values' markdown sections from a live vocab dict.
+
+    Mirrors the existing '## Allowed `program` values' section format: one
+    section per grounded axis with the exact comma-joined allowed strings plus
+    the cannot-map->null rule sentence. color_tone and typology_primary get an
+    extra rule paragraph (color-word->tone-family mapping; specific-type->
+    typology+program dual-fill). Pure string formatting -- no DB access, no
+    exceptions raised (a missing/empty axis in `vocab` is simply skipped).
+
+    Args:
+        vocab: dict[axis_name -> list[str]], e.g. services.get_axis_vocab() output.
+
+    Returns:
+        A markdown string to append to the system instruction. Empty string
+        if `vocab` is falsy.
+    """
+    if not vocab:
+        return ''
+
+    axes = ('style', 'atmosphere', 'color_tone', 'typology_primary', 'architectural_elements')
+    sections = []
+    for axis in axes:
+        values = vocab.get(axis)
+        if not values:
+            continue
+        joined = ', '.join(str(v) for v in values)
+        extra = _AXIS_EXTRA_RULES.get(axis, '')
+        sections.append(
+            f'## Allowed `{axis}` values (use exactly these strings)\n\n'
+            f'{joined}\n'
+            f'{extra}'
+            f'If you cannot map to one of these, set `{axis}: null` and let their words '
+            f'flow to `raw_query` / `visual_description` instead.\n'
+        )
+    return '\n' + '\n'.join(sections)
+
+
+# ---------------------------------------------------------------------------
+# Approximate token cost of build_vocab_prompt_block(_VOCAB_SNAPSHOT) is
+# checked in test_vocab_grounding.py (budget: <= ~600 tokens for the vocab
+# blocks + the new courtyard-house few-shot example added above).
+# ---------------------------------------------------------------------------

@@ -18,7 +18,7 @@ _REQUIRED_SLATE_FIELDS_SET = frozenset(('program', 'material', 'style', 'locatio
 _IDF_SCORE_AXES = (
     'program', 'location_country', 'location_city',
     'style', 'atmosphere', 'color_tone', 'typology_primary',
-    'material', 'year_min', 'year_max',
+    'material', 'year_min', 'year_max', 'architectural_elements',
 )
 
 
@@ -145,33 +145,36 @@ def _build_idf_score_cases(filters, base_weights, idf_map, filter_priority):
     """Build CASE WHEN SQL for IDF-weighted tag score (LLM-SEARCH-RANK-1).
 
     Generalises _build_score_cases with per-axis IDF weighting and priority boost.
-    Handles all scoring axes including the three new soft axes:
-      atmosphere, color_tone, typology_primary (all ILIKE on single TEXT columns).
+    Handles all scoring axes including the soft axes:
+      atmosphere, color_tone, typology_primary (ILIKE on single TEXT columns),
+      architectural_elements (EXISTS/unnest on a TEXT[] column, BACK-PARSER-VOCAB-1).
 
     Axis-to-column mapping (static allowlist — no user input reaches SQL):
-      program             -> exact  'program = %s'
-      location_country    -> ILIKE  'location_country ILIKE %s'
-      location_city       -> ILIKE  'location_city ILIKE %s'
-      style               -> ILIKE  'style ILIKE %s'
-      atmosphere          -> ILIKE  'atmosphere ILIKE %s'
-      color_tone          -> ILIKE  'color_tone ILIKE %s'
-      typology_primary    -> ILIKE  'typology_primary ILIKE %s'
-      material            -> EXISTS(unnest(material_visual))
-      year_min            -> 'project_year >= %s'
-      year_max            -> 'project_year <= %s'
+      program                 -> exact  'program = %s'
+      location_country        -> ILIKE  'location_country ILIKE %s'
+      location_city           -> ILIKE  'location_city ILIKE %s'
+      style                   -> ILIKE  'style ILIKE %s'
+      atmosphere              -> ILIKE  'atmosphere ILIKE %s'
+      color_tone              -> ILIKE  'color_tone ILIKE %s'
+      typology_primary        -> ILIKE  'typology_primary ILIKE %s'
+      material                -> EXISTS(unnest(material_visual))
+      architectural_elements  -> EXISTS(unnest(architectural_elements))
+      year_min                -> 'project_year >= %s'
+      year_max                -> 'project_year <= %s'
 
     IDF per axis:
       idf_map['_total'] == 0 -> all idf 1.0 (graceful fallback).
       idf = log(N / (df + 1)), clamped to [1.0, idf_ceiling].
       df is idf_map[idf_axis][filter_value], where idf_axis follows:
-        program          -> idf_map['program']
-        style            -> idf_map['style']
-        atmosphere       -> idf_map['atmosphere']
-        typology_primary -> idf_map['typology_primary']
-        material         -> idf_map['material_visual']
-        location_*       -> no IDF axis -> idf = 1.0
-        color_tone       -> no IDF axis -> idf = 1.0
-        year_*           -> no IDF axis -> idf = 1.0
+        program                 -> idf_map['program']
+        style                   -> idf_map['style']
+        atmosphere              -> idf_map['atmosphere']
+        typology_primary        -> idf_map['typology_primary']
+        material                -> idf_map['material_visual']
+        architectural_elements  -> idf_map['architectural_elements']
+        location_*              -> no IDF axis -> idf = 1.0
+        color_tone              -> no IDF axis -> idf = 1.0
+        year_*                  -> no IDF axis -> idf = 1.0
 
     Priority boost:
       filter_priority is an ordered list of axis names.
@@ -229,6 +232,7 @@ def _build_idf_score_cases(filters, base_weights, idf_map, filter_priority):
                 'atmosphere': 'atmosphere',
                 'typology_primary': 'typology_primary',
                 'material': 'material_visual',
+                'architectural_elements': 'architectural_elements',
             }
             idf_axis = idf_axis_map.get(axis)
             if idf_axis and idf_axis in idf_map:
@@ -320,6 +324,18 @@ def _build_idf_score_cases(filters, base_weights, idf_map, filter_priority):
                 f'THEN {w} ELSE 0 END'
             )
             params.append(f"%{filters['material']}%")
+            total_weight += w
+
+    # architectural_elements — unnest EXISTS (new soft axis, TEXT[] column)
+    if filters.get('architectural_elements') and 'architectural_elements' in _IDF_SCORE_AXES:
+        w = _effective_weight('architectural_elements', filters['architectural_elements'])
+        if w > 0:
+            cases.append(
+                'CASE WHEN EXISTS '
+                '(SELECT 1 FROM unnest(architectural_elements) e WHERE e ILIKE %s) '
+                f'THEN {w} ELSE 0 END'
+            )
+            params.append(f"%{filters['architectural_elements']}%")
             total_weight += w
 
     # year_min — numeric

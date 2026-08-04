@@ -604,6 +604,7 @@ def search_by_filters_scored(
         'location_country': 5.0, 'location_city': 5.0,
         'material': 4.0, 'style': 4.0,
         'atmosphere': 3.0, 'color_tone': 2.0,
+        'architectural_elements': 4.0,
         'year_min': 1.0, 'year_max': 1.0,
     }))
     # Pass IDF ceiling + priority boost + top-priority multiplier as sentinel keys
