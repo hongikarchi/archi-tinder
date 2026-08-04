@@ -697,7 +697,12 @@ def parse_query(conversation_history, language=None, prior_filters=None):
         _delta_set = {k: v for k, v in _delta_set.items() if k in _VALID_AXES and v is not None}
         _delta_remove = [a for a in _delta_remove if isinstance(a, str) and a in _VALID_AXES]
 
-        if _filter_delta:
+        # An EMPTY delta ({'set': {}, 'remove': []}) is only meaningful on a
+        # follow-up turn (prior filters exist). On a first turn it must NOT
+        # shadow the full `filters` dict -- some models (gpt-5.6-luna, and
+        # Gemini on schema-faithful outputs) always emit the delta skeleton,
+        # which silently wiped every parsed filter (found in A/B 2026-08-04).
+        if (_delta_set or _delta_remove) or (prior_filters and _filter_delta):
             # Follow-up turn: apply delta to prior
             filters = dict(prior_filters or {})
             filters.update(_delta_set)
@@ -1040,7 +1045,12 @@ def parse_query_stage1(conversation_history, language=None, prior_filters=None):
         _delta_set = {k: v for k, v in _delta_set.items() if k in _VALID_AXES and v is not None}
         _delta_remove = [a for a in _delta_remove if isinstance(a, str) and a in _VALID_AXES]
 
-        if _filter_delta:
+        # An EMPTY delta ({'set': {}, 'remove': []}) is only meaningful on a
+        # follow-up turn (prior filters exist). On a first turn it must NOT
+        # shadow the full `filters` dict -- some models (gpt-5.6-luna, and
+        # Gemini on schema-faithful outputs) always emit the delta skeleton,
+        # which silently wiped every parsed filter (found in A/B 2026-08-04).
+        if (_delta_set or _delta_remove) or (prior_filters and _filter_delta):
             # Follow-up turn: apply delta to prior
             filters = dict(prior_filters or {})
             filters.update(_delta_set)

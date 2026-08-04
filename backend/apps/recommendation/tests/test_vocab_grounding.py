@@ -417,3 +417,39 @@ class TestFewShotConformance:
         if isinstance(fd, dict) and isinstance(fd.get('set'), dict):
             sources.append(fd['set'])
         return sources
+
+
+class TestEmptyFilterDeltaFirstTurn:
+    """Regression: empty filter_delta skeleton must not wipe first-turn filters.
+
+    Some models (gpt-5.6-luna; Gemini on schema-faithful outputs) always emit
+    filter_delta={'set': {}, 'remove': []}. Pre-fix, that truthy-but-empty dict
+    routed the merge into the delta branch and discarded the full filters dict.
+    """
+
+    def test_first_turn_full_filters_survive_empty_delta(self, monkeypatch):
+        import json as _json
+        from unittest.mock import MagicMock, patch
+        from apps.recommendation import services as svc
+
+        payload = {
+            'probe_needed': False,
+            'probe_question': None,
+            'reply': 'ok',
+            'filters': {'program': 'Housing', 'material': 'brick',
+                        'architectural_elements': 'Courtyard'},
+            'filter_delta': {'set': {}, 'remove': []},
+            'filter_priority': ['program', 'material'],
+            'raw_query': 'q',
+            'visual_description': 'x',
+        }
+        resp = MagicMock()
+        resp.text = _json.dumps(payload)
+        resp.usage_metadata = None
+        with patch('apps.recommendation.services._get_client'), \
+                patch('apps.recommendation.services.generate_content_with_fallback',
+                      return_value=resp):
+            result = svc.parse_query([{'role': 'user', 'text': 'q'}])
+        assert result['filters'].get('program') == 'Housing'
+        assert result['filters'].get('material') == 'brick'
+        assert result['filters'].get('architectural_elements') == 'Courtyard'
