@@ -23,6 +23,12 @@ touches _get_client()/_get_gemini_client() to avoid cross-test leakage.
 BACK-LLM-PROVIDER-2 (TestImageProviderDispatch): covers the IMAGE-GEN path's
 own independent provider switch, settings.LLM_IMAGE_PROVIDER, in
 apps.recommendation.services.generation._gen_native.
+
+LLM-AB-KNOB-1 (TestOpenaiStrictSchema): covers the opt-in OpenAI strict
+structured-output mode (settings.OPENAI_STRICT_SCHEMA) for the LEGACY parse
+path only, plus a recursive structural check of _OPENAI_STRICT_PARSE_SCHEMA
+itself (every object node has additionalProperties=False and
+required==list(properties)).
 """
 import base64
 import os
@@ -639,3 +645,138 @@ class TestImageProviderDispatch:
             generation._gen_native(MagicMock(), 'a prompt')
 
         assert openai_client.images.generate.call_args.kwargs['quality'] == 'low'
+
+
+# ---------------------------------------------------------------------------
+# LLM-AB-KNOB-1: OpenAI strict structured-output mode (settings.OPENAI_STRICT_SCHEMA)
+# ---------------------------------------------------------------------------
+
+class TestOpenaiStrictSchema:
+
+    def _fake_create(self, captured):
+        completion = MagicMock()
+        completion.choices = [MagicMock(message=MagicMock(content='{}'))]
+        completion.usage = None
+
+        def _create(**kwargs):
+            captured.update(kwargs)
+            return completion
+        return _create
+
+    def test_strict_flag_off_uses_json_object(self):
+        """Default OPENAI_STRICT_SCHEMA=False -> json_object, unchanged existing
+        behaviour, even when config.response_schema is None."""
+        captured = {}
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.side_effect = self._fake_create(captured)
+
+        config = types.GenerateContentConfig(response_mime_type='application/json')
+
+        with override_settings(LLM_PROVIDER='openai', OPENAI_STRICT_SCHEMA=False):
+            _gemini._dispatch_generate(
+                mock_client, model='gpt-5.6-luna', contents='hi', config=config, timeout=15.0,
+            )
+
+        assert captured['response_format'] == {'type': 'json_object'}
+
+    def test_strict_flag_on_and_no_response_schema_uses_json_schema_strict(self):
+        """OPENAI_STRICT_SCHEMA=True + config.response_schema is None (the LEGACY
+        parse path) -> response_format is json_schema, strict=True, name=parse_result."""
+        captured = {}
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.side_effect = self._fake_create(captured)
+
+        config = types.GenerateContentConfig(response_mime_type='application/json')
+
+        with override_settings(LLM_PROVIDER='openai', OPENAI_STRICT_SCHEMA=True):
+            _gemini._dispatch_generate(
+                mock_client, model='gpt-5.6-luna', contents='hi', config=config, timeout=15.0,
+            )
+
+        rf = captured['response_format']
+        assert rf['type'] == 'json_schema'
+        assert rf['json_schema']['strict'] is True
+        assert rf['json_schema']['name'] == 'parse_result'
+        assert 'schema' in rf['json_schema']
+
+    def test_strict_flag_on_but_explicit_response_schema_still_json_object(self):
+        """OPENAI_STRICT_SCHEMA=True + config.response_schema IS set (the stage1
+        path, a Gemini-shaped schema) -> stays json_object; strict mode must NOT
+        override an explicit response_schema (that schema is Gemini-shaped, not
+        OpenAI-strict-compliant, and is never translated)."""
+        captured = {}
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.side_effect = self._fake_create(captured)
+
+        config = types.GenerateContentConfig(
+            response_mime_type='application/json',
+            response_schema={'type': 'OBJECT', 'required': ['a']},
+        )
+
+        with override_settings(LLM_PROVIDER='openai', OPENAI_STRICT_SCHEMA=True):
+            _gemini._dispatch_generate(
+                mock_client, model='gpt-5.6-luna', contents='hi', config=config, timeout=15.0,
+            )
+
+        assert captured['response_format'] == {'type': 'json_object'}
+        assert 'json_schema' not in captured['response_format']
+
+
+class TestOpenaiStrictParseSchemaStructure:
+    """Recursive structural validation of _OPENAI_STRICT_PARSE_SCHEMA: OpenAI
+    strict mode requires every object node to set additionalProperties=False
+    and required==list(properties) (no optional keys -- optionality is
+    expressed via nullable types instead)."""
+
+    def _walk(self, node, path='$'):
+        if not isinstance(node, dict):
+            return
+        if node.get('type') == 'object' or 'properties' in node:
+            assert node.get('additionalProperties') is False, (
+                f'{path}: additionalProperties must be False'
+            )
+            props = node.get('properties', {})
+            required = node.get('required', [])
+            assert set(required) == set(props.keys()), (
+                f'{path}: required {required} != properties {list(props.keys())}'
+            )
+            for key, sub in props.items():
+                self._walk(sub, f'{path}.{key}')
+        items = node.get('items')
+        if isinstance(items, dict):
+            self._walk(items, f'{path}[]')
+
+    def test_every_object_node_is_strict_compliant(self):
+        from apps.recommendation.services._prompts import _OPENAI_STRICT_PARSE_SCHEMA
+        self._walk(_OPENAI_STRICT_PARSE_SCHEMA)
+
+    def test_top_level_keys_match_legacy_output_schema(self):
+        """Sanity: the strict schema's top-level keys cover every key the
+        legacy parse output schema documents (filters/filter_delta shape +
+        calibration fields)."""
+        from apps.recommendation.services._prompts import _OPENAI_STRICT_PARSE_SCHEMA
+
+        expected = {
+            'probe_needed', 'probe_question', 'reply', 'filters', 'filter_delta',
+            'filter_priority', 'image_focus', 'raw_query', 'visual_description',
+            'confidence_score', 'system_action', 'suggested_quick_replies',
+            'priority_ordered', 'llm_response_message',
+        }
+        assert set(_OPENAI_STRICT_PARSE_SCHEMA['properties'].keys()) == expected
+
+    def test_filters_axes_match_the_eleven_axes(self):
+        from apps.recommendation.services._prompts import _OPENAI_STRICT_PARSE_SCHEMA
+
+        expected_axes = {
+            'location_country', 'location_city', 'program', 'material', 'style',
+            'year_min', 'year_max', 'atmosphere', 'color_tone',
+            'typology_primary', 'architectural_elements',
+        }
+        filters_props = _OPENAI_STRICT_PARSE_SCHEMA['properties']['filters']['properties']
+        assert set(filters_props.keys()) == expected_axes
+
+        delta_set_props = (
+            _OPENAI_STRICT_PARSE_SCHEMA['properties']['filter_delta']
+            ['properties']['set']['properties']
+        )
+        assert set(delta_set_props.keys()) == expected_axes

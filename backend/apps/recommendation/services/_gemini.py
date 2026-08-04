@@ -13,7 +13,10 @@ _get_openai_client() are the two always-provider-X escape hatches _gen_native
 picks between; _get_client() (the LLM_PROVIDER-switched seam) is unaffected
 and remains text-path-only.
 
-Self-contained: no imports from sibling sub-modules.
+Self-contained: no imports from sibling sub-modules (LLM-AB-KNOB-1's
+_OPENAI_STRICT_PARSE_SCHEMA is the sole exception, and it is imported
+lazily INSIDE _dispatch_generate's openai branch to preserve this at
+module-import time).
 """
 import logging
 import queue
@@ -360,10 +363,28 @@ def _dispatch_generate(client, *, model, contents, config=None, timeout):
     # reject any non-default value with 400 unsupported_value (empirically hit
     # 2026-08-04 — "Only the default (1) value is supported").
     json_mode = bool(config and getattr(config, 'response_mime_type', None) == 'application/json')
-    if json_mode:
+    response_schema = getattr(config, 'response_schema', None) if config else None
+    if json_mode and settings.OPENAI_STRICT_SCHEMA and response_schema is None:
+        # LLM-AB-KNOB-1: opt-in strict structured output for the LEGACY parse
+        # path only (response_schema is None there -- the stage1 path always
+        # sets response_schema=_STAGE1_RESPONSE_SCHEMA, a Gemini-shaped schema
+        # that must NOT be translated/forwarded here, so it falls through to
+        # the plain json_object branch below unchanged).
+        from ._prompts import _OPENAI_STRICT_PARSE_SCHEMA  # noqa: PLC0415 -- lazy, keeps module self-contained
+        kwargs['response_format'] = {
+            'type': 'json_schema',
+            'json_schema': {
+                'name': 'parse_result',
+                'strict': True,
+                'schema': _OPENAI_STRICT_PARSE_SCHEMA,
+            },
+        }
+    elif json_mode:
         kwargs['response_format'] = {'type': 'json_object'}
-    # config.response_schema and config.thinking_config are intentionally IGNORED
-    # on the openai path -- see this function's docstring + module design notes.
+    # config.thinking_config is intentionally IGNORED on the openai path -- see
+    # this function's docstring + module design notes. config.response_schema
+    # is ignored too EXCEPT as the strict-mode gate above (never translated/
+    # forwarded verbatim -- Gemini schema shape != OpenAI json_schema shape).
 
     # Validated at settings load (allowlist); empty string means "do not send".
     reasoning_effort = getattr(settings, 'OPENAI_REASONING_EFFORT', '')

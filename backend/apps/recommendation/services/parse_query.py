@@ -561,7 +561,7 @@ def parse_query(conversation_history, language=None, prior_filters=None):
                 cached_content=cache_resource_name,
                 response_mime_type='application/json',
                 temperature=0.2,
-                thinking_config=types.ThinkingConfig(thinking_budget=0),
+                thinking_config=types.ThinkingConfig(thinking_budget=settings.GEMINI_THINKING_BUDGET),
             )
         else:
             # Uncached path: inject language directive via augmented system_instruction.
@@ -569,7 +569,7 @@ def parse_query(conversation_history, language=None, prior_filters=None):
                 system_instruction=_system_instruction,
                 response_mime_type='application/json',
                 temperature=0.2,
-                thinking_config=types.ThinkingConfig(thinking_budget=0),
+                thinking_config=types.ThinkingConfig(thinking_budget=settings.GEMINI_THINKING_BUDGET),
             )
 
         t_call_start = time.perf_counter()
@@ -598,7 +598,7 @@ def parse_query(conversation_history, language=None, prior_filters=None):
                         system_instruction=_system_instruction,
                         response_mime_type='application/json',
                         temperature=0.2,
-                        thinking_config=types.ThinkingConfig(thinking_budget=0),
+                        thinking_config=types.ThinkingConfig(thinking_budget=settings.GEMINI_THINKING_BUDGET),
                     ),
                 )
             else:
@@ -929,7 +929,7 @@ def parse_query_stage1(conversation_history, language=None, prior_filters=None):
                 response_mime_type='application/json',
                 response_schema=_STAGE1_RESPONSE_SCHEMA,
                 temperature=0.2,
-                thinking_config=types.ThinkingConfig(thinking_budget=0),
+                thinking_config=types.ThinkingConfig(thinking_budget=settings.GEMINI_THINKING_BUDGET),
             )
         else:
             # Uncached path: inject language directive via augmented system_instruction.
@@ -938,7 +938,7 @@ def parse_query_stage1(conversation_history, language=None, prior_filters=None):
                 response_mime_type='application/json',
                 response_schema=_STAGE1_RESPONSE_SCHEMA,
                 temperature=0.2,
-                thinking_config=types.ThinkingConfig(thinking_budget=0),
+                thinking_config=types.ThinkingConfig(thinking_budget=settings.GEMINI_THINKING_BUDGET),
             )
 
         t_call_start = time.perf_counter()
@@ -967,7 +967,7 @@ def parse_query_stage1(conversation_history, language=None, prior_filters=None):
                         response_mime_type='application/json',
                         response_schema=_STAGE1_RESPONSE_SCHEMA,
                         temperature=0.2,
-                        thinking_config=types.ThinkingConfig(thinking_budget=0),
+                        thinking_config=types.ThinkingConfig(thinking_budget=settings.GEMINI_THINKING_BUDGET),
                     ),
                 )
             else:

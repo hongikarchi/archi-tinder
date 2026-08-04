@@ -453,3 +453,76 @@ class TestEmptyFilterDeltaFirstTurn:
         assert result['filters'].get('program') == 'Housing'
         assert result['filters'].get('material') == 'brick'
         assert result['filters'].get('architectural_elements') == 'Courtyard'
+
+
+# ---------------------------------------------------------------------------
+# LLM-AB-KNOB-2: settings.GEMINI_THINKING_BUDGET passthrough (parse_query paths)
+# ---------------------------------------------------------------------------
+
+class TestGeminiThinkingBudgetPassthrough:
+    """GEMINI_THINKING_BUDGET must reach ThinkingConfig(thinking_budget=...) on
+    BOTH parse paths (legacy parse_query + stage1 parse_query_stage1)."""
+
+    def _payload(self):
+        return {
+            'probe_needed': False,
+            'probe_question': None,
+            'reply': 'ok',
+            'filters': {'program': 'Housing'},
+            'filter_delta': {'set': {}, 'remove': []},
+            'filter_priority': ['program'],
+            'raw_query': 'q',
+            'visual_description': 'x',
+        }
+
+    def test_legacy_parse_query_passes_thinking_budget_through(self, monkeypatch):
+        import json as _json
+        from unittest.mock import MagicMock, patch
+        from django.test import override_settings
+        from apps.recommendation import services as svc
+
+        resp = MagicMock()
+        resp.text = _json.dumps(self._payload())
+        resp.usage_metadata = None
+        captured = {}
+
+        def _fake_fallback(client, **kw):
+            captured['config'] = kw.get('config')
+            return resp
+
+        with override_settings(GEMINI_THINKING_BUDGET=123), \
+                patch('apps.recommendation.services._get_client'), \
+                patch('apps.recommendation.services.generate_content_with_fallback',
+                      side_effect=_fake_fallback):
+            svc.parse_query([{'role': 'user', 'text': 'q'}])
+
+        assert captured['config'].thinking_config.thinking_budget == 123
+
+    def test_stage1_parse_query_passes_thinking_budget_through(self, monkeypatch):
+        import json as _json
+        from unittest.mock import MagicMock, patch
+        from django.test import override_settings
+        from apps.recommendation import services as svc
+
+        resp = MagicMock()
+        resp.text = _json.dumps(self._payload())
+        resp.usage_metadata = None
+        captured = {}
+
+        def _fake_fallback(client, **kw):
+            captured['config'] = kw.get('config')
+            return resp
+
+        with override_settings(GEMINI_THINKING_BUDGET=123), \
+                patch('apps.recommendation.services._get_client'), \
+                patch('apps.recommendation.services.generate_content_with_fallback',
+                      side_effect=_fake_fallback):
+            svc.parse_query_stage1([{'role': 'user', 'text': 'q'}])
+
+        assert captured['config'].thinking_config.thinking_budget == 123
+
+    def test_default_thinking_budget_is_zero_byte_identical(self):
+        """Sanity: default env unset -> settings.GEMINI_THINKING_BUDGET == 0,
+        i.e. byte-identical to the pre-knob literal 0."""
+        from django.conf import settings
+        assert settings.GEMINI_THINKING_BUDGET == 0
