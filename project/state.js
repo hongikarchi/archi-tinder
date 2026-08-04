@@ -23,7 +23,7 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-08-05 00:26 KST',
+    updatedAt: '2026-08-05 02:13 KST',
     head: '20ed84d',
     branch: 'feature/claude-llm-provider-adapter',
   },

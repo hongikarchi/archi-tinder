@@ -257,6 +257,7 @@ Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over
 - [x] 어댑터: 시임명 유지, mock 45곳 무변경, 신규 테스트 28개(회귀 포함). 현장 수정: reasoning 모델 temperature 400→미전송, OPENAI_REASONING_EFFORT settings 승격+allowlist, db_qc Neon 유휴 커넥션 리프레시.
 - [x] 실측 런: fix 전 4런 + fix 후 6런(`qc_20260804T144517Z`~`151907Z`). 주의: 2.5-flash/2.5-flash-lite 14%는 fix 전 수치라 무효 — 재평가 필요 시 재실행.
 - 판정 옵션: (A) gemini 유지+타임아웃 8s 완화 = 최속·최저가, (B) gpt-5.4-mini = 동급 품질·꼬리 0·p50 +1.4s·단가 3배. 결정 보류(유저).
+- [x] 확장(2026-08-05): program 버킷 모호 규칙 수정(미술관→Public 오선택으로 luna 89%→95%, `1e66498` 이전 커밋들) + `LLM_IMAGE_PROVIDER` 독립 스위치로 gpt-image-2 이미지 경로(`1e66498`) + 페르소나 4보드 실서비스 시딩·풀페이지 캡처(web-testing/ab_screenshot.py, llm-ab-screens/) + 기능×모델×effort 종합 보고 아티팩트 발행. gpt-image-2: low 26~32s/$0.005, medium 45s 타임아웃 초과(91s) — 채택 시 타임아웃 상향 필요.
 
 ### BACK-PARSER-VOCAB-1 — 파서 어휘 그라운딩 (db_qc P1/P2/P3 수정) — RESOLVED 2026-08-04 (`9c88b54`-pre-squash)
 파서가 DB에 없는 필터 값을 창작하던 문제(P1)·architectural_elements 축 부재(P2)·구체 유형 뭉개기(P3)를 어휘 그라운딩으로 수정 — db_qc 실측 unmatchable 8→0 쿼리, hard_empty 1→0, tag_match@10 courtyard/atrium/terrace 0→100%, library +90pt, facade +80pt, 회귀 0.
