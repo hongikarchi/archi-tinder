@@ -18,3 +18,4 @@ export { getProjectReactors, reactToProject, unreactToProject } from './social.j
 export { addLikedBuilding, getLikedBuildings } from './liked.js'
 export { getRecommendedArchitects, getArchitectProfile, getUserSavedStudios } from './architects.js'
 export { listNotifications, getUnreadCount, markRead } from './notifications.js'
+export { getInspectBuildings, getInspectBuilding, inspectSearch } from './inspect.js'

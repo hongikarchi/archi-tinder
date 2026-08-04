@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { useTheme } from './hooks/useTheme.js'
 import { useLanguage } from './hooks/useLanguage.js'
@@ -31,6 +31,10 @@ import { normalizeFilters, classifySwipeError, isActionCard, extractLikedIds, ex
 import { reportWriteError } from './utils/reportWriteError.js'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import LLMSearchUpdateWrapper from './components/LLMSearchUpdateWrapper.jsx'
+
+// ADMIN-DBCHECK-1: internal DB-quality inspection page — dev-build only, lazy
+// so it never lands in the prod bundle's eager import graph either.
+const DbCheckPage = lazy(() => import('./pages/dbCheck/DbCheckPage.jsx'))
 
 /* ── App ─────────────────────────────────────────────────────────────────── */
 export default function App() {
@@ -1122,6 +1126,14 @@ export default function App() {
             <Route path="notifications" element={<NotificationsScreen />} />
             <Route path="appearance" element={<AppearanceScreen />} />
           </Route>
+          {/* ADMIN-DBCHECK-1: URL-only internal QA tool, dev builds only — no TabBar/nav link */}
+          {import.meta.env.DEV && (
+            <Route path="db-check" element={
+              <Suspense fallback={null}>
+                <DbCheckPage />
+              </Suspense>
+            } />
+          )}
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

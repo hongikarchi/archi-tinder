@@ -1,0 +1,105 @@
+{
+  "_doc": "QC battery fixture. Each query: id, query (Korean NL, what a real user types), concepts = the ideas the query expresses. accept = substrings (lowercase-matched) that count as the concept being represented in parser filter values OR building tag values. truth_axis/truth_pattern = optional DB ground-truth predicate (ILIKE) for positive-placement metrics; omit when no reliable tag axis exists. vd_accept = override substrings for visual_description mention counting.",
+  "queries": [
+    {
+      "id": "courtyard-brick",
+      "query": "중정이 있는 벽돌 건축물",
+      "concepts": [
+        {"name": "brick", "accept": ["brick"], "truth_axis": "material_visual", "truth_pattern": "%brick%"},
+        {"name": "courtyard", "accept": ["courtyard", "중정"], "truth_axis": "architectural_elements", "truth_pattern": "%courtyard%", "vd_accept": ["courtyard", "patio", "cloister"]}
+      ]
+    },
+    {
+      "id": "piloti-concrete-house",
+      "query": "필로티가 있는 노출콘크리트 주택",
+      "concepts": [
+        {"name": "piloti", "accept": ["piloti", "pilotis", "필로티"]},
+        {"name": "concrete", "accept": ["concrete"], "truth_axis": "material_visual", "truth_pattern": "%concrete%"},
+        {"name": "house", "accept": ["house", "housing", "residential"], "truth_axis": "typology_primary", "truth_pattern": "%hous%"}
+      ]
+    },
+    {
+      "id": "wood-library",
+      "query": "목구조가 인상적인 도서관",
+      "concepts": [
+        {"name": "wood", "accept": ["wood", "timber"], "truth_axis": "material_visual", "truth_pattern": "%wood%"},
+        {"name": "library", "accept": ["library"], "truth_axis": "typology_primary", "truth_pattern": "%library%"}
+      ]
+    },
+    {
+      "id": "brutalist-concrete",
+      "query": "브루탈리즘 스타일의 콘크리트 건물",
+      "concepts": [
+        {"name": "brutalism", "accept": ["brutal"], "truth_axis": "style", "truth_pattern": "%brutal%"},
+        {"name": "concrete", "accept": ["concrete"], "truth_axis": "material_visual", "truth_pattern": "%concrete%"}
+      ]
+    },
+    {
+      "id": "white-minimal-house",
+      "query": "백색 미니멀리즘 주택",
+      "concepts": [
+        {"name": "minimal", "accept": ["minimal"], "truth_axis": "style", "truth_pattern": "%minimal%"},
+        {"name": "white", "accept": ["white"], "truth_axis": "color_tone", "truth_pattern": "%white%"},
+        {"name": "house", "accept": ["house", "housing", "residential"], "truth_axis": "typology_primary", "truth_pattern": "%hous%"}
+      ]
+    },
+    {
+      "id": "glass-museum",
+      "query": "유리 파사드가 돋보이는 미술관",
+      "concepts": [
+        {"name": "glass", "accept": ["glass"], "truth_axis": "material_visual", "truth_pattern": "%glass%"},
+        {"name": "museum", "accept": ["museum", "gallery"], "truth_axis": "typology_primary", "truth_pattern": "%museum%"},
+        {"name": "facade", "accept": ["facade", "파사드"], "truth_axis": "architectural_elements", "truth_pattern": "%facade%"}
+      ]
+    },
+    {
+      "id": "courtyard-house",
+      "query": "중정형 주택 보여줘",
+      "concepts": [
+        {"name": "courtyard", "accept": ["courtyard", "중정"], "truth_axis": "architectural_elements", "truth_pattern": "%courtyard%", "vd_accept": ["courtyard", "patio", "cloister"]},
+        {"name": "house", "accept": ["house", "housing", "residential"], "truth_axis": "typology_primary", "truth_pattern": "%hous%"}
+      ]
+    },
+    {
+      "id": "red-brick-school",
+      "query": "붉은 벽돌로 지은 학교 건물",
+      "concepts": [
+        {"name": "brick", "accept": ["brick"], "truth_axis": "material_visual", "truth_pattern": "%brick%"},
+        {"name": "school", "accept": ["school", "education", "kindergarten"], "truth_axis": "typology_primary", "truth_pattern": "%school%"}
+      ]
+    },
+    {
+      "id": "atrium-office",
+      "query": "아트리움이 있는 오피스 건물",
+      "concepts": [
+        {"name": "atrium", "accept": ["atrium", "아트리움"], "truth_axis": "architectural_elements", "truth_pattern": "%atrium%", "vd_accept": ["atrium", "void", "lightwell"]},
+        {"name": "office", "accept": ["office"], "truth_axis": "typology_primary", "truth_pattern": "%office%"}
+      ]
+    },
+    {
+      "id": "stone-religious",
+      "query": "돌로 지은 종교 건축",
+      "concepts": [
+        {"name": "stone", "accept": ["stone"], "truth_axis": "material_visual", "truth_pattern": "%stone%"},
+        {"name": "religious", "accept": ["religio", "church", "temple", "chapel"], "truth_axis": "typology_primary", "truth_pattern": "%religious%"}
+      ]
+    },
+    {
+      "id": "terrace-apartment",
+      "query": "테라스가 있는 집합주거",
+      "concepts": [
+        {"name": "terrace", "accept": ["terrace", "테라스"], "truth_axis": "architectural_elements", "truth_pattern": "%terrace%", "vd_accept": ["terrace", "balcony", "roof garden"]},
+        {"name": "apartment", "accept": ["apartment", "housing", "residential"], "truth_axis": "typology_primary", "truth_pattern": "%apartment%"}
+      ]
+    },
+    {
+      "id": "warm-wood-house",
+      "query": "따뜻한 분위기의 목재 주택",
+      "concepts": [
+        {"name": "warm", "accept": ["warm", "cozy"], "truth_axis": "atmosphere", "truth_pattern": "%warm%"},
+        {"name": "wood", "accept": ["wood", "timber"], "truth_axis": "material_visual", "truth_pattern": "%wood%"},
+        {"name": "house", "accept": ["house", "housing", "residential"], "truth_axis": "typology_primary", "truth_pattern": "%hous%"}
+      ]
+    }
+  ]
+}

@@ -23,11 +23,23 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-07-17 21:41 KST',
-    head: '7e974a2',
-    branch: 'feature/claude-works-followup',
+    updatedAt: '2026-08-04 14:42 KST',
+    head: '6054235',
+    branch: 'feature/claude-db-check',
   },
   done: [
+    {
+      id: 'ADMIN-DBCHECK-2',
+      title: 'DB/검색 QC 회귀 하네스 (기계층 + 판정층 런북)',
+      completedAt: '2026-08-04',
+      note: '검색 품질 3다리(DB 정확성·완전성·검색 도달성) 자동 측정 하네스 — `tools/db_qc.py` 4단계(어휘 덤프·파서 배터리·검색 배터리·이미지 헬스) + 12쿼리 fixture + 시각 판정층 루브릭/런북(`db_qc_rubric.md`), 재구축 전후 diff·HARD-EMPTY/5pt 회귀 시 exit 1.',
+    },
+    {
+      id: 'ADMIN-DBCHECK-1',
+      title: 'DB 품질 검사 페이지 (dev 전용)',
+      completedAt: '2026-07-27',
+      note: 'dev 빌드 전용 `/db-check` 내부 QA 페이지 — 전체 공개 건물 무한스크롤 그리드 + 자연어 검색(서비스 parse_query+scored search 재사용) + 타일 클릭 시 풀컬럼 DB 모달.',
+    },
     {
       id: 'FULL-WORKS-1a',
       title: '업로드 후속 fix 3건 (pagination + parallel HEAD + i18n)',
@@ -64,18 +76,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-07-13',
       note: '고트래픽 코어 루프 5파일의 하드코딩 한글 전량(주석 제외)을 t() 키로 — Discovery/Swipe/Results가 ko/en 동일 string source에서 렌더.',
     },
-    {
-      id: 'FRONT-IMAGE-RESIZE-3',
-      title: '이미지 풀해상도 passthrough + telemetry currentSrc',
-      completedAt: '2026-07-13',
-      note: '이미지 리사이즈 시리즈(PR1 #241 / PR2 #242 / LQIP #267) 마지막 잔여 마감 — 빈-갤러리 건물의 라이트박스/다운로드가 원본을 받고, telemetry가 실제 렌더 variant를 기록.',
-    },
-    {
-      id: 'BACK-PERFORMANCE-5a',
-      title: 'swipe timing_breakdown 계측 리더',
-      completedAt: '2026-07-13',
-      note: '`session_metrics_report`가 SessionEvent `timing_breakdown`을 이제 집계 — stage별 p50/p95/max + cache_hit 분리 + 세션내 위치 warmup bucket으로 swipe 0.7-1.5s 변동의 지배 원인을 prod 데이터로 특정 가능.',
-    },
   ],
   now: [],
   next: {
@@ -103,6 +103,11 @@ window.PROJECT_STATE = {
         id: 'FRONT-VERIFY-1',
         title: '보드저장 PATCH 경로 verify_required 모달 미배선',
         note: 'FULL-ONBOARDING-2(`92237d8`)가 guest promote-limit을 `403 {\'detail\':\'verify_required\',\'reason\':\'board_limit_reached\',\'limit\':3}`로 표준화했으나, 프론트 `updateProject`(projects.js:64-71)는 verify_required를 VerifyRequiredError로 변환 안 함(createProject:26-40만 처리) → SaveBoardModal에서 guest가 4번째 보…',
+      },
+      {
+        id: 'ADMIN-DBCHECK-3',
+        title: '판정층 첫 정식 QC 패스',
+        note: 'ADMIN-DBCHECK-2에서 분리(2026-08-04). 기계층 기준선(`qc_20260804T035813Z`) 위에서 시각 판정층 첫 실행: 태그 진실성 표본(tagged top-10 이미지 판정) + 음성 표본 감사(태그 없는 20동 → 태그 누락률 추정). 프로토콜은 `backend/tools/db_qc_rubric.md` 런북 그대로 (블라인드 sonnet 판정, 양성 대조군 3-5동 심기). 파서·엔진 수선 착지 후 돌리면 before/after 한 번에 나옴. ~600k son…',
       },
       {
         id: 'INFRA-TEMP-GC-1',
@@ -200,6 +205,27 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 287,
+      title: 'docs: full codebase audit 2026-07-17 — 68 findings report',
+      mergedAt: '2026-07-27T09:54:54Z',
+      mergedAtKST: '2026-07-27 18:54 KST',
+      sha: '6054235',
+    },
+    {
+      number: 286,
+      title: 'chore(infra): make dev port guard — fail loud on stale 8001/5174',
+      mergedAt: '2026-07-19T02:40:21Z',
+      mergedAtKST: '2026-07-19 11:40 KST',
+      sha: '36cbb2a',
+    },
+    {
+      number: 285,
+      title: 'feat(FULL-WORKS-1a): works followup — list pagination + parallel HEAD + page i18n',
+      mergedAt: '2026-07-17T12:46:31Z',
+      mergedAtKST: '2026-07-17 21:46 KST',
+      sha: '9c11907',
+    },
+    {
       number: 283,
       title: 'docs(BACK-PERFORMANCE-5): resolved — Redis US-region root cause, swipe p50 1638→124ms',
       mergedAt: '2026-07-16T17:57:16Z',
@@ -233,27 +259,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-07-13T08:16:20Z',
       mergedAtKST: '2026-07-13 17:16 KST',
       sha: '68dafaa',
-    },
-    {
-      number: 277,
-      title: 'feat(i18n): profile/board + modals sweep — slice c of 3, FULL-LANGUAGE-1 closed',
-      mergedAt: '2026-07-12T19:38:06Z',
-      mergedAtKST: '2026-07-13 04:38 KST',
-      sha: '227d23b',
-    },
-    {
-      number: 276,
-      title: 'feat(i18n): settings/account + auth errors sweep — slice b of 3 (FULL-LANGUAGE-1b)',
-      mergedAt: '2026-07-12T18:39:48Z',
-      mergedAtKST: '2026-07-13 03:39 KST',
-      sha: 'b51c385',
-    },
-    {
-      number: 275,
-      title: 'feat(i18n): core swipe loop label sweep — slice a of 3 (FULL-LANGUAGE-1a)',
-      mergedAt: '2026-07-12T17:59:59Z',
-      mergedAtKST: '2026-07-13 02:59 KST',
-      sha: '73b9c94',
     },
   ],
   agents: [
@@ -1104,6 +1109,10 @@ window.PROJECT_STATE = {
       role: 'Discovery 피드 테스트',
     },
     {
+      path: 'backend/apps/recommendation/tests/test_inspect.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/recommendation/tests/test_is_temp_data_filters.py',
       role: '',
     },
@@ -1146,6 +1155,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/recommendation/views/discovery.py',
       role: 'Discovery 피드 뷰',
+    },
+    {
+      path: 'backend/apps/recommendation/views/inspect.py',
+      role: '',
     },
     {
       path: 'backend/apps/recommendation/views/office_recommendation.py',
@@ -1568,6 +1581,14 @@ window.PROJECT_STATE = {
       role: '토픽 구성 테스트',
     },
     {
+      path: 'backend/tools/db_qc.py',
+      role: '',
+    },
+    {
+      path: 'backend/tools/db_qc_queries.json',
+      role: '',
+    },
+    {
       path: 'backend/tools/perf_measure.py',
       role: '엔드포인트 지연 측정 도구',
     },
@@ -1594,6 +1615,10 @@ window.PROJECT_STATE = {
     {
       path: 'docs/prd/archibe-business-model.html',
       role: 'archibe 비즈니스 모델 PRD (정적 HTML)',
+    },
+    {
+      path: 'docs/research/full-codebase-audit-2026-07-17.md',
+      role: '',
     },
     {
       path: 'docs/research/image-latency/findings-decode-render-loading.json',
@@ -1693,6 +1718,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/api/images.test.mjs',
+      role: '',
+    },
+    {
+      path: 'frontend/src/api/inspect.js',
       role: '',
     },
     {
@@ -2082,6 +2111,22 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/pages/buildingDetail/helpers.js',
       role: '건물 상세 메타 헬퍼',
+    },
+    {
+      path: 'frontend/src/pages/dbCheck/DbCheck.module.css',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/dbCheck/DbCheckDetailModal.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/dbCheck/DbCheckPage.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/dbCheck/DbCheckTile.jsx',
+      role: '',
     },
     {
       path: 'frontend/src/pages/firmProfile/FirmArticlesSection.jsx',

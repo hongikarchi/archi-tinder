@@ -57,7 +57,7 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(비어있음 — 배치 플랜 `reactive-soaring-hearth` 6/6 PR 완료 2026-07-13. 잔여 액션 완료 2026-07-15/16: i18n EN 카피 스팟체크 PASS(한글 누출 0, ko 의도 일치) + PERF-5 재계측→root-cause→fix 종결(## Done § BACK-PERFORMANCE-5 — Redis US리전이 범인, swipe p50 1638→124ms))_
+_(비어있음 — ADMIN-DBCHECK-1 완료 2026-07-27, ## Done 참조)_
 
 ---
 
@@ -143,6 +143,9 @@ FULL-WORKS-1 배포 후. (1) `rightSizeImageUrl.js`에 R2 works URL srcset/LQIP 
 
 #### FRONT-VERIFY-1 — 보드저장 PATCH 경로 verify_required 모달 미배선
 FULL-ONBOARDING-2(`92237d8`)가 guest promote-limit을 `403 {'detail':'verify_required','reason':'board_limit_reached','limit':3}`로 표준화했으나, 프론트 `updateProject`(projects.js:64-71)는 verify_required를 VerifyRequiredError로 변환 안 함(createProject:26-40만 처리) → SaveBoardModal에서 guest가 4번째 보드 저장확정 시 VerifyGateModal 대신 generic 에러 문자열. `updateProject`에 createProject와 동일한 403 verify_required 감지 + VerifyGateModal 배선. Non-blocking(백엔드 enforcement는 정상).
+
+#### ADMIN-DBCHECK-3 — 판정층 첫 정식 QC 패스
+ADMIN-DBCHECK-2에서 분리(2026-08-04). 기계층 기준선(`qc_20260804T035813Z`) 위에서 시각 판정층 첫 실행: 태그 진실성 표본(tagged top-10 이미지 판정) + 음성 표본 감사(태그 없는 20동 → 태그 누락률 추정). 프로토콜은 `backend/tools/db_qc_rubric.md` 런북 그대로 (블라인드 sonnet 판정, 양성 대조군 3-5동 심기). 파서·엔진 수선 착지 후 돌리면 before/after 한 번에 나옴. ~600k sonnet/패스.
 
 #### INFRA-TEMP-GC-1 — orphan temp 보드 서버측 GC/TTL 없음
 FULL-ONBOARDING-2에서 분리(2026-07-12). 브라우저 닫기/로그아웃 시 `is_temp=True` 보드가 서버에 영구 잔류(frontend cleanup은 /search 재진입 경로만). TTL 필드 or 정리 job(cron/management command) 필요 — 설계 결정(TTL 기간, report-있는 temp 처리) 선행. 비차단.
@@ -249,6 +252,19 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### ADMIN-DBCHECK-2 — DB/검색 QC 회귀 하네스 (기계층 + 판정층 런북) — RESOLVED 2026-08-04 (`fa1d4d7`-pre-squash)
+검색 품질 3다리(DB 정확성·완전성·검색 도달성) 자동 측정 하네스 — `tools/db_qc.py` 4단계(어휘 덤프·파서 배터리·검색 배터리·이미지 헬스) + 12쿼리 fixture + 시각 판정층 루브릭/런북(`db_qc_rubric.md`), 재구축 전후 diff·HARD-EMPTY/5pt 회귀 시 exit 1.
+- [x] Phase A-D: buildings DB 전수 어휘 사전(+drift diff) · 라이브 Gemini 파서 5회 반복(매핑 유효성 = 엔진 ILIKE 의미론 그대로, HARD-EMPTY/SOFT-SILENT 심각도 구분, 개념 소실률, null 폴백률) · in-process scored search(tag_match@10, truth-axis 양성 배치, vd-gap) · 커버 URL 매직바이트/썸네일 검사. 스코어카드 gitignored `tools/qc_runs/`.
+- [x] 판정층 루브릭 v1 repo 고정 (`db_qc_rubric.md`): 3판정자 캘리브레이션 실측(이진 일치 94%, 커버 단독 중정 감도 67% → 갤러리 에스컬레이션 의무), 블라인드 원칙, 부재 주장 금지, 품질 임계값 표.
+- 기준선 발견: 파서 어휘 무근거 작문(Brutalism↔Brutalist 형태 흔들림 = 간헐 HARD-EMPTY 전멸, typology_primary=courtyard/atrium 등 사어 값) · architectural_elements 축 파서·엔진 전결 부재(courtyard/atrium/terrace @10 = 0%, 태그 915동 도달 불가) · "도서관"→program:Public 뭉개짐(library@10 10%) · null 폴백 3%. 파서+엔진 수선은 타 세션 이관(진단 문서 전달 완료); color_tone 어휘 부재·태그 누락은 Make DB 소관.
+- Deferred: 판정층 첫 정식 패스 (기계층 기준선 위에서 태그 진실성 + 음성 표본 감사 실행).
+
+### ADMIN-DBCHECK-1 — DB 품질 검사 페이지 (dev 전용) — RESOLVED 2026-07-27 (`f8b9ab6`)
+dev 빌드 전용 `/db-check` 내부 QA 페이지 — 전체 공개 건물 무한스크롤 그리드 + 자연어 검색(서비스 parse_query+scored search 재사용) + 타일 클릭 시 풀컬럼 DB 모달.
+- [x] Backend 3 read-only 엔드포인트: `inspect/buildings/` keyset 목록(engine 카드 하이드레이션, total 1h 캐시) + `inspect/buildings/<id>/` 풀컬럼 디테일(embedding 벡터 제외·presence/dim만, non-publishable 404) + `inspect/search/` (parse_query 단일턴 + search_by_filters_scored limit 100, 빈결과 diverse_random 폴백). 전부 IsAuthenticated·is_publishable=true 게이트·buildings raw SQL 읽기 전용. 테스트 19개(services/engine mock).
+- [x] Frontend: `import.meta.env.DEV` 게이트 라우트(프로덕션 번들 제외, URL 직접 진입만) + LQIP blur-up 타일(깨진 이미지 placeholder 노출 = QA 목적) + 구조화 필터 칩·is_fallback 배지 + 그룹핑 디테일 모달(빈값 '—' 표시, covers_by_type 5슬롯, raw JSON 접이식).
+- 게이트: Opus verify PASS · security PASS · low 1건(CSS calc(px*px)) 커밋 전 수정 · app-test 스킵(비 swipe-경로 정책) · pytest는 CI 게이트.
+
 ### FULL-WORKS-1a — 업로드 후속 fix 3건 (pagination + parallel HEAD + i18n) — RESOLVED 2026-07-17
 #282 머지 시 유보한 리뷰 low 2건 + i18n 사각 1건, `feature/claude-works-followup` 단일 PR.
 - [x] BACK-WORKS-1: `GET /works/` 페이지네이션(default=cap 50, notifications 패턴, envelope `{works,total,page,page_size}`) + 응답 슬리밍(`r2_keys` 제거 — 프론트 무수정 호환)
