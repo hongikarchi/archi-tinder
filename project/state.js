@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-08-04 14:42 KST',
-    head: '6054235',
-    branch: 'feature/claude-db-check',
+    updatedAt: '2026-08-04 17:14 KST',
+    head: '749091e',
+    branch: 'feature/claude-parser-vocab-grounding',
   },
   done: [
+    {
+      id: 'BACK-PARSER-VOCAB-1',
+      title: '파서 어휘 그라운딩 (db_qc P1/P2/P3 수정)',
+      completedAt: '2026-08-04',
+      note: '파서가 DB에 없는 필터 값을 창작하던 문제(P1)·architectural_elements 축 부재(P2)·구체 유형 뭉개기(P3)를 어휘 그라운딩으로 수정 — db_qc 실측 unmatchable 8→0 쿼리, hard_empty 1→0, tag_match@10 courtyard/atrium/terrace 0→100%, library +90pt, facade +80pt, 회귀 0.',
+    },
     {
       id: 'ADMIN-DBCHECK-2',
       title: 'DB/검색 QC 회귀 하네스 (기계층 + 판정층 런북)',
@@ -69,12 +75,6 @@ window.PROJECT_STATE = {
       title: 'i18n 슬라이스 b: 설정·계정 + 인증에러',
       completedAt: '2026-07-13',
       note: '설정/계정 표면 9파일 + 인증 에러 훅 국지화 — Settings 트리 전체가 ko/en 동일 string source 렌더.',
-    },
-    {
-      id: 'FULL-LANGUAGE-1a',
-      title: 'i18n 슬라이스 a: 코어 스와이프 루프',
-      completedAt: '2026-07-13',
-      note: '고트래픽 코어 루프 5파일의 하드코딩 한글 전량(주석 제외)을 t() 키로 — Discovery/Swipe/Results가 ko/en 동일 string source에서 렌더.',
     },
   ],
   now: [],
@@ -205,6 +205,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 288,
+      title: 'feat(ADMIN-DBCHECK): /db-check inspect page + db_qc regression harness',
+      mergedAt: '2026-08-04T05:43:41Z',
+      mergedAtKST: '2026-08-04 14:43 KST',
+      sha: '749091e',
+    },
+    {
       number: 287,
       title: 'docs: full codebase audit 2026-07-17 — 68 findings report',
       mergedAt: '2026-07-27T09:54:54Z',
@@ -252,13 +259,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-07-13T22:41:15Z',
       mergedAtKST: '2026-07-14 07:41 KST',
       sha: '06826ed',
-    },
-    {
-      number: 278,
-      title: 'docs(perf): BACK-PERFORMANCE-5 prod timing diagnosis — prefetch stage dominates; Neon pooler flip prescribed',
-      mergedAt: '2026-07-13T08:16:20Z',
-      mergedAtKST: '2026-07-13 17:16 KST',
-      sha: '68dafaa',
     },
   ],
   agents: [
@@ -1089,6 +1089,10 @@ window.PROJECT_STATE = {
       role: '스와이프·질문카드 오케스트레이션',
     },
     {
+      path: 'backend/apps/recommendation/services/vocab.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/recommendation/tests/__init__.py',
       role: '테스트 패키지 init',
     },
@@ -1138,6 +1142,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/recommendation/tests/test_taste_board_name.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/tests/test_vocab_grounding.py',
       role: '',
     },
     {
@@ -1586,6 +1594,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/tools/db_qc_queries.json',
+      role: '',
+    },
+    {
+      path: 'backend/tools/db_qc_rubric.md',
       role: '',
     },
     {

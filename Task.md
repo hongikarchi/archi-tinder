@@ -57,15 +57,7 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-### BACK-PARSER-VOCAB-1 — 파서 어휘 그라운딩 (db_qc P1/P2/P3 수정)
-
-db_qc 베이스라인(`qc_20260804T035813Z.json`)이 입증한 파서 어휘 창작 문제 수정.
-프롬프트에 DB 실제 vocab(style 12 / atmosphere 12 / color_tone 8 / typology 35 /
-elements 13) 주입 + few-shot 죽은 값 교체, `architectural_elements` 축 신설(파서
-스키마 + `_VALID_AXES` + engine 소프트 IDF 축), 파이썬 snap-to-vocab 정규화 확장,
-런타임 vocab 페치(24h 캐시, 하드코딩 스냅샷 fallback), db_qc 드리프트 가드 2종.
-검증: db_qc 재실행 baseline diff — unmatchable 0 / courtyard·atrium·terrace
-tag_match@10 > 0 / concept-drop < 100%. 브랜치 `feature/claude-parser-vocab-grounding`.
+_(비어있음 — BACK-PARSER-VOCAB-1 완료 2026-08-04, ## Done 참조)_
 
 ---
 
@@ -260,6 +252,15 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### BACK-PARSER-VOCAB-1 — 파서 어휘 그라운딩 (db_qc P1/P2/P3 수정) — RESOLVED 2026-08-04 (`9c88b54`-pre-squash)
+파서가 DB에 없는 필터 값을 창작하던 문제(P1)·architectural_elements 축 부재(P2)·구체 유형 뭉개기(P3)를 어휘 그라운딩으로 수정 — db_qc 실측 unmatchable 8→0 쿼리, hard_empty 1→0, tag_match@10 courtyard/atrium/terrace 0→100%, library +90pt, facade +80pt, 회귀 0.
+- [x] `services/vocab.py` 신설: `get_axis_vocab()` 런타임 페치(buildings raw SQL, is_publishable 게이트, 24h Django 캐시, 축별 `_VOCAB_SNAPSHOT` fallback, never-raise) — 프롬프트와 정규화가 같은 소스 공유.
+- [x] 프롬프트: 호출 시점에 5축 Allowed-values 블록 주입(~592tok) + 색단어→톤계열 매핑 규칙(P6 파서측 구제) + 구체유형→typology+program 병행 규칙 + few-shot 죽은 값 교체(Avant-Garde/open/Brutalism 등) + Courtyard 예시 추가.
+- [x] `parse_query.py`: `_snap_to_vocab` 정규화(exact→casefold→ism→ist→title→None) 양 경로 적용, `architectural_elements`를 `_VALID_AXES`+stage1 스키마에 추가.
+- [x] `engine_filters.py`: elements 소프트 IDF 축(EXISTS unnest ILIKE, weight 4.0 — `settings.llm_search_base_weights` 신규 키).
+- [x] db_qc 가드 2종: vocab 값 덤프+스냅샷 드리프트 WARN, few-shot 정합성 WARN(신규 회귀 테스트 포함 42+1개).
+- [x] 파이프라인: feature 워크플로 리뷰 PASS/시큐리티 PASS/Opus 검증 low 2건 즉시 수정. 부수: `feature.js` opus verify `effort:'high'` 핀(ultracode xhigh 400 수정).
+- 잔여(스코프 외): P4 타임아웃 꼬리(31s+ 런 4회, 인프라성), 피로티 등 DB elements 어휘 자체 부재(Make DB 소관), color_tone 색단어 재추출(P6, Make DB 소관).
 ### ADMIN-DBCHECK-2 — DB/검색 QC 회귀 하네스 (기계층 + 판정층 런북) — RESOLVED 2026-08-04 (`fa1d4d7`-pre-squash)
 검색 품질 3다리(DB 정확성·완전성·검색 도달성) 자동 측정 하네스 — `tools/db_qc.py` 4단계(어휘 덤프·파서 배터리·검색 배터리·이미지 헬스) + 12쿼리 fixture + 시각 판정층 루브릭/런북(`db_qc_rubric.md`), 재구축 전후 diff·HARD-EMPTY/5pt 회귀 시 exit 1.
 - [x] Phase A-D: buildings DB 전수 어휘 사전(+drift diff) · 라이브 Gemini 파서 5회 반복(매핑 유효성 = 엔진 ILIKE 의미론 그대로, HARD-EMPTY/SOFT-SILENT 심각도 구분, 개념 소실률, null 폴백률) · in-process scored search(tag_match@10, truth-axis 양성 배치, vd-gap) · 커버 URL 매직바이트/썸네일 검사. 스코어카드 gitignored `tools/qc_runs/`.
