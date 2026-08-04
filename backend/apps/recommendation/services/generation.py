@@ -425,27 +425,46 @@ def generate_taste_board_name(profile, filters, raw_query, visual_description=No
 
 def _gen_native(client, prompt):
     """
-    Attempt Gemini-native image generation with automatic model fallback.
+    Attempt native image generation via the provider selected by
+    settings.LLM_IMAGE_PROVIDER (gemini|openai, default gemini). Returns
+    (raw_bytes, mime_type, used_model) on success, or (None, None, None) if
+    no image part is found or all attempts fail (gemini branch only -- the
+    openai branch re-raises instead, see below).
 
-    Tries settings.GEMINI_IMAGE_MODEL first, then settings.GEMINI_IMAGE_MODEL_FALLBACK
-    on NotFound / InvalidArgument.  Returns (raw_bytes, mime_type, used_model) on
-    success, or (None, None, None) if no image part is found or both models fail.
+    raw_bytes is the raw image bytes (not base64) in both branches -- the
+    openai branch base64-decodes resp.data[0].b64_json before returning.
 
-    raw_bytes is the raw image bytes from the SDK inline_data (not base64).
+    BACK-LLM-PROVIDER-2: LLM_IMAGE_PROVIDER is INDEPENDENT of LLM_PROVIDER (the
+    text-parse switch) so text/image providers mix freely.
 
-    BACK-LLM-PROVIDER-1: this function always calls client.models.generate_content
-    (the genai SDK shape) -- an OpenAI client has no such attribute. When
-    settings.LLM_PROVIDER='openai', the caller-supplied `client` (from the
-    provider-switched _get_client()) is IGNORED in favour of
-    _svc._get_gemini_client() (always genai, separate singleton). When
-    LLM_PROVIDER='gemini' (default), the passed-in `client` is used unchanged --
-    identical behaviour to before this change, and identical to what existing
-    tests patch via `_get_client`.
+    gemini branch (default): tries settings.GEMINI_IMAGE_MODEL first, then
+    settings.GEMINI_IMAGE_MODEL_FALLBACK on NotFound/InvalidArgument. Uses
+    _svc._get_gemini_client() (always genai, separate singleton) -- the
+    caller-supplied `client` is IGNORED here, exactly as before
+    BACK-LLM-PROVIDER-2 (BACK-LLM-PROVIDER-1 behaviour preserved unchanged).
+
+    openai branch: single model (settings.OPENAI_IMAGE_MODEL), NO fallback
+    loop -- re-raises on failure. Uses _svc._get_openai_client() (always
+    openai, separate singleton from the text-path client). gpt-image models
+    always return b64_json (response_format is NOT a valid param for them),
+    so the b64_json field is decoded directly; mime is always image/png.
     """
     from apps.recommendation import services as _svc  # noqa: PLC0415
 
-    if settings.LLM_PROVIDER != 'gemini':
-        client = _svc._get_gemini_client()
+    if settings.LLM_IMAGE_PROVIDER == 'openai':
+        client = _svc._get_openai_client()
+        resp = _svc._retry_gemini_call(
+            client.images.generate,
+            timeout=45.0,
+            model=settings.OPENAI_IMAGE_MODEL,
+            prompt=prompt,
+            size='1536x1024',
+            quality=settings.OPENAI_IMAGE_QUALITY,
+        )
+        raw = base64.b64decode(resp.data[0].b64_json)
+        return raw, 'image/png', settings.OPENAI_IMAGE_MODEL
+
+    client = _svc._get_gemini_client()
 
     for model in (settings.GEMINI_IMAGE_MODEL, settings.GEMINI_IMAGE_MODEL_FALLBACK):
         try:

@@ -3,8 +3,15 @@ _gemini.py -- Low-level Gemini API client wrapper and retry logic.
 
 BACK-LLM-PROVIDER-1: provider dispatch (gemini | openai) behind settings.LLM_PROVIDER,
 for A/B testing the text-parse path via tools/db_qc.py. Image generation
-(generation.py _gen_native) is pinned to Gemini regardless of LLM_PROVIDER via
-_get_gemini_client() -- see that function's docstring.
+(generation.py _gen_native) previously was pinned to Gemini regardless of
+LLM_PROVIDER via _get_gemini_client() -- see that function's docstring.
+
+BACK-LLM-PROVIDER-2: image generation now has its OWN independent switch,
+settings.LLM_IMAGE_PROVIDER (gemini|openai, default gemini) -- separate from
+LLM_PROVIDER so text/image providers mix freely. _get_gemini_client() and
+_get_openai_client() are the two always-provider-X escape hatches _gen_native
+picks between; _get_client() (the LLM_PROVIDER-switched seam) is unaffected
+and remains text-path-only.
 
 Self-contained: no imports from sibling sub-modules.
 """
@@ -32,6 +39,11 @@ _client = None
 # BACK-LLM-PROVIDER-1: separate singleton for the always-Gemini client used by
 # the image path (generation.py _gen_native), independent of LLM_PROVIDER/_client.
 _gemini_client = None
+
+# BACK-LLM-PROVIDER-2: separate singleton for the always-OpenAI client used by
+# the image path when settings.LLM_IMAGE_PROVIDER='openai', independent of
+# LLM_PROVIDER/_client and of _gemini_client above.
+_openai_client = None
 
 _GEMINI_MAX_RETRIES = 1
 _GEMINI_RETRY_DELAY = 1.0  # seconds
@@ -138,6 +150,24 @@ def _get_gemini_client():
     if _gemini_client is None:
         _gemini_client = genai.Client(api_key=settings.GEMINI_API_KEY)
     return _gemini_client
+
+
+def _get_openai_client():
+    """Always-OpenAI client, independent of settings.LLM_PROVIDER.
+
+    BACK-LLM-PROVIDER-2: mirrors _get_gemini_client() above, but for the image
+    path when settings.LLM_IMAGE_PROVIDER='openai'. A SEPARATE module-level
+    singleton (_openai_client) from both _client (the text-path provider-switched
+    seam) and _gemini_client (the image path's always-Gemini escape hatch) --
+    LLM_PROVIDER and LLM_IMAGE_PROVIDER are independent switches, so the openai
+    image client must not be conflated with the openai text client even though
+    both would build an identical openai.OpenAI(api_key=...) instance.
+    """
+    global _openai_client
+    if _openai_client is None:
+        import openai  # noqa: PLC0415 -- lazy: zero import cost when LLM_IMAGE_PROVIDER=gemini
+        _openai_client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
+    return _openai_client
 
 
 def _retry_gemini_call(func, *args, timeout=15.0, **kwargs):

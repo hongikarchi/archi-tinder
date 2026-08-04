@@ -436,6 +436,15 @@ _OPENAI_EFFORT_ALLOWED = ('', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh
 OPENAI_REASONING_EFFORT = os.getenv('OPENAI_REASONING_EFFORT', '')
 if OPENAI_REASONING_EFFORT not in _OPENAI_EFFORT_ALLOWED:
     OPENAI_REASONING_EFFORT = ''
+# BACK-LLM-PROVIDER-2: separate A/B provider switch for the IMAGE-GEN path
+# (generation.py _gen_native), independent of LLM_PROVIDER above so text/image
+# providers mix freely (e.g. LLM_PROVIDER=openai + LLM_IMAGE_PROVIDER=gemini).
+LLM_IMAGE_PROVIDER = os.getenv('LLM_IMAGE_PROVIDER', 'gemini')  # gemini|openai
+OPENAI_IMAGE_MODEL = os.getenv('OPENAI_IMAGE_MODEL', 'gpt-image-2')
+_OPENAI_IMAGE_QUALITY_ALLOWED = ('low', 'medium', 'high')
+OPENAI_IMAGE_QUALITY = os.getenv('OPENAI_IMAGE_QUALITY', 'medium')  # low|medium|high
+if OPENAI_IMAGE_QUALITY not in _OPENAI_IMAGE_QUALITY_ALLOWED:
+    OPENAI_IMAGE_QUALITY = 'medium'
 HF_TOKEN          = os.getenv('HF_TOKEN', '')
 IMAGE_BASE_URL    = os.getenv('IMAGE_BASE_URL', 'https://pub-5d2133d166fc4b65ad05295df352519f.r2.dev')
 GOOGLE_CLIENT_ID  = os.getenv('GOOGLE_CLIENT_ID', '')

@@ -19,12 +19,19 @@ apps.recommendation.services._gemini:
 No real Gemini or OpenAI API calls are made. Module-level singletons
 (_gemini._client / _gemini._gemini_client) are reset around every test that
 touches _get_client()/_get_gemini_client() to avoid cross-test leakage.
+
+BACK-LLM-PROVIDER-2 (TestImageProviderDispatch): covers the IMAGE-GEN path's
+own independent provider switch, settings.LLM_IMAGE_PROVIDER, in
+apps.recommendation.services.generation._gen_native.
 """
+import base64
+import os
 from unittest.mock import MagicMock
 
 import httpx
 import openai
 import pytest
+from django.conf import settings
 from django.test import override_settings
 from google.genai import types
 
@@ -476,3 +483,159 @@ class TestGenerateContentWithFallbackOpenaiNoSwap:
             c.kwargs.get('model') for c in mock_client.chat.completions.create.call_args_list
         }
         assert models_used == {'gpt-5.6-luna'}
+
+
+# ---------------------------------------------------------------------------
+# BACK-LLM-PROVIDER-2: _gen_native image-provider dispatch
+# (settings.LLM_IMAGE_PROVIDER, independent of LLM_PROVIDER)
+# ---------------------------------------------------------------------------
+
+class TestImageProviderDispatch:
+
+    def _make_gemini_image_response(self, data=b'GEMINI_PNG_BYTES', mime_type='image/png'):
+        idata = MagicMock()
+        idata.data = data
+        idata.mime_type = mime_type
+        part = MagicMock()
+        part.inline_data = idata
+        content = MagicMock()
+        content.parts = [part]
+        cand = MagicMock()
+        cand.content = content
+        resp = MagicMock()
+        resp.candidates = [cand]
+        return resp
+
+    def test_default_image_provider_gemini_uses_gemini_branch(self, monkeypatch):
+        """Default LLM_IMAGE_PROVIDER='gemini' -> _gen_native resolves the
+        always-Gemini client via _svc._get_gemini_client() and calls
+        client.models.generate_content, regardless of LLM_PROVIDER."""
+        from apps.recommendation import services as _svc
+        from apps.recommendation.services import generation
+
+        gemini_client = MagicMock()
+        resp = self._make_gemini_image_response()
+        gemini_client.models.generate_content.return_value = resp
+
+        monkeypatch.setattr(_svc, '_get_gemini_client', lambda: gemini_client)
+        real_retry = _svc._retry_gemini_call
+        monkeypatch.setattr(_svc, '_retry_gemini_call', lambda func, *a, **kw: real_retry(func, *a, **kw))
+
+        with override_settings(LLM_IMAGE_PROVIDER='gemini'):
+            raw, mime, used_model = generation._gen_native(MagicMock(), 'a prompt')
+
+        assert raw == b'GEMINI_PNG_BYTES'
+        assert mime == 'image/png'
+        assert used_model == settings.GEMINI_IMAGE_MODEL
+        gemini_client.models.generate_content.assert_called_once()
+        assert gemini_client.models.generate_content.call_args.kwargs['model'] == settings.GEMINI_IMAGE_MODEL
+
+    def test_openai_image_provider_calls_images_generate(self, monkeypatch):
+        """LLM_IMAGE_PROVIDER='openai' -> _gen_native resolves the always-OpenAI
+        client via _svc._get_openai_client() and calls client.images.generate
+        with model/size/quality from settings; b64_json is decoded to raw bytes."""
+        from apps.recommendation import services as _svc
+        from apps.recommendation.services import generation
+
+        raw_bytes = b'PNGBYTES'
+        b64_payload = base64.b64encode(raw_bytes).decode('ascii')
+        image_entry = MagicMock()
+        image_entry.b64_json = b64_payload
+        completion = MagicMock()
+        completion.data = [image_entry]
+
+        openai_client = MagicMock()
+        openai_client.images.generate.return_value = completion
+
+        monkeypatch.setattr(_svc, '_get_openai_client', lambda: openai_client)
+        real_retry = _svc._retry_gemini_call
+        monkeypatch.setattr(_svc, '_retry_gemini_call', lambda func, *a, **kw: real_retry(func, *a, **kw))
+
+        with override_settings(
+            LLM_IMAGE_PROVIDER='openai',
+            OPENAI_IMAGE_MODEL='gpt-image-2',
+            OPENAI_IMAGE_QUALITY='high',
+        ):
+            raw, mime, used_model = generation._gen_native(MagicMock(), 'a prompt')
+
+        assert raw == raw_bytes
+        assert mime == 'image/png'
+        assert used_model == 'gpt-image-2'
+        openai_client.images.generate.assert_called_once()
+        call_kwargs = openai_client.images.generate.call_args.kwargs
+        assert call_kwargs['model'] == 'gpt-image-2'
+        assert call_kwargs['prompt'] == 'a prompt'
+        assert call_kwargs['size'] == '1536x1024'
+        assert call_kwargs['quality'] == 'high'
+
+    def test_openai_image_provider_no_fallback_reraises(self, monkeypatch):
+        """openai image path has a single model and NO fallback loop -- a
+        failure propagates out of _gen_native (via _retry_gemini_call's normal
+        one-retry-then-raise transient handling) instead of trying an
+        alternate model, unlike the gemini branch's for-loop over two models."""
+        from apps.recommendation import services as _svc
+        from apps.recommendation.services import generation
+
+        openai_client = MagicMock()
+        openai_client.images.generate.side_effect = RuntimeError('boom')
+
+        monkeypatch.setattr(_svc, '_get_openai_client', lambda: openai_client)
+        monkeypatch.setattr(_gemini.time, 'sleep', lambda _: None)
+        real_retry = _svc._retry_gemini_call
+        monkeypatch.setattr(_svc, '_retry_gemini_call', lambda func, *a, **kw: real_retry(func, *a, **kw))
+
+        with override_settings(LLM_IMAGE_PROVIDER='openai'):
+            with pytest.raises(RuntimeError):
+                generation._gen_native(MagicMock(), 'a prompt')
+
+        # _retry_gemini_call's own transient-error retry (same call, same
+        # model) still applies -- what's absent is a SECOND, DIFFERENT model
+        # being tried, unlike the gemini branch's GEMINI_IMAGE_MODEL_FALLBACK.
+        models_used = {
+            c.kwargs.get('model') for c in openai_client.images.generate.call_args_list
+        }
+        assert models_used == {'gpt-image-2'}
+
+    def test_openai_image_quality_setting_coerced_to_medium_when_invalid(self):
+        """Settings-level allowlist validation: an invalid OPENAI_IMAGE_QUALITY
+        env value coerces to 'medium', mirroring _OPENAI_EFFORT_ALLOWED."""
+        import importlib
+
+        import config.settings as settings_module
+
+        old_env = os.environ.get('OPENAI_IMAGE_QUALITY')
+        try:
+            os.environ['OPENAI_IMAGE_QUALITY'] = 'ultra-mega-high'
+            importlib.reload(settings_module)
+            assert settings_module.OPENAI_IMAGE_QUALITY == 'medium'
+        finally:
+            if old_env is None:
+                os.environ.pop('OPENAI_IMAGE_QUALITY', None)
+            else:
+                os.environ['OPENAI_IMAGE_QUALITY'] = old_env
+            importlib.reload(settings_module)
+
+    def test_openai_image_quality_passthrough_verbatim(self, monkeypatch):
+        """_gen_native passes settings.OPENAI_IMAGE_QUALITY through verbatim
+        (the allowlist coercion happens at settings load, not in _gen_native)."""
+        from apps.recommendation import services as _svc
+        from apps.recommendation.services import generation
+
+        raw_bytes = b'X'
+        b64_payload = base64.b64encode(raw_bytes).decode('ascii')
+        image_entry = MagicMock()
+        image_entry.b64_json = b64_payload
+        completion = MagicMock()
+        completion.data = [image_entry]
+
+        openai_client = MagicMock()
+        openai_client.images.generate.return_value = completion
+
+        monkeypatch.setattr(_svc, '_get_openai_client', lambda: openai_client)
+        real_retry = _svc._retry_gemini_call
+        monkeypatch.setattr(_svc, '_retry_gemini_call', lambda func, *a, **kw: real_retry(func, *a, **kw))
+
+        with override_settings(LLM_IMAGE_PROVIDER='openai', OPENAI_IMAGE_QUALITY='low'):
+            generation._gen_native(MagicMock(), 'a prompt')
+
+        assert openai_client.images.generate.call_args.kwargs['quality'] == 'low'
