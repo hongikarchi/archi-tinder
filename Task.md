@@ -251,12 +251,12 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
-### BACK-LLM-PROVIDER-1 — LLM 프로바이더 어댑터 + Gemini/GPT 4모델 실측 A/B — RESOLVED 2026-08-04 (`b96a2ed`-pre-squash)
-파서 `LLM_PROVIDER=gemini|openai` 스위치 구현 후 db_qc 4모델 실측 — 결론: **gemini-3.1-flash-lite 유지** (tag_match@10 86~94% vs 2.5-flash 14% / 2.5-flash-lite 14% / gpt-5.6-luna 11%; 타 모델은 어휘 그라운딩 준수 붕괴, luna는 전 쿼리 broad-fallback화). P4 타임아웃 꼬리(9~10/60)는 3.1-flash-lite 고유(타 모델 slow 0) — 완화는 타임아웃 15→8s 별도 건.
-- [x] 어댑터: 시임명 유지, `_dispatch_generate` 번역 + `_NormalizedResponse` 정규화, openai 에러 분류, 이미지 경로 `_get_gemini_client()` 고정, 15s 동일 타임아웃(공정성), mock 45곳 무변경, 신규 테스트 27개.
-- [x] 실측 4런 (`qc_20260804T130045Z`~`133749Z`): 재기준선/2.5-flash/2.5-flash-lite/luna.
-- [x] 현장 수정: reasoning 모델 temperature 400 → 미전송; OPENAI_REASONING_EFFORT settings 승격+allowlist; db_qc buildings 커넥션 유휴사망 → search 배터리 전 리프레시.
-- 비고: 프롬프트가 Gemini 방언 최적화 상태의 비교 — GPT는 strict json_schema 포팅 시 개선 여지 있으나 기저 격차 큼(luna p50 4.6s로 2.2배 느림 + temp=1 강제).
+### BACK-LLM-PROVIDER-1 — LLM 프로바이더 어댑터 + 공정 A/B 8런 — RESOLVED 2026-08-04 (`13c4238`-pre-squash)
+파서 `LLM_PROVIDER=gemini|openai` 스위치 구현 + db_qc 8런 실측. 1차 비교의 "GPT 품질 붕괴(11%)"는 모델이 아니라 **파서 버그**였음: 빈 `filter_delta` 스켈레톤({'set':{},'remove':[]})이 truthy라 첫 턴 filters를 통째로 삼킴 — luna는 스키마 충실 출력이라 항상 발동, Gemini는 few-shot 모방으로 우연 회피(잠재 프로덕션 버그, `13c4238`에서 수정+회귀테스트). 픽스 후 공정 재비교: **품질 동급** — gemini-3.1-flash-lite 95% / gpt-5.4-mini 95% / luna(low) 94% / luna(high) 94% / terra 92% / luna(기본) 89% (tag_match@10 평균, 핵심 태그 전 모델 ~100%).
+- [x] 차별 요소는 품질 아닌 운영 특성: p50 — gemini 2.0s(최속) vs 5.4-mini 3.4s vs luna 4.5~6.6s. P4 타임아웃 꼬리 — gemini 고유(6~10/60, null폴백 1.7~6.7%) vs GPT 전 구성 사실상 0(null폴백 0%). 토큰 단가 — luna($0.20/$1.20)<gemini($0.25/$1.50)<5.4-mini($0.75/$4.50), 단 luna는 reasoning 토큰 가산.
+- [x] 어댑터: 시임명 유지, mock 45곳 무변경, 신규 테스트 28개(회귀 포함). 현장 수정: reasoning 모델 temperature 400→미전송, OPENAI_REASONING_EFFORT settings 승격+allowlist, db_qc Neon 유휴 커넥션 리프레시.
+- [x] 실측 런: fix 전 4런 + fix 후 6런(`qc_20260804T144517Z`~`151907Z`). 주의: 2.5-flash/2.5-flash-lite 14%는 fix 전 수치라 무효 — 재평가 필요 시 재실행.
+- 판정 옵션: (A) gemini 유지+타임아웃 8s 완화 = 최속·최저가, (B) gpt-5.4-mini = 동급 품질·꼬리 0·p50 +1.4s·단가 3배. 결정 보류(유저).
 
 ### BACK-PARSER-VOCAB-1 — 파서 어휘 그라운딩 (db_qc P1/P2/P3 수정) — RESOLVED 2026-08-04 (`9c88b54`-pre-squash)
 파서가 DB에 없는 필터 값을 창작하던 문제(P1)·architectural_elements 축 부재(P2)·구체 유형 뭉개기(P3)를 어휘 그라운딩으로 수정 — db_qc 실측 unmatchable 8→0 쿼리, hard_empty 1→0, tag_match@10 courtyard/atrium/terrace 0→100%, library +90pt, facade +80pt, 회귀 0.

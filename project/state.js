@@ -23,14 +23,14 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-08-04 22:45 KST',
+    updatedAt: '2026-08-05 00:25 KST',
     head: '20ed84d',
     branch: 'feature/claude-llm-provider-adapter',
   },
   done: [
     {
       id: 'BACK-LLM-PROVIDER-1',
-      title: 'LLM 프로바이더 어댑터 + Gemini/GPT 4모델 실측 A/B',
+      title: 'LLM 프로바이더 어댑터 + 공정 A/B 8런',
       completedAt: '2026-08-04',
       note: '파서 `LLM_PROVIDER=gemini|openai` 스위치 구현 후 db_qc 4모델 실측 — 결론: gemini-3.1-flash-lite 유지 (tag_match@10 86~94% vs 2.5-flash 14% / 2.5-flash-lite 14% / gpt-5.6-luna 11%; 타 모델은 어휘 그라운딩 준수 붕괴, luna는 전 쿼리 broad-fallback화). P4 타임아웃 꼬리(9~10/60)는 3.1-flash-lite 고유(타 모델 slow 0) — 완화는 타임아웃…',
     },
