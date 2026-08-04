@@ -32,7 +32,7 @@ window.PROJECT_STATE = {
       id: 'BACK-LLM-PROVIDER-1',
       title: 'LLM 프로바이더 어댑터 + 공정 A/B 8런',
       completedAt: '2026-08-04',
-      note: '파서 `LLM_PROVIDER=gemini|openai` 스위치 구현 후 db_qc 4모델 실측 — 결론: gemini-3.1-flash-lite 유지 (tag_match@10 86~94% vs 2.5-flash 14% / 2.5-flash-lite 14% / gpt-5.6-luna 11%; 타 모델은 어휘 그라운딩 준수 붕괴, luna는 전 쿼리 broad-fallback화). P4 타임아웃 꼬리(9~10/60)는 3.1-flash-lite 고유(타 모델 slow 0) — 완화는 타임아웃…',
+      note: '1차 'GPT 붕괴(11~14%)'는 파서의 빈 filter_delta 버그로 판명(13c4238 수정) — 픽스 후 품질 동급: gemini 95% / gpt-5.4-mini 95% / luna 94% / terra 92%. 차별점은 운영 특성: p50 gemini 2.0s 최속 vs GPT 타임아웃 꼬리 0(null폴백 0%). 판정 옵션: (A) gemini 유지+8s 완화 (B) gpt-5.4-mini. 결정 보류.',
     },
     {
       id: 'BACK-PARSER-VOCAB-1',
