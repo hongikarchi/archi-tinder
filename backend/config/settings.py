@@ -400,6 +400,9 @@ RECOMMENDATION = {
         'style': 4.0,             # architectural style (ILIKE)
         'atmosphere': 3.0,        # mood/atmosphere (new soft axis, ILIKE)
         'color_tone': 2.0,        # color palette (new soft axis, ILIKE)
+        # BACK-PARSER-VOCAB-1: architectural_elements (unnest array ILIKE), same
+        # weight tier as material -- both are concrete-feature axes, not just mood.
+        'architectural_elements': 4.0,
         'year_min': 1.0,          # year range (soft bonus, not exclusion)
         'year_max': 1.0,
     },

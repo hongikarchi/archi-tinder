@@ -118,6 +118,98 @@ def dump_vocab() -> dict:
     return out
 
 
+# BACK-PARSER-VOCAB-1: axes covered by the live-vocab prompt grounding + snapshot
+# fallback in apps.recommendation.services.vocab. Mirrors _VOCAB_SNAPSHOT's axis set.
+_SNAPSHOT_AXES = ('style', 'atmosphere', 'color_tone', 'typology_primary', 'architectural_elements')
+
+# ASSISTANT example JSON objects in _CHAT_PHASE_SYSTEM_PROMPT start with this marker.
+_ASSISTANT_LINE_RE = re.compile(r'^ASSISTANT:\s*(\{.*\})\s*$', re.MULTILINE)
+
+
+def diff_vocab_vs_snapshot(vocab_dump: dict) -> list[str]:
+    """Compare live per-axis VALUES (vocab_dump, from dump_vocab()) against
+    services.vocab._VOCAB_SNAPSHOT. Returns a list of WARN strings (empty = no drift).
+
+    Non-fatal -- this is a snapshot-refresh reminder, not a hard gate. Import is
+    local to keep db_qc's module-load path free of the recommendation app's
+    services package until main() actually needs it (mirrors the existing
+    `from apps.recommendation import engine, services` import at module top,
+    so this is really just documentation of intent).
+    """
+    from apps.recommendation.services.vocab import _VOCAB_SNAPSHOT
+
+    warnings = []
+    for axis in _SNAPSHOT_AXES:
+        live_values = set(vocab_dump.get(axis, {}).keys())
+        snapshot_values = set(_VOCAB_SNAPSHOT.get(axis, []))
+        added = live_values - snapshot_values
+        removed = snapshot_values - live_values
+        if added:
+            warnings.append(f'vocab drift: {axis} has NEW live values not in snapshot: {sorted(added)}')
+        if removed:
+            warnings.append(f'vocab drift: {axis} snapshot values missing from live DB: {sorted(removed)}')
+    return warnings
+
+
+def check_few_shot_conformance() -> list[str]:
+    """Parse every 'ASSISTANT: {...}' example JSON object embedded in
+    _CHAT_PHASE_SYSTEM_PROMPT, collect axis values from filters/filter_delta.set
+    for the 5 grounded axes + program, and WARN for any value not present in the
+    live vocab (or PROGRAM_VALUES for program). Case-sensitive compare; case
+    mismatches are reported separately from genuinely-missing values.
+
+    Non-fatal, no Gemini calls -- runs entirely against static prompt text +
+    get_axis_vocab()/PROGRAM_VALUES. Returns a list of WARN strings (empty = clean).
+    """
+    from apps.recommendation.services._prompts import _CHAT_PHASE_SYSTEM_PROMPT, PROGRAM_VALUES
+    from apps.recommendation import services
+
+    live_vocab = services.get_axis_vocab()
+    axes = _SNAPSHOT_AXES + ('program',)
+    allowed = {axis: live_vocab.get(axis, []) for axis in _SNAPSHOT_AXES}
+    allowed['program'] = PROGRAM_VALUES
+
+    warnings = []
+    for i, m in enumerate(_ASSISTANT_LINE_RE.finditer(_CHAT_PHASE_SYSTEM_PROMPT)):
+        raw = m.group(1)
+        try:
+            obj = json.loads(raw)
+        except Exception as e:  # noqa: BLE001 — one bad example must not kill the scan
+            warnings.append(f'few-shot #{i}: JSON parse failed ({e})')
+            continue
+
+        candidates = []
+        f = obj.get('filters')
+        if isinstance(f, dict):
+            candidates.append(f)
+        fd = obj.get('filter_delta')
+        if isinstance(fd, dict) and isinstance(fd.get('set'), dict):
+            candidates.append(fd['set'])
+
+        for axis in axes:
+            for src in candidates:
+                value = src.get(axis)
+                if not isinstance(value, str) or not value.strip():
+                    continue
+                axis_allowed = allowed.get(axis, [])
+                if value in axis_allowed:
+                    continue
+                case_hit = next(
+                    (v for v in axis_allowed if isinstance(v, str) and v.lower() == value.lower()),
+                    None,
+                )
+                if case_hit:
+                    warnings.append(
+                        f"few-shot #{i}: {axis}={value!r} case mismatch "
+                        f"(live vocab has {case_hit!r})"
+                    )
+                else:
+                    warnings.append(
+                        f"few-shot #{i}: {axis}={value!r} not in live vocab/PROGRAM_VALUES"
+                    )
+    return warnings
+
+
 # ---------------------------------------------------------------- phase B
 _match_cache: dict[tuple[str, str], int] = {}
 
@@ -465,9 +557,21 @@ def main() -> int:
                  'parser_runs': 0 if args.skip_parser else args.parser_runs}
     t0 = time.time()
 
-    print(f'[A] vocab dump...', flush=True)
+    print('[A] vocab dump...', flush=True)
+    _vocab_dump = dump_vocab()
     run['vocab_counts'] = {k: len(v) if isinstance(v, dict) else v
-                           for k, v in dump_vocab().items()}
+                           for k, v in _vocab_dump.items()}
+    # BACK-PARSER-VOCAB-1: store actual VALUES per axis (list) alongside counts,
+    # and non-fatally WARN when live values differ from the snapshot fallback.
+    run['vocab_values'] = {
+        k: sorted(v.keys()) for k, v in _vocab_dump.items() if isinstance(v, dict)
+    }
+    run['vocab_snapshot_drift'] = diff_vocab_vs_snapshot(_vocab_dump)
+    for w in run['vocab_snapshot_drift']:
+        print(f'  WARN {w}')
+    run['few_shot_conformance'] = check_few_shot_conformance()
+    for w in run['few_shot_conformance']:
+        print(f'  WARN {w}')
 
     if not args.skip_parser:
         print(f'[B] parser battery ({len(queries)} x {args.parser_runs} Gemini calls)...',

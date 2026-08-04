@@ -321,9 +321,14 @@ class TestParseQueryEmptyFiltersShape:
         from apps.recommendation.services import parse_query
 
         payload = self._base_payload()
-        payload['filters']['atmosphere'] = 'warm'
-        payload['filters']['color_tone'] = 'warm'
-        payload['filters']['typology_primary'] = 'detached house'
+        # BACK-PARSER-VOCAB-1: use canonical DB vocab strings directly -- lowercase
+        # 'warm'/'detached house' now get snapped by _snap_to_vocab (casefold ->
+        # canonical casing for atmosphere/color_tone; 'detached house' has no
+        # typology_primary match so it would become None). This test asserts the
+        # values pass through clean_filters, not the snap behaviour itself.
+        payload['filters']['atmosphere'] = 'Warm'
+        payload['filters']['color_tone'] = 'Warm'
+        payload['filters']['typology_primary'] = 'House'
 
         with patch('apps.recommendation.services._get_client') as mock_client, \
              patch('apps.recommendation.services.event_log.emit_event'):
@@ -337,9 +342,9 @@ class TestParseQueryEmptyFiltersShape:
         f = result['filters']
         # atmosphere/color_tone/typology_primary come through clean_filters
         # (they are string values and pass _clean_filter_value)
-        assert f.get('atmosphere') == 'warm'
-        assert f.get('color_tone') == 'warm'
-        assert f.get('typology_primary') == 'detached house'
+        assert f.get('atmosphere') == 'Warm'
+        assert f.get('color_tone') == 'Warm'
+        assert f.get('typology_primary') == 'House'
 
     def test_new_fields_are_not_required_slate(self):
         """atmosphere/color_tone/typology_primary must NOT appear in REQUIRED_SLATE_FIELDS."""

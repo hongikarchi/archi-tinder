@@ -79,6 +79,11 @@ from .parse_query import (  # noqa: F401
 )
 
 # ---------------------------------------------------------------------------
+# vocab: BACK-PARSER-VOCAB-1 -- live DB vocabulary for the 5 grounded axes
+# ---------------------------------------------------------------------------
+from .vocab import get_axis_vocab, _VOCAB_SNAPSHOT  # noqa: F401
+
+# ---------------------------------------------------------------------------
 # embeddings: HF embedding for HyDE V_initial
 # ---------------------------------------------------------------------------
 from .embeddings import embed_visual_description  # noqa: F401
@@ -141,6 +146,7 @@ __all__ = [
     'event_log',
     # Public functions + constants
     'PROGRAM_VALUES',
+    'get_axis_vocab',
     'get_cached_v_initial',
     'set_cached_v_initial',
     'embed_visual_description',
