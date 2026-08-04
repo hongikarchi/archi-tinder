@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-07-27 20:05 KST',
+    updatedAt: '2026-08-04 14:42 KST',
     head: '6054235',
     branch: 'feature/claude-db-check',
   },
   done: [
+    {
+      id: 'ADMIN-DBCHECK-2',
+      title: 'DB/검색 QC 회귀 하네스 (기계층 + 판정층 런북)',
+      completedAt: '2026-08-04',
+      note: '검색 품질 3다리(DB 정확성·완전성·검색 도달성) 자동 측정 하네스 — `tools/db_qc.py` 4단계(어휘 덤프·파서 배터리·검색 배터리·이미지 헬스) + 12쿼리 fixture + 시각 판정층 루브릭/런북(`db_qc_rubric.md`), 재구축 전후 diff·HARD-EMPTY/5pt 회귀 시 exit 1.',
+    },
     {
       id: 'ADMIN-DBCHECK-1',
       title: 'DB 품질 검사 페이지 (dev 전용)',
@@ -70,12 +76,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-07-13',
       note: '고트래픽 코어 루프 5파일의 하드코딩 한글 전량(주석 제외)을 t() 키로 — Discovery/Swipe/Results가 ko/en 동일 string source에서 렌더.',
     },
-    {
-      id: 'FRONT-IMAGE-RESIZE-3',
-      title: '이미지 풀해상도 passthrough + telemetry currentSrc',
-      completedAt: '2026-07-13',
-      note: '이미지 리사이즈 시리즈(PR1 #241 / PR2 #242 / LQIP #267) 마지막 잔여 마감 — 빈-갤러리 건물의 라이트박스/다운로드가 원본을 받고, telemetry가 실제 렌더 variant를 기록.',
-    },
   ],
   now: [],
   next: {
@@ -103,6 +103,11 @@ window.PROJECT_STATE = {
         id: 'FRONT-VERIFY-1',
         title: '보드저장 PATCH 경로 verify_required 모달 미배선',
         note: 'FULL-ONBOARDING-2(`92237d8`)가 guest promote-limit을 `403 {\'detail\':\'verify_required\',\'reason\':\'board_limit_reached\',\'limit\':3}`로 표준화했으나, 프론트 `updateProject`(projects.js:64-71)는 verify_required를 VerifyRequiredError로 변환 안 함(createProject:26-40만 처리) → SaveBoardModal에서 guest가 4번째 보…',
+      },
+      {
+        id: 'ADMIN-DBCHECK-3',
+        title: '판정층 첫 정식 QC 패스',
+        note: 'ADMIN-DBCHECK-2에서 분리(2026-08-04). 기계층 기준선(`qc_20260804T035813Z`) 위에서 시각 판정층 첫 실행: 태그 진실성 표본(tagged top-10 이미지 판정) + 음성 표본 감사(태그 없는 20동 → 태그 누락률 추정). 프로토콜은 `backend/tools/db_qc_rubric.md` 런북 그대로 (블라인드 sonnet 판정, 양성 대조군 3-5동 심기). 파서·엔진 수선 착지 후 돌리면 before/after 한 번에 나옴. ~600k son…',
       },
       {
         id: 'INFRA-TEMP-GC-1',
@@ -1574,6 +1579,14 @@ window.PROJECT_STATE = {
     {
       path: 'backend/tests/test_topic_composition.py',
       role: '토픽 구성 테스트',
+    },
+    {
+      path: 'backend/tools/db_qc.py',
+      role: '',
+    },
+    {
+      path: 'backend/tools/db_qc_queries.json',
+      role: '',
     },
     {
       path: 'backend/tools/perf_measure.py',
