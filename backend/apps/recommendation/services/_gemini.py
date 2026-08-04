@@ -326,9 +326,9 @@ def _dispatch_generate(client, *, model, contents, config=None, timeout):
         'model': model,
         'messages': messages,
     }
-    temperature = getattr(config, 'temperature', None) if config else None
-    if temperature is not None:
-        kwargs['temperature'] = temperature
+    # temperature intentionally NOT forwarded: gpt-5.x reasoning-class models
+    # reject any non-default value with 400 unsupported_value (empirically hit
+    # 2026-08-04 — "Only the default (1) value is supported").
     json_mode = bool(config and getattr(config, 'response_mime_type', None) == 'application/json')
     if json_mode:
         kwargs['response_format'] = {'type': 'json_object'}

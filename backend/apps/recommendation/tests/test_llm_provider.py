@@ -273,7 +273,9 @@ class TestJsonModeTranslation:
         system_msg = next(m for m in captured['messages'] if m['role'] == 'system')
         assert 'JSON' in system_msg['content']
         assert 'System prompt text.' in system_msg['content']
-        assert captured['temperature'] == 0.2
+        # temperature is intentionally NOT forwarded on the openai path
+        # (gpt-5.x reasoning models 400 on non-default values).
+        assert 'temperature' not in captured
 
     def test_json_mode_without_system_instruction_still_notes_json(self):
         completion = MagicMock()

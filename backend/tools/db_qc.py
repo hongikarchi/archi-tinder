@@ -376,6 +376,11 @@ def _truth_matches(concept: dict, metadata: dict) -> bool:
 
 
 def run_search_battery(queries: list[dict], limit: int) -> dict:
+    # Phase B (parser battery) can run long enough for Neon to idle-close the
+    # buildings connection (hit 2026-08-04 with slower OpenAI parses:
+    # InterfaceError 'connection already closed'). Force a fresh connection.
+    from django.db import connections
+    connections['buildings'].close()
     per_query = {}
     for q in queries:
         t0 = time.time()
