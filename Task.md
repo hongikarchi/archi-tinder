@@ -57,9 +57,8 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(비어있음 — 배치 플랜 `reactive-soaring-hearth` 6/6 PR 완료 2026-07-13. 잔여 액션 완료 2026-07-15/16: i18n EN 카피 스팟체크 PASS(한글 누출 0, ko 의도 일치) + PERF-5 재계측→root-cause→fix 종결(## Done § BACK-PERFORMANCE-5 — Redis US리전이 범인, swipe p50 1638→124ms))_
+_(비어있음 — BACK-LLM-PROVIDER-1 완료 2026-08-04, ## Done 참조)_
 
----
 
 ## Next
 
@@ -137,10 +136,15 @@ _(2026-06-08 범위 축소: #212(`4e58195`) Case #3 resume guard가 **진행중(
 
 _(2026-07-12 감사 re-pin: 전제 유효, 라인 이동 — resume guard `session_service.py:167-182`(completed 제외), 신규 세션 cold-create `:397-416`(phase='exploring', like_vectors=[] 등 전부 빈 값), `liked_ids`는 완료-세션 리포트에만 사용(`:688-689`), warm-start seed 경로 여전히 부재.)_
 
-
 ### MEDIUM
+#### FULL-WORKS-2 — works Phase 2: srcset/LQIP + 알고리즘 통합
+FULL-WORKS-1 배포 후. (1) `rightSizeImageUrl.js`에 R2 works URL srcset/LQIP 처리 추가 (Cloudflare Image Transforms 필요 — ops 설정 선행). (2) `engine.py` Python-layer에 `user_uploaded_works` 풀 병합 — 별도 협업자(algorithm 소유) 작업, 설계 sync 필요.
+
 #### FRONT-VERIFY-1 — 보드저장 PATCH 경로 verify_required 모달 미배선
 FULL-ONBOARDING-2(`92237d8`)가 guest promote-limit을 `403 {'detail':'verify_required','reason':'board_limit_reached','limit':3}`로 표준화했으나, 프론트 `updateProject`(projects.js:64-71)는 verify_required를 VerifyRequiredError로 변환 안 함(createProject:26-40만 처리) → SaveBoardModal에서 guest가 4번째 보드 저장확정 시 VerifyGateModal 대신 generic 에러 문자열. `updateProject`에 createProject와 동일한 403 verify_required 감지 + VerifyGateModal 배선. Non-blocking(백엔드 enforcement는 정상).
+
+#### ADMIN-DBCHECK-3 — 판정층 첫 정식 QC 패스
+ADMIN-DBCHECK-2에서 분리(2026-08-04). 기계층 기준선(`qc_20260804T035813Z`) 위에서 시각 판정층 첫 실행: 태그 진실성 표본(tagged top-10 이미지 판정) + 음성 표본 감사(태그 없는 20동 → 태그 누락률 추정). 프로토콜은 `backend/tools/db_qc_rubric.md` 런북 그대로 (블라인드 sonnet 판정, 양성 대조군 3-5동 심기). 파서·엔진 수선 착지 후 돌리면 before/after 한 번에 나옴. ~600k sonnet/패스.
 
 #### INFRA-TEMP-GC-1 — orphan temp 보드 서버측 GC/TTL 없음
 FULL-ONBOARDING-2에서 분리(2026-07-12). 브라우저 닫기/로그아웃 시 `is_temp=True` 보드가 서버에 영구 잔류(frontend cleanup은 /search 재진입 경로만). TTL 필드 or 정리 job(cron/management command) 필요 — 설계 결정(TTL 기간, report-있는 temp 처리) 선행. 비차단.
@@ -182,6 +186,12 @@ Likely slices:
 - Board/User profile second: keep existing mobile layout, add desktop breakpoints for hero + board grid density.
 
 ### LOW
+
+#### INFRA-WORKS-1 — R2 works 버킷 프로비저닝 (dev/prod 버킷 + 환경별 토큰 + CORS + public access)
+_(2026-07-17 플랜 `streamed-bubbling-lagoon`; **dev 버킷 완료**, prod 남음)_ 토큰 모델 확정 = **환경별 2개**: dev 토큰(works-dev 버킷만 스코프, 협업자 전달용) / prod 토큰(archibe-avatars+works-prod 멀티버킷, Railway 전용) — 코드 무수정(공유 `R2_*` env 유지). ✅ ① DONE 2026-07-17 (Cloudflare MCP API): `archibe-works-dev`(APAC) 생성 + CORS(`http://localhost:5174`+`5173`, **PUT**+content-type — presigned PUT 전환 반영) + public access `pub-b071ab81….r2.dev` + Object R/W dev 토큰(대시보드) + 로컬 `.env` 세팅 + 실업로드 E2E 검증. 남음 ② `archibe-works-prod` + prod 토큰 재발급(avatars+works-prod 멀티버킷) + prod 도메인 CORS(**PUT**; Vercel 도메인 대시보드 확인) + Railway env 4종 — 배포 직전 (Workstream C).
+
+#### FRONT-SWIPE-CLEANUP-1 — #281 진행바 리뷰 low 3건 정리
+`SwipePage.jsx`: ① 죽은 `value` prop×2 + orphan `confidence` 로컬(353/473/585 — 시그니처에서 제거된 prop을 호출부가 계속 전달, 주석이 dead code를 문서화) ② pct 공식 3분기 verbatim 중복(87/90/94 — 분기 밖 1회 계산 + converged만 100 override) ③ 도달불가 `like+dislike` fallback(76-78 — 백엔드 `_progress()`가 세 필드 항상 동시 방출) → `progress?.swipe_count ?? 0`. 2026-07-16 ultracode 리뷰 low 3건(Opus 확정), 기능 영향 0.
 
 #### BACK-ANALYTICS-1 — session_metrics_report 콘솔 ESC-byte 주입 (pre-existing #268)
 `session_metrics_report.py` 텍스트 모드가 SessionEvent payload의 `domain`/`context` 값을 raw로 stdout 출력(~:548-559, #268 소산) — prod payload에 ESC 바이트 섞이면 터미널 이스케이프 주입 가능. BACK-PERFORMANCE-5a(`afc0b88`) Opus 검증서 실증됐으나 해당 PR 미접촉 영역이라 분리. 수정 = 출력 전 non-printable strip/repr(). 운영자-실행 read-only 커맨드라 LOW.
@@ -241,6 +251,61 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### BACK-LLM-PROVIDER-1 — LLM 프로바이더 어댑터 + 공정 A/B 8런 — RESOLVED 2026-08-04 (`13c4238`-pre-squash)
+파서 `LLM_PROVIDER=gemini|openai` 스위치 구현 + db_qc 8런 실측. 1차 비교의 "GPT 품질 붕괴(11%)"는 모델이 아니라 **파서 버그**였음: 빈 `filter_delta` 스켈레톤({'set':{},'remove':[]})이 truthy라 첫 턴 filters를 통째로 삼킴 — luna는 스키마 충실 출력이라 항상 발동, Gemini는 few-shot 모방으로 우연 회피(잠재 프로덕션 버그, `13c4238`에서 수정+회귀테스트). 픽스 후 공정 재비교: **품질 동급** — gemini-3.1-flash-lite 95% / gpt-5.4-mini 95% / luna(low) 94% / luna(high) 94% / terra 92% / luna(기본) 89% (tag_match@10 평균, 핵심 태그 전 모델 ~100%).
+- [x] 차별 요소는 품질 아닌 운영 특성: p50 — gemini 2.0s(최속) vs 5.4-mini 3.4s vs luna 4.5~6.6s. P4 타임아웃 꼬리 — gemini 고유(6~10/60, null폴백 1.7~6.7%) vs GPT 전 구성 사실상 0(null폴백 0%). 토큰 단가 — luna($0.20/$1.20)<gemini($0.25/$1.50)<5.4-mini($0.75/$4.50), 단 luna는 reasoning 토큰 가산.
+- [x] 어댑터: 시임명 유지, mock 45곳 무변경, 신규 테스트 28개(회귀 포함). 현장 수정: reasoning 모델 temperature 400→미전송, OPENAI_REASONING_EFFORT settings 승격+allowlist, db_qc Neon 유휴 커넥션 리프레시.
+- [x] 실측 런: fix 전 4런 + fix 후 6런(`qc_20260804T144517Z`~`151907Z`). 주의: 2.5-flash/2.5-flash-lite 14%는 fix 전 수치라 무효 — 재평가 필요 시 재실행.
+- 판정 옵션: (A) gemini 유지+타임아웃 8s 완화 = 최속·최저가, (B) gpt-5.4-mini = 동급 품질·꼬리 0·p50 +1.4s·단가 3배. **→ 유저 판정 B (2026-08-05)**.
+- [x] 결승+판정(2026-08-05): 전수 그리드 15구성 + 신규 멀티턴 델타 배터리(8시나리오×3 — 파서 버그 2건 추가 발견·수정: remove-before-set 교체 의미론, 호텔→Hospitality 버킷). 결승 gemini(95/95/88%, p50 2.0s, 꼬리 6~11/60) vs mini-STRICT(94/95/95%, p50 3.2s, 꼬리 0, 멀티턴 95.8% vs gemini 100%). **B 적용: 파싱+보드명 = gpt-5.4-mini STRICT(env 전환, 코드 기본값은 gemini 유지 = 안전 롤아웃), 페르소나 텍스트+이미지 = Gemini(provider='gemini' 코드 고정)**. 탈락: thinking=dyn(이득 0), 3.5-flash(92%/4.7s), nano(전멸). 인시던트: 테스트로 Gemini 월 지출캡 소진 → 유저 상향. **프로드 전환 TODO: Railway env 4종(LLM_PROVIDER=openai / OPENAI_TEXT_MODEL=gpt-5.4-mini / OPENAI_STRICT_SCHEMA=true / OPENAI_API_KEY)**.
+- [x] 확장(2026-08-05): program 버킷 모호 규칙 수정(미술관→Public 오선택으로 luna 89%→95%, `1e66498` 이전 커밋들) + `LLM_IMAGE_PROVIDER` 독립 스위치로 gpt-image-2 이미지 경로(`1e66498`) + 페르소나 4보드 실서비스 시딩·풀페이지 캡처(web-testing/ab_screenshot.py, llm-ab-screens/) + 기능×모델×effort 종합 보고 아티팩트 발행. gpt-image-2: low 26~32s/$0.005, medium 45s 타임아웃 초과(91s) — 채택 시 타임아웃 상향 필요.
+
+### BACK-PARSER-VOCAB-1 — 파서 어휘 그라운딩 (db_qc P1/P2/P3 수정) — RESOLVED 2026-08-04 (`9c88b54`-pre-squash)
+파서가 DB에 없는 필터 값을 창작하던 문제(P1)·architectural_elements 축 부재(P2)·구체 유형 뭉개기(P3)를 어휘 그라운딩으로 수정 — db_qc 실측 unmatchable 8→0 쿼리, hard_empty 1→0, tag_match@10 courtyard/atrium/terrace 0→100%, library +90pt, facade +80pt, 회귀 0.
+- [x] `services/vocab.py` 신설: `get_axis_vocab()` 런타임 페치(buildings raw SQL, is_publishable 게이트, 24h Django 캐시, 축별 `_VOCAB_SNAPSHOT` fallback, never-raise) — 프롬프트와 정규화가 같은 소스 공유.
+- [x] 프롬프트: 호출 시점에 5축 Allowed-values 블록 주입(~592tok) + 색단어→톤계열 매핑 규칙(P6 파서측 구제) + 구체유형→typology+program 병행 규칙 + few-shot 죽은 값 교체(Avant-Garde/open/Brutalism 등) + Courtyard 예시 추가.
+- [x] `parse_query.py`: `_snap_to_vocab` 정규화(exact→casefold→ism→ist→title→None) 양 경로 적용, `architectural_elements`를 `_VALID_AXES`+stage1 스키마에 추가.
+- [x] `engine_filters.py`: elements 소프트 IDF 축(EXISTS unnest ILIKE, weight 4.0 — `settings.llm_search_base_weights` 신규 키).
+- [x] db_qc 가드 2종: vocab 값 덤프+스냅샷 드리프트 WARN, few-shot 정합성 WARN(신규 회귀 테스트 포함 42+1개).
+- [x] 파이프라인: feature 워크플로 리뷰 PASS/시큐리티 PASS/Opus 검증 low 2건 즉시 수정. 부수: `feature.js` opus verify `effort:'high'` 핀(ultracode xhigh 400 수정).
+- 잔여(스코프 외): P4 타임아웃 꼬리(31s+ 런 4회, 인프라성), 피로티 등 DB elements 어휘 자체 부재(Make DB 소관), color_tone 색단어 재추출(P6, Make DB 소관).
+### ADMIN-DBCHECK-2 — DB/검색 QC 회귀 하네스 (기계층 + 판정층 런북) — RESOLVED 2026-08-04 (`fa1d4d7`-pre-squash)
+검색 품질 3다리(DB 정확성·완전성·검색 도달성) 자동 측정 하네스 — `tools/db_qc.py` 4단계(어휘 덤프·파서 배터리·검색 배터리·이미지 헬스) + 12쿼리 fixture + 시각 판정층 루브릭/런북(`db_qc_rubric.md`), 재구축 전후 diff·HARD-EMPTY/5pt 회귀 시 exit 1.
+- [x] Phase A-D: buildings DB 전수 어휘 사전(+drift diff) · 라이브 Gemini 파서 5회 반복(매핑 유효성 = 엔진 ILIKE 의미론 그대로, HARD-EMPTY/SOFT-SILENT 심각도 구분, 개념 소실률, null 폴백률) · in-process scored search(tag_match@10, truth-axis 양성 배치, vd-gap) · 커버 URL 매직바이트/썸네일 검사. 스코어카드 gitignored `tools/qc_runs/`.
+- [x] 판정층 루브릭 v1 repo 고정 (`db_qc_rubric.md`): 3판정자 캘리브레이션 실측(이진 일치 94%, 커버 단독 중정 감도 67% → 갤러리 에스컬레이션 의무), 블라인드 원칙, 부재 주장 금지, 품질 임계값 표.
+- 기준선 발견: 파서 어휘 무근거 작문(Brutalism↔Brutalist 형태 흔들림 = 간헐 HARD-EMPTY 전멸, typology_primary=courtyard/atrium 등 사어 값) · architectural_elements 축 파서·엔진 전결 부재(courtyard/atrium/terrace @10 = 0%, 태그 915동 도달 불가) · "도서관"→program:Public 뭉개짐(library@10 10%) · null 폴백 3%. 파서+엔진 수선은 타 세션 이관(진단 문서 전달 완료); color_tone 어휘 부재·태그 누락은 Make DB 소관.
+- Deferred: 판정층 첫 정식 패스 (기계층 기준선 위에서 태그 진실성 + 음성 표본 감사 실행).
+
+### ADMIN-DBCHECK-1 — DB 품질 검사 페이지 (dev 전용) — RESOLVED 2026-07-27 (`f8b9ab6`)
+dev 빌드 전용 `/db-check` 내부 QA 페이지 — 전체 공개 건물 무한스크롤 그리드 + 자연어 검색(서비스 parse_query+scored search 재사용) + 타일 클릭 시 풀컬럼 DB 모달.
+- [x] Backend 3 read-only 엔드포인트: `inspect/buildings/` keyset 목록(engine 카드 하이드레이션, total 1h 캐시) + `inspect/buildings/<id>/` 풀컬럼 디테일(embedding 벡터 제외·presence/dim만, non-publishable 404) + `inspect/search/` (parse_query 단일턴 + search_by_filters_scored limit 100, 빈결과 diverse_random 폴백). 전부 IsAuthenticated·is_publishable=true 게이트·buildings raw SQL 읽기 전용. 테스트 19개(services/engine mock).
+- [x] Frontend: `import.meta.env.DEV` 게이트 라우트(프로덕션 번들 제외, URL 직접 진입만) + LQIP blur-up 타일(깨진 이미지 placeholder 노출 = QA 목적) + 구조화 필터 칩·is_fallback 배지 + 그룹핑 디테일 모달(빈값 '—' 표시, covers_by_type 5슬롯, raw JSON 접이식).
+- 게이트: Opus verify PASS · security PASS · low 1건(CSS calc(px*px)) 커밋 전 수정 · app-test 스킵(비 swipe-경로 정책) · pytest는 CI 게이트.
+
+### FULL-WORKS-1a — 업로드 후속 fix 3건 (pagination + parallel HEAD + i18n) — RESOLVED 2026-07-17
+#282 머지 시 유보한 리뷰 low 2건 + i18n 사각 1건, `feature/claude-works-followup` 단일 PR.
+- [x] BACK-WORKS-1: `GET /works/` 페이지네이션(default=cap 50, notifications 패턴, envelope `{works,total,page,page_size}`) + 응답 슬리밍(`r2_keys` 제거 — 프론트 무수정 호환)
+- [x] BACK-WORKS-2: finalize R2 HEAD `ThreadPoolExecutor` 병렬화(요청 내 왕복 sum(N)→max(N)) — 10MB 검증이 HEAD 의존이라 생략 불가·병렬화 채택; 실패 시 원본 `r2_keys` 순서 결정적 리포트(`executor.map` 순서 보장)
+- [x] UploadWorkPage i18n 전면 이관: t() 콜사이트 35개 / locales.js 92 엔트리(ko+en) — 프로그램 라벨 14종은 기존 KO UI에서도 영어였어서 한국어 신규 작성(네이티브 감수 1회 권장, `시설` 접미 일관성)
+- 검증: 실환경 스모크 ALL PASS(2장 병렬 HEAD finalize 1.16s + Gemini 게이트 PUBLISH + envelope/page_size 클램프/missing-key 400) · works 테스트 21개(CI 게이트) · flake8/eslint/build 그린
+
+### FULL-WORKS-1 — 건축 작품 업로드 Phase 1 — RESOLVED 2026-07-15 (`6089487`)
+presigned direct upload to Cloudflare R2: Django `apps/works/` 신설 + `/api/v1/works/presign/`·`/api/v1/works/` API + UploadWorkPage.
+- [x] Work 모델 (upload_id `usr_XXXXXX`, 14개 program enum, r2_keys JSONField, is_publishable=False, report_count) + migration 0001_initial
+- [x] presign 뷰: **presigned PUT** (서명에 ContentType 포함 → 정확일치 강제) + image/* 검증 + 10분 만료, key `works/{profile_id}/{uuid8}_{slot}.webp`; 10MB 상한은 finalize `head_object` ContentLength 서버검증
+- [x] finalize 뷰: 저작권 확인 → namespace 검증(403) → R2 존재 확인 → Work 저장 → 백그라운드 스레드(Gemini 품질 게이트 + atmosphere enum 12개 강제; HF 384차원 임베딩은 07-17 fix에서 삭제 — 저장 필드 부재 dead call) → 201 `{upload_id, status:'processing'}` 즉시 반환
+- [x] storage.py: `_make_s3_client()` 공유 + `generate_presigned_post()` + `verify_key_exists()` (boto3 lazy, accounts/storage.py 패턴 미러)
+- [x] WORKS_R2_ENABLED 플래그, INSTALLED_APPS 등록, `/api/v1/works/` URL
+- [x] 테스트 15개 (기존 9: presign 503/400x2, finalize 400/403/400/201/401 + fix 배치 5: PUT presign ContentType 회귀 / presign·finalize 11장 cap / project_year 비정수 / 비str r2_key + 크기상한 1: finalize 11MB→400) — CI Postgres 기준 그린
+- [x] UploadWorkPage: canvas.toBlob WebP 변환(max 2400px) + XHR progress + processing/error 상태 UI + /upload 라우트
+- [x] r2_keys isinstance + empty 가드 패치 (2 LOW 소견)
+- [x] **리뷰 fix 배치 2026-07-17** (ultracode 4-lens + Opus verify 10건 확정 → critical+medium+저비용 low 적용): presign `Fields={'Content-Type': ...}` 누락 수정(**critical**) · Gemini 호출 `_retry_gemini_call` 15s 데드라인 경유 · HF embed dead call 삭제 + `_GEMINI_RESPONSE_SCHEMA` 소비 필드로 트림 · project_year/r2_keys 원소 입력검증(500→400) · `MAX_WORK_IMAGES=10` 3-tier(presign+finalize+프론트 keep-what-fits, 신규 문자열 t() i18n) · DRY 3건(`_finish` 헬퍼, `_make_s3_client` 재사용, 잔여 ternary) · works conftest 커넥션-리셋 핵 제거(CI full-suite `no such table` 원인 — PR open 이래 CI red였음). 유보 → BACK-WORKS-1(페이지네이션)/BACK-WORKS-2(HEAD 병렬화)
+- [x] **presigned POST→PUT 전환 2026-07-17** (실인프라 검증發 재설계): dev 버킷 실업로드에서 **R2가 presigned POST 자체를 미구현**(`501 NotImplemented`) 확인 — 위 critical fix로도 구조적 동작 불가, mock 테스트로는 검출 불가능. Cloudflare 공식 패턴 **presigned PUT** 전환: `generate_presigned_put()`(ContentType 서명 → 헤더 정확일치 강제, 기존 starts-with policy보다 강함) + 응답 `{key,url}`(fields 제거) + 프론트 `works.js` XHR PUT + `UPLOAD_CONTENT_TYPE` 상수 미러링 + finalize 10MB `head_object` 검증 + 버킷 CORS PUT/content-type 재설정. 테스트 15개
+- [x] **실환경 풀플로우 E2E PASS 2026-07-17** (`archibe-works-dev` 실버킷 + 실Gemini): dev-login→presign→R2 PUT 200→finalize 201→**Gemini 게이트 실사진 PUBLISH**(is_publishable=True)→공개 cover URL 200 image/webp→11장 cap 400. CORS preflight 5174 허용/타origin 차단, 오타입 PUT 403(서명 거부) 검증 포함
+- 검증: workflow 2 cycles commitReady=true · app-test FEATURE-SCOPED 5/5 PASS · drift clean
+- Deferred-MEDIUM: FULL-WORKS-2 (Phase 2 works srcset/LQIP + algorithm 통합 + works 임베딩 저장 필드·HF 호출 재도입 — Phase 1 배포 후; 임베딩 dead call은 2026-07-17 fix에서 삭제됨)
+- Deferred-LOW: INFRA-WORKS-1 (R2 works 버킷 프로비저닝 — `## Next` § LOW로 구체화, 2026-07-17 진행중)
+
 ### BACK-PERFORMANCE-5 — Swipe latency 0.7-1.5s 흔들림 — RESOLVED 2026-07-16 (ops-only, 코드 0줄)
 Codex retest 2026-05-26: browser swipe 1.82s/1.75s/1.12s/1.81s; server swipe 1.50s/1.38s/0.746s/1.36s. **PR4 async prefetch consume IS working** — 3rd swipe with cache hit drops to 156ms prefetch stage. But variability is high. Identify which stage causes the 0.7→1.5s spread (DB query latency? embedding cache miss? pgvector?). Aim for swipe p95 ≤1.0s and p50 ≤0.5s on Singapore prod. **(2026-06-28 HIGH로 승격 — 코어 스와이프 루프 + <1s 페이지로드 목표 + 런칭 임박.)**
 
@@ -546,7 +611,6 @@ Codex 기능 리뷰 배치 머지(SECURITY 항목은 배포-게이트 배치로 
 
 ### INFRA-DB-2 — make test-local (로컬 pytest unblock) — RESOLVED 2026-06-04 (`feature/claude-test-local` → develop, #197)
 runtime `make_web_app`가 CREATEDB 없어 로컬 pytest가 'permission denied to create database'로 차단(conftest SQLite override는 자체 docstring상 not-load-bearing). `make test-local` 추가 — `migrate-local` idiom(read -s neondb_owner pw, inline DB_USER override로 DB_HOST는 LOCAL 유지), CI-shape real-PG+pgvector 실행. Neon 콘솔 작업 불필요. CLAUDE.md 문서화.
-
 
 ### UX-GALLERY — 갤러리 제스처 3버그 (FRONT-UX-6/9/10) — RESOLVED 2026-06-04 (`feature/claude-ux-gallery` → develop)
 갤러리 3버그(부모-sync wobble·모바일 세로스크롤·Discovery long-press 오작동)를 **lift 없이** 해결. 원 premise(sibling-overlay lift)를 유저 product 재검토로 재정의 — 갤러리 보면서도 스와이프 유지 + 순수 Discovery. session 브라우저 spike로 "3D가 스크롤 안 깸"(원인은 touch-action·snap, 3D 아님) 확정 후 구현.

@@ -9,6 +9,7 @@ from .views import (
     ProjectBookmarkView, ImageLoadTelemetryView, BoardSurpriseView,
     QuestionResponseView,
     RecommendedArchitectsView, ArchitectDetailView, ArchitectFollowView,
+    InspectBuildingsListView, InspectBuildingDetailView, InspectSearchView,
 )
 
 urlpatterns = [
@@ -44,4 +45,8 @@ urlpatterns = [
     # Follow URL must come before the detail URL (more specific path first).
     re_path(r'^architects/(?P<architect_id>arch_[0-9]{6})/follow/$', ArchitectFollowView.as_view()),
     re_path(r'^architects/(?P<architect_id>arch_[0-9]{6})/$', ArchitectDetailView.as_view()),
+    # ADMIN-DBCHECK-1: internal DB-quality inspection API (list must come before detail).
+    path('inspect/buildings/',                                InspectBuildingsListView.as_view()),
+    re_path(r'^inspect/buildings/(?P<canonical_bld_id>bld_[0-9]{6})/$', InspectBuildingDetailView.as_view()),
+    path('inspect/search/',                                   InspectSearchView.as_view()),
 ]

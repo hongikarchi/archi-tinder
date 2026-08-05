@@ -23,11 +23,47 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-07-16 00:30 KST',
-    head: 'fa36cd5',
-    branch: 'feature/claude-perf5-redis-region',
+    updatedAt: '2026-08-05 14:59 KST',
+    head: '20ed84d',
+    branch: 'feature/claude-llm-provider-adapter',
   },
   done: [
+    {
+      id: 'BACK-LLM-PROVIDER-1',
+      title: 'LLM 프로바이더 어댑터 + 공정 A/B 8런',
+      completedAt: '2026-08-04',
+      note: '1차 "GPT 붕괴(11~14%)"는 파서의 빈 filter_delta 버그로 판명(13c4238 수정) — 픽스 후 품질 동급: gemini 95% / gpt-5.4-mini 95% / luna 94% / terra 92%. 차별점은 운영 특성: p50 gemini 2.0s 최속 vs GPT 타임아웃 꼬리 0(null폴백 0%). 판정 옵션: (A) gemini 유지+8s 완화 (B) gpt-5.4-mini. 결정 보류.',
+    },
+    {
+      id: 'BACK-PARSER-VOCAB-1',
+      title: '파서 어휘 그라운딩 (db_qc P1/P2/P3 수정)',
+      completedAt: '2026-08-04',
+      note: '파서가 DB에 없는 필터 값을 창작하던 문제(P1)·architectural_elements 축 부재(P2)·구체 유형 뭉개기(P3)를 어휘 그라운딩으로 수정 — db_qc 실측 unmatchable 8→0 쿼리, hard_empty 1→0, tag_match@10 courtyard/atrium/terrace 0→100%, library +90pt, facade +80pt, 회귀 0.',
+    },
+    {
+      id: 'ADMIN-DBCHECK-2',
+      title: 'DB/검색 QC 회귀 하네스 (기계층 + 판정층 런북)',
+      completedAt: '2026-08-04',
+      note: '검색 품질 3다리(DB 정확성·완전성·검색 도달성) 자동 측정 하네스 — `tools/db_qc.py` 4단계(어휘 덤프·파서 배터리·검색 배터리·이미지 헬스) + 12쿼리 fixture + 시각 판정층 루브릭/런북(`db_qc_rubric.md`), 재구축 전후 diff·HARD-EMPTY/5pt 회귀 시 exit 1.',
+    },
+    {
+      id: 'ADMIN-DBCHECK-1',
+      title: 'DB 품질 검사 페이지 (dev 전용)',
+      completedAt: '2026-07-27',
+      note: 'dev 빌드 전용 `/db-check` 내부 QA 페이지 — 전체 공개 건물 무한스크롤 그리드 + 자연어 검색(서비스 parse_query+scored search 재사용) + 타일 클릭 시 풀컬럼 DB 모달.',
+    },
+    {
+      id: 'FULL-WORKS-1a',
+      title: '업로드 후속 fix 3건 (pagination + parallel HEAD + i18n)',
+      completedAt: '2026-07-17',
+      note: '#282 머지 시 유보한 리뷰 low 2건 + i18n 사각 1건, `feature/claude-works-followup` 단일 PR.',
+    },
+    {
+      id: 'FULL-WORKS-1',
+      title: '건축 작품 업로드 Phase 1',
+      completedAt: '2026-07-15',
+      note: 'presigned direct upload to Cloudflare R2: Django `apps/works/` 신설 + `/api/v1/works/presign/`·`/api/v1/works/` API + UploadWorkPage.',
+    },
     {
       id: 'BACK-PERFORMANCE-5',
       title: 'Swipe latency 0.7-1.5s 흔들림',
@@ -39,42 +75,6 @@ window.PROJECT_STATE = {
       title: 'i18n 슬라이스 c: 프로필·보드 + 모달',
       completedAt: '2026-07-13',
       note: '최종 슬라이스 17파일 ~115 리터럴 — 3슬라이스(a #275 / b #276 / c) 합산 32파일 176줄 sweep 완료, 전 고트래픽 surface가 ko/en 동일 string source 렌더. FULL-LANGUAGE-1 백로그 항목 종결.',
-    },
-    {
-      id: 'FULL-LANGUAGE-1b',
-      title: 'i18n 슬라이스 b: 설정·계정 + 인증에러',
-      completedAt: '2026-07-13',
-      note: '설정/계정 표면 9파일 + 인증 에러 훅 국지화 — Settings 트리 전체가 ko/en 동일 string source 렌더.',
-    },
-    {
-      id: 'FULL-LANGUAGE-1a',
-      title: 'i18n 슬라이스 a: 코어 스와이프 루프',
-      completedAt: '2026-07-13',
-      note: '고트래픽 코어 루프 5파일의 하드코딩 한글 전량(주석 제외)을 t() 키로 — Discovery/Swipe/Results가 ko/en 동일 string source에서 렌더.',
-    },
-    {
-      id: 'FRONT-IMAGE-RESIZE-3',
-      title: '이미지 풀해상도 passthrough + telemetry currentSrc',
-      completedAt: '2026-07-13',
-      note: '이미지 리사이즈 시리즈(PR1 #241 / PR2 #242 / LQIP #267) 마지막 잔여 마감 — 빈-갤러리 건물의 라이트박스/다운로드가 원본을 받고, telemetry가 실제 렌더 variant를 기록.',
-    },
-    {
-      id: 'BACK-PERFORMANCE-5a',
-      title: 'swipe timing_breakdown 계측 리더',
-      completedAt: '2026-07-13',
-      note: '`session_metrics_report`가 SessionEvent `timing_breakdown`을 이제 집계 — stage별 p50/p95/max + cache_hit 분리 + 세션내 위치 warmup bucket으로 swipe 0.7-1.5s 변동의 지배 원인을 prod 데이터로 특정 가능.',
-    },
-    {
-      id: 'FULL-ONBOARDING-2',
-      title: 'is_temp 라이프사이클 마감 (#243 fast-follows)',
-      completedAt: '2026-07-13',
-      note: 'temp 보드 누수 5개 사이트 일괄 마감: one-way finalize 강제 + 리스트/카운트/취향벡터/피드 전부 `is_temp=False` 필터 — 사일런트 보드 유실 경로 차단.',
-    },
-    {
-      id: 'BACK-LLM-4',
-      title: 'search.py ParseQueryView byte-cap ensure_ascii 부풀림 의심 — CLOSED 2026-07-12 (premise falsified, no PR)',
-      completedAt: '',
-      note: '2026-07-12 백로그 전수 감사에서 무혐의 판명: `ParseQueryView.post`는 conversation_history 검증을 serializer로 위임하며, 해당 serializer는 BACK-LLM-2(#195)가 이미 UTF-8 byte 측정으로 고침 — ParseQueryView 자체에 `ensure_ascii=True` byte-cap 경로가 애초에 없음(Sonnet 검증 + Opus 적대검증 동의). 의심 항목이었고 실재하지 않아 폐기.',
     },
   ],
   now: [],
@@ -95,9 +95,19 @@ window.PROJECT_STATE = {
     ],
     medium: [
       {
+        id: 'FULL-WORKS-2',
+        title: 'works Phase 2: srcset/LQIP + 알고리즘 통합',
+        note: 'FULL-WORKS-1 배포 후. (1) `rightSizeImageUrl.js`에 R2 works URL srcset/LQIP 처리 추가 (Cloudflare Image Transforms 필요 — ops 설정 선행). (2) `engine.py` Python-layer에 `user_uploaded_works` 풀 병합 — 별도 협업자(algorithm 소유) 작업, 설계 sync 필요.',
+      },
+      {
         id: 'FRONT-VERIFY-1',
         title: '보드저장 PATCH 경로 verify_required 모달 미배선',
         note: 'FULL-ONBOARDING-2(`92237d8`)가 guest promote-limit을 `403 {\'detail\':\'verify_required\',\'reason\':\'board_limit_reached\',\'limit\':3}`로 표준화했으나, 프론트 `updateProject`(projects.js:64-71)는 verify_required를 VerifyRequiredError로 변환 안 함(createProject:26-40만 처리) → SaveBoardModal에서 guest가 4번째 보…',
+      },
+      {
+        id: 'ADMIN-DBCHECK-3',
+        title: '판정층 첫 정식 QC 패스',
+        note: 'ADMIN-DBCHECK-2에서 분리(2026-08-04). 기계층 기준선(`qc_20260804T035813Z`) 위에서 시각 판정층 첫 실행: 태그 진실성 표본(tagged top-10 이미지 판정) + 음성 표본 감사(태그 없는 20동 → 태그 누락률 추정). 프로토콜은 `backend/tools/db_qc_rubric.md` 런북 그대로 (블라인드 sonnet 판정, 양성 대조군 3-5동 심기). 파서·엔진 수선 착지 후 돌리면 before/after 한 번에 나옴. ~600k son…',
       },
       {
         id: 'INFRA-TEMP-GC-1',
@@ -131,6 +141,16 @@ window.PROJECT_STATE = {
       },
     ],
     low: [
+      {
+        id: 'INFRA-WORKS-1',
+        title: 'R2 works 버킷 프로비저닝 (dev/prod 버킷 + 환경별 토큰 + CORS + public access)',
+        note: 'FULL-WORKS-1 배포 후 ops task. R2 버킷에 CORS 정책 설정 필요 (AllowedMethods: POST, AllowedOrigins: 도메인, AllowedHeaders: *). 설정 전 브라우저에서 presigned POST XHR이 CORS 에러로 차단됨. 코드 변경 없음, R2 대시보드 또는 wrangler cli.',
+      },
+      {
+        id: 'FRONT-SWIPE-CLEANUP-1',
+        title: '#281 진행바 리뷰 low 3건 정리',
+        note: '`SwipePage.jsx`: ① 죽은 `value` prop×2 + orphan `confidence` 로컬(353/473/585 — 시그니처에서 제거된 prop을 호출부가 계속 전달, 주석이 dead code를 문서화) ② pct 공식 3분기 verbatim 중복(87/90/94 — 분기 밖 1회 계산 + converged만 100 override) ③ 도달불가 `like+dislike` fallback(76-78 — 백엔드 `_progress()`가 세 필드 항상 동시 방출) → `pr…',
+      },
       {
         id: 'BACK-ANALYTICS-1',
         title: 'session_metrics_report 콘솔 ESC-byte 주입 (pre-existing #268)',
@@ -185,60 +205,60 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
-      number: 279,
-      title: 'docs(perf): BACK-PERFORMANCE-5 Neon pooler flip applied to prod + local (verified)',
-      mergedAt: '2026-07-13T22:41:15Z',
-      mergedAtKST: '2026-07-14 07:41 KST',
-      sha: '06826ed',
+      number: 289,
+      title: 'feat(BACK-PARSER-VOCAB-1): ground parser in live DB vocab + architectural_elements axis',
+      mergedAt: '2026-08-04T08:58:14Z',
+      mergedAtKST: '2026-08-04 17:58 KST',
+      sha: '20ed84d',
     },
     {
-      number: 278,
-      title: 'docs(perf): BACK-PERFORMANCE-5 prod timing diagnosis — prefetch stage dominates; Neon pooler flip prescribed',
-      mergedAt: '2026-07-13T08:16:20Z',
-      mergedAtKST: '2026-07-13 17:16 KST',
-      sha: '68dafaa',
+      number: 288,
+      title: 'feat(ADMIN-DBCHECK): /db-check inspect page + db_qc regression harness',
+      mergedAt: '2026-08-04T05:43:41Z',
+      mergedAtKST: '2026-08-04 14:43 KST',
+      sha: '749091e',
     },
     {
-      number: 277,
-      title: 'feat(i18n): profile/board + modals sweep — slice c of 3, FULL-LANGUAGE-1 closed',
-      mergedAt: '2026-07-12T19:38:06Z',
-      mergedAtKST: '2026-07-13 04:38 KST',
-      sha: '227d23b',
+      number: 287,
+      title: 'docs: full codebase audit 2026-07-17 — 68 findings report',
+      mergedAt: '2026-07-27T09:54:54Z',
+      mergedAtKST: '2026-07-27 18:54 KST',
+      sha: '6054235',
     },
     {
-      number: 276,
-      title: 'feat(i18n): settings/account + auth errors sweep — slice b of 3 (FULL-LANGUAGE-1b)',
-      mergedAt: '2026-07-12T18:39:48Z',
-      mergedAtKST: '2026-07-13 03:39 KST',
-      sha: 'b51c385',
+      number: 286,
+      title: 'chore(infra): make dev port guard — fail loud on stale 8001/5174',
+      mergedAt: '2026-07-19T02:40:21Z',
+      mergedAtKST: '2026-07-19 11:40 KST',
+      sha: '36cbb2a',
     },
     {
-      number: 275,
-      title: 'feat(i18n): core swipe loop label sweep — slice a of 3 (FULL-LANGUAGE-1a)',
-      mergedAt: '2026-07-12T17:59:59Z',
-      mergedAtKST: '2026-07-13 02:59 KST',
-      sha: '73b9c94',
+      number: 285,
+      title: 'feat(FULL-WORKS-1a): works followup — list pagination + parallel HEAD + page i18n',
+      mergedAt: '2026-07-17T12:46:31Z',
+      mergedAtKST: '2026-07-17 21:46 KST',
+      sha: '9c11907',
     },
     {
-      number: 274,
-      title: 'fix(image): cover_full_url raw passthrough + telemetry currentSrc (FRONT-IMAGE-RESIZE-3)',
-      mergedAt: '2026-07-12T17:28:52Z',
-      mergedAtKST: '2026-07-13 02:28 KST',
-      sha: 'a299af6',
+      number: 283,
+      title: 'docs(BACK-PERFORMANCE-5): resolved — Redis US-region root cause, swipe p50 1638→124ms',
+      mergedAt: '2026-07-16T17:57:16Z',
+      mergedAtKST: '2026-07-17 02:57 KST',
+      sha: '8ddee5b',
     },
     {
-      number: 273,
-      title: 'perf(analytics): swipe timing_breakdown aggregation in session_metrics_report (BACK-PERFORMANCE-5a)',
-      mergedAt: '2026-07-12T17:18:54Z',
-      mergedAtKST: '2026-07-13 02:18 KST',
-      sha: 'e66287b',
+      number: 282,
+      title: 'feat(FULL-WORKS-1): 건축 작품 업로드 Phase 1 — works 앱 + presigned POST + Created 탭',
+      mergedAt: '2026-07-17T12:19:02Z',
+      mergedAtKST: '2026-07-17 21:19 KST',
+      sha: '7e974a2',
     },
     {
-      number: 272,
-      title: 'fix(board): is_temp lifecycle closure — one-way finalize + temp exclusion (FULL-ONBOARDING-2)',
-      mergedAt: '2026-07-12T16:51:23Z',
-      mergedAtKST: '2026-07-13 01:51 KST',
-      sha: '8fba3d5',
+      number: 281,
+      title: 'feat(swipe): count-based progress bar — linear fill on every swipe',
+      mergedAt: '2026-07-17T01:48:21Z',
+      mergedAtKST: '2026-07-17 10:48 KST',
+      sha: 'db68d08',
     },
   ],
   agents: [
@@ -351,6 +371,10 @@ window.PROJECT_STATE = {
     {
       path: '.claude/plans/archive/building-detail-page.md',
       role: '건물 상세 페이지 플랜',
+    },
+    {
+      path: '.claude/plans/archive/perf-image-latency-research.md',
+      role: '',
     },
     {
       path: '.claude/plans/archive/perf-trio-optimization.md',
@@ -1065,6 +1089,10 @@ window.PROJECT_STATE = {
       role: '스와이프·질문카드 오케스트레이션',
     },
     {
+      path: 'backend/apps/recommendation/services/vocab.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/recommendation/tests/__init__.py',
       role: '테스트 패키지 init',
     },
@@ -1085,11 +1113,19 @@ window.PROJECT_STATE = {
       role: 'Discovery 피드 테스트',
     },
     {
+      path: 'backend/apps/recommendation/tests/test_inspect.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/recommendation/tests/test_is_temp_data_filters.py',
       role: '',
     },
     {
       path: 'backend/apps/recommendation/tests/test_like_vectors_hydration.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/tests/test_llm_provider.py',
       role: '',
     },
     {
@@ -1113,6 +1149,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'backend/apps/recommendation/tests/test_vocab_grounding.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/recommendation/urls.py',
       role: '추천 API URL 라우팅',
     },
@@ -1127,6 +1167,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/recommendation/views/discovery.py',
       role: 'Discovery 피드 뷰',
+    },
+    {
+      path: 'backend/apps/recommendation/views/inspect.py',
+      role: '',
     },
     {
       path: 'backend/apps/recommendation/views/office_recommendation.py',
@@ -1223,6 +1267,58 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/social/views.py',
       role: '팔로우/리액션 뷰',
+    },
+    {
+      path: 'backend/apps/works/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/works/apps.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/works/migrations/0001_initial.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/works/migrations/0002_rename_works_work_owner_i_idx_works_work_owner_i_cdca6c_idx.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/works/migrations/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/works/models.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/works/services.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/works/storage.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/works/tests/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/works/tests/conftest.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/works/tests/test_works_upload.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/works/urls.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/works/views.py',
+      role: '',
     },
     {
       path: 'backend/config/__init__.py',
@@ -1497,6 +1593,18 @@ window.PROJECT_STATE = {
       role: '토픽 구성 테스트',
     },
     {
+      path: 'backend/tools/db_qc.py',
+      role: '',
+    },
+    {
+      path: 'backend/tools/db_qc_queries.json',
+      role: '',
+    },
+    {
+      path: 'backend/tools/db_qc_rubric.md',
+      role: '',
+    },
+    {
       path: 'backend/tools/perf_measure.py',
       role: '엔드포인트 지연 측정 도구',
     },
@@ -1523,6 +1631,10 @@ window.PROJECT_STATE = {
     {
       path: 'docs/prd/archibe-business-model.html',
       role: 'archibe 비즈니스 모델 PRD (정적 HTML)',
+    },
+    {
+      path: 'docs/research/full-codebase-audit-2026-07-17.md',
+      role: '',
     },
     {
       path: 'docs/research/image-latency/findings-decode-render-loading.json',
@@ -1625,6 +1737,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'frontend/src/api/inspect.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/api/liked.js',
       role: '좋아요 건물 API 클라이언트',
     },
@@ -1659,6 +1775,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/api/social.js',
       role: '팔로우·리액션 소셜 API 클라이언트',
+    },
+    {
+      path: 'frontend/src/api/works.js',
+      role: '',
     },
     {
       path: 'frontend/src/components/AppearanceSettings.jsx',
@@ -1961,6 +2081,14 @@ window.PROJECT_STATE = {
       role: '취향 분석 스와이프 페이지',
     },
     {
+      path: 'frontend/src/pages/UploadWorkPage.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/UploadWorkPage.module.css',
+      role: '',
+    },
+    {
       path: 'frontend/src/pages/UserProfilePage.jsx',
       role: '유저 프로필 페이지',
     },
@@ -1999,6 +2127,22 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/pages/buildingDetail/helpers.js',
       role: '건물 상세 메타 헬퍼',
+    },
+    {
+      path: 'frontend/src/pages/dbCheck/DbCheck.module.css',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/dbCheck/DbCheckDetailModal.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/dbCheck/DbCheckPage.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/dbCheck/DbCheckTile.jsx',
+      role: '',
     },
     {
       path: 'frontend/src/pages/firmProfile/FirmArticlesSection.jsx',
@@ -2193,6 +2337,14 @@ window.PROJECT_STATE = {
       role: '테스트 러너 에이전트 가이드',
     },
     {
+      path: 'web-testing/ab_screenshot.mjs',
+      role: '',
+    },
+    {
+      path: 'web-testing/ab_screenshot.py',
+      role: '',
+    },
+    {
       path: 'web-testing/dashboard/app.js',
       role: 'E2E 테스트 대시보드 SPA',
     },
@@ -2203,6 +2355,10 @@ window.PROJECT_STATE = {
     {
       path: 'web-testing/dashboard/style.css',
       role: '테스트 대시보드 스타일',
+    },
+    {
+      path: 'web-testing/main-service-test-plan.md',
+      role: '',
     },
     {
       path: 'web-testing/requirements.txt',

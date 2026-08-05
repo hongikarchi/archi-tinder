@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { useTheme } from './hooks/useTheme.js'
 import { useLanguage } from './hooks/useLanguage.js'
@@ -16,6 +16,7 @@ import BuildingDetailPage from './pages/BuildingDetailPage.jsx'
 import DiscoveryPage from './pages/DiscoveryPage.jsx'
 import VerifyGateModal from './components/VerifyGateModal.jsx'
 import LikedProjectsPage from './pages/LikedProjectsPage.jsx'
+import UploadWorkPage from './pages/UploadWorkPage.jsx'
 import LikedOfficesPage from './pages/LikedOfficesPage.jsx'
 import ArchitectProfilePage from './pages/ArchitectProfilePage.jsx'
 import SettingsPage from './pages/settings/SettingsPage.jsx'
@@ -30,6 +31,10 @@ import { normalizeFilters, classifySwipeError, isActionCard, extractLikedIds, ex
 import { reportWriteError } from './utils/reportWriteError.js'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import LLMSearchUpdateWrapper from './components/LLMSearchUpdateWrapper.jsx'
+
+// ADMIN-DBCHECK-1: internal DB-quality inspection page — dev-build only, lazy
+// so it never lands in the prod bundle's eager import graph either.
+const DbCheckPage = lazy(() => import('./pages/dbCheck/DbCheckPage.jsx'))
 
 /* ── App ─────────────────────────────────────────────────────────────────── */
 export default function App() {
@@ -544,11 +549,18 @@ export default function App() {
       setCurrentCard(savedPrefetch)
       setPrefetchCard(prefetchCard2)  // shift queue
       setPrefetchCard2(null)
-      // Optimistic like_count bump so the unified progress bar advances in lockstep
-      // with the visible card. Server response at line ~387 replaces with authoritative state.
-      if (action === 'like') {
-        setSessionProgress(p => p ? { ...p, like_count: (p.like_count ?? 0) + 1 } : p)
-      }
+      // Optimistic swipe-count bump so the progress bar advances in lockstep
+      // with the visible card. Server response replaces with authoritative state.
+      setSessionProgress(p => {
+        if (!p) return p
+        const next = {
+          ...p,
+          swipe_count: (p.swipe_count ?? 0) + 1,
+        }
+        if (action === 'like') next.like_count = (p.like_count ?? 0) + 1
+        else next.dislike_count = (p.dislike_count ?? 0) + 1
+        return next
+      })
     } else {
       // Keep the current card visible with a loading overlay instead of
       // replacing it with null. Setting currentCard to null was the root cause
@@ -1104,6 +1116,7 @@ export default function App() {
           <Route path="board/:boardId" element={<BoardDetailPage onResume={handleResumeProject} />} />
           <Route path="board/:boardId/report" element={<BoardReportPage />} />
           <Route path="liked-projects" element={<LikedProjectsPage />} />
+          <Route path="upload" element={<UploadWorkPage />} />
           <Route path="my/liked-offices" element={<Navigate to="/my/profile" replace />} />
           <Route path="architects/:architectId" element={<ArchitectProfilePage />} />
           <Route path="notifications" element={<NotificationInboxScreen />} />
@@ -1113,6 +1126,14 @@ export default function App() {
             <Route path="notifications" element={<NotificationsScreen />} />
             <Route path="appearance" element={<AppearanceScreen />} />
           </Route>
+          {/* ADMIN-DBCHECK-1: URL-only internal QA tool, dev builds only — no TabBar/nav link */}
+          {import.meta.env.DEV && (
+            <Route path="db-check" element={
+              <Suspense fallback={null}>
+                <DbCheckPage />
+              </Suspense>
+            } />
+          )}
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

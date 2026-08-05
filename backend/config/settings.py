@@ -34,6 +34,7 @@ INSTALLED_APPS = [
     'apps.profiles',
     'apps.social',
     'apps.notifications',
+    'apps.works',
 ]
 
 MIDDLEWARE = [
@@ -260,6 +261,9 @@ R2_ACCESS_KEY_ID     = os.getenv('R2_ACCESS_KEY_ID', '')
 R2_SECRET_ACCESS_KEY = os.getenv('R2_SECRET_ACCESS_KEY', '')
 R2_AVATAR_BUCKET     = os.getenv('R2_AVATAR_BUCKET', '')
 AVATAR_PUBLIC_BASE_URL = os.getenv('AVATAR_PUBLIC_BASE_URL', '')
+R2_WORKS_BUCKET      = os.getenv('R2_WORKS_BUCKET', '')
+WORKS_PUBLIC_BASE_URL = os.getenv('WORKS_PUBLIC_BASE_URL', '')
+WORKS_R2_ENABLED = all([R2_ENDPOINT_URL, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_WORKS_BUCKET])
 
 # True only when all four R2 vars are set (non-empty).
 AVATAR_R2_ENABLED = all([
@@ -396,6 +400,9 @@ RECOMMENDATION = {
         'style': 4.0,             # architectural style (ILIKE)
         'atmosphere': 3.0,        # mood/atmosphere (new soft axis, ILIKE)
         'color_tone': 2.0,        # color palette (new soft axis, ILIKE)
+        # BACK-PARSER-VOCAB-1: architectural_elements (unnest array ILIKE), same
+        # weight tier as material -- both are concrete-feature axes, not just mood.
+        'architectural_elements': 4.0,
         'year_min': 1.0,          # year range (soft bonus, not exclusion)
         'year_max': 1.0,
     },
@@ -417,6 +424,38 @@ GEMINI_TEXT_MODEL_FALLBACK  = os.getenv('GEMINI_TEXT_MODEL_FALLBACK', 'gemini-2.
 GEMINI_IMAGE_MODEL          = os.getenv('GEMINI_IMAGE_MODEL', 'gemini-3.1-flash-image')
 GEMINI_IMAGE_MODEL_FALLBACK = os.getenv('GEMINI_IMAGE_MODEL_FALLBACK', 'gemini-2.5-flash-image')
 GEMINI_IMAGE_FORMAT         = os.getenv('GEMINI_IMAGE_FORMAT', 'webp')   # webp|native
+# LLM-AB-KNOB-2: thinking-budget override for the two Gemini PARSE paths only
+# (parse_query.py parse_query() + parse_query_stage1()). 0 = thinking off
+# (current/default, byte-identical to the pre-knob literal 0), -1 = dynamic
+# budget, >0 = fixed token budget. generation.py (stage2/persona/board) stays
+# hardcoded at 0 -- this knob does NOT touch it.
+GEMINI_THINKING_BUDGET      = int(os.getenv('GEMINI_THINKING_BUDGET', '0'))
+# BACK-LLM-PROVIDER-1: A/B provider switch for the TEXT-PARSE path only
+# (apps.recommendation.services._gemini). Image generation always uses Gemini
+# regardless of this flag (see _get_gemini_client() in _gemini.py).
+LLM_PROVIDER      = os.getenv('LLM_PROVIDER', 'gemini')  # gemini|openai
+OPENAI_API_KEY    = os.getenv('OPENAI_API_KEY', '')
+OPENAI_TEXT_MODEL = os.getenv('OPENAI_TEXT_MODEL', 'gpt-5.6-luna')
+# Optional reasoning-effort knob; allowlist-validated here so a typo'd env var
+# degrades to "not sent" instead of a per-request 400 on the parse path.
+_OPENAI_EFFORT_ALLOWED = ('', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max')
+OPENAI_REASONING_EFFORT = os.getenv('OPENAI_REASONING_EFFORT', '')
+if OPENAI_REASONING_EFFORT not in _OPENAI_EFFORT_ALLOWED:
+    OPENAI_REASONING_EFFORT = ''
+# LLM-AB-KNOB-1: opt-in OpenAI strict structured-output mode (json_schema,
+# strict=True) for the LEGACY parse path only -- see _dispatch_generate's
+# openai json branch in _gemini.py. Default off (non-strict json_object,
+# unchanged behaviour) so this is byte-identical when unset.
+OPENAI_STRICT_SCHEMA = os.getenv('OPENAI_STRICT_SCHEMA', '') == 'true'
+# BACK-LLM-PROVIDER-2: separate A/B provider switch for the IMAGE-GEN path
+# (generation.py _gen_native), independent of LLM_PROVIDER above so text/image
+# providers mix freely (e.g. LLM_PROVIDER=openai + LLM_IMAGE_PROVIDER=gemini).
+LLM_IMAGE_PROVIDER = os.getenv('LLM_IMAGE_PROVIDER', 'gemini')  # gemini|openai
+OPENAI_IMAGE_MODEL = os.getenv('OPENAI_IMAGE_MODEL', 'gpt-image-2')
+_OPENAI_IMAGE_QUALITY_ALLOWED = ('low', 'medium', 'high')
+OPENAI_IMAGE_QUALITY = os.getenv('OPENAI_IMAGE_QUALITY', 'medium')  # low|medium|high
+if OPENAI_IMAGE_QUALITY not in _OPENAI_IMAGE_QUALITY_ALLOWED:
+    OPENAI_IMAGE_QUALITY = 'medium'
 HF_TOKEN          = os.getenv('HF_TOKEN', '')
 IMAGE_BASE_URL    = os.getenv('IMAGE_BASE_URL', 'https://pub-5d2133d166fc4b65ad05295df352519f.r2.dev')
 GOOGLE_CLIENT_ID  = os.getenv('GOOGLE_CLIENT_ID', '')

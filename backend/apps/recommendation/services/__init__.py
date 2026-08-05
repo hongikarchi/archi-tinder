@@ -39,6 +39,13 @@ from ..engine import _dictfetchall  # noqa: F401
 from ._gemini import _get_client, _retry_gemini_call  # noqa: F401
 from ._gemini import generate_content_with_fallback, _is_model_unavailable  # noqa: F401
 from ._gemini import _GEMINI_MAX_RETRIES, _GEMINI_RETRY_DELAY  # noqa: F401
+# BACK-LLM-PROVIDER-1: always-Gemini client for the image path (generation.py
+# _gen_native) -- must stay accessible via the _svc facade for late-binding.
+from ._gemini import _get_gemini_client  # noqa: F401
+# BACK-LLM-PROVIDER-2: always-OpenAI client for the image path (generation.py
+# _gen_native) when settings.LLM_IMAGE_PROVIDER='openai' -- same late-binding
+# facade requirement as _get_gemini_client above.
+from ._gemini import _get_openai_client  # noqa: F401
 
 # ---------------------------------------------------------------------------
 # _caches: IMP-5 chat cache + IMP-6 V_initial cache
@@ -77,6 +84,11 @@ from .parse_query import (  # noqa: F401
     parse_query,
     parse_query_stage1,
 )
+
+# ---------------------------------------------------------------------------
+# vocab: BACK-PARSER-VOCAB-1 -- live DB vocabulary for the 5 grounded axes
+# ---------------------------------------------------------------------------
+from .vocab import get_axis_vocab, _VOCAB_SNAPSHOT  # noqa: F401
 
 # ---------------------------------------------------------------------------
 # embeddings: HF embedding for HyDE V_initial
@@ -141,6 +153,7 @@ __all__ = [
     'event_log',
     # Public functions + constants
     'PROGRAM_VALUES',
+    'get_axis_vocab',
     'get_cached_v_initial',
     'set_cached_v_initial',
     'embed_visual_description',

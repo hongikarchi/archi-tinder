@@ -35,6 +35,7 @@ from ._prompts import (  # noqa: F401
     _ADJECTIVE_TOKENS,
     _ALL_SPECIFICITY_TOKENS,
     _STAGE1_RESPONSE_SCHEMA,
+    build_vocab_prompt_block,
 )
 
 logger = logging.getLogger('apps.recommendation')
@@ -131,6 +132,84 @@ def _repair_required_slate(filters: dict, raw_priority) -> tuple[dict, list]:
     if not _has_required_slate(filters):
         filters[_BROAD_SLATE_DEFAULT_FIELD] = _BROAD_SLATE_DEFAULT_VALUE
     return filters, _normalise_filter_priority(filters, raw_priority)
+
+
+# ---------------------------------------------------------------------------
+# BACK-PARSER-VOCAB-1: snap the 5 grounded soft axes to live DB vocabulary.
+# ---------------------------------------------------------------------------
+_SNAP_AXES = ('style', 'atmosphere', 'color_tone', 'typology_primary', 'architectural_elements')
+
+
+def _snap_to_vocab(filters: dict) -> dict:
+    """Normalise style/atmosphere/color_tone/typology_primary/architectural_elements
+    to the canonical DB casing, or None when unmappable.
+
+    Resolution order per axis (first match wins):
+      1. Exact match against the live vocab list -- returned unchanged.
+      2. Case-insensitive (casefold) match -- returns the CANONICAL DB casing.
+      3. style only: variant repair (value.replace('ism', 'ist')), then a
+         casefold retry against the repaired string (e.g. 'Brutalism' ->
+         'Brutalist', 'Modernism' -> 'Modernist').
+      4. Title-case retry (e.g. 'contemporary house' style shouldn't hit this,
+         but odd casing like 'BRUTALIST' does).
+      5. None (unmappable -- the caller's downstream code treats this as if
+         Gemini had returned null for the axis).
+
+    Never raises. Leaves `program` untouched (PROGRAM_VALUES logic elsewhere
+    already handles that axis). Values that are already None, non-string, or
+    empty are left as None; missing axis keys are not added.
+    """
+    from apps.recommendation import services as _svc  # noqa: PLC0415
+
+    try:
+        vocab = _svc.get_axis_vocab() or {}
+    except Exception:
+        logger.warning('_snap_to_vocab: get_axis_vocab() failed; skipping snap', exc_info=True)
+        return filters
+
+    result = dict(filters)
+    for axis in _SNAP_AXES:
+        if axis not in result:
+            continue
+        value = result[axis]
+        if value is None or not isinstance(value, str) or not value.strip():
+            continue
+
+        allowed = vocab.get(axis) or []
+        if not allowed:
+            # No live/snapshot vocab for this axis at all -- leave value as-is
+            # rather than nulling out a possibly-valid value on a data outage.
+            continue
+
+        if value in allowed:
+            continue  # exact match -- already canonical
+
+        snapped = None
+        value_cf = value.casefold()
+        for candidate in allowed:
+            if candidate.casefold() == value_cf:
+                snapped = candidate
+                break
+
+        if snapped is None and axis == 'style':
+            # Casefold BEFORE the ism->ist repair so all-caps variants
+            # ('MODERNISM', 'BRUTALISM') resolve too.
+            repaired_cf = value_cf.replace('ism', 'ist')
+            for candidate in allowed:
+                if candidate.casefold() == repaired_cf:
+                    snapped = candidate
+                    break
+
+        if snapped is None:
+            titled = value.title()
+            for candidate in allowed:
+                if candidate == titled or candidate.casefold() == titled.casefold():
+                    snapped = candidate
+                    break
+
+        result[axis] = snapped  # None when nothing matched
+
+    return result
 
 
 def _compute_confidence_fallback(filters: dict, probe_needed: bool) -> float:
@@ -391,6 +470,7 @@ def parse_query(conversation_history, language=None, prior_filters=None):
         'program': None, 'material': None, 'style': None,
         'year_min': None, 'year_max': None,
         'atmosphere': None, 'color_tone': None, 'typology_primary': None,
+        'architectural_elements': None,
     }
     _fallback = {
         'probe_needed': False,
@@ -413,10 +493,22 @@ def parse_query(conversation_history, language=None, prior_filters=None):
     # FULL-LANGUAGE-1: compute augmented system instruction once for all sites below.
     # language=None -> no directive (infer from message, existing behaviour).
     # TASTE-CALIBRATION-1: always append calibration extension to inject confidence fields.
+    # BACK-PARSER-VOCAB-1: also append the live-DB "Allowed <axis> values" grounding
+    # block for style/atmosphere/color_tone/typology_primary/architectural_elements.
+    # get_axis_vocab() never raises (falls back to _VOCAB_SNAPSHOT), so this is safe
+    # to call unconditionally. IMP-5 note: this string (including the vocab block)
+    # is what would be hashed/cached if _get_prompt_hash read _system_instruction --
+    # today it hashes the static _CHAT_PHASE_SYSTEM_PROMPT only, and the cached-content
+    # path below (context_caching_enabled, default OFF) intentionally keeps caching the
+    # static prompt (caching logic in _caches.py is algorithm-owned, untouched here);
+    # the vocab block flows into system_instruction= on the (default) uncached path,
+    # exactly like the language directive does today.
+    _vocab_block = build_vocab_prompt_block(_svc.get_axis_vocab())
     _system_instruction = (
-        _CHAT_PHASE_SYSTEM_PROMPT + _CALIBRATION_PROMPT_EXTENSION + _LANG_DIRECTIVE[language]
+        _CHAT_PHASE_SYSTEM_PROMPT + _CALIBRATION_PROMPT_EXTENSION + _vocab_block
+        + _LANG_DIRECTIVE[language]
         if language in _LANG_DIRECTIVE
-        else _CHAT_PHASE_SYSTEM_PROMPT + _CALIBRATION_PROMPT_EXTENSION
+        else _CHAT_PHASE_SYSTEM_PROMPT + _CALIBRATION_PROMPT_EXTENSION + _vocab_block
     )
 
     try:
@@ -448,7 +540,12 @@ def parse_query(conversation_history, language=None, prior_filters=None):
             )
 
         # IMP-5: explicit context caching branch (flag-gated, default OFF)
-        caching_enabled = rc.get('context_caching_enabled', False)
+        # BACK-LLM-PROVIDER-1: Gemini explicit context caching (_ensure_chat_cache)
+        # is a genai-only API surface (client.caches.create) -- gate it off on the
+        # openai path so an openai.OpenAI client is never handed to it. The flag is
+        # OFF by default regardless, so this guard only matters if a deployment
+        # ever flips context_caching_enabled=True while LLM_PROVIDER=openai.
+        caching_enabled = rc.get('context_caching_enabled', False) and settings.LLM_PROVIDER == 'gemini'
         cache_resource_name = None
         if caching_enabled:
             cache_resource_name = _svc._ensure_chat_cache(client)
@@ -464,7 +561,7 @@ def parse_query(conversation_history, language=None, prior_filters=None):
                 cached_content=cache_resource_name,
                 response_mime_type='application/json',
                 temperature=0.2,
-                thinking_config=types.ThinkingConfig(thinking_budget=0),
+                thinking_config=types.ThinkingConfig(thinking_budget=settings.GEMINI_THINKING_BUDGET),
             )
         else:
             # Uncached path: inject language directive via augmented system_instruction.
@@ -472,7 +569,7 @@ def parse_query(conversation_history, language=None, prior_filters=None):
                 system_instruction=_system_instruction,
                 response_mime_type='application/json',
                 temperature=0.2,
-                thinking_config=types.ThinkingConfig(thinking_budget=0),
+                thinking_config=types.ThinkingConfig(thinking_budget=settings.GEMINI_THINKING_BUDGET),
             )
 
         t_call_start = time.perf_counter()
@@ -501,7 +598,7 @@ def parse_query(conversation_history, language=None, prior_filters=None):
                         system_instruction=_system_instruction,
                         response_mime_type='application/json',
                         temperature=0.2,
-                        thinking_config=types.ThinkingConfig(thinking_budget=0),
+                        thinking_config=types.ThinkingConfig(thinking_budget=settings.GEMINI_THINKING_BUDGET),
                     ),
                 )
             else:
@@ -591,20 +688,28 @@ def parse_query(conversation_history, language=None, prior_filters=None):
         _filter_delta = data.get('filter_delta') or {}
         _delta_set = _filter_delta.get('set') or {}
         _delta_remove = _filter_delta.get('remove') or []
-        # Allowlist: only the 10 known axes survive into delta
+        # Allowlist: only the 11 known axes survive into delta
         _VALID_AXES = frozenset({
             'location_country', 'location_city', 'program', 'material', 'style',
             'year_min', 'year_max', 'atmosphere', 'color_tone', 'typology_primary',
+            'architectural_elements',
         })
         _delta_set = {k: v for k, v in _delta_set.items() if k in _VALID_AXES and v is not None}
         _delta_remove = [a for a in _delta_remove if isinstance(a, str) and a in _VALID_AXES]
 
-        if _filter_delta:
+        # An EMPTY delta ({'set': {}, 'remove': []}) is only meaningful on a
+        # follow-up turn (prior filters exist). On a first turn it must NOT
+        # shadow the full `filters` dict -- some models (gpt-5.6-luna, and
+        # Gemini on schema-faithful outputs) always emit the delta skeleton,
+        # which silently wiped every parsed filter (found in A/B 2026-08-04).
+        if (_delta_set or _delta_remove) or (prior_filters and _filter_delta):
             # Follow-up turn: apply delta to prior
             filters = dict(prior_filters or {})
-            filters.update(_delta_set)
+            # Remove BEFORE set: "X는 빼고 Y로" makes models emit the same axis
+            # in both remove and set (replace semantics) -- set must win.
             for _axis in _delta_remove:
                 filters.pop(_axis, None)
+            filters.update(_delta_set)
         else:
             # First turn or LLM skipped filter_delta: merge prior + full LLM filters
             _llm_filters = data.get('filters') or dict(_empty_filters)
@@ -617,6 +722,11 @@ def parse_query(conversation_history, language=None, prior_filters=None):
             if program not in PROGRAM_VALUES:
                 titled = program.title()
                 filters['program'] = titled if titled in PROGRAM_VALUES else None
+
+        # BACK-PARSER-VOCAB-1: snap the 5 grounded soft axes to live DB vocabulary
+        # (exact -> casefold -> style ism->ist -> title -> None). program is
+        # untouched (handled above via PROGRAM_VALUES).
+        filters = _snap_to_vocab(filters)
 
         # Sanitize/repair filter_priority: keep only non-null filter keys, but
         # never let a successful Gemini payload proceed without any required
@@ -731,6 +841,7 @@ def parse_query_stage1(conversation_history, language=None, prior_filters=None):
         'program': None, 'material': None, 'style': None,
         'year_min': None, 'year_max': None,
         'atmosphere': None, 'color_tone': None, 'typology_primary': None,
+        'architectural_elements': None,
     }
     _fallback = {
         'probe_needed': False,
@@ -753,10 +864,22 @@ def parse_query_stage1(conversation_history, language=None, prior_filters=None):
     # FULL-LANGUAGE-1: compute augmented system instruction once for all sites below.
     # language=None -> no directive (infer from message, existing behaviour).
     # TASTE-CALIBRATION-1: always append calibration extension to inject confidence fields.
+    # BACK-PARSER-VOCAB-1: also append the live-DB "Allowed <axis> values" grounding
+    # block for style/atmosphere/color_tone/typology_primary/architectural_elements.
+    # get_axis_vocab() never raises (falls back to _VOCAB_SNAPSHOT), so this is safe
+    # to call unconditionally. IMP-5 note: this string (including the vocab block)
+    # is what would be hashed/cached if _get_prompt_hash read _system_instruction --
+    # today it hashes the static _CHAT_PHASE_SYSTEM_PROMPT only, and the cached-content
+    # path below (context_caching_enabled, default OFF) intentionally keeps caching the
+    # static prompt (caching logic in _caches.py is algorithm-owned, untouched here);
+    # the vocab block flows into system_instruction= on the (default) uncached path,
+    # exactly like the language directive does today.
+    _vocab_block = build_vocab_prompt_block(_svc.get_axis_vocab())
     _system_instruction = (
-        _CHAT_PHASE_SYSTEM_PROMPT + _CALIBRATION_PROMPT_EXTENSION + _LANG_DIRECTIVE[language]
+        _CHAT_PHASE_SYSTEM_PROMPT + _CALIBRATION_PROMPT_EXTENSION + _vocab_block
+        + _LANG_DIRECTIVE[language]
         if language in _LANG_DIRECTIVE
-        else _CHAT_PHASE_SYSTEM_PROMPT + _CALIBRATION_PROMPT_EXTENSION
+        else _CHAT_PHASE_SYSTEM_PROMPT + _CALIBRATION_PROMPT_EXTENSION + _vocab_block
     )
 
     try:
@@ -788,7 +911,12 @@ def parse_query_stage1(conversation_history, language=None, prior_filters=None):
             )
 
         # IMP-5: explicit context caching branch (flag-gated, default OFF)
-        caching_enabled = rc.get('context_caching_enabled', False)
+        # BACK-LLM-PROVIDER-1: Gemini explicit context caching (_ensure_chat_cache)
+        # is a genai-only API surface (client.caches.create) -- gate it off on the
+        # openai path so an openai.OpenAI client is never handed to it. The flag is
+        # OFF by default regardless, so this guard only matters if a deployment
+        # ever flips context_caching_enabled=True while LLM_PROVIDER=openai.
+        caching_enabled = rc.get('context_caching_enabled', False) and settings.LLM_PROVIDER == 'gemini'
         cache_resource_name = None
         if caching_enabled:
             cache_resource_name = _svc._ensure_chat_cache(client)
@@ -803,7 +931,7 @@ def parse_query_stage1(conversation_history, language=None, prior_filters=None):
                 response_mime_type='application/json',
                 response_schema=_STAGE1_RESPONSE_SCHEMA,
                 temperature=0.2,
-                thinking_config=types.ThinkingConfig(thinking_budget=0),
+                thinking_config=types.ThinkingConfig(thinking_budget=settings.GEMINI_THINKING_BUDGET),
             )
         else:
             # Uncached path: inject language directive via augmented system_instruction.
@@ -812,7 +940,7 @@ def parse_query_stage1(conversation_history, language=None, prior_filters=None):
                 response_mime_type='application/json',
                 response_schema=_STAGE1_RESPONSE_SCHEMA,
                 temperature=0.2,
-                thinking_config=types.ThinkingConfig(thinking_budget=0),
+                thinking_config=types.ThinkingConfig(thinking_budget=settings.GEMINI_THINKING_BUDGET),
             )
 
         t_call_start = time.perf_counter()
@@ -841,7 +969,7 @@ def parse_query_stage1(conversation_history, language=None, prior_filters=None):
                         response_mime_type='application/json',
                         response_schema=_STAGE1_RESPONSE_SCHEMA,
                         temperature=0.2,
-                        thinking_config=types.ThinkingConfig(thinking_budget=0),
+                        thinking_config=types.ThinkingConfig(thinking_budget=settings.GEMINI_THINKING_BUDGET),
                     ),
                 )
             else:
@@ -910,20 +1038,28 @@ def parse_query_stage1(conversation_history, language=None, prior_filters=None):
         _filter_delta = data.get('filter_delta') or {}
         _delta_set = _filter_delta.get('set') or {}
         _delta_remove = _filter_delta.get('remove') or []
-        # Allowlist: only the 10 known axes survive into delta
+        # Allowlist: only the 11 known axes survive into delta
         _VALID_AXES = frozenset({
             'location_country', 'location_city', 'program', 'material', 'style',
             'year_min', 'year_max', 'atmosphere', 'color_tone', 'typology_primary',
+            'architectural_elements',
         })
         _delta_set = {k: v for k, v in _delta_set.items() if k in _VALID_AXES and v is not None}
         _delta_remove = [a for a in _delta_remove if isinstance(a, str) and a in _VALID_AXES]
 
-        if _filter_delta:
+        # An EMPTY delta ({'set': {}, 'remove': []}) is only meaningful on a
+        # follow-up turn (prior filters exist). On a first turn it must NOT
+        # shadow the full `filters` dict -- some models (gpt-5.6-luna, and
+        # Gemini on schema-faithful outputs) always emit the delta skeleton,
+        # which silently wiped every parsed filter (found in A/B 2026-08-04).
+        if (_delta_set or _delta_remove) or (prior_filters and _filter_delta):
             # Follow-up turn: apply delta to prior
             filters = dict(prior_filters or {})
-            filters.update(_delta_set)
+            # Remove BEFORE set: "X는 빼고 Y로" makes models emit the same axis
+            # in both remove and set (replace semantics) -- set must win.
             for _axis in _delta_remove:
                 filters.pop(_axis, None)
+            filters.update(_delta_set)
         else:
             # First turn or LLM skipped filter_delta: merge prior + full LLM filters
             _llm_filters = data.get('filters') or dict(_empty_filters)
@@ -936,6 +1072,11 @@ def parse_query_stage1(conversation_history, language=None, prior_filters=None):
             if program not in PROGRAM_VALUES:
                 titled = program.title()
                 filters['program'] = titled if titled in PROGRAM_VALUES else None
+
+        # BACK-PARSER-VOCAB-1: snap the 5 grounded soft axes to live DB vocabulary
+        # (exact -> casefold -> style ism->ist -> title -> None). program is
+        # untouched (handled above via PROGRAM_VALUES).
+        filters = _snap_to_vocab(filters)
 
         # Sanitize/repair filter_priority: keep only non-null filter keys, but
         # never let a successful Gemini payload proceed without any required

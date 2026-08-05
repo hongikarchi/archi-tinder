@@ -84,3 +84,6 @@ Desktop.ini
 .#*
 \#*\#
 
+
+# db_qc harness run artifacts (local scorecards, diffed per machine)
+backend/tools/qc_runs/

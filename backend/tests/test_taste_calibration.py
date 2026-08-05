@@ -971,7 +971,10 @@ class TestFilterDeltaApply:
             'probe_needed': False, 'probe_question': None,
             'reply': '스타일 바꿀게요.',
             'filters': {},
-            'filter_delta': {'set': {'style': 'Brutalism'}, 'remove': []},
+            # BACK-PARSER-VOCAB-1: canonical vocab string (was 'Brutalism' -- now
+            # snapped to 'Brutalist' by _snap_to_vocab, so use the canonical form
+            # directly to keep this test focused on delta-merge, not vocab-snap).
+            'filter_delta': {'set': {'style': 'Brutalist'}, 'remove': []},
             'filter_priority': ['program', 'location_country', 'style'],
             'raw_query': '브루탈리즘으로',
             'visual_description': 'A brutalist museum.',
@@ -985,7 +988,7 @@ class TestFilterDeltaApply:
         assert filters.get('location_country') == 'Japan', (
             f"location_country must be preserved; got {filters}"
         )
-        assert filters.get('style') == 'Brutalism', f"style must be updated; got {filters}"
+        assert filters.get('style') == 'Brutalist', f"style must be updated; got {filters}"
 
     def test_first_turn_no_prior_uses_llm_filters(self, monkeypatch):
         """Turn 1 with no prior_filters: LLM full filters dict used directly."""

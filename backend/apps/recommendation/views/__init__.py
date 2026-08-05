@@ -61,6 +61,11 @@ from .office_recommendation import (
     ArchitectDetailView,
     ArchitectFollowView,
 )
+from .inspect import (
+    InspectBuildingsListView,
+    InspectBuildingDetailView,
+    InspectSearchView,
+)
 from ._shared import (
     # Private helpers accessed by tests
     _liked_id_only,
@@ -93,6 +98,9 @@ __all__ = [
     'RecommendedArchitectsView',
     'ArchitectDetailView',
     'ArchitectFollowView',
+    'InspectBuildingsListView',
+    'InspectBuildingDetailView',
+    'InspectSearchView',
     # Private helpers (re-exported for backward compat with test imports)
     '_liked_id_only',
     '_get_profile',
