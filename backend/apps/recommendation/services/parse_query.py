@@ -540,7 +540,12 @@ def parse_query(conversation_history, language=None, prior_filters=None):
             )
 
         # IMP-5: explicit context caching branch (flag-gated, default OFF)
-        caching_enabled = rc.get('context_caching_enabled', False)
+        # BACK-LLM-PROVIDER-1: Gemini explicit context caching (_ensure_chat_cache)
+        # is a genai-only API surface (client.caches.create) -- gate it off on the
+        # openai path so an openai.OpenAI client is never handed to it. The flag is
+        # OFF by default regardless, so this guard only matters if a deployment
+        # ever flips context_caching_enabled=True while LLM_PROVIDER=openai.
+        caching_enabled = rc.get('context_caching_enabled', False) and settings.LLM_PROVIDER == 'gemini'
         cache_resource_name = None
         if caching_enabled:
             cache_resource_name = _svc._ensure_chat_cache(client)
@@ -556,7 +561,7 @@ def parse_query(conversation_history, language=None, prior_filters=None):
                 cached_content=cache_resource_name,
                 response_mime_type='application/json',
                 temperature=0.2,
-                thinking_config=types.ThinkingConfig(thinking_budget=0),
+                thinking_config=types.ThinkingConfig(thinking_budget=settings.GEMINI_THINKING_BUDGET),
             )
         else:
             # Uncached path: inject language directive via augmented system_instruction.
@@ -564,7 +569,7 @@ def parse_query(conversation_history, language=None, prior_filters=None):
                 system_instruction=_system_instruction,
                 response_mime_type='application/json',
                 temperature=0.2,
-                thinking_config=types.ThinkingConfig(thinking_budget=0),
+                thinking_config=types.ThinkingConfig(thinking_budget=settings.GEMINI_THINKING_BUDGET),
             )
 
         t_call_start = time.perf_counter()
@@ -593,7 +598,7 @@ def parse_query(conversation_history, language=None, prior_filters=None):
                         system_instruction=_system_instruction,
                         response_mime_type='application/json',
                         temperature=0.2,
-                        thinking_config=types.ThinkingConfig(thinking_budget=0),
+                        thinking_config=types.ThinkingConfig(thinking_budget=settings.GEMINI_THINKING_BUDGET),
                     ),
                 )
             else:
@@ -692,12 +697,19 @@ def parse_query(conversation_history, language=None, prior_filters=None):
         _delta_set = {k: v for k, v in _delta_set.items() if k in _VALID_AXES and v is not None}
         _delta_remove = [a for a in _delta_remove if isinstance(a, str) and a in _VALID_AXES]
 
-        if _filter_delta:
+        # An EMPTY delta ({'set': {}, 'remove': []}) is only meaningful on a
+        # follow-up turn (prior filters exist). On a first turn it must NOT
+        # shadow the full `filters` dict -- some models (gpt-5.6-luna, and
+        # Gemini on schema-faithful outputs) always emit the delta skeleton,
+        # which silently wiped every parsed filter (found in A/B 2026-08-04).
+        if (_delta_set or _delta_remove) or (prior_filters and _filter_delta):
             # Follow-up turn: apply delta to prior
             filters = dict(prior_filters or {})
-            filters.update(_delta_set)
+            # Remove BEFORE set: "X는 빼고 Y로" makes models emit the same axis
+            # in both remove and set (replace semantics) -- set must win.
             for _axis in _delta_remove:
                 filters.pop(_axis, None)
+            filters.update(_delta_set)
         else:
             # First turn or LLM skipped filter_delta: merge prior + full LLM filters
             _llm_filters = data.get('filters') or dict(_empty_filters)
@@ -899,7 +911,12 @@ def parse_query_stage1(conversation_history, language=None, prior_filters=None):
             )
 
         # IMP-5: explicit context caching branch (flag-gated, default OFF)
-        caching_enabled = rc.get('context_caching_enabled', False)
+        # BACK-LLM-PROVIDER-1: Gemini explicit context caching (_ensure_chat_cache)
+        # is a genai-only API surface (client.caches.create) -- gate it off on the
+        # openai path so an openai.OpenAI client is never handed to it. The flag is
+        # OFF by default regardless, so this guard only matters if a deployment
+        # ever flips context_caching_enabled=True while LLM_PROVIDER=openai.
+        caching_enabled = rc.get('context_caching_enabled', False) and settings.LLM_PROVIDER == 'gemini'
         cache_resource_name = None
         if caching_enabled:
             cache_resource_name = _svc._ensure_chat_cache(client)
@@ -914,7 +931,7 @@ def parse_query_stage1(conversation_history, language=None, prior_filters=None):
                 response_mime_type='application/json',
                 response_schema=_STAGE1_RESPONSE_SCHEMA,
                 temperature=0.2,
-                thinking_config=types.ThinkingConfig(thinking_budget=0),
+                thinking_config=types.ThinkingConfig(thinking_budget=settings.GEMINI_THINKING_BUDGET),
             )
         else:
             # Uncached path: inject language directive via augmented system_instruction.
@@ -923,7 +940,7 @@ def parse_query_stage1(conversation_history, language=None, prior_filters=None):
                 response_mime_type='application/json',
                 response_schema=_STAGE1_RESPONSE_SCHEMA,
                 temperature=0.2,
-                thinking_config=types.ThinkingConfig(thinking_budget=0),
+                thinking_config=types.ThinkingConfig(thinking_budget=settings.GEMINI_THINKING_BUDGET),
             )
 
         t_call_start = time.perf_counter()
@@ -952,7 +969,7 @@ def parse_query_stage1(conversation_history, language=None, prior_filters=None):
                         response_mime_type='application/json',
                         response_schema=_STAGE1_RESPONSE_SCHEMA,
                         temperature=0.2,
-                        thinking_config=types.ThinkingConfig(thinking_budget=0),
+                        thinking_config=types.ThinkingConfig(thinking_budget=settings.GEMINI_THINKING_BUDGET),
                     ),
                 )
             else:
@@ -1030,12 +1047,19 @@ def parse_query_stage1(conversation_history, language=None, prior_filters=None):
         _delta_set = {k: v for k, v in _delta_set.items() if k in _VALID_AXES and v is not None}
         _delta_remove = [a for a in _delta_remove if isinstance(a, str) and a in _VALID_AXES]
 
-        if _filter_delta:
+        # An EMPTY delta ({'set': {}, 'remove': []}) is only meaningful on a
+        # follow-up turn (prior filters exist). On a first turn it must NOT
+        # shadow the full `filters` dict -- some models (gpt-5.6-luna, and
+        # Gemini on schema-faithful outputs) always emit the delta skeleton,
+        # which silently wiped every parsed filter (found in A/B 2026-08-04).
+        if (_delta_set or _delta_remove) or (prior_filters and _filter_delta):
             # Follow-up turn: apply delta to prior
             filters = dict(prior_filters or {})
-            filters.update(_delta_set)
+            # Remove BEFORE set: "X는 빼고 Y로" makes models emit the same axis
+            # in both remove and set (replace semantics) -- set must win.
             for _axis in _delta_remove:
                 filters.pop(_axis, None)
+            filters.update(_delta_set)
         else:
             # First turn or LLM skipped filter_delta: merge prior + full LLM filters
             _llm_filters = data.get('filters') or dict(_empty_filters)

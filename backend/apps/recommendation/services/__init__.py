@@ -39,6 +39,13 @@ from ..engine import _dictfetchall  # noqa: F401
 from ._gemini import _get_client, _retry_gemini_call  # noqa: F401
 from ._gemini import generate_content_with_fallback, _is_model_unavailable  # noqa: F401
 from ._gemini import _GEMINI_MAX_RETRIES, _GEMINI_RETRY_DELAY  # noqa: F401
+# BACK-LLM-PROVIDER-1: always-Gemini client for the image path (generation.py
+# _gen_native) -- must stay accessible via the _svc facade for late-binding.
+from ._gemini import _get_gemini_client  # noqa: F401
+# BACK-LLM-PROVIDER-2: always-OpenAI client for the image path (generation.py
+# _gen_native) when settings.LLM_IMAGE_PROVIDER='openai' -- same late-binding
+# facade requirement as _get_gemini_client above.
+from ._gemini import _get_openai_client  # noqa: F401
 
 # ---------------------------------------------------------------------------
 # _caches: IMP-5 chat cache + IMP-6 V_initial cache

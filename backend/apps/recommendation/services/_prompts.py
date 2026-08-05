@@ -477,10 +477,11 @@ _AXIS_EXTRA_RULES = {
     ),
     'typology_primary': (
         '\nWhen the user names a specific building type (도서관/교회/학교/미술관/파빌리온...), '
-        'set `typology_primary` to the matching allowed value AND ALSO fill `program` with '
-        'its parent bucket -- the specific type never replaces `program`, both are filled '
-        '(도서관->typology_primary "Library" + program "Education" or "Public"; '
-        '교회->"Religious Building" + "Religion").\n'
+        'set `typology_primary` to the matching allowed value AND ALSO fill `program` -- '
+        'both are filled. Program pick: use the DIRECT program match when one exists '
+        '(미술관->"Museum", 오피스->"Office", 주택->"Housing"); else fixed picks: 도서관/학교/'
+        '대학->"Education", 교회/사찰->"Religion", 호텔/리조트/펜션->"Hospitality", 파빌리온/기념관->"Public". Never "Public" '
+        'when a more specific bucket applies (`program` is a hard filter).\n'
     ),
 }
 
@@ -528,3 +529,88 @@ def build_vocab_prompt_block(vocab: dict) -> str:
 # checked in test_vocab_grounding.py (budget: <= ~600 tokens for the vocab
 # blocks + the new courtyard-house few-shot example added above).
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# LLM-AB-KNOB-1: OpenAI strict-mode (json_schema, strict=True) structured
+# output schema for the LEGACY parse_query() output object -- see
+# _CHAT_PHASE_SYSTEM_PROMPT's "## Your output schema" block above (the
+# `filters` / `filter_delta` shape) plus _CALIBRATION_PROMPT_EXTENSION (the
+# confidence/calibration fields: confidence_score, system_action,
+# suggested_quick_replies, priority_ordered, llm_response_message).
+#
+# OpenAI strict-mode requirements (every object node, recursively):
+#   - 'additionalProperties': False
+#   - 'required' lists EVERY key in 'properties' (strict mode has no notion
+#     of "optional" -- optionality is expressed by unioning the type with
+#     'null' instead, e.g. {'type': ['string', 'null']}).
+# Nullable enum (image_focus): OpenAI strict supports 'enum' alongside a
+# ['string', 'null'] type union with `None` included as a literal member of
+# 'enum' -- verified against the live API in the LIVE VALIDATION step below.
+# ---------------------------------------------------------------------------
+_OPENAI_STRICT_AXES_SET = {
+    'type': 'object',
+    'properties': {
+        'location_country': {'type': ['string', 'null']},
+        'location_city': {'type': ['string', 'null']},
+        'program': {'type': ['string', 'null']},
+        'material': {'type': ['string', 'null']},
+        'style': {'type': ['string', 'null']},
+        'year_min': {'type': ['integer', 'null']},
+        'year_max': {'type': ['integer', 'null']},
+        'atmosphere': {'type': ['string', 'null']},
+        'color_tone': {'type': ['string', 'null']},
+        'typology_primary': {'type': ['string', 'null']},
+        'architectural_elements': {'type': ['string', 'null']},
+    },
+    'required': [
+        'location_country', 'location_city', 'program', 'material', 'style',
+        'year_min', 'year_max', 'atmosphere', 'color_tone',
+        'typology_primary', 'architectural_elements',
+    ],
+    'additionalProperties': False,
+}
+
+_OPENAI_STRICT_PARSE_SCHEMA = {
+    'type': 'object',
+    'properties': {
+        'probe_needed': {'type': 'boolean'},
+        'probe_question': {'type': ['string', 'null']},
+        'reply': {'type': 'string'},
+        'filters': _OPENAI_STRICT_AXES_SET,
+        'filter_delta': {
+            'type': 'object',
+            'properties': {
+                'set': _OPENAI_STRICT_AXES_SET,
+                'remove': {'type': 'array', 'items': {'type': 'string'}},
+            },
+            'required': ['set', 'remove'],
+            'additionalProperties': False,
+        },
+        'filter_priority': {'type': 'array', 'items': {'type': 'string'}},
+        'image_focus': {
+            'type': ['string', 'null'],
+            'enum': ['exterior', 'interior', 'drawing', 'aerial', 'detail', None],
+        },
+        'raw_query': {'type': 'string'},
+        'visual_description': {'type': ['string', 'null']},
+        # TASTE-CALIBRATION-1 calibration fields (_CALIBRATION_PROMPT_EXTENSION).
+        'confidence_score': {'type': ['number', 'null']},
+        'system_action': {'type': ['string', 'null']},
+        'suggested_quick_replies': {
+            'type': ['array', 'null'],
+            'items': {'type': 'string'},
+        },
+        'priority_ordered': {
+            'type': ['array', 'null'],
+            'items': {'type': 'string'},
+        },
+        'llm_response_message': {'type': ['string', 'null']},
+    },
+    'required': [
+        'probe_needed', 'probe_question', 'reply', 'filters', 'filter_delta',
+        'filter_priority', 'image_focus', 'raw_query', 'visual_description',
+        'confidence_score', 'system_action', 'suggested_quick_replies',
+        'priority_ordered', 'llm_response_message',
+    ],
+    'additionalProperties': False,
+}

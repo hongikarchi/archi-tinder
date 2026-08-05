@@ -42,6 +42,7 @@ import django  # noqa: E402
 
 django.setup()
 
+from django.conf import settings  # noqa: E402
 from django.db import connections  # noqa: E402
 
 from apps.recommendation import engine, services  # noqa: E402
@@ -375,6 +376,11 @@ def _truth_matches(concept: dict, metadata: dict) -> bool:
 
 
 def run_search_battery(queries: list[dict], limit: int) -> dict:
+    # Phase B (parser battery) can run long enough for Neon to idle-close the
+    # buildings connection (hit 2026-08-04 with slower OpenAI parses:
+    # InterfaceError 'connection already closed'). Force a fresh connection.
+    from django.db import connections
+    connections['buildings'].close()
     per_query = {}
     for q in queries:
         t0 = time.time()
@@ -553,8 +559,12 @@ def main() -> int:
             print(f'no queries match --only {args.only}', file=sys.stderr)
             return 2
 
+    # BACK-LLM-PROVIDER-1: stamp provider/model so A/B matrix runs are self-describing.
+    _is_openai = settings.LLM_PROVIDER == 'openai'
     run: dict = {'ts': _now_stamp(), 'n_queries': len(queries),
-                 'parser_runs': 0 if args.skip_parser else args.parser_runs}
+                 'parser_runs': 0 if args.skip_parser else args.parser_runs,
+                 'llm_provider': settings.LLM_PROVIDER,
+                 'llm_model': settings.OPENAI_TEXT_MODEL if _is_openai else settings.GEMINI_TEXT_MODEL}
     t0 = time.time()
 
     print('[A] vocab dump...', flush=True)
