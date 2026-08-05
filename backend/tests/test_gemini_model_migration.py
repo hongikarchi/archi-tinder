@@ -289,6 +289,7 @@ class TestGeneratePersonaImage:
         mock_client = MagicMock()
         mock_client.models.generate_content.side_effect = side_effect
         monkeypatch.setattr('apps.recommendation.services._get_client', lambda: mock_client)
+        monkeypatch.setattr('apps.recommendation.services._get_gemini_client', lambda: mock_client)
         monkeypatch.setattr('apps.recommendation.services._gemini.time.sleep', lambda _: None)
         return mock_client
 
@@ -332,6 +333,7 @@ class TestGeneratePersonaImage:
         mock_client = MagicMock()
         mock_client.models.generate_content.side_effect = _fake_gc
         monkeypatch.setattr('apps.recommendation.services._get_client', lambda: mock_client)
+        monkeypatch.setattr('apps.recommendation.services._get_gemini_client', lambda: mock_client)
         monkeypatch.setattr('apps.recommendation.services._gemini.time.sleep', lambda _: None)
 
         with override_settings(
@@ -362,6 +364,7 @@ class TestGeneratePersonaImage:
         mock_client = MagicMock()
         mock_client.models.generate_content.side_effect = _fake_gc
         monkeypatch.setattr('apps.recommendation.services._get_client', lambda: mock_client)
+        monkeypatch.setattr('apps.recommendation.services._get_gemini_client', lambda: mock_client)
         monkeypatch.setattr('apps.recommendation.services._gemini.time.sleep', lambda _: None)
 
         with override_settings(
@@ -450,6 +453,7 @@ class TestGeneratePersonaImage:
         mock_client = MagicMock()
         mock_client.models.generate_content.side_effect = gax_exceptions.NotFound('not found')
         monkeypatch.setattr('apps.recommendation.services._get_client', lambda: mock_client)
+        monkeypatch.setattr('apps.recommendation.services._get_gemini_client', lambda: mock_client)
         monkeypatch.setattr('apps.recommendation.services._gemini.time.sleep', lambda _: None)
 
         with override_settings(
