@@ -8,16 +8,26 @@ FRONTEND_DIR = frontend
 
 SHELL := /bin/bash
 
+# Interpreter, resolved relative to BACKEND_DIR (every call site runs after
+# `cd $(BACKEND_DIR)`). Windows `python3` is a Store stub that prints "Python"
+# and executes nothing, so prefer the backend venv, then a REAL python3
+# (verified by executing code), then python.
+PYTHON := $(shell \
+	if [ -x "$(BACKEND_DIR)/.venv/Scripts/python.exe" ]; then echo .venv/Scripts/python; \
+	elif [ -x "$(BACKEND_DIR)/.venv/bin/python" ]; then echo .venv/bin/python; \
+	elif [ "$$(python3 -c 'print(42)' 2>/dev/null)" = "42" ]; then echo python3; \
+	else echo python; fi)
+
 .PHONY: setup dev backend frontend reset-db dashboard migrate-local test-local migrate-prod
 
 # ── Setup ────────────────────────────────────────────────────────────────────
 setup:
 	@echo "==> Installing backend dependencies..."
-	cd $(BACKEND_DIR) && pip3 install -r requirements.txt
+	cd $(BACKEND_DIR) && $(PYTHON) -m pip install -r requirements.txt
 	@echo "==> Running migrations..."
-	cd $(BACKEND_DIR) && python3 manage.py migrate
+	cd $(BACKEND_DIR) && $(PYTHON) manage.py migrate
 	@echo "==> Creating superuser (if not exists)..."
-	cd $(BACKEND_DIR) && python3 manage.py shell -c \
+	cd $(BACKEND_DIR) && $(PYTHON) manage.py shell -c \
 		"from django.contrib.auth import get_user_model; U = get_user_model(); U.objects.filter(email='$(DEV_SUPERUSER_EMAIL)').exists() or U.objects.create_superuser('admin', '$(DEV_SUPERUSER_EMAIL)', '$(DEV_SUPERUSER_PASSWORD)')"
 	@echo "==> Installing frontend dependencies..."
 	cd $(FRONTEND_DIR) && npm install
@@ -36,13 +46,13 @@ dev:
 		fi; \
 	done
 	@trap 'kill 0' INT TERM; \
-	(cd $(BACKEND_DIR) && python3 manage.py runserver 8001) & \
+	(cd $(BACKEND_DIR) && $(PYTHON) manage.py runserver 8001) & \
 	(cd $(FRONTEND_DIR) && npm run dev) & \
 	wait
 
 # ── Backend only ─────────────────────────────────────────────────────────────
 backend:
-	cd $(BACKEND_DIR) && python3 manage.py runserver 8001
+	cd $(BACKEND_DIR) && $(PYTHON) manage.py runserver 8001
 
 # ── Frontend only ────────────────────────────────────────────────────────────
 frontend:
@@ -50,7 +60,7 @@ frontend:
 
 # ── Reset DB (migrations only, no wipe) ─────────────────────────────────────
 reset-db:
-	cd $(BACKEND_DIR) && python3 manage.py migrate
+	cd $(BACKEND_DIR) && $(PYTHON) manage.py migrate
 
 # ── Dashboard (open committed project state view) ──────────────────────────
 dashboard:
@@ -66,13 +76,13 @@ migrate-local:
 	HOST=$$(grep -E '^DB_HOST=' .env | cut -d= -f2-); \
 	NAME=$$(grep -E '^DB_NAME=' .env | cut -d= -f2-); \
 	echo; echo "Pending migrations (as current runtime user):"; \
-	python3 manage.py showmigrations 2>/dev/null | grep '\[ \]' || echo "  (none -- DB already current)"; \
+	$(PYTHON) manage.py showmigrations 2>/dev/null | grep '\[ \]' || echo "  (none -- DB already current)"; \
 	echo; echo "LOCAL migrate target  ->  HOST=$$HOST  NAME=$$NAME  USER=neondb_owner"; \
 	echo "WARNING: runs DDL as neondb_owner. Confirm HOST above is your LOCAL dev branch, NOT production."; \
 	read -p "Proceed? type 'yes': " ANS; \
 	if [ "$$ANS" != "yes" ]; then echo "aborted."; exit 1; fi; \
 	read -s -p "neondb_owner password: " PW; echo; \
-	DB_USER=neondb_owner DB_PASSWORD="$$PW" python3 manage.py migrate && { echo; echo "Done. Runtime .env unchanged (still make_web_app)."; }
+	DB_USER=neondb_owner DB_PASSWORD="$$PW" $(PYTHON) manage.py migrate && { echo; echo "Done. Runtime .env unchanged (still make_web_app)."; }
 
 # -- Prod DB migrate (post-deploy step; DDL via neondb_owner) -------------------
 # Prod runtime user make_web_app has no DDL (INFRA-DB-1), so Railway can NOT
@@ -101,7 +111,7 @@ migrate-prod:
 	PW=$$(grep -E '^DB_PASSWORD=' .env.prod.owner | cut -d= -f2-); \
 	echo; echo "PROD migrate target  ->  HOST=$$HOST  NAME=$$NAME  USER=$$DBUSER"; \
 	echo; echo "Pending migrations on PROD:"; \
-	PENDING=$$(DB_HOST="$$HOST" DB_PORT="$$PORT" DB_NAME="$$NAME" DB_USER="$$DBUSER" DB_PASSWORD="$$PW" python3 manage.py showmigrations 2>/dev/null | grep '\[ \]' || true); \
+	PENDING=$$(DB_HOST="$$HOST" DB_PORT="$$PORT" DB_NAME="$$NAME" DB_USER="$$DBUSER" DB_PASSWORD="$$PW" $(PYTHON) manage.py showmigrations 2>/dev/null | grep '\[ \]' || true); \
 	if [ -z "$$PENDING" ]; then echo "  (none -- prod already current)"; exit 0; fi; \
 	echo "$$PENDING"; \
 	DESTR=""; \
@@ -117,7 +127,7 @@ migrate-prod:
 	echo; echo "ORDER CHECK: run this only AFTER the Railway deploy for this release is live."; \
 	read -p "Apply to PRODUCTION? type 'deploy-prod': " ANS; \
 	if [ "$$ANS" != "deploy-prod" ]; then echo "aborted."; exit 1; fi; \
-	DB_HOST="$$HOST" DB_PORT="$$PORT" DB_NAME="$$NAME" DB_USER="$$DBUSER" DB_PASSWORD="$$PW" python3 manage.py migrate && { echo; echo "Done. Prod schema current. Runtime .env unchanged (still make_web_app)."; }
+	DB_HOST="$$HOST" DB_PORT="$$PORT" DB_NAME="$$NAME" DB_USER="$$DBUSER" DB_PASSWORD="$$PW" $(PYTHON) manage.py migrate && { echo; echo "Done. Prod schema current. Runtime .env unchanged (still make_web_app)."; }
 
 # -- Local pytest (CI-shape Postgres run; test DB via neondb_owner CREATEDB) ----
 # Local runtime user make_web_app has no CREATEDB (INFRA-DB-1), so pytest-django
@@ -139,4 +149,4 @@ test-local:
 	read -p "Proceed? type 'yes': " ANS; \
 	if [ "$$ANS" != "yes" ]; then echo "aborted."; exit 1; fi; \
 	read -s -p "neondb_owner password: " PW; echo; \
-	DB_HOST="$$HOST" DB_NAME="$$NAME" DB_PORT="$$PORT" DB_USER=neondb_owner DB_PASSWORD="$$PW" python3 -m pytest $(ARGS)
+	DB_HOST="$$HOST" DB_NAME="$$NAME" DB_PORT="$$PORT" DB_USER=neondb_owner DB_PASSWORD="$$PW" $(PYTHON) -m pytest $(ARGS)
