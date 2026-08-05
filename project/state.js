@@ -23,7 +23,7 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-08-05 02:13 KST',
+    updatedAt: '2026-08-05 14:59 KST',
     head: '20ed84d',
     branch: 'feature/claude-llm-provider-adapter',
   },
@@ -2335,6 +2335,14 @@ window.PROJECT_STATE = {
     {
       path: 'web-testing/AGENTS.md',
       role: '테스트 러너 에이전트 가이드',
+    },
+    {
+      path: 'web-testing/ab_screenshot.mjs',
+      role: '',
+    },
+    {
+      path: 'web-testing/ab_screenshot.py',
+      role: '',
     },
     {
       path: 'web-testing/dashboard/app.js',
