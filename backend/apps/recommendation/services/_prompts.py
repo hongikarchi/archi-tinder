@@ -480,7 +480,7 @@ _AXIS_EXTRA_RULES = {
         'set `typology_primary` to the matching allowed value AND ALSO fill `program` -- '
         'both are filled. Program pick: use the DIRECT program match when one exists '
         '(미술관->"Museum", 오피스->"Office", 주택->"Housing"); else fixed picks: 도서관/학교/'
-        '대학->"Education", 교회/사찰->"Religion", 파빌리온/기념관->"Public". Never "Public" '
+        '대학->"Education", 교회/사찰->"Religion", 호텔/리조트/펜션->"Hospitality", 파빌리온/기념관->"Public". Never "Public" '
         'when a more specific bucket applies (`program` is a hard filter).\n'
     ),
 }

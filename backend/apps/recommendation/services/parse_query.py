@@ -705,9 +705,11 @@ def parse_query(conversation_history, language=None, prior_filters=None):
         if (_delta_set or _delta_remove) or (prior_filters and _filter_delta):
             # Follow-up turn: apply delta to prior
             filters = dict(prior_filters or {})
-            filters.update(_delta_set)
+            # Remove BEFORE set: "X는 빼고 Y로" makes models emit the same axis
+            # in both remove and set (replace semantics) -- set must win.
             for _axis in _delta_remove:
                 filters.pop(_axis, None)
+            filters.update(_delta_set)
         else:
             # First turn or LLM skipped filter_delta: merge prior + full LLM filters
             _llm_filters = data.get('filters') or dict(_empty_filters)
@@ -1053,9 +1055,11 @@ def parse_query_stage1(conversation_history, language=None, prior_filters=None):
         if (_delta_set or _delta_remove) or (prior_filters and _filter_delta):
             # Follow-up turn: apply delta to prior
             filters = dict(prior_filters or {})
-            filters.update(_delta_set)
+            # Remove BEFORE set: "X는 빼고 Y로" makes models emit the same axis
+            # in both remove and set (replace semantics) -- set must win.
             for _axis in _delta_remove:
                 filters.pop(_axis, None)
+            filters.update(_delta_set)
         else:
             # First turn or LLM skipped filter_delta: merge prior + full LLM filters
             _llm_filters = data.get('filters') or dict(_empty_filters)
