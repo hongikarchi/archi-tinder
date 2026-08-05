@@ -326,7 +326,7 @@ def _translate_contents_to_messages(contents, config):
     return messages
 
 
-def _dispatch_generate(client, *, model, contents, config=None, timeout):
+def _dispatch_generate(client, *, model, contents, config=None, timeout, provider=None):
     """BACK-LLM-PROVIDER-1: provider-agnostic single-call dispatch.
 
     Gemini path: unchanged -- calls _retry_gemini_call(client.models.generate_content, ...)
@@ -345,7 +345,7 @@ def _dispatch_generate(client, *, model, contents, config=None, timeout):
     """
     from apps.recommendation import services as _svc
 
-    if settings.LLM_PROVIDER != 'openai':
+    if (provider or settings.LLM_PROVIDER) != 'openai':
         return _svc._retry_gemini_call(
             client.models.generate_content,
             model=model,
@@ -400,7 +400,7 @@ def _dispatch_generate(client, *, model, contents, config=None, timeout):
     return _NormalizedResponse(response, model)
 
 
-def generate_content_with_fallback(client, *, timeout=15.0, **kw):
+def generate_content_with_fallback(client, *, timeout=15.0, provider=None, **kw):
     """
     Call client.models.generate_content (gemini) or client.chat.completions.create
     (openai, BACK-LLM-PROVIDER-1) with automatic model fallback -- gemini only.
@@ -431,19 +431,20 @@ def generate_content_with_fallback(client, *, timeout=15.0, **kw):
     _retry_gemini_call mock seam live, exactly as the pre-wrapper direct call
     sites did.
     """
-    if settings.LLM_PROVIDER == 'openai':
+    resolved = provider or settings.LLM_PROVIDER
+    if resolved == 'openai':
         model = settings.OPENAI_TEXT_MODEL
-        return _dispatch_generate(client, model=model, timeout=timeout, **kw)
+        return _dispatch_generate(client, model=model, timeout=timeout, provider=resolved, **kw)
 
     primary = settings.GEMINI_TEXT_MODEL
     fb = settings.GEMINI_TEXT_MODEL_FALLBACK
     try:
-        return _dispatch_generate(client, model=primary, timeout=timeout, **kw)
+        return _dispatch_generate(client, model=primary, timeout=timeout, provider=resolved, **kw)
     except Exception as e:
         if _is_model_unavailable(e) and fb and fb != primary:
             logger.warning(
                 'text model %s rejected (%s); fallback -> %s',
                 primary, type(e).__name__, fb,
             )
-            return _dispatch_generate(client, model=fb, timeout=timeout, **kw)
+            return _dispatch_generate(client, model=fb, timeout=timeout, provider=resolved, **kw)
         raise

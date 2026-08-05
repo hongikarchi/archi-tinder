@@ -251,10 +251,13 @@ def generate_persona_report(liked_building_ids):
     )
 
     try:
-        client = _svc._get_client()
+        # USER DECISION 2026-08-05: persona text stays Gemini even when the
+        # parse/board text provider is switched to openai (B pick).
+        client = _svc._get_gemini_client()
 
         response = _svc.generate_content_with_fallback(
             client,
+            provider='gemini',
             contents=summary,
             config=types.GenerateContentConfig(
                 system_instruction=_PERSONA_PROMPT,

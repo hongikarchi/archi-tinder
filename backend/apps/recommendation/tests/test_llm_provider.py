@@ -780,3 +780,34 @@ class TestOpenaiStrictParseSchemaStructure:
             ['properties']['set']['properties']
         )
         assert set(delta_set_props.keys()) == expected_axes
+
+
+class TestProviderOverride:
+    """B-pick: persona text pinned to gemini via provider= kwarg override."""
+
+    def test_provider_gemini_override_wins_over_openai_setting(self, monkeypatch, settings):
+        from unittest.mock import MagicMock
+        from apps.recommendation import services as _svc
+        from apps.recommendation.services import _gemini
+
+        settings.LLM_PROVIDER = 'openai'
+        captured = {}
+
+        def fake_retry(func, *args, **kwargs):
+            captured['func'] = func
+            resp = MagicMock()
+            resp.text = '{}'
+            return resp
+
+        monkeypatch.setattr(_svc, '_retry_gemini_call', fake_retry)
+        client = MagicMock()
+        _gemini.generate_content_with_fallback(client, provider='gemini', contents='x')
+        # gemini branch called client.models.generate_content, not chat.completions
+        assert captured['func'] is client.models.generate_content
+
+    def test_persona_call_site_pins_gemini(self):
+        import inspect
+        from apps.recommendation.services import generation
+        src = inspect.getsource(generation.generate_persona_report)
+        assert '_get_gemini_client()' in src
+        assert "provider='gemini'" in src
