@@ -107,6 +107,13 @@ Implementation map:
 
 ### HIGH
 
+#### ALGO-ACCURACY-1 — "Aha(취향 포착)" 주장 미검증 — 측정 하네스 부재 (hypothesis-grade)
+_출처: 2026-07-06 4-agent 정적분석 종합(`.claude/plans/algo-speed-accuracy-analysis.md`, 2026-08-05 stale-정리 때 삭제 — speed 파트는 #266-#269/#283 등으로 대부분 해소, accuracy 파트만 여기로 이관)._
+- **[CRITICAL] Photo-vs-taste confound**: 스와이프 자극은 사진인데 기록 신호는 텍스트 캡션 임베딩(`visual_description`, sentence encoder — 이미지/CLIP 임베딩은 스와이프 경로에 전무). 엔진의 "시각 유사도"는 실제로는 캡션 어휘 유사도. 옵션: Make DB CLIP/이미지-임베딩 채널(조율 필요, 최대 리프트) / 주장을 caption-semantic taste로 축소 / 실험으로 검증.
+- **[HIGH] Convergence = "centroid 정지" ≠ "취향 포착"**: threshold 0.08→0.13은 10-swipe 내 발화용 튜닝(SWIPE-CONVERGENCE-10), holdout 검증·온라인 메트릭 0. 잠재 메트릭은 이미 발행 중: bookmark provenance `in_cosine/gemini/dpp_top10` top-10 bookmark rate — 집계만 안 됨.
+- **측정 하네스 제안(오프라인, 기존 SwipeEvent 데이터, 최저비용)**: held-out-swipe prediction — 마지막 L likes 숨기고 나머지로 풀 랭킹, held-out rank vs random 비교. "Aha 미검증"을 숫자로 전환한 뒤 후속(intensity→centroid 가중, 조기 K=2, λ-ramp, CLIP 채널)을 결정.
+- 부수 발견: love intensity(∈[0,2]) 저장만 되고 centroid 수학 미사용; cold-start diversity가 캡션 공간 기준(미학 축 아님); analyzing 중 dislike 준-비활성(제품 결정 명시 필요); `docs/algorithm.md` D1-D5 doc-code drift(최악: convergence 공식 doc=normalized vs code=absolute L2 — centroid L2-normalize 덕에 현재만 무해).
+
 #### BACK-RECOMMEND-1 — Project 두번째 세션이 이전 taste를 모름
 Same Project can host multiple `AnalysisSession` rows (user comes back, "Resume" or new swipe round on the same Project — second session is created fresh while `Project.liked_ids` / `disliked_ids` / `saved_ids` carry forward as the persistent accumulator). Today the new session's algorithm-side state (`like_vectors`, `convergence_history`, `phase`) starts from scratch — exploring phase, empty pool of taste signal — even though the user just liked 12 buildings in Session #1.
 
