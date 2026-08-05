@@ -134,6 +134,7 @@ class TestChatPhaseParseQuery:
         mock_client = MagicMock()
         mock_client.models.generate_content.side_effect = _fake_generate_content
         monkeypatch.setattr(services, '_get_client', lambda: mock_client)
+        monkeypatch.setattr(services, '_get_gemini_client', lambda: mock_client)
 
         history = [
             {'role': 'user', 'text': '새로 올릴 주택 프로젝트 참고용 찾아요.'},
@@ -159,6 +160,7 @@ class TestChatPhaseParseQuery:
         mock_client = MagicMock()
         mock_client.models.generate_content.side_effect = _fake_generate_content
         monkeypatch.setattr(services, '_get_client', lambda: mock_client)
+        monkeypatch.setattr(services, '_get_gemini_client', lambda: mock_client)
 
         result = services.parse_query('새로 올릴 주택 프로젝트 참고용 찾아요.')
 
@@ -227,6 +229,7 @@ class TestGeneratePersonaReportThinkingBudget:
         mock_client = MagicMock()
         mock_client.models.generate_content.side_effect = _fake_generate_content
         monkeypatch.setattr(services, '_get_client', lambda: mock_client)
+        monkeypatch.setattr(services, '_get_gemini_client', lambda: mock_client)
 
         # Bypass the DB fetch
         mock_conn = MagicMock()
