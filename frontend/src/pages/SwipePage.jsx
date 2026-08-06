@@ -95,16 +95,6 @@ function ConfidenceBar({ phase, progress }) {
     stageLabel = 'Calibrating…'
   }
 
-  // Swipe count label: plain count, no /target denominator.
-  let swipeCountLabel = ''
-  if (progress?.swipe_count != null) {
-    swipeCountLabel = `${progress.swipe_count} swipes`
-  } else if (progress?.like_count != null && progress?.dislike_count != null) {
-    swipeCountLabel = `${progress.like_count + progress.dislike_count} swipes`
-  } else if (progress?.like_count != null) {
-    swipeCountLabel = `${progress.like_count} ♥`
-  }
-
   return (
     <div style={{ width: '100%' }}>
       {/* Two-column info row above the bar */}
@@ -118,13 +108,11 @@ function ConfidenceBar({ phase, progress }) {
         }}>
           {stageLabel}
         </span>
-        {swipeCountLabel ? (
-          <span style={{
-            fontSize: 12, fontWeight: 500, color: 'var(--color-text-dim)',
-          }}>
-            {swipeCountLabel}
-          </span>
-        ) : null}
+        <span style={{
+          fontSize: 12, fontWeight: 500, color: 'var(--color-text-dim)',
+        }}>
+          {pct}%
+        </span>
       </div>
 
       {/* Bar */}
