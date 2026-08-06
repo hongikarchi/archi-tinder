@@ -4,6 +4,7 @@ import SwipeCard, { CARD_WIDTH, CARD_HEIGHT } from '../components/SwipeCard.jsx'
 import QuestionCard from '../components/QuestionCard.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
 import CardSkeleton from '../components/CardSkeleton.jsx'
+import SwipeDeck from '../components/SwipeDeck.jsx'
 import { isActionCard } from '../utils/appHelpers.js'
 import { useSwipeOrchestration } from '../hooks/useSwipeOrchestration.js'
 import { useKeyboardSwipe } from '../hooks/useKeyboardSwipe.js'
@@ -324,6 +325,7 @@ export default function SwipePage({
   onExitToNewProject, onExitToHome,
   questionTrigger = null,
   onQuestionAnswer,
+  nextCard = null,
 }) {
   const { t } = useTranslation()
   const cardRef = useRef(null)
@@ -613,7 +615,7 @@ export default function SwipePage({
         )}
 
         {/* Card */}
-        <div style={{ width: CARD_WIDTH, height: CARD_HEIGHT, position: 'relative' }}>
+        <SwipeDeck nextCard={!questionTrigger && currentCard ? nextCard : null}>
           {currentCard ? (
             questionTrigger ? (
               /* Wrap QuestionCard in SwipeGestureFrame so right swipe = 'A' (Yes)
@@ -668,7 +670,7 @@ export default function SwipePage({
           ) : isLoading ? (
             <CardSkeleton />
           ) : null}
-        </div>
+        </SwipeDeck>
 
         </div>{/* end center wrapper */}
 

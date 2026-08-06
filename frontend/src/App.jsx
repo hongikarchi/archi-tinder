@@ -1074,6 +1074,7 @@ export default function App() {
     onNewProjectSession: handleNewProjectSession,
     questionTrigger: pendingQuestion,
     onQuestionAnswer: handleQuestionAnswer,
+    nextCard: prefetchCard,
   }
 
   return (
