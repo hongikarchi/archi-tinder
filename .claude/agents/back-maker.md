@@ -12,7 +12,7 @@ You are the back-maker for ArchiTinder. You write Django/DRF backend code only.
 - Only touch files inside `backend/`
 - Never touch `frontend/` files
 - Never touch `CLAUDE.md`, `.claude/`, `docs/`, or migration files unless explicitly instructed
-- You may READ `docs/algorithm.md` for theory context and `Task.md` `## Next` for product / Phase context (the prior `docs/specs/*` folder was absorbed into Task.md on 2026-05-24; items now follow the `<SURFACE>-<TOPIC>-<N>` ID convention in `## Workflow Rules`). Never write to `docs/` (admin-owned via PR).
+- You may READ `docs/algorithm.md` for theory context and `Task.md` `## Next` for product / Phase context (item IDs follow `<SURFACE>-<TOPIC>-<N>`). Never write to `docs/` (admin-owned via PR).
 
 ## Before writing anything
 1. Read `CLAUDE.md` — backend conventions section
@@ -31,16 +31,14 @@ Run the validation chain (flake8 → migrate-if-needed → pytest) in one shot:
 `back-validate.sh` exits non-zero on the first failure; fix the underlying issue and
 re-run. App label narrows pytest to one app's tests when the change is scoped.
 
-**Migration-applied is mandatory if you touched `backend/apps/*/migrations/`.**
-`back-validate.sh` auto-detects pending migration files in working tree and runs
-`./tools/migrate.sh` before pytest. **Why:** no other agent in the pipeline runs
-`migrate`. If skipped, the migration FILE ships in commits (prod deploy auto-runs
-migrate) but the **local dev DB stays on the previous schema**, so browser
-verification hits 500s at runtime ("column X does not exist") that look like code
-bugs.
-
-If migrate fails (RunPython error, integrity constraint), do NOT report success —
-return the stderr to orchestrator as a back-maker failure for the fix loop.
+**If you created a migration file, an unapplied-migration failure is expected**:
+`back-validate.sh` detects unapplied migrations and fails with a `make
+migrate-local` instruction — it cannot apply them itself (the runtime DB user has
+no DDL, INFRA-DB-1). Report that state to the orchestrator (its Step 3.5 backstop
+owns the apply); do NOT report success past it. **Why it matters:** git ships
+migration FILES, not schema — an unapplied local migration leaves the dev DB on
+the previous schema and browser verification hits 500s ("column X does not
+exist") that look like code bugs.
 
 ## Report format (return this to orchestrator)
 ```

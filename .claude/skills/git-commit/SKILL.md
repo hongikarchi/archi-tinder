@@ -38,7 +38,10 @@ git add --all -- \
   ':(exclude)*.pyc' \
   ':(exclude)*.key' \
   ':(exclude)*.pem' \
+  ':(exclude)*.p12' \
+  ':(exclude)*.pfx' \
   ':(exclude)credentials.*' \
+  ':(exclude)credentials/*' \
   ':(exclude)secrets/*'
 ```
 
@@ -48,7 +51,7 @@ git add --all -- \
 git diff --cached --stat
 ```
 
-If any of `.env*`, `*.key`, `*.pem`, `credentials.*`, `secrets/*` appears in the staged set, **ABORT**. Report the leak path and ask the user to clean it up (`git restore --staged <path>` + add to `.gitignore`).
+If any of `.env*`, `*.key`, `*.pem`, `*.p12`, `*.pfx`, `credentials.*`, `credentials/`, `secrets/` appears in the staged set, **ABORT**. Report the leak path and ask the user to clean it up (`git restore --staged <path>` + add to `.gitignore`).
 
 ### Step 4 — Compose conventional-commit message (caveman style)
 
@@ -64,10 +67,13 @@ If any of `.env*`, `*.key`, `*.pem`, `credentials.*`, `secrets/*` appears in the
 
 **Trailer** (required boilerplate, NEVER drop or compress):
 ```
-Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+Co-Authored-By: Claude <ACTUAL SESSION MODEL> <noreply@anthropic.com>
 ```
 
-Adjust the model name to match the actual model the main session is using.
+`<ACTUAL SESSION MODEL>` = the model THIS session runs on (e.g. `Fable 5`, `Opus 4.8`)
+— never copy a model name from an old commit or from this file's history. If the
+harness supplies its own trailer block (Co-Authored-By + Claude-Session), use that
+verbatim instead.
 
 **Examples** (good caveman):
 - `feat: add Office.claim_token + claim API per PROF1 §2.3`
@@ -86,7 +92,7 @@ git commit -m "$(cat <<'EOF'
 
 <body lines, optional>
 
-Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+Co-Authored-By: Claude <ACTUAL SESSION MODEL> <noreply@anthropic.com>
 EOF
 )"
 ```

@@ -40,10 +40,10 @@ DEBUG=False.
 
 If `DEV_LOGIN_SECRET` is not set in `backend/.env`, the endpoint returns 404.
 
-**`app-test` agent — hard FAIL on 404** (per `.claude/agents/app-test.md` Step
-B1d): deep verification cannot proceed without auth, so the agent returns
-`APP-TEST: FAIL` with reason `dev-login endpoint missing (DEV_LOGIN_SECRET not
-in env)`. There is no "skip authenticated flows" fallback for the agent.
+**`app-test` agent — hard FAIL on 404** (per `.claude/agents/app-test.md`
+preflight, dev-login step): deep verification cannot proceed without auth, so
+the agent returns `APP-TEST: FAIL` (`dev-login unavailable`). There is no
+"skip authenticated flows" fallback for the agent.
 
 **Standalone runner** (`web-testing/run.py`) — also requires
 `DEV_LOGIN_SECRET`; the runner exits with a clear error if the secret is
@@ -171,7 +171,7 @@ FULL.
 | **FULL** (default) | Recommendation / swipe path touched — `backend/apps/recommendation/**`, RECOMMENDATION dict in `backend/config/settings.py`, session lifecycle, `SwipePage.jsx` / `LLMSearchPage.jsx`, swipe / session logic in `App.jsx`. Always required pre-deploy (Mode 3). | 3 personas × 25 swipes × 3-run TTFC p50, spec-aligned latency budgets (Brutalist / Sustainable Korean TTFC < 4s; Bare Query < 5s; per-swipe outer < 1500 ms / backend < 1000 ms), edge-case coverage (refresh-resume, action card, network failure), zero-tolerance console/network error gates. No retries on flake. |
 | **FEATURE-SCOPED** | Changes that do not touch the recommendation / swipe path — e.g. profile, theme/font, boards, social, accounts, settings UI. | Preflight (dev-login, migrations, console baseline) + caller-supplied feature checklist + light regression smoke (1 AI search, ~5 swipes, no latency gate). The dispatch MUST include a feature-verification checklist or the agent fails the run. |
 
-Both modes end with an `origin/develop` drift check (Part C). The legacy
+Both modes end with an `origin/develop` drift check. The legacy
 "fast inner-loop / strict /review" split is **superseded** by these two modes
 as of 2026-05-22 — see `.claude/agents/app-test.md` for the full contract.
 There is no `/review` slash command — per CLAUDE.md `## Workflow — one

@@ -8,10 +8,11 @@
 
 ---
 
-## 0. Operating model — ultracode-main (Opus 4.8)
+## 0. Operating model — ultracode-main
 
-The main model is **Opus 4.8** (`claude-opus-4-8`, 1M context); Mythos/Fable are blocked,
-so Opus 4.8 is both floor and ceiling for the orchestrator. The primary workflow is
+The orchestrator runs on the **top available session-model tier** — **Fable 5**
+(`claude-fable-5`) as of 2026-08 (the earlier Opus 4.8 era assumption "Mythos/Fable
+blocked" no longer holds). The primary workflow is
 **ultracode = the Workflow tool**: substantive build+review work runs as a deterministic
 multi-agent Workflow script (`.claude/workflows/feature.js`), not an inline chain of
 `Agent` dispatches. Trivial mechanical edits (typos, one-line fixes, pure docs) stay
@@ -32,7 +33,7 @@ gate), and runs **skills** itself for the commit/audit/publish procedures.
 
 ```mermaid
 flowchart TD
-    Main["Claude Code session (Opus 4.8)<br/>orchestrator — owns the publish gate"]
+    Main["Claude Code session (Fable 5)<br/>orchestrator — owns the publish gate"]
     Main -->|"launches (Workflow tool)"| WF["feature workflow<br/>build → review → verify<br/>(Sonnet workers, Opus verify)<br/>STOPS at commit-ready, no git"]
     WF -->|"agentType"| Impl["back-maker · front-maker<br/>(Sonnet)"]
     WF -->|"agentType"| Rev["code-review · security-manager<br/>(Sonnet)"]
@@ -68,7 +69,8 @@ pr`/`merge` inside a workflow script. (Incident-driven: PR #105 main-merge, Code
 
 | Tier | Runs | Why |
 |------|------|-----|
-| **Opus 4.8** | the session/orchestrator + the workflow's own logic; the **adversarial-verify / judge** pass | judgment, synthesis, decomposition |
+| **Session model (Fable 5)** | the session/orchestrator + the workflow's own logic | judgment, synthesis, decomposition |
+| **Opus** | the **adversarial-verify / judge** pass — always pinned `model: 'opus', effort: 'high'` (xhigh sessions inherit effort into `agent()`; Opus without a thinking budget 400s) | strongest verifier below the session tier |
 | **Sonnet 4.6** | `back-maker`, `front-maker`, `code-review`, `security-manager`, `app-test` | implementation + review; documented production sweet spot |
 | **Haiku 4.5** | pure exploration / file-discovery / search (built-in `Explore` already runs Haiku) | high-volume, low-judgment lookup |
 
@@ -249,7 +251,7 @@ the heavy lane is opt-in via the workflow, with cost controlled by model tiering
 |------|--------|
 | Feature work runs through the `orchestrate` skill → `feature` workflow | The session never implements feature code directly from the main thread |
 | Workflows perform no git | `feature.js` stops at `commitReady`; the publish gate lives in the session |
-| Pin model on every workflow `agent()` | `agentType` does not carry the tier; default is inherit-Opus |
+| Pin model on every workflow `agent()` | `agentType` does not carry the tier; default is inherit-session-model (most expensive) |
 | Direct edit allowed for | meta/infra (`tools/`, `hooks/`, `.github/`, `.claude/workflows/`), single-line fixes, sub-MINOR follow-ups, pure docs (`CLAUDE.md`, `.claude/*`, `docs/*`, `CONTRIBUTING.md`, `DESIGN.md`, `README.md`) — direct edit + `git-commit` skill |
 | Makers are sandboxed | `back-maker`: `backend/` only · `front-maker`: `frontend/` only |
 | Git operations use skills first | `git-commit`, `git-publish`; `git-publisher` agent only for Mode 3 / external PR / complex rebase |
