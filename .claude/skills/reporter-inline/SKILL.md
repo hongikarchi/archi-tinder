@@ -125,47 +125,11 @@ Run ONLY if the commit touched any of:
 
 If diff doesn't touch any of those, skip this entire step.
 
-### 3a. Hyperparameter Production Value sync (mechanical)
+**The write-permission contract is `CLAUDE.md` § Rules ("docs/algorithm.md reporter sync")** — permitted writes (a) Production-Value column sync, (b) one-line `_(Updated YYYY-MM-DD <sha_short>: ...)_` annotation per changed section, (c) the `**Last Synced (Reporter):**` line; everything else forbidden. Follow it exactly; if an edit would cross it, STOP and surface the constraint. Mechanical details not in CLAUDE.md:
 
-If `RECOMMENDATION` dict values changed, update the **Production Value** column of `docs/algorithm.md` Hyperparameter Space table to match. Read both, replace cell values where they diverge. Leave Type + Range alone.
-
-New key in `RECOMMENDATION`: append new row with Type filled in from `settings.py`, Range blank.
-
-Removed key: leave row in place, append `_(removed in <sha_short>)_` annotation to value cell.
-
-### 3b. Inline annotation (semantic)
-
-For each section in `algorithm.md` whose described behavior just changed, append exactly ONE italic line at the END of that section:
-
-```
-_(Updated YYYY-MM-DD <sha_short>: <one-line summary>.)_
-```
-
-Examples:
-- Convergence detection bug fix → annotate "Convergence Detection" subsection.
-- Pool-score normalization → annotate "Phase 0 / Bounded Pool Creation".
-- Dislike threshold change → annotate "Edge Cases > Extreme Dislike Bias".
-
-If no semantic section maps to the change, skip 3b.
-
-### 3c. Top-of-file Last Synced line
-
-Add or replace a single line right under the intro blockquote:
-
-```
-**Last Synced (Reporter):** YYYY-MM-DD <sha_short>
-```
-
-If line exists, replace its value. If not, insert as a new line after the blockquote.
-
-### 3d. Hard limits (forbidden)
-
-- Do NOT rewrite algorithm theory (Mathematical Formulas, Phase descriptions).
-- Do NOT add new sections.
-- Do NOT remove any existing line (only ANNOTATE / REPLACE Production Value cell / Last Synced line).
-- Do NOT touch other `docs/*` files (database-schema.md, COLLAB_HANDOFF.md, etc.) — admin-owned, PR-edited.
-
-If your edit would cross any of these, STOP and surface the constraint to the user.
+- New `RECOMMENDATION` key → append a table row (Type from `settings.py`, Range blank). Removed key → keep the row, annotate the value cell `_(removed in <sha_short>)_`.
+- Annotation goes at the END of the semantically-matching section (e.g. convergence fix → "Convergence Detection"); no matching section → skip the annotation.
+- Never touch other `docs/*` files — admin-owned, PR-edited.
 
 ---
 

@@ -5,9 +5,10 @@ description: Use this skill to implement any feature or fix end-to-end. It reads
 
 # Orchestrate — feature-implementation playbook (Workflow-tool era)
 
-This skill runs in the **main session's context**. As of the Opus 4.8 + ultracode
-refactor, the build+review CORE is a **Workflow script** (`.claude/workflows/feature.js`),
-not an inline sequence of `Agent` dispatches. The skill's job is now:
+This skill runs in the **main session's context** (whatever the current session model
+is — Fable 5 as of 2026-08). Since the ultracode refactor, the build+review CORE is a
+**Workflow script** (`.claude/workflows/feature.js`), not an inline sequence of `Agent`
+dispatches. The skill's job is now:
 
 1. **Decompose** the task into a backend/frontend spec (the session owns this).
 2. **Launch** the `feature` workflow — it builds (back-maker/front-maker on Sonnet),
@@ -102,9 +103,9 @@ Call `Workflow({ name: 'feature', args: {...} })` with the decomposition. Watch 
 ### Step 3.5 — Migration backstop (defensive)
 If the workflow's `built` list shows any `backend/apps/*/migrations/` file, confirm it was applied:
 ```bash
-cd backend && python3 manage.py showmigrations 2>&1 | grep -E '\[ \]'
+cd backend && python manage.py showmigrations 2>&1 | grep -E '\[ \]'
 ```
-No output → proceed. Any `[ ]` → `cd backend && python3 manage.py migrate` (back-maker should have, but this is belt-and-suspenders; postmortem `190c830`).
+No output → proceed. Any `[ ]` → run `make migrate-local` (prompts for the `neondb_owner` password — the runtime DB user has no DDL, INFRA-DB-1, so a bare `manage.py migrate` fails), then restart the backend. (Belt-and-suspenders; postmortem `190c830`.)
 
 ### Step 4 — Commit (local only)
 Run the **`git-commit` skill** in the main session. Stages with secret exclusions, builds a caveman conventional-commit message, commits on the feature branch. Never pushes.
@@ -112,9 +113,9 @@ Run the **`git-commit` skill** in the main session. Stages with secret exclusion
 ### Step 5 — Pre-push browser test + drift gate
 Dispatch the **`app-test` agent** (it runs *outside* the workflow — it is post-commit, pre-push). It runs the live-browser user-journey + the HEAD/`origin/develop` drift check; returns one verdict.
 
-- **PASS** → Step 6.
-- **FAIL (browser)** — re-launch the `feature` workflow with `fixOrders` = the app-test failure spec and `cyclesUsed` raised by 1 (the app-test FAIL consumes one of the shared 2 cycles, since the workflow already returned and cannot re-enter its own loop). After it returns commit-ready, re-run `git-commit` (new commit, same branch) → re-dispatch `app-test`. If the shared budget is exhausted, STOP and report.
-- **FAIL (drift — `origin/develop` moved)** — no code fix. Inform the user, `git pull --rebase origin develop` (resolve conflicts via a fix re-launch if needed), re-dispatch `app-test`. Drift does NOT count toward the 2-cycle budget.
+- **PASS / PASS-WITH-MINORS** → Step 6 (carry any Minors list into the audit + PR description).
+- **FAIL** — re-launch the `feature` workflow with `fixOrders` = the app-test failure spec and `cyclesUsed` raised by 1 (the app-test FAIL consumes one of the shared 2 cycles, since the workflow already returned and cannot re-enter its own loop). After it returns commit-ready, re-run `git-commit` (new commit, same branch) → re-dispatch `app-test`. If the shared budget is exhausted, STOP and report.
+- **ABORTED (drift — `origin/develop` moved)** — no code fix. Inform the user, `git pull --rebase origin develop` (resolve conflicts via a fix re-launch if needed), re-dispatch `app-test`. Drift does NOT count toward the 2-cycle budget.
 - **Dev server not running** — app-test reports it; note it and proceed to Step 6 (drift check still applied).
 
 ### Step 6 — Audit (reporter-inline skill)

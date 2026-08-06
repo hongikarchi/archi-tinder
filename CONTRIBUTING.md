@@ -31,7 +31,7 @@ run `./tools/install-hooks.sh` directly instead.
 |---|---|---|
 | **A** | Algorithm | `backend/apps/recommendation/engine.py`, `backend/apps/recommendation/services/{embeddings,rerank,generation,parse_query,_caches,_gemini}.py`, `backend/config/settings.py` (RECOMMENDATION dict only), `backend/tests/` (algorithm tests: `test_topic*`, `test_hyde`, `test_hybrid_retrieval`, `test_imp*`, `test_chat_phase`, `test_confidence`, etc.) |
 | **B** | Post-swipe SNS | `backend/apps/social/`, `backend/apps/profiles/`, `frontend/src/pages/FirmProfilePage.jsx`, `UserProfilePage.jsx`, `BoardDetailPage.jsx`, `frontend/src/api/social.js`, `frontend/src/api/profiles.js`, `frontend/src/components/profile/` (BoardCard, BioPersonaFlipCard, DescriptionAboutFlipCard, ProjectCard, ArticleCard, InfoCol) |
-| **C** (admin) | Everything else | `backend/apps/accounts/`, `backend/apps/recommendation/views/sessions.py`, `views/projects.py`, `views/swipe.py`, `views/search.py`, `views/reports.py`, `views/telemetry.py`, `frontend/src/pages/SwipePage.jsx`, `LLMSearchPage.jsx`, `FavoritesPage.jsx`, `LoginPage.jsx`, `ProjectSetupPage.jsx`, Django admin, deployment config |
+| **C** (admin) | Everything else | `backend/apps/accounts/`, `backend/apps/recommendation/views/sessions.py`, `views/projects.py`, `views/swipe.py`, `views/search.py`, `views/reports.py`, `views/telemetry.py`, `frontend/src/pages/SwipePage.jsx`, `LLMSearchPage.jsx`, `DiscoveryPage.jsx`, `LikedProjectsPage.jsx` / `LikedOfficesPage.jsx`, `LoginPage.jsx`, `ResultsPage.jsx`, Django admin, deployment config |
 
 ## Shared / coordinated edit files
 
@@ -263,7 +263,7 @@ make migrate-prod
 
 **This is the only permitted force on a shared branch.** It is codified as a
 carve-out in `CLAUDE.md` / `AGENTS.md` § HARD RULE 4 and in `.claude/agents/git-publisher.md`
-§ Mode 3 step 5. Precondition: every commit on `origin/develop` must be
+§ Mode 3 (post-deploy force-reset step). Precondition: every commit on `origin/develop` must be
 content-equal to `origin/main` (no in-flight feature PR targets `develop`).
 The `git-publisher` agent runs this automatically after a deploy merge.
 
@@ -337,8 +337,9 @@ Body: include context (spec ref, investigation #, decision rationale).
 
 The `orchestrate` skill runs the `code-review` and `security-manager` sub-agents
 on a feature branch before push. The pre-push browser + drift gate is the
-`app-test` sub-agent on Claude Code and the `browser-verify` skill on Codex. Each
-returns a PASS / FAIL verdict; FAIL feeds the fix loop. Review scope is the
+`app-test` sub-agent on Claude Code (verdicts: PASS / PASS-WITH-MINORS / FAIL /
+ABORTED-on-drift) and the `browser-verify` skill on Codex. FAIL feeds the fix
+loop; ABORTED means rebase-and-rerun. Review scope is the
 unmerged commits that would land in develop on PR merge (`origin/develop..HEAD`).
 
 `develop → main` PRs typically don't need a fresh review since each underlying
