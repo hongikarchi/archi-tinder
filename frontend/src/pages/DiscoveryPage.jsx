@@ -693,23 +693,24 @@ export default function DiscoveryPage({ showToast }) {
               if (isTop) {
                 const isShaking = !isTrigger && shakeCardId === topCardId
                 return (
-                  <SwipeGestureFrame
-                    key={`top-${id}`}
-                    ref={cardRef}
-                    onSwipe={onTinderSwipe}
-                    onCardLeftScreen={onCardLeftScreen}
-                    className={isShaking ? 'discovery-shake' : undefined}
-                  >
-                    {isTrigger ? (
-                      <DiscoveryTriggerCard />
-                    ) : (
-                      <SwipeCard
-                        card={card}
-                        onGalleryOpen={() => {}}
-                        onGalleryClose={() => {}}
-                      />
-                    )}
-                  </SwipeGestureFrame>
+                  <div key={`top-${id}`} style={{ position: 'absolute', inset: 0, zIndex: 3 }}>
+                    <SwipeGestureFrame
+                      ref={cardRef}
+                      onSwipe={onTinderSwipe}
+                      onCardLeftScreen={onCardLeftScreen}
+                      className={isShaking ? 'discovery-shake' : undefined}
+                    >
+                      {isTrigger ? (
+                        <DiscoveryTriggerCard />
+                      ) : (
+                        <SwipeCard
+                          card={card}
+                          onGalleryOpen={() => {}}
+                          onGalleryClose={() => {}}
+                        />
+                      )}
+                    </SwipeGestureFrame>
+                  </div>
                 )
               }
               // Background stack cards: never render trigger card in the stack
@@ -720,10 +721,10 @@ export default function DiscoveryPage({ showToast }) {
                   style={{
                     position: 'absolute', top: 0, left: 0,
                     width: CARD_WIDTH, height: CARD_HEIGHT,
-                    transform: `scale(${1 - stackIndex * 0.04}) translateY(${stackIndex * 8}px)`,
-                    opacity: 1 - stackIndex * 0.18,
+                    transform: `scale(${1 - stackIndex * 0.05}) translateY(${stackIndex * 10}px)`,
+                    transformOrigin: 'bottom center',
                     pointerEvents: 'none',
-                    zIndex: -stackIndex,
+                    zIndex: 3 - stackIndex,
                   }}
                 >
                   <SwipeCard
