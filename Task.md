@@ -261,13 +261,9 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
-### FRONT-UX-1 — SwipeCard objectFit cover→contain 회귀 복구 — RESOLVED 2026-07-30
-2026-05-26 결정(#944 "사진 잘림 해소 — objectFit cover→contain")을 PR #267(fa36cd5, 2026-07-14 LQIP+비율적응형)이 인지 없이 덮어쓴 회귀. 사용자 확인 완료(의도적 재설계 아님).
-- [x] `COVER_CROP_MAX` 상수 + `computeFit()` 함수 제거 (adaptive object-fit 로직 전체 삭제)
-- [x] `imgFit` 변수 선언 제거 (`imgRatio` 읽기 측 unused → `[, setImgRatio]`로 전환, setter는 fallback-chain 재무장에 여전히 필요)
-- [x] 앞면 LQIP `<img>` + 본 `<img>` objectFit: imgFit → 'contain' 고정
-- [x] 뒷면 갤러리 `<img>` objectFit: `isDrawing ? 'contain' : 'cover'` → 'contain' 고정
-- Letterbox 배경색 분기(`isDrawingKind ? '#fff' : '#111'`)는 유지 — 이번 수정 범위 밖
+### FRONT-UX-12 — 진행률 바 정리 (Discovery 제거 + Taste N swipes %) — RESOLVED 2026-08-06 (`43d4861`-pre-squash)
+- [x] Discovery 탭 진행률 바 제거 (`ff07ee0`): 덱 스와이프 맥락에서 % 바가 맞지 않아 삭제; `discovery.progressComplete` i18n 키도 고아 → 삭제
+- [x] Taste 탭 진행률 바 swipe count 표시 (`43d4861`): "Tuning taste" 레이블 옆 swipe count 숫자(N swipes) 표시, % 수치 제거
 
 ### BACK-LLM-PROVIDER-1 — LLM 프로바이더 어댑터 + 공정 A/B 8런 — RESOLVED 2026-08-04 (`13c4238`-pre-squash)
 파서 `LLM_PROVIDER=gemini|openai` 스위치 구현 + db_qc 8런 실측. 1차 비교의 "GPT 품질 붕괴(11%)"는 모델이 아니라 **파서 버그**였음: 빈 `filter_delta` 스켈레톤({'set':{},'remove':[]})이 truthy라 첫 턴 filters를 통째로 삼킴 — luna는 스키마 충실 출력이라 항상 발동, Gemini는 few-shot 모방으로 우연 회피(잠재 프로덕션 버그, `13c4238`에서 수정+회귀테스트). 픽스 후 공정 재비교: **품질 동급** — gemini-3.1-flash-lite 95% / gpt-5.4-mini 95% / luna(low) 94% / luna(high) 94% / terra 92% / luna(기본) 89% (tag_match@10 평균, 핵심 태그 전 모델 ~100%).

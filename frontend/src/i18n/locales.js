@@ -12,7 +12,6 @@ export const locales = {
     },
     discovery: {
       loading: '취향 탐색 중…',
-      progressComplete: '취향 탐색 중',
       tasteAnalyzing: 'Taste 분석 중…',
       tasteSaving: 'Taste 저장 중…',
       saveTasteAndMove: '지금까지 취향 저장하고 Taste로 이동',
@@ -473,7 +472,6 @@ export const locales = {
     },
     discovery: {
       loading: 'Exploring your taste…',
-      progressComplete: 'Exploring taste',
       tasteAnalyzing: 'Analyzing taste…',
       tasteSaving: 'Saving taste…',
       saveTasteAndMove: 'Save taste so far and go to Taste',

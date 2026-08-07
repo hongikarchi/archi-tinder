@@ -24,6 +24,27 @@ export const CARD_WIDTH  = Math.min(420, _vw - 32)
 export const CARD_HEIGHT = Math.min(Math.round(CARD_WIDTH * 1.55), _vh - 220)
 export const TAP_THRESHOLD = 8
 
+// B2 — adaptive object-fit: cover ONLY when crop loss (fraction of image area
+// lost cropping to the card's aspect ratio) stays within this budget. Above
+// it (e.g. a square image against the ~0.65 portrait card ratio, ~35% loss)
+// we keep 'contain' — letterboxing beats visible cropping.
+const COVER_CROP_MAX = 0.25
+
+/**
+ * computeFit — pure helper (unit-testable inline): decide 'cover' vs 'contain'
+ * for a card image given its natural aspect ratio.
+ *   - Unknown ratio (image not yet loaded) -> 'contain' (current behavior,
+ *     no letterbox jump).
+ *   - Drawings always stay 'contain' regardless of crop loss.
+ *   - Otherwise cover only if cropping to the card ratio loses <= COVER_CROP_MAX
+ *     of the image area.
+ */
+function computeFit(imgRatio, isDrawing) {
+  if (!imgRatio || isDrawing) return 'contain'
+  const rCard = CARD_WIDTH / CARD_HEIGHT
+  const cropLoss = 1 - Math.min(imgRatio, rCard) / Math.max(imgRatio, rCard)
+  return cropLoss <= COVER_CROP_MAX ? 'cover' : 'contain'
+}
 
 /* ── InfoRow ─────────────────────────────────────────────────────────────── */
 function InfoRow({ label, value }) {
@@ -45,10 +66,9 @@ export default function SwipeCard({ card, onGalleryClose }) {
   const [hasBeenOpened,  setHasBeenOpened]  = useState(false)
   const [imgLoaded,      setImgLoaded]      = useState(false)
   const [imgFailed,      setImgFailed]      = useState(false)
-  // B2 — ratio state exists to drive the fallback-chain reset; value is no
-  // longer consumed (imgFit removed — always contain). Setter kept because
-  // captureImgRatio / advanceFallback still call it to re-arm the guard.
-  const [, setImgRatio] = useState(null)
+  // B2 — natural aspect ratio (naturalWidth/naturalHeight), first known from
+  // whichever of {LQIP, main img} fires onLoad first. null = not yet known.
+  const [imgRatio,       setImgRatio]       = useState(null)
   // B2 — did the fallback chain (advanceFallback) land the main <img> on the
   // covers_by_type.drawing URL? Drives contain+white background same as
   // isDrawingKind, for cards whose original photo cover failed to load.
@@ -260,6 +280,8 @@ export default function SwipeCard({ card, onGalleryClose }) {
   // moved the main <img> onto covers_by_type.drawing even when the card's own
   // focus/kind fields say otherwise.
   const isDrawingKind = card.image_focus === 'drawing' || card.image_kind === 'drawing' || landedOnDrawing
+  // B2-3: adaptive object-fit — cover only when crop loss is small and it's not a drawing.
+  const imgFit = computeFit(imgRatio, isDrawingKind)
 
   return (
     <div
@@ -323,7 +345,7 @@ export default function SwipeCard({ card, onGalleryClose }) {
                   style={{
                     position: 'absolute', inset: 0,
                     width: '100%', height: '100%',
-                    objectFit: 'contain', objectPosition: 'center',
+                    objectFit: imgFit, objectPosition: 'center',
                     filter: 'blur(16px)',
                     opacity: imgLoaded ? 0 : 1,
                     transition: 'opacity 0.2s ease',
@@ -346,7 +368,7 @@ export default function SwipeCard({ card, onGalleryClose }) {
                 style={{
                   position: 'absolute', inset: 0,
                   width: '100%', height: '100%',
-                  objectFit: 'contain', objectPosition: 'center',
+                  objectFit: imgFit, objectPosition: 'center',
                   background: isDrawingKind ? '#fff' : '#111',
                   opacity: imgLoaded ? 1 : 0,
                   transition: 'opacity 0.2s ease',
@@ -488,7 +510,9 @@ export default function SwipeCard({ card, onGalleryClose }) {
                     style={{
                       width: '100%',
                       height: '100%',
-                      objectFit: 'contain',
+                      // B2-5: gallery photos cover (fill-bleed), drawings keep
+                      // contain (full-view, matches the white background split above).
+                      objectFit: isDrawing ? 'contain' : 'cover',
                       objectPosition: 'center',
                       display: 'block',
                     }}
