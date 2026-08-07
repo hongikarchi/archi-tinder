@@ -141,8 +141,8 @@ REST_FRAMEWORK = {
         # HIGH-THROTTLE-1: Gemini-calling view throttles (audit 2026-07-17).
         # Scopes registered here so operators can adjust rates via env/deploy without code changes.
         'llm_search':       '10/min',
-        'report_generate':  '3/hour',
-        'report_image':     '2/hour',
+        'report_generate':  '10/hour',
+        'report_image':     '5/hour',
         # Global fallback rates (applied to views that reference these scopes directly).
         'anon': '60/min',
         'user': '300/min',

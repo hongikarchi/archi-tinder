@@ -20,22 +20,24 @@ class LLMSearchThrottle(UserRateThrottle):
 
 
 class ReportGenerateThrottle(UserRateThrottle):
-    """3 persona report generations per hour per authenticated user.
+    """10 persona report generations per hour per authenticated user.
 
     IsAuthenticated endpoint — UserRateThrottle keys on authenticated user.
-    Gemini text model + axis_scores computation; low cap because result is
-    cached on the Project row and regenerating rarely makes sense.
+    Frontend auto-calls report generation on session completion (up to 2x
+    per session: App.jsx goToResults + resume path), so 3/hour caused 429
+    on the 2nd session within an hour. 10/hour accommodates ~5 sessions/hr
+    while still preventing runaway Gemini spend.
     """
     scope = 'report_generate'
-    rate  = '3/hour'
+    rate  = '10/hour'
 
 
 class ReportImageThrottle(UserRateThrottle):
-    """2 persona image generations per hour per authenticated user.
+    """5 persona image generations per hour per authenticated user.
 
     IsAuthenticated endpoint — UserRateThrottle keys on authenticated user.
-    Gemini image generation is the highest-cost call in the app; tight cap
-    prevents accidental or abusive billing.
+    Raised from 2/hour to match the report_generate headroom increase —
+    image gen follows report gen in the same user flow.
     """
     scope = 'report_image'
-    rate  = '2/hour'
+    rate  = '5/hour'
