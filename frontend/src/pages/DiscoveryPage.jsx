@@ -480,9 +480,6 @@ export default function DiscoveryPage({ showToast }) {
   }
 
   // ── Render ─────────────────────────────────────────────────────────────── //
-  // Progress bar: 0–10 likes fills the bar
-  const progressPct = Math.min(draftLikeCount / TASTE_NUDGE_THRESHOLD, 1)
-  const progressComplete = draftLikeCount >= TASTE_NUDGE_THRESHOLD
 
   return (
     <div style={{
@@ -500,42 +497,6 @@ export default function DiscoveryPage({ showToast }) {
           <span style={{ color: 'var(--color-text)' }}>Disc</span>
           <span style={{ color: '#ec4899' }}>overy</span>
         </h1>
-
-        {/* Progress bar — fills draftLikeCount/10; shows '취향 탐색 중' at >=10 */}
-        <div style={{ width: '100%', maxWidth: CARD_WIDTH, margin: '0 auto' }}>
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: 4,
-          }}>
-            <span style={{
-              fontSize: 11,
-              fontWeight: 600,
-              color: progressComplete ? '#ec4899' : 'var(--color-text-muted)',
-              letterSpacing: '0.02em',
-            }}>
-              {progressComplete ? t('discovery.progressComplete') : `${draftLikeCount}/10`}
-            </span>
-          </div>
-          <div style={{
-            width: '100%',
-            height: 3,
-            borderRadius: 999,
-            background: 'var(--color-surface-3, #E1E4E8)',
-            overflow: 'hidden',
-          }}>
-            <div style={{
-              height: '100%',
-              width: `${progressPct * 100}%`,
-              borderRadius: 999,
-              background: progressComplete
-                ? 'linear-gradient(90deg, #ec4899, var(--accent-1, #0969DA))'
-                : '#ec4899',
-              transition: `width var(--motion-normal, 220ms) var(--motion-ease, cubic-bezier(0.4,0,0.2,1))`,
-            }} />
-          </div>
-        </div>
 
         {/* Feature B: persistent "Taste로 저장·이동" CTA — shown after user left-swiped
             the trigger card (Discovery 계속 선택). Rendered in the header (normal document
@@ -732,23 +693,24 @@ export default function DiscoveryPage({ showToast }) {
               if (isTop) {
                 const isShaking = !isTrigger && shakeCardId === topCardId
                 return (
-                  <SwipeGestureFrame
-                    key={`top-${id}`}
-                    ref={cardRef}
-                    onSwipe={onTinderSwipe}
-                    onCardLeftScreen={onCardLeftScreen}
-                    className={isShaking ? 'discovery-shake' : undefined}
-                  >
-                    {isTrigger ? (
-                      <DiscoveryTriggerCard />
-                    ) : (
-                      <SwipeCard
-                        card={card}
-                        onGalleryOpen={() => {}}
-                        onGalleryClose={() => {}}
-                      />
-                    )}
-                  </SwipeGestureFrame>
+                  <div key={`top-${id}`} style={{ position: 'absolute', inset: 0, zIndex: 3 }}>
+                    <SwipeGestureFrame
+                      ref={cardRef}
+                      onSwipe={onTinderSwipe}
+                      onCardLeftScreen={onCardLeftScreen}
+                      className={isShaking ? 'discovery-shake' : undefined}
+                    >
+                      {isTrigger ? (
+                        <DiscoveryTriggerCard />
+                      ) : (
+                        <SwipeCard
+                          card={card}
+                          onGalleryOpen={() => {}}
+                          onGalleryClose={() => {}}
+                        />
+                      )}
+                    </SwipeGestureFrame>
+                  </div>
                 )
               }
               // Background stack cards: never render trigger card in the stack
@@ -759,10 +721,10 @@ export default function DiscoveryPage({ showToast }) {
                   style={{
                     position: 'absolute', top: 0, left: 0,
                     width: CARD_WIDTH, height: CARD_HEIGHT,
-                    transform: `scale(${1 - stackIndex * 0.04}) translateY(${stackIndex * 8}px)`,
-                    opacity: 1 - stackIndex * 0.18,
+                    transform: `scale(${1 - stackIndex * 0.05}) translateY(${stackIndex * 10}px)`,
+                    transformOrigin: 'bottom center',
                     pointerEvents: 'none',
-                    zIndex: -stackIndex,
+                    zIndex: 3 - stackIndex,
                   }}
                 >
                   <SwipeCard

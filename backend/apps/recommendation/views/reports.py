@@ -10,6 +10,7 @@ from ..models import Project
 from .. import services
 from ..caches import evict_projects_list, evict_project_detail
 from ..services.axis_scores import compute_axis_scores
+from ..throttles import ReportGenerateThrottle, ReportImageThrottle
 from ._shared import _get_profile, _liked_id_only
 
 logger = logging.getLogger('apps.recommendation')
@@ -20,6 +21,7 @@ RC = settings.RECOMMENDATION
 
 class ProjectReportGenerateView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_classes   = [ReportGenerateThrottle]
 
     def post(self, request, pk):
         profile = _get_profile(request)
@@ -58,6 +60,7 @@ class ProjectReportGenerateView(APIView):
 
 class ProjectReportImageView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_classes   = [ReportImageThrottle]
 
     def post(self, request, pk):
         profile = _get_profile(request)

@@ -1,5 +1,5 @@
 import { forwardRef } from 'react'
-import TinderCard from 'react-tinder-card'
+import TinderCard from '../lib/tinderCard.js'
 import {
   SWIPE_PREVENT_VERTICAL,
   SWIPE_REQUIREMENT_TYPE,
