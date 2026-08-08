@@ -615,7 +615,10 @@ export default function SwipePage({
         )}
 
         {/* Card */}
-        <SwipeDeck nextCard={!questionTrigger && currentCard ? nextCard : null}>
+        <SwipeDeck
+          nextCard={!questionTrigger && currentCard && !isActionCard(currentCard) ? nextCard : null}
+          active={!!currentCard}
+        >
           {currentCard ? (
             questionTrigger ? (
               /* Wrap QuestionCard in SwipeGestureFrame so right swipe = 'A' (Yes)
