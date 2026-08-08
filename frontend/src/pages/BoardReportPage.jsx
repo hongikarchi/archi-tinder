@@ -1,8 +1,10 @@
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useBoard } from '../hooks/useBoard.js'
 import PersonaReport from '../components/PersonaReport.jsx'
 import styles from './BoardReportPage.module.css'
 import { useTranslation } from '../i18n/index.js'
+import { generateReport } from '../api/projects.js'
 
 /* ── BoardReportPage ────────────────────────────────────────────────────── */
 export default function BoardReportPage() {
@@ -13,7 +15,36 @@ export default function BoardReportPage() {
 
   const { board, loading } = useBoard(boardId)
 
-  const report = board?.final_report
+  const [localReport, setLocalReport] = useState(null)
+  const [localAxisScores, setLocalAxisScores] = useState(null)
+  const [generating, setGenerating] = useState(false)
+  const genRef = useRef(false)
+
+  const report = board?.final_report || localReport
+
+  useEffect(() => {
+    if (!board) return
+    if (board.final_report) return
+    if (localReport) return
+    if (genRef.current) return
+    if (!board.liked_ids?.length) return
+
+    genRef.current = true
+    setGenerating(true)
+
+    generateReport(boardId)
+      .then(data => {
+        setLocalReport(data.final_report)
+        setLocalAxisScores(data.axis_scores || null)
+      })
+      .catch(err => {
+        console.error('[BoardReportPage] generateReport failed:', err)
+      })
+      .finally(() => {
+        setGenerating(false)
+        genRef.current = false
+      })
+  }, [board, boardId, localReport])
 
   /* Loading state */
   if (loading) {
@@ -30,12 +61,54 @@ export default function BoardReportPage() {
     )
   }
 
-  /* Error / board not found */
-  if (!board || !report) {
+  /* Board not found */
+  if (!board) {
     return (
       <div className={styles.page} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: '40px 20px' }}>
         <p style={{ color: 'var(--color-text-muted)', fontSize: 16, fontWeight: 600, margin: 0 }}>
-          {!board ? t('board.notFound') : t('board.noReport')}
+          {t('board.notFound')}
+        </p>
+        <button
+          onClick={() => navigate(-1)}
+          style={{
+            padding: '10px 24px',
+            borderRadius: 999,
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
+            color: 'var(--color-text)',
+            fontSize: 14,
+            fontWeight: 600,
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+          }}
+        >
+          {t('board.back')}
+        </button>
+      </div>
+    )
+  }
+
+  /* Generating report — show spinner identical to loading spinner */
+  if (generating) {
+    return (
+      <div className={styles.page} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{
+          width: 32, height: 32, borderRadius: '50%',
+          border: '3px solid var(--color-border)',
+          borderTopColor: '#ec4899',
+          animation: 'spin 1.2s linear infinite',
+        }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    )
+  }
+
+  /* No report available (generation failed or no liked buildings) */
+  if (!report) {
+    return (
+      <div className={styles.page} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: '40px 20px' }}>
+        <p style={{ color: 'var(--color-text-muted)', fontSize: 16, fontWeight: 600, margin: 0 }}>
+          {t('board.noReport')}
         </p>
         <button
           onClick={() => navigate(-1)}
@@ -87,7 +160,7 @@ export default function BoardReportPage() {
         <PersonaReport
           boardId={boardId}
           finalReport={report}
-          axisScores={locationState?.axisScores || board?.axis_scores || null}
+          axisScores={locationState?.axisScores || localAxisScores || board?.axis_scores || null}
           reportImage={board?.report_image || null}
           reportImageMime={board?.report_image_mime || null}
         />
