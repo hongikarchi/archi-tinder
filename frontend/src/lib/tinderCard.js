@@ -1,3 +1,21 @@
+/**
+ * tinderCard.js — vendored fork of react-tinder-card 1.6.4 (PR #295, 2026-08-07).
+ * Dependency removed from package.json; this file is now the canonical source.
+ *
+ * Semantic divergences from upstream:
+ *   (a) handleSwipeReleased (position-mode) — swipe velocity multiplied x3.
+ *       Fly-out travels ~3x the distance in ~1/3 the duration — deliberate
+ *       feel tuning, matches the (b) power constant change.
+ *   (b) Imperative swipe() power constant 1.3 -> 3.0.
+ *   (c) animateOut duration capped at Math.min(diagonal / velocity, 500) —
+ *       fixes upstream's unbounded duration at near-zero release velocity.
+ *       animateBack / snap-back is untouched.
+ *   (d) useWindowSize eagerly reads window.innerWidth/innerHeight as its
+ *       initializer, replacing upstream's SSR guard. This app is CSR-only,
+ *       and it also fixes upstream's first-render NaN-diagonal race.
+ *   (e) Upstream's `isClicking` closure-local state bug is inherited as-is
+ *       and is now team-owned (not fixed here).
+ */
 import React from 'react'
 import { useSpring, animated } from '@react-spring/web'
 import { useWindowSize } from '../hooks/useWindowSize.js'

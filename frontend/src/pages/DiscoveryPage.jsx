@@ -739,6 +739,7 @@ export default function DiscoveryPage({ showToast }) {
               <div style={{
                 position: 'absolute', bottom: -28, left: 0, right: 0,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
+                zIndex: 4,
               }}>
                 <div style={{
                   width: 18, height: 18, borderRadius: '50%',

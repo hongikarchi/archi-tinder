@@ -147,6 +147,12 @@ _(2026-07-12 감사 re-pin: 전제 유효, 라인 이동 — resume guard `sessi
 #### SNS-PERSONA-AXIS-1 — persona 프롬프트에 axis_scores + 언어설정 미반영 (#232 유실 작업)
 PR #232(`feature/sns-persona-description-axis`, 2026-06-18, collaborator)가 CI red로 CLOSED-미머지 후 유실 — `generation.py` persona description 프롬프트에 `axis_scores` + 사용자 언어설정을 반영하는 작업(+68/-12, generation.py + views/reports.py). 2026-08-06 브랜치 정리 전수검사에서 발견: 현재 develop `generation.py`에 axis_scores 미사용 = 기능 미착륙 확인. 원격 브랜치는 보존됨(정리에서 유일하게 제외). 살리려면 rebase 필요 — 이후 persona seam 변경(#290 provider pin, #291 mock) 충돌 예상, cherry-pick보다 재구현이 쌀 수도. hypothesis-grade: 기능 가치 자체(개인화 페르소나 품질)는 제품 결정 필요.
 
+#### BACK-THROTTLE-2 — 스로틀 컨벤션 정리 + 잔여 무스로틀 엔드포인트
+PR #295 리뷰(2026-08-07)發. (1) **이중 선언 해소**: 스로틀 클래스 11개(accounts 8 + recommendation 3) 전부 클래스 `rate` 속성 + `DEFAULT_THROTTLE_RATES` 양쪽 선언 — DRF `SimpleRateThrottle.__init__`은 클래스 `rate` 존재 시 settings를 **안 읽으므로** settings 항목은 죽은 설정이고 기존 주석("settings로 override 가능")은 거짓. 방향 결정(코드 픽스드 vs settings 드리븐) 후 한쪽으로 통일 + 테스트를 실효 rate 검증으로 보강. (2) **잔여 무스로틀 LLM/고비용 엔드포인트**: works `FinalizeView`(POST당 Gemini 1회, 감사 이후 신설이라 미커버) + 감사 2026-07-17 기지적 사항인 OAuth 로그인 뷰 4개(Google/Kakao/Naver/TokenRefresh, AllowAny + 외부 HTTP 호출).
+
+#### BACK-REPORT-CACHE-1 — 리포트 캐시 short-circuit + 429 UX
+PR #295 리뷰(2026-08-07)發. `ProjectReportGenerateView`/`ProjectReportImageView`가 `project.final_report` 존재 시에도 매 POST마다 Gemini 무조건 재호출 (캐시 개념 부재) — 결과 재방문마다 스로틀 쿼터+비용 소모. 프론트는 세션당 자동 최대 2회 호출(`App.jsx:438` goToResults + `:642` 완료 분기)에 `.catch()` 무음 삼킴이라 429 시 리포트가 안내 없이 증발. 픽스: (1) 뷰에서 기존 리포트 캐시 반환(재생성은 명시 파라미터로만), (2) 프론트 자동 이중 호출 dedupe, (3) 429 사용자 안내 UI. 임시 완화로 rate 10/hour·5/hour 상향 적용됨(#295) — 근본 픽스는 여기.
+
 #### FULL-WORKS-2 — works Phase 2: srcset/LQIP + 알고리즘 통합
 FULL-WORKS-1 배포 후. (1) `rightSizeImageUrl.js`에 R2 works URL srcset/LQIP 처리 추가 (Cloudflare Image Transforms 필요 — ops 설정 선행). (2) `engine.py` Python-layer에 `user_uploaded_works` 풀 병합 — 별도 협업자(algorithm 소유) 작업, 설계 sync 필요.
 
@@ -263,7 +269,7 @@ Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over
 ## Done
 ### FRONT-UX-12 — 진행률 바 정리 (Discovery 제거 + Taste N swipes %) — RESOLVED 2026-08-06 (`43d4861`-pre-squash)
 - [x] Discovery 탭 진행률 바 제거 (`ff07ee0`): 덱 스와이프 맥락에서 % 바가 맞지 않아 삭제; `discovery.progressComplete` i18n 키도 고아 → 삭제
-- [x] Taste 탭 진행률 바 swipe count 표시 (`43d4861`): "Tuning taste" 레이블 옆 swipe count 숫자(N swipes) 표시, % 수치 제거
+- [x] Taste 탭 ConfidenceBar 라벨 교체 (`43d4861`): "N swipes" 카운트 → `{pct}%` 수치 표시 (바 width와 동일 스케일; 원문 항목이 방향을 반대로 기술해 2026-08-08 정정)
 
 ### BACK-LLM-PROVIDER-1 — LLM 프로바이더 어댑터 + 공정 A/B 8런 — RESOLVED 2026-08-04 (`13c4238`-pre-squash)
 파서 `LLM_PROVIDER=gemini|openai` 스위치 구현 + db_qc 8런 실측. 1차 비교의 "GPT 품질 붕괴(11%)"는 모델이 아니라 **파서 버그**였음: 빈 `filter_delta` 스켈레톤({'set':{},'remove':[]})이 truthy라 첫 턴 filters를 통째로 삼킴 — luna는 스키마 충실 출력이라 항상 발동, Gemini는 few-shot 모방으로 우연 회피(잠재 프로덕션 버그, `13c4238`에서 수정+회귀테스트). 픽스 후 공정 재비교: **품질 동급** — gemini-3.1-flash-lite 95% / gpt-5.4-mini 95% / luna(low) 94% / luna(high) 94% / terra 92% / luna(기본) 89% (tag_match@10 평균, 핵심 태그 전 모델 ~100%).
@@ -993,6 +999,8 @@ Deferred:
 - [x] `App.jsx` — auto-nav `at100` 조건에서 `(phase === 'converged')` 단독 분기. confidence null이어도 converged면 nav.
 - [x] Codex P1 fix — CARD_WIDTH overflow blocker 해소: `vw-16` → `vw-32`. 390px폰 358px 컨테이너에 358px 카드 = 딱 맞음 (이전 374px 카드 16px 클립).
 - [x] Codex P2 fix — `finishUnlocked` latch 재도입 drop. PR #121 1-shot `isAt100` 설계 보존 (App.jsx auto-nav 주 trigger, SwipePage Finish 버튼은 safety net). Same-project 새 session 시 stale state 위험 제거.
+
+_(Superseded 2026-07-14: contain 고정은 OVERNIGHT-PERF-1 PR-B #267 `7b5bc17`가 **adaptive object-fit**(크롭 손실 ≤25%면 cover, 초과 시 contain)으로 의도적 재설계하며 대체됨. 이 표기가 없어 PR #295(2026-08-07)에서 "미인지 회귀"로 오독되는 혼선 발생 — 소급 기록.)_
 
 ### FRONT-UX-2 — 스와이프 자동 이동 + 키보드 입력 — RESOLVED 2026-05-26 (PR #121 `80b519c`)
 - [x] `App.jsx` — `useEffect` watching `swipeSession` auto-navigates `/swipe` → `/result/:sessionId` when `session.phase` is `completed`/`results`, OR when latch threshold reached: `exploring` with `like_count >= 4`, or `analyzing`/`converged` with `confidence >= 1.0`. Replaces PR #114 + PR #115 (both had wrong base `main`; closed without merge).

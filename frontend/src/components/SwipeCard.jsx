@@ -39,7 +39,7 @@ const COVER_CROP_MAX = 0.25
  *   - Otherwise cover only if cropping to the card ratio loses <= COVER_CROP_MAX
  *     of the image area.
  */
-function computeFit(imgRatio, isDrawing) {
+export function computeFit(imgRatio, isDrawing) {
   if (!imgRatio || isDrawing) return 'contain'
   const rCard = CARD_WIDTH / CARD_HEIGHT
   const cropLoss = 1 - Math.min(imgRatio, rCard) / Math.max(imgRatio, rCard)
