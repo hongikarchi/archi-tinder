@@ -4,6 +4,7 @@ import { useResults } from '../hooks/useResults.js'
 import { resolveProjectBackendId } from '../utils/resolveProjectBackendId.js'
 import PersonaReport from '../components/PersonaReport.jsx'
 import { useTranslation } from '../i18n/index.js'
+import { generateReport } from '../api/projects.js'
 
 function cardId(card) {
   return card?.image_id || card?.canonical_bld_id || card?.building_id || ''
@@ -151,8 +152,36 @@ export default function ResultsPage({ projects, setProjects }) {
   const { sessionId } = useParams()
   const { t } = useTranslation()
   const { cards, error, loading, pendingIds, project, result, toggleBookmark } = useResults(sessionId, projects, setProjects)
+  const reportGenerating = useRef(false)
   const [loadedRank, setLoadedRank] = useState(10)
   const observerRef = useRef(null)
+
+  // Auto-retry report generation when finalReport is missing (e.g. prior Gemini failure)
+  useEffect(() => {
+    const backendId = project?.backendId
+    if (!backendId || project?.finalReport || reportGenerating.current) return
+    reportGenerating.current = true
+    generateReport(backendId)
+      .then(data => {
+        if (data?.final_report) {
+          setProjects(prev => prev.map(p =>
+            p.id === project.id
+              ? {
+                  ...p,
+                  finalReport: data.final_report,
+                  ...(data.axis_scores ? { axisScores: data.axis_scores } : {}),
+                }
+              : p
+          ))
+        }
+      })
+      .catch(err => {
+        console.error('[ResultsPage] generateReport retry failed:', err)
+      })
+      .finally(() => {
+        reportGenerating.current = false
+      })
+  }, [project?.backendId, project?.finalReport]) // eslint-disable-line react-hooks/exhaustive-deps
   const persona = personaFields(result, project)
   const cappedTotal = Math.min(cards.length, 50)
   const visibleCount = Math.min(loadedRank, cappedTotal)
