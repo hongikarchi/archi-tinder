@@ -29,6 +29,13 @@ class ProjectReportGenerateView(APIView):
         if not project:
             return Response({'detail': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
 
+        # BACK-REPORT-CACHE-1: short-circuit on stored report unless regenerate
+        # is explicitly requested. Avoids Gemini call + DB write + cache eviction
+        # on every revisit-triggered POST (was causing silent 429s + nondeterministic
+        # report rewrites — reports.py regenerated+overwrote on every call).
+        if project.final_report and not request.data.get('regenerate'):
+            return Response({'final_report': project.final_report, 'axis_scores': project.axis_scores})
+
         liked_id_strings = _liked_id_only(project.liked_ids)
         if not liked_id_strings:
             return Response({'detail': 'No liked buildings yet'}, status=status.HTTP_400_BAD_REQUEST)
@@ -70,6 +77,15 @@ class ProjectReportImageView(APIView):
 
         if not project.final_report:
             return Response({'detail': 'Generate persona report first'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # BACK-REPORT-CACHE-1: short-circuit on stored image unless regenerate
+        # is explicitly requested (same rationale as ProjectReportGenerateView).
+        if project.report_image and not request.data.get('regenerate'):
+            return Response({
+                'image_data': project.report_image,
+                'mime_type': project.report_image_mime,
+                'prompt': None,
+            })
 
         result = services.generate_persona_image(project.final_report)
         if not result:

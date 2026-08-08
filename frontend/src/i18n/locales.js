@@ -126,6 +126,8 @@ export const locales = {
     },
     results: {
       allLoaded: '더 볼 게 없어요',
+      reportError: '페르소나 리포트를 불러오지 못했어요.',
+      retry: '다시 시도',
     },
     account: {
       title:                  '계정',
@@ -211,6 +213,8 @@ export const locales = {
       saveError:          '저장에 실패했어요. 다시 시도해주세요.',
       notFound:           '보드를 찾을 수 없습니다.',
       noReport:           '아직 페르소나 리포트가 없습니다.',
+      reportGenError:     '페르소나 리포트 생성에 실패했어요.',
+      retry:              '다시 시도',
       back:               '뒤로가기',
       backToDetail:       '보드 상세로',
       recommendedOffice:  '추천 사무소',
@@ -586,6 +590,8 @@ export const locales = {
     },
     results: {
       allLoaded: 'No more to show',
+      reportError: 'Failed to load the persona report.',
+      retry: 'Try again',
     },
     account: {
       title:                  'Account',
@@ -686,6 +692,8 @@ export const locales = {
       saveError:          'Save failed. Please try again.',
       notFound:           'Board not found.',
       noReport:           'No persona report yet.',
+      reportGenError:     'Failed to generate the persona report.',
+      retry:              'Try again',
       back:               'Back',
       backToDetail:       'Board detail',
       recommendedOffice:  'Recommended studio',

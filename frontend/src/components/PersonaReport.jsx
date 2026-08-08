@@ -112,12 +112,18 @@ const SPECTRUM_AXES = [
  *   axisScores      object  - { form, materiality, scale, energy, tradition } (null이면 DEFAULT_AXES 사용)
  *   reportImage     string  - base64 이미지 데이터 (null 가능)
  *   reportImageMime string  - 예: 'image/png'
+ *   onReportUpdate  func    - optional. (data: { final_report, axis_scores }) => void
+ *                             called after a successful regenerate so the parent
+ *                             (e.g. ResultsPage) can persist the fresh report into
+ *                             its own project state — otherwise a remount/navigate
+ *                             back re-renders the stale pre-regenerate report.
  */
-export default function PersonaReport({ boardId, finalReport, axisScores, reportImage, reportImageMime }) {
+export default function PersonaReport({ boardId, finalReport, axisScores, reportImage, reportImageMime, onReportUpdate }) {
   const { t } = useTranslation()
   const [localImage, setLocalImage] = useState(reportImage || null)
   const [localMime, setLocalMime] = useState(reportImageMime || null)
   const [localAxisScores, setLocalAxisScores] = useState(axisScores || DEFAULT_AXES)
+  const [localReport, setLocalReport] = useState(null)
   const [imgGenLoading, setImgGenLoading] = useState(false)
   const [imgError, setImgError] = useState(null)
   const [reportLoading, setReportLoading] = useState(false)
@@ -128,7 +134,7 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
   useEffect(() => { if (reportImage) setLocalImage(reportImage) }, [reportImage])
   useEffect(() => { if (reportImageMime) setLocalMime(reportImageMime) }, [reportImageMime])
 
-  const report = finalReport || {}
+  const report = localReport || finalReport || {}
   const scores = localAxisScores
 
   async function handleGenerateImage() {
@@ -136,7 +142,8 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
     setImgGenLoading(true)
     setImgError(null)
     try {
-      const res = await generateReportImage(boardId)
+      // Explicit user intent (button click) must bypass the backend cache.
+      const res = await generateReportImage(boardId, { regenerate: true })
       if (res?.image_data) {
         setLocalImage(res.image_data)
         if (res.mime_type) setLocalMime(res.mime_type)
@@ -155,8 +162,13 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
     setReportLoading(true)
     setReportError(null)
     try {
-      const res = await generateReport(boardId)
+      // Explicit user intent (button click) must bypass the backend cache.
+      const res = await generateReport(boardId, { regenerate: true })
+      if (res?.final_report) setLocalReport(res.final_report)
       if (res?.axis_scores) setLocalAxisScores(res.axis_scores)
+      if (res?.final_report || res?.axis_scores) {
+        onReportUpdate?.({ final_report: res.final_report, axis_scores: res.axis_scores })
+      }
     } catch {
       setReportError(t('persona.reportError'))
     } finally {

@@ -419,38 +419,45 @@ export default function App() {
 
   // ── Shared results navigation ─────────────────────────────────────────────
   // Called from BOTH the action-card right-swipe AND the top "결과 보러 가기" button.
-  // Navigates to the result page, fires getResult + generateReport in parallel,
-  // updates the project with persona report + axis scores, and (for temp projects
-  // whose report just landed) surfaces the SaveBoardModal for board naming.
+  // Navigates to the result page and fires getResult only — no generateReport
+  // here. Live generation owners: ResultsPage's auto-repair effect,
+  // BoardReportPage's auto-generate effect, and handleSwipeCard's
+  // is_analysis_completed branch (guarded by !project.finalReport). goToResults
+  // used to fire generateReport too, but ResultsPage mounts on the navigate()
+  // above BEFORE this Promise.all resolves, so the two raced into concurrent
+  // POSTs (BACK-REPORT-CACHE-1 finding); the backend has no row lock, so the
+  // cache check alone can't stop that race — removing this call site is the fix.
   async function goToResults(project) {
     if (!project?.sessionId) {
       navigate('/user/me')
       return
     }
     const sessionId = project.sessionId
-    const backendId = project.backendId
     const localId = project.id
     navigate('/result/' + sessionId)
     setIsResultLoading(true)
     try {
-      const [resultData, reportData] = await Promise.all([
-        api.getResult({ session_id: sessionId }),
-        backendId ? api.generateReport(backendId).catch((err) => { console.error('report generation failed:', err); return null; }) : Promise.resolve(null),
-      ])
+      const resultData = await api.getResult({ session_id: sessionId })
       setProjects(prev => prev.map(p => p.id === localId ? {
         ...p,
         predictedLikes: resultData.predicted_like_images || [],
-        ...(reportData?.final_report ? { finalReport: reportData.final_report } : {}),
-        ...(reportData?.axis_scores ? { axisScores: reportData.axis_scores } : {}),
       } : p))
-      if (reportData?.final_report && backendId && project?.isTemp) {
-        setSaveModalProject({ backendId, finalReport: reportData.final_report, localId })
-        setShowSaveModal(true)
-      }
     } catch { /* ResultsPage fetches on entry */ }
     finally { setIsResultLoading(false) }
   }
   // ── End shared results navigation ─────────────────────────────────────────
+
+  // Called by ResultsPage after its auto-repair effect successfully generates
+  // a report — owns the SaveBoardModal surfacing for temp projects that used to
+  // live inline in goToResults. `data` is the generateReport response
+  // ({ final_report, axis_scores }); `project` is the ResultsPage-local project
+  // object at call time.
+  function handleReportGenerated(project, data) {
+    if (data?.final_report && project?.backendId && project?.isTemp) {
+      setSaveModalProject({ backendId: project.backendId, finalReport: data.final_report, localId: project.id })
+      setShowSaveModal(true)
+    }
+  }
 
   async function handleSwipeCard(action) {
     if (swipeLock.current) {
@@ -639,7 +646,7 @@ export default function App() {
           const backendId = project?.backendId
           const [resultData, reportData] = await Promise.all([
             api.getResult({ session_id: project.sessionId }),
-            backendId ? api.generateReport(backendId).catch((err) => { console.error('report generation failed:', err); return null; }) : Promise.resolve(null),
+            (backendId && !project.finalReport) ? api.generateReport(backendId).catch((err) => { console.error('report generation failed:', err); return null; }) : Promise.resolve(null),
           ])
           setProjects(prev => prev.map(p => p.id === activeProjectId ? {
             ...p,
@@ -648,7 +655,10 @@ export default function App() {
             ...(reportData?.axis_scores ? { axisScores: reportData.axis_scores } : {}),
           } : p))
           // Fire-and-forget: generate persona image without blocking the completion screen.
-          if (reportData?.final_report && backendId) {
+          // Backend caches the report; skip the image call too when one is already stored
+          // (belt-and-suspenders on top of the backend cache — quota conservation).
+          const hasReport = !!(reportData?.final_report || project.finalReport)
+          if (hasReport && backendId && !project.reportImage) {
             api.generateReportImage(backendId)
               .then(img => setProjects(prev => prev.map(p => p.id === activeProjectId
                 ? { ...p, reportImage: img.image_data, reportImageMime: img.mime_type } : p)))
@@ -1112,7 +1122,7 @@ export default function App() {
           <Route path="user/me" element={<UserProfilePage {...sharedLayoutProps} />} />
           <Route path="user/:userId" element={<UserProfilePage {...sharedLayoutProps} />} />
           <Route path="office/:officeId" element={<FirmProfilePage {...sharedLayoutProps} />} />
-          <Route path="result/:sessionId" element={<ResultsPage projects={projects} setProjects={setProjects} />} />
+          <Route path="result/:sessionId" element={<ResultsPage projects={projects} setProjects={setProjects} onReportGenerated={handleReportGenerated} />} />
           <Route path="buildings/:buildingId" element={<BuildingDetailPage />} />
           <Route path="board/:boardId" element={<BoardDetailPage onResume={handleResumeProject} />} />
           <Route path="board/:boardId/report" element={<BoardReportPage />} />

@@ -147,11 +147,9 @@ _(2026-07-12 감사 re-pin: 전제 유효, 라인 이동 — resume guard `sessi
 #### SNS-PERSONA-AXIS-1 — persona 프롬프트에 axis_scores + 언어설정 미반영 (#232 유실 작업)
 PR #232(`feature/sns-persona-description-axis`, 2026-06-18, collaborator)가 CI red로 CLOSED-미머지 후 유실 — `generation.py` persona description 프롬프트에 `axis_scores` + 사용자 언어설정을 반영하는 작업(+68/-12, generation.py + views/reports.py). 2026-08-06 브랜치 정리 전수검사에서 발견: 현재 develop `generation.py`에 axis_scores 미사용 = 기능 미착륙 확인. 원격 브랜치는 보존됨(정리에서 유일하게 제외). 살리려면 rebase 필요 — 이후 persona seam 변경(#290 provider pin, #291 mock) 충돌 예상, cherry-pick보다 재구현이 쌀 수도. hypothesis-grade: 기능 가치 자체(개인화 페르소나 품질)는 제품 결정 필요.
 
-#### BACK-THROTTLE-2 — 스로틀 컨벤션 정리 + 잔여 무스로틀 엔드포인트
-PR #295 리뷰(2026-08-07)發. (1) **이중 선언 해소**: 스로틀 클래스 11개(accounts 8 + recommendation 3) 전부 클래스 `rate` 속성 + `DEFAULT_THROTTLE_RATES` 양쪽 선언 — DRF `SimpleRateThrottle.__init__`은 클래스 `rate` 존재 시 settings를 **안 읽으므로** settings 항목은 죽은 설정이고 기존 주석("settings로 override 가능")은 거짓. 방향 결정(코드 픽스드 vs settings 드리븐) 후 한쪽으로 통일 + 테스트를 실효 rate 검증으로 보강. (2) **잔여 무스로틀 LLM/고비용 엔드포인트**: works `FinalizeView`(POST당 Gemini 1회, 감사 이후 신설이라 미커버) + 감사 2026-07-17 기지적 사항인 OAuth 로그인 뷰 4개(Google/Kakao/Naver/TokenRefresh, AllowAny + 외부 HTTP 호출).
-
-#### BACK-REPORT-CACHE-1 — 리포트 캐시 short-circuit + 429 UX
-PR #295 리뷰(2026-08-07)發. `ProjectReportGenerateView`/`ProjectReportImageView`가 `project.final_report` 존재 시에도 매 POST마다 Gemini 무조건 재호출 (캐시 개념 부재) — 결과 재방문마다 스로틀 쿼터+비용 소모. 프론트는 세션당 자동 최대 2회 호출(`App.jsx:438` goToResults + `:642` 완료 분기)에 `.catch()` 무음 삼킴이라 429 시 리포트가 안내 없이 증발. 픽스: (1) 뷰에서 기존 리포트 캐시 반환(재생성은 명시 파라미터로만), (2) 프론트 자동 이중 호출 dedupe, (3) 429 사용자 안내 UI. 임시 완화로 rate 10/hour·5/hour 상향 적용됨(#295) — 근본 픽스는 여기.
+#### BACK-THROTTLE-2 — 잔여 무스로틀 엔드포인트 (스코프 축소 2026-08-08)
+PR #295 리뷰(2026-08-07)發. 잔여 항목: works `FinalizeView`(POST당 Gemini 1회, 감사 이후 신설이라 미커버) + 감사 2026-07-17 기지적 사항인 OAuth 로그인 뷰 4개(Google/Kakao/Naver/TokenRefresh, AllowAny + 외부 HTTP 호출 — AnonRateThrottle, 남용 표면상 LLM 스로틀보다 우선순위 높음). 테스트는 실효 rate(클래스 attr) 검증으로 보강.
+_(스코프 축소 2026-08-08: "11개 클래스 이중선언 → settings-driven 통일" 리팩터는 오버엔지니어링으로 드랍 — 운영자가 무배포 rate 조정을 실제로 요구한 적 없음. 대신 컨벤션을 **code-pinned**로 확정하고 거짓 주석만 정정(settings.py NOTE + throttles.py, 2026-08-08 커밋). 세션 생성 경유 보드명 LLM 1콜(`session_service.py:49` fire-and-forget, gpt-5.4-mini)은 YAGNI — 소액 + 세션 생성 자체가 자연 제한; 남용 관측 시에만 재고.)_
 
 #### FULL-WORKS-2 — works Phase 2: srcset/LQIP + 알고리즘 통합
 FULL-WORKS-1 배포 후. (1) `rightSizeImageUrl.js`에 R2 works URL srcset/LQIP 처리 추가 (Cloudflare Image Transforms 필요 — ops 설정 선행). (2) `engine.py` Python-layer에 `user_uploaded_works` 풀 병합 — 별도 협업자(algorithm 소유) 작업, 설계 sync 필요.
@@ -267,6 +265,14 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### BACK-REPORT-CACHE-1 — 리포트 캐시 short-circuit + 무음실패 UX + stranding 출구 — RESOLVED 2026-08-08 (`14fbb09`-pre-squash)
+PR #295 스로틀 + 무캐시 재생성 + 프론트 자동호출의 결합이 무음 429 → `finalReport` null → ResultsPage 레거시 2줄 폴백("옛 모양 리포트" 증상, yywon1 보고/PR #298 진단 크레딧)을 유발. 근본 픽스 일괄:
+- [x] `reports.py` 캐시 short-circuit: 저장된 `final_report`/`report_image` 있으면 무-Gemini 반환, `{regenerate:true}`일 때만 재생성 — 방문마다 리포트가 바뀌던 비결정 재작성도 소멸. 테스트 12개 (`test_report_cache.py`)
+- [x] `App.jsx` goToResults의 generateReport 제거 (ResultsPage repair effect와 동시 POST 레이스 — 캐시로 못 막는 무락 경합이라 호출부 제거가 픽스), 완료 분기 `!finalReport` 가드
+- [x] ResultsPage auto-repair effect (1회, `resolveProjectBackendId`, 가시적 에러+재시도) / BoardReportPage 자동 생성 + genError·noReport 구분 + UUID 파라미터 게이트 — PR #298(yywon1) 방향 수용, auto-navigate 부분만 제외
+- [x] PersonaReport 재생성 버튼 반쪽-업데이트 버그 픽스 (화면 텍스트 즉시 갱신 + `regenerate:true` 바이패스 + `onReportUpdate` 영속)
+- [x] SwipePage stranding 출구: `isAt100`에 `swipeCount ≥ target+5` 추가 — 수렴 안 되는 dislike-heavy 세션에 Finish 버튼 노출 (기존: 결과로 갈 출구 전무; #298의 강제 auto-navigate 대신 버튼 opt-in으로 해결). 액션 카드 opt-in 설계 유지
+
 ### FRONT-UX-12 — 진행률 바 정리 (Discovery 제거 + Taste N swipes %) — RESOLVED 2026-08-06 (`43d4861`-pre-squash)
 - [x] Discovery 탭 진행률 바 제거 (`ff07ee0`): 덱 스와이프 맥락에서 % 바가 맞지 않아 삭제; `discovery.progressComplete` i18n 키도 고아 → 삭제
 - [x] Taste 탭 ConfidenceBar 라벨 교체 (`43d4861`): "N swipes" 카운트 → `{pct}%` 수치 표시 (바 width와 동일 스케일; 원문 항목이 방향을 반대로 기술해 2026-08-08 정정)

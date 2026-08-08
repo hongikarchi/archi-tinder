@@ -347,7 +347,14 @@ export default function SwipePage({
   // left-swipe sets keepExploringChosen → button appears. On resume,
   // keepExploringChosen is restored from backend action_card_shown
   // (App.jsx applySessionResponse) so the button shows immediately.
-  const isAt100 = keepExploringChosen || isCompleted
+  // Stranding fix: a dislike-heavy session may never converge (no action card
+  // ever shown) and isCompleted never flips — without this clause the user has
+  // NO exit to the results page at all. Once swipeCount overshoots the target
+  // by 5, surface the button regardless of convergence state (still a button,
+  // not auto-navigation — the user must choose to leave).
+  const swipeCount = progress?.swipe_count ?? ((progress?.like_count ?? 0) + (progress?.dislike_count ?? 0))
+  const targetSwipes = Math.max(1, progress?.target_swipes ?? 10)
+  const isAt100 = keepExploringChosen || isCompleted || swipeCount >= targetSwipes + 5
 
   const { pendingActionRef: pendingAction, onTinderSwipe, onCardLeftScreen } = useSwipeOrchestration({
     likeAction: 'like',
