@@ -84,6 +84,7 @@ export default function UploadWorkPage() {
   const fileInputRef = useRef(null)
   const { t } = useTranslation()
 
+  const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [files, setFiles] = useState([])
   const [formData, setFormData] = useState({
     title: '',
@@ -225,6 +226,7 @@ export default function UploadWorkPage() {
       await finalizeWork(payload)
 
       setUploadState('processing')
+      setShowSuccessModal(true)
     } catch (err) {
       setUploadState('error')
       setErrorMsg(err.message || t('uploadWork.error.uploadFailed'))
@@ -263,17 +265,63 @@ export default function UploadWorkPage() {
         <div style={{ width: 44 }} />
       </div>
 
-      <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px 48px' }}>
-        {/* ── Processing success state ─────────────────────────────────── */}
-        {uploadState === 'processing' && (
-          <div className={s.processingMsg}>
-            <p style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 700 }}>{t('uploadWork.success.title')}</p>
-            <p style={{ margin: 0 }}>
+      {/* ── Success modal overlay ──────────────────────────────────────── */}
+      {showSuccessModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1000,
+            background: 'rgba(0,0,0,0.4)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+          }}
+        >
+          <div
+            style={{
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 20,
+              padding: 24,
+              maxWidth: 480,
+              width: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 12,
+            }}
+          >
+            <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--color-text)' }}>
+              {t('uploadWork.success.title')}
+            </p>
+            <p style={{ margin: 0, fontSize: 14, color: 'var(--color-text)' }}>
               {t('uploadWork.success.body')}
             </p>
+            <button
+              type="button"
+              onClick={() => navigate('/user/me?tab=created')}
+              style={{
+                marginTop: 8,
+                padding: '12px 16px',
+                borderRadius: 12,
+                border: 0,
+                background: '#ec4899',
+                color: '#fff',
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: 'pointer',
+                minHeight: 44,
+                alignSelf: 'stretch',
+              }}
+            >
+              {t('uploadWork.success.confirm')}
+            </button>
           </div>
-        )}
+        </div>
+      )}
 
+      <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px 48px' }}>
         {uploadState !== 'processing' && (
           <form onSubmit={handleSubmit} noValidate>
             {/* ── Drop zone (hidden once MAX_WORK_IMAGES is reached — nothing more to add) ── */}

@@ -447,8 +447,9 @@ export const locales = {
         industrial:     '산업시설',
       },
       success: {
-        title: '업로드 완료',
-        body:  '검토 중입니다. 잠시 후 프로필 Created 탭에서 확인하세요.',
+        title:   '업로드 완료',
+        body:    '검토 중입니다. 잠시 후 프로필 Created 탭에서 확인하세요.',
+        confirm: '확인',
       },
       submit: {
         converting: '변환 중...',
@@ -911,8 +912,9 @@ export const locales = {
         industrial:     'Industrial',
       },
       success: {
-        title: 'Upload complete',
-        body:  'Your work is under review. Check the Created tab on your profile shortly.',
+        title:   'Upload complete',
+        body:    'Your work is under review. Check the Created tab on your profile shortly.',
+        confirm: 'OK',
       },
       submit: {
         converting: 'Converting...',
