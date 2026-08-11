@@ -23,11 +23,29 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-08-05 14:59 KST',
-    head: '20ed84d',
-    branch: 'feature/claude-llm-provider-adapter',
+    updatedAt: '2026-08-11 23:33 KST',
+    head: 'af6a33a',
+    branch: 'feature/admin-works-upload-edit',
   },
   done: [
+    {
+      id: 'FRONT-UX-13',
+      title: '업로드 이미지 편집(crop/rotate/커버 지정)',
+      completedAt: '2026-08-11',
+      note: 'files state: id/originalBlob/currentBlob/preview — 반복 편집 화질 열화 방지',
+    },
+    {
+      id: 'BACK-REPORT-CACHE-1',
+      title: '리포트 캐시 short-circuit + 무음실패 UX + stranding 출구',
+      completedAt: '2026-08-08',
+      note: 'PR #295 스로틀 + 무캐시 재생성 + 프론트 자동호출의 결합이 무음 429 → `finalReport` null → ResultsPage 레거시 2줄 폴백("옛 모양 리포트" 증상, yywon1 보고/PR #298 진단 크레딧)을 유발. 근본 픽스 일괄:',
+    },
+    {
+      id: 'FRONT-UX-12',
+      title: '진행률 바 정리 (Discovery 제거 + Taste N swipes %)',
+      completedAt: '2026-08-06',
+      note: 'Discovery 탭 진행률 바 제거 (`ff07ee0`): 덱 스와이프 맥락에서 % 바가 맞지 않아 삭제; `discovery.progressComplete` i18n 키도 고아 → 삭제',
+    },
     {
       id: 'BACK-LLM-PROVIDER-1',
       title: 'LLM 프로바이더 어댑터 + 공정 A/B 8런',
@@ -58,24 +76,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-07-17',
       note: '#282 머지 시 유보한 리뷰 low 2건 + i18n 사각 1건, `feature/claude-works-followup` 단일 PR.',
     },
-    {
-      id: 'FULL-WORKS-1',
-      title: '건축 작품 업로드 Phase 1',
-      completedAt: '2026-07-15',
-      note: 'presigned direct upload to Cloudflare R2: Django `apps/works/` 신설 + `/api/v1/works/presign/`·`/api/v1/works/` API + UploadWorkPage.',
-    },
-    {
-      id: 'BACK-PERFORMANCE-5',
-      title: 'Swipe latency 0.7-1.5s 흔들림',
-      completedAt: '2026-07-16',
-      note: 'Codex retest 2026-05-26: browser swipe 1.82s/1.75s/1.12s/1.81s; server swipe 1.50s/1.38s/0.746s/1.36s. PR4 async prefetch consume IS working — 3rd swipe with cache hit drops to 156ms prefetch stage. But variability is high. Identify which stage causes the 0.7→1.5s spread (DB q…',
-    },
-    {
-      id: 'FULL-LANGUAGE-1c',
-      title: 'i18n 슬라이스 c: 프로필·보드 + 모달',
-      completedAt: '2026-07-13',
-      note: '최종 슬라이스 17파일 ~115 리터럴 — 3슬라이스(a #275 / b #276 / c) 합산 32파일 176줄 sweep 완료, 전 고트래픽 surface가 ko/en 동일 string source 렌더. FULL-LANGUAGE-1 백로그 항목 종결.',
-    },
   ],
   now: [],
   next: {
@@ -88,6 +88,11 @@ window.PROJECT_STATE = {
     ],
     high: [
       {
+        id: 'ALGO-ACCURACY-1',
+        title: '"Aha(취향 포착)" 주장 미검증 — 측정 하네스 부재 (hypothesis-grade)',
+        note: '_출처: 2026-07-06 4-agent 정적분석 종합(`.claude/plans/algo-speed-accuracy-analysis.md`, 2026-08-05 stale-정리 때 삭제 — speed 파트는 #266-#269/#283 등으로 대부분 해소, accuracy 파트만 여기로 이관)._',
+      },
+      {
         id: 'BACK-RECOMMEND-1',
         title: 'Project 두번째 세션이 이전 taste를 모름',
         note: 'Code audit 2026-05-27: SessionCreateView resolves project_id only to skip dedupe; session_insert still creates phase=exploring with empty like_vectors/convergence/preference state. Project.liked_ids/disliked_ids/saved_ids persist but are not read. Primary edit: views/sessions.py warm-start policy + engine.get_pool_embeddings(project liked_ids) scoped to active project; tests in test_session_create_correctness.py for no cross-project leakage and progress semantics.',
@@ -95,9 +100,24 @@ window.PROJECT_STATE = {
     ],
     medium: [
       {
+        id: 'SNS-PERSONA-AXIS-1',
+        title: 'persona 프롬프트에 axis_scores + 언어설정 미반영 (#232 유실 작업)',
+        note: 'PR #232(`feature/sns-persona-description-axis`, 2026-06-18, collaborator)가 CI red로 CLOSED-미머지 후 유실 — `generation.py` persona description 프롬프트에 `axis_scores` + 사용자 언어설정을 반영하는 작업(+68/-12, generation.py + views/reports.py). 2026-08-06 브랜치 정리 전수검사에서 발견: 현재 develop `generation.py`에…',
+      },
+      {
+        id: 'BACK-THROTTLE-2',
+        title: '잔여 무스로틀 엔드포인트 (스코프 축소 2026-08-08)',
+        note: 'PR #295 리뷰(2026-08-07)發. 잔여 항목: works `FinalizeView`(POST당 Gemini 1회, 감사 이후 신설이라 미커버) + 감사 2026-07-17 기지적 사항인 OAuth 로그인 뷰 4개(Google/Kakao/Naver/TokenRefresh, AllowAny + 외부 HTTP 호출 — AnonRateThrottle, 남용 표면상 LLM 스로틀보다 우선순위 높음). 테스트는 실효 rate(클래스 attr) 검증으로 보강.',
+      },
+      {
         id: 'FULL-WORKS-2',
         title: 'works Phase 2: srcset/LQIP + 알고리즘 통합',
         note: 'FULL-WORKS-1 배포 후. (1) `rightSizeImageUrl.js`에 R2 works URL srcset/LQIP 처리 추가 (Cloudflare Image Transforms 필요 — ops 설정 선행). (2) `engine.py` Python-layer에 `user_uploaded_works` 풀 병합 — 별도 협업자(algorithm 소유) 작업, 설계 sync 필요.',
+      },
+      {
+        id: 'FULL-WORKS-3',
+        title: 'works 상세 모달 + cover_r2_key BE 컬럼 (PR2)',
+        note: 'FRONT-UX-13 follow-up. (1) `backend/apps/works/models.py` cover_r2_key CharField 추가 + migration + `GET /api/v1/works/<upload_id>/` 상세 엔드포인트(gallery_urls 배열, cover_url). (2) Created 탭 작품 카드 클릭 → 상세 모달(이미지 갤러리 슬라이더 + 작품 메타). `feature/admin-works-detail` 브랜치 예정.',
       },
       {
         id: 'FRONT-VERIFY-1',
@@ -353,14 +373,6 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: '.claude/plans/2026-06-01-office-recommendation-design.md',
-      role: '사무소/architect 추천 설계 플랜 (#178)',
-    },
-    {
-      path: '.claude/plans/2026-06-02-office-save.md',
-      role: '사무소 저장 기능 설계 플랜 (#180)',
-    },
-    {
       path: '.claude/plans/README.md',
       role: '플랜 디렉터리 안내',
     },
@@ -369,8 +381,24 @@ window.PROJECT_STATE = {
       role: '아카이브 플랜 문서',
     },
     {
+      path: '.claude/plans/archive/2026-06-01-office-recommendation-design.md',
+      role: '',
+    },
+    {
+      path: '.claude/plans/archive/2026-06-02-office-save.md',
+      role: '',
+    },
+    {
       path: '.claude/plans/archive/building-detail-page.md',
       role: '건물 상세 페이지 플랜',
+    },
+    {
+      path: '.claude/plans/archive/dashboard-autogen-1.md',
+      role: '',
+    },
+    {
+      path: '.claude/plans/archive/login-page-concept-rework.md',
+      role: '',
     },
     {
       path: '.claude/plans/archive/perf-image-latency-research.md',
@@ -381,6 +409,10 @@ window.PROJECT_STATE = {
       role: '성능 최적화 플랜',
     },
     {
+      path: '.claude/plans/archive/profile-harvest-redesign.wf.js',
+      role: '',
+    },
+    {
       path: '.claude/plans/archive/results-page.md',
       role: '결과 페이지 플랜',
     },
@@ -389,20 +421,8 @@ window.PROJECT_STATE = {
       role: '워크플로 스킬 흡수 플랜',
     },
     {
-      path: '.claude/plans/dashboard-autogen-1.md',
-      role: '대시보드 자동생성 플랜',
-    },
-    {
       path: '.claude/plans/like-vectors-id-round-refactor.md',
       role: '',
-    },
-    {
-      path: '.claude/plans/login-page-concept-rework.md',
-      role: '',
-    },
-    {
-      path: '.claude/plans/profile-harvest-redesign.wf.js',
-      role: '프로필 하베스트 재설계 워크플로 스크립트 (#179)',
     },
     {
       path: '.claude/reviews/2026-05-31-swipe-discovery-review.md',
@@ -1137,6 +1157,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'backend/apps/recommendation/tests/test_report_cache.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/recommendation/tests/test_row_to_card.py',
       role: 'row_to_card 변환 테스트',
     },
@@ -1149,7 +1173,15 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'backend/apps/recommendation/tests/test_throttles.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/recommendation/tests/test_vocab_grounding.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/throttles.py',
       role: '',
     },
     {
@@ -1865,6 +1897,10 @@ window.PROJECT_STATE = {
       role: '스와이프 카드 컴포넌트',
     },
     {
+      path: 'frontend/src/components/SwipeDeck.jsx',
+      role: '',
+    },
+    {
       path: 'frontend/src/components/SwipeGestureFrame.jsx',
       role: '공통 swipe 제스처 래퍼',
     },
@@ -2005,6 +2041,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'frontend/src/hooks/useWindowSize.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/i18n/index.js',
       role: '번역 훅 (경로 해석)',
     },
@@ -2019,6 +2059,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/layouts/MainLayout.jsx',
       role: '메인 레이아웃 + TabBar 셸',
+    },
+    {
+      path: 'frontend/src/lib/tinderCard.js',
+      role: '',
     },
     {
       path: 'frontend/src/main.jsx',

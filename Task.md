@@ -154,6 +154,9 @@ _(스코프 축소 2026-08-08: "11개 클래스 이중선언 → settings-driven
 #### FULL-WORKS-2 — works Phase 2: srcset/LQIP + 알고리즘 통합
 FULL-WORKS-1 배포 후. (1) `rightSizeImageUrl.js`에 R2 works URL srcset/LQIP 처리 추가 (Cloudflare Image Transforms 필요 — ops 설정 선행). (2) `engine.py` Python-layer에 `user_uploaded_works` 풀 병합 — 별도 협업자(algorithm 소유) 작업, 설계 sync 필요.
 
+#### FULL-WORKS-3 — works 상세 모달 + cover_r2_key BE 컬럼 (PR2)
+FRONT-UX-13 follow-up. (1) `backend/apps/works/models.py` cover_r2_key CharField 추가 + migration + `GET /api/v1/works/<upload_id>/` 상세 엔드포인트(gallery_urls 배열, cover_url). (2) Created 탭 작품 카드 클릭 → 상세 모달(이미지 갤러리 슬라이더 + 작품 메타). `feature/admin-works-detail` 브랜치 예정.
+
 #### FRONT-VERIFY-1 — 보드저장 PATCH 경로 verify_required 모달 미배선
 FULL-ONBOARDING-2(`92237d8`)가 guest promote-limit을 `403 {'detail':'verify_required','reason':'board_limit_reached','limit':3}`로 표준화했으나, 프론트 `updateProject`(projects.js:64-71)는 verify_required를 VerifyRequiredError로 변환 안 함(createProject:26-40만 처리) → SaveBoardModal에서 guest가 4번째 보드 저장확정 시 VerifyGateModal 대신 generic 에러 문자열. `updateProject`에 createProject와 동일한 403 verify_required 감지 + VerifyGateModal 배선. Non-blocking(백엔드 enforcement는 정상).
 
@@ -265,6 +268,17 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FRONT-UX-13 — 업로드 이미지 편집(crop/rotate/커버 지정) — RESOLVED 2026-08-11 (`bb79616`)
+- files state: id/originalBlob/currentBlob/preview — 반복 편집 화질 열화 방지
+- EXIF orientation 인라인 DataView 파서 (외부 라이브러리 없음)
+- 10MB/파일 제한 + name+size dedup + 10장 상한
+- coverImageId state: 첫 이미지 자동 지정, 삭제 시 다음 이미지 폴백
+- 썸네일 UI: ✏ 편집(좌하단) / ★ 커버(우하단) / COVER 배지(좌상단)
+- 편집 모달: react-image-crop + ±90° 회전 (applyEdit() → originalBlob 기준)
+- handleSubmit: coverImageId 기준 파일 순서 재정렬 → r2_keys[0] 항상 커버
+- app-test FEATURE-SCOPED PASS 8/8. react-image-crop ^11.1.2 추가.
+- Deferred: FULL-WORKS-3 — works 상세 모달 + cover_r2_key BE 컬럼 (PR2)
+
 ### BACK-REPORT-CACHE-1 — 리포트 캐시 short-circuit + 무음실패 UX + stranding 출구 — RESOLVED 2026-08-08 (`14fbb09`-pre-squash)
 PR #295 스로틀 + 무캐시 재생성 + 프론트 자동호출의 결합이 무음 429 → `finalReport` null → ResultsPage 레거시 2줄 폴백("옛 모양 리포트" 증상, yywon1 보고/PR #298 진단 크레딧)을 유발. 근본 픽스 일괄:
 - [x] `reports.py` 캐시 short-circuit: 저장된 `final_report`/`report_image` 있으면 무-Gemini 반환, `{regenerate:true}`일 때만 재생성 — 방문마다 리포트가 바뀌던 비결정 재작성도 소멸. 테스트 12개 (`test_report_cache.py`)
