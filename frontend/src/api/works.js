@@ -74,3 +74,13 @@ export async function getMyWorks() {
   const res = await callApi('GET', '/works/')
   return res
 }
+
+/**
+ * Fetch a single work detail by upload ID.
+ * @param {string} uploadId
+ * @returns {Promise<{upload_id: string, title: string, program: string, location_city: string, location_country: string, project_year: number|null, cover_url: string|null, gallery_urls: string[], status: 'published'|'rejected'|'processing', created_at: string}>}
+ */
+export async function getWork(uploadId) {
+  const res = await callApi('GET', `/works/${uploadId}/`)
+  return res
+}

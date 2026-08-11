@@ -402,6 +402,16 @@ export const locales = {
         devFailed:             'Dev 로그인 실패: {detail}',
       },
     },
+    workDetail: {
+      loading: '불러오는 중...',
+      error:   '불러올 수 없습니다',
+      close:   '닫기',
+      status: {
+        published:  '공개',
+        processing: '검토 중',
+        rejected:   '검토 거절',
+      },
+    },
     uploadWork: {
       header: {
         backAria: '뒤로가기',
@@ -864,6 +874,16 @@ export const locales = {
         loginFailed:           'Login failed. Please try again.',
         registerFailed:        'Registration failed. Please try again.',
         devFailed:             'Dev login failed: {detail}',
+      },
+    },
+    workDetail: {
+      loading: 'Loading...',
+      error:   'Could not load work',
+      close:   'Close',
+      status: {
+        published:  'Published',
+        processing: 'Under review',
+        rejected:   'Rejected',
       },
     },
     uploadWork: {
