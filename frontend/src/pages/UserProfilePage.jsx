@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from '../i18n/index.js'
 import { getUserProfile, getLikedBuildings, getArchitectProfile } from '../api/client.js'
 import { updateProject, deleteProject } from '../api/projects.js'
@@ -31,6 +31,7 @@ function formatBoardDate(iso) {
 export default function UserProfilePage({ onLogout, onResumeProject, onNewProjectSession }) {
   const { userId: routeUserId } = useParams()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { t } = useTranslation()
 
   const sessionUserId = sessionStorage.getItem('archithon_user')
@@ -159,6 +160,25 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
       setWorksLoading(false)
     }
   }
+
+  // handleCreatedTab is redefined every render (not useCallback) — stash the
+  // latest reference in a ref so the deep-link effect below can call it
+  // without depending on it directly (which would re-fire on every render).
+  const handleCreatedTabRef = useRef(handleCreatedTab)
+  handleCreatedTabRef.current = handleCreatedTab
+
+  // Deep-link support: /user/me?tab=created lands directly on the Created
+  // tab (used by the upload success-modal confirm). Guarded to fire once,
+  // only after the profile user + isMe are resolved, and only for isMe.
+  const deepLinkAppliedRef = useRef(false)
+  useEffect(() => {
+    if (deepLinkAppliedRef.current) return
+    if (!user || loading) return
+    if (searchParams.get('tab') === 'created' && isMe) {
+      deepLinkAppliedRef.current = true
+      handleCreatedTabRef.current()
+    }
+  }, [user, loading, isMe, searchParams])
 
   // Adapter: map project_id -> board_id + format ISO date -> "Month YYYY"
   function adaptBoard(b) {
