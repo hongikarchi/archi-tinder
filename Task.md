@@ -57,7 +57,7 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(비어있음 — BACK-LLM-PROVIDER-1 완료 2026-08-04, ## Done 참조)_
+_(비어있음 — FULL-WORKS-3 완료 2026-08-12, ## Done 참조)_
 
 
 ## Next
@@ -153,9 +153,6 @@ _(스코프 축소 2026-08-08: "11개 클래스 이중선언 → settings-driven
 
 #### FULL-WORKS-2 — works Phase 2: srcset/LQIP + 알고리즘 통합
 FULL-WORKS-1 배포 후. (1) `rightSizeImageUrl.js`에 R2 works URL srcset/LQIP 처리 추가 (Cloudflare Image Transforms 필요 — ops 설정 선행). (2) `engine.py` Python-layer에 `user_uploaded_works` 풀 병합 — 별도 협업자(algorithm 소유) 작업, 설계 sync 필요.
-
-#### FULL-WORKS-3 — works 상세 모달 + cover_r2_key BE 컬럼 (PR2)
-FRONT-UX-13 follow-up. (1) `backend/apps/works/models.py` cover_r2_key CharField 추가 + migration + `GET /api/v1/works/<upload_id>/` 상세 엔드포인트(gallery_urls 배열, cover_url). (2) Created 탭 작품 카드 클릭 → 상세 모달(이미지 갤러리 슬라이더 + 작품 메타). `feature/admin-works-detail` 브랜치 예정.
 
 #### FRONT-VERIFY-1 — 보드저장 PATCH 경로 verify_required 모달 미배선
 FULL-ONBOARDING-2(`92237d8`)가 guest promote-limit을 `403 {'detail':'verify_required','reason':'board_limit_reached','limit':3}`로 표준화했으나, 프론트 `updateProject`(projects.js:64-71)는 verify_required를 VerifyRequiredError로 변환 안 함(createProject:26-40만 처리) → SaveBoardModal에서 guest가 4번째 보드 저장확정 시 VerifyGateModal 대신 generic 에러 문자열. `updateProject`에 createProject와 동일한 403 verify_required 감지 + VerifyGateModal 배선. Non-blocking(백엔드 enforcement는 정상).
@@ -268,6 +265,14 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FULL-WORKS-3 — works 상세 모달 + cover_r2_key BE 컬럼 — RESOLVED 2026-08-12 (`31fe226`)
+- Work.cover_r2_key CharField + migration 0003 — 커버 키 명시 저장 (기존 r2_keys[0] 폴백 유지)
+- WorkDetailView GET /api/v1/works/\<upload_id\>/ — 소유자 확인(403/404), cover_url/gallery_urls, status 3-way
+- WorkDetailModal.jsx: 갤러리 슬라이더(단일이면 화살표 숨김) + 메타 + status 배지 + backdrop 닫기
+- UserProfilePage Created 탭 카드 클릭 → WorkDetailModal
+- getWork() api + workDetail i18n KO+EN
+- app-test FEATURE-SCOPED PASS 7/7. flake8/ESLint PASS.
+
 ### FRONT-UX-13 — 업로드 이미지 편집(crop/rotate/커버 지정) — RESOLVED 2026-08-11 (`bb79616`)
 - files state: id/originalBlob/currentBlob/preview — 반복 편집 화질 열화 방지
 - EXIF orientation 인라인 DataView 파서 (외부 라이브러리 없음)

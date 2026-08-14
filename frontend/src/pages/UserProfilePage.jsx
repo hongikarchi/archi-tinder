@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from '../i18n/index.js'
 import { getUserProfile, getLikedBuildings, getArchitectProfile } from '../api/client.js'
 import { updateProject, deleteProject } from '../api/projects.js'
@@ -7,6 +7,7 @@ import { getMyWorks } from '../api/works.js'
 import { purgeChatCache } from '../utils/appHelpers.js'
 import { getUserSavedStudios } from '../api/architects.js'
 import ShareCardModal from '../components/ShareCardModal.jsx'
+import WorkDetailModal from '../components/WorkDetailModal.jsx'
 import ProfileHeader from './userProfile/ProfileHeader'
 import ProfileHero from './userProfile/ProfileHero'
 import BoardGrid from './userProfile/BoardGrid'
@@ -30,6 +31,7 @@ function formatBoardDate(iso) {
 export default function UserProfilePage({ onLogout, onResumeProject, onNewProjectSession }) {
   const { userId: routeUserId } = useParams()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { t } = useTranslation()
 
   const sessionUserId = sessionStorage.getItem('archithon_user')
@@ -64,6 +66,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
   const [likedCount, setLikedCount] = useState(0)
   const [works, setWorks] = useState(null)  // null = not loaded yet
   const [worksLoading, setWorksLoading] = useState(false)
+  const [selectedWorkId, setSelectedWorkId] = useState(null)
 
   // MINOR #1: inline error banner for failed board actions (optimistic revert feedback)
   const [boardActionError, setBoardActionError] = useState(null)
@@ -157,6 +160,25 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
       setWorksLoading(false)
     }
   }
+
+  // handleCreatedTab is redefined every render (not useCallback) — stash the
+  // latest reference in a ref so the deep-link effect below can call it
+  // without depending on it directly (which would re-fire on every render).
+  const handleCreatedTabRef = useRef(handleCreatedTab)
+  handleCreatedTabRef.current = handleCreatedTab
+
+  // Deep-link support: /user/me?tab=created lands directly on the Created
+  // tab (used by the upload success-modal confirm). Guarded to fire once,
+  // only after the profile user + isMe are resolved, and only for isMe.
+  const deepLinkAppliedRef = useRef(false)
+  useEffect(() => {
+    if (deepLinkAppliedRef.current) return
+    if (!user || loading) return
+    if (searchParams.get('tab') === 'created' && isMe) {
+      deepLinkAppliedRef.current = true
+      handleCreatedTabRef.current()
+    }
+  }, [user, loading, isMe, searchParams])
 
   // Adapter: map project_id -> board_id + format ISO date -> "Month YYYY"
   function adaptBoard(b) {
@@ -1013,11 +1035,16 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                 gap: 16,
               }}>
                 {works.map(work => (
-                  <div key={work.upload_id} style={{
-                    borderRadius: 12, overflow: 'hidden',
-                    background: 'var(--color-surface-2)',
-                    display: 'flex', flexDirection: 'column',
-                  }}>
+                  <div
+                    key={work.upload_id}
+                    onClick={() => setSelectedWorkId(work.upload_id)}
+                    style={{
+                      borderRadius: 12, overflow: 'hidden',
+                      background: 'var(--color-surface-2)',
+                      display: 'flex', flexDirection: 'column',
+                      cursor: 'pointer',
+                    }}
+                  >
                     {work.cover_url ? (
                       <div style={{ aspectRatio: '3/4', overflow: 'hidden' }}>
                         <img
@@ -1061,6 +1088,14 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
       {/* Share card modal */}
       {shareOpen && user && (
         <ShareCardModal user={user} onClose={() => setShareOpen(false)} />
+      )}
+
+      {/* Work detail modal */}
+      {selectedWorkId && (
+        <WorkDetailModal
+          uploadId={selectedWorkId}
+          onClose={() => setSelectedWorkId(null)}
+        />
       )}
     </div>
   )

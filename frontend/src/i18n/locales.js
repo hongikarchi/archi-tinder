@@ -402,6 +402,16 @@ export const locales = {
         devFailed:             'Dev 로그인 실패: {detail}',
       },
     },
+    workDetail: {
+      loading: '불러오는 중...',
+      error:   '불러올 수 없습니다',
+      close:   '닫기',
+      status: {
+        published:  '공개',
+        processing: '검토 중',
+        rejected:   '검토 거절',
+      },
+    },
     uploadWork: {
       header: {
         backAria: '뒤로가기',
@@ -450,8 +460,9 @@ export const locales = {
         industrial:     '산업시설',
       },
       success: {
-        title: '업로드 완료',
-        body:  '검토 중입니다. 잠시 후 프로필 Created 탭에서 확인하세요.',
+        title:   '업로드 완료',
+        body:    '검토 중입니다. 잠시 후 프로필 Created 탭에서 확인하세요.',
+        confirm: '확인',
       },
       submit: {
         converting: '변환 중...',
@@ -877,6 +888,16 @@ export const locales = {
         devFailed:             'Dev login failed: {detail}',
       },
     },
+    workDetail: {
+      loading: 'Loading...',
+      error:   'Could not load work',
+      close:   'Close',
+      status: {
+        published:  'Published',
+        processing: 'Under review',
+        rejected:   'Rejected',
+      },
+    },
     uploadWork: {
       header: {
         backAria: 'Back',
@@ -925,8 +946,9 @@ export const locales = {
         industrial:     'Industrial',
       },
       success: {
-        title: 'Upload complete',
-        body:  'Your work is under review. Check the Created tab on your profile shortly.',
+        title:   'Upload complete',
+        body:    'Your work is under review. Check the Created tab on your profile shortly.',
+        confirm: 'OK',
       },
       submit: {
         converting: 'Converting...',

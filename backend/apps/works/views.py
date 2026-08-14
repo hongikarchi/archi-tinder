@@ -14,6 +14,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from rest_framework.exceptions import PermissionDenied
+
 from .services import _process_work
 from .storage import WorksR2DisabledError, _make_s3_client, generate_presigned_put, verify_key_exists
 
@@ -291,3 +293,60 @@ class FinalizeView(APIView):
             {'upload_id': work.upload_id, 'status': 'processing'},
             status=201,
         )
+
+
+class WorkDetailView(APIView):
+    """GET /api/v1/works/<upload_id>/ — retrieve a single work's full detail.
+
+    FULL-WORKS-3: returns cover_url (from cover_r2_key if set, else r2_keys[0])
+    plus gallery_urls (all r2_keys). Owner-only: 403 for another user's work,
+    404 for a non-existent upload_id.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, upload_id):
+        from .models import Work
+
+        try:
+            work = Work.objects.get(upload_id=upload_id)
+        except Work.DoesNotExist:
+            return Response({'detail': 'Not found.'}, status=404)
+
+        if work.owner.user != request.user:
+            raise PermissionDenied
+
+        public_base = getattr(settings, 'WORKS_PUBLIC_BASE_URL', '').rstrip('/')
+
+        # cover_url: prefer explicit cover_r2_key; fall back to r2_keys[0].
+        cover_url = None
+        if public_base:
+            cover_key = work.cover_r2_key or (work.r2_keys[0] if work.r2_keys else None)
+            if cover_key:
+                cover_url = f'{public_base}/{cover_key}'
+
+        # gallery_urls: all r2_keys with the public base prefix.
+        gallery_urls = []
+        if public_base and work.r2_keys:
+            gallery_urls = [f'{public_base}/{key}' for key in work.r2_keys]
+
+        # Status derivation: published > rejected (gate_reason set) > processing.
+        if work.is_publishable:
+            status_str = 'published'
+        elif work.gate_reason:
+            status_str = 'rejected'
+        else:
+            status_str = 'processing'
+
+        return Response({
+            'upload_id': work.upload_id,
+            'title': work.title,
+            'program': work.program,
+            'location_city': work.location_city,
+            'location_country': work.location_country,
+            'project_year': work.project_year,
+            'cover_url': cover_url,
+            'gallery_urls': gallery_urls,
+            'status': status_str,
+            'created_at': work.created_at.isoformat(),
+        })

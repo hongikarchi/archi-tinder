@@ -10,7 +10,7 @@
  * FRONT-UX-13: image editing (crop + rotate), cover image, per-file validation.
  */
 
-import { useState, useRef } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import ReactCrop from 'react-image-crop'
 import 'react-image-crop/dist/ReactCrop.css'
@@ -520,6 +520,24 @@ export default function UploadWorkPage() {
 
   const isBusy = uploadState === 'converting' || uploadState === 'uploading' || uploadState === 'processing'
 
+  /* ── Success modal dismiss ───────────────────────────────────────────── */
+  // The underlying form is hidden while uploadState === 'processing', so all
+  // dismiss paths (confirm click, backdrop click, Escape) perform the same
+  // navigation — there is nothing on this page to "return" to.
+  const goToCreatedWorks = useCallback(() => {
+    navigate('/user/me?tab=created')
+  }, [navigate])
+
+  // Escape key closes the success modal (matches PhotoLightbox.jsx precedent).
+  useEffect(() => {
+    if (uploadState !== 'processing') return
+    function onKey(e) {
+      if (e.key === 'Escape') goToCreatedWorks()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [uploadState, goToCreatedWorks])
+
   /* ── Render ──────────────────────────────────────────────────────────── */
 
   return (
@@ -539,17 +557,66 @@ export default function UploadWorkPage() {
         <div style={{ width: 44 }} />
       </div>
 
-      <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px 48px' }}>
-        {/* ── Processing success state ─────────────────────────────────── */}
-        {uploadState === 'processing' && (
-          <div className={s.processingMsg}>
-            <p style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 700 }}>{t('uploadWork.success.title')}</p>
-            <p style={{ margin: 0 }}>
+      {/* ── Success modal overlay ──────────────────────────────────────── */}
+      {uploadState === 'processing' && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) goToCreatedWorks()
+          }}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1000,
+            background: 'rgba(0,0,0,0.4)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+          }}
+        >
+          <div
+            style={{
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 20,
+              padding: 24,
+              maxWidth: 480,
+              width: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 12,
+            }}
+          >
+            <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--color-text)' }}>
+              {t('uploadWork.success.title')}
+            </p>
+            <p style={{ margin: 0, fontSize: 14, color: 'var(--color-text)' }}>
               {t('uploadWork.success.body')}
             </p>
+            <button
+              type="button"
+              onClick={goToCreatedWorks}
+              style={{
+                marginTop: 8,
+                padding: '12px 16px',
+                borderRadius: 12,
+                border: 0,
+                background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
+                color: '#fff',
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: 'pointer',
+                minHeight: 44,
+                alignSelf: 'stretch',
+              }}
+            >
+              {t('uploadWork.success.confirm')}
+            </button>
           </div>
-        )}
+        </div>
+      )}
 
+      <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px 48px' }}>
         {uploadState !== 'processing' && (
           <form onSubmit={handleSubmit} noValidate>
             {/* ── Drop zone ── */}
