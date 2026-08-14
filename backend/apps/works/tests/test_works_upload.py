@@ -634,3 +634,83 @@ class TestList:
         resp = auth_client.get('/api/v1/works/')
         assert resp.status_code == 200
         assert resp.json()['total'] == 0
+
+
+# ---------------------------------------------------------------------------
+# FULL-WORKS-3 — GET /api/v1/works/<upload_id>/ detail view tests
+# ---------------------------------------------------------------------------
+
+class TestWorkDetail:
+    """WorkDetailView: 200 (owner), 403 (non-owner), 404 (missing upload_id)."""
+
+    @pytest.mark.django_db
+    def test_detail_200_owner(self, auth_client, user_and_profile):
+        """Owner requesting their own work -> 200 with full detail including
+        cover_url (from r2_keys[0] when cover_r2_key is empty) and gallery_urls."""
+        from apps.works.models import Work
+
+        _user, profile = user_and_profile
+        key = f'works/{profile.id}/abc_cover.webp'
+        work = Work.objects.create(
+            owner=profile,
+            upload_id=Work.generate_upload_id(),
+            title='My Gallery Work',
+            program='cultural',
+            location_city='Seoul',
+            location_country='South Korea',
+            project_year=2023,
+            r2_keys=[key],
+            is_copyright_confirmed=True,
+            is_publishable=True,
+        )
+
+        with override_settings(WORKS_PUBLIC_BASE_URL='https://cdn.example.com'):
+            resp = auth_client.get(f'/api/v1/works/{work.upload_id}/')
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data['upload_id'] == work.upload_id
+        assert data['title'] == 'My Gallery Work'
+        assert data['program'] == 'cultural'
+        assert data['location_city'] == 'Seoul'
+        assert data['location_country'] == 'South Korea'
+        assert data['project_year'] == 2023
+        assert data['cover_url'] == f'https://cdn.example.com/{key}'
+        assert data['gallery_urls'] == [f'https://cdn.example.com/{key}']
+        assert data['status'] == 'published'
+        assert 'created_at' in data
+
+    @pytest.mark.django_db
+    def test_detail_403_non_owner(self, user_and_profile):
+        """A different authenticated user requesting another user's work -> 403."""
+        from django.contrib.auth.models import User
+
+        from apps.works.models import Work
+
+        _user, profile = user_and_profile
+        work = Work.objects.create(
+            owner=profile,
+            upload_id=Work.generate_upload_id(),
+            title='Private Work',
+            program='residential',
+            r2_keys=[f'works/{profile.id}/img.webp'],
+            is_copyright_confirmed=True,
+            is_publishable=False,
+        )
+
+        other_user = User.objects.create_user(
+            username='detailother', email='detailother@test.com', password='pass1234',
+        )
+        UserProfile.objects.create(user=other_user, display_name='Other Detail User')
+        other_client = APIClient()
+        refresh = RefreshToken.for_user(other_user)
+        other_client.credentials(HTTP_AUTHORIZATION=f'Bearer {refresh.access_token}')
+
+        resp = other_client.get(f'/api/v1/works/{work.upload_id}/')
+        assert resp.status_code == 403
+
+    @pytest.mark.django_db
+    def test_detail_404_missing_upload_id(self, auth_client):
+        """Non-existent upload_id -> 404."""
+        resp = auth_client.get('/api/v1/works/usr_doesnotexist99/')
+        assert resp.status_code == 404

@@ -42,6 +42,9 @@ class Work(models.Model):
     project_year = models.IntegerField(null=True, blank=True)
     # list[str] — Cloudflare R2 object keys for this work's images.
     r2_keys = models.JSONField(default=list)
+    # Optional explicit cover key. When set, cover_url uses this key instead
+    # of r2_keys[0]. Empty string means "use r2_keys[0]" (backwards compat).
+    cover_r2_key = models.CharField(max_length=512, blank=True, default='')
     is_copyright_confirmed = models.BooleanField(default=False)
     # Publishable gate: set True by _process_work after Gemini validation.
     is_publishable = models.BooleanField(default=False)
