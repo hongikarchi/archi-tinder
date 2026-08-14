@@ -290,18 +290,6 @@
 
 /* ── Status messages ────────────────────────────────────────────────────── */
 
-.processingMsg {
-  background: color-mix(in srgb, var(--accent-2) 10%, var(--color-surface));
-  border: 1px solid color-mix(in srgb, var(--accent-2) 30%, transparent);
-  border-radius: var(--radius-md);
-  padding: 16px;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--color-text);
-  line-height: 1.6;
-  text-align: center;
-}
-
 .errorMsg {
   background: color-mix(in srgb, var(--color-destructive) 10%, var(--color-surface));
   border: 1px solid color-mix(in srgb, var(--color-destructive) 30%, transparent);

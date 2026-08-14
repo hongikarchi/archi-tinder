@@ -8,7 +8,7 @@
  *   4. Presign → upload to R2 → finalize with backend
  */
 
-import { useState, useRef } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { presignFiles, uploadToR2, finalizeWork } from '../api/works.js'
 import { useTranslation } from '../i18n/index.js'
@@ -84,7 +84,6 @@ export default function UploadWorkPage() {
   const fileInputRef = useRef(null)
   const { t } = useTranslation()
 
-  const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [files, setFiles] = useState([])
   const [formData, setFormData] = useState({
     title: '',
@@ -226,7 +225,6 @@ export default function UploadWorkPage() {
       await finalizeWork(payload)
 
       setUploadState('processing')
-      setShowSuccessModal(true)
     } catch (err) {
       setUploadState('error')
       setErrorMsg(err.message || t('uploadWork.error.uploadFailed'))
@@ -245,6 +243,24 @@ export default function UploadWorkPage() {
   }
 
   const isBusy = uploadState === 'converting' || uploadState === 'uploading' || uploadState === 'processing'
+
+  /* ── Success modal dismiss ───────────────────────────────────────────── */
+  // The underlying form is hidden while uploadState === 'processing', so all
+  // dismiss paths (confirm click, backdrop click, Escape) perform the same
+  // navigation — there is nothing on this page to "return" to.
+  const goToCreatedWorks = useCallback(() => {
+    navigate('/user/me?tab=created')
+  }, [navigate])
+
+  // Escape key closes the success modal (matches PhotoLightbox.jsx precedent).
+  useEffect(() => {
+    if (uploadState !== 'processing') return
+    function onKey(e) {
+      if (e.key === 'Escape') goToCreatedWorks()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [uploadState, goToCreatedWorks])
 
   /* ── Render ──────────────────────────────────────────────────────────── */
 
@@ -266,8 +282,11 @@ export default function UploadWorkPage() {
       </div>
 
       {/* ── Success modal overlay ──────────────────────────────────────── */}
-      {showSuccessModal && (
+      {uploadState === 'processing' && (
         <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) goToCreatedWorks()
+          }}
           style={{
             position: 'fixed',
             inset: 0,
@@ -300,13 +319,13 @@ export default function UploadWorkPage() {
             </p>
             <button
               type="button"
-              onClick={() => navigate('/user/me?tab=created')}
+              onClick={goToCreatedWorks}
               style={{
                 marginTop: 8,
                 padding: '12px 16px',
                 borderRadius: 12,
                 border: 0,
-                background: '#ec4899',
+                background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
                 color: '#fff',
                 fontSize: 14,
                 fontWeight: 600,
