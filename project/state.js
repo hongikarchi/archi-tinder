@@ -23,11 +23,18 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-08-14 22:03 KST',
-    head: '56bae0d',
-    branch: 'feature/admin-works-upload-edit',
+    updatedAt: '2026-08-14 22:29 KST',
+    head: 'f0d4a5a',
+    branch: 'feature/claude-works-audit-chore',
   },
   done: [
+    {
+      id: 'UPLOAD-NAV-1',
+      title: '업로드 성공 모달 + Created 탭 이동',
+      completedAt: '2026-08-14',
+      prs: [300],
+      note: '_(yywon1 ad-hoc PR — Task ID 없이 들어와 사후 부여. 업로드 완료 인라인 메시지 → 확인 모달 + `/user/me?tab=created` 이동.)_',
+    },
     {
       id: 'FULL-WORKS-3',
       title: 'works 상세 모달 + cover_r2_key BE 컬럼',
@@ -70,12 +77,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-08-04',
       note: '검색 품질 3다리(DB 정확성·완전성·검색 도달성) 자동 측정 하네스 — `tools/db_qc.py` 4단계(어휘 덤프·파서 배터리·검색 배터리·이미지 헬스) + 12쿼리 fixture + 시각 판정층 루브릭/런북(`db_qc_rubric.md`), 재구축 전후 diff·HARD-EMPTY/5pt 회귀 시 exit 1.',
     },
-    {
-      id: 'ADMIN-DBCHECK-1',
-      title: 'DB 품질 검사 페이지 (dev 전용)',
-      completedAt: '2026-07-27',
-      note: 'dev 빌드 전용 `/db-check` 내부 QA 페이지 — 전체 공개 건물 무한스크롤 그리드 + 자연어 검색(서비스 parse_query+scored search 재사용) + 타일 클릭 시 풀컬럼 DB 모달.',
-    },
   ],
   now: [],
   next: {
@@ -113,6 +114,11 @@ window.PROJECT_STATE = {
         id: 'FULL-WORKS-2',
         title: 'works Phase 2: srcset/LQIP + 알고리즘 통합',
         note: 'FULL-WORKS-1 배포 후. (1) `rightSizeImageUrl.js`에 R2 works URL srcset/LQIP 처리 추가 (Cloudflare Image Transforms 필요 — ops 설정 선행). (2) `engine.py` Python-layer에 `user_uploaded_works` 풀 병합 — 별도 협업자(algorithm 소유) 작업, 설계 sync 필요.',
+      },
+      {
+        id: 'FULL-WORKS-4',
+        title: 'cover_r2_key finalize 배선 + works 리뷰 low 잔여',
+        note: 'PR #301/#302 리뷰(2026-08-14, 41-agent)發. 현재 커버는 프론트 r2_keys 재정렬(index 0 = 커버) 관례로만 동작하고 `Work.cover_r2_key` 컬럼은 쓰는 곳이 없음 — 두 PR이 각자 반쪽을 다른 메커니즘으로 구현, 서버가 순서를 바꾸면 조용히 깨지는 잠재 트랩. 묶음:',
       },
       {
         id: 'FRONT-VERIFY-1',
@@ -227,6 +233,13 @@ window.PROJECT_STATE = {
       sha: '4048777',
     },
     {
+      number: 301,
+      title: 'feat(FRONT-UX-13): works 업로드 이미지 편집 — crop/rotate + 커버 지정',
+      mergedAt: '2026-08-14T13:19:41Z',
+      mergedAtKST: '2026-08-14 22:19 KST',
+      sha: 'f0d4a5a',
+    },
+    {
       number: 300,
       title: 'feat(upload): success modal + navigate to Created tab',
       mergedAt: '2026-08-14T12:52:21Z',
@@ -267,13 +280,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-08-05T08:43:22Z',
       mergedAtKST: '2026-08-05 17:43 KST',
       sha: '2a801c3',
-    },
-    {
-      number: 291,
-      title: 'fix(test): mock _get_gemini_client in persona tests — CI red on develop',
-      mergedAt: '2026-08-05T06:22:53Z',
-      mergedAtKST: '2026-08-05 15:22 KST',
-      sha: 'cecc349',
     },
   ],
   agents: [

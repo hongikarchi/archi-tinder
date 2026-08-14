@@ -154,6 +154,14 @@ _(스코프 축소 2026-08-08: "11개 클래스 이중선언 → settings-driven
 #### FULL-WORKS-2 — works Phase 2: srcset/LQIP + 알고리즘 통합
 FULL-WORKS-1 배포 후. (1) `rightSizeImageUrl.js`에 R2 works URL srcset/LQIP 처리 추가 (Cloudflare Image Transforms 필요 — ops 설정 선행). (2) `engine.py` Python-layer에 `user_uploaded_works` 풀 병합 — 별도 협업자(algorithm 소유) 작업, 설계 sync 필요.
 
+#### FULL-WORKS-4 — cover_r2_key finalize 배선 + works 리뷰 low 잔여
+PR #301/#302 리뷰(2026-08-14, 41-agent)發. 현재 커버는 프론트 r2_keys 재정렬(index 0 = 커버) 관례로만 동작하고 `Work.cover_r2_key` 컬럼은 쓰는 곳이 없음 — 두 PR이 각자 반쪽을 다른 메커니즘으로 구현, 서버가 순서를 바꾸면 조용히 깨지는 잠재 트랩. 묶음:
+- (a) finalize payload에 `cover_r2_key` 명시 전송(프론트) + `FinalizeView.post()` 수용 — r2_keys와 동일한 `works/{profile.id}/` ownership-prefix 검증, 미전송 시 `''` 유지
+- (b) `WorkDetailView`: `select_related('owner')` + `owner.user_id != request.user.id` 비교 (3-query → 1)
+- (c) 테스트 갭: `cover_r2_key`가 **set된** 케이스(컬럼의 유일한 존재 이유) 검증 부재 — cover_url이 r2_keys[0] 아닌 cover_r2_key를 쓰는지
+- (d) status 3-way 파생(published/rejected/processing) 프론트(UserProfilePage 인라인)/백(WorkDetailView) 이중구현 — list 엔드포인트가 파생 `status`를 반환하게 통합
+- (e) JPEG-fallback content-type: `canvasToBlob`이 jpeg로 폴백해도 presign/PUT은 `image/webp` 고정 — blob.type을 per-file로 스레딩 (WebP 인코딩 없는 브라우저에서만 발동, 이론적)
+
 #### FRONT-VERIFY-1 — 보드저장 PATCH 경로 verify_required 모달 미배선
 FULL-ONBOARDING-2(`92237d8`)가 guest promote-limit을 `403 {'detail':'verify_required','reason':'board_limit_reached','limit':3}`로 표준화했으나, 프론트 `updateProject`(projects.js:64-71)는 verify_required를 VerifyRequiredError로 변환 안 함(createProject:26-40만 처리) → SaveBoardModal에서 guest가 4번째 보드 저장확정 시 VerifyGateModal 대신 generic 에러 문자열. `updateProject`에 createProject와 동일한 403 verify_required 감지 + VerifyGateModal 배선. Non-blocking(백엔드 enforcement는 정상).
 
@@ -265,6 +273,11 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### UPLOAD-NAV-1 — 업로드 성공 모달 + Created 탭 이동 — RESOLVED 2026-08-14 (PR #300 `56bae0d`)
+_(yywon1 ad-hoc PR — Task ID 없이 들어와 사후 부여. 업로드 완료 인라인 메시지 → 확인 모달 + `/user/me?tab=created` 이동.)_
+- UploadWorkPage: processingMsg 인라인 → 성공 모달(제목/본문/확인), uploadWork.success.confirm i18n KO+EN
+- **Admin takeover fix (`ca4a0d9`, 41-agent 리뷰發)**: (1) `?tab=created`가 죽은 param이었음 — UserProfilePage `useSearchParams` 원샷 딥링크 배선(`handleCreatedTab()` 호출로 데이터 fetch 포함); (2) `#ec4899` 하드코드 → `var(--accent-1/2)` 그라디언트(DESIGN.md §1.2); (3) backdrop 클릭 + ESC 탈출구(전부 동일 navigate — processing 중 폼 숨김이라 복귀 대상 없음); (4) 중복 `showSuccessModal` state 제거(`uploadState==='processing'` 게이트); (5) 고아 `.processingMsg` CSS 삭제
+
 ### FULL-WORKS-3 — works 상세 모달 + cover_r2_key BE 컬럼 — RESOLVED 2026-08-12 (`31fe226`)
 - Work.cover_r2_key CharField + migration 0003 — 커버 키 명시 저장 (기존 r2_keys[0] 폴백 유지)
 - WorkDetailView GET /api/v1/works/\<upload_id\>/ — 소유자 확인(403/404), cover_url/gallery_urls, status 3-way
