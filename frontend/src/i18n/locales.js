@@ -426,6 +426,9 @@ export const locales = {
       preview: {
         alt:        '미리보기 {n}',
         removeAria: '이미지 {n} 삭제',
+        editAria:   '이미지 {n} 편집',
+        coverAria:  '이미지 {n} 커버로 설정',
+        coverBadge: 'COVER',
       },
       form: {
         titleLabel:        '제목 *',
@@ -467,6 +470,13 @@ export const locales = {
         processing: '검토 중...',
         default:    '업로드',
       },
+      edit: {
+        title:       '이미지 편집',
+        rotateLeft:  '왼쪽 회전',
+        rotateRight: '오른쪽 회전',
+        cancel:      '취소',
+        apply:       '완료',
+      },
       error: {
         maxImages:        '이미지는 최대 {max}장까지 업로드할 수 있습니다.',
         imageLoadFailed:  '이미지를 불러올 수 없습니다',
@@ -476,6 +486,7 @@ export const locales = {
         programRequired:  '프로그램 유형을 선택해주세요.',
         copyrightRequired: '저작권 확인에 동의해주세요.',
         uploadFailed:     '업로드 중 오류가 발생했습니다.',
+        fileTooLarge:     '파일이 10MB를 초과합니다: {name}',
       },
     },
   },
@@ -901,6 +912,9 @@ export const locales = {
       preview: {
         alt:        'Preview {n}',
         removeAria: 'Delete image {n}',
+        editAria:   'Edit image {n}',
+        coverAria:  'Set image {n} as cover',
+        coverBadge: 'COVER',
       },
       form: {
         titleLabel:        'Title *',
@@ -942,6 +956,13 @@ export const locales = {
         processing: 'Reviewing...',
         default:    'Upload',
       },
+      edit: {
+        title:       'Edit image',
+        rotateLeft:  'Rotate left',
+        rotateRight: 'Rotate right',
+        cancel:      'Cancel',
+        apply:       'Apply',
+      },
       error: {
         maxImages:        'You can upload up to {max} images.',
         imageLoadFailed:  'Could not load image',
@@ -951,6 +972,7 @@ export const locales = {
         programRequired:  'Select a program type.',
         copyrightRequired: 'Please confirm copyright.',
         uploadFailed:     'Upload failed. Please try again.',
+        fileTooLarge:     'File exceeds 10 MB limit: {name}',
       },
     },
   },

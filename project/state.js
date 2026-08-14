@@ -23,9 +23,9 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-08-12 00:06 KST',
-    head: 'af6a33a',
-    branch: 'feature/admin-works-detail',
+    updatedAt: '2026-08-14 22:03 KST',
+    head: '56bae0d',
+    branch: 'feature/admin-works-upload-edit',
   },
   done: [
     {
@@ -33,6 +33,12 @@ window.PROJECT_STATE = {
       title: 'works 상세 모달 + cover_r2_key BE 컬럼',
       completedAt: '2026-08-12',
       note: 'Work.cover_r2_key CharField + migration 0003 — 커버 키 명시 저장 (기존 r2_keys[0] 폴백 유지)',
+    },
+    {
+      id: 'FRONT-UX-13',
+      title: '업로드 이미지 편집(crop/rotate/커버 지정)',
+      completedAt: '2026-08-14',
+      note: 'files state: id/originalBlob/currentBlob/preview — 반복 편집 화질 열화 방지',
     },
     {
       id: 'BACK-REPORT-CACHE-1',
@@ -69,12 +75,6 @@ window.PROJECT_STATE = {
       title: 'DB 품질 검사 페이지 (dev 전용)',
       completedAt: '2026-07-27',
       note: 'dev 빌드 전용 `/db-check` 내부 QA 페이지 — 전체 공개 건물 무한스크롤 그리드 + 자연어 검색(서비스 parse_query+scored search 재사용) + 타일 클릭 시 풀컬럼 DB 모달.',
-    },
-    {
-      id: 'FULL-WORKS-1a',
-      title: '업로드 후속 fix 3건 (pagination + parallel HEAD + i18n)',
-      completedAt: '2026-07-17',
-      note: '#282 머지 시 유보한 리뷰 low 2건 + i18n 사각 1건, `feature/claude-works-followup` 단일 PR.',
     },
   ],
   now: [],
@@ -220,6 +220,20 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 302,
+      title: 'feat(FULL-WORKS-3): works 상세 모달 + cover_r2_key BE 컬럼',
+      mergedAt: '2026-08-14T12:43:18Z',
+      mergedAtKST: '2026-08-14 21:43 KST',
+      sha: '4048777',
+    },
+    {
+      number: 300,
+      title: 'feat(upload): success modal + navigate to Created tab',
+      mergedAt: '2026-08-14T12:52:21Z',
+      mergedAtKST: '2026-08-14 21:52 KST',
+      sha: '56bae0d',
+    },
+    {
       number: 299,
       title: 'feat(BACK-REPORT-CACHE-1): report cache short-circuit + silent-failure UX + stranding exit',
       mergedAt: '2026-08-08T09:32:07Z',
@@ -260,20 +274,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-08-05T06:22:53Z',
       mergedAtKST: '2026-08-05 15:22 KST',
       sha: 'cecc349',
-    },
-    {
-      number: 290,
-      title: 'feat(BACK-LLM-PROVIDER): provider adapter + 4 parser bugfixes + B pick (parse/board -> gpt-5.4-mini)',
-      mergedAt: '2026-08-05T06:01:03Z',
-      mergedAtKST: '2026-08-05 15:01 KST',
-      sha: '2092797',
-    },
-    {
-      number: 289,
-      title: 'feat(BACK-PARSER-VOCAB-1): ground parser in live DB vocab + architectural_elements axis',
-      mergedAt: '2026-08-04T08:58:14Z',
-      mergedAtKST: '2026-08-04 17:58 KST',
-      sha: '20ed84d',
     },
   ],
   agents: [
