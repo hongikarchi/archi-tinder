@@ -72,7 +72,7 @@ const results = await pipeline(
   (d) => agent(reviewPrompt(d), { agentType: d.agentType, model: 'sonnet', phase: 'Review', label: `review:${d.key}`, schema: FINDINGS_SCHEMA }),
   (review, d) => parallel(
     ((review && review.findings) || []).map((f) => () =>
-      agent(verifyPrompt(f, d.key), { model: 'opus', phase: 'Verify', label: `verify:${d.key}`, schema: VERDICT_SCHEMA })
+      agent(verifyPrompt(f, d.key), { model: 'opus', effort: 'high', phase: 'Verify', label: `verify:${d.key}`, schema: VERDICT_SCHEMA })
         .then((v) => ({ dimension: d.key, file: f.file, line: f.line || '', problem: f.problem, fix: f.fix, verdict: v }))
     ),
   ),

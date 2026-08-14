@@ -12,7 +12,6 @@ export const locales = {
     },
     discovery: {
       loading: '취향 탐색 중…',
-      progressComplete: '취향 탐색 중',
       tasteAnalyzing: 'Taste 분석 중…',
       tasteSaving: 'Taste 저장 중…',
       saveTasteAndMove: '지금까지 취향 저장하고 Taste로 이동',
@@ -127,6 +126,8 @@ export const locales = {
     },
     results: {
       allLoaded: '더 볼 게 없어요',
+      reportError: '페르소나 리포트를 불러오지 못했어요.',
+      retry: '다시 시도',
     },
     account: {
       title:                  '계정',
@@ -212,6 +213,8 @@ export const locales = {
       saveError:          '저장에 실패했어요. 다시 시도해주세요.',
       notFound:           '보드를 찾을 수 없습니다.',
       noReport:           '아직 페르소나 리포트가 없습니다.',
+      reportGenError:     '페르소나 리포트 생성에 실패했어요.',
+      retry:              '다시 시도',
       back:               '뒤로가기',
       backToDetail:       '보드 상세로',
       recommendedOffice:  '추천 사무소',
@@ -399,6 +402,16 @@ export const locales = {
         devFailed:             'Dev 로그인 실패: {detail}',
       },
     },
+    workDetail: {
+      loading: '불러오는 중...',
+      error:   '불러올 수 없습니다',
+      close:   '닫기',
+      status: {
+        published:  '공개',
+        processing: '검토 중',
+        rejected:   '검토 거절',
+      },
+    },
     uploadWork: {
       header: {
         backAria: '뒤로가기',
@@ -413,6 +426,9 @@ export const locales = {
       preview: {
         alt:        '미리보기 {n}',
         removeAria: '이미지 {n} 삭제',
+        editAria:   '이미지 {n} 편집',
+        coverAria:  '이미지 {n} 커버로 설정',
+        coverBadge: 'COVER',
       },
       form: {
         titleLabel:        '제목 *',
@@ -444,14 +460,22 @@ export const locales = {
         industrial:     '산업시설',
       },
       success: {
-        title: '업로드 완료',
-        body:  '검토 중입니다. 잠시 후 프로필 Created 탭에서 확인하세요.',
+        title:   '업로드 완료',
+        body:    '검토 중입니다. 잠시 후 프로필 Created 탭에서 확인하세요.',
+        confirm: '확인',
       },
       submit: {
         converting: '변환 중...',
         uploading:  '업로드 중 {progress}%',
         processing: '검토 중...',
         default:    '업로드',
+      },
+      edit: {
+        title:       '이미지 편집',
+        rotateLeft:  '왼쪽 회전',
+        rotateRight: '오른쪽 회전',
+        cancel:      '취소',
+        apply:       '완료',
       },
       error: {
         maxImages:        '이미지는 최대 {max}장까지 업로드할 수 있습니다.',
@@ -462,6 +486,7 @@ export const locales = {
         programRequired:  '프로그램 유형을 선택해주세요.',
         copyrightRequired: '저작권 확인에 동의해주세요.',
         uploadFailed:     '업로드 중 오류가 발생했습니다.',
+        fileTooLarge:     '파일이 10MB를 초과합니다: {name}',
       },
     },
   },
@@ -473,7 +498,6 @@ export const locales = {
     },
     discovery: {
       loading: 'Exploring your taste…',
-      progressComplete: 'Exploring taste',
       tasteAnalyzing: 'Analyzing taste…',
       tasteSaving: 'Saving taste…',
       saveTasteAndMove: 'Save taste so far and go to Taste',
@@ -588,6 +612,8 @@ export const locales = {
     },
     results: {
       allLoaded: 'No more to show',
+      reportError: 'Failed to load the persona report.',
+      retry: 'Try again',
     },
     account: {
       title:                  'Account',
@@ -688,6 +714,8 @@ export const locales = {
       saveError:          'Save failed. Please try again.',
       notFound:           'Board not found.',
       noReport:           'No persona report yet.',
+      reportGenError:     'Failed to generate the persona report.',
+      retry:              'Try again',
       back:               'Back',
       backToDetail:       'Board detail',
       recommendedOffice:  'Recommended studio',
@@ -860,6 +888,16 @@ export const locales = {
         devFailed:             'Dev login failed: {detail}',
       },
     },
+    workDetail: {
+      loading: 'Loading...',
+      error:   'Could not load work',
+      close:   'Close',
+      status: {
+        published:  'Published',
+        processing: 'Under review',
+        rejected:   'Rejected',
+      },
+    },
     uploadWork: {
       header: {
         backAria: 'Back',
@@ -874,6 +912,9 @@ export const locales = {
       preview: {
         alt:        'Preview {n}',
         removeAria: 'Delete image {n}',
+        editAria:   'Edit image {n}',
+        coverAria:  'Set image {n} as cover',
+        coverBadge: 'COVER',
       },
       form: {
         titleLabel:        'Title *',
@@ -905,14 +946,22 @@ export const locales = {
         industrial:     'Industrial',
       },
       success: {
-        title: 'Upload complete',
-        body:  'Your work is under review. Check the Created tab on your profile shortly.',
+        title:   'Upload complete',
+        body:    'Your work is under review. Check the Created tab on your profile shortly.',
+        confirm: 'OK',
       },
       submit: {
         converting: 'Converting...',
         uploading:  'Uploading {progress}%',
         processing: 'Reviewing...',
         default:    'Upload',
+      },
+      edit: {
+        title:       'Edit image',
+        rotateLeft:  'Rotate left',
+        rotateRight: 'Rotate right',
+        cancel:      'Cancel',
+        apply:       'Apply',
       },
       error: {
         maxImages:        'You can upload up to {max} images.',
@@ -923,6 +972,7 @@ export const locales = {
         programRequired:  'Select a program type.',
         copyrightRequired: 'Please confirm copyright.',
         uploadFailed:     'Upload failed. Please try again.',
+        fileTooLarge:     'File exceeds 10 MB limit: {name}',
       },
     },
   },

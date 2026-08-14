@@ -127,7 +127,11 @@ REST_FRAMEWORK = {
         'image_load_telemetry': '120/min',
         # React/unreact write throttle — prevents bulk-reaction abuse (SOC2).
         'reaction_write': '60/min',
-        # Guest auth throttles — operator-overridable without code changes.
+        # NOTE (BACK-THROTTLE-2): entries below whose throttle CLASS also sets a
+        # `rate` attr are registry/documentation only — DRF's SimpleRateThrottle
+        # reads DEFAULT_THROTTLE_RATES solely when the class omits `rate`, so the
+        # class attr is the effective value. Convention: code-pinned rates.
+        # Guest auth throttles.
         'guest_login': '3/min',
         'guest_promote': '5/min',
         # AUTH-LOGIN-1: handle+password auth + email-link throttles.
@@ -138,6 +142,13 @@ REST_FRAMEWORK = {
         'set_password': '5/min',
         # FRONT-AVATAR-1: avatar upload is expensive (Pillow + R2 PUT); tight rate.
         'avatar_upload': '10/min',
+        # HIGH-THROTTLE-1: LLM-endpoint throttles (audit 2026-07-17) — provider-
+        # agnostic; parse path serves settings.LLM_PROVIDER (openai in prod, #290),
+        # report/image are Gemini-pinned. Effective values = class attrs in
+        # apps/recommendation/throttles.py (see NOTE above).
+        'llm_search':       '10/min',
+        'report_generate':  '10/hour',
+        'report_image':     '5/hour',
         # Global fallback rates (applied to views that reference these scopes directly).
         'anon': '60/min',
         'user': '300/min',

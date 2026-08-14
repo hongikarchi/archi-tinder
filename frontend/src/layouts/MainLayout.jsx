@@ -13,6 +13,7 @@ export default function MainLayout({
   onExitToNewProject, onExitToHome,
   questionTrigger = null,
   onQuestionAnswer,
+  nextCard = null,
 }) {
   const location = useLocation()
   const navigate = useNavigate()
@@ -79,6 +80,7 @@ export default function MainLayout({
           onExitToHome={onExitToHome}
           questionTrigger={questionTrigger}
           onQuestionAnswer={onQuestionAnswer}
+          nextCard={nextCard}
         />
       </div>
 

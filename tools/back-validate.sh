@@ -5,59 +5,56 @@
 #
 # Runs in order:
 #   1. flake8 on backend/ (config from backend/.flake8 — no CLI flag overrides)
-#   2. migrate (if there are pending migration files in working tree or staged)
+#   2. unapplied-migration check (report-only: applying needs neondb_owner DDL —
+#      INFRA-DB-1 — so the fix is `make migrate-local`, never a bare migrate here)
 #   3. pytest <app> if app arg given, else pytest all
+#      (DB-backed tests may fail locally: runtime user lacks CREATEDB — INFRA-DB-2.
+#       `make test-local` reproduces CI; CI stays the canonical gate.)
 #
 # Stops on first failure (set -e). Prints a final summary.
 #
-# Empirical: encapsulating these 3 steps in one script saves ~150 chars per
-# back-maker prompt across many dispatches; the back-maker.md just says
-# "run ./tools/back-validate.sh <app>".
+# PYTHON env var overrides the interpreter (Windows: python3 is a broken
+# Store stub — same fix as Makefile #293; default `python`).
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP="${1:-}"
+PYTHON="${PYTHON:-python}"
 
 cd "${REPO_ROOT}/backend"
 
 # 1. flake8 — config auto-discovered from backend/.flake8 (no CLI overrides)
 echo "─── 1/3: flake8 ─────"
-python3 -m flake8 . || {
+"$PYTHON" -m flake8 . || {
     echo "✗ flake8 found issues"
     exit 1
 }
 echo "✓ flake8 clean"
 echo ""
 
-# 2. migrate (only if there are migration files in working tree)
-echo "─── 2/3: migrate (if needed) ─────"
-PENDING_MIGS=$(git -C "${REPO_ROOT}" diff --name-only HEAD -- 'backend/apps/*/migrations/*.py' \
-                | grep -v '__init__.py' || true)
-PENDING_MIGS_STAGED=$(git -C "${REPO_ROOT}" diff --cached --name-only -- 'backend/apps/*/migrations/*.py' \
-                      | grep -v '__init__.py' || true)
-if [ -n "$PENDING_MIGS$PENDING_MIGS_STAGED" ]; then
-    echo "  (migration files in working tree → applying)"
-    python3 manage.py migrate || {
-        echo "✗ migrate failed (DB connection? schema conflict?)"
-        exit 2
-    }
-    echo "✓ migrate applied"
-else
-    echo "  (no migration files in working tree → skipping)"
+# 2. unapplied-migration check (report-only — runtime DB user has no DDL)
+echo "─── 2/3: migration check ─────"
+UNAPPLIED=$("$PYTHON" manage.py showmigrations 2>&1 | grep -E '\[ \]' || true)
+if [ -n "$UNAPPLIED" ]; then
+    echo "✗ unapplied migrations detected:"
+    echo "$UNAPPLIED"
+    echo "  → run \`make migrate-local\` (prompts for neondb_owner password), then restart backend"
+    exit 2
 fi
+echo "✓ no unapplied migrations"
 echo ""
 
 # 3. pytest
 echo "─── 3/3: pytest ─────"
 if [ -n "$APP" ]; then
-    python3 -m pytest "apps/${APP}/" -v 2>&1 | tail -25 || {
-        echo "✗ pytest failed for app=${APP}"
+    "$PYTHON" -m pytest "apps/${APP}/" -v 2>&1 | tail -25 || {
+        echo "✗ pytest failed for app=${APP} (DB-permission failures? → make test-local)"
         exit 3
     }
 else
-    python3 -m pytest -v 2>&1 | tail -25 || {
-        echo "✗ pytest failed (full suite)"
+    "$PYTHON" -m pytest -v 2>&1 | tail -25 || {
+        echo "✗ pytest failed (full suite; DB-permission failures? → make test-local)"
         exit 3
     }
 fi

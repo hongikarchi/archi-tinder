@@ -4,6 +4,7 @@ import SwipeCard, { CARD_WIDTH, CARD_HEIGHT } from '../components/SwipeCard.jsx'
 import QuestionCard from '../components/QuestionCard.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
 import CardSkeleton from '../components/CardSkeleton.jsx'
+import SwipeDeck from '../components/SwipeDeck.jsx'
 import { isActionCard } from '../utils/appHelpers.js'
 import { useSwipeOrchestration } from '../hooks/useSwipeOrchestration.js'
 import { useKeyboardSwipe } from '../hooks/useKeyboardSwipe.js'
@@ -95,16 +96,6 @@ function ConfidenceBar({ phase, progress }) {
     stageLabel = 'Calibrating…'
   }
 
-  // Swipe count label: plain count, no /target denominator.
-  let swipeCountLabel = ''
-  if (progress?.swipe_count != null) {
-    swipeCountLabel = `${progress.swipe_count} swipes`
-  } else if (progress?.like_count != null && progress?.dislike_count != null) {
-    swipeCountLabel = `${progress.like_count + progress.dislike_count} swipes`
-  } else if (progress?.like_count != null) {
-    swipeCountLabel = `${progress.like_count} ♥`
-  }
-
   return (
     <div style={{ width: '100%' }}>
       {/* Two-column info row above the bar */}
@@ -118,13 +109,11 @@ function ConfidenceBar({ phase, progress }) {
         }}>
           {stageLabel}
         </span>
-        {swipeCountLabel ? (
-          <span style={{
-            fontSize: 12, fontWeight: 500, color: 'var(--color-text-dim)',
-          }}>
-            {swipeCountLabel}
-          </span>
-        ) : null}
+        <span style={{
+          fontSize: 12, fontWeight: 500, color: 'var(--color-text-dim)',
+        }}>
+          {pct}%
+        </span>
       </div>
 
       {/* Bar */}
@@ -336,6 +325,7 @@ export default function SwipePage({
   onExitToNewProject, onExitToHome,
   questionTrigger = null,
   onQuestionAnswer,
+  nextCard = null,
 }) {
   const { t } = useTranslation()
   const cardRef = useRef(null)
@@ -357,7 +347,14 @@ export default function SwipePage({
   // left-swipe sets keepExploringChosen → button appears. On resume,
   // keepExploringChosen is restored from backend action_card_shown
   // (App.jsx applySessionResponse) so the button shows immediately.
-  const isAt100 = keepExploringChosen || isCompleted
+  // Stranding fix: a dislike-heavy session may never converge (no action card
+  // ever shown) and isCompleted never flips — without this clause the user has
+  // NO exit to the results page at all. Once swipeCount overshoots the target
+  // by 5, surface the button regardless of convergence state (still a button,
+  // not auto-navigation — the user must choose to leave).
+  const swipeCount = progress?.swipe_count ?? ((progress?.like_count ?? 0) + (progress?.dislike_count ?? 0))
+  const targetSwipes = Math.max(1, progress?.target_swipes ?? 10)
+  const isAt100 = keepExploringChosen || isCompleted || swipeCount >= targetSwipes + 5
 
   const { pendingActionRef: pendingAction, onTinderSwipe, onCardLeftScreen } = useSwipeOrchestration({
     likeAction: 'like',
@@ -625,7 +622,10 @@ export default function SwipePage({
         )}
 
         {/* Card */}
-        <div style={{ width: CARD_WIDTH, height: CARD_HEIGHT, position: 'relative' }}>
+        <SwipeDeck
+          nextCard={!questionTrigger && currentCard && !isActionCard(currentCard) ? nextCard : null}
+          active={!!currentCard}
+        >
           {currentCard ? (
             questionTrigger ? (
               /* Wrap QuestionCard in SwipeGestureFrame so right swipe = 'A' (Yes)
@@ -680,7 +680,7 @@ export default function SwipePage({
           ) : isLoading ? (
             <CardSkeleton />
           ) : null}
-        </div>
+        </SwipeDeck>
 
         </div>{/* end center wrapper */}
 

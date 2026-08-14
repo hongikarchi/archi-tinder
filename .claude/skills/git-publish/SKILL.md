@@ -21,9 +21,9 @@ Use this skill when a feature branch has committed work ready to ship to `develo
 
 Before any push / PR / merge action, verify ONE of:
 
-(a) **Explicit publish keyword** in the most recent user message. Keywords:
-   - Korean: `올려`, `푸시`, `배포`, `merge`, `PR 만들어`, `배포해`, `deploy`, `ship`
-   - English: `push`, `open PR`, `merge`, `deploy`, `ship`
+(a) **Explicit publish keyword** in the most recent user message — the authoritative
+    keyword list lives in `CLAUDE.md` § Git Operations "Publish gate" (always in
+    context; do not maintain a second copy here).
 
 (b) **Active `.claude/plans/<slug>.md`** in scope that authorizes the publish action explicitly.
 
@@ -167,17 +167,11 @@ Then STOP. Do NOT trigger `develop → main` deploy. That's `git-publisher` Mode
 
 ## When to escalate to git-publisher agent
 
-Routine Mode-2 squash merges run in this skill. Escalate to `git-publisher` agent for:
-
-1. **Mode 3 — `develop → main` deploy**: multi-PR batch + admin squash + post-deploy `develop` force-reset to match `main`. Requires explicit deploy keyword AND HARD RULE 4 carve-out citation.
-
-2. **External collaborator PR triage**: a PR from someone other than admin needs review + decision. Different workflow (CODEOWNERS, possibly different merge strategy).
-
-3. **Rebase failure or force-with-lease retries**: complex history surgery beyond this skill's linear flow.
-
-4. **Push rejection with unclear cause**: any push failure that isn't a simple wrong-branch or fast-forward issue.
-
-5. **Mid-merge failure**: if `gh pr merge --admin --squash` fails with a non-trivial error (e.g. CODEOWNERS misconfiguration, status-check pending despite none configured), escalate rather than retry with destructive workarounds.
+Routine Mode-2 squash merges run in this skill. Escalate to the `git-publisher`
+agent per the **escalation matrix in `CLAUDE.md` § Git Operations** (authoritative;
+in short: Mode 3 deploy, external collaborator PR triage, complex rebase recovery,
+push rejection with unclear cause, non-trivial mid-merge failure). Never retry a
+failed merge with destructive workarounds — escalate instead.
 
 Dispatch shape:
 ```

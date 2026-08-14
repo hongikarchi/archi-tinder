@@ -4,6 +4,7 @@ import { useResults } from '../hooks/useResults.js'
 import { resolveProjectBackendId } from '../utils/resolveProjectBackendId.js'
 import PersonaReport from '../components/PersonaReport.jsx'
 import { useTranslation } from '../i18n/index.js'
+import { generateReport } from '../api/projects.js'
 
 function cardId(card) {
   return card?.image_id || card?.canonical_bld_id || card?.building_id || ''
@@ -145,7 +146,7 @@ function ResultCard({ card, rank, saved, pending, onOpen, onToggle }) {
   )
 }
 
-export default function ResultsPage({ projects, setProjects }) {
+export default function ResultsPage({ projects, setProjects, onReportGenerated }) {
   const navigate = useNavigate()
   const location = useLocation()
   const { sessionId } = useParams()
@@ -158,6 +159,73 @@ export default function ResultsPage({ projects, setProjects }) {
   const visibleCount = Math.min(loadedRank, cappedTotal)
   const topCards = cards.slice(0, visibleCount)
   const savedIds = project?.savedIds || []
+  const backendId = resolveProjectBackendId(project)
+
+  // Auto-repair: when the report is missing (e.g. a prior generation failure),
+  // fire ONE generateReport call. Guarded by a ref so it fires at most once per
+  // mount — a failure surfaces an inline error + retry button instead of
+  // silently retrying forever.
+  const reportRepairRef = useRef(false)
+  const [reportRepairError, setReportRepairError] = useState(false)
+  const [reportRepairing, setReportRepairing] = useState(false)
+
+  function attemptReportRepair() {
+    // No liked buildings yet → backend always 400s ('No liked buildings yet');
+    // retrying can never succeed, so skip generation and fall through to the
+    // neutral persona placeholder instead of a dead-end error+retry state.
+    if (!backendId || project?.finalReport || reportRepairRef.current) return
+    if (!(project?.likedBuildings?.length)) return
+    reportRepairRef.current = true
+    setReportRepairing(true)
+    setReportRepairError(false)
+    generateReport(backendId)
+      .then(data => {
+        if (data?.final_report) {
+          setProjects(prev => prev.map(p => (
+            p.id === project.id
+              ? {
+                  ...p,
+                  finalReport: data.final_report,
+                  ...(data.axis_scores ? { axisScores: data.axis_scores } : {}),
+                }
+              : p
+          )))
+          onReportGenerated?.(project, data)
+        } else {
+          setReportRepairError(true)
+        }
+      })
+      .catch(err => {
+        console.error('[ResultsPage] generateReport retry failed:', err)
+        setReportRepairError(true)
+      })
+      .finally(() => {
+        setReportRepairing(false)
+      })
+  }
+
+  useEffect(() => {
+    attemptReportRepair()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [backendId, project?.finalReport])
+
+  function handleReportRetry() {
+    reportRepairRef.current = false
+    attemptReportRepair()
+  }
+
+  function handleReportUpdate(data) {
+    if (!project || !data?.final_report) return
+    setProjects(prev => prev.map(p => (
+      p.id === project.id
+        ? {
+            ...p,
+            finalReport: data.final_report,
+            ...(data.axis_scores ? { axisScores: data.axis_scores } : {}),
+          }
+        : p
+    )))
+  }
 
   // Reconcile bookmark state when navigating back from BuildingDetailPage
   useEffect(() => {
@@ -238,14 +306,39 @@ export default function ResultsPage({ projects, setProjects }) {
         </button>
       </section>
 
-      {project?.finalReport && project?.backendId ? (
+      {project?.finalReport && backendId ? (
         <PersonaReport
-          boardId={project.backendId}
+          boardId={backendId}
           finalReport={project.finalReport}
           axisScores={project.axisScores || null}
           reportImage={project.reportImage || null}
           reportImageMime={project.reportImageMime || null}
+          onReportUpdate={handleReportUpdate}
         />
+      ) : reportRepairError ? (
+        <section style={{ padding: '18px', borderBottom: '1px solid var(--color-border-soft)' }}>
+          <p style={{ color: 'var(--color-destructive, #D73A49)', fontSize: 13, fontWeight: 600, margin: '0 0 10px' }}>
+            {t('results.reportError')}
+          </p>
+          <button
+            type="button"
+            onClick={handleReportRetry}
+            disabled={reportRepairing}
+            style={{
+              padding: '8px 18px',
+              borderRadius: 999,
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              color: 'var(--color-text)',
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: reportRepairing ? 'default' : 'pointer',
+              fontFamily: 'inherit',
+            }}
+          >
+            {t('results.retry')}
+          </button>
+        </section>
       ) : (
         <section style={{ padding: '18px', borderBottom: '1px solid var(--color-border-soft)' }}>
           <p style={{ color: 'var(--color-text-muted)', fontSize: 14, fontWeight: 600, margin: 0 }}>

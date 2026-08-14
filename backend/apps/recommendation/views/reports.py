@@ -10,6 +10,7 @@ from ..models import Project
 from .. import services
 from ..caches import evict_projects_list, evict_project_detail
 from ..services.axis_scores import compute_axis_scores
+from ..throttles import ReportGenerateThrottle, ReportImageThrottle
 from ._shared import _get_profile, _liked_id_only
 
 logger = logging.getLogger('apps.recommendation')
@@ -20,12 +21,20 @@ RC = settings.RECOMMENDATION
 
 class ProjectReportGenerateView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_classes   = [ReportGenerateThrottle]
 
     def post(self, request, pk):
         profile = _get_profile(request)
         project = Project.objects.filter(project_id=pk, user=profile).first() if profile else None
         if not project:
             return Response({'detail': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        # BACK-REPORT-CACHE-1: short-circuit on stored report unless regenerate
+        # is explicitly requested. Avoids Gemini call + DB write + cache eviction
+        # on every revisit-triggered POST (was causing silent 429s + nondeterministic
+        # report rewrites — reports.py regenerated+overwrote on every call).
+        if project.final_report and not request.data.get('regenerate'):
+            return Response({'final_report': project.final_report, 'axis_scores': project.axis_scores})
 
         liked_id_strings = _liked_id_only(project.liked_ids)
         if not liked_id_strings:
@@ -58,6 +67,7 @@ class ProjectReportGenerateView(APIView):
 
 class ProjectReportImageView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_classes   = [ReportImageThrottle]
 
     def post(self, request, pk):
         profile = _get_profile(request)
@@ -67,6 +77,15 @@ class ProjectReportImageView(APIView):
 
         if not project.final_report:
             return Response({'detail': 'Generate persona report first'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # BACK-REPORT-CACHE-1: short-circuit on stored image unless regenerate
+        # is explicitly requested (same rationale as ProjectReportGenerateView).
+        if project.report_image and not request.data.get('regenerate'):
+            return Response({
+                'image_data': project.report_image,
+                'mime_type': project.report_image_mime,
+                'prompt': None,
+            })
 
         result = services.generate_persona_image(project.final_report)
         if not result:

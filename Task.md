@@ -57,7 +57,7 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(비어있음 — BACK-LLM-PROVIDER-1 완료 2026-08-04, ## Done 참조)_
+_(비어있음 — FULL-WORKS-3 완료 2026-08-12, ## Done 참조)_
 
 
 ## Next
@@ -107,6 +107,13 @@ Implementation map:
 
 ### HIGH
 
+#### ALGO-ACCURACY-1 — "Aha(취향 포착)" 주장 미검증 — 측정 하네스 부재 (hypothesis-grade)
+_출처: 2026-07-06 4-agent 정적분석 종합(`.claude/plans/algo-speed-accuracy-analysis.md`, 2026-08-05 stale-정리 때 삭제 — speed 파트는 #266-#269/#283 등으로 대부분 해소, accuracy 파트만 여기로 이관)._
+- **[CRITICAL] Photo-vs-taste confound**: 스와이프 자극은 사진인데 기록 신호는 텍스트 캡션 임베딩(`visual_description`, sentence encoder — 이미지/CLIP 임베딩은 스와이프 경로에 전무). 엔진의 "시각 유사도"는 실제로는 캡션 어휘 유사도. 옵션: Make DB CLIP/이미지-임베딩 채널(조율 필요, 최대 리프트) / 주장을 caption-semantic taste로 축소 / 실험으로 검증.
+- **[HIGH] Convergence = "centroid 정지" ≠ "취향 포착"**: threshold 0.08→0.13은 10-swipe 내 발화용 튜닝(SWIPE-CONVERGENCE-10), holdout 검증·온라인 메트릭 0. 잠재 메트릭은 이미 발행 중: bookmark provenance `in_cosine/gemini/dpp_top10` top-10 bookmark rate — 집계만 안 됨.
+- **측정 하네스 제안(오프라인, 기존 SwipeEvent 데이터, 최저비용)**: held-out-swipe prediction — 마지막 L likes 숨기고 나머지로 풀 랭킹, held-out rank vs random 비교. "Aha 미검증"을 숫자로 전환한 뒤 후속(intensity→centroid 가중, 조기 K=2, λ-ramp, CLIP 채널)을 결정.
+- 부수 발견: love intensity(∈[0,2]) 저장만 되고 centroid 수학 미사용; cold-start diversity가 캡션 공간 기준(미학 축 아님); analyzing 중 dislike 준-비활성(제품 결정 명시 필요); `docs/algorithm.md` D1-D5 doc-code drift(최악: convergence 공식 doc=normalized vs code=absolute L2 — centroid L2-normalize 덕에 현재만 무해).
+
 #### BACK-RECOMMEND-1 — Project 두번째 세션이 이전 taste를 모름
 Same Project can host multiple `AnalysisSession` rows (user comes back, "Resume" or new swipe round on the same Project — second session is created fresh while `Project.liked_ids` / `disliked_ids` / `saved_ids` carry forward as the persistent accumulator). Today the new session's algorithm-side state (`like_vectors`, `convergence_history`, `phase`) starts from scratch — exploring phase, empty pool of taste signal — even though the user just liked 12 buildings in Session #1.
 
@@ -137,8 +144,23 @@ _(2026-06-08 범위 축소: #212(`4e58195`) Case #3 resume guard가 **진행중(
 _(2026-07-12 감사 re-pin: 전제 유효, 라인 이동 — resume guard `session_service.py:167-182`(completed 제외), 신규 세션 cold-create `:397-416`(phase='exploring', like_vectors=[] 등 전부 빈 값), `liked_ids`는 완료-세션 리포트에만 사용(`:688-689`), warm-start seed 경로 여전히 부재.)_
 
 ### MEDIUM
+#### SNS-PERSONA-AXIS-1 — persona 프롬프트에 axis_scores + 언어설정 미반영 (#232 유실 작업)
+PR #232(`feature/sns-persona-description-axis`, 2026-06-18, collaborator)가 CI red로 CLOSED-미머지 후 유실 — `generation.py` persona description 프롬프트에 `axis_scores` + 사용자 언어설정을 반영하는 작업(+68/-12, generation.py + views/reports.py). 2026-08-06 브랜치 정리 전수검사에서 발견: 현재 develop `generation.py`에 axis_scores 미사용 = 기능 미착륙 확인. 원격 브랜치는 보존됨(정리에서 유일하게 제외). 살리려면 rebase 필요 — 이후 persona seam 변경(#290 provider pin, #291 mock) 충돌 예상, cherry-pick보다 재구현이 쌀 수도. hypothesis-grade: 기능 가치 자체(개인화 페르소나 품질)는 제품 결정 필요.
+
+#### BACK-THROTTLE-2 — 잔여 무스로틀 엔드포인트 (스코프 축소 2026-08-08)
+PR #295 리뷰(2026-08-07)發. 잔여 항목: works `FinalizeView`(POST당 Gemini 1회, 감사 이후 신설이라 미커버) + 감사 2026-07-17 기지적 사항인 OAuth 로그인 뷰 4개(Google/Kakao/Naver/TokenRefresh, AllowAny + 외부 HTTP 호출 — AnonRateThrottle, 남용 표면상 LLM 스로틀보다 우선순위 높음). 테스트는 실효 rate(클래스 attr) 검증으로 보강.
+_(스코프 축소 2026-08-08: "11개 클래스 이중선언 → settings-driven 통일" 리팩터는 오버엔지니어링으로 드랍 — 운영자가 무배포 rate 조정을 실제로 요구한 적 없음. 대신 컨벤션을 **code-pinned**로 확정하고 거짓 주석만 정정(settings.py NOTE + throttles.py, 2026-08-08 커밋). 세션 생성 경유 보드명 LLM 1콜(`session_service.py:49` fire-and-forget, gpt-5.4-mini)은 YAGNI — 소액 + 세션 생성 자체가 자연 제한; 남용 관측 시에만 재고.)_
+
 #### FULL-WORKS-2 — works Phase 2: srcset/LQIP + 알고리즘 통합
 FULL-WORKS-1 배포 후. (1) `rightSizeImageUrl.js`에 R2 works URL srcset/LQIP 처리 추가 (Cloudflare Image Transforms 필요 — ops 설정 선행). (2) `engine.py` Python-layer에 `user_uploaded_works` 풀 병합 — 별도 협업자(algorithm 소유) 작업, 설계 sync 필요.
+
+#### FULL-WORKS-4 — cover_r2_key finalize 배선 + works 리뷰 low 잔여
+PR #301/#302 리뷰(2026-08-14, 41-agent)發. 현재 커버는 프론트 r2_keys 재정렬(index 0 = 커버) 관례로만 동작하고 `Work.cover_r2_key` 컬럼은 쓰는 곳이 없음 — 두 PR이 각자 반쪽을 다른 메커니즘으로 구현, 서버가 순서를 바꾸면 조용히 깨지는 잠재 트랩. 묶음:
+- (a) finalize payload에 `cover_r2_key` 명시 전송(프론트) + `FinalizeView.post()` 수용 — r2_keys와 동일한 `works/{profile.id}/` ownership-prefix 검증, 미전송 시 `''` 유지
+- (b) `WorkDetailView`: `select_related('owner')` + `owner.user_id != request.user.id` 비교 (3-query → 1)
+- (c) 테스트 갭: `cover_r2_key`가 **set된** 케이스(컬럼의 유일한 존재 이유) 검증 부재 — cover_url이 r2_keys[0] 아닌 cover_r2_key를 쓰는지
+- (d) status 3-way 파생(published/rejected/processing) 프론트(UserProfilePage 인라인)/백(WorkDetailView) 이중구현 — list 엔드포인트가 파생 `status`를 반환하게 통합
+- (e) JPEG-fallback content-type: `canvasToBlob`이 jpeg로 폴백해도 presign/PUT은 `image/webp` 고정 — blob.type을 per-file로 스레딩 (WebP 인코딩 없는 브라우저에서만 발동, 이론적)
 
 #### FRONT-VERIFY-1 — 보드저장 PATCH 경로 verify_required 모달 미배선
 FULL-ONBOARDING-2(`92237d8`)가 guest promote-limit을 `403 {'detail':'verify_required','reason':'board_limit_reached','limit':3}`로 표준화했으나, 프론트 `updateProject`(projects.js:64-71)는 verify_required를 VerifyRequiredError로 변환 안 함(createProject:26-40만 처리) → SaveBoardModal에서 guest가 4번째 보드 저장확정 시 VerifyGateModal 대신 generic 에러 문자열. `updateProject`에 createProject와 동일한 403 verify_required 감지 + VerifyGateModal 배선. Non-blocking(백엔드 enforcement는 정상).
@@ -251,6 +273,41 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### UPLOAD-NAV-1 — 업로드 성공 모달 + Created 탭 이동 — RESOLVED 2026-08-14 (PR #300 `56bae0d`)
+_(yywon1 ad-hoc PR — Task ID 없이 들어와 사후 부여. 업로드 완료 인라인 메시지 → 확인 모달 + `/user/me?tab=created` 이동.)_
+- UploadWorkPage: processingMsg 인라인 → 성공 모달(제목/본문/확인), uploadWork.success.confirm i18n KO+EN
+- **Admin takeover fix (`ca4a0d9`, 41-agent 리뷰發)**: (1) `?tab=created`가 죽은 param이었음 — UserProfilePage `useSearchParams` 원샷 딥링크 배선(`handleCreatedTab()` 호출로 데이터 fetch 포함); (2) `#ec4899` 하드코드 → `var(--accent-1/2)` 그라디언트(DESIGN.md §1.2); (3) backdrop 클릭 + ESC 탈출구(전부 동일 navigate — processing 중 폼 숨김이라 복귀 대상 없음); (4) 중복 `showSuccessModal` state 제거(`uploadState==='processing'` 게이트); (5) 고아 `.processingMsg` CSS 삭제
+
+### FULL-WORKS-3 — works 상세 모달 + cover_r2_key BE 컬럼 — RESOLVED 2026-08-12 (`31fe226`)
+- Work.cover_r2_key CharField + migration 0003 — 커버 키 명시 저장 (기존 r2_keys[0] 폴백 유지)
+- WorkDetailView GET /api/v1/works/\<upload_id\>/ — 소유자 확인(403/404), cover_url/gallery_urls, status 3-way
+- WorkDetailModal.jsx: 갤러리 슬라이더(단일이면 화살표 숨김) + 메타 + status 배지 + backdrop 닫기
+- UserProfilePage Created 탭 카드 클릭 → WorkDetailModal
+- getWork() api + workDetail i18n KO+EN
+- app-test FEATURE-SCOPED PASS 7/7. flake8/ESLint PASS.
+
+### FRONT-UX-13 — 업로드 이미지 편집(crop/rotate/커버 지정) — RESOLVED 2026-08-14 (`bb79616` + admin takeover fix)
+- files state: id/originalBlob/currentBlob/preview — 반복 편집 화질 열화 방지
+- 10MB/파일 제한 + name+size dedup + 10장 상한
+- coverImageId state: 첫 이미지 자동 지정, 삭제 시 다음 이미지 폴백
+- 썸네일 UI: ✏ 편집(좌하단) / ★ 커버(우하단) / COVER 배지(좌상단)
+- 편집 모달: react-image-crop ^11.1.2 (신규 의존성, 유저 승인 2026-08-14) + ±90° 회전
+- handleSubmit: coverImageId 기준 파일 순서 재정렬 → r2_keys[0] 항상 커버
+- Deferred: FULL-WORKS-3 — works 상세 모달 + cover_r2_key BE 컬럼 (PR2)
+- **Admin takeover fix (2026-08-14, 41-agent 리뷰發)**: (1) 수동 EXIF DataView 파서 삭제 — 최신 브라우저가 drawImage에서 EXIF 자동 적용, 수동 보정은 폰 사진 이중회전 회귀였음; (2) crop 좌표계 percentCrop 전환 — 기존 코드는 화면 px를 비트맵 px로 오용(사실상 전 케이스 오크롭); (3) 회전을 프리뷰 비트맵에 베이크(drawRotatedCanvas 공유, CSS transform 제거) — crop이 항상 보이는 것과 동일 공간에서 동작, 회전 시 crop 리셋; (4) applyEdit 실패 시 errorMsg 표시 + toBlob null 가드; (5) 주석 20MB→10MB, closeEdit() 재사용, 에러 메시지 accumulator 통합
+
+### BACK-REPORT-CACHE-1 — 리포트 캐시 short-circuit + 무음실패 UX + stranding 출구 — RESOLVED 2026-08-08 (`14fbb09`-pre-squash)
+PR #295 스로틀 + 무캐시 재생성 + 프론트 자동호출의 결합이 무음 429 → `finalReport` null → ResultsPage 레거시 2줄 폴백("옛 모양 리포트" 증상, yywon1 보고/PR #298 진단 크레딧)을 유발. 근본 픽스 일괄:
+- [x] `reports.py` 캐시 short-circuit: 저장된 `final_report`/`report_image` 있으면 무-Gemini 반환, `{regenerate:true}`일 때만 재생성 — 방문마다 리포트가 바뀌던 비결정 재작성도 소멸. 테스트 12개 (`test_report_cache.py`)
+- [x] `App.jsx` goToResults의 generateReport 제거 (ResultsPage repair effect와 동시 POST 레이스 — 캐시로 못 막는 무락 경합이라 호출부 제거가 픽스), 완료 분기 `!finalReport` 가드
+- [x] ResultsPage auto-repair effect (1회, `resolveProjectBackendId`, 가시적 에러+재시도) / BoardReportPage 자동 생성 + genError·noReport 구분 + UUID 파라미터 게이트 — PR #298(yywon1) 방향 수용, auto-navigate 부분만 제외
+- [x] PersonaReport 재생성 버튼 반쪽-업데이트 버그 픽스 (화면 텍스트 즉시 갱신 + `regenerate:true` 바이패스 + `onReportUpdate` 영속)
+- [x] SwipePage stranding 출구: `isAt100`에 `swipeCount ≥ target+5` 추가 — 수렴 안 되는 dislike-heavy 세션에 Finish 버튼 노출 (기존: 결과로 갈 출구 전무; #298의 강제 auto-navigate 대신 버튼 opt-in으로 해결). 액션 카드 opt-in 설계 유지
+
+### FRONT-UX-12 — 진행률 바 정리 (Discovery 제거 + Taste N swipes %) — RESOLVED 2026-08-06 (`43d4861`-pre-squash)
+- [x] Discovery 탭 진행률 바 제거 (`ff07ee0`): 덱 스와이프 맥락에서 % 바가 맞지 않아 삭제; `discovery.progressComplete` i18n 키도 고아 → 삭제
+- [x] Taste 탭 ConfidenceBar 라벨 교체 (`43d4861`): "N swipes" 카운트 → `{pct}%` 수치 표시 (바 width와 동일 스케일; 원문 항목이 방향을 반대로 기술해 2026-08-08 정정)
+
 ### BACK-LLM-PROVIDER-1 — LLM 프로바이더 어댑터 + 공정 A/B 8런 — RESOLVED 2026-08-04 (`13c4238`-pre-squash)
 파서 `LLM_PROVIDER=gemini|openai` 스위치 구현 + db_qc 8런 실측. 1차 비교의 "GPT 품질 붕괴(11%)"는 모델이 아니라 **파서 버그**였음: 빈 `filter_delta` 스켈레톤({'set':{},'remove':[]})이 truthy라 첫 턴 filters를 통째로 삼킴 — luna는 스키마 충실 출력이라 항상 발동, Gemini는 few-shot 모방으로 우연 회피(잠재 프로덕션 버그, `13c4238`에서 수정+회귀테스트). 픽스 후 공정 재비교: **품질 동급** — gemini-3.1-flash-lite 95% / gpt-5.4-mini 95% / luna(low) 94% / luna(high) 94% / terra 92% / luna(기본) 89% (tag_match@10 평균, 핵심 태그 전 모델 ~100%).
 - [x] 차별 요소는 품질 아닌 운영 특성: p50 — gemini 2.0s(최속) vs 5.4-mini 3.4s vs luna 4.5~6.6s. P4 타임아웃 꼬리 — gemini 고유(6~10/60, null폴백 1.7~6.7%) vs GPT 전 구성 사실상 0(null폴백 0%). 토큰 단가 — luna($0.20/$1.20)<gemini($0.25/$1.50)<5.4-mini($0.75/$4.50), 단 luna는 reasoning 토큰 가산.
@@ -979,6 +1036,8 @@ Deferred:
 - [x] `App.jsx` — auto-nav `at100` 조건에서 `(phase === 'converged')` 단독 분기. confidence null이어도 converged면 nav.
 - [x] Codex P1 fix — CARD_WIDTH overflow blocker 해소: `vw-16` → `vw-32`. 390px폰 358px 컨테이너에 358px 카드 = 딱 맞음 (이전 374px 카드 16px 클립).
 - [x] Codex P2 fix — `finishUnlocked` latch 재도입 drop. PR #121 1-shot `isAt100` 설계 보존 (App.jsx auto-nav 주 trigger, SwipePage Finish 버튼은 safety net). Same-project 새 session 시 stale state 위험 제거.
+
+_(Superseded 2026-07-14: contain 고정은 OVERNIGHT-PERF-1 PR-B #267 `7b5bc17`가 **adaptive object-fit**(크롭 손실 ≤25%면 cover, 초과 시 contain)으로 의도적 재설계하며 대체됨. 이 표기가 없어 PR #295(2026-08-07)에서 "미인지 회귀"로 오독되는 혼선 발생 — 소급 기록.)_
 
 ### FRONT-UX-2 — 스와이프 자동 이동 + 키보드 입력 — RESOLVED 2026-05-26 (PR #121 `80b519c`)
 - [x] `App.jsx` — `useEffect` watching `swipeSession` auto-navigates `/swipe` → `/result/:sessionId` when `session.phase` is `completed`/`results`, OR when latch threshold reached: `exploring` with `like_count >= 4`, or `analyzing`/`converged` with `confidence >= 1.0`. Replaces PR #114 + PR #115 (both had wrong base `main`; closed without merge).

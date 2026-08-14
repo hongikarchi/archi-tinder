@@ -131,10 +131,205 @@
   align-items: center;
   justify-content: center;
   transition: background var(--motion-fast) var(--motion-ease);
+  z-index: 2;
 }
 
 .removeThumb:hover {
   background: rgba(0, 0, 0, 0.85);
+}
+
+/* ── Thumbnail overlay buttons (edit + cover) ───────────────────────────── */
+
+.editBtn {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--motion-fast) var(--motion-ease);
+  z-index: 2;
+}
+
+.editBtn:hover {
+  background: rgba(0, 0, 0, 0.85);
+}
+
+.coverBtn {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.5);
+  color: #ffd700;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--motion-fast) var(--motion-ease);
+  z-index: 2;
+}
+
+.coverBtn:hover {
+  background: rgba(0, 0, 0, 0.8);
+}
+
+.coverBadge {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  background: rgba(0, 0, 0, 0.7);
+  color: #ffd700;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 2px 5px;
+  border-radius: var(--radius-sm);
+  line-height: 1.4;
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* ── Edit modal ─────────────────────────────────────────────────────────── */
+
+.editModal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.editModalCard {
+  background: var(--color-bg);
+  border-radius: var(--radius-lg);
+  width: 100%;
+  max-width: 520px;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+}
+
+.editModalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.editModalTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.editCropArea {
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.editToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--color-border);
+}
+
+.editToolBtn {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-md);
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: background var(--motion-fast) var(--motion-ease);
+}
+
+.editToolBtn:hover {
+  background: var(--color-surface-2);
+}
+
+.editActions {
+  display: flex;
+  gap: 10px;
+  padding: 12px 16px 16px;
+}
+
+.editCancelBtn {
+  flex: 1;
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-md);
+  padding: 11px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  min-height: 44px;
+  transition: background var(--motion-fast) var(--motion-ease);
+}
+
+.editCancelBtn:hover {
+  background: var(--color-surface-2);
+}
+
+.editApplyBtn {
+  flex: 1;
+  background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+  color: #fff;
+  border: 0;
+  border-radius: var(--radius-md);
+  padding: 11px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  min-height: 44px;
+  transition:
+    transform var(--motion-normal) var(--motion-ease),
+    box-shadow var(--motion-slow) var(--motion-ease-out);
+}
+
+.editApplyBtn:hover {
+  transform: translateY(-1px);
+}
+
+.editApplyBtn:active {
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent-1) 28%, transparent);
+  transition: transform var(--motion-normal) var(--motion-ease), box-shadow 0s;
 }
 
 /* ── Form ───────────────────────────────────────────────────────────────── */
@@ -289,18 +484,6 @@
 }
 
 /* ── Status messages ────────────────────────────────────────────────────── */
-
-.processingMsg {
-  background: color-mix(in srgb, var(--accent-2) 10%, var(--color-surface));
-  border: 1px solid color-mix(in srgb, var(--accent-2) 30%, transparent);
-  border-radius: var(--radius-md);
-  padding: 16px;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--color-text);
-  line-height: 1.6;
-  text-align: center;
-}
 
 .errorMsg {
   background: color-mix(in srgb, var(--color-destructive) 10%, var(--color-surface));
