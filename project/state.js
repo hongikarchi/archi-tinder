@@ -23,7 +23,7 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-08-14 21:54 KST',
+    updatedAt: '2026-08-14 22:03 KST',
     head: '56bae0d',
     branch: 'feature/admin-works-upload-edit',
   },
@@ -37,7 +37,7 @@ window.PROJECT_STATE = {
     {
       id: 'FRONT-UX-13',
       title: '업로드 이미지 편집(crop/rotate/커버 지정)',
-      completedAt: '2026-08-11',
+      completedAt: '2026-08-14',
       note: 'files state: id/originalBlob/currentBlob/preview — 반복 편집 화질 열화 방지',
     },
     {
@@ -542,14 +542,6 @@ window.PROJECT_STATE = {
     {
       path: 'README.md',
       role: '프로젝트 안내 문서',
-    },
-    {
-      path: 'Task.md',
-      role: '태스크 보드 문서',
-    },
-    {
-      path: 'Task.md',
-      role: '태스크 보드 문서',
     },
     {
       path: 'Task.md',

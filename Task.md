@@ -273,16 +273,15 @@ Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over
 - getWork() api + workDetail i18n KO+EN
 - app-test FEATURE-SCOPED PASS 7/7. flake8/ESLint PASS.
 
-### FRONT-UX-13 — 업로드 이미지 편집(crop/rotate/커버 지정) — RESOLVED 2026-08-11 (`bb79616`)
+### FRONT-UX-13 — 업로드 이미지 편집(crop/rotate/커버 지정) — RESOLVED 2026-08-14 (`bb79616` + admin takeover fix)
 - files state: id/originalBlob/currentBlob/preview — 반복 편집 화질 열화 방지
-- EXIF orientation 인라인 DataView 파서 (외부 라이브러리 없음)
 - 10MB/파일 제한 + name+size dedup + 10장 상한
 - coverImageId state: 첫 이미지 자동 지정, 삭제 시 다음 이미지 폴백
 - 썸네일 UI: ✏ 편집(좌하단) / ★ 커버(우하단) / COVER 배지(좌상단)
-- 편집 모달: react-image-crop + ±90° 회전 (applyEdit() → originalBlob 기준)
+- 편집 모달: react-image-crop ^11.1.2 (신규 의존성, 유저 승인 2026-08-14) + ±90° 회전
 - handleSubmit: coverImageId 기준 파일 순서 재정렬 → r2_keys[0] 항상 커버
-- app-test FEATURE-SCOPED PASS 8/8. react-image-crop ^11.1.2 추가.
 - Deferred: FULL-WORKS-3 — works 상세 모달 + cover_r2_key BE 컬럼 (PR2)
+- **Admin takeover fix (2026-08-14, 41-agent 리뷰發)**: (1) 수동 EXIF DataView 파서 삭제 — 최신 브라우저가 drawImage에서 EXIF 자동 적용, 수동 보정은 폰 사진 이중회전 회귀였음; (2) crop 좌표계 percentCrop 전환 — 기존 코드는 화면 px를 비트맵 px로 오용(사실상 전 케이스 오크롭); (3) 회전을 프리뷰 비트맵에 베이크(drawRotatedCanvas 공유, CSS transform 제거) — crop이 항상 보이는 것과 동일 공간에서 동작, 회전 시 crop 리셋; (4) applyEdit 실패 시 errorMsg 표시 + toBlob null 가드; (5) 주석 20MB→10MB, closeEdit() 재사용, 에러 메시지 accumulator 통합
 
 ### BACK-REPORT-CACHE-1 — 리포트 캐시 short-circuit + 무음실패 UX + stranding 출구 — RESOLVED 2026-08-08 (`14fbb09`-pre-squash)
 PR #295 스로틀 + 무캐시 재생성 + 프론트 자동호출의 결합이 무음 429 → `finalReport` null → ResultsPage 레거시 2줄 폴백("옛 모양 리포트" 증상, yywon1 보고/PR #298 진단 크레딧)을 유발. 근본 픽스 일괄:

@@ -2,7 +2,9 @@
  * UploadWorkPage — /upload
  *
  * Portfolio work upload flow:
- *   1. Select images → convert to WebP via canvas (with EXIF orientation fix)
+ *   1. Select images → convert to WebP via canvas (modern browsers auto-apply
+ *      EXIF orientation when decoding <img>, so no manual EXIF handling is
+ *      needed — see convertToWebP())
  *   2. Fill metadata form (title, program, location, year)
  *   3. Confirm copyright
  *   4. Presign → upload to R2 → finalize with backend
@@ -52,62 +54,17 @@ const PROGRAM_VALUES = [
   'industrial',
 ]
 
-/* ── EXIF orientation reader ────────────────────────────────────────────── */
-
-/**
- * Reads EXIF orientation from a JPEG blob using DataView.
- * Returns orientation 1-8, or 1 (no rotation) if not found / not JPEG.
- */
-async function readExifOrientation(blob) {
-  try {
-    // Only attempt EXIF on JPEG (starts with 0xFFD8)
-    const header = await blob.slice(0, 2).arrayBuffer()
-    const dv = new DataView(header)
-    if (dv.getUint16(0, false) !== 0xFFD8) return 1
-
-    // Read up to 64 KB to find EXIF APP1 marker
-    const buf = await blob.slice(0, 65536).arrayBuffer()
-    const view = new DataView(buf)
-    let offset = 2
-    while (offset < view.byteLength - 4) {
-      const marker = view.getUint16(offset, false)
-      const segLen = view.getUint16(offset + 2, false)
-      if (marker === 0xFFE1) {
-        // APP1 — check for "Exif\0\0" header
-        if (view.getUint32(offset + 4, false) === 0x45786966 &&
-            view.getUint16(offset + 8, false) === 0x0000) {
-          // TIFF header starts at offset + 10
-          const tiffStart = offset + 10
-          const littleEndian = view.getUint16(tiffStart, false) === 0x4949
-          const ifdOffset = view.getUint32(tiffStart + 4, littleEndian)
-          const ifdStart = tiffStart + ifdOffset
-          const numEntries = view.getUint16(ifdStart, littleEndian)
-          for (let i = 0; i < numEntries; i++) {
-            const tag = view.getUint16(ifdStart + 2 + i * 12, littleEndian)
-            if (tag === 0x0112) {
-              return view.getUint16(ifdStart + 2 + i * 12 + 8, littleEndian)
-            }
-          }
-        }
-        break
-      }
-      offset += 2 + segLen
-    }
-  } catch {
-    // Ignore parse errors — fall back to no rotation
-  }
-  return 1
-}
-
 /* ── WebP converter ─────────────────────────────────────────────────────── */
 
 /**
- * Converts a file to WebP blob, applying EXIF orientation correction.
+ * Converts a file to WebP blob.
+ * Modern browsers (Chrome 81+/Firefox 77+/Safari 13.1+) auto-apply EXIF
+ * orientation when decoding <img> — naturalWidth/naturalHeight and
+ * drawImage() already return correctly-oriented pixels, so no manual EXIF
+ * transform is needed (or wanted — doing it manually here would double-rotate).
  * Returns the WebP blob.
  */
 async function convertToWebP(file, t) {
-  const orientation = await readExifOrientation(file)
-
   const img = new Image()
   const srcUrl = URL.createObjectURL(file)
   img.src = srcUrl
@@ -128,27 +85,11 @@ async function convertToWebP(file, t) {
 
     const canvas = document.createElement('canvas')
     const ctx = canvas.getContext('2d')
-
-    // Apply EXIF orientation correction
-    // orientations 5-8 require width/height swap
-    const swapDims = orientation >= 5 && orientation <= 8
-    canvas.width = swapDims ? h : w
-    canvas.height = swapDims ? w : h
-
-    switch (orientation) {
-      case 2: ctx.transform(-1, 0, 0, 1, w, 0); break
-      case 3: ctx.transform(-1, 0, 0, -1, w, h); break
-      case 4: ctx.transform(1, 0, 0, -1, 0, h); break
-      case 5: ctx.transform(0, 1, 1, 0, 0, 0); break
-      case 6: ctx.transform(0, 1, -1, 0, h, 0); break
-      case 7: ctx.transform(0, -1, -1, 0, h, w); break
-      case 8: ctx.transform(0, -1, 1, 0, 0, w); break
-      default: break // orientation 1 — no transform
-    }
-
+    canvas.width = w
+    canvas.height = h
     ctx.drawImage(img, 0, 0, w, h)
 
-    return new Promise(resolve => canvas.toBlob(resolve, 'image/webp', 0.85))
+    return canvasToBlob(canvas)
   } finally {
     URL.revokeObjectURL(srcUrl)
   }
@@ -157,12 +98,13 @@ async function convertToWebP(file, t) {
 /* ── Edit apply ─────────────────────────────────────────────────────────── */
 
 /**
- * Applies crop + rotation to originalBlob.
- * Returns { blob, previewUrl } for the edited image.
+ * Draws `blob` onto a fresh canvas with `rotation` (0/90/180/270) baked in.
+ * Dimensions are swapped for 90/270 so the output canvas always matches what
+ * the rotated image visually looks like. Shared by the edit-modal preview
+ * regenerator and applyEditToBlob so both use identical rotation math.
  */
-async function applyEditToBlob(originalBlob, crop, rotation) {
-  const MAX_OUT = 4096
-  const srcUrl = URL.createObjectURL(originalBlob)
+async function drawRotatedCanvas(blob, rotation) {
+  const srcUrl = URL.createObjectURL(blob)
   const img = new Image()
   img.src = srcUrl
   try {
@@ -173,81 +115,90 @@ async function applyEditToBlob(originalBlob, crop, rotation) {
 
     const srcW = img.naturalWidth
     const srcH = img.naturalHeight
-
-    // Determine effective source dimensions after downscaling
-    let drawW = srcW
-    let drawH = srcH
-    if (drawW > MAX_OUT || drawH > MAX_OUT) {
-      const r = Math.min(MAX_OUT / drawW, MAX_OUT / drawH)
-      drawW = Math.round(drawW * r)
-      drawH = Math.round(drawH * r)
-    }
-
-    // Scale factor from canvas pixel space back to original image pixels
-    const scaleX = srcW / drawW
-    const scaleY = srcH / drawH
-
-    // Compute crop in original image pixels
-    let cropX = 0, cropY = 0, cropW = drawW, cropH = drawH
-    if (crop && crop.width > 0 && crop.height > 0) {
-      // crop coordinates are in display (drawW/drawH) space — convert to original
-      cropX = Math.round(crop.x * scaleX)
-      cropY = Math.round(crop.y * scaleY)
-      cropW = Math.round(crop.width * scaleX)
-      cropH = Math.round(crop.height * scaleY)
-    }
-
-    // Build offscreen canvas: draw source then crop
-    // Step 1: draw downscaled source
-    const srcCanvas = document.createElement('canvas')
-    srcCanvas.width = drawW
-    srcCanvas.height = drawH
-    const srcCtx = srcCanvas.getContext('2d')
-    srcCtx.drawImage(img, 0, 0, drawW, drawH)
-
-    // Step 2: extract crop region
-    const cropCanvasW = Math.round(cropW / scaleX)
-    const cropCanvasH = Math.round(cropH / scaleY)
-    const cropedCanvas = document.createElement('canvas')
-    cropedCanvas.width = cropCanvasW
-    cropedCanvas.height = cropCanvasH
-    const cropCtx = cropedCanvas.getContext('2d')
-    cropCtx.drawImage(
-      srcCanvas,
-      Math.round(cropX / scaleX), Math.round(cropY / scaleY),
-      cropCanvasW, cropCanvasH,
-      0, 0, cropCanvasW, cropCanvasH
-    )
-
-    // Step 3: apply rotation
     const rad = (rotation * Math.PI) / 180
-    const swapDimsOut = rotation === 90 || rotation === 270
-    const outW = swapDimsOut ? cropCanvasH : cropCanvasW
-    const outH = swapDimsOut ? cropCanvasW : cropCanvasH
+    const swapDims = rotation === 90 || rotation === 270
+    const outW = swapDims ? srcH : srcW
+    const outH = swapDims ? srcW : srcH
 
-    const outCanvas = document.createElement('canvas')
-    outCanvas.width = outW
-    outCanvas.height = outH
-    const outCtx = outCanvas.getContext('2d')
-    outCtx.translate(outW / 2, outH / 2)
-    outCtx.rotate(rad)
-    outCtx.drawImage(cropedCanvas, -cropCanvasW / 2, -cropCanvasH / 2)
+    const canvas = document.createElement('canvas')
+    canvas.width = outW
+    canvas.height = outH
+    const ctx = canvas.getContext('2d')
+    ctx.translate(outW / 2, outH / 2)
+    ctx.rotate(rad)
+    ctx.drawImage(img, -srcW / 2, -srcH / 2)
 
-    return new Promise((resolve) => {
-      outCanvas.toBlob((blob) => {
-        if (blob) {
-          resolve({ blob, previewUrl: URL.createObjectURL(blob) })
-        } else {
-          // Fallback to JPEG if WebP fails
-          outCanvas.toBlob((jpegBlob) => {
-            resolve({ blob: jpegBlob, previewUrl: URL.createObjectURL(jpegBlob) })
-          }, 'image/jpeg', 0.85)
-        }
-      }, 'image/webp', 0.85)
-    })
+    return canvas
   } finally {
     URL.revokeObjectURL(srcUrl)
   }
+}
+
+/**
+ * Converts a canvas to a blob, preferring WebP and falling back to JPEG.
+ * Rejects if both encodings fail (never resolves with a null blob).
+ */
+function canvasToBlob(canvas) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) {
+        resolve(blob)
+        return
+      }
+      // Fallback to JPEG if WebP fails
+      canvas.toBlob((jpegBlob) => {
+        if (jpegBlob) {
+          resolve(jpegBlob)
+        } else {
+          reject(new Error('Canvas encoding failed'))
+        }
+      }, 'image/jpeg', 0.85)
+    }, 'image/webp', 0.85)
+  })
+}
+
+/**
+ * Applies rotation + percent-crop to originalBlob.
+ * `percentCrop` is a react-image-crop PercentCrop ({ unit: '%', x, y, width, height })
+ * or undefined/empty for "no crop". Rotation is baked in first (from the
+ * original, for quality), then the crop rect is extracted from the rotated
+ * canvas — this matches what the user sees in the edit modal, where crop
+ * always operates on an already-rotated preview.
+ * Returns { blob, previewUrl } for the edited image.
+ */
+async function applyEditToBlob(originalBlob, percentCrop, rotation) {
+  // Step 1: rotate the original at full quality
+  const rotatedCanvas = await drawRotatedCanvas(originalBlob, rotation)
+
+  // Step 2: no crop (or a degenerate crop) → use the rotated canvas as-is
+  if (!percentCrop || !percentCrop.width || !percentCrop.height) {
+    const blob = await canvasToBlob(rotatedCanvas)
+    return { blob, previewUrl: URL.createObjectURL(blob) }
+  }
+
+  const rw = rotatedCanvas.width
+  const rh = rotatedCanvas.height
+  const cropX = Math.max(0, Math.round((percentCrop.x / 100) * rw))
+  const cropY = Math.max(0, Math.round((percentCrop.y / 100) * rh))
+  let cropW = Math.round((percentCrop.width / 100) * rw)
+  let cropH = Math.round((percentCrop.height / 100) * rh)
+  // Clamp so the rect never overflows the canvas and is never zero-sized
+  // (percent rounding can otherwise produce a degenerate drawImage/toBlob call)
+  cropW = Math.max(1, Math.min(cropW, rw - cropX))
+  cropH = Math.max(1, Math.min(cropH, rh - cropY))
+
+  const outCanvas = document.createElement('canvas')
+  outCanvas.width = cropW
+  outCanvas.height = cropH
+  const outCtx = outCanvas.getContext('2d')
+  outCtx.drawImage(
+    rotatedCanvas,
+    cropX, cropY, cropW, cropH,
+    0, 0, cropW, cropH
+  )
+
+  const blob = await canvasToBlob(outCanvas)
+  return { blob, previewUrl: URL.createObjectURL(blob) }
 }
 
 /* ── Component ──────────────────────────────────────────────────────────── */
@@ -284,7 +235,7 @@ export default function UploadWorkPage() {
   async function processFile(file) {
     if (!file.type.startsWith('image/')) return true
 
-    // 20 MB limit per file
+    // 10 MB limit per file
     if (file.size > MAX_FILE_BYTES) {
       setErrorMsg(t('uploadWork.error.fileTooLarge', { name: file.name }))
       return false
@@ -312,7 +263,7 @@ export default function UploadWorkPage() {
     return true
   }
 
-  // Enforce MAX_WORK_IMAGES — dedup by name+size, 20MB filter, partial-add if overflow
+  // Enforce MAX_WORK_IMAGES — dedup by name+size, 10MB filter, partial-add if overflow
   async function addFiles(selected) {
     setErrorMsg('')
     const imageFiles = selected.filter(f => f.type.startsWith('image/'))
@@ -326,13 +277,9 @@ export default function UploadWorkPage() {
       return true
     })
 
-    // Filter 20MB oversized files — report error but continue with valid ones
+    // Filter 10MB oversized files — report error but continue with valid ones
     const oversized = uniqueFiles.filter(f => f.size > MAX_FILE_BYTES)
     const validFiles = uniqueFiles.filter(f => f.size <= MAX_FILE_BYTES)
-
-    if (oversized.length > 0) {
-      setErrorMsg(t('uploadWork.error.fileTooLarge', { name: oversized.map(f => f.name).join(', ') }))
-    }
 
     const room = MAX_WORK_IMAGES - files.length
     const toAdd = room > 0 ? validFiles.slice(0, room) : []
@@ -344,14 +291,19 @@ export default function UploadWorkPage() {
       if (!ok) { conversionFailed = true; break }
     }
 
-    if (rejectedCount > 0 && !conversionFailed && oversized.length === 0) {
-      setErrorMsg(t('uploadWork.error.maxImages', { max: MAX_WORK_IMAGES }))
-    } else if (rejectedCount > 0 && !conversionFailed && oversized.length > 0) {
-      // already reported oversized; also mention max limit
-      setErrorMsg(
-        t('uploadWork.error.fileTooLarge', { name: oversized.map(f => f.name).join(', ') }) +
-        ' ' + t('uploadWork.error.maxImages', { max: MAX_WORK_IMAGES })
-      )
+    // conversionFailed already set its own error message via processFile —
+    // don't clobber it with the oversized/maxImages messages below.
+    if (!conversionFailed) {
+      const msgs = []
+      if (oversized.length > 0) {
+        msgs.push(t('uploadWork.error.fileTooLarge', { name: oversized.map(f => f.name).join(', ') }))
+      }
+      if (rejectedCount > 0) {
+        msgs.push(t('uploadWork.error.maxImages', { max: MAX_WORK_IMAGES }))
+      }
+      if (msgs.length > 0) {
+        setErrorMsg(msgs.join(' '))
+      }
     }
   }
 
@@ -386,21 +338,83 @@ export default function UploadWorkPage() {
   }
 
   /* ── Edit modal ──────────────────────────────────────────────────────── */
+  // Crop always operates on an already-rotated preview (see applyEditToBlob
+  // doc comment) — rotate regenerates editTarget.previewUrl from the
+  // untouched originalBlob (never from a previously-rotated blob, so repeated
+  // rotations don't degrade quality) and resets crop, since the old crop rect
+  // no longer lines up with the newly-rotated image.
+  const rotateSeqRef = useRef(0)
+  // Tracks the rotation actually reflected in editTarget.previewUrl right
+  // now — NOT necessarily the latest `rotation` state, since a rotate can be
+  // in flight or can fail. rotateBy's catch reverts to this (not to the
+  // rotation-before-this-call) so it can never revert to a value the preview
+  // never actually showed (e.g. a discarded stale request followed by a
+  // failing one).
+  const displayedRotationRef = useRef(0)
 
   function openEdit(fileItem) {
+    // Invalidate any in-flight rotate regeneration from a previous modal session
+    rotateSeqRef.current++
     const previewUrl = URL.createObjectURL(fileItem.originalBlob)
     setEditTarget({ id: fileItem.id, previewUrl })
     setCrop(undefined)
     setRotation(0)
+    displayedRotationRef.current = 0
   }
 
   function closeEdit() {
-    if (editTarget?.previewUrl) {
-      URL.revokeObjectURL(editTarget.previewUrl)
-    }
-    setEditTarget(null)
+    // Invalidate any in-flight rotate regeneration so it can't land on a
+    // reopened modal for a different file
+    rotateSeqRef.current++
+    setEditTarget(prev => {
+      if (prev?.previewUrl) {
+        URL.revokeObjectURL(prev.previewUrl)
+      }
+      return null
+    })
     setCrop(undefined)
     setRotation(0)
+  }
+
+  async function rotateBy(delta) {
+    if (!editTarget) return
+    const fileItem = files.find(fi => fi.id === editTarget.id)
+    if (!fileItem) return
+
+    const nextRotation = (rotation + delta + 360) % 360
+    setRotation(nextRotation)
+    setCrop(undefined)
+
+    const mySeq = ++rotateSeqRef.current
+    try {
+      // rotation 0 needs no re-encode — just point back at the original
+      const nextPreviewUrl = nextRotation === 0
+        ? URL.createObjectURL(fileItem.originalBlob)
+        : URL.createObjectURL(await canvasToBlob(await drawRotatedCanvas(fileItem.originalBlob, nextRotation)))
+
+      // Discard stale results if the user rotated again (or closed/reopened
+      // the modal) before this resolved
+      if (rotateSeqRef.current !== mySeq) {
+        URL.revokeObjectURL(nextPreviewUrl)
+        return
+      }
+      setEditTarget(prev => {
+        if (!prev) {
+          URL.revokeObjectURL(nextPreviewUrl)
+          return prev
+        }
+        URL.revokeObjectURL(prev.previewUrl)
+        return { ...prev, previewUrl: nextPreviewUrl }
+      })
+      displayedRotationRef.current = nextRotation
+    } catch (err) {
+      if (rotateSeqRef.current !== mySeq) return
+      // Regeneration failed — revert to whatever rotation the preview is
+      // actually still showing (not necessarily the rotation right before
+      // this call, which may itself have been a discarded stale request)
+      setRotation(displayedRotationRef.current)
+      setErrorMsg(t('uploadWork.error.conversionFailed', { detail: err.message }))
+    }
   }
 
   async function applyEdit() {
@@ -417,14 +431,11 @@ export default function UploadWorkPage() {
         return { ...fi, currentBlob: blob, preview: previewUrl }
       }))
       setUploadState('idle')
-    } catch {
+    } catch (err) {
       setUploadState('idle')
+      setErrorMsg(t('uploadWork.error.conversionFailed', { detail: err.message }))
     }
-    // Close modal — revoke the edit preview url (was from originalBlob)
-    URL.revokeObjectURL(editTarget.previewUrl)
-    setEditTarget(null)
-    setCrop(undefined)
-    setRotation(0)
+    closeEdit()
   }
 
   /* ── Form field change ───────────────────────────────────────────────── */
@@ -813,8 +824,8 @@ export default function UploadWorkPage() {
                 </label>
               </div>
 
-              {/* Error message */}
-              {errorMsg && (
+              {/* Error message — hidden while the edit modal covers the form (rendered there instead) */}
+              {errorMsg && !editTarget && (
                 <div className={s.errorMsg} role="alert">
                   {errorMsg}
                 </div>
@@ -844,7 +855,7 @@ export default function UploadWorkPage() {
             <div className={s.editCropArea}>
               <ReactCrop
                 crop={crop}
-                onChange={(c) => setCrop(c)}
+                onChange={(_pixelCrop, percentCrop) => setCrop(percentCrop)}
                 aspect={undefined}
               >
                 <img
@@ -854,8 +865,6 @@ export default function UploadWorkPage() {
                     maxWidth: '100%',
                     maxHeight: '55vh',
                     display: 'block',
-                    transform: `rotate(${rotation}deg)`,
-                    transition: 'transform var(--motion-normal) var(--motion-ease)',
                   }}
                 />
               </ReactCrop>
@@ -865,20 +874,29 @@ export default function UploadWorkPage() {
               <button
                 type="button"
                 className={s.editToolBtn}
-                onClick={() => setRotation(r => (r - 90 + 360) % 360)}
+                onClick={() => rotateBy(-90)}
                 aria-label={t('uploadWork.edit.rotateLeft')}
+                disabled={uploadState === 'converting'}
               >
                 ↺ {t('uploadWork.edit.rotateLeft')}
               </button>
               <button
                 type="button"
                 className={s.editToolBtn}
-                onClick={() => setRotation(r => (r + 90) % 360)}
+                onClick={() => rotateBy(90)}
                 aria-label={t('uploadWork.edit.rotateRight')}
+                disabled={uploadState === 'converting'}
               >
                 ↻ {t('uploadWork.edit.rotateRight')}
               </button>
             </div>
+
+            {/* Error message — the form-level one is covered by this modal (z-index 100) */}
+            {errorMsg && (
+              <div className={s.errorMsg} role="alert">
+                {errorMsg}
+              </div>
+            )}
 
             <div className={s.editActions}>
               <button
@@ -892,6 +910,7 @@ export default function UploadWorkPage() {
                 type="button"
                 className={s.editApplyBtn}
                 onClick={applyEdit}
+                disabled={uploadState === 'converting'}
               >
                 {t('uploadWork.edit.apply')}
               </button>
