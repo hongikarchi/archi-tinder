@@ -57,7 +57,7 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(비어있음 — BACK-LLM-PROVIDER-1 완료 2026-08-04, ## Done 참조)_
+_(비어있음 — FULL-WORKS-3 완료 2026-08-12, ## Done 참조)_
 
 
 ## Next
@@ -265,6 +265,14 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FULL-WORKS-3 — works 상세 모달 + cover_r2_key BE 컬럼 — RESOLVED 2026-08-12 (`31fe226`)
+- Work.cover_r2_key CharField + migration 0003 — 커버 키 명시 저장 (기존 r2_keys[0] 폴백 유지)
+- WorkDetailView GET /api/v1/works/\<upload_id\>/ — 소유자 확인(403/404), cover_url/gallery_urls, status 3-way
+- WorkDetailModal.jsx: 갤러리 슬라이더(단일이면 화살표 숨김) + 메타 + status 배지 + backdrop 닫기
+- UserProfilePage Created 탭 카드 클릭 → WorkDetailModal
+- getWork() api + workDetail i18n KO+EN
+- app-test FEATURE-SCOPED PASS 7/7. flake8/ESLint PASS.
+
 ### BACK-REPORT-CACHE-1 — 리포트 캐시 short-circuit + 무음실패 UX + stranding 출구 — RESOLVED 2026-08-08 (`14fbb09`-pre-squash)
 PR #295 스로틀 + 무캐시 재생성 + 프론트 자동호출의 결합이 무음 429 → `finalReport` null → ResultsPage 레거시 2줄 폴백("옛 모양 리포트" 증상, yywon1 보고/PR #298 진단 크레딧)을 유발. 근본 픽스 일괄:
 - [x] `reports.py` 캐시 short-circuit: 저장된 `final_report`/`report_image` 있으면 무-Gemini 반환, `{regenerate:true}`일 때만 재생성 — 방문마다 리포트가 바뀌던 비결정 재작성도 소멸. 테스트 12개 (`test_report_cache.py`)

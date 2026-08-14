@@ -7,6 +7,7 @@ import { getMyWorks } from '../api/works.js'
 import { purgeChatCache } from '../utils/appHelpers.js'
 import { getUserSavedStudios } from '../api/architects.js'
 import ShareCardModal from '../components/ShareCardModal.jsx'
+import WorkDetailModal from '../components/WorkDetailModal.jsx'
 import ProfileHeader from './userProfile/ProfileHeader'
 import ProfileHero from './userProfile/ProfileHero'
 import BoardGrid from './userProfile/BoardGrid'
@@ -64,6 +65,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
   const [likedCount, setLikedCount] = useState(0)
   const [works, setWorks] = useState(null)  // null = not loaded yet
   const [worksLoading, setWorksLoading] = useState(false)
+  const [selectedWorkId, setSelectedWorkId] = useState(null)
 
   // MINOR #1: inline error banner for failed board actions (optimistic revert feedback)
   const [boardActionError, setBoardActionError] = useState(null)
@@ -1013,11 +1015,16 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                 gap: 16,
               }}>
                 {works.map(work => (
-                  <div key={work.upload_id} style={{
-                    borderRadius: 12, overflow: 'hidden',
-                    background: 'var(--color-surface-2)',
-                    display: 'flex', flexDirection: 'column',
-                  }}>
+                  <div
+                    key={work.upload_id}
+                    onClick={() => setSelectedWorkId(work.upload_id)}
+                    style={{
+                      borderRadius: 12, overflow: 'hidden',
+                      background: 'var(--color-surface-2)',
+                      display: 'flex', flexDirection: 'column',
+                      cursor: 'pointer',
+                    }}
+                  >
                     {work.cover_url ? (
                       <div style={{ aspectRatio: '3/4', overflow: 'hidden' }}>
                         <img
@@ -1061,6 +1068,14 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
       {/* Share card modal */}
       {shareOpen && user && (
         <ShareCardModal user={user} onClose={() => setShareOpen(false)} />
+      )}
+
+      {/* Work detail modal */}
+      {selectedWorkId && (
+        <WorkDetailModal
+          uploadId={selectedWorkId}
+          onClose={() => setSelectedWorkId(null)}
+        />
       )}
     </div>
   )
