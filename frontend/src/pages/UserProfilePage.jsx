@@ -638,7 +638,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
             margin: '16px 0 0',
             display: 'flex', alignItems: 'center', gap: 8,
             padding: '10px 12px',
-            background: 'rgba(15,15,15,0.80)',
+            background: 'color-mix(in srgb, var(--color-bg) 80%, transparent)',
             backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
             borderRadius: 16,
             border: '1px solid var(--color-border-soft)',

@@ -384,7 +384,7 @@ export default function BoardDetailPage({ onResume }) {
               backdropFilter: 'blur(12px)',
               WebkitBackdropFilter: 'blur(12px)',
               border: '1px solid rgba(255,255,255,0.12)',
-              color: isBackHovered ? '#ec4899' : '#fff',
+              color: isBackHovered ? 'var(--accent-1)' : '#fff',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
@@ -413,7 +413,7 @@ export default function BoardDetailPage({ onResume }) {
               backdropFilter: 'blur(12px)',
               WebkitBackdropFilter: 'blur(12px)',
               border: '1px solid rgba(255,255,255,0.12)',
-              color: shareCopied ? '#34d399' : (isShareHovered ? '#ec4899' : '#fff'),
+              color: shareCopied ? '#34d399' : (isShareHovered ? 'var(--accent-1)' : '#fff'),
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
@@ -424,7 +424,7 @@ export default function BoardDetailPage({ onResume }) {
             }}
           >
             {shareCopied ? (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="20 6 9 17 4 12" />
               </svg>
             ) : (
@@ -506,7 +506,7 @@ export default function BoardDetailPage({ onResume }) {
                 disabled={nameSaving}
                 style={{
                   width: 36, height: 36, borderRadius: '50%',
-                  background: '#ec4899', border: 'none',
+                  background: 'var(--accent-1)', border: 'none',
                   color: '#fff', fontSize: 16, cursor: 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   flexShrink: 0,
@@ -723,9 +723,9 @@ export default function BoardDetailPage({ onResume }) {
               borderRadius: 999,
               background: isReacted
                 ? 'var(--color-surface)'
-                : 'linear-gradient(135deg, #ec4899, #f43f5e)',
-              color: isReacted ? '#ec4899' : '#fff',
-              border: isReacted ? '1px solid #ec4899' : 'none',
+                : 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
+              color: isReacted ? 'var(--accent-1)' : '#fff',
+              border: isReacted ? '1px solid var(--accent-1)' : 'none',
               fontSize: 15,
               fontWeight: 700,
               cursor: 'pointer',
@@ -736,14 +736,14 @@ export default function BoardDetailPage({ onResume }) {
               transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), filter 0.2s cubic-bezier(0.4, 0, 0.2, 1), background 0.2s cubic-bezier(0.4, 0, 0.2, 1), color 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
               transform: isReactPressed ? 'scale(0.98)' : (isReactHovered ? 'scale(1.02)' : 'scale(1)'),
               filter: isReactHovered && !isReacted ? 'brightness(1.08)' : 'none',
-              boxShadow: isReacted ? 'none' : '0 8px 22px rgba(236,72,153,0.32)',
+              boxShadow: isReacted ? 'none' : '0 8px 22px color-mix(in srgb, var(--accent-1) 32%, transparent)',
               fontFamily: 'inherit',
             }}
           >
             <svg
               width="18" height="18" viewBox="0 0 24 24"
-              fill={isReacted ? '#ec4899' : 'none'}
-              stroke={isReacted ? '#ec4899' : 'currentColor'}
+              fill={isReacted ? 'currentColor' : 'none'}
+              stroke="currentColor"
               strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
             >
               <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
@@ -760,9 +760,9 @@ export default function BoardDetailPage({ onResume }) {
               minHeight: 44,
               padding: '12px 24px',
               borderRadius: 999,
-              background: 'linear-gradient(135deg, rgba(236,72,153,0.12), rgba(244,63,94,0.12))',
-              color: '#ec4899',
-              border: '1px solid rgba(236,72,153,0.3)',
+              background: 'linear-gradient(135deg, color-mix(in srgb, var(--accent-1) 12%, transparent), color-mix(in srgb, var(--accent-2) 12%, transparent))',
+              color: 'var(--accent-1)',
+              border: '1px solid color-mix(in srgb, var(--accent-1) 30%, transparent)',
               fontSize: 14,
               fontWeight: 700,
               cursor: 'pointer',
@@ -816,7 +816,7 @@ export default function BoardDetailPage({ onResume }) {
             alignItems: 'center',
             justifyContent: 'center',
             padding: '60px 20px',
-            color: 'var(--color-text-muted, #9ca3af)',
+            color: 'var(--color-text-muted)',
             textAlign: 'center',
             gap: 16,
           }}>
@@ -826,7 +826,7 @@ export default function BoardDetailPage({ onResume }) {
               <polyline points="21 15 16 10 5 21"></polyline>
             </svg>
             <p style={{
-              color: 'var(--color-text-muted, #9ca3af)',
+              color: 'var(--color-text-muted)',
               fontSize: 14,
               fontWeight: 600,
               margin: 0,

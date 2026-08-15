@@ -302,9 +302,9 @@ export default function BuildingDetailPage() {
                   style={{
                     padding: '7px 14px',
                     borderRadius: 999,
-                    border: active ? '1px solid #ec4899' : '1px solid var(--color-border-soft)',
-                    background: active ? 'rgba(236,72,153,0.14)' : 'var(--color-surface)',
-                    color: disabled ? 'var(--color-text-dimmer)' : (active ? '#ec4899' : 'var(--color-text)'),
+                    border: active ? '1px solid var(--accent-1)' : '1px solid var(--color-border-soft)',
+                    background: active ? 'color-mix(in srgb, var(--accent-1) 14%, transparent)' : 'var(--color-surface)',
+                    color: disabled ? 'var(--color-text-dimmer)' : (active ? 'var(--accent-1)' : 'var(--color-text)'),
                     fontSize: 12,
                     fontWeight: 700,
                     cursor: disabled ? 'default' : 'pointer',
