@@ -60,7 +60,7 @@ function InfoRow({ label, value }) {
 }
 
 /* ── SwipeCard ───────────────────────────────────────────────────────────── */
-export default function SwipeCard({ card, onGalleryClose }) {
+export default function SwipeCard({ card, onGalleryClose, onGalleryOpenChange }) {
   const [isExpanded,     setIsExpanded]     = useState(false)
   const [showGallery,    setShowGallery]    = useState(false)
   const [hasBeenOpened,  setHasBeenOpened]  = useState(false)
@@ -83,6 +83,15 @@ export default function SwipeCard({ card, onGalleryClose }) {
   const galleryScrollRef = useRef(null)
   // first-writer-wins guard for imgRatio (LQIP onLoad vs main img onLoad)
   const ratioSetRef = useRef(false)
+  // FRONT-UX-14: mirrors showGallery for listeners that must read the CURRENT
+  // open state without re-registering (the wheel listener lives for the whole
+  // hasBeenOpened lifetime, spanning many open/close cycles).
+  const showGalleryRef = useRef(false)
+  // FRONT-UX-14: latest onGalleryOpenChange, read from a ref so callers don't
+  // need useCallback (mirrors the useKeyboardSwipe pattern) and so the
+  // showGallery effect's cleanup (unmount case) always calls the current version.
+  const onGalleryOpenChangeRef = useRef(onGalleryOpenChange)
+  useEffect(() => { onGalleryOpenChangeRef.current = onGalleryOpenChange }, [onGalleryOpenChange])
 
   const { onLoad: telemetryOnLoad, onError: telemetryOnError } = useImageTelemetry({
     buildingId: card.image_id,
@@ -94,6 +103,15 @@ export default function SwipeCard({ card, onGalleryClose }) {
     setShowGallery(true)
   }
   function closeGallery() { setShowGallery(false); onGalleryClose && onGalleryClose() }
+
+  // FRONT-UX-14: notify the page-level galleryOpenRef/state on every showGallery
+  // transition. Cleanup fires on close AND on unmount (card swiped away while
+  // the gallery was open) — both must release the page's keyboard-swipe guard.
+  useEffect(() => {
+    showGalleryRef.current = showGallery
+    if (showGallery) onGalleryOpenChangeRef.current?.(true)
+    return () => { onGalleryOpenChangeRef.current?.(false) }
+  }, [showGallery])
 
   function handlePointerDown(e) {
     dragStart.current = { x: e.clientX, y: e.clientY }
@@ -219,12 +237,53 @@ export default function SwipeCard({ card, onGalleryClose }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [card?.image_id, card?.image_url])
 
+  // FRONT-UX-14 FIX 3 — gallery keyboard nav. Bound only while showGallery is
+  // true (added/removed per open/close cycle, cleaned up on unmount too).
+  // ArrowDown/PageDown scroll one card forward, ArrowUp/PageUp one card back;
+  // Escape closes (previously unhandled — SwipeCard had no keydown listener
+  // at all, so this also fixes the missing Escape-to-close behavior).
+  useEffect(() => {
+    if (!showGallery) return
+    const reduceMotion = typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const behavior = reduceMotion ? 'auto' : 'smooth'
+    function onKeyDown(e) {
+      const el = galleryScrollRef.current
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        closeGallery()
+        return
+      }
+      if (!el) return
+      if (e.key === 'ArrowDown' || e.key === 'PageDown') {
+        e.preventDefault()
+        el.scrollBy({ top: CARD_HEIGHT, behavior })
+      } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
+        e.preventDefault()
+        el.scrollBy({ top: -CARD_HEIGHT, behavior })
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showGallery])
+
   // Native direction-lock for gallery vertical scroll.
   // Bubble order: this gallery div listener fires BEFORE the react-tinder-card
   // native touchmove on the ancestor card element. stopPropagation() in a passive
   // listener is valid (passive only forbids preventDefault). We never call
   // preventDefault so the browser still handles pan-y scroll natively.
   // Horizontal intent propagates normally → card swipe still works.
+  //
+  // FRONT-UX-14 FIX 4 — desktop wheel snap, integrated into this same effect
+  // (same [hasBeenOpened] lifetime as the touch direction-lock, per the "don't
+  // duplicate listeners" guidance). scrollSnapType+mandatory fights wheel
+  // momentum (stutters); intercept wheel, accumulate deltaY, and drive an
+  // explicit scrollTo of exactly one card per gesture instead. Guarded by
+  // showGalleryRef (not the showGallery closure var) because this effect's
+  // listeners live for the whole hasBeenOpened lifetime, spanning multiple
+  // open/close cycles — a stale `showGallery` const would still preventDefault
+  // wheel events while the gallery face isn't even visible.
   useEffect(() => {
     const el = galleryScrollRef.current
     if (!el) return
@@ -254,10 +313,49 @@ export default function SwipeCard({ card, onGalleryClose }) {
     }
     el.addEventListener('touchstart', onStart, { passive: true })
     el.addEventListener('touchmove', onMove, { passive: true })
+
+    // -- FIX 4: wheel snap (desktop trackpad/mouse only; touch is unaffected —
+    // wheel events don't fire from touch gestures) --
+    let wheelAccum = 0
+    let locked = false
+    let lockTimer = null
+    const WHEEL_THRESHOLD = 40
+    const LOCK_MS = 450
+    const QUIET_MS = 140
+    const onWheel = (e) => {
+      if (!showGalleryRef.current) return
+      e.preventDefault()
+      if (locked) {
+        // Momentum-aware unlock: keep the lock alive while momentum deltas
+        // still arrive; release only after ~QUIET_MS of wheel silence so one
+        // long trackpad flick can't advance a second card.
+        clearTimeout(lockTimer)
+        lockTimer = setTimeout(() => { locked = false; wheelAccum = 0 }, QUIET_MS)
+        return
+      }
+      wheelAccum += e.deltaY
+      if (Math.abs(wheelAccum) > WHEEL_THRESHOLD) {
+        const total = gallery.length
+        const currentIndex = Math.round(el.scrollTop / CARD_HEIGHT)
+        const dir = wheelAccum > 0 ? 1 : -1
+        const targetIndex = Math.max(0, Math.min(total - 1, currentIndex + dir))
+        const reduceMotion = typeof window.matchMedia === 'function' &&
+          window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        el.scrollTo({ top: targetIndex * CARD_HEIGHT, behavior: reduceMotion ? 'auto' : 'smooth' })
+        locked = true
+        wheelAccum = 0
+        lockTimer = setTimeout(() => { locked = false }, LOCK_MS)
+      }
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+
     return () => {
       el.removeEventListener('touchstart', onStart)
       el.removeEventListener('touchmove', onMove)
+      el.removeEventListener('wheel', onWheel)
+      if (lockTimer) clearTimeout(lockTimer)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasBeenOpened])
 
   const typology   = card.metadata?.axis_typology

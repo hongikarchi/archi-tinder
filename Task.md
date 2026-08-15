@@ -57,7 +57,9 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(비어있음 — FRONT-DESIGN-A1 완료 2026-08-15, ## Done 참조. 디자인 이니셔티브 잔여: B2 Claude Design 연결 → A2 프리미티브 추출, `.claude/plans/design-clever-valley.md`. 별도 대기: FRONT-UX-14 스와이프 모션/갤러리.)_
+### FRONT-UX-14 — 스와이프 모션 + 갤러리 UX 5종 (진행 중 2026-08-15)
+
+`## Next`에서 승격 (원인 확정 완료 — 상세는 Done 이동 시 기록). ① tinderCard.js 퇴장 easing/power ② SwipeDeck 승격 entrance ③ 갤러리 키보드 ④ 휠 스냅 ⑤ 갤러리 rightSize. 브랜치 `feature/claude-ux-14`.
 
 
 ## Next

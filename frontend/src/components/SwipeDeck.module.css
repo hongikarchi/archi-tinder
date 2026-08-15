@@ -1,0 +1,31 @@
+/*
+ * SwipeDeck.module.css — stack-promotion entrance animation (FRONT-UX-14).
+ *
+ * Applied to a WRAPPER div around the active card's SwipeGestureFrame/TinderCard
+ * (never on the spring-animated element itself — react-spring drives that
+ * element's transform via translate3d, and a competing CSS animation on the
+ * same element would fight it).
+ *
+ * Start state matches SwipeDeck's Layer-2 peek-card resting transform
+ * (scale(0.95) translateY(10px), transformOrigin bottom center) so the
+ * promotion reads as one continuous motion instead of a pop.
+ */
+.promote {
+  animation: deckPromote var(--motion-normal) var(--motion-ease-out);
+  transform-origin: bottom center;
+}
+
+@keyframes deckPromote {
+  from {
+    transform: scale(0.95) translateY(10px);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .promote {
+    animation: none;
+  }
+}

@@ -107,7 +107,11 @@ export function normalizeCard(card) {
     image_focus: card.image_focus ?? null,
     image_kind:  card.image_kind ?? null,
     source_url:  card.url || null,
-    gallery:     card.gallery || [],
+    // FRONT-UX-14: gallery images render full-bleed at CARD_WIDTH — right-size
+    // to the same 840px default as the cover so the gallery face doesn't pull
+    // full-resolution source images. rightSizeImageUrl is idempotent for
+    // already-sized URLs and a no-op passthrough for non-CDN hosts.
+    gallery:     (card.gallery || []).map(u => rightSizeImageUrl(u)),
     gallery_meta: card.gallery_meta || [],
     gallery_drawing_start: card.gallery_drawing_start ?? card.metadata?.gallery_drawing_start ?? null,
     // covers_by_type: jsonb dict {exterior, interior, drawing, aerial, detail}

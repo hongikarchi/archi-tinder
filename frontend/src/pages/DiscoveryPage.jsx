@@ -7,6 +7,7 @@ import DiscoveryTriggerCard from '../components/DiscoveryTriggerCard.jsx'
 import TutorialPopup from '../components/TutorialPopup.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
 import CardSkeleton from '../components/CardSkeleton.jsx'
+import deckStyles from '../components/SwipeDeck.module.css'
 import { discoveryNavigationGuard } from '../utils/discoveryGuard.js'
 import { useSwipeOrchestration } from '../hooks/useSwipeOrchestration.js'
 import { useKeyboardSwipe } from '../hooks/useKeyboardSwipe.js'
@@ -20,7 +21,7 @@ let _discoveryMountedOnce = false
 const PREFETCH_AT_REMAINING = 3   // fetch more when deck.length <= this
 const TASTE_NUDGE_THRESHOLD = 10  // inject trigger card when draftLikeCount reaches this
 const DISCOVERY_LIKE_HARD_CAP = 50  // hard stop — block swiping, force Taste hand-off
-const DECK_CACHE_KEY = 'discovery_deck_v2'
+const DECK_CACHE_KEY = 'discovery_deck_v3' // v3: gallery URLs right-sized (FRONT-UX-14) — invalidate pre-change cached decks
 const DECK_CACHE_TTL_MS = 30 * 60 * 1000  // 30 min
 const DRAFT_ID_KEY = 'discovery_draft_id'
 const DRAFT_LIKES_KEY = 'discovery_draft_likes'
@@ -133,6 +134,10 @@ export default function DiscoveryPage({ showToast }) {
   const fetchingRef = useRef(false)
   const preloadRef = useRef(makeImagePreloader())
   const cardRef = useRef(null)
+  // FRONT-UX-14: tracks SwipeCard's gallery open state so the keyboard-swipe
+  // guardCondition below can go inert while the gallery face is showing
+  // (ArrowUp/Down/PageUp/Down inside the gallery must not also swipe the deck).
+  const isGalleryOpenRef = useRef(false)
   // triggerShownRef: true once the trigger card has been injected this session
   const triggerShownRef = useRef(false)
   // seenIdsRef: tracks cards seen this session for shake animation on re-appearance
@@ -444,7 +449,7 @@ export default function DiscoveryPage({ showToast }) {
 
   useKeyboardSwipe({
     onSwipe: async (dir) => { await cardRef.current?.swipe(dir) },
-    guardCondition: () => !!(capReached || !cardRef.current || !deck.length || showTutorial),
+    guardCondition: () => !!(capReached || !cardRef.current || !deck.length || showTutorial || isGalleryOpenRef.current),
   })
 
   // FRONT-FLOW-1: tutorial dismiss — removing 'archithon_show_tutorial' (set only
@@ -709,7 +714,7 @@ export default function DiscoveryPage({ showToast }) {
               if (isTop) {
                 const isShaking = !isTrigger && shakeCardId === topCardId
                 return (
-                  <div key={`top-${id}`} style={{ position: 'absolute', inset: 0, zIndex: 3 }}>
+                  <div key={`top-${id}`} className={deckStyles.promote} style={{ position: 'absolute', inset: 0, zIndex: 3 }}>
                     <SwipeGestureFrame
                       ref={cardRef}
                       onSwipe={onTinderSwipe}
@@ -723,6 +728,7 @@ export default function DiscoveryPage({ showToast }) {
                           card={card}
                           onGalleryOpen={() => {}}
                           onGalleryClose={() => {}}
+                          onGalleryOpenChange={(open) => { isGalleryOpenRef.current = open }}
                         />
                       )}
                     </SwipeGestureFrame>

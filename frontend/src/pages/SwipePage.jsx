@@ -4,6 +4,7 @@ import QuestionCard from '../components/QuestionCard.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
 import CardSkeleton from '../components/CardSkeleton.jsx'
 import SwipeDeck from '../components/SwipeDeck.jsx'
+import deckStyles from '../components/SwipeDeck.module.css'
 import { isActionCard } from '../utils/appHelpers.js'
 import { useSwipeOrchestration } from '../hooks/useSwipeOrchestration.js'
 import { useKeyboardSwipe } from '../hooks/useKeyboardSwipe.js'
@@ -349,6 +350,10 @@ export default function SwipePage({
   const [localResetTick, setLocalResetTick] = useState(0)
   const [showExitConfirm, setShowExitConfirm] = useState(false)
   const [showDismissConfirm, setShowDismissConfirm] = useState(false)
+  // FRONT-UX-14: tracks SwipeCard's gallery open state so the keyboard-swipe
+  // guardCondition below can go inert while the gallery face is showing
+  // (ArrowUp/Down/PageUp/Down inside the gallery must not also swipe the deck).
+  const isGalleryOpenRef = useRef(false)
 
   const phase            = progress?.phase
   const filter_relaxed   = progress?.filter_relaxed || false
@@ -403,7 +408,8 @@ export default function SwipePage({
     },
     guardCondition: () =>
       !!(questionTrigger || isLoading || !cardRef.current || !currentCard || showExitConfirm ||
-         showDismissConfirm || pendingAction.current || swipedCardId.current === currentCard?.image_id),
+         showDismissConfirm || pendingAction.current || swipedCardId.current === currentCard?.image_id ||
+         isGalleryOpenRef.current),
   })
 
   function handleDismissConfirm() {
@@ -656,21 +662,27 @@ export default function SwipePage({
               </SwipeGestureFrame>
             ) : (
               <>
-                <SwipeGestureFrame
-                  ref={cardRef}
-                  key={`${currentCard.image_id}_${cardResetToken}_${localResetTick}`}
-                  onSwipe={onTinderSwipe}
-                  onCardLeftScreen={onCardLeftScreen}
-                >
-                  {isActionCard(currentCard) ? (
-                    <ActionCard card={currentCard} />
-                  ) : (
-                    <SwipeCard
-                      card={currentCard}
-                      onGalleryClose={() => {}}
-                    />
-                  )}
-                </SwipeGestureFrame>
+                {/* Wrapper keyed by image_id ONLY (not cardResetToken/localResetTick) —
+                    the entrance animation should replay when a NEW card is promoted,
+                    not when a dismiss-cancel remounts the SAME card back to center. */}
+                <div key={currentCard.image_id} className={deckStyles.promote} style={{ position: 'absolute', inset: 0 }}>
+                  <SwipeGestureFrame
+                    ref={cardRef}
+                    key={`${currentCard.image_id}_${cardResetToken}_${localResetTick}`}
+                    onSwipe={onTinderSwipe}
+                    onCardLeftScreen={onCardLeftScreen}
+                  >
+                    {isActionCard(currentCard) ? (
+                      <ActionCard card={currentCard} />
+                    ) : (
+                      <SwipeCard
+                        card={currentCard}
+                        onGalleryClose={() => {}}
+                        onGalleryOpenChange={(open) => { isGalleryOpenRef.current = open }}
+                      />
+                    )}
+                  </SwipeGestureFrame>
+                </div>
                 {isLoading && (
                   <div style={{
                     position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',

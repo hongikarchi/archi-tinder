@@ -89,4 +89,27 @@ if (normalizeCard) {
     const result = normalizeCard(card)
     assert.equal(result.cover_full_url, null)
   })
+
+  // FRONT-UX-14: gallery URLs are right-sized (default 840 width) per-entry.
+  test('normalizeCard: gallery URLs are right-sized (w_840,c_limit)', () => {
+    const RAW_DIVISARE_2 = 'https://images.divisare.com/images/f_auto,q_auto,w_auto/v1/def/y.jpg'
+    const SIZED_DIVISARE_2 = 'https://images.divisare.com/images/f_auto,q_auto,w_840,c_limit/v1/def/y.jpg'
+    const card = { canonical_bld_id: 'bld_000001', gallery: [RAW_DIVISARE, RAW_DIVISARE_2] }
+    const result = normalizeCard(card)
+    assert.deepEqual(result.gallery, [SIZED_DIVISARE, SIZED_DIVISARE_2],
+      'each gallery entry must be independently right-sized')
+  })
+
+  test('normalizeCard: gallery URLs on a non-CDN host pass through unchanged', () => {
+    const EXTERNAL = 'https://cdn.unknown-host.io/photo.jpg'
+    const card = { canonical_bld_id: 'bld_000001', gallery: [EXTERNAL] }
+    const result = normalizeCard(card)
+    assert.deepEqual(result.gallery, [EXTERNAL])
+  })
+
+  test('normalizeCard: gallery defaults to [] when absent', () => {
+    const card = { canonical_bld_id: 'bld_000001' }
+    const result = normalizeCard(card)
+    assert.deepEqual(result.gallery, [])
+  })
 }
