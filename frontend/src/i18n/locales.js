@@ -114,6 +114,7 @@ export const locales = {
     },
     swipe: {
       actionCard: {
+        stamp:            'TASTE FOUND',
         message:          '취향이 충분히 모였어요!',
         subtitle:         '지금 결과를 확인하거나 계속 탐색할 수 있어요',
         continueHint:     '← 계속 탐색',
@@ -615,6 +616,7 @@ export const locales = {
     },
     swipe: {
       actionCard: {
+        stamp:            'TASTE FOUND',
         message:          'Your taste is taking shape!',
         subtitle:         'Check your results now or keep exploring',
         continueHint:     '← Keep exploring',

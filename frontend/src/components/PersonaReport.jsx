@@ -66,8 +66,10 @@ function RadarChart({ scores }) {
       {/* 값 폴리곤 */}
       <polygon
         points={valuePoints}
-        fill="rgba(236,72,153,0.2)"
-        stroke="#ec4899"
+        style={{
+          fill: 'color-mix(in srgb, var(--accent-1) 20%, transparent)',
+          stroke: 'var(--accent-1)',
+        }}
         strokeWidth="1.5"
       />
       {/* 레이블 */}
@@ -203,7 +205,7 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
 
       {/* 한 줄 설명 */}
       <p style={{
-        color: '#ec4899',
+        color: 'var(--accent-1)',
         fontSize: 15,
         fontWeight: 600,
         margin: '0 0 12px',
@@ -230,9 +232,9 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
           <span key={tag} style={{
             padding: '4px 10px',
             borderRadius: 999,
-            background: 'rgba(236,72,153,0.1)',
-            border: '1px solid rgba(236,72,153,0.22)',
-            color: '#ec4899',
+            background: 'color-mix(in srgb, var(--accent-1) 10%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--accent-1) 22%, transparent)',
+            color: 'var(--accent-1)',
             fontSize: 11,
             fontWeight: 700,
           }}>
@@ -410,7 +412,7 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
           borderRadius: 999,
           background: (imgGenLoading || !boardId)
             ? 'var(--color-surface-2)'
-            : 'linear-gradient(135deg, #ec4899, #f43f5e)',
+            : 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
           color: (imgGenLoading || !boardId) ? 'var(--color-text-muted)' : '#fff',
           border: 'none',
           fontSize: 14,
