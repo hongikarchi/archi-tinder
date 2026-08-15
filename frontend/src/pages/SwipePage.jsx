@@ -4,7 +4,6 @@ import QuestionCard from '../components/QuestionCard.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
 import CardSkeleton from '../components/CardSkeleton.jsx'
 import SwipeDeck from '../components/SwipeDeck.jsx'
-import deckStyles from '../components/SwipeDeck.module.css'
 import { isActionCard } from '../utils/appHelpers.js'
 import { useSwipeOrchestration } from '../hooks/useSwipeOrchestration.js'
 import { useKeyboardSwipe } from '../hooks/useKeyboardSwipe.js'
@@ -350,6 +349,13 @@ export default function SwipePage({
   const [localResetTick, setLocalResetTick] = useState(0)
   const [showExitConfirm, setShowExitConfirm] = useState(false)
   const [showDismissConfirm, setShowDismissConfirm] = useState(false)
+  // FRONT-UX-14-TUNE3 — true from swipe-commit (drag release or keyboard
+  // .swipe()) until the card actually leaves the screen. Drives SwipeDeck's
+  // progressive peek-card promotion so Layer-2 grows forward WHILE the top
+  // card is flying out, not after. Cleared on card-left AND on the
+  // dismiss-tutorial intercept/cancel paths so it never sticks true when the
+  // card is restored to center instead of exiting.
+  const [promoting, setPromoting] = useState(false)
 
   const phase            = progress?.phase
   const filter_relaxed   = progress?.filter_relaxed || false
@@ -381,10 +387,19 @@ export default function SwipePage({
         cardRef.current?.restoreCard()
         pendingDismissDir.current = dir
         swipedCardId.current = null
+        // FRONT-UX-14-TUNE3: intercepted — the card is being RESTORED to
+        // center, not exiting. Never let promoting stick true here (it can
+        // only have been set true by this same onTinderSwipe call, before
+        // onBeforeSwipe ran — see the hook's call order).
+        setPromoting(false)
         setShowDismissConfirm(true)
         return true  // intercepted
       }
       swipedCardId.current = currentCard?.image_id
+      // FRONT-UX-14-TUNE3: swipe commits (drag release, not intercepted) —
+      // the top card is about to fly out. Kick off the peek-card promotion
+      // now so it animates DURING the exit, not after.
+      setPromoting(true)
       return false
     },
     onCommit: (action) => onSwipe(action),
@@ -425,15 +440,26 @@ export default function SwipePage({
     pendingAction.current = null
     swipedCardId.current = null
     setShowDismissConfirm(false)
+    // FRONT-UX-14-TUNE3: safety net — promoting is already cleared by the
+    // onBeforeSwipe intercept branch, but the card is being restored (not
+    // exiting) either way, so make sure it can never read as promoting.
+    setPromoting(false)
     // Force TinderCard remount to restore card to center
     setLocalResetTick(n => n + 1)
   }
 
   // When cardResetToken changes the TinderCard was force-remounted after a
   // locked swipe. Clear the guard refs so the same card can be swiped again.
+  // FRONT-UX-14-TUNE3: a locked swipe can fire onSwipe (setPromoting(true) via
+  // onBeforeSwipe) without onCardLeftScreen ever firing — that's exactly why
+  // this force-remount recovery exists. Without clearing promoting here too,
+  // the card is restored to center but Layer-2 stays pinned at scale(1),
+  // hidden directly behind the active card — the depth ladder visually
+  // vanishes until the next successful swipe.
   useEffect(() => {
     swipedCardId.current = null
     pendingAction.current = null
+    setPromoting(false)
   }, [cardResetToken]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!isLoading && !currentCard) {
@@ -636,6 +662,7 @@ export default function SwipePage({
         <SwipeDeck
           nextCard={!questionTrigger && currentCard && !isActionCard(currentCard) ? nextCard : null}
           active={!!currentCard}
+          promoting={promoting}
         >
           {currentCard ? (
             questionTrigger ? (
@@ -658,14 +685,20 @@ export default function SwipePage({
             ) : (
               <>
                 {/* Wrapper keyed by image_id ONLY (not cardResetToken/localResetTick) —
-                    the entrance animation should replay when a NEW card is promoted,
-                    not when a dismiss-cancel remounts the SAME card back to center. */}
-                <div key={currentCard.image_id} className={deckStyles.promote} style={{ position: 'absolute', inset: 0 }}>
+                    a NEW card remount should reset positioning cleanly, not when a
+                    dismiss-cancel remounts the SAME card back to center.
+                    FRONT-UX-14-TUNE3: the deckPromote entrance animation (CSS
+                    keyframe scale(0.95)->none on mount) was removed — SwipeDeck's
+                    Layer-2 peek now animates to scale(1) DURING the prior card's
+                    exit (see `promoting` above), so by the time this new active
+                    card mounts the peek behind it is already at scale(1) and the
+                    swap is seamless with no replay needed. */}
+                <div key={currentCard.image_id} style={{ position: 'absolute', inset: 0 }}>
                   <SwipeGestureFrame
                     ref={cardRef}
                     key={`${currentCard.image_id}_${cardResetToken}_${localResetTick}`}
                     onSwipe={onTinderSwipe}
-                    onCardLeftScreen={onCardLeftScreen}
+                    onCardLeftScreen={() => { setPromoting(false); onCardLeftScreen() }}
                   >
                     {isActionCard(currentCard) ? (
                       <ActionCard card={currentCard} />

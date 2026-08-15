@@ -7,7 +7,6 @@ import DiscoveryTriggerCard from '../components/DiscoveryTriggerCard.jsx'
 import TutorialPopup from '../components/TutorialPopup.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
 import CardSkeleton from '../components/CardSkeleton.jsx'
-import deckStyles from '../components/SwipeDeck.module.css'
 import { discoveryNavigationGuard } from '../utils/discoveryGuard.js'
 import { useSwipeOrchestration } from '../hooks/useSwipeOrchestration.js'
 import { useKeyboardSwipe } from '../hooks/useKeyboardSwipe.js'
@@ -30,6 +29,12 @@ const SEEN_IDS_KEY = 'discovery_seen_ids'
 const CONTINUE_AFTER_TRIGGER_KEY = 'discovery_continue_after_trigger'
 
 const TRIGGER_CARD_ID = '__taste_trigger__'
+
+// FRONT-UX-14-TUNE3 — module-scope reduced-motion check (mirrors
+// SwipeCard.jsx's animateGallerySnap guard / SwipeDeck.jsx). Read once.
+const PREFERS_REDUCED_MOTION = typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
 // Shake keyframes injected once per page mount
 const SHAKE_STYLE_ID = 'discovery-shake-style'
@@ -142,6 +147,13 @@ export default function DiscoveryPage({ showToast }) {
   const [shakeCardId, setShakeCardId] = useState(null)
   const [promoteLoading, setPromoteLoading] = useState(false)
   const [capReached, setCapReached] = useState(false)
+  // FRONT-UX-14-TUNE3 — true from swipe-commit until the top card actually
+  // leaves the screen. Drives the same progressive stack-promotion feel as
+  // SwipePage: the bg (peek) cards step forward WHILE the top card exits.
+  // Discovery has no dismiss-intercept path (useSwipeOrchestration below has
+  // no onBeforeSwipe), so unlike SwipePage there's no restore-to-center
+  // branch to gate against — every commit really does exit.
+  const [promoting, setPromoting] = useState(false)
   // FRONT-FLOW-1: shown once on first Discovery entry for newly registered
   // accounts — flag set by LoginPage's register-success path. DiscoveryPage
   // owns both localStorage keys end-to-end (component itself stays dumb).
@@ -710,11 +722,11 @@ export default function DiscoveryPage({ showToast }) {
               if (isTop) {
                 const isShaking = !isTrigger && shakeCardId === topCardId
                 return (
-                  <div key={`top-${id}`} className={deckStyles.promote} style={{ position: 'absolute', inset: 0, zIndex: 3 }}>
+                  <div key={`top-${id}`} style={{ position: 'absolute', inset: 0, zIndex: 3 }}>
                     <SwipeGestureFrame
                       ref={cardRef}
-                      onSwipe={onTinderSwipe}
-                      onCardLeftScreen={onCardLeftScreen}
+                      onSwipe={(dir) => { setPromoting(true); onTinderSwipe(dir) }}
+                      onCardLeftScreen={() => { setPromoting(false); onCardLeftScreen() }}
                       className={isShaking ? 'discovery-shake' : undefined}
                     >
                       {isTrigger ? (
@@ -732,13 +744,27 @@ export default function DiscoveryPage({ showToast }) {
               }
               // Background stack cards: never render trigger card in the stack
               if (isTrigger) return null
+              // FRONT-UX-14-TUNE3 — progressive stack promotion. DiscoveryPage
+              // renders its own inline stack (no SwipeDeck component), so the
+              // same "peek grows forward during exit" behavior is reproduced
+              // directly here: while `promoting`, each bg card steps forward
+              // to the transform ONE stackIndex closer to active (stackIndex-1),
+              // with a transition; when promoting clears (new top mounted,
+              // fresh peek behind it) the reset to the resting transform must
+              // NOT animate, so the transition is gated to promoting-only —
+              // mirrors SwipeDeck.jsx's promoteTransition gating exactly.
+              const effectiveIndex = promoting ? stackIndex - 1 : stackIndex
+              const promoteTransition = (!PREFERS_REDUCED_MOTION && promoting)
+                ? 'transform 520ms var(--motion-ease)'
+                : 'none'
               return (
                 <div
                   key={`bg-${id}-${stackIndex}`}
                   style={{
                     position: 'absolute', top: 0, left: 0,
                     width: CARD_WIDTH, height: CARD_HEIGHT,
-                    transform: `scale(${1 - stackIndex * 0.05}) translateY(${stackIndex * 10}px)`,
+                    transform: `scale(${1 - effectiveIndex * 0.05}) translateY(${effectiveIndex * 10}px)`,
+                    transition: promoteTransition,
                     transformOrigin: 'bottom center',
                     pointerEvents: 'none',
                     zIndex: 3 - stackIndex,

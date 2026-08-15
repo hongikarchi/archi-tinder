@@ -33,19 +33,32 @@ const COVER_CROP_MAX = 0.25
 // FRONT-UX-14-TUNE — custom rAF gallery-snap animator, shared by the wheel
 // snap path and the ArrowUp/ArrowDown keyboard path. Native el.scrollTo({
 // behavior:'smooth'}) is a quick quasi-linear slide with no settle ("no
-// catch" per user feedback); easeOutBack overshoots past the target then
-// eases back, which reads as a tactile 탁 catch.
+// catch" per user feedback).
 //
-// c1 = 1.2 controls the overshoot amount (standard easeOutBack formula).
+// FRONT-UX-14-TUNE3: easeOutBack front-loaded velocity (~4x average at t=0)
+// so the 100%-height transit finished in ~80ms of the 420ms duration — it
+// read as an instant image SWITCH, not a glide (user feedback round 3).
+// Switched to easeInOutBack, which ramps in symmetrically (visible glide),
+// then overshoots + settles at the end (the tactile 탁 catch). Duration
+// stretched 420ms -> 520ms to make the glide phase read clearly.
+//
+// c1 = 1.2 controls the overshoot amount (standard easeInOutBack formula).
+// Note: easeInOutBack undershoots below 0 near t~0.15 (an "anticipation
+// dip" — scrollTop briefly moves a few px BACKWARD before launching
+// forward). This is desirable swipe-anticipation feel; the per-frame
+// [0, maxScroll] clamp below already guards the scroll-container edges, so
+// the dip is only ever visible on interior images, never at the first/last.
 const EASE_BACK_C1 = 1.2
-const EASE_BACK_C3 = EASE_BACK_C1 + 1
-function easeOutBack(t) {
-  return 1 + EASE_BACK_C3 * Math.pow(t - 1, 3) + EASE_BACK_C1 * Math.pow(t - 1, 2)
+const EASE_BACK_C2 = EASE_BACK_C1 * 1.525
+function easeInOutBack(t) {
+  return t < 0.5
+    ? (Math.pow(2 * t, 2) * ((EASE_BACK_C2 + 1) * 2 * t - EASE_BACK_C2)) / 2
+    : (Math.pow(2 * t - 2, 2) * ((EASE_BACK_C2 + 1) * (2 * t - 2) + EASE_BACK_C2) + 2) / 2
 }
 
 /**
  * animateGallerySnap — animates el.scrollTop from its current value to
- * targetTop with easeOutBack easing over `duration` ms.
+ * targetTop with easeInOutBack easing over `duration` ms.
  *   - Clamps per-frame scrollTop to [0, maxScroll] so the overshoot never
  *     rubber-bands past the first/last image (overshoot is only visible on
  *     middle images; the ends land firmly).
@@ -56,7 +69,7 @@ function easeOutBack(t) {
  *     previous animation before starting.
  *   - prefers-reduced-motion: skip the animation, jump straight to targetTop.
  */
-function animateGallerySnap(el, targetTop, cancelRef, { duration = 420 } = {}) {
+function animateGallerySnap(el, targetTop, cancelRef, { duration = 520 } = {}) {
   if (!el) return
   // cancelRef.current carries { id, restore } so an interrupted animation's
   // ORIGINAL pre-animation scrollSnapType survives the cancel — reading
@@ -85,7 +98,7 @@ function animateGallerySnap(el, targetTop, cancelRef, { duration = 420 } = {}) {
   function step(now) {
     const elapsed = now - startTime
     const t = Math.min(1, elapsed / duration)
-    const eased = easeOutBack(t)
+    const eased = easeInOutBack(t)
     const next = startTop + distance * eased
     el.scrollTop = Math.max(0, Math.min(maxScroll, next))
     if (t < 1) {
