@@ -30,6 +30,74 @@ export const TAP_THRESHOLD = 8
 // we keep 'contain' — letterboxing beats visible cropping.
 const COVER_CROP_MAX = 0.25
 
+// FRONT-UX-14-TUNE — custom rAF gallery-snap animator, shared by the wheel
+// snap path and the ArrowUp/ArrowDown keyboard path. Native el.scrollTo({
+// behavior:'smooth'}) is a quick quasi-linear slide with no settle ("no
+// catch" per user feedback); easeOutBack overshoots past the target then
+// eases back, which reads as a tactile 탁 catch.
+//
+// c1 = 1.2 controls the overshoot amount (standard easeOutBack formula).
+const EASE_BACK_C1 = 1.2
+const EASE_BACK_C3 = EASE_BACK_C1 + 1
+function easeOutBack(t) {
+  return 1 + EASE_BACK_C3 * Math.pow(t - 1, 3) + EASE_BACK_C1 * Math.pow(t - 1, 2)
+}
+
+/**
+ * animateGallerySnap — animates el.scrollTop from its current value to
+ * targetTop with easeOutBack easing over `duration` ms.
+ *   - Clamps per-frame scrollTop to [0, maxScroll] so the overshoot never
+ *     rubber-bands past the first/last image (overshoot is only visible on
+ *     middle images; the ends land firmly).
+ *   - Suspends el.style.scrollSnapType for the duration of the animation
+ *     (CSS mandatory snap fights per-frame scrollTop writes at the tail end)
+ *     and restores the previous value on finish/cancel.
+ *   - cancelRef holds the in-flight rAF id so a new call cancels the
+ *     previous animation before starting.
+ *   - prefers-reduced-motion: skip the animation, jump straight to targetTop.
+ */
+function animateGallerySnap(el, targetTop, cancelRef, { duration = 420 } = {}) {
+  if (!el) return
+  // cancelRef.current carries { id, restore } so an interrupted animation's
+  // ORIGINAL pre-animation scrollSnapType survives the cancel — reading
+  // el.style.scrollSnapType fresh here would instead pick up 'none' (the
+  // value the interrupted animation itself set), permanently disabling
+  // native snap once this chain of calls finally settles.
+  let previousSnapType = el.style.scrollSnapType
+  if (cancelRef.current != null) {
+    cancelAnimationFrame(cancelRef.current.id)
+    previousSnapType = cancelRef.current.restore
+    cancelRef.current = null
+  }
+  const reduceMotion = typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const maxScroll = Math.max(0, el.scrollHeight - el.clientHeight)
+  const clampedTarget = Math.max(0, Math.min(maxScroll, targetTop))
+  if (reduceMotion) {
+    el.scrollTop = clampedTarget
+    el.style.scrollSnapType = previousSnapType
+    return
+  }
+  const startTop = el.scrollTop
+  const distance = clampedTarget - startTop
+  el.style.scrollSnapType = 'none'
+  const startTime = performance.now()
+  function step(now) {
+    const elapsed = now - startTime
+    const t = Math.min(1, elapsed / duration)
+    const eased = easeOutBack(t)
+    const next = startTop + distance * eased
+    el.scrollTop = Math.max(0, Math.min(maxScroll, next))
+    if (t < 1) {
+      cancelRef.current = { id: requestAnimationFrame(step), restore: previousSnapType }
+    } else {
+      cancelRef.current = null
+      el.style.scrollSnapType = previousSnapType
+    }
+  }
+  cancelRef.current = { id: requestAnimationFrame(step), restore: previousSnapType }
+}
+
 /**
  * computeFit — pure helper (unit-testable inline): decide 'cover' vs 'contain'
  * for a card image given its natural aspect ratio.
@@ -87,6 +155,10 @@ export default function SwipeCard({ card, onGalleryClose }) {
   const imgRef = useRef(null)
   const timeoutRef = useRef(null)
   const galleryScrollRef = useRef(null)
+  // FRONT-UX-14-TUNE — in-flight rAF id for animateGallerySnap, shared by the
+  // wheel snap path and the keyboard ArrowUp/Down path so a new snap cancels
+  // any animation still running from the previous one.
+  const gallerySnapRafRef = useRef(null)
   // first-writer-wins guard for imgRatio (LQIP onLoad vs main img onLoad)
   const ratioSetRef = useRef(false)
   // FRONT-UX-14: mirrors showGallery for listeners that must read the CURRENT
@@ -247,9 +319,6 @@ export default function SwipeCard({ card, onGalleryClose }) {
   // vertical gallery nav (one card per press) + Escape.
   useEffect(() => {
     if (!showGallery) return
-    const reduceMotion = typeof window.matchMedia === 'function' &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    const behavior = reduceMotion ? 'auto' : 'smooth'
     function onKeyDown(e) {
       const el = galleryScrollRef.current
       if (e.key === 'Escape') {
@@ -258,12 +327,16 @@ export default function SwipeCard({ card, onGalleryClose }) {
         return
       }
       if (!el) return
+      // Quantize off the nearest card index (not raw scrollTop) so a press
+      // that interrupts an in-flight overshoot still targets a card
+      // boundary — matches the wheel path's index-quantized target.
+      const currentIndex = Math.round(el.scrollTop / CARD_HEIGHT)
       if (e.key === 'ArrowDown') {
         e.preventDefault()
-        el.scrollBy({ top: CARD_HEIGHT, behavior })
+        animateGallerySnap(el, (currentIndex + 1) * CARD_HEIGHT, gallerySnapRafRef)
       } else if (e.key === 'ArrowUp') {
         e.preventDefault()
-        el.scrollBy({ top: -CARD_HEIGHT, behavior })
+        animateGallerySnap(el, (currentIndex - 1) * CARD_HEIGHT, gallerySnapRafRef)
       }
     }
     window.addEventListener('keydown', onKeyDown)
@@ -342,9 +415,7 @@ export default function SwipeCard({ card, onGalleryClose }) {
         const currentIndex = Math.round(el.scrollTop / CARD_HEIGHT)
         const dir = wheelAccum > 0 ? 1 : -1
         const targetIndex = Math.max(0, Math.min(total - 1, currentIndex + dir))
-        const reduceMotion = typeof window.matchMedia === 'function' &&
-          window.matchMedia('(prefers-reduced-motion: reduce)').matches
-        el.scrollTo({ top: targetIndex * CARD_HEIGHT, behavior: reduceMotion ? 'auto' : 'smooth' })
+        animateGallerySnap(el, targetIndex * CARD_HEIGHT, gallerySnapRafRef)
         locked = true
         wheelAccum = 0
         lockTimer = setTimeout(() => { locked = false }, LOCK_MS)
