@@ -11,6 +11,22 @@ export default function SwipeDeck({ children, active = false }) {
     <div style={{ width: CARD_WIDTH, height: CARD_HEIGHT, position: 'relative' }}>
       {active && (
         <>
+          {/* Layer 0 — static shadow holder (FRONT-UX-14-R5 FIX1). Permanent,
+              never animates, sits below the ladder dummies. Guarantees the
+              scene's ground shadow never blinks out during swipe/promotion,
+              regardless of what the SwipeCard face shadows above do while
+              flying. Gated by `active` same as the ladder dummies — when the
+              deck has no card (loading/empty), no holder renders either; a
+              lone shadow rectangle with nothing on top of it would read as a
+              layout bug, not "ground shadow." */}
+          <div aria-hidden="true" style={{
+            position: 'absolute', inset: 0,
+            borderRadius: 20,
+            background: 'var(--color-surface)',
+            boxShadow: '0 25px 50px rgba(0,0,0,0.5)',
+            zIndex: 0,
+            pointerEvents: 'none',
+          }} />
           {/* Layer 1 — deepest dummy card (pure decoration, never animates) */}
           <div aria-hidden="true" style={{
             position: 'absolute', inset: 0,

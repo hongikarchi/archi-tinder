@@ -37,6 +37,12 @@ const PREFERS_REDUCED_MOTION = typeof window !== 'undefined' &&
   typeof window.matchMedia === 'function' &&
   window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
+// FRONT-UX-14-R5 FIX2 — plain ease-in-out cubic (no overshoot/back easing).
+// Local to SwipeCard: tinderCard.js has its own copy for the card-fling exit
+// animation, but that file is off-limits here (DO-NOT list) and the two
+// easings serve unrelated animations — duplicating the lambda is correct.
+const easeInOutCubic = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2)
+
 /**
  * computeFit — pure helper (unit-testable inline): decide 'cover' vs 'contain'
  * for a card image given its natural aspect ratio.
@@ -96,6 +102,14 @@ export default function SwipeCard({ card, onGalleryClose }) {
   const galleryScrollRef = useRef(null)
   // first-writer-wins guard for imgRatio (LQIP onLoad vs main img onLoad)
   const ratioSetRef = useRef(false)
+  // FRONT-UX-14-R5 FIX2 — in-flight keyboard glide rAF id + the scrollSnapType
+  // value saved before the glide suspended it (restored on cancel/finish).
+  const glideRafRef = useRef(null)
+  const glideSnapRestoreRef = useRef(null)
+  // In-flight glide destination — rapid same-direction presses accumulate from
+  // the pending target instead of the in-transit scrollTop (which still rounds
+  // to the origin card during the ease-in phase, eating presses).
+  const glideTargetRef = useRef(null)
 
   const { onLoad: telemetryOnLoad, onError: telemetryOnError } = useImageTelemetry({
     buildingId: card.image_id,
@@ -233,6 +247,58 @@ export default function SwipeCard({ card, onGalleryClose }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [card?.image_id, card?.image_url])
 
+  // FRONT-UX-14-R5 FIX2 — cancel any in-flight keyboard glide, restoring the
+  // scrollSnapType value that was in effect before the glide suspended it.
+  // Single cancel path: called at the start of every new glide (so a rapid
+  // keypress doesn't stack animations or clobber the restore value), from the
+  // finish handler, and from the effect cleanup (gallery close / unmount) so
+  // a glide interrupted by Escape doesn't leave snapType stuck at 'none'.
+  function cancelGlide() {
+    if (glideRafRef.current != null) {
+      cancelAnimationFrame(glideRafRef.current)
+      glideRafRef.current = null
+    }
+    if (glideSnapRestoreRef.current != null) {
+      const el = galleryScrollRef.current
+      if (el) el.style.scrollSnapType = glideSnapRestoreRef.current
+      glideSnapRestoreRef.current = null
+    }
+    glideTargetRef.current = null
+  }
+
+  // FRONT-UX-14-R5 FIX2 — small rAF glide used ONLY by the keyboard path.
+  // Chromium snaps a programmatic scrollBy({behavior:'smooth'}) immediately
+  // inside a scroll-snap-type:'y mandatory' container (the smooth animation
+  // gets overridden by the snap). Suspending scrollSnapType for the duration
+  // of a manual rAF animation defeats that snap-jump; wheel/touch (native
+  // snap) are untouched. No overshoot/back easing — plain glide only.
+  function animateScroll(el, targetTop, duration) {
+    cancelGlide() // always cancel first — captures the CURRENT snapType, not a stale 'none' left by a prior glide
+    if (PREFERS_REDUCED_MOTION) {
+      el.scrollTop = targetTop
+      return
+    }
+    const startTop = el.scrollTop
+    const delta = targetTop - startTop
+    if (delta === 0) return
+    glideTargetRef.current = targetTop
+    glideSnapRestoreRef.current = el.style.scrollSnapType || 'y mandatory'
+    el.style.scrollSnapType = 'none'
+    const startTime = performance.now()
+    function step(now) {
+      const t = Math.min((now - startTime) / duration, 1)
+      const eased = easeInOutCubic(t)
+      el.scrollTop = startTop + delta * eased
+      if (t < 1) {
+        glideRafRef.current = requestAnimationFrame(step)
+      } else {
+        glideRafRef.current = null
+        cancelGlide() // restores scrollSnapType on natural finish
+      }
+    }
+    glideRafRef.current = requestAnimationFrame(step)
+  }
+
   // FRONT-UX-14 FIX 3 — gallery keyboard nav. Bound only while showGallery is
   // true (added/removed per open/close cycle, cleaned up on unmount too).
   // ArrowDown scrolls one card forward, ArrowUp one card back; Escape closes
@@ -242,6 +308,9 @@ export default function SwipeCard({ card, onGalleryClose }) {
   // now swipe the deck even while the gallery is open (see useKeyboardSwipe
   // guardCondition in SwipePage/DiscoveryPage), so this listener only owns
   // vertical gallery nav (one card per press) + Escape.
+  // FRONT-UX-14-R5 FIX2: ArrowUp/Down now drive the rAF glide (animateScroll)
+  // instead of native scrollBy — see animateScroll's comment for why. Wheel
+  // and touch scrolling are untouched (native snap still handles those).
   useEffect(() => {
     if (!showGallery) return
     function onKeyDown(e) {
@@ -252,20 +321,24 @@ export default function SwipeCard({ card, onGalleryClose }) {
         return
       }
       if (!el) return
-      // FRONT-UX-14-SIMPLIFY — native scrollBy one card height. The CSS
-      // mandatory snap (scrollSnapType:'y mandatory' + scrollSnapAlign:'start'
-      // on each slide) catches the landing point, so an exact-card-height
-      // delta is all that's needed; no manual rAF easing or index math.
-      if (e.key === 'ArrowDown') {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault()
-        el.scrollBy({ top: CARD_HEIGHT, behavior: PREFERS_REDUCED_MOTION ? 'auto' : 'smooth' })
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault()
-        el.scrollBy({ top: -CARD_HEIGHT, behavior: PREFERS_REDUCED_MOTION ? 'auto' : 'smooth' })
+        const maxScroll = Math.max(0, el.scrollHeight - el.clientHeight)
+        // Accumulate from the pending glide destination when one is in flight
+        // (in-transit scrollTop still rounds to the origin card early in the
+        // ease-in phase, which would eat rapid presses).
+        const baseTop = glideTargetRef.current ?? el.scrollTop
+        const currentIndex = Math.round(baseTop / CARD_HEIGHT)
+        const targetIndex = currentIndex + (e.key === 'ArrowDown' ? 1 : -1)
+        const target = Math.min(Math.max(targetIndex * CARD_HEIGHT, 0), maxScroll)
+        animateScroll(el, target, 450)
       }
     }
     window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      cancelGlide()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showGallery])
 
