@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-08-15 11:07 KST',
+    updatedAt: '2026-08-15 12:03 KST',
     head: '25ee29d',
     branch: 'feature/claude-flow-1',
   },
   done: [
+    {
+      id: 'FRONT-FLOW-2',
+      title: '팝업/인터스티셜 de-drift 스윕',
+      completedAt: '2026-08-15',
+      note: 'user 스크린샷 지적(ActionCard 구 디자인 잔존)發 전체 팝업 12종 감사: 위반 5곳 수정, 7곳 정상 확인(SaveBoardModal/VerifyGateModal/WorkDetailModal/QuestionCard/ExitConfirm/DismissConfirm 토큰 기반, ShareCardModal 의도적 인쇄물 예외)',
+    },
     {
       id: 'FRONT-FLOW-1',
       title: '스와이프 온보딩 3연타 인터럽트 정리',
@@ -70,12 +76,6 @@ window.PROJECT_STATE = {
       title: '진행률 바 정리 (Discovery 제거 + Taste N swipes %)',
       completedAt: '2026-08-06',
       note: 'Discovery 탭 진행률 바 제거 (`ff07ee0`): 덱 스와이프 맥락에서 % 바가 맞지 않아 삭제; `discovery.progressComplete` i18n 키도 고아 → 삭제',
-    },
-    {
-      id: 'BACK-LLM-PROVIDER-1',
-      title: 'LLM 프로바이더 어댑터 + 공정 A/B 8런',
-      completedAt: '2026-08-04',
-      note: '1차 "GPT 붕괴(11~14%)"는 파서의 빈 filter_delta 버그로 판명(13c4238 수정) — 픽스 후 품질 동급: gemini 95% / gpt-5.4-mini 95% / luna 94% / terra 92%. 차별점은 운영 특성: p50 gemini 2.0s 최속 vs GPT 타임아웃 꼬리 0(null폴백 0%). 판정 옵션: (A) gemini 유지+8s 완화 (B) gpt-5.4-mini. 결정 보류.',
     },
   ],
   now: [],

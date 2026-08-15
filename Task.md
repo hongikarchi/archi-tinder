@@ -279,6 +279,14 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FRONT-FLOW-2 — 팝업/인터스티셜 de-drift 스윕 — RESOLVED 2026-08-15 (`fbc06ee`)
+- user 스크린샷 지적(ActionCard 구 디자인 잔존)發 전체 팝업 12종 감사: 위반 5곳 수정, 7곳 정상 확인(SaveBoardModal/VerifyGateModal/WorkDetailModal/QuestionCard/ExitConfirm/DismissConfirm 토큰 기반, ShareCardModal 의도적 인쇄물 예외)
+- SwipePage ActionCard(Taste 수렴 카드): 인디고 그라디언트+이모지 → paper 명함 언어(TriggerCard 미러, 'TASTE FOUND' mono 스탬프 — i18n `swipe.actionCard.stamp` ko/en)
+- SwipePage 핑크 전멸: ConfidenceBar fill/Finish 버튼×2/ExitConfirm primary/배지 → §8.1 accent 토큰·그라디언트 + color-mix 섀도
+- SurpriseBoardModal·SaveToBoardModal: 핑크 그라디언트 → accent, `#fca5a5` → destructive, ✨ 제거
+- PersonaReport: 차트 핑크 4곳 → accent-1 (SVG 속성 → style 이동, var() 지원)
+- Workflow: review PASS + security PASS, Opus verify LOW 1건(스탬프 i18n) 동일 커밋 수정. eslint 0 + build green
+
 ### FRONT-FLOW-1 — 스와이프 온보딩 3연타 인터럽트 정리 — RESOLVED 2026-08-15 (`ddfa655`)
 - B1 검토 중 user 발견/결정 3건 이행: 신규 유저 Discovery→Taste 시퀀스의 연속 인터럽트(TriggerCard→TutorialPopup→DismissConfirm) 정리
 - DiscoveryTriggerCard: 파랑-보라 그라디언트/이모지/glass → paper 명함 언어(cardLanguage.js, ARCHIBE 워드마크 + '10 LIKES' mono 스탬프, 테마 적응). 주입 로직/props 불변
