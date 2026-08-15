@@ -290,13 +290,14 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
-### FRONT-UX-14 — 스와이프 모션 + 갤러리 UX 5종 — RESOLVED 2026-08-15 (`94391bf`)
+### FRONT-UX-14 — 스와이프 모션 + 갤러리 UX 5종 — RESOLVED 2026-08-15 (`94391bf` + `1714e2d`)
 - ① 퇴장 애니메이션: vendored `lib/tinderCard.js` — linear 3-대각선 총알 → easeOutCubic + power 1.6 + duration 클램프 [320,560]ms (플링감 유지, 감속 꼬리)
 - ② 스택 승격: `SwipeDeck.module.css` deckPromote entrance — Layer-2 정지 transform(scale .95, translateY 10px)에서 시작해 연속감, 카드별 key로 재생, SwipePage는 dismiss-cancel 리마운트에 재생 안 되게 image_id만 키 사용, reduced-motion 게이트
-- ③ 갤러리 키보드: ArrowUp/Down/PageUp/Down 카드 단위 스크롤 + Escape 닫기(기존에 없었음 — 신규), 갤러리 열림 중 덱 ←→ 키 차단(양 페이지, SwipeCard 신규 optional `onGalleryOpenChange` prop)
-- ④ 휠 스냅: 제스처당 1장 — 40px 누적 임계 + momentum-aware quiet-unlock 140ms(Opus LOW 지적 수정: 고정 450ms lock은 긴 트랙패드 플릭에 2장 넘어감), 터치는 네이티브 스냅 유지
-- ⑤ 갤러리 이미지 840px 리사이즈: `api/images.js` gallery map + 테스트 3종(79 pass), `cover_full_url` 원본 유지, `DECK_CACHE_KEY` v2→v3(구 full-res 캐시 30분 잔존 차단 — Opus LOW 지적 수정)
-- Workflow: review PASS + security PASS, LOW 3건(2건 수정, 1건 dead velocity-branch 노트 — 차후 정리). eslint 0 + build + node --test green
+- ③ 갤러리 키보드: ArrowUp/Down 카드 단위 스크롤 + Escape 닫기(신규). user 리뷰 반영(`1714e2d`): PageUp/Down 제거, 갤러리 열림 중 덱 ←→ 스와이프 **허용**(초기 차단은 오발 방지 설계였으나 마우스 드래그와 일관 위해 해제, onGalleryOpenChange 배선 철거)
+- ④ 휠 스냅: 제스처당 1장 — 40px 누적 임계 + momentum-aware quiet-unlock 140ms(Opus LOW: 고정 450ms lock은 긴 플릭에 2장), 터치 네이티브 유지
+- ⑤ 갤러리 이미지 = 앞면과 동일 처리(user 리뷰 재해석 `1714e2d`): 840px 리사이즈 + **per-image computeFit 적응형 cover/contain**(비율 근접=꽉 채움/레터박스 없음, 비율 상이=비율 보존) + **DPR 1x/2x `gallery_srcset`**(raw URL 기반 병렬 필드), `cover_full_url` 원본 유지, `DECK_CACHE_KEY` v2→v4(shape 변경 캐시 무효화)
+- 부수: `core.js` BASE `import.meta.env` optional chain — plain-Node import 가능해져 **CI에서 조용히 skip되던 테스트 13개 부활**(Opus MEDIUM). npm test 94/94 · skip 0
+- Workflow ×2: review+security PASS, findings LOW 3(2 수정)+MEDIUM 1(수정)+dead velocity-branch 노트(차후 정리)
 
 ### FRONT-DESIGN-A1 — 디자인 정합성 기계적 스윕 (2 PR) — RESOLVED 2026-08-15 (`fc72775` + `7e192d2`)
 - 디자인 이니셔티브(B1→A1→B2→A2) A1, 유형별 PR 분리(user 결정): PR-1 hex→토큰, PR-2 hover 핵 제거 (stacked 브랜치)
