@@ -107,6 +107,12 @@ Implementation map:
 
 ### HIGH
 
+#### FRONT-FLOW-1 — 스와이프 온보딩 3연타 인터럽트 정리 (user 결정 2026-08-15)
+_B1 검토 중 발견: 신규 유저 시퀀스 Discovery 10likes → TriggerCard → Taste 진입 → TutorialPopup(제스처 재교육) → 첫 좌스와이프 → DismissConfirm 3연타. 스와이프 경로라 feature workflow 필수._
+- **DiscoveryTriggerCard 재설계**: 파랑-보라 그라디언트/이모지/glass 버튼 하드코딩(hex 5곳) → DESIGN.md 언어(§8.6 카드 or paper 언어)로. 로직(10-like 주입, ←Discovery/→Taste) 불변.
+- **TutorialPopup 이동**: SwipePage 최초 진입 → **신규 가입 계정의 Discovery 최초 진입**으로 (register 경로에서만 플래그, 기존 계정 로그인 경로 미노출). 카피도 Discovery 의미론으로 조정(← pass · → like), 빨강/핑크 hex 10곳 토큰화.
+- **DismissConfirmPopup**: 로직 유지(Taste 전용 dislike 영구 경고 — Discovery는 pass라 해당 없음, 검증됨), 스타일만 토큰 정합.
+
 #### FRONT-DESIGN-A1 — 디자인 정합성 기계적 스윕 (hex→토큰 + hover 핵 제거)
 _디자인 4단계 이니셔티브(B1→A1→B2→A2, `.claude/plans/design-clever-valley.md`)의 A1. B1은 2026-08-15 완료(## Done)._
 - 전체 46파일 스윕, 유형별 PR 분리(사용자 결정): PR-1 hex→토큰(토큰 값과 정확 일치/명백 우회만, §8.6 photo-overlay 및 white-on-accent 예외, 애매한 색은 로그만), PR-2 onMouseEnter→모듈 :hover(동일 값 이전, 로직성 핸들러 제외). pixel-identical 하드 제약.
