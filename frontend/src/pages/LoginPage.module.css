@@ -6,21 +6,10 @@
  * Tokens: tokens.css CSS variables only — no hardcoded colors/radii/motion.
  */
 
-/* ── 1A. Drafting-grid backdrop ─────────────────────────────────────────────
-   Architectural drafting-paper grid behind the card deck: fine grid every
-   24px + a stronger line every 120px, both token-driven so they auto-adapt
-   per theme (light = faint graph paper, dark = faint blueprint). A radial
-   vignette fades the grid out near the viewport edges so the card stays the
-   focal point. Layer order (first = top): vignette, 120px lines (x, y),
-   24px lines (x, y), base color. */
+/* Page background — plain bg, matches the swipe page tone (drafting-grid
+   experiment removed by user decision 2026-08-15). */
 .page {
-  background:
-    radial-gradient(circle at 50% 42%, transparent 0%, transparent 45%, var(--color-bg) 92%),
-    linear-gradient(to right, var(--color-border-soft) 1px, transparent 1px) 0 0 / 120px 120px,
-    linear-gradient(to bottom, var(--color-border-soft) 1px, transparent 1px) 0 0 / 120px 120px,
-    linear-gradient(to right, var(--color-border) 1px, transparent 1px) 0 0 / 24px 24px,
-    linear-gradient(to bottom, var(--color-border) 1px, transparent 1px) 0 0 / 24px 24px,
-    var(--color-bg);
+  background: var(--color-bg);
 }
 
 /* ── Card deck entrance ──────────────────────────────────────────────────── */
