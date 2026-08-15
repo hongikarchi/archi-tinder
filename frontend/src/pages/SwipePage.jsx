@@ -350,10 +350,6 @@ export default function SwipePage({
   const [localResetTick, setLocalResetTick] = useState(0)
   const [showExitConfirm, setShowExitConfirm] = useState(false)
   const [showDismissConfirm, setShowDismissConfirm] = useState(false)
-  // FRONT-UX-14: tracks SwipeCard's gallery open state so the keyboard-swipe
-  // guardCondition below can go inert while the gallery face is showing
-  // (ArrowUp/Down/PageUp/Down inside the gallery must not also swipe the deck).
-  const isGalleryOpenRef = useRef(false)
 
   const phase            = progress?.phase
   const filter_relaxed   = progress?.filter_relaxed || false
@@ -408,8 +404,7 @@ export default function SwipePage({
     },
     guardCondition: () =>
       !!(questionTrigger || isLoading || !cardRef.current || !currentCard || showExitConfirm ||
-         showDismissConfirm || pendingAction.current || swipedCardId.current === currentCard?.image_id ||
-         isGalleryOpenRef.current),
+         showDismissConfirm || pendingAction.current || swipedCardId.current === currentCard?.image_id),
   })
 
   function handleDismissConfirm() {
@@ -678,7 +673,6 @@ export default function SwipePage({
                       <SwipeCard
                         card={currentCard}
                         onGalleryClose={() => {}}
-                        onGalleryOpenChange={(open) => { isGalleryOpenRef.current = open }}
                       />
                     )}
                   </SwipeGestureFrame>

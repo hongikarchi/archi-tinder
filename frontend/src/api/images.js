@@ -112,6 +112,12 @@ export function normalizeCard(card) {
     // full-resolution source images. rightSizeImageUrl is idempotent for
     // already-sized URLs and a no-op passthrough for non-CDN hosts.
     gallery:     (card.gallery || []).map(u => rightSizeImageUrl(u)),
+    // FRONT-UX-14-FIX: parallel DPR srcset array, built from the RAW gallery
+    // URLs (buildCardSrcSet must see the un-right-sized w_auto token — see
+    // rightSizeImageUrl.js ~line 91). Computed independently of the `gallery`
+    // map above so existing consumers of `gallery` (right-sized strings) are
+    // unaffected. null entries (non-CDN hosts) degrade to the plain <img src>.
+    gallery_srcset: (card.gallery || []).map(u => buildCardSrcSet(u)),
     gallery_meta: card.gallery_meta || [],
     gallery_drawing_start: card.gallery_drawing_start ?? card.metadata?.gallery_drawing_start ?? null,
     // covers_by_type: jsonb dict {exterior, interior, drawing, aerial, detail}

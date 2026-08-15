@@ -60,7 +60,7 @@ function InfoRow({ label, value }) {
 }
 
 /* ── SwipeCard ───────────────────────────────────────────────────────────── */
-export default function SwipeCard({ card, onGalleryClose, onGalleryOpenChange }) {
+export default function SwipeCard({ card, onGalleryClose }) {
   const [isExpanded,     setIsExpanded]     = useState(false)
   const [showGallery,    setShowGallery]    = useState(false)
   const [hasBeenOpened,  setHasBeenOpened]  = useState(false)
@@ -73,6 +73,12 @@ export default function SwipeCard({ card, onGalleryClose, onGalleryOpenChange })
   // covers_by_type.drawing URL? Drives contain+white background same as
   // isDrawingKind, for cards whose original photo cover failed to load.
   const [landedOnDrawing, setLandedOnDrawing] = useState(false)
+  // FRONT-UX-14-FIX: per-gallery-image natural aspect ratio, index -> ratio.
+  // Populated by each gallery <img>'s onLoad; drives the same adaptive
+  // computeFit(imgRatio, isDrawing) used by the front face. Unknown (not yet
+  // loaded) falls back to the pre-adaptive isDrawing?'contain':'cover' so
+  // there's no layout flash while the image is still loading.
+  const [galleryRatios,  setGalleryRatios]  = useState({})
   // Set of URLs already attempted as src (cache-bust retry + covers_by_type
   // fallback chain). Initialized lazily inside handleImgError on first failure.
   const imgRetried = useRef(null)
@@ -87,11 +93,6 @@ export default function SwipeCard({ card, onGalleryClose, onGalleryOpenChange })
   // open state without re-registering (the wheel listener lives for the whole
   // hasBeenOpened lifetime, spanning many open/close cycles).
   const showGalleryRef = useRef(false)
-  // FRONT-UX-14: latest onGalleryOpenChange, read from a ref so callers don't
-  // need useCallback (mirrors the useKeyboardSwipe pattern) and so the
-  // showGallery effect's cleanup (unmount case) always calls the current version.
-  const onGalleryOpenChangeRef = useRef(onGalleryOpenChange)
-  useEffect(() => { onGalleryOpenChangeRef.current = onGalleryOpenChange }, [onGalleryOpenChange])
 
   const { onLoad: telemetryOnLoad, onError: telemetryOnError } = useImageTelemetry({
     buildingId: card.image_id,
@@ -104,13 +105,10 @@ export default function SwipeCard({ card, onGalleryClose, onGalleryOpenChange })
   }
   function closeGallery() { setShowGallery(false); onGalleryClose && onGalleryClose() }
 
-  // FRONT-UX-14: notify the page-level galleryOpenRef/state on every showGallery
-  // transition. Cleanup fires on close AND on unmount (card swiped away while
-  // the gallery was open) — both must release the page's keyboard-swipe guard.
+  // Keep showGalleryRef in sync with showGallery for the wheel listener below,
+  // which must read the CURRENT open state without re-registering.
   useEffect(() => {
     showGalleryRef.current = showGallery
-    if (showGallery) onGalleryOpenChangeRef.current?.(true)
-    return () => { onGalleryOpenChangeRef.current?.(false) }
   }, [showGallery])
 
   function handlePointerDown(e) {
@@ -217,6 +215,7 @@ export default function SwipeCard({ card, onGalleryClose, onGalleryOpenChange })
     setShowGallery(false)
     setImgRatio(null)
     setLandedOnDrawing(false)
+    setGalleryRatios({})
     ratioSetRef.current = false
     imgRetried.current = null
     if (timeoutRef.current) clearTimeout(timeoutRef.current)
@@ -239,9 +238,13 @@ export default function SwipeCard({ card, onGalleryClose, onGalleryOpenChange })
 
   // FRONT-UX-14 FIX 3 — gallery keyboard nav. Bound only while showGallery is
   // true (added/removed per open/close cycle, cleaned up on unmount too).
-  // ArrowDown/PageDown scroll one card forward, ArrowUp/PageUp one card back;
-  // Escape closes (previously unhandled — SwipeCard had no keydown listener
-  // at all, so this also fixes the missing Escape-to-close behavior).
+  // ArrowDown scrolls one card forward, ArrowUp one card back; Escape closes
+  // (previously unhandled — SwipeCard had no keydown listener at all, so this
+  // also fixes the missing Escape-to-close behavior).
+  // FRONT-UX-14-FIX: page-scroll keys removed per user review — ArrowLeft/Right
+  // now swipe the deck even while the gallery is open (see useKeyboardSwipe
+  // guardCondition in SwipePage/DiscoveryPage), so this listener only owns
+  // vertical gallery nav (one card per press) + Escape.
   useEffect(() => {
     if (!showGallery) return
     const reduceMotion = typeof window.matchMedia === 'function' &&
@@ -255,10 +258,10 @@ export default function SwipeCard({ card, onGalleryClose, onGalleryOpenChange })
         return
       }
       if (!el) return
-      if (e.key === 'ArrowDown' || e.key === 'PageDown') {
+      if (e.key === 'ArrowDown') {
         e.preventDefault()
         el.scrollBy({ top: CARD_HEIGHT, behavior })
-      } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
+      } else if (e.key === 'ArrowUp') {
         e.preventDefault()
         el.scrollBy({ top: -CARD_HEIGHT, behavior })
       }
@@ -588,29 +591,50 @@ export default function SwipeCard({ card, onGalleryClose, onGalleryOpenChange })
           >
             {gallery.map((url, i) => {
               const isDrawing = i >= drawingStart
+              const knownRatio = galleryRatios[i] ?? null
+              // FRONT-UX-14-FIX: adaptive fit via the same computeFit(ratio, isDrawing)
+              // used by the front face — 'cover' (fill-bleed, no letterbox) when the
+              // image ratio is close to the card ratio, 'contain' (ratio-preserving,
+              // letterboxed) when it's far off. Before the ratio is known, fall back
+              // to the pre-adaptive isDrawing?'contain':'cover' to avoid a layout flash.
+              const galleryFit = knownRatio != null
+                ? computeFit(knownRatio, isDrawing)
+                : (isDrawing ? 'contain' : 'cover')
+              // Background: drawings always keep white (matches the split above).
+              // Photos that resolve to 'cover' show no bars at all (background is
+              // fully covered, color is moot). Photos that resolve to 'contain' use
+              // dark #111 so the letterbox bars match the photo-viewer look.
+              const galleryBg = isDrawing ? '#fff' : '#111'
               return (
                 <div key={i} className="pressable" style={{
                   width: '100%', height: CARD_HEIGHT,
                   flexShrink: 0,
                   scrollSnapAlign: 'start',
                   scrollSnapStop: 'always',
-                  background: isDrawing ? '#fff' : '#111',
+                  background: galleryBg,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}>
                   <img
                     src={url}
+                    srcSet={card.gallery_srcset?.[i] || undefined}
                     alt=""
                     className="pressable"
                     loading={i === 0 ? 'eager' : 'lazy'}
                     decoding="async"
                     draggable={false}
+                    onLoad={e => {
+                      const node = e.target
+                      if (!node.naturalWidth || !node.naturalHeight) return
+                      const ratio = node.naturalWidth / node.naturalHeight
+                      setGalleryRatios(prev => (prev[i] != null ? prev : { ...prev, [i]: ratio }))
+                    }}
                     onError={e => { e.currentTarget.style.visibility = 'hidden' }}
                     style={{
                       width: '100%',
                       height: '100%',
-                      // B2-5: gallery photos cover (fill-bleed), drawings keep
-                      // contain (full-view, matches the white background split above).
-                      objectFit: isDrawing ? 'contain' : 'cover',
+                      // FRONT-UX-14-FIX (B2-5 successor): adaptive cover/contain —
+                      // see computeFit() usage above.
+                      objectFit: galleryFit,
                       objectPosition: 'center',
                       display: 'block',
                     }}
