@@ -290,14 +290,15 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
-### FRONT-UX-14 — 스와이프 모션 + 갤러리 UX 5종 — RESOLVED 2026-08-15 (`94391bf` + `1714e2d`)
-- ① 퇴장 애니메이션: vendored `lib/tinderCard.js` — linear 3-대각선 총알 → easeOutCubic + power 1.6 + duration 클램프 [320,560]ms (플링감 유지, 감속 꼬리)
-- ② 스택 승격: `SwipeDeck.module.css` deckPromote entrance — Layer-2 정지 transform(scale .95, translateY 10px)에서 시작해 연속감, 카드별 key로 재생, SwipePage는 dismiss-cancel 리마운트에 재생 안 되게 image_id만 키 사용, reduced-motion 게이트
-- ③ 갤러리 키보드: ArrowUp/Down 카드 단위 스크롤 + Escape 닫기(신규). user 리뷰 반영(`1714e2d`): PageUp/Down 제거, 갤러리 열림 중 덱 ←→ 스와이프 **허용**(초기 차단은 오발 방지 설계였으나 마우스 드래그와 일관 위해 해제, onGalleryOpenChange 배선 철거)
-- ④ 휠 스냅: 제스처당 1장 — 40px 누적 임계 + momentum-aware quiet-unlock 140ms(Opus LOW: 고정 450ms lock은 긴 플릭에 2장), 터치 네이티브 유지
-- ⑤ 갤러리 이미지 = 앞면과 동일 처리(user 리뷰 재해석 `1714e2d`): 840px 리사이즈 + **per-image computeFit 적응형 cover/contain**(비율 근접=꽉 채움/레터박스 없음, 비율 상이=비율 보존) + **DPR 1x/2x `gallery_srcset`**(raw URL 기반 병렬 필드), `cover_full_url` 원본 유지, `DECK_CACHE_KEY` v2→v4(shape 변경 캐시 무효화)
-- 부수: `core.js` BASE `import.meta.env` optional chain — plain-Node import 가능해져 **CI에서 조용히 skip되던 테스트 13개 부활**(Opus MEDIUM). npm test 94/94 · skip 0
-- Workflow ×2: review+security PASS, findings LOW 3(2 수정)+MEDIUM 1(수정)+dead velocity-branch 노트(차후 정리)
+### FRONT-UX-14 — 스와이프 모션 + 갤러리 UX (7 라운드 feel-iteration) — RESOLVED 2026-08-15 (`94391bf`…`9c09a8c`)
+- ① 퇴장: vendored `lib/tinderCard.js` — linear 3-대각선 총알 → **easeInOutCubic + power 1.0 + [480,680]ms** (가시 구간 56ms→~250ms, 카드가 가속하며 떠나는 게 보임. r2 easeOut 시도는 가시 구간이 더 짧아져 실패 — 교훈: 이동거리 대부분이 화면 밖이면 ease-out은 역효과)
+- ② 스택: 승격 애니메이션 접근 3회 실패 후 **모델 교체(user 통찰)** — 뒤 카드를 처음부터 풀사이즈로 밑에 렌더(Tinder 표준), key=카드id 동일 래퍼 리스트라 승격=key 이동(리마운트 0=깜빡임 원천 제거, 숨어서 로딩 완료), 깊이 사다리+그림자 홀더는 영구 정적 장식. Discovery 자체 스택(index-키 깜빡임 원인) SwipeDeck 통일. net −212줄
+- ③ 갤러리 키보드: ArrowUp/Down rAF easeInOutCubic 450ms 글라이드 + Escape(신규) + 연타 누적(대기 목적지 기준). **reduced-motion 가드 의도적 제거(user 결정 r7)** — 카드 exit spring과 동일 철학, 인터랙션 피드백 모션은 제품 핵심(장식성 CSS 모션은 계속 존중). 갤러리 열림 중 덱 ←→ 허용(user 결정)
+- ④ 휠/터치: 네이티브 1:1 스크롤 + CSS mandatory 스냅 (원 stutter 진범 = `scrollSnapStop:'always'` 제거; 인터셉트/커스텀 애니메이터 전부 삭제). 스냅 소유권 imperative-only
+- ⑤ 갤러리 이미지 = 앞면 동일 처리: 840px 리사이즈 + per-image computeFit 적응형 cover/contain + DPR `gallery_srcset`(raw 기반) + 인접 프리로드, `DECK_CACHE_KEY` v2→v4
+- **온디바이스 검증**: user 기기가 `prefers-reduced-motion: reduce` ON(Windows 애니메이션 효과 OFF)이라 r5/r6 글라이드가 전부 즉시 점프였음을 Chrome trace로 확정(Chromium은 네이티브 smooth 전체 강등) — r7 rAF 무가드 후 trace 곡선 0→4→46→177→424→584→651/470ms 연속 25프레임 확인. 교훈: **feel 버그는 기기 설정부터 측정** (이징 3회 교체가 무의미했던 이유)
+- 부수: `core.js` `import.meta.env` optional chain — CI 조용히 skip되던 테스트 13개 부활(Opus MEDIUM). npm test 94/94·skip 0. Workflow ×7 전부 review+security PASS
+- Deferred: TabBar 디스커버리 아이콘 핑크 잔존 1건(A1 잔여), dead velocity-branch 정리(tinderCard.js)
 
 ### FRONT-DESIGN-A1 — 디자인 정합성 기계적 스윕 (2 PR) — RESOLVED 2026-08-15 (`fc72775` + `7e192d2`)
 - 디자인 이니셔티브(B1→A1→B2→A2) A1, 유형별 PR 분리(user 결정): PR-1 hex→토큰, PR-2 hover 핵 제거 (stacked 브랜치)

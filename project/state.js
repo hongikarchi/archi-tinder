@@ -23,14 +23,14 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-08-15 14:48 KST',
+    updatedAt: '2026-08-15 23:24 KST',
     head: 'e33a065',
     branch: 'feature/claude-ux-14',
   },
   done: [
     {
       id: 'FRONT-UX-14',
-      title: '스와이프 모션 + 갤러리 UX 5종',
+      title: '스와이프 모션 + 갤러리 UX (7 라운드 feel-iteration)',
       completedAt: '2026-08-15',
       note: '① 퇴장 애니메이션: vendored `lib/tinderCard.js` — linear 3-대각선 총알 → easeOutCubic + power 1.6 + duration 클램프 [320,560]ms (플링감 유지, 감속 꼬리)',
     },
@@ -1918,10 +1918,6 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/components/SwipeDeck.jsx',
-      role: '',
-    },
-    {
-      path: 'frontend/src/components/SwipeDeck.module.css',
       role: '',
     },
     {
