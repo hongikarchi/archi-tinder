@@ -7,6 +7,8 @@ import DiscoveryTriggerCard from '../components/DiscoveryTriggerCard.jsx'
 import TutorialPopup from '../components/TutorialPopup.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
 import CardSkeleton from '../components/CardSkeleton.jsx'
+import SwipeDeck from '../components/SwipeDeck.jsx'
+import { SWIPE_PREVENT_ALL } from '../components/swipeGestureConfig.js'
 import { discoveryNavigationGuard } from '../utils/discoveryGuard.js'
 import { useSwipeOrchestration } from '../hooks/useSwipeOrchestration.js'
 import { useKeyboardSwipe } from '../hooks/useKeyboardSwipe.js'
@@ -20,7 +22,7 @@ let _discoveryMountedOnce = false
 const PREFETCH_AT_REMAINING = 3   // fetch more when deck.length <= this
 const TASTE_NUDGE_THRESHOLD = 10  // inject trigger card when draftLikeCount reaches this
 const DISCOVERY_LIKE_HARD_CAP = 50  // hard stop — block swiping, force Taste hand-off
-const DECK_CACHE_KEY = 'discovery_deck_v2'
+const DECK_CACHE_KEY = 'discovery_deck_v4' // v4: added gallery_srcset field (FRONT-UX-14-FIX) — invalidate pre-change cached decks
 const DECK_CACHE_TTL_MS = 30 * 60 * 1000  // 30 min
 const DRAFT_ID_KEY = 'discovery_draft_id'
 const DRAFT_LIKES_KEY = 'discovery_draft_likes'
@@ -700,20 +702,35 @@ export default function DiscoveryPage({ showToast }) {
           </div>
         ) : (
           <>
-            {deck.slice(0, 3).reverse().map((card, idxFromBottom) => {
-              const stackIndex = 2 - idxFromBottom // 0 = top
-              const isTop = stackIndex === 0
-              const id = getCardId(card)
-              const isTrigger = isTriggerCard(card)
-
-              if (isTop) {
-                const isShaking = !isTrigger && shakeCardId === topCardId
+            {/* FRONT-UX-14-SIMPLIFY — full-size under-card stack via the shared
+                SwipeDeck static ladder. Top + next real cards render in
+                IDENTICAL keyed wrappers (key = card id only) so React reuses
+                the DOM node when a card is promoted from under to top — no
+                remount, no flicker. The under card is a real SwipeCard
+                rendered inert (pointerEvents:none, aria-hidden); its image
+                telemetry fires while hidden (acceptable — see report). The
+                trigger card, when it is the under-card, renders inert too. */}
+            <SwipeDeck active>
+              {[deck[1], deck[0]].filter(Boolean).map(card => {
+                const isTop = card === deck[0]
+                const id = getCardId(card)
+                const isTrigger = isTriggerCard(card)
+                const isShaking = isTop && !isTrigger && shakeCardId === topCardId
                 return (
-                  <div key={`top-${id}`} style={{ position: 'absolute', inset: 0, zIndex: 3 }}>
+                  <div
+                    key={id}
+                    style={{
+                      position: 'absolute', inset: 0,
+                      zIndex: isTop ? 5 : 4,
+                      pointerEvents: isTop ? 'auto' : 'none',
+                    }}
+                    aria-hidden={!isTop}
+                  >
                     <SwipeGestureFrame
-                      ref={cardRef}
-                      onSwipe={onTinderSwipe}
-                      onCardLeftScreen={onCardLeftScreen}
+                      ref={isTop ? cardRef : null}
+                      onSwipe={isTop ? onTinderSwipe : undefined}
+                      onCardLeftScreen={isTop ? onCardLeftScreen : undefined}
+                      preventSwipe={isTop ? undefined : SWIPE_PREVENT_ALL}
                       className={isShaking ? 'discovery-shake' : undefined}
                     >
                       {isTrigger ? (
@@ -728,34 +745,13 @@ export default function DiscoveryPage({ showToast }) {
                     </SwipeGestureFrame>
                   </div>
                 )
-              }
-              // Background stack cards: never render trigger card in the stack
-              if (isTrigger) return null
-              return (
-                <div
-                  key={`bg-${id}-${stackIndex}`}
-                  style={{
-                    position: 'absolute', top: 0, left: 0,
-                    width: CARD_WIDTH, height: CARD_HEIGHT,
-                    transform: `scale(${1 - stackIndex * 0.05}) translateY(${stackIndex * 10}px)`,
-                    transformOrigin: 'bottom center',
-                    pointerEvents: 'none',
-                    zIndex: 3 - stackIndex,
-                  }}
-                >
-                  <SwipeCard
-                    card={card}
-                    onGalleryOpen={() => {}}
-                    onGalleryClose={() => {}}
-                  />
-                </div>
-              )
-            })}
+              })}
+            </SwipeDeck>
             {loading && deck.length > 0 && (
               <div style={{
                 position: 'absolute', bottom: -28, left: 0, right: 0,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                zIndex: 4,
+                zIndex: 6,
               }}>
                 <div style={{
                   width: 18, height: 18, borderRadius: '50%',

@@ -4,6 +4,7 @@ import QuestionCard from '../components/QuestionCard.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
 import CardSkeleton from '../components/CardSkeleton.jsx'
 import SwipeDeck from '../components/SwipeDeck.jsx'
+import { SWIPE_PREVENT_ALL } from '../components/swipeGestureConfig.js'
 import { isActionCard } from '../utils/appHelpers.js'
 import { useSwipeOrchestration } from '../hooks/useSwipeOrchestration.js'
 import { useKeyboardSwipe } from '../hooks/useKeyboardSwipe.js'
@@ -349,6 +350,19 @@ export default function SwipePage({
   const [localResetTick, setLocalResetTick] = useState(0)
   const [showExitConfirm, setShowExitConfirm] = useState(false)
   const [showDismissConfirm, setShowDismissConfirm] = useState(false)
+  // FRONT-UX-14-SIMPLIFY — scopes the recovery-remount key suffix to the
+  // SPECIFIC card a reset fired on. cardResetToken/localResetTick are
+  // monotonic counters that never reset to 0 — if the suffix were applied
+  // unconditionally whenever `resetTick` is truthy, every card AFTER the
+  // first-ever recovery would carry a stale `-rN` suffix forever, permanently
+  // mismatching the under-card's key and defeating the DOM-reuse promotion
+  // fix. Captured at render time (not in an effect — an effect fires one
+  // render late, after the remount already needed to happen) whenever the
+  // token pair changes, tagged with the CURRENT top card's id.
+  const resetRef = useRef({ t: cardResetToken, l: localResetTick, id: null })
+  if (resetRef.current.t !== cardResetToken || resetRef.current.l !== localResetTick) {
+    resetRef.current = { t: cardResetToken, l: localResetTick, id: currentCard?.image_id }
+  }
 
   const phase            = progress?.phase
   const filter_relaxed   = progress?.filter_relaxed || false
@@ -632,14 +646,13 @@ export default function SwipePage({
         )}
 
         {/* Card */}
-        <SwipeDeck
-          nextCard={!questionTrigger && currentCard && !isActionCard(currentCard) ? nextCard : null}
-          active={!!currentCard}
-        >
+        <SwipeDeck active={!!currentCard}>
           {currentCard ? (
             questionTrigger ? (
               /* Wrap QuestionCard in SwipeGestureFrame so right swipe = 'A' (Yes)
-                 and left swipe = 'B' (No). Buttons remain as accessible fallback. */
+                 and left swipe = 'B' (No). Buttons remain as accessible fallback.
+                 No under-card here — question interstitials aren't part of the
+                 real-card deck. */
               <SwipeGestureFrame
                 ref={questionCardRef}
                 key={`question_${questionTrigger.axis ?? ''}_${questionTrigger.type}`}
@@ -656,26 +669,60 @@ export default function SwipePage({
               </SwipeGestureFrame>
             ) : (
               <>
-                <SwipeGestureFrame
-                  ref={cardRef}
-                  key={`${currentCard.image_id}_${cardResetToken}_${localResetTick}`}
-                  onSwipe={onTinderSwipe}
-                  onCardLeftScreen={onCardLeftScreen}
-                >
-                  {isActionCard(currentCard) ? (
-                    <ActionCard card={currentCard} />
-                  ) : (
-                    <SwipeCard
-                      card={currentCard}
-                      onGalleryClose={() => {}}
-                    />
-                  )}
-                </SwipeGestureFrame>
+                {/* FRONT-UX-14-SIMPLIFY — full-size under-card stack. Render the
+                    top card AND the next real card (guarded off for action-card
+                    tops, mirroring the old nextCard={...isActionCard?null}
+                    condition) in IDENTICAL wrapper shapes so React reuses the
+                    DOM node when a card moves from under-slot to top-slot
+                    (key = image_id only — no remount). The under card finishes
+                    its LQIP->main image load while hidden (pointerEvents:none,
+                    aria-hidden), and promotion is a pure zIndex/prop flip. */}
+                {[
+                  (!isActionCard(currentCard) ? nextCard : null),
+                  currentCard,
+                ].filter(Boolean).map(card => {
+                  const isTop = card === currentCard
+                  // Scope the recovery-remount suffix to the exact card the
+                  // reset fired on (see resetRef comment above) so normal
+                  // promotion (under -> top) never remounts.
+                  const resetSuffix = (isTop && resetRef.current.id === card.image_id)
+                    ? `-r${cardResetToken}_${localResetTick}`
+                    : ''
+                  return (
+                    <div
+                      key={card.image_id}
+                      style={{
+                        position: 'absolute', inset: 0,
+                        zIndex: isTop ? 5 : 4,
+                        pointerEvents: isTop ? 'auto' : 'none',
+                      }}
+                      aria-hidden={!isTop}
+                    >
+                      <SwipeGestureFrame
+                        ref={isTop ? cardRef : null}
+                        key={`${card.image_id}${resetSuffix}`}
+                        onSwipe={isTop ? onTinderSwipe : undefined}
+                        onCardLeftScreen={isTop ? onCardLeftScreen : undefined}
+                        preventSwipe={isTop ? undefined : SWIPE_PREVENT_ALL}
+                      >
+                        {isActionCard(card) ? (
+                          <ActionCard card={card} />
+                        ) : (
+                          <SwipeCard
+                            card={card}
+                            onGalleryClose={() => {}}
+                          />
+                        )}
+                      </SwipeGestureFrame>
+                    </div>
+                  )
+                })}
                 {isLoading && (
                   <div style={{
                     position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     borderRadius: 20, background: 'rgba(0,0,0,0.15)', pointerEvents: 'none',
+                    zIndex: 6,
                   }}>
                     <div style={{
                       width: 32, height: 32, borderRadius: '50%',

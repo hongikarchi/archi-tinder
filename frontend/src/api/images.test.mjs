@@ -89,4 +89,56 @@ if (normalizeCard) {
     const result = normalizeCard(card)
     assert.equal(result.cover_full_url, null)
   })
+
+  // FRONT-UX-14: gallery URLs are right-sized (default 840 width) per-entry.
+  test('normalizeCard: gallery URLs are right-sized (w_840,c_limit)', () => {
+    const RAW_DIVISARE_2 = 'https://images.divisare.com/images/f_auto,q_auto,w_auto/v1/def/y.jpg'
+    const SIZED_DIVISARE_2 = 'https://images.divisare.com/images/f_auto,q_auto,w_840,c_limit/v1/def/y.jpg'
+    const card = { canonical_bld_id: 'bld_000001', gallery: [RAW_DIVISARE, RAW_DIVISARE_2] }
+    const result = normalizeCard(card)
+    assert.deepEqual(result.gallery, [SIZED_DIVISARE, SIZED_DIVISARE_2],
+      'each gallery entry must be independently right-sized')
+  })
+
+  test('normalizeCard: gallery URLs on a non-CDN host pass through unchanged', () => {
+    const EXTERNAL = 'https://cdn.unknown-host.io/photo.jpg'
+    const card = { canonical_bld_id: 'bld_000001', gallery: [EXTERNAL] }
+    const result = normalizeCard(card)
+    assert.deepEqual(result.gallery, [EXTERNAL])
+  })
+
+  test('normalizeCard: gallery defaults to [] when absent', () => {
+    const card = { canonical_bld_id: 'bld_000001' }
+    const result = normalizeCard(card)
+    assert.deepEqual(result.gallery, [])
+  })
+
+  // FRONT-UX-14-FIX: gallery_srcset — DPR 1x/2x srcset built from RAW gallery
+  // URLs, independent of the right-sized `gallery` field.
+  test('normalizeCard: gallery_srcset built from RAW urls (Divisare, contains 1x/2x)', () => {
+    const RAW_DIVISARE_2 = 'https://images.divisare.com/images/f_auto,q_auto,w_auto/v1/def/y.jpg'
+    const card = { canonical_bld_id: 'bld_000001', gallery: [RAW_DIVISARE, RAW_DIVISARE_2] }
+    const result = normalizeCard(card)
+    assert.equal(result.gallery_srcset.length, 2)
+    for (const srcset of result.gallery_srcset) {
+      assert.match(srcset, /^https:\/\/images\.divisare\.com\/.* 1x, https:\/\/images\.divisare\.com\/.* 2x$/,
+        'each gallery_srcset entry must contain a 1x and a 2x descriptor')
+    }
+    // gallery (right-sized strings) must remain unaffected in shape
+    assert.deepEqual(result.gallery, [SIZED_DIVISARE,
+      'https://images.divisare.com/images/f_auto,q_auto,w_840,c_limit/v1/def/y.jpg'])
+  })
+
+  test('normalizeCard: gallery_srcset is null-safe for non-CDN urls', () => {
+    const EXTERNAL = 'https://cdn.unknown-host.io/photo.jpg'
+    const card = { canonical_bld_id: 'bld_000001', gallery: [EXTERNAL] }
+    const result = normalizeCard(card)
+    assert.deepEqual(result.gallery_srcset, [null])
+  })
+
+  test('normalizeCard: gallery_srcset defaults to [] when gallery absent', () => {
+    const card = { canonical_bld_id: 'bld_000001' }
+    const result = normalizeCard(card)
+    assert.deepEqual(result.gallery_srcset, [])
+  })
 }

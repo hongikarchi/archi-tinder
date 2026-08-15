@@ -3,13 +3,17 @@
  * Dependency removed from package.json; this file is now the canonical source.
  *
  * Semantic divergences from upstream:
- *   (a) handleSwipeReleased (position-mode) — swipe velocity multiplied x3.
- *       Fly-out travels ~3x the distance in ~1/3 the duration — deliberate
- *       feel tuning, matches the (b) power constant change.
- *   (b) Imperative swipe() power constant 1.3 -> 3.0.
- *   (c) animateOut duration capped at Math.min(diagonal / velocity, 500) —
- *       fixes upstream's unbounded duration at near-zero release velocity.
- *       animateBack / snap-back is untouched.
+ *   (a) handleSwipeReleased (position-mode) — normalize multiplier 1.6 -> 1.0
+ *       (FRONT-UX-14-TUNE): at 1.6 the card was offscreen after ~35% of the
+ *       animated distance, so most of the flight was invisible.
+ *   (b) Imperative swipe() power constant 1.6 -> 1.0 (FRONT-UX-14-TUNE): at
+ *       1.6 + easeOutCubic's front-loaded speed, the visible portion of the
+ *       exit was ~10% of duration (~56ms, "bullet-fast").
+ *   (c) animateOut duration clamped to Math.max(480, Math.min(diagonal /
+ *       velocity, 680)) (FRONT-UX-14-TUNE, was [320,560]), eased with
+ *       easeInOutCubic instead of easeOutCubic — slow start keeps the
+ *       departure visible for ~35-40% of duration (~250ms) before the card
+ *       accelerates off-screen. animateBack / snap-back is untouched.
  *   (d) useWindowSize eagerly reads window.innerWidth/innerHeight as its
  *       initializer, replacing upstream's SSR guard. This app is CSR-only,
  *       and it also fixes upstream's first-render NaN-diagonal race.
@@ -39,17 +43,22 @@ const normalize = (vector) => {
   return { x: vector.x / length, y: vector.y / length }
 }
 
+// easeInOutCubic — slow start (departure stays visible), fast middle, slow
+// settle at the end. Replaces easeOutCubic (FRONT-UX-14-TUNE): easeOutCubic's
+// front-loaded speed made the card offscreen before the eye could track it.
+const easeInOutCubic = (t) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
+
 const animateOut = async (gesture, setSpringTarget, windowHeight, windowWidth) => {
   const diagonal = pythagoras(windowHeight, windowWidth)
   const velocity = pythagoras(gesture.x, gesture.y)
   const finalX = diagonal * gesture.x
   const finalY = diagonal * gesture.y
   const finalRotation = gesture.x * 45
-  const duration = Math.min(diagonal / velocity, 500)
+  const duration = Math.max(480, Math.min(diagonal / velocity, 680))
 
   setSpringTarget.start({
     xyrot: [finalX, finalY, finalRotation],
-    config: { duration }
+    config: { duration, easing: easeInOutCubic }
   })
 
   return await new Promise((resolve) => setTimeout(resolve, duration))
@@ -87,7 +96,7 @@ const TinderCard = React.forwardRef(
     React.useImperativeHandle(ref, () => ({
       async swipe(dir = 'right') {
         if (onSwipe) onSwipe(dir)
-        const power = 3.0
+        const power = 1.0
         const disturbance = (Math.random() - 0.5) / 2
         if (dir === 'right')      await animateOut({ x: power, y: disturbance }, setSpringTarget, width, height)
         else if (dir === 'left')  await animateOut({ x: -power, y: disturbance }, setSpringTarget, width, height)
@@ -109,7 +118,7 @@ const TinderCard = React.forwardRef(
             if (onSwipe) onSwipe(dir)
             const v = swipeRequirementType === 'velocity'
               ? { x: gesture.vx, y: gesture.vy }
-              : (() => { const n = normalize({ x: gesture.dx, y: gesture.dy }); return { x: n.x * 3, y: n.y * 3 } })()
+              : (() => { const n = normalize({ x: gesture.dx, y: gesture.dy }); return { x: n.x * 1.0, y: n.y * 1.0 } })()
             await animateOut(v, setSpringTarget, width, height)
             if (onCardLeftScreen) onCardLeftScreen(dir)
             return
