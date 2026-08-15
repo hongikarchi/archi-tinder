@@ -1,0 +1,23 @@
+/*
+ * RecommendedTile.module.css — image-overlay card hover per §3.5.1.
+ * FRONT-DESIGN-A1-HOVER: CSS :hover replaces onMouseEnter/Leave style mutation.
+ */
+.tile {
+  border: 1px solid transparent;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.tile:hover {
+  transform: translateY(-4px);
+  border-color: rgba(236, 72, 153, 0.55);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tile {
+    transition: none;
+  }
+  .tile:hover {
+    transform: none;
+  }
+}

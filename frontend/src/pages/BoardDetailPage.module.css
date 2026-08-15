@@ -1,0 +1,59 @@
+/*
+ * BoardDetailPage.module.css — hero header button hovers, owner-row underline,
+ * Love-this reaction button hover/press states.
+ * FRONT-DESIGN-A1-HOVER: CSS :hover/:active replaces onMouseEnter/Leave +
+ * React-state style mutation (isBackHovered / isShareHovered / isOwnerRowHovered /
+ * isReactHovered / isReactPressed all removed — none of them drove conditional
+ * rendering, only style values).
+ */
+
+/* Back + Share circular hero buttons — color/scale lift on hover. */
+.heroBtn {
+  color: #fff;
+  transition: color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+              transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.heroBtn:hover {
+  color: var(--accent-1);
+  transform: scale(1.05);
+}
+/* Share button "copied" state (green check) must win over the hover accent —
+   higher specificity than the bare :hover rule above. */
+.heroBtn.copied,
+.heroBtn.copied:hover {
+  color: #34d399;
+}
+
+/* Owner row — name underlines on row hover (parent-hover-affects-child, method #4). */
+.ownerRow:hover .ownerName {
+  text-decoration: underline;
+}
+
+/* Love-this reaction button — scale on hover/press + brightness when not-yet-reacted. */
+.reactBtn {
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+              filter 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+              background 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+              color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.reactBtn:hover:not(:disabled) {
+  transform: scale(1.02);
+}
+.reactBtn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+.reactBtn:hover:not(:disabled):not(.reacted) {
+  filter: brightness(1.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .heroBtn,
+  .reactBtn {
+    transition: none;
+  }
+  .heroBtn:hover,
+  .reactBtn:hover:not(:disabled),
+  .reactBtn:active:not(:disabled) {
+    transform: none;
+  }
+}

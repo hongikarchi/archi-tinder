@@ -1,0 +1,63 @@
+/*
+ * BoardCard.module.css — §3.5.4 flip card hover states.
+ * FRONT-DESIGN-A1-HOVER: CSS :hover replaces onMouseEnter/Leave style mutation
+ * for pure visual pairs. The outer perspective wrapper's isHovered state stays
+ * in JS (drives lock-chip / delete-button mount, not just style) — see BoardCard.jsx.
+ */
+
+/* Lock-toggle chip + delete (X) button — dark circle background darkens on hover. */
+.iconChip {
+  background: rgba(0, 0, 0, 0.4);
+  transition: background 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.iconChip:hover {
+  background: rgba(0, 0, 0, 0.6);
+}
+
+/* Delete (X) button also animates padding/border-radius (idle circle → confirm
+   pill) — carries the original combined `transition: all` so those inline
+   style changes (confirmingDelete ternaries) keep animating too. */
+.deleteChip {
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Resume CTA — primary gradient button, subtle lift on hover. */
+.resumeBtn {
+  transition: transform var(--motion-normal) var(--motion-ease);
+}
+.resumeBtn:hover {
+  transform: translateY(-1px);
+}
+
+/* Start New — secondary button, background brightens on hover. */
+.startNewBtn {
+  background: rgba(255, 255, 255, 0.10);
+  transition: background var(--motion-fast) var(--motion-ease);
+}
+.startNewBtn:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+/* View Gallery action bar button — pink tint on hover. */
+.viewGalleryBtn {
+  background: rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  transition: background 0.18s cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.viewGalleryBtn:hover {
+  background: rgba(236, 72, 153, 0.18);
+  border-color: rgba(236, 72, 153, 0.45);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .iconChip,
+  .resumeBtn,
+  .startNewBtn,
+  .viewGalleryBtn {
+    transition: none;
+  }
+  .resumeBtn:hover {
+    transform: none;
+  }
+}

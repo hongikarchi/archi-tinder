@@ -1,0 +1,30 @@
+/*
+ * LikedProjectsPage.module.css — building card hover + header back button hover.
+ * FRONT-DESIGN-A1-HOVER: CSS :hover replaces onMouseEnter/Leave style mutation.
+ */
+.card {
+  border: 1px solid transparent;
+  transition: transform var(--motion-normal, 220ms) var(--motion-ease, cubic-bezier(0.4, 0, 0.2, 1)),
+              border-color var(--motion-normal, 220ms) var(--motion-ease, cubic-bezier(0.4, 0, 0.2, 1));
+}
+.card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(236, 72, 153, 0.55);
+}
+
+.backBtn {
+  background: transparent;
+  transition: background var(--motion-fast, 180ms) var(--motion-ease, cubic-bezier(0.4, 0, 0.2, 1));
+}
+.backBtn:hover {
+  background: var(--color-surface-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    transition: none;
+  }
+  .card:hover {
+    transform: none;
+  }
+}

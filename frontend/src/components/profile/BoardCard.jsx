@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useImageTelemetry } from '../../hooks/useImageTelemetry.js'
 import InfoCol from './InfoCol'
 import { useTranslation } from '../../i18n/index.js'
+import s from './BoardCard.module.css'
 
 /**
  * BoardCard — flip card per DESIGN.md §3.5.4
@@ -210,17 +211,14 @@ export default function BoardCard({
                     e.stopPropagation()
                     onVisibilityChange(isPrivate ? 'public' : 'private')
                   }}
+                  className={s.iconChip}
                   style={{
                     position: 'absolute', top: 16, right: 16,
-                    background: 'rgba(0,0,0,0.4)',
                     backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
                     padding: 6, borderRadius: '50%',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     border: 'none', cursor: 'pointer',
-                    transition: 'background 0.18s cubic-bezier(0.4,0,0.2,1)',
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.6)' }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.4)' }}
                 >
                   {isPrivate ? (
                     // Lock-closed SVG (private)
@@ -284,20 +282,17 @@ export default function BoardCard({
                   onDelete()
                 }
               }}
+              className={`${s.iconChip} ${s.deleteChip}`}
               style={{
                 position: 'absolute', top: 16, left: 16,
                 display: confirmingDelete ? 'flex' : 'inline-flex',
                 alignItems: 'center',
                 gap: 6,
-                background: 'rgba(0,0,0,0.4)',
                 backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
                 padding: confirmingDelete ? '6px 10px 6px 6px' : 6,
                 borderRadius: confirmingDelete ? 16 : '50%',
                 border: 'none', cursor: 'pointer',
-                transition: 'all 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.6)' }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.4)' }}
             >
               {/* X icon — red when confirming, white-ish when idle */}
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
@@ -433,6 +428,7 @@ export default function BoardCard({
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); onResume() }}
+                  className={s.resumeBtn}
                   style={{
                     flex: 1, minHeight: 44,
                     padding: '10px 8px', borderRadius: 12,
@@ -441,10 +437,7 @@ export default function BoardCard({
                     color: '#fff', fontSize: 12, fontWeight: 600,
                     cursor: 'pointer', fontFamily: 'inherit',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    transition: 'transform var(--motion-normal) var(--motion-ease)',
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)' }}
-                  onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)' }}
                 >
                   {t('board.resume', { count: board.latest_session_meta.like_count })}
                 </button>
@@ -452,18 +445,15 @@ export default function BoardCard({
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); onStartNew() }}
+                  className={s.startNewBtn}
                   style={{
                     flex: 1, minHeight: 44,
                     padding: '10px 8px', borderRadius: 12,
-                    background: 'rgba(255,255,255,0.10)',
                     border: '1px solid rgba(255,255,255,0.18)',
                     color: '#fff', fontSize: 12, fontWeight: 600,
                     cursor: 'pointer', fontFamily: 'inherit',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    transition: 'background var(--motion-fast) var(--motion-ease)',
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.18)' }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.10)' }}
                 >
                   {t('board.startNew')}
                 </button>
@@ -472,23 +462,13 @@ export default function BoardCard({
             <button
               type="button"
               onClick={() => navigate('/board/' + board.board_id)}
+              className={s.viewGalleryBtn}
               style={{
                 width: '100%', minHeight: 44,
                 padding: '10px 14px', borderRadius: 12,
-                background: 'rgba(255,255,255,0.10)',
-                border: '1px solid rgba(255,255,255,0.18)',
                 color: '#fff', fontSize: 13, fontWeight: 600,
                 cursor: 'pointer', fontFamily: 'inherit',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                transition: 'background 0.18s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(236,72,153,0.18)'
-                e.currentTarget.style.borderColor = 'rgba(236,72,153,0.45)'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.10)'
-                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.18)'
               }}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

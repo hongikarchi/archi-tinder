@@ -1,3 +1,5 @@
+import s from './ArticleCard.module.css'
+
 /**
  * ArticleCard — list-style card with §3.5.1 hover behavior (no default border, hover lift)
  *   Content-specific differentiator: left accent border + source pill (preserved from prior redesign).
@@ -8,29 +10,15 @@ export default function ArticleCard({ article }) {
       href={article.url}
       target="_blank"
       rel="noreferrer"
+      className={s.card}
       style={{
         display: 'flex',
         flexDirection: 'column',
         gap: 12,
         padding: '18px 20px 18px 22px',
         background: 'var(--color-surface)',
-        border: '1px solid transparent',   // §3.5.1: NO default border
-        borderLeft: '3px solid #ec4899',    // content-specific accent (articles only)
         borderRadius: 14,
         textDecoration: 'none',
-        transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.transform = 'translateY(-4px)'
-        e.currentTarget.style.borderColor = 'rgba(236,72,153,0.55)'
-        e.currentTarget.style.borderLeftColor = '#f43f5e'
-        e.currentTarget.style.boxShadow = '0 10px 25px rgba(0,0,0,0.3)'
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.transform = 'translateY(0)'
-        e.currentTarget.style.borderColor = 'transparent'
-        e.currentTarget.style.borderLeftColor = '#ec4899'
-        e.currentTarget.style.boxShadow = 'none'
       }}
     >
       <p

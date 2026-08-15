@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { useImageTelemetry } from '../../hooks/useImageTelemetry.js'
 import InfoCol from './InfoCol'
+import s from './ProjectCard.module.css'
 
 /**
  * ProjectCard — image-overlay card per DESIGN.md §3.5.1 + §3.5.2 RICH PATTERN.
@@ -23,24 +24,15 @@ export default function ProjectCard({ project, onSave = null, isSaved = false })
         if (!buildingId) return
         navigate(`/buildings/${buildingId}`)
       }}
+      className={s.card}
       style={{
         position: 'relative',
         borderRadius: 20,
         overflow: 'hidden',
         cursor: 'pointer',
         background: 'rgba(255,255,255,0.03)',
-        border: '1px solid transparent',          // §3.5.1: NO default light border
         aspectRatio: '4 / 5',
         boxShadow: '0 10px 25px rgba(0,0,0,0.3)', // §3.5.1 mandatory depth
-        transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.transform = 'translateY(-4px)'
-        e.currentTarget.style.borderColor = 'rgba(236,72,153,0.55)'
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.transform = 'translateY(0)'
-        e.currentTarget.style.borderColor = 'transparent'
       }}
     >
       <img

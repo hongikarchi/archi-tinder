@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getLikedBuildings } from '../api/client.js'
 import { useTranslation } from '../i18n/index.js'
+import s from './LikedProjectsPage.module.css'
 
 /**
  * LikedProjectsPage — grid of buildings the user right-swiped in Discovery.
@@ -17,6 +18,7 @@ function LikedBuildingCard({ building }) {
   return (
     <div
       onClick={() => { if (buildingId) navigate('/buildings/' + buildingId) }}
+      className={s.card}
       style={{
         position: 'relative',
         aspectRatio: '4 / 5',
@@ -24,18 +26,8 @@ function LikedBuildingCard({ building }) {
         overflow: 'hidden',
         cursor: buildingId ? 'pointer' : 'default',
         background: 'var(--color-surface)',
-        border: '1px solid transparent',
         boxShadow: '0 10px 25px rgba(0,0,0,0.3)',
-        transition: 'transform var(--motion-normal, 220ms) var(--motion-ease, cubic-bezier(0.4,0,0.2,1)), border-color var(--motion-normal, 220ms) var(--motion-ease, cubic-bezier(0.4,0,0.2,1))',
         userSelect: 'none',
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.transform = 'translateY(-4px)'
-        e.currentTarget.style.borderColor = 'rgba(236,72,153,0.55)'
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.transform = 'translateY(0)'
-        e.currentTarget.style.borderColor = 'transparent'
       }}
     >
       {imageUrl && (
@@ -139,16 +131,14 @@ export default function LikedProjectsPage() {
         <button
           onClick={() => navigate(-1)}
           aria-label="Back"
+          className={s.backBtn}
           style={{
             width: 44, height: 44, minWidth: 44,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: 'transparent', border: 'none',
+            border: 'none',
             color: 'var(--color-text)', cursor: 'pointer',
             borderRadius: 12,
-            transition: 'background var(--motion-fast, 180ms) var(--motion-ease, cubic-bezier(0.4,0,0.2,1))',
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-surface-2)' }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="19" y1="12" x2="5" y2="12" />

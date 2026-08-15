@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom'
+import s from './FirmProfileHeader.module.css'
 
 export default function FirmProfileHeader() {
   const navigate = useNavigate()
@@ -25,6 +26,7 @@ export default function FirmProfileHeader() {
         type="button"
         onClick={() => navigate(-1)}
         aria-label="Go back"
+        className={s.backBtn}
         style={{
           width: 44,
           height: 44,
@@ -32,19 +34,11 @@ export default function FirmProfileHeader() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: 'transparent',
           border: 'none',
           color: 'var(--color-text)',
           cursor: 'pointer',
           borderRadius: 12,
-          transition: 'background 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
           padding: 0,
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.background = 'var(--color-surface-2, rgba(255,255,255,0.05))'
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = 'transparent'
         }}
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
