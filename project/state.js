@@ -23,9 +23,9 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-08-15 23:24 KST',
-    head: 'e33a065',
-    branch: 'feature/claude-ux-14',
+    updatedAt: '2026-08-15 23:38 KST',
+    head: '73d6177',
+    branch: 'feature/claude-design-b2',
   },
   done: [
     {
@@ -78,7 +78,13 @@ window.PROJECT_STATE = {
       note: 'files state: id/originalBlob/currentBlob/preview — 반복 편집 화질 열화 방지',
     },
   ],
-  now: [],
+  now: [
+    {
+      id: 'FRONT-DESIGN-B2',
+      title: 'Claude Design 반복 세션 (진행 중 2026-08-15)',
+      note: '셋업 완료: claude.ai/design 프로젝트 "ArchiTinder Design System" + `docs/design-preview/` 페이지 프리뷰 9종(브리프/파운데이션/로그인/디스커버리/Taste/프로필/페르소나 리포트 문제 재현+모바일 제안/플로우 맵/컴포넌트, 실토큰+4테마 스위처). user 노트 5건 Brief 카드화: 레이아웃·폰트 정리, 페르소나 리포트 데스크탑 문제, 모바일 중심 가운데 레이아웃 전환, 로그인 중점 수정, 화면 이동 시나리오. 다음: user가 C…',
+    },
+  ],
   next: {
     xhigh: [
       {
@@ -241,6 +247,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 309,
+      title: 'feat(FRONT-UX-14): swipe motion + gallery UX — 7-round feel iteration, on-device verified',
+      mergedAt: '2026-08-15T14:25:06Z',
+      mergedAtKST: '2026-08-15 23:25 KST',
+      sha: '73d6177',
+    },
+    {
       number: 308,
       title: 'refactor(FRONT-DESIGN-A1): hover hacks -> CSS :hover PR-2 — 13 files, identical values',
       mergedAt: '2026-08-15T04:48:31Z',
@@ -288,13 +301,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-08-14T13:19:41Z',
       mergedAtKST: '2026-08-14 22:19 KST',
       sha: 'f0d4a5a',
-    },
-    {
-      number: 300,
-      title: 'feat(upload): success modal + navigate to Created tab',
-      mergedAt: '2026-08-14T12:52:21Z',
-      mergedAtKST: '2026-08-14 21:52 KST',
-      sha: '56bae0d',
     },
   ],
   agents: [
@@ -1681,6 +1687,42 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'docs/design-preview/brief.html',
+      role: '',
+    },
+    {
+      path: 'docs/design-preview/components.html',
+      role: '',
+    },
+    {
+      path: 'docs/design-preview/flow.html',
+      role: '',
+    },
+    {
+      path: 'docs/design-preview/foundations.html',
+      role: '',
+    },
+    {
+      path: 'docs/design-preview/pages/discovery.html',
+      role: '',
+    },
+    {
+      path: 'docs/design-preview/pages/login.html',
+      role: '',
+    },
+    {
+      path: 'docs/design-preview/pages/persona-report.html',
+      role: '',
+    },
+    {
+      path: 'docs/design-preview/pages/profile.html',
+      role: '',
+    },
+    {
+      path: 'docs/design-preview/pages/taste-swipe.html',
+      role: '',
+    },
+    {
       path: 'docs/prd/archibe-business-model.html',
       role: 'archibe 비즈니스 모델 PRD (정적 HTML)',
     },
@@ -2431,6 +2473,10 @@ window.PROJECT_STATE = {
     {
       path: 'tools/front-validate.sh',
       role: '프론트 검증 체인 스크립트',
+    },
+    {
+      path: 'tools/gen-design-preview.py',
+      role: '',
     },
     {
       path: 'tools/gen-state.js',

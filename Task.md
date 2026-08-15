@@ -57,7 +57,9 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(비어있음 — FRONT-UX-14 완료 2026-08-15, ## Done 참조. 디자인 이니셔티브 잔여: B2 Claude Design 연결 → A2 프리미티브 추출.)_
+### FRONT-DESIGN-B2 — Claude Design 반복 세션 (진행 중 2026-08-15)
+
+셋업 완료: claude.ai/design 프로젝트 "ArchiTinder Design System" + `docs/design-preview/` 페이지 프리뷰 9종(브리프/파운데이션/로그인/디스커버리/Taste/프로필/페르소나 리포트 문제 재현+모바일 제안/플로우 맵/컴포넌트, 실토큰+4테마 스위처). user 노트 5건 Brief 카드화: 레이아웃·폰트 정리, 페르소나 리포트 데스크탑 문제, **모바일 중심 가운데 레이아웃 전환**, 로그인 중점 수정, 화면 이동 시나리오. 다음: user가 Claude Design에서 방향 확정 → 승인분만 컴포넌트 단위 코드 반영(A2와 병행). 재생성: `python tools/gen-design-preview.py`.
 
 
 ## Next
