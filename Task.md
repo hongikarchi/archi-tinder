@@ -57,14 +57,7 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-### FRONT-FLOW-1 — 스와이프 온보딩 3연타 인터럽트 정리 (user 결정 2026-08-15)
-
-_B1 검토 중 발견: 신규 유저 시퀀스 Discovery 10likes → TriggerCard → Taste 진입 → TutorialPopup(제스처 재교육) → 첫 좌스와이프 → DismissConfirm 3연타. 스와이프 경로라 feature workflow 필수._
-- **DiscoveryTriggerCard 재설계**: 파랑-보라 그라디언트/이모지/glass 버튼 → paper 언어(cardLanguage.js, 로그인과 동일 브랜드)로. 로직(10-like 주입, ←Discovery/→Taste) 불변.
-- **TutorialPopup 이동**: SwipePage 최초 진입 → **신규 가입 계정의 Discovery 최초 진입**으로 (register 성공 시 localStorage 플래그, 기존 계정 로그인 미노출). 카피 Discovery 의미론(← pass 중립색 · → like accent), 하드코딩 hex 토큰화 + i18n화(현재 영어 하드코딩).
-- **DismissConfirmPopup**: 로직 유지(Taste 전용 dislike 영구 경고, 검증됨), backdrop만 §8.10 정합.
-
-_(디자인 이니셔티브 잔여: A1 기계적 스윕 → B2 Claude Design 연결 → A2 프리미티브 추출, `.claude/plans/design-clever-valley.md`)_
+_(비어있음 — FRONT-FLOW-1 완료 2026-08-15, ## Done 참조. 디자인 이니셔티브 잔여: A1 기계적 스윕 → B2 Claude Design 연결 → A2 프리미티브 추출, `.claude/plans/design-clever-valley.md`)_
 
 
 ## Next
@@ -286,6 +279,14 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FRONT-FLOW-1 — 스와이프 온보딩 3연타 인터럽트 정리 — RESOLVED 2026-08-15 (`ddfa655`)
+- B1 검토 중 user 발견/결정 3건 이행: 신규 유저 Discovery→Taste 시퀀스의 연속 인터럽트(TriggerCard→TutorialPopup→DismissConfirm) 정리
+- DiscoveryTriggerCard: 파랑-보라 그라디언트/이모지/glass → paper 명함 언어(cardLanguage.js, ARCHIBE 워드마크 + '10 LIKES' mono 스탬프, 테마 적응). 주입 로직/props 불변
+- TutorialPopup: SwipePage 최초 진입 → **신규 가입 계정의 Discovery 최초 진입** (register 성공 시에만 `archithon_show_tutorial` 플래그, 기존 계정 로그인/google/dev 미노출). 카피 Discovery 의미론(← pass 중립 muted · → like accent-1) + 전체 i18n ko/en(기존 영어 하드코딩), hex 3종 제거. SwipePage에서 완전 제거
+- DismissConfirmPopup: 로직/카피 불변(Taste 전용 dislike 영구 경고 — Discovery는 pass라 미해당, 코드 검증), backdrop rgba(0,0,0,0.4) + radius 토큰 §8.10 정합
+- Workflow: review PASS + security PASS, Opus verify confirmed LOW 1건(dead `archithon_tutorial_dismissed` write-only key) — 동일 커밋에서 제거. eslint 0 errors + build green
+- Deferred: web-testing/runner/runner.py:77의 dismissed-key 세팅 이제 무의미(inert, 테스트 영향 없음 — dev-login은 플래그 미설정) — 차기 web-testing 정리 때 제거
+
 ### FRONT-DESIGN-B1 — 로그인+프로필 비주얼 튜닝 — RESOLVED 2026-08-15 (`051254e`)
 - 디자인 4단계 이니셔티브(B1→A1→B2→A2, `.claude/plans/design-clever-valley.md`)의 B1: 시스템 내 리파인, 컨셉 교체 없음
 - 로그인: `lp-*` 전역 규칙 index.css → LoginPage.module.css 단일화(camelCase 모듈 클래스), input focus 3-state 신설(기존 outline:none 접근성 공백), error slot 고정 높이(레이아웃 시프트 제거), reduced-motion 블록. _(drafting-grid 배경 시그니처는 넣었다가 사용자 결정으로 제거 `1b4de9c` — 스와이프 페이지 플레인 톤 유지)_
