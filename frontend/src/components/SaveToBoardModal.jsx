@@ -179,7 +179,7 @@ export default function SaveToBoardModal({ card, onClose, onSaved }) {
         </div>
 
         {error && (
-          <p style={{ color: '#fca5a5', margin: '0 0 8px', fontSize: 13, lineHeight: 1.35 }}>
+          <p style={{ color: 'var(--color-destructive)', margin: '0 0 8px', fontSize: 13, lineHeight: 1.35 }}>
             {error}
           </p>
         )}
@@ -196,7 +196,7 @@ export default function SaveToBoardModal({ card, onClose, onSaved }) {
               padding: '0 12px',
               borderRadius: 10,
               border: '1px solid var(--color-border-soft)',
-              background: 'linear-gradient(135deg,#ec4899,#f43f5e)',
+              background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
               color: '#fff',
               fontSize: 13,
               fontWeight: 700,
@@ -244,8 +244,8 @@ export default function SaveToBoardModal({ card, onClose, onSaved }) {
               style={{
                 minHeight: 40,
                 borderRadius: 10,
-                border: '1px solid rgba(236,72,153,0.45)',
-                background: 'linear-gradient(135deg,#ec4899,#f43f5e)',
+                border: '1px solid color-mix(in srgb, var(--accent-1) 45%, transparent)',
+                background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
                 color: '#fff',
                 cursor: creating ? 'default' : 'pointer',
                 opacity: creating ? 0.7 : 1,
@@ -257,7 +257,7 @@ export default function SaveToBoardModal({ card, onClose, onSaved }) {
               {creating ? 'Creating…' : 'Create'}
             </button>
             {createError && (
-              <p style={{ margin: 0, color: '#fca5a5', fontSize: 12, lineHeight: 1.35 }}>
+              <p style={{ margin: 0, color: 'var(--color-destructive)', fontSize: 12, lineHeight: 1.35 }}>
                 {createError}
               </p>
             )}

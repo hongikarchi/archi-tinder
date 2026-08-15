@@ -4,6 +4,7 @@ import { fetchDiscoveryFeed, discoveryFeedback, promoteToTaste, VerifyRequiredEr
 import { reportWriteError } from '../utils/reportWriteError.js'
 import SwipeCard, { CARD_WIDTH, CARD_HEIGHT } from '../components/SwipeCard.jsx'
 import DiscoveryTriggerCard from '../components/DiscoveryTriggerCard.jsx'
+import TutorialPopup from '../components/TutorialPopup.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
 import CardSkeleton from '../components/CardSkeleton.jsx'
 import { discoveryNavigationGuard } from '../utils/discoveryGuard.js'
@@ -140,6 +141,12 @@ export default function DiscoveryPage({ showToast }) {
   const [shakeCardId, setShakeCardId] = useState(null)
   const [promoteLoading, setPromoteLoading] = useState(false)
   const [capReached, setCapReached] = useState(false)
+  // FRONT-FLOW-1: shown once on first Discovery entry for newly registered
+  // accounts — flag set by LoginPage's register-success path. DiscoveryPage
+  // owns both localStorage keys end-to-end (component itself stays dumb).
+  const [showTutorial, setShowTutorial] = useState(
+    () => localStorage.getItem('archithon_show_tutorial') === '1'
+  )
   // Leave-warning modal state (DISCOVERY-PERF-3)
   const [leaveModal, setLeaveModal] = useState(null)  // null | { proceed: fn }
   // True while the modal's auto-promote call is in-flight (>=10 path)
@@ -437,8 +444,15 @@ export default function DiscoveryPage({ showToast }) {
 
   useKeyboardSwipe({
     onSwipe: async (dir) => { await cardRef.current?.swipe(dir) },
-    guardCondition: () => !!(capReached || !cardRef.current || !deck.length),
+    guardCondition: () => !!(capReached || !cardRef.current || !deck.length || showTutorial),
   })
+
+  // FRONT-FLOW-1: tutorial dismiss — removing 'archithon_show_tutorial' (set only
+  // on register success, LoginPage) IS the complete "already seen" record.
+  function handleTutorialClose() {
+    localStorage.removeItem('archithon_show_tutorial')
+    setShowTutorial(false)
+  }
 
   // -- Promote to Taste (triggered by right-swipe on trigger card) --
   async function handlePromoteToTaste() {
@@ -490,6 +504,8 @@ export default function DiscoveryPage({ showToast }) {
       background: 'var(--color-bg)',
       padding: '20px 16px',
     }}>
+
+      <TutorialPopup visible={showTutorial} onClose={handleTutorialClose} />
 
       {/* Header */}
       <div style={{ textAlign: 'center', width: '100%' }}>

@@ -134,7 +134,6 @@ export default function SurpriseBoardModal({ onClose, onSaved }) {
         }}>
           <div style={{ flex: 1, paddingRight: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <span style={{ fontSize: 18 }}>✨</span>
               <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800 }}>{title}</h3>
             </div>
             {rationale ? (
@@ -248,7 +247,7 @@ export default function SurpriseBoardModal({ onClose, onSaved }) {
                       <div style={{
                         width: '100%',
                         height: '100%',
-                        background: 'linear-gradient(135deg,rgba(236,72,153,0.18),rgba(15,15,15,0.85))',
+                        background: 'linear-gradient(135deg, color-mix(in srgb, var(--accent-1) 18%, transparent), rgba(0,0,0,0.85))',
                       }} />
                     )}
                   </div>
@@ -272,7 +271,7 @@ export default function SurpriseBoardModal({ onClose, onSaved }) {
                   minHeight: 40,
                   borderRadius: 10,
                   border: nameError
-                    ? '1px solid #fca5a5'
+                    ? '1px solid var(--color-destructive)'
                     : '1px solid var(--color-border-soft)',
                   background: 'var(--color-bg)',
                   color: 'var(--color-text)',
@@ -284,7 +283,7 @@ export default function SurpriseBoardModal({ onClose, onSaved }) {
                 }}
               />
               {nameError && (
-                <p style={{ margin: '4px 0 0', color: '#fca5a5', fontSize: 12 }}>
+                <p style={{ margin: '4px 0 0', color: 'var(--color-destructive)', fontSize: 12 }}>
                   {nameError}
                 </p>
               )}
@@ -314,7 +313,7 @@ export default function SurpriseBoardModal({ onClose, onSaved }) {
                     minHeight: 40,
                     borderRadius: 10,
                     border: 'none',
-                    background: 'linear-gradient(135deg,#ec4899,#f43f5e)',
+                    background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
                     color: '#fff',
                     fontSize: 13,
                     fontWeight: 700,
@@ -368,8 +367,8 @@ export default function SurpriseBoardModal({ onClose, onSaved }) {
                 borderRadius: 12,
                 border: 'none',
                 background: phase === 'saving'
-                  ? 'rgba(236,72,153,0.5)'
-                  : 'linear-gradient(135deg,#ec4899,#f43f5e)',
+                  ? 'color-mix(in srgb, var(--accent-1) 50%, transparent)'
+                  : 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
                 color: '#fff',
                 fontSize: 14,
                 fontWeight: 700,

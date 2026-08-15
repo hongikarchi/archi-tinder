@@ -1,5 +1,4 @@
 import { useRef, useState, useEffect } from 'react'
-import TutorialPopup from '../components/TutorialPopup.jsx'
 import SwipeCard, { CARD_WIDTH, CARD_HEIGHT } from '../components/SwipeCard.jsx'
 import QuestionCard from '../components/QuestionCard.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
@@ -9,58 +8,72 @@ import { isActionCard } from '../utils/appHelpers.js'
 import { useSwipeOrchestration } from '../hooks/useSwipeOrchestration.js'
 import { useKeyboardSwipe } from '../hooks/useKeyboardSwipe.js'
 import { useTranslation } from '../i18n/index.js'
+import {
+  INK,
+  MONO,
+  LS_CAPS,
+  paperFaceStyle,
+  wordmarkStyle,
+  monoLabelStyle,
+  cardMetaStyle,
+} from '../components/cardLanguage.js'
 
 /* ── ActionCard ──────────────────────────────────────────────────────────── */
 // Rendered when card_type === 'action' (backend-emitted when session converges).
 // The user opts in to the report by right-swiping (like), or keeps exploring
 // by left-swiping (pass). The hint text at the bottom makes this explicit.
+// FRONT-FLOW-2: retheme from the indigo-purple gradient card to the paper
+// business-card language (components/cardLanguage.js), mirroring
+// DiscoveryTriggerCard.jsx's composition (wordmark row + mono stamp, ink
+// title, meta body, mono hint row). Swipe semantics/props unchanged.
 function ActionCard({ card }) {
   const { t } = useTranslation()
   const message  = card.action_card_message  || t('swipe.actionCard.message')
   const subtitle = card.action_card_subtitle || t('swipe.actionCard.subtitle')
   return (
     <div style={{
+      ...paperFaceStyle({ radius: 20, padding: '24px 22px' }),
       position: 'absolute', top: 0, left: 0,
       width: CARD_WIDTH, height: CARD_HEIGHT,
-      borderRadius: 20, overflow: 'hidden',
-      background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 45%, #4c1d95 100%)',
-      boxShadow: '0 25px 50px rgba(0,0,0,0.6)',
-      display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center',
-      gap: 16, padding: '32px 28px',
+      justifyContent: 'space-between',
       userSelect: 'none',
+      boxSizing: 'border-box',
     }}>
-      {/* Decorative sparkle */}
-      <div style={{ fontSize: 56, lineHeight: 1 }}>✨</div>
-
-      {/* Main message */}
-      <h2 style={{
-        color: '#fff', fontSize: 22, fontWeight: 700,
-        textAlign: 'center', margin: 0, lineHeight: 1.35,
-      }}>
-        {message}
-      </h2>
-
-      {/* Subtitle */}
-      {subtitle && (
-        <p style={{
-          color: 'rgba(255,255,255,0.7)', fontSize: 14, fontWeight: 400,
-          textAlign: 'center', margin: 0, lineHeight: 1.5,
-        }}>
-          {subtitle}
-        </p>
-      )}
-
-      {/* Swipe hint — bottom of card */}
-      <div style={{
-        position: 'absolute', bottom: 28, left: 0, right: 0,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-        color: 'rgba(255,255,255,0.45)', fontSize: 12, letterSpacing: '0.03em',
-      }}>
-        <span>{t('swipe.actionCard.continueHint')}</span>
-        <span style={{ color: 'rgba(255,255,255,0.25)' }}>·</span>
-        <span>{t('swipe.actionCard.viewResultsHint')}</span>
+      {/* Top: wordmark row + mono stamp */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={wordmarkStyle}>ARCHIBE</span>
+        <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 600, letterSpacing: LS_CAPS, color: INK.mid }}>
+          {t('swipe.actionCard.stamp')}
+        </span>
       </div>
+
+      {/* Middle: title + body */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, textAlign: 'center' }}>
+        <h2 style={{
+          fontFamily: 'var(--font-family)',
+          fontSize: 22,
+          fontWeight: 700,
+          letterSpacing: '-0.01em',
+          color: INK.strong,
+          lineHeight: 1.35,
+          margin: 0,
+        }}>
+          {message}
+        </h2>
+
+        {subtitle && (
+          <p style={{ ...cardMetaStyle, textAlign: 'center' }}>
+            {subtitle}
+          </p>
+        )}
+      </div>
+
+      {/* Bottom hint */}
+      <p style={{ ...monoLabelStyle, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+        <span>{t('swipe.actionCard.continueHint')}</span>
+        <span style={{ color: INK.dim }}>·</span>
+        <span>{t('swipe.actionCard.viewResultsHint')}</span>
+      </p>
     </div>
   )
 }
@@ -125,7 +138,7 @@ function ConfidenceBar({ phase, progress }) {
         <div style={{
           height: '100%',
           width: `${pct}%`,
-          background: '#ec4899',
+          background: 'var(--accent-1)',
           borderRadius: 999,
           transition: 'width 300ms ease',
         }} />
@@ -196,7 +209,7 @@ function ExitConfirmPopup({ onNewProject, onHome, onCancel }) {
           onClick={onNewProject}
           style={{
             padding: '13px 24px', borderRadius: 12,
-            background: '#ec4899', color: '#fff',
+            background: 'var(--accent-1)', color: '#fff',
             fontSize: 14, fontWeight: 600, border: 'none',
             cursor: 'pointer', fontFamily: 'inherit', minHeight: 44,
           }}
@@ -251,7 +264,7 @@ function DismissConfirmPopup({ onConfirm, onCancel }) {
       onClick={onCancel}
       style={{
         position: 'fixed', inset: 0,
-        background: 'rgba(10,10,12,0.65)',
+        background: 'rgba(0,0,0,0.4)',
         backdropFilter: 'blur(12px)',
         WebkitBackdropFilter: 'blur(12px)',
         zIndex: 10001,
@@ -268,7 +281,7 @@ function DismissConfirmPopup({ onConfirm, onCancel }) {
         style={{
           background: 'var(--color-surface)',
           border: '1px solid var(--color-border-soft)',
-          borderRadius: 20,
+          borderRadius: 'var(--radius-lg)',
           padding: '28px 24px 24px',
           width: '100%',
           maxWidth: 360,
@@ -292,7 +305,7 @@ function DismissConfirmPopup({ onConfirm, onCancel }) {
           ref={primaryBtnRef}
           onClick={onConfirm}
           style={{
-            padding: '13px 24px', borderRadius: 12,
+            padding: '13px 24px', borderRadius: 'var(--radius-md)',
             background: 'var(--color-surface-2)', color: 'var(--color-text)',
             fontSize: 14, fontWeight: 600,
             border: '1px solid var(--color-border)',
@@ -304,7 +317,7 @@ function DismissConfirmPopup({ onConfirm, onCancel }) {
         <button
           onClick={onCancel}
           style={{
-            padding: '10px 24px', borderRadius: 12,
+            padding: '10px 24px', borderRadius: 'var(--radius-md)',
             background: 'transparent', color: 'var(--color-text-dim)',
             fontSize: 13, fontWeight: 500, border: 'none',
             cursor: 'pointer', fontFamily: 'inherit', minHeight: 40,
@@ -334,7 +347,6 @@ export default function SwipePage({
   const hasShownDismissTutorial = useRef(!!localStorage.getItem('archithon_dismiss_tutorial_seen'))
   const pendingDismissDir = useRef(null)
   const [localResetTick, setLocalResetTick] = useState(0)
-  const [showTutorial, setShowTutorial] = useState(() => !localStorage.getItem('archithon_tutorial_dismissed'))
   const [showExitConfirm, setShowExitConfirm] = useState(false)
   const [showDismissConfirm, setShowDismissConfirm] = useState(false)
 
@@ -390,7 +402,7 @@ export default function SwipePage({
       cardRef.current.swipe(dir)
     },
     guardCondition: () =>
-      !!(questionTrigger || isLoading || !cardRef.current || !currentCard || showTutorial || showExitConfirm ||
+      !!(questionTrigger || isLoading || !cardRef.current || !currentCard || showExitConfirm ||
          showDismissConfirm || pendingAction.current || swipedCardId.current === currentCard?.image_id),
   })
 
@@ -485,14 +497,14 @@ export default function SwipePage({
                 width: '100%',
                 padding: '13px 20px',
                 borderRadius: 14,
-                background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
+                background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
                 color: '#fff',
                 fontSize: 14,
                 fontWeight: 700,
                 border: 'none',
                 cursor: (isResultLoading || swipePending > 0) ? 'default' : 'pointer',
                 fontFamily: 'inherit',
-                boxShadow: '0 4px 16px rgba(236,72,153,0.35)',
+                boxShadow: '0 4px 16px color-mix(in srgb, var(--accent-1) 35%, transparent)',
                 opacity: (isResultLoading || swipePending > 0) ? 0.6 : 1,
                 transition: 'opacity 0.2s',
                 minHeight: 44,
@@ -525,8 +537,6 @@ export default function SwipePage({
 
   return (
     <>
-      <TutorialPopup visible={showTutorial} onClose={() => setShowTutorial(false)} />
-
       {showExitConfirm && (
         <ExitConfirmPopup
           onNewProject={() => { setShowExitConfirm(false); onExitToNewProject?.() }}
@@ -604,14 +614,14 @@ export default function SwipePage({
                 width: '100%',
                 padding: '12px 20px',
                 borderRadius: 14,
-                background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
+                background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
                 color: '#fff',
                 fontSize: 14,
                 fontWeight: 700,
                 border: 'none',
                 cursor: (isResultLoading || swipePending > 0) ? 'default' : 'pointer',
                 fontFamily: 'inherit',
-                boxShadow: '0 4px 16px rgba(236,72,153,0.35)',
+                boxShadow: '0 4px 16px color-mix(in srgb, var(--accent-1) 35%, transparent)',
                 opacity: (isResultLoading || swipePending > 0) ? 0.6 : 1,
                 transition: 'opacity 0.2s',
               }}

@@ -37,6 +37,21 @@ export const locales = {
         continueLeft2: '탐색하기',
         continueRight1: 'Taste에서 깊게',
         continueRight2: '탐색하기',
+        swipeHint: '스와이프로 선택',
+        stamp: '10 LIKES',
+      },
+      tutorial: {
+        swipeLeftTitle: '왼쪽으로 스와이프',
+        swipeLeftSub: '넘기기',
+        leftArrowTitle: '왼쪽 방향키',
+        leftArrowSub: '넘기기',
+        swipeRightTitle: '오른쪽으로 스와이프',
+        swipeRightSub: '좋아요',
+        rightArrowTitle: '오른쪽 방향키',
+        rightArrowSub: '좋아요',
+        tapCardTitle: '카드 탭하기',
+        tapCardSub: '상세 보기',
+        continueHint: '아무 곳이나 탭해서 계속하기',
       },
     },
     settings: {
@@ -99,6 +114,7 @@ export const locales = {
     },
     swipe: {
       actionCard: {
+        stamp:            'TASTE FOUND',
         message:          '취향이 충분히 모였어요!',
         subtitle:         '지금 결과를 확인하거나 계속 탐색할 수 있어요',
         continueHint:     '← 계속 탐색',
@@ -523,6 +539,21 @@ export const locales = {
         continueLeft2: 'in Discovery',
         continueRight1: 'Go deeper',
         continueRight2: 'in Taste',
+        swipeHint: 'swipe to choose',
+        stamp: '10 LIKES',
+      },
+      tutorial: {
+        swipeLeftTitle: 'Swipe Left',
+        swipeLeftSub: 'Pass',
+        leftArrowTitle: 'Left Arrow',
+        leftArrowSub: 'Pass',
+        swipeRightTitle: 'Swipe Right',
+        swipeRightSub: 'Like',
+        rightArrowTitle: 'Right Arrow',
+        rightArrowSub: 'Like',
+        tapCardTitle: 'Tap Card',
+        tapCardSub: 'View details',
+        continueHint: 'Tap anywhere to continue',
       },
     },
     settings: {
@@ -585,6 +616,7 @@ export const locales = {
     },
     swipe: {
       actionCard: {
+        stamp:            'TASTE FOUND',
         message:          'Your taste is taking shape!',
         subtitle:         'Check your results now or keep exploring',
         continueHint:     '← Keep exploring',

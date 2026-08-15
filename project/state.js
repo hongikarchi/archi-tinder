@@ -23,11 +23,23 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-08-15 09:03 KST',
-    head: '9db2ba1',
-    branch: 'feature/claude-design-b1',
+    updatedAt: '2026-08-15 12:03 KST',
+    head: '25ee29d',
+    branch: 'feature/claude-flow-1',
   },
   done: [
+    {
+      id: 'FRONT-FLOW-2',
+      title: '팝업/인터스티셜 de-drift 스윕',
+      completedAt: '2026-08-15',
+      note: 'user 스크린샷 지적(ActionCard 구 디자인 잔존)發 전체 팝업 12종 감사: 위반 5곳 수정, 7곳 정상 확인(SaveBoardModal/VerifyGateModal/WorkDetailModal/QuestionCard/ExitConfirm/DismissConfirm 토큰 기반, ShareCardModal 의도적 인쇄물 예외)',
+    },
+    {
+      id: 'FRONT-FLOW-1',
+      title: '스와이프 온보딩 3연타 인터럽트 정리',
+      completedAt: '2026-08-15',
+      note: 'B1 검토 중 user 발견/결정 3건 이행: 신규 유저 Discovery→Taste 시퀀스의 연속 인터럽트(TriggerCard→TutorialPopup→DismissConfirm) 정리',
+    },
     {
       id: 'FRONT-DESIGN-B1',
       title: '로그인+프로필 비주얼 튜닝',
@@ -64,18 +76,6 @@ window.PROJECT_STATE = {
       title: '진행률 바 정리 (Discovery 제거 + Taste N swipes %)',
       completedAt: '2026-08-06',
       note: 'Discovery 탭 진행률 바 제거 (`ff07ee0`): 덱 스와이프 맥락에서 % 바가 맞지 않아 삭제; `discovery.progressComplete` i18n 키도 고아 → 삭제',
-    },
-    {
-      id: 'BACK-LLM-PROVIDER-1',
-      title: 'LLM 프로바이더 어댑터 + 공정 A/B 8런',
-      completedAt: '2026-08-04',
-      note: '1차 "GPT 붕괴(11~14%)"는 파서의 빈 filter_delta 버그로 판명(13c4238 수정) — 픽스 후 품질 동급: gemini 95% / gpt-5.4-mini 95% / luna 94% / terra 92%. 차별점은 운영 특성: p50 gemini 2.0s 최속 vs GPT 타임아웃 꼬리 0(null폴백 0%). 판정 옵션: (A) gemini 유지+8s 완화 (B) gpt-5.4-mini. 결정 보류.',
-    },
-    {
-      id: 'BACK-PARSER-VOCAB-1',
-      title: '파서 어휘 그라운딩 (db_qc P1/P2/P3 수정)',
-      completedAt: '2026-08-04',
-      note: '파서가 DB에 없는 필터 값을 창작하던 문제(P1)·architectural_elements 축 부재(P2)·구체 유형 뭉개기(P3)를 어휘 그라운딩으로 수정 — db_qc 실측 unmatchable 8→0 쿼리, hard_empty 1→0, tag_match@10 courtyard/atrium/terrace 0→100%, library +90pt, facade +80pt, 회귀 0.',
     },
   ],
   now: [],
@@ -231,6 +231,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 305,
+      title: 'feat(FRONT-DESIGN-B1): login+profile visual tuning — tokens, :hover modules, de-drift',
+      mergedAt: '2026-08-15T01:53:00Z',
+      mergedAtKST: '2026-08-15 10:53 KST',
+      sha: '25ee29d',
+    },
+    {
       number: 303,
       title: 'chore(works-audit): PR #300 Done entry + FULL-WORKS-4 ticket',
       mergedAt: '2026-08-14T13:34:10Z',
@@ -278,13 +285,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-08-07T23:55:02Z',
       mergedAtKST: '2026-08-08 08:55 KST',
       sha: 'ec1d0d4',
-    },
-    {
-      number: 294,
-      title: 'chore(repo): stale purge + Fable-5 harness refresh — plans archive, agents rewrite, -707 lines',
-      mergedAt: '2026-08-06T07:53:30Z',
-      mergedAtKST: '2026-08-06 16:53 KST',
-      sha: 'a99fd64',
     },
   ],
   agents: [
