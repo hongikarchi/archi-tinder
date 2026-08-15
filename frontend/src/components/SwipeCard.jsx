@@ -37,11 +37,30 @@ const PREFERS_REDUCED_MOTION = typeof window !== 'undefined' &&
   typeof window.matchMedia === 'function' &&
   window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
-// FRONT-UX-14-R5 FIX2 — plain ease-in-out cubic (no overshoot/back easing).
-// Local to SwipeCard: tinderCard.js has its own copy for the card-fling exit
-// animation, but that file is off-limits here (DO-NOT list) and the two
-// easings serve unrelated animations — duplicating the lambda is correct.
-const easeInOutCubic = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2)
+// FRONT-UX-14-R6 — module-level Set-cached preloader for gallery images.
+// Root cause of the keyboard-glide stutter (R5 rAF version): the rAF step
+// wrote el.scrollTop on the MAIN thread every frame, and the destination
+// image's lazy load + decode landed on that SAME thread mid-glide, dropping
+// frames. Touch/wheel scroll is compositor-driven (hence smooth) — native
+// scrollTo({behavior:'smooth'}) gets the same compositor path, but only pays
+// off if the adjacent image is already decoded before the glide starts.
+// Preloading neighbors off the critical path removes the decode collision.
+//
+// srcset (optional 2nd arg): the gallery <img> renders card.gallery_srcset[i]
+// (a plain 1x/2x density descriptor — no `sizes` attr on either side, so the
+// candidate the browser picks for a bare Image() matches the mounted <img>
+// exactly). Without passing it through, the preload would warm the un-sized
+// `src` while the real <img> renders a differently-sized srcset candidate —
+// two different downloads, decode collision still there. Keyed by url only
+// (matches the mounted image's identity); srcset rides along when present.
+const galleryPreloaded = new Set()
+function preloadImg(url, srcset) {
+  if (!url || galleryPreloaded.has(url)) return
+  galleryPreloaded.add(url)
+  const i = new Image()
+  if (srcset) i.srcset = srcset
+  i.src = url
+}
 
 /**
  * computeFit — pure helper (unit-testable inline): decide 'cover' vs 'contain'
@@ -102,14 +121,18 @@ export default function SwipeCard({ card, onGalleryClose }) {
   const galleryScrollRef = useRef(null)
   // first-writer-wins guard for imgRatio (LQIP onLoad vs main img onLoad)
   const ratioSetRef = useRef(false)
-  // FRONT-UX-14-R5 FIX2 — in-flight keyboard glide rAF id + the scrollSnapType
-  // value saved before the glide suspended it (restored on cancel/finish).
-  const glideRafRef = useRef(null)
+  // FRONT-UX-14-R6 — scrollSnapType value saved before the glide suspended it
+  // (restored on scrollend / fallback timeout / cancel). glideRafRef removed —
+  // R6 replaced the rAF step machinery with native compositor-driven scrollTo.
   const glideSnapRestoreRef = useRef(null)
   // In-flight glide destination — rapid same-direction presses accumulate from
   // the pending target instead of the in-transit scrollTop (which still rounds
-  // to the origin card during the ease-in phase, eating presses).
+  // to the origin card mid-glide, eating presses).
   const glideTargetRef = useRef(null)
+  // R6 — pending scrollend listener + fallback timer, so a new press before
+  // restore can cancel both without double-restoring snap.
+  const glideScrollendCleanupRef = useRef(null)
+  const glideFallbackTimerRef = useRef(null)
 
   const { onLoad: telemetryOnLoad, onError: telemetryOnError } = useImageTelemetry({
     buildingId: card.image_id,
@@ -119,6 +142,11 @@ export default function SwipeCard({ card, onGalleryClose }) {
   function openGallery() {
     setHasBeenOpened(true)
     setShowGallery(true)
+    // R6 — preload the first 3 gallery images off the main-thread-decode path
+    // so the initial glide(s) don't collide with a cold decode.
+    const gal = card.gallery || []
+    const galSrcset = card.gallery_srcset || []
+    gal.slice(0, 3).forEach((url, i) => preloadImg(url, galSrcset[i]))
   }
   function closeGallery() { setShowGallery(false); onGalleryClose && onGalleryClose() }
 
@@ -247,56 +275,80 @@ export default function SwipeCard({ card, onGalleryClose }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [card?.image_id, card?.image_url])
 
-  // FRONT-UX-14-R5 FIX2 — cancel any in-flight keyboard glide, restoring the
-  // scrollSnapType value that was in effect before the glide suspended it.
-  // Single cancel path: called at the start of every new glide (so a rapid
-  // keypress doesn't stack animations or clobber the restore value), from the
-  // finish handler, and from the effect cleanup (gallery close / unmount) so
-  // a glide interrupted by Escape doesn't leave snapType stuck at 'none'.
-  function cancelGlide() {
-    if (glideRafRef.current != null) {
-      cancelAnimationFrame(glideRafRef.current)
-      glideRafRef.current = null
+  // FRONT-UX-14-R6 — cancel any in-flight keyboard glide's pending restore
+  // (scrollend listener + fallback timer), restoring the scrollSnapType value
+  // that was in effect before the glide suspended it. Single cancel path:
+  // called at the start of every new glide (so a rapid keypress re-targets
+  // instead of stacking restores), from the natural restore handler, and from
+  // the effect cleanup (gallery close / unmount) so a glide interrupted by
+  // Escape doesn't leave snapType stuck at 'none'.
+  //
+  // NOTE for the commit record (R6 correction): the R5+ comment claiming
+  // "React re-applies inline scrollSnapType on re-render, resurrecting
+  // mandatory snap mid-glide" (commit 036171a) is FALSE — React's style
+  // diffing skips keys whose value didn't change, so a re-render alone never
+  // re-applies scrollSnapType. The imperative snap ownership from 036171a
+  // stays regardless — it's what lets this glide pre-suspend snap without
+  // React fighting an explicit style write — but the stated mechanism was
+  // wrong. The REAL root cause (this round): the rAF step wrote el.scrollTop
+  // on the main thread every frame, and the destination image's lazy load +
+  // decode landed on that same thread mid-glide, dropping frames. Touch/wheel
+  // scroll is compositor-driven, hence smooth.
+  function cancelGlide(restoreSnap) {
+    if (glideScrollendCleanupRef.current) {
+      glideScrollendCleanupRef.current()
+      glideScrollendCleanupRef.current = null
     }
-    if (glideSnapRestoreRef.current != null) {
+    if (glideFallbackTimerRef.current != null) {
+      clearTimeout(glideFallbackTimerRef.current)
+      glideFallbackTimerRef.current = null
+    }
+    if (restoreSnap && glideSnapRestoreRef.current != null) {
       const el = galleryScrollRef.current
       if (el) el.style.scrollSnapType = glideSnapRestoreRef.current
       glideSnapRestoreRef.current = null
     }
-    glideTargetRef.current = null
+    if (restoreSnap) glideTargetRef.current = null
   }
 
-  // FRONT-UX-14-R5 FIX2 — small rAF glide used ONLY by the keyboard path.
-  // Chromium snaps a programmatic scrollBy({behavior:'smooth'}) immediately
-  // inside a scroll-snap-type:'y mandatory' container (the smooth animation
-  // gets overridden by the snap). Suspending scrollSnapType for the duration
-  // of a manual rAF animation defeats that snap-jump; wheel/touch (native
-  // snap) are untouched. No overshoot/back easing — plain glide only.
-  function animateScroll(el, targetTop, duration) {
-    cancelGlide() // always cancel first — captures the CURRENT snapType, not a stale 'none' left by a prior glide
+  // FRONT-UX-14-R6 — compositor-driven keyboard glide. Native
+  // el.scrollTo({behavior:'smooth'}) runs on the compositor thread (same path
+  // as touch/wheel), immune to main-thread decode jank — UNLIKE the R5 rAF
+  // step, which wrote el.scrollTop every frame on the main thread. Scroll
+  // snap is suspended for the duration (same reason as R5: Chromium snaps a
+  // programmatic smooth scroll immediately inside a mandatory-snap container
+  // — moot here only because snap is already 'none' before scrollTo fires).
+  // Restored on the native 'scrollend' event, or a ~700ms fallback timer for
+  // browsers without scrollend support — whichever fires first.
+  function animateScroll(el, targetTop) {
+    // No-op guard: an ArrowUp at the top / ArrowDown at the bottom clamps to
+    // the current position. Bail before suspending snap — nothing is in
+    // flight (glideTargetRef null) and the resting position already matches,
+    // so there's no glide to run and no scrollend event will ever fire to
+    // restore it (would otherwise strand snap suspended for the full 700ms
+    // fallback on every boundary press).
+    if (glideTargetRef.current == null && el.scrollTop === targetTop) return
+    // Keep snap suspended across a rapid re-press — only cancel the PENDING
+    // restore (listener/timer), not the suspension itself. Accumulation via
+    // glideTargetRef is preserved: native smooth scroll has the same in-
+    // transit under-accumulation problem as the rAF version had.
+    cancelGlide(false)
     if (PREFERS_REDUCED_MOTION) {
       el.scrollTop = targetTop
       return
     }
-    const startTop = el.scrollTop
-    const delta = targetTop - startTop
-    if (delta === 0) return
-    glideTargetRef.current = targetTop
-    glideSnapRestoreRef.current = el.style.scrollSnapType || 'y mandatory'
-    el.style.scrollSnapType = 'none'
-    const startTime = performance.now()
-    function step(now) {
-      const t = Math.min((now - startTime) / duration, 1)
-      const eased = easeInOutCubic(t)
-      el.scrollTop = startTop + delta * eased
-      if (t < 1) {
-        glideRafRef.current = requestAnimationFrame(step)
-      } else {
-        glideRafRef.current = null
-        cancelGlide() // restores scrollSnapType on natural finish
-      }
+    if (glideSnapRestoreRef.current == null) {
+      glideSnapRestoreRef.current = el.style.scrollSnapType || 'y mandatory'
+      el.style.scrollSnapType = 'none'
     }
-    glideRafRef.current = requestAnimationFrame(step)
+    glideTargetRef.current = targetTop
+    function restore() {
+      cancelGlide(true)
+    }
+    el.addEventListener('scrollend', restore, { once: true })
+    glideScrollendCleanupRef.current = () => el.removeEventListener('scrollend', restore)
+    glideFallbackTimerRef.current = setTimeout(restore, 700)
+    el.scrollTo({ top: targetTop, behavior: 'smooth' })
   }
 
   // FRONT-UX-14 FIX 3 — gallery keyboard nav. Bound only while showGallery is
@@ -308,9 +360,11 @@ export default function SwipeCard({ card, onGalleryClose }) {
   // now swipe the deck even while the gallery is open (see useKeyboardSwipe
   // guardCondition in SwipePage/DiscoveryPage), so this listener only owns
   // vertical gallery nav (one card per press) + Escape.
-  // FRONT-UX-14-R5 FIX2: ArrowUp/Down now drive the rAF glide (animateScroll)
-  // instead of native scrollBy — see animateScroll's comment for why. Wheel
-  // and touch scrolling are untouched (native snap still handles those).
+  // FRONT-UX-14-R6: ArrowUp/Down drive the compositor-driven glide
+  // (animateScroll) — see animateScroll's comment for why. Wheel and touch
+  // scrolling are untouched (native snap still handles those). Also preloads
+  // the neighbor image beyond the new target so its decode is already warm
+  // before the NEXT press's glide starts.
   useEffect(() => {
     if (!showGallery) return
     function onKeyDown(e) {
@@ -325,19 +379,23 @@ export default function SwipeCard({ card, onGalleryClose }) {
         e.preventDefault()
         const maxScroll = Math.max(0, el.scrollHeight - el.clientHeight)
         // Accumulate from the pending glide destination when one is in flight
-        // (in-transit scrollTop still rounds to the origin card early in the
-        // ease-in phase, which would eat rapid presses).
+        // (in-transit scrollTop still rounds to the origin card mid-glide,
+        // which would eat rapid presses — native smooth scroll has the same
+        // under-accumulation issue the rAF version had).
         const baseTop = glideTargetRef.current ?? el.scrollTop
         const currentIndex = Math.round(baseTop / CARD_HEIGHT)
         const targetIndex = currentIndex + (e.key === 'ArrowDown' ? 1 : -1)
         const target = Math.min(Math.max(targetIndex * CARD_HEIGHT, 0), maxScroll)
-        animateScroll(el, target, 450)
+        animateScroll(el, target)
+        const galSrcset = card.gallery_srcset || []
+        preloadImg(gallery[targetIndex + 1], galSrcset[targetIndex + 1])
+        preloadImg(gallery[targetIndex - 1], galSrcset[targetIndex - 1])
       }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => {
       window.removeEventListener('keydown', onKeyDown)
-      cancelGlide()
+      cancelGlide(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showGallery])
@@ -649,7 +707,7 @@ export default function SwipeCard({ card, onGalleryClose }) {
                     srcSet={card.gallery_srcset?.[i] || undefined}
                     alt=""
                     className="pressable"
-                    loading={i === 0 ? 'eager' : 'lazy'}
+                    loading={i <= 1 ? 'eager' : 'lazy'}
                     decoding="async"
                     draggable={false}
                     onLoad={e => {
