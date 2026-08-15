@@ -57,14 +57,7 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-### FRONT-DESIGN-B1 — 로그인+프로필 비주얼 튜닝 (design plan B1)
-
-**Plan**: `.claude/plans/design-clever-valley.md` — 4-phase design initiative (B1→A1→B2→A2), this is B1.
-**Scope**: LoginPage(+LoginPage.module.css 신설) + UserProfilePage/ProfileHeader/ProfileHero — 시스템 내 리파인.
-로그인: drafting-grid 배경 시그니처 + hover/focus-visible 폴리시(모듈 CSS), 레이아웃/로직 불변.
-프로필: 핑크 하드코딩(#ec4899 halo/hover, #ef4444 logout) 토큰화, 라이트테마 invisible avatar placeholder 수정,
-onMouseEnter 핵 제거(→:hover), 아이콘버튼/링크필/탭 로컬 클래스화. 공유 컴포넌트(BoardCard 등) 불변.
-**Direction spec**: scratchpad `design-direction-b1.md`. **Gate**: eslint+build, app-test skip(순수 UI), 커밋 후 STOP.
+_(비어있음 — FRONT-DESIGN-B1 완료 2026-08-15, ## Done 참조. 디자인 이니셔티브 다음 단계: A1 기계적 스윕 → B2 Claude Design 연결 → A2 프리미티브 추출, `.claude/plans/design-clever-valley.md`)_
 
 
 ## Next
@@ -113,6 +106,12 @@ Implementation map:
 - Account deletion/export is not currently in scope but should be tracked before public launch if GDPR-like obligations apply.
 
 ### HIGH
+
+#### FRONT-DESIGN-A1 — 디자인 정합성 기계적 스윕 (hex→토큰 + hover 핵 제거)
+_디자인 4단계 이니셔티브(B1→A1→B2→A2, `.claude/plans/design-clever-valley.md`)의 A1. B1은 2026-08-15 완료(## Done)._
+- 전체 46파일 스윕, 유형별 PR 분리(사용자 결정): PR-1 hex→토큰(토큰 값과 정확 일치/명백 우회만, §8.6 photo-overlay 및 white-on-accent 예외, 애매한 색은 로그만), PR-2 onMouseEnter→모듈 :hover(동일 값 이전, 로직성 핸들러 제외). pixel-identical 하드 제약.
+- 잔여 규모(B1 후): hex ~44파일, onMouseEnter 12파일(최다: BoardCard 6, BoardDetailPage 4). B1 처리분(로그인/프로필 5파일) 제외.
+- 포함: UserProfilePage.jsx:641 dark-glass 배경 라이트테마 invisible(B1 Opus verify 지적, 기존 이슈).
 
 #### ALGO-ACCURACY-1 — "Aha(취향 포착)" 주장 미검증 — 측정 하네스 부재 (hypothesis-grade)
 _출처: 2026-07-06 4-agent 정적분석 종합(`.claude/plans/algo-speed-accuracy-analysis.md`, 2026-08-05 stale-정리 때 삭제 — speed 파트는 #266-#269/#283 등으로 대부분 해소, accuracy 파트만 여기로 이관)._
@@ -280,6 +279,14 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FRONT-DESIGN-B1 — 로그인+프로필 비주얼 튜닝 — RESOLVED 2026-08-15 (`051254e`)
+- 디자인 4단계 이니셔티브(B1→A1→B2→A2, `.claude/plans/design-clever-valley.md`)의 B1: 시스템 내 리파인, 컨셉 교체 없음
+- 로그인: drafting-grid 배경 시그니처(토큰 기반 4테마 자동 적응 + radial vignette), `lp-*` 전역 규칙 index.css → LoginPage.module.css 단일화(camelCase 모듈 클래스), input focus 3-state 신설(기존 outline:none 접근성 공백), error slot 고정 높이(레이아웃 시프트 제거), reduced-motion 블록
+- 프로필: 핑크 하드코드 전멸(#ec4899 halo/hover → var(--accent-1/2), #ef4444 logout → var(--color-destructive)), 라이트테마 invisible avatar placeholder 수정(rgba(255,255,255,.4) → var(--color-text-dim)), onMouseEnter 핵 전부 → 모듈 :hover(iconBtn/linkPill/statBtn/tab 클래스), 링크필 3중복 → 단일 map, 탭바 ink underline 유지+hover/focus-visible
+- Workflow(feature.js): review PASS + security PASS + Opus verify 0 findings(리뷰 오탐 3건 기각); eslint 0 errors + build green; net −207 lines(11 files +608/−419)
+- feature.js sonnet 워커 4곳 `effort: 'high'` 핀(xhigh 세션 상속 400 가드 — Explore 3연사 사고 재발 방지)
+- Deferred: UserProfilePage.jsx:641 dark-glass 배경 라이트테마 invisible(기존 이슈, Opus verify 지적) — A1 스윕에서 처리
+
 ### UPLOAD-NAV-1 — 업로드 성공 모달 + Created 탭 이동 — RESOLVED 2026-08-14 (PR #300 `56bae0d`)
 _(yywon1 ad-hoc PR — Task ID 없이 들어와 사후 부여. 업로드 완료 인라인 메시지 → 확인 모달 + `/user/me?tab=created` 이동.)_
 - UploadWorkPage: processingMsg 인라인 → 성공 모달(제목/본문/확인), uploadWork.success.confirm i18n KO+EN
