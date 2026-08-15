@@ -57,9 +57,7 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-### FRONT-UX-14 — 스와이프 모션 + 갤러리 UX 5종 (진행 중 2026-08-15)
-
-`## Next`에서 승격 (원인 확정 완료 — 상세는 Done 이동 시 기록). ① tinderCard.js 퇴장 easing/power ② SwipeDeck 승격 entrance ③ 갤러리 키보드 ④ 휠 스냅 ⑤ 갤러리 rightSize. 브랜치 `feature/claude-ux-14`.
+_(비어있음 — FRONT-UX-14 완료 2026-08-15, ## Done 참조. 디자인 이니셔티브 잔여: B2 Claude Design 연결 → A2 프리미티브 추출.)_
 
 
 ## Next
@@ -292,6 +290,14 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FRONT-UX-14 — 스와이프 모션 + 갤러리 UX 5종 — RESOLVED 2026-08-15 (`94391bf`)
+- ① 퇴장 애니메이션: vendored `lib/tinderCard.js` — linear 3-대각선 총알 → easeOutCubic + power 1.6 + duration 클램프 [320,560]ms (플링감 유지, 감속 꼬리)
+- ② 스택 승격: `SwipeDeck.module.css` deckPromote entrance — Layer-2 정지 transform(scale .95, translateY 10px)에서 시작해 연속감, 카드별 key로 재생, SwipePage는 dismiss-cancel 리마운트에 재생 안 되게 image_id만 키 사용, reduced-motion 게이트
+- ③ 갤러리 키보드: ArrowUp/Down/PageUp/Down 카드 단위 스크롤 + Escape 닫기(기존에 없었음 — 신규), 갤러리 열림 중 덱 ←→ 키 차단(양 페이지, SwipeCard 신규 optional `onGalleryOpenChange` prop)
+- ④ 휠 스냅: 제스처당 1장 — 40px 누적 임계 + momentum-aware quiet-unlock 140ms(Opus LOW 지적 수정: 고정 450ms lock은 긴 트랙패드 플릭에 2장 넘어감), 터치는 네이티브 스냅 유지
+- ⑤ 갤러리 이미지 840px 리사이즈: `api/images.js` gallery map + 테스트 3종(79 pass), `cover_full_url` 원본 유지, `DECK_CACHE_KEY` v2→v3(구 full-res 캐시 30분 잔존 차단 — Opus LOW 지적 수정)
+- Workflow: review PASS + security PASS, LOW 3건(2건 수정, 1건 dead velocity-branch 노트 — 차후 정리). eslint 0 + build + node --test green
+
 ### FRONT-DESIGN-A1 — 디자인 정합성 기계적 스윕 (2 PR) — RESOLVED 2026-08-15 (`fc72775` + `7e192d2`)
 - 디자인 이니셔티브(B1→A1→B2→A2) A1, 유형별 PR 분리(user 결정): PR-1 hex→토큰, PR-2 hover 핵 제거 (stacked 브랜치)
 - PR-1 (`fc72775`): 2-라운드 스윕 — R1 exact-map(정확 일치 hex는 대부분 기토큰화 확인) + UserProfilePage:641 dark-glass 라이트테마 invisible 버그 수정(rgba(15,15,15,.80)→color-mix --color-bg 80%); R2 확정 매핑 7파일 59치환 1:1 — #ec4899→accent-1, 핑크 그라디언트→accent-1/2(§8.1), rgba 핑크→color-mix, #fbbf24→accent-3, #f9a8d4→accent-1 tint, Tailwind 그레이→text-dim/muted

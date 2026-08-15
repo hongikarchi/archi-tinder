@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-08-15 13:44 KST',
-    head: 'ab4ac47',
-    branch: 'feature/claude-design-a1-hover',
+    updatedAt: '2026-08-15 14:08 KST',
+    head: 'e33a065',
+    branch: 'feature/claude-ux-14',
   },
   done: [
+    {
+      id: 'FRONT-UX-14',
+      title: '스와이프 모션 + 갤러리 UX 5종',
+      completedAt: '2026-08-15',
+      note: '① 퇴장 애니메이션: vendored `lib/tinderCard.js` — linear 3-대각선 총알 → easeOutCubic + power 1.6 + duration 클램프 [320,560]ms (플링감 유지, 감속 꼬리)',
+    },
     {
       id: 'FRONT-DESIGN-A1',
       title: '디자인 정합성 기계적 스윕 (2 PR)',
@@ -70,12 +76,6 @@ window.PROJECT_STATE = {
       title: '업로드 이미지 편집(crop/rotate/커버 지정)',
       completedAt: '2026-08-14',
       note: 'files state: id/originalBlob/currentBlob/preview — 반복 편집 화질 열화 방지',
-    },
-    {
-      id: 'BACK-REPORT-CACHE-1',
-      title: '리포트 캐시 short-circuit + 무음실패 UX + stranding 출구',
-      completedAt: '2026-08-08',
-      note: 'PR #295 스로틀 + 무캐시 재생성 + 프론트 자동호출의 결합이 무음 429 → `finalReport` null → ResultsPage 레거시 2줄 폴백("옛 모양 리포트" 증상, yywon1 보고/PR #298 진단 크레딧)을 유발. 근본 픽스 일괄:',
     },
   ],
   now: [],
@@ -241,6 +241,20 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 308,
+      title: 'refactor(FRONT-DESIGN-A1): hover hacks -> CSS :hover PR-2 — 13 files, identical values',
+      mergedAt: '2026-08-15T04:48:31Z',
+      mergedAtKST: '2026-08-15 13:48 KST',
+      sha: 'e33a065',
+    },
+    {
+      number: 307,
+      title: 'feat(FRONT-DESIGN-A1): hex->token sweep PR-1 — pink de-drift + dark-glass fix',
+      mergedAt: '2026-08-15T04:47:46Z',
+      mergedAtKST: '2026-08-15 13:47 KST',
+      sha: 'c643a7c',
+    },
+    {
       number: 306,
       title: 'feat(FRONT-FLOW-1/2): onboarding interrupt fix + popup de-drift — paper cards, pink sweep',
       mergedAt: '2026-08-15T03:26:37Z',
@@ -281,20 +295,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-08-14T12:52:21Z',
       mergedAtKST: '2026-08-14 21:52 KST',
       sha: '56bae0d',
-    },
-    {
-      number: 299,
-      title: 'feat(BACK-REPORT-CACHE-1): report cache short-circuit + silent-failure UX + stranding exit',
-      mergedAt: '2026-08-08T09:32:07Z',
-      mergedAtKST: '2026-08-08 18:32 KST',
-      sha: 'af6a33a',
-    },
-    {
-      number: 296,
-      title: 'fix(swipe): PR #295 follow-up — peek gating + adaptive parity + fork docs',
-      mergedAt: '2026-08-08T00:07:22Z',
-      mergedAtKST: '2026-08-08 09:07 KST',
-      sha: 'd31828a',
     },
   ],
   agents: [
@@ -1918,6 +1918,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/components/SwipeDeck.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/SwipeDeck.module.css',
       role: '',
     },
     {
