@@ -15,7 +15,7 @@ export default function FirmProfileHero({ office, followerCount, onMessage }) {
                 position: 'absolute',
                 inset: -6,
                 borderRadius: '50%',
-                background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
+                background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
                 opacity: 0.55,
                 filter: 'blur(12px)',
               }}
@@ -91,7 +91,7 @@ export default function FirmProfileHero({ office, followerCount, onMessage }) {
                 width: 22,
                 height: 22,
                 borderRadius: '50%',
-                background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
+                background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
                 flexShrink: 0,
               }}
             >
@@ -166,7 +166,7 @@ export default function FirmProfileHero({ office, followerCount, onMessage }) {
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               transition: 'border-color 0.18s, color 0.18s',
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(236,72,153,0.45)'; e.currentTarget.style.color = '#ec4899' }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--accent-1) 45%, transparent)'; e.currentTarget.style.color = 'var(--accent-1)' }}
             onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-2)' }}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -195,8 +195,8 @@ export default function FirmProfileHero({ office, followerCount, onMessage }) {
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.transform = 'translateY(-1px)'
-                  e.currentTarget.style.borderColor = 'rgba(236,72,153,0.45)'
-                  e.currentTarget.style.color = '#ec4899'
+                  e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--accent-1) 45%, transparent)'
+                  e.currentTarget.style.color = 'var(--accent-1)'
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.transform = 'translateY(0)'
@@ -227,8 +227,8 @@ export default function FirmProfileHero({ office, followerCount, onMessage }) {
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.transform = 'translateY(-1px)'
-                  e.currentTarget.style.borderColor = 'rgba(236,72,153,0.45)'
-                  e.currentTarget.style.color = '#ec4899'
+                  e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--accent-1) 45%, transparent)'
+                  e.currentTarget.style.color = 'var(--accent-1)'
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.transform = 'translateY(0)'

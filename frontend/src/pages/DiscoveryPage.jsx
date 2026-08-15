@@ -511,7 +511,7 @@ export default function DiscoveryPage({ showToast }) {
       <div style={{ textAlign: 'center', width: '100%' }}>
         <h1 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 8px', letterSpacing: '-0.01em' }}>
           <span style={{ color: 'var(--color-text)' }}>Disc</span>
-          <span style={{ color: '#ec4899' }}>overy</span>
+          <span style={{ color: 'var(--accent-1)' }}>overy</span>
         </h1>
 
         {/* Feature B: persistent "Taste로 저장·이동" CTA — shown after user left-swiped
@@ -595,7 +595,7 @@ export default function DiscoveryPage({ showToast }) {
               color: 'var(--color-text)',
               lineHeight: 1.6,
             }}>
-              <span style={{ color: '#ec4899' }}>{t('discovery.capReachedCount', { n: 50 })}</span>
+              <span style={{ color: 'var(--accent-1)' }}>{t('discovery.capReachedCount', { n: 50 })}</span>
               {' '}{t('discovery.capReachedBody')}
             </p>
             <button
@@ -608,8 +608,8 @@ export default function DiscoveryPage({ showToast }) {
                 borderRadius: 12,
                 border: 'none',
                 background: promoteLoading
-                  ? 'rgba(236,72,153,0.4)'
-                  : 'linear-gradient(135deg,#ec4899,#f43f5e)',
+                  ? 'color-mix(in srgb, var(--accent-1) 40%, transparent)'
+                  : 'linear-gradient(135deg,var(--accent-1),var(--accent-2))',
                 color: '#fff',
                 fontSize: 15,
                 fontWeight: 700,
@@ -687,7 +687,7 @@ export default function DiscoveryPage({ showToast }) {
                 padding: '0 18px',
                 borderRadius: 12,
                 border: 'none',
-                background: 'linear-gradient(135deg,#ec4899,#f43f5e)',
+                background: 'linear-gradient(135deg,var(--accent-1),var(--accent-2))',
                 color: '#fff',
                 fontSize: 14,
                 fontWeight: 700,
@@ -760,7 +760,7 @@ export default function DiscoveryPage({ showToast }) {
                 <div style={{
                   width: 18, height: 18, borderRadius: '50%',
                   border: '2px solid rgba(255,255,255,0.2)',
-                  borderTopColor: '#ec4899',
+                  borderTopColor: 'var(--accent-1)',
                   animation: 'spin 0.8s linear infinite',
                 }} />
               </div>

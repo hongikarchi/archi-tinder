@@ -98,7 +98,7 @@ export default function MainLayout({
             onClick={() => navigate('/search')}
             style={{
               marginTop: 8, padding: '12px 28px', borderRadius: 12,
-              background: 'linear-gradient(135deg,#ec4899,#f43f5e)',
+              background: 'linear-gradient(135deg,var(--accent-1),var(--accent-2))',
               color: '#fff', fontSize: 14, fontWeight: 600,
               border: 'none', cursor: 'pointer', fontFamily: 'inherit',
             }}

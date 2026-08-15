@@ -40,9 +40,9 @@ function FilterChips({ filters }) {
       {chips.map(c => (
         <span key={c} style={{
           padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 500,
-          background: 'rgba(236,72,153,0.12)',
-          border: '1px solid rgba(236,72,153,0.25)',
-          color: '#f9a8d4',
+          background: 'color-mix(in srgb, var(--accent-1) 12%, transparent)',
+          border: '1px solid color-mix(in srgb, var(--accent-1) 25%, transparent)',
+          color: 'color-mix(in srgb, var(--accent-1) 55%, #fff)',
         }}>{c}</span>
       ))}
     </div>
@@ -83,14 +83,14 @@ function ResultStrip({ results, isFallback }) {
     <div style={{ marginTop: 12 }}>
       {isFallback && (
         <div style={{
-          fontSize: 11, color: '#9ca3af', marginBottom: 6,
+          fontSize: 11, color: 'var(--color-text-dim)', marginBottom: 6,
           display: 'flex', alignItems: 'center', gap: 4,
         }}>
           <span style={{
             padding: '1px 7px', borderRadius: 999, fontSize: 10,
-            background: 'rgba(251,191,36,0.12)',
-            border: '1px solid rgba(251,191,36,0.25)',
-            color: '#fbbf24',
+            background: 'color-mix(in srgb, var(--accent-3) 12%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--accent-3) 25%, transparent)',
+            color: 'var(--accent-3)',
           }}>similar</span>
           <span>showing related results</span>
         </div>
@@ -676,7 +676,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
     <div style={{
       height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))', overflow: 'hidden', background: 'var(--color-bg)',
       display: 'flex', flexDirection: 'column',
-      backgroundImage: 'radial-gradient(circle at 15% 50%, rgba(236,72,153,0.07), transparent 30%), radial-gradient(circle at 85% 30%, rgba(244,63,94,0.07), transparent 30%)',
+      backgroundImage: 'radial-gradient(circle at 15% 50%, color-mix(in srgb, var(--accent-1) 7%, transparent), transparent 30%), radial-gradient(circle at 85% 30%, color-mix(in srgb, var(--accent-2) 7%, transparent), transparent 30%)',
     }}>
 
       {/* Header */}
@@ -702,7 +702,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
         <div style={{ flex: 1, textAlign: 'center' }}>
           <span style={{
             fontSize: 16, fontWeight: 700,
-            background: 'linear-gradient(90deg, var(--color-text), #f9a8d4)',
+            background: 'linear-gradient(90deg, var(--color-text), color-mix(in srgb, var(--accent-1) 55%, #fff))',
             WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
           }}>
             {mode === 'update' ? `Update "${initialName}"` : 'archibe AI'}
@@ -781,19 +781,19 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
                   onClick={() => handlePreset(p.query)}
                   style={{
                     padding: '8px 14px', borderRadius: 999, fontSize: 12, fontWeight: 500,
-                    background: 'rgba(236,72,153,0.12)',
-                    border: '1px solid rgba(236,72,153,0.35)',
-                    color: '#f9a8d4', cursor: 'pointer', fontFamily: 'inherit',
+                    background: 'color-mix(in srgb, var(--accent-1) 12%, transparent)',
+                    border: '1px solid color-mix(in srgb, var(--accent-1) 35%, transparent)',
+                    color: 'color-mix(in srgb, var(--accent-1) 55%, #fff)', cursor: 'pointer', fontFamily: 'inherit',
                     transition: 'background 0.15s, border-color 0.15s',
                     whiteSpace: 'nowrap',
                   }}
                   onMouseEnter={e => {
-                    e.currentTarget.style.background = 'rgba(236,72,153,0.25)'
-                    e.currentTarget.style.borderColor = 'rgba(236,72,153,0.6)'
+                    e.currentTarget.style.background = 'color-mix(in srgb, var(--accent-1) 25%, transparent)'
+                    e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--accent-1) 60%, transparent)'
                   }}
                   onMouseLeave={e => {
-                    e.currentTarget.style.background = 'rgba(236,72,153,0.12)'
-                    e.currentTarget.style.borderColor = 'rgba(236,72,153,0.35)'
+                    e.currentTarget.style.background = 'color-mix(in srgb, var(--accent-1) 12%, transparent)'
+                    e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--accent-1) 35%, transparent)'
                   }}
                 >
                   {p.label}
@@ -812,7 +812,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
               }}>
                 {[0, 0.16, 0.32].map(d => (
                   <div key={d} style={{
-                    width: 6, height: 6, borderRadius: '50%', background: '#6b7280',
+                    width: 6, height: 6, borderRadius: '50%', background: 'var(--color-text-muted)',
                     animation: `bounce 1.4s ${d}s infinite ease-in-out both`,
                   }} />
                 ))}
@@ -838,7 +838,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
           }}>
             <button onClick={handleStartSwiping} style={{
               width: '100%', padding: '13px', borderRadius: 12, border: 'none',
-              background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
+              background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
               color: '#fff', fontSize: 14, fontWeight: 700,
               cursor: 'pointer', fontFamily: 'inherit',
             }}>
@@ -878,7 +878,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
           />
           <button type="submit" disabled={isLoading || !input.trim()} style={{
             width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
-            background: input.trim() && !isLoading ? '#ec4899' : 'var(--color-border-soft)',
+            background: input.trim() && !isLoading ? 'var(--accent-1)' : 'var(--color-border-soft)',
             border: 'none', cursor: input.trim() && !isLoading ? 'pointer' : 'default',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             transition: 'background 0.2s',

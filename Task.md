@@ -107,6 +107,17 @@ Implementation map:
 
 ### HIGH
 
+#### FRONT-UX-14 — 스와이프 모션 + 갤러리 UX 5종 (user 지적 2026-08-15, 원인 전부 확정)
+_스와이프 경로 — feature workflow 필수. `lib/tinderCard.js`는 vendored fork(PR #295)라 물리 상수 자유 튜닝 가능._
+- ① 퇴장 애니메이션 부자연: `animateOut` power 3.0(대각선 3배) + 500ms cap + linear easing(`config:{duration}` 감속 없음) → power 감소 + ease-out cubic + duration floor
+- ② 스택 승격 뚝뚝: SwipeDeck 레이어 static, 승격 시 무전환 교체 → 새 active 카드 entrance(scale 0.95→1, motion-normal)
+- ③ 갤러리 키보드: ArrowUp/Down 핸들러 없음 → showGallery 중 keydown, `scrollBy(±CARD_HEIGHT, smooth)`
+- ④ 스냅 끊김: `scrollSnapStop:'always'` + 데스크탑 휠 vs mandatory 스냅 충돌 → 휠 인터셉트 카드 단위 스냅(터치 네이티브 유지)
+- ⑤ 갤러리 full 해상도 로드(확인됨): `api/images.js:110` gallery raw passthrough → `rightSizeImageUrl` map(idempotent 안전)
+
+#### INFRA-TOKEN-1 — --color-success 토큰 신설 (4테마) + #34d399 전환
+_A1-HEX-R2 이연(2026-08-15): share-copied 등 success green을 accent-2로 바꾸면 의미 파괴(보라). tokens.css 4테마에 success green 추가 후 `BoardDetailPage.jsx:416` `#34d399` 전환 + DESIGN.md §1 동기화._
+
 #### FRONT-DESIGN-A1 — 디자인 정합성 기계적 스윕 (hex→토큰 + hover 핵 제거)
 _디자인 4단계 이니셔티브(B1→A1→B2→A2, `.claude/plans/design-clever-valley.md`)의 A1. B1은 2026-08-15 완료(## Done)._
 - 전체 46파일 스윕, 유형별 PR 분리(사용자 결정): PR-1 hex→토큰(토큰 값과 정확 일치/명백 우회만, §8.6 photo-overlay 및 white-on-accent 예외, 애매한 색은 로그만), PR-2 onMouseEnter→모듈 :hover(동일 값 이전, 로직성 핸들러 제외). pixel-identical 하드 제약.

@@ -62,11 +62,11 @@ function BuildingCard({ building, onClick, onSave, isSaved = false }) {
             width: 34,
             height: 34,
             borderRadius: '50%',
-            background: isSaved ? 'rgba(236,72,153,0.35)' : 'rgba(0,0,0,0.55)',
+            background: isSaved ? 'color-mix(in srgb, var(--accent-1) 35%, transparent)' : 'rgba(0,0,0,0.55)',
             backdropFilter: 'blur(6px)',
             WebkitBackdropFilter: 'blur(6px)',
-            border: isSaved ? '1px solid rgba(236,72,153,0.5)' : '1px solid rgba(255,255,255,0.15)',
-            color: isSaved ? '#ec4899' : '#fff',
+            border: isSaved ? '1px solid color-mix(in srgb, var(--accent-1) 50%, transparent)' : '1px solid rgba(255,255,255,0.15)',
+            color: isSaved ? 'var(--accent-1)' : '#fff',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -119,7 +119,7 @@ function SkeletonGrid() {
 
 function SkeletonHeader() {
   return (
-    <div style={{ background: 'linear-gradient(180deg, rgba(236,72,153,0.08) 0%, transparent 100%)', padding: '24px 16px 20px', textAlign: 'center' }}>
+    <div style={{ background: 'linear-gradient(180deg, color-mix(in srgb, var(--accent-1) 8%, transparent) 0%, transparent 100%)', padding: '24px 16px 20px', textAlign: 'center' }}>
       <div style={{
         width: 108,
         height: 108,
@@ -377,7 +377,7 @@ export default function ArchitectProfilePage() {
         <>
           {/* Profile hero area — pink gradient background */}
           <div style={{
-            background: 'linear-gradient(180deg, rgba(236,72,153,0.12) 0%, transparent 100%)',
+            background: 'linear-gradient(180deg, color-mix(in srgb, var(--accent-1) 12%, transparent) 0%, transparent 100%)',
             padding: '24px 16px 20px',
             textAlign: 'center',
           }}>
@@ -388,7 +388,7 @@ export default function ArchitectProfilePage() {
                 position: 'absolute',
                 inset: -6,
                 borderRadius: '50%',
-                background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
+                background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
                 opacity: 0.55,
                 filter: 'blur(12px)',
               }} aria-hidden="true" />
@@ -492,10 +492,10 @@ export default function ArchitectProfilePage() {
                 ...btnBase,
                 background: isFollowing
                   ? 'var(--color-surface-2)'
-                  : 'linear-gradient(135deg, #ec4899, #f43f5e)',
+                  : 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
                 color: isFollowing ? 'var(--color-text)' : '#fff',
                 border: isFollowing ? '1px solid var(--color-border)' : 'none',
-                boxShadow: isFollowing ? 'none' : '0 4px 14px rgba(236,72,153,0.28)',
+                boxShadow: isFollowing ? 'none' : '0 4px 14px color-mix(in srgb, var(--accent-1) 28%, transparent)',
                 opacity: followPending ? 0.7 : 1,
                 cursor: followPending ? 'default' : 'pointer',
               }}
