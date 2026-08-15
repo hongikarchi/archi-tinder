@@ -281,7 +281,7 @@ Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over
 ## Done
 ### FRONT-DESIGN-B1 — 로그인+프로필 비주얼 튜닝 — RESOLVED 2026-08-15 (`051254e`)
 - 디자인 4단계 이니셔티브(B1→A1→B2→A2, `.claude/plans/design-clever-valley.md`)의 B1: 시스템 내 리파인, 컨셉 교체 없음
-- 로그인: drafting-grid 배경 시그니처(토큰 기반 4테마 자동 적응 + radial vignette), `lp-*` 전역 규칙 index.css → LoginPage.module.css 단일화(camelCase 모듈 클래스), input focus 3-state 신설(기존 outline:none 접근성 공백), error slot 고정 높이(레이아웃 시프트 제거), reduced-motion 블록
+- 로그인: `lp-*` 전역 규칙 index.css → LoginPage.module.css 단일화(camelCase 모듈 클래스), input focus 3-state 신설(기존 outline:none 접근성 공백), error slot 고정 높이(레이아웃 시프트 제거), reduced-motion 블록. _(drafting-grid 배경 시그니처는 넣었다가 사용자 결정으로 제거 `1b4de9c` — 스와이프 페이지 플레인 톤 유지)_
 - 프로필: 핑크 하드코드 전멸(#ec4899 halo/hover → var(--accent-1/2), #ef4444 logout → var(--color-destructive)), 라이트테마 invisible avatar placeholder 수정(rgba(255,255,255,.4) → var(--color-text-dim)), onMouseEnter 핵 전부 → 모듈 :hover(iconBtn/linkPill/statBtn/tab 클래스), 링크필 3중복 → 단일 map, 탭바 ink underline 유지+hover/focus-visible
 - Workflow(feature.js): review PASS + security PASS + Opus verify 0 findings(리뷰 오탐 3건 기각); eslint 0 errors + build green; net −207 lines(11 files +608/−419)
 - feature.js sonnet 워커 4곳 `effort: 'high'` 핀(xhigh 세션 상속 400 가드 — Explore 3연사 사고 재발 방지)
