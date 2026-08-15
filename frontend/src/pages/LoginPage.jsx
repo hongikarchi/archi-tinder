@@ -18,6 +18,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import styles from './LoginPage.module.css'
 import { login as apiLogin, register as apiRegister, checkHandle } from '../api/auth.js'
 import * as api from '../api/client.js'
 import { getRoles } from '../api/meta.js'
@@ -422,7 +423,7 @@ export default function LoginPage({ onLogin }) {
   const frontCardKey = step === FLOW_STEPS.consent ? `consent-${consentResetTick}` : step
 
   return (
-    <div style={pageStyle}>
+    <div className={styles.page} style={pageStyle}>
       <main style={mainStyle}>
         <div style={stageStyle}>
           <div style={deckStackStyle}>
@@ -431,7 +432,7 @@ export default function LoginPage({ onLogin }) {
                 {renderStep(linearNextStep, { isActive: false, key: `back-${linearNextStep}` })}
               </div>
             )}
-            <div key={frontCardKey} className="lp-card-in" style={frontCardWrapStyle}>
+            <div key={frontCardKey} className={styles.cardIn} style={frontCardWrapStyle}>
               {renderStep(step, { key: frontCardKey })}
             </div>
           </div>
@@ -440,20 +441,20 @@ export default function LoginPage({ onLogin }) {
         {import.meta.env.DEV && (
           <button
             type="button"
-            className="lp-btn"
+            className={styles.btn}
             onClick={handleDevClick}
             disabled={isBusy}
-            style={inkSecondaryStyle(isBusy)}
+            style={inkGhostStyle(isBusy)}
           >
             {loading === 'dev' ? <Spinner /> : t('login.dev.button')}
           </button>
         )}
 
-        {errorText && (
-          <p role="alert" style={errorStyle}>
-            {errorText}
-          </p>
-        )}
+        {/* Fixed-height slot — reserved even when empty so error text never
+            shifts the deck (LOGIN-REWORK-1 issue: floating error caused layout jump). */}
+        <p role="alert" style={errorStyle}>
+          {errorText || ''}
+        </p>
       </main>
     </div>
   )
@@ -593,7 +594,7 @@ function ChoiceDeck({ t, typedLine, disabled, onAction, renderBackStep }) {
         </div>
       )}
       <SwipeGestureFrame
-        className="lp-tinder"
+        className={styles.tinder}
         onSwipe={handleSwipe}
         onCardLeftScreen={handleLeftScreen}
         onSwipeRequirementFulfilled={handleFulfilled}
@@ -768,7 +769,7 @@ function CredentialsStep({ t, typedLine, isActive = true, disabled, onBack, onCo
           maxLength={20}
           aria-label={t('login.credentials.id.aria')}
           aria-invalid={localId.length > 0 && !idFormatValid ? 'true' : 'false'}
-          className="lp-input"
+          className={styles.input}
           style={paperInputStyle}
         />
         <p aria-live="polite" style={{ margin: 0, minHeight: 16, fontSize: 12, fontWeight: 600, color: checkHintColor, lineHeight: 1.4, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -789,14 +790,14 @@ function CredentialsStep({ t, typedLine, isActive = true, disabled, onBack, onCo
           aria-label={t('login.credentials.password.aria')}
           maxLength={128}
           aria-required="true"
-          className="lp-input"
+          className={styles.input}
           style={paperInputStyle}
         />
 
         <div style={buttonGridStyle}>
           <button
             type="button"
-            className="lp-btn"
+            className={styles.btn}
             onClick={onBack}
             disabled={disabled}
             style={inkSecondaryStyle(disabled)}
@@ -805,7 +806,7 @@ function CredentialsStep({ t, typedLine, isActive = true, disabled, onBack, onCo
           </button>
           <button
             type="submit"
-            className="lp-cta"
+            className={styles.cta}
             disabled={!canContinue}
             style={inkPrimaryStyle(!canContinue)}
           >
@@ -853,7 +854,7 @@ function ConsentDeck({
         </div>
       )}
       <SwipeGestureFrame
-        className="lp-tinder"
+        className={styles.tinder}
         onSwipe={handleSwipe}
         onCardLeftScreen={handleLeftScreen}
         onSwipeRequirementFulfilled={handleFulfilled}
@@ -970,7 +971,7 @@ function ReturningStep({
           disabled={disabled}
           loading={googleLoading}
           label={t('login.returning.google')}
-          className="lp-btn"
+          className={styles.btn}
           style={{ width: '100%', minHeight: 48, borderRadius: 12 }}
         />
       ) : (
@@ -997,7 +998,7 @@ function ReturningStep({
           autoCorrect="off"
           spellCheck={false}
           aria-label={t('login.returning.id.aria')}
-          className="lp-input"
+          className={styles.input}
           style={paperInputStyle}
         />
         <input
@@ -1007,12 +1008,12 @@ function ReturningStep({
           disabled={disabled}
           placeholder={t('login.returning.password.placeholder')}
           aria-label={t('login.returning.password.aria')}
-          className="lp-input"
+          className={styles.input}
           style={paperInputStyle}
         />
         <button
           type="submit"
-          className="lp-cta"
+          className={styles.cta}
           disabled={disabled || !handle.trim() || !password}
           style={inkPrimaryStyle(disabled || !handle.trim() || !password)}
         >
@@ -1022,7 +1023,7 @@ function ReturningStep({
 
       <button
         type="button"
-        className="lp-btn"
+        className={styles.btn}
         onClick={onBack}
         disabled={disabled}
         style={inkGhostStyle(disabled)}
@@ -1070,7 +1071,7 @@ function ProfileStep({
           disabled={disabled}
           placeholder={t('login.profile.affiliation.placeholder')}
           maxLength={100}
-          className="lp-input"
+          className={styles.input}
           style={paperInputStyle}
         />
 
@@ -1096,7 +1097,7 @@ function ProfileStep({
               aria-checked={role === roleOption.value}
               onClick={() => onRoleChange(roleOption.value)}
               disabled={disabled}
-              className="lp-btn"
+              className={styles.btn}
               style={roleButtonStyle(disabled, role === roleOption.value)}
             >
               {roleLabel(roleOption, language)}
@@ -1107,7 +1108,7 @@ function ProfileStep({
         <div style={buttonGridStyle}>
           <button
             type="button"
-            className="lp-btn"
+            className={styles.btn}
             onClick={onBack}
             disabled={disabled}
             style={inkSecondaryStyle(disabled)}
@@ -1116,7 +1117,7 @@ function ProfileStep({
           </button>
           <button
             type="submit"
-            className="lp-cta"
+            className={styles.cta}
             disabled={disabled || !profileReady}
             style={inkPrimaryStyle(disabled || !profileReady)}
           >
@@ -1168,7 +1169,7 @@ function SwipeTutorial({ intent }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
       <span
-        className="lp-arrow-left"
+        className={styles.arrowLeft}
         aria-hidden="true"
         style={{
           fontSize: 22, fontWeight: 700, flexShrink: 0,
@@ -1178,7 +1179,7 @@ function SwipeTutorial({ intent }) {
         &#8592;
       </span>
       <div
-        className="lp-swipe-demo"
+        className={styles.swipeDemo}
         aria-hidden="true"
         style={{
           width: 84, height: 112,
@@ -1196,7 +1197,7 @@ function SwipeTutorial({ intent }) {
         </span>
       </div>
       <span
-        className="lp-arrow-right"
+        className={styles.arrowRight}
         aria-hidden="true"
         style={{
           fontSize: 22, fontWeight: 700, flexShrink: 0,
@@ -1258,7 +1259,6 @@ function roleButtonStyle(disabled, active) {
 
 const pageStyle = {
   minHeight: '100vh',
-  background: 'var(--color-bg)',
   display: 'grid',
   placeItems: 'center',
   padding: 16,
@@ -1407,7 +1407,11 @@ const roleGridStyle = {
 
 // LOGIN-REWORK-1: error text is instructional (tells the user what went
 // wrong / what to fix) — base font, not MONO, per DESIGN.md §2.5a.
+// FRONT-DESIGN-B1: fixed minHeight (~2 lines @ 12px/1.45) + always-rendered
+// node (see JSX) — reserves the slot so the deck never jumps when an error
+// appears/clears.
 const errorStyle = {
+  minHeight: 35,
   color: 'var(--color-destructive, #D73A49)',
   fontSize: 12,
   fontWeight: 500,

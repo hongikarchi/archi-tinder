@@ -57,7 +57,14 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(비어있음 — FULL-WORKS-3 완료 2026-08-12, ## Done 참조)_
+### FRONT-DESIGN-B1 — 로그인+프로필 비주얼 튜닝 (design plan B1)
+
+**Plan**: `.claude/plans/design-clever-valley.md` — 4-phase design initiative (B1→A1→B2→A2), this is B1.
+**Scope**: LoginPage(+LoginPage.module.css 신설) + UserProfilePage/ProfileHeader/ProfileHero — 시스템 내 리파인.
+로그인: drafting-grid 배경 시그니처 + hover/focus-visible 폴리시(모듈 CSS), 레이아웃/로직 불변.
+프로필: 핑크 하드코딩(#ec4899 halo/hover, #ef4444 logout) 토큰화, 라이트테마 invisible avatar placeholder 수정,
+onMouseEnter 핵 제거(→:hover), 아이콘버튼/링크필/탭 로컬 클래스화. 공유 컴포넌트(BoardCard 등) 불변.
+**Direction spec**: scratchpad `design-direction-b1.md`. **Gate**: eslint+build, app-test skip(순수 UI), 커밋 후 STOP.
 
 
 ## Next

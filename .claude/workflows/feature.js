@@ -126,7 +126,7 @@ async function pass(fixOrders) {
   if (spec.backend) {
     backend = await agent(
       `Implement the BACKEND for task ${taskId}.\n\nSpec:\n${spec.backend.spec}\n\nFiles likely touched: ${(spec.backend.files || []).join(', ') || '(decide)'}\n\nAcceptance criteria:\n${acceptance}${fixBlock}\n\nFollow CLAUDE.md backend conventions. Run flake8 + apply any migration you create. Report the exact API contract you implemented.`,
-      { agentType: 'back-maker', model: 'sonnet', phase: 'Build', label: `back-maker:${taskId}`, schema: MAKER_SCHEMA },
+      { agentType: 'back-maker', model: 'sonnet', effort: 'high', phase: 'Build', label: `back-maker:${taskId}`, schema: MAKER_SCHEMA },
     )
     if (backend && backend.status === 'blocked') {
       return { commitReady: false, blocked: `back-maker blocked: ${backend.notes}`, backend }
@@ -138,7 +138,7 @@ async function pass(fixOrders) {
     const contract = (backend && backend.apiContract) || spec.frontend.contract || 'none'
     frontend = await agent(
       `Implement the FRONTEND for task ${taskId}.\n\nSpec:\n${spec.frontend.spec}\n\nFiles likely touched: ${(spec.frontend.files || []).join(', ') || '(decide)'}\n\nBackend API contract to consume:\n${contract}\n\nAcceptance criteria:\n${acceptance}${fixBlock}\n\nConsult DESIGN.md before any style/layout change. Run ESLint + build.`,
-      { agentType: 'front-maker', model: 'sonnet', phase: 'Build', label: `front-maker:${taskId}`, schema: MAKER_SCHEMA },
+      { agentType: 'front-maker', model: 'sonnet', effort: 'high', phase: 'Build', label: `front-maker:${taskId}`, schema: MAKER_SCHEMA },
     )
     if (frontend && frontend.status === 'blocked') {
       return { commitReady: false, blocked: `front-maker blocked: ${frontend.notes}`, backend, frontend }
@@ -153,11 +153,11 @@ async function pass(fixOrders) {
   const [review, security] = await parallel([
     () => agent(
       `Review the changes for task ${taskId}.\nChanged files: ${filesLine}\nAPI contract: ${contractLine}\nAcceptance criteria:\n${acceptance}\n\nCheck integration correctness, API contract front<->back, logic bugs, error handling at boundaries, obvious perf. Return verdict + findings.`,
-      { agentType: 'code-review', model: 'sonnet', phase: 'Review', label: `code-review:${taskId}`, schema: FINDINGS_SCHEMA },
+      { agentType: 'code-review', model: 'sonnet', effort: 'high', phase: 'Review', label: `code-review:${taskId}`, schema: FINDINGS_SCHEMA },
     ),
     () => agent(
       `Security scan of the changes for task ${taskId}.\nChanged files: ${filesLine}\n\nScan backend (SQL injection, auth bypass, secret leakage), frontend (XSS, token storage, endpoint injection), database (raw SQL params, exposed IDs). Return verdict + findings.`,
-      { agentType: 'security-manager', model: 'sonnet', phase: 'Review', label: `security:${taskId}`, schema: FINDINGS_SCHEMA },
+      { agentType: 'security-manager', model: 'sonnet', effort: 'high', phase: 'Review', label: `security:${taskId}`, schema: FINDINGS_SCHEMA },
     ),
   ])
 

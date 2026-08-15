@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
+import styles from './UserProfilePage.module.css'
 import { useTranslation } from '../i18n/index.js'
 import { getUserProfile, getLikedBuildings, getArchitectProfile } from '../api/client.js'
 import { updateProject, deleteProject } from '../api/projects.js'
@@ -406,34 +407,6 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
     exitSelectMode()
   }, [bulkPending, selectedBoards, boards, boardsTotalCount, exitSelectMode])
 
-  // MINOR #2: shared style helpers for Public / Private bulk action buttons.
-  // Defined here (component-scoped consts) so they close over nothing and stay
-  // stable across renders without needing useCallback/useMemo.
-  function bulkActionButtonStyle(disabled) {
-    return {
-      flex: 1,
-      minHeight: 44, padding: '0 12px',
-      borderRadius: 10, border: '1px solid var(--color-border)',
-      background: 'var(--color-surface)',
-      color: 'var(--color-text-2)', fontSize: 13, fontWeight: 600,
-      cursor: disabled ? 'not-allowed' : 'pointer',
-      fontFamily: 'inherit',
-      opacity: disabled ? 0.5 : 1,
-      transition: 'border-color 0.18s, color 0.18s, opacity 0.18s',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-    }
-  }
-  const bulkBtnHoverEnter = (disabled) => (e) => {
-    if (!disabled) {
-      e.currentTarget.style.borderColor = 'rgba(236,72,153,0.45)'
-      e.currentTarget.style.color = '#ec4899'
-    }
-  }
-  const bulkBtnHoverLeave = (e) => {
-    e.currentTarget.style.borderColor = 'var(--color-border)'
-    e.currentTarget.style.color = 'var(--color-text-2)'
-  }
-
   if (loading) {
     return (
       <div style={{
@@ -467,10 +440,10 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
       background: 'var(--color-bg)',
       paddingBottom: 'calc(100px + env(safe-area-inset-bottom))'
     }}>
-      {/* Ambient brand-pink glow — on-brand */}
+      {/* Ambient accent glow — themed (DESIGN.md §8.1 accent idiom) */}
       <div style={{
         position: 'fixed', top: '-10%', left: '-10%', width: '120%', height: '50%',
-        background: 'radial-gradient(circle at 50% 0%, rgba(236,72,153,0.10) 0%, transparent 70%)',
+        background: 'radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--accent-1) 10%, transparent) 0%, transparent 70%)',
         pointerEvents: 'none', zIndex: 0,
       }} />
 
@@ -499,7 +472,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
           onAvatarUpdated={(updatedUser) => setUser(prev => ({ ...prev, avatar_url: updatedUser.avatar_url }))}
         />
 
-        {/* Tab bar — Boards | Studios | Liked (isMe only) */}
+        {/* Tab bar — Boards | Studios | Liked | Created (isMe only) */}
         <div style={{
           display: 'flex',
           borderBottom: '1px solid var(--color-border-soft)',
@@ -509,40 +482,14 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
           <button
             type="button"
             onClick={() => setActiveTab('boards')}
-            style={{
-              flex: 1,
-              padding: '12px 0',
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: 14,
-              fontWeight: activeTab === 'boards' ? 700 : 500,
-              color: activeTab === 'boards' ? 'var(--color-text)' : 'var(--color-text-muted)',
-              borderBottom: activeTab === 'boards' ? '2px solid var(--color-text)' : '2px solid transparent',
-              marginBottom: -1,
-              fontFamily: 'inherit',
-              transition: 'color var(--motion-fast), border-color var(--motion-fast)',
-            }}
+            className={`${styles.tab} ${activeTab === 'boards' ? styles.tabActive : ''}`}
           >
             Boards
           </button>
           <button
             type="button"
             onClick={handleStudiosTab}
-            style={{
-              flex: 1,
-              padding: '12px 0',
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: 14,
-              fontWeight: activeTab === 'studios' ? 700 : 500,
-              color: activeTab === 'studios' ? 'var(--color-text)' : 'var(--color-text-muted)',
-              borderBottom: activeTab === 'studios' ? '2px solid var(--color-text)' : '2px solid transparent',
-              marginBottom: -1,
-              fontFamily: 'inherit',
-              transition: 'color var(--motion-fast), border-color var(--motion-fast)',
-            }}
+            className={`${styles.tab} ${activeTab === 'studios' ? styles.tabActive : ''}`}
           >
             Studios
           </button>
@@ -550,20 +497,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
             <button
               type="button"
               onClick={handleLikedTab}
-              style={{
-                flex: 1,
-                padding: '12px 0',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: 14,
-                fontWeight: activeTab === 'liked' ? 700 : 500,
-                color: activeTab === 'liked' ? 'var(--color-text)' : 'var(--color-text-muted)',
-                borderBottom: activeTab === 'liked' ? '2px solid var(--color-text)' : '2px solid transparent',
-                marginBottom: -1,
-                fontFamily: 'inherit',
-                transition: 'color var(--motion-fast), border-color var(--motion-fast)',
-              }}
+              className={`${styles.tab} ${activeTab === 'liked' ? styles.tabActive : ''}`}
             >
               Liked
             </button>
@@ -572,20 +506,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
             <button
               type="button"
               onClick={handleCreatedTab}
-              style={{
-                flex: 1,
-                padding: '12px 0',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: 14,
-                fontWeight: activeTab === 'created' ? 700 : 500,
-                color: activeTab === 'created' ? 'var(--color-text)' : 'var(--color-text-muted)',
-                borderBottom: activeTab === 'created' ? '2px solid var(--color-text)' : '2px solid transparent',
-                marginBottom: -1,
-                fontFamily: 'inherit',
-                transition: 'color var(--motion-fast), border-color var(--motion-fast)',
-              }}
+              className={`${styles.tab} ${activeTab === 'created' ? styles.tabActive : ''}`}
             >
               Created
             </button>
@@ -599,8 +520,8 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
           <div aria-live="polite" style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
             padding: '12px 16px', marginBottom: 12, borderRadius: 12,
-            background: 'rgba(239,68,68,0.12)',
-            borderLeft: '3px solid #ef4444',
+            background: 'color-mix(in srgb, var(--color-destructive) 12%, transparent)',
+            borderLeft: '3px solid var(--color-destructive)',
             color: 'var(--color-text)', fontSize: 13, fontWeight: 500,
           }}>
             <span>{boardActionError.msg}</span>
@@ -632,14 +553,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
             <button
               type="button"
               onClick={exitSelectMode}
-              style={{
-                background: 'transparent', border: 'none', cursor: 'pointer',
-                color: 'var(--color-text-2)', fontSize: 14, fontWeight: 600,
-                minHeight: 44, padding: '0 4px',
-                fontFamily: 'inherit',
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--color-text)' }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--color-text-2)' }}
+              className={styles.cancelBtn}
             >
               Cancel
             </button>
@@ -660,13 +574,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                   setSelectedBoards(new Set(boards.map(b => b.board_id)))
                 }
               }}
-              style={{
-                background: 'transparent', border: 'none', cursor: 'pointer',
-                color: '#ec4899', fontSize: 13, fontWeight: 600,
-                minHeight: 44, padding: '0 4px',
-                fontFamily: 'inherit',
-                whiteSpace: 'nowrap',
-              }}
+              className={styles.selectAllBtn}
             >
               {allSelected ? 'Deselect all' : 'Select all'}
             </button>
@@ -696,24 +604,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                 type="button"
                 onClick={() => setSelectMode(true)}
                 aria-label="Edit boards"
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  background: 'transparent',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 10, cursor: 'pointer',
-                  color: 'var(--color-text-2)', fontSize: 13, fontWeight: 600,
-                  padding: '0 12px', minHeight: 44,
-                  fontFamily: 'inherit',
-                  transition: 'border-color 0.18s cubic-bezier(0.4, 0, 0.2, 1), color 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = 'rgba(236,72,153,0.55)'
-                  e.currentTarget.style.color = '#ec4899'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--color-border)'
-                  e.currentTarget.style.color = 'var(--color-text-2)'
-                }}
+                className={styles.editBtn}
               >
                 {/* Pencil icon */}
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -758,9 +649,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
               type="button"
               disabled={bulkPending}
               onClick={() => handleBulkVisibility('public')}
-              style={bulkActionButtonStyle(bulkPending)}
-              onMouseEnter={bulkBtnHoverEnter(bulkPending)}
-              onMouseLeave={bulkBtnHoverLeave}
+              className={styles.bulkActionBtn}
             >
               {/* Lock-open icon */}
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -774,9 +663,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
               type="button"
               disabled={bulkPending}
               onClick={() => handleBulkVisibility('private')}
-              style={bulkActionButtonStyle(bulkPending)}
-              onMouseEnter={bulkBtnHoverEnter(bulkPending)}
-              onMouseLeave={bulkBtnHoverLeave}
+              className={styles.bulkActionBtn}
             >
               {/* Lock-closed icon */}
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -801,19 +688,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                   handleBulkDelete()
                 }
               }}
-              style={{
-                minHeight: 44, padding: '0 14px',
-                borderRadius: 10, border: 'none',
-                background: confirmingBulkDelete ? '#ef4444' : 'rgba(239,68,68,0.12)',
-                color: confirmingBulkDelete ? '#fff' : '#ef4444',
-                fontSize: 13, fontWeight: 600,
-                cursor: bulkPending ? 'not-allowed' : 'pointer',
-                fontFamily: 'inherit',
-                opacity: bulkPending ? 0.5 : 1,
-                transition: 'background 0.18s, color 0.18s, opacity 0.18s',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                whiteSpace: 'nowrap',
-              }}
+              className={`${styles.bulkDeleteBtn} ${confirmingBulkDelete ? styles.bulkDeleteBtnConfirming : ''}`}
             >
               {/* Trash icon */}
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -842,7 +717,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
             <div style={{
               width: 24, height: 24, borderRadius: '50%',
               border: '2px solid var(--color-border)',
-              borderTopColor: '#ec4899',
+              borderTopColor: 'var(--accent-1)',
               animation: 'spin 0.8s linear infinite',
             }} />
           </div>
@@ -1069,7 +944,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                         <span style={{
                           display: 'inline-block', marginTop: 6,
                           padding: '2px 8px', borderRadius: 10,
-                          background: 'rgba(239,68,68,0.12)', color: '#ef4444',
+                          background: 'color-mix(in srgb, var(--color-destructive) 12%, transparent)', color: 'var(--color-destructive)',
                           fontSize: 10, fontWeight: 600,
                         }}>
                           {work.gate_reason ? '검토 거절' : '검토 중'}

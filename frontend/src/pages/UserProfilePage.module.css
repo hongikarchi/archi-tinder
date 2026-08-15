@@ -1,0 +1,210 @@
+/*
+ * UserProfilePage.module.css
+ * Scoped styles for the profile page's tab bar + boards-section action
+ * buttons. Per DESIGN.md §4 + §10.4: interactive components owning
+ * :hover/:focus get a co-located CSS Module; themeable values use
+ * tokens.css variables (accent-1 replaces the legacy Tailwind pink #ec4899,
+ * color-destructive replaces the legacy #ef4444).
+ */
+
+/* ---- Tab bar (Boards | Studios | Liked | Created) ------------------------
+   Keeps the ink underline (editorial identity) — only color/underline swap
+   on the active modifier, hover adds a color shift on inactive tabs. */
+
+.tab {
+  flex: 1;
+  padding: 12px 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  font-family: inherit;
+  transition: color var(--motion-fast) var(--motion-ease),
+              border-color var(--motion-fast) var(--motion-ease);
+}
+
+.tab:hover {
+  color: var(--color-text);
+}
+
+.tab:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: -2px;
+}
+
+.tabActive {
+  font-weight: 700;
+  color: var(--color-text);
+  border-bottom-color: var(--color-text);
+}
+
+/* ---- Cancel (select-mode header) ---- */
+
+.cancelBtn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-2);
+  font-size: 14px;
+  font-weight: 600;
+  min-height: 44px;
+  padding: 0 4px;
+  font-family: inherit;
+  transition: color var(--motion-fast) var(--motion-ease);
+}
+
+.cancelBtn:hover {
+  color: var(--color-text);
+}
+
+.cancelBtn:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+}
+
+/* ---- Select all / Deselect all ---- */
+
+.selectAllBtn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--accent-1);
+  font-size: 13px;
+  font-weight: 600;
+  min-height: 44px;
+  padding: 0 4px;
+  font-family: inherit;
+  white-space: nowrap;
+  transition: opacity var(--motion-fast) var(--motion-ease);
+}
+
+.selectAllBtn:hover {
+  opacity: 0.75;
+}
+
+.selectAllBtn:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+}
+
+/* ---- Edit boards button ---- */
+
+.editBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  cursor: pointer;
+  color: var(--color-text-2);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 0 12px;
+  min-height: 44px;
+  font-family: inherit;
+  transition: border-color var(--motion-fast) var(--motion-ease),
+              color var(--motion-fast) var(--motion-ease);
+}
+
+.editBtn:hover {
+  border-color: var(--accent-1);
+  color: var(--accent-1);
+}
+
+.editBtn:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+}
+
+/* ---- Bulk action buttons (Public / Private) ---- */
+
+.bulkActionBtn {
+  flex: 1;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-2);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: border-color var(--motion-fast) var(--motion-ease),
+              color var(--motion-fast) var(--motion-ease),
+              opacity var(--motion-fast) var(--motion-ease);
+}
+
+.bulkActionBtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.bulkActionBtn:hover:not(:disabled) {
+  border-color: var(--accent-1);
+  color: var(--accent-1);
+}
+
+.bulkActionBtn:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+}
+
+/* ---- Bulk delete button (2-step confirm) ---- */
+
+.bulkDeleteBtn {
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: none;
+  background: color-mix(in srgb, var(--color-destructive) 12%, transparent);
+  color: var(--color-destructive);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  opacity: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+  transition: background var(--motion-fast) var(--motion-ease),
+              color var(--motion-fast) var(--motion-ease),
+              opacity var(--motion-fast) var(--motion-ease);
+}
+
+.bulkDeleteBtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.bulkDeleteBtnConfirming {
+  background: var(--color-destructive);
+  color: #fff;
+}
+
+.bulkDeleteBtn:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab,
+  .cancelBtn,
+  .selectAllBtn,
+  .editBtn,
+  .bulkActionBtn,
+  .bulkDeleteBtn {
+    transition: none;
+  }
+}
