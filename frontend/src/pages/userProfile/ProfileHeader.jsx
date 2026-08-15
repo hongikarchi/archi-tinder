@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { IconBack, IconShare, IconSettings, IconBell } from '../../components/icons'
 import { useUnreadNotifications } from '../../hooks/useUnreadNotifications.js'
 import { useTranslation } from '../../i18n/index.js'
+import styles from './ProfileHeader.module.css'
 
 export default function ProfileHeader({
   isMe,
@@ -51,16 +52,7 @@ export default function ProfileHeader({
         <button
           onClick={() => navigate(-1)}
           aria-label="Back"
-          style={{
-            width: 44, height: 44, minWidth: 44,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: 'transparent', border: 'none',
-            color: 'var(--color-text)', cursor: 'pointer',
-            borderRadius: 12,
-            transition: 'background 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-surface-2, rgba(255,255,255,0.05))' }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+          className={styles.iconBtnBack}
         >
           <IconBack width={20} height={20} />
         </button>
@@ -83,17 +75,7 @@ export default function ProfileHeader({
             onClick={() => navigate('/notifications')}
             aria-label={t('profile.notifications')}
             title={t('profile.notifications')}
-            style={{
-              position: 'relative',
-              width: 44, height: 44, minWidth: 44,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: 'transparent', border: 'none',
-              color: 'var(--color-text-dim)', cursor: 'pointer',
-              borderRadius: 12,
-              transition: 'color 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--color-text)' }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--color-text-dim)' }}
+            className={styles.iconBtn}
           >
             <IconBell width={18} height={18} />
             {unreadCount > 0 && (
@@ -126,16 +108,7 @@ export default function ProfileHeader({
             onClick={onShare}
             aria-label={t('profile.shareCard')}
             title={t('profile.shareCard')}
-            style={{
-              width: 44, height: 44, minWidth: 44,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: 'transparent', border: 'none',
-              color: 'var(--color-text-dim)', cursor: 'pointer',
-              borderRadius: 12,
-              transition: 'color 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--color-text)' }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--color-text-dim)' }}
+            className={styles.iconBtn}
           >
             <IconShare width={18} height={18} />
           </button>
@@ -145,16 +118,7 @@ export default function ProfileHeader({
             onClick={() => navigate('/settings')}
             aria-label={t('profile.settings')}
             title={t('profile.settings')}
-            style={{
-              width: 44, height: 44, minWidth: 44,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: 'transparent', border: 'none',
-              color: 'var(--color-text-dim)', cursor: 'pointer',
-              borderRadius: 12,
-              transition: 'color 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--color-text)' }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--color-text-dim)' }}
+            className={styles.iconBtn}
           >
             <IconSettings width={18} height={18} />
           </button>
@@ -164,16 +128,7 @@ export default function ProfileHeader({
             onClick={onLogout}
             aria-label="Log out"
             title="Log out"
-            style={{
-              width: 44, height: 44, minWidth: 44,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: 'transparent', border: 'none',
-              color: 'var(--color-text-dim)', cursor: 'pointer',
-              borderRadius: 12,
-              transition: 'color 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = '#ef4444' }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--color-text-dim)' }}
+            className={styles.iconBtnDestructive}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
@@ -189,16 +144,7 @@ export default function ProfileHeader({
             onClick={onShare}
             aria-label={t('profile.shareCard')}
             title={t('profile.shareCard')}
-            style={{
-              width: 44, height: 44, minWidth: 44,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: 'transparent', border: 'none',
-              color: 'var(--color-text-dim)', cursor: 'pointer',
-              borderRadius: 12,
-              transition: 'color 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--color-text)' }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--color-text-dim)' }}
+            className={styles.iconBtn}
           >
             <IconShare width={18} height={18} />
           </button>

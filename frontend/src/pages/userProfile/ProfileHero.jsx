@@ -99,6 +99,49 @@ export default function ProfileHero({
     ...(isMe ? [{ count: likedCount ?? 0, label: 'Liked', onClick: () => onSelectTab('liked') }] : []),
   ]
 
+  // 2B: single data source for the external-link pills — map renders one
+  // shared .linkPill class instead of 3 near-duplicate <a> blocks.
+  const linkPills = [
+    igUrl && {
+      key: 'instagram',
+      href: igUrl,
+      external: true,
+      label: user.external_links.instagram,
+      icon: (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+          <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+          <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+        </svg>
+      ),
+    },
+    emailUrl && {
+      key: 'email',
+      href: emailUrl,
+      external: false,
+      label: user.external_links.email,
+      icon: (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+          <polyline points="22,6 12,13 2,6"></polyline>
+        </svg>
+      ),
+    },
+    websiteUrl && {
+      key: 'website',
+      href: websiteUrl,
+      external: true,
+      label: websiteUrl.replace(/^https?:\/\//, '').replace(/\/$/, ''),
+      icon: (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="2" y1="12" x2="22" y2="12"></line>
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+        </svg>
+      ),
+    },
+  ].filter(Boolean)
+
   const handleFileChange = useCallback(async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -127,7 +170,7 @@ export default function ProfileHero({
           <div
             style={{
               position: 'absolute', inset: -6, borderRadius: '50%',
-              background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
+              background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
               opacity: 0.55, filter: 'blur(12px)',
             }}
             aria-hidden="true"
@@ -156,7 +199,7 @@ export default function ProfileHero({
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}
       >
-        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-dim)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="8" r="4"></circle>
           <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"></path>
         </svg>
@@ -264,20 +307,11 @@ export default function ProfileHero({
         }}>
           {stats.map((stat, i, arr) => (
             <Fragment key={stat.label}>
-              <button
-                onClick={stat.onClick}
-                style={{
-                  flex: '0 0 auto',
-                  background: 'transparent', border: 'none', cursor: 'pointer',
-                  padding: '6px 14px', minHeight: 44,
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
-                  fontFamily: 'inherit', color: 'inherit',
-                }}
-              >
+              <button onClick={stat.onClick} className={styles.statBtn}>
                 <span style={{ color: 'var(--color-text)', fontSize: 18, fontWeight: 700, lineHeight: 1 }}>
                     {stat.count}
                   </span>
-                <span style={{ color: 'var(--color-text-dim)', fontSize: 12, fontWeight: 500 }}>
+                <span className={styles.statLabel}>
                   {stat.label}
                 </span>
               </button>
@@ -290,107 +324,19 @@ export default function ProfileHero({
 
 
         {/* External links — Instagram + email + website pills */}
-        {(igUrl || emailUrl || websiteUrl) && (
+        {linkPills.length > 0 && (
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
-            {igUrl && (
+            {linkPills.map(pill => (
               <a
-                href={igUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 7,
-                  padding: '10px 14px', borderRadius: 999,
-                  background: 'var(--color-surface-2, rgba(255,255,255,0.04))',
-                  border: '1px solid var(--color-border-soft)',
-                  color: 'var(--color-text-2)',
-                  textDecoration: 'none', fontSize: 13, fontWeight: 600,
-                  transition: 'transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.18s, color 0.18s',
-                  minHeight: 44,
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-1px)'
-                  e.currentTarget.style.borderColor = 'rgba(236,72,153,0.45)'
-                  e.currentTarget.style.color = '#ec4899'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)'
-                  e.currentTarget.style.borderColor = 'var(--color-border-soft)'
-                  e.currentTarget.style.color = 'var(--color-text-2)'
-                }}
+                key={pill.key}
+                href={pill.href}
+                {...(pill.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+                className={styles.linkPill}
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
-                  <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
-                  <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
-                </svg>
-                {user.external_links.instagram}
+                {pill.icon}
+                {pill.label}
               </a>
-            )}
-            {emailUrl && (
-              <a
-                href={emailUrl}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 7,
-                  padding: '10px 14px', borderRadius: 999,
-                  background: 'var(--color-surface-2, rgba(255,255,255,0.04))',
-                  border: '1px solid var(--color-border-soft)',
-                  color: 'var(--color-text-2)',
-                  textDecoration: 'none', fontSize: 13, fontWeight: 600,
-                  transition: 'transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.18s, color 0.18s',
-                  minHeight: 44,
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-1px)'
-                  e.currentTarget.style.borderColor = 'rgba(236,72,153,0.45)'
-                  e.currentTarget.style.color = '#ec4899'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)'
-                  e.currentTarget.style.borderColor = 'var(--color-border-soft)'
-                  e.currentTarget.style.color = 'var(--color-text-2)'
-                }}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
-                  <polyline points="22,6 12,13 2,6"></polyline>
-                </svg>
-                {user.external_links.email}
-              </a>
-            )}
-            {websiteUrl && (
-              <a
-                href={websiteUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 7,
-                  padding: '10px 14px', borderRadius: 999,
-                  background: 'var(--color-surface-2, rgba(255,255,255,0.04))',
-                  border: '1px solid var(--color-border-soft)',
-                  color: 'var(--color-text-2)',
-                  textDecoration: 'none', fontSize: 13, fontWeight: 600,
-                  transition: 'transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.18s, color 0.18s',
-                  minHeight: 44,
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-1px)'
-                  e.currentTarget.style.borderColor = 'rgba(236,72,153,0.45)'
-                  e.currentTarget.style.color = '#ec4899'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)'
-                  e.currentTarget.style.borderColor = 'var(--color-border-soft)'
-                  e.currentTarget.style.color = 'var(--color-text-2)'
-                }}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <line x1="2" y1="12" x2="22" y2="12"></line>
-                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
-                </svg>
-                {websiteUrl.replace(/^https?:\/\//, '').replace(/\/$/, '')}
-              </a>
-            )}
+            ))}
           </div>
         )}
 

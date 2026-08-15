@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-08-14 22:29 KST',
-    head: 'f0d4a5a',
-    branch: 'feature/claude-works-audit-chore',
+    updatedAt: '2026-08-15 09:03 KST',
+    head: '9db2ba1',
+    branch: 'feature/claude-design-b1',
   },
   done: [
+    {
+      id: 'FRONT-DESIGN-B1',
+      title: '로그인+프로필 비주얼 튜닝',
+      completedAt: '2026-08-15',
+      note: '디자인 4단계 이니셔티브(B1→A1→B2→A2, `.claude/plans/design-clever-valley.md`)의 B1: 시스템 내 리파인, 컨셉 교체 없음',
+    },
     {
       id: 'UPLOAD-NAV-1',
       title: '업로드 성공 모달 + Created 탭 이동',
@@ -71,12 +77,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-08-04',
       note: '파서가 DB에 없는 필터 값을 창작하던 문제(P1)·architectural_elements 축 부재(P2)·구체 유형 뭉개기(P3)를 어휘 그라운딩으로 수정 — db_qc 실측 unmatchable 8→0 쿼리, hard_empty 1→0, tag_match@10 courtyard/atrium/terrace 0→100%, library +90pt, facade +80pt, 회귀 0.',
     },
-    {
-      id: 'ADMIN-DBCHECK-2',
-      title: 'DB/검색 QC 회귀 하네스 (기계층 + 판정층 런북)',
-      completedAt: '2026-08-04',
-      note: '검색 품질 3다리(DB 정확성·완전성·검색 도달성) 자동 측정 하네스 — `tools/db_qc.py` 4단계(어휘 덤프·파서 배터리·검색 배터리·이미지 헬스) + 12쿼리 fixture + 시각 판정층 루브릭/런북(`db_qc_rubric.md`), 재구축 전후 diff·HARD-EMPTY/5pt 회귀 시 exit 1.',
-    },
   ],
   now: [],
   next: {
@@ -88,6 +88,11 @@ window.PROJECT_STATE = {
       },
     ],
     high: [
+      {
+        id: 'FRONT-DESIGN-A1',
+        title: '디자인 정합성 기계적 스윕 (hex→토큰 + hover 핵 제거)',
+        note: '_디자인 4단계 이니셔티브(B1→A1→B2→A2, `.claude/plans/design-clever-valley.md`)의 A1. B1은 2026-08-15 완료(## Done)._',
+      },
       {
         id: 'ALGO-ACCURACY-1',
         title: '"Aha(취향 포착)" 주장 미검증 — 측정 하네스 부재 (hypothesis-grade)',
@@ -226,6 +231,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 303,
+      title: 'chore(works-audit): PR #300 Done entry + FULL-WORKS-4 ticket',
+      mergedAt: '2026-08-14T13:34:10Z',
+      mergedAtKST: '2026-08-14 22:34 KST',
+      sha: '167be38',
+    },
+    {
       number: 302,
       title: 'feat(FULL-WORKS-3): works 상세 모달 + cover_r2_key BE 컬럼',
       mergedAt: '2026-08-14T12:43:18Z',
@@ -273,13 +285,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-08-06T07:53:30Z',
       mergedAtKST: '2026-08-06 16:53 KST',
       sha: 'a99fd64',
-    },
-    {
-      number: 293,
-      title: 'chore(infra): Makefile PYTHON var — Windows python3 Store-stub fix',
-      mergedAt: '2026-08-05T08:43:22Z',
-      mergedAtKST: '2026-08-05 17:43 KST',
-      sha: '2a801c3',
     },
   ],
   agents: [
@@ -2130,6 +2135,10 @@ window.PROJECT_STATE = {
       role: '게스트 온보딩 로그인 페이지',
     },
     {
+      path: 'frontend/src/pages/LoginPage.module.css',
+      role: '',
+    },
+    {
       path: 'frontend/src/pages/ResultsPage.jsx',
       role: '추천 결과 페이지',
     },
@@ -2148,6 +2157,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/pages/UserProfilePage.jsx',
       role: '유저 프로필 페이지',
+    },
+    {
+      path: 'frontend/src/pages/UserProfilePage.module.css',
+      role: '',
     },
     {
       path: 'frontend/src/pages/boardDetail/ArchitectSection.jsx',
@@ -2268,6 +2281,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/pages/userProfile/ProfileHeader.jsx',
       role: '유저 프로필 헤더 바',
+    },
+    {
+      path: 'frontend/src/pages/userProfile/ProfileHeader.module.css',
+      role: '',
     },
     {
       path: 'frontend/src/pages/userProfile/ProfileHero.jsx',

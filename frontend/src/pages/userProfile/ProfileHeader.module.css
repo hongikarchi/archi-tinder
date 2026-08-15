@@ -1,0 +1,64 @@
+/*
+ * ProfileHeader.module.css
+ * Scoped styles for the sticky profile header's icon buttons.
+ * Per DESIGN.md §4 + §10.4: interactive components owning :hover/:focus get a
+ * co-located CSS Module; themeable values use tokens.css variables.
+ */
+
+/* ---- Icon button (back / bell / share / settings / logout) ---- */
+
+.iconBtn {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--color-text-dim);
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  transition: background var(--motion-fast) var(--motion-ease),
+              color var(--motion-fast) var(--motion-ease);
+  position: relative;
+}
+
+.iconBtn:hover {
+  background: var(--color-surface-2);
+  color: var(--color-text);
+}
+
+.iconBtn:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+}
+
+/* Back button (other-user view) — text stays default color, only bg lifts on hover */
+.iconBtnBack {
+  composes: iconBtn;
+  color: var(--color-text);
+}
+
+.iconBtnBack:hover {
+  background: var(--color-surface-2);
+  color: var(--color-text);
+}
+
+/* Destructive variant — logout */
+.iconBtnDestructive {
+  composes: iconBtn;
+}
+
+.iconBtnDestructive:hover {
+  background: var(--color-surface-2);
+  color: var(--color-destructive);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .iconBtn,
+  .iconBtnBack,
+  .iconBtnDestructive {
+    transition: none;
+  }
+}
