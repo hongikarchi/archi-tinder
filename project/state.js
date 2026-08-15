@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-08-15 12:03 KST',
-    head: '25ee29d',
-    branch: 'feature/claude-flow-1',
+    updatedAt: '2026-08-15 13:44 KST',
+    head: 'ab4ac47',
+    branch: 'feature/claude-design-a1-hover',
   },
   done: [
+    {
+      id: 'FRONT-DESIGN-A1',
+      title: '디자인 정합성 기계적 스윕 (2 PR)',
+      completedAt: '2026-08-15',
+      note: '디자인 이니셔티브(B1→A1→B2→A2) A1, 유형별 PR 분리(user 결정): PR-1 hex→토큰, PR-2 hover 핵 제거 (stacked 브랜치)',
+    },
     {
       id: 'FRONT-FLOW-2',
       title: '팝업/인터스티셜 de-drift 스윕',
@@ -71,12 +77,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-08-08',
       note: 'PR #295 스로틀 + 무캐시 재생성 + 프론트 자동호출의 결합이 무음 429 → `finalReport` null → ResultsPage 레거시 2줄 폴백("옛 모양 리포트" 증상, yywon1 보고/PR #298 진단 크레딧)을 유발. 근본 픽스 일괄:',
     },
-    {
-      id: 'FRONT-UX-12',
-      title: '진행률 바 정리 (Discovery 제거 + Taste N swipes %)',
-      completedAt: '2026-08-06',
-      note: 'Discovery 탭 진행률 바 제거 (`ff07ee0`): 덱 스와이프 맥락에서 % 바가 맞지 않아 삭제; `discovery.progressComplete` i18n 키도 고아 → 삭제',
-    },
   ],
   now: [],
   next: {
@@ -88,6 +88,16 @@ window.PROJECT_STATE = {
       },
     ],
     high: [
+      {
+        id: 'FRONT-UX-14',
+        title: '스와이프 모션 + 갤러리 UX 5종 (user 지적 2026-08-15, 원인 전부 확정)',
+        note: '_스와이프 경로 — feature workflow 필수. `lib/tinderCard.js`는 vendored fork(PR #295)라 물리 상수 자유 튜닝 가능._',
+      },
+      {
+        id: 'INFRA-TOKEN-1',
+        title: '--color-success 토큰 신설 (4테마) + #34d399 전환',
+        note: '_A1-HEX-R2 이연(2026-08-15): share-copied 등 success green을 accent-2로 바꾸면 의미 파괴(보라). tokens.css 4테마에 success green 추가 후 `BoardDetailPage.jsx:416` `#34d399` 전환 + DESIGN.md §1 동기화._',
+      },
       {
         id: 'FRONT-DESIGN-A1',
         title: '디자인 정합성 기계적 스윕 (hex→토큰 + hover 핵 제거)',
@@ -231,6 +241,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 306,
+      title: 'feat(FRONT-FLOW-1/2): onboarding interrupt fix + popup de-drift — paper cards, pink sweep',
+      mergedAt: '2026-08-15T03:26:37Z',
+      mergedAtKST: '2026-08-15 12:26 KST',
+      sha: 'ab4ac47',
+    },
+    {
       number: 305,
       title: 'feat(FRONT-DESIGN-B1): login+profile visual tuning — tokens, :hover modules, de-drift',
       mergedAt: '2026-08-15T01:53:00Z',
@@ -278,13 +295,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-08-08T00:07:22Z',
       mergedAtKST: '2026-08-08 09:07 KST',
       sha: 'd31828a',
-    },
-    {
-      number: 295,
-      title: 'security+feat: Gemini throttle + swipe deck visual + progress bar cleanup',
-      mergedAt: '2026-08-07T23:55:02Z',
-      mergedAtKST: '2026-08-08 08:55 KST',
-      sha: 'ec1d0d4',
     },
   ],
   agents: [
@@ -1959,12 +1969,24 @@ window.PROJECT_STATE = {
       role: '프로필 아티클 카드',
     },
     {
+      path: 'frontend/src/components/profile/ArticleCard.module.css',
+      role: '',
+    },
+    {
       path: 'frontend/src/components/profile/BioPersonaFlipCard.jsx',
       role: '바이오·페르소나 플립 카드',
     },
     {
+      path: 'frontend/src/components/profile/BioPersonaFlipCard.module.css',
+      role: '',
+    },
+    {
       path: 'frontend/src/components/profile/BoardCard.jsx',
       role: '프로필 보드 플립 카드',
+    },
+    {
+      path: 'frontend/src/components/profile/BoardCard.module.css',
+      role: '',
     },
     {
       path: 'frontend/src/components/profile/BusinessCard.jsx',
@@ -1973,6 +1995,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/components/profile/DescriptionAboutFlipCard.jsx',
       role: '사무소 소개 플립 카드',
+    },
+    {
+      path: 'frontend/src/components/profile/DescriptionAboutFlipCard.module.css',
+      role: '',
     },
     {
       path: 'frontend/src/components/profile/EditCardForm.jsx',
@@ -1993,6 +2019,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/components/profile/ProjectCard.jsx',
       role: '사무소 프로젝트 카드',
+    },
+    {
+      path: 'frontend/src/components/profile/ProjectCard.module.css',
+      role: '',
     },
     {
       path: 'frontend/src/components/swipeGestureConfig.js',
@@ -2079,6 +2109,10 @@ window.PROJECT_STATE = {
       role: '메인 레이아웃 + TabBar 셸',
     },
     {
+      path: 'frontend/src/layouts/MainLayout.module.css',
+      role: '',
+    },
+    {
       path: 'frontend/src/lib/tinderCard.js',
       role: '',
     },
@@ -2097,6 +2131,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/pages/BoardDetailPage.jsx',
       role: '보드 상세 페이지',
+    },
+    {
+      path: 'frontend/src/pages/BoardDetailPage.module.css',
+      role: '',
     },
     {
       path: 'frontend/src/pages/BoardReportPage.jsx',
@@ -2123,12 +2161,20 @@ window.PROJECT_STATE = {
       role: 'LLM 검색 페이지',
     },
     {
+      path: 'frontend/src/pages/LLMSearchPage.module.css',
+      role: '',
+    },
+    {
       path: 'frontend/src/pages/LikedOfficesPage.jsx',
       role: '',
     },
     {
       path: 'frontend/src/pages/LikedProjectsPage.jsx',
       role: '좋아요 건물 그리드 페이지',
+    },
+    {
+      path: 'frontend/src/pages/LikedProjectsPage.module.css',
+      role: '',
     },
     {
       path: 'frontend/src/pages/LoginPage.jsx',
@@ -2175,8 +2221,16 @@ window.PROJECT_STATE = {
       role: '보드 건물 타일 카드',
     },
     {
+      path: 'frontend/src/pages/boardDetail/BuildingTile.module.css',
+      role: '',
+    },
+    {
       path: 'frontend/src/pages/boardDetail/RecommendedTile.jsx',
       role: '보드 추천 타일 카드',
+    },
+    {
+      path: 'frontend/src/pages/boardDetail/RecommendedTile.module.css',
+      role: '',
     },
     {
       path: 'frontend/src/pages/buildingDetail/ErrorState.jsx',
@@ -2223,8 +2277,16 @@ window.PROJECT_STATE = {
       role: '사무소 프로필 헤더 바',
     },
     {
+      path: 'frontend/src/pages/firmProfile/FirmProfileHeader.module.css',
+      role: '',
+    },
+    {
       path: 'frontend/src/pages/firmProfile/FirmProfileHero.jsx',
       role: '사무소 프로필 히어로',
+    },
+    {
+      path: 'frontend/src/pages/firmProfile/FirmProfileHero.module.css',
+      role: '',
     },
     {
       path: 'frontend/src/pages/firmProfile/FirmProjectsSection.jsx',
