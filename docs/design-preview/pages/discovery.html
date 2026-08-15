@@ -1,0 +1,334 @@
+<!-- @dsCard group="Pages" -->
+<!doctype html><html data-theme="github-light"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Discovery — swipe deck</title><style>
+/*
+ * tokens.css — Design-system CSS variables.
+ *
+ * Load order: tokens.css BEFORE index.css (see main.jsx).
+ *
+ * Structure:
+ *   :root          — invariant tokens (radius, motion, type, font) + GitHub Light colors (default theme)
+ *   @media         — mobile type-scale override of :root
+ *   [data-theme]   — color-only overrides for the 3 non-default themes
+ *   [data-font]    — font-family override for noto-serif
+ *
+ * Derived-token math (for the ~16 "spirit" tokens):
+ *   nav-bg      = bg at ~0.97 alpha over itself  → rgba(R,G,B, 0.97)
+ *   header-bg   = bg at ~0.90 alpha
+ *   ai-bubble   = surface at ~0.80 alpha
+ *   user-bubble = surface-3 (solid)
+ *   input-bg    = surface at ~0.95 alpha
+ *   panel-bg    = surface at ~0.97 alpha
+ *   progress-track = surface-3 (solid)
+ *   tag-bg      = dark-on-light: rgba(0,0,0,0.07) / light-on-dark: rgba(255,255,255,0.18)
+ *   tag-border  = dark-on-light: rgba(0,0,0,0.15) / light-on-dark: rgba(255,255,255,0.28)
+ *   tag-label   = dark-on-light: rgba(0,0,0,0.40) / light-on-dark: rgba(255,255,255,0.50)
+ *   nav-inactive = muted text
+ *   nav-disabled = surface-3
+ *   ai-bubble-border = border
+ *   user-bubble-text = text
+ */
+
+/* ── Invariant tokens + GitHub Light default ────────────────────────────── */
+/* SETTINGS-POLISH-1 §D: also match [data-theme="github-light"] so a scoped
+ * wrapper (ThemePreviewCard) can force github-light tokens on its subtree
+ * even while the app root runs a different theme. The 3 other
+ * [data-theme="..."] blocks below already override on top of this one via
+ * normal CSS cascade/specificity, so this addition is additive-only. */
+:root, [data-theme="github-light"] {
+  /* -- Border radius -------------------------------------------------------- */
+  --radius-sm:   8px;
+  --radius-md:   12px;
+  --radius-lg:   20px;
+  --radius-xl:   24px;
+  --radius-pill: 999px;
+
+  /* -- Motion --------------------------------------------------------------- */
+  --motion-fast:     180ms;
+  --motion-normal:   220ms;
+  --motion-slow:     400ms;
+  --motion-flip:     500ms;
+  --motion-ease:     cubic-bezier(0.4, 0, 0.2, 1);
+  --motion-ease-out: cubic-bezier(0, 0, 0.2, 1);
+
+  /* -- Type scale: desktop (≥769px) ---------------------------------------- */
+  --fs-h1:      48px;
+  --fs-h2:      30px;
+  --fs-body:    18px;
+  --fs-caption: 14px;
+
+  /* -- Font weights --------------------------------------------------------- */
+  --fw-body:    400;
+  --fw-caption: 500;
+  --fw-h2:      600;
+  --fw-h1:      700;
+
+  /* -- Safe-area ------------------------------------------------------------ */
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+
+  /* -- Font family (default: IBM Plex Sans KR) ----------------------------- */
+  --font-family: "IBM Plex Sans KR", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "맑은 고딕", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+
+  /* ── GitHub Light — COLOR TOKENS (default) ─────────────────────────────── */
+
+  /* Surface & text (§1.1 exact) */
+  --color-bg:         #FFFFFF;
+  --color-surface:    #F6F8FA;
+  --color-surface-2:  #EFF2F5;
+  --color-surface-3:  #E1E4E8;
+  --color-text:       #1F2328;
+  --color-text-2:     #24292F;
+  --color-text-muted: #656D76;
+  --color-text-dim:   #8C959F;
+  --color-border:     rgba(0,0,0,0.08);
+  --color-border-soft: rgba(0,0,0,0.12);
+
+  /* Additional text hierarchy */
+  --color-text-dimmer:  #B1BAC4;
+  --color-text-dimmest: #D0D7DE;
+
+  /* Accent (§1.2 exact) */
+  --accent-1: #0969DA;
+  --accent-2: #8250DF;
+  --accent-3: #953800;
+
+  /* Destructive (§1.3 exact) */
+  --color-destructive: #D73A49;
+
+  /* Derived spirit tokens — light-mode alpha-on-bg math */
+  --color-nav-bg:           rgba(255,255,255,0.97);
+  --color-nav-inactive:     #8C959F;
+  --color-nav-disabled:     #D0D7DE;
+  --color-header-bg:        rgba(255,255,255,0.92);
+  --color-ai-bubble:        rgba(246,248,250,0.95);
+  --color-ai-bubble-border: rgba(0,0,0,0.08);
+  --color-user-bubble:      #E1E4E8;
+  --color-user-bubble-text: #1F2328;
+  --color-input-bg:         rgba(255,255,255,0.98);
+  --color-panel-bg:         rgba(255,255,255,0.98);
+  --color-progress-track:   #E1E4E8;
+  --color-tag-bg:           rgba(0,0,0,0.07);
+  --color-tag-border:       rgba(0,0,0,0.15);
+  --color-tag-label:        rgba(0,0,0,0.40);
+}
+
+/* ── Mobile type-scale override (≤768px) ───────────────────────────────── */
+@media (max-width: 768px) {
+  :root {
+    --fs-h1:      32px;
+    --fs-h2:      24px;
+    --fs-body:    16px;
+    --fs-caption: 13px;
+  }
+}
+
+/* ── GitHub Dark ────────────────────────────────────────────────────────── */
+[data-theme="github-dark"] {
+  --color-bg:         #0d1117;
+  --color-surface:    #161b22;
+  --color-surface-2:  #1c2128;
+  --color-surface-3:  #2d333b;
+  --color-text:       #e6edf3;
+  --color-text-2:     #cdd9e5;
+  --color-text-muted: #768390;
+  --color-text-dim:   #636e7b;
+  --color-text-dimmer:  #444c56;
+  --color-text-dimmest: #2d333b;
+  --color-border:     rgba(255,255,255,0.10);
+  --color-border-soft: rgba(255,255,255,0.15);
+
+  --accent-1: #2f81f7;
+  --accent-2: #a371f7;
+  --accent-3: #e3b341;
+
+  --color-destructive: #F85149;
+
+  --color-nav-bg:           rgba(13,17,23,0.97);
+  --color-nav-inactive:     #636e7b;
+  --color-nav-disabled:     #2d333b;
+  --color-header-bg:        rgba(13,17,23,0.92);
+  --color-ai-bubble:        rgba(22,27,34,0.88);
+  --color-ai-bubble-border: rgba(255,255,255,0.08);
+  --color-user-bubble:      #2d333b;
+  --color-user-bubble-text: #e6edf3;
+  --color-input-bg:         rgba(22,27,34,0.97);
+  --color-panel-bg:         rgba(22,27,34,0.97);
+  --color-progress-track:   #2d333b;
+  --color-tag-bg:           rgba(255,255,255,0.10);
+  --color-tag-border:       rgba(255,255,255,0.18);
+  --color-tag-label:        rgba(255,255,255,0.50);
+}
+
+/* ── Ayu Light ──────────────────────────────────────────────────────────── */
+[data-theme="ayu-light"] {
+  /* Ayu Light: warm off-white surfaces, warm muted text */
+  --color-bg:         #FCFCFC;
+  --color-surface:    #F8F9F0;
+  --color-surface-2:  #F0F1E8;
+  --color-surface-3:  #E6E8DC;
+  --color-text:       #3D4047;
+  --color-text-2:     #5C6166;
+  --color-text-muted: #8A9199;
+  --color-text-dim:   #ABB0B8;
+  --color-text-dimmer:  #C8CDD4;
+  --color-text-dimmest: #DDE1E6;
+  --color-border:     rgba(0,0,0,0.07);
+  --color-border-soft: rgba(0,0,0,0.11);
+
+  /* Ayu orange accent family */
+  --accent-1: #FA8D3E;
+  --accent-2: #86B300;
+  --accent-3: #E6BA7E;
+
+  --color-destructive: #E5524B;
+
+  --color-nav-bg:           rgba(252,252,252,0.97);
+  --color-nav-inactive:     #ABB0B8;
+  --color-nav-disabled:     #DDE1E6;
+  --color-header-bg:        rgba(252,252,252,0.92);
+  --color-ai-bubble:        rgba(248,249,240,0.95);
+  --color-ai-bubble-border: rgba(0,0,0,0.07);
+  --color-user-bubble:      #E6E8DC;
+  --color-user-bubble-text: #3D4047;
+  --color-input-bg:         rgba(252,252,252,0.98);
+  --color-panel-bg:         rgba(252,252,252,0.98);
+  --color-progress-track:   #E6E8DC;
+  --color-tag-bg:           rgba(0,0,0,0.06);
+  --color-tag-border:       rgba(0,0,0,0.12);
+  --color-tag-label:        rgba(0,0,0,0.38);
+}
+
+/* ── SynthWave '84 ──────────────────────────────────────────────────────── */
+[data-theme="synthwave-84"] {
+  /* SynthWave: deep purple-navy bg, vibrant neon accents */
+  --color-bg:         #262335;
+  --color-surface:    #2a2139;
+  --color-surface-2:  #34294f;
+  --color-surface-3:  #3d3263;
+  --color-text:       #f0eff1;
+  --color-text-2:     #e3e1ea;
+  --color-text-muted: #a599c5;
+  --color-text-dim:   #7e7ab5;
+  --color-text-dimmer:  #574f8a;
+  --color-text-dimmest: #3d3263;
+  --color-border:     rgba(255,255,255,0.08);
+  --color-border-soft: rgba(255,255,255,0.13);
+
+  /* SynthWave neon family */
+  --accent-1: #FF7EDB;
+  --accent-2: #36F9F6;
+  --accent-3: #FDE24F;
+
+  --color-destructive: #FF6188;
+
+  --color-nav-bg:           rgba(38,35,53,0.97);
+  --color-nav-inactive:     #7e7ab5;
+  --color-nav-disabled:     #3d3263;
+  --color-header-bg:        rgba(38,35,53,0.92);
+  --color-ai-bubble:        rgba(42,33,57,0.88);
+  --color-ai-bubble-border: rgba(255,255,255,0.08);
+  --color-user-bubble:      #3d3263;
+  --color-user-bubble-text: #f0eff1;
+  --color-input-bg:         rgba(42,33,57,0.97);
+  --color-panel-bg:         rgba(42,33,57,0.97);
+  --color-progress-track:   #3d3263;
+  --color-tag-bg:           rgba(255,255,255,0.10);
+  --color-tag-border:       rgba(255,255,255,0.20);
+  --color-tag-label:        rgba(255,255,255,0.55);
+}
+
+/* ── Font override: Noto Serif KR ───────────────────────────────────────── */
+[data-font="noto-serif"] {
+  --font-family: "Noto Serif KR", "본명조", "Nanum Myeongjo", "나눔명조", "AppleMyungjo", "Batang", "바탕", Georgia, serif;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body { background: var(--color-bg); color: var(--color-text);
+       font-family: var(--font-family); min-height: 100vh; }
+.canvas { display: flex; flex-direction: column; align-items: center;
+           gap: 16px; padding: 24px 12px 48px; }
+.frame { width: 390px; max-width: 100%; background: var(--color-bg);
+          border: 1px solid var(--color-border-soft); border-radius: 24px;
+          overflow: hidden; position: relative; }
+.wide-frame { width: 960px; max-width: 100%; background: var(--color-bg);
+          border: 1px solid var(--color-border-soft); border-radius: 16px;
+          overflow: hidden; }
+.switcher { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.switcher button { padding: 6px 14px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--color-border-soft); background: var(--color-surface);
+  color: var(--color-text); font-family: inherit; font-size: 12px; font-weight: 600; }
+.note { max-width: 640px; font-size: 12px; line-height: 1.6;
+         color: var(--color-text-muted); background: var(--color-surface);
+         border: 1px solid var(--color-border); border-radius: 12px; padding: 12px 16px; }
+.tabbar { position: absolute; bottom: 0; left: 0; right: 0; height: 64px;
+  background: var(--color-nav-bg); border-top: 1px solid var(--color-border);
+  display: flex; align-items: center; justify-content: space-around;
+  font-size: 11px; color: var(--color-nav-inactive); }
+.tabbar .on { color: var(--accent-1); font-weight: 600; }
+.btn-primary { background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+  color: #fff; border: 0; border-radius: var(--radius-md); padding: 14px 16px;
+  font-weight: 600; min-height: 44px; font-family: inherit; width: 100%; }
+.btn-secondary { background: var(--color-surface); color: var(--color-text);
+  border: 1px solid var(--color-border); border-radius: var(--radius-md);
+  padding: 14px 16px; font-weight: 600; min-height: 44px; font-family: inherit; width: 100%; }
+.ink-btn { background: var(--color-text); color: var(--color-bg); border: 0;
+  border-radius: var(--radius-md); padding: 14px 16px; font-weight: 600;
+  min-height: 46px; font-family: inherit; width: 100%; }
+.ink-outline { background: transparent; color: var(--color-text);
+  border: 1px solid var(--color-text); border-radius: var(--radius-md);
+  padding: 14px 16px; font-weight: 600; min-height: 44px; font-family: inherit; width: 100%; }
+.paper { background: var(--color-surface); color: var(--color-text);
+  border: 1px solid var(--color-border-soft); border-radius: 20px;
+  padding: 26px 24px; box-shadow: 0 1px 0 rgba(0,0,0,0.05) inset,
+  0 12px 28px rgba(0,0,0,0.18), 0 24px 56px rgba(0,0,0,0.18);
+  display: flex; flex-direction: column; gap: 16px; }
+.wordmark { font-size: 24px; font-weight: 700; letter-spacing: 0.14em;
+  text-transform: uppercase; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px; font-weight: 500; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--color-text-muted); }
+.pill { display: inline-flex; align-items: center; gap: 7px; padding: 10px 14px;
+  border-radius: 999px; background: var(--color-surface-2);
+  border: 1px solid var(--color-border-soft); color: var(--color-text-2);
+  font-size: 13px; font-weight: 600; }
+</style></head>
+<body><div class="canvas">
+<h3 style="margin:0;font-size:14px;letter-spacing:0.04em;text-transform:uppercase;color:var(--color-text-muted)">Discovery — swipe deck</h3>
+
+<div class="switcher" id="sw"></div>
+<script>
+const themes = [["github-light","GitHub Light"],["ayu-light","Ayu Light"],["github-dark","GitHub Dark"],["synthwave-84","SynthWave '84"]];
+const sw = document.getElementById('sw');
+themes.forEach(([id, label]) => { const b = document.createElement('button');
+  b.textContent = label; b.onclick = () => document.documentElement.setAttribute('data-theme', id);
+  sw.appendChild(b); });
+</script>
+
+<div class="note">카드 §8.6 언어(하단 블랙 그라디언트 + 3열 info). 정적 사다리 + 그림자 홀더는 UX-14에서 확정.</div>
+
+<div class="frame" style="height:760px">
+ <div style="text-align:center;padding:14px;font-weight:700">Disc<span style="color:var(--accent-1)">overy</span></div>
+ <div style="display:grid;place-items:center;padding:0 20px">
+  <div style="width:100%;max-width:330px;position:relative;height:540px">
+   <div style="position:absolute;inset:0;border-radius:20px;background:var(--color-surface);border:1px solid var(--color-border-soft);transform:scale(.90) translateY(20px);transform-origin:bottom center"></div>
+   <div style="position:absolute;inset:0;border-radius:20px;background:var(--color-surface-2);border:1px solid var(--color-border-soft);transform:scale(.95) translateY(10px);transform-origin:bottom center"></div>
+   <div style="position:absolute;inset:0;border-radius:20px;overflow:hidden;box-shadow:0 25px 50px rgba(0,0,0,.5);background:linear-gradient(160deg,#6b7f8a 0%,#3c4a52 60%,#1c2328 100%)">
+    <div style="position:absolute;inset:0;background:linear-gradient(180deg,transparent 30%,rgba(0,0,0,.82))"></div>
+    <div style="position:absolute;left:0;right:0;bottom:0;padding:18px;color:#fff">
+      <div style="font-size:22px;font-weight:700">The Krantz-fontaine House</div>
+      <div style="font-size:13px;font-style:italic;color:rgba(255,255,255,.6)">Atelier d'architecture — Belgium</div>
+      <div style="height:1px;background:rgba(255,255,255,.15);margin:10px 0"></div>
+      <div style="display:flex;justify-content:space-between">
+        <div><div style="font-size:10px;letter-spacing:.06em;color:rgba(255,255,255,.5)">YEAR</div><div style="font-size:13px;font-weight:600">2006</div></div>
+        <div><div style="font-size:10px;letter-spacing:.06em;color:rgba(255,255,255,.5)">LOCATION</div><div style="font-size:13px;font-weight:600">Uccle</div></div>
+        <div><div style="font-size:10px;letter-spacing:.06em;color:rgba(255,255,255,.5)">PROGRAM</div><div style="font-size:13px;font-weight:600">Housing</div></div>
+      </div></div>
+   </div>
+  </div>
+  <div style="font-size:11px;color:var(--color-text-dim);margin-top:10px">← skip · tap card · save → · arrow keys supported</div>
+ </div>
+ <div class="tabbar"><span class="on">디스커버리</span><span>취향</span><span>프로필</span></div>
+</div>
+</div></body></html>
