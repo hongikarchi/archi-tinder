@@ -57,7 +57,14 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(비어있음 — FRONT-DESIGN-B1 완료 2026-08-15, ## Done 참조. 디자인 이니셔티브 다음 단계: A1 기계적 스윕 → B2 Claude Design 연결 → A2 프리미티브 추출, `.claude/plans/design-clever-valley.md`)_
+### FRONT-FLOW-1 — 스와이프 온보딩 3연타 인터럽트 정리 (user 결정 2026-08-15)
+
+_B1 검토 중 발견: 신규 유저 시퀀스 Discovery 10likes → TriggerCard → Taste 진입 → TutorialPopup(제스처 재교육) → 첫 좌스와이프 → DismissConfirm 3연타. 스와이프 경로라 feature workflow 필수._
+- **DiscoveryTriggerCard 재설계**: 파랑-보라 그라디언트/이모지/glass 버튼 → paper 언어(cardLanguage.js, 로그인과 동일 브랜드)로. 로직(10-like 주입, ←Discovery/→Taste) 불변.
+- **TutorialPopup 이동**: SwipePage 최초 진입 → **신규 가입 계정의 Discovery 최초 진입**으로 (register 성공 시 localStorage 플래그, 기존 계정 로그인 미노출). 카피 Discovery 의미론(← pass 중립색 · → like accent), 하드코딩 hex 토큰화 + i18n화(현재 영어 하드코딩).
+- **DismissConfirmPopup**: 로직 유지(Taste 전용 dislike 영구 경고, 검증됨), backdrop만 §8.10 정합.
+
+_(디자인 이니셔티브 잔여: A1 기계적 스윕 → B2 Claude Design 연결 → A2 프리미티브 추출, `.claude/plans/design-clever-valley.md`)_
 
 
 ## Next
@@ -106,12 +113,6 @@ Implementation map:
 - Account deletion/export is not currently in scope but should be tracked before public launch if GDPR-like obligations apply.
 
 ### HIGH
-
-#### FRONT-FLOW-1 — 스와이프 온보딩 3연타 인터럽트 정리 (user 결정 2026-08-15)
-_B1 검토 중 발견: 신규 유저 시퀀스 Discovery 10likes → TriggerCard → Taste 진입 → TutorialPopup(제스처 재교육) → 첫 좌스와이프 → DismissConfirm 3연타. 스와이프 경로라 feature workflow 필수._
-- **DiscoveryTriggerCard 재설계**: 파랑-보라 그라디언트/이모지/glass 버튼 하드코딩(hex 5곳) → DESIGN.md 언어(§8.6 카드 or paper 언어)로. 로직(10-like 주입, ←Discovery/→Taste) 불변.
-- **TutorialPopup 이동**: SwipePage 최초 진입 → **신규 가입 계정의 Discovery 최초 진입**으로 (register 경로에서만 플래그, 기존 계정 로그인 경로 미노출). 카피도 Discovery 의미론으로 조정(← pass · → like), 빨강/핑크 hex 10곳 토큰화.
-- **DismissConfirmPopup**: 로직 유지(Taste 전용 dislike 영구 경고 — Discovery는 pass라 해당 없음, 검증됨), 스타일만 토큰 정합.
 
 #### FRONT-DESIGN-A1 — 디자인 정합성 기계적 스윕 (hex→토큰 + hover 핵 제거)
 _디자인 4단계 이니셔티브(B1→A1→B2→A2, `.claude/plans/design-clever-valley.md`)의 A1. B1은 2026-08-15 완료(## Done)._

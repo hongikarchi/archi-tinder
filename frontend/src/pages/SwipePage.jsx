@@ -1,5 +1,4 @@
 import { useRef, useState, useEffect } from 'react'
-import TutorialPopup from '../components/TutorialPopup.jsx'
 import SwipeCard, { CARD_WIDTH, CARD_HEIGHT } from '../components/SwipeCard.jsx'
 import QuestionCard from '../components/QuestionCard.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
@@ -251,7 +250,7 @@ function DismissConfirmPopup({ onConfirm, onCancel }) {
       onClick={onCancel}
       style={{
         position: 'fixed', inset: 0,
-        background: 'rgba(10,10,12,0.65)',
+        background: 'rgba(0,0,0,0.4)',
         backdropFilter: 'blur(12px)',
         WebkitBackdropFilter: 'blur(12px)',
         zIndex: 10001,
@@ -268,7 +267,7 @@ function DismissConfirmPopup({ onConfirm, onCancel }) {
         style={{
           background: 'var(--color-surface)',
           border: '1px solid var(--color-border-soft)',
-          borderRadius: 20,
+          borderRadius: 'var(--radius-lg)',
           padding: '28px 24px 24px',
           width: '100%',
           maxWidth: 360,
@@ -292,7 +291,7 @@ function DismissConfirmPopup({ onConfirm, onCancel }) {
           ref={primaryBtnRef}
           onClick={onConfirm}
           style={{
-            padding: '13px 24px', borderRadius: 12,
+            padding: '13px 24px', borderRadius: 'var(--radius-md)',
             background: 'var(--color-surface-2)', color: 'var(--color-text)',
             fontSize: 14, fontWeight: 600,
             border: '1px solid var(--color-border)',
@@ -304,7 +303,7 @@ function DismissConfirmPopup({ onConfirm, onCancel }) {
         <button
           onClick={onCancel}
           style={{
-            padding: '10px 24px', borderRadius: 12,
+            padding: '10px 24px', borderRadius: 'var(--radius-md)',
             background: 'transparent', color: 'var(--color-text-dim)',
             fontSize: 13, fontWeight: 500, border: 'none',
             cursor: 'pointer', fontFamily: 'inherit', minHeight: 40,
@@ -334,7 +333,6 @@ export default function SwipePage({
   const hasShownDismissTutorial = useRef(!!localStorage.getItem('archithon_dismiss_tutorial_seen'))
   const pendingDismissDir = useRef(null)
   const [localResetTick, setLocalResetTick] = useState(0)
-  const [showTutorial, setShowTutorial] = useState(() => !localStorage.getItem('archithon_tutorial_dismissed'))
   const [showExitConfirm, setShowExitConfirm] = useState(false)
   const [showDismissConfirm, setShowDismissConfirm] = useState(false)
 
@@ -390,7 +388,7 @@ export default function SwipePage({
       cardRef.current.swipe(dir)
     },
     guardCondition: () =>
-      !!(questionTrigger || isLoading || !cardRef.current || !currentCard || showTutorial || showExitConfirm ||
+      !!(questionTrigger || isLoading || !cardRef.current || !currentCard || showExitConfirm ||
          showDismissConfirm || pendingAction.current || swipedCardId.current === currentCard?.image_id),
   })
 
@@ -525,8 +523,6 @@ export default function SwipePage({
 
   return (
     <>
-      <TutorialPopup visible={showTutorial} onClose={() => setShowTutorial(false)} />
-
       {showExitConfirm && (
         <ExitConfirmPopup
           onNewProject={() => { setShowExitConfirm(false); onExitToNewProject?.() }}

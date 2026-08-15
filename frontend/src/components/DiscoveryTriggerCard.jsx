@@ -6,139 +6,104 @@
  *   LEFT  swipe → dismiss, keep swiping Discovery
  *
  * Dimensions match SwipeCard (CARD_WIDTH × CARD_HEIGHT) so the stack layout is
- * identical. Styling follows DESIGN.md §8.1 (Primary CTA gradient) + §1.2 accent
- * tokens + §3.5 motion tokens.
+ * identical. FRONT-FLOW-1: retheme from the blue-purple accent-gradient card to
+ * the paper business-card language (components/cardLanguage.js) — same brand
+ * identity as LoginPage. The paper look intentionally contrasts with the photo
+ * cards around it in the deck (interstitial), same idiom as the login deck.
  */
 import { CARD_WIDTH, CARD_HEIGHT } from './SwipeCard.jsx'
 import { useTranslation } from '../i18n/index.js'
+import {
+  INK,
+  MONO,
+  LS_CAPS,
+  paperFaceStyle,
+  wordmarkStyle,
+  monoLabelStyle,
+  cardMetaStyle,
+  inkSecondaryStyle,
+} from './cardLanguage.js'
 
 export default function DiscoveryTriggerCard() {
   const { t } = useTranslation()
   return (
     <div
       style={{
+        ...paperFaceStyle({ radius: 20, padding: '24px 22px' }),
         width: CARD_WIDTH,
         height: CARD_HEIGHT,
-        borderRadius: 'var(--radius-lg, 20px)',
-        overflow: 'hidden',
-        background: 'linear-gradient(135deg, var(--accent-1, #0969DA), var(--accent-2, #8250DF))',
-        boxShadow: '0 12px 32px rgba(0,0,0,0.3)',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 32,
-        padding: '32px 24px',
+        justifyContent: 'space-between',
         position: 'relative',
         userSelect: 'none',
         WebkitUserSelect: 'none',
+        boxSizing: 'border-box',
       }}
     >
-      {/* Main message */}
-      <div style={{ textAlign: 'center' }}>
-        <div style={{
-          fontSize: 48,
-          lineHeight: 1,
-          marginBottom: 16,
-        }}>
-          ✨
-        </div>
+      {/* Top: wordmark row + mono stamp */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={wordmarkStyle}>ARCHIBE</span>
+        <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 600, letterSpacing: LS_CAPS, color: INK.mid }}>
+          {t('discovery.triggerCard.stamp')}
+        </span>
+      </div>
+
+      {/* Middle: title + body */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, textAlign: 'center' }}>
         <h2 style={{
-          fontSize: 22,
+          fontFamily: 'var(--font-family)',
+          fontSize: 26,
           fontWeight: 700,
-          color: '#fff',
-          margin: '0 0 10px',
-          letterSpacing: '-0.02em',
-          lineHeight: 1.3,
+          letterSpacing: '-0.01em',
+          color: INK.strong,
+          lineHeight: 1.2,
+          margin: 0,
         }}>
           {t('discovery.triggerCard.title')}
         </h2>
-        <p style={{
-          fontSize: 14,
-          fontWeight: 400,
-          color: 'rgba(255,255,255,0.78)',
-          margin: 0,
-          lineHeight: 1.5,
-        }}>
+        <p style={{ ...cardMetaStyle, textAlign: 'center' }}>
           {t('discovery.triggerCard.bodyLine1')}<br />{t('discovery.triggerCard.bodyLine2')}
         </p>
       </div>
 
-      {/* Swipe affordances */}
-      <div style={{
-        display: 'flex',
-        gap: 12,
-        width: '100%',
-      }}>
-        {/* LEFT direction — continue Discovery */}
-        <div style={{
-          flex: 1,
-          background: 'rgba(255,255,255,0.15)',
-          border: '1px solid rgba(255,255,255,0.25)',
-          borderRadius: 'var(--radius-md, 12px)',
-          padding: '12px 10px',
-          textAlign: 'center',
-        }}>
+      {/* Bottom: two direction affordances (non-interactive — swipe is the only input) */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ display: 'flex', gap: 10, width: '100%' }}>
+          {/* LEFT — continue Discovery (muted ink) */}
           <div style={{
-            fontSize: 20,
-            marginBottom: 6,
-            color: '#fff',
+            ...inkSecondaryStyle(false),
+            flex: 1,
+            flexDirection: 'column',
+            gap: 4,
+            color: INK.muted,
+            borderColor: INK.dim,
+            cursor: 'default',
           }}>
-            ←
+            <span style={{ fontSize: 18, lineHeight: 1 }}>←</span>
+            <span style={{ fontSize: 12, fontWeight: 500, lineHeight: 1.4, color: INK.muted }}>
+              {t('discovery.triggerCard.continueLeft1')}<br />{t('discovery.triggerCard.continueLeft2')}
+            </span>
           </div>
+
+          {/* RIGHT — promote to Taste (strong ink, emphasized action) */}
           <div style={{
-            fontSize: 12,
-            fontWeight: 500,
-            color: 'rgba(255,255,255,0.9)',
-            lineHeight: 1.4,
+            ...inkSecondaryStyle(false),
+            flex: 1,
+            flexDirection: 'column',
+            gap: 4,
+            cursor: 'default',
           }}>
-            {t('discovery.triggerCard.continueLeft1')}<br />{t('discovery.triggerCard.continueLeft2')}
+            <span style={{ fontSize: 18, lineHeight: 1 }}>→</span>
+            <span style={{ fontSize: 12, fontWeight: 600, lineHeight: 1.4, color: INK.strong }}>
+              {t('discovery.triggerCard.continueRight1')}<br />{t('discovery.triggerCard.continueRight2')}
+            </span>
           </div>
         </div>
 
-        {/* RIGHT direction — promote to Taste */}
-        <div style={{
-          flex: 1,
-          background: 'rgba(255,255,255,0.22)',
-          border: '1px solid rgba(255,255,255,0.4)',
-          borderRadius: 'var(--radius-md, 12px)',
-          padding: '12px 10px',
-          textAlign: 'center',
-        }}>
-          <div style={{
-            fontSize: 20,
-            marginBottom: 6,
-            color: '#fff',
-          }}>
-            →
-          </div>
-          <div style={{
-            fontSize: 12,
-            fontWeight: 600,
-            color: '#fff',
-            lineHeight: 1.4,
-          }}>
-            {t('discovery.triggerCard.continueRight1')}<br />{t('discovery.triggerCard.continueRight2')}
-          </div>
-        </div>
+        {/* Bottom hint */}
+        <p style={{ ...monoLabelStyle, textAlign: 'center' }}>
+          {t('discovery.triggerCard.swipeHint')}
+        </p>
       </div>
-
-      {/* Bottom hint */}
-      <p style={{
-        position: 'absolute',
-        bottom: 18,
-        left: 0,
-        right: 0,
-        textAlign: 'center',
-        margin: 0,
-        fontSize: 11,
-        fontWeight: 500,
-        color: 'rgba(255,255,255,0.5)',
-        letterSpacing: '0.04em',
-        textTransform: 'uppercase',
-      }}>
-        swipe to choose
-      </p>
     </div>
   )
 }

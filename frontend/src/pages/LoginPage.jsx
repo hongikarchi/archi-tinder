@@ -267,6 +267,9 @@ export default function LoginPage({ onLogin }) {
       }
       if (affiliation && affiliation.trim()) payload.affiliation = affiliation.trim().slice(0, 100)
       const user = await apiRegister(payload)
+      // FRONT-FLOW-1: newly registered accounts see the swipe tutorial on their
+      // first Discovery entry. Set BEFORE onLogin (which may navigate/unmount).
+      localStorage.setItem('archithon_show_tutorial', '1')
       await onLogin(user)
       setLanguage(language)
     } catch (err) {
