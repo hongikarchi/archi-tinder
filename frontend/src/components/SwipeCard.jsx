@@ -351,6 +351,10 @@ export default function SwipeCard({ card, onGalleryClose }) {
   useEffect(() => {
     const el = galleryScrollRef.current
     if (!el) return
+    // Snap ownership is imperative-only (see the scroller's style comment):
+    // set the resting snap here once per gallery mount; the keyboard glide
+    // suspends/restores it without React fighting back.
+    el.style.scrollSnapType = 'y mandatory'
     let startX = 0
     let startY = 0
     let axis = null // null (undecided) | 'v' (vertical → block card) | 'h' (horizontal → allow swipe)
@@ -606,7 +610,11 @@ export default function SwipeCard({ card, onGalleryClose }) {
             style={{
               position: 'absolute', inset: 0,
               overflowY: 'auto', overflowX: 'hidden',
-              scrollSnapType: 'y mandatory',
+              // scrollSnapType intentionally NOT set here — owned imperatively
+              // (mount effect + glide suspend/restore). As a React inline style
+              // it gets re-applied on EVERY re-render (e.g. lazy gallery img
+              // onLoad -> galleryRatios setState), resurrecting mandatory snap
+              // mid-glide and causing a jump-to-snap stutter.
               overscrollBehaviorY: 'contain',
               scrollbarWidth: 'none',
               touchAction: 'pan-y',
