@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { useImageTelemetry } from '../../hooks/useImageTelemetry.js'
 import InfoCol from '../../components/profile/InfoCol'
+import s from './BuildingTile.module.css'
 
 /**
  * BuildingTile — image-overlay card per §3.5.1 + §3.5.2 RICH PATTERN.
@@ -32,6 +33,7 @@ export default function BuildingTile({ building, fromProjectId, rank, savedIds, 
           : { fromBoard: true }
         navigate(`/buildings/${buildingId}`, { state })
       }}
+      className={s.tile}
       style={{
         position: 'relative',
         aspectRatio: '4 / 5',
@@ -39,18 +41,8 @@ export default function BuildingTile({ building, fromProjectId, rank, savedIds, 
         overflow: 'hidden',
         cursor: 'pointer',
         background: 'rgba(255,255,255,0.03)',
-        border: '1px solid transparent',          // §3.5.1: NO default light border
         boxShadow: '0 10px 25px rgba(0,0,0,0.3)', // §3.5.1 mandatory depth (static)
-        transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
         userSelect: 'none',
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.transform = 'translateY(-4px)'
-        e.currentTarget.style.borderColor = 'rgba(236,72,153,0.55)'
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.transform = 'translateY(0)'
-        e.currentTarget.style.borderColor = 'transparent'
       }}
     >
       <img

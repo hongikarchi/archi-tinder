@@ -1,0 +1,14 @@
+/*
+ * LLMSearchPage.module.css — preset-query chip hover.
+ * FRONT-DESIGN-A1-HOVER: CSS :hover replaces onMouseEnter/Leave style mutation.
+ */
+.presetChip {
+  background: color-mix(in srgb, var(--accent-1) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-1) 35%, transparent);
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.presetChip:hover {
+  background: color-mix(in srgb, var(--accent-1) 25%, transparent);
+  border-color: color-mix(in srgb, var(--accent-1) 60%, transparent);
+}

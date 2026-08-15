@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, memo } from 'react'
 import * as api from '../api/client.js'
 import { getProject, updateProject } from '../api/projects.js'
 import s from '../components/CalibrationChat.module.css'
+import ps from './LLMSearchPage.module.css'
 import { useTranslation } from '../i18n/index.js'
 
 const PRESETS = [
@@ -779,21 +780,11 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
                 <button
                   key={p.label}
                   onClick={() => handlePreset(p.query)}
+                  className={ps.presetChip}
                   style={{
                     padding: '8px 14px', borderRadius: 999, fontSize: 12, fontWeight: 500,
-                    background: 'color-mix(in srgb, var(--accent-1) 12%, transparent)',
-                    border: '1px solid color-mix(in srgb, var(--accent-1) 35%, transparent)',
                     color: 'color-mix(in srgb, var(--accent-1) 55%, #fff)', cursor: 'pointer', fontFamily: 'inherit',
-                    transition: 'background 0.15s, border-color 0.15s',
                     whiteSpace: 'nowrap',
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.background = 'color-mix(in srgb, var(--accent-1) 25%, transparent)'
-                    e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--accent-1) 60%, transparent)'
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.background = 'color-mix(in srgb, var(--accent-1) 12%, transparent)'
-                    e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--accent-1) 35%, transparent)'
                   }}
                 >
                   {p.label}

@@ -57,7 +57,7 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(비어있음 — FRONT-FLOW-1 완료 2026-08-15, ## Done 참조. 디자인 이니셔티브 잔여: A1 기계적 스윕 → B2 Claude Design 연결 → A2 프리미티브 추출, `.claude/plans/design-clever-valley.md`)_
+_(비어있음 — FRONT-DESIGN-A1 완료 2026-08-15, ## Done 참조. 디자인 이니셔티브 잔여: B2 Claude Design 연결 → A2 프리미티브 추출, `.claude/plans/design-clever-valley.md`. 별도 대기: FRONT-UX-14 스와이프 모션/갤러리.)_
 
 
 ## Next
@@ -290,6 +290,14 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FRONT-DESIGN-A1 — 디자인 정합성 기계적 스윕 (2 PR) — RESOLVED 2026-08-15 (`fc72775` + `7e192d2`)
+- 디자인 이니셔티브(B1→A1→B2→A2) A1, 유형별 PR 분리(user 결정): PR-1 hex→토큰, PR-2 hover 핵 제거 (stacked 브랜치)
+- PR-1 (`fc72775`): 2-라운드 스윕 — R1 exact-map(정확 일치 hex는 대부분 기토큰화 확인) + UserProfilePage:641 dark-glass 라이트테마 invisible 버그 수정(rgba(15,15,15,.80)→color-mix --color-bg 80%); R2 확정 매핑 7파일 59치환 1:1 — #ec4899→accent-1, 핑크 그라디언트→accent-1/2(§8.1), rgba 핑크→color-mix, #fbbf24→accent-3, #f9a8d4→accent-1 tint, Tailwind 그레이→text-dim/muted
+- 의도적 유지 확정: #34d399 success green(토큰 부재 — INFRA-TOKEN-1 신설), Toggle 흰 knob, 도면 letterbox 흰 배경, 라이트박스 검정, photo-overlay 흰색, 브랜드/프리뷰/인쇄물/디버그 제외 파일
+- PR-2 (`7e192d2`): onMouseEnter 스타일 핵 13파일 전환 — 값 동일 이전, 모듈 12개 신설, reduced-motion 블록, hover 전용 state 5개 삭제(BoardDetailPage). 로직 예외 1건 유지(BoardCard isHovered 조건부 마운트). MainLayout logout hover #f87171→destructive 토큰(B1 선례)
+- Workflow ×3(hex R1/R2 + hover): 전부 review PASS + security PASS, confirmed findings 0. eslint 0 + build green
+- 잔여 hex는 전부 문서화된 예외 — 코드베이스 hover 핵 0 (BoardCard 로직 1건 제외)
+
 ### FRONT-FLOW-2 — 팝업/인터스티셜 de-drift 스윕 — RESOLVED 2026-08-15 (`fbc06ee`)
 - user 스크린샷 지적(ActionCard 구 디자인 잔존)發 전체 팝업 12종 감사: 위반 5곳 수정, 7곳 정상 확인(SaveBoardModal/VerifyGateModal/WorkDetailModal/QuestionCard/ExitConfirm/DismissConfirm 토큰 기반, ShareCardModal 의도적 인쇄물 예외)
 - SwipePage ActionCard(Taste 수렴 카드): 인디고 그라디언트+이모지 → paper 명함 언어(TriggerCard 미러, 'TASTE FOUND' mono 스탬프 — i18n `swipe.actionCard.stamp` ko/en)

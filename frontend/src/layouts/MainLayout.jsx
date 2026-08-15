@@ -3,6 +3,7 @@ import TabBar from '../components/TabBar.jsx'
 import DebugOverlay from '../components/DebugOverlay.jsx'
 import SwipePage from '../pages/SwipePage.jsx'
 import { discoveryNavigationGuard } from '../utils/discoveryGuard.js'
+import s from './MainLayout.module.css'
 
 export default function MainLayout({
   userId, onLogout,
@@ -36,16 +37,14 @@ export default function MainLayout({
             }
           }}
           title="Log out"
+          className={s.logoutBtn}
           style={{
             width: 34, height: 34, borderRadius: '50%',
             background: 'var(--color-surface)',
             border: '1px solid var(--color-border-soft)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: 'var(--color-text-dim)', cursor: 'pointer',
-            transition: 'color 0.2s',
+            cursor: 'pointer',
           }}
-          onMouseEnter={e => { e.currentTarget.style.color = '#f87171' }}
-          onMouseLeave={e => { e.currentTarget.style.color = 'var(--color-text-dim)' }}
         >
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />

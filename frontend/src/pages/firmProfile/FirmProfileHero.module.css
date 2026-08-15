@@ -1,0 +1,33 @@
+/*
+ * FirmProfileHero.module.css — message button + action-pill hovers.
+ * FRONT-DESIGN-A1-HOVER: CSS :hover replaces onMouseEnter/Leave style mutation.
+ */
+.messageBtn {
+  border: 1px solid var(--color-border);
+  color: var(--color-text-2);
+  transition: border-color 0.18s, color 0.18s;
+}
+.messageBtn:hover {
+  border-color: color-mix(in srgb, var(--accent-1) 45%, transparent);
+  color: var(--accent-1);
+}
+
+.actionPill {
+  border: 1px solid var(--color-border-soft);
+  color: var(--color-text-2);
+  transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.18s, color 0.18s;
+}
+.actionPill:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--accent-1) 45%, transparent);
+  color: var(--accent-1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .actionPill {
+    transition: none;
+  }
+  .actionPill:hover {
+    transform: none;
+  }
+}

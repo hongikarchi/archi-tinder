@@ -7,6 +7,7 @@ import BuildingTile from './boardDetail/BuildingTile'
 import RecommendedTile from './boardDetail/RecommendedTile'
 import ArchitectSection from './boardDetail/ArchitectSection'
 import { useTranslation } from '../i18n/index.js'
+import s from './BoardDetailPage.module.css'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -152,11 +153,6 @@ export default function BoardDetailPage({ onResume }) {
   const [reactionCount, setReactionCount] = useState(0)
   const [isReactionPending, setIsReactionPending] = useState(false)
   const [reactionError, setReactionError] = useState(null)
-  const [isReactHovered, setIsReactHovered] = useState(false)
-  const [isReactPressed, setIsReactPressed] = useState(false)
-  const [isOwnerRowHovered, setIsOwnerRowHovered] = useState(false)
-  const [isBackHovered, setIsBackHovered] = useState(false)
-  const [isShareHovered, setIsShareHovered] = useState(false)
   const [localSavedIds, setLocalSavedIds] = useState([])
   const [localName, setLocalName] = useState('')
   const [isEditingName, setIsEditingName] = useState(false)
@@ -373,9 +369,8 @@ export default function BoardDetailPage({ onResume }) {
         }}>
           <button
             onClick={() => navigate(-1)}
-            onMouseEnter={() => setIsBackHovered(true)}
-            onMouseLeave={() => setIsBackHovered(false)}
             aria-label="Back"
+            className={s.heroBtn}
             style={{
               width: 44,
               height: 44,
@@ -384,14 +379,11 @@ export default function BoardDetailPage({ onResume }) {
               backdropFilter: 'blur(12px)',
               WebkitBackdropFilter: 'blur(12px)',
               border: '1px solid rgba(255,255,255,0.12)',
-              color: isBackHovered ? 'var(--accent-1)' : '#fff',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               padding: 0,
-              transition: 'color 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-              transform: isBackHovered ? 'scale(1.05)' : 'scale(1)',
             }}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -402,9 +394,8 @@ export default function BoardDetailPage({ onResume }) {
 
           <button
             onClick={handleShare}
-            onMouseEnter={() => setIsShareHovered(true)}
-            onMouseLeave={() => setIsShareHovered(false)}
             aria-label="Share"
+            className={`${s.heroBtn}${shareCopied ? ` ${s.copied}` : ''}`}
             style={{
               width: 44,
               height: 44,
@@ -413,14 +404,11 @@ export default function BoardDetailPage({ onResume }) {
               backdropFilter: 'blur(12px)',
               WebkitBackdropFilter: 'blur(12px)',
               border: '1px solid rgba(255,255,255,0.12)',
-              color: shareCopied ? '#34d399' : (isShareHovered ? 'var(--accent-1)' : '#fff'),
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               padding: 0,
-              transition: 'color 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-              transform: isShareHovered ? 'scale(1.05)' : 'scale(1)',
             }}
           >
             {shareCopied ? (
@@ -561,8 +549,7 @@ export default function BoardDetailPage({ onResume }) {
           {/* Owner row */}
           <div
             onClick={handleNavigateToOwner}
-            onMouseEnter={() => setIsOwnerRowHovered(true)}
-            onMouseLeave={() => setIsOwnerRowHovered(false)}
+            className={s.ownerRow}
             role="button"
             tabIndex={0}
             onKeyDown={(e) => {
@@ -594,11 +581,10 @@ export default function BoardDetailPage({ onResume }) {
                 background: 'var(--color-surface)',
               }}
             />
-            <span style={{
+            <span className={s.ownerName} style={{
               color: '#fff',
               fontSize: 14,
               fontWeight: 600,
-              textDecoration: isOwnerRowHovered ? 'underline' : 'none',
               textUnderlineOffset: 3,
             }}>
               {board?.user?.display_name || ''}
@@ -711,10 +697,7 @@ export default function BoardDetailPage({ onResume }) {
           <button
             onClick={handleToggleReaction}
             disabled={!board || isReactionPending}
-            onMouseEnter={() => setIsReactHovered(true)}
-            onMouseLeave={() => { setIsReactHovered(false); setIsReactPressed(false) }}
-            onMouseDown={() => setIsReactPressed(true)}
-            onMouseUp={() => setIsReactPressed(false)}
+            className={`${s.reactBtn}${isReacted ? ` ${s.reacted}` : ''}`}
             style={{
               width: '100%',
               maxWidth: 320,
@@ -733,9 +716,6 @@ export default function BoardDetailPage({ onResume }) {
               alignItems: 'center',
               justifyContent: 'center',
               gap: 10,
-              transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), filter 0.2s cubic-bezier(0.4, 0, 0.2, 1), background 0.2s cubic-bezier(0.4, 0, 0.2, 1), color 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-              transform: isReactPressed ? 'scale(0.98)' : (isReactHovered ? 'scale(1.02)' : 'scale(1)'),
-              filter: isReactHovered && !isReacted ? 'brightness(1.08)' : 'none',
               boxShadow: isReacted ? 'none' : '0 8px 22px color-mix(in srgb, var(--accent-1) 32%, transparent)',
               fontFamily: 'inherit',
             }}

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import s from './BioPersonaFlipCard.module.css'
 
 /**
  * BioPersonaFlipCard — §3.5.4 Hero Flip variant (text-on-surface, profile pages)
@@ -8,21 +9,17 @@ import { useState } from 'react'
  */
 export default function BioPersonaFlipCard({ bio, persona }) {
   const [isFlipped, setIsFlipped] = useState(false)
-  const [isHovered, setIsHovered] = useState(false)
 
   return (
     <div
+      className={s.wrapper}
       style={{
         perspective: '1200px',
         width: '100%',
         minHeight: 180,
         cursor: 'pointer',
-        transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-        transform: isHovered ? 'translateY(-4px)' : 'translateY(0)',
         marginTop: 18, marginBottom: 18,
       }}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
       onClick={(e) => {
         if (e.target.closest('button')) return
         setIsFlipped(f => !f)
