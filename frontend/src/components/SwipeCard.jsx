@@ -30,86 +30,12 @@ export const TAP_THRESHOLD = 8
 // we keep 'contain' — letterboxing beats visible cropping.
 const COVER_CROP_MAX = 0.25
 
-// FRONT-UX-14-TUNE — custom rAF gallery-snap animator, shared by the wheel
-// snap path and the ArrowUp/ArrowDown keyboard path. Native el.scrollTo({
-// behavior:'smooth'}) is a quick quasi-linear slide with no settle ("no
-// catch" per user feedback).
-//
-// FRONT-UX-14-TUNE3: easeOutBack front-loaded velocity (~4x average at t=0)
-// so the 100%-height transit finished in ~80ms of the 420ms duration — it
-// read as an instant image SWITCH, not a glide (user feedback round 3).
-// Switched to easeInOutBack, which ramps in symmetrically (visible glide),
-// then overshoots + settles at the end (the tactile 탁 catch). Duration
-// stretched 420ms -> 520ms to make the glide phase read clearly.
-//
-// c1 = 1.2 controls the overshoot amount (standard easeInOutBack formula).
-// Note: easeInOutBack undershoots below 0 near t~0.15 (an "anticipation
-// dip" — scrollTop briefly moves a few px BACKWARD before launching
-// forward). This is desirable swipe-anticipation feel; the per-frame
-// [0, maxScroll] clamp below already guards the scroll-container edges, so
-// the dip is only ever visible on interior images, never at the first/last.
-const EASE_BACK_C1 = 1.2
-const EASE_BACK_C2 = EASE_BACK_C1 * 1.525
-function easeInOutBack(t) {
-  return t < 0.5
-    ? (Math.pow(2 * t, 2) * ((EASE_BACK_C2 + 1) * 2 * t - EASE_BACK_C2)) / 2
-    : (Math.pow(2 * t - 2, 2) * ((EASE_BACK_C2 + 1) * (2 * t - 2) + EASE_BACK_C2) + 2) / 2
-}
-
-/**
- * animateGallerySnap — animates el.scrollTop from its current value to
- * targetTop with easeInOutBack easing over `duration` ms.
- *   - Clamps per-frame scrollTop to [0, maxScroll] so the overshoot never
- *     rubber-bands past the first/last image (overshoot is only visible on
- *     middle images; the ends land firmly).
- *   - Suspends el.style.scrollSnapType for the duration of the animation
- *     (CSS mandatory snap fights per-frame scrollTop writes at the tail end)
- *     and restores the previous value on finish/cancel.
- *   - cancelRef holds the in-flight rAF id so a new call cancels the
- *     previous animation before starting.
- *   - prefers-reduced-motion: skip the animation, jump straight to targetTop.
- */
-function animateGallerySnap(el, targetTop, cancelRef, { duration = 520 } = {}) {
-  if (!el) return
-  // cancelRef.current carries { id, restore } so an interrupted animation's
-  // ORIGINAL pre-animation scrollSnapType survives the cancel — reading
-  // el.style.scrollSnapType fresh here would instead pick up 'none' (the
-  // value the interrupted animation itself set), permanently disabling
-  // native snap once this chain of calls finally settles.
-  let previousSnapType = el.style.scrollSnapType
-  if (cancelRef.current != null) {
-    cancelAnimationFrame(cancelRef.current.id)
-    previousSnapType = cancelRef.current.restore
-    cancelRef.current = null
-  }
-  const reduceMotion = typeof window.matchMedia === 'function' &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  const maxScroll = Math.max(0, el.scrollHeight - el.clientHeight)
-  const clampedTarget = Math.max(0, Math.min(maxScroll, targetTop))
-  if (reduceMotion) {
-    el.scrollTop = clampedTarget
-    el.style.scrollSnapType = previousSnapType
-    return
-  }
-  const startTop = el.scrollTop
-  const distance = clampedTarget - startTop
-  el.style.scrollSnapType = 'none'
-  const startTime = performance.now()
-  function step(now) {
-    const elapsed = now - startTime
-    const t = Math.min(1, elapsed / duration)
-    const eased = easeInOutBack(t)
-    const next = startTop + distance * eased
-    el.scrollTop = Math.max(0, Math.min(maxScroll, next))
-    if (t < 1) {
-      cancelRef.current = { id: requestAnimationFrame(step), restore: previousSnapType }
-    } else {
-      cancelRef.current = null
-      el.style.scrollSnapType = previousSnapType
-    }
-  }
-  cancelRef.current = { id: requestAnimationFrame(step), restore: previousSnapType }
-}
+// FRONT-UX-14-SIMPLIFY — module-scope reduced-motion check for the keyboard
+// gallery-nav scrollBy (mirrors the module-scope checks formerly in
+// SwipeDeck.jsx / DiscoveryPage.jsx). Read once.
+const PREFERS_REDUCED_MOTION = typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
 /**
  * computeFit — pure helper (unit-testable inline): decide 'cover' vs 'contain'
@@ -168,16 +94,8 @@ export default function SwipeCard({ card, onGalleryClose }) {
   const imgRef = useRef(null)
   const timeoutRef = useRef(null)
   const galleryScrollRef = useRef(null)
-  // FRONT-UX-14-TUNE — in-flight rAF id for animateGallerySnap, shared by the
-  // wheel snap path and the keyboard ArrowUp/Down path so a new snap cancels
-  // any animation still running from the previous one.
-  const gallerySnapRafRef = useRef(null)
   // first-writer-wins guard for imgRatio (LQIP onLoad vs main img onLoad)
   const ratioSetRef = useRef(false)
-  // FRONT-UX-14: mirrors showGallery for listeners that must read the CURRENT
-  // open state without re-registering (the wheel listener lives for the whole
-  // hasBeenOpened lifetime, spanning many open/close cycles).
-  const showGalleryRef = useRef(false)
 
   const { onLoad: telemetryOnLoad, onError: telemetryOnError } = useImageTelemetry({
     buildingId: card.image_id,
@@ -189,12 +107,6 @@ export default function SwipeCard({ card, onGalleryClose }) {
     setShowGallery(true)
   }
   function closeGallery() { setShowGallery(false); onGalleryClose && onGalleryClose() }
-
-  // Keep showGalleryRef in sync with showGallery for the wheel listener below,
-  // which must read the CURRENT open state without re-registering.
-  useEffect(() => {
-    showGalleryRef.current = showGallery
-  }, [showGallery])
 
   function handlePointerDown(e) {
     dragStart.current = { x: e.clientX, y: e.clientY }
@@ -340,16 +252,16 @@ export default function SwipeCard({ card, onGalleryClose }) {
         return
       }
       if (!el) return
-      // Quantize off the nearest card index (not raw scrollTop) so a press
-      // that interrupts an in-flight overshoot still targets a card
-      // boundary — matches the wheel path's index-quantized target.
-      const currentIndex = Math.round(el.scrollTop / CARD_HEIGHT)
+      // FRONT-UX-14-SIMPLIFY — native scrollBy one card height. The CSS
+      // mandatory snap (scrollSnapType:'y mandatory' + scrollSnapAlign:'start'
+      // on each slide) catches the landing point, so an exact-card-height
+      // delta is all that's needed; no manual rAF easing or index math.
       if (e.key === 'ArrowDown') {
         e.preventDefault()
-        animateGallerySnap(el, (currentIndex + 1) * CARD_HEIGHT, gallerySnapRafRef)
+        el.scrollBy({ top: CARD_HEIGHT, behavior: PREFERS_REDUCED_MOTION ? 'auto' : 'smooth' })
       } else if (e.key === 'ArrowUp') {
         e.preventDefault()
-        animateGallerySnap(el, (currentIndex - 1) * CARD_HEIGHT, gallerySnapRafRef)
+        el.scrollBy({ top: -CARD_HEIGHT, behavior: PREFERS_REDUCED_MOTION ? 'auto' : 'smooth' })
       }
     }
     window.addEventListener('keydown', onKeyDown)
@@ -363,16 +275,6 @@ export default function SwipeCard({ card, onGalleryClose }) {
   // listener is valid (passive only forbids preventDefault). We never call
   // preventDefault so the browser still handles pan-y scroll natively.
   // Horizontal intent propagates normally → card swipe still works.
-  //
-  // FRONT-UX-14 FIX 4 — desktop wheel snap, integrated into this same effect
-  // (same [hasBeenOpened] lifetime as the touch direction-lock, per the "don't
-  // duplicate listeners" guidance). scrollSnapType+mandatory fights wheel
-  // momentum (stutters); intercept wheel, accumulate deltaY, and drive an
-  // explicit scrollTo of exactly one card per gesture instead. Guarded by
-  // showGalleryRef (not the showGallery closure var) because this effect's
-  // listeners live for the whole hasBeenOpened lifetime, spanning multiple
-  // open/close cycles — a stale `showGallery` const would still preventDefault
-  // wheel events while the gallery face isn't even visible.
   useEffect(() => {
     const el = galleryScrollRef.current
     if (!el) return
@@ -403,46 +305,10 @@ export default function SwipeCard({ card, onGalleryClose }) {
     el.addEventListener('touchstart', onStart, { passive: true })
     el.addEventListener('touchmove', onMove, { passive: true })
 
-    // -- FIX 4: wheel snap (desktop trackpad/mouse only; touch is unaffected —
-    // wheel events don't fire from touch gestures) --
-    let wheelAccum = 0
-    let locked = false
-    let lockTimer = null
-    const WHEEL_THRESHOLD = 40
-    const LOCK_MS = 450
-    const QUIET_MS = 140
-    const onWheel = (e) => {
-      if (!showGalleryRef.current) return
-      e.preventDefault()
-      if (locked) {
-        // Momentum-aware unlock: keep the lock alive while momentum deltas
-        // still arrive; release only after ~QUIET_MS of wheel silence so one
-        // long trackpad flick can't advance a second card.
-        clearTimeout(lockTimer)
-        lockTimer = setTimeout(() => { locked = false; wheelAccum = 0 }, QUIET_MS)
-        return
-      }
-      wheelAccum += e.deltaY
-      if (Math.abs(wheelAccum) > WHEEL_THRESHOLD) {
-        const total = gallery.length
-        const currentIndex = Math.round(el.scrollTop / CARD_HEIGHT)
-        const dir = wheelAccum > 0 ? 1 : -1
-        const targetIndex = Math.max(0, Math.min(total - 1, currentIndex + dir))
-        animateGallerySnap(el, targetIndex * CARD_HEIGHT, gallerySnapRafRef)
-        locked = true
-        wheelAccum = 0
-        lockTimer = setTimeout(() => { locked = false }, LOCK_MS)
-      }
-    }
-    el.addEventListener('wheel', onWheel, { passive: false })
-
     return () => {
       el.removeEventListener('touchstart', onStart)
       el.removeEventListener('touchmove', onMove)
-      el.removeEventListener('wheel', onWheel)
-      if (lockTimer) clearTimeout(lockTimer)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasBeenOpened])
 
   const typology   = card.metadata?.axis_typology
@@ -694,7 +560,6 @@ export default function SwipeCard({ card, onGalleryClose }) {
                   width: '100%', height: CARD_HEIGHT,
                   flexShrink: 0,
                   scrollSnapAlign: 'start',
-                  scrollSnapStop: 'always',
                   background: galleryBg,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}>
