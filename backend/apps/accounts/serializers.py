@@ -5,7 +5,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import EmailValidator, URLValidator
 from rest_framework import serializers
 
-from .models import UserProfile
+from .models import PersonalityProfile, UserProfile
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -454,3 +454,34 @@ class UserProfileSelfUpdateSerializer(serializers.ModelSerializer):
                         f'notifications["{k}"]["{nested_key}"] must be a boolean.'
                     )
         return value
+
+
+class PersonalityAssessmentSerializer(serializers.Serializer):
+    """Validates the 20-question Likert assessment payload.
+
+    responses: list of exactly 20 integers, each in [-2, +2].
+    """
+    responses = serializers.ListField(
+        child=serializers.IntegerField(min_value=-2, max_value=2),
+        min_length=20,
+        max_length=20,
+    )
+
+
+class PersonalityProfileSerializer(serializers.ModelSerializer):
+    """Read serializer for PersonalityProfile — returned by GET /personality/me/
+    and embedded in POST /personality/assessment/ responses."""
+
+    class Meta:
+        model = PersonalityProfile
+        fields = [
+            'axis_1',
+            'axis_2',
+            'axis_3',
+            'axis_4',
+            'axis_5',
+            'type_code',
+            'discovery_opt_in',
+            'created_at',
+        ]
+        read_only_fields = fields

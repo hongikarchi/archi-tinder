@@ -7,11 +7,13 @@ import { updateProject, deleteProject } from '../api/projects.js'
 import { getMyWorks } from '../api/works.js'
 import { purgeChatCache } from '../utils/appHelpers.js'
 import { getUserSavedStudios } from '../api/architects.js'
+import { getMyPersonality } from '../api/personality.js'
 import ShareCardModal from '../components/ShareCardModal.jsx'
 import WorkDetailModal from '../components/WorkDetailModal.jsx'
 import ProfileHeader from './userProfile/ProfileHeader'
 import ProfileHero from './userProfile/ProfileHero'
 import BoardGrid from './userProfile/BoardGrid'
+import PentagonChart from '../components/PentagonChart.jsx'
 import { OfficeCard, SkeletonCard, BuildingIconEmpty } from './LikedOfficesPage.jsx'
 
 /**
@@ -69,6 +71,9 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
   const [worksLoading, setWorksLoading] = useState(false)
   const [selectedWorkId, setSelectedWorkId] = useState(null)
 
+  // Personality profile state (isMe: my personality; !isMe: for overlay comparison)
+  const [myPersonality, setMyPersonality] = useState(null)
+
   // MINOR #1: inline error banner for failed board actions (optimistic revert feedback)
   const [boardActionError, setBoardActionError] = useState(null)
   // MINOR #3: per-board pending set — blocks rapid double-toggle
@@ -89,6 +94,14 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
       .then(data => setLikedCount(data?.total ?? 0))
       .catch(() => {})
   }, [isMe])
+
+  // Fetch my personality for overlay comparison (both isMe and !isMe paths)
+  // Empty deps intentional: runs once on mount to load the caller's own personality.
+  useEffect(() => {
+    getMyPersonality()
+      .then(data => setMyPersonality(data))
+      .catch(() => setMyPersonality(null))
+  }, [])
 
   // Fetch architect profiles for buildingsMap whenever savedStudios changes
   useEffect(() => {
@@ -471,6 +484,124 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
           isMe={isMe}
           onAvatarUpdated={(updatedUser) => setUser(prev => ({ ...prev, avatar_url: updatedUser.avatar_url }))}
         />
+
+        {/* ── Personality section ────────────────────────────────────────── */}
+        {(() => {
+          function vectorFrom(p) {
+            if (!p) return null
+            return [p.axis_1, p.axis_2, p.axis_3, p.axis_4, p.axis_5]
+          }
+
+          // isMe + no personality → CTA to assessment
+          if (isMe && !user.personality) {
+            return (
+              <div style={{ padding: '16px 20px 0', display: 'flex', justifyContent: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => navigate('/assessment')}
+                  style={{
+                    padding: '10px 20px',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 'var(--radius-pill)',
+                    background: 'var(--color-surface)',
+                    color: 'var(--color-text)',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    fontFamily: 'inherit',
+                    cursor: 'pointer',
+                    minHeight: 36,
+                  }}
+                >
+                  성향 진단 받기
+                </button>
+              </div>
+            )
+          }
+
+          // isMe + has personality → interactive pentagon (myVector only, no overlay)
+          if (isMe && user.personality) {
+            return (
+              <div style={{ padding: '16px 20px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                <PentagonChart
+                  myVector={vectorFrom(user.personality)}
+                  interactive={true}
+                  onAxisClick={(i) => navigate(`/people?axis=${i}`)}
+                  size={180}
+                />
+                <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: 0 }}>
+                  {user.personality.type_code} 유형
+                </p>
+              </div>
+            )
+          }
+
+          // !isMe + both have personality → overlay comparison
+          if (!isMe && user?.personality && myPersonality) {
+            return (
+              <div style={{ padding: '16px 20px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                <PentagonChart
+                  myVector={vectorFrom(myPersonality)}
+                  theirVector={vectorFrom(user.personality)}
+                  size={180}
+                />
+                <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: 0, fontStyle: 'italic' }}>
+                  실선 = 나, 점선 = 상대방
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {}}
+                  style={{
+                    padding: '10px 20px',
+                    border: 'none',
+                    borderRadius: 'var(--radius-pill)',
+                    background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
+                    color: '#fff',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    fontFamily: 'inherit',
+                    cursor: 'pointer',
+                    minHeight: 36,
+                  }}
+                >
+                  관심 있어요
+                </button>
+              </div>
+            )
+          }
+
+          // !isMe + they have personality, I don't → single graph + CTA
+          if (!isMe && user?.personality && !myPersonality) {
+            return (
+              <div style={{ padding: '16px 20px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                <PentagonChart
+                  theirVector={vectorFrom(user.personality)}
+                  size={180}
+                />
+                <button
+                  type="button"
+                  onClick={() => navigate('/assessment')}
+                  style={{
+                    padding: '10px 20px',
+                    border: 'none',
+                    borderRadius: 'var(--radius-pill)',
+                    background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
+                    color: '#fff',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    fontFamily: 'inherit',
+                    cursor: 'pointer',
+                    minHeight: 36,
+                  }}
+                >
+                  나의 성향 확인해보기 →
+                </button>
+              </div>
+            )
+          }
+
+          return null
+        })()}
+        {/* ── End personality section ────────────────────────────────────── */}
 
         {/* Tab bar — Boards | Studios | Liked | Created (isMe only) */}
         <div style={{

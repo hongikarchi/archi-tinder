@@ -1,0 +1,14 @@
+.root {
+  display: block;
+  overflow: visible;
+}
+
+.hitArea {
+  cursor: pointer;
+  outline: none;
+}
+
+.hitArea:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+}

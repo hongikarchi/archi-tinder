@@ -19,6 +19,8 @@ import LikedProjectsPage from './pages/LikedProjectsPage.jsx'
 import UploadWorkPage from './pages/UploadWorkPage.jsx'
 import LikedOfficesPage from './pages/LikedOfficesPage.jsx'
 import ArchitectProfilePage from './pages/ArchitectProfilePage.jsx'
+import AssessmentPage from './pages/AssessmentPage.jsx'
+import PeopleDiscoveryPage from './pages/PeopleDiscoveryPage.jsx'
 import SettingsPage from './pages/settings/SettingsPage.jsx'
 import AccountScreen from './pages/settings/AccountScreen.jsx'
 import NotificationsScreen from './pages/settings/NotificationsScreen.jsx'
@@ -1131,6 +1133,8 @@ export default function App() {
           <Route path="my/liked-offices" element={<Navigate to="/my/profile" replace />} />
           <Route path="architects/:architectId" element={<ArchitectProfilePage />} />
           <Route path="notifications" element={<NotificationInboxScreen />} />
+          <Route path="assessment" element={<ProtectedRoute><AssessmentPage /></ProtectedRoute>} />
+          <Route path="people" element={<ProtectedRoute><PeopleDiscoveryPage /></ProtectedRoute>} />
           <Route path="settings" element={<SettingsPage />}>
             <Route path="edit-profile" element={<EditProfileScreen />} />
             <Route path="account" element={<AccountScreen />} />
