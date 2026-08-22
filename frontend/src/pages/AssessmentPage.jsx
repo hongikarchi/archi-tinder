@@ -7,6 +7,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { QUESTIONS, LIKERT_LABELS, LIKERT_VALUES } from '../constants/assessmentQuestions.js'
+import { TYPE_LABELS } from '../constants/personalityTypes.js'
 import { submitAssessment } from '../api/personality.js'
 import PentagonChart from '../components/PentagonChart.jsx'
 import styles from './AssessmentPage.module.css'
@@ -84,7 +85,7 @@ export default function AssessmentPage() {
 
         <div className={styles.resultBody}>
           <p className={styles.typeCode}>{result.type_code}</p>
-          <p className={styles.typeLabel}>{result.type_label || '나만의 건축 성향'}</p>
+          <p className={styles.typeLabel}>{TYPE_LABELS[result.type_code] || '나만의 건축 성향'}</p>
 
           <div className={styles.chartWrap}>
             <PentagonChart
@@ -92,10 +93,6 @@ export default function AssessmentPage() {
               size={200}
             />
           </div>
-
-          {result.description && (
-            <p className={styles.description}>{result.description}</p>
-          )}
 
           <button
             type="button"
