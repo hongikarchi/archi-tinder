@@ -15,7 +15,7 @@ from rest_framework.views import APIView
 
 from django.core.cache import cache
 
-from ..models import UserProfile
+from ..models import PersonalityProfile, UserProfile
 from ..serializers import UserSerializer, UserProfileSerializer, UserProfileSelfUpdateSerializer
 from ..throttling import AvatarUploadThrottle
 
@@ -180,6 +180,21 @@ class UserProfileDetailView(APIView):
 
         data = UserProfileSerializer(profile).data
         data['boards'] = _build_boards_field(profile, is_owner, page=page, page_size=page_size)
+
+        # Personality field: all 5 axes included — axis_5 (bonus) is needed for
+        # the pentagon SVG shape in the profile overlay comparison view.
+        try:
+            p = profile.personality
+            data['personality'] = {
+                'axis_1': p.axis_1,
+                'axis_2': p.axis_2,
+                'axis_3': p.axis_3,
+                'axis_4': p.axis_4,
+                'axis_5': p.axis_5,
+                'type_code': p.type_code,
+            }
+        except PersonalityProfile.DoesNotExist:
+            data['personality'] = None
 
         # Serialiser returns OrderedDict; cast to plain dict for cache storage
         # so it round-trips cleanly through pickle / JSON.

@@ -1,0 +1,295 @@
+.page {
+  min-height: calc(100vh - 64px);
+  background: var(--color-bg);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header */
+.header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: color-mix(in srgb, var(--color-bg) 90%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--color-border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.backBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+  transition: background var(--motion-fast) var(--motion-ease);
+}
+
+.backBtn:hover {
+  background: var(--color-surface);
+}
+
+.title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0;
+  line-height: 1.3;
+}
+
+/* Assessment banner */
+.assessmentBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  background: color-mix(in srgb, var(--accent-1) 8%, var(--color-surface));
+  border-bottom: 1px solid color-mix(in srgb, var(--accent-1) 20%, transparent);
+}
+
+.assessmentText {
+  font-size: 13px;
+  color: var(--color-text);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.assessmentCta {
+  flex-shrink: 0;
+  padding: 7px 14px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  min-height: 32px;
+  white-space: nowrap;
+  transition: transform var(--motion-normal) var(--motion-ease);
+}
+
+.assessmentCta:hover {
+  transform: translateY(-1px);
+}
+
+/* Filter chips bar */
+.filterBar {
+  display: flex;
+  gap: 8px;
+  padding: 10px 16px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.filterBar::-webkit-scrollbar {
+  display: none;
+}
+
+.filterChip {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  transition:
+    border-color var(--motion-fast) var(--motion-ease),
+    background var(--motion-fast) var(--motion-ease),
+    color var(--motion-fast) var(--motion-ease);
+}
+
+.filterChip:hover {
+  border-color: var(--accent-1);
+  color: var(--accent-1);
+}
+
+.filterChipActive {
+  border-color: var(--accent-1);
+  background: color-mix(in srgb, var(--accent-1) 10%, transparent);
+  color: var(--accent-1);
+  font-weight: 600;
+}
+
+/* Content area */
+.content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+/* Feed grid — single column */
+.feed {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 560px;
+  margin: 0 auto;
+}
+
+/* Inline error */
+.inlineError {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 32px 20px;
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+
+.retryBtn {
+  padding: 8px 18px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color var(--motion-fast) var(--motion-ease);
+}
+
+.retryBtn:hover {
+  border-color: var(--accent-1);
+}
+
+/* Empty state */
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 48px 20px;
+  text-align: center;
+  max-width: 360px;
+  margin: 0 auto;
+}
+
+.emptyTitle {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0;
+}
+
+.emptyDesc {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.ctaBtn {
+  margin-top: 8px;
+  padding: 12px 20px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  min-height: 44px;
+  transition: transform var(--motion-normal) var(--motion-ease);
+}
+
+.ctaBtn:hover {
+  transform: translateY(-2px);
+}
+
+/* Toast (DESIGN.md §8.11 — bottom-center, glassmorphic) */
+.toast {
+  position: fixed;
+  bottom: calc(64px + 16px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: color-mix(in srgb, var(--color-surface) 72%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text);
+  white-space: nowrap;
+  z-index: 200;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+/* Skeleton */
+.skeleton {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 560px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.skelHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.skelAvatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--color-surface-3);
+  flex-shrink: 0;
+}
+
+.skelLines {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.skelLine {
+  height: 12px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-3);
+}
+
+.skelChart {
+  height: 140px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  align-self: center;
+  width: 140px;
+  border-radius: 50%;
+}

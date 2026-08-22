@@ -138,6 +138,45 @@ class UserProfile(models.Model):
         return self.display_name
 
 
+class PersonalityProfile(models.Model):
+    """Personality assessment result for a UserProfile.
+
+    Stores 5 axis scores (each -1.0 to +1.0) derived from a 20-question
+    Likert assessment (-2 to +2 per question, 4 questions per axis).
+    type_code is a 4-letter code from axes 1-4 (axis_5 is a bonus dimension
+    that does not affect type_code).
+
+    Axis semantics:
+      axis_1: C(Conceptual) > 0.0, R(Real) <= 0.0
+      axis_2: L(Leader)     > 0.0, S(Supporter) <= 0.0
+      axis_3: O(cOllaborative) > 0.0, D(inDependent) <= 0.0
+      axis_4: N(iNnovative) > 0.0, T(Traditional) <= 0.0
+      axis_5: bonus — P(Prudent/신중) > 0.0, I(Improvisational/즉흥) <= 0.0
+
+    discovery_opt_in controls visibility in the people-discovery feed.
+    """
+    user = models.OneToOneField(
+        UserProfile, on_delete=models.CASCADE, related_name='personality'
+    )
+    axis_1 = models.FloatField()   # 개념(+) / 실무(-)
+    axis_2 = models.FloatField()   # 리더(+) / 서포터(-)
+    axis_3 = models.FloatField()   # 협업(+) / 독립(-)
+    axis_4 = models.FloatField()   # 혁신(+) / 전통(-)
+    axis_5 = models.FloatField()   # 신중(+) / 즉흥(-) [보너스 — type_code 미영향]
+    type_code = models.CharField(max_length=4)
+    discovery_opt_in = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['discovery_opt_in'], name='personality_optin_idx'),
+        ]
+
+    def __str__(self):
+        return f'{self.user_id}:{self.type_code}'
+
+
 class SocialAccount(models.Model):
     PROVIDER_CHOICES = [
         ('google', 'Google'),
