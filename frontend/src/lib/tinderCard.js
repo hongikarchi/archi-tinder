@@ -30,7 +30,11 @@ const settings = {
   swipeThreshold: 0.5
 }
 
-const physics = {
+// Exported (2026-08-25) so callers that animate a card back INTO the deck —
+// AssessmentPage's "previous question" — reuse the same snap-back spring the
+// card itself uses when a drag is released below threshold, instead of
+// inventing a second set of numbers.
+export const physics = {
   touchResponsive: { friction: 50, tension: 2000 },
   animateOut:      { friction: 30, tension: 400 },
   animateBack:     { friction: 10, tension: 200 }
