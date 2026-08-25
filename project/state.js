@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-08-15 23:38 KST',
-    head: '73d6177',
-    branch: 'feature/claude-design-b2',
+    updatedAt: '2026-08-26 00:00 KST',
+    head: 'bc40fbf',
+    branch: 'feature/sns-people-card-flip',
   },
   done: [
+    {
+      id: 'FRONT-PEOPLE-CARD-1',
+      title: '/people 발견 카드 이미지 앞면 + flip 상세',
+      completedAt: '2026-08-26',
+      note: '카드 구조 교체: 앞면 = 취향분석 리포트 건축 이미지 전면(그래프/이름/아바타 제거), 탭 시 flip → 뒷면에 성향 그래프 + 내 벡터 오버레이 + 범례 + 이름(클릭 시 프로필 이동)',
+    },
     {
       id: 'FRONT-UX-14',
       title: '스와이프 모션 + 갤러리 UX (7 라운드 feel-iteration)',
@@ -70,12 +76,6 @@ window.PROJECT_STATE = {
       title: 'works 상세 모달 + cover_r2_key BE 컬럼',
       completedAt: '2026-08-12',
       note: 'Work.cover_r2_key CharField + migration 0003 — 커버 키 명시 저장 (기존 r2_keys[0] 폴백 유지)',
-    },
-    {
-      id: 'FRONT-UX-13',
-      title: '업로드 이미지 편집(crop/rotate/커버 지정)',
-      completedAt: '2026-08-14',
-      note: 'files state: id/originalBlob/currentBlob/preview — 반복 편집 화질 열화 방지',
     },
   ],
   now: [
@@ -121,6 +121,11 @@ window.PROJECT_STATE = {
       },
     ],
     medium: [
+      {
+        id: 'FRONT-PEOPLE-CARD-2',
+        title: '발견 피드가 실데이터에서 빈 화면',
+        note: 'FRONT-PEOPLE-CARD-1이 카드 앞면을 취향분석 리포트 이미지로 바꾸면서 피드 조건이 4중이 됨(진단 완료 + discovery_opt_in + publishable Work + public report_image). 로컬 DB 실측: 29명 중 진단 완료 2명, 그 2명이 전부 게스트라 2단계에서 이미 0명이 되고, `report_image` 보유 프로젝트는 공개 여부 무관 0건. 프로덕션도 같은 상태면 배포 후 빈 화면. 결정 필요: (a) 이미지 없는 유저는 Work 커버로…',
+      },
       {
         id: 'SNS-PERSONA-AXIS-1',
         title: 'persona 프롬프트에 axis_scores + 언어설정 미반영 (#232 유실 작업)',
@@ -247,6 +252,20 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 311,
+      title: 'feat(FULL-DISCOVERY-1): 성향 기반 유저 발견 — 4+1축 진단·발견 피드·5각형 차트',
+      mergedAt: '2026-08-22T01:44:14Z',
+      mergedAtKST: '2026-08-22 10:44 KST',
+      sha: 'bc40fbf',
+    },
+    {
+      number: 310,
+      title: 'feat(FRONT-DESIGN-B2): Claude Design page-preview bundle + generator',
+      mergedAt: '2026-08-15T14:38:41Z',
+      mergedAtKST: '2026-08-15 23:38 KST',
+      sha: 'e4d54f6',
+    },
+    {
       number: 309,
       title: 'feat(FRONT-UX-14): swipe motion + gallery UX — 7-round feel iteration, on-device verified',
       mergedAt: '2026-08-15T14:25:06Z',
@@ -287,20 +306,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-08-14T13:34:10Z',
       mergedAtKST: '2026-08-14 22:34 KST',
       sha: '167be38',
-    },
-    {
-      number: 302,
-      title: 'feat(FULL-WORKS-3): works 상세 모달 + cover_r2_key BE 컬럼',
-      mergedAt: '2026-08-14T12:43:18Z',
-      mergedAtKST: '2026-08-14 21:43 KST',
-      sha: '4048777',
-    },
-    {
-      number: 301,
-      title: 'feat(FRONT-UX-13): works 업로드 이미지 편집 — crop/rotate + 커버 지정',
-      mergedAt: '2026-08-14T13:19:41Z',
-      mergedAtKST: '2026-08-14 22:19 KST',
-      sha: 'f0d4a5a',
     },
   ],
   agents: [
@@ -655,6 +660,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'backend/apps/accounts/migrations/0012_personalityprofile.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/accounts/migrations/__init__.py',
       role: '패키지 init',
     },
@@ -760,6 +769,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/accounts/views/meta.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/accounts/views/personality.py',
       role: '',
     },
     {
@@ -1323,6 +1336,10 @@ window.PROJECT_STATE = {
       role: '팔로우/리액션 뷰',
     },
     {
+      path: 'backend/apps/social/views_people.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/works/__init__.py',
       role: '',
     },
@@ -1847,6 +1864,14 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'frontend/src/api/people.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/api/personality.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/api/profiles.js',
       role: '사무소·유저 프로필 API 클라이언트',
     },
@@ -1921,6 +1946,22 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/components/LLMSearchUpdateWrapper.jsx',
       role: 'LLM 검색 업데이트 모드 래퍼',
+    },
+    {
+      path: 'frontend/src/components/PentagonChart.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/PentagonChart.module.css',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/PersonCard.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/PersonCard.module.css',
+      role: '',
     },
     {
       path: 'frontend/src/components/PersonaReport.jsx',
@@ -2071,6 +2112,14 @@ window.PROJECT_STATE = {
       role: 'swipe 제스처 설정 상수',
     },
     {
+      path: 'frontend/src/constants/assessmentQuestions.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/constants/personalityTypes.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/constants/roles.js',
       role: '',
     },
@@ -2171,6 +2220,14 @@ window.PROJECT_STATE = {
       role: 'architect 프로필 페이지 CSS 모듈 (#182)',
     },
     {
+      path: 'frontend/src/pages/AssessmentPage.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/AssessmentPage.module.css',
+      role: '',
+    },
+    {
       path: 'frontend/src/pages/BoardDetailPage.jsx',
       role: '보드 상세 페이지',
     },
@@ -2224,6 +2281,14 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/pages/LoginPage.module.css',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/PeopleDiscoveryPage.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/PeopleDiscoveryPage.module.css',
       role: '',
     },
     {

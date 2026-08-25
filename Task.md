@@ -163,6 +163,9 @@ _(2026-06-08 범위 축소: #212(`4e58195`) Case #3 resume guard가 **진행중(
 _(2026-07-12 감사 re-pin: 전제 유효, 라인 이동 — resume guard `session_service.py:167-182`(completed 제외), 신규 세션 cold-create `:397-416`(phase='exploring', like_vectors=[] 등 전부 빈 값), `liked_ids`는 완료-세션 리포트에만 사용(`:688-689`), warm-start seed 경로 여전히 부재.)_
 
 ### MEDIUM
+#### FRONT-PEOPLE-CARD-2 — 발견 피드가 실데이터에서 빈 화면
+FRONT-PEOPLE-CARD-1이 카드 앞면을 취향분석 리포트 이미지로 바꾸면서 피드 조건이 4중이 됨(진단 완료 + discovery_opt_in + publishable Work + public report_image). 로컬 DB 실측: 29명 중 진단 완료 2명, 그 2명이 전부 게스트라 2단계에서 이미 0명이 되고, `report_image` 보유 프로젝트는 공개 여부 무관 0건. 프로덕션도 같은 상태면 배포 후 빈 화면. 결정 필요: (a) 이미지 없는 유저는 Work 커버로 대체, (b) Step 2b 필터 제거하고 앞면 플레이스홀더 허용, (c) 조건 유지하고 리포트 이미지 생성 유도 플로우를 먼저 붙이기.
+
 #### SNS-PERSONA-AXIS-1 — persona 프롬프트에 axis_scores + 언어설정 미반영 (#232 유실 작업)
 PR #232(`feature/sns-persona-description-axis`, 2026-06-18, collaborator)가 CI red로 CLOSED-미머지 후 유실 — `generation.py` persona description 프롬프트에 `axis_scores` + 사용자 언어설정을 반영하는 작업(+68/-12, generation.py + views/reports.py). 2026-08-06 브랜치 정리 전수검사에서 발견: 현재 develop `generation.py`에 axis_scores 미사용 = 기능 미착륙 확인. 원격 브랜치는 보존됨(정리에서 유일하게 제외). 살리려면 rebase 필요 — 이후 persona seam 변경(#290 provider pin, #291 mock) 충돌 예상, cherry-pick보다 재구현이 쌀 수도. hypothesis-grade: 기능 가치 자체(개인화 페르소나 품질)는 제품 결정 필요.
 
@@ -292,6 +295,16 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FRONT-PEOPLE-CARD-1 — /people 발견 카드 이미지 앞면 + flip 상세 — RESOLVED 2026-08-26 (`c58504e`, PR 리뷰 대기)
+- 카드 구조 교체: 앞면 = 취향분석 리포트 건축 이미지 전면(그래프/이름/아바타 제거), 탭 시 flip → 뒷면에 성향 그래프 + 내 벡터 오버레이 + 범례 + 이름(클릭 시 프로필 이동)
+- **재사용 우선 원칙 적용**: flip은 `BioPersonaFlipCard`/`SwipeCard` 갤러리 면과 동일 기법 — 세 곳이 리터럴로 갖고 있던 `0.5s cubic-bezier(0.4,0,0.2,1)`이 `--motion-flip`/`--motion-ease` 토큰과 일치해 토큰 참조로 전환. 그래프 오버레이는 `PentagonChart`에 **이미 구현돼 있어** 신규 작업 불필요(myVector 실선 accent-1 + theirVector 점선 accent-2). 프로필 이동은 기존 `navigate('/user/<id>')` 유지
+- 신규 ①: `PentagonChart` `legend` prop — 범례만 없었음. 별도 컴포넌트 대신 기존 컴포넌트 확장, 범례 선 스타일은 polygon stroke 미러링(색 드리프트 차단). 루트를 `<svg>`로 유지해 기존 호출부 3곳 무영향
+- 신규 ②: `GET /people/<user_id>/report-image/` — `Project.report_image`는 base64 TEXT라 피드에 15개 인라인하면 응답이 MB 단위. 피드는 `report_image_url` 포인터만 주고 카드가 lazy 로드. `visibility='public'` 프로젝트만 대상(비공개 리포트 미노출)
+- 함정: URL/피드의 `user_id`는 auth User id, `Project.user_id`는 UserProfile.id — 엔드포인트는 `user__user_id` 순회 필수. 직접 비교하면 **다른 사람 이미지가 매칭됨**
+- 요구사항 "진단 안 한 유저 제외"는 기존 쿼리셋(`PersonalityProfile` 기반)이 이미 충족 — 추가 작업 없었음
+- 미검증(중요): 로컬 DB에 표시 가능한 데이터가 0건이라 **브라우저 실물 확인 불가**. 진단 완료 2명이 전부 게스트라 `exclude(is_guest=True)`에서 탈락(이번 변경 이전부터 그러함), `report_image` 보유 프로젝트는 공개 여부 무관 0건. 로컬 전용 목 모드로만 렌더 확인
+- Deferred: `report_image` 보유 유저가 없으면 배포 후에도 피드가 빈 화면 — Step 2b 필터 유지 여부 결정 필요
+
 ### FRONT-UX-14 — 스와이프 모션 + 갤러리 UX (7 라운드 feel-iteration) — RESOLVED 2026-08-15 (`94391bf`…`9c09a8c`)
 - ① 퇴장: vendored `lib/tinderCard.js` — linear 3-대각선 총알 → **easeInOutCubic + power 1.0 + [480,680]ms** (가시 구간 56ms→~250ms, 카드가 가속하며 떠나는 게 보임. r2 easeOut 시도는 가시 구간이 더 짧아져 실패 — 교훈: 이동거리 대부분이 화면 밖이면 ease-out은 역효과)
 - ② 스택: 승격 애니메이션 접근 3회 실패 후 **모델 교체(user 통찰)** — 뒤 카드를 처음부터 풀사이즈로 밑에 렌더(Tinder 표준), key=카드id 동일 래퍼 리스트라 승격=key 이동(리마운트 0=깜빡임 원천 제거, 숨어서 로딩 완료), 깊이 사다리+그림자 홀더는 영구 정적 장식. Discovery 자체 스택(index-키 깜빡임 원인) SwipeDeck 통일. net −212줄
