@@ -66,6 +66,12 @@ export default function PentagonChart({
   interactive = false,
   onAxisClick,
   mini = false,
+  // Opt-in legend for overlay comparison views (people discovery card back).
+  // Rendered INSIDE the svg, on an extra strip below the chart, so the root
+  // element stays an <svg> and existing callers' layout is untouched.
+  legend = false,
+  legendMineLabel = '나',
+  legendTheirsLabel = '이 유저',
 }) {
   const size = sizeProp ?? (mini ? MINI_SIZE : DEFAULT_SIZE)
   const padding = mini ? 24 : 32
@@ -76,11 +82,14 @@ export default function PentagonChart({
   // Fallback zero-vector for grid rendering when neither vector is provided
   const zeroVec = Array(NUM_AXES).fill(0)
 
+  const legendH = legend ? (mini ? 18 : 22) : 0
+  const legendFont = mini ? 9 : 11
+
   return (
     <svg
       width={size}
-      height={size}
-      viewBox={`0 0 ${size} ${size}`}
+      height={size + legendH}
+      viewBox={`0 0 ${size} ${size + legendH}`}
       aria-label="성향 오각형 차트"
       className={styles.root}
     >
@@ -197,6 +206,52 @@ export default function PentagonChart({
           />
         )
       })}
+
+      {/* Legend — swatches mirror the polygon strokes above exactly:
+          myVector = solid accent-1, theirVector = dashed 4 2 accent-2. */}
+      {legend && (() => {
+        const y = size + legendH / 2
+        const swatchW = mini ? 12 : 16
+        const gapAfterSwatch = 4
+        const gapBetweenItems = mini ? 12 : 16
+        const mineW = swatchW + gapAfterSwatch + legendMineLabel.length * legendFont * 0.62
+        const theirsW = swatchW + gapAfterSwatch + legendTheirsLabel.length * legendFont * 0.62
+        let x = Math.max(0, (size - (mineW + gapBetweenItems + theirsW)) / 2)
+        const items = [
+          { label: legendMineLabel, color: 'var(--accent-1)', dash: undefined, w: mineW },
+          { label: legendTheirsLabel, color: 'var(--accent-2)', dash: '4 2', w: theirsW },
+        ]
+        return (
+          <g aria-hidden="true">
+            {items.map(item => {
+              const startX = x
+              x += item.w + gapBetweenItems
+              return (
+                <g key={item.label}>
+                  <line
+                    x1={startX}
+                    y1={y}
+                    x2={startX + swatchW}
+                    y2={y}
+                    stroke={item.color}
+                    strokeWidth="1.5"
+                    strokeDasharray={item.dash}
+                  />
+                  <text
+                    x={startX + swatchW + gapAfterSwatch}
+                    y={y}
+                    fontSize={legendFont}
+                    fill="var(--color-text-dim)"
+                    dominantBaseline="middle"
+                  >
+                    {item.label}
+                  </text>
+                </g>
+              )
+            })}
+          </g>
+        )
+      })()}
     </svg>
   )
 }
