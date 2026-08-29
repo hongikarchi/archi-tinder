@@ -94,15 +94,37 @@ EXTRACT = """
     for (const n of el.childNodes) if (n.nodeType === 3) own += n.nodeValue;
     own = own.replace(/\\s+/g, ' ').trim();
 
-    const style = {};
-    for (const p of props) style[p] = cs[p];
     const box = { w: Math.round(r.width), h: Math.round(r.height),
                   x: Math.round(r.x), y: Math.round(r.y) };
 
     if (own) {
-      textual.push({ tag: el.tagName, text: own, style, ...box });
+      // The mock wraps button labels in bare <span class="ko|en"> for its
+      // language switcher; the app puts the text straight in the <button>.
+      // Comparing that span against the app's button reports the button's own
+      // padding/background/radius as differences that do not exist. So when an
+      // element is a styleless wrapper, attribute its text to the nearest
+      // ancestor that actually carries styling.
+      let host = el;
+      for (let i = 0; i < 3; i++) {
+        const hs = getComputedStyle(host);
+        const bare = hs.backgroundColor === 'rgba(0, 0, 0, 0)' &&
+                     hs.padding === '0px' && hs.borderWidth === '0px' &&
+                     (hs.borderRadius === '0px' || hs.borderRadius === '');
+        if (!bare || !host.parentElement) break;
+        const p = host.parentElement;
+        // only climb while the parent's text is still just this text
+        if ((p.innerText || '').replace(/\\s+/g, ' ').trim() !== own) break;
+        host = p;
+      }
+      const hstyle = {};
+      const hcs = getComputedStyle(host);
+      for (const p of props) hstyle[p] = hcs[p];
+      textual.push({ tag: host.tagName, text: own, style: hstyle, ...box });
       continue;
     }
+
+    const style = {};
+    for (const p of props) style[p] = cs[p];
     // Iconic: an element that owns exactly one <svg>, or is one. Key on the
     // concatenated `d`/shape attributes — stable across mock and app.
     let svg = null;
