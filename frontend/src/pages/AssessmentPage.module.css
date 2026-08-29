@@ -1,14 +1,8 @@
-/* height, NOT min-height: body is height:100vh; overflow:hidden (viewport-lock,
-   CLAUDE.md § Frontend Conventions). With min-height the flex column grows past
-   the viewport, so no descendant ever gets a scroll box and overflowing content
-   is clipped unreachable — the result screen (48px type code + 200px chart +
-   two buttons) overflows on a short viewport. */
 .page {
-  height: calc(100vh - 64px);
+  min-height: calc(100vh - 64px);
   background: var(--color-bg);
   display: flex;
   flex-direction: column;
-  min-height: 0;
 }
 
 /* Header */
@@ -21,7 +15,8 @@
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--color-border);
-  flex-shrink: 0;
+  position: sticky;
+  top: 0;
   z-index: 10;
 }
 
@@ -62,7 +57,6 @@
 
 /* Progress bar */
 .progressTrack {
-  flex-shrink: 0;
   height: 3px;
   background: var(--color-surface-3);
   position: relative;
@@ -87,15 +81,12 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  /* `safe` drops to start-alignment when content overflows, so the top of the
-     deck never scrolls out of reach — plain `center` would clip it. */
-  justify-content: safe center;
+  justify-content: center;
   padding: 24px 16px 32px;
   width: 100%;
   margin: 0 auto;
   gap: 16px;
   min-height: 0;
-  overflow-y: auto;
 }
 
 /* Previous-question control — text button under the deck. */
@@ -212,8 +203,6 @@
   max-width: 480px;
   width: 100%;
   margin: 0 auto;
-  min-height: 0;
-  overflow-y: auto;
 }
 
 .typeCode {

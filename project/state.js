@@ -23,7 +23,7 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-08-29 10:41 KST',
+    updatedAt: '2026-08-25 00:29 KST',
     head: 'bc40fbf',
     branch: 'feature/sns-assessment-swipe-card',
   },
