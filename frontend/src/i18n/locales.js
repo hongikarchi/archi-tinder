@@ -29,6 +29,11 @@ export const locales = {
       toastNotEnoughLikes: '좋아요가 부족합니다 (최소 10개)',
       toastAnalysisFailed: 'Taste 분석 시작 실패 — 다시 시도해주세요',
       toastSaveFailedLeave: 'Taste 세션 저장 실패 — 그냥 이동합니다',
+      loadError: 'Discovery를 불러오지 못했습니다. 탭해서 다시 시도하세요.',
+      retry: '다시 시도',
+      emptyTitle: '아직 보여드릴 항목이 없어요',
+      startAnalysis: 'Taste 분석 시작',
+      swipeHintBar: '← 패스 · 카드 탭 · 좋아요 →  ·  방향키 지원',
       triggerCard: {
         title: '취향이 10장 모였어요',
         bodyLine1: '지금까지 좋아요한 건축들로',
@@ -531,6 +536,11 @@ export const locales = {
       toastNotEnoughLikes: 'Not enough likes (minimum 10)',
       toastAnalysisFailed: 'Failed to start Taste analysis — please try again',
       toastSaveFailedLeave: 'Failed to save Taste session — leaving anyway',
+      loadError: 'Couldn\'t load Discovery. Tap to retry.',
+      retry: 'Retry',
+      emptyTitle: 'Nothing to show yet',
+      startAnalysis: 'Start Taste Analysis',
+      swipeHintBar: '← skip · tap card · save →  ·  arrow keys supported',
       triggerCard: {
         title: 'You\'ve liked 10 buildings',
         bodyLine1: 'Based on what you\'ve liked so far,',
