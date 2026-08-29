@@ -15,12 +15,26 @@ Candidate pool construction (ORDER MATTERS — do not reorder):
   1. Filter:  discovery_opt_in=True, exclude requester, exclude is_guest=True.
   2. Work filter: further restrict to users who have at least one
                   is_publishable=True Work (owner_id set intersection).
+  2b. Report-image filter: further restrict to users who have at least one
+                  visibility='public' Project carrying a report_image. The
+                  feed card's front face IS that image, so a user without one
+                  would render an empty card (FRONT-PEOPLE-CARD-1).
   3. Safety cap: [:500] applied BEFORE any Python-side calculation.
   4. Distance:   Euclidean distance computed in Python for each candidate.
   5. Sort:       ascending distance ('inspired') or descending ('opposite').
   6. Top 15:     slice, then random.shuffle() for feed freshness.
 
 403 is returned when the requester has no PersonalityProfile yet.
+
+GET /api/v1/people/<user_id>/report-image/
+
+Serves one candidate's taste-report image. Split off the feed response on
+purpose: Project.report_image is base64 TEXT in the DB, and inlining ~15 of
+them would balloon a single feed payload into megabytes. The feed returns a
+`report_image_url` pointer instead and each card fetches lazily.
+
+Only `visibility='public'` projects are eligible — private taste reports never
+leave their owner.
 """
 import math
 import random
@@ -32,6 +46,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.models import PersonalityProfile, UserProfile
+from apps.recommendation.models import Project
 from apps.works.models import Work
 
 logger = logging.getLogger('apps.social')
@@ -178,6 +193,19 @@ class PeopleDiscoveryView(APIView):
         )
         base_qs = base_qs.filter(user_id__in=publishable_owner_ids)
 
+        # -- Step 2b: restrict to users with a public taste-report image ------
+        # The card's front face is this image; a user without one renders an
+        # empty card. Mirrors the Work gate above — set intersection, no join.
+        report_image_owner_ids = set(
+            Project.objects
+            .filter(visibility='public')
+            .exclude(report_image__isnull=True)
+            .exclude(report_image='')
+            .values_list('user_id', flat=True)
+            .distinct()
+        )
+        base_qs = base_qs.filter(user_id__in=report_image_owner_ids)
+
         # -- Step 3: safety cap BEFORE distance calculation -------------------
         candidates = list(base_qs[:_CANDIDATE_CAP])
 
@@ -211,9 +239,47 @@ class PeopleDiscoveryView(APIView):
                 'highlight_axis': h_axis,
                 'reason': _reason_copy(my_vec, their_vec),
                 'distance': round(dist, 4),
+                # Pointer, not payload — see module docstring.
+                'report_image_url': f'/api/v1/people/{user_profile.user_id}/report-image/',
             })
 
         return Response({
             'results': results,
             'my_vector': my_vec,
+        })
+
+
+class PeopleReportImageView(APIView):
+    """GET /api/v1/people/<user_id>/report-image/ — one candidate's report image.
+
+    Returns the most recently updated PUBLIC project's report image for that
+    user. 404 when the user has none public — callers treat that as "no image"
+    and fall back, they do not retry.
+
+    `user_id` is the auth User id — the same id `/api/v1/users/<user_id>/`
+    takes and the feed emits. Project.user points at UserProfile, whose OWN
+    `user_id` column is the auth User FK, hence the `user__user_id` traversal.
+    Filtering on Project.user_id directly would silently match the wrong
+    person (that column holds UserProfile.id).
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, user_id):
+        project = (
+            Project.objects
+            .filter(user__user_id=user_id, visibility='public')
+            .exclude(report_image__isnull=True)
+            .exclude(report_image='')
+            .order_by('-updated_at')
+            .values('report_image', 'report_image_mime')
+            .first()
+        )
+        if project is None:
+            return Response(
+                {'detail': 'No public report image for this user.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response({
+            'image_data': project['report_image'],
+            'mime_type': project['report_image_mime'] or 'image/png',
         })

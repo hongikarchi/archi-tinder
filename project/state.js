@@ -23,11 +23,24 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-08-25 00:29 KST',
-    head: 'bc40fbf',
-    branch: 'feature/sns-assessment-swipe-card',
+    updatedAt: '2026-08-29 11:18 KST',
+    head: 'b8b4f46',
+    branch: 'pr314-resolve',
   },
   done: [
+    {
+      id: 'FRONT-PEOPLE-CARD-3',
+      title: '/people 카드를 report 추천 타일 규격으로 축소 + 스크롤 버그',
+      completedAt: '2026-08-29',
+      prs: [314],
+      note: 'user 지적: 카드가 너무 커서 한 화면에 몇 장 안 보임 → report 생성 후 추천 그리드와 같은 타일로 통일',
+    },
+    {
+      id: 'FRONT-PEOPLE-CARD-1',
+      title: '/people 발견 카드 이미지 앞면 + flip 상세',
+      completedAt: '2026-08-26',
+      note: '카드 구조 교체: 앞면 = 취향분석 리포트 건축 이미지 전면(그래프/이름/아바타 제거), 탭 시 flip → 뒷면에 성향 그래프 + 내 벡터 오버레이 + 범례 + 이름(클릭 시 프로필 이동)',
+    },
     {
       id: 'FRONT-ASSESSMENT-1',
       title: '성향 진단 진입 버그 + 문항 스와이프 카드화',
@@ -65,19 +78,6 @@ window.PROJECT_STATE = {
       title: '스와이프 온보딩 3연타 인터럽트 정리',
       completedAt: '2026-08-15',
       note: 'B1 검토 중 user 발견/결정 3건 이행: 신규 유저 Discovery→Taste 시퀀스의 연속 인터럽트(TriggerCard→TutorialPopup→DismissConfirm) 정리',
-    },
-    {
-      id: 'FRONT-DESIGN-B1',
-      title: '로그인+프로필 비주얼 튜닝',
-      completedAt: '2026-08-15',
-      note: '디자인 4단계 이니셔티브(B1→A1→B2→A2, `.claude/plans/design-clever-valley.md`)의 B1: 시스템 내 리파인, 컨셉 교체 없음',
-    },
-    {
-      id: 'UPLOAD-NAV-1',
-      title: '업로드 성공 모달 + Created 탭 이동',
-      completedAt: '2026-08-14',
-      prs: [300],
-      note: '_(yywon1 ad-hoc PR — Task ID 없이 들어와 사후 부여. 업로드 완료 인라인 메시지 → 확인 모달 + `/user/me?tab=created` 이동.)_',
     },
   ],
   now: [
@@ -123,6 +123,11 @@ window.PROJECT_STATE = {
       },
     ],
     medium: [
+      {
+        id: 'FRONT-PEOPLE-CARD-2',
+        title: '발견 피드가 실데이터에서 빈 화면',
+        note: 'FRONT-PEOPLE-CARD-1이 카드 앞면을 취향분석 리포트 이미지로 바꾸면서 피드 조건이 4중이 됨(진단 완료 + discovery_opt_in + publishable Work + public report_image). 로컬 DB 실측: 29명 중 진단 완료 2명, 그 2명이 전부 게스트라 2단계에서 이미 0명이 되고, `report_image` 보유 프로젝트는 공개 여부 무관 0건. 프로덕션도 같은 상태면 배포 후 빈 화면. 결정 필요: (a) 이미지 없는 유저는 Work 커버로…',
+      },
       {
         id: 'FRONT-ASSESSMENT-2',
         title: '진단 카드 reduced-motion 정책 충돌',
@@ -254,6 +259,20 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 313,
+      title: 'feat(assessment): 성향 진단 문항을 스와이프 카드로 전환',
+      mergedAt: '2026-08-29T02:17:12Z',
+      mergedAtKST: '2026-08-29 11:17 KST',
+      sha: 'b8b4f46',
+    },
+    {
+      number: 312,
+      title: 'fix(routing): /assessment, /people 진입이 discovery로 튕기던 문제',
+      mergedAt: '2026-08-29T02:16:13Z',
+      mergedAtKST: '2026-08-29 11:16 KST',
+      sha: '2e358b7',
+    },
+    {
       number: 311,
       title: 'feat(FULL-DISCOVERY-1): 성향 기반 유저 발견 — 4+1축 진단·발견 피드·5각형 차트',
       mergedAt: '2026-08-22T01:44:14Z',
@@ -294,20 +313,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-08-15T03:26:37Z',
       mergedAtKST: '2026-08-15 12:26 KST',
       sha: 'ab4ac47',
-    },
-    {
-      number: 305,
-      title: 'feat(FRONT-DESIGN-B1): login+profile visual tuning — tokens, :hover modules, de-drift',
-      mergedAt: '2026-08-15T01:53:00Z',
-      mergedAtKST: '2026-08-15 10:53 KST',
-      sha: '25ee29d',
-    },
-    {
-      number: 303,
-      title: 'chore(works-audit): PR #300 Done entry + FULL-WORKS-4 ticket',
-      mergedAt: '2026-08-14T13:34:10Z',
-      mergedAtKST: '2026-08-14 22:34 KST',
-      sha: '167be38',
     },
   ],
   agents: [
@@ -576,6 +581,14 @@ window.PROJECT_STATE = {
     {
       path: 'README.md',
       role: '프로젝트 안내 문서',
+    },
+    {
+      path: 'Task.md',
+      role: '태스크 보드 문서',
+    },
+    {
+      path: 'Task.md',
+      role: '태스크 보드 문서',
     },
     {
       path: 'Task.md',
@@ -2062,6 +2075,10 @@ window.PROJECT_STATE = {
       role: '공통 stroke 아이콘 세트',
     },
     {
+      path: 'frontend/src/components/photoCardShell.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/components/profile/ArticleCard.jsx',
       role: '프로필 아티클 카드',
     },
@@ -2532,6 +2549,14 @@ window.PROJECT_STATE = {
     {
       path: 'project/mermaid.min.js',
       role: 'Mermaid 다이어그램 번들',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
     },
     {
       path: 'project/state.js',

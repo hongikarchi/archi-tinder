@@ -164,6 +164,9 @@ _(2026-06-08 범위 축소: #212(`4e58195`) Case #3 resume guard가 **진행중(
 _(2026-07-12 감사 re-pin: 전제 유효, 라인 이동 — resume guard `session_service.py:167-182`(completed 제외), 신규 세션 cold-create `:397-416`(phase='exploring', like_vectors=[] 등 전부 빈 값), `liked_ids`는 완료-세션 리포트에만 사용(`:688-689`), warm-start seed 경로 여전히 부재.)_
 
 ### MEDIUM
+#### FRONT-PEOPLE-CARD-2 — 발견 피드가 실데이터에서 빈 화면
+FRONT-PEOPLE-CARD-1이 카드 앞면을 취향분석 리포트 이미지로 바꾸면서 피드 조건이 4중이 됨(진단 완료 + discovery_opt_in + publishable Work + public report_image). 로컬 DB 실측: 29명 중 진단 완료 2명, 그 2명이 전부 게스트라 2단계에서 이미 0명이 되고, `report_image` 보유 프로젝트는 공개 여부 무관 0건. 프로덕션도 같은 상태면 배포 후 빈 화면. 결정 필요: (a) 이미지 없는 유저는 Work 커버로 대체, (b) Step 2b 필터 제거하고 앞면 플레이스홀더 허용, (c) 조건 유지하고 리포트 이미지 생성 유도 플로우를 먼저 붙이기.
+
 #### FRONT-ASSESSMENT-2 — 진단 카드 reduced-motion 정책 충돌
 FRONT-ASSESSMENT-1(PR #313)이 요구사항대로 `prefers-reduced-motion`에서 슬라이드 대신 페이드로 축소했으나, FRONT-UX-14-R7이 "스와이프 퇴장·갤러리 이동 같은 **인터랙션 피드백** 모션은 reduced-motion을 의도적으로 무시한다(장식성 CSS 모션만 존중)"를 제품 결정으로 확정해 둔 상태 — 진단 카드 퇴장은 그 정의상 인터랙션 피드백이므로 현재 두 화면의 정책이 갈림. 결정 필요: (a) 진단도 무시로 통일해 `exiting`/`entering` 분기 제거, (b) 현행 유지하고 R7 결정을 "덱 스와이프 한정"으로 좁혀 명문화. PR #313에 검토 요청으로 명시함.
 
@@ -296,6 +299,26 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FRONT-PEOPLE-CARD-3 — /people 카드를 report 추천 타일 규격으로 축소 + 스크롤 버그 — RESOLVED 2026-08-29 (`416e891`, PR #314)
+- user 지적: 카드가 너무 커서 한 화면에 몇 장 안 보임 → report 생성 후 추천 그리드와 같은 타일로 통일
+- **재사용 시도의 실제 결과**: `ResultsPage`의 `ResultCard`는 컴포넌트화돼 있지 않음(로컬 함수, export 없음) → import 불가. 측정값을 `photoCardShell.js`로 추출하고 `ResultCard`도 그걸 참조하도록 리팩터링(값 동일, 시각 변화 0). 이제 추천 타일 디자인 변경이 `/people`에 자동 전파
+- 공유 값: `aspect 2/3` · `radius 12` · `--color-border-soft` · `0 18px 42px rgba(0,0,0,.35)` · scrim `to top .94/.52(48%)/.08` · caption `10px/700` + `9px italic`
+- 앞면 배치도 추천 타일 언어로: 타입 칩 = `#rank` 자리(좌상단), 관심 버튼 = 북마크 별 자리(우상단 원형). 뒷면은 그래프+범례+이름만 남기고 추천 이유 제거(타일 폭에서 4~5줄로 감겨 그래프를 밀어냄)
+- 그리드는 **4/3/2 반응형** — `ResultsPage`는 4열 고정이지만 그대로 쓰면 390px에서 타일이 86px이 되어 뒤집힌 차트가 판독 불가
+- **스크롤 버그 수정 (#311부터 존재)**: `.page`가 `min-height`라 flex 컬럼이 내용만큼 늘어나 `.content`의 `overflow-y`가 발동하지 않았고, `body`(`height:100vh;overflow:hidden`)에 잘려 접근 불가였음. `height`로 교체 + `.content min-height:0` + 상단 영역 `flex-shrink:0`. CLAUDE.md 뷰포트 락 규약과 일치. 피드가 비어 있던 동안 드러나지 않다가 시드 유저 투입 후 발견
+- **실데이터 검증 완료**: 로컬 시드 유저 5명(진단+publishable Work+public report_image 충족)으로 피드 조회→카드 렌더→flip→오버레이 그래프→프로필 이동까지 브라우저 확인. `GET /people/<id>/report-image/`도 200/404 동작 확인
+- Deferred: `AssessmentPage`에 동일한 `min-height` 스크롤 버그 존재 — PR #313 소관이라 미수정
+
+### FRONT-PEOPLE-CARD-1 — /people 발견 카드 이미지 앞면 + flip 상세 — RESOLVED 2026-08-26 (`c58504e`, PR 리뷰 대기)
+- 카드 구조 교체: 앞면 = 취향분석 리포트 건축 이미지 전면(그래프/이름/아바타 제거), 탭 시 flip → 뒷면에 성향 그래프 + 내 벡터 오버레이 + 범례 + 이름(클릭 시 프로필 이동)
+- **재사용 우선 원칙 적용**: flip은 `BioPersonaFlipCard`/`SwipeCard` 갤러리 면과 동일 기법 — 세 곳이 리터럴로 갖고 있던 `0.5s cubic-bezier(0.4,0,0.2,1)`이 `--motion-flip`/`--motion-ease` 토큰과 일치해 토큰 참조로 전환. 그래프 오버레이는 `PentagonChart`에 **이미 구현돼 있어** 신규 작업 불필요(myVector 실선 accent-1 + theirVector 점선 accent-2). 프로필 이동은 기존 `navigate('/user/<id>')` 유지
+- 신규 ①: `PentagonChart` `legend` prop — 범례만 없었음. 별도 컴포넌트 대신 기존 컴포넌트 확장, 범례 선 스타일은 polygon stroke 미러링(색 드리프트 차단). 루트를 `<svg>`로 유지해 기존 호출부 3곳 무영향
+- 신규 ②: `GET /people/<user_id>/report-image/` — `Project.report_image`는 base64 TEXT라 피드에 15개 인라인하면 응답이 MB 단위. 피드는 `report_image_url` 포인터만 주고 카드가 lazy 로드. `visibility='public'` 프로젝트만 대상(비공개 리포트 미노출)
+- 함정: URL/피드의 `user_id`는 auth User id, `Project.user_id`는 UserProfile.id — 엔드포인트는 `user__user_id` 순회 필수. 직접 비교하면 **다른 사람 이미지가 매칭됨**
+- 요구사항 "진단 안 한 유저 제외"는 기존 쿼리셋(`PersonalityProfile` 기반)이 이미 충족 — 추가 작업 없었음
+- 미검증(중요): 로컬 DB에 표시 가능한 데이터가 0건이라 **브라우저 실물 확인 불가**. 진단 완료 2명이 전부 게스트라 `exclude(is_guest=True)`에서 탈락(이번 변경 이전부터 그러함), `report_image` 보유 프로젝트는 공개 여부 무관 0건. 로컬 전용 목 모드로만 렌더 확인
+- Deferred: `report_image` 보유 유저가 없으면 배포 후에도 피드가 빈 화면 — Step 2b 필터 유지 여부 결정 필요
+
 ### FRONT-ASSESSMENT-1 — 성향 진단 진입 버그 + 문항 스와이프 카드화 — RESOLVED 2026-08-25 (`968194f` + `51936b8`, PR #312/#313 리뷰 대기)
 - 진단 문항을 **질문 1개 = 카드 1장** 스와이프 카드로 전환. 답변 방식(5점 Likert 버튼)은 유지하고 카드 디자인·전환 애니메이션만 Discovery/Taste 덱과 동일 시스템으로 통일
 - ① 진입 버그(PR #312, `968194f`): `assessment`/`people` 두 라우트만 `ProtectedRoute` **중복 래핑 + 안쪽에 `userId` 미전달** → `!userId` 항상 참 → `/login` → 로그인 상태라 `/` → index → `/discovery`. **로그인했기 때문에 오히려 튕기는** 구조. 바깥 레이아웃 라우트가 이미 가드하므로 안쪽 래퍼 제거(보호 유지, 형제 라우트와 일관)

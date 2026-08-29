@@ -43,21 +43,10 @@ function Toast({ message, onDismiss }) {
   )
 }
 
-// Skeleton card placeholder
+// Skeleton card placeholder — one image-shaped block, matching the card's
+// report-image front face (FRONT-PEOPLE-CARD-1).
 function PersonCardSkeleton() {
-  return (
-    <div className={styles.skeleton} aria-hidden="true">
-      <div className={styles.skelHeader}>
-        <div className={styles.skelAvatar} />
-        <div className={styles.skelLines}>
-          <div className={styles.skelLine} style={{ width: '55%' }} />
-          <div className={styles.skelLine} style={{ width: '35%' }} />
-        </div>
-      </div>
-      <div className={styles.skelChart} />
-      <div className={styles.skelLine} style={{ width: '80%' }} />
-    </div>
-  )
+  return <div className={`${styles.skeleton} skeleton-shimmer`} aria-hidden="true" />
 }
 
 export default function PeopleDiscoveryPage() {
@@ -216,7 +205,7 @@ export default function PeopleDiscoveryPage() {
         {/* Loading skeletons */}
         {loading && !error && (
           <div className={styles.feed}>
-            {Array.from({ length: 4 }, (_, i) => <PersonCardSkeleton key={i} />)}
+            {Array.from({ length: 8 }, (_, i) => <PersonCardSkeleton key={i} />)}
           </div>
         )}
 
