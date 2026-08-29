@@ -378,7 +378,7 @@ breakpoint-desktop-min: 769   # ≥ 769px → desktop layout
 Main action buttons (core CTAs like sign-up / share / purchase).
 
 ```css
-background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+background: var(--accent-1);
 color: #fff;
 border: 0;
 border-radius: calc(var(--radius-md) * 1px);
@@ -387,6 +387,18 @@ font-weight: 600;
 min-height: 44px;
 transition: transform 0.22s, background-color 0.22s, box-shadow 0.4s ease-out;
 ```
+
+> **Changed 2026-08-29 — flat, was `linear-gradient(135deg, var(--accent-1), var(--accent-2))`.**
+> User decision during the canvas design port: of the 37 Claude Design boards,
+> **34 draw the primary CTA as flat `var(--accent-1)` and none use the
+> gradient** (the other 3 — `discovery`, `overlay-card-skeleton`,
+> `overlay-swipecard-expanded` — contain no CTA button at all). The gradient is
+> retired as the CTA background. Existing gradient
+> call sites (31 occurrences across 22 files as of this date) migrate to flat
+> **inside their own host-page PR**, so each change is seen before it ships —
+> not in one sweep. Interaction spec below (`:active` glow, transitions) is
+> unchanged. The gradient itself remains valid elsewhere (e.g. decorative
+> surfaces); this rule governs the CTA background only.
 
 **Click moment (`:active`) — glow shadow**
 Like the input focus pattern (§8.5), the glow appears instantly on click and
@@ -399,7 +411,7 @@ fades out over 0.4s.
 }
 ```
 
-- When the theme changes, the gradient colors change with it.
+- When the theme changes, the accent color changes with it.
 - Applied to: Persona "View persona report", Discovery ♥ (Save), AI Search chat
   send ↑.
 - Buttons that already have a depth shadow (e.g. Discovery ♥) stack both

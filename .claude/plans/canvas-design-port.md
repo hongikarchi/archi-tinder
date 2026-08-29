@@ -1,6 +1,13 @@
 # Canvas Design Port — Claude Design → Frontend Code
 
-**Status:** approved by user 2026-08-29 — executing, PR-0 in progress
+**Status:** approved by user 2026-08-29 — executing. PR-0 + PR-1 committed locally.
+
+**Mode change (user, 2026-08-29):** the user could not run the dev server, and chose to **build all PRs first and review visually afterward**. Consequences, all deliberate:
+- **Every PR stays LOCAL** — branch + commit only. No push, no PR open, no merge, for any of them, until the user reviews and says which to ship. `develop` stays clean.
+- The pilot's validate-then-fan-out loop is replaced by the §6c defect map: a full static scan of `frontend/src` done up front, so each PR burns down a concrete checklist instead of relying on an eyeball pass that has not happened.
+- Per-PR gates (lint / build / code-review, + security where the surface warrants) still run. They catch regressions, not taste.
+- Each PR must end with a **"needs eyeball" list**: judgment calls made, places the mock was deliberately not followed, and anything with uncertain contrast. That list is what the user reviews later instead of re-deriving it.
+- PRs stay one-per-page-group. Do not consolidate — separate branches are what makes "ship these, redo that one" possible after the review.
 **Created:** 2026-08-29
 **Source:** Claude Design project "Archibe Front Design" (`2d94fa98-05e3-4678-8857-ac0a1ea563cc`)
 **Local pull:** `<scratchpad>/design-pull/canvas/boards-desktop/*.html` (37/41 assembled) + `pull-report.md`
@@ -39,6 +46,9 @@ PR-0에서 scrim 토큰을 먼저 깔고, ResultsPage로 파이프라인을 검�
 2. **scrim tokens → add to `tokens.css`.** New `--color-scrim-*` family with derived values for all 4 themes, plus swap the 4 literals that duplicate existing token values. Lands as PR-0 so page PRs consume a stable token set.
 3. **Pilot page → `ResultsPage`** (user override of the initial discovery recommendation; chosen for its high text/visual density).
 4. **`/assessment`, `/people` → apply common patterns only.** No canvas design exists, so port only the mechanically-derived shared patterns (scrim tokens, card/list styling, spacing rules) to keep all 41 pages tonally consistent. Do **not** invent layout or copy. Note in the PR description that design intent was unverified for these two.
+5. **Primary CTA is FLAT `var(--accent-1)`, not the gradient** (user, 2026-08-29). Evidence: of the 37 pulled boards, **34 draw the CTA as flat `var(--accent-1)` and ZERO use `linear-gradient(135deg, var(--accent-1), var(--accent-2))`**; the remaining 3 (`discovery`, `overlay-card-skeleton`, `overlay-swipecard-expanded`) contain no CTA button at all, so the flat rule is unanimous among boards that have one. The user confirmed this was deliberate. `DESIGN.md` §8.1 updated accordingly (interaction spec unchanged). The 31 existing gradient call sites across 22 files migrate **per host-page PR**, never in a sweep — same discipline as the modal scrims.
+6. **ResultsPage gets `max-width: 680px` centered content** (user, 2026-08-29). A deliberate, user-authorized exception to translation rule 4 (no layout change). Intent stated as "BoardReportPage처럼 양쪽에 여백" — and `BoardReportPage.module.css` `.container` is already `max-width: 680px; margin: 0 auto`, so the mock's 680px is *parity with an existing page*, not a new desktop-only layout. Mirror the existing value rather than the mock's.
+7. **Tag chips follow the accent series** (user, 2026-08-29 — "버그 수정해줘"). `dominant_programs` already uses `--accent-1` at 10%/22%; `dominant_styles` moves from hardcoded Tailwind indigo-500 to `--accent-2` at the same percentages; `dominant_materials` moves from `rgba(255,255,255,0.06)` (invisible on light themes — a real bug) to `--color-tag-bg` / `--color-tag-border`.
 
 ---
 
@@ -66,6 +76,14 @@ Existing tokens hardcoded **in the mocks** (swap when porting mock markup — se
 | `#E1E4E8` | `var(--color-surface-3)` (or `--color-user-bubble` / `--color-progress-track` by context) |
 | `#e6edf3` | `var(--color-text)` (github-dark value — the mock froze a dark-theme color) |
 | `#3D4047` | `var(--color-text)` (ayu-light value — same) |
+
+### Standard conversions (apply on every page)
+
+| From | To | Note |
+|---|---|---|
+| `linear-gradient(135deg, var(--accent-1), var(--accent-2))` **on a CTA background** | `var(--accent-1)` | Decision ⑤. Preserve any disabled-state branch (`--color-surface-2` etc.) — convert only the enabled background. The gradient stays legal on non-CTA decorative surfaces. |
+| `#ec4899` (Tailwind pink-500) | the appropriate accent token, usually `var(--accent-1)` | Pre-token legacy. 13 occurrences remain across 10 files after PR-1. |
+| `rgba(255,255,255,0.0X)` used as a **surface wash** | `var(--color-tag-bg)` or the right surface token | Dark-theme-assumed; renders invisible on light themes. Not to be confused with on-photo whites, which stay literal. |
 
 ### Exemptions — literals that are CORRECT and must NOT be tokenized
 
@@ -148,6 +166,15 @@ Add the `--color-scrim-*` family to `frontend/src/tokens.css` for all 4 themes, 
 
 1. Session fetches any missing board → writes to `<scratchpad>/design-pull/canvas/boards-desktop/`.
 2. Session branches off `develop`: `git checkout develop && git pull && git checkout -b feature/claude-design-<topic>`. **Never `git add` on `develop`** — this plan file included; it gets committed from PR-0's branch.
+
+   **SUPERSEDED 2026-08-29 — `feature/claude-design-scrim-tokens` is the BASE BRANCH for the whole initiative.** Every page branch forks from it, never from `develop`. Three hard reasons, each a silent failure otherwise:
+   1. Page PRs consume `--color-scrim-*`. On a develop-based branch those variables do not exist, so the declaration is invalid and the background silently falls back to transparent — no error, no lint failure.
+   2. The `code-review` gate reads `DESIGN.md` from the working tree. On a develop-based branch §8.1 still mandates the gradient, so the reviewer flags every correct flat-CTA conversion as a violation.
+   3. Dispatches instruct the maker to read `.claude/plans/canvas-design-port.md`. That file does not exist on `develop`.
+
+   **Docs discipline:** `DESIGN.md` and this plan are edited ONLY on the base branch, between page PRs (finish PR-N → switch to base → record findings → commit → fork PR-N+1). Page branches touch `frontend/` only. Otherwise 12 branches each edit this file and every one conflicts at publish time.
+
+   **Publish-time consequence** (dormant during the local-only phase): the base branch merges to `develop` first — it carries PR-0's tokens plus the docs — then each page branch rebases onto fresh `develop` before its PR opens. The old "retarget before the parent merges" note generalizes to every child. PR-1 (`feature/claude-design-results`) already carries doc commits; they dedupe to empty hunks on rebase.
 3. Session dispatches `front-maker` (sonnet) with: board HTML **file path** (not content), target JSX paths, §3 translation rules verbatim, §4 reverse map, and the page-specific notes from the table above.
 4. Gate: eslint + build + `code-review` + `security-manager`. `app-test` skipped except the swipe PR (standing policy: 4-gate stack PASS → skip with inline drift check).
 5. **User eyeballs the dev server** (`cd frontend && npm run dev`) before the publish gate. This loop is per-PR and non-negotiable — the whole point is visual work verified visually.
@@ -155,10 +182,73 @@ Add the `--color-scrim-*` family to `frontend/src/tokens.css` for all 4 themes, 
 
 ---
 
+## 6b. Findings from PR-1 (carry into later PRs)
+
+- **The mocks faithfully reproduce existing bugs.** The canvas rendered real develop screens, so a literal in a mock may simply be a copy of a literal already in the code — not a design decision. Never treat "the mock does X" as intent without checking whether the code already did X.
+- **`rgb(99,102,241)` = `#6366F1` = Tailwind indigo-500.** A pre-token-system leftover, not a palette color. Appears on PersonaReport's `dominant_styles` chips. Same class as `#ec4899` (Tailwind pink-500), which still has 15 occurrences across 10 files (TabBar, profile cards, LikedProjectsPage, BuildingTile, buildingDetail/Header, UserProfilePage.module.css). Treat any Tailwind-default hex found in this codebase as legacy to tokenize, not as design.
+- **`rgba(255,255,255,0.0X)` surface washes are a light-theme bug pattern.** They assume a dark ground. On `github-light` / `ayu-light` this renders white-on-white — an invisible element. Correct fix is `var(--color-tag-bg)` (or the appropriate surface token), which is already defined per-theme with black-alpha on light themes. Confirmed occurrences beyond PR-1: `profile/BoardCard.jsx`, `profile/ProjectCard.jsx`, `SaveToBoardModal.jsx` ×2, `SurpriseBoardModal.jsx` ×4, `SwipeCard.jsx`. Fix each inside its host page's PR.
+- **Chip styling series:** `dominant_programs` uses `color-mix(… var(--accent-1) 10%/22%)`; `dominant_styles` should follow with `--accent-2` at the same percentages; `dominant_materials` should use `--color-tag-bg` / `--color-tag-border`. Pending user decision.
+- **A wrapping element added late does NOT get its children re-indented.** ResultsPage's `max-width: 680px` wrapper encloses ~218 lines; re-indenting them would bury a 3-line semantic change under 200 lines of whitespace in a squashed PR diff, defeating the per-PR visual review this plan is built on. Lint enforces no indent rule here. Same call applies to any later PR that adds a container element.
+- **Verify a dispatch's premise before the maker does.** PR-1's dispatch wrongly claimed PersonaReport lacked a pentagon chart; it already had a local `RadarChart` matching the mock exactly, and the `PentagonChart.jsx` the dispatch named renders a *different taxonomy* (assessment axes 작업방식/역할성향/… via a hardwired `AXIS_LABELS` import), so following the instruction would have shipped work-style labels over taste data. The maker caught it. Check component internals, not just names, when writing a dispatch.
+
+## 6c. Defect map — the checklist each page PR burns down
+
+Produced by a full static scan of `frontend/src` on 2026-08-29, BEFORE fanning out.
+
+> **⚠️ Counts revised upward 2026-08-29 (at PR-2 start) — the first scan undercounted every pattern.** It used whitespace-exact regexes and so missed the `var(--accent-1, #0969DA)` fallback form and the spaced `rgba(255, 255, 255, …)` form. **Always grep whitespace-tolerant**: `linear-gradient(135deg, *var(--accent-1`, `rgba(255, *255, *255, *0\.0[0-9])`, `#ec4899`.
+>
+> | Pattern | First scan | Corrected |
+> |---|---|---|
+> | Gradient CTA | 30 | **37** |
+> | White wash | 13 | **22** raw (19 excluding `tokens.css`'s own 3 definitions) |
+> | `#ec4899` | 13 | **17** |
+>
+> Files the first scan missed entirely: `layouts/MainLayout.jsx`, `pages/LikedOfficesPage.jsx`, `pages/DiscoveryPage.jsx` (4 gradient sites), `pages/firmProfile/FirmProfileHeader.module.css`, `pages/firmProfile/FirmProfileHero.jsx`.
+>
+> **These counts were measured on a develop-based tree, i.e. they are PRE-PR-1.** The results branch already clears: `PersonaReport.jsx`'s gradient (line 415), its materials-chip white wash, and 2 `#ec4899` sites. Do not hunt those again. **Re-run the corrected greps at the start of each PR** rather than trusting any number written here.
+>
+> `layouts/MainLayout.jsx`'s gradient belongs to the **swipe PR** (MainLayout wraps `/swipe`); `pages/LikedOfficesPage.jsx` is the confirmed orphan (see §7) — leave it. Because the user chose to run all PRs before doing a visual pass, each PR works this list rather than relying on eyeballing the mock. **Every page PR must clear the entries for the files it owns**, and report anything it deliberately left.
+
+**A. Light-theme-invisible white washes** (`rgba(255,255,255,0.0X)` used as a surface background — renders white-on-white on `github-light`/`ayu-light`). Fix → `var(--color-tag-bg)` or the right surface token. **Not** to be confused with on-photo whites, which stay literal.
+
+| File | Count | PR |
+|---|---|---|
+| `components/profile/BoardCard.jsx` | 1 | boards |
+| `components/profile/ProjectCard.jsx` | 1 | profiles |
+| `components/SaveToBoardModal.jsx` | 2 | boards |
+| `components/SurpriseBoardModal.jsx` | 4 | boards |
+| `components/SwipeCard.jsx` | 1 | swipe |
+| `pages/boardDetail/BuildingTile.jsx` | 1 | boards |
+| `pages/boardDetail/RecommendedTile.jsx` | 1 | boards |
+| `pages/LLMSearchPage.jsx` | 2 | search |
+| `pages/ResultsPage.jsx` | 1 | **NOT a defect** — verified on-photo badge over a tile image; correctly stays literal |
+
+**B. Tailwind default-palette leftovers** (pre-token-system; no design intent — see §6b). `#ec4899` = pink-500, `#ef4444` = red-500, `#fbbf24` = amber-400, `#f43f5e` = rose-500, `#a78bfa` = violet-400, `#6366F1` = indigo-500 (resolved in PR-1).
+
+| Hex | Files | PR |
+|---|---|---|
+| `#ec4899` ×13 | `profile/ArticleCard.jsx(+css)`, `profile/BioPersonaFlipCard.jsx` ×4, `profile/BoardCard.jsx` ×2, `profile/ProjectCard.jsx`, `TabBar.jsx`, `boardDetail/BuildingTile.jsx` ×2, `buildingDetail/Header.jsx`, `LikedProjectsPage.jsx`, `UserProfilePage.module.css` | profiles / boards / building / **TabBar = its own follow-up** |
+| `#ef4444` | `PersonaReport.jsx`, `profile/BoardCard.jsx`, `BoardDetailPage.jsx`, `UserProfilePage.module.css` | boards / profiles |
+| `#fbbf24` | `DebugOverlay.jsx`, `buildingDetail/Header.jsx`, `ResultsPage.jsx` | building (DebugOverlay = dev-only, skip) |
+| `#f43f5e` | `profile/ArticleCard.module.css`, `profile/BioPersonaFlipCard.jsx`, `buildingDetail/Header.jsx`, `LikedProjectsPage.jsx` | profiles / building / boards |
+| `#a78bfa` | `DebugOverlay.jsx` | dev-only, skip |
+
+**C. Token values hardcoded** (the literal equals a token's value — swap to the `var()`):
+`#D73A49` → `var(--color-destructive)` (7 files) · `#0969DA` → `var(--accent-1)` (4) · `#8250DF` → `var(--accent-2)` (4) · `#F6F8FA` → `var(--color-surface)` (2) · `#8C959F` → `var(--color-text-dim)` (2).
+
+**D. Gradient CTA → flat `var(--accent-1)`** (decision ⑤), 30 sites across 21 files after PR-1: `App.jsx`, `Button.module.css`, `CalibrationChat.module.css`, `profile/BoardCard.jsx`, `SaveBoardModal.module.css`, `SaveToBoardModal.jsx` ×2, `ShareCardModal.jsx`, `SurpriseBoardModal.jsx` ×2, `ThemePreviewCard.jsx`, `ArchitectProfilePage.jsx` ×2, `AssessmentPage.module.css` ×2, `BoardDetailPage.jsx`, `BoardReportPage.jsx`, `firmProfile/FirmProfileHero.jsx` ×2, `LLMSearchPage.jsx`, `PeopleDiscoveryPage.module.css` ×2, `SwipePage.jsx` ×2, `UploadWorkPage.jsx`, `UploadWorkPage.module.css` ×2, `userProfile/ProfileHero.jsx`, `UserProfilePage.jsx` ×2.
+Only convert CTA **backgrounds** — check each site; the gradient stays legal on decorative surfaces. `ThemePreviewCard.jsx` needs the same scrutiny as `AppearanceSettings.jsx` (it may be showing a theme sample deliberately).
+
+**E. Hardcoded English UI strings.** PR-1 found axis labels frozen in English. Each PR must check its pages for user-visible text not routed through `t()`.
+
+**F. Theme-frozen hex** — scan found **zero** outside `AppearanceSettings.jsx` (intentional, exempt). No action.
+
 ## 7. Open items
 
-- `rgba(99,102,241,…)` indigo in `results.html` — resolve during PR-1.
-- `#fff` / on-photo white alpha policy — establish the rule in PR-1, then apply globally.
+- ~~`rgba(99,102,241,…)` indigo~~ **RESOLVED (PR-1)** — Tailwind indigo-500, pre-token legacy. Now `--accent-2` at the same 10%/22% percentages, mirroring the `--accent-1` programs chip.
+- ~~`#fff` / on-photo white alpha policy~~ **RESOLVED (PR-1)** — on-photo whites and photo-gradient literals stay literal (image-relative, not theme-relative); `rgba(255,255,255,0.0X)` used as a *surface wash* is a light-theme bug and becomes `--color-tag-bg` or the right surface token. Both rules are in §4.
+- ~~Whether any board exploits desktop width~~ **RESOLVED (PR-1, decision ⑥)** — `results.html` pairs `max-width:680px` with `repeat(4,1fr)`, i.e. deliberately narrower tiles (~158px at 1440 vs ~344px uncapped), and 680px is parity with `BoardReportPage`'s existing `.container`. Not desktop-exploitation; it is a centered reading column. Still flag per-PR if a later board differs.
 - 4 unfetched overlay boards — fetched lazily per host PR.
-- Whether any board genuinely exploits desktop width — flag per-PR as encountered.
+- **ayu-light accent-on-background contrast is weak system-wide** (surfaced by PR-1 review, NOT introduced by it). Accent-colored small text on ayu-light's near-white `#FCFCFC` ground measures roughly 2.3–2.5:1, below WCAG AA for small text: `--accent-1` `#FA8D3E` orange ≈ 2.3:1 (the already-shipped `dominant_programs` chip), `--accent-2` `#86B300` olive ≈ 2.5:1 (the `dominant_styles` chip as of PR-1). PR-1 mirrored the existing pattern rather than diverging from it, so this is a pre-existing theme characteristic, not a regression. Fixing it means either darkening ayu-light's accents in `tokens.css` (affects every accent surface in that theme) or giving accent-tinted chips a darker text token — a design-system decision for the user, out of scope for a per-page port PR.
+- **PR-1 visual verdict still pending.** The user has not yet run the dev server on this branch. Their eyeball pass is what validates the translation pipeline; amend §3 with whatever it reveals BEFORE fanning out to PR-2+.
 - `LikedOfficesPage.jsx` is a confirmed orphan (imported, never rendered; `/my/liked-offices` is a redirect). Out of scope for this initiative; noted in case it surfaces during the profiles PR.
