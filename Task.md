@@ -304,6 +304,7 @@ Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over
 - ④ 상호작용: 드래그 응답은 `SWIPE_PREVENT_ALL`로 차단(탭 전용, 명령형 swipe는 우회). 중복 응답 차단 `busyRef`+`pointerEvents`+`disabled` 3중 양방향. 진행률을 응답 개수 기준으로 변경 → 탭 즉시 갱신되어 카드 비행과 이어짐. 마지막 문항은 완료 버튼 없이 즉시 제출, 실패 시 `retryKey`로 카드 복귀
 - ⑤ 이전 문항 복귀 신설(기존 없던 기능, user 요청). 이전 답변은 선택 상태로 보존 — 지우지 않고 수정 가능
 - 함정 2건: `busy`/`exiting`/`entering` 상태 분리 필수(한 플래그면 reduced-motion에서 **복귀 카드가 opacity 0으로 소멸**). 카드 내부 요소에 `pressable` 클래스 필수(`tinderCard`가 `touchstart`에서 `preventDefault`로 탭·스크롤을 삼킴)
+- 스크롤 버그 수정(#311부터 존재): `.page`가 `min-height`라 flex 컬럼이 내용만큼 늘어나 어떤 자손도 스크롤 박스를 못 받고, `body`(`height:100vh;overflow:hidden`)에 잘려 접근 불가였음. 결과 화면(48px 타입코드 + 200px 차트 + 버튼 2개)이 짧은 뷰포트에서 넘침. `height`로 교체 + `.body`/`.resultBody`에 `min-height:0` + `overflow-y:auto` + 상단 영역 `flex-shrink:0`. `.body`는 `justify-content: safe center` — 평범한 `center`는 넘칠 때 덱 상단이 스크롤 밖으로 잘림. 동일 버그를 `/people`에서 먼저 발견(FRONT-PEOPLE-CARD-3)
 - Deferred: reduced-motion 페이드가 FRONT-UX-14-R7의 "인터랙션 모션은 reduced-motion 무시" 제품 결정과 충돌 — PR #313에 검토 요청으로 명시, 팀장 판단 대기
 - 미검증: `/people` 진입은 라우트 수정만 확인(피드 자체는 진단 완료 계정 필요)
 
