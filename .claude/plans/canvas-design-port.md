@@ -243,6 +243,20 @@ Only convert CTA **backgrounds** — check each site; the gradient stays legal o
 
 **F. Theme-frozen hex** — scan found **zero** outside `AppearanceSettings.jsx` (intentional, exempt). No action.
 
+## 6d. Cross-cutting questions raised by the mocks (NOT per-page decisions)
+
+Surfaced during page PRs, deliberately not acted on. Each needs a single global decision from the user; a page PR must never resolve one unilaterally.
+
+1. **Every page header reads "Archibe" in the mocks.** Verified: **36 of the 37 boards** (all but `board-detail.html`) render an identical two-tone `Arch|ibe` h1 — including pages whose real headers are unrelated (`settings`, `login`, `results`, `building-detail`, `architect`). In the real app, "ARCHIBE" is an uppercase *wordmark* used on login/swipe cards (`LoginPage.jsx`, `SwipePage.jsx`, `CardSkeleton.jsx`, `DiscoveryTriggerCard.jsx`), while page titles are per-page (Discovery shows two-tone `Disc|overy`). So the mock's uniform header is almost certainly canvas *template chrome*, not a rename instruction — but if it IS intended, it is a site-wide rebrand needing its own initiative. **PR-2 kept "Discovery".**
+
+2. **`DiscoveryTriggerCard` retheme.** `overlay-trigger-card.html` redraws the card as a fully theme-tokenized surface and drops the ARCHIBE wordmark + "10 LIKES" stamp. The component's own header comment says its paper-literal look is deliberate ("intentionally contrasts with the photo cards around it… same idiom as the login deck", FRONT-FLOW-1). Same trap class as PR-1's PentagonChart. **PR-2 did not port it** — a brand change exceeds "value delta" and needs explicit go-ahead.
+
+3. **`DESIGN.md` §1.4 vs §8.10 tension on modal backdrops.** §1.4 calls `--color-scrim` (0.65) "the standard modal / dialog backdrop", but §8.10 separately specs `sheet-backdrop: rgba(0,0,0,0.4)`, and `rgba(0,0,0,0.4)` is what the codebase actually uses everywhere (`DiscoveryPage`, `BoardDetailPage`, `SwipePage`, `UploadWorkPage`, `SaveBoardModal.module.css`) — and what the mocks use too. No scrim tier equals 0.4. Options: add a 5th token at 0.4, or reconcile the two sections. **Until decided, leave `rgba(0,0,0,0.4)` backdrops alone** — converting them one page at a time creates inconsistency.
+
+4. **English copy polish.** `discovery.capReachedCount` interpolates a bare `{n}`, so English renders "50 You've hit the limit…" while Korean reads naturally. Korea-first policy means this is not urgent, but the mocks' English copy is better written throughout. A copy pass is its own task, not part of a color/token port.
+
+5. **Non-surface white literals.** The §6c defect map only catches `rgba(255,255,255,0.0X)` used as a *background*. PR-2 found the same light-theme legibility problem in a **border/spinner track** (`DiscoveryPage.jsx:758`, `rgba(255,255,255,0.2)` on a page-level spinner over `--color-bg`). Later PRs should check borders and outlines too, not just backgrounds.
+
 ## 7. Open items
 
 - ~~`rgba(99,102,241,…)` indigo~~ **RESOLVED (PR-1)** — Tailwind indigo-500, pre-token legacy. Now `--accent-2` at the same 10%/22% percentages, mirroring the `--accent-1` programs chip.
