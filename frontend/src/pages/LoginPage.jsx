@@ -872,10 +872,15 @@ function ConsentDeck({
           />
 
           {/* Middle: filled card preview — id / objective / affiliation */}
+          {/* Canvas design port (login family): name/role sizing overridden
+              inline here only — cardNameStyle/cardRoleStyle are
+              ConsentDeck-exclusive (verified: SwipePage/DiscoveryTriggerCard
+              consume cardMetaStyle and monoLabelStyle only, not these two),
+              so this is safe to adjust without a cross-page effect. */}
           <section style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div style={cardNameStyle}>{id}</div>
+            <div style={{ ...cardNameStyle, fontSize: 30, lineHeight: 1.15, textTransform: 'none' }}>{id}</div>
             {role && (
-              <div style={cardRoleStyle}>
+              <div style={{ ...cardRoleStyle, fontSize: 14, fontWeight: 600, color: 'var(--color-text-2)' }}>
                 {roleLabel(
                   (roles && roles.length ? roles : ONBOARDING_ROLES).find(r => r.value === role) || { value: role, label_en: role, label_ko: role },
                   language,
@@ -888,10 +893,12 @@ function ConsentDeck({
           </section>
 
           {/* Footer: @id + JOINED year left, monogram stamp right */}
+          {/* monoLabelStyle is shared with SwipePage/DiscoveryTriggerCard —
+              overridden inline here only, never edited in cardLanguage.js. */}
           <footer style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 14 }}>
             <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={monoRowStyle}>@{id}</div>
-              <div style={monoLabelStyle}>JOINED {new Date().getFullYear()}</div>
+              <div style={{ ...monoRowStyle, letterSpacing: '0.06em' }}>@{id}</div>
+              <div style={{ ...monoLabelStyle, fontSize: 10, textTransform: 'none', letterSpacing: '0.1em', color: 'var(--color-text-dim)' }}>JOINED {new Date().getFullYear()}</div>
             </div>
             <div style={{
               flexShrink: 0,
@@ -975,7 +982,15 @@ function ReturningStep({
           loading={googleLoading}
           label={t('login.returning.google')}
           className={styles.btn}
-          style={{ width: '100%', minHeight: 48, borderRadius: 12 }}
+          style={{
+            width: '100%',
+            minHeight: 48,
+            borderRadius: 12,
+            border: '1px solid var(--accent-1)',
+            background: 'var(--accent-1)',
+            color: '#fff',
+            fontWeight: 700,
+          }}
         />
       ) : (
         <div role="status" style={noticeStyle}>
