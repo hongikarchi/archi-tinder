@@ -148,12 +148,22 @@ Add the `--color-scrim-*` family to `frontend/src/tokens.css` for all 4 themes, 
 
 1. Session fetches any missing board → writes to `<scratchpad>/design-pull/canvas/boards-desktop/`.
 2. Session branches off `develop`: `git checkout develop && git pull && git checkout -b feature/claude-design-<topic>`. **Never `git add` on `develop`** — this plan file included; it gets committed from PR-0's branch.
+
+   **Exception — PR-1 is stacked on PR-0** (branched from `feature/claude-design-scrim-tokens`, not `develop`) because it consumes the scrim tokens PR-0 introduces. Consequence, per the stacked-PR gotcha: **retarget PR-1 to `--base develop` BEFORE PR-0 merges** — merging a parent with `--delete-branch` auto-closes the child PR. Later PRs branch off `develop` normally once PR-0 has landed.
 3. Session dispatches `front-maker` (sonnet) with: board HTML **file path** (not content), target JSX paths, §3 translation rules verbatim, §4 reverse map, and the page-specific notes from the table above.
 4. Gate: eslint + build + `code-review` + `security-manager`. `app-test` skipped except the swipe PR (standing policy: 4-gate stack PASS → skip with inline drift check).
 5. **User eyeballs the dev server** (`cd frontend && npm run dev`) before the publish gate. This loop is per-PR and non-negotiable — the whole point is visual work verified visually.
 6. `reporter-inline` skill → `git-commit` skill → STOP at publish gate (explicit trigger required).
 
 ---
+
+## 6b. Findings from PR-1 (carry into later PRs)
+
+- **The mocks faithfully reproduce existing bugs.** The canvas rendered real develop screens, so a literal in a mock may simply be a copy of a literal already in the code — not a design decision. Never treat "the mock does X" as intent without checking whether the code already did X.
+- **`rgb(99,102,241)` = `#6366F1` = Tailwind indigo-500.** A pre-token-system leftover, not a palette color. Appears on PersonaReport's `dominant_styles` chips. Same class as `#ec4899` (Tailwind pink-500), which still has 15 occurrences across 10 files (TabBar, profile cards, LikedProjectsPage, BuildingTile, buildingDetail/Header, UserProfilePage.module.css). Treat any Tailwind-default hex found in this codebase as legacy to tokenize, not as design.
+- **`rgba(255,255,255,0.0X)` surface washes are a light-theme bug pattern.** They assume a dark ground. On `github-light` / `ayu-light` this renders white-on-white — an invisible element. Correct fix is `var(--color-tag-bg)` (or the appropriate surface token), which is already defined per-theme with black-alpha on light themes. Confirmed occurrences beyond PR-1: `profile/BoardCard.jsx`, `profile/ProjectCard.jsx`, `SaveToBoardModal.jsx` ×2, `SurpriseBoardModal.jsx` ×4, `SwipeCard.jsx`. Fix each inside its host page's PR.
+- **Chip styling series:** `dominant_programs` uses `color-mix(… var(--accent-1) 10%/22%)`; `dominant_styles` should follow with `--accent-2` at the same percentages; `dominant_materials` should use `--color-tag-bg` / `--color-tag-border`. Pending user decision.
+- **Verify a dispatch's premise before the maker does.** PR-1's dispatch wrongly claimed PersonaReport lacked a pentagon chart; it already had a local `RadarChart` matching the mock exactly, and the `PentagonChart.jsx` the dispatch named renders a *different taxonomy* (assessment axes 작업방식/역할성향/… via a hardwired `AXIS_LABELS` import), so following the instruction would have shipped work-style labels over taste data. The maker caught it. Check component internals, not just names, when writing a dispatch.
 
 ## 7. Open items
 

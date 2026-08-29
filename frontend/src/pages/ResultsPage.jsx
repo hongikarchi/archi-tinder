@@ -425,7 +425,7 @@ export default function ResultsPage({ projects, setProjects, onReportGenerated }
             {[0, 1, 2, 3].map(i => (
               <div key={i} className="skeleton-shimmer" style={{
                 aspectRatio: '2 / 3',
-                borderRadius: 16,
+                borderRadius: 12,
               }} />
             ))}
           </div>
