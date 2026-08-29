@@ -10,10 +10,15 @@
  */
 
 /*
- * .cta / .primaryGradient — Primary CTA button (design.md §8.1).
+ * .cta / .primaryGradient — Primary CTA button (DESIGN.md §8.1).
  *
  * NOTE: min-height is 48px per task spec. DESIGN.md §8.1 defines 44px.
  * This deliberate deviation is documented here and in the PR description.
+ *
+ * NOTE: the background is FLAT `var(--accent-1)` as of 2026-08-29 — DESIGN.md
+ * §8.1 retired the gradient (every Claude Design board draws the CTA flat).
+ * `.primaryGradient` is now a misnomer kept only as an alias; nothing
+ * references it, so it can be deleted in a separate cleanup.
  */
 .cta,
 .primaryGradient {
@@ -23,7 +28,7 @@
   gap: 6px;
   min-height: 48px;
   padding: 14px 20px;
-  background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+  background: var(--accent-1);
   color: #fff;
   border: 0;
   border-radius: var(--radius-md);

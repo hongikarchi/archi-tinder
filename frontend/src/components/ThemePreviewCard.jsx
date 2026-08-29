@@ -86,7 +86,7 @@ export default function ThemePreviewCard({ theme }) {
                 justifyContent: 'center',
                 padding: '6px 12px',
                 borderRadius: 999,
-                background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
+                background: 'var(--accent-1)',
                 color: '#fff',
                 fontSize: 10,
                 fontWeight: 600,
