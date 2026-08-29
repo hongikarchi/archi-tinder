@@ -85,6 +85,11 @@ Existing tokens hardcoded **in the mocks** (swap when porting mock markup — se
 | `#ec4899` (Tailwind pink-500) | the appropriate accent token, usually `var(--accent-1)` | Pre-token legacy. 13 occurrences remain across 10 files after PR-1. |
 | `rgba(255,255,255,0.0X)` used as a **surface wash** | `var(--color-tag-bg)` or the right surface token | Dark-theme-assumed; renders invisible on light themes. Not to be confused with on-photo whites, which stay literal. |
 
+
+### Legacy pink gradient — a third CTA variant
+
+Beyond the tokenized `linear-gradient(135deg, var(--accent-1), var(--accent-2))`, there is an OLDER pre-token gradient still in the codebase: `linear-gradient(135deg, #ec4899, #f43f5e)` (Tailwind pink-500 → rose-500). Found at `components/profile/BioPersonaFlipCard.jsx:98`, `pages/buildingDetail/Header.jsx:53`, `pages/LikedProjectsPage.jsx:231`. These are the same class as the other Tailwind leftovers and are covered by decision ⑤ where they back a CTA. Where one backs a decorative surface rather than a button, tokenize the hexes but keep the gradient, and say so.
+
 ### Exemptions — literals that are CORRECT and must NOT be tokenized
 
 Verified 2026-08-29 against the real codebase. A maker that "fixes" any of these breaks the app:
