@@ -206,6 +206,13 @@ export const locales = {
       reportRegenerate:  '리포트 재생성',
       imgError:          '이미지 생성에 실패했습니다.',
       reportError:       '리포트 재생성에 실패했습니다.',
+      axis: {
+        form:        '형태',
+        materiality: '물성',
+        scale:       '스케일',
+        energy:      '에너지',
+        tradition:   '전통성',
+      },
       spectrum: {
         form:        { left: '기하학적',  right: '유기적' },
         materiality: { left: '산업재료',  right: '자연재료' },
@@ -723,6 +730,13 @@ export const locales = {
       reportRegenerate:  'Regenerate report',
       imgError:          'Failed to generate image.',
       reportError:       'Failed to regenerate report.',
+      axis: {
+        form:        'Form',
+        materiality: 'Materiality',
+        scale:       'Scale',
+        energy:      'Energy',
+        tradition:   'Tradition',
+      },
       spectrum: {
         form:        { left: 'Geometric',    right: 'Organic' },
         materiality: { left: 'Industrial',   right: 'Natural' },

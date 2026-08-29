@@ -261,6 +261,7 @@ export default function ResultsPage({ projects, setProjects, onReportGenerated }
     }}>
       <PageLogoHeader />
 
+      <div style={{ maxWidth: 680, margin: '0 auto' }}>
       <section style={{ padding: '18px 18px 0' }}>
         <button
           type="button"
@@ -428,7 +429,7 @@ export default function ResultsPage({ projects, setProjects, onReportGenerated }
             {[0, 1, 2, 3].map(i => (
               <div key={i} className="skeleton-shimmer" style={{
                 aspectRatio: '2 / 3',
-                borderRadius: 16,
+                borderRadius: 12,
               }} />
             ))}
           </div>
@@ -478,6 +479,7 @@ export default function ResultsPage({ projects, setProjects, onReportGenerated }
           </>
         )}
       </section>
+      </div>
     </div>
   )
 }

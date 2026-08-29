@@ -12,7 +12,7 @@ function Spinner() {
     <div style={{
       width: 32, height: 32, borderRadius: '50%',
       border: '3px solid var(--color-border)',
-      borderTopColor: '#ec4899',
+      borderTopColor: 'var(--accent-1)',
       animation: 'spin 1.2s linear infinite',
     }} />
   )
