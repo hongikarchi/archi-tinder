@@ -121,7 +121,7 @@ export default function BoardReportPage() {
             style={{
               padding: '10px 24px',
               borderRadius: 999,
-              background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
+              background: 'var(--accent-1)',
               border: 'none',
               color: '#fff',
               fontSize: 14,

@@ -1237,7 +1237,7 @@ export default function App() {
                   padding: '7px 14px',
                   borderRadius: 8,
                   border: 'none',
-                  background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
+                  background: 'var(--accent-1)',
                   color: '#fff',
                   fontSize: 12,
                   fontWeight: 600,
