@@ -15,6 +15,7 @@ import { useTranslation } from '../i18n/index.js'
 import { generateReport } from '../api/projects.js'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import PageTopControls from '../components/PageTopControls.jsx'
+import PageBackButton from '../components/PageBackButton.jsx'
 
 function cardId(card) {
   return card?.image_id || card?.canonical_bld_id || card?.building_id || ''
@@ -260,31 +261,11 @@ export default function ResultsPage({ projects, setProjects, onReportGenerated, 
       background: 'var(--color-bg)',
       paddingBottom: 'calc(88px + env(safe-area-inset-bottom, 0px))',
     }}>
+      <PageBackButton onClick={() => navigate('/')} />
       <PageLogoHeader />
       <PageTopControls onLogout={onLogout} />
 
       <div style={{ maxWidth: 680, margin: '0 auto' }}>
-      <section style={{ padding: '18px 18px 0' }}>
-        <button
-          type="button"
-          onClick={() => navigate('/')}
-          style={{
-            minHeight: 44,
-            border: 'none',
-            background: 'transparent',
-            color: 'var(--color-text-dim)',
-            fontSize: 13,
-            fontWeight: 700,
-            cursor: 'pointer',
-            fontFamily: 'inherit',
-            display: 'block',
-            padding: '0 0 4px',
-          }}
-        >
-          ← Home
-        </button>
-      </section>
-
       {project?.finalReport && backendId ? (
         <PersonaReport
           boardId={backendId}

@@ -104,14 +104,28 @@ EXTRACT = """
       // padding/background/radius as differences that do not exist. So when an
       // element is a styleless wrapper, attribute its text to the nearest
       // ancestor that actually carries styling.
+      // "Bare" must mean the element carries NO styling of its own — box or
+      // typographic. Testing only box properties made every typography-only
+      // class (a title that sets font-size/weight/colour but no background)
+      // look bare, so the tool climbed past it and measured the wrapper div's
+      // inherited defaults instead. That produced a run of phantom findings —
+      // e.g. every settings title reported as 16px/400 when the actual rule
+      // was 20px/700 and correct.
       let host = el;
       for (let i = 0; i < 3; i++) {
         const hs = getComputedStyle(host);
-        const bare = hs.backgroundColor === 'rgba(0, 0, 0, 0)' &&
-                     hs.padding === '0px' && hs.borderWidth === '0px' &&
-                     (hs.borderRadius === '0px' || hs.borderRadius === '');
-        if (!bare || !host.parentElement) break;
         const p = host.parentElement;
+        if (!p) break;
+        const ps = getComputedStyle(p);
+        const boxBare = hs.backgroundColor === 'rgba(0, 0, 0, 0)' &&
+                        hs.padding === '0px' && hs.borderWidth === '0px' &&
+                        (hs.borderRadius === '0px' || hs.borderRadius === '');
+        // typographically bare = inherits the parent's type treatment
+        const typeBare = hs.fontSize === ps.fontSize &&
+                         hs.fontWeight === ps.fontWeight &&
+                         hs.color === ps.color &&
+                         hs.letterSpacing === ps.letterSpacing;
+        if (!boxBare || !typeBare) break;
         // only climb while the parent's text is still just this text
         if ((p.innerText || '').replace(/\\s+/g, ' ').trim() !== own) break;
         host = p;
