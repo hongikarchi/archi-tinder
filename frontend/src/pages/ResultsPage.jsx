@@ -3,6 +3,14 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useResults } from '../hooks/useResults.js'
 import { resolveProjectBackendId } from '../utils/resolveProjectBackendId.js'
 import PersonaReport from '../components/PersonaReport.jsx'
+import {
+  photoCardShellStyle,
+  photoCardImageStyle,
+  photoCardScrimStyle,
+  photoCardCaptionStyle,
+  photoCardTitleStyle,
+  photoCardSubtitleStyle,
+} from '../components/photoCardShell.js'
 import { useTranslation } from '../i18n/index.js'
 import { generateReport } from '../api/projects.js'
 
@@ -29,37 +37,18 @@ function ResultCard({ card, rank, saved, pending, onOpen, onToggle }) {
   return (
     <article
       onClick={() => onOpen(card, rank)}
-      style={{
-      position: 'relative',
-      width: '100%',
-      aspectRatio: '2 / 3',
-      borderRadius: 12,
-      overflow: 'hidden',
-      background: 'var(--color-surface)',
-      border: '1px solid var(--color-border-soft)',
-      boxShadow: '0 18px 42px rgba(0,0,0,0.35)',
-      cursor: 'pointer',
-    }}>
+      style={photoCardShellStyle}
+    >
       <div className="skeleton-shimmer" style={{ position: 'absolute', inset: 0 }} />
       {card.image_url && (
         <img
           src={card.image_url}
           alt={title}
           loading={rank === 1 ? 'eager' : 'lazy'}
-          style={{
-            position: 'absolute',
-            inset: 0,
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
-          }}
+          style={photoCardImageStyle}
         />
       )}
-      <div style={{
-        position: 'absolute',
-        inset: 0,
-        background: 'linear-gradient(to top, rgba(0,0,0,0.94) 0%, rgba(0,0,0,0.52) 48%, rgba(0,0,0,0.08) 100%)',
-      }} />
+      <div style={photoCardScrimStyle} />
       <div style={{
         position: 'absolute',
         top: 14,
@@ -101,28 +90,12 @@ function ResultCard({ card, rank, saved, pending, onOpen, onToggle }) {
       >
         {saved ? '★' : '☆'}
       </button>
-      <div style={{
-        position: 'absolute',
-        left: 0,
-        right: 0,
-        bottom: 0,
-        padding: '6px 8px 8px',
-      }}>
-        <h2 style={{
-          color: '#fff',
-          fontSize: 10,
-          fontWeight: 700,
-          lineHeight: 1.2,
-          margin: '0 0 2px',
-          display: '-webkit-box',
-          WebkitLineClamp: 1,
-          WebkitBoxOrient: 'vertical',
-          overflow: 'hidden',
-        }}>
+      <div style={photoCardCaptionStyle}>
+        <h2 style={photoCardTitleStyle}>
           {title}
         </h2>
         {architects && (
-          <p style={{ color: 'rgba(255,255,255,0.68)', fontSize: 9, fontStyle: 'italic', margin: '0 0 6px' }}>
+          <p style={photoCardSubtitleStyle}>
             {architects}
           </p>
         )}

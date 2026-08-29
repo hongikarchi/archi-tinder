@@ -205,7 +205,7 @@ export default function PeopleDiscoveryPage() {
         {/* Loading skeletons */}
         {loading && !error && (
           <div className={styles.feed}>
-            {Array.from({ length: 4 }, (_, i) => <PersonCardSkeleton key={i} />)}
+            {Array.from({ length: 8 }, (_, i) => <PersonCardSkeleton key={i} />)}
           </div>
         )}
 
