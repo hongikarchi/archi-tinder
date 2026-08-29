@@ -46,8 +46,8 @@
               border-color 0.18s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .viewGalleryBtn:hover {
-  background: rgba(236, 72, 153, 0.18);
-  border-color: rgba(236, 72, 153, 0.45);
+  background: color-mix(in srgb, var(--accent-1) 18%, transparent);
+  border-color: color-mix(in srgb, var(--accent-1) 45%, transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {

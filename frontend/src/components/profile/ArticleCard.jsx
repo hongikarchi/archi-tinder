@@ -49,8 +49,8 @@ export default function ArticleCard({ article }) {
           style={{
             display: 'inline-flex',
             alignItems: 'center',
-            background: 'rgba(236,72,153,0.12)',
-            color: '#ec4899',
+            background: 'color-mix(in srgb, var(--accent-1) 12%, transparent)',
+            color: 'var(--accent-1)',
             fontSize: 11,
             fontWeight: 600,
             padding: '4px 10px',

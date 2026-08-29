@@ -101,7 +101,7 @@ export default function FirmProfilePage() {
         position: 'relative',
       }}
     >
-      {/* Ambient glow — single brand-pink, no purple */}
+      {/* Ambient accent glow — themed (DESIGN.md §8.1 accent idiom, mirrors UserProfilePage) */}
       <div
         style={{
           position: 'absolute',
@@ -109,7 +109,7 @@ export default function FirmProfilePage() {
           left: '-10%',
           width: '120%',
           height: '50%',
-          background: 'radial-gradient(circle at 50% 0%, rgba(236,72,153,0.10) 0%, transparent 70%)',
+          background: 'radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--accent-1) 10%, transparent) 0%, transparent 70%)',
           pointerEvents: 'none',
           zIndex: 0,
         }}

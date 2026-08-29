@@ -10,7 +10,7 @@
 
 .card:hover {
   transform: translateY(-4px);
-  border-color: rgba(236, 72, 153, 0.55);
+  border-color: color-mix(in srgb, var(--accent-1) 55%, transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {

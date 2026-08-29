@@ -44,11 +44,11 @@ export default function BioPersonaFlipCard({ bio, persona }) {
           boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
           minHeight: 180,
         }}>
-          {/* Internal radial-gradient pink glow */}
+          {/* Internal radial-gradient accent glow */}
           <div style={{
             position: 'absolute', top: -40, right: -40,
             width: 160, height: 160, borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(236,72,153,0.18), transparent 70%)',
+            background: 'radial-gradient(circle, color-mix(in srgb, var(--accent-1) 18%, transparent), transparent 70%)',
             pointerEvents: 'none',
           }} />
           <p style={{
@@ -83,11 +83,11 @@ export default function BioPersonaFlipCard({ bio, persona }) {
           boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
           minHeight: 180,
         }}>
-          {/* Internal radial-gradient pink glow */}
+          {/* Internal radial-gradient accent glow */}
           <div style={{
             position: 'absolute', top: -40, right: -40,
             width: 160, height: 160, borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(236,72,153,0.18), transparent 70%)',
+            background: 'radial-gradient(circle, color-mix(in srgb, var(--accent-1) 18%, transparent), transparent 70%)',
             pointerEvents: 'none',
           }} />
           <h3 style={{
@@ -95,11 +95,11 @@ export default function BioPersonaFlipCard({ bio, persona }) {
             margin: '0 0 6px',
             fontSize: 20, fontWeight: 700, lineHeight: 1.2,
             letterSpacing: '-0.01em',
-            background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
+            background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
             backgroundClip: 'text',
-            color: '#ec4899',
+            color: 'var(--accent-1)',
           }}>
             {persona.persona_type}
           </h3>
@@ -127,8 +127,8 @@ export default function BioPersonaFlipCard({ bio, persona }) {
                   <span key={s} style={{
                     display: 'inline-block',
                     padding: '4px 10px', borderRadius: 999,
-                    background: 'rgba(236,72,153,0.15)',
-                    color: '#ec4899',
+                    background: 'color-mix(in srgb, var(--accent-1) 15%, transparent)',
+                    color: 'var(--accent-1)',
                     fontSize: 11, fontWeight: 600,
                   }}>
                     {s}
@@ -151,8 +151,8 @@ export default function BioPersonaFlipCard({ bio, persona }) {
                   <span key={p} style={{
                     display: 'inline-block',
                     padding: '4px 10px', borderRadius: 999,
-                    background: 'rgba(236,72,153,0.15)',
-                    color: '#ec4899',
+                    background: 'color-mix(in srgb, var(--accent-1) 15%, transparent)',
+                    color: 'var(--accent-1)',
                     fontSize: 11, fontWeight: 600,
                   }}>
                     {p}

@@ -5,7 +5,7 @@
  */
 .card {
   border: 1px solid transparent;
-  border-left: 3px solid #ec4899;
+  border-left: 3px solid var(--accent-1);
   transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
               border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1),
               box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1);
@@ -13,8 +13,8 @@
 
 .card:hover {
   transform: translateY(-4px);
-  border-color: rgba(236, 72, 153, 0.55);
-  border-left-color: #f43f5e;
+  border-color: color-mix(in srgb, var(--accent-1) 55%, transparent);
+  border-left-color: var(--accent-2);
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
 }
 

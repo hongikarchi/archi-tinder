@@ -424,7 +424,7 @@ export default function ArchitectProfilePage() {
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}>
-                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-dim)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <rect x="3" y="3" width="18" height="18" rx="2" />
                     <path d="M9 9h6M9 12h6M9 15h6" />
                   </svg>
@@ -495,7 +495,7 @@ export default function ArchitectProfilePage() {
                 ...btnBase,
                 background: isFollowing
                   ? 'var(--color-surface-2)'
-                  : 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
+                  : 'var(--accent-1)',
                 color: isFollowing ? 'var(--color-text)' : '#fff',
                 border: isFollowing ? '1px solid var(--color-border)' : 'none',
                 boxShadow: isFollowing ? 'none' : '0 4px 14px color-mix(in srgb, var(--accent-1) 28%, transparent)',

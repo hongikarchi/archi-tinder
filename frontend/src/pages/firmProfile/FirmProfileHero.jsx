@@ -52,7 +52,7 @@ export default function FirmProfileHero({ office, followerCount, onMessage }) {
               marginBottom: 18,
             }}
           >
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-dim)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect>
               <line x1="9" y1="22" x2="15" y2="22"></line>
             </svg>
