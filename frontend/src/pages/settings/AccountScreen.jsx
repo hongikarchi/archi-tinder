@@ -8,13 +8,13 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getMe, updateMyProfile, setPassword as apiSetPassword } from '../../api/client.js'
-import { IconBack } from '../../components/icons.jsx'
 import GoogleVerifyButton from '../../components/GoogleVerifyButton.jsx'
 import { hasGoogleLogin } from '../../utils/loginFlow.js'
 import { useGoogleEmailVerify } from '../../hooks/useGoogleEmailVerify.js'
 import { useTranslation } from '../../i18n/index.js'
 import PageLogoHeader from '../../components/PageLogoHeader.jsx'
 import PageTopControls from '../../components/PageTopControls.jsx'
+import PageBackButton from '../../components/PageBackButton.jsx'
 import btnStyles from '../../components/Button.module.css'
 import styles from './AccountScreen.module.css'
 
@@ -210,7 +210,7 @@ export default function AccountScreen({ onLogout }) {
     <div className={styles.page}>
       <ScreenHeader navigate={navigate} t={t} onLogout={onLogout} />
 
-      <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px' }}>
+      <div style={{ maxWidth: 600, margin: '0 auto', padding: '0 16px 24px' }}>
 
         {/* Read-only info section */}
         <section style={{ marginBottom: 32 }}>
@@ -482,19 +482,11 @@ export default function AccountScreen({ onLogout }) {
 function ScreenHeader({ navigate, t, onLogout }) {
   return (
     <>
+      <PageBackButton onClick={() => navigate(-1)} />
       <PageLogoHeader />
       <PageTopControls onLogout={onLogout} />
-      <div className={styles.header}>
-        <button
-          type="button"
-          onClick={() => navigate(-1)}
-          aria-label="Back"
-          className={styles.iconBtn}
-        >
-          <IconBack width={20} height={20} />
-        </button>
+      <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px 0' }}>
         <h2 className={styles.headerTitle}>{t('account.title')}</h2>
-        <div style={{ width: 44 }} />
       </div>
     </>
   )

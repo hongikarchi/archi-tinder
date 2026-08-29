@@ -11,11 +11,11 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getMe } from '../../api/client.js'
 import { updateMyProfile } from '../../api/profiles.js'
-import { IconBack } from '../../components/icons.jsx'
 import EditCardForm from '../../components/profile/EditCardForm.jsx'
 import { useTranslation } from '../../i18n/index.js'
 import PageLogoHeader from '../../components/PageLogoHeader.jsx'
 import PageTopControls from '../../components/PageTopControls.jsx'
+import PageBackButton from '../../components/PageBackButton.jsx'
 import btnStyles from '../../components/Button.module.css'
 import styles from './AccountScreen.module.css'
 
@@ -115,7 +115,7 @@ export default function EditProfileScreen({ onLogout }) {
     <div className={styles.page}>
       <ScreenHeader navigate={navigate} t={t} onLogout={onLogout} />
 
-      <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px' }}>
+      <div style={{ maxWidth: 600, margin: '0 auto', padding: '0 16px 24px' }}>
 
         <EditCardForm
           user={me}
@@ -178,19 +178,11 @@ export default function EditProfileScreen({ onLogout }) {
 function ScreenHeader({ navigate, t, onLogout }) {
   return (
     <>
+      <PageBackButton onClick={() => navigate(-1)} />
       <PageLogoHeader />
       <PageTopControls onLogout={onLogout} />
-      <div className={styles.header}>
-        <button
-          type="button"
-          onClick={() => navigate(-1)}
-          aria-label="Back"
-          className={styles.iconBtn}
-        >
-          <IconBack width={20} height={20} />
-        </button>
+      <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px 0' }}>
         <h2 className={styles.headerTitle}>{t('profileEdit.title')}</h2>
-        <div style={{ width: 44 }} />
       </div>
     </>
   )

@@ -173,34 +173,6 @@
   transform: none;
 }
 
-/* ── New Conversation button (LLMSearchPage header) ─────────────────────── */
-.newConvBtn {
-  background: none;
-  border: none;
-  color: var(--color-text-dim);
-  cursor: pointer;
-  font-family: inherit;
-  padding: 4px;
-  min-height: 44px;
-  min-width: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-md);
-  transition: color var(--motion-fast) var(--motion-ease),
-              background var(--motion-fast) var(--motion-ease);
-}
-
-.newConvBtn:hover {
-  color: var(--color-text);
-  background: color-mix(in srgb, var(--color-text) 8%, transparent);
-}
-
-.newConvBtn:active {
-  background: color-mix(in srgb, var(--color-text) 14%, transparent);
-  transition: background 0s;
-}
-
 /* ── Typing indicator ───────────────────────────────────────────────────── */
 .typingDot {
   width: 6px;

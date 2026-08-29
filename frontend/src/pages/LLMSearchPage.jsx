@@ -6,6 +6,7 @@ import ps from './LLMSearchPage.module.css'
 import { useTranslation } from '../i18n/index.js'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import PageTopControls from '../components/PageTopControls.jsx'
+import PageBackButton from '../components/PageBackButton.jsx'
 
 const PRESETS = [
   { label: 'Japanese modern museum',  query: 'Modern museum in Japan' },
@@ -680,40 +681,41 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
       backgroundImage: 'radial-gradient(circle at 15% 50%, color-mix(in srgb, var(--accent-1) 7%, transparent), transparent 30%), radial-gradient(circle at 85% 30%, color-mix(in srgb, var(--accent-2) 7%, transparent), transparent 30%)',
     }}>
 
-      <PageLogoHeader />
-      <PageTopControls onLogout={onLogout} />
-
-      {/* Header */}
-      <div style={{
-        padding: '16px 20px',
-        borderBottom: '1px solid var(--color-border)',
-        background: 'var(--color-header-bg)',
-        backdropFilter: 'blur(12px)',
-        display: 'flex', alignItems: 'center', gap: 12,
-        position: 'sticky', top: 0, zIndex: 10,
-      }}>
-        <button
-          onClick={handleNewConversation}
-          className={s.newConvBtn}
-          aria-label={t('search.newConversation')}
-          title={t('search.newConversation')}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      {/* Floating "new conversation" button — replaces the old sticky header's
+       * left control (canvas-design-port.md §6d item 6; llm-search.html /
+       * llm-search-update.html both show this exact refresh/undo icon at the
+       * floating top-left slot, not a generic back-chevron — this page has
+       * no working back navigation (the `onBack` prop is unused dead code),
+       * so the floating circle is "new conversation" relocated, not "back"). */}
+      <PageBackButton
+        onClick={handleNewConversation}
+        label={t('search.newConversation')}
+        icon={
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="1 4 1 10 7 10" />
             <path d="M3.51 15a9 9 0 1 0 .49-4.5" />
           </svg>
-        </button>
-        <div style={{ flex: 1, textAlign: 'center' }}>
-          <span style={{
-            fontSize: 16, fontWeight: 700,
-            background: 'linear-gradient(90deg, var(--color-text), color-mix(in srgb, var(--accent-1) 55%, #fff))',
-            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+        }
+      />
+      <PageLogoHeader />
+      <PageTopControls onLogout={onLogout} />
+
+      {/* Update-mode title — a real information loss if dropped silently (which
+       * project is being updated); the mock shows no title here at all, so
+       * this is a deliberate mock deviation for `mode === 'update'` only.
+       * NEEDS EYEBALL. New-session mode drops "archibe AI" per the mock. */}
+      {mode === 'update' && (
+        <div style={{ padding: '0 16px', flexShrink: 0 }}>
+          <h2 style={{
+            fontSize: 20, fontWeight: 700, margin: '0 0 8px',
+            color: 'var(--color-text)', letterSpacing: '-0.01em',
+            maxWidth: 680, marginLeft: 'auto', marginRight: 'auto',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>
-            {mode === 'update' ? `Update "${initialName}"` : 'archibe AI'}
-          </span>
+            {`Update "${initialName}"`}
+          </h2>
         </div>
-        <div style={{ width: 40 }} />
-      </div>
+      )}
 
       {/* Messages */}
       <div style={{

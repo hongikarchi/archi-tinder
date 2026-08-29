@@ -13,54 +13,17 @@
   color: var(--color-text);
 }
 
-/* ── Sticky glassmorphic header ─────────────────────────────────────────── */
-
-.header {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  background: color-mix(in srgb, var(--color-bg) 72%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--color-border-soft);
-  padding: 12px 16px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.backBtn {
-  width: 44px;
-  height: 44px;
-  min-width: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  color: var(--color-text);
-  cursor: pointer;
-  border-radius: var(--radius-md);
-  font-size: 20px;
-  transition: background var(--motion-fast) var(--motion-ease);
-}
-
-.backBtn:hover {
-  background: var(--color-surface-2);
-}
-
-.backBtn:focus-visible {
-  outline: 2px solid var(--accent-1);
-  outline-offset: 2px;
-}
+/* ── Page title ─────────────────────────────────────────────────────────── */
+/* In-flow left-aligned page title (canvas-design-port.md §6d item 6) —
+ * scrolls with the content column; "back" lives in the floating
+ * PageBackButton instead of a sticky header bar. */
 
 .headerTitle {
-  margin: 0;
-  font-size: 17px;
+  margin: 0 0 14px;
+  font-size: 20px;
   font-weight: 700;
   color: var(--color-text);
   letter-spacing: -0.01em;
-  flex: 1;
 }
 
 /* ── Drop zone ──────────────────────────────────────────────────────────── */
@@ -209,7 +172,11 @@
 .editModal {
   position: fixed;
   inset: 0;
-  z-index: 100;
+  /* Above the floating page controls (z 300). At 100 the back button and the
+     top controls painted over this backdrop and stayed clickable, so a stray
+     click mid-crop navigated away and lost the edit. Other modals in the app
+     sit at 9999/10000; this one had been left behind. */
+  z-index: 9999;
   background: rgba(0, 0, 0, 0.7);
   display: flex;
   align-items: center;

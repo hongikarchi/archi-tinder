@@ -7,6 +7,7 @@ import styles from './ArchitectProfilePage.module.css'
 import { useTranslation } from '../i18n/index.js'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import PageTopControls from '../components/PageTopControls.jsx'
+import PageBackButton from '../components/PageBackButton.jsx'
 
 function BuildingCard({ building, onClick, onSave, isSaved = false }) {
   const [imgLoaded, setImgLoaded] = useState(false)
@@ -242,51 +243,35 @@ export default function ArchitectProfilePage({ onLogout }) {
       background: 'var(--color-bg)',
       paddingBottom: 'calc(80px + env(safe-area-inset-bottom, 0px))',
     }}>
+      <PageBackButton onClick={() => navigate(-1)} label={t('architect.back')} />
       <PageTopControls onLogout={onLogout} />
       <PageLogoHeader />
 
-      {/* Sticky top header */}
-      <div style={{
-        position: 'sticky',
-        top: 0,
-        zIndex: 10,
-        background: 'var(--color-bg)',
-        padding: '12px 16px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-      }}>
-        <button
-          className={styles.backBtn}
-          onClick={() => navigate(-1)}
-          type="button"
-          aria-label={t('architect.back')}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <line x1="19" y1="12" x2="5" y2="12" />
-            <polyline points="12 19 5 12 12 5" />
-          </svg>
-        </button>
-
-        <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--color-text)' }}>
-          Office
-        </span>
-
-        <button
-          className={styles.iconBtn}
-          onClick={handleShare}
-          type="button"
-          aria-label={t('architect.share')}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <circle cx="18" cy="5" r="3" />
-            <circle cx="6" cy="12" r="3" />
-            <circle cx="18" cy="19" r="3" />
-            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
-            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
-          </svg>
-        </button>
-      </div>
+      {/* Share — kept per task constraint (existing working control), but the
+       * mock (architect.html) drops the sticky header entirely with no
+       * relocation shown for it. NEEDS EYEBALL: stacked under the floating
+       * back button rather than a mock-specified spot. */}
+      <button
+        className={styles.iconBtn}
+        onClick={handleShare}
+        type="button"
+        aria-label={t('architect.share')}
+        style={{
+          position: 'fixed', top: 58, left: 16, zIndex: 300,
+          width: 34, height: 34, minHeight: 0,
+          borderRadius: '50%',
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-border-soft)',
+        }}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <circle cx="18" cy="5" r="3" />
+          <circle cx="6" cy="12" r="3" />
+          <circle cx="18" cy="19" r="3" />
+          <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+          <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+        </svg>
+      </button>
 
       {/* Loading state */}
       {isLoading && (
