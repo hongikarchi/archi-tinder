@@ -23,6 +23,7 @@ import { login as apiLogin, register as apiRegister, checkHandle } from '../api/
 import * as api from '../api/client.js'
 import { getRoles } from '../api/meta.js'
 import GoogleLoginButton from '../components/GoogleLoginButton.jsx'
+import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import { CARD_HEIGHT, CARD_WIDTH } from '../components/SwipeCard.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
 import { SWIPE_PREVENT_ALL, SWIPE_PREVENT_VERTICAL } from '../components/swipeGestureConfig.js'
@@ -427,7 +428,19 @@ export default function LoginPage({ onLogin }) {
 
   return (
     <div className={styles.page} style={pageStyle}>
+      {/* Canvas design port (login family): page-level chrome — language
+          toggle relocated OUT of the choice card's CardHeader to here, top-
+          right, fixed (mock parity: login.html / §8 visual harness finding).
+          Theme toggle stays in Settings — a separate product decision, per
+          the task's hard constraint; not ported here. */}
+      <div style={langToggleWrapStyle}>
+        <LangToggle />
+      </div>
       <main style={mainStyle}>
+        {/* Arch|ibe page logo — same PageLogoHeader + prop convention as
+            DiscoveryPage.jsx (padding={0}, page already supplies padding via
+            pageStyle; marginBottom={8} matches login.html's `margin:0 0 8px`). */}
+        <PageLogoHeader padding={0} marginBottom={8} />
         <div style={stageStyle}>
           <div style={deckStackStyle}>
             {linearNextStep && (
@@ -565,7 +578,7 @@ function GestureHint({ side, active, label, sub }) {
 // The card waiting behind it is resolved live from drag `intent`: dragging
 // left surfaces "returning" behind, dragging right surfaces "credentials"
 // behind; idle defaults to "credentials" (the primary new-profile path).
-function ChoiceDeck({ t, typedLine, disabled, onAction, renderBackStep }) {
+function ChoiceDeck({ t, disabled, onAction, renderBackStep }) {
   const pending = useRef(null)
   const [intent, setIntent] = useState(null)
 
@@ -605,13 +618,16 @@ function ChoiceDeck({ t, typedLine, disabled, onAction, renderBackStep }) {
         preventSwipe={preventSwipe}
       >
         <AuthCard absolute ariaLabel={t('login.choice.eyebrow')}>
-          <CardHeader
-            title={t('login.choice.title')}
-            typedLine={typedLine}
-            trailing={<LangToggle />}
-          />
-          <SwipeTutorial intent={intent} />
-          <p style={bodyCopyStyle}>{t('login.choice.body')}</p>
+          {/* Canvas design port (login family): the choice card drops
+              CardHeader entirely (no ARCHIBE row, no title, no typed line —
+              those moved to page level / were never in this mock) per
+              login.html. Body is one centered column: paragraph then the
+              arrow/mini-card swipe demo (mock order), replacing the former
+              tutorial-then-paragraph order + the CardHeader title. */}
+          <div style={choiceBodyStyle}>
+            <p style={bodyCopyStyle}>{t('login.choice.body')}</p>
+            <SwipeTutorial intent={intent} />
+          </div>
           <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12 }}>
             <GestureHint
               side="left"
@@ -750,7 +766,6 @@ function CredentialsStep({ t, typedLine, isActive = true, disabled, onBack, onCo
       <CardHeader
         title={t('login.credentials.title')}
         typedLine={typedLine}
-        trailing={<LangToggle />}
       />
       <form onSubmit={handleSubmit} style={formStyle}>
         <label style={baseLabelStyle} htmlFor="cred-id">
@@ -868,7 +883,6 @@ function ConsentDeck({
           <CardHeader
             eyebrow={t('login.consent.eyebrow')}
             typedLine={typedLine}
-            trailing={<LangToggle />}
           />
 
           {/* Middle: filled card preview — id / objective / affiliation */}
@@ -971,7 +985,6 @@ function ReturningStep({
       <CardHeader
         title={t('login.returning.title')}
         typedLine={typedLine}
-        trailing={<LangToggle />}
       />
       {showGoogle ? (
         <GoogleLoginButton
@@ -1074,7 +1087,6 @@ function ProfileStep({
       <CardHeader
         title={t('login.profile.title')}
         typedLine={typedLine}
-        trailing={<LangToggle />}
       />
       <form onSubmit={onSubmit} style={formStyle}>
         <label style={baseLabelStyle} htmlFor="guest-affiliation">
@@ -1283,6 +1295,22 @@ const pageStyle = {
   boxSizing: 'border-box',
 }
 
+// Mock: `position:absolute;top:14px;right:16px;z-index:300` inside the
+// canvas's device-frame div (which stands in for our real viewport). `fixed`
+// is the correct real-DOM equivalent — pageStyle has no `position` ancestor
+// for `absolute` to resolve against, and `fixed` pins to the true viewport
+// regardless. Theme toggle intentionally omitted (hard constraint — stays in
+// Settings, a separate product decision; the mock's toggle pill is not ported).
+const langToggleWrapStyle = {
+  position: 'fixed',
+  top: 14,
+  right: 16,
+  zIndex: 300,
+  display: 'flex',
+  gap: 8,
+  alignItems: 'center',
+}
+
 const mainStyle = {
   width: '100%',
   maxWidth: 420,
@@ -1375,11 +1403,31 @@ const typedLineStyle = {
   lineHeight: 1.45,
 }
 
+// Choice card only consumer (verified single call site). Canvas design port
+// (login family): values match login.html's centered paragraph exactly —
+// color-text-2 (not text-dim), 15px/500 (not 14px/400), centered, base
+// font-family per DESIGN.md §2.5a (this is instructional copy, not MONO).
 const bodyCopyStyle = {
   margin: 0,
-  color: 'var(--color-text-dim)',
-  fontSize: 14,
+  fontFamily: 'var(--font-family)',
+  color: 'var(--color-text-2)',
+  fontSize: 15,
+  fontWeight: 500,
   lineHeight: 1.55,
+  textAlign: 'center',
+}
+
+// Choice card body wrapper — recenters the card's middle content now that
+// CardHeader (which used to anchor the top of the card) is gone. Mirrors
+// login.html: `flex:1;display:flex;flex-direction:column;align-items:center;
+// justify-content:center;gap:28px`.
+const choiceBodyStyle = {
+  flex: 1,
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 28,
 }
 
 const buttonGridStyle = {

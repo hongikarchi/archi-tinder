@@ -338,7 +338,7 @@ export const locales = {
       choice: {
         eyebrow: '첫 카드',
         title:   '처음 방문하셨나요?',
-        body:    '건축 카드를 스와이프해 취향에 반응하세요 · 10~15장이면 취향 프로필이 완성돼요.',
+        body:    '건축 카드를 스와이프해 취향에 반응하세요.',
         left:    { label: '기존 계정', sub: '왼쪽 스와이프' },
         right:   { label: '새 프로필', sub: '오른쪽 스와이프' },
       },
@@ -852,7 +852,7 @@ export const locales = {
       choice: {
         eyebrow: 'First card',
         title:   'Are you new here?',
-        body:    'Swipe architecture cards to react to your taste · 10–15 swipes builds your taste profile.',
+        body:    'Swipe architecture cards to react to your taste.',
         left:    { label: 'Returning', sub: 'Left swipe' },
         right:   { label: 'New profile', sub: 'Right swipe' },
       },
