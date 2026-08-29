@@ -1,6 +1,13 @@
 # Canvas Design Port — Claude Design → Frontend Code
 
-**Status:** approved by user 2026-08-29 — executing, PR-0 in progress
+**Status:** approved by user 2026-08-29 — executing. PR-0 + PR-1 committed locally.
+
+**Mode change (user, 2026-08-29):** the user could not run the dev server, and chose to **build all PRs first and review visually afterward**. Consequences, all deliberate:
+- **Every PR stays LOCAL** — branch + commit only. No push, no PR open, no merge, for any of them, until the user reviews and says which to ship. `develop` stays clean.
+- The pilot's validate-then-fan-out loop is replaced by the §6c defect map: a full static scan of `frontend/src` done up front, so each PR burns down a concrete checklist instead of relying on an eyeball pass that has not happened.
+- Per-PR gates (lint / build / code-review, + security where the surface warrants) still run. They catch regressions, not taste.
+- Each PR must end with a **"needs eyeball" list**: judgment calls made, places the mock was deliberately not followed, and anything with uncertain contrast. That list is what the user reviews later instead of re-deriving it.
+- PRs stay one-per-page-group. Do not consolidate — separate branches are what makes "ship these, redo that one" possible after the review.
 **Created:** 2026-08-29
 **Source:** Claude Design project "Archibe Front Design" (`2d94fa98-05e3-4678-8857-ac0a1ea563cc`)
 **Local pull:** `<scratchpad>/design-pull/canvas/boards-desktop/*.html` (37/41 assembled) + `pull-report.md`
@@ -176,6 +183,44 @@ Add the `--color-scrim-*` family to `frontend/src/tokens.css` for all 4 themes, 
 - **Chip styling series:** `dominant_programs` uses `color-mix(… var(--accent-1) 10%/22%)`; `dominant_styles` should follow with `--accent-2` at the same percentages; `dominant_materials` should use `--color-tag-bg` / `--color-tag-border`. Pending user decision.
 - **A wrapping element added late does NOT get its children re-indented.** ResultsPage's `max-width: 680px` wrapper encloses ~218 lines; re-indenting them would bury a 3-line semantic change under 200 lines of whitespace in a squashed PR diff, defeating the per-PR visual review this plan is built on. Lint enforces no indent rule here. Same call applies to any later PR that adds a container element.
 - **Verify a dispatch's premise before the maker does.** PR-1's dispatch wrongly claimed PersonaReport lacked a pentagon chart; it already had a local `RadarChart` matching the mock exactly, and the `PentagonChart.jsx` the dispatch named renders a *different taxonomy* (assessment axes 작업방식/역할성향/… via a hardwired `AXIS_LABELS` import), so following the instruction would have shipped work-style labels over taste data. The maker caught it. Check component internals, not just names, when writing a dispatch.
+
+## 6c. Defect map — the checklist each page PR burns down
+
+Produced by a full static scan of `frontend/src` on 2026-08-29, BEFORE fanning out. Because the user chose to run all PRs before doing a visual pass, each PR works this list rather than relying on eyeballing the mock. **Every page PR must clear the entries for the files it owns**, and report anything it deliberately left.
+
+**A. Light-theme-invisible white washes** (`rgba(255,255,255,0.0X)` used as a surface background — renders white-on-white on `github-light`/`ayu-light`). Fix → `var(--color-tag-bg)` or the right surface token. **Not** to be confused with on-photo whites, which stay literal.
+
+| File | Count | PR |
+|---|---|---|
+| `components/profile/BoardCard.jsx` | 1 | boards |
+| `components/profile/ProjectCard.jsx` | 1 | profiles |
+| `components/SaveToBoardModal.jsx` | 2 | boards |
+| `components/SurpriseBoardModal.jsx` | 4 | boards |
+| `components/SwipeCard.jsx` | 1 | swipe |
+| `pages/boardDetail/BuildingTile.jsx` | 1 | boards |
+| `pages/boardDetail/RecommendedTile.jsx` | 1 | boards |
+| `pages/LLMSearchPage.jsx` | 2 | search |
+| `pages/ResultsPage.jsx` | 1 | **NOT a defect** — verified on-photo badge over a tile image; correctly stays literal |
+
+**B. Tailwind default-palette leftovers** (pre-token-system; no design intent — see §6b). `#ec4899` = pink-500, `#ef4444` = red-500, `#fbbf24` = amber-400, `#f43f5e` = rose-500, `#a78bfa` = violet-400, `#6366F1` = indigo-500 (resolved in PR-1).
+
+| Hex | Files | PR |
+|---|---|---|
+| `#ec4899` ×13 | `profile/ArticleCard.jsx(+css)`, `profile/BioPersonaFlipCard.jsx` ×4, `profile/BoardCard.jsx` ×2, `profile/ProjectCard.jsx`, `TabBar.jsx`, `boardDetail/BuildingTile.jsx` ×2, `buildingDetail/Header.jsx`, `LikedProjectsPage.jsx`, `UserProfilePage.module.css` | profiles / boards / building / **TabBar = its own follow-up** |
+| `#ef4444` | `PersonaReport.jsx`, `profile/BoardCard.jsx`, `BoardDetailPage.jsx`, `UserProfilePage.module.css` | boards / profiles |
+| `#fbbf24` | `DebugOverlay.jsx`, `buildingDetail/Header.jsx`, `ResultsPage.jsx` | building (DebugOverlay = dev-only, skip) |
+| `#f43f5e` | `profile/ArticleCard.module.css`, `profile/BioPersonaFlipCard.jsx`, `buildingDetail/Header.jsx`, `LikedProjectsPage.jsx` | profiles / building / boards |
+| `#a78bfa` | `DebugOverlay.jsx` | dev-only, skip |
+
+**C. Token values hardcoded** (the literal equals a token's value — swap to the `var()`):
+`#D73A49` → `var(--color-destructive)` (7 files) · `#0969DA` → `var(--accent-1)` (4) · `#8250DF` → `var(--accent-2)` (4) · `#F6F8FA` → `var(--color-surface)` (2) · `#8C959F` → `var(--color-text-dim)` (2).
+
+**D. Gradient CTA → flat `var(--accent-1)`** (decision ⑤), 30 sites across 21 files after PR-1: `App.jsx`, `Button.module.css`, `CalibrationChat.module.css`, `profile/BoardCard.jsx`, `SaveBoardModal.module.css`, `SaveToBoardModal.jsx` ×2, `ShareCardModal.jsx`, `SurpriseBoardModal.jsx` ×2, `ThemePreviewCard.jsx`, `ArchitectProfilePage.jsx` ×2, `AssessmentPage.module.css` ×2, `BoardDetailPage.jsx`, `BoardReportPage.jsx`, `firmProfile/FirmProfileHero.jsx` ×2, `LLMSearchPage.jsx`, `PeopleDiscoveryPage.module.css` ×2, `SwipePage.jsx` ×2, `UploadWorkPage.jsx`, `UploadWorkPage.module.css` ×2, `userProfile/ProfileHero.jsx`, `UserProfilePage.jsx` ×2.
+Only convert CTA **backgrounds** — check each site; the gradient stays legal on decorative surfaces. `ThemePreviewCard.jsx` needs the same scrutiny as `AppearanceSettings.jsx` (it may be showing a theme sample deliberately).
+
+**E. Hardcoded English UI strings.** PR-1 found axis labels frozen in English. Each PR must check its pages for user-visible text not routed through `t()`.
+
+**F. Theme-frozen hex** — scan found **zero** outside `AppearanceSettings.jsx` (intentional, exempt). No action.
 
 ## 7. Open items
 
