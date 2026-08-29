@@ -258,6 +258,7 @@ export default function ResultsPage({ projects, setProjects, onReportGenerated }
       background: 'var(--color-bg)',
       paddingBottom: 'calc(88px + env(safe-area-inset-bottom, 0px))',
     }}>
+      <div style={{ maxWidth: 680, margin: '0 auto' }}>
       <section style={{ padding: '18px 18px 0' }}>
         <button
           type="button"
@@ -475,6 +476,7 @@ export default function ResultsPage({ projects, setProjects, onReportGenerated }
           </>
         )}
       </section>
+      </div>
     </div>
   )
 }

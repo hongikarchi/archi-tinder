@@ -246,9 +246,9 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
           <span key={tag} style={{
             padding: '4px 10px',
             borderRadius: 999,
-            background: 'rgba(99,102,241,0.1)',
-            border: '1px solid rgba(99,102,241,0.22)',
-            color: 'var(--color-text-dim)',
+            background: 'color-mix(in srgb, var(--accent-2) 10%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--accent-2) 22%, transparent)',
+            color: 'var(--accent-2)',
             fontSize: 11,
             fontWeight: 700,
           }}>
@@ -259,9 +259,9 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
           <span key={tag} style={{
             padding: '4px 10px',
             borderRadius: 999,
-            background: 'rgba(255,255,255,0.06)',
-            border: '1px solid var(--color-border-soft)',
-            color: 'var(--color-text-dim)',
+            background: 'var(--color-tag-bg)',
+            border: '1px solid var(--color-tag-border)',
+            color: 'var(--color-tag-label)',
             fontSize: 11,
             fontWeight: 700,
           }}>
@@ -412,7 +412,7 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
           borderRadius: 999,
           background: (imgGenLoading || !boardId)
             ? 'var(--color-surface-2)'
-            : 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
+            : 'var(--accent-1)',
           color: (imgGenLoading || !boardId) ? 'var(--color-text-muted)' : '#fff',
           border: 'none',
           fontSize: 14,

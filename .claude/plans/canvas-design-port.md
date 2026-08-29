@@ -39,6 +39,9 @@ PR-0에서 scrim 토큰을 먼저 깔고, ResultsPage로 파이프라인을 검�
 2. **scrim tokens → add to `tokens.css`.** New `--color-scrim-*` family with derived values for all 4 themes, plus swap the 4 literals that duplicate existing token values. Lands as PR-0 so page PRs consume a stable token set.
 3. **Pilot page → `ResultsPage`** (user override of the initial discovery recommendation; chosen for its high text/visual density).
 4. **`/assessment`, `/people` → apply common patterns only.** No canvas design exists, so port only the mechanically-derived shared patterns (scrim tokens, card/list styling, spacing rules) to keep all 41 pages tonally consistent. Do **not** invent layout or copy. Note in the PR description that design intent was unverified for these two.
+5. **Primary CTA is FLAT `var(--accent-1)`, not the gradient** (user, 2026-08-29). Evidence: of the 37 pulled boards, **34 draw the CTA as flat `var(--accent-1)` and ZERO use `linear-gradient(135deg, var(--accent-1), var(--accent-2))`**. The user confirmed this was deliberate. `DESIGN.md` §8.1 updated accordingly (interaction spec unchanged). The 31 existing gradient call sites across 22 files migrate **per host-page PR**, never in a sweep — same discipline as the modal scrims.
+6. **ResultsPage gets `max-width: 680px` centered content** (user, 2026-08-29). A deliberate, user-authorized exception to translation rule 4 (no layout change). Intent stated as "BoardReportPage처럼 양쪽에 여백" — and `BoardReportPage.module.css` `.container` is already `max-width: 680px; margin: 0 auto`, so the mock's 680px is *parity with an existing page*, not a new desktop-only layout. Mirror the existing value rather than the mock's.
+7. **Tag chips follow the accent series** (user, 2026-08-29 — "버그 수정해줘"). `dominant_programs` already uses `--accent-1` at 10%/22%; `dominant_styles` moves from hardcoded Tailwind indigo-500 to `--accent-2` at the same percentages; `dominant_materials` moves from `rgba(255,255,255,0.06)` (invisible on light themes — a real bug) to `--color-tag-bg` / `--color-tag-border`.
 
 ---
 
@@ -66,6 +69,14 @@ Existing tokens hardcoded **in the mocks** (swap when porting mock markup — se
 | `#E1E4E8` | `var(--color-surface-3)` (or `--color-user-bubble` / `--color-progress-track` by context) |
 | `#e6edf3` | `var(--color-text)` (github-dark value — the mock froze a dark-theme color) |
 | `#3D4047` | `var(--color-text)` (ayu-light value — same) |
+
+### Standard conversions (apply on every page)
+
+| From | To | Note |
+|---|---|---|
+| `linear-gradient(135deg, var(--accent-1), var(--accent-2))` **on a CTA background** | `var(--accent-1)` | Decision ⑤. Preserve any disabled-state branch (`--color-surface-2` etc.) — convert only the enabled background. The gradient stays legal on non-CTA decorative surfaces. |
+| `#ec4899` (Tailwind pink-500) | the appropriate accent token, usually `var(--accent-1)` | Pre-token legacy. 13 occurrences remain across 10 files after PR-1. |
+| `rgba(255,255,255,0.0X)` used as a **surface wash** | `var(--color-tag-bg)` or the right surface token | Dark-theme-assumed; renders invisible on light themes. Not to be confused with on-photo whites, which stay literal. |
 
 ### Exemptions — literals that are CORRECT and must NOT be tokenized
 
@@ -163,12 +174,14 @@ Add the `--color-scrim-*` family to `frontend/src/tokens.css` for all 4 themes, 
 - **`rgb(99,102,241)` = `#6366F1` = Tailwind indigo-500.** A pre-token-system leftover, not a palette color. Appears on PersonaReport's `dominant_styles` chips. Same class as `#ec4899` (Tailwind pink-500), which still has 15 occurrences across 10 files (TabBar, profile cards, LikedProjectsPage, BuildingTile, buildingDetail/Header, UserProfilePage.module.css). Treat any Tailwind-default hex found in this codebase as legacy to tokenize, not as design.
 - **`rgba(255,255,255,0.0X)` surface washes are a light-theme bug pattern.** They assume a dark ground. On `github-light` / `ayu-light` this renders white-on-white — an invisible element. Correct fix is `var(--color-tag-bg)` (or the appropriate surface token), which is already defined per-theme with black-alpha on light themes. Confirmed occurrences beyond PR-1: `profile/BoardCard.jsx`, `profile/ProjectCard.jsx`, `SaveToBoardModal.jsx` ×2, `SurpriseBoardModal.jsx` ×4, `SwipeCard.jsx`. Fix each inside its host page's PR.
 - **Chip styling series:** `dominant_programs` uses `color-mix(… var(--accent-1) 10%/22%)`; `dominant_styles` should follow with `--accent-2` at the same percentages; `dominant_materials` should use `--color-tag-bg` / `--color-tag-border`. Pending user decision.
+- **A wrapping element added late does NOT get its children re-indented.** ResultsPage's `max-width: 680px` wrapper encloses ~218 lines; re-indenting them would bury a 3-line semantic change under 200 lines of whitespace in a squashed PR diff, defeating the per-PR visual review this plan is built on. Lint enforces no indent rule here. Same call applies to any later PR that adds a container element.
 - **Verify a dispatch's premise before the maker does.** PR-1's dispatch wrongly claimed PersonaReport lacked a pentagon chart; it already had a local `RadarChart` matching the mock exactly, and the `PentagonChart.jsx` the dispatch named renders a *different taxonomy* (assessment axes 작업방식/역할성향/… via a hardwired `AXIS_LABELS` import), so following the instruction would have shipped work-style labels over taste data. The maker caught it. Check component internals, not just names, when writing a dispatch.
 
 ## 7. Open items
 
-- `rgba(99,102,241,…)` indigo in `results.html` — resolve during PR-1.
-- `#fff` / on-photo white alpha policy — establish the rule in PR-1, then apply globally.
+- ~~`rgba(99,102,241,…)` indigo~~ **RESOLVED (PR-1)** — Tailwind indigo-500, pre-token legacy. Now `--accent-2` at the same 10%/22% percentages, mirroring the `--accent-1` programs chip.
+- ~~`#fff` / on-photo white alpha policy~~ **RESOLVED (PR-1)** — on-photo whites and photo-gradient literals stay literal (image-relative, not theme-relative); `rgba(255,255,255,0.0X)` used as a *surface wash* is a light-theme bug and becomes `--color-tag-bg` or the right surface token. Both rules are in §4.
+- ~~Whether any board exploits desktop width~~ **RESOLVED (PR-1, decision ⑥)** — `results.html` pairs `max-width:680px` with `repeat(4,1fr)`, i.e. deliberately narrower tiles (~158px at 1440 vs ~344px uncapped), and 680px is parity with `BoardReportPage`'s existing `.container`. Not desktop-exploitation; it is a centered reading column. Still flag per-PR if a later board differs.
 - 4 unfetched overlay boards — fetched lazily per host PR.
-- Whether any board genuinely exploits desktop width — flag per-PR as encountered.
+- **PR-1 visual verdict still pending.** The user has not yet run the dev server on this branch. Their eyeball pass is what validates the translation pipeline; amend §3 with whatever it reveals BEFORE fanning out to PR-2+.
 - `LikedOfficesPage.jsx` is a confirmed orphan (imported, never rendered; `/my/liked-offices` is a redirect). Out of scope for this initiative; noted in case it surfaces during the profiles PR.
