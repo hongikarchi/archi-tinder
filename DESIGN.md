@@ -71,6 +71,34 @@ Other themes (the theme switcher changes this in lockstep):
 - GitHub Dark → `#F85149`
 - SynthWave '84 → `#FF6188`
 
+### 1.4 Scrim (themed)
+Black-alpha overlay family for **content-over-content separation** — modal /
+dialog backdrops and the opaque end of photo-caption gradients. Not for
+shadows (see §8.6 `card-shadow`, which stays a literal box-shadow).
+
+| Token | Purpose |
+|---|---|
+| `--color-scrim-strong` | heaviest overlay — opaque end of a photo-caption gradient, darkest modal backdrops |
+| `--color-scrim` | standard modal / dialog backdrop |
+| `--color-scrim-soft` | lighter backdrop / hover veil |
+| `--color-scrim-faint` | barely-there wash — near-transparent end of a gradient |
+
+Current default (GitHub Light):
+```yaml
+scrim-strong: "rgba(0,0,0,0.93)"
+scrim:        "rgba(0,0,0,0.65)"
+scrim-soft:   "rgba(0,0,0,0.55)"
+scrim-faint:  "rgba(0,0,0,0.12)"
+```
+Other themes (the theme switcher changes this in lockstep):
+- Ayu Light → same as GitHub Light (light ground, black-alpha reads correctly as-is)
+- GitHub Dark → alpha raised (`0.94 / 0.78 / 0.68 / 0.18`) — a black veil over an
+  already-dark ground (`#0d1117`) needs more opacity to still read as
+  "deepening further"
+- SynthWave '84 → alpha raised **and** tinted toward the theme's own
+  purple-navy ground (`rgba(26,22,37,…)` instead of neutral black) — a neutral
+  black scrim over this hue reads as muddy grey rather than a deepening
+
 ---
 
 ## 2. Typography
