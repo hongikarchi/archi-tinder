@@ -56,7 +56,7 @@ export default function ShareCardModal({ user, onClose }) {
         inset: 0,
         zIndex: 10200,
         // Themed backdrop (slightly stronger than SaveToBoardModal for card contrast)
-        background: 'rgba(0,0,0,0.60)',
+        background: 'var(--color-scrim)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -190,7 +190,7 @@ export default function ShareCardModal({ user, onClose }) {
                   height: 40,
                   borderRadius: 'var(--radius-md)',
                   border: 'none',
-                  background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
+                  background: 'var(--accent-1)',
                   color: '#fff',
                   fontSize: 13,
                   fontWeight: 600,

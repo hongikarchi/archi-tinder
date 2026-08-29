@@ -615,7 +615,7 @@ export default function UploadWorkPage() {
                 padding: '12px 16px',
                 borderRadius: 12,
                 border: 0,
-                background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
+                background: 'var(--accent-1)',
                 color: '#fff',
                 fontSize: 14,
                 fontWeight: 600,

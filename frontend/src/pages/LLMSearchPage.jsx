@@ -38,13 +38,11 @@ function FilterChips({ filters }) {
   }
   if (!chips.length) return null
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px 14px', marginTop: 10 }}>
       {chips.map(c => (
         <span key={c} style={{
-          padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 500,
-          background: 'color-mix(in srgb, var(--accent-1) 12%, transparent)',
-          border: '1px solid color-mix(in srgb, var(--accent-1) 25%, transparent)',
-          color: 'color-mix(in srgb, var(--accent-1) 55%, #fff)',
+          fontSize: 12, fontWeight: 700,
+          color: 'var(--color-text)',
         }}>{c}</span>
       ))}
     </div>
@@ -54,7 +52,7 @@ function FilterChips({ filters }) {
 const Thumbnail = memo(function Thumbnail({ r }) {
   const [imgLoading, setImgLoading] = useState(true)
   return (
-    <div style={{ width: '100%', height: 72, position: 'relative', background: 'rgba(255,255,255,0.04)' }}>
+    <div style={{ width: '100%', height: 72, position: 'relative', background: 'var(--color-surface-2)' }}>
       {imgLoading && <div className="skeleton-shimmer" style={{ position: 'absolute', inset: 0 }} />}
       {r.image_url ? (
         <img
@@ -104,8 +102,8 @@ function ResultStrip({ results, isFallback }) {
         {results.slice(0, 12).map(r => (
           <div key={r.image_id} style={{
             flexShrink: 0, width: 100, borderRadius: 10, overflow: 'hidden',
-            background: 'rgba(255,255,255,0.05)',
-            border: '1px solid rgba(255,255,255,0.08)',
+            background: 'var(--color-tag-bg)',
+            border: '1px solid var(--color-border-soft)',
           }}>
             <Thumbnail r={r} />
             <div style={{ padding: '5px 7px' }}>
@@ -786,7 +784,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
                   className={ps.presetChip}
                   style={{
                     padding: '8px 14px', borderRadius: 999, fontSize: 12, fontWeight: 500,
-                    color: 'color-mix(in srgb, var(--accent-1) 55%, #fff)', cursor: 'pointer', fontFamily: 'inherit',
+                    color: 'var(--accent-1)', cursor: 'pointer', fontFamily: 'inherit',
                     whiteSpace: 'nowrap',
                   }}
                 >
@@ -832,7 +830,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
           }}>
             <button onClick={handleStartSwiping} style={{
               width: '100%', padding: '13px', borderRadius: 12, border: 'none',
-              background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
+              background: 'var(--accent-1)',
               color: '#fff', fontSize: 14, fontWeight: 700,
               cursor: 'pointer', fontFamily: 'inherit',
             }}>

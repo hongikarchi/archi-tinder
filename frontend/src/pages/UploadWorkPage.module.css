@@ -66,10 +66,10 @@
 /* ── Drop zone ──────────────────────────────────────────────────────────── */
 
 .dropzone {
-  border: 2px dashed var(--color-border-soft);
-  border-radius: var(--radius-lg);
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-md);
   background: var(--color-surface);
-  padding: 32px 16px;
+  padding: 18px;
   text-align: center;
   cursor: pointer;
   transition:
@@ -308,7 +308,7 @@
 
 .editApplyBtn {
   flex: 1;
-  background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+  background: var(--accent-1);
   color: #fff;
   border: 0;
   border-radius: var(--radius-md);
@@ -347,10 +347,11 @@
 }
 
 .label {
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--color-text-muted);
-  letter-spacing: 0.02em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .input {
@@ -436,7 +437,7 @@
 /* ── Submit button ──────────────────────────────────────────────────────── */
 
 .submitBtn {
-  background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+  background: var(--accent-1);
   color: #fff;
   border: 0;
   border-radius: var(--radius-md);

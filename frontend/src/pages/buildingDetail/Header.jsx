@@ -50,7 +50,7 @@ export default function Header({ onBack, onSaveToBoard, isSaved, saveEnabled, bo
             padding: '0 14px',
             borderRadius: 10,
             border: isSaved ? '1px solid rgba(251,191,36,0.5)' : 'none',
-            background: isSaved ? 'rgba(251,191,36,0.12)' : 'linear-gradient(135deg, #ec4899, #f43f5e)',
+            background: isSaved ? 'rgba(251,191,36,0.12)' : 'var(--accent-1)',
             color: isSaved ? '#fbbf24' : '#fff',
             fontSize: 13,
             fontWeight: 700,

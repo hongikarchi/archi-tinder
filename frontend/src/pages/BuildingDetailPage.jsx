@@ -190,7 +190,7 @@ export default function BuildingDetailPage() {
         <p style={{
           color: 'var(--color-text-muted)',
           fontSize: 11,
-          fontWeight: 800,
+          fontWeight: 700,
           letterSpacing: '0.1em',
           textTransform: 'uppercase',
           margin: '0 0 8px',
@@ -200,7 +200,7 @@ export default function BuildingDetailPage() {
         <h1 style={{
           color: 'var(--color-text)',
           fontSize: 'clamp(28px, 7vw, 42px)',
-          fontWeight: 800,
+          fontWeight: 700,
           lineHeight: 1.08,
           margin: '0 0 8px',
         }}>
@@ -235,7 +235,7 @@ export default function BuildingDetailPage() {
               <div style={{
                 color: 'var(--color-text-muted)',
                 fontSize: 10,
-                fontWeight: 800,
+                fontWeight: 700,
                 letterSpacing: '0.08em',
                 textTransform: 'uppercase',
                 marginBottom: 4,
@@ -494,7 +494,7 @@ export default function BuildingDetailPage() {
             <h2 style={{
               color: 'var(--color-text)',
               fontSize: 16,
-              fontWeight: 800,
+              fontWeight: 700,
               margin: '0 0 10px',
             }}>
               Description
@@ -518,7 +518,7 @@ export default function BuildingDetailPage() {
           <h2 style={{
             color: 'var(--color-text)',
             fontSize: 16,
-            fontWeight: 800,
+            fontWeight: 700,
             margin: '0 0 10px',
           }}>
             Atmosphere
