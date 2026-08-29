@@ -41,7 +41,6 @@ import {
   MONO,
   INK,
   paperFaceStyle,
-  loginWordmarkStyle as cardWordmarkStyle,
   baseLabelStyle,
   monoLabelStyle,
   monoRowStyle,
@@ -336,7 +335,6 @@ export default function LoginPage({ onLogin }) {
           <ReturningStep
             key={key}
             t={t}
-            typedLine={line}
             isActive={isActive}
             showGoogle={googleConfigured}
             disabled={isBusy || !isActive}
@@ -354,7 +352,6 @@ export default function LoginPage({ onLogin }) {
           <CredentialsStep
             key={key}
             t={t}
-            typedLine={line}
             isActive={isActive}
             disabled={isBusy || !isActive}
             onBack={goBack}
@@ -366,7 +363,6 @@ export default function LoginPage({ onLogin }) {
           <ProfileStep
             key={key}
             t={t}
-            typedLine={line}
             isActive={isActive}
             role={role}
             roles={roles}
@@ -657,7 +653,7 @@ const CHECK_TAKEN     = 'taken'
 // LOGIN-REWORK-1: debounce delay before auto-checking ID availability.
 const ID_CHECK_DEBOUNCE_MS = 450
 
-function CredentialsStep({ t, typedLine, isActive = true, disabled, onBack, onContinue }) {
+function CredentialsStep({ t, isActive = true, disabled, onBack, onContinue }) {
   const [localId, setLocalId]             = useState('')
   const [localPassword, setLocalPassword] = useState('')
   const [checkState, setCheckState]       = useState(CHECK_IDLE)
@@ -762,10 +758,9 @@ function CredentialsStep({ t, typedLine, isActive = true, disabled, onBack, onCo
     checkError || ''
 
   return (
-    <AuthCard ariaLabel={t('login.credentials.eyebrow')}>
+    <AuthCard front={isActive} ariaLabel={t('login.credentials.eyebrow')}>
       <CardHeader
         title={t('login.credentials.title')}
-        typedLine={typedLine}
       />
       <form onSubmit={handleSubmit} style={formStyle}>
         <label style={baseLabelStyle} htmlFor="cred-id">
@@ -879,7 +874,7 @@ function ConsentDeck({
         onSwipeRequirementUnfulfilled={handleUnfulfilled}
         preventSwipe={preventSwipe}
       >
-        <AuthCard absolute ariaLabel={t('login.consent.eyebrow')}>
+        <AuthCard absolute front ariaLabel={t('login.consent.eyebrow')}>
           <CardHeader
             eyebrow={t('login.consent.eyebrow')}
             typedLine={typedLine}
@@ -959,7 +954,6 @@ function ConsentDeck({
 
 function ReturningStep({
   t,
-  typedLine,
   isActive = true,
   showGoogle,
   disabled,
@@ -981,10 +975,9 @@ function ReturningStep({
   }
 
   return (
-    <AuthCard ariaLabel={t('login.returning.eyebrow')}>
+    <AuthCard front={isActive} ariaLabel={t('login.returning.eyebrow')}>
       <CardHeader
         title={t('login.returning.title')}
-        typedLine={typedLine}
       />
       {showGoogle ? (
         <GoogleLoginButton
@@ -1067,7 +1060,6 @@ function ReturningStep({
 
 function ProfileStep({
   t,
-  typedLine,
   isActive = true,
   role,
   roles,
@@ -1083,10 +1075,9 @@ function ProfileStep({
   const roleList = roles && roles.length ? roles : ONBOARDING_ROLES
 
   return (
-    <AuthCard ariaLabel={t('login.profile.eyebrow')}>
+    <AuthCard front={isActive} ariaLabel={t('login.profile.eyebrow')}>
       <CardHeader
         title={t('login.profile.title')}
-        typedLine={typedLine}
       />
       <form onSubmit={onSubmit} style={formStyle}>
         <label style={baseLabelStyle} htmlFor="guest-affiliation">
@@ -1159,32 +1150,42 @@ function ProfileStep({
   )
 }
 
-function CardHeader({ eyebrow, title, typedLine, trailing }) {
+function CardHeader({ eyebrow, title, typedLine }) {
   return (
     <div style={cardHeaderStyle}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-        <span style={cardWordmarkStyle}>ARCHIBE</span>
-        {trailing}
-      </div>
+      {/* Canvas design port (login family): the ARCHIBE wordmark row is
+          dropped from all four remaining CardHeader states — the mocks
+          (login-credentials/consent/profile/returning.html) show no
+          eyebrow/wordmark row above the title; only the state-specific
+          eyebrow OR title, never both (login-consent.html has an eyebrow +
+          no h2; the other three have an h2 + no eyebrow). */}
       {/* LOGIN-REWORK-1: eyebrow only renders when it adds orientation the
           typed question doesn't already give (issue 5 — remove noise copy). */}
       {eyebrow && <p style={baseLabelStyle}>{eyebrow}</p>}
       {title && <h2 style={titleStyle}>{title}</h2>}
-      <p style={typedLineStyle}>
-        {typedLine}
-        <span aria-hidden="true" style={{ opacity: typedLine ? 1 : 0 }}>_</span>
-      </p>
+      {/* typedLine != null (not truthy) — the reserved 44px slot must stay
+          mounted while the typed-animation string is still '' (consent's
+          first frame), and callers that never pass typedLine (credentials/
+          profile/returning, post-port) render no line at all, matching the
+          mocks exactly. */}
+      {typedLine != null && (
+        <p style={typedLineStyle}>
+          {typedLine}
+          <span aria-hidden="true" style={{ opacity: typedLine ? 1 : 0 }}>_</span>
+        </p>
+      )}
     </div>
   )
 }
 
-function AuthCard({ children, absolute = false, ariaLabel }) {
+function AuthCard({ children, absolute = false, front = false, ariaLabel }) {
   return (
     <section
       aria-label={ariaLabel}
       style={{
         ...authCardStyle,
         ...(absolute ? absoluteCardStyle : staticCardStyle),
+        ...(front ? frontCardStyle : null),
       }}
     >
       {children}
@@ -1374,6 +1375,22 @@ const staticCardStyle = {
   position: 'relative',
   width: '100%',
   height: AUTH_CARD_HEIGHT,
+}
+
+// Canvas design port (login family): the 4 mocks (login-credentials/consent/
+// profile/returning.html) render the FRONT (interactive) card at
+// `padding:40px 36px;justify-content:center` — tighter than the app's shared
+// `paperFaceStyle` default (26px 24px, no justify-content). `front` opts a
+// caller INTO this override; `choice` never passes it (its mock drops
+// CardHeader entirely and already centers its own body via choiceBodyStyle,
+// so this override does not apply there), and the pre-rendered inert BACK
+// card (backCardWrapStyle peek) is never passed `front` either — only the
+// active front-card render path for credentials/profile/returning/consent
+// opts in. See ProfileStep/CredentialsStep/ReturningStep (front={isActive})
+// and ConsentDeck (front — always the interactive card, never the peek).
+const frontCardStyle = {
+  padding: '40px 36px',
+  justifyContent: 'center',
 }
 
 const cardHeaderStyle = {
