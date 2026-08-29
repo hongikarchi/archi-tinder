@@ -23,9 +23,9 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-08-29 10:37 KST',
-    head: 'bc40fbf',
-    branch: 'feature/sns-people-card-flip',
+    updatedAt: '2026-08-29 11:18 KST',
+    head: 'b8b4f46',
+    branch: 'pr314-resolve',
   },
   done: [
     {
@@ -40,6 +40,20 @@ window.PROJECT_STATE = {
       title: '/people 발견 카드 이미지 앞면 + flip 상세',
       completedAt: '2026-08-26',
       note: '카드 구조 교체: 앞면 = 취향분석 리포트 건축 이미지 전면(그래프/이름/아바타 제거), 탭 시 flip → 뒷면에 성향 그래프 + 내 벡터 오버레이 + 범례 + 이름(클릭 시 프로필 이동)',
+    },
+    {
+      id: 'FRONT-ASSESSMENT-1',
+      title: '성향 진단 진입 버그 + 문항 스와이프 카드화',
+      completedAt: '2026-08-25',
+      prs: [312, 313],
+      note: '진단 문항을 질문 1개 = 카드 1장 스와이프 카드로 전환. 답변 방식(5점 Likert 버튼)은 유지하고 카드 디자인·전환 애니메이션만 Discovery/Taste 덱과 동일 시스템으로 통일',
+    },
+    {
+      id: 'FULL-PERSONALITY-1',
+      title: '성향 기반 유저 발견 (4+1축 진단·발견 피드·5각형 차트)',
+      completedAt: '2026-08-24',
+      prs: [311],
+      note: 'P2 협업/팀빌딩 발견 기능(연애 매칭 아님 — Product Constitution 범위 확인). 23파일 +2223줄',
     },
     {
       id: 'FRONT-UX-14',
@@ -65,24 +79,11 @@ window.PROJECT_STATE = {
       completedAt: '2026-08-15',
       note: 'B1 검토 중 user 발견/결정 3건 이행: 신규 유저 Discovery→Taste 시퀀스의 연속 인터럽트(TriggerCard→TutorialPopup→DismissConfirm) 정리',
     },
-    {
-      id: 'FRONT-DESIGN-B1',
-      title: '로그인+프로필 비주얼 튜닝',
-      completedAt: '2026-08-15',
-      note: '디자인 4단계 이니셔티브(B1→A1→B2→A2, `.claude/plans/design-clever-valley.md`)의 B1: 시스템 내 리파인, 컨셉 교체 없음',
-    },
-    {
-      id: 'UPLOAD-NAV-1',
-      title: '업로드 성공 모달 + Created 탭 이동',
-      completedAt: '2026-08-14',
-      prs: [300],
-      note: '_(yywon1 ad-hoc PR — Task ID 없이 들어와 사후 부여. 업로드 완료 인라인 메시지 → 확인 모달 + `/user/me?tab=created` 이동.)_',
-    },
   ],
   now: [
     {
       id: 'FRONT-DESIGN-B2',
-      title: 'Claude Design 반복 세션 (진행 중 2026-08-15)',
+      title: 'Claude Design 반복 세션 (외부 입력 대기 — 2026-08-15)',
       note: '셋업 완료: claude.ai/design 프로젝트 "ArchiTinder Design System" + `docs/design-preview/` 페이지 프리뷰 9종(브리프/파운데이션/로그인/디스커버리/Taste/프로필/페르소나 리포트 문제 재현+모바일 제안/플로우 맵/컴포넌트, 실토큰+4테마 스위처). user 노트 5건 Brief 카드화: 레이아웃·폰트 정리, 페르소나 리포트 데스크탑 문제, 모바일 중심 가운데 레이아웃 전환, 로그인 중점 수정, 화면 이동 시나리오. 다음: user가 C…',
     },
   ],
@@ -126,6 +127,11 @@ window.PROJECT_STATE = {
         id: 'FRONT-PEOPLE-CARD-2',
         title: '발견 피드가 실데이터에서 빈 화면',
         note: 'FRONT-PEOPLE-CARD-1이 카드 앞면을 취향분석 리포트 이미지로 바꾸면서 피드 조건이 4중이 됨(진단 완료 + discovery_opt_in + publishable Work + public report_image). 로컬 DB 실측: 29명 중 진단 완료 2명, 그 2명이 전부 게스트라 2단계에서 이미 0명이 되고, `report_image` 보유 프로젝트는 공개 여부 무관 0건. 프로덕션도 같은 상태면 배포 후 빈 화면. 결정 필요: (a) 이미지 없는 유저는 Work 커버로…',
+      },
+      {
+        id: 'FRONT-ASSESSMENT-2',
+        title: '진단 카드 reduced-motion 정책 충돌',
+        note: 'FRONT-ASSESSMENT-1(PR #313)이 요구사항대로 `prefers-reduced-motion`에서 슬라이드 대신 페이드로 축소했으나, FRONT-UX-14-R7이 "스와이프 퇴장·갤러리 이동 같은 인터랙션 피드백 모션은 reduced-motion을 의도적으로 무시한다(장식성 CSS 모션만 존중)"를 제품 결정으로 확정해 둔 상태 — 진단 카드 퇴장은 그 정의상 인터랙션 피드백이므로 현재 두 화면의 정책이 갈림. 결정 필요: (a) 진단도 무시로 통일해 `exiting`/`ent…',
       },
       {
         id: 'SNS-PERSONA-AXIS-1',
@@ -253,6 +259,20 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 313,
+      title: 'feat(assessment): 성향 진단 문항을 스와이프 카드로 전환',
+      mergedAt: '2026-08-29T02:17:12Z',
+      mergedAtKST: '2026-08-29 11:17 KST',
+      sha: 'b8b4f46',
+    },
+    {
+      number: 312,
+      title: 'fix(routing): /assessment, /people 진입이 discovery로 튕기던 문제',
+      mergedAt: '2026-08-29T02:16:13Z',
+      mergedAtKST: '2026-08-29 11:16 KST',
+      sha: '2e358b7',
+    },
+    {
       number: 311,
       title: 'feat(FULL-DISCOVERY-1): 성향 기반 유저 발견 — 4+1축 진단·발견 피드·5각형 차트',
       mergedAt: '2026-08-22T01:44:14Z',
@@ -293,20 +313,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-08-15T03:26:37Z',
       mergedAtKST: '2026-08-15 12:26 KST',
       sha: 'ab4ac47',
-    },
-    {
-      number: 305,
-      title: 'feat(FRONT-DESIGN-B1): login+profile visual tuning — tokens, :hover modules, de-drift',
-      mergedAt: '2026-08-15T01:53:00Z',
-      mergedAtKST: '2026-08-15 10:53 KST',
-      sha: '25ee29d',
-    },
-    {
-      number: 303,
-      title: 'chore(works-audit): PR #300 Done entry + FULL-WORKS-4 ticket',
-      mergedAt: '2026-08-14T13:34:10Z',
-      mergedAtKST: '2026-08-14 22:34 KST',
-      sha: '167be38',
     },
   ],
   agents: [
@@ -575,6 +581,14 @@ window.PROJECT_STATE = {
     {
       path: 'README.md',
       role: '프로젝트 안내 문서',
+    },
+    {
+      path: 'Task.md',
+      role: '태스크 보드 문서',
+    },
+    {
+      path: 'Task.md',
+      role: '태스크 보드 문서',
     },
     {
       path: 'Task.md',
@@ -1909,6 +1923,14 @@ window.PROJECT_STATE = {
       role: '외관설정 스타일(CSS Module)',
     },
     {
+      path: 'frontend/src/components/AssessmentCard.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/AssessmentCard.module.css',
+      role: '',
+    },
+    {
       path: 'frontend/src/components/Avatar.jsx',
       role: '',
     },
@@ -2042,6 +2064,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/components/cardLanguage.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/cardShell.js',
       role: '',
     },
     {
@@ -2523,6 +2549,14 @@ window.PROJECT_STATE = {
     {
       path: 'project/mermaid.min.js',
       role: 'Mermaid 다이어그램 번들',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
     },
     {
       path: 'project/state.js',

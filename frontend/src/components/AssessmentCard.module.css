@@ -1,0 +1,83 @@
+/**
+ * AssessmentCard.module.css — interaction states only.
+ *
+ * The option button's BASE appearance (padding, radius, font, background,
+ * border, min-height) comes from `questionOptionStyle` in cardShell.js, the
+ * same object QuestionCard's A/B buttons use. This file adds only what an
+ * inline style cannot express — :hover / :active / :disabled / selected —
+ * per DESIGN.md §4's hybrid rule.
+ */
+
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  /* Shrink before the card does on short viewports (CARD_HEIGHT collapses to
+     vh - 220), rather than overflowing the shell. */
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.options::-webkit-scrollbar { display: none; }
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  transition:
+    border-color var(--motion-fast) var(--motion-ease),
+    background var(--motion-fast) var(--motion-ease),
+    transform var(--motion-normal) var(--motion-ease);
+}
+
+.option:hover:not(:disabled) {
+  border-color: var(--accent-1);
+  background: color-mix(in srgb, var(--accent-1) 6%, var(--color-surface));
+  transform: translateY(-1px);
+}
+
+.option:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.option:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+}
+
+.option:disabled {
+  cursor: default;
+}
+
+.optionSelected {
+  border-color: var(--accent-1);
+  background: color-mix(in srgb, var(--accent-1) 12%, var(--color-surface));
+}
+
+.val {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent-1);
+  min-width: 28px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.label {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--color-text);
+  line-height: 1.3;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .option {
+    transition: none;
+  }
+  .option:hover:not(:disabled) {
+    transform: none;
+  }
+}

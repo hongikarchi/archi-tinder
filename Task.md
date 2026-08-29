@@ -57,9 +57,10 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-### FRONT-DESIGN-B2 — Claude Design 반복 세션 (진행 중 2026-08-15)
+### FRONT-DESIGN-B2 — Claude Design 반복 세션 (외부 입력 대기 — 2026-08-15)
 
 셋업 완료: claude.ai/design 프로젝트 "ArchiTinder Design System" + `docs/design-preview/` 페이지 프리뷰 9종(브리프/파운데이션/로그인/디스커버리/Taste/프로필/페르소나 리포트 문제 재현+모바일 제안/플로우 맵/컴포넌트, 실토큰+4테마 스위처). user 노트 5건 Brief 카드화: 레이아웃·폰트 정리, 페르소나 리포트 데스크탑 문제, **모바일 중심 가운데 레이아웃 전환**, 로그인 중점 수정, 화면 이동 시나리오. 다음: user가 Claude Design에서 방향 확정 → 승인분만 컴포넌트 단위 코드 반영(A2와 병행). 재생성: `python tools/gen-design-preview.py`.
+_Deferred 2026-08-21: Claude Design 외부 입력 대기 중, FULL-DISCOVERY-1 병행 진행._
 
 
 ## Next
@@ -165,6 +166,9 @@ _(2026-07-12 감사 re-pin: 전제 유효, 라인 이동 — resume guard `sessi
 ### MEDIUM
 #### FRONT-PEOPLE-CARD-2 — 발견 피드가 실데이터에서 빈 화면
 FRONT-PEOPLE-CARD-1이 카드 앞면을 취향분석 리포트 이미지로 바꾸면서 피드 조건이 4중이 됨(진단 완료 + discovery_opt_in + publishable Work + public report_image). 로컬 DB 실측: 29명 중 진단 완료 2명, 그 2명이 전부 게스트라 2단계에서 이미 0명이 되고, `report_image` 보유 프로젝트는 공개 여부 무관 0건. 프로덕션도 같은 상태면 배포 후 빈 화면. 결정 필요: (a) 이미지 없는 유저는 Work 커버로 대체, (b) Step 2b 필터 제거하고 앞면 플레이스홀더 허용, (c) 조건 유지하고 리포트 이미지 생성 유도 플로우를 먼저 붙이기.
+
+#### FRONT-ASSESSMENT-2 — 진단 카드 reduced-motion 정책 충돌
+FRONT-ASSESSMENT-1(PR #313)이 요구사항대로 `prefers-reduced-motion`에서 슬라이드 대신 페이드로 축소했으나, FRONT-UX-14-R7이 "스와이프 퇴장·갤러리 이동 같은 **인터랙션 피드백** 모션은 reduced-motion을 의도적으로 무시한다(장식성 CSS 모션만 존중)"를 제품 결정으로 확정해 둔 상태 — 진단 카드 퇴장은 그 정의상 인터랙션 피드백이므로 현재 두 화면의 정책이 갈림. 결정 필요: (a) 진단도 무시로 통일해 `exiting`/`entering` 분기 제거, (b) 현행 유지하고 R7 결정을 "덱 스와이프 한정"으로 좁혀 명문화. PR #313에 검토 요청으로 명시함.
 
 #### SNS-PERSONA-AXIS-1 — persona 프롬프트에 axis_scores + 언어설정 미반영 (#232 유실 작업)
 PR #232(`feature/sns-persona-description-axis`, 2026-06-18, collaborator)가 CI red로 CLOSED-미머지 후 유실 — `generation.py` persona description 프롬프트에 `axis_scores` + 사용자 언어설정을 반영하는 작업(+68/-12, generation.py + views/reports.py). 2026-08-06 브랜치 정리 전수검사에서 발견: 현재 develop `generation.py`에 axis_scores 미사용 = 기능 미착륙 확인. 원격 브랜치는 보존됨(정리에서 유일하게 제외). 살리려면 rebase 필요 — 이후 persona seam 변경(#290 provider pin, #291 mock) 충돌 예상, cherry-pick보다 재구현이 쌀 수도. hypothesis-grade: 기능 가치 자체(개인화 페르소나 품질)는 제품 결정 필요.
@@ -314,6 +318,24 @@ Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over
 - 요구사항 "진단 안 한 유저 제외"는 기존 쿼리셋(`PersonalityProfile` 기반)이 이미 충족 — 추가 작업 없었음
 - 미검증(중요): 로컬 DB에 표시 가능한 데이터가 0건이라 **브라우저 실물 확인 불가**. 진단 완료 2명이 전부 게스트라 `exclude(is_guest=True)`에서 탈락(이번 변경 이전부터 그러함), `report_image` 보유 프로젝트는 공개 여부 무관 0건. 로컬 전용 목 모드로만 렌더 확인
 - Deferred: `report_image` 보유 유저가 없으면 배포 후에도 피드가 빈 화면 — Step 2b 필터 유지 여부 결정 필요
+
+### FRONT-ASSESSMENT-1 — 성향 진단 진입 버그 + 문항 스와이프 카드화 — RESOLVED 2026-08-25 (`968194f` + `51936b8`, PR #312/#313 리뷰 대기)
+- 진단 문항을 **질문 1개 = 카드 1장** 스와이프 카드로 전환. 답변 방식(5점 Likert 버튼)은 유지하고 카드 디자인·전환 애니메이션만 Discovery/Taste 덱과 동일 시스템으로 통일
+- ① 진입 버그(PR #312, `968194f`): `assessment`/`people` 두 라우트만 `ProtectedRoute` **중복 래핑 + 안쪽에 `userId` 미전달** → `!userId` 항상 참 → `/login` → 로그인 상태라 `/` → index → `/discovery`. **로그인했기 때문에 오히려 튕기는** 구조. 바깥 레이아웃 라우트가 이미 가드하므로 안쪽 래퍼 제거(보호 유지, 형제 라우트와 일관)
+- ② 카드 표면(PR #313): `cardShell.js` 신설 — 기존 `QuestionCard.jsx`(취향 보정 질문 카드)가 쓰던 값을 추출한 단일 출처. `QuestionCard`도 이걸 참조하도록 리팩터링(값 동일, 시각 변화 0). footprint는 `SwipeCard`의 `CARD_WIDTH/HEIGHT`, 모서리는 `--radius-lg`(SwipeCard/SwipeDeck이 하드코딩하던 20px)
+- ③ 애니메이션 = 값 복제가 아니라 **코드 재사용**: 퇴장은 `SwipeDeck`+`SwipeGestureFrame`+`cardRef.swipe('left')`로 `tinderCard.animateOut()` 원본 실행(easeInOutCubic, [480,680]ms, 대각선 거리, 회전 x*45). 이전 문항 복귀는 `physics.animateBack` export 후 재사용(드래그 snap-back과 동일 스프링) → FRONT-UX-14 튜닝값이 자동 승계
+- ④ 상호작용: 드래그 응답은 `SWIPE_PREVENT_ALL`로 차단(탭 전용, 명령형 swipe는 우회). 중복 응답 차단 `busyRef`+`pointerEvents`+`disabled` 3중 양방향. 진행률을 응답 개수 기준으로 변경 → 탭 즉시 갱신되어 카드 비행과 이어짐. 마지막 문항은 완료 버튼 없이 즉시 제출, 실패 시 `retryKey`로 카드 복귀
+- ⑤ 이전 문항 복귀 신설(기존 없던 기능, user 요청). 이전 답변은 선택 상태로 보존 — 지우지 않고 수정 가능
+- 함정 2건: `busy`/`exiting`/`entering` 상태 분리 필수(한 플래그면 reduced-motion에서 **복귀 카드가 opacity 0으로 소멸**). 카드 내부 요소에 `pressable` 클래스 필수(`tinderCard`가 `touchstart`에서 `preventDefault`로 탭·스크롤을 삼킴)
+- Deferred: reduced-motion 페이드가 FRONT-UX-14-R7의 "인터랙션 모션은 reduced-motion 무시" 제품 결정과 충돌 — PR #313에 검토 요청으로 명시, 팀장 판단 대기
+- 미검증: `/people` 진입은 라우트 수정만 확인(피드 자체는 진단 완료 계정 필요)
+
+### FULL-PERSONALITY-1 — 성향 기반 유저 발견 (4+1축 진단·발견 피드·5각형 차트) — RESOLVED 2026-08-24 (`bc40fbf`, PR #311)
+- P2 협업/팀빌딩 발견 기능(연애 매칭 아님 — Product Constitution 범위 확인). 23파일 +2223줄
+- 백엔드: `PersonalityProfile` 모델(5축 + `type_code`) + `accounts/0012` 마이그레이션, 진단 API(`POST /personality/assessment/`, `GET /personality/me/`), 발견 피드 API(`GET /people/`), `/users/:id/`에 personality 필드 추가
+- 프론트: `PentagonChart`(5각형 레이더), `AssessmentPage` + 20문항 뱅크, `PeopleDiscoveryPage` + `PersonCard`, `UserProfilePage` 통합, `api/personality.js` · `api/people.js`
+- **감사 누락분 소급 기록**: 머지(2026-08-24) 시점에 reporter-inline이 돌지 않아 `## Now`에 미완료 체크박스로 남아 있던 것을 정리. ID도 `FULL-DISCOVERY-1`로 잘못 적혀 있었음 — 그 ID는 2026-06-04 Discovery v3.1/v3.2 재설계가 이미 점유 → `FULL-PERSONALITY-1`로 신규 부여
+- Deferred: 진단 UI가 일반 폼이라 앱의 스와이프 카드 언어와 이질적 (→ FRONT-ASSESSMENT-1에서 해소)
 
 ### FRONT-UX-14 — 스와이프 모션 + 갤러리 UX (7 라운드 feel-iteration) — RESOLVED 2026-08-15 (`94391bf`…`9c09a8c`)
 - ① 퇴장: vendored `lib/tinderCard.js` — linear 3-대각선 총알 → **easeInOutCubic + power 1.0 + [480,680]ms** (가시 구간 56ms→~250ms, 카드가 가속하며 떠나는 게 보임. r2 easeOut 시도는 가시 구간이 더 짧아져 실패 — 교훈: 이동거리 대부분이 화면 밖이면 ease-out은 역효과)
