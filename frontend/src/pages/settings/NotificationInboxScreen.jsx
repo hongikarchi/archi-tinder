@@ -19,6 +19,7 @@ import { useTranslation } from '../../i18n/index.js'
 import { formatTimeAgo } from '../../utils/timeAgo.js'
 import { IconBack } from '../../components/icons.jsx'
 import Avatar from '../../components/Avatar.jsx'
+import PageLogoHeader from '../../components/PageLogoHeader.jsx'
 import styles from './NotificationInboxScreen.module.css'
 
 const PAGE_SIZE = 20
@@ -120,6 +121,8 @@ export default function NotificationInboxScreen() {
 
   return (
     <div className={styles.page}>
+      <PageLogoHeader />
+
       {/* Glassmorphic sticky header */}
       <div className={styles.header}>
         <button

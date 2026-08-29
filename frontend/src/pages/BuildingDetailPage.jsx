@@ -7,6 +7,7 @@ import Header from './buildingDetail/Header.jsx'
 import LoadingState from './buildingDetail/LoadingState.jsx'
 import { isValidRank, kindLabel, metadataItems } from './buildingDetail/helpers.js'
 import PhotoLightbox from './buildingDetail/PhotoLightbox.jsx'
+import PageLogoHeader from '../components/PageLogoHeader.jsx'
 
 const BUILDING_ID_RE = /^[A-Za-z0-9_-]{1,32}$/
 
@@ -155,6 +156,8 @@ export default function BuildingDetailPage() {
       overflowY: 'auto',
       paddingBottom: 'calc(84px + env(safe-area-inset-bottom, 0px))',
     }}>
+      <PageLogoHeader />
+
       <Header
         onBack={handleBack}
         onSaveToBoard={() => !isSaved && setSaveModalOpen(true)}

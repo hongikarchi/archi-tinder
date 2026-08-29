@@ -14,6 +14,7 @@ import { getMe, updateMyProfile } from '../../api/client.js'
 import Toggle from '../../components/Toggle.jsx'
 import { IconBack } from '../../components/icons.jsx'
 import { useTranslation } from '../../i18n/index.js'
+import PageLogoHeader from '../../components/PageLogoHeader.jsx'
 import styles from './NotificationsScreen.module.css'
 
 const CATEGORY_KEYS = ['social', 'content', 'security', 'recommend', 'marketing']
@@ -91,6 +92,8 @@ export default function NotificationsScreen() {
 
   return (
     <div className={styles.page}>
+      <PageLogoHeader />
+
       {/* Glassmorphic sticky header */}
       <div className={styles.header}>
         <button

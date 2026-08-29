@@ -14,6 +14,7 @@ import { updateMyProfile } from '../../api/profiles.js'
 import { IconBack } from '../../components/icons.jsx'
 import EditCardForm from '../../components/profile/EditCardForm.jsx'
 import { useTranslation } from '../../i18n/index.js'
+import PageLogoHeader from '../../components/PageLogoHeader.jsx'
 import btnStyles from '../../components/Button.module.css'
 import styles from './AccountScreen.module.css'
 
@@ -175,17 +176,20 @@ export default function EditProfileScreen() {
 
 function ScreenHeader({ navigate, t }) {
   return (
-    <div className={styles.header}>
-      <button
-        type="button"
-        onClick={() => navigate(-1)}
-        aria-label="Back"
-        className={styles.iconBtn}
-      >
-        <IconBack width={20} height={20} />
-      </button>
-      <h2 className={styles.headerTitle}>{t('profileEdit.title')}</h2>
-      <div style={{ width: 44 }} />
-    </div>
+    <>
+      <PageLogoHeader />
+      <div className={styles.header}>
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          aria-label="Back"
+          className={styles.iconBtn}
+        >
+          <IconBack width={20} height={20} />
+        </button>
+        <h2 className={styles.headerTitle}>{t('profileEdit.title')}</h2>
+        <div style={{ width: 44 }} />
+      </div>
+    </>
   )
 }

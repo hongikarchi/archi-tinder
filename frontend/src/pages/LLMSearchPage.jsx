@@ -4,6 +4,7 @@ import { getProject, updateProject } from '../api/projects.js'
 import s from '../components/CalibrationChat.module.css'
 import ps from './LLMSearchPage.module.css'
 import { useTranslation } from '../i18n/index.js'
+import PageLogoHeader from '../components/PageLogoHeader.jsx'
 
 const PRESETS = [
   { label: 'Japanese modern museum',  query: 'Modern museum in Japan' },
@@ -679,6 +680,8 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
       display: 'flex', flexDirection: 'column',
       backgroundImage: 'radial-gradient(circle at 15% 50%, color-mix(in srgb, var(--accent-1) 7%, transparent), transparent 30%), radial-gradient(circle at 85% 30%, color-mix(in srgb, var(--accent-2) 7%, transparent), transparent 30%)',
     }}>
+
+      <PageLogoHeader />
 
       {/* Header */}
       <div style={{

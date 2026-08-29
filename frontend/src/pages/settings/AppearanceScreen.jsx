@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom'
 import AppearanceSettings from '../../components/AppearanceSettings.jsx'
 import { IconBack } from '../../components/icons.jsx'
 import { useTranslation } from '../../i18n/index.js'
+import PageLogoHeader from '../../components/PageLogoHeader.jsx'
 import styles from './AppearanceScreen.module.css'
 
 export default function AppearanceScreen() {
@@ -16,6 +17,8 @@ export default function AppearanceScreen() {
 
   return (
     <div className={styles.page}>
+      <PageLogoHeader />
+
       {/* Glassmorphic sticky header */}
       <div className={styles.header}>
         <button

@@ -5,6 +5,7 @@ import PersonaReport from '../components/PersonaReport.jsx'
 import styles from './BoardReportPage.module.css'
 import { useTranslation } from '../i18n/index.js'
 import { generateReport } from '../api/projects.js'
+import PageLogoHeader from '../components/PageLogoHeader.jsx'
 
 function Spinner() {
   return (
@@ -181,6 +182,7 @@ export default function BoardReportPage() {
 
   return (
     <div className={styles.page}>
+      <PageLogoHeader />
       <div className={styles.container}>
         {/* 뒤로가기 */}
         <button

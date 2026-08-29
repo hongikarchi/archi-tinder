@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getLikedBuildings } from '../api/client.js'
 import { useTranslation } from '../i18n/index.js'
+import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import s from './LikedProjectsPage.module.css'
 
 /**
@@ -119,6 +120,8 @@ export default function LikedProjectsPage() {
       background: 'var(--color-bg)',
       paddingBottom: 'calc(80px + env(safe-area-inset-bottom))',
     }}>
+      <PageLogoHeader />
+
       {/* Sticky header */}
       <div style={{
         position: 'sticky', top: 0, zIndex: 10,

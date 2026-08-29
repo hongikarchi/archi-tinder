@@ -14,6 +14,7 @@ import ProfileHeader from './userProfile/ProfileHeader'
 import ProfileHero from './userProfile/ProfileHero'
 import BoardGrid from './userProfile/BoardGrid'
 import PentagonChart from '../components/PentagonChart.jsx'
+import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import { OfficeCard, SkeletonCard, BuildingIconEmpty } from './LikedOfficesPage.jsx'
 
 /**
@@ -459,6 +460,8 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         background: 'radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--accent-1) 10%, transparent) 0%, transparent 70%)',
         pointerEvents: 'none', zIndex: 0,
       }} />
+
+      <PageLogoHeader padding="18px 16px 0" />
 
       <ProfileHeader
         isMe={isMe}

@@ -6,6 +6,7 @@ import FirmProfileHero from './firmProfile/FirmProfileHero'
 import FirmProjectsSection from './firmProfile/FirmProjectsSection'
 import FirmArticlesSection from './firmProfile/FirmArticlesSection'
 import SaveToBoardModal from '../components/SaveToBoardModal.jsx'
+import PageLogoHeader from '../components/PageLogoHeader.jsx'
 
 
 export default function FirmProfilePage() {
@@ -113,6 +114,8 @@ export default function FirmProfilePage() {
           zIndex: 0,
         }}
       />
+
+      <PageLogoHeader />
 
       <FirmProfileHeader />
 

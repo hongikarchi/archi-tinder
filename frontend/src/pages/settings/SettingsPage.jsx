@@ -7,6 +7,7 @@
 import { useNavigate, Outlet, useLocation } from 'react-router-dom'
 import { IconBack } from '../../components/icons.jsx'
 import { useTranslation } from '../../i18n/index.js'
+import PageLogoHeader from '../../components/PageLogoHeader.jsx'
 import styles from './SettingsPage.module.css'
 
 const ROWS = [
@@ -28,6 +29,8 @@ export default function SettingsPage() {
     <>
       {isRoot && (
         <div className={styles.page}>
+          <PageLogoHeader />
+
           {/* Glassmorphic sticky header */}
           <div className={styles.header}>
             <button

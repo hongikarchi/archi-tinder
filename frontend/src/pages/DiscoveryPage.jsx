@@ -13,6 +13,7 @@ import { discoveryNavigationGuard } from '../utils/discoveryGuard.js'
 import { useSwipeOrchestration } from '../hooks/useSwipeOrchestration.js'
 import { useKeyboardSwipe } from '../hooks/useKeyboardSwipe.js'
 import { useTranslation } from '../i18n/index.js'
+import PageLogoHeader from '../components/PageLogoHeader.jsx'
 
 // Module-level flag: false on full page reload (module not yet loaded), true after
 // the first mount within the same SPA session. Used to detect tab re-entry vs first
@@ -509,12 +510,9 @@ export default function DiscoveryPage({ showToast }) {
 
       <TutorialPopup visible={showTutorial} onClose={handleTutorialClose} />
 
-      {/* Header */}
+      {/* Header — Arch|ibe logo (DESIGN.md-mock parity, canvas-design-port.md §6d item 1) */}
       <div style={{ textAlign: 'center', width: '100%' }}>
-        <h1 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 8px', letterSpacing: '-0.01em' }}>
-          <span style={{ color: 'var(--color-text)' }}>Disc</span>
-          <span style={{ color: 'var(--accent-1)' }}>overy</span>
-        </h1>
+        <PageLogoHeader padding={0} marginBottom={8} />
 
         {/* Feature B: persistent "Taste로 저장·이동" CTA — shown after user left-swiped
             the trigger card (Discovery 계속 선택). Rendered in the header (normal document

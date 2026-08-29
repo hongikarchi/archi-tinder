@@ -18,6 +18,7 @@ import ReactCrop from 'react-image-crop'
 import 'react-image-crop/dist/ReactCrop.css'
 import { presignFiles, uploadToR2, finalizeWork } from '../api/works.js'
 import { useTranslation } from '../i18n/index.js'
+import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import s from './UploadWorkPage.module.css'
 
 // Matches backend MAX_WORK_IMAGES — presign/finalize reject >10 images with a 400.
@@ -553,6 +554,8 @@ export default function UploadWorkPage() {
 
   return (
     <div className={s.page}>
+      <PageLogoHeader />
+
       {/* Header */}
       <div className={s.header}>
         <button

@@ -13,6 +13,7 @@ import {
 } from '../components/photoCardShell.js'
 import { useTranslation } from '../i18n/index.js'
 import { generateReport } from '../api/projects.js'
+import PageLogoHeader from '../components/PageLogoHeader.jsx'
 
 function cardId(card) {
   return card?.image_id || card?.canonical_bld_id || card?.building_id || ''
@@ -258,6 +259,8 @@ export default function ResultsPage({ projects, setProjects, onReportGenerated }
       background: 'var(--color-bg)',
       paddingBottom: 'calc(88px + env(safe-area-inset-bottom, 0px))',
     }}>
+      <PageLogoHeader />
+
       <section style={{ padding: '18px 18px 0' }}>
         <button
           type="button"

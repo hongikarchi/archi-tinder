@@ -5,6 +5,7 @@ import { listProjects } from '../api/client.js'
 import SaveToBoardModal from '../components/SaveToBoardModal.jsx'
 import styles from './ArchitectProfilePage.module.css'
 import { useTranslation } from '../i18n/index.js'
+import PageLogoHeader from '../components/PageLogoHeader.jsx'
 
 function BuildingCard({ building, onClick, onSave, isSaved = false }) {
   const [imgLoaded, setImgLoaded] = useState(false)
@@ -240,6 +241,8 @@ export default function ArchitectProfilePage() {
       background: 'var(--color-bg)',
       paddingBottom: 'calc(80px + env(safe-area-inset-bottom, 0px))',
     }}>
+      <PageLogoHeader />
+
       {/* Sticky top header */}
       <div style={{
         position: 'sticky',

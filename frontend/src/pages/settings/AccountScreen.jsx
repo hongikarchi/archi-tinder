@@ -13,6 +13,7 @@ import GoogleVerifyButton from '../../components/GoogleVerifyButton.jsx'
 import { hasGoogleLogin } from '../../utils/loginFlow.js'
 import { useGoogleEmailVerify } from '../../hooks/useGoogleEmailVerify.js'
 import { useTranslation } from '../../i18n/index.js'
+import PageLogoHeader from '../../components/PageLogoHeader.jsx'
 import btnStyles from '../../components/Button.module.css'
 import styles from './AccountScreen.module.css'
 
@@ -479,18 +480,21 @@ export default function AccountScreen() {
 
 function ScreenHeader({ navigate, t }) {
   return (
-    <div className={styles.header}>
-      <button
-        type="button"
-        onClick={() => navigate(-1)}
-        aria-label="Back"
-        className={styles.iconBtn}
-      >
-        <IconBack width={20} height={20} />
-      </button>
-      <h2 className={styles.headerTitle}>{t('account.title')}</h2>
-      <div style={{ width: 44 }} />
-    </div>
+    <>
+      <PageLogoHeader />
+      <div className={styles.header}>
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          aria-label="Back"
+          className={styles.iconBtn}
+        >
+          <IconBack width={20} height={20} />
+        </button>
+        <h2 className={styles.headerTitle}>{t('account.title')}</h2>
+        <div style={{ width: 44 }} />
+      </div>
+    </>
   )
 }
 
