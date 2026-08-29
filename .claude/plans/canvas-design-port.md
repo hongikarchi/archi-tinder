@@ -275,3 +275,30 @@ Surfaced during page PRs, deliberately not acted on. Each needs a single global 
 - **ayu-light accent-on-background contrast is weak system-wide** (surfaced by PR-1 review, NOT introduced by it). Accent-colored small text on ayu-light's near-white `#FCFCFC` ground measures roughly 2.3–2.5:1, below WCAG AA for small text: `--accent-1` `#FA8D3E` orange ≈ 2.3:1 (the already-shipped `dominant_programs` chip), `--accent-2` `#86B300` olive ≈ 2.5:1 (the `dominant_styles` chip as of PR-1). PR-1 mirrored the existing pattern rather than diverging from it, so this is a pre-existing theme characteristic, not a regression. Fixing it means either darkening ayu-light's accents in `tokens.css` (affects every accent surface in that theme) or giving accent-tinted chips a darker text token — a design-system decision for the user, out of scope for a per-page port PR.
 - **PR-1 visual verdict still pending.** The user has not yet run the dev server on this branch. Their eyeball pass is what validates the translation pipeline; amend §3 with whatever it reveals BEFORE fanning out to PR-2+.
 - `LikedOfficesPage.jsx` is a confirmed orphan (imported, never rendered; `/my/liked-offices` is a redirect). Out of scope for this initiative; noted in case it surfaces during the profiles PR.
+
+---
+
+## 8. Visual verification harness (built 2026-08-29)
+
+The user's insight: correctness = "does the page look like its board?" That is checkable, not a matter of taste.
+
+- **Mocks are served by the dev server.** All 37 boards copied to `frontend/public/__mocks/` (gitignored). Reachable at `http://localhost:5173/__mocks/<board>.html`.
+- **Side-by-side harness**: `http://localhost:5173/__mocks/_compare.html` — pick a board, it loads the mock on the left and the mapped app route on the right; overlay mode with an opacity slider for pixel-diffing. Board→route map (including which page hosts each overlay) lives in that file.
+- **Port matters**: the backend's `CORS_ALLOWED_ORIGINS` allows only `5173,5174`, so the dev server MUST run on 5173 (`npm run dev -- --port 5173 --strictPort`) or dev-login fails with a bare "Failed to fetch". A concurrent session holding 5174 can push Vite to 5175 silently — check the port before debugging auth.
+- **`file://` URLs are blocked** by the browser tooling; serving through Vite is the way to view a mock.
+
+**This immediately caught what static reading missed:** `login.html` does not merely swap the card's title for a logo — it moves the wordmark AND the language toggle *out of the card* to page level, and drops the card's `<h2>`. PR-3's maker read the static HTML and concluded the language switcher was being deleted (a functionality loss it correctly refused). Overlaying the two renders showed it relocating instead. **Compare renders, not markup.**
+
+## 9. Remaining work — defect counts per PR group
+
+Measured 2026-08-29 with whitespace-tolerant greps, on top of the base branch:
+
+| PR group | Defect sites | Notes |
+|---|---|---|
+| profiles | 25 | heaviest: `profile/BoardCard.jsx` 6, `firmProfile/FirmProfileHero.jsx` 4, `profile/BioPersonaFlipCard.jsx` 4 |
+| boards | 17 | |
+| search | 5 | |
+| upload | 4 | |
+| swipe | 4 | plus `layouts/MainLayout.jsx`; the only group needing app-test FULL |
+| building | 3 | |
+| settings | 0 | clean — pure mock-delta port |
