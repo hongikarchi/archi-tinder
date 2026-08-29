@@ -19,6 +19,7 @@ import 'react-image-crop/dist/ReactCrop.css'
 import { presignFiles, uploadToR2, finalizeWork } from '../api/works.js'
 import { useTranslation } from '../i18n/index.js'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
+import PageTopControls from '../components/PageTopControls.jsx'
 import s from './UploadWorkPage.module.css'
 
 // Matches backend MAX_WORK_IMAGES — presign/finalize reject >10 images with a 400.
@@ -204,7 +205,7 @@ async function applyEditToBlob(originalBlob, percentCrop, rotation) {
 
 /* ── Component ──────────────────────────────────────────────────────────── */
 
-export default function UploadWorkPage() {
+export default function UploadWorkPage({ onLogout }) {
   const navigate = useNavigate()
   const fileInputRef = useRef(null)
   const { t } = useTranslation()
@@ -555,6 +556,7 @@ export default function UploadWorkPage() {
   return (
     <div className={s.page}>
       <PageLogoHeader />
+      <PageTopControls onLogout={onLogout} />
 
       {/* Header */}
       <div className={s.header}>

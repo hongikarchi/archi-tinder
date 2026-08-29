@@ -14,6 +14,7 @@ import {
 import { useTranslation } from '../i18n/index.js'
 import { generateReport } from '../api/projects.js'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
+import PageTopControls from '../components/PageTopControls.jsx'
 
 function cardId(card) {
   return card?.image_id || card?.canonical_bld_id || card?.building_id || ''
@@ -120,7 +121,7 @@ function ResultCard({ card, rank, saved, pending, onOpen, onToggle }) {
   )
 }
 
-export default function ResultsPage({ projects, setProjects, onReportGenerated }) {
+export default function ResultsPage({ projects, setProjects, onReportGenerated, onLogout }) {
   const navigate = useNavigate()
   const location = useLocation()
   const { sessionId } = useParams()
@@ -260,6 +261,7 @@ export default function ResultsPage({ projects, setProjects, onReportGenerated }
       paddingBottom: 'calc(88px + env(safe-area-inset-bottom, 0px))',
     }}>
       <PageLogoHeader />
+      <PageTopControls onLogout={onLogout} />
 
       <div style={{ maxWidth: 680, margin: '0 auto' }}>
       <section style={{ padding: '18px 18px 0' }}>

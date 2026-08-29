@@ -6,6 +6,7 @@ import styles from './BoardReportPage.module.css'
 import { useTranslation } from '../i18n/index.js'
 import { generateReport } from '../api/projects.js'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
+import PageTopControls from '../components/PageTopControls.jsx'
 
 function Spinner() {
   return (
@@ -21,7 +22,7 @@ function Spinner() {
 /* ── BoardReportPage ────────────────────────────────────────────────────── */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-export default function BoardReportPage() {
+export default function BoardReportPage({ onLogout }) {
   const navigate = useNavigate()
   const { boardId: rawBoardId } = useParams()
   // Same gate as BoardDetailPage: malformed URL param → null, never reaches the API layer.
@@ -183,6 +184,7 @@ export default function BoardReportPage() {
   return (
     <div className={styles.page}>
       <PageLogoHeader />
+      <PageTopControls onLogout={onLogout} />
       <div className={styles.container}>
         {/* 뒤로가기 */}
         <button

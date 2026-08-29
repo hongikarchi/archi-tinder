@@ -9,15 +9,17 @@ import AppearanceSettings from '../../components/AppearanceSettings.jsx'
 import { IconBack } from '../../components/icons.jsx'
 import { useTranslation } from '../../i18n/index.js'
 import PageLogoHeader from '../../components/PageLogoHeader.jsx'
+import PageTopControls from '../../components/PageTopControls.jsx'
 import styles from './AppearanceScreen.module.css'
 
-export default function AppearanceScreen() {
+export default function AppearanceScreen({ onLogout }) {
   const navigate = useNavigate()
   const { t } = useTranslation()
 
   return (
     <div className={styles.page}>
       <PageLogoHeader />
+      <PageTopControls onLogout={onLogout} />
 
       {/* Glassmorphic sticky header */}
       <div className={styles.header}>

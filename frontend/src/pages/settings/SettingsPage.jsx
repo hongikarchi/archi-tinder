@@ -8,6 +8,7 @@ import { useNavigate, Outlet, useLocation } from 'react-router-dom'
 import { IconBack } from '../../components/icons.jsx'
 import { useTranslation } from '../../i18n/index.js'
 import PageLogoHeader from '../../components/PageLogoHeader.jsx'
+import PageTopControls from '../../components/PageTopControls.jsx'
 import styles from './SettingsPage.module.css'
 
 const ROWS = [
@@ -17,7 +18,7 @@ const ROWS = [
   { key: 'appearance',    labelKey: 'settings.rows.appearance.label',     hintKey: 'settings.rows.appearance.hint',     path: '/settings/appearance' },
 ]
 
-export default function SettingsPage() {
+export default function SettingsPage({ onLogout }) {
   const navigate = useNavigate()
   const location = useLocation()
   const { t } = useTranslation()
@@ -30,6 +31,7 @@ export default function SettingsPage() {
       {isRoot && (
         <div className={styles.page}>
           <PageLogoHeader />
+          <PageTopControls onLogout={onLogout} />
 
           {/* Glassmorphic sticky header */}
           <div className={styles.header}>

@@ -15,10 +15,11 @@ import { IconBack } from '../../components/icons.jsx'
 import EditCardForm from '../../components/profile/EditCardForm.jsx'
 import { useTranslation } from '../../i18n/index.js'
 import PageLogoHeader from '../../components/PageLogoHeader.jsx'
+import PageTopControls from '../../components/PageTopControls.jsx'
 import btnStyles from '../../components/Button.module.css'
 import styles from './AccountScreen.module.css'
 
-export default function EditProfileScreen() {
+export default function EditProfileScreen({ onLogout }) {
   const navigate = useNavigate()
   const { t } = useTranslation()
 
@@ -85,7 +86,7 @@ export default function EditProfileScreen() {
   if (loading) {
     return (
       <div className={styles.page}>
-        <ScreenHeader navigate={navigate} t={t} />
+        <ScreenHeader navigate={navigate} t={t} onLogout={onLogout} />
         <div style={{
           display: 'flex', justifyContent: 'center',
           padding: 48, color: 'var(--color-text-dim)', fontSize: 14,
@@ -99,7 +100,7 @@ export default function EditProfileScreen() {
   if (fetchError) {
     return (
       <div className={styles.page}>
-        <ScreenHeader navigate={navigate} t={t} />
+        <ScreenHeader navigate={navigate} t={t} onLogout={onLogout} />
         <div style={{
           display: 'flex', justifyContent: 'center',
           padding: 48, color: 'var(--color-destructive)', fontSize: 14,
@@ -112,7 +113,7 @@ export default function EditProfileScreen() {
 
   return (
     <div className={styles.page}>
-      <ScreenHeader navigate={navigate} t={t} />
+      <ScreenHeader navigate={navigate} t={t} onLogout={onLogout} />
 
       <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px' }}>
 
@@ -174,10 +175,11 @@ export default function EditProfileScreen() {
 
 /* ── Internal helpers ────────────────────────────────────────────────── */
 
-function ScreenHeader({ navigate, t }) {
+function ScreenHeader({ navigate, t, onLogout }) {
   return (
     <>
       <PageLogoHeader />
+      <PageTopControls onLogout={onLogout} />
       <div className={styles.header}>
         <button
           type="button"

@@ -7,9 +7,10 @@ import FirmProjectsSection from './firmProfile/FirmProjectsSection'
 import FirmArticlesSection from './firmProfile/FirmArticlesSection'
 import SaveToBoardModal from '../components/SaveToBoardModal.jsx'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
+import PageTopControls from '../components/PageTopControls.jsx'
 
 
-export default function FirmProfilePage() {
+export default function FirmProfilePage({ onLogout }) {
   const rawOfficeId = useParams().officeId
   // Defense-in-depth: only allow alphanumeric office IDs (with optional `_`/`-`).
   // Backend route is the authoritative gate, but reject path-traversal-shaped values
@@ -116,6 +117,7 @@ export default function FirmProfilePage() {
       />
 
       <PageLogoHeader />
+      <PageTopControls onLogout={onLogout} />
 
       <FirmProfileHeader />
 

@@ -10,6 +10,7 @@ import { useSwipeOrchestration } from '../hooks/useSwipeOrchestration.js'
 import { useKeyboardSwipe } from '../hooks/useKeyboardSwipe.js'
 import { useTranslation } from '../i18n/index.js'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
+import PageTopControls from '../components/PageTopControls.jsx'
 import {
   INK,
   MONO,
@@ -341,6 +342,7 @@ export default function SwipePage({
   questionTrigger = null,
   onQuestionAnswer,
   nextCard = null,
+  onLogout,
 }) {
   const { t } = useTranslation()
   const cardRef = useRef(null)
@@ -465,6 +467,8 @@ export default function SwipePage({
         padding: '20px 16px',
         position: 'relative',
       }}>
+        <PageTopControls onLogout={onLogout} />
+
         {/* Exit button */}
         <button
           onClick={() => setShowExitConfirm(true)}
@@ -548,6 +552,8 @@ export default function SwipePage({
 
   return (
     <>
+      <PageTopControls onLogout={onLogout} />
+
       {showExitConfirm && (
         <ExitConfirmPopup
           onNewProject={() => { setShowExitConfirm(false); onExitToNewProject?.() }}

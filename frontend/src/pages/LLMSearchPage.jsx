@@ -5,6 +5,7 @@ import s from '../components/CalibrationChat.module.css'
 import ps from './LLMSearchPage.module.css'
 import { useTranslation } from '../i18n/index.js'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
+import PageTopControls from '../components/PageTopControls.jsx'
 
 const PRESETS = [
   { label: 'Japanese modern museum',  query: 'Modern museum in Japan' },
@@ -125,7 +126,7 @@ function ResultStrip({ results, isFallback }) {
 }
 
 // eslint-disable-next-line no-unused-vars
-export default function LLMSearchPage({ mode, projectId, projectName: initialName, visibility = 'private', onBack, onStart, onUpdate }) {
+export default function LLMSearchPage({ mode, projectId, projectName: initialName, visibility = 'private', onBack, onStart, onUpdate, onLogout }) {
   const { t } = useTranslation()
   // Derive storage key once per render cycle (props/sessionStorage are stable for the lifecycle of this route mount)
   const userId = sessionStorage.getItem('archithon_user') || 'anon'
@@ -680,6 +681,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
     }}>
 
       <PageLogoHeader />
+      <PageTopControls onLogout={onLogout} />
 
       {/* Header */}
       <div style={{

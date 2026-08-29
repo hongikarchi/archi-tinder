@@ -20,6 +20,7 @@ import { formatTimeAgo } from '../../utils/timeAgo.js'
 import { IconBack } from '../../components/icons.jsx'
 import Avatar from '../../components/Avatar.jsx'
 import PageLogoHeader from '../../components/PageLogoHeader.jsx'
+import PageTopControls from '../../components/PageTopControls.jsx'
 import styles from './NotificationInboxScreen.module.css'
 
 const PAGE_SIZE = 20
@@ -50,7 +51,7 @@ function RowSkeleton() {
   )
 }
 
-export default function NotificationInboxScreen() {
+export default function NotificationInboxScreen({ onLogout }) {
   const navigate = useNavigate()
   const { t, language } = useTranslation()
 
@@ -122,6 +123,7 @@ export default function NotificationInboxScreen() {
   return (
     <div className={styles.page}>
       <PageLogoHeader />
+      <PageTopControls onLogout={onLogout} />
 
       {/* Glassmorphic sticky header */}
       <div className={styles.header}>

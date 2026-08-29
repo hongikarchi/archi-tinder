@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { getLikedBuildings } from '../api/client.js'
 import { useTranslation } from '../i18n/index.js'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
+import PageTopControls from '../components/PageTopControls.jsx'
 import s from './LikedProjectsPage.module.css'
 
 /**
@@ -87,7 +88,7 @@ function LikedBuildingCard({ building }) {
   )
 }
 
-export default function LikedProjectsPage() {
+export default function LikedProjectsPage({ onLogout }) {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const [buildings, setBuildings] = useState([])
@@ -121,6 +122,7 @@ export default function LikedProjectsPage() {
       paddingBottom: 'calc(80px + env(safe-area-inset-bottom))',
     }}>
       <PageLogoHeader />
+      <PageTopControls onLogout={onLogout} />
 
       {/* Sticky header */}
       <div style={{

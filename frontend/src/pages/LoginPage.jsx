@@ -24,6 +24,7 @@ import * as api from '../api/client.js'
 import { getRoles } from '../api/meta.js'
 import GoogleLoginButton from '../components/GoogleLoginButton.jsx'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
+import PageTopControls from '../components/PageTopControls.jsx'
 import { CARD_HEIGHT, CARD_WIDTH } from '../components/SwipeCard.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
 import { SWIPE_PREVENT_ALL, SWIPE_PREVENT_VERTICAL } from '../components/swipeGestureConfig.js'
@@ -424,14 +425,19 @@ export default function LoginPage({ onLogin }) {
 
   return (
     <div className={styles.page} style={pageStyle}>
-      {/* Canvas design port (login family): page-level chrome — language
-          toggle relocated OUT of the choice card's CardHeader to here, top-
-          right, fixed (mock parity: login.html / §8 visual harness finding).
-          Theme toggle stays in Settings — a separate product decision, per
-          the task's hard constraint; not ported here. */}
-      <div style={langToggleWrapStyle}>
-        <LangToggle />
-      </div>
+      {/* Shared top-right controls cluster (language / theme / logout) —
+          see components/PageTopControls.jsx. Replaces the page-local
+          LangToggle this task previously introduced here (canvas design
+          port, login family: language toggle relocated OUT of the choice
+          card's CardHeader to top-right, fixed — mock parity: login.html /
+          §8 visual harness finding). The theme pill is now included too —
+          the earlier "theme toggle stays in Settings, a separate product
+          decision" call is superseded by the user's later confirmation that
+          language/theme switching belongs top-right on every page (see the
+          top-right-controls design-port task); Settings -> Appearance keeps
+          working unchanged. No `onLogout` is passed — this is the
+          unauthenticated page, so PageTopControls renders no logout button. */}
+      <PageTopControls />
       <main style={mainStyle}>
         {/* Arch|ibe page logo — same PageLogoHeader + prop convention as
             DiscoveryPage.jsx (padding={0}, page already supplies padding via
@@ -492,58 +498,6 @@ function useTypedLine(line) {
 }
 
 // ── Internal components ───────────────────────────────────────────────────────
-
-function LangToggle() {
-  const { language, setLanguage } = useLanguage()
-  const { t } = useTranslation()
-  const stop = (e) => e.stopPropagation()
-  const langs = [{ id: 'ko', labelKey: 'login.common.langKo' }, { id: 'en', labelKey: 'login.common.langEn' }]
-
-  return (
-    <div
-      onPointerDown={stop}
-      onMouseDown={stop}
-      onTouchStart={stop}
-      style={{
-        display: 'inline-flex',
-        gap: 2,
-        padding: 3,
-        background: 'var(--color-surface)',
-        border: '1px solid var(--color-border)',
-        borderRadius: 'var(--radius-pill)',
-        flexShrink: 0,
-      }}
-    >
-      {langs.map((l) => {
-        const sel = language === l.id
-        return (
-          <button
-            key={l.id}
-            type="button"
-            className="pressable"
-            onClick={() => setLanguage(l.id)}
-            style={{
-              padding: '3px 9px',
-              borderRadius: 'var(--radius-pill)',
-              border: 0,
-              background: sel ? 'var(--color-bg)' : 'transparent',
-              color: sel ? 'var(--color-text)' : 'var(--color-text-muted)',
-              fontSize: 11,
-              fontWeight: 600,
-              letterSpacing: l.id === 'en' ? '0.1em' : '0.02em',
-              cursor: 'pointer',
-              boxShadow: sel ? '0 1px 3px rgba(0,0,0,0.12)' : 'none',
-              fontFamily: 'inherit',
-              transition: `background var(--motion-fast), color var(--motion-fast)`,
-            }}
-          >
-            {t(l.labelKey)}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
 
 function GestureHint({ side, active, label, sub }) {
   const isLeft = side === 'left'
@@ -1294,22 +1248,6 @@ const pageStyle = {
   placeItems: 'center',
   padding: 16,
   boxSizing: 'border-box',
-}
-
-// Mock: `position:absolute;top:14px;right:16px;z-index:300` inside the
-// canvas's device-frame div (which stands in for our real viewport). `fixed`
-// is the correct real-DOM equivalent — pageStyle has no `position` ancestor
-// for `absolute` to resolve against, and `fixed` pins to the true viewport
-// regardless. Theme toggle intentionally omitted (hard constraint — stays in
-// Settings, a separate product decision; the mock's toggle pill is not ported).
-const langToggleWrapStyle = {
-  position: 'fixed',
-  top: 14,
-  right: 16,
-  zIndex: 300,
-  display: 'flex',
-  gap: 8,
-  alignItems: 'center',
 }
 
 const mainStyle = {

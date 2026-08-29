@@ -15,11 +15,12 @@ import Toggle from '../../components/Toggle.jsx'
 import { IconBack } from '../../components/icons.jsx'
 import { useTranslation } from '../../i18n/index.js'
 import PageLogoHeader from '../../components/PageLogoHeader.jsx'
+import PageTopControls from '../../components/PageTopControls.jsx'
 import styles from './NotificationsScreen.module.css'
 
 const CATEGORY_KEYS = ['social', 'content', 'security', 'recommend', 'marketing']
 
-export default function NotificationsScreen() {
+export default function NotificationsScreen({ onLogout }) {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const [prefs, setPrefs] = useState(null)   // null = not loaded yet
@@ -93,6 +94,7 @@ export default function NotificationsScreen() {
   return (
     <div className={styles.page}>
       <PageLogoHeader />
+      <PageTopControls onLogout={onLogout} />
 
       {/* Glassmorphic sticky header */}
       <div className={styles.header}>

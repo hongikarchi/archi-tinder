@@ -6,6 +6,7 @@ import SaveToBoardModal from '../components/SaveToBoardModal.jsx'
 import styles from './ArchitectProfilePage.module.css'
 import { useTranslation } from '../i18n/index.js'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
+import PageTopControls from '../components/PageTopControls.jsx'
 
 function BuildingCard({ building, onClick, onSave, isSaved = false }) {
   const [imgLoaded, setImgLoaded] = useState(false)
@@ -134,7 +135,7 @@ function SkeletonHeader() {
   )
 }
 
-export default function ArchitectProfilePage() {
+export default function ArchitectProfilePage({ onLogout }) {
   const { architectId } = useParams()
   const navigate = useNavigate()
   const { t } = useTranslation()
@@ -241,6 +242,7 @@ export default function ArchitectProfilePage() {
       background: 'var(--color-bg)',
       paddingBottom: 'calc(80px + env(safe-area-inset-bottom, 0px))',
     }}>
+      <PageTopControls onLogout={onLogout} />
       <PageLogoHeader />
 
       {/* Sticky top header */}

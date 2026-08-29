@@ -2,8 +2,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import TabBar from '../components/TabBar.jsx'
 import DebugOverlay from '../components/DebugOverlay.jsx'
 import SwipePage from '../pages/SwipePage.jsx'
-import { discoveryNavigationGuard } from '../utils/discoveryGuard.js'
-import s from './MainLayout.module.css'
+import PageTopControls from '../components/PageTopControls.jsx'
 
 export default function MainLayout({
   userId, onLogout,
@@ -21,38 +20,20 @@ export default function MainLayout({
   const pathname = location.pathname
 
   const isSwipe = pathname === '/swipe'
-  const isProfile = pathname.startsWith('/user')
+
+  // PageTopControls (shared language/theme/logout cluster) is now rendered
+  // per-page — see components/PageTopControls.jsx docblock + canvas-design-
+  // port.md. MainLayout no longer owns a top-right cluster shown across every
+  // route; every page under this layout that needs it renders
+  // <PageTopControls onLogout=.../> directly (DiscoveryPage, SwipePage,
+  // AssessmentPage, PeopleDiscoveryPage, and the other PageLogoHeader pages
+  // that had no colliding top-right chrome). The one exception MainLayout
+  // still owns directly is its own inline "no active project" screen below
+  // (isSwipe && !activeProject) — that screen has no page component of its
+  // own to render the cluster, so MainLayout renders it there.
 
   return (
     <div style={{ height: '100vh', overflow: 'hidden' }}>
-
-      {/* Header controls — hidden on pages that own their sticky header (profile/office/matched/board) */}
-      <div style={{ position: 'fixed', top: 14, right: 16, zIndex: 200, display: (isProfile || pathname.startsWith('/office') || pathname.startsWith('/matched') || pathname.startsWith('/board') || pathname.startsWith('/buildings') || pathname.startsWith('/settings')) ? 'none' : 'flex', gap: 6, alignItems: 'center' }}>
-        <button
-          onClick={() => {
-            if (discoveryNavigationGuard.check) {
-              discoveryNavigationGuard.check('logout', onLogout)
-            } else {
-              onLogout()
-            }
-          }}
-          title="Log out"
-          className={s.logoutBtn}
-          style={{
-            width: 34, height: 34, borderRadius: '50%',
-            background: 'var(--color-surface)',
-            border: '1px solid var(--color-border-soft)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer',
-          }}
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-            <polyline points="16 17 21 12 16 7" />
-            <line x1="21" y1="12" x2="9" y2="12" />
-          </svg>
-        </button>
-      </div>
 
       {/* Home sub-routes — only visible when not on swipe */}
       <div style={{ display: !isSwipe ? 'block' : 'none' }}>
@@ -63,6 +44,7 @@ export default function MainLayout({
       <div style={{ display: isSwipe && activeProject ? 'block' : 'none' }}>
         <SwipePage
           key={activeProjectId}
+          onLogout={onLogout}
           currentCard={currentCard}
           cardResetToken={cardResetToken}
           progress={sessionProgress}
@@ -85,26 +67,29 @@ export default function MainLayout({
 
       {/* No active project on swipe tab */}
       {isSwipe && !activeProject && (
-        <div style={{
-          height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))', background: 'var(--color-bg)', display: 'flex',
-          flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          gap: 12, padding: 24,
-        }}>
-          <div style={{ fontSize: 48 }}>🃏</div>
-          <p style={{ fontSize: 16, fontWeight: 700, margin: 0, letterSpacing: '0.2em', color: 'var(--color-text)' }}>ARCHIBE</p>
-          <p style={{ color: 'var(--color-text-dimmer)', fontSize: 13 }}>Start a taste analysis to begin swiping</p>
-          <button
-            onClick={() => navigate('/search')}
-            style={{
-              marginTop: 8, padding: '12px 28px', borderRadius: 12,
-              background: 'var(--accent-1)',
-              color: '#fff', fontSize: 14, fontWeight: 600,
-              border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-            }}
-          >
-            Start Taste Analysis
-          </button>
-        </div>
+        <>
+          <PageTopControls onLogout={onLogout} />
+          <div style={{
+            height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))', background: 'var(--color-bg)', display: 'flex',
+            flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            gap: 12, padding: 24,
+          }}>
+            <div style={{ fontSize: 48 }}>🃏</div>
+            <p style={{ fontSize: 16, fontWeight: 700, margin: 0, letterSpacing: '0.2em', color: 'var(--color-text)' }}>ARCHIBE</p>
+            <p style={{ color: 'var(--color-text-dimmer)', fontSize: 13 }}>Start a taste analysis to begin swiping</p>
+            <button
+              onClick={() => navigate('/search')}
+              style={{
+                marginTop: 8, padding: '12px 28px', borderRadius: 12,
+                background: 'var(--accent-1)',
+                color: '#fff', fontSize: 14, fontWeight: 600,
+                border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+              }}
+            >
+              Start Taste Analysis
+            </button>
+          </div>
+        </>
       )}
 
       {typeof window !== 'undefined' && (window.__debugMode || localStorage.getItem('__debugMode') === 'true') && (

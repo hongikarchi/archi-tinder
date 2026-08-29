@@ -14,6 +14,7 @@ import { useSwipeOrchestration } from '../hooks/useSwipeOrchestration.js'
 import { useKeyboardSwipe } from '../hooks/useKeyboardSwipe.js'
 import { useTranslation } from '../i18n/index.js'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
+import PageTopControls from '../components/PageTopControls.jsx'
 
 // Module-level flag: false on full page reload (module not yet loaded), true after
 // the first mount within the same SPA session. Used to detect tab re-entry vs first
@@ -128,7 +129,7 @@ function _clearDraftSessionStorage() {
   sessionStorage.removeItem(CONTINUE_AFTER_TRIGGER_KEY)
 }
 
-export default function DiscoveryPage({ showToast }) {
+export default function DiscoveryPage({ showToast, onLogout }) {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const isActiveRef = useRef(true)
@@ -507,6 +508,8 @@ export default function DiscoveryPage({ showToast }) {
       background: 'var(--color-bg)',
       padding: '20px 16px',
     }}>
+
+      <PageTopControls onLogout={onLogout} />
 
       <TutorialPopup visible={showTutorial} onClose={handleTutorialClose} />
 
