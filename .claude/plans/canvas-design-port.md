@@ -271,6 +271,9 @@ Surfaced during page PRs, deliberately not acted on. Each needs a single global 
 
 5. **Non-surface white literals.** The §6c defect map only catches `rgba(255,255,255,0.0X)` used as a *background*. PR-2 found the same light-theme legibility problem in a **border/spinner track** (`DiscoveryPage.jsx:758`, `rgba(255,255,255,0.2)` on a page-level spinner over `--color-bg`). Later PRs should check borders and outlines too, not just backgrounds.
 
+6. **Sticky glassmorphic header bar → plain in-flow title.** Raised independently by the settings PR after the logo-header PR had already shipped, so it is a *separate* question from §6d item 1. Every mock replaces the app's current `position: sticky` + `backdrop-filter: blur(12px)` header bar (back button · centered 17px/700 title · spacer) with a plain in-flow, **left-aligned 20px/700 `<h2>`** in the content column, and moves "back" to a floating circular button at the canvas top-left. Verified in `settings-account.html`: zero `position:sticky` in the whole board. This touches every page sharing the `.header` / `.headerTitle` pattern (~40 files), and it changes scroll behaviour, not just paint — the title stops following the scroll. **Needs its own decision + PR**, exactly like the logo header. Until then, page PRs leave existing headers alone.
+
+
 ## 7. Open items
 
 - ~~`rgba(99,102,241,…)` indigo~~ **RESOLVED (PR-1)** — Tailwind indigo-500, pre-token legacy. Now `--accent-2` at the same 10%/22% percentages, mirroring the `--accent-1` programs chip.
