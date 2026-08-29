@@ -310,3 +310,21 @@ Measured 2026-08-29 with whitespace-tolerant greps, on top of the base branch:
 | swipe | 4 | plus `layouts/MainLayout.jsx`; the only group needing app-test FULL |
 | building | 3 | |
 | settings | 0 | clean — pure mock-delta port |
+
+## 10. Reading design-diff output — what is signal, what is not
+
+`tools/design-diff.py` renders each mock and the matching app route and diffs computed styles. Its findings are not all real. Triage before dispatching:
+
+**Real, act on it**
+- A control the mock has and the app has nowhere (verified by grepping the component tree, not by trusting the tool). The top-right language/theme cluster was this: 42 boards, genuinely absent.
+- A control the app has only on the success branch. The tool renders unseeded, so it lands in loading/error branches — that is how it caught three pages where a logged-in user had no way to log out while data was in flight. Invisible to a static read.
+- A property value that differs and has no data explanation: the settings titles at 17px against the mock's 20px.
+
+**Not real, skip and say why**
+- **Placeholder data.** Mocks are populated with 김아키, `@archibe_user`, "Kanazawa 21st Century" and similar. An unseeded or differently-seeded app reports all of it as missing text. This is most of the raw count.
+- **Data-gated controls.** `profile`'s 14×14 Instagram/email icons read as missing, but `userProfile/ProfileHero.jsx` renders them from `user.external_links` — the test account simply has none. Check whether the feature exists before calling it absent.
+- **Geometry.** The mock is a fixed 1440×900 canvas; the app is fluid. Position and size differences are by design, which is why the tool does not compare them.
+- **Element-matching artifacts.** Fixed once already (labels wrapped in a styleless `<span>` were compared against the app's `<button>`), but assume more remain.
+- **Mocks copying existing bugs forward.** `font-weight: 800` appears in several boards; DESIGN.md §2.5 caps weight at 700. The mock reproduced a violation rather than prescribing one.
+
+**Rule of thumb**: a *missing control* is worth investigating; *missing text* is usually placeholder noise. Verify each finding against the component before acting — the tool locates candidates, it does not adjudicate them.
