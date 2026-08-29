@@ -1127,8 +1127,8 @@ export default function App() {
           <Route path="user/:userId" element={<UserProfilePage {...sharedLayoutProps} />} />
           <Route path="office/:officeId" element={<FirmProfilePage {...sharedLayoutProps} />} />
           <Route path="result/:sessionId" element={<ResultsPage projects={projects} setProjects={setProjects} onReportGenerated={handleReportGenerated} onLogout={handleLogout} />} />
-          <Route path="buildings/:buildingId" element={<BuildingDetailPage />} />
-          <Route path="board/:boardId" element={<BoardDetailPage onResume={handleResumeProject} />} />
+          <Route path="buildings/:buildingId" element={<BuildingDetailPage onLogout={handleLogout} />} />
+          <Route path="board/:boardId" element={<BoardDetailPage onResume={handleResumeProject} onLogout={handleLogout} />} />
           <Route path="board/:boardId/report" element={<BoardReportPage onLogout={handleLogout} />} />
           <Route path="liked-projects" element={<LikedProjectsPage onLogout={handleLogout} />} />
           <Route path="upload" element={<UploadWorkPage onLogout={handleLogout} />} />

@@ -8,6 +8,7 @@ import RecommendedTile from './boardDetail/RecommendedTile'
 import ArchitectSection from './boardDetail/ArchitectSection'
 import { useTranslation } from '../i18n/index.js'
 import s from './BoardDetailPage.module.css'
+import PageTopControls from '../components/PageTopControls.jsx'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -141,7 +142,7 @@ const MOCK_BOARD = {
   is_reacted: false,
 }
 
-export default function BoardDetailPage({ onResume }) {
+export default function BoardDetailPage({ onResume, onLogout }) {
   const navigate = useNavigate()
   const location = useLocation()
   const { t } = useTranslation()
@@ -323,6 +324,7 @@ export default function BoardDetailPage({ onResume }) {
       background: 'var(--color-bg)',
       paddingBottom: 'calc(80px + env(safe-area-inset-bottom))',
     }}>
+      <PageTopControls onLogout={onLogout} />
       {/* Hero cover */}
       <div style={{
         position: 'relative',

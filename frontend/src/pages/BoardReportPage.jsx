@@ -76,6 +76,7 @@ export default function BoardReportPage({ onLogout }) {
   if (loading || shouldAutoGenerate) {
     return (
       <div className={styles.page} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <PageTopControls onLogout={onLogout} />
         <Spinner />
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
@@ -86,6 +87,7 @@ export default function BoardReportPage({ onLogout }) {
   if (!board) {
     return (
       <div className={styles.page} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: '40px 20px' }}>
+        <PageTopControls onLogout={onLogout} />
         <p style={{ color: 'var(--color-text-muted)', fontSize: 16, fontWeight: 600, margin: 0 }}>
           {t('board.notFound')}
         </p>
@@ -113,6 +115,7 @@ export default function BoardReportPage({ onLogout }) {
   if (genError) {
     return (
       <div className={styles.page} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: '40px 20px' }}>
+        <PageTopControls onLogout={onLogout} />
         <p style={{ color: 'var(--color-destructive, #D73A49)', fontSize: 16, fontWeight: 600, margin: 0, textAlign: 'center' }}>
           {t('board.reportGenError')}
         </p>
@@ -158,6 +161,7 @@ export default function BoardReportPage({ onLogout }) {
   if (!report) {
     return (
       <div className={styles.page} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: '40px 20px' }}>
+        <PageTopControls onLogout={onLogout} />
         <p style={{ color: 'var(--color-text-muted)', fontSize: 16, fontWeight: 600, margin: 0 }}>
           {t('board.noReport')}
         </p>

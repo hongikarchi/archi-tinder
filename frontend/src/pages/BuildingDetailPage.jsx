@@ -8,10 +8,11 @@ import LoadingState from './buildingDetail/LoadingState.jsx'
 import { isValidRank, kindLabel, metadataItems } from './buildingDetail/helpers.js'
 import PhotoLightbox from './buildingDetail/PhotoLightbox.jsx'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
+import PageTopControls from '../components/PageTopControls.jsx'
 
 const BUILDING_ID_RE = /^[A-Za-z0-9_-]{1,32}$/
 
-export default function BuildingDetailPage() {
+export default function BuildingDetailPage({ onLogout }) {
   const navigate = useNavigate()
   const location = useLocation()
   const rawBuildingId = useParams().buildingId
@@ -137,14 +138,24 @@ export default function BuildingDetailPage() {
     }
   }
 
-  if (loading) return <LoadingState onBack={handleBack} />
+  if (loading) {
+    return (
+      <>
+        <PageTopControls onLogout={onLogout} />
+        <LoadingState onBack={handleBack} />
+      </>
+    )
+  }
   if (error || !building) {
     return (
-      <ErrorState
-        message={error || 'No building matched this ID.'}
-        onBack={handleBack}
-        onRetry={() => setReloadKey(k => k + 1)}
-      />
+      <>
+        <PageTopControls onLogout={onLogout} />
+        <ErrorState
+          message={error || 'No building matched this ID.'}
+          onBack={handleBack}
+          onRetry={() => setReloadKey(k => k + 1)}
+        />
+      </>
     )
   }
 
@@ -156,6 +167,7 @@ export default function BuildingDetailPage() {
       overflowY: 'auto',
       paddingBottom: 'calc(84px + env(safe-area-inset-bottom, 0px))',
     }}>
+      <PageTopControls onLogout={onLogout} />
       <PageLogoHeader />
 
       <Header

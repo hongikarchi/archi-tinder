@@ -74,6 +74,7 @@ export default function FirmProfilePage({ onLogout }) {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         color: 'var(--color-text-dim)', fontSize: 14,
       }}>
+        <PageTopControls onLogout={onLogout} />
         Loading office profile...
       </div>
     )
@@ -87,6 +88,7 @@ export default function FirmProfilePage({ onLogout }) {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         color: 'var(--color-text-dim)', fontSize: 14,
       }}>
+        <PageTopControls onLogout={onLogout} />
         {error || 'Office not found.'}
       </div>
     )

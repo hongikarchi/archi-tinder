@@ -15,6 +15,7 @@ import ProfileHero from './userProfile/ProfileHero'
 import BoardGrid from './userProfile/BoardGrid'
 import PentagonChart from '../components/PentagonChart.jsx'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
+import PageTopControls from '../components/PageTopControls.jsx'
 import { OfficeCard, SkeletonCard, BuildingIconEmpty } from './LikedOfficesPage.jsx'
 
 /**
@@ -461,6 +462,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         pointerEvents: 'none', zIndex: 0,
       }} />
 
+      <PageTopControls onLogout={onLogout} />
       <PageLogoHeader padding="18px 16px 0" />
 
       <ProfileHeader
