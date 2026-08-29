@@ -1133,8 +1133,8 @@ export default function App() {
           <Route path="my/liked-offices" element={<Navigate to="/my/profile" replace />} />
           <Route path="architects/:architectId" element={<ArchitectProfilePage />} />
           <Route path="notifications" element={<NotificationInboxScreen />} />
-          <Route path="assessment" element={<ProtectedRoute><AssessmentPage /></ProtectedRoute>} />
-          <Route path="people" element={<ProtectedRoute><PeopleDiscoveryPage /></ProtectedRoute>} />
+          <Route path="assessment" element={<AssessmentPage />} />
+          <Route path="people" element={<PeopleDiscoveryPage />} />
           <Route path="settings" element={<SettingsPage />}>
             <Route path="edit-profile" element={<EditProfileScreen />} />
             <Route path="account" element={<AccountScreen />} />
