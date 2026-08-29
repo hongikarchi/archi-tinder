@@ -21,7 +21,7 @@ function ProjectRow({ project, disabled, onClick }) {
         minHeight: 48,
         borderRadius: 12,
         border: '1px solid var(--color-border-soft)',
-        background: 'rgba(255,255,255,0.02)',
+        background: 'var(--color-tag-bg)',
         color: 'var(--color-text)',
         textAlign: 'left',
         padding: '10px 12px',
@@ -138,7 +138,7 @@ export default function SaveToBoardModal({ card, onClose, onSaved }) {
         position: 'fixed',
         inset: 0,
         zIndex: 10000,
-        background: 'rgba(0,0,0,0.55)',
+        background: 'var(--color-scrim-soft)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -158,7 +158,7 @@ export default function SaveToBoardModal({ card, onClose, onSaved }) {
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h3 style={{ fontSize: 17, margin: 0, fontWeight: 800 }}>{t('board.saveToBoard')}</h3>
+          <h3 style={{ fontSize: 17, margin: 0, fontWeight: 700 }}>{t('board.saveToBoard')}</h3>
           <button
             type="button"
             onClick={onClose}
@@ -167,7 +167,7 @@ export default function SaveToBoardModal({ card, onClose, onSaved }) {
               height: 34,
               borderRadius: '50%',
               border: '1px solid var(--color-border-soft)',
-              background: 'rgba(255,255,255,0.04)',
+              background: 'var(--color-tag-bg)',
               color: 'var(--color-text-dimmer)',
               fontSize: 18,
               lineHeight: 1,
@@ -196,7 +196,7 @@ export default function SaveToBoardModal({ card, onClose, onSaved }) {
               padding: '0 12px',
               borderRadius: 10,
               border: '1px solid var(--color-border-soft)',
-              background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
+              background: 'var(--accent-1)',
               color: '#fff',
               fontSize: 13,
               fontWeight: 700,
@@ -245,7 +245,7 @@ export default function SaveToBoardModal({ card, onClose, onSaved }) {
                 minHeight: 40,
                 borderRadius: 10,
                 border: '1px solid color-mix(in srgb, var(--accent-1) 45%, transparent)',
-                background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
+                background: 'var(--accent-1)',
                 color: '#fff',
                 cursor: creating ? 'default' : 'pointer',
                 opacity: creating ? 0.7 : 1,
@@ -270,7 +270,7 @@ export default function SaveToBoardModal({ card, onClose, onSaved }) {
           <>
             <p style={{
               margin: '0 0 8px',
-              fontSize: 11, fontWeight: 800,
+              fontSize: 11, fontWeight: 700,
               letterSpacing: '0.08em', textTransform: 'uppercase',
               color: 'var(--color-text-muted)',
             }}>

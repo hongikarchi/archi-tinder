@@ -231,10 +231,10 @@ export default function LikedProjectsPage() {
                 minHeight: 44, padding: '0 24px',
                 borderRadius: 999,
                 border: 'none',
-                background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
+                background: 'var(--accent-1)',
                 color: '#fff', fontSize: 14, fontWeight: 700,
                 cursor: 'pointer', fontFamily: 'inherit',
-                boxShadow: '0 8px 22px rgba(236,72,153,0.32)',
+                boxShadow: '0 8px 22px color-mix(in srgb, var(--accent-1) 32%, transparent)',
               }}
             >
               {t('profile.goToDiscovery')}
