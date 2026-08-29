@@ -23,11 +23,18 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-08-26 00:00 KST',
+    updatedAt: '2026-08-29 10:37 KST',
     head: 'bc40fbf',
     branch: 'feature/sns-people-card-flip',
   },
   done: [
+    {
+      id: 'FRONT-PEOPLE-CARD-3',
+      title: '/people 카드를 report 추천 타일 규격으로 축소 + 스크롤 버그',
+      completedAt: '2026-08-29',
+      prs: [314],
+      note: 'user 지적: 카드가 너무 커서 한 화면에 몇 장 안 보임 → report 생성 후 추천 그리드와 같은 타일로 통일',
+    },
     {
       id: 'FRONT-PEOPLE-CARD-1',
       title: '/people 발견 카드 이미지 앞면 + flip 상세',
@@ -70,12 +77,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-08-14',
       prs: [300],
       note: '_(yywon1 ad-hoc PR — Task ID 없이 들어와 사후 부여. 업로드 완료 인라인 메시지 → 확인 모달 + `/user/me?tab=created` 이동.)_',
-    },
-    {
-      id: 'FULL-WORKS-3',
-      title: 'works 상세 모달 + cover_r2_key BE 컬럼',
-      completedAt: '2026-08-12',
-      note: 'Work.cover_r2_key CharField + migration 0003 — 커버 키 명시 저장 (기존 r2_keys[0] 폴백 유지)',
     },
   ],
   now: [
@@ -2046,6 +2047,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/components/icons.jsx',
       role: '공통 stroke 아이콘 세트',
+    },
+    {
+      path: 'frontend/src/components/photoCardShell.js',
+      role: '',
     },
     {
       path: 'frontend/src/components/profile/ArticleCard.jsx',

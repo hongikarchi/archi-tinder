@@ -295,6 +295,16 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FRONT-PEOPLE-CARD-3 — /people 카드를 report 추천 타일 규격으로 축소 + 스크롤 버그 — RESOLVED 2026-08-29 (`416e891`, PR #314)
+- user 지적: 카드가 너무 커서 한 화면에 몇 장 안 보임 → report 생성 후 추천 그리드와 같은 타일로 통일
+- **재사용 시도의 실제 결과**: `ResultsPage`의 `ResultCard`는 컴포넌트화돼 있지 않음(로컬 함수, export 없음) → import 불가. 측정값을 `photoCardShell.js`로 추출하고 `ResultCard`도 그걸 참조하도록 리팩터링(값 동일, 시각 변화 0). 이제 추천 타일 디자인 변경이 `/people`에 자동 전파
+- 공유 값: `aspect 2/3` · `radius 12` · `--color-border-soft` · `0 18px 42px rgba(0,0,0,.35)` · scrim `to top .94/.52(48%)/.08` · caption `10px/700` + `9px italic`
+- 앞면 배치도 추천 타일 언어로: 타입 칩 = `#rank` 자리(좌상단), 관심 버튼 = 북마크 별 자리(우상단 원형). 뒷면은 그래프+범례+이름만 남기고 추천 이유 제거(타일 폭에서 4~5줄로 감겨 그래프를 밀어냄)
+- 그리드는 **4/3/2 반응형** — `ResultsPage`는 4열 고정이지만 그대로 쓰면 390px에서 타일이 86px이 되어 뒤집힌 차트가 판독 불가
+- **스크롤 버그 수정 (#311부터 존재)**: `.page`가 `min-height`라 flex 컬럼이 내용만큼 늘어나 `.content`의 `overflow-y`가 발동하지 않았고, `body`(`height:100vh;overflow:hidden`)에 잘려 접근 불가였음. `height`로 교체 + `.content min-height:0` + 상단 영역 `flex-shrink:0`. CLAUDE.md 뷰포트 락 규약과 일치. 피드가 비어 있던 동안 드러나지 않다가 시드 유저 투입 후 발견
+- **실데이터 검증 완료**: 로컬 시드 유저 5명(진단+publishable Work+public report_image 충족)으로 피드 조회→카드 렌더→flip→오버레이 그래프→프로필 이동까지 브라우저 확인. `GET /people/<id>/report-image/`도 200/404 동작 확인
+- Deferred: `AssessmentPage`에 동일한 `min-height` 스크롤 버그 존재 — PR #313 소관이라 미수정
+
 ### FRONT-PEOPLE-CARD-1 — /people 발견 카드 이미지 앞면 + flip 상세 — RESOLVED 2026-08-26 (`c58504e`, PR 리뷰 대기)
 - 카드 구조 교체: 앞면 = 취향분석 리포트 건축 이미지 전면(그래프/이름/아바타 제거), 탭 시 flip → 뒷면에 성향 그래프 + 내 벡터 오버레이 + 범례 + 이름(클릭 시 프로필 이동)
 - **재사용 우선 원칙 적용**: flip은 `BioPersonaFlipCard`/`SwipeCard` 갤러리 면과 동일 기법 — 세 곳이 리터럴로 갖고 있던 `0.5s cubic-bezier(0.4,0,0.2,1)`이 `--motion-flip`/`--motion-ease` 토큰과 일치해 토큰 참조로 전환. 그래프 오버레이는 `PentagonChart`에 **이미 구현돼 있어** 신규 작업 불필요(myVector 실선 accent-1 + theirVector 점선 accent-2). 프로필 이동은 기존 `navigate('/user/<id>')` 유지
