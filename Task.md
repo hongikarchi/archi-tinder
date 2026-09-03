@@ -299,6 +299,15 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FRONT-PEOPLE-FEED-1 — 페르소나 이미지 생성이 발견 피드에 반영되지 않던 문제 — RESOLVED 2026-09-03 (`9f83cbd` + `3abf9d8`, PR 리뷰 대기)
+- 팀장 피드백: 페르소나 리포트에서 이미지를 생성했는데 `/people`에 카드가 안 뜸. 조사 결과 **이미지 경로는 정상**이었고(리포트가 쓰는 `recommendation_project.report_image`를 피드가 그대로 읽음, 피드에 캐시 없음 = 즉시 반영 구조) 나머지 조건들이 막고 있었음
+- 실측 원인 2개: ① 피드가 본인을 제외(`exclude(user=requester_profile)`)해서 **자기 이미지는 자기 피드에 절대 안 뜸** ② 저장 모달 기본값이 `private`이라 이미지를 만들어도 보드가 비공개로 저장되어 `visibility='public'` 조건에서 탈락
+- 백엔드(`9f83cbd`): 본인 제외 · 게스트 제외 · publishable Work 보유 요구 **3개 제거**. 이미지 보유가 사실상 유일한 게이트가 됨. 본인 카드는 자기와의 거리가 0이라 "가장 닮았어요"가 자기 자신에 대해 출력되므로 `is_me` 플래그 + `reason='나의 카드예요'` + `highlight_axis=None`으로 분리
+- **유지한 조건 2개(프라이버시, 의도적)**: `discovery_opt_in`은 유저 본인의 "발견에서 숨기기" 스위치라 완성도 게이트가 아님 / `Project.visibility='public'`은 `report_image`가 비공개 취향 리포트와 같은 행에 있어 풀면 유출. 실측상 둘 다 현재 후보를 0명도 걸러내지 않아 손실 없음
+- 프론트(`3abf9d8`): `SaveBoardModal` 기본값 `private` → `public`. 토글은 그대로라 사용자가 비공개 선택 가능. 프로젝트 **생성** 시점의 private 기본값(App.jsx)은 유지 — 저장 모달에서 확정 전까지는 보수적으로
+- 로컬 실측: 후보 6 → 8명(게스트 1 + 본인 1). 실제 API로 `is_me` 카드까지 확인
+- **중요 한계**: 로컬 `backend/.env`는 프로덕션이 아니라 2026-05-25에 갈라진 Neon 자식 브랜치(`ep-holy-band`)라, 그 이후 프로덕션에서 만들어진 데이터(팀장 계정·이미지)가 존재하지 않음. 팀장 환경 확인은 배포 후에만 가능
+
 ### FRONT-PEOPLE-CARD-3 — /people 카드를 report 추천 타일 규격으로 축소 + 스크롤 버그 — RESOLVED 2026-08-29 (`416e891`, PR #314)
 - user 지적: 카드가 너무 커서 한 화면에 몇 장 안 보임 → report 생성 후 추천 그리드와 같은 타일로 통일
 - **재사용 시도의 실제 결과**: `ResultsPage`의 `ResultCard`는 컴포넌트화돼 있지 않음(로컬 함수, export 없음) → import 불가. 측정값을 `photoCardShell.js`로 추출하고 `ResultCard`도 그걸 참조하도록 리팩터링(값 동일, 시각 변화 0). 이제 추천 타일 디자인 변경이 `/people`에 자동 전파
