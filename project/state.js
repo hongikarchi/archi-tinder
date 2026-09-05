@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-08-29 11:18 KST',
-    head: 'b8b4f46',
-    branch: 'pr314-resolve',
+    updatedAt: '2026-09-05 23:52 KST',
+    head: '038c068',
+    branch: 'feature/sns-people-persona-thumbnail',
   },
   done: [
+    {
+      id: 'FRONT-PEOPLE-THUMB-1',
+      title: '프로필 보드 썸네일을 페르소나 리포트 이미지로 교체',
+      completedAt: '2026-09-05',
+      note: '요청 전제 정정: "프로필과 People 탭 양쪽에서 보드 썸네일 교체"였으나, People 탭에는 보드 썸네일이 없음(`PeopleDiscoveryPage`에 board 코드 0줄). `PersonCard`가 이미 `getPersonReportImage()`로 페르소나 이미지를 앞면에 쓰고 있음(#314 머지 완료) → 실제 대상은 프로필 `BoardCard` 한 곳. user 확인 후 범위 확정',
+    },
     {
       id: 'FRONT-PEOPLE-CARD-3',
       title: '/people 카드를 report 추천 타일 규격으로 축소 + 스크롤 버그',
@@ -72,12 +78,6 @@ window.PROJECT_STATE = {
       title: '팝업/인터스티셜 de-drift 스윕',
       completedAt: '2026-08-15',
       note: 'user 스크린샷 지적(ActionCard 구 디자인 잔존)發 전체 팝업 12종 감사: 위반 5곳 수정, 7곳 정상 확인(SaveBoardModal/VerifyGateModal/WorkDetailModal/QuestionCard/ExitConfirm/DismissConfirm 토큰 기반, ShareCardModal 의도적 인쇄물 예외)',
-    },
-    {
-      id: 'FRONT-FLOW-1',
-      title: '스와이프 온보딩 3연타 인터럽트 정리',
-      completedAt: '2026-08-15',
-      note: 'B1 검토 중 user 발견/결정 3건 이행: 신규 유저 Discovery→Taste 시퀀스의 연속 인터럽트(TriggerCard→TutorialPopup→DismissConfirm) 정리',
     },
   ],
   now: [
@@ -259,6 +259,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 314,
+      title: 'feat(people): 발견 카드를 이미지 앞면 + flip 상세 구조로 전환',
+      mergedAt: '2026-08-29T02:23:30Z',
+      mergedAtKST: '2026-08-29 11:23 KST',
+      sha: '038c068',
+    },
+    {
       number: 313,
       title: 'feat(assessment): 성향 진단 문항을 스와이프 카드로 전환',
       mergedAt: '2026-08-29T02:17:12Z',
@@ -306,13 +313,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-08-15T04:47:46Z',
       mergedAtKST: '2026-08-15 13:47 KST',
       sha: 'c643a7c',
-    },
-    {
-      number: 306,
-      title: 'feat(FRONT-FLOW-1/2): onboarding interrupt fix + popup de-drift — paper cards, pink sweep',
-      mergedAt: '2026-08-15T03:26:37Z',
-      mergedAtKST: '2026-08-15 12:26 KST',
-      sha: 'ab4ac47',
     },
   ],
   agents: [
@@ -581,14 +581,6 @@ window.PROJECT_STATE = {
     {
       path: 'README.md',
       role: '프로젝트 안내 문서',
-    },
-    {
-      path: 'Task.md',
-      role: '태스크 보드 문서',
-    },
-    {
-      path: 'Task.md',
-      role: '태스크 보드 문서',
     },
     {
       path: 'Task.md',
@@ -2549,14 +2541,6 @@ window.PROJECT_STATE = {
     {
       path: 'project/mermaid.min.js',
       role: 'Mermaid 다이어그램 번들',
-    },
-    {
-      path: 'project/state.js',
-      role: '대시보드 상태 데이터',
-    },
-    {
-      path: 'project/state.js',
-      role: '대시보드 상태 데이터',
     },
     {
       path: 'project/state.js',

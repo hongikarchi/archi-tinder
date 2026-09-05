@@ -299,6 +299,17 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FRONT-PEOPLE-THUMB-1 — 프로필 보드 썸네일을 페르소나 리포트 이미지로 교체 — RESOLVED 2026-09-05 (`9488979`, PR 리뷰 대기)
+- 요청 전제 정정: "프로필과 People 탭 **양쪽**에서 보드 썸네일 교체"였으나, **People 탭에는 보드 썸네일이 없음**(`PeopleDiscoveryPage`에 board 코드 0줄). `PersonCard`가 이미 `getPersonReportImage()`로 페르소나 이미지를 앞면에 쓰고 있음(#314 머지 완료) → 실제 대상은 프로필 `BoardCard` 한 곳. user 확인 후 범위 확정
+- 데이터 구조가 맞아떨어짐: 보드 = `Project`이고 `report_image`도 `Project`에 있어, 유저당 하나가 아니라 **보드마다 자기 리포트 이미지**를 커버로 쓰게 됨
+- **레이아웃/스타일 무변경**: `<img>` 엘리먼트·인라인 스타일·telemetry 훅·그라디언트 플레이스홀더 전부 그대로. 바뀐 건 `src` 하나
+- 폴백은 기존 체인 유지하며 앞에 한 단계만 추가 — 페르소나 이미지 → 기존 건축물 커버 → 그라디언트 플레이스홀더. `has_report_image`가 없거나 fetch 실패면 자동으로 기존 동작
+- 전달 방식은 **포인터 + lazy fetch**(base64 인라인 아님): `report_image`가 base64 TEXT(~200KB)이고 보드 `page_size`가 최대 50이라 인라인 시 프로필 응답 하나가 MB 단위. `/people` 피드와 같은 분리
+- `GET /projects/<pk>/report-image/` 신규. 가시성은 **보드 목록과 동일 규칙**(소유자는 자기 것, 그 외 public만). private은 존재 여부도 노출하지 않도록 404로 통일
+- 실증(로컬 API): payload 필드 적재 · 포인터 조회 200 · 이미지 없는 보드 404 · **비소유자의 타인 private 보드 404 / public 200** · 미인증 401
+- Deferred: `_build_boards_field`가 full `Project` row를 로드해 직렬화에 쓰지도 않는 `report_image` base64를 매번 DB에서 끌어옴. 기존 이슈이며 `.only()`/`.defer()`로 줄일 수 있으나 이번 범위 밖
+- 미검증: 브라우저 실물 확인 못 함(썸네일 렌더·폴백 외형). PR에 수동 절차 기재
+
 ### FRONT-PEOPLE-CARD-3 — /people 카드를 report 추천 타일 규격으로 축소 + 스크롤 버그 — RESOLVED 2026-08-29 (`416e891`, PR #314)
 - user 지적: 카드가 너무 커서 한 화면에 몇 장 안 보임 → report 생성 후 추천 그리드와 같은 타일로 통일
 - **재사용 시도의 실제 결과**: `ResultsPage`의 `ResultCard`는 컴포넌트화돼 있지 않음(로컬 함수, export 없음) → import 불가. 측정값을 `photoCardShell.js`로 추출하고 `ResultCard`도 그걸 참조하도록 리팩터링(값 동일, 시각 변화 0). 이제 추천 타일 디자인 변경이 `/people`에 자동 전파
