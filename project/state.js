@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-08-29 11:18 KST',
-    head: 'b8b4f46',
-    branch: 'pr314-resolve',
+    updatedAt: '2026-09-05 22:25 KST',
+    head: '038c068',
+    branch: 'feature/sns-assessment-resume',
   },
   done: [
+    {
+      id: 'FRONT-ASSESSMENT-3',
+      title: '진단 중 새로고침/뒤로가기/URL 재진입 시 진행 상태 유실',
+      completedAt: '2026-09-05',
+      note: '배경: People 탭에 페르소나 카드를 채우려면 유저가 진단을 완주해야 하는데, 중간 이탈 후 재진입하면 1번 문항으로 리셋돼 완주율을 깎고 있었음',
+    },
     {
       id: 'FRONT-PEOPLE-CARD-3',
       title: '/people 카드를 report 추천 타일 규격으로 축소 + 스크롤 버그',
@@ -72,12 +78,6 @@ window.PROJECT_STATE = {
       title: '팝업/인터스티셜 de-drift 스윕',
       completedAt: '2026-08-15',
       note: 'user 스크린샷 지적(ActionCard 구 디자인 잔존)發 전체 팝업 12종 감사: 위반 5곳 수정, 7곳 정상 확인(SaveBoardModal/VerifyGateModal/WorkDetailModal/QuestionCard/ExitConfirm/DismissConfirm 토큰 기반, ShareCardModal 의도적 인쇄물 예외)',
-    },
-    {
-      id: 'FRONT-FLOW-1',
-      title: '스와이프 온보딩 3연타 인터럽트 정리',
-      completedAt: '2026-08-15',
-      note: 'B1 검토 중 user 발견/결정 3건 이행: 신규 유저 Discovery→Taste 시퀀스의 연속 인터럽트(TriggerCard→TutorialPopup→DismissConfirm) 정리',
     },
   ],
   now: [
@@ -259,6 +259,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 314,
+      title: 'feat(people): 발견 카드를 이미지 앞면 + flip 상세 구조로 전환',
+      mergedAt: '2026-08-29T02:23:30Z',
+      mergedAtKST: '2026-08-29 11:23 KST',
+      sha: '038c068',
+    },
+    {
       number: 313,
       title: 'feat(assessment): 성향 진단 문항을 스와이프 카드로 전환',
       mergedAt: '2026-08-29T02:17:12Z',
@@ -306,13 +313,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-08-15T04:47:46Z',
       mergedAtKST: '2026-08-15 13:47 KST',
       sha: 'c643a7c',
-    },
-    {
-      number: 306,
-      title: 'feat(FRONT-FLOW-1/2): onboarding interrupt fix + popup de-drift — paper cards, pink sweep',
-      mergedAt: '2026-08-15T03:26:37Z',
-      mergedAtKST: '2026-08-15 12:26 KST',
-      sha: 'ab4ac47',
     },
   ],
   agents: [
@@ -581,14 +581,6 @@ window.PROJECT_STATE = {
     {
       path: 'README.md',
       role: '프로젝트 안내 문서',
-    },
-    {
-      path: 'Task.md',
-      role: '태스크 보드 문서',
-    },
-    {
-      path: 'Task.md',
-      role: '태스크 보드 문서',
     },
     {
       path: 'Task.md',
@@ -2503,6 +2495,14 @@ window.PROJECT_STATE = {
       role: '앱 필터·에러 헬퍼',
     },
     {
+      path: 'frontend/src/utils/assessmentDraft.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/assessmentDraft.test.mjs',
+      role: '',
+    },
+    {
       path: 'frontend/src/utils/discoveryGuard.js',
       role: '',
     },
@@ -2549,14 +2549,6 @@ window.PROJECT_STATE = {
     {
       path: 'project/mermaid.min.js',
       role: 'Mermaid 다이어그램 번들',
-    },
-    {
-      path: 'project/state.js',
-      role: '대시보드 상태 데이터',
-    },
-    {
-      path: 'project/state.js',
-      role: '대시보드 상태 데이터',
     },
     {
       path: 'project/state.js',
