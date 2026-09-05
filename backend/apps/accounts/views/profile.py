@@ -38,7 +38,9 @@ def _build_boards_field(target_profile, is_owner, page=1, page_size=12):
       }
 
     Each board card contains: project_id, name, date (created_at), visibility,
-    building_count, cover_image_url, thumbnails (up to 6).
+    building_count, cover_image_url, thumbnails (up to 6),
+    has_report_image + report_image_url (pointer to the persona report
+    image; the card prefers it over cover_image_url).
 
     Cover derivation: first liked_ids building → first saved_ids building → ''.
     Image batch lookup is performed only for the paged slice to avoid N+1 at
@@ -125,6 +127,18 @@ def _build_boards_field(target_profile, is_owner, page=1, page_size=12):
             'building_count': building_count,
             'cover_image_url': cover_url,
             'thumbnails':     thumbnails,
+            # FRONT-PEOPLE-THUMB-1: the board card's cover is the persona report
+            # image when the board has one. Only a POINTER ships here —
+            # Project.report_image is base64 TEXT (~200KB each) and page_size
+            # goes up to 50, so inlining would make one profile response
+            # megabytes wide. Same split the /people feed uses.
+            # `p.report_image` is already in memory (the queryset above loads
+            # full rows), so this flag costs no extra query.
+            'has_report_image': bool(p.report_image),
+            'report_image_url': (
+                f'/api/v1/projects/{p.project_id}/report-image/'
+                if p.report_image else ''
+            ),
         })
 
     return {

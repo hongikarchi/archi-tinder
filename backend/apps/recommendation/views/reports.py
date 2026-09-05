@@ -65,6 +65,51 @@ class ProjectReportGenerateView(APIView):
         return Response({'final_report': report, 'axis_scores': axis_scores})
 
 
+class ProjectReportImageFetchView(APIView):
+    """GET /api/v1/projects/<pk>/report-image/ — serve a board's persona image.
+
+    Split from the generating POST on purpose: board cards need to READ the
+    image, and Project.report_image is base64 TEXT (~200KB). Inlining it in the
+    profile's board list (page_size up to 50) would make one response megabytes
+    wide, so the list ships a pointer and each card fetches lazily. Mirrors the
+    /people feed's report-image endpoint.
+
+    Visibility mirrors the board LIST exactly (accounts/views/profile.py
+    `_build_boards_field`): the owner sees their own boards, everyone else only
+    `visibility='public'` ones. Without this the pointer would become a way to
+    read private boards' images.
+
+    404 when absent — callers treat that as "no image" and fall back, they do
+    not retry.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        project = (
+            Project.objects
+            .filter(project_id=pk)
+            .values('report_image', 'report_image_mime', 'visibility', 'user_id')
+            .first()
+        )
+        if not project:
+            return Response({'detail': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        profile = _get_profile(request)
+        is_owner = profile is not None and profile.pk == project['user_id']
+        if not is_owner and project['visibility'] != 'public':
+            # Same shape as "missing" so the endpoint never confirms that a
+            # private board exists.
+            return Response({'detail': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if not project['report_image']:
+            return Response({'detail': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        return Response({
+            'image_data': project['report_image'],
+            'mime_type': project['report_image_mime'] or 'image/png',
+        })
+
+
 class ProjectReportImageView(APIView):
     permission_classes = [IsAuthenticated]
     throttle_classes   = [ReportImageThrottle]

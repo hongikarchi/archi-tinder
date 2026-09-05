@@ -51,6 +51,7 @@ from .discovery import (
 from .reports import (
     ProjectReportGenerateView,
     ProjectReportImageView,
+    ProjectReportImageFetchView,
 )
 from .telemetry import (
     ImageLoadTelemetryView,
@@ -93,6 +94,7 @@ __all__ = [
     'BoardSurpriseView',
     'ProjectReportGenerateView',
     'ProjectReportImageView',
+    'ProjectReportImageFetchView',
     'ImageLoadTelemetryView',
     'ImageLoadTelemetryThrottle',
     'RecommendedArchitectsView',
