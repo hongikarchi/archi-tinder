@@ -23,11 +23,18 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-09-06 00:01 KST',
+    updatedAt: '2026-09-06 00:18 KST',
     head: '038c068',
-    branch: 'feature/sns-people-card-self-graph',
+    branch: 'fix/sns-people-overlay-graph-size',
   },
   done: [
+    {
+      id: 'FRONT-PEOPLE-CARD-5',
+      title: '카드 뒷면 성향 그래프 축소(여백 확보)',
+      completedAt: '2026-09-06',
+      prs: [319],
+      note: '피드백: flip 뒷면 그래프가 카드를 꽉 채워 답답함. 원인은 두 가지가 겹친 것 — `.chartWrap svg`가 `width:100%`라 카드 폭 전체를 쓰고, `.back` 패딩이 `8px 6px`뿐이라 좌우 6px만 남았음',
+    },
     {
       id: 'FRONT-PEOPLE-CARD-4',
       title: '내 카드는 성향 그래프 단독 표시',
@@ -73,12 +80,6 @@ window.PROJECT_STATE = {
       title: '스와이프 모션 + 갤러리 UX (7 라운드 feel-iteration)',
       completedAt: '2026-08-15',
       note: '① 퇴장 애니메이션: vendored `lib/tinderCard.js` — linear 3-대각선 총알 → easeOutCubic + power 1.6 + duration 클램프 [320,560]ms (플링감 유지, 감속 꼬리)',
-    },
-    {
-      id: 'FRONT-DESIGN-A1',
-      title: '디자인 정합성 기계적 스윕 (2 PR)',
-      completedAt: '2026-08-15',
-      note: '디자인 이니셔티브(B1→A1→B2→A2) A1, 유형별 PR 분리(user 결정): PR-1 hex→토큰, PR-2 hover 핵 제거 (stacked 브랜치)',
     },
   ],
   now: [
