@@ -277,3 +277,16 @@
   border-color: var(--accent-1);
   transform: translateY(-1px);
 }
+
+/* Resume notice — shown when a saved draft put the user mid-assessment. */
+.resumeNote {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--accent-1) 10%, transparent);
+  color: var(--accent-1);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+}
