@@ -299,6 +299,15 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FRONT-PEOPLE-CARD-4 — 내 카드는 성향 그래프 단독 표시 — RESOLVED 2026-09-06 (`636bb1d`, PR 리뷰 대기, #315 위 스택)
+- 요청은 "카드 클릭 flip + 오버레이 + 내 카드는 단독 + 이름 클릭 프로필 이동" 4가지였으나, **flip·오버레이·이름 이동 3가지는 `#314`에서 이미 구현돼 있었음**. 실제 미구현은 "내 카드 단독 표시" 하나
+- 그런데 `develop`의 피드는 본인을 제외(`exclude(user=requester_profile)`)해 **"내 카드"가 존재하지 않음** → `is_me`를 도입하는 `#315` 위에 스택해야 구현·검증 가능. user 확인 후 그렇게 진행
+- `is_me`일 때 `theirVector=null` + `legend=false` + `highlightAxis=null`. 같은 사람을 자기 자신과 비교하면 동일 폴리곤 2개가 포개지고 범례가 양쪽 다 '나'가 되며, '가장 닮은 축' 강조도 무의미해짐
+- 이름 옆 `나` 배지 추가 — 없으면 그 카드만 그래프가 하나인 게 버그처럼 읽힘
+- `myVector` 없을 때 `person.vector` 폴백(차트 공백 방지). 구 payload에서 `is_me` 부재 시 falsy → 기존 오버레이 동작 유지
+- 검증: **실제 컴포넌트를 esbuild+react-dom/server로 SSR 렌더**해 대조 — `isMe=false` polygon 5·점선 2·text 7·height 138 / `isMe=true` polygon 4·점선 0·text 5·height 120. 실 API에서도 `dev_test`만 `is_me=true`, 나머지 7명 false 확인
+- 미검증: 브라우저 실물(flip 모션·배지 위치). 컴포넌트 테스트 인프라가 없어(리포지토리에 React 테스트 없음) SSR 렌더로 대체
+
 ### FRONT-PEOPLE-FEED-1 — 페르소나 이미지 생성이 발견 피드에 반영되지 않던 문제 — RESOLVED 2026-09-03 (`9f83cbd` + `3abf9d8`, PR 리뷰 대기)
 - 팀장 피드백: 페르소나 리포트에서 이미지를 생성했는데 `/people`에 카드가 안 뜸. 조사 결과 **이미지 경로는 정상**이었고(리포트가 쓰는 `recommendation_project.report_image`를 피드가 그대로 읽음, 피드에 캐시 없음 = 즉시 반영 구조) 나머지 조건들이 막고 있었음
 - 실측 원인 2개: ① 피드가 본인을 제외(`exclude(user=requester_profile)`)해서 **자기 이미지는 자기 피드에 절대 안 뜸** ② 저장 모달 기본값이 `private`이라 이미지를 만들어도 보드가 비공개로 저장되어 `visibility='public'` 조건에서 탈락

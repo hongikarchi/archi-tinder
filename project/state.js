@@ -23,11 +23,18 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-09-03 11:27 KST',
+    updatedAt: '2026-09-06 00:01 KST',
     head: '038c068',
-    branch: 'feature/sns-people-feed-relax',
+    branch: 'feature/sns-people-card-self-graph',
   },
   done: [
+    {
+      id: 'FRONT-PEOPLE-CARD-4',
+      title: '내 카드는 성향 그래프 단독 표시',
+      completedAt: '2026-09-06',
+      prs: [315],
+      note: '요청은 "카드 클릭 flip + 오버레이 + 내 카드는 단독 + 이름 클릭 프로필 이동" 4가지였으나, flip·오버레이·이름 이동 3가지는 `#314`에서 이미 구현돼 있었음. 실제 미구현은 "내 카드 단독 표시" 하나',
+    },
     {
       id: 'FRONT-PEOPLE-FEED-1',
       title: '페르소나 이미지 생성이 발견 피드에 반영되지 않던 문제',
@@ -72,12 +79,6 @@ window.PROJECT_STATE = {
       title: '디자인 정합성 기계적 스윕 (2 PR)',
       completedAt: '2026-08-15',
       note: '디자인 이니셔티브(B1→A1→B2→A2) A1, 유형별 PR 분리(user 결정): PR-1 hex→토큰, PR-2 hover 핵 제거 (stacked 브랜치)',
-    },
-    {
-      id: 'FRONT-FLOW-2',
-      title: '팝업/인터스티셜 de-drift 스윕',
-      completedAt: '2026-08-15',
-      note: 'user 스크린샷 지적(ActionCard 구 디자인 잔존)發 전체 팝업 12종 감사: 위반 5곳 수정, 7곳 정상 확인(SaveBoardModal/VerifyGateModal/WorkDetailModal/QuestionCard/ExitConfirm/DismissConfirm 토큰 기반, ShareCardModal 의도적 인쇄물 예외)',
     },
   ],
   now: [
