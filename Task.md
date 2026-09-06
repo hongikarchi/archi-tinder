@@ -193,6 +193,9 @@ PR #301/#302 리뷰(2026-08-14, 41-agent)發. 현재 커버는 프론트 r2_keys
 - (d) status 3-way 파생(published/rejected/processing) 프론트(UserProfilePage 인라인)/백(WorkDetailView) 이중구현 — list 엔드포인트가 파생 `status`를 반환하게 통합
 - (e) JPEG-fallback content-type: `canvasToBlob`이 jpeg로 폴백해도 presign/PUT은 `image/webp` 고정 — blob.type을 per-file로 스레딩 (WebP 인코딩 없는 브라우저에서만 발동, 이론적)
 
+#### BACK-PRIVACY-2 — 공개 보드 상세의 report_image 노출 정책 결정
+BACK-PRIVACY-1(리스트 유출 차단) 후속. `ProjectDetailView`(AllowAny, views/projects.py:149)는 public 보드에 ProjectSerializer 전체 — report_image base64 포함 — 를 비인증에게도 반환. 단건이라 bulk 수확은 불가하나 `ProjectReportImageFetchView`(IsAuthenticated)와 정책 불일치. BoardReportPage.jsx:154가 이 경로의 report_image를 소비 중이라 단순 제거는 익명 공개-보드 리포트 열람을 깨뜨림. 옵션: (a) BoardReportPage를 lazy pointer 패턴으로 전환 + FetchView를 public-board-AllowAny로 완화 + 상세에서 필드 제거, (b) "공개 보드 리포트 이미지 = 의도적 공개(단건)"로 확정하고 FetchView 권한을 맞춰 불일치만 해소. Opus verify 2026-09-06 medium.
+
 #### FRONT-VERIFY-1 — 보드저장 PATCH 경로 verify_required 모달 미배선
 FULL-ONBOARDING-2(`92237d8`)가 guest promote-limit을 `403 {'detail':'verify_required','reason':'board_limit_reached','limit':3}`로 표준화했으나, 프론트 `updateProject`(projects.js:64-71)는 verify_required를 VerifyRequiredError로 변환 안 함(createProject:26-40만 처리) → SaveBoardModal에서 guest가 4번째 보드 저장확정 시 VerifyGateModal 대신 generic 에러 문자열. `updateProject`에 createProject와 동일한 403 verify_required 감지 + VerifyGateModal 배선. Non-blocking(백엔드 enforcement는 정상).
 
@@ -304,6 +307,12 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### BACK-PRIVACY-1 — 비인증 base64 리포트 유출 + 썸네일 캐시 evict 누락 — RESOLVED 2026-09-06 (`9b7c5e8`, PR 대기)
+- AllowAny `/users/<id>/projects/`가 report_image base64(개당 ~200KB, 페이지당 50개)를 익명 호출자에게 그대로 실어줌 — 신규 PublicProjectListSerializer로 해당 엔드포인트만 두 필드 제거(프론트 소비자 0 확인). owner GET /projects/는 불변(App.jsx:929 로그인 동기화 의존). queryset defer도 추가(DB→앱 전송비, Opus 검증 안전)
+- ProjectReportImageView.post가 이미지 생성 후 evict_user_profile_detail 미호출 → 프로필 보드 썸네일 60초 stale(#318 잔여) — evict 1줄 추가, 캐시 short-circuit 경로는 무접촉
+- 테스트 5종: 익명/owner 리스트 유출 부재, owner 자기 리스트 회귀 가드, evict 버전 범프, cached 경로 no-bump. DEPLOY-BATCH-2 플랜 PR-A
+- Deferred: ProjectDetailView(AllowAny)가 public 보드 상세에 report_image base64 여전히 포함 — pre-existing, BoardReportPage 익명 열람이 소비 중이라 단순 제거 불가. pointer 패턴 전환 vs 의도적 공개 정렬 결정 필요.
+
 ### FRONT-PEOPLE-CARD-2 — 발견 피드 빈 화면: seed_discovery 커맨드 + 소셜 탭 신설 — RESOLVED 2026-09-06 (`c791c24`, PR 대기)
 - 빈 피드 원인 재실측 — #315 완화 후 게이트는 2중(discovery_opt_in + public report_image 프로젝트)인데 로컬 DB 통과자 0명: report_image 프로젝트 4개 전부 private(#315 이전 SaveBoardModal 기본값), 진단 완료 4명 전부 본인 계정. "테스트 서버 계정"은 prod Neon DB 소속 + prod엔 discovery 미배포라 로컬에서 원천 불가시
 - `manage.py seed_discovery` 신규(백엔드 dev 도구) — 가짜 유저 N명(기본 20): 실 파생 함수 `_compute_type_code` 재사용으로 vector↔type_code 정합 보장, 16타입·거리분산 벡터, 순수 파이썬 PNG(의존성 0) public 보드, `--clean`/`--publish-existing`/`--n 0`, DEBUG=False 실행 거부 가드, get_or_create 멱등. pytest 9케이스 동봉(CI 게이트)

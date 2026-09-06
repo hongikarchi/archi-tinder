@@ -8,7 +8,7 @@ from rest_framework.views import APIView
 
 from ..models import Project
 from .. import services
-from ..caches import evict_projects_list, evict_project_detail
+from ..caches import evict_projects_list, evict_project_detail, evict_user_profile_detail
 from ..services.axis_scores import compute_axis_scores
 from ..throttles import ReportGenerateThrottle, ReportImageThrottle
 from ._shared import _get_profile, _liked_id_only
@@ -144,6 +144,7 @@ class ProjectReportImageView(APIView):
         project.save(update_fields=['report_image', 'report_image_mime'])
         evict_projects_list(profile.id)
         evict_project_detail(str(pk))
+        evict_user_profile_detail(profile.user.id)
         logger.info('Persona image generated for project %s', pk)
         return Response({
             'image_data': result['image_data'],
