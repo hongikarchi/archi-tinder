@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-09-06 23:44 KST',
-    head: '5a7cd77',
-    branch: 'feature/claude-people-seed-social',
+    updatedAt: '2026-09-07 00:52 KST',
+    head: '70851a2',
+    branch: 'feature/claude-bug-sweep-back',
   },
   done: [
+    {
+      id: 'BACK-PRIVACY-1',
+      title: '비인증 base64 리포트 유출 + 썸네일 캐시 evict 누락',
+      completedAt: '2026-09-06',
+      note: 'AllowAny `/users/<id>/projects/`가 report_image base64(개당 ~200KB, 페이지당 50개)를 익명 호출자에게 그대로 실어줌 — 신규 PublicProjectListSerializer로 해당 엔드포인트만 두 필드 제거(프론트 소비자 0 확인). owner GET /projects/는 불변(App.jsx:929 로그인 동기화 의존). queryset defer도 추가(DB→앱 전송비, Opus 검증 안전)',
+    },
     {
       id: 'FRONT-PEOPLE-CARD-2',
       title: '발견 피드 빈 화면: seed_discovery 커맨드 + 소셜 탭 신설',
@@ -70,13 +76,6 @@ window.PROJECT_STATE = {
       title: '진단 중 새로고침/뒤로가기/URL 재진입 시 진행 상태 유실',
       completedAt: '2026-09-05',
       note: '배경: People 탭에 페르소나 카드를 채우려면 유저가 진단을 완주해야 하는데, 중간 이탈 후 재진입하면 1번 문항으로 리셋돼 완주율을 깎고 있었음',
-    },
-    {
-      id: 'FRONT-PEOPLE-CARD-5',
-      title: '카드 뒷면 성향 그래프 축소(여백 확보)',
-      completedAt: '2026-09-06',
-      prs: [319],
-      note: '피드백: flip 뒷면 그래프가 카드를 꽉 채워 답답함. 원인은 두 가지가 겹친 것 — `.chartWrap svg`가 `width:100%`라 카드 폭 전체를 쓰고, `.back` 패딩이 `8px 6px`뿐이라 좌우 6px만 남았음',
     },
   ],
   now: [],
@@ -155,6 +154,11 @@ window.PROJECT_STATE = {
         id: 'FULL-WORKS-4',
         title: 'cover_r2_key finalize 배선 + works 리뷰 low 잔여',
         note: 'PR #301/#302 리뷰(2026-08-14, 41-agent)發. 현재 커버는 프론트 r2_keys 재정렬(index 0 = 커버) 관례로만 동작하고 `Work.cover_r2_key` 컬럼은 쓰는 곳이 없음 — 두 PR이 각자 반쪽을 다른 메커니즘으로 구현, 서버가 순서를 바꾸면 조용히 깨지는 잠재 트랩. 묶음:',
+      },
+      {
+        id: 'BACK-PRIVACY-2',
+        title: '공개 보드 상세의 report_image 노출 정책 결정',
+        note: 'BACK-PRIVACY-1(리스트 유출 차단) 후속. `ProjectDetailView`(AllowAny, views/projects.py:149)는 public 보드에 ProjectSerializer 전체 — report_image base64 포함 — 를 비인증에게도 반환. 단건이라 bulk 수확은 불가하나 `ProjectReportImageFetchView`(IsAuthenticated)와 정책 불일치. BoardReportPage.jsx:154가 이 경로의 report_image를 소…',
       },
       {
         id: 'FRONT-VERIFY-1',
@@ -262,6 +266,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 324,
+      title: 'feat(FRONT-PEOPLE-CARD-2): seed_discovery command + Social tab hosting /people',
+      mergedAt: '2026-09-06T14:57:06Z',
+      mergedAtKST: '2026-09-06 23:57 KST',
+      sha: '70851a2',
+    },
+    {
       number: 323,
       title: 'feat(FRONT-FUNC-CHECK-1): card-back i18n + motion gate 제거 + 건물→사무소 링크 + /office front 삭제',
       mergedAt: '2026-09-06T13:13:29Z',
@@ -309,13 +320,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-09-06T01:03:23Z',
       mergedAtKST: '2026-09-06 10:03 KST',
       sha: '58a1bc1',
-    },
-    {
-      number: 315,
-      title: 'feat(people): 페르소나 이미지가 있으면 발견 피드에 노출 — 본인 포함 + 저장 기본값 public',
-      mergedAt: '2026-09-06T00:54:33Z',
-      mergedAtKST: '2026-09-06 09:54 KST',
-      sha: '7c32640',
     },
   ],
   agents: [
