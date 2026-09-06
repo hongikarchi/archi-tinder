@@ -13,7 +13,8 @@
  */
 
 import styles from './PentagonChart.module.css'
-import { AXIS_LABELS } from '../constants/personalityTypes.js'
+import { AXIS_KEYS } from '../constants/personalityTypes.js'
+import { useTranslation } from '../i18n/index.js'
 
 const DEFAULT_SIZE = 200
 const MINI_SIZE = 120
@@ -70,9 +71,12 @@ export default function PentagonChart({
   // Rendered INSIDE the svg, on an extra strip below the chart, so the root
   // element stays an <svg> and existing callers' layout is untouched.
   legend = false,
-  legendMineLabel = '나',
-  legendTheirsLabel = '이 유저',
+  legendMineLabel,
+  legendTheirsLabel,
 }) {
+  const { t } = useTranslation()
+  const resolvedMineLabel = legendMineLabel ?? t('personCard.legendMine')
+  const resolvedTheirsLabel = legendTheirsLabel ?? t('personCard.legendTheirs')
   const size = sizeProp ?? (mini ? MINI_SIZE : DEFAULT_SIZE)
   const padding = mini ? 24 : 32
   const cx = size / 2
@@ -90,7 +94,7 @@ export default function PentagonChart({
       width={size}
       height={size + legendH}
       viewBox={`0 0 ${size} ${size + legendH}`}
-      aria-label="성향 오각형 차트"
+      aria-label={t('personCard.axisAria')}
       className={styles.root}
     >
       {/* Grid polygons */}
@@ -162,7 +166,7 @@ export default function PentagonChart({
       })()}
 
       {/* Axis labels */}
-      {AXIS_LABELS.map((label, i) => {
+      {AXIS_KEYS.map((key, i) => {
         const labelOffset = mini ? 14 : 18
         const pt = labelPoint(i, maxR, cx, cy, labelOffset)
         const isHighlighted = highlightAxis === i
@@ -178,7 +182,7 @@ export default function PentagonChart({
             fill={isHighlighted ? 'var(--accent-1)' : 'var(--color-text-muted)'}
             style={{ fontFamily: 'inherit', userSelect: 'none' }}
           >
-            {label}
+            {t(`personality.axis.${key}`)}
           </text>
         )
       })}
@@ -200,7 +204,7 @@ export default function PentagonChart({
             className={styles.hitArea}
             onClick={() => onAxisClick?.(i)}
             role="button"
-            aria-label={`${AXIS_LABELS[i]} 축 필터`}
+            aria-label={t('personCard.axisFilterAria', { axis: t(`personality.axis.${AXIS_KEYS[i]}`) })}
             tabIndex={0}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onAxisClick?.(i) }}
           />
@@ -214,12 +218,12 @@ export default function PentagonChart({
         const swatchW = mini ? 12 : 16
         const gapAfterSwatch = 4
         const gapBetweenItems = mini ? 12 : 16
-        const mineW = swatchW + gapAfterSwatch + legendMineLabel.length * legendFont * 0.62
-        const theirsW = swatchW + gapAfterSwatch + legendTheirsLabel.length * legendFont * 0.62
+        const mineW = swatchW + gapAfterSwatch + resolvedMineLabel.length * legendFont * 0.62
+        const theirsW = swatchW + gapAfterSwatch + resolvedTheirsLabel.length * legendFont * 0.62
         let x = Math.max(0, (size - (mineW + gapBetweenItems + theirsW)) / 2)
         const items = [
-          { label: legendMineLabel, color: 'var(--accent-1)', dash: undefined, w: mineW },
-          { label: legendTheirsLabel, color: 'var(--accent-2)', dash: '4 2', w: theirsW },
+          { label: resolvedMineLabel, color: 'var(--accent-1)', dash: undefined, w: mineW },
+          { label: resolvedTheirsLabel, color: 'var(--accent-2)', dash: '4 2', w: theirsW },
         ]
         return (
           <g aria-hidden="true">

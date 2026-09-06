@@ -8,9 +8,8 @@
  * adds only the flip mechanics and the back face's interior, which an inline
  * style cannot express.
  *
- * Flip values are the app's existing rule, matching
- * profile/BioPersonaFlipCard.jsx and SwipeCard's gallery face, timed by
- * --motion-flip / --motion-ease.
+ * Flip values are the app's existing rule, matching SwipeCard's gallery
+ * face, timed by --motion-flip / --motion-ease.
  */
 
 /* NOTE: the tile's own box (position/aspect/radius/border/shadow/overflow)
@@ -34,12 +33,6 @@
   height: 100%;
   transform-style: preserve-3d;
   transition: transform var(--motion-flip) var(--motion-ease);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .flipInner {
-    transition: none;
-  }
 }
 
 /* ── Front ─────────────────────────────────────────────────────────────── */

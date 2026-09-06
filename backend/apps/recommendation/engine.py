@@ -42,7 +42,7 @@ from .engine_filters import (  # noqa: F401
 )
 from .engine_cards import (  # noqa: F401
     _row_to_card, _card_cache_key, _with_image_focus,
-    _VALID_IMAGE_FOCUS, _CARD_CACHE_SCHEMA,
+    _VALID_IMAGE_FOCUS, _CARD_CACHE_SCHEMA, _CARD_SELECT_COLS,
 )
 
 
@@ -164,15 +164,7 @@ def get_diverse_random(n=10, filters=None, image_focus=None):
     if image_focus is None and filters:
         image_focus = filters.get('image_focus')
     where, params = _build_filter_sql(filters)
-    _required_cols = [
-        'canonical_bld_id', 'name', 'architect_names', 'architects_text',
-        'location_country', 'location_city', 'project_year',
-        'program', 'style', 'atmosphere', 'color_tone', 'material_visual',
-        'typology_primary', 'typology_tags', 'architectural_elements',
-        'visual_description',
-        'covers_by_type', 'all_images', 'display_cover_url',
-        'cover_image_url_default', 'source_urls',
-    ]
+    _required_cols = _CARD_SELECT_COLS
     _optional_cols = ()
     _cols = _build_select_columns(_required_cols, _optional_cols)
     # Two-query pattern: ID-only fetch first (no embedding column, no sort over
@@ -284,15 +276,7 @@ def get_building_card(canonical_bld_id, image_focus=None):
     if cached is not None:
         return _with_image_focus(cached, image_focus)
 
-    _required_cols = [
-        'canonical_bld_id', 'name', 'architect_names', 'architects_text',
-        'location_country', 'location_city', 'project_year',
-        'program', 'style', 'atmosphere', 'color_tone', 'material_visual',
-        'typology_primary', 'typology_tags', 'architectural_elements',
-        'visual_description',
-        'covers_by_type', 'all_images', 'display_cover_url',
-        'cover_image_url_default', 'source_urls',
-    ]
+    _required_cols = _CARD_SELECT_COLS
     _optional_cols = ()
     _cols = _build_select_columns(_required_cols, _optional_cols)
     with connection.cursor() as cur:
@@ -350,15 +334,7 @@ def get_top_k_results(pref_vector, exposed_ids, k=None, image_focus=None, questi
     else:
         exclude_sql = 'WHERE is_publishable = true'
 
-    _required_cols = [
-        'canonical_bld_id', 'name', 'architect_names', 'architects_text',
-        'location_country', 'location_city', 'project_year',
-        'program', 'style', 'atmosphere', 'color_tone', 'material_visual',
-        'typology_primary', 'typology_tags', 'architectural_elements',
-        'visual_description',
-        'covers_by_type', 'all_images', 'display_cover_url',
-        'cover_image_url_default', 'source_urls',
-    ]
+    _required_cols = _CARD_SELECT_COLS
     _optional_cols = ()
     _cols = _build_select_columns(_required_cols, _optional_cols)
     if not pref_vector:
@@ -435,15 +411,7 @@ def get_buildings_by_ids(canonical_bld_ids, image_focus=None):
     # Phase 2: batch DB fetch for cache misses only
     if miss_ids:
         placeholders = ','.join(['%s'] * len(miss_ids))
-        _required_cols = [
-            'canonical_bld_id', 'name', 'architect_names', 'architects_text',
-            'location_country', 'location_city', 'project_year',
-            'program', 'style', 'atmosphere', 'color_tone', 'material_visual',
-            'typology_primary', 'typology_tags', 'architectural_elements',
-            'visual_description',
-            'covers_by_type', 'all_images', 'display_cover_url',
-            'cover_image_url_default', 'source_urls',
-        ]
+        _required_cols = _CARD_SELECT_COLS
         _optional_cols = ()
         _cols = _build_select_columns(_required_cols, _optional_cols)
         with connection.cursor() as cur:
@@ -531,15 +499,7 @@ def search_by_filters(filters, limit=20, image_focus=None):
     if image_focus is None and filters:
         image_focus = filters.get('image_focus')
     where, params = _build_filter_sql(filters)
-    _required_cols = [
-        'canonical_bld_id', 'name', 'architect_names', 'architects_text',
-        'location_country', 'location_city', 'project_year',
-        'program', 'style', 'atmosphere', 'color_tone', 'material_visual',
-        'typology_primary', 'typology_tags', 'architectural_elements',
-        'visual_description',
-        'covers_by_type', 'all_images', 'display_cover_url',
-        'cover_image_url_default', 'source_urls',
-    ]
+    _required_cols = _CARD_SELECT_COLS
     _optional_cols = ()
     _cols = _build_select_columns(_required_cols, _optional_cols)
     # ORDER BY RANDOM() here is intentional: search_by_filters applies a WHERE clause
@@ -626,15 +586,7 @@ def search_by_filters_scored(
     )
 
     # SELECT columns (same set as search_by_filters)
-    _required_cols = [
-        'canonical_bld_id', 'name', 'architect_names', 'architects_text',
-        'location_country', 'location_city', 'project_year',
-        'program', 'style', 'atmosphere', 'color_tone', 'material_visual',
-        'typology_primary', 'typology_tags', 'architectural_elements',
-        'visual_description',
-        'covers_by_type', 'all_images', 'display_cover_url',
-        'cover_image_url_default', 'source_urls',
-    ]
+    _required_cols = _CARD_SELECT_COLS
     # Build tag_score expression; fall back to constant 0 when no cases
     if cases:
         tag_score_expr = '(' + ' + '.join(cases) + ')::float'
@@ -1793,15 +1745,7 @@ def get_top_k_mmr(
 
     # Fetch 3*k candidates for re-ranking
     vec_str = _vec_to_pg(centroid.tolist())
-    _required_cols = [
-        'canonical_bld_id', 'name', 'architect_names', 'architects_text',
-        'location_country', 'location_city', 'project_year',
-        'program', 'style', 'atmosphere', 'color_tone', 'material_visual',
-        'typology_primary', 'typology_tags', 'architectural_elements',
-        'visual_description',
-        'covers_by_type', 'all_images', 'display_cover_url',
-        'cover_image_url_default', 'source_urls',
-    ]
+    _required_cols = _CARD_SELECT_COLS
     _optional_cols = ()
     _cols = _build_select_columns(_required_cols, _optional_cols)
     with connection.cursor() as cur:
@@ -2163,15 +2107,7 @@ def taste_ranked_page(v_taste, exclude_ids, limit, offset, image_focus=None):
     and return one page.
     image_focus: forwarded to _row_to_card for per-focus cover selection.
     """
-    _required_cols = [
-        'canonical_bld_id', 'name', 'architect_names', 'architects_text',
-        'location_country', 'location_city', 'project_year',
-        'program', 'style', 'atmosphere', 'color_tone', 'material_visual',
-        'typology_primary', 'typology_tags', 'architectural_elements',
-        'visual_description',
-        'covers_by_type', 'all_images', 'display_cover_url',
-        'cover_image_url_default', 'source_urls',
-    ]
+    _required_cols = _CARD_SELECT_COLS
     _optional_cols = ()
     _cols = _build_select_columns(_required_cols, _optional_cols)
 

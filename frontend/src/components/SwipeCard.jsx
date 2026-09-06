@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useImageTelemetry } from '../hooks/useImageTelemetry.js'
+import { useTranslation } from '../i18n/index.js'
 
 /**
  * Shared swipe card — consumed by SwipePage (Taste) and DiscoveryPage (Discovery).
@@ -93,6 +94,7 @@ function InfoRow({ label, value }) {
 
 /* ── SwipeCard ───────────────────────────────────────────────────────────── */
 export default function SwipeCard({ card, onGalleryClose }) {
+  const { t } = useTranslation()
   const [isExpanded,     setIsExpanded]     = useState(false)
   const [showGallery,    setShowGallery]    = useState(false)
   const [hasBeenOpened,  setHasBeenOpened]  = useState(false)
@@ -506,7 +508,7 @@ export default function SwipeCard({ card, onGalleryClose }) {
                 <polyline points="21 15 16 10 5 21"/>
               </svg>
               <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, fontWeight: 500 }}>
-                Image unavailable
+                {t('swipe.detail.imageUnavailable')}
               </span>
             </div>
           ) : (
@@ -580,7 +582,7 @@ export default function SwipeCard({ card, onGalleryClose }) {
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="18 15 12 9 6 15" />
               </svg>
-              tap for details
+              {t('swipe.detail.tapForDetails')}
             </div>
           </div>
 
@@ -614,13 +616,13 @@ export default function SwipeCard({ card, onGalleryClose }) {
             )}
             <div style={{ height: 1, background: 'rgba(255,255,255,0.1)', marginBottom: 12, flexShrink: 0 }} />
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px', flex: '0 1 auto', minHeight: 0 }}>
-              <InfoRow label="Type"     value={typology} />
-              <InfoRow label="Country"  value={country} />
-              <InfoRow label="City"     value={city} />
-              <InfoRow label="Year"     value={year} />
-              <InfoRow label="Style"      value={style} />
-              <InfoRow label="Atmosphere" value={atmosphere} />
-              <InfoRow label="Material" value={material} />
+              <InfoRow label={t('swipe.detail.labels.type')}       value={typology} />
+              <InfoRow label={t('swipe.detail.labels.country')}    value={country} />
+              <InfoRow label={t('swipe.detail.labels.city')}       value={city} />
+              <InfoRow label={t('swipe.detail.labels.year')}       value={year} />
+              <InfoRow label={t('swipe.detail.labels.style')}      value={style} />
+              <InfoRow label={t('swipe.detail.labels.atmosphere')} value={atmosphere} />
+              <InfoRow label={t('swipe.detail.labels.material')}   value={material} />
 
             </div>
             {gallery.length > 0 && (
@@ -642,7 +644,7 @@ export default function SwipeCard({ card, onGalleryClose }) {
                   <circle cx="8.5" cy="8.5" r="1.5"/>
                   <polyline points="21 15 16 10 5 21"/>
                 </svg>
-                View Gallery · {gallery.length} photos
+                {t('swipe.detail.viewGallery', { n: gallery.length })}
               </button>
             )}
           </div>

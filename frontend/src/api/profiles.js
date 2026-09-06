@@ -1,13 +1,9 @@
 /**
  * api/profiles.js
- * Office (firm) and user profile fetching.
+ * User profile fetching.
  */
 
 import { callApi, BASE, getToken } from './core.js'
-
-export async function getOffice(officeId) {
-  return await callApi('GET', `/offices/${officeId}/`)
-}
 
 export async function getUserProfile(userId, { boardsPage, boardsPageSize } = {}) {
   const params = new URLSearchParams()

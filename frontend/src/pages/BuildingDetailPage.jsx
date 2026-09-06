@@ -10,6 +10,7 @@ import PhotoLightbox from './buildingDetail/PhotoLightbox.jsx'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import PageTopControls from '../components/PageTopControls.jsx'
 import { useTranslation } from '../i18n/index.js'
+import styles from './BuildingDetailPage.module.css'
 
 const BUILDING_ID_RE = /^[A-Za-z0-9_-]{1,32}$/
 
@@ -105,6 +106,7 @@ export default function BuildingDetailPage({ onLogout }) {
     return gallery.map(url => ({ url, alt: title }))
   }, [galleryMeta, galleryFilter, photos, drawings, gallery, title])
   const architect = building?.metadata?.axis_architects
+  const architectId = building?.metadata?.architect_id || null
   const detailDescription = building?.metadata?.visual_description || building?.metadata?.description || null
   const description = building?.metadata?.axis_atmosphere || 'No atmosphere description is available yet.'
   const items = metadataItems(building)
@@ -301,7 +303,15 @@ export default function BuildingDetailPage({ onLogout }) {
             lineHeight: 1.45,
             margin: '0 0 20px',
           }}>
-            {architect}
+            {architectId ? (
+              <button
+                type="button"
+                className={styles.architectLink}
+                onClick={() => navigate(`/architects/${architectId}`)}
+              >
+                {architect}
+              </button>
+            ) : architect}
           </p>
         )}
 
@@ -335,7 +345,15 @@ export default function BuildingDetailPage({ onLogout }) {
                 fontWeight: 700,
                 lineHeight: 1.3,
               }}>
-                {value}
+                {label === 'Architect' && architectId ? (
+                  <button
+                    type="button"
+                    className={styles.architectLink}
+                    onClick={() => navigate(`/architects/${architectId}`)}
+                  >
+                    {value}
+                  </button>
+                ) : value}
               </div>
             </div>
           ))}

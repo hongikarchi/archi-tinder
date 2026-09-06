@@ -95,27 +95,6 @@
   max-width: 420px;
 }
 
-/* Reduced-motion exit: the tinderCard flight is skipped in JS
-   (prefersReducedMotion() in AssessmentPage.jsx) and the card cross-fades
-   instead. Outside this media query the rule is inert — the swipe animation
-   owns the exit. */
-@media (prefers-reduced-motion: reduce) {
-  .exitingCard {
-    opacity: 0;
-    transition: opacity var(--motion-fast) var(--motion-ease);
-  }
-  /* Returning to the previous question: the spring slide is skipped in JS, so
-     the card fades in rather than popping. */
-  .enteringCard {
-    animation: assessmentFadeIn var(--motion-fast) var(--motion-ease);
-  }
-}
-
-@keyframes assessmentFadeIn {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-
 /* Submit button (last question) */
 .submitBtn {
   display: flex;

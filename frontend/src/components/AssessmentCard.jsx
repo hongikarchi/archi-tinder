@@ -21,35 +21,39 @@ import {
   questionBadgeStyle,
   questionOptionStyle,
 } from './cardShell.js'
-import { LIKERT_LABELS, LIKERT_VALUES } from '../constants/assessmentQuestions.js'
+import { LIKERT_KEYS, LIKERT_VALUES } from '../constants/assessmentQuestions.js'
 import styles from './AssessmentCard.module.css'
+import { useTranslation } from '../i18n/index.js'
 
 /**
  * Props:
- *   question   { id, axis, reversed, text_ko }
+ *   question   { id, axis, reversed, text_ko, text_en }
  *   selected   stored response for this question (null = unanswered)
  *   disabled   true while the card is flying out — blocks double answers
  *   onAnswer   (rawLikertValue) => void
  */
 export default function AssessmentCard({ question, selected, disabled, onAnswer }) {
+  const { t, language } = useTranslation()
   if (!question) return null
+
+  const questionText = language === 'en' ? (question.text_en || question.text_ko) : question.text_ko
 
   return (
     <div style={{ ...cardShellStyle, ...questionCardBodyStyle, justifyContent: 'center' }}>
 
       {/* Badge */}
       <p style={{ ...questionBadgeStyle, textAlign: 'center' }}>
-        가까운 정도를 선택하세요
+        {t('assessmentCard.chooseCloseness')}
       </p>
 
       {/* Question text */}
-      <p style={questionTitleStyle}>{question.text_ko}</p>
+      <p style={questionTitleStyle}>{questionText}</p>
 
       {/* Likert options — unchanged 5-point scale, -2..+2 */}
       <div
         className={`${styles.options} pressable`}
         role="group"
-        aria-label="답변 선택"
+        aria-label={t('assessmentCard.answerSelection')}
       >
         {LIKERT_VALUES.map((val, idx) => {
           const stored = question.reversed ? val * -1 : val
@@ -65,7 +69,7 @@ export default function AssessmentCard({ question, selected, disabled, onAnswer 
               aria-pressed={isSelected}
             >
               <span className={`${styles.val} pressable`}>{val > 0 ? `+${val}` : val}</span>
-              <span className={`${styles.label} pressable`}>{LIKERT_LABELS[idx]}</span>
+              <span className={`${styles.label} pressable`}>{t(`assessmentCard.likert.${LIKERT_KEYS[idx]}`)}</span>
             </button>
           )
         })}

@@ -12,26 +12,15 @@ export const TYPE_CODES = [
   'RSON', 'RSOT', 'RSDN', 'RSDT',
 ]
 
-export const TYPE_LABELS = {
-  CLON: '개념적 협업 리더 — 혁신형',
-  CLOT: '개념적 협업 리더 — 전통형',
-  CLDN: '개념적 독립 리더 — 혁신형',
-  CLDT: '개념적 독립 리더 — 전통형',
-  CSON: '개념적 협업 서포터 — 혁신형',
-  CSOT: '개념적 협업 서포터 — 전통형',
-  CSDN: '개념적 독립 서포터 — 혁신형',
-  CSDT: '개념적 독립 서포터 — 전통형',
-  RLON: '실무적 협업 리더 — 혁신형',
-  RLOT: '실무적 협업 리더 — 전통형',
-  RLDN: '실무적 독립 리더 — 혁신형',
-  RLDT: '실무적 독립 리더 — 전통형',
-  RSON: '실무적 협업 서포터 — 혁신형',
-  RSOT: '실무적 협업 서포터 — 전통형',
-  RSDN: '실무적 독립 서포터 — 혁신형',
-  RSDT: '실무적 독립 서포터 — 전통형',
-}
+// TYPE_LABELS (Korean-literal map) is retired — its sole consumer
+// (AssessmentPage.jsx result screen) now resolves display text via i18n key
+// `personality.types.<code>` (frontend/src/i18n/locales.js), gated by
+// TYPE_CODES.includes(code) with `personality.typeFallback` as the fallback.
 
-export const AXIS_LABELS = ['작업방식', '역할성향', '협업방식', '접근태도', '결정속도']
+// Localized at render sites via i18n key `personality.axis.<key>`
+// (frontend/src/i18n/locales.js). AXIS_LABELS (Korean literals) is retired —
+// PentagonChart.jsx now maps AXIS_KEYS through useTranslation()'s t().
+export const AXIS_KEYS = ['workStyle', 'role', 'collaboration', 'approach', 'decisionSpeed']
 
 /** Derive a type code from a 5-element vector (each -1..+1). */
 export function vectorToTypeCode(vector) {

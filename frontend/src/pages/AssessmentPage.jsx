@@ -10,7 +10,8 @@ import { useSpring, animated } from '@react-spring/web'
 import { physics } from '../lib/tinderCard.js'
 import { CARD_WIDTH } from '../components/cardShell.js'
 import { QUESTIONS } from '../constants/assessmentQuestions.js'
-import { TYPE_LABELS } from '../constants/personalityTypes.js'
+import { TYPE_CODES } from '../constants/personalityTypes.js'
+import { useTranslation } from '../i18n/index.js'
 import { submitAssessment } from '../api/personality.js'
 import PentagonChart from '../components/PentagonChart.jsx'
 import AssessmentCard from '../components/AssessmentCard.jsx'
@@ -37,19 +38,9 @@ const TOTAL = QUESTIONS.length
 // consistent direction). 'left' matches DiscoveryPage's "pass" exit.
 const EXIT_DIRECTION = 'left'
 
-// Reduced-motion fallback: the card cross-fades instead of flying. Kept at
-// --motion-fast (180ms, tokens.css) so the answer->next-question rhythm stays
-// close to the animated path without the travel.
-const REDUCED_FADE_MS = 180
-
-function prefersReducedMotion() {
-  return typeof window !== 'undefined'
-    && typeof window.matchMedia === 'function'
-    && window.matchMedia('(prefers-reduced-motion: reduce)').matches
-}
-
 export default function AssessmentPage({ onLogout }) {
   const navigate = useNavigate()
+  const { t } = useTranslation()
 
   // Read once, on mount. Refresh / browser-back / typing the URL all remount
   // this component, so without this the run restarted at question 1 every time.
@@ -67,12 +58,8 @@ export default function AssessmentPage({ onLogout }) {
   const [result, setResult] = useState(null)
   const [showResult, setShowResult] = useState(false)
   const [submitError, setSubmitError] = useState(null)
-  // busy   — any card transition is running; blocks every input.
-  // exiting — narrower: the top card is flying OUT (forward). Drives the
-  //           reduced-motion fade, which must not apply to a card coming back.
+  // busy — any card transition is running; blocks every input.
   const [busy, setBusy] = useState(false)
-  const [exiting, setExiting] = useState(false)
-  const [entering, setEntering] = useState(false)
   // Bumped on submit failure to remount the last card, so a card that already
   // flew off-screen comes back centered instead of staying gone.
   const [retryKey, setRetryKey] = useState(0)
@@ -114,7 +101,6 @@ export default function AssessmentPage({ onLogout }) {
     if (busyRef.current || submitting) return
     busyRef.current = true
     setBusy(true)
-    setExiting(true)
 
     setResumed(false)
 
@@ -124,14 +110,11 @@ export default function AssessmentPage({ onLogout }) {
     updated[currentQ] = stored
     setResponses(updated)
 
-    if (prefersReducedMotion()) {
-      await new Promise(resolve => setTimeout(resolve, REDUCED_FADE_MS))
-    } else {
-      // Same exit as a Discovery/Taste swipe: the vendored tinderCard fork's
-      // animateOut (easeInOutCubic, duration clamped to 480-680ms, travel =
-      // viewport diagonal, rotation = x * 45deg).
-      await cardRef.current?.swipe(EXIT_DIRECTION)
-    }
+    // Same exit as a Discovery/Taste swipe: the vendored tinderCard fork's
+    // animateOut (easeInOutCubic, duration clamped to 480-680ms, travel =
+    // viewport diagonal, rotation = x * 45deg). Always runs — reduced-motion
+    // does not gate interaction motion (standing project rule).
+    await cardRef.current?.swipe(EXIT_DIRECTION)
 
     if (isLast) {
       await doSubmit(updated)
@@ -141,7 +124,6 @@ export default function AssessmentPage({ onLogout }) {
 
     busyRef.current = false
     setBusy(false)
-    setExiting(false)
   }
 
   /**
@@ -153,18 +135,10 @@ export default function AssessmentPage({ onLogout }) {
     if (busyRef.current || submitting || currentQ === 0) return
     busyRef.current = true
     setBusy(true)
-    setEntering(true)
 
     const finish = () => {
       busyRef.current = false
       setBusy(false)
-      setEntering(false)
-    }
-
-    if (prefersReducedMotion()) {
-      setCurrentQ(q => q - 1)
-      setTimeout(finish, REDUCED_FADE_MS)
-      return
     }
 
     // Start fully off-screen on the edge answered cards leave by, then spring
@@ -186,7 +160,7 @@ export default function AssessmentPage({ onLogout }) {
       setResult(data)
       setShowResult(true)
     } catch (err) {
-      setSubmitError(err.message || '제출에 실패했어요. 다시 시도해주세요.')
+      setSubmitError(err.message || t('assessmentPage.submitFailed'))
       // The last card already left the screen — remount it so retrying has
       // something to answer.
       setRetryKey(k => k + 1)
@@ -210,12 +184,16 @@ export default function AssessmentPage({ onLogout }) {
     return (
       <div className={styles.page}>
         <PageTopControls onLogout={onLogout} />
-        <PageBackButton onClick={() => navigate('/user/me')} label="프로필로 이동" />
+        <PageBackButton onClick={() => navigate('/user/me')} label={t('assessmentPage.goToProfile')} />
         <PageLogoHeader padding="0 0 6px" marginBottom={8} />
 
         <div className={styles.resultBody}>
           <p className={styles.typeCode}>{result.type_code}</p>
-          <p className={styles.typeLabel}>{TYPE_LABELS[result.type_code] || '나만의 건축 성향'}</p>
+          <p className={styles.typeLabel}>
+            {TYPE_CODES.includes(result.type_code)
+              ? t(`personality.types.${result.type_code}`)
+              : t('personality.typeFallback')}
+          </p>
 
           <div className={styles.chartWrap}>
             <PentagonChart
@@ -229,7 +207,7 @@ export default function AssessmentPage({ onLogout }) {
             className={styles.ctaBtn}
             onClick={() => navigate('/people')}
           >
-            발견 피드 보기 →
+            {t('assessmentPage.viewDiscoveryFeed')}
           </button>
 
           <button
@@ -237,7 +215,7 @@ export default function AssessmentPage({ onLogout }) {
             className={styles.secondaryBtn}
             onClick={() => navigate('/user/me')}
           >
-            프로필로 돌아가기
+            {t('assessmentPage.backToProfile')}
           </button>
         </div>
       </div>
@@ -248,7 +226,7 @@ export default function AssessmentPage({ onLogout }) {
   return (
     <div className={styles.page}>
       <PageTopControls onLogout={onLogout} />
-      <PageBackButton onClick={() => navigate(-1)} label="뒤로가기" />
+      <PageBackButton onClick={() => navigate(-1)} label={t('assessmentPage.goBack')} />
 
       {/* Header — Arch|ibe logo + "Tuning taste"-style progress row, matching
           SwipePage's top region (PageLogoHeader -> info row -> 4px track). */}
@@ -263,7 +241,7 @@ export default function AssessmentPage({ onLogout }) {
               fontSize: 13, fontWeight: 600, color: 'var(--color-text)',
               lineHeight: 1.2,
             }}>
-              성향 진단
+              {t('assessmentPage.header')}
             </span>
             <span style={{
               fontSize: 12, fontWeight: 500, color: 'var(--color-text-dim)',
@@ -279,7 +257,7 @@ export default function AssessmentPage({ onLogout }) {
           {/* Resumed run — tells the user why they are not on question 1. */}
           {resumed && (
             <p className={styles.resumeNote} role="status">
-              이전에 진행하던 곳부터 이어서 진행합니다
+              {t('assessmentPage.resumeNote')}
             </p>
           )}
         </div>
@@ -295,14 +273,9 @@ export default function AssessmentPage({ onLogout }) {
         <SwipeDeck active>
           {[deck[1], deck[0]].filter(Boolean).map(q => {
             const isTop = q === deck[0]
-            const cls = [
-              isTop && exiting ? styles.exitingCard : '',
-              isTop && entering ? styles.enteringCard : '',
-            ].filter(Boolean).join(' ')
             return (
               <AnimatedDiv
                 key={`${q.id}-${retryKey}`}
-                className={cls || undefined}
                 style={{
                   position: 'absolute', inset: 0,
                   zIndex: isTop ? 5 : 4,
@@ -341,12 +314,12 @@ export default function AssessmentPage({ onLogout }) {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <polyline points="15 18 9 12 15 6" />
             </svg>
-            이전 문항
+            {t('assessmentPage.prevQuestion')}
           </button>
         )}
 
         {submitting && (
-          <p className={styles.submittingText} role="status">제출 중...</p>
+          <p className={styles.submittingText} role="status">{t('assessmentPage.submitting')}</p>
         )}
 
         {submitError && (
@@ -358,7 +331,7 @@ export default function AssessmentPage({ onLogout }) {
               onClick={handleRetry}
               disabled={submitting}
             >
-              다시 제출
+              {t('assessmentPage.retry')}
             </button>
           </div>
         )}
