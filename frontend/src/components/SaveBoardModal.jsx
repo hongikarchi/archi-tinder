@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { updateProject } from '../api/projects.js'
+import { updateProject, VerifyRequiredError } from '../api/projects.js'
 import styles from './SaveBoardModal.module.css'
 import { useTranslation } from '../i18n/index.js'
 
@@ -44,6 +44,14 @@ export default function SaveBoardModal({ projectId, finalReport, onSaved, onClos
       await updateProject(projectId, { is_temp: false, name: trimmed, visibility })
       onSaved({ name: trimmed, visibility })
     } catch (err) {
+      if (err instanceof VerifyRequiredError) {
+        // Global VerifyGateModal is already mounted via the
+        // 'archithon:verify-required' event dispatched by updateProject.
+        // Leave this sheet open (not onClose()) so the user can retry the
+        // save after verifying — keeps their name/visibility choices intact.
+        setSaving(false)
+        return
+      }
       setError(err?.message || t('board.saveError'))
       setSaving(false)
     }

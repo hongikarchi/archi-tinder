@@ -355,6 +355,8 @@ export default function LoginPage({ onLogin }) {
             t={t}
             isActive={isActive}
             disabled={isBusy || !isActive}
+            initialId={id}
+            initialPassword={password}
             onBack={goBack}
             onContinue={handleCredentialsContinue}
           />
@@ -607,11 +609,22 @@ const CHECK_TAKEN     = 'taken'
 // LOGIN-REWORK-1: debounce delay before auto-checking ID availability.
 const ID_CHECK_DEBOUNCE_MS = 450
 
-function CredentialsStep({ t, isActive = true, disabled, onBack, onContinue }) {
-  const [localId, setLocalId]             = useState('')
-  const [localPassword, setLocalPassword] = useState('')
-  const [checkState, setCheckState]       = useState(CHECK_IDLE)
-  const [confirmedId, setConfirmedId]     = useState('')  // the id that was confirmed available
+function CredentialsStep({ t, isActive = true, disabled, initialId = '', initialPassword = '', onBack, onContinue }) {
+  const [localId, setLocalId]             = useState(initialId)
+  const [localPassword, setLocalPassword] = useState(initialPassword)
+  // FRONT-VERIFY-1 (B2): seed the check-state as already-confirmed when
+  // re-mounting with a draft id — this component remounts on every back-nav
+  // (frontCardKey = step in the parent), so without this the inputs would show
+  // the previous values but Continue would stay dead until the user retyped
+  // the id to re-trigger runCheck. Safe by construction: the parent's `id`
+  // state only ever holds a value that already passed the availability check
+  // (onContinue only fires when canContinue was true — see handleSubmit).
+  const [checkState, setCheckState]       = useState(
+    initialId && isIdFormatValid(initialId) ? CHECK_AVAILABLE : CHECK_IDLE
+  )
+  const [confirmedId, setConfirmedId]     = useState(
+    initialId ? initialId.normalize('NFC') : ''
+  )  // the id that was confirmed available
   const [checkError, setCheckError]       = useState(null)
 
   // IME composition guard — Korean (and other IME) input fires onChange per

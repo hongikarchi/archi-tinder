@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-09-07 00:52 KST',
-    head: '70851a2',
-    branch: 'feature/claude-bug-sweep-back',
+    updatedAt: '2026-09-07 01:05 KST',
+    head: 'd334be4',
+    branch: 'feature/claude-bug-sweep-front',
   },
   done: [
+    {
+      id: 'FRONT-VERIFY-1',
+      title: 'PATCH 경로 verify_required 모달 배선 + 로그인 draft 유지',
+      completedAt: '2026-09-06',
+      note: 'updateProject가 403 verify_required를 미변환(createProject만 처리) → 공용 throwIfVerifyRequired 헬퍼 추출, 양 경로 동일 동작(VerifyRequiredError + archithon:verify-required 이벤트). guest 4번째 보드 저장확정 시 VerifyGateModal 정상 표출',
+    },
     {
       id: 'BACK-PRIVACY-1',
       title: '비인증 base64 리포트 유출 + 썸네일 캐시 evict 누락',
@@ -70,12 +76,6 @@ window.PROJECT_STATE = {
       title: '재진단 진입점(다시 진단받기 버튼)',
       completedAt: '2026-09-05',
       note: '팀 내부 People 탭 데모/테스트를 위해 반복 진단이 필요한데 UI에 진입점이 없었음. `UserProfilePage`가 `personality`가 없을 때만 `성향 진단 받기` CTA를 띄우고 있으면 오각형 차트만 보여줘 다시 들어갈 문이 없었음(`/assessment` URL 직접 입력은 그 전에도 동작)',
-    },
-    {
-      id: 'FRONT-ASSESSMENT-3',
-      title: '진단 중 새로고침/뒤로가기/URL 재진입 시 진행 상태 유실',
-      completedAt: '2026-09-05',
-      note: '배경: People 탭에 페르소나 카드를 채우려면 유저가 진단을 완주해야 하는데, 중간 이탈 후 재진입하면 1번 문항으로 리셋돼 완주율을 깎고 있었음',
     },
   ],
   now: [],
@@ -161,11 +161,6 @@ window.PROJECT_STATE = {
         note: 'BACK-PRIVACY-1(리스트 유출 차단) 후속. `ProjectDetailView`(AllowAny, views/projects.py:149)는 public 보드에 ProjectSerializer 전체 — report_image base64 포함 — 를 비인증에게도 반환. 단건이라 bulk 수확은 불가하나 `ProjectReportImageFetchView`(IsAuthenticated)와 정책 불일치. BoardReportPage.jsx:154가 이 경로의 report_image를 소…',
       },
       {
-        id: 'FRONT-VERIFY-1',
-        title: '보드저장 PATCH 경로 verify_required 모달 미배선',
-        note: 'FULL-ONBOARDING-2(`92237d8`)가 guest promote-limit을 `403 {\'detail\':\'verify_required\',\'reason\':\'board_limit_reached\',\'limit\':3}`로 표준화했으나, 프론트 `updateProject`(projects.js:64-71)는 verify_required를 VerifyRequiredError로 변환 안 함(createProject:26-40만 처리) → SaveBoardModal에서 guest가 4번째 보…',
-      },
-      {
         id: 'ADMIN-DBCHECK-3',
         title: '판정층 첫 정식 QC 패스',
         note: 'ADMIN-DBCHECK-2에서 분리(2026-08-04). 기계층 기준선(`qc_20260804T035813Z`) 위에서 시각 판정층 첫 실행: 태그 진실성 표본(tagged top-10 이미지 판정) + 음성 표본 감사(태그 없는 20동 → 태그 누락률 추정). 프로토콜은 `backend/tools/db_qc_rubric.md` 런북 그대로 (블라인드 sonnet 판정, 양성 대조군 3-5동 심기). 파서·엔진 수선 착지 후 돌리면 before/after 한 번에 나옴. ~600k son…',
@@ -174,11 +169,6 @@ window.PROJECT_STATE = {
         id: 'INFRA-TEMP-GC-1',
         title: 'orphan temp 보드 서버측 GC/TTL 없음',
         note: 'FULL-ONBOARDING-2에서 분리(2026-07-12). 브라우저 닫기/로그아웃 시 `is_temp=True` 보드가 서버에 영구 잔류(frontend cleanup은 /search 재진입 경로만). TTL 필드 or 정리 job(cron/management command) 필요 — 설계 결정(TTL 기간, report-있는 temp 처리) 선행. 비차단.',
-      },
-      {
-        id: 'FRONT-UX-7',
-        title: '로그인 뒤로가기 시 입력 draft 소실',
-        note: 'LOGIN-REWORK-1(`a390f9f`) pre-existing 잔존. CredentialsStep이 localId/localPassword를 컴포넌트 로컬 useState로 들고, 앞 카드가 `step`으로 key돼 profile→back→credentials 시 remount → 입력 draft 초기화. 부모 id/password는 마지막 confirmed 값 유지하나 local state를 props로 seed 안 함 → 입력창 빈 채로 보임. deck 리워크가 뒤로가기를 쉽게 만…',
       },
       {
         id: 'NOTIF-CHANNELS-1',
@@ -266,6 +256,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 325,
+      title: 'fix(BACK-PRIVACY-1): 비인증 base64 리포트 유출 차단 + 썸네일 캐시 evict 누락',
+      mergedAt: '2026-09-06T15:57:15Z',
+      mergedAtKST: '2026-09-07 00:57 KST',
+      sha: 'd334be4',
+    },
+    {
       number: 324,
       title: 'feat(FRONT-PEOPLE-CARD-2): seed_discovery command + Social tab hosting /people',
       mergedAt: '2026-09-06T14:57:06Z',
@@ -313,13 +310,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-09-06T01:07:38Z',
       mergedAtKST: '2026-09-06 10:07 KST',
       sha: 'b46b7df',
-    },
-    {
-      number: 316,
-      title: 'fix(assessment): 진단 중 새로고침/뒤로가기/URL 재진입 시 진행 상태 유지',
-      mergedAt: '2026-09-06T01:03:23Z',
-      mergedAtKST: '2026-09-06 10:03 KST',
-      sha: '58a1bc1',
     },
   ],
   agents: [

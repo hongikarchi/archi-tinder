@@ -196,17 +196,11 @@ PR #301/#302 리뷰(2026-08-14, 41-agent)發. 현재 커버는 프론트 r2_keys
 #### BACK-PRIVACY-2 — 공개 보드 상세의 report_image 노출 정책 결정
 BACK-PRIVACY-1(리스트 유출 차단) 후속. `ProjectDetailView`(AllowAny, views/projects.py:149)는 public 보드에 ProjectSerializer 전체 — report_image base64 포함 — 를 비인증에게도 반환. 단건이라 bulk 수확은 불가하나 `ProjectReportImageFetchView`(IsAuthenticated)와 정책 불일치. BoardReportPage.jsx:154가 이 경로의 report_image를 소비 중이라 단순 제거는 익명 공개-보드 리포트 열람을 깨뜨림. 옵션: (a) BoardReportPage를 lazy pointer 패턴으로 전환 + FetchView를 public-board-AllowAny로 완화 + 상세에서 필드 제거, (b) "공개 보드 리포트 이미지 = 의도적 공개(단건)"로 확정하고 FetchView 권한을 맞춰 불일치만 해소. Opus verify 2026-09-06 medium.
 
-#### FRONT-VERIFY-1 — 보드저장 PATCH 경로 verify_required 모달 미배선
-FULL-ONBOARDING-2(`92237d8`)가 guest promote-limit을 `403 {'detail':'verify_required','reason':'board_limit_reached','limit':3}`로 표준화했으나, 프론트 `updateProject`(projects.js:64-71)는 verify_required를 VerifyRequiredError로 변환 안 함(createProject:26-40만 처리) → SaveBoardModal에서 guest가 4번째 보드 저장확정 시 VerifyGateModal 대신 generic 에러 문자열. `updateProject`에 createProject와 동일한 403 verify_required 감지 + VerifyGateModal 배선. Non-blocking(백엔드 enforcement는 정상).
-
 #### ADMIN-DBCHECK-3 — 판정층 첫 정식 QC 패스
 ADMIN-DBCHECK-2에서 분리(2026-08-04). 기계층 기준선(`qc_20260804T035813Z`) 위에서 시각 판정층 첫 실행: 태그 진실성 표본(tagged top-10 이미지 판정) + 음성 표본 감사(태그 없는 20동 → 태그 누락률 추정). 프로토콜은 `backend/tools/db_qc_rubric.md` 런북 그대로 (블라인드 sonnet 판정, 양성 대조군 3-5동 심기). 파서·엔진 수선 착지 후 돌리면 before/after 한 번에 나옴. ~600k sonnet/패스.
 
 #### INFRA-TEMP-GC-1 — orphan temp 보드 서버측 GC/TTL 없음
 FULL-ONBOARDING-2에서 분리(2026-07-12). 브라우저 닫기/로그아웃 시 `is_temp=True` 보드가 서버에 영구 잔류(frontend cleanup은 /search 재진입 경로만). TTL 필드 or 정리 job(cron/management command) 필요 — 설계 결정(TTL 기간, report-있는 temp 처리) 선행. 비차단.
-
-#### FRONT-UX-7 — 로그인 뒤로가기 시 입력 draft 소실
-LOGIN-REWORK-1(`a390f9f`) pre-existing 잔존. CredentialsStep이 localId/localPassword를 컴포넌트 로컬 useState로 들고, 앞 카드가 `step`으로 key돼 profile→back→credentials 시 remount → 입력 draft 초기화. 부모 id/password는 마지막 confirmed 값 유지하나 local state를 props로 seed 안 함 → 입력창 빈 채로 보임. deck 리워크가 뒤로가기를 쉽게 만들어 노출 빈도↑. 수정: 마운트 시 부모 props로 local state seed, 또는 id/password를 부모로 완전 lift해 controlled 전환. Non-blocking UX papercut.
 
 #### NOTIF-CHANNELS-1 — 이메일·푸시 알림 채널 발송
 NOTIF-INAPP-1(0bac717)은 앱 내 채널만. 이메일(SMTP — Resend/Gmail 등) + 웹푸시(FCM)는 새 외부 의존성 → Product Constitution 상 사용자 승인 필요. prefs JSON은 push/email 키 이미 보존·검증됨(validator {push,email,in_app}) — 발송 파이프라인만 추가하면 됨. 보안 카테고리 이메일이 최우선 후보.
@@ -307,6 +301,12 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FRONT-VERIFY-1 — PATCH 경로 verify_required 모달 배선 + 로그인 draft 유지 — RESOLVED 2026-09-06 (`872d7fb`, PR 대기)
+- updateProject가 403 verify_required를 미변환(createProject만 처리) → 공용 throwIfVerifyRequired 헬퍼 추출, 양 경로 동일 동작(VerifyRequiredError + archithon:verify-required 이벤트). guest 4번째 보드 저장확정 시 VerifyGateModal 정상 표출
+- SaveBoardModal은 VerifyRequiredError를 무음 처리(시트 유지·재시도 가능, 전역 모달 밑 generic 에러 중복 제거)
+- 로그인 뒤로가기 draft 소실(구 FRONT-UX-7 슬러그, 로그인 건) — CredentialsStep이 부모 confirmed id/password로 local state + check state seed, remount에도 입력 유지. ReturningStep은 부모 lifted state 부재 확인 후 무접촉
+- 리뷰+보안+Opus verify finding 0. DEPLOY-BATCH-2 플랜 PR-B
+
 ### BACK-PRIVACY-1 — 비인증 base64 리포트 유출 + 썸네일 캐시 evict 누락 — RESOLVED 2026-09-06 (`9b7c5e8`, PR 대기)
 - AllowAny `/users/<id>/projects/`가 report_image base64(개당 ~200KB, 페이지당 50개)를 익명 호출자에게 그대로 실어줌 — 신규 PublicProjectListSerializer로 해당 엔드포인트만 두 필드 제거(프론트 소비자 0 확인). owner GET /projects/는 불변(App.jsx:929 로그인 동기화 의존). queryset defer도 추가(DB→앱 전송비, Opus 검증 안전)
 - ProjectReportImageView.post가 이미지 생성 후 evict_user_profile_detail 미호출 → 프로필 보드 썸네일 60초 stale(#318 잔여) — evict 1줄 추가, 캐시 short-circuit 경로는 무접촉
