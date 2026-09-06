@@ -42,11 +42,24 @@
 }
 
 /* Role dropdown — composes .field for matching height/border/colors, native
- * <select> is fine per SETTINGS-POLISH-1 §A.4 spec. */
+ * <select> is fine per SETTINGS-POLISH-1 §A.4 spec.
+ * Custom quiet chevron (settings-edit-profile.html / upload.html mocks both
+ * draw a plain "▾" glyph at 11px in --color-text-dim, not the bold OS
+ * default) — appearance:none suppresses the native arrow; a data-URI SVG
+ * redraws the same glyph. background-image can't reference currentColor, so
+ * the stroke color is baked in as a neutral gray (--color-text-dim's
+ * github-light value) — reads correctly on the light themes; dark-theme
+ * legibility is a known gap, flagged in the PR description. */
 .select {
   composes: field;
   cursor: pointer;
   min-height: 44px;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238C959F' stroke-width='1.3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 16px center;
+  padding-right: 38px;
 }
 
 /* Textarea specific: auto-grow via JS (EditCardForm bioRef effect), no manual

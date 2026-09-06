@@ -8,35 +8,34 @@ import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import PageTopControls from '../components/PageTopControls.jsx'
 import PageBackButton from '../components/PageBackButton.jsx'
 
+// Preset query chips — label is translated via t('search.presets.<id>Label');
+// query is the actual text sent to the backend parser, also translated
+// (Korea-first: a Korean UI showing an English query in the user bubble after
+// tapping a chip would look broken) via t('search.presets.<id>Query').
+// NEEDS EYEBALL: localizing the query text changes backend parser input for
+// ko users — the backend is expected to handle Korean queries already
+// (Korea-first parser), but this wasn't previously exercised via presets.
 const PRESETS = [
-  { label: 'Japanese modern museum',  query: 'Modern museum in Japan' },
-  { label: 'Minimalist housing',       query: 'Minimalist residential housing' },
-  { label: 'Landscape architecture',   query: 'Landscape or park architecture' },
-  { label: 'Brutalist office',         query: 'Brutalist office or civic building' },
-  { label: 'Religious architecture',   query: 'Religious or spiritual architecture' },
-  { label: 'Boutique hospitality',     query: 'Small hotel or boutique hospitality' },
+  { id: 'japaneseMuseum' },
+  { id: 'minimalistHousing' },
+  { id: 'landscape' },
+  { id: 'brutalistOffice' },
+  { id: 'religious' },
+  { id: 'boutiqueHospitality' },
 ]
 
-const FILTER_LABELS = {
-  program: 'Program',
-  location_country: 'Location',
-  material: 'Material',
-  style: 'Style',
-  year_min: 'Year',
-  year_max: 'Year',
-}
-
 function FilterChips({ filters }) {
+  const { t } = useTranslation()
   if (!filters) return null
   const chips = []
-  if (filters.program)          chips.push(`${FILTER_LABELS.program}: ${filters.program}`)
-  if (filters.location_country) chips.push(`${FILTER_LABELS.location_country}: ${filters.location_country}`)
-  if (filters.material)         chips.push(`${FILTER_LABELS.material}: ${filters.material}`)
-  if (filters.style)            chips.push(`${FILTER_LABELS.style}: ${filters.style}`)
+  if (filters.program)          chips.push(`${t('search.filterLabels.program')}: ${filters.program}`)
+  if (filters.location_country) chips.push(`${t('search.filterLabels.location')}: ${filters.location_country}`)
+  if (filters.material)         chips.push(`${t('search.filterLabels.material')}: ${filters.material}`)
+  if (filters.style)            chips.push(`${t('search.filterLabels.style')}: ${filters.style}`)
   if (filters.year_min || filters.year_max) {
     const from = filters.year_min || '...'
     const to   = filters.year_max || '...'
-    chips.push(`Year: ${from}-${to}`)
+    chips.push(`${t('search.filterLabels.year')}: ${from}-${to}`)
   }
   if (!chips.length) return null
   return (
@@ -52,6 +51,7 @@ function FilterChips({ filters }) {
 }
 
 const Thumbnail = memo(function Thumbnail({ r }) {
+  const { t } = useTranslation()
   const [imgLoading, setImgLoading] = useState(true)
   return (
     <div style={{ width: '100%', height: 72, position: 'relative', background: 'var(--color-surface-2)' }}>
@@ -73,13 +73,14 @@ const Thumbnail = memo(function Thumbnail({ r }) {
           width: '100%', height: 72,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 20,
-        }}>Building</div>
+        }}>{t('search.buildingFallback')}</div>
       )}
     </div>
   )
 })
 
 function ResultStrip({ results, isFallback }) {
+  const { t } = useTranslation()
   if (!results || !results.length) return null
   return (
     <div style={{ marginTop: 12 }}>
@@ -93,8 +94,8 @@ function ResultStrip({ results, isFallback }) {
             background: 'color-mix(in srgb, var(--accent-3) 12%, transparent)',
             border: '1px solid color-mix(in srgb, var(--accent-3) 25%, transparent)',
             color: 'var(--accent-3)',
-          }}>similar</span>
-          <span>showing related results</span>
+          }}>{t('search.similarBadge')}</span>
+          <span>{t('search.similarBadgeBody')}</span>
         </div>
       )}
       <div style={{
@@ -129,6 +130,10 @@ function ResultStrip({ results, isFallback }) {
 // eslint-disable-next-line no-unused-vars
 export default function LLMSearchPage({ mode, projectId, projectName: initialName, visibility = 'private', onBack, onStart, onUpdate, onLogout }) {
   const { t } = useTranslation()
+  // English pluralizes "building(s)"; Korean's "{n}곳" doesn't inflect, so the
+  // singular/plural key split only matters for the en dict (ko values are
+  // identical in both keys).
+  const foundBuildingsText = (n) => t(n === 1 ? 'search.foundBuilding' : 'search.foundBuildings', { n })
   // Derive storage key once per render cycle (props/sessionStorage are stable for the lifecycle of this route mount)
   const userId = sessionStorage.getItem('archithon_user') || 'anon'
   const storageKey = `archithon_chat_${userId}_${mode}_${projectId || 'new'}`
@@ -138,7 +143,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
       const stored = localStorage.getItem(`${storageKey}__messages`)
       if (stored) return JSON.parse(stored)
     } catch { /* ignore */ }
-    return [{ role: 'ai', text: "Hello! Describe the kind of architecture you're looking for -- country, program, architect, style, year, and so on." }]
+    return [{ role: 'ai', text: t('search.greeting') }]
   })
   const [input, setInput]               = useState('')
   const [isLoading, setIsLoading]       = useState(false)
@@ -507,9 +512,9 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
 
         let replyText
         if (results.length > 0 && !isFallback) {
-          replyText = `${probeText}\n\nFound ${results.length} building${results.length !== 1 ? 's' : ''} matching your criteria.`
+          replyText = `${probeText}\n\n${foundBuildingsText(results.length)}`
         } else if (results.length > 0 && isFallback) {
-          replyText = `${probeText}\n\n${parsed.fallback_note || 'No exact matches -- here are some similar buildings you might like.'}`
+          replyText = `${probeText}\n\n${parsed.fallback_note || t('search.noExactMatches')}`
         } else {
           replyText = probeText
         }
@@ -528,11 +533,11 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
         // the next fresh query.
         let replyText
         if (results.length > 0 && !isFallback) {
-          replyText = `${parsed.reply}\n\nFound ${results.length} building${results.length !== 1 ? 's' : ''} matching your criteria.`
+          replyText = `${parsed.reply}\n\n${foundBuildingsText(results.length)}`
         } else if (results.length > 0 && isFallback) {
-          replyText = `${parsed.reply}\n\n${parsed.fallback_note || 'No exact matches -- here are some similar buildings you might like.'}`
+          replyText = `${parsed.reply}\n\n${parsed.fallback_note || t('search.noExactMatches')}`
         } else {
-          replyText = `${parsed.reply}\n\nNo buildings found. Try describing it differently.`
+          replyText = `${parsed.reply}\n\n${t('search.noBuildingsFound')}`
         }
 
         setMessages(prev => [...prev, {
@@ -546,7 +551,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
         setConversationHistory([])
       }
     } catch (err) {
-      setMessages(prev => [...prev, { role: 'ai', text: `Something went wrong: ${err.message}. Please try again.` }])
+      setMessages(prev => [...prev, { role: 'ai', text: t('search.somethingWentWrong', { detail: err.message }) }])
     }
 
     setIsLoading(false)
@@ -595,9 +600,9 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
       // Build the AI reply text (mirrors the terminal path).
       let replyText
       if (results.length > 0 && !isFallback) {
-        replyText = `${t('search.chipRerankDone', { label })}\n\nFound ${results.length} building${results.length !== 1 ? 's' : ''} matching your criteria.`
+        replyText = `${t('search.chipRerankDone', { label })}\n\n${foundBuildingsText(results.length)}`
       } else if (results.length > 0 && isFallback) {
-        replyText = `${t('search.chipRerankDone', { label })}\n\n${parsed.fallback_note || 'No exact matches -- here are some similar buildings you might like.'}`
+        replyText = `${t('search.chipRerankDone', { label })}\n\n${parsed.fallback_note || t('search.noExactMatches')}`
       } else {
         replyText = t('search.chipRerankEmpty', { label })
       }
@@ -611,14 +616,14 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
         quickReplies: parsed.suggested_quick_replies || [],
       }])
     } catch (err) {
-      setMessages(prev => [...prev, { role: 'ai', text: `Something went wrong: ${err.message}. Please try again.` }])
+      setMessages(prev => [...prev, { role: 'ai', text: t('search.somethingWentWrong', { detail: err.message }) }])
     }
 
     setIsLoading(false)
   }
 
   function handleStartSwiping() {
-    const name = initialName || 'Untitled Project'
+    const name = initialName || t('search.untitledProject')
     clearChatStorage()
     // Clear backend blob so a consumed chat does not resurrect next time this
     // project is opened in update mode (backend was source of truth, now reset).
@@ -641,7 +646,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
     }
   }
 
-  const INITIAL_MESSAGE = { role: 'ai', text: "Hello! Describe the kind of architecture you're looking for -- country, program, architect, style, year, and so on." }
+  const INITIAL_MESSAGE = { role: 'ai', text: t('search.greeting') }
 
   function handleNewConversation() {
     if (messages.length > 1) {
@@ -678,7 +683,6 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
     <div style={{
       height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))', overflow: 'hidden', background: 'var(--color-bg)',
       display: 'flex', flexDirection: 'column',
-      backgroundImage: 'radial-gradient(circle at 15% 50%, color-mix(in srgb, var(--accent-1) 7%, transparent), transparent 30%), radial-gradient(circle at 85% 30%, color-mix(in srgb, var(--accent-2) 7%, transparent), transparent 30%)',
     }}>
 
       {/* Floating "new conversation" button — replaces the old sticky header's
@@ -712,7 +716,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
             maxWidth: 680, marginLeft: 'auto', marginRight: 'auto',
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>
-            {`Update "${initialName}"`}
+            {t('search.updateTitle', { name: initialName })}
           </h2>
         </div>
       )}
@@ -783,8 +787,8 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, paddingLeft: 2 }}>
               {PRESETS.map(p => (
                 <button
-                  key={p.label}
-                  onClick={() => handlePreset(p.query)}
+                  key={p.id}
+                  onClick={() => handlePreset(t(`search.presets.${p.id}Query`))}
                   className={ps.presetChip}
                   style={{
                     padding: '8px 14px', borderRadius: 999, fontSize: 12, fontWeight: 500,
@@ -792,7 +796,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  {p.label}
+                  {t(`search.presets.${p.id}Label`)}
                 </button>
               ))}
             </div>
@@ -839,8 +843,8 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
               cursor: 'pointer', fontFamily: 'inherit',
             }}>
               {mode === 'update'
-                ? `Update with these results - ${latestResults.length}`
-                : `Start swiping - ${latestResults.length}`}
+                ? t('search.updateWithResults', { n: latestResults.length })
+                : t('search.startSwiping', { n: latestResults.length })}
             </button>
           </div>
         </div>
@@ -864,7 +868,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
           <input
             value={input}
             onChange={e => setInput(e.target.value)}
-            placeholder="Find a modern museum in Japan..."
+            placeholder={t('search.inputPlaceholder')}
             style={{
               flex: 1, background: 'transparent', border: 'none',
               color: 'var(--color-text-2)', fontSize: 14, outline: 'none',
