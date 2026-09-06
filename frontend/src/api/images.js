@@ -126,6 +126,7 @@ export function normalizeCard(card) {
     metadata: {
       axis_typology:        card.metadata?.axis_typology        ?? card.program          ?? null,
       axis_architects:      card.metadata?.axis_architects      ?? null,
+      architect_id:         card.metadata?.architect_id         ?? null,
       axis_country:         card.metadata?.axis_country         ?? card.location_country ?? null,
       axis_city:            card.metadata?.axis_city            ?? card.location_city    ?? null,
       axis_year:            card.metadata?.axis_year            ?? card.project_year     ?? null,

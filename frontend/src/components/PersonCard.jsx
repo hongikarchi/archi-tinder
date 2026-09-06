@@ -18,9 +18,9 @@
  *           five lines and squeezes the chart out.
  *
  * The flip itself is the app's existing rule, identical to
- * profile/BioPersonaFlipCard.jsx and SwipeCard's gallery face: perspective on
- * the wrapper, preserve-3d on the rotating layer, backface-visibility hidden,
- * rotateY(180deg) — timed by --motion-flip / --motion-ease.
+ * SwipeCard's gallery face: perspective on the wrapper, preserve-3d on the
+ * rotating layer, backface-visibility hidden, rotateY(180deg) — timed by
+ * --motion-flip / --motion-ease.
  *
  * Props:
  *   person      {object}    { user_id, display_name, handle, avatar_url, type_code, vector, highlight_axis, reason }
@@ -33,6 +33,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PentagonChart from './PentagonChart.jsx'
 import { getPersonReportImage } from '../api/people.js'
+import { useTranslation } from '../i18n/index.js'
 import {
   photoCardShellStyle,
   photoCardImageStyle,
@@ -45,6 +46,7 @@ import styles from './PersonCard.module.css'
 
 export default function PersonCard({ person, myVector, onClick, onInterest }) {
   const navigate = useNavigate()
+  const { t } = useTranslation()
 
   const [isFlipped, setIsFlipped] = useState(false)
   // Blocks a second tap while the card is mid-rotation, so rapid taps cannot
@@ -132,7 +134,7 @@ export default function PersonCard({ person, myVector, onClick, onInterest }) {
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleFlip(e) }
       }}
-      aria-label={`${person.display_name} 카드 뒤집기`}
+      aria-label={t('personCard.flipCard', { name: person.display_name })}
       aria-pressed={isFlipped}
     >
       <div
@@ -144,14 +146,14 @@ export default function PersonCard({ person, myVector, onClick, onInterest }) {
           {image ? (
             <img
               src={image}
-              alt={`${person.display_name}의 취향 리포트 이미지`}
+              alt={t('personCard.reportImageAlt', { name: person.display_name })}
               loading="lazy"
               style={photoCardImageStyle}
               draggable={false}
             />
           ) : (
             <div className={`${styles.imagePlaceholder} ${imageFailed ? '' : 'skeleton-shimmer'}`}>
-              {imageFailed && <span className={styles.imagePlaceholderText}>이미지 없음</span>}
+              {imageFailed && <span className={styles.imagePlaceholderText}>{t('personCard.noImage')}</span>}
             </div>
           )}
           <div style={photoCardScrimStyle} />
@@ -165,8 +167,8 @@ export default function PersonCard({ person, myVector, onClick, onInterest }) {
             data-no-flip="true"
             className={styles.interestBtn}
             onClick={handleInterestClick}
-            aria-label={`${person.display_name}에게 관심 있어요`}
-            title="관심 있어요"
+            aria-label={t('personCard.interest', { name: person.display_name })}
+            title={t('personCard.interestTitle')}
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21.2l7.8-7.7 1-1.1a5.5 5.5 0 0 0 0-7.8z" />
@@ -210,13 +212,13 @@ export default function PersonCard({ person, myVector, onClick, onInterest }) {
               data-no-flip="true"
               className={styles.nameBtn}
               onClick={goToProfile}
-              aria-label={`${person.display_name} 프로필 보기`}
+              aria-label={t('personCard.viewProfile', { name: person.display_name })}
             >
               {person.display_name}
             </button>
             {/* Without this the single-polygon chart above reads as a bug
                 ("why does this one card have no comparison?"). */}
-            {isMe && <span className={styles.meBadge}>나</span>}
+            {isMe && <span className={styles.meBadge}>{t('personCard.me')}</span>}
           </div>
         </div>
       </div>

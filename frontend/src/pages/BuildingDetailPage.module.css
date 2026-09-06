@@ -1,0 +1,32 @@
+/* Architect name affordance — WI-4 (FRONT-FUNC-CHECK-1).
+ * Turns the plain-text architect name into a native <button> when
+ * architect_id is present, without touching the existing typography (the
+ * italic sub-line stays italic; the metadata tile value keeps its own
+ * font-size/weight). `font: inherit` + reset button chrome so the button
+ * renders identically to the plain text it replaces; :hover/:focus-visible
+ * add the click affordance per DESIGN.md §4 (CSS :hover only).
+ */
+.architectLink {
+  display: inline;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-style: inherit;
+  color: inherit;
+  text-align: inherit;
+  cursor: pointer;
+  transition: color var(--motion-fast) var(--motion-ease);
+}
+
+.architectLink:hover {
+  color: var(--accent-1);
+  text-decoration: underline;
+}
+
+.architectLink:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+  border-radius: 2px;
+}

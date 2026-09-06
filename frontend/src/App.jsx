@@ -8,7 +8,6 @@ import LLMSearchPage from './pages/LLMSearchPage.jsx'
 import SaveBoardModal from './components/SaveBoardModal.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import UserProfilePage from './pages/UserProfilePage.jsx'
-import FirmProfilePage from './pages/FirmProfilePage.jsx'
 import BoardDetailPage from './pages/BoardDetailPage.jsx'
 import BoardReportPage from './pages/BoardReportPage.jsx'
 import ResultsPage from './pages/ResultsPage.jsx'
@@ -1124,7 +1123,6 @@ export default function App() {
           <Route path="library/:folderId" element={<Navigate to="/user/me" replace />} />
           <Route path="user/me" element={<UserProfilePage {...sharedLayoutProps} />} />
           <Route path="user/:userId" element={<UserProfilePage {...sharedLayoutProps} />} />
-          <Route path="office/:officeId" element={<FirmProfilePage {...sharedLayoutProps} />} />
           <Route path="result/:sessionId" element={<ResultsPage projects={projects} setProjects={setProjects} onReportGenerated={handleReportGenerated} onLogout={handleLogout} />} />
           <Route path="buildings/:buildingId" element={<BuildingDetailPage onLogout={handleLogout} />} />
           <Route path="board/:boardId" element={<BoardDetailPage onResume={handleResumeProject} onLogout={handleLogout} />} />
