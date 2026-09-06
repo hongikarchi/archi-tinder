@@ -104,7 +104,7 @@ export default function ProfileHero({
   const stats = [
     { count: boardsTotalCount, label: 'Boards', onClick: () => onSelectTab('boards') },
     { count: savedStudiosCount ?? 0, label: 'Studios', onClick: () => onSelectTab('studios') },
-    ...(isMe ? [{ count: likedCount ?? 0, label: 'Liked', onClick: () => onSelectTab('liked') }] : []),
+    { count: likedCount ?? 0, label: 'Liked', onClick: () => onSelectTab('liked') },
   ]
 
   // 2B: single data source for the external-link pills — map renders one

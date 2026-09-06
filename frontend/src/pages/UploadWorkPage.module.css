@@ -377,6 +377,89 @@
   border-color: var(--accent-1);
 }
 
+/* ── Built/Unbuilt status toggle ────────────────────────────────────────── */
+/* Mock (upload.html): dark filled 'Built' pill (default) + outlined 'Unbuilt'. */
+
+.statusToggle {
+  display: flex;
+  gap: 6px;
+}
+
+.statusPill {
+  flex: 1;
+  min-height: 40px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border-soft);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease);
+}
+
+.statusPillActive {
+  border: none;
+  background: var(--color-text);
+  color: var(--color-bg);
+}
+
+.statusPill:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ── Optional details collapsible card ──────────────────────────────────── */
+/* Mock (upload.html): bordered card, light header bar with chevron; folds
+   city/country/year without unmounting their state (lives in formData on
+   the parent, so folding never clears values). */
+
+.optionalCard {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.optionalHeader {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--color-surface);
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+
+.optionalTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.optionalSub {
+  font-weight: 500;
+  color: var(--color-text-dim);
+  font-size: 12px;
+}
+
+.optionalChevron {
+  flex-shrink: 0;
+  transition: transform var(--motion-fast) var(--motion-ease);
+}
+
+.optionalBody {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 14px;
+  border-top: 1px solid var(--color-border);
+}
+
 /* ── Copyright row ──────────────────────────────────────────────────────── */
 
 .copyrightRow {

@@ -223,6 +223,8 @@ export default function UploadWorkPage({ onLogout }) {
     location_country: '',
     project_year: '',
   })
+  const [builtStatus, setBuiltStatus] = useState('built')
+  const [optionalOpen, setOptionalOpen] = useState(false)
   const [copyrightChecked, setCopyrightChecked] = useState(false)
   const [uploadState, setUploadState] = useState('idle')
   const [progress, setProgress] = useState(0)
@@ -506,6 +508,7 @@ export default function UploadWorkPage({ onLogout }) {
       const payload = {
         title: formData.title.trim(),
         program: formData.program,
+        built_status: builtStatus,
         location_city: formData.location_city.trim() || undefined,
         location_country: formData.location_country.trim() || undefined,
         project_year: formData.project_year ? parseInt(formData.project_year, 10) : undefined,
@@ -755,51 +758,105 @@ export default function UploadWorkPage({ onLogout }) {
                 </select>
               </div>
 
-              {/* Location city */}
+              {/* Built/Unbuilt status — required, segmented toggle (mock: upload.html) */}
               <div className={s.formGroup}>
-                <label className={s.label} htmlFor="location_city">{t('uploadWork.form.cityLabel')}</label>
-                <input
-                  id="location_city"
-                  name="location_city"
-                  type="text"
-                  className={s.input}
-                  value={formData.location_city}
-                  onChange={handleFieldChange}
-                  placeholder={t('uploadWork.form.cityPlaceholder')}
-                  disabled={isBusy}
-                />
+                <label className={s.label}>{t('uploadWork.form.statusLabel')}</label>
+                <div className={s.statusToggle}>
+                  <button
+                    type="button"
+                    className={`${s.statusPill} ${builtStatus === 'built' ? s.statusPillActive : ''}`}
+                    onClick={() => setBuiltStatus('built')}
+                    disabled={isBusy}
+                    aria-pressed={builtStatus === 'built'}
+                  >
+                    {t('uploadWork.form.statusBuilt')}
+                  </button>
+                  <button
+                    type="button"
+                    className={`${s.statusPill} ${builtStatus === 'unbuilt' ? s.statusPillActive : ''}`}
+                    onClick={() => setBuiltStatus('unbuilt')}
+                    disabled={isBusy}
+                    aria-pressed={builtStatus === 'unbuilt'}
+                  >
+                    {t('uploadWork.form.statusUnbuilt')}
+                  </button>
+                </div>
               </div>
 
-              {/* Location country */}
-              <div className={s.formGroup}>
-                <label className={s.label} htmlFor="location_country">{t('uploadWork.form.countryLabel')}</label>
-                <input
-                  id="location_country"
-                  name="location_country"
-                  type="text"
-                  className={s.input}
-                  value={formData.location_country}
-                  onChange={handleFieldChange}
-                  placeholder={t('uploadWork.form.countryPlaceholder')}
-                  disabled={isBusy}
-                />
-              </div>
+              {/* Optional details — collapsible card wrapping city/country/year
+                  (mock: upload.html). Collapsed by default; fields keep their
+                  values while folded since only the wrapper div unmounts. */}
+              <div className={s.optionalCard}>
+                <button
+                  type="button"
+                  className={s.optionalHeader}
+                  onClick={() => setOptionalOpen(o => !o)}
+                  aria-expanded={optionalOpen}
+                >
+                  <span className={s.optionalTitle}>
+                    {t('uploadWork.form.optionalTitle')}{' '}
+                    <span className={s.optionalSub}>{t('uploadWork.form.optionalSub')}</span>
+                  </span>
+                  <svg
+                    width="14" height="14" viewBox="0 0 24 24" fill="none"
+                    stroke="var(--color-text-dim)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                    className={s.optionalChevron}
+                    style={{ transform: optionalOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                  >
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                </button>
 
-              {/* Project year */}
-              <div className={s.formGroup}>
-                <label className={s.label} htmlFor="project_year">{t('uploadWork.form.yearLabel')}</label>
-                <input
-                  id="project_year"
-                  name="project_year"
-                  type="number"
-                  className={s.input}
-                  value={formData.project_year}
-                  onChange={handleFieldChange}
-                  placeholder={t('uploadWork.form.yearPlaceholder')}
-                  min="1800"
-                  max="2100"
-                  disabled={isBusy}
-                />
+                {optionalOpen && (
+                  <div className={s.optionalBody}>
+                    {/* Location city */}
+                    <div className={s.formGroup}>
+                      <label className={s.label} htmlFor="location_city">{t('uploadWork.form.cityLabel')}</label>
+                      <input
+                        id="location_city"
+                        name="location_city"
+                        type="text"
+                        className={s.input}
+                        value={formData.location_city}
+                        onChange={handleFieldChange}
+                        placeholder={t('uploadWork.form.cityPlaceholder')}
+                        disabled={isBusy}
+                      />
+                    </div>
+
+                    {/* Location country */}
+                    <div className={s.formGroup}>
+                      <label className={s.label} htmlFor="location_country">{t('uploadWork.form.countryLabel')}</label>
+                      <input
+                        id="location_country"
+                        name="location_country"
+                        type="text"
+                        className={s.input}
+                        value={formData.location_country}
+                        onChange={handleFieldChange}
+                        placeholder={t('uploadWork.form.countryPlaceholder')}
+                        disabled={isBusy}
+                      />
+                    </div>
+
+                    {/* Project year */}
+                    <div className={s.formGroup}>
+                      <label className={s.label} htmlFor="project_year">{t('uploadWork.form.yearLabel')}</label>
+                      <input
+                        id="project_year"
+                        name="project_year"
+                        type="number"
+                        className={s.input}
+                        value={formData.project_year}
+                        onChange={handleFieldChange}
+                        placeholder={t('uploadWork.form.yearPlaceholder')}
+                        min="1800"
+                        max="2100"
+                        disabled={isBusy}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Copyright */}

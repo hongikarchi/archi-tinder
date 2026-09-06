@@ -4,7 +4,7 @@ import styles from './UserProfilePage.module.css'
 import { useTranslation } from '../i18n/index.js'
 import { getUserProfile, getLikedBuildings, getArchitectProfile } from '../api/client.js'
 import { updateProject, deleteProject } from '../api/projects.js'
-import { getMyWorks } from '../api/works.js'
+import { getMyWorks, getUserWorks } from '../api/works.js'
 import { purgeChatCache } from '../utils/appHelpers.js'
 import { getUserSavedStudios } from '../api/architects.js'
 import { getMyPersonality } from '../api/personality.js'
@@ -116,13 +116,14 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
   const bulkDeleteBtnRef = useRef(null)
   const bulkConfirmTimerRef = useRef(null)
 
-  // Fetch likedCount on mount (isMe only) for ProfileHero stat display
+  // Fetch likedCount on mount for ProfileHero stat display — own list when
+  // isMe, otherwise the viewed user's liked list (design-parity, FRONT-*).
   useEffect(() => {
-    if (!isMe) return
-    getLikedBuildings()
+    if (!effectiveUserId) return
+    getLikedBuildings(isMe ? undefined : effectiveUserId)
       .then(data => setLikedCount(data?.total ?? 0))
       .catch(() => {})
-  }, [isMe])
+  }, [isMe, effectiveUserId])
 
   // Fetch my personality for overlay comparison (both isMe and !isMe paths)
   // Empty deps intentional: runs once on mount to load the caller's own personality.
@@ -155,7 +156,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
     if (likedBuildings !== null) return
     setLikedLoading(true)
     try {
-      const data = await getLikedBuildings()
+      const data = await getLikedBuildings(isMe ? undefined : effectiveUserId)
       setLikedBuildings(data?.buildings || [])
       setLikedCount(data?.total ?? 0)
     } catch {
@@ -195,7 +196,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
     if (works !== null) return  // already loaded
     setWorksLoading(true)
     try {
-      const data = await getMyWorks()
+      const data = isMe ? await getMyWorks() : await getUserWorks(effectiveUserId)
       setWorks(data?.works || [])
     } catch {
       setWorks([])
@@ -241,6 +242,12 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
     setBoards([])
     setBoardsPage(1)
     setBoardsHasMore(false)
+    // Reset Liked/Created tab caches on user change — both are now reachable
+    // for !isMe (design-parity), so navigating between two profiles without
+    // an unmount must not leak the previous user's likes/works/count.
+    setLikedBuildings(null)
+    setLikedCount(0)
+    setWorks(null)
     getUserProfile(effectiveUserId, { boardsPage: 1, boardsPageSize: 12 })
       .then(data => {
         if (cancelled) return
@@ -745,7 +752,9 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         })()}
         {/* ── End personality section ────────────────────────────────────── */}
 
-        {/* Tab bar — Boards | Studios | Liked | Created (isMe only) */}
+        {/* Tab bar — Boards | Studios | Liked | Created (all 4 visible to any
+            viewer, design-parity user-other.html; edit affordances inside
+            each panel stay isMe-gated) */}
         <div style={{
           display: 'flex',
           borderBottom: '1px solid var(--color-border-soft)',
@@ -766,24 +775,20 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
           >
             Studios
           </button>
-          {isMe && (
-            <button
-              type="button"
-              onClick={handleLikedTab}
-              className={`${styles.tab} ${activeTab === 'liked' ? styles.tabActive : ''}`}
-            >
-              Liked
-            </button>
-          )}
-          {isMe && (
-            <button
-              type="button"
-              onClick={handleCreatedTab}
-              className={`${styles.tab} ${activeTab === 'created' ? styles.tabActive : ''}`}
-            >
-              Created
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={handleLikedTab}
+            className={`${styles.tab} ${activeTab === 'liked' ? styles.tabActive : ''}`}
+          >
+            Liked
+          </button>
+          <button
+            type="button"
+            onClick={handleCreatedTab}
+            className={`${styles.tab} ${activeTab === 'created' ? styles.tabActive : ''}`}
+          >
+            Created
+          </button>
         </div>
 
         {activeTab === 'boards' && (<>
@@ -1120,26 +1125,32 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
           </div>
         )}
 
-        {/* Created tab content */}
-        {activeTab === 'created' && isMe && (
+        {/* Created tab content — isMe: full owner voice (upload CTA, review
+            badges). !isMe: publishable-only works from ?user_id=, cards are
+            NOT clickable into detail (GET /works/<id>/ is owner-only, 403s
+            for other viewers) — rendered as plain non-interactive cards
+            rather than linking anywhere else. */}
+        {activeTab === 'created' && (
           <div style={{ padding: '16px 0' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
               <h3 style={{ color: 'var(--color-text)', fontSize: 20, fontWeight: 700, margin: 0, letterSpacing: '-0.01em' }}>
-                My Works
+                {isMe ? 'My Works' : 'Works'}
               </h3>
-              <button
-                type="button"
-                onClick={() => navigate('/upload')}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  padding: '8px 16px', borderRadius: 20,
-                  background: 'var(--color-text)', color: 'var(--color-bg)',
-                  border: 'none', cursor: 'pointer',
-                  fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
-                }}
-              >
-                + 업로드
-              </button>
+              {isMe && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/upload')}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '8px 16px', borderRadius: 20,
+                    background: 'var(--color-text)', color: 'var(--color-bg)',
+                    border: 'none', cursor: 'pointer',
+                    fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
+                  }}
+                >
+                  + 업로드
+                </button>
+              )}
             </div>
             {worksLoading ? (
               <div style={{
@@ -1160,21 +1171,25 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                 <p style={{ color: 'var(--color-text)', fontSize: 16, fontWeight: 600, margin: 0 }}>
                   아직 업로드한 작품이 없어요
                 </p>
-                <p style={{ color: 'var(--color-text-muted)', fontSize: 13, margin: 0 }}>
-                  본인의 건축 작품을 올려보세요
-                </p>
-                <button
-                  type="button"
-                  onClick={() => navigate('/upload')}
-                  style={{
-                    marginTop: 8, padding: '10px 24px', borderRadius: 20,
-                    background: 'var(--color-text)', color: 'var(--color-bg)',
-                    border: 'none', cursor: 'pointer',
-                    fontSize: 14, fontWeight: 600, fontFamily: 'inherit',
-                  }}
-                >
-                  작품 업로드
-                </button>
+                {isMe && (
+                  <p style={{ color: 'var(--color-text-muted)', fontSize: 13, margin: 0 }}>
+                    본인의 건축 작품을 올려보세요
+                  </p>
+                )}
+                {isMe && (
+                  <button
+                    type="button"
+                    onClick={() => navigate('/upload')}
+                    style={{
+                      marginTop: 8, padding: '10px 24px', borderRadius: 20,
+                      background: 'var(--color-text)', color: 'var(--color-bg)',
+                      border: 'none', cursor: 'pointer',
+                      fontSize: 14, fontWeight: 600, fontFamily: 'inherit',
+                    }}
+                  >
+                    작품 업로드
+                  </button>
+                )}
               </div>
             ) : (
               <div style={{
@@ -1185,12 +1200,12 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                 {works.map(work => (
                   <div
                     key={work.upload_id}
-                    onClick={() => setSelectedWorkId(work.upload_id)}
+                    onClick={isMe ? () => setSelectedWorkId(work.upload_id) : undefined}
                     style={{
                       borderRadius: 12, overflow: 'hidden',
                       background: 'var(--color-surface-2)',
                       display: 'flex', flexDirection: 'column',
-                      cursor: 'pointer',
+                      cursor: isMe ? 'pointer' : 'default',
                     }}
                   >
                     {work.cover_url ? (
@@ -1213,7 +1228,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                       <p style={{ margin: '4px 0 0', fontSize: 11, color: 'var(--color-text-muted)' }}>
                         {work.program}
                       </p>
-                      {!work.is_publishable && (
+                      {isMe && !work.is_publishable && (
                         <span style={{
                           display: 'inline-block', marginTop: 6,
                           padding: '2px 8px', borderRadius: 10,
