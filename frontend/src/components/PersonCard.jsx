@@ -100,6 +100,10 @@ export default function PersonCard({ person, myVector, onClick, onInterest }) {
     onInterest?.(person)
   }
 
+  // The feed marks the requester's own card (views_people.py). Undefined on
+  // any older payload -> falsy -> existing overlay behaviour, unchanged.
+  const isMe = !!person.is_me
+
   function goToProfile(e) {
     e.stopPropagation()
     if (onClick) onClick(person)
@@ -176,7 +180,12 @@ export default function PersonCard({ person, myVector, onClick, onInterest }) {
           </div>
         </div>
 
-        {/* ── BACK — overlaid chart + name ── */}
+        {/* ── BACK — chart + name ──
+            Other people's cards overlay the viewer's vector on theirs so the
+            two shapes can be compared. The viewer's OWN card (is_me, set by
+            the feed once it stopped excluding the requester) draws a single
+            polygon: comparing someone to themselves would render two identical
+            shapes on top of each other, and the legend would label both "나". */}
         <div
           style={{ ...faceBase, transform: 'rotateY(180deg)' }}
           className={styles.back}
@@ -184,24 +193,31 @@ export default function PersonCard({ person, myVector, onClick, onInterest }) {
         >
           <div className={styles.chartWrap}>
             <PentagonChart
-              myVector={myVector ?? null}
-              theirVector={person.vector ?? null}
-              highlightAxis={person.highlight_axis ?? null}
+              // Fallback to person.vector: is_me implies the feed returned a
+              // my_vector, but a missing one must not blank the chart.
+              myVector={myVector ?? person.vector ?? null}
+              theirVector={isMe ? null : (person.vector ?? null)}
+              highlightAxis={isMe ? null : (person.highlight_axis ?? null)}
               mini
-              legend
+              legend={!isMe}
               legendTheirsLabel={person.display_name}
             />
           </div>
 
-          <button
-            type="button"
-            data-no-flip="true"
-            className={styles.nameBtn}
-            onClick={goToProfile}
-            aria-label={`${person.display_name} 프로필 보기`}
-          >
-            {person.display_name}
-          </button>
+          <div className={styles.nameRow}>
+            <button
+              type="button"
+              data-no-flip="true"
+              className={styles.nameBtn}
+              onClick={goToProfile}
+              aria-label={`${person.display_name} 프로필 보기`}
+            >
+              {person.display_name}
+            </button>
+            {/* Without this the single-polygon chart above reads as a bug
+                ("why does this one card have no comparison?"). */}
+            {isMe && <span className={styles.meBadge}>나</span>}
+          </div>
         </div>
       </div>
     </article>
