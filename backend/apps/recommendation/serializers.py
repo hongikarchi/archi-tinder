@@ -221,6 +221,32 @@ class ProjectListSerializer(ProjectSerializer):
         ]
 
 
+_PUBLIC_LIST_EXCLUDE_FIELDS = _LIST_EXCLUDE_FIELDS | {'report_image', 'report_image_mime'}
+
+
+class PublicProjectListSerializer(ProjectListSerializer):
+    """UserProjectsListView variant — additionally excludes report_image(_mime).
+
+    BACK-PRIVACY-1: UserProjectsListView (GET /api/v1/users/<id>/projects/) is
+    AllowAny, so ProjectListSerializer's report_image/report_image_mime
+    (base64 TEXT, ~200KB each, up to 50/page) let anonymous callers bulk-
+    harvest taste-report images off public boards. Profile board thumbnails
+    already use a separate lazy pointer (accounts/views/profile.py
+    has_report_image + report_image_url; reports.py ProjectReportImageFetchView),
+    so nothing needs report_image inlined in this list response.
+
+    Do NOT use this for ProjectListCreateView's owner list (GET /projects/) —
+    App.jsx:929 login project-sync consumes report_image from that endpoint.
+    """
+
+    class Meta(ProjectListSerializer.Meta):
+        fields = [f for f in ProjectListSerializer.Meta.fields if f not in _PUBLIC_LIST_EXCLUDE_FIELDS]
+        read_only_fields = [
+            f for f in ProjectListSerializer.Meta.read_only_fields
+            if f not in _PUBLIC_LIST_EXCLUDE_FIELDS
+        ]
+
+
 class ProjectSelfUpdateSerializer(serializers.ModelSerializer):
     """PATCH /api/v1/projects/{project_id}/ — owner updates name, visibility, conversation_history, is_temp.
 

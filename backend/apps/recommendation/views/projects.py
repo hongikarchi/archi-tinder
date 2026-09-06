@@ -11,7 +11,12 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from ..models import AnalysisSession, Project
-from ..serializers import ProjectListSerializer, ProjectSerializer, ProjectSelfUpdateSerializer
+from ..serializers import (
+    ProjectListSerializer,
+    ProjectSerializer,
+    ProjectSelfUpdateSerializer,
+    PublicProjectListSerializer,
+)
 from ..caches import (
     evict_taste,
     get_or_build_projects_list,
@@ -295,7 +300,11 @@ class UserProjectsListView(APIView):
             .select_related('user__user')
             # PERF-1 change C: heavy LLM JSON not consumed by list view.
             # BACK-LLM-2: conversation_history can be up to 64 KB — defer it too.
-            .defer('analysis_report', 'conversation_history', 'axis_scores')
+            # BACK-PRIVACY-1: report_image (~200KB base64) deferred as well — safe
+            # only because THIS endpoint serializes with PublicProjectListSerializer
+            # for every caller, which never reads the field.
+            .defer('analysis_report', 'conversation_history', 'axis_scores',
+                   'report_image', 'report_image_mime')
             .annotate(
                 _latest_session_id=_latest_sid_sq,
                 _latest_like_count=_latest_lc_sq,
@@ -311,7 +320,11 @@ class UserProjectsListView(APIView):
         has_more = len(chunk_plus_one) > page_size
         chunk = chunk_plus_one[:page_size]
         return Response({
-            'results':  ProjectListSerializer(chunk, many=True, context={'request': request}).data,
+            # BACK-PRIVACY-1: PublicProjectListSerializer (not ProjectListSerializer)
+            # — this endpoint is AllowAny; must not leak report_image/_mime base64
+            # blobs to anonymous callers. Owner GET /projects/ keeps the full
+            # ProjectListSerializer (App.jsx:929 login project-sync needs it).
+            'results':  PublicProjectListSerializer(chunk, many=True, context={'request': request}).data,
             'total':    None,   # deprecated — frontend uses has_more
             'page':     page,
             'has_more': has_more,

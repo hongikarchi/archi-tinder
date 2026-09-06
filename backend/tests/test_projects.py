@@ -246,6 +246,67 @@ class TestUserProjectsListView:
         assert data['page'] == 1
         assert data['has_more'] is False
 
+    # -- BACK-PRIVACY-1: report_image must never leak from this AllowAny endpoint ---
+
+    def test_report_image_absent_for_anonymous_caller(self, api_client, user_profile):
+        """Anonymous caller must not receive report_image/report_image_mime keys."""
+        Project.objects.create(
+            user=user_profile,
+            name='PublicBoard',
+            visibility='public',
+            final_report={'summary': 'r'},
+            report_image='base64-image-data',
+            report_image_mime='image/png',
+        )
+        resp = api_client.get(f'/api/v1/users/{user_profile.user.id}/projects/')
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data['results']) == 1
+        result = data['results'][0]
+        assert 'report_image' not in result
+        assert 'report_image_mime' not in result
+
+    def test_report_image_absent_for_owner_caller_too(self, auth_client, user_profile):
+        """Owner calling THIS endpoint (not GET /projects/) also gets no report_image —
+        the public list serializer applies regardless of caller identity."""
+        Project.objects.create(
+            user=user_profile,
+            name='OwnBoard',
+            visibility='public',
+            final_report={'summary': 'r'},
+            report_image='base64-image-data',
+            report_image_mime='image/png',
+        )
+        resp = auth_client.get(f'/api/v1/users/{user_profile.user.id}/projects/')
+        assert resp.status_code == 200
+        result = resp.json()['results'][0]
+        assert 'report_image' not in result
+        assert 'report_image_mime' not in result
+
+    def test_owner_projects_list_still_contains_report_image(self, auth_client, user_profile):
+        """Regression guard: GET /api/v1/projects/ (owner list) must keep shipping
+        report_image/report_image_mime — App.jsx:929 login project-sync depends on it.
+
+        Explicit cache.clear() first: get_or_build_projects_list uses a
+        process-wide LocMemCache keyed by profile_id (pk reused across tests
+        on the per-test SQLite DB), so a stale page-1 payload cached by an
+        earlier test in this module could otherwise mask a regression here.
+        """
+        from django.core.cache import cache
+        cache.clear()
+        Project.objects.create(
+            user=user_profile,
+            name='OwnBoard',
+            final_report={'summary': 'r'},
+            report_image='base64-image-data',
+            report_image_mime='image/png',
+        )
+        resp = auth_client.get('/api/v1/projects/')
+        assert resp.status_code == 200
+        result = resp.json()['results'][0]
+        assert result.get('report_image') == 'base64-image-data'
+        assert result.get('report_image_mime') == 'image/png'
+
 
 # -- Building Batch --------------------------------------------------------
 

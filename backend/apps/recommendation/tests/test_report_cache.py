@@ -296,3 +296,67 @@ class TestProjectReportImageCache:
             {}, format='json',
         )
         assert resp.status_code == 404
+
+
+# ── BACK-PRIVACY-1 (A1): fresh image generation must evict user_profile_detail ──
+
+@pytest.mark.django_db
+class TestProjectReportImageEvictsUserProfileDetail:
+    """ProjectReportImageView.post fresh-generation path must bump the viewed
+    user's profile-detail cache version so the profile board thumbnail (60s
+    cache) doesn't stay stale after a persona image is generated.
+
+    Mirrors the version-bump assertion style of test_profile_perf.py
+    test_evict_user_profile_detail_bumps_version.
+    """
+
+    def test_fresh_generation_bumps_user_profile_version(self, auth_client, user_profile):
+        from apps.recommendation.caches import _user_profile_version
+        from django.core.cache import cache
+
+        user_id = user_profile.user.id
+        cache.delete(f'user_profile_version:{user_id}')
+        assert _user_profile_version(user_id) == 0
+
+        project = _make_project(user_profile, final_report={'summary': 'report'})
+        new_result = {'image_data': 'first-image-data', 'mime_type': 'image/png', 'prompt': 'p'}
+
+        with patch(
+            'apps.recommendation.services.generate_persona_image', return_value=new_result,
+        ), patch('apps.recommendation.views.reports.evict_projects_list'), \
+                patch('apps.recommendation.views.reports.evict_project_detail'):
+            resp = auth_client.post(
+                f'/api/v1/projects/{project.project_id}/report/generate-image/',
+                {}, format='json',
+            )
+
+        assert resp.status_code == 200
+        assert _user_profile_version(user_id) == 1
+
+    def test_cached_short_circuit_does_not_bump_user_profile_version(self, auth_client, user_profile):
+        """The cached-return branch (no regenerate, image already stored) writes
+        nothing, so it must NOT evict the profile-detail cache."""
+        from apps.recommendation.caches import _user_profile_version
+        from django.core.cache import cache
+
+        user_id = user_profile.user.id
+        cache.delete(f'user_profile_version:{user_id}')
+
+        project = _make_project(
+            user_profile,
+            final_report={'summary': 'report'},
+            report_image='base64-existing-image-data',
+            report_image_mime='image/png',
+        )
+
+        with patch('apps.recommendation.services.generate_persona_image') as mock_gen, \
+             patch('apps.recommendation.views.reports.evict_projects_list'), \
+             patch('apps.recommendation.views.reports.evict_project_detail'):
+            resp = auth_client.post(
+                f'/api/v1/projects/{project.project_id}/report/generate-image/',
+                {}, format='json',
+            )
+
+        assert resp.status_code == 200
+        mock_gen.assert_not_called()
+        assert _user_profile_version(user_id) == 0
