@@ -23,9 +23,9 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-09-05 22:25 KST',
-    head: '038c068',
-    branch: 'feature/sns-assessment-resume',
+    updatedAt: '2026-09-06 09:59 KST',
+    head: 'e7f1f2c',
+    branch: 'pr316-resolve',
   },
   done: [
     {
@@ -33,6 +33,26 @@ window.PROJECT_STATE = {
       title: '진단 중 새로고침/뒤로가기/URL 재진입 시 진행 상태 유실',
       completedAt: '2026-09-05',
       note: '배경: People 탭에 페르소나 카드를 채우려면 유저가 진단을 완주해야 하는데, 중간 이탈 후 재진입하면 1번 문항으로 리셋돼 완주율을 깎고 있었음',
+    },
+    {
+      id: 'FRONT-PEOPLE-CARD-5',
+      title: '카드 뒷면 성향 그래프 축소(여백 확보)',
+      completedAt: '2026-09-06',
+      prs: [319],
+      note: '피드백: flip 뒷면 그래프가 카드를 꽉 채워 답답함. 원인은 두 가지가 겹친 것 — `.chartWrap svg`가 `width:100%`라 카드 폭 전체를 쓰고, `.back` 패딩이 `8px 6px`뿐이라 좌우 6px만 남았음',
+    },
+    {
+      id: 'FRONT-PEOPLE-CARD-4',
+      title: '내 카드는 성향 그래프 단독 표시',
+      completedAt: '2026-09-06',
+      prs: [315],
+      note: '요청은 "카드 클릭 flip + 오버레이 + 내 카드는 단독 + 이름 클릭 프로필 이동" 4가지였으나, flip·오버레이·이름 이동 3가지는 `#314`에서 이미 구현돼 있었음. 실제 미구현은 "내 카드 단독 표시" 하나',
+    },
+    {
+      id: 'FRONT-PEOPLE-FEED-1',
+      title: '페르소나 이미지 생성이 발견 피드에 반영되지 않던 문제',
+      completedAt: '2026-09-03',
+      note: '팀장 피드백: 페르소나 리포트에서 이미지를 생성했는데 `/people`에 카드가 안 뜸. 조사 결과 이미지 경로는 정상이었고(리포트가 쓰는 `recommendation_project.report_image`를 피드가 그대로 읽음, 피드에 캐시 없음 = 즉시 반영 구조) 나머지 조건들이 막고 있었음',
     },
     {
       id: 'FRONT-PEOPLE-CARD-3',
@@ -60,24 +80,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-08-24',
       prs: [311],
       note: 'P2 협업/팀빌딩 발견 기능(연애 매칭 아님 — Product Constitution 범위 확인). 23파일 +2223줄',
-    },
-    {
-      id: 'FRONT-UX-14',
-      title: '스와이프 모션 + 갤러리 UX (7 라운드 feel-iteration)',
-      completedAt: '2026-08-15',
-      note: '① 퇴장 애니메이션: vendored `lib/tinderCard.js` — linear 3-대각선 총알 → easeOutCubic + power 1.6 + duration 클램프 [320,560]ms (플링감 유지, 감속 꼬리)',
-    },
-    {
-      id: 'FRONT-DESIGN-A1',
-      title: '디자인 정합성 기계적 스윕 (2 PR)',
-      completedAt: '2026-08-15',
-      note: '디자인 이니셔티브(B1→A1→B2→A2) A1, 유형별 PR 분리(user 결정): PR-1 hex→토큰, PR-2 hover 핵 제거 (stacked 브랜치)',
-    },
-    {
-      id: 'FRONT-FLOW-2',
-      title: '팝업/인터스티셜 de-drift 스윕',
-      completedAt: '2026-08-15',
-      note: 'user 스크린샷 지적(ActionCard 구 디자인 잔존)發 전체 팝업 12종 감사: 위반 5곳 수정, 7곳 정상 확인(SaveBoardModal/VerifyGateModal/WorkDetailModal/QuestionCard/ExitConfirm/DismissConfirm 토큰 기반, ShareCardModal 의도적 인쇄물 예외)',
     },
   ],
   now: [
@@ -259,6 +261,20 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 319,
+      title: 'feat(people): 내 카드는 성향 그래프를 단독 표시 (카드 flip 인터랙션 완성)',
+      mergedAt: '2026-09-06T00:59:17Z',
+      mergedAtKST: '2026-09-06 09:59 KST',
+      sha: 'e7f1f2c',
+    },
+    {
+      number: 315,
+      title: 'feat(people): 페르소나 이미지가 있으면 발견 피드에 노출 — 본인 포함 + 저장 기본값 public',
+      mergedAt: '2026-09-06T00:54:33Z',
+      mergedAtKST: '2026-09-06 09:54 KST',
+      sha: '7c32640',
+    },
+    {
       number: 314,
       title: 'feat(people): 발견 카드를 이미지 앞면 + flip 상세 구조로 전환',
       mergedAt: '2026-08-29T02:23:30Z',
@@ -299,20 +315,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-08-15T14:25:06Z',
       mergedAtKST: '2026-08-15 23:25 KST',
       sha: '73d6177',
-    },
-    {
-      number: 308,
-      title: 'refactor(FRONT-DESIGN-A1): hover hacks -> CSS :hover PR-2 — 13 files, identical values',
-      mergedAt: '2026-08-15T04:48:31Z',
-      mergedAtKST: '2026-08-15 13:48 KST',
-      sha: 'e33a065',
-    },
-    {
-      number: 307,
-      title: 'feat(FRONT-DESIGN-A1): hex->token sweep PR-1 — pink de-drift + dark-glass fix',
-      mergedAt: '2026-08-15T04:47:46Z',
-      mergedAtKST: '2026-08-15 13:47 KST',
-      sha: 'c643a7c',
     },
   ],
   agents: [
@@ -581,6 +583,14 @@ window.PROJECT_STATE = {
     {
       path: 'README.md',
       role: '프로젝트 안내 문서',
+    },
+    {
+      path: 'Task.md',
+      role: '태스크 보드 문서',
+    },
+    {
+      path: 'Task.md',
+      role: '태스크 보드 문서',
     },
     {
       path: 'Task.md',
@@ -1819,6 +1829,158 @@ window.PROJECT_STATE = {
       role: '프론트 패키지 매니페스트',
     },
     {
+      path: 'frontend/public/__mocks/_compare.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/architect.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/board-detail.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/building-detail.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/discovery.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/liked-projects.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/llm-search-update.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/llm-search.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/login-consent.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/login-credentials.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/login-profile.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/login-returning.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/login.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/notifications.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/office.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/overlay-action-card.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/overlay-cap-reached.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/overlay-card-skeleton.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/overlay-leave-modal.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/overlay-photo-lightbox.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/overlay-question-card.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/overlay-save-board.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/overlay-save-to-board.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/overlay-swipe-confirms.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/overlay-swipecard-expanded.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/overlay-trigger-card.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/overlay-tutorial.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/persona-report.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/profile.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/results.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/settings-account.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/settings-appearance.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/settings-edit-profile.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/settings-notifications.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/settings.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/taste-swipe.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/upload.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/user-other.html',
+      role: '',
+    },
+    {
       path: 'frontend/public/favicon.svg',
       role: '파비콘 에셋',
     },
@@ -2549,6 +2711,14 @@ window.PROJECT_STATE = {
     {
       path: 'project/mermaid.min.js',
       role: 'Mermaid 다이어그램 번들',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
     },
     {
       path: 'project/state.js',

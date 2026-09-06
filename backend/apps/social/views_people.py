@@ -12,13 +12,16 @@ Query params:
             instead of the full 5-D Euclidean distance.
 
 Candidate pool construction (ORDER MATTERS — do not reorder):
-  1. Filter:  discovery_opt_in=True, exclude requester, exclude is_guest=True.
-  2. Work filter: further restrict to users who have at least one
-                  is_publishable=True Work (owner_id set intersection).
-  2b. Report-image filter: further restrict to users who have at least one
-                  visibility='public' Project carrying a report_image. The
-                  feed card's front face IS that image, so a user without one
-                  would render an empty card (FRONT-PEOPLE-CARD-1).
+  1. Filter:  discovery_opt_in=True. Nothing else — FRONT-PEOPLE-FEED-1
+              (2026-09-03) removed the self-exclusion, the guest exclusion and
+              the publishable-Work requirement. discovery_opt_in survives
+              because it is the user's own hide-me switch, not a completeness
+              gate.
+  2. Report-image filter: restrict to users who have at least one
+              visibility='public' Project carrying a report_image. The feed
+              card's front face IS that image, so this is the one hard
+              requirement; visibility='public' keeps private taste reports
+              from leaking.
   3. Safety cap: [:500] applied BEFORE any Python-side calculation.
   4. Distance:   Euclidean distance computed in Python for each candidate.
   5. Sort:       ascending distance ('inspired') or descending ('opposite').
@@ -47,7 +50,6 @@ from rest_framework.views import APIView
 
 from apps.accounts.models import PersonalityProfile, UserProfile
 from apps.recommendation.models import Project
-from apps.works.models import Work
 
 logger = logging.getLogger('apps.social')
 
@@ -171,12 +173,20 @@ class PeopleDiscoveryView(APIView):
                 )
             type_code_filter = upper_filter
 
-        # -- Step 1: candidate pool — opt-in, non-self, non-guest -------------
+        # -- Step 1: candidate pool — opt-in only -----------------------------
+        # FRONT-PEOPLE-FEED-1 (2026-09-03, product decision): a generated
+        # persona report image is now the ONLY gate that matters. The
+        # self-exclusion and the guest exclusion are both gone — if someone has
+        # an image, they appear, themselves included.
+        #
+        # discovery_opt_in is DELIBERATELY still honoured: it is the user's own
+        # "hide me from discovery" switch, not a completeness requirement, so
+        # overriding it would publish someone against their stated choice. It
+        # currently filters nobody out (0 users have it False), so keeping it
+        # costs no candidates today while preserving the opt-out.
         base_qs = (
             PersonalityProfile.objects
             .filter(discovery_opt_in=True)
-            .exclude(user=requester_profile)
-            .exclude(user__is_guest=True)
             .select_related('user')
         )
 
@@ -184,18 +194,14 @@ class PeopleDiscoveryView(APIView):
         if type_code_filter is not None:
             base_qs = base_qs.filter(type_code=type_code_filter)
 
-        # -- Step 2: restrict to users with at least one publishable Work -----
-        publishable_owner_ids = set(
-            Work.objects
-            .filter(is_publishable=True)
-            .values_list('owner_id', flat=True)
-            .distinct()
-        )
-        base_qs = base_qs.filter(user_id__in=publishable_owner_ids)
-
-        # -- Step 2b: restrict to users with a public taste-report image ------
-        # The card's front face is this image; a user without one renders an
-        # empty card. Mirrors the Work gate above — set intersection, no join.
+        # -- Step 2: restrict to users with a public taste-report image -------
+        # The card's front face is this image, so it is the one hard
+        # requirement. The former "must own a publishable Work" gate was
+        # dropped with the same decision — a portfolio upload has nothing to do
+        # with whether a taste profile is worth discovering.
+        #
+        # visibility='public' stays: report_image lives on Project alongside
+        # private taste reports, and serving those would leak them.
         report_image_owner_ids = set(
             Project.objects
             .filter(visibility='public')
@@ -229,6 +235,11 @@ class PeopleDiscoveryView(APIView):
             dist = _euclidean(my_vec, their_vec)
             h_axis = _highlight_axis(my_vec, their_vec)
             user_profile = p.user
+            # The requester now appears in their own feed (FRONT-PEOPLE-FEED-1).
+            # Their distance to themselves is 0, so a similarity reason would
+            # read "작업 방식 측면에서 가장 닮았어요" about the viewer — label the
+            # card instead, and let the client mark it via is_me.
+            is_me = p.user_id == requester_profile.id
             results.append({
                 'user_id': user_profile.user_id,
                 'display_name': user_profile.display_name,
@@ -236,8 +247,9 @@ class PeopleDiscoveryView(APIView):
                 'avatar_url': user_profile.avatar_url,
                 'type_code': p.type_code,
                 'vector': their_vec,
-                'highlight_axis': h_axis,
-                'reason': _reason_copy(my_vec, their_vec),
+                'highlight_axis': None if is_me else h_axis,
+                'reason': '나의 카드예요' if is_me else _reason_copy(my_vec, their_vec),
+                'is_me': is_me,
                 'distance': round(dist, 4),
                 # Pointer, not payload — see module docstring.
                 'report_image_url': f'/api/v1/people/{user_profile.user_id}/report-image/',
