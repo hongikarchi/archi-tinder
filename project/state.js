@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-09-06 10:17 KST',
-    head: '2324fec',
-    branch: 'feature/claude-design-ALL',
+    updatedAt: '2026-09-06 18:34 KST',
+    head: 'd15da87',
+    branch: 'feature/claude-design-finetune',
   },
   done: [
+    {
+      id: 'FRONT-DESIGN-FT',
+      title: '디자인 파인튜닝: vision 전수 감사 + 결정 반영',
+      completedAt: '2026-09-06',
+      note: '21보드 × 2라운드 vision 감사(스크린샷 쌍을 에이전트가 직접 판정 + 회의적 재검증, 48 에이전트) + 속성 diff 교차. 완전 일치 4, 수정 완료 7, 판정불가 4(dev 데이터 필요 — taste-swipe 세션/building/architect/office)',
+    },
     {
       id: 'FRONT-DESIGN-C',
       title: 'Claude Design canvas 41보드 → 실코드 반영 (B2 종결)',
@@ -73,15 +79,14 @@ window.PROJECT_STATE = {
       completedAt: '2026-09-03',
       note: '팀장 피드백: 페르소나 리포트에서 이미지를 생성했는데 `/people`에 카드가 안 뜸. 조사 결과 이미지 경로는 정상이었고(리포트가 쓰는 `recommendation_project.report_image`를 피드가 그대로 읽음, 피드에 캐시 없음 = 즉시 반영 구조) 나머지 조건들이 막고 있었음',
     },
+  ],
+  now: [
     {
-      id: 'FRONT-PEOPLE-CARD-3',
-      title: '/people 카드를 report 추천 타일 규격으로 축소 + 스크롤 버그',
-      completedAt: '2026-08-29',
-      prs: [314],
-      note: 'user 지적: 카드가 너무 커서 한 화면에 몇 장 안 보임 → report 생성 후 추천 그리드와 같은 타일로 통일',
+      id: 'FRONT-FUNC-CHECK-1',
+      title: '기능 점검 4종 (2026-09-06 예약)',
+      note: 'UI 파인튜닝(FRONT-DESIGN-FT) 종료 후 다음 세션의 기능 검증 슬라이스. user 지정:',
     },
   ],
-  now: [],
   next: {
     xhigh: [
       {
@@ -264,6 +269,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 321,
+      title: 'feat(FRONT-DESIGN-C): canvas design port — 시안 41보드 반영',
+      mergedAt: '2026-09-06T01:25:22Z',
+      mergedAtKST: '2026-09-06 10:25 KST',
+      sha: 'd15da87',
+    },
+    {
       number: 319,
       title: 'feat(people): 내 카드는 성향 그래프를 단독 표시 (카드 flip 인터랙션 완성)',
       mergedAt: '2026-09-06T00:59:17Z',
@@ -311,13 +323,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-08-29T02:17:12Z',
       mergedAtKST: '2026-08-29 11:17 KST',
       sha: 'b8b4f46',
-    },
-    {
-      number: 312,
-      title: 'fix(routing): /assessment, /people 진입이 discovery로 튕기던 문제',
-      mergedAt: '2026-08-29T02:16:13Z',
-      mergedAtKST: '2026-08-29 11:16 KST',
-      sha: '2e358b7',
     },
   ],
   agents: [
@@ -1377,6 +1382,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/works/migrations/0003_cover_r2_key.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/works/migrations/0004_work_built_status.py',
       role: '',
     },
     {
@@ -2646,14 +2655,6 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/pages/userProfile/BoardGrid.jsx',
       role: '프로필 보드 그리드',
-    },
-    {
-      path: 'frontend/src/pages/userProfile/ProfileHeader.jsx',
-      role: '유저 프로필 헤더 바',
-    },
-    {
-      path: 'frontend/src/pages/userProfile/ProfileHeader.module.css',
-      role: '',
     },
     {
       path: 'frontend/src/pages/userProfile/ProfileHero.jsx',
