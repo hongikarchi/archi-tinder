@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useImageTelemetry } from '../../hooks/useImageTelemetry.js'
+import { getProjectReportImage } from '../../api/projects.js'
 import InfoCol from './InfoCol'
 import { useTranslation } from '../../i18n/index.js'
 import s from './BoardCard.module.css'
@@ -79,7 +80,36 @@ export default function BoardCard({
   }, [confirmingDelete])
 
   const isPrivate = board.visibility === 'private'
-  const hasCover = !!board.cover_image_url
+
+  // FRONT-PEOPLE-THUMB-1: the cover is the board's PERSONA REPORT image when it
+  // has one; the building cover stays as the fallback. Only the `src` changes —
+  // the <img>, its styles, the telemetry hooks and the gradient placeholder
+  // below are untouched, so the card's layout is identical to before.
+  //
+  // Fetched lazily because the board list only carries a pointer
+  // (report_image_url): Project.report_image is base64 TEXT and the list holds
+  // up to 50 boards.
+  const [personaImage, setPersonaImage] = useState(null)
+
+  useEffect(() => {
+    if (!board.has_report_image) {
+      setPersonaImage(null)
+      return
+    }
+    let cancelled = false
+    getProjectReportImage(board.board_id).then(data => {
+      if (cancelled) return
+      // null = no image / not visible to this caller -> keep the fallback.
+      if (data?.image_data) {
+        setPersonaImage(`data:${data.mime_type || 'image/png'};base64,${data.image_data}`)
+      }
+    })
+    return () => { cancelled = true }
+  }, [board.board_id, board.has_report_image])
+
+  // Persona image -> building cover -> gradient placeholder (existing chain).
+  const coverSrc = personaImage || board.cover_image_url || ''
+  const hasCover = !!coverSrc
 
   const { onLoad: coverOnLoad, onError: coverOnError } = useImageTelemetry({
     buildingId: board.board_id,
@@ -140,7 +170,7 @@ export default function BoardCard({
         }}>
           {hasCover ? (
             <img
-              src={board.cover_image_url}
+              src={coverSrc}
               alt={board.name}
               loading="lazy"
               onLoad={coverOnLoad}

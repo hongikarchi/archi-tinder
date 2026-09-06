@@ -299,6 +299,65 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FRONT-PEOPLE-THUMB-1 — 프로필 보드 썸네일을 페르소나 리포트 이미지로 교체 — RESOLVED 2026-09-05 (`9488979`, PR 리뷰 대기)
+- 요청 전제 정정: "프로필과 People 탭 **양쪽**에서 보드 썸네일 교체"였으나, **People 탭에는 보드 썸네일이 없음**(`PeopleDiscoveryPage`에 board 코드 0줄). `PersonCard`가 이미 `getPersonReportImage()`로 페르소나 이미지를 앞면에 쓰고 있음(#314 머지 완료) → 실제 대상은 프로필 `BoardCard` 한 곳. user 확인 후 범위 확정
+- 데이터 구조가 맞아떨어짐: 보드 = `Project`이고 `report_image`도 `Project`에 있어, 유저당 하나가 아니라 **보드마다 자기 리포트 이미지**를 커버로 쓰게 됨
+- **레이아웃/스타일 무변경**: `<img>` 엘리먼트·인라인 스타일·telemetry 훅·그라디언트 플레이스홀더 전부 그대로. 바뀐 건 `src` 하나
+- 폴백은 기존 체인 유지하며 앞에 한 단계만 추가 — 페르소나 이미지 → 기존 건축물 커버 → 그라디언트 플레이스홀더. `has_report_image`가 없거나 fetch 실패면 자동으로 기존 동작
+- 전달 방식은 **포인터 + lazy fetch**(base64 인라인 아님): `report_image`가 base64 TEXT(~200KB)이고 보드 `page_size`가 최대 50이라 인라인 시 프로필 응답 하나가 MB 단위. `/people` 피드와 같은 분리
+- `GET /projects/<pk>/report-image/` 신규. 가시성은 **보드 목록과 동일 규칙**(소유자는 자기 것, 그 외 public만). private은 존재 여부도 노출하지 않도록 404로 통일
+- 실증(로컬 API): payload 필드 적재 · 포인터 조회 200 · 이미지 없는 보드 404 · **비소유자의 타인 private 보드 404 / public 200** · 미인증 401
+- Deferred: `_build_boards_field`가 full `Project` row를 로드해 직렬화에 쓰지도 않는 `report_image` base64를 매번 DB에서 끌어옴. 기존 이슈이며 `.only()`/`.defer()`로 줄일 수 있으나 이번 범위 밖
+- 미검증: 브라우저 실물 확인 못 함(썸네일 렌더·폴백 외형). PR에 수동 절차 기재
+
+### FRONT-ASSESSMENT-4 — 재진단 진입점(다시 진단받기 버튼) — RESOLVED 2026-09-05 (`62f2b95`, PR 리뷰 대기)
+- 팀 내부 People 탭 데모/테스트를 위해 반복 진단이 필요한데 UI에 진입점이 없었음. `UserProfilePage`가 `personality`가 **없을 때만** `성향 진단 받기` CTA를 띄우고 **있으면** 오각형 차트만 보여줘 다시 들어갈 문이 없었음(`/assessment` URL 직접 입력은 그 전에도 동작)
+- **백엔드 변경 0**: `PersonalityAssessmentView`가 처음부터 upsert — `PersonalityProfile.update_or_create` + `evict_user_profile_detail`, 201(생성)/200(재진단). 이력 테이블이 없어 최신 하나만 유지되며 기존 모델 설계 그대로. 즉 override 요구사항은 이미 충족돼 있었고 **없던 건 진입점뿐**이었음
+- 버튼은 오각형 차트 + `{type_code} 유형` 문구 아래. 바로 위 형제 분기의 CTA와 같은 자리·같은 스타일(`--radius-pill`, `--color-surface`, `13px/600`, `minHeight:36`)이라 두 상태가 대칭. 새 스타일 값 미생성
+- 확인 모달 없음 — 제출 전에는 아무것도 안 바뀌므로(`update_or_create`가 제출 시점에만 실행) 중간 이탈해도 이전 결과가 남아 보호할 대상이 없고, 반복 데모에 마찰만 됨
+- 실증(로컬 API): 같은 유저 2회 제출로 `CLON[1,1,1,1,1]` → `RSDT[-1,-1,-1,-1,-1]` 교체(둘 다 200). `GET /users/1/`도 새 값 반환(캐시 무효화 동작). People 피드는 캐시가 없어 매 요청 DB 직조회 → 즉시 반영
+- 설계는 `docs/plans/2026-08-20-personality-discovery-design.md` §12에 기록(같은 주제 문서에 덧붙임). 이 파일은 그동안 untracked였어 이번에 추적 시작
+- Deferred: PR #316(진단 이어하기) 머지 시 재진단이 중단된 draft를 되살려 "항상 1번부터" 결정과 충돌 → 진입 지점에서 draft 제거 필요
+- 미검증: 브라우저 실물 확인 못 함(버튼 렌더 + 네비게이션). PR에 수동 절차 기재
+
+### FRONT-ASSESSMENT-3 — 진단 중 새로고침/뒤로가기/URL 재진입 시 진행 상태 유실 — RESOLVED 2026-09-05 (`afca933`, PR 리뷰 대기)
+- 배경: People 탭에 페르소나 카드를 채우려면 유저가 진단을 **완주**해야 하는데, 중간 이탈 후 재진입하면 1번 문항으로 리셋돼 완주율을 깎고 있었음
+- 원인: `AssessmentPage`의 `currentQ`/`responses`가 순수 `useState`. 새로고침·브라우저 뒤로가기·URL 직접 입력이 전부 컴포넌트 리마운트라 상태가 초기값으로 돌아감
+- 저장 위치는 **기존 패턴을 따라 판단**: `App.jsx`가 durable 유저별 진행 상태를 `localStorage`의 `archithon_*_${userId}`에 두고(`projects`/`activeId`/`currentCard`), 일회성 덱 상태만 `sessionStorage`에 둠(`discovery_*`). 미완료 진단은 전자 → `archithon_assessment_${userId}`. `sessionStorage`는 새로고침은 버텨도 탭을 닫으면 사라져 완주 목표에 부적합
+- `utils/assessmentDraft.js` 신규 — 저장값을 신뢰하지 않고 검증 실패 시 `null` 반환해 깨끗한 시작으로 폴백. 문항 수가 달라진 draft는 인덱스가 어긋나 폐기. quota/private-mode 예외는 삼켜서 진단 자체를 막지 않음
+- 신규 진단 보장: 제출 **성공 시 draft 제거** → 다음 진입은 1번 문항부터. 답변 0개 + 1번 문항이면 애초에 저장하지 않아 빈 draft가 생기지 않음
+- 이어서 시작한 경우 안내 문구 노출(첫 응답 시 해제) — 왜 1번이 아닌지 사용자가 알 수 있게
+- 테스트 23개 추가(`node --test`, 기존 `loginFlow.test.mjs` 방식): 왕복 복원 · 음수 Likert 값 · 유저별 격리 · 손상 JSON/범위 밖 인덱스/비유한 값 폴백 · storage 예외. `npm test` 등록, 전체 **117/117 통과**
+- 미검증: 브라우저 실물 확인은 못 함(로직은 단위 테스트로 커버). PR에 수동 테스트 절차 기재
+
+### FRONT-PEOPLE-CARD-5 — 카드 뒷면 성향 그래프 축소(여백 확보) — RESOLVED 2026-09-06 (`6b7d5f9`, PR 리뷰 대기, #319 위 스택)
+- 피드백: flip 뒷면 그래프가 카드를 꽉 채워 답답함. 원인은 두 가지가 겹친 것 — `.chartWrap svg`가 `width:100%`라 카드 폭 전체를 쓰고, `.back` 패딩이 `8px 6px`뿐이라 좌우 6px만 남았음
+- `.back` `padding 8px 6px → 14px 12px` · `gap 4px → 8px`, `.chartWrap` `width 100% → 78%` + `max-width 240px`
+- 퍼센트를 쓴 이유: 4/3/2열 브레이크포인트마다 카드 폭이 달라(308/243/179px) 픽셀 고정 시 값을 따로 관리해야 함. `max-width`는 그리드가 더 넓어져도 그래프가 비대해지지 않게 하는 상한
+- 그래프 컴포넌트와 카드 크기/비율(2:3)은 무변경 — 바뀐 건 컨테이너 폭과 패딩뿐
+- 측정: 모바일 167→121px(여백 29px) · 태블릿 231→171px(36px) · 데스크탑 296→222px(43px). 세로 사용률 100%→65~69%로 내려가 이름 행과 균형 확보
+- **전/후 시각 비교를 아티팩트로 발행** — 실제 `PentagonChart`를 esbuild+react-dom/server로 SSR 렌더한 SVG를 실제 카드 CSS·픽셀 크기에 넣어 3개 브레이크포인트 대조. 브라우저 캡처 불가에 대한 대안
+- 스택 구조: #315 → #319 → 이 PR. PR base를 `feature/sns-people-card-self-graph`로 지정해 이번 작업분만 diff에 보이게 함. **#319 머지 후 base를 develop으로 바꾼 뒤 머지해야 함**
+- 미검증: 브라우저 실물(실제 렌더·flip 중 여백 체감)
+
+### FRONT-PEOPLE-CARD-4 — 내 카드는 성향 그래프 단독 표시 — RESOLVED 2026-09-06 (`636bb1d`, PR 리뷰 대기, #315 위 스택)
+- 요청은 "카드 클릭 flip + 오버레이 + 내 카드는 단독 + 이름 클릭 프로필 이동" 4가지였으나, **flip·오버레이·이름 이동 3가지는 `#314`에서 이미 구현돼 있었음**. 실제 미구현은 "내 카드 단독 표시" 하나
+- 그런데 `develop`의 피드는 본인을 제외(`exclude(user=requester_profile)`)해 **"내 카드"가 존재하지 않음** → `is_me`를 도입하는 `#315` 위에 스택해야 구현·검증 가능. user 확인 후 그렇게 진행
+- `is_me`일 때 `theirVector=null` + `legend=false` + `highlightAxis=null`. 같은 사람을 자기 자신과 비교하면 동일 폴리곤 2개가 포개지고 범례가 양쪽 다 '나'가 되며, '가장 닮은 축' 강조도 무의미해짐
+- 이름 옆 `나` 배지 추가 — 없으면 그 카드만 그래프가 하나인 게 버그처럼 읽힘
+- `myVector` 없을 때 `person.vector` 폴백(차트 공백 방지). 구 payload에서 `is_me` 부재 시 falsy → 기존 오버레이 동작 유지
+- 검증: **실제 컴포넌트를 esbuild+react-dom/server로 SSR 렌더**해 대조 — `isMe=false` polygon 5·점선 2·text 7·height 138 / `isMe=true` polygon 4·점선 0·text 5·height 120. 실 API에서도 `dev_test`만 `is_me=true`, 나머지 7명 false 확인
+- 미검증: 브라우저 실물(flip 모션·배지 위치). 컴포넌트 테스트 인프라가 없어(리포지토리에 React 테스트 없음) SSR 렌더로 대체
+
+### FRONT-PEOPLE-FEED-1 — 페르소나 이미지 생성이 발견 피드에 반영되지 않던 문제 — RESOLVED 2026-09-03 (`9f83cbd` + `3abf9d8`, PR 리뷰 대기)
+- 팀장 피드백: 페르소나 리포트에서 이미지를 생성했는데 `/people`에 카드가 안 뜸. 조사 결과 **이미지 경로는 정상**이었고(리포트가 쓰는 `recommendation_project.report_image`를 피드가 그대로 읽음, 피드에 캐시 없음 = 즉시 반영 구조) 나머지 조건들이 막고 있었음
+- 실측 원인 2개: ① 피드가 본인을 제외(`exclude(user=requester_profile)`)해서 **자기 이미지는 자기 피드에 절대 안 뜸** ② 저장 모달 기본값이 `private`이라 이미지를 만들어도 보드가 비공개로 저장되어 `visibility='public'` 조건에서 탈락
+- 백엔드(`9f83cbd`): 본인 제외 · 게스트 제외 · publishable Work 보유 요구 **3개 제거**. 이미지 보유가 사실상 유일한 게이트가 됨. 본인 카드는 자기와의 거리가 0이라 "가장 닮았어요"가 자기 자신에 대해 출력되므로 `is_me` 플래그 + `reason='나의 카드예요'` + `highlight_axis=None`으로 분리
+- **유지한 조건 2개(프라이버시, 의도적)**: `discovery_opt_in`은 유저 본인의 "발견에서 숨기기" 스위치라 완성도 게이트가 아님 / `Project.visibility='public'`은 `report_image`가 비공개 취향 리포트와 같은 행에 있어 풀면 유출. 실측상 둘 다 현재 후보를 0명도 걸러내지 않아 손실 없음
+- 프론트(`3abf9d8`): `SaveBoardModal` 기본값 `private` → `public`. 토글은 그대로라 사용자가 비공개 선택 가능. 프로젝트 **생성** 시점의 private 기본값(App.jsx)은 유지 — 저장 모달에서 확정 전까지는 보수적으로
+- 로컬 실측: 후보 6 → 8명(게스트 1 + 본인 1). 실제 API로 `is_me` 카드까지 확인
+- **중요 한계**: 로컬 `backend/.env`는 프로덕션이 아니라 2026-05-25에 갈라진 Neon 자식 브랜치(`ep-holy-band`)라, 그 이후 프로덕션에서 만들어진 데이터(팀장 계정·이미지)가 존재하지 않음. 팀장 환경 확인은 배포 후에만 가능
+
 ### FRONT-PEOPLE-CARD-3 — /people 카드를 report 추천 타일 규격으로 축소 + 스크롤 버그 — RESOLVED 2026-08-29 (`416e891`, PR #314)
 - user 지적: 카드가 너무 커서 한 화면에 몇 장 안 보임 → report 생성 후 추천 그리드와 같은 타일로 통일
 - **재사용 시도의 실제 결과**: `ResultsPage`의 `ResultCard`는 컴포넌트화돼 있지 않음(로컬 함수, export 없음) → import 불가. 측정값을 `photoCardShell.js`로 추출하고 `ResultCard`도 그걸 참조하도록 리팩터링(값 동일, 시각 변화 0). 이제 추천 타일 디자인 변경이 `/people`에 자동 전파

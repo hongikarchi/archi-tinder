@@ -4,7 +4,7 @@
  * Route: /assessment (ProtectedRoute)
  */
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSpring, animated } from '@react-spring/web'
 import { physics } from '../lib/tinderCard.js'
@@ -18,6 +18,11 @@ import SwipeDeck from '../components/SwipeDeck.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
 import { SWIPE_PREVENT_ALL } from '../components/swipeGestureConfig.js'
 import PageTopControls from '../components/PageTopControls.jsx'
+import {
+  loadAssessmentDraft,
+  saveAssessmentDraft,
+  clearAssessmentDraft,
+} from '../utils/assessmentDraft.js'
 import styles from './AssessmentPage.module.css'
 
 // Aliased the same way lib/tinderCard.js does it — the shared ESLint config
@@ -44,8 +49,18 @@ function prefersReducedMotion() {
 export default function AssessmentPage({ onLogout }) {
   const navigate = useNavigate()
 
-  const [currentQ, setCurrentQ] = useState(0)
-  const [responses, setResponses] = useState(Array(TOTAL).fill(null))
+  // Read once, on mount. Refresh / browser-back / typing the URL all remount
+  // this component, so without this the run restarted at question 1 every time.
+  // App.jsx keeps the signed-in id in sessionStorage under this key.
+  const [userId] = useState(() => sessionStorage.getItem('archithon_user') || null)
+  const [draft] = useState(() => loadAssessmentDraft(userId, TOTAL))
+
+  const [currentQ, setCurrentQ] = useState(() => draft?.currentQ ?? 0)
+  const [responses, setResponses] = useState(
+    () => draft?.responses ?? Array(TOTAL).fill(null)
+  )
+  // Surfaces a one-line "이어서 진행 중" note; dismissed on the first answer.
+  const [resumed, setResumed] = useState(() => draft !== null)
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState(null)
   const [showResult, setShowResult] = useState(false)
@@ -78,6 +93,16 @@ export default function AssessmentPage({ onLogout }) {
   const answered = responses.filter(r => r !== null).length
   const progress = (answered / TOTAL) * 100
 
+  // Persist progress so refresh / back / a typed URL resumes where the user
+  // left off. Mirrors App.jsx's `archithon_currentCard_${userId}_...` effect:
+  // write on change, and let the helper clear the slot when there is nothing to
+  // resume. Skipped once the result screen is up — that run is finished and its
+  // draft was already cleared by doSubmit.
+  useEffect(() => {
+    if (!userId || showResult) return
+    saveAssessmentDraft(userId, { currentQ, responses })
+  }, [userId, currentQ, responses, showResult])
+
   // Top card + the one underneath it, mirroring DiscoveryPage's deck: both are
   // rendered in identical keyed wrappers so React reuses the DOM node when the
   // under card is promoted to top (no remount, no flicker).
@@ -88,6 +113,8 @@ export default function AssessmentPage({ onLogout }) {
     busyRef.current = true
     setBusy(true)
     setExiting(true)
+
+    setResumed(false)
 
     const question = QUESTIONS[currentQ]
     const stored = question.reversed ? rawValue * -1 : rawValue
@@ -151,6 +178,9 @@ export default function AssessmentPage({ onLogout }) {
     setSubmitError(null)
     try {
       const data = await submitAssessment(finalResponses)
+      // Completed run: drop the draft so a NEW assessment starts at question 1
+      // instead of resuming the one that was just submitted.
+      clearAssessmentDraft(userId)
       setResult(data)
       setShowResult(true)
     } catch (err) {
@@ -248,6 +278,13 @@ export default function AssessmentPage({ onLogout }) {
       </div>
 
       <div className={styles.body}>
+        {/* Resumed run — tells the user why they are not on question 1. */}
+        {resumed && (
+          <p className={styles.resumeNote} role="status">
+            이전에 진행하던 곳부터 이어서 진행합니다
+          </p>
+        )}
+
         {/* Same deck the Discovery/Taste tabs use: SwipeDeck draws the static
             under-card ladder + ground shadow at SwipeCard's CARD_WIDTH /
             CARD_HEIGHT, and each card sits in a SwipeGestureFrame (the shared

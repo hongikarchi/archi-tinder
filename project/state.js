@@ -23,11 +23,49 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-08-29 11:18 KST',
-    head: 'b8b4f46',
-    branch: 'pr314-resolve',
+    updatedAt: '2026-09-06 10:07 KST',
+    head: 'b46b7df',
+    branch: 'pr318-resolve',
   },
   done: [
+    {
+      id: 'FRONT-PEOPLE-THUMB-1',
+      title: '프로필 보드 썸네일을 페르소나 리포트 이미지로 교체',
+      completedAt: '2026-09-05',
+      note: '요청 전제 정정: "프로필과 People 탭 양쪽에서 보드 썸네일 교체"였으나, People 탭에는 보드 썸네일이 없음(`PeopleDiscoveryPage`에 board 코드 0줄). `PersonCard`가 이미 `getPersonReportImage()`로 페르소나 이미지를 앞면에 쓰고 있음(#314 머지 완료) → 실제 대상은 프로필 `BoardCard` 한 곳. user 확인 후 범위 확정',
+    },
+    {
+      id: 'FRONT-ASSESSMENT-4',
+      title: '재진단 진입점(다시 진단받기 버튼)',
+      completedAt: '2026-09-05',
+      note: '팀 내부 People 탭 데모/테스트를 위해 반복 진단이 필요한데 UI에 진입점이 없었음. `UserProfilePage`가 `personality`가 없을 때만 `성향 진단 받기` CTA를 띄우고 있으면 오각형 차트만 보여줘 다시 들어갈 문이 없었음(`/assessment` URL 직접 입력은 그 전에도 동작)',
+    },
+    {
+      id: 'FRONT-ASSESSMENT-3',
+      title: '진단 중 새로고침/뒤로가기/URL 재진입 시 진행 상태 유실',
+      completedAt: '2026-09-05',
+      note: '배경: People 탭에 페르소나 카드를 채우려면 유저가 진단을 완주해야 하는데, 중간 이탈 후 재진입하면 1번 문항으로 리셋돼 완주율을 깎고 있었음',
+    },
+    {
+      id: 'FRONT-PEOPLE-CARD-5',
+      title: '카드 뒷면 성향 그래프 축소(여백 확보)',
+      completedAt: '2026-09-06',
+      prs: [319],
+      note: '피드백: flip 뒷면 그래프가 카드를 꽉 채워 답답함. 원인은 두 가지가 겹친 것 — `.chartWrap svg`가 `width:100%`라 카드 폭 전체를 쓰고, `.back` 패딩이 `8px 6px`뿐이라 좌우 6px만 남았음',
+    },
+    {
+      id: 'FRONT-PEOPLE-CARD-4',
+      title: '내 카드는 성향 그래프 단독 표시',
+      completedAt: '2026-09-06',
+      prs: [315],
+      note: '요청은 "카드 클릭 flip + 오버레이 + 내 카드는 단독 + 이름 클릭 프로필 이동" 4가지였으나, flip·오버레이·이름 이동 3가지는 `#314`에서 이미 구현돼 있었음. 실제 미구현은 "내 카드 단독 표시" 하나',
+    },
+    {
+      id: 'FRONT-PEOPLE-FEED-1',
+      title: '페르소나 이미지 생성이 발견 피드에 반영되지 않던 문제',
+      completedAt: '2026-09-03',
+      note: '팀장 피드백: 페르소나 리포트에서 이미지를 생성했는데 `/people`에 카드가 안 뜸. 조사 결과 이미지 경로는 정상이었고(리포트가 쓰는 `recommendation_project.report_image`를 피드가 그대로 읽음, 피드에 캐시 없음 = 즉시 반영 구조) 나머지 조건들이 막고 있었음',
+    },
     {
       id: 'FRONT-PEOPLE-CARD-3',
       title: '/people 카드를 report 추천 타일 규격으로 축소 + 스크롤 버그',
@@ -40,44 +78,6 @@ window.PROJECT_STATE = {
       title: '/people 발견 카드 이미지 앞면 + flip 상세',
       completedAt: '2026-08-26',
       note: '카드 구조 교체: 앞면 = 취향분석 리포트 건축 이미지 전면(그래프/이름/아바타 제거), 탭 시 flip → 뒷면에 성향 그래프 + 내 벡터 오버레이 + 범례 + 이름(클릭 시 프로필 이동)',
-    },
-    {
-      id: 'FRONT-ASSESSMENT-1',
-      title: '성향 진단 진입 버그 + 문항 스와이프 카드화',
-      completedAt: '2026-08-25',
-      prs: [312, 313],
-      note: '진단 문항을 질문 1개 = 카드 1장 스와이프 카드로 전환. 답변 방식(5점 Likert 버튼)은 유지하고 카드 디자인·전환 애니메이션만 Discovery/Taste 덱과 동일 시스템으로 통일',
-    },
-    {
-      id: 'FULL-PERSONALITY-1',
-      title: '성향 기반 유저 발견 (4+1축 진단·발견 피드·5각형 차트)',
-      completedAt: '2026-08-24',
-      prs: [311],
-      note: 'P2 협업/팀빌딩 발견 기능(연애 매칭 아님 — Product Constitution 범위 확인). 23파일 +2223줄',
-    },
-    {
-      id: 'FRONT-UX-14',
-      title: '스와이프 모션 + 갤러리 UX (7 라운드 feel-iteration)',
-      completedAt: '2026-08-15',
-      note: '① 퇴장 애니메이션: vendored `lib/tinderCard.js` — linear 3-대각선 총알 → easeOutCubic + power 1.6 + duration 클램프 [320,560]ms (플링감 유지, 감속 꼬리)',
-    },
-    {
-      id: 'FRONT-DESIGN-A1',
-      title: '디자인 정합성 기계적 스윕 (2 PR)',
-      completedAt: '2026-08-15',
-      note: '디자인 이니셔티브(B1→A1→B2→A2) A1, 유형별 PR 분리(user 결정): PR-1 hex→토큰, PR-2 hover 핵 제거 (stacked 브랜치)',
-    },
-    {
-      id: 'FRONT-FLOW-2',
-      title: '팝업/인터스티셜 de-drift 스윕',
-      completedAt: '2026-08-15',
-      note: 'user 스크린샷 지적(ActionCard 구 디자인 잔존)發 전체 팝업 12종 감사: 위반 5곳 수정, 7곳 정상 확인(SaveBoardModal/VerifyGateModal/WorkDetailModal/QuestionCard/ExitConfirm/DismissConfirm 토큰 기반, ShareCardModal 의도적 인쇄물 예외)',
-    },
-    {
-      id: 'FRONT-FLOW-1',
-      title: '스와이프 온보딩 3연타 인터럽트 정리',
-      completedAt: '2026-08-15',
-      note: 'B1 검토 중 user 발견/결정 3건 이행: 신규 유저 Discovery→Taste 시퀀스의 연속 인터럽트(TriggerCard→TutorialPopup→DismissConfirm) 정리',
     },
   ],
   now: [
@@ -259,6 +259,41 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 319,
+      title: 'feat(people): 내 카드는 성향 그래프를 단독 표시 (카드 flip 인터랙션 완성)',
+      mergedAt: '2026-09-06T00:59:17Z',
+      mergedAtKST: '2026-09-06 09:59 KST',
+      sha: 'e7f1f2c',
+    },
+    {
+      number: 317,
+      title: 'feat(assessment): 내 프로필에 재진단(다시 진단받기) 버튼 추가',
+      mergedAt: '2026-09-06T01:07:38Z',
+      mergedAtKST: '2026-09-06 10:07 KST',
+      sha: 'b46b7df',
+    },
+    {
+      number: 316,
+      title: 'fix(assessment): 진단 중 새로고침/뒤로가기/URL 재진입 시 진행 상태 유지',
+      mergedAt: '2026-09-06T01:03:23Z',
+      mergedAtKST: '2026-09-06 10:03 KST',
+      sha: '58a1bc1',
+    },
+    {
+      number: 315,
+      title: 'feat(people): 페르소나 이미지가 있으면 발견 피드에 노출 — 본인 포함 + 저장 기본값 public',
+      mergedAt: '2026-09-06T00:54:33Z',
+      mergedAtKST: '2026-09-06 09:54 KST',
+      sha: '7c32640',
+    },
+    {
+      number: 314,
+      title: 'feat(people): 발견 카드를 이미지 앞면 + flip 상세 구조로 전환',
+      mergedAt: '2026-08-29T02:23:30Z',
+      mergedAtKST: '2026-08-29 11:23 KST',
+      sha: '038c068',
+    },
+    {
       number: 313,
       title: 'feat(assessment): 성향 진단 문항을 스와이프 카드로 전환',
       mergedAt: '2026-08-29T02:17:12Z',
@@ -278,41 +313,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-08-22T01:44:14Z',
       mergedAtKST: '2026-08-22 10:44 KST',
       sha: 'bc40fbf',
-    },
-    {
-      number: 310,
-      title: 'feat(FRONT-DESIGN-B2): Claude Design page-preview bundle + generator',
-      mergedAt: '2026-08-15T14:38:41Z',
-      mergedAtKST: '2026-08-15 23:38 KST',
-      sha: 'e4d54f6',
-    },
-    {
-      number: 309,
-      title: 'feat(FRONT-UX-14): swipe motion + gallery UX — 7-round feel iteration, on-device verified',
-      mergedAt: '2026-08-15T14:25:06Z',
-      mergedAtKST: '2026-08-15 23:25 KST',
-      sha: '73d6177',
-    },
-    {
-      number: 308,
-      title: 'refactor(FRONT-DESIGN-A1): hover hacks -> CSS :hover PR-2 — 13 files, identical values',
-      mergedAt: '2026-08-15T04:48:31Z',
-      mergedAtKST: '2026-08-15 13:48 KST',
-      sha: 'e33a065',
-    },
-    {
-      number: 307,
-      title: 'feat(FRONT-DESIGN-A1): hex->token sweep PR-1 — pink de-drift + dark-glass fix',
-      mergedAt: '2026-08-15T04:47:46Z',
-      mergedAtKST: '2026-08-15 13:47 KST',
-      sha: 'c643a7c',
-    },
-    {
-      number: 306,
-      title: 'feat(FRONT-FLOW-1/2): onboarding interrupt fix + popup de-drift — paper cards, pink sweep',
-      mergedAt: '2026-08-15T03:26:37Z',
-      mergedAtKST: '2026-08-15 12:26 KST',
-      sha: 'ab4ac47',
     },
   ],
   agents: [
@@ -1755,6 +1755,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'docs/plans/2026-08-20-personality-discovery-design.md',
+      role: '',
+    },
+    {
       path: 'docs/prd/archibe-business-model.html',
       role: 'archibe 비즈니스 모델 PRD (정적 HTML)',
     },
@@ -1825,6 +1829,158 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/package.json',
       role: '프론트 패키지 매니페스트',
+    },
+    {
+      path: 'frontend/public/__mocks/_compare.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/architect.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/board-detail.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/building-detail.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/discovery.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/liked-projects.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/llm-search-update.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/llm-search.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/login-consent.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/login-credentials.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/login-profile.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/login-returning.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/login.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/notifications.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/office.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/overlay-action-card.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/overlay-cap-reached.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/overlay-card-skeleton.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/overlay-leave-modal.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/overlay-photo-lightbox.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/overlay-question-card.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/overlay-save-board.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/overlay-save-to-board.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/overlay-swipe-confirms.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/overlay-swipecard-expanded.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/overlay-trigger-card.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/overlay-tutorial.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/persona-report.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/profile.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/results.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/settings-account.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/settings-appearance.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/settings-edit-profile.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/settings-notifications.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/settings.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/taste-swipe.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/upload.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/user-other.html',
+      role: '',
     },
     {
       path: 'frontend/public/favicon.svg',
@@ -2501,6 +2657,14 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/utils/appHelpers.js',
       role: '앱 필터·에러 헬퍼',
+    },
+    {
+      path: 'frontend/src/utils/assessmentDraft.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/assessmentDraft.test.mjs',
+      role: '',
     },
     {
       path: 'frontend/src/utils/discoveryGuard.js',

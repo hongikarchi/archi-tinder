@@ -20,7 +20,18 @@ export default function SaveBoardModal({ projectId, finalReport, onSaved, onClos
   const defaultName = finalReport?.persona_type || t('board.defaultName')
 
   const [name, setName] = useState(defaultName)
-  const [visibility, setVisibility] = useState('private')
+  // FRONT-PEOPLE-FEED-1 (2026-09-03): defaults to public.
+  //
+  // The /people discovery feed only surfaces a user whose taste report lives on
+  // a PUBLIC project (report_image sits on Project, next to private reports, so
+  // the feed cannot serve private ones without leaking them). With the old
+  // 'private' default, generating a persona image did nothing visible — the
+  // board saved as private and the card never appeared, which is exactly the
+  // "이미지를 만들었는데 발견 탭에 안 뜬다" report this changes.
+  //
+  // The toggle is unchanged and right here in the same dialog, so this only
+  // moves which option is pre-selected — it never publishes silently.
+  const [visibility, setVisibility] = useState('public')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 

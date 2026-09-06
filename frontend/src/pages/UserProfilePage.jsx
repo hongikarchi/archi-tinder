@@ -536,6 +536,37 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                 <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: 0 }}>
                   {user.personality.type_code} 유형
                 </p>
+                {/* Retest. The backend already upserts (PersonalityProfile
+                    .update_or_create + profile-cache eviction), so this needs no
+                    API of its own — the only thing missing was a way back into
+                    the assessment once a profile existed.
+
+                    No confirm step on purpose: nothing is overwritten until the
+                    new run is submitted, so abandoning midway leaves the current
+                    result intact and there is nothing to protect against.
+
+                    Same styling as the `성향 진단 받기` CTA in the sibling branch
+                    above (isMe + no personality) so the two states read as one
+                    pair; placed under the type label to keep the chart primary. */}
+                <button
+                  type="button"
+                  onClick={() => navigate('/assessment')}
+                  style={{
+                    marginTop: 4,
+                    padding: '10px 20px',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 'var(--radius-pill)',
+                    background: 'var(--color-surface)',
+                    color: 'var(--color-text)',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    fontFamily: 'inherit',
+                    cursor: 'pointer',
+                    minHeight: 36,
+                  }}
+                >
+                  다시 진단받기
+                </button>
               </div>
             )
           }
