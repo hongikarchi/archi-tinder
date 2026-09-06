@@ -8,6 +8,7 @@ export const locales = {
     tabbar: {
       discovery: '디스커버리',
       taste:     '취향',
+      social:    '소셜',
       profile:   '프로필',
     },
     discovery: {
@@ -644,6 +645,7 @@ export const locales = {
     tabbar: {
       discovery: 'Discovery',
       taste:     'Taste',
+      social:    'Social',
       profile:   'Profile',
     },
     discovery: {

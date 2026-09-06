@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-09-06 20:39 KST',
-    head: 'f5cf623',
-    branch: 'feature/claude-func-check-1',
+    updatedAt: '2026-09-06 23:44 KST',
+    head: '5a7cd77',
+    branch: 'feature/claude-people-seed-social',
   },
   done: [
+    {
+      id: 'FRONT-PEOPLE-CARD-2',
+      title: '발견 피드 빈 화면: seed_discovery 커맨드 + 소셜 탭 신설',
+      completedAt: '2026-09-06',
+      note: '빈 피드 원인 재실측 — #315 완화 후 게이트는 2중(discovery_opt_in + public report_image 프로젝트)인데 로컬 DB 통과자 0명: report_image 프로젝트 4개 전부 private(#315 이전 SaveBoardModal 기본값), 진단 완료 4명 전부 본인 계정. "테스트 서버 계정"은 prod Neon DB 소속 + prod엔 discovery 미배포라 로컬에서 원천 불가시',
+    },
     {
       id: 'FRONT-FUNC-CHECK-1',
       title: '기능 점검 4종: 카드뒷면 i18n·모션·사무소 링크·/office 정리',
@@ -71,13 +77,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-09-06',
       prs: [319],
       note: '피드백: flip 뒷면 그래프가 카드를 꽉 채워 답답함. 원인은 두 가지가 겹친 것 — `.chartWrap svg`가 `width:100%`라 카드 폭 전체를 쓰고, `.back` 패딩이 `8px 6px`뿐이라 좌우 6px만 남았음',
-    },
-    {
-      id: 'FRONT-PEOPLE-CARD-4',
-      title: '내 카드는 성향 그래프 단독 표시',
-      completedAt: '2026-09-06',
-      prs: [315],
-      note: '요청은 "카드 클릭 flip + 오버레이 + 내 카드는 단독 + 이름 클릭 프로필 이동" 4가지였으나, flip·오버레이·이름 이동 3가지는 `#314`에서 이미 구현돼 있었음. 실제 미구현은 "내 카드 단독 표시" 하나',
     },
   ],
   now: [],
@@ -128,9 +127,9 @@ window.PROJECT_STATE = {
         note: '`frontend/public/__mocks/*.html`(디자인 대조용 테스트 픽스처 37종+하니스)이 PR #319에 실려 develop에 추적 파일로 들어감. gitignore 규칙(#321에 포함)은 추적된 파일을 못 뺌. 결정: `git rm --cached`로 untrack 하거나 의도적으로 유지. 유지 시 Vercel 빌드에 정적 파일로 포함됨(약 900KB).',
       },
       {
-        id: 'FRONT-PEOPLE-CARD-2',
-        title: '발견 피드가 실데이터에서 빈 화면',
-        note: 'FRONT-PEOPLE-CARD-1이 카드 앞면을 취향분석 리포트 이미지로 바꾸면서 피드 조건이 4중이 됨(진단 완료 + discovery_opt_in + publishable Work + public report_image). 로컬 DB 실측: 29명 중 진단 완료 2명, 그 2명이 전부 게스트라 2단계에서 이미 0명이 되고, `report_image` 보유 프로젝트는 공개 여부 무관 0건. 프로덕션도 같은 상태면 배포 후 빈 화면. 결정 필요: (a) 이미지 없는 유저는 Work 커버로…',
+        id: 'FRONT-PEOPLE-I18N-1',
+        title: 'PeopleDiscoveryPage 페이지 크롬 i18n',
+        note: '카드 내부(PersonCard 등)는 FRONT-FUNC-CHECK-1에서 i18n 완료됐으나 페이지 크롬이 하드코딩 한국어로 남음: 제목 "사람 발견", 프리셋 필터 칩(전체/영감 주는 사람/정반대 성향), 빈상태·에러·진단유도 문구, 관심 토스트. locales.js peoplePage.* namespace 신설 + useTranslation 배선.',
       },
       {
         id: 'FRONT-LOGINKEY-1',
@@ -263,6 +262,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 323,
+      title: 'feat(FRONT-FUNC-CHECK-1): card-back i18n + motion gate 제거 + 건물→사무소 링크 + /office front 삭제',
+      mergedAt: '2026-09-06T13:13:29Z',
+      mergedAtKST: '2026-09-06 22:13 KST',
+      sha: '5a7cd77',
+    },
+    {
       number: 322,
       title: 'feat(FRONT-DESIGN-FT): 디자인 파인튜닝 — vision 전수 감사 + 기능 결정 반영',
       mergedAt: '2026-09-06T09:38:44Z',
@@ -310,13 +316,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-09-06T00:54:33Z',
       mergedAtKST: '2026-09-06 09:54 KST',
       sha: '7c32640',
-    },
-    {
-      number: 314,
-      title: 'feat(people): 발견 카드를 이미지 앞면 + flip 상세 구조로 전환',
-      mergedAt: '2026-08-29T02:23:30Z',
-      mergedAtKST: '2026-08-29 11:23 KST',
-      sha: '038c068',
     },
   ],
   agents: [
@@ -1299,6 +1298,18 @@ window.PROJECT_STATE = {
       role: 'social 앱 설정',
     },
     {
+      path: 'backend/apps/social/management/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/social/management/commands/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/social/management/commands/seed_discovery.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/social/migrations/0001_initial.py',
       role: 'DB 마이그레이션 초기 스키마',
     },
@@ -1349,6 +1360,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/social/tests/test_reaction.py',
       role: '프로젝트 리액션 테스트',
+    },
+    {
+      path: 'backend/apps/social/tests/test_seed_discovery.py',
+      role: '',
     },
     {
       path: 'backend/apps/social/urls.py',

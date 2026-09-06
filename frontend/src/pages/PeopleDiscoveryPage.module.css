@@ -24,25 +24,6 @@
   z-index: 10;
 }
 
-.backBtn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border: none;
-  background: transparent;
-  color: var(--color-text);
-  cursor: pointer;
-  border-radius: var(--radius-md);
-  flex-shrink: 0;
-  transition: background var(--motion-fast) var(--motion-ease);
-}
-
-.backBtn:hover {
-  background: var(--color-surface);
-}
-
 .title {
   font-size: 17px;
   font-weight: 600;
