@@ -299,6 +299,16 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FRONT-ASSESSMENT-4 — 재진단 진입점(다시 진단받기 버튼) — RESOLVED 2026-09-05 (`62f2b95`, PR 리뷰 대기)
+- 팀 내부 People 탭 데모/테스트를 위해 반복 진단이 필요한데 UI에 진입점이 없었음. `UserProfilePage`가 `personality`가 **없을 때만** `성향 진단 받기` CTA를 띄우고 **있으면** 오각형 차트만 보여줘 다시 들어갈 문이 없었음(`/assessment` URL 직접 입력은 그 전에도 동작)
+- **백엔드 변경 0**: `PersonalityAssessmentView`가 처음부터 upsert — `PersonalityProfile.update_or_create` + `evict_user_profile_detail`, 201(생성)/200(재진단). 이력 테이블이 없어 최신 하나만 유지되며 기존 모델 설계 그대로. 즉 override 요구사항은 이미 충족돼 있었고 **없던 건 진입점뿐**이었음
+- 버튼은 오각형 차트 + `{type_code} 유형` 문구 아래. 바로 위 형제 분기의 CTA와 같은 자리·같은 스타일(`--radius-pill`, `--color-surface`, `13px/600`, `minHeight:36`)이라 두 상태가 대칭. 새 스타일 값 미생성
+- 확인 모달 없음 — 제출 전에는 아무것도 안 바뀌므로(`update_or_create`가 제출 시점에만 실행) 중간 이탈해도 이전 결과가 남아 보호할 대상이 없고, 반복 데모에 마찰만 됨
+- 실증(로컬 API): 같은 유저 2회 제출로 `CLON[1,1,1,1,1]` → `RSDT[-1,-1,-1,-1,-1]` 교체(둘 다 200). `GET /users/1/`도 새 값 반환(캐시 무효화 동작). People 피드는 캐시가 없어 매 요청 DB 직조회 → 즉시 반영
+- 설계는 `docs/plans/2026-08-20-personality-discovery-design.md` §12에 기록(같은 주제 문서에 덧붙임). 이 파일은 그동안 untracked였어 이번에 추적 시작
+- Deferred: PR #316(진단 이어하기) 머지 시 재진단이 중단된 draft를 되살려 "항상 1번부터" 결정과 충돌 → 진입 지점에서 draft 제거 필요
+- 미검증: 브라우저 실물 확인 못 함(버튼 렌더 + 네비게이션). PR에 수동 절차 기재
+
 ### FRONT-ASSESSMENT-3 — 진단 중 새로고침/뒤로가기/URL 재진입 시 진행 상태 유실 — RESOLVED 2026-09-05 (`afca933`, PR 리뷰 대기)
 - 배경: People 탭에 페르소나 카드를 채우려면 유저가 진단을 **완주**해야 하는데, 중간 이탈 후 재진입하면 1번 문항으로 리셋돼 완주율을 깎고 있었음
 - 원인: `AssessmentPage`의 `currentQ`/`responses`가 순수 `useState`. 새로고침·브라우저 뒤로가기·URL 직접 입력이 전부 컴포넌트 리마운트라 상태가 초기값으로 돌아감

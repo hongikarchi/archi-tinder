@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-09-06 09:59 KST',
-    head: 'e7f1f2c',
-    branch: 'pr316-resolve',
+    updatedAt: '2026-09-06 10:03 KST',
+    head: '58a1bc1',
+    branch: 'pr317-resolve',
   },
   done: [
+    {
+      id: 'FRONT-ASSESSMENT-4',
+      title: '재진단 진입점(다시 진단받기 버튼)',
+      completedAt: '2026-09-05',
+      note: '팀 내부 People 탭 데모/테스트를 위해 반복 진단이 필요한데 UI에 진입점이 없었음. `UserProfilePage`가 `personality`가 없을 때만 `성향 진단 받기` CTA를 띄우고 있으면 오각형 차트만 보여줘 다시 들어갈 문이 없었음(`/assessment` URL 직접 입력은 그 전에도 동작)',
+    },
     {
       id: 'FRONT-ASSESSMENT-3',
       title: '진단 중 새로고침/뒤로가기/URL 재진입 시 진행 상태 유실',
@@ -73,13 +79,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-08-25',
       prs: [312, 313],
       note: '진단 문항을 질문 1개 = 카드 1장 스와이프 카드로 전환. 답변 방식(5점 Likert 버튼)은 유지하고 카드 디자인·전환 애니메이션만 Discovery/Taste 덱과 동일 시스템으로 통일',
-    },
-    {
-      id: 'FULL-PERSONALITY-1',
-      title: '성향 기반 유저 발견 (4+1축 진단·발견 피드·5각형 차트)',
-      completedAt: '2026-08-24',
-      prs: [311],
-      note: 'P2 협업/팀빌딩 발견 기능(연애 매칭 아님 — Product Constitution 범위 확인). 23파일 +2223줄',
     },
   ],
   now: [
@@ -268,6 +267,13 @@ window.PROJECT_STATE = {
       sha: 'e7f1f2c',
     },
     {
+      number: 316,
+      title: 'fix(assessment): 진단 중 새로고침/뒤로가기/URL 재진입 시 진행 상태 유지',
+      mergedAt: '2026-09-06T01:03:23Z',
+      mergedAtKST: '2026-09-06 10:03 KST',
+      sha: '58a1bc1',
+    },
+    {
       number: 315,
       title: 'feat(people): 페르소나 이미지가 있으면 발견 피드에 노출 — 본인 포함 + 저장 기본값 public',
       mergedAt: '2026-09-06T00:54:33Z',
@@ -308,13 +314,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-08-15T14:38:41Z',
       mergedAtKST: '2026-08-15 23:38 KST',
       sha: 'e4d54f6',
-    },
-    {
-      number: 309,
-      title: 'feat(FRONT-UX-14): swipe motion + gallery UX — 7-round feel iteration, on-device verified',
-      mergedAt: '2026-08-15T14:25:06Z',
-      mergedAtKST: '2026-08-15 23:25 KST',
-      sha: '73d6177',
     },
   ],
   agents: [
@@ -1754,6 +1753,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'docs/design-preview/pages/taste-swipe.html',
+      role: '',
+    },
+    {
+      path: 'docs/plans/2026-08-20-personality-discovery-design.md',
       role: '',
     },
     {
