@@ -82,16 +82,24 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  padding: 8px 6px;
+  gap: 8px;
+  /* Was 8px 6px — the chart then ran edge to edge and the face read as
+     cramped. */
+  padding: 14px 12px;
   border: 1px solid var(--color-border-soft);
 }
 
 /* The chart is an <svg> with a viewBox, so letting it fill the tile's width
    keeps it legible at every column count (2 / 3 / 4) without passing a
    pixel size down per breakpoint. */
+/* The chart no longer spans the full face. At 100% the svg touched both edges
+   (only 6px of padding), which is what "답답하다" described. 78% keeps the
+   proportion consistent across the 4/3/2-column breakpoints instead of pinning
+   a pixel size per breakpoint; the max-width is a ceiling so the chart cannot
+   balloon if the grid ever widens. */
 .chartWrap {
-  width: 100%;
+  width: 78%;
+  max-width: 240px;
   display: flex;
   justify-content: center;
   align-items: center;

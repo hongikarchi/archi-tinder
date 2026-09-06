@@ -299,6 +299,16 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FRONT-PEOPLE-CARD-5 — 카드 뒷면 성향 그래프 축소(여백 확보) — RESOLVED 2026-09-06 (`6b7d5f9`, PR 리뷰 대기, #319 위 스택)
+- 피드백: flip 뒷면 그래프가 카드를 꽉 채워 답답함. 원인은 두 가지가 겹친 것 — `.chartWrap svg`가 `width:100%`라 카드 폭 전체를 쓰고, `.back` 패딩이 `8px 6px`뿐이라 좌우 6px만 남았음
+- `.back` `padding 8px 6px → 14px 12px` · `gap 4px → 8px`, `.chartWrap` `width 100% → 78%` + `max-width 240px`
+- 퍼센트를 쓴 이유: 4/3/2열 브레이크포인트마다 카드 폭이 달라(308/243/179px) 픽셀 고정 시 값을 따로 관리해야 함. `max-width`는 그리드가 더 넓어져도 그래프가 비대해지지 않게 하는 상한
+- 그래프 컴포넌트와 카드 크기/비율(2:3)은 무변경 — 바뀐 건 컨테이너 폭과 패딩뿐
+- 측정: 모바일 167→121px(여백 29px) · 태블릿 231→171px(36px) · 데스크탑 296→222px(43px). 세로 사용률 100%→65~69%로 내려가 이름 행과 균형 확보
+- **전/후 시각 비교를 아티팩트로 발행** — 실제 `PentagonChart`를 esbuild+react-dom/server로 SSR 렌더한 SVG를 실제 카드 CSS·픽셀 크기에 넣어 3개 브레이크포인트 대조. 브라우저 캡처 불가에 대한 대안
+- 스택 구조: #315 → #319 → 이 PR. PR base를 `feature/sns-people-card-self-graph`로 지정해 이번 작업분만 diff에 보이게 함. **#319 머지 후 base를 develop으로 바꾼 뒤 머지해야 함**
+- 미검증: 브라우저 실물(실제 렌더·flip 중 여백 체감)
+
 ### FRONT-PEOPLE-CARD-4 — 내 카드는 성향 그래프 단독 표시 — RESOLVED 2026-09-06 (`636bb1d`, PR 리뷰 대기, #315 위 스택)
 - 요청은 "카드 클릭 flip + 오버레이 + 내 카드는 단독 + 이름 클릭 프로필 이동" 4가지였으나, **flip·오버레이·이름 이동 3가지는 `#314`에서 이미 구현돼 있었음**. 실제 미구현은 "내 카드 단독 표시" 하나
 - 그런데 `develop`의 피드는 본인을 제외(`exclude(user=requester_profile)`)해 **"내 카드"가 존재하지 않음** → `is_me`를 도입하는 `#315` 위에 스택해야 구현·검증 가능. user 확인 후 그렇게 진행
