@@ -299,6 +299,17 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FRONT-PEOPLE-THUMB-1 — 프로필 보드 썸네일을 페르소나 리포트 이미지로 교체 — RESOLVED 2026-09-05 (`9488979`, PR 리뷰 대기)
+- 요청 전제 정정: "프로필과 People 탭 **양쪽**에서 보드 썸네일 교체"였으나, **People 탭에는 보드 썸네일이 없음**(`PeopleDiscoveryPage`에 board 코드 0줄). `PersonCard`가 이미 `getPersonReportImage()`로 페르소나 이미지를 앞면에 쓰고 있음(#314 머지 완료) → 실제 대상은 프로필 `BoardCard` 한 곳. user 확인 후 범위 확정
+- 데이터 구조가 맞아떨어짐: 보드 = `Project`이고 `report_image`도 `Project`에 있어, 유저당 하나가 아니라 **보드마다 자기 리포트 이미지**를 커버로 쓰게 됨
+- **레이아웃/스타일 무변경**: `<img>` 엘리먼트·인라인 스타일·telemetry 훅·그라디언트 플레이스홀더 전부 그대로. 바뀐 건 `src` 하나
+- 폴백은 기존 체인 유지하며 앞에 한 단계만 추가 — 페르소나 이미지 → 기존 건축물 커버 → 그라디언트 플레이스홀더. `has_report_image`가 없거나 fetch 실패면 자동으로 기존 동작
+- 전달 방식은 **포인터 + lazy fetch**(base64 인라인 아님): `report_image`가 base64 TEXT(~200KB)이고 보드 `page_size`가 최대 50이라 인라인 시 프로필 응답 하나가 MB 단위. `/people` 피드와 같은 분리
+- `GET /projects/<pk>/report-image/` 신규. 가시성은 **보드 목록과 동일 규칙**(소유자는 자기 것, 그 외 public만). private은 존재 여부도 노출하지 않도록 404로 통일
+- 실증(로컬 API): payload 필드 적재 · 포인터 조회 200 · 이미지 없는 보드 404 · **비소유자의 타인 private 보드 404 / public 200** · 미인증 401
+- Deferred: `_build_boards_field`가 full `Project` row를 로드해 직렬화에 쓰지도 않는 `report_image` base64를 매번 DB에서 끌어옴. 기존 이슈이며 `.only()`/`.defer()`로 줄일 수 있으나 이번 범위 밖
+- 미검증: 브라우저 실물 확인 못 함(썸네일 렌더·폴백 외형). PR에 수동 절차 기재
+
 ### FRONT-ASSESSMENT-4 — 재진단 진입점(다시 진단받기 버튼) — RESOLVED 2026-09-05 (`62f2b95`, PR 리뷰 대기)
 - 팀 내부 People 탭 데모/테스트를 위해 반복 진단이 필요한데 UI에 진입점이 없었음. `UserProfilePage`가 `personality`가 **없을 때만** `성향 진단 받기` CTA를 띄우고 **있으면** 오각형 차트만 보여줘 다시 들어갈 문이 없었음(`/assessment` URL 직접 입력은 그 전에도 동작)
 - **백엔드 변경 0**: `PersonalityAssessmentView`가 처음부터 upsert — `PersonalityProfile.update_or_create` + `evict_user_profile_detail`, 201(생성)/200(재진단). 이력 테이블이 없어 최신 하나만 유지되며 기존 모델 설계 그대로. 즉 override 요구사항은 이미 충족돼 있었고 **없던 건 진입점뿐**이었음

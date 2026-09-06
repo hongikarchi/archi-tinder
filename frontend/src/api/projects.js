@@ -149,3 +149,23 @@ export async function bookmarkBuilding(projectId, cardId, action, rank, sessionI
     ...(sessionId ? { session_id: sessionId } : {}),
   })
 }
+
+/**
+ * Fetch a board's persona report image.
+ *
+ * Split from the board list on purpose: Project.report_image is base64 TEXT
+ * (~200KB each) and the profile's board page holds up to 50, so the list ships
+ * a `report_image_url` pointer and each card resolves it lazily. Same split the
+ * /people feed uses (see api/people.js getPersonReportImage).
+ *
+ * Returns { image_data, mime_type }, or null when the board has none / is not
+ * visible to the caller (backend answers 404). Callers must treat null as "no
+ * image" and fall back — do not retry.
+ */
+export async function getProjectReportImage(projectId) {
+    try {
+        return await callApi('GET', `/projects/${projectId}/report-image/`)
+    } catch {
+        return null
+    }
+}

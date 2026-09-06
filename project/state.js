@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-09-06 10:03 KST',
-    head: '58a1bc1',
-    branch: 'pr317-resolve',
+    updatedAt: '2026-09-06 10:07 KST',
+    head: 'b46b7df',
+    branch: 'pr318-resolve',
   },
   done: [
+    {
+      id: 'FRONT-PEOPLE-THUMB-1',
+      title: '프로필 보드 썸네일을 페르소나 리포트 이미지로 교체',
+      completedAt: '2026-09-05',
+      note: '요청 전제 정정: "프로필과 People 탭 양쪽에서 보드 썸네일 교체"였으나, People 탭에는 보드 썸네일이 없음(`PeopleDiscoveryPage`에 board 코드 0줄). `PersonCard`가 이미 `getPersonReportImage()`로 페르소나 이미지를 앞면에 쓰고 있음(#314 머지 완료) → 실제 대상은 프로필 `BoardCard` 한 곳. user 확인 후 범위 확정',
+    },
     {
       id: 'FRONT-ASSESSMENT-4',
       title: '재진단 진입점(다시 진단받기 버튼)',
@@ -72,13 +78,6 @@ window.PROJECT_STATE = {
       title: '/people 발견 카드 이미지 앞면 + flip 상세',
       completedAt: '2026-08-26',
       note: '카드 구조 교체: 앞면 = 취향분석 리포트 건축 이미지 전면(그래프/이름/아바타 제거), 탭 시 flip → 뒷면에 성향 그래프 + 내 벡터 오버레이 + 범례 + 이름(클릭 시 프로필 이동)',
-    },
-    {
-      id: 'FRONT-ASSESSMENT-1',
-      title: '성향 진단 진입 버그 + 문항 스와이프 카드화',
-      completedAt: '2026-08-25',
-      prs: [312, 313],
-      note: '진단 문항을 질문 1개 = 카드 1장 스와이프 카드로 전환. 답변 방식(5점 Likert 버튼)은 유지하고 카드 디자인·전환 애니메이션만 Discovery/Taste 덱과 동일 시스템으로 통일',
     },
   ],
   now: [
@@ -267,6 +266,13 @@ window.PROJECT_STATE = {
       sha: 'e7f1f2c',
     },
     {
+      number: 317,
+      title: 'feat(assessment): 내 프로필에 재진단(다시 진단받기) 버튼 추가',
+      mergedAt: '2026-09-06T01:07:38Z',
+      mergedAtKST: '2026-09-06 10:07 KST',
+      sha: 'b46b7df',
+    },
+    {
       number: 316,
       title: 'fix(assessment): 진단 중 새로고침/뒤로가기/URL 재진입 시 진행 상태 유지',
       mergedAt: '2026-09-06T01:03:23Z',
@@ -307,13 +313,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-08-22T01:44:14Z',
       mergedAtKST: '2026-08-22 10:44 KST',
       sha: 'bc40fbf',
-    },
-    {
-      number: 310,
-      title: 'feat(FRONT-DESIGN-B2): Claude Design page-preview bundle + generator',
-      mergedAt: '2026-08-15T14:38:41Z',
-      mergedAtKST: '2026-08-15 23:38 KST',
-      sha: 'e4d54f6',
     },
   ],
   agents: [
