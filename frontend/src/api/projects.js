@@ -19,6 +19,23 @@ export class VerifyRequiredError extends Error {
 }
 
 /**
+ * Shared 403 verify_required check for project write endpoints (POST/PATCH).
+ * If `err` matches the backend's verify-required contract, dispatches the
+ * 'archithon:verify-required' event (global VerifyGateModal listens) and
+ * throws VerifyRequiredError. Otherwise returns without side effects, so the
+ * caller's own catch block continues to handle/rethrow the original error.
+ */
+function throwIfVerifyRequired(err) {
+  if (err?.status === 403 && err?.data?.detail === 'verify_required') {
+    const reason = err?.data?.reason || 'board_limit_reached'
+    window.dispatchEvent(new CustomEvent('archithon:verify-required', {
+      detail: { reason },
+    }))
+    throw new VerifyRequiredError(reason)
+  }
+}
+
+/**
  * Create a new project (board).
  * On 403 verify_required → throws VerifyRequiredError (caller must handle).
  * Also dispatches 'archithon:verify-required' event for the global VerifyGateModal.
@@ -27,14 +44,7 @@ export async function createProject(body) {
   try {
     return await callApi('POST', '/projects/', body)
   } catch (err) {
-    if (err?.status === 403 && err?.data?.detail === 'verify_required') {
-      const reason = err?.data?.reason || 'board_limit_reached'
-      const verifyErr = new VerifyRequiredError(reason)
-      window.dispatchEvent(new CustomEvent('archithon:verify-required', {
-        detail: { reason },
-      }))
-      throw verifyErr
-    }
+    throwIfVerifyRequired(err)
     throw err
   }
 }
@@ -61,10 +71,17 @@ export async function getProject(projectId, { throwOnError = false } = {}) {
   }
 }
 
+/**
+ * Update (PATCH) a project. On 403 verify_required → throws VerifyRequiredError
+ * (same contract/event as createProject, via the shared throwIfVerifyRequired
+ * helper) so callers like SaveBoardModal's confirm-save flow surface the
+ * global VerifyGateModal instead of a generic error string.
+ */
 export async function updateProject(projectId, fields) {
   try {
     return await callApi('PATCH', `/projects/${projectId}/`, fields)
   } catch (err) {
+    throwIfVerifyRequired(err)
     console.error('[api/client] updateProject failed:', err)
     throw err
   }
