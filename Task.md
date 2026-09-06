@@ -299,6 +299,16 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FRONT-ASSESSMENT-3 — 진단 중 새로고침/뒤로가기/URL 재진입 시 진행 상태 유실 — RESOLVED 2026-09-05 (`afca933`, PR 리뷰 대기)
+- 배경: People 탭에 페르소나 카드를 채우려면 유저가 진단을 **완주**해야 하는데, 중간 이탈 후 재진입하면 1번 문항으로 리셋돼 완주율을 깎고 있었음
+- 원인: `AssessmentPage`의 `currentQ`/`responses`가 순수 `useState`. 새로고침·브라우저 뒤로가기·URL 직접 입력이 전부 컴포넌트 리마운트라 상태가 초기값으로 돌아감
+- 저장 위치는 **기존 패턴을 따라 판단**: `App.jsx`가 durable 유저별 진행 상태를 `localStorage`의 `archithon_*_${userId}`에 두고(`projects`/`activeId`/`currentCard`), 일회성 덱 상태만 `sessionStorage`에 둠(`discovery_*`). 미완료 진단은 전자 → `archithon_assessment_${userId}`. `sessionStorage`는 새로고침은 버텨도 탭을 닫으면 사라져 완주 목표에 부적합
+- `utils/assessmentDraft.js` 신규 — 저장값을 신뢰하지 않고 검증 실패 시 `null` 반환해 깨끗한 시작으로 폴백. 문항 수가 달라진 draft는 인덱스가 어긋나 폐기. quota/private-mode 예외는 삼켜서 진단 자체를 막지 않음
+- 신규 진단 보장: 제출 **성공 시 draft 제거** → 다음 진입은 1번 문항부터. 답변 0개 + 1번 문항이면 애초에 저장하지 않아 빈 draft가 생기지 않음
+- 이어서 시작한 경우 안내 문구 노출(첫 응답 시 해제) — 왜 1번이 아닌지 사용자가 알 수 있게
+- 테스트 23개 추가(`node --test`, 기존 `loginFlow.test.mjs` 방식): 왕복 복원 · 음수 Likert 값 · 유저별 격리 · 손상 JSON/범위 밖 인덱스/비유한 값 폴백 · storage 예외. `npm test` 등록, 전체 **117/117 통과**
+- 미검증: 브라우저 실물 확인은 못 함(로직은 단위 테스트로 커버). PR에 수동 테스트 절차 기재
+
 ### FRONT-PEOPLE-CARD-5 — 카드 뒷면 성향 그래프 축소(여백 확보) — RESOLVED 2026-09-06 (`6b7d5f9`, PR 리뷰 대기, #319 위 스택)
 - 피드백: flip 뒷면 그래프가 카드를 꽉 채워 답답함. 원인은 두 가지가 겹친 것 — `.chartWrap svg`가 `width:100%`라 카드 폭 전체를 쓰고, `.back` 패딩이 `8px 6px`뿐이라 좌우 6px만 남았음
 - `.back` `padding 8px 6px → 14px 12px` · `gap 4px → 8px`, `.chartWrap` `width 100% → 78%` + `max-width 240px`

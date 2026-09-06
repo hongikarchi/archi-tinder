@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-09-06 09:55 KST',
-    head: '7c32640',
-    branch: 'pr319-resolve',
+    updatedAt: '2026-09-06 09:59 KST',
+    head: 'e7f1f2c',
+    branch: 'pr316-resolve',
   },
   done: [
+    {
+      id: 'FRONT-ASSESSMENT-3',
+      title: '진단 중 새로고침/뒤로가기/URL 재진입 시 진행 상태 유실',
+      completedAt: '2026-09-05',
+      note: '배경: People 탭에 페르소나 카드를 채우려면 유저가 진단을 완주해야 하는데, 중간 이탈 후 재진입하면 1번 문항으로 리셋돼 완주율을 깎고 있었음',
+    },
     {
       id: 'FRONT-PEOPLE-CARD-5',
       title: '카드 뒷면 성향 그래프 축소(여백 확보)',
@@ -74,12 +80,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-08-24',
       prs: [311],
       note: 'P2 협업/팀빌딩 발견 기능(연애 매칭 아님 — Product Constitution 범위 확인). 23파일 +2223줄',
-    },
-    {
-      id: 'FRONT-UX-14',
-      title: '스와이프 모션 + 갤러리 UX (7 라운드 feel-iteration)',
-      completedAt: '2026-08-15',
-      note: '① 퇴장 애니메이션: vendored `lib/tinderCard.js` — linear 3-대각선 총알 → easeOutCubic + power 1.6 + duration 클램프 [320,560]ms (플링감 유지, 감속 꼬리)',
     },
   ],
   now: [
@@ -261,6 +261,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 319,
+      title: 'feat(people): 내 카드는 성향 그래프를 단독 표시 (카드 flip 인터랙션 완성)',
+      mergedAt: '2026-09-06T00:59:17Z',
+      mergedAtKST: '2026-09-06 09:59 KST',
+      sha: 'e7f1f2c',
+    },
+    {
       number: 315,
       title: 'feat(people): 페르소나 이미지가 있으면 발견 피드에 노출 — 본인 포함 + 저장 기본값 public',
       mergedAt: '2026-09-06T00:54:33Z',
@@ -308,13 +315,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-08-15T14:25:06Z',
       mergedAtKST: '2026-08-15 23:25 KST',
       sha: '73d6177',
-    },
-    {
-      number: 308,
-      title: 'refactor(FRONT-DESIGN-A1): hover hacks -> CSS :hover PR-2 — 13 files, identical values',
-      mergedAt: '2026-08-15T04:48:31Z',
-      mergedAtKST: '2026-08-15 13:48 KST',
-      sha: 'e33a065',
     },
   ],
   agents: [
@@ -1829,6 +1829,158 @@ window.PROJECT_STATE = {
       role: '프론트 패키지 매니페스트',
     },
     {
+      path: 'frontend/public/__mocks/_compare.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/architect.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/board-detail.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/building-detail.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/discovery.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/liked-projects.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/llm-search-update.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/llm-search.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/login-consent.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/login-credentials.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/login-profile.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/login-returning.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/login.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/notifications.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/office.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/overlay-action-card.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/overlay-cap-reached.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/overlay-card-skeleton.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/overlay-leave-modal.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/overlay-photo-lightbox.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/overlay-question-card.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/overlay-save-board.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/overlay-save-to-board.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/overlay-swipe-confirms.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/overlay-swipecard-expanded.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/overlay-trigger-card.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/overlay-tutorial.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/persona-report.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/profile.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/results.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/settings-account.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/settings-appearance.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/settings-edit-profile.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/settings-notifications.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/settings.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/taste-swipe.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/upload.html',
+      role: '',
+    },
+    {
+      path: 'frontend/public/__mocks/user-other.html',
+      role: '',
+    },
+    {
       path: 'frontend/public/favicon.svg',
       role: '파비콘 에셋',
     },
@@ -2503,6 +2655,14 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/utils/appHelpers.js',
       role: '앱 필터·에러 헬퍼',
+    },
+    {
+      path: 'frontend/src/utils/assessmentDraft.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/assessmentDraft.test.mjs',
+      role: '',
     },
     {
       path: 'frontend/src/utils/discoveryGuard.js',
