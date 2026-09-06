@@ -23,11 +23,18 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-09-06 10:07 KST',
-    head: 'b46b7df',
-    branch: 'pr318-resolve',
+    updatedAt: '2026-09-06 10:17 KST',
+    head: '2324fec',
+    branch: 'feature/claude-design-ALL',
   },
   done: [
+    {
+      id: 'FRONT-DESIGN-C',
+      title: 'Claude Design canvas 41보드 → 실코드 반영 (B2 종결)',
+      completedAt: '2026-09-06',
+      prs: [321],
+      note: 'Claude Design "Archibe Front Design" canvas 41보드를 실제 front 코드에 이식 — 공용 컴포넌트 3종 신설(PageTopControls 언어·테마·로그아웃 / PageLogoHeader 로고 / PageBackButton 떠있는 뒤로가기), sticky 헤더 19화면 → 인플로우 제목, 단색 CTA 전환(~40곳, DESIGN.md §8.1 재작성), scrim 토큰 4종×4테마',
+    },
     {
       id: 'FRONT-PEOPLE-THUMB-1',
       title: '프로필 보드 썸네일을 페르소나 리포트 이미지로 교체',
@@ -73,20 +80,8 @@ window.PROJECT_STATE = {
       prs: [314],
       note: 'user 지적: 카드가 너무 커서 한 화면에 몇 장 안 보임 → report 생성 후 추천 그리드와 같은 타일로 통일',
     },
-    {
-      id: 'FRONT-PEOPLE-CARD-1',
-      title: '/people 발견 카드 이미지 앞면 + flip 상세',
-      completedAt: '2026-08-26',
-      note: '카드 구조 교체: 앞면 = 취향분석 리포트 건축 이미지 전면(그래프/이름/아바타 제거), 탭 시 flip → 뒷면에 성향 그래프 + 내 벡터 오버레이 + 범례 + 이름(클릭 시 프로필 이동)',
-    },
   ],
-  now: [
-    {
-      id: 'FRONT-DESIGN-B2',
-      title: 'Claude Design 반복 세션 (외부 입력 대기 — 2026-08-15)',
-      note: '셋업 완료: claude.ai/design 프로젝트 "ArchiTinder Design System" + `docs/design-preview/` 페이지 프리뷰 9종(브리프/파운데이션/로그인/디스커버리/Taste/프로필/페르소나 리포트 문제 재현+모바일 제안/플로우 맵/컴포넌트, 실토큰+4테마 스위처). user 노트 5건 Brief 카드화: 레이아웃·폰트 정리, 페르소나 리포트 데스크탑 문제, 모바일 중심 가운데 레이아웃 전환, 로그인 중점 수정, 화면 이동 시나리오. 다음: user가 C…',
-    },
-  ],
+  now: [],
   next: {
     xhigh: [
       {
@@ -123,6 +118,16 @@ window.PROJECT_STATE = {
       },
     ],
     medium: [
+      {
+        id: 'FRONT-DESIGN-C2',
+        title: '디자인 포트 잔여 결정 4건 + 스타일 델타 21곳',
+        note: 'FRONT-DESIGN-C(#321) 후속. 결정 대기: 저장/북마크 amber(`#fbbf24`) 대응 토큰 부재(accent-3는 라이트에서 갈색이라 부적합 — 상태 토큰 계열 신설 필요); 모달 backdrop 0.4 vs scrim 0.65(DESIGN.md §1.4/§8.10 모순 해소); UserProfile 떠있는 뒤로가기 목적지(`/user/me`는 TabBar 루트); appearance 칩 radius 10px(토큰 스케일 밖, 공용 .chip). 로그인 첫카드 "10~15…',
+      },
+      {
+        id: 'INFRA-MOCKS-1',
+        title: '__mocks 픽스처가 develop에 추적됨',
+        note: '`frontend/public/__mocks/*.html`(디자인 대조용 테스트 픽스처 37종+하니스)이 PR #319에 실려 develop에 추적 파일로 들어감. gitignore 규칙(#321에 포함)은 추적된 파일을 못 뺌. 결정: `git rm --cached`로 untrack 하거나 의도적으로 유지. 유지 시 Vercel 빌드에 정적 파일로 포함됨(약 900KB).',
+      },
       {
         id: 'FRONT-PEOPLE-CARD-2',
         title: '발견 피드가 실데이터에서 빈 화면',
@@ -266,6 +271,13 @@ window.PROJECT_STATE = {
       sha: 'e7f1f2c',
     },
     {
+      number: 318,
+      title: 'feat(profile): 보드 썸네일 이미지 소스를 페르소나 리포트 이미지로 교체',
+      mergedAt: '2026-09-06T01:11:41Z',
+      mergedAtKST: '2026-09-06 10:11 KST',
+      sha: '2324fec',
+    },
+    {
       number: 317,
       title: 'feat(assessment): 내 프로필에 재진단(다시 진단받기) 버튼 추가',
       mergedAt: '2026-09-06T01:07:38Z',
@@ -306,13 +318,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-08-29T02:16:13Z',
       mergedAtKST: '2026-08-29 11:16 KST',
       sha: '2e358b7',
-    },
-    {
-      number: 311,
-      title: 'feat(FULL-DISCOVERY-1): 성향 기반 유저 발견 — 4+1축 진단·발견 피드·5각형 차트',
-      mergedAt: '2026-08-22T01:44:14Z',
-      mergedAtKST: '2026-08-22 10:44 KST',
-      sha: 'bc40fbf',
     },
   ],
   agents: [
@@ -455,6 +460,14 @@ window.PROJECT_STATE = {
       role: '워크플로 스킬 흡수 플랜',
     },
     {
+      path: '.claude/plans/canvas-design-port-REVIEW.md',
+      role: '',
+    },
+    {
+      path: '.claude/plans/canvas-design-port.md',
+      role: '',
+    },
+    {
       path: '.claude/plans/like-vectors-id-round-refactor.md',
       role: '',
     },
@@ -581,14 +594,6 @@ window.PROJECT_STATE = {
     {
       path: 'README.md',
       role: '프로젝트 안내 문서',
-    },
-    {
-      path: 'Task.md',
-      role: '태스크 보드 문서',
-    },
-    {
-      path: 'Task.md',
-      role: '태스크 보드 문서',
     },
     {
       path: 'Task.md',
@@ -2127,6 +2132,22 @@ window.PROJECT_STATE = {
       role: 'LLM 검색 업데이트 모드 래퍼',
     },
     {
+      path: 'frontend/src/components/PageBackButton.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/PageLogoHeader.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/PageTopControls.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/PageTopControls.module.css',
+      role: '',
+    },
+    {
       path: 'frontend/src/components/PentagonChart.jsx',
       role: '',
     },
@@ -2387,10 +2408,6 @@ window.PROJECT_STATE = {
       role: '메인 레이아웃 + TabBar 셸',
     },
     {
-      path: 'frontend/src/layouts/MainLayout.module.css',
-      role: '',
-    },
-    {
       path: 'frontend/src/lib/tinderCard.js',
       role: '',
     },
@@ -2571,10 +2588,6 @@ window.PROJECT_STATE = {
       role: '사무소 프로필 헤더 바',
     },
     {
-      path: 'frontend/src/pages/firmProfile/FirmProfileHeader.module.css',
-      role: '',
-    },
-    {
       path: 'frontend/src/pages/firmProfile/FirmProfileHero.jsx',
       role: '사무소 프로필 히어로',
     },
@@ -2719,14 +2732,6 @@ window.PROJECT_STATE = {
       role: '대시보드 상태 데이터',
     },
     {
-      path: 'project/state.js',
-      role: '대시보드 상태 데이터',
-    },
-    {
-      path: 'project/state.js',
-      role: '대시보드 상태 데이터',
-    },
-    {
       path: 'tools/.smoke.sh',
       role: 'git 스크립트 환경 스모크 검사',
     },
@@ -2737,6 +2742,10 @@ window.PROJECT_STATE = {
     {
       path: 'tools/check-frontend.sh',
       role: '프론트 lint+빌드 래퍼',
+    },
+    {
+      path: 'tools/design-diff.py',
+      role: '',
     },
     {
       path: 'tools/front-validate.sh',
