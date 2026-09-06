@@ -1,74 +1,27 @@
 .page {
-  min-height: calc(100vh - 64px);
+  height: calc(100vh - 64px - env(safe-area-inset-bottom, 0px));
+  overflow: hidden;
   background: var(--color-bg);
   display: flex;
   flex-direction: column;
-}
-
-/* Header */
-.header {
-  display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-  background: color-mix(in srgb, var(--color-bg) 90%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--color-border);
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
-
-.backBtn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border: none;
-  background: transparent;
-  color: var(--color-text);
-  cursor: pointer;
-  border-radius: var(--radius-md);
-  flex-shrink: 0;
-  transition: background var(--motion-fast) var(--motion-ease);
-}
-
-.backBtn:hover {
-  background: var(--color-surface);
-}
-
-.title {
-  font-size: 17px;
-  font-weight: 600;
-  color: var(--color-text);
-  margin: 0;
-  flex: 1;
-  line-height: 1.3;
-}
-
-.qCount {
-  font-size: 13px;
-  color: var(--color-text-muted);
-  font-weight: 500;
-  flex-shrink: 0;
-}
-
-/* Progress bar */
-.progressTrack {
-  height: 3px;
-  background: var(--color-surface-3);
+  padding: 20px 16px;
   position: relative;
+}
+
+/* Progress bar — matches SwipePage's "Tuning taste" track (4px, pill, flat
+   accent-1 fill). */
+.progressTrack {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--color-progress-track);
   overflow: hidden;
 }
 
 .progressFill {
-  position: absolute;
-  left: 0;
-  top: 0;
   height: 100%;
-  background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
+  background: var(--accent-1);
+  border-radius: 999px;
   transition: width var(--motion-normal) var(--motion-ease);
 }
 
@@ -82,7 +35,13 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 24px 16px 32px;
+  /* No horizontal padding — `.page` now supplies the 16px side inset (matches
+     SwipePage's card-stage wrapper, which also carries zero horizontal
+     padding of its own). Double-padding here would shrink this container
+     below SwipeDeck's fixed CARD_WIDTH (= vw - 32) and, combined with
+     `.page`'s new `overflow: hidden`, clip the deck instead of just
+     re-centering it. */
+  padding: 24px 0 32px;
   width: 100%;
   margin: 0 auto;
   gap: 16px;
@@ -192,7 +151,10 @@
   text-align: center;
 }
 
-/* Result screen */
+/* Result screen — `.page` is now viewport-locked (overflow: hidden), so this
+   inner area owns its own scroll (mirrors ResultsPage's locked-page/inner-
+   scroll pattern) to avoid clipping the type code + chart + CTAs on short
+   viewports. */
 .resultBody {
   flex: 1;
   display: flex;
@@ -203,6 +165,8 @@
   max-width: 480px;
   width: 100%;
   margin: 0 auto;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .typeCode {
@@ -278,15 +242,12 @@
   transform: translateY(-1px);
 }
 
-/* Resume notice — shown when a saved draft put the user mid-assessment. */
+/* Resume notice — shown when a saved draft put the user mid-assessment.
+   Restyled to match SwipePage's under-bar note (e.g. filter_relaxed, line
+   ~607): plain small dim text directly under the track, no pill/bg. */
 .resumeNote {
-  flex-shrink: 0;
-  margin: 0;
-  padding: 6px 14px;
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--accent-1) 10%, transparent);
-  color: var(--accent-1);
-  font-size: 12px;
-  font-weight: 600;
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--color-text-dimmer);
   text-align: center;
 }
