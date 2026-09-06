@@ -1,0 +1,15 @@
+/*
+ * PageTopControls.module.css — logout button hover.
+ * Carries forward the .logoutBtn rule formerly in layouts/MainLayout.module.css
+ * (removed in this change — MainLayout no longer owns its own top-right
+ * cluster). FRONT-DESIGN-A1-HOVER: CSS :hover, not onMouseEnter/Leave style
+ * mutation.
+ */
+.logoutBtn {
+  color: var(--color-text-dim);
+  transition: color 0.2s;
+}
+
+.logoutBtn:hover {
+  color: var(--color-destructive);
+}

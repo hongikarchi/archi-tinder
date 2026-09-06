@@ -11,13 +11,15 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getMe } from '../../api/client.js'
 import { updateMyProfile } from '../../api/profiles.js'
-import { IconBack } from '../../components/icons.jsx'
 import EditCardForm from '../../components/profile/EditCardForm.jsx'
 import { useTranslation } from '../../i18n/index.js'
+import PageLogoHeader from '../../components/PageLogoHeader.jsx'
+import PageTopControls from '../../components/PageTopControls.jsx'
+import PageBackButton from '../../components/PageBackButton.jsx'
 import btnStyles from '../../components/Button.module.css'
 import styles from './AccountScreen.module.css'
 
-export default function EditProfileScreen() {
+export default function EditProfileScreen({ onLogout }) {
   const navigate = useNavigate()
   const { t } = useTranslation()
 
@@ -84,7 +86,7 @@ export default function EditProfileScreen() {
   if (loading) {
     return (
       <div className={styles.page}>
-        <ScreenHeader navigate={navigate} t={t} />
+        <ScreenHeader navigate={navigate} t={t} onLogout={onLogout} />
         <div style={{
           display: 'flex', justifyContent: 'center',
           padding: 48, color: 'var(--color-text-dim)', fontSize: 14,
@@ -98,7 +100,7 @@ export default function EditProfileScreen() {
   if (fetchError) {
     return (
       <div className={styles.page}>
-        <ScreenHeader navigate={navigate} t={t} />
+        <ScreenHeader navigate={navigate} t={t} onLogout={onLogout} />
         <div style={{
           display: 'flex', justifyContent: 'center',
           padding: 48, color: 'var(--color-destructive)', fontSize: 14,
@@ -111,9 +113,9 @@ export default function EditProfileScreen() {
 
   return (
     <div className={styles.page}>
-      <ScreenHeader navigate={navigate} t={t} />
+      <ScreenHeader navigate={navigate} t={t} onLogout={onLogout} />
 
-      <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px' }}>
+      <div style={{ maxWidth: 600, margin: '0 auto', padding: '0 16px 24px' }}>
 
         <EditCardForm
           user={me}
@@ -126,8 +128,8 @@ export default function EditProfileScreen() {
             marginTop: 16,
             padding: '10px 14px',
             borderRadius: 'var(--radius-sm)',
-            background: 'rgba(215,58,73,0.08)',
-            border: '1px solid rgba(215,58,73,0.28)',
+            background: 'color-mix(in srgb, var(--color-destructive) 8%, transparent)',
+            border: '1px solid var(--color-destructive)',
             color: 'var(--color-destructive)',
             fontSize: 13,
             lineHeight: 1.45,
@@ -173,19 +175,15 @@ export default function EditProfileScreen() {
 
 /* ── Internal helpers ────────────────────────────────────────────────── */
 
-function ScreenHeader({ navigate, t }) {
+function ScreenHeader({ navigate, t, onLogout }) {
   return (
-    <div className={styles.header}>
-      <button
-        type="button"
-        onClick={() => navigate(-1)}
-        aria-label="Back"
-        className={styles.iconBtn}
-      >
-        <IconBack width={20} height={20} />
-      </button>
-      <h2 className={styles.headerTitle}>{t('profileEdit.title')}</h2>
-      <div style={{ width: 44 }} />
-    </div>
+    <>
+      <PageBackButton onClick={() => navigate(-1)} />
+      <PageLogoHeader />
+      <PageTopControls onLogout={onLogout} />
+      <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px 0' }}>
+        <h2 className={styles.headerTitle}>{t('profileEdit.title')}</h2>
+      </div>
+    </>
   )
 }

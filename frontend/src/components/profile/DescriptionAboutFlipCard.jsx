@@ -44,11 +44,11 @@ export default function DescriptionAboutFlipCard({ description, foundedYear, loc
           boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
           minHeight: 180,
         }}>
-          {/* Internal radial-gradient pink glow */}
+          {/* Internal radial-gradient accent glow */}
           <div style={{
             position: 'absolute', top: -40, right: -40,
             width: 160, height: 160, borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(236,72,153,0.18), transparent 70%)',
+            background: 'radial-gradient(circle, color-mix(in srgb, var(--accent-1) 18%, transparent), transparent 70%)',
             pointerEvents: 'none',
           }} />
           <p style={{
@@ -87,11 +87,11 @@ export default function DescriptionAboutFlipCard({ description, foundedYear, loc
           boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
           minHeight: 180,
         }}>
-          {/* Internal radial-gradient pink glow */}
+          {/* Internal radial-gradient accent glow */}
           <div style={{
             position: 'absolute', top: -40, right: -40,
             width: 160, height: 160, borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(236,72,153,0.18), transparent 70%)',
+            background: 'radial-gradient(circle, color-mix(in srgb, var(--accent-1) 18%, transparent), transparent 70%)',
             pointerEvents: 'none',
           }} />
           <p style={{

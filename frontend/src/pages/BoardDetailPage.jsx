@@ -8,6 +8,7 @@ import RecommendedTile from './boardDetail/RecommendedTile'
 import ArchitectSection from './boardDetail/ArchitectSection'
 import { useTranslation } from '../i18n/index.js'
 import s from './BoardDetailPage.module.css'
+import PageTopControls from '../components/PageTopControls.jsx'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -141,7 +142,7 @@ const MOCK_BOARD = {
   is_reacted: false,
 }
 
-export default function BoardDetailPage({ onResume }) {
+export default function BoardDetailPage({ onResume, onLogout }) {
   const navigate = useNavigate()
   const location = useLocation()
   const { t } = useTranslation()
@@ -323,6 +324,7 @@ export default function BoardDetailPage({ onResume }) {
       background: 'var(--color-bg)',
       paddingBottom: 'calc(80px + env(safe-area-inset-bottom))',
     }}>
+      <PageTopControls onLogout={onLogout} />
       {/* Hero cover */}
       <div style={{
         position: 'relative',
@@ -367,6 +369,7 @@ export default function BoardDetailPage({ onResume }) {
           zIndex: 5,
           background: 'linear-gradient(to bottom, rgba(0,0,0,0.5) 0%, transparent 100%)',
         }}>
+        <div style={{ maxWidth: 680, margin: '0 auto', width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <button
             onClick={() => navigate(-1)}
             aria-label="Back"
@@ -426,6 +429,7 @@ export default function BoardDetailPage({ onResume }) {
             )}
           </button>
         </div>
+        </div>
 
         {/* §3.5.3 PRIVATE-only icon-lock chip — small dark blur circle, white-ish lock SVG.
             PUBLIC renders nothing (public is the default; only flag the exception).
@@ -458,6 +462,8 @@ export default function BoardDetailPage({ onResume }) {
           bottom: 0,
           left: 0,
           right: 0,
+          maxWidth: 680,
+          margin: '0 auto',
           padding: '24px 20px',
           display: 'flex',
           flexDirection: 'column',
@@ -706,7 +712,7 @@ export default function BoardDetailPage({ onResume }) {
               borderRadius: 999,
               background: isReacted
                 ? 'var(--color-surface)'
-                : 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
+                : 'var(--accent-1)',
               color: isReacted ? 'var(--accent-1)' : '#fff',
               border: isReacted ? '1px solid var(--accent-1)' : 'none',
               fontSize: 15,
@@ -777,7 +783,7 @@ export default function BoardDetailPage({ onResume }) {
       )}
 
       {/* Buildings section */}
-      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0' }}>
+      <div style={{ maxWidth: 680, margin: '0 auto', padding: '0' }}>
         <h3 style={{
           color: 'var(--color-text)',
           fontSize: 20,
@@ -842,7 +848,7 @@ export default function BoardDetailPage({ onResume }) {
       </div>
 
       {(recommended.length > 0 || resultLoading) && (
-        <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0' }}>
+        <div style={{ maxWidth: 680, margin: '0 auto', padding: '0' }}>
           <div style={{ height: 1, background: 'var(--color-border)', margin: '0 20px' }} />
           <h3 style={{
             color: 'var(--color-text)',

@@ -13,6 +13,9 @@ import {
 } from '../components/photoCardShell.js'
 import { useTranslation } from '../i18n/index.js'
 import { generateReport } from '../api/projects.js'
+import PageLogoHeader from '../components/PageLogoHeader.jsx'
+import PageTopControls from '../components/PageTopControls.jsx'
+import PageBackButton from '../components/PageBackButton.jsx'
 
 function cardId(card) {
   return card?.image_id || card?.canonical_bld_id || card?.building_id || ''
@@ -119,7 +122,7 @@ function ResultCard({ card, rank, saved, pending, onOpen, onToggle }) {
   )
 }
 
-export default function ResultsPage({ projects, setProjects, onReportGenerated }) {
+export default function ResultsPage({ projects, setProjects, onReportGenerated, onLogout }) {
   const navigate = useNavigate()
   const location = useLocation()
   const { sessionId } = useParams()
@@ -258,27 +261,11 @@ export default function ResultsPage({ projects, setProjects, onReportGenerated }
       background: 'var(--color-bg)',
       paddingBottom: 'calc(88px + env(safe-area-inset-bottom, 0px))',
     }}>
-      <section style={{ padding: '18px 18px 0' }}>
-        <button
-          type="button"
-          onClick={() => navigate('/')}
-          style={{
-            minHeight: 44,
-            border: 'none',
-            background: 'transparent',
-            color: 'var(--color-text-dim)',
-            fontSize: 13,
-            fontWeight: 700,
-            cursor: 'pointer',
-            fontFamily: 'inherit',
-            display: 'block',
-            padding: '0 0 4px',
-          }}
-        >
-          ← Home
-        </button>
-      </section>
+      <PageBackButton onClick={() => navigate('/')} />
+      <PageLogoHeader />
+      <PageTopControls onLogout={onLogout} />
 
+      <div style={{ maxWidth: 680, margin: '0 auto' }}>
       {project?.finalReport && backendId ? (
         <PersonaReport
           boardId={backendId}
@@ -425,7 +412,7 @@ export default function ResultsPage({ projects, setProjects, onReportGenerated }
             {[0, 1, 2, 3].map(i => (
               <div key={i} className="skeleton-shimmer" style={{
                 aspectRatio: '2 / 3',
-                borderRadius: 16,
+                borderRadius: 12,
               }} />
             ))}
           </div>
@@ -475,6 +462,7 @@ export default function ResultsPage({ projects, setProjects, onReportGenerated }
           </>
         )}
       </section>
+      </div>
     </div>
   )
 }

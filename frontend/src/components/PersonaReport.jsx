@@ -5,13 +5,14 @@ import { useTranslation } from '../i18n/index.js'
 
 /* ── RadarChart ─────────────────────────────────────────────────────────── */
 function RadarChart({ scores }) {
+  const { t } = useTranslation()
   const cx = 100, cy = 100, R = 80
   const axes = [
-    { key: 'form', label: 'Form' },
-    { key: 'materiality', label: 'Materiality' },
-    { key: 'scale', label: 'Scale' },
-    { key: 'energy', label: 'Energy' },
-    { key: 'tradition', label: 'Tradition' },
+    { key: 'form' },
+    { key: 'materiality' },
+    { key: 'scale' },
+    { key: 'energy' },
+    { key: 'tradition' },
   ]
   const N = axes.length
   const angle = (i) => (Math.PI * 2 * i) / N - Math.PI / 2
@@ -87,7 +88,7 @@ function RadarChart({ scores }) {
             fill="var(--color-text-muted)"
             fontWeight="600"
           >
-            {ax.label}
+            {t(`persona.axis.${ax.key}`)}
           </text>
         )
       })}
@@ -245,9 +246,9 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
           <span key={tag} style={{
             padding: '4px 10px',
             borderRadius: 999,
-            background: 'rgba(99,102,241,0.1)',
-            border: '1px solid rgba(99,102,241,0.22)',
-            color: 'var(--color-text-dim)',
+            background: 'color-mix(in srgb, var(--accent-2) 10%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--accent-2) 22%, transparent)',
+            color: 'var(--accent-2)',
             fontSize: 11,
             fontWeight: 700,
           }}>
@@ -258,9 +259,9 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
           <span key={tag} style={{
             padding: '4px 10px',
             borderRadius: 999,
-            background: 'rgba(255,255,255,0.06)',
-            border: '1px solid var(--color-border-soft)',
-            color: 'var(--color-text-dim)',
+            background: 'var(--color-tag-bg)',
+            border: '1px solid var(--color-tag-border)',
+            color: 'var(--color-tag-label)',
             fontSize: 11,
             fontWeight: 700,
           }}>
@@ -300,9 +301,8 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
                 fontSize: 13,
                 fontWeight: 600,
                 margin: '0 0 4px',
-                textTransform: 'capitalize',
               }}>
-                {ax.key.charAt(0).toUpperCase() + ax.key.slice(1)}
+                {t(`persona.axis.${ax.key}`)}
               </p>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ color: 'var(--color-text-muted)', fontSize: 10, fontWeight: 600, minWidth: 48, textAlign: 'right' }}>
@@ -362,7 +362,7 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
               gap: 5,
               padding: '7px 14px',
               borderRadius: 999,
-              background: 'rgba(0,0,0,0.55)',
+              background: 'var(--color-scrim-soft)',
               backdropFilter: 'blur(8px)',
               WebkitBackdropFilter: 'blur(8px)',
               color: '#fff',
@@ -412,7 +412,7 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
           borderRadius: 999,
           background: (imgGenLoading || !boardId)
             ? 'var(--color-surface-2)'
-            : 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
+            : 'var(--accent-1)',
           color: (imgGenLoading || !boardId) ? 'var(--color-text-muted)' : '#fff',
           border: 'none',
           fontSize: 14,

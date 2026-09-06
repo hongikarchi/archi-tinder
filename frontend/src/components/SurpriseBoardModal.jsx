@@ -102,7 +102,7 @@ export default function SurpriseBoardModal({ onClose, onSaved }) {
         position: 'fixed',
         inset: 0,
         zIndex: 10000,
-        background: 'rgba(0,0,0,0.65)',
+        background: 'var(--color-scrim)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -134,7 +134,7 @@ export default function SurpriseBoardModal({ onClose, onSaved }) {
         }}>
           <div style={{ flex: 1, paddingRight: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800 }}>{title}</h3>
+              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>{title}</h3>
             </div>
             {rationale ? (
               <p style={{ margin: '0 0 4px', fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.4 }}>
@@ -153,7 +153,7 @@ export default function SurpriseBoardModal({ onClose, onSaved }) {
               height: 34,
               borderRadius: '50%',
               border: '1px solid var(--color-border-soft)',
-              background: 'rgba(255,255,255,0.04)',
+              background: 'var(--color-tag-bg)',
               color: 'var(--color-text-muted)',
               fontSize: 18,
               lineHeight: 1,
@@ -204,7 +204,7 @@ export default function SurpriseBoardModal({ onClose, onSaved }) {
                   padding: '0 16px',
                   borderRadius: 10,
                   border: '1px solid var(--color-border-soft)',
-                  background: 'rgba(255,255,255,0.05)',
+                  background: 'var(--color-tag-bg)',
                   color: 'var(--color-text)',
                   fontSize: 13,
                   fontWeight: 700,
@@ -296,7 +296,7 @@ export default function SurpriseBoardModal({ onClose, onSaved }) {
                     minHeight: 40,
                     borderRadius: 10,
                     border: '1px solid var(--color-border-soft)',
-                    background: 'rgba(255,255,255,0.04)',
+                    background: 'var(--color-tag-bg)',
                     color: 'var(--color-text)',
                     fontSize: 13,
                     fontWeight: 700,
@@ -313,7 +313,7 @@ export default function SurpriseBoardModal({ onClose, onSaved }) {
                     minHeight: 40,
                     borderRadius: 10,
                     border: 'none',
-                    background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
+                    background: 'var(--accent-1)',
                     color: '#fff',
                     fontSize: 13,
                     fontWeight: 700,
@@ -346,7 +346,7 @@ export default function SurpriseBoardModal({ onClose, onSaved }) {
                 minHeight: 44,
                 borderRadius: 12,
                 border: '1px solid var(--color-border-soft)',
-                background: 'rgba(255,255,255,0.04)',
+                background: 'var(--color-tag-bg)',
                 color: 'var(--color-text)',
                 fontSize: 14,
                 fontWeight: 700,
@@ -368,7 +368,7 @@ export default function SurpriseBoardModal({ onClose, onSaved }) {
                 border: 'none',
                 background: phase === 'saving'
                   ? 'color-mix(in srgb, var(--accent-1) 50%, transparent)'
-                  : 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
+                  : 'var(--accent-1)',
                 color: '#fff',
                 fontSize: 14,
                 fontWeight: 700,

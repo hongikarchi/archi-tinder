@@ -166,7 +166,7 @@
   padding: 14px 16px;
   border: none;
   border-radius: var(--radius-md);
-  background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+  background: var(--accent-1);
   color: #fff;
   font-size: 16px;
   font-weight: 600;
@@ -241,7 +241,7 @@
   padding: 14px 16px;
   border: none;
   border-radius: var(--radius-md);
-  background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+  background: var(--accent-1);
   color: #fff;
   font-size: 16px;
   font-weight: 600;

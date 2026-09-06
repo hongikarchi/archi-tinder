@@ -134,7 +134,7 @@ export default function BoardCard({
         // lives outside the element so it doesn't affect layout or fight the border).
         transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
         transform: isHovered ? 'translateY(-4px)' : 'translateY(0)',
-        boxShadow: isSelected ? '0 0 0 3px #ec4899' : 'none',
+        boxShadow: isSelected ? '0 0 0 3px var(--accent-1)' : 'none',
       }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -166,7 +166,7 @@ export default function BoardCard({
           backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden',
           borderRadius: 20, overflow: 'hidden',
           boxShadow: '0 10px 25px rgba(0,0,0,0.3)',
-          background: 'rgba(255,255,255,0.03)',
+          background: 'var(--color-surface-2)',
         }}>
           {hasCover ? (
             <img
@@ -191,7 +191,7 @@ export default function BoardCard({
               aria-hidden
               style={{
                 position: 'absolute', inset: 0,
-                background: 'linear-gradient(135deg, rgba(236,72,153,0.22) 0%, rgba(244,63,94,0.18) 50%, rgba(15,15,15,0.85) 100%)',
+                background: 'linear-gradient(135deg, color-mix(in srgb, var(--accent-1) 22%, transparent) 0%, color-mix(in srgb, var(--accent-2) 18%, transparent) 50%, rgba(15,15,15,0.85) 100%)',
               }}
             />
           )}
@@ -212,7 +212,7 @@ export default function BoardCard({
                 position: 'absolute', top: 16, right: 16,
                 width: 28, height: 28, borderRadius: '50%',
                 border: isSelected ? 'none' : '2px solid rgba(255,255,255,0.9)',
-                background: isSelected ? '#ec4899' : 'rgba(0,0,0,0.4)',
+                background: isSelected ? 'var(--accent-1)' : 'rgba(0,0,0,0.4)',
                 backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 transition: 'background 0.15s cubic-bezier(0.4,0,0.2,1), border 0.15s cubic-bezier(0.4,0,0.2,1)',
@@ -324,15 +324,15 @@ export default function BoardCard({
                 border: 'none', cursor: 'pointer',
               }}
             >
-              {/* X icon — red when confirming, white-ish when idle */}
+              {/* X icon — destructive when confirming, white-ish when idle (on-photo icon) */}
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                   stroke={confirmingDelete ? '#ef4444' : 'rgba(255,255,255,0.85)'}
+                   stroke={confirmingDelete ? 'var(--color-destructive)' : 'rgba(255,255,255,0.85)'}
                    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
                 <line x1="6" y1="6" x2="18" y2="18"></line>
               </svg>
               {confirmingDelete && (
-                <span style={{ fontSize: 11, color: '#ef4444', fontWeight: 600 }}>
+                <span style={{ fontSize: 11, color: 'var(--color-destructive)', fontWeight: 600 }}>
                   Confirm?
                 </span>
               )}
@@ -462,7 +462,7 @@ export default function BoardCard({
                   style={{
                     flex: 1, minHeight: 44,
                     padding: '10px 8px', borderRadius: 12,
-                    background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
+                    background: 'var(--accent-1)',
                     border: 0,
                     color: '#fff', fontSize: 12, fontWeight: 600,
                     cursor: 'pointer', fontFamily: 'inherit',

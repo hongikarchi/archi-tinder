@@ -14,6 +14,8 @@ import ProfileHeader from './userProfile/ProfileHeader'
 import ProfileHero from './userProfile/ProfileHero'
 import BoardGrid from './userProfile/BoardGrid'
 import PentagonChart from '../components/PentagonChart.jsx'
+import PageLogoHeader from '../components/PageLogoHeader.jsx'
+import PageTopControls from '../components/PageTopControls.jsx'
 import { OfficeCard, SkeletonCard, BuildingIconEmpty } from './LikedOfficesPage.jsx'
 
 /**
@@ -460,6 +462,9 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         pointerEvents: 'none', zIndex: 0,
       }} />
 
+      <PageTopControls onLogout={onLogout} />
+      <PageLogoHeader padding="18px 16px 0" />
+
       <ProfileHeader
         isMe={isMe}
         handle={user?.handle}
@@ -585,7 +590,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                     padding: '10px 20px',
                     border: 'none',
                     borderRadius: 'var(--radius-pill)',
-                    background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
+                    background: 'var(--accent-1)',
                     color: '#fff',
                     fontSize: 13,
                     fontWeight: 600,
@@ -615,7 +620,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                     padding: '10px 20px',
                     border: 'none',
                     borderRadius: 'var(--radius-pill)',
-                    background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
+                    background: 'var(--accent-1)',
                     color: '#fff',
                     fontSize: 13,
                     fontWeight: 600,

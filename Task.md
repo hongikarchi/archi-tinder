@@ -57,10 +57,7 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-### FRONT-DESIGN-B2 — Claude Design 반복 세션 (외부 입력 대기 — 2026-08-15)
-
-셋업 완료: claude.ai/design 프로젝트 "ArchiTinder Design System" + `docs/design-preview/` 페이지 프리뷰 9종(브리프/파운데이션/로그인/디스커버리/Taste/프로필/페르소나 리포트 문제 재현+모바일 제안/플로우 맵/컴포넌트, 실토큰+4테마 스위처). user 노트 5건 Brief 카드화: 레이아웃·폰트 정리, 페르소나 리포트 데스크탑 문제, **모바일 중심 가운데 레이아웃 전환**, 로그인 중점 수정, 화면 이동 시나리오. 다음: user가 Claude Design에서 방향 확정 → 승인분만 컴포넌트 단위 코드 반영(A2와 병행). 재생성: `python tools/gen-design-preview.py`.
-_Deferred 2026-08-21: Claude Design 외부 입력 대기 중, FULL-DISCOVERY-1 병행 진행._
+(비어 있음 — FRONT-DESIGN-B2/C 종결로 이동, 2026-09-06)
 
 
 ## Next
@@ -164,6 +161,12 @@ _(2026-06-08 범위 축소: #212(`4e58195`) Case #3 resume guard가 **진행중(
 _(2026-07-12 감사 re-pin: 전제 유효, 라인 이동 — resume guard `session_service.py:167-182`(completed 제외), 신규 세션 cold-create `:397-416`(phase='exploring', like_vectors=[] 등 전부 빈 값), `liked_ids`는 완료-세션 리포트에만 사용(`:688-689`), warm-start seed 경로 여전히 부재.)_
 
 ### MEDIUM
+#### FRONT-DESIGN-C2 — 디자인 포트 잔여 결정 4건 + 스타일 델타 21곳
+FRONT-DESIGN-C(#321) 후속. 결정 대기: 저장/북마크 amber(`#fbbf24`) 대응 토큰 부재(accent-3는 라이트에서 갈색이라 부적합 — 상태 토큰 계열 신설 필요); 모달 backdrop 0.4 vs scrim 0.65(DESIGN.md §1.4/§8.10 모순 해소); UserProfile 떠있는 뒤로가기 목적지(`/user/me`는 TabBar 루트); appearance 칩 radius 10px(토큰 스케일 밖, 공용 .chip). 로그인 첫카드 "10~15장이면 취향 프로필 완성" 카피 복원 여부(핵심 약속 문구, 한 줄 revert). 스타일 델타 잔여 21곳은 `python tools/design-diff.py`로 재측정 후 처리. 로그인 하위 4카드+오버레이 17종은 자동 대조 불가 — 수동 확인.
+
+#### INFRA-MOCKS-1 — __mocks 픽스처가 develop에 추적됨
+`frontend/public/__mocks/*.html`(디자인 대조용 테스트 픽스처 37종+하니스)이 PR #319에 실려 develop에 추적 파일로 들어감. gitignore 규칙(#321에 포함)은 추적된 파일을 못 뺌. 결정: `git rm --cached`로 untrack 하거나 의도적으로 유지. 유지 시 Vercel 빌드에 정적 파일로 포함됨(약 900KB).
+
 #### FRONT-PEOPLE-CARD-2 — 발견 피드가 실데이터에서 빈 화면
 FRONT-PEOPLE-CARD-1이 카드 앞면을 취향분석 리포트 이미지로 바꾸면서 피드 조건이 4중이 됨(진단 완료 + discovery_opt_in + publishable Work + public report_image). 로컬 DB 실측: 29명 중 진단 완료 2명, 그 2명이 전부 게스트라 2단계에서 이미 0명이 되고, `report_image` 보유 프로젝트는 공개 여부 무관 0건. 프로덕션도 같은 상태면 배포 후 빈 화면. 결정 필요: (a) 이미지 없는 유저는 Work 커버로 대체, (b) Step 2b 필터 제거하고 앞면 플레이스홀더 허용, (c) 조건 유지하고 리포트 이미지 생성 유도 플로우를 먼저 붙이기.
 
@@ -299,6 +302,13 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FRONT-DESIGN-C — Claude Design canvas 41보드 → 실코드 반영 (B2 종결) — RESOLVED 2026-09-06 (`3f5f5cb`, PR #321)
+- Claude Design "Archibe Front Design" canvas 41보드를 실제 front 코드에 이식 — 공용 컴포넌트 3종 신설(PageTopControls 언어·테마·로그아웃 / PageLogoHeader 로고 / PageBackButton 떠있는 뒤로가기), sticky 헤더 19화면 → 인플로우 제목, 단색 CTA 전환(~40곳, DESIGN.md §8.1 재작성), scrim 토큰 4종×4테마
+- Tailwind 팔레트 잔재 ~40곳 토큰화(pink/red/rose/indigo-500, amber-400), 라이트 테마에서 안 보이던 흰색 워시 20+곳 수정, 취향 축 레이블 i18n(영어 고정이었음), TabBar 활성색 accent-1, 업로드 편집 모달 z-index 100→9999 위험 수정
+- 검증 하니스 신설 `tools/design-diff.py` — 시안·앱을 Playwright 렌더 후 계산 스타일 속성 단위 diff. 컨트롤 누락 70→25, 스타일 델타 62→38(잔여 17은 TabBar 활성 상태 아티팩트). 판독 규칙은 `canvas-design-port.md` §10
+- 브랜치 `feature/claude-design-ALL` 38커밋 squash 대상. sns PR 4건(#316-319)과 병합 충돌 1곳(AssessmentPage import 블록) merge-tree로 사전 계산·해소
+- Deferred: `frontend/public/__mocks/` #319 경유로 develop에 추적됨(테스트 픽스처, git rm --cached 결정 필요); 저장 상태 amber 토큰 부재; 모달 backdrop 0.4 vs 0.65 (DESIGN.md §1.4/§8.10 모순); UserProfile 뒤로가기 목적지; 로그인 첫카드 "10~15장" 카피 삭제 여부
+
 ### FRONT-PEOPLE-THUMB-1 — 프로필 보드 썸네일을 페르소나 리포트 이미지로 교체 — RESOLVED 2026-09-05 (`9488979`, PR 리뷰 대기)
 - 요청 전제 정정: "프로필과 People 탭 **양쪽**에서 보드 썸네일 교체"였으나, **People 탭에는 보드 썸네일이 없음**(`PeopleDiscoveryPage`에 board 코드 0줄). `PersonCard`가 이미 `getPersonReportImage()`로 페르소나 이미지를 앞면에 쓰고 있음(#314 머지 완료) → 실제 대상은 프로필 `BoardCard` 한 곳. user 확인 후 범위 확정
 - 데이터 구조가 맞아떨어짐: 보드 = `Project`이고 `report_image`도 `Project`에 있어, 유저당 하나가 아니라 **보드마다 자기 리포트 이미지**를 커버로 쓰게 됨

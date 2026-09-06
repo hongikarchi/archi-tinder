@@ -107,6 +107,12 @@
   --color-tag-bg:           rgba(0,0,0,0.07);
   --color-tag-border:       rgba(0,0,0,0.15);
   --color-tag-label:        rgba(0,0,0,0.40);
+
+  /* Scrim (content-over-content darkening — modal backdrops, photo-caption gradients) */
+  --color-scrim-strong: rgba(0,0,0,0.93);
+  --color-scrim:        rgba(0,0,0,0.65);
+  --color-scrim-soft:   rgba(0,0,0,0.55);
+  --color-scrim-faint:  rgba(0,0,0,0.12);
 }
 
 /* ── Mobile type-scale override (≤768px) ───────────────────────────────── */
@@ -154,6 +160,13 @@
   --color-tag-bg:           rgba(255,255,255,0.10);
   --color-tag-border:       rgba(255,255,255,0.18);
   --color-tag-label:        rgba(255,255,255,0.50);
+
+  /* Scrim — alpha raised vs. light baseline: a black veil over an already-dark
+   * ground (#0d1117) needs more opacity to still read as "deepening further" */
+  --color-scrim-strong: rgba(0,0,0,0.94);
+  --color-scrim:        rgba(0,0,0,0.78);
+  --color-scrim-soft:   rgba(0,0,0,0.68);
+  --color-scrim-faint:  rgba(0,0,0,0.18);
 }
 
 /* ── Ayu Light ──────────────────────────────────────────────────────────── */
@@ -193,6 +206,12 @@
   --color-tag-bg:           rgba(0,0,0,0.06);
   --color-tag-border:       rgba(0,0,0,0.12);
   --color-tag-label:        rgba(0,0,0,0.38);
+
+  /* Scrim (content-over-content darkening — modal backdrops, photo-caption gradients) */
+  --color-scrim-strong: rgba(0,0,0,0.93);
+  --color-scrim:        rgba(0,0,0,0.65);
+  --color-scrim-soft:   rgba(0,0,0,0.55);
+  --color-scrim-faint:  rgba(0,0,0,0.12);
 }
 
 /* ── SynthWave '84 ──────────────────────────────────────────────────────── */
@@ -232,6 +251,16 @@
   --color-tag-bg:           rgba(255,255,255,0.10);
   --color-tag-border:       rgba(255,255,255,0.20);
   --color-tag-label:        rgba(255,255,255,0.55);
+
+  /* Scrim — tinted toward the theme's own purple-navy ground (rgb 26,22,37,
+   * darker than --color-bg #262335, same B>R>G channel order) instead of
+   * neutral black; a neutral black veil over this hue reads as muddy grey
+   * rather than a deepening. Alpha also raised vs. light baseline for the
+   * same "already-dark ground" reason as github-dark. */
+  --color-scrim-strong: rgba(26,22,37,0.95);
+  --color-scrim:        rgba(26,22,37,0.80);
+  --color-scrim-soft:   rgba(26,22,37,0.70);
+  --color-scrim-faint:  rgba(26,22,37,0.20);
 }
 
 /* ── Font override: Noto Serif KR ───────────────────────────────────────── */

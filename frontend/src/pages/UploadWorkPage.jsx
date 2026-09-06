@@ -18,6 +18,9 @@ import ReactCrop from 'react-image-crop'
 import 'react-image-crop/dist/ReactCrop.css'
 import { presignFiles, uploadToR2, finalizeWork } from '../api/works.js'
 import { useTranslation } from '../i18n/index.js'
+import PageLogoHeader from '../components/PageLogoHeader.jsx'
+import PageTopControls from '../components/PageTopControls.jsx'
+import PageBackButton from '../components/PageBackButton.jsx'
 import s from './UploadWorkPage.module.css'
 
 // Matches backend MAX_WORK_IMAGES — presign/finalize reject >10 images with a 400.
@@ -203,7 +206,7 @@ async function applyEditToBlob(originalBlob, percentCrop, rotation) {
 
 /* ── Component ──────────────────────────────────────────────────────────── */
 
-export default function UploadWorkPage() {
+export default function UploadWorkPage({ onLogout }) {
   const navigate = useNavigate()
   const fileInputRef = useRef(null)
   const { t } = useTranslation()
@@ -553,20 +556,9 @@ export default function UploadWorkPage() {
 
   return (
     <div className={s.page}>
-      {/* Header */}
-      <div className={s.header}>
-        <button
-          type="button"
-          className={s.backBtn}
-          onClick={() => navigate(-1)}
-          aria-label={t('uploadWork.header.backAria')}
-        >
-          ←
-        </button>
-        <h1 className={s.headerTitle}>{t('uploadWork.header.title')}</h1>
-        {/* spacer to balance the back button */}
-        <div style={{ width: 44 }} />
-      </div>
+      <PageBackButton onClick={() => navigate(-1)} label={t('uploadWork.header.backAria')} />
+      <PageLogoHeader />
+      <PageTopControls onLogout={onLogout} />
 
       {/* ── Success modal overlay ──────────────────────────────────────── */}
       {uploadState === 'processing' && (
@@ -612,7 +604,7 @@ export default function UploadWorkPage() {
                 padding: '12px 16px',
                 borderRadius: 12,
                 border: 0,
-                background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
+                background: 'var(--accent-1)',
                 color: '#fff',
                 fontSize: 14,
                 fontWeight: 600,
@@ -628,6 +620,7 @@ export default function UploadWorkPage() {
       )}
 
       <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px 48px' }}>
+        <h1 className={s.headerTitle}>{t('uploadWork.header.title')}</h1>
         {uploadState !== 'processing' && (
           <form onSubmit={handleSubmit} noValidate>
             {/* ── Drop zone ── */}

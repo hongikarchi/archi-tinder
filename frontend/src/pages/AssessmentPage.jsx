@@ -17,6 +17,7 @@ import AssessmentCard from '../components/AssessmentCard.jsx'
 import SwipeDeck from '../components/SwipeDeck.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
 import { SWIPE_PREVENT_ALL } from '../components/swipeGestureConfig.js'
+import PageTopControls from '../components/PageTopControls.jsx'
 import {
   loadAssessmentDraft,
   saveAssessmentDraft,
@@ -45,7 +46,7 @@ function prefersReducedMotion() {
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 }
 
-export default function AssessmentPage() {
+export default function AssessmentPage({ onLogout }) {
   const navigate = useNavigate()
 
   // Read once, on mount. Refresh / browser-back / typing the URL all remount
@@ -206,6 +207,7 @@ export default function AssessmentPage() {
   if (showResult && result) {
     return (
       <div className={styles.page}>
+        <PageTopControls onLogout={onLogout} />
         <header className={styles.header}>
           <button
             type="button"
@@ -254,6 +256,7 @@ export default function AssessmentPage() {
   // Assessment screen
   return (
     <div className={styles.page}>
+      <PageTopControls onLogout={onLogout} />
       <header className={styles.header}>
         <button
           type="button"

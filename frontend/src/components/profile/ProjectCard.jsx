@@ -30,7 +30,7 @@ export default function ProjectCard({ project, onSave = null, isSaved = false })
         borderRadius: 20,
         overflow: 'hidden',
         cursor: 'pointer',
-        background: 'rgba(255,255,255,0.03)',
+        background: 'var(--color-surface-2)',
         aspectRatio: '4 / 5',
         boxShadow: '0 10px 25px rgba(0,0,0,0.3)', // §3.5.1 mandatory depth
       }}
@@ -72,11 +72,11 @@ export default function ProjectCard({ project, onSave = null, isSaved = false })
             width: 34,
             height: 34,
             borderRadius: '50%',
-            background: isSaved ? 'rgba(236,72,153,0.35)' : 'rgba(0,0,0,0.55)',
+            background: isSaved ? 'color-mix(in srgb, var(--accent-1) 35%, transparent)' : 'rgba(0,0,0,0.55)',
             backdropFilter: 'blur(6px)',
             WebkitBackdropFilter: 'blur(6px)',
-            border: isSaved ? '1px solid rgba(236,72,153,0.5)' : '1px solid rgba(255,255,255,0.15)',
-            color: isSaved ? '#ec4899' : '#fff',
+            border: isSaved ? '1px solid color-mix(in srgb, var(--accent-1) 50%, transparent)' : '1px solid rgba(255,255,255,0.15)',
+            color: isSaved ? 'var(--accent-1)' : '#fff',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',

@@ -52,7 +52,7 @@ export default function VerifyGateModal({ onClose, onPromoted }) {
         position: 'fixed',
         inset: 0,
         zIndex: 10100,
-        background: 'rgba(0,0,0,0.55)',
+        background: 'var(--color-scrim-soft)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',

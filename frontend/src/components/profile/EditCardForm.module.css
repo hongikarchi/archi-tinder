@@ -5,21 +5,29 @@
  * Token naming follows tokens.css — all var() references must exist there.
  */
 
-/* Shared base for all text inputs + textarea in the form */
+/*
+ * Shared base for all text inputs + textarea in the form.
+ * Glassmorphic per DESIGN.md §8.5 — mirrors AccountScreen.module.css
+ * .inputWrapper (settings-account.html / settings-edit-profile.html mocks
+ * draw every field this way: color-mix surface, blur, radius-sm, 12px 18px,
+ * 16px font so mobile doesn't trigger iOS zoom-on-focus).
+ */
 .field {
   width: 100%;
-  padding: 12px 14px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border-soft);
-  border-radius: var(--radius-md);
+  padding: 12px 18px;
+  background: color-mix(in srgb, var(--color-surface) 72%, transparent);
+  border: 1px solid var(--color-border);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: var(--radius-sm);
   color: var(--color-text);
-  font-size: 14px;
+  font-size: 16px;
   font-family: inherit;
   box-sizing: border-box;
   outline: none;
   /* DESIGN.md §8.5 — motion tokens for transitions */
   transition: border-color var(--motion-fast) var(--motion-ease),
-              box-shadow var(--motion-normal) var(--motion-ease-out);
+              box-shadow var(--motion-slow) var(--motion-ease-out);
 }
 
 /* §8.5: 3-state focus — gray → accent-1 on focus */

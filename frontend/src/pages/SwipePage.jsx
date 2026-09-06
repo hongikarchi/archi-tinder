@@ -9,6 +9,8 @@ import { isActionCard } from '../utils/appHelpers.js'
 import { useSwipeOrchestration } from '../hooks/useSwipeOrchestration.js'
 import { useKeyboardSwipe } from '../hooks/useKeyboardSwipe.js'
 import { useTranslation } from '../i18n/index.js'
+import PageLogoHeader from '../components/PageLogoHeader.jsx'
+import PageTopControls from '../components/PageTopControls.jsx'
 import {
   INK,
   MONO,
@@ -335,11 +337,12 @@ function DismissConfirmPopup({ onConfirm, onCancel }) {
 export default function SwipePage({
   currentCard, cardResetToken = 0, progress, isCompleted, isLoading, isResultLoading = false, swipePending = 0,
   keepExploringChosen = false,
-  projectName, onSwipe, onViewResults, onExtendSession, // eslint-disable-line no-unused-vars
+  onSwipe, onViewResults, onExtendSession, // eslint-disable-line no-unused-vars
   onExitToNewProject, onExitToHome,
   questionTrigger = null,
   onQuestionAnswer,
   nextCard = null,
+  onLogout,
 }) {
   const { t } = useTranslation()
   const cardRef = useRef(null)
@@ -464,6 +467,8 @@ export default function SwipePage({
         padding: '20px 16px',
         position: 'relative',
       }}>
+        <PageTopControls onLogout={onLogout} />
+
         {/* Exit button */}
         <button
           onClick={() => setShowExitConfirm(true)}
@@ -485,13 +490,9 @@ export default function SwipePage({
           </svg>
         </button>
 
-        {/* Header / confidence bar */}
+        {/* Header / confidence bar — Arch|ibe logo (DESIGN.md-mock parity, taste-swipe.html) */}
         <div style={{ textAlign: 'center', width: '100%' }}>
-          <h1 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 14px', letterSpacing: '-0.01em' }}>
-            {projectName
-              ? <span style={{ color: 'var(--color-text)' }}>{projectName}</span>
-              : <span style={{ color: 'var(--color-text)', letterSpacing: '0.2em' }}>ARCHIBE</span>}
-          </h1>
+          <PageLogoHeader padding="0 0 6px" marginBottom={8} />
           <div style={{ maxWidth: CARD_WIDTH, margin: '0 auto' }}>
             <ConfidenceBar value={confidence} phase={phase} progress={progress} />
           </div>
@@ -511,7 +512,7 @@ export default function SwipePage({
                 width: '100%',
                 padding: '13px 20px',
                 borderRadius: 14,
-                background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
+                background: 'var(--accent-1)',
                 color: '#fff',
                 fontSize: 14,
                 fontWeight: 700,
@@ -551,6 +552,8 @@ export default function SwipePage({
 
   return (
     <>
+      <PageTopControls onLogout={onLogout} />
+
       {showExitConfirm && (
         <ExitConfirmPopup
           onNewProject={() => { setShowExitConfirm(false); onExitToNewProject?.() }}
@@ -595,13 +598,9 @@ export default function SwipePage({
           </svg>
         </button>
 
-        {/* Header */}
+        {/* Header — Arch|ibe logo (DESIGN.md-mock parity, taste-swipe.html) */}
         <div style={{ textAlign: 'center', width: '100%' }}>
-          <h1 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 14px', letterSpacing: '-0.01em' }}>
-            {projectName
-              ? <span style={{ color: 'var(--color-text)' }}>{projectName}</span>
-              : <span style={{ color: 'var(--color-text)', letterSpacing: '0.2em' }}>ARCHIBE</span>}
-          </h1>
+          <PageLogoHeader padding="0 0 6px" marginBottom={8} />
           <div style={{ maxWidth: CARD_WIDTH, margin: '0 auto' }}>
             <ConfidenceBar value={confidence} phase={phase} progress={progress} />
             {filter_relaxed && (
@@ -628,7 +627,7 @@ export default function SwipePage({
                 width: '100%',
                 padding: '12px 20px',
                 borderRadius: 14,
-                background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
+                background: 'var(--accent-1)',
                 color: '#fff',
                 fontSize: 14,
                 fontWeight: 700,

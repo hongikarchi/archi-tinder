@@ -15,10 +15,7 @@ import { CARD_WIDTH, CARD_HEIGHT } from './SwipeCard.jsx'
 import { useTranslation } from '../i18n/index.js'
 import {
   INK,
-  MONO,
-  LS_CAPS,
   paperFaceStyle,
-  wordmarkStyle,
   monoLabelStyle,
   cardMetaStyle,
   inkSecondaryStyle,
@@ -32,22 +29,15 @@ export default function DiscoveryTriggerCard() {
         ...paperFaceStyle({ radius: 20, padding: '24px 22px' }),
         width: CARD_WIDTH,
         height: CARD_HEIGHT,
-        justifyContent: 'space-between',
+        justifyContent: 'center',
+        gap: 28,
         position: 'relative',
         userSelect: 'none',
         WebkitUserSelect: 'none',
         boxSizing: 'border-box',
       }}
     >
-      {/* Top: wordmark row + mono stamp */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={wordmarkStyle}>ARCHIBE</span>
-        <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 600, letterSpacing: LS_CAPS, color: INK.mid }}>
-          {t('discovery.triggerCard.stamp')}
-        </span>
-      </div>
-
-      {/* Middle: title + body */}
+      {/* Top: title + body (wordmark/stamp row removed — mock has no top row) */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, textAlign: 'center' }}>
         <h2 style={{
           fontFamily: 'var(--font-family)',

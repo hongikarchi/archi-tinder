@@ -7,10 +7,14 @@ import Header from './buildingDetail/Header.jsx'
 import LoadingState from './buildingDetail/LoadingState.jsx'
 import { isValidRank, kindLabel, metadataItems } from './buildingDetail/helpers.js'
 import PhotoLightbox from './buildingDetail/PhotoLightbox.jsx'
+import PageLogoHeader from '../components/PageLogoHeader.jsx'
+import PageTopControls from '../components/PageTopControls.jsx'
+import { useTranslation } from '../i18n/index.js'
 
 const BUILDING_ID_RE = /^[A-Za-z0-9_-]{1,32}$/
 
-export default function BuildingDetailPage() {
+export default function BuildingDetailPage({ onLogout }) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const location = useLocation()
   const rawBuildingId = useParams().buildingId
@@ -136,14 +140,24 @@ export default function BuildingDetailPage() {
     }
   }
 
-  if (loading) return <LoadingState onBack={handleBack} />
+  if (loading) {
+    return (
+      <>
+        <PageTopControls onLogout={onLogout} />
+        <LoadingState onBack={handleBack} />
+      </>
+    )
+  }
   if (error || !building) {
     return (
-      <ErrorState
-        message={error || 'No building matched this ID.'}
-        onBack={handleBack}
-        onRetry={() => setReloadKey(k => k + 1)}
-      />
+      <>
+        <PageTopControls onLogout={onLogout} />
+        <ErrorState
+          message={error || 'No building matched this ID.'}
+          onBack={handleBack}
+          onRetry={() => setReloadKey(k => k + 1)}
+        />
+      </>
     )
   }
 
@@ -155,16 +169,10 @@ export default function BuildingDetailPage() {
       overflowY: 'auto',
       paddingBottom: 'calc(84px + env(safe-area-inset-bottom, 0px))',
     }}>
-      <Header
-        onBack={handleBack}
-        onSaveToBoard={() => !isSaved && setSaveModalOpen(true)}
-        isSaved={isSaved}
-        saveEnabled={fromRecommended}
-        bookmarkEnabled={!!fromProjectId && !!rank}
-        bookmarkPending={bookmarkPending}
-        isBookmarked={isBookmarked}
-        onToggleBookmark={handleToggleBookmark}
-      />
+      <PageTopControls onLogout={onLogout} />
+      <PageLogoHeader />
+
+      <Header onBack={handleBack} />
 
       {saveModalOpen && building && (
         <SaveToBoardModal
@@ -187,22 +195,104 @@ export default function BuildingDetailPage() {
         <p style={{
           color: 'var(--color-text-muted)',
           fontSize: 11,
-          fontWeight: 800,
+          fontWeight: 700,
           letterSpacing: '0.1em',
           textTransform: 'uppercase',
           margin: '0 0 8px',
         }}>
           Building detail
         </p>
-        <h1 style={{
-          color: 'var(--color-text)',
-          fontSize: 'clamp(28px, 7vw, 42px)',
-          fontWeight: 800,
-          lineHeight: 1.08,
+        {/* Title row — save-to-board + bookmark now sit beside the h1
+         * (canvas-design-port.md §6d item 6; building-detail.html moves this
+         * cluster out of the old sticky header into this exact spot).
+         * Logic transplanted verbatim from the removed buildingDetail/Header.jsx —
+         * only the shell (pill/circle sizing, colors) is restyled to match the
+         * mock's default-state values; isSaved/isBookmarked/pending branches
+         * and their #fbbf24 literals are unchanged (still on the §6c defect
+         * map under the "building" PR, now living in this file instead). */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          gap: 16,
           margin: '0 0 8px',
         }}>
-          {title}
-        </h1>
+          <h1 style={{
+            color: 'var(--color-text)',
+            fontSize: 'clamp(28px, 7vw, 42px)',
+            fontWeight: 700,
+            lineHeight: 1.08,
+            margin: 0,
+          }}>
+            {title}
+          </h1>
+
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0, paddingTop: 10 }}>
+            {/* Save to Board — only on recommended buildings, not on board-saved ones */}
+            {fromRecommended && (
+              <button
+                type="button"
+                onClick={() => !isSaved && setSaveModalOpen(true)}
+                aria-label={isSaved ? 'Saved to board' : 'Save to board'}
+                style={{
+                  height: 34,
+                  padding: '0 14px',
+                  borderRadius: 999,
+                  border: isSaved ? '1px solid rgba(251,191,36,0.5)' : 'none',
+                  background: isSaved ? 'rgba(251,191,36,0.12)' : 'var(--accent-1)',
+                  color: isSaved ? '#fbbf24' : '#fff',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: isSaved ? 'default' : 'pointer',
+                  fontFamily: 'inherit',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  transition: 'background 0.2s, color 0.2s',
+                }}
+              >
+                {isSaved ? (
+                  <>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                    {t('buildingDetail.saved')}
+                  </>
+                ) : (
+                  <>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="12" y1="5" x2="12" y2="19" />
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                    {t('buildingDetail.save')}
+                  </>
+                )}
+              </button>
+            )}
+
+            {!!fromProjectId && !!rank && (
+              <button
+                type="button"
+                onClick={handleToggleBookmark}
+                disabled={bookmarkPending}
+                aria-label={isBookmarked ? 'Remove bookmark' : 'Save bookmark'}
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: '50%',
+                  border: isBookmarked ? '1px solid rgba(251,191,36,0.65)' : '1px solid var(--color-border-soft)',
+                  background: isBookmarked ? 'rgba(251,191,36,0.18)' : 'var(--color-surface)',
+                  color: isBookmarked ? '#fbbf24' : 'var(--color-text-dim)',
+                  cursor: bookmarkPending ? 'default' : 'pointer',
+                  opacity: bookmarkPending ? 0.65 : 1,
+                  fontSize: 16,
+                }}
+              >
+                {isBookmarked ? '★' : '☆'}
+              </button>
+            )}
+          </div>
+        </div>
         {architect && (
           <p style={{
             color: 'var(--color-text-dim)',
@@ -232,7 +322,7 @@ export default function BuildingDetailPage() {
               <div style={{
                 color: 'var(--color-text-muted)',
                 fontSize: 10,
-                fontWeight: 800,
+                fontWeight: 700,
                 letterSpacing: '0.08em',
                 textTransform: 'uppercase',
                 marginBottom: 4,
@@ -491,7 +581,7 @@ export default function BuildingDetailPage() {
             <h2 style={{
               color: 'var(--color-text)',
               fontSize: 16,
-              fontWeight: 800,
+              fontWeight: 700,
               margin: '0 0 10px',
             }}>
               Description
@@ -515,7 +605,7 @@ export default function BuildingDetailPage() {
           <h2 style={{
             color: 'var(--color-text)',
             fontSize: 16,
-            fontWeight: 800,
+            fontWeight: 700,
             margin: '0 0 10px',
           }}>
             Atmosphere

@@ -29,6 +29,11 @@ export const locales = {
       toastNotEnoughLikes: '좋아요가 부족합니다 (최소 10개)',
       toastAnalysisFailed: 'Taste 분석 시작 실패 — 다시 시도해주세요',
       toastSaveFailedLeave: 'Taste 세션 저장 실패 — 그냥 이동합니다',
+      loadError: 'Discovery를 불러오지 못했습니다. 탭해서 다시 시도하세요.',
+      retry: '다시 시도',
+      emptyTitle: '아직 보여드릴 항목이 없어요',
+      startAnalysis: 'Taste 분석 시작',
+      swipeHintBar: '← 패스 · 카드 탭 · 좋아요 →  ·  방향키 지원',
       triggerCard: {
         title: '취향이 10장 모였어요',
         bodyLine1: '지금까지 좋아요한 건축들로',
@@ -206,6 +211,13 @@ export const locales = {
       reportRegenerate:  '리포트 재생성',
       imgError:          '이미지 생성에 실패했습니다.',
       reportError:       '리포트 재생성에 실패했습니다.',
+      axis: {
+        form:        '형태',
+        materiality: '물성',
+        scale:       '스케일',
+        energy:      '에너지',
+        tradition:   '전통성',
+      },
       spectrum: {
         form:        { left: '기하학적',  right: '유기적' },
         materiality: { left: '산업재료',  right: '자연재료' },
@@ -326,7 +338,7 @@ export const locales = {
       choice: {
         eyebrow: '첫 카드',
         title:   '처음 방문하셨나요?',
-        body:    '건축 카드를 스와이프해 취향에 반응하세요 · 10~15장이면 취향 프로필이 완성돼요.',
+        body:    '건축 카드를 스와이프해 취향에 반응하세요.',
         left:    { label: '기존 계정', sub: '왼쪽 스와이프' },
         right:   { label: '새 프로필', sub: '오른쪽 스와이프' },
       },
@@ -531,6 +543,11 @@ export const locales = {
       toastNotEnoughLikes: 'Not enough likes (minimum 10)',
       toastAnalysisFailed: 'Failed to start Taste analysis — please try again',
       toastSaveFailedLeave: 'Failed to save Taste session — leaving anyway',
+      loadError: 'Couldn\'t load Discovery. Tap to retry.',
+      retry: 'Retry',
+      emptyTitle: 'Nothing to show yet',
+      startAnalysis: 'Start Taste Analysis',
+      swipeHintBar: '← skip · tap card · save →  ·  arrow keys supported',
       triggerCard: {
         title: 'You\'ve liked 10 buildings',
         bodyLine1: 'Based on what you\'ve liked so far,',
@@ -723,6 +740,13 @@ export const locales = {
       reportRegenerate:  'Regenerate report',
       imgError:          'Failed to generate image.',
       reportError:       'Failed to regenerate report.',
+      axis: {
+        form:        'Form',
+        materiality: 'Materiality',
+        scale:       'Scale',
+        energy:      'Energy',
+        tradition:   'Tradition',
+      },
       spectrum: {
         form:        { left: 'Geometric',    right: 'Organic' },
         materiality: { left: 'Industrial',   right: 'Natural' },
@@ -828,7 +852,7 @@ export const locales = {
       choice: {
         eyebrow: 'First card',
         title:   'Are you new here?',
-        body:    'Swipe architecture cards to react to your taste · 10–15 swipes builds your taste profile.',
+        body:    'Swipe architecture cards to react to your taste.',
         left:    { label: 'Returning', sub: 'Left swipe' },
         right:   { label: 'New profile', sub: 'Right swipe' },
       },

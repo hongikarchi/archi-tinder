@@ -10,6 +10,7 @@ import { getMyPersonality } from '../api/personality.js'
 import { getPeopleDiscovery } from '../api/people.js'
 import PersonCard from '../components/PersonCard.jsx'
 import { TYPE_CODES } from '../constants/personalityTypes.js'
+import PageTopControls from '../components/PageTopControls.jsx'
 import styles from './PeopleDiscoveryPage.module.css'
 
 const PRESET_FILTERS = [
@@ -49,7 +50,7 @@ function PersonCardSkeleton() {
   return <div className={`${styles.skeleton} skeleton-shimmer`} aria-hidden="true" />
 }
 
-export default function PeopleDiscoveryPage() {
+export default function PeopleDiscoveryPage({ onLogout }) {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const axisParam = searchParams.get('axis')
@@ -126,6 +127,8 @@ export default function PeopleDiscoveryPage() {
 
   return (
     <div className={styles.page}>
+      <PageTopControls onLogout={onLogout} />
+
       {/* Header */}
       <header className={styles.header}>
         <button

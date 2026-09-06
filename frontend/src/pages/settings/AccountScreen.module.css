@@ -10,51 +10,16 @@
   background: var(--color-bg);
 }
 
-.header {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  background: color-mix(in srgb, var(--color-bg) 72%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  padding: 12px 16px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid var(--color-border-soft);
-  gap: 8px;
-}
-
+/* In-flow left-aligned page title (canvas-design-port.md §6d item 6) —
+ * scrolls with the content column; "back" lives in the floating
+ * PageBackButton instead of a sticky header bar. Shared by AccountScreen
+ * and EditProfileScreen (both import this module). */
 .headerTitle {
-  color: var(--color-text);
-  font-size: 17px;
+  font-size: 20px;
   font-weight: 700;
-  margin: 0;
-  letter-spacing: -0.01em;
-}
-
-.iconBtn {
-  width: 44px;
-  height: 44px;
-  min-width: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
+  margin: 0 0 14px;
   color: var(--color-text);
-  cursor: pointer;
-  border-radius: 12px;
-  transition: background var(--motion-fast) var(--motion-ease);
-}
-
-.iconBtn:hover {
-  background: var(--color-surface-2);
-}
-
-.iconBtn:focus-visible {
-  outline: 2px solid var(--accent-1);
-  outline-offset: 2px;
+  letter-spacing: -0.01em;
 }
 
 /* Glassmorphic input (DESIGN.md §8.5) */

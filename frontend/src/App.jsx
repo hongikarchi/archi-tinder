@@ -1102,13 +1102,14 @@ export default function App() {
           </ProtectedRoute>
         }>
           <Route index element={<Navigate to="/discovery" replace />} />
-          <Route path="discovery" element={<DiscoveryPage showToast={setGlobalToast} />} />
+          <Route path="discovery" element={<DiscoveryPage showToast={setGlobalToast} onLogout={handleLogout} />} />
           <Route path="search" element={
             <LLMSearchPage
               mode="new"
               onBack={() => navigate('/discovery')}
               onStart={handleStart}
               onUpdate={handleUpdateWithImages}
+              onLogout={handleLogout}
             />
           } />
           <Route path="search/:projectId" element={
@@ -1116,6 +1117,7 @@ export default function App() {
               onBack={() => navigate('/')}
               onStart={handleStart}
               onUpdate={handleUpdateWithImages}
+              onLogout={handleLogout}
             />
           } />
           <Route path="swipe" element={null} />
@@ -1124,22 +1126,22 @@ export default function App() {
           <Route path="user/me" element={<UserProfilePage {...sharedLayoutProps} />} />
           <Route path="user/:userId" element={<UserProfilePage {...sharedLayoutProps} />} />
           <Route path="office/:officeId" element={<FirmProfilePage {...sharedLayoutProps} />} />
-          <Route path="result/:sessionId" element={<ResultsPage projects={projects} setProjects={setProjects} onReportGenerated={handleReportGenerated} />} />
-          <Route path="buildings/:buildingId" element={<BuildingDetailPage />} />
-          <Route path="board/:boardId" element={<BoardDetailPage onResume={handleResumeProject} />} />
-          <Route path="board/:boardId/report" element={<BoardReportPage />} />
-          <Route path="liked-projects" element={<LikedProjectsPage />} />
-          <Route path="upload" element={<UploadWorkPage />} />
+          <Route path="result/:sessionId" element={<ResultsPage projects={projects} setProjects={setProjects} onReportGenerated={handleReportGenerated} onLogout={handleLogout} />} />
+          <Route path="buildings/:buildingId" element={<BuildingDetailPage onLogout={handleLogout} />} />
+          <Route path="board/:boardId" element={<BoardDetailPage onResume={handleResumeProject} onLogout={handleLogout} />} />
+          <Route path="board/:boardId/report" element={<BoardReportPage onLogout={handleLogout} />} />
+          <Route path="liked-projects" element={<LikedProjectsPage onLogout={handleLogout} />} />
+          <Route path="upload" element={<UploadWorkPage onLogout={handleLogout} />} />
           <Route path="my/liked-offices" element={<Navigate to="/my/profile" replace />} />
-          <Route path="architects/:architectId" element={<ArchitectProfilePage />} />
-          <Route path="notifications" element={<NotificationInboxScreen />} />
-          <Route path="assessment" element={<AssessmentPage />} />
-          <Route path="people" element={<PeopleDiscoveryPage />} />
-          <Route path="settings" element={<SettingsPage />}>
-            <Route path="edit-profile" element={<EditProfileScreen />} />
-            <Route path="account" element={<AccountScreen />} />
-            <Route path="notifications" element={<NotificationsScreen />} />
-            <Route path="appearance" element={<AppearanceScreen />} />
+          <Route path="architects/:architectId" element={<ArchitectProfilePage onLogout={handleLogout} />} />
+          <Route path="notifications" element={<NotificationInboxScreen onLogout={handleLogout} />} />
+          <Route path="assessment" element={<AssessmentPage onLogout={handleLogout} />} />
+          <Route path="people" element={<PeopleDiscoveryPage onLogout={handleLogout} />} />
+          <Route path="settings" element={<SettingsPage onLogout={handleLogout} />}>
+            <Route path="edit-profile" element={<EditProfileScreen onLogout={handleLogout} />} />
+            <Route path="account" element={<AccountScreen onLogout={handleLogout} />} />
+            <Route path="notifications" element={<NotificationsScreen onLogout={handleLogout} />} />
+            <Route path="appearance" element={<AppearanceScreen onLogout={handleLogout} />} />
           </Route>
           {/* ADMIN-DBCHECK-1: URL-only internal QA tool, dev builds only — no TabBar/nav link */}
           {import.meta.env.DEV && (
@@ -1237,7 +1239,7 @@ export default function App() {
                   padding: '7px 14px',
                   borderRadius: 8,
                   border: 'none',
-                  background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
+                  background: 'var(--accent-1)',
                   color: '#fff',
                   fontSize: 12,
                   fontWeight: 600,

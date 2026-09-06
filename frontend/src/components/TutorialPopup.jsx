@@ -5,8 +5,10 @@
  * LoginPage's register-success path, owned end-to-end by DiscoveryPage).
  * Copy now Discovery-semantic (left = pass, right = like) and fully via i18n.
  * Colors: left/pass = neutral (var(--color-text-muted), non-destructive in
- * Discovery), right/like = var(--accent-1). The dark scrim + white-on-scrim
- * text stays rgba(255,255,255,...) — a theme-independent overlay idiom.
+ * Discovery), right/like = var(--accent-1). Backdrop uses var(--color-scrim)
+ * (canvas design port, 2026-08-29 — matches overlay-tutorial.html's
+ * rgba(0,0,0,0.65)); the white-on-scrim TEXT stays literal
+ * rgba(255,255,255,...) — a theme-independent on-scrim idiom.
  * The component itself is "dumb": it only calls onClose(); the caller
  * (DiscoveryPage) owns the localStorage flags.
  */
@@ -48,7 +50,7 @@ export default function TutorialPopup({ visible, onClose }) {
       onClick={handleClose}
       style={{
         position: 'fixed', inset: 0,
-        background: 'rgba(0,0,0,0.65)',
+        background: 'var(--color-scrim)',
         backdropFilter: 'blur(3px)',
         zIndex: 10000,
         display: 'flex', flexDirection: 'column',

@@ -78,7 +78,7 @@ export default function TabBar() {
               flex: 1, border: 'none', background: 'none',
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4,
               cursor: 'pointer', fontFamily: 'inherit',
-              color: active ? '#ec4899' : 'var(--color-nav-inactive)',
+              color: active ? 'var(--accent-1)' : 'var(--color-nav-inactive)',
               transition: 'color 0.18s',
               paddingBottom: 4,
             }}
@@ -86,7 +86,7 @@ export default function TabBar() {
             <div style={{
               width: 40, height: 28, borderRadius: 14,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: active ? 'rgba(236,72,153,0.12)' : 'transparent',
+              background: active ? 'color-mix(in srgb, var(--accent-1) 12%, transparent)' : 'transparent',
               transition: 'background 0.18s',
             }}>
               {TAB_ICONS[tab.id]}

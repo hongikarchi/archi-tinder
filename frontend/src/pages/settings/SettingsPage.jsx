@@ -5,8 +5,10 @@
  * Layout: viewport-locked scroll, glassmorphic sticky header (mirrors ProfileHeader).
  */
 import { useNavigate, Outlet, useLocation } from 'react-router-dom'
-import { IconBack } from '../../components/icons.jsx'
 import { useTranslation } from '../../i18n/index.js'
+import PageLogoHeader from '../../components/PageLogoHeader.jsx'
+import PageTopControls from '../../components/PageTopControls.jsx'
+import PageBackButton from '../../components/PageBackButton.jsx'
 import styles from './SettingsPage.module.css'
 
 const ROWS = [
@@ -16,7 +18,7 @@ const ROWS = [
   { key: 'appearance',    labelKey: 'settings.rows.appearance.label',     hintKey: 'settings.rows.appearance.hint',     path: '/settings/appearance' },
 ]
 
-export default function SettingsPage() {
+export default function SettingsPage({ onLogout }) {
   const navigate = useNavigate()
   const location = useLocation()
   const { t } = useTranslation()
@@ -28,23 +30,13 @@ export default function SettingsPage() {
     <>
       {isRoot && (
         <div className={styles.page}>
-          {/* Glassmorphic sticky header */}
-          <div className={styles.header}>
-            <button
-              type="button"
-              onClick={() => navigate(-1)}
-              aria-label="Back"
-              className={styles.iconBtn}
-            >
-              <IconBack width={20} height={20} />
-            </button>
-            <h2 className={styles.headerTitle}>{t('settings.title')}</h2>
-            {/* Spacer to keep title centered */}
-            <div style={{ width: 44 }} />
-          </div>
+          <PageBackButton onClick={() => navigate(-1)} />
+          <PageLogoHeader />
+          <PageTopControls onLogout={onLogout} />
 
           {/* Settings list */}
           <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px' }}>
+            <h2 className={styles.headerTitle}>{t('settings.title')}</h2>
             <div className={styles.listCard}>
               {ROWS.map((row) => (
                 <button

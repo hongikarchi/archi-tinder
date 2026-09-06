@@ -1,6 +1,8 @@
 /*
- * LikedProjectsPage.module.css — building card hover + header back button hover.
+ * LikedProjectsPage.module.css — building card hover.
  * FRONT-DESIGN-A1-HOVER: CSS :hover replaces onMouseEnter/Leave style mutation.
+ * (Header back-button hover rule removed — the header's back button is now
+ * the shared PageBackButton, canvas-design-port.md §6d item 6.)
  */
 .card {
   border: 1px solid transparent;
@@ -9,15 +11,7 @@
 }
 .card:hover {
   transform: translateY(-4px);
-  border-color: rgba(236, 72, 153, 0.55);
-}
-
-.backBtn {
-  background: transparent;
-  transition: background var(--motion-fast, 180ms) var(--motion-ease, cubic-bezier(0.4, 0, 0.2, 1));
-}
-.backBtn:hover {
-  background: var(--color-surface-2);
+  border-color: color-mix(in srgb, var(--accent-1) 55%, transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {

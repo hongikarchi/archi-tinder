@@ -40,7 +40,7 @@ export default function BuildingTile({ building, fromProjectId, rank, savedIds, 
         borderRadius: 20,
         overflow: 'hidden',
         cursor: 'pointer',
-        background: 'rgba(255,255,255,0.03)',
+        background: 'var(--color-surface-2)',
         boxShadow: '0 10px 25px rgba(0,0,0,0.3)', // §3.5.1 mandatory depth (static)
         userSelect: 'none',
       }}
@@ -73,15 +73,15 @@ export default function BuildingTile({ building, fromProjectId, rank, savedIds, 
       {isEditMode && (
         <div style={{
           position: 'absolute', inset: 0, pointerEvents: 'none',
-          background: isSelected ? 'rgba(236,72,153,0.28)' : 'rgba(0,0,0,0.18)',
+          background: isSelected ? 'color-mix(in srgb, var(--accent-1) 28%, transparent)' : 'rgba(0,0,0,0.18)',
           transition: 'background 0.15s',
           display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end',
           padding: 12,
         }}>
           <div style={{
             width: 26, height: 26, borderRadius: '50%',
-            border: `2px solid ${isSelected ? '#ec4899' : 'rgba(255,255,255,0.7)'}`,
-            background: isSelected ? '#ec4899' : 'rgba(0,0,0,0.35)',
+            border: `2px solid ${isSelected ? 'var(--accent-1)' : 'rgba(255,255,255,0.7)'}`,
+            background: isSelected ? 'var(--accent-1)' : 'rgba(0,0,0,0.35)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 14, color: '#fff', fontWeight: 700,
             transition: 'all 0.15s',

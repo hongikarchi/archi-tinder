@@ -6,9 +6,11 @@ import FirmProfileHero from './firmProfile/FirmProfileHero'
 import FirmProjectsSection from './firmProfile/FirmProjectsSection'
 import FirmArticlesSection from './firmProfile/FirmArticlesSection'
 import SaveToBoardModal from '../components/SaveToBoardModal.jsx'
+import PageLogoHeader from '../components/PageLogoHeader.jsx'
+import PageTopControls from '../components/PageTopControls.jsx'
 
 
-export default function FirmProfilePage() {
+export default function FirmProfilePage({ onLogout }) {
   const rawOfficeId = useParams().officeId
   // Defense-in-depth: only allow alphanumeric office IDs (with optional `_`/`-`).
   // Backend route is the authoritative gate, but reject path-traversal-shaped values
@@ -72,6 +74,7 @@ export default function FirmProfilePage() {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         color: 'var(--color-text-dim)', fontSize: 14,
       }}>
+        <PageTopControls onLogout={onLogout} />
         Loading office profile...
       </div>
     )
@@ -85,6 +88,7 @@ export default function FirmProfilePage() {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         color: 'var(--color-text-dim)', fontSize: 14,
       }}>
+        <PageTopControls onLogout={onLogout} />
         {error || 'Office not found.'}
       </div>
     )
@@ -100,7 +104,7 @@ export default function FirmProfilePage() {
         position: 'relative',
       }}
     >
-      {/* Ambient glow — single brand-pink, no purple */}
+      {/* Ambient accent glow — themed (DESIGN.md §8.1 accent idiom, mirrors UserProfilePage) */}
       <div
         style={{
           position: 'absolute',
@@ -108,11 +112,14 @@ export default function FirmProfilePage() {
           left: '-10%',
           width: '120%',
           height: '50%',
-          background: 'radial-gradient(circle at 50% 0%, rgba(236,72,153,0.10) 0%, transparent 70%)',
+          background: 'radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--accent-1) 10%, transparent) 0%, transparent 70%)',
           pointerEvents: 'none',
           zIndex: 0,
         }}
       />
+
+      <PageLogoHeader />
+      <PageTopControls onLogout={onLogout} />
 
       <FirmProfileHeader />
 

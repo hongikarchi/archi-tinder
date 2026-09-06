@@ -13,6 +13,8 @@ import { discoveryNavigationGuard } from '../utils/discoveryGuard.js'
 import { useSwipeOrchestration } from '../hooks/useSwipeOrchestration.js'
 import { useKeyboardSwipe } from '../hooks/useKeyboardSwipe.js'
 import { useTranslation } from '../i18n/index.js'
+import PageLogoHeader from '../components/PageLogoHeader.jsx'
+import PageTopControls from '../components/PageTopControls.jsx'
 
 // Module-level flag: false on full page reload (module not yet loaded), true after
 // the first mount within the same SPA session. Used to detect tab re-entry vs first
@@ -127,7 +129,7 @@ function _clearDraftSessionStorage() {
   sessionStorage.removeItem(CONTINUE_AFTER_TRIGGER_KEY)
 }
 
-export default function DiscoveryPage({ showToast }) {
+export default function DiscoveryPage({ showToast, onLogout }) {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const isActiveRef = useRef(true)
@@ -507,14 +509,13 @@ export default function DiscoveryPage({ showToast }) {
       padding: '20px 16px',
     }}>
 
+      <PageTopControls onLogout={onLogout} />
+
       <TutorialPopup visible={showTutorial} onClose={handleTutorialClose} />
 
-      {/* Header */}
+      {/* Header — Arch|ibe logo (DESIGN.md-mock parity, canvas-design-port.md §6d item 1) */}
       <div style={{ textAlign: 'center', width: '100%' }}>
-        <h1 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 8px', letterSpacing: '-0.01em' }}>
-          <span style={{ color: 'var(--color-text)' }}>Disc</span>
-          <span style={{ color: 'var(--accent-1)' }}>overy</span>
-        </h1>
+        <PageLogoHeader padding={0} marginBottom={8} />
 
         {/* Feature B: persistent "Taste로 저장·이동" CTA — shown after user left-swiped
             the trigger card (Discovery 계속 선택). Rendered in the header (normal document
@@ -546,8 +547,8 @@ export default function DiscoveryPage({ showToast }) {
                 borderRadius: 'var(--radius-md, 12px)',
                 border: 'none',
                 background: promoteLoading
-                  ? 'rgba(9,105,218,0.4)'
-                  : 'linear-gradient(135deg, var(--accent-1, #0969DA), var(--accent-2, #8250DF))',
+                  ? 'color-mix(in srgb, var(--accent-1) 40%, transparent)'
+                  : 'var(--accent-1)',
                 color: '#fff',
                 fontSize: 14,
                 fontWeight: 600,
@@ -611,7 +612,7 @@ export default function DiscoveryPage({ showToast }) {
                 border: 'none',
                 background: promoteLoading
                   ? 'color-mix(in srgb, var(--accent-1) 40%, transparent)'
-                  : 'linear-gradient(135deg,var(--accent-1),var(--accent-2))',
+                  : 'var(--accent-1)',
                 color: '#fff',
                 fontSize: 15,
                 fontWeight: 700,
@@ -647,7 +648,7 @@ export default function DiscoveryPage({ showToast }) {
             color: 'var(--color-text)', padding: '0 20px',
           }}>
             <p style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>
-              Couldn&apos;t load Discovery. Tap to retry.
+              {t('discovery.loadError')}
             </p>
             <button
               type="button"
@@ -665,7 +666,7 @@ export default function DiscoveryPage({ showToast }) {
                 fontFamily: 'inherit',
               }}
             >
-              Retry
+              {t('discovery.retry')}
             </button>
           </div>
         ) : deck.length === 0 && loading ? (
@@ -678,7 +679,7 @@ export default function DiscoveryPage({ showToast }) {
             textAlign: 'center', color: 'var(--color-text)', padding: '0 20px',
           }}>
             <p style={{ margin: 0, color: 'var(--color-text)', fontSize: 16, fontWeight: 700 }}>
-              Nothing to show yet
+              {t('discovery.emptyTitle')}
             </p>
             <button
               type="button"
@@ -689,7 +690,7 @@ export default function DiscoveryPage({ showToast }) {
                 padding: '0 18px',
                 borderRadius: 12,
                 border: 'none',
-                background: 'linear-gradient(135deg,var(--accent-1),var(--accent-2))',
+                background: 'var(--accent-1)',
                 color: '#fff',
                 fontSize: 14,
                 fontWeight: 700,
@@ -697,7 +698,7 @@ export default function DiscoveryPage({ showToast }) {
                 fontFamily: 'inherit',
               }}
             >
-              Start Taste Analysis
+              {t('discovery.startAnalysis')}
             </button>
           </div>
         ) : (
@@ -768,7 +769,7 @@ export default function DiscoveryPage({ showToast }) {
       {/* Bottom area: swipe hint */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
         <p style={{ color: 'var(--color-text-dimmest)', fontSize: 11, margin: 0 }}>
-          ← skip · tap card · save →&nbsp;&nbsp;·&nbsp;&nbsp;arrow keys supported
+          {t('discovery.swipeHintBar')}
         </p>
       </div>
 
@@ -828,7 +829,7 @@ export default function DiscoveryPage({ showToast }) {
                 padding: '0 16px',
                 borderRadius: 12,
                 border: 'none',
-                background: 'linear-gradient(135deg, var(--accent-1, #0969DA), var(--accent-2, #8250DF))',
+                background: 'var(--accent-1)',
                 color: '#fff',
                 fontSize: 15,
                 fontWeight: 600,

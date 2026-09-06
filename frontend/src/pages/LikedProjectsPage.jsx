@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getLikedBuildings } from '../api/client.js'
 import { useTranslation } from '../i18n/index.js'
+import PageLogoHeader from '../components/PageLogoHeader.jsx'
+import PageTopControls from '../components/PageTopControls.jsx'
+import PageBackButton from '../components/PageBackButton.jsx'
 import s from './LikedProjectsPage.module.css'
 
 /**
@@ -86,7 +89,7 @@ function LikedBuildingCard({ building }) {
   )
 }
 
-export default function LikedProjectsPage() {
+export default function LikedProjectsPage({ onLogout }) {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const [buildings, setBuildings] = useState([])
@@ -119,43 +122,18 @@ export default function LikedProjectsPage() {
       background: 'var(--color-bg)',
       paddingBottom: 'calc(80px + env(safe-area-inset-bottom))',
     }}>
-      {/* Sticky header */}
-      <div style={{
-        position: 'sticky', top: 0, zIndex: 10,
-        background: 'var(--color-header-bg, rgba(246,248,250,0.85))',
-        backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
-        padding: '12px 16px',
-        display: 'flex', alignItems: 'center', gap: 8,
-        borderBottom: '1px solid var(--color-border-soft)',
-      }}>
-        <button
-          onClick={() => navigate(-1)}
-          aria-label="Back"
-          className={s.backBtn}
-          style={{
-            width: 44, height: 44, minWidth: 44,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            border: 'none',
-            color: 'var(--color-text)', cursor: 'pointer',
-            borderRadius: 12,
-          }}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="19" y1="12" x2="5" y2="12" />
-            <polyline points="12 19 5 12 12 5" />
-          </svg>
-        </button>
+      <PageBackButton onClick={() => navigate(-1)} />
+      <PageLogoHeader />
+      <PageTopControls onLogout={onLogout} />
 
+      {/* Content area */}
+      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '18px 20px 24px' }}>
         <h2 style={{
-          color: 'var(--color-text)', fontSize: 17, fontWeight: 700,
-          margin: 0, letterSpacing: '-0.01em',
+          fontSize: 20, fontWeight: 700, margin: '0 0 16px',
+          color: 'var(--color-text)', letterSpacing: '-0.01em',
         }}>
           Liked Projects
         </h2>
-      </div>
-
-      {/* Content area */}
-      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 20px' }}>
         {loading ? (
           /* Skeleton grid while loading (§8.8 Skeleton pattern) */
           <div style={{
@@ -228,10 +206,10 @@ export default function LikedProjectsPage() {
                 minHeight: 44, padding: '0 24px',
                 borderRadius: 999,
                 border: 'none',
-                background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
+                background: 'var(--accent-1)',
                 color: '#fff', fontSize: 14, fontWeight: 700,
                 cursor: 'pointer', fontFamily: 'inherit',
-                boxShadow: '0 8px 22px rgba(236,72,153,0.32)',
+                boxShadow: '0 8px 22px color-mix(in srgb, var(--accent-1) 32%, transparent)',
               }}
             >
               {t('profile.goToDiscovery')}

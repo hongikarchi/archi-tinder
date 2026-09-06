@@ -8,11 +8,13 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getMe, updateMyProfile, setPassword as apiSetPassword } from '../../api/client.js'
-import { IconBack } from '../../components/icons.jsx'
 import GoogleVerifyButton from '../../components/GoogleVerifyButton.jsx'
 import { hasGoogleLogin } from '../../utils/loginFlow.js'
 import { useGoogleEmailVerify } from '../../hooks/useGoogleEmailVerify.js'
 import { useTranslation } from '../../i18n/index.js'
+import PageLogoHeader from '../../components/PageLogoHeader.jsx'
+import PageTopControls from '../../components/PageTopControls.jsx'
+import PageBackButton from '../../components/PageBackButton.jsx'
 import btnStyles from '../../components/Button.module.css'
 import styles from './AccountScreen.module.css'
 
@@ -41,7 +43,7 @@ const READONLY_VALUE_STYLE = {
   padding: '10px 0',
 }
 
-export default function AccountScreen() {
+export default function AccountScreen({ onLogout }) {
   const navigate = useNavigate()
   const { t } = useTranslation()
 
@@ -183,7 +185,7 @@ export default function AccountScreen() {
   if (loading) {
     return (
       <div className={styles.page}>
-        <ScreenHeader navigate={navigate} t={t} />
+        <ScreenHeader navigate={navigate} t={t} onLogout={onLogout} />
         <div style={{ display: 'flex', justifyContent: 'center', padding: 48, color: 'var(--color-text-dim)', fontSize: 14 }}>
           {t('account.loading')}
         </div>
@@ -194,7 +196,7 @@ export default function AccountScreen() {
   if (fetchError) {
     return (
       <div className={styles.page}>
-        <ScreenHeader navigate={navigate} t={t} />
+        <ScreenHeader navigate={navigate} t={t} onLogout={onLogout} />
         <div style={{ display: 'flex', justifyContent: 'center', padding: 48, color: 'var(--color-destructive)', fontSize: 14 }}>
           {fetchError}
         </div>
@@ -206,9 +208,9 @@ export default function AccountScreen() {
 
   return (
     <div className={styles.page}>
-      <ScreenHeader navigate={navigate} t={t} />
+      <ScreenHeader navigate={navigate} t={t} onLogout={onLogout} />
 
-      <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px' }}>
+      <div style={{ maxWidth: 600, margin: '0 auto', padding: '0 16px 24px' }}>
 
         {/* Read-only info section */}
         <section style={{ marginBottom: 32 }}>
@@ -477,20 +479,16 @@ export default function AccountScreen() {
 
 /* ── Internal helpers ────────────────────────────────────────────────── */
 
-function ScreenHeader({ navigate, t }) {
+function ScreenHeader({ navigate, t, onLogout }) {
   return (
-    <div className={styles.header}>
-      <button
-        type="button"
-        onClick={() => navigate(-1)}
-        aria-label="Back"
-        className={styles.iconBtn}
-      >
-        <IconBack width={20} height={20} />
-      </button>
-      <h2 className={styles.headerTitle}>{t('account.title')}</h2>
-      <div style={{ width: 44 }} />
-    </div>
+    <>
+      <PageBackButton onClick={() => navigate(-1)} />
+      <PageLogoHeader />
+      <PageTopControls onLogout={onLogout} />
+      <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px 0' }}>
+        <h2 className={styles.headerTitle}>{t('account.title')}</h2>
+      </div>
+    </>
   )
 }
 
