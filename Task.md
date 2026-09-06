@@ -167,8 +167,8 @@ FRONT-DESIGN-C(#321) 후속. 결정 대기: 저장/북마크 amber(`#fbbf24`) �
 #### INFRA-MOCKS-1 — __mocks 픽스처가 develop에 추적됨
 `frontend/public/__mocks/*.html`(디자인 대조용 테스트 픽스처 37종+하니스)이 PR #319에 실려 develop에 추적 파일로 들어감. gitignore 규칙(#321에 포함)은 추적된 파일을 못 뺌. 결정: `git rm --cached`로 untrack 하거나 의도적으로 유지. 유지 시 Vercel 빌드에 정적 파일로 포함됨(약 900KB).
 
-#### FRONT-PEOPLE-CARD-2 — 발견 피드가 실데이터에서 빈 화면
-FRONT-PEOPLE-CARD-1이 카드 앞면을 취향분석 리포트 이미지로 바꾸면서 피드 조건이 4중이 됨(진단 완료 + discovery_opt_in + publishable Work + public report_image). 로컬 DB 실측: 29명 중 진단 완료 2명, 그 2명이 전부 게스트라 2단계에서 이미 0명이 되고, `report_image` 보유 프로젝트는 공개 여부 무관 0건. 프로덕션도 같은 상태면 배포 후 빈 화면. 결정 필요: (a) 이미지 없는 유저는 Work 커버로 대체, (b) Step 2b 필터 제거하고 앞면 플레이스홀더 허용, (c) 조건 유지하고 리포트 이미지 생성 유도 플로우를 먼저 붙이기.
+#### FRONT-PEOPLE-I18N-1 — PeopleDiscoveryPage 페이지 크롬 i18n
+카드 내부(PersonCard 등)는 FRONT-FUNC-CHECK-1에서 i18n 완료됐으나 페이지 크롬이 하드코딩 한국어로 남음: 제목 "사람 발견", 프리셋 필터 칩(전체/영감 주는 사람/정반대 성향), 빈상태·에러·진단유도 문구, 관심 토스트. locales.js peoplePage.* namespace 신설 + useTranslation 배선.
 
 #### FRONT-LOGINKEY-1 — 로그인 키보드 진행 지원
 choice/consent 두 카드가 SwipeGestureFrame 드래그 전용이라 키보드 사용자는 계정 생성 자체가 불가(포커스 가능 컨트롤 0개). 나머지 폼 단계(credentials/returning/profile)는 이미 form onSubmit + native button 완비. 후보: `useKeyboardSwipe` 훅 재사용(ArrowLeft/Right) + 텍스트 입력 포커스 중 오발동 guard. 2026-09-06 유저 결정으로 보류 — 인터랙션 디자인 선행 필요.
@@ -304,6 +304,13 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FRONT-PEOPLE-CARD-2 — 발견 피드 빈 화면: seed_discovery 커맨드 + 소셜 탭 신설 — RESOLVED 2026-09-06 (`c791c24`, PR 대기)
+- 빈 피드 원인 재실측 — #315 완화 후 게이트는 2중(discovery_opt_in + public report_image 프로젝트)인데 로컬 DB 통과자 0명: report_image 프로젝트 4개 전부 private(#315 이전 SaveBoardModal 기본값), 진단 완료 4명 전부 본인 계정. "테스트 서버 계정"은 prod Neon DB 소속 + prod엔 discovery 미배포라 로컬에서 원천 불가시
+- `manage.py seed_discovery` 신규(백엔드 dev 도구) — 가짜 유저 N명(기본 20): 실 파생 함수 `_compute_type_code` 재사용으로 vector↔type_code 정합 보장, 16타입·거리분산 벡터, 순수 파이썬 PNG(의존성 0) public 보드, `--clean`/`--publish-existing`/`--n 0`, DEBUG=False 실행 거부 가드, get_or_create 멱등. pytest 9케이스 동봉(CI 게이트)
+- 소셜 탭 — TabBar 4탭째(디스커버리·테이스트·소셜·프로필), `/people`+`/assessment` 라우트 귀속, PeopleDiscoveryPage 뒤로가기 버튼 제거(탭 루트 전환), tabbar.social ko/en. people 기능이 디스커버리(건물 스와이프)와 개발 경로 분리됨
+- 로컬 실검증 — 시딩 후 피드 후보 22명, GET /people/ 200·15장, report-image 200 PNG, opposite 필터 정상. 썸네일/flip/이름클릭→프로필은 #314/#318 코드 그대로 (데이터 부재가 유일 병목이었음)
+- Deferred: PeopleDiscoveryPage 페이지 크롬("사람 발견", 필터 칩, 빈상태 문구) 하드코딩 한국어 — i18n 후속.
+
 ### FRONT-FUNC-CHECK-1 — 기능 점검 4종: 카드뒷면 i18n·모션·사무소 링크·/office 정리 — RESOLVED 2026-09-06 (`f4cede0`, PR 대기)
 - 카드 뒷면 한영 — 원인은 PersonCard/PentagonChart/SwipeCard/AssessmentCard 4곳이 useTranslation 미구독(정적 텍스트). 전부 배선 + 성향 오각형 축 5종 신규 namespace(personality.*, 취향 축 persona.axis.*와 별개 분류) + 진단 문항 20개 text_en 저작 + assessment 페이지 크롬까지 일괄 i18n (문항 채점은 id 기반이라 번역 무영향)
 - [x] 카드 모션 — yywon PR #312~#319 유실 감사 결과 기능 유실 제로(exit 애니메이션 파일 바이트 동일). "그쪽 컴퓨터와 다름"의 실원인 = 신규 코드의 reduced-motion gate 2곳(AssessmentPage 페이드 대체, PersonCard flip transition:none) — 이 기기(reduced-motion ON)에서만 죽어 보임. 표준 룰(인터랙션 모션은 OS 설정 무시, tinderCard JS 스프링은 원래 면역) 따라 gate 삭제
