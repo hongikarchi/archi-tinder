@@ -17,6 +17,14 @@ const TAB_ICONS = {
       <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
     </svg>
   ),
+  social: (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  ),
   profile: (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
@@ -27,6 +35,7 @@ const TAB_ICONS = {
 
 function getActiveTab(pathname) {
   if (pathname === '/swipe' || pathname.startsWith('/search') || pathname.startsWith('/result')) return 'swipe'
+  if (pathname.startsWith('/people') || pathname.startsWith('/assessment')) return 'social'
   if (pathname.startsWith('/user') || pathname.startsWith('/board') || pathname.startsWith('/settings')) return 'profile'
   return 'discovery'
 }
@@ -40,6 +49,7 @@ export default function TabBar() {
   const tabs = [
     { id: 'discovery', labelKey: 'tabbar.discovery', path: '/discovery' },
     { id: 'swipe',     labelKey: 'tabbar.taste',     path: '/search' },
+    { id: 'social',    labelKey: 'tabbar.social',    path: '/people' },
     { id: 'profile',   labelKey: 'tabbar.profile',   path: '/user/me' },
   ]
 

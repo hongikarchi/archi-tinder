@@ -1,7 +1,10 @@
 /**
  * PeopleDiscoveryPage.jsx
  * People discovery feed — personality-based user matching.
- * Route: /people (ProtectedRoute, push-navigation only — no TabBar link)
+ * Route: /people (ProtectedRoute) — tab root for the "소셜" (Social) TabBar tab.
+ * As a tab root, this page has no back button (see DiscoveryPage for the same
+ * tab-root convention). DiscoveryTriggerCard's push-navigation into this page
+ * (from Discovery, after 10 draft likes) still works unchanged.
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
@@ -129,18 +132,8 @@ export default function PeopleDiscoveryPage({ onLogout }) {
     <div className={styles.page}>
       <PageTopControls onLogout={onLogout} />
 
-      {/* Header */}
+      {/* Header — tab root, no back button (see DiscoveryPage convention) */}
       <header className={styles.header}>
-        <button
-          type="button"
-          className={styles.backBtn}
-          onClick={() => navigate(-1)}
-          aria-label="뒤로가기"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="15 18 9 12 15 6" />
-          </svg>
-        </button>
         <h1 className={styles.title}>사람 발견</h1>
       </header>
 
