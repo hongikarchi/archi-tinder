@@ -485,3 +485,31 @@ class PersonalityProfileSerializer(serializers.ModelSerializer):
             'created_at',
         ]
         read_only_fields = fields
+
+
+class _StrictBooleanField(serializers.BooleanField):
+    """serializers.BooleanField coerces string truthy/falsy values ('yes', '1',
+    'true', 'on', ...) instead of rejecting them — too lenient for an explicit
+    opt-in toggle. This subclass accepts ONLY an actual bool; anything else
+    (including the string "yes") raises the field's own 'invalid' 400 error.
+    """
+    def to_internal_value(self, data):
+        if not isinstance(data, bool):
+            self.fail('invalid', input=data)
+        return data
+
+
+class PersonalityDiscoveryOptInSerializer(serializers.ModelSerializer):
+    """PATCH /api/v1/personality/me/ — owner toggles discovery_opt_in ONLY.
+
+    FULL-PRIVACY-1: axis_1..5 / type_code / created_at must stay unwritable
+    via this endpoint — only discovery_opt_in is declared, so any other key
+    in the request body is silently ignored by DRF (not in Meta.fields).
+    _StrictBooleanField rejects non-boolean values (e.g. "yes") with a 400
+    instead of coercing them like the stock BooleanField would.
+    """
+    discovery_opt_in = _StrictBooleanField(required=True)
+
+    class Meta:
+        model = PersonalityProfile
+        fields = ['discovery_opt_in']

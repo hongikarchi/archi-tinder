@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-09-07 01:05 KST',
-    head: 'd334be4',
-    branch: 'feature/claude-bug-sweep-front',
+    updatedAt: '2026-09-07 01:25 KST',
+    head: '8c89ff0',
+    branch: 'feature/claude-discovery-optout',
   },
   done: [
+    {
+      id: 'FULL-PRIVACY-1',
+      title: '발견 피드 opt-out 부재(진단=영구 노출)',
+      completedAt: '2026-09-06',
+      note: 'discovery_opt_in 쓰기 경로 전무(#311 이후 최상위 privacy 갭) — PATCH /personality/me/ 신설: strict boolean 전용 serializer(축/타입 구조적 쓰기 불가), owner 한정 404 미러, 값 변경 시 evict_user_profile_detail(User id 키 정확 사용)',
+    },
     {
       id: 'FRONT-VERIFY-1',
       title: 'PATCH 경로 verify_required 모달 배선 + 로그인 draft 유지',
@@ -70,12 +76,6 @@ window.PROJECT_STATE = {
       title: '프로필 보드 썸네일을 페르소나 리포트 이미지로 교체',
       completedAt: '2026-09-05',
       note: '요청 전제 정정: "프로필과 People 탭 양쪽에서 보드 썸네일 교체"였으나, People 탭에는 보드 썸네일이 없음(`PeopleDiscoveryPage`에 board 코드 0줄). `PersonCard`가 이미 `getPersonReportImage()`로 페르소나 이미지를 앞면에 쓰고 있음(#314 머지 완료) → 실제 대상은 프로필 `BoardCard` 한 곳. user 확인 후 범위 확정',
-    },
-    {
-      id: 'FRONT-ASSESSMENT-4',
-      title: '재진단 진입점(다시 진단받기 버튼)',
-      completedAt: '2026-09-05',
-      note: '팀 내부 People 탭 데모/테스트를 위해 반복 진단이 필요한데 UI에 진입점이 없었음. `UserProfilePage`가 `personality`가 없을 때만 `성향 진단 받기` CTA를 띄우고 있으면 오각형 차트만 보여줘 다시 들어갈 문이 없었음(`/assessment` URL 직접 입력은 그 전에도 동작)',
     },
   ],
   now: [],
@@ -256,6 +256,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 326,
+      title: 'fix(FRONT-VERIFY-1): PATCH 경로 verify_required 모달 배선 + 로그인 뒤로가기 draft 유지',
+      mergedAt: '2026-09-06T16:09:50Z',
+      mergedAtKST: '2026-09-07 01:09 KST',
+      sha: '8c89ff0',
+    },
+    {
       number: 325,
       title: 'fix(BACK-PRIVACY-1): 비인증 base64 리포트 유출 차단 + 썸네일 캐시 evict 누락',
       mergedAt: '2026-09-06T15:57:15Z',
@@ -303,13 +310,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-09-06T01:11:41Z',
       mergedAtKST: '2026-09-06 10:11 KST',
       sha: '2324fec',
-    },
-    {
-      number: 317,
-      title: 'feat(assessment): 내 프로필에 재진단(다시 진단받기) 버튼 추가',
-      mergedAt: '2026-09-06T01:07:38Z',
-      mergedAtKST: '2026-09-06 10:07 KST',
-      sha: 'b46b7df',
     },
   ],
   agents: [
@@ -714,6 +714,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/accounts/tests/test_avatar_upload.py',
       role: '아바타 업로드 테스트',
+    },
+    {
+      path: 'backend/apps/accounts/tests/test_full_privacy_1_discovery_optout.py',
+      role: '',
     },
     {
       path: 'backend/apps/accounts/tests/test_guest_role_affiliation.py',

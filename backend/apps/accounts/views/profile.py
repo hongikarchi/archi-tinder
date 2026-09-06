@@ -197,16 +197,23 @@ class UserProfileDetailView(APIView):
 
         # Personality field: all 5 axes included — axis_5 (bonus) is needed for
         # the pentagon SVG shape in the profile overlay comparison view.
+        # FULL-PRIVACY-1: non-owner viewers only see this when the profile
+        # owner has discovery_opt_in=True; the owner always sees their own
+        # personality regardless of the toggle (it's a public-visibility
+        # switch, not a self-visibility one).
         try:
             p = profile.personality
-            data['personality'] = {
-                'axis_1': p.axis_1,
-                'axis_2': p.axis_2,
-                'axis_3': p.axis_3,
-                'axis_4': p.axis_4,
-                'axis_5': p.axis_5,
-                'type_code': p.type_code,
-            }
+            if is_owner or p.discovery_opt_in:
+                data['personality'] = {
+                    'axis_1': p.axis_1,
+                    'axis_2': p.axis_2,
+                    'axis_3': p.axis_3,
+                    'axis_4': p.axis_4,
+                    'axis_5': p.axis_5,
+                    'type_code': p.type_code,
+                }
+            else:
+                data['personality'] = None
         except PersonalityProfile.DoesNotExist:
             data['personality'] = None
 

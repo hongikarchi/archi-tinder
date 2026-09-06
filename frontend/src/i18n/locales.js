@@ -202,6 +202,10 @@ export const locales = {
       emailVerifySection:     '이메일 인증',
       verifyWithGoogle:       '구글로 이메일 인증',
       googleUnavailable:      'Google 인증을 사용할 수 없는 환경입니다.',
+      discoverySection:       '발견 피드 노출',
+      discoveryLabel:         '발견 피드 노출',
+      discoveryHint:          '끄면 사람 발견 피드에 내 카드가 보이지 않습니다. 프로필의 성향 정보도 다른 사람에게 숨겨집니다.',
+      discoverySaveError:     '저장에 실패했습니다. 다시 시도해주세요.',
     },
     profileEdit: {
       title:            '프로필 편집',
@@ -839,6 +843,10 @@ export const locales = {
       emailVerifySection:     'Email verification',
       verifyWithGoogle:       'Verify email with Google',
       googleUnavailable:      'Google verification is unavailable in this environment.',
+      discoverySection:       'Discovery visibility',
+      discoveryLabel:         'Show me in discovery',
+      discoveryHint:          'When off, your card is hidden from the people-discovery feed and your personality info is hidden from others on your profile.',
+      discoverySaveError:     'Save failed. Please try again.',
     },
     profileEdit: {
       title:            'Edit profile',

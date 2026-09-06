@@ -301,6 +301,12 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FULL-PRIVACY-1 — 발견 피드 opt-out 부재(진단=영구 노출) — RESOLVED 2026-09-06 (`b227e59`, PR 대기)
+- discovery_opt_in 쓰기 경로 전무(#311 이후 최상위 privacy 갭) — PATCH /personality/me/ 신설: strict boolean 전용 serializer(축/타입 구조적 쓰기 불가), owner 한정 404 미러, 값 변경 시 evict_user_profile_detail(User id 키 정확 사용)
+- 공개 프로필 성향 임베드 게이팅 — non-owner/익명은 opt-out 시 personality=null, owner는 항상 자기 것 열람(뷰어별 캐시 키라 분기 안전). 피드는 기존 필터 그대로 무접촉
+- 설정→계정 "발견 피드 노출" 토글(결정 (a)) — 진단 완료자만 표시, optimistic+실패 revert, DRF field-error 파싱(Opus low 반영), ko/en i18n
+- 테스트 12종(PATCH 왕복/401/400/404/extra-field, evict 범프+no-op 무범프, 임베드 4뷰어, 피드 풀 이탈). prod 배포 전 opt-out 라이브 = DEPLOY-BATCH-2 핵심 목표
+
 ### FRONT-VERIFY-1 — PATCH 경로 verify_required 모달 배선 + 로그인 draft 유지 — RESOLVED 2026-09-06 (`872d7fb`, PR 대기)
 - updateProject가 403 verify_required를 미변환(createProject만 처리) → 공용 throwIfVerifyRequired 헬퍼 추출, 양 경로 동일 동작(VerifyRequiredError + archithon:verify-required 이벤트). guest 4번째 보드 저장확정 시 VerifyGateModal 정상 표출
 - SaveBoardModal은 VerifyRequiredError를 무음 처리(시트 유지·재시도 가능, 전역 모달 밑 generic 에러 중복 제거)
