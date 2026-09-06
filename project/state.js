@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-09-07 01:25 KST',
-    head: '8c89ff0',
-    branch: 'feature/claude-discovery-optout',
+    updatedAt: '2026-09-07 01:30 KST',
+    head: 'dc01734',
+    branch: 'feature/claude-mocks-untrack',
   },
   done: [
+    {
+      id: 'INFRA-MOCKS-1',
+      title: '__mocks 픽스처 develop 추적(공개 URL 노출)',
+      completedAt: '2026-09-06',
+      note: '`git rm --cached -r`로 38파일(~900KB) 인덱스만 제거 — 워킹트리 보존, .gitignore:90(#321)이 재유입 차단. 배포 시 Vercel `/__mocks/*.html` 공개 URL 소멸. DEPLOY-BATCH-2 플랜 PR-D',
+    },
     {
       id: 'FULL-PRIVACY-1',
       title: '발견 피드 opt-out 부재(진단=영구 노출)',
@@ -71,12 +77,6 @@ window.PROJECT_STATE = {
       prs: [321],
       note: 'Claude Design "Archibe Front Design" canvas 41보드를 실제 front 코드에 이식 — 공용 컴포넌트 3종 신설(PageTopControls 언어·테마·로그아웃 / PageLogoHeader 로고 / PageBackButton 떠있는 뒤로가기), sticky 헤더 19화면 → 인플로우 제목, 단색 CTA 전환(~40곳, DESIGN.md §8.1 재작성), scrim 토큰 4종×4테마',
     },
-    {
-      id: 'FRONT-PEOPLE-THUMB-1',
-      title: '프로필 보드 썸네일을 페르소나 리포트 이미지로 교체',
-      completedAt: '2026-09-05',
-      note: '요청 전제 정정: "프로필과 People 탭 양쪽에서 보드 썸네일 교체"였으나, People 탭에는 보드 썸네일이 없음(`PeopleDiscoveryPage`에 board 코드 0줄). `PersonCard`가 이미 `getPersonReportImage()`로 페르소나 이미지를 앞면에 쓰고 있음(#314 머지 완료) → 실제 대상은 프로필 `BoardCard` 한 곳. user 확인 후 범위 확정',
-    },
   ],
   now: [],
   next: {
@@ -119,11 +119,6 @@ window.PROJECT_STATE = {
         id: 'FRONT-DESIGN-C2',
         title: '디자인 포트 잔여 결정 4건 + 스타일 델타 21곳',
         note: 'FRONT-DESIGN-C(#321) 후속. 결정 대기: 저장/북마크 amber(`#fbbf24`) 대응 토큰 부재(accent-3는 라이트에서 갈색이라 부적합 — 상태 토큰 계열 신설 필요); 모달 backdrop 0.4 vs scrim 0.65(DESIGN.md §1.4/§8.10 모순 해소); UserProfile 떠있는 뒤로가기 목적지(`/user/me`는 TabBar 루트); appearance 칩 radius 10px(토큰 스케일 밖, 공용 .chip). 로그인 첫카드 "10~15…',
-      },
-      {
-        id: 'INFRA-MOCKS-1',
-        title: '__mocks 픽스처가 develop에 추적됨',
-        note: '`frontend/public/__mocks/*.html`(디자인 대조용 테스트 픽스처 37종+하니스)이 PR #319에 실려 develop에 추적 파일로 들어감. gitignore 규칙(#321에 포함)은 추적된 파일을 못 뺌. 결정: `git rm --cached`로 untrack 하거나 의도적으로 유지. 유지 시 Vercel 빌드에 정적 파일로 포함됨(약 900KB).',
       },
       {
         id: 'FRONT-PEOPLE-I18N-1',
@@ -256,6 +251,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 327,
+      title: 'feat(FULL-PRIVACY-1): 발견 피드 opt-out — PATCH 쓰기 경로 + 프로필 게이팅 + 계정 토글',
+      mergedAt: '2026-09-06T16:30:14Z',
+      mergedAtKST: '2026-09-07 01:30 KST',
+      sha: 'dc01734',
+    },
+    {
       number: 326,
       title: 'fix(FRONT-VERIFY-1): PATCH 경로 verify_required 모달 배선 + 로그인 뒤로가기 draft 유지',
       mergedAt: '2026-09-06T16:09:50Z',
@@ -303,13 +305,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-09-06T00:59:17Z',
       mergedAtKST: '2026-09-06 09:59 KST',
       sha: 'e7f1f2c',
-    },
-    {
-      number: 318,
-      title: 'feat(profile): 보드 썸네일 이미지 소스를 페르소나 리포트 이미지로 교체',
-      mergedAt: '2026-09-06T01:11:41Z',
-      mergedAtKST: '2026-09-06 10:11 KST',
-      sha: '2324fec',
     },
   ],
   agents: [
@@ -1854,158 +1849,6 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/package.json',
       role: '프론트 패키지 매니페스트',
-    },
-    {
-      path: 'frontend/public/__mocks/_compare.html',
-      role: '',
-    },
-    {
-      path: 'frontend/public/__mocks/architect.html',
-      role: '',
-    },
-    {
-      path: 'frontend/public/__mocks/board-detail.html',
-      role: '',
-    },
-    {
-      path: 'frontend/public/__mocks/building-detail.html',
-      role: '',
-    },
-    {
-      path: 'frontend/public/__mocks/discovery.html',
-      role: '',
-    },
-    {
-      path: 'frontend/public/__mocks/liked-projects.html',
-      role: '',
-    },
-    {
-      path: 'frontend/public/__mocks/llm-search-update.html',
-      role: '',
-    },
-    {
-      path: 'frontend/public/__mocks/llm-search.html',
-      role: '',
-    },
-    {
-      path: 'frontend/public/__mocks/login-consent.html',
-      role: '',
-    },
-    {
-      path: 'frontend/public/__mocks/login-credentials.html',
-      role: '',
-    },
-    {
-      path: 'frontend/public/__mocks/login-profile.html',
-      role: '',
-    },
-    {
-      path: 'frontend/public/__mocks/login-returning.html',
-      role: '',
-    },
-    {
-      path: 'frontend/public/__mocks/login.html',
-      role: '',
-    },
-    {
-      path: 'frontend/public/__mocks/notifications.html',
-      role: '',
-    },
-    {
-      path: 'frontend/public/__mocks/office.html',
-      role: '',
-    },
-    {
-      path: 'frontend/public/__mocks/overlay-action-card.html',
-      role: '',
-    },
-    {
-      path: 'frontend/public/__mocks/overlay-cap-reached.html',
-      role: '',
-    },
-    {
-      path: 'frontend/public/__mocks/overlay-card-skeleton.html',
-      role: '',
-    },
-    {
-      path: 'frontend/public/__mocks/overlay-leave-modal.html',
-      role: '',
-    },
-    {
-      path: 'frontend/public/__mocks/overlay-photo-lightbox.html',
-      role: '',
-    },
-    {
-      path: 'frontend/public/__mocks/overlay-question-card.html',
-      role: '',
-    },
-    {
-      path: 'frontend/public/__mocks/overlay-save-board.html',
-      role: '',
-    },
-    {
-      path: 'frontend/public/__mocks/overlay-save-to-board.html',
-      role: '',
-    },
-    {
-      path: 'frontend/public/__mocks/overlay-swipe-confirms.html',
-      role: '',
-    },
-    {
-      path: 'frontend/public/__mocks/overlay-swipecard-expanded.html',
-      role: '',
-    },
-    {
-      path: 'frontend/public/__mocks/overlay-trigger-card.html',
-      role: '',
-    },
-    {
-      path: 'frontend/public/__mocks/overlay-tutorial.html',
-      role: '',
-    },
-    {
-      path: 'frontend/public/__mocks/persona-report.html',
-      role: '',
-    },
-    {
-      path: 'frontend/public/__mocks/profile.html',
-      role: '',
-    },
-    {
-      path: 'frontend/public/__mocks/results.html',
-      role: '',
-    },
-    {
-      path: 'frontend/public/__mocks/settings-account.html',
-      role: '',
-    },
-    {
-      path: 'frontend/public/__mocks/settings-appearance.html',
-      role: '',
-    },
-    {
-      path: 'frontend/public/__mocks/settings-edit-profile.html',
-      role: '',
-    },
-    {
-      path: 'frontend/public/__mocks/settings-notifications.html',
-      role: '',
-    },
-    {
-      path: 'frontend/public/__mocks/settings.html',
-      role: '',
-    },
-    {
-      path: 'frontend/public/__mocks/taste-swipe.html',
-      role: '',
-    },
-    {
-      path: 'frontend/public/__mocks/upload.html',
-      role: '',
-    },
-    {
-      path: 'frontend/public/__mocks/user-other.html',
-      role: '',
     },
     {
       path: 'frontend/public/favicon.svg',
