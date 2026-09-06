@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-09-06 18:34 KST',
-    head: 'd15da87',
-    branch: 'feature/claude-design-finetune',
+    updatedAt: '2026-09-06 20:39 KST',
+    head: 'f5cf623',
+    branch: 'feature/claude-func-check-1',
   },
   done: [
+    {
+      id: 'FRONT-FUNC-CHECK-1',
+      title: '기능 점검 4종: 카드뒷면 i18n·모션·사무소 링크·/office 정리',
+      completedAt: '2026-09-06',
+      note: '카드 뒷면 한영 — 원인은 PersonCard/PentagonChart/SwipeCard/AssessmentCard 4곳이 useTranslation 미구독(정적 텍스트). 전부 배선 + 성향 오각형 축 5종 신규 namespace(personality.*, 취향 축 persona.axis.*와 별개 분류) + 진단 문항 20개 text_en 저작 + assessment 페이지 크롬까지 일괄 i18n (문항 채점은 id 기반이라 번역 무영향)',
+    },
     {
       id: 'FRONT-DESIGN-FT',
       title: '디자인 파인튜닝: vision 전수 감사 + 결정 반영',
@@ -73,20 +79,8 @@ window.PROJECT_STATE = {
       prs: [315],
       note: '요청은 "카드 클릭 flip + 오버레이 + 내 카드는 단독 + 이름 클릭 프로필 이동" 4가지였으나, flip·오버레이·이름 이동 3가지는 `#314`에서 이미 구현돼 있었음. 실제 미구현은 "내 카드 단독 표시" 하나',
     },
-    {
-      id: 'FRONT-PEOPLE-FEED-1',
-      title: '페르소나 이미지 생성이 발견 피드에 반영되지 않던 문제',
-      completedAt: '2026-09-03',
-      note: '팀장 피드백: 페르소나 리포트에서 이미지를 생성했는데 `/people`에 카드가 안 뜸. 조사 결과 이미지 경로는 정상이었고(리포트가 쓰는 `recommendation_project.report_image`를 피드가 그대로 읽음, 피드에 캐시 없음 = 즉시 반영 구조) 나머지 조건들이 막고 있었음',
-    },
   ],
-  now: [
-    {
-      id: 'FRONT-FUNC-CHECK-1',
-      title: '기능 점검 4종 (2026-09-06 예약)',
-      note: 'UI 파인튜닝(FRONT-DESIGN-FT) 종료 후 다음 세션의 기능 검증 슬라이스. user 지정:',
-    },
-  ],
+  now: [],
   next: {
     xhigh: [
       {
@@ -139,9 +133,9 @@ window.PROJECT_STATE = {
         note: 'FRONT-PEOPLE-CARD-1이 카드 앞면을 취향분석 리포트 이미지로 바꾸면서 피드 조건이 4중이 됨(진단 완료 + discovery_opt_in + publishable Work + public report_image). 로컬 DB 실측: 29명 중 진단 완료 2명, 그 2명이 전부 게스트라 2단계에서 이미 0명이 되고, `report_image` 보유 프로젝트는 공개 여부 무관 0건. 프로덕션도 같은 상태면 배포 후 빈 화면. 결정 필요: (a) 이미지 없는 유저는 Work 커버로…',
       },
       {
-        id: 'FRONT-ASSESSMENT-2',
-        title: '진단 카드 reduced-motion 정책 충돌',
-        note: 'FRONT-ASSESSMENT-1(PR #313)이 요구사항대로 `prefers-reduced-motion`에서 슬라이드 대신 페이드로 축소했으나, FRONT-UX-14-R7이 "스와이프 퇴장·갤러리 이동 같은 인터랙션 피드백 모션은 reduced-motion을 의도적으로 무시한다(장식성 CSS 모션만 존중)"를 제품 결정으로 확정해 둔 상태 — 진단 카드 퇴장은 그 정의상 인터랙션 피드백이므로 현재 두 화면의 정책이 갈림. 결정 필요: (a) 진단도 무시로 통일해 `exiting`/`ent…',
+        id: 'FRONT-LOGINKEY-1',
+        title: '로그인 키보드 진행 지원',
+        note: 'choice/consent 두 카드가 SwipeGestureFrame 드래그 전용이라 키보드 사용자는 계정 생성 자체가 불가(포커스 가능 컨트롤 0개). 나머지 폼 단계(credentials/returning/profile)는 이미 form onSubmit + native button 완비. 후보: `useKeyboardSwipe` 훅 재사용(ArrowLeft/Right) + 텍스트 입력 포커스 중 오발동 guard. 2026-09-06 유저 결정으로 보류 — 인터랙션 디자인 선행 필요.',
       },
       {
         id: 'SNS-PERSONA-AXIS-1',
@@ -269,6 +263,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 322,
+      title: 'feat(FRONT-DESIGN-FT): 디자인 파인튜닝 — vision 전수 감사 + 기능 결정 반영',
+      mergedAt: '2026-09-06T09:38:44Z',
+      mergedAtKST: '2026-09-06 18:38 KST',
+      sha: 'f5cf623',
+    },
+    {
       number: 321,
       title: 'feat(FRONT-DESIGN-C): canvas design port — 시안 41보드 반영',
       mergedAt: '2026-09-06T01:25:22Z',
@@ -316,13 +317,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-08-29T02:23:30Z',
       mergedAtKST: '2026-08-29 11:23 KST',
       sha: '038c068',
-    },
-    {
-      number: 313,
-      title: 'feat(assessment): 성향 진단 문항을 스와이프 카드로 전환',
-      mergedAt: '2026-08-29T02:17:12Z',
-      mergedAtKST: '2026-08-29 11:17 KST',
-      sha: 'b8b4f46',
     },
   ],
   agents: [
@@ -1179,6 +1173,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/recommendation/tests/conftest.py',
       role: 'recommendation 테스트 픽스처',
+    },
+    {
+      path: 'backend/apps/recommendation/tests/test_architect_id_batch.py',
+      role: '',
     },
     {
       path: 'backend/apps/recommendation/tests/test_back_recommend_4.py',
@@ -2273,14 +2271,6 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/components/profile/BioPersonaFlipCard.jsx',
-      role: '바이오·페르소나 플립 카드',
-    },
-    {
-      path: 'frontend/src/components/profile/BioPersonaFlipCard.module.css',
-      role: '',
-    },
-    {
       path: 'frontend/src/components/profile/BoardCard.jsx',
       role: '프로필 보드 플립 카드',
     },
@@ -2291,14 +2281,6 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/components/profile/BusinessCard.jsx',
       role: '프로필 명함 카드(3D 플립)',
-    },
-    {
-      path: 'frontend/src/components/profile/DescriptionAboutFlipCard.jsx',
-      role: '사무소 소개 플립 카드',
-    },
-    {
-      path: 'frontend/src/components/profile/DescriptionAboutFlipCard.module.css',
-      role: '',
     },
     {
       path: 'frontend/src/components/profile/EditCardForm.jsx',
@@ -2461,12 +2443,12 @@ window.PROJECT_STATE = {
       role: '건물 상세 페이지',
     },
     {
-      path: 'frontend/src/pages/DiscoveryPage.jsx',
-      role: '디스커버리 스와이프 피드',
+      path: 'frontend/src/pages/BuildingDetailPage.module.css',
+      role: '',
     },
     {
-      path: 'frontend/src/pages/FirmProfilePage.jsx',
-      role: '사무소 프로필 페이지',
+      path: 'frontend/src/pages/DiscoveryPage.jsx',
+      role: '디스커버리 스와이프 피드',
     },
     {
       path: 'frontend/src/pages/LLMSearchPage.jsx',
@@ -2587,26 +2569,6 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/pages/dbCheck/DbCheckTile.jsx',
       role: '',
-    },
-    {
-      path: 'frontend/src/pages/firmProfile/FirmArticlesSection.jsx',
-      role: '사무소 아티클 섹션',
-    },
-    {
-      path: 'frontend/src/pages/firmProfile/FirmProfileHeader.jsx',
-      role: '사무소 프로필 헤더 바',
-    },
-    {
-      path: 'frontend/src/pages/firmProfile/FirmProfileHero.jsx',
-      role: '사무소 프로필 히어로',
-    },
-    {
-      path: 'frontend/src/pages/firmProfile/FirmProfileHero.module.css',
-      role: '',
-    },
-    {
-      path: 'frontend/src/pages/firmProfile/FirmProjectsSection.jsx',
-      role: '사무소 프로젝트 섹션',
     },
     {
       path: 'frontend/src/pages/settings/AccountScreen.jsx',
@@ -2743,6 +2705,10 @@ window.PROJECT_STATE = {
     {
       path: 'tools/check-frontend.sh',
       role: '프론트 lint+빌드 래퍼',
+    },
+    {
+      path: 'tools/design-capture.py',
+      role: '',
     },
     {
       path: 'tools/design-diff.py',

@@ -57,13 +57,7 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-### FRONT-FUNC-CHECK-1 — 기능 점검 4종 (2026-09-06 예약)
-
-UI 파인튜닝(FRONT-DESIGN-FT) 종료 후 다음 세션의 기능 검증 슬라이스. user 지정:
-- [ ] 카드 뒷면 언어 변경(한영) — 카드 flip 상세면의 언어 토글 동작
-- [ ] 로그인 키보드 지원 — 스와이프 전용인 choice 카드를 방향키로도 진행 가능하게
-- [ ] 카드 날아가는 모션 확인 — 스와이프 exit 애니메이션이 최근 PR들 이후 정상인지 (FRONT-UX-14 feel 기준)
-- [ ] building → 사무소 페이지 연결 — BuildingDetailPage에서 건축가/사무소 클릭 시 프로필로 이동 (현재 링크 0개 확인됨; ARCHITECT-UNIFY-1의 wiring 결정과 연동 — /architects/:id로 연결이 1차 후보)
+_(비어 있음 — FRONT-FUNC-CHECK-1 완료 2026-09-06, ## Done 참조)_
 
 
 ## Next
@@ -176,8 +170,10 @@ FRONT-DESIGN-C(#321) 후속. 결정 대기: 저장/북마크 amber(`#fbbf24`) �
 #### FRONT-PEOPLE-CARD-2 — 발견 피드가 실데이터에서 빈 화면
 FRONT-PEOPLE-CARD-1이 카드 앞면을 취향분석 리포트 이미지로 바꾸면서 피드 조건이 4중이 됨(진단 완료 + discovery_opt_in + publishable Work + public report_image). 로컬 DB 실측: 29명 중 진단 완료 2명, 그 2명이 전부 게스트라 2단계에서 이미 0명이 되고, `report_image` 보유 프로젝트는 공개 여부 무관 0건. 프로덕션도 같은 상태면 배포 후 빈 화면. 결정 필요: (a) 이미지 없는 유저는 Work 커버로 대체, (b) Step 2b 필터 제거하고 앞면 플레이스홀더 허용, (c) 조건 유지하고 리포트 이미지 생성 유도 플로우를 먼저 붙이기.
 
-#### FRONT-ASSESSMENT-2 — 진단 카드 reduced-motion 정책 충돌
-FRONT-ASSESSMENT-1(PR #313)이 요구사항대로 `prefers-reduced-motion`에서 슬라이드 대신 페이드로 축소했으나, FRONT-UX-14-R7이 "스와이프 퇴장·갤러리 이동 같은 **인터랙션 피드백** 모션은 reduced-motion을 의도적으로 무시한다(장식성 CSS 모션만 존중)"를 제품 결정으로 확정해 둔 상태 — 진단 카드 퇴장은 그 정의상 인터랙션 피드백이므로 현재 두 화면의 정책이 갈림. 결정 필요: (a) 진단도 무시로 통일해 `exiting`/`entering` 분기 제거, (b) 현행 유지하고 R7 결정을 "덱 스와이프 한정"으로 좁혀 명문화. PR #313에 검토 요청으로 명시함.
+#### FRONT-LOGINKEY-1 — 로그인 키보드 진행 지원
+choice/consent 두 카드가 SwipeGestureFrame 드래그 전용이라 키보드 사용자는 계정 생성 자체가 불가(포커스 가능 컨트롤 0개). 나머지 폼 단계(credentials/returning/profile)는 이미 form onSubmit + native button 완비. 후보: `useKeyboardSwipe` 훅 재사용(ArrowLeft/Right) + 텍스트 입력 포커스 중 오발동 guard. 2026-09-06 유저 결정으로 보류 — 인터랙션 디자인 선행 필요.
+
+_(FRONT-ASSESSMENT-2 — 진단 카드 reduced-motion 정책 충돌: FRONT-FUNC-CHECK-1에서 (a)안으로 종결 2026-09-06 — 인터랙션 모션은 무시로 통일, gate 삭제. `## Done` 참조.)_
 
 #### SNS-PERSONA-AXIS-1 — persona 프롬프트에 axis_scores + 언어설정 미반영 (#232 유실 작업)
 PR #232(`feature/sns-persona-description-axis`, 2026-06-18, collaborator)가 CI red로 CLOSED-미머지 후 유실 — `generation.py` persona description 프롬프트에 `axis_scores` + 사용자 언어설정을 반영하는 작업(+68/-12, generation.py + views/reports.py). 2026-08-06 브랜치 정리 전수검사에서 발견: 현재 develop `generation.py`에 axis_scores 미사용 = 기능 미착륙 확인. 원격 브랜치는 보존됨(정리에서 유일하게 제외). 살리려면 rebase 필요 — 이후 persona seam 변경(#290 provider pin, #291 mock) 충돌 예상, cherry-pick보다 재구현이 쌀 수도. hypothesis-grade: 기능 가치 자체(개인화 페르소나 품질)는 제품 결정 필요.
@@ -308,6 +304,14 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FRONT-FUNC-CHECK-1 — 기능 점검 4종: 카드뒷면 i18n·모션·사무소 링크·/office 정리 — RESOLVED 2026-09-06 (`f4cede0`, PR 대기)
+- 카드 뒷면 한영 — 원인은 PersonCard/PentagonChart/SwipeCard/AssessmentCard 4곳이 useTranslation 미구독(정적 텍스트). 전부 배선 + 성향 오각형 축 5종 신규 namespace(personality.*, 취향 축 persona.axis.*와 별개 분류) + 진단 문항 20개 text_en 저작 + assessment 페이지 크롬까지 일괄 i18n (문항 채점은 id 기반이라 번역 무영향)
+- [x] 카드 모션 — yywon PR #312~#319 유실 감사 결과 기능 유실 제로(exit 애니메이션 파일 바이트 동일). "그쪽 컴퓨터와 다름"의 실원인 = 신규 코드의 reduced-motion gate 2곳(AssessmentPage 페이드 대체, PersonCard flip transition:none) — 이 기기(reduced-motion ON)에서만 죽어 보임. 표준 룰(인터랙션 모션은 OS 설정 무시, tinderCard JS 스프링은 원래 면역) 따라 gate 삭제
+- [x] building→사무소 — `/images/batch/`가 architect id를 미반환(표시 문자열만)이 병목. metadata.architect_id(arch_XXXXXX|null) 추가 + BuildingDetailPage 이탤릭 서브라인·Architect 타일 클릭 → /architects/:id (id 없으면 기존 그대로). 리뷰가 캐시 오염 결함 적발(공유 카드 캐시에 컬럼 누락 fetcher가 선기록 → stale None) → engine SELECT 8곳 `_CARD_SELECT_COLS` 공용 상수화 + 캐시 스키마 v2→v3 범프로 구조적 봉인
+- /office front 삭제 — FirmProfilePage + firmProfile/ 5파일 + getOffice 제거(백엔드 Office 서브시스템은 claim substrate로 보존). 부수로 dead 된 Bio/DescriptionAbout 플립카드 4파일도 삭제. tools/design-capture.py 전 세션 누락분 탑승
+- 로그인 키보드는 유저 결정으로 이번 세션 스킵(디자인 선행 필요) → `## Next` FRONT-LOGINKEY-1
+- Deferred: 건물 메타·persona LLM 텍스트는 데이터 자체 단일 언어(FULL-LANGUAGE-1 범위); 배포 시 Redis 카드 캐시 v3 자동 무효화 — 별도 조치 불필요
+
 ### FRONT-DESIGN-FT — 디자인 파인튜닝: vision 전수 감사 + 결정 반영 — RESOLVED 2026-09-06 (`046f664`, PR 대기)
 - 21보드 × 2라운드 vision 감사(스크린샷 쌍을 에이전트가 직접 판정 + 회의적 재검증, 48 에이전트) + 속성 diff 교차. 완전 일치 4, 수정 완료 7, 판정불가 4(dev 데이터 필요 — taste-swipe 세션/building/architect/office)
 - 프로필 상단 시안 전환(좌측 원형 4버튼·sticky 바/글로우 제거·ProfileHeader 삭제), assessment 상단 swipe 관용구화(#316 draft-resume 불가침 검증), vision 확정 수정 6건(아바타 onError fallback 버그, llm-search 글로우, appearance 테마카드 한줄 배치·중복 레이블, i18n 28키, select chevron)
