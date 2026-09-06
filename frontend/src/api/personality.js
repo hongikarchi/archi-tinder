@@ -12,3 +12,7 @@ export async function submitAssessment(responses) {
 export async function getMyPersonality() {
   return await callApi('GET', '/personality/me/')
 }
+
+export async function patchMyPersonality(patch) {
+  return await callApi('PATCH', '/personality/me/', patch)
+}

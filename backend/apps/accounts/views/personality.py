@@ -7,6 +7,11 @@ POST /api/v1/personality/assessment/
 
 GET /api/v1/personality/me/
   Returns the caller's PersonalityProfile (404 if none exists yet).
+
+PATCH /api/v1/personality/me/
+  body: {"discovery_opt_in": <bool>}  FULL-PRIVACY-1 discovery opt-out.
+  Only discovery_opt_in is writable — axis/type_code fields are ignored.
+  404 if no assessment has been completed yet (mirrors GET).
 """
 import logging
 
@@ -16,7 +21,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from ..models import PersonalityProfile, UserProfile
-from ..serializers import PersonalityAssessmentSerializer, PersonalityProfileSerializer
+from ..serializers import (
+    PersonalityAssessmentSerializer,
+    PersonalityDiscoveryOptInSerializer,
+    PersonalityProfileSerializer,
+)
 
 logger = logging.getLogger('apps.accounts')
 
@@ -126,17 +135,26 @@ class PersonalityAssessmentView(APIView):
 
 class PersonalityMeView(APIView):
     """GET /api/v1/personality/me/
-
     Returns the authenticated user's PersonalityProfile.
     404 if no assessment has been completed yet.
+
+    PATCH /api/v1/personality/me/
+    FULL-PRIVACY-1: owner-only discovery_opt_in toggle. Body must contain
+    ONLY {"discovery_opt_in": <bool>} — any other field is ignored (not
+    declared on PersonalityDiscoveryOptInSerializer, so axis/type_code stay
+    unwritable via this route). 404 mirrors GET when no assessment exists.
+    Evicts the public-profile cache so the personality embed (C2) reflects
+    the new opt-in state immediately.
     """
     permission_classes = [IsAuthenticated]
 
-    def get(self, request):
+    def _get_personality_or_404(self, request):
+        """Shared owner-scoped lookup for GET + PATCH. Returns (personality, None)
+        or (None, error_response)."""
         try:
             profile = request.user.profile
         except UserProfile.DoesNotExist:
-            return Response(
+            return None, Response(
                 {'detail': 'UserProfile not found for current user.'},
                 status=status.HTTP_404_NOT_FOUND,
             )
@@ -144,9 +162,38 @@ class PersonalityMeView(APIView):
         try:
             personality = profile.personality
         except PersonalityProfile.DoesNotExist:
-            return Response(
+            return None, Response(
                 {'detail': 'No personality assessment found. Complete the assessment first.'},
                 status=status.HTTP_404_NOT_FOUND,
             )
+
+        return personality, None
+
+    def get(self, request):
+        personality, error = self._get_personality_or_404(request)
+        if error is not None:
+            return error
+        return Response(PersonalityProfileSerializer(personality).data)
+
+    def patch(self, request):
+        personality, error = self._get_personality_or_404(request)
+        if error is not None:
+            return error
+
+        serializer = PersonalityDiscoveryOptInSerializer(
+            personality, data=request.data, partial=False,
+        )
+        serializer.is_valid(raise_exception=True)
+        changed = serializer.validated_data['discovery_opt_in'] != personality.discovery_opt_in
+        serializer.save()
+
+        if changed:
+            # Evict the public-profile cache so GET /users/<id>/ (C2 gate)
+            # reflects the new discovery_opt_in state on the very next request.
+            # personality.user is a UserProfile (OneToOne) — the cache is keyed
+            # on the Django User id (the URL's <user_id>), i.e. UserProfile.user_id
+            # (the FK column), NOT UserProfile.id / personality.user.id.
+            from apps.recommendation.caches import evict_user_profile_detail
+            evict_user_profile_detail(personality.user.user_id)
 
         return Response(PersonalityProfileSerializer(personality).data)
