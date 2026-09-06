@@ -61,7 +61,15 @@ export default function ProfileHero({
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState(null)
   const [roleOptions, setRoleOptions] = useState([])
+  const [imgFailed, setImgFailed] = useState(false)
   const { language } = useLanguage()
+
+  // Reset the broken-image fallback whenever the avatar URL changes (e.g. a
+  // fresh upload after a prior failure) so the user isn't stuck on the
+  // placeholder forever.
+  useEffect(() => {
+    setImgFailed(false)
+  }, [user.avatar_url])
 
   // Role list only needed to localize onboarding_role (legacy free-text
   // user.role never needs it) — fetch once, memoized at module scope.
@@ -96,7 +104,7 @@ export default function ProfileHero({
   const stats = [
     { count: boardsTotalCount, label: 'Boards', onClick: () => onSelectTab('boards') },
     { count: savedStudiosCount ?? 0, label: 'Studios', onClick: () => onSelectTab('studios') },
-    ...(isMe ? [{ count: likedCount ?? 0, label: 'Liked', onClick: () => onSelectTab('liked') }] : []),
+    { count: likedCount ?? 0, label: 'Liked', onClick: () => onSelectTab('liked') },
   ]
 
   // 2B: single data source for the external-link pills — map renders one
@@ -164,7 +172,7 @@ export default function ProfileHero({
   // Avatar circle — renders the image+halo or the placeholder.
   // When isMe: wrapped in an upload <label> trigger with hover overlay.
   function AvatarCircle() {
-    if (user.avatar_url) {
+    if (user.avatar_url && !imgFailed) {
       return (
         <div style={{ position: 'relative' }}>
           <div
@@ -178,6 +186,7 @@ export default function ProfileHero({
           <img
             src={user.avatar_url}
             alt="avatar"
+            onError={() => setImgFailed(true)}
             style={{
               position: 'relative', zIndex: 2,
               width: 108, height: 108, borderRadius: '50%',

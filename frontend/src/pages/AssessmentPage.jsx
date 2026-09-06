@@ -18,6 +18,8 @@ import SwipeDeck from '../components/SwipeDeck.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
 import { SWIPE_PREVENT_ALL } from '../components/swipeGestureConfig.js'
 import PageTopControls from '../components/PageTopControls.jsx'
+import PageLogoHeader from '../components/PageLogoHeader.jsx'
+import PageBackButton from '../components/PageBackButton.jsx'
 import {
   loadAssessmentDraft,
   saveAssessmentDraft,
@@ -208,19 +210,8 @@ export default function AssessmentPage({ onLogout }) {
     return (
       <div className={styles.page}>
         <PageTopControls onLogout={onLogout} />
-        <header className={styles.header}>
-          <button
-            type="button"
-            className={styles.backBtn}
-            onClick={() => navigate('/user/me')}
-            aria-label="프로필로 이동"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="15 18 9 12 15 6" />
-            </svg>
-          </button>
-          <h1 className={styles.title}>성향 진단 결과</h1>
-        </header>
+        <PageBackButton onClick={() => navigate('/user/me')} label="프로필로 이동" />
+        <PageLogoHeader padding="0 0 6px" marginBottom={8} />
 
         <div className={styles.resultBody}>
           <p className={styles.typeCode}>{result.type_code}</p>
@@ -257,34 +248,44 @@ export default function AssessmentPage({ onLogout }) {
   return (
     <div className={styles.page}>
       <PageTopControls onLogout={onLogout} />
-      <header className={styles.header}>
-        <button
-          type="button"
-          className={styles.backBtn}
-          onClick={() => navigate(-1)}
-          aria-label="뒤로가기"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="15 18 9 12 15 6" />
-          </svg>
-        </button>
-        <h1 className={styles.title}>성향 진단</h1>
-        <span className={styles.qCount}>{currentQ + 1} / {TOTAL}</span>
-      </header>
+      <PageBackButton onClick={() => navigate(-1)} label="뒤로가기" />
 
-      {/* Progress bar */}
-      <div className={styles.progressTrack} role="progressbar" aria-valuenow={answered} aria-valuemin={0} aria-valuemax={TOTAL}>
-        <div className={styles.progressFill} style={{ width: `${progress}%` }} />
+      {/* Header — Arch|ibe logo + "Tuning taste"-style progress row, matching
+          SwipePage's top region (PageLogoHeader -> info row -> 4px track). */}
+      <div style={{ textAlign: 'center', width: '100%' }}>
+        <PageLogoHeader padding="0 0 6px" marginBottom={8} />
+        <div style={{ maxWidth: CARD_WIDTH, margin: '0 auto' }}>
+          <div style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+            marginBottom: 5,
+          }}>
+            <span style={{
+              fontSize: 13, fontWeight: 600, color: 'var(--color-text)',
+              lineHeight: 1.2,
+            }}>
+              성향 진단
+            </span>
+            <span style={{
+              fontSize: 12, fontWeight: 500, color: 'var(--color-text-dim)',
+            }}>
+              {currentQ + 1} / {TOTAL}
+            </span>
+          </div>
+
+          <div className={styles.progressTrack} role="progressbar" aria-valuenow={answered} aria-valuemin={0} aria-valuemax={TOTAL}>
+            <div className={styles.progressFill} style={{ width: `${progress}%` }} />
+          </div>
+
+          {/* Resumed run — tells the user why they are not on question 1. */}
+          {resumed && (
+            <p className={styles.resumeNote} role="status">
+              이전에 진행하던 곳부터 이어서 진행합니다
+            </p>
+          )}
+        </div>
       </div>
 
       <div className={styles.body}>
-        {/* Resumed run — tells the user why they are not on question 1. */}
-        {resumed && (
-          <p className={styles.resumeNote} role="status">
-            이전에 진행하던 곳부터 이어서 진행합니다
-          </p>
-        )}
-
         {/* Same deck the Discovery/Taste tabs use: SwipeDeck draws the static
             under-card ladder + ground shadow at SwipeCard's CARD_WIDTH /
             CARD_HEIGHT, and each card sits in a SwipeGestureFrame (the shared

@@ -203,6 +203,67 @@ class TestLikedBuildingsGet:
 
 
 # ---------------------------------------------------------------------------
+# TestLikedBuildingsOtherUser — design-parity public-profile Liked tab
+# ---------------------------------------------------------------------------
+
+class TestLikedBuildingsOtherUser:
+    """?user_id=<id> lets any AUTHENTICATED user view another user's liked
+    buildings (taste-sharing product decision). No anonymous access."""
+
+    @pytest.mark.django_db
+    def test_get_other_user_liked_buildings(self, lb_user_and_profile, lb_auth_client):
+        """?user_id=<other> returns that user's liked buildings, not the caller's."""
+        from django.contrib.auth.models import User
+
+        other_user = User.objects.create_user(
+            username='targetlbuser', email='targetlb@example.com', password='pass123',
+        )
+        other_profile = UserProfile.objects.create(user=other_user, display_name='Target LB User')
+        other_profile.liked_building_ids = ['bld_000123']
+        other_profile.save(update_fields=['liked_building_ids'])
+
+        with patch('apps.recommendation.engine.get_buildings_by_ids', return_value=[_FAKE_CARD]):
+            response = lb_auth_client.get(_LIKED_URL, {'user_id': other_user.id})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data['total'] == 1
+        assert data['buildings'][0]['canonical_bld_id'] == 'bld_000123'
+
+    @pytest.mark.django_db
+    def test_get_self_user_id_matches_no_param_path(self, lb_user_and_profile, lb_auth_client):
+        """?user_id=<self> behaves the same as omitting user_id."""
+        _, profile = lb_user_and_profile
+        profile.liked_building_ids = ['bld_000123']
+        profile.save(update_fields=['liked_building_ids'])
+
+        with patch('apps.recommendation.engine.get_buildings_by_ids', return_value=[_FAKE_CARD]):
+            response = lb_auth_client.get(_LIKED_URL, {'user_id': profile.user.id})
+
+        assert response.status_code == 200
+        assert response.json()['total'] == 1
+
+    @pytest.mark.django_db
+    def test_get_unknown_user_id_404(self, lb_auth_client):
+        """A user_id with no matching UserProfile -> 404."""
+        response = lb_auth_client.get(_LIKED_URL, {'user_id': 999999})
+        assert response.status_code == 404
+
+    @pytest.mark.django_db
+    def test_get_non_integer_user_id_400(self, lb_auth_client):
+        """A non-integer user_id -> 400."""
+        response = lb_auth_client.get(_LIKED_URL, {'user_id': 'abc'})
+        assert response.status_code == 400
+
+    @pytest.mark.django_db
+    def test_get_other_user_unauthenticated_401(self, anon_client, lb_user_and_profile):
+        """No anonymous access, even with ?user_id= set."""
+        _, profile = lb_user_and_profile
+        response = anon_client.get(_LIKED_URL, {'user_id': profile.user.id})
+        assert response.status_code == 401
+
+
+# ---------------------------------------------------------------------------
 # TestLikedBuildingsCap
 # ---------------------------------------------------------------------------
 

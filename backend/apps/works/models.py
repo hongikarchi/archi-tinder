@@ -26,6 +26,16 @@ PROGRAM_CHOICES = [
     ('sports',         'Sports'),
 ]
 
+# FRONT-DESIGN parity: Built/Unbuilt toggle on the upload form. Named
+# 'built_status' (not 'status') because the API already serializes a derived
+# 'status' key (processing/published/rejected — see WorkDetailView) computed
+# from is_publishable/gate_reason; reusing 'status' for this field would
+# collide with that existing contract.
+BUILT_STATUS_CHOICES = [
+    ('built',   'Built'),
+    ('unbuilt', 'Unbuilt'),
+]
+
 
 class Work(models.Model):
     owner = models.ForeignKey(
@@ -37,6 +47,8 @@ class Work(models.Model):
     upload_id = models.CharField(max_length=20, unique=True)
     title = models.CharField(max_length=200)
     program = models.CharField(max_length=20, choices=PROGRAM_CHOICES)
+    # Built/Unbuilt toggle (design-parity). Default keeps existing rows valid.
+    built_status = models.CharField(max_length=10, choices=BUILT_STATUS_CHOICES, default='built')
     location_city = models.CharField(max_length=100, blank=True)
     location_country = models.CharField(max_length=100, blank=True)
     project_year = models.IntegerField(null=True, blank=True)

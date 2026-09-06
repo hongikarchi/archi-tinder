@@ -28,7 +28,9 @@ export function useResults(sessionId, projects, setProjects) {
 
   useEffect(() => {
     if (!validSessionId) {
-      setError('Invalid session ID.')
+      // Stable code (not a display string) — ResultsPage translates it via
+      // t('results.invalidSession') at the display site.
+      setError('invalid_session_id')
       setLoading(false)
       return
     }

@@ -473,7 +473,12 @@ class LikedBuildingsView(APIView):
       200:    {"liked_count": N}
       400:    {"detail": "<reason>"}
 
-    GET — return the user's liked buildings as full card objects.
+    GET — return a user's liked buildings as full card objects.
+      Query param: user_id (optional). Omitted -> caller's own liked list.
+        Provided -> that user's liked list (design-parity public-profile
+        tabs; any AUTHENTICATED user may view another user's likes — taste
+        sharing is the product concept, still no anonymous access). Unknown
+        user_id -> 404.
       200:    {"buildings": [...], "total": N}
 
     Ordering: newest first (prepend on POST). Deduped. Capped at
@@ -554,13 +559,30 @@ class LikedBuildingsView(APIView):
         return Response({'liked_count': len(profile.liked_building_ids)})
 
     def get(self, request):
-        try:
-            profile = request.user.profile
-        except UserProfile.DoesNotExist:
-            return Response(
-                {'detail': 'Profile not found'},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+        target_user_id_raw = request.query_params.get('user_id')
+        if target_user_id_raw is not None:
+            try:
+                target_user_id = int(target_user_id_raw)
+            except (ValueError, TypeError):
+                return Response(
+                    {'detail': 'user_id must be an integer.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            try:
+                profile = UserProfile.objects.get(user__id=target_user_id)
+            except UserProfile.DoesNotExist:
+                return Response(
+                    {'detail': 'Not found.'},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+        else:
+            try:
+                profile = request.user.profile
+            except UserProfile.DoesNotExist:
+                return Response(
+                    {'detail': 'Profile not found'},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
 
         from apps.recommendation import engine
 

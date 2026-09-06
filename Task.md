@@ -57,7 +57,13 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-(비어 있음 — FRONT-DESIGN-B2/C 종결로 이동, 2026-09-06)
+### FRONT-FUNC-CHECK-1 — 기능 점검 4종 (2026-09-06 예약)
+
+UI 파인튜닝(FRONT-DESIGN-FT) 종료 후 다음 세션의 기능 검증 슬라이스. user 지정:
+- [ ] 카드 뒷면 언어 변경(한영) — 카드 flip 상세면의 언어 토글 동작
+- [ ] 로그인 키보드 지원 — 스와이프 전용인 choice 카드를 방향키로도 진행 가능하게
+- [ ] 카드 날아가는 모션 확인 — 스와이프 exit 애니메이션이 최근 PR들 이후 정상인지 (FRONT-UX-14 feel 기준)
+- [ ] building → 사무소 페이지 연결 — BuildingDetailPage에서 건축가/사무소 클릭 시 프로필로 이동 (현재 링크 0개 확인됨; ARCHITECT-UNIFY-1의 wiring 결정과 연동 — /architects/:id로 연결이 1차 후보)
 
 
 ## Next
@@ -302,6 +308,14 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FRONT-DESIGN-FT — 디자인 파인튜닝: vision 전수 감사 + 결정 반영 — RESOLVED 2026-09-06 (`046f664`, PR 대기)
+- 21보드 × 2라운드 vision 감사(스크린샷 쌍을 에이전트가 직접 판정 + 회의적 재검증, 48 에이전트) + 속성 diff 교차. 완전 일치 4, 수정 완료 7, 판정불가 4(dev 데이터 필요 — taste-swipe 세션/building/architect/office)
+- 프로필 상단 시안 전환(좌측 원형 4버튼·sticky 바/글로우 제거·ProfileHeader 삭제), assessment 상단 swipe 관용구화(#316 draft-resume 불가침 검증), vision 확정 수정 6건(아바타 onError fallback 버그, llm-search 글로우, appearance 테마카드 한줄 배치·중복 레이블, i18n 28키, select chevron)
+- 결정 8-10: 로그아웃 전 페이지 유지(시안 예외 등록), user-other Liked/Created 공개(백엔드 ?user_id= 읽기 신설, publishable 게이트), upload Built/Unbuilt 토글+선택정보 접이식(Work.built_status 마이그레이션 0004 — 로컬 적용 완료, prod는 배포 시 make migrate-prod)
+- 신규 도구 tools/design-capture.py(시안·앱 스크린샷 쌍 생성, 실ID 동적 해석) — design-diff.py와 함께 검증 하니스 구성
+- 부수: 죽은 LikedOfficesPage import 제거(ARCHITECT-UNIFY-C의 parked FirmProfilePage는 기록대로 유지), 프로필 A→B 이동 시 liked/works 캐시 누수 수정, UploadWorkPage 편집 모달 z-index 위험 해소
+- Deferred: 판정불가 4종 시딩 후 재검; WorkDetailView 공개화(타인 Created 카드 → 상세 진입) 결정; llm-search 채팅 이력이 생성 시점 언어로 고정되는 스냅샷 한계
+
 ### FRONT-DESIGN-C — Claude Design canvas 41보드 → 실코드 반영 (B2 종결) — RESOLVED 2026-09-06 (`3f5f5cb`, PR #321)
 - Claude Design "Archibe Front Design" canvas 41보드를 실제 front 코드에 이식 — 공용 컴포넌트 3종 신설(PageTopControls 언어·테마·로그아웃 / PageLogoHeader 로고 / PageBackButton 떠있는 뒤로가기), sticky 헤더 19화면 → 인플로우 제목, 단색 CTA 전환(~40곳, DESIGN.md §8.1 재작성), scrim 토큰 4종×4테마
 - Tailwind 팔레트 잔재 ~40곳 토큰화(pink/red/rose/indigo-500, amber-400), 라이트 테마에서 안 보이던 흰색 워시 20+곳 수정, 취향 축 레이블 i18n(영어 고정이었음), TabBar 활성색 accent-1, 업로드 편집 모달 z-index 100→9999 위험 수정

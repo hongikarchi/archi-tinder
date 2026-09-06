@@ -21,11 +21,11 @@ function cardId(card) {
   return card?.image_id || card?.canonical_bld_id || card?.building_id || ''
 }
 
-function personaFields(result, project) {
+function personaFields(result, project, t) {
   const report = result?.analysis_report || project?.finalReport || {}
   return {
-    type: report.persona_type || report.title || 'Your Architecture Persona',
-    line: report.one_liner || report.summary || 'A compact read of the forms, programs, and atmospheres you kept choosing.',
+    type: report.persona_type || report.title || t('results.personaFallbackType'),
+    line: report.one_liner || report.summary || t('results.personaFallbackLine'),
     styles: report.dominant_styles || report.styles || report.style_tags || [],
     programs: report.dominant_programs || report.programs || report.program_tags || [],
   }
@@ -130,7 +130,7 @@ export default function ResultsPage({ projects, setProjects, onReportGenerated, 
   const { cards, error, loading, pendingIds, project, result, toggleBookmark } = useResults(sessionId, projects, setProjects)
   const [loadedRank, setLoadedRank] = useState(10)
   const observerRef = useRef(null)
-  const persona = personaFields(result, project)
+  const persona = personaFields(result, project, t)
   const cappedTotal = Math.min(cards.length, 50)
   const visibleCount = Math.min(loadedRank, cappedTotal)
   const topCards = cards.slice(0, visibleCount)
@@ -394,7 +394,7 @@ export default function ResultsPage({ projects, setProjects, onReportGenerated, 
               Top-K recommendations
             </p>
             <h2 style={{ color: 'var(--color-text)', fontSize: 20, fontWeight: 700, margin: 0 }}>
-              Rank 1-{Math.max(visibleCount, 10)}
+              {t('results.rankRange', { n: Math.max(visibleCount, 10) })}
             </h2>
           </div>
           <span style={{ color: 'var(--color-text-dimmer)', fontSize: 12, fontWeight: 700 }}>
@@ -418,7 +418,7 @@ export default function ResultsPage({ projects, setProjects, onReportGenerated, 
           </div>
         ) : error ? (
           <p style={{ color: 'var(--color-text-dim)', fontSize: 14, padding: '20px 18px', margin: 0 }}>
-            {error}
+            {error === 'invalid_session_id' ? t('results.invalidSession') : error}
           </p>
         ) : (
           <>

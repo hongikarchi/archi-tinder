@@ -4,19 +4,38 @@ import styles from './UserProfilePage.module.css'
 import { useTranslation } from '../i18n/index.js'
 import { getUserProfile, getLikedBuildings, getArchitectProfile } from '../api/client.js'
 import { updateProject, deleteProject } from '../api/projects.js'
-import { getMyWorks } from '../api/works.js'
+import { getMyWorks, getUserWorks } from '../api/works.js'
 import { purgeChatCache } from '../utils/appHelpers.js'
 import { getUserSavedStudios } from '../api/architects.js'
 import { getMyPersonality } from '../api/personality.js'
 import ShareCardModal from '../components/ShareCardModal.jsx'
 import WorkDetailModal from '../components/WorkDetailModal.jsx'
-import ProfileHeader from './userProfile/ProfileHeader'
 import ProfileHero from './userProfile/ProfileHero'
 import BoardGrid from './userProfile/BoardGrid'
 import PentagonChart from '../components/PentagonChart.jsx'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import PageTopControls from '../components/PageTopControls.jsx'
+import PageBackButton from '../components/PageBackButton.jsx'
+import { useUnreadNotifications } from '../hooks/useUnreadNotifications.js'
 import { OfficeCard, SkeletonCard, BuildingIconEmpty } from './LikedOfficesPage.jsx'
+
+// Floating top-left cluster button (isMe: bell/share/settings/logout) — mock
+// parity with PageBackButton's shipped shape (DESIGN.md §4 inline layout
+// values). `position: relative` so the bell's absolutely-positioned unread
+// badge anchors correctly; harmless no-op for the other three buttons.
+const topClusterBtnStyle = {
+  position: 'relative',
+  width: 34,
+  height: 34,
+  borderRadius: '50%',
+  background: 'var(--color-surface)',
+  border: '1px solid var(--color-border-soft)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  color: 'var(--color-text-dim)',
+  cursor: 'pointer',
+}
 
 /**
  * formatBoardDate — converts ISO 8601 timestamp to "Month YYYY" display string.
@@ -76,6 +95,14 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
   // Personality profile state (isMe: my personality; !isMe: for overlay comparison)
   const [myPersonality, setMyPersonality] = useState(null)
 
+  // Own-profile only — bell + unread badge (NOTIF-INAPP-1). Count fetch is
+  // mount + visibilitychange only (no polling) per the hook's own contract.
+  // enabled=isMe so viewing someone else's profile never fires the request.
+  // Relocated from the retired ProfileHeader (Rules of Hooks — before the
+  // loading/error early returns below).
+  const { count: unreadCount } = useUnreadNotifications(isMe)
+  const unreadBadgeLabel = unreadCount > 9 ? '9+' : String(unreadCount)
+
   // MINOR #1: inline error banner for failed board actions (optimistic revert feedback)
   const [boardActionError, setBoardActionError] = useState(null)
   // MINOR #3: per-board pending set — blocks rapid double-toggle
@@ -89,13 +116,14 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
   const bulkDeleteBtnRef = useRef(null)
   const bulkConfirmTimerRef = useRef(null)
 
-  // Fetch likedCount on mount (isMe only) for ProfileHero stat display
+  // Fetch likedCount on mount for ProfileHero stat display — own list when
+  // isMe, otherwise the viewed user's liked list (design-parity, FRONT-*).
   useEffect(() => {
-    if (!isMe) return
-    getLikedBuildings()
+    if (!effectiveUserId) return
+    getLikedBuildings(isMe ? undefined : effectiveUserId)
       .then(data => setLikedCount(data?.total ?? 0))
       .catch(() => {})
-  }, [isMe])
+  }, [isMe, effectiveUserId])
 
   // Fetch my personality for overlay comparison (both isMe and !isMe paths)
   // Empty deps intentional: runs once on mount to load the caller's own personality.
@@ -128,7 +156,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
     if (likedBuildings !== null) return
     setLikedLoading(true)
     try {
-      const data = await getLikedBuildings()
+      const data = await getLikedBuildings(isMe ? undefined : effectiveUserId)
       setLikedBuildings(data?.buildings || [])
       setLikedCount(data?.total ?? 0)
     } catch {
@@ -168,7 +196,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
     if (works !== null) return  // already loaded
     setWorksLoading(true)
     try {
-      const data = await getMyWorks()
+      const data = isMe ? await getMyWorks() : await getUserWorks(effectiveUserId)
       setWorks(data?.works || [])
     } catch {
       setWorks([])
@@ -214,6 +242,12 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
     setBoards([])
     setBoardsPage(1)
     setBoardsHasMore(false)
+    // Reset Liked/Created tab caches on user change — both are now reachable
+    // for !isMe (design-parity), so navigating between two profiles without
+    // an unmount must not leak the previous user's likes/works/count.
+    setLikedBuildings(null)
+    setLikedCount(0)
+    setWorks(null)
     getUserProfile(effectiveUserId, { boardsPage: 1, boardsPageSize: 12 })
       .then(data => {
         if (cancelled) return
@@ -455,22 +489,101 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
       background: 'var(--color-bg)',
       paddingBottom: 'calc(100px + env(safe-area-inset-bottom))'
     }}>
-      {/* Ambient accent glow — themed (DESIGN.md §8.1 accent idiom) */}
-      <div style={{
-        position: 'fixed', top: '-10%', left: '-10%', width: '120%', height: '50%',
-        background: 'radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--accent-1) 10%, transparent) 0%, transparent 70%)',
-        pointerEvents: 'none', zIndex: 0,
-      }} />
+      <PageTopControls />
 
-      <PageTopControls onLogout={onLogout} />
+      {/* Floating top-left cluster — Claude Design mock conversion.
+          isMe: bell (unread badge) + share + settings + logout, all neutral
+          circles (no destructive tint — mock parity). !isMe: single back
+          circle via PageBackButton (value-for-value match already shipped
+          by the design-port initiative — reused rather than re-authored). */}
+      {isMe ? (
+        <div style={{
+          position: 'fixed', top: 14, left: 16, zIndex: 300,
+          display: 'flex', gap: 8, alignItems: 'center',
+        }}>
+          {/* Notifications bell + unread badge (NOTIF-INAPP-1) */}
+          <button
+            type="button"
+            onClick={() => navigate('/notifications')}
+            aria-label={t('profile.notifications')}
+            title={t('profile.notifications')}
+            className="pressable"
+            style={topClusterBtnStyle}
+          >
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path>
+              <path d="M13.73 21a2 2 0 01-3.46 0"></path>
+            </svg>
+            {unreadCount > 0 && (
+              <span
+                aria-hidden="true"
+                style={{
+                  position: 'absolute', top: -3, right: -3,
+                  minWidth: 15, height: 15, padding: '0 4px',
+                  borderRadius: 999, background: 'var(--accent-1)', color: '#fff',
+                  fontSize: 9, fontWeight: 700, lineHeight: '15px', textAlign: 'center',
+                }}
+              >
+                {unreadBadgeLabel}
+              </span>
+            )}
+          </button>
+
+          {/* Share — mock's share-network glyph, SVG paths verbatim from profile.html */}
+          <button
+            type="button"
+            onClick={() => setShareOpen(true)}
+            aria-label={t('profile.shareCard')}
+            title={t('profile.shareCard')}
+            className="pressable"
+            style={topClusterBtnStyle}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="6" cy="12" r="3"></circle>
+              <circle cx="18" cy="6" r="3"></circle>
+              <circle cx="18" cy="18" r="3"></circle>
+              <path d="M8.6 10.5l6.8-3M8.6 13.5l6.8 3"></path>
+            </svg>
+          </button>
+
+          {/* Settings */}
+          <button
+            type="button"
+            onClick={() => navigate('/settings')}
+            aria-label={t('profile.settings')}
+            title={t('profile.settings')}
+            className="pressable"
+            style={topClusterBtnStyle}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33h0a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51h0a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v0a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"></path>
+            </svg>
+          </button>
+
+          {/* Logout — neutral circle (no destructive tint, mock parity).
+              Old ProfileHeader wired this directly to onLogout (no guard) —
+              copied as-is, not reimplemented. */}
+          <button
+            type="button"
+            onClick={onLogout}
+            aria-label="Log out"
+            title="Log out"
+            className="pressable"
+            style={topClusterBtnStyle}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+              <polyline points="16 17 21 12 16 7"></polyline>
+              <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+          </button>
+        </div>
+      ) : (
+        <PageBackButton onClick={() => navigate(-1)} />
+      )}
+
       <PageLogoHeader padding="18px 16px 0" />
-
-      <ProfileHeader
-        isMe={isMe}
-        handle={user?.handle}
-        onLogout={onLogout}
-        onShare={() => setShareOpen(true)}
-      />
 
       {/* Unified responsive container (max-width 1100) */}
       <div style={{ position: 'relative', zIndex: 1, maxWidth: 1100, margin: '0 auto', padding: '32px 20px 40px' }}>
@@ -639,7 +752,9 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         })()}
         {/* ── End personality section ────────────────────────────────────── */}
 
-        {/* Tab bar — Boards | Studios | Liked | Created (isMe only) */}
+        {/* Tab bar — Boards | Studios | Liked | Created (all 4 visible to any
+            viewer, design-parity user-other.html; edit affordances inside
+            each panel stay isMe-gated) */}
         <div style={{
           display: 'flex',
           borderBottom: '1px solid var(--color-border-soft)',
@@ -660,24 +775,20 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
           >
             Studios
           </button>
-          {isMe && (
-            <button
-              type="button"
-              onClick={handleLikedTab}
-              className={`${styles.tab} ${activeTab === 'liked' ? styles.tabActive : ''}`}
-            >
-              Liked
-            </button>
-          )}
-          {isMe && (
-            <button
-              type="button"
-              onClick={handleCreatedTab}
-              className={`${styles.tab} ${activeTab === 'created' ? styles.tabActive : ''}`}
-            >
-              Created
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={handleLikedTab}
+            className={`${styles.tab} ${activeTab === 'liked' ? styles.tabActive : ''}`}
+          >
+            Liked
+          </button>
+          <button
+            type="button"
+            onClick={handleCreatedTab}
+            className={`${styles.tab} ${activeTab === 'created' ? styles.tabActive : ''}`}
+          >
+            Created
+          </button>
         </div>
 
         {activeTab === 'boards' && (<>
@@ -1014,26 +1125,32 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
           </div>
         )}
 
-        {/* Created tab content */}
-        {activeTab === 'created' && isMe && (
+        {/* Created tab content — isMe: full owner voice (upload CTA, review
+            badges). !isMe: publishable-only works from ?user_id=, cards are
+            NOT clickable into detail (GET /works/<id>/ is owner-only, 403s
+            for other viewers) — rendered as plain non-interactive cards
+            rather than linking anywhere else. */}
+        {activeTab === 'created' && (
           <div style={{ padding: '16px 0' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
               <h3 style={{ color: 'var(--color-text)', fontSize: 20, fontWeight: 700, margin: 0, letterSpacing: '-0.01em' }}>
-                My Works
+                {isMe ? 'My Works' : 'Works'}
               </h3>
-              <button
-                type="button"
-                onClick={() => navigate('/upload')}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  padding: '8px 16px', borderRadius: 20,
-                  background: 'var(--color-text)', color: 'var(--color-bg)',
-                  border: 'none', cursor: 'pointer',
-                  fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
-                }}
-              >
-                + 업로드
-              </button>
+              {isMe && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/upload')}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '8px 16px', borderRadius: 20,
+                    background: 'var(--color-text)', color: 'var(--color-bg)',
+                    border: 'none', cursor: 'pointer',
+                    fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
+                  }}
+                >
+                  + 업로드
+                </button>
+              )}
             </div>
             {worksLoading ? (
               <div style={{
@@ -1054,21 +1171,25 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                 <p style={{ color: 'var(--color-text)', fontSize: 16, fontWeight: 600, margin: 0 }}>
                   아직 업로드한 작품이 없어요
                 </p>
-                <p style={{ color: 'var(--color-text-muted)', fontSize: 13, margin: 0 }}>
-                  본인의 건축 작품을 올려보세요
-                </p>
-                <button
-                  type="button"
-                  onClick={() => navigate('/upload')}
-                  style={{
-                    marginTop: 8, padding: '10px 24px', borderRadius: 20,
-                    background: 'var(--color-text)', color: 'var(--color-bg)',
-                    border: 'none', cursor: 'pointer',
-                    fontSize: 14, fontWeight: 600, fontFamily: 'inherit',
-                  }}
-                >
-                  작품 업로드
-                </button>
+                {isMe && (
+                  <p style={{ color: 'var(--color-text-muted)', fontSize: 13, margin: 0 }}>
+                    본인의 건축 작품을 올려보세요
+                  </p>
+                )}
+                {isMe && (
+                  <button
+                    type="button"
+                    onClick={() => navigate('/upload')}
+                    style={{
+                      marginTop: 8, padding: '10px 24px', borderRadius: 20,
+                      background: 'var(--color-text)', color: 'var(--color-bg)',
+                      border: 'none', cursor: 'pointer',
+                      fontSize: 14, fontWeight: 600, fontFamily: 'inherit',
+                    }}
+                  >
+                    작품 업로드
+                  </button>
+                )}
               </div>
             ) : (
               <div style={{
@@ -1079,12 +1200,12 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                 {works.map(work => (
                   <div
                     key={work.upload_id}
-                    onClick={() => setSelectedWorkId(work.upload_id)}
+                    onClick={isMe ? () => setSelectedWorkId(work.upload_id) : undefined}
                     style={{
                       borderRadius: 12, overflow: 'hidden',
                       background: 'var(--color-surface-2)',
                       display: 'flex', flexDirection: 'column',
-                      cursor: 'pointer',
+                      cursor: isMe ? 'pointer' : 'default',
                     }}
                   >
                     {work.cover_url ? (
@@ -1107,7 +1228,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                       <p style={{ margin: '4px 0 0', fontSize: 11, color: 'var(--color-text-muted)' }}>
                         {work.program}
                       </p>
-                      {!work.is_publishable && (
+                      {isMe && !work.is_publishable && (
                         <span style={{
                           display: 'inline-block', marginTop: 6,
                           padding: '2px 8px', borderRadius: 10,
