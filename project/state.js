@@ -23,9 +23,9 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-09-06 00:18 KST',
-    head: '038c068',
-    branch: 'fix/sns-people-overlay-graph-size',
+    updatedAt: '2026-09-06 09:55 KST',
+    head: '7c32640',
+    branch: 'pr319-resolve',
   },
   done: [
     {
@@ -261,6 +261,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 315,
+      title: 'feat(people): 페르소나 이미지가 있으면 발견 피드에 노출 — 본인 포함 + 저장 기본값 public',
+      mergedAt: '2026-09-06T00:54:33Z',
+      mergedAtKST: '2026-09-06 09:54 KST',
+      sha: '7c32640',
+    },
+    {
       number: 314,
       title: 'feat(people): 발견 카드를 이미지 앞면 + flip 상세 구조로 전환',
       mergedAt: '2026-08-29T02:23:30Z',
@@ -308,13 +315,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-08-15T04:48:31Z',
       mergedAtKST: '2026-08-15 13:48 KST',
       sha: 'e33a065',
-    },
-    {
-      number: 307,
-      title: 'feat(FRONT-DESIGN-A1): hex->token sweep PR-1 — pink de-drift + dark-glass fix',
-      mergedAt: '2026-08-15T04:47:46Z',
-      mergedAtKST: '2026-08-15 13:47 KST',
-      sha: 'c643a7c',
     },
   ],
   agents: [
@@ -583,6 +583,14 @@ window.PROJECT_STATE = {
     {
       path: 'README.md',
       role: '프로젝트 안내 문서',
+    },
+    {
+      path: 'Task.md',
+      role: '태스크 보드 문서',
+    },
+    {
+      path: 'Task.md',
+      role: '태스크 보드 문서',
     },
     {
       path: 'Task.md',
@@ -2543,6 +2551,14 @@ window.PROJECT_STATE = {
     {
       path: 'project/mermaid.min.js',
       role: 'Mermaid 다이어그램 번들',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
     },
     {
       path: 'project/state.js',
