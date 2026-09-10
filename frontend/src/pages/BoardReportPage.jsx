@@ -38,13 +38,26 @@ export default function BoardReportPage({ onLogout }) {
   const [genError, setGenError] = useState(false)
   const genRef = useRef(false)
 
+  // Ownership. Same derivation as BoardDetailPage (viewer id from sessionStorage
+  // vs the board's owner id) so both pages agree on who owns a board.
+  const viewerId = sessionStorage.getItem('archithon_user')
+  const boardOwnerId = board?.user?.user_id ?? board?.owner?.user_id
+  const isOwner = !!viewerId && String(boardOwnerId) === String(viewerId)
+
   const report = board?.final_report || localReport
   // Auto-generate condition, computed once and reused for both the effect
   // guard AND the render branch below — this is what avoids the first-paint
   // flash: while the condition holds but the effect (fired via useEffect,
   // one tick after paint) hasn't run yet, we still render the spinner
   // instead of the noReport state.
-  const shouldAutoGenerate = !!(board && !report && !genError && board.liked_ids?.length > 0)
+  //
+  // isOwner gate: without it, opening someone else's report-less board fired
+  // generateReport against THEIR project — a write on another user's data
+  // (and a Gemini call) triggered just by viewing. Non-owners now fall through
+  // to the existing no-report state instead.
+  const shouldAutoGenerate = !!(
+    isOwner && board && !report && !genError && board.liked_ids?.length > 0
+  )
 
   useEffect(() => {
     if (!shouldAutoGenerate) return
@@ -149,6 +162,7 @@ export default function BoardReportPage({ onLogout }) {
       <div className={styles.container}>
         <PersonaReport
           boardId={boardId}
+          canRegenerate={isOwner}
           finalReport={report}
           axisScores={locationState?.axisScores || localAxisScores || board?.axis_scores || null}
           reportImage={board?.report_image || null}
