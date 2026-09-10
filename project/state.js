@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-09-07 01:30 KST',
-    head: 'dc01734',
-    branch: 'feature/claude-mocks-untrack',
+    updatedAt: '2026-09-10 23:23 KST',
+    head: '4779507',
+    branch: 'feature/sns-report-owner-only-regen',
   },
   done: [
+    {
+      id: 'FRONT-REPORT-OWNER-1',
+      title: '페르소나 리포트 재생성 버튼 소유자 제한',
+      completedAt: '2026-09-10',
+      note: '소셜 탭 → 타인 프로필 → curated 보드 → 리포트 진입 시 남의 리포트 화면에 `이미지 재생성`/`리포트 재생성` 버튼이 그대로 노출됨',
+    },
     {
       id: 'INFRA-MOCKS-1',
       title: '__mocks 픽스처 develop 추적(공개 URL 노출)',
@@ -69,13 +75,6 @@ window.PROJECT_STATE = {
       title: '디자인 파인튜닝: vision 전수 감사 + 결정 반영',
       completedAt: '2026-09-06',
       note: '21보드 × 2라운드 vision 감사(스크린샷 쌍을 에이전트가 직접 판정 + 회의적 재검증, 48 에이전트) + 속성 diff 교차. 완전 일치 4, 수정 완료 7, 판정불가 4(dev 데이터 필요 — taste-swipe 세션/building/architect/office)',
-    },
-    {
-      id: 'FRONT-DESIGN-C',
-      title: 'Claude Design canvas 41보드 → 실코드 반영 (B2 종결)',
-      completedAt: '2026-09-06',
-      prs: [321],
-      note: 'Claude Design "Archibe Front Design" canvas 41보드를 실제 front 코드에 이식 — 공용 컴포넌트 3종 신설(PageTopControls 언어·테마·로그아웃 / PageLogoHeader 로고 / PageBackButton 떠있는 뒤로가기), sticky 헤더 19화면 → 인플로우 제목, 단색 CTA 전환(~40곳, DESIGN.md §8.1 재작성), scrim 토큰 4종×4테마',
     },
   ],
   now: [],
@@ -251,6 +250,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 328,
+      title: 'chore(INFRA-MOCKS-1): __mocks 디자인 픽스처 38종 untrack — 공개 URL 노출 차단',
+      mergedAt: '2026-09-06T16:35:29Z',
+      mergedAtKST: '2026-09-07 01:35 KST',
+      sha: '4779507',
+    },
+    {
       number: 327,
       title: 'feat(FULL-PRIVACY-1): 발견 피드 opt-out — PATCH 쓰기 경로 + 프로필 게이팅 + 계정 토글',
       mergedAt: '2026-09-06T16:30:14Z',
@@ -298,13 +304,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-09-06T01:25:22Z',
       mergedAtKST: '2026-09-06 10:25 KST',
       sha: 'd15da87',
-    },
-    {
-      number: 319,
-      title: 'feat(people): 내 카드는 성향 그래프를 단독 표시 (카드 flip 인터랙션 완성)',
-      mergedAt: '2026-09-06T00:59:17Z',
-      mergedAtKST: '2026-09-06 09:59 KST',
-      sha: 'e7f1f2c',
     },
   ],
   agents: [

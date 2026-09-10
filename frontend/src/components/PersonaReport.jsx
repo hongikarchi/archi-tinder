@@ -111,6 +111,10 @@ const SPECTRUM_AXES = [
 /**
  * Props:
  *   boardId         string  - API 호출에 사용 (null이면 재생성 버튼 비활성화)
+ *   canRegenerate   bool    - 뷰어가 이 보드의 소유자인가. false면 이미지/리포트
+ *                             재생성 버튼을 아예 렌더하지 않는다 — 남의 리포트를
+ *                             덮어쓰는 조작이므로 비활성 표시가 아니라 제거.
+ *                             기본 true: 소유자 화면(ResultsPage 등) 호출부 무영향.
  *   finalReport     object  - { persona_type, one_liner, description, dominant_programs, dominant_styles, dominant_materials }
  *   axisScores      object  - { form, materiality, scale, energy, tradition } (null이면 DEFAULT_AXES 사용)
  *   reportImage     string  - base64 이미지 데이터 (null 가능)
@@ -121,7 +125,8 @@ const SPECTRUM_AXES = [
  *                             its own project state — otherwise a remount/navigate
  *                             back re-renders the stale pre-regenerate report.
  */
-export default function PersonaReport({ boardId, finalReport, axisScores, reportImage, reportImageMime, onReportUpdate }) {
+export default function PersonaReport({ boardId, finalReport, axisScores, reportImage, reportImageMime,
+  onReportUpdate, canRegenerate = true }) {
   const { t } = useTranslation()
   const [localImage, setLocalImage] = useState(reportImage || null)
   const [localMime, setLocalMime] = useState(reportImageMime || null)
@@ -401,6 +406,11 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
         </div>
       )}
 
+      {/* Regenerate controls — owner only.
+          These POST to the board's project (image + report overwrite), so a
+          non-owner must not merely see them disabled; they are not rendered.
+          The report itself stays fully readable either way. */}
+      {canRegenerate && (<>
       <button
         type="button"
         onClick={handleGenerateImage}
@@ -464,6 +474,7 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
           {reportError}
         </p>
       )}
+      </>)}
     </>
   )
 }
