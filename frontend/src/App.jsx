@@ -454,8 +454,10 @@ export default function App() {
   // object at call time.
   function handleReportGenerated(project, data) {
     if (data?.final_report && project?.backendId && project?.isTemp) {
+      // FRONT-RESULTS-SAVE-1: prime the target but do NOT open the sheet.
+      // Auto-opening covered the report the user just waited for; saving is now
+      // driven by the "저장하고 프로필로" CTA in ResultsPage.
       setSaveModalProject({ backendId: project.backendId, finalReport: data.final_report, localId: project.id })
-      setShowSaveModal(true)
     }
   }
 
@@ -664,15 +666,15 @@ export default function App() {
                 ? { ...p, reportImage: img.image_data, reportImageMime: img.mime_type } : p)))
               .catch(() => null)  // image failure is non-fatal; report text already shown
           }
-          // Show SaveBoardModal when report completes and the project is temp.
-          // project.isTemp was set in handleStart — check the snapshot captured above.
+          // FRONT-RESULTS-SAVE-1: prime the save target when the report lands on
+          // a temp project, but leave the sheet closed — the ResultsPage CTA
+          // opens it. project.isTemp was set in handleStart (snapshot above).
           if (reportData?.final_report && backendId && project?.isTemp) {
             setSaveModalProject({
               backendId,
               finalReport: reportData.final_report,
               localId: activeProjectId,
             })
-            setShowSaveModal(true)
           }
         } catch {
           // ResultsPage will attempt a fresh GET /result/ on entry.
@@ -1031,6 +1033,25 @@ export default function App() {
     setSaveModalProject(null)
     setTempCompletedProject(null)
     setGlobalToast({ message: '보드가 저장되었어요', type: 'success' })
+    // Land the flow on the profile so the run has a visible end — the saved
+    // board is right there in the list. Previously this stayed on the results
+    // screen, which read as "did it even save?".
+    navigate('/user/me')
+  }
+
+  // CTA entry point from ResultsPage. A board that is already saved has nothing
+  // to name, so it skips straight to the profile; a temp one opens the sheet.
+  function handleRequestSave(project) {
+    if (!project?.backendId || !project?.isTemp) {
+      navigate('/user/me')
+      return
+    }
+    setSaveModalProject({
+      backendId: project.backendId,
+      finalReport: project.finalReport,
+      localId: project.id,
+    })
+    setShowSaveModal(true)
   }
 
   function handleBoardSaveClose() {
@@ -1123,7 +1144,7 @@ export default function App() {
           <Route path="library/:folderId" element={<Navigate to="/user/me" replace />} />
           <Route path="user/me" element={<UserProfilePage {...sharedLayoutProps} />} />
           <Route path="user/:userId" element={<UserProfilePage {...sharedLayoutProps} />} />
-          <Route path="result/:sessionId" element={<ResultsPage projects={projects} setProjects={setProjects} onReportGenerated={handleReportGenerated} onLogout={handleLogout} />} />
+          <Route path="result/:sessionId" element={<ResultsPage projects={projects} setProjects={setProjects} onReportGenerated={handleReportGenerated} onLogout={handleLogout} onRequestSave={handleRequestSave} />} />
           <Route path="buildings/:buildingId" element={<BuildingDetailPage onLogout={handleLogout} />} />
           <Route path="board/:boardId" element={<BoardDetailPage onResume={handleResumeProject} onLogout={handleLogout} />} />
           <Route path="board/:boardId/report" element={<BoardReportPage onLogout={handleLogout} />} />

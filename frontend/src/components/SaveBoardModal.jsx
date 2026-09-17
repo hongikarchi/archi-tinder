@@ -57,7 +57,10 @@ export default function SaveBoardModal({ projectId, finalReport, onSaved, onClos
     }
   }
 
-  // Close on backdrop click
+  // Backdrop click still dismisses. The '나중에' button is gone (this sheet is
+  // now opened deliberately from the results CTA, so its one exit is Save),
+  // but a mis-tap must not trap the user — dismissing just returns to the
+  // report, which is still there to save from.
   function handleBackdropClick(e) {
     if (e.target === e.currentTarget) onClose()
   }
@@ -119,9 +122,7 @@ export default function SaveBoardModal({ projectId, finalReport, onSaved, onClos
           >
             {saving ? t('board.saving') : t('board.save')}
           </button>
-          <button className={styles.skipBtn} onClick={onClose}>
-            {t('board.later')}
-          </button>
+
         </div>
       </div>
     </div>
