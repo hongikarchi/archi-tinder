@@ -298,6 +298,17 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FRONT-RESULTS-SAVE-1 — 리포트 화면 상단 저장 CTA + 저장 후 프로필 이동 — RESOLVED 2026-09-17 (`e196549`, PR 리뷰 대기)
+- user 지적: Discovery → Taste 리포트 생성 후 **끝나는 지점이 없음**. 저장은 이미 되고 있었으나 `SaveBoardModal`이 자동으로 떠서 방금 기다린 리포트를 가렸고, 저장을 마쳐도 결과 화면에 머물러 뒤로가기로 빠져나가야 했음 → "저장이 안 된 것 같은" 느낌. **기능 결함이 아니라 완결감(closure)의 부재**
+- 브레인스토밍에서 3안 검토 후 B안 채택: 모달 자동 노출을 없애고 **리포트를 먼저 보여준 뒤 유저가 상단 CTA로 마무리**. A안(모달 강제)은 리포트를 보기도 전에 이름부터 정해야 해 순서가 부자연스럽고, C안(기본값 즉시 저장)은 공개여부 선택권이 사라져 발견 피드 노출과 충돌
+- `App.jsx` 자동 모달 2곳 제거하되 `saveModalProject` 세팅은 유지 — CTA가 바로 쓸 대상만 준비
+- CTA는 상태에 따라 분기: 임시 보드 → `저장하고 프로필로`(모달→저장→프로필), 이미 저장됨 → `프로필에서 보기`(바로 이동). 리포트 없으면 미렌더
+- `handleBoardSaved`에 `navigate('/user/me')` — CTA·재진입 배너 **모든 저장 경로가 프로필에서 끝남**
+- `SaveBoardModal`의 `나중에` 제거(출구를 저장으로 일원화)하되 **backdrop 클릭은 유지** — 오터치로 갇히면 안 되고, 돌아가도 리포트가 그대로 있어 잃는 게 없음
+- 신규 제작은 **버튼 하나**뿐. 모달·저장 API·`handleBoardSaved`는 기존 재사용, 버튼 스타일은 `PersonaReport` CTA 값 사용. i18n ko/en 2키 추가
+- 설계: `docs/plans/2026-09-17-results-save-cta-design.md`
+- 미검증: 브라우저 실물(모달 미노출·CTA 동작·프로필 도착). PR에 수동 절차 기재
+
 ### INFRA-MOCKS-1 — __mocks 픽스처 develop 추적(공개 URL 노출) — RESOLVED 2026-09-06 (`be390c4`, PR 대기)
 - `git rm --cached -r`로 38파일(~900KB) 인덱스만 제거 — 워킹트리 보존, .gitignore:90(#321)이 재유입 차단. 배포 시 Vercel `/__mocks/*.html` 공개 URL 소멸. DEPLOY-BATCH-2 플랜 PR-D
 
