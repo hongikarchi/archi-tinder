@@ -298,6 +298,14 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FRONT-REPORT-OWNER-1 — 페르소나 리포트 재생성 버튼 소유자 제한 — RESOLVED 2026-09-10 (`f6e1118`, PR 리뷰 대기)
+- 소셜 탭 → 타인 프로필 → curated 보드 → 리포트 진입 시 남의 리포트 화면에 `이미지 재생성`/`리포트 재생성` 버튼이 그대로 노출됨
+- **백엔드는 이미 안전했음**: 두 POST 모두 `filter(project_id=pk, user=profile)`라 타인 보드는 404(실측 확인 — 예원의 public 보드에 재생성 2종 POST → 둘 다 404). 데이터 유출·변조는 없었고 문제는 UI가 **반드시 실패할 버튼**을 노출한 것
+- `PersonaReport`에 `canRegenerate` prop 추가(기본 `true`). false면 두 버튼을 **비활성이 아니라 미렌더** — 남의 리포트를 덮어쓰는 조작이라 "눌러도 안 되는 버튼"으로 남길 이유가 없음. 리포트 본문 열람은 그대로. 기본 true라 `ResultsPage`(본인 세션 결과) 호출부는 무영향
+- `BoardReportPage`의 소유권 판정식은 `BoardDetailPage`와 동일(sessionStorage viewer id vs board owner id)하게 맞춰 두 페이지가 같은 기준을 봄
+- **부수 발견 — 자동 생성도 게이팅**: `shouldAutoGenerate`가 소유권을 보지 않아, 리포트 없는 타인 보드를 **열기만 해도** 그 사람 프로젝트에 `generateReport`가 발사됐음(타인 데이터 쓰기 + Gemini 호출 시도). 서버가 404로 막아 실제 변조는 없었으나 매 진입마다 무의미한 실패 요청 발생. 비소유자는 기존 no-report 상태로 떨어지도록 수정
+- 미검증: 브라우저 실물(타인 보드에서 버튼 미노출·본인 보드에서 정상 노출). PR에 수동 절차 기재
+
 ### INFRA-MOCKS-1 — __mocks 픽스처 develop 추적(공개 URL 노출) — RESOLVED 2026-09-06 (`be390c4`, PR 대기)
 - `git rm --cached -r`로 38파일(~900KB) 인덱스만 제거 — 워킹트리 보존, .gitignore:90(#321)이 재유입 차단. 배포 시 Vercel `/__mocks/*.html` 공개 URL 소멸. DEPLOY-BATCH-2 플랜 PR-D
 
