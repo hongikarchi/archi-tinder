@@ -122,7 +122,7 @@ function ResultCard({ card, rank, saved, pending, onOpen, onToggle }) {
   )
 }
 
-export default function ResultsPage({ projects, setProjects, onReportGenerated, onLogout }) {
+export default function ResultsPage({ projects, setProjects, onReportGenerated, onLogout, onRequestSave }) {
   const navigate = useNavigate()
   const location = useLocation()
   const { sessionId } = useParams()
@@ -266,6 +266,36 @@ export default function ResultsPage({ projects, setProjects, onReportGenerated, 
       <PageTopControls onLogout={onLogout} />
 
       <div style={{ maxWidth: 680, margin: '0 auto' }}>
+      {/* FRONT-RESULTS-SAVE-1 — the run's closing action.
+          The save sheet no longer auto-opens over the report (it covered the
+          thing the user just waited for), so this is what ends the flow: it
+          opens the sheet for a temp board, or goes straight to the profile for
+          one that is already saved. Either way the user lands somewhere that
+          shows the result was kept, instead of having to press Back.
+          Gated on the report existing — there is nothing to save before it. */}
+      {project?.finalReport && backendId && (
+        <div style={{ padding: '0 18px 4px' }}>
+          <button
+            type="button"
+            onClick={() => onRequestSave?.(project)}
+            style={{
+              width: '100%',
+              minHeight: 44,
+              padding: '12px 24px',
+              borderRadius: 999,
+              background: 'var(--accent-1)',
+              color: '#fff',
+              border: 'none',
+              fontSize: 14,
+              fontWeight: 700,
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+            }}
+          >
+            {project.isTemp ? t('results.saveAndProfile') : t('results.goToProfile')}
+          </button>
+        </div>
+      )}
       {project?.finalReport && backendId ? (
         <PersonaReport
           boardId={backendId}

@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-09-10 23:23 KST',
-    head: '4779507',
-    branch: 'feature/sns-report-owner-only-regen',
+    updatedAt: '2026-09-19 09:26 KST',
+    head: 'ab473f5',
+    branch: 'pr330-resolve',
   },
   done: [
+    {
+      id: 'FRONT-RESULTS-SAVE-1',
+      title: '리포트 화면 상단 저장 CTA + 저장 후 프로필 이동',
+      completedAt: '2026-09-17',
+      note: 'user 지적: Discovery → Taste 리포트 생성 후 끝나는 지점이 없음. 저장은 이미 되고 있었으나 `SaveBoardModal`이 자동으로 떠서 방금 기다린 리포트를 가렸고, 저장을 마쳐도 결과 화면에 머물러 뒤로가기로 빠져나가야 했음 → "저장이 안 된 것 같은" 느낌. 기능 결함이 아니라 완결감(closure)의 부재',
+    },
     {
       id: 'FRONT-REPORT-OWNER-1',
       title: '페르소나 리포트 재생성 버튼 소유자 제한',
@@ -69,12 +75,6 @@ window.PROJECT_STATE = {
       title: '기능 점검 4종: 카드뒷면 i18n·모션·사무소 링크·/office 정리',
       completedAt: '2026-09-06',
       note: '카드 뒷면 한영 — 원인은 PersonCard/PentagonChart/SwipeCard/AssessmentCard 4곳이 useTranslation 미구독(정적 텍스트). 전부 배선 + 성향 오각형 축 5종 신규 namespace(personality.*, 취향 축 persona.axis.*와 별개 분류) + 진단 문항 20개 text_en 저작 + assessment 페이지 크롬까지 일괄 i18n (문항 채점은 id 기반이라 번역 무영향)',
-    },
-    {
-      id: 'FRONT-DESIGN-FT',
-      title: '디자인 파인튜닝: vision 전수 감사 + 결정 반영',
-      completedAt: '2026-09-06',
-      note: '21보드 × 2라운드 vision 감사(스크린샷 쌍을 에이전트가 직접 판정 + 회의적 재검증, 48 에이전트) + 속성 diff 교차. 완전 일치 4, 수정 완료 7, 판정불가 4(dev 데이터 필요 — taste-swipe 세션/building/architect/office)',
     },
   ],
   now: [],
@@ -250,6 +250,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 329,
+      title: 'fix(report): 페르소나 리포트 재생성은 보드 소유자만',
+      mergedAt: '2026-09-19T00:26:02Z',
+      mergedAtKST: '2026-09-19 09:26 KST',
+      sha: 'ab473f5',
+    },
+    {
       number: 328,
       title: 'chore(INFRA-MOCKS-1): __mocks 디자인 픽스처 38종 untrack — 공개 URL 노출 차단',
       mergedAt: '2026-09-06T16:35:29Z',
@@ -297,13 +304,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-09-06T09:38:44Z',
       mergedAtKST: '2026-09-06 18:38 KST',
       sha: 'f5cf623',
-    },
-    {
-      number: 321,
-      title: 'feat(FRONT-DESIGN-C): canvas design port — 시안 41보드 반영',
-      mergedAt: '2026-09-06T01:25:22Z',
-      mergedAtKST: '2026-09-06 10:25 KST',
-      sha: 'd15da87',
     },
   ],
   agents: [
@@ -580,6 +580,14 @@ window.PROJECT_STATE = {
     {
       path: 'README.md',
       role: '프로젝트 안내 문서',
+    },
+    {
+      path: 'Task.md',
+      role: '태스크 보드 문서',
+    },
+    {
+      path: 'Task.md',
+      role: '태스크 보드 문서',
     },
     {
       path: 'Task.md',
@@ -1778,6 +1786,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'docs/plans/2026-09-17-results-save-cta-design.md',
+      role: '',
+    },
+    {
       path: 'docs/prd/archibe-business-model.html',
       role: 'archibe 비즈니스 모델 PRD (정적 HTML)',
     },
@@ -2544,6 +2556,14 @@ window.PROJECT_STATE = {
     {
       path: 'project/mermaid.min.js',
       role: 'Mermaid 다이어그램 번들',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
     },
     {
       path: 'project/state.js',

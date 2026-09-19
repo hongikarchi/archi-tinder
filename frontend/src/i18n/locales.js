@@ -161,6 +161,8 @@ export const locales = {
       },
     },
     results: {
+      saveAndProfile: '저장하고 프로필로',
+      goToProfile: '프로필에서 보기',
       allLoaded: '더 볼 게 없어요',
       reportError: '페르소나 리포트를 불러오지 못했어요.',
       retry: '다시 시도',
@@ -802,6 +804,8 @@ export const locales = {
       },
     },
     results: {
+      saveAndProfile: 'Save and go to profile',
+      goToProfile: 'View on profile',
       allLoaded: 'No more to show',
       reportError: 'Failed to load the persona report.',
       retry: 'Try again',
