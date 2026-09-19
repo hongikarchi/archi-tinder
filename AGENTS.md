@@ -113,7 +113,7 @@
 
   **Decision principles (tiebreakers, in order):**
   1. **Out-of-scope check first** — if a feature crosses a boundary, stop and ask the user; do not silently expand scope.
-  2. **Persona priority** — P1 (Firm→Jobseeker) > P2 (Person→Person) > P3 (Firm→Client) > P4 (Individual/gateway). P1 wins a design conflict unless the user overrides.
+  2. **Persona priority** — P2 (Person→Person) > P1 (Firm→Jobseeker) > P3 (Firm→Client) > P4 (Individual/gateway). P2 wins a design conflict unless the user overrides. (Reordered 2026-09-17 by user decision — see `docs/plans/2026-09-17-competition-team-design.md` §1; previously P1 > P2.)
   3. **Foundation correctness > feature breadth** — a correct algorithm with 3 features beats a buggy one with 30. Defer features that pile on shaky foundations.
   4. **Honest matching > engagement metrics** — never introduce patterns that boost session length / total swipes at the cost of taste-match quality.
   5. **External-dependency restraint** — prefer extending Gemini / HuggingFace / Imagen / Cloudflare R2 / Neon Postgres before adding a new external service; new dependencies need user approval.
