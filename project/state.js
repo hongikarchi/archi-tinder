@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-09-19 09:26 KST',
-    head: 'ab473f5',
-    branch: 'pr330-resolve',
+    updatedAt: '2026-09-23 17:44 KST',
+    head: '4975849',
+    branch: 'feature/sns-competition-prototype',
   },
   done: [
+    {
+      id: 'FRONT-COMP-PROTO-1',
+      title: '공모전 팀빌딩 화면 프로토타입',
+      completedAt: '2026-09-23',
+      note: '완성품이 아니라 판단용: 스와이프 취향분석 vs 커뮤니티 중 어느 쪽을 메인으로 둘지 주변 사람들에게 물어보기 위한 화면. user 결정',
+    },
     {
       id: 'FRONT-RESULTS-SAVE-1',
       title: '리포트 화면 상단 저장 CTA + 저장 후 프로필 이동',
@@ -69,12 +75,6 @@ window.PROJECT_STATE = {
       title: '발견 피드 빈 화면: seed_discovery 커맨드 + 소셜 탭 신설',
       completedAt: '2026-09-06',
       note: '빈 피드 원인 재실측 — #315 완화 후 게이트는 2중(discovery_opt_in + public report_image 프로젝트)인데 로컬 DB 통과자 0명: report_image 프로젝트 4개 전부 private(#315 이전 SaveBoardModal 기본값), 진단 완료 4명 전부 본인 계정. "테스트 서버 계정"은 prod Neon DB 소속 + prod엔 discovery 미배포라 로컬에서 원천 불가시',
-    },
-    {
-      id: 'FRONT-FUNC-CHECK-1',
-      title: '기능 점검 4종: 카드뒷면 i18n·모션·사무소 링크·/office 정리',
-      completedAt: '2026-09-06',
-      note: '카드 뒷면 한영 — 원인은 PersonCard/PentagonChart/SwipeCard/AssessmentCard 4곳이 useTranslation 미구독(정적 텍스트). 전부 배선 + 성향 오각형 축 5종 신규 namespace(personality.*, 취향 축 persona.axis.*와 별개 분류) + 진단 문항 20개 text_en 저작 + assessment 페이지 크롬까지 일괄 i18n (문항 채점은 id 기반이라 번역 무영향)',
     },
   ],
   now: [],
@@ -250,6 +250,20 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 331,
+      title: 'docs(plans): 공모전 팀빌딩 찜 기반 설계 — 팀원 추천 v2 접근 기각',
+      mergedAt: '2026-09-19T00:37:00Z',
+      mergedAtKST: '2026-09-19 09:37 KST',
+      sha: '4975849',
+    },
+    {
+      number: 330,
+      title: 'feat(results): 리포트 화면 상단 저장 CTA — 저장하면 프로필로 이어짐',
+      mergedAt: '2026-09-19T00:31:02Z',
+      mergedAtKST: '2026-09-19 09:31 KST',
+      sha: '631995b',
+    },
+    {
       number: 329,
       title: 'fix(report): 페르소나 리포트 재생성은 보드 소유자만',
       mergedAt: '2026-09-19T00:26:02Z',
@@ -290,20 +304,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-09-06T14:57:06Z',
       mergedAtKST: '2026-09-06 23:57 KST',
       sha: '70851a2',
-    },
-    {
-      number: 323,
-      title: 'feat(FRONT-FUNC-CHECK-1): card-back i18n + motion gate 제거 + 건물→사무소 링크 + /office front 삭제',
-      mergedAt: '2026-09-06T13:13:29Z',
-      mergedAtKST: '2026-09-06 22:13 KST',
-      sha: '5a7cd77',
-    },
-    {
-      number: 322,
-      title: 'feat(FRONT-DESIGN-FT): 디자인 파인튜닝 — vision 전수 감사 + 기능 결정 반영',
-      mergedAt: '2026-09-06T09:38:44Z',
-      mergedAtKST: '2026-09-06 18:38 KST',
-      sha: 'f5cf623',
     },
   ],
   agents: [
@@ -580,14 +580,6 @@ window.PROJECT_STATE = {
     {
       path: 'README.md',
       role: '프로젝트 안내 문서',
-    },
-    {
-      path: 'Task.md',
-      role: '태스크 보드 문서',
-    },
-    {
-      path: 'Task.md',
-      role: '태스크 보드 문서',
     },
     {
       path: 'Task.md',
@@ -1786,6 +1778,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'docs/plans/2026-09-17-competition-team-design.md',
+      role: '',
+    },
+    {
       path: 'docs/plans/2026-09-17-results-save-cta-design.md',
       role: '',
     },
@@ -2066,6 +2062,14 @@ window.PROJECT_STATE = {
       role: '프로필 명함 공유 모달',
     },
     {
+      path: 'frontend/src/components/SocialSegment.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/SocialSegment.module.css',
+      role: '',
+    },
+    {
       path: 'frontend/src/components/SurpriseBoardModal.jsx',
       role: '큐레이션 보드 제안 모달',
     },
@@ -2179,6 +2183,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/constants/assessmentQuestions.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/constants/mockCompetitions.js',
       role: '',
     },
     {
@@ -2311,6 +2319,22 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/pages/BuildingDetailPage.module.css',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/CompetitionDetailPage.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/CompetitionDetailPage.module.css',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/CompetitionListPage.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/CompetitionListPage.module.css',
       role: '',
     },
     {
@@ -2510,6 +2534,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'frontend/src/utils/competitionInterest.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/utils/discoveryGuard.js',
       role: '',
     },
@@ -2528,6 +2556,14 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/utils/resolveProjectBackendId.js',
       role: '프로젝트 백엔드 ID 해석 유틸',
+    },
+    {
+      path: 'frontend/src/utils/teamFit.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/teamFit.test.mjs',
+      role: '',
     },
     {
       path: 'frontend/src/utils/timeAgo.js',
@@ -2556,14 +2592,6 @@ window.PROJECT_STATE = {
     {
       path: 'project/mermaid.min.js',
       role: 'Mermaid 다이어그램 번들',
-    },
-    {
-      path: 'project/state.js',
-      role: '대시보드 상태 데이터',
-    },
-    {
-      path: 'project/state.js',
-      role: '대시보드 상태 데이터',
     },
     {
       path: 'project/state.js',
