@@ -71,32 +71,37 @@ export const MOCK_COMPETITIONS = [
 /**
  * 공모전별 찜한 사람.
  *
- * vector 는 5축(-1..+1). PersonCard 가 그대로 받는 모양이라 발견 피드와 같은
- * 카드를 재사용할 수 있다.
+ * user_id / handle / type_code / vector 는 **로컬 DB의 실제 행과 일치**시켰다
+ * (seed_people_local.py 로 심은 36~40, 그리고 실계정 3). 아이디를 누르면
+ * /user/:id?tab=created 로 가서 그 사람의 작품이 실제로 뜬다.
+ *
+ * 주의: 이 id 들은 로컬 개발 DB에만 있다. 다른 환경(배포 서버 등)에서는
+ * 프로필이 "찾을 수 없음"으로 뜬다 — 그 환경에서 쓰려면 seed_discovery
+ * 관리 커맨드로 유저를 심고 여기 id 를 맞춰야 한다.
+ *
+ * vector 는 5축(-1..+1).
  */
 export const MOCK_INTERESTED = {
   c1: [
-    { user_id: 9001, display_name: '김서연', handle: 'seoyeon_k', avatar_url: null, type_code: 'CLON', vector: [0.78, -0.12, 0.61, 0.83, 0.04] },
-    { user_id: 9002, display_name: '박도현', handle: 'dohyun.arch', avatar_url: null, type_code: 'CSDN', vector: [-0.62, 0.55, 0.48, 0.71, -0.22] },
-    { user_id: 9003, display_name: '이하늘', handle: 'haneul', avatar_url: null, type_code: 'RLOT', vector: [-0.55, -0.41, 0.72, 0.68, 0.31] },
-    { user_id: 9004, display_name: '최민준', handle: 'minjun_c', avatar_url: null, type_code: 'CLDT', vector: [0.69, 0.33, -0.52, -0.15, 0.44] },
-    { user_id: 9005, display_name: '정유진', handle: 'yujin.j', avatar_url: null, type_code: 'CLOT', vector: [0.58, -0.22, 0.49, 0.75, 0.42] },
+    { user_id: 36, display_name: 'seoyeon', handle: 'seoyeon', avatar_url: null, type_code: 'CLON', vector: [0.78, -0.12, 0.61, 0.83, 0.04] },
+    { user_id: 37, display_name: 'dohyun', handle: 'dohyun', avatar_url: null, type_code: 'CSDN', vector: [0.41, 0.55, -0.38, 0.29, -0.62] },
+    { user_id: 38, display_name: 'haneul', handle: 'haneul', avatar_url: null, type_code: 'RLOT', vector: [-0.55, -0.41, 0.72, -0.18, 0.66] },
+    { user_id: 39, display_name: 'minjun', handle: 'minjun', avatar_url: null, type_code: 'CLDT', vector: [0.69, -0.33, -0.52, 0.75, 0.31] },
+    { user_id: 40, display_name: 'yujin', handle: 'yujin', avatar_url: null, type_code: 'CLOT', vector: [0.58, -0.22, 0.49, 0.68, 0.42] },
   ],
   c2: [
-    { user_id: 9006, display_name: '한지우', handle: 'jiwoo_h', avatar_url: null, type_code: 'RSON', vector: [-0.71, -0.33, 0.55, 0.62, -0.18] },
-    { user_id: 9002, display_name: '박도현', handle: 'dohyun.arch', avatar_url: null, type_code: 'CSDN', vector: [-0.62, 0.55, 0.48, 0.71, -0.22] },
-    { user_id: 9007, display_name: '오세림', handle: 'serim.o', avatar_url: null, type_code: 'CLDN', vector: [0.44, 0.61, -0.38, 0.29, 0.53] },
+    { user_id: 3, display_name: '예원', handle: '예원', avatar_url: null, type_code: 'CSDT', vector: [0.12, -0.12, -0.12, -0.12, 0.25] },
+    { user_id: 37, display_name: 'dohyun', handle: 'dohyun', avatar_url: null, type_code: 'CSDN', vector: [0.41, 0.55, -0.38, 0.29, -0.62] },
   ],
   c3: [
-    { user_id: 9008, display_name: '윤태오', handle: 'taeo', avatar_url: null, type_code: 'CSOT', vector: [0.33, -0.68, 0.71, 0.58, -0.4] },
-    { user_id: 9001, display_name: '김서연', handle: 'seoyeon_k', avatar_url: null, type_code: 'CLON', vector: [0.78, -0.12, 0.61, 0.83, 0.04] },
+    { user_id: 36, display_name: 'seoyeon', handle: 'seoyeon', avatar_url: null, type_code: 'CLON', vector: [0.78, -0.12, 0.61, 0.83, 0.04] },
   ],
-  c4: [
-    { user_id: 9009, display_name: '배수린', handle: 'surin_b', avatar_url: null, type_code: 'RLDT', vector: [-0.48, 0.27, -0.61, -0.33, 0.19] },
-  ],
+  c4: [],
 }
 
-/** 모집 중인 팀. capacity - members.length 가 빈 자리(설계 §6-3: 저장하지 않고 파생). */
+/** 모집 중인 팀. capacity - members.length 가 빈 자리(설계 §6-3: 저장하지 않고 파생).
+ *  팀 멤버는 DB에 없는 가공 인물이다 — 이름만 나열될 뿐 프로필로 가는 링크가
+ *  없어서 깨질 곳이 없다. */
 export const MOCK_TEAMS = {
   c1: [
     {
@@ -133,8 +138,17 @@ export const MOCK_TEAMS = {
   c4: [],
 }
 
-/** 뷰어 본인의 축 벡터 — 겹침 계산과 오버레이 그래프에 쓰인다. */
-export const MOCK_MY_VECTOR = [0.62, -0.28, 0.45, 0.71, -0.15]
+/**
+ * 뷰어 본인의 축 벡터 — 겹침 계산과 오버레이 그래프에 쓰인다.
+ *
+ * 시드 유저들과의 관계를 보고 고른 값이다. 임의로 두면 "보완과 일치를 동시에
+ * 갖춘 사람"이 하나도 없어, 일치만 만점인 복제형이 추천 1위가 된다(w=0.4 라
+ * 일치가 무겁기 때문). 그러면 데모가 "보완되는 사람을 추천한다"는 기능 자체를
+ * 보여주지 못한다.
+ *
+ * 이 값에서는 @dohyun 이 1·2축 반대 + 3·4축 일치로 뚜렷한 1위가 된다.
+ */
+export const MOCK_MY_VECTOR = [-0.6, -0.7, -0.4, 0.3, 0.1]
 
 export function competitionById(id) {
   return MOCK_COMPETITIONS.find(c => c.id === id) || null
