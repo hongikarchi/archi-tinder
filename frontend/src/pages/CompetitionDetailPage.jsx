@@ -53,7 +53,11 @@ export default function CompetitionDetailPage({ onLogout }) {
   const d = daysLeft(competition)
 
   // 찜한 사람은 적합도 순. 발견 피드의 유클리드 정렬과 의도적으로 다르다(§4).
-  const people = sortByFit(MOCK_INTERESTED[competition.id] || [], MOCK_MY_VECTOR)
+  const ranked = sortByFit(MOCK_INTERESTED[competition.id] || [], MOCK_MY_VECTOR)
+  // 상위 1명만 추천으로 올린다. 2~3명을 추천하면 "추천"이 희석되어 그냥
+  // 정렬된 목록과 다를 게 없어진다.
+  const recommended = ranked.length > 1 ? ranked[0] : null
+  const rest = recommended ? ranked.slice(1) : ranked
   const teams = MOCK_TEAMS[competition.id] || []
 
   function handleToggleInterest() {
@@ -63,6 +67,46 @@ export default function CompetitionDetailPage({ onLogout }) {
   function showToast(msg) {
     setToast(msg)
     setTimeout(() => setToast(null), 2200)
+  }
+
+  /**
+   * 사람 카드. 추천/일반이 같은 카드를 쓰고 테두리만 달라진다 — 다른 레이아웃을
+   * 쓰면 "추천"이 별개 기능처럼 보여 목록과의 연결이 끊긴다.
+   *
+   * 실명 대신 아이디만 보여준다. 판단용 프로토타입이라 사람을 특정할 필요가
+   * 없고, 모르는 사람의 실명이 나열되면 발견보다 신상 목록처럼 읽힌다.
+   */
+  function renderPerson(p, isRecommended) {
+    return (
+      <article className={`${styles.personCard} ${isRecommended ? styles.personCardRec : ''}`}>
+        <div className={styles.personChart}>
+          <PentagonChart myVector={MOCK_MY_VECTOR} theirVector={p.vector} mini size={104} />
+        </div>
+        <div className={styles.personBody}>
+          <div className={styles.personHead}>
+            {/* 아이디를 누르면 그 사람의 Created 탭으로 — 작품을 보고
+                판단할 수 있어야 "제안"에 근거가 생긴다. */}
+            <button
+              type="button"
+              className={styles.handleBtn}
+              onClick={() => navigate(`/user/${p.user_id}?tab=created`)}
+              aria-label={`@${p.handle} 프로필 보기`}
+            >
+              @{p.handle}
+            </button>
+            <span className={styles.typeBadge}>{p.type_code}</span>
+          </div>
+          <p className={styles.fitReason}>{fitReason(MOCK_MY_VECTOR, p.vector)}</p>
+        </div>
+        <button
+          type="button"
+          className={styles.proposeBtn}
+          onClick={() => showToast(`@${p.handle}에게 제안을 보냈어요`)}
+        >
+          제안
+        </button>
+      </article>
+    )
   }
 
   return (
@@ -94,42 +138,29 @@ export default function CompetitionDetailPage({ onLogout }) {
           </p>
         </header>
 
-        {/* ── 섹션 A: 찜한 사람 ── */}
+        {/* ── 섹션 A: 찜한 사람 — 추천 1명 + 전체 ── */}
         <section className={styles.section}>
-          <h2 className={styles.sectionTitle}>이 공모전에 관심 있는 사람</h2>
-          {people.length === 0 ? (
-            <p className={styles.sectionEmpty}>아직 관심을 표시한 사람이 없어요</p>
+          {recommended && (
+            <>
+              <h2 className={styles.sectionTitle}>
+                추천 <span className={styles.sectionHint}>성향이 잘 맞아요</span>
+              </h2>
+              <div className={styles.recommendWrap}>
+                {renderPerson(recommended, true)}
+              </div>
+            </>
+          )}
+
+          <h2 className={`${styles.sectionTitle} ${recommended ? styles.sectionTitleGap : ''}`}>
+            관심 있는 사람 {ranked.length > 0 && <span className={styles.sectionHint}>{ranked.length}명</span>}
+          </h2>
+          {rest.length === 0 ? (
+            <p className={styles.sectionEmpty}>
+              {ranked.length === 0 ? '아직 관심을 표시한 사람이 없어요' : '다른 사람은 아직 없어요'}
+            </p>
           ) : (
             <ul className={styles.personList}>
-              {people.map(p => (
-                <li key={p.user_id}>
-                  <article className={styles.personCard}>
-                    <div className={styles.personChart}>
-                      <PentagonChart
-                        myVector={MOCK_MY_VECTOR}
-                        theirVector={p.vector}
-                        mini
-                        size={76}
-                      />
-                    </div>
-                    <div className={styles.personBody}>
-                      <div className={styles.personHead}>
-                        <span className={styles.personName}>{p.display_name}</span>
-                        <span className={styles.typeBadge}>{p.type_code}</span>
-                      </div>
-                      <p className={styles.personHandle}>@{p.handle}</p>
-                      <p className={styles.fitReason}>{fitReason(MOCK_MY_VECTOR, p.vector)}</p>
-                    </div>
-                    <button
-                      type="button"
-                      className={styles.proposeBtn}
-                      onClick={() => showToast(`${p.display_name}님에게 제안을 보냈어요`)}
-                    >
-                      제안
-                    </button>
-                  </article>
-                </li>
-              ))}
+              {rest.map(p => <li key={p.user_id}>{renderPerson(p, false)}</li>)}
             </ul>
           )}
         </section>
@@ -156,7 +187,7 @@ export default function CompetitionDetailPage({ onLogout }) {
                         )}
                       </div>
                       <p className={styles.teamMembers}>
-                        {t.members.map(m => m.display_name).join(' · ')}
+                        {t.members.map(m => `@${m.handle}`).join(' · ')}
                       </p>
                       {open > 0 && (
                         <button

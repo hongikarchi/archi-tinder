@@ -211,18 +211,20 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
   const handleCreatedTabRef = useRef(handleCreatedTab)
   handleCreatedTabRef.current = handleCreatedTab
 
-  // Deep-link support: /user/me?tab=created lands directly on the Created
-  // tab (used by the upload success-modal confirm). Guarded to fire once,
-  // only after the profile user + isMe are resolved, and only for isMe.
+  // Deep-link support: ?tab=created lands directly on the Created tab.
+  // Originally isMe-only (upload success-modal confirm). The isMe guard is
+  // gone because handleCreatedTab already handles both sides — it calls
+  // getUserWorks() for other people — and the competition prototype links
+  // straight to another user's works from the interested-people list.
   const deepLinkAppliedRef = useRef(false)
   useEffect(() => {
     if (deepLinkAppliedRef.current) return
     if (!user || loading) return
-    if (searchParams.get('tab') === 'created' && isMe) {
+    if (searchParams.get('tab') === 'created') {
       deepLinkAppliedRef.current = true
       handleCreatedTabRef.current()
     }
-  }, [user, loading, isMe, searchParams])
+  }, [user, loading, searchParams])
 
   // Adapter: map project_id -> board_id + format ISO date -> "Month YYYY"
   function adaptBoard(b) {

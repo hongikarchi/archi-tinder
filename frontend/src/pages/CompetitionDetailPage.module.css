@@ -145,11 +145,33 @@
 .personCard {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   padding: 12px 14px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
+}
+
+/* 추천은 같은 카드에 테두리만 강조한다. 레이아웃을 달리하면 "추천"이 별개
+   기능처럼 보여 아래 목록과의 연결이 끊긴다. */
+.personCardRec {
+  border-color: var(--accent-1);
+  background: color-mix(in srgb, var(--accent-1) 5%, var(--color-surface));
+}
+
+.recommendWrap {
+  margin-bottom: 4px;
+}
+
+.sectionHint {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  margin-left: 6px;
+}
+
+.sectionTitleGap {
+  margin-top: 22px;
 }
 
 .personChart {
@@ -169,11 +191,7 @@
   gap: 6px;
 }
 
-.personName {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--color-text);
-}
+
 
 .typeBadge {
   flex-shrink: 0;
@@ -187,17 +205,41 @@
   letter-spacing: 0.04em;
 }
 
-.personHandle {
-  font-size: 11px;
-  color: var(--color-text-muted);
-  margin: 2px 0 0;
+/* 실명을 빼고 아이디가 주 식별자가 됐으므로 부제가 아니라 제목 무게로 올린다.
+   누르면 프로필로 가므로 버튼이되, 링크처럼 보이게 둔다 — 카드 안에 버튼이
+   둘(아이디·제안)이라 둘 다 버튼 모양이면 무엇이 주 행동인지 흐려진다. */
+.handleBtn {
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+  cursor: pointer;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color var(--motion-fast) var(--motion-ease);
+}
+
+.handleBtn:hover {
+  color: var(--accent-1);
+  text-decoration: underline;
+}
+
+.handleBtn:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
 }
 
 /* 판정이 아니라 관찰. 단정적 표현을 쓰지 않는다(§5-1 기각 사유와 같은 맥락). */
 .fitReason {
   font-size: 12px;
   color: var(--accent-1);
-  margin: 6px 0 0;
+  margin: 5px 0 0;
   font-weight: 500;
 }
 
