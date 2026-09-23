@@ -37,7 +37,7 @@ import styles from './PageTopControls.module.css'
  * LoginPage passes no `onLogout` (unauthenticated page) -> no logout button,
  * even though the mock's markup includes one (meaningless pre-login).
  */
-export default function PageTopControls({ onLogout }) {
+export default function PageTopControls({ onLogout, splitMobile = false }) {
   const { theme, setTheme } = useTheme()
   const { language, setLanguage } = useLanguage()
   const { t } = useTranslation()
@@ -57,10 +57,11 @@ export default function PageTopControls({ onLogout }) {
       onPointerDown={stop}
       onMouseDown={stop}
       onTouchStart={stop}
+      className={`${styles.controls} ${splitMobile ? styles.splitMobile : ''}`}
       style={wrapStyle}
     >
       {/* Language pill */}
-      <div style={pillStyle}>
+      <div className={styles.languagePill} style={pillStyle}>
         <button
           type="button"
           className="pressable"
@@ -134,20 +135,20 @@ export default function PageTopControls({ onLogout }) {
 
 const wrapStyle = {
   position: 'fixed',
-  top: 14,
-  right: 16,
+  top: 16,
+  right: 12,
   zIndex: 300,
   display: 'flex',
-  gap: 8,
+  gap: 6,
   alignItems: 'center',
 }
 
 const pillStyle = {
   display: 'flex',
   alignItems: 'center',
-  height: 34,
+  height: 28,
   boxSizing: 'border-box',
-  padding: 3,
+  padding: 2,
   background: 'var(--color-surface)',
   border: '1px solid var(--color-border)',
   borderRadius: 'var(--radius-pill)',
@@ -159,13 +160,13 @@ function tgStyle(selected) {
     border: 0,
     background: selected ? 'var(--color-bg)' : 'transparent',
     color: selected ? 'var(--color-text)' : 'var(--color-text-muted)',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: 600,
     letterSpacing: '0.04em',
     cursor: 'pointer',
     borderRadius: 'var(--radius-pill)',
-    height: 28,
-    padding: '0 12px',
+    height: 22,
+    padding: '0 8px',
     display: 'flex',
     alignItems: 'center',
     fontFamily: 'inherit',
@@ -176,12 +177,12 @@ function tgStyle(selected) {
 
 // Mock .tg.tgi icon-only variant — same base, tighter horizontal padding.
 function tgIconStyle(selected) {
-  return { ...tgStyle(selected), padding: '0 9px' }
+  return { ...tgStyle(selected), padding: '0 6px' }
 }
 
 const logoutStyle = {
-  width: 34,
-  height: 34,
+  width: 28,
+  height: 28,
   borderRadius: '50%',
   background: 'var(--color-surface)',
   border: '1px solid var(--color-border-soft)',

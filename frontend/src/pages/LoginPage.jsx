@@ -440,11 +440,8 @@ export default function LoginPage({ onLogin }) {
           working unchanged. No `onLogout` is passed — this is the
           unauthenticated page, so PageTopControls renders no logout button. */}
       <PageTopControls />
+      <PageLogoHeader style={{ position: 'absolute', top: 0, left: 0 }} />
       <main style={mainStyle}>
-        {/* Arch|ibe page logo — same PageLogoHeader + prop convention as
-            DiscoveryPage.jsx (padding={0}, page already supplies padding via
-            pageStyle; marginBottom={8} matches login.html's `margin:0 0 8px`). */}
-        <PageLogoHeader padding={0} marginBottom={8} />
         <div style={stageStyle}>
           <div style={deckStackStyle}>
             {linearNextStep && (
@@ -1259,7 +1256,7 @@ const pageStyle = {
   minHeight: '100vh',
   display: 'grid',
   placeItems: 'center',
-  padding: 16,
+  padding: '64px 16px 16px',
   boxSizing: 'border-box',
 }
 
