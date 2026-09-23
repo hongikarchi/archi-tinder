@@ -19,6 +19,8 @@ import UploadWorkPage from './pages/UploadWorkPage.jsx'
 import ArchitectProfilePage from './pages/ArchitectProfilePage.jsx'
 import AssessmentPage from './pages/AssessmentPage.jsx'
 import PeopleDiscoveryPage from './pages/PeopleDiscoveryPage.jsx'
+import CompetitionListPage from './pages/CompetitionListPage.jsx'
+import CompetitionDetailPage from './pages/CompetitionDetailPage.jsx'
 import SettingsPage from './pages/settings/SettingsPage.jsx'
 import AccountScreen from './pages/settings/AccountScreen.jsx'
 import NotificationsScreen from './pages/settings/NotificationsScreen.jsx'
@@ -1155,6 +1157,10 @@ export default function App() {
           <Route path="notifications" element={<NotificationInboxScreen onLogout={handleLogout} />} />
           <Route path="assessment" element={<AssessmentPage onLogout={handleLogout} />} />
           <Route path="people" element={<PeopleDiscoveryPage onLogout={handleLogout} />} />
+          {/* FRONT-COMP-PROTO-1 — 공모전 팀빌딩 프로토타입. Social 탭의 두 번째
+              세그먼트. 목 데이터 + localStorage 만 쓰며 백엔드가 없다. */}
+          <Route path="competitions" element={<CompetitionListPage onLogout={handleLogout} />} />
+          <Route path="competitions/:competitionId" element={<CompetitionDetailPage onLogout={handleLogout} />} />
           <Route path="settings" element={<SettingsPage onLogout={handleLogout} />}>
             <Route path="edit-profile" element={<EditProfileScreen onLogout={handleLogout} />} />
             <Route path="account" element={<AccountScreen onLogout={handleLogout} />} />
