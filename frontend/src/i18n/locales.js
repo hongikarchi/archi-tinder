@@ -140,11 +140,6 @@ export const locales = {
         cancel: '취소',
       },
       emptyDeck: '더 볼 카드가 없어요 · 위에서 결과를 확인하세요',
-      questionCard: {
-        calibrating: '지금 취향을 파악하고 있어요 ✦',
-        swipeHint:   '← 아니오 · 네 →',
-        skip:        '건너뛰기',
-      },
       detail: {
         tapForDetails: '탭해서 자세히 보기',
         imageUnavailable: '이미지를 불러올 수 없습니다',
@@ -783,11 +778,6 @@ export const locales = {
         cancel: 'Cancel',
       },
       emptyDeck: 'No more cards · check results above',
-      questionCard: {
-        calibrating: 'Getting to know your taste ✦',
-        swipeHint:   '← No · Yes →',
-        skip:        'Skip',
-      },
       detail: {
         tapForDetails: 'tap for details',
         imageUnavailable: 'Image unavailable',

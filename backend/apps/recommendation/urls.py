@@ -8,7 +8,6 @@ from .views import (
     ProjectReportGenerateView, ProjectReportImageView,
     ProjectReportImageFetchView,
     ProjectBookmarkView, ImageLoadTelemetryView, BoardSurpriseView,
-    QuestionResponseView,
     RecommendedArchitectsView, ArchitectDetailView, ArchitectFollowView,
     InspectBuildingsListView, InspectBuildingDetailView, InspectSearchView,
 )
@@ -29,7 +28,6 @@ urlpatterns = [
     path('analysis/sessions/<uuid:session_id>/state/',   SessionStateView.as_view()),
     path('analysis/sessions/<uuid:session_id>/swipes/',  SwipeView.as_view()),
     path('analysis/sessions/<uuid:session_id>/result/',  SessionResultView.as_view()),
-    path('analysis/sessions/<uuid:session_id>/question-responses/', QuestionResponseView.as_view()),
     # Images
     path('discovery/',                                   DiscoveryFeedView.as_view()),
     path('discovery/feedback/',                          DiscoveryFeedbackView.as_view()),

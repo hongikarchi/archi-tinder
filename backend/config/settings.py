@@ -370,17 +370,8 @@ RECOMMENDATION = {
     'discovery_local_sim_radius': 0.55,          # cosine SIM to nearest centroid to count as local/취향
     'discovery_centroid_cache_ttl': 21600,       # 6h — app-session fixed
     'discovery_promote_threshold': 10,
-    # ALGO-QCARD Phase 1: soft-vector bias hyperparameters
-    'question_max_per_session': 2,      # ALGO-QCARD soft-vector: max question cards per session
-    'question_cooldown_swipes': 15,     # min swipes between question cards
-    'question_boost_weight': 2.0,       # Yes answer: + boost on keyword vector
-    'question_penalty_weight': 1.0,     # No answer: - penalty on keyword vector
-    # ALGO-QCARD Phase 2: TF-IDF discriminative keyword selection
-    'corpus_df_cache_ttl_seconds': 86400,   # TF-IDF corpus DF cache TTL (24h)
-    'question_common_tag_ratio': 0.4,        # tags with df/N above this are too common → skipped
-    # Explicit generic-tag blacklist (leave empty; df/N ratio is the primary discriminator).
-    # Ops can populate with domain-specific stop-tags if IDF alone is insufficient.
-    'question_keyword_blacklist': [],
+    # LLM search (get_corpus_tag_df / engine.llm_search_by_filters) TF-IDF corpus DF cache TTL (24h)
+    'corpus_df_cache_ttl_seconds': 86400,
     'discovery_like_hard_cap': 50,  # Discovery draft hard stop: block likes beyond 50; client redirects to Taste
     # DISCOVERY-PERF-1: scope tier/exclude/dislike/centroid to most-recent N boards (tunable).
     # Older boards' liked/disliked/saved buildings may re-appear in Discovery — intended behaviour.
@@ -389,11 +380,6 @@ RECOMMENDATION = {
     # sample that avoids a full seq scan of the large canonical_v2_buildings table
     # (VECTOR(384) + JSONB rows). ~2% of ~39k ≈ 780 sampled, ample for the 120-cap FPS.
     'discovery_tablesample_pct': 2.0,
-    # ALGO-QCARD Phase 3: hyper-positive / fast-swipe detection (Trigger A)
-    'question_fast_swipe_ms': 1500,          # avg inter-swipe latency below this = "fast" (hyper-positive)
-    'question_hyperpositive_window': 10,     # look back this many swipes
-    'question_hyperpositive_min_likes': 8,   # >= this many likes in the window triggers
-    'recent_latencies_cap': 10,              # rolling latency window size
     # LLM-SEARCH-RANK-1: A+BM25 soft-score ranking hyperparameters for ParseQueryView.
     # Replaces ORDER BY RANDOM() + 3-tier relaxation ladder with a single ranked CTE.
     # All axes are soft (no hard gate except is_publishable=true).

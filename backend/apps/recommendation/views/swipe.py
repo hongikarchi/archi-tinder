@@ -20,7 +20,6 @@ from ..services.swipe_service import (
     handle_swipe_normal,
     build_swipe_telemetry,
     compute_sync_prefetch,
-    handle_question_response,
 )
 
 logger = logging.getLogger('apps.recommendation')
@@ -51,7 +50,6 @@ def _async_prefetch_thread(
     session_id, cache_round, phase,
     pool_ids_snap, exposed_ids_snap, pool_embeddings_snap,
     like_vectors_snap, initial_batch_snap, current_round_snap,
-    question_bias_vector_snap=None,
     multimodal_floor_snap=None,
 ):
     """IMP-8 (Spec v1.6 §11.1): background thread to compute prefetch cards
@@ -109,7 +107,6 @@ def _async_prefetch_thread(
             pf_bid = engine.compute_mmr_next(
                 pool_ids_snap, exposed_ids_snap, pool_embeddings_snap,
                 like_vectors_snap, current_round_snap + 2,
-                question_bias_vector=question_bias_vector_snap,
                 multimodal_floor=multimodal_floor_snap,
             )
 
@@ -134,7 +131,6 @@ def _async_prefetch_thread(
                 pf2_bid = engine.compute_mmr_next(
                     pool_ids_snap, temp_exposed, pool_embeddings_snap,
                     like_vectors_snap, current_round_snap + 3,
-                    question_bias_vector=question_bias_vector_snap,
                     multimodal_floor=multimodal_floor_snap,
                 )
 
@@ -315,8 +311,6 @@ class SwipeView(APIView):
         _embedding_stats      = result['_embedding_stats']
         _pool_escalation_fired = result['_pool_escalation_fired']
         _timing_marks         = result['_timing_marks']
-        question_trigger      = result['question_trigger']
-        saved_question_bias_vector = result.get('saved_question_bias_vector')
         _action_card_accepted = result.get('_action_card_accepted', False)
 
         import time as _time
@@ -415,7 +409,6 @@ class SwipeView(APIView):
                     saved_current_round,
                 ),
                 kwargs={
-                    'question_bias_vector_snap': saved_question_bias_vector,
                     'multimodal_floor_snap': saved_multimodal_floor,
                 },
                 daemon=True,
@@ -428,7 +421,6 @@ class SwipeView(APIView):
             pf_bid, pf2_bid = compute_sync_prefetch(
                 saved_phase, saved_exposed_ids, saved_initial_batch, saved_current_round,
                 saved_pool_ids, saved_pool_embeddings, saved_like_vectors,
-                saved_question_bias_vector=saved_question_bias_vector,
                 saved_multimodal_floor=saved_multimodal_floor,
             )
 
@@ -497,47 +489,4 @@ class SwipeView(APIView):
             # prefetch path served the response — useful for client perf debug +
             # required by test_first_swipe_hits_prefetch_cache (PR #145 F4).
             'prefetch_strategy': prefetch_strategy,
-            # ALGO-QCARD-1: question card trigger (null or {type, axis, question, option_a, option_b})
-            'question_trigger': question_trigger,
         })
-
-
-# ── Question Response (ALGO-QCARD-1) ─────────────────────────────────────────
-
-class QuestionResponseView(APIView):
-    """
-    POST /api/v1/analysis/sessions/<uuid:session_id>/question-responses/
-
-    Record the user's answer to a question card (type: refine | refresh).
-    Applies soft-vector bias to future recommendations (ALGO-QCARD Phase 1).
-    Emits a tag_answer SessionEvent.
-
-    Request body:
-        question_type:   "refine" | "refresh"
-        axis:            str | null   (axis name for refine; null for refresh)
-        keyword:         str | null   (dominant tag echoed from question_trigger)
-        selected_option: "A" | "B" | "skip"
-            A = Yes (right swipe / agree)
-            B = No  (left swipe / disagree)
-
-    Response 200 (skip):
-        { "accepted": true, "flush_prefetch": false }
-
-    Response 200 (A or B):
-        {
-          "accepted": true,
-          "flush_prefetch": true,
-          "next_image": <ImageCard | null>,
-          "prefetch_image": <ImageCard | null>,
-          "prefetch_image_2": <ImageCard | null>,
-          "progress": { ... }
-        }
-    """
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request, session_id):
-        profile = _get_profile(request)
-        if not profile:
-            from rest_framework import status
-            return Response({'detail': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
-        return handle_question_response(request, profile, session_id)

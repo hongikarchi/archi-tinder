@@ -101,16 +101,11 @@ class AnalysisSession(models.Model):
     cosine_top10_ids  = models.JSONField(null=True, blank=True)  # first 10 cosine-ordered ids at result time
     gemini_top10_ids  = models.JSONField(null=True, blank=True)  # first 10 Gemini-rerank ids (None when flag off)
     dpp_top10_ids     = models.JSONField(null=True, blank=True)  # first 10 DPP-ordered ids (None when flag off)
-    # Question card trigger state (ALGO-QCARD-1)
+    # unused since FULL-RECOMMEND-1 — pending BACK-RECOMMEND-6 decision (kept in DB;
+    # all read/write code paths removed when the question-card feature was deleted).
     tag_axis_counts = models.JSONField(default=dict)   # {"style": {"minimal": 3}, ...}
     recent_like_tag_sets = models.JSONField(default=list)   # last 3 liked-card tag lists
-    question_cooldown = models.IntegerField(default=0)   # swipe-down counter; set to cooldown_n on trigger/answer
-    q_card_consecutive_dislikes = models.IntegerField(default=0)   # consecutive dislike counter for refresh trigger
-    # ALGO-QCARD Phase 1: soft-vector bias fields
-    question_count = models.IntegerField(default=0)   # questions triggered this session (cap)
-    question_bias_vector = models.JSONField(null=True, blank=True)   # accumulated 384-d soft bias from Yes/No answers; None = no bias
-    # ALGO-QCARD Phase 3: inter-swipe latency rolling window for hyper-positive detection
-    recent_latencies = models.JSONField(default=list)   # rolling inter-swipe latencies (ms), newest last; cap RC['recent_latencies_cap']
+    question_bias_vector = models.JSONField(null=True, blank=True)   # accumulated 384-d soft bias; None = no bias
     # TASTE-FLOW: action card is emitted exactly once per session (first convergence).
     # After the first emission (shown=True) subsequent converged swipes serve real cards.
     # Never reset on 'keep exploring' (extend path) — prompt was already shown.
@@ -162,7 +157,6 @@ class SessionEvent(models.Model):
         ('session_start',      'Session Start'),
         ('pool_creation',      'Pool Creation'),
         ('swipe',              'Swipe'),
-        ('tag_answer',         'Tag Answer'),
         ('confidence_update',  'Confidence Update'),
         ('session_end',        'Session End'),
         ('session_extend',     'Session Extend'),

@@ -11,8 +11,6 @@ export default function MainLayout({
   keepExploringChosen,
   onSwipe, onViewResults, onExtendSession,
   onExitToNewProject, onExitToHome,
-  questionTrigger = null,
-  onQuestionAnswer,
   nextCard = null,
 }) {
   const location = useLocation()
@@ -59,8 +57,6 @@ export default function MainLayout({
           onExtendSession={onExtendSession}
           onExitToNewProject={onExitToNewProject}
           onExitToHome={onExitToHome}
-          questionTrigger={questionTrigger}
-          onQuestionAnswer={onQuestionAnswer}
           nextCard={nextCard}
         />
       </div>

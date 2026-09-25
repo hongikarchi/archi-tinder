@@ -1,6 +1,5 @@
 import { useRef, useState, useEffect } from 'react'
 import SwipeCard, { CARD_WIDTH, CARD_HEIGHT } from '../components/SwipeCard.jsx'
-import QuestionCard from '../components/QuestionCard.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
 import CardSkeleton from '../components/CardSkeleton.jsx'
 import SwipeDeck from '../components/SwipeDeck.jsx'
@@ -339,14 +338,11 @@ export default function SwipePage({
   keepExploringChosen = false,
   onSwipe, onViewResults, onExtendSession, // eslint-disable-line no-unused-vars
   onExitToNewProject, onExitToHome,
-  questionTrigger = null,
-  onQuestionAnswer,
   nextCard = null,
   onLogout,
 }) {
   const { t } = useTranslation()
   const cardRef = useRef(null)
-  const questionCardRef = useRef(null)
   const swipedCardId = useRef(null)
   const hasShownDismissTutorial = useRef(!!localStorage.getItem('archithon_dismiss_tutorial_seen'))
   const pendingDismissDir = useRef(null)
@@ -419,7 +415,7 @@ export default function SwipePage({
       cardRef.current.swipe(dir)
     },
     guardCondition: () =>
-      !!(questionTrigger || isLoading || !cardRef.current || !currentCard || showExitConfirm ||
+      !!(isLoading || !cardRef.current || !currentCard || showExitConfirm ||
          showDismissConfirm || pendingAction.current || swipedCardId.current === currentCard?.image_id),
   })
 
@@ -647,92 +643,71 @@ export default function SwipePage({
         {/* Card */}
         <SwipeDeck active={!!currentCard}>
           {currentCard ? (
-            questionTrigger ? (
-              /* Wrap QuestionCard in SwipeGestureFrame so right swipe = 'A' (Yes)
-                 and left swipe = 'B' (No). Buttons remain as accessible fallback.
-                 No under-card here — question interstitials aren't part of the
-                 real-card deck. */
-              <SwipeGestureFrame
-                ref={questionCardRef}
-                key={`question_${questionTrigger.axis ?? ''}_${questionTrigger.type}`}
-                onSwipe={(dir) => {
-                  if (dir === 'right') onQuestionAnswer('A')
-                  else if (dir === 'left') onQuestionAnswer('B')
-                }}
-                onCardLeftScreen={() => {}}
-              >
-                <QuestionCard
-                  trigger={questionTrigger}
-                  onAnswer={onQuestionAnswer}
-                />
-              </SwipeGestureFrame>
-            ) : (
-              <>
-                {/* FRONT-UX-14-SIMPLIFY — full-size under-card stack. Render the
-                    top card AND the next real card (guarded off for action-card
-                    tops, mirroring the old nextCard={...isActionCard?null}
-                    condition) in IDENTICAL wrapper shapes so React reuses the
-                    DOM node when a card moves from under-slot to top-slot
-                    (key = image_id only — no remount). The under card finishes
-                    its LQIP->main image load while hidden (pointerEvents:none,
-                    aria-hidden), and promotion is a pure zIndex/prop flip. */}
-                {[
-                  (!isActionCard(currentCard) ? nextCard : null),
-                  currentCard,
-                ].filter(Boolean).map(card => {
-                  const isTop = card === currentCard
-                  // Scope the recovery-remount suffix to the exact card the
-                  // reset fired on (see resetRef comment above) so normal
-                  // promotion (under -> top) never remounts.
-                  const resetSuffix = (isTop && resetRef.current.id === card.image_id)
-                    ? `-r${cardResetToken}_${localResetTick}`
-                    : ''
-                  return (
-                    <div
-                      key={card.image_id}
-                      style={{
-                        position: 'absolute', inset: 0,
-                        zIndex: isTop ? 5 : 4,
-                        pointerEvents: isTop ? 'auto' : 'none',
-                      }}
-                      aria-hidden={!isTop}
+            <>
+              {/* FRONT-UX-14-SIMPLIFY — full-size under-card stack. Render the
+                  top card AND the next real card (guarded off for action-card
+                  tops, mirroring the old nextCard={...isActionCard?null}
+                  condition) in IDENTICAL wrapper shapes so React reuses the
+                  DOM node when a card moves from under-slot to top-slot
+                  (key = image_id only — no remount). The under card finishes
+                  its LQIP->main image load while hidden (pointerEvents:none,
+                  aria-hidden), and promotion is a pure zIndex/prop flip. */}
+              {[
+                (!isActionCard(currentCard) ? nextCard : null),
+                currentCard,
+              ].filter(Boolean).map(card => {
+                const isTop = card === currentCard
+                // Scope the recovery-remount suffix to the exact card the
+                // reset fired on (see resetRef comment above) so normal
+                // promotion (under -> top) never remounts.
+                const resetSuffix = (isTop && resetRef.current.id === card.image_id)
+                  ? `-r${cardResetToken}_${localResetTick}`
+                  : ''
+                return (
+                  <div
+                    key={card.image_id}
+                    style={{
+                      position: 'absolute', inset: 0,
+                      zIndex: isTop ? 5 : 4,
+                      pointerEvents: isTop ? 'auto' : 'none',
+                    }}
+                    aria-hidden={!isTop}
+                  >
+                    <SwipeGestureFrame
+                      ref={isTop ? cardRef : null}
+                      key={`${card.image_id}${resetSuffix}`}
+                      onSwipe={isTop ? onTinderSwipe : undefined}
+                      onCardLeftScreen={isTop ? onCardLeftScreen : undefined}
+                      preventSwipe={isTop ? undefined : SWIPE_PREVENT_ALL}
                     >
-                      <SwipeGestureFrame
-                        ref={isTop ? cardRef : null}
-                        key={`${card.image_id}${resetSuffix}`}
-                        onSwipe={isTop ? onTinderSwipe : undefined}
-                        onCardLeftScreen={isTop ? onCardLeftScreen : undefined}
-                        preventSwipe={isTop ? undefined : SWIPE_PREVENT_ALL}
-                      >
-                        {isActionCard(card) ? (
-                          <ActionCard card={card} />
-                        ) : (
-                          <SwipeCard
-                            card={card}
-                            onGalleryClose={() => {}}
-                          />
-                        )}
-                      </SwipeGestureFrame>
-                    </div>
-                  )
-                })}
-                {isLoading && (
-                  <div style={{
-                    position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    borderRadius: 20, background: 'rgba(0,0,0,0.15)', pointerEvents: 'none',
-                    zIndex: 6,
-                  }}>
-                    <div style={{
-                      width: 32, height: 32, borderRadius: '50%',
-                      border: '3px solid rgba(255,255,255,0.2)',
-                      borderTopColor: '#fff',
-                      animation: 'spin 0.8s linear infinite',
-                    }} />
+                      {isActionCard(card) ? (
+                        <ActionCard card={card} />
+                      ) : (
+                        <SwipeCard
+                          card={card}
+                          onGalleryClose={() => {}}
+                        />
+                      )}
+                    </SwipeGestureFrame>
                   </div>
-                )}
-              </>
-            )
+                )
+              })}
+              {isLoading && (
+                <div style={{
+                  position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  borderRadius: 20, background: 'rgba(0,0,0,0.15)', pointerEvents: 'none',
+                  zIndex: 6,
+                }}>
+                  <div style={{
+                    width: 32, height: 32, borderRadius: '50%',
+                    border: '3px solid rgba(255,255,255,0.2)',
+                    borderTopColor: '#fff',
+                    animation: 'spin 0.8s linear infinite',
+                  }} />
+                </div>
+              )}
+            </>
           ) : isLoading ? (
             <CardSkeleton />
           ) : null}

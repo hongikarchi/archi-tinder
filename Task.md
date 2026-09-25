@@ -57,7 +57,15 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(비어 있음 — FRONT-FUNC-CHECK-1 완료 2026-09-06, ## Done 참조)_
+### FULL-RECOMMEND-1 — 질문카드가 리포트에 무영향·순위만 과왜곡
+
+ALGO-QCARD(질문카드) 전면 제거 (grilling 2026-09-25 결정). 근거: 답변은 리포트(`generation.py`)에 0 영향, 반면 `question_bias_vector`(답변당 ±2.0, 비정규화)가 like(0.5) 대비 ~4배로 MMR 순위를 과점유; `docs/algorithm.md`·Task.md 미문서화.
+- 제거: `QuestionCard.jsx` + SwipePage/App/MainLayout/sessions.js 배선 + i18n `swipe.questionCard.*`; 백엔드 트리거·`handle_question_response`·`question-responses/` 엔드포인트·`question_*`/`recent_latencies_cap` 설정; engine `question_bias_vector` 파라미터 전 호출부; 테스트 4파일.
+- 컬럼 DROP(마이그레이션): `recent_latencies`, `question_count`, `question_cooldown`, `q_card_consecutive_dislikes`.
+- 컬럼 유지·코드만 제거(재논의 대기 → BACK-RECOMMEND-6): `tag_axis_counts`, `recent_like_tag_sets`, `question_bias_vector`.
+- 유지(무관): ActionCard, DiscoveryTriggerCard, parse_query probe, `cardShell.js`(AssessmentCard), `caches.get_corpus_tag_df`(LLM 검색 사용).
+- 다음 카드 = 스와이프(pref_vector)만. 가중치 재튜닝 없음.
+- Deferred: BACK-LLM-5 (리포트 근거 기반화), BACK-RECOMMEND-5 (Love intensity 잔재 제거), BACK-RECOMMEND-6 (태그→취향좌표 병합 검토)
 
 
 ## Next
@@ -106,6 +114,19 @@ Implementation map:
 - Account deletion/export is not currently in scope but should be tracked before public launch if GDPR-like obligations apply.
 
 ### HIGH
+
+#### BACK-LLM-5 — 리포트 취향 문장이 근거 없음
+_FULL-RECOMMEND-1 후속 PR 2 (grilling 2026-09-25 결정). `generation.generate_persona_report`는 liked 6속성만 Gemini에 넘김._
+- 입력: `Project.liked_ids` + `disliked_ids`로 리포트 시점 재계산(세션 누적값 아님). 추가 속성: `color_tone`, `visual_description`(참고문), `typology_primary`, `typology_tags`, `architectural_elements`, `project_year`.
+- 편중도(lift) = liked 비율 / 코퍼스 비율. `caches.get_corpus_tag_df`에 `color_tone`, `location_country`, `project_year`(10년 단위) 추가. 건축가는 개수만.
+- 채택 기준: 근거 건물 ≥2 AND lift ≥1.5 (settings 값) — 미달 특징은 문장 생략. 싫어요 대비("반복해서 넘긴 특징")도 동일 기준.
+- 백엔드가 "취향 사실" 결정론 계산 → Gemini는 사실만으로 문장화, 사실 목록은 리포트와 함께 저장. 기존 `final_report`는 유지(재생성 시에만 신 방식).
+
+#### BACK-RECOMMEND-5 — Love intensity 잔재 전수 제거
+_FULL-RECOMMEND-1 후속 PR 3. 프론트가 `intensity`를 한 번도 보내지 않아 모든 like = 1.0(Love 1.8 미구현 잔재). `swipe_service.py:786,1134`, `models.py:16` 주석, `rerank.py:118-141`, `engine.py:2037-2079`, `event_log.emit_swipe_event`, discovery/office/_shared 파서 등 코드·주석 전수 조사 후 제거._
+
+#### BACK-RECOMMEND-6 — 태그를 취향좌표에 병합 검토
+_FULL-RECOMMEND-1에서 보류. 선행: Make DB에서 건물 embedding 입력 텍스트 확인(태그 포함 여부 — 포함 시 이중 계산). 결과에 따라 태그→좌표(해당 태그 건물 embedding 평균, 정규화)를 pref_vector에 병합. 이후 유지 컬럼 `tag_axis_counts` / `recent_like_tag_sets` / `question_bias_vector`의 재사용·삭제를 사용자에게 재질문._
 
 #### FRONT-UX-14 — 스와이프 모션 + 갤러리 UX 5종 (user 지적 2026-08-15, 원인 전부 확정)
 _스와이프 경로 — feature workflow 필수. `lib/tinderCard.js`는 vendored fork(PR #295)라 물리 상수 자유 튜닝 가능._
