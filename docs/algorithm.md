@@ -3,7 +3,7 @@
 > Phase logic, mathematical formulas, and hyperparameter theory.
 > Research agent updates this file. Orchestrator references it for algorithm tasks.
 
-**Last Synced (Reporter):** 2026-07-13 92237d8
+**Last Synced (Reporter):** 2026-09-25 5c7d74c
 
 ---
 
@@ -111,6 +111,8 @@ lambda (mmr_penalty) range: 0.1-0.4. Current production value: 0.3.
 _(Updated 2026-04-25 96b91a6: Sprint 4 Topic 06 soft-assignment relevance — when `soft_relevance_enabled` (default OFF) AND len(centroids) > 1, relevance becomes softmax-weighted average of cosine similarities across centroids (vs hard max). Numerically-stable (sims − sims.max()).)_
 
 _(Updated 2026-04-25 de9bfa3: Sprint 4 Topic 04(a) MMR λ ramp — when `mmr_lambda_ramp_enabled` (default OFF), λ(t) = λ_base · min(1, |exposed|/N_ref) ramps diversity penalty as session progresses. Encourages relevance-heavy at start (sparse signal), diversity-heavy as exposure accumulates. λ computation hoisted outside candidate loop.)_
+
+_(Updated 2026-09-25 5c7d74c: FULL-RECOMMEND-1 — question card (ALGO-QCARD) removed; the undocumented `question_bias_vector` term (raw `relevance += C @ qb` in MMR, blended into the top-K / top-K-MMR query vector) is gone. Relevance + result ranking now derive from swipe `pref_vector` / like centroids only; `question_*` + `recent_latencies_cap` RECOMMENDATION keys removed.)_
 
 ### Convergence Detection
 ```

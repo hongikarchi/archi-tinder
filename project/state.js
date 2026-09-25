@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-09-19 09:26 KST',
-    head: 'ab473f5',
-    branch: 'pr330-resolve',
+    updatedAt: '2026-09-25 17:13 KST',
+    head: '4975849',
+    branch: 'feature/algo-algorithm-modified',
   },
   done: [
+    {
+      id: 'FULL-RECOMMEND-1',
+      title: '질문카드가 리포트에 무영향·순위만 과왜곡',
+      completedAt: '2026-09-25',
+      note: '질문카드(ALGO-QCARD) 전면 제거 — 답변은 리포트에 0 영향, `question_bias_vector`(답변당 ±2.0 비정규화)가 like 대비 ~4배로 MMR 순위 과점유, algorithm.md 미문서화였음. 다음 카드 = 스와이프 pref_vector만(재튜닝 없음).',
+    },
     {
       id: 'FRONT-RESULTS-SAVE-1',
       title: '리포트 화면 상단 저장 CTA + 저장 후 프로필 이동',
@@ -70,12 +76,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-09-06',
       note: '빈 피드 원인 재실측 — #315 완화 후 게이트는 2중(discovery_opt_in + public report_image 프로젝트)인데 로컬 DB 통과자 0명: report_image 프로젝트 4개 전부 private(#315 이전 SaveBoardModal 기본값), 진단 완료 4명 전부 본인 계정. "테스트 서버 계정"은 prod Neon DB 소속 + prod엔 discovery 미배포라 로컬에서 원천 불가시',
     },
-    {
-      id: 'FRONT-FUNC-CHECK-1',
-      title: '기능 점검 4종: 카드뒷면 i18n·모션·사무소 링크·/office 정리',
-      completedAt: '2026-09-06',
-      note: '카드 뒷면 한영 — 원인은 PersonCard/PentagonChart/SwipeCard/AssessmentCard 4곳이 useTranslation 미구독(정적 텍스트). 전부 배선 + 성향 오각형 축 5종 신규 namespace(personality.*, 취향 축 persona.axis.*와 별개 분류) + 진단 문항 20개 text_en 저작 + assessment 페이지 크롬까지 일괄 i18n (문항 채점은 id 기반이라 번역 무영향)',
-    },
   ],
   now: [],
   next: {
@@ -87,6 +87,21 @@ window.PROJECT_STATE = {
       },
     ],
     high: [
+      {
+        id: 'BACK-LLM-5',
+        title: '리포트 취향 문장이 근거 없음',
+        note: '_FULL-RECOMMEND-1 후속 PR 2 (grilling 2026-09-25 결정). `generation.generate_persona_report`는 liked 6속성만 Gemini에 넘김._',
+      },
+      {
+        id: 'BACK-RECOMMEND-5',
+        title: 'Love intensity 잔재 전수 제거',
+        note: '_FULL-RECOMMEND-1 후속 PR 3. 프론트가 `intensity`를 한 번도 보내지 않아 모든 like = 1.0(Love 1.8 미구현 잔재). `swipe_service.py:786,1134`, `models.py:16` 주석, `rerank.py:118-141`, `engine.py:2037-2079`, `event_log.emit_swipe_event`, discovery/office/_shared 파서 등 코드·주석 전수 조사 후 제거._',
+      },
+      {
+        id: 'BACK-RECOMMEND-6',
+        title: '태그를 취향좌표에 병합 검토',
+        note: '_FULL-RECOMMEND-1에서 보류. 선행: Make DB에서 건물 embedding 입력 텍스트 확인(태그 포함 여부 — 포함 시 이중 계산). 결과에 따라 태그→좌표(해당 태그 건물 embedding 평균, 정규화)를 pref_vector에 병합. 이후 유지 컬럼 `tag_axis_counts` / `recent_like_tag_sets` / `question_bias_vector`의 재사용·삭제를 사용자에게 재질문._',
+      },
       {
         id: 'FRONT-UX-14',
         title: '스와이프 모션 + 갤러리 UX 5종 (user 지적 2026-08-15, 원인 전부 확정)',
@@ -580,14 +595,6 @@ window.PROJECT_STATE = {
     {
       path: 'README.md',
       role: '프로젝트 안내 문서',
-    },
-    {
-      path: 'Task.md',
-      role: '태스크 보드 문서',
-    },
-    {
-      path: 'Task.md',
-      role: '태스크 보드 문서',
     },
     {
       path: 'Task.md',
@@ -1098,6 +1105,14 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'backend/apps/recommendation/migrations/0031_remove_qcard_counters.py',
+      role: '마이그 0031: 질문카드 카운터·recent_latencies 필드 삭제',
+    },
+    {
+      path: 'backend/apps/recommendation/migrations/0032_alter_sessionevent_event_type.py',
+      role: '마이그 0032: SessionEvent tag_answer 선택지 제거',
+    },
+    {
       path: 'backend/apps/recommendation/migrations/__init__.py',
       role: '마이그레이션 패키지 init',
     },
@@ -1208,10 +1223,6 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/recommendation/tests/test_phase13_board.py',
       role: 'Phase13 보드 테스트',
-    },
-    {
-      path: 'backend/apps/recommendation/tests/test_question_state.py',
-      role: '',
     },
     {
       path: 'backend/apps/recommendation/tests/test_report_cache.py',
@@ -1646,18 +1657,6 @@ window.PROJECT_STATE = {
       role: '프로젝트 N+1 쿼리 테스트',
     },
     {
-      path: 'backend/tests/test_qcard_phase1.py',
-      role: '질문카드 Phase 1: 벡터 편향 테스트',
-    },
-    {
-      path: 'backend/tests/test_qcard_phase2.py',
-      role: '질문카드 Phase 2: TF-IDF 선택 테스트',
-    },
-    {
-      path: 'backend/tests/test_qcard_phase3.py',
-      role: '질문카드 Phase 3: 레이턴시 캡처 테스트',
-    },
-    {
       path: 'backend/tests/test_rerank_shape.py',
       role: '리랭크 결과 형태 테스트',
     },
@@ -1783,6 +1782,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'docs/plans/2026-08-20-personality-discovery-design.md',
+      role: '',
+    },
+    {
+      path: 'docs/plans/2026-09-17-competition-team-design.md',
       role: '',
     },
     {
@@ -2044,10 +2047,6 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/components/ProtectedRoute.jsx',
       role: '인증 보호 라우트 가드',
-    },
-    {
-      path: 'frontend/src/components/QuestionCard.jsx',
-      role: '취향 보정 질문 카드',
     },
     {
       path: 'frontend/src/components/SaveBoardModal.jsx',
@@ -2556,14 +2555,6 @@ window.PROJECT_STATE = {
     {
       path: 'project/mermaid.min.js',
       role: 'Mermaid 다이어그램 번들',
-    },
-    {
-      path: 'project/state.js',
-      role: '대시보드 상태 데이터',
-    },
-    {
-      path: 'project/state.js',
-      role: '대시보드 상태 데이터',
     },
     {
       path: 'project/state.js',

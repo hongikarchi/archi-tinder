@@ -57,15 +57,7 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-### FULL-RECOMMEND-1 — 질문카드가 리포트에 무영향·순위만 과왜곡
-
-ALGO-QCARD(질문카드) 전면 제거 (grilling 2026-09-25 결정). 근거: 답변은 리포트(`generation.py`)에 0 영향, 반면 `question_bias_vector`(답변당 ±2.0, 비정규화)가 like(0.5) 대비 ~4배로 MMR 순위를 과점유; `docs/algorithm.md`·Task.md 미문서화.
-- 제거: `QuestionCard.jsx` + SwipePage/App/MainLayout/sessions.js 배선 + i18n `swipe.questionCard.*`; 백엔드 트리거·`handle_question_response`·`question-responses/` 엔드포인트·`question_*`/`recent_latencies_cap` 설정; engine `question_bias_vector` 파라미터 전 호출부; 테스트 4파일.
-- 컬럼 DROP(마이그레이션): `recent_latencies`, `question_count`, `question_cooldown`, `q_card_consecutive_dislikes`.
-- 컬럼 유지·코드만 제거(재논의 대기 → BACK-RECOMMEND-6): `tag_axis_counts`, `recent_like_tag_sets`, `question_bias_vector`.
-- 유지(무관): ActionCard, DiscoveryTriggerCard, parse_query probe, `cardShell.js`(AssessmentCard), `caches.get_corpus_tag_df`(LLM 검색 사용).
-- 다음 카드 = 스와이프(pref_vector)만. 가중치 재튜닝 없음.
-- Deferred: BACK-LLM-5 (리포트 근거 기반화), BACK-RECOMMEND-5 (Love intensity 잔재 제거), BACK-RECOMMEND-6 (태그→취향좌표 병합 검토)
+_(비어 있음 — FULL-RECOMMEND-1 완료 2026-09-25, ## Done 참조)_
 
 
 ## Next
@@ -319,6 +311,15 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FULL-RECOMMEND-1 — 질문카드가 리포트에 무영향·순위만 과왜곡 — RESOLVED 2026-09-25 (`5c7d74c`, PR 대기)
+- 질문카드(ALGO-QCARD) 전면 제거 — 답변은 리포트에 0 영향, `question_bias_vector`(답변당 ±2.0 비정규화)가 like 대비 ~4배로 MMR 순위 과점유, algorithm.md 미문서화였음. 다음 카드 = 스와이프 pref_vector만(재튜닝 없음).
+- FE: `QuestionCard.jsx` + SwipePage/App/MainLayout 배선, `submitQuestionResponse`, i18n `swipe.questionCard.*`, 죽은 `latency_ms` 측정(`cardShownAtRef`) 제거.
+- BE: 트리거·`handle_question_response`·`question-responses/` 라우트, engine `question_bias_vector` 파라미터 + 전 호출부, `question_*`/`recent_latencies_cap` 설정 제거.
+- DB: 0031 DROP `recent_latencies`/`question_count`/`question_cooldown`/`q_card_consecutive_dislikes`; 0032 `tag_answer` 이벤트 선택지 제거. 로컬 적용 완료 — **prod는 배포 후 `make migrate-prod`**(코드 먼저).
+- 유지(미사용, BACK-RECOMMEND-6 대기): `tag_axis_counts`, `recent_like_tag_sets`, `question_bias_vector` 컬럼. 무관 유지: ActionCard, DiscoveryTriggerCard, parse_query probe, `cardShell.js`, `get_corpus_tag_df`.
+- 검증: feature workflow review/security PASS(확정 결함 0); API 스모크 0 fail(연속 싫어요·연속 좋아요·수렴/ActionCard·재개·결과·리포트, `question-responses/` 404); BE 비DB 테스트 603 pass/0 fail(DB 테스트 831건은 로컬 DB 미연결 — CI 필요); FE 117 pass, eslint 0 error, build OK. app-test는 Playwright MCP 부재로 미실행.
+- 참고: 로컬 `dev-login` 500(`test_architinder` username 중복, 기존 데이터 문제 — 본 변경 무관).
+
 ### FRONT-RESULTS-SAVE-1 — 리포트 화면 상단 저장 CTA + 저장 후 프로필 이동 — RESOLVED 2026-09-17 (`e196549`, PR 리뷰 대기)
 - user 지적: Discovery → Taste 리포트 생성 후 **끝나는 지점이 없음**. 저장은 이미 되고 있었으나 `SaveBoardModal`이 자동으로 떠서 방금 기다린 리포트를 가렸고, 저장을 마쳐도 결과 화면에 머물러 뒤로가기로 빠져나가야 했음 → "저장이 안 된 것 같은" 느낌. **기능 결함이 아니라 완결감(closure)의 부재**
 - 브레인스토밍에서 3안 검토 후 B안 채택: 모달 자동 노출을 없애고 **리포트를 먼저 보여준 뒤 유저가 상단 CTA로 마무리**. A안(모달 강제)은 리포트를 보기도 전에 이름부터 정해야 해 순서가 부자연스럽고, C안(기본값 즉시 저장)은 공개여부 선택권이 사라져 발견 피드 노출과 충돌
