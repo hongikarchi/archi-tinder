@@ -15,6 +15,7 @@ import PersonCard from '../components/PersonCard.jsx'
 import SocialSegment from '../components/SocialSegment.jsx'
 import { TYPE_CODES } from '../constants/personalityTypes.js'
 import PageTopControls from '../components/PageTopControls.jsx'
+import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import styles from './PeopleDiscoveryPage.module.css'
 
 const PRESET_FILTERS = [
@@ -131,11 +132,11 @@ export default function PeopleDiscoveryPage({ onLogout }) {
 
   return (
     <div className={styles.page}>
-      <PageTopControls onLogout={onLogout} />
+      <PageTopControls onLogout={onLogout} splitMobile />
 
       {/* Header — tab root, no back button (see DiscoveryPage convention) */}
       <header className={styles.header}>
-        <h1 className={styles.title}>소셜</h1>
+        <PageLogoHeader />
       </header>
 
       {/* FRONT-COMP-PROTO-1 — [사람] / [공모전] 전환 */}

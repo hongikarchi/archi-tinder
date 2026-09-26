@@ -474,8 +474,8 @@ export default function SwipePage({
           onClick={() => setShowExitConfirm(true)}
           aria-label="Exit session"
           style={{
-            position: 'absolute', top: 12, left: 16,
-            width: 32, height: 32, borderRadius: '50%',
+            position: 'absolute', top: 16, left: 12,
+            width: 28, height: 28, padding: 0, borderRadius: '50%',
             background: 'var(--color-surface)',
             border: '1px solid var(--color-border)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -581,8 +581,8 @@ export default function SwipePage({
           onClick={() => setShowExitConfirm(true)}
           aria-label="Exit session"
           style={{
-            position: 'absolute', top: 12, left: 16,
-            width: 32, height: 32, borderRadius: '50%',
+            position: 'absolute', top: 16, left: 12,
+            width: 28, height: 28, padding: 0, borderRadius: '50%',
             background: 'var(--color-surface)',
             border: '1px solid var(--color-border)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',

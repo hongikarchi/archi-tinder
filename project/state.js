@@ -23,8 +23,8 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-09-23 17:44 KST',
-    head: '4975849',
+    updatedAt: '2026-09-26 09:58 KST',
+    head: '811c2e9',
     branch: 'feature/sns-competition-prototype',
   },
   done: [
@@ -87,6 +87,11 @@ window.PROJECT_STATE = {
       },
     ],
     high: [
+      {
+        id: 'DEPLOY-BLOCKER-1',
+        title: 'develop→main 배포 전 필수 정리 (#333 / #334, 2026-09-26 merge 결정)',
+        note: '_user 결정: 개발 단계라 develop에는 먼저 합치고, 실서비스 배포 전에 반드시 처리. 다음 deploy PR 전에 이 항목 확인._',
+      },
       {
         id: 'FRONT-UX-14',
         title: '스와이프 모션 + 갤러리 UX 5종 (user 지적 2026-08-15, 원인 전부 확정)',
@@ -250,6 +255,20 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 334,
+      title: 'feat(FRONT-HEADER-1): 페이지 상단 크롬 축소·통일 + people 헤더 로고 교체',
+      mergedAt: '2026-09-26T00:57:29Z',
+      mergedAtKST: '2026-09-26 09:57 KST',
+      sha: '811c2e9',
+    },
+    {
+      number: 332,
+      title: 'docs(plans): 공모전 팀빌딩 — 팀 진단 기각, 축 가중치는 추천 전용',
+      mergedAt: '2026-09-26T00:56:44Z',
+      mergedAtKST: '2026-09-26 09:56 KST',
+      sha: '986ed5b',
+    },
+    {
       number: 331,
       title: 'docs(plans): 공모전 팀빌딩 찜 기반 설계 — 팀원 추천 v2 접근 기각',
       mergedAt: '2026-09-19T00:37:00Z',
@@ -290,20 +309,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-09-06T16:09:50Z',
       mergedAtKST: '2026-09-07 01:09 KST',
       sha: '8c89ff0',
-    },
-    {
-      number: 325,
-      title: 'fix(BACK-PRIVACY-1): 비인증 base64 리포트 유출 차단 + 썸네일 캐시 evict 누락',
-      mergedAt: '2026-09-06T15:57:15Z',
-      mergedAtKST: '2026-09-07 00:57 KST',
-      sha: 'd334be4',
-    },
-    {
-      number: 324,
-      title: 'feat(FRONT-PEOPLE-CARD-2): seed_discovery command + Social tab hosting /people',
-      mergedAt: '2026-09-06T14:57:06Z',
-      mergedAtKST: '2026-09-06 23:57 KST',
-      sha: '70851a2',
     },
   ],
   agents: [
@@ -2367,6 +2372,14 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/pages/LoginPage.module.css',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/PeopleDiscoveryPage.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/PeopleDiscoveryPage.jsx',
       role: '',
     },
     {

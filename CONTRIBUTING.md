@@ -1,9 +1,7 @@
 # Contributing to Make Web
 
 3-person team workflow. main + develop + feature/* branches with PR-only landing
-and admin review. Read this once before your first commit. Local AI agents
-(Claude Code, Codex) are workers too — same model, each in its **own clone** (see
-§ Concurrent agents).
+and admin review. Read this once before your first commit. Local AI agents follow the same branch and PR rules and may use the current checkout.
 
 ## Setup (one-time per clone)
 
@@ -136,83 +134,12 @@ git checkout develop && git pull origin develop
 git branch -d feature/algo-mmr-lambda-tuning
 ```
 
-## Concurrent agents — one clone per worker (Claude Code + Codex)
+## Concurrent agents
 
-This repo is often worked by more than one agent at once. Locally the maintainer
-runs **Claude Code** (in a cmux terminal) and **Codex** (in a web browser, for
-visual UI/UX) at the same time — on top of the distributed human team above. One
-rule keeps all of them from colliding:
-
-> **Every worker — a remote human teammate OR a local AI tool — owns ONE working
-> directory with its OWN `.git`, works on its own `feature/*` branch, and opens
-> its own PR to `develop`. No worker ever checks out or commits in another
-> worker's directory.**
-
-The human team already lives by this: each teammate has their own **clone**, so
-their `HEAD`s can never touch. Local AI tools get the same treatment — **each its
-own clone** — which makes them first-class workers, indistinguishable from a
-remote teammate. There is no special "local multi-agent" model; it is the same
-clone-per-worker model.
-
-Two **independent** failure modes — you need both fixes:
-
-| Failure | Cause | Fix |
-|---|---|---|
-| **HEAD collision** | two sessions share ONE working dir → one `HEAD`; one's `checkout`/`pull` drags the other's | **separate `.git`** (own clone) |
-| **Merge conflict** | two workers edit the same files on different branches | **scope split** (assign files per task) |
-
-Scope-naming alone does NOT prevent the HEAD collision; isolation alone does NOT
-prevent merge conflicts.
-
-### Mechanism: a separate clone (NOT a worktree)
-
-```bash
-# Give a second local agent (e.g. Codex) its OWN clone — its own .git:
-git clone <repo-url> ../make_web-codex
-cd ../make_web-codex
-./tools/install-hooks.sh                     # own clone → own hooks (one-time; a clone's .git is a real dir, so this works)
-cp ../make_web/backend/.env backend/.env     # working files are NOT shared between clones
-cd frontend && npm install                   # own node_modules
-# then launch the agent with ../make_web-codex as its working directory
-```
-
-A clone has its **own `.git`** → another tool literally cannot reach in to move a
-`HEAD`. We deliberately do **NOT** use `git worktree` for session isolation:
-worktrees **share one `.git`**, and on **2026-05-31** that shared `.git` was
-exactly how a Codex session moved the main checkout's `HEAD` onto its own branch
-(`feature/codex-loginpage`) — the collision recurred *despite* the worktree docs.
-The disk cost of a clone over a worktree is only the `.git` objects;
-`node_modules`/venv/`.env` are per-directory either way.
-
-### Who works where
-
-| Agent | Launch | Clone | Tendency (a default, NOT a hard wall) |
-|---|---|---|---|
-| **Claude Code** | cmux terminal | the main clone `make_web/` | backend / API / recommendation-algorithm / DB |
-| **Codex** | web browser (visual UI/UX) | a separate clone `make_web-codex/` | frontend / UI / UX (`frontend/src/**`) |
-
-- Scope is assigned **per task** — the back/front split is just the usual
-  tendency. At task start, name which files/area each tool owns and keep them
-  non-overlapping so the two branches don't merge-conflict. If a task genuinely
-  needs both to touch the same files: sequence it, or use one tool.
-- **API contract = a named hand-off**, not free concurrency: when a backend change
-  alters a request/response shape the frontend consumes, coordinate it explicitly.
-- **Branch naming**: local AI agents use `feature/claude-<topic>` /
-  `feature/codex-<topic>` (the prefix tells the admin which clone a PR came from).
-  The human team's `feature/<role>-<topic>` (algo/sns/admin) is unchanged.
-- Both clones push to the same remote and PR to `develop` exactly like a human.
-
-### Sub-agent isolation is a different thing
-
-Claude Code's Agent tool `isolation:"worktree"` (and Codex's worktree/sandbox
-mode) isolate parallel file-mutating *sub-agents* within ONE session. That is
-unrelated to the per-session clone above and does NOT prevent two top-level
-sessions from colliding.
-
-The **reliable layer is launch placement**: each tool is started in its own clone
-(Claude in `make_web/`, Codex in `make_web-codex/`). The session-start check in
-`CLAUDE.md` / `AGENTS.md` (confirm you are in your own clone on your own branch)
-is a backstop, not the guarantee.
+Use the checkout selected by the user. A separate clone is optional, not a
+requirement. Work on a feature branch, coordinate overlapping edits, and preserve
+other workers' changes. Avoid simultaneous branch switching in a shared checkout.
+Local agent branches use `feature/claude-<topic>` or `feature/codex-<topic>`.
 
 ## First PR sanity check (recommended after onboarding)
 
@@ -335,12 +262,9 @@ Body: include context (spec ref, investigation #, decision rationale).
 
 ## Review
 
-The `orchestrate` skill runs the `code-review` and `security-manager` sub-agents
-on a feature branch before push. The pre-push browser + drift gate is the
-`app-test` sub-agent on Claude Code (verdicts: PASS / PASS-WITH-MINORS / FAIL /
-ABORTED-on-drift) and the `browser-verify` skill on Codex. FAIL feeds the fix
-loop; ABORTED means rebase-and-rerun. Review scope is the
-unmerged commits that would land in develop on PR merge (`origin/develop..HEAD`).
+Review the unmerged diff (`origin/develop..HEAD`), run relevant checks, and verify
+changed UI at mobile and desktop sizes before publishing. Specific agents and
+skills are optional; disclose checks that could not run.
 
 `develop → main` PRs typically don't need a fresh review since each underlying
 feature was already reviewed; admin self-merges based on CI green.

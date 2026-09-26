@@ -107,6 +107,14 @@ Implementation map:
 
 ### HIGH
 
+#### DEPLOY-BLOCKER-1 — develop→main 배포 전 필수 정리 (#333 / #334, 2026-09-26 merge 결정)
+_user 결정: 개발 단계라 develop에는 먼저 합치고, **실서비스 배포 전에 반드시 처리**. 다음 deploy PR 전에 이 항목 확인._
+- ① **#333 공모전 프로토타입 공개 범위** — `/competitions` 라우트 + `SocialSegment` [🏆]가 게이트 없이 모든 사용자에게 노출됨. 배포 전 (a) `import.meta.env.DEV` 게이트, (b) `VITE_ENABLE_COMPETITION_PROTOTYPE` 플래그(프리뷰만 on), (c) 실서비스 공개 중 택1
+- ② (c) 또는 게이트 없이 나갈 경우 필수: 실제 기관명(대한건축사협회·서울특별시·국토교통부·한국건축가협회) 붙은 가짜 공모전 → 가상 기관명, 가짜 관심 수·모집 팀 수 → 상단에 눈에 띄는 '예시 데이터' 배너, `제안`/`참여 요청` 토스트 "보냈어요" → "준비 중이에요", 목 유저 `user_id` 36~40·3 하드코딩 링크 제거
+- ③ #333 저위험: 관심 localStorage 키 유저별 분리 + 로그아웃 시 삭제, `fitReason` 폴백이 반대 축에 "비슷해요" 출력, 목 유저 `type_code`가 벡터와 불일치(c1 5명), `AXIS_LABELS` 중복, `CompetitionListPage` 헤더가 구 글래스 헤더 그대로(`/people`은 `PageLogoHeader`)
+- ④ **#334 헤더 축소**: 공용 상단 버튼 28px·토글 22px → DESIGN.md §3.2 터치 최소치(데스크톱 32/모바일 44) 미달, 히트 영역 확대 필요. `login.common.langKo/langEn` "한/EN" 축약이 설정>화면 언어 선택지에도 적용됨 → 짧은 키 분리. LoginPage 로고 "좌상단" 설명과 달리 가운데 정렬
+- ⑤ #334 하네스: Codex 규칙(별도 클론 선택화)과 CLAUDE.md HARD RULE 7이 반대 — user 판단: 역할이 달라 허용, 추후 점검
+
 #### FRONT-UX-14 — 스와이프 모션 + 갤러리 UX 5종 (user 지적 2026-08-15, 원인 전부 확정)
 _스와이프 경로 — feature workflow 필수. `lib/tinderCard.js`는 vendored fork(PR #295)라 물리 상수 자유 튜닝 가능._
 - ① 퇴장 애니메이션 부자연: `animateOut` power 3.0(대각선 3배) + 500ms cap + linear easing(`config:{duration}` 감속 없음) → power 감소 + ease-out cubic + duration floor

@@ -13,3 +13,17 @@
 .logoutBtn:hover {
   color: var(--color-destructive);
 }
+
+/* Leave the center available for the shared wordmark on narrow screens. */
+@media (max-width: 600px) {
+  .splitMobile .languagePill {
+    position: fixed;
+    top: 16px;
+    left: 12px;
+  }
+}
+
+.controls button:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+}
