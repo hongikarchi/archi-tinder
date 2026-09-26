@@ -14,23 +14,16 @@ import json
 import logging
 import re
 import time
+from collections import Counter
 
 from django.conf import settings
 from google.genai import types
 
+from ._report_prompts import build_persona_prompt
+from .taste_facts import AXES as _TASTE_AXES
+from .taste_facts import compute_taste_facts, extract_axis_values
+
 logger = logging.getLogger('apps.recommendation')
-
-_PERSONA_PROMPT = """You are an architectural taste analyst. Based on the buildings a user has liked, generate a short persona archetype that describes their architectural aesthetic.
-
-Return ONLY valid JSON with this exact structure:
-{
-  "persona_type": "A short poetic name like 'The Minimalist' or 'The Pragmatist'",
-  "one_liner": "A single evocative sentence about their taste",
-  "description": "2-3 sentences elaborating on their architectural sensibility",
-  "dominant_programs": ["list of program types from: Housing, Office, Museum, Education, Religion, Sports, Transport, Hospitality, Healthcare, Public, Mixed Use, Landscape, Infrastructure, Other"],
-  "dominant_styles": ["2-3 architectural style words"],
-  "dominant_materials": ["2-3 material words"]
-}"""
 
 
 def generate_visual_description(filters, raw_query, user_id):
@@ -201,54 +194,101 @@ def generate_visual_description(filters, raw_query, user_id):
         )
 
 
-def generate_persona_report(liked_building_ids):
+def generate_persona_report(liked_building_ids, disliked_building_ids=None, language='ko'):
     """
-    Generate an architect persona report from a list of liked canonical_bld_ids.
-    Returns a dict with persona fields on success.
-    Raises an exception with a descriptive message on failure (caller handles response).
-    Returns None only if no building data is found.
+    Generate an architect persona report from liked (+ optionally disliked)
+    canonical_bld_ids. BACK-LLM-5: taste text is grounded in deterministic
+    swipe facts (taste_facts.compute_taste_facts) rather than left to the LLM
+    to infer unconstrained -- the model phrases/interprets facts it is handed,
+    it does not invent them.
+
+    Backward compatible: callers passing only `liked_building_ids` (the
+    pre-BACK-LLM-5 call shape) still work -- disliked_building_ids defaults to
+    none and language defaults to 'ko'.
+
+    Returns a dict with persona fields (+ `taste_facts`, backend-attached, see
+    below) on success. Raises an exception with a descriptive message on
+    failure (caller handles response). Returns None only if no building data
+    is found for the given ids.
+
+    Args:
+        liked_building_ids:    list[str] canonical_bld_id.
+        disliked_building_ids: list[str] canonical_bld_id, or None.
+        language:               'ko' or 'en' (UserProfile.language); default 'ko'.
     """
     from apps.recommendation import services as _svc  # noqa: PLC0415
+
+    liked_building_ids = list(liked_building_ids or [])
+    disliked_building_ids = list(disliked_building_ids or [])
 
     if not liked_building_ids:
         return None
 
-    # Fetch attributes of liked buildings (publishable-gated).
-    placeholders = ','.join(['%s'] * len(liked_building_ids))
+    lang = language if language in ('ko', 'en') else 'ko'
+    rc = settings.RECOMMENDATION
+
+    # Fetch attributes of liked+disliked buildings (publishable-gated) in one
+    # query -- taste_facts needs BOTH sides to compute shown-set ratios.
+    all_ids = list(dict.fromkeys(liked_building_ids + disliked_building_ids))
+    placeholders = ','.join(['%s'] * len(all_ids))
     with _svc.connection.cursor() as cur:
         cur.execute(
-            f'SELECT program, style, atmosphere, material_visual, architects_text,'
-            f' location_country '
-            f'FROM canonical_v2_buildings'
+            f'SELECT canonical_bld_id, program, style, atmosphere, color_tone,'
+            f' material_visual, typology_primary, typology_tags, architectural_elements,'
+            f' project_year, location_country, architect_names, architects_text,'
+            f' visual_description'
+            f' FROM canonical_v2_buildings'
             f' WHERE canonical_bld_id IN ({placeholders}) AND is_publishable = true',
-            liked_building_ids,
+            all_ids,
         )
         rows = _svc._dictfetchall(cur)
 
     if not rows:
         return None
 
-    # Aggregate for the prompt
-    programs    = [r['program']           for r in rows if r.get('program')]
-    styles      = [r['style']             for r in rows if r.get('style')]
-    atmospheres = [r['atmosphere']        for r in rows if r.get('atmosphere')]
-    materials = []
-    for r in rows:
-        mv = r.get('material_visual') or []
-        if mv:
-            materials.extend(mv[:2])
-    architects  = [r['architects_text']   for r in rows if r.get('architects_text')]
-    countries   = [r['location_country']  for r in rows if r.get('location_country')]
+    rows_by_id = {r['canonical_bld_id']: r for r in rows if r.get('canonical_bld_id')}
 
-    summary = (
-        f"The user liked {len(rows)} buildings.\n"
-        f"Programs: {', '.join(programs)}\n"
-        f"Styles: {', '.join(styles)}\n"
-        f"Atmospheres: {', '.join(atmospheres)}\n"
-        f"Materials: {', '.join(materials)}\n"
-        f"Architects: {', '.join(architects[:10])}\n"
-        f"Countries: {', '.join(countries)}"
-    )
+    taste_facts = compute_taste_facts(rows_by_id, liked_building_ids, disliked_building_ids, rc)
+    facts = taste_facts.get('facts', [])
+
+    # Liked-only tag frequencies (for the interpretive `description` paragraph
+    # -- NOT the shown-vs-not-shown ratio math that drives `pattern_paragraph`,
+    # which comes from `facts` above). Reuses taste_facts.extract_axis_values
+    # so counting stays axis-for-axis consistent with the fact math.
+    liked_id_set = set(liked_building_ids)
+    liked_tag_frequencies = {}
+    for axis in _TASTE_AXES:
+        counter = Counter()
+        for bid in liked_id_set:
+            row = rows_by_id.get(bid)
+            if not row:
+                continue
+            for value in extract_axis_values(row, axis):
+                counter[value] += 1
+        if counter:
+            liked_tag_frequencies[axis] = dict(counter.most_common(10))
+
+    # Up to 5 liked visual_description excerpts, truncated to ~300 chars each.
+    liked_visual_excerpts = []
+    for bid in liked_building_ids:
+        row = rows_by_id.get(bid)
+        vd = (row or {}).get('visual_description')
+        if vd:
+            liked_visual_excerpts.append(vd[:300])
+        if len(liked_visual_excerpts) >= 5:
+            break
+
+    payload = {
+        'language': lang,
+        'liked_count': len(liked_id_set),
+        'facts': [
+            {k: v for k, v in fact.items() if k != 'building_ids'}
+            for fact in facts
+        ],
+        'liked_tag_frequencies': liked_tag_frequencies,
+        'liked_visual_description_excerpts': liked_visual_excerpts,
+    }
+    contents = json.dumps(payload, ensure_ascii=False)
 
     try:
         # USER DECISION 2026-08-05: persona text stays Gemini even when the
@@ -258,15 +298,15 @@ def generate_persona_report(liked_building_ids):
         response = _svc.generate_content_with_fallback(
             client,
             provider='gemini',
-            contents=summary,
+            contents=contents,
             config=types.GenerateContentConfig(
-                system_instruction=_PERSONA_PROMPT,
+                system_instruction=build_persona_prompt(lang),
                 response_mime_type='application/json',
                 temperature=0.7,
                 thinking_config=types.ThinkingConfig(thinking_budget=0),
             ),
         )
-        return json.loads(response.text)
+        report = json.loads(response.text)
     except json.JSONDecodeError as e:
         logger.error('generate_persona_report JSON decode error: %s', e)
         _svc.event_log.emit_event(
@@ -291,6 +331,30 @@ def generate_persona_report(liked_building_ids):
             error_message=str(e)[:200],
         )
         raise RuntimeError(f'Persona report generation failed: {type(e).__name__}. Please try again later.')
+
+    if not facts:
+        # No grounded facts (e.g. too few swipes to clear thresholds) --
+        # never let the model pad this in with an ungrounded sentence.
+        report['pattern_paragraph'] = ''
+    # Backend-computed, not LLM. Not rendered directly by the frontend
+    # (BACK-LLM-5 spec: "화면에는 표시하지 않습니다") -- but IS persisted on
+    # project.final_report, which IS served by ProjectDetailView (AllowAny
+    # for public boards) via ProjectSerializer. serializers.py's `disliked_ids`
+    # invariant (never exposed to ANY caller, owner included) therefore
+    # applies here too: a dislike fact's `building_ids` are disliked
+    # canonical_bld_ids, so they must be stripped before attaching. A like
+    # fact's `building_ids` are liked ids, already exposed via the
+    # `liked_ids` field on the same serializer, so those are kept (useful
+    # for future audit/debug UIs without re-deriving them).
+    report['taste_facts'] = {
+        'summary': taste_facts['summary'],
+        'facts': [
+            fact if fact.get('polarity') == 'like'
+            else {k: v for k, v in fact.items() if k != 'building_ids'}
+            for fact in facts
+        ],
+    }
+    return report
 
 
 # ---------------------------------------------------------------------------

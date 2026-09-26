@@ -99,7 +99,6 @@ from .embeddings import embed_visual_description  # noqa: F401
 # generation: Stage 2 visual description + persona report + persona image
 # ---------------------------------------------------------------------------
 from .generation import (  # noqa: F401
-    _PERSONA_PROMPT,
     _NAME_FILTER_PRIORITY,
     _sanitise_board_name,
     _deterministic_board_name,

@@ -115,7 +115,7 @@ const SPECTRUM_AXES = [
  *                             재생성 버튼을 아예 렌더하지 않는다 — 남의 리포트를
  *                             덮어쓰는 조작이므로 비활성 표시가 아니라 제거.
  *                             기본 true: 소유자 화면(ResultsPage 등) 호출부 무영향.
- *   finalReport     object  - { persona_type, one_liner, description, dominant_programs, dominant_styles, dominant_materials }
+ *   finalReport     object  - { persona_type, one_liner, description, pattern_paragraph, dominant_programs, dominant_styles, dominant_materials }
  *   axisScores      object  - { form, materiality, scale, energy, tradition } (null이면 DEFAULT_AXES 사용)
  *   reportImage     string  - base64 이미지 데이터 (null 가능)
  *   reportImageMime string  - 예: 'image/png'
@@ -219,6 +219,19 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
       }}>
         {report.one_liner}
       </p>
+
+      {/* 패턴 문단 — 스와이프 패턴에 대한 사실적 설명. description 위에 표시.
+          구버전 리포트(pattern_paragraph 없음)는 그대로 description만 렌더. */}
+      {report.pattern_paragraph && (
+        <p style={{
+          color: 'var(--color-text-dim)',
+          fontSize: 14,
+          lineHeight: 1.65,
+          margin: '0 0 12px',
+        }}>
+          {report.pattern_paragraph}
+        </p>
+      )}
 
       {/* 상세 description */}
       {report.description && (

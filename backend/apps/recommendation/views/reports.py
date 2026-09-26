@@ -40,8 +40,13 @@ class ProjectReportGenerateView(APIView):
         if not liked_id_strings:
             return Response({'detail': 'No liked buildings yet'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # BACK-LLM-5: ground the report in BOTH sides of the swipe history +
+        # the requesting profile's language preference (fallback 'ko').
+        disliked_id_strings = list(project.disliked_ids or [])
+        language = getattr(profile, 'language', 'ko') or 'ko'
+
         try:
-            report = services.generate_persona_report(liked_id_strings)
+            report = services.generate_persona_report(liked_id_strings, disliked_id_strings, language)
         except (ValueError, RuntimeError) as e:
             return Response(
                 {'detail': str(e), 'error_type': type(e).__name__},

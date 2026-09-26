@@ -403,6 +403,19 @@ RECOMMENDATION = {
         'year_min': 1.0,          # year range (soft bonus, not exclusion)
         'year_max': 1.0,
     },
+    # BACK-LLM-5: taste_facts.py deterministic swipe-fact thresholds for
+    # persona report grounding (pattern_paragraph). All facts are computed
+    # relative to the SHOWN set (liked ∪ disliked), never a corpus baseline.
+    'report_fact_min_shown':      3,     # min cards shown with a feature before it can become a fact
+    'report_fact_min_liked':      2,     # min liked cards with a feature before it can become a LIKE fact
+    'report_fact_min_ratio':      1.5,   # min smoothed like-rate ratio (feature vs not) for a LIKE fact
+    'report_fact_tie_ratio':      0.3,   # ratio candidates within this margin are tie-broken by support (Q37)
+    'report_fact_max_likes':      3,     # cap on selected LIKE facts per report
+    'report_fact_max_dislikes':   1,     # cap on selected DISLIKE facts per report
+    'report_dislike_often':       0.4,   # min disliked/shown rate for a feature to qualify as a DISLIKE fact
+    'report_dislike_mostly':      0.8,   # disliked/shown rate at/above which the dislike_word is "mostly" (else "often")
+    'report_fact_overlap_max':    0.8,   # drop a candidate fact whose supporting buildings overlap an already-selected fact's by >= this (Q38)
+    'report_fact_smoothing':      1,     # Laplace smoothing constant `s` in r=(liked+s)/(shown+2s) -- guards against small-sample flukes (Q36)
 }
 
 _check_async_prefetch_safety(

@@ -57,7 +57,13 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(비어 있음 — FULL-RECOMMEND-1 완료 2026-09-25, ## Done 참조)_
+### BACK-LLM-5 — 리포트 취향 문장이 근거 없음
+
+리포트를 스와이프 사실 기반으로 재작성 (grilling 2026-09-25~26 결정, FULL-RECOMMEND-1 위에 스택 — `feature/algo-report-grounding`). 기존 `generate_persona_report`는 liked 6속성만 영어 프롬프트로 전송(언어 설정 무시, 싫어요 미사용).
+- 기준 = 보여준 카드(`Project.liked_ids` ∪ `disliked_ids`, 양쪽이면 like). 편중도 = 특징 있는 카드 like율 ÷ 없는 카드 like율, 양쪽 +1/+2 스무딩. 코퍼스 캐시 미사용.
+- 좋아요 사실: shown≥3, liked≥2, ratio≥1.5. 싫어요 사실: shown≥3, 넘김≥40%(≥80% "대부분"/≥40% "여러 번"), like ratio ≤1/1.5. 정렬: ratio 내림차순, 0.3 이내면 근거 수 많은 순, 축당 1개, 근거 80%+ 겹치면 1개, like 2~3 + dislike ≤1. 배수 0.5 단위 내림.
+- 출력: `pattern_paragraph`(신규, "보여드린 건물 중…"으로 시작, 사실 문구는 권장 틀(자연스러운 변형 허용), ~200자, 사실 없으면 생략) + `description`(취향 해석, 부드러운 추정, ~300자) + `persona_type`(1~2단어 경향명) + `one_liner`(태그 포함 구체문) — 사용자 언어; `dominant_*` 영어 유지; `taste_facts` 저장(비표시). 용어 한글 음차, 국가 한국어, 건축가 영어. 금지: "다른 사용자보다" 등 미계산 비교, 최상급, 성격 판단, 비하.
+- 규칙 위치: `services/_report_prompts.py`(문장), `settings.RECOMMENDATION` `report_*`(기준값), `docs/report-writing.md`(설명). 기존 리포트 유지, 재생성 시에만 신 방식. 공개 보드도 동일 문장.
 
 
 ## Next
@@ -106,13 +112,6 @@ Implementation map:
 - Account deletion/export is not currently in scope but should be tracked before public launch if GDPR-like obligations apply.
 
 ### HIGH
-
-#### BACK-LLM-5 — 리포트 취향 문장이 근거 없음
-_FULL-RECOMMEND-1 후속 PR 2 (grilling 2026-09-25 결정). `generation.generate_persona_report`는 liked 6속성만 Gemini에 넘김._
-- 입력: `Project.liked_ids` + `disliked_ids`로 리포트 시점 재계산(세션 누적값 아님). 추가 속성: `color_tone`, `visual_description`(참고문), `typology_primary`, `typology_tags`, `architectural_elements`, `project_year`.
-- 편중도(lift) = liked 비율 / 코퍼스 비율. `caches.get_corpus_tag_df`에 `color_tone`, `location_country`, `project_year`(10년 단위) 추가. 건축가는 개수만.
-- 채택 기준: 근거 건물 ≥2 AND lift ≥1.5 (settings 값) — 미달 특징은 문장 생략. 싫어요 대비("반복해서 넘긴 특징")도 동일 기준.
-- 백엔드가 "취향 사실" 결정론 계산 → Gemini는 사실만으로 문장화, 사실 목록은 리포트와 함께 저장. 기존 `final_report`는 유지(재생성 시에만 신 방식).
 
 #### BACK-RECOMMEND-5 — Love intensity 잔재 전수 제거
 _FULL-RECOMMEND-1 후속 PR 3. 프론트가 `intensity`를 한 번도 보내지 않아 모든 like = 1.0(Love 1.8 미구현 잔재). `swipe_service.py:786,1134`, `models.py:16` 주석, `rerank.py:118-141`, `engine.py:2037-2079`, `event_log.emit_swipe_event`, discovery/office/_shared 파서 등 코드·주석 전수 조사 후 제거._
