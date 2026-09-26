@@ -12,6 +12,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { getMyPersonality } from '../api/personality.js'
 import { getPeopleDiscovery } from '../api/people.js'
 import PersonCard from '../components/PersonCard.jsx'
+import SocialSegment from '../components/SocialSegment.jsx'
 import { TYPE_CODES } from '../constants/personalityTypes.js'
 import PageTopControls from '../components/PageTopControls.jsx'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
@@ -137,6 +138,9 @@ export default function PeopleDiscoveryPage({ onLogout }) {
       <header className={styles.header}>
         <PageLogoHeader />
       </header>
+
+      {/* FRONT-COMP-PROTO-1 — [사람] / [공모전] 전환 */}
+      <SocialSegment active="people" />
 
       {/* Assessment prompt (no personality yet) */}
       {myPersonality === null && (

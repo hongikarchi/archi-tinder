@@ -107,6 +107,14 @@ Implementation map:
 
 ### HIGH
 
+#### DEPLOY-BLOCKER-1 — develop→main 배포 전 필수 정리 (#333 / #334, 2026-09-26 merge 결정)
+_user 결정: 개발 단계라 develop에는 먼저 합치고, **실서비스 배포 전에 반드시 처리**. 다음 deploy PR 전에 이 항목 확인._
+- ① **#333 공모전 프로토타입 공개 범위** — `/competitions` 라우트 + `SocialSegment` [🏆]가 게이트 없이 모든 사용자에게 노출됨. 배포 전 (a) `import.meta.env.DEV` 게이트, (b) `VITE_ENABLE_COMPETITION_PROTOTYPE` 플래그(프리뷰만 on), (c) 실서비스 공개 중 택1
+- ② (c) 또는 게이트 없이 나갈 경우 필수: 실제 기관명(대한건축사협회·서울특별시·국토교통부·한국건축가협회) 붙은 가짜 공모전 → 가상 기관명, 가짜 관심 수·모집 팀 수 → 상단에 눈에 띄는 '예시 데이터' 배너, `제안`/`참여 요청` 토스트 "보냈어요" → "준비 중이에요", 목 유저 `user_id` 36~40·3 하드코딩 링크 제거
+- ③ #333 저위험: 관심 localStorage 키 유저별 분리 + 로그아웃 시 삭제, `fitReason` 폴백이 반대 축에 "비슷해요" 출력, 목 유저 `type_code`가 벡터와 불일치(c1 5명), `AXIS_LABELS` 중복, `CompetitionListPage` 헤더가 구 글래스 헤더 그대로(`/people`은 `PageLogoHeader`)
+- ④ **#334 헤더 축소**: 공용 상단 버튼 28px·토글 22px → DESIGN.md §3.2 터치 최소치(데스크톱 32/모바일 44) 미달, 히트 영역 확대 필요. `login.common.langKo/langEn` "한/EN" 축약이 설정>화면 언어 선택지에도 적용됨 → 짧은 키 분리. LoginPage 로고 "좌상단" 설명과 달리 가운데 정렬
+- ⑤ #334 하네스: Codex 규칙(별도 클론 선택화)과 CLAUDE.md HARD RULE 7이 반대 — user 판단: 역할이 달라 허용, 추후 점검
+
 #### FRONT-UX-14 — 스와이프 모션 + 갤러리 UX 5종 (user 지적 2026-08-15, 원인 전부 확정)
 _스와이프 경로 — feature workflow 필수. `lib/tinderCard.js`는 vendored fork(PR #295)라 물리 상수 자유 튜닝 가능._
 - ① 퇴장 애니메이션 부자연: `animateOut` power 3.0(대각선 3배) + 500ms cap + linear easing(`config:{duration}` 감속 없음) → power 감소 + ease-out cubic + duration floor
@@ -298,6 +306,19 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FRONT-COMP-PROTO-1 — 공모전 팀빌딩 화면 프로토타입 — RESOLVED 2026-09-23 (`04d2e90`, PR 리뷰 대기)
+- **완성품이 아니라 판단용**: 스와이프 취향분석 vs 커뮤니티 중 어느 쪽을 메인으로 둘지 주변 사람들에게 물어보기 위한 화면. user 결정
+- 그래서 **의도적으로 만들지 않은 것** — `Competition`/`CompetitionInterest`/`Team`/`TeamInvite` 모델, 마이그레이션, API. 커뮤니티가 탈락하면 브랜치째 버릴 수 있어야 하는데 마이그레이션이 들어가면 되돌리기 어려움. **백엔드 변경 0줄**
+- 화면 2종: `/competitions`(마감 임박순 목록) · `/competitions/:id`(찜 → 사람 발견 → 팀 전환이 한 화면에서). Social 탭 안 세그먼트로 진입, TabBar 3개 구조 무변경
+- `teamFit.js` — 설계 §4 축 계산 구현. 발견 피드의 유클리드를 못 씀(1·2축 보완, 3·4축 일치). `w = 0.4`. 한국어 조사 처리 포함(축 이름이 '방식'/'태도'로 섞여 고정 조사 시 "접근 태도이"가 나옴)
+- 찜은 localStorage만 — 데모 중 새로고침해도 유지돼야 진짜처럼 느껴지므로 sessionStorage 아님
+- 추천은 **상위 1명만** 승격. 2~3명이면 "추천"이 희석되어 정렬된 목록과 다를 게 없어짐. 카드 레이아웃은 목록과 동일하게 두고 테두리만 강조 — 모양이 다르면 별개 기능처럼 보여 연결이 끊김
+- 아이디 클릭 → `/user/:id?tab=created`. `UserProfilePage`의 딥링크 `isMe` 가드 제거(`handleCreatedTab`은 이미 `getUserWorks`로 양쪽 처리, 탭 버튼도 조건부 아님 — 가드만 남의 프로필 진입을 막고 있었음)
+- **검증 중 발견**: id를 로컬 DB 실제 행(36~40)에 맞추자 추천 1위가 뷰어와 거의 동일한 **복제형**으로 나옴. 계산은 정상(`w=0.4`라 일치가 무거운데 보완·일치를 동시에 갖춘 시드 유저가 없었음)이나 **데모가 기능의 주장을 스스로 보여주지 못하는** 상태였음 → `MOCK_MY_VECTOR`를 시드 유저와의 관계를 보고 재설정해 `@dohyun`(1·2축 반대 + 3·4축 일치)이 0.82로 뚜렷한 1위가 되게 함
+- 테스트 16개 추가(`node --test`), 전체 133/133 통과
+- **한계(PR에 명시)**: 시드 유저는 로컬 DB에만 있어 다른 환경에서는 프로필 이동이 엉뚱한 사람에게 가거나 404. 핸들 조회 API가 없고 만들면 "백엔드 0" 전제가 깨져, 바꾸지 않고 안내로 처리하기로 user와 합의
+- Deferred: 팀 상세 화면(설계 §7-3) 미구현 — 판단에 필수가 아니라 생략. 배포 방법 미정(링크 공유하려면 필요)
+
 ### FRONT-RESULTS-SAVE-1 — 리포트 화면 상단 저장 CTA + 저장 후 프로필 이동 — RESOLVED 2026-09-17 (`e196549`, PR 리뷰 대기)
 - user 지적: Discovery → Taste 리포트 생성 후 **끝나는 지점이 없음**. 저장은 이미 되고 있었으나 `SaveBoardModal`이 자동으로 떠서 방금 기다린 리포트를 가렸고, 저장을 마쳐도 결과 화면에 머물러 뒤로가기로 빠져나가야 했음 → "저장이 안 된 것 같은" 느낌. **기능 결함이 아니라 완결감(closure)의 부재**
 - 브레인스토밍에서 3안 검토 후 B안 채택: 모달 자동 노출을 없애고 **리포트를 먼저 보여준 뒤 유저가 상단 CTA로 마무리**. A안(모달 강제)은 리포트를 보기도 전에 이름부터 정해야 해 순서가 부자연스럽고, C안(기본값 즉시 저장)은 공개여부 선택권이 사라져 발견 피드 노출과 충돌
