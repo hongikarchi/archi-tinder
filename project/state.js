@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-09-25 17:13 KST',
-    head: '4975849',
-    branch: 'feature/algo-algorithm-modified',
+    updatedAt: '2026-09-26 23:51 KST',
+    head: 'a277440',
+    branch: 'feature/algo-report-grounding',
   },
   done: [
+    {
+      id: 'BACK-LLM-5',
+      title: '리포트 취향 문장이 근거 없음',
+      completedAt: '2026-09-26',
+      note: '리포트를 보여준 카드(좋아요∪싫어요) 기준 결정론 사실(`taste_facts.py`) + 사용자 언어 프롬프트(`_report_prompts.py`)로 재작성. ① `pattern_paragraph`("보여드린 건물 중…") + ② `description`(부드러운 해석), 기존 필드 호환, `taste_facts` 저장(싫어요 건물 id 제외 — 보안 리뷰).',
+    },
     {
       id: 'FULL-RECOMMEND-1',
       title: '질문카드가 리포트에 무영향·순위만 과왜곡',
@@ -70,12 +76,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-09-06',
       note: 'AllowAny `/users/<id>/projects/`가 report_image base64(개당 ~200KB, 페이지당 50개)를 익명 호출자에게 그대로 실어줌 — 신규 PublicProjectListSerializer로 해당 엔드포인트만 두 필드 제거(프론트 소비자 0 확인). owner GET /projects/는 불변(App.jsx:929 로그인 동기화 의존). queryset defer도 추가(DB→앱 전송비, Opus 검증 안전)',
     },
-    {
-      id: 'FRONT-PEOPLE-CARD-2',
-      title: '발견 피드 빈 화면: seed_discovery 커맨드 + 소셜 탭 신설',
-      completedAt: '2026-09-06',
-      note: '빈 피드 원인 재실측 — #315 완화 후 게이트는 2중(discovery_opt_in + public report_image 프로젝트)인데 로컬 DB 통과자 0명: report_image 프로젝트 4개 전부 private(#315 이전 SaveBoardModal 기본값), 진단 완료 4명 전부 본인 계정. "테스트 서버 계정"은 prod Neon DB 소속 + prod엔 discovery 미배포라 로컬에서 원천 불가시',
-    },
   ],
   now: [],
   next: {
@@ -87,11 +87,6 @@ window.PROJECT_STATE = {
       },
     ],
     high: [
-      {
-        id: 'BACK-LLM-5',
-        title: '리포트 취향 문장이 근거 없음',
-        note: '_FULL-RECOMMEND-1 후속 PR 2 (grilling 2026-09-25 결정). `generation.generate_persona_report`는 liked 6속성만 Gemini에 넘김._',
-      },
       {
         id: 'BACK-RECOMMEND-5',
         title: 'Love intensity 잔재 전수 제거',
@@ -1145,6 +1140,10 @@ window.PROJECT_STATE = {
       role: '파싱 프롬프트·어휘 상수',
     },
     {
+      path: 'backend/apps/recommendation/services/_report_prompts.py',
+      role: '리포트 문장 규칙 프롬프트',
+    },
+    {
       path: 'backend/apps/recommendation/services/axis_scores.py',
       role: '5축 점수 계산 서비스 (스타일/분위기/재질)',
     },
@@ -1175,6 +1174,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/recommendation/services/swipe_service.py',
       role: '스와이프·질문카드 오케스트레이션',
+    },
+    {
+      path: 'backend/apps/recommendation/services/taste_facts.py',
+      role: '리포트 취향 사실 결정론 계산',
     },
     {
       path: 'backend/apps/recommendation/services/vocab.py',
@@ -1239,6 +1242,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/recommendation/tests/test_taste_board_name.py',
       role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/tests/test_taste_facts.py',
+      role: '취향 사실 계산 테스트',
     },
     {
       path: 'backend/apps/recommendation/tests/test_throttles.py',
@@ -1795,6 +1802,10 @@ window.PROJECT_STATE = {
     {
       path: 'docs/prd/archibe-business-model.html',
       role: 'archibe 비즈니스 모델 PRD (정적 HTML)',
+    },
+    {
+      path: 'docs/report-writing.md',
+      role: '리포트 작성 규칙 문서',
     },
     {
       path: 'docs/research/full-codebase-audit-2026-07-17.md',

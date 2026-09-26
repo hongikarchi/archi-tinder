@@ -423,5 +423,9 @@
   "frontend/src/pages/settings/SettingsPage.jsx": "설정 메인 네비게이션",
   "frontend/src/pages/settings/SettingsPage.module.css": "설정 목록 레이아웃 스타일(CSS Module)",
   "frontend/src/pages/userProfile/ProfileHero.module.css": "아바타 업로드 오버레이 스타일",
-  "frontend/src/utils/reportWriteError.js": "저장 실패 토스트 유틸리티"
+  "frontend/src/utils/reportWriteError.js": "저장 실패 토스트 유틸리티",
+  "backend/apps/recommendation/services/taste_facts.py": "리포트 취향 사실 결정론 계산",
+  "backend/apps/recommendation/services/_report_prompts.py": "리포트 문장 규칙 프롬프트",
+  "backend/apps/recommendation/tests/test_taste_facts.py": "취향 사실 계산 테스트",
+  "docs/report-writing.md": "리포트 작성 규칙 문서"
 }

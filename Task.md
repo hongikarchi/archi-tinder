@@ -57,14 +57,7 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-### BACK-LLM-5 — 리포트 취향 문장이 근거 없음
-
-리포트를 스와이프 사실 기반으로 재작성 (grilling 2026-09-25~26 결정, FULL-RECOMMEND-1 위에 스택 — `feature/algo-report-grounding`). 기존 `generate_persona_report`는 liked 6속성만 영어 프롬프트로 전송(언어 설정 무시, 싫어요 미사용).
-- 기준 = 보여준 카드(`Project.liked_ids` ∪ `disliked_ids`, 양쪽이면 like). 편중도 = 특징 있는 카드 like율 ÷ 없는 카드 like율, 양쪽 +1/+2 스무딩. 코퍼스 캐시 미사용.
-- 좋아요 사실: shown≥3, liked≥2, ratio≥1.5. 싫어요 사실: shown≥3, 넘김≥40%(≥80% "대부분"/≥40% "여러 번"), like ratio ≤1/1.5. 정렬: ratio 내림차순, 0.3 이내면 근거 수 많은 순, 축당 1개, 근거 80%+ 겹치면 1개, like 2~3 + dislike ≤1. 배수 0.5 단위 내림.
-- 출력: `pattern_paragraph`(신규, "보여드린 건물 중…"으로 시작, 사실 문구 틀 엄격(어미 연결만 허용, LLM 이탈은 검사 없이 수용), ~200자, 사실 없으면 생략) + `description`(취향 해석, 부드러운 추정, ~300자) + `persona_type`(1~2단어 경향명) + `one_liner`(태그 포함 구체문) — 사용자 언어; `dominant_*` 영어 유지; `taste_facts` 저장(비표시). 용어 한글 음차, 국가 한국어, 건축가 영어. 금지: "다른 사용자보다" 등 미계산 비교, 최상급, 성격 판단, 비하.
-- 규칙 위치: `services/_report_prompts.py`(문장), `settings.RECOMMENDATION` `report_*`(기준값), `docs/report-writing.md`(설명). 기존 리포트 유지, 재생성 시에만 신 방식. 공개 보드도 동일 문장.
-
+_(비어 있음 — BACK-LLM-5 완료 2026-09-26, ## Done 참조)_
 
 ## Next
 
@@ -310,6 +303,16 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### BACK-LLM-5 — 리포트 취향 문장이 근거 없음 — RESOLVED 2026-09-26 (`c69c895`, PR 대기 — FULL-RECOMMEND-1 위 스택)
+- 리포트를 보여준 카드(좋아요∪싫어요) 기준 결정론 사실(`taste_facts.py`) + 사용자 언어 프롬프트(`_report_prompts.py`)로 재작성. ① `pattern_paragraph`("보여드린 건물 중…") + ② `description`(부드러운 해석), 기존 필드 호환, `taste_facts` 저장(싫어요 건물 id 제외 — 보안 리뷰).
+리포트를 스와이프 사실 기반으로 재작성 (grilling 2026-09-25~26 결정, FULL-RECOMMEND-1 위에 스택 — `feature/algo-report-grounding`). 기존 `generate_persona_report`는 liked 6속성만 영어 프롬프트로 전송(언어 설정 무시, 싫어요 미사용).
+- 기준 = 보여준 카드(`Project.liked_ids` ∪ `disliked_ids`, 양쪽이면 like). 편중도 = 특징 있는 카드 like율 ÷ 없는 카드 like율, 양쪽 +1/+2 스무딩. 코퍼스 캐시 미사용.
+- 좋아요 사실: shown≥3, liked≥2, ratio≥1.5. 싫어요 사실: shown≥3, 넘김≥40%(≥80% "대부분"/≥40% "여러 번"), like ratio ≤1/1.5. 정렬: ratio 내림차순, 0.3 이내면 근거 수 많은 순, 축당 1개, 근거 80%+ 겹치면 1개, like 2~3 + dislike ≤1. 배수 0.5 단위 내림.
+- 출력: `pattern_paragraph`(신규, "보여드린 건물 중…"으로 시작, 사실 문구 틀 엄격(어미 연결만 허용, LLM 이탈은 검사 없이 수용), ~200자, 사실 없으면 생략) + `description`(취향 해석, 부드러운 추정, ~300자) + `persona_type`(1~2단어 경향명) + `one_liner`(태그 포함 구체문) — 사용자 언어; `dominant_*` 영어 유지; `taste_facts` 저장(비표시). 용어 한글 음차, 국가 한국어, 건축가 영어. 금지: "다른 사용자보다" 등 미계산 비교, 최상급, 성격 판단, 비하.
+- 규칙 위치: `services/_report_prompts.py`(문장), `settings.RECOMMENDATION` `report_*`(기준값), `docs/report-writing.md`(설명). 기존 리포트 유지, 재생성 시에만 신 방식. 공개 보드도 동일 문장.
+- 검증: feature workflow review/security PASS(보안 1건 수정: 싫어요 id 노출); 로컬 Neon 전체 1459 pass/0 fail; FE 117 pass, eslint 0 error, build OK; 실데이터 샘플 3건 확인. 후속: 사실 문구 엄격 복원(검사 장치 없이 LLM 이탈 수용), 배수 정수 표기(2.0→2), 스무딩 0 나눗셈 방어.
+- 관찰: 샘플 3건 모두 1순위 사실이 흔한 스타일 `contemporary` — 계산은 맞으나 Aha 약함. 실사용 데이터 확인 후 판단.
+
 ### FULL-RECOMMEND-1 — 질문카드가 리포트에 무영향·순위만 과왜곡 — RESOLVED 2026-09-25 (`5c7d74c`, PR 대기)
 - 질문카드(ALGO-QCARD) 전면 제거 — 답변은 리포트에 0 영향, `question_bias_vector`(답변당 ±2.0 비정규화)가 like 대비 ~4배로 MMR 순위 과점유, algorithm.md 미문서화였음. 다음 카드 = 스와이프 pref_vector만(재튜닝 없음).
 - FE: `QuestionCard.jsx` + SwipePage/App/MainLayout 배선, `submitQuestionResponse`, i18n `swipe.questionCard.*`, 죽은 `latency_ms` 측정(`cardShownAtRef`) 제거.
