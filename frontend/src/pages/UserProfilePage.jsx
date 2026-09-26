@@ -19,10 +19,12 @@ import PageBackButton from '../components/PageBackButton.jsx'
 import { useUnreadNotifications } from '../hooks/useUnreadNotifications.js'
 import { OfficeCard, SkeletonCard, BuildingIconEmpty } from './LikedOfficesPage.jsx'
 
-// Floating top-left cluster button (isMe: bell/share/settings/logout) — mock
+// Floating top-left cluster button (isMe: bell/share/settings) — mock
 // parity with PageBackButton's shipped shape (DESIGN.md §4 inline layout
 // values). `position: relative` so the bell's absolutely-positioned unread
-// badge anchors correctly; harmless no-op for the other three buttons.
+// badge anchors correctly; harmless no-op for the other two buttons.
+// Logout moved to PageTopControls (top-right), like every other page —
+// 2026-09-26 quickfix, was previously duplicated in this left cluster.
 const topClusterBtnStyle = {
   position: 'relative',
   width: 28,
@@ -37,6 +39,10 @@ const topClusterBtnStyle = {
   color: 'var(--color-text-dim)',
   cursor: 'pointer',
 }
+
+// Hidden 2026-09-26 per user (design noise); functionality kept, delete
+// entirely if no issue surfaces.
+const SHOW_BOARD_EDIT_BUTTON = false
 
 /**
  * formatBoardDate — converts ISO 8601 timestamp to "Month YYYY" display string.
@@ -492,13 +498,14 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
       background: 'var(--color-bg)',
       paddingBottom: 'calc(100px + env(safe-area-inset-bottom))'
     }}>
-      <PageTopControls />
+      <PageTopControls onLogout={onLogout} />
 
       {/* Floating top-left cluster — Claude Design mock conversion.
-          isMe: bell (unread badge) + share + settings + logout, all neutral
+          isMe: bell (unread badge) + share + settings, all neutral
           circles (no destructive tint — mock parity). !isMe: single back
           circle via PageBackButton (value-for-value match already shipped
-          by the design-port initiative — reused rather than re-authored). */}
+          by the design-port initiative — reused rather than re-authored).
+          Logout lives in PageTopControls (top-right) like every other page. */}
       {isMe ? (
         <div style={{
           position: 'fixed', top: 16, left: 12, zIndex: 300,
@@ -513,7 +520,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
             className="pressable"
             style={topClusterBtnStyle}
           >
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path>
               <path d="M13.73 21a2 2 0 01-3.46 0"></path>
             </svg>
@@ -541,7 +548,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
             className="pressable"
             style={topClusterBtnStyle}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="6" cy="12" r="3"></circle>
               <circle cx="18" cy="6" r="3"></circle>
               <circle cx="18" cy="18" r="3"></circle>
@@ -558,27 +565,9 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
             className="pressable"
             style={topClusterBtnStyle}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="3"></circle>
               <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33h0a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51h0a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v0a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"></path>
-            </svg>
-          </button>
-
-          {/* Logout — neutral circle (no destructive tint, mock parity).
-              Old ProfileHeader wired this directly to onLogout (no guard) —
-              copied as-is, not reimplemented. */}
-          <button
-            type="button"
-            onClick={onLogout}
-            aria-label="Log out"
-            title="Log out"
-            className="pressable"
-            style={topClusterBtnStyle}
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-              <polyline points="16 17 21 12 16 7"></polyline>
-              <line x1="21" y1="12" x2="9" y2="12"></line>
             </svg>
           </button>
         </div>
@@ -880,7 +869,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
               </span>
             </div>
             {/* P6: Edit button — owner-only, only when boards exist */}
-            {isMe && boards.length > 0 && (
+            {SHOW_BOARD_EDIT_BUTTON && isMe && boards.length > 0 && (
               <button
                 type="button"
                 onClick={() => setSelectMode(true)}

@@ -654,9 +654,12 @@ class DevLoginView(APIView):
         if request.data.get('secret') != secret:
             return Response({'detail': 'Invalid secret'}, status=status.HTTP_403_FORBIDDEN)
 
+        # Keyed on username (unique), not email: linking Google on the test
+        # account rewrites its email, and an email lookup then misses and
+        # re-creates the username -> IntegrityError 500.
         user, _ = User.objects.get_or_create(
-            email='test@architinder.dev',
-            defaults={'username': 'test_architinder', 'first_name': 'Test User'},
+            username='test_architinder',
+            defaults={'email': 'test@architinder.dev', 'first_name': 'Test User'},
         )
         profile, _ = UserProfile.objects.get_or_create(
             user=user, defaults={'display_name': 'Test User'},

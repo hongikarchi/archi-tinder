@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getUserSavedStudios, getArchitectProfile } from '../api/client.js'
 import { useTranslation } from '../i18n/index.js'
+import styles from './LikedOfficesPage.module.css'
 
 /* ── Placeholder SVG icons ──────────────────────────────────────────────── */
 
@@ -51,6 +52,37 @@ export function BuildingCarousel({ buildings, fallbackUrl, altText, onNavigate }
   // []   → loaded but no buildings (show placeholder)
   // [..] → show carousel
 
+  // Desktop mouse affordance for the touch-swipe carousel (Rules of Hooks:
+  // declared above the early returns below, even though they only matter
+  // for the final "show carousel" branch).
+  const { t } = useTranslation()
+  const scrollRef = useRef(null)
+  const [canPrev, setCanPrev] = useState(false)
+  const [canNext, setCanNext] = useState(false)
+
+  const updateArrows = useCallback(() => {
+    const el = scrollRef.current
+    if (!el) return
+    setCanPrev(el.scrollLeft > 1)
+    setCanNext(el.scrollLeft + el.clientWidth < el.scrollWidth - 1)
+  }, [])
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    updateArrows()
+    const ro = new ResizeObserver(updateArrows)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [buildings, updateArrows])
+
+  function scrollByStep(direction) {
+    const el = scrollRef.current
+    if (!el) return
+    const step = (el.firstElementChild?.offsetWidth || el.clientWidth) + 8 // + gap
+    el.scrollBy({ left: direction * step, behavior: 'smooth' })
+  }
+
   if (buildings === null || buildings === undefined) {
     return (
       <div
@@ -88,44 +120,75 @@ export function BuildingCarousel({ buildings, fallbackUrl, altText, onNavigate }
   }
 
   return (
-    <div
-      className="building-carousel"
-      onClick={e => e.stopPropagation()}
-      style={{
-        display: 'flex',
-        overflowX: 'auto',
-        scrollSnapType: 'x mandatory',
-        gap: 8,
-        borderRadius: 12,
-      }}
-    >
-      {buildings.map((bld, i) => (
-        <div
-          key={bld.canonical_bld_id || i}
-          onClick={e => { e.stopPropagation(); onNavigate?.() }}
-          style={{
-            flex: '0 0 80%',
-            flexShrink: 0,
-            scrollSnapAlign: 'start',
-            borderRadius: 12,
-            overflow: 'hidden',
-            aspectRatio: '16 / 10',
-            background: 'var(--color-surface-2)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}
+    <div style={{ position: 'relative' }}>
+      <div
+        ref={scrollRef}
+        className="building-carousel"
+        onClick={e => e.stopPropagation()}
+        onScroll={updateArrows}
+        style={{
+          display: 'flex',
+          overflowX: 'auto',
+          scrollSnapType: 'x mandatory',
+          gap: 8,
+          borderRadius: 12,
+        }}
+      >
+        {buildings.map((bld, i) => (
+          <div
+            key={bld.canonical_bld_id || i}
+            onClick={e => { e.stopPropagation(); onNavigate?.() }}
+            style={{
+              flex: '0 0 80%',
+              flexShrink: 0,
+              scrollSnapAlign: 'start',
+              borderRadius: 12,
+              overflow: 'hidden',
+              aspectRatio: '16 / 10',
+              background: 'var(--color-surface-2)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            {bld.image_url ? (
+              <img
+                src={bld.image_url}
+                alt={bld.name_en || altText}
+                loading="lazy"
+                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+              />
+            ) : (
+              <BuildingPlaceholderLarge />
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Mouse-only prev/next affordance (DESIGN.md §4 gesture-friendly —
+          touch devices keep plain swipe, see .module.css hover/pointer query). */}
+      {canPrev && (
+        <button
+          type="button"
+          onClick={e => { e.stopPropagation(); scrollByStep(-1) }}
+          aria-label={t('profile.prevImage')}
+          className={`pressable ${styles.arrow} ${styles.arrowPrev}`}
         >
-          {bld.image_url ? (
-            <img
-              src={bld.image_url}
-              alt={bld.name_en || altText}
-              loading="lazy"
-              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-            />
-          ) : (
-            <BuildingPlaceholderLarge />
-          )}
-        </div>
-      ))}
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+        </button>
+      )}
+      {canNext && (
+        <button
+          type="button"
+          onClick={e => { e.stopPropagation(); scrollByStep(1) }}
+          aria-label={t('profile.nextImage')}
+          className={`pressable ${styles.arrow} ${styles.arrowNext}`}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </button>
+      )}
     </div>
   )
 }
@@ -133,6 +196,7 @@ export function BuildingCarousel({ buildings, fallbackUrl, altText, onNavigate }
 /* ── OfficeCard ─────────────────────────────────────────────────────────── */
 
 export function OfficeCard({ office, buildings, onClick }) {
+  const { t } = useTranslation()
   return (
     <div
       onClick={onClick}
@@ -174,7 +238,7 @@ export function OfficeCard({ office, buildings, onClick }) {
             fontSize: 12, color: 'var(--color-text-muted)', fontWeight: 500,
             margin: '2px 0 0', lineHeight: 1.4,
           }}>
-            Saved to liked offices
+            {t('profile.savedStudio')}
           </p>
         </div>
       </div>

@@ -1,0 +1,43 @@
+/*
+ * LikedOfficesPage.module.css — building-carousel prev/next arrow buttons.
+ * Fine-pointer only (mouse/trackpad): touch devices keep plain swipe per
+ * DESIGN.md §4 (gesture-friendly). Chrome mirrors the shared 28px top-bar
+ * round button (PageTopControls / PageBackButton), CSS Module because these
+ * are interactive controls owning :hover (DESIGN.md §4 / §10.4).
+ */
+.arrow {
+  display: none;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-soft);
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-dim);
+  cursor: pointer;
+  z-index: 2;
+  transition: color var(--motion-fast) var(--motion-ease);
+}
+
+.arrow:hover {
+  color: var(--color-text);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .arrow {
+    display: flex;
+  }
+}
+
+.arrowPrev {
+  left: 6px;
+}
+
+.arrowNext {
+  right: 6px;
+}
