@@ -4,23 +4,9 @@
  * Per DESIGN.md §8.5: glassmorphic input focus pattern.
  */
 
-.page {
-  height: var(--page-height);
-  overflow-y: auto;
-  background: var(--color-bg);
-}
-
-/* In-flow left-aligned page title (canvas-design-port.md §6d item 6) —
- * scrolls with the content column; "back" lives in the floating
- * PageBackButton instead of a sticky header bar. Shared by AccountScreen
- * and EditProfileScreen (both import this module). */
-.headerTitle {
-  font-size: 20px;
-  font-weight: 700;
-  margin: 0 0 14px;
-  color: var(--color-text);
-  letter-spacing: -0.01em;
-}
+/* `.page` / `.headerTitle` (shared with EditProfileScreen's now-removed
+ * cross-import) moved to the shared `PageShell` / `PageTitle` components —
+ * UI-CONSISTENCY-B Phase 2b. */
 
 /* Glassmorphic input (DESIGN.md §8.5) */
 .inputWrapper {

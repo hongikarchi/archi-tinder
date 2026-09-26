@@ -4,26 +4,10 @@
  * interactive row hover/focus states.
  */
 
-.page {
-  height: var(--page-height);
-  overflow-y: auto;
-  background: var(--color-bg);
-}
-
-/* In-flow left-aligned page title (canvas-design-port.md §6d item 6) —
- * scrolls with the content column; "back" lives in the floating
- * PageBackButton instead of a sticky header bar. Spacing matches this
- * page's own mock (notifications.html): tighter margin + side padding to
- * align with the 12px content row padding below (vs. the 600-width
- * settings screens' 16px). */
-.headerTitle {
-  font-size: 20px;
-  font-weight: 700;
-  margin: 0 0 12px;
-  padding: 0 14px;
-  color: var(--color-text);
-  letter-spacing: -0.01em;
-}
+/* `.page` moved to the shared `PageShell` component; `.headerTitle`'s
+ * distinct margin/padding (tighter than the other settings screens, aligned
+ * with this page's own 12px row padding) is now passed as a `style` override
+ * to the shared `PageTitle` component — UI-CONSISTENCY-B Phase 2b. */
 
 .row {
   display: flex;

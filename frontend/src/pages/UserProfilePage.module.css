@@ -7,40 +7,8 @@
  * color-destructive replaces the legacy #ef4444).
  */
 
-/* ---- Tab bar (Boards | Studios | Liked | Created) ------------------------
-   Keeps the ink underline (editorial identity) — only color/underline swap
-   on the active modifier, hover adds a color shift on inactive tabs. */
-
-.tab {
-  flex: 1;
-  padding: 12px 0;
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--color-text-muted);
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  font-family: inherit;
-  transition: color var(--motion-fast) var(--motion-ease),
-              border-color var(--motion-fast) var(--motion-ease);
-}
-
-.tab:hover {
-  color: var(--color-text);
-}
-
-.tab:focus-visible {
-  outline: 2px solid var(--accent-1);
-  outline-offset: -2px;
-}
-
-.tabActive {
-  font-weight: 700;
-  color: var(--color-text);
-  border-bottom-color: var(--color-text);
-}
+/* Tab bar (Boards | Studios | Liked | Created) moved to the shared `Tabs`
+ * component — UI-CONSISTENCY-B Phase 2b. */
 
 /* ---- Cancel (select-mode header) ---- */
 
@@ -199,7 +167,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tab,
   .cancelBtn,
   .selectAllBtn,
   .editBtn,

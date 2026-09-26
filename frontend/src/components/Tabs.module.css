@@ -1,0 +1,49 @@
+/*
+ * Tabs.module.css — shared underline tab bar.
+ * Extracted verbatim from UserProfilePage.module.css `.tab`/`.tabActive`
+ * (UI-CONSISTENCY-B Phase 2b). DESIGN.md §2.2: tab label = `--fs-body` (14) /
+ * `--fw-semibold` (600) — both states now render the same 600 weight (the
+ * original UserProfilePage rule was 500 inactive / 700 active; unified per
+ * the "Label --fs-body 14 / --fw-semibold" component spec, active state
+ * differs only by color + underline, not weight).
+ */
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--color-border-soft);
+}
+
+.tab {
+  flex: 1;
+  padding: 12px 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-muted);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  font-family: inherit;
+  transition: color var(--motion-fast) var(--motion-ease),
+              border-color var(--motion-fast) var(--motion-ease);
+}
+
+.tab:hover {
+  color: var(--color-text);
+}
+
+.tab:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: -2px;
+}
+
+.tabActive {
+  color: var(--color-text);
+  border-bottom-color: var(--color-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab {
+    transition: none;
+  }
+}

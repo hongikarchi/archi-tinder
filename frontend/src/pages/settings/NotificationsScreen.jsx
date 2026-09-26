@@ -16,6 +16,8 @@ import { useTranslation } from '../../i18n/index.js'
 import PageLogoHeader from '../../components/PageLogoHeader.jsx'
 import PageTopControls from '../../components/PageTopControls.jsx'
 import PageBackButton from '../../components/PageBackButton.jsx'
+import PageShell from '../../components/PageShell.jsx'
+import PageTitle from '../../components/PageTitle.jsx'
 import styles from './NotificationsScreen.module.css'
 
 const CATEGORY_KEYS = ['social', 'content', 'security', 'recommend', 'marketing']
@@ -92,13 +94,16 @@ export default function NotificationsScreen({ onLogout }) {
   }
 
   return (
-    <div className={styles.page}>
-      <PageBackButton onClick={() => navigate(-1)} />
-      <PageLogoHeader />
-      <PageTopControls onLogout={onLogout} />
-
-      <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px' }}>
-        <h2 className={styles.headerTitle}>{t('notifications.title')}</h2>
+    <PageShell
+      width="narrow"
+      chrome={<>
+        <PageBackButton onClick={() => navigate(-1)} />
+        <PageLogoHeader />
+        <PageTopControls onLogout={onLogout} />
+      </>}
+      contentStyle={{ padding: '24px 20px' }}
+    >
+      <PageTitle>{t('notifications.title')}</PageTitle>
 
         {/* Honest hint: email/push delivery not yet implemented */}
         <div style={{
@@ -195,8 +200,7 @@ export default function NotificationsScreen({ onLogout }) {
           )
         })}
 
-      </div>
       <div style={{ height: 24 }} />
-    </div>
+    </PageShell>
   )
 }

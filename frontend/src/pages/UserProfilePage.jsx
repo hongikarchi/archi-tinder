@@ -17,6 +17,9 @@ import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import PageTopControls from '../components/PageTopControls.jsx'
 import PageBackButton from '../components/PageBackButton.jsx'
 import FloatingIconButton from '../components/FloatingIconButton.jsx'
+import Tabs from '../components/Tabs.jsx'
+import EmptyState from '../components/EmptyState.jsx'
+import PhotoTile from '../components/PhotoTile.jsx'
 import { useUnreadNotifications } from '../hooks/useUnreadNotifications.js'
 import { OfficeCard, SkeletonCard, BuildingIconEmpty } from './LikedOfficesPage.jsx'
 
@@ -720,41 +723,22 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         {/* Tab bar — Boards | Studios | Liked | Created (all 4 visible to any
             viewer, design-parity user-other.html; edit affordances inside
             each panel stay isMe-gated) */}
-        <div style={{
-          display: 'flex',
-          borderBottom: '1px solid var(--color-border-soft)',
-          marginBottom: 0,
-          marginTop: 8,
-        }}>
-          <button
-            type="button"
-            onClick={() => setActiveTab('boards')}
-            className={`${styles.tab} ${activeTab === 'boards' ? styles.tabActive : ''}`}
-          >
-            Boards
-          </button>
-          <button
-            type="button"
-            onClick={handleStudiosTab}
-            className={`${styles.tab} ${activeTab === 'studios' ? styles.tabActive : ''}`}
-          >
-            Studios
-          </button>
-          <button
-            type="button"
-            onClick={handleLikedTab}
-            className={`${styles.tab} ${activeTab === 'liked' ? styles.tabActive : ''}`}
-          >
-            Liked
-          </button>
-          <button
-            type="button"
-            onClick={handleCreatedTab}
-            className={`${styles.tab} ${activeTab === 'created' ? styles.tabActive : ''}`}
-          >
-            Created
-          </button>
-        </div>
+        <Tabs
+          style={{ marginTop: 8 }}
+          tabs={[
+            { id: 'boards', label: 'Boards' },
+            { id: 'studios', label: 'Studios' },
+            { id: 'liked', label: 'Liked' },
+            { id: 'created', label: 'Created' },
+          ]}
+          value={activeTab}
+          onChange={(id) => {
+            if (id === 'studios') handleStudiosTab()
+            else if (id === 'liked') handleLikedTab()
+            else if (id === 'created') handleCreatedTab()
+            else setActiveTab('boards')
+          }}
+        />
 
         {activeTab === 'boards' && (<>
 
@@ -980,19 +964,11 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                 {[0, 1, 2].map(i => <SkeletonCard key={i} />)}
               </div>
             ) : !savedStudios || savedStudios.length === 0 ? (
-              <div style={{
-                display: 'flex', flexDirection: 'column',
-                alignItems: 'center', justifyContent: 'center',
-                padding: '80px 20px', gap: 16, textAlign: 'center',
-              }}>
-                <BuildingIconEmpty />
-                <p style={{ color: 'var(--color-text)', fontSize: 16, fontWeight: 600, margin: 0 }}>
-                  {t('profile.noSavedOfficesInline')}
-                </p>
-                <p style={{ color: 'var(--color-text-muted)', fontSize: 13, margin: 0 }}>
-                  {t('profile.followToShowInline')}
-                </p>
-              </div>
+              <EmptyState
+                icon={<BuildingIconEmpty />}
+                title={t('profile.noSavedOfficesInline')}
+                body={t('profile.followToShowInline')}
+              />
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 40 }}>
                 {savedStudios.map((office, i) => (
@@ -1024,22 +1000,14 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                 gap: 20,
               }}>
                 {Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} style={{ aspectRatio: '4 / 5', borderRadius: 16, background: 'var(--color-surface-2)' }} />
+                  <div key={i} style={{ aspectRatio: '4 / 5', borderRadius: 'var(--radius-lg)', background: 'var(--color-surface-2)' }} />
                 ))}
               </div>
             ) : !likedBuildings || likedBuildings.length === 0 ? (
-              <div style={{
-                display: 'flex', flexDirection: 'column',
-                alignItems: 'center', justifyContent: 'center',
-                padding: '80px 20px', gap: 16, textAlign: 'center',
-              }}>
-                <p style={{ color: 'var(--color-text)', fontSize: 16, fontWeight: 600, margin: 0 }}>
-                  {t('profile.noLikedProjectsInline')}
-                </p>
-                <p style={{ color: 'var(--color-text-muted)', fontSize: 13, margin: 0 }}>
-                  {t('profile.swipeToSaveInline')}
-                </p>
-              </div>
+              <EmptyState
+                title={t('profile.noLikedProjectsInline')}
+                body={t('profile.swipeToSaveInline')}
+              />
             ) : (
               <div style={{
                 display: 'grid',
@@ -1047,43 +1015,14 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                 gap: 20,
               }}>
                 {likedBuildings.map((bld, i) => (
-                  <div
+                  <PhotoTile
                     key={bld.canonical_bld_id || i}
+                    imageUrl={bld.image_url || bld.display_cover_url}
+                    title={bld.name || bld.canonical_bld_id}
+                    subtitle={bld.architect_names?.length > 0 ? bld.architect_names.join(', ') : 'Building'}
+                    placeholder={<BuildingIconEmpty />}
                     onClick={() => navigate('/buildings/' + bld.canonical_bld_id)}
-                    style={{ cursor: 'pointer', borderRadius: 16, overflow: 'hidden', background: 'var(--color-surface-2)' }}
-                  >
-                    {(bld.image_url || bld.display_cover_url) ? (
-                      <img
-                        src={bld.image_url || bld.display_cover_url}
-                        alt={bld.name || ''}
-                        loading="lazy"
-                        style={{ width: '100%', aspectRatio: '4 / 5', objectFit: 'cover', display: 'block' }}
-                      />
-                    ) : (
-                      <div style={{ width: '100%', aspectRatio: '4 / 5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <BuildingIconEmpty />
-                      </div>
-                    )}
-                    <div style={{ padding: '10px 12px 12px' }}>
-                      <p style={{
-                        margin: 0, fontSize: 14, fontWeight: 700,
-                        color: 'var(--color-text)', lineHeight: 1.3,
-                        display: '-webkit-box', WebkitLineClamp: 2,
-                        WebkitBoxOrient: 'vertical', overflow: 'hidden',
-                      }}>
-                        {bld.name || bld.canonical_bld_id}
-                      </p>
-                      {bld.architect_names?.length > 0 && (
-                        <p style={{
-                          margin: '4px 0 0', fontSize: 12, color: 'var(--color-text-muted)',
-                          fontWeight: 500, lineHeight: 1.4,
-                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                        }}>
-                          {bld.architect_names.join(', ')}
-                        </p>
-                      )}
-                    </div>
-                  </div>
+                  />
                 ))}
               </div>
             )}
@@ -1128,34 +1067,12 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                 ))}
               </div>
             ) : !works || works.length === 0 ? (
-              <div style={{
-                display: 'flex', flexDirection: 'column',
-                alignItems: 'center', justifyContent: 'center',
-                padding: '80px 20px', gap: 16, textAlign: 'center',
-              }}>
-                <p style={{ color: 'var(--color-text)', fontSize: 16, fontWeight: 600, margin: 0 }}>
-                  아직 업로드한 작품이 없어요
-                </p>
-                {isMe && (
-                  <p style={{ color: 'var(--color-text-muted)', fontSize: 13, margin: 0 }}>
-                    본인의 건축 작품을 올려보세요
-                  </p>
-                )}
-                {isMe && (
-                  <button
-                    type="button"
-                    onClick={() => navigate('/upload')}
-                    style={{
-                      marginTop: 8, padding: '10px 24px', borderRadius: 20,
-                      background: 'var(--color-text)', color: 'var(--color-bg)',
-                      border: 'none', cursor: 'pointer',
-                      fontSize: 14, fontWeight: 600, fontFamily: 'inherit',
-                    }}
-                  >
-                    작품 업로드
-                  </button>
-                )}
-              </div>
+              <EmptyState
+                title="아직 업로드한 작품이 없어요"
+                body={isMe ? '본인의 건축 작품을 올려보세요' : undefined}
+                actionLabel={isMe ? '작품 업로드' : undefined}
+                onAction={isMe ? () => navigate('/upload') : undefined}
+              />
             ) : (
               <div style={{
                 display: 'grid',

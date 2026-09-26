@@ -5,11 +5,14 @@ import { useTranslation } from '../i18n/index.js'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import PageTopControls from '../components/PageTopControls.jsx'
 import PageBackButton from '../components/PageBackButton.jsx'
-import s from './LikedProjectsPage.module.css'
+import PhotoTile from '../components/PhotoTile.jsx'
 
 /**
  * LikedProjectsPage — grid of buildings the user right-swiped in Discovery.
  * Card style mirrors BuildingTile in BoardDetailPage (§3.5.1 + §3.5.2 RICH PATTERN).
+ * UI-CONSISTENCY-B Phase 2b: the local `LikedBuildingCard` is now the shared
+ * `PhotoTile` component (identical 4:5/radius-lg overlay tile, extracted
+ * so LikedProjectsPage and UserProfilePage's Liked tab share one card).
  */
 function LikedBuildingCard({ building }) {
   const navigate = useNavigate()
@@ -19,73 +22,12 @@ function LikedBuildingCard({ building }) {
   const imageUrl = building.image_url || ''
 
   return (
-    <div
-      onClick={() => { if (buildingId) navigate('/buildings/' + buildingId) }}
-      className={s.card}
-      style={{
-        position: 'relative',
-        aspectRatio: '4 / 5',
-        borderRadius: 20,
-        overflow: 'hidden',
-        cursor: buildingId ? 'pointer' : 'default',
-        background: 'var(--color-surface)',
-        boxShadow: '0 10px 25px rgba(0,0,0,0.3)',
-        userSelect: 'none',
-      }}
-    >
-      {imageUrl && (
-        <img
-          src={imageUrl}
-          alt={title}
-          loading="lazy"
-          style={{
-            position: 'absolute',
-            inset: 0,
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
-            display: 'block',
-          }}
-        />
-      )}
-
-      {/* §3.5.1 mandatory bottom gradient overlay */}
-      <div
-        aria-hidden="true"
-        style={{
-          position: 'absolute',
-          inset: 0,
-          background: 'linear-gradient(to top, rgba(0,0,0,0.93) 0%, rgba(0,0,0,0.4) 50%, transparent 100%)',
-          pointerEvents: 'none',
-        }}
-      />
-
-      {/* Card text overlay */}
-      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '16px 18px 20px' }}>
-        <h4 style={{
-          color: '#fff',
-          fontSize: 16,
-          fontWeight: 700,
-          margin: '0 0 3px',
-          lineHeight: 1.3,
-          display: '-webkit-box',
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: 'vertical',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-        }}>
-          {title}
-        </h4>
-        <p style={{
-          color: 'rgba(255,255,255,0.55)',
-          fontSize: 12,
-          fontStyle: 'italic',
-          margin: 0,
-        }}>
-          Building
-        </p>
-      </div>
-    </div>
+    <PhotoTile
+      imageUrl={imageUrl}
+      title={title}
+      subtitle="Building"
+      onClick={buildingId ? () => navigate('/buildings/' + buildingId) : undefined}
+    />
   )
 }
 

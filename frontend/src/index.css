@@ -66,21 +66,13 @@ body {
   40%           { transform: scale(1); }
 }
 
-/* -- Skeleton shimmer ----------------------------------------------------- */
-@keyframes shimmer {
-  0%   { background-position: -200% 0; }
-  100% { background-position:  200% 0; }
-}
-
+/* -- Skeleton (static, no shimmer per DESIGN.md §8.8) ---------------------- */
+/* Class name kept as-is (16 call sites across the app) — only the animation
+ * is removed; DESIGN.md §8.8 "No shimmer animation (performance cost +
+ * unrelated to the Vibe keywords)." See also components/Skeleton.jsx, the
+ * new shared component for future adoptions. */
 .skeleton-shimmer {
-  background: linear-gradient(
-    90deg,
-    var(--color-surface)   0%,
-    var(--color-surface-2) 50%,
-    var(--color-surface)   100%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.6s ease-in-out infinite;
+  background: var(--color-surface-2);
 }
 
 /* -- Card-language skeleton pulse (business-card style loading blocks) ---- */

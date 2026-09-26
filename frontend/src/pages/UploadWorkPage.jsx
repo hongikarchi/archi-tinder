@@ -21,6 +21,7 @@ import { useTranslation } from '../i18n/index.js'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import PageTopControls from '../components/PageTopControls.jsx'
 import PageBackButton from '../components/PageBackButton.jsx'
+import PageTitle from '../components/PageTitle.jsx'
 import s from './UploadWorkPage.module.css'
 
 // Matches backend MAX_WORK_IMAGES — presign/finalize reject >10 images with a 400.
@@ -623,7 +624,7 @@ export default function UploadWorkPage({ onLogout }) {
       )}
 
       <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px 48px' }}>
-        <h1 className={s.headerTitle}>{t('uploadWork.header.title')}</h1>
+        <PageTitle>{t('uploadWork.header.title')}</PageTitle>
         {uploadState !== 'processing' && (
           <form onSubmit={handleSubmit} noValidate>
             {/* ── Drop zone ── */}
