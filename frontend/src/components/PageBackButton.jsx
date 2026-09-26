@@ -41,11 +41,12 @@ export default function PageBackButton({ onClick, label = 'Back', icon, style })
 
 const wrapStyle = {
   position: 'fixed',
-  top: 14,
-  left: 16,
+  top: 16,
+  left: 12,
   zIndex: 300,
-  width: 34,
-  height: 34,
+  width: 28,
+  height: 28,
+  padding: 0,
   borderRadius: '50%',
   background: 'var(--color-surface)',
   border: '1px solid var(--color-border-soft)',

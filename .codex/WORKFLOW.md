@@ -1,5 +1,10 @@
 # ArchiTinder — Workflow
 
+> **Retired 2026-09-19:** This document describes the old harness and is retained
+> for reference only. Its mandatory clone, agent, skill, and pipeline requirements
+> no longer apply. Work directly in the user-selected checkout; follow AGENTS.md
+> and CONTRIBUTING.md for the current Git/PR rules and verification requirements.
+
 > **Read this when:** you want to understand how the project is built — the
 > single Codex app session, its sub-agents, the skills it runs itself, the
 > session model, the pre-push gate, and the token-saving rules.

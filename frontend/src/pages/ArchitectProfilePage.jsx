@@ -257,8 +257,8 @@ export default function ArchitectProfilePage({ onLogout }) {
         type="button"
         aria-label={t('architect.share')}
         style={{
-          position: 'fixed', top: 58, left: 16, zIndex: 300,
-          width: 34, height: 34, minHeight: 0,
+          position: 'fixed', top: 50, left: 12, zIndex: 300,
+          width: 28, height: 28, minHeight: 0, padding: 0,
           borderRadius: '50%',
           background: 'var(--color-surface)',
           border: '1px solid var(--color-border-soft)',

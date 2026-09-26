@@ -529,8 +529,8 @@ export const locales = {
       },
       common: {
         back:   '뒤로',
-        langKo: '한국어',
-        langEn: 'ENGLISH',
+        langKo: '한',
+        langEn: 'EN',
       },
       dev: {
         button: 'Dev login',
@@ -1172,8 +1172,8 @@ export const locales = {
       },
       common: {
         back:   'Back',
-        langKo: '한국어',
-        langEn: 'ENGLISH',
+        langKo: '한',
+        langEn: 'EN',
       },
       dev: {
         button: 'Dev login',

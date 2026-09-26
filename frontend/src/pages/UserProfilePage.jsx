@@ -25,8 +25,9 @@ import { OfficeCard, SkeletonCard, BuildingIconEmpty } from './LikedOfficesPage.
 // badge anchors correctly; harmless no-op for the other three buttons.
 const topClusterBtnStyle = {
   position: 'relative',
-  width: 34,
-  height: 34,
+  width: 28,
+  height: 28,
+  padding: 0,
   borderRadius: '50%',
   background: 'var(--color-surface)',
   border: '1px solid var(--color-border-soft)',
@@ -498,8 +499,8 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
           by the design-port initiative — reused rather than re-authored). */}
       {isMe ? (
         <div style={{
-          position: 'fixed', top: 14, left: 16, zIndex: 300,
-          display: 'flex', gap: 8, alignItems: 'center',
+          position: 'fixed', top: 16, left: 12, zIndex: 300,
+          display: 'flex', gap: 6, alignItems: 'center',
         }}>
           {/* Notifications bell + unread badge (NOTIF-INAPP-1) */}
           <button
@@ -583,7 +584,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         <PageBackButton onClick={() => navigate(-1)} />
       )}
 
-      <PageLogoHeader padding="18px 16px 0" />
+      <PageLogoHeader padding="20px 16px 0" />
 
       {/* Unified responsive container (max-width 1100) */}
       <div style={{ position: 'relative', zIndex: 1, maxWidth: 1100, margin: '0 auto', padding: '32px 20px 40px' }}>

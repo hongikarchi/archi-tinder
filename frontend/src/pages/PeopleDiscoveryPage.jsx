@@ -14,6 +14,7 @@ import { getPeopleDiscovery } from '../api/people.js'
 import PersonCard from '../components/PersonCard.jsx'
 import { TYPE_CODES } from '../constants/personalityTypes.js'
 import PageTopControls from '../components/PageTopControls.jsx'
+import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import styles from './PeopleDiscoveryPage.module.css'
 
 const PRESET_FILTERS = [
@@ -130,11 +131,11 @@ export default function PeopleDiscoveryPage({ onLogout }) {
 
   return (
     <div className={styles.page}>
-      <PageTopControls onLogout={onLogout} />
+      <PageTopControls onLogout={onLogout} splitMobile />
 
       {/* Header — tab root, no back button (see DiscoveryPage convention) */}
       <header className={styles.header}>
-        <h1 className={styles.title}>사람 발견</h1>
+        <PageLogoHeader />
       </header>
 
       {/* Assessment prompt (no personality yet) */}

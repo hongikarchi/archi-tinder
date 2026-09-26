@@ -13,10 +13,12 @@
  * routed through i18n (mirrors the uppercase ARCHIBE wordmark elsewhere,
  * e.g. LoginPage / SwipePage fallback / CardSkeleton, which is also literal).
  */
-export default function PageLogoHeader({ padding = '18px 16px 6px', marginBottom = 0, style }) {
+// Discovery establishes the shared 20px top inset. Pages that already provide
+// that inset (Discovery, Swipe, Assessment) pass zero top padding here.
+export default function PageLogoHeader({ padding = '20px 16px 6px', marginBottom = 0, style }) {
   return (
-    <div style={{ textAlign: 'center', width: '100%', padding, boxSizing: 'border-box', ...style }}>
-      <h1 style={{ fontSize: 20, fontWeight: 700, margin: `0 0 ${marginBottom}px`, letterSpacing: '-0.01em' }}>
+    <div style={{ textAlign: 'center', width: '100%', flexShrink: 0, padding, boxSizing: 'border-box', ...style }}>
+      <h1 style={{ fontSize: 20, lineHeight: '24px', fontWeight: 700, margin: `0 0 ${marginBottom}px`, letterSpacing: '-0.01em' }}>
         <span style={{ color: 'var(--color-text)' }}>Arch</span>
         <span style={{ color: 'var(--accent-1)' }}>ibe</span>
       </h1>
