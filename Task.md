@@ -62,7 +62,7 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 리포트를 스와이프 사실 기반으로 재작성 (grilling 2026-09-25~26 결정, FULL-RECOMMEND-1 위에 스택 — `feature/algo-report-grounding`). 기존 `generate_persona_report`는 liked 6속성만 영어 프롬프트로 전송(언어 설정 무시, 싫어요 미사용).
 - 기준 = 보여준 카드(`Project.liked_ids` ∪ `disliked_ids`, 양쪽이면 like). 편중도 = 특징 있는 카드 like율 ÷ 없는 카드 like율, 양쪽 +1/+2 스무딩. 코퍼스 캐시 미사용.
 - 좋아요 사실: shown≥3, liked≥2, ratio≥1.5. 싫어요 사실: shown≥3, 넘김≥40%(≥80% "대부분"/≥40% "여러 번"), like ratio ≤1/1.5. 정렬: ratio 내림차순, 0.3 이내면 근거 수 많은 순, 축당 1개, 근거 80%+ 겹치면 1개, like 2~3 + dislike ≤1. 배수 0.5 단위 내림.
-- 출력: `pattern_paragraph`(신규, "보여드린 건물 중…"으로 시작, 사실 문구는 권장 틀(자연스러운 변형 허용), ~200자, 사실 없으면 생략) + `description`(취향 해석, 부드러운 추정, ~300자) + `persona_type`(1~2단어 경향명) + `one_liner`(태그 포함 구체문) — 사용자 언어; `dominant_*` 영어 유지; `taste_facts` 저장(비표시). 용어 한글 음차, 국가 한국어, 건축가 영어. 금지: "다른 사용자보다" 등 미계산 비교, 최상급, 성격 판단, 비하.
+- 출력: `pattern_paragraph`(신규, "보여드린 건물 중…"으로 시작, 사실 문구 틀 엄격(어미 연결만 허용, LLM 이탈은 검사 없이 수용), ~200자, 사실 없으면 생략) + `description`(취향 해석, 부드러운 추정, ~300자) + `persona_type`(1~2단어 경향명) + `one_liner`(태그 포함 구체문) — 사용자 언어; `dominant_*` 영어 유지; `taste_facts` 저장(비표시). 용어 한글 음차, 국가 한국어, 건축가 영어. 금지: "다른 사용자보다" 등 미계산 비교, 최상급, 성격 판단, 비하.
 - 규칙 위치: `services/_report_prompts.py`(문장), `settings.RECOMMENDATION` `report_*`(기준값), `docs/report-writing.md`(설명). 기존 리포트 유지, 재생성 시에만 신 방식. 공개 보드도 동일 문장.
 
 

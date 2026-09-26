@@ -126,7 +126,9 @@ def _ratio_display(ratio):
     """
     if not math.isfinite(ratio):
         return ratio
-    return math.floor(ratio / 0.5) * 0.5
+    stepped = math.floor(ratio / 0.5) * 0.5
+    # Whole steps as int so the prompt JSON says 2 (not 2.0) and the LLM writes "약 2배".
+    return int(stepped) if stepped.is_integer() else stepped
 
 
 def _overlap_ratio(ids_a, ids_b):

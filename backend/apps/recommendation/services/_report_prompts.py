@@ -108,36 +108,38 @@ from the input data -- not a vague mood sentence. Example shape: "노출
 - Use ONLY the facts given in the `facts` array -- never invent a tag,
   building, or comparison that isn't in that array.
 - Order: ALL "like" facts first, THEN the "dislike" fact (if present) last.
-- Like fact phrasing (per fact, `polarity: "like"`) -- these are PREFERRED
-  templates, not verbatim requirements; paraphrase for flowing prose as long
-  as you preserve (a) the direction (chosen more often), (b) the
-  `ratio_display` number UNCHANGED and un-invented, and (c) behaviour-only
-  language:
-  Korean (preferred): "<feature> 건물은 다른 건물보다 약 <ratio_display>배
+- Like fact phrasing (per fact, `polarity: "like"`) -- REQUIRED templates.
+  Use them exactly, word for word:
+  Korean (required): "<feature> 건물은 다른 건물보다 약 <ratio_display>배
   자주 고르셨어요."
-  English (preferred): "the ones with <feature> were chosen about
+  English (required): "the ones with <feature> were chosen about
   <ratio_display>x more often than the other buildings shown."
   EXCEPTION: if the fact's `others_rarely_liked` is true, do NOT state a
   multiplier -- say instead that buildings WITHOUT that feature were rarely
   chosen at all (no number needed for that fact).
 - Dislike fact phrasing (per fact, `polarity: "dislike"`, using its
-  `dislike_word`) -- also PREFERRED templates, paraphrasable as long as the
-  strength-word meaning ("mostly" = stronger than "often") is preserved and
-  no number is added:
-  Korean (preferred): dislike_word "mostly" -> "<feature> 건물은 대부분
-  넘기셨어요."; dislike_word "often" -> "<feature> 건물은 여러 번
-  넘기셨어요."
-  English (preferred): "The <feature> buildings shown were <dislike_word>
-  swiped past." (dislike_word is already the English word "mostly"/"often" --
-  use it, or a natural synonym of equivalent strength, as-is.)
+  `dislike_word`) -- REQUIRED strength words, exact wording, no substitutes:
+  Korean (required): dislike_word "mostly" -> use the word "대부분" (never
+  "자주", "많이", "종종", or any other synonym) -> "<feature> 건물은 대부분
+  넘기셨어요."; dislike_word "often" -> use the word "여러 번" (never a
+  synonym) -> "<feature> 건물은 여러 번 넘기셨어요."
+  English (required): dislike_word "mostly" -> use the word "mostly" exactly
+  -> "The <feature> buildings shown were mostly swiped past."; dislike_word
+  "often" -> use the word "often" exactly -> "The <feature> buildings shown
+  were often swiped past."
+- The ONLY adjustment allowed to the templates above is a verb-ending change
+  needed to join facts into one flowing paragraph (e.g. Korean "고르셨어요"
+  -> "고르셨고" when another fact follows, or prefixing "반면" before the
+  dislike fact). Do not otherwise reword, shorten, or substitute any word in
+  the templates.
 - Describe BEHAVIOUR only ("골랐어요", "넘기셨어요" / "chose", "swiped past").
   NEVER say the user "hates", "dislikes", or has an aversion to something --
-  swiping-behaviour language only, even when paraphrasing.
+  swiping-behaviour language only.
 - At most 2 numbers (ratio_display values) in the whole paragraph. If more
   than 2 like facts are given, state a multiplier for the top 2 only and
   mention any remaining fact qualitatively (no number). Never change or
   invent a ratio_display value, and never add a fact that is not in the
-  `facts` array -- paraphrasing applies to wording only, not to content.
+  `facts` array.
 - If the `facts` array is EMPTY, return `""` for pattern_paragraph -- do not
   pad with a generic sentence.
 
