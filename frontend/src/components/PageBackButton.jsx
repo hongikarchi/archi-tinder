@@ -1,3 +1,5 @@
+import FloatingIconButton from './FloatingIconButton.jsx'
+
 /**
  * PageBackButton — shared floating circular back button, top-left.
  *
@@ -16,14 +18,17 @@
  * `onClick` is passed through unchanged — this component owns layout only,
  * never the navigation behavior. Callers keep their existing handler
  * (`navigate(-1)`, a custom back guard, etc.) exactly as before.
+ *
+ * UI-CONSISTENCY-B Phase 2a: the circle chrome itself (28px visual / 44px
+ * hit area / colors) now lives in the shared `FloatingIconButton` — this
+ * component only owns the fixed top-left position, matching every other
+ * caller of that component.
  */
 export default function PageBackButton({ onClick, label = 'Back', icon, style }) {
   return (
-    <button
-      type="button"
+    <FloatingIconButton
       onClick={onClick}
-      aria-label={label}
-      className="pressable"
+      ariaLabel={label}
       style={{ ...wrapStyle, ...style }}
     >
       {icon || (
@@ -32,7 +37,7 @@ export default function PageBackButton({ onClick, label = 'Back', icon, style })
           <polyline points="12 19 5 12 12 5" />
         </svg>
       )}
-    </button>
+    </FloatingIconButton>
   )
 }
 
@@ -44,15 +49,4 @@ const wrapStyle = {
   top: 16,
   left: 12,
   zIndex: 300,
-  width: 28,
-  height: 28,
-  padding: 0,
-  borderRadius: '50%',
-  background: 'var(--color-surface)',
-  border: '1px solid var(--color-border-soft)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  color: 'var(--color-text-dim)',
-  cursor: 'pointer',
 }

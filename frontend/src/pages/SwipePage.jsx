@@ -11,6 +11,7 @@ import { useKeyboardSwipe } from '../hooks/useKeyboardSwipe.js'
 import { useTranslation } from '../i18n/index.js'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import PageTopControls from '../components/PageTopControls.jsx'
+import FloatingIconButton from '../components/FloatingIconButton.jsx'
 import {
   INK,
   MONO,
@@ -458,7 +459,7 @@ export default function SwipePage({
     // Show a brief inline prompt; no full-screen takeover.
     return (
       <div style={{
-        height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+        height: 'var(--page-height)',
         overflow: 'hidden',
         background: 'var(--color-bg)',
         display: 'flex',
@@ -470,25 +471,17 @@ export default function SwipePage({
         <PageTopControls onLogout={onLogout} />
 
         {/* Exit button */}
-        <button
+        <FloatingIconButton
           onClick={() => setShowExitConfirm(true)}
-          aria-label="Exit session"
-          style={{
-            position: 'absolute', top: 16, left: 12,
-            width: 28, height: 28, padding: 0, borderRadius: '50%',
-            background: 'var(--color-surface)',
-            border: '1px solid var(--color-border)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: 'var(--color-text-dim)', cursor: 'pointer',
-            zIndex: 10,
-          }}
+          ariaLabel="Exit session"
+          style={{ position: 'absolute', top: 16, left: 12, zIndex: 10 }}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="1 4 1 10 7 10" />
             <path d="M3.51 15a9 9 0 1 0 .49-4.95" />
           </svg>
-        </button>
+        </FloatingIconButton>
 
         {/* Header / confidence bar — Arch|ibe logo (DESIGN.md-mock parity, taste-swipe.html) */}
         <div style={{ textAlign: 'center', width: '100%' }}>
@@ -571,24 +564,16 @@ export default function SwipePage({
 
       <div style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center',
-        justifyContent: 'flex-start', height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))', overflow: 'hidden',
+        justifyContent: 'flex-start', height: 'var(--page-height)', overflow: 'hidden',
         background: 'var(--color-bg)', padding: '20px 16px',
         position: 'relative',
       }}>
 
         {/* F3 — Exit button, top-left floating (moved from right to avoid Logout button occlusion) */}
-        <button
+        <FloatingIconButton
           onClick={() => setShowExitConfirm(true)}
-          aria-label="Exit session"
-          style={{
-            position: 'absolute', top: 16, left: 12,
-            width: 28, height: 28, padding: 0, borderRadius: '50%',
-            background: 'var(--color-surface)',
-            border: '1px solid var(--color-border)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: 'var(--color-text-dim)', cursor: 'pointer',
-            zIndex: 10,
-          }}
+          ariaLabel="Exit session"
+          style={{ position: 'absolute', top: 16, left: 12, zIndex: 10 }}
         >
           {/* Restart / new-session icon */}
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
@@ -596,7 +581,7 @@ export default function SwipePage({
             <polyline points="1 4 1 10 7 10" />
             <path d="M3.51 15a9 9 0 1 0 .49-4.95" />
           </svg>
-        </button>
+        </FloatingIconButton>
 
         {/* Header — Arch|ibe logo (DESIGN.md-mock parity, taste-swipe.html) */}
         <div style={{ textAlign: 'center', width: '100%' }}>

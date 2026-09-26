@@ -3,7 +3,7 @@
    the viewport instead of bounding .content, so .content's overflow-y:auto never
    gets a scroll box and the overflowing feed is clipped unreachable. */
 .page {
-  height: calc(100vh - 64px);
+  height: var(--page-height);
   background: var(--color-bg);
   display: flex;
   flex-direction: column;

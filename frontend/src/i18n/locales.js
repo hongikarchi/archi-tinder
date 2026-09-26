@@ -6,6 +6,7 @@
 export const locales = {
   ko: {
     tabbar: {
+      nav:       '메인 내비게이션',
       discovery: '디스커버리',
       taste:     '취향',
       social:    '소셜',
@@ -652,6 +653,7 @@ export const locales = {
   },
   en: {
     tabbar: {
+      nav:       'Main navigation',
       discovery: 'Discovery',
       taste:     'Taste',
       social:    'Social',

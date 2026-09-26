@@ -6,7 +6,7 @@
 
 /* Scrollable wrapper — viewport-lock */
 .page {
-  height: calc(100vh - 64px);
+  height: var(--page-height);
   overflow-y: auto;
   background: var(--color-bg);
 }

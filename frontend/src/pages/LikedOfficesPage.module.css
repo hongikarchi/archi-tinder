@@ -1,35 +1,31 @@
 /*
  * LikedOfficesPage.module.css — building-carousel prev/next arrow buttons.
  * Fine-pointer only (mouse/trackpad): touch devices keep plain swipe per
- * DESIGN.md §4 (gesture-friendly). Chrome mirrors the shared 28px top-bar
- * round button (PageTopControls / PageBackButton), CSS Module because these
- * are interactive controls owning :hover (DESIGN.md §4 / §10.4).
+ * DESIGN.md §4 (gesture-friendly).
+ *
+ * UI-CONSISTENCY-B Phase 2a: the circle chrome (28px / hit-area / colors /
+ * hover) moved to the shared FloatingIconButton — this file only owns
+ * position + the touch-vs-fine-pointer visibility toggle. `position` and
+ * `display` are written as the double-class selector `.arrow.arrowPrev` /
+ * `.arrow.arrowNext` (specificity 2 classes) rather than a bare `.arrow`
+ * (1 class), because CSS-module injection order between two different
+ * component files is NOT guaranteed by import order, and `.arrow` alone
+ * would tie with FloatingIconButton's `.btn` (also 1 class) on `position`/
+ * `display` and could lose depending on load order — which would show the
+ * arrows on touch devices, a regression this rule must prevent.
  */
-.arrow {
+.arrow.arrowPrev,
+.arrow.arrowNext {
   display: none;
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border-radius: 50%;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border-soft);
-  align-items: center;
-  justify-content: center;
-  color: var(--color-text-dim);
-  cursor: pointer;
   z-index: 2;
-  transition: color var(--motion-fast) var(--motion-ease);
-}
-
-.arrow:hover {
-  color: var(--color-text);
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .arrow {
+  .arrow.arrowPrev,
+  .arrow.arrowNext {
     display: flex;
   }
 }

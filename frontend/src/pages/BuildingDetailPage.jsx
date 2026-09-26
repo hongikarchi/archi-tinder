@@ -165,7 +165,7 @@ export default function BuildingDetailPage({ onLogout }) {
 
   return (
     <div style={{
-      height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+      height: 'var(--page-height)',
       background: 'var(--color-bg)',
       color: 'var(--color-text)',
       overflowY: 'auto',

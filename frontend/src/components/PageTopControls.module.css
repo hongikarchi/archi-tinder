@@ -4,13 +4,18 @@
  * (removed in this change — MainLayout no longer owns its own top-right
  * cluster). FRONT-DESIGN-A1-HOVER: CSS :hover, not onMouseEnter/Leave style
  * mutation.
+ *
+ * UI-CONSISTENCY-B Phase 2a: the logout button now renders through the
+ * shared FloatingIconButton (base color/hover = var(--color-text-dim) ->
+ * var(--color-text), see FloatingIconButton.module.css). The red hover below
+ * must win over that base rule; CSS-module injection order between two
+ * different files is NOT guaranteed by import order, so this is scoped
+ * `.controls .logoutBtn:hover` (2 classes + pseudo) rather than a bare
+ * `.logoutBtn:hover` (1 class + pseudo) to win on specificity regardless of
+ * load order — same scoping pattern as `.controls button:focus-visible`
+ * below.
  */
-.logoutBtn {
-  color: var(--color-text-dim);
-  transition: color 0.2s;
-}
-
-.logoutBtn:hover {
+.controls .logoutBtn:hover {
   color: var(--color-destructive);
 }
 

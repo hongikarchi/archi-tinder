@@ -2,7 +2,7 @@
    설계 §7-2. 찜 -> 사람 발견 -> 팀 전환이 한 화면에서 일어난다. */
 
 .page {
-  height: calc(100vh - 64px);
+  height: var(--page-height);
   background: var(--color-bg);
   display: flex;
   flex-direction: column;

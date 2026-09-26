@@ -8,6 +8,7 @@ import { useTranslation } from '../i18n/index.js'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import PageTopControls from '../components/PageTopControls.jsx'
 import PageBackButton from '../components/PageBackButton.jsx'
+import FloatingIconButton from '../components/FloatingIconButton.jsx'
 
 function BuildingCard({ building, onClick, onSave, isSaved = false }) {
   const [imgLoaded, setImgLoaded] = useState(false)
@@ -238,7 +239,7 @@ export default function ArchitectProfilePage({ onLogout }) {
 
   return (
     <div style={{
-      height: 'calc(100vh - 64px)',
+      height: 'var(--page-height)',
       overflowY: 'auto',
       background: 'var(--color-bg)',
       paddingBottom: 'calc(80px + env(safe-area-inset-bottom, 0px))',
@@ -250,19 +251,16 @@ export default function ArchitectProfilePage({ onLogout }) {
       {/* Share — kept per task constraint (existing working control), but the
        * mock (architect.html) drops the sticky header entirely with no
        * relocation shown for it. NEEDS EYEBALL: stacked under the floating
-       * back button rather than a mock-specified spot. */}
-      <button
-        className={styles.iconBtn}
+       * back button rather than a mock-specified spot.
+       * zIndex 299 (one below PageBackButton's 300): the two buttons' 44px
+       * invisible hit areas overlap in a ~2px sliver (top:16/44 visual vs
+       * top:50/44 visual, gap 6). Keeping back's stacking above share's
+       * resolves that sliver toward "back" rather than an ambiguous
+       * mis-tap on "share" — see FRONT_MAKER report. */}
+      <FloatingIconButton
         onClick={handleShare}
-        type="button"
-        aria-label={t('architect.share')}
-        style={{
-          position: 'fixed', top: 50, left: 12, zIndex: 300,
-          width: 28, height: 28, minHeight: 0, padding: 0,
-          borderRadius: '50%',
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-border-soft)',
-        }}
+        ariaLabel={t('architect.share')}
+        style={{ position: 'fixed', top: 50, left: 12, zIndex: 299 }}
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <circle cx="18" cy="5" r="3" />
@@ -271,7 +269,7 @@ export default function ArchitectProfilePage({ onLogout }) {
           <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
           <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
         </svg>
-      </button>
+      </FloatingIconButton>
 
       {/* Loading state */}
       {isLoading && (

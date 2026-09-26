@@ -503,7 +503,7 @@ export default function DiscoveryPage({ showToast, onLogout }) {
     <div style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center',
       justifyContent: 'space-between',
-      height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+      height: 'var(--page-height)',
       overflow: 'hidden',
       background: 'var(--color-bg)',
       padding: '20px 16px',

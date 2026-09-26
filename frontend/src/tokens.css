@@ -77,8 +77,14 @@
   /* -- Safe-area ------------------------------------------------------------ */
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
 
-  /* -- Layout / control (Phase 1, 2026-09-26) -------------------------------- */
-  --tabbar-height: 64px;
+  /* -- Layout / control (Phase 1, 2026-09-26) --------------------------------
+   * tabbar-height: 56px (icon-only, DESIGN.md §3.3 "tabbar-height-icon-only")
+   * — Phase 2a (UI-CONSISTENCY-B) drops the TabBar's text labels, so the bar
+   * moves off the 64px "with label" value. DESIGN.md §3.3's own "value
+   * currently in use: 64" line is stale as of this change; syncing it is
+   * outside front-maker's write scope (DESIGN.md is admin-owned) — flagged in
+   * the PR description. */
+  --tabbar-height: 56px;
   --page-height: calc(100vh - var(--tabbar-height) - env(safe-area-inset-bottom, 0px));
   --icon-btn-size: 28px;  /* visual size of floating circle buttons */
   --icon-btn-hit:  44px;  /* min touch target — invisible expanded hit area */

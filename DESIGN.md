@@ -215,11 +215,12 @@ arrows, modal close, photo-hero buttons) — decided 2026-09-26:
 ```yaml
 tabbar-height-with-label: 64    # icon + keyword (current default)
 tabbar-height-icon-only:  56    # icon only
-tabbar-height:            64    # value currently in use
+tabbar-height:            56    # value currently in use (icon-only, 2026-09-26)
 ```
-> ⚠️ If nav labels are removed during development, change `tabbar-height` to 56.
+> Labels removed 2026-09-26 (Instagram-style icon-only bar, active = filled icon,
+> 취향 = magnifying glass) → `tabbar-height` 56.
 
-Tokens: `--tabbar-height` (64px) and `--page-height`
+Tokens: `--tabbar-height` (56px) and `--page-height`
 (`calc(100vh - var(--tabbar-height) - env(safe-area-inset-bottom, 0px))`).
 Every page shell uses `--page-height` — never a hand-written
 `calc(100vh - 64px)` (the literal forgets the iOS safe-area inset and clips).
@@ -382,7 +383,7 @@ directly below Theme.
 ArchiTinder is mobile-first but must also behave naturally on desktop.
 
 ### 7.1 Mobile (≤ 768px)
-- Bottom-fixed nav bar (디스커버리 · 취향 · 소셜 · 프로필, 4-column grid).
+- Bottom-fixed nav bar, icon-only (디스커버리 · 취향(돋보기) · 소셜 · 프로필, 4-column grid; labels as aria-label).
 - Page left/right padding 16px.
 - Card grid: 2 columns.
 - iOS Safe Area support (`padding-bottom: env(safe-area-inset-bottom)`).
@@ -798,7 +799,7 @@ Type color tints:
 | Implementation | hybrid (inline + CSS variables) | §4 ✅ |
 | Accent policy | **themed (CSS variables)** | §1.2 ✅ |
 | Responsive | **mobile-first + desktop left-sidebar re-layout** | §7 ✅ |
-| TabBar Height | **64px (with label) / 56px (icon only)** | §3.3 ✅ |
+| TabBar | **icon-only Instagram style, 56px, active = filled icon** (2026-09-26) | §3.3 ✅ |
 | Border Radius | **tokenized by role: photos lg 20 · UI md 12 · inner sm 8 · sheet xl 24 · chips pill** (2026-09-26) | §3.1 ✅ |
 | Floating circle button | **28px visual / 44px hit area / 16px icon stroke 2, one shared component** (2026-09-26) | §3.2 ✅ |
 | Modal backdrop | **`--color-scrim-modal` 0.4; 0.65 family = photo overlay only** (2026-09-26) | §1.4 ✅ |

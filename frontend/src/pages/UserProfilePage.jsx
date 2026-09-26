@@ -16,29 +16,9 @@ import PentagonChart from '../components/PentagonChart.jsx'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import PageTopControls from '../components/PageTopControls.jsx'
 import PageBackButton from '../components/PageBackButton.jsx'
+import FloatingIconButton from '../components/FloatingIconButton.jsx'
 import { useUnreadNotifications } from '../hooks/useUnreadNotifications.js'
 import { OfficeCard, SkeletonCard, BuildingIconEmpty } from './LikedOfficesPage.jsx'
-
-// Floating top-left cluster button (isMe: bell/share/settings) — mock
-// parity with PageBackButton's shipped shape (DESIGN.md §4 inline layout
-// values). `position: relative` so the bell's absolutely-positioned unread
-// badge anchors correctly; harmless no-op for the other two buttons.
-// Logout moved to PageTopControls (top-right), like every other page —
-// 2026-09-26 quickfix, was previously duplicated in this left cluster.
-const topClusterBtnStyle = {
-  position: 'relative',
-  width: 28,
-  height: 28,
-  padding: 0,
-  borderRadius: '50%',
-  background: 'var(--color-surface)',
-  border: '1px solid var(--color-border-soft)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  color: 'var(--color-text-dim)',
-  cursor: 'pointer',
-}
 
 // Hidden 2026-09-26 per user (design noise); functionality kept, delete
 // entirely if no issue surfaces.
@@ -468,7 +448,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
   if (loading) {
     return (
       <div style={{
-        height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+        height: 'var(--page-height)',
         background: 'var(--color-bg)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         color: 'var(--color-text-dim)', fontSize: 14,
@@ -481,7 +461,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
   if (error || !user) {
     return (
       <div style={{
-        height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+        height: 'var(--page-height)',
         background: 'var(--color-bg)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         color: 'var(--color-text-dim)', fontSize: 14,
@@ -493,7 +473,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
 
   return (
     <div style={{
-      height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+      height: 'var(--page-height)',
       overflowY: 'auto',
       background: 'var(--color-bg)',
       paddingBottom: 'calc(100px + env(safe-area-inset-bottom))'
@@ -511,14 +491,13 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
           position: 'fixed', top: 16, left: 12, zIndex: 300,
           display: 'flex', gap: 6, alignItems: 'center',
         }}>
-          {/* Notifications bell + unread badge (NOTIF-INAPP-1) */}
-          <button
-            type="button"
+          {/* Notifications bell + unread badge (NOTIF-INAPP-1). FloatingIconButton's
+              own .btn class already sets position:relative, which is what the
+              badge below anchors to — no extra positioning style needed. */}
+          <FloatingIconButton
             onClick={() => navigate('/notifications')}
-            aria-label={t('profile.notifications')}
+            ariaLabel={t('profile.notifications')}
             title={t('profile.notifications')}
-            className="pressable"
-            style={topClusterBtnStyle}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path>
@@ -537,16 +516,13 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                 {unreadBadgeLabel}
               </span>
             )}
-          </button>
+          </FloatingIconButton>
 
           {/* Share — mock's share-network glyph, SVG paths verbatim from profile.html */}
-          <button
-            type="button"
+          <FloatingIconButton
             onClick={() => setShareOpen(true)}
-            aria-label={t('profile.shareCard')}
+            ariaLabel={t('profile.shareCard')}
             title={t('profile.shareCard')}
-            className="pressable"
-            style={topClusterBtnStyle}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="6" cy="12" r="3"></circle>
@@ -554,22 +530,19 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
               <circle cx="18" cy="18" r="3"></circle>
               <path d="M8.6 10.5l6.8-3M8.6 13.5l6.8 3"></path>
             </svg>
-          </button>
+          </FloatingIconButton>
 
           {/* Settings */}
-          <button
-            type="button"
+          <FloatingIconButton
             onClick={() => navigate('/settings')}
-            aria-label={t('profile.settings')}
+            ariaLabel={t('profile.settings')}
             title={t('profile.settings')}
-            className="pressable"
-            style={topClusterBtnStyle}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="3"></circle>
               <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33h0a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51h0a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v0a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"></path>
             </svg>
-          </button>
+          </FloatingIconButton>
         </div>
       ) : (
         <PageBackButton onClick={() => navigate(-1)} />

@@ -681,7 +681,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
 
   return (
     <div style={{
-      height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))', overflow: 'hidden', background: 'var(--color-bg)',
+      height: 'var(--page-height)', overflow: 'hidden', background: 'var(--color-bg)',
       display: 'flex', flexDirection: 'column',
     }}>
 

@@ -70,7 +70,7 @@ export default function MainLayout({
         <>
           <PageTopControls onLogout={onLogout} />
           <div style={{
-            height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))', background: 'var(--color-bg)', display: 'flex',
+            height: 'var(--page-height)', background: 'var(--color-bg)', display: 'flex',
             flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
             gap: 12, padding: 24,
           }}>

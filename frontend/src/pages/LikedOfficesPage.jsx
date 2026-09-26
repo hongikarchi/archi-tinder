@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getUserSavedStudios, getArchitectProfile } from '../api/client.js'
 import { useTranslation } from '../i18n/index.js'
+import FloatingIconButton from '../components/FloatingIconButton.jsx'
 import styles from './LikedOfficesPage.module.css'
 
 /* ── Placeholder SVG icons ──────────────────────────────────────────────── */
@@ -166,28 +167,26 @@ export function BuildingCarousel({ buildings, fallbackUrl, altText, onNavigate }
       {/* Mouse-only prev/next affordance (DESIGN.md §4 gesture-friendly —
           touch devices keep plain swipe, see .module.css hover/pointer query). */}
       {canPrev && (
-        <button
-          type="button"
+        <FloatingIconButton
           onClick={e => { e.stopPropagation(); scrollByStep(-1) }}
-          aria-label={t('profile.prevImage')}
-          className={`pressable ${styles.arrow} ${styles.arrowPrev}`}
+          ariaLabel={t('profile.prevImage')}
+          className={`${styles.arrow} ${styles.arrowPrev}`}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="15 18 9 12 15 6" />
           </svg>
-        </button>
+        </FloatingIconButton>
       )}
       {canNext && (
-        <button
-          type="button"
+        <FloatingIconButton
           onClick={e => { e.stopPropagation(); scrollByStep(1) }}
-          aria-label={t('profile.nextImage')}
-          className={`pressable ${styles.arrow} ${styles.arrowNext}`}
+          ariaLabel={t('profile.nextImage')}
+          className={`${styles.arrow} ${styles.arrowNext}`}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="9 18 15 12 9 6" />
           </svg>
-        </button>
+        </FloatingIconButton>
       )}
     </div>
   )
@@ -344,7 +343,7 @@ export default function LikedOfficesPage() {
       `}</style>
 
       <div style={{
-        height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+        height: 'var(--page-height)',
         overflowY: 'auto',
         background: 'var(--color-bg)',
         paddingBottom: 'calc(80px + env(safe-area-inset-bottom, 0px))',

@@ -256,7 +256,7 @@ export default function ResultsPage({ projects, setProjects, onReportGenerated, 
 
   return (
     <div style={{
-      height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+      height: 'var(--page-height)',
       overflowY: 'auto',
       background: 'var(--color-bg)',
       paddingBottom: 'calc(88px + env(safe-area-inset-bottom, 0px))',

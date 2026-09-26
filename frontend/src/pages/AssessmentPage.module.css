@@ -1,5 +1,5 @@
 .page {
-  height: calc(100vh - 64px - env(safe-area-inset-bottom, 0px));
+  height: var(--page-height);
   overflow: hidden;
   background: var(--color-bg);
   display: flex;

@@ -2,6 +2,7 @@ import { useTheme } from '../hooks/useTheme.js'
 import { useLanguage } from '../hooks/useLanguage.js'
 import { useTranslation } from '../i18n/index.js'
 import { discoveryNavigationGuard } from '../utils/discoveryGuard.js'
+import FloatingIconButton from './FloatingIconButton.jsx'
 import styles from './PageTopControls.module.css'
 
 /**
@@ -109,20 +110,18 @@ export default function PageTopControls({ onLogout, splitMobile = false }) {
 
       {/* Logout — only when a caller has one to wire up */}
       {onLogout && (
-        <button
-          type="button"
+        <FloatingIconButton
           onClick={handleLogoutClick}
           title="Log out"
-          aria-label="Log out"
-          className={`pressable ${styles.logoutBtn}`}
-          style={logoutStyle}
+          ariaLabel="Log out"
+          className={styles.logoutBtn}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
             <polyline points="16 17 21 12 16 7" />
             <line x1="21" y1="12" x2="9" y2="12" />
           </svg>
-        </button>
+        </FloatingIconButton>
       )}
     </div>
   )
@@ -178,16 +177,4 @@ function tgStyle(selected) {
 // Mock .tg.tgi icon-only variant — same base, tighter horizontal padding.
 function tgIconStyle(selected) {
   return { ...tgStyle(selected), padding: '0 6px' }
-}
-
-const logoutStyle = {
-  width: 28,
-  height: 28,
-  borderRadius: '50%',
-  background: 'var(--color-surface)',
-  border: '1px solid var(--color-border-soft)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  cursor: 'pointer',
 }
