@@ -3,99 +3,6 @@ import { generateReport, generateReportImage } from '../api/projects.js'
 import styles from '../pages/BoardReportPage.module.css'
 import { useTranslation } from '../i18n/index.js'
 
-/* ── RadarChart ─────────────────────────────────────────────────────────── */
-function RadarChart({ scores }) {
-  const { t } = useTranslation()
-  const cx = 100, cy = 100, R = 80
-  const axes = [
-    { key: 'form' },
-    { key: 'materiality' },
-    { key: 'scale' },
-    { key: 'energy' },
-    { key: 'tradition' },
-  ]
-  const N = axes.length
-  const angle = (i) => (Math.PI * 2 * i) / N - Math.PI / 2
-
-  const toXY = (i, r) => ({
-    x: cx + r * Math.cos(angle(i)),
-    y: cy + r * Math.sin(angle(i)),
-  })
-
-  const gridLevels = [0.25, 0.5, 0.75, 1.0]
-
-  const gridPoints = (level) =>
-    axes.map((_, i) => toXY(i, R * level))
-      .map(p => `${p.x},${p.y}`)
-      .join(' ')
-
-  // score -1.0~1.0 → r 0~R
-  const valuePoints = axes
-    .map((ax, i) => {
-      const s = scores[ax.key] ?? 0
-      const r = R * (s + 1.0) / 2.0
-      return toXY(i, r)
-    })
-    .map(p => `${p.x},${p.y}`)
-    .join(' ')
-
-  return (
-    <svg viewBox="0 0 200 200" width="200" height="200">
-      {/* 그리드 */}
-      {gridLevels.map(level => (
-        <polygon
-          key={level}
-          points={gridPoints(level)}
-          fill="none"
-          stroke="var(--color-border-soft)"
-          strokeWidth="0.8"
-        />
-      ))}
-      {/* 축선 */}
-      {axes.map((_, i) => {
-        const outer = toXY(i, R)
-        return (
-          <line
-            key={i}
-            x1={cx} y1={cy}
-            x2={outer.x} y2={outer.y}
-            stroke="var(--color-border-soft)"
-            strokeWidth="0.8"
-          />
-        )
-      })}
-      {/* 값 폴리곤 */}
-      <polygon
-        points={valuePoints}
-        style={{
-          fill: 'color-mix(in srgb, var(--accent-1) 20%, transparent)',
-          stroke: 'var(--accent-1)',
-        }}
-        strokeWidth="1.5"
-      />
-      {/* 레이블 */}
-      {axes.map((ax, i) => {
-        const labelR = R + 16
-        const pos = toXY(i, labelR)
-        return (
-          <text
-            key={ax.key}
-            x={pos.x}
-            y={pos.y}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            fontSize="9"
-            fill="var(--color-text-muted)"
-            fontWeight="600"
-          >
-            {t(`persona.axis.${ax.key}`)}
-          </text>
-        )
-      })}
-    </svg>
-  )
-}
-
 /* ── Constants ──────────────────────────────────────────────────────────── */
 const DEFAULT_AXES = { form: 0, materiality: 0, scale: 0, energy: 0, tradition: 0 }
 
@@ -301,11 +208,6 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
       }}>
         {t('persona.tasteSection')}
       </h2>
-
-      {/* 레이더 차트 */}
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>
-        <RadarChart scores={scores} />
-      </div>
 
       {/* 양극 스펙트럼 바 */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 24 }}>
