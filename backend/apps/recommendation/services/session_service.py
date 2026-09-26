@@ -28,7 +28,7 @@ from .. import services  # noqa: import MODULE — patch path apps.recommendatio
 from ..models import Project, AnalysisSession
 from ..caches import evict_projects_list, evict_user_profile_detail, evict_project_detail
 from ..perf_timing import stage
-from ..views._shared import _progress
+from ..views._shared import _progress, _liked_id_only
 from .hydration import hydrate_like_vectors
 from .swipe_service import _build_action_card
 
@@ -680,8 +680,28 @@ def get_session_state(request, session):
 
 def get_session_result(session):
     """Orchestrate session-result computation. Verbatim from SessionResultView.get."""
-    # Liked buildings (batch fetch — cache-aware, preserves order, applies is_publishable gate)
-    liked_ids   = list(session.swipes.filter(action='like').values_list('canonical_bld_id', flat=True))
+    # Liked buildings (batch fetch — cache-aware, preserves order, applies is_publishable gate).
+    #
+    # BACK-RECOMMEND-7: liked_images is sourced from session.project.liked_ids
+    # (the board's like list — the SAME source the persona report uses), not
+    # from this session's own SwipeEvent rows. A Discovery -> Taste promotion
+    # reuses the draft Project (and its liked_ids), so likes swiped during
+    # Discovery have no SwipeEvent row in this session and were previously
+    # dropped from the result, disagreeing with the persona report. Falls
+    # back to the old session-swipe query if session.project is unset
+    # (defensive — should not happen for a real session).
+    if session.project is not None:
+        liked_ids = _liked_id_only(session.project.liked_ids)
+    else:
+        liked_ids = list(session.swipes.filter(action='like').values_list('canonical_bld_id', flat=True))
+    # Dedupe while preserving stored order (first occurrence wins).
+    _seen_liked = set()
+    _deduped_liked_ids = []
+    for _lid in liked_ids:
+        if _lid not in _seen_liked:
+            _seen_liked.add(_lid)
+            _deduped_liked_ids.append(_lid)
+    liked_ids   = _deduped_liked_ids
     liked_cards = engine.get_buildings_by_ids(liked_ids)
     liked_cards = [c for c in liked_cards if c]
 
