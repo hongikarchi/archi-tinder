@@ -4,10 +4,12 @@
  * Load order: tokens.css BEFORE index.css (see main.jsx).
  *
  * Structure:
- *   :root          — invariant tokens (radius, motion, type, font) + GitHub Light colors (default theme)
- *   @media         — mobile type-scale override of :root
+ *   :root          — invariant tokens (radius, motion, type, font, layout) + GitHub Light colors (default theme)
  *   [data-theme]   — color-only overrides for the 3 non-default themes
  *   [data-font]    — font-family override for noto-serif
+ *
+ * Phase 1 (UI-consistency, 2026-09-26): type scale is now a single 5-step
+ * scale with NO mobile media-query override (was desktop/mobile split).
  *
  * Derived-token math (for the ~16 "spirit" tokens):
  *   nav-bg      = bg at ~0.97 alpha over itself  → rgba(R,G,B, 0.97)
@@ -33,7 +35,17 @@
  * [data-theme="..."] blocks below already override on top of this one via
  * normal CSS cascade/specificity, so this addition is additive-only. */
 :root, [data-theme="github-light"] {
-  /* -- Border radius -------------------------------------------------------- */
+  /* -- Border radius ---------------------------------------------------------
+   * Roles (DESIGN.md §3.1) — pick by what the element IS, not by feel:
+   *   lg   (20)  — photo cards / swipe cards / tiles
+   *   md   (12)  — panels, surface cards, buttons incl. primary CTA, inputs
+   *   sm   (8)   — small inner elements (badges, skeleton lines)
+   *   xl   (24)  — bottom-sheet top corners
+   *   pill (999) — chips / tags / segments only
+   * Off-scale hardcoded values are retired — migrate on touch: 10px, 14px → md;
+   * 16px → lg; 4px, 6px → sm. (Migration itself is Phase 2/3, not this
+   * token-definition PR.)
+   */
   --radius-sm:   8px;
   --radius-md:   12px;
   --radius-lg:   20px;
@@ -48,20 +60,29 @@
   --motion-ease:     cubic-bezier(0.4, 0, 0.2, 1);
   --motion-ease-out: cubic-bezier(0, 0, 0.2, 1);
 
-  /* -- Type scale: desktop (≥769px) ---------------------------------------- */
-  --fs-h1:      48px;
-  --fs-h2:      30px;
-  --fs-body:    18px;
-  --fs-caption: 14px;
+  /* -- Type scale: single 5-step scale, no mobile override (Phase 1, 2026-09-26) */
+  --fs-title:    24px;  /* page title */
+  --fs-heading:  20px;  /* section / modal title */
+  --fs-emphasis: 16px;  /* card title, emphasized text */
+  --fs-body:     14px;  /* body */
+  --fs-caption:  12px;  /* caption, label, meta, tab/chip label */
 
-  /* -- Font weights --------------------------------------------------------- */
-  --fw-body:    400;
-  --fw-caption: 500;
-  --fw-h2:      600;
-  --fw-h1:      700;
+  /* -- Font weights -----------------------------------------------------------
+   * 800/900 banned — DESIGN.md §2.5 caps weight at 700. */
+  --fw-regular:  400;
+  --fw-medium:   500;
+  --fw-semibold: 600;
+  --fw-bold:     700;
 
   /* -- Safe-area ------------------------------------------------------------ */
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+
+  /* -- Layout / control (Phase 1, 2026-09-26) -------------------------------- */
+  --tabbar-height: 64px;
+  --page-height: calc(100vh - var(--tabbar-height) - env(safe-area-inset-bottom, 0px));
+  --icon-btn-size: 28px;  /* visual size of floating circle buttons */
+  --icon-btn-hit:  44px;  /* min touch target — invisible expanded hit area */
+  --icon-size:     16px;  /* icon inside floating circle buttons, stroke 2 */
 
   /* -- Font family (default: IBM Plex Sans KR) ----------------------------- */
   --font-family: "IBM Plex Sans KR", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "맑은 고딕", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
@@ -108,21 +129,20 @@
   --color-tag-border:       rgba(0,0,0,0.15);
   --color-tag-label:        rgba(0,0,0,0.40);
 
-  /* Scrim (content-over-content darkening — modal backdrops, photo-caption gradients) */
+  /* Scrim — photo overlay / white-text-on-photo gradients (NOT modal
+   * backdrops → use --color-scrim-modal below) */
   --color-scrim-strong: rgba(0,0,0,0.93);
   --color-scrim:        rgba(0,0,0,0.65);
   --color-scrim-soft:   rgba(0,0,0,0.55);
   --color-scrim-faint:  rgba(0,0,0,0.12);
-}
 
-/* ── Mobile type-scale override (≤768px) ───────────────────────────────── */
-@media (max-width: 768px) {
-  :root {
-    --fs-h1:      32px;
-    --fs-h2:      24px;
-    --fs-body:    16px;
-    --fs-caption: 13px;
-  }
+  /* --color-scrim-modal — Phase 1 (2026-09-26): dedicated flat backdrop for
+   * modal / bottom-sheet overlays (DESIGN.md §8.10 sheet-backdrop), distinct
+   * from the --color-scrim* family above which is tuned for content-over-photo
+   * legibility (white text on real project imagery, alpha 0.12-0.93). This
+   * token stays a flat 0.4 across neutral themes; only the purple-tinted theme
+   * shifts its hue (see that theme's block below). */
+  --color-scrim-modal: rgba(0,0,0,0.4);
 }
 
 /* ── GitHub Dark ────────────────────────────────────────────────────────── */
@@ -167,6 +187,9 @@
   --color-scrim:        rgba(0,0,0,0.78);
   --color-scrim-soft:   rgba(0,0,0,0.68);
   --color-scrim-faint:  rgba(0,0,0,0.18);
+
+  /* --color-scrim-modal — flat modal/sheet backdrop (see :root comment) */
+  --color-scrim-modal: rgba(0,0,0,0.4);
 }
 
 /* ── Ayu Light ──────────────────────────────────────────────────────────── */
@@ -207,11 +230,15 @@
   --color-tag-border:       rgba(0,0,0,0.12);
   --color-tag-label:        rgba(0,0,0,0.38);
 
-  /* Scrim (content-over-content darkening — modal backdrops, photo-caption gradients) */
+  /* Scrim — photo overlay / white-text-on-photo gradients (NOT modal
+   * backdrops → use --color-scrim-modal below) */
   --color-scrim-strong: rgba(0,0,0,0.93);
   --color-scrim:        rgba(0,0,0,0.65);
   --color-scrim-soft:   rgba(0,0,0,0.55);
   --color-scrim-faint:  rgba(0,0,0,0.12);
+
+  /* --color-scrim-modal — flat modal/sheet backdrop (see :root comment) */
+  --color-scrim-modal: rgba(0,0,0,0.4);
 }
 
 /* ── SynthWave '84 ──────────────────────────────────────────────────────── */
@@ -261,6 +288,10 @@
   --color-scrim:        rgba(26,22,37,0.80);
   --color-scrim-soft:   rgba(26,22,37,0.70);
   --color-scrim-faint:  rgba(26,22,37,0.20);
+
+  /* --color-scrim-modal — flat modal/sheet backdrop, tinted like the rest of
+   * this theme's scrim family (see :root comment for the general policy). */
+  --color-scrim-modal: rgba(26,22,37,0.40);
 }
 
 /* ── Font override: Noto Serif KR ───────────────────────────────────────── */

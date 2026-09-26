@@ -33,7 +33,11 @@
   border: 0;
   border-radius: var(--radius-md);
   font-family: inherit;
-  font-size: var(--fs-caption);
+  /* Phase 1 token migration (2026-09-26): --fs-caption used to be 14px
+   * (mobile 13px) and read fine at CTA scale. The new 5-step scale makes
+   * --fs-caption 12px, which would visibly shrink this button's label —
+   * pinned to --fs-body (14px) instead so this PR causes no visual change. */
+  font-size: var(--fs-body);
   font-weight: 600;
   cursor: pointer;
   text-decoration: none;

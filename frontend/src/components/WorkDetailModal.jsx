@@ -157,7 +157,7 @@ export default function WorkDetailModal({ uploadId, onClose }) {
               onClick={onClose}
               style={{
                 padding: '10px 24px',
-                borderRadius: 'calc(var(--radius-md) * 1px)',
+                borderRadius: 'var(--radius-md)',
                 border: '1px solid var(--color-border)',
                 background: 'var(--color-surface)',
                 color: 'var(--color-text)',

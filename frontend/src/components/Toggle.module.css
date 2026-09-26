@@ -29,7 +29,11 @@
 }
 
 .label {
-  font-size: var(--fs-caption);
+  /* Phase 1 token migration (2026-09-26): --fs-caption used to be 14px
+   * (mobile 13px) and read fine at this label scale. The new 5-step scale
+   * makes --fs-caption 12px, which would visibly shrink this label — pinned
+   * to --fs-body (14px) instead so this PR causes no visual change. */
+  font-size: var(--fs-body);
   color: var(--color-text-2);
   font-family: var(--font-family);
   cursor: pointer;
