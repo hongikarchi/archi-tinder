@@ -242,7 +242,7 @@ export default function ArchitectProfilePage({ onLogout }) {
       height: 'var(--page-height)',
       overflowY: 'auto',
       background: 'var(--color-bg)',
-      paddingBottom: 'calc(80px + env(safe-area-inset-bottom, 0px))',
+      paddingBottom: 'var(--tabbar-clearance)',
     }}>
       <PageBackButton onClick={() => navigate(-1)} label={t('architect.back')} />
       <PageTopControls onLogout={onLogout} />

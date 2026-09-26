@@ -72,7 +72,7 @@ export default function MainLayout({
           <div style={{
             height: 'var(--page-height)', background: 'var(--color-bg)', display: 'flex',
             flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-            gap: 12, padding: 24,
+            gap: 12, padding: '24px 24px var(--tabbar-clearance)',
           }}>
             <div style={{ fontSize: 48 }}>🃏</div>
             <p style={{ fontSize: 16, fontWeight: 700, margin: 0, letterSpacing: '0.2em', color: 'var(--color-text)' }}>ARCHIBE</p>

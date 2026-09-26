@@ -62,7 +62,7 @@ export default function LikedProjectsPage({ onLogout }) {
       height: 'var(--page-height)',
       overflowY: 'auto',
       background: 'var(--color-bg)',
-      paddingBottom: 'calc(80px + env(safe-area-inset-bottom))',
+      paddingBottom: 'var(--tabbar-clearance)',
     }}>
       <PageBackButton onClick={() => navigate(-1)} />
       <PageLogoHeader />

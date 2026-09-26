@@ -455,6 +455,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         background: 'var(--color-bg)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         color: 'var(--color-text-dim)', fontSize: 14,
+        paddingBottom: 'var(--tabbar-clearance)',
       }}>
         Loading profile...
       </div>
@@ -468,6 +469,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         background: 'var(--color-bg)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         color: 'var(--color-text-dim)', fontSize: 14,
+        paddingBottom: 'var(--tabbar-clearance)',
       }}>
         {error || 'Profile not found.'}
       </div>
@@ -479,7 +481,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
       height: 'var(--page-height)',
       overflowY: 'auto',
       background: 'var(--color-bg)',
-      paddingBottom: 'calc(100px + env(safe-area-inset-bottom))'
+      paddingBottom: 'var(--tabbar-clearance)'
     }}>
       <PageTopControls onLogout={onLogout} />
 
@@ -861,7 +863,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         {/* P6: sticky bulk action bar — visible when selectMode && selection > 0 */}
         {selectMode && selectedBoards.size > 0 && (
           <div style={{
-            position: 'sticky', bottom: 12, zIndex: 5,
+            position: 'sticky', bottom: 'calc(var(--tabbar-clearance) + 12px)', zIndex: 5,
             margin: '16px 0 0',
             display: 'flex', alignItems: 'center', gap: 8,
             padding: '10px 12px',

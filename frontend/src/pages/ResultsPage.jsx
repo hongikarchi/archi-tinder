@@ -259,7 +259,7 @@ export default function ResultsPage({ projects, setProjects, onReportGenerated, 
       height: 'var(--page-height)',
       overflowY: 'auto',
       background: 'var(--color-bg)',
-      paddingBottom: 'calc(88px + env(safe-area-inset-bottom, 0px))',
+      paddingBottom: 'var(--tabbar-clearance)',
     }}>
       <PageBackButton onClick={() => navigate('/')} />
       <PageLogoHeader />

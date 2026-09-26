@@ -169,7 +169,7 @@ export default function BuildingDetailPage({ onLogout }) {
       background: 'var(--color-bg)',
       color: 'var(--color-text)',
       overflowY: 'auto',
-      paddingBottom: 'calc(84px + env(safe-area-inset-bottom, 0px))',
+      paddingBottom: 'var(--tabbar-clearance)',
     }}>
       <PageTopControls onLogout={onLogout} />
       <PageLogoHeader />

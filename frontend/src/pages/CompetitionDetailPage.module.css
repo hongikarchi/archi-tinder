@@ -13,7 +13,7 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 0 0 32px;
+  padding: 0 0 var(--tabbar-clearance);
 }
 
 /* ── Hero ───────────────────────────────────────────────────────────────── */
@@ -398,7 +398,7 @@
 /* DESIGN.md §8.11 — bottom-center, glassmorphic */
 .toast {
   position: fixed;
-  bottom: calc(64px + 16px);
+  bottom: var(--tabbar-clearance);
   left: 50%;
   transform: translateX(-50%);
   background: color-mix(in srgb, var(--color-surface) 72%, transparent);

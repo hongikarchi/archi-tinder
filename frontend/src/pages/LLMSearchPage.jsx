@@ -677,7 +677,11 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
     }
   }
 
-  const bottomOffset = showStart ? 64 + 140 : 64 + 20
+  // UI-CONSISTENCY-B Phase 2c: the old `64` was the previous full-width
+  // TabBar's height; the input bar / start panel now float `var(--tabbar-
+  // clearance)` above the floating capsule instead, so the messages list's
+  // scroll padding is rebased onto that token (deltas 140/20 preserved as-is).
+  const bottomOffset = showStart ? 'calc(var(--tabbar-clearance) + 140px)' : 'calc(var(--tabbar-clearance) + 20px)'
 
   return (
     <div style={{
@@ -826,7 +830,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
       {/* Start swiping panel */}
       {showStart && (
         <div style={{
-          position: 'fixed', bottom: 'calc(134px + env(safe-area-inset-bottom, 0px))', left: 0, right: 0,
+          position: 'fixed', bottom: 'calc(var(--tabbar-clearance) + 70px)', left: 0, right: 0,
           padding: '0 16px', zIndex: 20,
         }}>
           <div style={{
@@ -852,7 +856,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
 
       {/* Input */}
       <div style={{
-        position: 'fixed', bottom: 'calc(64px + env(safe-area-inset-bottom, 0px))', left: 0, right: 0,
+        position: 'fixed', bottom: 'var(--tabbar-clearance)', left: 0, right: 0,
         padding: '12px 16px',
         background: 'linear-gradient(to top, var(--color-bg) 80%, transparent)',
         zIndex: 30,

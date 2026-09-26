@@ -506,7 +506,7 @@ export default function DiscoveryPage({ showToast, onLogout }) {
       height: 'var(--page-height)',
       overflow: 'hidden',
       background: 'var(--color-bg)',
-      padding: '20px 16px',
+      padding: '20px 16px var(--tabbar-clearance)',
     }}>
 
       <PageTopControls onLogout={onLogout} />

@@ -346,7 +346,7 @@ export default function LikedOfficesPage() {
         height: 'var(--page-height)',
         overflowY: 'auto',
         background: 'var(--color-bg)',
-        paddingBottom: 'calc(80px + env(safe-area-inset-bottom, 0px))',
+        paddingBottom: 'var(--tabbar-clearance)',
       }}>
         {/* Sticky header */}
         <div style={{

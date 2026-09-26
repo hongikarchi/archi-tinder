@@ -623,7 +623,7 @@ export default function UploadWorkPage({ onLogout }) {
         </div>
       )}
 
-      <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px 48px' }}>
+      <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px var(--tabbar-clearance)' }}>
         <PageTitle>{t('uploadWork.header.title')}</PageTitle>
         {uploadState !== 'processing' && (
           <form onSubmit={handleSubmit} noValidate>

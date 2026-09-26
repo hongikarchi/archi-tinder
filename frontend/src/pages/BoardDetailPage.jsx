@@ -322,7 +322,7 @@ export default function BoardDetailPage({ onResume, onLogout }) {
       height: 'var(--page-height)',
       overflowY: 'auto',
       background: 'var(--color-bg)',
-      paddingBottom: 'calc(80px + env(safe-area-inset-bottom))',
+      paddingBottom: 'var(--tabbar-clearance)',
     }}>
       <PageTopControls onLogout={onLogout} />
       {/* Hero cover */}
@@ -925,7 +925,7 @@ export default function BoardDetailPage({ onResume, onLogout }) {
       {isEditMode && (
         <div style={{
           position: 'fixed',
-          bottom: 'calc(64px + env(safe-area-inset-bottom, 0px))',
+          bottom: 'var(--tabbar-clearance)',
           left: 0, right: 0,
           padding: '12px 20px',
           background: 'var(--color-surface)',

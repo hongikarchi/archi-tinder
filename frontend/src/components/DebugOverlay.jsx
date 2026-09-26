@@ -45,7 +45,7 @@ export default function DebugOverlay({ userId, session, swipeDebug }) {
 
   const containerStyle = {
     position: 'fixed',
-    bottom: 80,
+    bottom: 'var(--tabbar-clearance)',
     left: 12,
     zIndex: 9999,
     background: 'rgba(0,0,0,0.9)',

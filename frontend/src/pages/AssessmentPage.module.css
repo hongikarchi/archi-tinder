@@ -5,7 +5,10 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 20px 16px;
+  /* Bottom clearance for the floating TabBar capsule (UI-CONSISTENCY-B Phase
+     2c) — this page never scrolls (overflow: hidden), so the deck/result
+     stage must fit above the capsule via padding, not via scroll. */
+  padding: 20px 16px var(--tabbar-clearance);
   position: relative;
 }
 

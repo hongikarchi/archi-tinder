@@ -11,6 +11,7 @@ export default function ErrorState({ message, onBack, onRetry }) {
       color: 'var(--color-text)',
       display: 'flex',
       flexDirection: 'column',
+      paddingBottom: 'var(--tabbar-clearance)',
     }}>
       <Header onBack={onBack} />
       <div style={{

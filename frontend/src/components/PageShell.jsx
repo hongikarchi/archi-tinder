@@ -52,6 +52,11 @@ export default function PageShell({
         height: 'var(--page-height)',
         overflowY: 'auto',
         background: 'var(--color-bg)',
+        // UI-CONSISTENCY-B Phase 2c: bottom clearance for the floating TabBar
+        // capsule (no page-level reserved band anymore — every scroll shell
+        // reserves this itself). `...style` can still override if a future
+        // caller needs to.
+        paddingBottom: 'var(--tabbar-clearance)',
         ...style,
       }}
     >

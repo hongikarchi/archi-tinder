@@ -7,6 +7,7 @@ export default function LoadingState({ onBack }) {
       overflowY: 'auto',
       background: 'var(--color-bg)',
       color: 'var(--color-text)',
+      paddingBottom: 'var(--tabbar-clearance)',
     }}>
       <Header onBack={onBack} />
       <div className="skeleton-shimmer" style={{ height: '50vh', width: '100%' }} />

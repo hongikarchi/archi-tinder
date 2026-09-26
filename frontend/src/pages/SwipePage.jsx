@@ -465,7 +465,7 @@ export default function SwipePage({
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        padding: '20px 16px',
+        padding: '20px 16px var(--tabbar-clearance)',
         position: 'relative',
       }}>
         <PageTopControls onLogout={onLogout} />
@@ -565,7 +565,7 @@ export default function SwipePage({
       <div style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center',
         justifyContent: 'flex-start', height: 'var(--page-height)', overflow: 'hidden',
-        background: 'var(--color-bg)', padding: '20px 16px',
+        background: 'var(--color-bg)', padding: '20px 16px var(--tabbar-clearance)',
         position: 'relative',
       }}>
 

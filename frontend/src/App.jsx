@@ -1182,7 +1182,7 @@ export default function App() {
 
       {swipeError && (
         <div style={{
-          position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)',
+          position: 'fixed', bottom: 'var(--tabbar-clearance)', left: '50%', transform: 'translateX(-50%)',
           background: 'rgba(220, 38, 38, 0.92)', color: '#fff', padding: '10px 20px',
           borderRadius: 8, fontSize: 14, fontWeight: 500, zIndex: 9999,
           pointerEvents: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
@@ -1194,7 +1194,7 @@ export default function App() {
       {globalToast && (
         <div style={{
           position: 'fixed',
-          bottom: 'calc(64px + 16px)',
+          bottom: 'var(--tabbar-clearance)',
           left: '50%',
           transform: 'translateX(-50%)',
           background: 'color-mix(in srgb, var(--color-surface, #F6F8FA) 72%, transparent)',

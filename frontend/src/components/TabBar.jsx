@@ -6,8 +6,14 @@ import { discoveryNavigationGuard } from '../utils/discoveryGuard.js'
  * TAB_ICONS — { outline, active } SVG pair per tab.
  *
  * UI-CONSISTENCY-B Phase 2a decision log #5 (2026-09-26): Instagram-style
- * icon-only bar — inactive = outline (stroke 2), active = filled variant, no
- * color pill / no underline. Icon size 24 (DESIGN.md §7.1).
+ * icon-only bar — inactive = outline (stroke 2), active = filled variant.
+ * Icon size 24 (DESIGN.md §7.1).
+ *
+ * Superseded in part by decision log #5b (Phase 2c, same date): the bar is
+ * now a floating glass capsule, and the active tab gets a rounded pill
+ * highlight (`--tabbar-active-bg`) behind the filled icon — see the `<nav>` /
+ * pill-`<span>` markup below. The "no color pill / no underline" clause above
+ * described the flat Phase 2a bar and no longer applies.
  *
  * `active` variants reuse the exact same path geometry as `outline`
  * wherever a shape is already closed (rects, circles) or trivially
@@ -149,13 +155,17 @@ export default function TabBar() {
     <nav
       aria-label={t('tabbar.nav')}
       style={{
-        position: 'fixed', bottom: 0, left: 0, right: 0,
+        position: 'fixed',
+        left: 16, right: 16,
+        bottom: 'calc(env(safe-area-inset-bottom, 0px) + 10px)',
+        maxWidth: 420, margin: '0 auto',
         display: 'flex', zIndex: 100, height: 'var(--tabbar-height)',
-        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-        boxSizing: 'content-box',
-        background: 'var(--color-nav-bg)',
-        backdropFilter: 'blur(20px)',
-        borderTop: '1px solid var(--color-border)',
+        borderRadius: 'var(--radius-pill)',
+        background: 'var(--tabbar-glass-bg)',
+        border: '1px solid var(--tabbar-glass-border)',
+        boxShadow: 'var(--tabbar-glass-shadow)',
+        backdropFilter: 'blur(20px) saturate(160%)',
+        WebkitBackdropFilter: 'blur(20px) saturate(160%)',
       }}
     >
       {tabs.map(tab => {
@@ -169,14 +179,27 @@ export default function TabBar() {
             title={label}
             aria-current={active ? 'page' : undefined}
             style={{
-              flex: 1, border: 'none', background: 'none',
+              flex: 1, height: '100%', border: 'none', background: 'none',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              cursor: 'pointer', fontFamily: 'inherit',
+              cursor: 'pointer', fontFamily: 'inherit', padding: 0,
               color: active ? 'var(--color-text)' : 'var(--color-nav-inactive)',
               transition: `color var(--motion-fast) var(--motion-ease)`,
             }}
           >
-            {active ? TAB_ICONS[tab.id].active : TAB_ICONS[tab.id].outline}
+            {/* Active-tab pill highlight behind the icon (Instagram-style
+                floating capsule, plan decision 5b) — fades in/out rather than
+                sliding, per the task's "nice-to-have only if simple" note. */}
+            <span
+              style={{
+                width: 68, height: 44,
+                borderRadius: 'var(--radius-pill)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: active ? 'var(--tabbar-active-bg)' : 'transparent',
+                transition: `background var(--motion-fast) var(--motion-ease)`,
+              }}
+            >
+              {active ? TAB_ICONS[tab.id].active : TAB_ICONS[tab.id].outline}
+            </span>
           </button>
         )
       })}

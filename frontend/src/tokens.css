@@ -77,18 +77,39 @@
   /* -- Safe-area ------------------------------------------------------------ */
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
 
-  /* -- Layout / control (Phase 1, 2026-09-26) --------------------------------
-   * tabbar-height: 56px (icon-only, DESIGN.md §3.3 "tabbar-height-icon-only")
-   * — Phase 2a (UI-CONSISTENCY-B) drops the TabBar's text labels, so the bar
-   * moves off the 64px "with label" value. DESIGN.md §3.3's own "value
-   * currently in use: 64" line is stale as of this change; syncing it is
-   * outside front-maker's write scope (DESIGN.md is admin-owned) — flagged in
-   * the PR description. */
-  --tabbar-height: 56px;
-  --page-height: calc(100vh - var(--tabbar-height) - env(safe-area-inset-bottom, 0px));
+  /* -- Layout / control ------------------------------------------------------
+   * Phase 2c (UI-CONSISTENCY-B, 2026-09-26): TabBar becomes a FLOATING GLASS
+   * CAPSULE (plan decision 5b) — detached from the screen edges, not a
+   * full-width band. Consequence: `--page-height` is no longer "viewport
+   * minus tabbar" (that band no longer exists) — it is the FULL viewport, and
+   * every page instead reserves `--tabbar-clearance` of bottom padding so its
+   * last content / stage clears the floating capsule. `--tabbar-height` is
+   * now the CAPSULE's own height (60px, up from the old 56px icon-only bar —
+   * a capsule reads visually smaller than a full-width band at the same
+   * height, so it is bumped slightly). DESIGN.md §3.3 (56px / `calc(100vh -
+   * tabbar-height - safe-area)`) and §8.11 (`toast-bottom-offset:
+   * calc(tabbar-height + 16px)`) are now stale — syncing them is outside
+   * front-maker's write scope (DESIGN.md is admin-owned) — flagged in the PR
+   * description. */
+  --tabbar-height: 60px;
+  --page-height: 100vh;
+  /* Capsule height + bottom gap + safe-area + breathing room — every page
+   * that scrolls or centers content adds this as bottom clearance so its
+   * last item / stage never sits under the floating capsule. Mirrors the
+   * capsule's own position math below (TabBar.jsx: bottom = safe-area + 10px). */
+  --tabbar-clearance: calc(var(--tabbar-height) + 10px + env(safe-area-inset-bottom, 0px) + 12px);
   --icon-btn-size: 28px;  /* visual size of floating circle buttons */
   --icon-btn-hit:  44px;  /* min touch target — invisible expanded hit area */
   --icon-size:     16px;  /* icon inside floating circle buttons, stroke 2 */
+
+  /* -- TabBar glass capsule (Phase 2c) ---------------------------------------
+   * Light themes: dark-on-light glass, subtle dark active pill. Dark themes:
+   * light-on-dark glass, subtle light active pill. Values below are the
+   * GitHub Light defaults; each theme block overrides all four. */
+  --tabbar-glass-bg:     rgba(255,255,255,0.72);
+  --tabbar-glass-border: rgba(0,0,0,0.08);
+  --tabbar-glass-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  --tabbar-active-bg:    rgba(0,0,0,0.08);
 
   /* -- Font family (default: IBM Plex Sans KR) ----------------------------- */
   --font-family: "IBM Plex Sans KR", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "맑은 고딕", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
@@ -151,6 +172,23 @@
   --color-scrim-modal: rgba(0,0,0,0.4);
 }
 
+/* `--page-height: 100dvh` upgrade — 100dvh excludes mobile browser chrome
+ * (address bar) that 100vh includes, so it is a strictly more accurate full-
+ * viewport height where supported. This is NOT written as a second
+ * `--page-height: 100dvh` declaration stacked after the 100vh one above:
+ * custom properties don't reject unknown-to-the-browser values at parse time
+ * (unlike standard properties, where an unsupported value is dropped and the
+ * previous declaration wins as a fallback) — `--page-height: 100dvh` would be
+ * accepted as valid syntax even on a browser with no `dvh` support, and
+ * `height: var(--page-height)` would then fail at *computed-value* time
+ * (invalid = `auto`), collapsing every page shell. @supports correctly gates
+ * on actual `dvh` support instead. */
+@supports (height: 100dvh) {
+  :root, [data-theme="github-light"] {
+    --page-height: 100dvh;
+  }
+}
+
 /* ── GitHub Dark ────────────────────────────────────────────────────────── */
 [data-theme="github-dark"] {
   --color-bg:         #0d1117;
@@ -196,6 +234,13 @@
 
   /* --color-scrim-modal — flat modal/sheet backdrop (see :root comment) */
   --color-scrim-modal: rgba(0,0,0,0.4);
+
+  /* TabBar glass capsule — light-on-dark: lighter glass than the dark ground,
+   * light active-pill tint (dark themes invert the light-theme pairing). */
+  --tabbar-glass-bg:     rgba(13,17,23,0.70);
+  --tabbar-glass-border: rgba(255,255,255,0.10);
+  --tabbar-glass-shadow: 0 8px 24px rgba(0,0,0,0.45);
+  --tabbar-active-bg:    rgba(255,255,255,0.14);
 }
 
 /* ── Ayu Light ──────────────────────────────────────────────────────────── */
@@ -245,6 +290,13 @@
 
   /* --color-scrim-modal — flat modal/sheet backdrop (see :root comment) */
   --color-scrim-modal: rgba(0,0,0,0.4);
+
+  /* TabBar glass capsule — dark-on-light, matching this theme's own warm
+   * off-white ground (#FCFCFC) rather than neutral white. */
+  --tabbar-glass-bg:     rgba(252,252,252,0.72);
+  --tabbar-glass-border: rgba(0,0,0,0.07);
+  --tabbar-glass-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  --tabbar-active-bg:    rgba(0,0,0,0.08);
 }
 
 /* ── SynthWave '84 ──────────────────────────────────────────────────────── */
@@ -298,6 +350,14 @@
   /* --color-scrim-modal — flat modal/sheet backdrop, tinted like the rest of
    * this theme's scrim family (see :root comment for the general policy). */
   --color-scrim-modal: rgba(26,22,37,0.40);
+
+  /* TabBar glass capsule — light-on-dark, tinted toward this theme's own
+   * purple-navy ground (same rgb(38,35,53) as --color-bg #262335) instead of
+   * neutral black/white, matching the scrim family's tinting rationale above. */
+  --tabbar-glass-bg:     rgba(38,35,53,0.70);
+  --tabbar-glass-border: rgba(255,255,255,0.08);
+  --tabbar-glass-shadow: 0 8px 24px rgba(26,22,37,0.55);
+  --tabbar-active-bg:    rgba(255,255,255,0.14);
 }
 
 /* ── Font override: Noto Serif KR ───────────────────────────────────────── */
