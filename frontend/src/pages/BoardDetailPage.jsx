@@ -7,6 +7,7 @@ import BuildingTile from './boardDetail/BuildingTile'
 import RecommendedTile from './boardDetail/RecommendedTile'
 import ArchitectSection from './boardDetail/ArchitectSection'
 import { useTranslation } from '../i18n/index.js'
+import { localizeReport } from '../utils/reportText.js'
 import s from './BoardDetailPage.module.css'
 import PageTopControls from '../components/PageTopControls.jsx'
 
@@ -145,7 +146,7 @@ const MOCK_BOARD = {
 export default function BoardDetailPage({ onResume, onLogout }) {
   const navigate = useNavigate()
   const location = useLocation()
-  const { t } = useTranslation()
+  const { t, language } = useTranslation()
   const rawBoardId = useParams().boardId
   const boardId = UUID_RE.test(String(rawBoardId || '')) ? rawBoardId : null
   const { board, recommended: hookRecommended, recommendedArchitects, loading, resultLoading, error } = useBoard(boardId)
@@ -225,7 +226,7 @@ export default function BoardDetailPage({ onResume, onLogout }) {
   }
 
   async function handleShare() {
-    const report = board?.final_report
+    const report = localizeReport(board?.final_report, language)
     const shareData = {
       title: (localName || board?.name || 'Board') + (report?.persona_type ? ` · ${report.persona_type}` : ''),
       text: report?.one_liner || localName || '',

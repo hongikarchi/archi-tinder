@@ -9,6 +9,11 @@ Two layers:
      buildings DB cursor fully mocked, covering the grounding wiring
      (language -> system prompt, taste_facts attachment, forced-empty
      pattern_paragraph, backward-compatible call shape).
+  3. FULL-REPORT-BILINGUAL tests: one Gemini call stores BOTH ko/en text
+     under report['i18n'], top-level text tracks the requested language, a
+     missing language block is filled from the other (with a warning), empty
+     facts force pattern_paragraph='' in both languages, and pre-bilingual
+     flat model output is handled without crashing.
 """
 import json
 from unittest.mock import MagicMock
@@ -396,6 +401,25 @@ _STUB_REPORT = {
     'dominant_materials': ['concrete'],
 }
 
+# FULL-REPORT-BILINGUAL: the new shape -- one Gemini call, both languages.
+_STUB_BILINGUAL_REPORT = {
+    'ko': {
+        'persona_type': '미니멀리스트',
+        'one_liner': '노출 콘크리트 건물을 고르는 미니멀리스트예요.',
+        'pattern_paragraph': '보여드린 건물 중 노출 콘크리트 건물을 자주 고르셨어요.',
+        'description': '차갑고 단단한 재료를 절제된 형태로 쓴 건물에 눈이 가는 편이에요.',
+    },
+    'en': {
+        'persona_type': 'The Minimalist',
+        'one_liner': 'Chooses buildings with exposed concrete.',
+        'pattern_paragraph': 'Among the buildings shown, you often chose exposed concrete ones.',
+        'description': 'You tend to be drawn to cold, solid materials used in a restrained form.',
+    },
+    'dominant_programs': ['Housing'],
+    'dominant_styles': ['Modernist'],
+    'dominant_materials': ['concrete'],
+}
+
 
 class TestGeneratePersonaReportGrounding:
 
@@ -521,3 +545,114 @@ class TestGeneratePersonaReportGrounding:
         report = generation.generate_persona_report(['B1'])
         assert report['persona_type'] == 'The Minimalist'
         assert 'taste_facts' in report
+
+
+class TestGeneratePersonaReportBilingual:
+    """FULL-REPORT-BILINGUAL: one Gemini call, ko+en stored under i18n."""
+
+    def test_both_languages_stored_under_i18n_and_top_level_matches_requested_language(self, monkeypatch):
+        from apps.recommendation.services import generation
+
+        rows = [
+            _row('B1', style='brutalist'), _row('B2', style='brutalist'),
+            _row('B3', style='brutalist'), _row('B4', style='other'),
+            _row('B5', style='other'), _row('B6', style='other'),
+        ]
+        services = _mock_cursor(monkeypatch, rows)
+        monkeypatch.setattr(generation, 'build_persona_prompt', lambda language: 'SYS')
+        monkeypatch.setattr(
+            services, 'generate_content_with_fallback',
+            lambda *a, **kw: _fake_gemini_response(_STUB_BILINGUAL_REPORT),
+        )
+
+        report = generation.generate_persona_report(
+            ['B1', 'B2', 'B3', 'B4'], ['B5', 'B6'], language='en',
+        )
+
+        assert report['i18n']['ko']['persona_type'] == '미니멀리스트'
+        assert report['i18n']['en']['persona_type'] == 'The Minimalist'
+        assert report['i18n']['ko']['pattern_paragraph'] == _STUB_BILINGUAL_REPORT['ko']['pattern_paragraph']
+        assert report['i18n']['en']['pattern_paragraph'] == _STUB_BILINGUAL_REPORT['en']['pattern_paragraph']
+        # Top-level (backward-compat) fields track the REQUESTED language ('en').
+        assert report['persona_type'] == 'The Minimalist'
+        assert report['one_liner'] == _STUB_BILINGUAL_REPORT['en']['one_liner']
+        # dominant_* stay single top-level English arrays, unaffected by i18n split.
+        assert report['dominant_programs'] == ['Housing']
+        assert report['dominant_styles'] == ['Modernist']
+        assert report['dominant_materials'] == ['concrete']
+
+    def test_top_level_defaults_to_korean_when_language_omitted(self, monkeypatch):
+        from apps.recommendation.services import generation
+
+        services = _mock_cursor(monkeypatch, [_row('B1', style='x')])
+        monkeypatch.setattr(generation, 'build_persona_prompt', lambda language: 'SYS')
+        monkeypatch.setattr(
+            services, 'generate_content_with_fallback',
+            lambda *a, **kw: _fake_gemini_response(_STUB_BILINGUAL_REPORT),
+        )
+
+        report = generation.generate_persona_report(['B1'])  # language defaults to 'ko'
+        assert report['persona_type'] == '미니멀리스트'
+        assert report['i18n']['en']['persona_type'] == 'The Minimalist'
+
+    def test_missing_language_block_filled_from_other_with_warning(self, monkeypatch, caplog):
+        from apps.recommendation.services import generation
+
+        services = _mock_cursor(monkeypatch, [_row('B1', style='x')])
+        monkeypatch.setattr(generation, 'build_persona_prompt', lambda language: 'SYS')
+        malformed_payload = {
+            'en': _STUB_BILINGUAL_REPORT['en'],
+            'dominant_programs': ['Housing'],
+            'dominant_styles': ['Modernist'],
+            'dominant_materials': ['concrete'],
+            # 'ko' block entirely missing -- model ignored the bilingual instruction.
+        }
+        monkeypatch.setattr(
+            services, 'generate_content_with_fallback',
+            lambda *a, **kw: _fake_gemini_response(malformed_payload),
+        )
+
+        with caplog.at_level('WARNING'):
+            report = generation.generate_persona_report(['B1'], language='en')
+
+        assert report['i18n']['ko'] == report['i18n']['en']
+        assert report['i18n']['ko']['persona_type'] == 'The Minimalist'
+        assert any('ko block missing' in record.message for record in caplog.records)
+
+    def test_empty_facts_forces_pattern_paragraph_empty_in_both_languages(self, monkeypatch):
+        from apps.recommendation.services import generation
+
+        services = _mock_cursor(monkeypatch, [_row('B1')])
+        monkeypatch.setattr(generation, 'build_persona_prompt', lambda language: 'SYS')
+        monkeypatch.setattr(
+            services, 'generate_content_with_fallback',
+            lambda *a, **kw: _fake_gemini_response(_STUB_BILINGUAL_REPORT),
+        )
+
+        report = generation.generate_persona_report(['B1'])
+
+        assert report['taste_facts']['facts'] == []
+        assert report['pattern_paragraph'] == ''
+        assert report['i18n']['ko']['pattern_paragraph'] == ''
+        assert report['i18n']['en']['pattern_paragraph'] == ''
+        # description is interpretive, not fact-gated -- untouched.
+        assert report['i18n']['ko']['description'] == _STUB_BILINGUAL_REPORT['ko']['description']
+        assert report['i18n']['en']['description'] == _STUB_BILINGUAL_REPORT['en']['description']
+
+    def test_old_flat_model_output_treated_as_requested_language_only(self, monkeypatch):
+        from apps.recommendation.services import generation
+
+        services = _mock_cursor(monkeypatch, [_row('B1', style='x')])
+        monkeypatch.setattr(generation, 'build_persona_prompt', lambda language: 'SYS')
+        monkeypatch.setattr(
+            services, 'generate_content_with_fallback',
+            lambda *a, **kw: _fake_gemini_response(_STUB_REPORT),
+        )
+
+        report = generation.generate_persona_report(['B1'], language='ko')
+
+        assert report['persona_type'] == 'The Minimalist'
+        # Old flat output only ever named one language -- both i18n slots get
+        # filled with that same content rather than crashing on a missing key.
+        assert report['i18n']['ko']['persona_type'] == 'The Minimalist'
+        assert report['i18n']['en']['persona_type'] == 'The Minimalist'

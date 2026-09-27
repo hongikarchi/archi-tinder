@@ -2,6 +2,7 @@ import { useState, useEffect, Fragment } from 'react'
 import { generateReport, generateReportImage } from '../api/projects.js'
 import TasteSpectrum from './TasteSpectrum.jsx'
 import { useTranslation } from '../i18n/index.js'
+import { localizeReport } from '../utils/reportText.js'
 
 /* ── Constants ──────────────────────────────────────────────────────────── */
 // Form is intentionally excluded — see TasteSpectrum.jsx.
@@ -29,7 +30,7 @@ const DEFAULT_AXES = { materiality: 0, scale: 0, energy: 0, tradition: 0 }
  */
 export default function PersonaReport({ boardId, finalReport, axisScores, reportImage, reportImageMime,
   onReportUpdate, canRegenerate = true }) {
-  const { t } = useTranslation()
+  const { t, language } = useTranslation()
   const [localImage, setLocalImage] = useState(reportImage || null)
   const [localMime, setLocalMime] = useState(reportImageMime || null)
   const [localAxisScores, setLocalAxisScores] = useState(axisScores || DEFAULT_AXES)
@@ -44,7 +45,10 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
   useEffect(() => { if (reportImage) setLocalImage(reportImage) }, [reportImage])
   useEffect(() => { if (reportImageMime) setLocalMime(reportImageMime) }, [reportImageMime])
 
-  const report = localReport || finalReport || {}
+  // localizeReport swaps persona_type/one_liner/pattern_paragraph/description
+  // to the current UI language from report.i18n when present — instant, no
+  // API call. Old single-language reports (no i18n block) pass through as-is.
+  const report = localizeReport(localReport || finalReport || {}, language)
   const scores = localAxisScores
 
   async function handleGenerateImage() {

@@ -13,6 +13,7 @@ import {
 } from '../components/photoCardShell.js'
 import { useTranslation } from '../i18n/index.js'
 import { generateReport } from '../api/projects.js'
+import { localizeReport } from '../utils/reportText.js'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import PageTopControls from '../components/PageTopControls.jsx'
 import PageBackButton from '../components/PageBackButton.jsx'
@@ -21,8 +22,9 @@ function cardId(card) {
   return card?.image_id || card?.canonical_bld_id || card?.building_id || ''
 }
 
-function personaFields(result, project, t) {
-  const report = result?.analysis_report || project?.finalReport || {}
+function personaFields(result, project, t, language) {
+  const rawReport = result?.analysis_report || project?.finalReport || {}
+  const report = localizeReport(rawReport, language)
   return {
     type: report.persona_type || report.title || t('results.personaFallbackType'),
     line: report.one_liner || report.summary || t('results.personaFallbackLine'),
@@ -126,11 +128,11 @@ export default function ResultsPage({ projects, setProjects, onReportGenerated, 
   const navigate = useNavigate()
   const location = useLocation()
   const { sessionId } = useParams()
-  const { t } = useTranslation()
+  const { t, language } = useTranslation()
   const { cards, error, loading, pendingIds, project, result, toggleBookmark } = useResults(sessionId, projects, setProjects)
   const [loadedRank, setLoadedRank] = useState(10)
   const observerRef = useRef(null)
-  const persona = personaFields(result, project, t)
+  const persona = personaFields(result, project, t, language)
   const cappedTotal = Math.min(cards.length, 50)
   const visibleCount = Math.min(loadedRank, cappedTotal)
   const topCards = cards.slice(0, visibleCount)

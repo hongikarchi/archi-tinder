@@ -194,6 +194,20 @@ def generate_visual_description(filters, raw_query, user_id):
         )
 
 
+_REPORT_TEXT_FIELDS = ('persona_type', 'one_liner', 'pattern_paragraph', 'description')
+
+
+def _extract_lang_block(raw, lang_key):
+    """Return a normalised {persona_type, one_liner, pattern_paragraph,
+    description} dict from raw[lang_key], or None if that key is absent / not
+    a dict / missing any required field entirely (a dict present but missing
+    one field still counts -- missing fields default to '')."""
+    block = raw.get(lang_key) if isinstance(raw, dict) else None
+    if not isinstance(block, dict):
+        return None
+    return {field: block.get(field, '') for field in _REPORT_TEXT_FIELDS}
+
+
 def generate_persona_report(liked_building_ids, disliked_building_ids=None, language='ko'):
     """
     Generate an architect persona report from liked (+ optionally disliked)
@@ -201,6 +215,17 @@ def generate_persona_report(liked_building_ids, disliked_building_ids=None, lang
     swipe facts (taste_facts.compute_taste_facts) rather than left to the LLM
     to infer unconstrained -- the model phrases/interprets facts it is handed,
     it does not invent them.
+
+    FULL-REPORT-BILINGUAL (2026-09-27): ONE Gemini call now returns BOTH a
+    Korean and an English version of the human-readable fields (see
+    _report_prompts.build_persona_prompt). Both are stored under
+    report['i18n']['ko'] / ['en'] (4 text fields each) so the frontend can
+    switch UI language instantly without another API call. The top-level
+    persona_type/one_liner/pattern_paragraph/description keys are ALSO kept,
+    set to the `language`-matching version (fallback 'ko'), for backward
+    compatibility with existing consumers (SaveBoardModal default name,
+    generate_persona_image, share text, older frontend builds) that only
+    ever read the flat top-level fields.
 
     Backward compatible: callers passing only `liked_building_ids` (the
     pre-BACK-LLM-5 call shape) still work -- disliked_building_ids defaults to
@@ -214,7 +239,9 @@ def generate_persona_report(liked_building_ids, disliked_building_ids=None, lang
     Args:
         liked_building_ids:    list[str] canonical_bld_id.
         disliked_building_ids: list[str] canonical_bld_id, or None.
-        language:               'ko' or 'en' (UserProfile.language); default 'ko'.
+        language:               'ko' or 'en' (UserProfile.language); used to
+            pick which language populates the top-level (non-i18n) fields.
+            Default 'ko'.
     """
     from apps.recommendation import services as _svc  # noqa: PLC0415
 
@@ -306,7 +333,7 @@ def generate_persona_report(liked_building_ids, disliked_building_ids=None, lang
                 thinking_config=types.ThinkingConfig(thinking_budget=0),
             ),
         )
-        report = json.loads(response.text)
+        raw = json.loads(response.text)
     except json.JSONDecodeError as e:
         logger.error('generate_persona_report JSON decode error: %s', e)
         _svc.event_log.emit_event(
@@ -332,10 +359,54 @@ def generate_persona_report(liked_building_ids, disliked_building_ids=None, lang
         )
         raise RuntimeError(f'Persona report generation failed: {type(e).__name__}. Please try again later.')
 
+    # FULL-REPORT-BILINGUAL: raw is expected to be {"ko": {...4 fields}, "en":
+    # {...4 fields}, "dominant_programs": [...], ...}. Older model output (or
+    # a model that ignored the ko/en instruction) may instead be the flat
+    # pre-BACK-LLM-5-bilingual shape (the 4 text fields directly at the top
+    # level) -- treat that as the single `lang` the caller requested.
+    ko_block = _extract_lang_block(raw, 'ko')
+    en_block = _extract_lang_block(raw, 'en')
+
+    if ko_block is None and en_block is None:
+        flat_block = (
+            {field: raw.get(field, '') for field in _REPORT_TEXT_FIELDS}
+            if isinstance(raw, dict) else {field: '' for field in _REPORT_TEXT_FIELDS}
+        )
+        if lang == 'en':
+            en_block = flat_block
+        else:
+            ko_block = flat_block
+
+    if ko_block is None:
+        logger.warning(
+            'generate_persona_report: ko block missing/malformed in Gemini output; filling from en',
+        )
+        ko_block = dict(en_block)
+    elif en_block is None:
+        logger.warning(
+            'generate_persona_report: en block missing/malformed in Gemini output; filling from ko',
+        )
+        en_block = dict(ko_block)
+
+    chosen = ko_block if lang == 'ko' else en_block
+    report = {
+        'persona_type': chosen['persona_type'],
+        'one_liner': chosen['one_liner'],
+        'pattern_paragraph': chosen['pattern_paragraph'],
+        'description': chosen['description'],
+        'dominant_programs': (raw.get('dominant_programs') or []) if isinstance(raw, dict) else [],
+        'dominant_styles': (raw.get('dominant_styles') or []) if isinstance(raw, dict) else [],
+        'dominant_materials': (raw.get('dominant_materials') or []) if isinstance(raw, dict) else [],
+        'i18n': {'ko': ko_block, 'en': en_block},
+    }
+
     if not facts:
         # No grounded facts (e.g. too few swipes to clear thresholds) --
-        # never let the model pad this in with an ungrounded sentence.
+        # never let the model pad this in with an ungrounded sentence, in
+        # EITHER language.
         report['pattern_paragraph'] = ''
+        report['i18n']['ko']['pattern_paragraph'] = ''
+        report['i18n']['en']['pattern_paragraph'] = ''
     # Backend-computed, not LLM. Not rendered directly by the frontend
     # (BACK-LLM-5 spec: "화면에는 표시하지 않습니다") -- but IS persisted on
     # project.final_report, which IS served by ProjectDetailView (AllowAny
