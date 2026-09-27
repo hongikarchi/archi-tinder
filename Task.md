@@ -107,6 +107,12 @@ Implementation map:
 
 ### HIGH
 
+#### FULL-BOARD-FLOW-1 — 저장된 보드·진행 세션이 삭제되는 버그 + 보드·리포트 경로 정리
+2026-09-27 경로 감사(세션, 코드 확인 완료). UI-CONSISTENCY-B와 분리해 별도 PR로 처리.
+- **D1 (데이터 손실)**: 저장 보드 "이어서 탐색하기" 후 오른쪽 스와이프 없이 나가기 → 서버 보드 DELETE. `handleResumeProject` 합성 엔트리 `likedBuildings: []`(App.jsx:~991-1004) + 나가기 삭제 조건이 로컬 likedBuildings 길이 기준(App.jsx:~1092-1105). Discovery promote 엔트리도 likedBuildings []로 시작. 백엔드 DELETE에 is_temp 가드 없음(views/projects.py:~244-251). 수정: 삭제 조건을 `isTemp===true`로, 서버 가드 추가.
+- **D2 (데이터 손실)**: 스와이프 중 취향 탭(/search) → 진행 중 temp 세션 삭제 — /search 재진입 청소(App.jsx:~210-221)가 활성 프로젝트를 제외하지 않음. 수정: 활성 프로젝트 제외.
+- 결정 필요: G1 Discovery→Taste 보드에 저장 시트 미노출(is_temp=False 생성 → `discovery_YYMMDD` 이름·비공개로 남아 /people 미노출); G2 페르소나 이미지 자동 생성이 한 분기뿐(썸네일·people 카드가 수동 생성 의존), G3 Results에서 만든 이미지 재마운트 시 유실; G4 temp 보드가 프로필에 노출(`_build_boards_field` is_temp 필터 없음); G5 리포트 없는 내 보드에서 리포트 진입 경로 없음; G6 BoardCard flip/Resume/Start New 죽은 코드(latest_session_meta 미포함); G7 Results 재진입 불가; G8 좋아요 0 Results 막다른 길; G9 "Finish & View Report →" 영어 하드코딩·세션 없을 때 노출; G10 리포트 로딩 중 뒤로가기 없음; G11 리포트→보드 push로 뒤로가기 루프; G12 Results 뒤로가기=/discovery; G13 공유 링크 새로 열면 뒤로가기가 앱 밖; G14 PersonaReport 두 곳 폭 불일치; G15 보드 커버(첫 건물) ≠ 프로필 썸네일(페르소나 이미지); G16 리포트 버튼 스타일 DESIGN §8.1과 불일치. 리포트 표시 방식(보드 상세 요약 카드 / 버튼만 / 통합)도 이때 결정.
+
 #### DEPLOY-BLOCKER-1 — develop→main 배포 전 필수 정리 (#333 / #334, 2026-09-26 merge 결정)
 _user 결정: 개발 단계라 develop에는 먼저 합치고, **실서비스 배포 전에 반드시 처리**. 다음 deploy PR 전에 이 항목 확인._
 - ① **#333 공모전 프로토타입 공개 범위** — `/competitions` 라우트 + `SocialSegment` [🏆]가 게이트 없이 모든 사용자에게 노출됨. 배포 전 (a) `import.meta.env.DEV` 게이트, (b) `VITE_ENABLE_COMPETITION_PROTOTYPE` 플래그(프리뷰만 on), (c) 실서비스 공개 중 택1
