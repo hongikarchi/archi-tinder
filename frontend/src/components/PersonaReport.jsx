@@ -212,8 +212,11 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
       {/* 양극 스펙트럼 바 */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 24 }}>
         {SPECTRUM_AXES.map(ax => {
-          const score = scores[ax.key] ?? 0
+          const rawScore = scores[ax.key]
+          const hasEvidence = rawScore !== null && rawScore !== undefined
+          const score = hasEvidence ? rawScore : 0
           const pct = ((score + 1) / 2) * 100
+          const rowOpacity = hasEvidence ? 1 : 0.4
           return (
             <div key={ax.key}>
               <p style={{
@@ -223,16 +226,28 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
                 margin: '0 0 4px',
               }}>
                 {t(`persona.axis.${ax.key}`)}
+                {!hasEvidence && (
+                  <span style={{
+                    color: 'var(--color-text-dim)',
+                    fontSize: 11,
+                    fontWeight: 500,
+                    marginLeft: 8,
+                  }}>
+                    {t('persona.noEvidence')}
+                  </span>
+                )}
               </p>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: rowOpacity }}>
                 <span style={{ color: 'var(--color-text-muted)', fontSize: 10, fontWeight: 600, minWidth: 48, textAlign: 'right' }}>
                   {t(ax.leftKey)}
                 </span>
                 <div className={styles.spectrumBar} style={{ flex: 1 }}>
-                  <div
-                    className={styles.spectrumDot}
-                    style={{ left: `${pct}%` }}
-                  />
+                  {hasEvidence && (
+                    <div
+                      className={styles.spectrumDot}
+                      style={{ left: `${pct}%` }}
+                    />
+                  )}
                 </div>
                 <span style={{ color: 'var(--color-text-muted)', fontSize: 10, fontWeight: 600, minWidth: 48 }}>
                   {t(ax.rightKey)}

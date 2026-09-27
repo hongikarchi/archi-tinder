@@ -231,6 +231,7 @@ export const locales = {
       reportRegenerate:  '리포트 재생성',
       imgError:          '이미지 생성에 실패했습니다.',
       reportError:       '리포트 재생성에 실패했습니다.',
+      noEvidence:        '아직 판단할 근거가 없어요',
       axis: {
         form:        '형태',
         materiality: '물성',
@@ -884,6 +885,7 @@ export const locales = {
       reportRegenerate:  'Regenerate report',
       imgError:          'Failed to generate image.',
       reportError:       'Failed to regenerate report.',
+      noEvidence:        'Not enough evidence yet',
       axis: {
         form:        'Form',
         materiality: 'Materiality',

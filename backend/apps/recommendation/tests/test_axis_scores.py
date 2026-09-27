@@ -6,13 +6,15 @@ Coverage:
     non-material-skipped / case-insensitive, incl. 'larch wood' -> natural,
     'metal cladding' -> man-made, 'rammed earth' -> natural.
   - _mean_materiality: mean of classified ±1.0 over all liked buildings'
-    material_visual strings; 0.0 when none classify.
+    material_visual strings; None when none classify (no evidence).
   - _mean_categorical_axes: pure weight-averaging helper (form/scale/energy/
-    tradition), 0.0 when no match.
+    tradition), None when no match (no evidence).
   - compute_axis_scores: style/atmosphere feed the TagAxisWeight lookup,
     material_visual does NOT (even when a material string happens to match a
     seeded tag name) -- materiality comes only from the word-rule classifier.
-  - Empty building_ids -> all-zero dict.
+  - Empty building_ids / no rows / no tags -> every axis None (JSON null),
+    distinguishing "no evidence" from a real computed 0.0 (evidence exists,
+    signs cancel out).
 
 No real Postgres round-trip -- connections['buildings'].cursor() is mocked;
 TagAxisWeight rows use the real (sqlite in-memory) ORM via the `db` fixture.
@@ -95,11 +97,11 @@ class TestClassifyMaterial:
 
 class TestMeanMateriality:
 
-    def test_empty_list_returns_zero(self):
-        assert _mean_materiality([]) == 0.0
+    def test_empty_list_returns_none(self):
+        assert _mean_materiality([]) is None
 
-    def test_no_classifiable_strings_returns_zero(self):
-        assert _mean_materiality([['Water', 'Glass', 'Plaster'], None, []]) == 0.0
+    def test_no_classifiable_strings_returns_none(self):
+        assert _mean_materiality([['Water', 'Glass', 'Plaster'], None, []]) is None
 
     def test_mean_of_classified_values(self):
         # 2 natural (-1.0 each), 1 man-made (+1.0) -> mean = -1/3
@@ -109,14 +111,21 @@ class TestMeanMateriality:
     def test_non_list_entries_ignored(self):
         assert _mean_materiality([None, 'not-a-list', ['Wood']]) == -1.0
 
+    def test_evidence_cancels_to_real_zero(self):
+        # 1 natural (-1.0), 1 man-made (+1.0) -> real computed 0.0, NOT None,
+        # since evidence exists (the signs just cancel out).
+        result = _mean_materiality([['Wood'], ['Steel']])
+        assert result == 0.0
+        assert result is not None
+
 
 # ── _mean_categorical_axes ──────────────────────────────────────────────────
 
 class TestMeanCategoricalAxes:
 
-    def test_no_match_returns_all_zero(self):
+    def test_no_match_returns_all_none(self):
         result = _mean_categorical_axes(['Unknown Tag'], {})
-        assert result == {'form': 0.0, 'scale': 0.0, 'energy': 0.0, 'tradition': 0.0}
+        assert result == {'form': None, 'scale': None, 'energy': None, 'tradition': None}
 
     def test_mean_of_matched_weights(self):
         weight_map = {
@@ -127,8 +136,20 @@ class TestMeanCategoricalAxes:
         result = _mean_categorical_axes(['Modernist', 'Minimalist', 'Intimate'], weight_map)
         assert result['form'] == pytest.approx(0.95)
         assert result['scale'] == pytest.approx(-1.0)
-        assert result['energy'] == 0.0
-        assert result['tradition'] == 0.0
+        # energy/tradition: no matching tag -> no evidence -> None, not 0.0.
+        assert result['energy'] is None
+        assert result['tradition'] is None
+
+    def test_evidence_cancels_to_real_zero(self):
+        # form: 'Modernist' (+1.0) and 'Anti-Modernist' (-1.0) cancel out to a
+        # real computed 0.0 -- evidence exists, so this must NOT be None.
+        weight_map = {
+            ('Modernist', 'form'): 1.0,
+            ('Anti-Modernist', 'form'): -1.0,
+        }
+        result = _mean_categorical_axes(['Modernist', 'Anti-Modernist'], weight_map)
+        assert result['form'] == 0.0
+        assert result['form'] is not None
 
 
 # ── compute_axis_scores ──────────────────────────────────────────────────────
@@ -152,9 +173,9 @@ def _connections_mock(cursor):
 @pytest.mark.django_db
 class TestComputeAxisScores:
 
-    def test_empty_building_ids_returns_all_zero(self):
+    def test_empty_building_ids_returns_all_none(self):
         result = compute_axis_scores([])
-        assert result == {axis: 0.0 for axis in AXES}
+        assert result == {axis: None for axis in AXES}
 
     def test_style_atmosphere_feed_lookup_material_visual_does_not(self):
         """A material_visual string that happens to equal a seeded tag name
@@ -177,8 +198,15 @@ class TestComputeAxisScores:
         # the 'Concrete' decoy row that would drag it toward -1.0/0.0.
         assert result['form'] == 1.0
         # materiality: word-rule classification of material_visual only
-        # ('Concrete' -> +1.0, 'Wood' -> -1.0) -> mean 0.0.
+        # ('Concrete' -> +1.0, 'Wood' -> -1.0) -> real computed mean 0.0
+        # (evidence exists, signs cancel -- must be 0.0, not None).
         assert result['materiality'] == 0.0
+        assert result['materiality'] is not None
+        # scale/energy/tradition: no style/atmosphere tag touched these axes
+        # at all -> no evidence -> None.
+        assert result['scale'] is None
+        assert result['energy'] is None
+        assert result['tradition'] is None
 
     def test_full_row_all_axes(self):
         TagAxisWeight.objects.create(tag='Minimalist', axis='form', weight=0.9)
@@ -198,13 +226,35 @@ class TestComputeAxisScores:
         assert result['energy'] == -1.0
         assert result['scale'] == 1.0
         # tradition: no style/atmosphere tag in these rows matched a
-        # 'tradition' weight -> 0.0 (Futuristic was seeded but never appears).
-        assert result['tradition'] == 0.0
-        # materiality: Steel (+1.0), Glass (excluded), Larch wood (-1.0) -> mean 0.0
+        # 'tradition' weight -> no evidence -> None (Futuristic was seeded
+        # but never appears in the rows).
+        assert result['tradition'] is None
+        # materiality: Steel (+1.0), Glass (excluded), Larch wood (-1.0) ->
+        # real computed mean 0.0 (evidence exists, signs cancel).
         assert result['materiality'] == 0.0
+        assert result['materiality'] is not None
 
-    def test_no_rows_returns_all_zero(self):
+    def test_no_rows_returns_all_none(self):
         mock_connections = _connections_mock(_cursor_mock([]))
         with patch('apps.recommendation.services.axis_scores.connections', mock_connections):
             result = compute_axis_scores(['bld_missing'])
-        assert result == {axis: 0.0 for axis in AXES}
+        assert result == {axis: None for axis in AXES}
+
+    def test_evidence_on_one_axis_none_on_others(self):
+        """style/atmosphere give evidence for 'form' only; material_visual
+        gives no classifiable evidence -> form is a real value, every other
+        axis (including materiality) is None."""
+        TagAxisWeight.objects.create(tag='Brutalist', axis='form', weight=1.0)
+
+        rows = [
+            ('Brutalist', None, ['Water', 'Glass', 'Plaster']),
+        ]
+        mock_connections = _connections_mock(_cursor_mock(rows))
+        with patch('apps.recommendation.services.axis_scores.connections', mock_connections):
+            result = compute_axis_scores(['bld_000003'])
+
+        assert result['form'] == 1.0
+        assert result['scale'] is None
+        assert result['energy'] is None
+        assert result['tradition'] is None
+        assert result['materiality'] is None

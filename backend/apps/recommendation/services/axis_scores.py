@@ -1,13 +1,19 @@
 """axis_scores.py — 건축물 ID 리스트 → 5축 점수 계산.
 
 form/scale/energy/tradition: style + atmosphere 태그를 TagAxisWeight 테이블에서
-조회해 매칭된 weight의 평균을 낸다 (매칭 없으면 0.0).
+조회해 매칭된 weight의 평균을 낸다. 해당 축에 매칭된 태그가 하나도 없으면
+"근거 없음"을 의미하는 None(JSON null)을 반환한다.
 
 materiality: TagAxisWeight을 쓰지 않고 material_visual 문자열을 단어 규칙으로
 직접 분류한다 (natural=-1.0 / man-made=+1.0). glass는 두 목록에 없어 항상
 제외되고, 양쪽 다 매치되는 혼합 자재 문구(예: "wood-textured concrete")는
-스킵한다. 좋아요한 건물 전체의 분류된 자재 문자열 평균, 없으면 0.0.
+스킵한다. 좋아요한 건물 전체의 분류된 자재 문자열 평균이며, 분류된 문자열이
+하나도 없으면 None(근거 없음).
+
 (2026-09-27 리튠: materiality를 스타일/분위기 태그가 아닌 자재 자체로 계산.)
+(2026-09-27: 근거 없는 축은 0.0이 아니라 None -- UI가 "근거 없음"과 실제로
+계산되어 상쇄된 0.0(중립)을 구분할 수 있도록 한다. 근거가 있고 결과가 우연히
+0.0인 경우(예: +1.0과 -1.0이 상쇄)는 그대로 0.0을 반환한다.)
 """
 import re
 
@@ -68,7 +74,8 @@ def _classify_material(material_str):
 
 def _mean_categorical_axes(tags, weight_map):
     """tags: style/atmosphere 문자열 리스트. weight_map: {(tag, axis): weight}.
-    반환: CATEGORICAL_AXES 각각의 매칭된 weight 평균 (매칭 없으면 0.0)."""
+    반환: CATEGORICAL_AXES 각각의 매칭된 weight 평균. 해당 축에 매칭된 태그가
+    하나도 없으면 None(근거 없음) -- 실제로 계산되어 상쇄된 0.0과 구분한다."""
     sums = {axis: 0.0 for axis in CATEGORICAL_AXES}
     counts = {axis: 0 for axis in CATEGORICAL_AXES}
     for tag in tags:
@@ -78,14 +85,15 @@ def _mean_categorical_axes(tags, weight_map):
                 sums[axis] += w
                 counts[axis] += 1
     return {
-        axis: (sums[axis] / counts[axis]) if counts[axis] > 0 else 0.0
+        axis: (sums[axis] / counts[axis]) if counts[axis] > 0 else None
         for axis in CATEGORICAL_AXES
     }
 
 
 def _mean_materiality(material_visual_lists):
     """material_visual_lists: 건물별 material_visual 리스트의 리스트.
-    반환: 분류된 ±1.0 값들의 평균 (하나도 없으면 0.0)."""
+    반환: 분류된 ±1.0 값들의 평균. 분류된 값이 하나도 없으면 None(근거 없음) --
+    실제로 계산되어 상쇄된 0.0과 구분한다."""
     scores = []
     for materials in material_visual_lists:
         if not isinstance(materials, list):
@@ -94,19 +102,23 @@ def _mean_materiality(material_visual_lists):
             classified = _classify_material(material_str)
             if classified is not None:
                 scores.append(classified)
-    return sum(scores) / len(scores) if scores else 0.0
+    return sum(scores) / len(scores) if scores else None
 
 
 def compute_axis_scores(building_ids: list) -> dict:
     """
     building_ids: canonical_bld_id 리스트
-    반환: {"form": float, "materiality": float, "scale": float, "energy": float, "tradition": float}
+    반환: {"form": float|None, "materiality": float|None, "scale": float|None,
+           "energy": float|None, "tradition": float|None}
     form/scale/energy/tradition = style+atmosphere 태그의 TagAxisWeight 평균.
     materiality = material_visual 단어 규칙 분류 평균.
-    매핑/분류 데이터 없으면 해당 축은 0.0.
+    해당 축에 근거(매칭된 태그 / 분류된 자재)가 하나도 없으면 None(JSON null) --
+    UI가 "근거 없음"과 실제로 계산되어 상쇄된 0.0(중립)을 구분할 수 있게 한다.
+    building_ids가 비어 있거나, 조회된 행이 없거나, 태그/자재가 전혀 없으면
+    모든 축이 None이다.
     """
     if not building_ids:
-        return {axis: 0.0 for axis in AXES}
+        return {axis: None for axis in AXES}
 
     # buildings DB에서 style, atmosphere, material_visual 배치 조회
     with connections['buildings'].cursor() as cur:
@@ -146,4 +158,7 @@ def compute_axis_scores(building_ids: list) -> dict:
     scores = dict(categorical)
     scores['materiality'] = materiality
 
-    return {axis: round(scores[axis], 4) for axis in AXES}
+    return {
+        axis: (round(scores[axis], 4) if scores[axis] is not None else None)
+        for axis in AXES
+    }
