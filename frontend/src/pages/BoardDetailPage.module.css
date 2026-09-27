@@ -16,6 +16,23 @@
   text-decoration: underline;
 }
 
+/* Action row — buttons share one row, each flex:1 so the row spans the full
+   column width (left edge aligned with the title above it). At very narrow
+   widths two full-width Korean-labelled buttons no longer fit side by side,
+   so this wraps to one button per line instead of clipping/shrinking. */
+.actionRow {
+  display: flex;
+  gap: 8px;
+}
+@media (max-width: 360px) {
+  .actionRow {
+    flex-wrap: wrap;
+  }
+  .actionRow > * {
+    flex: 1 1 100%;
+  }
+}
+
 /* Primary CTA — DESIGN.md §8.1 (flat accent, radius md, click-moment glow). */
 .ctaPrimary {
   background: var(--accent-1);
