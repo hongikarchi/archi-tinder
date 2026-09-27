@@ -416,6 +416,10 @@ RECOMMENDATION = {
     'report_dislike_mostly':      0.8,   # disliked/shown rate at/above which the dislike_word is "mostly" (else "often")
     'report_fact_overlap_max':    0.8,   # drop a candidate fact whose supporting buildings overlap an already-selected fact's by >= this (Q38)
     'report_fact_smoothing':      1,     # Laplace smoothing constant `s` in r=(liked+s)/(shown+2s) -- guards against small-sample flukes (Q36)
+    # FULL-PERSONA-SPECTRUM (2026-09-27): axis_scores.py confidence formula --
+    # confidence = min(n / axis_confidence_full_n, 1) * max(0, 1 - iqr). n=5
+    # liked buildings is treated as "full" confidence (before the iqr penalty).
+    'axis_confidence_full_n':     5,
 }
 
 _check_async_prefetch_safety(

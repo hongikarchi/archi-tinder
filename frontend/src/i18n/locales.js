@@ -232,6 +232,7 @@ export const locales = {
       imgError:          '이미지 생성에 실패했습니다.',
       reportError:       '리포트 재생성에 실패했습니다.',
       noEvidence:        '아직 판단할 근거가 없어요',
+      spectrumLegend:    '큰 원: 고르신 건물의 평균 · 작은 원: 고르신 건물 분포\n곡선이 클수록 근거가 많고 일관돼요',
       axis: {
         form:        '형태',
         materiality: '물성',
@@ -886,6 +887,7 @@ export const locales = {
       imgError:          'Failed to generate image.',
       reportError:       'Failed to regenerate report.',
       noEvidence:        'Not enough evidence yet',
+      spectrumLegend:    'Big dot: average of your liked buildings · Small dots: spread of your liked buildings\nA bigger curve means more, more consistent evidence',
       axis: {
         form:        'Form',
         materiality: 'Materiality',

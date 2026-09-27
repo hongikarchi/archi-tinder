@@ -22,7 +22,7 @@ class Project(models.Model):
     final_report    = models.JSONField(null=True, blank=True)
     report_image      = models.TextField(null=True, blank=True)   # base64 image data
     report_image_mime = models.CharField(max_length=32, null=True, blank=True)
-    axis_scores       = models.JSONField(null=True, blank=True)   # 5-axis radar/spectrum scores
+    axis_scores       = models.JSONField(null=True, blank=True)   # 4-axis taste-spectrum scores (FULL-PERSONA-SPECTRUM 2026-09-27; legacy rows may still hold the old flat 5-axis shape until re-read via ensure_axis_scores)
     created_at      = models.DateTimeField(auto_now_add=True)
     updated_at      = models.DateTimeField(auto_now=True)
 

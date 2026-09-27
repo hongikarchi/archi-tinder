@@ -28,6 +28,7 @@ from ..caches import (
     PROJECT_DETAIL_TTL,
 )
 from ..perf_timing import endpoint, stage
+from ..services.axis_scores import ensure_axis_scores
 from ._shared import _get_profile
 
 logger = logging.getLogger('apps.recommendation')
@@ -163,6 +164,10 @@ class ProjectDetailView(APIView):
         is_owner = profile and project.user_id == profile.pk
         if not is_owner and project.visibility != 'public':
             return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+        # FULL-PERSONA-SPECTRUM (2026-09-27): recompute a legacy-format stored
+        # axis_scores before serializing. Runs only once visibility has already
+        # been cleared above (owner or public viewer) -- never changes who can read.
+        ensure_axis_scores(project)
         data = ProjectSerializer(project, context={'request': request}).data
         if not is_owner:
             data.pop('conversation_history', None)

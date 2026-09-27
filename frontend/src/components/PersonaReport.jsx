@@ -1,18 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Fragment } from 'react'
 import { generateReport, generateReportImage } from '../api/projects.js'
-import styles from '../pages/BoardReportPage.module.css'
+import TasteSpectrum from './TasteSpectrum.jsx'
 import { useTranslation } from '../i18n/index.js'
 
 /* ── Constants ──────────────────────────────────────────────────────────── */
-const DEFAULT_AXES = { form: 0, materiality: 0, scale: 0, energy: 0, tradition: 0 }
-
-const SPECTRUM_AXES = [
-  { key: 'form',        leftKey: 'persona.spectrum.form.left',        rightKey: 'persona.spectrum.form.right' },
-  { key: 'materiality', leftKey: 'persona.spectrum.materiality.left', rightKey: 'persona.spectrum.materiality.right' },
-  { key: 'scale',       leftKey: 'persona.spectrum.scale.left',       rightKey: 'persona.spectrum.scale.right' },
-  { key: 'energy',      leftKey: 'persona.spectrum.energy.left',      rightKey: 'persona.spectrum.energy.right' },
-  { key: 'tradition',   leftKey: 'persona.spectrum.tradition.left',   rightKey: 'persona.spectrum.tradition.right' },
-]
+// Form is intentionally excluded — see TasteSpectrum.jsx.
+const DEFAULT_AXES = { materiality: 0, scale: 0, energy: 0, tradition: 0 }
 
 /* ── PersonaReport ──────────────────────────────────────────────────────── */
 /**
@@ -23,7 +16,9 @@ const SPECTRUM_AXES = [
  *                             덮어쓰는 조작이므로 비활성 표시가 아니라 제거.
  *                             기본 true: 소유자 화면(ResultsPage 등) 호출부 무영향.
  *   finalReport     object  - { persona_type, one_liner, description, pattern_paragraph, dominant_programs, dominant_styles, dominant_materials }
- *   axisScores      object  - { form, materiality, scale, energy, tradition } (null이면 DEFAULT_AXES 사용)
+ *   axisScores      object  - { materiality, scale, energy, tradition }; each value is
+ *                             null | number (legacy) | { score, dots, n, iqr, confidence }
+ *                             (null이면 DEFAULT_AXES 사용). form은 표시하지 않음 — TasteSpectrum.jsx 참조.
  *   reportImage     string  - base64 이미지 데이터 (null 가능)
  *   reportImageMime string  - 예: 'image/png'
  *   onReportUpdate  func    - optional. (data: { final_report, axis_scores }) => void
@@ -209,53 +204,24 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
         {t('persona.tasteSection')}
       </h2>
 
-      {/* 양극 스펙트럼 바 */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 24 }}>
-        {SPECTRUM_AXES.map(ax => {
-          const rawScore = scores[ax.key]
-          const hasEvidence = rawScore !== null && rawScore !== undefined
-          const score = hasEvidence ? rawScore : 0
-          const pct = ((score + 1) / 2) * 100
-          const rowOpacity = hasEvidence ? 1 : 0.4
-          return (
-            <div key={ax.key}>
-              <p style={{
-                color: 'var(--color-text)',
-                fontSize: 13,
-                fontWeight: 600,
-                margin: '0 0 4px',
-              }}>
-                {t(`persona.axis.${ax.key}`)}
-                {!hasEvidence && (
-                  <span style={{
-                    color: 'var(--color-text-dim)',
-                    fontSize: 11,
-                    fontWeight: 500,
-                    marginLeft: 8,
-                  }}>
-                    {t('persona.noEvidence')}
-                  </span>
-                )}
-              </p>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: rowOpacity }}>
-                <span style={{ color: 'var(--color-text-muted)', fontSize: 10, fontWeight: 600, minWidth: 48, textAlign: 'right' }}>
-                  {t(ax.leftKey)}
-                </span>
-                <div className={styles.spectrumBar} style={{ flex: 1 }}>
-                  {hasEvidence && (
-                    <div
-                      className={styles.spectrumDot}
-                      style={{ left: `${pct}%` }}
-                    />
-                  )}
-                </div>
-                <span style={{ color: 'var(--color-text-muted)', fontSize: 10, fontWeight: 600, minWidth: 48 }}>
-                  {t(ax.rightKey)}
-                </span>
-              </div>
-            </div>
-          )
-        })}
+      {/* 취향 스펙트럼 범례 */}
+      <p style={{
+        color: 'var(--color-text-muted)',
+        fontSize: 12,
+        lineHeight: 1.6,
+        margin: '0 0 16px',
+      }}>
+        {t('persona.spectrumLegend').split('\n').map((line, i, arr) => (
+          <Fragment key={i}>
+            {line}
+            {i < arr.length - 1 && <br />}
+          </Fragment>
+        ))}
+      </p>
+
+      {/* 양극 스펙트럼 시각화 */}
+      <div style={{ marginBottom: 24 }}>
+        <TasteSpectrum axisScores={scores} />
       </div>
 
       {/* 구분선 */}
