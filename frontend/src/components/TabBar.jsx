@@ -1,6 +1,7 @@
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from '../i18n/index.js'
 import { discoveryNavigationGuard } from '../utils/discoveryGuard.js'
+import SegmentedControl from './SegmentedControl.jsx'
 
 /*
  * TAB_ICONS — { outline, active } SVG pair per tab.
@@ -136,11 +137,9 @@ export default function TabBar() {
     { id: 'profile',   labelKey: 'tabbar.profile',   path: '/user/me' },
   ]
 
-  function handleSelect(tab) {
-    // Already on this tab — tapping the active tab is a no-op; do not invoke
-    // the guard or navigate (prevents false-alarm modal when the user taps the
-    // active Discovery tab while a draft is in progress).
-    if (tab.path === location.pathname) return
+  function handleSelect(tabId) {
+    const tab = tabs.find(t => t.id === tabId)
+    if (!tab || tab.path === location.pathname) return
 
     // If the guard is active (Discovery mounted with draft likes >= 1), show the
     // leave-warning modal and defer navigation to the user's choice.
@@ -150,6 +149,8 @@ export default function TabBar() {
       navigate(tab.path)
     }
   }
+
+  const options = tabs.map(tab => ({ value: tab.id, ariaLabel: t(tab.labelKey) }))
 
   return (
     <nav
@@ -164,45 +165,35 @@ export default function TabBar() {
         background: 'var(--tabbar-glass-bg)',
         border: '1px solid var(--tabbar-glass-border)',
         boxShadow: 'var(--tabbar-glass-shadow)',
-        backdropFilter: 'blur(20px) saturate(160%)',
-        WebkitBackdropFilter: 'blur(20px) saturate(160%)',
+        backdropFilter: 'blur(24px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(24px) saturate(180%)',
       }}
     >
-      {tabs.map(tab => {
-        const active = activeTab === tab.id
-        const label = t(tab.labelKey)
-        return (
-          <button
-            key={tab.id}
-            onClick={() => handleSelect(tab)}
-            aria-label={label}
-            title={label}
-            aria-current={active ? 'page' : undefined}
-            style={{
-              flex: 1, height: '100%', border: 'none', background: 'none',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              cursor: 'pointer', fontFamily: 'inherit', padding: 0,
-              color: active ? 'var(--color-text)' : 'var(--color-nav-inactive)',
-              transition: `color var(--motion-fast) var(--motion-ease)`,
-            }}
-          >
-            {/* Active-tab pill highlight behind the icon (Instagram-style
-                floating capsule, plan decision 5b) — fades in/out rather than
-                sliding, per the task's "nice-to-have only if simple" note. */}
-            <span
-              style={{
-                width: 68, height: 44,
-                borderRadius: 'var(--radius-pill)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: active ? 'var(--tabbar-active-bg)' : 'transparent',
-                transition: `background var(--motion-fast) var(--motion-ease)`,
-              }}
-            >
-              {active ? TAB_ICONS[tab.id].active : TAB_ICONS[tab.id].outline}
-            </span>
-          </button>
-        )
-      })}
+      {/* variant="pill" / size="lg" / as="nav" — the 4 tabs are real route
+          navigation (not in-page panels), so this deliberately skips the
+          tablist/tab or radiogroup/radio ARIA pattern; see SegmentedControl's
+          docblock. `aria-label` stays on THIS <nav> (unchanged); the group
+          itself renders no role/aria-label of its own in "nav" mode. */}
+      <SegmentedControl
+        as="nav"
+        variant="pill"
+        size="lg"
+        fullWidth
+        pillHeight={44}
+        measureContent
+        options={options}
+        value={activeTab}
+        onChange={handleSelect}
+        style={{ width: '100%', height: '100%' }}
+        optionStyle={(opt, isActive) => ({
+          height: '100%',
+          color: isActive ? 'var(--color-text)' : 'var(--color-nav-inactive)',
+          transition: 'color var(--motion-fast) var(--motion-ease)',
+        })}
+        optionContentStyle={{ width: 68, height: 44 }}
+        highlightStyle={{ background: 'var(--tabbar-active-bg)' }}
+        renderOption={(opt, isActive) => (isActive ? TAB_ICONS[opt.value].active : TAB_ICONS[opt.value].outline)}
+      />
     </nav>
   )
 }

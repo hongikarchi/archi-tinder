@@ -220,8 +220,9 @@ tabbar-height:            60    # floating glass capsule (2026-09-26)
 > 2026-09-26: Instagram-iOS style **floating glass capsule** — icon-only, 취향 =
 > magnifying glass, active = rounded pill highlight (`--tabbar-active-bg`) +
 > filled icon. Capsule floats 16px from the sides (max-width 420 on desktop),
-> safe-area + 10px from the bottom, `blur(20px) saturate(160%)` over
-> `--tabbar-glass-bg`. Content scrolls **behind** it — no reserved band.
+> safe-area + 10px from the bottom, `blur(24px) saturate(180%)` over a clearly
+> translucent `--tabbar-glass-bg` (light themes 0.55, dark 0.50) with a hairline
+> border + inset top highlight. Content scrolls **behind** it — no reserved band.
 
 Tokens: `--tabbar-height` (60px), `--page-height` (full viewport, `100dvh` with
 `100vh` fallback) and `--tabbar-clearance` (capsule + gap + safe-area + 12px).
@@ -231,6 +232,16 @@ above the capsule; viewport-locked stages (Discovery / Swipe / Assessment)
 reserve the clearance so the card is never covered; fixed bottom elements
 (toasts, composers, action bars) sit at `var(--tabbar-clearance)`. Never a
 hand-written `calc(100vh - 64px)`.
+
+### 3.3a Selection controls — one sliding component
+Decided 2026-09-27: every "pick one of N" control is `SegmentedControl`
+(`components/SegmentedControl.jsx`) — the TabBar, the 한/EN and light/dark pills,
+the people/competition toggle, and the underline `Tabs`. A single highlight
+(pill or 2px underline) **slides** to the selected option
+(`transform` + `width`, `var(--motion-normal) var(--motion-ease)`); no
+per-option on/off backgrounds. This is interaction motion — it does not honor
+`prefers-reduced-motion`. No animation on first mount. New selectors must use
+this component, never a hand-rolled active background.
 
 ### 3.4 Legacy aliases (gradual migration)
 ```yaml

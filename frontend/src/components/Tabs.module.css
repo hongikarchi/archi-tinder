@@ -6,6 +6,14 @@
  * original UserProfilePage rule was 500 inactive / 700 active; unified per
  * the "Label --fs-body 14 / --fw-semibold" component spec, active state
  * differs only by color + underline, not weight).
+ *
+ * Phase 2d: the underline is now SegmentedControl's shared sliding highlight
+ * (a separate absolutely-positioned bar, `bottom:-1px` — see
+ * SegmentedControl.module.css `.highlightUnderline`), not a per-tab border.
+ * `.tab` keeps its transparent 2px `border-bottom` + `-1px` margin purely for
+ * height parity (no layout shift when the highlight starts sliding);
+ * `.tabActive` no longer sets `border-bottom-color` — coloring that border
+ * would double the sliding bar with a second, non-sliding line.
  */
 .tabs {
   display: flex;
@@ -39,7 +47,6 @@
 
 .tabActive {
   color: var(--color-text);
-  border-bottom-color: var(--color-text);
 }
 
 @media (prefers-reduced-motion: reduce) {

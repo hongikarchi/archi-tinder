@@ -102,13 +102,23 @@
   --icon-btn-hit:  44px;  /* min touch target — invisible expanded hit area */
   --icon-size:     16px;  /* icon inside floating circle buttons, stroke 2 */
 
-  /* -- TabBar glass capsule (Phase 2c) ---------------------------------------
+  /* -- TabBar glass capsule (Phase 2c; retuned Phase 2d for real glassmorphism)
    * Light themes: dark-on-light glass, subtle dark active pill. Dark themes:
    * light-on-dark glass, subtle light active pill. Values below are the
-   * GitHub Light defaults; each theme block overrides all four. */
-  --tabbar-glass-bg:     rgba(255,255,255,0.72);
-  --tabbar-glass-border: rgba(0,0,0,0.08);
-  --tabbar-glass-shadow: 0 8px 24px rgba(0,0,0,0.12);
+   * GitHub Light defaults; each theme block overrides all four.
+   *
+   * Phase 2d (2026-09-27): the 0.70-0.72 alpha shipped in Phase 2c read as
+   * nearly opaque over content — raised translucency so the page behind
+   * genuinely shows through, tinted + blurred (TabBar.jsx pairs this with
+   * `blur(24px) saturate(180%)`, up from 20px/160% — DESIGN.md §3.3 documents
+   * the old figures; syncing that doc is outside front-maker's write scope,
+   * flagged in the PR). Border strengthened + an inset top highlight added so
+   * the capsule edge stays legible over bright/white content underneath.
+   * `--tabbar-active-bg` is unchanged in this pass — see PR notes for the
+   * inactive-icon contrast tradeoff this alpha increase does NOT address. */
+  --tabbar-glass-bg:     rgba(255,255,255,0.55);
+  --tabbar-glass-border: rgba(0,0,0,0.14);
+  --tabbar-glass-shadow: 0 8px 24px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.5);
   --tabbar-active-bg:    rgba(0,0,0,0.08);
 
   /* -- Font family (default: IBM Plex Sans KR) ----------------------------- */
@@ -236,10 +246,13 @@
   --color-scrim-modal: rgba(0,0,0,0.4);
 
   /* TabBar glass capsule — light-on-dark: lighter glass than the dark ground,
-   * light active-pill tint (dark themes invert the light-theme pairing). */
-  --tabbar-glass-bg:     rgba(13,17,23,0.70);
-  --tabbar-glass-border: rgba(255,255,255,0.10);
-  --tabbar-glass-shadow: 0 8px 24px rgba(0,0,0,0.45);
+   * light active-pill tint (dark themes invert the light-theme pairing).
+   * Phase 2d: alpha lowered 0.70 → 0.50 for real translucency (see :root
+   * comment); inset uses a faint white top highlight (dark themes don't need
+   * as strong a rim as light themes since the ground itself is already dark). */
+  --tabbar-glass-bg:     rgba(13,17,23,0.50);
+  --tabbar-glass-border: rgba(255,255,255,0.12);
+  --tabbar-glass-shadow: 0 8px 24px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.08);
   --tabbar-active-bg:    rgba(255,255,255,0.14);
 }
 
@@ -292,10 +305,12 @@
   --color-scrim-modal: rgba(0,0,0,0.4);
 
   /* TabBar glass capsule — dark-on-light, matching this theme's own warm
-   * off-white ground (#FCFCFC) rather than neutral white. */
-  --tabbar-glass-bg:     rgba(252,252,252,0.72);
-  --tabbar-glass-border: rgba(0,0,0,0.07);
-  --tabbar-glass-shadow: 0 8px 24px rgba(0,0,0,0.12);
+   * off-white ground (#FCFCFC) rather than neutral white.
+   * Phase 2d: alpha lowered 0.72 → 0.55, border strengthened, inset top
+   * highlight added — same rationale as GitHub Light (see :root comment). */
+  --tabbar-glass-bg:     rgba(252,252,252,0.55);
+  --tabbar-glass-border: rgba(0,0,0,0.13);
+  --tabbar-glass-shadow: 0 8px 24px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.5);
   --tabbar-active-bg:    rgba(0,0,0,0.08);
 }
 
@@ -353,10 +368,12 @@
 
   /* TabBar glass capsule — light-on-dark, tinted toward this theme's own
    * purple-navy ground (same rgb(38,35,53) as --color-bg #262335) instead of
-   * neutral black/white, matching the scrim family's tinting rationale above. */
-  --tabbar-glass-bg:     rgba(38,35,53,0.70);
-  --tabbar-glass-border: rgba(255,255,255,0.08);
-  --tabbar-glass-shadow: 0 8px 24px rgba(26,22,37,0.55);
+   * neutral black/white, matching the scrim family's tinting rationale above.
+   * Phase 2d: alpha lowered 0.70 → 0.50, border bumped, faint inset top
+   * highlight — same rationale as GitHub Dark (see that block's comment). */
+  --tabbar-glass-bg:     rgba(38,35,53,0.50);
+  --tabbar-glass-border: rgba(255,255,255,0.10);
+  --tabbar-glass-shadow: 0 8px 24px rgba(26,22,37,0.55), inset 0 1px 0 rgba(255,255,255,0.08);
   --tabbar-active-bg:    rgba(255,255,255,0.14);
 }
 
