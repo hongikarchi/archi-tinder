@@ -23,11 +23,29 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-09-26 23:51 KST',
+    updatedAt: '2026-09-27 22:36 KST',
     head: 'a277440',
-    branch: 'feature/algo-report-grounding',
+    branch: 'feature/algo-persona-report',
   },
   done: [
+    {
+      id: 'FULL-REPORT-2',
+      title: '리포트가 언어 전환에 안 따라옴',
+      completedAt: '2026-09-27',
+      note: '리포트 문장이 생성 시점 언어로만 저장돼 UI 언어를 바꿔도 그대로였음. Gemini 1회 호출로 ko·en 두 판(동일 내용, 언어별 문장 규칙 유지)을 생성해 `final_report.i18n`에 저장, FE `localizeReport()`가 현재 언어판을 즉시 표시(AI 재호출 없음).',
+    },
+    {
+      id: 'FULL-PERSONA-1',
+      title: '취향 막대가 반대·근거 없음이 중립으로 보임',
+      completedAt: '2026-09-27',
+      note: '오각형 삭제(`8cff892`). 양극 막대 5개 전부 좌우 반전 버그 수정 + 단어 변경(`ee6d5f4`: 비정형↔정형, 자연↔인공 재료, 공간감 아늑한↔압도적인, 분위기 차분한↔역동적인, 전통적↔실험적). 근거 없는 축 = null → 흐린 막대 + "아직 판단할 근거가 없어요"(`ce4968e`).',
+    },
+    {
+      id: 'BACK-RECOMMEND-7',
+      title: '결과 My Likes에 Discovery 좋아요 누락',
+      completedAt: '2026-09-27',
+      note: '결과 API `liked_images`가 이번 세션 스와이프만 조회 → Discovery→Taste 전환 시 Discovery 좋아요 누락(리포트와 불일치). `session.project.liked_ids`(보드 좋아요 목록)에서 조회, 순서 유지·중복 제거. 실데이터: 4개 → 20개 표시.',
+    },
     {
       id: 'BACK-LLM-5',
       title: '리포트 취향 문장이 근거 없음',
@@ -57,24 +75,6 @@ window.PROJECT_STATE = {
       title: '__mocks 픽스처 develop 추적(공개 URL 노출)',
       completedAt: '2026-09-06',
       note: '`git rm --cached -r`로 38파일(~900KB) 인덱스만 제거 — 워킹트리 보존, .gitignore:90(#321)이 재유입 차단. 배포 시 Vercel `/__mocks/*.html` 공개 URL 소멸. DEPLOY-BATCH-2 플랜 PR-D',
-    },
-    {
-      id: 'FULL-PRIVACY-1',
-      title: '발견 피드 opt-out 부재(진단=영구 노출)',
-      completedAt: '2026-09-06',
-      note: 'discovery_opt_in 쓰기 경로 전무(#311 이후 최상위 privacy 갭) — PATCH /personality/me/ 신설: strict boolean 전용 serializer(축/타입 구조적 쓰기 불가), owner 한정 404 미러, 값 변경 시 evict_user_profile_detail(User id 키 정확 사용)',
-    },
-    {
-      id: 'FRONT-VERIFY-1',
-      title: 'PATCH 경로 verify_required 모달 배선 + 로그인 draft 유지',
-      completedAt: '2026-09-06',
-      note: 'updateProject가 403 verify_required를 미변환(createProject만 처리) → 공용 throwIfVerifyRequired 헬퍼 추출, 양 경로 동일 동작(VerifyRequiredError + archithon:verify-required 이벤트). guest 4번째 보드 저장확정 시 VerifyGateModal 정상 표출',
-    },
-    {
-      id: 'BACK-PRIVACY-1',
-      title: '비인증 base64 리포트 유출 + 썸네일 캐시 evict 누락',
-      completedAt: '2026-09-06',
-      note: 'AllowAny `/users/<id>/projects/`가 report_image base64(개당 ~200KB, 페이지당 50개)를 익명 호출자에게 그대로 실어줌 — 신규 PublicProjectListSerializer로 해당 엔드포인트만 두 필드 제거(프론트 소비자 0 확인). owner GET /projects/는 불변(App.jsx:929 로그인 동기화 의존). queryset defer도 추가(DB→앱 전송비, Opus 검증 안전)',
     },
   ],
   now: [],
@@ -124,6 +124,16 @@ window.PROJECT_STATE = {
       },
     ],
     medium: [
+      {
+        id: 'BACK-RECOMMEND-8',
+        title: '형태 축(정형↔비정형) 근거 부재',
+        note: '_FULL-PERSONA-1에서 제외. 임베딩이 기하학 형태 정보를 약하게 담아 기준 문장 투영 AUC 0.63~0.75. 후보: Gemini 건물별 정형도 채점(표본 200~300개로 AUC 검증 후 전체 일괄), 건물 사진 임베딩, Make DB에 형태 필드 요청. 태그로 양 끝 정의는 사용자 반대._',
+      },
+      {
+        id: 'BACK-RECOMMEND-9',
+        title: '태그 가중치 방식 잔재 삭제 확정',
+        note: '_`services/axis_scores.py` 주석 처리된 태그 가중치 코드, `TagAxisWeight` 모델·표, `fixtures/tag_axis_weights.json`, 마이그레이션 0033 데이터. 사용자 확정 시 코드 삭제 + 표 삭제 마이그레이션._',
+      },
       {
         id: 'FRONT-DESIGN-C2',
         title: '디자인 포트 잔여 결정 4건 + 스타일 델타 21곳',
@@ -972,6 +982,10 @@ window.PROJECT_STATE = {
       role: 'commands 패키지 init',
     },
     {
+      path: 'backend/apps/recommendation/management/commands/build_axis_directions.py',
+      role: '취향 축 방향 계산 커맨드',
+    },
+    {
       path: 'backend/apps/recommendation/management/commands/purge_legacy_projects.py',
       role: '레거시 프로젝트 정리 커맨드',
     },
@@ -1108,6 +1122,10 @@ window.PROJECT_STATE = {
       role: '마이그 0032: SessionEvent tag_answer 선택지 제거',
     },
     {
+      path: 'backend/apps/recommendation/migrations/0033_retune_tag_axis_weights.py',
+      role: '마이그 0033: 태그-축 가중치 재조정',
+    },
+    {
       path: 'backend/apps/recommendation/migrations/__init__.py',
       role: '마이그레이션 패키지 init',
     },
@@ -1126,6 +1144,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/recommendation/services/__init__.py',
       role: 'services 패키지 facade',
+    },
+    {
+      path: 'backend/apps/recommendation/services/_axis_anchors.py',
+      role: '취향 축 기준 문장 정의',
     },
     {
       path: 'backend/apps/recommendation/services/_caches.py',
@@ -1194,6 +1216,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/recommendation/tests/test_architect_id_batch.py',
       role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/tests/test_axis_scores.py',
+      role: '취향 축 점수 테스트',
     },
     {
       path: 'backend/apps/recommendation/tests/test_back_recommend_4.py',
@@ -1478,6 +1504,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/conftest.py',
       role: 'pytest 루트 픽스처 설정',
+    },
+    {
+      path: 'backend/fixtures/axis_directions.json',
+      role: '취향 축 방향·정규화 값',
     },
     {
       path: 'backend/fixtures/tag_axis_weights.json',
@@ -2096,6 +2126,10 @@ window.PROJECT_STATE = {
       role: '하단 탭바 내비게이션',
     },
     {
+      path: 'frontend/src/components/TasteSpectrum.jsx',
+      role: '취향 스펙트럼 SVG 시각화',
+    },
+    {
       path: 'frontend/src/components/ThemePreviewCard.jsx',
       role: '',
     },
@@ -2530,6 +2564,14 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/utils/loginFlow.test.mjs',
       role: 'loginFlow 테스트',
+    },
+    {
+      path: 'frontend/src/utils/reportText.js',
+      role: '리포트 문장 언어 선택',
+    },
+    {
+      path: 'frontend/src/utils/reportText.test.mjs',
+      role: '리포트 언어 선택 테스트',
     },
     {
       path: 'frontend/src/utils/reportWriteError.js',

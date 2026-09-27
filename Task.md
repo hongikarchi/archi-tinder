@@ -166,6 +166,12 @@ _(2026-06-08 범위 축소: #212(`4e58195`) Case #3 resume guard가 **진행중(
 _(2026-07-12 감사 re-pin: 전제 유효, 라인 이동 — resume guard `session_service.py:167-182`(completed 제외), 신규 세션 cold-create `:397-416`(phase='exploring', like_vectors=[] 등 전부 빈 값), `liked_ids`는 완료-세션 리포트에만 사용(`:688-689`), warm-start seed 경로 여전히 부재.)_
 
 ### MEDIUM
+
+#### BACK-RECOMMEND-8 — 형태 축(정형↔비정형) 근거 부재
+_FULL-PERSONA-1에서 제외. 임베딩이 기하학 형태 정보를 약하게 담아 기준 문장 투영 AUC 0.63~0.75. 후보: Gemini 건물별 정형도 채점(표본 200~300개로 AUC 검증 후 전체 일괄), 건물 사진 임베딩, Make DB에 형태 필드 요청. 태그로 양 끝 정의는 사용자 반대._
+
+#### BACK-RECOMMEND-9 — 태그 가중치 방식 잔재 삭제 확정
+_`services/axis_scores.py` 주석 처리된 태그 가중치 코드, `TagAxisWeight` 모델·표, `fixtures/tag_axis_weights.json`, 마이그레이션 0033 데이터. 사용자 확정 시 코드 삭제 + 표 삭제 마이그레이션._
 #### FRONT-DESIGN-C2 — 디자인 포트 잔여 결정 4건 + 스타일 델타 21곳
 FRONT-DESIGN-C(#321) 후속. 결정 대기: 저장/북마크 amber(`#fbbf24`) 대응 토큰 부재(accent-3는 라이트에서 갈색이라 부적합 — 상태 토큰 계열 신설 필요); 모달 backdrop 0.4 vs scrim 0.65(DESIGN.md §1.4/§8.10 모순 해소); UserProfile 떠있는 뒤로가기 목적지(`/user/me`는 TabBar 루트); appearance 칩 radius 10px(토큰 스케일 밖, 공용 .chip). 로그인 첫카드 "10~15장이면 취향 프로필 완성" 카피 복원 여부(핵심 약속 문구, 한 줄 revert). 스타일 델타 잔여 21곳은 `python tools/design-diff.py`로 재측정 후 처리. 로그인 하위 4카드+오버레이 17종은 자동 대조 불가 — 수동 확인.
 
@@ -303,6 +309,20 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FULL-REPORT-2 — 리포트가 언어 전환에 안 따라옴 — RESOLVED 2026-09-27 (`e13c9b9`, 푸시됨 · PR 대기 — `feature/algo-persona-report`)
+- 리포트 문장이 생성 시점 언어로만 저장돼 UI 언어를 바꿔도 그대로였음. Gemini 1회 호출로 ko·en 두 판(동일 내용, 언어별 문장 규칙 유지)을 생성해 `final_report.i18n`에 저장, FE `localizeReport()`가 현재 언어판을 즉시 표시(AI 재호출 없음).
+- 최상위 필드 = 생성 시 언어(하위 호환), `dominant_*` 영어 유지, 한쪽 누락 시 다른 쪽으로 채움. 적용: PersonaReport, ResultsPage, BoardDetailPage 공유 문구, SaveBoardModal 기본 이름. 기존 리포트는 재생성 시 두 판 생성.
+- 검증: review/security PASS, BE 30 pass, FE 124 pass, 실데이터 ko/en 샘플 일치 확인.
+
+### FULL-PERSONA-1 — 취향 막대가 반대·근거 없음이 중립으로 보임 — RESOLVED 2026-09-27 (`54e9c97`, 푸시됨 · PR 대기 — `feature/algo-persona-report`)
+- 오각형 삭제(`8cff892`). 양극 막대 5개 전부 좌우 반전 버그 수정 + 단어 변경(`ee6d5f4`: 비정형↔정형, 자연↔인공 재료, 공간감 아늑한↔압도적인, 분위기 차분한↔역동적인, 전통적↔실험적). 근거 없는 축 = null → 흐린 막대 + "아직 판단할 근거가 없어요"(`ce4968e`).
+- 점수 방식 교체(`54e9c97`): 태그 가중치(`7562118`, 단어 의미 연결·16행·재료 규칙 — 현재 주석 처리 보존) → **건물 임베딩을 기준 문장 방향에 투영**(태그 미사용). 축 4개(물성·공간감·분위기·전통성), 형태 축 제외(문장 AUC 0.63~0.75). 검증 AUC 0.92/0.99/0.85/0.91.
+- 기준 문장 `services/_axis_anchors.py`, 방향 계산 `manage.py build_axis_directions` → `fixtures/axis_directions.json`(HF는 빌드 시만). 저장 형태 `{score, dots(25/50/75% 또는 3개 이하 전부), n, iqr, confidence=min(n/5,1)×(1−iqr)}`, 예전 형식은 열 때 재계산.
+- UI `TasteSpectrum.jsx`: 좌우 바깥 단어, 0.5px 선, 검정 원(작은 3.5/큰 9), 테마색 곡선(신뢰도 크기, 축 사이 S자 연결). Deferred: BACK-RECOMMEND-8 (형태 축 재도입), BACK-RECOMMEND-9 (태그 가중치 코드·표 삭제 확정).
+
+### BACK-RECOMMEND-7 — 결과 My Likes에 Discovery 좋아요 누락 — RESOLVED 2026-09-27 (`9a19711`, 푸시됨 · PR 대기 — `feature/algo-persona-report`)
+- 결과 API `liked_images`가 이번 세션 스와이프만 조회 → Discovery→Taste 전환 시 Discovery 좋아요 누락(리포트와 불일치). `session.project.liked_ids`(보드 좋아요 목록)에서 조회, 순서 유지·중복 제거. 실데이터: 4개 → 20개 표시.
+
 ### BACK-LLM-5 — 리포트 취향 문장이 근거 없음 — RESOLVED 2026-09-26 (`c69c895`, PR 대기 — FULL-RECOMMEND-1 위 스택)
 - 리포트를 보여준 카드(좋아요∪싫어요) 기준 결정론 사실(`taste_facts.py`) + 사용자 언어 프롬프트(`_report_prompts.py`)로 재작성. ① `pattern_paragraph`("보여드린 건물 중…") + ② `description`(부드러운 해석), 기존 필드 호환, `taste_facts` 저장(싫어요 건물 id 제외 — 보안 리뷰).
 리포트를 스와이프 사실 기반으로 재작성 (grilling 2026-09-25~26 결정, FULL-RECOMMEND-1 위에 스택 — `feature/algo-report-grounding`). 기존 `generate_persona_report`는 liked 6속성만 영어 프롬프트로 전송(언어 설정 무시, 싫어요 미사용).

@@ -427,5 +427,13 @@
   "backend/apps/recommendation/services/taste_facts.py": "리포트 취향 사실 결정론 계산",
   "backend/apps/recommendation/services/_report_prompts.py": "리포트 문장 규칙 프롬프트",
   "backend/apps/recommendation/tests/test_taste_facts.py": "취향 사실 계산 테스트",
-  "docs/report-writing.md": "리포트 작성 규칙 문서"
+  "docs/report-writing.md": "리포트 작성 규칙 문서",
+  "frontend/src/components/TasteSpectrum.jsx": "취향 스펙트럼 SVG 시각화",
+  "backend/apps/recommendation/services/_axis_anchors.py": "취향 축 기준 문장 정의",
+  "backend/apps/recommendation/management/commands/build_axis_directions.py": "취향 축 방향 계산 커맨드",
+  "backend/fixtures/axis_directions.json": "취향 축 방향·정규화 값",
+  "backend/apps/recommendation/migrations/0033_retune_tag_axis_weights.py": "마이그 0033: 태그-축 가중치 재조정",
+  "backend/apps/recommendation/tests/test_axis_scores.py": "취향 축 점수 테스트",
+  "frontend/src/utils/reportText.js": "리포트 문장 언어 선택",
+  "frontend/src/utils/reportText.test.mjs": "리포트 언어 선택 테스트"
 }

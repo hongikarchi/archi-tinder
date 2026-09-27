@@ -3,7 +3,7 @@
 > Phase logic, mathematical formulas, and hyperparameter theory.
 > Research agent updates this file. Orchestrator references it for algorithm tasks.
 
-**Last Synced (Reporter):** 2026-09-26 c69c895
+**Last Synced (Reporter):** 2026-09-27 e13c9b9
 
 ---
 
@@ -199,6 +199,7 @@ _(Updated 2026-04-25 190c830: Like writes now carry an `intensity` field (defaul
 | `report_dislike_mostly` | float |  | 0.8 |
 | `report_fact_overlap_max` | float |  | 0.8 |
 | `report_fact_smoothing` | float |  | 1 |
+| `axis_confidence_full_n` | int |  | 5 |
 
 Source: `backend/config/settings.py` RECOMMENDATION dict.
 
