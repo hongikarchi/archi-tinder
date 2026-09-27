@@ -20,6 +20,8 @@ import FloatingIconButton from '../components/FloatingIconButton.jsx'
 import Tabs from '../components/Tabs.jsx'
 import EmptyState from '../components/EmptyState.jsx'
 import PhotoTile from '../components/PhotoTile.jsx'
+import SectionTitle from '../components/SectionTitle.jsx'
+import Skeleton from '../components/Skeleton.jsx'
 import { useUnreadNotifications } from '../hooks/useUnreadNotifications.js'
 import { OfficeCard, SkeletonCard, BuildingIconEmpty } from './LikedOfficesPage.jsx'
 
@@ -810,39 +812,28 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
           </div>
         ) : (
           // Normal boards section header
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            marginBottom: 20, padding: '0 4px',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <h3 style={{
-                color: 'var(--color-text)', fontSize: 20, fontWeight: 700,
-                margin: 0, letterSpacing: '-0.01em',
-              }}>
-                Curated Boards
-              </h3>
-              <span style={{
-                color: 'var(--color-text-dimmer)', fontSize: 13, fontWeight: 600,
-              }}>
-                {boardsTotalCount}
-              </span>
-            </div>
-            {/* P6: Edit button — owner-only, only when boards exist */}
-            {SHOW_BOARD_EDIT_BUTTON && isMe && boards.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setSelectMode(true)}
-                aria-label="Edit boards"
-                className={styles.editBtn}
-              >
-                {/* Pencil icon */}
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                </svg>
-                Edit
-              </button>
-            )}
+          <div style={{ marginBottom: 20, padding: '0 4px' }}>
+            <SectionTitle
+              as="h3"
+              count={boardsTotalCount}
+              right={SHOW_BOARD_EDIT_BUTTON && isMe && boards.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSelectMode(true)}
+                  aria-label="Edit boards"
+                  className={styles.editBtn}
+                >
+                  {/* Pencil icon */}
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                  </svg>
+                  Edit
+                </button>
+              )}
+            >
+              Curated Boards
+            </SectionTitle>
           </div>
         )}
 
@@ -989,12 +980,9 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         {/* Liked tab content */}
         {activeTab === 'liked' && (
           <div style={{ padding: '16px 0' }}>
-            <h3 style={{
-              color: 'var(--color-text)', fontSize: 20, fontWeight: 700,
-              margin: '0 0 20px', letterSpacing: '-0.01em',
-            }}>
-              Liked Projects
-            </h3>
+            <div style={{ marginBottom: 20 }}>
+              <SectionTitle as="h3">Liked Projects</SectionTitle>
+            </div>
             {likedLoading ? (
               <div style={{
                 display: 'grid',
@@ -1038,92 +1026,71 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
             rather than linking anywhere else. */}
         {activeTab === 'created' && (
           <div style={{ padding: '16px 0' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <h3 style={{ color: 'var(--color-text)', fontSize: 20, fontWeight: 700, margin: 0, letterSpacing: '-0.01em' }}>
-                {isMe ? 'My Works' : 'Works'}
-              </h3>
-              {isMe && (
-                <button
-                  type="button"
-                  onClick={() => navigate('/upload')}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 6,
-                    padding: '8px 16px', borderRadius: 20,
-                    background: 'var(--color-text)', color: 'var(--color-bg)',
-                    border: 'none', cursor: 'pointer',
-                    fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
-                  }}
-                >
-                  + 업로드
-                </button>
-              )}
+            <div style={{ marginBottom: 20 }}>
+              <SectionTitle
+                as="h3"
+                right={isMe && (
+                  <button
+                    type="button"
+                    onClick={() => navigate('/upload')}
+                    className={styles.uploadBtn}
+                  >
+                    {t('profile.uploadButton')}
+                  </button>
+                )}
+              >
+                {isMe ? t('profile.myWorksTitle') : t('profile.worksTitle')}
+              </SectionTitle>
             </div>
             {worksLoading ? (
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-                gap: 16,
+                gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+                gap: 20,
               }}>
                 {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} style={{ aspectRatio: '3/4', borderRadius: 12, background: 'var(--color-surface-2)' }} />
+                  <Skeleton key={i} radius="var(--radius-lg)" style={{ height: 'auto', aspectRatio: '4 / 5' }} />
                 ))}
               </div>
             ) : !works || works.length === 0 ? (
               <EmptyState
-                title="아직 업로드한 작품이 없어요"
-                body={isMe ? '본인의 건축 작품을 올려보세요' : undefined}
-                actionLabel={isMe ? '작품 업로드' : undefined}
+                title={t('profile.noWorksTitle')}
+                body={isMe ? t('profile.noWorksBody') : undefined}
+                actionLabel={isMe ? t('profile.uploadWorkAction') : undefined}
                 onAction={isMe ? () => navigate('/upload') : undefined}
               />
             ) : (
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-                gap: 16,
+                gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+                gap: 20,
               }}>
                 {works.map(work => (
-                  <div
+                  <PhotoTile
                     key={work.upload_id}
-                    onClick={isMe ? () => setSelectedWorkId(work.upload_id) : undefined}
-                    style={{
-                      borderRadius: 12, overflow: 'hidden',
-                      background: 'var(--color-surface-2)',
-                      display: 'flex', flexDirection: 'column',
-                      cursor: isMe ? 'pointer' : 'default',
-                    }}
-                  >
-                    {work.cover_url ? (
-                      <div style={{ aspectRatio: '3/4', overflow: 'hidden' }}>
-                        <img
-                          src={work.cover_url}
-                          alt={work.title}
-                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                        />
-                      </div>
-                    ) : (
-                      <div style={{ aspectRatio: '3/4', background: 'var(--color-surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <span style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>처리 중</span>
-                      </div>
+                    imageUrl={work.cover_url}
+                    title={work.title}
+                    subtitle={work.program}
+                    placeholder={!work.cover_url && (
+                      <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--fs-caption)' }}>
+                        {t('profile.workProcessing')}
+                      </span>
                     )}
-                    <div style={{ padding: '10px 12px 12px' }}>
-                      <p style={{ margin: 0, fontWeight: 600, fontSize: 13, color: 'var(--color-text)', lineHeight: 1.3 }}>
-                        {work.title}
-                      </p>
-                      <p style={{ margin: '4px 0 0', fontSize: 11, color: 'var(--color-text-muted)' }}>
-                        {work.program}
-                      </p>
-                      {isMe && !work.is_publishable && (
-                        <span style={{
-                          display: 'inline-block', marginTop: 6,
-                          padding: '2px 8px', borderRadius: 10,
-                          background: 'color-mix(in srgb, var(--color-destructive) 12%, transparent)', color: 'var(--color-destructive)',
-                          fontSize: 10, fontWeight: 600,
-                        }}>
-                          {work.gate_reason ? '검토 거절' : '검토 중'}
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                    onClick={isMe ? () => setSelectedWorkId(work.upload_id) : undefined}
+                    topRight={isMe && !work.is_publishable && (
+                      <span style={{
+                        display: 'inline-block',
+                        padding: '2px 8px',
+                        borderRadius: 'var(--radius-sm)',
+                        background: 'color-mix(in srgb, var(--color-destructive) 12%, transparent)',
+                        color: 'var(--color-destructive)',
+                        fontSize: 'var(--fs-caption)',
+                        fontWeight: 'var(--fw-semibold)',
+                      }}>
+                        {work.gate_reason ? t('workDetail.status.rejected') : t('workDetail.status.processing')}
+                      </span>
+                    )}
+                  />
                 ))}
               </div>
             )}

@@ -202,10 +202,21 @@ export default function BoardDetailPage({ onResume, onLogout }) {
     : null
   const showBuildingsSkeleton = loading && buildings.length === 0
   const boardName = localName || board?.name || ''
+  // Header (title / owner row / stats / action buttons) needs the real board
+  // to decide owner vs non-owner — without this gate the non-owner branch
+  // (e.g. the "Love this" button) and an empty/broken owner avatar flash
+  // briefly before `board` arrives.
+  const headerLoading = loading && !board
 
   return (
     <PageShell
       width="medium"
+      // Top padding so the cover card clears the fixed Share button
+      // (top:50/left:12) instead of sitting flush under the logo header
+      // (was the default `padding: '0 20px'` with no top gap at all —
+      // profile-page-visual-parity gap, mirrors UserProfilePage's 32px
+      // content-column top padding).
+      contentStyle={{ padding: '20px 20px 0' }}
       chrome={
         <>
           <PageBackButton onClick={() => navigate(-1)} label={t('board.back')} />
@@ -246,7 +257,19 @@ export default function BoardDetailPage({ onResume, onLogout }) {
         <BoardCover imageUrl={coverImage} alt={boardName || t('board.coverAlt')} />
       )}
 
-      {/* Title row — board name, editable inline by the owner */}
+      {/* Title row — board name, editable inline by the owner. Skeleton while
+          the board is still loading so the owner-row / stats don't flash
+          empty/broken content (see `headerLoading` above). */}
+      {headerLoading ? (
+        <div style={{ marginTop: 20 }}>
+          <Skeleton width="70%" height={28} radius="var(--radius-sm)" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14 }}>
+            <Skeleton circle height={28} />
+            <Skeleton width={140} height={16} />
+          </div>
+          <Skeleton width={180} height={14} style={{ marginTop: 10 }} />
+        </div>
+      ) : (
       <div style={{ marginTop: 20 }}>
         {isEditingName ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -381,8 +404,16 @@ export default function BoardDetailPage({ onResume, onLogout }) {
           {t(buildings.length === 1 ? 'board.statsOne' : 'board.statsMany', { n: buildings.length, r: reactionCount })}
         </p>
       </div>
+      )}
 
-      {/* Action row — owner sees edit controls, others see Love This; report button when final_report exists */}
+      {/* Action row — owner sees edit controls, others see Love This; report button when final_report exists.
+          Skeleton placeholder while headerLoading so we never guess owner vs
+          non-owner before `board` arrives. */}
+      {headerLoading ? (
+        <div style={{ padding: '20px 0 8px', display: 'flex', justifyContent: 'center' }}>
+          <Skeleton width="100%" height={44} radius="var(--radius-md)" style={{ maxWidth: 320 }} />
+        </div>
+      ) : (
       <div style={{
         padding: '20px 0 8px',
         display: 'flex',
@@ -520,6 +551,7 @@ export default function BoardDetailPage({ onResume, onLogout }) {
           </button>
         )}
       </div>
+      )}
       {!isOwner && reactionError && (
         <div style={{
           color: 'var(--color-text-muted)',

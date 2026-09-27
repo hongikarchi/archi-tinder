@@ -19,7 +19,10 @@ import styles from './PhotoTile.module.css'
  *   imageUrl    — photo src. Falls back to `placeholder` when absent.
  *   title       — building name, 2-line clamp, `--fs-body`/`--fw-semibold`.
  *   subtitle    — architect / meta line, `--fs-caption`.
- *   onClick     — click handler; tile only shows a pointer cursor when set.
+ *   onClick     — click handler; tile only shows a pointer cursor + hover
+ *                 lift/outline when set (a tile with no `onClick` renders as
+ *                 a plain static block — no cursor, no hover, no button role,
+ *                 matching a non-owner's read-only view).
  *   topRight    — optional overlay slot (e.g. a bookmark/select badge).
  *   placeholder — optional node shown instead of the scrim+caption when
  *                 there is no `imageUrl` (e.g. `<BuildingIconEmpty/>`).
@@ -38,7 +41,7 @@ export default function PhotoTile({
   return (
     <div
       onClick={onClick}
-      className={`${styles.tile} ${className}`}
+      className={`${styles.tile} ${onClick ? styles.interactive : ''} ${className}`}
       style={{ aspectRatio: aspect, cursor: onClick ? 'pointer' : 'default' }}
     >
       {imageUrl ? (

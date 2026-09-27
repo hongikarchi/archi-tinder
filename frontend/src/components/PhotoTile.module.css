@@ -12,20 +12,25 @@
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
   user-select: none;
   border: 1px solid transparent;
+}
+
+/* Hover lift + outline only when the tile is actually clickable (`onClick`
+ * set) — a non-interactive tile (no onClick) stays a plain static block. */
+.interactive {
   transition: transform var(--motion-normal) var(--motion-ease),
               border-color var(--motion-normal) var(--motion-ease);
 }
 
-.tile:hover {
+.interactive:hover {
   transform: translateY(-4px);
   border-color: color-mix(in srgb, var(--accent-1) 55%, transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tile {
+  .interactive {
     transition: none;
   }
-  .tile:hover {
+  .interactive:hover {
     transform: none;
   }
 }

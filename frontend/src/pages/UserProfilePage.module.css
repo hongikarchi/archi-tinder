@@ -166,12 +166,45 @@
   outline-offset: 2px;
 }
 
+/* ---- Upload button (Created tab header, owner-only) ---- */
+/* DESIGN.md §8.2 secondary button — replaces the old black pill
+ * (radius 20, var(--color-text) bg) with the standard secondary spec. */
+
+.uploadBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  color: var(--color-text);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  padding: 0 16px;
+  min-height: 44px;
+  font-family: inherit;
+  transition: border-color var(--motion-fast) var(--motion-ease),
+              color var(--motion-fast) var(--motion-ease);
+}
+
+.uploadBtn:hover {
+  border-color: var(--accent-1);
+  color: var(--accent-1);
+}
+
+.uploadBtn:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .cancelBtn,
   .selectAllBtn,
   .editBtn,
   .bulkActionBtn,
-  .bulkDeleteBtn {
+  .bulkDeleteBtn,
+  .uploadBtn {
     transition: none;
   }
 }
