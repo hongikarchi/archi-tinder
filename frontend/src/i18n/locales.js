@@ -233,6 +233,7 @@ export const locales = {
       reportError:       '리포트 재생성에 실패했습니다.',
       noEvidence:        '아직 판단할 근거가 없어요',
       spectrumLegend:    '큰 원: 고르신 건물의 평균 · 작은 원: 고르신 건물 분포\n곡선이 클수록 근거가 많고 일관돼요',
+      legacySpectrum:    '이전 방식으로 분석된 결과예요 · 리포트를 재생성하면 최신 분석을 볼 수 있어요',
       axis: {
         form:        '형태',
         materiality: '물성',
@@ -888,6 +889,7 @@ export const locales = {
       reportError:       'Failed to regenerate report.',
       noEvidence:        'Not enough evidence yet',
       spectrumLegend:    'Big dot: average of your liked buildings · Small dots: spread of your liked buildings\nA bigger curve means more, more consistent evidence',
+      legacySpectrum:    'Analyzed with the previous method · Regenerate the report to see the latest analysis',
       axis: {
         form:        'Form',
         materiality: 'Materiality',

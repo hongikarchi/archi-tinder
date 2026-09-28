@@ -3,6 +3,7 @@ import { generateReport, generateReportImage } from '../api/projects.js'
 import TasteSpectrum from './TasteSpectrum.jsx'
 import { useTranslation } from '../i18n/index.js'
 import { localizeReport } from '../utils/reportText.js'
+import { isLegacyAxisScores } from '../utils/axisScores.js'
 
 /* ── Constants ──────────────────────────────────────────────────────────── */
 // Form is intentionally excluded — see TasteSpectrum.jsx.
@@ -222,6 +223,20 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
           </Fragment>
         ))}
       </p>
+
+      {/* 구버전 리포트 안내 — axis_scores가 legacy 형태(flat number/form 키)일 때만.
+          백엔드가 구버전 리포트의 axis_scores를 재계산하지 않기로 결정
+          (2026-09-28) — 저장된 legacy 형태를 그대로 보여주고 안내만 덧붙인다. */}
+      {isLegacyAxisScores(scores) && (
+        <p style={{
+          color: 'var(--color-text-dim)',
+          fontSize: 12,
+          lineHeight: 1.6,
+          margin: '0 0 12px',
+        }}>
+          {t('persona.legacySpectrum')}
+        </p>
+      )}
 
       {/* 양극 스펙트럼 시각화 */}
       <div style={{ marginBottom: 24 }}>

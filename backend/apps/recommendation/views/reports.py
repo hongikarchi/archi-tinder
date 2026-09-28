@@ -9,7 +9,7 @@ from rest_framework.views import APIView
 from ..models import Project
 from .. import services
 from ..caches import evict_projects_list, evict_project_detail, evict_user_profile_detail
-from ..services.axis_scores import compute_axis_scores, ensure_axis_scores
+from ..services.axis_scores import compute_axis_scores
 from ..throttles import ReportGenerateThrottle, ReportImageThrottle
 from ._shared import _get_profile, _liked_id_only
 
@@ -34,10 +34,10 @@ class ProjectReportGenerateView(APIView):
         # on every revisit-triggered POST (was causing silent 429s + nondeterministic
         # report rewrites — reports.py regenerated+overwrote on every call).
         if project.final_report and not request.data.get('regenerate'):
-            # FULL-PERSONA-SPECTRUM (2026-09-27): a legacy-format stored
-            # axis_scores (pre embedding-projection) is recomputed + persisted
-            # here so old boards pick up the new 4-axis shape on next read.
-            ensure_axis_scores(project)
+            # 2026-09-28: no recompute on the cached short-circuit path -- a
+            # legacy-format stored axis_scores is returned as-is (original
+            # BACK-REPORT-CACHE-1 behaviour). It only upgrades to the new
+            # embedding-projection shape via the generate/regenerate path below.
             return Response({'final_report': project.final_report, 'axis_scores': project.axis_scores})
 
         liked_id_strings = _liked_id_only(project.liked_ids)

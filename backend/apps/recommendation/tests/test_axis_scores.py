@@ -7,9 +7,12 @@ Coverage:
     all scores sorted, n>3 = 25/50/75 percentiles), iqr/confidence formula,
     n==0 (no parseable embeddings) -> every axis None, empty building_ids ->
     every axis None, missing axis_directions.json -> every axis None.
-  - _is_current_axis_shape / ensure_axis_scores: legacy flat 5-axis
-    (form-included) shape is detected and triggers a recompute + save +
-    cache eviction; the new 4-axis dict-with-'dots' shape is a no-op.
+
+2026-09-28: recompute-on-read (ensure_axis_scores / _is_current_axis_shape)
+was removed -- stored axis_scores (legacy or current shape) is now shown
+as-is on read; only report generate/regenerate calls compute_axis_scores.
+See test_report_cache.py / test_phase13_board.py for the read-path
+regression coverage.
 
 Pure/unit style throughout: connections['buildings'].cursor() and
 _load_directions()/_parse_embedding_text are mocked -- no real Postgres
@@ -20,12 +23,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from apps.recommendation.services.axis_scores import (
-    AXES,
-    _is_current_axis_shape,
-    compute_axis_scores,
-    ensure_axis_scores,
-)
+from apps.recommendation.services.axis_scores import AXES, compute_axis_scores
 
 
 # ── shared fixtures/helpers ──────────────────────────────────────────────────
@@ -200,115 +198,3 @@ class TestComputeAxisScoresMath:
             assert result[axis]['confidence'] == pytest.approx(
                 min(5 / 5, 1) * max(0, 1 - result[axis]['iqr'])
             )
-
-
-# ── _is_current_axis_shape / ensure_axis_scores ─────────────────────────────
-
-class TestIsCurrentAxisShape:
-
-    def test_none_is_not_current(self):
-        assert _is_current_axis_shape(None) is False
-
-    def test_empty_dict_is_not_current(self):
-        assert _is_current_axis_shape({}) is False
-
-    def test_legacy_flat_five_axis_shape_is_not_current(self):
-        legacy = {'form': 0.5, 'materiality': 0.2, 'scale': 0.1, 'energy': 0.0, 'tradition': -0.3}
-        assert _is_current_axis_shape(legacy) is False
-
-    def test_legacy_shape_with_nones_is_not_current(self):
-        legacy = {'form': None, 'materiality': None, 'scale': None, 'energy': None, 'tradition': None}
-        assert _is_current_axis_shape(legacy) is False
-
-    def test_wrong_axis_keyset_is_not_current(self):
-        # Current axis names, but missing one + no 'form' -- keyset mismatch either way.
-        wrong = {'materiality': {'score': 0.1, 'dots': [0.1]}, 'scale': {'score': 0.1, 'dots': [0.1]}}
-        assert _is_current_axis_shape(wrong) is False
-
-    def test_current_shape_with_all_axes_dicts_is_current(self):
-        current = {
-            axis: {'score': 0.1, 'dots': [0.1], 'n': 1, 'iqr': 1.0, 'confidence': 0.0}
-            for axis in AXES
-        }
-        assert _is_current_axis_shape(current) is True
-
-    def test_current_shape_with_some_none_axes_is_current(self):
-        current = {axis: None for axis in AXES}
-        current['materiality'] = {'score': 0.1, 'dots': [0.1], 'n': 1, 'iqr': 1.0, 'confidence': 0.0}
-        assert _is_current_axis_shape(current) is True
-
-    def test_dict_value_missing_dots_key_is_not_current(self):
-        bad = {axis: {'score': 0.1} for axis in AXES}
-        assert _is_current_axis_shape(bad) is False
-
-
-class _FakeProject:
-    """Minimal stand-in for models.Project -- only the attributes/methods
-    ensure_axis_scores touches, so this test file needs no Django DB."""
-
-    def __init__(self, axis_scores, liked_ids=None, user_id=7, project_id='proj-1'):
-        self.axis_scores = axis_scores
-        self.liked_ids = liked_ids if liked_ids is not None else []
-        self.user_id = user_id
-        self.project_id = project_id
-        self.save_calls = []
-
-    def save(self, update_fields=None):
-        self.save_calls.append(update_fields)
-
-
-class TestEnsureAxisScores:
-
-    def test_current_shape_is_a_noop(self):
-        current = {
-            axis: {'score': 0.1, 'dots': [0.1], 'n': 1, 'iqr': 1.0, 'confidence': 0.0}
-            for axis in AXES
-        }
-        project = _FakeProject(axis_scores=current)
-
-        with patch('apps.recommendation.services.axis_scores.compute_axis_scores') as mock_compute:
-            ensure_axis_scores(project)
-
-        mock_compute.assert_not_called()
-        assert project.save_calls == []
-        assert project.axis_scores == current
-
-    def test_legacy_shape_triggers_recompute_save_and_eviction(self):
-        legacy = {'form': 0.5, 'materiality': 0.2, 'scale': 0.1, 'energy': 0.0, 'tradition': -0.3}
-        new_scores = {
-            axis: {'score': 0.4, 'dots': [0.4], 'n': 2, 'iqr': 0.0, 'confidence': 0.4}
-            for axis in AXES
-        }
-        project = _FakeProject(
-            axis_scores=legacy,
-            liked_ids=[{'id': 'bld_000001', 'intensity': 1.0}, 'bld_000002'],
-        )
-
-        with patch('apps.recommendation.services.axis_scores.compute_axis_scores',
-                   return_value=new_scores) as mock_compute, \
-             patch('apps.recommendation.views._shared._liked_id_only',
-                   return_value=['bld_000001', 'bld_000002']) as mock_liked, \
-             patch('apps.recommendation.caches.evict_projects_list') as mock_evict_list, \
-             patch('apps.recommendation.caches.evict_project_detail') as mock_evict_detail:
-            ensure_axis_scores(project)
-
-        mock_liked.assert_called_once_with(project.liked_ids)
-        mock_compute.assert_called_once_with(['bld_000001', 'bld_000002'])
-        assert project.axis_scores == new_scores
-        assert project.save_calls == [['axis_scores']]
-        mock_evict_list.assert_called_once_with(project.user_id)
-        mock_evict_detail.assert_called_once_with(str(project.project_id))
-
-    def test_missing_axis_scores_triggers_recompute(self):
-        project = _FakeProject(axis_scores=None)
-        new_scores = {axis: None for axis in AXES}
-
-        with patch('apps.recommendation.services.axis_scores.compute_axis_scores',
-                   return_value=new_scores), \
-             patch('apps.recommendation.views._shared._liked_id_only', return_value=[]), \
-             patch('apps.recommendation.caches.evict_projects_list'), \
-             patch('apps.recommendation.caches.evict_project_detail'):
-            ensure_axis_scores(project)
-
-        assert project.axis_scores == new_scores
-        assert project.save_calls == [['axis_scores']]

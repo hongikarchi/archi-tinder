@@ -12,6 +12,12 @@ services/_axis_anchors.py의 문장들로부터 `build_axis_directions` 커맨�
 
 건물이 하나도 임베딩을 가지고 있지 않으면(n == 0) 모든 축이 None(JSON null)
 -- "근거 없음"과 실제로 계산된 값을 구분한다.
+
+2026-09-28: 읽기 경로에서의 재계산(recompute-on-read)은 폐지했다. 이미
+저장된(레거시 포맷 포함) axis_scores는 있는 그대로 보여주고, 새로 생성하거나
+regenerate할 때만 이 모듈의 compute_axis_scores로 새 포맷으로 갱신한다 --
+board detail GET은 이제 connections['buildings']를 절대 건드리지 않는다
+(buildings DB 장애가 board detail 500으로 번지는 것을 방지).
 """
 import hashlib
 import json
@@ -177,49 +183,6 @@ def compute_axis_scores(building_ids: list) -> dict:
         }
 
     return result
-
-
-def _is_current_axis_shape(axis_scores):
-    """axis_scores가 현재(embedding-projection) 포맷인지 확인.
-
-    현재 포맷: {axis: None | dict-with-'dots'} 인 4축(AXES) 딱 그 키셋.
-    레거시 포맷(태그 가중치 시절): {axis: float|None}인 5축(form 포함) --
-    값이 dict가 아니라 flat float/None이므로 걸러진다.
-    """
-    if not axis_scores or not isinstance(axis_scores, dict):
-        return False
-    if set(axis_scores.keys()) != set(AXES):
-        return False
-    for value in axis_scores.values():
-        if value is not None and not (isinstance(value, dict) and 'dots' in value):
-            return False
-    return True
-
-
-def ensure_axis_scores(project):
-    """project.axis_scores가 없거나 레거시 포맷이면 재계산 + 저장한다.
-
-    레거시 포맷(pre FULL-PERSONA-SPECTRUM, 2026-09-27): flat
-    {axis: float|None}, 5축(form 포함). 현재 포맷과 다르면(축 없음/축 5개/
-    값이 dict가 아님 등) project.liked_ids로부터 다시 계산해
-    update_fields=['axis_scores']로 저장하고, reports.py와 동일한 방식으로
-    projects list/detail 캐시를 무효화한다. 이미 현재 포맷이면 아무 것도
-    하지 않는다(no-op).
-
-    호출부(views/reports.py, views/projects.py)와의 순환 임포트를 피하기
-    위해 캐시/liked_ids 헬퍼는 함수 내부에서 지연 임포트한다.
-    """
-    if _is_current_axis_shape(project.axis_scores):
-        return
-
-    from ..views._shared import _liked_id_only
-    from ..caches import evict_projects_list, evict_project_detail
-
-    liked_id_strings = _liked_id_only(project.liked_ids)
-    project.axis_scores = compute_axis_scores(liked_id_strings)
-    project.save(update_fields=['axis_scores'])
-    evict_projects_list(project.user_id)
-    evict_project_detail(str(project.project_id))
 
 
 # =============================================================================
