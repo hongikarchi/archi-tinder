@@ -764,6 +764,45 @@ export const locales = {
       buildingSubtitle:   '건물',
       personaReportEyebrow: '페르소나 리포트',
     },
+    // UI-CONSISTENCY-B Phase 3 (2026-09-27): modal family migrated onto the
+    // shared Modal component. New strings only — never edit the keys above.
+    modalB3: {
+      close: '닫기',
+      saveToBoard: {
+        newBoard:        '새 보드',
+        namePlaceholder: '보드 이름',
+        creating:        '만드는 중…',
+        create:          '만들기',
+        likedProjects:   '좋아요한 프로젝트',
+        untitledBoard:   '이름 없는 보드',
+        nameRequired:    '보드 이름을 입력해주세요.',
+        loadError:       '보드를 불러오지 못했어요.',
+        createError:     '보드를 만들지 못했어요.',
+        saveError:       '보드에 저장하지 못했어요.',
+      },
+      surpriseBoard: {
+        defaultTitle:    '취향 맞춤 추천',
+        prompt:          '좋아요를 기반으로 만들었어요 — 보드로 저장할까요?',
+        loadError:       '불러오지 못했어요. 다시 시도해주세요.',
+        retry:           '다시 시도',
+        namePlaceholder: '보드 이름을 입력하세요',
+        nameRequired:    '보드 이름을 입력해주세요.',
+        back:            '뒤로',
+        createBoard:     '보드 만들기',
+        notNow:          '나중에',
+        saveThisBoard:   '이 보드 저장하기',
+        saving:          '저장 중…',
+      },
+      workDetail: {
+        prevImage: '이전 이미지',
+        nextImage: '다음 이미지',
+      },
+      reportBanner: {
+        body:   '이전에 완성된 리포트가 있어요',
+        save:   '저장',
+        delete: '삭제',
+      },
+    },
   },
   en: {
     tabbar: {
@@ -1524,6 +1563,45 @@ export const locales = {
       likedProjectsTitle: 'Liked Projects',
       buildingSubtitle:   'Building',
       personaReportEyebrow: 'Persona Report',
+    },
+    // UI-CONSISTENCY-B Phase 3 (2026-09-27): modal family migrated onto the
+    // shared Modal component. New strings only — never edit the keys above.
+    modalB3: {
+      close: 'Close',
+      saveToBoard: {
+        newBoard:        'New board',
+        namePlaceholder: 'Board name',
+        creating:        'Creating…',
+        create:          'Create',
+        likedProjects:   'Liked Projects',
+        untitledBoard:   'Untitled board',
+        nameRequired:    'Board name is required.',
+        loadError:       'Failed to load boards.',
+        createError:     'Failed to create board.',
+        saveError:       'Failed to save to board.',
+      },
+      surpriseBoard: {
+        defaultTitle:    'Curated for you',
+        prompt:          'Your saves shaped this — save it as a board?',
+        loadError:       "Couldn't load. Try again.",
+        retry:           'Retry',
+        namePlaceholder: 'Name this board',
+        nameRequired:    'Board name is required.',
+        back:            'Back',
+        createBoard:     'Create board',
+        notNow:          'Not now',
+        saveThisBoard:   'Save this board',
+        saving:          'Saving…',
+      },
+      workDetail: {
+        prevImage: 'Previous image',
+        nextImage: 'Next image',
+      },
+      reportBanner: {
+        body:   'You have a completed report',
+        save:   'Save',
+        delete: 'Delete',
+      },
     },
   },
 }

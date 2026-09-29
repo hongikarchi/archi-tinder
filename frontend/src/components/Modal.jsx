@@ -17,10 +17,23 @@ import styles from './Modal.module.css'
  * (e.g. VerifyGateModal at 10100, above SaveToBoardModal) — losing that
  * would break layering when this replaces a caller's own backdrop.
  *
- * Adopted so far (UI-CONSISTENCY-B Phase 2b): `VerifyGateModal` only — the
- * simplest existing modal, chosen to prove the component. Every other modal
- * in the app (`ShareCardModal`, `SaveToBoardModal`, `SaveBoardModal`,
- * `SurpriseBoardModal`, `WorkDetailModal`) migrates in phase 3.
+ * Adopted so far (UI-CONSISTENCY-B Phase 2b): `VerifyGateModal`. Phase 3
+ * migrated every other modal in the app (`ShareCardModal`, `SaveToBoardModal`,
+ * `SaveBoardModal`, `SurpriseBoardModal`, `WorkDetailModal`, plus SwipePage's
+ * exit/dismiss confirm popups and DiscoveryPage's leave-warning modal).
+ *
+ * `centered` (Phase 3 addition, backward-compatible — default false keeps
+ * every existing caller's mobile bottom-sheet behavior unchanged): forces the
+ * centered-modal layout at every viewport width instead of auto-switching to
+ * a bottom sheet on mobile. For small interrupt-style confirm dialogs (e.g.
+ * SwipePage's exit/dismiss popups) a bottom sheet reads as an unrelated
+ * gesture mid-swipe-session — centered-always matches the existing UX.
+ *
+ * `closeOnEscape` (Phase 3 addition, backward-compatible — default true):
+ * set false when a caller deliberately wants Escape to NOT bubble to this
+ * Modal because it stacks under another open Modal that should own Escape
+ * (e.g. SaveBoardModal staying open under VerifyGateModal at zIndex 10100 so
+ * the user's in-progress name/visibility choices survive verification).
  */
 export default function Modal({
   open,
@@ -32,18 +45,20 @@ export default function Modal({
   closeLabel = 'Close',
   width = 480,
   className = '',
+  centered = false,
+  closeOnEscape = true,
 }) {
   const titleId = useId()
   const panelRef = useRef(null)
 
   useEffect(() => {
-    if (!open) return
+    if (!open || !closeOnEscape) return
     function onKey(e) {
       if (e.key === 'Escape') onClose()
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+  }, [open, onClose, closeOnEscape])
 
   useEffect(() => {
     if (open) panelRef.current?.focus()
@@ -56,14 +71,18 @@ export default function Modal({
   }
 
   return (
-    <div className={styles.backdrop} style={{ zIndex }} onClick={handleBackdropClick}>
+    <div
+      className={`${styles.backdrop} ${centered ? styles.centered : ''}`}
+      style={{ zIndex }}
+      onClick={handleBackdropClick}
+    >
       <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={title ? titleId : undefined}
         tabIndex={-1}
-        className={`${styles.panel} ${className}`}
+        className={`${styles.panel} ${centered ? styles.centered : ''} ${className}`}
         style={{ '--modal-max-width': `${width}px` }}
       >
         <div className={styles.handle} aria-hidden="true" />

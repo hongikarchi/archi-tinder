@@ -49,19 +49,22 @@
 }
 
 @media (max-width: 768px) {
-  .backdrop {
+  /* .centered (Phase 3) opts a caller out of the mobile bottom-sheet layout —
+     it stays a centered modal at every width. See Modal.jsx doc comment. */
+  .backdrop:not(.centered) {
     align-items: flex-end;
     padding: 0;
   }
 
-  .panel {
+  .panel:not(.centered) {
     max-width: 100%;
     border-radius: var(--radius-xl) var(--radius-xl) 0 0;
     max-height: 85vh;
+    padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
     animation: slideUp var(--motion-flip) var(--motion-ease);
   }
 
-  .handle {
+  .panel:not(.centered) .handle {
     display: block;
     width: 36px;
     height: 4px;
