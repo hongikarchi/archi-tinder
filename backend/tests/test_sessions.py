@@ -1710,3 +1710,115 @@ class TestSessionResultWriteIdempotency:
         # gemini and dpp flags are off in test settings; expect None
         assert session.gemini_top10_ids is None
         assert session.dpp_top10_ids is None
+
+
+# ---------------------------------------------------------------------------
+# BACK-RECOMMEND-7 regression: liked_images sourced from project.liked_ids,
+# not session-only swipes (Discovery -> Taste promotion case)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestSessionResultLikedImagesFromProject:
+    """A Discovery -> Taste promotion reuses the draft Project (and its
+    liked_ids), so a like swiped during Discovery has no SwipeEvent row in
+    the Taste session. liked_images must still include it (sourced from
+    project.liked_ids, the same source the persona report uses), in stored
+    order, deduped."""
+
+    def test_liked_images_includes_discovery_only_likes(self, auth_client, user_profile):
+        """project.liked_ids has 3 likes; only 1 has a matching in-session
+        SwipeEvent row. liked_images must contain all 3, in stored order."""
+        import numpy as np
+
+        # Discovery-origin likes: {id, intensity} shape, stored order matters.
+        project = Project.objects.create(
+            user=user_profile,
+            name='Discovery Promotion Test',
+            liked_ids=[
+                {'id': 'B00002', 'intensity': 1.0},  # Discovery-only like
+                {'id': 'B00001', 'intensity': 1.8},  # also swiped in-session
+                {'id': 'B00003', 'intensity': 1.0},  # Discovery-only like
+            ],
+        )
+        fake_vec = list(np.random.RandomState(7).randn(384))
+        session = AnalysisSession.objects.create(
+            user=user_profile,
+            project=project,
+            status='completed',
+            phase='converged',
+            preference_vector=fake_vec,
+            like_vectors=[],
+            pool_ids=_FAKE_POOL,
+            exposed_ids=_FAKE_POOL,
+            pool_scores=_FAKE_SCORES,
+            current_round=10,
+            current_pool_tier=1,
+        )
+        # Only B00001 has an in-session SwipeEvent -- B00002/B00003 are
+        # Discovery-origin likes with no swipe row in THIS session.
+        SwipeEvent.objects.create(
+            session=session, canonical_bld_id='B00001', action='like',
+            idempotency_key='disc_promo_b1',
+        )
+
+        captured_ids = []
+
+        def _fake_get_buildings_by_ids(canonical_bld_ids, image_focus=None):
+            captured_ids.append(list(canonical_bld_ids))
+            return [_make_card(bid) for bid in canonical_bld_ids]
+
+        with patch(f'{_ENGINE}.get_buildings_by_ids', side_effect=_fake_get_buildings_by_ids):
+            with patch(f'{_ENGINE}.get_top_k_results', return_value=[]):
+                resp = auth_client.get(
+                    f'/api/v1/analysis/sessions/{session.session_id}/result/'
+                )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        liked_ids_out = [c['canonical_bld_id'] for c in body['liked_images']]
+        # Stored order preserved, all 3 project-level likes present (not just
+        # the 1 with an in-session SwipeEvent row).
+        assert liked_ids_out == ['B00002', 'B00001', 'B00003'], (
+            f'liked_images missing Discovery-only likes or wrong order: {liked_ids_out}'
+        )
+
+    def test_liked_images_dedupes_preserving_first_occurrence(self, auth_client, user_profile):
+        """A duplicate entry in project.liked_ids must not produce a duplicate
+        card in liked_images; first occurrence position wins."""
+        import numpy as np
+
+        project = Project.objects.create(
+            user=user_profile,
+            name='Dedupe Test',
+            liked_ids=['B00001', 'B00002', 'B00001'],
+        )
+        fake_vec = list(np.random.RandomState(7).randn(384))
+        session = AnalysisSession.objects.create(
+            user=user_profile,
+            project=project,
+            status='completed',
+            phase='converged',
+            preference_vector=fake_vec,
+            like_vectors=[],
+            pool_ids=_FAKE_POOL,
+            exposed_ids=_FAKE_POOL,
+            pool_scores=_FAKE_SCORES,
+            current_round=10,
+            current_pool_tier=1,
+        )
+
+        def _fake_get_buildings_by_ids(canonical_bld_ids, image_focus=None):
+            return [_make_card(bid) for bid in canonical_bld_ids]
+
+        with patch(f'{_ENGINE}.get_buildings_by_ids', side_effect=_fake_get_buildings_by_ids):
+            with patch(f'{_ENGINE}.get_top_k_results', return_value=[]):
+                resp = auth_client.get(
+                    f'/api/v1/analysis/sessions/{session.session_id}/result/'
+                )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        liked_ids_out = [c['canonical_bld_id'] for c in body['liked_images']]
+        assert liked_ids_out == ['B00001', 'B00002'], (
+            f'liked_images not deduped / order not preserved: {liked_ids_out}'
+        )

@@ -23,11 +23,41 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-09-29 22:34 KST',
-    head: 'a277440',
-    branch: 'feature/claude-ui-pages-3b',
+    updatedAt: '2026-09-29 23:00 KST',
+    head: '2551611',
+    branch: 'feature/algo-persona-report',
   },
   done: [
+    {
+      id: 'FULL-REPORT-2',
+      title: '리포트가 언어 전환에 안 따라옴',
+      completedAt: '2026-09-27',
+      note: '리포트 문장이 생성 시점 언어로만 저장돼 UI 언어를 바꿔도 그대로였음. Gemini 1회 호출로 ko·en 두 판(동일 내용, 언어별 문장 규칙 유지)을 생성해 `final_report.i18n`에 저장, FE `localizeReport()`가 현재 언어판을 즉시 표시(AI 재호출 없음).',
+    },
+    {
+      id: 'FULL-PERSONA-1',
+      title: '취향 막대가 반대·근거 없음이 중립으로 보임',
+      completedAt: '2026-09-27',
+      note: '오각형 삭제(`8cff892`). 양극 막대 5개 전부 좌우 반전 버그 수정 + 단어 변경(`ee6d5f4`: 비정형↔정형, 자연↔인공 재료, 공간감 아늑한↔압도적인, 분위기 차분한↔역동적인, 전통적↔실험적). 근거 없는 축 = null → 흐린 막대 + "아직 판단할 근거가 없어요"(`ce4968e`).',
+    },
+    {
+      id: 'BACK-RECOMMEND-7',
+      title: '결과 My Likes에 Discovery 좋아요 누락',
+      completedAt: '2026-09-27',
+      note: '결과 API `liked_images`가 이번 세션 스와이프만 조회 → Discovery→Taste 전환 시 Discovery 좋아요 누락(리포트와 불일치). `session.project.liked_ids`(보드 좋아요 목록)에서 조회, 순서 유지·중복 제거. 실데이터: 4개 → 20개 표시.',
+    },
+    {
+      id: 'BACK-LLM-5',
+      title: '리포트 취향 문장이 근거 없음',
+      completedAt: '2026-09-26',
+      note: '리포트를 보여준 카드(좋아요∪싫어요) 기준 결정론 사실(`taste_facts.py`) + 사용자 언어 프롬프트(`_report_prompts.py`)로 재작성. ① `pattern_paragraph`("보여드린 건물 중…") + ② `description`(부드러운 해석), 기존 필드 호환, `taste_facts` 저장(싫어요 건물 id 제외 — 보안 리뷰).',
+    },
+    {
+      id: 'FULL-RECOMMEND-1',
+      title: '질문카드가 리포트에 무영향·순위만 과왜곡',
+      completedAt: '2026-09-25',
+      note: '질문카드(ALGO-QCARD) 전면 제거 — 답변은 리포트에 0 영향, `question_bias_vector`(답변당 ±2.0 비정규화)가 like 대비 ~4배로 MMR 순위 과점유, algorithm.md 미문서화였음. 다음 카드 = 스와이프 pref_vector만(재튜닝 없음).',
+    },
     {
       id: 'UI-CONSISTENCY-B',
       title: '디자인 통일성 정비: 규칙·토큰 → 공통 부품 → 페이지 교체',
@@ -46,36 +76,6 @@ window.PROJECT_STATE = {
       completedAt: '2026-09-17',
       note: 'user 지적: Discovery → Taste 리포트 생성 후 끝나는 지점이 없음. 저장은 이미 되고 있었으나 `SaveBoardModal`이 자동으로 떠서 방금 기다린 리포트를 가렸고, 저장을 마쳐도 결과 화면에 머물러 뒤로가기로 빠져나가야 했음 → "저장이 안 된 것 같은" 느낌. 기능 결함이 아니라 완결감(closure)의 부재',
     },
-    {
-      id: 'FRONT-REPORT-OWNER-1',
-      title: '페르소나 리포트 재생성 버튼 소유자 제한',
-      completedAt: '2026-09-10',
-      note: '소셜 탭 → 타인 프로필 → curated 보드 → 리포트 진입 시 남의 리포트 화면에 `이미지 재생성`/`리포트 재생성` 버튼이 그대로 노출됨',
-    },
-    {
-      id: 'INFRA-MOCKS-1',
-      title: '__mocks 픽스처 develop 추적(공개 URL 노출)',
-      completedAt: '2026-09-06',
-      note: '`git rm --cached -r`로 38파일(~900KB) 인덱스만 제거 — 워킹트리 보존, .gitignore:90(#321)이 재유입 차단. 배포 시 Vercel `/__mocks/*.html` 공개 URL 소멸. DEPLOY-BATCH-2 플랜 PR-D',
-    },
-    {
-      id: 'FULL-PRIVACY-1',
-      title: '발견 피드 opt-out 부재(진단=영구 노출)',
-      completedAt: '2026-09-06',
-      note: 'discovery_opt_in 쓰기 경로 전무(#311 이후 최상위 privacy 갭) — PATCH /personality/me/ 신설: strict boolean 전용 serializer(축/타입 구조적 쓰기 불가), owner 한정 404 미러, 값 변경 시 evict_user_profile_detail(User id 키 정확 사용)',
-    },
-    {
-      id: 'FRONT-VERIFY-1',
-      title: 'PATCH 경로 verify_required 모달 배선 + 로그인 draft 유지',
-      completedAt: '2026-09-06',
-      note: 'updateProject가 403 verify_required를 미변환(createProject만 처리) → 공용 throwIfVerifyRequired 헬퍼 추출, 양 경로 동일 동작(VerifyRequiredError + archithon:verify-required 이벤트). guest 4번째 보드 저장확정 시 VerifyGateModal 정상 표출',
-    },
-    {
-      id: 'BACK-PRIVACY-1',
-      title: '비인증 base64 리포트 유출 + 썸네일 캐시 evict 누락',
-      completedAt: '2026-09-06',
-      note: 'AllowAny `/users/<id>/projects/`가 report_image base64(개당 ~200KB, 페이지당 50개)를 익명 호출자에게 그대로 실어줌 — 신규 PublicProjectListSerializer로 해당 엔드포인트만 두 필드 제거(프론트 소비자 0 확인). owner GET /projects/는 불변(App.jsx:929 로그인 동기화 의존). queryset defer도 추가(DB→앱 전송비, Opus 검증 안전)',
-    },
   ],
   now: [],
   next: {
@@ -87,6 +87,16 @@ window.PROJECT_STATE = {
       },
     ],
     high: [
+      {
+        id: 'BACK-RECOMMEND-5',
+        title: 'Love intensity 잔재 전수 제거',
+        note: '_FULL-RECOMMEND-1 후속 PR 3. 프론트가 `intensity`를 한 번도 보내지 않아 모든 like = 1.0(Love 1.8 미구현 잔재). `swipe_service.py:786,1134`, `models.py:16` 주석, `rerank.py:118-141`, `engine.py:2037-2079`, `event_log.emit_swipe_event`, discovery/office/_shared 파서 등 코드·주석 전수 조사 후 제거._',
+      },
+      {
+        id: 'BACK-RECOMMEND-6',
+        title: '태그를 취향좌표에 병합 검토',
+        note: '_FULL-RECOMMEND-1에서 보류. 선행: Make DB에서 건물 embedding 입력 텍스트 확인(태그 포함 여부 — 포함 시 이중 계산). 결과에 따라 태그→좌표(해당 태그 건물 embedding 평균, 정규화)를 pref_vector에 병합. 이후 유지 컬럼 `tag_axis_counts` / `recent_like_tag_sets` / `question_bias_vector`의 재사용·삭제를 사용자에게 재질문._',
+      },
       {
         id: 'FULL-BOARD-FLOW-1',
         title: '저장된 보드·진행 세션이 삭제되는 버그 + 보드·리포트 경로 정리',
@@ -124,6 +134,16 @@ window.PROJECT_STATE = {
       },
     ],
     medium: [
+      {
+        id: 'BACK-RECOMMEND-8',
+        title: '형태 축(정형↔비정형) 근거 부재',
+        note: '_FULL-PERSONA-1에서 제외. 임베딩이 기하학 형태 정보를 약하게 담아 기준 문장 투영 AUC 0.63~0.75. 후보: Gemini 건물별 정형도 채점(표본 200~300개로 AUC 검증 후 전체 일괄), 건물 사진 임베딩, Make DB에 형태 필드 요청. 태그로 양 끝 정의는 사용자 반대._',
+      },
+      {
+        id: 'BACK-RECOMMEND-9',
+        title: '태그 가중치 방식 잔재 삭제 확정',
+        note: '_`services/axis_scores.py` 주석 처리된 태그 가중치 코드, `TagAxisWeight` 모델·표, `fixtures/tag_axis_weights.json`, 마이그레이션 0033 데이터. 사용자 확정 시 코드 삭제 + 표 삭제 마이그레이션._',
+      },
       {
         id: 'FRONT-DESIGN-C2',
         title: '디자인 포트 잔여 결정 4건 + 스타일 델타 21곳',
@@ -260,6 +280,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 338,
+      title: 'feat(UI-CONSISTENCY-B): 디자인 통일성 정비 — 규칙·토큰 → 공통 부품 → 페이지 교체',
+      mergedAt: '2026-09-29T13:39:33Z',
+      mergedAtKST: '2026-09-29 22:39 KST',
+      sha: '2551611',
+    },
+    {
       number: 334,
       title: 'feat(FRONT-HEADER-1): 페이지 상단 크롬 축소·통일 + people 헤더 로고 교체',
       mergedAt: '2026-09-26T00:57:29Z',
@@ -307,13 +334,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-09-06T16:35:29Z',
       mergedAtKST: '2026-09-07 01:35 KST',
       sha: '4779507',
-    },
-    {
-      number: 327,
-      title: 'feat(FULL-PRIVACY-1): 발견 피드 opt-out — PATCH 쓰기 경로 + 프로필 게이팅 + 계정 토글',
-      mergedAt: '2026-09-06T16:30:14Z',
-      mergedAtKST: '2026-09-07 01:30 KST',
-      sha: 'dc01734',
     },
   ],
   agents: [
@@ -594,6 +614,14 @@ window.PROJECT_STATE = {
     {
       path: 'README.md',
       role: '프로젝트 안내 문서',
+    },
+    {
+      path: 'Task.md',
+      role: '태스크 보드 문서',
+    },
+    {
+      path: 'Task.md',
+      role: '태스크 보드 문서',
     },
     {
       path: 'Task.md',
@@ -976,6 +1004,10 @@ window.PROJECT_STATE = {
       role: 'commands 패키지 init',
     },
     {
+      path: 'backend/apps/recommendation/management/commands/build_axis_directions.py',
+      role: '취향 축 방향 계산 커맨드',
+    },
+    {
       path: 'backend/apps/recommendation/management/commands/purge_legacy_projects.py',
       role: '레거시 프로젝트 정리 커맨드',
     },
@@ -1104,6 +1136,18 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'backend/apps/recommendation/migrations/0031_remove_qcard_counters.py',
+      role: '마이그 0031: 질문카드 카운터·recent_latencies 필드 삭제',
+    },
+    {
+      path: 'backend/apps/recommendation/migrations/0032_alter_sessionevent_event_type.py',
+      role: '마이그 0032: SessionEvent tag_answer 선택지 제거',
+    },
+    {
+      path: 'backend/apps/recommendation/migrations/0033_retune_tag_axis_weights.py',
+      role: '마이그 0033: 태그-축 가중치 재조정',
+    },
+    {
       path: 'backend/apps/recommendation/migrations/__init__.py',
       role: '마이그레이션 패키지 init',
     },
@@ -1124,6 +1168,10 @@ window.PROJECT_STATE = {
       role: 'services 패키지 facade',
     },
     {
+      path: 'backend/apps/recommendation/services/_axis_anchors.py',
+      role: '취향 축 기준 문장 정의',
+    },
+    {
       path: 'backend/apps/recommendation/services/_caches.py',
       role: 'Gemini·V_initial 캐시 헬퍼',
     },
@@ -1134,6 +1182,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/recommendation/services/_prompts.py',
       role: '파싱 프롬프트·어휘 상수',
+    },
+    {
+      path: 'backend/apps/recommendation/services/_report_prompts.py',
+      role: '리포트 문장 규칙 프롬프트',
     },
     {
       path: 'backend/apps/recommendation/services/axis_scores.py',
@@ -1168,6 +1220,10 @@ window.PROJECT_STATE = {
       role: '스와이프·질문카드 오케스트레이션',
     },
     {
+      path: 'backend/apps/recommendation/services/taste_facts.py',
+      role: '리포트 취향 사실 결정론 계산',
+    },
+    {
       path: 'backend/apps/recommendation/services/vocab.py',
       role: '',
     },
@@ -1182,6 +1238,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/recommendation/tests/test_architect_id_batch.py',
       role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/tests/test_axis_scores.py',
+      role: '취향 축 점수 테스트',
     },
     {
       path: 'backend/apps/recommendation/tests/test_back_recommend_4.py',
@@ -1216,10 +1276,6 @@ window.PROJECT_STATE = {
       role: 'Phase13 보드 테스트',
     },
     {
-      path: 'backend/apps/recommendation/tests/test_question_state.py',
-      role: '',
-    },
-    {
       path: 'backend/apps/recommendation/tests/test_report_cache.py',
       role: '',
     },
@@ -1234,6 +1290,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/recommendation/tests/test_taste_board_name.py',
       role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/tests/test_taste_facts.py',
+      role: '취향 사실 계산 테스트',
     },
     {
       path: 'backend/apps/recommendation/tests/test_throttles.py',
@@ -1468,6 +1528,10 @@ window.PROJECT_STATE = {
       role: 'pytest 루트 픽스처 설정',
     },
     {
+      path: 'backend/fixtures/axis_directions.json',
+      role: '취향 축 방향·정규화 값',
+    },
+    {
       path: 'backend/fixtures/tag_axis_weights.json',
       role: '태그-축 가중치 픽스처',
     },
@@ -1652,18 +1716,6 @@ window.PROJECT_STATE = {
       role: '프로젝트 N+1 쿼리 테스트',
     },
     {
-      path: 'backend/tests/test_qcard_phase1.py',
-      role: '질문카드 Phase 1: 벡터 편향 테스트',
-    },
-    {
-      path: 'backend/tests/test_qcard_phase2.py',
-      role: '질문카드 Phase 2: TF-IDF 선택 테스트',
-    },
-    {
-      path: 'backend/tests/test_qcard_phase3.py',
-      role: '질문카드 Phase 3: 레이턴시 캡처 테스트',
-    },
-    {
       path: 'backend/tests/test_rerank_shape.py',
       role: '리랭크 결과 형태 테스트',
     },
@@ -1804,6 +1856,10 @@ window.PROJECT_STATE = {
       role: 'archibe 비즈니스 모델 PRD (정적 HTML)',
     },
     {
+      path: 'docs/report-writing.md',
+      role: '리포트 작성 규칙 문서',
+    },
+    {
       path: 'docs/research/full-codebase-audit-2026-07-17.md',
       role: '',
     },
@@ -1866,6 +1922,14 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/package-lock.json',
       role: '의존성 잠금 파일',
+    },
+    {
+      path: 'frontend/package.json',
+      role: '프론트 패키지 매니페스트',
+    },
+    {
+      path: 'frontend/package.json',
+      role: '프론트 패키지 매니페스트',
     },
     {
       path: 'frontend/package.json',
@@ -2080,6 +2144,14 @@ window.PROJECT_STATE = {
       role: '페르소나 리포트 공용 컴포넌트 (Board/Results 공유, 이미지 저장 버튼)',
     },
     {
+      path: 'frontend/src/components/PersonaReport.jsx',
+      role: '페르소나 리포트 공용 컴포넌트 (Board/Results 공유, 이미지 저장 버튼)',
+    },
+    {
+      path: 'frontend/src/components/PersonaReport.jsx',
+      role: '페르소나 리포트 공용 컴포넌트 (Board/Results 공유, 이미지 저장 버튼)',
+    },
+    {
       path: 'frontend/src/components/PhotoTile.jsx',
       role: '',
     },
@@ -2092,8 +2164,12 @@ window.PROJECT_STATE = {
       role: '인증 보호 라우트 가드',
     },
     {
-      path: 'frontend/src/components/QuestionCard.jsx',
-      role: '취향 보정 질문 카드',
+      path: 'frontend/src/components/SaveBoardModal.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/SaveBoardModal.jsx',
+      role: '',
     },
     {
       path: 'frontend/src/components/SaveBoardModal.jsx',
@@ -2170,6 +2246,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/components/Tabs.module.css',
       role: '',
+    },
+    {
+      path: 'frontend/src/components/TasteSpectrum.jsx',
+      role: '취향 스펙트럼 SVG 시각화',
     },
     {
       path: 'frontend/src/components/ThemePreviewCard.jsx',
@@ -2592,6 +2672,14 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'frontend/src/utils/axisScores.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/axisScores.test.mjs',
+      role: '',
+    },
+    {
       path: 'frontend/src/utils/competitionInterest.js',
       role: '',
     },
@@ -2606,6 +2694,14 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/utils/loginFlow.test.mjs',
       role: 'loginFlow 테스트',
+    },
+    {
+      path: 'frontend/src/utils/reportText.js',
+      role: '리포트 문장 언어 선택',
+    },
+    {
+      path: 'frontend/src/utils/reportText.test.mjs',
+      role: '리포트 언어 선택 테스트',
     },
     {
       path: 'frontend/src/utils/reportWriteError.js',
@@ -2650,6 +2746,14 @@ window.PROJECT_STATE = {
     {
       path: 'project/mermaid.min.js',
       role: 'Mermaid 다이어그램 번들',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
     },
     {
       path: 'project/state.js',

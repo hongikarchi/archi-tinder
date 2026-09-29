@@ -161,7 +161,6 @@ Implemented:
 - First left-swipe confirmation tutorial.
 - Confidence/progress bar and finish floor after target swipes.
 - Keep exploring after completion when backend allows.
-- In-session question cards: right = option A, left = option B, buttons as fallback.
 
 Primary scenario:
 
@@ -169,17 +168,14 @@ Primary scenario:
 2. Dismiss tutorial if shown.
 3. Swipe 15-25 cards with mixed likes/dislikes.
 4. On first left swipe, confirm skip tutorial, then test cancel path in another run.
-5. When question card appears, choose A once and B once in separate runs.
-6. Refresh during active session and confirm same or valid next card resumes.
-7. Continue until `Finish & View Report` or completed state appears.
+5. Refresh during active session and confirm same or valid next card resumes.
+6. Continue until `Finish & View Report` or completed state appears.
 
 Success:
 
 - Every swipe sends `/api/v1/analysis/sessions/{id}/swipes/`.
 - Like/dislike counts and phase/progress update.
 - No same card repeats from client prefetch queue.
-- Question card blocks normal card swipes until answered.
-- A/B answer posts `/question-responses/`; when backend flushes, stale prefetch cards disappear.
 - Refresh resumes current session without creating duplicate project/session.
 - Finish button is disabled while swipe request is pending.
 
@@ -187,7 +183,6 @@ Failure:
 
 - Card disappears permanently after swipe.
 - Swipe API succeeds but UI keeps previous card.
-- Question card options invert user intent versus text.
 - Finish button opens report before last swipe write settles.
 - Refresh restarts taste from zero without explicit new-session action.
 
@@ -437,7 +432,7 @@ For deployed main testing, update or wrap the runner before relying on it:
 
 - accept `FRONTEND_URL` and `API_BASE_URL` from environment;
 - create/login a test user through UI or handle/password API, not dev-login;
-- add scenarios for Discovery promotion, question cards, profile/board settings, board report axis charts, and architect follows;
+- add scenarios for Discovery promotion, profile/board settings, board report axis charts, and architect follows;
 - keep screenshots, network calls, console errors, and route URLs per step.
 
 Recommended minimum production smoke:

@@ -370,17 +370,8 @@ RECOMMENDATION = {
     'discovery_local_sim_radius': 0.55,          # cosine SIM to nearest centroid to count as local/취향
     'discovery_centroid_cache_ttl': 21600,       # 6h — app-session fixed
     'discovery_promote_threshold': 10,
-    # ALGO-QCARD Phase 1: soft-vector bias hyperparameters
-    'question_max_per_session': 2,      # ALGO-QCARD soft-vector: max question cards per session
-    'question_cooldown_swipes': 15,     # min swipes between question cards
-    'question_boost_weight': 2.0,       # Yes answer: + boost on keyword vector
-    'question_penalty_weight': 1.0,     # No answer: - penalty on keyword vector
-    # ALGO-QCARD Phase 2: TF-IDF discriminative keyword selection
-    'corpus_df_cache_ttl_seconds': 86400,   # TF-IDF corpus DF cache TTL (24h)
-    'question_common_tag_ratio': 0.4,        # tags with df/N above this are too common → skipped
-    # Explicit generic-tag blacklist (leave empty; df/N ratio is the primary discriminator).
-    # Ops can populate with domain-specific stop-tags if IDF alone is insufficient.
-    'question_keyword_blacklist': [],
+    # LLM search (get_corpus_tag_df / engine.llm_search_by_filters) TF-IDF corpus DF cache TTL (24h)
+    'corpus_df_cache_ttl_seconds': 86400,
     'discovery_like_hard_cap': 50,  # Discovery draft hard stop: block likes beyond 50; client redirects to Taste
     # DISCOVERY-PERF-1: scope tier/exclude/dislike/centroid to most-recent N boards (tunable).
     # Older boards' liked/disliked/saved buildings may re-appear in Discovery — intended behaviour.
@@ -389,11 +380,6 @@ RECOMMENDATION = {
     # sample that avoids a full seq scan of the large canonical_v2_buildings table
     # (VECTOR(384) + JSONB rows). ~2% of ~39k ≈ 780 sampled, ample for the 120-cap FPS.
     'discovery_tablesample_pct': 2.0,
-    # ALGO-QCARD Phase 3: hyper-positive / fast-swipe detection (Trigger A)
-    'question_fast_swipe_ms': 1500,          # avg inter-swipe latency below this = "fast" (hyper-positive)
-    'question_hyperpositive_window': 10,     # look back this many swipes
-    'question_hyperpositive_min_likes': 8,   # >= this many likes in the window triggers
-    'recent_latencies_cap': 10,              # rolling latency window size
     # LLM-SEARCH-RANK-1: A+BM25 soft-score ranking hyperparameters for ParseQueryView.
     # Replaces ORDER BY RANDOM() + 3-tier relaxation ladder with a single ranked CTE.
     # All axes are soft (no hard gate except is_publishable=true).
@@ -417,6 +403,23 @@ RECOMMENDATION = {
         'year_min': 1.0,          # year range (soft bonus, not exclusion)
         'year_max': 1.0,
     },
+    # BACK-LLM-5: taste_facts.py deterministic swipe-fact thresholds for
+    # persona report grounding (pattern_paragraph). All facts are computed
+    # relative to the SHOWN set (liked ∪ disliked), never a corpus baseline.
+    'report_fact_min_shown':      3,     # min cards shown with a feature before it can become a fact
+    'report_fact_min_liked':      2,     # min liked cards with a feature before it can become a LIKE fact
+    'report_fact_min_ratio':      1.5,   # min smoothed like-rate ratio (feature vs not) for a LIKE fact
+    'report_fact_tie_ratio':      0.3,   # ratio candidates within this margin are tie-broken by support (Q37)
+    'report_fact_max_likes':      3,     # cap on selected LIKE facts per report
+    'report_fact_max_dislikes':   1,     # cap on selected DISLIKE facts per report
+    'report_dislike_often':       0.4,   # min disliked/shown rate for a feature to qualify as a DISLIKE fact
+    'report_dislike_mostly':      0.8,   # disliked/shown rate at/above which the dislike_word is "mostly" (else "often")
+    'report_fact_overlap_max':    0.8,   # drop a candidate fact whose supporting buildings overlap an already-selected fact's by >= this (Q38)
+    'report_fact_smoothing':      1,     # Laplace smoothing constant `s` in r=(liked+s)/(shown+2s) -- guards against small-sample flukes (Q36)
+    # FULL-PERSONA-SPECTRUM (2026-09-27): axis_scores.py confidence formula --
+    # confidence = min(n / axis_confidence_full_n, 1) * max(0, 1 - iqr). n=5
+    # liked buildings is treated as "full" confidence (before the iqr penalty).
+    'axis_confidence_full_n':     5,
 }
 
 _check_async_prefetch_safety(

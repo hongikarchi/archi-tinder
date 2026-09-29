@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { updateProject, VerifyRequiredError } from '../api/projects.js'
 import styles from './SaveBoardModal.module.css'
 import { useTranslation } from '../i18n/index.js'
+import { localizeReport } from '../utils/reportText.js'
 import Modal from './Modal.jsx'
 
 /**
@@ -17,8 +18,8 @@ import Modal from './Modal.jsx'
  * Built on the shared Modal component (DESIGN.md §8.10).
  */
 export default function SaveBoardModal({ projectId, finalReport, onSaved, onClose }) {
-  const { t } = useTranslation()
-  const defaultName = finalReport?.persona_type || t('board.defaultName')
+  const { t, language } = useTranslation()
+  const defaultName = localizeReport(finalReport, language)?.persona_type || t('board.defaultName')
 
   const [name, setName] = useState(defaultName)
   // FRONT-PEOPLE-FEED-1 (2026-09-03): defaults to public.

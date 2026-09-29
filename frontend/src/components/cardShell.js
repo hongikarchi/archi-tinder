@@ -1,9 +1,11 @@
 /**
  * cardShell.js — the single source of truth for the swipe-deck card surface.
  *
- * Extracted from QuestionCard.jsx (2026-08-24) so the Taste/Discovery
- * calibration card and the /assessment personality card render the SAME card,
- * not two look-alikes. Change a value here and both move together.
+ * Originally extracted (2026-08-24) from the now-removed in-session
+ * QuestionCard so it and the /assessment personality card rendered the SAME
+ * card, not two look-alikes. QuestionCard was removed (FULL-RECOMMEND-1); the
+ * question-shaped style exports below are retained because AssessmentCard
+ * still consumes them. Change a value here and every consumer moves together.
  *
  * Size comes from SwipeCard's CARD_WIDTH/CARD_HEIGHT — the same constants
  * SwipeDeck's static ladder and DiscoveryPage's deck wrapper use, so a card
@@ -17,7 +19,7 @@ import { CARD_WIDTH, CARD_HEIGHT } from './SwipeCard.jsx'
 
 export { CARD_WIDTH, CARD_HEIGHT }
 
-/** Ground shadow — matches QuestionCard's original value. */
+/** Ground shadow — matches the original calibration-card value. */
 export const CARD_SHADOW = '0 25px 50px rgba(0,0,0,0.4)'
 
 /** The card surface itself: footprint, radius, background, border, shadow. */

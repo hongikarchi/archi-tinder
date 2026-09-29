@@ -163,6 +163,10 @@ class ProjectDetailView(APIView):
         is_owner = profile and project.user_id == profile.pk
         if not is_owner and project.visibility != 'public':
             return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+        # 2026-09-28: stop recomputing axis_scores on read. Detail GET must not
+        # touch connections['buildings'] or write -- a legacy-format stored
+        # axis_scores is shown as-is; it is only upgraded to the new
+        # embedding-projection shape on report generate/regenerate.
         data = ProjectSerializer(project, context={'request': request}).data
         if not is_owner:
             data.pop('conversation_history', None)

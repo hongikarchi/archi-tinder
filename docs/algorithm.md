@@ -3,7 +3,7 @@
 > Phase logic, mathematical formulas, and hyperparameter theory.
 > Research agent updates this file. Orchestrator references it for algorithm tasks.
 
-**Last Synced (Reporter):** 2026-07-13 92237d8
+**Last Synced (Reporter):** 2026-09-27 e13c9b9
 
 ---
 
@@ -112,6 +112,8 @@ _(Updated 2026-04-25 96b91a6: Sprint 4 Topic 06 soft-assignment relevance — wh
 
 _(Updated 2026-04-25 de9bfa3: Sprint 4 Topic 04(a) MMR λ ramp — when `mmr_lambda_ramp_enabled` (default OFF), λ(t) = λ_base · min(1, |exposed|/N_ref) ramps diversity penalty as session progresses. Encourages relevance-heavy at start (sparse signal), diversity-heavy as exposure accumulates. λ computation hoisted outside candidate loop.)_
 
+_(Updated 2026-09-25 5c7d74c: FULL-RECOMMEND-1 — question card (ALGO-QCARD) removed; the undocumented `question_bias_vector` term (raw `relevance += C @ qb` in MMR, blended into the top-K / top-K-MMR query vector) is gone. Relevance + result ranking now derive from swipe `pref_vector` / like centroids only; `question_*` + `recent_latencies_cap` RECOMMENDATION keys removed.)_
+
 ### Convergence Detection
 ```
 delta_V = ||centroid_now - centroid_prev|| / ||centroid_prev||
@@ -187,6 +189,17 @@ _(Updated 2026-04-25 190c830: Like writes now carry an `intensity` field (defaul
 | `context_caching_enabled` | bool | True/False | False |
 | `context_caching_ttl_seconds` | int | 60-7200 | 3600 |
 | `stage_decouple_enabled` | bool | True/False | False |
+| `report_fact_min_shown` | int |  | 3 |
+| `report_fact_min_liked` | int |  | 2 |
+| `report_fact_min_ratio` | float |  | 1.5 |
+| `report_fact_tie_ratio` | float |  | 0.3 |
+| `report_fact_max_likes` | int |  | 3 |
+| `report_fact_max_dislikes` | int |  | 1 |
+| `report_dislike_often` | float |  | 0.4 |
+| `report_dislike_mostly` | float |  | 0.8 |
+| `report_fact_overlap_max` | float |  | 0.8 |
+| `report_fact_smoothing` | float |  | 1 |
+| `axis_confidence_full_n` | int |  | 5 |
 
 Source: `backend/config/settings.py` RECOMMENDATION dict.
 

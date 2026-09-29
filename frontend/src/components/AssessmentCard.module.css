@@ -2,10 +2,9 @@
  * AssessmentCard.module.css — interaction states only.
  *
  * The option button's BASE appearance (padding, radius, font, background,
- * border, min-height) comes from `questionOptionStyle` in cardShell.js, the
- * same object QuestionCard's A/B buttons use. This file adds only what an
- * inline style cannot express — :hover / :active / :disabled / selected —
- * per DESIGN.md §4's hybrid rule.
+ * border, min-height) comes from `questionOptionStyle` in cardShell.js. This
+ * file adds only what an inline style cannot express — :hover / :active /
+ * :disabled / selected — per DESIGN.md §4's hybrid rule.
  */
 
 .options {

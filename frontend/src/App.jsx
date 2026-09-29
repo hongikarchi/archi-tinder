@@ -31,7 +31,6 @@ import EditProfileScreen from './pages/settings/EditProfileScreen.jsx'
 import * as api from './api/client.js'
 import { createProject, VerifyRequiredError } from './api/projects.js'
 import { normalizeFilters, classifySwipeError, isActionCard, extractLikedIds, extractSavedIds, purgeChatCache } from './utils/appHelpers.js'
-import { reportWriteError } from './utils/reportWriteError.js'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import LLMSearchUpdateWrapper from './components/LLMSearchUpdateWrapper.jsx'
 
@@ -93,8 +92,6 @@ export default function App() {
   const [surprisePending, setSurprisePending] = useState(false)
   // Global toast state (type: 'info' | 'success' | 'warning' | 'error')
   const [globalToast, setGlobalToast] = useState(null) // {message, type}
-  // Pending in-session question triggered by the backend after a swipe
-  const [pendingQuestion, setPendingQuestion] = useState(null)
 
   // If session has a user but no access token, clear immediately
   useEffect(() => {
@@ -260,20 +257,11 @@ export default function App() {
   const swipeRetryCount = useRef(0)
   const currentCardRef = useRef(null)
   const activeProjectIdRef = useRef(null)
-  // Records the wall-clock time (ms) when the current card became visible.
-  // Reset every time currentCard changes so latency_ms captures exactly how
-  // long the user looked at the card before swiping it.
-  const cardShownAtRef = useRef(Date.now())
 
   // Keep currentCardRef in sync so setTimeout closures can read live card identity
   useEffect(() => { currentCardRef.current = currentCard }, [currentCard])
   // Keep activeProjectIdRef in sync so setTimeout closures detect project-switch / session-end
   useEffect(() => { activeProjectIdRef.current = activeProjectId }, [activeProjectId])
-  // Reset the card-shown timer whenever the displayed card changes (all paths:
-  // instant-swap, non-instant, question-flush, session resume/start).
-  useEffect(() => {
-    cardShownAtRef.current = Date.now()
-  }, [currentCard?.image_id])
   useEffect(() => {
     if (swipeRestored.current) return
     if (location.pathname === '/swipe' && activeProjectId && userId) {
@@ -354,7 +342,6 @@ export default function App() {
   }
 
   async function initSession(projectId, filters, filterPriority = [], seedIds = [], existingSessionId = null, currentHint = null, visualDescription = null, projectName = 'Untitled', rawQuery = '', imageFocus = null, forceNew = false) {
-    setPendingQuestion(null)
     setIsSwipeLoading(true)
     setIsSessionCompleted(false)
     setKeepExploringChosen(false)
@@ -592,17 +579,11 @@ export default function App() {
         .map(c => c.image_id)
 
       let result
-      // Compute how long the user looked at the card before swiping.
-      // Clamped to >= 0 to guard against clock skew. Large values are fine —
-      // the backend caps them. latency_ms is omitted on the extend path
-      // (handled separately in handleExtendSession) but always present here.
-      const latency_ms = Math.max(0, Date.now() - cardShownAtRef.current)
       const swipePayload = {
         session_id: project.sessionId,
         image_id: swipedCard.image_id,
         action,
         client_buffer_ids: clientBufferIds,
-        latency_ms,
       }
 
       const _apiT0 = Date.now()
@@ -627,9 +608,6 @@ export default function App() {
 
       swipeRetryCount.current = 0
       setSwipeError(null)
-      if (result.question_trigger) {
-        setPendingQuestion(result.question_trigger)
-      }
       setSessionProgress({
         ...result.progress,
         confidence: result.confidence ?? null,
@@ -834,46 +812,6 @@ export default function App() {
     } finally {
       setIsSwipeLoading(false)
       swipeLock.current = false
-    }
-  }
-
-  async function handleQuestionAnswer(option) {
-    const q = pendingQuestion
-    setPendingQuestion(null)
-    if (!activeProject?.sessionId) return
-    try {
-      const resp = await api.submitQuestionResponse({
-        session_id: activeProject.sessionId,
-        question_type: q.type,
-        axis: q.axis ?? null,
-        keyword: q.keyword ?? null,
-        selected_option: option,
-      })
-      if (resp.flush_prefetch) {
-        // Flush the entire client-side prefetch queue so the user sees the
-        // server's qbias-reranked deck rather than the 2 stale prefetched cards.
-        // Also clear the preload image cache entries for the old prefetch URLs
-        // so no stale card can flash through instant-swap.
-        if (prefetchCard?.image_url) imagePreloadCache.current.delete(prefetchCard.image_url)
-        if (prefetchCard2?.image_url) imagePreloadCache.current.delete(prefetchCard2.image_url)
-        setPrefetchCard(null)
-        setPrefetchCard2(null)
-        if (resp.next_image) {
-          setCurrentCard(resp.next_image)
-          if (resp.next_image.image_url) preloadImage(resp.next_image)
-          setPrefetchCard(resp.prefetch_image ?? null)
-          setPrefetchCard2(resp.prefetch_image_2 ?? null)
-          if (resp.prefetch_image?.image_url) preloadImage(resp.prefetch_image)
-          if (resp.prefetch_image_2?.image_url) preloadImage(resp.prefetch_image_2)
-        } else {
-          // next_image null → end of stream; mirror the session-completed path
-          setIsSessionCompleted(true)
-          setCurrentCard(null)
-        }
-      }
-    } catch {
-      reportWriteError(setGlobalToast, '답변 전송 실패 — 다시 선택해주세요')
-      setPendingQuestion(q)
     }
   }
 
@@ -1107,8 +1045,6 @@ export default function App() {
     },
     onResumeProject: handleResumeProject,
     onNewProjectSession: handleNewProjectSession,
-    questionTrigger: pendingQuestion,
-    onQuestionAnswer: handleQuestionAnswer,
     nextCard: prefetchCard,
   }
 

@@ -2,12 +2,14 @@
  * AssessmentCard — one personality-assessment question rendered as a swipe-deck
  * card.
  *
- * Shares its entire surface with the Taste/Discovery calibration card
- * (QuestionCard.jsx): both spread the same `cardShellStyle` /
- * `questionCardBodyStyle` / `questionTitleStyle` / `questionBadgeStyle` /
- * `questionOptionStyle` from cardShell.js, which in turn takes its footprint
- * from SwipeCard's CARD_WIDTH/CARD_HEIGHT. Nothing here re-declares a radius,
- * shadow, padding or font size of its own.
+ * Shares its entire surface with the shared card shell: it spreads
+ * `cardShellStyle` / `questionCardBodyStyle` / `questionTitleStyle` /
+ * `questionBadgeStyle` / `questionOptionStyle` from cardShell.js, which in
+ * turn takes its footprint from SwipeCard's CARD_WIDTH/CARD_HEIGHT. Nothing
+ * here re-declares a radius, shadow, padding or font size of its own. (The
+ * in-session QuestionCard these exports were originally extracted from was
+ * removed — FULL-RECOMMEND-1 — but the exports themselves remain load-bearing
+ * for this component.)
  *
  * Every interactive element carries the `pressable` class: the vendored
  * tinderCard fork calls preventDefault() on touchstart unless the event's

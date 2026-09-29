@@ -10,6 +10,10 @@ Coverage:
   - POST report/generate/ with a stored final_report and no `regenerate` flag
     returns the stored report WITHOUT calling generate_persona_report /
     compute_axis_scores / cache eviction.
+  - 2026-09-28: the cached short-circuit path no longer recomputes
+    axis_scores on read -- a legacy-format stored axis_scores is returned
+    as-is, unchanged (recompute-on-read was removed; see TestProjectSerializer
+    in test_phase13_board.py for the board-detail-GET-side of this).
   - POST report/generate/ with `regenerate: true` always regenerates.
   - POST report/generate-image/ mirrors the same pattern for report_image.
   - Response shapes are identical (same key sets) between cached and
@@ -21,6 +25,12 @@ from unittest.mock import patch
 from django.core.cache import cache
 
 from apps.recommendation.models import Project
+from apps.recommendation.services.axis_scores import AXES
+
+# A stored axis_scores already in the current (FULL-PERSONA-SPECTRUM) shape --
+# used as a representative stored value for the "cached short-circuit does no
+# extra work, returns stored axis_scores unchanged" behaviour these tests assert.
+CURRENT_SHAPE_AXIS_SCORES = {axis: None for axis in AXES}
 
 
 @pytest.fixture(autouse=True)
@@ -52,7 +62,9 @@ class TestProjectReportGenerateCache:
 
     def test_cached_report_short_circuits_no_generation_call(self, auth_client, user_profile):
         stored_report = {'summary': 'Existing persona report'}
-        stored_axis = {'form': 0.5, 'materiality': 0.2, 'scale': 0.1, 'energy': 0.0, 'tradition': -0.3}
+        # 2026-09-28: the cached short-circuit path never recomputes
+        # axis_scores on read -- stored value (any shape) comes back unchanged.
+        stored_axis = CURRENT_SHAPE_AXIS_SCORES
         project = _make_project(
             user_profile, final_report=stored_report, axis_scores=stored_axis,
         )
@@ -76,6 +88,7 @@ class TestProjectReportGenerateCache:
 
         project.refresh_from_db()
         assert project.final_report == stored_report
+        assert project.axis_scores == stored_axis
 
     def test_regenerate_true_always_regenerates(self, auth_client, user_profile):
         stored_report = {'summary': 'Stale report'}
@@ -128,7 +141,7 @@ class TestProjectReportGenerateCache:
     def test_cached_and_generated_response_shapes_identical(self, auth_client, user_profile):
         """Key sets must match between the cached short-circuit and the generation path."""
         cached_project = _make_project(
-            user_profile, final_report={'summary': 'cached'}, axis_scores={'form': 0.1},
+            user_profile, final_report={'summary': 'cached'}, axis_scores=CURRENT_SHAPE_AXIS_SCORES,
         )
         with patch('apps.recommendation.services.generate_persona_report'), \
              patch('apps.recommendation.views.reports.compute_axis_scores'), \
@@ -173,6 +186,47 @@ class TestProjectReportGenerateCache:
             {}, format='json',
         )
         assert resp.status_code == 404
+
+
+# ── 2026-09-28: no recompute-on-read for legacy axis_scores ─────────────────
+
+@pytest.mark.django_db
+class TestProjectReportGenerateLegacyAxisScoresUnchanged:
+    """The cached-report short-circuit must NOT recompute axis_scores, even
+    when the stored value predates the embedding-projection rewrite (flat
+    5-axis incl. 'form'). It comes back exactly as stored -- upgrading to the
+    new 4-axis dict shape only happens via generate/regenerate
+    (compute_axis_scores), never as a side effect of reading a cached report."""
+
+    def test_legacy_axis_scores_returned_unchanged_on_cached_short_circuit(self, auth_client, user_profile):
+        stored_report = {'summary': 'Existing persona report'}
+        legacy_axis = {'form': 0.5, 'materiality': 0.2, 'scale': 0.1, 'energy': 0.0, 'tradition': -0.3}
+        project = _make_project(
+            user_profile, final_report=stored_report, axis_scores=legacy_axis,
+        )
+
+        compute_target = 'apps.recommendation.services.axis_scores.compute_axis_scores'
+        with patch('apps.recommendation.services.generate_persona_report') as mock_gen, \
+             patch(compute_target) as mock_compute, \
+             patch('apps.recommendation.caches.evict_projects_list') as mock_evict_list, \
+             patch('apps.recommendation.caches.evict_project_detail') as mock_evict_detail:
+            resp = auth_client.post(
+                f'/api/v1/projects/{project.project_id}/report/generate/',
+                {}, format='json',
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data['final_report'] == stored_report
+        assert data['axis_scores'] == legacy_axis
+        mock_gen.assert_not_called()
+        mock_compute.assert_not_called()
+        mock_evict_list.assert_not_called()
+        mock_evict_detail.assert_not_called()
+
+        project.refresh_from_db()
+        assert project.axis_scores == legacy_axis
+        assert project.final_report == stored_report
 
 
 # ── ProjectReportImageView ─────────────────────────────────────────────────

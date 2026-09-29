@@ -72,25 +72,20 @@ export async function getSessionState(sessionId, currentHint = null) {
  * prefetched in its visible queue (not yet swiped). The backend merges these
  * into session.exposed_ids before card selection so the same card is never
  * shown twice.
- * latency_ms (optional) is the number of milliseconds between the card
- * becoming visible and the user swiping it. The backend uses this for
- * hyper-positive / mindless-fast-swipe detection (Phase 3). Ignored if absent.
  */
-export async function recordSwipe({ session_id, image_id, action, client_buffer_ids = [], extend = false, latency_ms }) {
+export async function recordSwipe({ session_id, image_id, action, client_buffer_ids = [], extend = false }) {
   const result = await callApi('POST', `/analysis/sessions/${session_id}/swipes/`, {
     canonical_bld_id:  image_id,
     action,
     idempotency_key:   `swp_${session_id}_${image_id}`,
     client_buffer_ids: client_buffer_ids,
     ...(extend ? { extend: true } : {}),
-    ...(latency_ms != null ? { latency_ms } : {}),
   })
   return {
     ...result,
     next_image:       normalizeCard(result.next_image),
     prefetch_image:   normalizeCard(result.prefetch_image),
     prefetch_image_2: normalizeCard(result.prefetch_image_2),
-    question_trigger: result.question_trigger ?? null,
   }
 }
 
@@ -141,28 +136,5 @@ export async function getResult({ session_id }) {
     ...result,
     liked_images:           (result.liked_images || []).map(normalizeCard),
     predicted_like_images:  (result.predicted_images || []).map(normalizeCard),
-  }
-}
-
-/**
- * Submit a user's response to an in-session question card.
- * option: "A" | "B" | "skip"
- * keyword: the keyword field from the question_trigger (or null)
- *
- * On flush_prefetch=true the response includes next_image / prefetch_image /
- * prefetch_image_2 which are normalized so callers can update the deck directly.
- */
-export async function submitQuestionResponse({ session_id, question_type, axis, keyword, selected_option }) {
-  const result = await callApi('POST', `/analysis/sessions/${session_id}/question-responses/`, {
-    question_type,
-    axis,
-    keyword: keyword ?? null,
-    selected_option,
-  })
-  return {
-    ...result,
-    next_image:       normalizeCard(result.next_image),
-    prefetch_image:   normalizeCard(result.prefetch_image),
-    prefetch_image_2: normalizeCard(result.prefetch_image_2),
   }
 }

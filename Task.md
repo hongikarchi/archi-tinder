@@ -57,8 +57,7 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(비어 있음 — FRONT-FUNC-CHECK-1 완료 2026-09-06, ## Done 참조)_
-
+_(비어 있음 — BACK-LLM-5 완료 2026-09-26, ## Done 참조)_
 
 ## Next
 
@@ -107,6 +106,11 @@ Implementation map:
 
 ### HIGH
 
+#### BACK-RECOMMEND-5 — Love intensity 잔재 전수 제거
+_FULL-RECOMMEND-1 후속 PR 3. 프론트가 `intensity`를 한 번도 보내지 않아 모든 like = 1.0(Love 1.8 미구현 잔재). `swipe_service.py:786,1134`, `models.py:16` 주석, `rerank.py:118-141`, `engine.py:2037-2079`, `event_log.emit_swipe_event`, discovery/office/_shared 파서 등 코드·주석 전수 조사 후 제거._
+
+#### BACK-RECOMMEND-6 — 태그를 취향좌표에 병합 검토
+_FULL-RECOMMEND-1에서 보류. 선행: Make DB에서 건물 embedding 입력 텍스트 확인(태그 포함 여부 — 포함 시 이중 계산). 결과에 따라 태그→좌표(해당 태그 건물 embedding 평균, 정규화)를 pref_vector에 병합. 이후 유지 컬럼 `tag_axis_counts` / `recent_like_tag_sets` / `question_bias_vector`의 재사용·삭제를 사용자에게 재질문._
 #### FULL-BOARD-FLOW-1 — 저장된 보드·진행 세션이 삭제되는 버그 + 보드·리포트 경로 정리
 2026-09-27 경로 감사(세션, 코드 확인 완료). UI-CONSISTENCY-B와 분리해 별도 PR로 처리.
 - **D1 (데이터 손실)**: 저장 보드 "이어서 탐색하기" 후 오른쪽 스와이프 없이 나가기 → 서버 보드 DELETE. `handleResumeProject` 합성 엔트리 `likedBuildings: []`(App.jsx:~991-1004) + 나가기 삭제 조건이 로컬 likedBuildings 길이 기준(App.jsx:~1092-1105). Discovery promote 엔트리도 likedBuildings []로 시작. 백엔드 DELETE에 is_temp 가드 없음(views/projects.py:~244-251). 수정: 삭제 조건을 `isTemp===true`로, 서버 가드 추가.
@@ -175,6 +179,12 @@ _(2026-06-08 범위 축소: #212(`4e58195`) Case #3 resume guard가 **진행중(
 _(2026-07-12 감사 re-pin: 전제 유효, 라인 이동 — resume guard `session_service.py:167-182`(completed 제외), 신규 세션 cold-create `:397-416`(phase='exploring', like_vectors=[] 등 전부 빈 값), `liked_ids`는 완료-세션 리포트에만 사용(`:688-689`), warm-start seed 경로 여전히 부재.)_
 
 ### MEDIUM
+
+#### BACK-RECOMMEND-8 — 형태 축(정형↔비정형) 근거 부재
+_FULL-PERSONA-1에서 제외. 임베딩이 기하학 형태 정보를 약하게 담아 기준 문장 투영 AUC 0.63~0.75. 후보: Gemini 건물별 정형도 채점(표본 200~300개로 AUC 검증 후 전체 일괄), 건물 사진 임베딩, Make DB에 형태 필드 요청. 태그로 양 끝 정의는 사용자 반대._
+
+#### BACK-RECOMMEND-9 — 태그 가중치 방식 잔재 삭제 확정
+_`services/axis_scores.py` 주석 처리된 태그 가중치 코드, `TagAxisWeight` 모델·표, `fixtures/tag_axis_weights.json`, 마이그레이션 0033 데이터. 사용자 확정 시 코드 삭제 + 표 삭제 마이그레이션._
 #### FRONT-DESIGN-C2 — 디자인 포트 잔여 결정 4건 + 스타일 델타 21곳
 FRONT-DESIGN-C(#321) 후속. 결정 대기: 저장/북마크 amber(`#fbbf24`) 대응 토큰 부재(accent-3는 라이트에서 갈색이라 부적합 — 상태 토큰 계열 신설 필요); 모달 backdrop 0.4 vs scrim 0.65(DESIGN.md §1.4/§8.10 모순 해소); UserProfile 떠있는 뒤로가기 목적지(`/user/me`는 TabBar 루트); appearance 칩 radius 10px(토큰 스케일 밖, 공용 .chip). 로그인 첫카드 "10~15장이면 취향 프로필 완성" 카피 복원 여부(핵심 약속 문구, 한 줄 revert). 스타일 델타 잔여 21곳은 `python tools/design-diff.py`로 재측정 후 처리. 로그인 하위 4카드+오버레이 17종은 자동 대조 불가 — 수동 확인.
 
@@ -312,6 +322,38 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FULL-REPORT-2 — 리포트가 언어 전환에 안 따라옴 — RESOLVED 2026-09-27 (`e13c9b9`, 푸시됨 · PR 대기 — `feature/algo-persona-report`)
+- 리포트 문장이 생성 시점 언어로만 저장돼 UI 언어를 바꿔도 그대로였음. Gemini 1회 호출로 ko·en 두 판(동일 내용, 언어별 문장 규칙 유지)을 생성해 `final_report.i18n`에 저장, FE `localizeReport()`가 현재 언어판을 즉시 표시(AI 재호출 없음).
+- 최상위 필드 = 생성 시 언어(하위 호환), `dominant_*` 영어 유지, 한쪽 누락 시 다른 쪽으로 채움. 적용: PersonaReport, ResultsPage, BoardDetailPage 공유 문구, SaveBoardModal 기본 이름. 기존 리포트는 재생성 시 두 판 생성.
+- 검증: review/security PASS, BE 30 pass, FE 124 pass, 실데이터 ko/en 샘플 일치 확인.
+
+### FULL-PERSONA-1 — 취향 막대가 반대·근거 없음이 중립으로 보임 — RESOLVED 2026-09-27 (`54e9c97`, 푸시됨 · PR 대기 — `feature/algo-persona-report`)
+- 오각형 삭제(`8cff892`). 양극 막대 5개 전부 좌우 반전 버그 수정 + 단어 변경(`ee6d5f4`: 비정형↔정형, 자연↔인공 재료, 공간감 아늑한↔압도적인, 분위기 차분한↔역동적인, 전통적↔실험적). 근거 없는 축 = null → 흐린 막대 + "아직 판단할 근거가 없어요"(`ce4968e`).
+- 점수 방식 교체(`54e9c97`): 태그 가중치(`7562118`, 단어 의미 연결·16행·재료 규칙 — 현재 주석 처리 보존) → **건물 임베딩을 기준 문장 방향에 투영**(태그 미사용). 축 4개(물성·공간감·분위기·전통성), 형태 축 제외(문장 AUC 0.63~0.75). 검증 AUC 0.92/0.99/0.85/0.91.
+- 기준 문장 `services/_axis_anchors.py`, 방향 계산 `manage.py build_axis_directions` → `fixtures/axis_directions.json`(HF는 빌드 시만). 저장 형태 `{score, dots(25/50/75% 또는 3개 이하 전부), n, iqr, confidence=min(n/5,1)×(1−iqr)}`, 예전 형식은 열 때 재계산.
+- UI `TasteSpectrum.jsx`: 좌우 바깥 단어, 0.5px 선, 검정 원(작은 3.5/큰 9), 테마색 곡선(신뢰도 크기, 축 사이 S자 연결). Deferred: BACK-RECOMMEND-8 (형태 축 재도입), BACK-RECOMMEND-9 (태그 가중치 코드·표 삭제 확정).
+
+### BACK-RECOMMEND-7 — 결과 My Likes에 Discovery 좋아요 누락 — RESOLVED 2026-09-27 (`9a19711`, 푸시됨 · PR 대기 — `feature/algo-persona-report`)
+- 결과 API `liked_images`가 이번 세션 스와이프만 조회 → Discovery→Taste 전환 시 Discovery 좋아요 누락(리포트와 불일치). `session.project.liked_ids`(보드 좋아요 목록)에서 조회, 순서 유지·중복 제거. 실데이터: 4개 → 20개 표시.
+
+### BACK-LLM-5 — 리포트 취향 문장이 근거 없음 — RESOLVED 2026-09-26 (`c69c895`, PR 대기 — FULL-RECOMMEND-1 위 스택)
+- 리포트를 보여준 카드(좋아요∪싫어요) 기준 결정론 사실(`taste_facts.py`) + 사용자 언어 프롬프트(`_report_prompts.py`)로 재작성. ① `pattern_paragraph`("보여드린 건물 중…") + ② `description`(부드러운 해석), 기존 필드 호환, `taste_facts` 저장(싫어요 건물 id 제외 — 보안 리뷰).
+리포트를 스와이프 사실 기반으로 재작성 (grilling 2026-09-25~26 결정, FULL-RECOMMEND-1 위에 스택 — `feature/algo-report-grounding`). 기존 `generate_persona_report`는 liked 6속성만 영어 프롬프트로 전송(언어 설정 무시, 싫어요 미사용).
+- 기준 = 보여준 카드(`Project.liked_ids` ∪ `disliked_ids`, 양쪽이면 like). 편중도 = 특징 있는 카드 like율 ÷ 없는 카드 like율, 양쪽 +1/+2 스무딩. 코퍼스 캐시 미사용.
+- 좋아요 사실: shown≥3, liked≥2, ratio≥1.5. 싫어요 사실: shown≥3, 넘김≥40%(≥80% "대부분"/≥40% "여러 번"), like ratio ≤1/1.5. 정렬: ratio 내림차순, 0.3 이내면 근거 수 많은 순, 축당 1개, 근거 80%+ 겹치면 1개, like 2~3 + dislike ≤1. 배수 0.5 단위 내림.
+- 출력: `pattern_paragraph`(신규, "보여드린 건물 중…"으로 시작, 사실 문구 틀 엄격(어미 연결만 허용, LLM 이탈은 검사 없이 수용), ~200자, 사실 없으면 생략) + `description`(취향 해석, 부드러운 추정, ~300자) + `persona_type`(1~2단어 경향명) + `one_liner`(태그 포함 구체문) — 사용자 언어; `dominant_*` 영어 유지; `taste_facts` 저장(비표시). 용어 한글 음차, 국가 한국어, 건축가 영어. 금지: "다른 사용자보다" 등 미계산 비교, 최상급, 성격 판단, 비하.
+- 규칙 위치: `services/_report_prompts.py`(문장), `settings.RECOMMENDATION` `report_*`(기준값), `docs/report-writing.md`(설명). 기존 리포트 유지, 재생성 시에만 신 방식. 공개 보드도 동일 문장.
+- 검증: feature workflow review/security PASS(보안 1건 수정: 싫어요 id 노출); 로컬 Neon 전체 1459 pass/0 fail; FE 117 pass, eslint 0 error, build OK; 실데이터 샘플 3건 확인. 후속: 사실 문구 엄격 복원(검사 장치 없이 LLM 이탈 수용), 배수 정수 표기(2.0→2), 스무딩 0 나눗셈 방어.
+- 관찰: 샘플 3건 모두 1순위 사실이 흔한 스타일 `contemporary` — 계산은 맞으나 Aha 약함. 실사용 데이터 확인 후 판단.
+
+### FULL-RECOMMEND-1 — 질문카드가 리포트에 무영향·순위만 과왜곡 — RESOLVED 2026-09-25 (`5c7d74c`, PR 대기)
+- 질문카드(ALGO-QCARD) 전면 제거 — 답변은 리포트에 0 영향, `question_bias_vector`(답변당 ±2.0 비정규화)가 like 대비 ~4배로 MMR 순위 과점유, algorithm.md 미문서화였음. 다음 카드 = 스와이프 pref_vector만(재튜닝 없음).
+- FE: `QuestionCard.jsx` + SwipePage/App/MainLayout 배선, `submitQuestionResponse`, i18n `swipe.questionCard.*`, 죽은 `latency_ms` 측정(`cardShownAtRef`) 제거.
+- BE: 트리거·`handle_question_response`·`question-responses/` 라우트, engine `question_bias_vector` 파라미터 + 전 호출부, `question_*`/`recent_latencies_cap` 설정 제거.
+- DB: 0031 DROP `recent_latencies`/`question_count`/`question_cooldown`/`q_card_consecutive_dislikes`; 0032 `tag_answer` 이벤트 선택지 제거. 로컬 적용 완료 — **prod는 배포 후 `make migrate-prod`**(코드 먼저).
+- 유지(미사용, BACK-RECOMMEND-6 대기): `tag_axis_counts`, `recent_like_tag_sets`, `question_bias_vector` 컬럼. 무관 유지: ActionCard, DiscoveryTriggerCard, parse_query probe, `cardShell.js`, `get_corpus_tag_df`.
+- 검증: feature workflow review/security PASS(확정 결함 0); API 스모크 0 fail(연속 싫어요·연속 좋아요·수렴/ActionCard·재개·결과·리포트, `question-responses/` 404); BE 비DB 테스트 603 pass/0 fail(DB 테스트 831건은 로컬 DB 미연결 — CI 필요); FE 117 pass, eslint 0 error, build OK. app-test는 Playwright MCP 부재로 미실행.
+- 참고: 로컬 `dev-login` 500(`test_architinder` username 중복, 기존 데이터 문제 — 본 변경 무관).
 ### UI-CONSISTENCY-B — 디자인 통일성 정비: 규칙·토큰 → 공통 부품 → 페이지 교체 — RESOLVED 2026-09-29 (`cb4b025`, PR 대기)
 - 2026-09-26 전수 감사(radius 리터럴 ~160 vs 토큰 ~25, 폰트 23종, 원형 버튼 28~44 혼재, 사진 카드 7종, 탭 4종, 모달 공통 부품 부재, DESIGN.md 자체 결함) 후 유저 결정 순서대로 3단계 진행. 플랜 `.claude/plans/ui-consistency-b.md`
 - 1단계 규칙·토큰: radius 역할(사진 20·UI 12·내부 8·시트 24·칩 pill), 5단 글자 12/14/16/20/24 + 굵기 400~700(800 금지), 모달 배경 `--color-scrim-modal` 0.4, 원형 버튼 28px/터치 44px. DESIGN.md의 `calc(var(--radius) * 1px)` 오류(모서리 0 렌더) 제거

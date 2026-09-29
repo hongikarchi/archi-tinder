@@ -34,14 +34,23 @@ class ProjectReportGenerateView(APIView):
         # on every revisit-triggered POST (was causing silent 429s + nondeterministic
         # report rewrites — reports.py regenerated+overwrote on every call).
         if project.final_report and not request.data.get('regenerate'):
+            # 2026-09-28: no recompute on the cached short-circuit path -- a
+            # legacy-format stored axis_scores is returned as-is (original
+            # BACK-REPORT-CACHE-1 behaviour). It only upgrades to the new
+            # embedding-projection shape via the generate/regenerate path below.
             return Response({'final_report': project.final_report, 'axis_scores': project.axis_scores})
 
         liked_id_strings = _liked_id_only(project.liked_ids)
         if not liked_id_strings:
             return Response({'detail': 'No liked buildings yet'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # BACK-LLM-5: ground the report in BOTH sides of the swipe history +
+        # the requesting profile's language preference (fallback 'ko').
+        disliked_id_strings = list(project.disliked_ids or [])
+        language = getattr(profile, 'language', 'ko') or 'ko'
+
         try:
-            report = services.generate_persona_report(liked_id_strings)
+            report = services.generate_persona_report(liked_id_strings, disliked_id_strings, language)
         except (ValueError, RuntimeError) as e:
             return Response(
                 {'detail': str(e), 'error_type': type(e).__name__},
