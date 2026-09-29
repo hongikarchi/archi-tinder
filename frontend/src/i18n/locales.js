@@ -676,6 +676,18 @@ export const locales = {
         fileTooLarge:     '파일이 10MB를 초과합니다: {name}',
       },
     },
+    architectB3: {
+      buildings:     '건물',
+      followers:     '팔로워',
+      follow:        '팔로우',
+      following:     '팔로잉',
+      website:       '웹사이트',
+      contact:       '연락하기',
+      buildingsSection: '건물',
+      builtTab:      '완공',
+      unbuiltTab:    '미완공',
+      noProjectsYet: '등록된 프로젝트가 없어요.',
+    },
   },
   en: {
     tabbar: {
@@ -1348,6 +1360,18 @@ export const locales = {
         uploadFailed:     'Upload failed. Please try again.',
         fileTooLarge:     'File exceeds 10 MB limit: {name}',
       },
+    },
+    architectB3: {
+      buildings:     'Buildings',
+      followers:     'Followers',
+      follow:        'Follow',
+      following:     'Following',
+      website:       'Website',
+      contact:       'Contact',
+      buildingsSection: 'Buildings',
+      builtTab:      'Built',
+      unbuiltTab:    'Unbuilt',
+      noProjectsYet: 'No projects yet',
     },
   },
 }
