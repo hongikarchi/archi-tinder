@@ -8,11 +8,21 @@
  * 마감 임박순이 기본 정렬인 이유 — 긴급함이 목록의 성격을 만든다.
  *
  * 백엔드 없음. 목 데이터 + localStorage 찜.
+ *
+ * UI-CONSISTENCY-B Phase 3b-3: top structure ported onto the shared system —
+ * own sticky glass header bar ("소셜" title) dropped in favor of the exact
+ * same chrome as the sibling PeopleDiscoveryPage (PageTopControls +
+ * PageLogoHeader + SocialSegment row), so switching between the [사람]/
+ * [공모전] segments doesn't visibly jump chrome. List cards moved onto the
+ * shared radius/type-scale tokens (radius-md — these are text surface cards,
+ * not photo tiles; §3.1 decision log item 1).
  */
 
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from '../i18n/index.js'
 import PageTopControls from '../components/PageTopControls.jsx'
+import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import SocialSegment from '../components/SocialSegment.jsx'
 import { MOCK_COMPETITIONS, MOCK_TEAMS, daysLeft } from '../constants/mockCompetitions.js'
 import { loadInterests, toggleInterest } from '../utils/competitionInterest.js'
@@ -20,6 +30,7 @@ import styles from './CompetitionListPage.module.css'
 
 export default function CompetitionListPage({ onLogout }) {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [interests, setInterests] = useState(() => loadInterests())
 
   // 마감 임박순. 목 데이터는 이미 그 순서지만 정렬을 명시해 의도를 남긴다.
@@ -32,12 +43,14 @@ export default function CompetitionListPage({ onLogout }) {
 
   return (
     <div className={styles.page}>
-      <PageTopControls onLogout={onLogout} />
+      <PageTopControls onLogout={onLogout} splitMobile />
 
+      {/* Header — tab root, no back button (matches PeopleDiscoveryPage) */}
       <header className={styles.header}>
-        <h1 className={styles.title}>소셜</h1>
+        <PageLogoHeader />
       </header>
 
+      {/* FRONT-COMP-PROTO-1 — [사람] / [공모전] 전환 */}
       <SocialSegment active="competitions" />
 
       <div className={styles.content}>
@@ -46,7 +59,7 @@ export default function CompetitionListPage({ onLogout }) {
             const d = daysLeft(c)
             const saved = interests.has(c.id)
             const recruiting = (MOCK_TEAMS[c.id] || []).filter(
-              t => t.members.length < t.capacity
+              team => team.members.length < team.capacity
             ).length
             return (
               <li key={c.id}>
@@ -66,7 +79,7 @@ export default function CompetitionListPage({ onLogout }) {
                     <div className={styles.cardHead}>
                       <h2 className={styles.cardTitle}>{c.title}</h2>
                       <span className={`${styles.dday} ${d <= 7 ? styles.ddayUrgent : ''}`}>
-                        D-{d}
+                        {t('competitionB3.dday', { d })}
                       </span>
                     </div>
                     <p className={styles.organizer}>{c.organizer}</p>
@@ -74,12 +87,14 @@ export default function CompetitionListPage({ onLogout }) {
 
                     <div className={styles.metaRow}>
                       <span className={styles.meta}>
-                        {c.interestCount + (saved ? 1 : 0)}명 관심
+                        {t('competitionB3.list.interestCount', { count: c.interestCount + (saved ? 1 : 0) })}
                       </span>
                       {recruiting > 0 && (
                         <>
                           <span className={styles.dot} aria-hidden="true">·</span>
-                          <span className={styles.metaAccent}>{recruiting}팀 모집중</span>
+                          <span className={styles.metaAccent}>
+                            {t('competitionB3.list.recruiting', { count: recruiting })}
+                          </span>
                         </>
                       )}
                     </div>
@@ -90,9 +105,12 @@ export default function CompetitionListPage({ onLogout }) {
                     className={`${styles.interestBtn} ${saved ? styles.interestBtnOn : ''}`}
                     onClick={e => handleToggle(e, c.id)}
                     aria-pressed={saved}
-                    aria-label={saved ? `${c.title} 관심 해제` : `${c.title} 관심 등록`}
+                    aria-label={t(
+                      saved ? 'competitionB3.list.interestOnAria' : 'competitionB3.list.interestOffAria',
+                      { title: c.title }
+                    )}
                   >
-                    {saved ? '관심 ✓' : '관심'}
+                    {t(saved ? 'competitionB3.list.interestOn' : 'competitionB3.list.interestOff')}
                   </button>
                 </article>
               </li>
@@ -100,9 +118,7 @@ export default function CompetitionListPage({ onLogout }) {
           })}
         </ul>
 
-        <p className={styles.protoNote}>
-          프로토타입 — 공모전 정보와 참가자는 예시 데이터입니다
-        </p>
+        <p className={styles.protoNote}>{t('competitionB3.protoNote')}</p>
       </div>
     </div>
   )
