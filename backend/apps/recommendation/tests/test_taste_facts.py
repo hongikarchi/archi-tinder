@@ -613,11 +613,14 @@ class TestGeneratePersonaReportBilingual:
             lambda *a, **kw: _fake_gemini_response(malformed_payload),
         )
 
-        # settings.LOGGING sets 'apps.recommendation' propagate=False, so caplog's
-        # root handler only sees the record if propagation is forced on here.
-        monkeypatch.setattr(logging.getLogger('apps.recommendation'), 'propagate', True)
-        with caplog.at_level('WARNING'):
+        # settings.LOGGING sets the 'apps' logger propagate=False, so caplog's root
+        # handler misses the record; attach caplog's handler to the emitting logger.
+        rec_logger = logging.getLogger('apps.recommendation')
+        rec_logger.addHandler(caplog.handler)
+        try:
             report = generation.generate_persona_report(['B1'], language='en')
+        finally:
+            rec_logger.removeHandler(caplog.handler)
 
         assert report['i18n']['ko'] == report['i18n']['en']
         assert report['i18n']['ko']['persona_type'] == 'The Minimalist'
