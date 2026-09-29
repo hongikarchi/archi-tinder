@@ -16,6 +16,7 @@ Two layers:
      flat model output is handled without crashing.
 """
 import json
+import logging
 from unittest.mock import MagicMock
 
 from apps.recommendation.services import taste_facts as tf
@@ -612,6 +613,9 @@ class TestGeneratePersonaReportBilingual:
             lambda *a, **kw: _fake_gemini_response(malformed_payload),
         )
 
+        # settings.LOGGING sets 'apps.recommendation' propagate=False, so caplog's
+        # root handler only sees the record if propagation is forced on here.
+        monkeypatch.setattr(logging.getLogger('apps.recommendation'), 'propagate', True)
         with caplog.at_level('WARNING'):
             report = generation.generate_persona_report(['B1'], language='en')
 
